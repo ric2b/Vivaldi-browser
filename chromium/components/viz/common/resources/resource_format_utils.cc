@@ -4,6 +4,8 @@
 
 #include "components/viz/common/resources/resource_format_utils.h"
 
+#include <ostream>
+
 #include "base/check_op.h"
 #include "base/notreached.h"
 #include "base/stl_util.h"
@@ -324,10 +326,11 @@ unsigned int TextureStorageFormat(ResourceFormat format) {
     case RGBA_1010102:
     case BGRA_1010102:
       return GL_RGB10_A2_EXT;
-    case BGR_565:
-    case BGRX_8888:
     case YVU_420:
     case YUV_420_BIPLANAR:
+      return GL_RGB8_OES;
+    case BGR_565:
+    case BGRX_8888:
     case P010:
       break;
   }

@@ -32,9 +32,10 @@
 #include "content/browser/renderer_host/media/media_stream_dispatcher_host.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/screen_enumeration/screen_enumeration_impl.h"
-#include "content/browser/service_worker/service_worker_provider_host.h"
+#include "content/browser/service_worker/service_worker_host.h"
 #include "content/browser/speech/speech_recognition_dispatcher_host.h"
 #include "content/browser/wake_lock/wake_lock_service_impl.h"
+#include "content/browser/web_contents/file_chooser_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/browser/worker_host/dedicated_worker_host.h"
 #include "content/browser/worker_host/shared_worker_connector_impl.h"
@@ -160,8 +161,8 @@ shape_detection::mojom::ShapeDetectionService* GetShapeDetectionService() {
       mojo::Remote<shape_detection::mojom::ShapeDetectionService>>
       remote;
   if (!*remote) {
-    base::PostTask(FROM_HERE, {BrowserThread::IO},
-                   base::BindOnce(&BindShapeDetectionServiceOnIOThread,
+    GetIOThreadTaskRunner({})->PostTask(
+        FROM_HERE, base::BindOnce(&BindShapeDetectionServiceOnIOThread,
                                   remote->BindNewPipeAndPassReceiver()));
     remote->reset_on_disconnect();
   }
@@ -189,8 +190,8 @@ void BindTextDetection(
 #if defined(OS_MACOSX)
 void BindTextInputHost(
     mojo::PendingReceiver<blink::mojom::TextInputHost> receiver) {
-  base::PostTask(
-      FROM_HERE, {BrowserThread::IO},
+  GetIOThreadTaskRunner({})->PostTask(
+      FROM_HERE,
       base::BindOnce(&TextInputHostImpl::Create, std::move(receiver)));
 }
 #endif
@@ -211,14 +212,14 @@ void BindBadgeServiceForServiceWorkerOnUI(
 }
 
 void BindBadgeServiceForServiceWorker(
-    ServiceWorkerProviderHost* service_worker_host,
+    ServiceWorkerHost* service_worker_host,
     mojo::PendingReceiver<blink::mojom::BadgeService> receiver) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
   content::RunOrPostTaskOnThread(
       FROM_HERE, content::BrowserThread::UI,
       base::BindOnce(&BindBadgeServiceForServiceWorkerOnUI,
                      service_worker_host->worker_process_id(),
-                     service_worker_host->running_hosted_version()->scope(),
+                     service_worker_host->version()->scope(),
                      std::move(receiver)));
 }
 
@@ -387,7 +388,7 @@ BindWorkerReceiverForOriginAndFrameId(
 
 template <typename... Args>
 void RunOrPostTaskToBindServiceWorkerReceiver(
-    ServiceWorkerProviderHost* host,
+    ServiceWorkerHost* host,
     void (RenderProcessHostImpl::*method)(Args...),
     Args... args) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
@@ -408,9 +409,9 @@ template <typename Interface>
 base::RepeatingCallback<void(mojo::PendingReceiver<Interface>)>
 BindServiceWorkerReceiver(
     void (RenderProcessHostImpl::*method)(mojo::PendingReceiver<Interface>),
-    ServiceWorkerProviderHost* host) {
+    ServiceWorkerHost* host) {
   return base::BindRepeating(
-      [](ServiceWorkerProviderHost* host,
+      [](ServiceWorkerHost* host,
          void (RenderProcessHostImpl::*method)(
              mojo::PendingReceiver<Interface>),
          mojo::PendingReceiver<Interface> receiver) {
@@ -426,9 +427,9 @@ base::RepeatingCallback<void(const ServiceWorkerVersionInfo&,
 BindServiceWorkerReceiverForOrigin(
     void (RenderProcessHostImpl::*method)(const url::Origin&,
                                           mojo::PendingReceiver<Interface>),
-    ServiceWorkerProviderHost* host) {
+    ServiceWorkerHost* host) {
   return base::BindRepeating(
-      [](ServiceWorkerProviderHost* host,
+      [](ServiceWorkerHost* host,
          void (RenderProcessHostImpl::*method)(
              const url::Origin&, mojo::PendingReceiver<Interface>),
          const ServiceWorkerVersionInfo& info,
@@ -448,9 +449,9 @@ BindServiceWorkerReceiverForOriginAndFrameId(
     void (RenderProcessHostImpl::*method)(int,
                                           const url::Origin&,
                                           mojo::PendingReceiver<Interface>),
-    ServiceWorkerProviderHost* host) {
+    ServiceWorkerHost* host) {
   return base::BindRepeating(
-      [](ServiceWorkerProviderHost* host,
+      [](ServiceWorkerHost* host,
          void (RenderProcessHostImpl::*method)(
              int, const url::Origin&, mojo::PendingReceiver<Interface>),
          const ServiceWorkerVersionInfo& info,
@@ -539,7 +540,7 @@ void PopulateFrameBinders(RenderFrameHostImpl* host, mojo::BinderMap* map) {
   map->Add<blink::mojom::SpeechRecognizer>(
       base::BindRepeating(&SpeechRecognitionDispatcherHost::Create,
                           host->GetProcess()->GetID(), host->GetRoutingID()),
-      base::CreateSingleThreadTaskRunner({BrowserThread::IO}));
+      GetIOThreadTaskRunner({}));
 
   map->Add<blink::mojom::SpeechSynthesis>(base::BindRepeating(
       &RenderFrameHostImpl::GetSpeechSynthesis, base::Unretained(host)));
@@ -568,8 +569,8 @@ void PopulateFrameBinders(RenderFrameHostImpl* host, mojo::BinderMap* map) {
   map->Add<blink::mojom::IDBFactory>(base::BindRepeating(
       &RenderFrameHostImpl::CreateIDBFactory, base::Unretained(host)));
 
-  map->Add<blink::mojom::FileChooser>(base::BindRepeating(
-      &RenderFrameHostImpl::GetFileChooser, base::Unretained(host)));
+  map->Add<blink::mojom::FileChooser>(
+      base::BindRepeating(&FileChooserImpl::Create, base::Unretained(host)));
 
   map->Add<device::mojom::GamepadMonitor>(
       base::BindRepeating(&device::GamepadMonitor::Create));
@@ -613,13 +614,13 @@ void PopulateFrameBinders(RenderFrameHostImpl* host, mojo::BinderMap* map) {
         base::BindRepeating(&MediaDevicesDispatcherHost::Create,
                             host->GetProcess()->GetID(), host->GetRoutingID(),
                             base::Unretained(media_stream_manager)),
-        base::CreateSingleThreadTaskRunner(BrowserThread::IO));
+        GetIOThreadTaskRunner({}));
 
     map->Add<blink::mojom::MediaStreamDispatcherHost>(
         base::BindRepeating(&MediaStreamDispatcherHost::Create,
                             host->GetProcess()->GetID(), host->GetRoutingID(),
                             base::Unretained(media_stream_manager)),
-        base::CreateSingleThreadTaskRunner(BrowserThread::IO));
+        GetIOThreadTaskRunner({}));
   }
 
   map->Add<mojom::RendererAudioInputStreamFactory>(
@@ -935,13 +936,12 @@ void PopulateBinderMap(SharedWorkerHost* host, mojo::BinderMap* map) {
 }
 
 // Service workers
-ServiceWorkerVersionInfo GetContextForHost(ServiceWorkerProviderHost* host) {
+ServiceWorkerVersionInfo GetContextForHost(ServiceWorkerHost* host) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
-
-  return host->running_hosted_version()->GetInfo();
+  return host->version()->GetInfo();
 }
 
-void PopulateServiceWorkerBinders(ServiceWorkerProviderHost* host,
+void PopulateServiceWorkerBinders(ServiceWorkerHost* host,
                                   mojo::BinderMap* map) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
 
@@ -958,11 +958,11 @@ void PopulateServiceWorkerBinders(ServiceWorkerProviderHost* host,
       base::BindRepeating(&BindTextDetection));
 
   // worker host binders
-  map->Add<blink::mojom::QuicTransportConnector>(base::BindRepeating(
-      &ServiceWorkerProviderHost::CreateQuicTransportConnector,
-      base::Unretained(host)));
+  map->Add<blink::mojom::QuicTransportConnector>(
+      base::BindRepeating(&ServiceWorkerHost::CreateQuicTransportConnector,
+                          base::Unretained(host)));
   map->Add<blink::mojom::CacheStorage>(base::BindRepeating(
-      &ServiceWorkerProviderHost::BindCacheStorage, base::Unretained(host)));
+      &ServiceWorkerHost::BindCacheStorage, base::Unretained(host)));
   map->Add<blink::mojom::BadgeService>(
       base::BindRepeating(&BindBadgeServiceForServiceWorker, host));
 
@@ -972,13 +972,13 @@ void PopulateServiceWorkerBinders(ServiceWorkerProviderHost* host,
 }
 
 void PopulateBinderMapWithContext(
-    ServiceWorkerProviderHost* host,
+    ServiceWorkerHost* host,
     mojo::BinderMapWithContext<const ServiceWorkerVersionInfo&>* map) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
 
   // static binders
-  // Use a task runner if ServiceWorkerProviderHost lives on the IO
-  // thread, as CreateForWorker() needs to be called on the UI thread.
+  // Use a task runner if ServiceWorkerHost lives on the IO thread, as
+  // CreateForWorker() needs to be called on the UI thread.
   if (ServiceWorkerContext::IsServiceWorkerOnUIEnabled()) {
     map->Add<blink::mojom::BackgroundFetchService>(
         base::BindRepeating(&BackgroundFetchServiceImpl::CreateForWorker));
@@ -989,13 +989,13 @@ void PopulateBinderMapWithContext(
   } else {
     map->Add<blink::mojom::BackgroundFetchService>(
         base::BindRepeating(&BackgroundFetchServiceImpl::CreateForWorker),
-        base::CreateSingleThreadTaskRunner(BrowserThread::UI));
+        GetUIThreadTaskRunner({}));
     map->Add<blink::mojom::ContentIndexService>(
         base::BindRepeating(&ContentIndexServiceImpl::CreateForWorker),
-        base::CreateSingleThreadTaskRunner(BrowserThread::UI));
+        GetUIThreadTaskRunner({}));
     map->Add<blink::mojom::CookieStore>(
         base::BindRepeating(&CookieStoreContext::CreateServiceForWorker),
-        base::CreateSingleThreadTaskRunner(BrowserThread::UI));
+        GetUIThreadTaskRunner({}));
   }
 
   // render process host binders taking an origin
@@ -1031,7 +1031,7 @@ void PopulateBinderMapWithContext(
           &RenderProcessHostImpl::BindQuotaManagerHost, host));
 }
 
-void PopulateBinderMap(ServiceWorkerProviderHost* host, mojo::BinderMap* map) {
+void PopulateBinderMap(ServiceWorkerHost* host, mojo::BinderMap* map) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
   PopulateServiceWorkerBinders(host, map);
 }

@@ -32,17 +32,6 @@ class Command {
 const CommandUtil = {};
 
 /**
- * Possible share action sources for UMA.
- * @enum {string}
- * @const
- */
-CommandUtil.SharingActionSourceForUMA = {
-  UNKNOWN: 'Unknown',
-  CONTEXT_MENU: 'Context Menu',
-  SHARE_BUTTON: 'Share Button',
-};
-
-/**
  * The IDs of elements that can trigger share action.
  * @enum {string}
  * @const
@@ -53,32 +42,22 @@ CommandUtil.SharingActionElementId = {
 };
 
 /**
- * A list of supported values for SharingActionSource enum. Keep this in sync
- * with SharingActionSource defined in //tools/metrics/histograms/enums.xml.
- */
-CommandUtil.ValidSharingActionSource = [
-  CommandUtil.SharingActionSourceForUMA.UNKNOWN,
-  CommandUtil.SharingActionSourceForUMA.CONTEXT_MENU,
-  CommandUtil.SharingActionSourceForUMA.SHARE_BUTTON,
-];
-
-/**
  * Helper function that for the given event returns the source of a share
  * action. If the source cannot be determined, this function returns
  * CommandUtil.SharingActionSourceForUMA.UNKNOWN.
  * @param {!Event} event The event that triggered share action.
- * @return {!CommandUtil.SharingActionSourceForUMA}
+ * @return {!FileTasks.SharingActionSourceForUMA}
  */
 CommandUtil.getSharingActionSource = event => {
   const id = event.target.id;
   switch (id) {
     case CommandUtil.SharingActionElementId.CONTEXT_MENU:
-      return CommandUtil.SharingActionSourceForUMA.CONTEXT_MENU;
+      return FileTasks.SharingActionSourceForUMA.CONTEXT_MENU;
     case CommandUtil.SharingActionElementId.SHARE_BUTTON:
-      return CommandUtil.SharingActionSourceForUMA.SHARE_BUTTON;
+      return FileTasks.SharingActionSourceForUMA.SHARE_BUTTON;
     default: {
       console.error('Unrecognized event.target.id for sharing action "%s"', id);
-      return CommandUtil.SharingActionSourceForUMA.UNKNOWN;
+      return FileTasks.SharingActionSourceForUMA.UNKNOWN;
     }
   }
 };
@@ -446,11 +425,6 @@ class CommandHandler {
         'show', this.onContextMenuShow_.bind(this));
     cr.ui.contextMenuHandler.addEventListener(
         'hide', this.onContextMenuHide_.bind(this));
-
-    chrome.commandLinePrivate.hasSwitch(
-        'disable-zip-archiver-packer', disabled => {
-          CommandHandler.IS_ZIP_ARCHIVER_PACKER_ENABLED_ = !disabled;
-        });
   }
 
   /** @param {!Event} event */
@@ -514,12 +488,6 @@ class CommandHandler {
     return CommandHandler.COMMANDS_[name];
   }
 }
-
-/**
- * A flag that determines whether zip archiver - packer is enabled or no.
- * @private {boolean}
- */
-CommandHandler.IS_ZIP_ARCHIVER_PACKER_ENABLED_ = false;
 
 /**
  * Supported disk file system types for renaming.
@@ -603,24 +571,6 @@ console.assert(
 CommandHandler.recordMenuItemSelected = menuItem => {
   metrics.recordEnum(
       'MenuItemSelected', menuItem, CommandHandler.ValidMenuCommandsForUMA);
-};
-
-/**
- * Records UMA statistics about Share action.
- * @param {!Event} event The event that triggered sharing action.
- * @param {!Array<!FileEntry>} entries File entries to be shared.
- */
-CommandHandler.recordSharingAction = (event, entries) => {
-  const source = CommandUtil.getSharingActionSource(event);
-  metrics.recordEnum(
-      'Share.ActionSource', source, CommandUtil.ValidSharingActionSource);
-  metrics.recordSmallCount('Share.FileCount', entries.length);
-  for (const entry of entries) {
-    metrics.recordEnum(
-        'Share.FileType', FileTasks.getViewFileType(entry),
-        FileTasks.UMA_INDEX_KNOWN_EXTENSIONS);
-  }
-  // TODO(crbug.com/1063169): record Share.AppId AppID for each entity.
 };
 
 /**
@@ -1618,6 +1568,47 @@ CommandHandler.COMMANDS_['show-submenu'] = new class extends Command {
 };
 
 /**
+ * Opens containing folder of the focused file.
+ */
+CommandHandler.COMMANDS_['go-to-file-location'] = new class extends Command {
+  execute(event, fileManager) {
+    const entries = CommandUtil.getCommandEntries(fileManager, event.target);
+    if (entries.length !== 1) {
+      return;
+    }
+
+    const components = PathComponent.computeComponentsFromEntry(
+        entries[0], fileManager.volumeManager);
+    // Entries in file list table should always have its containing folder.
+    // (i.e. Its path have at least two components: its parent and itself.)
+    assert(components.length >= 2);
+    const parentComponent = components[components.length - 2];
+    parentComponent.resolveEntry().then(entry => {
+      if (entry && entry.isDirectory) {
+        fileManager.directoryModel.changeDirectoryEntry(
+            /** @type {!(DirectoryEntry|FilesAppDirEntry)} */ (entry));
+      }
+    });
+  }
+
+  /** @override */
+  canExecute(event, fileManager) {
+    // Available in Recents, Audio, Images, and Videos.
+    if (!util.isRecentRootType(
+            fileManager.directoryModel.getCurrentRootType())) {
+      event.canExecute = false;
+      event.command.setHidden(true);
+      return;
+    }
+
+    // Available for a single entry.
+    const entries = CommandUtil.getCommandEntries(fileManager, event.target);
+    event.canExecute = entries.length === 1;
+    event.command.setHidden(!event.canExecute);
+  }
+};
+
+/**
  * Displays QuickView for current selection.
  */
 CommandHandler.COMMANDS_['get-info'] = new class extends Command {
@@ -1763,7 +1754,14 @@ CommandHandler.COMMANDS_['zip-selection'] = new class extends Command {
       return;
     }
 
-    if (CommandHandler.IS_ZIP_ARCHIVER_PACKER_ENABLED_) {
+    if (util.isZipNoNacl()) {
+      // TODO(crbug.com/912236) Implement and remove error notification.
+      const item = new ProgressCenterItem();
+      item.id = 'no_zip';
+      item.message = 'Cannot zip selection: Not implemented yet';
+      item.state = ProgressItemState.ERROR;
+      fileManager.progressCenter.updateItem(item);
+    } else {
       fileManager.taskController.getFileTasks()
           .then(tasks => {
             if (fileManager.directoryModel.isOnDrive() ||
@@ -1780,10 +1778,6 @@ CommandHandler.COMMANDS_['zip-selection'] = new class extends Command {
               console.error(error.stack || error);
             }
           });
-    } else {
-      const selectionEntries = fileManager.getSelection().entries;
-      fileManager.fileOperationManager.zipSelection(
-          selectionEntries, /** @type {!DirectoryEntry} */ (dirEntry));
     }
   }
 
@@ -1803,15 +1797,8 @@ CommandHandler.COMMANDS_['zip-selection'] = new class extends Command {
     // space in the file list.
     const noEntries = selection.entries.length === 0;
     event.command.setHidden(noEntries);
-
-    const isOnEligibleLocation =
-        CommandHandler.IS_ZIP_ARCHIVER_PACKER_ENABLED_ ?
-        true :
-        !fileManager.directoryModel.isOnDrive() &&
-            !fileManager.directoryModel.isOnMTP();
-
     event.canExecute = dirEntry && !fileManager.directoryModel.isReadOnly() &&
-        isOnEligibleLocation && selection && selection.totalCount > 0;
+        selection && selection.totalCount > 0;
   }
 };
 
@@ -1821,7 +1808,8 @@ CommandHandler.COMMANDS_['zip-selection'] = new class extends Command {
 CommandHandler.COMMANDS_['share'] = new class extends Command {
   execute(event, fileManager) {
     const entries = CommandUtil.getCommandEntries(fileManager, event.target);
-    CommandHandler.recordSharingAction(event, entries);
+    FileTasks.recordSharingActionUMA_(
+        CommandUtil.getSharingActionSource(event), entries);
     const actionsController = fileManager.actionsController;
 
     fileManager.actionsController.getActionsForEntries(entries).then(
@@ -1968,7 +1956,7 @@ CommandHandler.COMMANDS_['share-with-linux'] = new class extends Command {
       fileManager.crostini.registerSharedPath(
           constants.DEFAULT_CROSTINI_VM, dir);
       fileManager.ui.toast.show(str('FOLDER_SHARED_WITH_CROSTINI'), {
-        text: str('MANAGE_LINUX_SHARING_BUTTON_LABEL'),
+        text: str('MANAGE_TOAST_BUTTON_LABEL'),
         callback: () => {
           chrome.fileManagerPrivate.openSettingsSubpage('crostini/sharedPaths');
           CommandHandler.recordMenuItemSelected(
@@ -2044,9 +2032,10 @@ CommandHandler.COMMANDS_['share-with-plugin-vm'] = new class extends Command {
       // immediately, since the container may take 10s or more to start.
       fileManager.crostini.registerSharedPath(constants.PLUGIN_VM, dir);
       fileManager.ui.toast.show(str('FOLDER_SHARED_WITH_PLUGIN_VM'), {
-        text: str('MANAGE_PLUGIN_VM_SHARING_BUTTON_LABEL'),
+        text: str('MANAGE_TOAST_BUTTON_LABEL'),
         callback: () => {
-          chrome.fileManagerPrivate.openSettingsSubpage('pluginVm/sharedPaths');
+          chrome.fileManagerPrivate.openSettingsSubpage(
+              'app-management/pluginVm/sharedPaths');
           CommandHandler.recordMenuItemSelected(
               CommandHandler.MenuCommandsForUMA.MANAGE_PLUGIN_VM_SHARING_TOAST);
         }
@@ -2139,7 +2128,8 @@ CommandHandler.COMMANDS_['manage-linux-sharing'] = new class extends Command {
 CommandHandler.COMMANDS_['manage-plugin-vm-sharing-gear'] =
     new class extends Command {
   execute(event, fileManager) {
-    chrome.fileManagerPrivate.openSettingsSubpage('pluginVm/sharedPaths');
+    chrome.fileManagerPrivate.openSettingsSubpage(
+        'app-management/pluginVm/sharedPaths');
     CommandHandler.recordMenuItemSelected(
         CommandHandler.MenuCommandsForUMA.MANAGE_PLUGIN_VM_SHARING);
   }
@@ -2158,7 +2148,8 @@ CommandHandler.COMMANDS_['manage-plugin-vm-sharing-gear'] =
 CommandHandler.COMMANDS_['manage-plugin-vm-sharing'] =
     new class extends Command {
   execute(event, fileManager) {
-    chrome.fileManagerPrivate.openSettingsSubpage('pluginVm/sharedPaths');
+    chrome.fileManagerPrivate.openSettingsSubpage(
+        'app-management/pluginVm/sharedPaths');
     CommandHandler.recordMenuItemSelected(
         CommandHandler.MenuCommandsForUMA.MANAGE_PLUGIN_VM_SHARING);
   }
@@ -2301,7 +2292,8 @@ CommandHandler.COMMANDS_['unpin-folder'] = new class extends Command {
  */
 CommandHandler.COMMANDS_['zoom-in'] = new class extends Command {
   execute(event, fileManager) {
-    chrome.fileManagerPrivate.zoom('in');
+    chrome.fileManagerPrivate.zoom(
+        chrome.fileManagerPrivate.ZoomOperationType.IN);
   }
 };
 
@@ -2310,7 +2302,8 @@ CommandHandler.COMMANDS_['zoom-in'] = new class extends Command {
  */
 CommandHandler.COMMANDS_['zoom-out'] = new class extends Command {
   execute(event, fileManager) {
-    chrome.fileManagerPrivate.zoom('out');
+    chrome.fileManagerPrivate.zoom(
+        chrome.fileManagerPrivate.ZoomOperationType.OUT);
   }
 };
 
@@ -2319,7 +2312,8 @@ CommandHandler.COMMANDS_['zoom-out'] = new class extends Command {
  */
 CommandHandler.COMMANDS_['zoom-reset'] = new class extends Command {
   execute(event, fileManager) {
-    chrome.fileManagerPrivate.zoom('reset');
+    chrome.fileManagerPrivate.zoom(
+        chrome.fileManagerPrivate.ZoomOperationType.RESET);
   }
 };
 
@@ -2380,7 +2374,8 @@ CommandHandler.COMMANDS_['sort-by-date'] = new class extends Command {
  */
 CommandHandler.COMMANDS_['inspect-normal'] = new class extends Command {
   execute(event, fileManager) {
-    chrome.fileManagerPrivate.openInspector('normal');
+    chrome.fileManagerPrivate.openInspector(
+        chrome.fileManagerPrivate.InspectionType.NORMAL);
   }
 };
 
@@ -2389,7 +2384,8 @@ CommandHandler.COMMANDS_['inspect-normal'] = new class extends Command {
  */
 CommandHandler.COMMANDS_['inspect-console'] = new class extends Command {
   execute(event, fileManager) {
-    chrome.fileManagerPrivate.openInspector('console');
+    chrome.fileManagerPrivate.openInspector(
+        chrome.fileManagerPrivate.InspectionType.CONSOLE);
   }
 };
 
@@ -2398,7 +2394,8 @@ CommandHandler.COMMANDS_['inspect-console'] = new class extends Command {
  */
 CommandHandler.COMMANDS_['inspect-element'] = new class extends Command {
   execute(event, fileManager) {
-    chrome.fileManagerPrivate.openInspector('element');
+    chrome.fileManagerPrivate.openInspector(
+        chrome.fileManagerPrivate.InspectionType.ELEMENT);
   }
 };
 
@@ -2407,7 +2404,8 @@ CommandHandler.COMMANDS_['inspect-element'] = new class extends Command {
  */
 CommandHandler.COMMANDS_['inspect-background'] = new class extends Command {
   execute(event, fileManager) {
-    chrome.fileManagerPrivate.openInspector('background');
+    chrome.fileManagerPrivate.openInspector(
+        chrome.fileManagerPrivate.InspectionType.BACKGROUND);
   }
 };
 

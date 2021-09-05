@@ -15,11 +15,9 @@
 #include "base/optional.h"
 #include "base/time/time.h"
 #include "content/browser/frame_host/back_forward_cache_metrics.h"
-#include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/service_worker/service_worker_registration.h"
 #include "content/common/content_export.h"
-#include "content/public/browser/dedicated_worker_id.h"
-#include "content/public/browser/shared_worker_id.h"
+#include "content/public/browser/service_worker_client_info.h"
 #include "content/public/common/child_process_host.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
@@ -42,8 +40,8 @@ class ServiceWorkerObjectHostTest;
 }
 
 class ServiceWorkerContextCore;
+class ServiceWorkerHost;
 class ServiceWorkerObjectHost;
-class ServiceWorkerProviderHost;
 class ServiceWorkerRegistrationObjectHost;
 class ServiceWorkerVersion;
 
@@ -84,9 +82,9 @@ class ServiceWorkerVersion;
 // registration settles, if need.
 //
 // For service worker execution contexts, ServiceWorkerContainerHost is owned
-// by ServiceWorkerProviderHost, which in turn is owned by ServiceWorkerVersion.
-// The container host and provider host are destructed when the service worker
-// is stopped.
+// by ServiceWorkerHost, which in turn is owned by ServiceWorkerVersion. The
+// container host and worker host are destructed when the service worker is
+// stopped.
 class CONTENT_EXPORT ServiceWorkerContainerHost final
     : public blink::mojom::ServiceWorkerContainerHost,
       public ServiceWorkerRegistration::Listener {
@@ -111,9 +109,7 @@ class CONTENT_EXPORT ServiceWorkerContainerHost final
       int process_id,
       mojo::PendingAssociatedRemote<blink::mojom::ServiceWorkerContainer>
           container_remote,
-      blink::mojom::ServiceWorkerClientType client_type,
-      DedicatedWorkerId dedicated_worker_id,
-      SharedWorkerId shared_worker_id);
+      ServiceWorkerClientInfo client_info);
 
   ~ServiceWorkerContainerHost() override;
 
@@ -272,6 +268,11 @@ class CONTENT_EXPORT ServiceWorkerContainerHost final
       mojo::PendingRemote<network::mojom::CrossOriginEmbedderPolicyReporter>
           coep_reporter);
 
+  // For service worker window clients. Called after the navigation commits to a
+  // render frame host. At this point, the previous ServiceWorkerContainerHost
+  // for that render frame host no longer exists.
+  void OnEndNavigationCommit();
+
   // For service worker clients that are shared workers or dedicated workers.
   // Called when the web worker main script resource has finished loading.
   // Updates this host with information about the worker.
@@ -407,7 +408,7 @@ class CONTENT_EXPORT ServiceWorkerContainerHost final
   base::TimeTicks create_time() const { return create_time_; }
   int process_id() const { return process_id_; }
   int frame_id() const { return frame_id_; }
-  int frame_tree_node_id() const { return frame_tree_node_id_; }
+  int frame_tree_node_id() const { return client_info_->GetFrameTreeNodeId(); }
 
   // For service worker clients.
   const std::string& client_uuid() const;
@@ -424,8 +425,8 @@ class CONTENT_EXPORT ServiceWorkerContainerHost final
   ServiceWorkerRegistration* controller_registration() const;
 
   // For service worker execution contexts.
-  void set_service_worker_host(ServiceWorkerProviderHost* service_worker_host);
-  ServiceWorkerProviderHost* service_worker_host();
+  void set_service_worker_host(ServiceWorkerHost* service_worker_host);
+  ServiceWorkerHost* service_worker_host();
 
   // BackForwardCache:
   // For service worker clients that are windows.
@@ -438,6 +439,8 @@ class CONTENT_EXPORT ServiceWorkerContainerHost final
   // BackForwardCached frame can be deleted while in the cache but in this case
   // OnRestoreFromBackForwardCache will not be called.
   void OnRestoreFromBackForwardCache();
+
+  bool navigation_commit_ended() const { return navigation_commit_ended_; }
 
   void EnterBackForwardCacheForTesting() { is_in_back_forward_cache_ = true; }
   void LeaveBackForwardCacheForTesting() { is_in_back_forward_cache_ = false; }
@@ -644,12 +647,9 @@ class CONTENT_EXPORT ServiceWorkerContainerHost final
   mojo::AssociatedRemote<blink::mojom::ServiceWorkerContainer> container_;
 
   // The type of client.
-  const base::Optional<blink::mojom::ServiceWorkerClientType> client_type_;
+  const base::Optional<ServiceWorkerClientInfo> client_info_;
 
   // For window clients only ---------------------------------------------------
-
-  // The ID of the frame tree node where the navigation occurs.
-  const int frame_tree_node_id_ = FrameTreeNode::kFrameTreeNodeInvalidId;
 
   // A token used internally to identify this context in requests. Corresponds
   // to the Fetch specification's concept of a request's associated window:
@@ -680,18 +680,13 @@ class CONTENT_EXPORT ServiceWorkerContainerHost final
   // and RenderFrameHost have the same lifetime.
   bool is_in_back_forward_cache_ = false;
 
-  // For worker clients only ---------------------------------------------------
-
-  // The ID of the client, if the client is a dedicated worker.
-  DedicatedWorkerId dedicated_worker_id_;
-
-  // The ID of the client, if the client is a shared worker.
-  SharedWorkerId shared_worker_id_;
+  // Indicates if OnEndNavigationCommit() was called on this container host.
+  bool navigation_commit_ended_ = false;
 
   // For service worker execution contexts -------------------------------------
 
-  // The ServiceWorkerProviderHost that owns |this|.
-  ServiceWorkerProviderHost* service_worker_host_ = nullptr;
+  // The ServiceWorkerHost that owns |this|.
+  ServiceWorkerHost* service_worker_host_ = nullptr;
 
   base::WeakPtrFactory<ServiceWorkerContainerHost> weak_factory_{this};
 };

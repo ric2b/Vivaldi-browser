@@ -335,3 +335,59 @@ TEST_F(LoaderTest, TemplateBuildDependencyFilesAreCollected) {
 
   EXPECT_FALSE(scheduler().is_failed());
 }
+
+TEST_F(LoaderTest, NonDefaultBuildFileName) {
+  std::string new_name = "BUILD.more.gn";
+
+  SourceFile build_config("//build/config/BUILDCONFIG.gn");
+  build_settings_.set_build_config_file(build_config);
+
+  scoped_refptr<LoaderImpl> loader(new LoaderImpl(&build_settings_));
+  loader->set_build_file_extension("more");
+
+  // The default toolchain needs to be set by the build config file.
+  mock_ifm_.AddCannedResponse(build_config,
+                              "set_default_toolchain(\"//tc:tc\")");
+
+  loader->set_async_load_file(mock_ifm_.GetAsyncCallback());
+
+  // Request the root build file be loaded. This should kick off the default
+  // build config loading.
+  SourceFile root_build("//" + new_name);
+  loader->Load(root_build, LocationRange(), Label());
+  EXPECT_TRUE(mock_ifm_.HasOnePending(build_config));
+
+  // Completing the build config load should kick off the root build file load.
+  mock_ifm_.IssueAllPending();
+  MsgLoop::Current()->RunUntilIdleForTesting();
+  EXPECT_TRUE(mock_ifm_.HasOnePending(root_build));
+
+  // Load the root build file.
+  mock_ifm_.IssueAllPending();
+  MsgLoop::Current()->RunUntilIdleForTesting();
+
+  // Schedule some other file to load in another toolchain.
+  Label second_tc(SourceDir("//tc2/"), "tc2");
+  SourceFile second_file("//foo/" + new_name);
+  loader->Load(second_file, LocationRange(), second_tc);
+  EXPECT_TRUE(mock_ifm_.HasOnePending(SourceFile("//tc2/" + new_name)));
+
+  // Running the toolchain file should schedule the build config file to load
+  // for that toolchain.
+  mock_ifm_.IssueAllPending();
+  MsgLoop::Current()->RunUntilIdleForTesting();
+
+  // We have to tell it we have a toolchain definition now (normally the
+  // builder would do this).
+  const Settings* default_settings = loader->GetToolchainSettings(Label());
+  Toolchain second_tc_object(default_settings, second_tc);
+  loader->ToolchainLoaded(&second_tc_object);
+  EXPECT_TRUE(mock_ifm_.HasOnePending(build_config));
+
+  // Running the build config file should make our second file pending.
+  mock_ifm_.IssueAllPending();
+  MsgLoop::Current()->RunUntilIdleForTesting();
+  EXPECT_TRUE(mock_ifm_.HasOnePending(second_file));
+
+  EXPECT_FALSE(scheduler().is_failed());
+}

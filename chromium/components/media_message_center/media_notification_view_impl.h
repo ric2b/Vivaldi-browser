@@ -81,6 +81,7 @@ class COMPONENT_EXPORT(MEDIA_MESSAGE_CENTER) MediaNotificationViewImpl
   void UpdateWithMediaArtwork(const gfx::ImageSkia& image) override;
   void UpdateWithFavicon(const gfx::ImageSkia& icon) override;
   void UpdateWithVectorIcon(const gfx::VectorIcon& vector_icon) override;
+  void OnThemeChanged() override;
 
   const views::Label* title_label_for_testing() const { return title_label_; }
 
@@ -98,7 +99,8 @@ class COMPONENT_EXPORT(MEDIA_MESSAGE_CENTER) MediaNotificationViewImpl
 
   // Creates an image button with an icon that matches |action| and adds it
   // to |button_row_|. When clicked it will trigger |action| on the session.
-  // |accessible_name| is the text used for screen readers.
+  // |accessible_name| is the text used for screen readers and the
+  // button's tooltip.
   void CreateMediaButton(media_session::mojom::MediaSessionAction action,
                          const base::string16& accessible_name);
 

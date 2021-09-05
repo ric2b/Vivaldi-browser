@@ -37,7 +37,6 @@ class Menu_Model : public KeyedService {
   bool Save();
   void LoadFinished(std::unique_ptr<MenuLoadDetails> details);
 
-  bool SetMenu(std::unique_ptr<Menu_Node> node);
   bool Move(const Menu_Node* node, const Menu_Node* new_parent, size_t index);
   Menu_Node* Add(std::unique_ptr<Menu_Node> node, Menu_Node* parent,
                  size_t index);
@@ -54,12 +53,16 @@ class Menu_Model : public KeyedService {
   void AddObserver(MenuModelObserver* observer);
   void RemoveObserver(MenuModelObserver* observer);
 
-  Menu_Node* GetMenu(const std::string& named_menu);
-  Menu_Node& GetRoot() {return root_;}
+  Menu_Node* GetNamedMenu(const std::string& named_menu);
+  // Returns the parent of all fixed nodes.
+  Menu_Node& root_node() {return root_;}
+  // Returns the fixed node that is the ancestor of main menus.
+  Menu_Node* mainmenu_node() {return mainmenu_node_;}
+
   Menu_Control* GetControl() {return control_.get();}
 
  private:
-  void SetDeleted(Menu_Node* node, bool include_children);
+  void RemoveBundleTag(Menu_Node* node, bool include_children);
   void ClearDeleted(const Menu_Node* node, bool include_children);
   void RemoveGuidDuplication(const Menu_Node* node);
 
@@ -70,6 +73,8 @@ class Menu_Model : public KeyedService {
   content::BrowserContext* context_;
   std::unique_ptr<MenuStorage> store_;
   Menu_Node root_;
+  // Managed by the root node. Provides easy access.
+  Menu_Node* mainmenu_node_ = nullptr;
   std::unique_ptr<Menu_Control> control_;
 };
 

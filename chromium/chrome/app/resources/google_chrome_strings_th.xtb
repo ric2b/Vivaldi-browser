@@ -35,7 +35,6 @@
 <translation id="1873233029667955273">Google Chrome ไม่ใช่เบราว์เซอร์เริ่มต้น</translation>
 <translation id="1874309113135274312">Google Chrome เบต้า (mDNS-In)</translation>
 <translation id="1877026089748256423">Chrome ล้าสมัย</translation>
-<translation id="1900795423379050516">หากการตั้งค่าไม่แสดงในหน้านี้ โปรดดูที่<ph name="LINK_BEGIN" />การตั้งค่าเบราว์เซอร์ Chrome<ph name="LINK_END" /></translation>
 <translation id="1919130412786645364">อนุญาตให้ลงชื่อเข้าใช้ Chrome</translation>
 <translation id="2063848847527508675">ต้องรีสตาร์ท Chrome OS เพื่อใช้การอัปเดต</translation>
 <translation id="2094919256425865063">ปิด Chrome ใช่ไหม</translation>
@@ -111,6 +110,7 @@
 <translation id="4251615635259297716">เชื่อมโยงข้อมูล Chrome กับบัญชีนี้ไหม</translation>
 <translation id="4281844954008187215">ข้อกำหนดในการให้บริการ</translation>
 <translation id="4293420128516039005">ลงชื่อเข้าใช้เพื่อซิงค์และปรับเปลี่ยน Chrome ในอุปกรณ์ต่างๆ</translation>
+<translation id="4325083532956419387">เวอร์ชัน Chrome OS</translation>
 <translation id="4328355335528187361">Google Chrome Dev (mDNS-In)</translation>
 <translation id="4331809312908958774">Chrome OS</translation>
 <translation id="4335235004908507846">Chrome ช่วยให้คุณปลอดภัยจากการละเมิดข้อมูล ส่วนขยายที่ไม่ปลอดภัย และอื่นๆ ได้</translation>

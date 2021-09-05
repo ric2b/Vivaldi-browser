@@ -29,6 +29,7 @@
 #include "components/password_manager/core/browser/ui/plaintext_reason.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/prefs/pref_service.h"
+#include "components/signin/public/base/signin_metrics.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -122,6 +123,20 @@ password_manager::PlaintextReason ConvertPlaintextReason(
   return password_manager::PlaintextReason::kView;
 }
 
+// Gets all the existing keys in |generator| corresponding to |ids|. If no key
+// is found for an id, it is simply ignored.
+std::vector<std::string> GetSortKeys(
+    const extensions::IdGenerator<std::string>& generator,
+    const std::vector<int> ids) {
+  std::vector<std::string> sort_keys;
+  sort_keys.reserve(ids.size());
+  for (int id : ids) {
+    if (const std::string* sort_key = generator.TryGetKey(id))
+      sort_keys.emplace_back(*sort_key);
+  }
+  return sort_keys;
+}
+
 }  // namespace
 
 namespace extensions {
@@ -197,28 +212,30 @@ void PasswordsPrivateDelegateImpl::ChangeSavedPassword(
       *sort_key, std::move(new_username), std::move(new_password));
 }
 
-void PasswordsPrivateDelegateImpl::RemoveSavedPassword(int id) {
+void PasswordsPrivateDelegateImpl::RemoveSavedPasswords(
+    const std::vector<int>& ids) {
   ExecuteFunction(
-      base::Bind(&PasswordsPrivateDelegateImpl::RemoveSavedPasswordInternal,
-                 base::Unretained(this), id));
+      base::Bind(&PasswordsPrivateDelegateImpl::RemoveSavedPasswordsInternal,
+                 base::Unretained(this), ids));
 }
 
-void PasswordsPrivateDelegateImpl::RemoveSavedPasswordInternal(int id) {
-  const std::string* sort_key = password_id_generator_.TryGetKey(id);
-  if (sort_key)
-    password_manager_presenter_->RemoveSavedPassword(*sort_key);
+void PasswordsPrivateDelegateImpl::RemoveSavedPasswordsInternal(
+    const std::vector<int>& ids) {
+  password_manager_presenter_->RemoveSavedPasswords(
+      GetSortKeys(password_id_generator_, ids));
 }
 
-void PasswordsPrivateDelegateImpl::RemovePasswordException(int id) {
-  ExecuteFunction(
-      base::Bind(&PasswordsPrivateDelegateImpl::RemovePasswordExceptionInternal,
-                 base::Unretained(this), id));
+void PasswordsPrivateDelegateImpl::RemovePasswordExceptions(
+    const std::vector<int>& ids) {
+  ExecuteFunction(base::Bind(
+      &PasswordsPrivateDelegateImpl::RemovePasswordExceptionsInternal,
+      base::Unretained(this), ids));
 }
 
-void PasswordsPrivateDelegateImpl::RemovePasswordExceptionInternal(int id) {
-  const std::string* sort_key = exception_id_generator_.TryGetKey(id);
-  if (sort_key)
-    password_manager_presenter_->RemovePasswordException(*sort_key);
+void PasswordsPrivateDelegateImpl::RemovePasswordExceptionsInternal(
+    const std::vector<int>& ids) {
+  password_manager_presenter_->RemovePasswordExceptions(
+      GetSortKeys(exception_id_generator_, ids));
 }
 
 void PasswordsPrivateDelegateImpl::UndoRemoveSavedPasswordOrException() {
@@ -267,8 +284,10 @@ void PasswordsPrivateDelegateImpl::RequestPlaintextPassword(
             std::move(callback).Run(base::nullopt);
             return;
           }
-          ui::ScopedClipboardWriter(ui::ClipboardBuffer::kCopyPaste)
-              .WriteText(*password);
+          ui::ScopedClipboardWriter clipboard_writer(
+              ui::ClipboardBuffer::kCopyPaste);
+          clipboard_writer.WriteText(*password);
+          clipboard_writer.MarkAsConfidential();
           std::move(callback).Run(base::string16());
         },
         std::move(callback));
@@ -325,6 +344,9 @@ void PasswordsPrivateDelegateImpl::SetPasswordList(
     entry.username = base::UTF16ToUTF8(form->username_value);
     entry.id = password_id_generator_.GenerateId(
         password_manager::CreateSortKey(*form));
+    entry.frontend_id = password_frontend_id_generator_.GenerateId(
+        password_manager::CreateSortKey(*form,
+                                        password_manager::IgnoreStore(true)));
 
     if (!form->federation_origin.opaque()) {
       entry.federation_text.reset(new std::string(l10n_util::GetStringFUTF8(
@@ -360,6 +382,10 @@ void PasswordsPrivateDelegateImpl::SetPasswordExceptionList(
     current_exception_entry.urls = CreateUrlCollectionFromForm(*form);
     current_exception_entry.id = exception_id_generator_.GenerateId(
         password_manager::CreateSortKey(*form));
+    current_exception_entry.frontend_id =
+        exception_frontend_id_generator_.GenerateId(
+            password_manager::CreateSortKey(
+                *form, password_manager::IgnoreStore(true)));
 
     current_exception_entry.from_account_store = form->IsUsingAccountStore();
     current_exceptions_.push_back(std::move(current_exception_entry));
@@ -376,6 +402,18 @@ void PasswordsPrivateDelegateImpl::SetPasswordExceptionList(
   for (auto& callback : get_password_exception_list_callbacks_)
     std::move(callback).Run(current_exceptions_);
   get_password_exception_list_callbacks_.clear();
+}
+
+void PasswordsPrivateDelegateImpl::MovePasswordToAccount(
+    int id,
+    content::WebContents* web_contents) {
+  auto* client = ChromePasswordManagerClient::FromWebContents(web_contents);
+  // TODO(victorvianna): Use a DCHECK instead.
+  if (!client)
+    return;
+
+  if (const std::string* sort_key = password_id_generator_.TryGetKey(id))
+    password_manager_presenter_->MovePasswordToAccountStore(*sort_key, client);
 }
 
 void PasswordsPrivateDelegateImpl::ImportPasswords(
@@ -434,7 +472,8 @@ void PasswordsPrivateDelegateImpl::SetAccountStorageOptIn(
     return;
   }
   // The opt in pref is automatically set upon successful reauth.
-  client->TriggerReauthForPrimaryAccount(base::DoNothing());
+  client->TriggerReauthForPrimaryAccount(
+      signin_metrics::ReauthAccessPoint::kPasswordSettings, base::DoNothing());
 }
 
 std::vector<api::passwords_private::CompromisedCredential>

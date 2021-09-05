@@ -9,6 +9,7 @@
 #include <string>
 
 #include "content/common/content_export.h"
+#include "content/public/browser/navigation_handle_timing.h"
 #include "content/public/browser/navigation_throttle.h"
 #include "content/public/browser/reload_type.h"
 #include "content/public/browser/restore_type.h"
@@ -22,6 +23,7 @@
 #include "net/dns/public/resolve_error_info.h"
 #include "net/http/http_response_info.h"
 #include "services/network/public/cpp/resource_request_body.h"
+#include "third_party/blink/public/mojom/referrer.mojom.h"
 #include "ui/base/page_transition_types.h"
 
 class GURL;
@@ -124,13 +126,8 @@ class CONTENT_EXPORT NavigationHandle {
   // set if unknown.
   virtual base::TimeTicks NavigationInputStart() = 0;
 
-  // The time the first HTTP request is sent.
-  // See comments on |NavigationRequest::first_request_start_| for details.
-  virtual base::TimeTicks FirstRequestStart() = 0;
-
-  // The time the headers of the first HTTP response is received.
-  // See comments on |NavigationRequest::first_response_start_| for details.
-  virtual base::TimeTicks FirstResponseStart() = 0;
+  // The timing information of loading for the navigation.
+  virtual const NavigationHandleTiming& GetNavigationHandleTiming() = 0;
 
   // Whether or not the navigation was started within a context menu.
   virtual bool WasStartedFromContextMenu() = 0;
@@ -163,6 +160,12 @@ class CONTENT_EXPORT NavigationHandle {
 
   // Returns a sanitized version of the referrer for this request.
   virtual const blink::mojom::Referrer& GetReferrer() = 0;
+
+  // Sets the referrer. The referrer may only be set during start and redirect
+  // phases. If the referer is set in navigation start, it is reset during the
+  // redirect. In other words, if you need to set a referer that applies to
+  // redirects, then this must be called during DidRedirectNavigation().
+  virtual void SetReferrer(blink::mojom::ReferrerPtr referrer) = 0;
 
   // Whether the navigation was initiated by a user gesture. Note that this
   // will return false for browser-initiated navigations.
@@ -227,7 +230,11 @@ class CONTENT_EXPORT NavigationHandle {
   // errors that leave the user on the previous page.
   virtual bool HasCommitted() = 0;
 
-  // Whether the navigation resulted in an error page.
+  // Whether the navigation committed an error page.
+  //
+  // DO NOT use this before the navigation commit. It would always return false.
+  // You can use it from WebContentsObserver::DidFinishNavigation().
+  //
   // Note that if an error page reloads, this will return true even though
   // GetNetErrorCode will be net::OK.
   virtual bool IsErrorPage() = 0;

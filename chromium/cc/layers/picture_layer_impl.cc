@@ -258,12 +258,16 @@ void PictureLayerImpl::AppendQuads(viz::RenderPass* render_pass,
     // |PictureLayerTiling::EnclosingContentsRectFromLayer()| will
     // create a tiling that, when scaled by |max_contents_scale| above, is
     // larger than the layer bounds by a fraction of a pixel.
-    gfx::Rect clip_rect = draw_properties().drawable_content_rect;
+    gfx::Rect bounds_in_target_space = MathUtil::MapEnclosingClippedRect(
+        draw_properties().target_space_transform, gfx::Rect(bounds()));
+    if (is_clipped())
+      bounds_in_target_space.Intersect(draw_properties().clip_rect);
+
     if (shared_quad_state->is_clipped)
-      clip_rect.Intersect(shared_quad_state->clip_rect);
+      bounds_in_target_space.Intersect(shared_quad_state->clip_rect);
 
     shared_quad_state->is_clipped = true;
-    shared_quad_state->clip_rect = clip_rect;
+    shared_quad_state->clip_rect = bounds_in_target_space;
 
 #if DCHECK_IS_ON()
     // Validate that the tile and bounds size are always within one pixel.
@@ -596,14 +600,11 @@ bool PictureLayerImpl::UpdateTiles() {
   const float old_ideal_contents_scale = ideal_contents_scale_;
   UpdateIdealScales();
 
-  const bool ideal_contents_scale_changed =
-      old_ideal_contents_scale != 0 &&
-      old_ideal_contents_scale != ideal_contents_scale_;
-  if (!raster_contents_scale_ ||
-      ShouldAdjustRasterScale(ideal_contents_scale_changed)) {
+  const bool should_adjust_raster_scale =
+      ShouldAdjustRasterScale(old_ideal_contents_scale);
+  if (should_adjust_raster_scale)
     RecalculateRasterScales();
-    AddTilingsForRasterScale();
-  }
+  UpdateTilingsForRasterScaleAndTranslation(should_adjust_raster_scale);
 
   if (layer_tree_impl()->IsActiveTree())
     AddLowResolutionTilingIfNeeded();
@@ -836,22 +837,24 @@ LCDTextDisallowedReason PictureLayerImpl::ComputeLCDTextDisallowedReason()
     return LCDTextDisallowedReason::kNone;
   if (!layer_tree_impl()->settings().can_use_lcd_text)
     return LCDTextDisallowedReason::kSetting;
-  if (!contents_opaque()) {
+  if (!contents_opaque_for_text()) {
     if (SkColorGetA(background_color()) != SK_AlphaOPAQUE)
       return LCDTextDisallowedReason::kBackgroundColorNotOpaque;
     return LCDTextDisallowedReason::kContentsNotOpaque;
   }
 
-  if (!GetTransformTree()
-           .Node(transform_tree_index())
-           ->node_and_ancestors_have_only_integer_translation)
-    return LCDTextDisallowedReason::kNonIntegralTranslation;
-  if (static_cast<int>(offset_to_transform_parent().x()) !=
-      offset_to_transform_parent().x())
-    return LCDTextDisallowedReason::kNonIntegralXOffset;
-  if (static_cast<int>(offset_to_transform_parent().y()) !=
-      offset_to_transform_parent().y())
-    return LCDTextDisallowedReason::kNonIntegralYOffset;
+  if (!use_transformed_rasterization_) {
+    if (!GetTransformTree()
+             .Node(transform_tree_index())
+             ->node_and_ancestors_have_only_integer_translation)
+      return LCDTextDisallowedReason::kNonIntegralTranslation;
+    if (static_cast<int>(offset_to_transform_parent().x()) !=
+        offset_to_transform_parent().x())
+      return LCDTextDisallowedReason::kNonIntegralXOffset;
+    if (static_cast<int>(offset_to_transform_parent().y()) !=
+        offset_to_transform_parent().y())
+      return LCDTextDisallowedReason::kNonIntegralYOffset;
+  }
 
   if (has_will_change_transform_hint())
     return LCDTextDisallowedReason::kWillChangeTransform;
@@ -1066,6 +1069,11 @@ void PictureLayerImpl::SetNearestNeighbor(bool nearest_neighbor) {
 }
 
 void PictureLayerImpl::SetUseTransformedRasterization(bool use) {
+  // With transformed rasterization, the pixels along the edge of the layer may
+  // become translucent, so clear contents_opaque.
+  if (use)
+    SetContentsOpaque(false);
+
   if (use_transformed_rasterization_ == use)
     return;
 
@@ -1182,24 +1190,30 @@ void PictureLayerImpl::RemoveAllTilings() {
   ResetRasterScale();
 }
 
-void PictureLayerImpl::AddTilingsForRasterScale() {
+void PictureLayerImpl::UpdateTilingsForRasterScaleAndTranslation(
+    bool adjusted_raster_scale) {
+  PictureLayerTiling* high_res =
+      tilings_->FindTilingWithScaleKey(raster_contents_scale_);
+
+  gfx::Vector2dF raster_translation =
+      CalculateRasterTranslation(raster_contents_scale_);
+  if (high_res) {
+    if (high_res->raster_transform().translation() != raster_translation) {
+      // We should recreate the high res tiling with the new raster translation.
+      tilings_->Remove(high_res);
+      high_res = nullptr;
+    } else if (!adjusted_raster_scale) {
+      // Nothing changed, no need to update tilings.
+      DCHECK_EQ(HIGH_RESOLUTION, high_res->resolution());
+      SanityCheckTilingState();
+      return;
+    }
+  }
+
   // Reset all resolution enums on tilings, we'll be setting new values in this
   // function.
   tilings_->MarkAllTilingsNonIdeal();
 
-  PictureLayerTiling* high_res =
-      tilings_->FindTilingWithScaleKey(raster_contents_scale_);
-  // Note: This function is always invoked when raster scale is recomputed,
-  // but not necessarily changed. This means raster translation update is also
-  // always done when there are significant changes that triggered raster scale
-  // recomputation.
-  gfx::Vector2dF raster_translation =
-      CalculateRasterTranslation(raster_contents_scale_);
-  if (high_res &&
-      high_res->raster_transform().translation() != raster_translation) {
-    tilings_->Remove(high_res);
-    high_res = nullptr;
-  }
   if (!high_res) {
     // We always need a high res tiling, so create one if it doesn't exist.
     high_res = AddTiling(
@@ -1233,7 +1247,10 @@ void PictureLayerImpl::AddTilingsForRasterScale() {
 }
 
 bool PictureLayerImpl::ShouldAdjustRasterScale(
-    bool ideal_contents_scale_changed) const {
+    float old_ideal_contents_scale) const {
+  if (!raster_contents_scale_)
+    return true;
+
   if (directly_composited_image_size_) {
     // If we have a directly composited image size, but previous raster scale
     // calculations did not set an initial raster scale, we must recalcluate.
@@ -1258,6 +1275,9 @@ bool PictureLayerImpl::ShouldAdjustRasterScale(
     // changed. We should recalculate in order to raster at the intrinsic image
     // size. Note that this is not a comparison of the used raster_source_scale_
     // and desired because of the adjustments in RecalculateRasterScales.
+    bool ideal_contents_scale_changed =
+        old_ideal_contents_scale != 0 &&
+        old_ideal_contents_scale != ideal_contents_scale_;
     bool default_raster_scale_changed =
         default_raster_scale != directly_composited_image_initial_raster_scale_;
     if (ideal_contents_scale_changed && !default_raster_scale_changed) {
@@ -1560,6 +1580,8 @@ gfx::Vector2dF PictureLayerImpl::CalculateRasterTranslation(
     float raster_scale) {
   if (!use_transformed_rasterization_)
     return gfx::Vector2dF();
+
+  DCHECK(!contents_opaque());
 
   gfx::Transform draw_transform = DrawTransform();
   // TODO(enne): for performance reasons, we should only have a raster

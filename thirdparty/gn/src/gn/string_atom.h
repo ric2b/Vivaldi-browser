@@ -109,6 +109,10 @@ class StringAtom {
   }
 
   bool operator<(const StringAtom& other) const {
+    // Avoid one un-necessary string comparison if values are equal.
+    if (SameAs(other))
+      return false;
+
     return value_ < other.value_;
   }
 

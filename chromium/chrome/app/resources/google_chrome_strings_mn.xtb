@@ -39,8 +39,6 @@
 <translation id="1873233029667955273">Google Chrome таны өгөгдмөл хөтөч биш юм</translation>
 <translation id="1874309113135274312">Google Chrome Бэта (mDNS-In)</translation>
 <translation id="1877026089748256423">Chrome хуучирсан байна.</translation>
-<translation id="1900795423379050516">Хэрэв энэ хуудсан дээр тохиргоог харуулахгүй байгаа бол <ph name="LINK_BEGIN" />
-      Chrome хөтчийнхөө тохиргоо<ph name="LINK_END" /> дотроос хайна уу</translation>
 <translation id="1919130412786645364">Chromium-д нэвтрэхийг зөвшөөрөх</translation>
 <translation id="2063848847527508675">Шинэчлэлтийг хэрэгжүүлэхийн тулд Chrome үйлдлийн системийг дахин эхлүүлнэ үү.</translation>
 <translation id="2094919256425865063">Ямар ч байсан Chrome-с гарах уу?</translation>
@@ -116,6 +114,7 @@
 <translation id="4251615635259297716">Chrome өгөгдлөө энэ бүртгэл рүү холбох уу?</translation>
 <translation id="4281844954008187215">Үйлчилгээний нөхцөл</translation>
 <translation id="4293420128516039005">Төхөөрөмжүүддээ Chrome-г синк хийж, хувийн болгохын тулд нэвтрэх</translation>
+<translation id="4325083532956419387">Chrome үйлдлийн системийн хувилбар</translation>
 <translation id="4328355335528187361">Google Chrome Dev (mDNS-In)</translation>
 <translation id="4331809312908958774">Chrome OS</translation>
 <translation id="4335235004908507846">Chrome нь таныг өгөгдлийн зөрчил, муу өргөтгөл болон бусад асуудлаас хамгаалахад туслах боломжтой</translation>

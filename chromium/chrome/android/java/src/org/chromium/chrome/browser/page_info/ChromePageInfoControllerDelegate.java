@@ -9,6 +9,7 @@ import android.content.Intent;
 import android.text.SpannableString;
 import android.text.TextUtils;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
@@ -27,8 +28,8 @@ import org.chromium.chrome.browser.performance_hints.PerformanceHintsObserver.Pe
 import org.chromium.chrome.browser.previews.PreviewsAndroidBridge;
 import org.chromium.chrome.browser.previews.PreviewsUma;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.site_settings.CookieControlsBridge;
 import org.chromium.chrome.browser.vr.VrModuleProvider;
+import org.chromium.components.content_settings.CookieControlsBridge;
 import org.chromium.components.content_settings.CookieControlsObserver;
 import org.chromium.components.feature_engagement.EventConstants;
 import org.chromium.components.page_info.PageInfoControllerDelegate;
@@ -56,9 +57,6 @@ public class ChromePageInfoControllerDelegate extends PageInfoControllerDelegate
     private String mOfflinePageCreationDate;
     private OfflinePageLoadUrlDelegate mOfflinePageLoadUrlDelegate;
 
-    // Bridge updating the CookieControlsView when cookie settings change.
-    private CookieControlsBridge mBridge;
-
     public ChromePageInfoControllerDelegate(Context context, WebContents webContents,
             Supplier<ModalDialogManager> modalDialogManagerSupplier,
             OfflinePageLoadUrlDelegate offlinePageLoadUrlDelegate) {
@@ -74,6 +72,7 @@ public class ChromePageInfoControllerDelegate extends PageInfoControllerDelegate
         mPreviewPageState = getPreviewPageStateAndRecordUma();
         initOfflinePageParams();
         mOfflinePageLoadUrlDelegate = offlinePageLoadUrlDelegate;
+        initHttpsImageCompressionStateAndRecordUMA();
     }
 
     private Profile profile() {
@@ -119,6 +118,14 @@ public class ChromePageInfoControllerDelegate extends PageInfoControllerDelegate
                 DateFormat df = DateFormat.getDateInstance(DateFormat.MEDIUM);
                 mOfflinePageCreationDate = df.format(creationDate);
             }
+        }
+    }
+
+    private void initHttpsImageCompressionStateAndRecordUMA() {
+        mIsHttpsImageCompressionApplied =
+                PreviewsAndroidBridge.getInstance().isHttpsImageCompressionApplied(mWebContents);
+        if (mIsHttpsImageCompressionApplied) {
+            PreviewsUma.recordHttpsImageCompressionPageInfoOpened();
         }
     }
 
@@ -245,24 +252,11 @@ public class ChromePageInfoControllerDelegate extends PageInfoControllerDelegate
      * {@inheritDoc}
      */
     @Override
-    public void createCookieControlsBridge(CookieControlsObserver observer) {
-        mBridge = new CookieControlsBridge(observer, mWebContents);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public void onUiClosing() {
-        mBridge.onUiClosing();
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public void setThirdPartyCookieBlockingEnabledForSite(boolean blockCookies) {
-        mBridge.setThirdPartyCookieBlockingEnabledForSite(blockCookies);
+    @NonNull
+    public CookieControlsBridge createCookieControlsBridge(CookieControlsObserver observer) {
+        Profile profile = Profile.fromWebContents(mWebContents);
+        return new CookieControlsBridge(observer, mWebContents,
+                profile.isOffTheRecord() ? profile.getOriginalProfile() : null);
     }
 
     @VisibleForTesting

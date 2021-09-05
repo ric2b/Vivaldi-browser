@@ -442,6 +442,8 @@ void LayoutBlock::AddVisualOverflowFromChildren() {
   if (PrePaintBlockedByDisplayLock(DisplayLockLifecycleTarget::kChildren))
     return;
 
+  DCHECK(!NeedsLayout());
+
   if (ChildrenInline())
     To<LayoutBlockFlow>(this)->AddVisualOverflowFromInlineChildren();
   else
@@ -459,6 +461,8 @@ void LayoutBlock::AddLayoutOverflowFromChildren() {
 }
 
 void LayoutBlock::ComputeVisualOverflow(bool) {
+  DCHECK(!SelfNeedsLayout());
+
   LayoutRect previous_visual_overflow_rect = VisualOverflowRect();
   ClearVisualOverflow();
   AddVisualOverflowFromChildren();
@@ -499,6 +503,18 @@ void LayoutBlock::ComputeLayoutOverflow(LayoutUnit old_client_after_edge,
           LayoutUnit(1));
     AddLayoutOverflow(rect_to_apply);
     SetLayoutClientAfterEdge(old_client_after_edge);
+
+    if (PaddingEnd() && !ChildrenInline()) {
+      EOverflow overflow = StyleRef().OverflowInlineDirection();
+      if (overflow == EOverflow::kAuto) {
+        UseCounter::Count(GetDocument(),
+                          WebFeature::kInlineOverflowAutoWithInlineEndPadding);
+      } else if (overflow == EOverflow::kScroll) {
+        UseCounter::Count(
+            GetDocument(),
+            WebFeature::kInlineOverflowScrollWithInlineEndPadding);
+      }
+    }
   }
 }
 
@@ -959,6 +975,7 @@ void LayoutBlock::InsertPositionedObject(LayoutBox* o) {
       if (container_map_it->value == this) {
         DCHECK(HasPositionedObjects());
         DCHECK(PositionedObjects()->Contains(o));
+        PositionedObjects()->AppendOrMoveToLast(o);
         return;
       }
       RemovePositionedObject(o);
@@ -1667,7 +1684,8 @@ void LayoutBlock::ComputeChildPreferredLogicalWidths(
     const Length& computed_inline_size = child.StyleRef().LogicalWidth();
     if (computed_inline_size.IsMaxContent())
       min_preferred_logical_width = max_preferred_logical_width;
-    else if (computed_inline_size.IsMinContent())
+    else if (computed_inline_size.IsMinContent() ||
+             computed_inline_size.IsMinIntrinsic())
       max_preferred_logical_width = min_preferred_logical_width;
   }
 }
@@ -1684,9 +1702,15 @@ LayoutUnit LayoutBlock::EmptyLineBaseline(
     LineDirectionMode line_direction) const {
   if (!HasLineIfEmpty())
     return LayoutUnit(-1);
+  const auto baseline_offset = BaselineForEmptyLine(line_direction);
+  return baseline_offset ? *baseline_offset : LayoutUnit(-1);
+}
+
+base::Optional<LayoutUnit> LayoutBlock::BaselineForEmptyLine(
+    LineDirectionMode line_direction) const {
   const SimpleFontData* font_data = FirstLineStyle()->GetFont().PrimaryFont();
   if (!font_data)
-    return LayoutUnit(-1);
+    return base::nullopt;
   const auto& font_metrics = font_data->GetFontMetrics();
   const LayoutUnit line_height =
       LineHeight(true, line_direction, kPositionOfInteriorLineBoxes);

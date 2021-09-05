@@ -91,8 +91,12 @@ inline LayoutUnit ResolveMinInlineLength(
     return border_padding.InlineSum();
 
   base::Optional<MinMaxSizes> min_max_sizes;
-  if (length.IsIntrinsic())
-    min_max_sizes = min_max_sizes_func().sizes;
+  if (length.IsIntrinsic()) {
+    min_max_sizes =
+        min_max_sizes_func(length.IsMinIntrinsic() ? MinMaxSizesType::kIntrinsic
+                                                   : MinMaxSizesType::kContent)
+            .sizes;
+  }
 
   return ResolveInlineLengthInternal(constraint_space, style, border_padding,
                                      min_max_sizes, length);
@@ -126,8 +130,12 @@ inline LayoutUnit ResolveMaxInlineLength(
     return LayoutUnit::Max();
 
   base::Optional<MinMaxSizes> min_max_sizes;
-  if (length.IsIntrinsic())
-    min_max_sizes = min_max_sizes_func().sizes;
+  if (length.IsIntrinsic()) {
+    min_max_sizes =
+        min_max_sizes_func(length.IsMinIntrinsic() ? MinMaxSizesType::kIntrinsic
+                                                   : MinMaxSizesType::kContent)
+            .sizes;
+  }
 
   return ResolveInlineLengthInternal(constraint_space, style, border_padding,
                                      min_max_sizes, length);
@@ -157,8 +165,12 @@ inline LayoutUnit ResolveMainInlineLength(
     const MinMaxSizesFunc& min_max_sizes_func,
     const Length& length) {
   base::Optional<MinMaxSizes> min_max_sizes;
-  if (length.IsIntrinsic())
-    min_max_sizes = min_max_sizes_func().sizes;
+  if (length.IsIntrinsic()) {
+    min_max_sizes =
+        min_max_sizes_func(length.IsMinIntrinsic() ? MinMaxSizesType::kIntrinsic
+                                                   : MinMaxSizesType::kContent)
+            .sizes;
+  }
 
   return ResolveInlineLengthInternal(constraint_space, style, border_padding,
                                      min_max_sizes, length);
@@ -451,8 +463,15 @@ inline NGLineBoxStrut ComputeLinePadding(
                         style.IsFlippedLinesWritingMode());
 }
 
-CORE_EXPORT NGBoxStrut ComputeScrollbars(const NGConstraintSpace&,
-                                         const NGLayoutInputNode);
+CORE_EXPORT NGBoxStrut ComputeScrollbarsForNonAnonymous(const NGBlockNode&);
+
+inline NGBoxStrut ComputeScrollbars(const NGConstraintSpace& space,
+                                    const NGBlockNode& node) {
+  if (space.IsAnonymous())
+    return NGBoxStrut();
+
+  return ComputeScrollbarsForNonAnonymous(node);
+}
 
 // Return true if we need to know the inline size of the fragment in order to
 // calculate its line-left offset. This is the case when we have auto margins,
@@ -500,10 +519,15 @@ CORE_EXPORT NGFragmentGeometry
 CalculateInitialMinMaxFragmentGeometry(const NGConstraintSpace&,
                                        const NGBlockNode&);
 
-// Shrink and return the available size by an inset. This may e.g. be used to
-// convert from border-box to content-box size. Indefinite block size is
-// allowed, in which case the inset will be ignored for block size.
-LogicalSize ShrinkAvailableSize(LogicalSize size, const NGBoxStrut& inset);
+// Shrinks the logical |size| by |insets|.
+LogicalSize ShrinkLogicalSize(LogicalSize size, const NGBoxStrut& insets);
+
+// Calculates the available size that children of the node should use.
+LogicalSize CalculateChildAvailableSize(
+    const NGConstraintSpace&,
+    const NGBlockNode& node,
+    const LogicalSize border_box_size,
+    const NGBoxStrut& border_scrollbar_padding);
 
 // Calculates the percentage resolution size that children of the node should
 // use.

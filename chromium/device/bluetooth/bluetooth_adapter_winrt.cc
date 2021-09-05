@@ -51,6 +51,7 @@ namespace {
 namespace uwp {
 using ABI::Windows::Devices::Bluetooth::BluetoothAdapter;
 }  // namespace uwp
+using ABI::Windows::Devices::Bluetooth::BluetoothError;
 using ABI::Windows::Devices::Bluetooth::IBluetoothAdapter;
 using ABI::Windows::Devices::Bluetooth::IBluetoothAdapterStatics;
 using ABI::Windows::Devices::Bluetooth::IID_IBluetoothAdapterStatics;
@@ -64,15 +65,12 @@ using ABI::Windows::Devices::Bluetooth::Advertisement::
     BluetoothLEAdvertisementWatcherStatus_Aborted;
 using ABI::Windows::Devices::Bluetooth::Advertisement::
     BluetoothLEManufacturerData;
-using ABI::Windows::Devices::Bluetooth::Advertisement::BluetoothLEScanningMode;
 using ABI::Windows::Devices::Bluetooth::Advertisement::
     BluetoothLEScanningMode_Active;
 using ABI::Windows::Devices::Bluetooth::Advertisement::
     IBluetoothLEAdvertisement;
 using ABI::Windows::Devices::Bluetooth::Advertisement::
     IBluetoothLEAdvertisementDataSection;
-using ABI::Windows::Devices::Bluetooth::Advertisement::
-    IBluetoothLEAdvertisementPublisherFactory;
 using ABI::Windows::Devices::Bluetooth::Advertisement::
     IBluetoothLEAdvertisementReceivedEventArgs;
 using ABI::Windows::Devices::Bluetooth::Advertisement::
@@ -461,26 +459,6 @@ base::Optional<std::string> ExtractDeviceName(
     return base::nullopt;
 
   return base::win::ScopedHString(local_name).GetAsUTF8();
-}
-
-void ExtractAndUpdateAdvertisementData(
-    IBluetoothLEAdvertisementReceivedEventArgs* received,
-    BluetoothDevice* device) {
-  int16_t rssi = 0;
-  HRESULT hr = received->get_RawSignalStrengthInDBm(&rssi);
-  if (FAILED(hr)) {
-    BLUETOOTH_LOG(ERROR) << "get_RawSignalStrengthInDBm() failed: "
-                         << logging::SystemErrorCodeToString(hr);
-  }
-
-  ComPtr<IBluetoothLEAdvertisement> advertisement = GetAdvertisement(received);
-  static_cast<BluetoothDeviceWinrt*>(device)->UpdateLocalName(
-      ExtractDeviceName(advertisement.Get()));
-  device->UpdateAdvertisementData(rssi, ExtractFlags(advertisement.Get()),
-                                  ExtractAdvertisedUUIDs(advertisement.Get()),
-                                  ExtractTxPower(advertisement.Get()),
-                                  ExtractServiceData(advertisement.Get()),
-                                  ExtractManufacturerData(advertisement.Get()));
 }
 
 RadioState GetState(IRadio* radio) {
@@ -951,12 +929,12 @@ void BluetoothAdapterWinrt::StartScanWithFilter(
     return;
   }
 
-  auto advertisement_received_token = AddTypedEventHandler(
+  advertisement_received_token_ = AddTypedEventHandler(
       ble_advertisement_watcher_.Get(),
       &IBluetoothLEAdvertisementWatcher::add_Received,
       base::BindRepeating(&BluetoothAdapterWinrt::OnAdvertisementReceived,
                           weak_ptr_factory_.GetWeakPtr()));
-  if (!advertisement_received_token) {
+  if (!advertisement_received_token_) {
     ui_task_runner_->PostTask(
         FROM_HERE,
         base::BindOnce(std::move(callback), /*is_error=*/true,
@@ -964,13 +942,25 @@ void BluetoothAdapterWinrt::StartScanWithFilter(
     return;
   }
 
-  advertisement_received_token_ = *advertisement_received_token;
+  advertisement_watcher_stopped_token_ = AddTypedEventHandler(
+      ble_advertisement_watcher_.Get(),
+      &IBluetoothLEAdvertisementWatcher::add_Stopped,
+      base::BindRepeating(&BluetoothAdapterWinrt::OnAdvertisementWatcherStopped,
+                          weak_ptr_factory_.GetWeakPtr()));
+  if (!advertisement_watcher_stopped_token_) {
+    RemoveAdvertisementWatcherEventHandlers();
+    ui_task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(std::move(callback), /*is_error=*/true,
+                       UMABluetoothDiscoverySessionOutcome::UNKNOWN));
+    return;
+  }
 
   hr = ble_advertisement_watcher_->Start();
   if (FAILED(hr)) {
     BLUETOOTH_LOG(ERROR) << "Starting the Advertisement Watcher failed: "
                          << logging::SystemErrorCodeToString(hr);
-    RemoveAdvertisementReceivedHandler();
+    RemoveAdvertisementWatcherEventHandlers();
     ui_task_runner_->PostTask(
         FROM_HERE,
         base::BindOnce(std::move(callback), /*is_error=*/true,
@@ -987,12 +977,16 @@ void BluetoothAdapterWinrt::StartScanWithFilter(
     BLUETOOTH_LOG(ERROR)
         << "Starting Advertisement Watcher failed, it is in the Aborted "
            "state.";
-    RemoveAdvertisementReceivedHandler();
+    RemoveAdvertisementWatcherEventHandlers();
     ui_task_runner_->PostTask(
         FROM_HERE,
         base::BindOnce(std::move(callback), /*is_error=*/true,
                        UMABluetoothDiscoverySessionOutcome::UNKNOWN));
     return;
+  }
+
+  for (auto& observer : observers_) {
+    observer.AdapterDiscoveringChanged(this, /*discovering=*/true);
   }
 
   ui_task_runner_->PostTask(
@@ -1003,7 +997,7 @@ void BluetoothAdapterWinrt::StartScanWithFilter(
 void BluetoothAdapterWinrt::StopScan(DiscoverySessionResultCallback callback) {
   DCHECK_EQ(NumDiscoverySessions(), 0);
 
-  RemoveAdvertisementReceivedHandler();
+  RemoveAdvertisementWatcherEventHandlers();
   HRESULT hr = ble_advertisement_watcher_->Stop();
   if (FAILED(hr)) {
     BLUETOOTH_LOG(ERROR) << "Stopped the Advertisement Watcher failed: "
@@ -1015,8 +1009,14 @@ void BluetoothAdapterWinrt::StopScan(DiscoverySessionResultCallback callback) {
     return;
   }
 
-  for (auto& device : devices_)
+  for (auto& device : devices_) {
     device.second->ClearAdvertisementData();
+  }
+
+  for (auto& observer : observers_) {
+    observer.AdapterDiscoveringChanged(this, /*discovering=*/false);
+  }
+
   ble_advertisement_watcher_.Reset();
   ui_task_runner_->PostTask(
       FROM_HERE, base::BindOnce(std::move(callback), /*is_error=*/false,
@@ -1329,12 +1329,56 @@ void BluetoothAdapterWinrt::OnAdvertisementReceived(
   }
 
   BluetoothDevice* const device = it->second.get();
-  ExtractAndUpdateAdvertisementData(received, device);
+
+  int16_t rssi = 0;
+  hr = received->get_RawSignalStrengthInDBm(&rssi);
+  if (FAILED(hr)) {
+    BLUETOOTH_LOG(ERROR) << "get_RawSignalStrengthInDBm() failed: "
+                         << logging::SystemErrorCodeToString(hr);
+  }
+
+  // Extract the remaining advertisement data.
+  ComPtr<IBluetoothLEAdvertisement> advertisement = GetAdvertisement(received);
+  base::Optional<std::string> device_name =
+      ExtractDeviceName(advertisement.Get());
+  base::Optional<int8_t> tx_power = ExtractTxPower(advertisement.Get());
+  BluetoothDevice::UUIDList advertised_uuids =
+      ExtractAdvertisedUUIDs(advertisement.Get());
+  BluetoothDevice::ServiceDataMap service_data_map =
+      ExtractServiceData(advertisement.Get());
+  BluetoothDevice::ManufacturerDataMap manufacturer_data_map =
+      ExtractManufacturerData(advertisement.Get());
+
+  static_cast<BluetoothDeviceWinrt*>(device)->UpdateLocalName(device_name);
+  device->UpdateAdvertisementData(rssi, ExtractFlags(advertisement.Get()),
+                                  advertised_uuids, tx_power, service_data_map,
+                                  manufacturer_data_map);
 
   for (auto& observer : observers_) {
+    observer.DeviceAdvertisementReceived(
+        bluetooth_address, device->GetName(),
+        /*advertisement_name=*/device_name, rssi, tx_power,
+        device->GetAppearance(), advertised_uuids, service_data_map,
+        manufacturer_data_map);
     is_new_device ? observer.DeviceAdded(this, device)
                   : observer.DeviceChanged(this, device);
   }
+}
+
+void BluetoothAdapterWinrt::OnAdvertisementWatcherStopped(
+    ABI::Windows::Devices::Bluetooth::Advertisement::
+        IBluetoothLEAdvertisementWatcher* watcher,
+    ABI::Windows::Devices::Bluetooth::Advertisement::
+        IBluetoothLEAdvertisementWatcherStoppedEventArgs* args) {
+  BluetoothError error;
+  HRESULT hr = args->get_Error(&error);
+  if (FAILED(hr)) {
+    BLUETOOTH_LOG(ERROR) << "get_Error() failed: " << hr;
+    return;
+  }
+  BLUETOOTH_LOG(DEBUG) << "OnAdvertisementWatcherStopped() error=" << error;
+
+  MarkDiscoverySessionsAsInactive();
 }
 
 void BluetoothAdapterWinrt::OnRegisterAdvertisement(
@@ -1409,13 +1453,23 @@ void BluetoothAdapterWinrt::TryRemovePoweredRadioEventHandlers() {
   }
 }
 
-void BluetoothAdapterWinrt::RemoveAdvertisementReceivedHandler() {
+void BluetoothAdapterWinrt::RemoveAdvertisementWatcherEventHandlers() {
   DCHECK(ble_advertisement_watcher_);
-  HRESULT hr = ble_advertisement_watcher_->remove_Received(
-      advertisement_received_token_);
-  if (FAILED(hr)) {
-    BLUETOOTH_LOG(ERROR) << "Removing the Received Handler failed: "
-                         << logging::SystemErrorCodeToString(hr);
+  if (advertisement_received_token_) {
+    HRESULT hr = ble_advertisement_watcher_->remove_Received(
+        *advertisement_received_token_);
+    if (FAILED(hr)) {
+      BLUETOOTH_LOG(ERROR) << "Removing the Received Handler failed: "
+                           << logging::SystemErrorCodeToString(hr);
+    }
+  }
+  if (advertisement_watcher_stopped_token_) {
+    HRESULT hr = ble_advertisement_watcher_->remove_Stopped(
+        *advertisement_watcher_stopped_token_);
+    if (FAILED(hr)) {
+      BLUETOOTH_LOG(ERROR) << "Removing the Stopped Handler failed: "
+                           << logging::SystemErrorCodeToString(hr);
+    }
   }
 }
 

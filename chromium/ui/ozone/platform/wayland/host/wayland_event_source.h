@@ -55,6 +55,10 @@ class WaylandEventSource : public PlatformEventSource,
   WaylandEventSource& operator=(const WaylandEventSource&) = delete;
   ~WaylandEventSource() override;
 
+  int last_pointer_button_pressed() const {
+    return last_pointer_button_pressed_;
+  }
+
   // Starts polling for events from the wayland connection file descriptor.
   // This method assumes connection is already estabilished and input objects
   // are already bound and properly initialized.
@@ -76,18 +80,17 @@ class WaylandEventSource : public PlatformEventSource,
   void OnKeyboardDestroyed(WaylandKeyboard* keyboard) override;
   void OnKeyboardFocusChanged(WaylandWindow* window, bool focused) override;
   void OnKeyboardModifiersChanged(int modifiers) override;
-  void OnKeyboardKeyEvent(EventType type,
-                          DomCode dom_code,
-                          DomKey dom_key,
-                          KeyboardCode key_code,
-                          bool repeat,
-                          base::TimeTicks timestamp) override;
+  uint32_t OnKeyboardKeyEvent(EventType type,
+                              DomCode dom_code,
+                              DomKey dom_key,
+                              KeyboardCode key_code,
+                              bool repeat,
+                              base::TimeTicks timestamp) override;
 
   // WaylandPointer::Delegate
   void OnPointerCreated(WaylandPointer* pointer) override;
   void OnPointerDestroyed(WaylandPointer* pointer) override;
   void OnPointerFocusChanged(WaylandWindow* window,
-                             bool focused,
                              const gfx::PointF& location) override;
   void OnPointerButtonEvent(EventType evtype, int changed_button) override;
   void OnPointerMotionEvent(const gfx::PointF& location) override;
@@ -117,7 +120,7 @@ class WaylandEventSource : public PlatformEventSource,
 
   void UpdateKeyboardModifiers(int modifier, bool down);
   void HandleKeyboardFocusChange(WaylandWindow* window, bool focused);
-  void HandlePointerFocusChange(WaylandWindow* window, bool focused);
+  void HandlePointerFocusChange(WaylandWindow* window);
   void HandleTouchFocusChange(WaylandWindow* window,
                               bool focused,
                               base::Optional<PointerId> id = base::nullopt);
@@ -132,6 +135,9 @@ class WaylandEventSource : public PlatformEventSource,
 
   // Bitmask of EventFlags used to keep track of the the pointer state.
   int pointer_flags_ = 0;
+
+  // Bitmask of EventFlags used to keep track of the last changed button.
+  int last_pointer_button_pressed_ = 0;
 
   // Bitmask of EventFlags used to keep track of the the keyboard state.
   int keyboard_modifiers_ = 0;

@@ -112,6 +112,7 @@
 <translation id="1771761307086386028">Баруун тийш гүйлгэх</translation>
 <translation id="1781173782405573156">Түлхүүрийн тусламжтайгаар нэвтрэх</translation>
 <translation id="1787176709638001873">Нууц үг засварлах текст</translation>
+<translation id="180203835522132923">Search + O, дараа нь W</translation>
 <translation id="1810107444790159527">Жагсаалтын цонх</translation>
 <translation id="1812527064848182527">газрын гадаргуу</translation>
 <translation id="1829244130665387512">Хуудаснаас хайх</translation>
@@ -256,6 +257,7 @@
 <translation id="297825089465017871">Хоёр хурууг зүүн тийш шудрах</translation>
 <translation id="2998131015536248178">Өмнөх тэмдэгт</translation>
 <translation id="2999559350546931576">Түвшинг бууруулах</translation>
+<translation id="3009352964623081324">Search + O, дараа нь S. Дуу хоолойг суулгах, удирдах болон өөрчлөхийн тулд ашиглана уу.</translation>
 <translation id="3014130421870723208">@ed 8цэг</translation>
 <translation id="3030432017085518523">Цэснээс нэгийг сонгох товч</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{ тодорхойлох тэмдэг}other{# тодорхойлох тэмдэгүүд}}</translation>
@@ -454,6 +456,7 @@
 <translation id="4505167975768625962">Оруулалт</translation>
 <translation id="4511186779140817916">Бага зэргийн саарал туяатай цайвар ягаан</translation>
 <translation id="451510441928265982">Өмнөх 2-р түвшний гарчиг алга байна</translation>
+<translation id="4515799157838123044">Арын контентыг сүүдэрлэх</translation>
 <translation id="4517854969512651305">Утгыг нэмэгдүүлэх</translation>
 <translation id="4532633738839459153">{COUNT,plural, =1{ налуу зураас }other{ # налуу зурааснууд}}</translation>
 <translation id="4537277403911487429">Дараагийн ижил төстэй зүйл</translation>
@@ -705,6 +708,7 @@
 <translation id="6628427060004938651">Хэсэг</translation>
 <translation id="6637586476836377253">нэвтрэх</translation>
 <translation id="6657128831881431364">Явцын мөр</translation>
+<translation id="6660819301598582123">Хурдан бор үнэг залхуу нохойн дээгүүр үсрэв.</translation>
 <translation id="667999046851023355">Бичиг баримт</translation>
 <translation id="6688209025607531203">Баймж бус сануулга</translation>
 <translation id="6689672606256159458">Улбар шар туяатай ягаан (Яргай загасны өнгө)</translation>
@@ -740,7 +744,6 @@
 <translation id="6951482098621102657">Дараагийн 5-р түвшний гарчиг алга байна</translation>
 <translation id="6955705049214951590">Бага зэргийн нил ягаан туяатай бүдэг ягаан</translation>
 <translation id="696356426651109308">Эхлэл хэсэг рүү очих</translation>
-<translation id="699159175332639490">+ O + W-г хайх</translation>
 <translation id="6994042831499278539">Тайлбар толины лавлагаа</translation>
 <translation id="6996566555547746822">Дараагийн хослолын хайрцаг</translation>
 <translation id="6997224546856374593">Том үсгүүдийг унших үед:</translation>
@@ -765,7 +768,7 @@
 <translation id="7137397390322864165">Улбар шар туяатай ягаан</translation>
 <translation id="7140168702531682811">Дээд индекс байна</translation>
 <translation id="7143034430156387447">6-с 8 цэгт брайлийн хооронд унтраах/асаах</translation>
-<translation id="7143207342074048698">Холбогдож байна</translation>
+<translation id="7143207342074048698">Холбож байна</translation>
 <translation id="7153618581592392745">Цайвар ягаан</translation>
 <translation id="7157306005867877619">Хураангуй</translation>
 <translation id="7161771961008409533">Зар сурталчилгааны товч</translation>
@@ -809,6 +812,7 @@
 <translation id="743783356331413498">Жишээ</translation>
 <translation id="7439060726180460871">Хадгалалтын файлын сан</translation>
 <translation id="744163271241493234">pwded</translation>
+<translation id="7484805699335881122">Элементийн төрөл болон эш татсан, устгасан, тодруулсан, хаалтад оруулсан эсвэл том үсгээр бичсэн текстийг хэлж байх үед ярианы өнгийг өөрчилнө үү.</translation>
 <translation id="7491962110804786152">цонх</translation>
 <translation id="7505149250476994901">Үсгийн өмнө "том" гэж хэлнэ үү</translation>
 <translation id="7518543783849163354">ChromeVox-н яриаг түр зогсоохын тулд Control түлхүүрийг дарна уу.</translation>

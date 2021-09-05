@@ -6,6 +6,7 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/toolbar_button_provider.h"
 #include "chrome/browser/ui/web_applications/web_app_controller_browsertest.h"
+#include "chrome/browser/web_applications/test/web_app_test.h"
 #include "chrome/common/web_application_info.h"
 #include "content/public/test/browser_test.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
@@ -35,24 +36,22 @@ IN_PROC_BROWSER_TEST_P(WebAppMinimalUITest, Standalone) {
   BrowserView* browser_view =
       CreateBrowserView(blink::mojom::DisplayMode::kStandalone);
   ToolbarButtonProvider* provider = browser_view->toolbar_button_provider();
-  EXPECT_FALSE(!!provider->GetBackButton());
-  EXPECT_FALSE(!!provider->GetReloadButton());
+  EXPECT_FALSE(provider->GetBackButton());
+  EXPECT_FALSE(provider->GetReloadButton());
 }
 
 IN_PROC_BROWSER_TEST_P(WebAppMinimalUITest, MinimalUi) {
   BrowserView* browser_view =
       CreateBrowserView(blink::mojom::DisplayMode::kMinimalUi);
   ToolbarButtonProvider* provider = browser_view->toolbar_button_provider();
-  EXPECT_TRUE(!!provider->GetBackButton());
-  EXPECT_TRUE(!!provider->GetReloadButton());
+  EXPECT_TRUE(provider->GetBackButton());
+  EXPECT_TRUE(provider->GetReloadButton());
 }
 
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    WebAppMinimalUITest,
-    ::testing::Values(ControllerType::kHostedAppController,
-                      ControllerType::kUnifiedControllerWithBookmarkApp,
-                      ControllerType::kUnifiedControllerWithWebApp),
-    ControllerTypeParamToString);
+INSTANTIATE_TEST_SUITE_P(All,
+                         WebAppMinimalUITest,
+                         ::testing::Values(ProviderType::kBookmarkApps,
+                                           ProviderType::kWebApps),
+                         ProviderTypeParamToString);
 
 }  // namespace web_app

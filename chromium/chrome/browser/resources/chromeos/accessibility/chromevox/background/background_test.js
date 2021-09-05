@@ -3,9 +3,7 @@
 // found in the LICENSE file.
 
 // Include test fixture.
-GEN_INCLUDE([
-  '../testing/chromevox_next_e2e_test_base.js', '../testing/assert_additions.js'
-]);
+GEN_INCLUDE(['../testing/chromevox_next_e2e_test_base.js']);
 
 GEN_INCLUDE(['../testing/mock_feedback.js', '../testing/fake_objects.js']);
 
@@ -216,7 +214,7 @@ TEST_F('ChromeVoxBackgroundTest', 'ForwardBackwardNavigation', function() {
 });
 
 TEST_F('ChromeVoxBackgroundTest', 'CaretNavigation', function() {
-  // TODO(plundblad): Add braille expectaions when crbug.com/523285 is fixed.
+  // TODO(plundblad): Add braille expectations when crbug.com/523285 is fixed.
   const mockFeedback = this.createMockFeedback();
   this.runWithLoadedTree(this.linksAndHeadingsDoc, function() {
     mockFeedback.expectSpeech('start');
@@ -1340,7 +1338,8 @@ TEST_F('ChromeVoxBackgroundTest', 'NodeVsSubnode', function() {
       });
 });
 
-TEST_F('ChromeVoxBackgroundTest', 'NativeFind', function() {
+// TODO(crbug.com/1085666): Test is flaky.
+TEST_F('ChromeVoxBackgroundTest', 'DISABLED_NativeFind', function() {
   const mockFeedback = this.createMockFeedback();
   this.runWithLoadedTree(
       `
@@ -2567,3 +2566,15 @@ TEST_F('ChromeVoxBackgroundTest', 'MenuItemRadio', function() {
             .replay();
       });
 });
+
+TEST_F(
+    'ChromeVoxBackgroundTest', 'FocusableNamedDivIsNotContainer', function() {
+      this.runWithLoadedTree(
+          `<div aria-label="hello world" tabindex="0">hello world</div>`,
+          function(root) {
+            const genericContainer =
+                root.find({role: RoleType.GENERIC_CONTAINER});
+            assertTrue(AutomationPredicate.object(genericContainer));
+            assertFalse(AutomationPredicate.container(genericContainer));
+          });
+    });

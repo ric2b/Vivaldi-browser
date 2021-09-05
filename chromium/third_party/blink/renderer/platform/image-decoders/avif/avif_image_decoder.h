@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "base/optional.h"
 #include "third_party/blink/renderer/platform/image-decoders/image_decoder.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkData.h"
@@ -34,6 +35,10 @@ class PLATFORM_EXPORT AVIFImageDecoder final : public ImageDecoder {
   String FilenameExtension() const override { return "avif"; }
   bool ImageIsHighBitDepth() override;
   void OnSetData(SegmentReader* data) override;
+  IntSize DecodedYUVSize(int component) const override;
+  size_t DecodedYUVWidthBytes(int component) const override;
+  SkYUVColorSpace GetYUVColorSpace() const override;
+  void DecodeToYUV() override;
   int RepetitionCount() const override;
   base::TimeDelta FrameDurationAtIndex(size_t) const override;
 
@@ -53,34 +58,32 @@ class PLATFORM_EXPORT AVIFImageDecoder final : public ImageDecoder {
   bool MaybeCreateDemuxer();
 
   // Decodes the frame at index |index|. The decoded frame is available in
-  // decoder_->image. Returns true on success, false on failure.
+  // decoder_->image. Returns whether decoding completed successfully.
   bool DecodeImage(size_t index);
 
-  // Updates or creates |color_transform_|. Returns true on success, false on
-  // failure.
-  bool UpdateColorTransform(const gfx::ColorSpace& src_cs,
-                            const gfx::ColorSpace& dest_cs);
+  // Updates or creates |color_transform_| for YUV-to-RGB conversion.
+  void UpdateColorTransform(const gfx::ColorSpace& frame_cs, int bit_depth);
 
-  // Returns true if we can set the color space on the image.
-  bool CanSetColorSpace() const;
+  // Renders |image| in |buffer|. Returns whether |image| was rendered
+  // successfully.
+  bool RenderImage(const avifImage* image, ImageFrame* buffer);
 
-  // Renders |image| in |buffer|. |frame_cs| is the color space of |image|.
-  // Returns true on success, false on failure.
-  bool RenderImage(const avifImage* image,
-                   const gfx::ColorSpace& frame_cs,
-                   ImageFrame* buffer);
+  // Applies color profile correction to the pixel data for |buffer|, if
+  // desired.
+  void ColorCorrectImage(ImageFrame* buffer);
 
-  bool is_high_bit_depth_ = false;
+  uint8_t bit_depth_ = 0;
   bool decode_to_half_float_ = false;
+  uint8_t chroma_shift_x_ = 0;
+  uint8_t chroma_shift_y_ = 0;
   size_t decoded_frame_count_ = 0;
+  base::Optional<SkYUVColorSpace> yuv_color_space_;
   std::unique_ptr<avifDecoder, void (*)(avifDecoder*)> decoder_{nullptr,
                                                                 nullptr};
 
   std::unique_ptr<gfx::ColorTransform> color_transform_;
 
-  gfx::ColorSpace last_color_space_;
   sk_sp<SkData> image_data_;
-  SkBitmap temp_bitmap_;
 };
 
 }  // namespace blink

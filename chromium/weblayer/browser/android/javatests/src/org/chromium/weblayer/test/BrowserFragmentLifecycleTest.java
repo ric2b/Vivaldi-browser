@@ -6,22 +6,28 @@ package org.chromium.weblayer.test;
 
 import android.net.Uri;
 import android.os.Bundle;
-import android.support.test.filters.SmallTest;
 
 import androidx.annotation.NonNull;
 import androidx.fragment.app.FragmentManager;
+import androidx.test.filters.SmallTest;
 
 import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.weblayer.Navigation;
 import org.chromium.weblayer.NavigationCallback;
 import org.chromium.weblayer.NavigationController;
 import org.chromium.weblayer.Tab;
 import org.chromium.weblayer.shell.InstrumentationActivity;
+
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Tests that fragment lifecycle works as expected.
@@ -62,27 +68,31 @@ public class BrowserFragmentLifecycleTest {
         waitForTabToFinishRestore(getTab(), url);
     }
 
+    private void destroyFragment(CallbackHelper helper) {
+        FragmentManager fm = mActivityTestRule.getActivity().getSupportFragmentManager();
+        fm.beginTransaction()
+                .remove(fm.getFragments().get(0))
+                .runOnCommit(helper::notifyCalled)
+                .commit();
+    }
+
     // https://crbug.com/1021041
     @Test
     @SmallTest
-    public void handlesFragmentDestroyWhileNavigating() {
+    public void handlesFragmentDestroyWhileNavigating() throws Throwable {
         InstrumentationActivity activity = mActivityTestRule.launchShellWithUrl("about:blank");
-        BoundedCountDownLatch latch = new BoundedCountDownLatch(1);
+        CallbackHelper helper = new CallbackHelper();
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             NavigationController navigationController = activity.getTab().getNavigationController();
             navigationController.registerNavigationCallback(new NavigationCallback() {
                 @Override
                 public void onReadyToCommitNavigation(@NonNull Navigation navigation) {
-                    FragmentManager fm = activity.getSupportFragmentManager();
-                    fm.beginTransaction()
-                            .remove(fm.getFragments().get(0))
-                            .runOnCommit(latch::countDown)
-                            .commit();
+                    destroyFragment(helper);
                 }
             });
             navigationController.navigate(Uri.parse("data:text,foo"));
         });
-        latch.timedAwait();
+        helper.waitForFirst();
     }
 
     // Waits for |tab| to finish loadding |url. This is intended to be called after restore.
@@ -178,5 +188,100 @@ public class BrowserFragmentLifecycleTest {
         final String restoredTabId = TestThreadUtils.runOnUiThreadBlockingNoException(
                 () -> { return restoredTab.getGuid(); });
         Assert.assertEquals(initialTabId, restoredTabId);
+    }
+
+    @Test
+    @SmallTest
+    @MinWebLayerVersion(85)
+    public void restoresTabData() throws Throwable {
+        Bundle extras = new Bundle();
+        extras.putString(InstrumentationActivity.EXTRA_PERSISTENCE_ID, "x");
+
+        Map<String, String> initialData = new HashMap<>();
+        initialData.put("foo", "bar");
+        restoresTabData(extras, initialData);
+    }
+
+    @Test
+    @SmallTest
+    @MinWebLayerVersion(85)
+    public void restoreTabDataAfterRecreate() throws Throwable {
+        Map<String, String> initialData = new HashMap<>();
+        initialData.put("foo", "bar");
+        restoresTabData(new Bundle(), initialData);
+    }
+
+    private void restoresTabData(Bundle extras, Map<String, String> initialData) {
+        String url = mActivityTestRule.getTestDataURL("simple_page.html");
+        mActivityTestRule.launchShellWithUrl(url, extras);
+
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            Tab tab = mActivityTestRule.getActivity().getTab();
+            Assert.assertTrue(tab.getData().isEmpty());
+            tab.setData(initialData);
+        });
+
+        mActivityTestRule.recreateActivity();
+
+        Tab tab = getTab();
+        Assert.assertNotNull(tab);
+        waitForTabToFinishRestore(tab, url);
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> Assert.assertEquals(initialData, tab.getData()));
+    }
+
+    @Test
+    @SmallTest
+    @MinWebLayerVersion(85)
+    public void getAndRemoveBrowserPersistenceIds() throws Throwable {
+        // Creates a browser with the persistence id 'x'.
+        final String persistenceId = "x";
+        Bundle extras = new Bundle();
+        extras.putString(InstrumentationActivity.EXTRA_PERSISTENCE_ID, persistenceId);
+        final String url = mActivityTestRule.getTestDataURL("simple_page.html");
+        mActivityTestRule.launchShellWithUrl(url, extras);
+
+        // Destroy the frament, which ensures the persistence file was written to.
+        CallbackHelper helper = new CallbackHelper();
+        TestThreadUtils.runOnUiThreadBlocking(() -> destroyFragment(helper));
+        helper.waitForCallback(0, 1);
+        int callCount = helper.getCallCount();
+
+        // Verify the id can be fetched.
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            mActivityTestRule.getActivity().getBrowser().getProfile().getBrowserPersistenceIds(
+                    (Set<String> ids) -> {
+                        Assert.assertEquals(1, ids.size());
+                        Assert.assertTrue(ids.contains(persistenceId));
+                        helper.notifyCalled();
+                    });
+        });
+        helper.waitForCallback(callCount, 1);
+        callCount = helper.getCallCount();
+
+        // Remove the storage.
+        HashSet<String> ids = new HashSet<String>();
+        ids.add("x");
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            mActivityTestRule.getActivity()
+                    .getBrowser()
+                    .getProfile()
+                    .removeBrowserPersistenceStorage(ids, (Boolean result) -> {
+                        Assert.assertTrue(result);
+                        helper.notifyCalled();
+                    });
+        });
+        helper.waitForCallback(callCount, 1);
+        callCount = helper.getCallCount();
+
+        // Verify it was actually removed.
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            mActivityTestRule.getActivity().getBrowser().getProfile().getBrowserPersistenceIds(
+                    (Set<String> actualIds) -> {
+                        Assert.assertTrue(actualIds.isEmpty());
+                        helper.notifyCalled();
+                    });
+        });
+        helper.waitForCallback(callCount, 1);
     }
 }

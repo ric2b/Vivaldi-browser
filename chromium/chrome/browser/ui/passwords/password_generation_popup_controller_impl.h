@@ -102,7 +102,6 @@ class PasswordGenerationPopupControllerImpl
   void GeneratedPasswordRejected();
 
   // content::WebContentsObserver overrides
-  void DidAttachInterstitialPage() override;
   void WebContentsDestroyed() override;
   void DidFinishNavigation(
       content::NavigationHandle* navigation_handle) override;
@@ -134,6 +133,7 @@ class PasswordGenerationPopupControllerImpl
   void SetSelected() override;
   void PasswordAccepted() override;
   gfx::NativeView container_view() const override;
+  content::WebContents* GetWebContents() const override;
   const gfx::RectF& element_bounds() const override;
   bool IsRTL() const override;
 

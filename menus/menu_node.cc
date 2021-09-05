@@ -4,14 +4,20 @@
 
 namespace menus {
 
-int64_t Menu_Node::id_counter = 1;
+int64_t Menu_Node::id_counter =  Menu_Node::kFirstDynamicNodeId;
+
+const char Menu_Node::kRootNodeGuid[] = "00000000-0000-5000-a000-000000000001";
+const char Menu_Node::kMainmenuNodeGuid[] =
+    "00000000-0000-5000-a000-000000000002";
 
 Menu_Control::Menu_Control() {}
 Menu_Control::~Menu_Control() {}
 
-Menu_Node::Menu_Node()
+Menu_Node::Menu_Node(const std::string& guid, int64_t id)
   : type_(UNKNOWN),
-    origin_(BUNDLE) {}
+    origin_(BUNDLE),
+    guid_(guid),
+    id_(id) {}
 
 Menu_Node::~Menu_Node() {}
 

@@ -305,13 +305,23 @@ class CORE_EXPORT StyleCascade {
   bool ValidateFallback(const CustomProperty&, CSSParserTokenRange) const;
   // Marks the CustomProperty as referenced by something. Needed to avoid
   // animating these custom properties on the compositor.
-  void MarkIsReferenced(const CustomProperty&);
+  void MarkIsReferenced(const CSSProperty& referencer,
+                        const CustomProperty& referenced);
   // Marks a CSSProperty as having a reference to a custom property. Needed to
   // disable the matched property cache in some cases.
   void MarkHasVariableReference(const CSSProperty&);
+  // The resulting ComputedStyle may depend on values from the parent style,
+  // for example, explicit inheritance or var() references means we hold a
+  // dependency on the relevant property. We maintain a set of these
+  // dependencies on StyleResolverState, which is later used by the
+  // MatchedPropertiesCache to figure out if a given cache lookup is a hit or a
+  // miss.
+  void MarkDependency(const CSSProperty&);
 
   const Document& GetDocument() const;
   const CSSProperty& ResolveSurrogate(const CSSProperty& surrogate);
+
+  bool ShouldRevert(const CSSProperty&, const CSSValue&, CascadeOrigin);
 
   StyleResolverState& state_;
   MatchResult match_result_;

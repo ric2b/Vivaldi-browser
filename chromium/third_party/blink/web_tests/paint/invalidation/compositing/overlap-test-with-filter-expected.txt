@@ -7,12 +7,9 @@
       "backgroundColor": "#FFFFFF"
     },
     {
-      "name": "LayoutIFrame IFRAME",
-      "bounds": [300, 100]
-    },
-    {
       "name": "LayoutView #document",
       "bounds": [300, 100],
+      "contentsOpaqueForText": true,
       "backgroundColor": "#FFFF00"
     },
     {

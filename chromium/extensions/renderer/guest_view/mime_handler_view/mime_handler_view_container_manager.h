@@ -112,6 +112,9 @@ class MimeHandlerViewContainerManager
                const GURL& resource_url) override;
 
  private:
+  // Static so it can be called after self-deletion.
+  static void RecordInteraction(MimeHandlerViewUMATypes::Type type);
+
   // PostMessageSupport::Delegate overrides.
   blink::WebLocalFrame* GetSourceFrame() override;
   blink::WebFrame* GetTargetFrame() override;
@@ -126,8 +129,6 @@ class MimeHandlerViewContainerManager
   void SetShowBeforeUnloadDialog(
       bool show_dialog,
       SetShowBeforeUnloadDialogCallback callback) override;
-
-  void RecordInteraction(MimeHandlerViewUMATypes::Type type);
 
   // Returns true if the |element| is managed by
   // MimeHandlerViewContainerManager; this would be the element that is added by

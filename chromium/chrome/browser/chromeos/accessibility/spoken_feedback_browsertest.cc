@@ -147,15 +147,7 @@ void LoggedInSpokenFeedbackTest::EnableChromeVox() {
   ASSERT_FALSE(AccessibilityManager::Get()->IsSpokenFeedbackEnabled());
 
   AccessibilityManager::Get()->EnableSpokenFeedback(true);
-
-  // AccessibilityManager sends a warmup utterance prior to actually loading
-  // ChromeVox.
-  sm_.ExpectSpeech("");
-
-  // The next utterance comes from ChromeVox signaling it is ready.
   sm_.ExpectSpeechPattern("*");
-
-  // Injects js to disable earcons.
   sm_.Call([this]() { DisableEarcons(); });
 }
 
@@ -279,7 +271,8 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, FocusToolbar) {
   sm_.Replay();
 }
 
-IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, TypeInOmnibox) {
+// TODO(crbug.com/1065235): flaky.
+IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, DISABLED_TypeInOmnibox) {
   EnableChromeVox();
 
   sm_.Call([this]() {
@@ -371,20 +364,11 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, ShelfIconFocusForward) {
 
 // Verifies that speaking text under mouse works for Shelf button and voice
 // announcements should not be stacked when mouse goes over many Shelf buttons
-IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest,
-                       DISABLED_SpeakingTextUnderMouseForShelfItem) {
+IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, SpeakingTextUnderMouseForShelfItem) {
   // Add the ShelfItem to the ShelfModel after enabling the ChromeVox. Because
   // when an extension is enabled, the ShelfItems which are not recorded as
   // pinned apps in user preference will be removed.
   EnableChromeVox();
-
-  sm_.Call([this]() {
-    ui_test_utils::NavigateToURL(browser(),
-                                 GURL("data:text/html;charset=utf-8,<button "
-                                      "autofocus>Click me</button>"));
-  });
-
-  sm_.ExpectSpeech("Click me");
 
   sm_.Call([this]() {
     // Add three Shelf buttons. Wait for the change on ShelfModel to reach ash.

@@ -63,6 +63,7 @@ public class CachedFeatureFlags {
             put(ChromeFeatureList.SWAP_PIXEL_FORMAT_TO_FIX_CONVERT_FROM_TRANSLUCENT, true);
             put(ChromeFeatureList.START_SURFACE_ANDROID, false);
             put(ChromeFeatureList.PAINT_PREVIEW_DEMO, false);
+            put(ChromeFeatureList.PAINT_PREVIEW_SHOW_ON_STARTUP, false);
             put(ChromeFeatureList.TAB_GRID_LAYOUT_ANDROID, true); // Vivaldi default value override.
             put(ChromeFeatureList.TAB_GROUPS_ANDROID, false);
             put(ChromeFeatureList.TAB_GROUPS_CONTINUATION_ANDROID, false);
@@ -247,7 +248,9 @@ public class CachedFeatureFlags {
         // Propagate REACHED_CODE_PROFILER feature value to LibraryLoader. This can't be done in
         // LibraryLoader itself because it lives in //base and can't depend on ChromeFeatureList.
         LibraryLoader.setReachedCodeProfilerEnabledOnNextRuns(
-                ChromeFeatureList.isEnabled(ChromeFeatureList.REACHED_CODE_PROFILER));
+                ChromeFeatureList.isEnabled(ChromeFeatureList.REACHED_CODE_PROFILER),
+                ChromeFeatureList.getFieldTrialParamByFeatureAsInt(
+                        ChromeFeatureList.REACHED_CODE_PROFILER, "sampling_interval_us", 0));
     }
 
     /**

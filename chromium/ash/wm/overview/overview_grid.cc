@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <memory>
 #include <utility>
 
 #include "ash/metrics/histogram_macros.h"
@@ -39,7 +40,6 @@
 #include "ash/wm/overview/overview_utils.h"
 #include "ash/wm/overview/overview_window_drag_controller.h"
 #include "ash/wm/overview/scoped_overview_animation_settings.h"
-#include "ash/wm/resize_shadow_controller.h"
 #include "ash/wm/splitview/split_view_constants.h"
 #include "ash/wm/splitview/split_view_divider.h"
 #include "ash/wm/splitview/split_view_utils.h"
@@ -225,7 +225,7 @@ std::unique_ptr<views::Widget> CreateDropTargetWidget(
   widget->SetVisibilityAnimationTransition(views::Widget::ANIMATE_NONE);
 
   // Show plus icon if drag a tab from a multi-tab window.
-  widget->SetContentsView(new DropTargetView(
+  widget->SetContentsView(std::make_unique<DropTargetView>(
       dragged_window->GetProperty(ash::kTabDraggingSourceWindowKey)));
   aura::Window* drop_target_window = widget->GetNativeWindow();
   drop_target_window->parent()->StackChildAtBottom(drop_target_window);
@@ -349,9 +349,6 @@ OverviewGrid::OverviewGrid(aura::Window* root_window,
     if (window->GetRootWindow() != root_window)
       continue;
 
-    // Hide the drag shadow if it is visible.
-    Shell::Get()->resize_shadow_controller()->HideShadow(window);
-
     // Stop ongoing animations before entering overview mode. Because we are
     // deferring SetTransform of the windows beneath the window covering the
     // available workspace, we need to set the correct transforms of these
@@ -369,6 +366,8 @@ OverviewGrid::OverviewGrid(aura::Window* root_window,
 OverviewGrid::~OverviewGrid() = default;
 
 void OverviewGrid::Shutdown() {
+  EndNudge();
+
   SplitViewController::Get(root_window_)->RemoveObserver(this);
   ScreenRotationAnimator::GetForRootWindow(root_window_)->RemoveObserver(this);
   Shell::Get()->wallpaper_controller()->RemoveObserver(this);
@@ -590,6 +589,8 @@ void OverviewGrid::AddItemInMruOrder(aura::Window* window,
 void OverviewGrid::RemoveItem(OverviewItem* overview_item,
                               bool item_destroying,
                               bool reposition) {
+  EndNudge();
+
   // Use reverse iterator to be efficient when removing all.
   auto iter = std::find_if(window_list_.rbegin(), window_list_.rend(),
                            base::MatchesUniquePtr(overview_item));
@@ -1395,7 +1396,7 @@ bool OverviewGrid::MaybeDropItemOnDeskMiniView(
   }
 
   auto* desks_controller = DesksController::Get();
-  for (auto& mini_view : desks_bar_view_->mini_views()) {
+  for (auto* mini_view : desks_bar_view_->mini_views()) {
     if (!mini_view->IsPointOnMiniView(screen_location))
       continue;
 
@@ -1623,13 +1624,13 @@ void OverviewGrid::MaybeInitDesksWidget() {
 
   desks_widget_ =
       DesksBarView::CreateDesksWidget(root_window_, GetDesksWidgetBounds());
-  desks_bar_view_ = new DesksBarView(this);
 
   // The following order of function calls is significant: SetContentsView()
   // must be called before DesksBarView:: Init(). This is needed because the
   // desks mini views need to access the widget to get the root window in order
   // to know how to layout themselves.
-  desks_widget_->SetContentsView(desks_bar_view_);
+  desks_bar_view_ =
+      desks_widget_->SetContentsView(std::make_unique<DesksBarView>(this));
   desks_bar_view_->Init();
 
   desks_widget_->Show();

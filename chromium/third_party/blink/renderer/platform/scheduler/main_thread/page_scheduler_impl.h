@@ -16,6 +16,7 @@
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/scheduler/common/throttling/task_queue_throttler.h"
 #include "third_party/blink/renderer/platform/scheduler/common/tracing_helper.h"
+#include "third_party/blink/renderer/platform/scheduler/main_thread/frame_origin_type.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/page_visibility_state.h"
 #include "third_party/blink/renderer/platform/scheduler/public/page_lifecycle_state.h"
 #include "third_party/blink/renderer/platform/scheduler/public/page_scheduler.h"
@@ -42,14 +43,21 @@ class
 class CPUTimeBudgetPool;
 class FrameSchedulerImpl;
 class MainThreadSchedulerImpl;
+class MainThreadTaskQueue;
+class WakeUpBudgetPool;
 
 class PLATFORM_EXPORT PageSchedulerImpl : public PageScheduler {
  public:
+  // Interval between throttled wake ups, when intensive throttling is disabled.
+  static constexpr base::TimeDelta kDefaultThrottledWakeUpInterval =
+      base::TimeDelta::FromSeconds(1);
+
   PageSchedulerImpl(PageScheduler::Delegate*, MainThreadSchedulerImpl*);
 
   ~PageSchedulerImpl() override;
 
   // PageScheduler implementation:
+  void OnTitleOrFaviconUpdated() override;
   void SetPageVisible(bool page_visible) override;
   void SetPageFrozen(bool) override;
   void SetKeepActive(bool) override;
@@ -86,12 +94,11 @@ class PLATFORM_EXPORT PageSchedulerImpl : public PageScheduler {
 
   bool IsPageVisible() const;
   bool IsFrozen() const;
-  // PageSchedulerImpl::OptedOutFromAggressiveThrottling can be used in non-test
-  // code, while PageScheduler::OptedOutFromAggressiveThrottlingForTest can't.
+  bool OptedOutFromAllThrottling() const;
   bool OptedOutFromAggressiveThrottling() const;
-  // Note that the frame can throttle queues even when the page is not throttled
-  // (e.g. for offscreen frames or recently backgrounded pages).
-  bool IsThrottled() const;
+  // Returns whether CPU time is throttled for the page. Note: This is
+  // independent from wake up rate throttling.
+  bool IsCPUTimeThrottled() const;
   bool KeepActive() const;
 
   bool IsLoading() const;
@@ -100,14 +107,12 @@ class PLATFORM_EXPORT PageSchedulerImpl : public PageScheduler {
   // owned by a web view.
   bool IsOrdinary() const;
 
-  void RegisterFrameSchedulerImpl(FrameSchedulerImpl* frame_scheduler);
-
   MainThreadSchedulerImpl* GetMainThreadScheduler() const;
 
   void Unregister(FrameSchedulerImpl*);
   void OnNavigation();
 
-  void OnAggressiveThrottlingStatusUpdated();
+  void OnThrottlingStatusUpdated();
 
   void OnTraceLogEnabled();
 
@@ -192,9 +197,16 @@ class PLATFORM_EXPORT PageSchedulerImpl : public PageScheduler {
     DISALLOW_COPY_AND_ASSIGN(PageLifecycleStateTracker);
   };
 
-  // We do not throttle anything while audio is played and shortly after that.
+  void RegisterFrameSchedulerImpl(FrameSchedulerImpl* frame_scheduler);
+
+  // A page cannot be throttled or frozen 30 seconds after playing audio.
+  //
+  // This used to be 5 seconds, which was barely enough to cover the time of
+  // silence during which a logo and button are shown after a YouTube ad. Since
+  // most pages don't play audio in background, it was decided that the delay
+  // can be increased to 30 seconds without significantly affecting performance.
   static constexpr base::TimeDelta kRecentAudioDelay =
-      base::TimeDelta::FromSeconds(5);
+      base::TimeDelta::FromSeconds(30);
 
   static const char kHistogramPageLifecycleStateTransition[];
 
@@ -202,29 +214,49 @@ class PLATFORM_EXPORT PageSchedulerImpl : public PageScheduler {
   // a part of foregrounding the page.
   void SetPageFrozenImpl(bool frozen, NotificationPolicy notification_policy);
 
-  CPUTimeBudgetPool* BackgroundCPUTimeBudgetPool();
-  void MaybeInitializeBackgroundCPUTimeBudgetPool();
+  // Adds or removes a |task_queue| from the WakeUpBudgetPool associated with
+  // |frame_origin_type|. When the FrameOriginType of a FrameScheduler changes,
+  // it should remove all its TaskQueues from their current WakeUpBudgetPool and
+  // add them back to the WakeUpBudgetPool appropriate for the new
+  // FrameOriginType.
+  void AddQueueToWakeUpBudgetPool(MainThreadTaskQueue* task_queue,
+                                  FrameOriginType frame_origin_type,
+                                  base::sequence_manager::LazyNow* lazy_now);
+  void RemoveQueueFromWakeUpBudgetPool(
+      MainThreadTaskQueue* task_queue,
+      FrameOriginType frame_origin_type,
+      base::sequence_manager::LazyNow* lazy_now);
+  // Returns the WakeUpBudgetPool to use for a frame with |frame_origin_type|.
+  WakeUpBudgetPool* GetWakeUpBudgetPool(FrameOriginType frame_origin_type);
+  // Initializes WakeUpBudgetPools, if not already initialized.
+  void MaybeInitializeWakeUpBudgetPools(
+      base::sequence_manager::LazyNow* lazy_now);
+
+  CPUTimeBudgetPool* background_cpu_time_budget_pool();
+  void MaybeInitializeBackgroundCPUTimeBudgetPool(
+      base::sequence_manager::LazyNow* lazy_now);
 
   void OnThrottlingReported(base::TimeDelta throttling_duration);
 
   // Depending on page visibility, either turns throttling off, or schedules a
   // call to enable it after a grace period.
-  void UpdateBackgroundSchedulingLifecycleState(
-      NotificationPolicy notification_policy);
+  void UpdatePolicyOnVisibilityChange(NotificationPolicy notification_policy);
 
-  // As a part of UpdateBackgroundSchedulingLifecycleState set correct
-  // background_time_budget_pool_ state depending on page visibility and
-  // number of active connections.
-  void UpdateBackgroundBudgetPoolSchedulingLifecycleState();
+  // Adjusts settings of budget pools depending on current state of the page.
+  void UpdateCPUTimeBudgetPool(base::sequence_manager::LazyNow* lazy_now);
+  void UpdateWakeUpBudgetPools(base::sequence_manager::LazyNow* lazy_now);
+  base::TimeDelta GetIntensiveWakeUpThrottlingDuration(bool is_same_origin);
 
   // Callback for marking page is silent after a delay since last audible
   // signal.
   void OnAudioSilent();
 
-  // Callback for enabling throttling in background after specified delay.
+  // Callbacks for adjusting the settings of a budget pool after a delay.
   // TODO(altimin): Trigger throttling depending on the loading state
   // of the page.
-  void DoThrottlePage();
+  void DoThrottleCPUTime();
+  void DoIntensivelyThrottleWakeUps();
+  void ResetHadRecentTitleOrFaviconUpdate();
 
   // Notify frames that the page scheduler state has been updated.
   void NotifyFrames();
@@ -252,14 +284,33 @@ class PLATFORM_EXPORT PageSchedulerImpl : public PageScheduler {
   AudioState audio_state_;
   bool is_frozen_;
   bool reported_background_throttling_since_navigation_;
+  bool opted_out_from_all_throttling_;
   bool opted_out_from_aggressive_throttling_;
   bool nested_runloop_;
   bool is_main_frame_local_;
-  bool is_throttled_;
+  bool is_cpu_time_throttled_;
+  bool are_wake_ups_intensively_throttled_;
   bool keep_active_;
-  CPUTimeBudgetPool* background_time_budget_pool_;  // Not owned.
-  PageScheduler::Delegate* delegate_;               // Not owned.
-  CancelableClosureHolder do_throttle_page_callback_;
+  bool had_recent_title_or_favicon_update_;
+  CPUTimeBudgetPool* cpu_time_budget_pool_;
+  // Throttles wake ups in throttleable TaskQueues of frames that have the same
+  // origin as the main frame.
+  //
+  // This pool allows aligned wake ups and unaligned wake ups if there hasn't
+  // been a recent wake up.
+  WakeUpBudgetPool* same_origin_wake_up_budget_pool_;
+  // Throttles wake ups in throttleable TaskQueues of frames that are
+  // cross-origin with the main frame.
+  //
+  // This pool only allows aligned wake ups. Because wake ups do not depend on
+  // recent wake ups like in |same_origin_wake_up_budget_pool_|, tasks cannot
+  // easily learn about tasks running in other queues in the same pool. This is
+  // important because this pool can have queues from different origins.
+  WakeUpBudgetPool* cross_origin_wake_up_budget_pool_;
+  PageScheduler::Delegate* delegate_;
+  CancelableClosureHolder do_throttle_cpu_time_callback_;
+  CancelableClosureHolder do_intensively_throttle_wake_ups_callback_;
+  CancelableClosureHolder reset_had_recent_title_or_favicon_update_;
   CancelableClosureHolder on_audio_silent_closure_;
   CancelableClosureHolder do_freeze_page_callback_;
   const base::TimeDelta delay_for_background_tab_freezing_;

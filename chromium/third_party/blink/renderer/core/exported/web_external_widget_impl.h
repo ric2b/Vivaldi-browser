@@ -45,6 +45,24 @@ class WebExternalWidgetImpl : public WebExternalWidget,
   scheduler::WebRenderWidgetSchedulingState* RendererWidgetSchedulingState()
       override;
   void SetCursor(const ui::Cursor& cursor) override;
+  bool HandlingInputEvent() override;
+  void SetHandlingInputEvent(bool handling) override;
+  void ProcessInputEventSynchronously(const WebCoalescedInputEvent&,
+                                      HandledEventCallback) override;
+  void DidOverscrollForTesting(
+      const gfx::Vector2dF& overscroll_delta,
+      const gfx::Vector2dF& accumulated_overscroll,
+      const gfx::PointF& position_in_viewport,
+      const gfx::Vector2dF& velocity_in_viewport) override;
+  void UpdateTextInputState() override;
+  void UpdateCompositionInfo() override;
+  void UpdateSelectionBounds() override;
+  void ShowVirtualKeyboard() override;
+  void ForceTextInputStateUpdate() override;
+  void RequestCompositionUpdates(bool immediate_request,
+                                 bool monitor_updates) override;
+  bool HasFocus() override;
+  void SetFocus(bool focus) override;
 
   // WebExternalWidget overrides:
   void SetRootLayer(scoped_refptr<cc::Layer>) override;
@@ -58,6 +76,24 @@ class WebExternalWidgetImpl : public WebExternalWidget,
   void RequestNewLayerTreeFrameSink(
       LayerTreeFrameSinkCallback callback) override;
   void DidCommitAndDrawCompositorFrame() override;
+  bool WillHandleGestureEvent(const WebGestureEvent& event) override;
+  bool WillHandleMouseEvent(const WebMouseEvent& event) override;
+  void ObserveGestureEventAndResult(
+      const WebGestureEvent& gesture_event,
+      const gfx::Vector2dF& unused_delta,
+      const cc::OverscrollBehavior& overscroll_behavior,
+      bool event_processed) override;
+  bool SupportsBufferedTouchEvents() override;
+  void QueueSyntheticEvent(
+      std::unique_ptr<blink::WebCoalescedInputEvent>) override;
+  void GetWidgetInputHandler(
+      mojo::PendingReceiver<mojom::blink::WidgetInputHandler> request,
+      mojo::PendingRemote<mojom::blink::WidgetInputHandlerHost> host) override;
+  bool HasCurrentImeGuard(bool request_to_show_virtual_keyboard) override;
+  void SendCompositionRangeChanged(
+      const gfx::Range& range,
+      const std::vector<gfx::Rect>& character_bounds) override;
+  void FocusChanged(bool enabled) override;
 
  private:
   WebExternalWidgetClient* const client_;

@@ -46,7 +46,7 @@ unsigned button_down_mask = 0;
 
 // Restore Xlib constants that were #undef'ed by gen/ui/gfx/x/xproto.h.
 constexpr int CopyFromParent = 0;
-constexpr int InputOnly = 1;
+constexpr int InputOnly = 2;
 constexpr int KeyPress = 2;
 constexpr int KeyRelease = 3;
 constexpr int ButtonPress = 4;
@@ -59,23 +59,27 @@ class UIControlsDesktopX11 : public UIControlsAura {
  public:
   UIControlsDesktopX11()
       : x_display_(gfx::GetXDisplay()),
-        x_root_window_(DefaultRootWindow(x_display_)),
-        x_window_(XCreateWindow(x_display_,
-                                x_root_window_,
-                                -100,            // x
-                                -100,            // y
-                                10,              // width
-                                10,              // height
-                                0,               // border width
-                                CopyFromParent,  // depth
-                                InputOnly,
-                                reinterpret_cast<Visual*>(CopyFromParent),
-                                0,
-                                nullptr)) {
-    XStoreName(x_display_, x_window_, "Chromium UIControlsDesktopX11 Window");
+        x_root_window_(ui::GetX11RootWindow()),
+        x_window_(static_cast<x11::Window>(
+            XCreateWindow(x_display_,
+                          static_cast<uint32_t>(x_root_window_),
+                          -100,            // x
+                          -100,            // y
+                          10,              // width
+                          10,              // height
+                          0,               // border width
+                          CopyFromParent,  // depth
+                          InputOnly,
+                          reinterpret_cast<Visual*>(CopyFromParent),
+                          0,
+                          nullptr))) {
+    XStoreName(x_display_, static_cast<uint32_t>(x_window_),
+               "Chromium UIControlsDesktopX11 Window");
   }
 
-  ~UIControlsDesktopX11() override { XDestroyWindow(x_display_, x_window_); }
+  ~UIControlsDesktopX11() override {
+    XDestroyWindow(x_display_, static_cast<uint32_t>(x_window_));
+  }
 
   bool SendKeyPress(gfx::NativeWindow window,
                     ui::KeyboardCode key,
@@ -281,10 +285,10 @@ class UIControlsDesktopX11 : public UIControlsAura {
 
   // Our X11 state.
   Display* x_display_;
-  ::Window x_root_window_;
+  x11::Window x_root_window_;
 
   // Input-only window used for events.
-  ::Window x_window_;
+  x11::Window x_window_;
 
   DISALLOW_COPY_AND_ASSIGN(UIControlsDesktopX11);
 };

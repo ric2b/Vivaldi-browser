@@ -297,6 +297,10 @@ class AuthenticatorRequestDialogModel {
   // user verification capability.
   void OnAuthenticatorMissingUserVerification();
 
+  // To be called when the selected authenticator doesn't support any of the
+  // COSEAlgorithmIdentifiers requested by the RP.
+  void OnNoCommonAlgorithms();
+
   // To be called when the selected authenticator cannot create a resident
   // credential because of insufficient storage.
   void OnAuthenticatorStorageFull();
@@ -415,6 +419,8 @@ class AuthenticatorRequestDialogModel {
   const std::string& relying_party_id() const { return relying_party_id_; }
 
   bool offer_try_again_in_ui() const { return offer_try_again_in_ui_; }
+
+  base::WeakPtr<AuthenticatorRequestDialogModel> GetWeakPtr();
 
  private:
   // Contains the state that will be reset when calling StartOver(). StartOver()

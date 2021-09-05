@@ -35,7 +35,6 @@
 #include "third_party/blink/public/common/css/screen_spanning.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom-shared.h"
 #include "third_party/blink/public/platform/pointer_properties.h"
-#include "third_party/blink/public/platform/shape_properties.h"
 #include "third_party/blink/renderer/core/css/css_primitive_value.h"
 #include "third_party/blink/renderer/core/css/css_resolution_units.h"
 #include "third_party/blink/renderer/core/css/css_to_length_conversion_data.h"
@@ -85,7 +84,7 @@ MediaQueryEvaluator::MediaQueryEvaluator(
 
 MediaQueryEvaluator::~MediaQueryEvaluator() = default;
 
-void MediaQueryEvaluator::Trace(Visitor* visitor) {
+void MediaQueryEvaluator::Trace(Visitor* visitor) const {
   visitor->Trace(media_values_);
 }
 
@@ -737,26 +736,18 @@ static bool PrefersReducedMotionMediaFeatureEval(
          media_values.PrefersReducedMotion();
 }
 
-static bool ShapeMediaFeatureEval(const MediaQueryExpValue& value,
-                                  MediaFeaturePrefix,
-                                  const MediaValues& media_values) {
+static bool PrefersReducedDataMediaFeatureEval(
+    const MediaQueryExpValue& value,
+    MediaFeaturePrefix,
+    const MediaValues& media_values) {
   if (!value.IsValid())
-    return true;
+    return media_values.PrefersReducedData();
 
   if (!value.is_id)
     return false;
 
-  DisplayShape shape = media_values.GetDisplayShape();
-
-  switch (value.id) {
-    case CSSValueID::kRect:
-      return shape == kDisplayShapeRect;
-    case CSSValueID::kRound:
-      return shape == kDisplayShapeRound;
-    default:
-      NOTREACHED();
-      return false;
-  }
+  return (value.id == CSSValueID::kNoPreference) ^
+         media_values.PrefersReducedData();
 }
 
 static bool AnyPointerMediaFeatureEval(const MediaQueryExpValue& value,
@@ -852,14 +843,12 @@ static bool PrefersColorSchemeMediaFeatureEval(
       media_values.GetPreferredColorScheme();
 
   if (!value.IsValid())
-    return preferred_scheme != PreferredColorScheme::kNoPreference;
+    return true;
 
   if (!value.is_id)
     return false;
 
-  return (preferred_scheme == PreferredColorScheme::kNoPreference &&
-          value.id == CSSValueID::kNoPreference) ||
-         (preferred_scheme == PreferredColorScheme::kDark &&
+  return (preferred_scheme == PreferredColorScheme::kDark &&
           value.id == CSSValueID::kDark) ||
          (preferred_scheme == PreferredColorScheme::kLight &&
           value.id == CSSValueID::kLight);
@@ -933,8 +922,13 @@ void MediaQueryEvaluator::Init() {
 }
 
 bool MediaQueryEvaluator::Eval(const MediaQueryExp& expr) const {
-  if (!media_values_ || !media_values_->HasValues())
-    return true;
+  if (!media_values_ || !media_values_->HasValues()) {
+    // media_values_ should only be nullptr when parsing UA stylesheets. The
+    // only media queries we support in UA stylesheets are media type queries.
+    // If HasValues() return false, it means the document frame is nullptr.
+    NOTREACHED();
+    return false;
+  }
 
   DCHECK(g_function_map);
 

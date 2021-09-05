@@ -27,7 +27,6 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/scoped_thread_priority.h"
 #include "base/time/time.h"
@@ -210,6 +209,10 @@ void PasswordCheckPrefs::Write(PrefService* local_state) {
 }
 
 int64_t GetPasswordLastChanged(const WCHAR* username) {
+  // Mitigate the issues caused by loading DLLs on a background thread
+  // (http://crbug/973868).
+  SCOPED_MAY_LOAD_LIBRARY_AT_BACKGROUND_PRIORITY();
+
   LPUSER_INFO_1 user_info = NULL;
   DWORD age = 0;
 
@@ -548,9 +551,9 @@ bool AuthenticateUserNew(gfx::NativeWindow window,
 }  // namespace
 
 void DelayReportOsPassword() {
-  base::PostDelayedTask(FROM_HERE, {content::BrowserThread::UI},
-                        base::BindOnce(&GetOsPasswordStatus),
-                        base::TimeDelta::FromSeconds(40));
+  content::GetUIThreadTaskRunner({})->PostDelayedTask(
+      FROM_HERE, base::BindOnce(&GetOsPasswordStatus),
+      base::TimeDelta::FromSeconds(40));
 }
 
 bool AuthenticateUser(gfx::NativeWindow window,

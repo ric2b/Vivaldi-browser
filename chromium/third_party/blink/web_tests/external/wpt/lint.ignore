@@ -172,11 +172,13 @@ SET TIMEOUT: IndexedDB/*
 SET TIMEOUT: infrastructure/*
 SET TIMEOUT: intersection-observer/resources/*
 SET TIMEOUT: intersection-observer/target-in-different-window.html
+SET TIMEOUT: measure-memory/*
 SET TIMEOUT: media-source/mediasource-util.js
 SET TIMEOUT: media-source/URL-createObjectURL-revoke.html
 SET TIMEOUT: mixed-content/generic/sanity-checker.js
 SET TIMEOUT: navigation-timing/*
 SET TIMEOUT: html/canvas/offscreen/the-offscreen-canvas/*
+SET TIMEOUT: html/canvas/offscreen/manual/the-offscreen-canvas/*
 SET TIMEOUT: old-tests/submission/Microsoft/history/history_000.htm
 SET TIMEOUT: paint-timing/resources/subframe-painting.html
 SET TIMEOUT: payment-request/allowpaymentrequest/setting-allowpaymentrequest-timing.https.sub.html
@@ -221,6 +223,7 @@ GENERATE_TESTS: resources/testharness.js
 
 # generate_tests usage (should be got rid of)
 GENERATE_TESTS: html/canvas/element/drawing-images-to-the-canvas/*
+GENERATE_TESTS: html/canvas/element/manual/drawing-images-to-the-canvas/*
 GENERATE_TESTS: css/css-shapes/shape-outside/values/*
 GENERATE_TESTS: css/css-tables/bounding-box-computation-1.html
 GENERATE_TESTS: css/css-tables/bounding-box-computation-2.html
@@ -262,7 +265,9 @@ GENERATE_TESTS: domparsing/createContextualFragment.html
 GENERATE_TESTS: domxpath/001.html
 GENERATE_TESTS: domxpath/002.html
 GENERATE_TESTS: mediacapture-image/MediaStreamTrack-applyConstraints-reject.html
+GENERATE_TESTS: mediacapture-image/MediaStreamTrack-getCapabilities.html
 GENERATE_TESTS: mediacapture-image/MediaStreamTrack-getConstraints-fast.html
+GENERATE_TESTS: mediacapture-image/MediaStreamTrack-getSettings.html
 GENERATE_TESTS: mediacapture-image/setOptions-reject.html
 GENERATE_TESTS: html/semantics/scripting-1/the-template-element/template-element/template-as-a-descendant.html
 GENERATE_TESTS: html/syntax/parsing/Document.getElementsByTagName-foreign-01.html
@@ -275,7 +280,7 @@ GENERATE_TESTS: html/webappapis/atob/base64.html
 GENERATE_TESTS: mediacapture-fromelement/capture.html
 GENERATE_TESTS: mediacapture-fromelement/creation.html
 GENERATE_TESTS: mediacapture-fromelement/ended.html
-GENERATE_TESTS: html/canvas/offscreen/filter/offscreencanvas.filter.html
+GENERATE_TESTS: html/canvas/offscreen/manual/filter/offscreencanvas.filter.html
 GENERATE_TESTS: pointerevents/pointerevent_constructor.html
 GENERATE_TESTS: pointerevents/extension/pointerevent_constructor.html
 GENERATE_TESTS: selection/collapse.js
@@ -294,6 +299,7 @@ SET TIMEOUT: css/css-fonts/font-display/font-display-feature-policy-01.tentative
 SET TIMEOUT: css/css-fonts/font-display/font-display-feature-policy-02.tentative.html
 SET TIMEOUT: css/css-fonts/font-display/font-display-preload.html
 SET TIMEOUT: document-policy/font-display/font-display-document-policy-01.tentative.html
+SET TIMEOUT: feature-policy/experimental-features/resources/focus-without-user-activation-iframe-tentative.html
 SET TIMEOUT: html/browsers/windows/auxiliary-browsing-contexts/resources/close-opener.html
 SET TIMEOUT: html/cross-origin-embedder-policy/resources/navigate-none.sub.html
 SET TIMEOUT: html/cross-origin-embedder-policy/resources/navigate-require-corp.sub.html
@@ -309,6 +315,8 @@ SET TIMEOUT: resources/test/tests/functional/add_cleanup_async.html
 SET TIMEOUT: resources/test/tests/functional/add_cleanup_async_rejection.html
 SET TIMEOUT: resources/test/tests/functional/add_cleanup_async_rejection_after_load.html
 SET TIMEOUT: resources/test/tests/functional/api-tests-1.html
+SET TIMEOUT: resources/test/tests/functional/step_wait.html
+SET TIMEOUT: resources/test/tests/functional/step_wait_func.html
 SET TIMEOUT: resources/test/tests/functional/worker.js
 SET TIMEOUT: resources/test/tests/functional/worker-uncaught-allow.js
 SET TIMEOUT: resources/test/tests/unit/exceptional-cases.html
@@ -608,6 +616,8 @@ CSS-COLLIDING-SUPPORT-NAME: css/css-display/support/util.js
 CSS-COLLIDING-SUPPORT-NAME: css/CSS2/normal-flow/support/replaced-min-max-1.png
 CSS-COLLIDING-SUPPORT-NAME: css/vendor-imports/mozilla/mozilla-central-reftests/ui3/support/replaced-min-max-1.png
 
+CSS-COLLIDING-TEST-NAME: css/css-contain/inheritance.html
+CSS-COLLIDING-TEST-NAME: css/css-contain/content-visibility/inheritance.html
 CSS-COLLIDING-TEST-NAME: css/css-sizing/contain-intrinsic-size/parsing/contain-intrinsic-size-invalid.html
 CSS-COLLIDING-TEST-NAME: css/css-sizing/aspect-ratio/parsing/contain-intrinsic-size-invalid.html
 CSS-COLLIDING-TEST-NAME: css/css-sizing/contain-intrinsic-size/parsing/contain-intrinsic-size-computed.html
@@ -707,6 +717,7 @@ MISSING DEPENDENCY: webxr/resources/webxr_util.js
 MISSING DEPENDENCY: contacts/resources/helpers.js
 MISSING DEPENDENCY: generic-sensor/resources/generic-sensor-helpers.js
 MISSING DEPENDENCY: orientation-event/resources/orientation-event-helpers.js
+MISSING DEPENDENCY: screen_enumeration/resources/screenenumeration-helpers.js
 
 # Tests that are false positives for using Ahem as a system font
 AHEM SYSTEM FONT: acid/acid3/test.html
@@ -719,7 +730,7 @@ AHEM SYSTEM FONT: infrastructure/assumptions/ahem-ref.html
 AHEM SYSTEM FONT: infrastructure/assumptions/ahem.html
 
 # Existing crashtests using testharness
-TESTHARNESS-IN-OTHER-TYPE: html/canvas/element/wide-gamut-canvas/imagedata-no-color-settings-crash.html
+TESTHARNESS-IN-OTHER-TYPE: html/canvas/element/manual/wide-gamut-canvas/imagedata-no-color-settings-crash.html
 TESTHARNESS-IN-OTHER-TYPE: css/CSS2/floats-clear/adjoining-float-new-fc-crash.html
 TESTHARNESS-IN-OTHER-TYPE: css/CSS2/floats/floats-saturated-position-crash.html
 TESTHARNESS-IN-OTHER-TYPE: css/CSS2/linebox/video-needs-layout-crash.html
@@ -753,7 +764,11 @@ TESTHARNESS-IN-OTHER-TYPE: html/semantics/interactive-elements/the-summary-eleme
 TESTHARNESS-IN-OTHER-TYPE: html/semantics/text-level-semantics/the-ruby-element/rt-without-ruby-crash.html
 TESTHARNESS-IN-OTHER-TYPE: portals/portals-no-frame-crash.html
 TESTHARNESS-IN-OTHER-TYPE: quirks/table-replaced-descendant-percentage-height-crash.html
+TESTHARNESS-IN-OTHER-TYPE: scroll-animations/null-scroll-source-crash.html
 TESTHARNESS-IN-OTHER-TYPE: svg/extensibility/foreignObject/foreign-object-circular-filter-reference-crash.html
 TESTHARNESS-IN-OTHER-TYPE: svg/extensibility/foreignObject/foreign-object-under-clip-path-crash.html
 TESTHARNESS-IN-OTHER-TYPE: svg/extensibility/foreignObject/foreign-object-under-defs-crash.html
 TESTHARNESS-IN-OTHER-TYPE: svg/svg-in-svg/svg-in-svg-circular-filter-reference-crash.html
+
+PRINT STATEMENT: webdriver/tests/print/printcmd.py
+PRINT STATEMENT: webdriver/tests/print/user_prompts.py

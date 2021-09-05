@@ -14,6 +14,7 @@
 #include "chrome/browser/chromeos/crostini/crostini_test_helper.h"
 #include "chrome/browser/chromeos/crostini/crostini_util.h"
 #include "chrome/browser/chromeos/guest_os/guest_os_pref_names.h"
+#include "chrome/browser/chromeos/plugin_vm/plugin_vm_test_helper.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chromeos/dbus/vm_applications/apps.pb.h"
@@ -28,6 +29,9 @@ using vm_tools::apps::ApplicationList;
 
 constexpr char kCrostiniAppsInstalledHistogram[] =
     "Crostini.AppsInstalledAtLogin";
+
+constexpr char kPluginVmAppsInstalledHistogram[] =
+    "PluginVm.AppsInstalledAtLogin";
 
 namespace guest_os {
 
@@ -54,7 +58,7 @@ class GuestOsRegistryServiceTest : public testing::Test {
   };
 
   guest_os::GuestOsRegistryService* service() { return service_.get(); }
-  Profile* profile() { return &profile_; }
+  TestingProfile* profile() { return &profile_; }
 
   std::vector<std::string> GetRegisteredAppIds() {
     std::vector<std::string> result;
@@ -184,6 +188,34 @@ TEST_F(GuestOsRegistryServiceTest, Observer) {
   service()->UpdateApplicationList(app_list);
 }
 
+TEST_F(GuestOsRegistryServiceTest, ObserverForPvmDefault) {
+  ApplicationList app_list = crostini::CrostiniTestHelper::BasicAppList(
+      "app 1", "PvmDefault", "container");
+  app_list.set_vm_type(vm_tools::apps::ApplicationList_VmType_PLUGIN_VM);
+  std::string app_id_1 = crostini::CrostiniTestHelper::GenerateAppId(
+      "app 1", "PvmDefault", "container");
+
+  Observer observer;
+  service()->AddObserver(&observer);
+
+  // Observers should be called when apps are added or updated.
+  EXPECT_CALL(observer, OnRegistryUpdated(
+                            service(), testing::IsEmpty(), testing::IsEmpty(),
+                            testing::UnorderedElementsAre(app_id_1)))
+      .Times(1);
+  service()->UpdateApplicationList(app_list);
+
+  // Observers should be called when apps are removed.
+  EXPECT_CALL(observer,
+              OnRegistryUpdated(service(), testing::IsEmpty(),
+                                testing::UnorderedElementsAre(app_id_1),
+                                testing::IsEmpty()))
+      .Times(1);
+  service()->ClearApplicationList(
+      GuestOsRegistryService::VmType::ApplicationList_VmType_PLUGIN_VM,
+      "PvmDefault", "");
+}
+
 TEST_F(GuestOsRegistryServiceTest, ZeroAppsInstalledHistogram) {
   base::HistogramTester histogram_tester;
 
@@ -221,6 +253,29 @@ TEST_F(GuestOsRegistryServiceTest, NAppsInstalledHistogram) {
   RecreateService();
 
   histogram_tester.ExpectUniqueSample(kCrostiniAppsInstalledHistogram, 4, 1);
+}
+
+TEST_F(GuestOsRegistryServiceTest, PluginVmAppsInstalledHistogram) {
+  base::HistogramTester histogram_tester;
+
+  plugin_vm::PluginVmTestHelper test_helper(profile());
+  test_helper.AllowPluginVm();
+
+  // Plugin VM needs to be enabled before we start counting.
+  RecreateService();
+  histogram_tester.ExpectTotalCount(kPluginVmAppsInstalledHistogram, 0);
+
+  test_helper.EnablePluginVm();
+  // Set up an app list with the expected number of apps.
+  ApplicationList app_list = crostini::CrostiniTestHelper::BasicAppList(
+      "app 1", "PvmDefault", "container");
+  *app_list.add_apps() = crostini::CrostiniTestHelper::BasicApp("app 2");
+  app_list.set_vm_type(vm_tools::apps::ApplicationList_VmType_PLUGIN_VM);
+  service()->UpdateApplicationList(app_list);
+
+  RecreateService();
+
+  histogram_tester.ExpectUniqueSample(kPluginVmAppsInstalledHistogram, 2, 1);
 }
 
 TEST_F(GuestOsRegistryServiceTest, InstallAndLaunchTime) {
@@ -328,7 +383,9 @@ TEST_F(GuestOsRegistryServiceTest, ClearApplicationList) {
                                          app_id_1, app_id_2, app_id_3, app_id_4,
                                          crostini::GetTerminalId()));
 
-  service()->ClearApplicationList("vm 2", "");
+  service()->ClearApplicationList(
+      GuestOsRegistryService::VmType::ApplicationList_VmType_TERMINA, "vm 2",
+      "");
 
   EXPECT_THAT(GetRegisteredAppIds(),
               testing::UnorderedElementsAre(app_id_1, app_id_2,

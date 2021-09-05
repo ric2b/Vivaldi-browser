@@ -381,6 +381,10 @@ HttpHandler::HttpHandler(
           WrapToCommand("ElementScreenshot",
                         base::BindRepeating(&ExecuteElementScreenshot))),
 
+      CommandMapping(
+          kPost, "session/:sessionId/print",
+          WrapToCommand("Print", base::BindRepeating(&ExecutePrint))),
+
       //
       // Json wire protocol endpoints
       //
@@ -859,9 +863,6 @@ HttpHandler::HttpHandler(
       // ChromeDriver specific extension commands.
       //
 
-      CommandMapping(
-          kPost, "session/:sessionId/chromium/launch_app",
-          WrapToCommand("LaunchApp", base::BindRepeating(&ExecuteLaunchApp))),
       CommandMapping(
           kGet, "session/:sessionId/chromium/heap_snapshot",
           WrapToCommand("HeapSnapshot",

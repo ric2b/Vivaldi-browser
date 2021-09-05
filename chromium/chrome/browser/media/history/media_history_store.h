@@ -41,7 +41,6 @@ class MediaHistorySessionImagesTable;
 class MediaHistoryImagesTable;
 class MediaHistoryFeedsTable;
 class MediaHistoryFeedItemsTable;
-class MediaHistoryFeedAssociatedOriginsTable;
 
 // Refcounted as it is created, initialized and destroyed on a different thread
 // from the DB sequence provided to the constructor of this class that is
@@ -132,6 +131,9 @@ class MediaHistoryStore : public base::RefCountedThreadSafe<MediaHistoryStore> {
   std::vector<mojom::MediaHistoryPlaybackRowPtr>
   GetMediaHistoryPlaybackRowsForDebug();
 
+  std::vector<media_feeds::mojom::MediaFeedItemPtr> GetMediaFeedItems(
+      const MediaHistoryKeyedService::GetMediaFeedItemsRequest& request);
+
   std::vector<media_feeds::mojom::MediaFeedPtr> GetMediaFeeds(
       const MediaHistoryKeyedService::GetMediaFeedsRequest& request);
 
@@ -155,20 +157,22 @@ class MediaHistoryStore : public base::RefCountedThreadSafe<MediaHistoryStore> {
   void StoreMediaFeedFetchResult(
       MediaHistoryKeyedService::MediaFeedFetchResult result);
 
-  std::vector<media_feeds::mojom::MediaFeedItemPtr>
-  GetItemsForMediaFeedForDebug(const int64_t feed_id);
-
   MediaHistoryKeyedService::PendingSafeSearchCheckList
   GetPendingSafeSearchCheckMediaFeedItems();
 
   void StoreMediaFeedItemSafeSearchResults(
-      std::map<int64_t, media_feeds::mojom::SafeSearchResult> results);
+      std::map<MediaHistoryKeyedService::SafeSearchID,
+               media_feeds::mojom::SafeSearchResult> results);
 
   void UpdateMediaFeedDisplayTime(const int64_t feed_id);
 
   void ResetMediaFeed(const url::Origin& origin,
-                      media_feeds::mojom::ResetReason reason,
-                      const bool include_subdomains);
+                      media_feeds::mojom::ResetReason reason);
+
+  void ResetMediaFeedDueToCookies(const url::Origin& origin,
+                                  const bool include_subdomains,
+                                  const std::string& name,
+                                  const net::CookieChangeCause& cause);
 
   void ResetMediaFeedDueToCacheClearing(
       const base::Time& start_time,
@@ -212,7 +216,6 @@ class MediaHistoryStore : public base::RefCountedThreadSafe<MediaHistoryStore> {
   scoped_refptr<MediaHistoryImagesTable> images_table_;
   scoped_refptr<MediaHistoryFeedsTable> feeds_table_;
   scoped_refptr<MediaHistoryFeedItemsTable> feed_items_table_;
-  scoped_refptr<MediaHistoryFeedAssociatedOriginsTable> feed_origins_table_;
   bool initialization_successful_;
   base::AtomicFlag cancelled_;
 };

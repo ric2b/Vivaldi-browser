@@ -7,6 +7,7 @@
 
 #include "base/observer_list.h"
 #include "content/public/browser/dedicated_worker_service.h"
+#include "url/gurl.h"
 
 namespace content {
 
@@ -25,13 +26,13 @@ class CONTENT_EXPORT DedicatedWorkerServiceImpl
 
   DedicatedWorkerId GenerateNextDedicatedWorkerId();
 
-  // Notifies all observers about a starting worker.
-  void NotifyWorkerStarted(DedicatedWorkerId dedicated_worker_id,
+  // Notifies all observers about a new worker.
+  void NotifyWorkerCreated(DedicatedWorkerId dedicated_worker_id,
                            int worker_process_id,
                            GlobalFrameRoutingId ancestor_render_frame_host_id);
 
-  // Notifies all observers about a terminating worker.
-  void NotifyWorkerTerminating(
+  // Notifies all observers about a worker being destroyed.
+  void NotifyBeforeWorkerDestroyed(
       DedicatedWorkerId dedicated_worker_id,
       GlobalFrameRoutingId ancestor_render_frame_host_id);
 
@@ -47,8 +48,16 @@ class CONTENT_EXPORT DedicatedWorkerServiceImpl
   base::ObserverList<Observer> observers_;
 
   struct DedicatedWorkerInfo {
+    DedicatedWorkerInfo(int worker_process_id,
+                        GlobalFrameRoutingId ancestor_render_frame_host_id);
+    ~DedicatedWorkerInfo();
+
+    DedicatedWorkerInfo(const DedicatedWorkerInfo& info);
+    DedicatedWorkerInfo& operator=(const DedicatedWorkerInfo& info);
+
     int worker_process_id;
     GlobalFrameRoutingId ancestor_render_frame_host_id;
+    base::Optional<GURL> final_response_url;
   };
   base::flat_map<DedicatedWorkerId, DedicatedWorkerInfo>
       dedicated_worker_infos_;

@@ -6,7 +6,7 @@
 import {webUIListenerCallback} from 'chrome://resources/js/cr.m.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-import {HatsBrowserProxyImpl, LifetimeBrowserProxyImpl, MetricsBrowserProxyImpl, OpenWindowProxyImpl, PasswordManagerImpl, PasswordManagerProxy, Router, routes, SafetyCheckBrowserProxy, SafetyCheckBrowserProxyImpl, SafetyCheckCallbackConstants, SafetyCheckExtensionsStatus, SafetyCheckIconStatus, SafetyCheckInteractions, SafetyCheckParentStatus, SafetyCheckPasswordsStatus, SafetyCheckSafeBrowsingStatus, SafetyCheckUpdatesStatus} from 'chrome://settings/settings.js';
+import {HatsBrowserProxyImpl, LifetimeBrowserProxyImpl, MetricsBrowserProxyImpl, OpenWindowProxyImpl, PasswordManagerImpl, PasswordManagerProxy, Router, routes, SafetyCheckBrowserProxy, SafetyCheckBrowserProxyImpl, SafetyCheckCallbackConstants, SafetyCheckChromeCleanerStatus, SafetyCheckExtensionsStatus, SafetyCheckIconStatus, SafetyCheckInteractions, SafetyCheckParentStatus, SafetyCheckPasswordsStatus, SafetyCheckSafeBrowsingStatus, SafetyCheckUpdatesStatus} from 'chrome://settings/settings.js';
 
 import {assertEquals, assertFalse, assertTrue} from '../chai_assert.js';
 import {TestBrowserProxy} from '../test_browser_proxy.m.js';
@@ -23,64 +23,82 @@ const testDisplayString = 'Test display string';
 
 /**
  * Fire a safety check parent event.
- * @param {SafetyCheckParentStatus} state
+ * @param {!SafetyCheckParentStatus} state
  */
 function fireSafetyCheckParentEvent(state) {
-  const event = {};
-  event.newState = state;
-  event.displayString = testDisplayString;
+  const event = {
+    newState: state,
+    displayString: testDisplayString,
+  };
   webUIListenerCallback(SafetyCheckCallbackConstants.PARENT_CHANGED, event);
 }
 
 /**
  * Fire a safety check updates event.
- * @param {SafetyCheckUpdatesStatus} state
+ * @param {!SafetyCheckUpdatesStatus} state
  */
 function fireSafetyCheckUpdatesEvent(state) {
-  const event = {};
-  event.newState = state;
-  event.displayString = testDisplayString;
+  const event = {
+    newState: state,
+    displayString: testDisplayString,
+  };
   webUIListenerCallback(SafetyCheckCallbackConstants.UPDATES_CHANGED, event);
 }
 
 /**
  * Fire a safety check passwords event.
- * @param {SafetyCheckPasswordsStatus} state
+ * @param {!SafetyCheckPasswordsStatus} state
  */
 function fireSafetyCheckPasswordsEvent(state) {
-  const event = {};
-  event.newState = state;
-  event.displayString = testDisplayString;
+  const event = {
+    newState: state,
+    displayString: testDisplayString,
+  };
   event.passwordsButtonString = null;
   webUIListenerCallback(SafetyCheckCallbackConstants.PASSWORDS_CHANGED, event);
 }
 
 /**
  * Fire a safety check safe browsing event.
- * @param {SafetyCheckSafeBrowsingStatus} state
+ * @param {!SafetyCheckSafeBrowsingStatus} state
  */
 function fireSafetyCheckSafeBrowsingEvent(state) {
-  const event = {};
-  event.newState = state;
-  event.displayString = testDisplayString;
+  const event = {
+    newState: state,
+    displayString: testDisplayString,
+  };
   webUIListenerCallback(
       SafetyCheckCallbackConstants.SAFE_BROWSING_CHANGED, event);
 }
 
 /**
  * Fire a safety check extensions event.
- * @param {SafetyCheckExtensionsStatus} state
+ * @param {!SafetyCheckExtensionsStatus} state
  */
 function fireSafetyCheckExtensionsEvent(state) {
-  const event = {};
-  event.newState = state;
-  event.displayString = testDisplayString;
+  const event = {
+    newState: state,
+    displayString: testDisplayString,
+  };
   webUIListenerCallback(SafetyCheckCallbackConstants.EXTENSIONS_CHANGED, event);
 }
 
 /**
- * Verify that the safety check child element of the page has been configured
- * as specified.
+ * Fire a safety check Chrome cleaner event.
+ * @param {SafetyCheckChromeCleanerStatus} state
+ */
+function fireSafetyCheckChromeCleanerEvent(state) {
+  const event = {
+    newState: state,
+    displayString: testDisplayString,
+  };
+  webUIListenerCallback(
+      SafetyCheckCallbackConstants.CHROME_CLEANER_CHANGED, event);
+}
+
+/**
+ * Verify that the safety check child inside the page has been configured as
+ * specified.
  * @param {!{
  *   page: !PolymerElement,
  *   iconStatus: !SafetyCheckIconStatus,
@@ -206,6 +224,8 @@ suite('SafetyCheckPageUiTests', function() {
         SafetyCheckSafeBrowsingStatus.ENABLED_STANDARD);
     fireSafetyCheckExtensionsEvent(
         SafetyCheckExtensionsStatus.NO_BLOCKLISTED_EXTENSIONS);
+    fireSafetyCheckChromeCleanerEvent(
+        SafetyCheckChromeCleanerStatus.REPORTER_FOUND_NOTHING);
     fireSafetyCheckParentEvent(SafetyCheckParentStatus.AFTER);
 
     flush();
@@ -345,14 +365,14 @@ suite('SafetyCheckChildTests', function() {
   });
 });
 
-suite('SafetyCheckUpdatesElementUiTests', function() {
+suite('SafetyCheckUpdatesChildUiTests', function() {
   /** @type {?TestLifetimeBrowserProxy} */
   let lifetimeBrowserProxy = null;
 
   /** @type {?TestMetricsBrowserProxy} */
   let metricsBrowserProxy = null;
 
-  /** @type {!SettingsSafetyCheckUpdatesElementElement} */
+  /** @type {!SettingsSafetyCheckUpdatesChildElement} */
   let page;
 
   setup(function() {
@@ -362,8 +382,8 @@ suite('SafetyCheckUpdatesElementUiTests', function() {
     MetricsBrowserProxyImpl.instance_ = metricsBrowserProxy;
 
     document.body.innerHTML = '';
-    page = /** @type {!SettingsSafetyCheckUpdatesElementElement} */ (
-        document.createElement('settings-safety-check-updates-element'));
+    page = /** @type {!SettingsSafetyCheckUpdatesChildElement} */ (
+        document.createElement('settings-safety-check-updates-child'));
     document.body.appendChild(page);
     flush();
   });
@@ -470,11 +490,11 @@ suite('SafetyCheckUpdatesElementUiTests', function() {
   });
 });
 
-suite('SafetyCheckPasswordsElementUiTests', function() {
+suite('SafetyCheckPasswordsChildUiTests', function() {
   /** @type {?TestMetricsBrowserProxy} */
   let metricsBrowserProxy = null;
 
-  /** @type {!SettingsSafetyCheckPasswordsElementElement} */
+  /** @type {!SettingsSafetyCheckPasswordsChildElement} */
   let page;
 
   setup(function() {
@@ -482,8 +502,8 @@ suite('SafetyCheckPasswordsElementUiTests', function() {
     MetricsBrowserProxyImpl.instance_ = metricsBrowserProxy;
 
     document.body.innerHTML = '';
-    page = /** @type {!SettingsSafetyCheckPasswordsElementElement} */ (
-        document.createElement('settings-safety-check-passwords-element'));
+    page = /** @type {!SettingsSafetyCheckPasswordsChildElement} */ (
+        document.createElement('settings-safety-check-passwords-child'));
     document.body.appendChild(page);
     flush();
   });
@@ -562,6 +582,7 @@ suite('SafetyCheckPasswordsElementUiTests', function() {
         case SafetyCheckPasswordsStatus.SIGNED_OUT:
         case SafetyCheckPasswordsStatus.QUOTA_LIMIT:
         case SafetyCheckPasswordsStatus.ERROR:
+        case SafetyCheckPasswordsStatus.FEATURE_UNAVAILABLE:
           assertSafetyCheckChild({
             page: page,
             iconStatus: SafetyCheckIconStatus.INFO,
@@ -576,11 +597,11 @@ suite('SafetyCheckPasswordsElementUiTests', function() {
   });
 });
 
-suite('SafetyCheckSafeBrowsingElementUiTests', function() {
+suite('SafetyCheckSafeBrowsingChildUiTests', function() {
   /** @type {?TestMetricsBrowserProxy} */
   let metricsBrowserProxy = null;
 
-  /** @type {!SettingsSafetyCheckSafeBrowsingElementElement} */
+  /** @type {!SettingsSafetyCheckSafeBrowsingChildElement} */
   let page;
 
   setup(function() {
@@ -588,8 +609,8 @@ suite('SafetyCheckSafeBrowsingElementUiTests', function() {
     MetricsBrowserProxyImpl.instance_ = metricsBrowserProxy;
 
     document.body.innerHTML = '';
-    page = /** @type {!SettingsSafetyCheckSafeBrowsingElementElement} */ (
-        document.createElement('settings-safety-check-safe-browsing-element'));
+    page = /** @type {!SettingsSafetyCheckSafeBrowsingChildElement} */ (
+        document.createElement('settings-safety-check-safe-browsing-child'));
     document.body.appendChild(page);
     flush();
   });
@@ -681,14 +702,14 @@ suite('SafetyCheckSafeBrowsingElementUiTests', function() {
   });
 });
 
-suite('SafetyCheckExtensionsElementUiTests', function() {
+suite('SafetyCheckExtensionsChildUiTests', function() {
   /** @type {?TestMetricsBrowserProxy} */
   let metricsBrowserProxy = null;
 
   /** @type {?TestOpenWindowProxy} */
   let openWindowProxy = null;
 
-  /** @type {!SettingsSafetyCheckExtensionsElementElement} */
+  /** @type {!SettingsSafetyCheckExtensionsChildElement} */
   let page;
 
   setup(function() {
@@ -698,8 +719,8 @@ suite('SafetyCheckExtensionsElementUiTests', function() {
     OpenWindowProxyImpl.instance_ = openWindowProxy;
 
     document.body.innerHTML = '';
-    page = /** @type {!SettingsSafetyCheckExtensionsElementElement} */ (
-        document.createElement('settings-safety-check-extensions-element'));
+    page = /** @type {!SettingsSafetyCheckExtensionsChildElement} */ (
+        document.createElement('settings-safety-check-extensions-child'));
     document.body.appendChild(page);
     flush();
   });
@@ -708,9 +729,7 @@ suite('SafetyCheckExtensionsElementUiTests', function() {
     page.remove();
   });
 
-  /**
-   * @return {!Promise}
-   */
+  /** @return {!Promise} */
   async function expectExtensionsButtonClickActions() {
     // User clicks review extensions button.
     page.$$('#safetyCheckChild').$$('#button').click();

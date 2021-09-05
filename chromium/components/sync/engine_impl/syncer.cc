@@ -5,13 +5,14 @@
 #include "components/sync/engine_impl/syncer.h"
 
 #include <memory>
+#include <string>
 
 #include "base/auto_reset.h"
 #include "base/logging.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/trace_event/trace_event.h"
 #include "components/sync/base/cancelation_signal.h"
 #include "components/sync/engine/sync_engine_switches.h"
-#include "components/sync/engine_impl/apply_control_data_updates.h"
 #include "components/sync/engine_impl/commit.h"
 #include "components/sync/engine_impl/commit_processor.h"
 #include "components/sync/engine_impl/cycle/nudge_tracker.h"
@@ -119,9 +120,6 @@ bool Syncer::DownloadAndApplyUpdates(ModelTypeSet* request_types,
   {
     TRACE_EVENT0("sync", "ApplyUpdates");
 
-    // Nigori updates always get applied first.
-    ApplyNigoriUpdate(cycle->context()->directory());
-
     // Apply updates to the other types. May or may not involve cross-thread
     // traffic, depending on the underlying update handlers and the GU type's
     // delegate.
@@ -163,6 +161,12 @@ SyncerError Syncer::BuildAndPostCommits(const ModelTypeSet& request_types,
     SyncerError error = commit->PostAndProcessResponse(
         nudge_tracker, cycle, cycle->mutable_status_controller(),
         cycle->context()->extensions_activity());
+    base::UmaHistogramEnumeration("Sync.CommitResponse", error.value());
+    for (ModelType type : commit->GetContributingDataTypes()) {
+      const std::string kPrefix = "Sync.CommitResponse.";
+      base::UmaHistogramEnumeration(kPrefix + ModelTypeToHistogramSuffix(type),
+                                    error.value());
+    }
     commit->CleanUp();
     if (error.value() != SyncerError::SYNCER_OK) {
       return error;

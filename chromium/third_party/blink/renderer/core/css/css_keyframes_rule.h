@@ -114,10 +114,10 @@ class CSSKeyframesRule final : public CSSRule {
 
   void StyleChanged() { keyframes_rule_->StyleChanged(); }
 
-  void Trace(Visitor*) override;
+  void Trace(Visitor*) const override;
 
  private:
-  CSSRule::Type type() const override { return kKeyframesRule; }
+  CSSRule::Type GetType() const override { return kKeyframesRule; }
 
   Member<StyleRuleKeyframes> keyframes_rule_;
   mutable HeapVector<Member<CSSKeyframeRule>> child_rule_cssom_wrappers_;
@@ -128,7 +128,7 @@ class CSSKeyframesRule final : public CSSRule {
 template <>
 struct DowncastTraits<CSSKeyframesRule> {
   static bool AllowFrom(const CSSRule& rule) {
-    return rule.type() == CSSRule::kKeyframesRule;
+    return rule.GetType() == CSSRule::kKeyframesRule;
   }
 };
 

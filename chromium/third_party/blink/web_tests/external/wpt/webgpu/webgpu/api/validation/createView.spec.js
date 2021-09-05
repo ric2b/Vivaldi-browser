@@ -5,7 +5,7 @@
 export const description = `
 createView validation tests.
 `;
-import { TestGroup } from '../../../common/framework/test_group.js';
+import { makeTestGroup } from '../../../common/framework/test_group.js';
 import { ValidationTest } from './validation_test.js';
 const ARRAY_LAYER_COUNT_2D = 6;
 const MIP_LEVEL_COUNT = 6;
@@ -55,28 +55,8 @@ class F extends ValidationTest {
 
 }
 
-export const g = new TestGroup(F);
-g.test('creating texture view on a 2D non array texture', async t => {
-  const {
-    dimension = '2d',
-    arrayLayerCount,
-    mipLevelCount,
-    baseMipLevel,
-    _success
-  } = t.params;
-  const texture = t.createTexture({
-    arrayLayerCount: 1
-  });
-  const descriptor = t.getDescriptor({
-    dimension,
-    arrayLayerCount,
-    mipLevelCount,
-    baseMipLevel
-  });
-  t.expectValidationError(() => {
-    texture.createView(descriptor);
-  }, !_success);
-}).params([{
+export const g = makeTestGroup(F);
+g.test('creating_texture_view_on_a_2D_non_array_texture').params([{
   _success: true
 }, // default view works
 {
@@ -135,26 +115,28 @@ g.test('creating texture view on a 2D non array texture', async t => {
   mipLevelCount: 1,
   baseMipLevel: MIP_LEVEL_COUNT,
   _success: false
-}]);
-g.test('creating texture view on a 2D array texture', async t => {
+}]).fn(async t => {
   const {
-    dimension = '2d-array',
+    dimension = '2d',
     arrayLayerCount,
-    baseArrayLayer,
+    mipLevelCount,
+    baseMipLevel,
     _success
   } = t.params;
   const texture = t.createTexture({
-    arrayLayerCount: ARRAY_LAYER_COUNT_2D
+    arrayLayerCount: 1
   });
   const descriptor = t.getDescriptor({
     dimension,
     arrayLayerCount,
-    baseArrayLayer
+    mipLevelCount,
+    baseMipLevel
   });
   t.expectValidationError(() => {
     texture.createView(descriptor);
   }, !_success);
-}).params([{
+});
+g.test('creating_texture_view_on_a_2D_array_texture').params([{
   _success: true
 }, // default view works
 {
@@ -200,28 +182,26 @@ g.test('creating texture view on a 2D array texture', async t => {
   arrayLayerCount: 1,
   baseArrayLayer: ARRAY_LAYER_COUNT_2D,
   _success: false
-}]);
-g.test('Using defaults validates the same as setting values for more than 1 array layer', async t => {
+}]).fn(async t => {
   const {
-    format,
-    dimension,
+    dimension = '2d-array',
     arrayLayerCount,
-    mipLevelCount,
+    baseArrayLayer,
     _success
   } = t.params;
   const texture = t.createTexture({
     arrayLayerCount: ARRAY_LAYER_COUNT_2D
   });
-  const descriptor = {
-    format,
+  const descriptor = t.getDescriptor({
     dimension,
     arrayLayerCount,
-    mipLevelCount
-  };
+    baseArrayLayer
+  });
   t.expectValidationError(() => {
     texture.createView(descriptor);
   }, !_success);
-}).params([{
+});
+g.test('Using_defaults_validates_the_same_as_setting_values_for_more_than_1_array_layer').params([{
   _success: true
 }, {
   format: 'rgba8unorm',
@@ -248,8 +228,7 @@ g.test('Using defaults validates the same as setting values for more than 1 arra
   dimension: '2d-array',
   mipLevelCount: MIP_LEVEL_COUNT,
   _success: true
-}]);
-g.test('Using defaults validates the same as setting values for only 1 array layer', async t => {
+}]).fn(async t => {
   const {
     format,
     dimension,
@@ -258,7 +237,7 @@ g.test('Using defaults validates the same as setting values for only 1 array lay
     _success
   } = t.params;
   const texture = t.createTexture({
-    arrayLayerCount: 1
+    arrayLayerCount: ARRAY_LAYER_COUNT_2D
   });
   const descriptor = {
     format,
@@ -269,7 +248,8 @@ g.test('Using defaults validates the same as setting values for only 1 array lay
   t.expectValidationError(() => {
     texture.createView(descriptor);
   }, !_success);
-}).params([{
+});
+g.test('Using_defaults_validates_the_same_as_setting_values_for_only_1_array_layer').params([{
   _success: true
 }, {
   format: 'rgba8unorm',
@@ -298,24 +278,28 @@ g.test('Using defaults validates the same as setting values for only 1 array lay
 }, {
   mipLevelCount: 1,
   _success: true
-}]);
-g.test('creating cube map texture view', async t => {
+}]).fn(async t => {
   const {
-    dimension = '2d-array',
+    format,
+    dimension,
     arrayLayerCount,
+    mipLevelCount,
     _success
   } = t.params;
   const texture = t.createTexture({
-    arrayLayerCount: 16
+    arrayLayerCount: 1
   });
-  const descriptor = t.getDescriptor({
+  const descriptor = {
+    format,
     dimension,
-    arrayLayerCount
-  });
+    arrayLayerCount,
+    mipLevelCount
+  };
   t.expectValidationError(() => {
     texture.createView(descriptor);
   }, !_success);
-}).params([{
+});
+g.test('creating_cube_map_texture_view').params([{
   dimension: 'cube',
   arrayLayerCount: 6,
   _success: true
@@ -350,8 +334,32 @@ g.test('creating cube map texture view', async t => {
   dimension: 'cube-array',
   arrayLayerCount: 13,
   _success: false
-}]);
-g.test('creating cube map texture view with a non square texture', async t => {
+}]).fn(async t => {
+  const {
+    dimension = '2d-array',
+    arrayLayerCount,
+    _success
+  } = t.params;
+  const texture = t.createTexture({
+    arrayLayerCount: 16
+  });
+  const descriptor = t.getDescriptor({
+    dimension,
+    arrayLayerCount
+  });
+  t.expectValidationError(() => {
+    texture.createView(descriptor);
+  }, !_success);
+});
+g.test('creating_cube_map_texture_view_with_a_non_square_texture').params([{
+  dimension: 'cube',
+  arrayLayerCount: 6
+}, // it is an error to create a cube map texture view with width != height.
+{
+  dimension: 'cube-array',
+  arrayLayerCount: 12
+} // it is an error to create a cube map array texture view with width != height.
+]).fn(async t => {
   const {
     dimension,
     arrayLayerCount
@@ -369,17 +377,9 @@ g.test('creating cube map texture view with a non square texture', async t => {
   t.expectValidationError(() => {
     nonSquareTexture.createView(descriptor);
   });
-}).params([{
-  dimension: 'cube',
-  arrayLayerCount: 6
-}, // it is an error to create a cube map texture view with width != height.
-{
-  dimension: 'cube-array',
-  arrayLayerCount: 12
-} // it is an error to create a cube map array texture view with width != height.
-]); // TODO: add more tests when rules are fully implemented.
+}); // TODO: add more tests when rules are fully implemented.
 
-g.test('test the format compatibility rules when creating a texture view', async t => {
+g.test('test_the_format_compatibility_rules_when_creating_a_texture_view').fn(async t => {
   const texture = t.createTexture({
     arrayLayerCount: 1
   });
@@ -391,7 +391,7 @@ g.test('test the format compatibility rules when creating a texture view', async
     texture.createView(descriptor);
   });
 });
-g.test('it is invalid to use a texture view created from a destroyed texture', async t => {
+g.test('it_is_invalid_to_use_a_texture_view_created_from_a_destroyed_texture').fn(async t => {
   const texture = t.createTexture({
     arrayLayerCount: 1
   });

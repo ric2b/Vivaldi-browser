@@ -284,7 +284,8 @@ void GpuWatchdogThreadImplV2::OnAddPowerObserver() {
   DCHECK(watchdog_thread_task_runner_->BelongsToCurrentThread());
   DCHECK(base::PowerMonitor::IsInitialized());
 
-  is_power_observer_added_ = base::PowerMonitor::AddObserver(this);
+  base::PowerMonitor::AddObserver(this);
+  is_power_observer_added_ = true;
 }
 
 // Running on the watchdog thread.
@@ -660,7 +661,6 @@ void GpuWatchdogThreadImplV2::DeliberatelyTerminateToRecoverFromHang() {
 
 void GpuWatchdogThreadImplV2::GpuWatchdogHistogram(
     GpuWatchdogThreadEvent thread_event) {
-  base::UmaHistogramEnumeration("GPU.WatchdogThread.Event.V2", thread_event);
   base::UmaHistogramEnumeration("GPU.WatchdogThread.Event", thread_event);
 }
 

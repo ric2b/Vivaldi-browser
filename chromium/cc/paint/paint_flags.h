@@ -33,7 +33,6 @@ class CC_PAINT_EXPORT PaintFlags {
   enum Style {
     kFill_Style = SkPaint::kFill_Style,
     kStroke_Style = SkPaint::kStroke_Style,
-    kStrokeAndFill_Style = SkPaint::kStrokeAndFill_Style,
   };
   bool nothingToDraw() const;
   ALWAYS_INLINE Style getStyle() const {
@@ -141,9 +140,13 @@ class CC_PAINT_EXPORT PaintFlags {
     draw_looper_ = std::move(looper);
   }
 
-  // Returns true if this just represents an opacity blend when
-  // used as saveLayer flags.
+  // Returns true if this just represents an opacity blend when used as
+  // saveLayer flags, thus the saveLayer can be converted to a saveLayerAlpha.
   bool IsSimpleOpacity() const;
+
+  // Returns true if this (of a drawOp) allows the sequence
+  // saveLayerAlpha/drawOp/restore to be folded into a single drawOp by baking
+  // the alpha in the saveLayerAlpha into the flags of the drawOp.
   bool SupportsFoldingAlpha() const;
 
   // SkPaint does not support loopers, so callers of SkToPaint need

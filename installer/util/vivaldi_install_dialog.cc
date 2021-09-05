@@ -1111,14 +1111,6 @@ INT_PTR CALLBACK VivaldiInstallDialog::DlgProc(HWND hdlg,
                   : this_->btn_tos_accept_install_str_.c_str());
               if (this_->is_upgrade_) {
                 ShowWindow(GetDlgItem(hdlg, IDC_STATIC_WARN), SW_SHOW);
-
-                // If not standalone install selected, override current.
-                if (this_->install_type_ != INSTALL_STANDALONE) {
-                  this_->install_type_ = installed_type;
-                  ComboBox_SetCurSel(
-                      GetDlgItem(hdlg, IDC_COMBO_INSTALLTYPES),
-                          this_->install_type_);
-                }
                 this_->UpdateRegisterCheckboxVisibility();
               } else {
                 ShowWindow(GetDlgItem(hdlg, IDC_STATIC_WARN), SW_HIDE);

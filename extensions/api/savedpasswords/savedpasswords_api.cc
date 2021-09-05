@@ -66,7 +66,7 @@ void SavedpasswordsGetListFunction::OnGetPasswordStoreResults(
     notes_tree_node->username = base::UTF16ToUTF8(form->username_value);
     notes_tree_node->password = base::UTF16ToUTF8(form->password_value);
     notes_tree_node->origin =
-        base::UTF16ToUTF8(url_formatter::FormatUrl(form->origin));
+        base::UTF16ToUTF8(url_formatter::FormatUrl(form->url));
     notes_tree_node->index = base::NumberToString(i);
   }
 
@@ -125,7 +125,7 @@ ExtensionFunction::ResponseAction SavedpasswordsAddFunction::Run() {
   autofill::PasswordForm password_form = {};
   password_form.scheme = autofill::PasswordForm::Scheme::kOther;
   password_form.signon_realm = params->password_form.signon_realm;
-  password_form.origin = GURL(params->password_form.origin);
+  password_form.url = GURL(params->password_form.origin);
   password_form.username_value =
       base::UTF8ToUTF16(params->password_form.username);
   password_form.password_value =
@@ -205,7 +205,7 @@ ExtensionFunction::ResponseAction SavedpasswordsDeleteFunction::Run() {
   autofill::PasswordForm password_form = {};
   password_form.scheme = autofill::PasswordForm::Scheme::kOther;
   password_form.signon_realm = params->password_form.signon_realm;
-  password_form.origin = GURL(params->password_form.origin);
+  password_form.url = GURL(params->password_form.origin);
   password_form.username_value =
       base::UTF8ToUTF16(params->password_form.username);
 

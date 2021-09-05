@@ -2199,15 +2199,39 @@ TEST_F(HttpStreamFactoryTest, RequestBidirectionalStreamImpl) {
   EXPECT_TRUE(waiter.used_proxy_info().is_direct());
 }
 
+struct TestParams {
+  quic::ParsedQuicVersion version;
+  bool client_headers_include_h2_stream_dependency;
+};
+
+// Used by ::testing::PrintToStringParamName().
+std::string PrintToString(const TestParams& p) {
+  return quiche::QuicheStrCat(
+      ParsedQuicVersionToString(p.version), "_",
+      (p.client_headers_include_h2_stream_dependency ? "" : "No"),
+      "Dependency");
+}
+
+std::vector<TestParams> GetTestParams() {
+  std::vector<TestParams> params;
+  quic::ParsedQuicVersionVector all_supported_versions =
+      quic::AllSupportedVersions();
+  for (const auto& version : all_supported_versions) {
+    params.push_back(TestParams{version, false});
+    params.push_back(TestParams{version, true});
+  }
+  return params;
+}
+
 class HttpStreamFactoryBidirectionalQuicTest
     : public TestWithTaskEnvironment,
-      public ::testing::WithParamInterface<
-          std::tuple<quic::ParsedQuicVersion, bool>> {
+      public ::testing::WithParamInterface<TestParams> {
  protected:
   HttpStreamFactoryBidirectionalQuicTest()
       : default_url_(kDefaultUrl),
-        version_(std::get<0>(GetParam())),
-        client_headers_include_h2_stream_dependency_(std::get<1>(GetParam())),
+        version_(GetParam().version),
+        client_headers_include_h2_stream_dependency_(
+            GetParam().client_headers_include_h2_stream_dependency),
         client_packet_maker_(version_,
                              quic::QuicUtils::CreateRandomConnectionId(
                                  quic_context_.random_generator()),
@@ -2227,9 +2251,7 @@ class HttpStreamFactoryBidirectionalQuicTest
         ssl_config_service_(new SSLConfigServiceDefaults) {
     FLAGS_quic_enable_http3_grease_randomness = false;
     quic_context_.AdvanceTime(quic::QuicTime::Delta::FromMilliseconds(20));
-    if (version_.handshake_protocol == quic::PROTOCOL_TLS1_3) {
-      quic::QuicEnableVersion(version_);
-    }
+    quic::QuicEnableVersion(version_);
   }
 
   void TearDown() override { session_.reset(); }
@@ -2327,11 +2349,10 @@ class HttpStreamFactoryBidirectionalQuicTest
   HttpNetworkSession::Params params_;
 };
 
-INSTANTIATE_TEST_SUITE_P(
-    VersionIncludeStreamDependencySequence,
-    HttpStreamFactoryBidirectionalQuicTest,
-    ::testing::Combine(::testing::ValuesIn(quic::AllSupportedVersions()),
-                       ::testing::Bool()));
+INSTANTIATE_TEST_SUITE_P(VersionIncludeStreamDependencySequence,
+                         HttpStreamFactoryBidirectionalQuicTest,
+                         ::testing::ValuesIn(GetTestParams()),
+                         ::testing::PrintToStringParamName());
 
 TEST_P(HttpStreamFactoryBidirectionalQuicTest,
        RequestBidirectionalStreamImplQuicAlternative) {
@@ -3452,10 +3473,10 @@ TEST_F(ProcessAlternativeServicesTest, ProcessAltSvcClear) {
   EXPECT_TRUE(alternatives.empty());
 }
 
-TEST_F(ProcessAlternativeServicesTest, ProcessAltSvcQuic) {
+TEST_F(ProcessAlternativeServicesTest, ProcessAltSvcQuicOldFormat) {
   quic::ParsedQuicVersionVector versions_with_quic_handshake;
   for (const auto& version : quic::AllSupportedVersions()) {
-    if (version.handshake_protocol == quic::PROTOCOL_QUIC_CRYPTO) {
+    if (version.UsesQuicCrypto() && version.SupportsGoogleAltSvcFormat()) {
       versions_with_quic_handshake.push_back(version);
     }
   }
@@ -3471,7 +3492,7 @@ TEST_F(ProcessAlternativeServicesTest, ProcessAltSvcQuic) {
 
   scoped_refptr<HttpResponseHeaders> headers(
       base::MakeRefCounted<HttpResponseHeaders>(""));
-  headers->AddHeader("alt-svc", "quic=\":443\"; v=\"99,50,49,48,47,46,43,39\"");
+  headers->AddHeader("alt-svc", "quic=\":443\"; v=\"46,43\"");
 
   session_->http_stream_factory()->ProcessAlternativeServices(
       session_.get(), network_isolation_key, headers.get(), origin);
@@ -3493,9 +3514,10 @@ TEST_F(ProcessAlternativeServicesTest, ProcessAltSvcQuic) {
 // Regression test for https://crbug.com/1044694.
 TEST_F(ProcessAlternativeServicesTest, AltSvcQuicDoesNotSupportTLSHandshake) {
   // In this example, QUIC v50 is only supported with TLS handshake.
+  // Note that this test only covers the Google-specific AltSvc format
+  // which is now deprecated.
   quic_context_.params()->supported_versions = {
-      {quic::PROTOCOL_QUIC_CRYPTO, quic::QUIC_VERSION_49},
-      {quic::PROTOCOL_TLS1_3, quic::QUIC_VERSION_50}};
+      quic::ParsedQuicVersion::Q043(), quic::ParsedQuicVersion::T050()};
   session_ =
       std::make_unique<HttpNetworkSession>(session_params_, session_context_);
   url::SchemeHostPort origin(url::kHttpsScheme, "example.com", 443);
@@ -3504,10 +3526,9 @@ TEST_F(ProcessAlternativeServicesTest, AltSvcQuicDoesNotSupportTLSHandshake) {
       url::Origin::Create(GURL("https://example.com")),
       url::Origin::Create(GURL("https://example.com")));
 
-  // Alt-Svc header only refers to PROTOCOL_QUIC_CRYPTO handshake.
   scoped_refptr<HttpResponseHeaders> headers(
       base::MakeRefCounted<HttpResponseHeaders>(""));
-  headers->AddHeader("alt-svc", "quic=\":443\"; v=\"50,49\"");
+  headers->AddHeader("alt-svc", "quic=\":443\"; v=\"50,43\"");
 
   session_->http_stream_factory()->ProcessAlternativeServices(
       session_.get(), network_isolation_key, headers.get(), origin);
@@ -3519,11 +3540,9 @@ TEST_F(ProcessAlternativeServicesTest, AltSvcQuicDoesNotSupportTLSHandshake) {
   EXPECT_EQ(kProtoQUIC, alternatives[0].protocol());
   EXPECT_EQ(HostPortPair("example.com", 443), alternatives[0].host_port_pair());
   EXPECT_EQ(1u, alternatives[0].advertised_versions().size());
-  // Q049 and T050 are supported.  Q049 and Q050 are advertised in the Alt-Svc
-  // header.  Therefore only Q049 is parsed.
-  quic::ParsedQuicVersion expected_advertised_version = {
-      quic::PROTOCOL_QUIC_CRYPTO, quic::QUIC_VERSION_49};
-  EXPECT_EQ(expected_advertised_version,
+  // Q043 and T050 are supported.  Q043 and Q050 are advertised in the Alt-Svc
+  // header.  Therefore only Q043 is parsed.
+  EXPECT_EQ(quic::ParsedQuicVersion::Q043(),
             alternatives[0].advertised_versions()[0]);
 }
 
@@ -3541,24 +3560,16 @@ TEST_F(ProcessAlternativeServicesTest, ProcessAltSvcQuicIetf) {
       base::MakeRefCounted<HttpResponseHeaders>(""));
   headers->AddHeader("alt-svc",
                      "h3-27=\":443\","
-                     "h3-25=\":443\","
                      "h3-Q050=\":443\","
-                     "h3-Q049=\":443\","
-                     "h3-Q048=\":443\","
-                     "h3-Q047=\":443\","
-                     "h3-Q043=\":443\","
-                     "h3-Q039=\":443\"");
+                     "h3-Q043=\":443\"");
 
   session_->http_stream_factory()->ProcessAlternativeServices(
       session_.get(), network_isolation_key, headers.get(), origin);
 
   quic::ParsedQuicVersionVector versions = {
-      {quic::PROTOCOL_TLS1_3, quic::QUIC_VERSION_IETF_DRAFT_27},
-      {quic::PROTOCOL_TLS1_3, quic::QUIC_VERSION_IETF_DRAFT_25},
-      {quic::PROTOCOL_QUIC_CRYPTO, quic::QUIC_VERSION_50},
-      {quic::PROTOCOL_QUIC_CRYPTO, quic::QUIC_VERSION_49},
-      {quic::PROTOCOL_QUIC_CRYPTO, quic::QUIC_VERSION_48},
-      {quic::PROTOCOL_QUIC_CRYPTO, quic::QUIC_VERSION_43},
+      quic::ParsedQuicVersion::Draft27(),
+      quic::ParsedQuicVersion::Q050(),
+      quic::ParsedQuicVersion::Q043(),
   };
   AlternativeServiceInfoVector alternatives =
       http_server_properties_.GetAlternativeServiceInfos(origin,

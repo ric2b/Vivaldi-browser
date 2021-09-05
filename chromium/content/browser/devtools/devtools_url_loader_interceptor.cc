@@ -23,6 +23,7 @@
 #include "mojo/public/cpp/system/data_pipe_drainer.h"
 #include "net/base/load_flags.h"
 #include "net/base/mime_sniffer.h"
+#include "net/cookies/cookie_inclusion_status.h"
 #include "net/cookies/cookie_util.h"
 #include "net/http/http_util.h"
 #include "net/url_request/redirect_util.h"
@@ -323,8 +324,8 @@ class InterceptionJob : public network::mojom::URLLoaderClient,
       network::mojom::CookieManager::GetCookieListCallback callback);
   void NotifyClientWithCookies(
       std::unique_ptr<InterceptedRequestInfo> request_info,
-      const net::CookieStatusList& cookie_list_with_statuses,
-      const net::CookieStatusList& excluded_cookies);
+      const net::CookieAccessResultList& cookies_with_access_result,
+      const net::CookieAccessResultList& excluded_cookies);
 
   void ResponseBodyComplete();
 
@@ -527,7 +528,7 @@ DevToolsURLLoaderFactoryProxy::DevToolsURLLoaderFactoryProxy(
                      base::Unretained(this)));
 }
 
-DevToolsURLLoaderFactoryProxy::~DevToolsURLLoaderFactoryProxy() {}
+DevToolsURLLoaderFactoryProxy::~DevToolsURLLoaderFactoryProxy() = default;
 
 void DevToolsURLLoaderFactoryProxy::CreateLoaderAndStart(
     mojo::PendingReceiver<network::mojom::URLLoader> loader,
@@ -1112,8 +1113,9 @@ void InterceptionJob::ProcessSetCookies(const net::HttpResponseHeaders& headers,
 
   // |this| might be deleted here if |cookies| is empty!
   auto on_cookie_set = base::BindRepeating(
-      [](base::RepeatingClosure closure,
-         net::CanonicalCookie::CookieInclusionStatus) { closure.Run(); },
+      [](base::RepeatingClosure closure, net::CookieInclusionStatus) {
+        closure.Run();
+      },
       base::BarrierClosure(cookies.size(), std::move(callback)));
   for (auto& cookie : cookies) {
     cookie_manager_->SetCanonicalCookie(
@@ -1269,14 +1271,14 @@ void InterceptionJob::NotifyClient(
 
 void InterceptionJob::NotifyClientWithCookies(
     std::unique_ptr<InterceptedRequestInfo> request_info,
-    const net::CookieStatusList& cookie_list_with_statuses,
-    const net::CookieStatusList& excluded_cookies) {
+    const net::CookieAccessResultList& cookies_with_access_result,
+    const net::CookieAccessResultList& excluded_cookies) {
   if (!interceptor_)
     return;
   std::string cookie_line;
-  if (!cookie_list_with_statuses.empty()) {
+  if (!cookies_with_access_result.empty()) {
     cookie_line =
-        net::CanonicalCookie::BuildCookieLine(cookie_list_with_statuses);
+        net::CanonicalCookie::BuildCookieLine(cookies_with_access_result);
   }
   request_info->network_request =
       protocol::NetworkHandler::CreateRequestFromResourceRequest(

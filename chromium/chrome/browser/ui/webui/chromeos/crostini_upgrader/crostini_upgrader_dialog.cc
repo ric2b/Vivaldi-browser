@@ -4,8 +4,11 @@
 
 #include "chrome/browser/ui/webui/chromeos/crostini_upgrader/crostini_upgrader_dialog.h"
 
+#include "ash/public/cpp/shelf_types.h"
+#include "ash/public/cpp/window_properties.h"
 #include "base/metrics/histogram_functions.h"
 #include "chrome/browser/chromeos/crostini/crostini_manager.h"
+#include "chrome/browser/chromeos/crostini/crostini_shelf_utils.h"
 #include "chrome/browser/chromeos/crostini/crostini_simple_types.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/chromeos/crostini_upgrader/crostini_upgrader_ui.h"
@@ -35,8 +38,7 @@ void CrostiniUpgraderDialog::Show(base::OnceClosure launch_closure,
   instance = new CrostiniUpgraderDialog(std::move(launch_closure),
                                         only_run_launch_closure_on_restart);
   instance->ShowSystemDialog();
-  base::UmaHistogramEnumeration(crostini::kUpgradeDialogEventHistogram,
-                                crostini::UpgradeDialogEvent::kDialogShown);
+  EmitUpgradeDialogEventHistogram(crostini::UpgradeDialogEvent::kDialogShown);
 }
 
 CrostiniUpgraderDialog::CrostiniUpgraderDialog(
@@ -67,6 +69,10 @@ bool CrostiniUpgraderDialog::ShouldCloseDialogOnEscape() const {
 void CrostiniUpgraderDialog::AdjustWidgetInitParams(
     views::Widget::InitParams* params) {
   params->z_order = ui::ZOrderLevel::kNormal;
+
+  const ash::ShelfID shelf_id(crostini::kCrostiniUpgraderShelfId);
+  params->init_properties_container.SetProperty(ash::kShelfIDKey,
+                                                shelf_id.Serialize());
 }
 
 void CrostiniUpgraderDialog::SetDeletionClosureForTesting(
@@ -83,7 +89,14 @@ bool CrostiniUpgraderDialog::CanCloseDialog() const {
     return true;
   }
   // Disallow closing without WebUI consent.
-  return upgrader_ui_ == nullptr || upgrader_ui_->can_close();
+  //
+  // Note that while the function name |CanCloseDialog| does not indicate the
+  // intend to close the dialog, but it is indeed only called when we are
+  // closing it, so requesting closing the page here is appropriate. One might
+  // think we should actually do all of this in |OnDialogCloseRequested|
+  // instead, but unfortunately that function is called after the web content is
+  // closed.
+  return upgrader_ui_ == nullptr || upgrader_ui_->RequestClosePage();
 }
 
 namespace {
@@ -101,7 +114,7 @@ void RunLaunchClosure(base::WeakPtr<crostini::CrostiniManager> crostini_manager,
     return;
   }
   crostini_manager->RestartCrostini(
-      crostini::kCrostiniDefaultVmName, crostini::kCrostiniDefaultContainerName,
+      crostini::ContainerId::GetDefault(),
       base::BindOnce(
           [](base::OnceClosure launch_closure,
              crostini::CrostiniResult result) {
@@ -122,9 +135,7 @@ void CrostiniUpgraderDialog::OnDialogShown(content::WebUI* webui) {
       crostini::CrostiniManager::GetForProfile(Profile::FromWebUI(webui));
   crostini_manager->SetCrostiniDialogStatus(crostini::DialogType::UPGRADER,
                                             true);
-  crostini_manager->UpgradePromptShown(
-      crostini::ContainerId(crostini::kCrostiniDefaultVmName,
-                            crostini::kCrostiniDefaultContainerName));
+  crostini_manager->UpgradePromptShown(crostini::ContainerId::GetDefault());
 
   upgrader_ui_ = static_cast<CrostiniUpgraderUI*>(webui->GetController());
   upgrader_ui_->set_launch_callback(base::BindOnce(
@@ -141,6 +152,11 @@ void CrostiniUpgraderDialog::OnCloseContents(content::WebContents* source,
   crostini_manager->SetCrostiniDialogStatus(crostini::DialogType::UPGRADER,
                                             false);
   return SystemWebDialogDelegate::OnCloseContents(source, out_close_dialog);
+}
+
+void CrostiniUpgraderDialog::EmitUpgradeDialogEventHistogram(
+    crostini::UpgradeDialogEvent event) {
+  base::UmaHistogramEnumeration("Crostini.UpgradeDialogEvent", event);
 }
 
 }  // namespace chromeos

@@ -7,7 +7,8 @@ package org.chromium.chrome.browser.tabmodel;
 import android.annotation.TargetApi;
 import android.os.Build;
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.MediumTest;
+
+import androidx.test.filters.MediumTest;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -22,7 +23,6 @@ import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.FlakyTest;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.base.test.util.Restriction;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.browser.ChromeTabbedActivity2;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -329,7 +329,6 @@ public class UndoTabModelTest {
      */
     @Test
     @MediumTest
-    @RetryOnFailure
     public void testSingleTab() throws TimeoutException {
         TabModel model = mActivityTestRule.getActivity().getTabModelSelector().getModel(false);
         ChromeTabCreator tabCreator = mActivityTestRule.getActivity().getTabCreator(false);
@@ -419,7 +418,6 @@ public class UndoTabModelTest {
      */
     @Test
     // @MediumTest
-    // @RetryOnFailure
     @DisabledTest(
             message = "Flaky on all Android configurations except Swarming.  See crbug.com/620014.")
     public void
@@ -570,7 +568,6 @@ public class UndoTabModelTest {
      */
     @Test
     @MediumTest
-    @RetryOnFailure
     public void testInOrderRestore() throws TimeoutException {
         TabModel model = mActivityTestRule.getActivity().getTabModelSelector().getModel(false);
         ChromeTabCreator tabCreator = mActivityTestRule.getActivity().getTabCreator(false);
@@ -881,7 +878,6 @@ public class UndoTabModelTest {
      */
     @Test
     @MediumTest
-    @RetryOnFailure
     public void testOutOfOrder1() throws TimeoutException {
         TabModel model = mActivityTestRule.getActivity().getTabModelSelector().getModel(false);
         ChromeTabCreator tabCreator = mActivityTestRule.getActivity().getTabCreator(false);
@@ -1215,7 +1211,6 @@ public class UndoTabModelTest {
      */
     @Test
     @MediumTest
-    @RetryOnFailure
     public void testMoveTab() throws TimeoutException {
         TabModel model = mActivityTestRule.getActivity().getTabModelSelector().getModel(false);
         ChromeTabCreator tabCreator = mActivityTestRule.getActivity().getTabCreator(false);
@@ -1340,7 +1335,6 @@ public class UndoTabModelTest {
      */
     @Test
     @MediumTest
-    @RetryOnFailure
     @DisabledTest(message = "crbug.com/1042168")
     public void testUndoNotSupported() throws TimeoutException {
         TabModel model = mActivityTestRule.getActivity().getTabModelSelector().getModel(true);
@@ -1420,7 +1414,6 @@ public class UndoTabModelTest {
      */
     @Test
     @MediumTest
-    @RetryOnFailure
     public void testOpenRecentlyClosedTab() throws TimeoutException {
         TabModelSelector selector = mActivityTestRule.getActivity().getTabModelSelector();
         TabModel model = selector.getModel(false);

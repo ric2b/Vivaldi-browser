@@ -63,7 +63,7 @@
 <translation id="1360699455582016846"><ph name="ROUTING_KEY_NUMBER" /> റൂട്ടിംഗ് കീയ്ക്ക് ചുവടെയുള്ള ഇനം ക്ലിക്ക് ചെയ്യുക</translation>
 <translation id="1377925789329510816">ഇത് അവസാനത്തെ തലക്കെട്ടാണ്. ഈ പേജിലെ ആദ്യ തലക്കെട്ട് റാപ്പ് ചെയ്യാൻ തിരയൽ+H അമർത്തുക അല്ലെങ്കിൽ രണ്ടാമത്തെ തലക്കെട്ടിലേക്ക് പോകാൻ തിരയൽ+Shift+H അമർത്തുക.</translation>
 <translation id="138218114945450791">ഇളം നീല</translation>
-<translation id="1383876407941801731">തിരയുക</translation>
+<translation id="1383876407941801731">Search</translation>
 <translation id="1396114365388024581">tablst</translation>
 <translation id="1405567553485452995">ഇളം പച്ച</translation>
 <translation id="1417889266572670458">നേവി</translation>
@@ -112,6 +112,7 @@
 <translation id="1771761307086386028">വലത്തോട്ട് സ്ക്രോൾ ചെയ്യുക</translation>
 <translation id="1781173782405573156">പാസ് ത്രൂ കീ</translation>
 <translation id="1787176709638001873">പാസ്‌വേഡിനായി വാചകം എഡിറ്റ് ചെയ്യുക</translation>
+<translation id="180203835522132923">Search + O, തുടർന്ന് W</translation>
 <translation id="1810107444790159527">പട്ടിക ബോക്സ്</translation>
 <translation id="1812527064848182527">ലാൻഡ്‌സ്‌കേപ്പ്</translation>
 <translation id="1829244130665387512">പേജില്‍ കണ്ടുപിടിക്കുക</translation>
@@ -256,6 +257,7 @@
 <translation id="297825089465017871">രണ്ട് വിരലുകൾ ഉപയോഗിച്ച് ഇടത്തോട്ട് സ്വൈപ്പ് ചെയ്യുക</translation>
 <translation id="2998131015536248178">മുമ്പത്തെ പ്രതീകം</translation>
 <translation id="2999559350546931576">പിച്ച് കുറയ്ക്കുക</translation>
+<translation id="3009352964623081324">Search + O, തുടർന്ന് S. ശബ്‌ദങ്ങൾ ഇൻസ്‌റ്റാൾ ചെയ്യാനും മാനേജ് ചെയ്യാനും ഇഷ്ടാനുസൃതമാക്കാനും ഉപയോഗിക്കുക.</translation>
 <translation id="3014130421870723208">@ed 8dot</translation>
 <translation id="3030432017085518523">മെനു ഇനം റേഡിയോ ബട്ടൺ</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{വിശ്ലേഷം}other{# വിശ്ലേഷങ്ങൾ}}</translation>
@@ -454,6 +456,7 @@
 <translation id="4505167975768625962">ചേർക്കൽ</translation>
 <translation id="4511186779140817916">ബ്ലാഞ്ച്ഡ് ആൽമൻഡ്</translation>
 <translation id="451510441928265982">മുൻ നില 2 ശീർഷകം ഒന്നുമില്ല</translation>
+<translation id="4515799157838123044">പശ്ചാത്തല ഉള്ളടക്കത്തിന്റെ ഷെയ്‌ഡ്</translation>
 <translation id="4517854969512651305">മൂല്യം കൂട്ടുക</translation>
 <translation id="4532633738839459153">{COUNT,plural, =1{സ്ലാഷ്}other{# സ്ലാഷുകൾ}}</translation>
 <translation id="4537277403911487429">സമാനമായ അടുത്ത ഇനം</translation>
@@ -705,6 +708,7 @@
 <translation id="6628427060004938651">ഭാഗം</translation>
 <translation id="6637586476836377253">ലോഗ്</translation>
 <translation id="6657128831881431364">വർദ്ധനവ് ബാർ</translation>
+<translation id="6660819301598582123">അജവും ആനയും ഐരാവതവും ഗരുഡനും കഠോര സ്വരം പൊഴിക്കെ ഹാരവും ഒഢ്യാണവും ഫാലത്തിൽ മഞ്ഞളും ഈറൻ കേശത്തിൽ ഔഷധ എണ്ണയുമായി ഋതുമതിയും അനഘയും ഭൂനാഥയുമായ ഉമ ദു:ഖഛവിയോടെ ഇടതു പാദം ഏന്തി നിർഝരിയിലെ ചിറ്റലകളെ ഓമനിക്കുമ്പോൾ ബാ‍ലയുടെ കൺകളിൽ നീർ ഊർന്നു വിങ്ങി.</translation>
 <translation id="667999046851023355">പ്രമാണം</translation>
 <translation id="6688209025607531203">ഒരു നോൺ മോഡൽ അലേർട്ട്</translation>
 <translation id="6689672606256159458">കടും സാൽമൻ</translation>
@@ -740,7 +744,6 @@
 <translation id="6951482098621102657">അടുത്ത നില 5 ശീർഷകം ഒന്നുമില്ല</translation>
 <translation id="6955705049214951590">മിസ്‌റ്റി റോസ്</translation>
 <translation id="696356426651109308">ആരംഭത്തിലേക്ക് പോവുക</translation>
-<translation id="699159175332639490">തിരയൽ + O + W</translation>
 <translation id="6994042831499278539">പദസഞ്ചയ റെഫറൻസ്</translation>
 <translation id="6996566555547746822">അടുത്ത കോംബോ ബോക്സ്</translation>
 <translation id="6997224546856374593">വലിയക്ഷരങ്ങൾ വായിക്കുമ്പോൾ:</translation>
@@ -765,7 +768,7 @@
 <translation id="7137397390322864165">സാൽമൻ</translation>
 <translation id="7140168702531682811">സൂപ്പർസ്‌ക്രി‌പ്‌റ്റ്</translation>
 <translation id="7143034430156387447">6, 8 ഡോട്ട് ബ്രെയ്‌ലികൾക്കിടയിൽ മാറുക</translation>
-<translation id="7143207342074048698">കണക്റ്റുചെയ്യുന്നു</translation>
+<translation id="7143207342074048698">കണക്റ്റിംഗ്</translation>
 <translation id="7153618581592392745">ലാവെൻഡർ</translation>
 <translation id="7157306005867877619">സംക്ഷേപം</translation>
 <translation id="7161771961008409533">പോപ്പ്-അപ്പ് ബട്ടൺ</translation>
@@ -808,6 +811,7 @@
 <translation id="743783356331413498">ഉദാഹരണം</translation>
 <translation id="7439060726180460871">ഡയറക്‌റ്ററി</translation>
 <translation id="744163271241493234">pwded</translation>
+<translation id="7484805699335881122">ഘടകത്തിന്റെ തരങ്ങളും ഉദ്ധരിച്ചതോ ഇല്ലാതാക്കിയതോ ബോൾഡ് ചെയ്‌തതോ ബ്രാക്കറ്റിനുള്ളിലെയോ വലിയക്ഷരത്തിലുള്ളതോ ആയ ടെക്‌സ്‌റ്റ് പറയുമ്പോൾ പിച്ച് മാറ്റുക.</translation>
 <translation id="7491962110804786152">ടാബ്</translation>
 <translation id="7505149250476994901">അക്ഷരം പറയുന്നതിന് മുമ്പ് "വലിയക്ഷരം" എന്ന് പറയുക</translation>
 <translation id="7518543783849163354">സംസാരിക്കുന്നതിൽ നിന്ന് ChromeVox-നെ തൽക്കാലം നിർത്താൻ, കൺട്രോൾ കീ അമർത്തുക.</translation>

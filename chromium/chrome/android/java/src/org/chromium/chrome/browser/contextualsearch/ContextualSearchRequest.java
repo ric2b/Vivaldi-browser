@@ -62,7 +62,7 @@ class ContextualSearchRequest {
      * @param isLowPriorityEnabled Whether the request can be made at a low priority.
      */
     ContextualSearchRequest(String searchTerm, boolean isLowPriorityEnabled) {
-        this(searchTerm, null, null, isLowPriorityEnabled, null, null);
+        this(searchTerm, null, null, isLowPriorityEnabled, null, null, true);
     }
 
     /**
@@ -78,17 +78,18 @@ class ContextualSearchRequest {
      * @param isLowPriorityEnabled Whether the request can be made at a low priority.
      * @param searchUrlFull The URL for the full search to present in the overlay, or empty.
      * @param searchUrlPreload The URL for the search to preload into the overlay, or empty.
+     * @param doRequireGoogleUrl Whether a Google URL is required when server-supplied.
      */
     ContextualSearchRequest(String searchTerm, @Nullable String alternateTerm, @Nullable String mid,
             boolean isLowPriorityEnabled, @Nullable String searchUrlFull,
-            @Nullable String searchUrlPreload) {
+            @Nullable String searchUrlPreload, boolean doRequireGoogleUrl) {
         mWasPrefetch = isLowPriorityEnabled;
-        mIsFullSearchUrlProvided = isGoogleUrl(searchUrlFull);
+        mIsFullSearchUrlProvided = !doRequireGoogleUrl || isGoogleUrl(searchUrlFull);
         mNormalPriorityUri = mIsFullSearchUrlProvided
                 ? Uri.parse(searchUrlFull)
                 : getUriTemplate(searchTerm, alternateTerm, mid, false);
         if (isLowPriorityEnabled) {
-            if (isGoogleUrl(searchUrlPreload)) {
+            if (!doRequireGoogleUrl || isGoogleUrl(searchUrlPreload)) {
                 mLowPriorityUri = Uri.parse(searchUrlPreload);
             } else {
                 Uri baseLowPriorityUri = getUriTemplate(searchTerm, alternateTerm, mid, true);
@@ -175,14 +176,17 @@ class ContextualSearchRequest {
     }
 
     /**
-     * Adds translation parameters.
+     * Adds translation parameters, unless they match.
      * @param sourceLanguage The language of the original search term.
      * @param targetLanguage The language the that the user prefers.
      */
     void forceTranslation(String sourceLanguage, String targetLanguage) {
         mIsTranslationForced = true;
         // If the server is providing a full URL then we shouldn't alter it.
-        if (mIsFullSearchUrlProvided) return;
+        if (mIsFullSearchUrlProvided || TextUtils.isEmpty(targetLanguage)
+                || targetLanguage.equals(sourceLanguage)) {
+            return;
+        }
 
         if (mLowPriorityUri != null) {
             mLowPriorityUri = makeTranslateUri(mLowPriorityUri, sourceLanguage, targetLanguage);

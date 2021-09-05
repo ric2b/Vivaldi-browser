@@ -271,10 +271,11 @@ class Distribution(object):
                 return super(DistributionCodeSignConfig,
                              self).packaging_basename
 
-        return DistributionCodeSignConfig(
-            base_config.identity, base_config.installer_identity,
-            base_config.notary_user, base_config.notary_password,
-            base_config.notary_asc_provider)
+        return DistributionCodeSignConfig(base_config.identity,
+                                          base_config.installer_identity,
+                                          base_config.notary_user,
+                                          base_config.notary_password,
+                                          base_config.notary_asc_provider)
 
 
 class Paths(object):
@@ -286,9 +287,11 @@ class Paths(object):
     """
 
     def __init__(self, input, output, work):
-        self._input = input
-        self._output = output
+        self._input = os.path.abspath(input)
+        self._output = os.path.abspath(output)
         self._work = work
+        if self._work:
+            self._work = os.path.abspath(self._work)
 
     @property
     def input(self):

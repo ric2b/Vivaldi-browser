@@ -19,7 +19,6 @@
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
-#include "base/task/post_task.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -109,11 +108,7 @@ class MockVideoCaptureControllerEventHandler
       const media::mojom::VideoFrameInfoPtr& frame_info) override {
     EXPECT_EQ(expected_pixel_format_, frame_info->pixel_format);
     EXPECT_EQ(expected_color_space_, frame_info->color_space);
-    media::VideoFrameMetadata metadata;
-    metadata.MergeInternalValuesFrom(frame_info->metadata);
-    base::TimeTicks reference_time;
-    EXPECT_TRUE(metadata.GetTimeTicks(media::VideoFrameMetadata::REFERENCE_TIME,
-                                      &reference_time));
+    EXPECT_TRUE(frame_info->metadata.reference_time.has_value());
     DoBufferReady(id, frame_info->coded_size);
     if (enable_auto_return_buffer_on_buffer_ready_) {
       base::ThreadTaskRunnerHandle::Get()->PostTask(
@@ -188,15 +183,13 @@ class VideoCaptureControllerTest
     device_client_.reset(new media::VideoCaptureDeviceClient(
         media::VideoCaptureBufferType::kSharedMemory,
         std::make_unique<media::VideoFrameReceiverOnTaskRunner>(
-            controller_->GetWeakPtrForIOThread(),
-            base::CreateSingleThreadTaskRunner({BrowserThread::IO})),
+            controller_->GetWeakPtrForIOThread(), GetIOThreadTaskRunner({})),
         buffer_pool_, media::VideoCaptureJpegDecoderFactoryCB()));
 #else
     device_client_.reset(new media::VideoCaptureDeviceClient(
         media::VideoCaptureBufferType::kSharedMemory,
         std::make_unique<media::VideoFrameReceiverOnTaskRunner>(
-            controller_->GetWeakPtrForIOThread(),
-            base::CreateSingleThreadTaskRunner({BrowserThread::IO})),
+            controller_->GetWeakPtrForIOThread(), GetIOThreadTaskRunner({})),
         buffer_pool_));
 #endif  // defined(OS_CHROMEOS)
   }

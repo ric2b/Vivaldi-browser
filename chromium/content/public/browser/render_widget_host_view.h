@@ -275,9 +275,6 @@ class CONTENT_EXPORT RenderWidgetHostView {
   // |destination_is_loaded| is true when
   //   ResourceCoordinatorTabHelper::IsLoaded() is true for the new tab
   //   contents.
-  // |destination_is_frozen| is true when
-  //   ResourceCoordinatorTabHelper::IsFrozen() is true for the new tab
-  //   contents.
   // |show_reason_tab_switching| is true when tab switch event should be
   //   reported.
   // |show_reason_unoccluded| is true when "unoccluded" event should be
@@ -287,7 +284,6 @@ class CONTENT_EXPORT RenderWidgetHostView {
   virtual void SetRecordContentToVisibleTimeRequest(
       base::TimeTicks start_time,
       base::Optional<bool> destination_is_loaded,
-      base::Optional<bool> destination_is_frozen,
       bool show_reason_tab_switching,
       bool show_reason_unoccluded,
       bool show_reason_bfcache_restore) = 0;

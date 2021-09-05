@@ -21,13 +21,14 @@
 #include "ui/events/test/events_test_utils.h"
 #include "ui/events/test/keyboard_layout.h"
 #include "ui/events/test/test_event_target.h"
-#include "ui/events/x/x11_event_translation.h"
 #include "ui/gfx/transform.h"
 
 #if defined(USE_X11)
 #include "ui/events/test/events_test_utils_x11.h"
-#include "ui/gfx/x/x11.h"        // nogncheck
-#include "ui/gfx/x/x11_types.h"  // nogncheck
+#include "ui/events/x/x11_event_translation.h"  // nogncheck
+#include "ui/gfx/x/event.h"                     // nogncheck
+#include "ui/gfx/x/x11.h"                       // nogncheck
+#include "ui/gfx/x/x11_types.h"                 // nogncheck
 #endif
 
 namespace ui {
@@ -39,7 +40,7 @@ TEST(EventTest, NoNativeEvent) {
 
 TEST(EventTest, NativeEvent) {
 #if defined(OS_WIN)
-  MSG native_event = { NULL, WM_KEYUP, VKEY_A, 0 };
+  MSG native_event = {nullptr, WM_KEYUP, VKEY_A, 0};
   KeyEvent keyev(native_event);
   EXPECT_TRUE(keyev.HasNativeEvent());
 #elif defined(USE_X11)
@@ -84,7 +85,7 @@ TEST(EventTest, GetCharacter) {
 TEST(EventTest, ClickCount) {
   const gfx::Point origin(0, 0);
   MouseEvent mouseev(ET_MOUSE_PRESSED, origin, origin, EventTimeForNow(), 0, 0);
-  for (int i = 1; i <=3 ; ++i) {
+  for (int i = 1; i <= 3; ++i) {
     mouseev.SetClickCount(i);
     EXPECT_EQ(i, mouseev.GetClickCount());
   }
@@ -97,7 +98,7 @@ TEST(EventTest, RepeatedClick) {
   LocatedEventTestApi test_event1(&event1);
   LocatedEventTestApi test_event2(&event2);
 
-  base::TimeTicks start = base::TimeTicks();
+  base::TimeTicks start = base::TimeTicks::Now();
   base::TimeTicks soon = start + base::TimeDelta::FromMilliseconds(1);
   base::TimeTicks later = start + base::TimeDelta::FromMilliseconds(1000);
 
@@ -136,7 +137,7 @@ TEST(EventTest, RepeatedClick) {
 // does not yield a double click event: http://crbug.com/389162
 TEST(EventTest, DoubleClickRequiresUniqueTimestamp) {
   const gfx::Point point(0, 0);
-  base::TimeTicks time1 = base::TimeTicks();
+  base::TimeTicks time1 = base::TimeTicks::Now();
   base::TimeTicks time2 = time1 + base::TimeDelta::FromMilliseconds(1);
 
   // Re-processing the same press doesn't yield a double-click.
@@ -177,7 +178,7 @@ TEST(EventTest, DoubleClickRequiresUniqueTimestamp) {
 // Tests that right clicking, then left clicking does not yield double clicks.
 TEST(EventTest, SingleClickRightLeft) {
   const gfx::Point point(0, 0);
-  base::TimeTicks time1 = base::TimeTicks();
+  base::TimeTicks time1 = base::TimeTicks::Now();
   base::TimeTicks time2 = time1 + base::TimeDelta::FromMilliseconds(1);
   base::TimeTicks time3 = time1 + base::TimeDelta::FromMilliseconds(2);
 
@@ -204,80 +205,78 @@ TEST(EventTest, KeyEvent) {
     int flags;
     uint16_t character;
   } kTestData[] = {
-    { VKEY_A, 0, 'a' },
-    { VKEY_A, EF_SHIFT_DOWN, 'A' },
-    { VKEY_A, EF_CAPS_LOCK_ON, 'A' },
-    { VKEY_A, EF_SHIFT_DOWN | EF_CAPS_LOCK_ON, 'a' },
-    { VKEY_A, EF_CONTROL_DOWN, 0x01 },
-    { VKEY_A, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\x01' },
-    { VKEY_Z, 0, 'z' },
-    { VKEY_Z, EF_SHIFT_DOWN, 'Z' },
-    { VKEY_Z, EF_CAPS_LOCK_ON, 'Z' },
-    { VKEY_Z, EF_SHIFT_DOWN | EF_CAPS_LOCK_ON, 'z' },
-    { VKEY_Z, EF_CONTROL_DOWN, '\x1A' },
-    { VKEY_Z, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\x1A' },
+      {VKEY_A, 0, 'a'},
+      {VKEY_A, EF_SHIFT_DOWN, 'A'},
+      {VKEY_A, EF_CAPS_LOCK_ON, 'A'},
+      {VKEY_A, EF_SHIFT_DOWN | EF_CAPS_LOCK_ON, 'a'},
+      {VKEY_A, EF_CONTROL_DOWN, 0x01},
+      {VKEY_A, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\x01'},
+      {VKEY_Z, 0, 'z'},
+      {VKEY_Z, EF_SHIFT_DOWN, 'Z'},
+      {VKEY_Z, EF_CAPS_LOCK_ON, 'Z'},
+      {VKEY_Z, EF_SHIFT_DOWN | EF_CAPS_LOCK_ON, 'z'},
+      {VKEY_Z, EF_CONTROL_DOWN, '\x1A'},
+      {VKEY_Z, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\x1A'},
 
-    { VKEY_2, EF_CONTROL_DOWN, '\x12' },
-    { VKEY_2, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\0' },
-    { VKEY_6, EF_CONTROL_DOWN, '\x16' },
-    { VKEY_6, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\x1E' },
-    { VKEY_OEM_MINUS, EF_CONTROL_DOWN, '\x0D' },
-    { VKEY_OEM_MINUS, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\x1F' },
-    { VKEY_OEM_4, EF_CONTROL_DOWN, '\x1B' },
-    { VKEY_OEM_4, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\x1B' },
-    { VKEY_OEM_5, EF_CONTROL_DOWN, '\x1C' },
-    { VKEY_OEM_5, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\x1C' },
-    { VKEY_OEM_6, EF_CONTROL_DOWN, '\x1D' },
-    { VKEY_OEM_6, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\x1D' },
-    { VKEY_RETURN, EF_CONTROL_DOWN, '\x0A' },
+      {VKEY_2, EF_CONTROL_DOWN, '\x12'},
+      {VKEY_2, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\0'},
+      {VKEY_6, EF_CONTROL_DOWN, '\x16'},
+      {VKEY_6, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\x1E'},
+      {VKEY_OEM_MINUS, EF_CONTROL_DOWN, '\x0D'},
+      {VKEY_OEM_MINUS, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\x1F'},
+      {VKEY_OEM_4, EF_CONTROL_DOWN, '\x1B'},
+      {VKEY_OEM_4, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\x1B'},
+      {VKEY_OEM_5, EF_CONTROL_DOWN, '\x1C'},
+      {VKEY_OEM_5, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\x1C'},
+      {VKEY_OEM_6, EF_CONTROL_DOWN, '\x1D'},
+      {VKEY_OEM_6, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\x1D'},
+      {VKEY_RETURN, EF_CONTROL_DOWN, '\x0A'},
 
-    { VKEY_0, 0, '0' },
-    { VKEY_0, EF_SHIFT_DOWN, ')' },
-    { VKEY_0, EF_SHIFT_DOWN | EF_CAPS_LOCK_ON, ')' },
-    { VKEY_0, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\x09' },
+      {VKEY_0, 0, '0'},
+      {VKEY_0, EF_SHIFT_DOWN, ')'},
+      {VKEY_0, EF_SHIFT_DOWN | EF_CAPS_LOCK_ON, ')'},
+      {VKEY_0, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\x09'},
 
-    { VKEY_9, 0, '9' },
-    { VKEY_9, EF_SHIFT_DOWN, '(' },
-    { VKEY_9, EF_SHIFT_DOWN | EF_CAPS_LOCK_ON, '(' },
-    { VKEY_9, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\x08' },
+      {VKEY_9, 0, '9'},
+      {VKEY_9, EF_SHIFT_DOWN, '('},
+      {VKEY_9, EF_SHIFT_DOWN | EF_CAPS_LOCK_ON, '('},
+      {VKEY_9, EF_SHIFT_DOWN | EF_CONTROL_DOWN, '\x08'},
 
-    { VKEY_NUMPAD0, EF_CONTROL_DOWN, '\x10' },
-    { VKEY_NUMPAD0, EF_SHIFT_DOWN, '0' },
+      {VKEY_NUMPAD0, EF_CONTROL_DOWN, '\x10'},
+      {VKEY_NUMPAD0, EF_SHIFT_DOWN, '0'},
 
-    { VKEY_NUMPAD9, EF_CONTROL_DOWN, '\x19' },
-    { VKEY_NUMPAD9, EF_SHIFT_DOWN, '9' },
+      {VKEY_NUMPAD9, EF_CONTROL_DOWN, '\x19'},
+      {VKEY_NUMPAD9, EF_SHIFT_DOWN, '9'},
 
-    { VKEY_TAB, EF_NONE, '\t' },
-    { VKEY_TAB, EF_CONTROL_DOWN, '\t' },
-    { VKEY_TAB, EF_SHIFT_DOWN, '\t' },
+      {VKEY_TAB, EF_NONE, '\t'},
+      {VKEY_TAB, EF_CONTROL_DOWN, '\t'},
+      {VKEY_TAB, EF_SHIFT_DOWN, '\t'},
 
-    { VKEY_MULTIPLY, EF_CONTROL_DOWN, '\x0A' },
-    { VKEY_MULTIPLY, EF_SHIFT_DOWN, '*' },
-    { VKEY_ADD, EF_CONTROL_DOWN, '\x0B' },
-    { VKEY_ADD, EF_SHIFT_DOWN, '+' },
-    { VKEY_SUBTRACT, EF_CONTROL_DOWN, '\x0D' },
-    { VKEY_SUBTRACT, EF_SHIFT_DOWN, '-' },
-    { VKEY_DECIMAL, EF_CONTROL_DOWN, '\x0E' },
-    { VKEY_DECIMAL, EF_SHIFT_DOWN, '.' },
-    { VKEY_DIVIDE, EF_CONTROL_DOWN, '\x0F' },
-    { VKEY_DIVIDE, EF_SHIFT_DOWN, '/' },
+      {VKEY_MULTIPLY, EF_CONTROL_DOWN, '\x0A'},
+      {VKEY_MULTIPLY, EF_SHIFT_DOWN, '*'},
+      {VKEY_ADD, EF_CONTROL_DOWN, '\x0B'},
+      {VKEY_ADD, EF_SHIFT_DOWN, '+'},
+      {VKEY_SUBTRACT, EF_CONTROL_DOWN, '\x0D'},
+      {VKEY_SUBTRACT, EF_SHIFT_DOWN, '-'},
+      {VKEY_DECIMAL, EF_CONTROL_DOWN, '\x0E'},
+      {VKEY_DECIMAL, EF_SHIFT_DOWN, '.'},
+      {VKEY_DIVIDE, EF_CONTROL_DOWN, '\x0F'},
+      {VKEY_DIVIDE, EF_SHIFT_DOWN, '/'},
 
-    { VKEY_OEM_1, EF_CONTROL_DOWN, '\x1B' },
-    { VKEY_OEM_1, EF_SHIFT_DOWN, ':' },
-    { VKEY_OEM_PLUS, EF_CONTROL_DOWN, '\x1D' },
-    { VKEY_OEM_PLUS, EF_SHIFT_DOWN, '+' },
-    { VKEY_OEM_COMMA, EF_CONTROL_DOWN, '\x0C' },
-    { VKEY_OEM_COMMA, EF_SHIFT_DOWN, '<' },
-    { VKEY_OEM_PERIOD, EF_CONTROL_DOWN, '\x0E' },
-    { VKEY_OEM_PERIOD, EF_SHIFT_DOWN, '>' },
-    { VKEY_OEM_3, EF_CONTROL_DOWN, '\x0' },
-    { VKEY_OEM_3, EF_SHIFT_DOWN, '~' },
+      {VKEY_OEM_1, EF_CONTROL_DOWN, '\x1B'},
+      {VKEY_OEM_1, EF_SHIFT_DOWN, ':'},
+      {VKEY_OEM_PLUS, EF_CONTROL_DOWN, '\x1D'},
+      {VKEY_OEM_PLUS, EF_SHIFT_DOWN, '+'},
+      {VKEY_OEM_COMMA, EF_CONTROL_DOWN, '\x0C'},
+      {VKEY_OEM_COMMA, EF_SHIFT_DOWN, '<'},
+      {VKEY_OEM_PERIOD, EF_CONTROL_DOWN, '\x0E'},
+      {VKEY_OEM_PERIOD, EF_SHIFT_DOWN, '>'},
+      {VKEY_OEM_3, EF_CONTROL_DOWN, '\x0'},
+      {VKEY_OEM_3, EF_SHIFT_DOWN, '~'},
   };
 
   for (size_t i = 0; i < base::size(kTestData); ++i) {
-    KeyEvent key(ET_KEY_PRESSED,
-                 kTestData[i].key_code,
-                 kTestData[i].flags);
+    KeyEvent key(ET_KEY_PRESSED, kTestData[i].key_code, kTestData[i].flags);
     EXPECT_EQ(kTestData[i].character, key.GetCharacter())
         << " Index:" << i << " key_code:" << kTestData[i].key_code;
   }
@@ -315,7 +314,7 @@ TEST(EventTest, NormalizeKeyEventFlags) {
     EXPECT_EQ(EF_NONE, keyev->flags());
   }
   {
-    event.InitKeyEvent(ET_KEY_PRESSED, VKEY_MENU,  EF_ALT_DOWN);
+    event.InitKeyEvent(ET_KEY_PRESSED, VKEY_MENU, EF_ALT_DOWN);
     auto keyev = ui::BuildKeyEventFromXEvent(*event);
     EXPECT_EQ(EF_ALT_DOWN, keyev->flags());
   }
@@ -349,7 +348,7 @@ TEST(EventTest, NormalizeKeyEventFlags) {
     EXPECT_EQ(EF_NONE, keyev.flags());
   }
   {
-    KeyEvent keyev(ET_KEY_PRESSED, VKEY_MENU,  EF_ALT_DOWN);
+    KeyEvent keyev(ET_KEY_PRESSED, VKEY_MENU, EF_ALT_DOWN);
     EXPECT_EQ(EF_ALT_DOWN, keyev.flags());
   }
   {
@@ -409,21 +408,21 @@ TEST(EventTest, KeyEventCode) {
     ASSERT_EQ((kNativeCodeSpace & 0xFF), kNativeCodeSpace);
 
     const LPARAM lParam = GetLParamFromScanCode(kNativeCodeSpace);
-    MSG native_event = { NULL, WM_KEYUP, VKEY_SPACE, lParam };
+    MSG native_event = {nullptr, WM_KEYUP, VKEY_SPACE, lParam};
     KeyEvent key(native_event);
 
     // KeyEvent converts from the native keycode (scan code) to the code.
     EXPECT_EQ(kCodeForSpace, key.GetCodeString());
   }
   {
-    const char kCodeForHome[]  = "Home";
+    const char kCodeForHome[] = "Home";
     const uint16_t kNativeCodeHome = 0xe047;
 
     // 'Home' is an extended key with 0xe000 bits.
     ASSERT_NE((kNativeCodeHome & 0xFF), kNativeCodeHome);
     const LPARAM lParam = GetLParamFromScanCode(kNativeCodeHome);
 
-    MSG native_event = { NULL, WM_KEYUP, VKEY_HOME, lParam };
+    MSG native_event = {nullptr, WM_KEYUP, VKEY_HOME, lParam};
     KeyEvent key(native_event);
 
     // KeyEvent converts from the native keycode (scan code) to the code.
@@ -435,12 +434,16 @@ TEST(EventTest, KeyEventCode) {
 #if defined(USE_X11)
 namespace {
 
-void SetKeyEventTimestamp(XEvent* event, int64_t time) {
-  event->xkey.time = time & UINT32_MAX;
+void SetKeyEventTimestamp(x11::Event* event, int64_t time64) {
+  uint32_t time = time64 & UINT32_MAX;
+  event->xlib_event().xkey.time = time;
+  event->As<x11::KeyEvent>()->time = static_cast<x11::Time>(time);
 }
 
-void AdvanceKeyEventTimestamp(XEvent* event) {
-  event->xkey.time++;
+void AdvanceKeyEventTimestamp(x11::Event* event) {
+  uint32_t time = event->xlib_event().xkey.time + 1;
+  event->xlib_event().xkey.time = time;
+  event->As<x11::KeyEvent>()->time = static_cast<x11::Time>(time);
 }
 
 }  // namespace
@@ -454,22 +457,26 @@ TEST(EventTest, AutoRepeat) {
   ScopedXI2Event native_event_a_pressed;
   native_event_a_pressed.InitKeyEvent(ET_KEY_PRESSED, VKEY_A, kNativeCodeA);
   ScopedXI2Event native_event_a_pressed_1500;
-  native_event_a_pressed_1500.InitKeyEvent(
-      ET_KEY_PRESSED, VKEY_A, kNativeCodeA);
+  native_event_a_pressed_1500.InitKeyEvent(ET_KEY_PRESSED, VKEY_A,
+                                           kNativeCodeA);
   ScopedXI2Event native_event_a_pressed_3000;
-  native_event_a_pressed_3000.InitKeyEvent(
-      ET_KEY_PRESSED, VKEY_A, kNativeCodeA);
+  native_event_a_pressed_3000.InitKeyEvent(ET_KEY_PRESSED, VKEY_A,
+                                           kNativeCodeA);
 
   ScopedXI2Event native_event_a_released;
   native_event_a_released.InitKeyEvent(ET_KEY_RELEASED, VKEY_A, kNativeCodeA);
   ScopedXI2Event native_event_b_pressed;
   native_event_b_pressed.InitKeyEvent(ET_KEY_PRESSED, VKEY_B, kNativeCodeB);
   ScopedXI2Event native_event_a_pressed_nonstandard_state;
-  native_event_a_pressed_nonstandard_state.InitKeyEvent(
-      ET_KEY_PRESSED, VKEY_A, kNativeCodeA);
+  native_event_a_pressed_nonstandard_state.InitKeyEvent(ET_KEY_PRESSED, VKEY_A,
+                                                        kNativeCodeA);
   // IBUS-GTK uses the mask (1 << 25) to detect reposted event.
-  static_cast<XEvent*>(native_event_a_pressed_nonstandard_state)->xkey.state |=
-      1 << 25;
+  {
+    x11::Event& event = *native_event_a_pressed_nonstandard_state;
+    int mask = event.xlib_event().xkey.state | 1 << 25;
+    event.xlib_event().xkey.state = mask;
+    event.As<x11::KeyEvent>()->state = static_cast<x11::KeyButMask>(mask);
+  }
 
   int64_t ticks_base =
       (base::TimeTicks::Now() - base::TimeTicks()).InMilliseconds() - 5000;
@@ -555,7 +562,7 @@ TEST(EventTest, AutoRepeat) {
 #endif  // USE_X11
 
 TEST(EventTest, TouchEventRadiusDefaultsToOtherAxis) {
-  const base::TimeTicks time = base::TimeTicks();
+  const base::TimeTicks time = base::TimeTicks::Now();
   const float non_zero_length1 = 30;
   const float non_zero_length2 = 46;
 
@@ -579,7 +586,7 @@ TEST(EventTest, TouchEventRadiusDefaultsToOtherAxis) {
 }
 
 TEST(EventTest, TouchEventRotationAngleFixing) {
-  const base::TimeTicks time = base::TimeTicks();
+  const base::TimeTicks time = base::TimeTicks::Now();
   const float radius_x = 20;
   const float radius_y = 10;
 
@@ -805,7 +812,7 @@ TEST(EventTest, EventLatencyOSTouchHistograms) {
 TEST(EventTest, EventLatencyOSMouseWheelHistogram) {
 #if defined(OS_WIN)
   base::HistogramTester histogram_tester;
-  MSG event = { nullptr, WM_MOUSEWHEEL, 0, 0 };
+  MSG event = {nullptr, WM_MOUSEWHEEL, 0, 0};
   MouseWheelEvent mouseWheelEvent(event);
   histogram_tester.ExpectTotalCount("Event.Latency.OS.MOUSE_WHEEL", 1);
 #elif defined(USE_X11)
@@ -813,11 +820,12 @@ TEST(EventTest, EventLatencyOSMouseWheelHistogram) {
   DeviceDataManagerX11::CreateInstance();
 
   // Initializes a native event and uses it to generate a MouseWheel event.
-  XEvent native_event;
-  memset(&native_event, 0, sizeof(XEvent));
-  XButtonEvent* button_event = &(native_event.xbutton);
-  button_event->type = ButtonPress;
-  button_event->button = 4; // A valid wheel button number between min and max.
+  xcb_generic_event_t ge;
+  memset(&ge, 0, sizeof(ge));
+  auto* button = reinterpret_cast<xcb_button_press_event_t*>(&ge);
+  button->response_type = x11::ButtonEvent::Press;
+  button->detail = 4;  // A valid wheel button number between min and max.
+  x11::Event native_event(&ge, x11::Connection::Get());
   auto mouse_ev = ui::BuildMouseWheelEventFromXEvent(native_event);
   histogram_tester.ExpectTotalCount("Event.Latency.OS.MOUSE_WHEEL", 1);
 #endif

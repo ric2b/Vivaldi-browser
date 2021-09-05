@@ -55,7 +55,7 @@ const char kCountersKey[] = "counters";
 
 const char kPresetIdKey[] = "preset-id";
 
-const int kCurrentStorageVersion = 2;
+const int kCurrentStorageVersion = 3;
 
 const base::FilePath::CharType kSourcesFileName[] =
     FILE_PATH_LITERAL("AdBlockState");

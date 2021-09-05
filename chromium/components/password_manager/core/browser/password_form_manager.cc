@@ -27,6 +27,7 @@
 #include "components/password_manager/core/browser/password_generation_manager.h"
 #include "components/password_manager/core/browser/password_manager_client.h"
 #include "components/password_manager/core/browser/password_manager_driver.h"
+#include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/browser/possible_username_data.h"
 #include "components/password_manager/core/browser/statistics_table.h"
@@ -34,8 +35,10 @@
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "google_apis/gaia/core_account_id.h"
 
+using autofill::FieldRendererId;
 using autofill::FormData;
 using autofill::FormFieldData;
+using autofill::FormRendererId;
 using autofill::FormSignature;
 using autofill::FormStructure;
 using autofill::GaiaIdHash;
@@ -188,13 +191,7 @@ bool PasswordFormManager::DoesManageAccordingToRendererId(
     const PasswordManagerDriver* driver) const {
   if (driver != driver_.get())
     return false;
-#if defined(OS_IOS)
-  NOTREACHED();
-  // On iOS form name is used as the form identifier.
-  return false;
-#else
   return observed_form_.unique_renderer_id == form_renderer_id;
-#endif
 }
 
 bool PasswordFormManager::IsEqualToSubmittedForm(
@@ -229,8 +226,8 @@ bool PasswordFormManager::IsEqualToSubmittedForm(
   return false;
 }
 
-const GURL& PasswordFormManager::GetOrigin() const {
-  return observed_not_web_form_digest_ ? observed_not_web_form_digest_->origin
+const GURL& PasswordFormManager::GetURL() const {
+  return observed_not_web_form_digest_ ? observed_not_web_form_digest_->url
                                        : observed_form_.url;
 }
 
@@ -271,18 +268,21 @@ bool PasswordFormManager::IsBlacklisted() const {
   return form_fetcher_->IsBlacklisted() || newly_blacklisted_;
 }
 
+bool PasswordFormManager::WasUnblacklisted() const {
+  return was_unblacklisted_while_on_page_;
+}
+
 bool PasswordFormManager::IsMovableToAccountStore() const {
+  DCHECK(
+      client_->GetPasswordFeatureManager()->ShouldShowAccountStorageBubbleUi())
+      << "Ensure that the client supports moving passwords for this user!";
   signin::IdentityManager* identity_manager = client_->GetIdentityManager();
-  if (!identity_manager)
-    return false;
+  DCHECK(identity_manager);
   const std::string gaia_id =
       identity_manager
           ->GetPrimaryAccountInfo(signin::ConsentLevel::kNotRequired)
           .gaia;
-  // If there is no signed in user, we cannot move the credentials to the
-  // account store.
-  if (gaia_id.empty())
-    return false;
+  DCHECK(!gaia_id.empty()) << "Cannot move without signed in user";
 
   const base::string16& username = GetPendingCredentials().username_value;
   const base::string16& password = GetPendingCredentials().password_value;
@@ -418,18 +418,18 @@ void PasswordFormManager::PermanentlyBlacklist() {
 
 PasswordStore::FormDigest PasswordFormManager::ConstructObservedFormDigest() {
   std::string signon_realm;
-  GURL origin;
+  GURL url;
   if (observed_not_web_form_digest_) {
-    origin = observed_not_web_form_digest_->origin;
+    url = observed_not_web_form_digest_->url;
     // GetSignonRealm is not suitable for http auth credentials.
     signon_realm = IsHttpAuth()
                        ? observed_not_web_form_digest_->signon_realm
-                       : GetSignonRealm(observed_not_web_form_digest_->origin);
+                       : GetSignonRealm(observed_not_web_form_digest_->url);
   } else {
-    origin = observed_form_.url;
+    url = observed_form_.url;
     signon_realm = GetSignonRealm(observed_form_.url);
   }
-  return PasswordStore::FormDigest(GetScheme(), signon_realm, origin);
+  return PasswordStore::FormDigest(GetScheme(), signon_realm, url);
 }
 
 void PasswordFormManager::OnPasswordsRevealed() {
@@ -437,7 +437,10 @@ void PasswordFormManager::OnPasswordsRevealed() {
 }
 
 void PasswordFormManager::MoveCredentialsToAccountStore() {
-  password_save_manager_->MoveCredentialsToAccountStore();
+  DCHECK(client_->GetPasswordFeatureManager()->IsOptedInForAccountStorage());
+  password_save_manager_->MoveCredentialsToAccountStore(
+      metrics_util::MoveToAccountStoreTrigger::
+          kSuccessfulLoginWithProfileStorePassword);
 }
 
 void PasswordFormManager::BlockMovingCredentialsToAccountStore() {
@@ -497,7 +500,7 @@ void PasswordFormManager::SetGenerationPopupWasShown(
 }
 
 void PasswordFormManager::SetGenerationElement(
-    const base::string16& generation_element) {
+    FieldRendererId generation_element) {
   votes_uploader_.set_generation_element(generation_element);
 }
 
@@ -523,22 +526,22 @@ void PasswordFormManager::PresaveGeneratedPassword(
     PasswordManagerDriver* driver,
     const FormData& form,
     const base::string16& generated_password,
-    const base::string16& generation_element) {
+    FieldRendererId generation_element) {
   observed_form_ = form;
   PresaveGeneratedPasswordInternal(form, generated_password);
   votes_uploader_.set_generation_element(generation_element);
 }
 
 bool PasswordFormManager::UpdateStateOnUserInput(
-    const base::string16& form_identifier,
-    const base::string16& field_identifier,
+    FormRendererId form_id,
+    FieldRendererId field_id,
     const base::string16& field_value) {
-  if (observed_form_.name != form_identifier)
+  if (observed_form_.unique_renderer_id != form_id)
     return false;
 
   bool form_data_changed = false;
   for (FormFieldData& field : observed_form_.fields) {
-    if (field.unique_id == field_identifier) {
+    if (field.unique_renderer_id == field_id) {
       field.value = field_value;
       form_data_changed = true;
       break;
@@ -550,7 +553,7 @@ bool PasswordFormManager::UpdateStateOnUserInput(
 
   base::string16 generated_password =
       password_save_manager_->GetGeneratedPassword();
-  if (votes_uploader_.get_generation_element() == field_identifier) {
+  if (votes_uploader_.get_generation_element() == field_id) {
     generated_password = field_value;
     form_data_changed = true;
   }
@@ -596,8 +599,8 @@ std::unique_ptr<PasswordFormManager> PasswordFormManager::Clone() {
     result->parser_.set_predictions(*parser_.predictions());
 
   if (parsed_submitted_form_) {
-    result->parsed_submitted_form_.reset(
-        new PasswordForm(*parsed_submitted_form_));
+    result->parsed_submitted_form_ =
+        std::make_unique<PasswordForm>(*parsed_submitted_form_);
   }
   result->is_submitted_ = is_submitted_;
   result->password_save_manager_->Init(result->client_, result->form_fetcher_,
@@ -637,7 +640,7 @@ void PasswordFormManager::OnFetchCompleted() {
     return;
   }
 
-  client_->UpdateCredentialCache(observed_form_.url.GetOrigin(),
+  client_->UpdateCredentialCache(url::Origin::Create(observed_form_.url),
                                  form_fetcher_->GetBestMatches(),
                                  form_fetcher_->IsBlacklisted());
 
@@ -723,7 +726,7 @@ bool PasswordFormManager::ProvisionallySaveHttpAuthForm(
         PasswordStore::FormDigest(submitted_form)))
     return false;
 
-  parsed_submitted_form_.reset(new PasswordForm(submitted_form));
+  parsed_submitted_form_ = std::make_unique<PasswordForm>(submitted_form);
   is_submitted_ = true;
   CreatePendingCredentials();
   return true;
@@ -788,7 +791,6 @@ void PasswordFormManager::Fill() {
     driver_->FormEligibleForGenerationFound(
         {/*form_renderer_id*/ observed_password_form->form_data
              .unique_renderer_id,
-         /*new_password_element*/ observed_password_form->new_password_element,
          /*new_password_element_renderer_id*/
          observed_password_form->new_password_element_renderer_id,
          /*confirmation_password_element_renderer_id*/
@@ -845,12 +847,16 @@ void PasswordFormManager::OnGeneratedPasswordAccepted(
       ParseFormAndMakeLogging(form_data, FormDataParser::Mode::kSaving);
   if (!parsed_form) {
     // Create a password form with a minimum data.
-    parsed_form.reset(new PasswordForm);
-    parsed_form->origin = form_data.url;
+    parsed_form = std::make_unique<PasswordForm>();
+    parsed_form->url = form_data.url;
     parsed_form->signon_realm = GetSignonRealm(form_data.url);
   }
   parsed_form->password_value = password;
   password_save_manager_->GeneratedPasswordAccepted(*parsed_form, driver_);
+}
+
+void PasswordFormManager::MarkWasUnblacklisted() {
+  was_unblacklisted_while_on_page_ = true;
 }
 
 PasswordFormManager::PasswordFormManager(
@@ -874,7 +880,8 @@ PasswordFormManager::PasswordFormManager(
       votes_uploader_(client, false /* is_possible_change_password_form */) {
   if (!metrics_recorder_) {
     metrics_recorder_ = base::MakeRefCounted<PasswordFormMetricsRecorder>(
-        client_->IsMainFrameSecure(), client_->GetUkmSourceId());
+        client_->IsCommittedMainFrameSecure(), client_->GetUkmSourceId(),
+        client_->GetPrefs());
   }
   password_save_manager_->Init(client_, form_fetcher_, metrics_recorder_,
                                &votes_uploader_);
@@ -936,8 +943,8 @@ void PasswordFormManager::PresaveGeneratedPasswordInternal(
 
   if (!parsed_form) {
     // Create a password form with a minimum data.
-    parsed_form.reset(new PasswordForm());
-    parsed_form->origin = form.url;
+    parsed_form = std::make_unique<PasswordForm>();
+    parsed_form->url = form.url;
     parsed_form->signon_realm = GetSignonRealm(form.url);
   }
   // Set |password_value| to the generated password in order to ensure that

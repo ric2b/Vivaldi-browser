@@ -2,14 +2,14 @@
                              what i18n to use for keypad, ie, does 1 ABC make
                              sense in every scenario? -->
 
-<link rel="import" href="chrome://resources/html/polymer.html">
+<link rel="import" href="../../../html/polymer.html">
 
-<link rel="import" href="chrome://resources/cr_elements/cr_button/cr_button.html">
-<link rel="import" href="chrome://resources/cr_elements/cr_icon_button/cr_icon_button.html">
-<link rel="import" href="chrome://resources/cr_elements/cr_input/cr_input.html">
-<link rel="import" href="chrome://resources/cr_elements/icons.html">
-<link rel="import" href="chrome://resources/cr_elements/shared_vars_css.html">
-<link rel="import" href="chrome://resources/html/i18n_behavior.html">
+<link rel="import" href="../../../cr_elements/cr_button/cr_button.html">
+<link rel="import" href="../../../cr_elements/cr_icon_button/cr_icon_button.html">
+<link rel="import" href="../../../cr_elements/cr_input/cr_input.html">
+<link rel="import" href="../../../cr_elements/icons.html">
+<link rel="import" href="../../../cr_elements/shared_vars_css.html">
+<link rel="import" href="../../../html/i18n_behavior.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/color.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
 <link rel="import" href="pin_keyboard_icon.html">
@@ -119,11 +119,12 @@
         font-size: 20px;
       }
 
+      #pinInput::part(input) {
+        font-size: 28px;
+      }
+
       #pinInput {
         --cr-input-error-display: none;
-        --cr-input-input: {
-          font-size: 28px;
-        };
         --cr-input-letter-spacing: var(--pin-keyboard-input-letter-spacing,
                                        18px);
         --cr-input-padding-end: 0;
@@ -164,7 +165,7 @@
             is-input-rtl$="[[isInputRtl_(value)]]" aria-label="[[ariaLabel]]"
             make-contrast$="[[hasInputOrFocus_(value, focused_)]]" invalid="[[hasError]]"
             placeholder="[[getInputPlaceholder_(enablePassword,
-                enablePlaceholder)]]"
+                enablePlaceholder)]]" inputmode="none"
             on-keydown="onInputKeyDown_" force-underline="true"
             disabled="[[disabled]]">
         </cr-input>

@@ -76,6 +76,9 @@ public class EmptyTabObserver implements TabObserver {
     public void onCrash(Tab tab) {}
 
     @Override
+    public void webContentsWillSwap(Tab tab) {}
+
+    @Override
     public void onWebContentsSwapped(Tab tab, boolean didStartLoad, boolean didFinishLoad) {}
 
     @Override
@@ -115,12 +118,6 @@ public class EmptyTabObserver implements TabObserver {
     public void onDidChangeThemeColor(Tab tab, int color) {}
 
     @Override
-    public void onDidAttachInterstitialPage(Tab tab) {}
-
-    @Override
-    public void onDidDetachInterstitialPage(Tab tab) {}
-
-    @Override
     public void onBackgroundColorChanged(Tab tab, int color) {}
 
     @Override
@@ -153,4 +150,7 @@ public class EmptyTabObserver implements TabObserver {
     public void onBrowserControlsOffsetChanged(Tab tab, int topControlsOffsetY,
             int bottomControlsOffsetY, int contentOffsetY, int topControlsMinHeightOffsetY,
             int bottomControlsMinHeightOffsetY) {}
+
+    @Override
+    public void onContentViewScrollingStateChanged(boolean scrolling) {}
 }

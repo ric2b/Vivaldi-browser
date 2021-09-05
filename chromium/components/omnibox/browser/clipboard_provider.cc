@@ -20,7 +20,7 @@
 #include "base/optional.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
-#include "base/task/task_traits.h"
+#include "base/task/thread_pool.h"
 #include "build/build_config.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match.h"
@@ -38,6 +38,10 @@
 namespace {
 
 const size_t kMaxClipboardSuggestionShownNumTimesSimpleSize = 20;
+
+// Clipboard suggestions should be placed above search and url suggestions, but
+// below query tiles.
+const int kClipboardMatchRelevanceScore = 1500;
 
 bool IsMatchDeletionEnabled() {
   return base::FeatureList::IsEnabled(
@@ -258,8 +262,8 @@ base::Optional<AutocompleteMatch> ClipboardProvider::CreateURLMatch(
 
   DCHECK(url.is_valid());
 
-  // Add the clipboard match. The relevance is 800 to beat ZeroSuggest results.
-  AutocompleteMatch match(this, 800, IsMatchDeletionEnabled(),
+  AutocompleteMatch match(this, kClipboardMatchRelevanceScore,
+                          IsMatchDeletionEnabled(),
                           AutocompleteMatchType::CLIPBOARD_URL);
   match.destination_url = url;
 
@@ -299,8 +303,8 @@ base::Optional<AutocompleteMatch> ClipboardProvider::CreateTextMatch(
   if (GURL(text).is_valid())
     return base::nullopt;
 
-  // Add the clipboard match. The relevance is 800 to beat ZeroSuggest results.
-  AutocompleteMatch match(this, 800, IsMatchDeletionEnabled(),
+  AutocompleteMatch match(this, kClipboardMatchRelevanceScore,
+                          IsMatchDeletionEnabled(),
                           AutocompleteMatchType::CLIPBOARD_TEXT);
   match.fill_into_edit = text;
 
@@ -372,7 +376,7 @@ void ClipboardProvider::OnReceiveImage(
   if (!optional_image)
     return;
   done_ = false;
-  PostTaskAndReplyWithResult(
+  base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE,
       base::BindOnce(&ClipboardProvider::EncodeClipboardImage,
                      optional_image.value()),
@@ -394,8 +398,9 @@ void ClipboardProvider::ConstructImageMatchCallback(
     scoped_refptr<base::RefCountedMemory> image_bytes) {
   const TemplateURL* default_url = url_service->GetDefaultSearchProvider();
   DCHECK(default_url);
-  // Add the clipboard match. The relevance is 800 to beat ZeroSuggest results.
-  AutocompleteMatch match(this, 800, IsMatchDeletionEnabled(),
+
+  AutocompleteMatch match(this, kClipboardMatchRelevanceScore,
+                          IsMatchDeletionEnabled(),
                           AutocompleteMatchType::CLIPBOARD_IMAGE);
 
   match.description.assign(l10n_util::GetStringUTF16(IDS_IMAGE_FROM_CLIPBOARD));

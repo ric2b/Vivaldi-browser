@@ -8,7 +8,6 @@
 #include <memory>
 #include <utility>
 
-#include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "content/renderer/render_widget.h"
@@ -17,7 +16,6 @@
 
 namespace blink {
 class WebLocalFrame;
-class WebString;
 }  // namespace blink
 
 namespace content {
@@ -27,7 +25,6 @@ class RenderViewImpl;
 namespace content {
 
 class TestRunner;
-class TestRunnerForSpecificView;
 class EventSender;
 class WebViewTestProxy;
 
@@ -65,13 +62,16 @@ class WebWidgetTestProxy : public RenderWidget {
 
   // WebWidgetClient implementation.
   void ScheduleAnimation() override;
+  void ScheduleAnimationForWebTests() override;
   bool RequestPointerLock(blink::WebLocalFrame* requester_frame,
                           blink::WebWidgetClient::PointerLockCallback callback,
                           bool request_unajusted_movement) override;
+  bool RequestPointerLockChange(
+      blink::WebLocalFrame* requester_frame,
+      blink::WebWidgetClient::PointerLockCallback callback,
+      bool request_unadjusted_movement) override;
   void RequestPointerUnlock() override;
   bool IsPointerLocked() override;
-  void SetToolTipText(const blink::WebString& text,
-                      base::i18n::TextDirection hint) override;
   void StartDragging(network::mojom::ReferrerPolicy policy,
                      const blink::WebDragData& data,
                      blink::WebDragOperationsMask mask,
@@ -85,11 +85,25 @@ class WebWidgetTestProxy : public RenderWidget {
   // objects.
   WebViewTestProxy* GetWebViewTestProxy();
 
+  // WebWidgetTestProxy is always a widget for a RenderFrame, so its WebWidget
+  // is always a WebFrameWidget.
+  blink::WebFrameWidget* GetWebFrameWidget();
+
   EventSender* event_sender() { return &event_sender_; }
   void Reset();
   void Install(blink::WebLocalFrame* frame);
 
-  void EndSyntheticGestures();
+  // Called to composite when the test has ended, in order to ensure the test
+  // produces up-to-date pixel output. This is a separate path as most
+  // compositing paths stop running when the test ends, to avoid tests running
+  // forever.
+  void SynchronouslyCompositeAfterTest();
+
+ private:
+  TestRunner* GetTestRunner();
+
+  void ScheduleAnimationInternal(bool do_raster);
+  void AnimateNow();
 
   // When |do_raster| is false, only a main frame animation step is performed,
   // but when true, a full composite is performed and a frame submitted to the
@@ -97,13 +111,6 @@ class WebWidgetTestProxy : public RenderWidget {
   // Note that compositing has the potential to detach the current frame and
   // thus destroy |this| before returning.
   void SynchronouslyComposite(bool do_raster);
-
- private:
-  TestRunnerForSpecificView* GetViewTestRunner();
-  TestRunner* GetTestRunner();
-
-  void ScheduleAnimationInternal(bool do_raster);
-  void AnimateNow();
 
   // Perform the synchronous composite step for a given RenderWidget.
   static void DoComposite(RenderWidget* widget, bool do_raster);

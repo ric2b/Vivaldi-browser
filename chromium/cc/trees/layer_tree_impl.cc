@@ -10,7 +10,9 @@
 #include <algorithm>
 #include <iterator>
 #include <limits>
+#include <memory>
 #include <set>
+#include <utility>
 
 #include "base/containers/adapters.h"
 #include "base/debug/crash_logging.h"
@@ -24,6 +26,7 @@
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/traced_value.h"
 #include "cc/base/devtools_instrumentation.h"
+#include "cc/base/features.h"
 #include "cc/base/histograms.h"
 #include "cc/base/math_util.h"
 #include "cc/base/synced_property.h"
@@ -209,17 +212,38 @@ void LayerTreeImpl::DidUpdateScrollOffset(ElementId id) {
     return;
   }
 
+  // This bit controls whether we'll update the transform node based on a
+  // changed scroll offset. If scroll unification is off, we always do this
+  // because the scroll handling code will only invoke a scroll update on nodes
+  // that can compositor scroll. However, with scroll unification, we can
+  // mutate scroll nodes which have main thread scrolling reasons, or aren't
+  // backed by a layer at all. In those cases, we don't want to produce any
+  // immediate changes in the compositor, we want the scroll to propagate
+  // through Blink in a commit and have Blink update properties, paint,
+  // compositing, etc. Thus, we avoid mutating the transform tree in this case.
+  // TODO(bokan): We SetNeedsCommit in LTHI when a scroll happens but in a
+  // normal compositor scroll there isn't much urgency for a commit to be
+  // scheduled. We should look into what we can do to make sure this is
+  // proritized accordingly. https://crbug.com/1082618.
+  bool can_realize_scroll_on_compositor =
+      !base::FeatureList::IsEnabled(features::kScrollUnification) ||
+      (scroll_node->is_composited &&
+       !scroll_node->main_thread_scrolling_reasons);
+
   DCHECK(scroll_node->transform_id != TransformTree::kInvalidNodeId);
   TransformTree& transform_tree = property_trees()->transform_tree;
   auto* transform_node = transform_tree.Node(scroll_node->transform_id);
-  if (transform_node->scroll_offset != scroll_tree.current_scroll_offset(id)) {
-    transform_node->scroll_offset = scroll_tree.current_scroll_offset(id);
-    transform_node->needs_local_transform_update = true;
-    transform_tree.set_needs_update(true);
+  if (can_realize_scroll_on_compositor) {
+    if (transform_node->scroll_offset !=
+        scroll_tree.current_scroll_offset(id)) {
+      transform_node->scroll_offset = scroll_tree.current_scroll_offset(id);
+      transform_node->needs_local_transform_update = true;
+      transform_tree.set_needs_update(true);
+    }
+    transform_node->transform_changed = true;
+    property_trees()->changed = true;
+    set_needs_update_draw_properties();
   }
-  transform_node->transform_changed = true;
-  property_trees()->changed = true;
-  set_needs_update_draw_properties();
 
   if (IsActiveTree()) {
     // Ensure the other trees are kept in sync.
@@ -419,6 +443,13 @@ void LayerTreeImpl::UpdateViewportContainerSizes() {
         OuterViewportScrollNode()->container_bounds.height() +
         scaled_bounds_delta.y();
     outer_clip_node->clip.set_height(adjusted_container_height);
+
+    // Expand all clips between the outer viewport and the inner viewport.
+    auto* outer_ancestor = property_trees->clip_tree.parent(outer_clip_node);
+    while (outer_ancestor && outer_ancestor->id != ClipTree::kRootNodeId) {
+      outer_ancestor->clip.Union(outer_clip_node->clip);
+      outer_ancestor = property_trees->clip_tree.parent(outer_ancestor);
+    }
   }
 
   anchor.ResetViewportToAnchoredPosition();
@@ -477,6 +508,16 @@ OwnedLayerImplList LayerTreeImpl::DetachLayersKeepingRootLayerForTesting() {
 }
 
 void LayerTreeImpl::SetPropertyTrees(PropertyTrees* property_trees) {
+  // Updating the scroll tree shouldn't clobber the currently scrolling node so
+  // stash it and restore it at the end of this method.  To maintain the
+  // current scrolling node we need to use element ids which are stable across
+  // the property tree update in SetPropertyTrees.
+  ElementId scrolling_element_id;
+  if (IsActiveTree()) {
+    if (ScrollNode* scrolling_node = CurrentlyScrollingNode())
+      scrolling_element_id = scrolling_node->element_id;
+  }
+
   std::vector<std::unique_ptr<RenderSurfaceImpl>> old_render_surfaces;
   property_trees_.effect_tree.TakeRenderSurfaces(&old_render_surfaces);
   property_trees_ = *property_trees;
@@ -493,6 +534,13 @@ void LayerTreeImpl::SetPropertyTrees(PropertyTrees* property_trees) {
   // effect tree.
   if (IsActiveTree())
     property_trees_.effect_tree.set_needs_update(true);
+
+  const ScrollNode* scrolling_node = nullptr;
+  if (scrolling_element_id) {
+    auto& scroll_tree = property_trees_.scroll_tree;
+    scrolling_node = scroll_tree.FindNodeFromElementId(scrolling_element_id);
+  }
+  SetCurrentlyScrollingNode(scrolling_node);
 }
 
 void LayerTreeImpl::PushPropertyTreesTo(LayerTreeImpl* target_tree) {
@@ -508,20 +556,7 @@ void LayerTreeImpl::PushPropertyTreesTo(LayerTreeImpl* target_tree) {
       target_tree->MoveChangeTrackingToLayers();
   }
 
-  // To maintain the current scrolling node we need to use element ids which
-  // are stable across the property tree update in SetPropertyTrees.
-  ElementId scrolling_element_id;
-  if (ScrollNode* scrolling_node = target_tree->CurrentlyScrollingNode())
-    scrolling_element_id = scrolling_node->element_id;
-
   target_tree->SetPropertyTrees(&property_trees_);
-
-  const ScrollNode* scrolling_node = nullptr;
-  if (scrolling_element_id) {
-    auto& scroll_tree = target_tree->property_trees()->scroll_tree;
-    scrolling_node = scroll_tree.FindNodeFromElementId(scrolling_element_id);
-  }
-  target_tree->SetCurrentlyScrollingNode(scrolling_node);
 
   std::vector<EventMetrics> events_metrics;
   events_metrics.swap(events_metrics_from_main_thread_);
@@ -618,6 +653,13 @@ void LayerTreeImpl::PushPropertiesTo(LayerTreeImpl* target_tree) {
   target_tree->HandleScrollbarShowRequestsFromMain();
   target_tree->AddPresentationCallbacks(std::move(presentation_callbacks_));
   presentation_callbacks_.clear();
+
+  if (delegated_ink_metadata_) {
+    TRACE_EVENT_INSTANT1("cc", "Delegated ink metadata pushed to tree",
+                         TRACE_EVENT_SCOPE_THREAD, "point",
+                         delegated_ink_metadata_->point().ToString());
+    target_tree->set_delegated_ink_metadata(std::move(delegated_ink_metadata_));
+  }
 }
 
 void LayerTreeImpl::HandleTickmarksVisibilityChange() {
@@ -1581,12 +1623,8 @@ ImageAnimationController* LayerTreeImpl::image_animation_controller() const {
   return host_impl_->image_animation_controller();
 }
 
-FrameRateCounter* LayerTreeImpl::frame_rate_counter() const {
-  return host_impl_->fps_counter();
-}
-
-base::Optional<int> LayerTreeImpl::current_universal_throughput() {
-  return host_impl_->current_universal_throughput();
+DroppedFrameCounter* LayerTreeImpl::dropped_frame_counter() const {
+  return host_impl_->dropped_frame_counter();
 }
 
 MemoryHistory* LayerTreeImpl::memory_history() const {
@@ -2254,6 +2292,19 @@ LayerTreeImpl::FindLayersHitByPointInNonFastScrollableRegion(
   }
 
   return layers;
+}
+
+bool LayerTreeImpl::PointHitsNonFastScrollableRegion(
+    const gfx::PointF& screen_space_point,
+    const LayerImpl& layer) const {
+  // We assume the layer has already been hit tested.
+  DCHECK(PointHitsLayer(&layer, screen_space_point, nullptr));
+
+  if (layer.non_fast_scrollable_region().IsEmpty())
+    return false;
+
+  return PointHitsRegion(screen_space_point, layer.ScreenSpaceTransform(),
+                         layer.non_fast_scrollable_region(), &layer);
 }
 
 struct HitTestFramedVisibleScrollableOrTouchableFunctor {

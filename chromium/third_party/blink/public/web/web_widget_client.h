@@ -32,6 +32,7 @@
 #define THIRD_PARTY_BLINK_PUBLIC_WEB_WEB_WIDGET_CLIENT_H_
 
 #include <memory>
+#include <vector>
 
 #include "base/callback.h"
 #include "base/i18n/rtl.h"
@@ -39,12 +40,16 @@
 #include "cc/trees/layer_tree_host.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "services/network/public/mojom/referrer_policy.mojom-shared.h"
+#include "third_party/blink/public/common/input/web_coalesced_input_event.h"
 #include "third_party/blink/public/common/input/web_gesture_event.h"
+#include "third_party/blink/public/common/page/web_drag_operation.h"
+#include "third_party/blink/public/mojom/input/input_handler.mojom-shared.h"
 #include "third_party/blink/public/mojom/input/pointer_lock_result.mojom-forward.h"
+#include "third_party/blink/public/platform/cross_variant_mojo_util.h"
 #include "third_party/blink/public/platform/web_common.h"
-#include "third_party/blink/public/platform/web_drag_operation.h"
 #include "third_party/blink/public/platform/web_rect.h"
 #include "third_party/blink/public/platform/web_screen_info.h"
+#include "third_party/blink/public/platform/web_text_input_type.h"
 #include "third_party/blink/public/platform/web_touch_action.h"
 #include "third_party/blink/public/web/web_meaningful_layout.h"
 #include "third_party/blink/public/web/web_navigation_policy.h"
@@ -52,7 +57,6 @@
 class SkBitmap;
 
 namespace cc {
-struct ElementId;
 class PaintImage;
 }
 
@@ -67,9 +71,9 @@ class Cursor;
 
 namespace blink {
 class WebDragData;
+class WebMouseEvent;
 class WebGestureEvent;
 struct WebFloatRect;
-class WebString;
 class WebWidget;
 class WebLocalFrame;
 
@@ -81,6 +85,12 @@ class WebWidgetClient {
   // single thread and no scheduler, the impl should schedule a task to run
   // a synchronous composite.
   virtual void ScheduleAnimation() {}
+
+  // Called to request a BeginMainFrame from the compositor, meant to be used
+  // for web tests only, where commits must be explicitly scheduled. Contrary to
+  // ScheduleAnimation() this will be a no-op on multi-threaded environments and
+  // will unconditionally ensure that the compositor is actually run.
+  virtual void ScheduleAnimationForWebTests() {}
 
   // Called immediately following the first compositor-driven (frame-generating)
   // layout that happened after an interesting document lifecyle change (see
@@ -106,10 +116,6 @@ class WebWidgetClient {
   // Called to get the view rect in screen coordinates. This is the actual
   // content view area, i.e. doesn't include any window decorations.
   virtual WebRect ViewRect() { return WebRect(); }
-
-  // Called when a tooltip should be shown at the current cursor position.
-  virtual void SetToolTipText(const WebString&,
-                              base::i18n::TextDirection hint) {}
 
   // Requests to lock the mouse cursor for the |requester_frame| in the
   // widget. If true is returned, the success result will be asynchronously
@@ -138,28 +144,13 @@ class WebWidgetClient {
   // Returns true iff the pointer is locked to this widget.
   virtual bool IsPointerLocked() { return false; }
 
-  // Called when a gesture event is handled.
-  virtual void DidHandleGestureEvent(const WebGestureEvent& event,
-                                     bool event_cancelled) {}
-
   // Called when overscrolled on main thread. All parameters are in
   // viewport-space.
   virtual void DidOverscroll(const gfx::Vector2dF& overscroll_delta,
                              const gfx::Vector2dF& accumulated_overscroll,
                              const gfx::PointF& position_in_viewport,
-                             const gfx::Vector2dF& velocity_in_viewport) {}
-
-  // Requests that a gesture of |injected_type| be reissued at a later point in
-  // time. |injected_type| is required to be one of
-  // GestureScroll{Begin,Update,End}. The dispatched gesture will scroll the
-  // ScrollableArea identified by |scrollable_area_element_id| by the given
-  // delta + granularity.
-  virtual void InjectGestureScrollEvent(
-      WebGestureDevice device,
-      const gfx::Vector2dF& delta,
-      ui::ScrollGranularity granularity,
-      cc::ElementId scrollable_area_element_id,
-      WebInputEvent::Type injected_type) {}
+                             const gfx::Vector2dF& velocity_in_viewport,
+                             cc::OverscrollBehavior overscroll_behavior) {}
 
   // Called to update if pointerrawupdate events should be sent.
   virtual void SetHasPointerRawUpdateEventHandlers(bool) {}
@@ -178,9 +169,6 @@ class WebWidgetClient {
   // Called during WebWidget::HandleInputEvent for a TouchStart event to inform
   // the embedder of the touch actions that are permitted for this touch.
   virtual void SetTouchAction(WebTouchAction touch_action) {}
-
-  // Request the browser to show virtual keyboard for current input type.
-  virtual void ShowVirtualKeyboardOnElementFocus() {}
 
   // Converts the |rect| from Blink's Viewport coordinates to the
   // coordinates in the native window used to display the content, in
@@ -279,6 +267,74 @@ class WebWidgetClient {
 
   // Returns a scale of the device emulator from the widget.
   virtual float GetEmulatorScale() const { return 1.0f; }
+
+  // Returns whether we handled a GestureScrollEvent.
+  virtual void DidHandleGestureScrollEvent(
+      const WebGestureEvent& gesture_event,
+      const gfx::Vector2dF& unused_delta,
+      const cc::OverscrollBehavior& overscroll_behavior,
+      bool event_processed) {}
+
+  // Called before gesture events are processed and allows the
+  // client to handle the event itself. Return true if event was handled
+  // and further processing should stop.
+  virtual bool WillHandleGestureEvent(const WebGestureEvent& event) {
+    return false;
+  }
+
+  // Called before mouse events are processed and allows the
+  // client to handle the event itself. Return true if event was handled
+  // and further processing should stop.
+  virtual bool WillHandleMouseEvent(const WebMouseEvent& event) {
+    return false;
+  }
+
+  // Queue a sythentic event in the MainThreadEventQueue. This is called
+  // for when handling scrollbars.
+  virtual void QueueSyntheticEvent(
+      std::unique_ptr<blink::WebCoalescedInputEvent>) {}
+
+  // Connect the Widget Input Handler to the channels provided.
+  virtual void GetWidgetInputHandler(
+      CrossVariantMojoReceiver<mojom::WidgetInputHandlerInterfaceBase>
+          widget_input_receiver,
+      CrossVariantMojoRemote<mojom::WidgetInputHandlerHostInterfaceBase>
+          widget_input_host_remote) {}
+
+  // Since the widget input IPC channel is still on the content side send this
+  // message back to the embedder to then send it on that channel. All bounds
+  // are in window coordinates.
+  virtual void SendCompositionRangeChanged(
+      const gfx::Range& range,
+      const std::vector<gfx::Rect>& character_bounds) {}
+
+  // The IME guard prevents sending IPC messages while messages are being
+  // processed. Returns true if there is a current guard.
+  // |request_to_show_virtual_keyboard| is whether the message that would have
+  // been sent would have requested the keyboard. This method will eventually be
+  // removed when all input handling is moved into blink.
+  virtual bool HasCurrentImeGuard(bool request_to_show_virtual_keyboard) {
+    return false;
+  }
+
+  // Determines whether composition can happen inline.
+  virtual bool CanComposeInline() { return false; }
+
+  // Determines if IME events should be sent to Pepper instead of processed to
+  // the currently focused frame.
+  virtual bool ShouldDispatchImeEventsToPepper() { return false; }
+
+  // Returns the current pepper text input type.
+  virtual WebTextInputType GetPepperTextInputType() {
+    return WebTextInputType::kWebTextInputTypeNone;
+  }
+
+  // Returns the current pepper caret bounds in window coordinates.
+  virtual gfx::Rect GetPepperCaretBounds() { return gfx::Rect(); }
+
+  // The state of the focus has changed for the WebWidget. |enabled|
+  // is the new state.
+  virtual void FocusChanged(bool enabled) {}
 };
 
 }  // namespace blink

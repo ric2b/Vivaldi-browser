@@ -4,6 +4,8 @@
 
 #include "components/password_manager/core/common/credential_manager_types.h"
 
+#include <memory>
+
 #include "base/strings/string_number_conversions.h"
 #include "components/autofill/core/common/password_form.h"
 
@@ -53,8 +55,7 @@ CredentialInfo::CredentialInfo(const autofill::PasswordForm& form,
 
 CredentialInfo::CredentialInfo(const CredentialInfo& other) = default;
 
-CredentialInfo::~CredentialInfo() {
-}
+CredentialInfo::~CredentialInfo() = default;
 
 bool CredentialInfo::operator==(const CredentialInfo& rhs) const {
   return (type == rhs.type && id == rhs.id && name == rhs.name &&
@@ -64,16 +65,16 @@ bool CredentialInfo::operator==(const CredentialInfo& rhs) const {
 
 std::unique_ptr<autofill::PasswordForm> CreatePasswordFormFromCredentialInfo(
     const CredentialInfo& info,
-    const GURL& origin) {
+    const url::Origin& origin) {
   std::unique_ptr<autofill::PasswordForm> form;
   if (info.type == CredentialType::CREDENTIAL_TYPE_EMPTY)
     return form;
 
-  form.reset(new autofill::PasswordForm);
+  form = std::make_unique<autofill::PasswordForm>();
   form->icon_url = info.icon;
   form->display_name = info.name.value_or(base::string16());
   form->federation_origin = info.federation;
-  form->origin = origin;
+  form->url = origin.GetURL();
   form->password_value = info.password.value_or(base::string16());
   form->username_value = info.id.value_or(base::string16());
   form->scheme = autofill::PasswordForm::Scheme::kHtml;
@@ -81,7 +82,7 @@ std::unique_ptr<autofill::PasswordForm> CreatePasswordFormFromCredentialInfo(
 
   form->signon_realm =
       info.type == CredentialType::CREDENTIAL_TYPE_PASSWORD
-          ? origin.GetOrigin().spec()
+          ? form->url.spec()
           : "federation://" + origin.host() + "/" + info.federation.host();
   return form;
 }

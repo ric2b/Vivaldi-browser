@@ -171,7 +171,6 @@ enum PasswordProtectionTrigger {
   // Password protection is off.
   PASSWORD_PROTECTION_OFF = 0,
   // Password protection triggered by password reuse event.
-  // Not used for now.
   PASSWORD_REUSE = 1,
   // Password protection triggered by password reuse event on phishing page.
   PHISHING_REUSE = 2,
@@ -294,7 +293,7 @@ void SetExtendedReportingPrefAndMetric(PrefService* prefs,
                                        ExtendedReportingOptInLocation location);
 
 // This variant is used to simplify test code by omitting the location.
-void SetExtendedReportingPref(PrefService* prefs, bool value);
+void SetExtendedReportingPrefForTests(PrefService* prefs, bool value);
 
 // Sets the currently active Safe Browsing Enhanced Protection to the specified
 // value.

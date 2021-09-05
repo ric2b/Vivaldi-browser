@@ -5,6 +5,7 @@
 #include "chrome/browser/chromeos/printing/history/print_job_info_proto_conversions.h"
 
 #include "base/optional.h"
+#include "chrome/browser/chromeos/printing/printer_error_codes.h"
 #include "printing/mojom/print.mojom.h"
 
 namespace chromeos {
@@ -63,6 +64,7 @@ proto::PrintJobInfo_PrintJobSource PrintJobSourceToProto(
 proto::PrintJobInfo_PrintJobStatus PrintJobStateToProto(
     CupsPrintJob::State state) {
   switch (state) {
+    case CupsPrintJob::State::STATE_ERROR:
     case CupsPrintJob::State::STATE_FAILED:
       return proto::PrintJobInfo_PrintJobStatus_FAILED;
     case CupsPrintJob::State::STATE_CANCELLED:
@@ -88,6 +90,39 @@ proto::Printer_PrinterSource PrinterSourceToProto(
       NOTREACHED();
   }
   return proto::Printer_PrinterSource_USER;
+}
+
+proto::PrintJobInfo_PrinterErrorCode PrinterErrorCodeToProto(
+    PrinterErrorCode error_code) {
+  switch (error_code) {
+    case PrinterErrorCode::NO_ERROR:
+      return proto::PrintJobInfo_PrinterErrorCode_NO_ERROR;
+    case PrinterErrorCode::PAPER_JAM:
+      return proto::PrintJobInfo_PrinterErrorCode_PAPER_JAM;
+    case PrinterErrorCode::OUT_OF_PAPER:
+      return proto::PrintJobInfo_PrinterErrorCode_OUT_OF_PAPER;
+    case PrinterErrorCode::OUT_OF_INK:
+      return proto::PrintJobInfo_PrinterErrorCode_OUT_OF_INK;
+    case PrinterErrorCode::DOOR_OPEN:
+      return proto::PrintJobInfo_PrinterErrorCode_DOOR_OPEN;
+    case PrinterErrorCode::PRINTER_UNREACHABLE:
+      return proto::PrintJobInfo_PrinterErrorCode_PRINTER_UNREACHABLE;
+    case PrinterErrorCode::TRAY_MISSING:
+      return proto::PrintJobInfo_PrinterErrorCode_TRAY_MISSING;
+    case PrinterErrorCode::OUTPUT_FULL:
+      return proto::PrintJobInfo_PrinterErrorCode_OUTPUT_FULL;
+    case PrinterErrorCode::STOPPED:
+      return proto::PrintJobInfo_PrinterErrorCode_STOPPED;
+    case PrinterErrorCode::FILTER_FAILED:
+      return proto::PrintJobInfo_PrinterErrorCode_FILTER_FAILED;
+    case PrinterErrorCode::UNKNOWN_ERROR:
+      return proto::PrintJobInfo_PrinterErrorCode_UNKNOWN_ERROR;
+    default:
+      // Be sure to update the above case statements whenever a new printer
+      // error is introduced.
+      NOTREACHED();
+  }
+  return proto::PrintJobInfo_PrinterErrorCode_UNKNOWN_ERROR;
 }
 
 // Helper method to convert base::Time to the number of milliseconds past the
@@ -126,6 +161,8 @@ proto::PrintJobInfo CupsPrintJobToProto(const CupsPrintJob& print_job,
   print_job_info_proto.set_source(PrintJobSourceToProto(print_job.source()));
   print_job_info_proto.set_source_id(print_job.source_id());
   print_job_info_proto.set_status(PrintJobStateToProto(print_job.state()));
+  print_job_info_proto.set_printer_error_code(
+      PrinterErrorCodeToProto(print_job.error_code()));
   print_job_info_proto.set_creation_time(
       TimeToMillisecondsPastUnixEpoch(print_job.creation_time()));
   print_job_info_proto.set_completion_time(

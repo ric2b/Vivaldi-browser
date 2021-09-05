@@ -396,8 +396,8 @@ Session::Session(
                                               base::Unretained(this))),
       gpu_channel_host_(nullptr) {
   DCHECK(resource_provider_);
-  mirror_settings_.SetResolutionContraints(max_resolution.width(),
-                                           max_resolution.height());
+  mirror_settings_.SetResolutionConstraints(max_resolution.width(),
+                                            max_resolution.height());
   resource_provider_->GetNetworkContext(
       network_context_.BindNewPipeAndPassReceiver());
 
@@ -725,7 +725,8 @@ void Session::OnAnswer(const std::vector<FrameSenderConfig>& audio_configs,
       audio_input_device_ = new media::AudioInputDevice(
           std::make_unique<CapturedAudioInput>(base::BindRepeating(
               &Session::CreateAudioStream, base::Unretained(this))),
-          media::AudioInputDevice::Purpose::kLoopback);
+          media::AudioInputDevice::Purpose::kLoopback,
+          media::AudioInputDevice::DeadStreamDetection::kEnabled);
       audio_input_device_->Initialize(mirror_settings_.GetAudioCaptureParams(),
                                       audio_capturing_callback_.get());
       audio_input_device_->Start();

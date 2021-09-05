@@ -40,7 +40,7 @@ class FakeLocalFrameHost : public mojom::blink::LocalFrameHost {
   void DidContainInsecureFormAction() override;
   void DocumentAvailableInMainFrame(bool uses_temporary_zoom_level) override;
   void SetNeedsOcclusionTracking(bool needs_tracking) override;
-  void LifecycleStateChanged(mojom::blink::FrameLifecycleState state) override;
+  void SetVirtualKeyboardOverlayPolicy(bool vk_overlays_content) override;
   void EvictFromBackForwardCache() override;
   void VisibilityChanged(mojom::blink::FrameVisibility visibility) override;
   void DidChangeThemeColor(
@@ -48,6 +48,7 @@ class FakeLocalFrameHost : public mojom::blink::LocalFrameHost {
   void DidFailLoadWithError(const ::blink::KURL& url,
                             int32_t error_code) override;
   void DidFocusFrame() override;
+  void DidCallFocus() override;
   void EnforceInsecureRequestPolicy(
       mojom::InsecureRequestPolicy policy_bitmap) override;
   void EnforceInsecureNavigationsSet(const WTF::Vector<uint32_t>& set) override;
@@ -71,9 +72,8 @@ class FakeLocalFrameHost : public mojom::blink::LocalFrameHost {
   void DispatchLoad() override;
   void GoToEntryAtOffset(int32_t offset, bool has_user_gesture) override;
   void RenderFallbackContentInParentProcess() override;
-  void UpdateTitle(
-      const WTF::String& title,
-      mojo_base::mojom::blink::TextDirection title_direction) override;
+  void UpdateTitle(const WTF::String& title,
+                   base::i18n::TextDirection title_direction) override;
   void UpdateUserActivationState(
       mojom::blink::UserActivationUpdateType update_type) override;
   void HandleAccessibilityFindInPageResult(
@@ -115,6 +115,10 @@ class FakeLocalFrameHost : public mojom::blink::LocalFrameHost {
   void DidChangeFrameOwnerProperties(
       const base::UnguessableToken& child_frame_token,
       mojom::blink::FrameOwnerPropertiesPtr frame_owner_properties) override;
+  void DidChangeOpener(
+      const base::Optional<base::UnguessableToken>& opener_frame) override;
+  void DidChangeFramePolicy(const base::UnguessableToken& child_frame_token,
+                            const FramePolicy& frame_policy) override;
 
  private:
   void BindFrameHostReceiver(mojo::ScopedInterfaceEndpointHandle handle);

@@ -80,10 +80,6 @@
 #include "third_party/blink/renderer/core/layout/layout_list_marker.h"
 #include "third_party/blink/renderer/core/layout/layout_multi_column_spanner_placeholder.h"
 #include "third_party/blink/renderer/core/layout/layout_object_factory.h"
-#include "third_party/blink/renderer/core/layout/layout_table_caption.h"
-#include "third_party/blink/renderer/core/layout/layout_table_cell.h"
-#include "third_party/blink/renderer/core/layout/layout_table_col.h"
-#include "third_party/blink/renderer/core/layout/layout_table_row.h"
 #include "third_party/blink/renderer/core/layout/layout_text_fragment.h"
 #include "third_party/blink/renderer/core/layout/layout_theme.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
@@ -245,24 +241,16 @@ LayoutObject* LayoutObject::CreateObject(Element* element,
       return LayoutObjectFactory::CreateBlockFlow(*element, style, legacy);
     case EDisplay::kTable:
     case EDisplay::kInlineTable:
-      UseCounter::Count(element->GetDocument(),
-                        WebFeature::kLegacyLayoutByTable);
-      return new LayoutTable(element);
+      return LayoutObjectFactory::CreateTable(*element, style, legacy);
     case EDisplay::kTableRowGroup:
     case EDisplay::kTableHeaderGroup:
     case EDisplay::kTableFooterGroup:
-      UseCounter::Count(element->GetDocument(),
-                        WebFeature::kLegacyLayoutByTable);
-      return new LayoutTableSection(element);
+      return LayoutObjectFactory::CreateTableSection(*element, style, legacy);
     case EDisplay::kTableRow:
-      UseCounter::Count(element->GetDocument(),
-                        WebFeature::kLegacyLayoutByTable);
-      return new LayoutTableRow(element);
+      return LayoutObjectFactory::CreateTableRow(*element, style, legacy);
     case EDisplay::kTableColumnGroup:
     case EDisplay::kTableColumn:
-      UseCounter::Count(element->GetDocument(),
-                        WebFeature::kLegacyLayoutByTable);
-      return new LayoutTableCol(element);
+      return LayoutObjectFactory::CreateTableColumn(*element, style, legacy);
     case EDisplay::kTableCell:
       return LayoutObjectFactory::CreateTableCell(*element, style, legacy);
     case EDisplay::kTableCaption:
@@ -431,7 +419,7 @@ void LayoutObject::AddChild(LayoutObject* new_child,
         !after_child->IsBeforeContent()) {
       table = after_child;
     } else {
-      table = LayoutTable::CreateAnonymousWithParent(this);
+      table = LayoutObjectFactory::CreateAnonymousTableWithParent(*this);
       children->InsertChildNode(this, table, before_child);
     }
     table->AddChild(new_child);
@@ -845,7 +833,6 @@ LayoutBox* LayoutObject::EnclosingBox() const {
 }
 
 LayoutBlockFlow* LayoutObject::RootInlineFormattingContext() const {
-  DCHECK(IsInline());
   for (LayoutObject* parent = Parent(); parent; parent = parent->Parent()) {
     if (auto* block_flow = DynamicTo<LayoutBlockFlow>(parent)) {
       // Skip |LayoutFlowThread| because it is skipped when finding the first
@@ -859,7 +846,6 @@ LayoutBlockFlow* LayoutObject::RootInlineFormattingContext() const {
 }
 
 LayoutBlockFlow* LayoutObject::FragmentItemsContainer() const {
-  DCHECK(IsInline());
   for (LayoutObject* parent = Parent(); parent; parent = parent->Parent()) {
     if (auto* block_flow = DynamicTo<LayoutBlockFlow>(parent))
       return block_flow;
@@ -937,7 +923,10 @@ static inline bool ObjectIsRelayoutBoundary(const LayoutObject* object) {
   // Positioned objects always have self-painting layers and are safe to use as
   // relayout boundaries.
   bool is_svg_root = object->IsSVGRoot();
-  if (!object->IsPositioned() && !is_svg_root)
+  bool has_self_painting_layer =
+      object->HasLayer() &&
+      ToLayoutBoxModelObject(object)->HasSelfPaintingLayer();
+  if (!has_self_painting_layer && !is_svg_root)
     return false;
 
   // LayoutInline can't be relayout roots since LayoutBlockFlow is responsible
@@ -989,11 +978,12 @@ static inline bool ObjectIsRelayoutBoundary(const LayoutObject* object) {
 
     // In LayoutNG, if box has any OOF descendants, they are propagated to
     // parent. Therefore, we must mark parent chain for layout.
-    if (layout_box->GetCachedLayoutResult() &&
-        layout_box->GetCachedLayoutResult()
-            ->PhysicalFragment()
-            .HasOutOfFlowPositionedDescendants())
-      return false;
+    if (const NGLayoutResult* layouot_result =
+            layout_box->GetCachedLayoutResult()) {
+      if (layouot_result->PhysicalFragment()
+              .HasOutOfFlowPositionedDescendants())
+        return false;
+    }
   }
 
   if (object->IsTextControl())
@@ -1290,11 +1280,6 @@ inline void LayoutObject::InvalidateContainerIntrinsicLogicalWidths() {
 LayoutObject* LayoutObject::ContainerForAbsolutePosition(
     AncestorSkipInfo* skip_info) const {
   return FindAncestorByPredicate(this, skip_info, [](LayoutObject* candidate) {
-    if (!candidate->StyleRef().CanContainAbsolutePositionObjects() &&
-        candidate->ShouldApplyLayoutContainment()) {
-      UseCounter::Count(candidate->GetDocument(),
-                        WebFeature::kCSSContainLayoutPositionedDescendants);
-    }
     return candidate->CanContainAbsolutePositionObjects();
   });
 }
@@ -1303,12 +1288,6 @@ LayoutObject* LayoutObject::ContainerForFixedPosition(
     AncestorSkipInfo* skip_info) const {
   DCHECK(!IsText());
   return FindAncestorByPredicate(this, skip_info, [](LayoutObject* candidate) {
-    if (!candidate->StyleRef().CanContainFixedPositionObjects(
-            candidate->IsDocumentElement()) &&
-        candidate->ShouldApplyLayoutContainment()) {
-      UseCounter::Count(candidate->GetDocument(),
-                        WebFeature::kCSSContainLayoutPositionedDescendants);
-    }
     return candidate->CanContainFixedPositionObjects();
   });
 }
@@ -1358,6 +1337,13 @@ LayoutBlock* LayoutObject::ContainingBlock(AncestorSkipInfo* skip_info) const {
   return DynamicTo<LayoutBlock>(object);
 }
 
+LayoutObject* LayoutObject::NonAnonymousAncestor() const {
+  LayoutObject* ancestor = Parent();
+  while (ancestor && ancestor->IsAnonymous())
+    ancestor = ancestor->Parent();
+  return ancestor;
+}
+
 LayoutBlock* LayoutObject::FindNonAnonymousContainingBlock(
     LayoutObject* container,
     AncestorSkipInfo* skip_info) {
@@ -1397,6 +1383,11 @@ bool LayoutObject::ComputeIsFixedContainer(const ComputedStyle* style) const {
   if (IsA<LayoutView>(this) || IsSVGForeignObject() || IsTextControl())
     return true;
   // https://www.w3.org/TR/css-transforms-1/#containing-block-for-all-descendants
+
+  if (RuntimeEnabledFeatures::TransformInteropEnabled() &&
+      style->TransformStyle3D() == ETransformStyle3D::kPreserve3d)
+    return true;
+
   if (style->HasTransformRelatedProperty()) {
     if (!IsInline() || IsAtomicInlineLevel())
       return true;
@@ -2051,8 +2042,16 @@ StyleDifference LayoutObject::AdjustStyleDifference(
         (IsText() && !IsBR() && ToLayoutText(this)->HasInlineFragments()) ||
         (IsSVG() && StyleRef().SvgStyle().IsFillColorCurrentColor()) ||
         (IsSVG() && StyleRef().SvgStyle().IsStrokeColorCurrentColor()) ||
-        IsListMarker() || IsDetailsMarker() || IsMathML())
+        IsListMarkerForNormalContent() || IsDetailsMarker() || IsMathML())
       diff.SetNeedsPaintInvalidation();
+  }
+
+  // TODO(1088373): Pixel_WebGLHighToLowPower fails without this. This isn't the
+  // right way to ensure GPU switching. Investigate and do it in the right way.
+  if (RuntimeEnabledFeatures::CSSReducedFontLoadingInvalidationsEnabled() &&
+      !diff.NeedsPaintInvalidation() && IsLayoutView() && Style() &&
+      !Style()->GetFont().IsFallbackValid()) {
+    diff.SetNeedsPaintInvalidation();
   }
 
   // The answer to layerTypeRequired() for plugins, iframes, and canvas can
@@ -2383,8 +2382,9 @@ void LayoutObject::StyleWillChange(StyleDifference diff,
     bool visibility_changed = style_->Visibility() != new_style.Visibility();
     // If our z-index changes value or our visibility changes,
     // we need to dirty our stacking context's z-order list.
-    if (visibility_changed || style_->ZIndex() != new_style.ZIndex() ||
-        style_->IsStackingContext() != new_style.IsStackingContext()) {
+    if (visibility_changed ||
+        style_->EffectiveZIndex() != new_style.EffectiveZIndex() ||
+        IsStackingContext(*style_) != IsStackingContext(new_style)) {
       GetDocument().SetAnnotatedRegionsDirty(true);
       if (AXObjectCache* cache = GetDocument().ExistingAXObjectCache()) {
         if (GetNode())
@@ -2537,6 +2537,20 @@ void LayoutObject::StyleDidChange(StyleDifference diff,
         style_->HasIsolation() || style_->HasMask()) {
       UseCounter::Count(GetDocument(),
                         WebFeature::kAdditionalGroupingPropertiesForCompat);
+    }
+  }
+
+  if (HasHiddenBackface()) {
+    bool preserve_3d =
+        (Parent() && Parent()->StyleRef().UsedTransformStyle3D() ==
+                         ETransformStyle3D::kPreserve3d);
+    if (style_->HasTransform() || preserve_3d) {
+      UseCounter::Count(GetDocument(),
+                        WebFeature::kHiddenBackfaceWithPossible3D);
+    }
+    if (preserve_3d) {
+      UseCounter::Count(GetDocument(),
+                        WebFeature::kHiddenBackfaceWithPreserve3D);
     }
   }
 
@@ -2980,8 +2994,13 @@ void LayoutObject::GetTransformFromContainer(
   transform.PostTranslate(offset_in_container.left.ToFloat(),
                           offset_in_container.top.ToFloat());
 
-  if (container_object && container_object->HasLayer() &&
-      container_object->StyleRef().HasPerspective()) {
+  bool has_perspective = container_object && container_object->HasLayer() &&
+                         container_object->StyleRef().HasPerspective();
+  if (has_perspective && RuntimeEnabledFeatures::TransformInteropEnabled() &&
+      container_object != NonAnonymousAncestor())
+    has_perspective = false;
+
+  if (has_perspective) {
     // Perspective on the container affects us, so we have to factor it in here.
     DCHECK(container_object->HasLayer());
     FloatPoint perspective_origin =
@@ -3468,9 +3487,26 @@ void LayoutObject::DestroyAndCleanupAnonymousWrappers() {
     if (destroy_root_parent->IsLayoutFlowThread())
       break;
 
-    if (destroy_root->PreviousSibling() || destroy_root->NextSibling())
-      break;  // Need to keep the anonymous parent, since it won't become empty
-              // by the removal of this LayoutObject.
+    // We need to keep the anonymous parent, if it won't become empty by the
+    // removal of this LayoutObject.
+    if (destroy_root->PreviousSibling())
+      break;
+    if (const LayoutObject* sibling = destroy_root->NextSibling()) {
+      if (destroy_root->GetNode()) {
+        // When there are inline continuations, there may be multiple layout
+        // objects generated from the same node, and those are special. They
+        // will be removed as part of destroying |this|, in
+        // LayoutInline::WillBeDestroyed(). So if that's all we have left, we
+        // need to realize now that the anonymous containing block will become
+        // empty. So we have to destroy it.
+        while (sibling && sibling->GetNode() == destroy_root->GetNode())
+          sibling = sibling->NextSibling();
+      }
+      if (sibling)
+        break;
+      DCHECK(destroy_root->IsLayoutInline());
+      DCHECK(ToLayoutInline(destroy_root)->Continuation());
+    }
   }
 
   destroy_root->Destroy();
@@ -3709,7 +3745,7 @@ bool LayoutObject::WillRenderImage() {
     return false;
 
   // We will not render a new image when ExecutionContext is paused
-  if (GetDocument().IsContextPaused())
+  if (GetDocument().GetExecutionContext()->IsContextPaused())
     return false;
 
   // Suspend animations when the page is not visible.
@@ -3726,6 +3762,18 @@ bool LayoutObject::GetImageAnimationPolicy(ImageAnimationPolicy& policy) {
     return false;
   policy = GetDocument().GetSettings()->GetImageAnimationPolicy();
   return true;
+}
+
+bool LayoutObject::IsInsideListMarker() const {
+  return (IsListMarkerForNormalContent() &&
+          ToLayoutListMarker(this)->IsInside()) ||
+         IsInsideListMarkerForCustomContent();
+}
+
+bool LayoutObject::IsOutsideListMarker() const {
+  return (IsListMarkerForNormalContent() &&
+          !ToLayoutListMarker(this)->IsInside()) ||
+         IsOutsideListMarkerForCustomContent();
 }
 
 int LayoutObject::CaretMinOffset() const {
@@ -4092,6 +4140,20 @@ bool LayoutObject::PaintInvalidationStateIsDirty() const {
          !fragment_.PartialInvalidationLocalRect().IsEmpty();
 }
 #endif
+
+void LayoutObject::ClearPaintFlags() {
+  DCHECK_EQ(GetDocument().Lifecycle().GetState(),
+            DocumentLifecycle::kInPrePaint);
+  ClearPaintInvalidationFlags();
+  bitfields_.SetNeedsPaintPropertyUpdate(false);
+  bitfields_.SetEffectiveAllowedTouchActionChanged(false);
+
+  if (!PrePaintBlockedByDisplayLock(DisplayLockLifecycleTarget::kChildren)) {
+    bitfields_.SetDescendantNeedsPaintPropertyUpdate(false);
+    bitfields_.SetDescendantEffectiveAllowedTouchActionChanged(false);
+    bitfields_.ResetSubtreePaintPropertyUpdateReasons();
+  }
+}
 
 bool LayoutObject::IsAllowedToModifyLayoutTreeStructure(Document& document) {
   return document.Lifecycle().StateAllowsLayoutTreeMutations();

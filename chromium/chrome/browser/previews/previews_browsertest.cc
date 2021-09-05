@@ -7,12 +7,12 @@
 #include "base/metrics/field_trial_param_associator.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/run_loop.h"
-#include "base/task/post_task.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/metrics/subprocess_metrics_provider.h"
+#include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
+#include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
 #include "chrome/browser/previews/previews_service_factory.h"
 #include "chrome/browser/previews/previews_test_util.h"
 #include "chrome/browser/previews/previews_ui_tab_helper.h"
@@ -27,10 +27,12 @@
 #include "components/optimization_guide/optimization_guide_features.h"
 #include "components/optimization_guide/optimization_guide_service.h"
 #include "components/optimization_guide/proto/hints.pb.h"
+#include "components/optimization_guide/proto/models.pb.h"
 #include "components/optimization_guide/test_hints_component_creator.h"
 #include "components/previews/core/previews_features.h"
 #include "components/previews/core/previews_switches.h"
 #include "content/public/browser/browser_task_traits.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "net/dns/mock_host_resolver.h"
@@ -46,10 +48,6 @@ class PreviewsBrowserTest : public InProcessBrowserTest {
   ~PreviewsBrowserTest() override = default;
 
   void SetUpOnMainThread() override {
-    g_browser_process->network_quality_tracker()
-        ->ReportEffectiveConnectionTypeForTesting(
-            net::EFFECTIVE_CONNECTION_TYPE_2G);
-
     // Set up https server with resource monitor.
     https_server_.reset(
         new net::EmbeddedTestServer(net::EmbeddedTestServer::TYPE_HTTPS));
@@ -70,8 +68,8 @@ class PreviewsBrowserTest : public InProcessBrowserTest {
     ASSERT_EQ(https_hint_setup_url_.host(), https_url_.host());
 
     // Set up http server with resource monitor and redirect handler.
-    http_server_.reset(
-        new net::EmbeddedTestServer(net::EmbeddedTestServer::TYPE_HTTP));
+    http_server_ = std::make_unique<net::EmbeddedTestServer>(
+        net::EmbeddedTestServer::TYPE_HTTP);
     http_server_->ServeFilesFromSourceDirectory("chrome/test/data/previews");
     http_server_->RegisterRequestMonitor(base::BindRepeating(
         &PreviewsBrowserTest::MonitorResourceRequest, base::Unretained(this)));
@@ -92,10 +90,10 @@ class PreviewsBrowserTest : public InProcessBrowserTest {
 
   void SetUpCommandLine(base::CommandLine* cmd) override {
     cmd->AppendSwitch("enable-spdy-proxy-auth");
-    // Due to race conditions, it's possible that blacklist data is not loaded
+    // Due to race conditions, it's possible that blocklist data is not loaded
     // at the time of first navigation. That may prevent Preview from
     // triggering, and causing the test to flake.
-    cmd->AppendSwitch(previews::switches::kIgnorePreviewsBlacklist);
+    cmd->AppendSwitch(previews::switches::kIgnorePreviewsBlocklist);
   }
 
   const GURL& https_url() const { return https_url_; }
@@ -126,8 +124,8 @@ class PreviewsBrowserTest : public InProcessBrowserTest {
   void MonitorResourceRequest(const net::test_server::HttpRequest& request) {
     // This method is called on embedded test server thread. Post the
     // information on UI thread.
-    base::PostTask(
-        FROM_HERE, {content::BrowserThread::UI},
+    content::GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE,
         base::BindOnce(&PreviewsBrowserTest::MonitorResourceRequestOnUIThread,
                        base::Unretained(this), request));
   }
@@ -207,11 +205,19 @@ class PreviewsNoScriptBrowserTest : public ::testing::WithParamInterface<bool>,
     PreviewsBrowserTest::SetUp();
   }
 
+  void SetUpOnMainThread() override {
+    OptimizationGuideKeyedServiceFactory::GetForProfile(browser()->profile())
+        ->OverrideTargetDecisionForTesting(
+            optimization_guide::proto::OPTIMIZATION_TARGET_PAINFUL_PAGE_LOAD,
+            optimization_guide::OptimizationGuideDecision::kTrue);
+    PreviewsBrowserTest::SetUpOnMainThread();
+  }
+
   void SetUpCommandLine(base::CommandLine* cmd) override {
     cmd->AppendSwitch("enable-spdy-proxy-auth");
     cmd->AppendSwitch("optimization-guide-disable-installer");
     cmd->AppendSwitch("purge_hint_cache_store");
-    cmd->AppendSwitch(previews::switches::kIgnorePreviewsBlacklist);
+    cmd->AppendSwitch(previews::switches::kIgnorePreviewsBlocklist);
   }
 
   // Creates hint data for the |hint_setup_url|'s host and then performs a
@@ -260,8 +266,9 @@ INSTANTIATE_TEST_SUITE_P(ShouldSkipPreview,
 // Loads a webpage that has both script and noscript tags and also requests
 // a script resource. Verifies that the noscript tag is evaluated and the
 // script resource is not loaded.
-IN_PROC_BROWSER_TEST_P(PreviewsNoScriptBrowserTest,
-                       DISABLE_ON_WIN_MAC_CHROMEOS(NoScriptPreviewsEnabled)) {
+IN_PROC_BROWSER_TEST_P(
+    PreviewsNoScriptBrowserTest,
+    DISABLE_ON_WIN_MAC_CHROMEOS_LINUX(NoScriptPreviewsEnabled)) {
   GURL url = https_url();
 
   // Whitelist NoScript for https_hint_setup_url()'s' host.
@@ -299,8 +306,9 @@ IN_PROC_BROWSER_TEST_P(
   EXPECT_TRUE(noscript_js_requested());
 }
 
-IN_PROC_BROWSER_TEST_P(PreviewsNoScriptBrowserTest,
-                       DISABLE_ON_WIN_MAC_CHROMEOS(NoScriptPreviewsForHttp)) {
+IN_PROC_BROWSER_TEST_P(
+    PreviewsNoScriptBrowserTest,
+    DISABLE_ON_WIN_MAC_CHROMEOS_LINUX(NoScriptPreviewsForHttp)) {
   GURL url = http_url();
 
   // Whitelist NoScript for http_hint_setup_url() host.
@@ -332,9 +340,9 @@ IN_PROC_BROWSER_TEST_P(PreviewsNoScriptBrowserTest,
       "Previews.CacheControlNoTransform.BlockedPreview", 5 /* NoScript */, 1);
 }
 
-IN_PROC_BROWSER_TEST_P(
-    PreviewsNoScriptBrowserTest,
-    DISABLE_ON_WIN_MAC_CHROMEOS(NoScriptPreviewsEnabledHttpRedirectToHttps)) {
+IN_PROC_BROWSER_TEST_P(PreviewsNoScriptBrowserTest,
+                       DISABLE_ON_WIN_MAC_CHROMEOS_LINUX(
+                           NoScriptPreviewsEnabledHttpRedirectToHttps)) {
   GURL url = redirect_url();
 
   // Whitelist NoScript for http_hint_setup_url() host.
@@ -354,7 +362,7 @@ IN_PROC_BROWSER_TEST_P(
 
 IN_PROC_BROWSER_TEST_P(
     PreviewsNoScriptBrowserTest,
-    DISABLE_ON_WIN_MAC_CHROMEOS(NoScriptPreviewsRecordsOptOut)) {
+    DISABLE_ON_WIN_MAC_CHROMEOS_LINUX(NoScriptPreviewsRecordsOptOut)) {
   GURL url = redirect_url();
 
   // Whitelist NoScript for http_hint_setup_url()'s' host.
@@ -381,7 +389,7 @@ IN_PROC_BROWSER_TEST_P(
 
 IN_PROC_BROWSER_TEST_P(
     PreviewsNoScriptBrowserTest,
-    DISABLE_ON_WIN_MAC_CHROMEOS(NoScriptPreviewsEnabledByWhitelist)) {
+    DISABLE_ON_WIN_MAC_CHROMEOS_LINUX(NoScriptPreviewsEnabledByWhitelist)) {
   GURL url = https_url();
 
   // Whitelist NoScript for https_hint_setup_url()'s' host.
@@ -412,10 +420,12 @@ IN_PROC_BROWSER_TEST_P(
 IN_PROC_BROWSER_TEST_P(PreviewsNoScriptBrowserTest,
                        DISABLE_ON_WIN_MAC_CHROMEOS(
                            NoScriptPreviewsEnabledShouldSkipPreviewCheck)) {
-  // Set ECT to 4G so that the Preview should not be shown in the regular case.
-  g_browser_process->network_quality_tracker()
-      ->ReportEffectiveConnectionTypeForTesting(
-          net::EFFECTIVE_CONNECTION_TYPE_4G);
+  // Override the decision to |kFalse| so that the Preview should not be shown
+  // in the regular case.
+  OptimizationGuideKeyedServiceFactory::GetForProfile(browser()->profile())
+      ->OverrideTargetDecisionForTesting(
+          optimization_guide::proto::OPTIMIZATION_TARGET_PAINFUL_PAGE_LOAD,
+          optimization_guide::OptimizationGuideDecision::kFalse);
 
   GURL url = https_url();
 

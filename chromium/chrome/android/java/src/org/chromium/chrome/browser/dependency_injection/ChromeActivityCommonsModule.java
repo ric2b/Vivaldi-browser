@@ -5,11 +5,15 @@
 package org.chromium.chrome.browser.dependency_injection;
 
 import static org.chromium.chrome.browser.dependency_injection.ChromeCommonQualifiers.ACTIVITY_CONTEXT;
+import static org.chromium.chrome.browser.dependency_injection.ChromeCommonQualifiers.DECOR_VIEW;
+import static org.chromium.chrome.browser.dependency_injection.ChromeCommonQualifiers.IS_PROMOTABLE_TO_TAB_BOOLEAN;
 
 import android.app.Activity;
 import android.content.Context;
 import android.content.res.Resources;
+import android.view.View;
 
+import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.compositor.CompositorViewHolder;
@@ -18,10 +22,11 @@ import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
+import org.chromium.chrome.browser.tabmodel.TabCreatorManager.TabCreator;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.ui.system.StatusBarColorController;
-import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetController;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.notifications.NotificationManagerProxy;
 import org.chromium.components.browser_ui.notifications.NotificationManagerProxyImpl;
 import org.chromium.content_public.browser.ScreenOrientationProvider;
@@ -94,6 +99,12 @@ public class ChromeActivityCommonsModule {
     }
 
     @Provides
+    @Named(DECOR_VIEW)
+    public View provideDecorView() {
+        return mActivity.getWindow().getDecorView();
+    }
+
+    @Provides
     public Resources provideResources() {
         return mActivity.getResources();
     }
@@ -131,6 +142,17 @@ public class ChromeActivityCommonsModule {
     @Provides
     public TabCreatorManager provideTabCreatorManager() {
         return mActivity;
+    }
+
+    @Provides
+    public Supplier<TabCreator> provideTabCreator() {
+        return mActivity::getCurrentTabCreator;
+    }
+
+    @Provides
+    @Named(IS_PROMOTABLE_TO_TAB_BOOLEAN)
+    public boolean provideIsPromotableToTab() {
+        return !mActivity.isCustomTab();
     }
 
     @Provides

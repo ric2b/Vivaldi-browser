@@ -64,10 +64,12 @@
 <translation id="2522350507219695259">ልኬት ማስተካከል ተጠናቅቋል</translation>
 <translation id="252373100621549798">ያልታወቀ ማሳያ</translation>
 <translation id="2545651323591713692">አሸልብ</translation>
+<translation id="2570734079541893434">ቅንብሮችን ያቀናብሩ</translation>
 <translation id="2573731672208488250">{HOURS,plural, =1{በ 1ሰ ውስጥ}one{በ #ሰ ውስጥ}other{በ #ሰ ውስጥ}}</translation>
 <translation id="2583543531130364912">የእርስዎን ማያንካ ልኬት ያስተካክሉ</translation>
 <translation id="2666092431469916601">ላይ</translation>
 <translation id="2701330563083355633">በ <ph name="DEVICE_NAME" /> የተጋራ</translation>
+<translation id="271033894570825754">አዲስ</translation>
 <translation id="2743387203779672305">ወደ ቅንጥብ ሰሌዳ ገልብጥ</translation>
 <translation id="2749082172777216925"><ph name="APP_NAME_INFO" />፣ <ph name="PRICE" /></translation>
 <translation id="2803313416453193357">አቃፊ ክፈት</translation>
@@ -135,6 +137,7 @@
 <translation id="5463830097259460683">ስሜት ገላጭ ምስሎች እና ምልክቶች</translation>
 <translation id="5476505524087279545">አታመልክት</translation>
 <translation id="547979256943495781">መደርደሪያ በስተቀኝ</translation>
+<translation id="5528053674512161860">የገንቢው ዩአይ ሞዱል (dev_ui) ስላልተጫነ ገጹን መጫን አልተሳካም</translation>
 <translation id="5574202486608032840">የ<ph name="IDS_SHORT_PRODUCT_OS_NAME" /> ሥርዓት</translation>
 <translation id="5583640892426849032">Backspace</translation>
 <translation id="5613020302032141669">ግራ ቀስት</translation>
@@ -152,10 +155,12 @@
 <translation id="6040143037577758943">ዝጋ</translation>
 <translation id="6119846243427417423">አንቃ</translation>
 <translation id="6129953537138746214">ባዶ ቦታ</translation>
+<translation id="6134259848159370930">የእርስዎን መሣሪያ፣ መተግበሪያዎች፣ ቅንብሮች እና ድር ይፈልጉ።</translation>
 <translation id="6135826906199951471">Del</translation>
 <translation id="6142413573757616983"><ph name="QUANTITY" /> ባ/ሰ</translation>
 <translation id="6156262341071374681">ወደ ሁሉም መተግበሪያዎች ዘርጋ</translation>
 <translation id="6165508094623778733">የበለጠ ለመረዳት</translation>
+<translation id="6166852626429024716">የእርስዎን መሣሪያ፣ መተግበሪያዎች፣ ቅንብሮች፣ ድር ይፈልጉ...</translation>
 <translation id="6264365405983206840">&amp;ሁሉንም ምረጥ</translation>
 <translation id="6351032674660237738">የመተግበሪያ አስተያየት ጥቆማዎች</translation>
 <translation id="6364916375976753737">ወደ ግራ ሸብልል</translation>
@@ -192,7 +197,6 @@
 <translation id="7222373446505536781">F11</translation>
 <translation id="7238427729722629793">{MINUTES,plural, =1{1 ደቂቃ ቀርቷል}one{# ደቂቃዎች ቀርቷል}other{# ደቂቃዎች ቀርተዋል}}</translation>
 <translation id="7319740667687257810">ማስጀመሪያ፣ ከፊል እይታ</translation>
-<translation id="7352651011704765696">የሆነ ችግር ተፈጥሯል</translation>
 <translation id="7365057348334984696">{MINUTES,plural, =1{1 ደቂቃ በፊት}one{# ደቂቃዎች በፊት}other{# ደቂቃዎች በፊት}}</translation>
 <translation id="7389409599945284130">- <ph name="MESSAGE" /></translation>
 <translation id="7410957453383678442">{MINUTES,plural, =1{1 ደቂቃ ቀርቷል}one{# ደቂቃዎች ቀርቷል}other{# ደቂቃዎች ቀርተዋል}}</translation>
@@ -205,6 +209,7 @@
 <translation id="7848989271541991537">ወደ ገጽ <ph name="PAGE_NUMBER" />፣ ረድፍ <ph name="ROW_NUMBER" />፣ ዓምድ <ph name="COLUMN_NUMBER" /> ተንቀሳቅሷል።</translation>
 <translation id="7879499977785298635">አታግድ</translation>
 <translation id="7907591526440419938">ፋይል ክፈት</translation>
+<translation id="7952747673138230804">Chrome OS አዲስ የሚታሰሱ የይዘት አስተያየት ጥቆማዎችን ያሳያል። የአጠቃቀም ውሂብን ለማጋራት ከመረጡ ብቻ የአስተያየት ጥቆማዎችን ለማሻሻል ስታትስቲክስን ይልካል። <ph name="MANAGE_SETTINGS" /></translation>
 <translation id="7969046989155602842">ትእዛዝ</translation>
 <translation id="8074552109918343525">{MAX_UNREAD_NOTIFICATIONS,plural, =1{ከ1 በላይ ያልተነበበ ማሳወቂያ}one{ከ# በላይ ያልተነበበቡ ማሳወቂያዎች}other{ከ# በላይ ያልተነበበቡ ማሳወቂያዎች}}</translation>
 <translation id="8086866675552927481">{MINUTES,plural, =1{በ 1ደ ውስጥ}one{በ #ደ ውስጥ}other{በ #ደ ውስጥ}}</translation>
@@ -231,6 +236,7 @@
 <translation id="8602707065186045623"><ph name="SAVEAS_EXTENSION_TYPE" /> ፋይል(.<ph name="SAVEAS_EXTENSION_NAME" />)</translation>
 <translation id="8649597172973390955">መደርደሪያ ሁልጊዜ ይታያል</translation>
 <translation id="8677655579646609597"><ph name="QUANTITY" /> ኪባ/ሰ</translation>
+<translation id="8685326675965865247">የእርስዎን መሣሪያ፣ መተግበሪያዎች እና ድርን ይፈልጉ። በእርስዎ መተግበሪያዎች መካከል አሰሳ ለማድረግ የቀስት ቁልፎቹን ይጠቀሙ።</translation>
 <translation id="8725488761726303204">+<ph name="NUMBER" /> ተጨማሪ</translation>
 <translation id="8730621377337864115">ተከናውኗል</translation>
 <translation id="8772073294905169192">{HOURS,plural, =1{1ሰ}one{#ሰ}other{#ሰ}}</translation>

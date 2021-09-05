@@ -5,6 +5,7 @@
 #include "fuchsia/runners/cast/cast_component.h"
 
 #include <lib/fidl/cpp/binding.h>
+#include <lib/ui/scenic/cpp/view_ref_pair.h>
 #include <algorithm>
 #include <utility>
 
@@ -18,6 +19,7 @@
 #include "fuchsia/base/mem_buffer_util.h"
 #include "fuchsia/fidl/chromium/cast/cpp/fidl.h"
 #include "fuchsia/runners/cast/cast_runner.h"
+#include "fuchsia/runners/cast/cast_streaming.h"
 #include "fuchsia/runners/common/web_component.h"
 
 namespace {
@@ -56,9 +58,9 @@ CastComponent::CastComponent(WebContentRunner* runner,
       initial_url_rewrite_rules_(
           std::move(params.initial_url_rewrite_rules.value())),
       api_bindings_client_(std::move(params.api_bindings_client)),
+      application_context_(params.application_context.Bind()),
       media_session_id_(params.media_session_id.value()),
-      headless_disconnect_watch_(FROM_HERE),
-      navigation_listener_binding_(this) {
+      headless_disconnect_watch_(FROM_HERE) {
   base::AutoReset<bool> constructor_active_reset(&constructor_active_, true);
 }
 
@@ -89,8 +91,34 @@ void CastComponent::StartComponent() {
   frame()->SetMediaSessionId(media_session_id_);
   frame()->ConfigureInputTypes(fuchsia::web::InputTypes::ALL,
                                fuchsia::web::AllowInputState::DENY);
-  frame()->SetNavigationEventListener(
-      navigation_listener_binding_.NewBinding());
+  frame()->SetJavaScriptLogLevel(fuchsia::web::ConsoleLogLevel::WARN);
+
+  if (IsAppConfigForCastStreaming(application_config_)) {
+    // TODO(crbug.com/1082821): Remove this once the Cast Streaming Receiver
+    // component has been implemented.
+
+    // Register the MessagePort for the Cast Streaming Receiver.
+    fidl::InterfaceHandle<fuchsia::web::MessagePort> message_port;
+    fuchsia::web::WebMessage message;
+    message.set_data(cr_fuchsia::MemBufferFromString("", "empty_message"));
+    fuchsia::web::OutgoingTransferable outgoing_transferable;
+    outgoing_transferable.set_message_port(message_port.NewRequest());
+    std::vector<fuchsia::web::OutgoingTransferable> outgoing_transferables;
+    outgoing_transferables.push_back(std::move(outgoing_transferable));
+    message.set_outgoing_transfer(std::move(outgoing_transferables));
+
+    frame()->PostMessage(
+        kCastStreamingMessagePortOrigin, std::move(message),
+        [this](fuchsia::web::Frame_PostMessage_Result result) {
+          if (result.is_err()) {
+            DestroyComponent(kBindingsFailureExitCode,
+                             fuchsia::sys::TerminationReason::INTERNAL_ERROR);
+          }
+        });
+    api_bindings_client_->OnPortConnected(kCastStreamingMessagePortName,
+                                          std::move(message_port));
+  }
+
   api_bindings_client_->AttachToFrame(
       frame(), connector_.get(),
       base::BindOnce(&CastComponent::DestroyComponent, base::Unretained(this),
@@ -107,13 +135,11 @@ void CastComponent::StartComponent() {
   }
 
   application_controller_ = std::make_unique<ApplicationControllerImpl>(
-      frame(),
-      agent_manager_->ConnectToAgentService<chromium::cast::ApplicationContext>(
-          application_config_.agent_url()));
+      frame(), application_context_.get());
 
   // Pass application permissions to the frame.
-  std::string origin = GURL(application_config_.web_url()).GetOrigin().spec();
   if (application_config_.has_permissions()) {
+    std::string origin = GURL(application_config_.web_url()).GetOrigin().spec();
     for (auto& permission : application_config_.permissions()) {
       fuchsia::web::PermissionDescriptor permission_clone;
       zx_status_t status = permission.Clone(&permission_clone);
@@ -124,13 +150,24 @@ void CastComponent::StartComponent() {
   }
 }
 
-void CastComponent::DestroyComponent(int termination_exit_code,
+void CastComponent::DestroyComponent(int64_t exit_code,
                                      fuchsia::sys::TerminationReason reason) {
   DCHECK(!constructor_active_);
 
   std::move(on_destroyed_).Run();
 
-  WebComponent::DestroyComponent(termination_exit_code, reason);
+  // If the component EXITED then pass the |exit_code| to the Agent, to allow it
+  // to distinguish graceful termination from crashes.
+  if (reason == fuchsia::sys::TerminationReason::EXITED &&
+      application_controller_) {
+    application_context_->OnApplicationExit(exit_code);
+  }
+
+  // frame() is about to be destroyed, so there is no need to perform cleanup
+  // such as removing before-load JavaScripts.
+  api_bindings_client_->DetachFromFrame(frame());
+
+  WebComponent::DestroyComponent(exit_code, reason);
 }
 
 void CastComponent::OnRewriteRulesReceived(
@@ -146,13 +183,24 @@ void CastComponent::OnNavigationStateChanged(
     OnNavigationStateChangedCallback callback) {
   if (change.has_is_main_document_loaded() && change.is_main_document_loaded())
     connector_->OnPageLoad();
-  callback();
+  WebComponent::OnNavigationStateChanged(std::move(change),
+                                         std::move(callback));
 }
 
 void CastComponent::CreateView(
     zx::eventpair view_token,
     fidl::InterfaceRequest<fuchsia::sys::ServiceProvider> incoming_services,
     fidl::InterfaceHandle<fuchsia::sys::ServiceProvider> outgoing_services) {
+  scenic::ViewRefPair view_ref_pair = scenic::ViewRefPair::New();
+  CreateViewWithViewRef(std::move(view_token),
+                        std::move(view_ref_pair.control_ref),
+                        std::move(view_ref_pair.view_ref));
+}
+
+void CastComponent::CreateViewWithViewRef(
+    zx::eventpair view_token,
+    fuchsia::ui::views::ViewRefControl control_ref,
+    fuchsia::ui::views::ViewRef view_ref) {
   if (is_headless_) {
     // For headless CastComponents, |view_token| does not actually connect to a
     // Scenic View. It is merely used as a conduit for propagating termination
@@ -166,8 +214,8 @@ void CastComponent::CreateView(
     return;
   }
 
-  WebComponent::CreateView(std::move(view_token), std::move(incoming_services),
-                           std::move(outgoing_services));
+  WebComponent::CreateViewWithViewRef(
+      std::move(view_token), std::move(control_ref), std::move(view_ref));
 }
 
 void CastComponent::OnZxHandleSignalled(zx_handle_t handle,

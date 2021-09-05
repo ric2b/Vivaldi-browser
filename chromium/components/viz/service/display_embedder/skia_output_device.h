@@ -11,6 +11,7 @@
 #include "base/callback.h"
 #include "base/containers/queue.h"
 #include "base/macros.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/optional.h"
 #include "build/build_config.h"
 #include "components/viz/service/display/output_surface.h"
@@ -20,9 +21,12 @@
 #include "third_party/skia/include/core/SkRefCnt.h"
 #include "third_party/skia/src/gpu/GrSemaphore.h"
 #include "ui/gfx/swap_result.h"
-#include "ui/latency/latency_tracker.h"
 
 class SkSurface;
+
+namespace base {
+class SequencedTaskRunner;
+}
 
 namespace gfx {
 class ColorSpace;
@@ -35,6 +39,10 @@ namespace gpu {
 class MemoryTracker;
 class MemoryTypeTracker;
 }  // namespace gpu
+
+namespace ui {
+class LatencyTracker;
+}
 
 namespace viz {
 
@@ -89,7 +97,7 @@ class SkiaOutputDevice {
                                    std::vector<ui::LatencyInfo> latency_info);
 
   // Set the rectangle that will be drawn into on the surface.
-  virtual void SetDrawRectangle(const gfx::Rect& draw_rectangle);
+  virtual bool SetDrawRectangle(const gfx::Rect& draw_rectangle);
 
   virtual void SetGpuVSyncEnabled(bool enabled);
 
@@ -129,7 +137,9 @@ class SkiaOutputDevice {
     SwapInfo(uint64_t swap_id, BufferPresentedCallback feedback);
     SwapInfo(SwapInfo&& other);
     ~SwapInfo();
-    const gpu::SwapBuffersCompleteParams& Complete(gfx::SwapResult result);
+    const gpu::SwapBuffersCompleteParams& Complete(
+        gfx::SwapCompletionResult result,
+        const base::Optional<gfx::Rect>& damage_area);
     void CallFeedback();
 
    private:
@@ -150,9 +160,11 @@ class SkiaOutputDevice {
 
   // Helper method for SwapBuffers() and PostSubBuffer(). It should be called
   // at the end of SwapBuffers() and PostSubBuffer() implementations
-  void FinishSwapBuffers(gfx::SwapResult result,
-                         const gfx::Size& size,
-                         std::vector<ui::LatencyInfo> latency_info);
+  void FinishSwapBuffers(
+      gfx::SwapCompletionResult result,
+      const gfx::Size& size,
+      std::vector<ui::LatencyInfo> latency_info,
+      const base::Optional<gfx::Rect>& damage_area = base::nullopt);
 
   OutputSurface::Capabilities capabilities_;
 
@@ -161,12 +173,15 @@ class SkiaOutputDevice {
 
   base::queue<SwapInfo> pending_swaps_;
 
-  ui::LatencyTracker latency_tracker_;
-
   // RGBX format is emulated with RGBA.
   bool is_emulated_rgbx_ = false;
 
   std::unique_ptr<gpu::MemoryTypeTracker> memory_type_tracker_;
+
+ private:
+  std::unique_ptr<ui::LatencyTracker> latency_tracker_;
+  // task runner for latency tracker.
+  scoped_refptr<base::SequencedTaskRunner> latency_tracker_runner_;
 
   DISALLOW_COPY_AND_ASSIGN(SkiaOutputDevice);
 };

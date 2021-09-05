@@ -20,6 +20,7 @@
 #include "components/autofill/core/common/password_form_fill_data.h"
 #include "components/autofill/core/common/renderer_id.h"
 #include "components/autofill/core/common/signatures.h"
+#include "components/password_manager/core/browser/credential_cache.h"
 #include "components/password_manager/core/browser/form_parsing/password_field_prediction.h"
 #include "components/password_manager/core/browser/form_submission_observer.h"
 #include "components/password_manager/core/browser/leak_detection/leak_detection_check_factory.h"
@@ -105,8 +106,13 @@ class PasswordManager : public FormSubmissionObserver {
   void SetGenerationElementAndReasonForForm(
       PasswordManagerDriver* driver,
       const autofill::FormData& form_data,
-      const base::string16& generation_element,
+      autofill::FieldRendererId generation_element,
       bool is_manually_triggered);
+
+  // Called upon navigation to persist the state from |CredentialCache|
+  // used to decide when to record
+  // |PasswordManager.ResultOfSavingFlowAfterUnblacklistin|.
+  void MarkWasUnblacklistedInFormManagers(CredentialCache* credential_cache);
 
   // FormSubmissionObserver:
   void DidNavigateMainFrame(bool form_may_be_submitted) override;
@@ -208,7 +214,12 @@ class PasswordManager : public FormSubmissionObserver {
   // Notifies that Credential Management API function store() is called.
   void NotifyStorePasswordCalled();
 
+  // Sets the autofill-assistant mode. Certain prompts will be disabled while
+  // autofill-assistant is running. See |AutofillAssistantMode|.
   void SetAutofillAssistantMode(AutofillAssistantMode mode);
+
+  // Returns the currently set autofill-assistant mode.
+  AutofillAssistantMode GetAutofillAssistantMode() const;
 
 #if defined(OS_IOS)
   // TODO(https://crbug.com/866444): Use these methods instead olds ones when
@@ -221,20 +232,26 @@ class PasswordManager : public FormSubmissionObserver {
   void PresaveGeneratedPassword(PasswordManagerDriver* driver,
                                 const autofill::FormData& form,
                                 const base::string16& generated_password,
-                                const base::string16& generation_element);
+                                autofill::FieldRendererId generation_element);
 
   // Updates the state if the PasswordFormManager which corresponds to the form
   // with |form_identifier|. In case if there is a presaved credential it
   // updates the presaved credential.
   void UpdateStateOnUserInput(PasswordManagerDriver* driver,
-                              const base::string16& form_identifier,
-                              const base::string16& field_identifier,
+                              autofill::FormRendererId form_id,
+                              autofill::FieldRendererId field_id,
                               const base::string16& field_value);
 
   // Stops treating a password as generated. |driver| corresponds to the
   // form parent frame.
   void OnPasswordNoLongerGenerated(PasswordManagerDriver* driver);
 
+  void OnPasswordFormRemoved(PasswordManagerDriver* driver,
+                             autofill::FormRendererId form_id);
+
+  // Checks if there is a submitted PasswordFormManager for a form from the
+  // detached frame.
+  void OnIframeDetach(const std::string& frame_id);
 #endif
 
  private:
@@ -378,8 +395,8 @@ class PasswordManager : public FormSubmissionObserver {
   // Server predictions for the forms on the page.
   std::map<autofill::FormSignature, FormPredictions> predictions_;
 
-  // The user-visible URL from the last time a password was provisionally saved.
-  GURL main_frame_url_;
+  // The URL of the last submitted form.
+  GURL submitted_form_url_;
 
   // True if Credential Management API function store() was called. In this case
   // PasswordManager does not need to show a save/update prompt since

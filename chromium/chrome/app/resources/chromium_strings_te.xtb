@@ -123,6 +123,7 @@
 <translation id="5903106910045431592"><ph name="PAGE_TITLE" /> - నెట్‌వర్క్ సైన్ ఇన్</translation>
 <translation id="5987687638152509985">సింక్‌ను ప్రారంభించడానికి Chromiumను అప్‌డేట్ చేయండి</translation>
 <translation id="6013050204643758987"><ph name="BEGIN_LINK_LINUX_OSS" />Linux (బీటా) <ph name="END_LINK_LINUX_OSS" /> లాగానే, Chromium OS కూడా అదనపు <ph name="BEGIN_LINK_CROS_OSS" /> ఓపెన్ సోర్స్ సాఫ్ట్‌వేర్‌ <ph name="END_LINK_CROS_OSS" /> మూలంగానే సాధ్యమైంది.</translation>
+<translation id="6039377483953237732">Chromium OS వెర్షన్</translation>
 <translation id="6055895534982063517">కొత్త Chromium వెర్షన్ అందుబాటులో ఉంది, ఇది మునుపటి కంటే వేగవంతంగా ఉంటుంది.</translation>
 <translation id="6063093106622310249">&amp;Chromiumలో తెరవండి</translation>
 <translation id="6072279588547424923">Chromiumకు <ph name="EXTENSION_NAME" /> జోడించబడింది</translation>
@@ -218,8 +219,6 @@
 <translation id="8586442755830160949">కాపీరైట్ <ph name="YEAR" /> Chromium రచయితలు. అన్ని హ‌క్కులు రిజ‌ర్వ్ చేయ‌బ‌డ్డాయి.</translation>
 <translation id="8619360774459241877">Chromiumని ప్రారంభిస్తోంది...</translation>
 <translation id="8621669128220841554">తెలియ‌ని ఎర్ర‌ర్‌ కారణంగా ఇన‌స్ట‌లేష‌న్‌ విఫలమైంది. దయచేసి Chromiumను మళ్లీ డౌన్‌లోడ్ చేయండి.</translation>
-<translation id="8682540261359803721">ఏదైనా సెట్టింగ్ ఈ పేజీలో కనపడకపోతే, మీ <ph name="LINK_BEGIN" />
-    Chromium బ్రౌజర్ సెట్టింగ్‌లు<ph name="LINK_END" />లో చూడండి</translation>
 <translation id="8697124171261953979">ఇది మీరు Chromiumను ప్రారంభించేటప్పుడు లేదా ఓమ్నిబాక్స్ నుండి వెతికేటప్పుడు చూపబడే పేజీని కూడా నియంత్రిస్తుంది.</translation>
 <translation id="8704119203788522458">ఇది మీ Chromium</translation>
 <translation id="8796602469536043152">ఈ సైట్ కోసం మీ కెమెరా మరియు మైక్రోఫోన్‌ను యాక్సెస్ చేయడానికి Chromiumకు అనుమతి అవసరం</translation>

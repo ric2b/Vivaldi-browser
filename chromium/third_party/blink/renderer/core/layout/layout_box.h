@@ -69,7 +69,7 @@ struct LayoutBoxRareData final : public GarbageCollected<LayoutBoxRareData> {
  public:
   LayoutBoxRareData();
 
-  void Trace(Visitor* visitor);
+  void Trace(Visitor* visitor) const;
 
   // For spanners, the spanner placeholder that lays us out within the multicol
   // container.
@@ -220,6 +220,7 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
 
   bool BackgroundIsKnownToBeOpaqueInRect(
       const PhysicalRect& local_rect) const override;
+  bool TextIsKnownToBeOnOpaqueBackground() const override;
 
   virtual bool BackgroundShouldAlwaysBeClipped() const { return false; }
 
@@ -307,10 +308,12 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
 
   LayoutUnit MinimumLogicalHeightForEmptyLine() const {
     return BorderAndPaddingLogicalHeight() + ScrollbarLogicalHeight() +
-           LineHeight(
-               true,
-               IsHorizontalWritingMode() ? kHorizontalLine : kVerticalLine,
-               kPositionOfInteriorLineBoxes);
+           LogicalHeightForEmptyLine();
+  }
+  LayoutUnit LogicalHeightForEmptyLine() const {
+    return LineHeight(
+        true, IsHorizontalWritingMode() ? kHorizontalLine : kVerticalLine,
+        kPositionOfInteriorLineBoxes);
   }
 
   void SetLogicalLeft(LayoutUnit left) {
@@ -1055,6 +1058,14 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   // value of the previous in-flow sibling.
   bool NeedsForcedBreakBefore(EBreakBetween previous_break_after_value) const;
 
+  // Get the name of the start page name for this object; see
+  // https://drafts.csswg.org/css-page-3/#start-page-value
+  virtual const AtomicString StartPageName() const;
+
+  // Get the name of the end page name for this object; see
+  // https://drafts.csswg.org/css-page-3/#end-page-value
+  virtual const AtomicString EndPageName() const;
+
   bool MapToVisualRectInAncestorSpaceInternal(
       const LayoutBoxModelObject* ancestor,
       TransformState&,
@@ -1547,9 +1558,8 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   // Returns true if the box intersects the viewport visible to the user.
   bool IntersectsVisibleViewport() const;
 
-  bool HasNonCompositedScrollbars() const final;
-
   void EnsureIsReadyForPaintInvalidation() override;
+  void ClearPaintFlags() override;
 
   bool HasControlClip() const;
 

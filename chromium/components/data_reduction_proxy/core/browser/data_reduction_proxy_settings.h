@@ -157,9 +157,9 @@ class DataReductionProxySettings {
   // some of them should have.
   bool IsDataReductionProxyUnreachable();
 
-  // When triggering previews, prevent long term black list rules.
-  virtual void SetIgnoreLongTermBlackListRules(
-      bool ignore_long_term_black_list_rules) {}
+  // When triggering previews, prevent long term block list rules.
+  virtual void SetIgnoreLongTermBlockListRules(
+      bool ignore_long_term_block_list_rules) {}
 
   ContentLengthList GetDailyContentLengths(const char* pref_name);
 
@@ -178,6 +178,11 @@ class DataReductionProxySettings {
 
   // Returns the list of hosts for the prefetch proxy.
   const std::vector<GURL>& GetPrefetchProxies() const;
+
+  // Returns the time LiteMode was last enabled. This is reset whenever LiteMode
+  // is disabled and re-enabled from settings. Null time is returned when
+  // LiteMode has never been enabled.
+  base::Time GetLastEnabledTime() const;
 
   // Adds an observer that is notified every time the proxy request headers
   // change.

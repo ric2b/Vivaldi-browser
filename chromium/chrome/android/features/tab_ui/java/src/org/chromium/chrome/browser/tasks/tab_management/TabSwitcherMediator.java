@@ -9,8 +9,9 @@ import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerP
 import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerProperties.INITIAL_SCROLL_INDEX;
 import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerProperties.IS_INCOGNITO;
 import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerProperties.IS_VISIBLE;
-import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerProperties.SHADOW_TOP_MARGIN;
-import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerProperties.TOP_CONTROLS_HEIGHT;
+import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerProperties.SHADOW_TOP_OFFSET;
+import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerProperties.TOP_MARGIN;
+import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerProperties.TRANSLATION_Y;
 import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerProperties.VISIBILITY_LISTENER;
 
 import android.graphics.Bitmap;
@@ -29,12 +30,13 @@ import org.chromium.base.ThreadUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.task.PostTask;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManager;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
-import org.chromium.chrome.browser.fullscreen.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.init.FirstDrawDetector;
+import org.chromium.chrome.browser.multiwindow.MultiWindowModeStateDispatcher;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabCreationState;
 import org.chromium.chrome.browser.tab.TabHidingType;
@@ -96,6 +98,8 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
     private final BrowserControlsStateProvider.Observer mBrowserControlsObserver;
     private final ViewGroup mContainerView;
     private final TabContentManager mTabContentManager;
+    private final MultiWindowModeStateDispatcher mMultiWindowModeStateDispatcher;
+    private final MultiWindowModeStateDispatcher.MultiWindowModeObserver mMultiWindowModeObserver;
 
     private Integer mSoftCleanupDelayMsForTesting;
     private Integer mCleanupDelayMsForTesting;
@@ -191,17 +195,21 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
      * @param browserControlsStateProvider {@link BrowserControlsStateProvider} to use.
      * @param containerView The container {@link ViewGroup} to use.
      * @param tabContentManager The {@link TabContentManager} for first meaningful paint event.
+     * @param multiWindowModeStateDispatcher The {@link MultiWindowModeStateDispatcher} to observe
+     *         for multi-window related changes.
      * @param mode One of the {@link TabListCoordinator.TabListMode}.
      */
     TabSwitcherMediator(ResetHandler resetHandler, PropertyModel containerViewModel,
             TabModelSelector tabModelSelector,
             BrowserControlsStateProvider browserControlsStateProvider, ViewGroup containerView,
             TabContentManager tabContentManager, MessageItemsController messageItemsController,
+            MultiWindowModeStateDispatcher multiWindowModeStateDispatcher,
             @TabListCoordinator.TabListMode int mode) {
         mResetHandler = resetHandler;
         mContainerViewModel = containerViewModel;
         mTabModelSelector = tabModelSelector;
         mBrowserControlsStateProvider = browserControlsStateProvider;
+        mMultiWindowModeStateDispatcher = multiWindowModeStateDispatcher;
         mMode = mode;
 
         mTabModelSelectorObserver = new EmptyTabModelSelectorObserver() {
@@ -304,18 +312,19 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
 
         mBrowserControlsObserver = new BrowserControlsStateProvider.Observer() {
             @Override
-            public void onContentOffsetChanged(int offset) {}
-
-            @Override
             public void onControlsOffsetChanged(int topOffset, int topControlsMinHeightOffset,
-                    int bottomOffset, int bottomControlsMinHeightOffset, boolean needsAnimate) {}
+                    int bottomOffset, int bottomControlsMinHeightOffset, boolean needsAnimate) {
+                if (mMode == TabListCoordinator.TabListMode.CAROUSEL) return;
+
+                updateTopControlsProperties();
+            }
 
             @Override
             public void onTopControlsHeightChanged(
                     int topControlsHeight, int topControlsMinHeight) {
                 if (mMode == TabListCoordinator.TabListMode.CAROUSEL) return;
 
-                updateTopControlsProperties(topControlsHeight);
+                updateTopControlsProperties();
             }
 
             @Override
@@ -355,8 +364,8 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
         mContainerViewModel.set(ANIMATE_VISIBILITY_CHANGES, true);
 
         // Container view takes care of padding and margin in start surface.
-        if (mode != TabListCoordinator.TabListMode.CAROUSEL) {
-            updateTopControlsProperties(browserControlsStateProvider.getTopControlsHeight());
+        if (mMode != TabListCoordinator.TabListMode.CAROUSEL) {
+            updateTopControlsProperties();
             mContainerViewModel.set(
                     BOTTOM_CONTROLS_HEIGHT, browserControlsStateProvider.getBottomControlsHeight());
         }
@@ -372,6 +381,15 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
         // TODO(crbug.com/982018): Let the start surface pass in the parameter and add unit test for
         // it. This is a temporary solution to keep this change minimum.
         mShowTabsInMruOrder = isShowingTabsInMRUOrder();
+
+        mMultiWindowModeObserver = isInMultiWindowMode -> {
+            if (isInMultiWindowMode) {
+                messageItemsController.removeAllAppendedMessage();
+            } else {
+                messageItemsController.restoreAllAppendedMessage();
+            }
+        };
+        mMultiWindowModeStateDispatcher.addObserver(mMultiWindowModeObserver);
     }
 
     /**
@@ -435,13 +453,32 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
         mContainerViewModel.set(IS_VISIBLE, isVisible);
     }
 
-    private void updateTopControlsProperties(int topControlsHeight) {
-        // The start surface checks in this block are for top controls height and shadow
-        // margin to be set correctly for displaying the omnibox above the tab switcher.
-        topControlsHeight =
-                StartSurfaceConfiguration.isStartSurfaceEnabled() ? 0 : topControlsHeight;
-        mContainerViewModel.set(TOP_CONTROLS_HEIGHT, topControlsHeight);
-        mContainerViewModel.set(SHADOW_TOP_MARGIN, topControlsHeight);
+    private void updateTopControlsProperties() {
+        // If the Start surface is enabled, it will handle the margins and positioning of the tab
+        // switcher. So, we shouldn't do it here.
+        if (StartSurfaceConfiguration.isStartSurfaceEnabled()) {
+            mContainerViewModel.set(TOP_MARGIN, 0);
+            mContainerViewModel.set(SHADOW_TOP_OFFSET, 0);
+            return;
+        }
+
+        final int controlsHeight = mBrowserControlsStateProvider.getTopControlsHeight();
+        final int contentOffset = mBrowserControlsStateProvider.getContentOffset();
+
+        // If the top controls are at the resting position or their height is decreasing, we want to
+        // update the margin. We don't do this if the controls height is increasing because changing
+        // the margin shrinks the view height to its final value, leaving a gap at the bottom until
+        // the animation finishes.
+        if (contentOffset >= controlsHeight) {
+            mContainerViewModel.set(TOP_MARGIN, controlsHeight);
+        }
+
+        // If the content offset is different from the margin, we use translationY to position the
+        // view in line with the content offset.
+        mContainerViewModel.set(TRANSLATION_Y, contentOffset - mContainerViewModel.get(TOP_MARGIN));
+        // Offsetting the shadow using the content offset will position it right below the top
+        // controls.
+        mContainerViewModel.set(SHADOW_TOP_OFFSET, contentOffset);
     }
 
     /**
@@ -687,6 +724,9 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
         mFirstMeaningfulPaintRecorder = new FirstMeaningfulPaintRecorder(activityCreateTimeMs);
     }
 
+    @Override
+    public void onOverviewShownAtLaunch(long activityCreationTimeMs) {}
+
     /**
      * Do clean-up work after the overview hiding animation is finished.
      * @see TabSwitcher.TabListDelegate#postHiding
@@ -732,6 +772,7 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
         mBrowserControlsStateProvider.removeObserver(mBrowserControlsObserver);
         mTabModelSelector.getTabModelFilterProvider().removeTabModelFilterObserver(
                 mTabModelObserver);
+        mMultiWindowModeStateDispatcher.removeObserver(mMultiWindowModeObserver);
     }
 
     void setOnTabSelectingListener(TabSwitcher.OnTabSelectingListener listener) {

@@ -146,12 +146,17 @@ SyncedNoteTracker::CreateFromNotesModelAndMetadata(
     return nullptr;
   }
 
-  const bool notes_full_title_reuploaded =
-      model_metadata.notes_full_title_reuploaded();
+  auto tracker =
+      CreateEmpty(std::move(*model_metadata.mutable_model_type_state()));
 
-  auto tracker = base::WrapUnique(new SyncedNoteTracker(
-      std::move(*model_metadata.mutable_model_type_state()),
-      notes_full_title_reuploaded));
+  // When the reupload feature is enabled and disabled again, there may occur
+  // new entities which weren't reuploaded.
+  const bool notes_full_title_reuploaded =
+      model_metadata.notes_full_title_reuploaded() &&
+      base::FeatureList::IsEnabled(switches::kSyncReuploadBookmarkFullTitles);
+  if (notes_full_title_reuploaded) {
+    tracker->SetNotesFullTitleReuploaded();
+  }
 
   bool is_not_corrupted = tracker->InitEntitiesFromModelAndMetadata(
       model, std::move(model_metadata));
@@ -166,6 +171,10 @@ SyncedNoteTracker::CreateFromNotesModelAndMetadata(
 }
 
 SyncedNoteTracker::~SyncedNoteTracker() = default;
+
+void SyncedNoteTracker::SetNotesFullTitleReuploaded() {
+  notes_full_title_reuploaded_ = true;
+}
 
 const SyncedNoteTracker::Entity* SyncedNoteTracker::GetEntityForSyncId(
     const std::string& sync_id) const {

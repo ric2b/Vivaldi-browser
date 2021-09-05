@@ -44,8 +44,6 @@ namespace {
 
 using base::StreamingUtf8Validator;
 
-const int kDefaultSendQuotaLowWaterMark = 1 << 16;
-const int kDefaultSendQuotaHighWaterMark = 1 << 17;
 const size_t kWebSocketCloseCodeLength = 2;
 // Timeout for waiting for the server to acknowledge a closing handshake.
 const int kClosingHandshakeTimeoutSeconds = 60;
@@ -286,9 +284,6 @@ WebSocketChannel::WebSocketChannel(
     URLRequestContext* url_request_context)
     : event_interface_(std::move(event_interface)),
       url_request_context_(url_request_context),
-      send_quota_low_water_mark_(kDefaultSendQuotaLowWaterMark),
-      send_quota_high_water_mark_(kDefaultSendQuotaHighWaterMark),
-      current_send_quota_(0),
       closing_handshake_timeout_(
           base::TimeDelta::FromSeconds(kClosingHandshakeTimeoutSeconds)),
       underlying_connection_close_timeout_(base::TimeDelta::FromSeconds(
@@ -354,12 +349,6 @@ WebSocketChannel::ChannelState WebSocketChannel::SendFrame(
   }
 
   DCHECK_EQ(state_, CONNECTED);
-  if (buffer_size > base::checked_cast<size_t>(current_send_quota_)) {
-    // TODO(ricea): Kill renderer.
-    FailChannel("Send quota exceeded", kWebSocketErrorGoingAway, "");
-    return CHANNEL_DELETED;
-    // |this| has been deleted.
-  }
 
   DCHECK(WebSocketFrameHeader::IsKnownDataOpCode(op_code))
       << "Got SendFrame with bogus op_code " << op_code << " fin=" << fin
@@ -381,11 +370,7 @@ WebSocketChannel::ChannelState WebSocketChannel::SendFrame(
     sending_text_message_ = !fin;
     DCHECK(!fin || state == StreamingUtf8Validator::VALID_ENDPOINT);
   }
-  current_send_quota_ -= buffer_size;
-  // TODO(ricea): If current_send_quota_ has dropped below
-  // send_quota_low_water_mark_, it might be good to increase the "low
-  // water mark" and "high water mark", but only if the link to the WebSocket
-  // server is not saturated.
+
   return SendFrameInternal(fin, op_code, std::move(buffer), buffer_size);
   // |this| may have been deleted.
 }
@@ -519,12 +504,8 @@ void WebSocketChannel::OnConnectSuccess(
   // |stream_request_| is not used once the connection has succeeded.
   stream_request_.reset();
 
-  // TODO(ricea): Get flow control information from the WebSocketStream once we
-  // have a multiplexing WebSocketStream.
-  current_send_quota_ = send_quota_high_water_mark_;
   event_interface_->OnAddChannelResponse(
-      std::move(response), stream_->GetSubProtocol(), stream_->GetExtensions(),
-      send_quota_high_water_mark_);
+      std::move(response), stream_->GetSubProtocol(), stream_->GetExtensions());
   // |this| may have been deleted after OnAddChannelResponse.
 }
 
@@ -599,21 +580,7 @@ ChannelState WebSocketChannel::OnWriteDone(bool synchronous, int result) {
           return WriteFrames();
       } else {
         data_being_sent_.reset();
-        if (current_send_quota_ < send_quota_low_water_mark_) {
-          // TODO(ricea): Increase low_water_mark and high_water_mark if
-          // throughput is high, reduce them if throughput is low.  Low water
-          // mark needs to be >= the bandwidth delay product *of the IPC
-          // channel*. Because factors like context-switch time, thread wake-up
-          // time, and bus speed come into play it is complex and probably needs
-          // to be determined empirically.
-          DCHECK_LE(send_quota_low_water_mark_, send_quota_high_water_mark_);
-          // TODO(ricea): Truncate quota by the quota specified by the remote
-          // server, if the protocol in use supports quota.
-          int fresh_quota = send_quota_high_water_mark_ - current_send_quota_;
-          current_send_quota_ += fresh_quota;
-          event_interface_->OnSendFlowControlQuotaAdded(fresh_quota);
-          return CHANNEL_ALIVE;
-        }
+        event_interface_->OnSendDataFrameDone();
       }
       return CHANNEL_ALIVE;
 
@@ -961,8 +928,6 @@ ChannelState WebSocketChannel::SendFrameInternal(
   if (data_being_sent_) {
     // Either the link to the WebSocket server is saturated, or several messages
     // are being sent in a batch.
-    // TODO(ricea): Keep some statistics to work out the situation and adjust
-    // quota appropriately.
     if (!data_to_send_next_)
       data_to_send_next_ = std::make_unique<SendBuffer>();
     data_to_send_next_->AddFrame(std::move(frame), std::move(buffer));
@@ -1016,6 +981,7 @@ ChannelState WebSocketChannel::SendClose(uint16_t code,
     std::copy(
         reason.begin(), reason.end(), body->data() + kWebSocketCloseCodeLength);
   }
+
   return SendFrameInternal(true, WebSocketFrameHeader::kOpCodeClose,
                            std::move(body), size);
 }

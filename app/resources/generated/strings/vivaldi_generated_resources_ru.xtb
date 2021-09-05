@@ -38,7 +38,6 @@
 <translation id="1603914832182249871">(Приватный)</translation>
 <translation id="1620510694547887537">Камера</translation>
 <translation id="1627276047960621195">Дескрипторы файлов</translation>
-<translation id="1635033183663317347">Установлено попечителем.</translation>
 <translation id="1682548588986054654">Новое приватное окно</translation>
 <translation id="1698122934742150150">Только для текущей приватной сессии</translation>
 <translation id="1706625117072057435">Масштабирование</translation>
@@ -170,7 +169,6 @@
 <translation id="3678156199662914018">Расширение: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Запрос доступа к экрану от <ph name="APP_NAME" /></translation>
 <translation id="3711931198657368127">Вс&amp;тавить и перейти на <ph name="URL" /></translation>
-<translation id="3725367690636977613">страниц</translation>
 <translation id="3727187387656390258">Инспектировать</translation>
 <translation id="3744111561329211289">Фоновая синхронизация</translation>
 <translation id="3760460896538743390">Исследовать &amp;фоновую страницу</translation>
@@ -198,7 +196,6 @@
 
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4088095054444612037">Принять для группы</translation>
-<translation id="4091434297613116013">листов бумаги</translation>
 <translation id="4096508467498758490">Отключить расширения в режиме разработчика</translation>
 <translation id="4100839878934973028">Одна из программ на вашем компьютере установила приложение, которое может влиять на работу Vivaldi.</translation>
 <translation id="4109898769411476438">Закройте другой браузер</translation>
@@ -376,7 +373,6 @@
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">Показать &amp;управление</translation>
 <translation id="7311079019872751559">Доступ к плагинам вне тестовой среды</translation>
-<translation id="73174032666024687"><ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="7385854874724088939">При печати произошла ошибка. Проверьте состояние принтера и повторите попытку.</translation>
 <translation id="7412226954991670867">Память GPU</translation>
 <translation id="7421925624202799674">&amp;Просмотр кода страницы</translation>
@@ -433,7 +429,6 @@
 <translation id="8071432093239591881">Печатать как картинку</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> КБ</translation>
 <translation id="8137559199583651773">Управление расширениями</translation>
-<translation id="8180239481735238521">страница</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD,plural, =1{Выполняется скачивание}one{Выполняется скачивание}few{Выполняется скачивание}many{Выполняется скачивание}other{Выполняется скачивание}}</translation>
 <translation id="8230134520748321204">Сохранить пароль для <ph name="ORIGIN" />?</translation>
 <translation id="8261378640211443080">В <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> нет сведений об этом расширении, оно могло быть установлено без вашего ведома.</translation>
@@ -465,7 +460,6 @@
 <translation id="8798099450830957504">По умолчанию</translation>
 <translation id="8800004011501252845">Поиск мест назначения для</translation>
 <translation id="8808478386290700967">Интернет-магазин</translation>
-<translation id="8813811964357448561">лист бумаги</translation>
 <translation id="8823514049557262177">Копировать &amp;текст ссылки</translation>
 <translation id="8823704566850948458">Предложить пароль...</translation>
 <translation id="8859174528519900719">Субфрейм: <ph name="SUBFRAME_SITE" /></translation>

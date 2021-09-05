@@ -4,6 +4,9 @@
 
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_updater.h"
 
+#import <MaterialComponents/MaterialPalettes.h>
+#import <MaterialComponents/MaterialSnackbar.h>
+
 #include "base/check.h"
 #include "base/mac/foundation_util.h"
 #include "base/strings/sys_string_conversions.h"
@@ -20,6 +23,7 @@
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_utils.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_data_sink.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_data_source.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_feature.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_metrics_recording.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_view_controller.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_view_controller_audience.h"
@@ -27,8 +31,6 @@
 #import "ios/chrome/browser/ui/content_suggestions/identifier/content_suggestions_section_information.h"
 #import "ios/chrome/browser/ui/list_model/list_item+Controller.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
-#import "ios/third_party/material_components_ios/src/components/Palettes/src/MaterialPalettes.h"
-#import "ios/third_party/material_components_ios/src/components/Snackbar/src/MaterialSnackbar.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -50,6 +52,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   ItemTypeMostVisited,
   ItemTypePromo,
   ItemTypeLearnMore,
+  ItemTypeDiscover,
   ItemTypeUnknown,
 };
 
@@ -62,6 +65,7 @@ typedef NS_ENUM(NSInteger, SectionIdentifier) {
   SectionIdentifierLogo,
   SectionIdentifierPromo,
   SectionIdentifierLearnMore,
+  SectionIdentifierDiscover,
   SectionIdentifierDefault,
 };
 
@@ -98,7 +102,8 @@ ItemType ItemTypeForInfo(ContentSuggestionsSectionInformation* info) {
       return ItemTypePromo;
     case ContentSuggestionsSectionLearnMore:
       return ItemTypeLearnMore;
-
+    case ContentSuggestionsSectionDiscover:
+      return ItemTypeDiscover;
     case ContentSuggestionsSectionLogo:
     case ContentSuggestionsSectionUnknown:
       return ItemTypeUnknown;
@@ -121,7 +126,8 @@ SectionIdentifier SectionIdentifierForInfo(
       return SectionIdentifierPromo;
     case ContentSuggestionsSectionLearnMore:
       return SectionIdentifierLearnMore;
-
+    case ContentSuggestionsSectionDiscover:
+      return SectionIdentifierDiscover;
     case ContentSuggestionsSectionUnknown:
       return SectionIdentifierDefault;
   }
@@ -497,7 +503,9 @@ addSuggestionsToModel:(NSArray<CSCollectionViewItem*>*)suggestions
 
     if ([model hasSectionForSectionIdentifier:sectionIdentifier] ||
         (!sectionInfo.showIfEmpty &&
-         [self.dataSource itemsForSectionInfo:sectionInfo].count == 0)) {
+         [self.dataSource itemsForSectionInfo:sectionInfo].count == 0) ||
+        (IsFromContentSuggestionsService(sectionIdentifier) &&
+         IsDiscoverFeedEnabled())) {
       continue;
     }
 
@@ -570,6 +578,10 @@ addSuggestionsToModel:(NSArray<CSCollectionViewItem*>*)suggestions
   return IsFromContentSuggestionsService(
       [self.collectionViewController.collectionViewModel
           sectionIdentifierForSection:section]);
+}
+
+- (BOOL)isDiscoverItem:(NSInteger)itemType {
+  return itemType == ItemTypeDiscover;
 }
 
 - (void)dismissItem:(CSCollectionViewItem*)item {

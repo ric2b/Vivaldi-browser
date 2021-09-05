@@ -16,6 +16,7 @@
 #include "base/debug/alias.h"
 #include "base/feature_list.h"
 #include "base/hash/hash.h"
+#include "base/logging.h"
 #include "base/memory/discardable_memory_allocator.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_math.h"
@@ -1043,9 +1044,9 @@ GpuImageDecodeCache::GpuImageDecodeCache(
     base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
         this, "cc::GpuImageDecodeCache", base::ThreadTaskRunnerHandle::Get());
   }
-  memory_pressure_listener_.reset(
-      new base::MemoryPressureListener(base::BindRepeating(
-          &GpuImageDecodeCache::OnMemoryPressure, base::Unretained(this))));
+  memory_pressure_listener_ = std::make_unique<base::MemoryPressureListener>(
+      FROM_HERE, base::BindRepeating(&GpuImageDecodeCache::OnMemoryPressure,
+                                     base::Unretained(this)));
 }
 
 GpuImageDecodeCache::~GpuImageDecodeCache() {
@@ -1164,7 +1165,12 @@ ImageDecodeCache::TaskResult GpuImageDecodeCache::GetTaskForImageAndRefInternal(
     task = GetImageDecodeTaskAndRef(draw_image, tracing_info, task_type);
   }
 
-  return TaskResult(task,
+  if (task) {
+    return TaskResult(task,
+                      image_data->decode.can_do_hardware_accelerated_decode());
+  }
+
+  return TaskResult(true /* needs_unref */, false /* is_at_raster_decode */,
                     image_data->decode.can_do_hardware_accelerated_decode());
 }
 
@@ -1922,7 +1928,8 @@ void GpuImageDecodeCache::DecodeImageIfNecessary(const DrawImage& draw_image,
       DLOG(ERROR) << "YUV + Bitmap is unknown and unimplemented!";
       NOTREACHED();
     } else {
-      image_data->decode.SetBitmapImage(draw_image.paint_image().GetSkImage());
+      image_data->decode.SetBitmapImage(
+          draw_image.paint_image().GetRasterSkImage());
     }
     return;
   }
@@ -2086,7 +2093,7 @@ void GpuImageDecodeCache::UploadImageIfNecessary(const DrawImage& draw_image,
 
       // Get the encoded data in a contiguous form.
       sk_sp<SkData> encoded_data =
-          draw_image.paint_image().GetSkImage()->refEncodedData();
+          draw_image.paint_image().GetRasterSkImage()->refEncodedData();
       DCHECK(encoded_data);
       const uint32_t transfer_cache_id =
           ClientImageTransferCacheEntry::GetNextId();
@@ -2526,7 +2533,7 @@ void GpuImageDecodeCache::FlushYUVImages(
   CheckContextLockAcquiredIfNecessary();
   lock_.AssertAcquired();
   for (auto& image : *yuv_images) {
-    image->flush(context_->GrContext());
+    image->flushAndSubmit(context_->GrContext());
   }
   yuv_images->clear();
 }

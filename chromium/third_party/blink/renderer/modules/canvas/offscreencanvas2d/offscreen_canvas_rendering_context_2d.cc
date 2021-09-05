@@ -105,7 +105,7 @@ OffscreenCanvasRenderingContext2D::OffscreenCanvasRenderingContext2D(
     canvas->SetDisableReadingFromCanvasTrue();
 }
 
-void OffscreenCanvasRenderingContext2D::Trace(Visitor* visitor) {
+void OffscreenCanvasRenderingContext2D::Trace(Visitor* visitor) const {
   CanvasRenderingContext::Trace(visitor);
   BaseRenderingContext2D::Trace(visitor);
 }
@@ -216,7 +216,7 @@ ImageBitmap* OffscreenCanvasRenderingContext2D::TransferToImageBitmap(
 
   if (!GetOrCreateCanvasResourceProvider())
     return nullptr;
-  scoped_refptr<StaticBitmapImage> image = GetImage(kPreferAcceleration);
+  scoped_refptr<StaticBitmapImage> image = GetImage();
   if (!image)
     return nullptr;
   image->SetOriginClean(this->OriginClean());
@@ -236,8 +236,7 @@ ImageBitmap* OffscreenCanvasRenderingContext2D::TransferToImageBitmap(
   return MakeGarbageCollected<ImageBitmap>(std::move(image));
 }
 
-scoped_refptr<StaticBitmapImage> OffscreenCanvasRenderingContext2D::GetImage(
-    AccelerationHint hint) {
+scoped_refptr<StaticBitmapImage> OffscreenCanvasRenderingContext2D::GetImage() {
   FinalizeFrame();
   if (!IsPaintable())
     return nullptr;
@@ -391,6 +390,8 @@ String OffscreenCanvasRenderingContext2D::font() const {
 void OffscreenCanvasRenderingContext2D::setFont(const String& new_font) {
   if (GetState().HasRealizedFont() && new_font == GetState().UnparsedFont())
     return;
+  identifiability_study_helper_.MaybeUpdateDigest(CanvasOps::kSetFont,
+                                                  new_font);
 
   base::TimeTicks start_time = base::TimeTicks::Now();
   OffscreenFontCache& font_cache = GetOffscreenFontCache();
@@ -509,6 +510,12 @@ void OffscreenCanvasRenderingContext2D::DrawTextInternal(
   if (max_width && (!std::isfinite(*max_width) || *max_width <= 0))
     return;
 
+  identifiability_study_helper_.MaybeUpdateDigest(
+      paint_type == CanvasRenderingContext2DState::kFillPaintType
+          ? CanvasOps::kFillText
+          : CanvasOps::kStrokeText,
+      IdentifiabilitySensitiveString(text), x, y, max_width ? *max_width : -1);
+
   const Font& font = AccessFont();
   const SimpleFontData* font_data = font.PrimaryFont();
   DCHECK(font_data);
@@ -575,7 +582,7 @@ void OffscreenCanvasRenderingContext2D::DrawTextInternal(
       },
       [](const SkIRect& rect)  // overdraw test lambda
       { return false; },
-      bounds, paint_type);
+      bounds, paint_type, CanvasRenderingContext2DState::kNoImage);
   paint_canvas->restoreToCount(save_count);
   ValidateStateStack();
 }

@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.media.ui;
 
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import android.graphics.Bitmap;
@@ -15,6 +16,7 @@ import org.mockito.MockitoAnnotations;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.ui.favicon.LargeIconBridge;
+import org.chromium.components.browser_ui.media.MediaSessionHelper;
 import org.chromium.components.url_formatter.UrlFormatter;
 import org.chromium.components.url_formatter.UrlFormatterJni;
 import org.chromium.content_public.browser.MediaSession;
@@ -24,6 +26,7 @@ import org.chromium.media_session.mojom.MediaSessionAction;
 import org.chromium.net.GURLUtils;
 import org.chromium.net.GURLUtilsJni;
 import org.chromium.services.media_session.MediaMetadata;
+import org.chromium.url.GURL;
 
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -73,11 +76,9 @@ public class MediaNotificationTestTabHolder {
 
         when(mTab.getWebContents()).thenReturn(mWebContents);
         when(mTab.getId()).thenReturn(tabId);
-        when(mTab.isIncognito()).thenReturn(false);
-        when(mTab.getTitle()).thenAnswer(invocation -> mTitle);
-        when(mTab.getUrlString()).thenAnswer(invocation -> mUrl);
+        when(mWebContents.isIncognito()).thenReturn(false);
 
-        MediaSessionTabHelper.sOverriddenMediaSession = mMediaSession;
+        MediaSessionHelper.sOverriddenMediaSession = mMediaSession;
         mMediaSessionTabHelper = new MediaSessionTabHelper(mTab);
         mMediaSessionTabHelper.mLargeIconBridge = new TestLargeIconBridge();
 
@@ -91,7 +92,7 @@ public class MediaNotificationTestTabHolder {
 
     public void simulateTitleUpdated(String title) {
         mTitle = title;
-        mMediaSessionTabHelper.mTabObserver.onTitleUpdated(mTab);
+        mMediaSessionTabHelper.mMediaSessionHelper.mWebContentsObserver.titleWasSet(title);
     }
 
     public void simulateFaviconUpdated(Bitmap icon) {
@@ -99,29 +100,40 @@ public class MediaNotificationTestTabHolder {
     }
 
     public void simulateMediaSessionStateChanged(boolean isControllable, boolean isSuspended) {
-        mMediaSessionTabHelper.mMediaSessionObserver.mediaSessionStateChanged(
+        mMediaSessionTabHelper.mMediaSessionHelper.mMediaSessionObserver.mediaSessionStateChanged(
                 isControllable, isSuspended);
     }
 
     public void simulateMediaSessionMetadataChanged(MediaMetadata metadata) {
-        mMediaSessionTabHelper.mMediaSessionObserver.mediaSessionMetadataChanged(metadata);
+        mMediaSessionTabHelper.mMediaSessionHelper.mMediaSessionObserver
+                .mediaSessionMetadataChanged(metadata);
     }
 
     public void simulateMediaSessionActionsChanged(Set<Integer> actions) {
-        mMediaSessionTabHelper.mMediaSessionObserver.mediaSessionActionsChanged(actions);
+        mMediaSessionTabHelper.mMediaSessionHelper.mMediaSessionObserver.mediaSessionActionsChanged(
+                actions);
     }
 
     public void simulateNavigation(String url, boolean isSameDocument) {
         mUrl = url;
 
+        // The following hoop jumping is necessary because loading real GURLs fails under junit.
+        GURL gurl = mock(GURL.class);
+        when(mWebContents.getVisibleUrl()).thenAnswer(invocation -> gurl);
+        GURL gurlOrigin = mock(GURL.class);
+        when(gurl.getOrigin()).thenAnswer(invocation -> gurlOrigin);
+        when(gurlOrigin.getSpec()).thenAnswer(invocation -> url);
+
         NavigationHandle navigation = new NavigationHandle(0 /* navigationHandleProxy */, url,
                 true /* isInMainFrame */, isSameDocument, false /* isRendererInitiated */);
-        mMediaSessionTabHelper.mTabObserver.onDidStartNavigation(mTab, navigation);
+        mMediaSessionTabHelper.mMediaSessionHelper.mWebContentsObserver.didStartNavigation(
+                navigation);
 
         navigation.didFinish(url, false /* isErrorPage */, true /* hasCommitted */,
                 false /* isFragmentNavigation */, false /* isDownload */,
                 false /* isValidSearchFormUrl */, 0 /* pageTransition */, 0 /* errorCode */,
                 200 /* httpStatusCode */);
-        mMediaSessionTabHelper.mTabObserver.onDidFinishNavigation(mTab, navigation);
+        mMediaSessionTabHelper.mMediaSessionHelper.mWebContentsObserver.didFinishNavigation(
+                navigation);
     }
 }

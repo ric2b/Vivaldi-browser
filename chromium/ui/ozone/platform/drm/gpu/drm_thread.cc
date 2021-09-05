@@ -5,6 +5,7 @@
 #include "ui/ozone/platform/drm/gpu/drm_thread.h"
 
 #include <gbm.h>
+
 #include <memory>
 #include <utility>
 
@@ -22,6 +23,7 @@
 #include "ui/gfx/linux/gbm_util.h"
 #include "ui/gfx/presentation_feedback.h"
 #include "ui/ozone/platform/drm/common/drm_util.h"
+#include "ui/ozone/platform/drm/gpu/crtc_controller.h"
 #include "ui/ozone/platform/drm/gpu/drm_device_generator.h"
 #include "ui/ozone/platform/drm/gpu/drm_device_manager.h"
 #include "ui/ozone/platform/drm/gpu/drm_dumb_buffer.h"
@@ -108,8 +110,8 @@ void DrmThread::Init() {
   device_manager_ =
       std::make_unique<DrmDeviceManager>(std::move(device_generator_));
   screen_manager_ = std::make_unique<ScreenManager>();
-  display_manager_.reset(
-      new DrmGpuDisplayManager(screen_manager_.get(), device_manager_.get()));
+  display_manager_ = std::make_unique<DrmGpuDisplayManager>(
+      screen_manager_.get(), device_manager_.get());
 
   DCHECK(task_runner())
       << "DrmThread::Init -- thread doesn't have a task_runner";
@@ -276,8 +278,8 @@ void DrmThread::SetCursor(gfx::AcceleratedWidget widget,
                           const gfx::Point& location,
                           int32_t frame_delay_ms) {
   TRACE_EVENT0("drm", "DrmThread::SetCursor");
-  screen_manager_->GetWindow(widget)
-      ->SetCursor(bitmaps, location, frame_delay_ms);
+  screen_manager_->GetWindow(widget)->SetCursor(bitmaps, location,
+                                                frame_delay_ms);
 }
 
 void DrmThread::MoveCursor(gfx::AcceleratedWidget widget,
@@ -324,20 +326,21 @@ void DrmThread::RefreshNativeDisplays(
 }
 
 void DrmThread::ConfigureNativeDisplay(
-    int64_t id,
-    std::unique_ptr<display::DisplayMode> mode,
-    const gfx::Point& origin,
+    const display::DisplayConfigurationParams& display_config_params,
     base::OnceCallback<void(int64_t, bool)> callback) {
   TRACE_EVENT0("drm", "DrmThread::ConfigureNativeDisplay");
-  std::move(callback).Run(
-      id, display_manager_->ConfigureDisplay(id, *mode, origin));
-}
 
-void DrmThread::DisableNativeDisplay(
-    int64_t id,
-    base::OnceCallback<void(int64_t, bool)> callback) {
-  TRACE_EVENT0("drm", "DrmThread::DisableNativeDisplay");
-  std::move(callback).Run(id, display_manager_->DisableDisplay(id));
+  if (display_config_params.mode) {
+    std::move(callback).Run(
+        display_config_params.id,
+        display_manager_->ConfigureDisplay(display_config_params.id,
+                                           *display_config_params.mode.value(),
+                                           display_config_params.origin));
+  } else {
+    std::move(callback).Run(
+        display_config_params.id,
+        display_manager_->DisableDisplay(display_config_params.id));
+  }
 }
 
 void DrmThread::TakeDisplayControl(base::OnceCallback<void(bool)> callback) {
@@ -416,6 +419,19 @@ void DrmThread::ProcessPendingTasks() {
   }
 
   pending_tasks_.clear();
+}
+
+void DrmThread::SetColorSpace(gfx::AcceleratedWidget widget,
+                              const gfx::ColorSpace& color_space) {
+  DCHECK(screen_manager_->GetWindow(widget));
+  HardwareDisplayController* controller =
+      screen_manager_->GetWindow(widget)->GetController();
+  if (!controller)
+    return;
+
+  const auto& crtc_controllers = controller->crtc_controllers();
+  for (const auto& crtc_controller : crtc_controllers)
+    display_manager_->SetColorSpace(crtc_controller->crtc(), color_space);
 }
 
 }  // namespace ui

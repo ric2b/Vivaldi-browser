@@ -9,12 +9,12 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.LargeTest;
 import android.support.test.uiautomator.UiDevice;
 
 import androidx.fragment.app.FragmentTransaction;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceCategory;
+import androidx.test.filters.LargeTest;
 
 import org.junit.Assert;
 import org.junit.Rule;
@@ -40,7 +40,6 @@ import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.chrome.test.util.browser.sync.SyncTestUtil;
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
-import org.chromium.components.sync.AndroidSyncSettings;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 
 /**
@@ -56,8 +55,6 @@ public class SyncAndServicesSettingsTest {
 
     // SettingsActivity needs to be initialized and destroyed with the mock
     // signin environment setup in SyncTestRule
-    // TODO(https://crbug.com/1081153):
-    // Check if to add ProfileSyncService.resetForTests() in SyncTestRule teardown.
     @Rule
     public final RuleChain mRuleChain =
             RuleChain.outerRule(mSyncTestRule).around(mSettingsActivityTestRule);

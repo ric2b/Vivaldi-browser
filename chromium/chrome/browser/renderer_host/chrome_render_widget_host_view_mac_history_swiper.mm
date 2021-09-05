@@ -15,6 +15,7 @@
 
 #include "app/vivaldi_apptools.h"
 #include "base/mac/mac_util.h"
+#include "ui/vivaldi_browser_window.h"
 
 namespace {
 // The horizontal distance required to cause the browser to perform a history
@@ -415,6 +416,13 @@ BOOL forceMagicMouse = NO;
   Browser* browser = chrome::FindBrowserWithWindow([event window]);
   if (!browser)
     return NO;
+
+  if (browser->is_vivaldi() &&
+      static_cast<VivaldiBrowserWindow*>(browser->window())->type() ==
+          VivaldiBrowserWindow::WindowType::SETTINGS) {
+    // VB-70626 Crash when using macOS history gesture in settings window
+    return NO;
+  }
 
   if (direction == history_swiper::kForwards) {
     return chrome::CanGoForward(browser);

@@ -21,11 +21,13 @@
 #include "components/prefs/pref_service.h"
 #include "components/translate/core/browser/translate_manager.h"
 #include "components/translate/core/browser/translate_prefs.h"
+#include "ios/chrome/browser/application_context.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
 #import "ios/chrome/browser/find_in_page/find_tab_helper.h"
 #import "ios/chrome/browser/overlays/public/overlay_presenter.h"
 #import "ios/chrome/browser/overlays/public/overlay_presenter_observer_bridge.h"
+#include "ios/chrome/browser/policy/browser_policy_connector_ios.h"
 #include "ios/chrome/browser/policy/policy_features.h"
 #import "ios/chrome/browser/search_engines/search_engines_util.h"
 #import "ios/chrome/browser/translate/chrome_ios_translate_client.h"
@@ -36,6 +38,7 @@
 #import "ios/chrome/browser/ui/list_model/list_model.h"
 #import "ios/chrome/browser/ui/ntp_tile_views/ntp_tile_constants.h"
 #import "ios/chrome/browser/ui/popup_menu/cells/popup_menu_navigation_item.h"
+#import "ios/chrome/browser/ui/popup_menu/cells/popup_menu_text_item.h"
 #import "ios/chrome/browser/ui/popup_menu/cells/popup_menu_tools_item.h"
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_constants.h"
 #import "ios/chrome/browser/ui/popup_menu/public/cells/popup_menu_item.h"
@@ -50,6 +53,7 @@
 #import "ios/chrome/browser/web/font_size_tab_helper.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/web_state_list/web_state_list_observer_bridge.h"
+#import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ios/components/webui/web_ui_url_constants.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
@@ -86,7 +90,22 @@ PopupMenuToolsItem* CreateTableViewItem(int titleID,
   }
   return item;
 }
+
+PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
+                                            NSString* message,
+                                            PopupMenuAction action,
+                                            NSString* accessibilityID) {
+  PopupMenuTextItem* item =
+      [[PopupMenuTextItem alloc] initWithType:kItemTypeEnumZero];
+  item.imageName = imageName;
+  item.message = message;
+  item.actionIdentifier = action;
+  item.accessibilityIdentifier = accessibilityID;
+
+  return item;
 }
+
+}  // namespace
 
 @interface PopupMenuMediator () <BookmarkModelBridgeObserver,
                                  CRWWebStateObserver,
@@ -313,7 +332,8 @@ PopupMenuToolsItem* CreateTableViewItem(int titleID,
 #pragma mark - OverlayPresenterObserving
 
 - (void)overlayPresenter:(OverlayPresenter*)presenter
-    willShowOverlayForRequest:(OverlayRequest*)request {
+    willShowOverlayForRequest:(OverlayRequest*)request
+          initialPresentation:(BOOL)initialPresentation {
   self.webContentAreaShowingOverlay = YES;
 }
 
@@ -746,34 +766,58 @@ PopupMenuToolsItem* CreateTableViewItem(int titleID,
 
 // Creates the menu items for the search menu.
 - (void)createSearchMenuItems {
-  NSMutableArray* items = [NSMutableArray array];
+  self.items = @[ [self searchMenuStaticItems] ];
 
-  // The consumer is expecting an array of arrays of items. Each sub array
-  // represent a section in the popup menu. Having one sub array means having
-  // all the items in the same section.
-  PopupMenuToolsItem* copiedContentItem = nil;
   ClipboardRecentContent* clipboardRecentContent =
       ClipboardRecentContent::GetInstance();
 
-  if (search_engines::SupportsSearchByImage(self.templateURLService) &&
-      clipboardRecentContent->HasRecentImageFromClipboard()) {
-    copiedContentItem = CreateTableViewItem(
-        IDS_IOS_TOOLS_MENU_SEARCH_COPIED_IMAGE,
-        PopupMenuActionSearchCopiedImage, @"popup_menu_paste_and_go",
-        kToolsMenuCopiedImageSearch);
-  } else if (clipboardRecentContent->GetRecentURLFromClipboard()) {
-    copiedContentItem = CreateTableViewItem(
-        IDS_IOS_TOOLS_MENU_VISIT_COPIED_LINK, PopupMenuActionPasteAndGo,
-        @"popup_menu_paste_and_go", kToolsMenuPasteAndGo);
-  } else if (clipboardRecentContent->GetRecentTextFromClipboard()) {
-    copiedContentItem = CreateTableViewItem(
-        IDS_IOS_TOOLS_MENU_SEARCH_COPIED_TEXT, PopupMenuActionPasteAndGo,
-        @"popup_menu_paste_and_go", kToolsMenuPasteAndGo);
-  }
-  if (copiedContentItem) {
-    [items addObject:@[ copiedContentItem ]];
-  }
+  std::set<ClipboardContentType> clipboard_types;
+  clipboard_types.insert(ClipboardContentType::URL);
+  clipboard_types.insert(ClipboardContentType::Text);
+  clipboard_types.insert(ClipboardContentType::Image);
 
+  clipboardRecentContent->HasRecentContentFromClipboard(
+      clipboard_types,
+      base::BindOnce(^(std::set<ClipboardContentType> matched_types) {
+        __block NSMutableArray* items = [NSMutableArray array];
+        // The consumer is expecting an array of arrays of items. Each sub array
+        // represent a section in the popup menu. Having one sub array means
+        // having all the items in the same section.
+        PopupMenuToolsItem* copiedContentItem = nil;
+        if (search_engines::SupportsSearchByImage(self.templateURLService) &&
+            matched_types.find(ClipboardContentType::Image) !=
+                matched_types.end()) {
+          copiedContentItem = CreateTableViewItem(
+              IDS_IOS_TOOLS_MENU_SEARCH_COPIED_IMAGE,
+              PopupMenuActionSearchCopiedImage, @"popup_menu_paste_and_go",
+              kToolsMenuCopiedImageSearch);
+        } else if (matched_types.find(ClipboardContentType::URL) !=
+                   matched_types.end()) {
+          copiedContentItem = CreateTableViewItem(
+              IDS_IOS_TOOLS_MENU_VISIT_COPIED_LINK, PopupMenuActionPasteAndGo,
+              @"popup_menu_paste_and_go", kToolsMenuPasteAndGo);
+        } else if (matched_types.find(ClipboardContentType::Text) !=
+                   matched_types.end()) {
+          copiedContentItem = CreateTableViewItem(
+              IDS_IOS_TOOLS_MENU_SEARCH_COPIED_TEXT, PopupMenuActionPasteAndGo,
+              @"popup_menu_paste_and_go", kToolsMenuPasteAndGo);
+        }
+        if (copiedContentItem) {
+          [items addObject:@[ copiedContentItem ]];
+        }
+
+        [items addObject:[self searchMenuStaticItems]];
+        self.items = items;
+
+        dispatch_async(dispatch_get_main_queue(), ^{
+          [self.popupMenu setPopupMenuItems:self.items];
+        });
+      }));
+}
+
+// Creates and returns the search menu items that are static (i.e. always in
+// the search menu).
+- (NSArray<TableViewItem<PopupMenuItem>*>*)searchMenuStaticItems {
   PopupMenuToolsItem* QRCodeSearch = CreateTableViewItem(
       IDS_IOS_TOOLS_MENU_QR_SCANNER, PopupMenuActionQRCodeSearch,
       @"popup_menu_qr_scanner", kToolsMenuQRCodeSearch);
@@ -787,10 +831,7 @@ PopupMenuToolsItem* CreateTableViewItem(int titleID,
       IDS_IOS_TOOLS_MENU_NEW_INCOGNITO_SEARCH, PopupMenuActionIncognitoSearch,
       @"popup_menu_new_incognito_tab", kToolsMenuIncognitoSearch);
 
-  [items
-      addObject:@[ newSearch, newIncognitoSearch, voiceSearch, QRCodeSearch ]];
-
-  self.items = items;
+  return @[ newSearch, newIncognitoSearch, voiceSearch, QRCodeSearch ];
 }
 
 // Creates the menu items for the tools menu.
@@ -812,7 +853,19 @@ PopupMenuToolsItem* CreateTableViewItem(int titleID,
 
   NSArray* collectionActions = [self collectionItems];
 
-  self.items = @[ tabActions, collectionActions, browserActions ];
+  if (base::FeatureList::IsEnabled(kEnableIOSManagedSettingsUI) &&
+      GetApplicationContext()->GetBrowserPolicyConnector() &&
+      GetApplicationContext()
+          ->GetBrowserPolicyConnector()
+          ->HasMachineLevelPolicies()) {
+    // Show enterprise infomation when chrome is managed by policy and the
+    // settings UI flag is enabled.
+    NSArray* textActions = [self enterpriseInfoSection];
+    self.items =
+        @[ tabActions, collectionActions, browserActions, textActions ];
+  } else {
+    self.items = @[ tabActions, collectionActions, browserActions ];
+  }
 }
 
 - (NSArray<TableViewItem*>*)itemsForNewTab {
@@ -996,6 +1049,16 @@ PopupMenuToolsItem* CreateTableViewItem(int titleID,
   return @[ bookmarks, self.readingListItem, recentTabs, history, settings ];
 }
 
+// Creates the section for enterprise info.
+- (NSArray<TableViewItem*>*)enterpriseInfoSection {
+  NSString* message = l10n_util::GetNSString(
+      IDS_IOS_ENTERPRISE_MANAGED_SETTING_DESC_WITHOUT_COMPANY_NAME);
+  TableViewItem* enterpriseInfoItem = CreateEnterpriseInfoItem(
+      @"popup_menu_enterprise_icon", message,
+      PopupMenuActionEnterpriseInfoMessage, kTextMenuEnterpriseInfo);
+  return @[ enterpriseInfoItem ];
+}
+
 // Returns the UserAgentType currently in use.
 - (web::UserAgentType)userAgentType {
   if (!self.webState)
@@ -1005,7 +1068,7 @@ PopupMenuToolsItem* CreateTableViewItem(int titleID,
   if (!visibleItem)
     return web::UserAgentType::NONE;
 
-  return visibleItem->GetUserAgentType(self.webState->GetView());
+  return visibleItem->GetUserAgentType();
 }
 
 #pragma mark - Other private methods

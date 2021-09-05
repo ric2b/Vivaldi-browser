@@ -31,6 +31,7 @@
 #include "chrome/browser/history/top_sites_factory.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/installable/installable_manager.h"
+#include "chrome/browser/lite_video/lite_video_observer.h"
 #include "chrome/browser/media/history/media_history_contents_observer.h"
 #include "chrome/browser/media/media_engagement_service.h"
 #include "chrome/browser/metrics/desktop_session_duration/desktop_session_duration_observer.h"
@@ -43,6 +44,7 @@
 #include "chrome/browser/optimization_guide/optimization_guide_web_contents_observer.h"
 #include "chrome/browser/page_load_metrics/page_load_metrics_initialize.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
+#include "chrome/browser/performance_hints/performance_hints_features.h"
 #include "chrome/browser/performance_hints/performance_hints_observer.h"
 #include "chrome/browser/plugins/pdf_plugin_placeholder_observer.h"
 #include "chrome/browser/predictors/loading_predictor_factory.h"
@@ -69,8 +71,6 @@
 #include "chrome/browser/tab_contents/navigation_metrics_recorder.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
 #include "chrome/browser/ui/autofill/chrome_autofill_client.h"
-#include "chrome/browser/ui/blocked_content/popup_blocker_tab_helper.h"
-#include "chrome/browser/ui/blocked_content/popup_opener_tab_helper.h"
 #include "chrome/browser/ui/find_bar/find_bar_state.h"
 #include "chrome/browser/ui/focus_tab_after_navigation_helper.h"
 #include "chrome/browser/ui/navigation_correction_tab_observer.h"
@@ -90,6 +90,8 @@
 #include "chrome/common/chrome_switches.h"
 #include "components/autofill/content/browser/content_autofill_driver_factory.h"
 #include "components/autofill/core/browser/autofill_manager.h"
+#include "components/blocked_content/popup_blocker_tab_helper.h"
+#include "components/blocked_content/popup_opener_tab_helper.h"
 #include "components/captive_portal/core/buildflags.h"
 #include "components/client_hints/browser/client_hints.h"
 #include "components/content_settings/browser/tab_specific_content_settings.h"
@@ -101,8 +103,8 @@
 #include "components/javascript_dialogs/tab_modal_dialog_manager.h"
 #include "components/offline_pages/buildflags/buildflags.h"
 #include "components/password_manager/core/browser/password_manager.h"
-#include "components/performance_manager/embedder/performance_manager_registry.h"
 #include "components/performance_manager/public/decorators/tab_properties_decorator.h"
+#include "components/performance_manager/public/performance_manager.h"
 #include "components/permissions/permission_request_manager.h"
 #include "components/subresource_filter/core/browser/subresource_filter_features.h"
 #include "components/sync/engine/sync_engine_switches.h"
@@ -120,7 +122,6 @@
 #include "chrome/browser/banners/app_banner_manager_android.h"
 #include "chrome/browser/flags/android/chrome_feature_list.h"
 #include "chrome/browser/ui/android/context_menu_helper.h"
-#include "chrome/browser/ui/android/view_android_helper.h"
 #include "chrome/browser/ui/javascript_dialogs/javascript_tab_modal_dialog_manager_delegate_android.h"
 #else
 #include "chrome/browser/banners/app_banner_manager_desktop.h"
@@ -151,6 +152,7 @@
 #if !defined(OS_ANDROID)
 #include "chrome/browser/media/feeds/media_feeds_contents_observer.h"
 #include "chrome/browser/media/feeds/media_feeds_service.h"
+#include "chrome/browser/media/kaleidoscope/kaleidoscope_tab_helper.h"
 #endif
 
 #if BUILDFLAG(ENABLE_CAPTIVE_PORTAL_DETECTION)
@@ -165,10 +167,6 @@
 #include "chrome/browser/web_applications/web_app_tab_helper.h"
 #include "extensions/browser/view_type_utils.h"
 #endif
-
-#if BUILDFLAG(ENABLE_KALEIDOSCOPE)
-#include "chrome/browser/media/kaleidoscope/internal/kaleidoscope_tab_helper.h"
-#endif  // BUILDFLAG(ENABLE_KALEIDOSCOPE)
 
 #if BUILDFLAG(ENABLE_OFFLINE_PAGES)
 #include "chrome/browser/offline_pages/android/auto_fetch_page_load_watcher.h"
@@ -276,6 +274,7 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   InfoBarService::CreateForWebContents(web_contents);
   InstallableManager::CreateForWebContents(web_contents);
   IsolatedPrerenderTabHelper::CreateForWebContents(web_contents);
+  LiteVideoObserver::MaybeCreateForWebContents(web_contents);
   if (MediaEngagementService::IsEnabled())
     MediaEngagementService::CreateWebContentsObserver(web_contents);
   if (base::FeatureList::IsEnabled(media::kUseMediaHistoryStore))
@@ -296,17 +295,15 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   chrome::InitializePageLoadMetricsForWebContents(web_contents);
   }
   PDFPluginPlaceholderObserver::CreateForWebContents(web_contents);
-  if (auto* performance_manager_registry =
-          performance_manager::PerformanceManagerRegistry::GetInstance()) {
-    performance_manager_registry->CreatePageNodeForWebContents(web_contents);
+  if (performance_manager::PerformanceManager::IsAvailable())
     performance_manager::TabPropertiesDecorator::SetIsTab(web_contents, true);
-  }
   permissions::PermissionRequestManager::CreateForWebContents(web_contents);
   // The PopupBlockerTabHelper has an implicit dependency on
   // ChromeSubresourceFilterClient being available in its constructor.
-  PopupBlockerTabHelper::CreateForWebContents(web_contents);
-  PopupOpenerTabHelper::CreateForWebContents(
-      web_contents, base::DefaultTickClock::GetInstance());
+  blocked_content::PopupBlockerTabHelper::CreateForWebContents(web_contents);
+  blocked_content::PopupOpenerTabHelper::CreateForWebContents(
+      web_contents, base::DefaultTickClock::GetInstance(),
+      HostContentSettingsMapFactory::GetForProfile(profile));
   if (predictors::LoadingPredictorFactory::GetForProfile(profile))
     predictors::LoadingPredictorTabHelper::CreateForWebContents(web_contents);
   PrefsTabHelper::CreateForWebContents(web_contents);
@@ -366,15 +363,10 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   if (OomInterventionTabHelper::IsEnabled()) {
     OomInterventionTabHelper::CreateForWebContents(web_contents);
   }
-  if (base::FeatureList::IsEnabled(
-          chrome::android::kPageInfoPerformanceHints) ||
-      base::FeatureList::IsEnabled(
-          chrome::android::kContextMenuPerformanceInfo) ||
-      base::FeatureList::IsEnabled(kPerformanceHintsObserver)) {
+  if (IsPerformanceHintsObserverEnabled()) {
     PerformanceHintsObserver::CreateForWebContents(web_contents);
   }
   SearchGeolocationDisclosureTabHelper::CreateForWebContents(web_contents);
-  ViewAndroidHelper::CreateForWebContents(web_contents);
 #else
   banners::AppBannerManagerDesktop::CreateForWebContents(web_contents);
   BookmarkTabHelper::CreateForWebContents(web_contents);
@@ -450,10 +442,10 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
     web_app::WebAppMetrics::Get(profile);
 #endif
 
-#if BUILDFLAG(ENABLE_KALEIDOSCOPE)
+#if !defined(OS_ANDROID)
   if (base::FeatureList::IsEnabled(media::kKaleidoscope))
     KaleidoscopeTabHelper::CreateForWebContents(web_contents);
-#endif  // BUILDFLAG(ENABLE_KALEIDOSCOPE)
+#endif  // !defined(OS_ANDROID)
 
 #if BUILDFLAG(ENABLE_OFFLINE_PAGES)
   offline_pages::OfflinePageTabHelper::CreateForWebContents(web_contents);

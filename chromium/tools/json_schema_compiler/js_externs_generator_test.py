@@ -65,6 +65,10 @@ namespace fakeApi {
 
   callback OptionalParamCallback = void(optional Qux qux);
 
+  interface Properties {
+    static DOMString lastError();
+  };
+
   interface Functions {
     // Does something exciting! And what's more, this is a multiline function
     // comment! It goes onto multiple lines!
@@ -78,7 +82,26 @@ namespace fakeApi {
 
     [deprecated="Use a new method."] static DOMString returnString();
 
+    static void instanceOfObjectParam([instanceOf=SomeType] object obj);
+
     static void optionalParam(optional OptionalParamCallback callback);
+
+    static void nonFinalOptionalParams(
+        DOMString string,
+        optional double num,
+        object obj,
+        [instanceOf = SomeType] object someType,
+        [instanceOf = SomeType] optional object optionalSomeType,
+        optional boolean bool,
+        optional Baz baz,
+        VoidCallback callback);
+
+    static void multipleOptionalParams(
+        optional DOMString param1,
+        optional DOMString param2,
+        optional object obj,
+        [instanceOf = SomeType] optional object optionalSomeType,
+        optional VoidCallback callback);
   };
 
   interface Events {
@@ -102,9 +125,7 @@ fake_idl_expected = """// Copyright %s The Chromium Authors. All rights reserved
 
 /** @fileoverview Externs generated from namespace: fakeApi */
 
-/**
- * @const
- */
+/** @const */
 chrome.fakeApi = {};
 
 /**
@@ -185,16 +206,22 @@ chrome.fakeApi.Qux.prototype.stop = function() {};
 
 
 /**
+ * @type {string}
+ * @see https://developer.chrome.com/extensions/fakeApi#type-lastError
+ */
+chrome.fakeApi.lastError;
+
+/**
  * Does something exciting! And what's more, this is a multiline function
  * comment! It goes onto multiple lines!
  * @param {!chrome.fakeApi.Baz} baz The baz to use.
- * @param {function():void} callback
+ * @param {function(): void} callback
  * @see https://developer.chrome.com/extensions/fakeApi#method-doSomething
  */
 chrome.fakeApi.doSomething = function(baz, callback) {};
 
 /**
- * @param {function(!chrome.fakeApi.Baz, !chrome.fakeApi.Greek):void=} callback
+ * @param {function(!chrome.fakeApi.Baz, !chrome.fakeApi.Greek): void=} callback
  *     The callback which will most assuredly in all cases be called; that is,
  *     of course, iff such a callback was provided and is not at all null.
  * @see https://developer.chrome.com/extensions/fakeApi#method-bazGreek
@@ -209,10 +236,39 @@ chrome.fakeApi.bazGreek = function(callback) {};
 chrome.fakeApi.returnString = function() {};
 
 /**
- * @param {function((!chrome.fakeApi.Qux|undefined)):void=} callback
+ * @param {SomeType} obj
+ * @see https://developer.chrome.com/extensions/fakeApi#method-instanceOfObjectParam
+ */
+chrome.fakeApi.instanceOfObjectParam = function(obj) {};
+
+/**
+ * @param {function((!chrome.fakeApi.Qux|undefined)): void=} callback
  * @see https://developer.chrome.com/extensions/fakeApi#method-optionalParam
  */
 chrome.fakeApi.optionalParam = function(callback) {};
+
+/**
+ * @param {string} string
+ * @param {?number|undefined} num
+ * @param {Object} obj
+ * @param {SomeType} someType
+ * @param {?SomeType|undefined} optionalSomeType
+ * @param {?boolean|undefined} bool
+ * @param {?chrome.fakeApi.Baz|undefined} baz
+ * @param {function(): void} callback
+ * @see https://developer.chrome.com/extensions/fakeApi#method-nonFinalOptionalParams
+ */
+chrome.fakeApi.nonFinalOptionalParams = function(string, num, obj, someType, optionalSomeType, bool, baz, callback) {};
+
+/**
+ * @param {string=} param1
+ * @param {string=} param2
+ * @param {Object=} obj
+ * @param {SomeType=} optionalSomeType
+ * @param {function(): void=} callback
+ * @see https://developer.chrome.com/extensions/fakeApi#method-multipleOptionalParams
+ */
+chrome.fakeApi.multipleOptionalParams = function(param1, param2, obj, optionalSomeType, callback) {};
 
 /**
  * Fired when we realize it's a trap!
@@ -261,9 +317,7 @@ fake_private_idl_expected = """// Copyright %s The Chromium Authors. All rights 
 
 /** @fileoverview Externs generated from namespace: fakeApiPrivate */
 
-/**
- * @const
- */
+/** @const */
 chrome.fakeApiPrivate = {};
 
 /**
@@ -310,6 +364,12 @@ fake_json = """// Copyright 2014 The Chromium Authors. All rights reserved.
         "additionalProperties": {"type": "string"}
       }
     ],
+    "properties": {
+      "lastError": {
+        "type": "string",
+        "description": "The lastError."
+      }
+    },
     "functions": [ {
       "name": "funcWithInlineObj",
       "type": "function",
@@ -383,9 +443,7 @@ fake_json_expected = """// Copyright %s The Chromium Authors. All rights reserve
 
 /** @fileoverview Externs generated from namespace: fakeJson */
 
-/**
- * @const
- */
+/** @const */
 chrome.fakeJson = {};
 
 /**
@@ -406,6 +464,13 @@ chrome.fakeJson.CrazyEnum = {
 chrome.fakeJson.CrazyObject;
 
 /**
+ * The lastError.
+ * @type {string}
+ * @see https://developer.chrome.com/extensions/fakeJson#type-lastError
+ */
+chrome.fakeJson.lastError;
+
+/**
  * @param {{
  *   foo: (boolean|undefined),
  *   bar: number,
@@ -417,7 +482,7 @@ chrome.fakeJson.CrazyObject;
  *     description that causes problems!
  * @param {function({
  *   str: string
- * }):void} callback The callback to this heinous method
+ * }): void} callback The callback to this heinous method
  * @return {{
  *   str: string,
  *   int: number

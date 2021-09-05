@@ -9,7 +9,6 @@
 #include "base/bind.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/task/post_task.h"
 #include "base/time/time.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -130,18 +129,19 @@ void MultipartUploadRequest::RetryOrFinish(
         base::Time::Now() - start_time_);
     std::move(callback_).Run(/*success=*/true, *response_body.get());
   } else {
-    if (retry_count_ < kMaxRetryAttempts) {
-      base::PostDelayedTask(FROM_HERE, {content::BrowserThread::UI},
-                            base::BindOnce(&MultipartUploadRequest::SendRequest,
-                                           weak_factory_.GetWeakPtr()),
-                            current_backoff_);
-      current_backoff_ *= kBackoffFactor;
-      retry_count_++;
-    } else {
+    if (response_code < 500 || retry_count_ >= kMaxRetryAttempts) {
       RecordUploadSuccessHistogram(/*success=*/false);
       base::UmaHistogramMediumTimes("SBMultipartUploader.FailedUploadDuration",
                                     base::Time::Now() - start_time_);
       std::move(callback_).Run(/*success=*/false, *response_body.get());
+    } else {
+      content::GetUIThreadTaskRunner({})->PostDelayedTask(
+          FROM_HERE,
+          base::BindOnce(&MultipartUploadRequest::SendRequest,
+                         weak_factory_.GetWeakPtr()),
+          current_backoff_);
+      current_backoff_ *= kBackoffFactor;
+      retry_count_++;
     }
   }
 }

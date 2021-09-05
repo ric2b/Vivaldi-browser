@@ -67,11 +67,13 @@ void ExtensionsMenuView::ButtonListener::ButtonPressed(views::Button* sender,
 ExtensionsMenuView::ExtensionsMenuView(
     views::View* anchor_view,
     Browser* browser,
-    ExtensionsContainer* extensions_container)
+    ExtensionsContainer* extensions_container,
+    bool allow_pinning)
     : BubbleDialogDelegateView(anchor_view,
                                views::BubbleBorder::Arrow::TOP_RIGHT),
       browser_(browser),
       extensions_container_(extensions_container),
+      allow_pinning_(allow_pinning),
       toolbar_model_(ToolbarActionsModel::Get(browser_->profile())),
       toolbar_model_observer_(this),
       button_listener_(browser_),
@@ -138,7 +140,11 @@ void ExtensionsMenuView::Populate() {
 
   auto extension_buttons = CreateExtensionButtonsContainer();
 
-  constexpr int kMaxExtensionButtonsHeightDp = 600;
+  // This is set so that the extensions menu doesn't fall outside the monitor in
+  // a maximized window in 1024x768. See https://crbug.com/1096630.
+  // TODO(pbos): Consider making this dynamic and handled by views. Ideally we
+  // wouldn't ever pop up so that they pop outside the screen.
+  constexpr int kMaxExtensionButtonsHeightDp = 448;
   auto scroll_view = std::make_unique<views::ScrollView>();
   scroll_view->ClipHeightTo(0, kMaxExtensionButtonsHeightDp);
   scroll_view->SetDrawOverflowIndicator(false);
@@ -283,7 +289,8 @@ void ExtensionsMenuView::CreateAndInsertNewItem(
 
   // The bare `new` is safe here, because InsertMenuItem is guaranteed to
   // be added to the view hierarchy, which takes ownership.
-  auto* item = new ExtensionsMenuItemView(browser_, std::move(controller));
+  auto* item = new ExtensionsMenuItemView(browser_, std::move(controller),
+                                          allow_pinning_);
   extensions_menu_items_.push_back(item);
   InsertMenuItem(item);
   // Sanity check that the item was added.
@@ -456,7 +463,8 @@ void ExtensionsMenuView::OnToolbarVisibleCountChanged() {
 }
 
 void ExtensionsMenuView::OnToolbarHighlightModeChanged(bool is_highlighting) {
-  // TODO(pbos): Handle highlighting - somehow.
+  NOTREACHED()
+      << "Action highlighting is not supported with the extensions menu";
 }
 
 void ExtensionsMenuView::OnToolbarModelInitialized() {
@@ -478,10 +486,11 @@ base::AutoReset<bool> ExtensionsMenuView::AllowInstancesForTesting() {
 views::Widget* ExtensionsMenuView::ShowBubble(
     views::View* anchor_view,
     Browser* browser,
-    ExtensionsContainer* extensions_container) {
+    ExtensionsContainer* extensions_container,
+    bool allow_pinning) {
   DCHECK(!g_extensions_dialog);
-  g_extensions_dialog =
-      new ExtensionsMenuView(anchor_view, browser, extensions_container);
+  g_extensions_dialog = new ExtensionsMenuView(
+      anchor_view, browser, extensions_container, allow_pinning);
   views::Widget* widget =
       views::BubbleDialogDelegateView::CreateBubble(g_extensions_dialog);
   widget->Show();

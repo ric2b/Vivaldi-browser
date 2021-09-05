@@ -4,6 +4,8 @@
 
 #include "net/quic/quic_transport_client.h"
 
+#include "base/metrics/histogram_functions.h"
+#include "base/stl_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "net/proxy_resolution/configured_proxy_resolution_service.h"
 #include "net/proxy_resolution/proxy_resolution_request.h"
@@ -17,6 +19,10 @@
 namespace net {
 
 namespace {
+// From
+// https://wicg.github.io/web-transport/#dom-quictransportconfiguration-server_certificate_fingerprints
+constexpr int kCustomCertificateMaxValidityDays = 14;
+
 std::set<std::string> HostsFromOrigins(std::set<HostPortPair> origins) {
   std::set<std::string> hosts;
   for (const auto& origin : origins) {
@@ -24,17 +30,47 @@ std::set<std::string> HostsFromOrigins(std::set<HostPortPair> origins) {
   }
   return hosts;
 }
+
+std::unique_ptr<quic::ProofVerifier> CreateProofVerifier(
+    const NetworkIsolationKey& isolation_key,
+    URLRequestContext* context,
+    const QuicTransportClient::Parameters& parameters) {
+  if (parameters.server_certificate_fingerprints.empty()) {
+    return std::make_unique<ProofVerifierChromium>(
+        context->cert_verifier(), context->ct_policy_enforcer(),
+        context->transport_security_state(),
+        context->cert_transparency_verifier(),
+        HostsFromOrigins(
+            context->quic_context()->params()->origins_to_force_quic_on),
+        isolation_key);
+  }
+
+  auto verifier = std::make_unique<quic::WebTransportFingerprintProofVerifier>(
+      context->quic_context()->clock(), kCustomCertificateMaxValidityDays);
+  for (const quic::CertificateFingerprint& fingerprint :
+       parameters.server_certificate_fingerprints) {
+    bool success = verifier->AddFingerprint(fingerprint);
+    if (!success) {
+      DLOG(WARNING) << "Failed to add a certificate fingerprint: "
+                    << fingerprint.fingerprint;
+    }
+  }
+  return verifier;
+}
 }  // namespace
 
-constexpr quic::ParsedQuicVersion
-    QuicTransportClient::kQuicVersionForOriginTrial;
+QuicTransportClient::Parameters::Parameters() = default;
+QuicTransportClient::Parameters::~Parameters() = default;
+QuicTransportClient::Parameters::Parameters(const Parameters&) = default;
+QuicTransportClient::Parameters::Parameters(Parameters&&) = default;
 
 QuicTransportClient::QuicTransportClient(
     const GURL& url,
     const url::Origin& origin,
     Visitor* visitor,
     const NetworkIsolationKey& isolation_key,
-    URLRequestContext* context)
+    URLRequestContext* context,
+    const Parameters& parameters)
     : url_(url),
       origin_(origin),
       isolation_key_(isolation_key),
@@ -53,15 +89,8 @@ QuicTransportClient::QuicTransportClient(
       // (currently, all certificate verification errors result in "TLS
       // handshake error" even when more detailed message is available).  This
       // requires implementing ProofHandler::OnProofVerifyDetailsAvailable.
-      crypto_config_(
-          std::make_unique<ProofVerifierChromium>(
-              context->cert_verifier(),
-              context->ct_policy_enforcer(),
-              context->transport_security_state(),
-              context->cert_transparency_verifier(),
-              std::set<std::string>(HostsFromOrigins(
-                  quic_context_->params()->origins_to_force_quic_on))),
-          /* session_cache */ nullptr) {}
+      crypto_config_(CreateProofVerifier(isolation_key_, context, parameters),
+                     /* session_cache */ nullptr) {}
 
 QuicTransportClient::~QuicTransportClient() = default;
 
@@ -139,13 +168,13 @@ int QuicTransportClient::DoInit() {
 
   // Ensure that for the duration of the origin trial, a fixed QUIC transport
   // version is available.
-  supported_versions_.push_back(kQuicVersionForOriginTrial);
+  supported_versions_ = QuicVersionsForWebTransportOriginTrial();
   // Add other supported versions if available.
   for (quic::ParsedQuicVersion& version :
        quic_context_->params()->supported_versions) {
     if (!quic::IsVersionValidForQuicTransport(version))
       continue;
-    if (version == kQuicVersionForOriginTrial)
+    if (base::Contains(supported_versions_, version))
       continue;  // Skip as we've already added it above.
     supported_versions_.push_back(version);
   }
@@ -227,6 +256,20 @@ int QuicTransportClient::DoConnect() {
   if (rv != OK)
     return rv;
 
+  CreateConnection();
+  next_connect_state_ = CONNECT_STATE_CONFIRM_CONNECTION;
+  return ERR_IO_PENDING;
+}
+
+void QuicTransportClient::CreateConnection() {
+  // Delete the objects in the same order they would be normally deleted by the
+  // destructor.
+  packet_reader_ = nullptr;
+  session_ = nullptr;
+  connection_ = nullptr;
+
+  IPEndPoint server_address =
+      *resolve_host_request_->GetAddressResults()->begin();
   quic::QuicConnectionId connection_id =
       quic::QuicUtils::CreateRandomConnectionId(
           quic_context_->random_generator());
@@ -251,9 +294,6 @@ int QuicTransportClient::DoConnect() {
   session_->Initialize();
   packet_reader_->StartReading();
   session_->CryptoConnect();
-
-  next_connect_state_ = CONNECT_STATE_CONFIRM_CONNECTION;
-  return ERR_IO_PENDING;
 }
 
 int QuicTransportClient::DoConfirmConnection() {
@@ -290,6 +330,18 @@ void QuicTransportClient::TransitionToState(State next_state) {
       // https://tools.ietf.org/html/draft-vvv-webtransport-overview-01#section-7
       if (session_ != nullptr) {
         error_.safe_to_report_details = session_->alpn_received();
+      }
+
+      base::UmaHistogramEnumeration("Net.QuicTransportClient.FailedAtState",
+                                    last_state, NUM_STATES);
+      base::UmaHistogramSparse("Net.QuicTransportClient.Error",
+                               std::abs(error_.net_error));
+      if (last_state == CONNECTING) {
+        base::UmaHistogramEnumeration(
+            "Net.QuicTransportClient.FailedAtConnectState", next_connect_state_,
+            CONNECT_STATE_NUM_STATES);
+        base::UmaHistogramSparse("Net.QuicTransportClient.ConnectionError",
+                                 std::abs(error_.net_error));
       }
 
       DCHECK_NE(error_.net_error, OK);
@@ -372,7 +424,38 @@ void QuicTransportClient::OnConnectionClosed(
     quic::QuicConnectionId /*server_connection_id*/,
     quic::QuicErrorCode error,
     const std::string& error_details,
-    quic::ConnectionCloseSource /*source*/) {
+    quic::ConnectionCloseSource source) {
+  if (!retried_with_new_version_ &&
+      session_->error() == quic::QUIC_INVALID_VERSION) {
+    retried_with_new_version_ = true;
+    base::EraseIf(
+        supported_versions_, [this](const quic::ParsedQuicVersion& version) {
+          return !base::Contains(
+              session_->connection()->server_supported_versions(), version);
+        });
+    if (!supported_versions_.empty()) {
+      // Since this is a callback from QuicConnection, we can't replace the
+      // connection object in this method; do it from the top of the event loop
+      // instead.
+      task_runner_->PostTask(
+          FROM_HERE, base::BindOnce(&QuicTransportClient::CreateConnection,
+                                    weak_factory_.GetWeakPtr()));
+      return;
+    }
+    // If there are no supported versions, treat this as a regular error.
+  }
+
+  std::string histogram_name;
+  switch (source) {
+    case quic::ConnectionCloseSource::FROM_SELF:
+      histogram_name = "Net.QuicTransportClient.ConnectionCloseCodeClient";
+      break;
+    case quic::ConnectionCloseSource::FROM_PEER:
+      histogram_name = "Net.QuicTransportClient.ConnectionCloseCodeServer";
+      break;
+  }
+  base::UmaHistogramSparse(histogram_name, error);
+
   if (error == quic::QUIC_NO_ERROR) {
     TransitionToState(CLOSED);
     return;
@@ -390,19 +473,6 @@ void QuicTransportClient::OnConnectionClosed(
   }
 
   TransitionToState(FAILED);
-}
-
-std::string QuicTransportErrorToString(const QuicTransportError& error) {
-  std::string message =
-      ExtendedErrorToString(error.net_error, error.quic_error);
-  if (error.details == message)
-    return message;
-  return quiche::QuicheStrCat(message, " (", error.details, ")");
-}
-
-std::ostream& operator<<(std::ostream& os, const QuicTransportError& error) {
-  os << QuicTransportErrorToString(error);
-  return os;
 }
 
 }  // namespace net

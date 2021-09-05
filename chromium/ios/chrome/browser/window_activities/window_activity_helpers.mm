@@ -17,11 +17,14 @@
 // Activity types.
 NSString* const kLoadURLActivityType = @"org.chromium.load.url";
 NSString* const kLoadIncognitoURLActivityType = @"org.chromium.load.otr-url";
+NSString* const kMoveTabActivityType = @"org.chromium.move-tab";
 
 // User info keys.
 NSString* const kURLKey = @"LoadParams_URL";
 NSString* const kReferrerURLKey = @"LoadParams_ReferrerURL";
 NSString* const kReferrerPolicyKey = @"LoadParams_ReferrerPolicy";
+NSString* const kOriginKey = @"LoadParams_Origin";
+NSString* const kTabIdentifierKey = @"TabIdentifier";
 
 namespace {
 
@@ -43,11 +46,13 @@ NSUserActivity* ActivityToOpenNewTab(bool in_incognito) {
   return activity;
 }
 
-NSUserActivity* ActivityToLoadURL(const GURL& url,
+NSUserActivity* ActivityToLoadURL(WindowActivityOrigin origin,
+                                  const GURL& url,
                                   const web::Referrer& referrer,
                                   bool in_incognito) {
   NSUserActivity* activity = BaseActivityForURLOpening(in_incognito);
   NSMutableDictionary* params = [[NSMutableDictionary alloc] init];
+  params[kOriginKey] = [NSNumber numberWithInteger:origin];
   if (!url.is_empty()) {
     params[kURLKey] = net::NSURLWithGURL(url);
   }
@@ -59,9 +64,32 @@ NSUserActivity* ActivityToLoadURL(const GURL& url,
   return activity;
 }
 
+NSUserActivity* ActivityToLoadURL(WindowActivityOrigin origin,
+                                  const GURL& url) {
+  NSUserActivity* activity = BaseActivityForURLOpening(false);
+  NSMutableDictionary* params = [[NSMutableDictionary alloc] init];
+  params[kOriginKey] = [NSNumber numberWithInteger:origin];
+  if (!url.is_empty()) {
+    params[kURLKey] = net::NSURLWithGURL(url);
+  }
+  [activity addUserInfoEntriesFromDictionary:params];
+  return activity;
+}
+
+NSUserActivity* ActivityToMoveTab(NSString* tab_id) {
+  NSUserActivity* activity =
+      [[NSUserActivity alloc] initWithActivityType:kMoveTabActivityType];
+  [activity addUserInfoEntriesFromDictionary:@{kTabIdentifierKey : tab_id}];
+  return activity;
+}
+
 bool ActivityIsURLLoad(NSUserActivity* activity) {
   return [activity.activityType isEqualToString:kLoadURLActivityType] ||
          [activity.activityType isEqualToString:kLoadIncognitoURLActivityType];
+}
+
+bool ActivityIsTabMove(NSUserActivity* activity) {
+  return [activity.activityType isEqualToString:kMoveTabActivityType];
 }
 
 UrlLoadParams LoadParamsFromActivity(NSUserActivity* activity) {
@@ -87,4 +115,10 @@ UrlLoadParams LoadParamsFromActivity(NSUserActivity* activity) {
   }
 
   return params;
+}
+
+WindowActivityOrigin OriginOfActivity(NSUserActivity* activity) {
+  NSNumber* origin = activity.userInfo[kOriginKey];
+  return origin ? static_cast<WindowActivityOrigin>(origin.intValue)
+                : WindowActivityUnknownOrigin;
 }

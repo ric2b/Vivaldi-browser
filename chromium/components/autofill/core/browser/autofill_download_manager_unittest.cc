@@ -211,7 +211,7 @@ class AutofillDownloadManagerTest : public AutofillDownloadManager::Observer,
   // AutofillDownloadManager::Observer implementation.
   void OnLoadedServerPredictions(
       std::string response_xml,
-      const std::vector<std::string>& form_signatures) override {
+      const FormAndFieldSignatures& form_signatures) override {
     ResponseData response;
     response.response = std::move(response_xml);
     response.type_of_response = QUERY_SUCCESSFULL;
@@ -224,11 +224,11 @@ class AutofillDownloadManagerTest : public AutofillDownloadManager::Observer,
     responses_.push_back(response);
   }
 
-  void OnServerRequestError(const std::string& form_signature,
+  void OnServerRequestError(FormSignature form_signature,
                             AutofillDownloadManager::RequestType request_type,
                             int http_error) override {
     ResponseData response;
-    response.signature = form_signature;
+    response.signature = base::NumberToString(form_signature.value());
     response.error = http_error;
     response.type_of_response =
         request_type == AutofillDownloadManager::REQUEST_QUERY
@@ -1401,7 +1401,7 @@ class AutofillServerCommunicationTest
   // AutofillDownloadManager::Observer implementation.
   void OnLoadedServerPredictions(
       std::string /* response_xml */,
-      const std::vector<std::string>& /*form_signatures */) override {
+      const FormAndFieldSignatures& /*form_signatures */) override {
     ASSERT_TRUE(run_loop_);
     run_loop_->QuitWhenIdle();
   }
@@ -2007,6 +2007,8 @@ TEST_P(AutofillUploadTest, RichMetadata) {
     EXPECT_TRUE(upload.randomized_form_metadata().has_id());
     EXPECT_TRUE(upload.randomized_form_metadata().has_name());
     EXPECT_TRUE(upload.randomized_form_metadata().has_url());
+    ASSERT_TRUE(upload.randomized_form_metadata().has_checksum_for_url());
+    EXPECT_EQ(upload.randomized_form_metadata().checksum_for_url(), 3608731642);
     EXPECT_EQ(3, upload.field_size());
     for (const auto& f : upload.field()) {
       ASSERT_TRUE(f.has_randomized_field_metadata());

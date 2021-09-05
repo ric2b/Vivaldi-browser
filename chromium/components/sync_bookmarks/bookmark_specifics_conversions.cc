@@ -12,6 +12,7 @@
 #include "base/containers/span.h"
 #include "base/guid.h"
 #include "base/hash/sha1.h"
+#include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
@@ -21,10 +22,14 @@
 #include "components/bookmarks/browser/bookmark_node.h"
 #include "components/favicon/core/favicon_service.h"
 #include "components/sync/engine/engine_util.h"
+#include "components/sync/model/entity_data.h"
 #include "components/sync/protocol/sync.pb.h"
 #include "components/sync_bookmarks/switches.h"
 #include "ui/gfx/favicon_size.h"
 #include "url/gurl.h"
+
+#include "components/bookmarks/vivaldi_bookmark_kit.h"
+#include "components/bookmarks/vivaldi_partners.h"
 
 namespace sync_bookmarks {
 
@@ -56,7 +61,7 @@ void UpdateBookmarkSpecificsMetaInfo(
     const bookmarks::BookmarkNode::MetaInfoMap* metainfo_map,
     sync_pb::BookmarkSpecifics* bm_specifics) {
   for (const std::pair<const std::string, std::string>& pair : *metainfo_map) {
-    if (pair.first == "Thumbnail") {
+    if (pair.first == vivaldi_bookmark_kit::ThumbnailString()) {
       // Never sync the Thumbnail key as it's not relevant in the receiving
       // end.
       continue;
@@ -190,8 +195,16 @@ std::string FullTitleToLegacyCanonicalizedTitle(const std::string& node_title) {
   return specifics_title;
 }
 
-bool IsFullTitleReuploadNeeded(const sync_pb::BookmarkSpecifics& specifics) {
-  if (specifics.has_full_title()) {
+bool IsBookmarkEntityReuploadNeeded(
+    const syncer::EntityData& remote_entity_data) {
+  DCHECK(remote_entity_data.server_defined_unique_tag.empty());
+  // Do not initiate a reupload for a remote deletion.
+  if (remote_entity_data.is_deleted()) {
+    return false;
+  }
+  DCHECK(remote_entity_data.specifics.has_bookmark());
+  if (remote_entity_data.specifics.bookmark().has_full_title() &&
+      !remote_entity_data.is_bookmark_guid_in_specifics_preprocessed) {
     return false;
   }
   return base::FeatureList::IsEnabled(
@@ -272,6 +285,18 @@ const bookmarks::BookmarkNode* CreateBookmarkNodeFromSpecifics(
 
   bookmarks::BookmarkNode::MetaInfoMap metainfo =
       GetBookmarkMetaInfo(specifics);
+
+  // NOTE(igor@vivaldi.com): A new partner gets its default thumbnail.
+  const std::string* vivaldi_partner =
+      vivaldi_bookmark_kit::GetPartner(metainfo);
+  if (vivaldi_partner) {
+    const std::string& thumbnail =
+        vivaldi_partners::GetThumbnailUrl(*vivaldi_partner);
+    if (!thumbnail.empty()) {
+      metainfo[vivaldi_bookmark_kit::ThumbnailString()] = thumbnail;
+    }
+  }
+
   const bookmarks::BookmarkNode* node;
   if (is_folder) {
     node = model->AddFolder(parent, index, NodeTitleFromSpecifics(specifics),
@@ -318,13 +343,11 @@ void UpdateBookmarkNodeFromSpecifics(
   // value of the thumbnail. Make sure the model listeners never see that its
   // value was updated or removed even temporarly to prevent removing of
   // thumbnail data mappings, see VB-56930.
-  const std::string thumbnail_key = "Thumbnail";
-  std::string thumbnail_value;
-  bool has_thumbnail = node->GetMetaInfo(thumbnail_key, &thumbnail_value);
-  if (has_thumbnail) {
-    map[thumbnail_key] = thumbnail_value;
+  std::string thumbnail = vivaldi_bookmark_kit::GetThumbnail(node);
+  if (!thumbnail.empty()) {
+    map[vivaldi_bookmark_kit::ThumbnailString()] = thumbnail;
   } else {
-    map.erase(thumbnail_key);
+    map.erase(vivaldi_bookmark_kit::ThumbnailString());
   }
 
   model->SetNodeMetaInfoMap(node, map);

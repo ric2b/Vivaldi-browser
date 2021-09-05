@@ -2,13 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "ash/app_list/views/app_list_view.h"
 #include "ash/assistant/model/assistant_ui_model.h"
 #include "ash/assistant/test/assistant_ash_test_base.h"
 #include "ash/assistant/ui/assistant_ui_constants.h"
 #include "ash/assistant/ui/main_stage/suggestion_chip_view.h"
+#include "ash/public/cpp/app_list/app_list_types.h"
 #include "base/run_loop.h"
+#include "base/scoped_observer.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chromeos/services/assistant/public/cpp/default_assistant_interaction_subscriber.h"
+#include "base/test/scoped_feature_list.h"
+#include "chromeos/services/assistant/public/cpp/assistant_service.h"
+#include "chromeos/services/assistant/public/cpp/features.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/events/event.h"
 #include "ui/views/controls/textfield/textfield.h"
@@ -19,8 +24,8 @@ namespace ash {
 
 namespace {
 
-using chromeos::assistant::mojom::AssistantInteractionMetadata;
-using chromeos::assistant::mojom::AssistantInteractionType;
+using chromeos::assistant::AssistantInteractionMetadata;
+using chromeos::assistant::AssistantInteractionType;
 
 #define EXPECT_INTERACTION_OF_TYPE(type_)                      \
   ({                                                           \
@@ -208,11 +213,11 @@ class AssistantPageViewTest : public AssistantAshTestBase {
 
 // Counts the number of Assistant interactions that are started.
 class AssistantInteractionCounter
-    : private chromeos::assistant::DefaultAssistantInteractionSubscriber {
+    : private chromeos::assistant::AssistantInteractionSubscriber {
  public:
   explicit AssistantInteractionCounter(
-      chromeos::assistant::mojom::Assistant* service) {
-    service->AddAssistantInteractionSubscriber(BindNewPipeAndPassRemote());
+      chromeos::assistant::Assistant* service) {
+    interaction_observer_.Add(service);
   }
   AssistantInteractionCounter(AssistantInteractionCounter&) = delete;
   AssistantInteractionCounter& operator=(AssistantInteractionCounter&) = delete;
@@ -221,16 +226,46 @@ class AssistantInteractionCounter
   int interaction_count() const { return interaction_count_; }
 
  private:
-  // DefaultAssistantInteractionSubscriber implementation:
+  // AssistantInteractionSubscriber implementation:
   void OnInteractionStarted(
-      chromeos::assistant::mojom::AssistantInteractionMetadataPtr) override {
+      const chromeos::assistant::AssistantInteractionMetadata&) override {
     interaction_count_++;
   }
 
   int interaction_count_ = 0;
+  chromeos::assistant::ScopedAssistantInteractionSubscriber
+      interaction_observer_{this};
 };
 
 }  // namespace
+
+TEST_F(AssistantPageViewTest, ShouldStartInPeekingState) {
+  EXPECT_FALSE(chromeos::assistant::features::IsBetterOnboardingEnabled());
+
+  ShowAssistantUi();
+
+  EXPECT_EQ(AppListViewState::kPeeking, app_list_view()->app_list_state());
+}
+
+// Tests the |AssistantPageView| with better onboarding enabled.
+class AssistantPageViewBetterOnboardingTest : public AssistantPageViewTest {
+ public:
+  AssistantPageViewBetterOnboardingTest() {
+    feature_list_.InitAndEnableFeature(
+        chromeos::assistant::features::kAssistantBetterOnboarding);
+  }
+
+  ~AssistantPageViewBetterOnboardingTest() override = default;
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+TEST_F(AssistantPageViewBetterOnboardingTest, ShouldStartInHalfState) {
+  ShowAssistantUi();
+
+  EXPECT_EQ(AppListViewState::kHalf, app_list_view()->app_list_state());
+}
 
 TEST_F(AssistantPageViewTest, ShouldStartAtMinimumHeight) {
   ShowAssistantUi();
@@ -354,38 +389,113 @@ TEST_F(AssistantPageViewTest, ShouldFocusMicWhenOpeningWithHotword) {
 }
 
 TEST_F(AssistantPageViewTest, ShouldShowGreetingLabelWhenOpening) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(
+      chromeos::assistant::features::kAssistantBetterOnboarding);
+
   ShowAssistantUi();
 
-  EXPECT_TRUE(greeting_label()->GetVisible());
+  EXPECT_TRUE(greeting_label()->IsDrawn());
+  EXPECT_EQ(nullptr, onboarding_view());
+}
+
+TEST_F(AssistantPageViewTest, ShouldShowOnboardingWhenOpening) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      chromeos::assistant::features::kAssistantBetterOnboarding);
+
+  ShowAssistantUi();
+
+  EXPECT_TRUE(onboarding_view()->IsDrawn());
+  EXPECT_FALSE(greeting_label()->IsDrawn());
 }
 
 TEST_F(AssistantPageViewTest, ShouldDismissGreetingLabelAfterQuery) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(
+      chromeos::assistant::features::kAssistantBetterOnboarding);
+
   ShowAssistantUi();
 
   MockTextInteraction().WithTextResponse("The response");
 
-  EXPECT_FALSE(greeting_label()->GetVisible());
+  EXPECT_FALSE(greeting_label()->IsDrawn());
+  EXPECT_EQ(nullptr, onboarding_view());
+}
+
+TEST_F(AssistantPageViewTest, ShouldDismissOnboardingAfterQuery) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      chromeos::assistant::features::kAssistantBetterOnboarding);
+
+  ShowAssistantUi();
+
+  MockTextInteraction().WithTextResponse("The response");
+
+  EXPECT_FALSE(onboarding_view()->IsDrawn());
+  EXPECT_FALSE(greeting_label()->IsDrawn());
 }
 
 TEST_F(AssistantPageViewTest, ShouldShowGreetingLabelAgainAfterReopening) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(
+      chromeos::assistant::features::kAssistantBetterOnboarding);
+
   ShowAssistantUi();
 
   // Cause the label to be hidden.
   MockTextInteraction().WithTextResponse("The response");
-  ASSERT_FALSE(greeting_label()->GetVisible());
+  ASSERT_FALSE(greeting_label()->IsDrawn());
 
   // Close and reopen the Assistant UI.
   CloseAssistantUi();
   ShowAssistantUi();
 
-  EXPECT_TRUE(greeting_label()->GetVisible());
+  EXPECT_TRUE(greeting_label()->IsDrawn());
+  EXPECT_EQ(nullptr, onboarding_view());
+}
+
+TEST_F(AssistantPageViewTest, ShouldShowOnboardingAgainAfterReopening) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      chromeos::assistant::features::kAssistantBetterOnboarding);
+
+  ShowAssistantUi();
+
+  // Cause the label to be hidden.
+  MockTextInteraction().WithTextResponse("The response");
+  ASSERT_FALSE(onboarding_view()->IsDrawn());
+
+  // Close and reopen the Assistant UI.
+  CloseAssistantUi();
+  ShowAssistantUi();
+
+  EXPECT_TRUE(onboarding_view()->IsDrawn());
+  EXPECT_FALSE(greeting_label()->IsDrawn());
 }
 
 TEST_F(AssistantPageViewTest,
        ShouldNotShowGreetingLabelWhenOpeningFromSearchResult) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(
+      chromeos::assistant::features::kAssistantBetterOnboarding);
+
   ShowAssistantUi(AssistantEntryPoint::kLauncherSearchResult);
 
-  EXPECT_FALSE(greeting_label()->GetVisible());
+  EXPECT_FALSE(greeting_label()->IsDrawn());
+  EXPECT_EQ(nullptr, onboarding_view());
+}
+
+TEST_F(AssistantPageViewTest,
+       ShouldNotShowOnboardingWhenOpeningFromSearchResult) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      chromeos::assistant::features::kAssistantBetterOnboarding);
+
+  ShowAssistantUi(AssistantEntryPoint::kLauncherSearchResult);
+
+  EXPECT_FALSE(onboarding_view()->IsDrawn());
+  EXPECT_FALSE(greeting_label()->IsDrawn());
 }
 
 TEST_F(AssistantPageViewTest, ShouldFocusMicViewWhenPressingVoiceInputToggle) {
@@ -622,6 +732,45 @@ TEST_F(AssistantPageViewTest, ShouldNotClearQueryWhenSwitchingToTabletMode) {
 
   EXPECT_HAS_FOCUS(input_text_field());
   EXPECT_EQ(query_text, input_text_field()->GetText());
+}
+
+TEST_F(AssistantPageViewTest, ShouldHaveConversationStarters) {
+  ASSERT_FALSE(chromeos::assistant::features::IsBetterOnboardingEnabled());
+
+  ShowAssistantUi();
+
+  EXPECT_EQ(nullptr, onboarding_view());
+  EXPECT_FALSE(GetSuggestionChips().empty());
+}
+
+TEST_F(AssistantPageViewTest,
+       ShouldNotHaveConversationStartersWhenShowingOnboarding) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      chromeos::assistant::features::kAssistantBetterOnboarding);
+
+  ShowAssistantUi();
+
+  EXPECT_TRUE(onboarding_view()->IsDrawn());
+  EXPECT_TRUE(GetSuggestionChips().empty());
+}
+
+TEST_F(AssistantPageViewTest, ShouldHavePopulatedSuggestionChips) {
+  constexpr char kAnyQuery[] = "<query>";
+  constexpr char kAnyText[] = "<text>";
+  constexpr char kAnyChip[] = "<chip>";
+
+  ShowAssistantUi();
+  MockTextInteraction()
+      .WithQuery(kAnyQuery)
+      .WithTextResponse(kAnyText)
+      .WithSuggestionChip(kAnyChip);
+
+  auto chips = GetSuggestionChips();
+  ASSERT_EQ(chips.size(), 1u);
+  auto* chip = chips.at(0);
+
+  EXPECT_EQ(kAnyChip, base::UTF16ToUTF8(chip->GetText()));
 }
 
 // Tests the |AssistantPageView| with tablet mode enabled.

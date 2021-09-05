@@ -37,7 +37,7 @@ namespace {
 class MockPhishingClassifier : public PhishingClassifier {
  public:
   explicit MockPhishingClassifier(content::RenderFrame* render_frame)
-      : PhishingClassifier(render_frame, NULL /* clock */) {}
+      : PhishingClassifier(render_frame) {}
 
   ~MockPhishingClassifier() override {}
 
@@ -224,6 +224,25 @@ TEST_F(PhishingClassifierDelegateTest, Navigation) {
   EXPECT_CALL(*classifier_, CancelPendingClassification());
   delegate_->PageCaptured(&page_text, false);
   Mock::VerifyAndClearExpectations(classifier_);
+
+  // The delegate will cancel pending classification on destruction.
+  EXPECT_CALL(*classifier_, CancelPendingClassification());
+}
+
+TEST_F(PhishingClassifierDelegateTest, NoPhishingModel) {
+  ASSERT_FALSE(classifier_->is_ready());
+  delegate_->SetPhishingModel("");
+  // The scorer is nullptr so the classifier should still not be ready.
+  ASSERT_FALSE(classifier_->is_ready());
+}
+
+TEST_F(PhishingClassifierDelegateTest, HasPhishingModel) {
+  ASSERT_FALSE(classifier_->is_ready());
+
+  ClientSideModel model;
+  model.set_max_words_per_term(1);
+  delegate_->SetPhishingModel(model.SerializeAsString());
+  ASSERT_TRUE(classifier_->is_ready());
 
   // The delegate will cancel pending classification on destruction.
   EXPECT_CALL(*classifier_, CancelPendingClassification());

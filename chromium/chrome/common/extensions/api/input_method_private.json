@@ -571,13 +571,48 @@
             "type": "function",
             "name": "callback",
             "optional": true,
-            "description": "Called when the operation completes with a boolean indicating if the text was accepted or not. On failure, chrome.runtime.lastError is set.",
+            "description": "Called when the operation completes with a boolean indicating if the text was accepted or not. On failure, $(ref:runtime.lastError) is set.",
             "parameters": [
               {
                 "name": "success",
                 "type": "boolean"
               }
             ]
+          }
+        ]
+      }, {
+        "name": "setAutocorrectRange",
+        "type": "function",
+        "description": "Set the autocorrect range and autocorrect word. If this extension does not own the active IME, this fails.",
+        "parameters": [
+          {
+            "name": "parameters",
+            "type": "object",
+            "properties": {
+              "contextID": {
+                "description": "ID of the context to autocorrect.",
+                "type": "integer"
+              },
+              "autocorrectString": {
+                "description": "Autocorrect suggestion to display.",
+                "type": "string"
+              },
+              "selectionStart": {
+                "description": "Start of the selection range.",
+                "type": "integer"
+              },
+              "selectionEnd": {
+                "description": "End of the selection range.",
+                "type": "integer"
+              }
+            }
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "description": "Called when the operation completes. On failure, chrome.runtime.lastError is set.",
+            "parameters": []
           }
         ]
       }, {
@@ -726,6 +761,20 @@
             "name": "isProjected",
             "type": "boolean",
             "description": "Whether the screen is projected."
+          }
+        ]
+      }, {
+        "name": "onSuggestionsChanged",
+        "type": "function",
+        "description": "This event is sent when a new set of suggestions has been generated",
+        "parameters": [
+          {
+            "name": "suggestions",
+            "type": "array",
+            "description": "List of suggestions to display, in order of relevance",
+            "items": {
+              "type": "string"
+            }
           }
         ]
       }

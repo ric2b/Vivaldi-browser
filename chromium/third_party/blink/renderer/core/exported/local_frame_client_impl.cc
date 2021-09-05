@@ -74,6 +74,7 @@
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
+#include "third_party/blink/renderer/core/frame/web_frame_widget_base.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
 #include "third_party/blink/renderer/core/fullscreen/fullscreen.h"
 #include "third_party/blink/renderer/core/html/html_frame_element_base.h"
@@ -207,6 +208,20 @@ WebString ConvertToPublic(
       return "navigate-to";
     case CSPDirectiveName::FrameAncestors:
       return "frame-ancestors";
+    case CSPDirectiveName::ImgSrc:
+      return "img-src";
+    case CSPDirectiveName::MediaSrc:
+      return "media-src";
+    case CSPDirectiveName::ObjectSrc:
+      return "object-src";
+    case CSPDirectiveName::ScriptSrc:
+      return "script-src";
+    case CSPDirectiveName::StyleSrc:
+      return "style-src";
+    case CSPDirectiveName::WorkerSrc:
+      return "worker-src";
+    case CSPDirectiveName::ConnectSrc:
+      return "connect-src";
     case CSPDirectiveName::Unknown:
       NOTREACHED();
       return "";
@@ -241,7 +256,7 @@ LocalFrameClientImpl::LocalFrameClientImpl(WebLocalFrameImpl* frame)
 
 LocalFrameClientImpl::~LocalFrameClientImpl() = default;
 
-void LocalFrameClientImpl::Trace(Visitor* visitor) {
+void LocalFrameClientImpl::Trace(Visitor* visitor) const {
   visitor->Trace(web_frame_);
   LocalFrameClient::Trace(visitor);
 }
@@ -392,13 +407,6 @@ bool LocalFrameClientImpl::InShadowTree() const {
 
 Frame* LocalFrameClientImpl::Opener() const {
   return ToCoreFrame(web_frame_->Opener());
-}
-
-void LocalFrameClientImpl::SetOpener(Frame* opener) {
-  WebFrame* opener_frame = WebFrame::FromFrame(opener);
-  if (web_frame_->Client() && web_frame_->Opener() != opener_frame)
-    web_frame_->Client()->DidChangeOpener(opener_frame);
-  web_frame_->SetOpener(opener_frame);
 }
 
 Frame* LocalFrameClientImpl::Parent() const {
@@ -565,7 +573,7 @@ void LocalFrameClientImpl::BeginNavigation(
   navigation_info->triggering_event_info = triggering_event_info;
   navigation_info->should_check_main_world_content_security_policy =
       should_check_main_world_content_security_policy;
-  navigation_info->blob_url_token = blob_url_token.PassPipe();
+  navigation_info->blob_url_token = std::move(blob_url_token);
   navigation_info->input_start = input_start_time;
   if (origin_document && origin_document->GetFrame()) {
     navigation_info->initiator_frame =
@@ -984,15 +992,6 @@ void LocalFrameClientImpl::DidChangeName(const String& name) {
   web_frame_->Client()->DidChangeName(name);
 }
 
-void LocalFrameClientImpl::DidChangeFramePolicy(
-    Frame* child_frame,
-    const FramePolicy& frame_policy) {
-  if (!web_frame_->Client())
-    return;
-  web_frame_->Client()->DidChangeFramePolicy(WebFrame::FromFrame(child_frame),
-                                             frame_policy);
-}
-
 void LocalFrameClientImpl::DidSetFramePolicyHeaders(
     network::mojom::blink::WebSandboxFlags sandbox_flags,
     const ParsedFeaturePolicy& feature_policy_header,
@@ -1092,9 +1091,9 @@ String LocalFrameClientImpl::evaluateInInspectorOverlayForTesting(
 }
 
 bool LocalFrameClientImpl::HandleCurrentKeyboardEvent() {
-  if (web_frame_->Client())
-    return web_frame_->Client()->HandleCurrentKeyboardEvent();
-  return false;
+  return web_frame_->LocalRoot()
+      ->FrameWidgetImpl()
+      ->HandleCurrentKeyboardEvent();
 }
 
 void LocalFrameClientImpl::DidChangeSelection(bool is_selection_empty) {
@@ -1161,6 +1160,14 @@ std::unique_ptr<WebContentSettingsClient>
 LocalFrameClientImpl::CreateWorkerContentSettingsClient() {
   DCHECK(web_frame_->Client());
   return web_frame_->Client()->CreateWorkerContentSettingsClient();
+}
+
+std::unique_ptr<media::SpeechRecognitionClient>
+LocalFrameClientImpl::CreateSpeechRecognitionClient(
+    media::SpeechRecognitionClient::OnReadyCallback callback) {
+  DCHECK(web_frame_->Client());
+  return web_frame_->Client()->CreateSpeechRecognitionClient(
+      std::move(callback));
 }
 
 void LocalFrameClientImpl::SetMouseCapture(bool capture) {

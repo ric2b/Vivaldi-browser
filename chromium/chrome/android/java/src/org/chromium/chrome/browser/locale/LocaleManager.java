@@ -476,6 +476,7 @@ public class LocaleManager {
      * @return Whether we still have to check for whether search engine dialog is necessary.
      */
     public boolean needToCheckForSearchEnginePromo() {
+        if (ChromeApplication.isVivaldi()) return false; // Vivaldi should never check.
         if (ChromeFeatureList.isInitialized()
                 && !ChromeFeatureList.isEnabled(
                            ChromeFeatureList.SEARCH_ENGINE_PROMO_EXISTING_DEVICE)) {

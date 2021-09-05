@@ -15,6 +15,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
+#include "base/logging.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
@@ -1246,10 +1247,11 @@ TEST_F(NetworkStateHandlerTest,
   network_state_handler_->AddTetherNetworkState(
       kTetherGuid1, kTetherName1, kTetherCarrier1, kTetherBatteryPercentage1,
       kTetherSignalStrength1, kTetherHasConnectedToHost1);
-  test_observer_->reset_change_counts();
-  test_observer_->reset_updates();
+  base::RunLoop().RunUntilIdle();
 
   // Preconditions.
+  test_observer_->reset_change_counts();
+  test_observer_->reset_updates();
   EXPECT_EQ(0, test_observer_->ConnectionStateChangesForService(kTetherGuid1));
   EXPECT_EQ(0, test_observer_->PropertyUpdatesForService(kTetherGuid1));
   EXPECT_EQ(0u, test_observer_->default_network_change_count());
@@ -1262,6 +1264,7 @@ TEST_F(NetworkStateHandlerTest,
   const NetworkState* tether_network =
       network_state_handler_->GetNetworkStateFromGuid(kTetherGuid1);
   network_state_handler_->SetTetherNetworkStateConnecting(kTetherGuid1);
+  base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(tether_network->IsConnectingState());
   EXPECT_EQ(1, test_observer_->ConnectionStateChangesForService(kTetherGuid1));
   EXPECT_EQ(1, test_observer_->PropertyUpdatesForService(kTetherGuid1));
@@ -1271,8 +1274,10 @@ TEST_F(NetworkStateHandlerTest,
   // Associate Tether and Wi-Fi networks.
   network_state_handler_->AssociateTetherNetworkStateWithWifiNetwork(
       kTetherGuid1, "wifi1_guid");
+  base::RunLoop().RunUntilIdle();
   EXPECT_EQ(1, test_observer_->ConnectionStateChangesForService(kTetherGuid1));
   EXPECT_EQ(2, test_observer_->PropertyUpdatesForService(kTetherGuid1));
+  EXPECT_EQ(0u, test_observer_->default_network_change_count());
 
   // Connect to the underlying Wi-Fi network. The default network should not
   // change yet.

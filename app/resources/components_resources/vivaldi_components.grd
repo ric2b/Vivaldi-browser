@@ -9,6 +9,8 @@
                type="BINDATA" compress="gzip" />
       <include name="IDR_VERSION_UI_HTML" file="version_ui/about_version.html"
                flattenhtml="true" allowexternalscript="true" type="BINDATA" compress="gzip" />
+      <include name="IDR_DOCUMENT_BLOCKED_INTERSTITIAL_HTML" file="../../../components/request_filter/adblock_filter/interstitial/document_blocked_interstitial.html"
+               compress="gzip" flattenhtml="true" type="BINDATA"/>
     </includes>
   </release>
 </grit>

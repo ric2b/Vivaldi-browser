@@ -54,12 +54,12 @@ class WebLocalFrameImpl;
 class WebSpellCheckPanelHostClient;
 enum class GlobalObjectReusePolicy;
 
-class LocalFrameClientImpl final : public LocalFrameClient {
+class CORE_EXPORT LocalFrameClientImpl final : public LocalFrameClient {
  public:
   explicit LocalFrameClientImpl(WebLocalFrameImpl*);
   ~LocalFrameClientImpl() override;
 
-  void Trace(Visitor*) override;
+  void Trace(Visitor*) const override;
 
   WebLocalFrameImpl* GetWebFrame() const override;
 
@@ -87,7 +87,6 @@ class LocalFrameClientImpl final : public LocalFrameClient {
   bool HasWebView() const override;
   bool InShadowTree() const override;
   Frame* Opener() const override;
-  void SetOpener(Frame*) override;
   Frame* Parent() const override;
   Frame* Top() const override;
   Frame* NextSibling() const override;
@@ -201,7 +200,6 @@ class LocalFrameClientImpl final : public LocalFrameClient {
   bool AllowContentInitiatedDataUrlNavigations(const KURL&) override;
 
   void DidChangeName(const String&) override;
-  void DidChangeFramePolicy(Frame* child_frame, const FramePolicy&) override;
   void DidSetFramePolicyHeaders(
       network::mojom::blink::WebSandboxFlags,
       const ParsedFeaturePolicy& fp_header,
@@ -267,6 +265,9 @@ class LocalFrameClientImpl final : public LocalFrameClient {
       WebDedicatedWorkerHostFactoryClient*) override;
   std::unique_ptr<WebContentSettingsClient> CreateWorkerContentSettingsClient()
       override;
+
+  std::unique_ptr<media::SpeechRecognitionClient> CreateSpeechRecognitionClient(
+      media::SpeechRecognitionClient::OnReadyCallback callback) override;
 
   void SetMouseCapture(bool capture) override;
 

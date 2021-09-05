@@ -86,13 +86,140 @@ TEST_F(LayoutObjectTest, DisplayInlineBlockCreateObject) {
   EXPECT_TRUE(layout_object->IsInline());
 }
 
+TEST_F(LayoutObjectTest, BackdropFilterAsGroupingProperty) {
+  ScopedTransformInteropForTest enabled(true);
+
+  SetBodyInnerHTML(R"HTML(
+    <style> div { transform-style: preserve-3d; } </style>
+    <div id=target1 style="backdrop-filter: blur(2px)"></div>
+    <div id=target2 style="will-change: backdrop-filter"></div>
+    <div id=target3 style="position: relative"></div>
+  )HTML");
+  EXPECT_TRUE(GetLayoutObjectByElementId("target1")
+                  ->StyleRef()
+                  .HasGroupingPropertyForUsedTransformStyle3D());
+  EXPECT_TRUE(GetLayoutObjectByElementId("target2")
+                  ->StyleRef()
+                  .HasGroupingPropertyForUsedTransformStyle3D());
+  EXPECT_FALSE(GetLayoutObjectByElementId("target1")->StyleRef().Preserves3D());
+  EXPECT_FALSE(GetLayoutObjectByElementId("target2")->StyleRef().Preserves3D());
+
+  EXPECT_FALSE(GetLayoutObjectByElementId("target3")
+                   ->StyleRef()
+                   .HasGroupingPropertyForUsedTransformStyle3D());
+  EXPECT_TRUE(GetLayoutObjectByElementId("target3")->StyleRef().Preserves3D());
+}
+
+TEST_F(LayoutObjectTest, BlendModeAsGroupingProperty) {
+  ScopedTransformInteropForTest enabled(true);
+
+  SetBodyInnerHTML(R"HTML(
+    <style> div { transform-style: preserve-3d; } </style>
+    <div id=target1 style="mix-blend-mode: multiply"></div>
+    <div id=target2 style="position: relative"></div>
+  )HTML");
+  EXPECT_TRUE(GetLayoutObjectByElementId("target1")
+                  ->StyleRef()
+                  .HasGroupingPropertyForUsedTransformStyle3D());
+  EXPECT_FALSE(GetLayoutObjectByElementId("target1")->StyleRef().Preserves3D());
+
+  EXPECT_FALSE(GetLayoutObjectByElementId("target2")
+                   ->StyleRef()
+                   .HasGroupingPropertyForUsedTransformStyle3D());
+  EXPECT_TRUE(GetLayoutObjectByElementId("target2")->StyleRef().Preserves3D());
+}
+
+TEST_F(LayoutObjectTest, CSSClipAsGroupingProperty) {
+  ScopedTransformInteropForTest enabled(true);
+
+  SetBodyInnerHTML(R"HTML(
+    <style> div { transform-style: preserve-3d; } </style>
+    <div id=target1 style="clip: rect(1px, 2px, 3px, 4px)"></div>
+    <div id=target2 style="position: absolute; clip: rect(1px, 2px, 3px, 4px)">
+    </div>
+    <div id=target3 style="position: relative"></div>
+  )HTML");
+  EXPECT_FALSE(GetLayoutObjectByElementId("target1")
+                   ->StyleRef()
+                   .HasGroupingPropertyForUsedTransformStyle3D());
+  EXPECT_TRUE(GetLayoutObjectByElementId("target1")->StyleRef().Preserves3D());
+  EXPECT_TRUE(GetLayoutObjectByElementId("target2")
+                  ->StyleRef()
+                  .HasGroupingPropertyForUsedTransformStyle3D());
+  EXPECT_FALSE(GetLayoutObjectByElementId("target2")->StyleRef().Preserves3D());
+
+  EXPECT_FALSE(GetLayoutObjectByElementId("target3")
+                   ->StyleRef()
+                   .HasGroupingPropertyForUsedTransformStyle3D());
+  EXPECT_TRUE(GetLayoutObjectByElementId("target3")->StyleRef().Preserves3D());
+}
+
+TEST_F(LayoutObjectTest, ClipPathAsGroupingProperty) {
+  ScopedTransformInteropForTest enabled(true);
+
+  SetBodyInnerHTML(R"HTML(
+    <style> div { transform-style: preserve-3d; } </style>
+    <div id=target1 style="clip-path: circle(40%)"></div>
+    <div id=target2 style="position: relative"></div>
+  )HTML");
+  EXPECT_TRUE(GetLayoutObjectByElementId("target1")
+                  ->StyleRef()
+                  .HasGroupingPropertyForUsedTransformStyle3D());
+  EXPECT_FALSE(GetLayoutObjectByElementId("target1")->StyleRef().Preserves3D());
+
+  EXPECT_FALSE(GetLayoutObjectByElementId("target2")
+                   ->StyleRef()
+                   .HasGroupingPropertyForUsedTransformStyle3D());
+  EXPECT_TRUE(GetLayoutObjectByElementId("target2")->StyleRef().Preserves3D());
+}
+
+TEST_F(LayoutObjectTest, IsolationAsGroupingProperty) {
+  ScopedTransformInteropForTest enabled(true);
+
+  SetBodyInnerHTML(R"HTML(
+    <style> div { transform-style: preserve-3d; } </style>
+    <div id=target1 style="isolation: isolate"></div>
+    <div id=target2 style="position: relative"></div>
+  )HTML");
+  EXPECT_TRUE(GetLayoutObjectByElementId("target1")
+                  ->StyleRef()
+                  .HasGroupingPropertyForUsedTransformStyle3D());
+  EXPECT_FALSE(GetLayoutObjectByElementId("target1")->StyleRef().Preserves3D());
+
+  EXPECT_FALSE(GetLayoutObjectByElementId("target2")
+                   ->StyleRef()
+                   .HasGroupingPropertyForUsedTransformStyle3D());
+  EXPECT_TRUE(GetLayoutObjectByElementId("target2")->StyleRef().Preserves3D());
+}
+
+TEST_F(LayoutObjectTest, MaskAsGroupingProperty) {
+  ScopedTransformInteropForTest enabled(true);
+
+  SetBodyInnerHTML(R"HTML(
+    <style> div { transform-style: preserve-3d; } </style>
+    <div id=target1 style="-webkit-mask:linear-gradient(black,transparent)">
+    </div>
+    <div id=target2 style="position: relative"></div>
+  )HTML");
+  EXPECT_TRUE(GetLayoutObjectByElementId("target1")
+                  ->StyleRef()
+                  .HasGroupingPropertyForUsedTransformStyle3D());
+  EXPECT_FALSE(GetLayoutObjectByElementId("target1")->StyleRef().Preserves3D());
+
+  EXPECT_FALSE(GetLayoutObjectByElementId("target2")
+                   ->StyleRef()
+                   .HasGroupingPropertyForUsedTransformStyle3D());
+  EXPECT_TRUE(GetLayoutObjectByElementId("target2")->StyleRef().Preserves3D());
+}
+
 TEST_F(LayoutObjectTest, UseCountBackdropFilterAsGroupingProperty) {
   SetBodyInnerHTML(R"HTML(
     <style> div { transform-style: preserve-3d; } </style>
     <div id=target style="backdrop-filter: blur(2px)"></div>
   )HTML");
-  EXPECT_FALSE(
-      GetLayoutObjectByElementId("target")->StyleRef().HasGroupingProperty());
+  EXPECT_FALSE(GetLayoutObjectByElementId("target")
+                   ->StyleRef()
+                   .HasGroupingPropertyForUsedTransformStyle3D());
   EXPECT_TRUE(GetDocument().IsUseCounted(
       WebFeature::kAdditionalGroupingPropertiesForCompat));
 }
@@ -167,6 +294,20 @@ TEST_F(
   auto offset =
       layout_object->OffsetFromContainer(containing_blocklayout_object);
   EXPECT_EQ(PhysicalOffset(2, 10), offset);
+}
+
+TEST_F(LayoutObjectTest, ContainingBlockFixedPosUnderFlattened3DWithInterop) {
+  ScopedTransformInteropForTest enabled(true);
+
+  SetBodyInnerHTML(R"HTML(
+    <div id=container style='transform-style: preserve-3d; opacity: 0.9'>
+      <div id=target style='position:fixed'></div>
+    </div>
+  )HTML");
+
+  LayoutObject* target = GetLayoutObjectByElementId("target");
+  LayoutObject* container = GetLayoutObjectByElementId("container");
+  EXPECT_EQ(container, target->Container());
 }
 
 TEST_F(LayoutObjectTest, ContainingBlockFixedLayoutObjectInTransformedDiv) {
@@ -1115,6 +1256,71 @@ TEST_F(LayoutObjectTest, NeedsLayoutOverflowRecalc) {
   EXPECT_FALSE(wrapper->NeedsLayoutOverflowRecalc());
   EXPECT_FALSE(target->NeedsLayoutOverflowRecalc());
   EXPECT_FALSE(other->NeedsLayoutOverflowRecalc());
+}
+
+TEST_F(LayoutObjectTest, ContainValueIsRelayoutBoundary) {
+  SetBodyInnerHTML(R"HTML(
+    <div id='target1' style='contain:layout'></div>
+    <div id='target2' style='contain:layout size'></div>
+    <div id='target3' style='contain:paint'></div>
+    <div id='target4' style='contain:size'></div>
+    <div id='target5' style='contain:content'></div>
+    <div id='target6' style='contain:strict'></div>
+  )HTML");
+  EXPECT_FALSE(GetLayoutObjectByElementId("target1")->IsRelayoutBoundary());
+  EXPECT_TRUE(GetLayoutObjectByElementId("target2")->IsRelayoutBoundary());
+  EXPECT_FALSE(GetLayoutObjectByElementId("target3")->IsRelayoutBoundary());
+  EXPECT_FALSE(GetLayoutObjectByElementId("target4")->IsRelayoutBoundary());
+  EXPECT_FALSE(GetLayoutObjectByElementId("target5")->IsRelayoutBoundary());
+  EXPECT_TRUE(GetLayoutObjectByElementId("target6")->IsRelayoutBoundary());
+}
+
+TEST_F(LayoutObjectTest, PerspectiveIsNotParent) {
+  ScopedTransformInteropForTest enabled(true);
+
+  GetDocument().SetBaseURLOverride(KURL("http://test.com"));
+  SetBodyInnerHTML(R"HTML(
+    <style>body { margin:0; }</style>
+    <div id='ancestor' style='perspective: 100px'>
+      <div>
+        <div id='child' style='width: 10px; height: 10px; transform: rotateY(45deg);
+        position: absolute'></div>
+      </div>
+    </div>
+  )HTML");
+
+  auto* ancestor =
+      ToLayoutBox(GetDocument().getElementById("ancestor")->GetLayoutObject());
+  auto* child =
+      ToLayoutBox(GetDocument().getElementById("child")->GetLayoutObject());
+
+  TransformationMatrix transform;
+  child->GetTransformFromContainer(ancestor, PhysicalOffset(), transform);
+  TransformationMatrix::DecomposedType decomposed;
+  EXPECT_TRUE(transform.Decompose(decomposed));
+  EXPECT_EQ(0, decomposed.perspective_z);
+}
+
+TEST_F(LayoutObjectTest, PerspectiveWithAnonymousTable) {
+  ScopedTransformInteropForTest enabled(true);
+
+  SetBodyInnerHTML(R"HTML(
+    <style>body { margin:0; }</style>
+    <div id='ancestor' style='display: table; perspective: 100px; width: 100px; height: 100px;'>
+      <div id='child' style='display: table-cell; width: 100px; height: 100px; transform: rotateY(45deg);
+        position: absolute'></div>
+    </table>
+  )HTML");
+
+  LayoutObject* child = GetLayoutObjectByElementId("child");
+  LayoutBoxModelObject* ancestor =
+      ToLayoutBoxModelObject(GetLayoutObjectByElementId("ancestor"));
+
+  TransformationMatrix transform;
+  child->GetTransformFromContainer(ancestor, PhysicalOffset(), transform);
+  TransformationMatrix::DecomposedType decomposed;
+  EXPECT_TRUE(transform.Decompose(decomposed));
+  EXPECT_EQ(-0.01, decomposed.perspective_z);
 }
 
 }  // namespace blink

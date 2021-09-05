@@ -126,7 +126,6 @@ struct CONTENT_EXPORT WebPreferences {
   bool new_canvas_2d_api_enabled;
   bool antialiased_2d_canvas_disabled;
   bool antialiased_clips_2d_canvas_enabled;
-  int accelerated_2d_canvas_msaa_sample_count;
   bool accelerated_filters_enabled;
   bool deferred_filters_enabled;
   bool container_culling_enabled;
@@ -161,7 +160,6 @@ struct CONTENT_EXPORT WebPreferences {
   bool dont_send_key_events_to_javascript;
   bool barrel_button_for_drag_enabled = false;
   bool sync_xhr_in_documents_enabled;
-  bool should_respect_image_orientation;
   int number_of_cpu_cores;
   EditingBehavior editing_behavior;
   bool supports_multiple_windows;
@@ -320,7 +318,7 @@ struct CONTENT_EXPORT WebPreferences {
   // evaluate the prefers-color-scheme media query and resolve UA color scheme
   // to be used based on the supported-color-schemes META tag and CSS property.
   blink::PreferredColorScheme preferred_color_scheme =
-      blink::PreferredColorScheme::kNoPreference;
+      blink::PreferredColorScheme::kLight;
 
   // Network quality threshold below which resources from iframes are assigned
   // either kVeryLow or kVeryLow Blink priority.

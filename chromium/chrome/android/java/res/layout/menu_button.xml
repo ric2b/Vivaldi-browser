@@ -12,11 +12,11 @@
        android:layout_height="wrap_content"
        android:id="@+id/menu_button_wrapper">
 
-       <!-- TODO Vivaldi android:src="@drawable/ic_more_vert_24dp" -->
+       <!-- Vivaldi -->
        <org.chromium.ui.widget.ChromeImageButton
            android:id="@+id/menu_button"
            style="@style/VivaldiToolbarMenuButtonPhone"
-           app:srcCompat="@drawable/vivaldi_menu_icon_56x56dp"
+           android:src="@drawable/ic_vivaldi_main_menu_24dp"
            android:contentDescription="@string/accessibility_toolbar_btn_menu"
            android:layout_gravity="center"
            app:tint="@color/default_icon_color_tint_list" />

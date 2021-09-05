@@ -42,7 +42,7 @@
 #include "media/filters/dav1d_video_decoder.h"
 #endif
 
-#if BUILDFLAG(ENABLE_FFMPEG)
+#if BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS)
 #include "media/filters/ffmpeg_video_decoder.h"
 #endif
 
@@ -260,7 +260,7 @@ class VideoDecoderAdapter : public CdmVideoDecoder {
 
   void OnVideoFrameReady(scoped_refptr<VideoFrame> video_frame) {
     // Do not queue EOS frames, which is not needed.
-    if (video_frame->metadata()->IsTrue(VideoFrameMetadata::END_OF_STREAM))
+    if (video_frame->metadata()->end_of_stream)
       return;
 
     decoded_video_frames_.push(std::move(video_frame));
@@ -326,7 +326,7 @@ std::unique_ptr<CdmVideoDecoder> CreateVideoDecoder(
 #endif
   }
 
-#if BUILDFLAG(ENABLE_FFMPEG)
+#if BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS)
   if (!video_decoder)
     video_decoder.reset(new FFmpegVideoDecoder(null_media_log.get()));
 #endif

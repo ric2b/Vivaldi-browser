@@ -30,7 +30,7 @@ class GamepadDispatcher final : public GarbageCollected<GamepadDispatcher>,
   USING_GARBAGE_COLLECTED_MIXIN(GamepadDispatcher);
 
  public:
-  explicit GamepadDispatcher(ExecutionContext* context);
+  explicit GamepadDispatcher(ExecutionContext& context);
   ~GamepadDispatcher() override;
 
   void SampleGamepads(device::Gamepads&);
@@ -44,7 +44,7 @@ class GamepadDispatcher final : public GarbageCollected<GamepadDispatcher>,
                               device::mojom::blink::GamepadHapticsManager::
                                   ResetVibrationActuatorCallback);
 
-  void Trace(Visitor*) override;
+  void Trace(Visitor*) const override;
 
  private:
   void InitializeHaptics();

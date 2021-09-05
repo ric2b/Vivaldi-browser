@@ -8,7 +8,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
-#include "chrome/browser/metrics/subprocess_metrics_provider.h"
 #include "chrome/browser/navigation_predictor/navigation_predictor.h"
 #include "chrome/browser/navigation_predictor/navigation_predictor_keyed_service.h"
 #include "chrome/browser/navigation_predictor/navigation_predictor_keyed_service_factory.h"
@@ -135,7 +134,7 @@ class TestObserver : public NavigationPredictorKeyedService::Observer {
   void WaitUntilNotificationsCountReached(size_t expected_notifications_count) {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     // Ensure that |wait_loop_| is null implying there is no ongoing wait.
-    ASSERT_FALSE(!!wait_loop_);
+    ASSERT_FALSE(wait_loop_);
 
     if (count_predictions_ >= expected_notifications_count)
       return;
@@ -331,7 +330,6 @@ IN_PROC_BROWSER_TEST_F(
   histogram_tester.ExpectUniqueSample(
       "NavigationPredictor.OnNonDSE.ActionTaken",
       NavigationPredictor::Action::kPrefetch, 1);
-
 }
 
 IN_PROC_BROWSER_TEST_F(
@@ -433,8 +431,7 @@ IN_PROC_BROWSER_TEST_F(NavigationPredictorBrowserTest,
       "NavigationPredictor.LinkClickedPrerenderResult", 1);
 }
 
-// Simulate a click at the anchor element in off-the-record profile. Metrics
-// should not be recorded.
+// Simulate a click at the anchor element in off-the-record profile.
 IN_PROC_BROWSER_TEST_F(NavigationPredictorBrowserTest,
                        ClickAnchorElementOffTheRecord) {
   auto test_ukm_recorder = std::make_unique<ukm::TestAutoSetUkmRecorder>();
@@ -451,13 +448,13 @@ IN_PROC_BROWSER_TEST_F(NavigationPredictorBrowserTest,
   EXPECT_TRUE(content::ExecuteScript(
       incognito->tab_strip_model()->GetActiveWebContents(),
       "document.getElementById('google').click();"));
+  content::WaitForLoadStop(
+      incognito->tab_strip_model()->GetActiveWebContents());
 
-  // Check that the page was loaded from cache.
   auto entries = test_ukm_recorder->GetMergedEntriesByName(
       ukm::builders::PageLoad::kEntryName);
-  EXPECT_EQ(0u, entries.size());
+  EXPECT_EQ(1u, entries.size());
 }
-
 
 IN_PROC_BROWSER_TEST_F(NavigationPredictorBrowserTest,
                        AnchorElementClickedOnSearchEnginePage) {

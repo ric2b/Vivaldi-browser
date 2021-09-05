@@ -49,10 +49,10 @@ class ExtensionsMenuItemViewTest : public BrowserWithTestWindowTest {
     controller_->SetActionName(initial_extension_name_);
     controller_->SetTooltip(initial_tooltip_);
     auto menu_item = std::make_unique<ExtensionsMenuItemView>(
-        browser(), std::move(controller));
+        browser(), std::move(controller), true);
     primary_button_on_menu_ = menu_item->primary_action_button_for_testing();
 
-    widget_->SetContentsView(menu_item.release());
+    widget_->SetContentsView(std::move(menu_item));
   }
 
   void TearDown() override {

@@ -5,7 +5,8 @@
 package org.chromium.components.sync.notifier;
 
 import android.accounts.Account;
-import android.support.test.filters.SmallTest;
+
+import androidx.test.filters.SmallTest;
 
 import com.google.ipc.invalidation.external.client.types.ObjectId;
 
@@ -17,7 +18,6 @@ import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.CollectionUtil;
 import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.RetryOnFailure;
 
 import java.util.Arrays;
 import java.util.Set;
@@ -28,7 +28,6 @@ import java.util.Set;
  * @author dsmyers@google.com (Daniel Myers)
  */
 @RunWith(BaseJUnit4ClassRunner.class)
-@RetryOnFailure
 public class InvalidationPreferencesTest {
 
     @Test

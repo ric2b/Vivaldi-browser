@@ -40,8 +40,10 @@ void ClientSharedImageInterface::PresentSwapChain(const SyncToken& sync_token,
 #if defined(OS_FUCHSIA)
 void ClientSharedImageInterface::RegisterSysmemBufferCollection(
     gfx::SysmemBufferCollectionId id,
-    zx::channel token) {
-  proxy_->RegisterSysmemBufferCollection(id, std::move(token));
+    zx::channel token,
+    gfx::BufferFormat format,
+    gfx::BufferUsage usage) {
+  proxy_->RegisterSysmemBufferCollection(id, std::move(token), format, usage);
 }
 
 void ClientSharedImageInterface::ReleaseSysmemBufferCollection(
@@ -56,6 +58,11 @@ SyncToken ClientSharedImageInterface::GenUnverifiedSyncToken() {
 
 SyncToken ClientSharedImageInterface::GenVerifiedSyncToken() {
   return proxy_->GenVerifiedSyncToken();
+}
+
+void ClientSharedImageInterface::WaitSyncToken(
+    const gpu::SyncToken& sync_token) {
+  proxy_->WaitSyncToken(sync_token);
 }
 
 void ClientSharedImageInterface::Flush() {
@@ -122,6 +129,12 @@ void ClientSharedImageInterface::DestroySharedImage(const SyncToken& sync_token,
 
 uint32_t ClientSharedImageInterface::UsageForMailbox(const Mailbox& mailbox) {
   return proxy_->UsageForMailbox(mailbox);
+}
+
+void ClientSharedImageInterface::NotifyMailboxAdded(const Mailbox& mailbox,
+                                                    uint32_t usage) {
+  AddMailbox(mailbox);
+  proxy_->NotifyMailboxAdded(mailbox, usage);
 }
 
 Mailbox ClientSharedImageInterface::AddMailbox(const gpu::Mailbox& mailbox) {

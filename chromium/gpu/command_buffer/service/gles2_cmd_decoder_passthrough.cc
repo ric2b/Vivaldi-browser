@@ -24,6 +24,7 @@
 #include "gpu/command_buffer/service/program_cache.h"
 #include "gpu/command_buffer/service/shared_image_representation.h"
 #include "ui/gl/gl_version_info.h"
+#include "ui/gl/gpu_switching_manager.h"
 #include "ui/gl/progress_reporter.h"
 
 #if defined(OS_WIN)
@@ -1092,8 +1093,7 @@ gpu::ContextResult GLES2DecoderPassthroughImpl::Initialize(
     bound_buffers_[GL_DISPATCH_INDIRECT_BUFFER] = 0;
   }
 
-  if (feature_info_->feature_flags().chromium_texture_filtering_hint &&
-      feature_info_->feature_flags().is_swiftshader) {
+  if (feature_info_->feature_flags().chromium_texture_filtering_hint) {
     api()->glHintFn(GL_TEXTURE_FILTERING_HINT_CHROMIUM, GL_NICEST);
   }
 
@@ -1210,6 +1210,11 @@ gpu::ContextResult GLES2DecoderPassthroughImpl::Initialize(
     api()->glDisableFn(GL_TEXTURE_RECTANGLE_ANGLE);
 #endif
 
+  // Register this object as a GPU switching observer.
+  if (feature_info_->IsWebGLContext()) {
+    ui::GpuSwitchingManager::GetInstance()->AddObserver(this);
+  }
+
   set_initialized();
   return gpu::ContextResult::kSuccess;
 }
@@ -1314,6 +1319,11 @@ void GLES2DecoderPassthroughImpl::Destroy(bool have_context) {
     }
   }
   deschedule_until_finished_fences_.clear();
+
+  // Unregister this object as a GPU switching observer.
+  if (feature_info_->IsWebGLContext()) {
+    ui::GpuSwitchingManager::GetInstance()->RemoveObserver(this);
+  }
 
   // Destroy the surface before the context, some surface destructors make GL
   // calls.
@@ -1870,6 +1880,12 @@ void GLES2DecoderPassthroughImpl::MarkContextLost(
 
 gpu::gles2::Logger* GLES2DecoderPassthroughImpl::GetLogger() {
   return &logger_;
+}
+
+void GLES2DecoderPassthroughImpl::OnGpuSwitched(
+    gl::GpuPreference active_gpu_heuristic) {
+  // Send OnGpuSwitched notification to renderer process via decoder client.
+  client()->OnGpuSwitched(active_gpu_heuristic);
 }
 
 void GLES2DecoderPassthroughImpl::BeginDecoding() {
@@ -2865,14 +2881,13 @@ bool GLES2DecoderPassthroughImpl::IsEmulatedFramebufferBound(
 void GLES2DecoderPassthroughImpl::CheckSwapBuffersAsyncResult(
     const char* function_name,
     uint64_t swap_id,
-    gfx::SwapResult result,
-    std::unique_ptr<gfx::GpuFence> gpu_fence) {
+    gfx::SwapCompletionResult result) {
   TRACE_EVENT_ASYNC_END0("gpu", "AsyncSwapBuffers", swap_id);
   // Handling of the out-fence should have already happened before reaching
   // this function, so we don't expect to get a valid fence here.
-  DCHECK(!gpu_fence);
+  DCHECK(!result.gpu_fence);
 
-  CheckSwapBuffersResult(result, function_name);
+  CheckSwapBuffersResult(result.swap_result, function_name);
 }
 
 error::Error GLES2DecoderPassthroughImpl::CheckSwapBuffersResult(

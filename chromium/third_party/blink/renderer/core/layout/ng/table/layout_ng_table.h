@@ -33,6 +33,12 @@ class CORE_EXPORT LayoutNGTable : public LayoutNGMixin<LayoutBlock>,
 
   void UpdateBlockLayout(bool relayout_children) override;
 
+  void AddChild(LayoutObject* child,
+                LayoutObject* before_child = nullptr) override;
+
+  LayoutBox* CreateAnonymousBoxWithSameTypeAs(
+      const LayoutObject* parent) const override;
+
   // LayoutBlock methods end.
 
   // LayoutNGTableInterface methods start.

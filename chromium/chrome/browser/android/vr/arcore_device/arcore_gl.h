@@ -67,12 +67,14 @@ class ArCoreGl : public mojom::XRFrameDataProvider,
   explicit ArCoreGl(std::unique_ptr<ArImageTransport> ar_image_transport);
   ~ArCoreGl() override;
 
-  void Initialize(vr::ArCoreSessionUtils* session_utils,
-                  ArCoreFactory* arcore_factory,
-                  gfx::AcceleratedWidget drawing_widget,
-                  const gfx::Size& frame_size,
-                  display::Display::Rotation display_rotation,
-                  base::OnceCallback<void(bool)> callback);
+  void Initialize(
+      vr::ArCoreSessionUtils* session_utils,
+      ArCoreFactory* arcore_factory,
+      gfx::AcceleratedWidget drawing_widget,
+      const gfx::Size& frame_size,
+      display::Display::Rotation display_rotation,
+      const std::vector<device::mojom::XRSessionFeature>& enabled_features,
+      base::OnceCallback<void(bool)> callback);
 
   void CreateSession(mojom::VRDisplayInfoPtr display_info,
                      ArCoreGlCreateSessionCallback create_callback,
@@ -127,11 +129,13 @@ class ArCoreGl : public mojom::XRFrameDataProvider,
 
   void CreateAnchor(
       mojom::XRNativeOriginInformationPtr native_origin_information,
-      mojom::PosePtr native_origin_from_anchor,
+      const device::Pose& native_origin_from_anchor,
       CreateAnchorCallback callback) override;
-  void CreatePlaneAnchor(mojom::PosePtr anchor_pose,
-                         uint64_t plane_id,
-                         CreatePlaneAnchorCallback callback) override;
+  void CreatePlaneAnchor(
+      mojom::XRNativeOriginInformationPtr native_origin_information,
+      const device::Pose& native_origin_from_anchor,
+      uint64_t plane_id,
+      CreatePlaneAnchorCallback callback) override;
 
   void DetachAnchor(uint64_t anchor_id) override;
 
@@ -176,6 +180,11 @@ class ArCoreGl : public mojom::XRFrameDataProvider,
   // in a closure owned by the task runner, that would lead to inconsistent
   // state on session shutdown. See https://crbug.com/1065572.
   void RunNextGetFrameData();
+
+  // List of features enabled on this session. Required to correctly configure
+  // the session and only send out necessary data related to reference spaces to
+  // blink. Valid after the call to |Initialize()| method.
+  std::vector<device::mojom::XRSessionFeature> enabled_features_;
 
   base::OnceClosure session_shutdown_callback_;
 

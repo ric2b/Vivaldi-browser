@@ -129,7 +129,8 @@ class PolicyDetails:
 
     self.is_supported = (target_platform in self.platforms
                          or target_platform in self.future_on)
-    self.is_future = self.is_future or target_platform in self.future_on
+    self.is_future_on = target_platform in self.future_on
+    self.is_future = self.is_future or self.is_future_on
 
     if policy['type'] not in PolicyDetails.TYPE_MAP:
       raise NotImplementedError(
@@ -497,7 +498,7 @@ def _WritePolicyConstantHeader(policies, policy_atomic_groups, target_platform,
           '#endif\n'
           '\n'
           '// Returns the PolicyDetails for |policy| if |policy| is a known\n'
-          '// Chrome policy, otherwise returns NULL.\n'
+          '// Chrome policy, otherwise returns nullptr.\n'
           'const PolicyDetails* GetChromePolicyDetails('
           'const std::string& policy);\n'
           '\n'
@@ -915,13 +916,14 @@ class SchemaNodesGenerator:
 
     f.write('const internal::SchemaData kChromeSchemaData = {\n'
             '  kSchemas,\n')
-    f.write('  kPropertyNodes,\n' if self.property_nodes else '  NULL,\n')
-    f.write('  kProperties,\n' if self.properties_nodes else '  NULL,\n')
-    f.write('  kRestrictionNodes,\n' if self.restriction_nodes else '  NULL,\n')
-    f.write('  kRequiredProperties,\n' if self
-            .required_properties else '  NULL,\n')
-    f.write('  kIntegerEnumerations,\n' if self.int_enums else '  NULL,\n')
-    f.write('  kStringEnumerations,\n' if self.string_enums else '  NULL,\n')
+    f.write('  kPropertyNodes,\n' if self.property_nodes else '  nullptr,\n')
+    f.write('  kProperties,\n' if self.properties_nodes else '  nullptr,\n')
+    f.write(
+        '  kRestrictionNodes,\n' if self.restriction_nodes else '  nullptr,\n')
+    f.write('  kRequiredProperties,\n' if self.
+            required_properties else '  nullptr,\n')
+    f.write('  kIntegerEnumerations,\n' if self.int_enums else '  nullptr,\n')
+    f.write('  kStringEnumerations,\n' if self.string_enums else '  nullptr,\n')
     f.write('  %d,  // validation_schema root index\n' %
             self.validation_schema_root_index)
     f.write('};\n\n')
@@ -1031,7 +1033,7 @@ def _WritePolicyConstantSource(policies, policy_atomic_groups, target_platform,
 #include <climits>
 #include <memory>
 
-#include "base/logging.h"
+#include "base/check_op.h"
 #include "base/stl_util.h"  // base::size()
 #include "build/branding_buildflags.h"
 #include "components/policy/core/common/policy_types.h"
@@ -1081,7 +1083,7 @@ namespace policy {
       f.write('  // %s\n' % policy.name)
       f.write('  { %-14s%-10s%-17s%4s,%22s, %s },\n' %
               ('true,' if policy.is_deprecated else 'false,',
-               'true,' if policy.is_future else 'false, ',
+               'true,' if policy.is_future_on else 'false, ',
                'true,' if policy.is_device_only else 'false,', policy.id,
                policy.max_size, risk_tags.ToInitString(policy.tags)))
   f.write('};\n\n')

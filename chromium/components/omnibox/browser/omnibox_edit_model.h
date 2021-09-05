@@ -116,8 +116,7 @@ class OmniboxEditModel {
 
   // Adjusts the copied text before writing it to the clipboard. If the copied
   // text is a URL with the scheme elided, this method reattaches the scheme.
-  // Copied text that looks like a search query, including the Query in Omnibox
-  // case, will not be modified.
+  // Copied text that looks like a search query will not be modified.
   //
   // |sel_min| gives the minimum of the selection, e.g. min(sel_start, sel_end).
   // |text| is the currently selected text, and may be modified by this method.
@@ -176,7 +175,7 @@ class OmniboxEditModel {
   //
   // If the omnibox is not currently displaying elided text, this method will
   // no-op and return false.
-  bool Unelide(bool exit_query_in_omnibox);
+  bool Unelide();
 
   // Invoked any time the text may have changed in the edit. Notifies the
   // controller.
@@ -361,19 +360,26 @@ class OmniboxEditModel {
   //     a different match, or the inline autocomplete text.
   //   |is_temporary_text| is true if |text| contains the temporary text for
   //     a match, and is false if |text| contains the inline autocomplete text.
+  //   |prefix_autocompletion_text| is the prefix autocomplete text.
   //   |destination_for_temporary_text_change| is NULL (if temporary text should
   //     not change) or the pre-change destination URL (if temporary text should
   //     change) so we can save it off to restore later.
   //   |keyword| is the keyword to show a hint for if |is_keyword_hint| is true,
   //     or the currently selected keyword if |is_keyword_hint| is false (see
   //     comments on keyword_ and is_keyword_hint_).
-  void OnPopupDataChanged(const base::string16& text,
-                          bool is_temporary_text,
-                          const base::string16& keyword,
-                          bool is_keyword_hint);
+  //   |additional_text| is additional omnibox text to be displayed adjacent to
+  //   the omnibox view.
+  // Virtual to allow testing.
+  virtual void OnPopupDataChanged(
+      const base::string16& text,
+      bool is_temporary_text,
+      const base::string16& prefix_autocompletion_text,
+      const base::string16& keyword,
+      bool is_keyword_hint,
+      const base::string16& additional_text);
 
   // Called by the OmniboxView after something changes, with details about what
-  // state changes occured.  Updates internal state, updates the popup if
+  // state changes occurred.  Updates internal state, updates the popup if
   // necessary, and returns true if any significant changes occurred.  Note that
   // |text_change.text_differs| may be set even if |text_change.old_text| ==
   // |text_change.new_text|, e.g. if we've just committed an IME composition.
@@ -399,6 +405,9 @@ class OmniboxEditModel {
   // Reverts the edit box from a temporary text back to the original user text.
   // Also resets the popup to the initial state.
   void RevertTemporaryTextAndPopup();
+
+  // Returns whether to prevent elision of the display URL.
+  bool ShouldPreventElision() const;
 
  private:
   friend class OmniboxControllerTest;
@@ -504,12 +513,10 @@ class OmniboxEditModel {
   // no input is in progress or the Omnibox is not focused.
   OmniboxFocusSource focus_source_ = OmniboxFocusSource::INVALID;
 
-  // Display-only text representing the current page. This could be any of:
+  // Display-only text representing the current page. This could either:
   //  - The same as |url_for_editing_| if Steady State Elisions is OFF.
   //  - A simplified version of |url_for_editing_| with some destructive
   //    elisions applied. This is the case if Steady State Elisions is ON.
-  //  - The user entered search query, if the user is on the search results
-  //    page of the default search provider and Query in Omnibox is ON.
   //
   // This should not be considered suitable for editing.
   base::string16 display_text_;
@@ -572,6 +579,7 @@ class OmniboxEditModel {
   // it to a normal selection, or change the edit entirely).
   bool just_deleted_text_;
   base::string16 inline_autocomplete_text_;
+  base::string16 prefix_autocompletion_text_;
 
   // Used by OnPopupDataChanged to keep track of whether there is currently a
   // temporary text.

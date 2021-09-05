@@ -28,7 +28,6 @@
 <translation id="1601560923496285236">Aplicar</translation>
 <translation id="1603914832182249871">(privada)</translation>
 <translation id="1620510694547887537">Câmera</translation>
-<translation id="1635033183663317347">Instalada pelo seu tutor legal.</translation>
 <translation id="1682548588986054654">Nova janela privada</translation>
 <translation id="1698122934742150150">Aplicar somente durante a sessão privada atual</translation>
 <translation id="1706625117072057435">Níveis de zoom</translation>
@@ -76,7 +75,7 @@
 <translation id="26224892172169984">Não permitir que qualquer site manipule protocolos</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Reativar</translation>
-<translation id="2721037002783622288">&amp;Procurar <ph name="SEARCH_ENGINE" /> for image</translation>
+<translation id="2721037002783622288">&amp;Pesquisar imagem no <ph name="SEARCH_ENGINE" /></translation>
 <translation id="2809586584051668049">e mais <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
 <translation id="2812989263793994277">Não exibir imagens</translation>
 <translation id="2850541429955027218">Adicionar tema</translation>
@@ -121,7 +120,6 @@
 <translation id="3668823961463113931">Manipuladores de protocolos</translation>
 <translation id="3678156199662914018">Extensão: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> deseja transmitir a tela</translation>
-<translation id="3725367690636977613">páginas</translation>
 <translation id="3744111561329211289">Sincronização em segundo plano</translation>
 <translation id="3797900183766075808">&amp;Pesquisar por “<ph name="SEARCH_TERMS" />” no <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3800806661949714323">Exibir imagens (recomendado)</translation>
@@ -136,7 +134,7 @@
 <translation id="3927932062596804919">Negar</translation>
 <translation id="3936390757709632190">Abrir áudio em nova &amp;guia</translation>
 <translation id="3943582379552582368">&amp;Voltar</translation>
-<translation id="3948116654032448504">&amp;Pesquisar <ph name="SEARCH_ENGINE" /> for Image</translation>
+<translation id="3948116654032448504">&amp;Pesquisar imagem no <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3955193568934677022">Permitir que os sites reproduzam conteúdo protegido por DRM (recomendado)</translation>
 <translation id="3979395879372752341">Nova extensão adicionada (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">–</translation>
@@ -146,7 +144,6 @@
 
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4088095054444612037">Aceitar fazer parte do grupo</translation>
-<translation id="4091434297613116013">folhas de papel</translation>
 <translation id="4096508467498758490">Desativar extensões no modo de desenvolvedor</translation>
 <translation id="4100839878934973028">Outro programa em seu computador adicionou um aplicativo que pode modificar a forma como o Vivaldi funciona.</translation>
 <translation id="4109898769411476438">Fechar o Navegador Antes de Importar</translation>
@@ -312,7 +309,6 @@ Mantenha o seu arquivo de chave privada em um local seguro. Você precisará del
 <translation id="8032244173881942855">Não foi possível transmitir a guia.</translation>
 <translation id="8071432093239591881">Imprimir como imagem</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> KB</translation>
-<translation id="8180239481735238521">página</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD,plural, =1{O download está em andamento}one{O download está em andamento}other{Os downloads estão em andamento}}</translation>
 <translation id="8230134520748321204">Salvar senha para <ph name="ORIGIN" />?</translation>
 <translation id="8261378640211443080">Esta extensão não está listada na <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> e pode ter sido adicionada sem seu conhecimento.</translation>
@@ -332,7 +328,6 @@ Mantenha o seu arquivo de chave privada em um local seguro. Você precisará del
 <translation id="8783093612333542422">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; quer compartilhar uma impressora &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; com você.</translation>
 <translation id="8798099450830957504">Padrões</translation>
 <translation id="8800004011501252845">Mostrando destinos para</translation>
-<translation id="8813811964357448561">folha de papel</translation>
 <translation id="8859174528519900719">Frame: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8910146161325739742">Compartilhar sua tela</translation>
 <translation id="8915370057835397490">Carregando sugestão</translation>

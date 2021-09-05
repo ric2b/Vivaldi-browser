@@ -116,7 +116,7 @@ You can remove items from a list:
 ```
 a = [ "first", "second", "third", "first" ]
 b = a - [ "first" ]  # [ "second", "third" ]
-a -= [ "second" ]  # [ "first", "third", "fourth" ]
+a -= [ "second" ]  # [ "first", "third", "first" ]
 ```
 
 The - operator on a list searches for matches and removes all matching

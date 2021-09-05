@@ -20,7 +20,9 @@
 #include "base/test/bind_test_util.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/enterprise/connectors/common.h"
+#include "chrome/browser/enterprise/connectors/connectors_manager.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/binary_upload_service.h"
+#include "chrome/browser/safe_browsing/cloud_content_scanning/deep_scanning_test_utils.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/deep_scanning_utils.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/fake_deep_scanning_dialog_delegate.h"
 #include "chrome/browser/safe_browsing/dm_token_utils.h"
@@ -28,10 +30,12 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
+#include "components/enterprise/common/proto/connectors.pb.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "components/safe_browsing/core/features.h"
+#include "components/safe_browsing/core/proto/webprotect.pb.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_utils.h"
@@ -64,55 +68,100 @@ class ScopedSetDMToken {
 
 class BaseTest : public testing::Test {
  public:
-  BaseTest() : profile_manager_(TestingBrowserProcess::GetGlobal()) {
+  explicit BaseTest(bool use_legacy_policies)
+      : profile_manager_(TestingBrowserProcess::GetGlobal()),
+        use_legacy_policies_(use_legacy_policies) {
     EXPECT_TRUE(profile_manager_.SetUp());
     profile_ = profile_manager_.CreateTestingProfile("test-user");
     DeepScanningDialogDelegate::DisableUIForTesting();
   }
 
-  void EnableFeatures(const std::vector<base::Feature>& features) {
+  void EnableFeatures() {
     scoped_feature_list_.Reset();
-    scoped_feature_list_.InitWithFeatures(features, {});
+    if (use_legacy_policies_) {
+      scoped_feature_list_.InitWithFeatures(
+          {kContentComplianceEnabled, kMalwareScanEnabled}, {});
+    } else {
+      scoped_feature_list_.InitWithFeatures(
+          {kContentComplianceEnabled, kMalwareScanEnabled,
+           enterprise_connectors::kEnterpriseConnectorsEnabled},
+          {});
+    }
   }
 
-  void DisableFeatures(const std::vector<base::Feature>& features) {
+  void DisableFeatures() {
     scoped_feature_list_.Reset();
-    scoped_feature_list_.InitWithFeatures({}, features);
+    scoped_feature_list_.InitWithFeatures(
+        {}, {kContentComplianceEnabled, kMalwareScanEnabled,
+             enterprise_connectors::kEnterpriseConnectorsEnabled});
   }
 
   void SetDlpPolicy(CheckContentComplianceValues state) {
-    TestingBrowserProcess::GetGlobal()->local_state()->SetInteger(
-        prefs::kCheckContentCompliance, state);
+    if (use_legacy_policies_) {
+      TestingBrowserProcess::GetGlobal()->local_state()->SetInteger(
+          prefs::kCheckContentCompliance, state);
+    } else {
+      SetDlpPolicyForConnectors(state);
+    }
   }
 
   void SetWaitPolicy(DelayDeliveryUntilVerdictValues state) {
-    TestingBrowserProcess::GetGlobal()->local_state()->SetInteger(
-        prefs::kDelayDeliveryUntilVerdict, state);
+    if (use_legacy_policies_) {
+      TestingBrowserProcess::GetGlobal()->local_state()->SetInteger(
+          prefs::kDelayDeliveryUntilVerdict, state);
+    } else {
+      SetDelayDeliveryUntilVerdictPolicyForConnectors(state);
+    }
   }
 
   void SetAllowPasswordPolicy(AllowPasswordProtectedFilesValues state) {
-    TestingBrowserProcess::GetGlobal()->local_state()->SetInteger(
-        prefs::kAllowPasswordProtectedFiles, state);
+    if (use_legacy_policies_) {
+      TestingBrowserProcess::GetGlobal()->local_state()->SetInteger(
+          prefs::kAllowPasswordProtectedFiles, state);
+    } else {
+      SetAllowPasswordProtectedFilesPolicyForConnectors(state);
+    }
   }
 
   void SetMalwarePolicy(SendFilesForMalwareCheckValues state) {
-    profile_->GetPrefs()->SetInteger(
-        prefs::kSafeBrowsingSendFilesForMalwareCheck, state);
+    if (use_legacy_policies_) {
+      profile_->GetPrefs()->SetInteger(
+          prefs::kSafeBrowsingSendFilesForMalwareCheck, state);
+    } else {
+      SetMalwarePolicyForConnectors(state);
+    }
   }
 
   void SetBlockLargeFilePolicy(BlockLargeFileTransferValues state) {
-    TestingBrowserProcess::GetGlobal()->local_state()->SetInteger(
-        prefs::kBlockLargeFileTransfer, state);
+    if (use_legacy_policies_) {
+      TestingBrowserProcess::GetGlobal()->local_state()->SetInteger(
+          prefs::kBlockLargeFileTransfer, state);
+    } else {
+      SetBlockLargeFileTransferPolicyForConnectors(state);
+    }
+  }
+
+  void SetUnsupportedFileTypePolicy(BlockUnsupportedFiletypesValues state) {
+    if (use_legacy_policies_) {
+      TestingBrowserProcess::GetGlobal()->local_state()->SetInteger(
+          prefs::kBlockUnsupportedFiletypes, state);
+    } else {
+      SetBlockUnsupportedFileTypesPolicyForConnectors(state);
+    }
+  }
+
+  void AddUrlToList(const char* pref_name, const std::string& url) {
+    if (use_legacy_policies_) {
+      ListPrefUpdate(TestingBrowserProcess::GetGlobal()->local_state(),
+                     pref_name)
+          ->Append(url);
+    } else {
+      AddUrlToListForConnectors(pref_name, url);
+    }
   }
 
   void AddUrlToList(const char* pref_name, const GURL& url) {
-    ListPrefUpdate(TestingBrowserProcess::GetGlobal()->local_state(), pref_name)
-        ->Append(url.host());
-  }
-
-  void AddUrlToList(const char* pref_name, const char* url) {
-    ListPrefUpdate(TestingBrowserProcess::GetGlobal()->local_state(), pref_name)
-        ->Append(url);
+    AddUrlToList(pref_name, url.host());
   }
 
   void ScanUpload(content::WebContents* web_contents,
@@ -139,28 +188,100 @@ class BaseTest : public testing::Test {
   }
 
   void SetUp() override {
+    enterprise_connectors::ConnectorsManager::GetInstance()->SetUpForTesting();
+
     // Always set this so DeepScanningDialogDelegate::ShowForWebContents waits
     // for the verdict before running its callback.
     SetWaitPolicy(DELAY_UPLOADS);
   }
 
+  void TearDown() override {
+    enterprise_connectors::ConnectorsManager::GetInstance()
+        ->TearDownForTesting();
+  }
+
   Profile* profile() { return profile_; }
 
- private:
+  content::WebContents* contents() {
+    if (!web_contents_) {
+      content::WebContents::CreateParams params(profile());
+      web_contents_ = content::WebContents::Create(params);
+    }
+    return web_contents_.get();
+  }
+
+  void RunUntilDone() { run_loop_.Run(); }
+
+ protected:
   content::BrowserTaskEnvironment task_environment_;
   base::test::ScopedFeatureList scoped_feature_list_;
   TestingPrefServiceSimple pref_service_;
   TestingProfileManager profile_manager_;
   TestingProfile* profile_;
   base::ScopedTempDir temp_dir_;
+  bool use_legacy_policies_;
+  std::unique_ptr<content::WebContents> web_contents_;
+  base::RunLoop run_loop_;
 };
+
+enterprise_connectors::ContentAnalysisResponse::Result
+DlpVerdictToContentAnalysisResult(const DlpDeepScanningVerdict& dlp_verdict) {
+  enterprise_connectors::ContentAnalysisResponse::Result result;
+  result.set_tag("dlp");
+  switch (dlp_verdict.status()) {
+    case DlpDeepScanningVerdict::STATUS_UNKNOWN:
+      result.set_status(enterprise_connectors::ContentAnalysisResponse::Result::
+                            STATUS_UNKNOWN);
+      break;
+    case DlpDeepScanningVerdict::FAILURE:
+      result.set_status(
+          enterprise_connectors::ContentAnalysisResponse::Result::FAILURE);
+      break;
+    case DlpDeepScanningVerdict::SUCCESS:
+      result.set_status(
+          enterprise_connectors::ContentAnalysisResponse::Result::SUCCESS);
+  }
+  for (const auto& dlp_rule : dlp_verdict.triggered_rules()) {
+    auto* rule = result.add_triggered_rules();
+    rule->set_rule_name(dlp_rule.rule_name());
+    rule->set_rule_id(base::NumberToString(dlp_rule.rule_id()));
+    switch (dlp_rule.action()) {
+      case DlpDeepScanningVerdict::TriggeredRule::ACTION_UNKNOWN:
+        rule->set_action(enterprise_connectors::ContentAnalysisResponse::
+                             Result::TriggeredRule::ACTION_UNSPECIFIED);
+        break;
+      case DlpDeepScanningVerdict::TriggeredRule::REPORT_ONLY:
+        rule->set_action(enterprise_connectors::ContentAnalysisResponse::
+                             Result::TriggeredRule::REPORT_ONLY);
+        break;
+      case DlpDeepScanningVerdict::TriggeredRule::WARN:
+        rule->set_action(enterprise_connectors::ContentAnalysisResponse::
+                             Result::TriggeredRule::WARN);
+        break;
+      case DlpDeepScanningVerdict::TriggeredRule::BLOCK:
+        rule->set_action(enterprise_connectors::ContentAnalysisResponse::
+                             Result::TriggeredRule::BLOCK);
+        break;
+    }
+  }
+  return result;
+}
 
 }  // namespace
 
-using DeepScanningDialogDelegateIsEnabledTest = BaseTest;
+class DeepScanningDialogDelegateIsEnabledTest
+    : public BaseTest,
+      public testing::WithParamInterface<bool> {
+ public:
+  DeepScanningDialogDelegateIsEnabledTest() : BaseTest(GetParam()) {}
+};
 
-TEST_F(DeepScanningDialogDelegateIsEnabledTest, NoFeatureNoDMTokenNoPref) {
-  DisableFeatures({kContentComplianceEnabled, kMalwareScanEnabled});
+INSTANTIATE_TEST_SUITE_P(,
+                         DeepScanningDialogDelegateIsEnabledTest,
+                         testing::Bool());
+
+TEST_P(DeepScanningDialogDelegateIsEnabledTest, NoFeatureNoDMTokenNoPref) {
+  DisableFeatures();
   ScopedSetDMToken scoped_dm_token(
       policy::DMToken::CreateInvalidTokenForTesting());
 
@@ -172,8 +293,8 @@ TEST_F(DeepScanningDialogDelegateIsEnabledTest, NoFeatureNoDMTokenNoPref) {
   EXPECT_FALSE(data.do_malware_scan);
 }
 
-TEST_F(DeepScanningDialogDelegateIsEnabledTest, NoDMTokenNoPref) {
-  EnableFeatures({kContentComplianceEnabled, kMalwareScanEnabled});
+TEST_P(DeepScanningDialogDelegateIsEnabledTest, NoDMTokenNoPref) {
+  EnableFeatures();
   ScopedSetDMToken scoped_dm_token(
       policy::DMToken::CreateInvalidTokenForTesting());
 
@@ -185,8 +306,8 @@ TEST_F(DeepScanningDialogDelegateIsEnabledTest, NoDMTokenNoPref) {
   EXPECT_FALSE(data.do_malware_scan);
 }
 
-TEST_F(DeepScanningDialogDelegateIsEnabledTest, NoDMToken) {
-  EnableFeatures({kContentComplianceEnabled, kMalwareScanEnabled});
+TEST_P(DeepScanningDialogDelegateIsEnabledTest, NoDMToken) {
+  EnableFeatures();
   SetDlpPolicy(CHECK_UPLOADS_AND_DOWNLOADS);
   SetMalwarePolicy(SEND_UPLOADS_AND_DOWNLOADS);
   ScopedSetDMToken scoped_dm_token(
@@ -200,8 +321,8 @@ TEST_F(DeepScanningDialogDelegateIsEnabledTest, NoDMToken) {
   EXPECT_FALSE(data.do_malware_scan);
 }
 
-TEST_F(DeepScanningDialogDelegateIsEnabledTest, NoFeatureNoPref) {
-  DisableFeatures({kContentComplianceEnabled, kMalwareScanEnabled});
+TEST_P(DeepScanningDialogDelegateIsEnabledTest, NoFeatureNoPref) {
+  DisableFeatures();
   ScopedSetDMToken scoped_dm_token(
       policy::DMToken::CreateValidTokenForTesting(kDmToken));
 
@@ -213,8 +334,8 @@ TEST_F(DeepScanningDialogDelegateIsEnabledTest, NoFeatureNoPref) {
   EXPECT_FALSE(data.do_malware_scan);
 }
 
-TEST_F(DeepScanningDialogDelegateIsEnabledTest, NoFeatureNoDMToken) {
-  DisableFeatures({kContentComplianceEnabled, kMalwareScanEnabled});
+TEST_P(DeepScanningDialogDelegateIsEnabledTest, NoFeatureNoDMToken) {
+  DisableFeatures();
   SetDlpPolicy(CHECK_UPLOADS_AND_DOWNLOADS);
   SetMalwarePolicy(SEND_UPLOADS_AND_DOWNLOADS);
   ScopedSetDMToken scoped_dm_token(
@@ -228,8 +349,8 @@ TEST_F(DeepScanningDialogDelegateIsEnabledTest, NoFeatureNoDMToken) {
   EXPECT_FALSE(data.do_malware_scan);
 }
 
-TEST_F(DeepScanningDialogDelegateIsEnabledTest, NoFeature) {
-  DisableFeatures({kContentComplianceEnabled, kMalwareScanEnabled});
+TEST_P(DeepScanningDialogDelegateIsEnabledTest, NoFeature) {
+  DisableFeatures();
   ScopedSetDMToken scoped_dm_token(
       policy::DMToken::CreateValidTokenForTesting(kDmToken));
   SetDlpPolicy(CHECK_UPLOADS_AND_DOWNLOADS);
@@ -243,8 +364,8 @@ TEST_F(DeepScanningDialogDelegateIsEnabledTest, NoFeature) {
   EXPECT_FALSE(data.do_malware_scan);
 }
 
-TEST_F(DeepScanningDialogDelegateIsEnabledTest, DlpNoPref) {
-  EnableFeatures({kContentComplianceEnabled, kMalwareScanEnabled});
+TEST_P(DeepScanningDialogDelegateIsEnabledTest, DlpNoPref) {
+  EnableFeatures();
   ScopedSetDMToken scoped_dm_token(
       policy::DMToken::CreateValidTokenForTesting(kDmToken));
 
@@ -256,8 +377,8 @@ TEST_F(DeepScanningDialogDelegateIsEnabledTest, DlpNoPref) {
   EXPECT_FALSE(data.do_malware_scan);
 }
 
-TEST_F(DeepScanningDialogDelegateIsEnabledTest, DlpNoPref2) {
-  EnableFeatures({kContentComplianceEnabled, kMalwareScanEnabled});
+TEST_P(DeepScanningDialogDelegateIsEnabledTest, DlpNoPref2) {
+  EnableFeatures();
   ScopedSetDMToken scoped_dm_token(
       policy::DMToken::CreateValidTokenForTesting(kDmToken));
   SetDlpPolicy(CHECK_NONE);
@@ -270,8 +391,8 @@ TEST_F(DeepScanningDialogDelegateIsEnabledTest, DlpNoPref2) {
   EXPECT_FALSE(data.do_malware_scan);
 }
 
-TEST_F(DeepScanningDialogDelegateIsEnabledTest, DlpNoPref3) {
-  EnableFeatures({kContentComplianceEnabled, kMalwareScanEnabled});
+TEST_P(DeepScanningDialogDelegateIsEnabledTest, DlpNoPref3) {
+  EnableFeatures();
   ScopedSetDMToken scoped_dm_token(
       policy::DMToken::CreateValidTokenForTesting(kDmToken));
   SetDlpPolicy(CHECK_DOWNLOADS);
@@ -284,8 +405,8 @@ TEST_F(DeepScanningDialogDelegateIsEnabledTest, DlpNoPref3) {
   EXPECT_FALSE(data.do_malware_scan);
 }
 
-TEST_F(DeepScanningDialogDelegateIsEnabledTest, DlpEnabled) {
-  EnableFeatures({kContentComplianceEnabled, kMalwareScanEnabled});
+TEST_P(DeepScanningDialogDelegateIsEnabledTest, DlpEnabled) {
+  EnableFeatures();
   ScopedSetDMToken scoped_dm_token(
       policy::DMToken::CreateValidTokenForTesting(kDmToken));
   SetDlpPolicy(CHECK_UPLOADS);
@@ -298,8 +419,8 @@ TEST_F(DeepScanningDialogDelegateIsEnabledTest, DlpEnabled) {
   EXPECT_FALSE(data.do_malware_scan);
 }
 
-TEST_F(DeepScanningDialogDelegateIsEnabledTest, DlpEnabled2) {
-  EnableFeatures({kContentComplianceEnabled, kMalwareScanEnabled});
+TEST_P(DeepScanningDialogDelegateIsEnabledTest, DlpEnabled2) {
+  EnableFeatures();
   ScopedSetDMToken scoped_dm_token(
       policy::DMToken::CreateValidTokenForTesting(kDmToken));
   SetDlpPolicy(CHECK_UPLOADS_AND_DOWNLOADS);
@@ -312,8 +433,8 @@ TEST_F(DeepScanningDialogDelegateIsEnabledTest, DlpEnabled2) {
   EXPECT_FALSE(data.do_malware_scan);
 }
 
-TEST_F(DeepScanningDialogDelegateIsEnabledTest, DlpEnabledWithUrl) {
-  EnableFeatures({kContentComplianceEnabled, kMalwareScanEnabled});
+TEST_P(DeepScanningDialogDelegateIsEnabledTest, DlpEnabledWithUrl) {
+  EnableFeatures();
   ScopedSetDMToken scoped_dm_token(
       policy::DMToken::CreateValidTokenForTesting(kDmToken));
   SetDlpPolicy(CHECK_UPLOADS_AND_DOWNLOADS);
@@ -328,9 +449,9 @@ TEST_F(DeepScanningDialogDelegateIsEnabledTest, DlpEnabledWithUrl) {
   EXPECT_EQ(kTestUrl, data.url);
 }
 
-TEST_F(DeepScanningDialogDelegateIsEnabledTest, DlpDisabledByList) {
+TEST_P(DeepScanningDialogDelegateIsEnabledTest, DlpDisabledByList) {
   GURL url(kTestUrl);
-  EnableFeatures({kContentComplianceEnabled, kMalwareScanEnabled});
+  EnableFeatures();
   ScopedSetDMToken scoped_dm_token(
       policy::DMToken::CreateValidTokenForTesting(kDmToken));
   SetDlpPolicy(CHECK_UPLOADS);
@@ -344,8 +465,8 @@ TEST_F(DeepScanningDialogDelegateIsEnabledTest, DlpDisabledByList) {
   EXPECT_FALSE(data.do_malware_scan);
 }
 
-TEST_F(DeepScanningDialogDelegateIsEnabledTest, DlpDisabledByListWithPatterns) {
-  EnableFeatures({kContentComplianceEnabled, kMalwareScanEnabled});
+TEST_P(DeepScanningDialogDelegateIsEnabledTest, DlpDisabledByListWithPatterns) {
+  EnableFeatures();
   ScopedSetDMToken scoped_dm_token(
       policy::DMToken::CreateValidTokenForTesting(kDmToken));
   SetDlpPolicy(CHECK_UPLOADS);
@@ -445,8 +566,8 @@ TEST_F(DeepScanningDialogDelegateIsEnabledTest, DlpDisabledByListWithPatterns) {
   EXPECT_FALSE(data.do_malware_scan);
 }
 
-TEST_F(DeepScanningDialogDelegateIsEnabledTest, MalwareNoPref) {
-  EnableFeatures({kContentComplianceEnabled, kMalwareScanEnabled});
+TEST_P(DeepScanningDialogDelegateIsEnabledTest, MalwareNoPref) {
+  EnableFeatures();
   ScopedSetDMToken scoped_dm_token(
       policy::DMToken::CreateValidTokenForTesting(kDmToken));
 
@@ -458,8 +579,8 @@ TEST_F(DeepScanningDialogDelegateIsEnabledTest, MalwareNoPref) {
   EXPECT_FALSE(data.do_malware_scan);
 }
 
-TEST_F(DeepScanningDialogDelegateIsEnabledTest, MalwareNoPref2) {
-  EnableFeatures({kContentComplianceEnabled, kMalwareScanEnabled});
+TEST_P(DeepScanningDialogDelegateIsEnabledTest, MalwareNoPref2) {
+  EnableFeatures();
   ScopedSetDMToken scoped_dm_token(
       policy::DMToken::CreateValidTokenForTesting(kDmToken));
   SetMalwarePolicy(DO_NOT_SCAN);
@@ -472,8 +593,8 @@ TEST_F(DeepScanningDialogDelegateIsEnabledTest, MalwareNoPref2) {
   EXPECT_FALSE(data.do_malware_scan);
 }
 
-TEST_F(DeepScanningDialogDelegateIsEnabledTest, MalwareNoPref4) {
-  EnableFeatures({kContentComplianceEnabled, kMalwareScanEnabled});
+TEST_P(DeepScanningDialogDelegateIsEnabledTest, MalwareNoPref4) {
+  EnableFeatures();
   ScopedSetDMToken scoped_dm_token(
       policy::DMToken::CreateValidTokenForTesting(kDmToken));
   SetMalwarePolicy(SEND_DOWNLOADS);
@@ -486,8 +607,8 @@ TEST_F(DeepScanningDialogDelegateIsEnabledTest, MalwareNoPref4) {
   EXPECT_FALSE(data.do_malware_scan);
 }
 
-TEST_F(DeepScanningDialogDelegateIsEnabledTest, MalwareNoList) {
-  EnableFeatures({kContentComplianceEnabled, kMalwareScanEnabled});
+TEST_P(DeepScanningDialogDelegateIsEnabledTest, MalwareNoList) {
+  EnableFeatures();
   ScopedSetDMToken scoped_dm_token(
       policy::DMToken::CreateValidTokenForTesting(kDmToken));
   SetMalwarePolicy(SEND_UPLOADS);
@@ -500,8 +621,8 @@ TEST_F(DeepScanningDialogDelegateIsEnabledTest, MalwareNoList) {
   EXPECT_FALSE(data.do_malware_scan);
 }
 
-TEST_F(DeepScanningDialogDelegateIsEnabledTest, MalwareNoList2) {
-  EnableFeatures({kContentComplianceEnabled, kMalwareScanEnabled});
+TEST_P(DeepScanningDialogDelegateIsEnabledTest, MalwareNoList2) {
+  EnableFeatures();
   ScopedSetDMToken scoped_dm_token(
       policy::DMToken::CreateValidTokenForTesting(kDmToken));
   SetMalwarePolicy(SEND_UPLOADS_AND_DOWNLOADS);
@@ -514,9 +635,9 @@ TEST_F(DeepScanningDialogDelegateIsEnabledTest, MalwareNoList2) {
   EXPECT_FALSE(data.do_malware_scan);
 }
 
-TEST_F(DeepScanningDialogDelegateIsEnabledTest, MalwareEnabled) {
+TEST_P(DeepScanningDialogDelegateIsEnabledTest, MalwareEnabled) {
   GURL url(kTestUrl);
-  EnableFeatures({kContentComplianceEnabled, kMalwareScanEnabled});
+  EnableFeatures();
   ScopedSetDMToken scoped_dm_token(
       policy::DMToken::CreateValidTokenForTesting(kDmToken));
   SetMalwarePolicy(SEND_UPLOADS_AND_DOWNLOADS);
@@ -530,9 +651,9 @@ TEST_F(DeepScanningDialogDelegateIsEnabledTest, MalwareEnabled) {
   EXPECT_TRUE(data.do_malware_scan);
 }
 
-TEST_F(DeepScanningDialogDelegateIsEnabledTest, NoScanInIncognito) {
+TEST_P(DeepScanningDialogDelegateIsEnabledTest, NoScanInIncognito) {
   GURL url(kTestUrl);
-  EnableFeatures({kContentComplianceEnabled, kMalwareScanEnabled});
+  EnableFeatures();
   ScopedSetDMToken scoped_dm_token(
       policy::DMToken::CreateValidTokenForTesting(kDmToken));
   SetDlpPolicy(CHECK_UPLOADS_AND_DOWNLOADS);
@@ -546,12 +667,18 @@ TEST_F(DeepScanningDialogDelegateIsEnabledTest, NoScanInIncognito) {
 
   // The same URL should not trigger a scan in incognito.
   EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(
-      profile()->GetOffTheRecordProfile(), url, &data,
+      profile()->GetPrimaryOTRProfile(), url, &data,
       enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
+
+  // The same URL should not trigger a scan in non-primary OTR profiles
+  EXPECT_FALSE(DeepScanningDialogDelegate::IsEnabled(
+      profile()->GetOffTheRecordProfile(
+          Profile::OTRProfileID("Test::DeepScanning")),
+      url, &data, enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
 }
 
-TEST_F(DeepScanningDialogDelegateIsEnabledTest, MalwareEnabledWithPatterns) {
-  EnableFeatures({kContentComplianceEnabled, kMalwareScanEnabled});
+TEST_P(DeepScanningDialogDelegateIsEnabledTest, MalwareEnabledWithPatterns) {
+  EnableFeatures();
   ScopedSetDMToken scoped_dm_token(
       policy::DMToken::CreateValidTokenForTesting(kDmToken));
   SetMalwarePolicy(SEND_UPLOADS_AND_DOWNLOADS);
@@ -649,25 +776,61 @@ TEST_F(DeepScanningDialogDelegateIsEnabledTest, MalwareEnabledWithPatterns) {
   EXPECT_FALSE(data.do_malware_scan);
 }
 
-class DeepScanningDialogDelegateAuditOnlyTest : public BaseTest {
+class DeepScanningDialogDelegateAuditOnlyTest
+    : public BaseTest,
+      public testing::WithParamInterface<bool> {
+ public:
+  DeepScanningDialogDelegateAuditOnlyTest() : BaseTest(GetParam()) {}
+
  protected:
-  void RunUntilDone() { run_loop_.Run(); }
-
-  content::WebContents* contents() {
-    if (!web_contents_) {
-      content::WebContents::CreateParams params(profile());
-      web_contents_ = content::WebContents::Create(params);
-    }
-    return web_contents_.get();
-  }
-
   void SetDLPResponse(DlpDeepScanningVerdict verdict) {
     dlp_verdict_ = verdict;
   }
 
   void PathFailsDeepScan(base::FilePath path,
                          DeepScanningClientResponse response) {
-    failures_.insert({std::move(path), std::move(response)});
+    if (use_legacy_policies_) {
+      failures_.insert({std::move(path), std::move(response)});
+    } else {
+      enterprise_connectors::ContentAnalysisResponse connector_response;
+
+      if (response.has_token())
+        connector_response.set_request_token(response.token());
+
+      if (response.has_malware_scan_verdict()) {
+        auto* result = connector_response.add_results();
+        result->set_tag("malware");
+        switch (response.malware_scan_verdict().verdict()) {
+          case MalwareDeepScanningVerdict::CLEAN:
+          case MalwareDeepScanningVerdict::UWS:
+          case MalwareDeepScanningVerdict::MALWARE:
+            result->set_status(enterprise_connectors::ContentAnalysisResponse::
+                                   Result::SUCCESS);
+            break;
+          case MalwareDeepScanningVerdict::VERDICT_UNSPECIFIED:
+            result->set_status(enterprise_connectors::ContentAnalysisResponse::
+                                   Result::STATUS_UNKNOWN);
+            break;
+          case MalwareDeepScanningVerdict::SCAN_FAILURE:
+            result->set_status(enterprise_connectors::ContentAnalysisResponse::
+                                   Result::FAILURE);
+        }
+        if (response.malware_scan_verdict().verdict() !=
+            MalwareDeepScanningVerdict::CLEAN) {
+          result->add_triggered_rules()->set_action(
+              enterprise_connectors::ContentAnalysisResponse::Result::
+                  TriggeredRule::BLOCK);
+        }
+      }
+
+      if (response.has_dlp_scan_verdict()) {
+        *connector_response.add_results() =
+            DlpVerdictToContentAnalysisResult(response.dlp_scan_verdict());
+      }
+
+      connector_failures_.insert(
+          {std::move(path), std::move(connector_response)});
+    }
   }
 
   void SetPathIsEncrypted(base::FilePath path) {
@@ -689,23 +852,35 @@ class DeepScanningDialogDelegateAuditOnlyTest : public BaseTest {
       SetMalwarePolicy(DO_NOT_SCAN);
   }
 
- private:
   void SetUp() override {
     BaseTest::SetUp();
 
-    EnableFeatures({kContentComplianceEnabled, kMalwareScanEnabled});
+    EnableFeatures();
     SetDlpPolicy(CHECK_UPLOADS);
     SetMalwarePolicy(SEND_UPLOADS);
 
-    DeepScanningDialogDelegate::SetFactoryForTesting(base::BindRepeating(
-        &FakeDeepScanningDialogDelegate::Create, run_loop_.QuitClosure(),
-        base::BindRepeating(
-            &DeepScanningDialogDelegateAuditOnlyTest::StatusCallback,
-            base::Unretained(this)),
-        base::BindRepeating(
-            &DeepScanningDialogDelegateAuditOnlyTest::EncryptionStatusCallback,
-            base::Unretained(this)),
-        kDmToken));
+    if (use_legacy_policies_) {
+      DeepScanningDialogDelegate::SetFactoryForTesting(base::BindRepeating(
+          &FakeDeepScanningDialogDelegate::Create, run_loop_.QuitClosure(),
+          base::BindRepeating(
+              &DeepScanningDialogDelegateAuditOnlyTest::StatusCallback,
+              base::Unretained(this)),
+          base::BindRepeating(&DeepScanningDialogDelegateAuditOnlyTest::
+                                  EncryptionStatusCallback,
+                              base::Unretained(this)),
+          kDmToken));
+    } else {
+      DeepScanningDialogDelegate::SetFactoryForTesting(base::BindRepeating(
+          &FakeDeepScanningDialogDelegate::CreateForConnectors,
+          run_loop_.QuitClosure(),
+          base::BindRepeating(
+              &DeepScanningDialogDelegateAuditOnlyTest::ConnectorStatusCallback,
+              base::Unretained(this)),
+          base::BindRepeating(&DeepScanningDialogDelegateAuditOnlyTest::
+                                  EncryptionStatusCallback,
+                              base::Unretained(this)),
+          kDmToken));
+    }
   }
 
   DeepScanningClientResponse StatusCallback(const base::FilePath& path) {
@@ -723,12 +898,35 @@ class DeepScanningDialogDelegateAuditOnlyTest : public BaseTest {
     return response;
   }
 
+  enterprise_connectors::ContentAnalysisResponse ConnectorStatusCallback(
+      const base::FilePath& path) {
+    // The path succeeds if it is not in the |connector_failures_| maps.
+    auto it = connector_failures_.find(path);
+    enterprise_connectors::ContentAnalysisResponse response =
+        it != connector_failures_.end()
+            ? it->second
+            : FakeDeepScanningDialogDelegate::SuccessfulResponse([this]() {
+                std::set<std::string> tags;
+                if (include_dlp_ && !dlp_verdict_.has_value())
+                  tags.insert("dlp");
+                if (include_malware_)
+                  tags.insert("malware");
+                return tags;
+              }());
+
+    if (include_dlp_ && dlp_verdict_.has_value()) {
+      *response.add_results() =
+          DlpVerdictToContentAnalysisResult(dlp_verdict_.value());
+    }
+
+    return response;
+  }
+
   bool EncryptionStatusCallback(const base::FilePath& path) {
     return encrypted_.count(path) > 0;
   }
 
-  base::RunLoop run_loop_;
-  std::unique_ptr<content::WebContents> web_contents_;
+ private:
   ScopedSetDMToken scoped_dm_token_{
       policy::DMToken::CreateValidTokenForTesting(kDmToken)};
   bool include_dlp_ = true;
@@ -737,6 +935,8 @@ class DeepScanningDialogDelegateAuditOnlyTest : public BaseTest {
   // Paths in this map will be consider to have failed deep scan checks.
   // The actual failure response is given for each path.
   std::map<base::FilePath, DeepScanningClientResponse> failures_;
+  std::map<base::FilePath, enterprise_connectors::ContentAnalysisResponse>
+      connector_failures_;
 
   // Paths in this set will be considered to contain encryption and will
   // not be uploaded.
@@ -746,7 +946,11 @@ class DeepScanningDialogDelegateAuditOnlyTest : public BaseTest {
   base::Optional<DlpDeepScanningVerdict> dlp_verdict_ = base::nullopt;
 };
 
-TEST_F(DeepScanningDialogDelegateAuditOnlyTest, Empty) {
+INSTANTIATE_TEST_SUITE_P(,
+                         DeepScanningDialogDelegateAuditOnlyTest,
+                         testing::Bool());
+
+TEST_P(DeepScanningDialogDelegateAuditOnlyTest, Empty) {
   GURL url(kTestUrl);
   DeepScanningDialogDelegate::Data data;
   ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
@@ -771,7 +975,7 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest, Empty) {
   EXPECT_TRUE(called);
 }
 
-TEST_F(DeepScanningDialogDelegateAuditOnlyTest, StringData) {
+TEST_P(DeepScanningDialogDelegateAuditOnlyTest, StringData) {
   GURL url(kTestUrl);
   DeepScanningDialogDelegate::Data data;
   ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
@@ -797,7 +1001,7 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest, StringData) {
   EXPECT_TRUE(called);
 }
 
-TEST_F(DeepScanningDialogDelegateAuditOnlyTest, StringData2) {
+TEST_P(DeepScanningDialogDelegateAuditOnlyTest, StringData2) {
   GURL url(kTestUrl);
   DeepScanningDialogDelegate::Data data;
   ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
@@ -825,7 +1029,7 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest, StringData2) {
   EXPECT_TRUE(called);
 }
 
-TEST_F(DeepScanningDialogDelegateAuditOnlyTest,
+TEST_P(DeepScanningDialogDelegateAuditOnlyTest,
        FileDataPositiveMalwareAndDlpVerdicts) {
   GURL url(kTestUrl);
   DeepScanningDialogDelegate::Data data;
@@ -852,7 +1056,7 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest,
   EXPECT_TRUE(called);
 }
 
-TEST_F(DeepScanningDialogDelegateAuditOnlyTest,
+TEST_P(DeepScanningDialogDelegateAuditOnlyTest,
        FileDataPositiveMalwareAndDlpVerdicts2) {
   GURL url(kTestUrl);
   DeepScanningDialogDelegate::Data data;
@@ -881,7 +1085,7 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest,
   EXPECT_TRUE(called);
 }
 
-TEST_F(DeepScanningDialogDelegateAuditOnlyTest,
+TEST_P(DeepScanningDialogDelegateAuditOnlyTest,
        FileDataPositiveMalwareVerdict) {
   SetScanPolicies(/*dlp=*/false, /*malware=*/true);
   AddUrlToList(prefs::kURLsToCheckForMalwareOfUploadedContent, "*");
@@ -912,7 +1116,7 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest,
   EXPECT_TRUE(called);
 }
 
-TEST_F(DeepScanningDialogDelegateAuditOnlyTest, FileIsEncrypted) {
+TEST_P(DeepScanningDialogDelegateAuditOnlyTest, FileIsEncrypted) {
   content::InProcessUtilityThreadHelper in_process_utility_thread_helper;
 
   SetScanPolicies(/*dlp=*/true, /*malware=*/true);
@@ -948,7 +1152,7 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest, FileIsEncrypted) {
   EXPECT_TRUE(called);
 }
 
-TEST_F(DeepScanningDialogDelegateAuditOnlyTest, FileIsEncrypted_PolicyAllows) {
+TEST_P(DeepScanningDialogDelegateAuditOnlyTest, FileIsEncrypted_PolicyAllows) {
   content::InProcessUtilityThreadHelper in_process_utility_thread_helper;
 
   SetScanPolicies(/*dlp=*/true, /*malware=*/true);
@@ -984,7 +1188,7 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest, FileIsEncrypted_PolicyAllows) {
   EXPECT_TRUE(called);
 }
 
-TEST_F(DeepScanningDialogDelegateAuditOnlyTest,
+TEST_P(DeepScanningDialogDelegateAuditOnlyTest,
        FileDataNegativeMalwareVerdict) {
   SetScanPolicies(/*dlp=*/false, /*malware=*/true);
   AddUrlToList(prefs::kURLsToCheckForMalwareOfUploadedContent, "*");
@@ -1018,7 +1222,7 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest,
   EXPECT_TRUE(called);
 }
 
-TEST_F(DeepScanningDialogDelegateAuditOnlyTest, FileDataPositiveDlpVerdict) {
+TEST_P(DeepScanningDialogDelegateAuditOnlyTest, FileDataPositiveDlpVerdict) {
   SetScanPolicies(/*dlp=*/true, /*malware=*/false);
   GURL url(kTestUrl);
   DeepScanningDialogDelegate::Data data;
@@ -1047,7 +1251,7 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest, FileDataPositiveDlpVerdict) {
   EXPECT_TRUE(called);
 }
 
-TEST_F(DeepScanningDialogDelegateAuditOnlyTest, FileDataNegativeDlpVerdict) {
+TEST_P(DeepScanningDialogDelegateAuditOnlyTest, FileDataNegativeDlpVerdict) {
   SetScanPolicies(/*dlp=*/true, /*malware=*/false);
   AddUrlToList(prefs::kURLsToCheckForMalwareOfUploadedContent, "*");
   GURL url(kTestUrl);
@@ -1082,7 +1286,7 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest, FileDataNegativeDlpVerdict) {
   EXPECT_TRUE(called);
 }
 
-TEST_F(DeepScanningDialogDelegateAuditOnlyTest,
+TEST_P(DeepScanningDialogDelegateAuditOnlyTest,
        FileDataNegativeMalwareAndDlpVerdicts) {
   SetScanPolicies(/*dlp=*/true, /*malware=*/true);
   AddUrlToList(prefs::kURLsToCheckForMalwareOfUploadedContent, "*");
@@ -1119,7 +1323,7 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest,
   EXPECT_TRUE(called);
 }
 
-TEST_F(DeepScanningDialogDelegateAuditOnlyTest, StringFileData) {
+TEST_P(DeepScanningDialogDelegateAuditOnlyTest, StringFileData) {
   GURL url(kTestUrl);
   DeepScanningDialogDelegate::Data data;
   ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
@@ -1149,7 +1353,7 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest, StringFileData) {
   EXPECT_TRUE(called);
 }
 
-TEST_F(DeepScanningDialogDelegateAuditOnlyTest, StringFileDataNoDLP) {
+TEST_P(DeepScanningDialogDelegateAuditOnlyTest, StringFileDataNoDLP) {
   // Enable malware scan so deep scanning still occurs.
   SetScanPolicies(/*dlp=*/false, /*malware=*/true);
   AddUrlToList(prefs::kURLsToCheckForMalwareOfUploadedContent, "*");
@@ -1184,7 +1388,7 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest, StringFileDataNoDLP) {
   EXPECT_TRUE(called);
 }
 
-TEST_F(DeepScanningDialogDelegateAuditOnlyTest, StringFileDataFailedDLP) {
+TEST_P(DeepScanningDialogDelegateAuditOnlyTest, StringFileDataFailedDLP) {
   SetScanPolicies(/*dlp=*/true, /*malware=*/false);
   GURL url(kTestUrl);
   DeepScanningDialogDelegate::Data data;
@@ -1218,7 +1422,7 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest, StringFileDataFailedDLP) {
   EXPECT_TRUE(called);
 }
 
-TEST_F(DeepScanningDialogDelegateAuditOnlyTest, StringFileDataPartialSuccess) {
+TEST_P(DeepScanningDialogDelegateAuditOnlyTest, StringFileDataPartialSuccess) {
   GURL url(kTestUrl);
   DeepScanningDialogDelegate::Data data;
   ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
@@ -1262,7 +1466,7 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest, StringFileDataPartialSuccess) {
                    EXPECT_TRUE(result.paths_results[0]);
                    EXPECT_FALSE(result.paths_results[1]);
                    EXPECT_FALSE(result.paths_results[2]);
-                   EXPECT_FALSE(result.paths_results[3]);
+                   EXPECT_TRUE(result.paths_results[3]);
                    EXPECT_FALSE(result.paths_results[4]);
                    *called = true;
                  },
@@ -1271,7 +1475,7 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest, StringFileDataPartialSuccess) {
   EXPECT_TRUE(called);
 }
 
-TEST_F(DeepScanningDialogDelegateAuditOnlyTest, NoDelay) {
+TEST_P(DeepScanningDialogDelegateAuditOnlyTest, NoDelay) {
   SetWaitPolicy(DELAY_NONE);
   AddUrlToList(prefs::kURLsToCheckForMalwareOfUploadedContent, "*");
   GURL url(kTestUrl);
@@ -1336,7 +1540,7 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest, NoDelay) {
   EXPECT_TRUE(called);
 }
 
-TEST_F(DeepScanningDialogDelegateAuditOnlyTest, EmptyWait) {
+TEST_P(DeepScanningDialogDelegateAuditOnlyTest, EmptyWait) {
   GURL url(kTestUrl);
   DeepScanningDialogDelegate::Data data;
   ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
@@ -1359,7 +1563,7 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest, EmptyWait) {
   EXPECT_TRUE(called);
 }
 
-TEST_F(DeepScanningDialogDelegateAuditOnlyTest, SupportedTypes) {
+TEST_P(DeepScanningDialogDelegateAuditOnlyTest, SupportedTypes) {
   content::InProcessUtilityThreadHelper in_process_utility_thread_helper;
 
   GURL url(kTestUrl);
@@ -1400,7 +1604,7 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest, SupportedTypes) {
   EXPECT_TRUE(called);
 }
 
-TEST_F(DeepScanningDialogDelegateAuditOnlyTest, UnsupportedTypesDefaultPolicy) {
+TEST_P(DeepScanningDialogDelegateAuditOnlyTest, UnsupportedTypesDefaultPolicy) {
   GURL url(kTestUrl);
   DeepScanningDialogDelegate::Data data;
   ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
@@ -1438,9 +1642,9 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest, UnsupportedTypesDefaultPolicy) {
   EXPECT_TRUE(called);
 }
 
-TEST_F(DeepScanningDialogDelegateAuditOnlyTest, UnsupportedTypesBlockPolicy) {
-  TestingBrowserProcess::GetGlobal()->local_state()->SetInteger(
-      prefs::kBlockUnsupportedFiletypes, BLOCK_UNSUPPORTED_FILETYPES_UPLOADS);
+TEST_P(DeepScanningDialogDelegateAuditOnlyTest, UnsupportedTypesBlockPolicy) {
+  SetUnsupportedFileTypePolicy(
+      BLOCK_UNSUPPORTED_FILETYPES_UPLOADS_AND_DOWNLOADS);
   GURL url(kTestUrl);
   DeepScanningDialogDelegate::Data data;
   EXPECT_TRUE(DeepScanningDialogDelegate::IsEnabled(
@@ -1478,7 +1682,7 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest, UnsupportedTypesBlockPolicy) {
   EXPECT_TRUE(called);
 }
 
-TEST_F(DeepScanningDialogDelegateAuditOnlyTest, SupportedAndUnsupportedTypes) {
+TEST_P(DeepScanningDialogDelegateAuditOnlyTest, SupportedAndUnsupportedTypes) {
   GURL url(kTestUrl);
   DeepScanningDialogDelegate::Data data;
   ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
@@ -1525,7 +1729,7 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest, SupportedAndUnsupportedTypes) {
   EXPECT_TRUE(called);
 }
 
-TEST_F(DeepScanningDialogDelegateAuditOnlyTest, UnsupportedTypeAndDLPFailure) {
+TEST_P(DeepScanningDialogDelegateAuditOnlyTest, UnsupportedTypeAndDLPFailure) {
   GURL url(kTestUrl);
   DeepScanningDialogDelegate::Data data;
   ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
@@ -1563,17 +1767,66 @@ TEST_F(DeepScanningDialogDelegateAuditOnlyTest, UnsupportedTypeAndDLPFailure) {
   EXPECT_TRUE(called);
 }
 
-// TODO(crbug/1041890): This test should not depend on
-// DeepScanningDialogDelegateAuditOnlyTest. Refactor this by moving common
-// functionalities to BaseTest or util classes/functions.
 class DeepScanningDialogDelegateResultHandlingTest
-    : public DeepScanningDialogDelegateAuditOnlyTest,
-      public testing::WithParamInterface<BinaryUploadService::Result> {};
+    : public BaseTest,
+      public testing::WithParamInterface<
+          std::tuple<BinaryUploadService::Result, bool>> {
+ public:
+  DeepScanningDialogDelegateResultHandlingTest()
+      : BaseTest(std::get<1>(GetParam())) {}
+
+  void SetUp() override {
+    BaseTest::SetUp();
+    EnableFeatures();
+    SetDlpPolicy(CHECK_UPLOADS);
+    SetMalwarePolicy(SEND_UPLOADS);
+
+    if (use_legacy_policies_) {
+      DeepScanningDialogDelegate::SetFactoryForTesting(base::BindRepeating(
+          &FakeDeepScanningDialogDelegate::Create, run_loop_.QuitClosure(),
+          base::BindRepeating(
+              &DeepScanningDialogDelegateResultHandlingTest::StatusCallback,
+              base::Unretained(this)),
+          /*encryption_callback=*/
+          base::BindRepeating([](const base::FilePath& path) { return false; }),
+          kDmToken));
+    } else {
+      DeepScanningDialogDelegate::SetFactoryForTesting(base::BindRepeating(
+          &FakeDeepScanningDialogDelegate::CreateForConnectors,
+          run_loop_.QuitClosure(),
+          base::BindRepeating(&DeepScanningDialogDelegateResultHandlingTest::
+                                  ConnectorStatusCallback,
+                              base::Unretained(this)),
+          /*encryption_callback=*/
+          base::BindRepeating([](const base::FilePath& path) { return false; }),
+          kDmToken));
+    }
+  }
+
+  BinaryUploadService::Result result() const { return std::get<0>(GetParam()); }
+
+  DeepScanningClientResponse StatusCallback(const base::FilePath& path) {
+    DeepScanningClientResponse response =
+        FakeDeepScanningDialogDelegate::SuccessfulResponse(
+            /*dlp*/ true, /*malware=*/true);
+    return response;
+  }
+
+  enterprise_connectors::ContentAnalysisResponse ConnectorStatusCallback(
+      const base::FilePath& path) {
+    return FakeDeepScanningDialogDelegate::SuccessfulResponse(
+        {"dlp", "malware"});
+  }
+
+ protected:
+  ScopedSetDMToken scoped_dm_token_{
+      policy::DMToken::CreateValidTokenForTesting(kDmToken)};
+};
 
 TEST_P(DeepScanningDialogDelegateResultHandlingTest, Test) {
   GURL url(kTestUrl);
   DeepScanningDialogDelegate::Data data;
-  FakeDeepScanningDialogDelegate::SetResponseResult(GetParam());
+  FakeDeepScanningDialogDelegate::SetResponseResult(result());
   ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
       profile(), url, &data,
       enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
@@ -1583,9 +1836,9 @@ TEST_P(DeepScanningDialogDelegateResultHandlingTest, Test) {
   bool called = false;
   ScanUpload(
       contents(), std::move(data),
-      base::BindOnce(
-          [](bool* called, const DeepScanningDialogDelegate::Data& data,
-             const DeepScanningDialogDelegate::Result& result) {
+      base::BindLambdaForTesting(
+          [this, &called](const DeepScanningDialogDelegate::Data& data,
+                          const DeepScanningDialogDelegate::Result& result) {
             EXPECT_EQ(0u, data.text.size());
             EXPECT_EQ(1u, data.paths.size());
             EXPECT_EQ(0u, result.text_results.size());
@@ -1593,30 +1846,51 @@ TEST_P(DeepScanningDialogDelegateResultHandlingTest, Test) {
 
             bool expected =
                 DeepScanningDialogDelegate::ResultShouldAllowDataUse(
-                    GetParam(), data.settings);
+                    this->result(), data.settings);
             EXPECT_EQ(expected, result.paths_results[0]);
-            *called = true;
-          },
-          &called));
+            called = true;
+          }));
   RunUntilDone();
   EXPECT_TRUE(called);
 }
 
 INSTANTIATE_TEST_SUITE_P(
-    Tests,
+    ,
     DeepScanningDialogDelegateResultHandlingTest,
-    testing::Values(BinaryUploadService::Result::UNKNOWN,
-                    BinaryUploadService::Result::SUCCESS,
-                    BinaryUploadService::Result::UPLOAD_FAILURE,
-                    BinaryUploadService::Result::TIMEOUT,
-                    BinaryUploadService::Result::FILE_TOO_LARGE,
-                    BinaryUploadService::Result::FAILED_TO_GET_TOKEN,
-                    BinaryUploadService::Result::UNAUTHORIZED,
-                    BinaryUploadService::Result::FILE_ENCRYPTED));
+    testing::Combine(
+        testing::Values(BinaryUploadService::Result::UNKNOWN,
+                        BinaryUploadService::Result::SUCCESS,
+                        BinaryUploadService::Result::UPLOAD_FAILURE,
+                        BinaryUploadService::Result::TIMEOUT,
+                        BinaryUploadService::Result::FILE_TOO_LARGE,
+                        BinaryUploadService::Result::FAILED_TO_GET_TOKEN,
+                        BinaryUploadService::Result::UNAUTHORIZED,
+                        BinaryUploadService::Result::FILE_ENCRYPTED),
+        testing::Bool()));
 
-class DeepScanningDialogDelegatePolicyResultsTest : public BaseTest {
+class DeepScanningDialogDelegatePolicyResultsTest
+    : public BaseTest,
+      public testing::WithParamInterface<bool> {
  public:
+  DeepScanningDialogDelegatePolicyResultsTest() : BaseTest(GetParam()) {}
+
+  void SetUp() override {
+    BaseTest::SetUp();
+    EnableFeatures();
+    if (!use_legacy_policies_) {
+      // This is required since Connector policies can't return settings if
+      // there are no URL patterns. Legacy policies don't need to account for
+      // this since DLP is implicitly "*" on uploads.
+      AddUrlsToCheckForMalwareOfUploadsForConnectors({"*"});
+    }
+  }
+
   enterprise_connectors::AnalysisSettings settings() {
+    // Clear the cache before getting settings so there's no race with the pref
+    // change and the cached values being updated.
+    enterprise_connectors::ConnectorsManager::GetInstance()
+        ->ClearCacheForTesting();
+
     base::Optional<enterprise_connectors::AnalysisSettings> settings =
         enterprise_connectors::ConnectorsManager::GetInstance()
             ->GetAnalysisSettings(
@@ -1627,7 +1901,11 @@ class DeepScanningDialogDelegatePolicyResultsTest : public BaseTest {
   }
 };
 
-TEST_F(DeepScanningDialogDelegatePolicyResultsTest, BlockLargeFile) {
+INSTANTIATE_TEST_SUITE_P(,
+                         DeepScanningDialogDelegatePolicyResultsTest,
+                         testing::Bool());
+
+TEST_P(DeepScanningDialogDelegatePolicyResultsTest, BlockLargeFile) {
   // The value returned by ResultShouldAllowDataUse for FILE_TOO_LARGE should
   // match the BlockLargeFilePolicy.
   SetBlockLargeFilePolicy(
@@ -1648,7 +1926,7 @@ TEST_F(DeepScanningDialogDelegatePolicyResultsTest, BlockLargeFile) {
       BinaryUploadService::Result::FILE_TOO_LARGE, settings()));
 }
 
-TEST_F(DeepScanningDialogDelegatePolicyResultsTest,
+TEST_P(DeepScanningDialogDelegatePolicyResultsTest,
        AllowPasswordProtectedFiles) {
   // The value returned by ResultShouldAllowDataUse for FILE_ENCRYPTED should
   // match the AllowPasswordProtectedFiles policy.

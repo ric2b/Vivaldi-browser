@@ -20,7 +20,16 @@ extern const char kHistogramName[];
 }
 
 using LookalikeTargetAllowlistChecker =
-    base::RepeatingCallback<bool(const GURL&)>;
+    base::RepeatingCallback<bool(const std::string&)>;
+
+// Used for |GetTargetEmbeddingType| return value. It shows if the target
+// embedding triggers on the input domain, and if it does, what type of warning
+// should be shown to the user.
+enum class TargetEmbeddingType {
+  kNone = 0,
+  kInterstitial = 1,
+  kSafetyTip = 2,
+};
 
 // Used for UKM. There is only a single LookalikeUrlMatchType per navigation.
 enum class LookalikeUrlMatchType {
@@ -33,10 +42,16 @@ enum class LookalikeUrlMatchType {
   kTargetEmbedding = 5,
   kSkeletonMatchTop500 = 6,
   kSkeletonMatchTop5k = 7,
+  kTargetEmbeddingForSafetyTips = 8,
+
+  // The domain name failed IDN spoof checks but didn't match a safe hostname.
+  // As a result, there is no URL to suggest to the user in the form of "Did
+  // you mean <url>?".
+  kFailedSpoofChecks = 9,
 
   // Append new items to the end of the list above; do not modify or replace
   // existing values. Comment out obsolete items.
-  kMaxValue = kSkeletonMatchTop5k,
+  kMaxValue = kFailedSpoofChecks,
 };
 
 // Used for UKM. There is only a single LookalikeUrlBlockingPageUserAction per
@@ -66,10 +81,12 @@ enum class NavigationSuggestionEvent {
   kMatchTargetEmbedding = 7,
   kMatchSkeletonTop500 = 8,
   kMatchSkeletonTop5k = 9,
+  kMatchTargetEmbeddingForSafetyTips = 10,
+  kFailedSpoofChecks = 11,
 
   // Append new items to the end of the list above; do not modify or
   // replace existing values. Comment out obsolete items.
-  kMaxValue = kMatchSkeletonTop5k,
+  kMaxValue = kFailedSpoofChecks,
 };
 
 struct DomainInfo {
@@ -99,9 +116,12 @@ struct DomainInfo {
   DomainInfo(const DomainInfo& other);
 };
 
-// Returns a DomainInfo instance computed from |url|. Will return empty fields
-// for non-unique hostnames (e.g. site.test), localhost or sites whose eTLD+1 is
-// empty.
+// Returns a DomainInfo instance computed from |hostname|. Will return empty
+// fields for non-unique hostnames (e.g. site.test), localhost or sites whose
+// eTLD+1 is empty.
+DomainInfo GetDomainInfo(const std::string& hostname);
+
+// Convenience function for returning GetDomainInfo(url.host()).
 DomainInfo GetDomainInfo(const GURL& url);
 
 // Returns true if the Levenshtein distance between |str1| and |str2| is at most
@@ -109,6 +129,13 @@ DomainInfo GetDomainInfo(const GURL& url);
 // distance computation.
 bool IsEditDistanceAtMostOne(const base::string16& str1,
                              const base::string16& str2);
+
+// Returns whether |navigated_domain| and |matched_domain| are likely to be edit
+// distance false positives, and thus the user should *not* be warned.
+//
+// Assumes |navigated_domain| and |matched_domain| are edit distance matches.
+bool IsLikelyEditDistanceFalsePositive(const DomainInfo& navigated_domain,
+                                       const DomainInfo& matched_domain);
 
 // Returns true if the domain given by |domain_info| is a top domain.
 bool IsTopDomain(const DomainInfo& domain_info);
@@ -141,14 +168,19 @@ void RecordUMAFromMatchType(LookalikeUrlMatchType match_type);
 // |safe_hostname| to the url of the embedded target domain.
 // At the moment we consider the following cases as Target Embedding:
 // example-google.com-site.com, example.google.com-site.com,
-// example-google-com-site.com, example.google.com.site.com,
+// example-google-info-site.com, example.google.com.site.com,
 // example-googlé.com-site.com where the embedded target is google.com. We
 // detect embeddings of top 500 domains and engaged domains. However, to reduce
 // false positives, we do not protect domains that are shorter than 7 characters
 // long (e.g. com.ru).
 // This function checks possible targets against |in_target_allowlist| to skip
 // permitted embeddings.
-bool IsTargetEmbeddingLookalike(
+// If no target embedding is found, the return value will be set to |kNonw|.
+// When the target is embedded with another TLD instead of its actual TLD, it
+// should trigger a Safety Tip when the embedded TLD is a ccTLD. In this
+// situation, return value will be |kSafetyTip|. All the other triggers will
+// result in a |kInterstitial| return value.
+TargetEmbeddingType GetTargetEmbeddingType(
     const std::string& hostname,
     const std::vector<DomainInfo>& engaged_sites,
     const LookalikeTargetAllowlistChecker& in_target_allowlist,

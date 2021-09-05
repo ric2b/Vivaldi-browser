@@ -39,10 +39,11 @@
 #include "services/tracing/public/cpp/perfetto/macros.h"
 #include "services/tracing/public/cpp/perfetto/perfetto_producer.h"
 #include "services/tracing/public/cpp/perfetto/perfetto_traced_process.h"
+#include "services/tracing/public/cpp/perfetto/system_producer.h"
 #include "services/tracing/public/cpp/perfetto/trace_time.h"
 #include "services/tracing/public/cpp/perfetto/traced_value_proto_writer.h"
 #include "services/tracing/public/cpp/perfetto/track_event_thread_local_event_sink.h"
-#include "services/tracing/public/cpp/trace_event_args_whitelist.h"
+#include "services/tracing/public/cpp/trace_event_args_allowlist.h"
 #include "services/tracing/public/cpp/trace_startup.h"
 #include "services/tracing/public/mojom/constants.mojom.h"
 #include "third_party/perfetto/include/perfetto/ext/tracing/core/shared_memory_arbiter.h"
@@ -176,11 +177,11 @@ TraceEventMetadataSource::GenerateTraceConfigMetadataDict() {
 
   auto metadata_dict = std::make_unique<base::DictionaryValue>();
   // If argument filtering is enabled, we need to check if the trace config is
-  // whitelisted before emitting it.
+  // allowlisted before emitting it.
   // TODO(eseckler): Figure out a way to solve this without calling directly
-  // into IsMetadataWhitelisted().
+  // into IsMetadataAllowlisted().
   if (!parsed_chrome_config_->IsArgumentFilterEnabled() ||
-      IsMetadataWhitelisted("trace-config")) {
+      IsMetadataAllowlisted("trace-config")) {
     metadata_dict->SetString("trace-config", chrome_config_);
   } else {
     metadata_dict->SetString("trace-config", "__stripped__");
@@ -458,11 +459,13 @@ TraceEventDataSource::~TraceEventDataSource() = default;
 
 void TraceEventDataSource::RegisterStartupHooks() {
   RegisterTracedValueProtoWriter();
+  base::trace_event::EnableTypedTraceEvents(
+      &TraceEventDataSource::OnAddTypedTraceEvent);
 }
 
 void TraceEventDataSource::RegisterWithTraceLog() {
   TraceLog::GetInstance()->SetAddTraceEventOverrides(
-      &TraceEventDataSource::OnAddTraceEvent,
+      &TraceEventDataSource::OnAddLegacyTraceEvent,
       &TraceEventDataSource::FlushCurrentThread,
       &TraceEventDataSource::OnUpdateDuration);
   base::AutoLock l(lock_);
@@ -498,8 +501,7 @@ void TraceEventDataSource::OnStopTracingDone() {
 }
 
 // static
-TrackEventThreadLocalEventSink* TraceEventDataSource::GetOrPrepareEventSink(
-    bool thread_will_flush) {
+TrackEventThreadLocalEventSink* TraceEventDataSource::GetOrPrepareEventSink() {
   // Avoid re-entrancy, which can happen during PostTasks (the taskqueue can
   // emit trace events). We discard the events in this case, as any PostTasking
   // to deal with these events later would break the event ordering that the
@@ -536,8 +538,7 @@ TrackEventThreadLocalEventSink* TraceEventDataSource::GetOrPrepareEventSink(
   }
 
   if (!thread_local_event_sink) {
-    thread_local_event_sink =
-        GetInstance()->CreateThreadLocalEventSink(thread_will_flush);
+    thread_local_event_sink = GetInstance()->CreateThreadLocalEventSink();
     ThreadLocalEventSinkSlot()->Set(thread_local_event_sink);
   }
 
@@ -869,7 +870,7 @@ void TraceEventDataSource::LogHistogram(base::HistogramBase* histogram) {
   base::Base64Encode(
       std::string(static_cast<const char*>(pickle.data()), pickle.size()),
       &buckets);
-  TRACE_EVENT_INSTANT2("benchmark", "UMAHistogramSamples",
+  TRACE_EVENT_INSTANT2("benchmark,uma", "UMAHistogramSamples",
                        TRACE_EVENT_SCOPE_PROCESS, "name",
                        histogram->histogram_name(), "buckets", buckets);
 }
@@ -929,7 +930,7 @@ TraceEventDataSource::CreateTraceWriterLocked() {
 }
 
 TrackEventThreadLocalEventSink*
-TraceEventDataSource::CreateThreadLocalEventSink(bool thread_will_flush) {
+TraceEventDataSource::CreateThreadLocalEventSink() {
   AutoLockWithDeferredTaskPosting lock(lock_);
   uint32_t session_id =
       session_flags_.load(std::memory_order_relaxed).session_id;
@@ -945,12 +946,27 @@ TraceEventDataSource::CreateThreadLocalEventSink(bool thread_will_flush) {
 }
 
 // static
-void TraceEventDataSource::OnAddTraceEvent(
+void TraceEventDataSource::OnAddLegacyTraceEvent(
     TraceEvent* trace_event,
     bool thread_will_flush,
     base::trace_event::TraceEventHandle* handle) {
-  OnAddTraceEvent(trace_event, thread_will_flush, handle, perfetto::Track(),
-                  [](perfetto::EventContext) {});
+  auto* thread_local_event_sink = GetOrPrepareEventSink();
+  if (thread_local_event_sink) {
+    AutoThreadLocalBoolean thread_is_in_trace_event(
+        GetThreadIsInTraceEventTLS());
+    thread_local_event_sink->AddLegacyTraceEvent(trace_event, handle);
+  }
+}
+
+// static
+base::trace_event::TrackEventHandle TraceEventDataSource::OnAddTypedTraceEvent(
+    base::trace_event::TraceEvent* trace_event) {
+  auto* thread_local_event_sink = GetOrPrepareEventSink();
+  if (thread_local_event_sink) {
+    // GetThreadIsInTraceEventTLS() is handled by the sink for typed events.
+    return thread_local_event_sink->AddTypedTraceEvent(trace_event);
+  }
+  return base::trace_event::TrackEventHandle();
 }
 
 // static
@@ -1108,6 +1124,23 @@ void TraceEventDataSource::EmitTrackDescriptor() {
   if (process_type != ChromeProcessDescriptor::PROCESS_UNSPECIFIED) {
     chrome_process->set_process_type(process_type);
   }
+
+#if defined(OS_ANDROID)
+  // Host app package name is only recorded if privacy filtering is disabled or
+  // this is a system trace.
+  if (!privacy_filtering_enabled_ ||
+      producer_ == PerfettoTracedProcess::Get()->system_producer()) {
+    // Host app package name is used to group information from different
+    // processes that "belong" to the same WebView app.
+    // TODO(b/161983088): only write this for WebView since this information is
+    // not useful in other cases.
+    if (process_type == ChromeProcessDescriptor::PROCESS_RENDERER ||
+        process_type == ChromeProcessDescriptor::PROCESS_BROWSER) {
+      chrome_process->set_host_app_package_name(
+          base::android::BuildInfo::GetInstance()->host_package_name());
+    }
+  }
+#endif  // defined(OS_ANDROID)
 
   // TODO(eseckler): Set other fields on |chrome_process|.
 

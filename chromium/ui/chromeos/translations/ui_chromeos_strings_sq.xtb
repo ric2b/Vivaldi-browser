@@ -8,6 +8,7 @@
 <translation id="1046068652463704410">Hyrje japonisht (për tastierë amerikane)</translation>
 <translation id="1047956942837015229">Po fshin <ph name="COUNT" /> artikuj...</translation>
 <translation id="1049926623896334335">Dokument Word</translation>
+<translation id="1060368002126861100">Për të hapur skedarët me <ph name="APP_NAME" />, në fillim zhvendosi në dosjen e skedarëve të Windows.</translation>
 <translation id="1062407476771304334">Zëvendëso</translation>
 <translation id="1065449928621190041">Tastiera për frëngjishte kanadeze</translation>
 <translation id="1119069657431255176">Arkivi i ngjeshur i mbledhjes së Bzip2</translation>
@@ -45,6 +46,8 @@
 <translation id="1395262318152388157">Rrëshqitësi i kërkimit</translation>
 <translation id="1399648040768741453">Tastierë telugu (fonetike)</translation>
 <translation id="1430915738399379752">Printo</translation>
+<translation id="1433600251059882049">Kjo dosje është ndarë me Linux dhe Windows</translation>
+<translation id="1435838927755162558">Ndaje dosjen me Parallels Desktop</translation>
 <translation id="1439494416798956626">Zhvendosur te <ph name="FOLDER_NAME" />.</translation>
 <translation id="1441841714100794440">Tastierë në vietnamisht (Telex)</translation>
 <translation id="1455548678241328678">Tastierë norvegjeze</translation>
@@ -79,6 +82,7 @@
 <translation id="1844692022597038441">Ky skedar nuk ofrohet jashtë linje.</translation>
 <translation id="184633654410729720">Tastierë në tajlandisht (Kedmanee)</translation>
 <translation id="1847880352285315359">U ruajt</translation>
+<translation id="1853795129690976061">Kjo dosje është ndarë me Linux</translation>
 <translation id="1864756863218646478">Ky skedar nuk mund të gjendej.</translation>
 <translation id="1921986354447415460">Tastiera turke me F</translation>
 <translation id="1924372192547904021"><ph name="DRIVE_NAME" /> u formatua</translation>
@@ -124,6 +128,7 @@
 <translation id="2384596874640104496">Tastierë Sinhala</translation>
 <translation id="240770291734945588"><ph name="SPACE_AVAILABLE" /> të disponueshme</translation>
 <translation id="2425665904502185219">Madhësia e përgjithshme e skedarit</translation>
+<translation id="2428749644083375155">Po kopjon <ph name="NUMBER_OF_ITEMS" /> artikuj në <ph name="FOLDER_NAME" /></translation>
 <translation id="2448312741937722512">Shkruaj</translation>
 <translation id="2453576648990281505">Skedari ekziston tashmë.</translation>
 <translation id="2464079411014186876">Akullore</translation>
@@ -178,6 +183,7 @@
 <translation id="303198083543495566">Gjeografia</translation>
 <translation id="3057861065630527966">Rezervo fotografitë dhe videot</translation>
 <translation id="3064388234319122767">Transliterim (zdravo → здраво)</translation>
+<translation id="3067790092342515856">Skedarët e Windows</translation>
 <translation id="3078461028045006476">Ndaje me <ph name="EXTENSION_NAME" /></translation>
 <translation id="3088034400796962477">Transliterim (salam ← سلام)</translation>
 <translation id="3116361045094675131">Tastierë britanike</translation>
@@ -216,6 +222,7 @@
 <translation id="3524311639100184459">Kujdes! Këta skedarë janë të përkohshëm dhe mund të fshihen automatikisht për të liruar hapësirën në disk.  <ph name="BEGIN_LINK" />Mëso më shumë<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">Dosje</translation>
 <translation id="3549797760399244642">Shko te drive.google.com...</translation>
+<translation id="3553048479571901246">Për të hapur skedarët me <ph name="APP_NAME" />, në fillim kopjoji në dosjen e skedarëve të Windows.</translation>
 <translation id="357479282490346887">Lituanisht</translation>
 <translation id="3583509704582854624">Hyrje alfanumerike (për tastierë japoneze)</translation>
 <translation id="3603385196401704894">Frëngjishte kanadeze</translation>
@@ -239,6 +246,7 @@
 <translation id="3798449238516105146">Versioni</translation>
 <translation id="3801082500826908679">Faroisht</translation>
 <translation id="3809272675881623365">Lepur</translation>
+<translation id="3810973564298564668">Menaxho</translation>
 <translation id="3811494700605067549">1 skedar i zgjedhur</translation>
 <translation id="3815016854028376614">Metoda e hyrjes zhuyin</translation>
 <translation id="3825863595139017598">Tastierë në mongolisht</translation>
@@ -259,8 +267,8 @@
 <translation id="3943857333388298514">Ngjite</translation>
 <translation id="3958548648197196644">Kivi</translation>
 <translation id="3966388904776714213">Lexuesi i audios</translation>
+<translation id="3984317463833596033">Jepi leje Parallels Desktop që të modifikojë skedarët në dosjen <ph name="FOLDER_NAME" /></translation>
 <translation id="4002066346123236978">Titulli</translation>
-<translation id="4065397611279318371">Për të hapur skedarët me aplikacionet <ph name="APP_NAME" />, në fillim zhvendosi ato te dosja <ph name="SHARED_DIRECTORY_LABEL" />.</translation>
 <translation id="4070370845051020638">Metoda e hyrjes kantoneze</translation>
 <translation id="4072248638558688893">Tastierë në tamilisht (fonetike)</translation>
 <translation id="4124935795427217608">Njëbrirësh</translation>
@@ -288,6 +296,7 @@
 <translation id="4470564870223067757">Paketa hangul 2</translation>
 <translation id="4477219268485577442">Tastierë fonetike bullgare</translation>
 <translation id="4479812471636796472">Tastierë amerikane dvorak</translation>
+<translation id="4481711095103932593">Kjo dosje është ndarë me Windows</translation>
 <translation id="4487088045714738411">Tastierë belge</translation>
 <translation id="4522570452068850558">Detajet</translation>
 <translation id="4552678318981539154">Bli më shumë hapësirë ruajtëse</translation>
@@ -297,6 +306,7 @@
 <translation id="4579744207439506346"><ph name="ENTRY_NAME" /> u shtua te zgjedhja.</translation>
 <translation id="4582497162516204941">Instalo me Linux (Beta)</translation>
 <translation id="4594543368593301662">Po shfaq rezultate për <ph name="SEARCH_TERM" />.</translation>
+<translation id="4603392156942865207">Po kopjon <ph name="FILE_NAME" /> në <ph name="FOLDER_NAME" /></translation>
 <translation id="4631887759990505102">Artisti</translation>
 <translation id="4656293982926141856">Ky kompjuter</translation>
 <translation id="4669606053856530811">Anëtarët e "<ph name="SOURCE_NAME" />" do të humbin qasjen në rast se këta artikuj nuk ndahen me ta.</translation>
@@ -330,11 +340,12 @@
 <translation id="4880520557730313061">Rregullo automatikisht</translation>
 <translation id="4881695831933465202">Hap</translation>
 <translation id="4886021172213954916">Tastierë në tamilisht (Makinë shkrimi)</translation>
-<translation id="4892969127351273348">Nuk mund të hapet me <ph name="APP_NAME" /></translation>
+<translation id="4900532980794411603">Ndaj me Parallels Desktop</translation>
 <translation id="4905417359854579806">Gati për të rezervuar <ph name="FILE_COUNT" /></translation>
 <translation id="4924638091161556692">Rregulluar</translation>
 <translation id="4935975195727477204">Lule Gazania</translation>
 <translation id="4943368462779413526">Futboll</translation>
+<translation id="4961158930123534723">1 dosje e ndarë me Parallels Desktop</translation>
 <translation id="4969785127455456148">Albumi</translation>
 <translation id="497244430928947428">Tastierë malajalame (fonetike)</translation>
 <translation id="4973523518332075481">Përdor një emër që është <ph name="MAX_LENGTH" /> karaktere i gjatë ose më pak</translation>
@@ -346,10 +357,12 @@
 <translation id="5010406651457630570">Kompjuterët</translation>
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5024856940085636730">Një operacion po zgjat më shumë nga sa pritej. Dëshiron që ta braktisësh?</translation>
+<translation id="5036159836254554629">Menaxho ndarjen e Parallels Desktop</translation>
 <translation id="5038625366300922036">Shiko më shumë...</translation>
 <translation id="5061708541166515394">Kontrasti</translation>
 <translation id="5068919226082848014">Pica</translation>
 <translation id="5081517858322016911"><ph name="TOTAL_FILE_SIZE" /> nga skedarët do të fshihen</translation>
+<translation id="508423945471810158">Po zhvendos <ph name="NUMBER_OF_ITEMS" /> artikuj në <ph name="FOLDER_NAME" /></translation>
 <translation id="509429900233858213">Ndodhi një gabim.</translation>
 <translation id="5098629044894065541">Hebraisht</translation>
 <translation id="5123433949759960244">Basketboll</translation>
@@ -452,6 +465,7 @@
 <translation id="6054173164583630569">Tastierë në frëngjisht</translation>
 <translation id="6074825444536523002">Formulari i Google</translation>
 <translation id="6096979789310008754">Teksti i kërkimit u fshi, duke treguar të gjithë skedarët dhe dosjet.</translation>
+<translation id="610101264611565198">Po zhvendos <ph name="FILE_NAME" /> në <ph name="FOLDER_NAME" /></translation>
 <translation id="6111770213269631447">Transliterimi (namaskar → নমস্কার)</translation>
 <translation id="6129953537138746214">Hapësirë</translation>
 <translation id="6133173853026656527">Po zhvendos <ph name="FILE_NAME" />...</translation>
@@ -492,6 +506,7 @@
 <translation id="656398493051028875">Po fshin "<ph name="FILENAME" />"...</translation>
 <translation id="6581162200855843583">Lidhja e "Diskut të Google"</translation>
 <translation id="6607272825297743757">Informacioni i skedarit</translation>
+<translation id="6609332149380188670"><ph name="NUMBER_OF_ITEMS" /> dosje të ndara me Parallels Desktop</translation>
 <translation id="6629841649550503054">Të gjitha u rezervuan te <ph name="BEGIN_LINK" />Disku i Google!<ph name="END_LINK" /></translation>
 <translation id="6643016212128521049">Pastro</translation>
 <translation id="6650726141019353908">Flutur rozë</translation>
@@ -535,6 +550,7 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">Instalimi dështoi.</translation>
 <translation id="7040138676081995583">Hape me...</translation>
+<translation id="7059566040011178088">Më pak se <ph name="REMAINING_TIME" /></translation>
 <translation id="7100897339030255923"><ph name="COUNT" /> artikuj u zgjodhën</translation>
 <translation id="7106346894903675391">Bli më shumë hapësirë ruajtëse...</translation>
 <translation id="7126604456862387217">'&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;' - &lt;em&gt;kërko në "Disk"&lt;/em&gt;</translation>
@@ -645,6 +661,7 @@
 <translation id="8193175696669055101">Modeli i pajisjes</translation>
 <translation id="8208580316430297579">Punim artistik</translation>
 <translation id="8223479393428528563">Për të ruajtur këta skedarë për përdorim jashtë linje, kthehu në linjë, kliko me të djathtën te skedarët dhe zgjidh opsionin <ph name="OFFLINE_CHECKBOX_NAME" />.</translation>
+<translation id="8231972167769262174">Rreth <ph name="REMAINING_TIME" /></translation>
 <translation id="8249296373107784235">Ndërprite</translation>
 <translation id="8261506727792406068">Fshi</translation>
 <translation id="8269755669432358899">Palos panelet e komenteve të skedarëve</translation>
@@ -671,6 +688,7 @@
 <translation id="8475647382427415476">"Disku i Google" nuk mund ta sinkronizonte "<ph name="FILENAME" />" për momentin. "Disku i Google" do të provojë përsëri më vonë.</translation>
 <translation id="8477649328507734757">Rrotullim</translation>
 <translation id="8487700953926739672">Mundësohet jashtë linje</translation>
+<translation id="8490342535582768689">Jepi leje Parallels Desktop që të modifikojë skedarët në "Diskun tënd të Google". Ndryshimet do të sinkronizohen në pajisjet e tua të tjera.</translation>
 <translation id="8521441079177373948">Britanike</translation>
 <translation id="8525306231823319788">Ekrani i plotë</translation>
 <translation id="8551494947769799688">Letonisht</translation>

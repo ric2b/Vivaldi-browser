@@ -47,27 +47,35 @@ namespace blink {
 class ContentSecurityPolicy;
 class Document;
 class DocumentLoader;
+class ExecutionContext;
 class HTMLImportsController;
 class LocalFrame;
 class PluginData;
-class Settings;
 class UseCounter;
-class WindowAgentFactory;
 
 class CORE_EXPORT DocumentInit final {
   STACK_ALLOCATED();
 
  public:
-  // Use either of the following methods to create a DocumentInit instance, and
-  // then add a chain of calls to the .WithFooBar() methods to add optional
+  // Create a DocumentInit instance, then add a chain of calls to add optional
   // parameters to it.
   //
   // Example:
   //
   //   DocumentInit init = DocumentInit::Create()
-  //       .WithDocumentLoader(loader)
-  //       .WithContextDocument(context_document)
+  //       .WithExecutionContext(context)
   //       .WithURL(url);
+  //
+  // Before creating a Document from this DocumentInit, the caller must invoke
+  // exactly one of:
+  // * ForTest() - for unit-test-only cases
+  // * WithDocumentLoader() - for navigations originating from DocumentLoader
+  // * WithExecutionContext() - for all other cases
+  //
+  // Invoking init.CreateDocument() will construct a Document of the appropriate
+  // subclass for the init's Type.
+  // However, when the document type is known, it is acceptable to invoke the
+  // constructor for Document (or the appropriate subclass) directly:
   //   Document* document = MakeGarbageCollected<Document>(init);
   static DocumentInit Create();
 
@@ -87,23 +95,25 @@ class CORE_EXPORT DocumentInit final {
     kUnspecified
   };
 
+  DocumentInit& ForTest();
+
+  // Actually constructs the Document based on the provided state.
+  Document* CreateDocument() const;
+
   DocumentInit& WithImportsController(HTMLImportsController*);
   HTMLImportsController* ImportsController() const {
     return imports_controller_;
   }
 
-  bool HasSecurityContext() const { return MasterDocumentLoader(); }
+  bool HasSecurityContext() const { return TreeRootDocumentLoader(); }
   bool IsSrcdocDocument() const;
   bool ShouldSetURL() const;
   network::mojom::blink::WebSandboxFlags GetSandboxFlags() const;
   mojom::blink::InsecureRequestPolicy GetInsecureRequestPolicy() const;
   const SecurityContext::InsecureNavigationsSet* InsecureNavigationsToUpgrade()
       const;
-  bool GrantLoadLocalResources() const { return grant_load_local_resources_; }
 
-  Settings* GetSettings() const;
-
-  DocumentInit& WithDocumentLoader(DocumentLoader*);
+  DocumentInit& WithDocumentLoader(DocumentLoader*, ContentSecurityPolicy*);
   LocalFrame* GetFrame() const;
   UseCounter* GetUseCounter() const;
 
@@ -123,15 +133,17 @@ class CORE_EXPORT DocumentInit final {
   bool IsForExternalHandler() const { return is_for_external_handler_; }
   Color GetPluginBackgroundColor() const { return plugin_background_color_; }
 
-  // Used by the DOMImplementation and DOMParser to pass their parent Document
-  // so that the created Document will return the Document when the
-  // ContextDocument() method is called.
-  DocumentInit& WithContextDocument(Document*);
-  Document* ContextDocument() const;
+  // Used when creating Documents not attached to a window.
+  DocumentInit& WithExecutionContext(ExecutionContext*);
+  ExecutionContext* GetExecutionContext() const;
 
   DocumentInit& WithURL(const KURL&);
   const KURL& Url() const { return url_; }
 
+  // Pre-calculates the origin. This is needed for DocumentLoader, which wants
+  // to inspect the origin multiple times and should receive the same object
+  // back each time.
+  void CalculateAndCacheDocumentOrigin();
   scoped_refptr<SecurityOrigin> GetDocumentOrigin() const;
 
   // Specifies the Document to inherit security configurations from.
@@ -155,7 +167,6 @@ class CORE_EXPORT DocumentInit final {
   network::mojom::IPAddressSpace GetIPAddressSpace() const;
 
   DocumentInit& WithSrcdocDocument(bool is_srcdoc_document);
-  DocumentInit& WithBlockedByCSP(bool blocked_by_csp);
   DocumentInit& WithGrantLoadLocalResources(bool grant_load_local_resources);
 
   DocumentInit& WithRegistrationContext(V0CustomElementRegistrationContext*);
@@ -175,8 +186,6 @@ class CORE_EXPORT DocumentInit final {
 
   DocumentInit& WithSandboxFlags(network::mojom::blink::WebSandboxFlags flags);
 
-  DocumentInit& WithContentSecurityPolicy(ContentSecurityPolicy* policy);
-  DocumentInit& WithContentSecurityPolicyFromContextDoc();
   ContentSecurityPolicy* GetContentSecurityPolicy() const;
 
   DocumentInit& WithFramePolicy(
@@ -199,8 +208,7 @@ class CORE_EXPORT DocumentInit final {
   DocumentInit& WithWebBundleClaimedUrl(const KURL& web_bundle_claimed_url);
   const KURL& GetWebBundleClaimedUrl() const { return web_bundle_claimed_url_; }
 
-  WindowAgentFactory* GetWindowAgentFactory() const;
-  Settings* GetSettingsForWindowAgentFactory() const;
+  bool ShouldReuseDOMWindow() const;
 
  private:
   DocumentInit() = default;
@@ -209,7 +217,9 @@ class CORE_EXPORT DocumentInit final {
   // DocumentLoader driving the commit. For an import, XSLT-generated
   // document, etc., it will be the DocumentLoader that drove the commit
   // of its owning Document.
-  DocumentLoader* MasterDocumentLoader() const;
+  DocumentLoader* TreeRootDocumentLoader() const;
+
+  bool IsSandboxed(network::mojom::blink::WebSandboxFlags) const;
 
   static PluginData* GetPluginData(LocalFrame* frame, const KURL& url);
 
@@ -221,9 +231,12 @@ class CORE_EXPORT DocumentInit final {
 
   HTMLImportsController* imports_controller_ = nullptr;
 
-  Document* context_document_ = nullptr;
+  ExecutionContext* execution_context_ = nullptr;
   KURL url_;
   Document* owner_document_ = nullptr;
+
+  // Used to cache the final origin for the Document to be created.
+  scoped_refptr<SecurityOrigin> cached_document_origin_;
 
   // Initiator origin is used for calculating the document origin when the
   // navigation is started in a different process. In such cases, the document
@@ -249,10 +262,6 @@ class CORE_EXPORT DocumentInit final {
   // the parent document, not from loading a URL.
   bool is_srcdoc_document_ = false;
 
-  // Whether the actual document was blocked by csp and we are creating a dummy
-  // empty document instead.
-  bool blocked_by_csp_ = false;
-
   // Whether the document should be able to access local file:// resources.
   bool grant_load_local_resources_ = false;
 
@@ -272,7 +281,6 @@ class CORE_EXPORT DocumentInit final {
 
   // Loader's CSP
   ContentSecurityPolicy* content_security_policy_ = nullptr;
-  bool content_security_policy_from_context_doc_ = false;
 
   network::mojom::IPAddressSpace ip_address_space_ =
       network::mojom::IPAddressSpace::kUnknown;
@@ -291,6 +299,10 @@ class CORE_EXPORT DocumentInit final {
 
   bool is_for_external_handler_ = false;
   Color plugin_background_color_;
+
+#if DCHECK_IS_ON()
+  bool for_test_ = false;
+#endif
 };
 
 }  // namespace blink

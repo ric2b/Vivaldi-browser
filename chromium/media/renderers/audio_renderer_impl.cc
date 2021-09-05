@@ -48,7 +48,7 @@ AudioRendererImpl::AudioRendererImpl(
     media::AudioRendererSink* sink,
     const CreateAudioDecodersCB& create_audio_decoders_cb,
     MediaLog* media_log,
-    const TranscribeAudioCallback& transcribe_audio_callback)
+    SpeechRecognitionClient* speech_recognition_client)
     : task_runner_(task_runner),
       expecting_config_changes_(false),
       sink_(sink),
@@ -70,8 +70,12 @@ AudioRendererImpl::AudioRendererImpl(
       received_end_of_stream_(false),
       rendered_end_of_stream_(false),
       is_suspending_(false),
+#if defined(OS_ANDROID)
+      is_passthrough_(false) {
+#else
       is_passthrough_(false),
-      transcribe_audio_callback_(transcribe_audio_callback) {
+      speech_recognition_client_(speech_recognition_client) {
+#endif
   DCHECK(create_audio_decoders_cb_);
 
   // PowerObserver's must be added and removed from the same thread, but we
@@ -369,6 +373,14 @@ void AudioRendererImpl::Initialize(DemuxerStream* stream,
   sink_->GetOutputDeviceInfoAsync(
       base::BindOnce(&AudioRendererImpl::OnDeviceInfoReceived,
                      weak_factory_.GetWeakPtr(), demuxer_stream_, cdm_context));
+
+#if !defined(OS_ANDROID)
+  if (speech_recognition_client_) {
+    speech_recognition_client_->SetOnReadyCallback(
+        base::BindOnce(&AudioRendererImpl::EnableSpeechRecognition,
+                       weak_factory_.GetWeakPtr()));
+  }
+#endif
 }
 
 void AudioRendererImpl::OnDeviceInfoReceived(
@@ -619,6 +631,8 @@ void AudioRendererImpl::OnAudioDecoderStreamInitialized(bool success) {
   algorithm_->Initialize(audio_parameters_, is_encrypted_);
   if (latency_hint_)
     algorithm_->SetLatencyHint(latency_hint_);
+
+  algorithm_->SetPreservesPitch(preserves_pitch_);
   ConfigureChannelMask();
 
   ChangeState_Locked(kFlushed);
@@ -706,6 +720,15 @@ void AudioRendererImpl::SetLatencyHint(
     // This may be needed if rendering isn't active to schedule regular reads.
     AttemptRead_Locked();
   }
+}
+
+void AudioRendererImpl::SetPreservesPitch(bool preserves_pitch) {
+  base::AutoLock auto_lock(lock_);
+
+  preserves_pitch_ = preserves_pitch;
+
+  if (algorithm_)
+    algorithm_->SetPreservesPitch(preserves_pitch);
 }
 
 void AudioRendererImpl::OnSuspend() {
@@ -871,8 +894,10 @@ bool AudioRendererImpl::HandleDecodedBuffer_Locked(
     if (first_packet_timestamp_ == kNoTimestamp)
       first_packet_timestamp_ = buffer->timestamp();
 
-    if (!transcribe_audio_callback_.is_null())
+#if !defined(OS_ANDROID)
+    if (transcribe_audio_callback_)
       transcribe_audio_callback_.Run(buffer);
+#endif
 
     if (state_ != kUninitialized)
       algorithm_->EnqueueBuffer(std::move(buffer));
@@ -1281,4 +1306,20 @@ void AudioRendererImpl::ConfigureChannelMask() {
   algorithm_->SetChannelMask(std::move(channel_mask));
 }
 
+void AudioRendererImpl::EnableSpeechRecognition() {
+#if !defined(OS_ANDROID)
+  DCHECK(task_runner_->BelongsToCurrentThread());
+  transcribe_audio_callback_ = base::BindRepeating(
+      &AudioRendererImpl::TranscribeAudio, weak_factory_.GetWeakPtr());
+#endif
+}
+
+void AudioRendererImpl::TranscribeAudio(
+    scoped_refptr<media::AudioBuffer> buffer) {
+#if !defined(OS_ANDROID)
+  DCHECK(task_runner_->BelongsToCurrentThread());
+  if (speech_recognition_client_)
+    speech_recognition_client_->AddAudio(std::move(buffer));
+#endif
+}
 }  // namespace media

@@ -7,8 +7,9 @@
 
 #include <memory>
 #include <set>
+#include <string>
+#include <vector>
 
-#include "base/containers/circular_deque.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
 #include "base/containers/unique_ptr_adapters.h"
@@ -60,6 +61,7 @@ class InputHandler : public DevToolsDomainHandler, public Input::Backend {
       Maybe<bool> is_keypad,
       Maybe<bool> is_system_key,
       Maybe<int> location,
+      Maybe<Array<std::string>> commands,
       std::unique_ptr<DispatchKeyEventCallback> callback) override;
 
   void InsertText(const std::string& text,

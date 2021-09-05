@@ -354,13 +354,16 @@ void SharedImageStub::OnPresentSwapChain(const Mailbox& mailbox,
 #if defined(OS_FUCHSIA)
 void SharedImageStub::OnRegisterSysmemBufferCollection(
     gfx::SysmemBufferCollectionId id,
-    zx::channel token) {
+    zx::channel token,
+    gfx::BufferFormat format,
+    gfx::BufferUsage usage) {
   if (!id || !token) {
     OnError();
     return;
   }
 
-  if (!factory_->RegisterSysmemBufferCollection(id, std::move(token))) {
+  if (!factory_->RegisterSysmemBufferCollection(id, std::move(token), format,
+                                                usage)) {
     OnError();
   }
 }
@@ -389,7 +392,7 @@ void SharedImageStub::OnRegisterSharedImageUploadBuffer(
   }
 }
 
-bool SharedImageStub::MakeContextCurrent() {
+bool SharedImageStub::MakeContextCurrent(bool needs_gl) {
   DCHECK(context_state_);
 
   if (context_state_->context_lost()) {
@@ -400,13 +403,9 @@ bool SharedImageStub::MakeContextCurrent() {
   // |factory_| never writes to the surface, so pass nullptr to
   // improve performance. https://crbug.com/457431
   auto* context = context_state_->real_context();
-  if (context->IsCurrent(nullptr) ||
-      context->MakeCurrent(context_state_->surface())) {
-    return true;
-  }
-  context_state_->MarkContextLost();
-  LOG(ERROR) << "SharedImageStub: MakeCurrent failed";
-  return false;
+  if (context->IsCurrent(nullptr))
+    return !context_state_->CheckResetStatus(needs_gl);
+  return context_state_->MakeCurrent(/*surface=*/nullptr, needs_gl);
 }
 
 ContextResult SharedImageStub::MakeContextCurrentAndCreateFactory() {
@@ -421,7 +420,9 @@ ContextResult SharedImageStub::MakeContextCurrentAndCreateFactory() {
   }
   DCHECK(context_state_);
   DCHECK(!context_state_->context_lost());
-  if (!MakeContextCurrent()) {
+  // Some shared image backing factories will use GL in ctor, so we need GL even
+  // if chrome is using non-GL backing.
+  if (!MakeContextCurrent(/*needs_gl=*/true)) {
     context_state_ = nullptr;
     return ContextResult::kTransientFailure;
   }

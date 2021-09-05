@@ -52,11 +52,13 @@
 <translation id="3914946330804881301">Importert fra Opera</translation>
 <translation id="3921292902397893431">Monster 8</translation>
 <translation id="3943857333388298514">Lim inn</translation>
+<translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4073157431025461511">&amp;Ikke vis igjen</translation>
 <translation id="4074744496918018786">Åpne bilde i privat vindu</translation>
 <translation id="4324492550286218827">Landskap 2</translation>
 <translation id="4406101500523955324">Åpne i nytt privatvindu</translation>
 <translation id="4420816922321010053">Sikker på at du vil avslutte Vivaldi?</translation>
+<translation id="443008484043213881">Verktøy</translation>
 <translation id="4456211719108566931">Monster 6</translation>
 <translation id="4512900838580567989">Åpne lenken i ny bakgrunnsfane</translation>
 <translation id="4515472507709384008">Opera versjon 15+</translation>
@@ -64,12 +66,14 @@
 <translation id="4582480609585453144">Åpne lenken i bakgrunnsfane</translation>
 <translation id="4636708767492582204">Send med epost</translation>
 <translation id="4677434526832593569">Dyr 8</translation>
+<translation id="474217410105706308">Slå av lyd for fane</translation>
 <translation id="4881695831933465202">Åpne</translation>
 <translation id="5014281392052865061">Importert Speed Dial</translation>
-<translation id="5092656712000637858">Legg til siden som webpanel</translation>
+<translation id="5092656712000637858">Legg til siden som nettpanel</translation>
 <translation id="5177818338935286353">Monster 7</translation>
 <translation id="5213743983876949565">Dyr 1</translation>
 <translation id="5238244642230426581">Importerte bokmerker</translation>
+<translation id="527605719918376753">Slå av lyd for fane</translation>
 <translation id="5305569355661722298">Bekreft lukking av vinduer</translation>
 <translation id="5388358297987318779">Åpne bilde</translation>
 <translation id="5416008465899576639">En ny versjon av Vivaldi er tilgjengelig.</translation>
@@ -85,6 +89,7 @@
 <translation id="6229528619562190452">Klikk her for å oppdatere Vivaldi.</translation>
 <translation id="6234173136417926046">Bruk bildet som startsidebakgrunn</translation>
 <translation id="630690498669249215">Opera bokmerkefil</translation>
+<translation id="6339818817272922368">Lokal konto</translation>
 <translation id="6438786710866753178">Landskap 4</translation>
 <translation id="6477028720702061455">Velg Opera profilkatalog for import</translation>
 <translation id="6510706699590490869">&amp;Oppdater Vivaldi</translation>
@@ -99,6 +104,7 @@
 <translation id="7496505986576158197">Vivaldi er gjort mulig av åpen kildekode-prosjektet <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> and annen <ph name="BEGIN_LINK_OSS" />programvare med åpen kildekode<ph name="END_LINK_OSS" />.</translation>
 <translation id="7715497554424665066">&amp;Ignorer oppdatering</translation>
 <translation id="7724603315864178912">Klipp ut</translation>
+<translation id="7793738202466490491">Legg til som kalenderhendelse</translation>
 <translation id="7865983598101744945">Bekreft avslutning</translation>
 <translation id="7957213167373139414">Min kalender</translation>
 <translation id="8027581147000338959">Åpne i nytt vindu</translation>
@@ -108,14 +114,16 @@
 <translation id="8331671104904436324">Åpne i ny bakgrunnsfane</translation>
 <translation id="8373293945112511707">Landskap 1</translation>
 <translation id="8427094907586191051">Landskap 17</translation>
+<translation id="8446668873108041390">Kjøring av JavaScript gjennom AppleScript er skrudd av. Under Innstillinger &gt; Personvern &gt; Apple Events, er det en innstilling for å tillate JavaScript fra Apple Events.</translation>
 <translation id="8539196077526389150">Landskap 13</translation>
 <translation id="8624587806981488221">&amp;Last inn bildet på nytt</translation>
 <translation id="864444594187862076">Opera versjon 15+ (utvikler)</translation>
 <translation id="8651348004684669199">Legg til aktiv fane</translation>
 <translation id="8669345741879513971">Monster 10</translation>
+<translation id="867544375504146191">Yandex</translation>
 <translation id="8768970203213061953">Landskap 14</translation>
 <translation id="8773635261052182196">Du får ikke lenger se disse meldingene. Du kan aktivere dem igjen fra Vivaldi innstillinger.</translation>
-<translation id="8894900864683381599">Legg til lenken som webpanel</translation>
+<translation id="8894900864683381599">Legg til lenken som nettpanel</translation>
 <translation id="8912720443398351457">Er du sikker på at du vil avslutte Vivaldi?</translation>
 <translation id="8947109330183116400">Velg HTML bokmerkefil</translation>
 <translation id="9017566390391482291">Velg Vivaldi profilkatalog for import</translation>

@@ -48,11 +48,14 @@
 #include "chrome/browser/ui/webui/settings/site_settings_helper.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
+#include "components/content_settings/core/browser/content_settings_info.h"
+#include "components/content_settings/core/browser/content_settings_registry.h"
 #include "components/content_settings/core/browser/content_settings_utils.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/datasource/vivaldi_data_source_api.h"
 #include "components/language/core/browser/pref_names.h"
+#include "components/lookalikes/core/lookalike_url_util.h"
 #include "components/prefs/pref_service.h"
 #include "components/sessions/core/tab_restore_service.h"
 #include "components/version_info/version_info.h"
@@ -70,6 +73,7 @@
 #include "ui/lights/razer_chroma_handler.h"
 #include "ui/shell_dialogs/select_file_policy.h"
 #include "ui/vivaldi_ui_utils.h"
+#include "url/third_party/mozilla/url_parse.h"
 #include "url/url_constants.h"
 
 // DO NOT REMOVE!! Needed by Final Official Release Branch builds
@@ -486,6 +490,97 @@ ExtensionFunction::ResponseAction UtilitiesIsUrlValidFunction::Run() {
   default_protocol_worker->StartCheckIsDefault();
   return RespondLater();
 }
+
+ExtensionFunction::ResponseAction UtilitiesGetUrlFragmentsFunction::Run() {
+  using vivaldi::utilities::GetUrlFragments::Params;
+  namespace Results = vivaldi::utilities::GetUrlFragments::Results;
+
+  std::unique_ptr<Params> params = Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  vivaldi::utilities::UrlFragments fragments;
+  GURL url(params->url);
+  if (!url.is_valid()) {
+    return RespondNow(ArgumentList(Results::Create(false, fragments)));
+  }
+
+  url::Parsed parsed;
+  if (url.SchemeIsFile()) {
+    ParseFileURL(url.spec().c_str(), url.spec().length(), &parsed);
+  } else {
+    ParseStandardURL(url.spec().c_str(), url.spec().length(), &parsed);
+    if (url.host().empty() && parsed.host.end() > 0) {
+      // Of the type "javascript:..."
+      ParsePathURL(url.spec().c_str(), url.spec().length(), false, &parsed);
+    }
+  }
+
+  if (parsed.scheme.is_valid()) {
+    fragments.scheme.fragment = url.scheme();
+    fragments.scheme.begin = parsed.CountCharactersBefore(
+        url::Parsed::SCHEME, true);
+    fragments.scheme.end = parsed.scheme.end();
+  }
+  if (parsed.username.is_valid()) {
+    fragments.username.fragment = url.username();
+    fragments.username.begin = parsed.CountCharactersBefore(
+        url::Parsed::USERNAME, true);
+    fragments.username.end = parsed.username.end();
+  }
+  if (parsed.password.is_valid()) {
+    fragments.password.fragment = url.password();
+    fragments.password.begin = parsed.CountCharactersBefore(
+        url::Parsed::PASSWORD, true);
+    fragments.password.end = parsed.password.end();
+  }
+  if (parsed.host.is_valid()) {
+    fragments.host.fragment = url.host();
+    fragments.host.begin = parsed.CountCharactersBefore(
+        url::Parsed::HOST, true);
+    fragments.host.end = parsed.host.end();
+  }
+  if (parsed.port.is_valid()) {
+    fragments.port.fragment = url.port();
+    fragments.port.begin = parsed.CountCharactersBefore(
+        url::Parsed::PORT, true);
+    fragments.port.end = parsed.port.end();
+  }
+  if (parsed.path.is_valid()) {
+    fragments.path.fragment = url.path();
+    fragments.path.begin = parsed.CountCharactersBefore(
+        url::Parsed::PATH, true);
+    fragments.path.end = parsed.path.end();
+  }
+  if (parsed.query.is_valid()) {
+    fragments.query.fragment = url.query();
+    fragments.query.begin = parsed.CountCharactersBefore(
+        url::Parsed::QUERY, true);
+    fragments.query.end = parsed.query.end();
+  }
+  if (parsed.ref.is_valid()) {
+    fragments.ref.fragment = url.ref();
+    fragments.ref.begin = parsed.CountCharactersBefore(
+        url::Parsed::REF, true);
+    fragments.ref.end = parsed.ref.end();
+  }
+  if (parsed.host.is_valid()) {
+    DomainInfo info = GetDomainInfo(url);
+    if (!info.domain_without_registry.empty()) {
+      fragments.tld.fragment = info.domain_and_registry.substr(
+          info.domain_without_registry.length() + 1);
+    } else {
+      fragments.tld.fragment = info.domain_and_registry;
+    }
+    std::size_t offset = fragments.host.fragment.find(fragments.tld.fragment);
+    if (offset != std::string::npos) {
+      fragments.tld.begin = fragments.host.begin + offset;
+      fragments.tld.end = parsed.host.end();
+    }
+  }
+
+  return RespondNow(ArgumentList(Results::Create(true, fragments)));
+}
+
 
 ExtensionFunction::ResponseAction UtilitiesGetSelectedTextFunction::Run() {
   using vivaldi::utilities::GetSelectedText::Params;
@@ -970,7 +1065,16 @@ UtilitiesSetDefaultContentSettingsFunction::Run() {
 
   HostContentSettingsMap* map =
       HostContentSettingsMapFactory::GetForProfile(profile);
-  map->SetDefaultContentSetting(content_type, default_setting);
+
+  const content_settings::ContentSettingsInfo* info =
+    content_settings::ContentSettingsRegistry::GetInstance()->Get(
+      content_type);
+
+  bool is_valid_settings_value = info->IsDefaultSettingValid(default_setting);
+  DCHECK(is_valid_settings_value);
+  if (is_valid_settings_value) {
+    map->SetDefaultContentSetting(content_type, default_setting);
+  }
 
   return RespondNow(ArgumentList(Results::Create()));
 }
@@ -1365,6 +1469,8 @@ ExtensionFunction::ResponseAction UtilitiesGetMediaAvailableStateFunction::Run()
       case PRODUCT_PROFESSIONAL_N:
       case PRODUCT_PROFESSIONAL_S_N:
       case PRODUCT_PROFESSIONAL_STUDENT_N:
+      case PRODUCT_STARTER_N:
+      case PRODUCT_CORE_N:
         is_available = false;
         break;
     }
@@ -1372,15 +1478,22 @@ ExtensionFunction::ResponseAction UtilitiesGetMediaAvailableStateFunction::Run()
     const int kMFVersionVista = (0x0001 << 16 | MF_API_VERSION);
     const int kMFVersionWin7 = (0x0002 << 16 | MF_API_VERSION);
     if (!is_available) {
-      // Only check N versions for media framework, otherwise just assume
-      // all is fine and proceed.
-      HRESULT hr = MFStartup(base::win::GetVersion() >= base::win::Version::WIN7
-        ? kMFVersionWin7
-        : kMFVersionVista,
-        MFSTARTUP_LITE);
-      if (SUCCEEDED(hr)) {
-        is_available = true;
-        MFShutdown();
+      // MFStartup triggers a delayload which crashes on startup if the dll is
+      // not available, so ensure the dll is present first.
+      HMODULE dll =
+          ::LoadLibraryExW(L"mfplat.dll", NULL, LOAD_LIBRARY_AS_DATAFILE);
+      if (dll) {
+        // Only check N versions for media framework, otherwise just assume
+        // all is fine and proceed.
+        HRESULT hr = MFStartup(base::win::GetVersion() >= base::win::Version::WIN7
+          ? kMFVersionWin7
+          : kMFVersionVista,
+          MFSTARTUP_LITE);
+        if (SUCCEEDED(hr)) {
+          is_available = true;
+          MFShutdown();
+        }
+        ::FreeLibrary(dll);
       }
     }
   }

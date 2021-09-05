@@ -12,9 +12,7 @@
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
 #include "build/build_config.h"
-#include "components/prefs/pref_registry_simple.h"
 #include "components/security_state/core/features.h"
-#include "components/security_state/core/security_state_pref_names.h"
 #include "net/ssl/ssl_cipher_suite_names.h"
 #include "net/ssl/ssl_connection_status_flags.h"
 #include "services/network/public/cpp/is_potentially_trustworthy.h"
@@ -57,8 +55,6 @@ SecurityLevel GetSecurityLevelForDisplayedMixedContent(bool suppress_warning) {
 std::string GetHistogramSuffixForSecurityLevel(
     security_state::SecurityLevel level) {
   switch (level) {
-    case EV_SECURE:
-      return "EV_SECURE";
     case SECURE:
       return "SECURE";
     case NONE:
@@ -247,10 +243,6 @@ SecurityLevel GetSecurityLevel(
     return SECURE_WITH_POLICY_INSTALLED_CERT;
   }
 
-  if ((visible_security_state.cert_status & net::CERT_STATUS_IS_EV) &&
-      visible_security_state.certificate) {
-    return EV_SECURE;
-  }
   return SECURE;
 }
 
@@ -267,11 +259,6 @@ bool HasMajorCertificateError(
       net::IsCertStatusError(visible_security_state.cert_status);
 
   return is_cryptographic_with_certificate && is_major_cert_error;
-}
-
-void RegisterProfilePrefs(PrefRegistrySimple* registry) {
-  registry->RegisterBooleanPref(prefs::kStricterMixedContentTreatmentEnabled,
-                                true);
 }
 
 VisibleSecurityState::VisibleSecurityState()
@@ -311,7 +298,7 @@ bool IsOriginLocalhostOrFile(const GURL& url) {
 }
 
 bool IsSslCertificateValid(SecurityLevel security_level) {
-  return security_level == SECURE || security_level == EV_SECURE ||
+  return security_level == SECURE ||
          security_level == SECURE_WITH_POLICY_INSTALLED_CERT;
 }
 

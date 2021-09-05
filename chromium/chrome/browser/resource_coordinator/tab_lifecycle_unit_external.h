@@ -49,9 +49,6 @@ class TabLifecycleUnitExternal {
   // Returns the number of times that the tab was discarded.
   virtual int GetDiscardCount() const = 0;
 
-  // Returns true if the tab is frozen.
-  virtual bool IsFrozen() const = 0;
-
   virtual void SetIsDiscarded();
 };
 

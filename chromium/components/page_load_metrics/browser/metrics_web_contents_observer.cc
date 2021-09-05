@@ -76,23 +76,6 @@ void MetricsWebContentsObserver::RecordFeatureUsage(
     observer->OnBrowserFeatureUsage(render_frame_host, new_features);
 }
 
-MetricsWebContentsObserver::MetricsWebContentsObserver(
-    content::WebContents* web_contents,
-    std::unique_ptr<PageLoadMetricsEmbedderInterface> embedder_interface)
-    : content::WebContentsObserver(web_contents),
-      in_foreground_(web_contents->GetVisibility() !=
-                     content::Visibility::HIDDEN),
-      embedder_interface_(std::move(embedder_interface)),
-      has_navigated_(false),
-      page_load_metrics_receiver_(web_contents, this) {
-  // Prerenders erroneously report that they are initially visible, so we
-  // manually override visibility state for prerender.
-  if (embedder_interface_->IsPrerender(web_contents))
-    in_foreground_ = false;
-
-  RegisterInputEventObserver(web_contents->GetRenderViewHost());
-}
-
 // static
 MetricsWebContentsObserver* MetricsWebContentsObserver::CreateForWebContents(
     content::WebContents* web_contents,
@@ -186,6 +169,23 @@ void MetricsWebContentsObserver::WillStartNavigationRequest(
 
   WillStartNavigationRequestImpl(navigation_handle);
   has_navigated_ = true;
+}
+
+MetricsWebContentsObserver::MetricsWebContentsObserver(
+    content::WebContents* web_contents,
+    std::unique_ptr<PageLoadMetricsEmbedderInterface> embedder_interface)
+    : content::WebContentsObserver(web_contents),
+      in_foreground_(web_contents->GetVisibility() !=
+                     content::Visibility::HIDDEN),
+      embedder_interface_(std::move(embedder_interface)),
+      has_navigated_(false),
+      page_load_metrics_receiver_(web_contents, this) {
+  // Prerenders erroneously report that they are initially visible, so we
+  // manually override visibility state for prerender.
+  if (embedder_interface_->IsPrerender(web_contents))
+    in_foreground_ = false;
+
+  RegisterInputEventObserver(web_contents->GetRenderViewHost());
 }
 
 void MetricsWebContentsObserver::WillStartNavigationRequestImpl(
@@ -397,6 +397,22 @@ void MetricsWebContentsObserver::OnCookiesAccessedImpl(
   }
 }
 
+void MetricsWebContentsObserver::DidActivatePortal(
+    content::WebContents* predecessor_web_contents,
+    base::TimeTicks activation_time) {
+  // The |predecessor_web_contents| is the WebContents that instantiated the
+  // portal.
+  MetricsWebContentsObserver* predecessor_observer =
+      MetricsWebContentsObserver::FromWebContents(predecessor_web_contents);
+  // We only track the portal activation if the predecessor is also being
+  // tracked.
+  if (!committed_load_ || !predecessor_observer ||
+      !predecessor_observer->committed_load_) {
+    return;
+  }
+  committed_load_->DidActivatePortal(activation_time);
+}
+
 void MetricsWebContentsObserver::OnStorageAccessed(const GURL& url,
                                                    const GURL& first_party_url,
                                                    bool blocked_by_policy,
@@ -574,7 +590,11 @@ bool MetricsWebContentsObserver::MaybeRestorePageLoadTrackerForBackForwardCache(
 
   committed_load_ = std::move(it->second);
   back_forward_cached_pages_.erase(it);
-  committed_load_->OnRestoreFromBackForwardCache();
+  committed_load_->OnRestoreFromBackForwardCache(navigation_handle);
+
+  for (auto& observer : testing_observers_)
+    observer.OnRestoredFromBackForwardCache(committed_load_.get());
+
   return true;
 }
 
@@ -783,24 +803,7 @@ void MetricsWebContentsObserver::OnTimingUpdated(
 
   const bool is_main_frame = (render_frame_host->GetParent() == nullptr);
   if (is_main_frame) {
-    // While timings arriving for the wrong frame are expected, we do not expect
-    // any of the errors below for main frames. Thus, we track occurrences of
-    // all errors below, rather than returning early after encountering an
-    // error.
-    // TODO(crbug/1061090): Update page load metrics IPC validation to ues
-    // mojo::ReportBadMessage.
-    bool error = false;
-    if (!committed_load_) {
-      RecordInternalError(ERR_IPC_WITH_NO_RELEVANT_LOAD);
-      error = true;
-    }
-
-    if (!web_contents()->GetLastCommittedURL().SchemeIsHTTPOrHTTPS()) {
-      RecordInternalError(ERR_IPC_FROM_BAD_URL_SCHEME);
-      error = true;
-    }
-
-    if (error)
+    if (DoesTimingUpdateHaveError())
       return;
   } else if (!committed_load_) {
     RecordInternalError(ERR_SUBFRAME_IPC_WITH_NO_RELEVANT_LOAD);
@@ -813,6 +816,26 @@ void MetricsWebContentsObserver::OnTimingUpdated(
         std::move(cpu_timing), std::move(new_deferred_resource_data),
         std::move(input_timing_delta));
   }
+}
+
+bool MetricsWebContentsObserver::DoesTimingUpdateHaveError() {
+  // While timings arriving for the wrong frame are expected, we do not expect
+  // any of the errors below for main frames. Thus, we track occurrences of
+  // all errors below, rather than returning early after encountering an
+  // error.
+  // TODO(crbug/1061090): Update page load metrics IPC validation to ues
+  // mojo::ReportBadMessage.
+  bool error = false;
+  if (!committed_load_) {
+    RecordInternalError(ERR_IPC_WITH_NO_RELEVANT_LOAD);
+    error = true;
+  }
+
+  if (!web_contents()->GetLastCommittedURL().SchemeIsHTTPOrHTTPS()) {
+    RecordInternalError(ERR_IPC_FROM_BAD_URL_SCHEME);
+    error = true;
+  }
+  return error;
 }
 
 void MetricsWebContentsObserver::UpdateTiming(
@@ -832,17 +855,22 @@ void MetricsWebContentsObserver::UpdateTiming(
                   std::move(input_timing_delta));
 }
 
+void MetricsWebContentsObserver::SubmitThroughputData(
+    mojom::ThroughputUkmDataPtr throughput_data) {
+  if (DoesTimingUpdateHaveError())
+    return;
+
+  content::RenderFrameHost* render_frame_host =
+      page_load_metrics_receiver_.GetCurrentTargetFrame();
+  committed_load_->metrics_update_dispatcher()->UpdateThroughput(
+      render_frame_host, std::move(throughput_data));
+}
+
 bool MetricsWebContentsObserver::ShouldTrackMainFrameNavigation(
     content::NavigationHandle* navigation_handle) const {
   DCHECK(navigation_handle->IsInMainFrame());
   DCHECK(!navigation_handle->HasCommitted() ||
          !navigation_handle->IsSameDocument());
-  // If there is an outer WebContents, then this WebContents is embedded into
-  // another one (it is either a portal or a Chrome App <webview>). Ignore these
-  // navigations for now.
-  if (web_contents()->GetOuterWebContents())
-    return false;
-
   // Ignore non-HTTP schemes (e.g. chrome://).
   if (!navigation_handle->GetURL().SchemeIsHTTPOrHTTPS())
     return false;

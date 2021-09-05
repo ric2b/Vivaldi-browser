@@ -56,7 +56,7 @@ class StyleSheetCSSRuleList final : public CSSRuleList {
  public:
   StyleSheetCSSRuleList(CSSStyleSheet* sheet) : style_sheet_(sheet) {}
 
-  void Trace(Visitor* visitor) override {
+  void Trace(Visitor* visitor) const override {
     visitor->Trace(style_sheet_);
     CSSRuleList::Trace(visitor);
   }
@@ -226,6 +226,8 @@ void CSSStyleSheet::DidMutateRules() {
         resolver->InvalidateMatchedPropertiesCache();
     }
   }
+
+  probe::DidMutateStyleSheet(OwnerDocument(), this);
 }
 
 void CSSStyleSheet::DidMutate() {
@@ -632,7 +634,7 @@ bool CSSStyleSheet::CanBeActivated(
   return true;
 }
 
-void CSSStyleSheet::Trace(Visitor* visitor) {
+void CSSStyleSheet::Trace(Visitor* visitor) const {
   visitor->Trace(contents_);
   visitor->Trace(owner_node_);
   visitor->Trace(owner_rule_);

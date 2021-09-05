@@ -17,8 +17,8 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
-#include "base/task/post_task.h"
 #include "base/task/single_thread_task_executor.h"
+#include "base/task/thread_pool.h"
 #include "base/threading/platform_thread.h"
 #include "base/timer/hi_res_timer_manager.h"
 #include "base/trace_event/trace_event.h"
@@ -48,6 +48,7 @@
 #include "media/gpu/buildflags.h"
 #include "services/tracing/public/cpp/trace_startup.h"
 #include "third_party/angle/src/gpu_info_util/SystemInfo.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/events/platform/platform_event_source.h"
 #include "ui/gfx/switches.h"
 #include "ui/gl/gl_context.h"
@@ -79,6 +80,7 @@
 #if defined(USE_X11)
 #include "ui/base/x/x11_util.h"                          // nogncheck
 #include "ui/gfx/linux/gpu_memory_buffer_support_x11.h"  // nogncheck
+#include "ui/gfx/x/x11.h"                                // nogncheck
 #include "ui/gfx/x/x11_switches.h"                       // nogncheck
 #include "ui/gfx/x/x11_types.h"                          // nogncheck
 #endif
@@ -87,7 +89,6 @@
 #include "content/gpu/gpu_sandbox_hook_linux.h"
 #include "content/public/common/sandbox_init.h"
 #include "services/service_manager/sandbox/linux/sandbox_linux.h"
-#include "services/service_manager/zygote/common/common_sandbox_support_linux.h"
 #endif
 
 #if defined(OS_MACOSX)
@@ -180,9 +181,9 @@ class ContentSandboxHelper : public gpu::GpuSandboxHelper {
 };
 
 #if defined(OS_MACOSX)
-void TestShaderCallback(metal::TestShaderResult result,
-                        const base::TimeDelta& method_time,
-                        const base::TimeDelta& compile_time) {
+void TestShaderCallback(metal::TestShaderComponent component,
+                        metal::TestShaderResult result,
+                        const base::TimeDelta& callback_time) {
   switch (result) {
     case metal::TestShaderResult::kNotAttempted:
     case metal::TestShaderResult::kFailed:
@@ -194,8 +195,15 @@ void TestShaderCallback(metal::TestShaderResult result,
     case metal::TestShaderResult::kSucceeded:
       break;
   }
-  UMA_HISTOGRAM_MEDIUM_TIMES("Gpu.Metal.TestShaderMethodTime", method_time);
-  UMA_HISTOGRAM_MEDIUM_TIMES("Gpu.Metal.TestShaderCompileTime", compile_time);
+  switch (component) {
+    case metal::TestShaderComponent::kCompile:
+      UMA_HISTOGRAM_MEDIUM_TIMES("Gpu.Metal.TestShaderCompileTime",
+                                 callback_time);
+      break;
+    case metal::TestShaderComponent::kLink:
+      UMA_HISTOGRAM_MEDIUM_TIMES("Gpu.Metal.TestShaderLinkTime", callback_time);
+      break;
+  }
 }
 #endif
 
@@ -266,22 +274,29 @@ int GpuMain(const MainFunctionParams& parameters) {
     main_thread_task_executor =
         std::make_unique<base::SingleThreadTaskExecutor>(
             base::MessagePumpType::DEFAULT);
-#elif defined(USE_X11)
-    // We need a UI loop so that we can grab the Expose events. See GLSurfaceGLX
-    // and https://crbug.com/326995.
-    ui::SetDefaultX11ErrorHandlers();
-    if (!gfx::GetXDisplay())
-      return RESULT_CODE_GPU_DEAD_ON_ARRIVAL;
-    main_thread_task_executor =
-        std::make_unique<base::SingleThreadTaskExecutor>(
-            base::MessagePumpType::UI);
-    event_source = ui::PlatformEventSource::CreateDefault();
-#elif defined(USE_OZONE)
+#elif defined(USE_X11) || defined(USE_OZONE)
+#if defined(USE_X11)
+    if (!features::IsUsingOzonePlatform()) {
+      // We need a UI loop so that we can grab the Expose events. See
+      // GLSurfaceGLX and https://crbug.com/326995.
+      ui::SetDefaultX11ErrorHandlers();
+      if (!gfx::GetXDisplay())
+        return RESULT_CODE_GPU_DEAD_ON_ARRIVAL;
+      main_thread_task_executor =
+          std::make_unique<base::SingleThreadTaskExecutor>(
+              base::MessagePumpType::UI);
+      event_source = ui::PlatformEventSource::CreateDefault();
+    }
+#endif
+#if defined(USE_OZONE)
     // The MessagePump type required depends on the Ozone platform selected at
     // runtime.
-    main_thread_task_executor =
-        std::make_unique<base::SingleThreadTaskExecutor>(
-            gpu_preferences.message_pump_type);
+    if (!main_thread_task_executor) {
+      main_thread_task_executor =
+          std::make_unique<base::SingleThreadTaskExecutor>(
+              gpu_preferences.message_pump_type);
+    }
+#endif
 #elif defined(OS_LINUX)
 #error "Unsupported Linux platform."
 #elif defined(OS_MACOSX)
@@ -320,9 +335,14 @@ int GpuMain(const MainFunctionParams& parameters) {
 
   gpu_init->set_sandbox_helper(&sandbox_helper);
 
-  // Since GPU initialization calls into skia, its important to initialize skia
+  // Since GPU initialization calls into skia, it's important to initialize skia
   // before it.
   InitializeSkia();
+
+  // Create the ThreadPool before invoking |gpu_init| as it needs the ThreadPool
+  // (in angle::InitializePlatform()). Do not start it until after the sandbox
+  // is initialized however to avoid creating threads outside the sandbox.
+  base::ThreadPoolInstance::Create("GPU");
 
   // Gpu initialization may fail for various reasons, in which case we will need
   // to tear down this process. However, we can not do so safely until the IPC
@@ -337,6 +357,9 @@ int GpuMain(const MainFunctionParams& parameters) {
   const bool dead_on_arrival = !init_success;
 
   GetContentClient()->SetGpuInfo(gpu_init->gpu_info());
+
+  // Start the ThreadPoolInstance now that the sandbox is initialized.
+  base::ThreadPoolInstance::Get()->StartWithDefaultParams();
 
   const base::ThreadPriority io_thread_priority =
       base::FeatureList::IsEnabled(features::kGpuUseDisplayThreadPriority)
@@ -356,11 +379,14 @@ int GpuMain(const MainFunctionParams& parameters) {
 #if defined(USE_X11)
   // ui::GbmDevice() takes >50ms with amdgpu, so kick off
   // GpuMemoryBufferSupportX11 creation on another thread now.
-  base::PostTask(
-      FROM_HERE, base::BindOnce([]() {
-        SCOPED_UMA_HISTOGRAM_TIMER("Linux.X11.GbmSupportX11CreationTime");
-        ui::GpuMemoryBufferSupportX11::GetInstance();
-      }));
+  if (!features::IsUsingOzonePlatform() &&
+      gpu_preferences.enable_native_gpu_memory_buffers) {
+    base::ThreadPool::PostTask(
+        FROM_HERE, base::BindOnce([]() {
+          SCOPED_UMA_HISTOGRAM_TIMER("Linux.X11.GbmSupportX11CreationTime");
+          ui::GpuMemoryBufferSupportX11::GetInstance();
+        }));
+  }
 #endif
 
   auto* client = GetContentClient()->gpu();

@@ -13,6 +13,7 @@ const std::vector<std::string> kPermanentKnownTrackingSources = {
     "https://downloads.vivaldi.com/easylist/easyprivacy-current.txt"};
 
 const std::vector<std::string> kPermanentKnownAdBlockSources = {
+    "https://downloads.vivaldi.com/lists/vivaldi/partners-current.txt",
     "https://downloads.vivaldi.com/easylist/easylist-current.txt"};
 
 struct PresetSourceInfo {

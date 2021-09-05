@@ -113,11 +113,11 @@ const char kPropertySelectToSpeakEnabled[] = "a11ySelectToSpeakEnabled";
 // Key which corresponds to the Switch Access A11Y property in JS.
 const char kPropertySwitchAccessEnabled[] = "a11ySwitchAccessEnabled";
 
+// Key which corresponds to the cursor color A11Y property in JS.
+const char kPropertyCursorColorEnabled[] = "a11yCursorColorEnabled";
+
 // Key which corresponds to the send-function-keys property in JS.
 const char kPropertySendFunctionsKeys[] = "sendFunctionKeys";
-
-// Key which corresponds to the camera-media-consolidated property in JS.
-const char kPropertyCameraMediaConsolidated[] = "cameraMediaConsolidated";
 
 // Property not found error message.
 const char kPropertyNotFound[] = "Property '*' does not exist.";
@@ -224,8 +224,8 @@ const struct {
      ash::prefs::kAccessibilitySelectToSpeakEnabled},
     {kPropertySwitchAccessEnabled,
      ash::prefs::kAccessibilitySwitchAccessEnabled},
-    {kPropertySendFunctionsKeys, prefs::kLanguageSendFunctionKeys},
-    {kPropertyCameraMediaConsolidated, prefs::kCameraMediaConsolidated}};
+    {kPropertyCursorColorEnabled, ash::prefs::kAccessibilityCursorColorEnabled},
+    {kPropertySendFunctionsKeys, prefs::kLanguageSendFunctionKeys}};
 
 const char* GetBoolPrefNameForApiProperty(const char* api_name) {
   for (size_t i = 0;

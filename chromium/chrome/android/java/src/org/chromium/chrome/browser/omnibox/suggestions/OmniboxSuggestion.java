@@ -76,6 +76,7 @@ public class OmniboxSuggestion {
     private final int mGroupId;
     private final List<QueryTile> mQueryTiles;
     private final byte[] mClipboardImageData;
+    private final boolean mHasTabMatch;
 
     public OmniboxSuggestion(int nativeType, boolean isSearchType, int relevance, int transition,
             String displayText, List<MatchClassification> displayTextClassifications,
@@ -83,7 +84,7 @@ public class OmniboxSuggestion {
             SuggestionAnswer answer, String fillIntoEdit, GURL url, GURL imageUrl,
             String imageDominantColor, boolean isStarred, boolean isDeletable,
             String postContentType, byte[] postData, int groupId, List<QueryTile> queryTiles,
-            byte[] clipboardImageData) {
+            byte[] clipboardImageData, boolean hasTabMatch) {
         mType = nativeType;
         mIsSearchType = isSearchType;
         mRelevance = relevance;
@@ -106,6 +107,7 @@ public class OmniboxSuggestion {
         mGroupId = groupId;
         mQueryTiles = queryTiles;
         mClipboardImageData = clipboardImageData;
+        mHasTabMatch = hasTabMatch;
     }
 
     public int getType() {
@@ -187,6 +189,10 @@ public class OmniboxSuggestion {
         return mPostData;
     }
 
+    public boolean hasTabMatch() {
+        return mHasTabMatch;
+    }
+
     /**
      * @return The image data for the image clipbaord suggestion. This data has already been
      *         validated in C++ and is safe to use in the browser process.
@@ -227,6 +233,7 @@ public class OmniboxSuggestion {
                 && ObjectsCompat.equals(
                         mDescriptionClassifications, suggestion.mDescriptionClassifications)
                 && mIsStarred == suggestion.mIsStarred && mIsDeletable == suggestion.mIsDeletable
+                && mRelevance == suggestion.mRelevance
                 && ObjectsCompat.equals(mAnswer, suggestion.mAnswer)
                 && TextUtils.equals(mPostContentType, suggestion.mPostContentType)
                 && Arrays.equals(mPostData, suggestion.mPostData) && mGroupId == suggestion.mGroupId

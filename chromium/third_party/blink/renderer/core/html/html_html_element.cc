@@ -79,10 +79,11 @@ void HTMLHtmlElement::MaybeSetupApplicationCache() {
   const AtomicString& manifest = FastGetAttribute(html_names::kManifestAttr);
 
   if (RuntimeEnabledFeatures::RestrictAppCacheToSecureContextsEnabled() &&
-      !GetDocument().IsSecureContext()) {
+      !GetExecutionContext()->IsSecureContext()) {
     if (!manifest.IsEmpty()) {
       Deprecation::CountDeprecation(
-          GetDocument(), WebFeature::kApplicationCacheAPIInsecureOrigin);
+          GetExecutionContext(),
+          WebFeature::kApplicationCacheAPIInsecureOrigin);
     }
     return;
   }

@@ -13,6 +13,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/web/web_script_source.h"
+#include "third_party/blink/renderer/core/dom/dom_node_ids.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
@@ -254,18 +255,12 @@ TEST_P(CompositingTest, BackgroundColorInScrollingContentsLayer) {
   ASSERT_TRUE(scroller_box->GetBackgroundPaintLocation() ==
               kBackgroundPaintInScrollingContents);
 
-  // In CAP mode, background_color is only set on the cc::Layer which draws the
-  // background; in pre-CAP mode, it is set on both the main layer and the
-  // scrolling contents layer.
-  bool cap_mode = RuntimeEnabledFeatures::CompositeAfterPaintEnabled();
-
   // The root layer and root scrolling contents layer get background_color by
   // blending the CSS background-color of the <html> element with
   // LocalFrameView::BaseBackgroundColor(), which is white by default.
   auto* layer = CcLayersByName(RootCcLayer(), "LayoutView #document")[0];
   SkColor expected_color = SkColorSetRGB(10, 20, 30);
-  EXPECT_EQ(layer->background_color(),
-            cap_mode ? SK_ColorTRANSPARENT : expected_color);
+  EXPECT_EQ(layer->background_color(), SK_ColorTRANSPARENT);
   auto* scrollable_area = GetLocalFrameView()->LayoutViewport();
   layer = ScrollingContentsCcLayerByScrollElementId(
       RootCcLayer(), scrollable_area->GetScrollElementId());
@@ -275,8 +270,7 @@ TEST_P(CompositingTest, BackgroundColorInScrollingContentsLayer) {
   // the layer-defining element.
   expected_color = SkColorSetRGB(30, 40, 50);
   layer = CcLayerByDOMElementId("scroller");
-  EXPECT_EQ(layer->background_color(),
-            cap_mode ? SK_ColorTRANSPARENT : expected_color);
+  EXPECT_EQ(layer->background_color(), SK_ColorTRANSPARENT);
   scrollable_area = scroller_box->GetScrollableArea();
   layer = ScrollingContentsCcLayerByScrollElementId(
       RootCcLayer(), scrollable_area->GetScrollElementId());
@@ -319,11 +313,6 @@ TEST_P(CompositingTest, BackgroundColorInGraphicsLayer) {
   ASSERT_TRUE(scroller_box->GetBackgroundPaintLocation() ==
               kBackgroundPaintInGraphicsLayer);
 
-  // In CAP mode, background_color is only set on the cc::Layer which draws the
-  // background; in pre-CAP mode, it is set on both the main layer and the
-  // scrolling contents layer.
-  bool cap_mode = RuntimeEnabledFeatures::CompositeAfterPaintEnabled();
-
   // The root layer and root scrolling contents layer get background_color by
   // blending the CSS background-color of the <html> element with
   // LocalFrameView::BaseBackgroundColor(), which is white by default. In this
@@ -334,8 +323,8 @@ TEST_P(CompositingTest, BackgroundColorInGraphicsLayer) {
   auto* scrollable_area = GetLocalFrameView()->LayoutViewport();
   layer = ScrollingContentsCcLayerByScrollElementId(
       RootCcLayer(), scrollable_area->GetScrollElementId());
-  EXPECT_EQ(layer->background_color(),
-            cap_mode ? SK_ColorTRANSPARENT : SK_ColorWHITE);
+  EXPECT_EQ(layer->background_color(), SK_ColorTRANSPARENT);
+  EXPECT_EQ(layer->SafeOpaqueBackgroundColor(), SK_ColorTRANSPARENT);
 
   // Non-root layers set background_color based on the CSS background color of
   // the layer-defining element.
@@ -345,8 +334,8 @@ TEST_P(CompositingTest, BackgroundColorInGraphicsLayer) {
   scrollable_area = scroller_box->GetScrollableArea();
   layer = ScrollingContentsCcLayerByScrollElementId(
       RootCcLayer(), scrollable_area->GetScrollElementId());
-  EXPECT_EQ(layer->background_color(),
-            cap_mode ? SK_ColorTRANSPARENT : expected_color);
+  EXPECT_EQ(layer->background_color(), SK_ColorTRANSPARENT);
+  EXPECT_EQ(layer->SafeOpaqueBackgroundColor(), SK_ColorTRANSPARENT);
 }
 
 class CompositingSimTest : public PaintTestConfigurations, public SimTest {
@@ -366,6 +355,15 @@ class CompositingSimTest : public PaintTestConfigurations, public SimTest {
   const cc::Layer* CcLayerByDOMElementId(const char* id) {
     auto layers = CcLayersByDOMElementId(RootCcLayer(), id);
     return layers.IsEmpty() ? nullptr : layers[0];
+  }
+
+  const cc::Layer* CcLayerByOwnerNodeId(Node* node) {
+    DOMNodeId id = DOMNodeIds::IdForNode(node);
+    for (auto& layer : RootCcLayer()->children()) {
+      if (layer->debug_info() && layer->debug_info()->owner_node_id == id)
+        return layer.get();
+    }
+    return nullptr;
   }
 
   Element* GetElementById(const AtomicString& id) {
@@ -1101,7 +1099,8 @@ TEST_P(CompositingSimTest, SafeOpaqueBackgroundColorGetsSet) {
 
   auto* grouped_mapping =
       GetElementById("topleft")->GetLayoutBox()->Layer()->GroupedMapping();
-  auto* squashed_layer = grouped_mapping->SquashingLayer()->CcLayer();
+  auto* squashed_layer =
+      grouped_mapping->NonScrollingSquashingLayer()->CcLayer();
   ASSERT_NE(nullptr, squashed_layer);
 
   // Top left and bottom right are squashed.
@@ -1222,7 +1221,14 @@ TEST_P(CompositingSimTest, PromoteCrossOriginIframe) {
       blink::features::kCompositeCrossOriginIframes, true);
   InitializeWithHTML("<!DOCTYPE html><iframe id=iframe sandbox></iframe>");
   Compositor().BeginFrame();
-  EXPECT_TRUE(CcLayerByDOMElementId("iframe"));
+  Document* iframe_doc =
+      To<HTMLFrameOwnerElement>(GetElementById("iframe"))->contentDocument();
+  Node* owner_node = iframe_doc;
+  if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
+    owner_node = iframe_doc->documentElement();
+  auto* layer = CcLayerByOwnerNodeId(owner_node);
+  EXPECT_TRUE(layer);
+  EXPECT_EQ(layer->bounds(), gfx::Size(300, 150));
 }
 
 // On initial layout, the iframe is not yet loaded and is not considered
@@ -1244,7 +1250,12 @@ TEST_P(CompositingSimTest, PromoteCrossOriginIframeAfterLoading) {
   frame_resource.Complete("<!DOCTYPE html>");
   Compositor().BeginFrame();
 
-  EXPECT_TRUE(CcLayerByDOMElementId("iframe"));
+  Document* iframe_doc =
+      To<HTMLFrameOwnerElement>(GetElementById("iframe"))->contentDocument();
+  Node* owner_node = iframe_doc;
+  if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
+    owner_node = iframe_doc->documentElement();
+  EXPECT_TRUE(CcLayerByOwnerNodeId(owner_node));
 }
 
 // An iframe that is cross-origin to the parent should be composited. This test
@@ -1271,8 +1282,18 @@ TEST_P(CompositingSimTest, PromoteCrossOriginToParent) {
   grandchild_resource.Complete("<!DOCTYPE html>");
   Compositor().BeginFrame();
 
-  EXPECT_TRUE(CcLayerByDOMElementId("main_iframe"));
-  EXPECT_TRUE(CcLayerByDOMElementId("child_iframe"));
+  Document* iframe_doc =
+      To<HTMLFrameOwnerElement>(GetElementById("main_iframe"))
+          ->contentDocument();
+  EXPECT_TRUE(CcLayerByOwnerNodeId(iframe_doc));
+
+  iframe_doc =
+      To<HTMLFrameOwnerElement>(iframe_doc->getElementById("child_iframe"))
+          ->contentDocument();
+  Node* owner_node = iframe_doc;
+  if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
+    owner_node = iframe_doc->documentElement();
+  EXPECT_TRUE(CcLayerByOwnerNodeId(owner_node));
 }
 
 // Initially the iframe is cross-origin and should be composited. After changing
@@ -1293,10 +1314,16 @@ TEST_P(CompositingSimTest, PromoteCrossOriginIframeAfterDomainChange) {
   frame_resource.Complete("<!DOCTYPE html>");
   Compositor().BeginFrame();
 
-  EXPECT_TRUE(CcLayerByDOMElementId("iframe"));
-
   auto* iframe_element =
       To<HTMLIFrameElement>(GetDocument().getElementById("iframe"));
+
+  Document* iframe_doc =
+      To<HTMLFrameOwnerElement>(GetElementById("iframe"))->contentDocument();
+  Node* owner_node = iframe_doc;
+  if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
+    owner_node = iframe_doc->documentElement();
+  EXPECT_TRUE(CcLayerByOwnerNodeId(owner_node));
+
   NonThrowableExceptionState exception_state;
   GetDocument().setDomain(String("origin-a.com"), exception_state);
   iframe_element->contentDocument()->setDomain(String("origin-a.com"),
@@ -1305,7 +1332,12 @@ TEST_P(CompositingSimTest, PromoteCrossOriginIframeAfterDomainChange) {
   // using BeginFrame.
   UpdateAllLifecyclePhases();
 
-  EXPECT_FALSE(CcLayerByDOMElementId("iframe"));
+  iframe_doc =
+      To<HTMLFrameOwnerElement>(GetElementById("iframe"))->contentDocument();
+  owner_node = iframe_doc;
+  if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
+    owner_node = iframe_doc->documentElement();
+  EXPECT_FALSE(CcLayerByOwnerNodeId(owner_node));
 }
 
 // This test sets up nested frames with domains A -> B -> A. Initially, the
@@ -1333,8 +1365,18 @@ TEST_P(CompositingSimTest, PromoteCrossOriginToParentIframeAfterDomainChange) {
   grandchild_resource.Complete("<!DOCTYPE html>");
   Compositor().BeginFrame();
 
-  EXPECT_TRUE(CcLayerByDOMElementId("main_iframe"));
-  EXPECT_TRUE(CcLayerByDOMElementId("child_iframe"));
+  Document* iframe_doc =
+      To<HTMLFrameOwnerElement>(GetElementById("main_iframe"))
+          ->contentDocument();
+  EXPECT_TRUE(CcLayerByOwnerNodeId(iframe_doc));
+
+  iframe_doc =
+      To<HTMLFrameOwnerElement>(iframe_doc->getElementById("child_iframe"))
+          ->contentDocument();
+  Node* owner_node = iframe_doc;
+  if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
+    owner_node = iframe_doc->documentElement();
+  EXPECT_TRUE(CcLayerByOwnerNodeId(owner_node));
 
   auto* main_iframe_element =
       To<HTMLIFrameElement>(GetDocument().getElementById("main_iframe"));
@@ -1351,8 +1393,35 @@ TEST_P(CompositingSimTest, PromoteCrossOriginToParentIframeAfterDomainChange) {
   // using BeginFrame.
   UpdateAllLifecyclePhases();
 
-  EXPECT_FALSE(CcLayerByDOMElementId("main_iframe"));
-  EXPECT_FALSE(CcLayerByDOMElementId("child_iframe"));
+  iframe_doc = To<HTMLFrameOwnerElement>(GetElementById("main_iframe"))
+                   ->contentDocument();
+  EXPECT_FALSE(CcLayerByOwnerNodeId(iframe_doc));
+
+  iframe_doc =
+      To<HTMLFrameOwnerElement>(iframe_doc->getElementById("child_iframe"))
+          ->contentDocument();
+  owner_node = iframe_doc;
+  if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
+    owner_node = iframe_doc->documentElement();
+  EXPECT_FALSE(CcLayerByOwnerNodeId(owner_node));
+}
+
+// Regression test for https://crbug.com/1095167. Render surfaces require that
+// EffectNode::stable_id is set.
+TEST_P(CompositingTest, EffectNodesShouldHaveStableIds) {
+  InitializeWithHTML(*WebView()->MainFrameImpl()->GetFrame(), R"HTML(
+    <div style="overflow: hidden; border-radius: 2px; height: 10px;">
+      <div style="backdrop-filter: grayscale(3%);">
+        a
+        <span style="backdrop-filter: grayscale(3%);">b</span>
+      </div>
+    </div>
+  )HTML");
+  auto* property_trees = RootCcLayer()->layer_tree_host()->property_trees();
+  for (const auto& effect_node : property_trees->effect_tree.nodes()) {
+    if (effect_node.parent_id != -1)
+      EXPECT_TRUE(!!effect_node.stable_id);
+  }
 }
 
 }  // namespace blink

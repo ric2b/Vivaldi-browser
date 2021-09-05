@@ -9,9 +9,9 @@
 #include "base/bind.h"
 #include "base/memory/read_only_shared_memory_region.h"
 #include "base/stl_util.h"
-#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "components/discardable_memory/service/discardable_shared_memory_manager.h"
+#include "components/printing/browser/service_sandbox_type.h"
 #include "components/printing/common/print_messages.h"
 #include "components/services/print_compositor/public/cpp/print_service_mojo_types.h"
 #include "components/strings/grit/components_strings.h"
@@ -20,6 +20,7 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/service_process_host.h"
+#include "printing/common/metafile_utils.h"
 #include "printing/printing_utils.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 
@@ -81,40 +82,41 @@ PrintCompositeClient::~PrintCompositeClient() {}
 bool PrintCompositeClient::OnMessageReceived(
     const IPC::Message& message,
     content::RenderFrameHost* render_frame_host) {
+#if BUILDFLAG(ENABLE_TAGGED_PDF)
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP_WITH_PARAM(PrintCompositeClient, message,
                                    render_frame_host)
-    IPC_MESSAGE_HANDLER(PrintHostMsg_DidPrintFrameContent,
-                        OnDidPrintFrameContent)
-#if BUILDFLAG(ENABLE_TAGGED_PDF)
     IPC_MESSAGE_HANDLER(PrintHostMsg_AccessibilityTree, OnAccessibilityTree)
-#endif
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   return handled;
+#else
+  return false;
+#endif
 }
 
 void PrintCompositeClient::RenderFrameDeleted(
     content::RenderFrameHost* render_frame_host) {
-  uint64_t frame_guid = GenerateFrameGuid(render_frame_host);
-  auto iter = pending_subframe_cookies_.find(frame_guid);
-  if (iter != pending_subframe_cookies_.end()) {
-    // When a subframe we are expecting is deleted, we should notify print
+  if (document_cookie_ == 0)
+    return;
+
+  auto iter = pending_subframes_.find(render_frame_host);
+  if (iter != pending_subframes_.end()) {
+    // When a subframe we are expecting is deleted, we should notify the print
     // compositor service.
-    for (int doc_cookie : iter->second) {
-      auto* compositor = GetCompositeRequest(doc_cookie);
-      compositor->NotifyUnavailableSubframe(frame_guid);
-    }
-    pending_subframe_cookies_.erase(iter);
+    auto* compositor = GetCompositeRequest(document_cookie_);
+    compositor->NotifyUnavailableSubframe(GenerateFrameGuid(render_frame_host));
+    pending_subframes_.erase(iter);
   }
 
   print_render_frames_.erase(render_frame_host);
 }
 
 void PrintCompositeClient::OnDidPrintFrameContent(
-    content::RenderFrameHost* render_frame_host,
+    int render_process_id,
+    int render_frame_id,
     int document_cookie,
-    const PrintHostMsg_DidPrintContent_Params& params) {
+    mojom::DidPrintContentParamsPtr params) {
   auto* outer_contents = web_contents()->GetOuterWebContents();
   if (outer_contents) {
     // NOTE(andre@vivaldi.com) : Vivaldi turned on
@@ -131,27 +133,32 @@ void PrintCompositeClient::OnDidPrintFrameContent(
     // contents nested in multiple layers.
     auto* outer_client = PrintCompositeClient::FromWebContents(outer_contents);
     DCHECK(outer_client);
-    outer_client->OnDidPrintFrameContent(render_frame_host, document_cookie,
-                                         params);
+    outer_client->OnDidPrintFrameContent(render_process_id, render_frame_id,
+                                         document_cookie, std::move(params));
     return;
     }
   }
+
+  if (document_cookie_ != document_cookie)
+    return;
+
+  auto* render_frame_host =
+      content::RenderFrameHost::FromID(render_process_id, render_frame_id);
+  if (!render_frame_host)
+    return;
 
   // Content in |params| is sent from untrusted source; only minimal processing
   // is done here. Most of it will be directly forwarded to print compositor
   // service.
   auto* compositor = GetCompositeRequest(document_cookie);
-  auto region = params.metafile_data_region.Duplicate();
-  uint64_t frame_guid = GenerateFrameGuid(render_frame_host);
+  auto region = params->metafile_data_region.Duplicate();
   compositor->AddSubframeContent(
-      frame_guid, std::move(region),
-      ConvertContentInfoMap(render_frame_host, params.subframe_content_info));
+      GenerateFrameGuid(render_frame_host), std::move(region),
+      ConvertContentInfoMap(render_frame_host, params->subframe_content_info));
 
   // Update our internal states about this frame.
-  pending_subframe_cookies_[frame_guid].erase(document_cookie);
-  if (pending_subframe_cookies_[frame_guid].empty())
-    pending_subframe_cookies_.erase(frame_guid);
-  printed_subframes_[document_cookie].insert(frame_guid);
+  pending_subframes_.erase(render_frame_host);
+  printed_subframes_.insert(render_frame_host);
 }
 
 #if BUILDFLAG(ENABLE_TAGGED_PDF)
@@ -168,38 +175,36 @@ void PrintCompositeClient::PrintCrossProcessSubframe(
     int document_cookie,
     content::RenderFrameHost* subframe_host) {
   auto params = mojom::PrintFrameContentParams::New(rect, document_cookie);
-  uint64_t frame_guid = GenerateFrameGuid(subframe_host);
   if (!subframe_host->IsRenderFrameLive()) {
     // When the subframe is dead, no need to send message,
     // just notify the service.
     auto* compositor = GetCompositeRequest(document_cookie);
-    compositor->NotifyUnavailableSubframe(frame_guid);
+    compositor->NotifyUnavailableSubframe(GenerateFrameGuid(subframe_host));
     return;
   }
 
-  auto subframe_iter = printed_subframes_.find(document_cookie);
-  if (subframe_iter != printed_subframes_.end() &&
-      base::Contains(subframe_iter->second, frame_guid)) {
-    // If this frame is already printed, no need to print again.
-    return;
-  }
-
-  auto cookie_iter = pending_subframe_cookies_.find(frame_guid);
-  if (cookie_iter != pending_subframe_cookies_.end() &&
-      base::Contains(cookie_iter->second, document_cookie)) {
-    // If this frame is being printed, no need to print again.
+  // If this frame is already printed, no need to print again.
+  if (base::Contains(pending_subframes_, subframe_host) ||
+      base::Contains(printed_subframes_, subframe_host)) {
     return;
   }
 
   // Send the request to the destination frame.
-  GetPrintRenderFrame(subframe_host)->PrintFrameContent(std::move(params));
-  pending_subframe_cookies_[frame_guid].insert(document_cookie);
+  int render_process_id = subframe_host->GetProcess()->GetID();
+  int render_frame_id = subframe_host->GetRoutingID();
+  GetPrintRenderFrame(subframe_host)
+      ->PrintFrameContent(
+          std::move(params),
+          base::BindOnce(&PrintCompositeClient::OnDidPrintFrameContent,
+                         weak_ptr_factory_.GetWeakPtr(), render_process_id,
+                         render_frame_id));
+  pending_subframes_.insert(subframe_host);
 }
 
 void PrintCompositeClient::DoCompositePageToPdf(
     int document_cookie,
     content::RenderFrameHost* render_frame_host,
-    const PrintHostMsg_DidPrintContent_Params& content,
+    const mojom::DidPrintContentParams& content,
     mojom::PrintCompositor::CompositePageToPdfCallback callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
@@ -218,8 +223,8 @@ void PrintCompositeClient::DoPrepareForDocumentToPdf(
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DCHECK(!GetIsDocumentConcurrentlyComposited(document_cookie));
 
-  is_doc_concurrently_composited_set_.insert(document_cookie);
-  auto* compositor = GetCompositeRequest(document_cookie);
+  auto* compositor = CreateCompositeRequest(document_cookie);
+  is_doc_concurrently_composited_ = true;
   compositor->PrepareForDocumentToPdf(
       base::BindOnce(&PrintCompositeClient::OnDidPrepareForDocumentToPdf,
                      std::move(callback)));
@@ -247,12 +252,12 @@ void PrintCompositeClient::DoCompleteDocumentToPdf(
 void PrintCompositeClient::DoCompositeDocumentToPdf(
     int document_cookie,
     content::RenderFrameHost* render_frame_host,
-    const PrintHostMsg_DidPrintContent_Params& content,
+    const mojom::DidPrintContentParams& content,
     mojom::PrintCompositor::CompositeDocumentToPdfCallback callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DCHECK(!GetIsDocumentConcurrentlyComposited(document_cookie));
 
-  auto* compositor = GetCompositeRequest(document_cookie);
+  auto* compositor = CreateCompositeRequest(document_cookie);
   auto region = content.metafile_data_region.Duplicate();
 
   // Since this class owns compositor, compositor will be gone when this class
@@ -280,9 +285,6 @@ void PrintCompositeClient::OnDidCompositeDocumentToPdf(
     mojom::PrintCompositor::Status status,
     base::ReadOnlySharedMemoryRegion region) {
   RemoveCompositeRequest(document_cookie);
-  // Clear all stored printed subframes.
-  printed_subframes_.erase(document_cookie);
-
   std::move(callback).Run(status, std::move(region));
 }
 
@@ -299,54 +301,61 @@ void PrintCompositeClient::OnDidCompleteDocumentToPdf(
     mojom::PrintCompositor::Status status,
     base::ReadOnlySharedMemoryRegion region) {
   RemoveCompositeRequest(document_cookie);
-  // Clear all stored printed subframes.
-  printed_subframes_.erase(document_cookie);
-  // No longer concurrently compositing this document.
-  is_doc_concurrently_composited_set_.erase(document_cookie);
   std::move(callback).Run(status, std::move(region));
 }
 
 bool PrintCompositeClient::GetIsDocumentConcurrentlyComposited(
     int cookie) const {
-  return base::Contains(is_doc_concurrently_composited_set_, cookie);
+  return is_doc_concurrently_composited_ && document_cookie_ == cookie;
 }
 
-mojom::PrintCompositor* PrintCompositeClient::GetCompositeRequest(int cookie) {
-  auto iter = compositor_map_.find(cookie);
-  if (iter != compositor_map_.end()) {
-    DCHECK(iter->second.is_bound());
-    return iter->second.get();
+mojom::PrintCompositor* PrintCompositeClient::CreateCompositeRequest(
+    int cookie) {
+  if (document_cookie_ != 0) {
+    DCHECK_NE(document_cookie_, cookie);
+    RemoveCompositeRequest(document_cookie_);
   }
+  document_cookie_ = cookie;
 
-  iter = compositor_map_.emplace(cookie, CreateCompositeRequest()).first;
-  return iter->second.get();
-}
-
-void PrintCompositeClient::RemoveCompositeRequest(int cookie) {
-  size_t erased = compositor_map_.erase(cookie);
-  DCHECK_EQ(erased, 1u);
-}
-
-mojo::Remote<mojom::PrintCompositor>
-PrintCompositeClient::CreateCompositeRequest() {
-  auto compositor = content::ServiceProcessHost::Launch<mojom::PrintCompositor>(
+  compositor_ = content::ServiceProcessHost::Launch<mojom::PrintCompositor>(
       content::ServiceProcessHost::Options()
           .WithDisplayName(IDS_PRINT_COMPOSITOR_SERVICE_DISPLAY_NAME)
-          .WithSandboxType(service_manager::SandboxType::kPrintCompositor)
           .Pass());
 
   mojo::PendingRemote<discardable_memory::mojom::DiscardableSharedMemoryManager>
       discardable_memory_manager;
-  base::PostTask(
-      FROM_HERE, {content::BrowserThread::IO},
+  content::GetIOThreadTaskRunner({})->PostTask(
+      FROM_HERE,
       base::BindOnce(
           &BindDiscardableSharedMemoryManagerOnIOThread,
           discardable_memory_manager.InitWithNewPipeAndPassReceiver()));
-  compositor->SetDiscardableSharedMemoryManager(
+  compositor_->SetDiscardableSharedMemoryManager(
       std::move(discardable_memory_manager));
-  compositor->SetWebContentsURL(web_contents()->GetLastCommittedURL());
-  compositor->SetUserAgent(user_agent_);
-  return compositor;
+  compositor_->SetWebContentsURL(web_contents()->GetLastCommittedURL());
+  compositor_->SetUserAgent(user_agent_);
+
+  return compositor_.get();
+}
+
+void PrintCompositeClient::RemoveCompositeRequest(int cookie) {
+  DCHECK_EQ(document_cookie_, cookie);
+  compositor_.reset();
+  document_cookie_ = 0;
+
+  // Clear all stored printed and pending subframes.
+  pending_subframes_.clear();
+  printed_subframes_.clear();
+
+  // No longer concurrently compositing this document.
+  is_doc_concurrently_composited_ = false;
+}
+
+mojom::PrintCompositor* PrintCompositeClient::GetCompositeRequest(
+    int cookie) const {
+  DCHECK_NE(0, document_cookie_);
+  DCHECK_EQ(document_cookie_, cookie);
+  DCHECK(compositor_.is_bound());
+  return compositor_.get();
 }
 
 const mojo::AssociatedRemote<mojom::PrintRenderFrame>&

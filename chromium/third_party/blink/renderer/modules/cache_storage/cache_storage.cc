@@ -51,7 +51,8 @@ struct TypeConverter<MultiCacheQueryOptionsPtr,
 
     MultiCacheQueryOptionsPtr output = MultiCacheQueryOptions::New();
     output->query_options = std::move(query_options);
-    output->cache_name = input->cacheName();
+    if (input->hasCacheName())
+      output->cache_name = input->cacheName();
     return output;
   }
 };
@@ -498,7 +499,7 @@ bool CacheStorage::HasPendingActivity() const {
   return ever_used_;
 }
 
-void CacheStorage::Trace(Visitor* visitor) {
+void CacheStorage::Trace(Visitor* visitor) const {
   visitor->Trace(scoped_fetcher_);
   visitor->Trace(blob_client_list_);
   visitor->Trace(cache_storage_remote_);

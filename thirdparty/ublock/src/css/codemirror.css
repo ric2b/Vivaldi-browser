@@ -1,0 +1,127 @@
+.codeMirrorContainer {
+    font-size: 12px;
+    line-height: 1.25;
+    overflow: hidden;
+    position: relative;
+    }
+.CodeMirror {
+    box-sizing: border-box;
+    flex-grow: 1;
+    height: 100%;
+    width: 100%;
+    }
+
+/* For when panels are used */
+.codeMirrorContainer > div:not([class^="CodeMirror"]) {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    }
+
+.codeMirrorContainer.codeMirrorBreakAll .CodeMirror-wrap pre {
+    word-break: break-all;
+    }
+
+/* CodeMirror theme overrides */
+.cm-s-default .cm-value { color: #930; }
+.cm-s-default .cm-comment { color: #777; }
+.cm-s-default .cm-keyword { color: #90b; }
+.cm-s-default .cm-regex {
+    text-underline-position: under;
+    text-decoration-color: darkgray;
+    text-decoration-style: solid;
+    text-decoration-line: underline;
+    }
+.cm-s-default .cm-error {
+    color: inherit;
+    }
+.cm-s-default .cm-error,
+.CodeMirror-linebackground.error {
+    background-color: #ff000016;
+    text-decoration: underline red;
+    text-underline-position: under;
+    }
+
+.cm-directive { color: #333; font-weight: bold; }
+.cm-staticext { color: #008; }
+.cm-staticnetBlock { color: #800; }
+.cm-staticnetAllow { color: #004f00; }
+.cm-staticOpt { background-color: #ddd; font-weight: bold; }
+
+div.CodeMirror span.CodeMirror-matchingbracket {
+    color: unset;
+    }
+.CodeMirror-matchingbracket {
+    background-color: #afa;
+    color: inherit !important;
+    font-weight: bold;
+    }
+
+.cm-search-widget {
+    align-items: center;
+    background-color: var(--bg-code);
+    cursor: default;
+    direction: ltr;
+    display: flex;
+    flex-shrink: 0;
+    justify-content: space-between;
+    padding: 0.5em;
+    user-select: none;
+      -moz-user-select: none;
+      -webkit-user-select: none;
+    z-index: 1000;
+    }
+.cm-search-widget-input {
+    display: inline-flex;
+    flex-grow: 1;
+    }
+.cm-search-widget .fa-icon {
+    fill: #888;
+    font-size: 140%;
+    }
+.cm-search-widget .fa-icon:not(.fa-icon-ro):hover {
+    fill: #000;
+    }
+.cm-search-widget-input input {
+    border: 1px solid gray;
+    display: inline-flex;
+    flex-grow: 1;
+    max-width: 16em;
+    }
+.cm-search-widget-count {
+    align-items: center;
+    display: inline-flex;
+    flex-grow: 0;
+    font-size: 95%;
+    min-width: 6em;
+    visibility: hidden;
+    }
+.cm-search-widget[data-query] .cm-search-widget-count:not(:empty) {
+    visibility: visible;
+    }
+.cm-search-widget .cm-search-widget-button:hover {
+    color: #000;
+    }
+.cm-search-widget .sourceURL[href=""] {
+    display: none;
+    }
+.cm-searching {
+    border: 1px dotted black;
+    }
+
+.CodeMirror-merge-l-deleted {
+    background-image: none;
+    font-weight: bold;
+    }
+.CodeMirror-merge-l-inserted {
+    background-image: none;
+    font-weight: bold;
+    }
+/* This probably needs to be added to CodeMirror repo */
+.CodeMirror-merge-gap {
+    vertical-align: top;
+    }
+
+.CodeMirror-hints {
+    z-index: 10000;
+    }

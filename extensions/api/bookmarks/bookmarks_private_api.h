@@ -33,8 +33,7 @@ class VivaldiBookmarksAPI : public bookmarks::BookmarkModelObserver,
 
   static bool SetBookmarkThumbnail(content::BrowserContext* browser_context,
                                    int64_t bookmark_id,
-                                   const std::string& url,
-                                   std::string* old_url);
+                                   const std::string& url);
 
  private:
   // bookmarks::BookmarkModelObserver

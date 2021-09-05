@@ -77,8 +77,8 @@ class MetricsRenderFrameObserver
   void ReadyToCommitNavigation(
       blink::WebDocumentLoader* document_loader) override;
   void DidFailProvisionalLoad() override;
-  void DidCommitProvisionalLoad(bool is_same_document_navigation,
-                                ui::PageTransition transition) override;
+  void DidCommitProvisionalLoad(ui::PageTransition transition) override;
+  void DidCreateDocumentElement() override;
   void OnDestruct() override;
 
   // Invoked when a frame is going away. This is our last chance to send IPCs
@@ -95,6 +95,11 @@ class MetricsRenderFrameObserver
 
   void OnMainFrameDocumentIntersectionChanged(
       const blink::WebRect& main_frame_document_intersection) override;
+
+  void OnThroughputDataAvailable(ukm::SourceId source_id,
+                                 int aggregated_percent,
+                                 int impl_percent,
+                                 base::Optional<int> main_percent) override;
 
  protected:
   // The relative and monotonic page load timings.
@@ -125,8 +130,13 @@ class MetricsRenderFrameObserver
   void SendMetrics();
   virtual Timing GetTiming() const;
   virtual std::unique_ptr<base::OneShotTimer> CreateTimer();
-  virtual std::unique_ptr<PageTimingSender> CreatePageTimingSender();
+  virtual std::unique_ptr<PageTimingSender> CreatePageTimingSender(
+      bool limited_sending_mode);
   virtual bool HasNoRenderFrame() const;
+
+  // Whether the initial about:blank document loaded into every frame was
+  // observed.
+  bool first_document_observed_ = false;
 
   // Collects the data use of the frame request for a provisional load until the
   // load is committed. We want to collect data use for completed navigations in

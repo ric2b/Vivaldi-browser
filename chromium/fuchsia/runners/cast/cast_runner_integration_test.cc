@@ -35,7 +35,6 @@
 #include "fuchsia/base/frame_test_util.h"
 #include "fuchsia/base/fuchsia_dir_scheme.h"
 #include "fuchsia/base/mem_buffer_util.h"
-#include "fuchsia/base/release_channel.h"
 #include "fuchsia/base/result_receiver.h"
 #include "fuchsia/base/string_util.h"
 #include "fuchsia/base/test_devtools_list_fetcher.h"
@@ -122,6 +121,13 @@ class FakeApplicationContext : public chromium::cast::ApplicationContext {
     return controller_.get();
   }
 
+  base::Optional<int64_t> WaitForApplicationTerminated() {
+    base::RunLoop loop;
+    on_application_terminated_ = loop.QuitClosure();
+    loop.Run();
+    return application_exit_code_;
+  }
+
  private:
   // chromium::cast::ApplicationContext implementation.
   void GetMediaSessionId(GetMediaSessionIdCallback callback) final {
@@ -132,8 +138,16 @@ class FakeApplicationContext : public chromium::cast::ApplicationContext {
       final {
     controller_ = controller.Bind();
   }
+  void OnApplicationExit(int64_t exit_code) final {
+    application_exit_code_ = exit_code;
+    if (on_application_terminated_)
+      std::move(on_application_terminated_).Run();
+  }
 
   chromium::cast::ApplicationControllerPtr controller_;
+
+  base::Optional<int64_t> application_exit_code_;
+  base::OnceClosure on_application_terminated_;
 };
 
 class FakeComponentState : public cr_fuchsia::AgentImpl::ComponentStateBase {
@@ -549,8 +563,7 @@ TEST_F(CastRunnerIntegrationTest, IncorrectCastAppId) {
   CreateComponentContext(kIncorrectComponentUrl);
   StartCastComponent(kIncorrectComponentUrl);
 
-  // Run the loop until the ComponentController is dropped, or a WebComponent is
-  // created.
+  // Run the loop until the ComponentController is dropped.
   base::RunLoop run_loop;
   component_controller_.set_error_handler([&run_loop](zx_status_t status) {
     EXPECT_EQ(status, ZX_ERR_PEER_CLOSED);
@@ -865,24 +878,104 @@ TEST_F(CastRunnerIntegrationTest, LegacyMetricsRedirect) {
   CreateComponentContext(component_url);
   EXPECT_NE(component_context_, nullptr);
 
+  base::RunLoop run_loop;
+
+  // Add MetricsRecorder the the component's incoming_services.
+  component_services_.AddPublicService(
+      std::make_unique<vfs::Service>(
+          [&run_loop](zx::channel request, async_dispatcher_t* dispatcher) {
+            run_loop.Quit();
+          }),
+      fuchsia::legacymetrics::MetricsRecorder::Name_);
+
   StartCastComponent(component_url);
 
-  // Wait until we see the CastRunner connect to the LegacyMetrics service.
-  base::RunLoop run_loop;
-  component_state_created_callback_ = base::BindOnce(
-      [](FakeComponentState** component_state,
-         base::RepeatingClosure quit_closure) {
-        (*component_state)
-            ->outgoing_directory()
-            ->AddPublicService(
-                std::make_unique<vfs::Service>(
-                    [quit_closure](zx::channel, async_dispatcher_t*) {
-                      quit_closure.Run();
-                    }),
-                fuchsia::legacymetrics::MetricsRecorder::Name_);
-      },
-      base::Unretained(&component_state_), run_loop.QuitClosure());
+  // Wait until we see the CastRunner connect to the MetricsRecorder service.
   run_loop.Run();
+}
+
+// Verifies that the ApplicationContext::OnApplicationTerminated() is notified
+// with the component exit code if the web content closes itself.
+TEST_F(CastRunnerIntegrationTest, OnApplicationTerminated_WindowClose) {
+  const GURL url = test_server_.GetURL(kBlankAppUrl);
+  app_config_manager_.AddApp(kTestAppId, url);
+
+  CreateComponentContextAndStartComponent();
+
+  // It is possible to observe the ComponentController close before
+  // OnApplicationTerminated() is received, so ignore that.
+  component_controller_.set_error_handler([](zx_status_t) {});
+
+  // Have the web content close itself, and wait for OnApplicationTerminated().
+  EXPECT_EQ(ExecuteJavaScript("window.close()"), "undefined");
+  base::Optional<zx_status_t> exit_code =
+      component_state_->application_context()->WaitForApplicationTerminated();
+  ASSERT_TRUE(exit_code);
+  EXPECT_EQ(exit_code.value(), ZX_OK);
+}
+
+// Verifies that the ComponentController reports TerminationReason::EXITED and
+// exit code ZX_OK if the web content terminates itself.
+// TODO(https://crbug.com/1066833): Make this a WebRunner test.
+TEST_F(CastRunnerIntegrationTest, OnTerminated_WindowClose) {
+  const GURL url = test_server_.GetURL(kBlankAppUrl);
+  app_config_manager_.AddApp(kTestAppId, url);
+
+  CreateComponentContextAndStartComponent();
+
+  // Register an handler on the ComponentController channel, for the
+  // OnTerminated event.
+  base::RunLoop exit_code_loop;
+  component_controller_.set_error_handler(
+      [quit_loop = exit_code_loop.QuitClosure()](zx_status_t) {
+        quit_loop.Run();
+        ADD_FAILURE();
+      });
+  component_controller_.events().OnTerminated =
+      [quit_loop = exit_code_loop.QuitClosure()](
+          int64_t exit_code, fuchsia::sys::TerminationReason reason) {
+        quit_loop.Run();
+        EXPECT_EQ(reason, fuchsia::sys::TerminationReason::EXITED);
+        EXPECT_EQ(exit_code, ZX_OK);
+      };
+
+  // Have the web content close itself, and wait for OnTerminated().
+  EXPECT_EQ(ExecuteJavaScript("window.close()"), "undefined");
+  exit_code_loop.Run();
+
+  component_controller_.Unbind();
+}
+
+// Verifies that the ComponentController reports TerminationReason::EXITED and
+// exit code ZX_OK if Kill() is used.
+// TODO(https://crbug.com/1066833): Make this a WebRunner test.
+TEST_F(CastRunnerIntegrationTest, OnTerminated_ComponentKill) {
+  const GURL url = test_server_.GetURL(kBlankAppUrl);
+  app_config_manager_.AddApp(kTestAppId, url);
+
+  CreateComponentContextAndStartComponent();
+
+  // Register an handler on the ComponentController channel, for the
+  // OnTerminated event.
+  base::RunLoop exit_code_loop;
+  component_controller_.set_error_handler(
+      [quit_loop = exit_code_loop.QuitClosure()](zx_status_t) {
+        quit_loop.Run();
+        ADD_FAILURE();
+      });
+  component_controller_.events().OnTerminated =
+      [quit_loop = exit_code_loop.QuitClosure()](
+          int64_t exit_code, fuchsia::sys::TerminationReason reason) {
+        quit_loop.Run();
+        EXPECT_EQ(reason, fuchsia::sys::TerminationReason::EXITED);
+        EXPECT_EQ(exit_code, ZX_OK);
+      };
+
+  // Kill() the component and wait for OnTerminated().
+  component_controller_->Kill();
+  exit_code_loop.Run();
+
+  component_controller_.Unbind();
 }
 
 TEST_F(CastRunnerIntegrationTest, WebGLContextAbsentWithoutVulkanFeature) {

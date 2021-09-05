@@ -50,7 +50,8 @@ void NinjaBinaryTargetWriter::Run() {
   writer.Run();
 }
 
-OutputFile NinjaBinaryTargetWriter::WriteInputsStampAndGetDep() const {
+std::vector<OutputFile> NinjaBinaryTargetWriter::WriteInputsStampAndGetDep(
+    size_t num_stamp_uses) const {
   CHECK(target_->toolchain()) << "Toolchain not set on target "
                               << target_->label().GetUserVisibleName(true);
 
@@ -62,12 +63,23 @@ OutputFile NinjaBinaryTargetWriter::WriteInputsStampAndGetDep() const {
   }
 
   if (inputs.size() == 0)
-    return OutputFile();  // No inputs
+    return std::vector<OutputFile>();  // No inputs
 
   // If we only have one input, return it directly instead of writing a stamp
   // file for it.
-  if (inputs.size() == 1)
-    return OutputFile(settings_->build_settings(), *inputs[0]);
+  if (inputs.size() == 1) {
+    return std::vector<OutputFile>{
+      OutputFile(settings_->build_settings(), *inputs[0])};
+  }
+
+  std::vector<OutputFile> outs;
+  for (const SourceFile* source : inputs)
+    outs.push_back(OutputFile(settings_->build_settings(), *source));
+
+  // If there are multiple inputs, but the stamp file would be referenced only
+  // once, don't write it but depend on the inputs directly.
+  if (num_stamp_uses == 1u)
+    return outs;
 
   // Make a stamp file.
   OutputFile stamp_file =
@@ -87,7 +99,7 @@ OutputFile NinjaBinaryTargetWriter::WriteInputsStampAndGetDep() const {
   }
 
   out_ << std::endl;
-  return stamp_file;
+  return {stamp_file};
 }
 
 void NinjaBinaryTargetWriter::WriteSourceSetStamp(
@@ -196,9 +208,49 @@ void NinjaBinaryTargetWriter::ClassifyDependency(
 void NinjaBinaryTargetWriter::AddSourceSetFiles(
     const Target* source_set,
     UniqueVector<OutputFile>* obj_files) const {
-  // Just add all sources to the list.
+  std::vector<OutputFile> tool_outputs;  // Prevent allocation in loop.
+
+  // Compute object files for all sources. Only link the first output from
+  // the tool if there are more than one.
   for (const auto& source : source_set->sources()) {
-    obj_files->push_back(OutputFile(settings_->build_settings(), source));
+    const char* tool_name = Tool::kToolNone;
+    if (source_set->GetOutputFilesForSource(source, &tool_name, &tool_outputs))
+      obj_files->push_back(tool_outputs[0]);
+  }
+
+  // Add MSVC precompiled header object files. GCC .gch files are not object
+  // files so they are omitted.
+  if (source_set->config_values().has_precompiled_headers()) {
+    if (source_set->source_types_used().Get(SourceFile::SOURCE_C)) {
+      const CTool* tool = source_set->toolchain()->GetToolAsC(CTool::kCToolCc);
+      if (tool && tool->precompiled_header_type() == CTool::PCH_MSVC) {
+        GetPCHOutputFiles(source_set, CTool::kCToolCc, &tool_outputs);
+        obj_files->Append(tool_outputs.begin(), tool_outputs.end());
+      }
+    }
+    if (source_set->source_types_used().Get(SourceFile::SOURCE_CPP)) {
+      const CTool* tool = source_set->toolchain()->GetToolAsC(CTool::kCToolCxx);
+      if (tool && tool->precompiled_header_type() == CTool::PCH_MSVC) {
+        GetPCHOutputFiles(source_set, CTool::kCToolCxx, &tool_outputs);
+        obj_files->Append(tool_outputs.begin(), tool_outputs.end());
+      }
+    }
+    if (source_set->source_types_used().Get(SourceFile::SOURCE_M)) {
+      const CTool* tool =
+          source_set->toolchain()->GetToolAsC(CTool::kCToolObjC);
+      if (tool && tool->precompiled_header_type() == CTool::PCH_MSVC) {
+        GetPCHOutputFiles(source_set, CTool::kCToolObjC, &tool_outputs);
+        obj_files->Append(tool_outputs.begin(), tool_outputs.end());
+      }
+    }
+    if (source_set->source_types_used().Get(SourceFile::SOURCE_MM)) {
+      const CTool* tool =
+          source_set->toolchain()->GetToolAsC(CTool::kCToolObjCxx);
+      if (tool && tool->precompiled_header_type() == CTool::PCH_MSVC) {
+        GetPCHOutputFiles(source_set, CTool::kCToolObjCxx, &tool_outputs);
+        obj_files->Append(tool_outputs.begin(), tool_outputs.end());
+      }
+    }
   }
 }
 
@@ -301,11 +353,16 @@ void NinjaBinaryTargetWriter::WriteLibs(std::ostream& out, const Tool* tool) {
 
 void NinjaBinaryTargetWriter::WriteFrameworks(std::ostream& out,
                                               const Tool* tool) {
-  FrameworksWriter writer(tool->framework_switch());
-
   // Frameworks that have been recursively pushed through the dependency tree.
+  FrameworksWriter writer(tool->framework_switch());
   const auto& all_frameworks = target_->all_frameworks();
   for (size_t i = 0; i < all_frameworks.size(); i++) {
     writer(all_frameworks[i], out);
+  }
+
+  FrameworksWriter weak_writer(tool->weak_framework_switch());
+  const auto& all_weak_frameworks = target_->all_weak_frameworks();
+  for (size_t i = 0; i < all_weak_frameworks.size(); i++) {
+    weak_writer(all_weak_frameworks[i], out);
   }
 }

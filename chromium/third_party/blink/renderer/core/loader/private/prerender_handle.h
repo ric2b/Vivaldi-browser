@@ -44,6 +44,7 @@
 
 namespace blink {
 
+class ExecutionContext;
 class Document;
 class PrerenderClient;
 
@@ -60,13 +61,14 @@ class PrerenderHandle final : public GarbageCollected<PrerenderHandle>,
                                  unsigned prerender_rel_types);
 
   using PassKey = util::PassKey<PrerenderHandle>;
-  PrerenderHandle(PassKey,
-                  Document&,
-                  PrerenderClient*,
-                  const KURL&,
-                  HeapMojoRemote<mojom::blink::PrerenderHandle,
-                                 HeapMojoWrapperMode::kWithoutContextObserver>,
-                  mojo::PendingReceiver<mojom::blink::PrerenderHandleClient>);
+  PrerenderHandle(
+      PassKey,
+      ExecutionContext*,
+      PrerenderClient*,
+      const KURL&,
+      HeapMojoRemote<mojom::blink::PrerenderHandle,
+                     HeapMojoWrapperMode::kForceWithoutContextObserver>,
+      mojo::PendingReceiver<mojom::blink::PrerenderHandleClient>);
   ~PrerenderHandle() override;
   void Dispose();
 
@@ -82,7 +84,7 @@ class PrerenderHandle final : public GarbageCollected<PrerenderHandle>,
   void OnPrerenderDomContentLoaded() override;
   void OnPrerenderStop() override;
 
-  void Trace(Visitor*) override;
+  void Trace(Visitor*) const override;
 
  private:
   void Detach();
@@ -90,11 +92,11 @@ class PrerenderHandle final : public GarbageCollected<PrerenderHandle>,
   KURL url_;
   WeakMember<PrerenderClient> client_;
   HeapMojoRemote<mojom::blink::PrerenderHandle,
-                 HeapMojoWrapperMode::kWithoutContextObserver>
+                 HeapMojoWrapperMode::kForceWithoutContextObserver>
       remote_handle_;
   HeapMojoReceiver<mojom::blink::PrerenderHandleClient,
                    PrerenderHandle,
-                   HeapMojoWrapperMode::kWithoutContextObserver>
+                   HeapMojoWrapperMode::kForceWithoutContextObserver>
       receiver_;
 
   DISALLOW_COPY_AND_ASSIGN(PrerenderHandle);

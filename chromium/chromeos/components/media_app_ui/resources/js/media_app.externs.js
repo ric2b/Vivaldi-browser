@@ -41,6 +41,17 @@ mediaApp.AbstractFile.prototype.size;
  */
 mediaApp.AbstractFile.prototype.mimeType;
 /**
+ * Whether the file came from the clipboard or a similar in-memory source not
+ * backed by a file on disk.
+ * @type {boolean|undefined}
+ */
+mediaApp.AbstractFile.prototype.fromClipboard;
+/**
+ * An error associated with this file.
+ * @type {string|undefined}
+ */
+mediaApp.AbstractFile.prototype.error;
+/**
  * A function that will overwrite the original file with the provided Blob.
  * Returns a promise that resolves when the write operations are complete. Or
  * rejects. Upon success, `size` will reflect the new file size.
@@ -52,18 +63,20 @@ mediaApp.AbstractFile.prototype.overwriteOriginal;
 /**
  * A function that will delete the original file. Returns a promise that
  * resolves to an enum value (see DeleteResult in chromium message_types)
- * reflecting the result of the deletion (SUCCESS, FILE_MOVED). Rejected if an
- * error is thrown.
- * @type {function(): Promise<number>|undefined}
+ * reflecting the result of the deletion. Errors encountered are thrown from the
+ * message pipe and handled by invoking functions in Google3.
+ * @type {function(): !Promise<number>|undefined}
  */
 mediaApp.AbstractFile.prototype.deleteOriginalFile;
 /**
  * A function that will rename the original file. Returns a promise that
  * resolves to an enum value (see RenameResult in message_types) reflecting the
- * result of the rename (SUCCESS, FILE_EXISTS). Rejected if an error is thrown.
- * @type {function(string): Promise<number>|undefined}
+ * result of the rename. Errors encountered are thrown from the message pipe and
+ * handled by invoking functions in Google3.
+ * @type {function(string): !Promise<number>|undefined}
  */
 mediaApp.AbstractFile.prototype.renameOriginalFile;
+
 /**
  * Wraps an HTML FileList object.
  * @record
@@ -77,6 +90,26 @@ mediaApp.AbstractFileList.prototype.length;
  * @return {(null|!mediaApp.AbstractFile)}
  */
 mediaApp.AbstractFileList.prototype.item = function(index) {};
+/**
+ * Returns the file which is currently writable or null if there isn't one.
+ * @return {?mediaApp.AbstractFile}
+ */
+mediaApp.AbstractFileList.prototype.getCurrentlyWritable = function() {};
+/**
+ * Loads in the next file in the list as a writable.
+ * @return {!Promise<undefined>}
+ */
+mediaApp.AbstractFileList.prototype.loadNext = function() {};
+/**
+ * Loads in the previous file in the list as a writable.
+ * @return {!Promise<undefined>}
+ */
+mediaApp.AbstractFileList.prototype.loadPrev = function() {};
+/**
+ * @param {function(!mediaApp.AbstractFileList): void} observer invoked when the
+ *     size or contents of the file list changes.
+ */
+mediaApp.AbstractFileList.prototype.addObserver = function(observer) {};
 
 /**
  * The delegate which exposes open source privileged WebUi functions to
@@ -96,9 +129,7 @@ mediaApp.ClientApiDelegate.prototype.openFeedbackDialog = function() {};
  * Saves a copy of `file` in a custom location with a custom
  * name which the user is prompted for via a native save file dialog.
  * @param {!mediaApp.AbstractFile} file
- * @return {!Promise<?string>} Promise which resolves when the request has been
- *     acknowledged. If the dialog could not be opened the promise resolves with
- *     an error message. Otherwise, with null after writing is complete.
+ * @return {!Promise<undefined>}
  */
 mediaApp.ClientApiDelegate.prototype.saveCopy = function(file) {};
 
@@ -120,39 +151,6 @@ mediaApp.ClientApi.prototype.loadFiles = function(files) {};
  * @param {?mediaApp.ClientApiDelegate} delegate
  */
 mediaApp.ClientApi.prototype.setDelegate = function(delegate) {};
-
-/**
- * The message structure sent to the guest over postMessage. The presence of
- * a particular field determines the instruction being given to the guest.
- *
- * @record
- * @struct
- */
-mediaApp.MessageEventData = function() {};
-/**
- * File data to load. TODO(b/144865801): Remove this (obsolete).
- *
- * @type {!ArrayBuffer|undefined}
- */
-mediaApp.MessageEventData.prototype.buffer;
-/**
- * MIME type of the data in `buffer`.
- *
- * @type {string|undefined}
- */
-mediaApp.MessageEventData.prototype.type;
-/**
- * An object that uniquely identifies a FileSystemFileHandle in the host.
- *
- * @type {!Object|undefined}
- */
-mediaApp.MessageEventData.prototype.handle;
-/**
- * A File to load.
- *
- * @type {!File|undefined}
- */
-mediaApp.MessageEventData.prototype.file;
 
 /**
  * Launch data that can be read by the app when it first loads.

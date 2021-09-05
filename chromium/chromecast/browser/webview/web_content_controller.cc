@@ -123,6 +123,10 @@ void WebContentController::ProcessRequest(
       HandleClearCache();
       break;
 
+    case webview::WebviewRequest::kClearCookies:
+      HandleClearCookies(request.id());
+      break;
+
     case webview::WebviewRequest::kGetTitle:
       HandleGetTitle(request.id());
       break;
@@ -371,14 +375,33 @@ void WebContentController::HandleClearCache() {
   // Android has a specific renderer message for this:
   // https://cs.chromium.org/chromium/src/android_webview/common/render_view_messages.h?rcl=65107121555167a3db39de5633c3297f7e861315&l=44
 
-  // Remove disk cache.
+  // Remove disk cache and local storage.
   content::BrowsingDataRemover* remover =
       content::BrowserContext::GetBrowsingDataRemover(
           GetWebContents()->GetBrowserContext());
   remover->Remove(base::Time(), base::Time::Max(),
-                  content::BrowsingDataRemover::DATA_TYPE_CACHE,
+                  content::BrowsingDataRemover::DATA_TYPE_CACHE |
+                      content::BrowsingDataRemover::DATA_TYPE_DOM_STORAGE,
                   content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB |
                       content::BrowsingDataRemover::ORIGIN_TYPE_PROTECTED_WEB);
+}
+
+void WebContentController::HandleClearCookies(int64_t id) {
+  std::unique_ptr<webview::WebviewResponse> response =
+      std::make_unique<webview::WebviewResponse>();
+
+  content::BrowsingDataRemover* remover =
+      content::BrowserContext::GetBrowsingDataRemover(
+          GetWebContents()->GetBrowserContext());
+  remover->Remove(base::Time(), base::Time::Max(),
+                  content::BrowsingDataRemover::DATA_TYPE_COOKIES,
+                  content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB |
+                      content::BrowsingDataRemover::ORIGIN_TYPE_PROTECTED_WEB);
+
+  // There appears to be no way of knowing if this actually clears anything.
+  response->mutable_clear_cookies()->set_had_cookies(false);
+  response->set_id(id);
+  client_->EnqueueSend(std::move(response));
 }
 
 void WebContentController::HandleGetTitle(int64_t id) {
@@ -466,15 +489,6 @@ void WebContentController::RenderFrameCreated(
 void WebContentController::RenderFrameDeleted(
     content::RenderFrameHost* render_frame_host) {
   current_render_frame_set_.erase(render_frame_host);
-  // The RenderFrameHost might not have a RenderWidgetHostView.
-  // TODO(b/150955487): Investigate the conditions for this (renderer process
-  // crash?) and Render.* relationships and notifications to see whether this
-  // can be cleaned up (and in particular not potentially retain stale
-  // |current_render_widget_set_| entries).
-  content::RenderWidgetHostView* const rwhv = render_frame_host->GetView();
-  if (rwhv) {
-    UnregisterRenderWidgetInputObserver(rwhv->GetRenderWidgetHost());
-  }
 }
 
 void WebContentController::RenderFrameHostChanged(

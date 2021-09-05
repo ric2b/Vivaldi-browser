@@ -7,14 +7,17 @@
 #include <utility>
 
 #include "ash/keyboard/ui/keyboard_ui_controller.h"
+#include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/memory/singleton.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "components/arc/arc_browser_context_keyed_service_factory_base.h"
 #include "components/arc/arc_util.h"
 #include "components/arc/ime/arc_ime_bridge_impl.h"
 #include "components/exo/wm_helper.h"
+#include "ui/aura/client/aura_constants.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
@@ -45,11 +48,12 @@ double GetDefaultDeviceScaleFactor() {
 class ArcWindowDelegateImpl : public ArcImeService::ArcWindowDelegate {
  public:
   explicit ArcWindowDelegateImpl(ArcImeService* ime_service)
-    : ime_service_(ime_service) {}
+      : ime_service_(ime_service) {}
 
   ~ArcWindowDelegateImpl() override = default;
 
   bool IsInArcAppWindow(const aura::Window* window) const override {
+    // WMHelper is not craeted in browser_tests.
     if (!exo::WMHelper::HasInstance())
       return false;
     aura::Window* active = exo::WMHelper::GetInstance()->GetActiveWindow();
@@ -71,7 +75,7 @@ class ArcWindowDelegateImpl : public ArcImeService::ArcWindowDelegate {
   }
 
   void RegisterFocusObserver() override {
-    // WMHelper is not created in tests.
+    // WMHelper is not craeted in browser_tests.
     if (!exo::WMHelper::HasInstance())
       return;
     exo::WMHelper::GetInstance()->AddFocusObserver(ime_service_);
@@ -93,7 +97,7 @@ class ArcWindowDelegateImpl : public ArcImeService::ArcWindowDelegate {
   }
 
   bool IsImeBlocked(aura::Window* window) const override {
-    // WMHelper is not created in tests.
+    // WMHelper is not craeted in browser_tests.
     if (!exo::WMHelper::HasInstance())
       return false;
     return exo::WMHelper::GetInstance()->IsImeBlocked(window);
@@ -137,8 +141,15 @@ ArcImeService* ArcImeService::GetForBrowserContext(
 
 ArcImeService::ArcImeService(content::BrowserContext* context,
                              ArcBridgeService* bridge_service)
+    : ArcImeService(context,
+                    bridge_service,
+                    std::make_unique<ArcWindowDelegateImpl>(this)) {}
+
+ArcImeService::ArcImeService(content::BrowserContext* context,
+                             ArcBridgeService* bridge_service,
+                             std::unique_ptr<ArcWindowDelegate> delegate)
     : ime_bridge_(new ArcImeBridgeImpl(this, bridge_service)),
-      arc_window_delegate_(new ArcWindowDelegateImpl(this)),
+      arc_window_delegate_(std::move(delegate)),
       ime_type_(ui::TEXT_INPUT_TYPE_NONE),
       ime_flags_(ui::TEXT_INPUT_FLAG_NONE),
       is_personalized_learning_allowed_(false),
@@ -172,11 +183,6 @@ ArcImeService::~ArcImeService() {
 void ArcImeService::SetImeBridgeForTesting(
     std::unique_ptr<ArcImeBridge> test_ime_bridge) {
   ime_bridge_ = std::move(test_ime_bridge);
-}
-
-void ArcImeService::SetArcWindowDelegateForTesting(
-    std::unique_ptr<ArcWindowDelegate> delegate) {
-  arc_window_delegate_ = std::move(delegate);
 }
 
 ui::InputMethod* ArcImeService::GetInputMethod() {
@@ -602,6 +608,13 @@ bool ArcImeService::SetCompositionFromExistingText(
     const gfx::Range& range,
     const std::vector<ui::ImeTextSpan>& ui_ime_text_spans) {
   // TODO(https://crbug.com/952757): Implement this method.
+  NOTIMPLEMENTED_LOG_ONCE();
+  return false;
+}
+
+bool ArcImeService::SetAutocorrectRange(const base::string16& autocorrect_text,
+                                        const gfx::Range& range) {
+  // TODO(https:://crbug.com/1091088): Implement this method.
   NOTIMPLEMENTED_LOG_ONCE();
   return false;
 }

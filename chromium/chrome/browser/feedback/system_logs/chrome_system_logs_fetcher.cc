@@ -19,14 +19,14 @@
 #include "chrome/browser/chromeos/system_logs/debug_daemon_log_source.h"
 #include "chrome/browser/chromeos/system_logs/device_event_log_source.h"
 #include "chrome/browser/chromeos/system_logs/iwlwifi_dump_log_source.h"
+#include "chrome/browser/chromeos/system_logs/network_health_source.h"
 #include "chrome/browser/chromeos/system_logs/touch_log_source.h"
 #include "chrome/browser/chromeos/system_logs/ui_hierarchy_log_source.h"
 #endif
 
 namespace system_logs {
 
-SystemLogsFetcher* BuildChromeSystemLogsFetcher() {
-  const bool scrub_data = true;
+SystemLogsFetcher* BuildChromeSystemLogsFetcher(bool scrub_data) {
   SystemLogsFetcher* fetcher = new SystemLogsFetcher(
       scrub_data, extension_misc::kBuiltInFirstPartyExtensionIds);
 
@@ -41,10 +41,10 @@ SystemLogsFetcher* BuildChromeSystemLogsFetcher() {
   fetcher->AddSource(std::make_unique<IwlwifiDumpChecker>());
   fetcher->AddSource(std::make_unique<TouchLogSource>());
 
-  // Debug Daemon data source - currently only this data source supports
-  // the scrub_data parameter, but the others still get scrubbed by
-  // SystemLogsFetcher.
+  // Data sources that directly scrub itentifiable information, but the others
+  // still get scrubbed by SystemLogsFetcher.
   fetcher->AddSource(std::make_unique<DebugDaemonLogSource>(scrub_data));
+  fetcher->AddSource(std::make_unique<NetworkHealthSource>(scrub_data));
   fetcher->AddSource(std::make_unique<UiHierarchyLogSource>(scrub_data));
 #endif
 

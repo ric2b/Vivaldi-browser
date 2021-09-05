@@ -66,7 +66,6 @@
 #include "third_party/blink/renderer/core/display_lock/display_lock_context.h"
 #include "third_party/blink/renderer/core/display_lock/display_lock_document_state.h"
 #include "third_party/blink/renderer/core/display_lock/display_lock_utilities.h"
-#include "third_party/blink/renderer/core/display_lock/render_subtree_activation_event.h"
 #include "third_party/blink/renderer/core/dom/attr.h"
 #include "third_party/blink/renderer/core/dom/dataset_dom_string_map.h"
 #include "third_party/blink/renderer/core/dom/document.h"
@@ -288,6 +287,10 @@ bool DefinitelyNewFormattingContext(const Node& node,
                                     const ComputedStyle& style) {
   auto display = style.Display();
   if (display == EDisplay::kInline || display == EDisplay::kContents)
+    return false;
+  // ::marker may establish a formatting context but still have some dependency
+  // on the originating list item, so return false.
+  if (node.IsMarkerPseudoElement())
     return false;
   // The only block-container display types that potentially don't establish a
   // new formatting context, are 'block' and 'list-item'.
@@ -518,8 +521,11 @@ void EnqueueAutofocus(Element& element) {
     doc.AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
         mojom::ConsoleMessageSource::kSecurity,
         mojom::ConsoleMessageLevel::kError,
-        "Blocked autofocusing on a form control because the form's frame is "
-        "sandboxed and the 'allow-scripts' permission is not set."));
+        String::Format(
+            "Blocked autofocusing on a <%s> element because the element's "
+            "frame "
+            "is sandboxed and the 'allow-scripts' permission is not set.",
+            element.TagQName().ToString().Ascii().c_str())));
     return;
   }
 
@@ -532,7 +538,9 @@ void EnqueueAutofocus(Element& element) {
     doc.AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
         mojom::ConsoleMessageSource::kSecurity,
         mojom::ConsoleMessageLevel::kError,
-        "Blocked autofocusing on a form control in a cross-origin subframe."));
+        String::Format("Blocked autofocusing on a <%s> element in a "
+                       "cross-origin subframe.",
+                       element.TagQName().ToString().Ascii().c_str())));
     return;
   }
 
@@ -637,7 +645,8 @@ Node* Element::Clone(Document& factory, CloneChildrenFlag flag) const {
   // 7. If node is a shadow host and the clone shadows flag is set, run these
   // steps:
   if (flag == CloneChildrenFlag::kCloneWithShadows) {
-    DCHECK(RuntimeEnabledFeatures::DeclarativeShadowDOMEnabled());
+    DCHECK(RuntimeEnabledFeatures::DeclarativeShadowDOMEnabled(
+        GetExecutionContext()));
     auto* shadow_root = GetShadowRoot();
     if (shadow_root && (shadow_root->GetType() == ShadowRootType::kOpen ||
                         shadow_root->GetType() == ShadowRootType::kClosed)) {
@@ -2947,9 +2956,9 @@ scoped_refptr<ComputedStyle> Element::StyleForLayoutObject() {
     element_animations->UpdateAnimationFlags(*style);
   }
 
-  style->UpdateIsStackingContext(this == GetDocument().documentElement(),
-                                 IsInTopLayer(),
-                                 IsA<SVGForeignObjectElement>(*this));
+  style->UpdateIsStackingContextWithoutContainment(
+      this == GetDocument().documentElement(), IsInTopLayer(),
+      IsA<SVGForeignObjectElement>(*this));
 
   return style;
 }
@@ -3531,7 +3540,7 @@ ElementInternals& Element::EnsureElementInternals() {
 }
 
 ShadowRoot* Element::createShadowRoot(ExceptionState& exception_state) {
-  DCHECK(RuntimeEnabledFeatures::ShadowDOMV0Enabled(&GetDocument()));
+  DCHECK(RuntimeEnabledFeatures::ShadowDOMV0Enabled(GetExecutionContext()));
   if (ShadowRoot* root = GetShadowRoot()) {
     if (root->IsUserAgent()) {
       exception_state.ThrowDOMException(
@@ -3566,7 +3575,7 @@ ShadowRoot* Element::createShadowRoot(ExceptionState& exception_state) {
 }
 
 ShadowRoot& Element::CreateShadowRootInternal() {
-  DCHECK(RuntimeEnabledFeatures::ShadowDOMV0Enabled(&GetDocument()));
+  DCHECK(RuntimeEnabledFeatures::ShadowDOMV0Enabled(GetExecutionContext()));
   DCHECK(!ClosedShadowRoot());
   DCHECK(AreAuthorShadowsAllowed());
   DCHECK(!AlwaysCreateUserAgentShadowRoot());
@@ -3669,14 +3678,18 @@ void Element::AttachDeclarativeShadowRoot(HTMLTemplateElement* template_element,
                                           SlotAssignmentMode slot_assignment) {
   DCHECK(template_element);
   DCHECK(type == ShadowRootType::kOpen || type == ShadowRootType::kClosed);
+  UseCounter::Count(GetDocument(), WebFeature::kDeclarativeShadowRoot);
 
   // 12. Run attach a shadow root with shadow host equal to declarative shadow
   // host element, mode equal to declarative shadow mode, and delegates focus
   // equal to declarative shadow delegates focus. If an exception was thrown by
-  // attach a shadow root, catch it, and report the exception.
+  // attach a shadow root, catch it, and ignore the exception.
   if (const char* error_message = ErrorMessageForAttachShadow()) {
-    // TODO(1067488): Fire this exception at Window.
-    LOG(ERROR) << error_message;
+    template_element->SetDeclarativeShadowRootType(
+        DeclarativeShadowRootType::kNone);
+    GetDocument().AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
+        mojom::blink::ConsoleMessageSource::kOther,
+        mojom::blink::ConsoleMessageLevel::kError, error_message));
     return;
   }
   ShadowRoot& shadow_root =
@@ -4334,11 +4347,15 @@ bool Element::IsFocusableStyleAfterUpdate() const {
   // creation. We need to ensure to update style and layout tree to have
   // up-to-date information.
   //
+  // Note also that there may be situations where focus / keyboard navigation
+  // causes us to have dirty style, so we update StyleAndLayoutTreeForNode here.
+  // If the style and layout tree are clean, then this should be a quick
+  // operation. See crbug.com/1079385 for details.
+  //
   // Note that this isn't a part of `IsFocusableStyle()` because there are
   // callers of that function which cannot do a layout tree update (e.g.
   // accessibility).
-  if (RuntimeEnabledFeatures::CSSContentVisibilityEnabled())
-    GetDocument().UpdateStyleAndLayoutTreeForNode(this);
+  GetDocument().UpdateStyleAndLayoutTreeForNode(this);
   return IsFocusableStyle();
 }
 
@@ -4628,17 +4645,31 @@ void Element::setInnerHTML(const String& html,
     if (DocumentFragment* fragment = CreateFragmentForInnerOuterHTML(
             html, this, kAllowScriptingContent, "innerHTML", exception_state)) {
       ContainerNode* container = this;
-      if (auto* template_element = DynamicTo<HTMLTemplateElement>(*this))
-        container = template_element->content();
+      if (auto* template_element = DynamicTo<HTMLTemplateElement>(*this)) {
+        // Allow replacing innerHTML on declarative shadow templates, prior to
+        // their closing tag being parsed.
+        container = template_element->IsDeclarativeShadowRoot()
+                        ? template_element->DeclarativeShadowContent()
+                        : template_element->content();
+      }
       ReplaceChildrenWithFragment(container, fragment, exception_state);
     }
   }
 }
 
 String Element::getInnerHTML(const GetInnerHTMLOptions* options) const {
+  DCHECK(RuntimeEnabledFeatures::DeclarativeShadowDOMEnabled(
+      GetExecutionContext()));
+  ClosedRootsSet include_closed_roots;
+  if (options->hasClosedRoots()) {
+    for (auto& shadow_root : options->closedRoots()) {
+      include_closed_roots.insert(shadow_root);
+    }
+  }
   return CreateMarkup(
       this, kChildrenOnly, kDoNotResolveURLs,
-      options->includeShadowRoots() ? kIncludeShadowRoots : kNoShadowRoots);
+      options->includeShadowRoots() ? kIncludeShadowRoots : kNoShadowRoots,
+      include_closed_roots);
 }
 
 void Element::setOuterHTML(const String& html,
@@ -6127,10 +6158,13 @@ void Element::StyleAttributeChanged(
   } else if (modification_reason == AttributeModificationReason::kByCloning ||
              (ContainingShadowRoot() &&
               ContainingShadowRoot()->IsUserAgent()) ||
-             GetDocument().GetContentSecurityPolicyForWorld()->AllowInline(
-                 ContentSecurityPolicy::InlineType::kStyleAttribute, this,
-                 new_style_string, String() /* nonce */, GetDocument().Url(),
-                 start_line_number)) {
+             (GetExecutionContext() &&
+              GetExecutionContext()
+                  ->GetContentSecurityPolicyForWorld()
+                  ->AllowInline(
+                      ContentSecurityPolicy::InlineType::kStyleAttribute, this,
+                      new_style_string, String() /* nonce */,
+                      GetDocument().Url(), start_line_number))) {
     SetInlineStyleFromString(new_style_string);
   }
 
@@ -6353,7 +6387,7 @@ void Element::LogUpdateAttributeIfIsolatedWorldAndInDocument(
   activity_logger->LogEvent("blinkSetAttribute", argv.size(), argv.data());
 }
 
-void Element::Trace(Visitor* visitor) {
+void Element::Trace(Visitor* visitor) const {
   visitor->Trace(element_data_);
   ContainerNode::Trace(visitor);
 }

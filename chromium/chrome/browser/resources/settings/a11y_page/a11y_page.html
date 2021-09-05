@@ -16,13 +16,18 @@
         </cr-link-row>
         <settings-toggle-button
             class="hr"
+            hidden$="[[!showFocusHighlightOption_]]"
+            pref="{{prefs.settings.a11y.focus_highlight}}"
+            label="$i18n{focusHighlightLabel}">
+        </settings-toggle-button>
+        <settings-toggle-button
+            class="hr"
             hidden$="[[!showAccessibilityLabelsSetting_]]"
             pref="{{prefs.settings.a11y.enable_accessibility_image_labels}}"
             on-change="onA11yImageLabelsChange_"
             label="$i18n{accessibleImageLabelsTitle}"
             sub-label="$i18n{accessibleImageLabelsSubtitle}">
         </settings-toggle-button>
-</if>
         <template is="dom-if" if="[[enableLiveCaption_]]">
           <settings-toggle-button
               pref="{{prefs.accessibility.captions.live_caption_enabled}}"
@@ -31,6 +36,7 @@
               sub-label="$i18n{captionsEnableLiveCaptionSubtitle}">
           </settings-toggle-button>
         </template>
+</if>
         <cr-link-row class="hr" label="$i18n{moreFeaturesLink}"
             on-click="onMoreFeaturesLinkClick_" sub-label="$i18n{a11yWebStore}"
             external>

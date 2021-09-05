@@ -64,7 +64,7 @@ ScrollingCoordinator::~ScrollingCoordinator() {
   DCHECK(!page_);
 }
 
-void ScrollingCoordinator::Trace(Visitor* visitor) {
+void ScrollingCoordinator::Trace(Visitor* visitor) const {
   visitor->Trace(page_);
   visitor->Trace(horizontal_scrollbars_);
   visitor->Trace(vertical_scrollbars_);
@@ -166,7 +166,7 @@ static void ForAllPaintingGraphicsLayers(GraphicsLayer& layer,
     return;
   }
 
-  if (layer.PaintsContentOrHitTest())
+  if (layer.PaintsContentOrHitTest() && layer.HasLayerState())
     function(layer);
 
   for (auto* child : layer.Children())
@@ -477,6 +477,7 @@ void ScrollingCoordinator::WillCloseAnimationHost(LocalFrameView* view) {
 void ScrollingCoordinator::WillBeDestroyed() {
   DCHECK(page_);
   page_ = nullptr;
+  weak_ptr_factory_.InvalidateWeakPtrs();
 }
 
 bool ScrollingCoordinator::CoordinatesScrollingForFrameView(

@@ -112,14 +112,20 @@ void TabLoader::RestoreTabs(const std::vector<RestoredTab>& tabs,
   TRACE_EVENT0("browser", "TabLoader::RestoreTabs");
 
   if (!shared_tab_loader_)
-    shared_tab_loader_ = new TabLoader(restore_started);
+    shared_tab_loader_ = new TabLoader();
+
   if (vivaldi::IsVivaldiRunning())
     // NOTE(andre@vivaldi.com) : Make sure we don't start loading of contents in
     // the tabstrip until the content has been moved into webview. (We had
     // issues with this in the transition to GuestViewCrossProcessFrames. See
     // bugs VB-39149, VB-38823 et al.
     return;
-  shared_tab_loader_->stats_collector_->TrackTabs(tabs);
+
+  SessionRestoreStatsCollector::GetOrCreateInstance(
+      restore_started,
+      std::make_unique<
+          SessionRestoreStatsCollector::UmaStatsReportingDelegate>())
+      ->TrackTabs(tabs);
 
   // TODO(chrisha): Mix overlapping session tab restore priorities. Right now
   // the lowest priority tabs from the first session restore will load before
@@ -208,16 +214,11 @@ void TabLoader::SetAllTabsScored(bool all_tabs_scored) {
     OnIsLoadingEnabledChanged();
 }
 
-TabLoader::TabLoader(base::TimeTicks restore_started)
+TabLoader::TabLoader()
     : memory_pressure_listener_(
+          FROM_HERE,
           base::Bind(&TabLoader::OnMemoryPressure, base::Unretained(this))),
       clock_(GetDefaultTickClock()) {
-  if (!vivaldi::IsVivaldiRunning()) {
-  stats_collector_ = new SessionRestoreStatsCollector(
-      restore_started,
-      std::make_unique<
-          SessionRestoreStatsCollector::UmaStatsReportingDelegate>());
-  }
   shared_tab_loader_ = this;
   this_retainer_ = this;
   TabLoadTracker::Get()->AddObserver(this);
@@ -539,7 +540,6 @@ void TabLoader::MarkTabAsDeferred(content::WebContents* contents) {
   DCHECK(it != tabs_to_load_.end());
   tabs_to_load_.erase(it);
   delegate_->RemoveTabForScoring(contents);
-  stats_collector_->DeferTab(&contents->GetController());
 }
 
 void TabLoader::MaybeLoadSomeTabs() {
@@ -603,7 +603,6 @@ void TabLoader::StopLoadingTabs() {
   for (auto score_content_pair : tabs_to_load_) {
     auto* contents = score_content_pair.second;
     delegate_->RemoveTabForScoring(contents);
-    stats_collector_->DeferTab(&contents->GetController());
   }
   }
 
@@ -653,9 +652,6 @@ void TabLoader::LoadNextTab(bool due_to_timeout) {
   if (!contents)
     return;
 
-  if (!vivaldi::IsVivaldiRunning()) {
-  stats_collector_->OnWillLoadNextTab(due_to_timeout);
-  }
   MarkTabAsLoadInitiated(contents);
   StartTimerIfNeeded();
 

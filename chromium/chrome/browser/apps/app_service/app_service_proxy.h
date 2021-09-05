@@ -14,11 +14,11 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/apps/app_service/browser_app_launcher.h"
-#include "chrome/services/app_service/public/cpp/app_registry_cache.h"
-#include "chrome/services/app_service/public/cpp/icon_cache.h"
-#include "chrome/services/app_service/public/cpp/icon_coalescer.h"
-#include "chrome/services/app_service/public/cpp/preferred_apps_list.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/services/app_service/public/cpp/app_registry_cache.h"
+#include "components/services/app_service/public/cpp/icon_cache.h"
+#include "components/services/app_service/public/cpp/icon_coalescer.h"
+#include "components/services/app_service/public/cpp/preferred_apps_list.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -31,7 +31,7 @@
 #include "chrome/browser/apps/app_service/extension_apps_chromeos.h"
 #include "chrome/browser/apps/app_service/plugin_vm_apps.h"
 #include "chrome/browser/apps/app_service/web_apps_chromeos.h"
-#include "chrome/services/app_service/public/cpp/instance_registry.h"
+#include "components/services/app_service/public/cpp/instance_registry.h"
 #else
 #include "chrome/browser/apps/app_service/extension_apps.h"
 #include "chrome/browser/apps/app_service/web_apps.h"
@@ -64,7 +64,7 @@ struct PauseData {
 // On Chrome OS, an instance is created for the lock screen apps profile, but
 // not for the signin profile.
 //
-// See chrome/services/app_service/README.md.
+// See components/services/app_service/README.md.
 class AppServiceProxy : public KeyedService,
                         public apps::IconLoader,
                         public apps::mojom::Subscriber,
@@ -157,6 +157,10 @@ class AppServiceProxy : public KeyedService,
   // |parent_window|. Otherwise, the browser window will be used as the anchor.
   void Uninstall(const std::string& app_id, gfx::NativeWindow parent_window);
 
+  // Uninstalls an app for the given |app_id| without prompting the user to
+  // confirm.
+  void UninstallSilently(const std::string& app_id);
+
 #if defined(OS_CHROMEOS)
   // Pauses apps. |pause_data|'s key is the app_id. |pause_data|'s PauseData
   // is the time limit setting for the app, which is shown in the pause app
@@ -169,6 +173,9 @@ class AppServiceProxy : public KeyedService,
   // as false directly and removes the paused app icon effect.
   void UnpauseApps(const std::set<std::string>& app_ids);
 #endif
+
+  // Stops the current running app for the given |app_id|.
+  void StopApp(const std::string& app_id);
 
   // Returns the menu items for the given |app_id|. |display_id| is the id of
   // the display from which the app is launched.
@@ -418,6 +425,34 @@ class AppServiceProxy : public KeyedService,
   base::WeakPtrFactory<AppServiceProxy> weak_ptr_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(AppServiceProxy);
+};
+
+class ScopedOmitBuiltInAppsForTesting {
+ public:
+  ScopedOmitBuiltInAppsForTesting();
+  ~ScopedOmitBuiltInAppsForTesting();
+
+ private:
+  ScopedOmitBuiltInAppsForTesting(const ScopedOmitBuiltInAppsForTesting&) =
+      delete;
+  ScopedOmitBuiltInAppsForTesting& operator=(
+      const ScopedOmitBuiltInAppsForTesting&) = delete;
+
+  const bool previous_omit_built_in_apps_for_testing_;
+};
+
+class ScopedOmitPluginVmAppsForTesting {
+ public:
+  ScopedOmitPluginVmAppsForTesting();
+  ~ScopedOmitPluginVmAppsForTesting();
+
+ private:
+  ScopedOmitPluginVmAppsForTesting(const ScopedOmitPluginVmAppsForTesting&) =
+      delete;
+  ScopedOmitPluginVmAppsForTesting& operator=(
+      const ScopedOmitPluginVmAppsForTesting&) = delete;
+
+  const bool previous_omit_plugin_vm_apps_for_testing_;
 };
 
 }  // namespace apps

@@ -125,6 +125,7 @@
 <translation id="5903106910045431592"><ph name="PAGE_TITLE" /> - 网络登录</translation>
 <translation id="5987687638152509985">更新 Chromium 以开始同步</translation>
 <translation id="6013050204643758987">Chromium 操作系统是借助了其他<ph name="BEGIN_LINK_CROS_OSS" />开放源代码软件<ph name="END_LINK_CROS_OSS" />才得以问世，<ph name="BEGIN_LINK_LINUX_OSS" />Linux（测试版）<ph name="END_LINK_LINUX_OSS" />也是如此。</translation>
+<translation id="6039377483953237732">Chromium 操作系统版本</translation>
 <translation id="6055895534982063517">Chromium 现已推出速度更快的新版本。</translation>
 <translation id="6063093106622310249">在 Chromium 中打开(&amp;O)</translation>
 <translation id="6072279588547424923">“<ph name="EXTENSION_NAME" />”已添加到 Chromium</translation>
@@ -222,8 +223,6 @@ Chromium 无法恢复您的设置。</translation>
 <translation id="8586442755830160949">版权所有<ph name="YEAR" /> The Chromium Authors。保留所有权利。</translation>
 <translation id="8619360774459241877">正在启动 Chromium…</translation>
 <translation id="8621669128220841554">未指定的错误导致安装失败。请重新下载 Chromium。</translation>
-<translation id="8682540261359803721">如果此页面中未显示某项设置，请在 <ph name="LINK_BEGIN" />
-      Chromium 浏览器设置<ph name="LINK_END" />中查找</translation>
 <translation id="8697124171261953979">它还能够控制您启动Chromium后或通过多功能框进行搜索时系统显示的页面。</translation>
 <translation id="8704119203788522458">这是您的专属Chromium</translation>
 <translation id="8796602469536043152">Chromium 需要获得相应权限，才能允许此网站使用您的摄像头和麦克风</translation>

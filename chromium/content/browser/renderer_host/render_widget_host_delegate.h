@@ -19,9 +19,9 @@
 #include "content/public/common/drop_data.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
+#include "third_party/blink/public/common/page/web_drag_operation.h"
 #include "third_party/blink/public/mojom/frame/lifecycle.mojom.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
-#include "third_party/blink/public/platform/web_drag_operation.h"
 #include "ui/gfx/native_widget_types.h"
 
 namespace blink {
@@ -42,6 +42,7 @@ class Sample;
 namespace content {
 
 class BrowserAccessibilityManager;
+class FrameTree;
 class RenderFrameHostImpl;
 class RenderWidgetHostImpl;
 class RenderWidgetHostInputEventRouter;
@@ -340,6 +341,12 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
 
   // Notify the delegate that the screen orientation has been changed.
   virtual void DidChangeScreenOrientation() {}
+
+  // Returns the FrameTree that this RenderWidgetHost is attached to. If the
+  // RenderWidgetHost is attached to a frame, then its RenderFrameHost will be
+  // in the tree. Otherwise, the RenderWidgetHost is for a popup which was
+  // opened by a frame in the FrameTree.
+  virtual FrameTree* GetFrameTree();
 
  protected:
   virtual ~RenderWidgetHostDelegate() {}

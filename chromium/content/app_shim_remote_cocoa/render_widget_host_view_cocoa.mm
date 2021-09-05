@@ -36,13 +36,13 @@
 #include "ui/events/event_utils.h"
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
+#include "ui/events/platform/platform_event_source.h"
 #include "ui/gfx/mac/coordinate_conversion.h"
 
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_command_controller.h"
 #import "chrome/browser/app_controller_mac.h"
 
-using content::InputEvent;
 using content::NativeWebKeyboardEvent;
 using content::RenderWidgetHostViewMacEditCommandHelper;
 using content::WebGestureEventBuilder;
@@ -682,6 +682,8 @@ void ExtractUnderlines(NSAttributedString* string,
     if (handled)
       return;
   }
+  if (ui::PlatformEventSource::ShouldIgnoreNativePlatformEvents())
+    return;
 
   // Set the pointer type when we are receiving a NSMouseEntered event and the
   // following NSMouseExited event should have the same pointer type.

@@ -297,6 +297,11 @@ base::string16 PaletteTray::GetAccessibleNameForTray() {
   return l10n_util::GetStringUTF16(IDS_ASH_STYLUS_TOOLS_TITLE);
 }
 
+void PaletteTray::HandleLocaleChange() {
+  icon_->set_tooltip_text(
+      l10n_util::GetStringUTF16(IDS_ASH_STYLUS_TOOLS_TITLE));
+}
+
 void PaletteTray::HideBubbleWithView(const TrayBubbleView* bubble_view) {
   if (bubble_->bubble_view() == bubble_view)
     HidePalette();
@@ -493,7 +498,7 @@ void PaletteTray::ShowBubble(bool show_by_click) {
   // Add horizontal separator between the title and tools.
   auto* separator = new views::Separator();
   separator->SetColor(AshColorProvider::Get()->GetContentLayerColor(
-      AshColorProvider::ContentLayerType::kSeparator,
+      AshColorProvider::ContentLayerType::kSeparatorColor,
       AshColorProvider::AshColorMode::kLight));
   separator->SetBorder(views::CreateEmptyBorder(gfx::Insets(
       kPaddingBetweenTitleAndSeparator, 0, kMenuSeparatorVerticalPadding, 0)));

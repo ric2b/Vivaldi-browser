@@ -17,6 +17,7 @@
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/common/content_navigation_policy.h"
 #include "content/common/page_messages.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/visibility.h"
 #include "net/http/http_request_headers.h"
 #include "net/http/http_status_code.h"
@@ -152,7 +153,13 @@ uint64_t GetDisallowedFeatures(RenderFrameHostImpl* rfh) {
       FeatureToBit(WebSchedulerTrackedFeature::kAppBanner) |
       FeatureToBit(WebSchedulerTrackedFeature::kPrinting) |
       FeatureToBit(WebSchedulerTrackedFeature::kWebDatabase) |
-      FeatureToBit(WebSchedulerTrackedFeature::kPictureInPicture);
+      FeatureToBit(WebSchedulerTrackedFeature::kPictureInPicture) |
+      FeatureToBit(WebSchedulerTrackedFeature::kPortal) |
+      FeatureToBit(WebSchedulerTrackedFeature::kSpeechRecognizer) |
+      FeatureToBit(WebSchedulerTrackedFeature::kIdleManager) |
+      FeatureToBit(WebSchedulerTrackedFeature::kPaymentManager) |
+      FeatureToBit(WebSchedulerTrackedFeature::kSpeechSynthesis) |
+      FeatureToBit(WebSchedulerTrackedFeature::kKeyboardLock);
 
   uint64_t result = kAlwaysDisallowedFeatures;
 
@@ -248,7 +255,6 @@ void RequestRecordTimeToVisible(RenderFrameHostImpl* rfh,
   if (rfh->delegate()->GetVisibility() != Visibility::HIDDEN) {
     rfh->GetView()->SetRecordContentToVisibleTimeRequest(
         navigation_start, base::Optional<bool>() /* destination_is_loaded */,
-        base::Optional<bool>() /* destination_is_frozen */,
         false /* show_reason_tab_switching */,
         false /* show_reason_unoccluded */,
         true /* show_reason_bfcache_restore */);
@@ -333,8 +339,8 @@ BackForwardCacheCanStoreDocumentResult BackForwardCacheImpl::CanStoreDocument(
   if (rfh->last_http_method() != net::HttpRequestHeaders::kGetMethod)
     result.No(BackForwardCacheMetrics::NotRestoredReason::kHTTPMethodNotGET);
 
-  // Do not store main document with non HTTP/HTTPS URL scheme. In particular,
-  // this excludes the new tab page.
+  // Do not store main document with non HTTP/HTTPS URL scheme. Among other
+  // things, this excludes the new tab page and all WebUI pages.
   if (!rfh->GetLastCommittedURL().SchemeIsHTTPOrHTTPS()) {
     result.No(
         BackForwardCacheMetrics::NotRestoredReason::kSchemeNotHTTPOrHTTPS);
@@ -390,6 +396,10 @@ void BackForwardCacheImpl::CanStoreRenderFrameHost(
     result->No(
         BackForwardCacheMetrics::NotRestoredReason::kSubframeIsNavigating);
   }
+
+  // Do not store documents if they have inner WebContents.
+  if (rfh->IsOuterDelegateFrame())
+    result->No(BackForwardCacheMetrics::NotRestoredReason::kHaveInnerContents);
 
   for (size_t i = 0; i < rfh->child_count(); i++)
     CanStoreRenderFrameHost(result, rfh->child_at(i)->current_frame_host());
@@ -492,8 +502,8 @@ void BackForwardCacheImpl::EvictFramesInRelatedSiteInstances(
 }
 
 void BackForwardCacheImpl::PostTaskToDestroyEvictedFrames() {
-  base::PostTask(FROM_HERE, {BrowserThread::UI},
-                 base::BindOnce(&BackForwardCacheImpl::DestroyEvictedFrames,
+  GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE, base::BindOnce(&BackForwardCacheImpl::DestroyEvictedFrames,
                                 weak_factory_.GetWeakPtr()));
 }
 

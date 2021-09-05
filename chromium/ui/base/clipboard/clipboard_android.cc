@@ -21,10 +21,12 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/thread_annotations.h"
 #include "base/time/time.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/clipboard/clipboard_constants.h"
+#include "ui/base/clipboard/clipboard_metrics.h"
 #include "ui/base/ui_base_jni_headers/Clipboard_jni.h"
 #include "ui/gfx/android/java_bitmap.h"
 #include "ui/gfx/image/image.h"
@@ -149,9 +151,8 @@ std::string ClipboardMap::Get(const std::string& format) {
 }
 
 void ClipboardMap::GetImage(ReadImageCallback callback) {
-  base::PostTaskAndReplyWithResult(
-      FROM_HERE,
-      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_BLOCKING},
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_BLOCKING},
       base::BindOnce(&GetImageData, clipboard_manager_), std::move(callback));
 }
 
@@ -432,6 +433,7 @@ void ClipboardAndroid::ReadAsciiText(ClipboardBuffer buffer,
                                      std::string* result) const {
   DCHECK(CalledOnValidThread());
   DCHECK_EQ(buffer, ClipboardBuffer::kCopyPaste);
+  RecordRead(ClipboardFormatMetric::kText);
   *result = g_map.Get().Get(ClipboardFormatType::GetPlainTextType().GetName());
 }
 
@@ -443,6 +445,7 @@ void ClipboardAndroid::ReadHTML(ClipboardBuffer buffer,
                                 uint32_t* fragment_end) const {
   DCHECK(CalledOnValidThread());
   DCHECK_EQ(buffer, ClipboardBuffer::kCopyPaste);
+  RecordRead(ClipboardFormatMetric::kHtml);
   if (src_url)
     src_url->clear();
 
@@ -464,6 +467,7 @@ void ClipboardAndroid::ReadImage(ClipboardBuffer buffer,
                                  ReadImageCallback callback) const {
   DCHECK(CalledOnValidThread());
   DCHECK_EQ(buffer, ClipboardBuffer::kCopyPaste);
+  RecordRead(ClipboardFormatMetric::kImage);
   g_map.Get().GetImage(std::move(callback));
 }
 
@@ -483,6 +487,7 @@ void ClipboardAndroid::ReadBookmark(base::string16* title,
 void ClipboardAndroid::ReadData(const ClipboardFormatType& format,
                                 std::string* result) const {
   DCHECK(CalledOnValidThread());
+  RecordRead(ClipboardFormatMetric::kData);
   *result = g_map.Get().Get(format.GetName());
 }
 

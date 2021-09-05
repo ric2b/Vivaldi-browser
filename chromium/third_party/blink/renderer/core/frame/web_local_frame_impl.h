@@ -41,6 +41,7 @@
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "services/network/public/mojom/web_sandbox_flags.mojom-blink.h"
 #include "third_party/blink/public/mojom/ad_tagging/ad_frame.mojom-blink-forward.h"
+#include "third_party/blink/public/mojom/blob/blob_url_store.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/devtools/devtools_agent.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/frame/find_in_page.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/frame/lifecycle.mojom-blink-forward.h"
@@ -136,6 +137,7 @@ class CORE_EXPORT WebLocalFrameImpl final
                          const WebURL& mixed_content_url,
                          mojom::RequestContextType,
                          bool was_allowed,
+                         const WebURL& url_before_redirects,
                          bool had_redirect,
                          const WebSourceLocation&) override;
   void SendOrientationChangeEvent() override;
@@ -150,6 +152,10 @@ class CORE_EXPORT WebLocalFrameImpl final
   void ClearIsolatedWorldCSPForTesting(int32_t world_id) override;
   void SetIsolatedWorldInfo(int32_t world_id,
                             const WebIsolatedWorldInfo&) override;
+  WebString GetIsolatedWorldStableId(
+      v8::Local<v8::Context> context) const override;
+  WebString GetIsolatedWorldHumanReadableName(
+      v8::Local<v8::Context> context) const override;
   v8::Local<v8::Value> ExecuteScriptAndReturnValue(
       const WebScriptSource&) override;
   v8::MaybeLocal<v8::Value> CallFunctionEvenIfScriptDisabled(
@@ -158,6 +164,8 @@ class CORE_EXPORT WebLocalFrameImpl final
       int argc,
       v8::Local<v8::Value> argv[]) override;
   v8::Local<v8::Context> MainWorldScriptContext() const override;
+  int32_t GetScriptContextWorldId(
+      v8::Local<v8::Context> script_context) const override;
   void RequestExecuteScriptAndReturnValue(const WebScriptSource&,
                                           bool user_gesture,
                                           WebScriptExecutionCallback*) override;
@@ -196,7 +204,7 @@ class CORE_EXPORT WebLocalFrameImpl final
   bool SelectionTextDirection(base::i18n::TextDirection& start,
                               base::i18n::TextDirection& end) const override;
   bool IsSelectionAnchorFirst() const override;
-  void SetTextDirection(base::i18n::TextDirection) override;
+  void SetTextDirectionForTesting(base::i18n::TextDirection direction) override;
   bool HasSelection() const override;
   WebRange SelectionRange() const override;
   WebString SelectionAsText() const override;
@@ -216,7 +224,7 @@ class CORE_EXPORT WebLocalFrameImpl final
   bool SetCompositionFromExistingText(
       int composition_start,
       int composition_end,
-      const WebVector<WebImeTextSpan>& ime_text_spans) override;
+      const WebVector<ui::ImeTextSpan>& ime_text_spans) override;
   void ExtendSelectionAndDelete(int before, int after) override;
   void MoveRangeSelectionExtent(const gfx::Point&) override;
   void ReplaceSelection(const WebString&) override;
@@ -245,7 +253,7 @@ class CORE_EXPORT WebLocalFrameImpl final
                       bool match_case,
                       bool forward,
                       bool force,
-                      bool find_next,
+                      bool new_session,
                       bool wrap_within_frame) override;
   void SetTickmarks(const WebVector<WebRect>&) override;
   WebNode ContextMenuNode() const override;
@@ -275,6 +283,7 @@ class CORE_EXPORT WebLocalFrameImpl final
   bool HasVisibleContent() const override;
   WebRect VisibleContentRect() const override;
   void DispatchBeforePrintEvent() override;
+  WebPlugin* GetPluginToPrint(const WebNode& constrain_to_node) override;
   int PrintBegin(const WebPrintParams&,
                  const WebNode& constrain_to_node) override;
   float GetPrintPageShrink(int page) override;
@@ -284,17 +293,19 @@ class CORE_EXPORT WebLocalFrameImpl final
   bool GetPrintPresetOptionsForPlugin(const WebNode&,
                                       WebPrintPresetOptions*) override;
   bool CapturePaintPreview(const WebRect& bounds,
-                           cc::PaintCanvas* canvas) override;
-  void SetMainFrameOverlayColor(SkColor) override;
+                           cc::PaintCanvas* canvas,
+                           bool include_linked_destinations) override;
   bool ShouldSuppressKeyboardForFocusedElement() override;
   WebPerformance Performance() const override;
   bool IsAdSubframe() const override;
   void SetIsAdSubframe(blink::mojom::AdFrameType ad_frame_type) override;
-  void WaitForDebuggerWhenShown() override;
-  void PrintPagesForTesting(cc::PaintCanvas*, const WebSize&) override;
+  WebSize SpoolSizeInPixelsForTesting(const WebSize& page_size_in_pixels,
+                                      int page_count) override;
+  void PrintPagesForTesting(cc::PaintCanvas*,
+                            const WebSize& page_size_in_pixels,
+                            const WebSize& spool_size_in_pixels) override;
   WebRect GetSelectionBoundsRectForTesting() const override;
   gfx::Point GetPositionInViewportForTesting() const override;
-  void SetLifecycleState(mojom::FrameLifecycleState state) override;
   void WasHidden() override;
   void WasShown() override;
   void SetAllowsCrossBrowsingInstanceFrameLookup() override;
@@ -321,16 +332,13 @@ class CORE_EXPORT WebLocalFrameImpl final
       const WebURLError&) const override;
   void SetCommittedFirstRealLoad() override;
   bool HasCommittedFirstRealLoad() override;
-  bool WillStartNavigation(
-      const WebNavigationInfo&,
-      bool is_history_navigation_in_new_child_frame) override;
+  bool WillStartNavigation(const WebNavigationInfo&) override;
   void DidDropNavigation() override;
-  void MarkAsLoading() override;
-  bool IsClientNavigationInitialHistoryLoad() override;
   void DownloadURL(
       const WebURLRequest& request,
       network::mojom::blink::RedirectMode cross_origin_redirect_behavior,
-      mojo::ScopedMessagePipeHandle blob_url_token) override;
+      CrossVariantMojoRemote<mojom::blink::BlobURLTokenInterfaceBase>
+          blob_url_token) override;
 
   void InitializeCoreFrame(
       Page&,
@@ -404,6 +412,11 @@ class CORE_EXPORT WebLocalFrameImpl final
   void SetDevToolsAgentImpl(WebDevToolsAgentImpl*);
   WebDevToolsAgentImpl* DevToolsAgentImpl();
 
+  // Instructs devtools to pause loading of the frame as soon as it's shown
+  // until explicit command from the devtools client. May only be called on a
+  // local root.
+  void WaitForDebuggerWhenShown();
+
   // When a Find operation ends, we want to set the selection to what was active
   // and set focus to the first focusable node we find (starting with the first
   // node in the matched range and going up the inheritance chain). If we find
@@ -446,7 +459,7 @@ class CORE_EXPORT WebLocalFrameImpl final
   // Returns true if our print context suggests using printing layout.
   bool UsePrintingLayout() const;
 
-  virtual void Trace(Visitor*);
+  virtual void Trace(Visitor*) const;
 
  protected:
   // WebLocalFrame protected overrides:
@@ -475,6 +488,9 @@ class CORE_EXPORT WebLocalFrameImpl final
 
   // A helper for DispatchBeforePrintEvent() and DispatchAfterPrintEvent().
   void DispatchPrintEventRecursively(const AtomicString& event_type);
+
+  WebPluginContainerImpl* GetPluginToPrintHelper(
+      const WebNode& constrain_to_node);
 
   Node* ContextMenuNodeInner() const;
 

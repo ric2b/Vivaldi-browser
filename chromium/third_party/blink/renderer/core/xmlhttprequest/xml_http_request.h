@@ -55,7 +55,7 @@
 namespace blink {
 
 class
-    ArrayBufferOrArrayBufferViewOrBlobOrDocumentOrStringOrFormDataOrURLSearchParams;
+    DocumentOrBlobOrArrayBufferOrArrayBufferViewOrFormDataOrURLSearchParamsOrUSVString;
 class Blob;
 class BlobDataHandle;
 class DOMArrayBuffer;
@@ -136,7 +136,7 @@ class XMLHttpRequest final : public XMLHttpRequestEventTarget,
             bool async,
             ExceptionState&);
   void send(
-      const ArrayBufferOrArrayBufferViewOrBlobOrDocumentOrStringOrFormDataOrURLSearchParams&,
+      const DocumentOrBlobOrArrayBufferOrArrayBufferViewOrFormDataOrURLSearchParamsOrUSVString&,
       ExceptionState&);
   void abort();
   void Dispose();
@@ -175,7 +175,7 @@ class XMLHttpRequest final : public XMLHttpRequestEventTarget,
 
   DEFINE_ATTRIBUTE_EVENT_LISTENER(readystatechange, kReadystatechange)
 
-  void Trace(Visitor*) override;
+  void Trace(Visitor*) const override;
   const char* NameInHeapSnapshot() const override { return "XMLHttpRequest"; }
 
  private:

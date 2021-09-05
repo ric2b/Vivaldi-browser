@@ -1,0 +1,16 @@
+<!-- Copyright 2020 The Chromium Authors. All rights reserved.
+     Use of this source code is governed by a BSD-style license that can be
+     found in the LICENSE file. -->
+
+<!-- Login-specific screens -->
+<terms-of-service id="terms-of-service" class="step hidden">
+</terms-of-service>
+<include src="../oobe_screen_supervision_transition.html">
+<gaia-password-changed id="gaia-password-changed"
+    class="step hidden" hidden>
+</gaia-password-changed>
+<active-directory-password-change id="ad-password-change"
+    class="step hidden migrate" hidden>
+</active-directory-password-change>
+<include src="../screen_encryption_migration.html">
+<include src="../screen_update_required.html">

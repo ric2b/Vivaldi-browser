@@ -79,19 +79,19 @@ bool VulkanInstance::Initialize(
   if (!vulkan_function_pointers->BindUnassociatedFunctionPointers())
     return false;
 
-  if (vulkan_function_pointers->vkEnumerateInstanceVersionFn)
-    vkEnumerateInstanceVersion(&vulkan_info_.api_version);
+  VkResult result = vkEnumerateInstanceVersion(&vulkan_info_.api_version);
+  if (result != VK_SUCCESS) {
+    DLOG(ERROR) << "vkEnumerateInstanceVersion() failed: " << result;
+    return false;
+  }
 
-  if (vulkan_info_.api_version < VK_MAKE_VERSION(1, 1, 0))
+  if (vulkan_info_.api_version < kVulkanRequiredApiVersion)
     return false;
 
   gpu::crash_keys::vulkan_api_version.Set(
       VkVersionToString(vulkan_info_.api_version));
 
-  // Use Vulkan 1.1 if it's available.
-  vulkan_info_.used_api_version = VK_MAKE_VERSION(1, 1, 0);
-
-  VkResult result = VK_SUCCESS;
+  vulkan_info_.used_api_version = kVulkanRequiredApiVersion;
 
   VkApplicationInfo app_info = {};
   app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
@@ -304,7 +304,8 @@ bool VulkanInstance::CollectInfo() {
     // API version of the VkPhysicalDevice, so we need to check the GPU's
     // API version instead of just testing to see if
     // vkGetPhysicalDeviceFeatures2 is non-null.
-    if (info.properties.apiVersion >= VK_MAKE_VERSION(1, 1, 0)) {
+    static_assert(kVulkanRequiredApiVersion >= VK_API_VERSION_1_1, "");
+    if (info.properties.apiVersion >= kVulkanRequiredApiVersion) {
       VkPhysicalDeviceSamplerYcbcrConversionFeatures ycbcr_conversion_features =
           {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_YCBCR_CONVERSION_FEATURES};
       VkPhysicalDeviceProtectedMemoryFeatures protected_memory_feature = {
@@ -319,8 +320,6 @@ bool VulkanInstance::CollectInfo() {
       info.feature_sampler_ycbcr_conversion =
           ycbcr_conversion_features.samplerYcbcrConversion;
       info.feature_protected_memory = protected_memory_feature.protectedMemory;
-    } else {
-      vkGetPhysicalDeviceFeatures(device, &info.features);
     }
 
     count = 0;

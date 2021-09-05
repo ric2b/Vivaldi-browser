@@ -6,6 +6,7 @@
 
 #include <algorithm>
 
+#include "base/logging.h"
 #include "base/stl_util.h"
 #include "sql/transaction.h"
 
@@ -13,7 +14,7 @@
 // corresponding changes must happen in the unit tests, and new migration test
 // added.  See |WebDatabaseMigrationTest::kCurrentTestedVersionNumber|.
 // static
-const int WebDatabase::kCurrentVersionNumber = 86;
+const int WebDatabase::kCurrentVersionNumber = 87;
 
 const int WebDatabase::kDeprecatedVersionNumber = 51;
 

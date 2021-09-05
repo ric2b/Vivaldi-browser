@@ -26,12 +26,12 @@ import static org.chromium.content_public.browser.test.util.CriteriaHelper.pollU
 
 import static java.util.Arrays.asList;
 
-import android.support.test.filters.MediumTest;
 import android.text.method.PasswordTransformationMethod;
 import android.view.View;
 import android.widget.TextView;
 
 import androidx.recyclerview.widget.RecyclerView;
+import androidx.test.filters.MediumTest;
 
 import org.junit.Before;
 import org.junit.Rule;
@@ -48,10 +48,11 @@ import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.FooterProperties;
 import org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.HeaderProperties;
 import org.chromium.chrome.browser.touch_to_fill.data.Credential;
-import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetController;
-import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetController.SheetState;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.SheetState;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetTestSupport;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.content_public.browser.test.util.TouchCommon;
@@ -306,12 +307,12 @@ public class TouchToFillViewTest {
             mModel.set(VISIBLE, true);
         });
         pollUiThread(() -> getBottomSheetState() == BottomSheetController.SheetState.HALF);
+        BottomSheetTestSupport sheetSupport = new BottomSheetTestSupport(
+                getActivity().getRootUiCoordinatorForTesting().getBottomSheetController());
 
-        TestThreadUtils.runOnUiThreadBlocking(() -> {
-            getActivity().getBottomSheetController().setSheetStateForTesting(
-                    SheetState.FULL, false);
-        });
-        pollUiThread(() -> getBottomSheetState() == SheetState.FULL);
+        // Swipe the sheet up to it's full state.
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> { sheetSupport.setSheetState(SheetState.FULL, false); });
 
         TextView manageButton = mTouchToFillView.getContentView().findViewById(
                 R.id.touch_to_fill_sheet_manage_passwords);

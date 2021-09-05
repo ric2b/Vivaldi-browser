@@ -214,6 +214,14 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
   // so do not keep a reference to it afterward.
   virtual void DidFinishNavigation(NavigationHandle* navigation_handle) {}
 
+  // Called after the contents replaces the |predecessor_contents| in its
+  // container due to portal activation. The |predecessor_contents| is now a
+  // portal pending adoption. |predecessor_contents| is non-null, but may
+  // subsequently be destroyed if it is not adopted.
+  // |activation_time| is the time the activation happened.
+  virtual void DidActivatePortal(WebContents* predecessor_web_contents,
+                                 base::TimeTicks activation_time) {}
+
   // Document load events ------------------------------------------------------
 
   // These three methods correspond to the points in time when a document starts
@@ -422,6 +430,20 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
   // added to the WebContents tree at this point, but can be observed safely.
   virtual void InnerWebContentsCreated(WebContents* inner_web_contents) {}
 
+  // Notifies that an |inner_web_contents| instance has been attached to the
+  // provided |render_frame_host|. By the time this is called the
+  // |inner_web_contents| will have been added to the WebContents tree.
+  virtual void InnerWebContentsAttached(WebContents* inner_web_contents,
+                                        RenderFrameHost* render_frame_host,
+                                        bool is_full_page) {}
+
+  // Notifies that an |inner_web_contents| instance has been detached from this
+  // WebContents. InnerWebContentsAttached() will already have been called for
+  // the |inner_web_contents|. By the time this is called the
+  // |inner_web_contents| will have been removed from the WebContents tree, but
+  // will still be alive and is safe to observe.
+  virtual void InnerWebContentsDetached(WebContents* inner_web_contents) {}
+
   // Invoked when WebContents::Clone() was used to clone a WebContents.
   virtual void DidCloneToNewWebContents(WebContents* old_web_contents,
                                         WebContents* new_web_contents) {}
@@ -439,11 +461,19 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
   // the renderer process. If the instance is created after the page is loaded,
   // it is recommended to call WebContents::GetFaviconURLs() to get the current
   // list as this callback will not be executed unless there is an update.
+  // |render_frame_host| is the main render frame host.
   virtual void DidUpdateFaviconURL(
+      RenderFrameHost* render_frame_host,
       const std::vector<blink::mojom::FaviconURLPtr>& candidates) {}
 
-  // Called when an audio change occurs.
+  // Called when an audio change occurs to this WebContents. If |audible| is
+  // true then one or more frames or child contents are emitting audio; if
+  // false, then no frames or child contents are emitting audio. See
+  // OnFrameAudioStateChanged for per-frame information.
   virtual void OnAudioStateChanged(bool audible) {}
+
+  // Called when the audio state of an individual frame changes.
+  virtual void OnFrameAudioStateChanged(RenderFrameHost* rfh, bool audible) {}
 
   // Called when the connected to Bluetooth device state changes.
   virtual void OnIsConnectedToBluetoothDeviceChanged(
@@ -468,10 +498,6 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
   //  2) after an element in a descendant frame exits fullscreen and makes
   //     this frame own the current fullscreen element again.
   virtual void DidAcquireFullscreen(RenderFrameHost* rfh) {}
-
-  // Invoked when an interstitial page is attached or detached.
-  virtual void DidAttachInterstitialPage() {}
-  virtual void DidDetachInterstitialPage() {}
 
   // Invoked when the vertical scroll direction of the root layer is changed.
   // Note that if a scroll in a given direction occurs, the scroll is completed,
@@ -549,6 +575,7 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
   virtual void MediaEffectivelyFullscreenChanged(bool is_fullscreen) {}
   virtual void MediaPictureInPictureChanged(bool is_picture_in_picture) {}
   virtual void MediaMutedStatusChanged(const MediaPlayerId& id, bool muted) {}
+  virtual void MediaBufferUnderflow(const MediaPlayerId& id) {}
 
   // Invoked when the renderer process changes the page scale factor.
   virtual void OnPageScaleFactorChanged(float page_scale_factor) {}
@@ -583,6 +610,7 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
   // document has both a manifest and a favicon, DidUpdateWebManifestURL() will
   // be invoked before DidUpdateFaviconURL().
   virtual void DidUpdateWebManifestURL(
+      RenderFrameHost* target_frame,
       const base::Optional<GURL>& manifest_url) {}
 
   // DEPRECATED. Please register interface binders with BrowserInterfaceBroker
@@ -600,12 +628,6 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
       const AudioContextId& audio_context_id) {}
   virtual void AudioContextPlaybackStopped(
       const AudioContextId& audio_context_id) {}
-
-  // Called after the contents replaces the |predecessor_contents| in its
-  // container due to portal activation. The |predecessor_contents| is now a
-  // portal pending adoption. |predecessor_contents| is non-null, but may
-  // subsequently be destroyed if it is not adopted.
-  virtual void DidActivatePortal(WebContents* predecessor_contents) {}
 
   // Called when the RenderFrameHost tries to use a ServiceWorker
   // (e.g. via navigation.serviceWorker API).

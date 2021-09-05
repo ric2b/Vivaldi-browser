@@ -20,10 +20,6 @@ class GLImage;
 class GLSurface;
 }  // namespace gl
 
-namespace gfx {
-class GpuFence;
-}  // namespace gfx
-
 namespace gpu {
 class MailboxManager;
 class SharedContextState;
@@ -63,7 +59,7 @@ class SkiaOutputDeviceGL final : public SkiaOutputDevice {
                      std::vector<ui::LatencyInfo> latency_info) override;
   void CommitOverlayPlanes(BufferPresentedCallback feedback,
                            std::vector<ui::LatencyInfo> latency_info) override;
-  void SetDrawRectangle(const gfx::Rect& draw_rectangle) override;
+  bool SetDrawRectangle(const gfx::Rect& draw_rectangle) override;
   void SetGpuVSyncEnabled(bool enabled) override;
 #if defined(OS_WIN)
   void SetEnableDCLayers(bool enable) override;
@@ -80,8 +76,7 @@ class SkiaOutputDeviceGL final : public SkiaOutputDevice {
   // operation
   void DoFinishSwapBuffers(const gfx::Size& size,
                            std::vector<ui::LatencyInfo> latency_info,
-                           gfx::SwapResult result,
-                           std::unique_ptr<gfx::GpuFence>);
+                           gfx::SwapCompletionResult result);
 
   scoped_refptr<gl::GLImage> GetGLImageForMailbox(const gpu::Mailbox& mailbox);
 

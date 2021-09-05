@@ -31,6 +31,7 @@
 
 #include "base/optional.h"
 #include "base/unguessable_token.h"
+#include "mojo/public/mojom/base/text_direction.mojom-blink-forward.h"
 #include "third_party/blink/public/common/feature_policy/document_policy.h"
 #include "third_party/blink/public/common/frame/user_activation_state.h"
 #include "third_party/blink/public/common/frame/user_activation_update_source.h"
@@ -77,9 +78,13 @@ enum class FrameDetachType { kRemove, kSwap };
 // input, layout, or painting probably belongs on LocalFrame.
 class CORE_EXPORT Frame : public GarbageCollected<Frame> {
  public:
+  // Returns the Frame instance for the given |frame_token|.
+  // Note that this Frame can be either a LocalFrame or Remote instance.
+  static Frame* ResolveFrame(const base::UnguessableToken& frame_token);
+
   virtual ~Frame();
 
-  virtual void Trace(Visitor*);
+  virtual void Trace(Visitor*) const;
 
   virtual bool IsLocalFrame() const = 0;
   virtual bool IsRemoteFrame() const = 0;
@@ -217,6 +222,9 @@ class CORE_EXPORT Frame : public GarbageCollected<Frame> {
   virtual void SetIsInert(bool) = 0;
   void UpdateInertIfPossible();
 
+  // Changes the text direction of the selected input node.
+  virtual void SetTextDirection(base::i18n::TextDirection) = 0;
+
   virtual void SetInheritedEffectiveTouchAction(TouchAction) = 0;
   void UpdateInheritedEffectiveTouchActionIfPossible();
   TouchAction InheritedEffectiveTouchAction() const {
@@ -282,12 +290,22 @@ class CORE_EXPORT Frame : public GarbageCollected<Frame> {
   void ScheduleFormSubmission(FrameScheduler* scheduler,
                               FormSubmission* form_submission);
   void CancelFormSubmission();
+  bool IsFormSubmissionPending();
+
+  // Asks the browser process to activate the page associated to the current
+  // Frame, reporting |originating_frame| as the local frame originating this
+  // request.
+  void FocusPage(LocalFrame* originating_frame);
 
   // Called when the focus controller changes the focus to this frame.
   virtual void DidFocus() = 0;
 
   virtual IntSize GetMainFrameViewportSize() const = 0;
   virtual IntPoint GetMainFrameScrollOffset() const = 0;
+
+  // Sets this frame's opener to another frame, or disowned the opener
+  // if opener is null. See http://html.spec.whatwg.org/#dom-opener.
+  virtual void SetOpener(Frame* opener) = 0;
 
  protected:
   // |inheriting_agent_factory| should basically be set to the parent frame or

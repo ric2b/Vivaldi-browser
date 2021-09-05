@@ -15,12 +15,18 @@ jumbo_component("x") {
   sources = [
     "selection_utils.cc",
     "selection_utils.h",
+    "x11_cursor.cc",
+    "x11_cursor.h",
+    "x11_cursor_factory.cc",
+    "x11_cursor_factory.h",
     "x11_desktop_window_move_client.cc",
     "x11_desktop_window_move_client.h",
     "x11_display_manager.cc",
     "x11_display_manager.h",
     "x11_display_util.cc",
     "x11_display_util.h",
+    "x11_error_handler.cc",
+    "x11_error_handler.h",
     "x11_menu_list.cc",
     "x11_menu_list.h",
     "x11_menu_registrar.cc",
@@ -46,7 +52,7 @@ jumbo_component("x") {
     "x11_workspace_handler.h",
   ]
 
-  if (is_desktop_linux) {
+  if (is_desktop_linux || is_chromeos) {
     sources += [
       "selection_owner.cc",
       "selection_owner.h",
@@ -59,8 +65,6 @@ jumbo_component("x") {
     ]
   }
 
-  public_configs = [ "//build/config/linux:xrandr" ]
-
   defines = [ "IS_UI_BASE_X_IMPL" ]
 
   deps = [
@@ -72,6 +76,9 @@ jumbo_component("x") {
     "//ui/base:hit_test",
     "//ui/base:wm_role_names",
     "//ui/base/clipboard:clipboard_types",
+    "//ui/base/cursor:cursor_base",
+    "//ui/base/cursor:theme_manager",
+    "//ui/base/cursor/mojom:cursor_type",
     "//ui/base/dragdrop/file_info",
     "//ui/display/util",
     "//ui/events",
@@ -80,6 +87,7 @@ jumbo_component("x") {
     "//ui/events/platform/x11",
     "//ui/events/x:x",
     "//ui/gfx",
+    "//ui/gfx/geometry",
     "//ui/gfx/x",
     "//ui/platform_window/common",
   ]
@@ -113,5 +121,16 @@ source_set("test_support") {
     "//ui/events:platform_event",
     "//ui/events/platform/x11",
     "//ui/gfx/x",
+  ]
+}
+
+source_set("unittests") {
+  testonly = true
+  sources = [ "x11_cursor_factory_unittest.cc" ]
+  deps = [
+    ":x",
+    "//skia",
+    "//testing/gtest",
+    "//ui/gfx/geometry",
   ]
 }

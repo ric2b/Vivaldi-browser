@@ -115,6 +115,7 @@ ContentSettingsType kPermissionType[] = {
 #endif
     ContentSettingsType::USB_GUARD,
 #if !defined(OS_ANDROID)
+    ContentSettingsType::HID_GUARD,
     ContentSettingsType::SERIAL_GUARD,
     ContentSettingsType::NATIVE_FILE_SYSTEM_WRITE_GUARD,
 #endif
@@ -137,9 +138,16 @@ bool IsPermissionFactoryDefault(HostContentSettingsMap* content_settings,
       content_settings::ContentSettingsRegistry::GetInstance()
           ->Get(info.type)
           ->GetInitialDefaultSetting();
-  return (info.source == content_settings::SETTING_SOURCE_USER &&
-          factory_default_setting == info.default_setting &&
-          info.setting == CONTENT_SETTING_DEFAULT);
+
+  // Settings that are granted in regular mode get reduced to ASK in incognito
+  // mode. These settings should not be displayed either.
+  const bool is_incognito_default =
+      info.is_incognito && info.setting == CONTENT_SETTING_ASK &&
+      factory_default_setting == CONTENT_SETTING_ASK;
+
+  return info.source == content_settings::SETTING_SOURCE_USER &&
+         factory_default_setting == info.default_setting &&
+         (info.setting == CONTENT_SETTING_DEFAULT || is_incognito_default);
 }
 
 // Determines whether to show permission |type| in the Page Info UI. Only
@@ -174,15 +182,12 @@ bool ShouldShowPermission(const PageInfoUI::PermissionInfo& info,
 #if defined(OS_ANDROID)
   // Special geolocation DSE settings apply only on Android, so make sure it
   // gets checked there regardless of default setting on Desktop.
-  if (info.type == ContentSettingsType::GEOLOCATION)
+  // DSE settings don't apply to incognito mode.
+  if (info.type == ContentSettingsType::GEOLOCATION && !info.is_incognito)
     return true;
 
   // The Native File System write permission is desktop only at the moment.
   if (info.type == ContentSettingsType::NATIVE_FILE_SYSTEM_WRITE_GUARD)
-    return false;
-
-  // Camera PTZ is desktop only at the moment.
-  if (info.type == ContentSettingsType::CAMERA_PAN_TILT_ZOOM)
     return false;
 #else
   // Flash is shown if the user has ever changed its setting for |site_url|.
@@ -209,6 +214,21 @@ bool ShouldShowPermission(const PageInfoUI::PermissionInfo& info,
   if (info.type == ContentSettingsType::CAMERA_PAN_TILT_ZOOM &&
       !cmd->HasSwitch(switches::kEnableExperimentalWebPlatformFeatures)) {
     return false;
+  }
+
+  // Hide camera if camera PTZ is granted or blocked.
+  if (info.type == ContentSettingsType::MEDIASTREAM_CAMERA &&
+      cmd->HasSwitch(switches::kEnableExperimentalWebPlatformFeatures)) {
+    std::unique_ptr<base::Value> value = content_settings->GetWebsiteSetting(
+        site_url, site_url, ContentSettingsType::CAMERA_PAN_TILT_ZOOM,
+        std::string(), nullptr);
+    DCHECK(value.get());
+    ContentSetting camera_ptz_setting =
+        content_settings::ValueToContentSetting(value.get());
+    if (camera_ptz_setting == CONTENT_SETTING_ALLOW ||
+        camera_ptz_setting == CONTENT_SETTING_BLOCK) {
+      return false;
+    }
   }
 #endif
 
@@ -298,6 +318,10 @@ const PageInfo::ChooserUIInfo kChooserUIInfo[] = {
      IDS_PAGE_INFO_USB_DEVICE_ALLOWED_BY_POLICY_LABEL,
      IDS_PAGE_INFO_DELETE_USB_DEVICE},
 #if !defined(OS_ANDROID)
+    {ContentSettingsType::HID_CHOOSER_DATA,
+     IDS_PAGE_INFO_HID_DEVICE_SECONDARY_LABEL,
+     /*allowed_by_policy_description_string_id=*/-1,
+     IDS_PAGE_INFO_DELETE_HID_DEVICE},
     {ContentSettingsType::SERIAL_CHOOSER_DATA,
      IDS_PAGE_INFO_SERIAL_PORT_SECONDARY_LABEL,
      /*allowed_by_policy_description_string_id=*/-1,
@@ -411,6 +435,8 @@ PageInfo::~PageInfo() {
 void PageInfo::InitializeUiState(PageInfoUI* ui) {
   ui_ = ui;
   DCHECK(ui_);
+  // TabSpecificContentSetting needs to be created before page load.
+  DCHECK(GetTabSpecificContentSettings());
 
   ComputeUIInputs(site_url_);
   PresentSitePermissions();
@@ -458,11 +484,15 @@ void PageInfo::RecordPageInfoAction(PageInfoAction action) {
   std::string histogram_name;
   if (site_url_.SchemeIsCryptographic()) {
     if (security_level_ == security_state::SECURE) {
-      UMA_HISTOGRAM_ENUMERATION("Security.PageInfo.Action.HttpsUrl.ValidNonEV",
-                                action, PAGE_INFO_COUNT);
-    } else if (security_level_ == security_state::EV_SECURE) {
-      UMA_HISTOGRAM_ENUMERATION("Security.PageInfo.Action.HttpsUrl.ValidEV",
-                                action, PAGE_INFO_COUNT);
+      if (visible_security_state_for_metrics_.cert_status &
+          net::CERT_STATUS_IS_EV) {
+        UMA_HISTOGRAM_ENUMERATION("Security.PageInfo.Action.HttpsUrl.ValidEV",
+                                  action, PAGE_INFO_COUNT);
+      } else {
+        UMA_HISTOGRAM_ENUMERATION(
+            "Security.PageInfo.Action.HttpsUrl.ValidNonEV", action,
+            PAGE_INFO_COUNT);
+      }
     } else if (security_level_ == security_state::NONE) {
       UMA_HISTOGRAM_ENUMERATION("Security.PageInfo.Action.HttpsUrl.Downgraded",
                                 action, PAGE_INFO_COUNT);
@@ -891,8 +921,8 @@ void PageInfo::PresentSitePermissions() {
 
   PageInfoUI::PermissionInfo permission_info;
   HostContentSettingsMap* content_settings = GetContentSettings();
-  for (size_t i = 0; i < base::size(kPermissionType); ++i) {
-    permission_info.type = kPermissionType[i];
+  for (const ContentSettingsType type : kPermissionType) {
+    permission_info.type = type;
 
     content_settings::SettingInfo info;
 
@@ -919,7 +949,7 @@ void PageInfo::PresentSitePermissions() {
     } else {
       permission_info.default_setting =
           content_settings->GetDefaultContentSetting(permission_info.type,
-                                                     NULL);
+                                                     nullptr);
     }
 
     // For permissions that are still prompting the user and haven't been
@@ -1048,8 +1078,8 @@ HostContentSettingsMap* PageInfo::GetContentSettings() const {
 
 std::vector<ContentSettingsType> PageInfo::GetAllPermissionsForTesting() {
   std::vector<ContentSettingsType> permission_list;
-  for (size_t i = 0; i < base::size(kPermissionType); ++i)
-    permission_list.push_back(kPermissionType[i]);
+  for (const ContentSettingsType type : kPermissionType)
+    permission_list.push_back(type);
 
   return permission_list;
 }
@@ -1116,38 +1146,52 @@ PageInfo::GetTabSpecificContentSettings() const {
 }
 
 bool PageInfo::HasContentSettingChangedViaPageInfo(ContentSettingsType type) {
-  return GetTabSpecificContentSettings()->HasContentSettingChangedViaPageInfo(
-      type);
+  auto* settings = GetTabSpecificContentSettings();
+  if (!settings)
+    return false;
+
+  return settings->HasContentSettingChangedViaPageInfo(type);
 }
 
 void PageInfo::ContentSettingChangedViaPageInfo(ContentSettingsType type) {
-  GetTabSpecificContentSettings()->ContentSettingChangedViaPageInfo(type);
-}
+  auto* settings = GetTabSpecificContentSettings();
+  if (!settings)
+    return;
 
-const browsing_data::LocalSharedObjectsContainer& PageInfo::GetAllowedObjects(
-    const GURL& site_url) {
-  return GetTabSpecificContentSettings()->allowed_local_shared_objects();
-}
-
-const browsing_data::LocalSharedObjectsContainer& PageInfo::GetBlockedObjects(
-    const GURL& site_url) {
-  return GetTabSpecificContentSettings()->blocked_local_shared_objects();
+  return settings->ContentSettingChangedViaPageInfo(type);
 }
 
 int PageInfo::GetFirstPartyAllowedCookiesCount(const GURL& site_url) {
-  return GetAllowedObjects(site_url).GetObjectCountForDomain(site_url);
+  auto* settings = GetTabSpecificContentSettings();
+  if (!settings)
+    return 0;
+  return settings->allowed_local_shared_objects().GetObjectCountForDomain(
+      site_url);
 }
 
 int PageInfo::GetFirstPartyBlockedCookiesCount(const GURL& site_url) {
-  return GetBlockedObjects(site_url).GetObjectCountForDomain(site_url);
+  auto* settings = GetTabSpecificContentSettings();
+  if (!settings)
+    return 0;
+
+  return settings->blocked_local_shared_objects().GetObjectCountForDomain(
+      site_url);
 }
 
 int PageInfo::GetThirdPartyAllowedCookiesCount(const GURL& site_url) {
-  return GetAllowedObjects(site_url).GetObjectCount() -
+  auto* settings = GetTabSpecificContentSettings();
+  if (!settings)
+    return 0;
+
+  return settings->allowed_local_shared_objects().GetObjectCount() -
          GetFirstPartyAllowedCookiesCount(site_url);
 }
 
 int PageInfo::GetThirdPartyBlockedCookiesCount(const GURL& site_url) {
-  return GetBlockedObjects(site_url).GetObjectCount() -
+  auto* settings = GetTabSpecificContentSettings();
+  if (!settings)
+    return 0;
+
+  return settings->blocked_local_shared_objects().GetObjectCount() -
          GetFirstPartyBlockedCookiesCount(site_url);
 }

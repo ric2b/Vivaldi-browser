@@ -201,6 +201,7 @@ static bool AtkObjectHasState(AtkObject* atk_object, AtkStateType state) {
 TEST_F(AXPlatformNodeAuraLinuxTest, TestAtkObjectDetachedObject) {
   AXNodeData root;
   root.id = 1;
+  root.role = ax::mojom::Role::kRootWebArea;
   root.SetName("Name");
   Init(root);
 
@@ -231,6 +232,7 @@ TEST_F(AXPlatformNodeAuraLinuxTest, TestAtkObjectDetachedObject) {
 TEST_F(AXPlatformNodeAuraLinuxTest, TestAtkObjectName) {
   AXNodeData root;
   root.id = 1;
+  root.role = ax::mojom::Role::kRootWebArea;
   root.SetName("Name");
   Init(root);
 
@@ -659,12 +661,14 @@ TEST_F(AXPlatformNodeAuraLinuxTest, TestAtkComponentRefAtPoint) {
 
   AXNodeData node1;
   node1.id = 2;
+  node1.role = ax::mojom::Role::kGenericContainer;
   node1.relative_bounds.bounds = gfx::RectF(0, 0, 10, 10);
   node1.SetName("Name1");
   root.child_ids.push_back(node1.id);
 
   AXNodeData node2;
   node2.id = 3;
+  node2.role = ax::mojom::Role::kGenericContainer;
   node2.relative_bounds.bounds = gfx::RectF(20, 20, 10, 10);
   node2.SetName("Name2");
   root.child_ids.push_back(node2.id);
@@ -1820,23 +1824,10 @@ TEST_F(AXPlatformNodeAuraLinuxTest, TestAtkPopupWindowActive) {
   {
     ActivationTester tester(menu_atk_node);
     GetPlatformNode(menu_node)->NotifyAccessibilityEvent(
-        ax::mojom::Event::kMenuPopupHide);
+        ax::mojom::Event::kMenuPopupEnd);
     EXPECT_FALSE(tester.saw_activate_);
     EXPECT_TRUE(tester.saw_deactivate_);
     EXPECT_FALSE(tester.IsActivatedInStateSet());
-    EXPECT_EQ(focus_events_on_original_node, 0);
-  }
-
-  {
-    ActivationTester tester(menu_atk_node);
-    GetPlatformNode(menu_node)->NotifyAccessibilityEvent(
-        ax::mojom::Event::kMenuPopupEnd);
-    EXPECT_FALSE(tester.saw_activate_);
-    EXPECT_FALSE(tester.saw_deactivate_);
-    EXPECT_FALSE(tester.IsActivatedInStateSet());
-
-    // The menu has closed so the original node should have received focus
-    // again.
     EXPECT_EQ(focus_events_on_original_node, 1);
   }
 

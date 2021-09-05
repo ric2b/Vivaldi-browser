@@ -2,7 +2,7 @@
 <grit base_dir="." latest_public_release="0" current_release="1"
       source_lang_id="en" enc_check="möl">
   <release seq="1" allow_pseudo="false">
-    <structures>
+    <structures fallback_to_low_resolution="true">
       <structure type="chrome_scaled_image" name="IDR_ERROR_NETWORK_GENERIC" file="vivaldi/error_network_generic.png" />
       <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_WHITE" file="vivaldi/product_logo_white.png" />
       <if expr="vivaldi_release_final">
@@ -14,6 +14,7 @@
       <if expr="vivaldi_release_sopranos">
         <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO" file="vivaldi_sopranos/product_icon_128.png" />
       </if>
+      <structure type="chrome_scaled_image" name="IDR_SAD_WEBVIEW" file="vivaldi/webview-crash.png" />
     </structures>
   </release>
 </grit>

@@ -4,11 +4,14 @@
 
 package org.chromium.chrome.browser.webapps;
 
+import static org.junit.Assert.assertEquals;
+
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.LargeTest;
+
+import androidx.test.filters.LargeTest;
 
 import org.junit.Before;
 import org.junit.Rule;
@@ -32,6 +35,7 @@ import org.chromium.chrome.test.util.ApplicationTestUtils;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.browser.webapps.WebApkIntentDataProviderBuilder;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
+import org.chromium.content_public.common.BrowserControlsState;
 import org.chromium.webapk.lib.common.WebApkConstants;
 
 /** Tests for WebAPK {@link WebappActivity}. */
@@ -69,7 +73,8 @@ public final class WebApkActivityTest {
         WebappActivity webApkActivity =
                 mActivityTestRule.startWebApkActivity(createIntentDataProvider(
                         getTestServerUrl("scope_a/page_1.html"), getTestServerUrl("scope_a/")));
-        WebappActivityTestRule.assertToolbarShowState(webApkActivity, false);
+        assertEquals(BrowserControlsState.HIDDEN,
+                WebappActivityTestRule.getToolbarShowState(webApkActivity));
 
         // We navigate outside scope and expect CCT toolbar to show on top of WebAPK Activity.
         String outOfScopeUrl = getTestServerUrl("manifest_test_page.html");
@@ -77,7 +82,7 @@ public final class WebApkActivityTest {
                 "window.top.location = '" + outOfScopeUrl + "'");
 
         ChromeTabUtils.waitForTabPageLoaded(webApkActivity.getActivityTab(), outOfScopeUrl);
-        WebappActivityTestRule.assertToolbarShowState(webApkActivity, true);
+        WebappActivityTestRule.assertToolbarShownMaybeHideable(webApkActivity);
     }
 
     /**

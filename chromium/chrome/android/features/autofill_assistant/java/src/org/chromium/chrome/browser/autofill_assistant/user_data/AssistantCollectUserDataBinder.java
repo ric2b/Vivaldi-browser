@@ -23,6 +23,7 @@ import org.chromium.chrome.browser.payments.AutofillPaymentInstrument;
 import org.chromium.chrome.browser.payments.BasicCardUtils;
 import org.chromium.chrome.browser.payments.CardEditor;
 import org.chromium.chrome.browser.payments.ContactEditor;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.components.payments.MethodStrings;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.browser.WebContents;
@@ -173,11 +174,20 @@ class AssistantCollectUserDataBinder
             view.mContactDetailsSection.setListener(collectUserDataDelegate != null
                             ? collectUserDataDelegate::onContactInfoChanged
                             : null);
+            view.mContactDetailsSection.setCompletenessDelegate(collectUserDataDelegate != null
+                            ? collectUserDataDelegate::isContactComplete
+                            : null);
             view.mPaymentMethodSection.setListener(collectUserDataDelegate != null
                             ? collectUserDataDelegate::onPaymentMethodChanged
                             : null);
+            view.mPaymentMethodSection.setCompletenessDelegate(collectUserDataDelegate != null
+                            ? collectUserDataDelegate::isPaymentInstrumentComplete
+                            : null);
             view.mShippingAddressSection.setListener(collectUserDataDelegate != null
                             ? collectUserDataDelegate::onShippingAddressChanged
+                            : null);
+            view.mShippingAddressSection.setCompletenessDelegate(collectUserDataDelegate != null
+                            ? collectUserDataDelegate::isShippingAddressComplete
                             : null);
             view.mLoginSection.setListener(collectUserDataDelegate != null
                             ? collectUserDataDelegate::onLoginChoiceChanged
@@ -647,6 +657,7 @@ class AssistantCollectUserDataBinder
             return true;
         }
 
+        Profile profile = Profile.fromWebContents(webContents);
         if (shouldShowContactDetails(model)) {
             ContactEditor contactEditor =
                     new ContactEditor(model.get(AssistantCollectUserDataModel.REQUEST_NAME),
@@ -654,14 +665,14 @@ class AssistantCollectUserDataBinder
                             model.get(AssistantCollectUserDataModel.REQUEST_EMAIL),
                             !webContents.isIncognito());
             contactEditor.setEditorDialog(new EditorDialog(view.mActivity,
-                    /*deleteRunnable =*/null));
+                    /*deleteRunnable =*/null, profile));
             view.mContactDetailsSection.setEditor(contactEditor);
         }
 
         AddressEditor addressEditor = new AddressEditor(AddressEditor.Purpose.PAYMENT_REQUEST,
                 /* saveToDisk= */ !webContents.isIncognito());
         addressEditor.setEditorDialog(new EditorDialog(view.mActivity,
-                /*deleteRunnable =*/null));
+                /*deleteRunnable =*/null, profile));
 
         CardEditor cardEditor = new CardEditor(webContents, addressEditor,
                 /* includeOrgLabel= */ false, /* observerForTest= */ null);
@@ -673,7 +684,7 @@ class AssistantCollectUserDataBinder
         }
 
         EditorDialog cardEditorDialog = new EditorDialog(view.mActivity,
-                /*deleteRunnable =*/null);
+                /*deleteRunnable =*/null, profile);
         if (ChromeVersionInfo.isBetaBuild() || ChromeVersionInfo.isStableBuild()) {
             cardEditorDialog.disableScreenshots();
         }

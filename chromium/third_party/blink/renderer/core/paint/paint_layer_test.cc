@@ -277,8 +277,6 @@ TEST_P(PaintLayerTest, HasNonIsolatedDescendantWithBlendMode) {
   EXPECT_TRUE(parent->HasNonIsolatedDescendantWithBlendMode());
   EXPECT_TRUE(stacking_parent->HasNonIsolatedDescendantWithBlendMode());
   EXPECT_FALSE(stacking_grandparent->HasNonIsolatedDescendantWithBlendMode());
-
-  EXPECT_FALSE(parent->HasDescendantWithClipPath());
   EXPECT_TRUE(parent->HasVisibleDescendant());
 }
 
@@ -1094,23 +1092,6 @@ TEST_P(PaintLayerTest, NegativeZIndexChangeToPositive) {
       PaintLayerPaintOrderIterator(*target, kPositiveZOrderChildren).Next());
 }
 
-TEST_P(PaintLayerTest, HasDescendantWithClipPath) {
-  SetBodyInnerHTML(R"HTML(
-    <div id='parent' style='position:relative'>
-      <div id='clip-path' style='clip-path: circle(50px at 0 100px)'>
-      </div>
-    </div>
-  )HTML");
-  PaintLayer* parent = GetPaintLayerByElementId("parent");
-  PaintLayer* clip_path = GetPaintLayerByElementId("clip-path");
-
-  EXPECT_TRUE(parent->HasDescendantWithClipPath());
-  EXPECT_FALSE(clip_path->HasDescendantWithClipPath());
-
-  EXPECT_FALSE(parent->HasNonIsolatedDescendantWithBlendMode());
-  EXPECT_TRUE(parent->HasVisibleDescendant());
-}
-
 TEST_P(PaintLayerTest, HasVisibleDescendant) {
   SetBodyInnerHTML(R"HTML(
     <div id='invisible' style='position:relative'>
@@ -1123,9 +1104,7 @@ TEST_P(PaintLayerTest, HasVisibleDescendant) {
 
   EXPECT_TRUE(invisible->HasVisibleDescendant());
   EXPECT_FALSE(visible->HasVisibleDescendant());
-
   EXPECT_FALSE(invisible->HasNonIsolatedDescendantWithBlendMode());
-  EXPECT_FALSE(invisible->HasDescendantWithClipPath());
 }
 
 TEST_P(PaintLayerTest, Has3DTransformedDescendant) {
@@ -1892,7 +1871,7 @@ TEST_P(PaintLayerTest, CompositingContainerSelfPaintingNonStackedFloat) {
   // The target layer is self-painting, but not stacked.
   PaintLayer* target = GetPaintLayerByElementId("target");
   EXPECT_TRUE(target->IsSelfPaintingLayer());
-  EXPECT_FALSE(target->GetLayoutObject().StyleRef().IsStacked());
+  EXPECT_FALSE(target->GetLayoutObject().IsStacked());
 
   PaintLayer* container = GetPaintLayerByElementId("container");
   PaintLayer* span = GetPaintLayerByElementId("span");
@@ -2022,7 +2001,7 @@ TEST_P(PaintLayerTest, NeedsRepaintOnRemovingStackedLayer) {
 
   // |container| is not the CompositingContainer of |target| because |target|
   // is stacked but |container| is not a stacking context.
-  EXPECT_TRUE(target_layer->GetLayoutObject().StyleRef().IsStacked());
+  EXPECT_TRUE(target_layer->GetLayoutObject().IsStacked());
   EXPECT_NE(body_layer, target_layer->CompositingContainer());
   auto* old_compositing_container = target_layer->CompositingContainer();
 

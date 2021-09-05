@@ -30,6 +30,9 @@ enum class SandboxType {
 
   // The PDF conversion service process used in printing.
   kPdfConversion,
+
+  // The icon reader service.
+  kIconReader,
 #endif
 
 #if defined(OS_FUCHSIA)
@@ -69,6 +72,8 @@ enum class SandboxType {
 
 #if defined(OS_CHROMEOS)
   kIme,
+  // Text-to-speech.
+  kTts,
 #endif  // defined(OS_CHROMEOS)
 
 #if defined(OS_LINUX)

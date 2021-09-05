@@ -233,7 +233,7 @@ void BackgroundFetchRegistration::DidGetMatchingRequests(
 
   for (auto& fetch : settled_fetches) {
     Request* request =
-        Request::Create(script_state, *(fetch->request),
+        Request::Create(script_state, std::move(fetch->request),
                         Request::ForServiceWorkerFetchEvent::kFalse);
     auto* record =
         MakeGarbageCollected<BackgroundFetchRecord>(request, script_state);
@@ -354,10 +354,6 @@ const String BackgroundFetchRegistration::failureReason() const {
   NOTREACHED();
 }
 
-void BackgroundFetchRegistration::Dispose() {
-  observer_receiver_.reset();
-}
-
 bool BackgroundFetchRegistration::HasPendingActivity() const {
   if (!GetExecutionContext())
     return false;
@@ -376,7 +372,7 @@ void BackgroundFetchRegistration::UpdateUI(
   registration_service_->UpdateUI(in_title, in_icon, std::move(callback));
 }
 
-void BackgroundFetchRegistration::Trace(Visitor* visitor) {
+void BackgroundFetchRegistration::Trace(Visitor* visitor) const {
   visitor->Trace(registration_);
   visitor->Trace(observers_);
   visitor->Trace(observer_receiver_);

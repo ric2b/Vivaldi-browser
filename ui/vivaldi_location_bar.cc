@@ -57,7 +57,7 @@ void VivaldiLocationBar::UpdateContentSettingsIcons() {
         TabSpecificContentSettings::FromWebContents(active_contents);
     extensions::VivaldiPrivateTabObserver* private_tab =
         extensions::VivaldiPrivateTabObserver::FromWebContents(active_contents);
-    if (private_tab) {
+    if (private_tab && content_settings) {
       TabSpecificContentSettings::MicrophoneCameraState cam_state =
           content_settings->GetMicrophoneCameraState();
       bool microphoneAccessed =

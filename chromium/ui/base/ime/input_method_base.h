@@ -92,6 +92,9 @@ class COMPONENT_EXPORT(UI_BASE_IME) InputMethodBase
       uint32_t before,
       uint32_t after,
       const std::vector<ui::ImeTextSpan>& text_spans) override;
+  bool SetAutocorrectRange(const base::string16& autocorrect_text,
+                           uint32_t start,
+                           uint32_t end) override;
   bool SetSelectionRange(uint32_t start, uint32_t end) override;
 #endif
 
@@ -134,22 +137,14 @@ class COMPONENT_EXPORT(UI_BASE_IME) InputMethodBase
 
   internal::InputMethodDelegate* delegate() const { return delegate_; }
 
-  static IMEEngineHandlerInterface* GetEngine();
-
  private:
   internal::InputMethodDelegate* delegate_;
-
-  // InputMethod:
-  const std::vector<std::unique_ptr<ui::KeyEvent>>& GetKeyEventsForTesting()
-      override;
 
   void SetFocusedTextInputClientInternal(TextInputClient* client);
 
   TextInputClient* text_input_client_ = nullptr;
 
   base::ObserverList<InputMethodObserver>::Unchecked observer_list_;
-
-  std::vector<std::unique_ptr<ui::KeyEvent>> key_events_for_testing_;
 
   // Screen bounds of a on-screen keyboard.
   gfx::Rect keyboard_bounds_;

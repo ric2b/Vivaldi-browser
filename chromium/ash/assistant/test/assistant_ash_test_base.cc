@@ -17,6 +17,7 @@
 #include "ash/public/cpp/assistant/assistant_state.h"
 #include "ash/public/cpp/assistant/controller/assistant_ui_controller.h"
 #include "ash/public/cpp/test/assistant_test_api.h"
+#include "ash/public/cpp/test/test_image_downloader.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_helper.h"
 #include "base/run_loop.h"
@@ -26,8 +27,8 @@ namespace ash {
 
 namespace {
 
-using chromeos::assistant::mojom::AssistantInteractionMetadata;
-using chromeos::assistant::mojom::AssistantInteractionType;
+using chromeos::assistant::AssistantInteractionMetadata;
+using chromeos::assistant::AssistantInteractionType;
 
 gfx::Point GetPointInside(const views::View* view) {
   return view->GetBoundsInScreen().CenterPoint();
@@ -102,6 +103,7 @@ AssistantAshTestBase::AssistantAshTestBase(
       test_api_(AssistantTestApi::Create()),
       test_setup_(std::make_unique<TestAssistantSetup>()),
       test_web_view_factory_(std::make_unique<TestAssistantWebViewFactory>()),
+      test_image_downloader_(std::make_unique<TestImageDownloader>()),
       assistant_client_(std::make_unique<TestAssistantClient>()) {}
 
 AssistantAshTestBase::~AssistantAshTestBase() = default;
@@ -195,7 +197,7 @@ views::View* AssistantAshTestBase::page_view() {
   return test_api_->page_view();
 }
 
-views::View* AssistantAshTestBase::app_list_view() {
+AppListView* AssistantAshTestBase::app_list_view() {
   return test_api_->app_list_view();
 }
 
@@ -236,7 +238,7 @@ void AssistantAshTestBase::ClickOnAndWait(
   base::RunLoop().RunUntilIdle();
 }
 
-base::Optional<chromeos::assistant::mojom::AssistantInteractionMetadata>
+base::Optional<chromeos::assistant::AssistantInteractionMetadata>
 AssistantAshTestBase::current_interaction() {
   return assistant_service()->current_interaction();
 }
@@ -281,6 +283,10 @@ views::View* AssistantAshTestBase::voice_input_toggle() {
 
 views::View* AssistantAshTestBase::keyboard_input_toggle() {
   return test_api_->keyboard_input_toggle();
+}
+
+views::View* AssistantAshTestBase::onboarding_view() {
+  return test_api_->onboarding_view();
 }
 
 views::View* AssistantAshTestBase::opt_in_view() {

@@ -41,8 +41,7 @@ class CC_EXPORT RenderFrameMetadata {
   // specified.
   SkColor root_background_color = SK_ColorWHITE;
 
-  // Scroll offset of the root layer. This optional parameter is only valid
-  // during tests.
+  // Scroll offset of the root layer.
   base::Optional<gfx::Vector2dF> root_scroll_offset;
 
   // Selection region relative to the current viewport. If the selection is
@@ -55,6 +54,11 @@ class CC_EXPORT RenderFrameMetadata {
   // - page prevents zooming in or out (i.e. min and max page scale factors
   // are the same).
   bool is_mobile_optimized = false;
+
+  // Flag used to notify the browser process to start or stop forwarding points
+  // to viz for use in a delegated ink trail. True the entire time points should
+  // be forwarded, and forwarding stops as soon as it is false again.
+  bool has_delegated_ink_metadata = false;
 
   // The device scale factor used to generate a CompositorFrame.
   float device_scale_factor = 1.f;

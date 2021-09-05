@@ -5,6 +5,7 @@
 #include "ui/base/ime/mock_ime_input_context_handler.h"
 
 #include "base/logging.h"
+#include "base/notreached.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/base/ime/composition_text.h"
 #include "ui/base/ime/input_method.h"
@@ -16,8 +17,7 @@ MockIMEInputContextHandler::MockIMEInputContextHandler()
     : commit_text_call_count_(0),
       set_selection_range_call_count_(0),
       update_preedit_text_call_count_(0),
-      delete_surrounding_text_call_count_(0),
-      last_sent_key_event_(ui::ET_KEY_PRESSED, ui::VKEY_SPACE, 0) {}
+      delete_surrounding_text_call_count_(0) {}
 
 MockIMEInputContextHandler::~MockIMEInputContextHandler() {}
 
@@ -47,6 +47,14 @@ bool MockIMEInputContextHandler::SetCompositionRange(
   return true;
 }
 
+bool MockIMEInputContextHandler::SetAutocorrectRange(
+    const base::string16& autocorrect_text,
+    uint32_t start,
+    uint32_t end) {
+  // TODO(crbug.com/1091088): Implement function.
+  return false;
+}
+
 bool MockIMEInputContextHandler::SetSelectionRange(uint32_t start,
                                                    uint32_t end) {
   ++set_selection_range_call_count_;
@@ -72,11 +80,11 @@ void MockIMEInputContextHandler::Reset() {
   update_preedit_text_call_count_ = 0;
   delete_surrounding_text_call_count_ = 0;
   last_commit_text_.clear();
-  last_sent_key_event_ = ui::KeyEvent(ui::ET_KEY_PRESSED, ui::VKEY_SPACE, 0);
+  sent_key_events_.clear();
 }
 
 void MockIMEInputContextHandler::SendKeyEvent(KeyEvent* event) {
-  last_sent_key_event_ = *event;
+  sent_key_events_.emplace_back(*event);
 }
 
 InputMethod* MockIMEInputContextHandler::GetInputMethod() {

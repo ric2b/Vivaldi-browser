@@ -160,6 +160,7 @@ UseCounterPageLoadMetricsObserver::GetAllowedUkmFeatures() {
           WebFeature::kThirdPartyCacheStorage,
           WebFeature::kThirdPartyLocalStorage,
           WebFeature::kThirdPartySessionStorage,
+          WebFeature::kOverlayPopup,
           WebFeature::kOverlayPopupAd,
           WebFeature::kTrustTokenXhr,
           WebFeature::kTrustTokenFetch,
@@ -169,6 +170,9 @@ UseCounterPageLoadMetricsObserver::GetAllowedUkmFeatures() {
           WebFeature::kV8HTMLVideoElement_CancelVideoFrameCallback_Method,
           WebFeature::kSchemefulSameSiteContextDowngrade,
           WebFeature::kIdleDetectionStart,
+          WebFeature::kPerformanceObserverEntryTypesAndBuffered,
+          WebFeature::kStorageAccessAPI_HasStorageAccess_Method,
+          WebFeature::kStorageAccessAPI_requestStorageAccess_Method,
       }));
   return *opt_in_features;
 }

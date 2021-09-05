@@ -4,20 +4,27 @@
 
 #include "chrome/browser/web_applications/web_app_migration_manager.h"
 
+#include <map>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/stl_util.h"
 #include "base/threading/sequenced_task_runner_handle.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/web_applications/components/web_app_chromeos_data.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
+#include "chrome/browser/web_applications/components/web_app_ui_manager.h"
+#include "chrome/browser/web_applications/components/web_app_utils.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_database.h"
 #include "chrome/browser/web_applications/web_app_database_factory.h"
 #include "chrome/browser/web_applications/web_app_icon_manager.h"
 #include "chrome/browser/web_applications/web_app_registry_update.h"
+#include "chrome/common/chrome_features.h"
 #include "components/services/app_service/public/cpp/file_handler.h"
 #include "components/sync/model/metadata_batch.h"
 #include "components/sync/model/metadata_change_list.h"
@@ -114,19 +121,41 @@ void WebAppMigrationManager::OnBookmarkAppIconsRead(
     MigrateNextBookmarkAppIcons();
     return;
   }
-  // TODO(https://crbug.com/1069316): Support jump lists migration here: Convert
-  // old extension's representation to new web app representation (project BMO).
+
   web_app_icon_manager_->WriteData(
       app_id, std::move(icon_bitmaps),
-      std::vector<std::map<SquareSizePx, SkBitmap>>(),
       base::BindOnce(&WebAppMigrationManager::OnWebAppIconsWritten,
+                     weak_ptr_factory_.GetWeakPtr(), app_id));
+}
+
+void WebAppMigrationManager::OnWebAppIconsWritten(const AppId& app_id,
+                                                  bool success) {
+  if (!success)
+    DLOG(ERROR) << "Write web app icons failed.";
+  if (base::FeatureList::IsEnabled(
+          features::kDesktopPWAsAppIconShortcutsMenu)) {
+    bookmark_app_icon_manager_.ReadAllShortcutsMenuIcons(
+        app_id,
+        base::BindOnce(
+            &WebAppMigrationManager::OnBookmarkAppShortcutsMenuIconsRead,
+            weak_ptr_factory_.GetWeakPtr(), app_id));
+  } else {
+    MigrateNextBookmarkAppIcons();
+  }
+}
+
+void WebAppMigrationManager::OnBookmarkAppShortcutsMenuIconsRead(
+    const AppId& app_id,
+    ShortcutsMenuIconsBitmaps shortcuts_menu_icons_bitmaps) {
+  web_app_icon_manager_->WriteShortcutsMenuIconsData(
+      app_id, std::move(shortcuts_menu_icons_bitmaps),
+      base::BindOnce(&WebAppMigrationManager::OnWebAppShortcutsMenuIconsWritten,
                      weak_ptr_factory_.GetWeakPtr()));
 }
 
-void WebAppMigrationManager::OnWebAppIconsWritten(bool success) {
+void WebAppMigrationManager::OnWebAppShortcutsMenuIconsWritten(bool success) {
   if (!success)
-    DLOG(ERROR) << "Write web app icons failed.";
-
+    DLOG(ERROR) << "Write web app shortcuts menu icons failed.";
   MigrateNextBookmarkAppIcons();
 }
 
@@ -188,7 +217,9 @@ std::unique_ptr<WebApp> WebAppMigrationManager::MigrateBookmarkApp(
   web_app->SetName(bookmark_app_registrar_.GetAppShortName(app_id));
   web_app->SetDescription(bookmark_app_registrar_.GetAppDescription(app_id));
   web_app->SetLaunchUrl(bookmark_app_registrar_.GetAppLaunchURL(app_id));
-
+  web_app->SetLastLaunchTime(
+      bookmark_app_registrar_.GetAppLastLaunchTime(app_id));
+  web_app->SetInstallTime(bookmark_app_registrar_.GetAppInstallTime(app_id));
   base::Optional<GURL> scope = bookmark_app_registrar_.GetAppScope(app_id);
   if (scope)
     web_app->SetScope(*scope);
@@ -207,10 +238,39 @@ std::unique_ptr<WebApp> WebAppMigrationManager::MigrateBookmarkApp(
   web_app->SetDownloadedIconSizes(
       bookmark_app_registrar_.GetAppDownloadedIconSizes(app_id));
 
-  WebApp::SyncData sync_data;
-  sync_data.name = bookmark_app_registrar_.GetAppShortName(app_id);
-  sync_data.theme_color = bookmark_app_registrar_.GetAppThemeColor(app_id);
-  web_app->SetSyncData(std::move(sync_data));
+  if (base::FeatureList::IsEnabled(
+          features::kDesktopPWAsAppIconShortcutsMenu)) {
+    web_app->SetShortcutInfos(
+        bookmark_app_registrar_.GetAppShortcutInfos(app_id));
+    web_app->SetDownloadedShortcutsMenuIconsSizes(
+        bookmark_app_registrar_.GetAppDownloadedShortcutsMenuIconsSizes(
+            app_id));
+  }
+
+  web_app->SetUserPageOrdinal(
+      bookmark_app_registrar_.GetUserPageOrdinal(app_id));
+  web_app->SetUserLaunchOrdinal(
+      bookmark_app_registrar_.GetUserLaunchOrdinal(app_id));
+
+  if (IsChromeOs()) {
+    auto chromeos_data = base::make_optional<WebAppChromeOsData>();
+    const bool should_show = !WebAppUiManager::ShouldHideAppFromUser(app_id);
+    chromeos_data->show_in_launcher = should_show;
+    chromeos_data->show_in_search = should_show;
+    chromeos_data->show_in_management = should_show;
+    web_app->SetWebAppChromeOsData(std::move(chromeos_data));
+  }
+
+  WebApp::SyncFallbackData sync_fallback_data;
+  sync_fallback_data.name = bookmark_app_registrar_.GetAppShortName(app_id);
+  sync_fallback_data.theme_color =
+      bookmark_app_registrar_.GetAppThemeColor(app_id);
+  // Avoid using derived scope as we are transferring raw data.
+  sync_fallback_data.scope =
+      bookmark_app_registrar_.GetAppScopeInternal(app_id).value_or(GURL());
+  sync_fallback_data.icon_infos =
+      bookmark_app_registrar_.GetAppIconInfos(app_id);
+  web_app->SetSyncFallbackData(std::move(sync_fallback_data));
 
   const apps::FileHandlers* file_handlers =
       bookmark_app_file_handler_manager_.GetAllFileHandlers(app_id);

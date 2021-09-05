@@ -46,7 +46,7 @@ class ContextProvider;
 namespace cc {
 
 class DebugRectHistory;
-class FrameRateCounter;
+class DroppedFrameCounter;
 class HeadsUpDisplayLayerImpl;
 class ImageDecodeCache;
 class LayerTreeDebugState;
@@ -127,8 +127,7 @@ class CC_EXPORT LayerTreeImpl {
   TileManager* tile_manager() const;
   ImageDecodeCache* image_decode_cache() const;
   ImageAnimationController* image_animation_controller() const;
-  FrameRateCounter* frame_rate_counter() const;
-  base::Optional<int> current_universal_throughput();
+  DroppedFrameCounter* dropped_frame_counter() const;
   MemoryHistory* memory_history() const;
   DebugRectHistory* debug_rect_history() const;
   bool IsActiveTree() const;
@@ -591,6 +590,8 @@ class CC_EXPORT LayerTreeImpl {
   // Return all layers with a hit non-fast scrollable region.
   std::vector<const LayerImpl*> FindLayersHitByPointInNonFastScrollableRegion(
       const gfx::PointF& screen_space_point);
+  bool PointHitsNonFastScrollableRegion(const gfx::PointF& scree_space_point,
+                                        const LayerImpl& layer) const;
 
   // Returns the ElementId representing a frame's document at the given point.
   // In cases where cc doesn't have enough information to perform accurate
@@ -708,6 +709,18 @@ class CC_EXPORT LayerTreeImpl {
 
   const gfx::Transform& DrawTransform() const {
     return host_impl_->DrawTransform();
+  }
+
+  // These functions are used for plumbing DelegatedInkMetadata from blink
+  // through the compositor and into viz via a compositor frame. They should
+  // only be called after the JS API |updateInkTrailStartPoint| has been
+  // called, which populates the metadata with provided information.
+  void set_delegated_ink_metadata(
+      std::unique_ptr<viz::DelegatedInkMetadata> metadata) {
+    delegated_ink_metadata_ = std::move(metadata);
+  }
+  std::unique_ptr<viz::DelegatedInkMetadata> take_delegated_ink_metadata() {
+    return std::move(delegated_ink_metadata_);
   }
 
  protected:
@@ -861,6 +874,8 @@ class CC_EXPORT LayerTreeImpl {
 
   // Event metrics that are reported back from the main thread.
   std::vector<EventMetrics> events_metrics_from_main_thread_;
+
+  std::unique_ptr<viz::DelegatedInkMetadata> delegated_ink_metadata_;
 };
 
 }  // namespace cc

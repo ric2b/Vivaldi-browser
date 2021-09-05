@@ -17,6 +17,7 @@
 #include "chrome/browser/media/webrtc/native_desktop_media_list.h"
 #include "chrome/browser/media/webrtc/tab_desktop_media_list.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/safe_browsing/user_interaction_observer.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/url_formatter/elide_url.h"
@@ -97,6 +98,21 @@ void DisplayMediaAccessHandler::HandleRequest(
     std::move(callback).Run(
         blink::MediaStreamDevices(),
         blink::mojom::MediaStreamRequestResult::PERMISSION_DENIED, nullptr);
+    return;
+  }
+
+  // SafeBrowsing Delayed Warnings experiment can delay some SafeBrowsing
+  // warnings until user interaction. If the current page has a delayed warning,
+  // it'll have a user interaction observer attached. Show the warning
+  // immediately in that case.
+  safe_browsing::SafeBrowsingUserInteractionObserver* observer =
+      safe_browsing::SafeBrowsingUserInteractionObserver::FromWebContents(
+          web_contents);
+  if (observer) {
+    std::move(callback).Run(
+        blink::MediaStreamDevices(),
+        blink::mojom::MediaStreamRequestResult::PERMISSION_DENIED, nullptr);
+    observer->OnDesktopCaptureRequest();
     return;
   }
 
@@ -225,6 +241,14 @@ void DisplayMediaAccessHandler::OnPickerDialogResults(
           blink::mojom::MediaStreamRequestResult::SYSTEM_PERMISSION_DENIED;
     }
 #endif
+    if (media_id.type == content::DesktopMediaID::TYPE_WEB_CONTENTS &&
+        !content::WebContents::FromRenderFrameHost(
+            content::RenderFrameHost::FromID(
+                media_id.web_contents_id.render_process_id,
+                media_id.web_contents_id.main_render_frame_id))) {
+      request_result =
+          blink::mojom::MediaStreamRequestResult::TAB_CAPTURE_FAILURE;
+    }
     if (request_result == blink::mojom::MediaStreamRequestResult::OK) {
       const auto& visible_url = url_formatter::FormatUrlForSecurityDisplay(
           web_contents->GetLastCommittedURL(),

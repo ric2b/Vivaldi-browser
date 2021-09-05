@@ -78,6 +78,7 @@ WebRemoteFrame* WebRemoteFrame::CreateForPortal(
                                              frame_token, portal_element);
 }
 
+// static
 WebRemoteFrameImpl* WebRemoteFrameImpl::CreateMainFrame(
     WebView* web_view,
     WebRemoteFrameClient* client,
@@ -117,7 +118,8 @@ WebRemoteFrameImpl* WebRemoteFrameImpl::CreateForPortal(
 
   Element* element = portal_element;
   DCHECK(element->HasTagName(html_names::kPortalTag));
-  DCHECK(RuntimeEnabledFeatures::PortalsEnabled(&element->GetDocument()));
+  DCHECK(
+      RuntimeEnabledFeatures::PortalsEnabled(element->GetExecutionContext()));
   HTMLPortalElement* portal = static_cast<HTMLPortalElement*>(element);
   LocalFrame* host_frame = portal->GetDocument().GetFrame();
   frame->InitializeCoreFrame(*host_frame->GetPage(), portal, g_null_atom,
@@ -128,7 +130,7 @@ WebRemoteFrameImpl* WebRemoteFrameImpl::CreateForPortal(
 
 WebRemoteFrameImpl::~WebRemoteFrameImpl() = default;
 
-void WebRemoteFrameImpl::Trace(Visitor* visitor) {
+void WebRemoteFrameImpl::Trace(Visitor* visitor) const {
   visitor->Trace(frame_client_);
   visitor->Trace(frame_);
   WebFrame::TraceFrames(visitor, this);
@@ -327,12 +329,6 @@ bool WebRemoteFrameImpl::IsIgnoredForHitTest() const {
 void WebRemoteFrameImpl::UpdateUserActivationState(
     mojom::blink::UserActivationUpdateType update_type) {
   GetFrame()->UpdateUserActivationState(update_type);
-}
-
-void WebRemoteFrameImpl::TransferUserActivationFrom(
-    blink::WebRemoteFrame* source_frame) {
-  GetFrame()->TransferUserActivationFrom(
-      To<WebRemoteFrameImpl>(source_frame)->GetFrame());
 }
 
 void WebRemoteFrameImpl::SetHadStickyUserActivationBeforeNavigation(

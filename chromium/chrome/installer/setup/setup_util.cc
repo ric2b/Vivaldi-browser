@@ -198,24 +198,23 @@ const char kUnPackStatusMetricsName[] = "Setup.Install.LzmaUnPackStatus";
 int CourgettePatchFiles(const base::FilePath& src,
                         const base::FilePath& patch,
                         const base::FilePath& dest) {
-  VLOG(1) << "Applying Courgette patch " << patch.value()
-          << " to file " << src.value()
-          << " and generating file " << dest.value();
+  VLOG(1) << "Applying Courgette patch " << patch.value() << " to file "
+          << src.value() << " and generating file " << dest.value();
 
   if (src.empty() || patch.empty() || dest.empty())
     return installer::PATCH_INVALID_ARGUMENTS;
 
-  const courgette::Status patch_status =
-      courgette::ApplyEnsemblePatch(src.value().c_str(),
-                                    patch.value().c_str(),
-                                    dest.value().c_str());
-  const int exit_code = (patch_status != courgette::C_OK) ?
-      static_cast<int>(patch_status) + kCourgetteErrorOffset : 0;
+  const courgette::Status patch_status = courgette::ApplyEnsemblePatch(
+      src.value().c_str(), patch.value().c_str(), dest.value().c_str());
+  const int exit_code =
+      (patch_status != courgette::C_OK)
+          ? static_cast<int>(patch_status) + kCourgetteErrorOffset
+          : 0;
 
-  LOG_IF(ERROR, exit_code)
-      << "Failed to apply Courgette patch " << patch.value()
-      << " to file " << src.value() << " and generating file " << dest.value()
-      << ". err=" << exit_code;
+  LOG_IF(ERROR, exit_code) << "Failed to apply Courgette patch "
+                           << patch.value() << " to file " << src.value()
+                           << " and generating file " << dest.value()
+                           << ". err=" << exit_code;
 
   return exit_code;
 }
@@ -223,21 +222,20 @@ int CourgettePatchFiles(const base::FilePath& src,
 int BsdiffPatchFiles(const base::FilePath& src,
                      const base::FilePath& patch,
                      const base::FilePath& dest) {
-  VLOG(1) << "Applying bsdiff patch " << patch.value()
-          << " to file " << src.value()
-          << " and generating file " << dest.value();
+  VLOG(1) << "Applying bsdiff patch " << patch.value() << " to file "
+          << src.value() << " and generating file " << dest.value();
 
   if (src.empty() || patch.empty() || dest.empty())
     return installer::PATCH_INVALID_ARGUMENTS;
 
   const int patch_status = bsdiff::ApplyBinaryPatch(src, patch, dest);
-  const int exit_code = patch_status != bsdiff::OK ?
-                        patch_status + kBsdiffErrorOffset : 0;
+  const int exit_code =
+      patch_status != bsdiff::OK ? patch_status + kBsdiffErrorOffset : 0;
 
-  LOG_IF(ERROR, exit_code)
-      << "Failed to apply bsdiff patch " << patch.value()
-      << " to file " << src.value() << " and generating file " << dest.value()
-      << ". err=" << exit_code;
+  LOG_IF(ERROR, exit_code) << "Failed to apply bsdiff patch " << patch.value()
+                           << " to file " << src.value()
+                           << " and generating file " << dest.value()
+                           << ". err=" << exit_code;
 
   return exit_code;
 }
@@ -268,7 +266,7 @@ int ZucchiniPatchFiles(const base::FilePath& src,
 base::Version* GetMaxVersionFromArchiveDir(const base::FilePath& chrome_path) {
   VLOG(1) << "Looking for Chrome version folder under " << chrome_path.value();
   base::FileEnumerator version_enum(chrome_path, false,
-      base::FileEnumerator::DIRECTORIES);
+                                    base::FileEnumerator::DIRECTORIES);
   // TODO(tommi): The version directory really should match the version of
   // setup.exe.  To begin with, we should at least DCHECK that that's true.
 
@@ -288,15 +286,16 @@ base::Version* GetMaxVersionFromArchiveDir(const base::FilePath& chrome_path) {
     }
   }
 
-  return (version_found ? max_version.release() : NULL);
+  return (version_found ? max_version.release() : nullptr);
 }
 
 base::FilePath FindArchiveToPatch(const InstallationState& original_state,
                                   const InstallerState& installer_state,
                                   const base::Version& desired_version) {
   if (desired_version.IsValid()) {
-    base::FilePath archive(installer_state.GetInstallerDirectory(
-        desired_version).Append(kChromeArchive));
+    base::FilePath archive(
+        installer_state.GetInstallerDirectory(desired_version)
+            .Append(kChromeArchive));
     return base::PathExists(archive) ? archive : base::FilePath();
   }
 
@@ -308,15 +307,15 @@ base::FilePath FindArchiveToPatch(const InstallationState& original_state,
       original_state.GetProductState(installer_state.system_install());
   if (product) {
     patch_source = installer_state.GetInstallerDirectory(product->version())
-        .Append(installer::kChromeArchive);
+                       .Append(installer::kChromeArchive);
     if (base::PathExists(patch_source))
       return patch_source;
   }
   std::unique_ptr<base::Version> version(
       installer::GetMaxVersionFromArchiveDir(installer_state.target_path()));
   if (version) {
-    patch_source = installer_state.GetInstallerDirectory(*version)
-        .Append(installer::kChromeArchive);
+    patch_source = installer_state.GetInstallerDirectory(*version).Append(
+        installer::kChromeArchive);
     if (base::PathExists(patch_source))
       return patch_source;
   }
@@ -333,10 +332,10 @@ bool DeleteFileFromTempProcess(const base::FilePath& path,
   if (!size || size >= MAX_PATH)
     return false;
 
-  STARTUPINFO startup = { sizeof(STARTUPINFO) };
+  STARTUPINFO startup = {sizeof(STARTUPINFO)};
   PROCESS_INFORMATION pi = {0};
-  BOOL ok = ::CreateProcess(NULL, rundll32, NULL, NULL, FALSE, CREATE_SUSPENDED,
-                            NULL, NULL, &startup, &pi);
+  BOOL ok = ::CreateProcess(nullptr, rundll32, nullptr, nullptr, FALSE,
+                            CREATE_SUSPENDED, nullptr, nullptr, &startup, &pi);
   if (ok) {
     // We use the main thread of the new process to run:
     //   Sleep(delay_before_delete_ms);
@@ -345,22 +344,22 @@ bool DeleteFileFromTempProcess(const base::FilePath& path,
     // This runs before the main routine of the process runs, so it doesn't
     // matter much which executable we choose except that we don't want to
     // use e.g. a console app that causes a window to be created.
-    size = static_cast<DWORD>(
-        (path.value().length() + 1) * sizeof(path.value()[0]));
-    void* mem = ::VirtualAllocEx(pi.hProcess, NULL, size, MEM_COMMIT,
+    size = static_cast<DWORD>((path.value().length() + 1) *
+                              sizeof(path.value()[0]));
+    void* mem = ::VirtualAllocEx(pi.hProcess, nullptr, size, MEM_COMMIT,
                                  PAGE_READWRITE);
     if (mem) {
       SIZE_T written = 0;
-      ::WriteProcessMemory(
-          pi.hProcess, mem, path.value().c_str(),
-          (path.value().size() + 1) * sizeof(path.value()[0]), &written);
+      ::WriteProcessMemory(pi.hProcess, mem, path.value().c_str(),
+                           (path.value().size() + 1) * sizeof(path.value()[0]),
+                           &written);
       HMODULE kernel32 = ::GetModuleHandle(L"kernel32.dll");
-      PAPCFUNC sleep = reinterpret_cast<PAPCFUNC>(
-          ::GetProcAddress(kernel32, "Sleep"));
-      PAPCFUNC delete_file = reinterpret_cast<PAPCFUNC>(
-          ::GetProcAddress(kernel32, "DeleteFileW"));
-      PAPCFUNC exit_process = reinterpret_cast<PAPCFUNC>(
-          ::GetProcAddress(kernel32, "ExitProcess"));
+      PAPCFUNC sleep =
+          reinterpret_cast<PAPCFUNC>(::GetProcAddress(kernel32, "Sleep"));
+      PAPCFUNC delete_file =
+          reinterpret_cast<PAPCFUNC>(::GetProcAddress(kernel32, "DeleteFileW"));
+      PAPCFUNC exit_process =
+          reinterpret_cast<PAPCFUNC>(::GetProcAddress(kernel32, "ExitProcess"));
       if (!sleep || !delete_file || !exit_process) {
         NOTREACHED();
         ok = FALSE;
@@ -409,19 +408,19 @@ bool IsUninstallSuccess(InstallStatus install_status) {
 
 bool ContainsUnsupportedSwitch(const base::CommandLine& cmd_line) {
   static const char* const kLegacySwitches[] = {
-    // Chrome Frame ready-mode.
-    "ready-mode",
-    "ready-mode-opt-in",
-    "ready-mode-temp-opt-out",
-    "ready-mode-end-temp-opt-out",
-    // Chrome Frame quick-enable.
-    "quick-enable-cf",
-    // Installation of Chrome Frame.
-    "chrome-frame",
-    "migrate-chrome-frame",
-    // Stand-alone App Launcher.
-    "app-host",
-    "app-launcher",
+      // Chrome Frame ready-mode.
+      "ready-mode",
+      "ready-mode-opt-in",
+      "ready-mode-temp-opt-out",
+      "ready-mode-end-temp-opt-out",
+      // Chrome Frame quick-enable.
+      "quick-enable-cf",
+      // Installation of Chrome Frame.
+      "chrome-frame",
+      "migrate-chrome-frame",
+      // Stand-alone App Launcher.
+      "app-host",
+      "app-launcher",
   };
   for (size_t i = 0; i < base::size(kLegacySwitches); ++i) {
     if (cmd_line.HasSwitch(kLegacySwitches[i]))
@@ -464,11 +463,12 @@ void DeleteRegistryKeyPartial(
         return base::ToLowerASCII(str);
       });
   base::win::RegKey key;
-  LONG result = key.Open(root, path.c_str(), (KEY_ENUMERATE_SUB_KEYS |
-                                              KEY_QUERY_VALUE | KEY_SET_VALUE));
+  LONG result =
+      key.Open(root, path.c_str(),
+               (KEY_ENUMERATE_SUB_KEYS | KEY_QUERY_VALUE | KEY_SET_VALUE));
   if (result != ERROR_SUCCESS) {
-    LOG_IF(ERROR, result != ERROR_FILE_NOT_FOUND) << "Failed to open " << path
-                                                  << "; result = " << result;
+    LOG_IF(ERROR, result != ERROR_FILE_NOT_FOUND)
+        << "Failed to open " << path << "; result = " << result;
     return;
   }
 
@@ -611,8 +611,7 @@ int GetInstallAge(const InstallerState& installer_state) {
   return age >= base::TimeDelta() ? age.InDays() : -1;
 }
 
-void RecordUnPackMetrics(UnPackStatus unpack_status,
-                         UnPackConsumer consumer) {
+void RecordUnPackMetrics(UnPackStatus unpack_status, UnPackConsumer consumer) {
   std::string consumer_name;
 
   switch (consumer) {
@@ -662,7 +661,9 @@ void RegisterEventLogProvider(const base::FilePath& install_directory,
           .Append(FILE_PATH_LITERAL("eventlog_provider.dll")));
 
   static constexpr const wchar_t* kFileKeys[] = {
-      L"CategoryMessageFile", L"EventMessageFile", L"ParameterMessageFile",
+      L"CategoryMessageFile",
+      L"EventMessageFile",
+      L"ParameterMessageFile",
   };
   for (const wchar_t* file_key : kFileKeys) {
     work_item_list->AddSetRegValueWorkItem(HKEY_LOCAL_MACHINE, reg_path,

@@ -65,6 +65,16 @@ class ContentBrowserClientImpl : public content::ContentBrowserClient {
       content::NavigationUIData* navigation_ui_data,
       int frame_tree_node_id) override;
   bool IsHandledURL(const GURL& url) override;
+  std::vector<url::Origin> GetOriginsRequiringDedicatedProcess() override;
+  bool ShouldDisableSiteIsolation() override;
+  std::vector<std::string> GetAdditionalSiteIsolationModes() override;
+  void PersistIsolatedOrigin(content::BrowserContext* context,
+                             const url::Origin& origin) override;
+  base::OnceClosure SelectClientCertificate(
+      content::WebContents* web_contents,
+      net::SSLCertRequestInfo* cert_request_info,
+      net::ClientCertIdentityList client_certs,
+      std::unique_ptr<content::ClientCertificateDelegate> delegate) override;
   bool CanCreateWindow(content::RenderFrameHost* opener,
                        const GURL& opener_url,
                        const GURL& opener_top_level_frame_url,
@@ -111,11 +121,22 @@ class ContentBrowserClientImpl : public content::ContentBrowserClient {
                                       int child_process_id) override;
 #if defined(OS_ANDROID)
   WideColorGamutHeuristic GetWideColorGamutHeuristic() override;
+  std::unique_ptr<content::LoginDelegate> CreateLoginDelegate(
+      const net::AuthChallengeInfo& auth_info,
+      content::WebContents* web_contents,
+      const content::GlobalRequestID& request_id,
+      bool is_main_frame,
+      const GURL& url,
+      scoped_refptr<net::HttpResponseHeaders> response_headers,
+      bool first_auth_attempt,
+      LoginAuthRequiredCallback auth_required_callback) override;
 #endif  // OS_ANDROID
-
-  void CreateFeatureListAndFieldTrials();
   content::SpeechRecognitionManagerDelegate*
   CreateSpeechRecognitionManagerDelegate() override;
+  ukm::UkmService* GetUkmService() override;
+  content::TtsPlatform* GetTtsPlatform() override;
+
+  void CreateFeatureListAndFieldTrials();
 
  private:
   std::unique_ptr<PrefService> CreateLocalState();

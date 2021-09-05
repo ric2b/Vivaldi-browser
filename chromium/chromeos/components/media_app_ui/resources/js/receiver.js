@@ -6,21 +6,26 @@
 const parentMessagePipe = new MessagePipe('chrome://media-app', window.parent);
 
 /**
- * A file received from the privileged context.
+ * Placeholder Blob used when a null file is received. For null files we only
+ * know the name until the file is navigated to.
+ */
+const PLACEHOLDER_BLOB = new Blob([]);
+
+/**
+ * A file received from the privileged context, and decorated with IPC methods
+ * added in the untrusted (this) context to communicate back.
  * @implements {mediaApp.AbstractFile}
  */
 class ReceivedFile {
-  /**
-   * @param {?File} file The received file.
-   * @param {number} token A token that identifies the file.
-   * @param {string} fallbackName The name to use when `file` is null/empty.
-   */
-  constructor(file, token, fallbackName) {
-    this.blob = file || new File([], fallbackName);
-    this.name = this.blob.name;
+  /** @param {!FileContext} file */
+  constructor(file) {
+    this.blob = file.file || PLACEHOLDER_BLOB;
+    this.name = file.name;
     this.size = this.blob.size;
     this.mimeType = this.blob.type;
-    this.token = token;
+    this.token = file.token;
+    this.error = file.error;
+    this.fromClipboard = false;
   }
 
   /**
@@ -28,7 +33,7 @@ class ReceivedFile {
    * @param{!Blob} blob
    */
   async overwriteOriginal(blob) {
-    /** @type{OverwriteFileMessage} */
+    /** @type {!OverwriteFileMessage} */
     const message = {token: this.token, blob: blob};
 
     await parentMessagePipe.sendMessage(Message.OVERWRITE_FILE, message);
@@ -64,6 +69,13 @@ class ReceivedFile {
 }
 
 /**
+ * Source of truth for what files are loaded in the app and writable. This can
+ * be appended to via `ReceivedFileList.addFiles()`.
+ * @type {?ReceivedFileList}
+ */
+let lastLoadedReceivedFileList = null;
+
+/**
  * A file list consisting of all files received from the parent. Exposes the
  * currently writable file and all other readable files in the current
  * directory.
@@ -85,9 +97,11 @@ class ReceivedFileList {
 
     this.length = files.length;
     /** @type {!Array<!ReceivedFile>} */
-    this.files = files.map(f => new ReceivedFile(f.file, f.token, f.name));
+    this.files = files.map(f => new ReceivedFile(f));
     /** @type {number} */
     this.writableFileIndex = 0;
+    /** @type {!Array<function(!mediaApp.AbstractFileList): void>} */
+    this.observers = [];
   }
 
   /** @override */
@@ -97,6 +111,7 @@ class ReceivedFileList {
 
   /**
    * Returns the file which is currently writable or null if there isn't one.
+   * @override
    * @return {?mediaApp.AbstractFile}
    */
   getCurrentlyWritable() {
@@ -105,6 +120,7 @@ class ReceivedFileList {
 
   /**
    * Loads in the next file in the list as a writable.
+   * @override
    * @return {!Promise<undefined>}
    */
   async loadNext() {
@@ -117,17 +133,49 @@ class ReceivedFileList {
 
   /**
    * Loads in the previous file in the list as a writable.
+   * @override
    * @return {!Promise<undefined>}
    */
   async loadPrev() {
     await parentMessagePipe.sendMessage(Message.NAVIGATE, {direction: -1});
   }
+
+  /** @override */
+  addObserver(observer) {
+    this.observers.push(observer);
+  }
+
+  /** @param {!Array<!ReceivedFile>} files */
+  addFiles(files) {
+    if (files.length === 0) {
+      return;
+    }
+    this.files = [...this.files, ...files];
+    this.length = this.files.length;
+    // Call observers with the new underlying files.
+    this.observers.map(o => o(this));
+  }
 }
 
 parentMessagePipe.registerHandler(Message.LOAD_FILES, async (message) => {
   const filesMessage = /** @type {!LoadFilesMessage} */ (message);
-  await loadFiles(new ReceivedFileList(filesMessage));
+  lastLoadedReceivedFileList = new ReceivedFileList(filesMessage);
+  await loadFiles(lastLoadedReceivedFileList);
 });
+
+// Load extra files by appending to the current `ReceivedFileList`.
+parentMessagePipe.registerHandler(Message.LOAD_EXTRA_FILES, async (message) => {
+  if (!lastLoadedReceivedFileList) {
+    return;
+  }
+  const extraFilesMessage = /** @type {!LoadFilesMessage} */ (message);
+  const newFiles = extraFilesMessage.files.map(f => new ReceivedFile(f));
+  lastLoadedReceivedFileList.addFiles(newFiles);
+});
+
+// As soon as the LOAD_FILES handler is installed, signal readiness to the
+// parent frame (privileged context).
+parentMessagePipe.sendMessage(Message.IFRAME_READY);
 
 /**
  * A delegate which exposes privileged WebUI functionality to the media
@@ -140,13 +188,14 @@ const DELEGATE = {
         await parentMessagePipe.sendMessage(Message.OPEN_FEEDBACK_DIALOG);
     return /** @type {?string} */ (response['errorMessage']);
   },
+  /**
+   * @param {!mediaApp.AbstractFile} abstractFile
+   * @return {!Promise<undefined>}
+   */
   async saveCopy(/** !mediaApp.AbstractFile */ abstractFile) {
     /** @type {!SaveCopyMessage} */
     const msg = {blob: abstractFile.blob, suggestedName: abstractFile.name};
-    const response =
-        /** @type {!SaveCopyResponse} */ (
-            await parentMessagePipe.sendMessage(Message.SAVE_COPY, msg));
-    return response.errorMessage;
+    await parentMessagePipe.sendMessage(Message.SAVE_COPY, msg);
   }
 };
 
@@ -210,10 +259,11 @@ window.addEventListener('DOMContentLoaded', () => {
   observer.observe(document.body, {childList: true});
 });
 
-// Attempting to execute chooseFileSystemEntries is guaranteed to result in a
-// SecurityError due to the fact that we are running in a unprivileged iframe.
-// Note, we can not do window.chooseFileSystemEntries due to the fact that
-// closure does not yet know that 'chooseFileSystemEntries' is on the window.
+// Attempting to show file pickers in the sandboxed <iframe> is guaranteed to
+// result in a SecurityError: hide them.
 // TODO(crbug/1040328): Remove this when we have a polyfill that allows us to
 // talk to the privileged frame.
 window['chooseFileSystemEntries'] = null;
+window['showOpenFilePicker'] = null;
+window['showSaveFilePicker'] = null;
+window['showDirectoryPicker'] = null;

@@ -30,10 +30,10 @@ const base::Feature kParallelDownloading {
 #endif
 };
 
-#if defined(OS_ANDROID)
 const base::Feature kDownloadLater{"DownloadLater",
                                    base::FEATURE_DISABLED_BY_DEFAULT};
 
+#if defined(OS_ANDROID)
 const base::Feature kRefreshExpirationDate{"RefreshExpirationDate",
                                            base::FEATURE_ENABLED_BY_DEFAULT};
 #endif
@@ -65,5 +65,11 @@ const base::Feature kDeleteExpiredDownloads{"DeleteExpiredDownloads",
                                             base::FEATURE_ENABLED_BY_DEFAULT};
 
 }  // namespace features
+
+namespace switches {
+
+const char kDownloadLaterDebugOnWifi[] = "download-later-debug-on-wifi";
+
+}  // namespace switches
 
 }  // namespace download

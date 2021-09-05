@@ -24,8 +24,11 @@
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/scoped_blocking_call.h"
+#include "base/threading/scoped_thread_priority.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/win/registry.h"
+#include "base/win/scoped_devinfo.h"
 #include "base/win/scoped_handle.h"
 #include "components/device_event_log/device_event_log.h"
 #include "services/device/usb/usb_descriptors.h"
@@ -37,16 +40,13 @@ namespace device {
 
 namespace {
 
-struct DevInfoScopedTraits {
-  static HDEVINFO InvalidValue() { return INVALID_HANDLE_VALUE; }
-  static void Free(HDEVINFO h) { SetupDiDestroyDeviceInfoList(h); }
-};
-
-using ScopedDevInfo = base::ScopedGeneric<HDEVINFO, DevInfoScopedTraits>;
-
 base::Optional<uint32_t> GetDeviceUint32Property(HDEVINFO dev_info,
                                                  SP_DEVINFO_DATA* dev_info_data,
                                                  const DEVPROPKEY& property) {
+  // SetupDiGetDeviceProperty() makes an RPC which may block.
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
+
   DEVPROPTYPE property_type;
   uint32_t buffer;
   if (!SetupDiGetDeviceProperty(
@@ -63,6 +63,10 @@ base::Optional<base::string16> GetDeviceStringProperty(
     HDEVINFO dev_info,
     SP_DEVINFO_DATA* dev_info_data,
     const DEVPROPKEY& property) {
+  // SetupDiGetDeviceProperty() makes an RPC which may block.
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
+
   DEVPROPTYPE property_type;
   DWORD required_size;
   if (SetupDiGetDeviceProperty(dev_info, dev_info_data, &property,
@@ -87,6 +91,10 @@ base::Optional<std::vector<base::string16>> GetDeviceStringListProperty(
     HDEVINFO dev_info,
     SP_DEVINFO_DATA* dev_info_data,
     const DEVPROPKEY& property) {
+  // SetupDiGetDeviceProperty() makes an RPC which may block.
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
+
   DEVPROPTYPE property_type;
   DWORD required_size;
   if (SetupDiGetDeviceProperty(dev_info, dev_info_data, &property,
@@ -236,7 +244,7 @@ bool GetDeviceInterfaceDetails(HDEVINFO dev_info,
 
 base::string16 GetDevicePath(const base::string16& instance_id,
                              const GUID& device_interface_guid) {
-  ScopedDevInfo dev_info(
+  base::win::ScopedDevInfo dev_info(
       SetupDiGetClassDevs(&device_interface_guid, instance_id.c_str(), 0,
                           DIGCF_DEVICEINTERFACE | DIGCF_PRESENT));
   if (!dev_info.is_valid()) {
@@ -287,7 +295,8 @@ int GetInterfaceNumber(const base::string16& instance_id) {
 UsbDeviceWin::FunctionInfo GetFunctionInfo(const base::string16& instance_id) {
   UsbDeviceWin::FunctionInfo info;
 
-  ScopedDevInfo dev_info(SetupDiCreateDeviceInfoList(nullptr, nullptr));
+  base::win::ScopedDevInfo dev_info(
+      SetupDiCreateDeviceInfoList(nullptr, nullptr));
   if (!dev_info.is_valid()) {
     USB_PLOG(ERROR) << "SetupDiCreateDeviceInfoList";
     return info;
@@ -309,6 +318,10 @@ UsbDeviceWin::FunctionInfo GetFunctionInfo(const base::string16& instance_id) {
 
   if (!base::EqualsCaseInsensitiveASCII(info.driver, L"winusb"))
     return info;
+
+  // Boost priority while potentially loading Advapi32.dll on a background
+  // thread for the registry functions used below.
+  SCOPED_MAY_LOAD_LIBRARY_AT_BACKGROUND_PRIORITY();
 
   // There is no standard device interface GUID for USB functions and so we
   // must discover the set of GUIDs that have been set in the registry by
@@ -332,6 +345,10 @@ UsbDeviceWin::FunctionInfo GetFunctionInfo(const base::string16& instance_id) {
   }
 
   for (const auto& guid_string : device_interface_guids) {
+    // Boost priority while potentially loading Ole32.dll on a background
+    // thread for CLSIDFromString().
+    SCOPED_MAY_LOAD_LIBRARY_AT_BACKGROUND_PRIORITY();
+
     GUID guid;
     if (FAILED(CLSIDFromString(guid_string.c_str(), &guid))) {
       USB_LOG(ERROR) << "Failed to parse device interface GUID: "
@@ -357,7 +374,11 @@ class UsbServiceWin::BlockingTaskRunnerHelper {
   ~BlockingTaskRunnerHelper() {}
 
   void EnumerateDevices() {
-    ScopedDevInfo dev_info(
+    // Boost priority while potentially loading SetupAPI.dll for the following
+    // functions on a background thread.
+    SCOPED_MAY_LOAD_LIBRARY_AT_BACKGROUND_PRIORITY();
+
+    base::win::ScopedDevInfo dev_info(
         SetupDiGetClassDevs(&GUID_DEVINTERFACE_USB_DEVICE, nullptr, 0,
                             DIGCF_DEVICEINTERFACE | DIGCF_PRESENT));
     if (!dev_info.is_valid()) {
@@ -384,7 +405,11 @@ class UsbServiceWin::BlockingTaskRunnerHelper {
   }
 
   void OnDeviceAdded(const GUID& guid, const base::string16& device_path) {
-    ScopedDevInfo dev_info(SetupDiGetClassDevs(
+    // Boost priority while potentially loading SetupAPI.dll and Ole32.dll on a
+    // background thread for the following functions.
+    SCOPED_MAY_LOAD_LIBRARY_AT_BACKGROUND_PRIORITY();
+
+    base::win::ScopedDevInfo dev_info(SetupDiGetClassDevs(
         &guid, nullptr, 0, DIGCF_DEVICEINTERFACE | DIGCF_PRESENT));
     if (!dev_info.is_valid()) {
       USB_PLOG(ERROR) << "Failed to set up device enumeration";
@@ -407,6 +432,7 @@ class UsbServiceWin::BlockingTaskRunnerHelper {
     }
   }
 
+ private:
   void EnumerateDevice(HDEVINFO dev_info,
                        SP_DEVICE_INTERFACE_DATA* device_interface_data,
                        const base::Optional<base::string16>& opt_device_path) {
@@ -499,7 +525,6 @@ class UsbServiceWin::BlockingTaskRunnerHelper {
                        std::move(parent_path), interface_number, info));
   }
 
- private:
   std::unordered_map<base::string16, base::string16> hub_paths_;
 
   // Calls back to |service_| must be posted to |service_task_runner_|, which

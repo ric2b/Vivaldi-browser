@@ -4,10 +4,12 @@
 
 package org.chromium.chrome.browser.tasks.tab_management;
 
-import static android.support.test.espresso.Espresso.onView;
-import static android.support.test.espresso.action.ViewActions.click;
-import static android.support.test.espresso.matcher.ViewMatchers.withId;
-import static android.support.test.espresso.matcher.ViewMatchers.withParent;
+import static androidx.test.espresso.Espresso.onView;
+import static androidx.test.espresso.action.ViewActions.click;
+import static androidx.test.espresso.matcher.ViewMatchers.Visibility.VISIBLE;
+import static androidx.test.espresso.matcher.ViewMatchers.withEffectiveVisibility;
+import static androidx.test.espresso.matcher.ViewMatchers.withId;
+import static androidx.test.espresso.matcher.ViewMatchers.withParent;
 
 import static org.hamcrest.Matchers.allOf;
 import static org.junit.Assert.assertTrue;
@@ -21,10 +23,10 @@ import static org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper.e
 import static org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper.mergeAllNormalTabsToAGroup;
 import static org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper.verifyTabSwitcherCardCount;
 
-import android.support.test.filters.MediumTest;
 import android.view.ViewGroup;
 
 import androidx.recyclerview.widget.RecyclerView;
+import androidx.test.filters.MediumTest;
 
 import org.junit.Before;
 import org.junit.Rule;
@@ -150,7 +152,8 @@ public class TabGroupUiTest {
             // Disable animation to reduce flakiness.
             stripRecyclerView.setItemAnimator(null);
         });
-        onView(allOf(withId(R.id.toolbar_right_button), withParent(withId(R.id.main_content))))
+        onView(allOf(withId(R.id.toolbar_right_button), withParent(withId(R.id.main_content)),
+                       withEffectiveVisibility(VISIBLE)))
                 .perform(click());
         mRenderTestRule.render(recyclerViewReference.get(), "11th_tab_selected");
     }

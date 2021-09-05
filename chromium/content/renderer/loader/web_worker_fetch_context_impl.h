@@ -85,7 +85,8 @@ class CONTENT_EXPORT WebWorkerFetchContextImpl
       std::unique_ptr<network::PendingSharedURLLoaderFactory>
           pending_fallback_factory,
       mojo::PendingReceiver<blink::mojom::SubresourceLoaderUpdater>
-          pending_subresource_loader_updater);
+          pending_subresource_loader_updater,
+      const std::vector<std::string>& cors_exempt_header_list);
 
   // Clones this fetch context for a nested worker.
   // For non-PlzDedicatedWorker. This will be removed once PlzDedicatedWorker is
@@ -110,7 +111,9 @@ class CONTENT_EXPORT WebWorkerFetchContextImpl
   void InitializeOnWorkerThread(blink::AcceptLanguagesWatcher*) override;
   blink::WebURLLoaderFactory* GetURLLoaderFactory() override;
   std::unique_ptr<blink::WebURLLoaderFactory> WrapURLLoaderFactory(
-      mojo::ScopedMessagePipeHandle url_loader_factory_handle) override;
+      blink::CrossVariantMojoRemote<
+          network::mojom::URLLoaderFactoryInterfaceBase> url_loader_factory)
+      override;
   std::unique_ptr<blink::CodeCacheLoader> CreateCodeCacheLoader() override;
   void WillSendRequest(blink::WebURLRequest&) override;
   blink::mojom::ControllerServiceWorkerMode GetControllerServiceWorkerMode()
@@ -130,8 +133,9 @@ class CONTENT_EXPORT WebWorkerFetchContextImpl
   std::unique_ptr<blink::WebSocketHandshakeThrottle>
   CreateWebSocketHandshakeThrottle(
       scoped_refptr<base::SingleThreadTaskRunner> task_runner) override;
-  mojo::ScopedMessagePipeHandle TakePendingWorkerTimingReceiver(
-      int request_id) override;
+  blink::CrossVariantMojoReceiver<
+      blink::mojom::WorkerTimingContainerInterfaceBase>
+  TakePendingWorkerTimingReceiver(int request_id) override;
   void SetIsOfflineMode(bool is_offline_mode) override;
 
   // blink::mojom::ServiceWorkerWorkerClient implementation:
@@ -215,7 +219,8 @@ class CONTENT_EXPORT WebWorkerFetchContextImpl
       std::unique_ptr<WebSocketHandshakeThrottleProvider>
           websocket_handshake_throttle_provider,
       ThreadSafeSender* thread_safe_sender,
-      mojo::SharedRemote<mojom::ChildProcessHost> process_host);
+      mojo::SharedRemote<mojom::ChildProcessHost> process_host,
+      const std::vector<std::string>& cors_exempt_header_list);
 
   ~WebWorkerFetchContextImpl() override;
 
@@ -358,6 +363,8 @@ class CONTENT_EXPORT WebWorkerFetchContextImpl
       websocket_handshake_throttle_provider_;
 
   mojo::SharedRemote<mojom::ChildProcessHost> process_host_;
+
+  std::vector<std::string> cors_exempt_header_list_;
 
   std::unique_ptr<NavigationResponseOverrideParameters> response_override_;
 

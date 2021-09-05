@@ -31,6 +31,7 @@
 #include "net/cookies/canonical_cookie.h"
 #include "net/cookies/cookie_access_delegate.h"
 #include "net/cookies/cookie_constants.h"
+#include "net/cookies/cookie_inclusion_status.h"
 #include "net/cookies/cookie_monster_change_dispatcher.h"
 #include "net/cookies/cookie_store.h"
 #include "net/log/net_log_with_source.h"
@@ -123,6 +124,9 @@ class NET_EXPORT CookieMonster : public CookieStore {
   static const size_t kMaxCookies;
   static const size_t kPurgeCookies;
 
+  // Max number of keys to store for domains that have been purged.
+  static const size_t kMaxDomainPurgedKeys;
+
   // Quota for cookies with {low, medium, high} priorities within a domain.
   static const size_t kDomainCookiesQuotaLow;
   static const size_t kDomainCookiesQuotaMedium;
@@ -202,6 +206,10 @@ class NET_EXPORT CookieMonster : public CookieStore {
   // well as for PersistentCookieStore::LoadCookiesForKey. See comment on keys
   // before the CookieMap typedef.
   static std::string GetKey(base::StringPiece domain);
+
+  // Triggers immediate recording of stats that are typically reported
+  // periodically.
+  bool DoRecordPeriodicStatsForTesting() { return DoRecordPeriodicStats(); }
 
  private:
   // For garbage collection constants.
@@ -394,8 +402,8 @@ class NET_EXPORT CookieMonster : public CookieStore {
   void FilterCookiesWithOptions(const GURL url,
                                 const CookieOptions options,
                                 std::vector<CanonicalCookie*>* cookie_ptrs,
-                                CookieStatusList* included_cookies,
-                                CookieStatusList* excluded_cookies);
+                                CookieAccessResultList* included_cookies,
+                                CookieAccessResultList* excluded_cookies);
 
   // Possibly delete an existing cookie equivalent to |cookie_being_set| (same
   // path, domain, and name).
@@ -428,7 +436,7 @@ class NET_EXPORT CookieMonster : public CookieStore {
       bool skip_httponly,
       bool already_expired,
       base::Time* creation_date_to_inherit,
-      CanonicalCookie::CookieInclusionStatus* status);
+      CookieInclusionStatus* status);
 
   // This is only used if the RecentCreationTimeGrantsLegacyCookieSemantics
   // feature is enabled. It finds an equivalent cookie (based on name, domain,
@@ -562,7 +570,11 @@ class NET_EXPORT CookieMonster : public CookieStore {
   // statistics if a sufficient time period has passed.
   void RecordPeriodicStats(const base::Time& current_time);
 
-  // Initialize the above variables; should only be called from
+  // Records the aforementioned stats if we have already finished loading all
+  // cookies. Returns whether stats were recorded.
+  bool DoRecordPeriodicStats();
+
+  // Initialize the histogram_* variables below; should only be called from
   // the constructor.
   void InitializeHistograms();
 
@@ -587,6 +599,15 @@ class NET_EXPORT CookieMonster : public CookieStore {
   base::HistogramBase* histogram_cookie_type_;
   base::HistogramBase* histogram_cookie_source_scheme_;
   base::HistogramBase* histogram_time_blocked_on_load_;
+
+  // Set of keys (eTLD+1's) for which non-expired cookies have
+  // been evicted for hitting the per-domain max. The size of this set is
+  // histogrammed periodically. The size is limited to |kMaxDomainPurgedKeys|.
+  std::set<std::string> domain_purged_keys_;
+
+  // The number of distinct keys (eTLD+1's) currently present in the |cookies_|
+  // multimap. This is histogrammed periodically.
+  size_t num_keys_;
 
   CookieMap cookies_;
 

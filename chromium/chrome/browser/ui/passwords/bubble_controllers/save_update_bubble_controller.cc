@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/passwords/bubble_controllers/save_update_bubble_controller.h"
 
+#include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/time/default_clock.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
@@ -56,13 +57,13 @@ password_manager::metrics_util::UIDisplayDisposition ComputeDisplayDisposition(
   }
 }
 
-void CleanStatisticsForSite(Profile* profile, const GURL& origin) {
+void CleanStatisticsForSite(Profile* profile, const url::Origin& origin) {
   DCHECK(profile);
   password_manager::PasswordStore* password_store =
       PasswordStoreFactory::GetForProfile(profile,
                                           ServiceAccessType::IMPLICIT_ACCESS)
           .get();
-  password_store->RemoveSiteStats(origin.GetOrigin());
+  password_store->RemoveSiteStats(origin.GetURL());
 }
 
 std::vector<autofill::PasswordForm> DeepCopyForms(
@@ -96,6 +97,12 @@ SaveUpdateBubbleController::SaveUpdateBubbleController(
       enable_editing_(false),
       dismissal_reason_(metrics_util::NO_DIRECT_INTERACTION),
       clock_(base::DefaultClock::GetInstance()) {
+  // If kEnablePasswordsAccountStorage is enabled, then
+  // SaveUpdateWithAccountStoreBubbleController should be used instead of this
+  // class.
+  DCHECK(!base::FeatureList::IsEnabled(
+      password_manager::features::kEnablePasswordsAccountStorage));
+
   state_ = delegate_->GetState();
   DCHECK(state_ == password_manager::ui::PENDING_PASSWORD_STATE ||
          state_ == password_manager::ui::PENDING_PASSWORD_UPDATE_STATE);
@@ -103,7 +110,7 @@ SaveUpdateBubbleController::SaveUpdateBubbleController(
   pending_password_ = delegate_->GetPendingPassword();
   local_credentials_ = DeepCopyForms(delegate_->GetCurrentForms());
   if (state_ == password_manager::ui::PENDING_PASSWORD_STATE) {
-    interaction_stats_.origin_domain = origin_.GetOrigin();
+    interaction_stats_.origin_domain = origin_.GetURL();
     interaction_stats_.username_value = pending_password_.username_value;
     const password_manager::InteractionsStats* stats =
         delegate_->GetCurrentInteractionStats();
@@ -133,16 +140,6 @@ SaveUpdateBubbleController::SaveUpdateBubbleController(
   enable_editing_ = delegate_->GetCredentialSource() !=
                     password_manager::metrics_util::CredentialSourceType::
                         kCredentialManagementAPI;
-
-  // Compute the title.
-  PasswordTitleType type =
-      state_ == password_manager::ui::PENDING_PASSWORD_UPDATE_STATE
-          ? PasswordTitleType::UPDATE_PASSWORD
-          : (pending_password_.federation_origin.opaque()
-                 ? PasswordTitleType::SAVE_PASSWORD
-                 : PasswordTitleType::SAVE_ACCOUNT);
-  GetSavePasswordDialogTitleTextAndLinkRange(GetWebContents()->GetVisibleURL(),
-                                             origin_, type, &title_);
 }
 
 SaveUpdateBubbleController::~SaveUpdateBubbleController() {
@@ -213,7 +210,6 @@ bool SaveUpdateBubbleController::ReplaceToShowPromotionIfNeeded() {
   if (password_bubble_experiment::ShouldShowChromeSignInPasswordPromo(
           prefs, sync_service)) {
     ReportInteractions();
-    title_ = l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_SYNC_PROMO_TITLE);
     state_ = password_manager::ui::CHROME_SIGN_IN_PROMO_STATE;
     int show_count = prefs->GetInteger(
         password_manager::prefs::kNumberSignInPasswordPromoShown);
@@ -231,6 +227,19 @@ bool SaveUpdateBubbleController::RevealPasswords() {
   if (reveal_immediately)
     delegate_->OnPasswordsRevealed();
   return reveal_immediately;
+}
+
+base::string16 SaveUpdateBubbleController::GetTitle() const {
+  if (state_ == password_manager::ui::CHROME_SIGN_IN_PROMO_STATE)
+    return l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_SYNC_PROMO_TITLE);
+
+  PasswordTitleType type = IsCurrentStateUpdate()
+                               ? PasswordTitleType::UPDATE_PASSWORD
+                               : (pending_password_.federation_origin.opaque()
+                                      ? PasswordTitleType::SAVE_PASSWORD
+                                      : PasswordTitleType::SAVE_ACCOUNT);
+  return GetSavePasswordDialogTitleText(GetWebContents()->GetVisibleURL(),
+                                        origin_, type);
 }
 
 void SaveUpdateBubbleController::ReportInteractions() {
@@ -263,7 +272,8 @@ void SaveUpdateBubbleController::ReportInteractions() {
   if (state_ == password_manager::ui::PENDING_PASSWORD_UPDATE_STATE) {
     metrics_util::LogUpdateUIDismissalReason(dismissal_reason_);
   } else if (state_ == password_manager::ui::PENDING_PASSWORD_STATE) {
-    metrics_util::LogSaveUIDismissalReason(dismissal_reason_);
+    metrics_util::LogSaveUIDismissalReason(dismissal_reason_,
+                                           /*user_state=*/base::nullopt);
   }
 
   // Update the delegate so that it can send votes to the server.
@@ -277,8 +287,4 @@ void SaveUpdateBubbleController::ReportInteractions() {
   // Record UKM statistics on dismissal reason.
   if (metrics_recorder_)
     metrics_recorder_->RecordUIDismissalReason(dismissal_reason_);
-}
-
-base::string16 SaveUpdateBubbleController::GetTitle() const {
-  return title_;
 }

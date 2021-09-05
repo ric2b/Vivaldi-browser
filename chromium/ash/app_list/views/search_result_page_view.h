@@ -89,12 +89,11 @@ class APP_LIST_EXPORT SearchResultPageView
   void OnSearchResultContainerResultsChanged() override;
 
   // Overridden from SearchBoxModelObserver:
-  void HintTextChanged() override;
   void Update() override;
   void SearchEngineChanged() override;
   void ShowAssistantChanged() override;
 
-  void OnAssistantPrivacyInfoViewCloseButtonPressed();
+  void OnPrivacyInfoViewCloseButtonPressed();
 
   // Shows a dialog widget, and anchors it within the search results page. The
   // dialog will be positioned relative to the search box bounds, and will be
@@ -189,6 +188,7 @@ class APP_LIST_EXPORT SearchResultPageView
   int last_search_result_count_ = 0;
 
   views::View* assistant_privacy_info_view_ = nullptr;
+  views::View* suggested_content_info_view_ = nullptr;
 
   std::unique_ptr<ViewShadow> view_shadow_;
 

@@ -48,8 +48,6 @@ class TestNativeFileSystemPermissionContext
   GetReadPermissionGrant(const url::Origin& origin,
                          const base::FilePath& path,
                          bool is_directory,
-                         int process_id,
-                         int frame_id,
                          UserAction user_action) override {
     NOTREACHED();
     return nullptr;
@@ -58,25 +56,24 @@ class TestNativeFileSystemPermissionContext
   GetWritePermissionGrant(const url::Origin& origin,
                           const base::FilePath& path,
                           bool is_directory,
-                          int process_id,
-                          int frame_id,
                           UserAction user_action) override {
     NOTREACHED();
     return nullptr;
   }
+  void ConfirmDirectoryReadAccess(
+      const url::Origin& origin,
+      const base::FilePath& path,
+      content::GlobalFrameRoutingId frame_id,
+      base::OnceCallback<void(PermissionStatus)> callback) override {
+    NOTREACHED();
+  }
 
   // ChromeNativeFileSystemPermissionContext:
-  Grants GetPermissionGrants(const url::Origin& origin,
-                             int process_id,
-                             int frame_id) override {
+  Grants GetPermissionGrants(const url::Origin& origin) override {
     NOTREACHED();
     return {};
   }
-  void RevokeGrants(const url::Origin& origin,
-                    int process_id,
-                    int frame_id) override {
-    NOTREACHED();
-  }
+  void RevokeGrants(const url::Origin& origin) override { NOTREACHED(); }
 
  private:
   base::WeakPtr<ChromeNativeFileSystemPermissionContext> GetWeakPtr() override {
@@ -106,8 +103,8 @@ class ChromeNativeFileSystemPermissionContextTest : public testing::Test {
     base::RunLoop loop;
     SensitiveDirectoryResult out_result;
     permission_context_->ConfirmSensitiveDirectoryAccess(
-        kTestOrigin, paths, /*is_directory=*/false, /*process_id=*/0,
-        /*frame_id=*/0,
+        kTestOrigin, paths, /*is_directory=*/false,
+        content::GlobalFrameRoutingId(),
         base::BindLambdaForTesting([&](SensitiveDirectoryResult result) {
           out_result = result;
           loop.Quit();

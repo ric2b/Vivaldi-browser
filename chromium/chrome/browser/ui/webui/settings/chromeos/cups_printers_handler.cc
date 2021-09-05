@@ -27,6 +27,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/printing/cups_printers_manager.h"
 #include "chrome/browser/chromeos/printing/ppd_provider_factory.h"
+#include "chrome/browser/chromeos/printing/print_management/print_management_uma.h"
 #include "chrome/browser/chromeos/printing/printer_configurer.h"
 #include "chrome/browser/chromeos/printing/printer_event_tracker.h"
 #include "chrome/browser/chromeos/printing/printer_event_tracker_factory.h"
@@ -241,15 +242,15 @@ Printer::PpdReference GetPpdReference(const base::Value* info) {
 
   Printer::PpdReference ret;
 
-  if (user_supplied_ppd_url != nullptr) {
+  if (user_supplied_ppd_url) {
     ret.user_supplied_ppd_url = user_supplied_ppd_url->GetString();
   }
 
-  if (effective_make_and_model != nullptr) {
+  if (effective_make_and_model) {
     ret.effective_make_and_model = effective_make_and_model->GetString();
   }
 
-  if (autoconf != nullptr) {
+  if (autoconf) {
     ret.autoconf = autoconf->GetBool();
   }
 
@@ -998,6 +999,7 @@ void CupsPrintersHandler::HandleStartDiscovery(const base::ListValue* args) {
   UMA_HISTOGRAM_COUNTS_100(
       "Printing.CUPS.PrintersDiscovered",
       discovered_printers_.size() + automatic_printers_.size());
+  printers_manager_->RecordNearbyNetworkPrinterCounts();
   // Scan completes immediately right now.  Emit done.
   FireWebUIListener("on-printer-discovery-done");
 }
@@ -1328,7 +1330,8 @@ void CupsPrintersHandler::HandleOpenPrintManagementApp(
   DCHECK(args->empty());
   DCHECK(
       base::FeatureList::IsEnabled(chromeos::features::kPrintJobManagementApp));
-  chrome::ShowPrintManagementApp(profile_);
+  chrome::ShowPrintManagementApp(profile_,
+                                 PrintManagementAppEntryPoint::kSettings);
 }
 
 }  // namespace settings

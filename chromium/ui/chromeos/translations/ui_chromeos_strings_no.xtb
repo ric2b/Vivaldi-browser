@@ -8,6 +8,7 @@
 <translation id="1046068652463704410">Japansk inndata (for amerikansk tastatur)</translation>
 <translation id="1047956942837015229">Sletter <ph name="COUNT" /> elementer ...</translation>
 <translation id="1049926623896334335">Word-dokument</translation>
+<translation id="1060368002126861100">For å åpne filer med <ph name="APP_NAME" />, flytt dem til mappen for Windows-filer først.</translation>
 <translation id="1062407476771304334">Erstatt</translation>
 <translation id="1065449928621190041">Fransk tastatur (Canada)</translation>
 <translation id="1119069657431255176">Komprimert tar-arkiv for Bzip2</translation>
@@ -45,6 +46,8 @@
 <translation id="1395262318152388157">Fremdriftsbryter</translation>
 <translation id="1399648040768741453">Telugu-tastatur (fonetisk)</translation>
 <translation id="1430915738399379752">Skriv ut</translation>
+<translation id="1433600251059882049">Denne mappen deles med Linux og Windows</translation>
+<translation id="1435838927755162558">Del mappen med Parallels Desktop</translation>
 <translation id="1439494416798956626">Flyttet til <ph name="FOLDER_NAME" />.</translation>
 <translation id="1441841714100794440">Vietnamesisk tastatur (Telex)</translation>
 <translation id="1455548678241328678">Norsk tastatur</translation>
@@ -79,6 +82,7 @@
 <translation id="1844692022597038441">Denne filen er ikke tilgjengelig utenfor Internett.</translation>
 <translation id="184633654410729720">Thai-tastatur (Kedmanee)</translation>
 <translation id="1847880352285315359">Lagret</translation>
+<translation id="1853795129690976061">Denne mappen deles med Linux</translation>
 <translation id="1864756863218646478">Kunne ikke finne filen.</translation>
 <translation id="1921986354447415460">Tyrkisk F-tastatur</translation>
 <translation id="1924372192547904021">Formaterte <ph name="DRIVE_NAME" /></translation>
@@ -124,6 +128,7 @@
 <translation id="2384596874640104496">Singalesisk tastatur</translation>
 <translation id="240770291734945588"><ph name="SPACE_AVAILABLE" /> tilgjengelig</translation>
 <translation id="2425665904502185219">Total filstørrelse</translation>
+<translation id="2428749644083375155">Kopierer <ph name="NUMBER_OF_ITEMS" /> elementer til <ph name="FOLDER_NAME" /></translation>
 <translation id="2448312741937722512">Type</translation>
 <translation id="2453576648990281505">Filen eksisterer allerede</translation>
 <translation id="2464079411014186876">Iskrem</translation>
@@ -178,6 +183,7 @@
 <translation id="303198083543495566">Geografi</translation>
 <translation id="3057861065630527966">Sikkerhetskopiér bildene og videoene dine</translation>
 <translation id="3064388234319122767">Translitterasjon (zdravo → здраво)</translation>
+<translation id="3067790092342515856">Windows-filer</translation>
 <translation id="3078461028045006476">Del med <ph name="EXTENSION_NAME" /></translation>
 <translation id="3088034400796962477">Translitterasjon (salam ← سلام)</translation>
 <translation id="3116361045094675131">Britisk tastatur</translation>
@@ -216,6 +222,7 @@
 <translation id="3524311639100184459">Advarsel: Disse filene er midlertidige og kan bli slettet automatisk for å frigjøre diskplass.  <ph name="BEGIN_LINK" />Finn ut mer<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">Mappe</translation>
 <translation id="3549797760399244642">Gå til drive.google.com</translation>
+<translation id="3553048479571901246">For å åpne filer med <ph name="APP_NAME" />, kopiér dem til mappen for Windows-filer først.</translation>
 <translation id="357479282490346887">Litauisk</translation>
 <translation id="3583509704582854624">Alfanumerisk inndata (for japansk tastatur)</translation>
 <translation id="3603385196401704894">Canadisk fransk</translation>
@@ -239,6 +246,7 @@
 <translation id="3798449238516105146">Versjon</translation>
 <translation id="3801082500826908679">Færøysk</translation>
 <translation id="3809272675881623365">Kanin</translation>
+<translation id="3810973564298564668">Administrer</translation>
 <translation id="3811494700605067549">1 fil er valgt</translation>
 <translation id="3815016854028376614">Zhuyin-inndatametode</translation>
 <translation id="3825863595139017598">Mongolsk tastatur</translation>
@@ -259,8 +267,8 @@
 <translation id="3943857333388298514">Lim inn</translation>
 <translation id="3958548648197196644">Kiwi</translation>
 <translation id="3966388904776714213">Audio Player</translation>
+<translation id="3984317463833596033">Gi Parallels Desktop tillatelse til å endre filer i mappen <ph name="FOLDER_NAME" /></translation>
 <translation id="4002066346123236978">Tittel</translation>
-<translation id="4065397611279318371">For å åpne filer med <ph name="APP_NAME" />-apper må du først flytte dem til <ph name="SHARED_DIRECTORY_LABEL" />-mappen.</translation>
 <translation id="4070370845051020638">Kantonesisk inndatametode</translation>
 <translation id="4072248638558688893">Tamilsk tastatur (fonetisk)</translation>
 <translation id="4124935795427217608">Enhjørning</translation>
@@ -288,6 +296,7 @@
 <translation id="4470564870223067757">Hangul 2-sett</translation>
 <translation id="4477219268485577442">Bulgarsk fonetisk</translation>
 <translation id="4479812471636796472">Amerikansk tastatur (Dvorak)</translation>
+<translation id="4481711095103932593">Denne mappen deles med Windows</translation>
 <translation id="4487088045714738411">Belgisk tastatur</translation>
 <translation id="4522570452068850558">Detaljer</translation>
 <translation id="4552678318981539154">Kjøp mer lagringsplass</translation>
@@ -297,6 +306,7 @@
 <translation id="4579744207439506346">La til <ph name="ENTRY_NAME" /> i utvalget.</translation>
 <translation id="4582497162516204941">Installer med Linux (beta)</translation>
 <translation id="4594543368593301662">Viser resultater for <ph name="SEARCH_TERM" />.</translation>
+<translation id="4603392156942865207">Kopierer <ph name="FILE_NAME" /> til <ph name="FOLDER_NAME" /></translation>
 <translation id="4631887759990505102">Artist</translation>
 <translation id="4656293982926141856">Denne datamaskinen</translation>
 <translation id="4669606053856530811">Medlemmer av «<ph name="SOURCE_NAME" />» mister tilgangen, med mindre disse elementene deles med dem.</translation>
@@ -330,11 +340,12 @@
 <translation id="4880520557730313061">Autokorrigering</translation>
 <translation id="4881695831933465202">Åpne</translation>
 <translation id="4886021172213954916">Tamilsk tastatur (skrivemaskin)</translation>
-<translation id="4892969127351273348">Kan ikke åpnes med <ph name="APP_NAME" /></translation>
+<translation id="4900532980794411603">Del med Parallels Desktop</translation>
 <translation id="4905417359854579806">Klar til å sikkerhetskopiere <ph name="FILE_COUNT" /></translation>
 <translation id="4924638091161556692">Fikset</translation>
 <translation id="4935975195727477204">Gazania-blomst</translation>
 <translation id="4943368462779413526">Fotball</translation>
+<translation id="4961158930123534723">1 mappe er delt med Parallels Desktop</translation>
 <translation id="4969785127455456148">Album</translation>
 <translation id="497244430928947428">Malayalam-tastatur (fonetisk)</translation>
 <translation id="4973523518332075481">Bruk et navn på <ph name="MAX_LENGTH" /> eller færre tegn</translation>
@@ -346,10 +357,12 @@
 <translation id="5010406651457630570">Datamaskiner</translation>
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5024856940085636730">En handling tar lengre tid enn vanlig. Vil du avbryte den?</translation>
+<translation id="5036159836254554629">Administrer Parallels Desktop-deling</translation>
 <translation id="5038625366300922036">Se flere</translation>
 <translation id="5061708541166515394">Kontrast</translation>
 <translation id="5068919226082848014">Pizza</translation>
 <translation id="5081517858322016911"><ph name="TOTAL_FILE_SIZE" /> med filer blir slettet</translation>
+<translation id="508423945471810158">Flytter <ph name="NUMBER_OF_ITEMS" /> elementer til <ph name="FOLDER_NAME" /></translation>
 <translation id="509429900233858213">Det oppsto en feil.</translation>
 <translation id="5098629044894065541">Hebraisk</translation>
 <translation id="5123433949759960244">Basketball</translation>
@@ -453,6 +466,7 @@
 <translation id="6054173164583630569">Fransk tastatur</translation>
 <translation id="6074825444536523002">Google-skjema</translation>
 <translation id="6096979789310008754">Søketeksten er fjernet. Viser alle filer og mapper.</translation>
+<translation id="610101264611565198">Flytter <ph name="FILE_NAME" /> til <ph name="FOLDER_NAME" /></translation>
 <translation id="6111770213269631447">Translitterasjon (namaskar → নমস্কার)</translation>
 <translation id="6129953537138746214">Mellomrom</translation>
 <translation id="6133173853026656527">Flytter <ph name="FILE_NAME" /> ...</translation>
@@ -493,6 +507,7 @@
 <translation id="656398493051028875">Sletter «<ph name="FILENAME" />» ...</translation>
 <translation id="6581162200855843583">Google Disk-link</translation>
 <translation id="6607272825297743757">Filinformasjon</translation>
+<translation id="6609332149380188670"><ph name="NUMBER_OF_ITEMS" /> mapper er delt med Parallels Desktop</translation>
 <translation id="6629841649550503054">Alt er sikkerhetskopiert til <ph name="BEGIN_LINK" />Google Disk<ph name="END_LINK" /></translation>
 <translation id="6643016212128521049">Tøm</translation>
 <translation id="6650726141019353908">Rosa sommerfugl</translation>
@@ -536,6 +551,7 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">Installeringen mislyktes.</translation>
 <translation id="7040138676081995583">Åpne med</translation>
+<translation id="7059566040011178088">Mindre enn <ph name="REMAINING_TIME" /></translation>
 <translation id="7100897339030255923"><ph name="COUNT" /> elementer er valgt</translation>
 <translation id="7106346894903675391">Kjøp mer lagringsplass</translation>
 <translation id="7126604456862387217">'&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;' – &lt;em&gt;søk i Disk&lt;/em&gt;</translation>
@@ -646,6 +662,7 @@
 <translation id="8193175696669055101">Enhetsmodell</translation>
 <translation id="8208580316430297579">Albumforside</translation>
 <translation id="8223479393428528563">For å lagre disse filene for bruk utenfor Internett, går du på nettet, høyreklikker på filene og velger <ph name="OFFLINE_CHECKBOX_NAME" />-alternativet.</translation>
+<translation id="8231972167769262174">Omtrent <ph name="REMAINING_TIME" /></translation>
 <translation id="8249296373107784235">Avbryt</translation>
 <translation id="8261506727792406068">Slett</translation>
 <translation id="8269755669432358899">Skjul tilbakemeldingspaneler på filer</translation>
@@ -672,6 +689,7 @@
 <translation id="8475647382427415476">Google Disk kunne ikke synkronisere «<ph name="FILENAME" />» akkurat nå. Vi prøver igjen senere.</translation>
 <translation id="8477649328507734757">Spinn</translation>
 <translation id="8487700953926739672">Tilgjengelig utenfor nettet</translation>
+<translation id="8490342535582768689">Gi Parallels Desktop tillatelse til å endre filer i Google Disk. Endringer synkroniseres med de andre enhetene dine.</translation>
 <translation id="8521441079177373948">Britisk</translation>
 <translation id="8525306231823319788">Full skjerm</translation>
 <translation id="8551494947769799688">Latvisk</translation>
@@ -724,7 +742,7 @@
 <translation id="939736085109172342">Ny mappe</translation>
 <translation id="942954117721265519">Det fins ingen bilder i denne katalogen.</translation>
 <translation id="943972244133411984">Endret av</translation>
-<translation id="945522503751344254">Gi tilbakemelding</translation>
+<translation id="945522503751344254">Send tilbakemelding</translation>
 <translation id="947144732524271678">Valgte et område med <ph name="ENTRY_COUNT" /> oppføringer – fra <ph name="FROM_ENTRY_NAME" /> til <ph name="TO_ENTRY_NAME" />.</translation>
 <translation id="981121421437150478">Uten nett</translation>
 <translation id="988685240266037636">Filnavnet «<ph name="FILE_NAME" />» finnes allerede. Vil du erstatte filen med dette navnet?</translation>

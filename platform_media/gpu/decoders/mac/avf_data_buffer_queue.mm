@@ -10,6 +10,7 @@
 #include <deque>
 
 #include "base/callback_helpers.h"
+#include "base/logging.h"
 #include "base/optional.h"
 #include "base/strings/stringprintf.h"
 #include "common/platform_media_pipeline_types.h"

@@ -9,6 +9,7 @@
 
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom-blink.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/loader/empty_clients.h"
 #include "third_party/blink/renderer/core/testing/page_test_base.h"
@@ -21,6 +22,7 @@
 #define ORIGIN_A "https://example.com/"
 #define ORIGIN_B "https://example.net/"
 #define ORIGIN_C "https://example.org/"
+#define OPAQUE_ORIGIN ""
 
 class GURL;
 
@@ -72,7 +74,7 @@ const char kAllowlistHeaderHistogram[] =
 
 }  // namespace
 
-class FeaturePolicyParserTest : public testing::Test {
+class FeaturePolicyParserTest : public ::testing::Test {
  protected:
   FeaturePolicyParserTest() = default;
 
@@ -95,237 +97,339 @@ class FeaturePolicyParserTest : public testing::Test {
       {"geolocation", blink::mojom::blink::FeaturePolicyFeature::kGeolocation}};
 };
 
+struct ParsedPolicyDeclarationForTest {
+  mojom::blink::FeaturePolicyFeature feature;
+  bool fallback_value;
+  bool opaque_value;
+  std::vector<const char*> origins;
+};
+
+using ParsedPolicyForTest = std::vector<ParsedPolicyDeclarationForTest>;
+
+struct FeaturePolicyParserTestCase {
+  const char* test_name;
+
+  // Test inputs.
+  const char* policy_string;
+  const char* self_origin;
+  const char* src_origin;
+
+  // Test expectation.
+  ParsedPolicyForTest expected_parse_result;
+};
+
+class FeaturePolicyParserParsingTest
+    : public FeaturePolicyParserTest,
+      public ::testing::WithParamInterface<FeaturePolicyParserTestCase> {
+ protected:
+  ParsedFeaturePolicy Parse(const char* policy_string,
+                            const char* self_origin_string,
+                            const char* src_origin_string,
+                            PolicyParserMessageBuffer& logger,
+                            const FeatureNameMap& feature_names) {
+    scoped_refptr<const SecurityOrigin> self_origin =
+        SecurityOrigin::CreateFromString(self_origin_string);
+
+    scoped_refptr<const SecurityOrigin> src_origin;
+    if (String(src_origin_string) == OPAQUE_ORIGIN) {
+      src_origin = SecurityOrigin::CreateUniqueOpaque();
+    } else {
+      src_origin = src_origin_string
+                       ? SecurityOrigin::CreateFromString(src_origin_string)
+                       : nullptr;
+    }
+
+    return FeaturePolicyParser::Parse(policy_string, self_origin, src_origin,
+                                      logger, feature_names);
+  }
+
+ public:
+  static const FeaturePolicyParserTestCase kCases[];
+};
+
+const FeaturePolicyParserTestCase FeaturePolicyParserParsingTest::kCases[] = {
+    {
+        /* test_name */ "EmptyPolicy",
+        /* policy_string */ "",
+        /* self_origin */ ORIGIN_A,
+        /* src_origin */ ORIGIN_B,
+        /* expected_parse_result */ {},
+    },
+    {
+        /* test_name */ "SimplePolicyWithSelf",
+        /* policy_string */ "geolocation 'self'",
+        /* self_origin */ ORIGIN_A,
+        /* src_origin */ ORIGIN_B,
+        /* expected_parse_result */
+        {
+            {
+                mojom::blink::FeaturePolicyFeature::kGeolocation,
+                /* fallback_value */ false,
+                /* opaque_value */ false,
+                {ORIGIN_A},
+            },
+        },
+    },
+    {
+        /* test_name */ "SimplePolicyWithStar",
+        /* policy_string */ "geolocation *",
+        /* self_origin */ ORIGIN_A,
+        /* src_origin */ ORIGIN_B,
+        /* expected_parse_result */
+        {
+            {
+                mojom::blink::FeaturePolicyFeature::kGeolocation,
+                /* fallback_value */ true,
+                /* opaque_value */ true,
+                {},
+            },
+        },
+    },
+    {
+        /* test_name */ "ComplicatedPolicy",
+        /* policy_string */
+        "geolocation *; "
+        "fullscreen " ORIGIN_B " " ORIGIN_C "; "
+        "payment 'self'",
+        /* self_origin */ ORIGIN_A,
+        /* src_origin */ ORIGIN_B,
+        /* expected_parse_result */
+        {
+            {
+                mojom::blink::FeaturePolicyFeature::kGeolocation,
+                /* fallback_value */ true,
+                /* opaque_value */ true,
+                {},
+            },
+            {
+                mojom::blink::FeaturePolicyFeature::kFullscreen,
+                /* fallback_value */ false,
+                /* opaque_value */ false,
+                {ORIGIN_B, ORIGIN_C},
+            },
+            {
+                mojom::blink::FeaturePolicyFeature::kPayment,
+                /* fallback_value */ false,
+                /* opaque_value */ false,
+                {ORIGIN_A},
+            },
+        },
+    },
+    {
+        /* test_name */ "MultiplePolicies",
+        /* policy_string */
+        "geolocation * " ORIGIN_B "; "
+        "fullscreen " ORIGIN_B " none " ORIGIN_C ","
+        "payment 'self' badorigin",
+        /* self_origin */ ORIGIN_A,
+        /* src_origin */ ORIGIN_B,
+        /* expected_parse_result */
+        {
+            {
+                mojom::blink::FeaturePolicyFeature::kGeolocation,
+                /* fallback_value */ true,
+                /* opaque_value */ true,
+                {},
+            },
+            {
+                mojom::blink::FeaturePolicyFeature::kFullscreen,
+                /* fallback_value */ false,
+                /* opaque_value */ false,
+                {ORIGIN_B, ORIGIN_C},
+            },
+            {
+                mojom::blink::FeaturePolicyFeature::kPayment,
+                /* fallback_value */ false,
+                /* opaque_value */ false,
+                {ORIGIN_A},
+            },
+        },
+    },
+    {
+        /* test_name */ "HeaderPoliciesWithNoOptionalOriginLists",
+        /* policy_string */ "geolocation;fullscreen;payment",
+        /* self_origin */ ORIGIN_A,
+        /* src_origin */ nullptr,
+        /* expected_parse_result */
+        {
+            {
+                mojom::blink::FeaturePolicyFeature::kGeolocation,
+                /* fallback_value */ false,
+                /* opaque_value */ false,
+                {ORIGIN_A},
+            },
+            {
+                mojom::blink::FeaturePolicyFeature::kFullscreen,
+                /* fallback_value */ false,
+                /* opaque_value */ false,
+                {ORIGIN_A},
+            },
+            {
+                mojom::blink::FeaturePolicyFeature::kPayment,
+                /* fallback_value */ false,
+                /* opaque_value */ false,
+                {ORIGIN_A},
+            },
+        },
+    },
+    {
+        /* test_name */ "EmptyPolicyOpaqueSrcOrigin",
+        /* policy_string */ "",
+        /* self_origin */ ORIGIN_A,
+        /* src_origin */ OPAQUE_ORIGIN,
+        /* expected_parse_result */ {},
+    },
+    {
+        /* test_name */ "SimplePolicyOpaqueSrcOrigin",
+        /* policy_string */ "geolocation",
+        /* self_origin */ ORIGIN_A,
+        /* src_origin */ OPAQUE_ORIGIN,
+        /* expected_parse_result */
+        {
+            {
+                mojom::blink::FeaturePolicyFeature::kGeolocation,
+                /* fallback_value */ false,
+                /* opaque_value */ true,
+                {},
+            },
+        },
+    },
+    {
+        /* test_name */ "SimplePolicyWithSrcOpaqueSrcOrigin",
+        /* policy_string */ "geolocation 'src'",
+        /* self_origin */ ORIGIN_A,
+        /* src_origin */ OPAQUE_ORIGIN,
+        /* expected_parse_result */
+        {
+            {
+                mojom::blink::FeaturePolicyFeature::kGeolocation,
+                /* fallback_value */ false,
+                /* opaque_value */ true,
+                {},
+            },
+        },
+    },
+    {
+        /* test_name */ "SimplePolicyWithStarOpaqueSrcOrigin",
+        /* policy_string */ "geolocation *",
+        /* self_origin */ ORIGIN_A,
+        /* src_origin */ OPAQUE_ORIGIN,
+        /* expected_parse_result */
+        {
+            {
+                mojom::blink::FeaturePolicyFeature::kGeolocation,
+                /* fallback_value */ true,
+                /* opaque_value */ true,
+                {},
+            },
+        },
+    },
+    {
+        /* test_name */ "PolicyWithExplicitOriginsOpaqueSrcOrigin",
+        /* policy_string */ "geolocation " ORIGIN_B " " ORIGIN_C,
+        /* self_origin */ ORIGIN_A,
+        /* src_origin */ OPAQUE_ORIGIN,
+        /* expected_parse_result */
+        {
+            {
+                mojom::blink::FeaturePolicyFeature::kGeolocation,
+                /* fallback_value */ false,
+                /* opaque_value */ false,
+                {ORIGIN_B, ORIGIN_C},
+            },
+        },
+    },
+    {
+        /* test_name */ "PolicyWithMultipleOriginsIncludingSrc"
+                        "OpaqueSrcOrigin",
+        /* policy_string */ "geolocation " ORIGIN_B " 'src'",
+        /* self_origin */ ORIGIN_A,
+        /* src_origin */ OPAQUE_ORIGIN,
+        /* expected_parse_result */
+        {
+            {
+                mojom::blink::FeaturePolicyFeature::kGeolocation,
+                /* fallback_value */ false,
+                /* opaque_value */ true,
+                {ORIGIN_B},
+            },
+        },
+    },
+};
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    FeaturePolicyParserParsingTest,
+    ::testing::ValuesIn(FeaturePolicyParserParsingTest::kCases),
+    [](const testing::TestParamInfo<FeaturePolicyParserTestCase>& param_info) {
+      return param_info.param.test_name;
+    });
+
+TEST_P(FeaturePolicyParserParsingTest, PolicyParsedCorrectly) {
+  PolicyParserMessageBuffer logger;
+  const FeaturePolicyParserTestCase& test_case = GetParam();
+  ASSERT_NE(test_case.self_origin, nullptr);
+  const ParsedFeaturePolicy actual =
+      Parse(test_case.policy_string, test_case.self_origin,
+            test_case.src_origin, logger, test_feature_name_map);
+  const ParsedPolicyForTest& expected = test_case.expected_parse_result;
+  ASSERT_EQ(actual.size(), expected.size());
+  for (size_t i = 0; i < actual.size(); ++i) {
+    const auto& actual_declaration = actual[i];
+    const auto& expected_declaration = expected[i];
+
+    EXPECT_EQ(actual_declaration.feature, expected_declaration.feature);
+    EXPECT_EQ(actual_declaration.fallback_value,
+              expected_declaration.fallback_value);
+    EXPECT_EQ(actual_declaration.opaque_value,
+              expected_declaration.opaque_value);
+
+    ASSERT_EQ(actual_declaration.allowed_origins.size(),
+              expected_declaration.origins.size());
+    for (size_t j = 0; j < actual_declaration.allowed_origins.size(); ++j) {
+      EXPECT_TRUE(actual_declaration.allowed_origins[j].IsSameOriginWith(
+          url::Origin::Create(GURL(expected_declaration.origins[j]))));
+    }
+  }
+}
+
 TEST_F(FeaturePolicyParserTest, ParseValidPolicy) {
-  Vector<String> messages;
   for (const char* policy_string : kValidPolicies) {
-    messages.clear();
+    PolicyParserMessageBuffer logger;
     FeaturePolicyParser::Parse(policy_string, origin_a_.get(), origin_b_.get(),
-                               &messages, test_feature_name_map);
-    EXPECT_EQ(0UL, messages.size()) << "Should parse " << policy_string;
+                               logger, test_feature_name_map);
+    EXPECT_EQ(0UL, logger.GetMessages().size())
+        << "Should parse " << policy_string;
   }
 }
 
 TEST_F(FeaturePolicyParserTest, ParseInvalidPolicy) {
-  Vector<String> messages;
   for (const char* policy_string : kInvalidPolicies) {
-    messages.clear();
+    PolicyParserMessageBuffer logger;
     FeaturePolicyParser::Parse(policy_string, origin_a_.get(), origin_b_.get(),
-                               &messages, test_feature_name_map);
-    EXPECT_LT(0UL, messages.size()) << "Should fail to parse " << policy_string;
+                               logger, test_feature_name_map);
+    EXPECT_LT(0UL, logger.GetMessages().size())
+        << "Should fail to parse " << policy_string;
   }
 }
 
 TEST_F(FeaturePolicyParserTest, ParseTooLongPolicy) {
-  Vector<String> messages;
+  PolicyParserMessageBuffer logger;
   auto policy_string = "geolocation http://" + std::string(1 << 17, 'a');
   FeaturePolicyParser::Parse(policy_string.c_str(), origin_a_.get(),
-                             origin_b_.get(), &messages, test_feature_name_map);
-  EXPECT_EQ(1UL, messages.size())
+                             origin_b_.get(), logger, test_feature_name_map);
+  EXPECT_EQ(1UL, logger.GetMessages().size())
       << "Should fail to parse string with size " << policy_string.size();
-}
-
-TEST_F(FeaturePolicyParserTest, PolicyParsedCorrectly) {
-  Vector<String> messages;
-
-  // Empty policy.
-  ParsedFeaturePolicy parsed_policy = FeaturePolicyParser::Parse(
-      "", origin_a_.get(), origin_b_.get(), &messages, test_feature_name_map);
-  EXPECT_EQ(0UL, parsed_policy.size());
-
-  // Simple policy with 'self'.
-  parsed_policy = FeaturePolicyParser::Parse("geolocation 'self'",
-                                             origin_a_.get(), origin_b_.get(),
-                                             &messages, test_feature_name_map);
-  EXPECT_EQ(1UL, parsed_policy.size());
-
-  EXPECT_EQ(mojom::blink::FeaturePolicyFeature::kGeolocation,
-            parsed_policy[0].feature);
-  EXPECT_FALSE(parsed_policy[0].fallback_value);
-  EXPECT_FALSE(parsed_policy[0].opaque_value);
-  EXPECT_EQ(1UL, parsed_policy[0].allowed_origins.size());
-  EXPECT_TRUE(parsed_policy[0].allowed_origins.begin()->IsSameOriginWith(
-      expected_url_origin_a_));
-
-  // Simple policy with *.
-  parsed_policy = FeaturePolicyParser::Parse("geolocation *", origin_a_.get(),
-                                             origin_b_.get(), &messages,
-                                             test_feature_name_map);
-  EXPECT_EQ(1UL, parsed_policy.size());
-  EXPECT_EQ(mojom::blink::FeaturePolicyFeature::kGeolocation,
-            parsed_policy[0].feature);
-  EXPECT_TRUE(parsed_policy[0].fallback_value);
-  EXPECT_TRUE(parsed_policy[0].opaque_value);
-  EXPECT_EQ(0UL, parsed_policy[0].allowed_origins.size());
-
-  // Complicated policy.
-  parsed_policy = FeaturePolicyParser::Parse(
-      "geolocation *; "
-      "fullscreen https://example.net https://example.org; "
-      "payment 'self'",
-      origin_a_.get(), origin_b_.get(), &messages, test_feature_name_map);
-  EXPECT_EQ(3UL, parsed_policy.size());
-  EXPECT_EQ(mojom::blink::FeaturePolicyFeature::kGeolocation,
-            parsed_policy[0].feature);
-  EXPECT_TRUE(parsed_policy[0].fallback_value);
-  EXPECT_TRUE(parsed_policy[0].opaque_value);
-  EXPECT_EQ(0UL, parsed_policy[0].allowed_origins.size());
-  EXPECT_EQ(mojom::blink::FeaturePolicyFeature::kFullscreen,
-            parsed_policy[1].feature);
-  EXPECT_FALSE(parsed_policy[1].fallback_value);
-  EXPECT_FALSE(parsed_policy[1].opaque_value);
-  EXPECT_EQ(2UL, parsed_policy[1].allowed_origins.size());
-  auto it = parsed_policy[1].allowed_origins.begin();
-  EXPECT_TRUE(it->IsSameOriginWith(expected_url_origin_b_));
-  EXPECT_TRUE((++it)->IsSameOriginWith(expected_url_origin_c_));
-  EXPECT_EQ(mojom::blink::FeaturePolicyFeature::kPayment,
-            parsed_policy[2].feature);
-  EXPECT_FALSE(parsed_policy[2].fallback_value);
-  EXPECT_FALSE(parsed_policy[2].opaque_value);
-  EXPECT_EQ(1UL, parsed_policy[2].allowed_origins.size());
-  EXPECT_TRUE(parsed_policy[2].allowed_origins.begin()->IsSameOriginWith(
-      expected_url_origin_a_));
-
-  // Multiple policies.
-  parsed_policy = FeaturePolicyParser::Parse(
-      "geolocation * https://example.net; "
-      "fullscreen https://example.net none https://example.org,"
-      "payment 'self' badorigin",
-      origin_a_.get(), origin_b_.get(), &messages, test_feature_name_map);
-  EXPECT_EQ(3UL, parsed_policy.size());
-  EXPECT_EQ(mojom::blink::FeaturePolicyFeature::kGeolocation,
-            parsed_policy[0].feature);
-  EXPECT_TRUE(parsed_policy[0].fallback_value);
-  EXPECT_TRUE(parsed_policy[0].opaque_value);
-  EXPECT_EQ(0UL, parsed_policy[0].allowed_origins.size());
-  EXPECT_EQ(mojom::blink::FeaturePolicyFeature::kFullscreen,
-            parsed_policy[1].feature);
-  EXPECT_FALSE(parsed_policy[1].fallback_value);
-  EXPECT_FALSE(parsed_policy[1].opaque_value);
-  EXPECT_EQ(2UL, parsed_policy[1].allowed_origins.size());
-  it = parsed_policy[1].allowed_origins.begin();
-  EXPECT_TRUE(it->IsSameOriginWith(expected_url_origin_b_));
-  EXPECT_TRUE((++it)->IsSameOriginWith(expected_url_origin_c_));
-  EXPECT_EQ(mojom::blink::FeaturePolicyFeature::kPayment,
-            parsed_policy[2].feature);
-  EXPECT_FALSE(parsed_policy[2].fallback_value);
-  EXPECT_FALSE(parsed_policy[2].opaque_value);
-  EXPECT_EQ(1UL, parsed_policy[2].allowed_origins.size());
-  EXPECT_TRUE(parsed_policy[2].allowed_origins.begin()->IsSameOriginWith(
-      expected_url_origin_a_));
-
-  // Header policies with no optional origin lists.
-  parsed_policy = FeaturePolicyParser::Parse("geolocation;fullscreen;payment",
-                                             origin_a_.get(), nullptr,
-                                             &messages, test_feature_name_map);
-  EXPECT_EQ(3UL, parsed_policy.size());
-  EXPECT_EQ(mojom::blink::FeaturePolicyFeature::kGeolocation,
-            parsed_policy[0].feature);
-  EXPECT_FALSE(parsed_policy[0].fallback_value);
-  EXPECT_FALSE(parsed_policy[0].opaque_value);
-  EXPECT_EQ(1UL, parsed_policy[0].allowed_origins.size());
-  EXPECT_TRUE(parsed_policy[0].allowed_origins.begin()->IsSameOriginWith(
-      expected_url_origin_a_));
-  EXPECT_EQ(mojom::blink::FeaturePolicyFeature::kFullscreen,
-            parsed_policy[1].feature);
-  EXPECT_FALSE(parsed_policy[1].fallback_value);
-  EXPECT_FALSE(parsed_policy[1].opaque_value);
-  EXPECT_EQ(1UL, parsed_policy[1].allowed_origins.size());
-  EXPECT_TRUE(parsed_policy[1].allowed_origins.begin()->IsSameOriginWith(
-      expected_url_origin_a_));
-  EXPECT_EQ(mojom::blink::FeaturePolicyFeature::kPayment,
-            parsed_policy[2].feature);
-  EXPECT_FALSE(parsed_policy[2].opaque_value);
-  EXPECT_EQ(1UL, parsed_policy[2].allowed_origins.size());
-  EXPECT_TRUE(parsed_policy[2].allowed_origins.begin()->IsSameOriginWith(
-      expected_url_origin_a_));
-}
-
-TEST_F(FeaturePolicyParserTest, PolicyParsedCorrectlyForOpaqueOrigins) {
-  Vector<String> messages;
-
-  scoped_refptr<SecurityOrigin> opaque_origin =
-      SecurityOrigin::CreateUniqueOpaque();
-
-  // Empty policy.
-  ParsedFeaturePolicy parsed_policy =
-      FeaturePolicyParser::Parse("", origin_a_.get(), opaque_origin.get(),
-                                 &messages, test_feature_name_map);
-  EXPECT_EQ(0UL, parsed_policy.size());
-
-  // Simple policy.
-  parsed_policy = FeaturePolicyParser::Parse("geolocation", origin_a_.get(),
-                                             opaque_origin.get(), &messages,
-                                             test_feature_name_map);
-  EXPECT_EQ(1UL, parsed_policy.size());
-
-  EXPECT_EQ(mojom::blink::FeaturePolicyFeature::kGeolocation,
-            parsed_policy[0].feature);
-  EXPECT_FALSE(parsed_policy[0].fallback_value);
-  EXPECT_TRUE(parsed_policy[0].opaque_value);
-  EXPECT_EQ(0UL, parsed_policy[0].allowed_origins.size());
-
-  // Simple policy with 'src'.
-  parsed_policy = FeaturePolicyParser::Parse(
-      "geolocation 'src'", origin_a_.get(), opaque_origin.get(), &messages,
-      test_feature_name_map);
-  EXPECT_EQ(1UL, parsed_policy.size());
-
-  EXPECT_EQ(mojom::blink::FeaturePolicyFeature::kGeolocation,
-            parsed_policy[0].feature);
-  EXPECT_FALSE(parsed_policy[0].fallback_value);
-  EXPECT_TRUE(parsed_policy[0].opaque_value);
-  EXPECT_EQ(0UL, parsed_policy[0].allowed_origins.size());
-
-  // Simple policy with *.
-  parsed_policy = FeaturePolicyParser::Parse("geolocation *", origin_a_.get(),
-                                             opaque_origin.get(), &messages,
-                                             test_feature_name_map);
-  EXPECT_EQ(1UL, parsed_policy.size());
-
-  EXPECT_EQ(mojom::blink::FeaturePolicyFeature::kGeolocation,
-            parsed_policy[0].feature);
-  EXPECT_TRUE(parsed_policy[0].fallback_value);
-  EXPECT_TRUE(parsed_policy[0].opaque_value);
-  EXPECT_EQ(0UL, parsed_policy[0].allowed_origins.size());
-
-  // Policy with explicit origins
-  parsed_policy = FeaturePolicyParser::Parse(
-      "geolocation https://example.net https://example.org", origin_a_.get(),
-      opaque_origin.get(), &messages, test_feature_name_map);
-  EXPECT_EQ(1UL, parsed_policy.size());
-
-  EXPECT_EQ(mojom::blink::FeaturePolicyFeature::kGeolocation,
-            parsed_policy[0].feature);
-  EXPECT_FALSE(parsed_policy[0].fallback_value);
-  EXPECT_FALSE(parsed_policy[0].opaque_value);
-  EXPECT_EQ(2UL, parsed_policy[0].allowed_origins.size());
-  auto it = parsed_policy[0].allowed_origins.begin();
-  EXPECT_TRUE(it->IsSameOriginWith(expected_url_origin_b_));
-  EXPECT_TRUE((++it)->IsSameOriginWith(expected_url_origin_c_));
-
-  // Policy with multiple origins, including 'src'.
-  parsed_policy = FeaturePolicyParser::Parse(
-      "geolocation https://example.net 'src'", origin_a_.get(),
-      opaque_origin.get(), &messages, test_feature_name_map);
-  EXPECT_EQ(1UL, parsed_policy.size());
-
-  EXPECT_EQ(mojom::blink::FeaturePolicyFeature::kGeolocation,
-            parsed_policy[0].feature);
-  EXPECT_FALSE(parsed_policy[0].fallback_value);
-  EXPECT_TRUE(parsed_policy[0].opaque_value);
-  EXPECT_EQ(1UL, parsed_policy[0].allowed_origins.size());
-  EXPECT_TRUE(parsed_policy[0].allowed_origins.begin()->IsSameOriginWith(
-      expected_url_origin_b_));
 }
 
 // Test histogram counting the use of feature policies in header.
 TEST_F(FeaturePolicyParserTest, HeaderHistogram) {
   const char* histogram_name = "Blink.UseCounter.FeaturePolicy.Header";
   HistogramTester tester;
-  Vector<String> messages;
+  PolicyParserMessageBuffer logger;
 
   FeaturePolicyParser::Parse("payment; fullscreen", origin_a_.get(), nullptr,
-                             &messages, test_feature_name_map);
+                             logger, test_feature_name_map);
   tester.ExpectTotalCount(histogram_name, 2);
   tester.ExpectBucketCount(
       histogram_name,
@@ -340,15 +444,15 @@ TEST_F(FeaturePolicyParserTest, HeaderHistogram) {
 TEST_F(FeaturePolicyParserTest, HistogramMultiple) {
   const char* histogram_name = "Blink.UseCounter.FeaturePolicy.Header";
   HistogramTester tester;
-  Vector<String> messages;
+  PolicyParserMessageBuffer logger;
 
   // If the same feature is listed multiple times, it should only be counted
   // once.
   FeaturePolicyParser::Parse("geolocation 'self'; payment; geolocation *",
-                             origin_a_.get(), nullptr, &messages,
+                             origin_a_.get(), nullptr, logger,
                              test_feature_name_map);
   FeaturePolicyParser::Parse("fullscreen 'self', fullscreen *", origin_a_.get(),
-                             nullptr, &messages, test_feature_name_map);
+                             nullptr, logger, test_feature_name_map);
   tester.ExpectTotalCount(histogram_name, 3);
   tester.ExpectBucketCount(
       histogram_name,
@@ -365,15 +469,15 @@ TEST_F(FeaturePolicyParserTest, HistogramMultiple) {
 TEST_F(FeaturePolicyParserTest, AllowHistogramSameDocument) {
   const char* histogram_name = "Blink.UseCounter.FeaturePolicy.Allow";
   HistogramTester tester;
-  Vector<String> messages;
+  PolicyParserMessageBuffer logger;
   auto dummy = std::make_unique<DummyPageHolder>();
 
   FeaturePolicyParser::Parse("payment; fullscreen", origin_a_.get(),
-                             origin_b_.get(), &messages, test_feature_name_map,
-                             &dummy->GetDocument());
+                             origin_b_.get(), logger, test_feature_name_map,
+                             dummy->GetFrame().DomWindow());
   FeaturePolicyParser::Parse("fullscreen; geolocation", origin_a_.get(),
-                             origin_b_.get(), &messages, test_feature_name_map,
-                             &dummy->GetDocument());
+                             origin_b_.get(), logger, test_feature_name_map,
+                             dummy->GetFrame().DomWindow());
   tester.ExpectTotalCount(histogram_name, 3);
   tester.ExpectBucketCount(
       histogram_name,
@@ -393,16 +497,16 @@ TEST_F(FeaturePolicyParserTest, AllowHistogramSameDocument) {
 TEST_F(FeaturePolicyParserTest, AllowHistogramDifferentDocument) {
   const char* histogram_name = "Blink.UseCounter.FeaturePolicy.Allow";
   HistogramTester tester;
-  Vector<String> messages;
+  PolicyParserMessageBuffer logger;
   auto dummy = std::make_unique<DummyPageHolder>();
   auto dummy2 = std::make_unique<DummyPageHolder>();
 
   FeaturePolicyParser::Parse("payment; fullscreen", origin_a_.get(),
-                             origin_b_.get(), &messages, test_feature_name_map,
-                             &dummy->GetDocument());
+                             origin_b_.get(), logger, test_feature_name_map,
+                             dummy->GetFrame().DomWindow());
   FeaturePolicyParser::Parse("fullscreen; geolocation", origin_a_.get(),
-                             origin_b_.get(), &messages, test_feature_name_map,
-                             &dummy2->GetDocument());
+                             origin_b_.get(), logger, test_feature_name_map,
+                             dummy2->GetFrame().DomWindow());
   tester.ExpectTotalCount(histogram_name, 4);
   tester.ExpectBucketCount(
       histogram_name,
@@ -419,13 +523,13 @@ TEST_F(FeaturePolicyParserTest, AllowHistogramDifferentDocument) {
 
 // Tests the use counter for comma separator in declarations.
 TEST_F(FeaturePolicyParserTest, CommaSeparatedUseCounter) {
-  Vector<String> messages;
+  PolicyParserMessageBuffer logger;
 
   // Declarations without a semicolon should not trigger the use counter.
   {
     auto dummy = std::make_unique<DummyPageHolder>();
-    FeaturePolicyParser::ParseHeader("payment", origin_a_.get(), &messages,
-                                     &dummy->GetDocument());
+    FeaturePolicyParser::ParseHeader("payment", origin_a_.get(), logger,
+                                     dummy->GetFrame().DomWindow());
     EXPECT_FALSE(dummy->GetDocument().IsUseCounted(
         WebFeature::kFeaturePolicyCommaSeparatedDeclarations));
   }
@@ -434,7 +538,7 @@ TEST_F(FeaturePolicyParserTest, CommaSeparatedUseCounter) {
   {
     auto dummy = std::make_unique<DummyPageHolder>();
     FeaturePolicyParser::ParseHeader("payment, fullscreen", origin_a_.get(),
-                                     &messages, &dummy->GetDocument());
+                                     logger, dummy->GetFrame().DomWindow());
     EXPECT_TRUE(dummy->GetDocument().IsUseCounted(
         WebFeature::kFeaturePolicyCommaSeparatedDeclarations))
         << "'payment, fullscreen' should trigger the comma separated use "
@@ -444,13 +548,13 @@ TEST_F(FeaturePolicyParserTest, CommaSeparatedUseCounter) {
 
 // Tests the use counter for semicolon separator in declarations.
 TEST_F(FeaturePolicyParserTest, SemicolonSeparatedUseCounter) {
-  Vector<String> messages;
+  PolicyParserMessageBuffer logger;
 
   // Declarations without a semicolon should not trigger the use counter.
   {
     auto dummy = std::make_unique<DummyPageHolder>();
-    FeaturePolicyParser::ParseHeader("payment", origin_a_.get(), &messages,
-                                     &dummy->GetDocument());
+    FeaturePolicyParser::ParseHeader("payment", origin_a_.get(), logger,
+                                     dummy->GetFrame().DomWindow());
     EXPECT_FALSE(dummy->GetDocument().IsUseCounted(
         WebFeature::kFeaturePolicySemicolonSeparatedDeclarations));
   }
@@ -459,7 +563,7 @@ TEST_F(FeaturePolicyParserTest, SemicolonSeparatedUseCounter) {
   {
     auto dummy = std::make_unique<DummyPageHolder>();
     FeaturePolicyParser::ParseHeader("payment; fullscreen", origin_a_.get(),
-                                     &messages, &dummy->GetDocument());
+                                     logger, dummy->GetFrame().DomWindow());
     EXPECT_TRUE(dummy->GetDocument().IsUseCounted(
         WebFeature::kFeaturePolicySemicolonSeparatedDeclarations))
         << "'payment; fullscreen' should trigger the semicolon separated use "
@@ -564,14 +668,14 @@ INSTANTIATE_TEST_SUITE_P(
     });
 
 TEST_P(FeaturePolicyAllowlistHistogramTest, HeaderHistogram) {
-  Vector<String> messages;
+  PolicyParserMessageBuffer logger;
   HistogramTester tester;
 
   AllowlistHistogramData data = GetParam();
 
   auto dummy = std::make_unique<DummyPageHolder>();
   FeaturePolicyParser::ParseHeader(data.policy_declaration, origin_a_.get(),
-                                   &messages, &dummy->GetDocument());
+                                   logger, dummy->GetFrame().DomWindow());
   for (FeaturePolicyAllowlistType expected_bucket : data.expected_buckets) {
     tester.ExpectBucketCount(kAllowlistHeaderHistogram,
                              static_cast<int>(expected_bucket), 1);
@@ -581,13 +685,13 @@ TEST_P(FeaturePolicyAllowlistHistogramTest, HeaderHistogram) {
 }
 
 TEST_F(FeaturePolicyAllowlistHistogramTest, MixedInHeaderHistogram) {
-  Vector<String> messages;
+  PolicyParserMessageBuffer logger;
   HistogramTester tester;
 
   auto dummy = std::make_unique<DummyPageHolder>();
   const char* declaration = "fullscreen *; geolocation 'self' " ORIGIN_A;
-  FeaturePolicyParser::ParseHeader(declaration, origin_a_.get(), &messages,
-                                   &dummy->GetDocument());
+  FeaturePolicyParser::ParseHeader(declaration, origin_a_.get(), logger,
+                                   dummy->GetFrame().DomWindow());
 
   tester.ExpectBucketCount(kAllowlistHeaderHistogram,
                            static_cast<int>(FeaturePolicyAllowlistType::kStar),
@@ -600,15 +704,15 @@ TEST_F(FeaturePolicyAllowlistHistogramTest, MixedInHeaderHistogram) {
 }
 
 TEST_P(FeaturePolicyAllowlistHistogramTest, AttributeHistogram) {
-  Vector<String> messages;
+  PolicyParserMessageBuffer logger;
   HistogramTester tester;
 
   AllowlistHistogramData data = GetParam();
 
   auto dummy = std::make_unique<DummyPageHolder>();
   FeaturePolicyParser::ParseAttribute(data.policy_declaration, origin_a_.get(),
-                                      origin_b_.get(), &messages,
-                                      &dummy->GetDocument());
+                                      origin_b_.get(), logger,
+                                      dummy->GetFrame().DomWindow());
   for (FeaturePolicyAllowlistType expected_bucket : data.expected_buckets) {
     tester.ExpectBucketCount(kAllowlistAttributeHistogram,
                              static_cast<int>(expected_bucket), 1);
@@ -618,14 +722,14 @@ TEST_P(FeaturePolicyAllowlistHistogramTest, AttributeHistogram) {
 }
 
 TEST_F(FeaturePolicyAllowlistHistogramTest, MixedInAttributeHistogram) {
-  Vector<String> messages;
+  PolicyParserMessageBuffer logger;
   HistogramTester tester;
 
   auto dummy = std::make_unique<DummyPageHolder>();
   const char* declaration = "fullscreen *; geolocation 'src' " ORIGIN_A;
   FeaturePolicyParser::ParseAttribute(declaration, origin_a_.get(),
-                                      origin_b_.get(), &messages,
-                                      &dummy->GetDocument());
+                                      origin_b_.get(), logger,
+                                      dummy->GetFrame().DomWindow());
 
   tester.ExpectBucketCount(kAllowlistAttributeHistogram,
                            static_cast<int>(FeaturePolicyAllowlistType::kStar),
@@ -638,14 +742,14 @@ TEST_F(FeaturePolicyAllowlistHistogramTest, MixedInAttributeHistogram) {
 }
 
 TEST_F(FeaturePolicyAllowlistHistogramTest, SrcInAttributeHistogram) {
-  Vector<String> messages;
+  PolicyParserMessageBuffer logger;
   HistogramTester tester;
 
   auto dummy = std::make_unique<DummyPageHolder>();
   const char* declaration = "fullscreen 'src'";
   FeaturePolicyParser::ParseAttribute(declaration, origin_a_.get(),
-                                      origin_b_.get(), &messages,
-                                      &dummy->GetDocument());
+                                      origin_b_.get(), logger,
+                                      dummy->GetFrame().DomWindow());
 
   tester.ExpectBucketCount(kAllowlistAttributeHistogram,
                            static_cast<int>(FeaturePolicyAllowlistType::kSrc),
@@ -879,23 +983,23 @@ TEST_F(FeaturePolicyViolationHistogramTest, PotentialViolation) {
       "Blink.UseCounter.FeaturePolicy.PotentialViolation";
   auto dummy_page_holder_ = std::make_unique<DummyPageHolder>();
   // Probing feature state should not count.
-  dummy_page_holder_->GetDocument().IsFeatureEnabled(
+  dummy_page_holder_->GetFrame().DomWindow()->IsFeatureEnabled(
       mojom::blink::FeaturePolicyFeature::kPayment);
   tester.ExpectTotalCount(histogram_name, 0);
   // Checking the feature state with reporting intent should record a potential
   // violation.
-  dummy_page_holder_->GetDocument().IsFeatureEnabled(
+  dummy_page_holder_->GetFrame().DomWindow()->IsFeatureEnabled(
       mojom::blink::FeaturePolicyFeature::kPayment,
       ReportOptions::kReportOnFailure);
   tester.ExpectTotalCount(histogram_name, 1);
   // The potential violation for an already recorded violation does not count
   // again.
-  dummy_page_holder_->GetDocument().IsFeatureEnabled(
+  dummy_page_holder_->GetFrame().DomWindow()->IsFeatureEnabled(
       mojom::blink::FeaturePolicyFeature::kPayment,
       ReportOptions::kReportOnFailure);
   tester.ExpectTotalCount(histogram_name, 1);
   // Sanity check: check some other feature to increase the count.
-  dummy_page_holder_->GetDocument().IsFeatureEnabled(
+  dummy_page_holder_->GetFrame().DomWindow()->IsFeatureEnabled(
       mojom::blink::FeaturePolicyFeature::kFullscreen,
       ReportOptions::kReportOnFailure);
   tester.ExpectTotalCount(histogram_name, 2);

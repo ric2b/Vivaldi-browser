@@ -43,7 +43,6 @@ class SpeechSynthesisUtterance final
       public ExecutionContextClient,
       public mojom::blink::SpeechSynthesisClient {
   DEFINE_WRAPPERTYPEINFO();
-  USING_PRE_FINALIZER(SpeechSynthesisUtterance, Dispose);
   USING_GARBAGE_COLLECTED_MIXIN(SpeechSynthesisUtterance);
 
  public:
@@ -92,7 +91,7 @@ class SpeechSynthesisUtterance final
     return ExecutionContextClient::GetExecutionContext();
   }
 
-  void Trace(Visitor*) override;
+  void Trace(Visitor*) const override;
 
   // mojom::blink::SpeechSynthesisClient
   void OnStartedSpeaking() override;
@@ -108,10 +107,6 @@ class SpeechSynthesisUtterance final
   void Start(SpeechSynthesis* synthesis);
 
  private:
-  // USING_PRE_FINALIZER interface.
-  // Called before the object gets garbage collected.
-  void Dispose();
-
   void OnDisconnected();
 
   // EventTarget

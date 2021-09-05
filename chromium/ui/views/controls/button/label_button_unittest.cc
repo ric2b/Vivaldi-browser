@@ -627,8 +627,8 @@ TEST_F(LabelButtonTest, HighlightedButtonStyle) {
 // Ensure the label resets the enabled color after LabelButton::OnThemeChanged()
 // is invoked.
 TEST_F(LabelButtonTest, OnThemeChanged) {
-  ASSERT_NE(button_->GetNativeTheme()->GetHighContrastColorScheme(),
-            ui::NativeTheme::HighContrastColorScheme::kDark);
+  ASSERT_NE(button_->GetNativeTheme()->GetPlatformHighContrastColorScheme(),
+            ui::NativeTheme::PlatformHighContrastColorScheme::kDark);
   ASSERT_NE(button_->label()->GetBackgroundColor(), SK_ColorBLACK);
   EXPECT_EQ(themed_normal_text_color_, button_->label()->GetEnabledColor());
 
@@ -665,6 +665,25 @@ TEST_F(LabelButtonTest, SetEnabledTextColorsResetsToThemeColors) {
   // the original colors used before the theme changed.
   button_->SetEnabledTextColors(base::nullopt);
   EXPECT_EQ(TestNativeTheme::kSystemColor, button_->label()->GetEnabledColor());
+}
+
+TEST_F(LabelButtonTest, ImageOrLabelGetClipped) {
+  const base::string16 text(ASCIIToUTF16("abc"));
+  button_->SetText(text);
+
+  const gfx::FontList font_list = button_->label()->font_list();
+  const int image_size = font_list.GetHeight();
+  button_->SetImage(Button::STATE_NORMAL,
+                    CreateTestImage(image_size, image_size));
+
+  button_->SetBoundsRect(gfx::Rect(button_->GetPreferredSize()));
+  // The border size + the content height is more than button's preferred size.
+  button_->SetBorder(CreateEmptyBorder(image_size / 2, 0, image_size / 2, 0));
+  button_->Layout();
+
+  // Ensure that content (image and label) doesn't get clipped by the border.
+  EXPECT_GE(button_->image()->height(), image_size);
+  EXPECT_GE(button_->label()->height(), image_size);
 }
 
 // Test fixture for a LabelButton that has an ink drop configured.

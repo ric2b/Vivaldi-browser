@@ -121,6 +121,7 @@ class InstallManager {
     bool add_to_applications_menu = true;
     bool add_to_desktop = true;
     bool add_to_quick_launch_bar = true;
+    bool run_on_os_login = false;
 
     // These have no effect outside of Chrome OS.
     bool add_to_search = true;
@@ -155,8 +156,6 @@ class InstallManager {
       std::unique_ptr<WebApplicationInfo> web_application_info,
       OnceInstallCallback callback) = 0;
 
-  virtual void Shutdown() = 0;
-
   explicit InstallManager(Profile* profile);
   virtual ~InstallManager();
 
@@ -172,12 +171,26 @@ class InstallManager {
       WebappInstallSource install_source,
       WebAppInstallabilityCheckCallback callback) = 0;
 
+  void DisableBookmarkAppSyncInstallForTesting() {
+    disable_bookmark_app_sync_install_for_testing_ = true;
+  }
+  void DisableWebAppSyncInstallForTesting() {
+    disable_web_app_sync_install_for_testing_ = true;
+  }
+
  protected:
   Profile* profile() { return profile_; }
   AppRegistrar* registrar() { return registrar_; }
   AppShortcutManager* shortcut_manager() { return shortcut_manager_; }
   FileHandlerManager* file_handler_manager() { return file_handler_manager_; }
   InstallFinalizer* finalizer() { return finalizer_; }
+
+  bool disable_bookmark_app_sync_install_for_testing() const {
+    return disable_bookmark_app_sync_install_for_testing_;
+  }
+  bool disable_web_app_sync_install_for_testing() const {
+    return disable_web_app_sync_install_for_testing_;
+  }
 
  private:
   Profile* const profile_;
@@ -187,6 +200,9 @@ class InstallManager {
   AppShortcutManager* shortcut_manager_ = nullptr;
   FileHandlerManager* file_handler_manager_ = nullptr;
   InstallFinalizer* finalizer_ = nullptr;
+
+  bool disable_bookmark_app_sync_install_for_testing_ = false;
+  bool disable_web_app_sync_install_for_testing_ = false;
 };
 
 }  // namespace web_app

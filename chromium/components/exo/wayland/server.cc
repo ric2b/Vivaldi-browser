@@ -28,6 +28,7 @@
 #include <vsync-feedback-unstable-v1-server-protocol.h>
 #include <wayland-server-core.h>
 #include <wayland-server-protocol-core.h>
+#include <xdg-shell-server-protocol.h>
 #include <xdg-shell-unstable-v6-server-protocol.h>
 
 #include <memory>
@@ -60,6 +61,7 @@
 
 #if defined(OS_CHROMEOS)
 #include "components/exo/wayland/wl_shell.h"
+#include "components/exo/wayland/xdg_shell.h"
 #include "components/exo/wayland/zcr_color_space.h"
 #include "components/exo/wayland/zcr_cursor_shapes.h"
 #include "components/exo/wayland/zcr_gaming_input.h"
@@ -79,6 +81,7 @@
 #if defined(USE_OZONE)
 #include <linux-dmabuf-unstable-v1-server-protocol.h>
 #include "components/exo/wayland/zwp_linux_dmabuf.h"
+#include "ui/ozone/public/ozone_platform.h"
 #endif
 
 #if defined(USE_FULLSCREEN_SHELL)
@@ -103,6 +106,18 @@ const base::FilePath::CharType kSocketName[] = FILE_PATH_LITERAL("wayland-0");
 
 // Group used for wayland socket.
 const char kWaylandSocketGroup[] = "wayland";
+
+bool IsDrmAtomicAvailable() {
+#if defined(USE_OZONE)
+  auto& host_properties =
+      ui::OzonePlatform::GetInstance()->GetInitializedHostProperties();
+  return host_properties.supports_overlays;
+#else
+  LOG(WARNING) << "Ozone disabled, cannot determine whether DrmAtomic is "
+                  "present. Assuming it is not";
+  return false;
+#endif
+}
 
 }  // namespace
 
@@ -150,9 +165,14 @@ Server::Server(Display* display)
   wl_global_create(wl_display_.get(), &wl_seat_interface, kWlSeatVersion,
                    seat_data_.get(), bind_seat);
 
-  wl_global_create(wl_display_.get(),
-                   &zwp_linux_explicit_synchronization_v1_interface, 1,
-                   display_, bind_linux_explicit_synchronization);
+  if (IsDrmAtomicAvailable()) {
+    // The release fence needed by linux-explicit-sync comes from DRM-atomic.
+    // If DRM atomic is not supported, linux-explicit-sync interface is
+    // disabled.
+    wl_global_create(wl_display_.get(),
+                     &zwp_linux_explicit_synchronization_v1_interface, 1,
+                     display_, bind_linux_explicit_synchronization);
+  }
   wl_global_create(wl_display_.get(), &zaura_shell_interface,
                    kZAuraShellVersion, display_, bind_aura_shell);
 #if defined(OS_CHROMEOS)
@@ -192,10 +212,15 @@ Server::Server(Display* display)
   wl_global_create(wl_display_.get(), &zwp_text_input_manager_v1_interface, 1,
                    zwp_text_manager_data_.get(), bind_text_input_manager);
 
+  zxdg_shell_data_ =
+      std::make_unique<WaylandZxdgShell>(display_, serial_tracker_.get());
+  wl_global_create(wl_display_.get(), &zxdg_shell_v6_interface, 1,
+                   zxdg_shell_data_.get(), bind_zxdg_shell_v6);
+
   xdg_shell_data_ =
       std::make_unique<WaylandXdgShell>(display_, serial_tracker_.get());
-  wl_global_create(wl_display_.get(), &zxdg_shell_v6_interface, 1,
-                   xdg_shell_data_.get(), bind_xdg_shell_v6);
+  wl_global_create(wl_display_.get(), &xdg_wm_base_interface, 1,
+                   xdg_shell_data_.get(), bind_xdg_shell);
 #endif
 
 #if defined(USE_FULLSCREEN_SHELL)

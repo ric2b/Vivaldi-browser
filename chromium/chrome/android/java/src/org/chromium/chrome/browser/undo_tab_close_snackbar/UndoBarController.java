@@ -6,7 +6,6 @@ package org.chromium.chrome.browser.undo_tab_close_snackbar;
 
 import android.content.Context;
 
-import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
 import org.chromium.chrome.browser.device.DeviceClassManager;
@@ -18,7 +17,7 @@ import org.chromium.chrome.browser.tasks.ConditionalTabStripUtils;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 import org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
-import org.chromium.chrome.browser.util.AccessibilityUtil;
+import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
 
 import java.util.List;
 import java.util.Locale;
@@ -40,12 +39,6 @@ import java.util.Locale;
  * in sync with the model.
  */
 public class UndoBarController implements SnackbarManager.SnackbarController {
-    // AndroidTabCloseUndoToastEvent defined in tools/metrics/histograms/histograms.xml.
-    private static final int TAB_CLOSE_UNDO_TOAST_SHOWN_COLD = 0;
-    private static final int TAB_CLOSE_UNDO_TOAST_SHOWN_WARM = 1;
-    private static final int TAB_CLOSE_UNDO_TOAST_PRESSED = 2;
-    private static final int TAB_CLOSE_UNDO_TOAST_COUNT = 5;
-
     private final TabModelSelector mTabModelSelector;
     private final TabModelObserver mTabModelObserver;
     private final SnackbarManager.SnackbarManageable mSnackbarManagable;
@@ -76,7 +69,7 @@ public class UndoBarController implements SnackbarManager.SnackbarController {
                         && !overviewModeBehavior.overviewVisible()) {
                     return false;
                 }
-                return AccessibilityUtil.isAccessibilityEnabled()
+                return ChromeAccessibilityUtil.get().isAccessibilityEnabled()
                         || DeviceClassManager.enableAccessibilityLayout();
             }
 
@@ -146,11 +139,6 @@ public class UndoBarController implements SnackbarManager.SnackbarController {
      * @param content The title of the tab.
      */
     private void showUndoBar(int tabId, String content) {
-        RecordHistogram.recordEnumeratedHistogram("AndroidTabCloseUndo.Toast",
-                mSnackbarManagable.getSnackbarManager().isShowing()
-                        ? TAB_CLOSE_UNDO_TOAST_SHOWN_WARM
-                        : TAB_CLOSE_UNDO_TOAST_SHOWN_COLD,
-                TAB_CLOSE_UNDO_TOAST_COUNT);
         mSnackbarManagable.getSnackbarManager().showSnackbar(
                 Snackbar.make(content, this, Snackbar.TYPE_ACTION, Snackbar.UMA_TAB_CLOSE_UNDO)
                         .setTemplateText(mContext.getString(R.string.undo_bar_close_message))
@@ -183,8 +171,6 @@ public class UndoBarController implements SnackbarManager.SnackbarController {
     @SuppressWarnings("unchecked")
     @Override
     public void onAction(Object actionData) {
-        RecordHistogram.recordEnumeratedHistogram("AndroidTabCloseUndo.Toast",
-                TAB_CLOSE_UNDO_TOAST_PRESSED, TAB_CLOSE_UNDO_TOAST_COUNT);
         if (actionData instanceof Integer) {
             cancelTabClosure((Integer) actionData);
         } else {

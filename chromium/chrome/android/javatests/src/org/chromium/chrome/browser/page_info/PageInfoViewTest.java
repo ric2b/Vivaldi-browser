@@ -4,14 +4,17 @@
 
 package org.chromium.chrome.browser.page_info;
 
-import static android.support.test.espresso.Espresso.onView;
-import static android.support.test.espresso.action.ViewActions.click;
-import static android.support.test.espresso.matcher.ViewMatchers.withId;
+import static androidx.test.espresso.Espresso.onView;
+import static androidx.test.espresso.action.ViewActions.click;
+import static androidx.test.espresso.matcher.ViewMatchers.withId;
 
 import static org.junit.Assert.assertNotNull;
 
+import static org.chromium.components.content_settings.PrefNames.BLOCK_THIRD_PARTY_COOKIES;
+
 import android.os.Build;
-import android.support.test.filters.MediumTest;
+
+import androidx.test.filters.MediumTest;
 
 import org.junit.After;
 import org.junit.Before;
@@ -26,7 +29,6 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.notifications.channels.SiteChannelsManager;
-import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.test.ChromeActivityTestRule;
@@ -38,6 +40,7 @@ import org.chromium.components.content_settings.ContentSettingsFeatureList;
 import org.chromium.components.content_settings.ContentSettingsType;
 import org.chromium.components.location.LocationUtils;
 import org.chromium.components.page_info.PageInfoController;
+import org.chromium.components.page_info.PageInfoFeatureList;
 import org.chromium.components.page_info.PageInfoView;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.content_public.common.ContentSwitches;
@@ -98,7 +101,7 @@ public class PageInfoViewTest {
 
     private void setThirdPartyCookieBlocking(boolean value) {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            PrefServiceBridge.getInstance().setBoolean(Pref.BLOCK_THIRD_PARTY_COOKIES, value);
+            PrefServiceBridge.getInstance().setBoolean(BLOCK_THIRD_PARTY_COOKIES, value);
         });
     }
 
@@ -219,6 +222,18 @@ public class PageInfoViewTest {
         setThirdPartyCookieBlocking(true);
         loadUrlAndOpenPageInfo(mTestServerRule.getServer().getURL(mPath));
         mRenderTestRule.render(getPageInfoView(), "PageInfo_PermissionsAndCookieBlocking");
+    }
+
+    /**
+     * Tests the new PageInfo UI on a secure website.
+     */
+    @Test
+    @MediumTest
+    @Feature({"RenderTest"})
+    @Features.EnableFeatures(PageInfoFeatureList.PAGE_INFO_V2)
+    public void testShowOnSecureWebsiteV2() throws IOException {
+        loadUrlAndOpenPageInfo(mTestServerRule.getServer().getURL(mPath));
+        mRenderTestRule.render(getPageInfoView(), "PageInfo_SecureWebsiteV2");
     }
 
     // TODO(1071762): Add tests for preview pages, offline pages, offline state and other states.

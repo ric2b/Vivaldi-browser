@@ -87,15 +87,10 @@ void FakeLoginDisplayHost::OnPreferencesChanged() {}
 
 void FakeLoginDisplayHost::PrewarmAuthentication() {}
 
-void FakeLoginDisplayHost::StartAppLaunch(const std::string& app_id,
-                                          bool diagnostic_mode,
-                                          bool is_auto_launch) {}
-
 void FakeLoginDisplayHost::StartDemoAppLaunch() {}
 
-void FakeLoginDisplayHost::StartArcKiosk(const AccountId& account_id) {}
-
-void FakeLoginDisplayHost::StartWebKiosk(const AccountId& account_id) {}
+void FakeLoginDisplayHost::StartKiosk(const KioskAppId& kiosk_app_id,
+                                      bool is_auto_launch) {}
 
 void FakeLoginDisplayHost::CompleteLogin(const UserContext& user_context) {}
 
@@ -120,10 +115,6 @@ void FakeLoginDisplayHost::ShowGaiaDialog(const AccountId& prefilled_account) {}
 void FakeLoginDisplayHost::HideOobeDialog() {}
 
 void FakeLoginDisplayHost::UpdateOobeDialogState(ash::OobeDialogState state) {}
-
-const user_manager::UserList FakeLoginDisplayHost::GetUsers() {
-  return user_manager::UserList();
-}
 
 void FakeLoginDisplayHost::CancelPasswordChangedFlow() {}
 

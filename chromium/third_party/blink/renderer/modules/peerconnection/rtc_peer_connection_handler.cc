@@ -37,6 +37,7 @@
 #include "third_party/blink/renderer/modules/webrtc/webrtc_audio_device_impl.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/mediastream/media_constraints.h"
+#include "third_party/blink/renderer/platform/mediastream/media_stream_component.h"
 #include "third_party/blink/renderer/platform/mediastream/webrtc_uma_histograms.h"
 #include "third_party/blink/renderer/platform/peerconnection/rtc_answer_options_platform.h"
 #include "third_party/blink/renderer/platform/peerconnection/rtc_event_log_output_sink.h"
@@ -900,7 +901,7 @@ class RTCPeerConnectionHandler::Observer
     }
   }
 
-  void Trace(Visitor* visitor) override {}
+  void Trace(Visitor* visitor) const override {}
 
  protected:
   // TODO(hbos): Remove once no longer mandatory to implement.
@@ -1899,6 +1900,7 @@ RTCPeerConnectionHandler::AddTrack(const WebMediaStreamTrack& track,
         native_peer_connection_, track_adapter_map_, std::move(sender_state),
         force_encoded_audio_insertable_streams_,
         force_encoded_video_insertable_streams_));
+    MaybeCreateThermalUmaListner();
     platform_transceiver = std::make_unique<blink::RTCRtpSenderOnlyTransceiver>(
         std::make_unique<blink::RTCRtpSenderImpl>(*rtp_senders_.back().get()));
   } else {
@@ -1977,16 +1979,16 @@ RTCPeerConnectionHandler::RemoveTrack(blink::RTCRtpSenderPlatform* web_sender) {
 bool RTCPeerConnectionHandler::RemoveTrackPlanB(
     blink::RTCRtpSenderPlatform* web_sender) {
   DCHECK_EQ(configuration_.sdp_semantics, webrtc::SdpSemantics::kPlanB);
-  auto web_track = web_sender->Track();
+  auto* track = web_sender->Track();
   auto it = FindSender(web_sender->Id());
   if (it == rtp_senders_.end())
     return false;
   if (!(*it)->RemoveFromPeerConnection(native_peer_connection_.get()))
     return false;
-  if (web_track) {
+  if (track) {
     track_metrics_.RemoveTrack(MediaStreamTrackMetrics::Direction::kSend,
-                               MediaStreamTrackMetricsKind(web_track),
-                               web_track.Id().Utf8());
+                               MediaStreamTrackMetricsKind(track),
+                               track->Id().Utf8());
   }
   if (peer_connection_tracker_) {
     auto sender_only_transceiver =
@@ -2093,6 +2095,44 @@ void RTCPeerConnectionHandler::CloseClientPeerConnection() {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
   if (!is_closed_)
     client_->ClosePeerConnection();
+}
+
+void RTCPeerConnectionHandler::MaybeCreateThermalUmaListner() {
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
+  if (!thermal_uma_listener_) {
+    // Instantiate the thermal uma listener only if we are sending video.
+    for (const auto& sender : rtp_senders_) {
+      if (sender->Track() && sender->Track()->Source()->GetType() ==
+                                 MediaStreamSource::kTypeVideo) {
+        thermal_uma_listener_ = ThermalUmaListener::Create(task_runner_);
+        thermal_uma_listener_->OnThermalMeasurement(last_thermal_state_);
+        return;
+      }
+    }
+  }
+}
+
+ThermalUmaListener* RTCPeerConnectionHandler::thermal_uma_listener() const {
+  return thermal_uma_listener_.get();
+}
+
+void RTCPeerConnectionHandler::OnThermalStateChange(
+    base::PowerObserver::DeviceThermalState thermal_state) {
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
+  if (is_closed_)
+    return;
+  last_thermal_state_ = thermal_state;
+  if (thermal_uma_listener_) {
+    thermal_uma_listener_->OnThermalMeasurement(thermal_state);
+  }
+  if (!base::FeatureList::IsEnabled(kWebRtcThermalResource))
+    return;
+  if (!thermal_resource_) {
+    thermal_resource_ = ThermalResource::Create(task_runner_);
+    native_peer_connection_->AddAdaptationResource(
+        rtc::scoped_refptr<ThermalResource>(thermal_resource_.get()));
+  }
+  thermal_resource_->OnThermalMeasurement(thermal_state);
 }
 
 void RTCPeerConnectionHandler::StartEventLog(int output_period_ms) {
@@ -2324,11 +2364,11 @@ void RTCPeerConnectionHandler::OnAddReceiverPlanB(
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
   DCHECK(receiver_state.is_initialized());
   TRACE_EVENT0("webrtc", "RTCPeerConnectionHandler::OnAddReceiverPlanB");
-  auto web_track = receiver_state.track_ref()->web_track();
+  auto* track = receiver_state.track_ref()->track();
   // Update metrics.
   track_metrics_.AddTrack(MediaStreamTrackMetrics::Direction::kReceive,
-                          MediaStreamTrackMetricsKind(web_track),
-                          web_track.Id().Utf8());
+                          MediaStreamTrackMetricsKind(track),
+                          track->Id().Utf8());
   for (const auto& stream_id : receiver_state.stream_ids()) {
     // New remote stream?
     if (!IsRemoteStream(rtp_receivers_, stream_id)) {
@@ -2369,7 +2409,7 @@ void RTCPeerConnectionHandler::OnRemoveReceiverPlanB(uintptr_t receiver_id) {
   // Update metrics.
   track_metrics_.RemoveTrack(MediaStreamTrackMetrics::Direction::kReceive,
                              MediaStreamTrackMetricsKind(receiver->Track()),
-                             receiver->Track().Id().Utf8());
+                             receiver->Track()->Id().Utf8());
   if (peer_connection_tracker_) {
     auto receiver_only_transceiver =
         std::make_unique<blink::RTCRtpReceiverOnlyTransceiver>(
@@ -2661,6 +2701,7 @@ RTCPeerConnectionHandler::CreateOrUpdateTransceiver(
            rtp_senders_.end());
     rtp_senders_.push_back(std::make_unique<blink::RTCRtpSenderImpl>(
         *transceiver->content_sender()));
+    MaybeCreateThermalUmaListner();
     DCHECK(FindReceiver(blink::RTCRtpReceiverImpl::getId(
                webrtc_receiver.get())) == rtp_receivers_.end());
     rtp_receivers_.push_back(std::make_unique<blink::RTCRtpReceiverImpl>(

@@ -15,7 +15,6 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/metrics/field_trial_params.h"
-#include "base/task/post_task.h"
 #include "base/time/default_tick_clock.h"
 #include "chrome/android/features/autofill_assistant/jni_headers/AutofillAssistantClient_jni.h"
 #include "chrome/android/features/autofill_assistant/jni_headers/AutofillAssistantDirectActionImpl_jni.h"
@@ -360,7 +359,8 @@ bool ClientAndroid::PerformDirectAction(
   // always available, even if no action was found and action_index == -1.
   if (action_name == kCancelActionName && ui_controller_android_) {
     ui_controller_android_->CloseOrCancel(action_index,
-                                          std::move(trigger_context));
+                                          std::move(trigger_context),
+                                          Metrics::DropOutReason::SHEET_CLOSED);
     return true;
   }
 
@@ -518,6 +518,11 @@ DeviceContext ClientAndroid::GetDeviceContext() const {
   return context;
 }
 
+bool ClientAndroid::IsAccessibilityEnabled() const {
+  return Java_AutofillAssistantClient_isAccessibilityEnabled(
+      AttachCurrentThread(), java_object_);
+}
+
 content::WebContents* ClientAndroid::GetWebContents() const {
   return web_contents_;
 }
@@ -537,8 +542,8 @@ void ClientAndroid::Shutdown(Metrics::DropOutReason reason) {
 
   // Delete the controller in a separate task. This avoids tricky ordering
   // issues when Shutdown is called from the controller.
-  base::PostTask(FROM_HERE, {content::BrowserThread::UI},
-                 base::BindOnce(&ClientAndroid::DestroyController,
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE, base::BindOnce(&ClientAndroid::DestroyController,
                                 weak_ptr_factory_.GetWeakPtr()));
 }
 

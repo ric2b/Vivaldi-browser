@@ -15,11 +15,14 @@
 #include <utility>
 #include <vector>
 
+#include "base/json/json_writer.h"
 #include "base/lazy_instance.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/thread_task_runner_handle.h"
+#include "base/values.h"
 #include "base/win/enum_variant.h"
 #include "base/win/scoped_bstr.h"
 #include "base/win/scoped_safearray.h"
@@ -27,6 +30,7 @@
 #include "skia/ext/skia_utils_win.h"
 #include "third_party/iaccessible2/ia2_api_all.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/accessibility/accessibility_features.h"
 #include "ui/accessibility/accessibility_switches.h"
 #include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_active_popup.h"
@@ -43,6 +47,7 @@
 #include "ui/accessibility/platform/ax_platform_node_textchildprovider_win.h"
 #include "ui/accessibility/platform/ax_platform_node_textprovider_win.h"
 #include "ui/accessibility/platform/ax_platform_relation_win.h"
+#include "ui/accessibility/platform/uia_registrar_win.h"
 #include "ui/base/win/atl_module.h"
 #include "ui/display/win/screen_win.h"
 #include "ui/gfx/geometry/rect_conversions.h"
@@ -297,7 +302,7 @@ AXPlatformNode* AXPlatformNode::FromNativeViewAccessible(
 // AXPlatformNodeWin
 //
 
-AXPlatformNodeWin::AXPlatformNodeWin() : force_new_hypertext_(false) {}
+AXPlatformNodeWin::AXPlatformNodeWin() {}
 
 AXPlatformNodeWin::~AXPlatformNodeWin() {
   ClearOwnRelations();
@@ -305,17 +310,12 @@ AXPlatformNodeWin::~AXPlatformNodeWin() {
 
 void AXPlatformNodeWin::Init(AXPlatformNodeDelegate* delegate) {
   AXPlatformNodeBase::Init(delegate);
-  force_new_hypertext_ = false;
 }
 
 void AXPlatformNodeWin::ClearOwnRelations() {
   for (size_t i = 0; i < relations_.size(); ++i)
     relations_[i]->Invalidate();
   relations_.clear();
-}
-
-void AXPlatformNodeWin::ForceNewHypertext() {
-  force_new_hypertext_ = true;
 }
 
 // Static
@@ -645,7 +645,7 @@ void AXPlatformNodeWin::NotifyAccessibilityEvent(ax::mojom::Event event_type) {
     ::VariantInit(old_value.Receive());
     base::win::ScopedVariant new_value;
     ::VariantInit(new_value.Receive());
-    GetPropertyValue((*uia_property), new_value.Receive());
+    GetPropertyValueImpl((*uia_property), new_value.Receive());
     ::UiaRaiseAutomationPropertyChangedEvent(this, (*uia_property), old_value,
                                              new_value);
   }
@@ -1263,6 +1263,14 @@ IFACEMETHODIMP AXPlatformNodeWin::get_states(AccessibleStates* states) {
 IFACEMETHODIMP AXPlatformNodeWin::get_uniqueID(LONG* id) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_UNIQUE_ID);
   COM_OBJECT_VALIDATE_1_ARG(id);
+  // We want to negate the unique id for it to be consistent across different
+  // Windows accessiblity APIs. The negative unique id convention originated
+  // from ::NotifyWinEvent() takes an hwnd and a child id. A 0 child id means
+  // self, and a positive child id means child #n. In order to fire an event for
+  // an arbitrary descendant of the window, Firefox started the practice of
+  // using a negative unique id. We follow the same negative unique id
+  // convention here and when we fire events via
+  // ::NotifyWinEvent().
   *id = -GetUniqueId();
   return S_OK;
 }
@@ -2075,7 +2083,23 @@ HRESULT AXPlatformNodeWin::ISelectionItemProviderSetSelected(
       return UIA_E_ELEMENTNOTENABLED;
   }
 
-  if (selected == ISelectionItemProviderIsSelected())
+  // The platform implements selection follows focus for single-selection
+  // container elements. Focus action can change a node's accessibility selected
+  // state, but does not cause the actual control to be selected.
+  // https://www.w3.org/TR/wai-aria-practices-1.1/#kbd_selection_follows_focus
+  // https://www.w3.org/TR/core-aam-1.2/#mapping_events_selection
+  //
+  // We don't want to perform |Action::kDoDefault| for an ax node that has
+  // |kSelected=true| and |kSelectedFromFocus=false|, because perform
+  // |Action::kDoDefault| may cause the control to be unselected. However, if an
+  // ax node is selected due to focus, i.e. |kSelectedFromFocus=true|, we need
+  // to perform |Action::kDoDefault| on the ax node, since focus action only
+  // changes an ax node's accessibility selected state to |kSelected=true| and
+  // no |Action::kDoDefault| was performed on that node yet. So we need to
+  // perform |Action::kDoDefault| on the ax node to cause its associated control
+  // to be selected.
+  if (selected == ISelectionItemProviderIsSelected() &&
+      !GetBoolAttribute(ax::mojom::BoolAttribute::kSelectedFromFocus))
     return S_OK;
 
   AXActionData data;
@@ -3971,6 +3995,11 @@ IFACEMETHODIMP AXPlatformNodeWin::get_FragmentRoot(
 IFACEMETHODIMP AXPlatformNodeWin::GetPatternProvider(PATTERNID pattern_id,
                                                      IUnknown** result) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_PATTERN_PROVIDER);
+  return GetPatternProviderImpl(pattern_id, result);
+}
+
+HRESULT AXPlatformNodeWin::GetPatternProviderImpl(PATTERNID pattern_id,
+                                                  IUnknown** result) {
   UIA_VALIDATE_CALL_1_ARG(result);
 
   *result = nullptr;
@@ -3997,7 +4026,11 @@ IFACEMETHODIMP AXPlatformNodeWin::GetPropertyValue(PROPERTYID property_id,
     // Collapse all unknown property IDs into a single bucket.
     base::UmaHistogramSparse("Accessibility.WinAPIs.GetPropertyValue", 0);
   }
+  return GetPropertyValueImpl(property_id, result);
+}
 
+HRESULT AXPlatformNodeWin::GetPropertyValueImpl(PROPERTYID property_id,
+                                                VARIANT* result) {
   UIA_VALIDATE_CALL_1_ARG(result);
 
   result->vt = VT_EMPTY;
@@ -4005,6 +4038,7 @@ IFACEMETHODIMP AXPlatformNodeWin::GetPropertyValue(PROPERTYID property_id,
   int int_attribute;
   const AXNodeData& data = GetData();
 
+  // Default UIA Property Ids.
   switch (property_id) {
     case UIA_AriaPropertiesPropertyId:
       result->vt = VT_BSTR;
@@ -4044,9 +4078,7 @@ IFACEMETHODIMP AXPlatformNodeWin::GetPropertyValue(PROPERTYID property_id,
       break;
 
     case UIA_CulturePropertyId:
-      result->vt = VT_BSTR;
-      GetStringAttributeAsBstr(ax::mojom::StringAttribute::kLanguage,
-                               &result->bstrVal);
+      return GetCultureAttributeAsVariant(result);
       break;
 
     case UIA_DescribedByPropertyId:
@@ -4366,6 +4398,21 @@ IFACEMETHODIMP AXPlatformNodeWin::GetPropertyValue(PROPERTYID property_id,
     case UIA_ProviderDescriptionPropertyId:
     case UIA_RuntimeIdPropertyId:
       break;
+  }  // End of default UIA property ids.
+
+  // Custom UIA Property Ids.
+  if (property_id ==
+      UiaRegistrarWin::GetInstance().GetUiaUniqueIdPropertyId()) {
+    // We want to negate the unique id for it to be consistent across different
+    // Windows accessiblity APIs. The negative unique id convention originated
+    // from ::NotifyWinEvent() takes an hwnd and a child id. A 0 child id means
+    // self, and a positive child id means child #n. In order to fire an event
+    // for an arbitrary descendant of the window, Firefox started the practice
+    // of using a negative unique id. We follow the same negative unique id
+    // convention here and when we fire events via ::NotifyWinEvent().
+    result->vt = VT_BSTR;
+    result->bstrVal =
+        SysAllocString(base::NumberToString16(-GetUniqueId()).c_str());
   }
 
   return S_OK;
@@ -4405,6 +4452,71 @@ IFACEMETHODIMP AXPlatformNodeWin::ShowContextMenu() {
 }
 
 //
+// IChromeAccessible implementation.
+//
+
+void SendBulkFetchResponse(
+    Microsoft::WRL::ComPtr<IChromeAccessibleDelegate> delegate,
+    LONG request_id,
+    std::string json_result) {
+  base::string16 json_result_utf16 = base::UTF8ToUTF16(json_result);
+  delegate->put_bulkFetchResult(request_id,
+                                SysAllocString(json_result_utf16.c_str()));
+}
+
+IFACEMETHODIMP AXPlatformNodeWin::get_bulkFetch(
+    BSTR input_json,
+    LONG request_id,
+    IChromeAccessibleDelegate* delegate) {
+  COM_OBJECT_VALIDATE();
+  if (!delegate)
+    return E_INVALIDARG;
+
+  // TODO(crbug.com/1083834): if parsing |input_json|, use
+  // DataDecoder because the json is untrusted. For now, this is just
+  // a stub that calls PostTask so that it's async, but it doesn't
+  // actually parse the input.
+
+  base::Value result(base::Value::Type::DICTIONARY);
+  result.SetKey("role", base::Value(ui::ToString(GetData().role)));
+
+  gfx::Rect bounds = GetDelegate()->GetBoundsRect(
+      AXCoordinateSystem::kScreenDIPs, AXClippingBehavior::kUnclipped);
+  result.SetKey("x", base::Value(bounds.x()));
+  result.SetKey("y", base::Value(bounds.y()));
+  result.SetKey("width", base::Value(bounds.width()));
+  result.SetKey("height", base::Value(bounds.height()));
+  std::string json_result;
+  base::JSONWriter::Write(result, &json_result);
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          &SendBulkFetchResponse,
+          Microsoft::WRL::ComPtr<IChromeAccessibleDelegate>(delegate),
+          request_id, json_result));
+  return S_OK;
+}
+
+IFACEMETHODIMP AXPlatformNodeWin::get_hitTest(
+    LONG screen_physical_pixel_x,
+    LONG screen_physical_pixel_y,
+    LONG request_id,
+    IChromeAccessibleDelegate* delegate) {
+  COM_OBJECT_VALIDATE();
+
+  if (!delegate)
+    return E_INVALIDARG;
+
+  // TODO(crbug.com/1083834): Plumb through an actual async hit test.
+  AXPlatformNodeWin* hit_child = static_cast<AXPlatformNodeWin*>(
+      FromNativeViewAccessible(GetDelegate()->HitTestSync(
+          screen_physical_pixel_x, screen_physical_pixel_y)));
+
+  delegate->put_hitTestResult(request_id, static_cast<IAccessible*>(hit_child));
+  return S_OK;
+}
+
+//
 // IServiceProvider implementation.
 //
 
@@ -4428,6 +4540,12 @@ IFACEMETHODIMP AXPlatformNodeWin::QueryService(REFGUID guidService,
       guidService == IID_IAccessibleText ||
       guidService == IID_IAccessibleValue) {
     return QueryInterface(riid, object);
+  }
+
+  if (guidService == IID_IChromeAccessible) {
+    if (features::IsIChromeAccessibleEnabled()) {
+      return QueryInterface(riid, object);
+    }
   }
 
   // TODO(suproteem): Include IAccessibleEx in the list, potentially checking
@@ -4466,6 +4584,10 @@ STDMETHODIMP AXPlatformNodeWin::InternalQueryInterface(
     }
   } else if (riid == IID_IAccessibleValue) {
     if (!accessible->GetData().IsRangeValueSupported()) {
+      return E_NOINTERFACE;
+    }
+  } else if (riid == IID_IChromeAccessible) {
+    if (!features::IsIChromeAccessibleEnabled()) {
       return E_NOINTERFACE;
     }
   }
@@ -5254,7 +5376,7 @@ int32_t AXPlatformNodeWin::ComputeIA2State() {
   const AXNodeData& data = GetData();
   int32_t ia2_state = IA2_STATE_OPAQUE;
 
-  if (HasIntAttribute(ax::mojom::IntAttribute::kCheckedState))
+  if (IsPlatformCheckable())
     ia2_state |= IA2_STATE_CHECKABLE;
 
   if (HasIntAttribute(ax::mojom::IntAttribute::kInvalidState) &&
@@ -6800,7 +6922,12 @@ bool AXPlatformNodeWin::IsUIAControl() const {
   // UIA provides multiple "views": raw, content and control. We only want to
   // populate the content and control views with items that make sense to
   // traverse over.
+
   if (GetDelegate()->IsWebContent()) {
+    // Invisible or ignored elements should not show up in control view at all.
+    if (IsInvisibleOrIgnored())
+      return false;
+
     if (IsTextOnlyObject()) {
       // A text leaf can be a UIAControl, but text inside of a heading, link,
       // button, etc. where the role allows the name to be generated from the
@@ -6840,7 +6967,8 @@ bool AXPlatformNodeWin::IsUIAControl() const {
         }
         parent = FromNativeViewAccessible(parent->GetParent());
       }
-    }
+    }  // end of text only case.
+
     const AXNodeData& data = GetData();
     // https://docs.microsoft.com/en-us/windows/win32/winauto/uiauto-treeoverview#control-view
     // The control view also includes noninteractive UI items that contribute
@@ -6892,9 +7020,10 @@ bool AXPlatformNodeWin::IsUIAControl() const {
         !data.HasState(ax::mojom::State::kFocusable) && !data.IsClickable()) {
       return false;
     }
+
     return true;
-  }
-  // non web-content case.
+  }  // end of web-content only case.
+
   const AXNodeData& data = GetData();
   return !((IsReadOnlySupported(data.role) && data.IsReadOnlyOrDisabled()) ||
            data.HasState(ax::mojom::State::kInvisible) ||
@@ -6959,8 +7088,10 @@ bool AXPlatformNodeWin::IsInaccessibleDueToAncestor() const {
 }
 
 bool AXPlatformNodeWin::ShouldHideChildrenForUIA() const {
-  auto role = GetData().role;
+  if (IsPlainTextField())
+    return true;
 
+  auto role = GetData().role;
   if (HasPresentationalChildren(role))
     return true;
 
@@ -6982,7 +7113,6 @@ bool AXPlatformNodeWin::ShouldHideChildrenForUIA() const {
         return only_child && only_child->IsTextOnlyObject();
       }
       return false;
-    case ax::mojom::Role::kTextField:
     case ax::mojom::Role::kPdfActionableHighlight:
       return true;
     default:
@@ -7002,6 +7132,13 @@ base::string16 AXPlatformNodeWin::GetValue() const {
     value = GetString16Attribute(ax::mojom::StringAttribute::kUrl);
 
   return value;
+}
+
+bool AXPlatformNodeWin::IsPlatformCheckable() const {
+  if (GetData().role == ax::mojom::Role::kToggleButton)
+    return false;
+
+  return AXPlatformNodeBase::IsPlatformCheckable();
 }
 
 bool AXPlatformNodeWin::ShouldNodeHaveFocusableState(
@@ -7212,6 +7349,8 @@ base::Optional<DWORD> AXPlatformNodeWin::MojoEventToMSAAEvent(
   switch (event) {
     case ax::mojom::Event::kAlert:
       return EVENT_SYSTEM_ALERT;
+    case ax::mojom::Event::kActiveDescendantChanged:
+      return IA2_EVENT_ACTIVE_DESCENDANT_CHANGED;
     case ax::mojom::Event::kCheckedStateChanged:
     case ax::mojom::Event::kExpandedChanged:
     case ax::mojom::Event::kStateChanged:

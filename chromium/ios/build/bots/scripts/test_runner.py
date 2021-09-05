@@ -158,19 +158,6 @@ def get_device_ios_version(udid):
                                   '-k', 'ProductVersion']).strip()
 
 
-def is_iOS13_or_higher_device(udid):
-  """Checks whether device with udid has iOS 13.0+.
-
-  Args:
-    udid: (str) iOS device UDID.
-
-  Returns:
-    True for iOS 13.0+ devices otherwise false.
-  """
-  return (distutils.version.LooseVersion(get_device_ios_version(udid)) >=
-          distutils.version.LooseVersion('13.0'))
-
-
 def defaults_write(d, key, value):
   """Run 'defaults write d key value' command.
 
@@ -316,10 +303,16 @@ def get_xctest_from_app(app):
   """
   plugins_dir = os.path.join(app, 'PlugIns')
   if not os.path.exists(plugins_dir):
+    # TODO(crbug.com/1001667): Throw error when all device unit test should run
+    # with xctest.
+    LOGGER.warning('PlugIns dir doesn\'t exist in app.\n')
     return None
   for plugin in os.listdir(plugins_dir):
     if plugin.endswith('.xctest'):
       return os.path.join(plugins_dir, plugin)
+  # TODO(crbug.com/1001667): Throw error when all device unit test should run
+  # with xctest.
+  LOGGER.warning('.xctest doesn\'t exist in app PlugIns dir.\n')
   return None
 
 
@@ -557,6 +550,11 @@ class TestRunner(object):
 
     result.passed_tests.extend(parser.PassedTests(include_flaky=True))
 
+    # Only GTest outputs compiled tests in a json file.
+    if not self.xctest:
+      result.disabled_tests_from_compiled_tests_file.extend(
+          parser.DisabledTestsFromCompiledTestsFile())
+
     LOGGER.info('%s returned %s\n', cmd[0], returncode)
 
     # xcodebuild can return 5 if it exits noncleanly even if all tests passed.
@@ -579,7 +577,7 @@ class TestRunner(object):
       if self.__class__.__name__ == 'DeviceTestRunner':
         # When self.xctest is False and (bool)self.xctest_path is True and it's
         # using a device runner, this is a XCTest hosted unit test, which is
-        # currently running on iOS 13+ devices.
+        # currently running on real devices.
         # TODO(crbug.com/1006881): Separate "running style" from "parser style"
         # for XCtests and Gtests.
         test_app = test_apps.DeviceXCTestUnitTestsApp(
@@ -617,6 +615,7 @@ class TestRunner(object):
       passed = result.passed_tests
       failed = result.failed_tests
       flaked = result.flaked_tests
+      disabled = result.disabled_tests_from_compiled_tests_file
 
       try:
         while result.crashed and result.crashed_test:
@@ -635,6 +634,9 @@ class TestRunner(object):
           passed.extend(result.passed_tests)
           failed.update(result.failed_tests)
           flaked.update(result.flaked_tests)
+          if not disabled:
+            disabled = result.disabled_tests_from_compiled_tests_file
+
       except OSError as e:
         if e.errno == errno.E2BIG:
           LOGGER.error('Too many test cases to resume.')
@@ -667,6 +669,8 @@ class TestRunner(object):
             # Save the result of the latest run for each test.
             retry_results[test] = retry_result
 
+      output.mark_all_skipped(disabled)
+
       # Build test_results.json.
       # Check if if any of the retries crashed in addition to the original run.
       interrupted = (result.crashed or
@@ -680,6 +684,8 @@ class TestRunner(object):
       self.test_results['tests'] = output.tests
 
       self.logs['passed tests'] = passed
+      if disabled:
+        self.logs['disabled tests'] = disabled
       if flaked:
         self.logs['flaked tests'] = flaked
       if failed:
@@ -870,6 +876,8 @@ class SimulatorTestRunner(TestRunner):
     self.kill_simulators()
     LOGGER.debug('Wiping simulator.')
     self.wipe_simulator()
+    LOGGER.debug('Deleting simulator.')
+    self.deleteSimulator(self.udid)
     if os.path.exists(self.homedir):
       shutil.rmtree(self.homedir, ignore_errors=True)
       self.homedir = ''
@@ -980,13 +988,10 @@ class DeviceTestRunner(TestRunner):
     if len(self.udid.splitlines()) != 1:
       raise DeviceDetectionError(self.udid)
 
-    is_iOS13 = is_iOS13_or_higher_device(self.udid)
-
-    # GTest-based unittests are invoked via XCTest on iOS 13+ devices
+    # GTest-based unittests are invoked via XCTest for all devices
     # but produce GTest-style log output that is parsed with a GTestLogParser.
-    if xctest or is_iOS13:
-      if is_iOS13:
-        self.xctest_path = get_xctest_from_app(self.app_path)
+    self.xctest_path = get_xctest_from_app(self.app_path)
+
     self.restart = restart
 
   def uninstall_apps(self):

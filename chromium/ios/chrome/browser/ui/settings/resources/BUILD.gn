@@ -26,6 +26,14 @@ imageset("encryption_error") {
   ]
 }
 
+imageset("enterprise_icon") {
+  sources = [
+    "enterprise_icon.imageset/Contents.json",
+    "enterprise_icon.imageset/enterprise_icon@2x.png",
+    "enterprise_icon.imageset/enterprise_icon@3x.png",
+  ]
+}
+
 imageset("settings_accounts_add_account") {
   sources = [
     "settings_accounts_add_account.imageset/Contents.json",
@@ -180,5 +188,29 @@ imageset("sync_and_google_services_sync_on") {
     "sync_and_google_services_sync_on.imageset/Contents.json",
     "sync_and_google_services_sync_on.imageset/sync_and_google_services_sync_on@2x.png",
     "sync_and_google_services_sync_on.imageset/sync_and_google_services_sync_on@3x.png",
+  ]
+}
+
+imageset("settings_unsafe_state") {
+  sources = [
+    "settings_unsafe_state.imageset/Contents.json",
+    "settings_unsafe_state.imageset/settings_unsafe_state@2x.png",
+    "settings_unsafe_state.imageset/settings_unsafe_state@3x.png",
+  ]
+}
+
+imageset("settings_safe_state") {
+  sources = [
+    "settings_safe_state.imageset/Contents.json",
+    "settings_safe_state.imageset/settings_safe_state@2x.png",
+    "settings_safe_state.imageset/settings_safe_state@3x.png",
+  ]
+}
+
+imageset("settings_info") {
+  sources = [
+    "settings_info.imageset/Contents.json",
+    "settings_info.imageset/settings_info@2x.png",
+    "settings_info.imageset/settings_info@3x.png",
   ]
 }

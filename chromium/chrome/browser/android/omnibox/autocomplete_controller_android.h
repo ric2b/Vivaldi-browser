@@ -23,6 +23,7 @@
 class AutocompleteController;
 struct AutocompleteMatch;
 class AutocompleteResult;
+class ChromeAutocompleteProviderClient;
 class Profile;
 
 // The native part of the Java AutocompleteController class.
@@ -43,7 +44,8 @@ class AutocompleteControllerAndroid : public AutocompleteController::Observer,
              bool prefer_keyword,
              bool allow_exact_keyword_match,
              bool want_asynchronous_matches,
-             const base::android::JavaRef<jstring>& j_query_tile_id);
+             const base::android::JavaRef<jstring>& j_query_tile_id,
+             bool is_query_started_from_tiles);
   base::android::ScopedJavaLocalRef<jobject> Classify(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
@@ -65,6 +67,7 @@ class AutocompleteControllerAndroid : public AutocompleteController::Observer,
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
       jint selected_index,
+      const jint j_window_open_disposition,
       jint hash_code,
       const base::android::JavaParamRef<jstring>& j_current_url,
       jint j_page_classification,
@@ -82,6 +85,10 @@ class AutocompleteControllerAndroid : public AutocompleteController::Observer,
       jint selected_index,
       jint hash_code,
       jlong elapsed_time_since_input_change);
+  base::android::ScopedJavaLocalRef<jobject> FindMatchingTabWithUrl(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jobject>& j_gurl);
 
   // KeyedService:
   void Shutdown() override;
@@ -154,6 +161,11 @@ class AutocompleteControllerAndroid : public AutocompleteController::Observer,
 
   JavaObjectWeakGlobalRef weak_java_autocomplete_controller_android_;
   Profile* profile_;
+  ChromeAutocompleteProviderClient* provider_client_;
+
+  // Whether the omnibox input is a query that starts building
+  // by clicking on an image tile.
+  bool is_query_started_from_tiles_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(AutocompleteControllerAndroid);
 };

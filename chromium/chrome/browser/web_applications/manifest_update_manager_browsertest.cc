@@ -8,12 +8,15 @@
 #include <vector>
 
 #include "base/bind_helpers.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/strings/string_util.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/installable/installable_metrics.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/web_applications/components/app_icon_manager.h"
@@ -24,6 +27,7 @@
 #include "chrome/browser/web_applications/components/pending_app_manager.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/browser/web_applications/components/web_app_provider_base.h"
+#include "chrome/browser/web_applications/extensions/bookmark_app_registrar.h"
 #include "chrome/browser/web_applications/system_web_app_manager.h"
 #include "chrome/browser/web_applications/test/test_system_web_app_installation.h"
 #include "chrome/browser/web_applications/test/web_app_install_observer.h"
@@ -33,6 +37,8 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/url_loader_interceptor.h"
+#include "extensions/browser/extension_registry.h"
+#include "extensions/browser/test_extension_registry_observer.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -54,6 +60,8 @@ constexpr char kInstallableIconList[] = R"(
     }
   ]
 )";
+constexpr SkColor kInstallableIconTopLeftColor =
+    SkColorSetRGB(0x15, 0x96, 0xE0);
 
 constexpr char kAnotherInstallableIconList[] = R"(
   [
@@ -64,6 +72,65 @@ constexpr char kAnotherInstallableIconList[] = R"(
     }
   ]
 )";
+
+constexpr char kAnotherShortcutsItemName[] = "Timeline";
+constexpr char kAnotherShortcutsItemUrl[] = "/shortcut";
+constexpr char kAnotherShortcutsItemShortName[] = "H";
+constexpr char kAnotherShortcutsItemDescription[] = "Navigate home";
+constexpr char kAnotherIconSrc[] = "/launcher-icon-4x.png";
+constexpr int kAnotherIconSize = 192;
+
+constexpr char kShortcutsItem[] = R"(
+  [
+    {
+      "name": "Home",
+      "short_name": "HM",
+      "description": "Go home",
+      "url": ".",
+      "icons": [
+        {
+          "src": "/banners/image-512px.png",
+          "sizes": "512x512",
+          "type": "image/png"
+        }
+      ]
+    }
+  ]
+)";
+
+constexpr char kShortcutsItems[] = R"(
+  [
+    {
+      "name": "Home",
+      "short_name": "HM",
+      "description": "Go home",
+      "url": ".",
+      "icons": [
+        {
+          "src": "/banners/image-512px.png",
+          "sizes": "512x512",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Settings",
+      "short_name": "ST",
+      "description": "App settings",
+      "url": "/settings",
+      "icons": [
+        {
+          "src": "launcher-icon-4x.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
+  ]
+)";
+
+constexpr SkColor kAnotherInstallableIconTopLeftColor =
+    SkColorSetRGB(0x5C, 0x5C, 0x5C);
 
 ManifestUpdateManager& GetManifestUpdateManager(Browser* browser) {
   return WebAppProviderBase::GetProviderBase(browser->profile())
@@ -137,6 +204,26 @@ class ManifestUpdateManagerBrowserTest
 
   void SetUpOnMainThread() override {
     GetProvider().shortcut_manager().SuppressShortcutsForTesting();
+    // Cannot construct RunLoop in constructor due to threading restrictions.
+    shortcut_run_loop_.emplace();
+    AppShortcutManager::SetShortcutUpdateCallbackForTesting(
+        base::BindOnce(&ManifestUpdateManagerBrowserTest::OnShortcutUpdated,
+                       base::Unretained(this)));
+  }
+
+  void OnShortcutUpdated(const ShortcutInfo* shortcut_info) {
+    if (shortcut_info) {
+      updated_shortcut_top_left_color_ =
+          shortcut_info->favicon.begin()->AsBitmap().getColor(0, 0);
+    }
+    shortcut_run_loop_->Quit();
+  }
+
+  void AwaitShortcutsUpdated(SkColor top_left_color) {
+    if (!GetProvider().shortcut_manager().CanCreateShortcuts())
+      return;
+    shortcut_run_loop_->Run();
+    EXPECT_EQ(updated_shortcut_top_left_color_, top_left_color);
   }
 
   std::unique_ptr<net::test_server::HttpResponse> RequestHandlerOverride(
@@ -239,6 +326,9 @@ class ManifestUpdateManagerBrowserTest
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
+
+  base::Optional<base::RunLoop> shortcut_run_loop_;
+  base::Optional<SkColor> updated_shortcut_top_left_color_;
 
   DISALLOW_COPY_AND_ASSIGN(ManifestUpdateManagerBrowserTest);
 };
@@ -546,6 +636,7 @@ IN_PROC_BROWSER_TEST_P(ManifestUpdateManagerBrowserTest,
             ManifestUpdateResult::kAppUpdated);
   histogram_tester_.ExpectBucketCount(kUpdateHistogramName,
                                       ManifestUpdateResult::kAppUpdated, 1);
+  AwaitShortcutsUpdated(kInstallableIconTopLeftColor);
   EXPECT_EQ(GetProvider().registrar().GetAppThemeColor(app_id), SK_ColorRED);
 }
 
@@ -572,6 +663,7 @@ IN_PROC_BROWSER_TEST_P(ManifestUpdateManagerBrowserTest, CheckKeepsSameName) {
             ManifestUpdateResult::kAppUpdated);
   histogram_tester_.ExpectBucketCount(kUpdateHistogramName,
                                       ManifestUpdateResult::kAppUpdated, 1);
+  AwaitShortcutsUpdated(kInstallableIconTopLeftColor);
   EXPECT_EQ(GetProvider().registrar().GetAppThemeColor(app_id), SK_ColorRED);
   // The app name must not change without user confirmation.
   EXPECT_EQ(GetProvider().registrar().GetAppShortName(app_id), "App name 1");
@@ -596,6 +688,7 @@ IN_PROC_BROWSER_TEST_P(ManifestUpdateManagerBrowserTest,
             ManifestUpdateResult::kAppUpdated);
   histogram_tester_.ExpectBucketCount(kUpdateHistogramName,
                                       ManifestUpdateResult::kAppUpdated, 1);
+  AwaitShortcutsUpdated(kAnotherInstallableIconTopLeftColor);
 }
 
 IN_PROC_BROWSER_TEST_P(ManifestUpdateManagerBrowserTest,
@@ -620,6 +713,7 @@ IN_PROC_BROWSER_TEST_P(ManifestUpdateManagerBrowserTest,
             ManifestUpdateResult::kAppUpdated);
   histogram_tester_.ExpectBucketCount(kUpdateHistogramName,
                                       ManifestUpdateResult::kAppUpdated, 1);
+  AwaitShortcutsUpdated(kInstallableIconTopLeftColor);
 
   // Policy installed apps should continue to be not uninstallable by the user
   // after updating.
@@ -646,6 +740,7 @@ IN_PROC_BROWSER_TEST_P(ManifestUpdateManagerBrowserTest,
             ManifestUpdateResult::kAppUpdated);
   histogram_tester_.ExpectBucketCount(kUpdateHistogramName,
                                       ManifestUpdateResult::kAppUpdated, 1);
+  AwaitShortcutsUpdated(kInstallableIconTopLeftColor);
   EXPECT_EQ(GetProvider().registrar().GetAppScope(app_id),
             http_server_.GetURL("/"));
 }
@@ -669,6 +764,7 @@ IN_PROC_BROWSER_TEST_P(ManifestUpdateManagerBrowserTest,
             ManifestUpdateResult::kAppUpdated);
   histogram_tester_.ExpectBucketCount(kUpdateHistogramName,
                                       ManifestUpdateResult::kAppUpdated, 1);
+  AwaitShortcutsUpdated(kInstallableIconTopLeftColor);
   EXPECT_EQ(GetProvider().registrar().GetAppDisplayMode(app_id),
             DisplayMode::kStandalone);
 }
@@ -706,7 +802,7 @@ IN_PROC_BROWSER_TEST_P(ManifestUpdateManagerBrowserTest,
       "display": "standalone",
       "icons": [
         {
-          "src": "/web_apps/basic-192.png",
+          "src": "/web_apps/basic-192.png?ignore",
           "sizes": "192x192",
           "type": "image/png"
         }
@@ -722,7 +818,7 @@ IN_PROC_BROWSER_TEST_P(ManifestUpdateManagerBrowserTest,
       [this](content::URLLoaderInterceptor::RequestParams* params)
           -> bool /*intercepted*/ {
         if (params->url_request.url ==
-            http_server_.GetURL("/web_apps/basic-192.png")) {
+            http_server_.GetURL("/web_apps/basic-192.png?ignore")) {
           content::URLLoaderInterceptor::WriteResponse(
               "chrome/test/data/web_apps/blue-192.png", params->client.get());
           return true;
@@ -734,6 +830,7 @@ IN_PROC_BROWSER_TEST_P(ManifestUpdateManagerBrowserTest,
             ManifestUpdateResult::kAppUpdated);
   histogram_tester_.ExpectBucketCount(kUpdateHistogramName,
                                       ManifestUpdateResult::kAppUpdated, 1);
+  AwaitShortcutsUpdated(SK_ColorBLUE);
 
   // Check that the installed icon is now blue.
   base::RunLoop run_loop;
@@ -757,12 +854,12 @@ IN_PROC_BROWSER_TEST_P(ManifestUpdateManagerBrowserTest,
       "display": "standalone",
       "icons": [
         {
-          "src": "/web_apps/basic-48.png",
+          "src": "/web_apps/basic-48.png?ignore",
           "sizes": "48x48",
           "type": "image/png"
         },
         {
-          "src": "/web_apps/basic-192.png",
+          "src": "/web_apps/basic-192.png?ignore",
           "sizes": "192x192",
           "type": "image/png"
         }
@@ -779,13 +876,13 @@ IN_PROC_BROWSER_TEST_P(ManifestUpdateManagerBrowserTest,
       [this](content::URLLoaderInterceptor::RequestParams* params)
           -> bool /*intercepted*/ {
         if (params->url_request.url ==
-            http_server_.GetURL("/web_apps/basic-48.png")) {
+            http_server_.GetURL("/web_apps/basic-48.png?ignore")) {
           content::URLLoaderInterceptor::WriteResponse("malformed response", "",
                                                        params->client.get());
           return true;
         }
         if (params->url_request.url ==
-            http_server_.GetURL("/web_apps/basic-192.png")) {
+            http_server_.GetURL("/web_apps/basic-192.png?ignore")) {
           content::URLLoaderInterceptor::WriteResponse(
               "chrome/test/data/web_apps/blue-192.png", params->client.get());
           return true;
@@ -859,6 +956,353 @@ IN_PROC_BROWSER_TEST_P(ManifestUpdateManagerSystemAppBrowserTest,
   EXPECT_EQ(GetProvider().registrar().GetAppThemeColor(app_id), SK_ColorGREEN);
 }
 
+using ManifestUpdateManagerWebAppsBrowserTest =
+    ManifestUpdateManagerBrowserTest;
+
+IN_PROC_BROWSER_TEST_P(ManifestUpdateManagerWebAppsBrowserTest,
+                       CheckFindsThemeColorChangeForShadowBookmarkApp) {
+  auto* extensions_registry =
+      extensions::ExtensionRegistry::Get(browser()->profile());
+  extensions::TestExtensionRegistryObserver extensions_registry_observer(
+      extensions_registry);
+
+  extensions::BookmarkAppRegistrar bookmark_app_registrar{browser()->profile()};
+
+  constexpr char kManifestTemplate[] = R"(
+    {
+      "name": "Test app name",
+      "start_url": ".",
+      "scope": "/",
+      "display": "standalone",
+      "icons": $1,
+      "theme_color": "$2"
+    }
+  )";
+  OverrideManifest(kManifestTemplate, {kInstallableIconList, "blue"});
+  AppId app_id = InstallWebApp();
+  EXPECT_EQ(GetProvider().registrar().GetAppThemeColor(app_id), SK_ColorBLUE);
+
+  scoped_refptr<const extensions::Extension> extension =
+      extensions_registry_observer.WaitForExtensionInstalled();
+  EXPECT_EQ(extension->id(), app_id);
+  EXPECT_EQ(bookmark_app_registrar.GetAppThemeColor(app_id).value(),
+            SK_ColorBLUE);
+
+  OverrideManifest(kManifestTemplate, {kInstallableIconList, "red"});
+  EXPECT_EQ(GetResultAfterPageLoad(GetAppURL(), &app_id),
+            ManifestUpdateResult::kAppUpdated);
+  AwaitShortcutsUpdated(kInstallableIconTopLeftColor);
+  EXPECT_EQ(GetProvider().registrar().GetAppThemeColor(app_id), SK_ColorRED);
+
+  // Wait for all update events sequentially. Otherwise the test is flaky.
+  extensions_registry_observer.WaitForExtensionUnloaded();
+  extensions_registry_observer.WaitForExtensionLoaded();
+  extension = extensions_registry_observer.WaitForExtensionReady();
+
+  EXPECT_EQ(extension->id(), app_id);
+  EXPECT_EQ(bookmark_app_registrar.GetAppThemeColor(app_id).value(),
+            SK_ColorRED);
+}
+
+class ManifestUpdateManagerBrowserTestWithShortcutsMenu
+    : public ManifestUpdateManagerBrowserTest {
+ public:
+  ManifestUpdateManagerBrowserTestWithShortcutsMenu() {
+    scoped_feature_list_.InitAndEnableFeature(
+        features::kDesktopPWAsAppIconShortcutsMenu);
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_P(ManifestUpdateManagerBrowserTestWithShortcutsMenu,
+                       CheckFindsShortcutsMenuUpdated) {
+  constexpr char kManifestTemplate[] = R"(
+    {
+      "name": "Test app name",
+      "start_url": ".",
+      "scope": "/",
+      "display": "standalone",
+      "icons": $1,
+      "shortcuts": $2
+    }
+  )";
+  OverrideManifest(kManifestTemplate, {kInstallableIconList, kShortcutsItem});
+  AppId app_id = InstallWebApp();
+
+  OverrideManifest(kManifestTemplate, {kInstallableIconList, kShortcutsItems});
+  EXPECT_EQ(GetResultAfterPageLoad(GetAppURL(), &app_id),
+            ManifestUpdateResult::kAppUpdated);
+  histogram_tester_.ExpectBucketCount(kUpdateHistogramName,
+                                      ManifestUpdateResult::kAppUpdated, 1);
+  EXPECT_EQ(GetProvider().registrar().GetAppShortcutInfos(app_id).size(), 2u);
+}
+
+IN_PROC_BROWSER_TEST_P(ManifestUpdateManagerBrowserTestWithShortcutsMenu,
+                       CheckFindsItemNameUpdated) {
+  constexpr char kManifestTemplate[] = R"(
+    {
+      "name": "Test app name",
+      "start_url": ".",
+      "scope": "/",
+      "display": "standalone",
+      "icons": $1,
+      "shortcuts": [
+        {
+          "name": "$2",
+          "short_name": "HM",
+          "description": "Go home",
+          "url": ".",
+          "icons": [
+            {
+              "src": "/banners/image-512px.png",
+              "sizes": "512x512",
+              "type": "image/png"
+            }
+          ]
+        }
+      ]
+    }
+  )";
+  OverrideManifest(kManifestTemplate, {kInstallableIconList, "Home"});
+  AppId app_id = InstallWebApp();
+
+  OverrideManifest(kManifestTemplate,
+                   {kInstallableIconList, kAnotherShortcutsItemName});
+  EXPECT_EQ(GetResultAfterPageLoad(GetAppURL(), &app_id),
+            ManifestUpdateResult::kAppUpdated);
+  histogram_tester_.ExpectBucketCount(kUpdateHistogramName,
+                                      ManifestUpdateResult::kAppUpdated, 1);
+  EXPECT_EQ(GetProvider().registrar().GetAppShortcutInfos(app_id)[0].name,
+            base::UTF8ToUTF16(kAnotherShortcutsItemName));
+}
+
+IN_PROC_BROWSER_TEST_P(ManifestUpdateManagerBrowserTestWithShortcutsMenu,
+                       CheckIgnoresShortNameAndDescriptionChange) {
+  constexpr char kManifestTemplate[] = R"(
+    {
+      "name": "Test app name",
+      "start_url": ".",
+      "scope": "/",
+      "display": "standalone",
+      "icons": $1,
+      "shortcuts": [
+        {
+          "name": "Home",
+          "short_name": "$2",
+          "description": "$3",
+          "url": ".",
+          "icons": [
+            {
+              "src": "/banners/image-512px.png",
+              "sizes": "512x512",
+              "type": "image/png"
+            }
+          ]
+        }
+      ]
+    }
+  )";
+  OverrideManifest(kManifestTemplate, {kInstallableIconList, "HM", "Go home"});
+  AppId app_id = InstallWebApp();
+
+  OverrideManifest(kManifestTemplate,
+                   {kInstallableIconList, kAnotherShortcutsItemShortName,
+                    kAnotherShortcutsItemDescription});
+  EXPECT_EQ(GetResultAfterPageLoad(GetAppURL(), &app_id),
+            ManifestUpdateResult::kAppUpToDate);
+  histogram_tester_.ExpectBucketCount(kUpdateHistogramName,
+                                      ManifestUpdateResult::kAppUpToDate, 1);
+}
+
+IN_PROC_BROWSER_TEST_P(ManifestUpdateManagerBrowserTestWithShortcutsMenu,
+                       CheckFindsItemUrlUpdated) {
+  constexpr char kManifestTemplate[] = R"(
+    {
+      "name": "Test app name",
+      "start_url": ".",
+      "scope": "/",
+      "display": "standalone",
+      "icons": $1,
+      "shortcuts": [
+        {
+          "name": "Home",
+          "short_name": "HM",
+          "description": "Go home",
+          "url": "$2",
+          "icons": [
+            {
+              "src": "/banners/image-512px.png",
+              "sizes": "512x512",
+              "type": "image/png"
+            }
+          ]
+        }
+      ]
+    }
+  )";
+  OverrideManifest(kManifestTemplate, {kInstallableIconList, "/"});
+  AppId app_id = InstallWebApp();
+
+  OverrideManifest(kManifestTemplate,
+                   {kInstallableIconList, kAnotherShortcutsItemUrl});
+  EXPECT_EQ(GetResultAfterPageLoad(GetAppURL(), &app_id),
+            ManifestUpdateResult::kAppUpdated);
+  histogram_tester_.ExpectBucketCount(kUpdateHistogramName,
+                                      ManifestUpdateResult::kAppUpdated, 1);
+  EXPECT_EQ(GetProvider().registrar().GetAppShortcutInfos(app_id)[0].url,
+            http_server_.GetURL(kAnotherShortcutsItemUrl));
+}
+
+IN_PROC_BROWSER_TEST_P(ManifestUpdateManagerBrowserTestWithShortcutsMenu,
+                       CheckFindsShortcutIconContentChange) {
+  constexpr char kManifest[] = R"(
+    {
+      "name": "Test app name",
+      "start_url": ".",
+      "scope": "/",
+      "display": "standalone",
+      "icons": $1,
+      "shortcuts": [
+        {
+          "name": "Home",
+          "short_name": "HM",
+          "description": "Go home",
+          "url": "/",
+          "icons": [
+            {
+              "src": "/web_apps/basic-192.png?ignore",
+              "sizes": "192x192",
+              "type": "image/png"
+            }
+          ]
+        }
+      ]
+    }
+  )";
+  OverrideManifest(kManifest, {kInstallableIconList});
+  AppId app_id = InstallWebApp();
+
+  // Replace the contents of basic-192.png with blue-192.png without changing
+  // the URL.
+  content::URLLoaderInterceptor url_interceptor(base::BindLambdaForTesting(
+      [this](content::URLLoaderInterceptor::RequestParams* params)
+          -> bool /*intercepted*/ {
+        if (params->url_request.url ==
+            http_server_.GetURL("/web_apps/basic-192.png?ignore")) {
+          content::URLLoaderInterceptor::WriteResponse(
+              "chrome/test/data/web_apps/blue-192.png", params->client.get());
+          return true;
+        }
+        return false;
+      }));
+
+  EXPECT_EQ(GetResultAfterPageLoad(GetAppURL(), &app_id),
+            ManifestUpdateResult::kAppUpdated);
+  histogram_tester_.ExpectBucketCount(kUpdateHistogramName,
+                                      ManifestUpdateResult::kAppUpdated, 1);
+
+  // Check that the installed icon is now blue.
+  base::RunLoop run_loop;
+  GetProvider().icon_manager().ReadAllShortcutsMenuIcons(
+      app_id,
+      base::BindLambdaForTesting(
+          [&run_loop](ShortcutsMenuIconsBitmaps shortcuts_menu_icons_bitmaps) {
+            run_loop.Quit();
+            EXPECT_EQ(shortcuts_menu_icons_bitmaps[0].at(192).getColor(0, 0),
+                      SK_ColorBLUE);
+          }));
+  run_loop.Run();
+}
+
+IN_PROC_BROWSER_TEST_P(ManifestUpdateManagerBrowserTestWithShortcutsMenu,
+                       CheckFindsShortcutIconSrcUpdated) {
+  constexpr char kManifestTemplate[] = R"(
+    {
+      "name": "Test app name",
+      "start_url": ".",
+      "scope": "/",
+      "display": "standalone",
+      "icons": $1,
+      "shortcuts": [
+        {
+          "name": "Home",
+          "short_name": "HM",
+          "description": "Go home",
+          "url": ".",
+          "icons": [
+            {
+              "src": "$2",
+              "sizes": "512x512",
+              "type": "image/png"
+            }
+          ]
+        }
+      ]
+    }
+  )";
+  OverrideManifest(kManifestTemplate,
+                   {kInstallableIconList, "/banners/image-512px.png"});
+  AppId app_id = InstallWebApp();
+
+  OverrideManifest(kManifestTemplate, {kInstallableIconList, kAnotherIconSrc});
+  EXPECT_EQ(GetResultAfterPageLoad(GetAppURL(), &app_id),
+            ManifestUpdateResult::kAppUpdated);
+  histogram_tester_.ExpectBucketCount(kUpdateHistogramName,
+                                      ManifestUpdateResult::kAppUpdated, 1);
+  EXPECT_EQ(GetProvider()
+                .registrar()
+                .GetAppShortcutInfos(app_id)[0]
+                .shortcut_icon_infos[0]
+                .url,
+            http_server_.GetURL(kAnotherIconSrc));
+}
+
+IN_PROC_BROWSER_TEST_P(ManifestUpdateManagerBrowserTestWithShortcutsMenu,
+                       CheckFindsShortcutIconSizesUpdated) {
+  constexpr char kManifestTemplate[] = R"(
+    {
+      "name": "Test app name",
+      "start_url": ".",
+      "scope": "/",
+      "display": "standalone",
+      "icons": $1,
+      "shortcuts": [
+        {
+          "name": "Home",
+          "short_name": "HM",
+          "description": "Go home",
+          "url": ".",
+          "icons": [
+            {
+              "src": "/banners/image-512px.png",
+              "sizes": "$2",
+              "type": "image/png"
+            }
+          ]
+        }
+      ]
+    }
+  )";
+  OverrideManifest(kManifestTemplate, {kInstallableIconList, "512x512"});
+  AppId app_id = InstallWebApp();
+
+  OverrideManifest(kManifestTemplate,
+                   {kInstallableIconList,
+                    gfx::Size(kAnotherIconSize, kAnotherIconSize).ToString()});
+  EXPECT_EQ(GetResultAfterPageLoad(GetAppURL(), &app_id),
+            ManifestUpdateResult::kAppUpdated);
+  histogram_tester_.ExpectBucketCount(kUpdateHistogramName,
+                                      ManifestUpdateResult::kAppUpdated, 1);
+  EXPECT_EQ(GetProvider()
+                .registrar()
+                .GetAppShortcutInfos(app_id)[0]
+                .shortcut_icon_infos[0]
+                .square_size_px,
+            kAnotherIconSize);
+}
+
 INSTANTIATE_TEST_SUITE_P(All,
                          ManifestUpdateManagerBrowserTest,
                          ::testing::Values(ProviderType::kBookmarkApps,
@@ -867,6 +1311,17 @@ INSTANTIATE_TEST_SUITE_P(All,
 
 INSTANTIATE_TEST_SUITE_P(All,
                          ManifestUpdateManagerSystemAppBrowserTest,
+                         ::testing::Values(ProviderType::kBookmarkApps,
+                                           ProviderType::kWebApps),
+                         ProviderTypeParamToString);
+
+INSTANTIATE_TEST_SUITE_P(All,
+                         ManifestUpdateManagerWebAppsBrowserTest,
+                         ::testing::Values(ProviderType::kWebApps),
+                         ProviderTypeParamToString);
+
+INSTANTIATE_TEST_SUITE_P(All,
+                         ManifestUpdateManagerBrowserTestWithShortcutsMenu,
                          ::testing::Values(ProviderType::kBookmarkApps,
                                            ProviderType::kWebApps),
                          ProviderTypeParamToString);

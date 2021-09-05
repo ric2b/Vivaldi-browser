@@ -46,9 +46,8 @@ void FakeLocalFrameHost::DocumentAvailableInMainFrame(
     bool uses_temporary_zoom_level) {}
 
 void FakeLocalFrameHost::SetNeedsOcclusionTracking(bool needs_tracking) {}
-
-void FakeLocalFrameHost::LifecycleStateChanged(
-    mojom::blink::FrameLifecycleState state) {}
+void FakeLocalFrameHost::SetVirtualKeyboardOverlayPolicy(
+    bool vk_overlays_content) {}
 
 void FakeLocalFrameHost::EvictFromBackForwardCache() {}
 
@@ -62,6 +61,8 @@ void FakeLocalFrameHost::DidFailLoadWithError(const ::blink::KURL& url,
                                               int32_t error_code) {}
 
 void FakeLocalFrameHost::DidFocusFrame() {}
+
+void FakeLocalFrameHost::DidCallFocus() {}
 
 void FakeLocalFrameHost::EnforceInsecureRequestPolicy(
     mojom::InsecureRequestPolicy policy_bitmap) {}
@@ -107,7 +108,7 @@ void FakeLocalFrameHost::RenderFallbackContentInParentProcess() {}
 
 void FakeLocalFrameHost::UpdateTitle(
     const WTF::String& title,
-    mojo_base::mojom::blink::TextDirection title_direction) {}
+    base::i18n::TextDirection title_direction) {}
 
 void FakeLocalFrameHost::UpdateUserActivationState(
     mojom::blink::UserActivationUpdateType update_type) {}
@@ -182,6 +183,13 @@ void FakeLocalFrameHost::DidLoadResourceFromMemoryCache(
 void FakeLocalFrameHost::DidChangeFrameOwnerProperties(
     const base::UnguessableToken& child_frame_token,
     mojom::blink::FrameOwnerPropertiesPtr frame_owner_properties) {}
+
+void FakeLocalFrameHost::DidChangeOpener(
+    const base::Optional<base::UnguessableToken>& opener_frame) {}
+
+void FakeLocalFrameHost::DidChangeFramePolicy(
+    const base::UnguessableToken& child_frame_token,
+    const FramePolicy& frame_policy) {}
 
 void FakeLocalFrameHost::BindFrameHostReceiver(
     mojo::ScopedInterfaceEndpointHandle handle) {

@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "chromeos/services/assistant/public/cpp/features.h"
+#include "chromeos/constants/chromeos_features.h"
 
 #include "base/feature_list.h"
 
@@ -13,14 +14,11 @@ namespace features {
 const base::Feature kAssistantAudioEraser{"AssistantAudioEraser",
                                           base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kAssistantFeedbackUi{"AssistantFeedbackUi",
+const base::Feature kAssistantAppSupport{"AssistantAppSupport",
                                          base::FEATURE_ENABLED_BY_DEFAULT};
 
-const base::Feature kAssistantWarmerWelcomeFeature{
-    "AssistantWarmerWelcome", base::FEATURE_ENABLED_BY_DEFAULT};
-
-const base::Feature kAssistantAppSupport{"AssistantAppSupport",
-                                         base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kAssistantBetterOnboarding{
+    "AssistantBetterOnboarding", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kAssistantConversationStartersV2{
     "AssistantConversationStartersV2", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -28,52 +26,8 @@ const base::Feature kAssistantConversationStartersV2{
 const base::Feature kAssistantLauncherChipIntegration{
     "AssistantLauncherChipIntegration", base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kAssistantProactiveSuggestions{
-    "AssistantProactiveSuggestions", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// The maximum width (in dip) for the proactive suggestions chip.
-const base::FeatureParam<int> kAssistantProactiveSuggestionsMaxWidth{
-    &kAssistantProactiveSuggestions, "max-width", 280};
-
-// The desired background blur radius (in dip) for the rich proactive
-// suggestions entry point. Amount of blur may need to be dynamically modified
-// later or disabled which may be accomplished by setting to zero.
-const base::FeatureParam<int>
-    kAssistantProactiveSuggestionsRichEntryPointBackgroundBlurRadius{
-        &kAssistantProactiveSuggestions,
-        "rich-entry-point-background-blur-radius", 30};
-
-// The desired corner radius (in dip) for the rich proactive suggestions entry
-// point. As the rich UI has yet to be defined, corner radius may need to be
-// dynamically modified later.
-const base::FeatureParam<int>
-    kAssistantProactiveSuggestionsRichEntryPointCornerRadius{
-        &kAssistantProactiveSuggestions, "rich-entry-point-corner-radius", 12};
-
-const base::FeatureParam<std::string>
-    kAssistantProactiveSuggestionsServerExperimentIds{
-        &kAssistantProactiveSuggestions, "server-experiment-ids", ""};
-
-// When enabled, the proactive suggestions view will show only after the user
-// scrolls up in the source web contents. When disabled, the view will be shown
-// immediately once the set of proactive suggestions are available.
-const base::FeatureParam<bool> kAssistantProactiveSuggestionsShowOnScroll{
-    &kAssistantProactiveSuggestions, "show-on-scroll", true};
-
-// When enabled, we will use the rich, content-forward entry point for the
-// proactive suggestions feature in lieu of the simple entry point affordance.
-const base::FeatureParam<bool> kAssistantProactiveSuggestionsShowRichEntryPoint{
-    &kAssistantProactiveSuggestions, "show-rich-entry-point", false};
-
-const base::FeatureParam<bool> kAssistantProactiveSuggestionsSuppressDuplicates{
-    &kAssistantProactiveSuggestions, "suppress-duplicates", false};
-
-const base::FeatureParam<int>
-    kAssistantProactiveSuggestionsTimeoutThresholdMillis{
-        &kAssistantProactiveSuggestions, "timeout-threshold-millis", 15 * 1000};
-
 const base::Feature kAssistantResponseProcessingV2{
-    "AssistantResponseProcessingV2", base::FEATURE_DISABLED_BY_DEFAULT};
+    "AssistantResponseProcessingV2", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kAssistantRoutines{"AssistantRoutines",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
@@ -84,8 +38,8 @@ const base::Feature kAssistantTimersV2{"AssistantTimersV2",
 const base::Feature kAssistantWaitScheduling{"AssistantWaitScheduling",
                                              base::FEATURE_ENABLED_BY_DEFAULT};
 
-const base::Feature kEnableClearCutLog{"EnableClearCutLog",
-                                       base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kEnableAmbientAssistant{"EnableAmbientAssistant",
+                                            base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kEnableDspHotword{"EnableDspHotword",
                                       base::FEATURE_DISABLED_BY_DEFAULT};
@@ -96,36 +50,23 @@ const base::Feature kEnableStereoAudioInput{"AssistantEnableStereoAudioInput",
 const base::Feature kEnablePowerManager{"ChromeOSAssistantEnablePowerManager",
                                         base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kEnableOnDeviceAssistant{"ChromeOSOnDeviceAssistant",
+const base::Feature kEnableOnDeviceAssistant{"OnDeviceAssistant",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
 
+const base::Feature kEnableLibAssistantBetaBackend{
+    "LibAssistantBetaBackend", base::FEATURE_DISABLED_BY_DEFAULT};
+
 const base::Feature kEnableMediaSessionIntegration{
-    "AssistantEnableMediaSessionIntegration",
-    base::FEATURE_DISABLED_BY_DEFAULT};
+    "AssistantEnableMediaSessionIntegration", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Disable voice match for test purpose.
 const base::Feature kDisableVoiceMatch{"DisableVoiceMatch",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
-int GetProactiveSuggestionsMaxWidth() {
-  return kAssistantProactiveSuggestionsMaxWidth.Get();
-}
-
-int GetProactiveSuggestionsRichEntryPointBackgroundBlurRadius() {
-  return kAssistantProactiveSuggestionsRichEntryPointBackgroundBlurRadius.Get();
-}
-
-int GetProactiveSuggestionsRichEntryPointCornerRadius() {
-  return kAssistantProactiveSuggestionsRichEntryPointCornerRadius.Get();
-}
-
-std::string GetProactiveSuggestionsServerExperimentIds() {
-  return kAssistantProactiveSuggestionsServerExperimentIds.Get();
-}
-
-base::TimeDelta GetProactiveSuggestionsTimeoutThreshold() {
-  return base::TimeDelta::FromMilliseconds(
-      kAssistantProactiveSuggestionsTimeoutThresholdMillis.Get());
+bool IsAmbientAssistantEnabled() {
+  return chromeos::features::IsAmbientModeEnabled() &&
+         base::FeatureList::IsEnabled(
+             assistant::features::kEnableAmbientAssistant);
 }
 
 bool IsAppSupportEnabled() {
@@ -137,8 +78,8 @@ bool IsAudioEraserEnabled() {
   return base::FeatureList::IsEnabled(kAssistantAudioEraser);
 }
 
-bool IsClearCutLogEnabled() {
-  return base::FeatureList::IsEnabled(kEnableClearCutLog);
+bool IsBetterOnboardingEnabled() {
+  return base::FeatureList::IsEnabled(kAssistantBetterOnboarding);
 }
 
 bool IsConversationStartersV2Enabled() {
@@ -147,10 +88,6 @@ bool IsConversationStartersV2Enabled() {
 
 bool IsDspHotwordEnabled() {
   return base::FeatureList::IsEnabled(kEnableDspHotword);
-}
-
-bool IsFeedbackUiEnabled() {
-  return base::FeatureList::IsEnabled(kAssistantFeedbackUi);
 }
 
 bool IsLauncherChipIntegrationEnabled() {
@@ -169,20 +106,8 @@ bool IsOnDeviceAssistantEnabled() {
   return base::FeatureList::IsEnabled(kEnableOnDeviceAssistant);
 }
 
-bool IsProactiveSuggestionsEnabled() {
-  return base::FeatureList::IsEnabled(kAssistantProactiveSuggestions);
-}
-
-bool IsProactiveSuggestionsShowOnScrollEnabled() {
-  return kAssistantProactiveSuggestionsShowOnScroll.Get();
-}
-
-bool IsProactiveSuggestionsShowRichEntryPointEnabled() {
-  return kAssistantProactiveSuggestionsShowRichEntryPoint.Get();
-}
-
-bool IsProactiveSuggestionsSuppressDuplicatesEnabled() {
-  return kAssistantProactiveSuggestionsSuppressDuplicates.Get();
+bool IsLibAssistantBetaBackendEnabled() {
+  return base::FeatureList::IsEnabled(kEnableLibAssistantBetaBackend);
 }
 
 bool IsResponseProcessingV2Enabled() {
@@ -211,10 +136,6 @@ bool IsWaitSchedulingEnabled() {
   // Wait scheduling is only supported for response processing v2 and routines.
   return base::FeatureList::IsEnabled(kAssistantWaitScheduling) &&
          (IsResponseProcessingV2Enabled() || IsRoutinesEnabled());
-}
-
-bool IsWarmerWelcomeEnabled() {
-  return base::FeatureList::IsEnabled(kAssistantWarmerWelcomeFeature);
 }
 
 }  // namespace features

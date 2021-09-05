@@ -108,7 +108,6 @@ class NATIVE_THEME_EXPORT NativeTheme {
   // OS-level preferred color scheme. (Ex. high contrast or dark mode color
   // preference.)
   enum PreferredColorScheme {
-    kNoPreference,
     kDark,
     kLight,
     kMaxValue = kLight,
@@ -118,14 +117,13 @@ class NATIVE_THEME_EXPORT NativeTheme {
   // This enum is reporting in metrics. Do not reorder; add additional values at
   // the end.
   //
-  // This represents the OS-level high contrast theme. kNone if high contrast is
-  // not enabled.
-  enum class HighContrastColorScheme {
+  // This represents the OS-level high contrast theme. kNone unless the default
+  // system color scheme is kPlatformHighContrast.
+  enum class PlatformHighContrastColorScheme {
     kNone = 0,
     kDark = 1,
     kLight = 2,
-    kCustom = 3,
-    kMaxValue = kCustom,
+    kMaxValue = kLight,
   };
 
   // The color scheme used for painting the native controls.
@@ -251,12 +249,32 @@ class NATIVE_THEME_EXPORT NativeTheme {
     ScrollbarOverlayColorTheme scrollbar_theme;
   };
 
+#if defined(OS_MACOSX)
+  enum ScrollbarOrientation {
+    // Vertical scrollbar on the right side of content.
+    kVerticalOnRight,
+    // Vertical scrollbar on the left side of content.
+    kVerticalOnLeft,
+    // Horizontal scrollbar (on the bottom of content).
+    kHorizontal,
+  };
+
+  // A unique set of scrollbar params. Currently needed for Mac.
+  struct ScrollbarExtraParams {
+    bool is_hovering;
+    bool is_overlay;
+    ScrollbarOverlayColorTheme scrollbar_theme;
+    ScrollbarOrientation orientation;  // Used on Mac for drawing gradients.
+  };
+#endif
+
   struct SliderExtraParams {
     bool vertical;
     bool in_drag;
     int thumb_x;
     int thumb_y;
     float zoom;
+    bool right_to_left;
   };
 
   struct TextFieldExtraParams {
@@ -292,6 +310,9 @@ class NATIVE_THEME_EXPORT NativeTheme {
     MenuBackgroundExtraParams menu_background;
     ProgressBarExtraParams progress_bar;
     ScrollbarArrowExtraParams scrollbar_arrow;
+#if defined(OS_MACOSX)
+    ScrollbarExtraParams scrollbar_extra;
+#endif
     ScrollbarTrackExtraParams scrollbar_track;
     ScrollbarThumbExtraParams scrollbar_thumb;
     SliderExtraParams slider;
@@ -399,9 +420,10 @@ class NATIVE_THEME_EXPORT NativeTheme {
   // system accessibility settings and the system theme.
   virtual bool UsesHighContrastColors() const;
 
-  // Returns the HighContrastColorScheme used by the OS. Returns kNone if high
-  // contrast is not enabled.
-  HighContrastColorScheme GetHighContrastColorScheme() const;
+  // Returns the PlatformHighContrastColorScheme used by the OS. Returns a value
+  // other than kNone only if the default system color scheme is
+  // kPlatformHighContrast.
+  PlatformHighContrastColorScheme GetPlatformHighContrastColorScheme() const;
 
   // Returns true when the NativeTheme uses a light-on-dark color scheme. If
   // you're considering using this function to choose between two hard-coded
@@ -465,12 +487,9 @@ class NATIVE_THEME_EXPORT NativeTheme {
   // Some platforms override this behavior. On Windows, for example, we also
   // look at the high contrast setting. If high contrast is enabled, the
   // preferred color scheme calculation will ignore the state of dark mode.
-  // Instead, preferred color scheme will be light, dark, or no-preference
-  // depending on the OS high contrast theme. If high contrast is off, the
-  // preferred color scheme calculation will follow the default behavior.
-  //
-  // Note, if the preferred color scheme is based on dark mode, it will never
-  // be set to no-preference.
+  // Instead, preferred color scheme will be light, or dark depending on the OS
+  // high contrast theme. If high contrast is off, the preferred color scheme
+  // calculation will follow the default behavior.
   virtual PreferredColorScheme CalculatePreferredColorScheme() const;
 
   // A function to be called by native theme instances that need to set state
@@ -506,8 +525,7 @@ class NATIVE_THEME_EXPORT NativeTheme {
 
   bool should_use_dark_colors_ = false;
   bool is_high_contrast_ = false;
-  PreferredColorScheme preferred_color_scheme_ =
-      PreferredColorScheme::kNoPreference;
+  PreferredColorScheme preferred_color_scheme_ = PreferredColorScheme::kLight;
 
   DISALLOW_COPY_AND_ASSIGN(NativeTheme);
 };

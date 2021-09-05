@@ -4,7 +4,9 @@
 
 #include "third_party/blink/renderer/core/page/scrolling/text_fragment_anchor_metrics.h"
 
+#include "base/test/simple_test_tick_clock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/mojom/scroll/scroll_enums.mojom-blink.h"
 #include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
@@ -125,6 +127,16 @@ TEST_F(TextFragmentAnchorMetricsTest, UMAMetricsCollected) {
       static_cast<int>(
           TextFragmentAnchorMetrics::TextFragmentAnchorParameters::kExactText),
       1);
+
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TimeToScrollToTop", 0);
+
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.ListItemMatch", 1);
+  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.ListItemMatch", 0,
+                                       1);
+
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TableCellMatch", 1);
+  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.TableCellMatch", 0,
+                                       1);
 }
 
 // Test UMA metrics collection when there is no match found
@@ -181,6 +193,12 @@ TEST_F(TextFragmentAnchorMetricsTest, NoMatchFound) {
   histogram_tester_.ExpectTotalCount("TextFragmentAnchor.EndTextLength", 0);
 
   histogram_tester_.ExpectTotalCount("TextFragmentAnchor.Parameters", 0);
+
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TimeToScrollToTop", 0);
+
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.ListItemMatch", 0);
+
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TableCellMatch", 0);
 }
 
 // Test that we don't collect any metrics when there is no text directive
@@ -221,6 +239,12 @@ TEST_F(TextFragmentAnchorMetricsTest, NoTextFragmentAnchor) {
   histogram_tester_.ExpectTotalCount("TextFragmentAnchor.EndTextLength", 0);
 
   histogram_tester_.ExpectTotalCount("TextFragmentAnchor.Parameters", 0);
+
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TimeToScrollToTop", 0);
+
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.ListItemMatch", 0);
+
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TableCellMatch", 0);
 }
 
 // Test that the correct metrics are collected when we found a match but didn't
@@ -278,6 +302,16 @@ TEST_F(TextFragmentAnchorMetricsTest, MatchFoundNoScroll) {
       static_cast<int>(
           TextFragmentAnchorMetrics::TextFragmentAnchorParameters::kExactText),
       1);
+
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TimeToScrollToTop", 0);
+
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.ListItemMatch", 1);
+  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.ListItemMatch", 0,
+                                       1);
+
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TableCellMatch", 1);
+  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.TableCellMatch", 0,
+                                       1);
 }
 
 // Test that the correct metrics are collected for all possible combinations of
@@ -361,6 +395,16 @@ TEST_F(TextFragmentAnchorMetricsTest, ExactTextParameters) {
       static_cast<int>(TextFragmentAnchorMetrics::TextFragmentAnchorParameters::
                            kExactTextWithContext),
       1);
+
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TimeToScrollToTop", 0);
+
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.ListItemMatch", 4);
+  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.ListItemMatch", 0,
+                                       4);
+
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TableCellMatch", 4);
+  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.TableCellMatch", 0,
+                                       4);
 }
 
 // Test that the correct metrics are collected for all possible combinations of
@@ -460,11 +504,37 @@ TEST_F(TextFragmentAnchorMetricsTest, TextRangeParameters) {
       static_cast<int>(TextFragmentAnchorMetrics::TextFragmentAnchorParameters::
                            kTextRangeWithContext),
       1);
+
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TimeToScrollToTop", 0);
+
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.ListItemMatch", 0);
+
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TableCellMatch", 0);
 }
+
+class TextFragmentAnchorScrollMetricsTest
+    : public TextFragmentAnchorMetricsTest,
+      public testing::WithParamInterface<mojom::blink::ScrollType> {
+ protected:
+  bool IsUserScrollType() {
+    return GetParam() == mojom::blink::ScrollType::kCompositor ||
+           GetParam() == mojom::blink::ScrollType::kUser;
+  }
+};
+
+INSTANTIATE_TEST_SUITE_P(
+    ScrollTypes,
+    TextFragmentAnchorScrollMetricsTest,
+    testing::Values(mojom::blink::ScrollType::kUser,
+                    mojom::blink::ScrollType::kProgrammatic,
+                    mojom::blink::ScrollType::kClamping,
+                    mojom::blink::ScrollType::kCompositor,
+                    mojom::blink::ScrollType::kAnchoring,
+                    mojom::blink::ScrollType::kSequenced));
 
 // Test that the ScrollCancelled metric gets reported when a user scroll cancels
 // the scroll into view.
-TEST_F(TextFragmentAnchorMetricsTest, ScrollCancelled) {
+TEST_P(TextFragmentAnchorScrollMetricsTest, ScrollCancelled) {
   // This test isn't relevant with this flag enabled. When it's enabled,
   // there's no way to block rendering and the fragment is installed and
   // invoked as soon as parsing finishes which means the user cannot scroll
@@ -491,8 +561,10 @@ TEST_F(TextFragmentAnchorMetricsTest, ScrollCancelled) {
   )HTML");
 
   Compositor().PaintFrame();
-  GetDocument().View()->LayoutViewport()->ScrollBy(
-      ScrollOffset(0, 100), mojom::blink::ScrollType::kUser);
+
+  mojom::blink::ScrollType scroll_type = GetParam();
+  GetDocument().View()->LayoutViewport()->ScrollBy(ScrollOffset(0, 100),
+                                                   scroll_type);
 
   // Set the target text to visible and change its position to cause a layout
   // and invoke the fragment anchor.
@@ -502,6 +574,27 @@ TEST_F(TextFragmentAnchorMetricsTest, ScrollCancelled) {
   // Render two frames to handle the async step added by the beforematch event.
   Compositor().BeginFrame();
   BeginEmptyFrame();
+
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.ScrollCancelled", 1);
+
+  // A user scroll should have caused this to be canceled, other kinds of
+  // scrolls should have no effect.
+  if (IsUserScrollType()) {
+    histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.ScrollCancelled",
+                                         1, 1);
+
+    histogram_tester_.ExpectTotalCount("TextFragmentAnchor.DidScrollIntoView",
+                                       0);
+    histogram_tester_.ExpectTotalCount(
+        "TextFragmentAnchor.TimeToScrollIntoView", 0);
+  } else {
+    histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.ScrollCancelled",
+                                         0, 1);
+    histogram_tester_.ExpectTotalCount("TextFragmentAnchor.DidScrollIntoView",
+                                       1);
+    histogram_tester_.ExpectTotalCount(
+        "TextFragmentAnchor.TimeToScrollIntoView", 1);
+  }
 
   histogram_tester_.ExpectTotalCount("TextFragmentAnchor.SelectorCount", 1);
   histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.SelectorCount", 1,
@@ -513,15 +606,6 @@ TEST_F(TextFragmentAnchorMetricsTest, ScrollCancelled) {
   histogram_tester_.ExpectTotalCount("TextFragmentAnchor.AmbiguousMatch", 1);
   histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.AmbiguousMatch", 0,
                                        1);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.ScrollCancelled", 1);
-  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.ScrollCancelled", 1,
-                                       1);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.DidScrollIntoView", 0);
-
-  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TimeToScrollIntoView",
-                                     0);
 
   histogram_tester_.ExpectTotalCount("TextFragmentAnchor.DirectiveLength", 1);
   histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.DirectiveLength", 9,
@@ -541,6 +625,108 @@ TEST_F(TextFragmentAnchorMetricsTest, ScrollCancelled) {
       static_cast<int>(
           TextFragmentAnchorMetrics::TextFragmentAnchorParameters::kExactText),
       1);
+
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TimeToScrollToTop", 0);
+
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.ListItemMatch", 1);
+  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.ListItemMatch", 0,
+                                       1);
+
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TableCellMatch", 1);
+  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.TableCellMatch", 0,
+                                       1);
+}
+
+// Test that the user scrolling back to the top of the page reports metrics
+TEST_P(TextFragmentAnchorScrollMetricsTest, TimeToScrollToTop) {
+  mojom::blink::ScrollType scroll_type = GetParam();
+
+  // Set the page to be initially hidden to delay the text fragment so that we
+  // can set the mock TickClock.
+  WebView().SetVisibilityState(mojom::blink::PageVisibilityState::kHidden,
+                               /*initial_state=*/true);
+
+  SimRequest request("https://example.com/test.html#:~:text=test%20page",
+                     "text/html");
+  LoadURL("https://example.com/test.html#:~:text=test%20page");
+  request.Complete(R"HTML(
+    <!DOCTYPE html>
+    <style>
+      body {
+        height: 2200px;
+      }
+      p {
+        position: absolute;
+        top: 1000px;
+      }
+    </style>
+    <p>This is a test page</p>
+  )HTML");
+  RunAsyncMatchingTasks();
+
+  BeginEmptyFrame();
+  BeginEmptyFrame();
+
+  // Set the test TickClock and then render the page visible to activate the
+  // text fragment.
+  base::SimpleTestTickClock tick_clock;
+  tick_clock.SetNowTicks(base::TimeTicks::Now());
+  static_cast<TextFragmentAnchor*>(GetDocument().View()->GetFragmentAnchor())
+      ->SetTickClockForTesting(&tick_clock);
+  WebView().SetVisibilityState(mojom::blink::PageVisibilityState::kVisible,
+                               /*initial_state=*/false);
+  BeginEmptyFrame();
+  BeginEmptyFrame();
+
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TimeToScrollToTop", 0);
+
+  const int64_t time_to_scroll_to_top = 500;
+  tick_clock.Advance(base::TimeDelta::FromMilliseconds(time_to_scroll_to_top));
+
+  ASSERT_GT(GetDocument().View()->LayoutViewport()->GetScrollOffset().Height(),
+            100);
+
+  // Ensure scrolling but not to the top isn't counted.
+  {
+    GetDocument().View()->LayoutViewport()->ScrollBy(ScrollOffset(0, -20),
+                                                     scroll_type);
+    histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TimeToScrollToTop",
+                                       0);
+  }
+
+  // Scroll to top and ensure the metric is recorded, but only for user type
+  // scrolls.
+  {
+    GetDocument().View()->LayoutViewport()->SetScrollOffset(ScrollOffset(),
+                                                            scroll_type);
+
+    if (IsUserScrollType()) {
+      histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TimeToScrollToTop",
+                                         1);
+      histogram_tester_.ExpectUniqueSample(
+          "TextFragmentAnchor.TimeToScrollToTop", time_to_scroll_to_top, 1);
+    } else {
+      histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TimeToScrollToTop",
+                                         0);
+    }
+  }
+
+  // Scroll down and then back up to the top again to ensure the metric is
+  // recorded only once.
+  {
+    GetDocument().View()->LayoutViewport()->SetScrollOffset(
+        ScrollOffset(0, 100), scroll_type);
+    GetDocument().View()->LayoutViewport()->SetScrollOffset(ScrollOffset(),
+                                                            scroll_type);
+
+    if (IsUserScrollType()) {
+      histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TimeToScrollToTop",
+                                         1);
+    } else {
+      histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TimeToScrollToTop",
+                                         0);
+    }
+  }
 }
 
 // Test that the TapToDismiss feature gets use counted when the user taps to
@@ -624,6 +810,96 @@ TEST_F(TextFragmentAnchorMetricsTest, InvalidFragmentDirective) {
   }
 }
 
+// Test recording of the ListItemMatch metric
+TEST_F(TextFragmentAnchorMetricsTest, ListItemMatch) {
+  SimRequest request("https://example.com/test.html#:~:text=list", "text/html");
+  LoadURL("https://example.com/test.html#:~:text=list");
+  request.Complete(R"HTML(
+    <!DOCTYPE html>
+    <ul>
+      <li>Some test content</li>
+      <li>Within a list item</li>
+    </ul>
+  )HTML");
+  RunAsyncMatchingTasks();
+
+  BeginEmptyFrame();
+  BeginEmptyFrame();
+
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.ListItemMatch", 1);
+  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.ListItemMatch", 1,
+                                       1);
+}
+
+// Test recording of the TableCellMatch metric
+TEST_F(TextFragmentAnchorMetricsTest, TableCellMatch) {
+  SimRequest request("https://example.com/test.html#:~:text=table",
+                     "text/html");
+  LoadURL("https://example.com/test.html#:~:text=table");
+  request.Complete(R"HTML(
+    <!DOCTYPE html>
+    <table>
+      <tr>
+        <td>Some test content</td>
+        <td>Within a table cell</td>
+      </tr>
+    </table>
+  )HTML");
+  RunAsyncMatchingTasks();
+
+  BeginEmptyFrame();
+  BeginEmptyFrame();
+
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TableCellMatch", 1);
+  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.TableCellMatch", 1,
+                                       1);
+}
+
+// Test recording of ListItemMatch for a match nested in a list item
+TEST_F(TextFragmentAnchorMetricsTest, NestedListItemMatch) {
+  SimRequest request("https://example.com/test.html#:~:text=list", "text/html");
+  LoadURL("https://example.com/test.html#:~:text=list");
+  request.Complete(R"HTML(
+    <!DOCTYPE html>
+    <ol>
+      <li>Some test content</li>
+      <li>Within a <span>list</span> item</li>
+    </ol>
+  )HTML");
+  RunAsyncMatchingTasks();
+
+  BeginEmptyFrame();
+  BeginEmptyFrame();
+
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.ListItemMatch", 1);
+  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.ListItemMatch", 1,
+                                       1);
+}
+
+// Test recording of TableCellMatch for a match nested in a table cell
+TEST_F(TextFragmentAnchorMetricsTest, NestedTableCellMatch) {
+  SimRequest request("https://example.com/test.html#:~:text=table",
+                     "text/html");
+  LoadURL("https://example.com/test.html#:~:text=table");
+  request.Complete(R"HTML(
+    <!DOCTYPE html>
+    <table>
+      <tr>
+        <td>Some test content</td>
+        <td>Within a <span>table</span> cell</td>
+      </tr>
+    </table>
+  )HTML");
+  RunAsyncMatchingTasks();
+
+  BeginEmptyFrame();
+  BeginEmptyFrame();
+
+  histogram_tester_.ExpectTotalCount("TextFragmentAnchor.TableCellMatch", 1);
+  histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.TableCellMatch", 1,
+                                       1);
+}
+
 class TextFragmentRelatedMetricTest : public TextFragmentAnchorMetricsTest,
                                       public testing::WithParamInterface<bool> {
  public:
@@ -651,25 +927,34 @@ TEST_P(TextFragmentRelatedMetricTest, ElementIdSuccessFailureCounts) {
   // result of the element-id fragment if a text directive is successfully
   // parsed. If the feature is off we treat the text directive as an element-id
   // and should count the result.
-  const int kUncountedOrNotFound = GetParam() ? kUncounted : kNotFound;
   const int kUncountedOrFound = GetParam() ? kUncounted : kFound;
 
-  // When the TextFragmentAnchors feature is on, we'll strip the fragment
-  // directive (i.e. anything after :~:) leaving just the element anchor.
-  const int kFoundIfDirectiveStripped = GetParam() ? kFound : kNotFound;
+  // Note: We'll strip the fragment directive (i.e. anything after :~:) leaving
+  // just the element anchor. The fragment directive stripping behavior is now
+  // shipped unflagged so it should always be performed.
 
   Vector<std::pair<String, int>> test_cases = {
       {"", kUncounted},
       {"#element", kFound},
       {"#doesntExist", kNotFound},
-      {"#element:~:foo", kFoundIfDirectiveStripped},
+      // `:~:foo` will be stripped so #element will be found and #doesntexist
+      // ##element will be not found.
+      {"#element:~:foo", kFound},
       {"#doesntexist:~:foo", kNotFound},
       {"##element", kNotFound},
-      {"#element:~:text=doesntexist", kUncountedOrNotFound},
-      {"#element:~:text=page", kUncountedOrNotFound},
-      {"#:~:text=doesntexist", kUncountedOrNotFound},
-      {"#:~:text=page", kUncountedOrNotFound},
-      {"#:~:text=name", kUncountedOrFound},
+      // If the feature  is on, `:~:text=` will parse so we shouldn't count.
+      // Otherwise, it'll just be stripped so #element will be found.
+      {"#element:~:text=doesntexist", kUncountedOrFound},
+      {"#element:~:text=page", kUncountedOrFound},
+      // If the feature is on, `:~:text` is parsed so we don't count. If it's
+      // off the entire fragment is a directive that's stripped so no search is
+      // performed either.
+      {"#:~:text=doesntexist", kUncounted},
+      {"#:~:text=page", kUncounted},
+      {"#:~:text=name", kUncounted},
+      // If the feature is enabled, `:~:text` parses and we don't count the
+      // element-id. If the feature is off, we still strip the :~: directive
+      // and the remaining fragment does match an element id.
       {"#element:~:text=name", kUncountedOrFound}};
 
   const int kNotFoundSample = 0;

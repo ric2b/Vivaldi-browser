@@ -52,7 +52,8 @@ base::FilePath GetProductPath() {
   if (!base::PathService::Get(base::DIR_LOCAL_APP_DATA, &app_data_dir))
     return base::FilePath();
   return app_data_dir.AppendASCII(COMPANY_SHORTNAME_STRING)
-      .AppendASCII(PRODUCT_FULLNAME_STRING);
+      .AppendASCII(PRODUCT_FULLNAME_STRING)
+      .AppendASCII(UPDATER_VERSION_STRING);
 }
 
 base::FilePath GetExecutablePath() {
@@ -66,7 +67,7 @@ void Clean() {
   // TODO(crbug.com/1062288): Delete the COM server items.
   // TODO(crbug.com/1062288): Delete the COM service items.
   // TODO(crbug.com/1062288): Delete the COM interfaces.
-  // TODO(crbug.com/1062288): Delete the UpdateApps task.
+  // TODO(crbug.com/1062288): Delete the Wake task.
   EXPECT_TRUE(base::DeleteFile(GetProductPath(), true));
 }
 
@@ -76,7 +77,7 @@ void ExpectClean() {
   // TODO(crbug.com/1062288): Assert there are no COM server items.
   // TODO(crbug.com/1062288): Assert there are no COM service items.
   // TODO(crbug.com/1062288): Assert there are no COM interfaces.
-  // TODO(crbug.com/1062288): Assert there are no UpdateApps tasks.
+  // TODO(crbug.com/1062288): Assert there are no Wake tasks.
 
   // Files must not exist on the file system.
 
@@ -89,7 +90,7 @@ void ExpectInstalled() {
   // TODO(crbug.com/1062288): Assert there are COM server items.
   // TODO(crbug.com/1062288): Assert there are COM service items. (Maybe.)
   // TODO(crbug.com/1062288): Assert there are COM interfaces.
-  // TODO(crbug.com/1062288): Assert there are UpdateApps tasks.
+  // TODO(crbug.com/1062288): Assert there are Wake tasks.
 
   // Files must exist on the file system.
   EXPECT_TRUE(base::PathExists(GetProductPath()));

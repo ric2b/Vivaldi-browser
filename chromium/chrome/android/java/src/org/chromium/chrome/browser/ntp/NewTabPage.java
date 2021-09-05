@@ -29,21 +29,19 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
 import org.chromium.chrome.browser.compositor.layouts.content.InvalidationAwareThumbnailProvider;
 import org.chromium.chrome.browser.download.DownloadManagerService;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
-import org.chromium.chrome.browser.feed.FeedProcessScopeFactory;
 import org.chromium.chrome.browser.feed.FeedSurfaceCoordinator;
 import org.chromium.chrome.browser.feed.NtpStreamLifecycleManager;
 import org.chromium.chrome.browser.feed.StreamLifecycleManager;
 import org.chromium.chrome.browser.feed.action.FeedActionHandler;
-import org.chromium.chrome.browser.feed.library.api.client.stream.Stream;
-import org.chromium.chrome.browser.feed.library.api.host.action.ActionApi;
 import org.chromium.chrome.browser.feed.shared.FeedSurfaceDelegate;
 import org.chromium.chrome.browser.feed.shared.FeedSurfaceProvider;
+import org.chromium.chrome.browser.feed.shared.stream.Stream;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
-import org.chromium.chrome.browser.fullscreen.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.LifecycleObserver;
 import org.chromium.chrome.browser.lifecycle.PauseResumeWithNativeObserver;
@@ -72,6 +70,7 @@ import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.ui.native_page.NativePage;
 import org.chromium.chrome.browser.ui.native_page.NativePageHost;
 import org.chromium.chrome.browser.vr.VrModuleProvider;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.components.feature_engagement.EventConstants;
@@ -134,9 +133,6 @@ public class NewTabPage implements NativePage, InvalidationAwareThumbnailProvide
     private boolean mIsDestroyed;
 
     private final int mTabStripAndToolbarHeight;
-
-    @Override
-    public void onContentOffsetChanged(int offset) {}
 
     @Override
     public void onControlsOffsetChanged(int topOffset, int topControlsMinHeightOffset,
@@ -219,7 +215,8 @@ public class NewTabPage implements NativePage, InvalidationAwareThumbnailProvide
         }
 
         @Override
-        public void focusSearchBox(boolean beginVoiceSearch, String pastedText) {
+        public void focusSearchBox(
+                boolean beginVoiceSearch, String pastedText, boolean fromQueryTile) {
             if (mIsDestroyed) return;
             if (VrModuleProvider.getDelegate().isInVr()) return;
             if (mVoiceRecognitionHandler != null && beginVoiceSearch) {
@@ -227,8 +224,10 @@ public class NewTabPage implements NativePage, InvalidationAwareThumbnailProvide
                         VoiceRecognitionHandler.VoiceInteractionSource.NTP);
             } else if (mFakeboxDelegate != null) {
                 mFakeboxDelegate.setUrlBarFocus(true, pastedText,
-                        pastedText == null ? OmniboxFocusReason.FAKE_BOX_TAP
-                                           : OmniboxFocusReason.FAKE_BOX_LONG_PRESS);
+                        pastedText == null
+                                ? OmniboxFocusReason.FAKE_BOX_TAP
+                                : (fromQueryTile ? OmniboxFocusReason.QUERY_TILES_NTP_TAP
+                                                 : OmniboxFocusReason.FAKE_BOX_LONG_PRESS));
             }
         }
 
@@ -305,12 +304,14 @@ public class NewTabPage implements NativePage, InvalidationAwareThumbnailProvide
      * @param isInNightMode {@code true} if the night mode setting is on.
      * @param nativePageHost The host that is showing this new tab page.
      * @param tab The {@link Tab} that contains this new tab page.
+     * @param bottomSheetController The controller for bottom sheets, used by the feed.
      */
     public NewTabPage(Activity activity, BrowserControlsStateProvider browserControlsStateProvider,
             Supplier<Tab> activityTabProvider, @Nullable OverviewModeBehavior overviewModeBehavior,
             SnackbarManager snackbarManager, ActivityLifecycleDispatcher lifecycleDispatcher,
             TabModelSelector tabModelSelector, boolean isTablet, NewTabPageUma uma,
-            boolean isInNightMode, NativePageHost nativePageHost, Tab tab) {
+            boolean isInNightMode, NativePageHost nativePageHost, Tab tab,
+            BottomSheetController bottomSheetController) {
         mConstructedTimeNs = System.nanoTime();
         TraceEvent.begin(TAG);
 
@@ -373,7 +374,7 @@ public class NewTabPage implements NativePage, InvalidationAwareThumbnailProvide
 
         updateSearchProviderHasLogo();
         initializeMainView(activity, activityTabProvider, snackbarManager, tabModelSelector, uma,
-                isInNightMode);
+                isInNightMode, bottomSheetController);
 
         mBrowserControlsStateProvider = browserControlsStateProvider;
         getView().addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
@@ -397,7 +398,6 @@ public class NewTabPage implements NativePage, InvalidationAwareThumbnailProvide
                 activity.getResources().getDimensionPixelSize(R.dimen.tab_strip_and_toolbar_height);
 
         mNewTabPageUma.recordIsUserOnline();
-        mNewTabPageUma.recordLoadType();
         mNewTabPageUma.recordContentSuggestionsDisplayStatus();
 
         // TODO(twellington): Move this somewhere it can be shared with NewTabPageView?
@@ -424,14 +424,13 @@ public class NewTabPage implements NativePage, InvalidationAwareThumbnailProvide
      * @param tabModelSelector {@link TabModelSelector} object.
      * @param uma {@link NewTabPageUma} object recording user metrics.
      * @param isInNightMode {@code true} if the night mode setting is on.
+     * @param bottomSheetController The controller for bottom sheets.  Used by the feed.
      */
     protected void initializeMainView(Activity activity, Supplier<Tab> tabProvider,
             SnackbarManager snackbarManager, TabModelSelector tabModelSelector, NewTabPageUma uma,
-            boolean isInNightMode) {
+            boolean isInNightMode, BottomSheetController bottomSheetController) {
         Profile profile = Profile.fromWebContents(mTab.getWebContents());
-        ActionApi actionApi = new FeedActionHandler(mNewTabPageManager.getNavigationDelegate(),
-                FeedProcessScopeFactory.getFeedConsumptionObserver(),
-                FeedProcessScopeFactory.getFeedLoggingBridge(), activity, profile);
+
         LayoutInflater inflater = LayoutInflater.from(activity);
         mNewTabPageLayout = (NewTabPageLayout) inflater.inflate(R.layout.new_tab_page_layout, null);
 
@@ -448,8 +447,9 @@ public class NewTabPage implements NativePage, InvalidationAwareThumbnailProvide
         mFeedSurfaceProvider =
                 new FeedSurfaceCoordinator(activity, snackbarManager, tabModelSelector, tabProvider,
                         new SnapScrollHelper(mNewTabPageManager, mNewTabPageLayout),
-                        mNewTabPageLayout, sectionHeaderView, actionApi, isInNightMode, this,
-                        mNewTabPageManager.getNavigationDelegate(), profile);
+                        mNewTabPageLayout, sectionHeaderView, new FeedActionHandler.Options(),
+                        isInNightMode, this, mNewTabPageManager.getNavigationDelegate(), profile,
+                        /* isPlaceholderShown= */ false, bottomSheetController);
 
         // Record the timestamp at which the new tab page's construction started.
         uma.trackTimeToFirstDraw(mFeedSurfaceProvider.getView(), mConstructedTimeNs);
@@ -495,11 +495,36 @@ public class NewTabPage implements NativePage, InvalidationAwareThumbnailProvide
                 ((ViewGroup.MarginLayoutParams) view.getLayoutParams());
         if (layoutParams == null) return;
 
-        layoutParams.bottomMargin = mBrowserControlsStateProvider.getBottomControlsHeight()
-                - mBrowserControlsStateProvider.getBottomControlOffset();
-        layoutParams.topMargin = getToolbarExtraYOffset();
+        int topMargin = layoutParams.topMargin;
+        final int topControlsDistanceToRest = mBrowserControlsStateProvider.getContentOffset()
+                - mBrowserControlsStateProvider.getTopControlsHeight();
 
-        view.setLayoutParams(layoutParams);
+        // Negative |topControlsDistanceToRest| means the controls Y position is above the rest
+        // position and the controls height is increasing with animation.
+        if (topControlsDistanceToRest < 0) {
+            // #getToolbarExtraYOffset() returns the margin we will set at the end of the animation.
+            // Adding |topControlsDistanceToRest| to it gives us the translation we need for each
+            // animation frame until we reach the desired position. Once |topControlsDistanceToRest|
+            // reaches 0, we are at the desired position. In the else block below, we will set the
+            // real margin and set the translation to 0.
+            view.setTranslationY(getToolbarExtraYOffset() + topControlsDistanceToRest);
+        } else {
+            // Positive |topControlsDistanceToRest| means the controls Y position is below the rest
+            // position and the controls height is decreasing with animation. We need to set the
+            // new margin (0 in this case) immediately and update translationY during the animation,
+            // which will reach 0 at the end.
+            view.setTranslationY(topControlsDistanceToRest);
+            topMargin = getToolbarExtraYOffset();
+        }
+
+        int bottomMargin = mBrowserControlsStateProvider.getBottomControlsHeight()
+                - mBrowserControlsStateProvider.getBottomControlOffset();
+
+        if (topMargin != layoutParams.topMargin || bottomMargin != layoutParams.bottomMargin) {
+            layoutParams.topMargin = topMargin;
+            layoutParams.bottomMargin = bottomMargin;
+            view.setLayoutParams(layoutParams);
+        }
 
         // Apply negative margin to the top of the N logo (which would otherwise be the height of
         // the top toolbar) when Duet is enabled to remove some of the empty space.

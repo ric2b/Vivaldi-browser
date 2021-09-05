@@ -58,8 +58,8 @@ class MockScreenOrientationClient;
 class RenderFrame;
 class SpellCheckClient;
 class TestInterfaces;
-class TestRunnerForSpecificView;
 class WebFrameTestProxy;
+class WebWidgetTestProxy;
 class WebViewTestProxy;
 
 // TestRunner class currently has dual purpose:
@@ -69,8 +69,6 @@ class WebViewTestProxy;
 //    - TestRunner.SetAllowRunningOfInsecureContent (test flag affecting product
 //      behavior)
 //    - TestRunner.SetTextSubpixelPositioning (directly interacts with product).
-//    Note that "per-view" (non-"global") bindings are handled by
-//    instances of TestRunnerForSpecificView class.
 // 2. It manages global test state.  Example:
 //    - Tracking topLoadingFrame that can finish the test when it loads.
 //    - WorkQueue holding load requests from the TestInterfaces
@@ -80,9 +78,7 @@ class TestRunner {
   explicit TestRunner(TestInterfaces*);
   virtual ~TestRunner();
 
-  void Install(RenderFrame* frame,
-               SpellCheckClient* spell_check,
-               TestRunnerForSpecificView* view_test_runner);
+  void Install(WebFrameTestProxy* frame, SpellCheckClient* spell_check);
 
   void SetDelegate(BlinkTestRunner*);
   void SetMainView(blink::WebView*);
@@ -91,6 +87,8 @@ class TestRunner {
   void Reset();
   // Resets state on the |web_view_test_proxy| for the next test.
   void ResetWebView(WebViewTestProxy* web_view_test_proxy);
+  // Resets state on the |web_widget_test_proxy| for the next test.
+  void ResetWebWidget(WebWidgetTestProxy* web_widget_test_proxy);
   // Resets state on the |web_frame_test_proxy| for the next test.
   void ResetWebFrame(WebFrameTestProxy* web_frame_test_proxy);
 
@@ -306,9 +304,10 @@ class TestRunner {
   // Delays completion of the test until the policy delegate runs.
   void WaitForPolicyDelegate();
 
-  // Functions for dealing with windows. By default we block all new windows.
+  // TODO(danakj): This is the count of in-process RenderViewHosts, not the
+  // count of windows. It's only a window count if the page is entire in one
+  // site and any page opened in a window has only a single site each.
   int WindowCount();
-  void SetCloseRemainingWindowsWhenComplete(bool close_remaining_windows);
 
   // Allows web tests to manage origins' allow list.
   void AddOriginAccessAllowListEntry(const std::string& source_origin,
@@ -442,9 +441,6 @@ class TestRunner {
   void SetPrinting();
   void SetPrintingForFrame(const std::string& frame_name);
 
-  // Clears the state from SetPrinting().
-  void ClearPrinting();
-
   void SetShouldStayOnPageAfterHandlingBeforeUnload(bool value);
 
   // Causes WillSendRequest to clear certain headers.
@@ -549,18 +545,10 @@ class TestRunner {
 
   bool test_is_running_ = false;
 
-  // When reset is called, go through and close all but the main test shell
-  // window. By default, set to true but toggled to false using
-  // SetCloseRemainingWindowsWhenComplete().
-  bool close_remaining_windows_ = false;
-
   WorkQueue work_queue_;
 
   // Bound variable to return the name of this platform (chromium).
   std::string platform_name_;
-
-  // Bound variable to store the last tooltip text
-  std::string tooltip_text_;
 
   // Bound variable counting the number of top URLs visited.
   int web_history_item_count_ = 0;

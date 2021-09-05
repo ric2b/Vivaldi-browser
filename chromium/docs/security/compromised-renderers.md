@@ -245,9 +245,13 @@ Compromised renderers shouldn't be able to poison the JavaScript code cache
 used by scripts executed in cross-site execution contexts.
 
 Protection techniques:
-- Partitioning the code cache by Network Isolation Key (NIK).
-- Using `CanAccessDataForOrigin` in
+- Validating origins sent in IPCs from a renderer process by using
+  `CanAccessDataForOrigin` in
   `CodeCacheHostImpl::DidGenerateCacheableMetadataInCacheStorage`.
+- Using trustworthy, browser-side origin lock while writing to and fetching from
+  the code cache by using `ChildProcessSecurityPolicyImpl::GetOriginLock` in
+  `GetSecondaryKeyForCodeCache` in
+  `//content/browser/renderer_host/code_cache_host_impl.cc`
 
 
 ## Cross-Origin-Resource-Policy response header
@@ -384,3 +388,24 @@ below.
   processes on Android (for example affecting protections of CORB, CORP,
   Sec-Fetch-Site and in the future SameSite cookies and Origin
   protections).  See also https://crbug.com/891872.
+
+
+## Renderer processes hosting DevTools frontend
+
+If an attacker could take control over the DevTools frontend then the attacker
+would gain access to all the cookies, storage, etc. of any origin within the
+page and would be able to execute arbitrary scripts in any frame of the page.
+This means that treating the DevTools renderer as untrustworthy wouldn't in
+practice offer additional protection for the same-origin-policy.
+
+Because of the above:
+
+- Chrome ensures that the DevTools frontend is always hosted in a renderer
+  process separate from renderers hosting web origins.
+- Chrome assumes that the DevTools frontend is always trustworthy
+  (i.e. never compromised, or under direct control of an attacker).
+  For example, when the DevTools process asks to initiate a HTTP request on
+  behalf of https://example.com, the browser process trusts the DevTools
+  renderer to claim authority to initiate requests of behalf of this origin
+  (e.g. attach SameSite cookies, send appropriate Sec-Fetch-Site request header,
+  etc.).

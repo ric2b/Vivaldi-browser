@@ -68,6 +68,7 @@ void ActivityRecord::SetOrUpdateSession(const CastSession& session,
   DVLOG(2) << "SetOrUpdateSession old session_id = "
            << session_id_.value_or("<missing>")
            << ", new session_id = " << session.session_id();
+  DCHECK(sink.is_cast_sink());
   route_.set_description(session.GetRouteDescription());
   sink_ = sink;
   if (session_id_) {
@@ -138,8 +139,10 @@ void ActivityRecord::SendSetVolumeRequestToReceiver(
 void ActivityRecord::StopSessionOnReceiver(
     const std::string& client_id,
     cast_channel::ResultCallback callback) {
-  if (!session_id_)
+  if (!session_id_) {
     std::move(callback).Run(cast_channel::Result::kFailed);
+    return;
+  }
 
   message_handler_->StopSession(cast_channel_id(), *session_id_, client_id,
                                 std::move(callback));

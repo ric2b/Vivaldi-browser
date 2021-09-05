@@ -8,6 +8,9 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "cc/metrics/compositor_frame_reporting_controller.h"
 #include "cc/metrics/frame_sequence_tracker_collection.h"
+#include "cc/metrics/throughput_ukm_reporter.h"
+#include "cc/trees/ukm_manager.h"
+#include "components/ukm/test_ukm_recorder.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -40,16 +43,16 @@ class FrameSequenceTrackerTest : public testing::Test {
                 /*should_report_metrics=*/true)),
         collection_(/*is_single_threaded=*/false,
                     compositor_frame_reporting_controller_.get()) {
-    collection_.StartSequence(FrameSequenceTrackerType::kTouchScroll);
-    tracker_ = collection_.GetTrackerForTesting(
-        FrameSequenceTrackerType::kTouchScroll);
+    tracker_ = collection_.StartScrollSequence(
+        FrameSequenceTrackerType::kTouchScroll,
+        FrameSequenceMetrics::ThreadType::kCompositor);
   }
   ~FrameSequenceTrackerTest() override = default;
 
-  void CreateNewTracker() {
-    collection_.StartSequence(FrameSequenceTrackerType::kTouchScroll);
-    tracker_ = collection_.GetTrackerForTesting(
-        FrameSequenceTrackerType::kTouchScroll);
+  void CreateNewTracker(FrameSequenceMetrics::ThreadType thread_type =
+                            FrameSequenceMetrics::ThreadType::kCompositor) {
+    tracker_ = collection_.StartScrollSequence(
+        FrameSequenceTrackerType::kTouchScroll, thread_type);
   }
 
   viz::BeginFrameArgs CreateBeginFrameArgs(
@@ -100,7 +103,15 @@ class FrameSequenceTrackerTest : public testing::Test {
 
   // Check whether a type of tracker exists in |frame_trackers_| or not.
   bool TrackerExists(FrameSequenceTrackerType type) const {
-    return collection_.frame_trackers_.contains(type);
+    auto key = std::make_pair(type, FrameSequenceMetrics::ThreadType::kUnknown);
+    if (type == FrameSequenceTrackerType::kTouchScroll ||
+        type == FrameSequenceTrackerType::kWheelScroll ||
+        type == FrameSequenceTrackerType::kScrollbarScroll) {
+      key = std::make_pair(type, FrameSequenceMetrics::ThreadType::kCompositor);
+      if (!collection_.frame_trackers_.contains(key))
+        key = std::make_pair(type, FrameSequenceMetrics::ThreadType::kMain);
+    }
+    return collection_.frame_trackers_.contains(key);
   }
 
   bool RemovalTrackerExists(unsigned index,
@@ -254,12 +265,27 @@ class FrameSequenceTrackerTest : public testing::Test {
     return tracker_->ignored_frame_tokens_;
   }
 
+  FrameSequenceMetrics::ThroughputData& ImplThroughput(
+      FrameSequenceTracker* tracker) const {
+    return tracker->impl_throughput();
+  }
+
   FrameSequenceMetrics::ThroughputData& ImplThroughput() const {
     return tracker_->impl_throughput();
   }
 
+  FrameSequenceMetrics::ThroughputData& MainThroughput(
+      FrameSequenceTracker* tracker) const {
+    return tracker->main_throughput();
+  }
+
   FrameSequenceMetrics::ThroughputData& MainThroughput() const {
     return tracker_->main_throughput();
+  }
+
+  FrameSequenceMetrics::ThroughputData& AggregatedThroughput(
+      FrameSequenceTracker* tracker) const {
+    return tracker->aggregated_throughput();
   }
 
   FrameSequenceMetrics::ThroughputData& AggregatedThroughput() const {
@@ -464,8 +490,6 @@ TEST_F(FrameSequenceTrackerTest, ReportMetrics) {
       1u);
   histogram_tester.ExpectTotalCount(
       "Graphics.Smoothness.PercentDroppedFrames.MainThread.TouchScroll", 0u);
-  histogram_tester.ExpectTotalCount(
-      "Graphics.Smoothness.PercentDroppedFrames.SlowerThread.TouchScroll", 1u);
 
   // Test that both are reported.
   ImplThroughput().frames_expected = 100u;
@@ -478,8 +502,6 @@ TEST_F(FrameSequenceTrackerTest, ReportMetrics) {
       2u);
   histogram_tester.ExpectTotalCount(
       "Graphics.Smoothness.PercentDroppedFrames.MainThread.TouchScroll", 1u);
-  histogram_tester.ExpectTotalCount(
-      "Graphics.Smoothness.PercentDroppedFrames.SlowerThread.TouchScroll", 2u);
 
   // Test that none is reported.
   MainThroughput().frames_expected = 2u;
@@ -492,8 +514,6 @@ TEST_F(FrameSequenceTrackerTest, ReportMetrics) {
       2u);
   histogram_tester.ExpectTotalCount(
       "Graphics.Smoothness.PercentDroppedFrames.MainThread.TouchScroll", 1u);
-  histogram_tester.ExpectTotalCount(
-      "Graphics.Smoothness.PercentDroppedFrames.SlowerThread.TouchScroll", 2u);
 
   // Test the case where compositor and main thread have the same throughput.
   ImplThroughput().frames_expected = 120u;
@@ -506,8 +526,6 @@ TEST_F(FrameSequenceTrackerTest, ReportMetrics) {
       3u);
   histogram_tester.ExpectTotalCount(
       "Graphics.Smoothness.PercentDroppedFrames.MainThread.TouchScroll", 2u);
-  histogram_tester.ExpectTotalCount(
-      "Graphics.Smoothness.PercentDroppedFrames.SlowerThread.TouchScroll", 3u);
 }
 
 TEST_F(FrameSequenceTrackerTest, ReportMetricsAtFixedInterval) {
@@ -638,9 +656,6 @@ TEST_F(FrameSequenceTrackerTest, BeginMainFrameSubmit) {
 }
 
 TEST_F(FrameSequenceTrackerTest, ScrollingThreadMetricCompositorThread) {
-  tracker_->metrics()->SetScrollingThread(
-      FrameSequenceMetrics::ThreadType::kCompositor);
-
   // Start with a bunch of frames so that the metric does get reported at the
   // end of the test.
   ImplThroughput().frames_expected = 100u;
@@ -659,8 +674,7 @@ TEST_F(FrameSequenceTrackerTest, ScrollingThreadMetricCompositorThread) {
 }
 
 TEST_F(FrameSequenceTrackerTest, ScrollingThreadMetricMainThread) {
-  tracker_->metrics()->SetScrollingThread(
-      FrameSequenceMetrics::ThreadType::kMain);
+  CreateNewTracker(FrameSequenceMetrics::ThreadType::kMain);
 
   // Start with a bunch of frames so that the metric does get reported at the
   // end of the test.
@@ -1104,8 +1118,8 @@ TEST_F(FrameSequenceTrackerTest, TrackLastImplFrame2) {
   EXPECT_EQ(NumberOfRemovalTrackers(), 0u);
 
   std::string metric = "Graphics.Smoothness.FrameSequenceLength.TouchScroll";
-  // Both impl and slower threads reports 101 frames expected.
-  EXPECT_EQ(histogram_tester.GetBucketCount(metric, 101), 2);
+  // Impl thread reports 101 frames expected.
+  EXPECT_EQ(histogram_tester.GetBucketCount(metric, 101), 1);
   // The main thread reports 0 frames expected.
   EXPECT_EQ(histogram_tester.GetBucketCount(metric, 0), 1);
   metric =
@@ -1132,8 +1146,8 @@ TEST_F(FrameSequenceTrackerTest, TrackLastImplFrame3) {
   EXPECT_EQ(NumberOfRemovalTrackers(), 0u);
 
   std::string metric = "Graphics.Smoothness.FrameSequenceLength.TouchScroll";
-  // Both impl and slower threads reports 101 frames expected.
-  EXPECT_EQ(histogram_tester.GetBucketCount(metric, 101), 2);
+  // Impl thread reports 101 frames expected.
+  EXPECT_EQ(histogram_tester.GetBucketCount(metric, 101), 1);
   // The main thread reports 0 frames expected.
   EXPECT_EQ(histogram_tester.GetBucketCount(metric, 0), 1);
   metric =
@@ -1160,8 +1174,8 @@ TEST_F(FrameSequenceTrackerTest, TrackLastImplFrame4) {
   EXPECT_EQ(NumberOfRemovalTrackers(), 0u);
 
   std::string metric = "Graphics.Smoothness.FrameSequenceLength.TouchScroll";
-  // Both impl and slower threads reports 101 frames expected.
-  EXPECT_EQ(histogram_tester.GetBucketCount(metric, 101), 2);
+  // Impl thread reports 101 frames expected.
+  EXPECT_EQ(histogram_tester.GetBucketCount(metric, 101), 1);
   // The main thread reports 0 frames expected.
   EXPECT_EQ(histogram_tester.GetBucketCount(metric, 0), 1);
   metric =
@@ -1229,8 +1243,8 @@ TEST_F(FrameSequenceTrackerTest, TrackLastImplFrame7) {
   EXPECT_EQ(NumberOfRemovalTrackers(), 0u);
 
   std::string metric = "Graphics.Smoothness.FrameSequenceLength.TouchScroll";
-  // Both impl and slower threads reports 101 frames expected.
-  EXPECT_EQ(histogram_tester.GetBucketCount(metric, 101), 2);
+  // Impl thread reports 101 frames expected.
+  EXPECT_EQ(histogram_tester.GetBucketCount(metric, 101), 1);
   // The main thread reports 0 frames expected.
   EXPECT_EQ(histogram_tester.GetBucketCount(metric, 0), 1);
   metric =
@@ -1257,8 +1271,8 @@ TEST_F(FrameSequenceTrackerTest, TrackLastImplFrame8) {
   EXPECT_EQ(NumberOfRemovalTrackers(), 0u);
 
   std::string metric = "Graphics.Smoothness.FrameSequenceLength.TouchScroll";
-  // Both impl and slower threads reports 101 frames expected.
-  EXPECT_EQ(histogram_tester.GetBucketCount(metric, 101), 2);
+  // Impl thread reports 101 frames expected.
+  EXPECT_EQ(histogram_tester.GetBucketCount(metric, 101), 1);
   // The main thread reports 0 frames expected.
   EXPECT_EQ(histogram_tester.GetBucketCount(metric, 0), 1);
   metric =
@@ -1285,8 +1299,8 @@ TEST_F(FrameSequenceTrackerTest, TrackLastImplFrame9) {
   EXPECT_EQ(NumberOfRemovalTrackers(), 0u);
 
   std::string metric = "Graphics.Smoothness.FrameSequenceLength.TouchScroll";
-  // Both impl and slower threads reports 101 frames expected.
-  EXPECT_EQ(histogram_tester.GetBucketCount(metric, 101), 2);
+  // Impl thread reports 101 frames expected.
+  EXPECT_EQ(histogram_tester.GetBucketCount(metric, 101), 1);
   // The main thread reports 0 frames expected.
   EXPECT_EQ(histogram_tester.GetBucketCount(metric, 0), 1);
   metric =
@@ -1346,8 +1360,8 @@ TEST_F(FrameSequenceTrackerTest, TrackLastImplFrame12) {
   EXPECT_EQ(NumberOfRemovalTrackers(), 0u);
 
   std::string metric = "Graphics.Smoothness.FrameSequenceLength.TouchScroll";
-  // Both impl and slower threads reports 101 frames expected.
-  EXPECT_EQ(histogram_tester.GetBucketCount(metric, 101), 2);
+  // Impl thread reports 101 frames expected.
+  EXPECT_EQ(histogram_tester.GetBucketCount(metric, 101), 1);
   // The main thread reports 0 frames expected.
   EXPECT_EQ(histogram_tester.GetBucketCount(metric, 0), 1);
   metric =
@@ -1374,8 +1388,8 @@ TEST_F(FrameSequenceTrackerTest, TrackLastImplFrame13) {
   EXPECT_EQ(NumberOfRemovalTrackers(), 0u);
 
   std::string metric = "Graphics.Smoothness.FrameSequenceLength.TouchScroll";
-  // Both impl and slower threads reports 101 frames expected.
-  EXPECT_EQ(histogram_tester.GetBucketCount(metric, 101), 2);
+  // Impl thread reports 101 frames expected.
+  EXPECT_EQ(histogram_tester.GetBucketCount(metric, 101), 1);
   // The main thread reports 0 frames expected.
   EXPECT_EQ(histogram_tester.GetBucketCount(metric, 0), 1);
   metric =
@@ -1395,8 +1409,8 @@ TEST_F(FrameSequenceTrackerTest, TrackLastImplFrame14) {
   EXPECT_EQ(NumberOfRemovalTrackers(), 0u);
 
   std::string metric = "Graphics.Smoothness.FrameSequenceLength.TouchScroll";
-  // Both impl and slower threads reports 101 frames expected.
-  EXPECT_EQ(histogram_tester.GetBucketCount(metric, 101), 2);
+  // Impl thread reports 101 frames expected.
+  EXPECT_EQ(histogram_tester.GetBucketCount(metric, 101), 1);
   // The main thread reports 0 frames expected.
   EXPECT_EQ(histogram_tester.GetBucketCount(metric, 0), 1);
   metric =
@@ -1430,8 +1444,8 @@ TEST_F(FrameSequenceTrackerTest, TrackLastImplFrame15) {
   EXPECT_EQ(NumberOfRemovalTrackers(), 0u);
 
   std::string metric = "Graphics.Smoothness.FrameSequenceLength.TouchScroll";
-  // Both impl and slower threads reports 101 frames expected.
-  EXPECT_EQ(histogram_tester.GetBucketCount(metric, 101), 2);
+  // Impl thread reports 101 frames expected.
+  EXPECT_EQ(histogram_tester.GetBucketCount(metric, 101), 1);
   // The main thread reports 0 frames expected.
   EXPECT_EQ(histogram_tester.GetBucketCount(metric, 0), 1);
   metric =
@@ -1458,8 +1472,8 @@ TEST_F(FrameSequenceTrackerTest, TrackLastImplFrame16) {
   EXPECT_EQ(NumberOfRemovalTrackers(), 0u);
 
   std::string metric = "Graphics.Smoothness.FrameSequenceLength.TouchScroll";
-  // Both impl and slower threads reports 101 frames expected.
-  EXPECT_EQ(histogram_tester.GetBucketCount(metric, 101), 2);
+  // Impl thread reports 101 frames expected.
+  EXPECT_EQ(histogram_tester.GetBucketCount(metric, 101), 1);
   // The main thread reports 0 frames expected.
   EXPECT_EQ(histogram_tester.GetBucketCount(metric, 0), 1);
   metric =
@@ -1486,8 +1500,8 @@ TEST_F(FrameSequenceTrackerTest, TrackLastImplFrame17) {
   EXPECT_EQ(NumberOfRemovalTrackers(), 0u);
 
   std::string metric = "Graphics.Smoothness.FrameSequenceLength.TouchScroll";
-  // Both impl and slower threads reports 101 frames expected.
-  EXPECT_EQ(histogram_tester.GetBucketCount(metric, 101), 2);
+  // Impl thread reports 101 frames expected.
+  EXPECT_EQ(histogram_tester.GetBucketCount(metric, 101), 1);
   // The main thread reports 0 frames expected.
   EXPECT_EQ(histogram_tester.GetBucketCount(metric, 0), 1);
   metric =
@@ -1515,8 +1529,8 @@ TEST_F(FrameSequenceTrackerTest, TrackLastImplFrame18) {
   EXPECT_EQ(NumberOfRemovalTrackers(), 0u);
 
   std::string metric = "Graphics.Smoothness.FrameSequenceLength.TouchScroll";
-  // Both impl and slower threads reports 101 frames expected.
-  EXPECT_EQ(histogram_tester.GetBucketCount(metric, 101), 2);
+  // Impl thread reports 101 frames expected.
+  EXPECT_EQ(histogram_tester.GetBucketCount(metric, 101), 1);
   // The main thread reports 0 frames expected.
   EXPECT_EQ(histogram_tester.GetBucketCount(metric, 0), 1);
   metric =
@@ -1543,8 +1557,8 @@ TEST_F(FrameSequenceTrackerTest, TrackLastImplFrame19) {
   EXPECT_EQ(NumberOfRemovalTrackers(), 0u);
 
   std::string metric = "Graphics.Smoothness.FrameSequenceLength.TouchScroll";
-  // Both impl and slower threads reports 101 frames expected.
-  EXPECT_EQ(histogram_tester.GetBucketCount(metric, 101), 2);
+  // Impl thread reports 101 frames expected.
+  EXPECT_EQ(histogram_tester.GetBucketCount(metric, 101), 1);
   // The main thread reports 0 frames expected.
   EXPECT_EQ(histogram_tester.GetBucketCount(metric, 0), 1);
   metric =
@@ -1571,8 +1585,8 @@ TEST_F(FrameSequenceTrackerTest, TrackLastImplFrame20) {
   EXPECT_EQ(NumberOfRemovalTrackers(), 0u);
 
   std::string metric = "Graphics.Smoothness.FrameSequenceLength.TouchScroll";
-  // Both impl and slower threads reports 101 frames expected.
-  EXPECT_EQ(histogram_tester.GetBucketCount(metric, 101), 2);
+  // Impl thread reports 101 frames expected.
+  EXPECT_EQ(histogram_tester.GetBucketCount(metric, 101), 1);
   // The main thread reports 0 frames expected.
   EXPECT_EQ(histogram_tester.GetBucketCount(metric, 0), 1);
   metric =
@@ -1851,7 +1865,8 @@ TEST_F(FrameSequenceTrackerTest, MainThreadPresentWithNullTimeStamp) {
   const char sequence[] = "b(1)B(0,1)E(1)s(1)S(1)e(1,1)";
   GenerateSequence(sequence);
   collection_.NotifyFramePresented(
-      1, {base::TimeTicks(), viz::BeginFrameArgs::DefaultInterval(), 0});
+      1, {base::TimeTicks(), viz::BeginFrameArgs::DefaultInterval(),
+          gfx::PresentationFeedback::kFailure});
   EXPECT_EQ(MainThroughput().frames_expected, 1u);
   // No presentation, no main frame produced.
   EXPECT_EQ(MainThroughput().frames_produced, 0u);
@@ -1867,6 +1882,29 @@ TEST_F(FrameSequenceTrackerTest, TrackerTypeEncoding) {
   ActiveFrameSequenceTrackers active_encoded =
       collection_.FrameSequenceTrackerActiveTypes();
   EXPECT_EQ(active_encoded, 16);  // 1 << 4
+}
+
+TEST_F(FrameSequenceTrackerTest, UniversalTrackerSubmitThroughput) {
+  auto recorder = std::make_unique<ukm::TestUkmRecorder>();
+  auto ukm_manager = std::make_unique<UkmManager>(std::move(recorder));
+
+  collection_.ClearAll();
+  collection_.SetUkmManager(ukm_manager.get());
+  auto* tracker =
+      collection_.StartSequence(FrameSequenceTrackerType::kUniversal);
+  ImplThroughput(tracker).frames_expected = 200u;
+  ImplThroughput(tracker).frames_produced = 190u;
+  MainThroughput(tracker).frames_expected = 100u;
+  MainThroughput(tracker).frames_produced = 50u;
+  AggregatedThroughput(tracker).frames_expected = 200u;
+  AggregatedThroughput(tracker).frames_produced = 150u;
+
+  collection_.ComputeUniversalThroughputForTesting();
+  DCHECK(collection_.HasThroughputData());
+  EXPECT_EQ(collection_.TakeLastAggregatedPercent(), 25);
+  EXPECT_EQ(collection_.TakeLastImplPercent(), 5);
+  EXPECT_EQ(collection_.TakeLastMainPercent().value(), 50);
+  EXPECT_FALSE(collection_.HasThroughputData());
 }
 
 TEST_F(FrameSequenceTrackerTest, CustomTrackers) {
@@ -1916,6 +1954,106 @@ TEST_F(FrameSequenceTrackerTest, CustomTrackers) {
   EXPECT_EQ(1u, results[1].frames_expected);
   EXPECT_EQ(1u, results[3].frames_produced);
   EXPECT_EQ(1u, results[3].frames_expected);
+}
+
+TEST_F(FrameSequenceTrackerTest, MergeTrackers) {
+  // Generate two sequences of scrolls: first with only 1 frame, and then with
+  // 99 frames. Verify that the two scrolls are merged to report a single
+  // metric.
+  base::HistogramTester histogram_tester;
+  const char first_sequence[] = "b(1)s(1)e(1,0)P(1)";
+  GenerateSequence(first_sequence);
+  EXPECT_EQ(ImplThroughput().frames_expected, 1u);
+  EXPECT_EQ(ImplThroughput().frames_produced, 1u);
+  collection_.StopSequence(FrameSequenceTrackerType::kTouchScroll);
+
+  const char metric[] =
+      "Graphics.Smoothness.PercentDroppedFrames.CompositorThread.TouchScroll";
+  histogram_tester.ExpectTotalCount(metric, 0u);
+  EXPECT_FALSE(TrackerExists(FrameSequenceTrackerType::kTouchScroll));
+
+  CreateNewTracker();
+  const char second_sequence[] = "b(2)s(2)e(2,0)P(2)b(100)s(3)e(100,0)P(3)";
+  GenerateSequence(second_sequence);
+  EXPECT_EQ(ImplThroughput().frames_expected, 99u);
+  EXPECT_EQ(ImplThroughput().frames_produced, 2u);
+  collection_.StopSequence(FrameSequenceTrackerType::kTouchScroll);
+  EXPECT_FALSE(TrackerExists(FrameSequenceTrackerType::kTouchScroll));
+  histogram_tester.ExpectTotalCount(metric, 1u);
+  EXPECT_THAT(histogram_tester.GetAllSamples(metric),
+              testing::ElementsAre(base::Bucket(97, 1)));
+}
+
+TEST_F(FrameSequenceTrackerTest, MergeTrackersPresentAfterStopSequence) {
+  // Generate two sequences of scrolls: first with only 1 frame, and then with
+  // 99 frames. Verify that the two scrolls are merged to report a single
+  // metric. For the second sequence, the last frame is presented after the
+  // sequence ends.
+  base::HistogramTester histogram_tester;
+  const char first_sequence[] = "b(1)s(1)e(1,0)P(1)";
+  GenerateSequence(first_sequence);
+  EXPECT_EQ(ImplThroughput().frames_expected, 1u);
+  EXPECT_EQ(ImplThroughput().frames_produced, 1u);
+  collection_.StopSequence(FrameSequenceTrackerType::kTouchScroll);
+
+  const char metric[] =
+      "Graphics.Smoothness.PercentDroppedFrames.CompositorThread.TouchScroll";
+  histogram_tester.ExpectTotalCount(metric, 0u);
+  EXPECT_FALSE(TrackerExists(FrameSequenceTrackerType::kTouchScroll));
+
+  CreateNewTracker();
+  const char second_sequence[] = "b(2)s(2)e(2,0)P(2)b(100)s(3)e(100,0)";
+  GenerateSequence(second_sequence);
+  EXPECT_EQ(ImplThroughput().frames_expected, 99u);
+  EXPECT_EQ(ImplThroughput().frames_produced, 1u);
+  collection_.StopSequence(FrameSequenceTrackerType::kTouchScroll);
+  GenerateSequence("P(3)");
+  histogram_tester.ExpectTotalCount(metric, 1u);
+  EXPECT_THAT(histogram_tester.GetAllSamples(metric),
+              testing::ElementsAre(base::Bucket(97, 1)));
+}
+
+TEST_F(FrameSequenceTrackerTest, MergeTrackersScrollOnSameThread) {
+  // Do a short scroll on the compositor thread, then do another short scroll on
+  // the compositor thread. Make sure these are merged.
+  base::HistogramTester histogram_tester;
+  const char first_sequence[] = "b(1)s(1)e(1,0)P(1)b(80)s(2)e(80,0)P(2)";
+  GenerateSequence(first_sequence);
+  collection_.StopSequence(FrameSequenceTrackerType::kTouchScroll);
+
+  CreateNewTracker(FrameSequenceMetrics::ThreadType::kCompositor);
+  const char second_sequence[] = "b(81)s(3)e(81,0)P(3)b(101)s(4)e(101,0)P(4)";
+  GenerateSequence(second_sequence);
+  collection_.StopSequence(FrameSequenceTrackerType::kTouchScroll);
+
+  const char comp_metric[] =
+      "Graphics.Smoothness.PercentDroppedFrames.CompositorThread.TouchScroll";
+  const char main_metric[] =
+      "Graphics.Smoothness.PercentDroppedFrames.MainThread.TouchScroll";
+  histogram_tester.ExpectTotalCount(comp_metric, 1u);
+  histogram_tester.ExpectTotalCount(main_metric, 0u);
+}
+
+TEST_F(FrameSequenceTrackerTest, MergeTrackersScrollOnDifferentThreads) {
+  // Do a short scroll on the compositor thread, then do another short scroll on
+  // the main-thread. Make sure these are not merged.
+  base::HistogramTester histogram_tester;
+  const char compscroll_sequence[] = "b(1)s(1)e(1,0)P(1)b(80)s(2)e(80,0)P(2)";
+  GenerateSequence(compscroll_sequence);
+  collection_.StopSequence(FrameSequenceTrackerType::kTouchScroll);
+
+  CreateNewTracker(FrameSequenceMetrics::ThreadType::kMain);
+  const char mainscroll_sequence[] =
+      "b(81)s(3)e(81,0)P(3)b(101)s(4)e(101,0)P(4)";
+  GenerateSequence(mainscroll_sequence);
+  collection_.StopSequence(FrameSequenceTrackerType::kTouchScroll);
+
+  const char comp_metric[] =
+      "Graphics.Smoothness.PercentDroppedFrames.CompositorThread.TouchScroll";
+  const char main_metric[] =
+      "Graphics.Smoothness.PercentDroppedFrames.MainThread.TouchScroll";
+  histogram_tester.ExpectTotalCount(comp_metric, 0u);
+  histogram_tester.ExpectTotalCount(main_metric, 0u);
 }
 
 }  // namespace cc

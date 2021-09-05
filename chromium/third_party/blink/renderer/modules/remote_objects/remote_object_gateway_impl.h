@@ -25,7 +25,6 @@ class MODULES_EXPORT RemoteObjectGatewayImpl
       public Supplement<LocalFrame>,
       public mojom::blink::RemoteObjectGateway {
   USING_GARBAGE_COLLECTED_MIXIN(RemoteObjectGatewayImpl);
-  USING_PRE_FINALIZER(RemoteObjectGatewayImpl, Dispose);
 
  public:
   static const char kSupplementName[];
@@ -40,7 +39,6 @@ class MODULES_EXPORT RemoteObjectGatewayImpl
   RemoteObjectGatewayImpl(const RemoteObjectGatewayImpl&) = delete;
   RemoteObjectGatewayImpl& operator=(const RemoteObjectGatewayImpl&) = delete;
   ~RemoteObjectGatewayImpl() override = default;
-  void Dispose();
 
   static void BindMojoReceiver(
       LocalFrame*,
@@ -53,7 +51,7 @@ class MODULES_EXPORT RemoteObjectGatewayImpl
 
   void OnClearWindowObjectInMainWorld();
 
-  void Trace(Visitor* visitor) override {
+  void Trace(Visitor* visitor) const override {
     visitor->Trace(receiver_);
     visitor->Trace(object_host_);
     Supplement<LocalFrame>::Trace(visitor);
@@ -75,10 +73,10 @@ class MODULES_EXPORT RemoteObjectGatewayImpl
 
   HeapMojoReceiver<mojom::blink::RemoteObjectGateway,
                    RemoteObjectGatewayImpl,
-                   HeapMojoWrapperMode::kWithoutContextObserver>
+                   HeapMojoWrapperMode::kForceWithoutContextObserver>
       receiver_;
   HeapMojoRemote<mojom::blink::RemoteObjectHost,
-                 HeapMojoWrapperMode::kWithoutContextObserver>
+                 HeapMojoWrapperMode::kForceWithoutContextObserver>
       object_host_;
 };
 

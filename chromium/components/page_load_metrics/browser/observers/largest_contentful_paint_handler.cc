@@ -6,6 +6,7 @@
 
 #include "components/page_load_metrics/browser/page_load_metrics_observer_delegate.h"
 #include "components/page_load_metrics/common/page_load_metrics.mojom.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 
 namespace page_load_metrics {
@@ -63,9 +64,8 @@ void Reset(ContentfulPaintTimingInfo& timing) {
 
 }  // namespace
 
-ContentfulPaintTimingInfo::ContentfulPaintTimingInfo(
-    PageLoadMetricsObserver::LargestContentType type,
-    bool in_main_frame)
+ContentfulPaintTimingInfo::ContentfulPaintTimingInfo(LargestContentType type,
+                                                     bool in_main_frame)
     : time_(base::Optional<base::TimeDelta>()),
       size_(0),
       type_(type),
@@ -73,7 +73,7 @@ ContentfulPaintTimingInfo::ContentfulPaintTimingInfo(
 ContentfulPaintTimingInfo::ContentfulPaintTimingInfo(
     const base::Optional<base::TimeDelta>& time,
     const uint64_t& size,
-    const page_load_metrics::PageLoadMetricsObserver::LargestContentType type,
+    const LargestContentType type,
     bool in_main_frame)
     : time_(time), size_(size), type_(type), in_main_frame_(in_main_frame) {}
 
@@ -93,9 +93,9 @@ ContentfulPaintTimingInfo::DataAsTraceValue() const {
 
 std::string ContentfulPaintTimingInfo::TypeInString() const {
   switch (Type()) {
-    case page_load_metrics::PageLoadMetricsObserver::LargestContentType::kText:
+    case LargestContentType::kText:
       return "text";
-    case page_load_metrics::PageLoadMetricsObserver::LargestContentType::kImage:
+    case LargestContentType::kImage:
       return "image";
     default:
       NOTREACHED();
@@ -114,14 +114,48 @@ void ContentfulPaintTimingInfo::Reset(
   size_ = size;
   time_ = time;
 }
-
 ContentfulPaint::ContentfulPaint(bool in_main_frame)
-    : text_(PageLoadMetricsObserver::LargestContentType::kText, in_main_frame),
-      image_(PageLoadMetricsObserver::LargestContentType::kImage,
+    : text_(ContentfulPaintTimingInfo::LargestContentType::kText,
+            in_main_frame),
+      image_(ContentfulPaintTimingInfo::LargestContentType::kImage,
              in_main_frame) {}
 
-const ContentfulPaintTimingInfo& ContentfulPaint::MergeTextAndImageTiming() {
+const ContentfulPaintTimingInfo& ContentfulPaint::MergeTextAndImageTiming()
+    const {
   return MergeTimingsBySizeAndTime(text_, image_);
+}
+
+// static
+bool LargestContentfulPaintHandler::AssignTimeAndSizeForLargestContentfulPaint(
+    const page_load_metrics::mojom::LargestContentfulPaintTiming&
+        largest_contentful_paint,
+    base::Optional<base::TimeDelta>* largest_content_paint_time,
+    uint64_t* largest_content_paint_size,
+    ContentfulPaintTimingInfo::LargestContentType* largest_content_type) {
+  // Size being 0 means the paint time is not recorded.
+  if (!largest_contentful_paint.largest_text_paint_size &&
+      !largest_contentful_paint.largest_image_paint_size)
+    return false;
+
+  if ((largest_contentful_paint.largest_text_paint_size >
+       largest_contentful_paint.largest_image_paint_size) ||
+      (largest_contentful_paint.largest_text_paint_size ==
+           largest_contentful_paint.largest_image_paint_size &&
+       largest_contentful_paint.largest_text_paint <
+           largest_contentful_paint.largest_image_paint)) {
+    *largest_content_paint_time = largest_contentful_paint.largest_text_paint;
+    *largest_content_paint_size =
+        largest_contentful_paint.largest_text_paint_size;
+    *largest_content_type =
+        ContentfulPaintTimingInfo::LargestContentType::kText;
+  } else {
+    *largest_content_paint_time = largest_contentful_paint.largest_image_paint;
+    *largest_content_paint_size =
+        largest_contentful_paint.largest_image_paint_size;
+    *largest_content_type =
+        ContentfulPaintTimingInfo::LargestContentType::kImage;
+  }
+  return true;
 }
 
 LargestContentfulPaintHandler::LargestContentfulPaintHandler()
@@ -131,10 +165,14 @@ LargestContentfulPaintHandler::LargestContentfulPaintHandler()
 LargestContentfulPaintHandler::~LargestContentfulPaintHandler() = default;
 
 void LargestContentfulPaintHandler::RecordTiming(
-    const mojom::PaintTimingPtr& timing,
+    const page_load_metrics::mojom::LargestContentfulPaintTiming&
+        largest_contentful_paint,
+    const base::Optional<base::TimeDelta>&
+        first_input_or_scroll_notified_timestamp,
     content::RenderFrameHost* subframe_rfh) {
   if (!IsSubframe(subframe_rfh)) {
-    RecordMainFrameTiming(timing);
+    RecordMainFrameTiming(largest_contentful_paint,
+                          first_input_or_scroll_notified_timestamp);
     return;
   }
   // For subframes
@@ -144,11 +182,12 @@ void LargestContentfulPaintHandler::RecordTiming(
     // We received timing information for an untracked load. Ignore it.
     return;
   }
-  RecordSubframeTiming(timing, it->second);
+  RecordSubframeTiming(largest_contentful_paint,
+                       first_input_or_scroll_notified_timestamp, it->second);
 }
 
 const ContentfulPaintTimingInfo&
-LargestContentfulPaintHandler::MergeMainFrameAndSubframes() {
+LargestContentfulPaintHandler::MergeMainFrameAndSubframes() const {
   const ContentfulPaintTimingInfo& main_frame_timing =
       main_frame_contentful_paint_.MergeTextAndImageTiming();
   const ContentfulPaintTimingInfo& subframe_timing =
@@ -165,31 +204,40 @@ LargestContentfulPaintHandler::MergeMainFrameAndSubframes() {
 // trade-off we make to keep a simple algorithm, otherwise we will have to
 // track one candidate per subframe.
 void LargestContentfulPaintHandler::RecordSubframeTiming(
-    const mojom::PaintTimingPtr& timing,
+    const page_load_metrics::mojom::LargestContentfulPaintTiming&
+        largest_contentful_paint,
+    const base::Optional<base::TimeDelta>&
+        first_input_or_scroll_notified_timestamp,
     const base::TimeDelta& navigation_start_offset) {
-  UpdateFirstInputOrScrollNotified(
-      timing->first_input_or_scroll_notified_timestamp,
-      navigation_start_offset);
+  UpdateFirstInputOrScrollNotified(first_input_or_scroll_notified_timestamp,
+                                   navigation_start_offset);
   MergeForSubframes(&subframe_contentful_paint_.Text(),
-                    timing->largest_text_paint, timing->largest_text_paint_size,
+                    largest_contentful_paint.largest_text_paint,
+                    largest_contentful_paint.largest_text_paint_size,
                     navigation_start_offset);
   MergeForSubframes(&subframe_contentful_paint_.Image(),
-                    timing->largest_image_paint,
-                    timing->largest_image_paint_size, navigation_start_offset);
+                    largest_contentful_paint.largest_image_paint,
+                    largest_contentful_paint.largest_image_paint_size,
+                    navigation_start_offset);
 }
 
 void LargestContentfulPaintHandler::RecordMainFrameTiming(
-    const mojom::PaintTimingPtr& timing) {
+    const page_load_metrics::mojom::LargestContentfulPaintTiming&
+        largest_contentful_paint,
+    const base::Optional<base::TimeDelta>&
+        first_input_or_scroll_notified_timestamp) {
   UpdateFirstInputOrScrollNotified(
-      timing->first_input_or_scroll_notified_timestamp,
+      first_input_or_scroll_notified_timestamp,
       /* navigation_start_offset */ base::TimeDelta());
-  if (IsValid(timing->largest_text_paint)) {
-    main_frame_contentful_paint_.Text().Reset(timing->largest_text_paint,
-                                              timing->largest_text_paint_size);
+  if (IsValid(largest_contentful_paint.largest_text_paint)) {
+    main_frame_contentful_paint_.Text().Reset(
+        largest_contentful_paint.largest_text_paint,
+        largest_contentful_paint.largest_text_paint_size);
   }
-  if (IsValid(timing->largest_image_paint)) {
+  if (IsValid(largest_contentful_paint.largest_image_paint)) {
     main_frame_contentful_paint_.Image().Reset(
-        timing->largest_image_paint, timing->largest_image_paint_size);
+        largest_contentful_paint.largest_image_paint,
+        largest_contentful_paint.largest_image_paint_size);
   }
 }
 
@@ -220,7 +268,7 @@ void LargestContentfulPaintHandler::UpdateFirstInputOrScrollNotified(
 
 void LargestContentfulPaintHandler::OnDidFinishSubFrameNavigation(
     content::NavigationHandle* navigation_handle,
-    const PageLoadMetricsObserverDelegate& delegate) {
+    base::TimeTicks navigation_start) {
   if (!navigation_handle->HasCommitted())
     return;
 
@@ -229,7 +277,7 @@ void LargestContentfulPaintHandler::OnDidFinishSubFrameNavigation(
   subframe_navigation_start_offset_.erase(
       navigation_handle->GetFrameTreeNodeId());
 
-  if (delegate.GetNavigationStart() > navigation_handle->NavigationStart())
+  if (navigation_start > navigation_handle->NavigationStart())
     return;
   base::TimeDelta navigation_delta;
   // If navigation start offset tracking has been disabled for tests, then
@@ -238,11 +286,16 @@ void LargestContentfulPaintHandler::OnDidFinishSubFrameNavigation(
   // See crbug/616901 for more details on why navigation start offset tracking
   // is disabled in tests.
   if (!g_disable_subframe_navigation_start_offset) {
-    navigation_delta =
-        navigation_handle->NavigationStart() - delegate.GetNavigationStart();
+    navigation_delta = navigation_handle->NavigationStart() - navigation_start;
   }
   subframe_navigation_start_offset_.insert(std::make_pair(
       navigation_handle->GetFrameTreeNodeId(), navigation_delta));
+}
+
+void LargestContentfulPaintHandler::OnFrameDeleted(
+    content::RenderFrameHost* render_frame_host) {
+  subframe_navigation_start_offset_.erase(
+      render_frame_host->GetFrameTreeNodeId());
 }
 
 void LargestContentfulPaintHandler::MergeForSubframes(

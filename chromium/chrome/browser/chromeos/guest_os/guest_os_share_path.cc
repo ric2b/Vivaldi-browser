@@ -8,7 +8,6 @@
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/optional.h"
-#include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "chrome/browser/chromeos/crostini/crostini_manager.h"
 #include "chrome/browser/chromeos/crostini/crostini_util.h"
@@ -223,9 +222,10 @@ void GuestOsSharePath::CallSeneschalSharePath(const std::string& vm_name,
       file_manager::util::GetMyFilesFolderForProfile(profile_);
   base::FilePath android_files(file_manager::util::kAndroidFilesPath);
   base::FilePath removable_media(file_manager::util::kRemovableMediaPath);
-  base::FilePath system_fonts(file_manager::util::kSystemFontsPath);
   base::FilePath linux_files =
       file_manager::util::GetCrostiniMountDirectory(profile_);
+  base::FilePath system_fonts(file_manager::util::kSystemFontsPath);
+  base::FilePath archive_mount(file_manager::util::kArchiveMountPath);
   if (my_files == path || my_files.AppendRelativePath(path, &relative_path)) {
     allowed_path = true;
     request.set_storage_location(
@@ -298,6 +298,11 @@ void GuestOsSharePath::CallSeneschalSharePath(const std::string& vm_name,
              system_fonts.AppendRelativePath(path, &relative_path)) {
     allowed_path = true;
     request.set_storage_location(vm_tools::seneschal::SharePathRequest::FONTS);
+  } else if (archive_mount.AppendRelativePath(path, &relative_path)) {
+    // Allow subdirs of /media/archive.
+    allowed_path = true;
+    request.set_storage_location(
+        vm_tools::seneschal::SharePathRequest::ARCHIVE);
   }
 
   if (!allowed_path) {
@@ -331,7 +336,8 @@ void GuestOsSharePath::CallSeneschalSharePath(const std::string& vm_name,
         crostini_manager->GetVmInfo(vm_name);
     if (!vm_info || vm_info->state != crostini::VmState::STARTED) {
       crostini_manager->RestartCrostini(
-          vm_name, crostini::kCrostiniDefaultContainerName,
+          crostini::ContainerId(vm_name,
+                                crostini::kCrostiniDefaultContainerName),
           base::BindOnce(&OnVmRestartedForSeneschal, profile_, vm_name,
                          std::move(callback), std::move(request)));
       return;
@@ -372,22 +378,23 @@ void GuestOsSharePath::CallSeneschalUnsharePath(const std::string& vm_name,
   }
 
   // Convert path to a virtual path relative to one of the external mounts,
-  // then get it as a FilesSystemURL to convert to a path inside crostini,
-  // then remove /mnt/chromeos/ base dir prefix to get the path to unshare.
+  // then get it as a FilesSystemURL to convert to a path inside the VM,
+  // then remove mount base dir prefix to get the path to unshare.
   storage::ExternalMountPoints* mount_points =
       storage::ExternalMountPoints::GetSystemInstance();
   base::FilePath virtual_path;
+  base::FilePath dummy_vm_mount("/");
   base::FilePath inside;
   bool result = mount_points->GetVirtualPath(path, &virtual_path);
   if (result) {
     storage::FileSystemURL url = mount_points->CreateCrackedFileSystemURL(
         url::Origin(), storage::kFileSystemTypeExternal, virtual_path);
-    result = file_manager::util::ConvertFileSystemURLToPathInsideCrostini(
-        profile_, url, &inside);
+    result = file_manager::util::ConvertFileSystemURLToPathInsideVM(
+        profile_, url, dummy_vm_mount, &inside,
+        /*map_crostini_home=*/vm_name == crostini::kCrostiniDefaultVmName);
   }
   base::FilePath unshare_path;
-  if (!result || !crostini::ContainerChromeOSBaseDirectory().AppendRelativePath(
-                     inside, &unshare_path)) {
+  if (!result || !dummy_vm_mount.AppendRelativePath(inside, &unshare_path)) {
     std::move(callback).Run(false, "Invalid path to unshare");
     return;
   }
@@ -521,6 +528,21 @@ void GuestOsSharePath::RegisterPersistedPath(const std::string& vm_name,
   }
 }
 
+bool GuestOsSharePath::IsPathShared(const std::string& vm_name,
+                                    base::FilePath path) const {
+  while (true) {
+    auto it = shared_paths_.find(path);
+    if (it != shared_paths_.end() && it->second.vm_names.count(vm_name) > 0) {
+      return true;
+    }
+    base::FilePath parent = path.DirName();
+    if (parent == path) {
+      return false;
+    }
+    path = std::move(parent);
+  }
+}
+
 void GuestOsSharePath::OnVolumeMounted(chromeos::MountError error_code,
                                        const file_manager::Volume& volume) {
   if (error_code != chromeos::MountError::MOUNT_ERROR_NONE) {
@@ -593,7 +615,7 @@ void GuestOsSharePath::RegisterSharedPath(const std::string& vm_name,
   auto changed = [](base::RepeatingClosure deleted, const base::FilePath& path,
                     bool error) {
     if (!error && !base::PathExists(path)) {
-      base::PostTask(FROM_HERE, {content::BrowserThread::UI}, deleted);
+      content::GetUIThreadTaskRunner({})->PostTask(FROM_HERE, deleted);
     }
   };
   // Start watcher on its sequenced task runner.  It must also be destroyed

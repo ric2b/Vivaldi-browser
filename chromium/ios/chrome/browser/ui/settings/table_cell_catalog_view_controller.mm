@@ -4,6 +4,7 @@
 
 #import "ios/chrome/browser/ui/settings/table_cell_catalog_view_controller.h"
 
+#include "base/mac/foundation_util.h"
 #import "ios/chrome/browser/ui/authentication/cells/signin_promo_view_configurator.h"
 #import "ios/chrome/browser/ui/authentication/cells/table_view_account_item.h"
 #import "ios/chrome/browser/ui/authentication/cells/table_view_signin_promo_item.h"
@@ -12,11 +13,15 @@
 #import "ios/chrome/browser/ui/settings/cells/account_sign_in_item.h"
 #import "ios/chrome/browser/ui/settings/cells/copied_to_chrome_item.h"
 #import "ios/chrome/browser/ui/settings/cells/settings_image_detail_text_item.h"
+#import "ios/chrome/browser/ui/settings/cells/settings_password_check_item.h"
 #import "ios/chrome/browser/ui/settings/cells/settings_switch_item.h"
 #import "ios/chrome/browser/ui/settings/cells/sync_switch_item.h"
+#import "ios/chrome/browser/ui/settings/elements/enterprise_info_popover_view_controller.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_detail_icon_item.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_detail_text_item.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_image_item.h"
+#import "ios/chrome/browser/ui/table_view/cells/table_view_info_button_cell.h"
+#import "ios/chrome/browser/ui/table_view/cells/table_view_info_button_item.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_link_header_footer_item.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_multi_detail_text_item.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_text_button_item.h"
@@ -67,10 +72,16 @@ typedef NS_ENUM(NSInteger, ItemType) {
   ItemTypeAccountSignInItem,
   ItemTypeSettingsSwitch1,
   ItemTypeSettingsSwitch2,
+  ItemTypeTableViewInfoButton,
+  ItemTypeTableViewInfoButtonWithDetailText,
+  ItemTypeTableViewInfoButtonWithImage,
   ItemTypeSyncSwitch,
   ItemTypeSettingsSyncError,
   ItemTypeAutofillData,
   ItemTypeAccount,
+  ItemTypePasswordCheck1,
+  ItemTypePasswordCheck2,
+  ItemTypePasswordCheck3,
 };
 }
 
@@ -342,6 +353,33 @@ typedef NS_ENUM(NSInteger, ItemType) {
   [model addItem:syncSwitchItem
       toSectionWithIdentifier:SectionIdentifierSettings];
 
+  TableViewInfoButtonItem* tableViewInfoButtonItem =
+      [[TableViewInfoButtonItem alloc]
+          initWithType:ItemTypeTableViewInfoButton];
+  tableViewInfoButtonItem.text = @"Info button item";
+  tableViewInfoButtonItem.statusText = @"Status";
+  [model addItem:tableViewInfoButtonItem
+      toSectionWithIdentifier:SectionIdentifierSettings];
+
+  TableViewInfoButtonItem* tableViewInfoButtonItemWithDetailText =
+      [[TableViewInfoButtonItem alloc]
+          initWithType:ItemTypeTableViewInfoButtonWithDetailText];
+  tableViewInfoButtonItemWithDetailText.text = @"Info button item";
+  tableViewInfoButtonItemWithDetailText.detailText = @"Detail text";
+  tableViewInfoButtonItemWithDetailText.statusText = @"Status";
+  [model addItem:tableViewInfoButtonItemWithDetailText
+      toSectionWithIdentifier:SectionIdentifierSettings];
+
+  TableViewInfoButtonItem* tableViewInfoButtonItemWithLeadingImage =
+      [[TableViewInfoButtonItem alloc]
+          initWithType:ItemTypeTableViewInfoButtonWithImage];
+  tableViewInfoButtonItemWithLeadingImage.text = @"Info button item";
+  tableViewInfoButtonItemWithLeadingImage.statusText = @"Status";
+  tableViewInfoButtonItemWithLeadingImage.iconImageName =
+      @"settings_article_suggestions";
+  [model addItem:tableViewInfoButtonItemWithLeadingImage
+      toSectionWithIdentifier:SectionIdentifierSettings];
+
   SettingsImageDetailTextItem* imageDetailTextItem =
       [[SettingsImageDetailTextItem alloc]
           initWithType:ItemTypeSettingsSyncError];
@@ -351,6 +389,40 @@ typedef NS_ENUM(NSInteger, ItemType) {
   imageDetailTextItem.image = [[ChromeIcon infoIcon]
       imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
   [model addItem:imageDetailTextItem
+      toSectionWithIdentifier:SectionIdentifierSettings];
+
+  SettingsPasswordCheckItem* checkPasswordsInProcess =
+      [[SettingsPasswordCheckItem alloc] initWithType:ItemTypePasswordCheck1];
+  checkPasswordsInProcess.text = @"This is running password check item";
+  checkPasswordsInProcess.detailText =
+      @"This is very long description of password check item. Another line of "
+      @"description.";
+  checkPasswordsInProcess.enabled = YES;
+  checkPasswordsInProcess.indicatorHidden = NO;
+  [model addItem:checkPasswordsInProcess
+      toSectionWithIdentifier:SectionIdentifierSettings];
+
+  SettingsPasswordCheckItem* checkPasswordsFinished =
+      [[SettingsPasswordCheckItem alloc] initWithType:ItemTypePasswordCheck2];
+  checkPasswordsFinished.text = @"This is finished password check item";
+  checkPasswordsFinished.detailText =
+      @"This is very long description of password check item. Another line of "
+      @"description.";
+  checkPasswordsFinished.enabled = YES;
+  checkPasswordsFinished.indicatorHidden = YES;
+  checkPasswordsFinished.image = [[ChromeIcon infoIcon]
+      imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+  [model addItem:checkPasswordsFinished
+      toSectionWithIdentifier:SectionIdentifierSettings];
+
+  SettingsPasswordCheckItem* checkPasswordsDisabled =
+      [[SettingsPasswordCheckItem alloc] initWithType:ItemTypePasswordCheck3];
+  checkPasswordsDisabled.text = @"This is disabled password check item";
+  checkPasswordsDisabled.detailText =
+      @"This is very long description of password check item. Another line of "
+      @"description.";
+  checkPasswordsDisabled.enabled = NO;
+  [model addItem:checkPasswordsDisabled
       toSectionWithIdentifier:SectionIdentifierSettings];
 
   TableViewLinkHeaderFooterItem* linkFooter =
@@ -447,6 +519,46 @@ typedef NS_ENUM(NSInteger, ItemType) {
   item.URL = GURL("https://photos.google.com/");
   item.badgeImage = [UIImage imageNamed:@"table_view_cell_check_mark"];
   [model addItem:item toSectionWithIdentifier:SectionIdentifierURL];
+}
+
+#pragma mark - Actions
+
+// Called when the user clicks on the information button of the managed
+// setting's UI. Shows a textual bubble with the information of the enterprise.
+- (void)didTapManagedUIInfoButton:(UIButton*)buttonView {
+  EnterpriseInfoPopoverViewController* bubbleViewController =
+      [[EnterpriseInfoPopoverViewController alloc] initWithEnterpriseName:nil];
+  [self presentViewController:bubbleViewController animated:YES completion:nil];
+
+  // Disable the button when showing the bubble.
+  buttonView.enabled = NO;
+
+  // Set the anchor and arrow direction of the bubble.
+  bubbleViewController.popoverPresentationController.sourceView = buttonView;
+  bubbleViewController.popoverPresentationController.sourceRect =
+      buttonView.bounds;
+  bubbleViewController.popoverPresentationController.permittedArrowDirections =
+      UIPopoverArrowDirectionAny;
+}
+
+#pragma mark - UITableViewDataSource
+
+- (UITableViewCell*)tableView:(UITableView*)tableView
+        cellForRowAtIndexPath:(NSIndexPath*)indexPath {
+  UITableViewCell* cell = [super tableView:tableView
+                     cellForRowAtIndexPath:indexPath];
+  ItemType itemType = static_cast<ItemType>(
+      [self.tableViewModel itemTypeForIndexPath:indexPath]);
+  if (itemType == ItemTypeTableViewInfoButton ||
+      itemType == ItemTypeTableViewInfoButtonWithDetailText ||
+      itemType == ItemTypeTableViewInfoButtonWithImage) {
+    TableViewInfoButtonCell* managedCell =
+        base::mac::ObjCCastStrict<TableViewInfoButtonCell>(cell);
+    [managedCell.trailingButton addTarget:self
+                                   action:@selector(didTapManagedUIInfoButton:)
+                         forControlEvents:UIControlEventTouchUpInside];
+  }
+  return cell;
 }
 
 @end

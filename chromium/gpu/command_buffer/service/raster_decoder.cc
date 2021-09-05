@@ -208,7 +208,8 @@ bool AllowedBetweenBeginEndRaster(CommandId command) {
 // avoid it as much as possible.
 class RasterDecoderImpl final : public RasterDecoder,
                                 public gles2::ErrorStateClient,
-                                public ServiceFontManager::Client {
+                                public ServiceFontManager::Client,
+                                public SharedContextState::ContextLostObserver {
  public:
   RasterDecoderImpl(DecoderClient* client,
                     CommandBufferServiceBase* command_buffer_service,
@@ -365,6 +366,9 @@ class RasterDecoderImpl final : public RasterDecoder,
   scoped_refptr<Buffer> GetShmBuffer(uint32_t shm_id) override;
   void ReportProgress() override;
 
+  // SharedContextState::ContextLostObserver implementation.
+  void OnContextLost() override;
+
  private:
   gles2::ContextState* state() const {
     if (use_passthrough_) {
@@ -401,7 +405,7 @@ class RasterDecoderImpl final : public RasterDecoder,
     if (!flush_workaround_disabled_for_test_) {
       TRACE_EVENT0("gpu", "RasterDecoderImpl::FlushToWorkAroundMacCrashes");
       if (gr_context())
-        gr_context()->flush();
+        gr_context()->flushAndSubmit();
       api()->glFlushFn();
 
       // Flushes can be expensive, yield to allow interruption after each flush.
@@ -583,8 +587,6 @@ class RasterDecoderImpl final : public RasterDecoder,
   bool use_passthrough_ = false;
   bool use_ddl_ = false;
 
-  bool reset_by_robustness_extension_ = false;
-
   // The current decoder error communicates the decoder error through command
   // processing functions that do not return the error value. Should be set
   // only if not returning an error.
@@ -756,9 +758,12 @@ RasterDecoderImpl::RasterDecoderImpl(
       font_manager_(base::MakeRefCounted<ServiceFontManager>(this)),
       is_privileged_(is_privileged) {
   DCHECK(shared_context_state_);
+  shared_context_state_->AddContextLostObserver(this);
 }
 
-RasterDecoderImpl::~RasterDecoderImpl() = default;
+RasterDecoderImpl::~RasterDecoderImpl() {
+  shared_context_state_->RemoveContextLostObserver(this);
+}
 
 base::WeakPtr<DecoderContext> RasterDecoderImpl::AsWeakPtr() {
   return weak_ptr_factory_.GetWeakPtr();
@@ -854,16 +859,12 @@ void RasterDecoderImpl::Destroy(bool have_context) {
       DCHECK(result == GrSemaphoresSubmitted::kYes || end_semaphores_.empty());
       end_semaphores_.clear();
       sk_surface_ = nullptr;
-      if (shared_image_) {
-        scoped_shared_image_write_.reset();
-        shared_image_.reset();
-      } else {
-        sk_surface_for_testing_.reset();
-      }
     }
-    if (gr_context()) {
-      gr_context()->flush();
-    }
+    if (gr_context())
+      gr_context()->flushAndSubmit();
+    scoped_shared_image_write_.reset();
+    shared_image_.reset();
+    sk_surface_for_testing_.reset();
   }
 
   copy_tex_image_blit_.reset();
@@ -891,17 +892,10 @@ bool RasterDecoderImpl::MakeCurrent() {
   if (shared_context_state_->context_lost() ||
       !shared_context_state_->MakeCurrent(nullptr)) {
     LOG(ERROR) << "  RasterDecoderImpl: Context lost during MakeCurrent.";
-    MarkContextLost(error::kMakeCurrentFailed);
     return false;
   }
 
   DCHECK_EQ(api(), gl::g_current_gl_context);
-
-  if (CheckResetStatus()) {
-    LOG(ERROR)
-        << "  RasterDecoderImpl: Context reset detected after MakeCurrent.";
-    return false;
-  }
 
   // Rebind textures if the service ids may have changed.
   RestoreAllExternalTextureBindingsIfNeeded();
@@ -948,6 +942,10 @@ Capabilities RasterDecoderImpl::GetCapabilities() {
 #else
     NOTREACHED();
 #endif
+  } else if (shared_context_state_->GrContextIsDawn()) {
+    // TODO(crbug.com/1090476): Query Dawn for this value once an API exists for
+    // capabilities.
+    caps.max_texture_size = 8192;
   } else {
     NOTIMPLEMENTED();
   }
@@ -1113,55 +1111,27 @@ void RasterDecoderImpl::SetLevelInfo(uint32_t client_id,
 }
 
 bool RasterDecoderImpl::WasContextLost() const {
-  return context_lost_;
+  return shared_context_state_->context_lost();
 }
 
 bool RasterDecoderImpl::WasContextLostByRobustnessExtension() const {
-  return WasContextLost() && reset_by_robustness_extension_;
+  return shared_context_state_->device_needs_reset();
 }
 
 void RasterDecoderImpl::MarkContextLost(error::ContextLostReason reason) {
-  // Only lose the context once.
-  if (WasContextLost())
-    return;
+  shared_context_state_->MarkContextLost(reason);
+}
 
-  // Don't make GL calls in here, the context might not be current.
-  context_lost_ = true;
-  command_buffer_service()->SetContextLostReason(reason);
+void RasterDecoderImpl::OnContextLost() {
+  DCHECK(shared_context_state_->context_lost());
+  command_buffer_service()->SetContextLostReason(
+      *shared_context_state_->context_lost_reason());
   current_decoder_error_ = error::kLostContext;
 }
 
 bool RasterDecoderImpl::CheckResetStatus() {
   DCHECK(!WasContextLost());
-  DCHECK(shared_context_state_->context()->IsCurrent(nullptr));
-
-  // If the reason for the call was a GL error, we can try to determine the
-  // reset status more accurately.
-  GLenum driver_status =
-      shared_context_state_->context()->CheckStickyGraphicsResetStatus();
-  if (driver_status == GL_NO_ERROR)
-    return false;
-
-  LOG(ERROR) << "RasterDecoder context lost via ARB/EXT_robustness. Reset "
-                "status = "
-             << gles2::GLES2Util::GetStringEnum(driver_status);
-
-  switch (driver_status) {
-    case GL_GUILTY_CONTEXT_RESET_ARB:
-      MarkContextLost(error::kGuilty);
-      break;
-    case GL_INNOCENT_CONTEXT_RESET_ARB:
-      MarkContextLost(error::kInnocent);
-      break;
-    case GL_UNKNOWN_CONTEXT_RESET_ARB:
-      MarkContextLost(error::kUnknown);
-      break;
-    default:
-      NOTREACHED();
-      return false;
-  }
-  reset_by_robustness_extension_ = true;
-  return true;
+  return shared_context_state_->CheckResetStatus(/*needs_gl=*/false);
 }
 
 gles2::Logger* RasterDecoderImpl::GetLogger() {
@@ -1500,14 +1470,13 @@ void RasterDecoderImpl::DisableFlushWorkaroundForTest() {
 void RasterDecoderImpl::OnContextLostError() {
   if (!WasContextLost()) {
     // Need to lose current context before broadcasting!
-    CheckResetStatus();
-    reset_by_robustness_extension_ = true;
+    shared_context_state_->CheckResetStatus(/*needs_gl=*/false);
   }
 }
 
 void RasterDecoderImpl::OnOutOfMemoryError() {
   if (lose_context_when_out_of_memory_ && !WasContextLost()) {
-    if (!CheckResetStatus()) {
+    if (!shared_context_state_->CheckResetStatus(/*needs_gl=*/false)) {
       MarkContextLost(error::kOutOfMemory);
     }
   }
@@ -2071,17 +2040,14 @@ void RasterDecoderImpl::DoCopySubTextureINTERNALGL(
     if (gles2::GLStreamTextureImage* image =
             source_texture->GetLevelStreamTextureImage(GL_TEXTURE_EXTERNAL_OES,
                                                        source_level)) {
-      GLfloat transform_matrix[16];
-      image->GetTextureMatrix(transform_matrix);
-
-      copy_texture_chromium_->DoCopySubTextureWithTransform(
+      copy_texture_chromium_->DoCopySubTexture(
           this, source_target, source_texture->service_id(), source_level,
           source_internal_format, dest_target, dest_texture->service_id(),
           dest_level, dest_internal_format, xoffset, yoffset, x, y, width,
           height, dest_size.width(), dest_size.height(), source_size.width(),
           source_size.height(), unpack_flip_y, unpack_premultiply_alpha,
-          false /* unpack_unmultiply_alpha */, false /* dither */,
-          transform_matrix, copy_tex_image_blit_.get());
+          /*unpack_unmultiply_alpha=*/false, /*dither=*/false,
+          gles2::CopyTextureMethod::DIRECT_DRAW, copy_tex_image_blit_.get());
       dest_texture->SetLevelClearedRect(dest_target, dest_level,
                                         new_cleared_rect);
       return;
@@ -2255,8 +2221,13 @@ void RasterDecoderImpl::DoCopySubTextureINTERNALSkia(
   };
   gpu::AddVulkanCleanupTaskForSkiaFlush(
       shared_context_state_->vk_context_provider(), &flush_info);
-  dest_scoped_access->surface()->flush(
+  auto result = dest_scoped_access->surface()->flush(
       SkSurface::BackendSurfaceAccess::kNoAccess, flush_info);
+  // If the |end_semaphores| is empty, we can deferred the queue submission.
+  if (!end_semaphores.empty()) {
+    DCHECK_EQ(result, GrSemaphoresSubmitted::kYes);
+    gr_context()->submit();
+  }
 
   if (!dest_shared_image->IsCleared()) {
     dest_shared_image->SetClearedRect(new_cleared_rect);
@@ -2294,6 +2265,15 @@ void RasterDecoderImpl::DoWritePixelsINTERNAL(GLint x_offset,
   if (!dest_shared_image) {
     LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION, "glWritePixels",
                        "Attempting to write to unknown mailbox.");
+    return;
+  }
+
+  if (SkColorTypeBytesPerPixel(viz::ResourceFormatToClosestSkColorType(
+          true, dest_shared_image->format())) !=
+      SkColorTypeBytesPerPixel(static_cast<SkColorType>(src_sk_color_type))) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION, "glWritePixels",
+                       "Bytes per pixel for src SkColorType and dst "
+                       "SkColorType must be the same.");
     return;
   }
 
@@ -2375,8 +2355,12 @@ void RasterDecoderImpl::DoWritePixelsINTERNAL(GLint x_offset,
   };
   gpu::AddVulkanCleanupTaskForSkiaFlush(
       shared_context_state_->vk_context_provider(), &flush_info);
-  dest_scoped_access->surface()->flush(
+  auto result = dest_scoped_access->surface()->flush(
       SkSurface::BackendSurfaceAccess::kNoAccess, flush_info);
+  if (!end_semaphores.empty()) {
+    DCHECK_EQ(result, GrSemaphoresSubmitted::kYes);
+    gr_context()->submit();
+  }
 
   if (!dest_shared_image->IsCleared()) {
     dest_shared_image->SetClearedRect(
@@ -2565,8 +2549,12 @@ void RasterDecoderImpl::DoConvertYUVMailboxesToRGBINTERNAL(
   };
   gpu::AddVulkanCleanupTaskForSkiaFlush(
       shared_context_state_->vk_context_provider(), &flush_info);
-  dest_scoped_access->surface()->flush(
+  auto result = dest_scoped_access->surface()->flush(
       SkSurface::BackendSurfaceAccess::kNoAccess, flush_info);
+  if (!end_semaphores.empty()) {
+    DCHECK_EQ(result, GrSemaphoresSubmitted::kYes);
+    gr_context()->submit();
+  }
 
   if (!images[YUVConversionMailboxIndex::kDestIndex]->IsCleared() &&
       drew_image) {
@@ -2899,13 +2887,15 @@ void RasterDecoderImpl::DoEndRasterCHROMIUM() {
         .fNumSemaphores = end_semaphores_.size(),
         .fSignalSemaphores = end_semaphores_.data(),
     };
-    AddVulkanCleanupTaskForSkiaFlush(
-        shared_context_state_->vk_context_provider(), &flush_info);
     auto result = sk_surface_->flush(SkSurface::BackendSurfaceAccess::kPresent,
                                      flush_info);
-    DCHECK(result == GrSemaphoresSubmitted::kYes || end_semaphores_.empty());
-    end_semaphores_.clear();
-
+    // If |end_semaphores_| is not empty, we will submit work to the queue.
+    // Otherwise the queue submission can be deferred..
+    if (!end_semaphores_.empty()) {
+      DCHECK(result == GrSemaphoresSubmitted::kYes);
+      gr_context()->submit();
+      end_semaphores_.clear();
+    }
     // The DDL pins memory for the recorded ops so it must be kept alive until
     // its flushed.
     ddl_.reset();
@@ -2913,13 +2903,10 @@ void RasterDecoderImpl::DoEndRasterCHROMIUM() {
 
   shared_context_state_->UpdateSkiaOwnedMemorySize();
   sk_surface_ = nullptr;
-  if (!shared_image_) {
-    // Test only path for  SetUpForRasterCHROMIUMForTest.
-    sk_surface_for_testing_.reset();
-  } else {
-    scoped_shared_image_write_.reset();
-    shared_image_.reset();
-  }
+  scoped_shared_image_write_.reset();
+  shared_image_.reset();
+  // Test only path for SetUpForRasterCHROMIUMForTest.
+  sk_surface_for_testing_.reset();
 
   // Unlock all font handles. This needs to be deferred until
   // SkSurface::flush since that flushes batched Gr operations

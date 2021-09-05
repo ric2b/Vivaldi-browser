@@ -122,8 +122,7 @@ BrowserThreadImpl::BrowserThreadImpl(
     // In unit tests, usage of the  FileDescriptorWatcher API is already allowed
     // if the UI thread is running a MessageLoopForIO.
     if (!base::MessageLoopCurrentForIO::IsSet()) {
-      file_descriptor_watcher_.emplace(
-          base::CreateSingleThreadTaskRunner({BrowserThread::IO}));
+      file_descriptor_watcher_.emplace(GetIOThreadTaskRunner({}));
     }
     base::FileDescriptorWatcher::AssertAllowed();
 #endif
@@ -248,10 +247,11 @@ void BrowserThread::PostBestEffortTask(
     const base::Location& from_here,
     scoped_refptr<base::TaskRunner> task_runner,
     base::OnceClosure task) {
-  base::PostTask(
-      FROM_HERE, {content::BrowserThread::IO, base::TaskPriority::BEST_EFFORT},
-      base::BindOnce(base::IgnoreResult(&base::TaskRunner::PostTask),
-                     std::move(task_runner), from_here, std::move(task)));
+  content::GetIOThreadTaskRunner({base::TaskPriority::BEST_EFFORT})
+      ->PostTask(
+          FROM_HERE,
+          base::BindOnce(base::IgnoreResult(&base::TaskRunner::PostTask),
+                         std::move(task_runner), from_here, std::move(task)));
 }
 
 }  // namespace content

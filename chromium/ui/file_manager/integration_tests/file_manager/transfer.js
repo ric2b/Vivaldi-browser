@@ -229,9 +229,9 @@ async function transferBetweenVolumes(transferInfo) {
 
 /**
  * A list of transfer locations, for use with transferBetweenVolumes.
- * @enum{TransferLocationInfo}
+ * @enum {TransferLocationInfo}
  */
-const TRANSFER_LOCATIONS = Object.freeze({
+const TRANSFER_LOCATIONS = {
   drive: new TransferLocationInfo({
     breadcrumbsPath: '/My Drive',
     volumeName: 'drive',
@@ -306,7 +306,8 @@ const TRANSFER_LOCATIONS = Object.freeze({
       }),
     ]
   }),
-});
+};
+Object.freeze(TRANSFER_LOCATIONS);
 
 /**
  * Tests copying from Drive to Downloads.
@@ -516,8 +517,10 @@ testcase.transferDragAndDrop = async () => {
       'fakeMouseClick failed');
 
   // Drag and drop it.
+  const skipDrop = false;
   chrome.test.assertTrue(
-      await remoteCall.callRemoteTestUtil('fakeDragAndDrop', appId, [src, dst]),
+      await remoteCall.callRemoteTestUtil(
+          'fakeDragAndDrop', appId, [src, dst, skipDrop]),
       'fakeDragAndDrop failed');
 
   // Navigate to the dst folder.

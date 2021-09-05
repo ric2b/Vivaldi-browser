@@ -269,7 +269,7 @@ VulkanImplementationScenic::CreateImageFromGpuMemoryHandle(
   auto image = gpu::VulkanImage::Create(
       device_queue, vk_image, vk_device_memory, size, vk_image_info.format,
       vk_image_info.tiling, vk_device_size, 0 /* memory_type_index */,
-      ycbcr_info);
+      ycbcr_info, vk_image_info.flags);
 
   if (image->format() != vk_format) {
     DLOG(ERROR) << "Unexpected format " << vk_format << " vs "
@@ -298,10 +298,16 @@ std::unique_ptr<gpu::SysmemBufferCollection>
 VulkanImplementationScenic::RegisterSysmemBufferCollection(
     VkDevice device,
     gfx::SysmemBufferCollectionId id,
-    zx::channel token) {
+    zx::channel token,
+    gfx::BufferFormat format,
+    gfx::BufferUsage usage) {
+  // SCANOUT images must be protected in protected mode.
+  bool force_protected =
+      usage == gfx::BufferUsage::SCANOUT && enforce_protected_memory();
+
   return std::make_unique<SysmemBufferCollectionImpl>(
-      sysmem_buffer_manager_->ImportSysmemBufferCollection(device, id,
-                                                           std::move(token)));
+      sysmem_buffer_manager_->ImportSysmemBufferCollection(
+          device, id, std::move(token), format, usage, force_protected));
 }
 
 }  // namespace ui

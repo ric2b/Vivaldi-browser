@@ -14,6 +14,7 @@
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_clock.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/ui/passwords/passwords_model_delegate_mock.h"
@@ -25,6 +26,7 @@
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
 #include "components/password_manager/core/browser/statistics_table.h"
 #include "components/password_manager/core/common/credential_manager_types.h"
+#include "components/password_manager/core/common/password_manager_features.h"
 #include "components/password_manager/core/common/password_manager_ui.h"
 #include "components/ukm/test_ukm_recorder.h"
 #include "content/public/browser/web_contents.h"
@@ -61,7 +63,12 @@ constexpr char kUIDismissalReasonUpdateMetric[] =
 
 class SaveUpdateWithAccountStoreBubbleControllerTest : public ::testing::Test {
  public:
-  SaveUpdateWithAccountStoreBubbleControllerTest() = default;
+  SaveUpdateWithAccountStoreBubbleControllerTest() {
+    // If kEnablePasswordsAccountStorage is disabled, then
+    // SaveUpdateBubbleController is used instead of this class.
+    feature_list_.InitAndEnableFeature(
+        password_manager::features::kEnablePasswordsAccountStorage);
+  }
   ~SaveUpdateWithAccountStoreBubbleControllerTest() override = default;
 
   void SetUp() override {
@@ -79,7 +86,7 @@ class SaveUpdateWithAccountStoreBubbleControllerTest : public ::testing::Test {
             &password_manager::BuildPasswordStore<
                 content::BrowserContext,
                 testing::StrictMock<password_manager::MockPasswordStore>>));
-    pending_password_.origin = GURL(kSiteOrigin);
+    pending_password_.url = GURL(kSiteOrigin);
     pending_password_.signon_realm = kSiteOrigin;
     pending_password_.username_value = base::ASCIIToUTF16(kUsername);
     pending_password_.password_value = base::ASCIIToUTF16(kPassword);
@@ -130,6 +137,7 @@ class SaveUpdateWithAccountStoreBubbleControllerTest : public ::testing::Test {
   std::vector<std::unique_ptr<autofill::PasswordForm>> GetCurrentForms() const;
 
  private:
+  base::test::ScopedFeatureList feature_list_;
   content::BrowserTaskEnvironment task_environment_;
   content::RenderViewHostTestEnabler rvh_enabler_;
   TestingProfile profile_;
@@ -144,8 +152,8 @@ class SaveUpdateWithAccountStoreBubbleControllerTest : public ::testing::Test {
 void SaveUpdateWithAccountStoreBubbleControllerTest::SetUpWithState(
     password_manager::ui::State state,
     PasswordBubbleControllerBase::DisplayReason reason) {
-  GURL origin(kSiteOrigin);
-  EXPECT_CALL(*delegate(), GetOrigin()).WillOnce(ReturnRef(origin));
+  url::Origin origin = url::Origin::Create(GURL(kSiteOrigin));
+  EXPECT_CALL(*delegate(), GetOrigin()).WillOnce(Return(origin));
   EXPECT_CALL(*delegate(), GetState()).WillRepeatedly(Return(state));
   EXPECT_CALL(*delegate(), GetWebContents())
       .WillRepeatedly(Return(test_web_contents_.get()));
@@ -331,6 +339,30 @@ TEST_F(SaveUpdateWithAccountStoreBubbleControllerTest,
   DestroyModelExpectReason(password_manager::metrics_util::CLICKED_SAVE);
 }
 
+TEST_F(SaveUpdateWithAccountStoreBubbleControllerTest,
+       ClickUpdateWhileNotOptedIn) {
+  // This is testing that updating a password should not trigger an account
+  // store opt in flow even if the user isn't opted in.
+  ON_CALL(*password_feature_manager(), GetDefaultPasswordStore)
+      .WillByDefault(Return(autofill::PasswordForm::Store::kAccountStore));
+  ON_CALL(*password_feature_manager(), IsOptedInForAccountStorage)
+      .WillByDefault(Return(false));
+  PretendUpdatePasswordWaiting();
+
+  EXPECT_TRUE(controller()->enable_editing());
+  EXPECT_TRUE(controller()->IsCurrentStateUpdate());
+
+  EXPECT_CALL(*GetStore(), RemoveSiteStatsImpl(GURL(kSiteOrigin).GetOrigin()));
+  EXPECT_CALL(*delegate(), SavePassword(pending_password().username_value,
+                                        pending_password().password_value));
+  EXPECT_CALL(*delegate(), NeverSavePassword()).Times(0);
+  EXPECT_CALL(*delegate(), OnNopeUpdateClicked()).Times(0);
+  EXPECT_CALL(*delegate(), AuthenticateUserForAccountStoreOptInAndSavePassword)
+      .Times(0);
+  controller()->OnSaveClicked();
+  DestroyModelExpectReason(password_manager::metrics_util::CLICKED_SAVE);
+}
+
 TEST_F(SaveUpdateWithAccountStoreBubbleControllerTest, ClickSaveInUpdateState) {
   PretendUpdatePasswordWaiting();
 
@@ -443,7 +475,8 @@ TEST_F(SaveUpdateWithAccountStoreBubbleControllerTest, RecordUKMs) {
           // Setup metrics recorder
           auto recorder = base::MakeRefCounted<
               password_manager::PasswordFormMetricsRecorder>(
-              true /*is_main_frame_secure*/, kTestSourceId);
+              true /*is_main_frame_secure*/, kTestSourceId,
+              /*pref_service=*/nullptr);
 
           // Exercise bubble.
           ON_CALL(*delegate(), GetPasswordFormMetricsRecorder())

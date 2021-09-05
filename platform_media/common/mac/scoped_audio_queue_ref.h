@@ -11,8 +11,10 @@
 #include "platform_media/common/feature_toggles.h"
 
 #include <AudioToolbox/AudioQueue.h>
+#include <sstream>
 
 #include "base/mac/scoped_typeref.h"
+#include "base/notreached.h"
 
 namespace media {
 

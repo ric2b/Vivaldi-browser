@@ -19,6 +19,8 @@
 #import "ios/chrome/browser/ui/overlays/infobar_banner/confirm/confirm_infobar_banner_overlay_mediator.h"
 #import "ios/chrome/browser/ui/overlays/infobar_banner/infobar_banner_overlay_mediator.h"
 #import "ios/chrome/browser/ui/overlays/infobar_banner/passwords/save_password_infobar_banner_overlay_mediator.h"
+#import "ios/chrome/browser/ui/overlays/infobar_banner/save_card/save_card_infobar_banner_overlay_mediator.h"
+#import "ios/chrome/browser/ui/overlays/infobar_banner/translate/translate_infobar_banner_overlay_mediator.h"
 #import "ios/chrome/browser/ui/overlays/overlay_request_coordinator+subclassing.h"
 #import "ios/chrome/browser/ui/overlays/overlay_request_coordinator_delegate.h"
 #import "ios/chrome/browser/ui/overlays/overlay_request_mediator_util.h"
@@ -27,6 +29,14 @@
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
+
+namespace {
+// The banner dismissal timeout for all Infobar Messages Overlays in M85. This
+// is temporary since M85 does not have support for high-priority banner
+// dismissal timeouts.
+const NSTimeInterval kInfobarBannerTemporaryPresentationDurationInSeconds =
+    11.0;
+}  // namespace
 
 @interface InfobarBannerOverlayCoordinator () <InfobarBannerPositioner>
 // The list of supported mediator classes.
@@ -45,7 +55,9 @@
 + (NSArray<Class>*)supportedMediatorClasses {
   return @[
     [SavePasswordInfobarBannerOverlayMediator class],
-    [ConfirmInfobarBannerOverlayMediator class]
+    [ConfirmInfobarBannerOverlayMediator class],
+    [TranslateInfobarBannerOverlayMediator class],
+    [SaveCardInfobarBannerOverlayMediator class],
   ];
 }
 
@@ -102,16 +114,26 @@
                                         [self finishPresentation];
                                       }];
   self.started = YES;
+
+  if (!UIAccessibilityIsVoiceOverRunning()) {
+    // Auto-dismiss the banner after timeout if VoiceOver is off (banner should
+    // persist until user explicitly swipes it away).
+    [self performSelector:@selector(dismissBannerIfReady)
+               withObject:nil
+               afterDelay:kInfobarBannerTemporaryPresentationDurationInSeconds];
+  }
 }
 
 - (void)stopAnimated:(BOOL)animated {
   if (!self.started)
     return;
+  // Mark started as NO before calling dismissal callback to prevent dup
+  // stopAnimated: executions.
+  self.started = NO;
   [self.baseViewController dismissViewControllerAnimated:animated
                                               completion:^{
                                                 [self finishDismissal];
                                               }];
-  self.started = NO;
 }
 
 - (UIViewController*)viewController {
@@ -149,6 +171,12 @@
           [self class].supportedMediatorClasses, self.request));
   DCHECK(mediator) << "None of the supported mediator classes support request.";
   return mediator;
+}
+
+// Indicate to the UI to dismiss itself if it is ready (e.g. the user is not
+// currently interaction with it).
+- (void)dismissBannerIfReady {
+  [self.bannerViewController dismissWhenInteractionIsFinished];
 }
 
 @end

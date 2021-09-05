@@ -5,6 +5,7 @@
 #include "components/password_manager/core/browser/password_manager_client_helper.h"
 
 #include "components/password_manager/core/browser/password_bubble_experiment.h"
+#include "components/password_manager/core/browser/password_feature_manager.h"
 #include "components/password_manager/core/browser/password_form_manager_for_ui.h"
 #include "components/password_manager/core/browser/password_manager.h"
 #include "components/password_manager/core/common/password_manager_features.h"
@@ -19,7 +20,7 @@ PasswordManagerClientHelper::PasswordManagerClientHelper(
   DCHECK(delegate_);
 }
 
-PasswordManagerClientHelper::~PasswordManagerClientHelper() {}
+PasswordManagerClientHelper::~PasswordManagerClientHelper() = default;
 
 void PasswordManagerClientHelper::NotifyUserCouldBeAutoSignedIn(
     std::unique_ptr<autofill::PasswordForm> form) {
@@ -33,16 +34,14 @@ void PasswordManagerClientHelper::NotifySuccessfulLoginWithExistingPassword(
   if (!possible_auto_sign_in_ ||
       possible_auto_sign_in_->username_value != form.username_value ||
       possible_auto_sign_in_->password_value != form.password_value ||
-      possible_auto_sign_in_->origin != form.origin ||
+      possible_auto_sign_in_->url != form.url ||
       !ShouldPromptToEnableAutoSignIn()) {
     possible_auto_sign_in_.reset();
   }
   // Check if it is necessary to prompt user to enable auto sign-in.
   if (possible_auto_sign_in_) {
     delegate_->PromptUserToEnableAutosignin();
-  } else if (base::FeatureList::IsEnabled(
-                 password_manager::features::kEnablePasswordsAccountStorage) &&
-             submitted_manager->IsMovableToAccountStore()) {
+  } else if (ShouldPromptToMovePasswordToAccount(*submitted_manager)) {
     delegate_->PromptUserToMovePasswordToAccount(std::move(submitted_manager));
   }
 }
@@ -81,6 +80,16 @@ bool PasswordManagerClientHelper::ShouldPromptToEnableAutoSignIn() const {
                  delegate_->GetPrefs()) &&
          delegate_->GetPrefs()->GetBoolean(
              password_manager::prefs::kCredentialsEnableAutosignin) &&
+         !delegate_->IsIncognito();
+}
+
+bool PasswordManagerClientHelper::ShouldPromptToMovePasswordToAccount(
+    const PasswordFormManagerForUI& submitted_manager) const {
+  return delegate_->GetPasswordFeatureManager()
+             ->ShouldShowAccountStorageBubbleUi() &&
+         delegate_->GetPasswordFeatureManager()->GetDefaultPasswordStore() ==
+             autofill::PasswordForm::Store::kAccountStore &&
+         submitted_manager.IsMovableToAccountStore() &&
          !delegate_->IsIncognito();
 }
 

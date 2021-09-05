@@ -9,7 +9,6 @@
 #include <string>
 #include <utility>
 
-#include "ash/public/cpp/assistant/assistant_settings.h"
 #include "ash/public/cpp/assistant/assistant_setup.h"
 #include "ash/public/cpp/assistant/assistant_state.h"
 #include "base/macros.h"
@@ -42,7 +41,6 @@ class AssistantOptInFlowScreenView {
   DISALLOW_COPY_AND_ASSIGN(AssistantOptInFlowScreenView);
 };
 
-// TODO(updowndota): Refactor to reuse AssistantOptInHandler methods.
 class AssistantOptInFlowScreenHandler
     : public BaseScreenHandler,
       public AssistantOptInFlowScreenView,

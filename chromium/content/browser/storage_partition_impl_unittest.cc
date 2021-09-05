@@ -17,7 +17,6 @@
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
-#include "base/task/post_task.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/thread.h"
@@ -33,6 +32,7 @@
 #include "content/browser/gpu/shader_cache_factory.h"
 #include "content/browser/storage_partition_impl.h"
 #include "content/public/browser/browser_task_traits.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/generated_code_cache_settings.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/storage_usage_info.h"
@@ -42,17 +42,21 @@
 #include "content/public/test/test_utils.h"
 #include "net/base/test_completion_callback.h"
 #include "net/cookies/canonical_cookie.h"
+#include "net/cookies/cookie_inclusion_status.h"
 #include "net/cookies/cookie_store.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "ppapi/buildflags/buildflags.h"
 #include "services/network/cookie_manager.h"
+#include "storage/browser/quota/quota_client_type.h"
 #include "storage/browser/quota/quota_manager.h"
+#include "storage/browser/test/mock_quota_client.h"
 #include "storage/browser/test/mock_quota_manager.h"
 #include "storage/browser/test/mock_special_storage_policy.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/mojom/quota/quota_types.mojom-shared.h"
 #include "third_party/leveldatabase/env_chromium.h"
 
 #if BUILDFLAG(ENABLE_PLUGINS)
@@ -148,7 +152,7 @@ class RemoveCookieTester {
   }
 
   void AddCookie(const url::Origin& origin) {
-    CanonicalCookie::CookieInclusionStatus status;
+    net::CookieInclusionStatus status;
     std::unique_ptr<net::CanonicalCookie> cc(
         net::CanonicalCookie::Create(origin.GetURL(), "A=1", base::Time::Now(),
                                      base::nullopt /* server_time */, &status));
@@ -160,8 +164,9 @@ class RemoveCookieTester {
   }
 
  private:
-  void GetCookieListCallback(const net::CookieStatusList& cookie_list,
-                             const net::CookieStatusList& excluded_cookies) {
+  void GetCookieListCallback(
+      const net::CookieAccessResultList& cookie_list,
+      const net::CookieAccessResultList& excluded_cookies) {
     std::string cookie_line =
         net::CanonicalCookie::BuildCookieLine(cookie_list);
     if (cookie_line == "A=1") {
@@ -173,7 +178,7 @@ class RemoveCookieTester {
     await_completion_.Notify();
   }
 
-  void SetCookieCallback(CanonicalCookie::CookieInclusionStatus result) {
+  void SetCookieCallback(net::CookieInclusionStatus result) {
     ASSERT_TRUE(result.IsInclude());
     await_completion_.Notify();
   }
@@ -571,8 +576,8 @@ class RemovePluginPrivateDataTester {
 
     // AwaitCompletionHelper and MessageLoop don't work on a
     // SequencedTaskRunner, so post a task on the IO thread.
-    base::PostTask(FROM_HERE, {BrowserThread::IO},
-                   base::BindOnce(&AwaitCompletionHelper::Notify,
+    GetIOThreadTaskRunner({})->PostTask(
+        FROM_HERE, base::BindOnce(&AwaitCompletionHelper::Notify,
                                   base::Unretained(await_completion)));
   }
 
@@ -732,6 +737,9 @@ class StoragePartitionImplTest : public testing::Test {
   StoragePartitionImplTest()
       : task_environment_(content::BrowserTaskEnvironment::IO_MAINLOOP),
         browser_context_(new TestBrowserContext()) {
+    // Configures the Conversion API to run in memory to speed up it's
+    // initialization and avoid timeouts. See https://crbug.com/1080764.
+    ConversionManagerImpl::RunInMemoryForTesting();
     feature_list_.InitAndEnableFeature(features::kConversionMeasurement);
   }
 
@@ -739,8 +747,15 @@ class StoragePartitionImplTest : public testing::Test {
     if (!quota_manager_.get()) {
       quota_manager_ = base::MakeRefCounted<storage::MockQuotaManager>(
           browser_context_->IsOffTheRecord(), browser_context_->GetPath(),
-          base::CreateSingleThreadTaskRunner({BrowserThread::IO}).get(),
+          GetIOThreadTaskRunner({}).get(),
           browser_context_->GetSpecialStoragePolicy());
+      auto quota_client = base::MakeRefCounted<storage::MockQuotaClient>(
+          quota_manager_->proxy(), base::span<const storage::MockOriginData>(),
+          storage::QuotaClientType::kFileSystem);
+      quota_manager_->proxy()->RegisterClient(
+          std::move(quota_client), storage::QuotaClientType::kFileSystem,
+          {blink::mojom::StorageType::kTemporary,
+           blink::mojom::StorageType::kPersistent});
     }
     return quota_manager_.get();
   }

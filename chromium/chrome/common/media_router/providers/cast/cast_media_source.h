@@ -11,7 +11,7 @@
 #include <type_traits>
 #include <vector>
 
-#include "base/logging.h"
+#include "base/check.h"
 #include "base/optional.h"
 #include "chrome/common/media_router/media_source.h"
 #include "components/cast_channel/cast_message_util.h"
@@ -27,6 +27,13 @@ static constexpr char kCastStreamingAudioAppId[] = "85CDB22F";
 // Placeholder app ID advertised by the multizone leader in a receiver status
 // message.
 static constexpr char kMultizoneLeaderAppId[] = "MultizoneLeader";
+
+static const constexpr char* const kMultizoneMemberAppIds[] = {
+    kMultizoneLeaderAppId,
+    "531A4F84",  // MultizoneLeader
+    "MultizoneFollower",
+    "705D30C6"  // MultizoneFollower
+};
 
 static constexpr base::TimeDelta kDefaultLaunchTimeout =
     base::TimeDelta::FromSeconds(60);
@@ -44,12 +51,20 @@ class BitwiseOr {
     for (E e : values)
       Add(e);
   }
+  static constexpr BitwiseOr FromBits(T bits) { return BitwiseOr(bits); }
   bool empty() const { return bits_ == 0; }
+  T bits() const { return bits_; }
   void Add(E value) { bits_ |= Mask(value); }
+  bool Has(E value) const { return (bits_ & Mask(value)) != 0; }
+  bool HasAll(const BitwiseOr& other) const {
+    return (bits_ & other.bits_) == other.bits_;
+  }
   bool operator==(const BitwiseOr& other) const { return bits_ == other.bits_; }
   bool operator!=(const BitwiseOr& other) const { return *this != other; }
 
  private:
+  explicit constexpr BitwiseOr(T bits) : bits_(bits) {}
+
   static T Mask(E value) {
     const T result = static_cast<T>(value);
     DCHECK(static_cast<E>(result) == value);
@@ -60,11 +75,15 @@ class BitwiseOr {
 
 // Represents a Cast app and its capabilitity requirements.
 struct CastAppInfo {
-  explicit CastAppInfo(const std::string& app_id,
-                       BitwiseOr<cast_channel::CastDeviceCapability> = {});
+  explicit CastAppInfo(
+      const std::string& app_id,
+      BitwiseOr<cast_channel::CastDeviceCapability> required_capabilities);
   ~CastAppInfo();
 
   CastAppInfo(const CastAppInfo& other);
+
+  static CastAppInfo ForCastStreaming();
+  static CastAppInfo ForCastStreamingAudio();
 
   std::string app_id;
 
@@ -113,6 +132,9 @@ bool IsAutoJoinAllowed(AutoJoinPolicy policy,
                        int tab_id1,
                        const url::Origin& origin2,
                        int tab_id2);
+
+// Returns true if |source_id| is a valid origin for site-initiated mirroring.
+bool IsSiteInitiatedMirroringSource(const MediaSource::Id& source_id);
 
 // Represents a MediaSource parsed into structured, Cast specific data. The
 // following MediaSources can be parsed into CastMediaSource:
@@ -165,6 +187,17 @@ class CastMediaSource {
   DefaultActionPolicy default_action_policy() const {
     return default_action_policy_;
   }
+  base::Optional<base::TimeDelta> target_playout_delay() const {
+    return target_playout_delay_;
+  }
+  void set_target_playout_delay(
+      const base::Optional<base::TimeDelta>& target_playout_delay) {
+    target_playout_delay_ = target_playout_delay;
+  }
+  bool allow_audio_capture() const { return allow_audio_capture_; }
+  void set_allow_audio_capture(bool allow_audio_capture) {
+    allow_audio_capture_ = allow_audio_capture;
+  }
   const std::string& app_params() const { return app_params_; }
   void set_app_params(const std::string& app_params) {
     app_params_ = app_params;
@@ -180,9 +213,11 @@ class CastMediaSource {
   AutoJoinPolicy auto_join_policy_;
   DefaultActionPolicy default_action_policy_;
   base::TimeDelta launch_timeout_ = kDefaultLaunchTimeout;
-  // Empty if not set.
+  // Optional parameters.
   std::string client_id_;
   base::Optional<cast_channel::BroadcastRequest> broadcast_request_;
+  base::Optional<base::TimeDelta> target_playout_delay_;
+  bool allow_audio_capture_ = true;
   std::vector<ReceiverAppType> supported_app_types_ = {ReceiverAppType::kWeb};
   std::string app_params_;
 };

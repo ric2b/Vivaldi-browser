@@ -68,7 +68,8 @@ class OmniboxViewIOS : public OmniboxView,
                                    const AutocompleteMatch& match,
                                    bool save_original_selection,
                                    bool notify_text_changed) override;
-  bool OnInlineAutocompleteTextMaybeChanged(const base::string16& display_text,
+  void OnInlineAutocompleteTextMaybeChanged(const base::string16& display_text,
+                                            size_t user_text_start,
                                             size_t user_text_length) override;
   void OnBeforePossibleChange() override;
   bool OnAfterPossibleChange(bool allow_keyword_ui_change) override;
@@ -77,10 +78,12 @@ class OmniboxViewIOS : public OmniboxView,
 
   // OmniboxView stubs.
   void Update() override {}
+  void SetAdditionalText(const base::string16& text) override {}
   void EnterKeywordModeForDefaultSearchProvider() override {}
   bool IsSelectAll() const override;
   void GetSelectionBounds(base::string16::size_type* start,
                           base::string16::size_type* end) const override;
+  size_t GetAllSelectionsLength() const override;
   void SelectAll(bool reversed) override {}
   void SetFocus(bool is_user_initiated) override {}
   void ApplyCaretVisibility() override {}

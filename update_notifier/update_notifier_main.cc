@@ -4,7 +4,9 @@
 #include <shellscalingapi.h>
 
 #include "base/at_exit.h"
-#include "base/message_loop/message_loop.h"
+#include "base/logging.h"
+#include "base/message_loop/message_pump_type.h"
+#include "base/task/single_thread_task_executor.h"
 #include "base/win/windows_version.h"
 #include "chrome/install_static/product_install_details.h"
 
@@ -48,13 +50,11 @@ void EnableHighDPISupport() {
 
 int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE prev, wchar_t*, int) {
   base::AtExitManager at_exit;
-  base::MessageLoop message_loop(base::MessagePumpType::UI);
+  base::SingleThreadTaskExecutor executor(base::MessagePumpType::UI);
 
   install_static::InitializeProductDetailsForPrimaryModule();
   EnableHighDPISupport();
 
   return vivaldi_update_notifier::UpdateNotifierManager::GetInstance()
-                 ->RunNotifier(instance)
-             ? 0
-             : 1;
+                 ->RunNotifier(instance) ? 0 : 1;
 }

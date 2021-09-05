@@ -8,6 +8,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/strcat.h"
 #include "components/autofill/core/common/password_generation_util.h"
+#include "components/password_manager/core/common/password_manager_features.h"
 
 using autofill::password_generation::PasswordGenerationType;
 
@@ -57,14 +58,47 @@ void LogGeneralUIDismissalReason(UIDismissalReason reason) {
                                 NUM_UI_RESPONSES);
 }
 
-void LogSaveUIDismissalReason(UIDismissalReason reason) {
+void LogSaveUIDismissalReason(
+    UIDismissalReason reason,
+    base::Optional<PasswordAccountStorageUserState> user_state) {
   base::UmaHistogramEnumeration("PasswordManager.SaveUIDismissalReason", reason,
                                 NUM_UI_RESPONSES);
+
+  if (user_state.has_value()) {
+    DCHECK(base::FeatureList::IsEnabled(
+        password_manager::features::kEnablePasswordsAccountStorage));
+    std::string suffix =
+        GetPasswordAccountStorageUserStateHistogramSuffix(user_state.value());
+    base::UmaHistogramEnumeration(
+        "PasswordManager.SaveUIDismissalReason." + suffix, reason,
+        NUM_UI_RESPONSES);
+  }
+}
+
+void LogSaveUIDismissalReasonAfterUnblacklisting(UIDismissalReason reason) {
+  base::UmaHistogramEnumeration(
+      "PasswordManager.SaveUIDismissalReasonAfterUnblacklisting", reason,
+      NUM_UI_RESPONSES);
 }
 
 void LogUpdateUIDismissalReason(UIDismissalReason reason) {
   base::UmaHistogramEnumeration("PasswordManager.UpdateUIDismissalReason",
                                 reason, NUM_UI_RESPONSES);
+}
+
+void LogMoveUIDismissalReason(UIDismissalReason reason,
+                              PasswordAccountStorageUserState user_state) {
+  DCHECK(base::FeatureList::IsEnabled(
+      password_manager::features::kEnablePasswordsAccountStorage));
+
+  base::UmaHistogramEnumeration("PasswordManager.MoveUIDismissalReason", reason,
+                                NUM_UI_RESPONSES);
+
+  std::string suffix =
+      GetPasswordAccountStorageUserStateHistogramSuffix(user_state);
+  base::UmaHistogramEnumeration(
+      "PasswordManager.MoveUIDismissalReason." + suffix, reason,
+      NUM_UI_RESPONSES);
 }
 
 void LogLeakDialogTypeAndDismissalReason(LeakDialogType type,
@@ -221,6 +255,13 @@ void LogSubmittedFormFrame(SubmittedFormFrame frame) {
                                 SubmittedFormFrame::SUBMITTED_FORM_FRAME_COUNT);
 }
 
+void LogPasswordsCountFromAccountStoreAfterUnlock(
+    int account_store_passwords_count) {
+  base::UmaHistogramCounts100(
+      "PasswordManager.CredentialsCountFromAccountStoreAfterUnlock",
+      account_store_passwords_count);
+}
+
 void LogPasswordSettingsReauthResult(ReauthResult result) {
   base::UmaHistogramEnumeration(
       "PasswordManager.ReauthToAccessPasswordInSettings", result);
@@ -230,11 +271,6 @@ void LogDeleteUndecryptableLoginsReturnValue(
     DeleteCorruptedPasswordsResult result) {
   base::UmaHistogramEnumeration(
       "PasswordManager.DeleteUndecryptableLoginsReturnValue", result);
-}
-
-void LogDeleteCorruptedPasswordsResult(DeleteCorruptedPasswordsResult result) {
-  base::UmaHistogramEnumeration(
-      "PasswordManager.DeleteCorruptedPasswordsResult", result);
 }
 
 void LogNewlySavedPasswordIsGenerated(

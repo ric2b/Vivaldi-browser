@@ -9,6 +9,7 @@
 #include "base/files/file_util.h"
 #include "base/test/bind_test_util.h"
 #include "base/threading/thread_restrictions.h"
+#include "chrome/browser/chromeos/drive/drivefs_test_support.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -20,6 +21,38 @@
 namespace drive {
 
 class DriveIntegrationServiceBrowserTest : public InProcessBrowserTest {
+  bool SetUpUserDataDirectory() override {
+    return drive::SetUpUserDataDirectoryForDriveFsTest();
+  }
+
+  void SetUpInProcessBrowserTestFixture() override {
+    create_drive_integration_service_ = base::Bind(
+        &DriveIntegrationServiceBrowserTest::CreateDriveIntegrationService,
+        base::Unretained(this));
+    service_factory_for_test_ = std::make_unique<
+        drive::DriveIntegrationServiceFactory::ScopedFactoryForTest>(
+        &create_drive_integration_service_);
+  }
+
+ private:
+  drive::DriveIntegrationService* CreateDriveIntegrationService(
+      Profile* profile) {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    base::FilePath mount_path = profile->GetPath().Append("drivefs");
+    fake_drivefs_helpers_[profile] =
+        std::make_unique<drive::FakeDriveFsHelper>(profile, mount_path);
+    auto* integration_service = new drive::DriveIntegrationService(
+        profile, std::string(), mount_path,
+        fake_drivefs_helpers_[profile]->CreateFakeDriveFsListenerFactory());
+    return integration_service;
+  }
+
+  drive::DriveIntegrationServiceFactory::FactoryCallback
+      create_drive_integration_service_;
+  std::unique_ptr<drive::DriveIntegrationServiceFactory::ScopedFactoryForTest>
+      service_factory_for_test_;
+  std::map<Profile*, std::unique_ptr<drive::FakeDriveFsHelper>>
+      fake_drivefs_helpers_;
 };
 
 // Verify DriveIntegrationService is created during login.
@@ -99,5 +132,41 @@ IN_PROC_BROWSER_TEST_F(DriveIntegrationServiceWithGaiaDisabledBrowserTest,
 
   ASSERT_TRUE(integration_service);
   EXPECT_FALSE(integration_service->is_enabled());
+}
+
+IN_PROC_BROWSER_TEST_F(DriveIntegrationServiceBrowserTest, GetMetadata) {
+  base::ScopedAllowBlockingForTesting allow_blocking;
+  auto* drive_service =
+      DriveIntegrationServiceFactory::FindForProfile(browser()->profile());
+
+  base::FilePath mount_path = drive_service->GetMountPointPath();
+  base::FilePath file_path;
+  base::CreateTemporaryFileInDir(mount_path, &file_path);
+
+  {
+    base::RunLoop run_loop;
+    auto quit_closure = run_loop.QuitClosure();
+    drive_service->GetMetadata(
+        base::FilePath("/foo/bar"),
+        base::BindLambdaForTesting(
+            [=](FileError error, drivefs::mojom::FileMetadataPtr metadata_ptr) {
+              EXPECT_EQ(FILE_ERROR_NOT_FOUND, error);
+              quit_closure.Run();
+            }));
+    run_loop.Run();
+  }
+
+  {
+    base::RunLoop run_loop;
+    auto quit_closure = run_loop.QuitClosure();
+    drive_service->GetMetadata(
+        file_path,
+        base::BindLambdaForTesting(
+            [=](FileError error, drivefs::mojom::FileMetadataPtr metadata_ptr) {
+              EXPECT_EQ(FILE_ERROR_OK, error);
+              quit_closure.Run();
+            }));
+    run_loop.Run();
+  }
 }
 }  // namespace drive

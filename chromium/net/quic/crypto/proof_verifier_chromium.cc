@@ -16,6 +16,7 @@
 #include "crypto/signature_verifier.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/net_errors.h"
+#include "net/base/network_isolation_key.h"
 #include "net/cert/cert_status_flags.h"
 #include "net/cert/cert_verifier.h"
 #include "net/cert/ct_policy_enforcer.h"
@@ -459,7 +460,8 @@ int ProofVerifierChromium::Job::DoVerifyCertComplete(int result) {
             cert_verify_result.verified_cert.get(), cert_.get(),
             verify_details_->ct_verify_result.scts,
             TransportSecurityState::ENABLE_EXPECT_CT_REPORTS,
-            verify_details_->ct_verify_result.policy_compliance);
+            verify_details_->ct_verify_result.policy_compliance,
+            proof_verifier_->network_isolation_key_);
     if (ct_requirement_status != TransportSecurityState::CT_NOT_REQUIRED) {
       verify_details_->ct_verify_result.policy_compliance_required = true;
       if (verify_details_->cert_verify_result.is_issued_by_known_root) {
@@ -594,12 +596,14 @@ ProofVerifierChromium::ProofVerifierChromium(
     CTPolicyEnforcer* ct_policy_enforcer,
     TransportSecurityState* transport_security_state,
     CTVerifier* cert_transparency_verifier,
-    std::set<std::string> hostnames_to_allow_unknown_roots)
+    std::set<std::string> hostnames_to_allow_unknown_roots,
+    const NetworkIsolationKey& network_isolation_key)
     : cert_verifier_(cert_verifier),
       ct_policy_enforcer_(ct_policy_enforcer),
       transport_security_state_(transport_security_state),
       cert_transparency_verifier_(cert_transparency_verifier),
-      hostnames_to_allow_unknown_roots_(hostnames_to_allow_unknown_roots) {
+      hostnames_to_allow_unknown_roots_(hostnames_to_allow_unknown_roots),
+      network_isolation_key_(network_isolation_key) {
   DCHECK(cert_verifier_);
   DCHECK(ct_policy_enforcer_);
   DCHECK(transport_security_state_);

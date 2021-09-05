@@ -17,7 +17,6 @@
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
@@ -36,6 +35,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/printing/browser/print_composite_client.h"
 #include "components/printing/browser/print_manager_utils.h"
+#include "components/printing/common/print.mojom.h"
 #include "components/printing/common/print_messages.h"
 #include "components/services/print_compositor/public/cpp/print_service_mojo_types.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -85,8 +85,8 @@ void OnPrintSettingsDoneWrapper(PrintSettingsCallback settings_callback,
                                 std::unique_ptr<PrinterQuery> query) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
 
-  base::PostTask(
-      FROM_HERE, {content::BrowserThread::UI},
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE,
       base::BindOnce(std::move(settings_callback), std::move(query)));
 }
 
@@ -132,8 +132,8 @@ PrintViewManagerBase::~PrintViewManagerBase() {
 bool PrintViewManagerBase::PrintNow(content::RenderFrameHost* rfh) {
   DisconnectFromCurrentPrintJob();
 
-  // Don't print / print preview interstitials or crashed tabs.
-  if (IsInterstitialOrCrashed())
+  // Don't print / print preview crashed tabs.
+  if (IsCrashed())
     return false;
 
   SetPrintingRFH(rfh);
@@ -153,8 +153,8 @@ void PrintViewManagerBase::PrintForPrintPreview(
                      weak_ptr_factory_.GetWeakPtr(), print_data,
                      job_settings.FindIntKey(kSettingPreviewPageCount).value(),
                      std::move(callback));
-  base::PostTask(
-      FROM_HERE, {content::BrowserThread::IO},
+  content::GetIOThreadTaskRunner({})->PostTask(
+      FROM_HERE,
       base::BindOnce(CreateQueryWithSettings, std::move(job_settings),
                      rfh->GetProcess()->GetID(), rfh->GetRoutingID(), queue_,
                      std::move(settings_callback)));
@@ -200,8 +200,8 @@ void PrintViewManagerBase::OnPrintSettingsDone(
   if (printer_query->last_status() == PrintingContext::CANCEL) {
     queue_->QueuePrinterQuery(std::move(printer_query));
 #if defined(OS_WIN)
-    base::PostTask(FROM_HERE, {content::BrowserThread::UI},
-                   base::BindOnce(&PrintViewManagerBase::SystemDialogCancelled,
+    content::GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE, base::BindOnce(&PrintViewManagerBase::SystemDialogCancelled,
                                   weak_ptr_factory_.GetWeakPtr()));
 #endif
     std::move(callback).Run(base::Value());
@@ -209,8 +209,8 @@ void PrintViewManagerBase::OnPrintSettingsDone(
   }
 
   if (!printer_query->cookie() || !printer_query->settings().dpi()) {
-    base::PostTask(
-        FROM_HERE, {content::BrowserThread::IO},
+    content::GetIOThreadTaskRunner({})->PostTask(
+        FROM_HERE,
         base::BindOnce(&PrinterQuery::StopWorker, std::move(printer_query)));
     std::move(callback).Run(base::Value("Update settings failed"));
     return;
@@ -220,8 +220,8 @@ void PrintViewManagerBase::OnPrintSettingsDone(
   // OnDidGetPrintedPagesCount().
   int cookie = printer_query->cookie();
   queue_->QueuePrinterQuery(std::move(printer_query));
-  base::PostTask(FROM_HERE, {content::BrowserThread::UI},
-                 base::BindOnce(&PrintViewManagerBase::StartLocalPrintJob,
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE, base::BindOnce(&PrintViewManagerBase::StartLocalPrintJob,
                                 weak_ptr_factory_.GetWeakPtr(), print_data,
                                 page_count, cookie, std::move(callback)));
 }
@@ -323,7 +323,7 @@ void PrintViewManagerBase::OnDidPrintDocument(
   if (!PrintJobHasDocument(params.document_cookie))
     return;
 
-  const PrintHostMsg_DidPrintContent_Params& content = params.content;
+  const mojom::DidPrintContentParams& content = params.content;
   if (!content.metafile_data_region.IsValid()) {
     NOTREACHED() << "invalid memory handle";
     web_contents()->Stop();
@@ -703,16 +703,15 @@ bool PrintViewManagerBase::OpportunisticallyCreatePrintJob(int cookie) {
   return true;
 }
 
-bool PrintViewManagerBase::IsInterstitialOrCrashed() {
-  return web_contents()->ShowingInterstitialPage() ||
-         web_contents()->IsCrashed();
+bool PrintViewManagerBase::IsCrashed() {
+  return web_contents()->IsCrashed();
 }
 
 bool PrintViewManagerBase::PrintNowInternal(
     content::RenderFrameHost* rfh,
     std::unique_ptr<IPC::Message> message) {
-  // Don't print / print preview interstitials or crashed tabs.
-  if (IsInterstitialOrCrashed())
+  // Don't print / print preview crashed tabs.
+  if (IsCrashed())
     return false;
   return rfh->Send(message.release());
 }
@@ -737,8 +736,8 @@ void PrintViewManagerBase::ReleasePrinterQuery() {
   std::unique_ptr<PrinterQuery> printer_query = queue_->PopPrinterQuery(cookie);
   if (!printer_query)
     return;
-  base::PostTask(
-      FROM_HERE, {content::BrowserThread::IO},
+  content::GetIOThreadTaskRunner({})->PostTask(
+      FROM_HERE,
       base::BindOnce(&PrinterQuery::StopWorker, std::move(printer_query)));
 }
 

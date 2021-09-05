@@ -9,13 +9,17 @@
 #include "base/run_loop.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
+#include "content/browser/conversions/conversion_manager_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/common/content_features.h"
+#include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
+#include "content/public/test/test_navigation_observer.h"
 #include "content/shell/browser/shell.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/default_handlers.h"
@@ -26,13 +30,15 @@ namespace content {
 
 // WebContentsObserver that waits until an impression is available on a
 // navigation handle for a finished navigation.
-class ImpressionObserver : public WebContentsObserver {
+class ImpressionObserver : public TestNavigationObserver {
  public:
-  explicit ImpressionObserver(WebContents* contents)
-      : WebContentsObserver(contents) {}
+  explicit ImpressionObserver(WebContents* contents,
+                              size_t num_impressions = 1u)
+      : TestNavigationObserver(contents),
+        expected_num_impressions_(num_impressions) {}
 
   // WebContentsObserver
-  void DidFinishNavigation(NavigationHandle* navigation_handle) override {
+  void OnDidFinishNavigation(NavigationHandle* navigation_handle) override {
     if (!navigation_handle->GetImpression()) {
       if (waiting_for_null_impression_)
         impression_loop_.Quit();
@@ -40,14 +46,21 @@ class ImpressionObserver : public WebContentsObserver {
     }
 
     last_impression_ = *(navigation_handle->GetImpression());
+    num_impressions_++;
 
-    if (!waiting_for_null_impression_)
+    if (!waiting_for_null_impression_ &&
+        num_impressions_ >= expected_num_impressions_) {
       impression_loop_.Quit();
+    }
   }
 
   const Impression& last_impression() { return *last_impression_; }
 
-  const Impression& WaitForImpression() {
+  // Waits for |expected_num_impressions_| navigations with impressions, and
+  // returns the last impression.
+  const Impression& Wait() {
+    if (num_impressions_ >= expected_num_impressions_)
+      return *last_impression_;
     impression_loop_.Run();
     return last_impression();
   }
@@ -60,15 +73,18 @@ class ImpressionObserver : public WebContentsObserver {
   }
 
  private:
+  size_t num_impressions_ = 0u;
+  const size_t expected_num_impressions_ = 0u;
   base::Optional<Impression> last_impression_;
   bool waiting_for_null_impression_ = false;
   base::RunLoop impression_loop_;
 };
 
-class ImpressionDeclarationBrowserTest : public ContentBrowserTest {
+class ImpressionDisabledBrowserTest : public ContentBrowserTest {
  public:
-  ImpressionDeclarationBrowserTest() {
+  ImpressionDisabledBrowserTest() {
     feature_list_.InitAndEnableFeature(features::kConversionMeasurement);
+    ConversionManagerImpl::RunInMemoryForTesting();
   }
 
   void SetUpOnMainThread() override {
@@ -99,6 +115,37 @@ class ImpressionDeclarationBrowserTest : public ContentBrowserTest {
   std::unique_ptr<net::EmbeddedTestServer> https_server_;
 };
 
+// Verifies that impressions are not logged when the Runtime feature isn't
+// enabled.
+IN_PROC_BROWSER_TEST_F(ImpressionDisabledBrowserTest,
+                       ImpressionWithoutFeatureEnabled_NotReceived) {
+  ImpressionObserver impression_observer(web_contents());
+  EXPECT_TRUE(NavigateToURL(
+      web_contents(),
+      https_server()->GetURL("b.test", "/page_with_impression_creator.html")));
+
+  EXPECT_TRUE(ExecJs(web_contents(), R"(
+    createImpressionTag("link",
+                        "page_with_conversion_redirect.html",
+                        "1" /* impression data */,
+                        "https://a.com" /* conversion_destination */);)"));
+  EXPECT_TRUE(ExecJs(shell(), "simulateClick(\'link\');"));
+
+  // No impression should be observed.
+  EXPECT_TRUE(impression_observer.WaitForNavigationWithNoImpression());
+}
+
+class ImpressionDeclarationBrowserTest : public ImpressionDisabledBrowserTest {
+ public:
+  ImpressionDeclarationBrowserTest() = default;
+
+  // Sets up the blink runtime feature for ConversionMeasurement.
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    command_line->AppendSwitch(
+        switches::kEnableExperimentalWebPlatformFeatures);
+  }
+};
+
 IN_PROC_BROWSER_TEST_F(ImpressionDeclarationBrowserTest,
                        ImpressionTagClicked_ImpressionReceived) {
   ImpressionObserver impression_observer(web_contents());
@@ -118,7 +165,7 @@ IN_PROC_BROWSER_TEST_F(ImpressionDeclarationBrowserTest,
   EXPECT_TRUE(ExecJs(shell(), "simulateClick(\'link\');"));
 
   // Wait for the impression to be seen by the observer.
-  Impression last_impression = impression_observer.WaitForImpression();
+  Impression last_impression = impression_observer.Wait();
 
   // Verify the attributes of the impression are set as expected.
   EXPECT_EQ(1UL, last_impression.impression_data);
@@ -135,8 +182,6 @@ IN_PROC_BROWSER_TEST_F(ImpressionDeclarationBrowserTest,
       web_contents(),
       https_server()->GetURL("b.test", "/page_with_impression_creator.html")));
 
-  ShellAddedObserver new_shell_observer;
-
   // Create an impression tag with a target frame that does not exist, which
   // will open a new window to navigate.
   EXPECT_TRUE(ExecJs(web_contents(), R"(
@@ -145,20 +190,27 @@ IN_PROC_BROWSER_TEST_F(ImpressionDeclarationBrowserTest,
                         "1" /* impression data */,
                         "https://a.com" /* conversion_destination */,
                         "target" /* target */);)"));
+
+  ImpressionObserver impression_observer(nullptr);
+  impression_observer.StartWatchingNewWebContents();
   EXPECT_TRUE(ExecJs(shell(), "simulateClick(\'link\');"));
 
-  ImpressionObserver impression_observer(
-      new_shell_observer.GetShell()->web_contents());
-
   // Wait for the impression to be seen by the observer.
-  Impression last_impression = impression_observer.WaitForImpression();
+  Impression last_impression = impression_observer.Wait();
   EXPECT_EQ(1UL, impression_observer.last_impression().impression_data);
 }
 
-// Test frequently flakes due to timeout. ( https://crbug.com/1084201 )
+// Flaky on Mac: crbug.com/1099410
+#if defined(OS_MACOSX)
+#define MAYBE_ImpressionTagNavigatesExistingRemoteFrame_ImpressionReceived \
+  DISABLED_ImpressionTagNavigatesExistingRemoteFrame_ImpressionReceived
+#else
+#define MAYBE_ImpressionTagNavigatesExistingRemoteFrame_ImpressionReceived \
+  ImpressionTagNavigatesExistingRemoteFrame_ImpressionReceived
+#endif
 IN_PROC_BROWSER_TEST_F(
     ImpressionDeclarationBrowserTest,
-    DISABLED_ImpressionTagNavigatesExistingRemoteFrame_ImpressionReceived) {
+    MAYBE_ImpressionTagNavigatesExistingRemoteFrame_ImpressionReceived) {
   EXPECT_TRUE(NavigateToURL(
       web_contents(),
       https_server()->GetURL("b.test", "/page_with_impression_creator.html")));
@@ -181,12 +233,12 @@ IN_PROC_BROWSER_TEST_F(
                         "1" /* impression data */,
                         "https://a.com" /* conversion_destination */,
                         "target" /* target */);)"));
-  EXPECT_TRUE(ExecJs(shell(), "simulateClick(\'link\');"));
 
   ImpressionObserver impression_observer(remote_web_contents);
+  EXPECT_TRUE(ExecJs(shell(), "simulateClick(\'link\');"));
 
   // Wait for the impression to be seen by the observer.
-  Impression last_impression = impression_observer.WaitForImpression();
+  Impression last_impression = impression_observer.Wait();
   EXPECT_EQ(1UL, impression_observer.last_impression().impression_data);
 }
 
@@ -207,7 +259,7 @@ IN_PROC_BROWSER_TEST_F(ImpressionDeclarationBrowserTest,
   EXPECT_TRUE(ExecJs(shell(), "simulateClick(\'link\');"));
 
   // Wait for the impression to be seen by the observer.
-  Impression last_impression = impression_observer.WaitForImpression();
+  Impression last_impression = impression_observer.Wait();
   EXPECT_EQ(0UL, impression_observer.last_impression().impression_data);
 }
 
@@ -218,8 +270,6 @@ IN_PROC_BROWSER_TEST_F(
       https_server()->GetURL("b.test", "/page_with_impression_creator.html");
   EXPECT_TRUE(NavigateToURL(web_contents(), page_url));
 
-  ShellAddedObserver new_shell_observer;
-
   // Create an impression tag that is opened via middle click. This navigates in
   // a new WebContents.
   EXPECT_TRUE(ExecJs(web_contents(), R"(
@@ -227,12 +277,12 @@ IN_PROC_BROWSER_TEST_F(
                         "page_with_conversion_redirect.html",
                         "1" /* impression data */,
                         "https://a.com" /* conversion_destination */);)"));
+
+  ImpressionObserver impression_observer(nullptr);
+  impression_observer.StartWatchingNewWebContents();
   EXPECT_TRUE(ExecJs(shell(), "simulateMiddleClick(\'link\');"));
 
-  ImpressionObserver impression_observer(
-      new_shell_observer.GetShell()->web_contents());
-
-  Impression last_impression = impression_observer.WaitForImpression();
+  Impression last_impression = impression_observer.Wait();
 
   // Verify the attributes of the impression are set as expected.
   EXPECT_EQ(1UL, last_impression.impression_data);
@@ -260,12 +310,13 @@ IN_PROC_BROWSER_TEST_F(
     link.addEventListener('focus', function() { document.title = 'focused'; });
     link.focus();)"));
   EXPECT_EQ(expected_title, title_watcher.WaitAndGetTitle());
+
+  ImpressionObserver impression_observer(web_contents());
   content::SimulateKeyPress(web_contents(), ui::DomKey::ENTER,
                             ui::DomCode::ENTER, ui::VKEY_RETURN, false, false,
                             false, false);
 
-  ImpressionObserver impression_observer(web_contents());
-  Impression last_impression = impression_observer.WaitForImpression();
+  Impression last_impression = impression_observer.Wait();
 
   // Verify the attributes of the impression are set as expected.
   EXPECT_EQ(1UL, last_impression.impression_data);
@@ -393,7 +444,7 @@ IN_PROC_BROWSER_TEST_F(ImpressionDeclarationBrowserTest,
   EXPECT_TRUE(ExecJs(subframe, "simulateClick('link');"));
 
   // We should see a null impression on the navigation
-  EXPECT_EQ(1u, impression_observer.WaitForImpression().impression_data);
+  EXPECT_EQ(1u, impression_observer.Wait().impression_data);
 }
 
 IN_PROC_BROWSER_TEST_F(ImpressionDeclarationBrowserTest,
@@ -409,7 +460,7 @@ IN_PROC_BROWSER_TEST_F(ImpressionDeclarationBrowserTest,
                         "1" /* impression data */,
                         "https://a.com" /* conversion_destination */);)"));
   EXPECT_TRUE(ExecJs(shell(), "simulateClick(\'link\');"));
-  EXPECT_EQ(1UL, impression_observer.WaitForImpression().impression_data);
+  EXPECT_EQ(1UL, impression_observer.Wait().impression_data);
 
   ImpressionObserver reload_observer(web_contents());
   shell()->Reload();
@@ -432,7 +483,7 @@ IN_PROC_BROWSER_TEST_F(ImpressionDeclarationBrowserTest,
                         "1" /* impression data */,
                         "https://a.com" /* conversion_destination */);)"));
   EXPECT_TRUE(ExecJs(shell(), "simulateClick(\'link\');"));
-  EXPECT_EQ(1UL, impression_observer.WaitForImpression().impression_data);
+  EXPECT_EQ(1UL, impression_observer.Wait().impression_data);
 
   ImpressionObserver reload_observer(web_contents());
   EXPECT_TRUE(ExecJs(web_contents(), "window.location.reload()"));
@@ -451,7 +502,7 @@ IN_PROC_BROWSER_TEST_F(ImpressionDeclarationBrowserTest,
 
   // Click the default impression on the page.
   EXPECT_TRUE(ExecJs(shell(), "simulateClick(\'impression_tag\');"));
-  EXPECT_EQ(1UL, impression_observer.WaitForImpression().impression_data);
+  EXPECT_EQ(1UL, impression_observer.Wait().impression_data);
 
   // Navigate away so we can back navigate to the impression's navigated page.
   EXPECT_TRUE(NavigateToURL(web_contents(), GURL("about:blank")));
@@ -471,8 +522,7 @@ IN_PROC_BROWSER_TEST_F(ImpressionDeclarationBrowserTest,
   WaitForLoadStop(web_contents());
   ImpressionObserver second_impression_observer(web_contents());
   EXPECT_TRUE(ExecJs(shell(), "simulateClick(\'impression_tag\');"));
-  EXPECT_EQ(1UL,
-            second_impression_observer.WaitForImpression().impression_data);
+  EXPECT_EQ(1UL, second_impression_observer.Wait().impression_data);
 }
 
 }  // namespace content

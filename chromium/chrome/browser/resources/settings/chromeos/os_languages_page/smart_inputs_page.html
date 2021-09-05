@@ -27,13 +27,31 @@
           </span>
           <div class="list-frame vertical-list">
             <settings-toggle-button class="list-item first"
-                pref="{{prefs.assistive_feature_enabled.personal_info_suggester}}"
+                pref="{{prefs.assistive_input.personal_info_enabled}}"
                 label="$i18n{showPersonalInfoSuggestion}">
             </settings-toggle-button>
             <cr-link-row class="hr list-item"
                 label="$i18n{managePersonalInfo}"
                 on-click="onManagePersonalInfoClick_" external>
             </cr-link-row>
+          </div>
+        </div>
+      </template>
+      <template is="dom-if" if="[[allowEmojiSuggestion_]]">
+        <div id="emojiSuggestion">
+          <h2 aria-hidden="true">
+            $i18n{emojiSuggestionTitle}
+          </h2>
+          <span class="settings-box first" aria-hidden="true"
+              id="emojiSuggestionDescription">
+            $i18n{emojiSuggestionDescription}
+          </span>
+          <div class="list-frame vertical-list">
+            <settings-toggle-button class="list-item first"
+                pref="{{prefs.assistive_input.emoji_suggestion_enabled}}"
+                label="$i18n{showEmojiSuggestion}"
+                aria-describedby="emojiSuggestionDescription">
+            </settings-toggle-button>
           </div>
         </div>
       </template>

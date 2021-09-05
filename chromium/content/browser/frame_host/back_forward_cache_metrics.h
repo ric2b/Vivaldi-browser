@@ -72,7 +72,10 @@ class BackForwardCacheMetrics
     kRenderFrameHostReused_CrossSite = 28,
     kNotMostRecentNavigationEntry = 29,
     kServiceWorkerClaim = 30,
-    kMaxValue = kServiceWorkerClaim,
+    kIgnoreEventAndEvict = 31,
+    kHaveInnerContents = 32,
+    kTimeoutPuttingInCache = 33,
+    kMaxValue = kTimeoutPuttingInCache,
   };
 
   using NotRestoredReasons =

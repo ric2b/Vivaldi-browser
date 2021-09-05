@@ -52,7 +52,7 @@ NGPhysicalTextFragment::NGPhysicalTextFragment(
   DCHECK_LE(text_offset_.end, source.EndOffset());
   DCHECK(shape_result_ || IsFlowControl()) << *this;
   base_or_resolved_direction_ = source.base_or_resolved_direction_;
-  ink_overflow_computed_ = false;
+  ink_overflow_computed_or_mathml_paint_info_ = false;
 }
 
 NGPhysicalTextFragment::NGPhysicalTextFragment(NGTextFragmentBuilder* builder)
@@ -60,12 +60,12 @@ NGPhysicalTextFragment::NGPhysicalTextFragment(NGTextFragmentBuilder* builder)
                          kFragmentText,
                          static_cast<unsigned>(builder->text_type_)),
       text_(builder->text_),
-      text_offset_({builder->start_offset_, builder->end_offset_}),
+      text_offset_(builder->text_offset_),
       shape_result_(std::move(builder->shape_result_)) {
   DCHECK(shape_result_ || IsFlowControl()) << *this;
   base_or_resolved_direction_ =
       static_cast<unsigned>(builder->ResolvedDirection());
-  ink_overflow_computed_ = false;
+  ink_overflow_computed_or_mathml_paint_info_ = false;
 }
 
 bool NGPhysicalTextFragment::IsGeneratedText() const {
@@ -78,10 +78,8 @@ LayoutUnit NGPhysicalTextFragment::InlinePositionForOffset(
     unsigned offset,
     LayoutUnit (*round_function)(float),
     AdjustMidCluster adjust_mid_cluster) const {
-  scoped_refptr<NGFragmentItem> item =
-      base::MakeRefCounted<NGFragmentItem>(*this);
-  return item->InlinePositionForOffset(Text(), offset, round_function,
-                                       adjust_mid_cluster);
+  return NGFragmentItem(*this).InlinePositionForOffset(
+      Text(), offset, round_function, adjust_mid_cluster);
 }
 
 // TODO(yosin): We should move |NGFragmentItem::InlinePositionForOffset" to
@@ -125,17 +123,14 @@ LayoutUnit NGFragmentItem::InlinePositionForOffset(StringView text,
 
 LayoutUnit NGPhysicalTextFragment::InlinePositionForOffset(
     unsigned offset) const {
-  scoped_refptr<NGFragmentItem> item =
-      base::MakeRefCounted<NGFragmentItem>(*this);
-  return item->InlinePositionForOffset(Text(), offset);
+  return NGFragmentItem(*this).InlinePositionForOffset(Text(), offset);
 }
 
 std::pair<LayoutUnit, LayoutUnit>
 NGPhysicalTextFragment::LineLeftAndRightForOffsets(unsigned start_offset,
                                                    unsigned end_offset) const {
-  scoped_refptr<NGFragmentItem> item =
-      base::MakeRefCounted<NGFragmentItem>(*this);
-  return item->LineLeftAndRightForOffsets(Text(), start_offset, end_offset);
+  return NGFragmentItem(*this).LineLeftAndRightForOffsets(Text(), start_offset,
+                                                          end_offset);
 }
 
 // TODO(yosin): We should move |NGFragmentItem::InlinePositionForOffset" to
@@ -162,9 +157,7 @@ std::pair<LayoutUnit, LayoutUnit> NGFragmentItem::LineLeftAndRightForOffsets(
 
 PhysicalRect NGPhysicalTextFragment::LocalRect(unsigned start_offset,
                                                unsigned end_offset) const {
-  scoped_refptr<NGFragmentItem> item =
-      base::MakeRefCounted<NGFragmentItem>(*this);
-  return item->LocalRect(Text(), start_offset, end_offset);
+  return NGFragmentItem(*this).LocalRect(Text(), start_offset, end_offset);
 }
 
 // TODO(yosin): We should move |NGFragmentItem::InlinePositionForOffset" to
@@ -194,7 +187,7 @@ PhysicalRect NGFragmentItem::LocalRect(StringView text,
 }
 
 PhysicalRect NGPhysicalTextFragment::SelfInkOverflow() const {
-  if (!ink_overflow_computed_)
+  if (!ink_overflow_computed_or_mathml_paint_info_)
     ComputeSelfInkOverflow();
   if (ink_overflow_)
     return ink_overflow_->self_ink_overflow;
@@ -202,7 +195,7 @@ PhysicalRect NGPhysicalTextFragment::SelfInkOverflow() const {
 }
 
 void NGPhysicalTextFragment::ComputeSelfInkOverflow() const {
-  ink_overflow_computed_ = true;
+  ink_overflow_computed_or_mathml_paint_info_ = true;
 
   if (UNLIKELY(!shape_result_)) {
     ink_overflow_ = nullptr;

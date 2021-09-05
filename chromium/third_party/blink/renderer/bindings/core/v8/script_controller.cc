@@ -73,7 +73,7 @@
 
 namespace blink {
 
-void ScriptController::Trace(Visitor* visitor) {
+void ScriptController::Trace(Visitor* visitor) const {
   visitor->Trace(frame_);
   visitor->Trace(window_proxy_manager_);
 }
@@ -115,7 +115,27 @@ v8::Local<v8::Value> ScriptController::ExecuteScriptAndReturnValue(
     // Note: This improves chance of getting into a fast path in
     //       ReferrerScriptInfo::ToV8HostDefinedOptions.
     KURL stored_base_url = (base_url == source.Url()) ? KURL() : base_url;
-    const ReferrerScriptInfo referrer_info(stored_base_url, fetch_options);
+
+    // TODO(hiroshige): Remove this code and related use counters once the
+    // measurement is done.
+    ReferrerScriptInfo::BaseUrlSource base_url_source =
+        ReferrerScriptInfo::BaseUrlSource::kOther;
+    if (source.SourceLocationType() ==
+            ScriptSourceLocationType::kExternalFile &&
+        !base_url.IsNull()) {
+      switch (sanitize_script_errors) {
+        case SanitizeScriptErrors::kDoNotSanitize:
+          base_url_source =
+              ReferrerScriptInfo::BaseUrlSource::kClassicScriptCORSSameOrigin;
+          break;
+        case SanitizeScriptErrors::kSanitize:
+          base_url_source =
+              ReferrerScriptInfo::BaseUrlSource::kClassicScriptCORSCrossOrigin;
+          break;
+      }
+    }
+    const ReferrerScriptInfo referrer_info(stored_base_url, fetch_options,
+                                           base_url_source);
 
     v8::Local<v8::Script> script;
 
@@ -290,8 +310,14 @@ void ScriptController::ExecuteJavaScriptURL(
   // If a navigation begins during the javascript: url's execution, ignore
   // the return value of the script. Otherwise, replacing the document with a
   // string result would cancel the navigation.
-  if (!had_navigation_before && GetFrame()->Loader().HasProvisionalNavigation())
+  // TODO(crbug.com/1085514): Consider making HasProvisionalNavigation return
+  // true when a form submission is pending instead of having a separate check
+  // for form submissions here.
+  if (!had_navigation_before &&
+      (GetFrame()->Loader().HasProvisionalNavigation() ||
+       GetFrame()->IsFormSubmissionPending())) {
     return;
+  }
   if (v8_result.IsEmpty() || !v8_result->IsString())
     return;
 
@@ -347,7 +373,7 @@ v8::Local<v8::Value> ScriptController::EvaluateScriptInMainWorld(
     const ScriptFetchOptions& fetch_options,
     ExecuteScriptPolicy policy) {
   if (policy == kDoNotExecuteScriptWhenScriptsDisabled &&
-      !GetFrame()->GetDocument()->CanExecuteScripts(kAboutToExecuteScript))
+      !GetFrame()->DomWindow()->CanExecuteScripts(kAboutToExecuteScript))
     return v8::Local<v8::Value>();
 
   // |context| should be initialized already due to the MainWorldProxy() call.

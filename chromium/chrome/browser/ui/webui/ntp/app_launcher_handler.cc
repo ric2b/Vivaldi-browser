@@ -22,6 +22,7 @@
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/time/time.h"
 #include "base/values.h"
 #include "chrome/browser/apps/app_service/app_icon_source.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
@@ -53,13 +54,12 @@
 #include "chrome/browser/ui/webui/extensions/extension_icon_source.h"
 #include "chrome/browser/ui/webui/ntp/new_tab_ui.h"
 #include "chrome/browser/web_applications/components/app_registry_controller.h"
-#include "chrome/browser/web_applications/components/app_shortcut_manager.h"
-#include "chrome/browser/web_applications/components/file_handler_manager.h"
 #include "chrome/browser/web_applications/components/install_finalizer.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/browser/web_applications/components/web_app_provider_base.h"
 #include "chrome/browser/web_applications/extensions/bookmark_app_finalizer_utils.h"
 #include "chrome/browser/web_applications/extensions/bookmark_app_util.h"
+#include "chrome/browser/web_applications/os_integration_manager.h"
 #include "chrome/browser/web_applications/web_app_icon_manager.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/common/buildflags.h"
@@ -972,15 +972,12 @@ void AppLauncherHandler::HandleInstallAppLocally(const base::ListValue* args) {
 
   web_app_provider_->registry_controller().SetAppIsLocallyInstalled(app_id,
                                                                     true);
-  web_app::AppShortcutManager& shortcut_manager =
-      web_app_provider_->shortcut_manager();
-  if (shortcut_manager.CanCreateShortcuts()) {
-    shortcut_manager.CreateShortcuts(
-        app_id, /*add_to_desktop=*/true,
-        base::BindOnce(
-            &AppLauncherHandler::OnShortcutsCreatedRegisterOsIntegration,
-            weak_ptr_factory_.GetWeakPtr(), app_id));
-  }
+  web_app_provider_->registry_controller().SetAppInstallTime(app_id,
+                                                             base::Time::Now());
+  web_app_provider_->os_integration_manager().InstallOsHooks(
+      app_id, base::BindOnce(&AppLauncherHandler::OnOsHooksInstalled,
+                             weak_ptr_factory_.GetWeakPtr(), app_id));
+
   // Use the appAdded to update the app icon's color to no longer be
   // greyscale.
   std::unique_ptr<base::DictionaryValue> app_info = GetWebAppInfo(app_id);
@@ -1201,13 +1198,10 @@ void AppLauncherHandler::PromptToEnableApp(const std::string& extension_id) {
   extension_enable_flow_->StartForWebContents(web_ui()->GetWebContents());
 }
 
-void AppLauncherHandler::OnShortcutsCreatedRegisterOsIntegration(
-    const web_app::AppId& app_id,
-    bool shortcuts_created) {
+void AppLauncherHandler::OnOsHooksInstalled(const web_app::AppId& app_id,
+                                            bool shortcuts_created) {
   LOCAL_HISTOGRAM_BOOLEAN("Apps.Launcher.InstallLocallyShortcutsCreated",
                           shortcuts_created);
-  web_app_provider_->file_handler_manager().EnableAndRegisterOsFileHandlers(
-      app_id);
 }
 
 void AppLauncherHandler::OnExtensionUninstallDialogClosed(

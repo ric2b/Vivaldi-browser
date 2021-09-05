@@ -76,9 +76,11 @@ void SharedWorkerServiceImpl::RemoveObserver(Observer* observer) {
 
 void SharedWorkerServiceImpl::EnumerateSharedWorkers(Observer* observer) {
   for (const auto& host : worker_hosts_) {
+    observer->OnWorkerCreated(host->id(), host->GetProcessHost()->GetID(),
+                              host->GetDevToolsToken());
     if (host->started()) {
-      observer->OnWorkerStarted(host->id(), host->GetProcessHost()->GetID(),
-                                host->dev_tools_token());
+      observer->OnFinalResponseURLDetermined(host->id(),
+                                             host->final_response_url());
     }
   }
 }
@@ -134,8 +136,7 @@ void SharedWorkerServiceImpl::ConnectToWorker(
     return;
   }
 
-  RenderFrameHost* main_frame =
-      render_frame_host->frame_tree_node()->frame_tree()->GetMainFrame();
+  RenderFrameHost* main_frame = render_frame_host->frame_tree()->GetMainFrame();
   if (!GetContentClient()->browser()->AllowSharedWorker(
           info->url,
           render_frame_host->ComputeSiteForCookies().RepresentativeUrl(),
@@ -185,12 +186,9 @@ void SharedWorkerServiceImpl::ConnectToWorker(
     ScriptLoadFailed(std::move(client), /*error_message=*/"");
     return;
   }
-  std::string storage_domain;
-  std::string partition_name;
-  bool in_memory;
-  GetContentClient()->browser()->GetStoragePartitionConfigForSite(
-      storage_partition_->browser_context(), site_instance->GetSiteURL(),
-      /*can_be_default=*/true, &storage_domain, &partition_name, &in_memory);
+  auto storage_partition_config =
+      GetContentClient()->browser()->GetStoragePartitionConfigForSite(
+          storage_partition_->browser_context(), site_instance->GetSiteURL());
 
   SharedWorkerInstance instance(
       info->url, info->options->type, info->options->credentials,
@@ -199,7 +197,8 @@ void SharedWorkerServiceImpl::ConnectToWorker(
       creation_context_type);
   host = CreateWorker(shared_worker_id_generator_.GenerateNextId(), instance,
                       std::move(info->outside_fetch_client_settings_object),
-                      client_render_frame_host_id, storage_domain, message_port,
+                      client_render_frame_host_id,
+                      storage_partition_config.partition_domain(), message_port,
                       std::move(blob_url_loader_factory));
   host->AddClient(std::move(client), client_render_frame_host_id, message_port);
 }
@@ -211,20 +210,20 @@ void SharedWorkerServiceImpl::DestroyHost(SharedWorkerHost* host) {
   worker_hosts_.erase(worker_hosts_.find(host));
 }
 
-void SharedWorkerServiceImpl::NotifyWorkerStarted(
+void SharedWorkerServiceImpl::NotifyWorkerCreated(
     SharedWorkerId shared_worker_id,
     int worker_process_id,
     const base::UnguessableToken& dev_tools_token) {
   for (Observer& observer : observers_) {
-    observer.OnWorkerStarted(shared_worker_id, worker_process_id,
+    observer.OnWorkerCreated(shared_worker_id, worker_process_id,
                              dev_tools_token);
   }
 }
 
-void SharedWorkerServiceImpl::NotifyWorkerTerminating(
+void SharedWorkerServiceImpl::NotifyBeforeWorkerDestroyed(
     SharedWorkerId shared_worker_id) {
   for (Observer& observer : observers_)
-    observer.OnBeforeWorkerTerminated(shared_worker_id);
+    observer.OnBeforeWorkerDestroyed(shared_worker_id);
 }
 
 void SharedWorkerServiceImpl::NotifyClientAdded(
@@ -402,7 +401,8 @@ void SharedWorkerServiceImpl::StartWorker(
   host->Start(std::move(factory), std::move(main_script_load_params),
               std::move(subresource_loader_factories), std::move(controller),
               std::move(controller_service_worker_object_host),
-              std::move(outside_fetch_client_settings_object));
+              std::move(outside_fetch_client_settings_object),
+              final_response_url);
   for (Observer& observer : observers_)
     observer.OnFinalResponseURLDetermined(host->id(), final_response_url);
 }

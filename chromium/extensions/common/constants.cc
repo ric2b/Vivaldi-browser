@@ -124,7 +124,9 @@ const char kLacrosAppId[] = "jaimifaeiicidiikhmjedcgdimealfbh";
 const char kFilesManagerAppId[] = "hhaomjibdihmijegdhdafkllkbggdgoj";
 const char kCalculatorAppId[] = "joodangkbfjnajiiifokapkpmhfnpleo";
 const char kCalendarDemoAppId[] = "fpgfohogebplgnamlafljlcidjedbdeb";
+const char kGMailAppId[] = "pjkljhegncpnkpknbcohdijeoejaedia";
 const char kGoogleDocsDemoAppId[] = "chdaoodbokekbiiphekbfjdmiodccljl";
+const char kGoogleDriveAppId[] = "apdfllckaahabafndbhieahigkjlhalf";
 const char kGoogleSheetsDemoAppId[] = "nifkmgcdokhkjghdlgflonppnefddien";
 const char kGoogleSlidesDemoAppId[] = "hdmobeajeoanbanmdlabnbnlopepchip";
 const char kGoogleKeepAppId[] = "hmjkmjkepdijhoojdojkdfohbdgmmhki";
@@ -142,6 +144,7 @@ const char kScreensaverEveAppId[] = "gdobaoeekhiklaljmhladjfdfkigampc";
 const char kScreensaverNocturneAppId[] = "lminefdanffajachfahfpmphfkhahcnj";
 const char kScreensaverAtlasAppId[] = "bnabjkecnachpogjlfilfcnlpcmacglh";
 const char kScreensaverKukuiAppId[] = "fafhbhdboeiciklpkminlncemohljlkj";
+const char kSigninProfileTestExtensionId[] = "mecfefiddjlmabpeilblgegnbioikfmp";
 
 bool IsSystemUIApp(base::StringPiece extension_id) {
   static const char* const kApps[] = {
@@ -186,5 +189,8 @@ const char kPolicyBlockedScripting[] =
 const int kContentVerificationDefaultBlockSize = 4096;
 
 const logging::LogSeverity kMinimumSeverityToReportError = logging::LOG_WARNING;
+
+const char kCastExtensionIdRelease[] = "pkedcjkdefgpdelpbcmbmeomcjbeemfm";
+const char kCastExtensionIdDev[] = "enhhojjnijigcajfphajepfemndkmdlo";
 
 }  // namespace extension_misc

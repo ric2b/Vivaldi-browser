@@ -155,6 +155,9 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
             + "To make locally-built Chrome a first-party app, sign with release-test "
             + "signing keys and run on userdebug devices. See use_signing_keys GN arg.";
 
+    private static final String EXPERIMENT_IDS =
+            "org.chromium.chrome.browser.customtabs.AGA_EXPERIMENT_IDS";
+
     private final Intent mIntent;
     private final CustomTabsSessionToken mSession;
     private final boolean mIsTrustedIntent;
@@ -203,6 +206,9 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
     /** ISO 639 language code */
     @Nullable
     private final String mTranslateLanguage;
+
+    @Nullable
+    private final int[] mGsaExperimentIds;
 
     /**
      * Add extras to customize menu items for opening payment request UI custom tab from Chrome.
@@ -344,6 +350,8 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
 
         mTranslateLanguage = IntentUtils.safeGetStringExtra(intent, EXTRA_TRANSLATE_LANGUAGE);
         mFocusIntent = IntentUtils.safeGetParcelableExtra(intent, EXTRA_FOCUS_INTENT);
+
+        mGsaExperimentIds = IntentUtils.safeGetIntArrayExtra(intent, EXPERIMENT_IDS);
     }
 
     /**
@@ -802,5 +810,11 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
         }
 
         return version;
+    }
+
+    @Override
+    @Nullable
+    public int[] getGsaExperimentIds() {
+        return mGsaExperimentIds;
     }
 }

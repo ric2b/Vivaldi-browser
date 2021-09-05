@@ -31,15 +31,19 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/services/app_service/public/cpp/instance.h"
-#include "chrome/services/app_service/public/mojom/types.mojom-shared.h"
-#include "chrome/services/app_service/public/mojom/types.mojom.h"
+#include "chrome/grit/chrome_unscaled_resources.h"
 #include "components/account_id/account_id.h"
 #include "components/arc/arc_util.h"
+#include "components/exo/shell_surface_base.h"
+#include "components/services/app_service/public/cpp/instance.h"
+#include "components/services/app_service/public/mojom/types.mojom-shared.h"
+#include "components/services/app_service/public/mojom/types.mojom.h"
 #include "extensions/common/constants.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
+#include "ui/base/resource/resource_bundle.h"
+#include "ui/gfx/image/image_skia.h"
 #include "ui/views/widget/widget.h"
 
 namespace {
@@ -75,8 +79,21 @@ AppServiceAppWindowLauncherController::AppServiceAppWindowLauncherController(
   profile_list_.push_back(owner->profile());
 
   for (auto* browser : *BrowserList::GetInstance()) {
-    if (browser && browser->window() && browser->window()->GetNativeWindow())
+    if (browser && browser->window() && browser->window()->GetNativeWindow()) {
       observed_windows_.Add(browser->window()->GetNativeWindow());
+
+      // Observe the browser tabs
+      TabStripModel* tab_strip = browser->tab_strip_model();
+      for (int i = 0; i < tab_strip->count(); ++i) {
+        auto* tab = tab_strip->GetWebContentsAt(i);
+        if (!tab)
+          continue;
+        aura::Window* window = tab->GetNativeView();
+        if (window) {
+          observed_windows_.Add(window);
+        }
+      }
+    }
   }
 }
 
@@ -91,6 +108,9 @@ AppServiceAppWindowLauncherController::
     DCHECK(proxy);
     proxy->InstanceRegistry().RemoveObserver(this);
   }
+
+  app_service_instance_helper_.reset();
+  observed_windows_.RemoveAll();
 }
 
 AppWindowLauncherItemController*
@@ -219,6 +239,14 @@ void AppServiceAppWindowLauncherController::OnWindowVisibilityChanged(
 
   if (crostini_tracker_)
     crostini_tracker_->OnWindowVisibilityChanged(window, shelf_id.app_id);
+
+  // This will match both the Plugin VM App window and installer.
+  if (shelf_id.app_id == plugin_vm::kPluginVmShelfAppId) {
+    // Plugin VM can only be used on the primary profile.
+    MultiUserWindowManagerHelper::GetWindowManager()->SetWindowOwner(
+        window,
+        user_manager::UserManager::Get()->GetPrimaryUser()->GetAccountId());
+  }
 }
 
 void AppServiceAppWindowLauncherController::OnWindowDestroying(
@@ -411,6 +439,19 @@ AppWindowBase* AppServiceAppWindowLauncherController::GetAppWindow(
   return aura_window_to_app_window_[window].get();
 }
 
+void AppServiceAppWindowLauncherController::ObserveWindow(
+    aura::Window* window) {
+  if (!window || observed_windows_.IsObserving(window))
+    return;
+  observed_windows_.Add(window);
+}
+
+bool AppServiceAppWindowLauncherController::IsObservingWindow(
+    aura::Window* window) {
+  DCHECK(window);
+  return observed_windows_.IsObserving(window);
+}
+
 std::vector<aura::Window*>
 AppServiceAppWindowLauncherController::GetArcWindows() {
   std::vector<aura::Window*> arc_windows;
@@ -464,13 +505,21 @@ void AppServiceAppWindowLauncherController::RegisterWindow(
     if (shelf_id.app_id == arc::kPlayStoreAppId) {
       AppWindowLauncherItemController* item_controller =
           owner()->shelf_model()->GetAppWindowLauncherItemController(shelf_id);
-      if (item_controller != nullptr &&
-          shelf_id.app_id == arc::kPlayStoreAppId && arc_tracker_) {
+      if (item_controller && shelf_id.app_id == arc::kPlayStoreAppId &&
+          arc_tracker_) {
         OnItemDelegateDiscarded(item_controller);
       }
     }
 
     AddWindowToShelf(window, shelf_id);
+
+    if (plugin_vm::IsPluginVmAppWindow(window)) {
+      // Set an icon for the Plugin VM app window.
+      static_cast<exo::ShellSurfaceBase*>(
+          views::Widget::GetWidgetForNativeWindow(window)->widget_delegate())
+          ->SetIcon(*ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
+              IDR_LOGO_PLUGIN_VM_DEFAULT_32));
+    }
   }
 }
 
@@ -556,8 +605,8 @@ ash::ShelfID AppServiceAppWindowLauncherController::GetShelfId(
       return ash::ShelfID(shelf_app_id);
   }
 
-  if (plugin_vm::IsPluginVmWindow(window))
-    return ash::ShelfID(plugin_vm::kPluginVmAppId);
+  if (plugin_vm::IsPluginVmAppWindow(window))
+    return ash::ShelfID(plugin_vm::kPluginVmShelfAppId);
 
   ash::ShelfID shelf_id;
   if (arc_tracker_)

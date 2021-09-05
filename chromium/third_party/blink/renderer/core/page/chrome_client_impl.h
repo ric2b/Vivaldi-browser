@@ -61,14 +61,15 @@ class CORE_EXPORT ChromeClientImpl final : public ChromeClient {
  public:
   explicit ChromeClientImpl(WebViewImpl*);
   ~ChromeClientImpl() override;
-  void Trace(Visitor* visitor) override;
+  void Trace(Visitor* visitor) const override;
 
   // ChromeClient methods:
   WebViewImpl* GetWebView() const override;
   void ChromeDestroyed() override;
   void SetWindowRect(const IntRect&, LocalFrame&) override;
   IntRect RootWindowRect(LocalFrame&) override;
-  void Focus(LocalFrame*) override;
+  void FocusPage() override;
+  void DidFocusPage() override;
   bool CanTakeFocus(mojom::blink::FocusType) override;
   void TakeFocus(mojom::blink::FocusType) override;
   void SetKeyboardFocusURL(Element* new_focus_element) override;
@@ -115,6 +116,10 @@ class CORE_EXPORT ChromeClientImpl final : public ChromeClient {
   bool CanOpenBeforeUnloadConfirmPanel() override;
   bool OpenBeforeUnloadConfirmPanelDelegate(LocalFrame*,
                                             bool is_reload) override;
+  // Used in tests to set a mock value for a before unload confirmation dialog
+  // box. The value is cleared after being read.
+  void SetBeforeUnloadConfirmPanelResultForTesting(bool result_success);
+
   void CloseWindowSoon() override;
   bool OpenJavaScriptAlertDelegate(LocalFrame*, const String&) override;
   bool OpenJavaScriptConfirmDelegate(LocalFrame*, const String&) override;
@@ -199,6 +204,9 @@ class CORE_EXPORT ChromeClientImpl final : public ChromeClient {
   // ChromeClient methods:
   String AcceptLanguages() override;
   void SetCursorForPlugin(const ui::Cursor&, LocalFrame*) override;
+  void SetDelegatedInkMetadata(
+      LocalFrame* frame,
+      std::unique_ptr<viz::DelegatedInkMetadata> metadata) override;
 
   // ChromeClientImpl:
   void SetNewWindowNavigationPolicy(WebNavigationPolicy);
@@ -298,6 +306,7 @@ class CORE_EXPORT ChromeClientImpl final : public ChromeClient {
   bool cursor_overridden_;
   Member<ExternalDateTimeChooser> external_date_time_chooser_;
   bool did_request_non_empty_tool_tip_;
+  base::Optional<bool> before_unload_confirm_panel_result_for_testing_;
 
   FRIEND_TEST_ALL_PREFIXES(FileChooserQueueTest, DerefQueuedChooser);
 };

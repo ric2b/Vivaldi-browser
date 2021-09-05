@@ -17,6 +17,7 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
@@ -228,8 +229,6 @@ class AutofillManager : public AutofillHandler,
   void OnDidPreviewAutofillFormData() override;
   void OnDidEndTextFieldEditing() override;
   void OnHidePopup() override;
-  void OnSetDataList(const std::vector<base::string16>& values,
-                     const std::vector<base::string16>& labels) override;
   void SelectFieldOptionsDidChange(const FormData& form) override;
   void Reset() override;
 
@@ -280,8 +279,8 @@ class AutofillManager : public AutofillHandler,
   // purposes only.
   void OnLoadedServerPredictionsForTest(
       std::string response,
-      const std::vector<std::string>& form_signatures) {
-    OnLoadedServerPredictions(response, form_signatures);
+      const FormAndFieldSignatures& signatures) {
+    OnLoadedServerPredictions(response, signatures);
   }
 
   // A public wrapper that calls |MakeFrontendID| for testing purposes only.
@@ -386,17 +385,25 @@ class AutofillManager : public AutofillHandler,
  private:
   // Keeps track of the filling context for a form, used to make refill attemps.
   struct FillingContext {
-    FillingContext();
+    // |optional_profile| or |optional_credit_card| must be non-null.
+    // If |optional_credit_card| is non-null, |optional_cvc| may be non-null.
+    FillingContext(const AutofillField& field,
+                   const AutofillProfile* optional_profile,
+                   const CreditCard* optional_credit_card,
+                   const base::string16* optional_cvc);
     ~FillingContext();
 
     // Whether a refill attempt was made.
     bool attempted_refill = false;
-    // The profile that was used for the initial fill.
-    AutofillProfile temp_data_model;
+    // The profile or credit card that was used for the initial fill.
+    // The std::string associated with the credit card is the CVC, which may be
+    // empty.
+    const base::Optional<AutofillProfile> profile;
+    const base::Optional<std::pair<CreditCard, base::string16>> credit_card;
     // The name of the field that was initially filled.
-    base::string16 filled_field_name;
-    // The time at which the initial fill occured.
-    base::TimeTicks original_fill_time;
+    const base::string16 filled_field_name;
+    // The time at which the initial fill occurred.
+    const base::TimeTicks original_fill_time;
     // The timer used to trigger a refill.
     base::OneShotTimer on_refill_timer;
     // The field type groups that were initially filled.
@@ -430,7 +437,7 @@ class AutofillManager : public AutofillHandler,
   // AutofillDownloadManager::Observer:
   void OnLoadedServerPredictions(
       std::string response,
-      const std::vector<std::string>& form_signatures) override;
+      const FormAndFieldSignatures& signatures) override;
 
   // CreditCardAccessManager::Accessor
   void OnCreditCardFetched(
@@ -477,9 +484,9 @@ class AutofillManager : public AutofillHandler,
                                   int query_id,
                                   const FormData& form,
                                   const FormFieldData& field,
-                                  const AutofillDataModel& data_model,
-                                  bool is_credit_card,
-                                  const base::string16& cvc,
+                                  const AutofillProfile* optional_profile,
+                                  const CreditCard* optional_credit_card,
+                                  const base::string16* optional_cvc,
                                   FormStructure* form_structure,
                                   AutofillField* autofill_field,
                                   bool is_refill = false);
@@ -596,6 +603,8 @@ class AutofillManager : public AutofillHandler,
   FormEventLoggerBase* GetEventFormLogger(
       FieldTypeGroup field_type_group) const;
 
+  void SetDataList(const std::vector<base::string16>& values,
+                   const std::vector<base::string16>& labels);
   AutofillClient* const client_;
 
   LogManager* log_manager_;

@@ -112,6 +112,7 @@
 <translation id="1771761307086386028">ਸੱਜੇ ਪਾਸੇ ਸਕ੍ਰੋਲ ਕਰੋ</translation>
 <translation id="1781173782405573156">ਕੁੰਜੀ ਦੁਆਰਾ ਪਾਸ ਕਰੋ</translation>
 <translation id="1787176709638001873">ਪਾਸਵਰਡ ਸੰਪਾਦਨ ਲਿਖਤ</translation>
+<translation id="180203835522132923">Search + O, ਫਿਰ W</translation>
 <translation id="1810107444790159527">ਸੂਚੀ ਬੌਕਸ</translation>
 <translation id="1812527064848182527">ਲੈਂਡਸਕੇਪ</translation>
 <translation id="1829244130665387512">ਸਫ਼ੇ ਵਿੱਚ ਲੱਭੋ</translation>
@@ -256,6 +257,7 @@
 <translation id="297825089465017871">ਦੋ ਉਂਗਲਾਂ ਖੱਬੇ ਪਾਸੇ ਵੱਲ ਸਵਾਈਪ ਕਰੋ</translation>
 <translation id="2998131015536248178">ਪਿਛਲਾ ਅੱਖਰ</translation>
 <translation id="2999559350546931576">ਪਿਚ ਘਟਾਓ</translation>
+<translation id="3009352964623081324">Search + O, ਫਿਰ S. ਇਸਨੂੰ ਸਥਾਪਤ ਕਰਨ, ਪ੍ਰਬੰਧਨ ਕਰਨ ਅਤੇ ਅਵਾਜ਼ਾਂ ਨੂੰ ਵਿਉਂਤਬੱਧ ਕਰਨ ਲਈ ਵਰਤੋ।</translation>
 <translation id="3014130421870723208">@ed 8dot</translation>
 <translation id="3030432017085518523">ਮੀਨੂ ਬਟਨ ਰੇਡੀਓ ਬਟਨ</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{ਅੱਖਰ ਲੋਪ ਚਿੰਨ੍ਹ}one{# ਅੱਖਰ ਲੋਪ ਚਿੰਨ੍ਹ}other{# ਅੱਖਰ ਲੋਪ ਚਿੰਨ੍ਹ}}</translation>
@@ -454,6 +456,7 @@
 <translation id="4505167975768625962">ਸ਼ਾਮਲ ਕਰਨਾ</translation>
 <translation id="4511186779140817916">ਰਚਵਾਂ ਬਦਾਮੀ</translation>
 <translation id="451510441928265982">ਕੋਈ ਪਿਛਲਾ ਪੱਧਰ 2 ਸਿਰਲੇਖ ਨਹੀਂ</translation>
+<translation id="4515799157838123044">ਬੈਕਗ੍ਰਾਊਂਡ ਸਮੱਗਰੀ ਸ਼ੇਡ ਕਰੋ</translation>
 <translation id="4517854969512651305">ਮੁੱਲ ਵਧਾਓ</translation>
 <translation id="4532633738839459153">{COUNT,plural, =1{ਸਲੈਸ਼}one{# ਸਲੈਸ਼ਿਜ}other{# ਸਲੈਸ਼ਿਜ}}</translation>
 <translation id="4537277403911487429">ਅਗਲੀ ਮਿਲਦੀ-ਜੁਲਦੀ ਆਈਟਮ</translation>
@@ -705,6 +708,7 @@
 <translation id="6628427060004938651">ਭਾਗ</translation>
 <translation id="6637586476836377253">ਲੌਗ</translation>
 <translation id="6657128831881431364">ਪ੍ਰਗਤੀ ਬਾਰ</translation>
+<translation id="6660819301598582123">The quick brown fox jumped over the lazy dog.</translation>
 <translation id="667999046851023355">ਦਸਤਾਵੇਜ਼</translation>
 <translation id="6688209025607531203">ਇੱਕ ਗੈਰ ਵਿਧੀਗਤ  ਚਿਤਾਵਨੀ </translation>
 <translation id="6689672606256159458">ਗੂੜ੍ਹਾ ਨਾਰੰਗੀ</translation>
@@ -740,7 +744,6 @@
 <translation id="6951482098621102657">ਕੋਈ ਹੋਰ ਪੱਧਰ 5 ਸਿਰਲੇਖ ਨਹੀਂ</translation>
 <translation id="6955705049214951590">ਬਿਲਕੁਲ ਫਿੱਕਾ ਗੁਲਾਬੀ</translation>
 <translation id="696356426651109308">ਸ਼ੁਰੂਆਤ 'ਤੇ ਜਾਓ</translation>
-<translation id="699159175332639490">Search + O + W</translation>
 <translation id="6994042831499278539">ਸ਼ਬਦਾਵਲੀ ਦਾ ਹਵਾਲਾ</translation>
 <translation id="6996566555547746822">ਅਗਲਾ ਕੌਂਬੋ ਬਾਕਸ</translation>
 <translation id="6997224546856374593">ਵੱਡੇ ਅੱਖਰ ਪੜ੍ਹਨ ਵੇਲੇ:</translation>
@@ -809,6 +812,7 @@
 <translation id="743783356331413498">ਉਦਾਹਰਨ</translation>
 <translation id="7439060726180460871">ਡਾਇਰੈਕਟਰੀ</translation>
 <translation id="744163271241493234">pwded</translation>
+<translation id="7484805699335881122">ਤੱਤ ਕਿਸਮਾਂ ਅਤੇ ਉਤਕਥਨ, ਕੱਟੀ ਗਈ ਲਿਖਤ, ਗੂੜ੍ਹੀ ਕੀਤੀ ਲਿਖਤ, ਬਰੈਕਟਦਾਰ ਜਾਂ ਵੱਡੇ ਅੱਖਰਾਂ ਵਾਲੀ ਲਿਖਤ ਨੂੰ ਬੋਲਣ ਵੇਲੇ ਪਿੱਚ ਬਦਲੋ।</translation>
 <translation id="7491962110804786152">ਟੈਬ</translation>
 <translation id="7505149250476994901">ਅੱਖਰ ਤੋਂ ਪਹਿਲਾਂ "ਵੱਡਾ" ਬੋਲੋ</translation>
 <translation id="7518543783849163354">ਅਸਥਾਈ ਤੌਰ 'ਤੇ ChromeVox ਦਾ ਬੋਲਣਾ ਬੰਦ ਕਰਨ ਲਈ, ਕੰਟਰੋਲ ਕੁੰਜੀ ਦਬਾਓ।</translation>

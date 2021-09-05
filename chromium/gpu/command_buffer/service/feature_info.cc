@@ -170,35 +170,6 @@ bool IsWebGLDrawBuffersSupported(bool webglCompatibilityContext,
 
 }  // anonymous namespace.
 
-namespace {
-
-enum GpuTextureResultR16_L16 {
-  // Values synced with 'GpuTextureResultR16_L16' in
-  // src/tools/metrics/histograms/histograms.xml
-  kHaveNone = 0,
-  kHaveR16 = 1,
-  kHaveL16 = 2,
-  kHaveR16AndL16 = 3,
-  kMax = kHaveR16AndL16
-};
-
-// TODO(riju): For UMA, remove after crbug.com/759456 is resolved.
-bool g_r16_is_present;
-bool g_l16_is_present;
-
-GpuTextureResultR16_L16 GpuTextureUMAHelper() {
-  if (g_r16_is_present && g_l16_is_present) {
-    return GpuTextureResultR16_L16::kHaveR16AndL16;
-  } else if (g_r16_is_present) {
-    return GpuTextureResultR16_L16::kHaveR16;
-  } else if (g_l16_is_present) {
-    return GpuTextureResultR16_L16::kHaveL16;
-  }
-  return GpuTextureResultR16_L16::kHaveNone;
-}
-
-}  // anonymous namespace.
-
 FeatureInfo::FeatureFlags::FeatureFlags() = default;
 
 FeatureInfo::FeatureInfo() {
@@ -249,11 +220,6 @@ void FeatureInfo::InitializeBasicState(const base::CommandLine* command_line) {
 
   feature_flags_.is_swiftshader_for_webgl =
       (useGL == gl::kGLImplementationSwiftShaderForWebGLName);
-
-  feature_flags_.is_swiftshader =
-      (useGL == gl::kGLImplementationSwiftShaderName) ||
-      ((useGL == gl::kGLImplementationANGLEName) &&
-       (useANGLE == gl::kANGLEImplementationSwiftShaderName));
 
   // The shader translator is needed to translate from WebGL-conformant GLES SL
   // to normal GLES SL, enforce WebGL conformance, translate from GLES SL 1.0 to
@@ -418,6 +384,13 @@ void FeatureInfo::EnableCHROMIUMColorBufferFloatRGB() {
   validators_.texture_sized_color_renderable_internal_format.AddValue(
       GL_RGB32F);
   AddExtensionString("GL_CHROMIUM_color_buffer_float_rgb");
+}
+
+void FeatureInfo::EnableOESDrawBuffersIndexed() {
+  if (!feature_flags_.oes_draw_buffers_indexed) {
+    AddExtensionString("GL_OES_draw_buffers_indexed");
+    feature_flags_.oes_draw_buffers_indexed = true;
+  }
 }
 
 void FeatureInfo::EnableOESFboRenderMipmap() {
@@ -776,6 +749,14 @@ void FeatureInfo::InitializeFeatures() {
       gl::HasDesktopGLFeatures()) {
     AddExtensionString("GL_OES_element_index_uint");
     validators_.index_type.AddValue(GL_UNSIGNED_INT);
+  }
+
+  // Note (crbug.com/1058744): not implemented for validating command decoder
+  if (is_passthrough_cmd_decoder_ &&
+      gfx::HasExtension(extensions, "GL_OES_draw_buffers_indexed")) {
+    if (!disallowed_features_.oes_draw_buffers_indexed) {
+      EnableOESDrawBuffersIndexed();
+    }
   }
 
   if (gl_version_info_->IsAtLeastGL(3, 0) || gl_version_info_->is_es3 ||
@@ -1461,7 +1442,6 @@ void FeatureInfo::InitializeFeatures() {
        gfx::HasExtension(extensions, "GL_EXT_texture_norm16"))) {
     AddExtensionString("GL_EXT_texture_norm16");
     feature_flags_.ext_texture_norm16 = true;
-    g_r16_is_present = true;
 
     validators_.pixel_type.AddValue(GL_UNSIGNED_SHORT);
     validators_.pixel_type.AddValue(GL_SHORT);
@@ -1510,10 +1490,6 @@ void FeatureInfo::InitializeFeatures() {
     // So didn't expose all buffer formats here.
     feature_flags_.gpu_memory_buffer_formats.Add(gfx::BufferFormat::R_16);
   }
-
-  UMA_HISTOGRAM_ENUMERATION(
-      "GPU.TextureR16Ext_LuminanceF16", GpuTextureUMAHelper(),
-      static_cast<int>(GpuTextureResultR16_L16::kMax) + 1);
 
   if (enable_es3 && gfx::HasExtension(extensions, "GL_EXT_window_rectangles")) {
     AddExtensionString("GL_EXT_window_rectangles");
@@ -1945,9 +1921,6 @@ void FeatureInfo::InitializeFloatAndHalfFloatFeatures(
     validators_.texture_internal_format_storage.AddValue(
         GL_LUMINANCE_ALPHA16F_EXT);
   }
-
-  g_l16_is_present =
-      enable_texture_half_float && feature_flags_.ext_texture_storage;
 }
 
 bool FeatureInfo::IsES3Capable() const {

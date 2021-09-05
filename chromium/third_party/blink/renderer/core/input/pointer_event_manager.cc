@@ -61,14 +61,6 @@ const AtomicString& MouseEventNameForPointerEventInputType(
   }
 }
 
-Element* GetPointerLockedElement(LocalFrame* frame) {
-  if (Page* p = frame->GetPage()) {
-    if (!p->GetPointerLockController().LockPending())
-      return p->GetPointerLockController().GetElement();
-  }
-  return nullptr;
-}
-
 }  // namespace
 
 PointerEventManager::PointerEventManager(LocalFrame& frame,
@@ -104,7 +96,7 @@ void PointerEventManager::Clear() {
   dispatching_pointer_id_ = 0;
 }
 
-void PointerEventManager::Trace(Visitor* visitor) {
+void PointerEventManager::Trace(Visitor* visitor) const {
   visitor->Trace(frame_);
   visitor->Trace(element_under_pointer_);
   visitor->Trace(pointer_capture_target_);
@@ -342,8 +334,7 @@ bool PointerEventManager::ShouldAdjustPointerEvent(
       !frame_->GetSettings()->GetTouchAdjustmentEnabled())
     return false;
 
-  return RuntimeEnabledFeatures::UnifiedTouchAdjustmentEnabled() &&
-         pointer_event.pointer_type ==
+  return pointer_event.pointer_type ==
              WebPointerProperties::PointerType::kTouch &&
          pointer_event.GetType() == WebInputEvent::Type::kPointerDown &&
          pointer_event_factory_.IsPrimary(pointer_event);
@@ -550,7 +541,8 @@ WebInputEventResult PointerEventManager::HandlePointerEvent(
     // not quite possible as we haven't merged the locked event
     // dispatch with this path.
     Node* target;
-    Element* pointer_locked_element = GetPointerLockedElement(frame_);
+    Element* pointer_locked_element =
+        PointerLockController::GetPointerLockedElement(frame_);
     if (pointer_locked_element &&
         event.pointer_type == WebPointerProperties::PointerType::kMouse) {
       // The locked element could be in another frame. So we need to delegate
@@ -851,17 +843,15 @@ WebInputEventResult PointerEventManager::SendMousePointerEvent(
       // If pointerup releases the capture we also send boundary events
       // rightaway when the pointer that supports hover. Perform a hit
       // test to find the new target.
-      if (RuntimeEnabledFeatures::UnifiedPointerCaptureInBlinkEnabled()) {
-        if (pointer_capture_target_.find(pointer_event->pointerId()) !=
-            pointer_capture_target_.end()) {
-          HitTestRequest::HitTestRequestType hit_type =
-              HitTestRequest::kRelease | HitTestRequest::kRetargetForInert;
-          HitTestRequest request(hit_type);
-          MouseEventWithHitTestResults mev =
-              event_handling_util::PerformMouseEventHitTest(frame_, request,
-                                                            mouse_event);
-          target = mev.InnerElement();
-        }
+      if (pointer_capture_target_.find(pointer_event->pointerId()) !=
+          pointer_capture_target_.end()) {
+        HitTestRequest::HitTestRequestType hit_type =
+            HitTestRequest::kRelease | HitTestRequest::kRetargetForInert;
+        HitTestRequest request(hit_type);
+        MouseEventWithHitTestResults mev =
+            event_handling_util::PerformMouseEventHitTest(frame_, request,
+                                                          mouse_event);
+        target = mev.InnerElement();
       }
       ProcessCaptureAndPositionOfPointerEvent(pointer_event, target,
                                               canvas_region_id, &mouse_event);

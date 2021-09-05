@@ -18,11 +18,13 @@
 #include "components/metrics/metrics_service_client.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
+#include "weblayer/browser/profile_impl.h"
 
 namespace weblayer {
 
 class WebLayerMetricsServiceClient
-    : public ::metrics::AndroidMetricsServiceClient {
+    : public ::metrics::AndroidMetricsServiceClient,
+      public ProfileImpl::ProfileObserver {
   friend class base::NoDestructor<WebLayerMetricsServiceClient>;
 
  public:
@@ -31,20 +33,30 @@ class WebLayerMetricsServiceClient
   WebLayerMetricsServiceClient();
   ~WebLayerMetricsServiceClient() override;
 
-  void RegisterSyntheticMultiGroupFieldTrial(
-      base::StringPiece trial_name,
-      const std::vector<int>& experiment_ids);
+  void RegisterExternalExperiments(const std::vector<int>& experiment_ids);
 
   // metrics::MetricsServiceClient
   int32_t GetProduct() override;
+  bool IsExternalExperimentAllowlistEnabled() override;
+  bool IsUkmAllowedForAllProfiles() override;
+  std::string GetUploadSigningKey() override;
 
   // metrics::AndroidMetricsServiceClient:
   int GetSampleRatePerMille() override;
   void OnMetricsStart() override;
   void OnMetricsNotStarted() override;
   int GetPackageNameLimitRatePerMille() override;
+  void RegisterAdditionalMetricsProviders(
+      metrics::MetricsService* service) override;
+  bool EnablePersistentHistograms() override;
+  bool IsOffTheRecordSessionActive() override;
+  scoped_refptr<network::SharedURLLoaderFactory> GetURLLoaderFactory() override;
 
  private:
+  // ProfileImpl::ProfileObserver:
+  void ProfileCreated(ProfileImpl* profile) override;
+  void ProfileDestroyed(ProfileImpl* profile) override;
+
   std::vector<base::OnceClosure> post_start_tasks_;
 
   DISALLOW_COPY_AND_ASSIGN(WebLayerMetricsServiceClient);

@@ -17,8 +17,8 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/intent_picker_tab_helper.h"
 #include "chrome/common/chrome_features.h"
-#include "chrome/services/app_service/public/mojom/types.mojom.h"
 #include "chromeos/constants/chromeos_switches.h"
+#include "components/services/app_service/public/mojom/types.mojom.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/display/types/display_constants.h"
@@ -215,7 +215,7 @@ IntentPickerResponse CommonAppsNavigationThrottle::GetOnPickerClosedCallback(
                         ui_auto_display_service, url);
 }
 
-bool CommonAppsNavigationThrottle::ShouldDeferNavigation(
+bool CommonAppsNavigationThrottle::ShouldCancelNavigation(
     content::NavigationHandle* handle) {
   content::WebContents* web_contents = handle->GetWebContents();
 
@@ -259,12 +259,25 @@ bool CommonAppsNavigationThrottle::ShouldDeferNavigation(
       }
     }
   }
+  return false;
+}
+
+bool CommonAppsNavigationThrottle::ShouldDeferNavigation(
+    content::NavigationHandle* handle) {
+  content::WebContents* web_contents = handle->GetWebContents();
+
+  const GURL& url = handle->GetURL();
 
   std::vector<apps::IntentPickerAppInfo> apps_for_picker =
       FindAllAppsForUrl(web_contents, url, {});
 
   if (apps_for_picker.empty())
     return false;
+
+  if (GetPickerShowState(apps_for_picker, web_contents, url) ==
+      PickerShowState::kOmnibox) {
+    return false;
+  }
 
   IntentPickerTabHelper::LoadAppIcons(
       web_contents, std::move(apps_for_picker),

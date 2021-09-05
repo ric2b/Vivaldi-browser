@@ -25,7 +25,7 @@ namespace base {
 class CommandLine;
 class FilePath;
 class Version;
-}
+}  // namespace base
 
 namespace installer {
 
@@ -67,7 +67,7 @@ int ZucchiniPatchFiles(const base::FilePath& src,
 
 // Find the version of Chrome from an install source directory.
 // Chrome_path should contain at least one version folder.
-// Returns the maximum version found or NULL if no version is found.
+// Returns the maximum version found or nullptr if no version is found.
 base::Version* GetMaxVersionFromArchiveDir(const base::FilePath& chrome_path);
 
 // Returns the uncompressed archive of the installed version that serves as the
@@ -89,7 +89,7 @@ bool DeleteFileFromTempProcess(const base::FilePath& path,
 
 // Drops the process down to background processing mode on supported OSes if it
 // was launched below the normal process priority. Returns true when background
-// procesing mode is entered.
+// processing mode is entered.
 bool AdjustProcessPriority();
 
 // Returns true if |install_status| represents a successful uninstall code.
@@ -120,8 +120,7 @@ bool IsDowngradeAllowed(const MasterPreferences& prefs);
 int GetInstallAge(const InstallerState& installer_state);
 
 // Records UMA metrics for unpack result.
-void RecordUnPackMetrics(UnPackStatus unpack_status,
-                         UnPackConsumer consumer);
+void RecordUnPackMetrics(UnPackStatus unpack_status, UnPackConsumer consumer);
 
 // Register Chrome's EventLog message provider dll.
 void RegisterEventLogProvider(const base::FilePath& install_directory,

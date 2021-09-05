@@ -28,7 +28,7 @@
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/fake_safe_browsing_database_manager.h"
-#include "chrome/browser/extensions/forced_extensions/installation_reporter.h"
+#include "chrome/browser/extensions/forced_extensions/install_stage_tracker.h"
 #include "chrome/browser/extensions/scripting_permissions_modifier.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -148,15 +148,18 @@ WebApplicationInfo CreateWebAppInfo(const char* title,
   web_app_info.scope = GURL(app_url);
   web_app_info.icon_bitmaps[size] = CreateSquareBitmap(size);
   if (create_with_shortcuts) {
-    WebApplicationShortcutInfo shortcut_item;
-    WebApplicationIconInfo icon;
+    WebApplicationShortcutsMenuItemInfo shortcut_item;
+    WebApplicationShortcutsMenuItemInfo::Icon icon;
+    std::map<SquareSizePx, SkBitmap> shortcut_icon_bitmaps;
     shortcut_item.name = base::UTF8ToUTF16(kShortcutItemName);
     shortcut_item.url = GURL(kShortcutUrl);
     icon.url = GURL(kShortcutIconUrl);
     icon.square_size_px = size;
     shortcut_item.shortcut_icon_infos.push_back(std::move(icon));
-    shortcut_item.shortcut_icon_bitmaps[size] = CreateSquareBitmap(size);
-    web_app_info.shortcut_infos.push_back(std::move(shortcut_item));
+    web_app_info.shortcut_infos.emplace_back(std::move(shortcut_item));
+    shortcut_icon_bitmaps[size] = CreateSquareBitmap(size);
+    web_app_info.shortcuts_menu_icons_bitmaps.emplace_back(
+        std::move(shortcut_icon_bitmaps));
   }
   return web_app_info;
 }
@@ -714,8 +717,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionCrxInstallerTest, Blacklist) {
   EXPECT_FALSE(InstallExtension(crx_path, 0));
 
   auto installation_failure =
-      InstallationReporter::Get(profile())->Get(extension_id);
-  EXPECT_EQ(InstallationReporter::FailureReason::CRX_INSTALL_ERROR_DECLINED,
+      InstallStageTracker::Get(profile())->Get(extension_id);
+  EXPECT_EQ(InstallStageTracker::FailureReason::CRX_INSTALL_ERROR_DECLINED,
             installation_failure.failure_reason);
   EXPECT_EQ(CrxInstallErrorDetail::EXTENSION_IS_BLOCKLISTED,
             installation_failure.install_error_detail);
@@ -977,8 +980,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionCrxInstallerTest,
   EXPECT_EQ("0.0", extension->VersionString());
 
   auto installation_failure =
-      InstallationReporter::Get(profile())->Get(extension_id);
-  EXPECT_EQ(InstallationReporter::FailureReason::
+      InstallStageTracker::Get(profile())->Get(extension_id);
+  EXPECT_EQ(InstallStageTracker::FailureReason::
                 CRX_INSTALL_ERROR_SANDBOXED_UNPACKER_FAILURE,
             installation_failure.failure_reason);
   EXPECT_EQ(base::nullopt, installation_failure.install_error_detail);
@@ -1020,8 +1023,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionCrxInstallerTest,
   EXPECT_EQ("0.0", extension->VersionString());
 
   auto installation_failure =
-      InstallationReporter::Get(profile())->Get(extension_id);
-  EXPECT_EQ(InstallationReporter::FailureReason::CRX_INSTALL_ERROR_OTHER,
+      InstallStageTracker::Get(profile())->Get(extension_id);
+  EXPECT_EQ(InstallStageTracker::FailureReason::CRX_INSTALL_ERROR_OTHER,
             installation_failure.failure_reason);
   EXPECT_EQ(CrxInstallErrorDetail::UNEXPECTED_ID,
             *installation_failure.install_error_detail);

@@ -25,6 +25,7 @@
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "printing/buildflags/buildflags.h"
 #include "printing/common/metafile_utils.h"
+#include "printing/mojom/print.mojom-forward.h"
 #include "third_party/blink/public/web/web_node.h"
 #include "third_party/blink/public/web/web_print_params.h"
 #include "ui/gfx/geometry/size.h"
@@ -59,7 +60,6 @@ class AXTreeSnapshotter;
 
 namespace printing {
 
-struct PageSizeMargins;
 class MetafileSkia;
 class PrepareFrameAndViewForPrint;
 
@@ -236,7 +236,8 @@ class PrintRenderFrameHelper
   void PrintPreview(base::Value settings) override;
   void OnPrintPreviewDialogClosed() override;
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
-  void PrintFrameContent(mojom::PrintFrameContentParamsPtr params) override;
+  void PrintFrameContent(mojom::PrintFrameContentParamsPtr params,
+                         PrintFrameContentCallback callback) override;
   void PrintingDone(bool success) override;
   void SetPrintingEnabled(bool enabled) override;
   void PrintNodeUnderContextMenu() override;
@@ -244,7 +245,7 @@ class PrintRenderFrameHelper
   // Get |page_size| and |content_area| information from
   // |page_layout_in_points|.
   void GetPageSizeAndContentAreaFromPageLayout(
-      const PageSizeMargins& page_layout_in_points,
+      const mojom::PageSizeMargins& page_layout_in_points,
       gfx::Size* page_size,
       gfx::Rect* content_area);
 
@@ -375,7 +376,7 @@ class PrintRenderFrameHelper
       const PrintMsg_Print_Params& default_params,
       bool ignore_css_margins,
       double* scale_factor,
-      PageSizeMargins* page_layout_in_points);
+      mojom::PageSizeMargins* page_layout_in_points);
 
   // Return an array of pages to print given the print |params| and an expected
   // |page_count|. Page numbers are zero-based.
@@ -385,13 +386,14 @@ class PrintRenderFrameHelper
 
   // Given the |device| and |canvas| to draw on, prints the appropriate headers
   // and footers using strings from |header_footer_info| on to the canvas.
-  static void PrintHeaderAndFooter(cc::PaintCanvas* canvas,
-                                   int page_number,
-                                   int total_pages,
-                                   const blink::WebLocalFrame& source_frame,
-                                   float webkit_scale_factor,
-                                   const PageSizeMargins& page_layout_in_points,
-                                   const PrintMsg_Print_Params& params);
+  static void PrintHeaderAndFooter(
+      cc::PaintCanvas* canvas,
+      int page_number,
+      int total_pages,
+      const blink::WebLocalFrame& source_frame,
+      float webkit_scale_factor,
+      const mojom::PageSizeMargins& page_layout_in_points,
+      const PrintMsg_Print_Params& params);
 
   // Script Initiated Printing ------------------------------------------------
 
@@ -479,7 +481,7 @@ class PrintRenderFrameHelper
     bool CreatePreviewDocument(
         std::unique_ptr<PrepareFrameAndViewForPrint> prepared_frame,
         const std::vector<int>& pages,
-        SkiaDocumentType doc_type,
+        mojom::SkiaDocumentType doc_type,
         int document_cookie,
         bool require_document_metafile);
 
@@ -507,6 +509,7 @@ class PrintRenderFrameHelper
     int GetNextPageNumber();
     bool IsRendering() const;
     bool IsForArc() const;
+    bool IsPlugin() const;
     bool IsModifiable() const;
     bool IsPdf() const;
     bool HasSelection();
@@ -547,9 +550,7 @@ class PrintRenderFrameHelper
     // Reset some of the internal rendering context.
     void ClearContext();
 
-    void CalculateIsModifiable();
-
-    void CalculateIsPdf();
+    void CalculatePluginAttributes();
 
     // Specifies what to render for print preview.
     FrameReference source_frame_;
@@ -568,6 +569,9 @@ class PrintRenderFrameHelper
 
     // List of page indices that need to be rendered.
     std::vector<int> pages_to_render_;
+
+    // True, if the document source is a plugin.
+    bool is_plugin_ = false;
 
     // True, if the document source is modifiable. e.g. HTML and not PDF.
     bool is_modifiable_ = true;

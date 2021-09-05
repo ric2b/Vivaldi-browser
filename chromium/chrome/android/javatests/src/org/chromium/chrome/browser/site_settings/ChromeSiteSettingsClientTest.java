@@ -7,7 +7,8 @@ package org.chromium.chrome.browser.site_settings;
 import static com.google.common.truth.Truth.assertThat;
 
 import android.graphics.Bitmap;
-import android.support.test.filters.SmallTest;
+
+import androidx.test.filters.SmallTest;
 
 import org.junit.Before;
 import org.junit.Rule;
@@ -48,6 +49,8 @@ public class ChromeSiteSettingsClientTest {
         ChromeSiteSettingsClient client =
                 new ChromeSiteSettingsClient(mActivityTestRule.getActivity());
 
+        // Hold the Bitmap in an array because it gets assigned to in a closure, and all captured
+        // variables have to be effectively final.
         Bitmap[] holder = new Bitmap[1];
         CallbackHelper helper = new CallbackHelper();
         PostTask.postTask(UiThreadTaskTraits.DEFAULT, () -> {

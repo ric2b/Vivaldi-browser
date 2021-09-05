@@ -34,14 +34,7 @@ class VivaldiNativeAppWindowViewsMac : public VivaldiNativeAppWindowViews {
 
  protected:
   // VivaldiNativeAppWindowView implementation.
-  void OnBeforeWidgetInit(
-      const extensions::AppWindow::CreateParams& create_params,
-      views::Widget::InitParams* init_params,
-      views::Widget* widget) override;
-  views::NonClientFrameView* CreateStandardDesktopAppFrame() override;
-  views::NonClientFrameView* CreateNonStandardAppFrame() override;
-
-  // ui::BaseWindow implementation.
+  void OnBeforeWidgetInit(views::Widget::InitParams& init_params) override;
   bool IsMaximized() const override;
   gfx::Rect GetRestoredBounds() const override;
   void Show() override;
@@ -51,11 +44,12 @@ class VivaldiNativeAppWindowViewsMac : public VivaldiNativeAppWindowViews {
 
   // WidgetObserver implementation.
   void OnWidgetCreated(views::Widget* widget) override;
-
   void OnWidgetDestroyed(views::Widget* widget) override;
 
   // WidgetDelegate implementation.
   void DeleteDelegate() override;
+  views::NonClientFrameView* CreateNonClientFrameView(
+      views::Widget* widget) override;
 
  private:
   // Used to notify us about certain NSWindow events.

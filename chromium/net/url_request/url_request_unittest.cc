@@ -84,6 +84,7 @@
 #include "net/cert/x509_util.h"
 #include "net/cert_net/cert_net_fetcher_url_request.h"
 #include "net/cookies/canonical_cookie_test_helpers.h"
+#include "net/cookies/cookie_inclusion_status.h"
 #include "net/cookies/cookie_monster.h"
 #include "net/cookies/cookie_store_test_helpers.h"
 #include "net/cookies/test_cookie_access_delegate.h"
@@ -115,6 +116,7 @@
 #include "net/ssl/ssl_server_config.h"
 #include "net/ssl/test_ssl_config_service.h"
 #include "net/test/cert_test_util.h"
+#include "net/test/embedded_test_server/default_handlers.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/embedded_test_server_connection_listener.h"
 #include "net/test/embedded_test_server/http_request.h"
@@ -161,6 +163,7 @@
 
 using net::test::IsError;
 using net::test::IsOk;
+using net::test_server::RegisterDefaultHandlers;
 using testing::AnyOf;
 
 using base::ASCIIToUTF16;
@@ -324,7 +327,7 @@ class HttpTestServer : public EmbeddedTestServer {
     AddDefaultHandlers(document_root);
   }
 
-  HttpTestServer() { AddDefaultHandlers(base::FilePath()); }
+  HttpTestServer() { RegisterDefaultHandlers(this); }
 };
 
 // Job that allows monitoring of its priority.
@@ -1569,7 +1572,6 @@ class FilteringTestNetworkDelegate : public TestNetworkDelegate {
   void ResetBlockedSetCookieCount() { blocked_set_cookie_count_ = 0; }
 
   bool OnCanGetCookies(const URLRequest& request,
-                       const net::CookieList& cookie_list,
                        bool allowed_from_caller) override {
     // Filter out cookies if |block_get_cookies_| is set and
     // combine with |allowed_from_caller|.
@@ -1580,7 +1582,7 @@ class FilteringTestNetworkDelegate : public TestNetworkDelegate {
     if (!allowed)
       ++blocked_get_cookie_count_;
 
-    return TestNetworkDelegate::OnCanGetCookies(request, cookie_list, allowed);
+    return TestNetworkDelegate::OnCanGetCookies(request, allowed);
   }
 
   void set_block_get_cookies() { block_get_cookies_ = true; }
@@ -2398,10 +2400,10 @@ TEST_F(URLRequestTest, SameSiteCookiesSpecialScheme) {
   url::AddStandardScheme("chrome", url::SchemeType::SCHEME_WITH_HOST);
 
   EmbeddedTestServer https_test_server(EmbeddedTestServer::TYPE_HTTPS);
-  https_test_server.AddDefaultHandlers(base::FilePath());
+  RegisterDefaultHandlers(&https_test_server);
   ASSERT_TRUE(https_test_server.Start());
   EmbeddedTestServer http_test_server(EmbeddedTestServer::TYPE_HTTP);
-  http_test_server.AddDefaultHandlers(base::FilePath());
+  RegisterDefaultHandlers(&http_test_server);
   // Ensure they are on different ports.
   ASSERT_TRUE(http_test_server.Start(https_test_server.port() + 1));
   // Both hostnames should be 127.0.0.1 (so that we can use the same set of
@@ -2488,11 +2490,9 @@ TEST_F(URLRequestTest, SameSiteCookiesSpecialScheme) {
 // Tests that __Secure- cookies can't be set on non-secure origins.
 TEST_F(URLRequestTest, SecureCookiePrefixOnNonsecureOrigin) {
   EmbeddedTestServer http_server;
-  http_server.AddDefaultHandlers(
-      base::FilePath(FILE_PATH_LITERAL("net/data/ssl")));
+  RegisterDefaultHandlers(&http_server);
   EmbeddedTestServer https_server(EmbeddedTestServer::TYPE_HTTPS);
-  https_server.AddDefaultHandlers(
-      base::FilePath(FILE_PATH_LITERAL("net/data/ssl")));
+  RegisterDefaultHandlers(&https_server);
   ASSERT_TRUE(http_server.Start());
   ASSERT_TRUE(https_server.Start());
 
@@ -2531,8 +2531,7 @@ TEST_F(URLRequestTest, SecureCookiePrefixOnNonsecureOrigin) {
 
 TEST_F(URLRequestTest, SecureCookiePrefixNonsecure) {
   EmbeddedTestServer https_server(EmbeddedTestServer::TYPE_HTTPS);
-  https_server.AddDefaultHandlers(
-      base::FilePath(FILE_PATH_LITERAL("net/data/ssl")));
+  RegisterDefaultHandlers(&https_server);
   ASSERT_TRUE(https_server.Start());
 
   TestNetworkDelegate network_delegate;
@@ -2570,8 +2569,7 @@ TEST_F(URLRequestTest, SecureCookiePrefixNonsecure) {
 
 TEST_F(URLRequestTest, SecureCookiePrefixSecure) {
   EmbeddedTestServer https_server(EmbeddedTestServer::TYPE_HTTPS);
-  https_server.AddDefaultHandlers(
-      base::FilePath(FILE_PATH_LITERAL("net/data/ssl")));
+  RegisterDefaultHandlers(&https_server);
   ASSERT_TRUE(https_server.Start());
 
   TestNetworkDelegate network_delegate;
@@ -2610,11 +2608,9 @@ TEST_F(URLRequestTest, SecureCookiePrefixSecure) {
 // cookies are enabled.
 TEST_F(URLRequestTest, StrictSecureCookiesOnNonsecureOrigin) {
   EmbeddedTestServer http_server;
-  http_server.AddDefaultHandlers(
-      base::FilePath(FILE_PATH_LITERAL("net/data/ssl")));
+  RegisterDefaultHandlers(&http_server);
   EmbeddedTestServer https_server(EmbeddedTestServer::TYPE_HTTPS);
-  https_server.AddDefaultHandlers(
-      base::FilePath(FILE_PATH_LITERAL("net/data/ssl")));
+  RegisterDefaultHandlers(&https_server);
   ASSERT_TRUE(http_server.Start());
   ASSERT_TRUE(https_server.Start());
 
@@ -3728,76 +3724,132 @@ TEST_F(URLRequestTestHTTP, GetTestLoadTiming) {
   }
 }
 
-// TODO(svaldez): Update tests to use EmbeddedTestServer.
-#if !defined(OS_IOS)
+namespace {
+
+// Sends the correct Content-Length matching the compressed length.
+const char kZippedContentLengthCompressed[] = "C";
+// Sends an incorrect Content-Length matching the uncompressed length.
+const char kZippedContentLengthUncompressed[] = "U";
+// Sends an incorrect Content-Length shorter than the compressed length.
+const char kZippedContentLengthShort[] = "S";
+// Sends an incorrect Content-Length between the compressed and uncompressed
+// lengths.
+const char kZippedContentLengthMedium[] = "M";
+// Sends an incorrect Content-Length larger than both compressed and
+// uncompressed lengths.
+const char kZippedContentLengthLong[] = "L";
+
+// Sends |compressed_content| which, when decoded with deflate, should have
+// length |uncompressed_length|. The Content-Length header will be sent based on
+// which of the constants above is sent in the query string.
+std::unique_ptr<test_server::HttpResponse> HandleZippedRequest(
+    const std::string& compressed_content,
+    size_t uncompressed_length,
+    const test_server::HttpRequest& request) {
+  GURL url = request.GetURL();
+  if (url.path_piece() != "/compressedfiles/BullRunSpeech.txt")
+    return nullptr;
+
+  size_t length;
+  if (url.query_piece() == kZippedContentLengthCompressed) {
+    length = compressed_content.size();
+  } else if (url.query_piece() == kZippedContentLengthUncompressed) {
+    length = uncompressed_length;
+  } else if (url.query_piece() == kZippedContentLengthShort) {
+    length = compressed_content.size() / 2;
+  } else if (url.query_piece() == kZippedContentLengthMedium) {
+    length = (compressed_content.size() + uncompressed_length) / 2;
+  } else if (url.query_piece() == kZippedContentLengthLong) {
+    length = compressed_content.size() + uncompressed_length;
+  } else {
+    return nullptr;
+  }
+
+  std::string headers = "HTTP/1.1 200 OK\r\n";
+  headers += "Content-Encoding: deflate\r\n";
+  base::StringAppendF(&headers, "Content-Length: %zu\r\n", length);
+  return std::make_unique<test_server::RawHttpResponse>(headers,
+                                                        compressed_content);
+}
+
+}  // namespace
+
 TEST_F(URLRequestTestHTTP, GetZippedTest) {
-  SpawnedTestServer test_server(SpawnedTestServer::TYPE_HTTP,
-                                base::FilePath(kTestFilePath));
-
-  ASSERT_TRUE(test_server.Start());
-
-  // Parameter that specifies the Content-Length field in the response:
-  // C - Compressed length.
-  // U - Uncompressed length.
-  // L - Large length (larger than both C & U).
-  // M - Medium length (between C & U).
-  // S - Small length (smaller than both C & U).
-  const char test_parameters[] = "CULMS";
-  const int num_tests = base::size(test_parameters) - 1;  // Skip NULL.
-  // C & U should be OK.
-  // L & M are larger than the data sent, and show an error.
-  // S has too little data, but we seem to accept it.
-  const bool test_expect_success[num_tests] =
-      { true, true, false, false, true };
-
   base::FilePath file_path;
   base::PathService::Get(base::DIR_SOURCE_ROOT, &file_path);
   file_path = file_path.Append(kTestFilePath);
-  file_path = file_path.Append(FILE_PATH_LITERAL("BullRunSpeech.txt"));
-  std::string expected_content;
-  ASSERT_TRUE(base::ReadFileToString(file_path, &expected_content));
+  std::string expected_content, compressed_content;
+  ASSERT_TRUE(base::ReadFileToString(
+      file_path.Append(FILE_PATH_LITERAL("BullRunSpeech.txt")),
+      &expected_content));
+  // This file is the output of the Python zlib.compress function on
+  // |expected_content|.
+  ASSERT_TRUE(base::ReadFileToString(
+      file_path.Append(FILE_PATH_LITERAL("BullRunSpeech.txt.deflate")),
+      &compressed_content));
 
-  for (int i = 0; i < num_tests; i++) {
+  http_test_server()->RegisterRequestHandler(base::BindRepeating(
+      &HandleZippedRequest, compressed_content, expected_content.size()));
+  ASSERT_TRUE(http_test_server()->Start());
+
+  static const struct {
+    const char* parameter;
+    bool expect_success;
+  } kTests[] = {
+      // Sending the compressed Content-Length is correct.
+      {kZippedContentLengthCompressed, true},
+      // Sending the uncompressed Content-Length is incorrect, but we accept it
+      // to workaround some broken servers.
+      {kZippedContentLengthUncompressed, true},
+      // Sending too long of Content-Length is rejected.
+      {kZippedContentLengthLong, false},
+      {kZippedContentLengthMedium, false},
+      // Sending too short of Content-Length successfully fetches a response
+      // body, but it will be truncated.
+      {kZippedContentLengthShort, true},
+  };
+
+  for (const auto& test : kTests) {
+    SCOPED_TRACE(test.parameter);
     TestDelegate d;
-    {
-      std::string test_file = base::StringPrintf(
-          "compressedfiles/BullRunSpeech.txt?%c", test_parameters[i]);
+    std::string test_file = base::StringPrintf(
+        "/compressedfiles/BullRunSpeech.txt?%s", test.parameter);
 
-      TestNetworkDelegate network_delegate;  // Must outlive URLRequest.
-      TestURLRequestContext context(true);
-      context.set_network_delegate(&network_delegate);
-      context.Init();
+    TestNetworkDelegate network_delegate;  // Must outlive URLRequest.
+    TestURLRequestContext context(true);
+    context.set_network_delegate(&network_delegate);
+    context.Init();
 
-      std::unique_ptr<URLRequest> r(
-          context.CreateRequest(test_server.GetURL(test_file), DEFAULT_PRIORITY,
-                                &d, TRAFFIC_ANNOTATION_FOR_TESTS));
-      r->Start();
-      EXPECT_TRUE(r->is_pending());
+    std::unique_ptr<URLRequest> r(context.CreateRequest(
+        http_test_server()->GetURL(test_file), DEFAULT_PRIORITY, &d,
+        TRAFFIC_ANNOTATION_FOR_TESTS));
+    r->Start();
+    EXPECT_TRUE(r->is_pending());
 
-      d.RunUntilComplete();
+    d.RunUntilComplete();
 
-      EXPECT_EQ(1, d.response_started_count());
-      EXPECT_FALSE(d.received_data_before_response());
-      VLOG(1) << " Received " << d.bytes_received() << " bytes"
-              << " error = " << d.request_status();
-      if (test_expect_success[i]) {
-        EXPECT_EQ(OK, d.request_status()) << " Parameter = \"" << test_file
-                                          << "\"";
-        if (test_parameters[i] == 'S') {
-          // When content length is smaller than both compressed length and
-          // uncompressed length, HttpStreamParser might not read the full
-          // response body.
-          continue;
-        }
-        EXPECT_EQ(expected_content, d.data_received());
+    EXPECT_EQ(1, d.response_started_count());
+    EXPECT_FALSE(d.received_data_before_response());
+    VLOG(1) << " Received " << d.bytes_received() << " bytes"
+            << " error = " << d.request_status();
+    if (test.expect_success) {
+      EXPECT_EQ(OK, d.request_status())
+          << " Parameter = \"" << test_file << "\"";
+      if (strcmp(test.parameter, kZippedContentLengthShort) == 0) {
+        // When content length is smaller than both compressed length and
+        // uncompressed length, HttpStreamParser might not read the full
+        // response body.
+        EXPECT_EQ(expected_content.substr(0, d.data_received().size()),
+                  d.data_received());
       } else {
-        EXPECT_EQ(ERR_CONTENT_LENGTH_MISMATCH, d.request_status())
-            << " Parameter = \"" << test_file << "\"";
+        EXPECT_EQ(expected_content, d.data_received());
       }
+    } else {
+      EXPECT_EQ(ERR_CONTENT_LENGTH_MISMATCH, d.request_status())
+          << " Parameter = \"" << test_file << "\"";
     }
   }
 }
-#endif  // !defined(OS_IOS)
 
 TEST_F(URLRequestTestHTTP, RedirectLoadTiming) {
   ASSERT_TRUE(http_test_server()->Start());
@@ -4997,8 +5049,8 @@ TEST_F(URLRequestTestHTTP, ProcessSTS) {
       default_context().transport_security_state();
   TransportSecurityState::STSState sts_state;
   TransportSecurityState::PKPState pkp_state;
-  EXPECT_TRUE(security_state->GetDynamicSTSState(test_server_hostname,
-                                                 &sts_state, nullptr));
+  EXPECT_TRUE(
+      security_state->GetDynamicSTSState(test_server_hostname, &sts_state));
   EXPECT_FALSE(
       security_state->GetDynamicPKPState(test_server_hostname, &pkp_state));
   EXPECT_EQ(TransportSecurityState::STSState::MODE_FORCE_HTTPS,
@@ -5031,8 +5083,8 @@ TEST_F(URLRequestTestHTTP, STSNotProcessedOnIP) {
   TransportSecurityState* security_state =
       default_context().transport_security_state();
   TransportSecurityState::STSState sts_state;
-  EXPECT_FALSE(security_state->GetDynamicSTSState(test_server_hostname,
-                                                  &sts_state, nullptr));
+  EXPECT_FALSE(
+      security_state->GetDynamicSTSState(test_server_hostname, &sts_state));
 }
 
 namespace {
@@ -5245,8 +5297,8 @@ TEST_F(URLRequestTestHTTP, ProcessSTSOnce) {
   TransportSecurityState* security_state =
       default_context().transport_security_state();
   TransportSecurityState::STSState sts_state;
-  EXPECT_TRUE(security_state->GetDynamicSTSState(test_server_hostname,
-                                                 &sts_state, nullptr));
+  EXPECT_TRUE(
+      security_state->GetDynamicSTSState(test_server_hostname, &sts_state));
   EXPECT_EQ(TransportSecurityState::STSState::MODE_FORCE_HTTPS,
             sts_state.upgrade_mode);
   EXPECT_FALSE(sts_state.include_subdomains);
@@ -5260,13 +5312,15 @@ class MockExpectCTReporter : public TransportSecurityState::ExpectCTReporter {
   MockExpectCTReporter() : num_failures_(0) {}
   ~MockExpectCTReporter() override = default;
 
-  void OnExpectCTFailed(const HostPortPair& host_port_pair,
-                        const GURL& report_uri,
-                        base::Time expiration,
-                        const X509Certificate* validated_certificate_chain,
-                        const X509Certificate* served_certificate_chain,
-                        const SignedCertificateTimestampAndStatusList&
-                            signed_certificate_timestamps) override {
+  void OnExpectCTFailed(
+      const HostPortPair& host_port_pair,
+      const GURL& report_uri,
+      base::Time expiration,
+      const X509Certificate* validated_certificate_chain,
+      const X509Certificate* served_certificate_chain,
+      const SignedCertificateTimestampAndStatusList&
+          signed_certificate_timestamps,
+      const NetworkIsolationKey& network_isolation_key) override {
     num_failures_++;
   }
 
@@ -5414,8 +5468,8 @@ TEST_F(URLRequestTestHTTP, ExpectCTHeader) {
   d.RunUntilComplete();
 
   TransportSecurityState::ExpectCTState state;
-  ASSERT_TRUE(
-      transport_security_state.GetDynamicExpectCTState(url.host(), &state));
+  ASSERT_TRUE(transport_security_state.GetDynamicExpectCTState(
+      url.host(), NetworkIsolationKey(), &state));
   EXPECT_TRUE(state.enforce);
   EXPECT_EQ(GURL("https://example.test"), state.report_uri);
 }
@@ -5476,8 +5530,8 @@ TEST_F(URLRequestTestHTTP, MultipleExpectCTHeaders) {
   d.RunUntilComplete();
 
   TransportSecurityState::ExpectCTState state;
-  ASSERT_TRUE(
-      transport_security_state.GetDynamicExpectCTState(url.host(), &state));
+  ASSERT_TRUE(transport_security_state.GetDynamicExpectCTState(
+      url.host(), NetworkIsolationKey(), &state));
   EXPECT_TRUE(state.enforce);
   EXPECT_EQ(GURL("https://example.test"), state.report_uri);
 }
@@ -5488,7 +5542,7 @@ TEST_F(URLRequestTestHTTP, MultipleExpectCTHeaders) {
 
 TEST_F(URLRequestTestHTTP, NetworkErrorLogging_DontReportIfNetworkNotAccessed) {
   EmbeddedTestServer https_test_server(net::EmbeddedTestServer::TYPE_HTTPS);
-  https_test_server.AddDefaultHandlers(base::FilePath(kTestFilePath));
+  RegisterDefaultHandlers(&https_test_server);
   ASSERT_TRUE(https_test_server.Start());
   GURL request_url = https_test_server.GetURL("/cachetime");
 
@@ -5552,7 +5606,7 @@ TEST_F(URLRequestTestHTTP, NetworkErrorLogging_BasicSuccess) {
 
 TEST_F(URLRequestTestHTTP, NetworkErrorLogging_BasicError) {
   EmbeddedTestServer https_test_server(net::EmbeddedTestServer::TYPE_HTTPS);
-  https_test_server.AddDefaultHandlers(base::FilePath(kTestFilePath));
+  RegisterDefaultHandlers(&https_test_server);
   ASSERT_TRUE(https_test_server.Start());
   GURL request_url = https_test_server.GetURL("/close-socket");
 
@@ -5636,7 +5690,7 @@ TEST_F(URLRequestTestHTTP, NetworkErrorLogging_RedirectWithoutLocationHeader) {
 
 TEST_F(URLRequestTestHTTP, NetworkErrorLogging_Auth) {
   EmbeddedTestServer https_test_server(net::EmbeddedTestServer::TYPE_HTTPS);
-  https_test_server.AddDefaultHandlers(base::FilePath(kTestFilePath));
+  RegisterDefaultHandlers(&https_test_server);
   ASSERT_TRUE(https_test_server.Start());
   GURL request_url = https_test_server.GetURL("/auth-basic");
 
@@ -5667,7 +5721,7 @@ TEST_F(URLRequestTestHTTP, NetworkErrorLogging_Auth) {
 
 TEST_F(URLRequestTestHTTP, NetworkErrorLogging_304Response) {
   EmbeddedTestServer https_test_server(net::EmbeddedTestServer::TYPE_HTTPS);
-  https_test_server.AddDefaultHandlers(base::FilePath(kTestFilePath));
+  RegisterDefaultHandlers(&https_test_server);
   ASSERT_TRUE(https_test_server.Start());
   GURL request_url = https_test_server.GetURL("/auth-basic");
 
@@ -6127,7 +6181,12 @@ TEST_F(URLRequestTestHTTP, CapRefererHeaderLength) {
     req->Start();
     d.RunUntilComplete();
 
-    EXPECT_EQ("http://example.com/", d.data_received());
+    // The request's referrer will be stripped since (1) there will be a
+    // mismatch between the request's referrer and the output of
+    // URLRequestJob::ComputeReferrerForPolicy and (2) the delegate, when
+    // offered the opportunity to cancel the request for this reason, will
+    // decline.
+    EXPECT_EQ("None", d.data_received());
   }
   {
     std::string original_header = "http://example.com/";
@@ -6729,8 +6788,7 @@ TEST_F(URLRequestTest, ReportCookieActivity) {
               req->maybe_stored_cookies()[0].cookie->Name());
     EXPECT_TRUE(req->maybe_stored_cookies()[0]
                     .status.HasExactlyExclusionReasonsForTesting(
-                        {net::CanonicalCookie::CookieInclusionStatus::
-                             EXCLUDE_USER_PREFERENCES}));
+                        {CookieInclusionStatus::EXCLUDE_USER_PREFERENCES}));
     EXPECT_EQ("stored_cookie", req->maybe_stored_cookies()[1].cookie->Name());
     EXPECT_TRUE(req->maybe_stored_cookies()[1].status.IsInclude());
     EXPECT_EQ("stored_cookie", req->maybe_stored_cookies()[1].cookie->Name());
@@ -6769,17 +6827,16 @@ TEST_F(URLRequestTest, ReportCookieActivity) {
 
     ASSERT_EQ(2u, req->maybe_sent_cookies().size());
     EXPECT_EQ("path_cookie", req->maybe_sent_cookies()[0].cookie.Name());
-    EXPECT_TRUE(req->maybe_sent_cookies()[0]
-                    .status.HasExactlyExclusionReasonsForTesting(
-                        {net::CanonicalCookie::CookieInclusionStatus::
-                             EXCLUDE_NOT_ON_PATH,
-                         net::CanonicalCookie::CookieInclusionStatus::
-                             EXCLUDE_USER_PREFERENCES}));
+    EXPECT_TRUE(
+        req->maybe_sent_cookies()[0]
+            .access_result.status.HasExactlyExclusionReasonsForTesting(
+                {net::CookieInclusionStatus::EXCLUDE_NOT_ON_PATH,
+                 net::CookieInclusionStatus::EXCLUDE_USER_PREFERENCES}));
     EXPECT_EQ("stored_cookie", req->maybe_sent_cookies()[1].cookie.Name());
-    EXPECT_TRUE(req->maybe_sent_cookies()[1]
-                    .status.HasExactlyExclusionReasonsForTesting(
-                        {net::CanonicalCookie::CookieInclusionStatus::
-                             EXCLUDE_USER_PREFERENCES}));
+    EXPECT_TRUE(
+        req->maybe_sent_cookies()[1]
+            .access_result.status.HasExactlyExclusionReasonsForTesting(
+                {net::CookieInclusionStatus::EXCLUDE_USER_PREFERENCES}));
     auto entries =
         net_log.GetEntriesWithType(NetLogEventType::COOKIE_INCLUSION_STATUS);
     EXPECT_EQ(2u, entries.size());
@@ -6842,11 +6899,10 @@ TEST_F(URLRequestTest, ReportCookieActivity) {
     ASSERT_EQ(2u, req->maybe_sent_cookies().size());
     EXPECT_EQ("path_cookie", req->maybe_sent_cookies()[0].cookie.Name());
     EXPECT_TRUE(req->maybe_sent_cookies()[0]
-                    .status.HasExactlyExclusionReasonsForTesting(
-                        {net::CanonicalCookie::CookieInclusionStatus::
-                             EXCLUDE_NOT_ON_PATH}));
+                    .access_result.status.HasExactlyExclusionReasonsForTesting(
+                        {net::CookieInclusionStatus::EXCLUDE_NOT_ON_PATH}));
     EXPECT_EQ("stored_cookie", req->maybe_sent_cookies()[1].cookie.Name());
-    EXPECT_TRUE(req->maybe_sent_cookies()[1].status.IsInclude());
+    EXPECT_TRUE(req->maybe_sent_cookies()[1].access_result.status.IsInclude());
     auto entries =
         net_log.GetEntriesWithType(NetLogEventType::COOKIE_INCLUSION_STATUS);
     EXPECT_EQ(2u, entries.size());
@@ -6860,6 +6916,200 @@ TEST_F(URLRequestTest, ReportCookieActivity) {
                   "\"path\":\"/\",\"status\":\"INCLUDE, DO_NOT_WARN\"}",
               SerializeNetLogValueToJson(entries[1].params));
     net_log.Clear();
+  }
+}
+
+// Test that CookieInclusionStatus warnings for SameSite cookie compatibility
+// pairs are applied correctly.
+TEST_F(URLRequestTest, SameSiteCookieCompatPairWarnings) {
+  EmbeddedTestServer https_test_server(EmbeddedTestServer::TYPE_HTTPS);
+  RegisterDefaultHandlers(&https_test_server);
+  ASSERT_TRUE(https_test_server.Start());
+
+  GURL set_pair_url = https_test_server.GetURL(
+      "/set-cookie?name=value;SameSite=None;Secure&"
+      "name_legacy=value");
+  GURL set_httponly_pair_url = https_test_server.GetURL(
+      "/set-cookie?name=value;SameSite=None;Secure;HttpOnly&"
+      "name_legacy=value;HttpOnly");
+  GURL set_pair_and_other_url = https_test_server.GetURL(
+      "/set-cookie?name=value;SameSite=None;Secure&"
+      "name_legacy=value&"
+      "name2=value;SameSite=None;Secure");
+  GURL set_two_pairs_url = https_test_server.GetURL(
+      "/set-cookie?name=value;SameSite=None;Secure&"
+      "name_legacy=value&"
+      "name2=value;SameSite=None;Secure&"
+      "compat-name2=value");
+  GURL get_cookies_url = https_test_server.GetURL("/echoheader?Cookie");
+
+  struct TestCase {
+    // URL used to set cookies.
+    // Note: This test works because each URL uses a superset of the cookies
+    // used by URLs before it.
+    GURL set_cookies_url;
+    // Names of cookies and whether they are expected to be included for a
+    // cross-site get/set. (All are expected for a same-site request.)
+    std::map<std::string, bool> expected_cookies;
+    // Names of cookies expected to have a compat pair warning for a cross-site
+    // request.
+    std::set<std::string> expected_compat_warning_cookies;
+    // Whether all cookies should be HttpOnly.
+    bool expected_httponly = false;
+  } kTestCases[] = {
+      // Basic case with a single compat pair.
+      {set_pair_url,
+       {{"name", true}, {"name_legacy", false}},
+       {"name", "name_legacy"}},
+      // Compat pair with HttpOnly cookies (should not change behavior because
+      // this is an HTTP request).
+      {set_httponly_pair_url,
+       {{"name", true}, {"name_legacy", false}},
+       {"name", "name_legacy"},
+       true},
+      // Pair should be marked, but extra cookie (not part of a pair) should
+      // not.
+      {set_pair_and_other_url,
+       {{"name", true}, {"name_legacy", false}, {"name2", true}},
+       {"name", "name_legacy"}},
+      // Two separate pairs should all be marked.
+      {set_two_pairs_url,
+       {{"name", true},
+        {"name_legacy", false},
+        {"name2", true},
+        {"compat-name2", false}},
+       {"name", "name_legacy", "name2", "compat-name2"}}};
+
+  // For each test case, this exercises:
+  //  1. Set cookies in a cross-site context to trigger compat pair warnings.
+  //  2. Set cookies in a same-site context and check that no compat pair
+  //     warnings are applied (and also make sure the cookies are actually
+  //     present for the subsequent tests).
+  //  3. Get cookies in a same-site context and check that no compat pair
+  //     warnings are applied.
+  //  4. Get cookies in a cross-site context to trigger compat pair warnings.
+  for (const auto& test : kTestCases) {
+    {
+      // Set cookies in a cross-site context.
+      TestDelegate d;
+      std::unique_ptr<URLRequest> req(default_context().CreateRequest(
+          test.set_cookies_url, DEFAULT_PRIORITY, &d,
+          TRAFFIC_ANNOTATION_FOR_TESTS));
+      req->Start();
+      d.RunUntilComplete();
+
+      ASSERT_EQ(test.expected_cookies.size(),
+                req->maybe_stored_cookies().size());
+      for (const auto& cookie : req->maybe_stored_cookies()) {
+        ASSERT_TRUE(cookie.cookie.has_value());
+        EXPECT_EQ(cookie.cookie->IsHttpOnly(), test.expected_httponly);
+
+        const std::string& cookie_name = cookie.cookie->Name();
+        auto it = test.expected_cookies.find(cookie_name);
+        ASSERT_NE(test.expected_cookies.end(), it);
+        bool included = cookie.status.IsInclude();
+        EXPECT_EQ(it->second, included);
+
+        std::vector<CookieInclusionStatus::ExclusionReason> exclusions;
+        std::vector<CookieInclusionStatus::WarningReason> warnings;
+        if (!included) {
+          exclusions.push_back(CookieInclusionStatus::
+                                   EXCLUDE_SAMESITE_UNSPECIFIED_TREATED_AS_LAX);
+          warnings.push_back(CookieInclusionStatus::
+                                 WARN_SAMESITE_UNSPECIFIED_CROSS_SITE_CONTEXT);
+        }
+        if (base::Contains(test.expected_compat_warning_cookies, cookie_name)) {
+          warnings.push_back(CookieInclusionStatus::WARN_SAMESITE_COMPAT_PAIR);
+        }
+        EXPECT_TRUE(
+            cookie.status.HasExactlyExclusionReasonsForTesting(exclusions));
+        EXPECT_TRUE(cookie.status.HasExactlyWarningReasonsForTesting(warnings));
+      }
+    }
+    {
+      // Set cookies in a same-site context.
+      TestDelegate d;
+      std::unique_ptr<URLRequest> req(default_context().CreateFirstPartyRequest(
+          test.set_cookies_url, DEFAULT_PRIORITY, &d,
+          TRAFFIC_ANNOTATION_FOR_TESTS));
+      req->Start();
+      d.RunUntilComplete();
+
+      ASSERT_EQ(test.expected_cookies.size(),
+                req->maybe_stored_cookies().size());
+      for (const auto& cookie : req->maybe_stored_cookies()) {
+        ASSERT_TRUE(cookie.cookie.has_value());
+        EXPECT_EQ(cookie.cookie->IsHttpOnly(), test.expected_httponly);
+        EXPECT_TRUE(
+            base::Contains(test.expected_cookies, cookie.cookie->Name()));
+        // Cookie was included and there are no warnings.
+        EXPECT_EQ(CookieInclusionStatus(), cookie.status);
+      }
+    }
+    {
+      // Get cookies in a same-site context.
+      TestDelegate d;
+      std::unique_ptr<URLRequest> req(default_context().CreateFirstPartyRequest(
+          get_cookies_url, DEFAULT_PRIORITY, &d, TRAFFIC_ANNOTATION_FOR_TESTS));
+      req->Start();
+      d.RunUntilComplete();
+
+      ASSERT_EQ(test.expected_cookies.size(), req->maybe_sent_cookies().size());
+      for (const auto& cookie : req->maybe_sent_cookies()) {
+        EXPECT_EQ(cookie.cookie.IsHttpOnly(), test.expected_httponly);
+        EXPECT_TRUE(
+            base::Contains(test.expected_cookies, cookie.cookie.Name()));
+        EXPECT_THAT(d.data_received(),
+                    ::testing::HasSubstr(cookie.cookie.Name() + "=value"));
+        // Cookie was included and there are no warnings.
+        EXPECT_EQ(CookieInclusionStatus(), cookie.access_result.status);
+      }
+    }
+    {
+      // Get cookies in a cross-site context.
+      TestDelegate d;
+      std::unique_ptr<URLRequest> req(default_context().CreateRequest(
+          get_cookies_url, DEFAULT_PRIORITY, &d, TRAFFIC_ANNOTATION_FOR_TESTS));
+      req->Start();
+      d.RunUntilComplete();
+
+      ASSERT_EQ(test.expected_cookies.size(), req->maybe_sent_cookies().size());
+      for (const auto& cookie : req->maybe_sent_cookies()) {
+        EXPECT_EQ(cookie.cookie.IsHttpOnly(), test.expected_httponly);
+
+        const std::string& cookie_name = cookie.cookie.Name();
+        auto it = test.expected_cookies.find(cookie_name);
+        ASSERT_NE(test.expected_cookies.end(), it);
+        bool included = cookie.access_result.status.IsInclude();
+        EXPECT_EQ(it->second, included);
+
+        if (included) {
+          EXPECT_THAT(d.data_received(),
+                      ::testing::HasSubstr(cookie.cookie.Name() + "=value"));
+        } else {
+          EXPECT_THAT(d.data_received(), ::testing::Not(::testing::HasSubstr(
+                                             cookie.cookie.Name() + "=value")));
+        }
+
+        std::vector<CookieInclusionStatus::ExclusionReason> exclusions;
+        std::vector<CookieInclusionStatus::WarningReason> warnings;
+        if (!included) {
+          exclusions.push_back(CookieInclusionStatus::
+                                   EXCLUDE_SAMESITE_UNSPECIFIED_TREATED_AS_LAX);
+          warnings.push_back(CookieInclusionStatus::
+                                 WARN_SAMESITE_UNSPECIFIED_CROSS_SITE_CONTEXT);
+        }
+        if (base::Contains(test.expected_compat_warning_cookies, cookie_name)) {
+          warnings.push_back(CookieInclusionStatus::WARN_SAMESITE_COMPAT_PAIR);
+        }
+        EXPECT_TRUE(
+            cookie.access_result.status.HasExactlyExclusionReasonsForTesting(
+                exclusions));
+        EXPECT_TRUE(
+            cookie.access_result.status.HasExactlyWarningReasonsForTesting(
+                warnings));
+      }
+    }
   }
 }
 
@@ -6908,8 +7158,7 @@ TEST_F(URLRequestTest, NoCookieInclusionStatusWarningIfWouldBeExcludedAnyway) {
     // doesn't even make it to the cookie store (it is filtered out beforehand).
     EXPECT_TRUE(req->maybe_stored_cookies()[0]
                     .status.HasExactlyExclusionReasonsForTesting(
-                        {CanonicalCookie::CookieInclusionStatus::
-                             EXCLUDE_USER_PREFERENCES}));
+                        {CookieInclusionStatus::EXCLUDE_USER_PREFERENCES}));
     EXPECT_FALSE(req->maybe_stored_cookies()[0].status.ShouldWarn());
 
     // Cookie that would be included had it not been for the new SameSite rules
@@ -6918,22 +7167,21 @@ TEST_F(URLRequestTest, NoCookieInclusionStatusWarningIfWouldBeExcludedAnyway) {
               req->maybe_stored_cookies()[1].cookie->Name());
     EXPECT_TRUE(req->maybe_stored_cookies()[1]
                     .status.HasExactlyExclusionReasonsForTesting(
-                        {CanonicalCookie::CookieInclusionStatus::
+                        {CookieInclusionStatus::
                              EXCLUDE_SAMESITE_UNSPECIFIED_TREATED_AS_LAX}));
     EXPECT_TRUE(req->maybe_stored_cookies()[1]
                     .status.HasExactlyWarningReasonsForTesting(
-                        {CanonicalCookie::CookieInclusionStatus::
+                        {CookieInclusionStatus::
                              WARN_SAMESITE_UNSPECIFIED_CROSS_SITE_CONTEXT}));
 
     // Cookie that is blocked because of invalid Secure attribute is not warned
     // about.
     EXPECT_EQ("invalidsecure", req->maybe_stored_cookies()[2].cookie->Name());
-    EXPECT_TRUE(
-        req->maybe_stored_cookies()[2]
-            .status.HasExactlyExclusionReasonsForTesting(
-                {CanonicalCookie::CookieInclusionStatus::EXCLUDE_SECURE_ONLY,
-                 CanonicalCookie::CookieInclusionStatus::
-                     EXCLUDE_SAMESITE_UNSPECIFIED_TREATED_AS_LAX}));
+    EXPECT_TRUE(req->maybe_stored_cookies()[2]
+                    .status.HasExactlyExclusionReasonsForTesting(
+                        {CookieInclusionStatus::EXCLUDE_SECURE_ONLY,
+                         CookieInclusionStatus::
+                             EXCLUDE_SAMESITE_UNSPECIFIED_TREATED_AS_LAX}));
     EXPECT_FALSE(req->maybe_stored_cookies()[2].status.ShouldWarn());
   }
 
@@ -6944,14 +7192,13 @@ TEST_F(URLRequestTest, NoCookieInclusionStatusWarningIfWouldBeExcludedAnyway) {
     auto cookie1 = CanonicalCookie::Create(url, "cookienosamesite=1",
                                            base::Time::Now(), base::nullopt);
     base::RunLoop run_loop;
-    CanonicalCookie::CookieInclusionStatus status;
+    CookieInclusionStatus status;
     cm.SetCanonicalCookieAsync(
         std::move(cookie1), url, CookieOptions::MakeAllInclusive(),
-        base::BindLambdaForTesting(
-            [&](CanonicalCookie::CookieInclusionStatus result) {
-              status = result;
-              run_loop.Quit();
-            }));
+        base::BindLambdaForTesting([&](CookieInclusionStatus result) {
+          status = result;
+          run_loop.Quit();
+        }));
     run_loop.Run();
     EXPECT_TRUE(status.IsInclude());
 
@@ -6970,14 +7217,14 @@ TEST_F(URLRequestTest, NoCookieInclusionStatusWarningIfWouldBeExcludedAnyway) {
     ASSERT_EQ(1u, req->maybe_sent_cookies().size());
     EXPECT_EQ("cookienosamesite", req->maybe_sent_cookies()[0].cookie.Name());
     EXPECT_TRUE(req->maybe_sent_cookies()[0]
-                    .status.HasExactlyExclusionReasonsForTesting(
-                        {CanonicalCookie::CookieInclusionStatus::
-                             EXCLUDE_USER_PREFERENCES,
-                         CanonicalCookie::CookieInclusionStatus::
+                    .access_result.status.HasExactlyExclusionReasonsForTesting(
+                        {CookieInclusionStatus::EXCLUDE_USER_PREFERENCES,
+                         CookieInclusionStatus::
                              EXCLUDE_SAMESITE_UNSPECIFIED_TREATED_AS_LAX}));
     // Cookie should not be warned about because it was blocked because of user
     // preferences.
-    EXPECT_FALSE(req->maybe_sent_cookies()[0].status.ShouldWarn());
+    EXPECT_FALSE(
+        req->maybe_sent_cookies()[0].access_result.status.ShouldWarn());
   }
   network_delegate.unset_block_get_cookies();
 
@@ -6988,14 +7235,13 @@ TEST_F(URLRequestTest, NoCookieInclusionStatusWarningIfWouldBeExcludedAnyway) {
                                            base::Time::Now(), base::nullopt);
     base::RunLoop run_loop;
     // Note: cookie1 from the previous testcase is still in the cookie store.
-    CanonicalCookie::CookieInclusionStatus status;
+    CookieInclusionStatus status;
     cm.SetCanonicalCookieAsync(
         std::move(cookie2), url, CookieOptions::MakeAllInclusive(),
-        base::BindLambdaForTesting(
-            [&](CanonicalCookie::CookieInclusionStatus result) {
-              status = result;
-              run_loop.Quit();
-            }));
+        base::BindLambdaForTesting([&](CookieInclusionStatus result) {
+          status = result;
+          run_loop.Quit();
+        }));
     run_loop.Run();
     EXPECT_TRUE(status.IsInclude());
 
@@ -7017,24 +7263,24 @@ TEST_F(URLRequestTest, NoCookieInclusionStatusWarningIfWouldBeExcludedAnyway) {
     // Note: this cookie is first because the cookies are sorted by path length
     // with longest first. See CookieSorter() in cookie_monster.cc.
     EXPECT_EQ("cookiewithpath", req->maybe_sent_cookies()[0].cookie.Name());
-    EXPECT_TRUE(
-        req->maybe_sent_cookies()[0]
-            .status.HasExactlyExclusionReasonsForTesting(
-                {CanonicalCookie::CookieInclusionStatus::EXCLUDE_NOT_ON_PATH,
-                 CanonicalCookie::CookieInclusionStatus::
-                     EXCLUDE_SAMESITE_UNSPECIFIED_TREATED_AS_LAX}));
-    EXPECT_FALSE(req->maybe_sent_cookies()[0].status.ShouldWarn());
+    EXPECT_TRUE(req->maybe_sent_cookies()[0]
+                    .access_result.status.HasExactlyExclusionReasonsForTesting(
+                        {CookieInclusionStatus::EXCLUDE_NOT_ON_PATH,
+                         CookieInclusionStatus::
+                             EXCLUDE_SAMESITE_UNSPECIFIED_TREATED_AS_LAX}));
+    EXPECT_FALSE(
+        req->maybe_sent_cookies()[0].access_result.status.ShouldWarn());
     // Cookie that was only blocked because of unspecified SameSite should be
     // warned about.
     EXPECT_EQ("cookienosamesite", req->maybe_sent_cookies()[1].cookie.Name());
     EXPECT_TRUE(req->maybe_sent_cookies()[1]
-                    .status.HasExactlyExclusionReasonsForTesting(
-                        {CanonicalCookie::CookieInclusionStatus::
+                    .access_result.status.HasExactlyExclusionReasonsForTesting(
+                        {CookieInclusionStatus::
                              EXCLUDE_SAMESITE_UNSPECIFIED_TREATED_AS_LAX}));
-    EXPECT_TRUE(
-        req->maybe_sent_cookies()[1].status.HasExactlyWarningReasonsForTesting(
-            {CanonicalCookie::CookieInclusionStatus::
-                 WARN_SAMESITE_UNSPECIFIED_CROSS_SITE_CONTEXT}));
+    EXPECT_TRUE(req->maybe_sent_cookies()[1]
+                    .access_result.status.HasExactlyWarningReasonsForTesting(
+                        {CookieInclusionStatus::
+                             WARN_SAMESITE_UNSPECIFIED_CROSS_SITE_CONTEXT}));
   }
 }
 
@@ -7060,8 +7306,7 @@ TEST_F(URLRequestTestHTTP, AuthChallengeCancelCookieCollect) {
   ASSERT_EQ(1u, request->maybe_stored_cookies().size());
   EXPECT_TRUE(request->maybe_stored_cookies()[0]
                   .status.HasExactlyExclusionReasonsForTesting(
-                      {net::CanonicalCookie::CookieInclusionStatus::
-                           EXCLUDE_USER_PREFERENCES}));
+                      {net::CookieInclusionStatus::EXCLUDE_USER_PREFERENCES}));
   EXPECT_EQ("got_challenged=true",
             request->maybe_stored_cookies()[0].cookie_string);
 
@@ -7099,11 +7344,11 @@ TEST_F(URLRequestTestHTTP, AuthChallengeWithFilteredCookies) {
 
     // The number of cookies blocked from the most recent round trip.
     ASSERT_EQ(1u, request->maybe_stored_cookies().size());
-    EXPECT_TRUE(request->maybe_stored_cookies()
-                    .front()
-                    .status.HasExactlyExclusionReasonsForTesting(
-                        {net::CanonicalCookie::CookieInclusionStatus::
-                             EXCLUDE_USER_PREFERENCES}));
+    EXPECT_TRUE(
+        request->maybe_stored_cookies()
+            .front()
+            .status.HasExactlyExclusionReasonsForTesting(
+                {net::CookieInclusionStatus::EXCLUDE_USER_PREFERENCES}));
 
     // Now check the second round trip
     request->SetAuth(AuthCredentials(kUser, kSecret));
@@ -7153,11 +7398,11 @@ TEST_F(URLRequestTestHTTP, AuthChallengeWithFilteredCookies) {
     EXPECT_EQ("another_cookie",
               request->maybe_sent_cookies().front().cookie.Name());
     EXPECT_EQ("true", request->maybe_sent_cookies().front().cookie.Value());
-    EXPECT_TRUE(request->maybe_sent_cookies()
-                    .front()
-                    .status.HasExactlyExclusionReasonsForTesting(
-                        {net::CanonicalCookie::CookieInclusionStatus::
-                             EXCLUDE_USER_PREFERENCES}));
+    EXPECT_TRUE(
+        request->maybe_sent_cookies()
+            .front()
+            .access_result.status.HasExactlyExclusionReasonsForTesting(
+                {net::CookieInclusionStatus::EXCLUDE_USER_PREFERENCES}));
 
     // Check maybe_sent_cookies on second roundtrip.
     request->set_maybe_sent_cookies({});
@@ -7188,11 +7433,11 @@ TEST_F(URLRequestTestHTTP, AuthChallengeWithFilteredCookies) {
     ASSERT_EQ(1u, request->maybe_sent_cookies().size());
     EXPECT_EQ("one_more_cookie",
               request->maybe_sent_cookies().front().cookie.Name());
-    EXPECT_TRUE(request->maybe_sent_cookies()
-                    .front()
-                    .status.HasExactlyExclusionReasonsForTesting(
-                        {net::CanonicalCookie::CookieInclusionStatus::
-                             EXCLUDE_USER_PREFERENCES}));
+    EXPECT_TRUE(
+        request->maybe_sent_cookies()
+            .front()
+            .access_result.status.HasExactlyExclusionReasonsForTesting(
+                {net::CookieInclusionStatus::EXCLUDE_USER_PREFERENCES}));
   }
 }
 
@@ -7503,11 +7748,11 @@ TEST_F(URLRequestTestHTTP, RedirectWithFilteredCookies) {
     EXPECT_EQ("server-redirect",
               request->maybe_stored_cookies().front().cookie->Name());
     EXPECT_EQ("true", request->maybe_stored_cookies().front().cookie->Value());
-    EXPECT_TRUE(request->maybe_stored_cookies()
-                    .front()
-                    .status.HasExactlyExclusionReasonsForTesting(
-                        {net::CanonicalCookie::CookieInclusionStatus::
-                             EXCLUDE_USER_PREFERENCES}));
+    EXPECT_TRUE(
+        request->maybe_stored_cookies()
+            .front()
+            .status.HasExactlyExclusionReasonsForTesting(
+                {net::CookieInclusionStatus::EXCLUDE_USER_PREFERENCES}));
 
     // Check maybe_stored_cookies on second round trip (and clearing from the
     // first).
@@ -7526,11 +7771,11 @@ TEST_F(URLRequestTestHTTP, RedirectWithFilteredCookies) {
     EXPECT_EQ("server-redirect",
               request->maybe_stored_cookies().front().cookie->Name());
     EXPECT_EQ("other", request->maybe_stored_cookies().front().cookie->Value());
-    EXPECT_TRUE(request->maybe_stored_cookies()
-                    .front()
-                    .status.HasExactlyExclusionReasonsForTesting(
-                        {net::CanonicalCookie::CookieInclusionStatus::
-                             EXCLUDE_USER_PREFERENCES}));
+    EXPECT_TRUE(
+        request->maybe_stored_cookies()
+            .front()
+            .status.HasExactlyExclusionReasonsForTesting(
+                {net::CookieInclusionStatus::EXCLUDE_USER_PREFERENCES}));
   }
 
   // Check maybe_sent_cookies on first round trip.
@@ -7561,11 +7806,11 @@ TEST_F(URLRequestTestHTTP, RedirectWithFilteredCookies) {
     ASSERT_EQ(1u, request->maybe_sent_cookies().size());
     EXPECT_EQ("another_cookie",
               request->maybe_sent_cookies().front().cookie.Name());
-    EXPECT_TRUE(request->maybe_sent_cookies()
-                    .front()
-                    .status.HasExactlyExclusionReasonsForTesting(
-                        {net::CanonicalCookie::CookieInclusionStatus::
-                             EXCLUDE_USER_PREFERENCES}));
+    EXPECT_TRUE(
+        request->maybe_sent_cookies()
+            .front()
+            .access_result.status.HasExactlyExclusionReasonsForTesting(
+                {net::CookieInclusionStatus::EXCLUDE_USER_PREFERENCES}));
 
     // Check maybe_sent_cookies on second round trip
     request->set_maybe_sent_cookies({});
@@ -7592,11 +7837,11 @@ TEST_F(URLRequestTestHTTP, RedirectWithFilteredCookies) {
     EXPECT_EQ("one_more_cookie",
               request->maybe_sent_cookies().front().cookie.Name());
     EXPECT_EQ("true", request->maybe_sent_cookies().front().cookie.Value());
-    EXPECT_TRUE(request->maybe_sent_cookies()
-                    .front()
-                    .status.HasExactlyExclusionReasonsForTesting(
-                        {net::CanonicalCookie::CookieInclusionStatus::
-                             EXCLUDE_USER_PREFERENCES}));
+    EXPECT_TRUE(
+        request->maybe_sent_cookies()
+            .front()
+            .access_result.status.HasExactlyExclusionReasonsForTesting(
+                {net::CookieInclusionStatus::EXCLUDE_USER_PREFERENCES}));
   }
 }
 
@@ -8123,34 +8368,19 @@ class URLRequestTestReferrerPolicy : public URLRequestTest {
   URLRequestTestReferrerPolicy() = default;
 
   void InstantiateSameOriginServers(net::EmbeddedTestServer::Type type) {
-    origin_server_.reset(new EmbeddedTestServer(type));
-    if (type == net::EmbeddedTestServer::TYPE_HTTPS) {
-      origin_server_->AddDefaultHandlers(
-          base::FilePath(FILE_PATH_LITERAL("net/data/ssl")));
-    } else {
-      origin_server_->AddDefaultHandlers(base::FilePath(kTestFilePath));
-    }
+    origin_server_ = std::make_unique<EmbeddedTestServer>(type);
+    RegisterDefaultHandlers(origin_server_.get());
     ASSERT_TRUE(origin_server_->Start());
   }
 
   void InstantiateCrossOriginServers(net::EmbeddedTestServer::Type origin_type,
                                      net::EmbeddedTestServer::Type dest_type) {
-    origin_server_.reset(new EmbeddedTestServer(origin_type));
-    if (origin_type == net::EmbeddedTestServer::TYPE_HTTPS) {
-      origin_server_->AddDefaultHandlers(
-          base::FilePath(FILE_PATH_LITERAL("net/data/ssl")));
-    } else {
-      origin_server_->AddDefaultHandlers(base::FilePath(kTestFilePath));
-    }
+    origin_server_ = std::make_unique<EmbeddedTestServer>(origin_type);
+    RegisterDefaultHandlers(origin_server_.get());
     ASSERT_TRUE(origin_server_->Start());
 
-    destination_server_.reset(new EmbeddedTestServer(dest_type));
-    if (dest_type == net::EmbeddedTestServer::TYPE_HTTPS) {
-      destination_server_->AddDefaultHandlers(
-          base::FilePath(FILE_PATH_LITERAL("net/data/ssl")));
-    } else {
-      destination_server_->AddDefaultHandlers(base::FilePath(kTestFilePath));
-    }
+    destination_server_ = std::make_unique<EmbeddedTestServer>(dest_type);
+    RegisterDefaultHandlers(destination_server_.get());
     ASSERT_TRUE(destination_server_->Start());
   }
 
@@ -8454,8 +8684,7 @@ class HTTPSRequestTest : public TestWithTaskEnvironment {
 
 TEST_F(HTTPSRequestTest, HTTPSGetTest) {
   EmbeddedTestServer test_server(net::EmbeddedTestServer::TYPE_HTTPS);
-  test_server.AddDefaultHandlers(
-      base::FilePath(FILE_PATH_LITERAL("net/data/ssl")));
+  RegisterDefaultHandlers(&test_server);
   ASSERT_TRUE(test_server.Start());
 
   TestDelegate d;
@@ -8482,8 +8711,7 @@ TEST_F(HTTPSRequestTest, HTTPSGetTest) {
 TEST_F(HTTPSRequestTest, HTTPSMismatchedTest) {
   EmbeddedTestServer test_server(net::EmbeddedTestServer::TYPE_HTTPS);
   test_server.SetSSLConfig(net::EmbeddedTestServer::CERT_MISMATCHED_NAME);
-  test_server.AddDefaultHandlers(
-      base::FilePath(FILE_PATH_LITERAL("net/data/ssl")));
+  RegisterDefaultHandlers(&test_server);
   ASSERT_TRUE(test_server.Start());
 
   bool err_allowed = true;
@@ -8516,8 +8744,7 @@ TEST_F(HTTPSRequestTest, HTTPSMismatchedTest) {
 TEST_F(HTTPSRequestTest, HTTPSExpiredTest) {
   EmbeddedTestServer test_server(net::EmbeddedTestServer::TYPE_HTTPS);
   test_server.SetSSLConfig(net::EmbeddedTestServer::CERT_EXPIRED);
-  test_server.AddDefaultHandlers(
-      base::FilePath(FILE_PATH_LITERAL("net/data/ssl")));
+  RegisterDefaultHandlers(&test_server);
   ASSERT_TRUE(test_server.Start());
 
   // Iterate from false to true, just so that we do the opposite of the
@@ -8578,8 +8805,7 @@ class SSLNetErrorTestDelegate : public TestDelegate {
 TEST_F(HTTPSRequestTest, SSLNetErrorReportedToDelegate) {
   EmbeddedTestServer test_server(net::EmbeddedTestServer::TYPE_HTTPS);
   test_server.SetSSLConfig(net::EmbeddedTestServer::CERT_EXPIRED);
-  test_server.AddDefaultHandlers(
-      base::FilePath(FILE_PATH_LITERAL("net/data/ssl")));
+  RegisterDefaultHandlers(&test_server);
   ASSERT_TRUE(test_server.Start());
 
   SSLNetErrorTestDelegate d;
@@ -8675,7 +8901,7 @@ TEST_F(HTTPSRequestTest, HTTPSErrorsNoClobberTSSTest) {
   TransportSecurityState::STSState dynamic_sts_state;
   TransportSecurityState::PKPState dynamic_pkp_state;
   EXPECT_FALSE(transport_security_state.GetDynamicSTSState(
-      "hsts-hpkp-preloaded.test", &dynamic_sts_state, nullptr));
+      "hsts-hpkp-preloaded.test", &dynamic_sts_state));
   EXPECT_FALSE(transport_security_state.GetDynamicPKPState(
       "hsts-hpkp-preloaded.test", &dynamic_pkp_state));
 
@@ -8704,7 +8930,7 @@ TEST_F(HTTPSRequestTest, HTTPSErrorsNoClobberTSSTest) {
   TransportSecurityState::STSState new_dynamic_sts_state;
   TransportSecurityState::PKPState new_dynamic_pkp_state;
   EXPECT_FALSE(transport_security_state.GetDynamicSTSState(
-      "hsts-hpkp-preloaded.test", &new_dynamic_sts_state, nullptr));
+      "hsts-hpkp-preloaded.test", &new_dynamic_sts_state));
   EXPECT_FALSE(transport_security_state.GetDynamicPKPState(
       "hsts-hpkp-preloaded.test", &new_dynamic_pkp_state));
 
@@ -8723,8 +8949,7 @@ TEST_F(HTTPSRequestTest, HSTSPreservesPosts) {
   static const char kData[] = "hello world";
 
   EmbeddedTestServer test_server(net::EmbeddedTestServer::TYPE_HTTPS);
-  test_server.AddDefaultHandlers(
-      base::FilePath(FILE_PATH_LITERAL("net/data/ssl")));
+  RegisterDefaultHandlers(&test_server);
   ASSERT_TRUE(test_server.Start());
 
 
@@ -8909,8 +9134,7 @@ TEST_F(HTTPSRequestTest, ClientAuthNoCertificate) {
   ssl_config.client_cert_type =
       SSLServerConfig::ClientCertType::OPTIONAL_CLIENT_CERT;
   test_server.SetSSLConfig(EmbeddedTestServer::CERT_OK, ssl_config);
-  test_server.AddDefaultHandlers(
-      base::FilePath(FILE_PATH_LITERAL("net/data/ssl")));
+  RegisterDefaultHandlers(&test_server);
   ASSERT_TRUE(test_server.Start());
 
   SSLClientAuthTestDelegate d;
@@ -8956,8 +9180,7 @@ TEST_F(HTTPSRequestTest, ClientAuth) {
   ssl_config.client_cert_type =
       SSLServerConfig::ClientCertType::REQUIRE_CLIENT_CERT;
   test_server.SetSSLConfig(EmbeddedTestServer::CERT_OK, ssl_config);
-  test_server.AddDefaultHandlers(
-      base::FilePath(FILE_PATH_LITERAL("net/data/ssl")));
+  RegisterDefaultHandlers(&test_server);
   ASSERT_TRUE(test_server.Start());
 
   {
@@ -9038,8 +9261,7 @@ TEST_F(HTTPSRequestTest, ClientAuthFailSigning) {
   ssl_config.client_cert_type =
       SSLServerConfig::ClientCertType::REQUIRE_CLIENT_CERT;
   test_server.SetSSLConfig(EmbeddedTestServer::CERT_OK, ssl_config);
-  test_server.AddDefaultHandlers(
-      base::FilePath(FILE_PATH_LITERAL("net/data/ssl")));
+  RegisterDefaultHandlers(&test_server);
   ASSERT_TRUE(test_server.Start());
 
   {
@@ -9119,8 +9341,7 @@ TEST_F(HTTPSRequestTest, ClientAuthFailSigningRetry) {
   ssl_config.client_cert_type =
       SSLServerConfig::ClientCertType::REQUIRE_CLIENT_CERT;
   test_server.SetSSLConfig(EmbeddedTestServer::CERT_OK, ssl_config);
-  test_server.AddDefaultHandlers(
-      base::FilePath(FILE_PATH_LITERAL("net/data/ssl")));
+  RegisterDefaultHandlers(&test_server);
   ASSERT_TRUE(test_server.Start());
 
   // Connect with a client certificate to put it in the client auth cache.
@@ -9587,8 +9808,7 @@ class HTTPSCertNetFetchingTest : public HTTPSRequestTest {
 
     EmbeddedTestServer test_server(EmbeddedTestServer::TYPE_HTTPS);
     test_server.SetSSLConfig(cert_config);
-    test_server.AddDefaultHandlers(
-        base::FilePath(FILE_PATH_LITERAL("net/data/ssl")));
+    RegisterDefaultHandlers(&test_server);
     ASSERT_TRUE(test_server.Start());
 
     delegate->set_allow_certificate_errors(true);
@@ -10287,8 +10507,7 @@ TEST_F(HTTPSAIATest, AIAFetching) {
   EmbeddedTestServer::ServerCertificateConfig cert_config;
   cert_config.intermediate = EmbeddedTestServer::IntermediateType::kByAIA;
   test_server.SetSSLConfig(cert_config);
-  test_server.AddDefaultHandlers(
-      base::FilePath(FILE_PATH_LITERAL("net/data/ssl")));
+  RegisterDefaultHandlers(&test_server);
   ASSERT_TRUE(test_server.Start());
 
   TestDelegate d;
@@ -10589,8 +10808,7 @@ TEST_F(HTTPSCRLSetTest, CRLSetRevoked) {
       {{OCSPRevocationStatus::GOOD,
         EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kValid}});
   test_server.SetSSLConfig(cert_config);
-  test_server.AddDefaultHandlers(
-      base::FilePath(FILE_PATH_LITERAL("net/data/ssl")));
+  RegisterDefaultHandlers(&test_server);
   ASSERT_TRUE(test_server.Start());
 
   CertVerifier::Config cert_verifier_config = GetCertVerifierConfig();
@@ -10629,8 +10847,7 @@ TEST_F(HTTPSCRLSetTest, CRLSetRevokedBySubject) {
       {{OCSPRevocationStatus::GOOD,
         EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kValid}});
   test_server.SetSSLConfig(cert_config);
-  test_server.AddDefaultHandlers(
-      base::FilePath(FILE_PATH_LITERAL("net/data/ssl")));
+  RegisterDefaultHandlers(&test_server);
   ASSERT_TRUE(test_server.Start());
 
   std::string common_name = test_server.GetCertificate()->subject().common_name;
@@ -10705,8 +10922,7 @@ TEST_F(HTTPSLocalCRLSetTest, KnownInterceptionBlocked) {
 
   // Verify the connection succeeds without being flagged.
   EmbeddedTestServer https_server(EmbeddedTestServer::TYPE_HTTPS);
-  https_server.AddDefaultHandlers(
-      base::FilePath(FILE_PATH_LITERAL("net/data/ssl")));
+  RegisterDefaultHandlers(&https_server);
   https_server.SetSSLConfig(EmbeddedTestServer::CERT_OK_BY_INTERMEDIATE);
   ASSERT_TRUE(https_server.Start());
 
@@ -11770,8 +11986,7 @@ class HTTPSEarlyDataTest : public TestWithTaskEnvironment {
     ssl_config_.version_max = SSL_PROTOCOL_VERSION_TLS1_3;
     ssl_config_.early_data_enabled = true;
     test_server_.SetSSLConfig(net::EmbeddedTestServer::CERT_OK, ssl_config_);
-    test_server_.AddDefaultHandlers(
-        base::FilePath(FILE_PATH_LITERAL("net/data/ssl")));
+    RegisterDefaultHandlers(&test_server_);
     test_server_.RegisterRequestHandler(
         base::BindRepeating(&HandleZeroRTTRequest));
     test_server_.SetConnectionListener(&listener_);

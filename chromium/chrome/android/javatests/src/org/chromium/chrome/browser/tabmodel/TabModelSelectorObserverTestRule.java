@@ -14,10 +14,10 @@ import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabSelectionType;
+import org.chromium.chrome.browser.tabmodel.NextTabPolicy.NextTabPolicySupplier;
 import org.chromium.chrome.test.ChromeBrowserTestRule;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
-import org.chromium.ui.base.WindowAndroid;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -30,8 +30,6 @@ public class TabModelSelectorObserverTestRule extends ChromeBrowserTestRule {
     private TabModelSelectorTestTabModel mNormalTabModel;
     private TabModelSelectorTestTabModel mIncognitoTabModel;
 
-    private WindowAndroid mWindowAndroid;
-
     public TabModelSelectorBase getSelector() {
         return mSelector;
     }
@@ -42,10 +40,6 @@ public class TabModelSelectorObserverTestRule extends ChromeBrowserTestRule {
 
     public TabModelSelectorTestTabModel getIncognitoTabModel() {
         return mIncognitoTabModel;
-    }
-
-    public WindowAndroid getWindowAndroid() {
-        return mWindowAndroid;
     }
 
     @Override
@@ -65,11 +59,7 @@ public class TabModelSelectorObserverTestRule extends ChromeBrowserTestRule {
     }
 
     private void initialize() {
-        mWindowAndroid = new WindowAndroid(InstrumentationRegistry.getInstrumentation()
-                                                   .getTargetContext()
-                                                   .getApplicationContext());
-
-        mSelector = new TabModelSelectorBase(null, false) {
+        mSelector = new TabModelSelectorBase(null, EmptyTabModelFilter::new, false) {
             @Override
             public Tab openNewTab(LoadUrlParams loadUrlParams, @TabLaunchType int type, Tab parent,
                     boolean incognito) {
@@ -84,6 +74,7 @@ public class TabModelSelectorObserverTestRule extends ChromeBrowserTestRule {
         TabPersistencePolicy persistencePolicy = new TabbedModeTabPersistencePolicy(0, false);
         TabPersistentStore tabPersistentStore =
                 new TabPersistentStore(persistencePolicy, mSelector, null, null);
+        NextTabPolicySupplier nextTabPolicySupplier = () -> NextTabPolicy.HIERARCHICAL;
 
         TabModelDelegate delegate = new TabModelDelegate() {
             @Override
@@ -101,11 +92,6 @@ public class TabModelSelectorObserverTestRule extends ChromeBrowserTestRule {
 
             @Override
             public boolean isCurrentModel(TabModel model) {
-                return false;
-            }
-
-            @Override
-            public boolean isInOverviewMode() {
                 return false;
             }
 
@@ -128,13 +114,12 @@ public class TabModelSelectorObserverTestRule extends ChromeBrowserTestRule {
             public boolean isReparentingInProgress() {
                 return false;
             }
-
         };
-        mNormalTabModel = new TabModelSelectorTestTabModel(
-                false, orderController, tabContentManager, tabPersistentStore, delegate);
+        mNormalTabModel = new TabModelSelectorTestTabModel(false, orderController,
+                tabContentManager, tabPersistentStore, nextTabPolicySupplier, delegate);
 
-        mIncognitoTabModel = new TabModelSelectorTestTabModel(
-                true, orderController, tabContentManager, tabPersistentStore, delegate);
+        mIncognitoTabModel = new TabModelSelectorTestTabModel(true, orderController,
+                tabContentManager, tabPersistentStore, nextTabPolicySupplier, delegate);
 
         mSelector.initialize(mNormalTabModel, mIncognitoTabModel);
     }
@@ -147,9 +132,10 @@ public class TabModelSelectorObserverTestRule extends ChromeBrowserTestRule {
 
         public TabModelSelectorTestTabModel(boolean incognito,
                 TabModelOrderController orderController, TabContentManager tabContentManager,
-                TabPersistentStore tabPersistentStore, TabModelDelegate modelDelegate) {
+                TabPersistentStore tabPersistentStore, NextTabPolicySupplier nextTabPolicySupplier,
+                TabModelDelegate modelDelegate) {
             super(incognito, false, null, null, null, orderController, tabContentManager,
-                    tabPersistentStore, modelDelegate, false);
+                    tabPersistentStore, nextTabPolicySupplier, modelDelegate, false);
         }
 
         @Override

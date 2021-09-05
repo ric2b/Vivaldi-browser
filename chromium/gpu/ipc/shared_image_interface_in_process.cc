@@ -94,7 +94,7 @@ void SharedImageInterfaceInProcess::DestroyOnGpu(
   completion->Signal();
 }
 
-bool SharedImageInterfaceInProcess::MakeContextCurrent() {
+bool SharedImageInterfaceInProcess::MakeContextCurrent(bool needs_gl) {
   if (!context_state_)
     return false;
 
@@ -104,17 +104,19 @@ bool SharedImageInterfaceInProcess::MakeContextCurrent() {
   // |shared_image_factory_| never writes to the surface, so skip unnecessary
   // MakeCurrent to improve performance. https://crbug.com/457431
   auto* context = context_state_->real_context();
-  if (context->IsCurrent(nullptr) ||
-      context->MakeCurrent(context_state_->surface()))
-    return true;
-
-  context_state_->MarkContextLost();
-  return false;
+  if (context->IsCurrent(nullptr))
+    return !context_state_->CheckResetStatus(needs_gl);
+  return context_state_->MakeCurrent(/*surface=*/nullptr, needs_gl);
 }
 
 void SharedImageInterfaceInProcess::LazyCreateSharedImageFactory() {
   // This function is always called right after we call MakeContextCurrent().
   if (shared_image_factory_)
+    return;
+
+  // Some shared image backing factories will use GL in ctor, so we need GL even
+  // if chrome is using non-GL backing.
+  if (!MakeContextCurrent(/*needs_gl=*/true))
     return;
 
   // We need WrappedSkImage to support creating a SharedImage with pixel data
@@ -308,7 +310,9 @@ void SharedImageInterfaceInProcess::PresentSwapChain(
 #if defined(OS_FUCHSIA)
 void SharedImageInterfaceInProcess::RegisterSysmemBufferCollection(
     gfx::SysmemBufferCollectionId id,
-    zx::channel token) {
+    zx::channel token,
+    gfx::BufferFormat format,
+    gfx::BufferUsage usage) {
   NOTREACHED();
 }
 void SharedImageInterfaceInProcess::ReleaseSysmemBufferCollection(
@@ -383,6 +387,16 @@ void SharedImageInterfaceInProcess::DestroySharedImageOnGpuThread(
   }
 }
 
+void SharedImageInterfaceInProcess::WaitSyncTokenOnGpuThread(
+    const SyncToken& sync_token) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(gpu_sequence_checker_);
+  if (!MakeContextCurrent())
+    return;
+
+  mailbox_manager_->PushTextureUpdates(sync_token);
+  sync_point_client_state_->ReleaseFenceSync(sync_token.release_count());
+}
+
 SyncToken SharedImageInterfaceInProcess::GenUnverifiedSyncToken() {
   base::AutoLock lock(lock_);
   return MakeSyncToken(next_fence_sync_release_ - 1);
@@ -393,6 +407,16 @@ SyncToken SharedImageInterfaceInProcess::GenVerifiedSyncToken() {
   SyncToken sync_token = MakeSyncToken(next_fence_sync_release_ - 1);
   sync_token.SetVerifyFlush();
   return sync_token;
+}
+
+void SharedImageInterfaceInProcess::WaitSyncToken(const SyncToken& sync_token) {
+  base::AutoLock lock(lock_);
+
+  ScheduleGpuTask(
+      base::BindOnce(&SharedImageInterfaceInProcess::WaitSyncTokenOnGpuThread,
+                     base::Unretained(this),
+                     MakeSyncToken(next_fence_sync_release_++)),
+      {sync_token});
 }
 
 void SharedImageInterfaceInProcess::Flush() {

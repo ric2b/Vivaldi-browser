@@ -283,10 +283,6 @@ void BlinkTestRunner::TestFinished() {
     // we will ask the browser to initiate it.
     CaptureLocalPixelsDump();
   } else {
-    // If the browser should capture pixels, then we shouldn't be waiting
-    // for layout dump results. Any test can only require the browser to
-    // dump one or the other at this time.
-    DCHECK(!waiting_for_layout_dump_results_);
     if (test_runner->ShouldDumpSelectionRect()) {
       dump_result_->selection_rect =
           web_frame->GetSelectionBoundsRectForTesting();
@@ -378,10 +374,6 @@ void BlinkTestRunner::CaptureDumpComplete() {
   std::move(dump_callback_).Run(std::move(dump_result_));
 }
 
-void BlinkTestRunner::CloseRemainingWindows() {
-  GetWebTestControlHostRemote()->CloseRemainingWindows();
-}
-
 void BlinkTestRunner::DeleteAllCookies() {
   GetWebTestClientRemote()->DeleteAllCookies();
 }
@@ -417,6 +409,14 @@ void BlinkTestRunner::SetPermission(const std::string& name,
 
 void BlinkTestRunner::ResetPermissions() {
   GetWebTestClientRemote()->ResetPermissions();
+}
+
+void BlinkTestRunner::SetMainWindowHidden(bool hidden) {
+  GetWebTestControlHostRemote()->SetMainWindowHidden(hidden);
+}
+
+void BlinkTestRunner::CheckForLeakedWindows() {
+  GetWebTestControlHostRemote()->CheckForLeakedWindows();
 }
 
 void BlinkTestRunner::SetScreenOrientationChanged() {
@@ -541,6 +541,12 @@ void BlinkTestRunner::OnSetTestConfiguration(
   DCHECK(web_view_test_proxy_->GetMainRenderFrame());
 
   ApplyTestConfiguration(std::move(params));
+
+  // If focus was in a child frame, it gets lost when we navigate to the next
+  // test, but we want to start with focus in the main frame for every test.
+  // Focus is controlled by the renderer, so we must do the reset here.
+  web_view_test_proxy_->GetWebView()->SetFocusedFrame(
+      web_view_test_proxy_->GetMainRenderFrame()->GetWebFrame());
 }
 
 void BlinkTestRunner::OnResetRendererAfterWebTest() {

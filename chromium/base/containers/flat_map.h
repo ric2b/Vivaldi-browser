@@ -9,8 +9,8 @@
 #include <tuple>
 #include <utility>
 
+#include "base/check.h"
 #include "base/containers/flat_tree.h"
-#include "base/logging.h"
 #include "base/template_util.h"
 
 namespace base {
@@ -202,7 +202,7 @@ class flat_map : public ::base::internal::flat_tree<
   ~flat_map() = default;
 
   flat_map& operator=(const flat_map&) = default;
-  flat_map& operator=(flat_map&&) = default;
+  flat_map& operator=(flat_map&&) noexcept = default;
   // Takes the first if there are duplicates in the initializer list.
   flat_map& operator=(std::initializer_list<value_type> ilist);
 

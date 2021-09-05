@@ -18,7 +18,6 @@
 #include "base/no_destructor.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
-#include "base/task/post_task.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/trace_event/trace_event.h"
@@ -321,8 +320,8 @@ void SafeBrowsingService::Start() {
         PingManager::Create(GetURLLoaderFactory(), GetV4ProtocolConfig());
   }
 
-  base::PostTask(
-      FROM_HERE, {BrowserThread::IO},
+  content::GetIOThreadTaskRunner({})->PostTask(
+      FROM_HERE,
       base::BindOnce(
           &SafeBrowsingService::StartOnIOThread, this,
           std::make_unique<network::CrossThreadPendingSharedURLLoaderFactory>(
@@ -332,8 +331,8 @@ void SafeBrowsingService::Start() {
 void SafeBrowsingService::Stop(bool shutdown) {
   ping_manager_.reset();
   ui_manager_->Stop(shutdown);
-  base::PostTask(
-      FROM_HERE, {BrowserThread::IO},
+  content::GetIOThreadTaskRunner({})->PostTask(
+      FROM_HERE,
       base::BindOnce(&SafeBrowsingService::StopOnIOThread, this, shutdown));
 }
 
@@ -351,6 +350,9 @@ void SafeBrowsingService::OnProfileAdded(Profile* profile) {
   // renderers have if extended-reporting changes.
   registrar->Add(
       prefs::kSafeBrowsingScoutReportingEnabled,
+      base::Bind(&SafeBrowsingService::RefreshState, base::Unretained(this)));
+  registrar->Add(
+      prefs::kSafeBrowsingEnhanced,
       base::Bind(&SafeBrowsingService::RefreshState, base::Unretained(this)));
   prefs_map_[pref_service] = std::move(registrar);
   RefreshState();

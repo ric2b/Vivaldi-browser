@@ -26,9 +26,10 @@ class CompileCommandsWriter {
                                const std::string& target_filters,
                                bool quiet,
                                Err* err);
-  static void RenderJSON(const BuildSettings* build_settings,
-                         std::vector<const Target*>& all_targets,
-                         std::string* compile_commands);
+
+  static std::string RenderJSON(const BuildSettings* build_settings,
+                                std::vector<const Target*>& all_targets);
+
   static std::vector<const Target*> FilterTargets(
       const std::vector<const Target*>& all_targets,
       const std::set<std::string>& target_filters_set);

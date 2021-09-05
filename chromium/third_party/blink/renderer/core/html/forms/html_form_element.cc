@@ -87,7 +87,7 @@ HTMLFormElement::HTMLFormElement(Document& document)
 
 HTMLFormElement::~HTMLFormElement() = default;
 
-void HTMLFormElement::Trace(Visitor* visitor) {
+void HTMLFormElement::Trace(Visitor* visitor) const {
   visitor->Trace(past_names_map_);
   visitor->Trace(radio_button_group_scope_);
   visitor->Trace(listed_elements_);
@@ -514,6 +514,11 @@ void HTMLFormElement::ScheduleFormSubmission(
     // Cancel pending javascript url navigations for the target frame. This new
     // form submission should take precedence over them.
     target_local_frame->GetDocument()->CancelPendingJavaScriptUrls();
+
+    // Cancel any pre-existing attempt to navigate the target frame which was
+    // already sent to the browser process so this form submission will take
+    // precedence over it.
+    target_local_frame->Loader().CancelClientNavigation();
   }
 
   target_frame->ScheduleFormSubmission(scheduler, form_submission);

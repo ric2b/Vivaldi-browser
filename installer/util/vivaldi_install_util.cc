@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <tlhelp32.h>
 
+#include "base/logging.h"
 #include "base/path_service.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"

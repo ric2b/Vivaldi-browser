@@ -5,7 +5,6 @@
 
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
@@ -194,7 +193,7 @@ class OperaImportObserver : public ProfileWriter,
     const OperaPasswordInfo& p = OperaPasswords[password_count];
     // EXPECT_EQ(p.wildcard,form.);
     EXPECT_EQ(p.scheme, form.scheme);
-    EXPECT_EQ(p.url, form.origin.spec());
+    EXPECT_EQ(p.url, form.url.spec());
     EXPECT_EQ((p.realm ? p.realm : ""), form.signon_realm);
     EXPECT_EQ(base::WideToUTF16(p.username_field), form.username_element);
     EXPECT_EQ(base::WideToUTF16(p.username), form.username_value);

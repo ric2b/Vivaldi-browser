@@ -8,6 +8,7 @@
 <translation id="1046068652463704410">Увод Google Japanese (японская мова) (для клавіятуры ЗША)</translation>
 <translation id="1047956942837015229">Ідзе выдаленне элементаў (<ph name="COUNT" />)...</translation>
 <translation id="1049926623896334335">Дакумент Word</translation>
+<translation id="1060368002126861100">Каб адкрываць файлы ў праграме "<ph name="APP_NAME" />", спачатку перамясціце іх у папку файлаў Windows.</translation>
 <translation id="1062407476771304334">Замяніць</translation>
 <translation id="1065449928621190041">Французская (канадская) клавіятура</translation>
 <translation id="1119069657431255176">Архіў TAR, сціснуты праграмай Bzip2</translation>
@@ -45,6 +46,8 @@
 <translation id="1395262318152388157">Паўзунок пераходу</translation>
 <translation id="1399648040768741453">Клавіятура тэлугу (фанетычная)</translation>
 <translation id="1430915738399379752">Друк</translation>
+<translation id="1433600251059882049">Гэта папка абагулена з Linux і Windows</translation>
+<translation id="1435838927755162558">Абагульванне папкі з Parallels Desktop</translation>
 <translation id="1439494416798956626">Перамешчана ў папку "<ph name="FOLDER_NAME" />".</translation>
 <translation id="1441841714100794440">В'етнамская клавіятура (Telex)</translation>
 <translation id="1455548678241328678">Нарвежская клавіятура</translation>
@@ -79,6 +82,7 @@
 <translation id="1844692022597038441">Файл недаступны па-за сеткай.</translation>
 <translation id="184633654410729720">Тайская клавіятура (Kedmanee)</translation>
 <translation id="1847880352285315359">Захавана</translation>
+<translation id="1853795129690976061">Гэта папка абагулена з Linux</translation>
 <translation id="1864756863218646478">Не ўдалося знайсці файл.</translation>
 <translation id="1921986354447415460">Турэцкая раскладка (Turkish-F)</translation>
 <translation id="1924372192547904021">Дыск "<ph name="DRIVE_NAME" />" адфармаціраваны</translation>
@@ -124,6 +128,7 @@
 <translation id="2384596874640104496">Сінгальская раскладка</translation>
 <translation id="240770291734945588">Даступна <ph name="SPACE_AVAILABLE" /></translation>
 <translation id="2425665904502185219">Агульны памер файлаў</translation>
+<translation id="2428749644083375155">Ідзе капіраванне элементаў (<ph name="NUMBER_OF_ITEMS" />) у папку "<ph name="FOLDER_NAME" />"</translation>
 <translation id="2448312741937722512">Тып</translation>
 <translation id="2453576648990281505">Файл ужо існуе</translation>
 <translation id="2464079411014186876">Марожанае</translation>
@@ -178,6 +183,7 @@
 <translation id="303198083543495566">Геаграфія</translation>
 <translation id="3057861065630527966">Захаваць рэзервовыя копіі фота і відэа</translation>
 <translation id="3064388234319122767">Транслітарацыя (zdravo → здраво)</translation>
+<translation id="3067790092342515856">Файлы Windows</translation>
 <translation id="3078461028045006476">Абагуліць праз пашырэнне "<ph name="EXTENSION_NAME" />"</translation>
 <translation id="3088034400796962477">Транслітарацыя (salam ← سلام)</translation>
 <translation id="3116361045094675131">Клавіятура для Злучанага Каралеўства</translation>
@@ -216,6 +222,7 @@
 <translation id="3524311639100184459">Увага! Гэта часовыя файлы, і яны могуць быць аўтаматычна выдалены для вызвалення месца на дыску.  <ph name="BEGIN_LINK" />Даведацца больш<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">Папка</translation>
 <translation id="3549797760399244642">Перайсці на drive.google.com...</translation>
+<translation id="3553048479571901246">Каб адкрываць файлы ў праграме "<ph name="APP_NAME" />", спачатку скапіруйце іх у папку файлаў Windows.</translation>
 <translation id="357479282490346887">Літоўская</translation>
 <translation id="3583509704582854624">Літарна-лічбавы ўвод (для японскай клавіятуры)</translation>
 <translation id="3603385196401704894">Французская (канадская)</translation>
@@ -239,6 +246,7 @@
 <translation id="3798449238516105146">Версія</translation>
 <translation id="3801082500826908679">Фарэрская</translation>
 <translation id="3809272675881623365">Трус</translation>
+<translation id="3810973564298564668">Кіраваць</translation>
 <translation id="3811494700605067549">Выбраны 1 файл</translation>
 <translation id="3815016854028376614">Метад уводу чжуінь</translation>
 <translation id="3825863595139017598">Мангольская клавіятура</translation>
@@ -259,8 +267,8 @@
 <translation id="3943857333388298514">Уставіць</translation>
 <translation id="3958548648197196644">Ківі</translation>
 <translation id="3966388904776714213">Аўдыяпрайгравальнік</translation>
+<translation id="3984317463833596033">Дазволіць Parallels Desktop змяняць файлы ў папцы "<ph name="FOLDER_NAME" />"</translation>
 <translation id="4002066346123236978">Назва</translation>
-<translation id="4065397611279318371">Каб адкрываць файлы ў праграмах <ph name="APP_NAME" />, спачатку перамясціце іх у папку <ph name="SHARED_DIRECTORY_LABEL" />.</translation>
 <translation id="4070370845051020638">Кантонскі метад уводу</translation>
 <translation id="4072248638558688893">Тамільская клавіятура (фанетычная)</translation>
 <translation id="4124935795427217608">Аднарог</translation>
@@ -288,6 +296,7 @@
 <translation id="4470564870223067757">Карэйскі алфавіт (хангыль), рэжым 2 Set</translation>
 <translation id="4477219268485577442">Балгарская фанетычная</translation>
 <translation id="4479812471636796472">Клавіятура Дворака (ЗША)</translation>
+<translation id="4481711095103932593">Гэта папка абагулена з Windows</translation>
 <translation id="4487088045714738411">Бельгійская клавіятура</translation>
 <translation id="4522570452068850558">Падрабязнасці</translation>
 <translation id="4552678318981539154">Купіце больш месца ў сховішчы</translation>
@@ -297,6 +306,7 @@
 <translation id="4579744207439506346">Дададзена да выбранага: <ph name="ENTRY_NAME" />.</translation>
 <translation id="4582497162516204941">Усталяваць пакет Linux (бэта-версія)</translation>
 <translation id="4594543368593301662">Паказваюцца вынікі па запыце "<ph name="SEARCH_TERM" />".</translation>
+<translation id="4603392156942865207">Ідзе капіраванне файла "<ph name="FILE_NAME" />" у папку "<ph name="FOLDER_NAME" />"</translation>
 <translation id="4631887759990505102">Выканаўца</translation>
 <translation id="4656293982926141856">Гэты камп'ютар</translation>
 <translation id="4669606053856530811">Удзельнікі дыска "<ph name="SOURCE_NAME" />" страцяць доступ да гэтых элементаў, калі гэтыя элементы не абагулены з імі.</translation>
@@ -330,11 +340,12 @@
 <translation id="4880520557730313061">Аўтавыпраўленне</translation>
 <translation id="4881695831933465202">Адкрыць</translation>
 <translation id="4886021172213954916">Тамільская клавіятура (пішучая машынка)</translation>
-<translation id="4892969127351273348">Не ўдалося адкрыць у праграме "<ph name="APP_NAME" />"</translation>
+<translation id="4900532980794411603">Абагуліць з Parallels Desktop</translation>
 <translation id="4905417359854579806">Файлы (<ph name="FILE_COUNT" />) гатовыя да рэзервовага капіравання</translation>
 <translation id="4924638091161556692">Выпраўлена</translation>
 <translation id="4935975195727477204">Кветка гацаніі</translation>
 <translation id="4943368462779413526">Мяч для амерыканскага футбола</translation>
+<translation id="4961158930123534723">1 папка абагулена з Parallels Desktop</translation>
 <translation id="4969785127455456148">Альбом</translation>
 <translation id="497244430928947428">Малаяламская клавіятура (фанетычная)</translation>
 <translation id="4973523518332075481">Максімальна дапушчальная даўжыня назвы (у сімвалах): <ph name="MAX_LENGTH" /></translation>
@@ -346,10 +357,12 @@
 <translation id="5010406651457630570">Камп'ютары</translation>
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5024856940085636730">Аперацыя займае больш часу, чым звычайна. Спыніць яе?</translation>
+<translation id="5036159836254554629">Кіраваць абагульваннем з Parallels Desktop</translation>
 <translation id="5038625366300922036">Яшчэ...</translation>
 <translation id="5061708541166515394">Кантраст</translation>
 <translation id="5068919226082848014">Піца</translation>
 <translation id="5081517858322016911">Будуць выдалены файлы агульным памерам <ph name="TOTAL_FILE_SIZE" /></translation>
+<translation id="508423945471810158">Ідзе перамяшчэнне элементаў (<ph name="NUMBER_OF_ITEMS" />) у папку "<ph name="FOLDER_NAME" />"</translation>
 <translation id="509429900233858213">Адбылася памылка.</translation>
 <translation id="5098629044894065541">Іўрыт</translation>
 <translation id="5123433949759960244">Баскетбол</translation>
@@ -452,6 +465,7 @@
 <translation id="6054173164583630569">Французская раскладка клавіятуры</translation>
 <translation id="6074825444536523002">Форма Google</translation>
 <translation id="6096979789310008754">Крытэрыі пошуку выдалены, паказваюцца ўсе файлы і папкі.</translation>
+<translation id="610101264611565198">Ідзе перамяшчэнне файла "<ph name="FILE_NAME" />" у папку "<ph name="FOLDER_NAME" />"</translation>
 <translation id="6111770213269631447">Транслітарацыя (namaskar → নমস্কার)</translation>
 <translation id="6129953537138746214">Прабел</translation>
 <translation id="6133173853026656527">Ідзе перамяшчэнне файла <ph name="FILE_NAME" />...</translation>
@@ -492,6 +506,7 @@
 <translation id="656398493051028875">Ідзе выдаленне файла "<ph name="FILENAME" />"...</translation>
 <translation id="6581162200855843583">Спасылка на Google Дыск</translation>
 <translation id="6607272825297743757">Інфармацыя пра файл</translation>
+<translation id="6609332149380188670">Абагулена папак з Parallels Desktop: <ph name="NUMBER_OF_ITEMS" /></translation>
 <translation id="6629841649550503054">Усе даныя скапіраваны на <ph name="BEGIN_LINK" />Google Дыск!<ph name="END_LINK" /></translation>
 <translation id="6643016212128521049">Ачысціць</translation>
 <translation id="6650726141019353908">Ружовы матылёк</translation>
@@ -535,6 +550,7 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">Памылка ўсталявання.</translation>
 <translation id="7040138676081995583">Адкрыць з дапамогай...</translation>
+<translation id="7059566040011178088">Менш за <ph name="REMAINING_TIME" /></translation>
 <translation id="7100897339030255923">Выбрана элементаў: <ph name="COUNT" /></translation>
 <translation id="7106346894903675391">Купіце больш месца ў сховішчы...</translation>
 <translation id="7126604456862387217">"&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;" – &lt;em&gt;пошук на Дыску&lt;/em&gt;</translation>
@@ -645,6 +661,7 @@
 <translation id="8193175696669055101">Мадэль прылады</translation>
 <translation id="8208580316430297579">Плакат</translation>
 <translation id="8223479393428528563">Каб захаваць гэтыя файлы для выкарыстання ў аўтаномным рэжыме, падключыцеся зноў да інтэрнэту, націсніце правай кнопкай мышы на патрэбныя файлы і выберыце параметр <ph name="OFFLINE_CHECKBOX_NAME" />.</translation>
+<translation id="8231972167769262174">Каля <ph name="REMAINING_TIME" /></translation>
 <translation id="8249296373107784235">Скасаваць</translation>
 <translation id="8261506727792406068">Выдаліць</translation>
 <translation id="8269755669432358899">Згарнуць панэлі водгукаў для файлаў</translation>
@@ -671,6 +688,7 @@
 <translation id="8475647382427415476">Google Дыску зараз не ўдалося сінхранізаваць "<ph name="FILENAME" />". Спроба сінхранізацыі будзе паўторана пазней.</translation>
 <translation id="8477649328507734757">Кручэнне</translation>
 <translation id="8487700953926739672">Даступна па-за сеткай</translation>
+<translation id="8490342535582768689">Дазволіць Parallels Desktop змяняць файлы на Google Дыску. Змены будуць сінхранізавацца з іншымі прыладамі.</translation>
 <translation id="8521441079177373948">Вялікабрытанія</translation>
 <translation id="8525306231823319788">Поўнаэкранны рэжым</translation>
 <translation id="8551494947769799688">Латышская</translation>

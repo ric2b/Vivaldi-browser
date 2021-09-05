@@ -37,12 +37,11 @@
 #include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom-blink.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/platform/web_url_request.h"
-#include "third_party/blink/renderer/bindings/core/v8/array_buffer_or_array_buffer_view_or_blob_or_document_or_string_or_form_data_or_url_search_params.h"
 #include "third_party/blink/renderer/bindings/core/v8/array_buffer_or_array_buffer_view_or_blob_or_usv_string.h"
+#include "third_party/blink/renderer/bindings/core/v8/document_or_xml_http_request_body_init.h"
 #include "third_party/blink/renderer/core/dom/document_init.h"
 #include "third_party/blink/renderer/core/dom/document_parser.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
-#include "third_party/blink/renderer/core/dom/dom_implementation.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/dom/xml_document.h"
 #include "third_party/blink/renderer/core/editing/serializers/serialization.h"
@@ -92,6 +91,7 @@
 #include "third_party/blink/renderer/platform/loader/fetch/text_resource_decoder_options.h"
 #include "third_party/blink/renderer/platform/network/http_names.h"
 #include "third_party/blink/renderer/platform/network/http_parsers.h"
+#include "third_party/blink/renderer/platform/network/mime/mime_type_registry.h"
 #include "third_party/blink/renderer/platform/network/network_log.h"
 #include "third_party/blink/renderer/platform/network/parsed_content_type.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
@@ -264,7 +264,7 @@ class XMLHttpRequest::BlobLoader final
 
   void Cancel() { loader_->Cancel(); }
 
-  void Trace(Visitor* visitor) { visitor->Trace(xhr_); }
+  void Trace(Visitor* visitor) const { visitor->Trace(xhr_); }
 
  private:
   Member<XMLHttpRequest> xhr_;
@@ -355,10 +355,9 @@ void XMLHttpRequest::InitResponseDocument() {
   }
 
   DocumentInit init = DocumentInit::Create()
-                          .WithContextDocument(GetDocument()->ContextDocument())
-                          .WithOwnerDocument(GetDocument()->ContextDocument())
-                          .WithURL(response_.ResponseUrl())
-                          .WithContentSecurityPolicyFromContextDoc();
+                          .WithExecutionContext(GetExecutionContext())
+                          .WithOwnerDocument(GetDocument())
+                          .WithURL(response_.ResponseUrl());
   if (is_html)
     response_document_ = MakeGarbageCollected<HTMLDocument>(init);
   else
@@ -742,7 +741,7 @@ bool XMLHttpRequest::InitSend(ExceptionState& exception_state) {
 
   if (!async_) {
     if (GetExecutionContext()->IsDocument() &&
-        !GetDocument()->IsFeatureEnabled(
+        !GetExecutionContext()->IsFeatureEnabled(
             mojom::blink::FeaturePolicyFeature::kSyncXHR,
             ReportOptions::kReportOnFailure,
             "Synchronous requests are disabled by Feature Policy.")) {
@@ -762,13 +761,23 @@ bool XMLHttpRequest::InitSend(ExceptionState& exception_state) {
 }
 
 void XMLHttpRequest::send(
-    const ArrayBufferOrArrayBufferViewOrBlobOrDocumentOrStringOrFormDataOrURLSearchParams&
+    const DocumentOrBlobOrArrayBufferOrArrayBufferViewOrFormDataOrURLSearchParamsOrUSVString&
         body,
     ExceptionState& exception_state) {
   probe::WillSendXMLHttpOrFetchNetworkRequest(GetExecutionContext(), Url());
 
   if (body.IsNull()) {
     send(String(), exception_state);
+    return;
+  }
+
+  if (body.IsDocument()) {
+    send(body.GetAsDocument(), exception_state);
+    return;
+  }
+
+  if (body.IsBlob()) {
+    send(body.GetAsBlob(), exception_state);
     return;
   }
 
@@ -782,16 +791,6 @@ void XMLHttpRequest::send(
     return;
   }
 
-  if (body.IsBlob()) {
-    send(body.GetAsBlob(), exception_state);
-    return;
-  }
-
-  if (body.IsDocument()) {
-    send(body.GetAsDocument(), exception_state);
-    return;
-  }
-
   if (body.IsFormData()) {
     send(body.GetAsFormData(), exception_state);
     return;
@@ -802,8 +801,8 @@ void XMLHttpRequest::send(
     return;
   }
 
-  DCHECK(body.IsString());
-  send(body.GetAsString(), exception_state);
+  DCHECK(body.IsUSVString());
+  send(body.GetAsUSVString(), exception_state);
 }
 
 bool XMLHttpRequest::AreMethodAndURLValidForSend() {
@@ -1658,7 +1657,7 @@ void XMLHttpRequest::UpdateContentTypeAndCharset(
 }
 
 bool XMLHttpRequest::ResponseIsXML() const {
-  return DOMImplementation::IsXMLMIMEType(FinalResponseMIMETypeWithFallback());
+  return MIMETypeRegistry::IsXMLMIMEType(FinalResponseMIMETypeWithFallback());
 }
 
 bool XMLHttpRequest::ResponseIsHTML() const {
@@ -1869,8 +1868,10 @@ void XMLHttpRequest::ParseDocumentChunk(const char* data, unsigned len) {
     if (!response_document_)
       return;
 
-    response_document_parser_ =
-        response_document_->ImplicitOpen(kAllowAsynchronousParsing);
+    response_document_parser_ = response_document_->ImplicitOpen(
+        RuntimeEnabledFeatures::ForceSynchronousHTMLParsingEnabled()
+            ? kAllowDeferredParsing
+            : kAllowAsynchronousParsing);
     response_document_parser_->AddClient(this);
   }
   DCHECK(response_document_parser_);
@@ -2093,7 +2094,7 @@ void XMLHttpRequest::ReportMemoryUsageToV8() {
     isolate_->AdjustAmountOfExternalAllocatedMemory(diff);
 }
 
-void XMLHttpRequest::Trace(Visitor* visitor) {
+void XMLHttpRequest::Trace(Visitor* visitor) const {
   visitor->Trace(response_blob_);
   visitor->Trace(loader_);
   visitor->Trace(response_document_);

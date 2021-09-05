@@ -106,3 +106,78 @@ TEST_F(NinjaBinaryTargetWriterTest, NoSourcesStaticLib) {
   std::string out_str = out.str();
   EXPECT_EQ(expected, out_str);
 }
+
+TEST_F(NinjaBinaryTargetWriterTest, Inputs) {
+  Err err;
+  TestWithScope setup;
+
+  {
+    Target target(setup.settings(), Label(SourceDir("//foo/"), "bar"));
+    target.set_output_type(Target::SOURCE_SET);
+    target.visibility().SetPublic();
+    target.sources().push_back(SourceFile("//foo/source1.cc"));
+    target.config_values().inputs().push_back(SourceFile("//foo/input1"));
+    target.config_values().inputs().push_back(SourceFile("//foo/input2"));
+    target.source_types_used().Set(SourceFile::SOURCE_CPP);
+    target.SetToolchain(setup.toolchain());
+    ASSERT_TRUE(target.OnResolved(&err));
+
+    std::ostringstream out;
+    NinjaBinaryTargetWriter writer(&target, out);
+    writer.Run();
+
+    const char expected[] =
+        "defines =\n"
+        "include_dirs =\n"
+        "cflags =\n"
+        "cflags_cc =\n"
+        "root_out_dir = .\n"
+        "target_out_dir = obj/foo\n"
+        "target_output_name = bar\n"
+        "\n"
+        "build obj/foo/bar.source1.o: cxx ../../foo/source1.cc | "
+        "../../foo/input1 ../../foo/input2\n"
+        "\n"
+        "build obj/foo/bar.stamp: stamp obj/foo/bar.source1.o\n";
+    std::string out_str = out.str();
+    EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
+  }
+
+  {
+    Target target(setup.settings(), Label(SourceDir("//foo/"), "bar"));
+    target.set_output_type(Target::SOURCE_SET);
+    target.visibility().SetPublic();
+    target.sources().push_back(SourceFile("//foo/source1.cc"));
+    target.sources().push_back(SourceFile("//foo/source2.cc"));
+    target.config_values().inputs().push_back(SourceFile("//foo/input1"));
+    target.config_values().inputs().push_back(SourceFile("//foo/input2"));
+    target.source_types_used().Set(SourceFile::SOURCE_CPP);
+    target.SetToolchain(setup.toolchain());
+    ASSERT_TRUE(target.OnResolved(&err));
+
+    std::ostringstream out;
+    NinjaBinaryTargetWriter writer(&target, out);
+    writer.Run();
+
+    const char expected[] =
+        "defines =\n"
+        "include_dirs =\n"
+        "cflags =\n"
+        "cflags_cc =\n"
+        "root_out_dir = .\n"
+        "target_out_dir = obj/foo\n"
+        "target_output_name = bar\n"
+        "\n"
+        "build obj/foo/bar.inputs.stamp: stamp "
+        "../../foo/input1 ../../foo/input2\n"
+        "build obj/foo/bar.source1.o: cxx ../../foo/source1.cc | "
+        "obj/foo/bar.inputs.stamp\n"
+        "build obj/foo/bar.source2.o: cxx ../../foo/source2.cc | "
+        "obj/foo/bar.inputs.stamp\n"
+        "\n"
+        "build obj/foo/bar.stamp: stamp obj/foo/bar.source1.o "
+        "obj/foo/bar.source2.o\n";
+    std::string out_str = out.str();
+    EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
+  }
+}

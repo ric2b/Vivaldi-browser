@@ -13,7 +13,7 @@
 #include "chrome/browser/renderer_context_menu/render_view_context_menu_browsertest_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/exclusive_access/fullscreen_controller_test.h"
+#include "chrome/browser/ui/exclusive_access/exclusive_access_test.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/interactive_test_utils.h"
@@ -931,7 +931,9 @@ void SitePerProcessInteractiveBrowserTest::FullscreenElementInABA(
   EXPECT_EQ("none", GetFullscreenElementId(grandchild));
 }
 
-#if defined(OS_MACOSX)
+// https://crbug.com/1087392: Flaky for ASAN and TSAN
+#if defined(OS_MACOSX) || defined(ADDRESS_SANITIZER) || \
+    defined(THREAD_SANITIZER)
 #define MAYBE_FullscreenElementInABAAndExitViaEscapeKey \
   DISABLED_FullscreenElementInABAAndExitViaEscapeKey
 #else
@@ -972,15 +974,9 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessInteractiveBrowserTest,
 // The test also exits fullscreen by simulating pressing ESC rather than using
 // document.webkitExitFullscreen(), which tests the browser-initiated
 // fullscreen exit path.
-#if defined(OS_CHROMEOS) || defined(OS_MACOSX)
-#define MAYBE_FullscreenElementInMultipleSubframes \
-  DISABLED_FullscreenElementInMultipleSubframes
-#else
-#define MAYBE_FullscreenElementInMultipleSubframes \
-  FullscreenElementInMultipleSubframes
-#endif
+// TODO(crbug.com/756338): flaky on all platforms.
 IN_PROC_BROWSER_TEST_F(SitePerProcessInteractiveBrowserTest,
-                       MAYBE_FullscreenElementInMultipleSubframes) {
+                       DISABLED_FullscreenElementInMultipleSubframes) {
   // Allow fullscreen in all iframes descending to |c_middle|.
   GURL main_url(embedded_test_server()->GetURL(
       "a.com",
@@ -1377,13 +1373,9 @@ class SitePerProcessAutofillTest : public SitePerProcessInteractiveBrowserTest {
     }
 
     void ShowAutofillPopup(
-        const gfx::RectF& element_bounds,
-        base::i18n::TextDirection text_direction,
-        const std::vector<autofill::Suggestion>& suggestions,
-        bool autoselect_first_suggestion,
-        autofill::PopupType popup_type,
+        const autofill::AutofillClient::PopupOpenArgs& open_args,
         base::WeakPtr<autofill::AutofillPopupDelegate> delegate) override {
-      element_bounds_ = element_bounds;
+      element_bounds_ = open_args.element_bounds;
       popup_shown_ = true;
       if (loop_runner_)
         loop_runner_->Quit();

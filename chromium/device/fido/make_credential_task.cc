@@ -28,6 +28,10 @@ namespace {
 bool CtapDeviceShouldUseU2fBecauseClientPinIsSet(
     const FidoDevice* device,
     const CtapMakeCredentialRequest& request) {
+  if (!IsConvertibleToU2fRegisterCommand(request)) {
+    return false;
+  }
+
   DCHECK_EQ(device->supported_protocol(), ProtocolVersion::kCtap2);
   // Don't use U2F for requests that require UV or PIN which U2F doesn't
   // support. Note that |pin_auth| may also be set by GetTouchRequest(), but we
@@ -79,7 +83,7 @@ CtapMakeCredentialRequest MakeCredentialTask::GetTouchRequest(
       std::move(user),
       PublicKeyCredentialParams(
           {{CredentialType::kPublicKey,
-            base::strict_cast<int>(CoseAlgorithmIdentifier::kCoseEs256)}}));
+            base::strict_cast<int>(CoseAlgorithmIdentifier::kEs256)}}));
 
   // If a device supports CTAP2 and has PIN support then setting an empty
   // pinAuth should trigger just a touch[1]. Our U2F code also understands

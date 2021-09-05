@@ -8,6 +8,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/metrics/user_action_tester.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
@@ -19,12 +20,14 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/exclusive_access/exclusive_access_test.h"
 #include "chrome/browser/ui/page_info/page_info_dialog.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/toolbar/app_menu_model.h"
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
 #include "chrome/browser/ui/web_applications/web_app_controller_browsertest.h"
+#include "chrome/browser/ui/web_applications/web_app_launch_manager.h"
 #include "chrome/browser/ui/web_applications/web_app_launch_utils.h"
 #include "chrome/browser/ui/web_applications/web_app_menu_model.h"
 #include "chrome/browser/web_applications/components/app_registrar.h"
@@ -34,6 +37,7 @@
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/browser/web_applications/components/web_app_provider_base.h"
 #include "chrome/browser/web_applications/test/web_app_install_observer.h"
+#include "chrome/browser/web_applications/test/web_app_test.h"
 #include "chrome/common/web_application_info.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/sessions/core/tab_restore_service.h"
@@ -49,6 +53,10 @@
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
+#endif
+
+#if defined(OS_MACOSX)
+#include "ui/base/test/scoped_fake_nswindow_fullscreen.h"
 #endif
 
 namespace {
@@ -196,6 +204,22 @@ IN_PROC_BROWSER_TEST_P(WebAppBrowserTest, AppInfoOpensPageInfo) {
   // The test closure should have run. But clear the global in case it hasn't.
   EXPECT_FALSE(GetPageInfoDialogCreatedCallbackForTesting());
   GetPageInfoDialogCreatedCallbackForTesting().Reset();
+}
+
+// Check that last launch time is set after launch.
+IN_PROC_BROWSER_TEST_P(WebAppBrowserTest, AppLastLaunchTime) {
+  const GURL app_url(kExampleURL);
+  const AppId app_id = InstallPWA(app_url);
+  auto* provider = WebAppProviderBase::GetProviderBase(profile());
+
+  // last_launch_time is not set before launch
+  EXPECT_TRUE(provider->registrar().GetAppLastLaunchTime(app_id).is_null());
+
+  auto before_launch = base::Time::Now();
+  LaunchWebAppBrowser(app_id);
+
+  EXPECT_TRUE(provider->registrar().GetAppLastLaunchTime(app_id) >=
+              before_launch);
 }
 
 IN_PROC_BROWSER_TEST_P(WebAppBrowserTest, HasMinimalUiButtons) {
@@ -427,12 +451,7 @@ IN_PROC_BROWSER_TEST_P(WebAppBrowserTest, UpgradeWithoutCustomTabBar) {
   Browser* const app_browser = LaunchWebAppBrowser(app_id);
   NavigateToURLAndWait(app_browser, secure_app_url);
 
-  // HostedAppBrowserController's IsSameHostAndPort fallback path for Extensions
-  // without URL handlers does not apply for apps created through InstallPWA.
-  const bool expected_visibility =
-      (GetParam() == ControllerType::kHostedAppController);
-  EXPECT_EQ(app_browser->app_controller()->ShouldShowCustomTabBar(),
-            expected_visibility);
+  EXPECT_FALSE(app_browser->app_controller()->ShouldShowCustomTabBar());
 
   const GURL off_origin_url =
       https_server()->GetURL("example.org", "/empty.html");
@@ -483,6 +502,17 @@ IN_PROC_BROWSER_TEST_P(WebAppBrowserTest, PopOutDisabledInIncognito) {
   ASSERT_TRUE(app_menu_model->GetModelAndIndexForCommandId(
       IDC_OPEN_IN_PWA_WINDOW, &model, &index));
   EXPECT_FALSE(model->IsEnabledAt(index));
+}
+
+// Tests that web app menus don't crash when no tabs are selected.
+IN_PROC_BROWSER_TEST_P(WebAppBrowserTest, NoTabSelectedMenuCrash) {
+  const GURL app_url = GetSecureAppURL();
+  const AppId app_id = InstallPWA(app_url);
+  Browser* const app_browser = LaunchWebAppBrowserAndWait(app_id);
+
+  app_browser->tab_strip_model()->CloseAllTabs();
+  auto app_menu_model = std::make_unique<WebAppMenuModel>(nullptr, app_browser);
+  app_menu_model->Init();
 }
 
 // Tests that PWA menus have an uninstall option.
@@ -579,6 +609,7 @@ IN_PROC_BROWSER_TEST_P(WebAppBrowserTest, MenuOptionsOutsideInstalledPwaScope) {
 }
 
 IN_PROC_BROWSER_TEST_P(WebAppBrowserTest, InstallInstallableSite) {
+  base::Time before_install_time = base::Time::Now();
   base::UserActionTester user_action_tester;
   NavigateToURLAndWait(browser(), GetInstallableAppURL());
 
@@ -590,6 +621,10 @@ IN_PROC_BROWSER_TEST_P(WebAppBrowserTest, InstallInstallableSite) {
   // Installed PWAs should launch in their own window.
   EXPECT_EQ(provider->registrar().GetAppUserDisplayMode(app_id),
             blink::mojom::DisplayMode::kStandalone);
+
+  // Installed PWAs should have install time set.
+  EXPECT_TRUE(provider->registrar().GetAppInstallTime(app_id) >=
+              before_install_time);
 
   EXPECT_EQ(1, user_action_tester.GetActionCount("InstallWebAppFromMenu"));
   EXPECT_EQ(0, user_action_tester.GetActionCount("CreateShortcut"));
@@ -838,20 +873,41 @@ IN_PROC_BROWSER_TEST_P(WebAppBrowserTest, NewAppWindow) {
 
 #endif
 
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    WebAppBrowserTest,
-    ::testing::Values(ControllerType::kHostedAppController,
-                      ControllerType::kUnifiedControllerWithBookmarkApp,
-                      ControllerType::kUnifiedControllerWithWebApp),
-    ControllerTypeParamToString);
+IN_PROC_BROWSER_TEST_P(WebAppBrowserTest, PopupLocationBar) {
+#if defined(OS_MACOSX)
+  ui::test::ScopedFakeNSWindowFullscreen fake_fullscreen;
+#endif
+  const GURL app_url = GetSecureAppURL();
+  const GURL in_scope =
+      https_server()->GetURL("app.com", "/ssl/page_with_subresource.html");
+  const AppId app_id = InstallPWA(app_url);
 
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    WebAppTabRestoreBrowserTest,
-    ::testing::Values(ControllerType::kHostedAppController,
-                      ControllerType::kUnifiedControllerWithBookmarkApp,
-                      ControllerType::kUnifiedControllerWithWebApp),
-    ControllerTypeParamToString);
+  Browser* const popup_browser = web_app::CreateWebApplicationWindow(
+      profile(), app_id, WindowOpenDisposition::NEW_POPUP);
+
+  EXPECT_TRUE(
+      popup_browser->CanSupportWindowFeature(Browser::FEATURE_LOCATIONBAR));
+  EXPECT_TRUE(
+      popup_browser->SupportsWindowFeature(Browser::FEATURE_LOCATIONBAR));
+
+  FullscreenNotificationObserver waiter(popup_browser);
+  chrome::ToggleFullscreenMode(popup_browser);
+  waiter.Wait();
+
+  EXPECT_TRUE(
+      popup_browser->CanSupportWindowFeature(Browser::FEATURE_LOCATIONBAR));
+}
+
+INSTANTIATE_TEST_SUITE_P(All,
+                         WebAppBrowserTest,
+                         ::testing::Values(ProviderType::kBookmarkApps,
+                                           ProviderType::kWebApps),
+                         ProviderTypeParamToString);
+
+INSTANTIATE_TEST_SUITE_P(All,
+                         WebAppTabRestoreBrowserTest,
+                         ::testing::Values(ProviderType::kBookmarkApps,
+                                           ProviderType::kWebApps),
+                         ProviderTypeParamToString);
 
 }  // namespace web_app

@@ -42,6 +42,7 @@
 <translation id="2359808026110333948">Weiter</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Eine Netzwerkdiagnose durchführen<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">Benachrichtigungen</translation>
+<translation id="2501278716633472235">Gehe zurück</translation>
 <translation id="2539524384386349900">Erkennen</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> hat eine ungültige Antwort gesendet.</translation>
 <translation id="2586657967955657006">Zwischenablage</translation>
@@ -70,6 +71,7 @@
 <translation id="3226128629678568754">Klicken Sie auf die Schaltfläche zum erneuten Laden, um die für das Laden der Seite erforderlichen Daten erneut zu senden.</translation>
 <translation id="3227137524299004712">Mikrofon</translation>
 <translation id="3234666976984236645">Wichtige Inhalte auf dieser Website immer erkennen</translation>
+<translation id="3308738399950580893">Werbung</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> ist momentan nicht erreichbar.</translation>
 <translation id="3427092606871434483">Zulassen (Standardeinstellung)</translation>
 <translation id="3447661539832366887">Der Besitzer dieses Geräts hat das Antonio-Spiel deaktiviert.</translation>
@@ -84,6 +86,7 @@
 <translation id="3681007416295224113">Zertifikatinformationen</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Proxy, Firewall und DNS-Konfiguration prüfen<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Falls Sie einen Proxyserver verwenden...</translation>
+<translation id="3894751534882749287">Wenn Sie die Seite trotzdem ansehen möchten, können Sie die Tracking-Schutzstufe im Tracker-Blocker-Popup oder durch Klicken auf die Zulassen-Schaltfläche ändern</translation>
 <translation id="3950820424414687140">Anmelden</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> ist gesperrt</translation>
 <translation id="3987940399970879459">Weniger als 1 MB</translation>
@@ -110,6 +113,7 @@
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Ihre Verbindung wurde unterbrochen</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Eine Windows Netzwerkdiagnose durchzuführen<ph name="END_LINK" /></translation>
+<translation id="4736016046474602958">Tracker-Blocker</translation>
 <translation id="4744603770635761495">Ausführbarer Pfad</translation>
 <translation id="4750917950439032686">Ihre Daten wie Passwörter oder Kreditkartennummern sind privat, wenn Sie sie an diese Website senden.</translation>
 <translation id="4764776831041365478">Die Webseite unter <ph name="URL" /> ist möglicherweise vorübergehend nicht verfügbar oder wurde dauerhaft an eine neue Webadresse verschoben.</translation>
@@ -172,10 +176,12 @@
 <translation id="7090678807593890770">Bei Google nach <ph name="LINK" /> suchen</translation>
 <translation id="7108819624672055576">Von einer Erweiterung zugelassen</translation>
 <translation id="7111012039238467737">(Gültig)</translation>
+<translation id="7113310725918019676"><ph name="BLOCKED_TYPE" /> von <ph name="DOMAIN" /> zulassen</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> erfüllt die Sicherheitsstandards nicht.</translation>
 <translation id="7219179957768738017">Die Verbindung verwendet <ph name="SSL_VERSION" />.</translation>
 <translation id="7260504762447901703">Zugriff entziehen</translation>
 <translation id="7353601530677266744">Befehlszeile</translation>
+<translation id="7364115444476960850">Die Seite, auf die Sie zugreifen wollten, wurde von Vivaldis <ph name="BLOCKER_NAME" /> geblockt</translation>
 <translation id="7419106976560586862">Profilpfad</translation>
 <translation id="7445762425076701745">Die Identität des Servers, mit dem Sie verbunden sind, kann nicht vollständig überprüft werden. Sie sind mit einem Server verbunden, dessen Name nur innerhalb Ihres Netzwerks gültig ist. Eine externe Zertifizierungsstelle hat keine Möglichkeit, den Eigentümer dieses Namens zu bestätigen. Da einige Zertifizierungsstellen ungeachtet dessen dennoch Zertifikate für derartige Namen ausstellen, gibt es keine Möglichkeit sicherzustellen, dass Sie mit der gewünschten Website und nicht mit einem Angreifer verbunden sind.</translation>
 <translation id="7455133967321480974">Globalen Standard verwenden (Blockieren)</translation>
@@ -199,6 +205,7 @@
 <translation id="8037357227543935929">Nachfragen (Standardeinstellung)</translation>
 <translation id="8041940743680923270">Globalen Standard verwenden (Nachfragen)</translation>
 <translation id="808894953321890993">Passwort ändern</translation>
+<translation id="8119307142152921512">Tracker und Werbung</translation>
 <translation id="8142868475871995937">Unter &lt;strong&gt;vivaldi://policy&lt;/strong&gt; finden Sie eine Liste der blockierten URLs und andere Richtlinien, die durch Ihren Systemadministrator in Kraft gesetzt wurden.</translation>
 <translation id="8149426793427495338">Ihr Computer geht in den Ruhemodus.</translation>
 <translation id="8150722005171944719">Die Datei unter <ph name="URL" /> kann nicht gelesen werden. Sie wurde möglicherweise entfernt oder verschoben oder die Dateiberechtigungen verhindern den Zugriff.</translation>
@@ -216,6 +223,7 @@
 <translation id="8703575177326907206">Die Verbindung zu <ph name="DOMAIN" /> ist nicht verschlüsselt.</translation>
 <translation id="8740359287975076522">Die &lt;abbr id="dnsDefinition"&gt;DNS-Adresse&lt;/abbr&gt; von <ph name="HOST_NAME" /> wurde nicht gefunden. Eine Problemdiagnose wird durchgeführt.</translation>
 <translation id="8820817407110198400">Lesezeichen</translation>
+<translation id="8940028675168378100">Geblockt von <ph name="BLOCKER_NAME" /></translation>
 <translation id="9001074447101275817">Für den Proxy <ph name="DOMAIN" /> sind ein Nutzername und ein Passwort erforderlich.</translation>
 <translation id="9008201768610948239">Ignorieren</translation>
 <translation id="9011424611726486705">Website-Einstellungen öffnen</translation>
@@ -223,6 +231,7 @@
 <translation id="9039213469156557790">Darüber hinaus enthält diese Seite auch andere Ressourcen, die nicht sicher sind. Diese Ressourcen können von anderen während der Übertragung abgefangen und von einem Angreifer modifiziert werden, um das Verhalten der Seite zu ändern.</translation>
 <translation id="9069693763241529744">Von einer Erweiterung blockiert</translation>
 <translation id="9169664750068251925">Auf dieser Website immer blockieren</translation>
+<translation id="9180553614777056266">Werbeblocker</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> verwendet ein nicht unterstütztes Protokoll.</translation>
 <translation id="9219103736887031265">Bilder</translation>
 <translation id="936602727769022409">Sie könnten den Zugriff auf Ihr Google-Konto verlieren. Vivaldi empfiehlt Ihnen, Ihr Passwort jetzt zu ändern. Sie werden dazu aufgefordert, sich anzumelden.</translation>

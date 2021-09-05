@@ -20,7 +20,6 @@
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
-#include "base/task/post_task.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "content/browser/appcache/appcache.h"
 #include "content/browser/appcache/appcache_database.h"
@@ -33,6 +32,7 @@
 #include "content/browser/appcache/appcache_response_info.h"
 #include "content/browser/appcache/appcache_service_impl.h"
 #include "content/public/browser/browser_task_traits.h"
+#include "content/public/browser/browser_thread.h"
 #include "net/base/cache_type.h"
 #include "net/base/net_errors.h"
 #include "sql/database.h"
@@ -309,8 +309,8 @@ void AppCacheStorageImpl::InitTask::RunCompleted() {
   }
 
   if (storage_->service()->quota_client()) {
-    base::PostTask(
-        FROM_HERE, {BrowserThread::IO},
+    GetIOThreadTaskRunner({})->PostTask(
+        FROM_HERE,
         base::BindOnce(&AppCacheQuotaClient::NotifyAppCacheReady,
                        base::RetainedRef(storage_->service()->quota_client())));
   }
@@ -353,8 +353,8 @@ void AppCacheStorageImpl::GetAllInfoTask::Run() {
   std::set<url::Origin> origins;
   database_->FindOriginsWithGroups(&origins);
   for (const url::Origin& origin : origins) {
-    std::vector<blink::mojom::AppCacheInfo>& infos =
-        info_collection_->infos_by_origin[origin];
+    std::vector<blink::mojom::AppCacheInfo> infos;
+
     std::vector<AppCacheDatabase::GroupRecord> groups;
     database_->FindGroupsForOrigin(origin, &groups);
     for (const auto& group : groups) {
@@ -378,6 +378,13 @@ void AppCacheStorageImpl::GetAllInfoTask::Run() {
       info.manifest_scope = cache_record.manifest_scope;
       infos.push_back(info);
     }
+
+    // It's possible that all the origins have a group that is invalid due to
+    // the origin trial.  Ignore these.
+    if (infos.empty())
+      continue;
+
+    info_collection_->infos_by_origin[origin] = std::move(infos);
   }
 }
 
@@ -1398,15 +1405,7 @@ void AppCacheStorageImpl::UpdateEvictionTimesTask::Run() {
 // AppCacheStorageImpl ---------------------------------------------------
 
 AppCacheStorageImpl::AppCacheStorageImpl(AppCacheServiceImpl* service)
-    : AppCacheStorage(service),
-      is_incognito_(false),
-      is_response_deletion_scheduled_(false),
-      did_start_deleting_responses_(false),
-      last_deletable_response_rowid_(0),
-      database_(nullptr),
-      is_disabled_(false),
-      delete_and_start_over_pending_(false),
-      expecting_cleanup_complete_on_disable_(false) {}
+    : AppCacheStorage(service) {}
 
 AppCacheStorageImpl::~AppCacheStorageImpl() {
   for (StoreGroupAndCacheTask* task : pending_quota_queries_)
@@ -1414,13 +1413,12 @@ AppCacheStorageImpl::~AppCacheStorageImpl() {
   for (DatabaseTask* task : scheduled_database_tasks_)
     task->CancelCompletion();
 
-  if (database_ &&
-      !db_task_runner_->PostTask(
-          FROM_HERE,
-          base::BindOnce(
-              &ClearSessionOnlyOrigins, std::move(database_),
-              base::WrapRefCounted(service_->special_storage_policy()),
-              service()->force_keep_session_state()))) {
+  if (database_) {
+    db_task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(&ClearSessionOnlyOrigins, std::move(database_),
+                       base::WrapRefCounted(service_->special_storage_policy()),
+                       service()->force_keep_session_state()));
   }
 }
 
@@ -1937,8 +1935,8 @@ void AppCacheStorageImpl::OnDiskCacheCleanupComplete() {
     delete_and_start_over_pending_ = false;
     db_task_runner_->PostTaskAndReply(
         FROM_HERE,
-        base::BindOnce(base::IgnoreResult(&base::DeleteFile), cache_directory_,
-                       true),
+        base::BindOnce(base::GetDeletePathRecursivelyCallback(),
+                       cache_directory_),
         base::BindOnce(&AppCacheStorageImpl::CallScheduleReinitialize,
                        weak_factory_.GetWeakPtr()));
   }

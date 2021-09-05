@@ -18,8 +18,9 @@
 #include "content/public/browser/web_contents.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 
-#if BUILDFLAG(SAFE_BROWSING_CSD)
+#if BUILDFLAG(FULL_SAFE_BROWSING)
 #include "chrome/browser/safe_browsing/client_side_detection_host.h"
+#include "chrome/browser/safe_browsing/client_side_detection_service.h"
 #include "chrome/browser/safe_browsing/client_side_detection_service_factory.h"
 #include "chrome/common/chrome_render_frame.mojom.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
@@ -27,7 +28,7 @@
 
 namespace safe_browsing {
 
-#if !BUILDFLAG(SAFE_BROWSING_CSD)
+#if !BUILDFLAG(FULL_SAFE_BROWSING)
 // Provide a dummy implementation so that
 // std::unique_ptr<ClientSideDetectionHost>
 // has a concrete destructor to call. This is necessary because it is used
@@ -38,7 +39,7 @@ class ClientSideDetectionHost { };
 
 SafeBrowsingTabObserver::SafeBrowsingTabObserver(
     content::WebContents* web_contents) : web_contents_(web_contents) {
-#if BUILDFLAG(SAFE_BROWSING_CSD)
+#if BUILDFLAG(FULL_SAFE_BROWSING)
   Profile* profile =
       Profile::FromBrowserContext(web_contents->GetBrowserContext());
   PrefService* prefs = profile->GetPrefs();
@@ -55,6 +56,8 @@ SafeBrowsingTabObserver::SafeBrowsingTabObserver(
         g_browser_process->safe_browsing_service() && csd_service) {
       safebrowsing_detection_host_ =
           ClientSideDetectionHost::Create(web_contents);
+      csd_service->AddClientSideDetectionHost(
+          safebrowsing_detection_host_.get());
     }
   }
 #endif
@@ -67,7 +70,7 @@ SafeBrowsingTabObserver::~SafeBrowsingTabObserver() {
 // Internal helpers
 
 void SafeBrowsingTabObserver::UpdateSafebrowsingDetectionHost() {
-#if BUILDFLAG(SAFE_BROWSING_CSD)
+#if BUILDFLAG(FULL_SAFE_BROWSING)
   Profile* profile =
       Profile::FromBrowserContext(web_contents_->GetBrowserContext());
   PrefService* prefs = profile->GetPrefs();
@@ -78,15 +81,12 @@ void SafeBrowsingTabObserver::UpdateSafebrowsingDetectionHost() {
     if (!safebrowsing_detection_host_.get()) {
       safebrowsing_detection_host_ =
           ClientSideDetectionHost::Create(web_contents_);
+      csd_service->AddClientSideDetectionHost(
+          safebrowsing_detection_host_.get());
     }
   } else {
     safebrowsing_detection_host_.reset();
   }
-
-  content::RenderFrameHost* rfh = web_contents_->GetMainFrame();
-  mojo::AssociatedRemote<chrome::mojom::ChromeRenderFrame> client;
-  rfh->GetRemoteAssociatedInterfaces()->GetInterface(&client);
-  client->SetClientSidePhishingDetection(safe_browsing);
 #endif
 }
 

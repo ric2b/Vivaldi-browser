@@ -14,7 +14,6 @@
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/pattern.h"
-#include "base/task/post_task.h"
 #include "cc/base/switches.h"
 #include "content/public/browser/browser_child_process_observer.h"
 #include "content/public/browser/browser_context.h"
@@ -41,7 +40,6 @@
 #include "content/shell/browser/web_test/web_test_client_impl.h"
 #include "content/shell/browser/web_test/web_test_control_host.h"
 #include "content/shell/browser/web_test/web_test_permission_manager.h"
-#include "content/shell/browser/web_test/web_test_tts_controller_delegate.h"
 #include "content/shell/browser/web_test/web_test_tts_platform.h"
 #include "content/shell/common/web_test/web_test_bluetooth_fake_adapter_setter.mojom.h"
 #include "content/shell/common/web_test/web_test_switches.h"
@@ -117,7 +115,7 @@ class BoundsMatchVideoSizeOverlayWindow : public OverlayWindow {
     size_ = natural_size;
   }
   void SetPlaybackState(PlaybackState playback_state) override {}
-  void SetAlwaysHidePlayPauseButton(bool is_visible) override {}
+  void SetPlayPauseButtonVisibility(bool is_visible) override {}
   void SetSkipAdButtonVisibility(bool is_visible) override {}
   void SetNextTrackButtonVisibility(bool is_visible) override {}
   void SetPreviousTrackButtonVisibility(bool is_visible) override {}
@@ -207,7 +205,7 @@ WebTestContentBrowserClient::GetNextFakeBluetoothChooser() {
 void WebTestContentBrowserClient::BrowserChildProcessHostCreated(
     BrowserChildProcessHost* host) {
   scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner =
-      base::CreateSingleThreadTaskRunner({content::BrowserThread::UI});
+      content::GetUIThreadTaskRunner({});
   ui_task_runner->PostTask(FROM_HERE,
                            base::BindOnce(&CreateChildProcessCrashWatcher));
 }
@@ -217,7 +215,7 @@ void WebTestContentBrowserClient::ExposeInterfacesToRenderer(
     blink::AssociatedInterfaceRegistry* associated_registry,
     RenderProcessHost* render_process_host) {
   scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner =
-      base::CreateSingleThreadTaskRunner({content::BrowserThread::UI});
+      content::GetUIThreadTaskRunner({});
   registry->AddInterface(
       base::BindRepeating(&WebTestBluetoothFakeAdapterSetterImpl::Create),
       ui_task_runner);
@@ -433,11 +431,6 @@ BluetoothDelegate* WebTestContentBrowserClient::GetBluetoothDelegate() {
 
 void WebTestContentBrowserClient::ResetFakeBluetoothDelegate() {
   fake_bluetooth_delegate_.reset();
-}
-
-content::TtsControllerDelegate*
-WebTestContentBrowserClient::GetTtsControllerDelegate() {
-  return WebTestTtsControllerDelegate::GetInstance();
 }
 
 content::TtsPlatform* WebTestContentBrowserClient::GetTtsPlatform() {

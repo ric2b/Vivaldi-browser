@@ -50,7 +50,7 @@ enum class FeaturePolicyFeature;
 namespace base {
 class UnguessableToken;
 class Value;
-}
+}  // namespace base
 
 namespace features {
 CONTENT_EXPORT extern const base::Feature kCrashReporting;
@@ -122,6 +122,9 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
 
   // Returns the route id for this frame.
   virtual int GetRoutingID() = 0;
+
+  // Returns the frame token for this frame.
+  virtual const base::UnguessableToken& GetFrameToken() = 0;
 
   // Returns the accessibility tree ID for this RenderFrameHost.
   virtual ui::AXTreeID GetAXTreeID() = 0;
@@ -197,12 +200,16 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   // never used to look up the FrameTreeNode instance.
   virtual base::UnguessableToken GetDevToolsFrameToken() = 0;
 
-  // Returns the embedding token for the current document in this
-  // RenderFrameHost. This token is used by a remote parent to uniquely identify
-  // it. The token will be changed when a new document commits in this
-  // RenderFrameHost. This will be null if the document is:
-  // - not embedded by a parent
-  // - a local child
+  // This token is present on all frames. For frames with parents, it allows
+  // identification of embedding relationships between parent and child. For
+  // main frames, it also allows generalization of the embedding relationship
+  // when the WebContents itself is embedded in another context such as the rest
+  // of the browser UI. This will be nullopt prior to the RenderFrameHost
+  // committing a navigation. After the first navigation commits this
+  // will return the token for the last committed document.
+  //
+  // TODO(crbug/1098283): Remove the nullopt scenario by creating the token in
+  // CreateChildFrame() or similar.
   virtual base::Optional<base::UnguessableToken> GetEmbeddingToken() = 0;
 
   // Returns the assigned name of the frame, the name of the iframe tag
@@ -430,13 +437,6 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   // RenderFrameHost.
   virtual void ViewSource() = 0;
 
-  // Starts pausing subresource loading on this frame and returns
-  // PauseSubresourceLoadingHandle that controls the pausing behavior.  As long
-  // as this handle is live, pausing will continue until an internal
-  // navigation happens in the frame.
-  virtual mojo::Remote<blink::mojom::PauseSubresourceLoadingHandle>
-  PauseSubresourceLoading() = 0;
-
   // Run the given action on the media player location at the given point.
   virtual void ExecuteMediaPlayerActionAtLocation(
       const gfx::Point& location,
@@ -571,6 +571,14 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   // Note: this can be called on any frame, but this id for all subframes is the
   // same as the id for the main frame.
   virtual ukm::SourceId GetPageUkmSourceId() = 0;
+
+  // Report an inspector issue to devtools due the frame using an excessive
+  // amount of resources (cpu or network).  Invoked only for ad frames.
+  // TODO(crbug.com/1091720): This reporting should be done directly in the
+  // chrome layer in the future.
+  virtual void ReportHeavyAdIssue(
+      blink::mojom::HeavyAdResolutionStatus resolution,
+      blink::mojom::HeavyAdReason reason) = 0;
 
  private:
   // This interface should only be implemented inside content.

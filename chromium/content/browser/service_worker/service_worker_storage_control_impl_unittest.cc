@@ -30,6 +30,8 @@
 namespace content {
 
 using DatabaseStatus = storage::mojom::ServiceWorkerDatabaseStatus;
+using RegistrationData = storage::mojom::ServiceWorkerRegistrationDataPtr;
+using ResourceRecord = storage::mojom::ServiceWorkerResourceRecordPtr;
 using FindRegistrationResult =
     storage::mojom::ServiceWorkerFindRegistrationResultPtr;
 
@@ -50,6 +52,11 @@ struct GetRegistrationsForOriginResult {
 struct DeleteRegistrationResult {
   DatabaseStatus status;
   storage::mojom::ServiceWorkerStorageOriginState origin_state;
+};
+
+struct GetNewVersionIdResult {
+  int64_t version_id;
+  mojo::PendingRemote<storage::mojom::ServiceWorkerLiveVersionRef> reference;
 };
 
 struct GetUserDataResult {
@@ -190,7 +197,7 @@ class ServiceWorkerStorageControlImplTest : public testing::Test {
     storage()->FindRegistrationForClientUrl(
         client_url,
         base::BindLambdaForTesting([&](FindRegistrationResult result) {
-          return_value = result.Clone();
+          return_value = std::move(result);
           loop.Quit();
         }));
     loop.Run();
@@ -202,7 +209,7 @@ class ServiceWorkerStorageControlImplTest : public testing::Test {
     base::RunLoop loop;
     storage()->FindRegistrationForScope(
         scope, base::BindLambdaForTesting([&](FindRegistrationResult result) {
-          return_value = result.Clone();
+          return_value = std::move(result);
           loop.Quit();
         }));
     loop.Run();
@@ -216,7 +223,7 @@ class ServiceWorkerStorageControlImplTest : public testing::Test {
     storage()->FindRegistrationForId(
         registration_id, origin,
         base::BindLambdaForTesting([&](FindRegistrationResult result) {
-          return_value = result.Clone();
+          return_value = std::move(result);
           loop.Quit();
         }));
     loop.Run();
@@ -243,7 +250,7 @@ class ServiceWorkerStorageControlImplTest : public testing::Test {
   }
 
   DatabaseStatus StoreRegistration(
-      storage::mojom::ServiceWorkerRegistrationDataPtr registration,
+      RegistrationData registration,
       std::vector<storage::mojom::ServiceWorkerResourceRecordPtr> resources) {
     DatabaseStatus out_status;
     base::RunLoop loop;
@@ -345,16 +352,19 @@ class ServiceWorkerStorageControlImplTest : public testing::Test {
     return return_value;
   }
 
-  int64_t GetNewVersionId() {
-    int64_t return_value;
+  GetNewVersionIdResult GetNewVersionId() {
+    GetNewVersionIdResult result;
     base::RunLoop loop;
-    storage()->GetNewVersionId(
-        base::BindLambdaForTesting([&](int64_t version_id) {
-          return_value = version_id;
+    storage()->GetNewVersionId(base::BindLambdaForTesting(
+        [&](int64_t version_id,
+            mojo::PendingRemote<storage::mojom::ServiceWorkerLiveVersionRef>
+                reference) {
+          result.version_id = version_id;
+          result.reference = std::move(reference);
           loop.Quit();
         }));
     loop.Run();
-    return return_value;
+    return result;
   }
 
   int64_t GetNewResourceId() {
@@ -363,6 +373,33 @@ class ServiceWorkerStorageControlImplTest : public testing::Test {
     storage()->GetNewResourceId(
         base::BindLambdaForTesting([&](int64_t resource_id) {
           return_value = resource_id;
+          loop.Quit();
+        }));
+    loop.Run();
+    return return_value;
+  }
+
+  DatabaseStatus StoreUncommittedResourceId(int64_t resource_id,
+                                            const GURL& origin) {
+    DatabaseStatus return_value;
+    base::RunLoop loop;
+    storage()->StoreUncommittedResourceId(
+        resource_id, origin,
+        base::BindLambdaForTesting([&](DatabaseStatus status) {
+          return_value = status;
+          loop.Quit();
+        }));
+    loop.Run();
+    return return_value;
+  }
+
+  DatabaseStatus DoomUncommittedResources(
+      const std::vector<int64_t> resource_ids) {
+    DatabaseStatus return_value;
+    base::RunLoop loop;
+    storage()->DoomUncommittedResources(
+        resource_ids, base::BindLambdaForTesting([&](DatabaseStatus status) {
+          return_value = status;
           loop.Quit();
         }));
     loop.Run();
@@ -511,17 +548,14 @@ class ServiceWorkerStorageControlImplTest : public testing::Test {
     return return_value;
   }
 
-  // Create a registration with a single resource and stores the registration.
-  DatabaseStatus CreateAndStoreRegistration(int64_t registration_id,
-                                            int64_t version_id,
-                                            int64_t resource_id,
-                                            const GURL& scope,
-                                            const GURL& script_url,
-                                            int64_t script_size) {
-    std::vector<storage::mojom::ServiceWorkerResourceRecordPtr> resources;
-    resources.push_back(storage::mojom::ServiceWorkerResourceRecord::New(
-        resource_id, script_url, script_size));
-
+  // Creates a registration with the given resource records.
+  RegistrationData CreateRegistrationData(
+      int64_t registration_id,
+      int64_t version_id,
+      const GURL& scope,
+      const GURL& script_url,
+      const std::vector<storage::mojom::ServiceWorkerResourceRecordPtr>&
+          resources) {
     auto data = storage::mojom::ServiceWorkerRegistrationData::New();
     data->registration_id = registration_id;
     data->version_id = version_id;
@@ -536,9 +570,51 @@ class ServiceWorkerStorageControlImplTest : public testing::Test {
     }
     data->resources_total_size_bytes = resources_total_size_bytes;
 
+    return data;
+  }
+
+  // Creates a registration with a single resource and stores the registration.
+  DatabaseStatus CreateAndStoreRegistration(int64_t registration_id,
+                                            int64_t version_id,
+                                            int64_t resource_id,
+                                            const GURL& scope,
+                                            const GURL& script_url,
+                                            int64_t script_size) {
+    std::vector<storage::mojom::ServiceWorkerResourceRecordPtr> resources;
+    resources.push_back(storage::mojom::ServiceWorkerResourceRecord::New(
+        resource_id, script_url, script_size));
+
+    RegistrationData data = CreateRegistrationData(
+        registration_id, version_id, scope, script_url, resources);
+
     DatabaseStatus status =
         StoreRegistration(std::move(data), std::move(resources));
     return status;
+  }
+
+  int WriteResource(int64_t resource_id, const std::string& data) {
+    auto response_head = network::mojom::URLResponseHead::New();
+    response_head->headers = base::MakeRefCounted<net::HttpResponseHeaders>(
+        net::HttpUtil::AssembleRawHeaders(
+            "HTTP/1.1 200 OK\n"
+            "Content-Type: application/javascript\n"));
+    response_head->headers->GetMimeType(&response_head->mime_type);
+
+    mojo::Remote<storage::mojom::ServiceWorkerResourceWriter> writer =
+        CreateResourceWriter(resource_id);
+    int result = WriteResponseHead(writer.get(), std::move(response_head));
+    if (result < 0)
+      return result;
+
+    mojo_base::BigBuffer buffer(base::as_bytes(base::make_span(data)));
+    result = WriteResponseData(writer.get(), std::move(buffer));
+    return result;
+  }
+
+  std::string ReadResource(int64_t resource_id, int data_size) {
+    mojo::Remote<storage::mojom::ServiceWorkerResourceReader> reader =
+        CreateResourceReader(resource_id);
+    return ReadResponseData(reader.get(), data_size);
   }
 
   mojo::Remote<storage::mojom::ServiceWorkerResourceReader>
@@ -563,6 +639,22 @@ class ServiceWorkerStorageControlImplTest : public testing::Test {
     storage()->CreateResourceMetadataWriter(
         resource_id, writer.BindNewPipeAndPassReceiver());
     return writer;
+  }
+
+  // Helper function that reads uncommitted resource ids from database.
+  std::vector<int64_t> GetUncommittedResourceIds() {
+    std::vector<int64_t> ids;
+    base::RunLoop loop;
+    ServiceWorkerStorage* internal_storage = storage_impl_->storage();
+    ServiceWorkerDatabase* database_raw = internal_storage->database_.get();
+    internal_storage->database_task_runner_->PostTask(
+        FROM_HERE, base::BindLambdaForTesting([&]() {
+          EXPECT_EQ(ServiceWorkerDatabase::Status::kOk,
+                    database_raw->GetUncommittedResourceIds(&ids));
+          loop.Quit();
+        }));
+    loop.Run();
+    return ids;
   }
 
  private:
@@ -607,7 +699,7 @@ TEST_F(ServiceWorkerStorageControlImplTest, StoreAndDeleteRegistration) {
   LazyInitializeForTest();
 
   const int64_t kRegistrationId = GetNewResourceId();
-  const int64_t kVersionId = GetNewVersionId();
+  const int64_t kVersionId = GetNewVersionId().version_id;
 
   // Create a registration data with a single resource.
   std::vector<storage::mojom::ServiceWorkerResourceRecordPtr> resources;
@@ -682,7 +774,7 @@ TEST_F(ServiceWorkerStorageControlImplTest, UpdateToActiveState) {
 
   // Preparation: Store a registration.
   const int64_t registration_id = GetNewRegistrationId();
-  const int64_t version_id = GetNewVersionId();
+  const int64_t version_id = GetNewVersionId().version_id;
   const int64_t resource_id = GetNewResourceId();
   DatabaseStatus status =
       CreateAndStoreRegistration(registration_id, version_id, resource_id,
@@ -719,7 +811,7 @@ TEST_F(ServiceWorkerStorageControlImplTest, UpdateLastUpdateCheckTime) {
 
   // Preparation: Store a registration.
   const int64_t registration_id = GetNewRegistrationId();
-  const int64_t version_id = GetNewVersionId();
+  const int64_t version_id = GetNewVersionId().version_id;
   const int64_t resource_id = GetNewResourceId();
   DatabaseStatus status =
       CreateAndStoreRegistration(registration_id, version_id, resource_id,
@@ -757,7 +849,7 @@ TEST_F(ServiceWorkerStorageControlImplTest, Update) {
 
   // Preparation: Store a registration.
   const int64_t registration_id = GetNewRegistrationId();
-  const int64_t version_id = GetNewVersionId();
+  const int64_t version_id = GetNewVersionId().version_id;
   const int64_t resource_id = GetNewResourceId();
   DatabaseStatus status =
       CreateAndStoreRegistration(registration_id, version_id, resource_id,
@@ -806,14 +898,14 @@ TEST_F(ServiceWorkerStorageControlImplTest, GetRegistrationsForOrigin) {
   // Store two registrations which have the same origin.
   DatabaseStatus status;
   const int64_t registration_id1 = GetNewRegistrationId();
-  const int64_t version_id1 = GetNewVersionId();
+  const int64_t version_id1 = GetNewVersionId().version_id;
   const int64_t resource_id1 = GetNewResourceId();
   status =
       CreateAndStoreRegistration(registration_id1, version_id1, resource_id1,
                                  kScope1, kScriptUrl1, kScriptSize);
   ASSERT_EQ(status, DatabaseStatus::kOk);
   const int64_t registration_id2 = GetNewRegistrationId();
-  const int64_t version_id2 = GetNewVersionId();
+  const int64_t version_id2 = GetNewVersionId().version_id;
   const int64_t resource_id2 = GetNewResourceId();
   status =
       CreateAndStoreRegistration(registration_id2, version_id2, resource_id2,
@@ -933,6 +1025,83 @@ TEST_F(ServiceWorkerStorageControlImplTest, WriteAndReadResource) {
   }
 }
 
+// Tests that uncommitted resources can be listed on storage and these resources
+// will be committed when a registration is stored with these resources.
+TEST_F(ServiceWorkerStorageControlImplTest, UncommittedResources) {
+  const GURL kScope("https://www.example.com/");
+  const GURL kScriptUrl("https://www.example.com/sw.js");
+  const GURL kImportedScriptUrl("https://www.example.com/imported.js");
+
+  LazyInitializeForTest();
+
+  // Preparation: Create a registration with two resources. These aren't written
+  // to storage yet.
+  std::vector<ResourceRecord> resources;
+  const int64_t resource_id1 = GetNewResourceId();
+  const std::string resource_data1 = "main script data";
+  resources.push_back(storage::mojom::ServiceWorkerResourceRecord::New(
+      resource_id1, kScriptUrl, resource_data1.size()));
+
+  const int64_t resource_id2 = GetNewResourceId();
+  const std::string resource_data2 = "imported script data";
+  resources.push_back(storage::mojom::ServiceWorkerResourceRecord::New(
+      resource_id2, kImportedScriptUrl, resource_data2.size()));
+
+  const int64_t registration_id = GetNewRegistrationId();
+  const int64_t version_id = GetNewVersionId().version_id;
+  RegistrationData registration_data = CreateRegistrationData(
+      registration_id, version_id, kScope, kScriptUrl, resources);
+
+  // Put these resources ids on the uncommitted list in storage.
+  DatabaseStatus status;
+  status = StoreUncommittedResourceId(resource_id1, kScope.GetOrigin());
+  ASSERT_EQ(status, DatabaseStatus::kOk);
+  status = StoreUncommittedResourceId(resource_id2, kScope.GetOrigin());
+  ASSERT_EQ(status, DatabaseStatus::kOk);
+
+  std::vector<int64_t> uncommitted_ids = GetUncommittedResourceIds();
+  EXPECT_EQ(uncommitted_ids.size(), 2UL);
+
+  // Write responses and the registration data.
+  int result;
+  result = WriteResource(resource_id1, resource_data1);
+  ASSERT_GT(result, 0);
+  result = WriteResource(resource_id2, resource_data2);
+  ASSERT_GT(result, 0);
+  status =
+      StoreRegistration(std::move(registration_data), std::move(resources));
+  ASSERT_EQ(status, DatabaseStatus::kOk);
+
+  // Storing registration should take the resource ids out of the uncommitted
+  // list.
+  uncommitted_ids = GetUncommittedResourceIds();
+  EXPECT_TRUE(uncommitted_ids.empty());
+}
+
+// Tests that uncommitted resource ids are purged by DoomUncommittedResources.
+TEST_F(ServiceWorkerStorageControlImplTest, DoomUncommittedResources) {
+  const GURL kScope("https://www.example.com/");
+
+  LazyInitializeForTest();
+
+  const int64_t resource_id1 = GetNewResourceId();
+  const int64_t resource_id2 = GetNewResourceId();
+
+  DatabaseStatus status;
+  status = StoreUncommittedResourceId(resource_id1, kScope.GetOrigin());
+  ASSERT_EQ(status, DatabaseStatus::kOk);
+  status = StoreUncommittedResourceId(resource_id2, kScope.GetOrigin());
+  ASSERT_EQ(status, DatabaseStatus::kOk);
+
+  std::vector<int64_t> uncommitted_ids = GetUncommittedResourceIds();
+  EXPECT_EQ(uncommitted_ids.size(), 2UL);
+
+  status = DoomUncommittedResources({resource_id1, resource_id2});
+  ASSERT_EQ(status, DatabaseStatus::kOk);
+  uncommitted_ids = GetUncommittedResourceIds();
+  EXPECT_TRUE(uncommitted_ids.empty());
+}
+
 // Tests that storing/getting user data for a registration work.
 TEST_F(ServiceWorkerStorageControlImplTest, StoreAndGetUserData) {
   const GURL kScope("https://www.example.com/");
@@ -942,7 +1111,7 @@ TEST_F(ServiceWorkerStorageControlImplTest, StoreAndGetUserData) {
   LazyInitializeForTest();
 
   const int64_t registration_id = GetNewRegistrationId();
-  const int64_t version_id = GetNewVersionId();
+  const int64_t version_id = GetNewVersionId().version_id;
   const int64_t resource_id = GetNewResourceId();
   DatabaseStatus status;
   status = CreateAndStoreRegistration(registration_id, version_id, resource_id,
@@ -1002,7 +1171,7 @@ TEST_F(ServiceWorkerStorageControlImplTest, StoreAndGetUserData) {
   // Delete the registration and store a new registration for the same
   // scope.
   const int64_t new_registration_id = GetNewRegistrationId();
-  const int64_t new_version_id = GetNewVersionId();
+  const int64_t new_version_id = GetNewVersionId().version_id;
   const int64_t new_resource_id = GetNewResourceId();
   {
     DeleteRegistrationResult result =
@@ -1033,7 +1202,7 @@ TEST_F(ServiceWorkerStorageControlImplTest, StoreAndGetUserDataByKeyPrefix) {
   LazyInitializeForTest();
 
   const int64_t registration_id = GetNewRegistrationId();
-  const int64_t version_id = GetNewVersionId();
+  const int64_t version_id = GetNewVersionId().version_id;
   const int64_t resource_id = GetNewResourceId();
   DatabaseStatus status;
   status = CreateAndStoreRegistration(registration_id, version_id, resource_id,
@@ -1111,14 +1280,14 @@ TEST_F(ServiceWorkerStorageControlImplTest,
   // Preparation: Create and store two registrations.
   DatabaseStatus status;
   const int64_t registration_id1 = GetNewRegistrationId();
-  const int64_t version_id1 = GetNewVersionId();
+  const int64_t version_id1 = GetNewVersionId().version_id;
   const int64_t resource_id1 = GetNewResourceId();
   status =
       CreateAndStoreRegistration(registration_id1, version_id1, resource_id1,
                                  kScope1, kScriptUrl1, kScriptSize);
   ASSERT_EQ(status, DatabaseStatus::kOk);
   const int64_t registration_id2 = GetNewRegistrationId();
-  const int64_t version_id2 = GetNewVersionId();
+  const int64_t version_id2 = GetNewVersionId().version_id;
   const int64_t resource_id2 = GetNewResourceId();
   status =
       CreateAndStoreRegistration(registration_id2, version_id2, resource_id2,
@@ -1215,14 +1384,14 @@ TEST_F(ServiceWorkerStorageControlImplTest, ApplyPolicyUpdates) {
   // Preparation: Create and store two registrations.
   DatabaseStatus status;
   const int64_t registration_id1 = GetNewRegistrationId();
-  const int64_t version_id1 = GetNewVersionId();
+  const int64_t version_id1 = GetNewVersionId().version_id;
   const int64_t resource_id1 = GetNewResourceId();
   status =
       CreateAndStoreRegistration(registration_id1, version_id1, resource_id1,
                                  kScope1, kScriptUrl1, kScriptSize);
   ASSERT_EQ(status, DatabaseStatus::kOk);
   const int64_t registration_id2 = GetNewRegistrationId();
-  const int64_t version_id2 = GetNewVersionId();
+  const int64_t version_id2 = GetNewVersionId().version_id;
   const int64_t resource_id2 = GetNewResourceId();
   status =
       CreateAndStoreRegistration(registration_id2, version_id2, resource_id2,
@@ -1245,6 +1414,94 @@ TEST_F(ServiceWorkerStorageControlImplTest, ApplyPolicyUpdates) {
   {
     FindRegistrationResult result = FindRegistrationForScope(kScope2);
     ASSERT_EQ(result->status, DatabaseStatus::kErrorNotFound);
+  }
+}
+
+TEST_F(ServiceWorkerStorageControlImplTest, TrackRunningVersion) {
+  const GURL kScope("https://www.example.com/");
+  const GURL kScriptUrl("https://www.example.com/sw.js");
+  const GURL kImportedScriptUrl("https://www.example.com/imported.js");
+
+  LazyInitializeForTest();
+
+  // Preparation: Create a registration with two resources (The main script and
+  // an imported script).
+  int result;
+  std::vector<ResourceRecord> resources;
+  const int64_t resource_id1 = GetNewResourceId();
+  const std::string resource_data1 = "main script data";
+  result = WriteResource(resource_id1, resource_data1);
+  ASSERT_GT(result, 0);
+  resources.push_back(storage::mojom::ServiceWorkerResourceRecord::New(
+      resource_id1, kScriptUrl, resource_data1.size()));
+
+  const int64_t resource_id2 = GetNewResourceId();
+  const std::string resource_data2 = "imported script data";
+  result = WriteResource(resource_id2, resource_data2);
+  ASSERT_GT(result, 0);
+  resources.push_back(storage::mojom::ServiceWorkerResourceRecord::New(
+      resource_id2, kImportedScriptUrl, resource_data2.size()));
+
+  const int64_t registration_id = GetNewRegistrationId();
+  GetNewVersionIdResult new_version_id_result = GetNewVersionId();
+  ASSERT_NE(new_version_id_result.version_id,
+            blink::mojom::kInvalidServiceWorkerVersionId);
+  const int64_t version_id = new_version_id_result.version_id;
+  RegistrationData registration_data = CreateRegistrationData(
+      registration_id, version_id, kScope, kScriptUrl, resources);
+  DatabaseStatus status =
+      StoreRegistration(std::move(registration_data), std::move(resources));
+  ASSERT_EQ(status, DatabaseStatus::kOk);
+
+  // Create two references, one from GetNewVersionId() and the other from
+  // FindRegistrationForId().
+  mojo::Remote<storage::mojom::ServiceWorkerLiveVersionRef> reference1;
+  ASSERT_TRUE(new_version_id_result.reference);
+  reference1.Bind(std::move(new_version_id_result.reference));
+
+  mojo::Remote<storage::mojom::ServiceWorkerLiveVersionRef> reference2;
+  {
+    FindRegistrationResult result =
+        FindRegistrationForId(registration_id, kScope.GetOrigin());
+    ASSERT_EQ(result->status, DatabaseStatus::kOk);
+    ASSERT_TRUE(result->version_reference);
+    reference2.Bind(std::move(result->version_reference));
+  }
+
+  // Drop the first reference and delete the registration.
+  reference1.reset();
+  {
+    DeleteRegistrationResult result =
+        DeleteRegistration(registration_id, kScope.GetOrigin());
+    ASSERT_EQ(result.status, DatabaseStatus::kOk);
+  }
+
+  // Make sure all tasks are ran.
+  // TODO(bashi): Don't rely on RunAllTasksUntilIdle()?
+  content::RunAllTasksUntilIdle();
+
+  // Resources shouldn't be purged because there is an active reference.
+  {
+    std::string read_resource_data1 =
+        ReadResource(resource_id1, resource_data1.size());
+    ASSERT_EQ(read_resource_data1, resource_data1);
+    std::string read_resource_data2 =
+        ReadResource(resource_id2, resource_data2.size());
+    ASSERT_EQ(read_resource_data2, resource_data2);
+  }
+
+  // Drop the second reference.
+  reference2.reset();
+  content::RunAllTasksUntilIdle();
+
+  // Resources should have been purged.
+  {
+    std::string read_resource_data1 =
+        ReadResource(resource_id1, resource_data1.size());
+    ASSERT_EQ(read_resource_data1, "");
+    std::string read_resource_data2 =
+        ReadResource(resource_id2, resource_data2.size());
+    ASSERT_EQ(read_resource_data2, "");
   }
 }
 

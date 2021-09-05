@@ -8,10 +8,13 @@
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
+#include "chrome/common/channel_info.h"
 #include "components/signin/public/identity_manager/access_token_info.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
+#include "components/version_info/channel.h"
 #include "content/public/browser/storage_partition.h"
 #include "google_apis/gaia/gaia_urls.h"
+#include "google_apis/google_api_keys.h"
 #include "services/network/public/cpp/simple_url_loader.h"
 
 #if defined(OS_ANDROID)
@@ -55,6 +58,44 @@ EndpointFetcher::EndpointFetcher(
           IdentityManagerFactory::GetForProfile(profile)) {}
 
 EndpointFetcher::EndpointFetcher(
+    Profile* const profile,
+    const GURL& url,
+    const std::string& http_method,
+    const std::string& content_type,
+    int64_t timeout_ms,
+    const std::string& post_data,
+    const net::NetworkTrafficAnnotationTag& annotation_tag)
+    : auth_type_(CHROME_API_KEY),
+      url_(url),
+      http_method_(http_method),
+      content_type_(content_type),
+      timeout_ms_(timeout_ms),
+      post_data_(post_data),
+      annotation_tag_(annotation_tag),
+      url_loader_factory_(
+          content::BrowserContext::GetDefaultStoragePartition(profile)
+              ->GetURLLoaderFactoryForBrowserProcess()),
+      identity_manager_(nullptr),
+      sanitize_response_(true) {}
+
+EndpointFetcher::EndpointFetcher(
+    Profile* const profile,
+    const GURL& url,
+    const net::NetworkTrafficAnnotationTag& annotation_tag)
+    : auth_type_(NO_AUTH),
+      url_(url),
+      http_method_("GET"),
+      content_type_(std::string()),
+      timeout_ms_(0),
+      post_data_(std::string()),
+      annotation_tag_(annotation_tag),
+      url_loader_factory_(
+          content::BrowserContext::GetDefaultStoragePartition(profile)
+              ->GetURLLoaderFactoryForBrowserProcess()),
+      identity_manager_(nullptr),
+      sanitize_response_(false) {}
+
+EndpointFetcher::EndpointFetcher(
     const std::string& oauth_consumer_name,
     const GURL& url,
     const std::string& http_method,
@@ -65,7 +106,8 @@ EndpointFetcher::EndpointFetcher(
     const net::NetworkTrafficAnnotationTag& annotation_tag,
     const scoped_refptr<network::SharedURLLoaderFactory>& url_loader_factory,
     signin::IdentityManager* const identity_manager)
-    : oauth_consumer_name_(oauth_consumer_name),
+    : auth_type_(OAUTH),
+      oauth_consumer_name_(oauth_consumer_name),
       url_(url),
       http_method_(http_method),
       content_type_(content_type),
@@ -73,7 +115,8 @@ EndpointFetcher::EndpointFetcher(
       post_data_(post_data),
       annotation_tag_(annotation_tag),
       url_loader_factory_(url_loader_factory),
-      identity_manager_(identity_manager) {
+      identity_manager_(identity_manager),
+      sanitize_response_(true) {
   for (auto scope : scopes) {
     oauth_scopes_.insert(scope);
   }
@@ -87,8 +130,8 @@ void EndpointFetcher::Fetch(EndpointFetcherCallback endpoint_fetcher_callback) {
       std::move(endpoint_fetcher_callback));
   DCHECK(!access_token_fetcher_);
   DCHECK(!simple_url_loader_);
-  // TODO(crbug.com/997018) Make access_token_fetcher_ local variable passed to
-  // callback
+  // TODO(crbug.com/997018) Make access_token_fetcher_ local variable passed
+  // to callback
   access_token_fetcher_ =
       std::make_unique<signin::PrimaryAccountAccessTokenFetcher>(
           oauth_consumer_name_, identity_manager_, oauth_scopes_,
@@ -108,7 +151,13 @@ void EndpointFetcher::OnAuthTokenFetched(
     std::move(endpoint_fetcher_callback).Run(std::move(response));
     return;
   }
+  PerformRequest(std::move(endpoint_fetcher_callback),
+                 access_token_info.token.c_str());
+}
 
+void EndpointFetcher::PerformRequest(
+    EndpointFetcherCallback endpoint_fetcher_callback,
+    const char* key) {
   auto resource_request = std::make_unique<network::ResourceRequest>();
   resource_request->method = http_method_;
   resource_request->url = url_;
@@ -116,12 +165,26 @@ void EndpointFetcher::OnAuthTokenFetched(
   if (base::EqualsCaseInsensitiveASCII(http_method_, "POST")) {
     resource_request->headers.SetHeader(kContentTypeKey, content_type_);
   }
-  resource_request->headers.SetHeader(
-      kDeveloperKey, GaiaUrls::GetInstance()->oauth2_chrome_client_id());
-  resource_request->headers.SetHeader(
-      net::HttpRequestHeaders::kAuthorization,
-      base::StringPrintf("Bearer %s", access_token_info.token.c_str()));
-
+  switch (auth_type_) {
+    case OAUTH:
+      resource_request->headers.SetHeader(
+          kDeveloperKey, GaiaUrls::GetInstance()->oauth2_chrome_client_id());
+      resource_request->headers.SetHeader(
+          net::HttpRequestHeaders::kAuthorization,
+          base::StringPrintf("Bearer %s", key));
+      break;
+    case CHROME_API_KEY: {
+      bool is_stable_channel =
+          chrome::GetChannel() == version_info::Channel::STABLE;
+      std::string api_key = is_stable_channel
+                                ? google_apis::GetAPIKey()
+                                : google_apis::GetNonStableAPIKey();
+      resource_request->headers.SetHeader("x-goog-api-key", api_key);
+      break;
+    }
+    default:
+      break;
+  }
   // TODO(crbug.com/997018) Make simple_url_loader_ local variable passed to
   // callback
   simple_url_loader_ = network::SimpleURLLoader::Create(
@@ -134,7 +197,6 @@ void EndpointFetcher::OnAuthTokenFetched(
                                       network::SimpleURLLoader::RETRY_ON_5XX);
   simple_url_loader_->SetTimeoutDuration(
       base::TimeDelta::FromMilliseconds(timeout_ms_));
-
   network::SimpleURLLoader::BodyAsStringCallback body_as_string_callback =
       base::BindOnce(&EndpointFetcher::OnResponseFetched,
                      weak_ptr_factory_.GetWeakPtr(),
@@ -148,10 +210,37 @@ void EndpointFetcher::OnResponseFetched(
     EndpointFetcherCallback endpoint_fetcher_callback,
     std::unique_ptr<std::string> response_body) {
   simple_url_loader_.reset();
+  if (response_body) {
+    if (sanitize_response_) {
+      data_decoder::JsonSanitizer::Sanitize(
+          std::move(*response_body),
+          base::BindOnce(&EndpointFetcher::OnSanitizationResult,
+                         weak_ptr_factory_.GetWeakPtr(),
+                         std::move(endpoint_fetcher_callback)));
+    } else {
+      auto response = std::make_unique<EndpointResponse>();
+      response->response = *response_body;
+      std::move(endpoint_fetcher_callback).Run(std::move(response));
+    }
+  } else {
+    auto response = std::make_unique<EndpointResponse>();
+    // TODO(crbug.com/993393) Add more detailed error messaging
+    response->response = "There was a response error";
+    std::move(endpoint_fetcher_callback).Run(std::move(response));
+  }
+}
+
+void EndpointFetcher::OnSanitizationResult(
+    EndpointFetcherCallback endpoint_fetcher_callback,
+    data_decoder::JsonSanitizer::Result result) {
   auto response = std::make_unique<EndpointResponse>();
-  // TODO(crbug.com/993393) Add more detailed error messaging
-  response->response =
-      response_body ? std::move(*response_body) : "There was a response error";
+  if (result.value.has_value())
+    response->response = result.value.value();
+  else if (result.error.has_value())
+    response->response =
+        "There was a sanitization error: " + result.error.value();
+  else
+    response->response = "There was an unknown sanitization error";
   std::move(endpoint_fetcher_callback).Run(std::move(response));
 }
 
@@ -173,7 +262,10 @@ static void OnEndpointFetcherComplete(
 }
 }  // namespace
 
-static void JNI_EndpointFetcher_NativeFetch(
+// TODO(crbug.com/1077537) Create a KeyProvider so
+// we can have one centralized API.
+
+static void JNI_EndpointFetcher_NativeFetchOAuth(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& jprofile,
     const base::android::JavaParamRef<jstring>& joauth_consumer_name,
@@ -202,6 +294,49 @@ static void JNI_EndpointFetcher_NativeFetch(
                      // unique_ptr endpoint_fetcher is passed until the callback
                      // to ensure its lifetime across the request.
                      std::move(endpoint_fetcher)));
+}
+
+static void JNI_EndpointFetcher_NativeFetchChromeAPIKey(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& jprofile,
+    const base::android::JavaParamRef<jstring>& jurl,
+    const base::android::JavaParamRef<jstring>& jhttps_method,
+    const base::android::JavaParamRef<jstring>& jcontent_type,
+    const base::android::JavaParamRef<jstring>& jpost_data,
+    jlong jtimeout,
+    const base::android::JavaParamRef<jobject>& jcallback) {
+  auto endpoint_fetcher = std::make_unique<EndpointFetcher>(
+      ProfileAndroid::FromProfileAndroid(jprofile),
+      GURL(base::android::ConvertJavaStringToUTF8(env, jurl)),
+      base::android::ConvertJavaStringToUTF8(env, jhttps_method),
+      base::android::ConvertJavaStringToUTF8(env, jcontent_type), jtimeout,
+      base::android::ConvertJavaStringToUTF8(env, jpost_data),
+      NO_TRAFFIC_ANNOTATION_YET);
+  endpoint_fetcher->PerformRequest(
+      base::BindOnce(&OnEndpointFetcherComplete,
+                     base::android::ScopedJavaGlobalRef<jobject>(jcallback),
+                     // unique_ptr endpoint_fetcher is passed until the callback
+                     // to ensure its lifetime across the request.
+                     std::move(endpoint_fetcher)),
+      nullptr);
+}
+
+static void JNI_EndpointFetcher_NativeFetchWithNoAuth(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& jprofile,
+    const base::android::JavaParamRef<jstring>& jurl,
+    const base::android::JavaParamRef<jobject>& jcallback) {
+  auto endpoint_fetcher = std::make_unique<EndpointFetcher>(
+      ProfileAndroid::FromProfileAndroid(jprofile),
+      GURL(base::android::ConvertJavaStringToUTF8(env, jurl)),
+      NO_TRAFFIC_ANNOTATION_YET);
+  endpoint_fetcher->PerformRequest(
+      base::BindOnce(&OnEndpointFetcherComplete,
+                     base::android::ScopedJavaGlobalRef<jobject>(jcallback),
+                     // unique_ptr endpoint_fetcher is passed until the callback
+                     // to ensure its lifetime across the request.
+                     std::move(endpoint_fetcher)),
+      nullptr);
 }
 
 #endif  // defined(OS_ANDROID)

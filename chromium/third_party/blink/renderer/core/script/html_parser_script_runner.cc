@@ -523,7 +523,6 @@ void HTMLParserScriptRunner::RequestParsingBlockingScript(
   // Callers will attempt to run the m_parserBlockingScript if possible before
   // returning control to the parser.
   if (!ParserBlockingScript()->IsReady()) {
-    parser_blocking_script_->StartStreamingIfPossible();
     parser_blocking_script_->WatchForLoad(this);
   }
 }
@@ -532,12 +531,6 @@ void HTMLParserScriptRunner::RequestDeferredScript(
     ScriptLoader* script_loader) {
   PendingScript* pending_script =
       script_loader->TakePendingScript(ScriptSchedulingType::kDefer);
-  if (!pending_script)
-    return;
-
-  if (!pending_script->IsReady()) {
-    pending_script->StartStreamingIfPossible();
-  }
 
   DCHECK(!script_loader->IsForceDeferred());
   DCHECK(pending_script->IsExternalOrModule());
@@ -553,12 +546,6 @@ void HTMLParserScriptRunner::RequestForceDeferredScript(
     ScriptLoader* script_loader) {
   PendingScript* pending_script =
       script_loader->TakePendingScript(ScriptSchedulingType::kForceDefer);
-  if (!pending_script)
-    return;
-
-  if (!pending_script->IsReady()) {
-    pending_script->StartStreamingIfPossible();
-  }
 
   DCHECK(script_loader->IsForceDeferred());
 
@@ -699,7 +686,7 @@ void HTMLParserScriptRunner::RecordMetricsAtParseEnd() const {
   }
 }
 
-void HTMLParserScriptRunner::Trace(Visitor* visitor) {
+void HTMLParserScriptRunner::Trace(Visitor* visitor) const {
   visitor->Trace(document_);
   visitor->Trace(host_);
   visitor->Trace(parser_blocking_script_);

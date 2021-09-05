@@ -13,7 +13,7 @@ Design doc: https://docs.google.com/document/d/1MtdbUcWBDZyvmV0FOdsTWw_Jv16YtE6K
 
 import logging
 
-from blinkpy.w3c.common import WPT_REVISION_FOOTER
+from blinkpy.w3c.common import WPT_REVISION_FOOTER, WPT_GH_URL
 from blinkpy.w3c.gerrit import GerritError
 from blinkpy.w3c.wpt_github import GitHubError
 
@@ -65,8 +65,7 @@ class ExportNotifier(object):
             gerrit_sha = self.wpt_github.extract_metadata(
                 WPT_REVISION_FOOTER, pr.body)
             gerrit_dict[gerrit_id] = PRStatusInfo(
-                taskcluster_status['node_id'],
-                taskcluster_status['target_url'], gerrit_sha)
+                taskcluster_status['target_url'], pr.number, gerrit_sha)
 
         self.process_failing_prs(gerrit_dict)
         return False
@@ -126,10 +125,10 @@ class ExportNotifier(object):
             pr_status_info: PRStatusInfo object.
         """
         for message in reversed(messages):
-            existing_status = PRStatusInfo.from_gerrit_comment(
+            cl_gerrit_sha = PRStatusInfo.get_gerrit_sha_from_comment(
                 message['message'])
-            if existing_status:
-                return existing_status.node_id == pr_status_info.node_id
+            if cl_gerrit_sha:
+                return cl_gerrit_sha == pr_status_info.gerrit_sha
 
         return False
 
@@ -176,22 +175,17 @@ class ExportNotifier(object):
 
 
 class PRStatusInfo(object):
-    NODE_ID_TAG = 'Taskcluster Node ID: '
     LINK_TAG = 'Taskcluster Link: '
     CL_SHA_TAG = 'Gerrit CL SHA: '
     PATCHSET_TAG = 'Patchset Number: '
 
-    def __init__(self, node_id, link, gerrit_sha=None):
-        self._node_id = node_id
+    def __init__(self, link, pr_number, gerrit_sha=None):
         self._link = link
+        self.pr_number = pr_number
         if gerrit_sha:
             self._gerrit_sha = gerrit_sha
         else:
             self._gerrit_sha = 'Latest'
-
-    @property
-    def node_id(self):
-        return self._node_id
 
     @property
     def link(self):
@@ -202,37 +196,27 @@ class PRStatusInfo(object):
         return self._gerrit_sha
 
     @staticmethod
-    def from_gerrit_comment(comment):
-        tags = [
-            PRStatusInfo.NODE_ID_TAG, PRStatusInfo.LINK_TAG,
-            PRStatusInfo.CL_SHA_TAG
-        ]
-        values = ['', '', '']
-
+    def get_gerrit_sha_from_comment(comment):
         for line in comment.splitlines():
-            for index, tag in enumerate(tags):
-                if line.startswith(tag):
-                    values[index] = line[len(tag):]
+            if line.startswith(PRStatusInfo.CL_SHA_TAG):
+                return line[len(PRStatusInfo.CL_SHA_TAG):]
 
-        for val in values:
-            if not val:
-                return None
-
-        return PRStatusInfo(*values)
+        return None
 
     def to_gerrit_comment(self, patchset=None):
         status_line = (
-            'The exported PR for the current patch failed Taskcluster check(s) '
-            'on GitHub, which could indict cross-broswer failures on the '
-            'exportable changes. Please contact ecosystem-infra@ team for '
-            'more information.')
-        node_id_line = ('\n\n{}{}').format(PRStatusInfo.NODE_ID_TAG,
-                                           self.node_id)
-        link_line = ('\n{}{}').format(PRStatusInfo.LINK_TAG, self.link)
+            'The exported PR, {pr_url}, has failed Taskcluster check(s) '
+            'on GitHub, which could indicate cross-browser failures on the '
+            'exported changes. Please contact ecosystem-infra@chromium.org for '
+            'more information.').format(
+            pr_url='%spull/%d' % (WPT_GH_URL, self.pr_number)
+        )
+        link_line = ('\n\n{}{}').format(PRStatusInfo.LINK_TAG, self.link)
         sha_line = ('\n{}{}').format(PRStatusInfo.CL_SHA_TAG, self.gerrit_sha)
 
-        comment = status_line + node_id_line + link_line + sha_line
+        comment = status_line + link_line + sha_line
         if patchset is not None:
             comment += ('\n{}{}').format(PRStatusInfo.PATCHSET_TAG, patchset)
 
+        comment += '\n\nAny suggestions to improve this service are welcome; crbug.com/1027618.'
         return comment

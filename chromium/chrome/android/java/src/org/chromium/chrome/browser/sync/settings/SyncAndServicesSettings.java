@@ -53,6 +53,7 @@ import org.chromium.chrome.browser.settings.ChromeManagedPreferenceDelegate;
 import org.chromium.chrome.browser.settings.SettingsActivity;
 import org.chromium.chrome.browser.signin.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.UnifiedConsentServiceBridge;
+import org.chromium.chrome.browser.sync.AndroidSyncSettings;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
 import org.chromium.chrome.browser.sync.TrustedVaultClient;
 import org.chromium.chrome.browser.sync.settings.SyncSettingsUtils.SyncError;
@@ -67,7 +68,6 @@ import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.components.signin.metrics.SigninAccessPoint;
 import org.chromium.components.signin.metrics.SignoutReason;
-import org.chromium.components.sync.AndroidSyncSettings;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.ui.UiUtils;
 import org.chromium.ui.widget.ButtonCompat;
@@ -312,7 +312,9 @@ public class SyncAndServicesSettings extends PreferenceFragmentCompat
         mSigninPreference.registerForUpdates();
 
         if (!mIsFromSigninScreen
-                || IdentityServicesProvider.get().getIdentityManager().hasPrimaryAccount()) {
+                || IdentityServicesProvider.get()
+                           .getIdentityManager(Profile.getLastUsedRegularProfile())
+                           .hasPrimaryAccount()) {
             return;
         }
 
@@ -365,8 +367,7 @@ public class SyncAndServicesSettings extends PreferenceFragmentCompat
             PostTask.postTask(UiThreadTaskTraits.DEFAULT,
                     this::updateLeakDetectionAndSafeBrowsingReportingPreferences);
         } else if (PREF_PASSWORD_LEAK_DETECTION.equals(key)) {
-            mPrefServiceBridge.setBoolean(
-                    Pref.PASSWORD_MANAGER_LEAK_DETECTION_ENABLED, (boolean) newValue);
+            mPrefServiceBridge.setBoolean(Pref.PASSWORD_LEAK_DETECTION_ENABLED, (boolean) newValue);
         } else if (PREF_SAFE_BROWSING_SCOUT_REPORTING.equals(key)) {
             SafeBrowsingBridge.setSafeBrowsingExtendedReportingEnabled((boolean) newValue);
         } else if (PREF_NAVIGATION_ERROR.equals(key)) {
@@ -486,7 +487,7 @@ public class SyncAndServicesSettings extends PreferenceFragmentCompat
             AccountManagerFacadeProvider.getInstance().updateCredentials(
                     CoreAccountInfo.getAndroidAccountFrom(
                             IdentityServicesProvider.get()
-                                    .getIdentityManager()
+                                    .getIdentityManager(Profile.getLastUsedRegularProfile())
                                     .getPrimaryAccountInfo(ConsentLevel.SYNC)),
                     getActivity(), null);
             return;
@@ -503,15 +504,20 @@ public class SyncAndServicesSettings extends PreferenceFragmentCompat
 
         if (mCurrentSyncError == SyncError.OTHER_ERRORS) {
             final Account account = CoreAccountInfo.getAndroidAccountFrom(
-                    IdentityServicesProvider.get().getIdentityManager().getPrimaryAccountInfo(
-                            ConsentLevel.SYNC));
+                    IdentityServicesProvider.get()
+                            .getIdentityManager(Profile.getLastUsedRegularProfile())
+                            .getPrimaryAccountInfo(ConsentLevel.SYNC));
             // TODO(https://crbug.com/873116): Pass the correct reason for the signout.
-            IdentityServicesProvider.get().getSigninManager().signOut(
-                    SignoutReason.USER_CLICKED_SIGNOUT_SETTINGS,
-                    ()
-                            -> IdentityServicesProvider.get().getSigninManager().signIn(
-                                    SigninAccessPoint.SYNC_ERROR_CARD, account, null),
-                    false);
+            IdentityServicesProvider.get()
+                    .getSigninManager(Profile.getLastUsedRegularProfile())
+                    .signOut(SignoutReason.USER_CLICKED_SIGNOUT_SETTINGS,
+                            ()
+                                    -> IdentityServicesProvider.get()
+                                               .getSigninManager(
+                                                       Profile.getLastUsedRegularProfile())
+                                               .signIn(SigninAccessPoint.SYNC_ERROR_CARD, account,
+                                                       null),
+                            false);
             return;
         }
 
@@ -523,8 +529,9 @@ public class SyncAndServicesSettings extends PreferenceFragmentCompat
         if (mCurrentSyncError == SyncError.TRUSTED_VAULT_KEY_REQUIRED_FOR_EVERYTHING
                 || mCurrentSyncError == SyncError.TRUSTED_VAULT_KEY_REQUIRED_FOR_PASSWORDS) {
             CoreAccountInfo primaryAccountInfo =
-                    IdentityServicesProvider.get().getIdentityManager().getPrimaryAccountInfo(
-                            ConsentLevel.SYNC);
+                    IdentityServicesProvider.get()
+                            .getIdentityManager(Profile.getLastUsedRegularProfile())
+                            .getPrimaryAccountInfo(ConsentLevel.SYNC);
             if (primaryAccountInfo != null) {
                 SyncSettingsUtils.openTrustedVaultKeyRetrievalDialog(
                         this, primaryAccountInfo, REQUEST_CODE_TRUSTED_VAULT_KEY_RETRIEVAL);
@@ -571,7 +578,9 @@ public class SyncAndServicesSettings extends PreferenceFragmentCompat
             closeDialogIfOpen(FRAGMENT_ENTER_PASSPHRASE);
         }
 
-        if (!IdentityServicesProvider.get().getIdentityManager().hasPrimaryAccount()) {
+        if (!IdentityServicesProvider.get()
+                        .getIdentityManager(Profile.getLastUsedRegularProfile())
+                        .hasPrimaryAccount()) {
             getPreferenceScreen().removePreference(mManageYourGoogleAccount);
             getPreferenceScreen().removePreference(mSyncCategory);
             return;
@@ -621,7 +630,7 @@ public class SyncAndServicesSettings extends PreferenceFragmentCompat
 
         boolean has_token_for_leak_check = PasswordUIView.hasAccountForLeakCheckRequest();
         boolean leak_detection_enabled =
-                mPrefServiceBridge.getBoolean(Pref.PASSWORD_MANAGER_LEAK_DETECTION_ENABLED);
+                mPrefServiceBridge.getBoolean(Pref.PASSWORD_LEAK_DETECTION_ENABLED);
         boolean toggle_enabled = safe_browsing_enabled && has_token_for_leak_check;
 
         mPasswordLeakDetection.setEnabled(toggle_enabled);
@@ -651,8 +660,7 @@ public class SyncAndServicesSettings extends PreferenceFragmentCompat
                 return mPrefServiceBridge.isManagedPreference(Pref.SAFE_BROWSING_ENABLED);
             }
             if (PREF_PASSWORD_LEAK_DETECTION.equals(key)) {
-                return mPrefServiceBridge.isManagedPreference(
-                        Pref.PASSWORD_MANAGER_LEAK_DETECTION_ENABLED);
+                return mPrefServiceBridge.isManagedPreference(Pref.PASSWORD_LEAK_DETECTION_ENABLED);
             }
             if (PREF_USAGE_AND_CRASH_REPORTING.equals(key)) {
                 return PrivacyPreferencesManager.getInstance().isMetricsReportingManaged();
@@ -691,8 +699,9 @@ public class SyncAndServicesSettings extends PreferenceFragmentCompat
 
     private void cancelSync() {
         RecordUserAction.record("Signin_Signin_CancelAdvancedSyncSettings");
-        IdentityServicesProvider.get().getSigninManager().signOut(
-                SignoutReason.USER_CLICKED_SIGNOUT_SETTINGS);
+        IdentityServicesProvider.get()
+                .getSigninManager(Profile.getLastUsedRegularProfile())
+                .signOut(SignoutReason.USER_CLICKED_SIGNOUT_SETTINGS);
         getActivity().finish();
     }
 

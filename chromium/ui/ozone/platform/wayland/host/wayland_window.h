@@ -17,6 +17,7 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/ozone/platform/wayland/common/wayland_object.h"
+#include "ui/ozone/platform/wayland/host/wayland_surface.h"
 #include "ui/platform_window/platform_window.h"
 #include "ui/platform_window/platform_window_delegate.h"
 #include "ui/platform_window/platform_window_init_properties.h"
@@ -36,7 +37,7 @@ class WaylandWindow : public PlatformWindow, public PlatformEventDispatcher {
   ~WaylandWindow() override;
 
   // A factory method that can create any of the derived types of WaylandWindow
-  // (WaylandSurface, WaylandPopup and WaylandSubsurface).
+  // (WaylandToplevelWindow, WaylandPopup and WaylandSubsurface).
   static std::unique_ptr<WaylandWindow> Create(
       PlatformWindowDelegate* delegate,
       WaylandConnection* connection,
@@ -53,7 +54,8 @@ class WaylandWindow : public PlatformWindow, public PlatformEventDispatcher {
   // to do so (this is not needed upon window initialization).
   void UpdateBufferScale(bool update_bounds);
 
-  wl_surface* surface() const { return surface_.get(); }
+  WaylandSurface* wayland_surface() { return &wayland_surface_; }
+  wl_surface* surface() const { return wayland_surface_.surface(); }
 
   void set_parent_window(WaylandWindow* parent_window) {
     parent_window_ = parent_window;
@@ -80,7 +82,7 @@ class WaylandWindow : public PlatformWindow, public PlatformEventDispatcher {
   void set_child_window(WaylandWindow* window) { child_window_ = window; }
   WaylandWindow* child_window() const { return child_window_; }
 
-  int32_t buffer_scale() const { return buffer_scale_; }
+  int32_t buffer_scale() const { return wayland_surface_.buffer_scale(); }
   int32_t ui_scale() const { return ui_scale_; }
 
   const base::flat_set<uint32_t>& entered_outputs_ids() const {
@@ -144,11 +146,16 @@ class WaylandWindow : public PlatformWindow, public PlatformEventDispatcher {
                            std::unique_ptr<OSExchangeData> data,
                            int operation);
   virtual int OnDragMotion(const gfx::PointF& point,
-                           uint32_t time,
                            int operation);
   virtual void OnDragDrop(std::unique_ptr<OSExchangeData> data);
   virtual void OnDragLeave();
   virtual void OnDragSessionClose(uint32_t dnd_action);
+
+  // Returns a root parent window within the same hierarchy.
+  WaylandWindow* GetRootParentWindow();
+
+  // Returns a top most child window within the same hierarchy.
+  WaylandWindow* GetTopMostChildWindow();
 
  protected:
   WaylandWindow(PlatformWindowDelegate* delegate,
@@ -174,9 +181,6 @@ class WaylandWindow : public PlatformWindow, public PlatformEventDispatcher {
 
   // Initializes the WaylandWindow with supplied properties.
   bool Initialize(PlatformWindowInitProperties properties);
-
-  // Returns a root parent window.
-  WaylandWindow* GetRootParentWindow();
 
   // Install a surface listener and start getting wl_output enter/leave events.
   void AddSurfaceListener();
@@ -212,7 +216,7 @@ class WaylandWindow : public PlatformWindow, public PlatformEventDispatcher {
   WaylandWindow* parent_window_ = nullptr;
   WaylandWindow* child_window_ = nullptr;
 
-  wl::Object<wl_surface> surface_;
+  WaylandSurface wayland_surface_;
 
   // The current cursor bitmap (immutable).
   scoped_refptr<BitmapCursorOzone> bitmap_;
@@ -225,9 +229,6 @@ class WaylandWindow : public PlatformWindow, public PlatformEventDispatcher {
   bool has_pointer_focus_ = false;
   bool has_keyboard_focus_ = false;
   bool has_touch_focus_ = false;
-  // Wayland's scale factor for the output that this window currently belongs
-  // to.
-  int32_t buffer_scale_ = 1;
   // The UI scale may be forced through the command line, which means that it
   // replaces the default value that is equal to the natural device scale.
   // We need it to place and size the menus properly.

@@ -10,6 +10,10 @@
 
 namespace mojolpm {
 
+const uint32_t kPipeElementMaxSize = 0x1000u;
+const uint32_t kPipeCapacityMaxSize = 0x100000u;
+const uint32_t kPipeActionMaxSize = 0x100000u;
+
 Context::Context() : message_(0, 0, 0, 0, nullptr) {}
 
 Context::~Context() = default;
@@ -50,6 +54,13 @@ void Context::PostNextAction() {
     task_runner_->PostTask(FROM_HERE, base::BindOnce(&Context::NextAction,
                                                      base::Unretained(this)));
   }
+}
+
+int Context::NextResponseIndex(TypeId type_id) {
+  if (testcase_) {
+    return testcase_->NextResponseIndex(type_id);
+  }
+  return 0;
 }
 
 Context* g_context = nullptr;
@@ -209,8 +220,10 @@ bool FromProto(const ::mojolpm::DataPipeConsumerHandle& input,
 
     options.struct_size = sizeof(MojoCreateDataPipeOptions);
     options.flags = input.new_().flags();
-    options.element_num_bytes = input.new_().element_num_bytes();
-    options.capacity_num_bytes = input.new_().capacity_num_bytes();
+    options.element_num_bytes =
+        std::min(input.new_().element_num_bytes(), kPipeElementMaxSize);
+    options.capacity_num_bytes =
+        std::min(input.new_().capacity_num_bytes(), kPipeCapacityMaxSize);
 
     if (MOJO_RESULT_OK ==
         mojo::CreateDataPipe(&options, &producer, &consumer)) {
@@ -246,8 +259,10 @@ bool FromProto(const ::mojolpm::DataPipeProducerHandle& input,
 
     options.struct_size = sizeof(MojoCreateDataPipeOptions);
     options.flags = input.new_().flags();
-    options.element_num_bytes = input.new_().element_num_bytes();
-    options.capacity_num_bytes = input.new_().capacity_num_bytes();
+    options.element_num_bytes =
+        std::min(input.new_().element_num_bytes(), kPipeElementMaxSize);
+    options.capacity_num_bytes =
+        std::min(input.new_().capacity_num_bytes(), kPipeCapacityMaxSize);
 
     if (MOJO_RESULT_OK ==
         mojo::CreateDataPipe(&options, &producer, &consumer)) {
@@ -310,8 +325,10 @@ void HandleDataPipeRead(const ::mojolpm::DataPipeRead& input) {
 
     options.struct_size = sizeof(MojoCreateDataPipeOptions);
     options.flags = input.handle().new_().flags();
-    options.element_num_bytes = input.handle().new_().element_num_bytes();
-    options.capacity_num_bytes = input.handle().new_().capacity_num_bytes();
+    options.element_num_bytes = std::min(
+        input.handle().new_().element_num_bytes(), kPipeElementMaxSize);
+    options.capacity_num_bytes = std::min(
+        input.handle().new_().capacity_num_bytes(), kPipeCapacityMaxSize);
 
     if (MOJO_RESULT_OK ==
         mojo::CreateDataPipe(&options, &producer, &consumer)) {
@@ -323,7 +340,10 @@ void HandleDataPipeRead(const ::mojolpm::DataPipeRead& input) {
   }
 
   if (consumer_ptr) {
-    uint32_t size = input.size();
+    unsigned int size = input.size();
+    if (size > kPipeActionMaxSize) {
+      size = kPipeActionMaxSize;
+    }
     std::vector<char> data(size);
     consumer_ptr->get().ReadData(data.data(), &size, 0);
   }
@@ -344,8 +364,10 @@ void HandleDataPipeWrite(const ::mojolpm::DataPipeWrite& input) {
 
     options.struct_size = sizeof(MojoCreateDataPipeOptions);
     options.flags = input.handle().new_().flags();
-    options.element_num_bytes = input.handle().new_().element_num_bytes();
-    options.capacity_num_bytes = input.handle().new_().capacity_num_bytes();
+    options.element_num_bytes = std::min(
+        input.handle().new_().element_num_bytes(), kPipeElementMaxSize);
+    options.capacity_num_bytes = std::min(
+        input.handle().new_().capacity_num_bytes(), kPipeCapacityMaxSize);
 
     if (MOJO_RESULT_OK ==
         mojo::CreateDataPipe(&options, &producer, &consumer)) {
@@ -357,7 +379,10 @@ void HandleDataPipeWrite(const ::mojolpm::DataPipeWrite& input) {
   }
 
   if (producer_ptr) {
-    uint32_t size = static_cast<uint32_t>(input.data().size());
+    unsigned int size = input.data().size();
+    if (size > kPipeActionMaxSize) {
+      size = kPipeActionMaxSize;
+    }
     producer_ptr->get().WriteData(input.data().data(), &size, 0);
   }
 }

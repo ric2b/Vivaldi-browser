@@ -15,6 +15,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_piece.h"
+#include "base/trace_event/trace_event.h"
 #include "components/sync/base/unique_position.h"
 #include "components/sync/model/conflict_resolution.h"
 #include "components/sync/protocol/unique_position.pb.h"
@@ -153,6 +154,8 @@ void NoteRemoteUpdatesHandler::Process(
     const syncer::UpdateResponseDataList& updates,
     bool got_new_encryption_requirements) {
   note_tracker_->CheckAllNodesTracked(notes_model_);
+  TRACE_EVENT0("sync", "NoteRemoteUpdatesHandler::Process");
+
   // If new encryption requirements come from the server, the entities that are
   // in |updates| will be recorded here so they can be ignored during the
   // re-encryption phase at the end.

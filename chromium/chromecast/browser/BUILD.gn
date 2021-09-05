@@ -177,6 +177,7 @@ cast_source_set("browser") {
     "//chromecast/media:libcast_media",
     "//chromecast/media/base:media_codec_support",
     "//chromecast/media/base:video_plane_controller",
+    "//chromecast/media/cdm:cdm_origin_provider",
     "//chromecast/media/service",
     "//chromecast/media/service/mojom",
     "//chromecast/net",
@@ -186,7 +187,7 @@ cast_source_set("browser") {
     "//components/download/public/common:public",
     "//components/media_control/browser",
     "//components/metrics",
-    "//components/metrics:gpu",
+    "//components/metrics:content",
     "//components/metrics:net",
     "//components/variations/net",
 
@@ -208,6 +209,7 @@ cast_source_set("browser") {
     "//gpu",
     "//ipc",
     "//media",
+    "//media/mojo/mojom:remoting",
     "//media/mojo/services",
     "//net",
     "//services/media_session/public/mojom",
@@ -589,6 +591,14 @@ cast_source_set("unittests") {
       "//ui/events:test_support",
     ]
   }
+
+  if (is_linux && use_ozone) {
+    sources += [ "webview/webview_window_manager_unittest.cc" ]
+    deps += [
+      "//chromecast/graphics",
+      "//components/exo",
+    ]
+  }
 }
 
 if (is_android) {
@@ -608,6 +618,22 @@ if (is_android) {
   java_cpp_enum("java_enums") {
     sources = [ "cast_content_window.h" ]
   }
+}
+
+# Could be used in the internal build if the internal implementation won't be
+# included, for example, some unit tests.
+cast_source_set("simple_browser") {
+  sources = [
+    "cast_browser_main_parts_simple.cc",
+    "cast_content_browser_client_simple.cc",
+    "pref_service_helper_simple.cc",
+  ]
+
+  deps = [
+    ":browser",
+    ":prefs",
+    "//chromecast/base:default_create_sys_info",
+  ]
 }
 
 cast_source_set("web_contents_provider") {

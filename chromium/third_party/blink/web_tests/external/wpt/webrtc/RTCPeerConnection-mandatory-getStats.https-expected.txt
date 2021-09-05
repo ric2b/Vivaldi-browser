@@ -1,5 +1,5 @@
 This is a testharness.js-based test.
-Found 76 tests; 51 PASS, 25 FAIL, 0 TIMEOUT, 0 NOTRUN.
+Found 76 tests; 52 PASS, 24 FAIL, 0 TIMEOUT, 0 NOTRUN.
 PASS getStats succeeds
 PASS RTCRtpStreamStats's ssrc
 PASS RTCRtpStreamStats's kind
@@ -26,7 +26,7 @@ FAIL RTCRemoteOutboundRtpStreamStats's remoteTimestamp assert_true: Is remoteTim
 PASS RTCPeerConnectionStats's dataChannelsOpened
 PASS RTCPeerConnectionStats's dataChannelsClosed
 PASS RTCDataChannelStats's protocol
-FAIL RTCDataChannelStats's dataChannelIdentifier assert_true: Is dataChannelIdentifier present expected true got false
+PASS RTCDataChannelStats's dataChannelIdentifier
 PASS RTCDataChannelStats's state
 PASS RTCDataChannelStats's messagesSent
 PASS RTCDataChannelStats's bytesSent

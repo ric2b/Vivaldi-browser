@@ -491,10 +491,6 @@ void PipelineIntegrationTestBase::CreateDemuxer(
 #endif
 }
 
-namespace {
-void Dummy_TranscribeAudio(scoped_refptr<media::AudioBuffer> buffer) {}
-}  // namespace
-
 std::unique_ptr<Renderer> PipelineIntegrationTestBase::CreateRenderer(
     base::Optional<RendererFactoryType> factory_type) {
   if (create_renderer_cb_)
@@ -562,8 +558,7 @@ std::unique_ptr<Renderer> PipelineIntegrationTestBase::CreateDefaultRenderer(
                  task_environment_.GetMainThreadTaskRunner(),
                  &media_log_,
                  prepend_audio_decoders_cb_),
-      &media_log_,
-      BindToCurrentLoop(base::BindRepeating(&Dummy_TranscribeAudio))));
+      &media_log_, nullptr));
   if (hashing_enabled_) {
     if (clockless_playback_)
       clockless_audio_sink_->StartAudioHashForTesting();

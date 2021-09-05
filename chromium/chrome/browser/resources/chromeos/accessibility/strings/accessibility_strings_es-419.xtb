@@ -112,6 +112,7 @@
 <translation id="1771761307086386028">Desplazar hacia la derecha</translation>
 <translation id="1781173782405573156">Tecla de acceso rápido</translation>
 <translation id="1787176709638001873">Texto de edición de contraseña</translation>
+<translation id="180203835522132923">Tecla de búsqueda + O y, luego, W</translation>
 <translation id="1810107444790159527">Cuadro de lista</translation>
 <translation id="1812527064848182527">horizontal</translation>
 <translation id="1829244130665387512">Buscar en la página</translation>
@@ -194,7 +195,7 @@
 <translation id="2523609930580546572">Instructivo de ChromeVox</translation>
 <translation id="2525706221823668172">Combinaciones de teclas para Chromebook</translation>
 <translation id="2553108862507765288">grammatical mistake</translation>
-<translation id="257674075312929031">Grupo</translation>
+<translation id="257674075312929031">Agrupar</translation>
 <translation id="2582407057977008361">Lateral</translation>
 <translation id="2592212930811759050">Presiona dos veces para comenzar a editar</translation>
 <translation id="2598495320872286378">Error gramatical</translation>
@@ -256,6 +257,7 @@
 <translation id="297825089465017871">Deslizar dos dedos hacia la izquierda</translation>
 <translation id="2998131015536248178">Carácter anterior</translation>
 <translation id="2999559350546931576">Disminuir el tono</translation>
+<translation id="3009352964623081324">Tecla de búsqueda + O y, luego, S. Se usa para instalar, administrar y personalizar voces.</translation>
 <translation id="3014130421870723208">@8 puntos de ed</translation>
 <translation id="3030432017085518523">Botón de selección del elemento de menú</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{apóstrofo}other{# apóstrofos}}</translation>
@@ -454,6 +456,7 @@
 <translation id="4505167975768625962">Contenido agregado</translation>
 <translation id="4511186779140817916">Almendra pálido</translation>
 <translation id="451510441928265982">No hay encabezados de nivel 2 anteriores</translation>
+<translation id="4515799157838123044">Sombrear el contenido del fondo</translation>
 <translation id="4517854969512651305">Incrementar el valor</translation>
 <translation id="4532633738839459153">{COUNT,plural, =1{barra}other{# barras}}</translation>
 <translation id="4537277403911487429">Próximo elemento similar</translation>
@@ -705,6 +708,7 @@
 <translation id="6628427060004938651">Parte</translation>
 <translation id="6637586476836377253">rgstr</translation>
 <translation id="6657128831881431364">Barra de progreso</translation>
+<translation id="6660819301598582123">El veloz murciélago hindú comía feliz cardillo y kiwi.</translation>
 <translation id="667999046851023355">Documento</translation>
 <translation id="6688209025607531203">Una alerta no modal</translation>
 <translation id="6689672606256159458">Salmón oscuro</translation>
@@ -740,7 +744,6 @@
 <translation id="6951482098621102657">No hay encabezados de nivel 5 siguientes</translation>
 <translation id="6955705049214951590">Rosa brumoso</translation>
 <translation id="696356426651109308">Ir al comienzo</translation>
-<translation id="699159175332639490">Buscar + O + W</translation>
 <translation id="6994042831499278539">Referencia de glosario</translation>
 <translation id="6996566555547746822">Siguiente cuadro combinado</translation>
 <translation id="6997224546856374593">Cuando se lee texto en mayúscula:</translation>
@@ -809,6 +812,7 @@
 <translation id="743783356331413498">Ejemplo</translation>
 <translation id="7439060726180460871">Directorio</translation>
 <translation id="744163271241493234">pwded</translation>
+<translation id="7484805699335881122">Cambiar el tono cuando se leen tipos de elementos y texto entrecomillado, eliminado, en negrita, entre paréntesis o en mayúsculas.</translation>
 <translation id="7491962110804786152">tab</translation>
 <translation id="7505149250476994901">Decir "mayúscula" antes de la letra</translation>
 <translation id="7518543783849163354">Para silenciar ChromeVox de forma temporal, presiona la tecla Ctrl.</translation>

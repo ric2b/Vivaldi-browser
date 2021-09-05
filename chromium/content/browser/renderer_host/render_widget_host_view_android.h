@@ -248,9 +248,9 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   TextSuggestionHostAndroid* text_suggestion_host() const {
     return text_suggestion_host_;
   }
-  void set_gesture_listener_manager(GestureListenerManager* manager) {
-    gesture_listener_manager_ = manager;
-  }
+  void SetGestureListenerManager(GestureListenerManager* manager);
+
+  void UpdateReportAllRootScrolls();
 
   base::WeakPtr<RenderWidgetHostViewAndroid> GetWeakPtrAndroid();
 
@@ -317,6 +317,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void OnRenderFrameMetadataChangedBeforeActivation(
       const cc::RenderFrameMetadata& metadata) override;
   void OnRenderFrameMetadataChangedAfterActivation() override;
+  void OnRootScrollOffsetChanged(
+      const gfx::Vector2dF& root_scroll_offset) override;
 
   void WasEvicted();
 
@@ -370,6 +372,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   friend class RenderWidgetHostViewAndroidTest;
   FRIEND_TEST_ALL_PREFIXES(SitePerProcessBrowserTest,
                            GestureManagerListensToChildFrames);
+
+  bool ShouldReportAllRootScrolls();
 
   MouseWheelPhaseHandler* GetMouseWheelPhaseHandler() override;
 

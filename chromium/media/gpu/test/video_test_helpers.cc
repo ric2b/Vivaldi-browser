@@ -6,29 +6,100 @@
 
 #include <limits>
 
+#include "base/logging.h"
+#include "base/memory/aligned_memory.h"
+#include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "base/sys_byteorder.h"
 #include "media/base/video_decoder_config.h"
 #include "media/base/video_frame_layout.h"
+#include "media/gpu/test/video.h"
 #include "media/video/h264_parser.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/libyuv/include/libyuv/planar_functions.h"
 
 namespace media {
 namespace test {
+namespace {
+constexpr uint16_t kIvfFileHeaderSize = 32;
+constexpr size_t kIvfFrameHeaderSize = 12;
+}  // namespace
 
-// The structure for IVF frame header. IVF is a video file format.
-// The helpful description is in https://wiki.multimedia.cx/index.php/IVF.
-struct EncodedDataHelper::IVFHeader {
-  uint32_t frame_size;
-  uint64_t timestamp;
-};
+IvfFileHeader GetIvfFileHeader(const base::span<const uint8_t>& data) {
+  LOG_ASSERT(data.size_bytes() == 32u);
+  IvfFileHeader file_header;
+  memcpy(&file_header, data.data(), sizeof(IvfFileHeader));
+  file_header.ByteSwap();
+  return file_header;
+}
 
-// The structure for IVF frame data and header.
-// The data to be read is |header.frame_size| bytes from |data|.
-struct EncodedDataHelper::IVFFrame {
-  const char* data;
-  IVFHeader header;
-};
+IvfFrameHeader GetIvfFrameHeader(const base::span<const uint8_t>& data) {
+  LOG_ASSERT(data.size_bytes() == 12u);
+  IvfFrameHeader frame_header{};
+  memcpy(&frame_header.frame_size, data.data(), 4);
+  memcpy(&frame_header.timestamp, &data[4], 8);
+  return frame_header;
+}
+
+IvfWriter::IvfWriter(base::FilePath output_filepath) {
+  output_file_ = base::File(
+      output_filepath, base::File::FLAG_CREATE_ALWAYS | base::File::FLAG_WRITE);
+  LOG_ASSERT(output_file_.IsValid());
+}
+
+bool IvfWriter::WriteFileHeader(VideoCodec codec,
+                                const gfx::Size& resolution,
+                                uint32_t frame_rate,
+                                uint32_t num_frames) {
+  char ivf_header[kIvfFileHeaderSize] = {};
+  // Bytes 0-3 of an IVF file header always contain the signature 'DKIF'.
+  strcpy(&ivf_header[0], "DKIF");
+  constexpr uint16_t kVersion = 0;
+  auto write16 = [&ivf_header](int i, uint16_t v) {
+    memcpy(&ivf_header[i], &v, sizeof(v));
+  };
+  auto write32 = [&ivf_header](int i, uint32_t v) {
+    memcpy(&ivf_header[i], &v, sizeof(v));
+  };
+
+  write16(4, kVersion);
+  write16(6, kIvfFileHeaderSize);
+  switch (codec) {
+    case kCodecVP8:
+      strcpy(&ivf_header[8], "VP80");
+      break;
+    case kCodecVP9:
+      strcpy(&ivf_header[8], "VP90");
+      break;
+    default:
+      LOG(ERROR) << "Unknown codec: " << GetCodecName(codec);
+      return false;
+  }
+
+  write16(12, resolution.width());
+  write16(14, resolution.height());
+  write32(16, frame_rate);
+  write32(20, 1);
+  write32(24, num_frames);
+  // Reserved.
+  write32(28, 0);
+  return output_file_.WriteAtCurrentPos(ivf_header, kIvfFileHeaderSize) ==
+         static_cast<int>(kIvfFileHeaderSize);
+}
+
+bool IvfWriter::WriteFrame(uint32_t data_size,
+                           uint64_t timestamp,
+                           const uint8_t* data) {
+  char ivf_frame_header[kIvfFrameHeaderSize] = {};
+  memcpy(&ivf_frame_header[0], &data_size, sizeof(data_size));
+  memcpy(&ivf_frame_header[4], &timestamp, sizeof(timestamp));
+  bool success =
+      output_file_.WriteAtCurrentPos(ivf_frame_header, kIvfFrameHeaderSize) ==
+          static_cast<int>(kIvfFrameHeaderSize) &&
+      output_file_.WriteAtCurrentPos(reinterpret_cast<const char*>(data),
+                                     data_size) == static_cast<int>(data_size);
+  return success;
+}
 
 EncodedDataHelper::EncodedDataHelper(const std::vector<uint8_t>& stream,
                                      VideoCodecProfile profile)
@@ -109,15 +180,20 @@ bool EncodedDataHelper::LookForSPS(size_t* skipped_fragments_count) {
 
 scoped_refptr<DecoderBuffer> EncodedDataHelper::GetNextFrame() {
   // Helpful description: http://wiki.multimedia.cx/index.php?title=IVF
-  constexpr size_t kIVFHeaderSize = 32;
   // Only IVF video files are supported. The first 4bytes of an IVF video file's
   // header should be "DKIF".
   if (next_pos_to_decode_ == 0) {
-    if ((data_.size() < kIVFHeaderSize) || strncmp(&data_[0], "DKIF", 4) != 0) {
+    if (data_.size() < kIvfFileHeaderSize) {
+      LOG(ERROR) << "data is too small";
+      return nullptr;
+    }
+    auto ivf_header = GetIvfFileHeader(base::span<const uint8_t>(
+        reinterpret_cast<const uint8_t*>(&data_[0]), kIvfFileHeaderSize));
+    if (strncmp(ivf_header.signature, "DKIF", 4) != 0) {
       LOG(ERROR) << "Unexpected data encountered while parsing IVF header";
       return nullptr;
     }
-    next_pos_to_decode_ = kIVFHeaderSize;  // Skip IVF header.
+    next_pos_to_decode_ = kIvfFileHeaderSize;  // Skip IVF header.
   }
 
   // Group IVF data whose timestamps are the same. Spatial layers in a
@@ -125,9 +201,9 @@ scoped_refptr<DecoderBuffer> EncodedDataHelper::GetNextFrame() {
   // timestamps of the IVF frame headers are the same. However, it is necessary
   // for VD(A) to feed the spatial layers by a single DecoderBuffer. So this
   // grouping is required.
-  std::vector<IVFFrame> ivf_frames;
+  std::vector<IvfFrame> ivf_frames;
   while (!ReachEndOfStream()) {
-    auto frame_header = GetNextIVFFrameHeader();
+    auto frame_header = GetNextIvfFrameHeader();
     if (!frame_header)
       return nullptr;
 
@@ -138,7 +214,7 @@ scoped_refptr<DecoderBuffer> EncodedDataHelper::GetNextFrame() {
       break;
     }
 
-    auto frame_data = ReadNextIVFFrame();
+    auto frame_data = ReadNextIvfFrame();
     if (!frame_data)
       return nullptr;
 
@@ -166,8 +242,8 @@ scoped_refptr<DecoderBuffer> EncodedDataHelper::GetNextFrame() {
   std::string data;
   std::vector<uint32_t> frame_sizes;
   frame_sizes.reserve(ivf_frames.size());
-  for (const IVFFrame& ivf : ivf_frames) {
-    data.append(ivf.data, ivf.header.frame_size);
+  for (const IvfFrame& ivf : ivf_frames) {
+    data.append(reinterpret_cast<char*>(ivf.data), ivf.header.frame_size);
     frame_sizes.push_back(ivf.header.frame_size);
   }
 
@@ -183,34 +259,25 @@ scoped_refptr<DecoderBuffer> EncodedDataHelper::GetNextFrame() {
                                  data.size(), side_data, side_data_size);
 }
 
-base::Optional<EncodedDataHelper::IVFHeader>
-EncodedDataHelper::GetNextIVFFrameHeader() const {
-  constexpr size_t kIVFFrameHeaderSize = 12;
-
+base::Optional<IvfFrameHeader> EncodedDataHelper::GetNextIvfFrameHeader()
+    const {
   const size_t pos = next_pos_to_decode_;
-
   // Read VP8/9 frame size from IVF header.
-  if (pos + kIVFFrameHeaderSize > data_.size()) {
+  if (pos + kIvfFrameHeaderSize > data_.size()) {
     LOG(ERROR) << "Unexpected data encountered while parsing IVF frame header";
     return base::nullopt;
   }
-
-  uint32_t frame_size = 0;
-  uint64_t timestamp = 0;
-  memcpy(&frame_size, &data_[pos], 4);
-  memcpy(&timestamp, &data_[pos + 4], 8);
-  return IVFHeader{frame_size, timestamp};
+  return GetIvfFrameHeader(base::span<const uint8_t>(
+      reinterpret_cast<const uint8_t*>(&data_[pos]), kIvfFrameHeaderSize));
 }
 
-base::Optional<EncodedDataHelper::IVFFrame>
-EncodedDataHelper::ReadNextIVFFrame() {
-  constexpr size_t kIVFFrameHeaderSize = 12;
-  auto frame_header = GetNextIVFFrameHeader();
+base::Optional<IvfFrame> EncodedDataHelper::ReadNextIvfFrame() {
+  auto frame_header = GetNextIvfFrameHeader();
   if (!frame_header)
     return base::nullopt;
 
   // Skip IVF frame header.
-  const size_t pos = next_pos_to_decode_ + kIVFFrameHeaderSize;
+  const size_t pos = next_pos_to_decode_ + kIvfFrameHeaderSize;
 
   // Make sure we are not reading out of bounds.
   if (pos + frame_header->frame_size > data_.size()) {
@@ -222,7 +289,7 @@ EncodedDataHelper::ReadNextIVFFrame() {
   // Update next_pos_to_decode_.
   next_pos_to_decode_ = pos + frame_header->frame_size;
 
-  return IVFFrame{&data_[pos], *frame_header};
+  return IvfFrame{*frame_header, reinterpret_cast<uint8_t*>(&data_[pos])};
 }
 
 // static
@@ -361,22 +428,99 @@ void AlignedDataHelper::CreateAlignedInputStream(
   off_t src_offset = 0;
   off_t dest_offset = 0;
   for (size_t frame = 0; frame < num_frames_; frame++) {
-    const char* src_ptr = reinterpret_cast<const char*>(&stream[src_offset]);
-
     for (size_t i = 0; i < num_planes; i++) {
       // Assert that each plane of frame starts at required byte boundary.
-      ASSERT_EQ(0u, dest_offset & (kPlatformBufferAlignment - 1))
+      ASSERT_TRUE(base::IsAligned(dest_offset, kPlatformBufferAlignment))
           << "Planes of frame should be mapped per platform requirements";
-      char* dst_ptr = &aligned_data_[dest_offset];
-      for (size_t j = 0; j < visible_plane_rows[i]; j++) {
-        memcpy(dst_ptr, src_ptr, visible_bpl[i]);
-        src_ptr += visible_bpl[i];
-        dst_ptr += static_cast<off_t>(coded_bpl[i]);
-      }
+      const uint8_t* src_ptr = &stream[src_offset];
+      uint8_t* dst_ptr =
+          reinterpret_cast<uint8_t*>(&aligned_data_[dest_offset]);
+      libyuv::CopyPlane(src_ptr, visible_bpl[i], dst_ptr, coded_bpl[i],
+                        visible_bpl[i], visible_plane_rows[i]);
       dest_offset += aligned_plane_size_[i];
+      src_offset +=
+          VideoFrame::PlaneSize(pixel_format_, i, visible_area_.size())
+              .GetArea();
     }
-    src_offset += static_cast<off_t>(frame_buffer_size);
   }
+}
+
+// static
+std::unique_ptr<RawDataHelper> RawDataHelper::Create(Video* video) {
+  size_t frame_size = 0;
+  VideoPixelFormat pixel_format = video->PixelFormat();
+  const size_t num_planes = VideoFrame::NumPlanes(pixel_format);
+  size_t strides[VideoFrame::kMaxPlanes] = {};
+  size_t plane_sizes[VideoFrame::kMaxPlanes] = {};
+  const gfx::Size& resolution = video->Resolution();
+  // Calculate size of frames and their planes.
+  for (size_t i = 0; i < num_planes; ++i) {
+    const size_t bytes_per_line =
+        VideoFrame::RowBytes(i, pixel_format, resolution.width());
+    const size_t plane_size =
+        bytes_per_line * VideoFrame::Rows(i, pixel_format, resolution.height());
+    strides[i] = bytes_per_line;
+    plane_sizes[i] = plane_size;
+    frame_size += plane_size;
+  }
+
+  // Verify whether calculated frame size is valid.
+  const size_t data_size = video->Data().size();
+  if (frame_size == 0 || data_size % frame_size != 0 ||
+      data_size / frame_size != video->NumFrames()) {
+    LOG(ERROR) << "Invalid frame_size=" << frame_size
+               << ", file size=" << data_size;
+    return nullptr;
+  }
+
+  std::vector<ColorPlaneLayout> planes(num_planes);
+  size_t offset = 0;
+  for (size_t i = 0; i < num_planes; ++i) {
+    planes[i].stride =
+        VideoFrame::RowBytes(i, pixel_format, resolution.width());
+    planes[i].offset = offset;
+    planes[i].size = plane_sizes[i];
+    offset += plane_sizes[i];
+  }
+  auto layout = VideoFrameLayout::CreateWithPlanes(pixel_format, resolution,
+                                                   std::move(planes));
+  if (!layout) {
+    LOG(ERROR) << "Failed to create VideoFrameLayout";
+    return nullptr;
+  }
+
+  return base::WrapUnique(new RawDataHelper(video, frame_size, *layout));
+}
+
+RawDataHelper::RawDataHelper(Video* video,
+                             size_t frame_size,
+                             const VideoFrameLayout& layout)
+    : video_(video), frame_size_(frame_size), layout_(layout) {}
+
+RawDataHelper::~RawDataHelper() = default;
+
+scoped_refptr<const VideoFrame> RawDataHelper::GetFrame(size_t index) {
+  if (index >= video_->NumFrames()) {
+    LOG(ERROR) << "index is too big. index=" << index
+               << ", num_frames=" << video_->NumFrames();
+    return nullptr;
+  }
+
+  size_t offset = frame_size_ * index;
+  uint8_t* frame_data[VideoFrame::kMaxPlanes] = {};
+  const size_t num_planes = VideoFrame::NumPlanes(video_->PixelFormat());
+  for (size_t i = 0; i < num_planes; ++i) {
+    frame_data[i] = reinterpret_cast<uint8_t*>(video_->Data().data()) + offset;
+    offset += layout_->planes()[i].size;
+  }
+  // TODO(crbug.com/1045825): Investigate use of MOJO_SHARED_BUFFER, similar to
+  // changes made in crrev.com/c/2050895.
+  scoped_refptr<const VideoFrame> video_frame =
+      VideoFrame::WrapExternalYuvDataWithLayout(
+          *layout_, gfx::Rect(video_->Resolution()), video_->Resolution(),
+          frame_data[0], frame_data[1], frame_data[2],
+          base::TimeTicks::Now().since_origin());
+  return video_frame;
 }
 
 }  // namespace test

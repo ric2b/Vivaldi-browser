@@ -12,7 +12,9 @@
 #include "base/bind_helpers.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/test/bind_test_util.h"
+#include "base/time/time.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/browser/web_applications/components/web_app_utils.h"
@@ -30,6 +32,12 @@
 #include "url/gurl.h"
 
 namespace web_app {
+
+namespace {
+
+const int kIconSize = 64;
+
+}  // namespace
 
 class WebAppDatabaseTest : public WebAppTest {
  public:
@@ -69,6 +77,43 @@ class WebAppDatabaseTest : public WebAppTest {
     return file_handlers;
   }
 
+  static std::vector<WebApplicationShortcutsMenuItemInfo> CreateShortcutInfos(
+      const std::string& base_url,
+      int suffix) {
+    std::vector<WebApplicationShortcutsMenuItemInfo> shortcut_infos;
+    for (unsigned int i = 0; i < 3; ++i) {
+      std::string suffix_str =
+          base::NumberToString(suffix) + base::NumberToString(i);
+      WebApplicationShortcutsMenuItemInfo shortcut_info;
+      shortcut_info.url = GURL(base_url + "/shortcut" + suffix_str);
+      shortcut_info.name = base::UTF8ToUTF16("shortcut" + suffix_str);
+      for (unsigned int j = 0; j < i; ++j) {
+        std::string icon_suffix_str = suffix_str + base::NumberToString(j);
+        WebApplicationShortcutsMenuItemInfo::Icon shortcut_icon;
+        shortcut_icon.url =
+            GURL(base_url + "/shortcuts/icon" + icon_suffix_str);
+        shortcut_icon.square_size_px = kIconSize * (i + j);
+        shortcut_info.shortcut_icon_infos.emplace_back(
+            std::move(shortcut_icon));
+      }
+      shortcut_infos.emplace_back(std::move(shortcut_info));
+    }
+    return shortcut_infos;
+  }
+
+  static std::vector<std::vector<SquareSizePx>>
+  CreateDownloadedShortcutsMenuIconsSizes() {
+    std::vector<std::vector<SquareSizePx>> results;
+    for (unsigned int i = 0; i < 3; ++i) {
+      std::vector<SquareSizePx> result;
+      for (unsigned int j = 0; j < i; ++j) {
+        result.emplace_back(kIconSize * (i + j));
+      }
+      results.emplace_back(std::move(result));
+    }
+    return results;
+  }
+
   static std::unique_ptr<WebApp> CreateWebApp(const std::string& base_url,
                                               int suffix) {
     const auto launch_url = base_url + base::NumberToString(suffix);
@@ -80,7 +125,6 @@ class WebAppDatabaseTest : public WebAppTest {
         base_url + "/scope" + base::NumberToString(suffix);
     const base::Optional<SkColor> theme_color = suffix;
     const base::Optional<SkColor> synced_theme_color = suffix ^ UINT_MAX;
-
     auto app = std::make_unique<WebApp>(app_id);
 
     // Generate all possible permutations of field values in a random way:
@@ -107,6 +151,15 @@ class WebAppDatabaseTest : public WebAppTest {
     app->SetUserDisplayMode((suffix & 1) ? DisplayMode::kBrowser
                                          : DisplayMode::kStandalone);
 
+    // 2*suffix time to make it different from install time
+    const base::Time last_launch_time =
+        base::Time::UnixEpoch() + 2 * base::TimeDelta::FromMilliseconds(suffix);
+    app->SetLastLaunchTime(last_launch_time);
+
+    const base::Time install_time =
+        base::Time::UnixEpoch() + base::TimeDelta::FromMilliseconds(suffix);
+    app->SetInstallTime(install_time);
+
     const DisplayMode display_modes[4] = {
         DisplayMode::kBrowser, DisplayMode::kMinimalUi,
         DisplayMode::kStandalone, DisplayMode::kFullscreen};
@@ -115,7 +168,8 @@ class WebAppDatabaseTest : public WebAppTest {
     WebApplicationIconInfo icon;
     icon.url = GURL(base_url + "/icon" + base::NumberToString(suffix));
     const SquareSizePx size = 256;
-    icon.square_size_px = size;
+    if (suffix % 2 == 0)
+      icon.square_size_px = size;
     app->SetIconInfos({std::move(icon)});
     app->SetDownloadedIconSizes({size});
 
@@ -130,6 +184,10 @@ class WebAppDatabaseTest : public WebAppTest {
     }
     app->SetAdditionalSearchTerms(std::move(additional_search_terms));
 
+    app->SetShortcutInfos(CreateShortcutInfos(base_url, suffix));
+    app->SetDownloadedShortcutsMenuIconsSizes(
+        CreateDownloadedShortcutsMenuIconsSizes());
+
     if (IsChromeOs()) {
       auto chromeos_data = base::make_optional<WebAppChromeOsData>();
       chromeos_data->show_in_launcher = suffix & 0b0001;
@@ -139,10 +197,12 @@ class WebAppDatabaseTest : public WebAppTest {
       app->SetWebAppChromeOsData(std::move(chromeos_data));
     }
 
-    WebApp::SyncData sync_data;
-    sync_data.name = "Sync" + name;
-    sync_data.theme_color = synced_theme_color;
-    app->SetSyncData(std::move(sync_data));
+    WebApp::SyncFallbackData sync_fallback_data;
+    sync_fallback_data.name = "Sync" + name;
+    sync_fallback_data.theme_color = synced_theme_color;
+    sync_fallback_data.scope = app->scope();
+    sync_fallback_data.icon_infos = app->icon_infos();
+    app->SetSyncFallbackData(std::move(sync_fallback_data));
 
     return app;
   }
@@ -332,10 +392,16 @@ TEST_F(WebAppDatabaseTest, WebAppWithoutOptionalFields) {
   EXPECT_TRUE(app->icon_infos().empty());
   EXPECT_TRUE(app->downloaded_icon_sizes().empty());
   EXPECT_FALSE(app->is_in_sync_install());
-  EXPECT_TRUE(app->sync_data().name.empty());
-  EXPECT_FALSE(app->sync_data().theme_color.has_value());
+  EXPECT_TRUE(app->sync_fallback_data().name.empty());
+  EXPECT_FALSE(app->sync_fallback_data().theme_color.has_value());
+  EXPECT_FALSE(app->sync_fallback_data().scope.is_valid());
+  EXPECT_TRUE(app->sync_fallback_data().icon_infos.empty());
   EXPECT_TRUE(app->file_handlers().empty());
   EXPECT_TRUE(app->additional_search_terms().empty());
+  EXPECT_TRUE(app->last_launch_time().is_null());
+  EXPECT_TRUE(app->install_time().is_null());
+  EXPECT_TRUE(app->shortcut_infos().empty());
+  EXPECT_TRUE(app->downloaded_shortcuts_menu_icons_sizes().empty());
   controller().RegisterApp(std::move(app));
 
   Registry registry = database_factory().ReadRegistry();
@@ -371,13 +437,19 @@ TEST_F(WebAppDatabaseTest, WebAppWithoutOptionalFields) {
   EXPECT_TRUE(app_copy->description().empty());
   EXPECT_TRUE(app_copy->scope().is_empty());
   EXPECT_FALSE(app_copy->theme_color().has_value());
+  EXPECT_TRUE(app_copy->last_launch_time().is_null());
+  EXPECT_TRUE(app_copy->install_time().is_null());
   EXPECT_TRUE(app_copy->icon_infos().empty());
   EXPECT_TRUE(app_copy->downloaded_icon_sizes().empty());
   EXPECT_FALSE(app_copy->is_in_sync_install());
-  EXPECT_TRUE(app_copy->sync_data().name.empty());
-  EXPECT_FALSE(app_copy->sync_data().theme_color.has_value());
+  EXPECT_TRUE(app_copy->sync_fallback_data().name.empty());
+  EXPECT_FALSE(app_copy->sync_fallback_data().theme_color.has_value());
+  EXPECT_FALSE(app_copy->sync_fallback_data().scope.is_valid());
+  EXPECT_TRUE(app_copy->sync_fallback_data().icon_infos.empty());
   EXPECT_TRUE(app_copy->file_handlers().empty());
   EXPECT_TRUE(app_copy->additional_search_terms().empty());
+  EXPECT_TRUE(app_copy->shortcut_infos().empty());
+  EXPECT_TRUE(app_copy->downloaded_shortcuts_menu_icons_sizes().empty());
 }
 
 TEST_F(WebAppDatabaseTest, WebAppWithManyIcons) {
@@ -396,7 +468,7 @@ TEST_F(WebAppDatabaseTest, WebAppWithManyIcons) {
     icon.url = GURL(base_url + "/icon" + base::NumberToString(num_icons));
     // Let size equals the icon's number squared.
     icon.square_size_px = i * i;
-    sizes.push_back(icon.square_size_px);
+    sizes.push_back(*icon.square_size_px);
     icons.push_back(std::move(icon));
   }
   app->SetIconInfos(std::move(icons));

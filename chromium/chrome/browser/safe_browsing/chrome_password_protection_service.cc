@@ -9,6 +9,8 @@
 
 #include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/metrics/user_metrics.h"
+#include "base/metrics/user_metrics_action.h"
 #include "base/rand_util.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -85,6 +87,8 @@
 #include "chrome/browser/safe_browsing/android/password_reuse_controller_android.h"
 #endif
 
+using base::RecordAction;
+using base::UserMetricsAction;
 using content::BrowserThread;
 using sync_pb::GaiaPasswordReuse;
 using sync_pb::UserEventSpecifics;
@@ -891,16 +895,22 @@ void ChromePasswordProtectionService::HandleUserActionOnModalWarning(
       GetNavigationIDFromPrefsByOrigin(profile_->GetPrefs(), origin);
 
   if (action == WarningAction::CHANGE_PASSWORD) {
+    RecordAction(UserMetricsAction(
+        "PasswordProtection.ModalWarning.ChangePasswordButtonClicked"));
     LogDialogMetricsOnChangePassword(web_contents, password_type, navigation_id,
                                      outcome, verdict_type, verdict_token);
     OpenChangePasswordUrl(web_contents, password_type);
   } else if (action == WarningAction::IGNORE_WARNING &&
              password_type.is_account_syncing()) {
+    RecordAction(UserMetricsAction(
+        "PasswordProtection.ModalWarning.IgnoreButtonClicked"));
     // No need to change state.
     MaybeLogPasswordReuseDialogInteraction(
         navigation_id, PasswordReuseDialogInteraction::WARNING_ACTION_IGNORED);
   } else if (action == WarningAction::CLOSE &&
              password_type.is_account_syncing()) {
+    RecordAction(
+        UserMetricsAction("PasswordProtection.ModalWarning.CloseWarning"));
     // No need to change state.
     MaybeLogPasswordReuseDialogInteraction(
         navigation_id, PasswordReuseDialogInteraction::WARNING_UI_IGNORED);
@@ -968,11 +978,15 @@ void ChromePasswordProtectionService::HandleUserActionOnPageInfo(
   const Origin origin = Origin::Create(url);
 
   if (action == WarningAction::CHANGE_PASSWORD) {
+    RecordAction(UserMetricsAction(
+        "PasswordProtection.PageInfo.ChangePasswordButtonClicked"));
     OpenChangePasswordUrl(web_contents, password_type);
     return;
   }
 
   if (action == WarningAction::MARK_AS_LEGITIMATE) {
+    RecordAction(
+        UserMetricsAction("PasswordProtection.PageInfo.MarkSiteAsLegitimate"));
     // TODO(vakh): There's no good enum to report this dialog interaction.
     // This needs to be investigated.
     UpdateSecurityState(SB_THREAT_TYPE_SAFE, password_type, web_contents);
@@ -1006,6 +1020,8 @@ void ChromePasswordProtectionService::HandleUserActionOnPageInfo(
 void ChromePasswordProtectionService::HandleResetPasswordOnInterstitial(
     content::WebContents* web_contents,
     WarningAction action) {
+  RecordAction(
+      UserMetricsAction("PasswordProtection.Interstitial.ResetPassword"));
   // Opens enterprise change password page in current tab for user to change
   // password.
   OpenUrl(web_contents, GetEnterpriseChangePasswordURL(),
@@ -1256,21 +1272,14 @@ void ChromePasswordProtectionService::OnEnterprisePasswordUrlChanged() {
 }
 
 bool ChromePasswordProtectionService::CanShowInterstitial(
-    RequestOutcome reason,
     ReusedPasswordAccountType password_type,
     const GURL& main_frame_url) {
-  // If it's not password alert mode, no need to log any metric.
-  if (reason != RequestOutcome::PASSWORD_ALERT_MODE ||
-      (password_type.account_type() != ReusedPasswordAccountType::GSUITE &&
-       password_type.account_type() !=
-           ReusedPasswordAccountType::NON_GAIA_ENTERPRISE)) {
-    return false;
-  }
-
-  if (!IsURLWhitelistedForPasswordEntry(main_frame_url, &reason))
-    reason = RequestOutcome::SUCCEEDED;
-  LogPasswordAlertModeOutcome(reason, password_type);
-  return reason == RequestOutcome::SUCCEEDED;
+  bool is_supported_password_type =
+      password_type.account_type() == ReusedPasswordAccountType::GSUITE ||
+      password_type.account_type() ==
+          ReusedPasswordAccountType::NON_GAIA_ENTERPRISE;
+  return IsInPasswordAlertMode(password_type) && is_supported_password_type &&
+         !IsURLWhitelistedForPasswordEntry(main_frame_url);
 }
 
 void ChromePasswordProtectionService::SetLogPasswordCaptureTimer(
@@ -1424,18 +1433,19 @@ bool ChromePasswordProtectionService::IsIncognito() {
   return profile_->IsOffTheRecord();
 }
 
+bool ChromePasswordProtectionService::IsInPasswordAlertMode(
+    ReusedPasswordAccountType password_type) {
+  return GetPasswordProtectionWarningTriggerPref(password_type) ==
+         PASSWORD_REUSE;
+}
+
 bool ChromePasswordProtectionService::IsPingingEnabled(
     LoginReputationClientRequest::TriggerType trigger_type,
-    ReusedPasswordAccountType password_type,
-    RequestOutcome* reason) {
+    ReusedPasswordAccountType password_type) {
   if (!IsSafeBrowsingEnabled()) {
-    *reason = RequestOutcome::SAFE_BROWSING_DISABLED;
     return false;
   }
   bool extended_reporting_enabled = IsExtendedReporting();
-  if (!extended_reporting_enabled) {
-    *reason = RequestOutcome::DISABLED_DUE_TO_USER_POPULATION;
-  }
   if (trigger_type == LoginReputationClientRequest::PASSWORD_REUSE_EVENT) {
     if (password_type.account_type() ==
         ReusedPasswordAccountType::SAVED_PASSWORD) {
@@ -1444,11 +1454,9 @@ bool ChromePasswordProtectionService::IsPingingEnabled(
                  safe_browsing::kPasswordProtectionForSavedPasswords);
     }
 
-    PasswordProtectionTrigger trigger_level =
-        GetPasswordProtectionWarningTriggerPref(password_type);
     // Only override policy if password protection is off for Gmail users.
-    if (trigger_level == PASSWORD_PROTECTION_OFF) {
-      *reason = RequestOutcome::TURNED_OFF_BY_ADMIN;
+    if (GetPasswordProtectionWarningTriggerPref(password_type) ==
+        PASSWORD_PROTECTION_OFF) {
       return false;
     }
     // If the account type is UNKNOWN (i.e. AccountInfo fields could not be
@@ -1466,13 +1474,41 @@ bool ChromePasswordProtectionService::IsPingingEnabled(
 #endif
   }
 
-  // Password field on focus pinging is enabled for !incognito &&
-  // extended_reporting.
-  if (IsIncognito()) {
-    *reason = RequestOutcome::DISABLED_DUE_TO_INCOGNITO;
-    return false;
+  return !IsIncognito() && extended_reporting_enabled;
+}
+
+RequestOutcome ChromePasswordProtectionService::GetPingNotSentReason(
+    LoginReputationClientRequest::TriggerType trigger_type,
+    const GURL& url,
+    ReusedPasswordAccountType password_type) {
+  DCHECK(!CanSendPing(trigger_type, url, password_type));
+  if (!IsSafeBrowsingEnabled()) {
+    return RequestOutcome::SAFE_BROWSING_DISABLED;
   }
-  return extended_reporting_enabled;
+  if (IsIncognito()) {
+    return RequestOutcome::DISABLED_DUE_TO_INCOGNITO;
+  }
+  if (trigger_type == LoginReputationClientRequest::PASSWORD_REUSE_EVENT &&
+      password_type.account_type() !=
+          ReusedPasswordAccountType::SAVED_PASSWORD &&
+      GetPasswordProtectionWarningTriggerPref(password_type) ==
+          PASSWORD_PROTECTION_OFF) {
+    return RequestOutcome::TURNED_OFF_BY_ADMIN;
+  }
+  PrefService* prefs = profile_->GetPrefs();
+  if (IsURLWhitelistedByPolicy(url, *prefs)) {
+    return RequestOutcome::MATCHED_ENTERPRISE_WHITELIST;
+  }
+  if (MatchesPasswordProtectionChangePasswordURL(url, *prefs)) {
+    return RequestOutcome::MATCHED_ENTERPRISE_CHANGE_PASSWORD_URL;
+  }
+  if (MatchesPasswordProtectionLoginURL(url, *prefs)) {
+    return RequestOutcome::MATCHED_ENTERPRISE_LOGIN_URL;
+  }
+  if (IsInPasswordAlertMode(password_type)) {
+    return RequestOutcome::PASSWORD_ALERT_MODE;
+  }
+  return RequestOutcome::DISABLED_DUE_TO_USER_POPULATION;
 }
 
 bool ChromePasswordProtectionService::IsHistorySyncEnabled() {
@@ -1639,31 +1675,14 @@ ChromePasswordProtectionService::GetPasswordProtectionWarningTriggerPref(
 }
 
 bool ChromePasswordProtectionService::IsURLWhitelistedForPasswordEntry(
-    const GURL& url,
-    RequestOutcome* reason) const {
+    const GURL& url) const {
   if (!profile_)
     return false;
 
   PrefService* prefs = profile_->GetPrefs();
-  if (IsURLWhitelistedByPolicy(url, *prefs)) {
-    *reason = RequestOutcome::MATCHED_ENTERPRISE_WHITELIST;
-    return true;
-  }
-
-  // Checks if |url| matches the change password url configured in enterprise
-  // policy.
-  if (MatchesPasswordProtectionChangePasswordURL(url, *prefs)) {
-    *reason = RequestOutcome::MATCHED_ENTERPRISE_CHANGE_PASSWORD_URL;
-    return true;
-  }
-
-  // Checks if |url| matches any login url configured in enterprise policy.
-  if (MatchesPasswordProtectionLoginURL(url, *prefs)) {
-    *reason = RequestOutcome::MATCHED_ENTERPRISE_LOGIN_URL;
-    return true;
-  }
-
-  return false;
+  return IsURLWhitelistedByPolicy(url, *prefs) ||
+         MatchesPasswordProtectionChangePasswordURL(url, *prefs) ||
+         MatchesPasswordProtectionLoginURL(url, *prefs);
 }
 
 void ChromePasswordProtectionService::PersistPhishedSavedPasswordCredential(

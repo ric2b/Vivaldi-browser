@@ -13,6 +13,7 @@
 #include "base/time/time.h"
 #include "net/base/net_export.h"
 #include "net/cookies/canonical_cookie.h"
+#include "net/cookies/cookie_inclusion_status.h"
 #include "net/cookies/cookie_options.h"
 #include "net/cookies/site_for_cookies.h"
 #include "url/origin.h"
@@ -26,6 +27,23 @@ namespace cookie_util {
 const int kVlogPerCookieMonster = 1;
 const int kVlogSetCookies = 7;
 const int kVlogGarbageCollection = 5;
+
+// Minimum name length for SameSite compatibility pair heuristic (see
+// IsSameSiteCompatPair() below.)
+const int kMinCompatPairNameLength = 3;
+
+// This enum must match the numbering for StorageAccessResult in
+// histograms/enums.xml. Do not reorder or remove items, only add new items
+// at the end.
+enum class StorageAccessResult {
+  ACCESS_BLOCKED = 0,
+  ACCESS_ALLOWED = 1,
+  ACCESS_ALLOWED_STORAGE_ACCESS_GRANT = 2,
+  kMaxValue = ACCESS_ALLOWED_STORAGE_ACCESS_GRANT,
+};
+// Helper to fire telemetry indicating if a given request for storage was
+// allowed or not by the provided |result|.
+NET_EXPORT void FireStorageAccessHistogram(StorageAccessResult result);
 
 // Returns the effective TLD+1 for a given host. This only makes sense for http
 // and https schemes. For other schemes, the host will be returned unchanged
@@ -172,6 +190,26 @@ ComputeSameSiteContextForSubresource(const GURL& url,
                                      const SiteForCookies& site_for_cookies,
                                      bool force_ignore_site_for_cookies);
 
+// Evaluates a heuristic to determine whether |c1| and |c2| are likely to be a
+// "double cookie" pair used for SameSite=None compatibility reasons.
+//
+// This returns true if all of the following are true:
+//  1. The cookies are not equivalent (i.e. same name, domain, and path).
+//  2. One of them is SameSite=None and Secure; the other one has unspecified
+//     SameSite.
+//  3. Their domains are equal.
+//  4. Their paths are equal.
+//  5. Their values are equal.
+//  6. One of them has a name that is a prefix or suffix of the other and has
+//     length at least 3 characters.
+//
+// |options| is the CookieOptions object used to access (get/set) the cookies.
+// If the CookieOptions indicate that HttpOnly cookies are not allowed, this
+// will return false if either of |c1| or |c2| is HttpOnly.
+NET_EXPORT bool IsSameSiteCompatPair(const CanonicalCookie& c1,
+                                     const CanonicalCookie& c2,
+                                     const CookieOptions& options);
+
 // Returns whether the respective SameSite feature is enabled.
 NET_EXPORT bool IsSameSiteByDefaultCookiesEnabled();
 NET_EXPORT bool IsCookiesWithoutSameSiteMustBeSecureEnabled();
@@ -198,12 +236,13 @@ bool DoesCreationTimeGrantLegacySemantics(base::Time creation_date);
 //
 // Can be used with SetCanonicalCookie when you don't need to know why a cookie
 // was blocked, only whether it was blocked.
-NET_EXPORT base::OnceCallback<void(CanonicalCookie::CookieInclusionStatus)>
+NET_EXPORT base::OnceCallback<void(CookieInclusionStatus)>
 AdaptCookieInclusionStatusToBool(base::OnceCallback<void(bool)> callback);
 
-// Turn a CookieStatusList into a CookieList by stripping out the statuses
-// (for callers who don't care about the statuses).
-NET_EXPORT CookieList StripStatuses(const CookieStatusList& cookie_status_list);
+// Turn a CookieAccessResultList into a CookieList by stripping out access
+// results (for callers who only care about cookies).
+NET_EXPORT CookieList
+StripAccessResults(const CookieAccessResultList& cookie_access_result_list);
 
 }  // namespace cookie_util
 }  // namespace net

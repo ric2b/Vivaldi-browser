@@ -47,8 +47,7 @@ HTMLScriptElement::HTMLScriptElement(Document& document,
                                      const CreateElementFlags flags)
     : HTMLElement(html_names::kScriptTag, document),
       children_changed_by_api_(false),
-      loader_(InitializeScriptLoader(flags.IsCreatedByParser(),
-                                     flags.WasAlreadyStarted())) {}
+      loader_(InitializeScriptLoader(flags)) {}
 
 const AttrNameToTrustedType& HTMLScriptElement::GetCheckedAttributeTypes()
     const {
@@ -94,7 +93,8 @@ void HTMLScriptElement::ParseAttribute(
   } else if (params.name == html_names::kAsyncAttr) {
     loader_->HandleAsyncAttribute();
   } else if (params.name == html_names::kImportanceAttr &&
-             RuntimeEnabledFeatures::PriorityHintsEnabled(&GetDocument())) {
+             RuntimeEnabledFeatures::PriorityHintsEnabled(
+                 GetExecutionContext())) {
     // The only thing we need to do for the the importance attribute/Priority
     // Hints is count usage upon parsing. Processing the value happens when the
     // element loads.
@@ -270,7 +270,7 @@ bool HTMLScriptElement::AllowInlineScriptForCSP(
     const AtomicString& nonce,
     const WTF::OrdinalNumber& context_line,
     const String& script_content) {
-  return GetDocument().GetContentSecurityPolicyForWorld()->AllowInline(
+  return GetExecutionContext()->GetContentSecurityPolicyForWorld()->AllowInline(
       ContentSecurityPolicy::InlineType::kScript, this, script_content, nonce,
       GetDocument().Url(), context_line);
 }
@@ -309,7 +309,7 @@ Element& HTMLScriptElement::CloneWithoutAttributesAndChildren(
   return *factory.CreateElement(TagQName(), flags, IsValue());
 }
 
-void HTMLScriptElement::Trace(Visitor* visitor) {
+void HTMLScriptElement::Trace(Visitor* visitor) const {
   visitor->Trace(loader_);
   HTMLElement::Trace(visitor);
   ScriptElementBase::Trace(visitor);

@@ -313,11 +313,6 @@ void ShelfNavigationWidget::Delegate::UpdateOpaqueBackground() {
   // The opaque background does not show up when there are two buttons.
   gfx::Rect opaque_background_bounds =
       GetFirstButtonBounds(shelf_->IsHorizontalAlignment());
-  if (base::i18n::IsRTL() && GetWidget() &&
-      Shelf::ForWindow(GetWidget()->GetNativeWindow())
-          ->IsHorizontalAlignment()) {
-    opaque_background_bounds.set_x(0);
-  }
   opaque_background_.SetBounds(opaque_background_bounds);
   opaque_background_.SetBackgroundBlur(
       ShelfConfig::Get()->GetShelfControlButtonBlurRadius());
@@ -457,21 +452,17 @@ gfx::Size ShelfNavigationWidget::GetIdealSize() const {
   const int vertical_spacing = ShelfConfig::Get()->control_button_edge_spacing(
       !shelf_->IsHorizontalAlignment());
 
-  if (!shelf_->IsHorizontalAlignment()) {
-    return gfx::Size(2 * horizontal_spacing + control_size,
-                     vertical_spacing + control_size);
-  }
-
+  DCHECK(shelf_->IsHorizontalAlignment() || button_count == 1);
   gfx::Size ideal_size(
       button_count * control_size +
           (button_count - 1) * ShelfConfig::Get()->button_spacing(),
       control_size);
 
   // Enlarge the widget to take up available space, this ensures events which
-  // are outside of the HomeButton bounds can be received.
-  if (IsHomeButtonShown()) {
-    ideal_size.Enlarge(horizontal_spacing, 2 * vertical_spacing);
-  }
+  // are outside of the HomeButton bounds can be received. Also, ensure spacing
+  // is added on all sides to center the buttons and avoid view targeter
+  // issues.
+  ideal_size.Enlarge(2 * horizontal_spacing, 2 * vertical_spacing);
 
   return ideal_size;
 }
@@ -635,14 +626,15 @@ void ShelfNavigationWidget::UpdateLayout(bool animate) {
 }
 
 void ShelfNavigationWidget::UpdateTargetBoundsForGesture(int shelf_position) {
-  if (shelf_->IsHorizontalAlignment()) {
-    if (!Shell::Get()->IsInTabletMode() ||
-        !chromeos::switches::ShouldShowShelfHotseat()) {
-      target_bounds_.set_y(shelf_position);
-    }
-  } else {
+  if (shelf_->IsHorizontalAlignment())
+    target_bounds_.set_y(shelf_position);
+  else
     target_bounds_.set_x(shelf_position);
-  }
+}
+
+void ShelfNavigationWidget::HandleLocaleChange() {
+  delegate_->home_button()->HandleLocaleChange();
+  delegate_->back_button()->HandleLocaleChange();
 }
 
 void ShelfNavigationWidget::UpdateButtonVisibility(

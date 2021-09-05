@@ -49,6 +49,7 @@ namespace media {
 class AudioBufferConverter;
 class AudioBus;
 class AudioClock;
+class SpeechRecognitionClient;
 
 class MEDIA_EXPORT AudioRendererImpl
     : public AudioRenderer,
@@ -62,6 +63,9 @@ class MEDIA_EXPORT AudioRendererImpl
   using TranscribeAudioCallback =
       base::RepeatingCallback<void(scoped_refptr<media::AudioBuffer>)>;
 
+  using EnableSpeechRecognitionCallback =
+      base::OnceCallback<void(TranscribeAudioCallback)>;
+
   // |task_runner| is the thread on which AudioRendererImpl will execute.
   //
   // |sink| is used as the destination for the rendered audio.
@@ -72,7 +76,7 @@ class MEDIA_EXPORT AudioRendererImpl
       AudioRendererSink* sink,
       const CreateAudioDecodersCB& create_audio_decoders_cb,
       MediaLog* media_log,
-      const TranscribeAudioCallback& transcribe_audio_callback);
+      SpeechRecognitionClient* speech_recognition_client = nullptr);
   ~AudioRendererImpl() override;
 
   // TimeSource implementation.
@@ -95,6 +99,7 @@ class MEDIA_EXPORT AudioRendererImpl
   void StartPlaying() override;
   void SetVolume(float volume) override;
   void SetLatencyHint(base::Optional<base::TimeDelta> latency_hint) override;
+  void SetPreservesPitch(bool preserves_pitch) override;
 
   // base::PowerObserver implementation.
   void OnSuspend() override;
@@ -224,6 +229,9 @@ class MEDIA_EXPORT AudioRendererImpl
   // changes. Expect the layout in |last_decoded_channel_layout_|.
   void ConfigureChannelMask();
 
+  void EnableSpeechRecognition();
+  void TranscribeAudio(scoped_refptr<media::AudioBuffer> buffer);
+
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 
   std::unique_ptr<AudioBufferConverter> buffer_converter_;
@@ -293,6 +301,10 @@ class MEDIA_EXPORT AudioRendererImpl
   // during Initialize().
   base::Optional<base::TimeDelta> latency_hint_;
 
+  // Passed to |algorithm_|. Indicates whether |algorithm_| should or should not
+  // make pitch adjustments at playbacks other than 1.0.
+  bool preserves_pitch_ = true;
+
   // Simple state tracking variable.
   State state_;
 
@@ -350,7 +362,10 @@ class MEDIA_EXPORT AudioRendererImpl
 
   // End variables which must be accessed under |lock_|. ----------------------
 
+#if !defined(OS_ANDROID)
+  SpeechRecognitionClient* speech_recognition_client_;
   TranscribeAudioCallback transcribe_audio_callback_;
+#endif
 
   // NOTE: Weak pointers must be invalidated before all other member variables.
   base::WeakPtrFactory<AudioRendererImpl> weak_factory_{this};

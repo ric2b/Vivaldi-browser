@@ -107,7 +107,7 @@ constexpr gfx::Insets kUnifiedSliderRowPadding(0, 16, 8, 16);
 constexpr gfx::Insets kUnifiedSliderBubblePadding(12, 0, 4, 0);
 constexpr gfx::Insets kUnifiedSliderPadding(0, 16);
 constexpr gfx::Insets kMicGainSliderViewPadding(0, 52, 0, 0);
-constexpr gfx::Insets kMicGainSliderPadding(0, 0, 0, 48);
+constexpr gfx::Insets kMicGainSliderPadding(0, 8, 0, 48);
 constexpr int kMicGainSliderViewSpacing = 8;
 
 constexpr int kMessageCenterCollapseThreshold = 175;
@@ -163,7 +163,7 @@ constexpr gfx::Size kUnifiedFeaturePodCollapsedSize(46, 46);
 constexpr gfx::Insets kUnifiedFeaturePodIconPadding(4);
 constexpr gfx::Insets kUnifiedFeaturePodHoverPadding(2);
 constexpr int kUnifiedFeaturePodVectorIconSize = 20;
-constexpr int kUnifiedFeaturePodLabelWidth = 80;
+constexpr int kUnifiedFeaturePodLabelWidth = 85;
 constexpr int kUnifiedFeaturePodSpacing = 6;
 constexpr int kUnifiedFeaturePodHoverCornerRadius = 4;
 constexpr int kUnifiedFeaturePodVerticalPadding = 24;
@@ -186,6 +186,7 @@ constexpr int kUnifiedFeaturePodMinRows = 1;
 constexpr int kUnifiedFeaturePodMaxItemsInCollapsed = 5;
 constexpr int kUnifiedFeaturePodsPageSpacing = 48;
 constexpr int kUnifiedNotificationSeparatorThickness = 1;
+constexpr int kPageIndicatorViewMaxHeight = 20;
 
 // Constants used in system tray page transition animations.
 constexpr double kCollapseThreshold = 0.3;

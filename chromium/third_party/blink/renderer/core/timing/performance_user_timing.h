@@ -46,9 +46,9 @@ class UserTiming final : public GarbageCollected<UserTiming> {
 
   PerformanceMeasure* Measure(ScriptState*,
                               const AtomicString& measure_name,
-                              const StringOrDouble& start,
-                              base::Optional<double> duration,
-                              const StringOrDouble& end,
+                              const base::Optional<StringOrDouble>& start,
+                              const base::Optional<double>& duration,
+                              const base::Optional<StringOrDouble>& end,
                               const ScriptValue& detail,
                               ExceptionState&);
   void ClearMeasures(const AtomicString& measure_name);
@@ -60,7 +60,7 @@ class UserTiming final : public GarbageCollected<UserTiming> {
   PerformanceEntryVector GetMarks(const AtomicString& name) const;
   PerformanceEntryVector GetMeasures(const AtomicString& name) const;
 
-  void Trace(Visitor*);
+  void Trace(Visitor*) const;
 
  private:
   double FindExistingMarkStartTime(const AtomicString& mark_name,

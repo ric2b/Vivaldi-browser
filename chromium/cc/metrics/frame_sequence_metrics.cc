@@ -4,6 +4,10 @@
 
 #include "cc/metrics/frame_sequence_metrics.h"
 
+#include <memory>
+#include <string>
+#include <utility>
+
 #include "base/metrics/histogram.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/strcat.h"
@@ -91,13 +95,20 @@ bool IsInteractionType(FrameSequenceTrackerType sequence_type) {
 FrameSequenceMetrics::FrameSequenceMetrics(FrameSequenceTrackerType type,
                                            ThroughputUkmReporter* ukm_reporter)
     : type_(type), throughput_ukm_reporter_(ukm_reporter) {
-  TRACE_EVENT_NESTABLE_ASYNC_BEGIN1(
-      "cc,benchmark", "FrameSequenceTracker", TRACE_ID_LOCAL(this), "name",
-      FrameSequenceTracker::GetFrameSequenceTrackerTypeName(type_));
 }
 
-FrameSequenceMetrics::~FrameSequenceMetrics() {
+FrameSequenceMetrics::~FrameSequenceMetrics() = default;
+
+void FrameSequenceMetrics::ReportLeftoverData() {
   if (HasDataLeftForReporting()) {
+    // Do this before ReportMetrics() which clears the throughput data.
+    // TODO(xidachen): Find a way to make ThroughputUkmReporter to directly talk
+    // to LayerTreeHostClient, and submit throughput data. Instead of storing
+    // the values in ThroughputUkmReporter.
+    if (type_ == FrameSequenceTrackerType::kUniversal &&
+        HasEnoughDataForReporting()) {
+      throughput_ukm_reporter_->ComputeUniversalThroughput(this);
+    }
     ReportMetrics();
   }
 }
@@ -136,6 +147,8 @@ FrameSequenceMetrics::ThreadType FrameSequenceMetrics::GetEffectiveThread()
       return ThreadType::kSlower;
 
     case FrameSequenceTrackerType::kCustom:
+      return ThreadType::kMain;
+
     case FrameSequenceTrackerType::kMaxType:
       NOTREACHED();
   }
@@ -144,6 +157,8 @@ FrameSequenceMetrics::ThreadType FrameSequenceMetrics::GetEffectiveThread()
 
 void FrameSequenceMetrics::Merge(
     std::unique_ptr<FrameSequenceMetrics> metrics) {
+  // Merging custom trackers are not supported.
+  DCHECK_NE(type_, FrameSequenceTrackerType::kCustom);
   DCHECK_EQ(type_, metrics->type_);
   DCHECK_EQ(GetEffectiveThread(), metrics->GetEffectiveThread());
   impl_throughput_.Merge(metrics->impl_throughput_);
@@ -169,6 +184,16 @@ bool FrameSequenceMetrics::HasDataLeftForReporting() const {
          main_throughput_.frames_expected > 0;
 }
 
+void FrameSequenceMetrics::AdoptTrace(FrameSequenceMetrics* adopt_from) {
+  DCHECK(!trace_data_.trace_id);
+  trace_data_.trace_id = adopt_from->trace_data_.trace_id;
+  adopt_from->trace_data_.trace_id = nullptr;
+}
+
+void FrameSequenceMetrics::AdvanceTrace(base::TimeTicks timestamp) {
+  trace_data_.Advance(timestamp);
+}
+
 void FrameSequenceMetrics::ComputeAggregatedThroughput() {
   // Whenever we are expecting and producing main frames, we are expecting and
   // producing impl frames as well. As an example, if we expect one main frame
@@ -183,10 +208,11 @@ void FrameSequenceMetrics::ComputeAggregatedThroughput() {
 void FrameSequenceMetrics::ReportMetrics() {
   DCHECK_LE(impl_throughput_.frames_produced, impl_throughput_.frames_expected);
   DCHECK_LE(main_throughput_.frames_produced, main_throughput_.frames_expected);
-  TRACE_EVENT_NESTABLE_ASYNC_END2(
-      "cc,benchmark", "FrameSequenceTracker", TRACE_ID_LOCAL(this), "args",
-      ThroughputData::ToTracedValue(impl_throughput_, main_throughput_),
-      "checkerboard", frames_checkerboarded_);
+  DCHECK_LE(aggregated_throughput_.frames_produced,
+            aggregated_throughput_.frames_expected);
+
+  // Terminates |trace_data_| for all types of FrameSequenceTracker.
+  trace_data_.Terminate();
 
   if (type_ == FrameSequenceTrackerType::kCustom) {
     DCHECK(!custom_reporter_.is_null());
@@ -198,8 +224,6 @@ void FrameSequenceMetrics::ReportMetrics() {
     frames_checkerboarded_ = 0;
     return;
   }
-
-  ComputeAggregatedThroughput();
 
   // Report the throughput metrics.
   base::Optional<int> impl_throughput_percent = ThroughputData::ReportHistogram(
@@ -220,7 +244,8 @@ void FrameSequenceMetrics::ReportMetrics() {
         this, ThreadType::kSlower,
         GetIndexForMetric(FrameSequenceMetrics::ThreadType::kSlower, type_),
         aggregated_throughput_);
-    if (aggregated_throughput_percent.has_value() && throughput_ukm_reporter_) {
+    if (aggregated_throughput_percent.has_value() && throughput_ukm_reporter_ &&
+        type_ != FrameSequenceTrackerType::kUniversal) {
       throughput_ukm_reporter_->ReportThroughputUkm(
           aggregated_throughput_percent, impl_throughput_percent,
           main_throughput_percent, type_);
@@ -312,9 +337,7 @@ base::Optional<int> FrameSequenceMetrics::ThroughputData::ReportHistogram(
   // Throughput means the percent of frames that was expected to show on the
   // screen but didn't. In other words, the lower the throughput is, the
   // smoother user experience.
-  const int percent =
-      std::ceil(100 * (data.frames_expected - data.frames_produced) /
-                static_cast<double>(data.frames_expected));
+  const int percent = data.DroppedFramePercent();
 
   const bool is_animation =
       ShouldReportForAnimation(sequence_type, thread_type);
@@ -323,6 +346,11 @@ base::Optional<int> FrameSequenceMetrics::ThroughputData::ReportHistogram(
   ThroughputUkmReporter* const ukm_reporter = metrics->ukm_reporter();
 
   if (is_animation) {
+    TRACE_EVENT_INSTANT2("cc,benchmark", "PercentDroppedFrames.AllAnimations",
+                         TRACE_EVENT_SCOPE_THREAD, "frames_expected",
+                         data.frames_expected, "frames_produced",
+                         data.frames_produced);
+
     UMA_HISTOGRAM_PERCENTAGE(
         "Graphics.Smoothness.PercentDroppedFrames.AllAnimations", percent);
     if (ukm_reporter) {
@@ -332,6 +360,10 @@ base::Optional<int> FrameSequenceMetrics::ThroughputData::ReportHistogram(
   }
 
   if (is_interaction) {
+    TRACE_EVENT_INSTANT2("cc,benchmark", "PercentDroppedFrames.AllInteractions",
+                         TRACE_EVENT_SCOPE_THREAD, "frames_expected",
+                         data.frames_expected, "frames_produced",
+                         data.frames_produced);
     UMA_HISTOGRAM_PERCENTAGE(
         "Graphics.Smoothness.PercentDroppedFrames.AllInteractions", percent);
     if (ukm_reporter) {
@@ -341,6 +373,10 @@ base::Optional<int> FrameSequenceMetrics::ThroughputData::ReportHistogram(
   }
 
   if (is_animation || is_interaction) {
+    TRACE_EVENT_INSTANT2("cc,benchmark", "PercentDroppedFrames.AllSequences",
+                         TRACE_EVENT_SCOPE_THREAD, "frames_expected",
+                         data.frames_expected, "frames_produced",
+                         data.frames_produced);
     UMA_HISTOGRAM_PERCENTAGE(
         "Graphics.Smoothness.PercentDroppedFrames.AllSequences", percent);
     if (ukm_reporter) {
@@ -366,6 +402,64 @@ base::Optional<int> FrameSequenceMetrics::ThroughputData::ReportHistogram(
           GetThroughputHistogramName(sequence_type, thread_name), 1, 100, 101,
           base::HistogramBase::kUmaTargetedHistogramFlag));
   return percent;
+}
+
+std::unique_ptr<base::trace_event::TracedValue>
+FrameSequenceMetrics::ThroughputData::ToTracedValue(
+    const ThroughputData& impl,
+    const ThroughputData& main,
+    ThreadType effective_thread) {
+  auto dict = std::make_unique<base::trace_event::TracedValue>();
+  if (effective_thread == ThreadType::kMain) {
+    dict->SetInteger("main-frames-produced", main.frames_produced);
+    dict->SetInteger("main-frames-expected", main.frames_expected);
+  } else {
+    dict->SetInteger("impl-frames-produced", impl.frames_produced);
+    dict->SetInteger("impl-frames-expected", impl.frames_expected);
+  }
+  return dict;
+}
+
+FrameSequenceMetrics::TraceData::TraceData(FrameSequenceMetrics* m)
+    : metrics(m) {
+  TRACE_EVENT_CATEGORY_GROUP_ENABLED("cc,benchmark", &enabled);
+}
+
+FrameSequenceMetrics::TraceData::~TraceData() = default;
+
+void FrameSequenceMetrics::TraceData::Terminate() {
+  if (!enabled || !trace_id)
+    return;
+  TRACE_EVENT_NESTABLE_ASYNC_END2(
+      "cc,benchmark", "FrameSequenceTracker", TRACE_ID_LOCAL(trace_id), "args",
+      ThroughputData::ToTracedValue(metrics->impl_throughput(),
+                                    metrics->main_throughput(),
+                                    metrics->GetEffectiveThread()),
+      "checkerboard", metrics->frames_checkerboarded());
+  trace_id = nullptr;
+}
+
+void FrameSequenceMetrics::TraceData::Advance(base::TimeTicks new_timestamp) {
+  if (!enabled)
+    return;
+  if (!trace_id) {
+    trace_id = this;
+    TRACE_EVENT_NESTABLE_ASYNC_BEGIN_WITH_TIMESTAMP1(
+        "cc,benchmark", "FrameSequenceTracker", TRACE_ID_LOCAL(trace_id),
+        this->last_timestamp, "name",
+        FrameSequenceTracker::GetFrameSequenceTrackerTypeName(metrics->type()));
+  }
+  // Use different names, because otherwise the trace-viewer shows the slices in
+  // the same color, and that makes it difficult to tell the traces apart from
+  // each other.
+  const char* trace_names[] = {"Frame", "Frame ", "Frame   "};
+  TRACE_EVENT_NESTABLE_ASYNC_BEGIN_WITH_TIMESTAMP0(
+      "cc,benchmark", trace_names[++this->frame_count % 3],
+      TRACE_ID_LOCAL(trace_id), this->last_timestamp);
+  TRACE_EVENT_NESTABLE_ASYNC_END_WITH_TIMESTAMP0(
+      "cc,benchmark", trace_names[this->frame_count % 3],
+      TRACE_ID_LOCAL(trace_id), new_timestamp);
+  this->last_timestamp = new_timestamp;
 }
 
 }  // namespace cc

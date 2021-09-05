@@ -17,7 +17,6 @@
 #include "base/metrics/sparse_histogram.h"
 #include "base/rand_util.h"
 #include "base/system/sys_info.h"
-#include "base/task/post_task.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/scoped_blocking_call.h"
@@ -57,6 +56,7 @@
 #include "base/strings/string_util.h"
 #include "base/version.h"
 #if defined(USE_X11)
+#include "ui/base/ui_base_features.h"
 #include "ui/base/x/x11_util.h"
 #endif
 #endif  // defined(OS_LINUX) && !defined(OS_CHROMEOS)
@@ -78,9 +78,9 @@ void RecordMemoryMetrics();
 
 // Records memory metrics after a delay.
 void RecordMemoryMetricsAfterDelay() {
-  base::PostDelayedTask(FROM_HERE, {content::BrowserThread::UI},
-                        base::BindOnce(&RecordMemoryMetrics),
-                        memory_instrumentation::GetDelayForNextMemoryLog());
+  content::GetUIThreadTaskRunner({})->PostDelayedTask(
+      FROM_HERE, base::BindOnce(&RecordMemoryMetrics),
+      memory_instrumentation::GetDelayForNextMemoryLog());
 }
 
 // Records memory metrics, and then triggers memory colleciton after a delay.
@@ -531,7 +531,11 @@ void ChromeBrowserMainExtraPartsMetrics::PreBrowserStart() {
   // Log once here at browser start rather than at each renderer launch.
   ChromeMetricsServiceAccessor::RegisterSyntheticFieldTrial("ClangPGO",
 #if BUILDFLAG(CLANG_PGO)
+#if BUILDFLAG(USE_THIN_LTO)
+                                                            "EnabledWithThinLTO"
+#else
                                                             "Enabled"
+#endif
 #else
                                                             "Disabled"
 #endif
@@ -542,8 +546,11 @@ void ChromeBrowserMainExtraPartsMetrics::PostBrowserStart() {
   RecordMemoryMetricsAfterDelay();
   RecordLinuxGlibcVersion();
 #if defined(USE_X11)
-  UMA_HISTOGRAM_ENUMERATION("Linux.WindowManager", GetLinuxWindowManager(),
-                            UMA_LINUX_WINDOW_MANAGER_COUNT);
+  // TODO(https://crbug.com/1097007): capture window manager name on Linux.
+  if (!features::IsUsingOzonePlatform()) {
+    UMA_HISTOGRAM_ENUMERATION("Linux.WindowManager", GetLinuxWindowManager(),
+                              UMA_LINUX_WINDOW_MANAGER_COUNT);
+  }
 #endif
 
   constexpr base::TaskTraits kBestEffortTaskTraits = {

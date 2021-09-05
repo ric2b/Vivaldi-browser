@@ -14,6 +14,9 @@ namespace updater {
 // to avoid collision on kernel object names.
 extern const base::char16 kGlobalPrefix[];
 
+// Serializes access to prefs.
+extern const base::char16 kPrefsAccessMutex[];
+
 // Registry keys and value names.
 #define COMPANY_KEY "Software\\" COMPANY_SHORTNAME_STRING "\\"
 // Use |Update| instead of PRODUCT_FULLNAME_STRING for the registry key name
@@ -29,8 +32,9 @@ extern const base::char16 kGlobalPrefix[];
 
 extern const base::char16 kRegistryValuePV[];
 extern const base::char16 kRegistryValueName[];
+extern const base::char16 kRegistryValueInstallerProgress[];
 
-constexpr base::char16 kWindowsServiceName[] = L"UpdaterService";
+extern const base::char16 kWindowsServiceName[];
 
 }  // namespace updater
 

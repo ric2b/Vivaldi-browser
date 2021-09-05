@@ -6,11 +6,13 @@ package org.chromium.components.paintpreview.player;
 
 import android.graphics.Rect;
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.MediumTest;
 import android.support.test.uiautomator.UiDevice;
 import android.view.View;
 import android.view.ViewGroup;
 
+import androidx.test.filters.MediumTest;
+
+import org.hamcrest.Matchers;
 import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
@@ -22,6 +24,7 @@ import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.ScalableTimeout;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
+import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.ui.test.util.DummyUiActivityTestCase;
 import org.chromium.url.GURL;
@@ -51,6 +54,7 @@ public class PaintPreviewPlayerTest extends DummyUiActivityTestCase {
 
     private PlayerManager mPlayerManager;
     private TestLinkClickHandler mLinkClickHandler;
+    private CallbackHelper mRefreshedCallback;
 
     /**
      * LinkClickHandler implementation for caching the last URL that was clicked.
@@ -86,17 +90,14 @@ public class PaintPreviewPlayerTest extends DummyUiActivityTestCase {
         final View activityContentView = getActivity().findViewById(android.R.id.content);
 
         // Assert that the player view has the same dimensions as the content view.
-        CriteriaHelper.pollUiThread(
-                () -> {
-                    boolean contentSizeNonZero = activityContentView.getWidth() > 0
-                            && activityContentView.getHeight() > 0;
-                    boolean viewSizeMatchContent =
-                            activityContentView.getWidth() == playerHostView.getWidth()
-                            && activityContentView.getHeight() == playerHostView.getHeight();
-                    return contentSizeNonZero && viewSizeMatchContent;
-                },
-                "Player size doesn't match R.id.content", TIMEOUT_MS,
-                CriteriaHelper.DEFAULT_POLLING_INTERVAL);
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(activityContentView.getWidth(), Matchers.greaterThan(0));
+            Criteria.checkThat(activityContentView.getHeight(), Matchers.greaterThan(0));
+            Criteria.checkThat(
+                    activityContentView.getWidth(), Matchers.is(playerHostView.getWidth()));
+            Criteria.checkThat(
+                    activityContentView.getHeight(), Matchers.is(playerHostView.getHeight()));
+        }, TIMEOUT_MS, CriteriaHelper.DEFAULT_POLLING_INTERVAL);
     }
 
     /**
@@ -126,6 +127,61 @@ public class PaintPreviewPlayerTest extends DummyUiActivityTestCase {
         assertLinkUrl(playerHostView, 422, 4965, TEST_OUT_OF_VIEWPORT_LINK_URL);
     }
 
+    @Test
+    @MediumTest
+    public void overscrollRefreshTest() throws Exception {
+        initPlayerManager();
+        UiDevice uiDevice = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
+        int deviceHeight = uiDevice.getDisplayHeight();
+        int statusBarHeight = statusBarHeight();
+        int navigationBarHeight = navigationBarHeight();
+        int padding = 20;
+        int toY = deviceHeight - navigationBarHeight - padding;
+        int fromY = statusBarHeight + padding;
+        uiDevice.swipe(50, fromY, 50, toY, 5);
+
+        mRefreshedCallback.waitForFirst();
+    }
+
+    /**
+     * Tests that an initialization failure is reported properly.
+     */
+    @Test
+    @MediumTest
+    public void initializationCallbackErrorReported() throws Exception {
+        CallbackHelper compositorErrorCallback = new CallbackHelper();
+        mLinkClickHandler = new TestLinkClickHandler();
+        PostTask.postTask(UiThreadTaskTraits.DEFAULT, () -> {
+            PaintPreviewTestService service =
+                    new PaintPreviewTestService(UrlUtils.getIsolatedTestFilePath(TEST_DATA_DIR));
+            // Use the wrong URL to simulate a failure.
+            mPlayerManager = new PlayerManager(new GURL("about:blank"), getActivity(), service,
+                    TEST_DIRECTORY_KEY, mLinkClickHandler,
+                    () -> { Assert.fail("Unexpected overscroll refresh attempted."); },
+                    () -> {
+                        Assert.fail("View Ready callback occurred, but expected a failure.");
+                    },
+                    0xffffffff, () -> { compositorErrorCallback.notifyCalled(); }, false);
+        });
+        compositorErrorCallback.waitForFirst();
+    }
+
+    private int statusBarHeight() {
+        Rect visibleContentRect = new Rect();
+        getActivity().getWindow().getDecorView().getWindowVisibleDisplayFrame(visibleContentRect);
+        return visibleContentRect.top;
+    }
+
+    private int navigationBarHeight() {
+        int navigationBarHeight = 100;
+        int resourceId = getActivity().getResources().getIdentifier(
+                "navigation_bar_height", "dimen", "android");
+        if (resourceId > 0) {
+            navigationBarHeight = getActivity().getResources().getDimensionPixelSize(resourceId);
+        }
+        return navigationBarHeight;
+    }
+
     /**
      * Scrolls to the bottom fo the paint preview.
      */
@@ -133,16 +189,8 @@ public class PaintPreviewPlayerTest extends DummyUiActivityTestCase {
         UiDevice uiDevice = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
         int deviceHeight = uiDevice.getDisplayHeight();
 
-        Rect visibleContentRect = new Rect();
-        getActivity().getWindow().getDecorView().getWindowVisibleDisplayFrame(visibleContentRect);
-        int statusBarHeight = visibleContentRect.top;
-
-        int navigationBarHeight = 100;
-        int resourceId = getActivity().getResources().getIdentifier(
-                "navigation_bar_height", "dimen", "android");
-        if (resourceId > 0) {
-            navigationBarHeight = getActivity().getResources().getDimensionPixelSize(resourceId);
-        }
+        int statusBarHeight = statusBarHeight();
+        int navigationBarHeight = navigationBarHeight();
 
         int padding = 20;
         int swipeSteps = 5;
@@ -160,24 +208,38 @@ public class PaintPreviewPlayerTest extends DummyUiActivityTestCase {
 
     private void initPlayerManager() {
         mLinkClickHandler = new TestLinkClickHandler();
+        mRefreshedCallback = new CallbackHelper();
+        CallbackHelper viewReady = new CallbackHelper();
         PostTask.postTask(UiThreadTaskTraits.DEFAULT, () -> {
             PaintPreviewTestService service =
                     new PaintPreviewTestService(UrlUtils.getIsolatedTestFilePath(TEST_DATA_DIR));
             mPlayerManager = new PlayerManager(new GURL(TEST_URL), getActivity(), service,
-                    TEST_DIRECTORY_KEY, mLinkClickHandler, Assert::assertTrue, 0xffffffff);
+                    TEST_DIRECTORY_KEY, mLinkClickHandler,
+                    () -> { mRefreshedCallback.notifyCalled(); },
+                    () -> { viewReady.notifyCalled(); },
+                    0xffffffff, () -> { Assert.fail("Compositor initialization failed."); },
+                    false);
             getActivity().setContentView(mPlayerManager.getView());
         });
 
         // Wait until PlayerManager is initialized.
-        CriteriaHelper.pollUiThread(() -> mPlayerManager != null,
-                "PlayerManager was not initialized.", TIMEOUT_MS,
-                CriteriaHelper.DEFAULT_POLLING_INTERVAL);
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(
+                    "PlayerManager was not initialized.", mPlayerManager, Matchers.notNullValue());
+        }, TIMEOUT_MS, CriteriaHelper.DEFAULT_POLLING_INTERVAL);
+
+        try {
+            viewReady.waitForFirst();
+        } catch (Exception e) {
+            Assert.fail("View ready was not called.");
+        }
 
         // Assert that the player view is added to the player host view.
-        CriteriaHelper.pollUiThread(
-                () -> ((ViewGroup) mPlayerManager.getView()).getChildCount() > 0,
-                "Player view is not added to the host view.", TIMEOUT_MS,
-                CriteriaHelper.DEFAULT_POLLING_INTERVAL);
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat("Player view is not added to the host view.",
+                    ((ViewGroup) mPlayerManager.getView()).getChildCount(),
+                    Matchers.greaterThan(0));
+        }, TIMEOUT_MS, CriteriaHelper.DEFAULT_POLLING_INTERVAL);
     }
 
     /*
@@ -209,18 +271,11 @@ public class PaintPreviewPlayerTest extends DummyUiActivityTestCase {
         UiDevice device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
         device.click(scaledX + locationXY[0], scaledY + locationXY[1]);
 
-        CriteriaHelper.pollUiThread(
-                ()
-                        -> {
-                    GURL url = mLinkClickHandler.mUrl;
-                    if (url == null) return false;
-
-                    return url.getSpec().equals(expectedUrl);
-                },
-                "Link press on abs (" + x + ", " + y + ") failed. Expected: " + expectedUrl
-                        + ", found: "
-                        + (mLinkClickHandler.mUrl == null ? null
-                                                          : mLinkClickHandler.mUrl.getSpec()),
-                TIMEOUT_MS, CriteriaHelper.DEFAULT_POLLING_INTERVAL);
+        CriteriaHelper.pollUiThread(() -> {
+            GURL url = mLinkClickHandler.mUrl;
+            String msg = "Link press on abs (" + x + ", " + y + ") failed.";
+            Criteria.checkThat(msg, url, Matchers.notNullValue());
+            Criteria.checkThat(msg, url.getSpec(), Matchers.is(expectedUrl));
+        }, TIMEOUT_MS, CriteriaHelper.DEFAULT_POLLING_INTERVAL);
     }
 }

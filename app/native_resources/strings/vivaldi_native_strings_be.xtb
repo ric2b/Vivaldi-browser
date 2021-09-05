@@ -11,7 +11,7 @@
 <translation id="1462666970065907900">Сапраўды зачыніць акно?</translation>
 <translation id="1657174850639146440">Пачварка 9</translation>
 <translation id="1676595396635191120">Новае прыватнае акно</translation>
-<translation id="1728549374069268714">Уставіць і перайсці</translation>
+<translation id="1728549374069268714">Уставіць і Перайсці</translation>
 <translation id="1756026472674246267">Адчыніць з новай картай</translation>
 <translation id="1759842336958782510">Chrome</translation>
 <translation id="1769904678986817931">Уласцівасці выявы...</translation>
@@ -26,7 +26,7 @@
 <translation id="2848085334714181751">Жывёлка 3</translation>
 <translation id="2873951654529031587">Cметніца</translation>
 <translation id="292258461174562431">Пачварка 4</translation>
-<translation id="2923448633003185837">Уставіць і перайсці</translation>
+<translation id="2923448633003185837">Уставіць і Перайсці</translation>
 <translation id="2977472760057091832">Адчыніць у прыватным акне</translation>
 <translation id="2989805286512600854">Адчыніць у Новай Картке</translation>
 <translation id="3027988479108856431">На жаль, налады Яндэкс-браўзэру недаступны пад час працуючага браўзэру. Для імпарту гэтых наладаў у Vivaldi, захавайце свае дадзеныя і зачыніце ўсе вокны Яндэкс-браўзэру. Потым націсніце "Працягнуць".</translation>
@@ -87,6 +87,7 @@
 <translation id="6229528619562190452">Націсні тут , каб абнавіць Vivaldi.</translation>
 <translation id="6234173136417926046">Скарыстаць выяву як тло на стартавай старонцы</translation>
 <translation id="630690498669249215">Файл закладак Opera</translation>
+<translation id="6339818817272922368">Лакальная Ўлікоўка</translation>
 <translation id="6438786710866753178">Краявід 4</translation>
 <translation id="6477028720702061455">Абраць тэчку да імпарту з профілем Opera</translation>
 <translation id="6510706699590490869">&amp;Абнавіць Vivaldi</translation>
@@ -97,8 +98,10 @@
 <translation id="7086554968911045110">Краявід 7</translation>
 <translation id="7111492742514999492">Краявід 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
+<translation id="7496505986576158197">Vivaldi створаны з выкарыстаннем праекту <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> з адткрытым зыходным кодам і другога <ph name="BEGIN_LINK_OSS" />адкрытага ПЗ<ph name="END_LINK_OSS" />.</translation>
 <translation id="7715497554424665066">&amp;Прапусціць абнаўленне</translation>
 <translation id="7724603315864178912">Выразаць</translation>
+<translation id="7793738202466490491">Дадаць як Падзею Каляндара</translation>
 <translation id="7865983598101744945">Пацвердзіце выхад</translation>
 <translation id="7957213167373139414">Мой календар</translation>
 <translation id="8027581147000338959">Адчыніць у новым акне</translation>
@@ -108,6 +111,7 @@
 <translation id="8331671104904436324">Адчыніць побач</translation>
 <translation id="8373293945112511707">Краявід 1</translation>
 <translation id="8427094907586191051">Краявід 17</translation>
+<translation id="8446668873108041390">Вакананне JavaScript праз AppleScript Адключана. У Settings &gt; Privacy &gt; Apple Events вы можаце Дазволіць этае Выконванне.</translation>
 <translation id="8539196077526389150">Краявід 13</translation>
 <translation id="8624587806981488221">Перазагрузіць Малюнак</translation>
 <translation id="864444594187862076">Opera версіі 15+ (тэставая)</translation>
@@ -120,7 +124,7 @@
 <translation id="8912720443398351457">Запраўды зачыніць Vivaldi?</translation>
 <translation id="8947109330183116400">Вылучы HTML файл з закладкамі</translation>
 <translation id="9017566390391482291">Вылучы  тэчку Vivaldi профіль для імпарту</translation>
-<translation id="9065203028668620118">Рэдаґваць</translation>
+<translation id="9065203028668620118">Рэдагаваць Тэкст</translation>
 <translation id="9157539936604258187">Адчыніць спасылку</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
 <translation id="970294721402795299">Краявід 16</translation>

@@ -5,7 +5,8 @@
 package org.chromium.chrome.browser;
 
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.MediumTest;
+
+import androidx.test.filters.MediumTest;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -17,7 +18,6 @@ import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
@@ -102,7 +102,6 @@ public class TabThemeTest {
     @Feature({"Toolbar-Theme-Color"})
     @MediumTest
     @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
-    @RetryOnFailure
     public void testThemeColorIsCorrect() throws ExecutionException, TimeoutException {
         EmbeddedTestServer testServer =
                 EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());

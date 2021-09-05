@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/core/layout/ng/ng_physical_box_fragment.h"
 
 #include "third_party/blink/renderer/core/dom/document_lifecycle.h"
+#include "third_party/blink/renderer/core/layout/geometry/writing_mode_converter.h"
 #include "third_party/blink/renderer/core/layout/layout_block.h"
 #include "third_party/blink/renderer/core/layout/ng/geometry/ng_border_edges.h"
 #include "third_party/blink/renderer/core/layout/ng/geometry/ng_box_strut.h"
@@ -23,6 +24,9 @@ namespace {
 
 struct SameSizeAsNGPhysicalFragment
     : RefCounted<const NGPhysicalFragment, NGPhysicalFragmentTraits> {
+  // |flags_for_free_maybe| is used to support an additional increase in size
+  // needed for DCHECK and 32-bit builds.
+  unsigned flags_for_free_maybe;
   void* layout_object;
   PhysicalSize size;
   unsigned flags;
@@ -213,18 +217,18 @@ void NGPhysicalFragmentTraits::Destruct(const NGPhysicalFragment* fragment) {
 NGPhysicalFragment::NGPhysicalFragment(NGFragmentBuilder* builder,
                                        NGFragmentType type,
                                        unsigned sub_type)
-    : layout_object_(builder->layout_object_),
+    : has_floating_descendants_for_paint_(false),
+      layout_object_(builder->layout_object_),
       size_(ToPhysicalSize(builder->size_, builder->GetWritingMode())),
       type_(type),
       sub_type_(sub_type),
       style_variant_((unsigned)builder->style_variant_),
       is_hidden_for_paint_(builder->is_hidden_for_paint_),
-      has_floating_descendants_for_paint_(false),
       is_fieldset_container_(false),
       is_legacy_layout_root_(false),
       is_painted_atomically_(false),
       has_baseline_(false) {
-  DCHECK(builder->layout_object_);
+  CHECK(builder->layout_object_);
 }
 
 NGPhysicalFragment::NGPhysicalFragment(LayoutObject* layout_object,
@@ -232,18 +236,18 @@ NGPhysicalFragment::NGPhysicalFragment(LayoutObject* layout_object,
                                        PhysicalSize size,
                                        NGFragmentType type,
                                        unsigned sub_type)
-    : layout_object_(layout_object),
+    : has_floating_descendants_for_paint_(false),
+      layout_object_(layout_object),
       size_(size),
       type_(type),
       sub_type_(sub_type),
       style_variant_((unsigned)style_variant),
       is_hidden_for_paint_(false),
-      has_floating_descendants_for_paint_(false),
       is_fieldset_container_(false),
       is_legacy_layout_root_(false),
       is_painted_atomically_(false),
       has_baseline_(false) {
-  DCHECK(layout_object);
+  CHECK(layout_object);
 }
 
 // Keep the implementation of the destructor here, to avoid dependencies on
@@ -295,7 +299,7 @@ bool NGPhysicalFragment::IsPlacedByLayoutNG() const {
   // to set.
   if (IsLineBox())
     return false;
-  if (IsColumnBox())
+  if (IsFragmentainerBox())
     return true;
   const LayoutBlock* container = layout_object_->ContainingBlock();
   if (!container)
@@ -315,14 +319,15 @@ const FragmentData* NGPhysicalFragment::GetFragmentData() const {
 }
 
 const NGPhysicalFragment* NGPhysicalFragment::PostLayout() const {
-  if (IsBox() && !IsInlineBox()) {
-    if (const auto* block = DynamicTo<LayoutBlockFlow>(GetLayoutObject())) {
-      if (block->IsRelayoutBoundary()) {
-        const NGPhysicalFragment* new_fragment = block->CurrentFragment();
-        if (new_fragment && new_fragment != this)
-          return new_fragment;
-      }
-    }
+  const auto* layout_box = ToLayoutBoxOrNull(GetLayoutObject());
+  if (UNLIKELY(!layout_box))
+    return nullptr;
+
+  if (layout_box->PhysicalFragmentCount() == 1) {
+    const NGPhysicalFragment* post_layout = layout_box->GetPhysicalFragment(0);
+    DCHECK(post_layout);
+    if (UNLIKELY(post_layout && post_layout != this))
+      return post_layout;
   }
   return nullptr;
 }
@@ -504,6 +509,18 @@ bool NGPhysicalFragment::ShouldPaintDragCaret() const {
   if (const auto* block = DynamicTo<LayoutBlock>(GetLayoutObject()))
     return block->ShouldPaintDragCaret();
   return false;
+}
+
+LogicalRect NGPhysicalFragment::ConvertChildToLogical(
+    const PhysicalRect& physical_rect) const {
+  return WritingModeConverter(Style().GetWritingDirection(), Size())
+      .ToLogical(physical_rect);
+}
+
+PhysicalRect NGPhysicalFragment::ConvertChildToPhysical(
+    const LogicalRect& logical_rect) const {
+  return WritingModeConverter(Style().GetWritingDirection(), Size())
+      .ToPhysical(logical_rect);
 }
 
 String NGPhysicalFragment::ToString() const {

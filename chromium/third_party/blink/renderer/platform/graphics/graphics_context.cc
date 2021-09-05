@@ -62,6 +62,25 @@
 
 namespace blink {
 
+namespace {
+DarkModeFilter::ElementRole GetElementRoleForImage(Image* image) {
+  DCHECK(image);
+
+  if (image->IsBitmapImage())
+    return DarkModeFilter::ElementRole::kBitmapImage;
+
+  if (image->IsSVGImage() || image->IsSVGImageForContainer())
+    return DarkModeFilter::ElementRole::kSVGImage;
+
+  if (image->IsGradientGeneratedImage())
+    return DarkModeFilter::ElementRole::kGradientGeneratedImage;
+
+  // TODO(prashant.n): Check if remaining image types need to be treated
+  // separately.
+  return DarkModeFilter::ElementRole::kUnhandledImage;
+}
+}  // namespace
+
 // Helper class that copies |flags| only when dark mode is enabled.
 //
 // TODO(gilmanmh): Investigate removing const from |flags| in the calling
@@ -355,9 +374,8 @@ void GraphicsContext::DrawFocusRingPath(const SkPath& path,
                                         float border_radius) {
   DrawPlatformFocusRing(
       path, canvas_,
-      dark_mode_filter_
-          .InvertColorIfNeeded(color, DarkModeFilter::ElementRole::kBackground)
-          .Rgb(),
+      dark_mode_filter_.InvertColorIfNeeded(
+          color.Rgb(), DarkModeFilter::ElementRole::kBackground),
       width, border_radius);
 }
 
@@ -367,9 +385,8 @@ void GraphicsContext::DrawFocusRingRect(const SkRect& rect,
                                         float border_radius) {
   DrawPlatformFocusRing(
       rect, canvas_,
-      dark_mode_filter_
-          .InvertColorIfNeeded(color, DarkModeFilter::ElementRole::kBackground)
-          .Rgb(),
+      dark_mode_filter_.InvertColorIfNeeded(
+          color.Rgb(), DarkModeFilter::ElementRole::kBackground),
       width, border_radius);
 }
 
@@ -422,7 +439,16 @@ void GraphicsContext::DrawFocusRing(const Vector<IntRect>& rects,
                                     int offset,
                                     float border_radius,
                                     float min_border_width,
-                                    const Color& color) {
+                                    const Color& color,
+                                    WebColorScheme color_scheme) {
+#if defined(OS_MACOSX)
+  const Color& inner_color = color_scheme == WebColorScheme::kDark
+                                 ? SkColorSetRGB(0x99, 0xC8, 0xFF)
+                                 : color;
+#else
+  const Color& inner_color =
+      color_scheme == WebColorScheme::kDark ? SK_ColorWHITE : color;
+#endif
   if (::features::IsFormControlsRefreshEnabled()) {
     // The focus ring is made of two borders which have a 2:1 ratio.
     const float first_border_width = (width / 3) * 2;
@@ -433,15 +459,18 @@ void GraphicsContext::DrawFocusRing(const Vector<IntRect>& rects,
     if (min_border_width >= inside_border_width) {
       offset -= inside_border_width;
     }
-    // The white ring is drawn first, and we overdraw to ensure no gaps or AA
+    const Color& outer_color = color_scheme == WebColorScheme::kDark
+                                   ? SkColorSetRGB(0x10, 0x10, 0x10)
+                                   : SK_ColorWHITE;
+    // The outer ring is drawn first, and we overdraw to ensure no gaps or AA
     // artifacts.
     DrawFocusRingInternal(rects, first_border_width,
                           offset + std::ceil(second_border_width),
-                          border_radius, SK_ColorWHITE);
+                          border_radius, outer_color);
     DrawFocusRingInternal(rects, first_border_width, offset, border_radius,
-                          color);
+                          inner_color);
   } else {
-    DrawFocusRingInternal(rects, width, offset, border_radius, color);
+    DrawFocusRingInternal(rects, width, offset, border_radius, inner_color);
   }
 }
 
@@ -468,14 +497,14 @@ void GraphicsContext::DrawInnerShadow(const FloatRoundedRect& rect,
                                       float shadow_blur,
                                       float shadow_spread,
                                       Edges clipped_edges) {
-  Color shadow_color = dark_mode_filter_.InvertColorIfNeeded(
-      orig_shadow_color, DarkModeFilter::ElementRole::kBackground);
+  SkColor shadow_color = dark_mode_filter_.InvertColorIfNeeded(
+      orig_shadow_color.Rgb(), DarkModeFilter::ElementRole::kBackground);
 
   FloatRect hole_rect(rect.Rect());
   hole_rect.Inflate(-shadow_spread);
 
   if (hole_rect.IsEmpty()) {
-    FillRoundedRect(rect, shadow_color);
+    FillRoundedRect(rect, Color(shadow_color));
     return;
   }
 
@@ -496,8 +525,8 @@ void GraphicsContext::DrawInnerShadow(const FloatRoundedRect& rect,
     hole_rect.SetHeight(hole_rect.Height() -
                         std::min(shadow_offset.Height(), 0.0f) + shadow_blur);
 
-  Color fill_color(shadow_color.Red(), shadow_color.Green(),
-                   shadow_color.Blue(), 255);
+  Color fill_color(SkColorGetR(shadow_color), SkColorGetG(shadow_color),
+                   SkColorGetB(shadow_color), 255);
 
   FloatRect outer_rect = AreaCastingShadowInHole(rect.Rect(), shadow_blur,
                                                  shadow_spread, shadow_offset);
@@ -858,8 +887,11 @@ void GraphicsContext::DrawImage(
   image_flags.setFilterQuality(ComputeFilterQuality(image, dest, src));
 
   // Do not classify the image if the element has any CSS filters.
-  if (!has_filter_property)
-    dark_mode_filter_.ApplyToImageFlagsIfNeeded(src, dest, image, &image_flags);
+  if (!has_filter_property && dark_mode_filter_.IsDarkModeActive()) {
+    dark_mode_filter_.ApplyToImageFlagsIfNeeded(
+        src, dest, image->PaintImageForCurrentFrame(), &image_flags,
+        GetElementRoleForImage(image));
+  }
 
   image->Draw(canvas_, image_flags, dest, src, should_respect_image_orientation,
               Image::kClampImageToSourceRect, decode_mode);
@@ -896,8 +928,11 @@ void GraphicsContext::DrawImageRRect(
   image_flags.setFilterQuality(
       ComputeFilterQuality(image, dest.Rect(), src_rect));
 
-  dark_mode_filter_.ApplyToImageFlagsIfNeeded(src_rect, dest.Rect(), image,
-                                              &image_flags);
+  if (dark_mode_filter_.IsDarkModeActive()) {
+    dark_mode_filter_.ApplyToImageFlagsIfNeeded(
+        src_rect, dest.Rect(), image->PaintImageForCurrentFrame(), &image_flags,
+        GetElementRoleForImage(image));
+  }
 
   bool use_shader = (visible_src == src_rect) &&
                     (respect_orientation == kDoNotRespectImageOrientation ||
@@ -1102,10 +1137,8 @@ void GraphicsContext::FillDRRect(const FloatRoundedRect& outer,
       canvas_->drawDRRect(outer, inner, ImmutableState()->FillFlags());
     } else {
       PaintFlags flags(ImmutableState()->FillFlags());
-      flags.setColor(dark_mode_filter_
-                         .InvertColorIfNeeded(
-                             color, DarkModeFilter::ElementRole::kBackground)
-                         .Rgb());
+      flags.setColor(dark_mode_filter_.InvertColorIfNeeded(
+          color.Rgb(), DarkModeFilter::ElementRole::kBackground));
       canvas_->drawDRRect(outer, inner, flags);
     }
 
@@ -1118,10 +1151,8 @@ void GraphicsContext::FillDRRect(const FloatRoundedRect& outer,
   stroke_r_rect.inset(stroke_width / 2, stroke_width / 2);
 
   PaintFlags stroke_flags(ImmutableState()->FillFlags());
-  stroke_flags.setColor(
-      dark_mode_filter_
-          .InvertColorIfNeeded(color, DarkModeFilter::ElementRole::kBackground)
-          .Rgb());
+  stroke_flags.setColor(dark_mode_filter_.InvertColorIfNeeded(
+      color.Rgb(), DarkModeFilter::ElementRole::kBackground));
   stroke_flags.setStyle(PaintFlags::kStroke_Style);
   stroke_flags.setStrokeWidth(stroke_width);
 
@@ -1284,10 +1315,8 @@ void GraphicsContext::FillRectWithRoundedHole(
     const FloatRoundedRect& rounded_hole_rect,
     const Color& color) {
   PaintFlags flags(ImmutableState()->FillFlags());
-  flags.setColor(
-      dark_mode_filter_
-          .InvertColorIfNeeded(color, DarkModeFilter::ElementRole::kBackground)
-          .Rgb());
+  flags.setColor(dark_mode_filter_.InvertColorIfNeeded(
+      color.Rgb(), DarkModeFilter::ElementRole::kBackground));
   canvas_->drawDRRect(SkRRect::MakeRect(rect), rounded_hole_rect, flags);
 }
 

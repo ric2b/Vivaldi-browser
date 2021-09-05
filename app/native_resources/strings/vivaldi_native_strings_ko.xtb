@@ -87,6 +87,7 @@
 <translation id="6229528619562190452">Vivialdi를 업데이트하려면 여기를 클릭하세요.</translation>
 <translation id="6234173136417926046">이 이미지를 시작 페이지 배경으로 사용</translation>
 <translation id="630690498669249215">Opera 북마크 파일</translation>
+<translation id="6339818817272922368">로컬 계정</translation>
 <translation id="6438786710866753178">경관 4</translation>
 <translation id="6477028720702061455">가져올 Opera 프로필 폴더 선택</translation>
 <translation id="6510706699590490869">Vivaldi 업데이트 (&amp;U)</translation>
@@ -101,6 +102,7 @@
 <translation id="7496505986576158197">Vivaldi는 <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> 오픈 소스 프로젝트를 비롯한 여러 <ph name="BEGIN_LINK_OSS" />오픈 소스 소프트웨어<ph name="END_LINK_OSS" />에 기초해 만들어진 브라우저입니다.</translation>
 <translation id="7715497554424665066">업데이트 무시 (&amp;I)</translation>
 <translation id="7724603315864178912">잘라내기</translation>
+<translation id="7793738202466490491">캘린더 이벤트로 추가</translation>
 <translation id="7865983598101744945">나가기 확인</translation>
 <translation id="7957213167373139414">내 캘린더</translation>
 <translation id="8027581147000338959">새 창에서 열기</translation>
@@ -110,6 +112,7 @@
 <translation id="8331671104904436324">백그라운트 탭에서 열기</translation>
 <translation id="8373293945112511707">경관 1</translation>
 <translation id="8427094907586191051">경관 17</translation>
+<translation id="8446668873108041390">AppleScript가 꺼져있을 때 JavaScript를 실행합니다. 설정 &gt; 프라이버시 &gt; Apple 이벤트 하단을 보면 Apple 이벤트에서 JavaScript를 허용할 수 있는 설정이 있습니다.</translation>
 <translation id="8539196077526389150">경관 13</translation>
 <translation id="8624587806981488221">이미지 새로고침 (&amp;R)</translation>
 <translation id="864444594187862076">Opera 버전 15+ (개발자 버전)</translation>

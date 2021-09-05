@@ -112,6 +112,7 @@
 <translation id="1771761307086386028">Прагартаць управа</translation>
 <translation id="1781173782405573156">Клавіша пераходу</translation>
 <translation id="1787176709638001873">Рэдагаванне пароля</translation>
+<translation id="180203835522132923">Пошук + O, затым W</translation>
 <translation id="1810107444790159527">Поле спіса</translation>
 <translation id="1812527064848182527">альбомная</translation>
 <translation id="1829244130665387512">Пошук на старонцы</translation>
@@ -256,6 +257,7 @@
 <translation id="297825089465017871">Правядзіце двума пальцамі ўлева</translation>
 <translation id="2998131015536248178">Папярэдні сімвал</translation>
 <translation id="2999559350546931576">Паменшыць вышыню голасу</translation>
+<translation id="3009352964623081324">Пошук + O, затым S. Выкарыстоўвайце, каб усталёўваць і наладжваць галасы і кіраваць імі.</translation>
 <translation id="3014130421870723208">@рэд 8кроп</translation>
 <translation id="3030432017085518523">Кнопка-пераключальнік у пункце меню</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{апостраф}one{# апостраф}few{# апострафы}many{# апострафаў}other{# апострафа}}</translation>
@@ -454,6 +456,7 @@
 <translation id="4505167975768625962">Устаўка</translation>
 <translation id="4511186779140817916">Бланшыраваны міндаль</translation>
 <translation id="451510441928265982">Няма папярэдняга загалоўка ўзроўню 2</translation>
+<translation id="4515799157838123044">Зацямніць змесціва фону</translation>
 <translation id="4517854969512651305">Павялічыць значэнне</translation>
 <translation id="4532633738839459153">{COUNT,plural, =1{касая рыса}one{# касая рыса}few{# касыя рысы}many{# касых рыс}other{# касой рысы}}</translation>
 <translation id="4537277403911487429">Наступны падобны элемент</translation>
@@ -705,6 +708,7 @@
 <translation id="6628427060004938651">Частка</translation>
 <translation id="6637586476836377253">журнал</translation>
 <translation id="6657128831881431364">Індыкатар стану</translation>
+<translation id="6660819301598582123">абвгдеёжзійклмнопрстуўфхцчшыьэюя</translation>
 <translation id="667999046851023355">Дакумент</translation>
 <translation id="6688209025607531203">Немадальная абвестка</translation>
 <translation id="6689672606256159458">Цёмна-ласасёвы</translation>
@@ -740,7 +744,6 @@
 <translation id="6951482098621102657">Няма наступнага загалоўка ўзроўню 5</translation>
 <translation id="6955705049214951590">Невыразны ружавы</translation>
 <translation id="696356426651109308">Перайсці ў пачатак</translation>
-<translation id="699159175332639490">Пошук + O + W</translation>
 <translation id="6994042831499278539">Спасылка на гласарый</translation>
 <translation id="6996566555547746822">Наступнае камбінаванае акно</translation>
 <translation id="6997224546856374593">Пры агучванні загалоўных літар:</translation>
@@ -765,7 +768,7 @@
 <translation id="7137397390322864165">Ласасёвы</translation>
 <translation id="7140168702531682811">Надрадковы тэкст</translation>
 <translation id="7143034430156387447">Пераключэнне паміж 6- і 8-кропкавым шрыфтам Брайля</translation>
-<translation id="7143207342074048698">Ідзе падключэнне</translation>
+<translation id="7143207342074048698">Падключэнне</translation>
 <translation id="7153618581592392745">Бледна-ліловы</translation>
 <translation id="7157306005867877619">Абстракцыя</translation>
 <translation id="7161771961008409533">Усплывальная кнопка</translation>
@@ -809,6 +812,7 @@
 <translation id="743783356331413498">Прыклад</translation>
 <translation id="7439060726180460871">Каталог</translation>
 <translation id="744163271241493234">зменапароля</translation>
+<translation id="7484805699335881122">Змяняць вышыню голасу пры агучванні тыпаў элементаў і тэксту, запісанага ў двукоссі, паўтлустым шрыфтам, у дужках, вялікімі літарамі або выдаленага.</translation>
 <translation id="7491962110804786152">укладка</translation>
 <translation id="7505149250476994901">Казаць "загалоўная" перад літарай</translation>
 <translation id="7518543783849163354">Каб прыпыніць маўленне ChromeVox, націсніце клавішу Ctrl.</translation>

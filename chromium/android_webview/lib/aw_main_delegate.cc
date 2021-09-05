@@ -12,7 +12,7 @@
 #include "android_webview/browser/gfx/gpu_service_web_view.h"
 #include "android_webview/browser/gfx/viz_compositor_thread_runner_webview.h"
 #include "android_webview/browser/scoped_add_feature_flags.h"
-#include "android_webview/browser/tracing/aw_trace_event_args_whitelist.h"
+#include "android_webview/browser/tracing/aw_trace_event_args_allowlist.h"
 #include "android_webview/common/aw_descriptors.h"
 #include "android_webview/common/aw_features.h"
 #include "android_webview/common/aw_paths.h"
@@ -37,6 +37,7 @@
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/crash/core/common/crash_key.h"
 #include "components/gwp_asan/buildflags/buildflags.h"
+#include "components/metrics/unsent_log_store_metrics.h"
 #include "components/safe_browsing/android/safe_browsing_api_handler_bridge.h"
 #include "components/services/heap_profiling/public/cpp/profiling_client.h"
 #include "components/spellcheck/spellcheck_buildflags.h"
@@ -127,6 +128,11 @@ bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
   // metadata and controls.
   cl->AppendSwitch(switches::kDisableMediaSessionAPI);
 
+  // WebView does not support origin trials and so needs to force appcache
+  // to be enabled during the removal origin trial, until it is finally
+  // removed entirely.  See: http://crbug.com/582750
+  cl->AppendSwitch(switches::kAppCacheForceEnabled);
+
 #if defined(V8_USE_EXTERNAL_STARTUP_DATA)
   if (cl->GetSwitchValueASCII(switches::kProcessType).empty()) {
     // Browser process (no type specified).
@@ -167,9 +173,14 @@ bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
 #if BUILDFLAG(ENABLE_SPELLCHECK)
     features.EnableIfNotSet(spellcheck::kAndroidSpellCheckerNonLowEnd);
 #endif  // ENABLE_SPELLCHECK
-
-    features.EnableIfNotSet(
-        autofill::features::kAutofillSkipComparingInferredLabels);
+    if (base::android::BuildInfo::GetInstance()->sdk_int() >=
+        base::android::SDK_VERSION_OREO) {
+      features.EnableIfNotSet(autofill::features::kAutofillExtractAllDatalists);
+      features.EnableIfNotSet(
+          autofill::features::kAutofillSkipComparingInferredLabels);
+      features.DisableIfNotSet(
+          autofill::features::kAutofillRestrictUnownedFieldsToFormlessCheckout);
+    }
 
     if (cl->HasSwitch(switches::kWebViewLogJsConsoleMessages)) {
       features.EnableIfNotSet(::features::kLogJsConsoleMessages);
@@ -201,9 +212,6 @@ bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
     // WebView does not support Picture-in-Picture yet.
     features.DisableIfNotSet(media::kPictureInPictureAPI);
 
-    features.DisableIfNotSet(
-        autofill::features::kAutofillRestrictUnownedFieldsToFormlessCheckout);
-
     features.DisableIfNotSet(::features::kBackgroundFetch);
 
     features.EnableIfNotSet(::features::kDisableSurfaceControlForWebview);
@@ -230,6 +238,9 @@ bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
     features.DisableIfNotSet(network::features::kCrossOriginEmbedderPolicy);
 
     features.DisableIfNotSet(::features::kInstalledApp);
+
+    features.EnableIfNotSet(
+        metrics::UnsentLogStoreMetrics::kRecordLastUnsentLogMetadataMetrics);
   }
 
   android_webview::RegisterPathProvider();
@@ -242,9 +253,9 @@ bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
   // Used only if the argument filter is enabled in tracing config,
   // as is the case by default in aw_tracing_controller.cc
   base::trace_event::TraceLog::GetInstance()->SetArgumentFilterPredicate(
-      base::BindRepeating(&IsTraceEventArgsWhitelisted));
+      base::BindRepeating(&IsTraceEventArgsAllowlisted));
   base::trace_event::TraceLog::GetInstance()->SetMetadataFilterPredicate(
-      base::BindRepeating(&IsTraceMetadataWhitelisted));
+      base::BindRepeating(&IsTraceMetadataAllowlisted));
 
   // The TLS slot used by the memlog allocator shim needs to be initialized
   // early to ensure that it gets assigned a low slot number. If it gets

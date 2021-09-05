@@ -166,12 +166,6 @@ class TestPendingAppInstallFinalizer : public InstallFinalizer {
             }));
   }
 
-  void FinalizeFallbackInstallAfterSync(
-      const AppId& app_id,
-      InstallFinalizedCallback callback) override {
-    NOTREACHED();
-  }
-
   void FinalizeUninstallAfterSync(const AppId& app_id,
                                   UninstallWebAppCallback callback) override {
     NOTREACHED();
@@ -322,12 +316,15 @@ class PendingAppInstallTaskTest : public ChromeRenderViewHostTestHarness {
     provider->SetFileHandlerManager(std::move(file_handler_manager));
 
     provider->Start();
+    // Start only WebAppInstallManager for real.
+    install_manager_->Start();
   }
 
  protected:
   TestWebAppUiManager* ui_manager() { return ui_manager_; }
   TestAppRegistrar* registrar() { return registrar_; }
   TestPendingAppInstallFinalizer* finalizer() { return install_finalizer_; }
+  WebAppInstallManager* install_manager() { return install_manager_; }
   TestAppShortcutManager* shortcut_manager() { return shortcut_manager_; }
   TestFileHandlerManager* file_handler_manager() {
     return file_handler_manager_;
@@ -370,7 +367,7 @@ class PendingAppInstallTaskTest : public ChromeRenderViewHostTestHarness {
 
     auto task = std::make_unique<PendingAppInstallTask>(
         profile(), registrar_, shortcut_manager_, file_handler_manager_,
-        ui_manager_, install_finalizer_, std::move(options));
+        ui_manager_, install_finalizer_, install_manager_, std::move(options));
     return task;
   }
 
@@ -386,6 +383,19 @@ class PendingAppInstallTaskTest : public ChromeRenderViewHostTestHarness {
   TestFileHandlerManager* file_handler_manager_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(PendingAppInstallTaskTest);
+};
+
+class PendingAppInstallTaskWithRunOnOsLoginTest
+    : public PendingAppInstallTaskTest {
+ public:
+  void SetUp() override {
+    scoped_feature_list_.InitWithFeatures({features::kDesktopPWAsRunOnOsLogin},
+                                          {});
+    PendingAppInstallTaskTest::SetUp();
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 TEST_F(PendingAppInstallTaskTest,
@@ -887,7 +897,7 @@ TEST_F(PendingAppInstallTaskTest, InstallURLLoadFailed) {
         ExternalInstallSource::kInternalDefault);
     PendingAppInstallTask install_task(
         profile(), registrar(), shortcut_manager(), file_handler_manager(),
-        ui_manager(), finalizer(), install_options);
+        ui_manager(), finalizer(), install_manager(), install_options);
 
     install_task.Install(
         web_contents(), result_pair.loader_result,
@@ -904,9 +914,9 @@ TEST_F(PendingAppInstallTaskTest, FailedWebContentsDestroyed) {
   ExternalInstallOptions install_options(
       GURL(), DisplayMode::kStandalone,
       ExternalInstallSource::kInternalDefault);
-  PendingAppInstallTask install_task(profile(), registrar(), shortcut_manager(),
-                                     file_handler_manager(), ui_manager(),
-                                     finalizer(), install_options);
+  PendingAppInstallTask install_task(
+      profile(), registrar(), shortcut_manager(), file_handler_manager(),
+      ui_manager(), finalizer(), install_manager(), install_options);
 
   install_task.Install(
       web_contents(), WebAppUrlLoader::Result::kFailedWebContentsDestroyed,
@@ -914,6 +924,67 @@ TEST_F(PendingAppInstallTaskTest, FailedWebContentsDestroyed) {
           [&](PendingAppInstallTask::Result) { NOTREACHED(); }));
 
   base::RunLoop().RunUntilIdle();
+}
+
+TEST_F(PendingAppInstallTaskWithRunOnOsLoginTest,
+       WebAppOrShortcutFromContents_RunOnOsLogin) {
+  ExternalInstallOptions install_options(
+      WebAppUrl(), DisplayMode::kStandalone,
+      ExternalInstallSource::kInternalDefault);
+  install_options.run_on_os_login = true;
+
+  auto task = GetInstallationTaskWithTestMocks(std::move(install_options));
+
+  base::RunLoop run_loop;
+
+  task->Install(
+      web_contents(), WebAppUrlLoader::Result::kUrlLoaded,
+      base::BindLambdaForTesting([&](PendingAppInstallTask::Result result) {
+        EXPECT_EQ(InstallResultCode::kSuccessNewInstall, result.code);
+        EXPECT_TRUE(result.app_id.has_value());
+
+        EXPECT_EQ(1u, shortcut_manager()->num_create_shortcuts_calls());
+        EXPECT_TRUE(shortcut_manager()->did_add_to_desktop().value());
+
+        EXPECT_EQ(1u, shortcut_manager()->num_register_run_on_os_login_calls());
+
+        EXPECT_EQ(1u, finalizer()->num_add_app_to_quick_launch_bar_calls());
+        EXPECT_EQ(0u, finalizer()->num_reparent_tab_calls());
+
+        run_loop.Quit();
+      }));
+
+  run_loop.Run();
+}
+
+TEST_F(PendingAppInstallTaskWithRunOnOsLoginTest,
+       WebAppOrShortcutFromContents_NoRunOnOsLogin) {
+  ExternalInstallOptions install_options(
+      WebAppUrl(), DisplayMode::kStandalone,
+      ExternalInstallSource::kInternalDefault);
+  install_options.run_on_os_login = false;
+  auto task = GetInstallationTaskWithTestMocks(std::move(install_options));
+
+  base::RunLoop run_loop;
+
+  task->Install(
+      web_contents(), WebAppUrlLoader::Result::kUrlLoaded,
+      base::BindLambdaForTesting([&](PendingAppInstallTask::Result result) {
+        EXPECT_EQ(InstallResultCode::kSuccessNewInstall, result.code);
+        EXPECT_TRUE(result.app_id.has_value());
+
+        EXPECT_EQ(1u, shortcut_manager()->num_create_shortcuts_calls());
+        EXPECT_TRUE(shortcut_manager()->did_add_to_desktop().value());
+
+        EXPECT_EQ(0u, shortcut_manager()->num_register_run_on_os_login_calls());
+
+        EXPECT_EQ(1u, finalizer()->num_add_app_to_quick_launch_bar_calls());
+        EXPECT_EQ(0u, finalizer()->num_reparent_tab_calls());
+
+        run_loop.Quit();
+      }));
+
+  run_loop.Run();
 }
 
 }  // namespace web_app

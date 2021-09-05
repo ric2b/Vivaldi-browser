@@ -218,14 +218,15 @@ TEST_F(CompositingReasonFinderTest, PromoteCrossOriginIframe) {
   )HTML");
   UpdateAllLifecyclePhasesForTest();
 
-  Element* iframe = GetDocument().getElementById("iframe");
+  HTMLFrameOwnerElement* iframe =
+      To<HTMLFrameOwnerElement>(GetDocument().getElementById("iframe"));
   ASSERT_TRUE(iframe);
-  PaintLayer* iframe_layer =
-      ToLayoutBoxModelObject(iframe->GetLayoutObject())->Layer();
+  ASSERT_FALSE(iframe->ContentFrame()->IsCrossOriginToMainFrame());
+  LayoutView* iframe_layout_view =
+      To<LocalFrame>(iframe->ContentFrame())->ContentLayoutObject();
+  ASSERT_TRUE(iframe_layout_view);
+  PaintLayer* iframe_layer = iframe_layout_view->Layer();
   ASSERT_TRUE(iframe_layer);
-  ASSERT_FALSE(To<HTMLFrameOwnerElement>(iframe)
-                   ->ContentFrame()
-                   ->IsCrossOriginToMainFrame());
   EXPECT_EQ(kNotComposited, iframe_layer->DirectCompositingReasons());
 
   SetBodyInnerHTML(R"HTML(
@@ -234,15 +235,135 @@ TEST_F(CompositingReasonFinderTest, PromoteCrossOriginIframe) {
   )HTML");
   UpdateAllLifecyclePhasesForTest();
 
-  iframe = GetDocument().getElementById("iframe");
-  ASSERT_TRUE(iframe);
-  iframe_layer = ToLayoutBoxModelObject(iframe->GetLayoutObject())->Layer();
+  iframe = To<HTMLFrameOwnerElement>(GetDocument().getElementById("iframe"));
+  iframe_layout_view =
+      To<LocalFrame>(iframe->ContentFrame())->ContentLayoutObject();
+  iframe_layer = iframe_layout_view->Layer();
   ASSERT_TRUE(iframe_layer);
-  ASSERT_TRUE(To<HTMLFrameOwnerElement>(iframe)
-                  ->ContentFrame()
-                  ->IsCrossOriginToMainFrame());
+  ASSERT_TRUE(iframe->ContentFrame()->IsCrossOriginToMainFrame());
   EXPECT_EQ(CompositingReason::kIFrame,
             iframe_layer->DirectCompositingReasons());
+}
+
+TEST_F(CompositingReasonFinderTest,
+       CompositeWithBackfaceVisibilityAncestorAndPreserve3D) {
+  ScopedTransformInteropForTest enabled(true);
+
+  SetBodyInnerHTML(R"HTML(
+    <!DOCTYPE html>
+    <style>
+      div { width: 100px; height: 100px; position: relative }
+    </style>
+    <div style="backface-visibility: hidden; transform-style: preserve-3d">
+      <div id=target></div>
+    </div>
+  )HTML");
+
+  PaintLayer* target_layer =
+      ToLayoutBoxModelObject(GetLayoutObjectByElementId("target"))->Layer();
+
+  EXPECT_EQ(CompositingReason::kBackfaceInvisibility3DAncestor,
+            target_layer->PotentialCompositingReasonsFromNonStyle());
+  EXPECT_EQ(kPaintsIntoOwnBacking, target_layer->GetCompositingState());
+}
+
+TEST_F(CompositingReasonFinderTest,
+       CompositeWithBackfaceVisibilityAncestorAndPreserve3DWithInterveningDiv) {
+  ScopedTransformInteropForTest enabled(true);
+
+  SetBodyInnerHTML(R"HTML(
+    <!DOCTYPE html>
+    <style>
+      div { width: 100px; height: 100px }
+    </style>
+    <div style="backface-visibility: hidden; transform-style: preserve-3d">
+      <div>
+        <div id=target style="position: relative"></div>
+      </div>
+    </div>
+  )HTML");
+
+  PaintLayer* target_layer =
+      ToLayoutBoxModelObject(GetLayoutObjectByElementId("target"))->Layer();
+
+  EXPECT_EQ(CompositingReason::kBackfaceInvisibility3DAncestor,
+            target_layer->PotentialCompositingReasonsFromNonStyle());
+  EXPECT_EQ(kPaintsIntoOwnBacking, target_layer->GetCompositingState());
+}
+
+TEST_F(CompositingReasonFinderTest,
+       CompositeWithBackfaceVisibilityAncestorWithInterveningStackingDiv) {
+  ScopedTransformInteropForTest enabled(true);
+
+  SetBodyInnerHTML(R"HTML(
+    <!DOCTYPE html>
+    <style>
+      div { width: 100px; height: 100px }
+    </style>
+    <div style="backface-visibility: hidden; transform-style: preserve-3d">
+      <div id=intermediate style="isolation: isolate">
+        <div id=target style="position: relative"></div>
+      </div>
+    </div>
+  )HTML");
+
+  PaintLayer* intermediate_layer =
+      ToLayoutBoxModelObject(GetLayoutObjectByElementId("intermediate"))
+          ->Layer();
+
+  PaintLayer* target_layer =
+      ToLayoutBoxModelObject(GetLayoutObjectByElementId("target"))->Layer();
+
+  EXPECT_EQ(CompositingReason::kBackfaceInvisibility3DAncestor,
+            intermediate_layer->PotentialCompositingReasonsFromNonStyle());
+  EXPECT_EQ(kPaintsIntoOwnBacking, intermediate_layer->GetCompositingState());
+
+  EXPECT_EQ(CompositingReason::kNone,
+            target_layer->PotentialCompositingReasonsFromNonStyle());
+  EXPECT_NE(kPaintsIntoOwnBacking, target_layer->GetCompositingState());
+}
+
+TEST_F(CompositingReasonFinderTest,
+       CompositeWithBackfaceVisibilityAncestorAndFlattening) {
+  ScopedTransformInteropForTest enabled(true);
+
+  SetBodyInnerHTML(R"HTML(
+    <!DOCTYPE html>
+    <style>
+      div { width: 100px; height: 100px; position: relative }
+    </style>
+    <div style="backface-visibility: hidden;">
+      <div id=target></div>
+    </div>
+  )HTML");
+
+  PaintLayer* target_layer =
+      ToLayoutBoxModelObject(GetLayoutObjectByElementId("target"))->Layer();
+
+  EXPECT_EQ(CompositingReason::kNone,
+            target_layer->PotentialCompositingReasonsFromNonStyle());
+  EXPECT_NE(kPaintsIntoOwnBacking, target_layer->GetCompositingState());
+}
+
+TEST_F(CompositingReasonFinderTest, CompositeWithBackfaceVisibility) {
+  ScopedTransformInteropForTest enabled(true);
+
+  SetBodyInnerHTML(R"HTML(
+    <!DOCTYPE html>
+    <style>
+      div { width: 100px; height: 100px; position: relative }
+    </style>
+    <div id=target style="backface-visibility: hidden;">
+      <div></div>
+    </div>
+  )HTML");
+
+  PaintLayer* target_layer =
+      ToLayoutBoxModelObject(GetLayoutObjectByElementId("target"))->Layer();
+
+  EXPECT_EQ(CompositingReason::kNone,
+            target_layer->PotentialCompositingReasonsFromNonStyle());
+  EXPECT_EQ(kPaintsIntoOwnBacking, target_layer->GetCompositingState());
 }
 
 }  // namespace blink

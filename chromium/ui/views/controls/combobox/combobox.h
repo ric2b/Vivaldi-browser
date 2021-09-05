@@ -126,7 +126,7 @@ class VIEWS_EXPORT Combobox : public View,
   void AdjustBoundsForRTLUI(gfx::Rect* rect) const;
 
   // Draws the selected value of the drop down list
-  void PaintText(gfx::Canvas* canvas);
+  void PaintIconAndText(gfx::Canvas* canvas);
 
   // Show the drop down list
   void ShowDropDownMenu(ui::MenuSourceType source_type);
@@ -207,7 +207,7 @@ class VIEWS_EXPORT Combobox : public View,
   bool size_to_largest_label_;
 
   // The focus ring for this Combobox.
-  std::unique_ptr<FocusRing> focus_ring_;
+  FocusRing* focus_ring_ = nullptr;
 
   ScopedObserver<ui::ComboboxModel, ui::ComboboxModelObserver> observer_{this};
 

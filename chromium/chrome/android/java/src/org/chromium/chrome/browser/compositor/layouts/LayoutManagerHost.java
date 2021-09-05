@@ -8,6 +8,7 @@ import android.content.Context;
 import android.graphics.RectF;
 import android.view.View;
 
+import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.chrome.browser.compositor.TitleCache;
 import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
 
@@ -108,6 +109,11 @@ public interface LayoutManagerHost {
      * @return The manager in charge of handling fullscreen changes.
      */
     ChromeFullscreenManager getFullscreenManager();
+
+    /**
+     * @return An {@link ObservableSupplier} supplier for the {@link ChromeFullscreenManager}.
+     */
+    ObservableSupplier<ChromeFullscreenManager> getFullscreenManagerSupplier();
 
     /**
      * Called when the currently visible content has been changed.

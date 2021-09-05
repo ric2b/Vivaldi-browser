@@ -13,7 +13,6 @@
 #include "base/rand_util.h"
 #include "base/strings/safe_sprintf.h"
 #include "base/strings/strcat.h"
-#include "base/task/post_task.h"
 #include "base/timer/timer.h"
 #include "base/trace_event/trace_event.h"
 #include "base/values.h"
@@ -170,6 +169,8 @@ class NamedTriggerRule : public BackgroundTracingRule {
       named_rule->set_event_type(MetadataProto::NamedRule::NAVIGATION);
     } else if (named_event_ == "session-restore-config") {
       named_rule->set_event_type(MetadataProto::NamedRule::SESSION_RESTORE);
+    } else if (named_event_ == "reached-code-config") {
+      named_rule->set_event_type(MetadataProto::NamedRule::REACHED_CODE);
     } else if (named_event_ == "preemptive_test") {
       named_rule->set_event_type(MetadataProto::NamedRule::TEST_RULE);
     }
@@ -283,8 +284,8 @@ class HistogramRule : public BackgroundTracingRule,
     if (histogram_name != histogram_name_)
       return;
 
-    base::PostTask(
-        FROM_HERE, {content::BrowserThread::UI},
+    content::GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE,
         base::BindOnce(
             &BackgroundTracingManagerImpl::OnRuleTriggered,
             base::Unretained(BackgroundTracingManagerImpl::GetInstance()), this,
@@ -292,8 +293,8 @@ class HistogramRule : public BackgroundTracingRule,
   }
 
   void AbortTracing() {
-    base::PostTask(
-        FROM_HERE, {content::BrowserThread::UI},
+    content::GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE,
         base::BindOnce(
             &BackgroundTracingManagerImpl::AbortScenario,
             base::Unretained(BackgroundTracingManagerImpl::GetInstance())));

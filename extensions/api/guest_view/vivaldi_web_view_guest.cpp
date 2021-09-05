@@ -83,7 +83,8 @@ void SetAllowRunningInsecureContent(content::RenderFrameHost* frame) {
   renderer->SetAllowRunningInsecureContent();
 }
 
-static std::string SSLStateToString(security_state::SecurityLevel status) {
+static std::string SSLStateToString(SecurityStateTabHelper* helper) {
+  security_state::SecurityLevel status = helper->GetSecurityLevel();
   switch (status) {
     case security_state::NONE:
       // HTTP/no URL/user is editing
@@ -91,12 +92,13 @@ static std::string SSLStateToString(security_state::SecurityLevel status) {
     case security_state::WARNING:
       // show a visible warning about the page's lack of security
       return "warning";
-    case security_state::EV_SECURE:
-      // HTTPS with valid EV cert
-      return "secure_with_ev";
-    case security_state::SECURE:
-      // HTTPS (non-EV)
+    case security_state::SECURE: {
+      auto visible_security_state = helper->GetVisibleSecurityState();
+      if (visible_security_state->cert_status & net::CERT_STATUS_IS_EV)
+        return "secure_with_ev";
+      // HTTPS
       return "secure_no_ev";
+    }
     case security_state::SECURE_WITH_POLICY_INSTALLED_CERT:
       // HTTPS, but the certificate verification chain is anchored on a
       // certificate that was installed by the system administrator
@@ -195,18 +197,14 @@ WebContents::CreateParams WebViewGuest::GetWebContentsCreateParams(
       std::string extension_id = site.host();
       const Extension* extension =
           registry->enabled_extensions().GetByID(extension_id);
-
       if (extension && !IncognitoInfo::IsSplitMode(extension)) {
         // If it's not split-mode the host is associated with the original
         // profile.
         profile = profile->GetOriginalProfile();
         context = profile;
-        guest_site_instance =
-            ProcessManager::Get(profile)->GetSiteInstanceForURL(site);
-      } else {
-        guest_site_instance =
-            content::SiteInstance::CreateForURL(context, site);
       }
+      guest_site_instance =
+          content::SiteInstance::CreateForGuest(context, site);
     }
   }
 
@@ -377,7 +375,7 @@ void WebViewGuest::VisibleSecurityStateChanged(WebContents* source) {
     return;
   }
 
-  args->SetString("SSLState", SSLStateToString(helper->GetSecurityLevel()));
+  args->SetString("SSLState", SSLStateToString(helper));
 
   content::NavigationController& controller = web_contents()->GetController();
   content::NavigationEntry* entry = controller.GetVisibleEntry();

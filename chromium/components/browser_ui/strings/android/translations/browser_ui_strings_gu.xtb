@@ -10,6 +10,7 @@
 <translation id="1201402288615127009">આગલું</translation>
 <translation id="1242008676835033345"><ph name="WEBSITE_URL" /> પર શામેલ કર્યું</translation>
 <translation id="1272079795634619415">રોકો</translation>
+<translation id="1289742167380433257">તમારો ડેટા બચાવવા માટે, આ પેજની છબીઓને Google દ્વારા ઑપ્ટિમાઇઝ કરવામાં આવી છે.</translation>
 <translation id="129382876167171263">વેબસાઇટ દ્વારા સાચવવામાં આવેલી ફાઇલો અહી દેખાશે</translation>
 <translation id="1364532808393826295"><ph name="APP_NAME" /> - <ph name="NOTIFICATION_MESSAGE" /></translation>
 <translation id="1369915414381695676">સાઈટ <ph name="SITE_NAME" /> ઉમેરવામાં આવી</translation>
@@ -42,11 +43,12 @@
 <translation id="2182457891543959921">કોઈ સાઇટને તમારી આજુબાજુનો 3D નકશો બનાવતા અથવા કૅમેરાની સ્થિતિને ટ્રૅક કરવાની મંજૂરી આપતા પહેલાં પૂછો (સુઝાવ આપીએ છીએ)</translation>
 <translation id="2212565012507486665">કુકીને મંજૂરી આપો</translation>
 <translation id="2289270750774289114">જ્યારે કોઈ સાઇટ નજીકના બ્લૂટૂથ ડિવાઇસને શોધવા માગે ત્યારે પૂછો (સુઝાવ આપેલ)</translation>
+<translation id="2315043854645842844">ઓપરેટિંગ સિસ્ટમ દ્વારા ક્લાઇન્ટ તરફની પ્રમાણપત્ર પસંદગી સપોર્ટ કરતી નથી.</translation>
 <translation id="2359808026110333948">આગળ વધો</translation>
 <translation id="2402980924095424747"><ph name="MEGABYTES" /> MB</translation>
 <translation id="2434158240863470628">ડાઉનલોડ પૂર્ણ <ph name="SEPARATOR" /><ph name="BYTES_DOWNLOADED" /></translation>
 <translation id="2440823041667407902">સ્થાન ઍક્સેસ</translation>
-<translation id="2482878487686419369">સૂચનાઓ</translation>
+<translation id="2482878487686419369">નોટિફિકેશનો</translation>
 <translation id="2490684707762498678"><ph name="APP_NAME" /> દ્વારા સંચાલિત</translation>
 <translation id="2498359688066513246">સહાય અને પ્રતિસાદ</translation>
 <translation id="2501278716633472235">પાછા જાઓ</translation>
@@ -61,10 +63,12 @@
 <translation id="2704606927547763573">કૉપિ કર્યું</translation>
 <translation id="2822354292072154809">શું તમે ખરેખર <ph name="CHOSEN_OBJECT_NAME" />ની બધી સાઇટ પસંદગીઓને રીસેટ કરવા માગો છે?</translation>
 <translation id="2870560284913253234">સાઇટ</translation>
+<translation id="2874939134665556319">પાછલું ટ્રૅક</translation>
 <translation id="2910701580606108292">સાઇટને સંરક્ષિત કન્ટેન્ટ ચલાવવાની મંજૂરી આપતા પહેલાંં પૂછો</translation>
 <translation id="2913331724188855103">સાઇટને કૂકી ડેટા સાચવવા અને વાંચવાની મંજૂરી આપો (ભલામણ કરેલ)</translation>
 <translation id="2968755619301702150">પ્રમાણપત્ર દર્શક</translation>
 <translation id="300526633675317032">આ <ph name="SIZE_IN_KB" /> નું બધું વેબસાઇટ સ્ટોરેજ સાફ કરશે.</translation>
+<translation id="301521992641321250">આપમેળે અવરોધિત</translation>
 <translation id="3115898365077584848">માહિતી બતાવો</translation>
 <translation id="3123473560110926937">કેટલીક સાઇટ પર બ્લૉક કરેલ</translation>
 <translation id="3190152372525844641"><ph name="BEGIN_LINK" />Android સેટિંગ્સ<ph name="END_LINK" />માં Chrome માટે પરવાનગીઓ ચાલુ કરો.</translation>
@@ -83,16 +87,19 @@
 <translation id="3744111561329211289">પૃષ્ઠભૂમિ સમન્વયન</translation>
 <translation id="3822502789641063741">સાઇટ સ્ટોરેજ સાફ કરીએ?</translation>
 <translation id="385051799172605136">પાછળ</translation>
+<translation id="3859306556332390985">આગળ કરો</translation>
 <translation id="3955193568934677022">સાઇટને સંરક્ષિત કન્ટેન્ટ ચલાવવાની મંજૂરી આપો (ભલામણ કરેલ)</translation>
 <translation id="3987993985790029246">લિંક કૉપિ કરો</translation>
 <translation id="3991845972263764475"><ph name="BYTES_DOWNLOADED_WITH_UNITS" /> / ?</translation>
 <translation id="4002066346123236978">શીર્ષક</translation>
 <translation id="4008040567710660924">કોઈ ચોક્કસ સાઇટ માટે કુકીને મંજૂરી આપો.</translation>
+<translation id="4046123991198612571">આગલો ટ્રૅક</translation>
 <translation id="4165986682804962316">સાઇટ સેટિંગ્સ</translation>
 <translation id="4226663524361240545">સૂચનાઓ ઉપકરણને વાઇબ્રેટ કરી શકે છે</translation>
 <translation id="4242533952199664413">સેટિંગ્સ ખોલો</translation>
 <translation id="4259722352634471385">નેવિગેશન અવરોધિત છે: <ph name="URL" /></translation>
 <translation id="4278390842282768270">મંજૂર</translation>
+<translation id="429312253194641664">સાઇટ મીડિયા ચલાવી રહી છે</translation>
 <translation id="4433925000917964731">Google દ્વારા પૂરું પાડવામાં આવેલું લાઇટ વર્ઝનનું પેજ</translation>
 <translation id="4434045419905280838">પૉપ-અપ અને રીડાયરેક્ટ</translation>
 <translation id="445467742685312942">સાઇટને સંરક્ષિત કન્ટેન્ટ ચલાવવાની મંજૂરી આપો</translation>
@@ -107,6 +114,7 @@
 <translation id="4962975101802056554">ડિવાઇસ માટેની બધી પરવાનગીઓને રદબાતલ કરો</translation>
 <translation id="4964199952259983386">Chromeને ARનો વપરાશ કરવા દેવા માટે, <ph name="BEGIN_LINK" />Android સેટિંગ<ph name="END_LINK" />માંથી કૅમેરા પણ ચાલુ કરો.</translation>
 <translation id="497421865427891073">આગળ જાઓ</translation>
+<translation id="4996978546172906250">આનાથી શેર કરો</translation>
 <translation id="5039804452771397117">મંજૂરી આપો</translation>
 <translation id="5048398596102334565">સાઇટને મોશન સેન્સરના ઍક્સેસની મંજૂરી આપો (સુઝાવ આપેલ)</translation>
 <translation id="5063480226653192405">ઉપયોગ</translation>
@@ -163,7 +171,9 @@
 <translation id="6643016212128521049">સાફ કરો</translation>
 <translation id="6697925417670533197">ડાઉનલોડ કરવાનું સક્રિય કરો</translation>
 <translation id="6746124502594467657">નીચે ખસેડો</translation>
+<translation id="6766622839693428701">બંધ કરવા માટે નીચેની તરફ સ્વાઇપ કરો.</translation>
 <translation id="6782111308708962316">તૃતીય-પક્ષ વેબસાઇટને કુકી ડેટા સાચવવા અને વાંચવાથી અટકાવો</translation>
+<translation id="6790428901817661496">ચલાવો</translation>
 <translation id="6818926723028410516">આઇટમ પસંદ કરો</translation>
 <translation id="6864395892908308021">આ ડિવાઇસ NFC વાંચી શકતું નથી</translation>
 <translation id="6910211073230771657">કાઢી નાખ્યું</translation>
@@ -197,6 +207,7 @@
 <translation id="7804248752222191302">કોઈ સાઇટ તમારા કૅમેરાનો ઉપયોગ કરી રહી છે</translation>
 <translation id="7817023149356982970">આ સાઇટમાંથી તમને સાઇન આઉટ કરવામાં આવશે.</translation>
 <translation id="7828557259026017104">કુકી એ તમે મુલાકાત લો છો તે વેબસાઇટ દ્વારા બનાવવામાં આવેલી ફાઇલો છે. સાઇટ તેનો ઉપયોગ તમારી પસંદગીઓને યાદ રાખવા માટે કરે છે. ત્રીજા પક્ષની કુકી અન્ય સાઇટ દ્વારા બનાવવામાં આવે છે. અમુક પ્રકારનું કન્ટેન્ટ આ સાઇટની માલિકીનું હોય છે, જેમ કે તમે મુલાકાત લો છો તે વેેબપેજ પર તમે જોયેલી જાહેરાતો કે છબીઓ.</translation>
+<translation id="7835852323729233924">મીડિયા ચલાવી રહ્યાં છીએ</translation>
 <translation id="7846076177841592234">પસંદગી રદ કરો</translation>
 <translation id="7846621471902887024">તમે બધી સાઇટમાં સાઇન આઉટ કરવામાં આવશે.</translation>
 <translation id="7882806643839505685">કોઈ એક ચોક્કસ સાઇટ માટે અવાજ ચલાવવાની મંજૂરી આપો.</translation>
@@ -204,6 +215,7 @@
 <translation id="7999064672810608036">શું તમે ખરેખર કૂકીઝ સહિત આ વેબસાઇટ માટેનો બધો ડેટા સાફ કરી અને આ વેબસાઇટ માટેની બધી પરવાનગીઓ ફરીથી સેટ કરવા માગો છો?</translation>
 <translation id="8007176423574883786">આ ઉપકરણ માટે બંધ કર્યું</translation>
 <translation id="802154636333426148">ડાઉનલોડ નિષ્ફળ થયું</translation>
+<translation id="8068648041423924542">પ્રમાણપત્ર પસંદ કરવામાં અસમર્થ.</translation>
 <translation id="8087000398470557479">આ કન્ટેન્ટ <ph name="DOMAIN_NAME" /> માંથી, Google દ્વારા વિતરિત કરેલ છે.</translation>
 <translation id="8116925261070264013">મ્યૂટ કરેલ</translation>
 <translation id="8131740175452115882">પુષ્ટિ કરો</translation>
@@ -216,6 +228,8 @@
 <translation id="83792324527827022">કોઈ સાઇટ તમારા કૅમેરા અને માઇક્રોફોનનો ઉપયોગ કરી રહી છે</translation>
 <translation id="8380167699614421159">આ સાઇટ ઘૃણાસ્પદ અથવા ભ્રામક જાહેરાતો બતાવે છે</translation>
 <translation id="8394832520002899662">સાઇટ પર પાછા ફરવા માટે, ટૅપ કરો</translation>
+<translation id="8425213833346101688">બદલો</translation>
+<translation id="8441146129660941386">પાછળ કરો</translation>
 <translation id="8447861592752582886">ઉપકરણની પરવાનગી રદબાતલ કરો</translation>
 <translation id="8463851957836045671">સાઇટ ઝડપી છે</translation>
 <translation id="851751545965956758">સાઇટને ઉપકરણો સાથે કનેક્ટ થવાથી બ્લૉક કરો</translation>
@@ -236,6 +250,7 @@
 <translation id="8958424370300090006">કોઈ ચોક્કસ સાઇટ માટે કુકીને બ્લૉક કરો.</translation>
 <translation id="8959122750345127698">નેવિગેશન બિનપહોંચ યોગ્ય છે: <ph name="URL" /></translation>
 <translation id="9019902583201351841">તમારા માતાપિતા દ્વારા સંચાલિત</translation>
+<translation id="9074739597929991885">બ્લૂટૂથ</translation>
 <translation id="945632385593298557">તમારા માઇક્રોફોનની ઍક્સેસ</translation>
 <translation id="965817943346481315">જો સાઇટ ઘૃણાસ્પદ અથવા ભ્રામક જાહેરાતો બતાવતી હોય, તો બ્લૉક કરો (ભલામણ કરેલ)</translation>
 </translationbundle>

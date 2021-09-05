@@ -12,7 +12,7 @@ import androidx.annotation.Nullable;
 
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
-import org.chromium.chrome.browser.util.AccessibilityUtil;
+import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
 import org.chromium.components.browser_ui.util.BrowserControlsVisibilityDelegate;
 import org.chromium.components.dom_distiller.core.DomDistillerUrlUtils;
 import org.chromium.components.embedder_support.util.UrlConstants;
@@ -137,16 +137,6 @@ public class TabStateBrowserControlsVisibilityDelegate
             }
 
             @Override
-            public void onDidAttachInterstitialPage(Tab tab) {
-                updateVisibilityConstraints();
-            }
-
-            @Override
-            public void onDidDetachInterstitialPage(Tab tab) {
-                updateVisibilityConstraints();
-            }
-
-            @Override
             public void onShown(Tab tab, int type) {
                 updateVisibilityConstraints();
             }
@@ -200,14 +190,13 @@ public class TabStateBrowserControlsVisibilityDelegate
         enableHidingBrowserControls &=
                 !SelectionPopupController.fromWebContents(webContents).isFocusedNodeEditable();
         enableHidingBrowserControls &= !mTab.isShowingErrorPage();
-        enableHidingBrowserControls &= !webContents.isShowingInterstitialPage();
         enableHidingBrowserControls &= !mTab.isRendererUnresponsive();
         enableHidingBrowserControls &= !mTab.isHidden();
         enableHidingBrowserControls &= !mIsFullscreenWaitingForLoad;
 
         // TODO(tedchoc): AccessibilityUtil and DeviceClassManager checks do not belong in Tab
         //                logic.  They should be moved to application level checks.
-        enableHidingBrowserControls &= !AccessibilityUtil.isAccessibilityEnabled();
+        enableHidingBrowserControls &= !ChromeAccessibilityUtil.get().isAccessibilityEnabled();
         enableHidingBrowserControls &= DeviceClassManager.enableFullscreen();
 
         return enableHidingBrowserControls;

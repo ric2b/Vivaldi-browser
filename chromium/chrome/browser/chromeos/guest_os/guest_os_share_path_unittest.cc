@@ -907,7 +907,7 @@ TEST_F(GuestOsSharePathTest, UnshareOnDeleteMountExists) {
   SetUpVolume();
   crostini::CrostiniManager::GetForProfile(profile())->AddRunningVmForTesting(
       crostini::kCrostiniDefaultVmName);
-  ASSERT_TRUE(base::DeleteFile(shared_path_, false));
+  ASSERT_TRUE(base::DeleteFile(shared_path_));
   guest_os_share_path_->set_seneschal_callback_for_testing(base::BindRepeating(
       &GuestOsSharePathTest::SeneschalUnsharePathCallback,
       base::Unretained(this), "unshare-on-delete", shared_path_, Persist::NO,
@@ -944,6 +944,28 @@ TEST_F(GuestOsSharePathTest, RegisterPathThenUnshare) {
                      SeneschalClientCalled::YES, "MyFiles/path-to-share",
                      Success::YES, ""));
   run_loop()->Run();
+}
+
+TEST_F(GuestOsSharePathTest, IsPathShared) {
+  SetUpVolume();
+  // shared_path_ and children paths are shared for 'termina'.
+  for (auto& path : {shared_path_, shared_path_.Append("a.txt"),
+                     shared_path_.Append("a"), shared_path_.Append("a/b")}) {
+    EXPECT_TRUE(guest_os_share_path_->IsPathShared(
+        crostini::kCrostiniDefaultVmName, path));
+  }
+  // Any parent paths are not shared.
+  for (auto& path : {shared_path_.DirName(), root_}) {
+    EXPECT_FALSE(guest_os_share_path_->IsPathShared(
+        crostini::kCrostiniDefaultVmName, path));
+  }
+
+  // No paths are shared for 'not-shared' VM.
+  for (auto& path :
+       {shared_path_, shared_path_.Append("a.txt"), shared_path_.Append("a"),
+        shared_path_.Append("a/b"), shared_path_.DirName(), root_}) {
+    EXPECT_FALSE(guest_os_share_path_->IsPathShared("not-shared", path));
+  }
 }
 
 }  // namespace guest_os

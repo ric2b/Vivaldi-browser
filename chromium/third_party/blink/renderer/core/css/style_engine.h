@@ -147,7 +147,7 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
                                WebDocument::kAuthorOrigin);
   CSSStyleSheet& EnsureInspectorStyleSheet();
   RuleSet* WatchedSelectorsRuleSet() {
-    DCHECK(IsMaster());
+    DCHECK(!IsHTMLImport());
     DCHECK(global_rule_set_);
     return global_rule_set_->WatchedSelectorsRuleSet();
   }
@@ -158,10 +158,9 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   RuleSet* RuleSetForSheet(CSSStyleSheet&);
   void MediaQueryAffectingValueChanged(MediaValueChange change);
   void UpdateActiveStyleSheetsInImport(
-      StyleEngine& master_engine,
+      StyleEngine& root_engine,
       DocumentStyleSheetCollector& parent_collector);
   void UpdateActiveStyle();
-  void MarkAllTreeScopesDirty() { all_tree_scopes_dirty_ = true; }
 
   String PreferredStylesheetSetName() const {
     return preferred_stylesheet_set_name_;
@@ -232,7 +231,7 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   bool MediaQueryAffectedByViewportChange();
   bool MediaQueryAffectedByDeviceChange();
   bool HasViewportDependentMediaQueries() {
-    DCHECK(IsMaster());
+    DCHECK(!IsHTMLImport());
     DCHECK(global_rule_set_);
     UpdateActiveStyle();
     return !global_rule_set_->GetRuleFeatureSet()
@@ -271,6 +270,7 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   void EnsureUAStyleForFullscreen();
   void EnsureUAStyleForXrOverlay();
   void EnsureUAStyleForElement(const Element&);
+  void EnsureUAStyleForPseudoElement(PseudoId);
 
   void PlatformColorsChanged();
 
@@ -382,9 +382,11 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
     return preferred_color_scheme_;
   }
   ForcedColors GetForcedColors() const { return forced_colors_; }
-  void UpdateColorSchemeBackground();
+  void UpdateColorSchemeBackground(bool color_scheme_changed = false);
+  Color ForcedBackgroundColor() const { return forced_background_color_; }
+  Color ColorAdjustBackgroundColor() const;
 
-  void Trace(Visitor*) override;
+  void Trace(Visitor*) const override;
   const char* NameInHeapSnapshot() const override { return "StyleEngine"; }
 
  private:
@@ -395,9 +397,8 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
 
  private:
   bool NeedsActiveStyleSheetUpdate() const {
-    return all_tree_scopes_dirty_ || tree_scopes_removed_ ||
-           document_scope_dirty_ || dirty_tree_scopes_.size() ||
-           user_style_dirty_;
+    return tree_scopes_removed_ || document_scope_dirty_ ||
+           dirty_tree_scopes_.size() || user_style_dirty_;
   }
 
   TreeScopeStyleSheetCollection& EnsureStyleSheetCollectionFor(TreeScope&);
@@ -409,8 +410,8 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   void MarkTreeScopeDirty(TreeScope&);
   void MarkUserStyleDirty();
 
-  bool IsMaster() const { return is_master_; }
-  Document* Master();
+  bool IsHTMLImport() const { return is_html_import_; }
+  Document* HTMLImportRootDocument();
   Document& GetDocument() const { return *document_; }
 
   typedef HeapHashSet<Member<TreeScope>> UnorderedTreeScopeSet;
@@ -424,7 +425,7 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
                                        MediaValueChange);
 
   const RuleFeatureSet& GetRuleFeatureSet() const {
-    DCHECK(IsMaster());
+    DCHECK(!IsHTMLImport());
     DCHECK(global_rule_set_);
     return global_rule_set_->GetRuleFeatureSet();
   }
@@ -484,6 +485,8 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   void ClearKeyframeRules() { keyframes_rule_map_.clear(); }
   void ClearPropertyRules();
 
+  void AddPropertyRulesFromSheets(const ActiveStyleSheetVector&);
+
   // Returns true if any @font-face rules are added.
   bool AddUserFontFaceRules(const RuleSet&);
   void AddUserKeyframeRules(const RuleSet&);
@@ -492,12 +495,15 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
 
   void UpdateColorScheme();
   bool SupportsDarkColorScheme();
+  void UpdateForcedBackgroundColor();
 
   void ViewportDefiningElementDidChange();
   void PropagateWritingModeAndDirectionToHTMLRoot();
 
   Member<Document> document_;
-  bool is_master_;
+
+  // True if this StyleEngine is for an HTML Import document.
+  bool is_html_import_ = false;
 
   // Tracks the number of currently loading top-level stylesheets. Sheets loaded
   // using the @import directive are not included in this count. We use this
@@ -535,7 +541,6 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   StyleSheetCollectionMap style_sheet_collection_map_;
 
   bool document_scope_dirty_ = true;
-  bool all_tree_scopes_dirty_ = false;
   bool tree_scopes_removed_ = false;
   bool user_style_dirty_ = false;
   UnorderedTreeScopeSet dirty_tree_scopes_;
@@ -603,12 +608,13 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
 
   // The preferred color scheme is set in settings, but may be overridden by the
   // ForceDarkMode setting where the preferred_color_scheme_ will be set to
-  // kNoPreference to avoid dark styling to be applied before auto darkening.
-  PreferredColorScheme preferred_color_scheme_ =
-      PreferredColorScheme::kNoPreference;
+  // kLight to avoid dark styling to be applied before auto darkening.
+  PreferredColorScheme preferred_color_scheme_ = PreferredColorScheme::kLight;
+  bool use_dark_background_ = false;
 
   // Forced colors is set in WebThemeEngine.
   ForcedColors forced_colors_ = ForcedColors::kNone;
+  Color forced_background_color_;
 
   friend class NodeTest;
   friend class StyleEngineTest;

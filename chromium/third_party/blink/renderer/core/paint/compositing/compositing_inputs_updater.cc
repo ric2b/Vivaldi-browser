@@ -8,6 +8,7 @@
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/layout/layout_block.h"
+#include "third_party/blink/renderer/core/layout/layout_embedded_content.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/paint/compositing/composited_layer_mapping.h"
 #include "third_party/blink/renderer/core/paint/compositing/paint_layer_compositor.h"
@@ -189,6 +190,13 @@ void CompositingInputsUpdater::UpdateSelfAndDescendantsRecursively(
     descendant_has_direct_compositing_reason |=
         LayerOrDescendantShouldBeComposited(child);
   }
+  if (!descendant_has_direct_compositing_reason &&
+      layer->GetLayoutObject().IsLayoutEmbeddedContent()) {
+    if (ToLayoutEmbeddedContent(layer->GetLayoutObject())
+            .ContentDocumentIsCompositing()) {
+      descendant_has_direct_compositing_reason = true;
+    }
+  }
   layer->SetDescendantHasDirectOrScrollingCompositingReason(
       descendant_has_direct_compositing_reason);
 
@@ -249,7 +257,7 @@ void CompositingInputsUpdater::UpdateAncestorInfo(PaintLayer* const layer,
     case kNotComposited:
       break;
     case kPaintsIntoOwnBacking:
-      if (style.IsStackingContext())
+      if (layout_object.IsStackingContext())
         enclosing_stacking_composited_layer = layer;
       break;
     case kPaintsIntoGroupedBacking:
@@ -336,7 +344,7 @@ void CompositingInputsUpdater::UpdateAncestorInfo(PaintLayer* const layer,
   if (layout_object.HasClip())
     info.clip_chain_parent_for_fixed = layer;
 
-  if (style.IsStackingContext()) {
+  if (layout_object.IsStackingContext()) {
     info.escape_clip_to = nullptr;
     const LayoutBoxModelObject* clipping_container =
         ClippingContainerFromClipChainParent(layer);
@@ -360,14 +368,12 @@ void CompositingInputsUpdater::UpdateAncestorInfo(PaintLayer* const layer,
     //     <div style="position:absolute;"></div>
     //   </div>
     // </div>
-    if (info.escape_clip_to_for_absolute && style.ZIndex() < 0 &&
+    if (info.escape_clip_to_for_absolute && style.EffectiveZIndex() < 0 &&
         !info.escape_clip_to_for_absolute->GetLayoutObject()
-             .StyleRef()
              .IsStackingContext())
       info.escape_clip_to_for_absolute = nullptr;
-    if (info.escape_clip_to_for_fixed && style.ZIndex() < 0 &&
+    if (info.escape_clip_to_for_fixed && style.EffectiveZIndex() < 0 &&
         !info.escape_clip_to_for_fixed->GetLayoutObject()
-             .StyleRef()
              .IsStackingContext())
       info.escape_clip_to_for_fixed = nullptr;
 
@@ -465,7 +471,7 @@ void CompositingInputsUpdater::UpdateAncestorDependentCompositingInputs(
   properties.clip_parent = info.escape_clip_to;
 
   properties.ancestor_scrolling_layer = info.scrolling_ancestor;
-  if (info.needs_reparent_scroll && layout_object.StyleRef().IsStacked())
+  if (info.needs_reparent_scroll && layout_object.IsStacked())
     properties.scroll_parent = info.scrolling_ancestor;
 
   properties.nearest_contained_layout_layer =

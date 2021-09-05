@@ -13,6 +13,7 @@
 #include "components/viz/common/resources/resource_sizes.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
 #include "gpu/command_buffer/service/abstract_texture.h"
+#include "gpu/command_buffer/service/ahardwarebuffer_utils.h"
 #include "gpu/command_buffer/service/mailbox_manager.h"
 #include "gpu/command_buffer/service/memory_tracking.h"
 #include "gpu/command_buffer/service/shared_context_state.h"
@@ -145,9 +146,9 @@ class SharedImageRepresentationGLTextureVideo
   gles2::Texture* GetTexture() override { return texture_; }
 
   bool BeginAccess(GLenum mode) override {
-    // This representation should only be called for read.
-    DCHECK_EQ(mode,
-              static_cast<GLenum>(GL_SHARED_IMAGE_ACCESS_MODE_READ_CHROMIUM));
+    // This representation should only be called for read or overlay.
+    DCHECK(mode == GL_SHARED_IMAGE_ACCESS_MODE_READ_CHROMIUM ||
+           mode == GL_SHARED_IMAGE_ACCESS_MODE_OVERLAY_CHROMIUM);
 
     auto* video_backing = static_cast<SharedImageVideo*>(backing());
     video_backing->BeginGLReadAccess();
@@ -182,9 +183,9 @@ class SharedImageRepresentationGLTexturePassthroughVideo
   }
 
   bool BeginAccess(GLenum mode) override {
-    // This representation should only be called for read.
-    DCHECK_EQ(mode,
-              static_cast<GLenum>(GL_SHARED_IMAGE_ACCESS_MODE_READ_CHROMIUM));
+    // This representation should only be called for read or overlay.
+    DCHECK(mode == GL_SHARED_IMAGE_ACCESS_MODE_READ_CHROMIUM ||
+           mode == GL_SHARED_IMAGE_ACCESS_MODE_OVERLAY_CHROMIUM);
 
     auto* video_backing = static_cast<SharedImageVideo*>(backing());
     video_backing->BeginGLReadAccess();
@@ -266,13 +267,10 @@ class SharedImageRepresentationVideoSkiaVk
 
     if (!vulkan_image_) {
       DCHECK(!promise_texture_);
-      gfx::GpuMemoryBufferHandle gmb_handle(
-          scoped_hardware_buffer_->TakeBuffer());
-      auto* device_queue =
-          context_state_->vk_context_provider()->GetDeviceQueue();
-      vulkan_image_ = VulkanImage::CreateFromGpuMemoryBufferHandle(
-          device_queue, std::move(gmb_handle), size(), ToVkFormat(format()),
-          0 /* usage */);
+
+      vulkan_image_ =
+          CreateVkImageFromAhbHandle(scoped_hardware_buffer_->TakeBuffer(),
+                                     context_state_.get(), size(), format());
       if (!vulkan_image_)
         return nullptr;
 

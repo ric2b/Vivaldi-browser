@@ -55,6 +55,11 @@ void DataRequestHandler::Init(ipc_data_source::Info source_info,
                               dispatch_queue_t ipc_queue) {
   // This can only be called once.
   DCHECK(!can_read_);
+  if (source_info.buffer.IsReadError()) {
+    // An empty source that we use during warmup to force a early read error
+    // from the handler, see AVFMediaReaderRunner::WarmUp.
+    return;
+  }
   can_read_ = true;
 
   source_buffer_ = std::move(source_info.buffer);

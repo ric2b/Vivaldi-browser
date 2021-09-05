@@ -15,6 +15,7 @@
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/ui/passwords/manage_passwords_ui_controller.h"
 #include "chrome/browser/ui/tab_dialogs.h"
+#include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/password_form.h"
 #include "components/password_manager/core/browser/test_password_store.h"
 #include "components/password_manager/core/common/password_manager_features.h"
@@ -77,7 +78,7 @@ class CapturedSitesPasswordManagerBrowserTest
                 browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS)
                 .get());
     autofill::PasswordForm signin_form;
-    signin_form.origin = GURL(origin);
+    signin_form.url = GURL(origin);
     signin_form.signon_realm = origin;
     signin_form.password_value = base::ASCIIToUTF16(password);
     signin_form.username_value = base::ASCIIToUTF16(username);
@@ -141,10 +142,9 @@ class CapturedSitesPasswordManagerBrowserTest
     }
 
     const std::vector<autofill::PasswordForm>& passwords_vector = found->second;
-    for (auto it = passwords_vector.begin(); it != passwords_vector.end();
-         ++it) {
-      if (base::ASCIIToUTF16(username) == it->username_value &&
-          base::ASCIIToUTF16(password) == it->password_value) {
+    for (const auto& found_password : passwords_vector) {
+      if (base::ASCIIToUTF16(username) == found_password.username_value &&
+          base::ASCIIToUTF16(password) == found_password.password_value) {
         return true;
       }
     }
@@ -168,7 +168,10 @@ class CapturedSitesPasswordManagerBrowserTest
         std::make_unique<ServerUrlLoader>(std::make_unique<ServerCacheReplayer>(
             GetParam().capture_file_path,
             ServerCacheReplayer::kOptionFailOnInvalidJsonRecord |
-                ServerCacheReplayer::kOptionSplitRequestsByForm)));
+                ServerCacheReplayer::kOptionSplitRequestsByForm,
+            base::FeatureList::IsEnabled(autofill::features::kAutofillUseApi)
+                ? autofill::test::AutofillServerType::kApi
+                : autofill::test::AutofillServerType::kLegacy)));
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {

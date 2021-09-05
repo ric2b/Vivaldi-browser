@@ -11,8 +11,8 @@
 #include <string>
 #include <vector>
 
-#include "ash/public/cpp/arc_notification_manager_base.h"
-#include "ash/public/cpp/arc_notifications_host_initializer.h"
+#include "ash/public/cpp/message_center/arc_notification_manager_base.h"
+#include "ash/public/cpp/message_center/arc_notifications_host_initializer.h"
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -26,11 +26,12 @@
 #include "chrome/browser/chromeos/arc/app_shortcuts/arc_app_shortcut_item.h"
 #include "chrome/browser/chromeos/arc/app_shortcuts/arc_app_shortcuts_request.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
-#include "chrome/services/app_service/public/cpp/publisher_base.h"
-#include "chrome/services/app_service/public/mojom/app_service.mojom.h"
 #include "components/arc/intent_helper/arc_intent_helper_bridge.h"
 #include "components/arc/intent_helper/arc_intent_helper_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/services/app_service/public/cpp/instance_registry.h"
+#include "components/services/app_service/public/cpp/publisher_base.h"
+#include "components/services/app_service/public/mojom/app_service.mojom.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote_set.h"
@@ -43,13 +44,14 @@ class AppServiceProxy;
 
 // An app publisher (in the App Service sense) of ARC++ apps,
 //
-// See chrome/services/app_service/README.md.
+// See components/services/app_service/README.md.
 class ArcApps : public KeyedService,
                 public apps::PublisherBase,
                 public ArcAppListPrefs::Observer,
                 public arc::ArcIntentHelperObserver,
                 public ash::ArcNotificationManagerBase::Observer,
-                public ash::ArcNotificationsHostInitializer::Observer {
+                public ash::ArcNotificationsHostInitializer::Observer,
+                public apps::InstanceRegistry::Observer {
  public:
   static ArcApps* Get(Profile* profile);
 
@@ -94,6 +96,7 @@ class ArcApps : public KeyedService,
                  bool report_abuse) override;
   void PauseApp(const std::string& app_id) override;
   void UnpauseApps(const std::string& app_id) override;
+  void StopApp(const std::string& app_id) override;
   void GetMenuModel(const std::string& app_id,
                     apps::mojom::MenuType menu_type,
                     int64_t display_id,
@@ -144,6 +147,11 @@ class ArcApps : public KeyedService,
   void OnNotificationRemoved(const std::string& notification_id) override;
   void OnArcNotificationManagerDestroyed(
       ash::ArcNotificationManagerBase* notification_manager) override;
+
+  // apps::InstanceRegistry::Observer overrides.
+  void OnInstanceUpdate(const apps::InstanceUpdate& update) override;
+  void OnInstanceRegistryWillBeDestroyed(
+      apps::InstanceRegistry* instance_registry) override;
 
   void LoadPlayStoreIcon(apps::mojom::IconCompression icon_compression,
                          int32_t size_hint_in_dip,
@@ -202,6 +210,11 @@ class ArcApps : public KeyedService,
       notification_observer_{this};
 
   AppNotifications app_notifications_;
+
+  ScopedObserver<apps::InstanceRegistry, apps::InstanceRegistry::Observer>
+      instance_registry_observer_{this};
+
+  bool settings_app_is_active_;
 
   base::WeakPtrFactory<ArcApps> weak_ptr_factory_{this};
 

@@ -13,8 +13,9 @@ import android.app.NotificationChannel;
 import android.content.Context;
 import android.os.Build;
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.MediumTest;
-import android.support.test.filters.SmallTest;
+
+import androidx.test.filters.MediumTest;
+import androidx.test.filters.SmallTest;
 
 import org.hamcrest.BaseMatcher;
 import org.hamcrest.Description;
@@ -35,6 +36,7 @@ import org.chromium.components.browser_ui.notifications.NotificationManagerProxy
 import org.chromium.components.browser_ui.notifications.NotificationManagerProxyImpl;
 import org.chromium.components.browser_ui.site_settings.PermissionInfo;
 import org.chromium.components.content_settings.ContentSettingValues;
+import org.chromium.content_public.browser.test.NativeLibraryTestUtils;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 
 import java.util.ArrayList;
@@ -59,7 +61,7 @@ public class SiteChannelsManagerTest {
 
     @Before
     public void setUp() {
-        mChromeBrowserTestRule.loadNativeLibraryAndInitBrowserProcess();
+        NativeLibraryTestUtils.loadNativeLibraryAndInitBrowserProcess();
 
         Context mContext = InstrumentationRegistry.getTargetContext();
         NotificationManagerProxy notificationManagerProxy =

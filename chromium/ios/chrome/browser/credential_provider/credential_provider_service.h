@@ -9,6 +9,8 @@
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/core/browser/password_store_consumer.h"
+#include "components/signin/public/identity_manager/identity_manager.h"
+#import "ios/chrome/browser/signin/authentication_service.h"
 
 @class ArchivableCredentialStore;
 
@@ -17,16 +19,25 @@
 class CredentialProviderService
     : public KeyedService,
       public password_manager::PasswordStoreConsumer,
-      public password_manager::PasswordStore::Observer {
+      public password_manager::PasswordStore::Observer,
+      public signin::IdentityManager::Observer {
  public:
   // Initializes the service.
   CredentialProviderService(
       scoped_refptr<password_manager::PasswordStore> password_store,
-      ArchivableCredentialStore* credential_store);
+      AuthenticationService* authentication_service,
+      ArchivableCredentialStore* credential_store,
+      signin::IdentityManager* identity_manager);
   ~CredentialProviderService() override;
 
   // KeyedService:
   void Shutdown() override;
+
+  // IdentityManager::Observer.
+  void OnPrimaryAccountSet(
+      const CoreAccountInfo& primary_account_info) override;
+  void OnPrimaryAccountCleared(
+      const CoreAccountInfo& previous_primary_account_info) override;
 
  private:
   // Request all the credentials to sync them. Before adding the fresh ones,
@@ -35,6 +46,9 @@ class CredentialProviderService
 
   // Syncs the credential store to disk.
   void SyncStore(void (^completion)(NSError*)) const;
+
+  // Syncs account_validation_id_.
+  void UpdateAccountValidationId();
 
   // PasswordStoreConsumer:
   void OnGetPasswordStoreResults(
@@ -47,8 +61,17 @@ class CredentialProviderService
   // The interface for getting and manipulating a user's saved passwords.
   scoped_refptr<password_manager::PasswordStore> password_store_;
 
+  // The interface for getting the primary account identifier.
+  AuthenticationService* authentication_service_ = nullptr;
+
+  // Identity manager to observe.
+  signin::IdentityManager* identity_manager_;
+
   // The interface for saving and updating credentials.
   ArchivableCredentialStore* archivable_credential_store_ = nil;
+
+  // The current validation ID or nil.
+  NSString* account_validation_id_ = nil;
 
   DISALLOW_COPY_AND_ASSIGN(CredentialProviderService);
 };

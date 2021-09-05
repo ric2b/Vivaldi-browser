@@ -25,7 +25,6 @@ using bookmarks::BookmarkModel;
 using bookmarks::BookmarkNode;
 
 using vivaldi_partners::PartnerDetails;
-using vivaldi_partners::PartnerDatabase;
 
 namespace {
 
@@ -64,7 +63,6 @@ struct DefaultBookmarkItem {
 };
 
 struct DefaultBookmarkTree {
-  std::unique_ptr<PartnerDatabase> partner_db;
   bool valid = false;
   std::string version;
   std::vector<DefaultBookmarkItem> top_items;
@@ -90,10 +88,6 @@ class BookmarkUpdater {
   void RunCleanUpdate();
 
   const Stats& stats() const { return stats_; }
-
-  const PartnerDatabase* partner_db() const {
-    return default_bookmark_tree_->partner_db.get();
-  }
 
  private:
   void UpdateRecursively(
@@ -122,13 +116,15 @@ class BookmarkUpdater {
 };
 
 struct DefaultBookmarkParser {
+  DefaultBookmarkParser(DefaultBookmarkTree& tree) : tree(tree) {}
+
   void ParseJson(base::Value default_bookmarks_value);
   void ParseBookmarkList(int level,
                          base::Value* value_list,
                          std::vector<DefaultBookmarkItem>* default_items,
                          bool inside_bookmarks_folder);
 
-  DefaultBookmarkTree tree;
+  DefaultBookmarkTree& tree;
 
   // The set of partner folders and bookmarks outside Bokmarks folder that are
   // used by a particular bookmark file.
@@ -166,7 +162,7 @@ void DefaultBookmarkParser::ParseBookmarkList(
 
     const PartnerDetails* details = nullptr;
     if (std::string* value = dict.FindStringKey(kNameKey)) {
-      details = tree.partner_db->FindDetailsByName(*value);
+      details = vivaldi_partners::FindDetailsByName(*value);
     }
     if (!details) {
       tree.valid = false;
@@ -269,9 +265,7 @@ void DefaultBookmarkParser::ParseJson(base::Value default_bookmarks_value) {
   ParseBookmarkList(0, bookmark_list, &tree.top_items, false);
 }
 
-DefaultBookmarkTree ReadDefaultBookmarks(std::string locale) {
-
-  std::unique_ptr<PartnerDatabase> partner_db = PartnerDatabase::Read();
+base::Optional<base::Value> ReadDefaultBookmarks(std::string locale) {
 
   vivaldi_partners::AssetReader reader;
   base::Optional<base::Value> default_bookmarks_value =
@@ -287,16 +281,7 @@ DefaultBookmarkTree ReadDefaultBookmarks(std::string locale) {
       }
     }
   }
-
-  if (partner_db && default_bookmarks_value) {
-    DefaultBookmarkParser bookmark_parser;
-    bookmark_parser.tree.partner_db = std::move(partner_db);
-    bookmark_parser.ParseJson(std::move(*default_bookmarks_value));
-    if (bookmark_parser.tree.valid) {
-      return std::move(bookmark_parser.tree);
-    }
-  }
-  return DefaultBookmarkTree();
+  return default_bookmarks_value;
 }
 
 BookmarkUpdater::BookmarkUpdater(
@@ -324,7 +309,7 @@ void BookmarkUpdater::SetDeletedPartners(PrefService* prefs) {
       continue;
     }
     std::string guid = value.GetString();
-    if (partner_db()->MapLocaleIdToGUID(guid)) {
+    if (vivaldi_partners::MapLocaleIdToGUID(guid)) {
       has_locale_based_ids = true;
     }
     ids.push_back(std::move(guid));
@@ -394,7 +379,7 @@ void BookmarkUpdater::FindExistingPartners(const BookmarkNode* top_node) {
     // If the guid was for a former locale-specific partner id, adjust it to
     // locale-independent one as guid_node_map_ is used to check for presence of
     // nodes that lost its partner status due to changes by the user.
-    partner_db()->MapLocaleIdToGUID(guid);
+    vivaldi_partners::MapLocaleIdToGUID(guid);
     auto inserted_guid = guid_node_map_.emplace(std::move(guid), node);
     if (!inserted_guid.second) {
       // This happens after sync mixed older locale-based partners from several
@@ -406,7 +391,7 @@ void BookmarkUpdater::FindExistingPartners(const BookmarkNode* top_node) {
     std::string partner_id = vivaldi_bookmark_kit::GetPartner(node);
     if (partner_id.empty())
       continue;
-    if (partner_db()->MapLocaleIdToGUID(partner_id)) {
+    if (vivaldi_partners::MapLocaleIdToGUID(partner_id)) {
       VLOG(2) << "Old locale-based partner id "
               << vivaldi_bookmark_kit::GetPartner(node) << " "
               << node->GetTitle();
@@ -584,13 +569,13 @@ void BookmarkUpdater::UpdatePartnerNode(const DefaultBookmarkItem& item,
 
 void UpdatePartnersInModel(Profile* profile,
                            const std::string& locale,
-                           DefaultBookmarkTree default_tree,
+                           base::Optional<base::Value> default_bookmarks_value,
                            UpdateCallback callback,
                            BookmarkModel* model) {
   bool ok = false;
   bool no_version = false;
   do {
-    if (!model)
+    if (!model || !default_bookmarks_value)
       break;
 
     if (!model->bookmark_bar_node() || !model->trash_node()) {
@@ -599,6 +584,13 @@ void UpdatePartnersInModel(Profile* profile,
       break;
     }
 
+    // We parse default_bookmarks_value here after the bookmark model and
+    // vivaldi_partners database are loaded, not on a worker thread immediatelly
+    // after we read JSON in ReadDefaultBookmarks. The latter may run before
+    // vivaldi_partners are ready especially on Android.
+    DefaultBookmarkTree default_tree;
+    DefaultBookmarkParser bookmark_parser(default_tree);
+    bookmark_parser.ParseJson(std::move(*default_bookmarks_value));
     if (!default_tree.valid) {
       LOG(ERROR) << "default bookmarks cannot be updated as their definition "
                     "is not valid.";
@@ -662,15 +654,16 @@ void UpdatePartnersInModel(Profile* profile,
   }
 }
 
-void UpdatePartnersFromDefaults(Profile* profile,
-                                const std::string& locale,
-                                UpdateCallback callback,
-                                DefaultBookmarkTree default_tree) {
+void UpdatePartnersFromDefaults(
+    Profile* profile,
+    const std::string& locale,
+    UpdateCallback callback,
+    base::Optional<base::Value> default_bookmarks_value) {
   // Unretained is safe as recording profiles are never removed.
   vivaldi_bookmark_kit::RunAfterModelLoad(
       profile ? BookmarkModelFactory::GetForBrowserContext(profile) : nullptr,
       base::BindOnce(&UpdatePartnersInModel, base::Unretained(profile), locale,
-                     std::move(default_tree), std::move(callback)));
+                     std::move(default_bookmarks_value), std::move(callback)));
 }
 
 }  // namespace

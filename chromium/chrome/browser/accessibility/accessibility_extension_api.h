@@ -109,8 +109,8 @@ class AccessibilityPrivateOnSelectToSpeakStateChangedFunction
                              ACCESSIBILITY_PRIVATE_ONSELECTTOSPEAKSTATECHANGED)
 };
 
-// API function that is called when the Autoclick extension finds scrollable
-// bounds.
+// API function that is called when the Accessibility Common extension finds
+// scrollable bounds.
 class AccessibilityPrivateOnScrollableBoundsForPointFoundFunction
     : public ExtensionFunction {
   ~AccessibilityPrivateOnScrollableBoundsForPointFoundFunction() override {}
@@ -127,15 +127,6 @@ class AccessibilityPrivateToggleDictationFunction : public ExtensionFunction {
   ResponseAction Run() override;
   DECLARE_EXTENSION_FUNCTION("accessibilityPrivate.toggleDictation",
                              ACCESSIBILITY_PRIVATE_TOGGLEDICTATION)
-};
-
-// API function that is called to show or hide the Switch Access menu.
-class AccessibilityPrivateSetSwitchAccessMenuStateFunction
-    : public ExtensionFunction {
-  ~AccessibilityPrivateSetSwitchAccessMenuStateFunction() override {}
-  ResponseAction Run() override;
-  DECLARE_EXTENSION_FUNCTION("accessibilityPrivate.setSwitchAccessMenuState",
-                             ACCESSIBILITY_PRIVATE_SETSWITCHACCESSMENUSTATE)
 };
 
 // API function that requests that key events be forwarded to the Switch

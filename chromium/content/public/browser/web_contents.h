@@ -82,7 +82,6 @@ class BrowserContext;
 class BrowserPluginGuestDelegate;
 class RenderFrameHost;
 class RenderViewHost;
-class RenderWidgetHost;
 class RenderWidgetHostView;
 class WebContentsDelegate;
 class WebUI;
@@ -295,10 +294,7 @@ class WebContents : public PageNavigator,
 
   // Gets the virtual URL currently being displayed in the URL bar, if there is
   // one. This URL might be a pending navigation that hasn't committed yet, so
-  // it is not guaranteed to match the current page in this WebContents. A
-  // typical example of this is interstitials, which show the URL of the
-  // new/loading page (active) but the security context is of the old page (last
-  // committed).
+  // it is not guaranteed to match the current page in this WebContents.
   virtual const GURL& GetVisibleURL() = 0;
 
   // Gets the virtual URL of the last committed page in this WebContents.
@@ -432,12 +428,15 @@ class WebContents : public PageNavigator,
   using AccessibilityEventCallback =
       base::RepeatingCallback<void(const std::string&)>;
 
-  // Starts or stops recording accessibility events. While accessibility events
-  // are being recorded, the callback will be called when an accessibility
-  // event is received. The start paramater says whether the recording is
-  // starting or stopping.
-  virtual void RecordAccessibilityEvents(AccessibilityEventCallback callback,
-                                         bool start) = 0;
+  // Starts or stops recording accessibility events. |start_recording| is true
+  // when recording should start and false when recording should stop.
+  // |callback| is an optional function which is called when an accessibility
+  // event is received while accessibility events are being recorded. When
+  // |start_recording| is true, it is expected that |callback| has a value; when
+  // |start_recording| is false, it is expected that |callback| does not.
+  virtual void RecordAccessibilityEvents(
+      bool start_recording,
+      base::Optional<AccessibilityEventCallback> callback) = 0;
 
   // External data.
   virtual void SetExtData(const std::string& ext_data) = 0;
@@ -517,6 +516,9 @@ class WebContents : public PageNavigator,
                                       bool stay_hidden) = 0;
   virtual void DecrementCapturerCount(bool stay_hidden) = 0;
   virtual bool IsBeingCaptured() = 0;
+  // Returns true if there is any active capturer that called
+  // IncrementCaptureCount() with |stay_hidden|==false.
+  virtual bool IsBeingVisiblyCaptured() = 0;
 
   // Indicates/Sets whether all audio output from this WebContents is muted.
   virtual bool IsAudioMuted() = 0;
@@ -540,18 +542,6 @@ class WebContents : public PageNavigator,
   // Indicates whether any frame in the WebContents has native file system
   // handles.
   virtual bool HasNativeFileSystemHandles() = 0;
-
-  // Indicates whether any frame in the WebContents has native file system
-  // directory handles.
-  virtual bool HasNativeFileSystemDirectoryHandles() = 0;
-
-  // Returns the paths of all the native file system directory handles frames in
-  // this WebContents have access to.
-  virtual std::vector<base::FilePath> GetNativeFileSystemDirectoryHandles() = 0;
-
-  // Indicates whether any frame in the WebContents has writable native file
-  // system handles.
-  virtual bool HasWritableNativeFileSystemHandles() = 0;
 
   // Indicates whether a video is in Picture-in-Picture for |this|.
   virtual bool HasPictureInPictureVideo() = 0;
@@ -636,6 +626,10 @@ class WebContents : public PageNavigator,
   // This value may change over time due to portal activation and adoption.
   virtual bool IsPortal() = 0;
 
+  // If |IsPortal()| is true, returns this WebContents' portal host's
+  // WebContents. Otherwise, returns nullptr.
+  virtual WebContents* GetPortalHostWebContents() = 0;
+
   // Returns the outer WebContents frame, the same frame that this WebContents
   // was attached in AttachToOuterWebContentsFrame().
   virtual RenderFrameHost* GetOuterWebContentsFrame() = 0;
@@ -691,13 +685,6 @@ class WebContents : public PageNavigator,
 
   // Reloads the focused frame.
   virtual void ReloadFocusedFrame() = 0;
-
-  // Attains PauseSubresourceLoadingHandles for each frame in the web contents.
-  // As long as these handles are not deleted, subresources will continue to be
-  // deferred until an internal navigation happens in the frame. Holding handles
-  // for deleted or re-navigated frames has no effect.
-  virtual std::vector<mojo::Remote<blink::mojom::PauseSubresourceLoadingHandle>>
-  PauseSubresourceLoading() = 0;
 
   // Editing commands ----------------------------------------------------------
 
@@ -777,11 +764,6 @@ class WebContents : public PageNavigator,
   // is true when using Shift-Tab).
   virtual void FocusThroughTabTraversal(bool reverse) = 0;
 
-  // Interstitials -------------------------------------------------------------
-
-  // Various other systems need to know about our interstitials.
-  virtual bool ShowingInterstitialPage() = 0;
-
   // Misc state & callbacks ----------------------------------------------------
 
   // Check whether we can do the saving page operation this page given its MIME
@@ -840,19 +822,12 @@ class WebContents : public PageNavigator,
   // Returns the contents MIME type after a navigation.
   virtual const std::string& GetContentsMimeType() = 0;
 
-  // Returns true if this WebContents will notify about disconnection.
-  virtual bool WillNotifyDisconnection() = 0;
-
   // Returns the settings which get passed to the renderer.
   virtual blink::mojom::RendererPreferences* GetMutableRendererPrefs() = 0;
 
   // Tells the tab to close now. The tab will take care not to close until it's
   // out of nested run loops.
   virtual void Close() = 0;
-
-  // A render view-originated drag has ended. Informs the render view host and
-  // WebContentsDelegate.
-  virtual void SystemDragEnded(RenderWidgetHost* source_rwh) = 0;
 
   // Indicates if this tab was explicitly closed by the user (control-w, close
   // tab menu item...). This is false for actions that indirectly close the tab,

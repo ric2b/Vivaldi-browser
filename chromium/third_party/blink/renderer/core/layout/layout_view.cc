@@ -24,6 +24,7 @@
 #include <inttypes.h>
 
 #include "build/build_config.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/scroll/scrollbar_mode.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_screen_info.h"
@@ -344,6 +345,15 @@ void LayoutView::UpdateLayout() {
 #endif
 
   LayoutBlockFlow::UpdateLayout();
+
+  if (named_pages_mapper_) {
+    // If a start page name got propagated all the way up to the root, that will
+    // be the name for the first page. Usually we insert names into the mapper
+    // as part of inserting forced breaks, but in this case there'll be no
+    // break, since we're at the first page.
+    if (const AtomicString first_page_name = StartPageName())
+      named_pages_mapper_->NameFirstPage(first_page_name);
+  }
 
 #if DCHECK_IS_ON()
   CheckLayoutState();
@@ -831,11 +841,9 @@ IntervalArena* LayoutView::GetIntervalArena() {
 }
 
 bool LayoutView::BackgroundIsKnownToBeOpaqueInRect(const PhysicalRect&) const {
-  // FIXME: Remove this main frame check. Same concept applies to subframes too.
-  if (!GetFrame()->IsMainFrame())
-    return false;
-
-  return frame_view_->HasOpaqueBackground();
+  // The base background color applies to the main frame only.
+  return GetFrame()->IsMainFrame() &&
+         !frame_view_->BaseBackgroundColor().HasAlpha();
 }
 
 FloatSize LayoutView::ViewportSizeForViewportUnits() const {
@@ -892,6 +900,18 @@ bool LayoutView::UpdateLogicalWidthAndColumnWidth() {
   // When we're printing, the size of LayoutView is changed outside of layout,
   // so we'll fail to detect any changes here. Just return true.
   return relayout_children || ShouldUsePrintingLayout();
+}
+
+CompositingReasons LayoutView::AdditionalCompositingReasons() const {
+  // TODO(lfg): Audit for portals
+  const LocalFrame& frame = frame_view_->GetFrame();
+  if (frame.OwnerLayoutObject() &&
+      base::FeatureList::IsEnabled(
+          blink::features::kCompositeCrossOriginIframes) &&
+      frame.IsCrossOriginToParentFrame()) {
+    return CompositingReason::kIFrame;
+  }
+  return CompositingReason::kNone;
 }
 
 void LayoutView::UpdateCounters() {

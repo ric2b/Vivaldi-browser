@@ -5,7 +5,6 @@
 #include "chrome/browser/media/router/mojo/media_sink_service_status.h"
 
 #include "base/json/json_string_value_serializer.h"
-#include "base/logging.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
@@ -23,11 +22,7 @@ std::string ToJSONString(const base::Value& value) {
   std::string json;
   JSONStringValueSerializer serializer(&json);
   serializer.set_pretty_print(true);
-  if (!serializer.Serialize(value)) {
-    DVLOG(1) << "Failed to serialize log to JSON.";
-    return "";
-  }
-  return json;
+  return serializer.Serialize(value) ? json : "";
 }
 
 // Returns UUID if |sink_id| is in the format of "cast:<UUID>" or "dial:<UUID>";

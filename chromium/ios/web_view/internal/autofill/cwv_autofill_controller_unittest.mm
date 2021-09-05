@@ -81,8 +81,7 @@ class CWVAutofillControllerTest : public PlatformTest {
         [[CRWTestJSInjectionReceiver alloc] init];
     web_state_.SetJSInjectionReceiver(injectionReceiver);
 
-    js_autofill_manager_ =
-        [[FakeJSAutofillManager alloc] initWithReceiver:injectionReceiver];
+    js_autofill_manager_ = [[FakeJSAutofillManager alloc] init];
     js_suggestion_manager_ = OCMClassMock([JsSuggestionManager class]);
 
     autofill_agent_ =

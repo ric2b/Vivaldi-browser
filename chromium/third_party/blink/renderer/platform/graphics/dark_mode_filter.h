@@ -8,10 +8,9 @@
 #include <memory>
 
 #include "cc/paint/paint_flags.h"
-#include "third_party/blink/renderer/platform/geometry/float_rect.h"
 #include "third_party/blink/renderer/platform/graphics/color.h"
 #include "third_party/blink/renderer/platform/graphics/dark_mode_settings.h"
-#include "third_party/blink/renderer/platform/graphics/image.h"
+#include "third_party/blink/renderer/platform/graphics/paint/paint_image.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 
@@ -19,9 +18,12 @@ class SkColorFilter;
 
 namespace blink {
 
+class GraphicsContext;
 class DarkModeColorClassifier;
+class DarkModeImageClassifier;
 class DarkModeColorFilter;
 class ScopedDarkModeElementRoleOverride;
+class DarkModeInvertedColorCache;
 
 class PLATFORM_EXPORT DarkModeFilter {
  public:
@@ -38,32 +40,54 @@ class PLATFORM_EXPORT DarkModeFilter {
   // TODO(gilmanmh): Add a role for shadows. In general, we don't want to
   // invert shadows, but we may need to do some other kind of processing for
   // them.
-  enum class ElementRole { kText, kListSymbol, kBackground, kSVG };
-  Color InvertColorIfNeeded(const Color& color, ElementRole element_role);
+  enum class ElementRole {
+    kText,
+    kListSymbol,
+    kBackground,
+    kSVG,
+    kUnhandledImage,
+    kBitmapImage,
+    kSVGImage,
+    kGradientGeneratedImage
+  };
+
+  SkColor InvertColorIfNeeded(SkColor color, ElementRole element_role);
   base::Optional<cc::PaintFlags> ApplyToFlagsIfNeeded(
       const cc::PaintFlags& flags,
       ElementRole element_role);
 
   // |image| and |flags| must not be null.
-  void ApplyToImageFlagsIfNeeded(const FloatRect& src_rect,
-                                 const FloatRect& dest_rect,
-                                 Image* image,
-                                 cc::PaintFlags* flags);
+  void ApplyToImageFlagsIfNeeded(const SkRect& src,
+                                 const SkRect& dst,
+                                 const PaintImage& paint_image,
+                                 cc::PaintFlags* flags,
+                                 ElementRole element_role);
 
   SkColorFilter* GetImageFilterForTesting() { return image_filter_.get(); }
+  size_t GetInvertedColorCacheSizeForTesting();
 
  private:
   friend class ScopedDarkModeElementRoleOverride;
 
   DarkModeSettings settings_;
 
-  bool ShouldApplyToColor(const Color& color, ElementRole role);
+  bool ShouldApplyToColor(SkColor color, ElementRole role);
+  bool ShouldApplyToImage(const DarkModeSettings& settings,
+                          const SkRect& src,
+                          const SkRect& dst,
+                          const PaintImage& paint_image,
+                          ElementRole role);
 
   std::unique_ptr<DarkModeColorClassifier> text_classifier_;
   std::unique_ptr<DarkModeColorClassifier> background_classifier_;
+  std::unique_ptr<DarkModeImageClassifier> bitmap_image_classifier_;
+  std::unique_ptr<DarkModeImageClassifier> svg_image_classifier_;
+  std::unique_ptr<DarkModeImageClassifier> gradient_generated_image_classifier_;
+
   std::unique_ptr<DarkModeColorFilter> color_filter_;
   sk_sp<SkColorFilter> image_filter_;
   base::Optional<ElementRole> role_override_;
+  std::unique_ptr<DarkModeInvertedColorCache> inverted_color_cache_;
 };
 
 // Temporarily override the element role for the scope of this object's

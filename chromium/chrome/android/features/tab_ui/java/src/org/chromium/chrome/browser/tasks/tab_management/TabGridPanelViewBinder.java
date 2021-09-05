@@ -15,16 +15,15 @@ import static org.chromium.chrome.browser.tasks.tab_management.TabGridPanelPrope
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridPanelProperties.HEADER_TITLE;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridPanelProperties.INITIAL_SCROLL_INDEX;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridPanelProperties.IS_DIALOG_VISIBLE;
+import static org.chromium.chrome.browser.tasks.tab_management.TabGridPanelProperties.IS_KEYBOARD_VISIBLE;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridPanelProperties.IS_MAIN_CONTENT_VISIBLE;
-import static org.chromium.chrome.browser.tasks.tab_management.TabGridPanelProperties.IS_POPUP_WINDOW_FOCUSABLE;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridPanelProperties.IS_TITLE_TEXT_FOCUSED;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridPanelProperties.MENU_CLICK_LISTENER;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridPanelProperties.PRIMARY_COLOR;
-import static org.chromium.chrome.browser.tasks.tab_management.TabGridPanelProperties.SCRIMVIEW_OBSERVER;
+import static org.chromium.chrome.browser.tasks.tab_management.TabGridPanelProperties.SCRIMVIEW_CLICK_RUNNABLE;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridPanelProperties.TINT;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridPanelProperties.TITLE_CURSOR_VISIBILITY;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridPanelProperties.TITLE_TEXT_ON_FOCUS_LISTENER;
-import static org.chromium.chrome.browser.tasks.tab_management.TabGridPanelProperties.TITLE_TEXT_ON_TOUCH_LISTENER;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridPanelProperties.TITLE_TEXT_WATCHER;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridPanelProperties.UNGROUP_BAR_STATUS;
 
@@ -49,10 +48,10 @@ class TabGridPanelViewBinder {
         public final TabGroupUiToolbarView toolbarView;
         public final RecyclerView contentView;
         @Nullable
-        public TabGridDialogParent dialogView;
+        public TabGridDialogView dialogView;
 
         ViewHolder(TabGroupUiToolbarView toolbarView, RecyclerView contentView,
-                @Nullable TabGridDialogParent dialogView) {
+                @Nullable TabGridDialogView dialogView) {
             this.toolbarView = toolbarView;
             this.contentView = contentView;
             this.dialogView = dialogView;
@@ -81,8 +80,8 @@ class TabGridPanelViewBinder {
             viewHolder.contentView.setBackgroundColor(model.get(PRIMARY_COLOR));
         } else if (TINT == propertyKey) {
             viewHolder.toolbarView.setTint(model.get(TINT));
-        } else if (SCRIMVIEW_OBSERVER == propertyKey) {
-            viewHolder.dialogView.setScrimViewObserver(model.get(SCRIMVIEW_OBSERVER));
+        } else if (SCRIMVIEW_CLICK_RUNNABLE == propertyKey) {
+            viewHolder.dialogView.setScrimClickRunnable(model.get(SCRIMVIEW_CLICK_RUNNABLE));
         } else if (IS_DIALOG_VISIBLE == propertyKey) {
             if (model.get(IS_DIALOG_VISIBLE)) {
                 viewHolder.dialogView.resetDialog(viewHolder.toolbarView, viewHolder.contentView);
@@ -135,10 +134,11 @@ class TabGridPanelViewBinder {
             if (!model.get(IS_TITLE_TEXT_FOCUSED)) {
                 viewHolder.toolbarView.clearTitleTextFocus();
             }
-        } else if (IS_POPUP_WINDOW_FOCUSABLE == propertyKey) {
-            viewHolder.dialogView.setPopupWindowFocusable(model.get(IS_POPUP_WINDOW_FOCUSABLE));
-        } else if (TITLE_TEXT_ON_TOUCH_LISTENER == propertyKey) {
-            viewHolder.toolbarView.setTitleOnTouchListener(model.get(TITLE_TEXT_ON_TOUCH_LISTENER));
+        } else if (IS_KEYBOARD_VISIBLE == propertyKey) {
+            // Don't explicitly show keyboard since it should happen automatically.
+            if (!model.get(IS_KEYBOARD_VISIBLE)) {
+                viewHolder.toolbarView.hideKeyboard();
+            }
         }
     }
 }

@@ -10,10 +10,10 @@
 #include <unordered_map>
 #include <unordered_set>
 
-#include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_piece.h"
 #include "chrome/renderer/safe_browsing/features.h"
+#include "components/safe_browsing/content/password_protection/visual_utils.h"
 #include "components/safe_browsing/core/proto/client_model.pb.h"
 
 namespace {
@@ -57,14 +57,12 @@ Scorer::~Scorer() {}
 Scorer* Scorer::Create(const base::StringPiece& model_str) {
   std::unique_ptr<Scorer> scorer(new Scorer());
   ClientSideModel& model = scorer->model_;
+  // Parse the phishing model.
   if (!model.ParseFromArray(model_str.data(), model_str.size())) {
-    DLOG(ERROR) << "Unable to parse phishing model.  This Scorer object is "
-                << "invalid.";
     RecordScorerCreationStatus(SCORER_FAIL_MODEL_PARSE_ERROR);
     return NULL;
   } else if (!model.IsInitialized()) {
-    DLOG(ERROR) << "Unable to parse phishing model.  The model is missing "
-                << "some required fields.  Maybe the .proto file changed?";
+    // The model may be missing some required fields.
     RecordScorerCreationStatus(SCORER_FAIL_MODEL_MISSING_FIELDS);
     return NULL;
   }
@@ -84,6 +82,32 @@ double Scorer::ComputeScore(const FeatureMap& features) const {
     logodds += ComputeRuleScore(model_.rule(i), features);
   }
   return LogOdds2Prob(logodds);
+}
+
+bool Scorer::GetMatchingVisualTargets(const SkBitmap& bitmap,
+                                      ClientPhishingRequest* request) const {
+  bool has_match = false;
+  for (const VisualTarget& target : model_.vision_model().targets()) {
+    base::Optional<VisionMatchResult> result =
+        visual_utils::IsVisualMatch(bitmap, target);
+    if (result.has_value()) {
+      *request->add_vision_match() = result.value();
+      has_match = true;
+    }
+  }
+
+  if (model_.has_vision_model()) {
+    // Populate these fields for telementry purposes. They will be filtered in
+    // the browser process if they are not needed.
+    VisualFeatures::BlurredImage blurred_image;
+    if (visual_utils::GetBlurredImage(bitmap, &blurred_image)) {
+      request->set_screenshot_phash(
+          visual_utils::GetHashFromBlurredImage(blurred_image));
+      request->set_phash_dimension_size(48);
+    }
+  }
+
+  return has_match;
 }
 
 int Scorer::model_version() const {

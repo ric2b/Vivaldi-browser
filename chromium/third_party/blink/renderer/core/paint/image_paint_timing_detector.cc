@@ -122,7 +122,9 @@ ImageRecord* ImagePaintTimingDetector::UpdateCandidate() {
   PaintTimingDetector& detector = frame_view_->GetPaintTimingDetector();
   // Two different candidates are rare to have the same time and size.
   // So when they are unchanged, the candidate is considered unchanged.
-  bool changed = detector.NotifyIfChangedLargestImagePaint(time, size);
+  bool changed = detector.NotifyIfChangedLargestImagePaint(
+      time, size, records_manager_.LargestRemovedImagePaintTime(),
+      records_manager_.LargestRemovedImageSize());
   if (changed) {
     if (!time.is_null()) {
       DCHECK(largest_image_record->loaded);
@@ -341,11 +343,11 @@ ImageRecord* ImageRecordsManager::FindLargestPaintCandidate() const {
   return size_ordered_set_.begin()->get();
 }
 
-void ImageRecordsManager::Trace(Visitor* visitor) {
+void ImageRecordsManager::Trace(Visitor* visitor) const {
   visitor->Trace(frame_view_);
 }
 
-void ImagePaintTimingDetector::Trace(Visitor* visitor) {
+void ImagePaintTimingDetector::Trace(Visitor* visitor) const {
   visitor->Trace(records_manager_);
   visitor->Trace(frame_view_);
   visitor->Trace(callback_manager_);

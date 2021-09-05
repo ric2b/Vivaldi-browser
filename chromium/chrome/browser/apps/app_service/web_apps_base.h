@@ -15,11 +15,11 @@
 #include "chrome/browser/web_applications/components/app_registrar.h"
 #include "chrome/browser/web_applications/components/app_registrar_observer.h"
 #include "chrome/browser/web_applications/components/web_app_id.h"
-#include "chrome/services/app_service/public/cpp/publisher_base.h"
-#include "chrome/services/app_service/public/mojom/app_service.mojom.h"
-#include "chrome/services/app_service/public/mojom/types.mojom.h"
 #include "components/content_settings/core/browser/content_settings_observer.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/services/app_service/public/cpp/publisher_base.h"
+#include "components/services/app_service/public/mojom/app_service.mojom.h"
+#include "components/services/app_service/public/mojom/types.mojom.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/bindings/remote_set.h"
@@ -57,6 +57,9 @@ class WebAppsBase : public apps::PublisherBase,
 
   // web_app::AppRegistrarObserver:
   void OnWebAppUninstalled(const web_app::AppId& app_id) override;
+  void OnWebAppLastLaunchTimeChanged(
+      const std::string& app_id,
+      const base::Time& last_launch_time) override;
 
   apps::mojom::AppPtr ConvertImpl(const web_app::WebApp* web_app,
                                   apps::mojom::Readiness readiness);
@@ -88,7 +91,8 @@ class WebAppsBase : public apps::PublisherBase,
  private:
   void Initialize(const mojo::Remote<apps::mojom::AppService>& app_service);
 
-  const web_app::WebAppRegistrar& GetRegistrar() const;
+  // Can return nullptr in tests.
+  const web_app::WebAppRegistrar* GetRegistrar() const;
 
   // apps::mojom::Publisher overrides.
   void Connect(mojo::PendingRemote<apps::mojom::Subscriber> subscriber_remote,
@@ -125,10 +129,11 @@ class WebAppsBase : public apps::PublisherBase,
 
   // web_app::AppRegistrarObserver:
   void OnWebAppInstalled(const web_app::AppId& app_id) override;
+  void OnWebAppManifestUpdated(const web_app::AppId& app_id,
+                               base::StringPiece old_name) override;
   void OnAppRegistrarDestroyed() override;
   void OnWebAppLocallyInstalledStateChanged(const web_app::AppId& app_id,
                                             bool is_locally_installed) override;
-  // TODO(loyso): Implement app->last_launch_time field for the new system.
 
   void SetShowInFields(apps::mojom::AppPtr& app,
                        const web_app::WebApp* web_app);

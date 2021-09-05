@@ -25,7 +25,7 @@ bool PasswordManagerClient::IsFillingFallbackEnabled(const GURL& url) const {
   return true;
 }
 
-void PasswordManagerClient::PostHSTSQueryForHost(const GURL& origin,
+void PasswordManagerClient::PostHSTSQueryForHost(const url::Origin& origin,
                                                  HSTSCallback callback) const {
   std::move(callback).Run(HSTSResult::kError);
 }
@@ -39,13 +39,13 @@ BiometricAuthenticator* PasswordManagerClient::GetBiometricAuthenticator() {
 void PasswordManagerClient::GeneratePassword() {}
 
 void PasswordManagerClient::UpdateCredentialCache(
-    const GURL& origin,
+    const url::Origin& origin,
     const std::vector<const autofill::PasswordForm*>& best_matches,
     bool is_blacklisted) {}
 
 void PasswordManagerClient::PasswordWasAutofilled(
     const std::vector<const autofill::PasswordForm*>& best_matches,
-    const GURL& origin,
+    const url::Origin& origin,
     const std::vector<const autofill::PasswordForm*>* federated_matches) {}
 
 void PasswordManagerClient::AutofillHttpAuth(
@@ -58,6 +58,7 @@ void PasswordManagerClient::NotifyUserCredentialsWereLeaked(
     const base::string16& username) {}
 
 void PasswordManagerClient::TriggerReauthForPrimaryAccount(
+    signin_metrics::ReauthAccessPoint access_point,
     base::OnceCallback<void(ReauthSucceeded)> reauth_callback) {
   std::move(reauth_callback).Run(ReauthSucceeded(false));
 }
@@ -115,11 +116,7 @@ PasswordManagerClient::GetAutofillDownloadManager() {
   return nullptr;
 }
 
-const GURL& PasswordManagerClient::GetMainFrameURL() const {
-  return GURL::EmptyGURL();
-}
-
-bool PasswordManagerClient::IsMainFrameSecure() const {
+bool PasswordManagerClient::IsCommittedMainFrameSecure() const {
   return false;
 }
 
@@ -146,6 +143,10 @@ favicon::FaviconService* PasswordManagerClient::GetFaviconService() {
 
 bool PasswordManagerClient::IsUnderAdvancedProtection() const {
   return false;
+}
+
+AutofillAssistantMode PasswordManagerClient::GetAutofillAssistantMode() const {
+  return GetPasswordManager()->GetAutofillAssistantMode();
 }
 
 }  // namespace password_manager

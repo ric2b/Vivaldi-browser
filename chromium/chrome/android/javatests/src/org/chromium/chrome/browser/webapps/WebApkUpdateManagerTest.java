@@ -4,7 +4,9 @@
 
 package org.chromium.chrome.browser.webapps;
 
-import android.support.test.filters.MediumTest;
+import android.content.Intent;
+
+import androidx.test.filters.MediumTest;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -170,12 +172,12 @@ public class WebApkUpdateManagerTest {
             WebappDataStorage storage =
                     WebappRegistry.getInstance().getWebappDataStorage(WEBAPK_ID);
             BrowserServicesIntentDataProvider intentDataProvider =
-                    WebApkIntentDataProviderFactory.create("", creationData.scope, null, null,
-                            creationData.name, creationData.shortName, creationData.displayMode,
-                            creationData.orientation, 0, creationData.themeColor,
-                            creationData.backgroundColor, 0, creationData.isPrimaryIconMaskable,
-                            false /* isSplashIconMaskable */, "",
-                            WebApkVersion.REQUEST_UPDATE_FOR_SHELL_APK_VERSION,
+                    WebApkIntentDataProviderFactory.create(new Intent(), "", creationData.scope,
+                            null, null, creationData.name, creationData.shortName,
+                            creationData.displayMode, creationData.orientation, 0,
+                            creationData.themeColor, creationData.backgroundColor, 0,
+                            creationData.isPrimaryIconMaskable, false /* isSplashIconMaskable */,
+                            "", WebApkVersion.REQUEST_UPDATE_FOR_SHELL_APK_VERSION,
                             creationData.manifestUrl, creationData.startUrl,
                             WebApkDistributor.BROWSER, creationData.iconUrlToMurmur2HashMap, null,
                             false /* forceNavigation */, false /* isSplashProvidedByWebApk */,

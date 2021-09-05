@@ -7,8 +7,9 @@ package org.chromium.android_webview.test;
 import android.graphics.Rect;
 import android.net.Uri;
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.SmallTest;
 import android.webkit.JavascriptInterface;
+
+import androidx.test.filters.SmallTest;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -25,7 +26,6 @@ import org.chromium.android_webview.test.TestAwContentsClient.ShouldInterceptReq
 import org.chromium.android_webview.test.util.CommonResources;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.content_public.browser.MessagePort;
 import org.chromium.content_public.browser.SelectionPopupController;
 import org.chromium.content_public.browser.test.util.Criteria;
@@ -266,7 +266,6 @@ public class PopupWindowTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
-    @RetryOnFailure
     public void testPopupWindowTextHandle() throws Throwable {
         final String popupPath = "/popup.html";
         final String parentPageHtml = CommonResources.makeHtmlPageFrom("", "<script>"

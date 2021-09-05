@@ -4,7 +4,7 @@
 
 package org.chromium.chrome.browser.feed;
 
-import android.support.test.filters.SmallTest;
+import androidx.test.filters.SmallTest;
 
 import org.junit.Assert;
 import org.junit.Rule;
@@ -96,13 +96,6 @@ public class FeedConfigurationTest {
                 FeedConfiguration.getUseSecondaryPageRequest());
         Assert.assertEquals(FeedConfiguration.VIEW_LOG_THRESHOLD_DEFAULT,
                 FeedConfiguration.getViewLogThreshold(), ASSERT_EQUALS_DOUBLE_DELTA);
-    }
-
-    @Test
-    @Feature({"Feed"})
-    public void testSendFeedbackEnabledDefault() {
-        Assert.assertEquals(
-                SEND_FEEDBACK_ENABLED_DEFAULT, FeedConfiguration.getSendFeedbackEnabled());
     }
 
     @Test

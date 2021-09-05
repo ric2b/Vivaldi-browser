@@ -40,7 +40,6 @@ blink_core_sources("rendering") {
     "filter_operation.h",
     "filter_operations.cc",
     "filter_operations.h",
-    "gap_length.h",
     "grid_area.h",
     "grid_length.h",
     "grid_position.h",
@@ -81,10 +80,13 @@ blink_core_sources("rendering") {
     "style_inherited_variables.h",
     "style_initial_data.cc",
     "style_initial_data.h",
+    "style_name.h",
+    "style_name_or_keyword.h",
     "style_non_inherited_variables.h",
     "style_offset_rotation.h",
     "style_path.cc",
     "style_path.h",
+    "style_pending_image.cc",
     "style_pending_image.h",
     "style_ray.cc",
     "style_ray.h",
@@ -104,5 +106,18 @@ blink_core_sources("svg_style") {
     "svg_computed_style.h",
     "svg_computed_style_defs.cc",
     "svg_computed_style_defs.h",
+  ]
+}
+
+blink_core_tests("unit_tests") {
+  sources = [
+    "border_value_test.cc",
+    "computed_style_test.cc",
+    "filter_operations_test.cc",
+    "style_difference_test.cc",
+    "style_name_or_keyword_test.cc",
+    "style_name_test.cc",
+    "style_variables_test.cc",
+    "svg_computed_style_test.cc",
   ]
 }

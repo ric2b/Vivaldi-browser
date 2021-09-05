@@ -98,6 +98,8 @@ class PLATFORM_EXPORT DrawingBuffer : public cc::TextureLayerClient,
     virtual void DrawingBufferClientRestorePixelPackParameters() = 0;
     // Restores the GL_TEXTURE_2D binding for the active texture unit only.
     virtual void DrawingBufferClientRestoreTexture2DBinding() = 0;
+    // Restores the GL_TEXTURE_CUBE_MAP binding for the active texture unit.
+    virtual void DrawingBufferClientRestoreTextureCubeMapBinding() = 0;
     virtual void DrawingBufferClientRestoreRenderbufferBinding() = 0;
     virtual void DrawingBufferClientRestoreFramebufferBinding() = 0;
     virtual void DrawingBufferClientRestorePixelUnpackBufferBinding() = 0;
@@ -136,6 +138,7 @@ class PLATFORM_EXPORT DrawingBuffer : public cc::TextureLayerClient,
       PreserveDrawingBuffer,
       WebGLVersion,
       ChromiumImageUsage,
+      SkFilterQuality,
       const CanvasColorParams&,
       gl::GpuPreference);
 
@@ -281,6 +284,8 @@ class PLATFORM_EXPORT DrawingBuffer : public cc::TextureLayerClient,
   scoped_refptr<CanvasResource> AsCanvasResource(
       base::WeakPtr<CanvasResourceProvider> resource_provider);
 
+  static const size_t kDefaultColorBufferCacheLimit;
+
  protected:  // For unittests
   DrawingBuffer(std::unique_ptr<WebGraphicsContext3DProvider>,
                 bool using_gpu_compositing,
@@ -295,6 +300,7 @@ class PLATFORM_EXPORT DrawingBuffer : public cc::TextureLayerClient,
                 bool wants_depth,
                 bool wants_stencil,
                 ChromiumImageUsage,
+                SkFilterQuality,
                 const CanvasColorParams&,
                 gl::GpuPreference gpu_preference);
 

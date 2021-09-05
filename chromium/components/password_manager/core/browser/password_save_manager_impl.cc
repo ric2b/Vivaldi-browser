@@ -171,7 +171,8 @@ void PasswordSaveManagerImpl::CreatePendingCredentials(
       submitted_form, generated_password, is_http_auth, is_credential_api_save,
       similar_saved_form);
 
-  SetVotesAndRecordMetricsForPendingCredentials(parsed_submitted_form);
+  if (votes_uploader_)
+    SetVotesAndRecordMetricsForPendingCredentials(parsed_submitted_form);
 }
 
 void PasswordSaveManagerImpl::SetVotesAndRecordMetricsForPendingCredentials(
@@ -314,7 +315,8 @@ void PasswordSaveManagerImpl::PasswordNoLongerGenerated() {
       PasswordFormMetricsRecorder::GeneratedPasswordStatus::kPasswordDeleted);
 }
 
-void PasswordSaveManagerImpl::MoveCredentialsToAccountStore() {
+void PasswordSaveManagerImpl::MoveCredentialsToAccountStore(
+    metrics_util::MoveToAccountStoreTrigger) {
   // Moving credentials is only supported in MultiStorePasswordSaveManager.
   NOTREACHED();
 }
@@ -403,7 +405,7 @@ PasswordForm PasswordSaveManagerImpl::BuildPendingCredentials(
       password_manager_util::UpdateMetadataForUsage(&pending_credentials);
 
       // Update |pending_credentials| in order to be able correctly save it.
-      pending_credentials.origin = parsed_submitted_form.origin;
+      pending_credentials.url = parsed_submitted_form.url;
       pending_credentials.signon_realm = parsed_submitted_form.signon_realm;
       pending_credentials.action = parsed_submitted_form.action;
       break;

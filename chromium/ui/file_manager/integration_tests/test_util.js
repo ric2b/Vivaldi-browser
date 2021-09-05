@@ -437,9 +437,9 @@ class TestEntryInfo {
     this.mimeType = options.mimeType || '';
     this.sharedOption = options.sharedOption || SharedOption.NONE;
     this.lastModifiedTime = options.lastModifiedTime;
-    this.nameText = options.nameText;
-    this.sizeText = options.sizeText;
-    this.typeText = options.typeText;
+    this.nameText = options.nameText || '';
+    this.sizeText = options.sizeText || '';
+    this.typeText = options.typeText || '';
     this.capabilities = options.capabilities;
     this.folderFeature = options.folderFeature;
     this.pinned = !!options.pinned;
@@ -1343,6 +1343,15 @@ const ENTRIES = {
     nameText: 'hello.crdownload',
     sizeText: '51 bytes',
     typeText: 'CRDOWNLOAD file'
+  }),
+
+  pluginVm: new TestEntryInfo({
+    type: EntryType.DIRECTORY,
+    targetPath: 'PvmDefault',
+    lastModifiedTime: 'Jan 1, 1980, 11:59 PM',
+    nameText: 'Windows Files',
+    sizeText: '--',
+    typeText: 'Folder'
   }),
 };
 

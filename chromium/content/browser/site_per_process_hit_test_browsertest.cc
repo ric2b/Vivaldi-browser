@@ -27,7 +27,6 @@
 #include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
 #include "content/browser/site_per_process_browsertest.h"
 #include "content/common/frame_messages.h"
-#include "content/common/input/input_handler.mojom-test-utils.h"
 #include "content/common/view_messages.h"
 #include "content/common/widget_messages.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -47,6 +46,7 @@
 #include "content/shell/common/shell_switches.h"
 #include "content/test/mock_overscroll_observer.h"
 #include "third_party/blink/public/mojom/frame/user_activation_update_types.mojom.h"
+#include "third_party/blink/public/mojom/input/input_handler.mojom-test-utils.h"
 #include "third_party/blink/public/mojom/page/widget.mojom-test-utils.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
@@ -589,7 +589,7 @@ bool ConvertJSONToRect(const std::string& str, gfx::Rect* rect) {
 // use different bindings.
 class SetMouseCaptureInterceptor
     : public base::RefCountedThreadSafe<SetMouseCaptureInterceptor>,
-      public mojom::WidgetInputHandlerHostInterceptorForTesting {
+      public blink::mojom::WidgetInputHandlerHostInterceptorForTesting {
  public:
   SetMouseCaptureInterceptor(RenderWidgetHostImpl* host)
       : msg_received_(false),
@@ -612,8 +612,8 @@ class SetMouseCaptureInterceptor
   }
 
  protected:
-  // mojom::WidgetInputHandlerHostInterceptorForTesting:
-  mojom::WidgetInputHandlerHost* GetForwardingInterface() override {
+  // blink::mojom::WidgetInputHandlerHostInterceptorForTesting:
+  blink::mojom::WidgetInputHandlerHost* GetForwardingInterface() override {
     return impl_;
   }
   void SetMouseCapture(bool capturing) override {
@@ -631,16 +631,16 @@ class SetMouseCaptureInterceptor
     receiver().internal_state()->SwapImplForTesting(impl_);
   }
 
-  mojo::Receiver<mojom::WidgetInputHandlerHost>& receiver() {
+  mojo::Receiver<blink::mojom::WidgetInputHandlerHost>& receiver() {
     return static_cast<InputRouterImpl*>(host_->input_router())
-        ->frame_host_receiver_for_testing();
+        ->host_receiver_for_testing();
   }
 
   std::unique_ptr<base::RunLoop> run_loop_;
   bool msg_received_;
   bool capturing_;
   RenderWidgetHostImpl* host_;
-  mojom::WidgetInputHandlerHost* impl_;
+  blink::mojom::WidgetInputHandlerHost* impl_;
 
   DISALLOW_COPY_AND_ASSIGN(SetMouseCaptureInterceptor);
 };
@@ -650,28 +650,6 @@ class SetMouseCaptureInterceptor
 // that might otherwise cause unpredictable behaviour in tests.
 class SystemEventRewriter : public ui::EventRewriter {
  public:
-  // Helper class to allow events to pass through for the lifetime of the
-  // object. Use this when tests generate events. This is needed under mash
-  // because the generate events reach SystemEventRewriter and will be dropped
-  // if there is no ScopedAllow instance.
-  // Note that allowing system events can cause flakiness in browser tests that
-  // don't expect them.
-  class ScopedAllow {
-   public:
-    explicit ScopedAllow(SystemEventRewriter* rewriter) : rewriter_(rewriter) {
-      ++rewriter_->num_of_scoped_allows_;
-    }
-    ~ScopedAllow() {
-      DCHECK_GT(rewriter_->num_of_scoped_allows_, 0);
-      --rewriter_->num_of_scoped_allows_;
-    }
-
-   private:
-    SystemEventRewriter* const rewriter_;
-
-    DISALLOW_COPY_AND_ASSIGN(ScopedAllow);
-  };
-
   SystemEventRewriter() = default;
   ~SystemEventRewriter() override = default;
 
@@ -679,13 +657,8 @@ class SystemEventRewriter : public ui::EventRewriter {
   ui::EventDispatchDetails RewriteEvent(
       const ui::Event& event,
       const Continuation continuation) override {
-    return num_of_scoped_allows_ ? SendEvent(continuation, &event)
-                                 : DiscardEvent(continuation);
+    return DiscardEvent(continuation);
   }
-
-  // Count of ScopedAllow objects. When it is greater than 0, events are allowed
-  // to pass. Otherwise, they are discarded.
-  int num_of_scoped_allows_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(SystemEventRewriter);
 };
@@ -712,26 +685,26 @@ bool IsScreenTooSmallForPopup(const ScreenInfo& screen_info) {
 
 }  // namespace
 
-class SitePerProcessHitTestBrowserTest : public SitePerProcessBrowserTest {
+class SitePerProcessHitTestBrowserTest : public SitePerProcessBrowserTestBase {
  public:
   SitePerProcessHitTestBrowserTest() {}
 
 #if defined(USE_AURA)
   void PreRunTestOnMainThread() override {
-    SitePerProcessBrowserTest::PreRunTestOnMainThread();
+    SitePerProcessBrowserTestBase::PreRunTestOnMainThread();
     // Disable system mouse events, which can interfere with tests.
     shell()->window()->GetHost()->AddEventRewriter(&event_rewriter_);
   }
 
   void PostRunTestOnMainThread() override {
     shell()->window()->GetHost()->RemoveEventRewriter(&event_rewriter_);
-    SitePerProcessBrowserTest::PostRunTestOnMainThread();
+    SitePerProcessBrowserTestBase::PostRunTestOnMainThread();
   }
 #endif
 
  protected:
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    SitePerProcessBrowserTest::SetUpCommandLine(command_line);
+    SitePerProcessBrowserTestBase::SetUpCommandLine(command_line);
     ui::PlatformEventSource::SetIgnoreNativePlatformEvents(true);
   }
 
@@ -791,7 +764,7 @@ class SitePerProcessUserActivationHitTestBrowserTest
 
  protected:
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    SitePerProcessBrowserTest::SetUpCommandLine(command_line);
+    SitePerProcessBrowserTestBase::SetUpCommandLine(command_line);
     ui::PlatformEventSource::SetIgnoreNativePlatformEvents(true);
     feature_list_.InitAndEnableFeature(
         features::kBrowserVerifiedUserActivationMouse);
@@ -2011,7 +1984,7 @@ class SitePerProcessEmulatedTouchBrowserTest
     base::TimeDelta simulated_event_time_delta =
         base::TimeDelta::FromMilliseconds(100);
     blink::WebMouseEvent mouse_move_event =
-        SyntheticWebMouseEventBuilder::Build(
+        blink::SyntheticWebMouseEventBuilder::Build(
             blink::WebInputEvent::Type::kMouseMove, position_in_root.x(),
             position_in_root.y(), 0);
     mouse_move_event.SetTimeStamp(simulated_event_time);
@@ -2021,7 +1994,7 @@ class SitePerProcessEmulatedTouchBrowserTest
                              : 0;
     mouse_modifier |= blink::WebInputEvent::kLeftButtonDown;
     blink::WebMouseEvent mouse_down_event =
-        SyntheticWebMouseEventBuilder::Build(
+        blink::SyntheticWebMouseEventBuilder::Build(
             blink::WebInputEvent::Type::kMouseDown, position_in_root.x(),
             position_in_root.y(), mouse_modifier);
     mouse_down_event.button = blink::WebMouseEvent::Button::kLeft;
@@ -2029,16 +2002,17 @@ class SitePerProcessEmulatedTouchBrowserTest
     mouse_down_event.SetTimeStamp(simulated_event_time);
 
     blink::WebMouseEvent mouse_drag_event =
-        SyntheticWebMouseEventBuilder::Build(
+        blink::SyntheticWebMouseEventBuilder::Build(
             blink::WebInputEvent::Type::kMouseMove, position_in_root.x(),
             position_in_root.y() + 20, mouse_modifier);
     simulated_event_time += simulated_event_time_delta;
     mouse_drag_event.SetTimeStamp(simulated_event_time);
     mouse_drag_event.button = blink::WebMouseEvent::Button::kLeft;
 
-    blink::WebMouseEvent mouse_up_event = SyntheticWebMouseEventBuilder::Build(
-        blink::WebInputEvent::Type::kMouseUp, position_in_root.x(),
-        position_in_root.y() + 20, mouse_modifier);
+    blink::WebMouseEvent mouse_up_event =
+        blink::SyntheticWebMouseEventBuilder::Build(
+            blink::WebInputEvent::Type::kMouseUp, position_in_root.x(),
+            position_in_root.y() + 20, mouse_modifier);
     mouse_up_event.button = blink::WebMouseEvent::Button::kLeft;
     simulated_event_time += simulated_event_time_delta;
     mouse_up_event.SetTimeStamp(simulated_event_time);
@@ -3099,6 +3073,76 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
   EXPECT_FALSE(child_frame_monitor.EventWasReceived());
 }
 
+// Verify that asynchronous hit test immediately handle
+// when target client disconnects.
+IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
+                       AsynchronousHitTestChildDisconnectClient) {
+  GURL main_url(embedded_test_server()->GetURL(
+      "/frame_tree/page_with_positioned_busy_frame.html"));
+  EXPECT_TRUE(NavigateToURL(shell(), main_url));
+
+  // It is safe to obtain the root frame tree node here, as it doesn't change.
+  FrameTreeNode* root = web_contents()->GetFrameTree()->root();
+  ASSERT_EQ(1U, root->child_count());
+
+  FrameTreeNode* child_node = root->child_at(0);
+
+  // Create listeners for mouse events.
+  RenderWidgetHostMouseEventMonitor main_frame_monitor(
+      root->current_frame_host()->GetRenderWidgetHost());
+  RenderWidgetHostMouseEventMonitor child_frame_monitor(
+      child_node->current_frame_host()->GetRenderWidgetHost());
+
+  EXPECT_EQ(
+      " Site A ------------ proxies for B C\n"
+      "   +--Site B ------- proxies for A C\n"
+      "        +--Site C -- proxies for A B\n"
+      "Where A = http://127.0.0.1/\n"
+      "      B = http://baz.com/\n"
+      "      C = http://bar.com/",
+      DepictFrameTree(root));
+
+  RenderWidgetHostInputEventRouter* router =
+      web_contents()->GetInputEventRouter();
+
+  WaitForHitTestData(child_node->current_frame_host());
+
+  RenderWidgetHostViewBase* root_view = static_cast<RenderWidgetHostViewBase*>(
+      root->current_frame_host()->GetRenderWidgetHost()->GetView());
+
+  // Target input event to child frame. It should get delivered to the main
+  // frame instead because the child frame main thread is non-responsive.
+  blink::WebMouseEvent child_event(
+      blink::WebInputEvent::Type::kMouseDown,
+      blink::WebInputEvent::kNoModifiers,
+      blink::WebInputEvent::GetStaticTimeStampForTests());
+  child_event.button = blink::WebPointerProperties::Button::kLeft;
+  SetWebEventPositions(&child_event, gfx::Point(75, 75), root_view);
+  child_event.click_count = 1;
+  main_frame_monitor.ResetEventReceived();
+  child_frame_monitor.ResetEventReceived();
+
+  {
+    InputEventAckWaiter waiter(root_view->GetRenderWidgetHost(),
+                               child_event.GetType());
+    router->RouteMouseEvent(root_view, &child_event, ui::LatencyInfo());
+    // Raise error for call disconnect handler.
+    static_cast<RenderWidgetHostImpl*>(
+        root->current_frame_host()->GetRenderWidgetHost())
+        ->input_target_client()
+        .internal_state()
+        ->RaiseError();
+    waiter.Wait();
+  }
+
+  EXPECT_TRUE(main_frame_monitor.EventWasReceived());
+  EXPECT_NEAR(75, main_frame_monitor.event().PositionInWidget().x(),
+              kHitTestTolerance);
+  EXPECT_NEAR(75, main_frame_monitor.event().PositionInWidget().y(),
+              kHitTestTolerance);
+  EXPECT_FALSE(child_frame_monitor.EventWasReceived());
+}
+
 // Tooltips aren't used on Android, so no need to compile/run this test in that
 // case.
 #if !defined(OS_ANDROID)
@@ -3788,7 +3832,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
   // should initiate mouse capture for the main frame.
   mouse_event.SetType(blink::WebInputEvent::Type::kMouseDown);
   mouse_event.SetModifiers(blink::WebInputEvent::kLeftButtonDown);
-  SetWebEventPositions(&mouse_event, gfx::Point(100, 25), root_view);
+  SetWebEventPositions(&mouse_event, gfx::Point(100, 105), root_view);
   RouteMouseEventAndWaitUntilDispatch(router, root_view, root_view,
                                       &mouse_event);
   EXPECT_TRUE(main_frame_monitor.EventWasReceived());
@@ -4846,10 +4890,6 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
   InputEventAckWaiter ack_waiter(child_frame_host->GetRenderWidgetHost(),
                                  blink::WebInputEvent::Type::kGestureTap);
 
-#if defined(USE_AURA)
-  // Allows the gesture events to go through under mash.
-  SystemEventRewriter::ScopedAllow scoped_allow(&event_rewriter_);
-#endif
   render_widget_host->QueueSyntheticGesture(
       std::move(gesture), base::BindOnce([](SyntheticGesture::Result result) {
         EXPECT_EQ(SyntheticGesture::GESTURE_FINISHED, result);
@@ -5335,7 +5375,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
 // Test that performing a touchpad pinch over an OOPIF offers the synthetic
 // wheel events to the child and causes the page scale factor to change for
 // the main frame (given that the child did not consume the wheel).
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_WIN)
+// Flaky on Windows: https://crbug.com/947193
 #define MAYBE_TouchpadPinchOverOOPIF DISABLED_TouchpadPinchOverOOPIF
 #else
 #define MAYBE_TouchpadPinchOverOOPIF TouchpadPinchOverOOPIF

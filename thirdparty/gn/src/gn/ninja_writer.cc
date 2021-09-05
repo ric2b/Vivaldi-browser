@@ -31,9 +31,8 @@ bool NinjaWriter::RunAndWriteFiles(const BuildSettings* build_settings,
 bool NinjaWriter::WriteToolchains(const PerToolchainRules& per_toolchain_rules,
                                   Err* err) {
   if (per_toolchain_rules.empty()) {
-    Err(Location(), "No targets.",
-        "I could not find any targets to write, so I'm doing nothing.")
-        .PrintToStdout();
+    *err = Err(Location(), "No targets.",
+        "I could not find any targets to write, so I'm doing nothing.");
     return false;
   }
 
@@ -42,8 +41,8 @@ bool NinjaWriter::WriteToolchains(const PerToolchainRules& per_toolchain_rules,
     const Settings* settings =
         builder_.loader()->GetToolchainSettings(toolchain->label());
     if (!NinjaToolchainWriter::RunAndWriteFile(settings, toolchain, i.second)) {
-      Err(Location(), "Couldn't open toolchain buildfile(s) for writing")
-          .PrintToStdout();
+      *err =
+          Err(Location(), "Couldn't open toolchain buildfile(s) for writing");
       return false;
     }
   }

@@ -216,7 +216,8 @@ bool ExpandPropertyContents(const std::string& content,
 
 bool ExpandPropertyFile(const base::FilePath& input,
                         const base::FilePath& output,
-                        CrosConfig* config) {
+                        CrosConfig* config,
+                        bool append) {
   std::string content;
   std::string expanded;
   if (!base::ReadFileToString(input, &content)) {
@@ -225,10 +226,17 @@ bool ExpandPropertyFile(const base::FilePath& input,
   }
   if (!ExpandPropertyContents(content, config, &expanded))
     return false;
-  if (base::WriteFile(output, expanded.data(), expanded.size()) !=
-      static_cast<int>(expanded.size())) {
-    PLOG(ERROR) << "Failed to write to " << output;
-    return false;
+  if (append && base::PathExists(output)) {
+    if (!base::AppendToFile(output, expanded.data(), expanded.size())) {
+      PLOG(ERROR) << "Failed to append to " << output;
+      return false;
+    }
+  } else {
+    if (base::WriteFile(output, expanded.data(), expanded.size()) !=
+        static_cast<int>(expanded.size())) {
+      PLOG(ERROR) << "Failed to write to " << output;
+      return false;
+    }
   }
   return true;
 }
@@ -287,22 +295,35 @@ bool TruncateAndroidPropertyForTesting(const std::string& line,
 bool ExpandPropertyFileForTesting(const base::FilePath& input,
                                   const base::FilePath& output,
                                   CrosConfig* config) {
-  return ExpandPropertyFile(input, output, config);
+  return ExpandPropertyFile(input, output, config, /*append=*/false);
 }
 
 bool ExpandPropertyFiles(const base::FilePath& source_path,
-                         const base::FilePath& dest_path) {
+                         const base::FilePath& dest_path,
+                         bool single_file) {
   CrosConfig config;
-  for (const char* file : {"default.prop", "build.prop", "vendor_build.prop"}) {
-    if (!ExpandPropertyFile(source_path.Append(file), dest_path.Append(file),
-                            &config)) {
+  if (single_file)
+    base::DeleteFile(dest_path, /*recursive=*/false);
+
+  // default.prop may not exist. Silently skip it if not found.
+  for (const auto& pair : {std::pair<const char*, bool>{"default.prop", true},
+                           {"build.prop", false},
+                           {"vendor_build.prop", false}}) {
+    const char* file = pair.first;
+    const bool is_optional = pair.second;
+
+    if (is_optional && !base::PathExists(source_path.Append(file)))
+      continue;
+
+    if (!ExpandPropertyFile(source_path.Append(file),
+                            single_file ? dest_path : dest_path.Append(file),
+                            &config,
+                            /*append=*/single_file)) {
       LOG(ERROR) << "Failed to expand " << source_path.Append(file);
       return false;
     }
   }
-  // Use the same permissions as stock Android for /vendor/build.prop.
-  return base::SetPosixFilePermissions(dest_path.Append("vendor_build.prop"),
-                                       0600);
+  return true;
 }
 
 }  // namespace arc

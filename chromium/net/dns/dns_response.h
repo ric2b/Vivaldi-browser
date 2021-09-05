@@ -44,8 +44,8 @@ struct NET_EXPORT_PRIVATE DnsResourceRecord {
   DnsResourceRecord& operator=(const DnsResourceRecord& other);
   DnsResourceRecord& operator=(DnsResourceRecord&& other);
 
-  // A helper to set |owned_rdata| that also sets |rdata| to point to it.
-  // See the definition of |owned_rdata| below.
+  // A helper to set |owned_rdata| that also sets |rdata| to point to it. The
+  // |value| must be non-empty. See the definition of |owned_rdata| below.
   void SetOwnedRdata(std::string value);
 
   // NAME (variable length) + TYPE (2 bytes) + CLASS (2 bytes) + TTL (4 bytes) +
@@ -208,9 +208,9 @@ class NET_EXPORT_PRIVATE DnsResponse {
   bool WriteHeader(base::BigEndianWriter* writer,
                    const dns_protocol::Header& header);
   bool WriteQuestion(base::BigEndianWriter* writer, const DnsQuery& query);
-  bool WriteRecord(base::BigEndianWriter* wirter,
+  bool WriteRecord(base::BigEndianWriter* writer,
                    const DnsResourceRecord& record);
-  bool WriteAnswer(base::BigEndianWriter* wirter,
+  bool WriteAnswer(base::BigEndianWriter* writer,
                    const DnsResourceRecord& answer,
                    const base::Optional<DnsQuery>& query);
 

@@ -4,8 +4,9 @@
 
 package org.chromium.chrome.browser.sms;
 
-import android.support.test.filters.MediumTest;
 import android.widget.EditText;
+
+import androidx.test.filters.MediumTest;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -27,7 +28,6 @@ import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.KeyboardVisibilityDelegate;
-import org.chromium.ui.base.ActivityWindowAndroid;
 
 /**
  * Tests for the SmsReceiverInfoBar class.
@@ -53,9 +53,8 @@ public class SmsReceiverInfoBarTest {
     private SmsReceiverInfoBar createInfoBar() {
         return TestThreadUtils.runOnUiThreadBlockingNoException(() -> {
             Tab tab = mActivity.getActivityTab();
-            ActivityWindowAndroid windowAndroid = new ActivityWindowAndroid(mActivity);
             SmsReceiverInfoBar infoBar = SmsReceiverInfoBar.create(
-                    windowAndroid, /*enumeratedIconId=*/0, "title", "message", "ok");
+                    mActivity.getWindowAndroid(), /*enumeratedIconId=*/0, "title", "message", "ok");
             InfoBarContainer.get(tab).addInfoBarForTesting(infoBar);
             return infoBar;
         });

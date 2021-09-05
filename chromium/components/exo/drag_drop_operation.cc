@@ -78,8 +78,10 @@ base::WeakPtr<DragDropOperation> DragDropOperation::Create(
     DataSource* source,
     Surface* origin,
     Surface* icon,
+    const gfx::Point& drag_start_point,
     ui::DragDropTypes::DragEventSource event_source) {
-  auto* dnd_op = new DragDropOperation(source, origin, icon, event_source);
+  auto* dnd_op = new DragDropOperation(source, origin, icon, drag_start_point,
+                                       event_source);
   return dnd_op->weak_ptr_factory_.GetWeakPtr();
 }
 
@@ -87,11 +89,12 @@ DragDropOperation::DragDropOperation(
     DataSource* source,
     Surface* origin,
     Surface* icon,
+    const gfx::Point& drag_start_point,
     ui::DragDropTypes::DragEventSource event_source)
     : SurfaceTreeHost("ExoDragDropOperation"),
       source_(std::make_unique<ScopedDataSource>(source, this)),
       origin_(std::make_unique<ScopedSurface>(origin, this)),
-      drag_start_point_(display::Screen::GetScreen()->GetCursorScreenPoint()),
+      drag_start_point_(drag_start_point),
       os_exchange_data_(std::make_unique<ui::OSExchangeData>()),
       event_source_(event_source),
       weak_ptr_factory_(this) {
@@ -185,6 +188,7 @@ void DragDropOperation::CaptureDragIcon() {
           viz::CopyOutputRequest::ResultFormat::RGBA_BITMAP,
           base::BindOnce(&DragDropOperation::OnDragIconCaptured,
                          weak_ptr_factory_.GetWeakPtr()));
+  request->set_result_task_runner(base::SequencedTaskRunnerHandle::Get());
 
   host_window()->layer()->RequestCopyOfOutput(std::move(request));
 }
@@ -235,6 +239,8 @@ void DragDropOperation::StartDragDropOperation() {
   uint32_t dnd_operations =
       DndActionsToDragOperations(source_->get()->GetActions());
 
+  base::WeakPtr<DragDropOperation> weak_ptr = weak_ptr_factory_.GetWeakPtr();
+
   started_by_this_object_ = true;
   // This triggers a nested run loop that terminates when the drag and drop
   // operation is completed.
@@ -242,6 +248,10 @@ void DragDropOperation::StartDragDropOperation() {
       std::move(os_exchange_data_), origin_->get()->window()->GetRootWindow(),
       origin_->get()->window(), drag_start_point_, dnd_operations,
       event_source_);
+
+  // The instance deleted during StartDragAndDrop's nested RunLoop.
+  if (!weak_ptr)
+    return;
 
   if (op) {
     // Success

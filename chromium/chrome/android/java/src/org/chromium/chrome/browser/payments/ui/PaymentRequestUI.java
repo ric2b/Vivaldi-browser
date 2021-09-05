@@ -39,19 +39,20 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeVersionInfo;
 import org.chromium.chrome.browser.autofill.prefeditor.EditorDialog;
 import org.chromium.chrome.browser.autofill.prefeditor.EditorObserverForTest;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.lifecycle.PauseResumeWithNativeObserver;
 import org.chromium.chrome.browser.payments.PaymentRequestImpl.PaymentUisShowStateReconciler;
 import org.chromium.chrome.browser.payments.ShippingStrings;
 import org.chromium.chrome.browser.payments.ui.PaymentRequestSection.LineItemBreakdownSection;
 import org.chromium.chrome.browser.payments.ui.PaymentRequestSection.OptionSection;
 import org.chromium.chrome.browser.payments.ui.PaymentRequestSection.SectionSeparator;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.IdentityServicesProvider;
 import org.chromium.components.autofill.EditableOption;
 import org.chromium.components.browser_ui.widget.FadingEdgeScrollView;
 import org.chromium.components.browser_ui.widget.animation.FocusAnimator;
 import org.chromium.components.browser_ui.widget.animation.Interpolators;
 import org.chromium.components.payments.PaymentApp;
+import org.chromium.components.payments.PaymentFeatureList;
 import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.ui.text.NoUnderlineClickableSpan;
@@ -352,11 +353,12 @@ public class PaymentRequestUI implements DimmingDialog.OnDismissListener, View.O
      * https://www.chromium.org/Home/chromium-security/enamel#TOC-Eliding-Origin-Names-And-Hostnames
      * @param securityLevel   The security level of the page that invoked PaymentRequest.
      * @param shippingStrings The string resource identifiers to use in the shipping sections.
+     * @param profile         The current profile that creates the PaymentRequestUI.
      */
     public PaymentRequestUI(Activity activity, Client client, boolean canAddCards,
             boolean showDataSource, String title, String origin, int securityLevel,
             ShippingStrings shippingStrings,
-            PaymentUisShowStateReconciler paymentUisShowStateReconciler) {
+            PaymentUisShowStateReconciler paymentUisShowStateReconciler, Profile profile) {
         mContext = activity;
         mClient = client;
         mShowDataSource = showDataSource;
@@ -403,12 +405,12 @@ public class PaymentRequestUI implements DimmingDialog.OnDismissListener, View.O
 
         mRequestView =
                 (ViewGroup) LayoutInflater.from(mContext).inflate(R.layout.payment_request, null);
-        prepareRequestView(mContext, title, origin, securityLevel, canAddCards);
+        prepareRequestView(mContext, title, origin, securityLevel, canAddCards, profile);
 
-        mEditorDialog = new EditorDialog(activity, /*deleteRunnable =*/null);
+        mEditorDialog = new EditorDialog(activity, /*deleteRunnable =*/null, profile);
         DimmingDialog.setVisibleStatusBarIconColor(mEditorDialog.getWindow());
 
-        mCardEditorDialog = new EditorDialog(activity, /*deleteRunnable =*/null);
+        mCardEditorDialog = new EditorDialog(activity, /*deleteRunnable =*/null, profile);
         DimmingDialog.setVisibleStatusBarIconColor(mCardEditorDialog.getWindow());
 
         // Allow screenshots of the credit card number in Canary, Dev, and developer builds.
@@ -476,9 +478,10 @@ public class PaymentRequestUI implements DimmingDialog.OnDismissListener, View.O
      * @param origin        The RFC6454 origin of the page.
      * @param securityLevel The security level of the page that invoked PaymentRequest.
      * @param canAddCards   Whether new cards can be added.
+     * @param profile       The current profile to pass PaymentRequestHeader.
      */
-    private void prepareRequestView(
-            Context context, String title, String origin, int securityLevel, boolean canAddCards) {
+    private void prepareRequestView(Context context, String title, String origin, int securityLevel,
+            boolean canAddCards, Profile profile) {
         mSpinnyLayout = mRequestView.findViewById(R.id.payment_request_spinny);
         assert mSpinnyLayout.getVisibility() == View.VISIBLE;
         mIsShowingSpinner = true;
@@ -488,7 +491,7 @@ public class PaymentRequestUI implements DimmingDialog.OnDismissListener, View.O
         messageView.setText(R.string.payments_loading_message);
 
         ((PaymentRequestHeader) mRequestView.findViewById(R.id.header))
-                .setTitleAndOrigin(title, origin, securityLevel);
+                .setTitleAndOrigin(title, origin, securityLevel, profile);
 
         // Set up the buttons.
         mCloseButton = mRequestView.findViewById(R.id.close_button);
@@ -530,8 +533,8 @@ public class PaymentRequestUI implements DimmingDialog.OnDismissListener, View.O
 
         // Put payment method section on top of address section for
         // WEB_PAYMENTS_METHOD_SECTION_ORDER_V2.
-        boolean methodSectionOrderV2 =
-                ChromeFeatureList.isEnabled(ChromeFeatureList.WEB_PAYMENTS_METHOD_SECTION_ORDER_V2);
+        boolean methodSectionOrderV2 = PaymentFeatureList.isEnabled(
+                PaymentFeatureList.WEB_PAYMENTS_METHOD_SECTION_ORDER_V2);
 
         // Add the necessary sections to the layout.
         mPaymentContainerLayout.addView(mOrderSummarySection, new LinearLayout.LayoutParams(

@@ -128,8 +128,8 @@ HTMLPlugInElement::HTMLPlugInElement(
       should_prefer_plug_ins_for_images_(prefer_plug_ins_for_images_option ==
                                          kShouldPreferPlugInsForImages) {
   SetHasCustomStyleCallbacks();
-  if (doc.GetScheduler()) {
-    doc.GetScheduler()->RegisterStickyFeature(
+  if (auto* context = doc.GetExecutionContext()) {
+    context->GetScheduler()->RegisterStickyFeature(
         SchedulingPolicy::Feature::kContainsPlugins,
         {SchedulingPolicy::RecordMetricsForBackForwardCache()});
   }
@@ -140,7 +140,7 @@ HTMLPlugInElement::~HTMLPlugInElement() {
   DCHECK(!is_delaying_load_event_);
 }
 
-void HTMLPlugInElement::Trace(Visitor* visitor) {
+void HTMLPlugInElement::Trace(Visitor* visitor) const {
   visitor->Trace(image_loader_);
   visitor->Trace(persisted_plugin_);
   HTMLFrameOwnerElement::Trace(visitor);
@@ -272,8 +272,7 @@ bool HTMLPlugInElement::ShouldAccelerate() const {
   return plugin && plugin->CcLayer();
 }
 
-ParsedFeaturePolicy HTMLPlugInElement::ConstructContainerPolicy(
-    Vector<String>*) const {
+ParsedFeaturePolicy HTMLPlugInElement::ConstructContainerPolicy() const {
   // Plugin elements (<object> and <embed>) are not allowed to enable the
   // fullscreen feature. Add an empty allowlist for the fullscreen feature so
   // that the nested browsing context is unable to use the API, regardless of
@@ -725,7 +724,7 @@ bool HTMLPlugInElement::AllowedToLoadObject(const KURL& url,
   // is specified.
   return (!mime_type.IsEmpty() && url.IsEmpty()) ||
          !MixedContentChecker::ShouldBlockFetch(
-             frame, mojom::RequestContextType::OBJECT,
+             frame, mojom::RequestContextType::OBJECT, url,
              ResourceRequest::RedirectStatus::kNoRedirect, url,
              /* devtools_id= */ base::nullopt);
 }

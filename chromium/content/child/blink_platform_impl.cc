@@ -38,6 +38,7 @@
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/url_utils.h"
 #include "mojo/public/cpp/bindings/shared_remote.h"
 #include "net/base/net_errors.h"
 #include "services/network/public/cpp/features.h"
@@ -78,8 +79,6 @@ std::unique_ptr<blink::WebThemeEngine> GetWebThemeEngine() {
 #if defined(OS_ANDROID)
   return std::make_unique<WebThemeEngineAndroid>();
 #elif defined(OS_MACOSX)
-  if (features::IsFormControlsRefreshEnabled())
-    return std::make_unique<WebThemeEngineDefault>();
   return std::make_unique<WebThemeEngineMac>();
 #else
   return std::make_unique<WebThemeEngineDefault>();
@@ -87,12 +86,10 @@ std::unique_ptr<blink::WebThemeEngine> GetWebThemeEngine() {
 }
 
 // This must match third_party/WebKit/public/blink_resources.grd.
-// In particular, |is_gzipped| corresponds to compress="gzip".
 struct DataResource {
   const char* name;
   int id;
   ui::ScaleFactor scale_factor;
-  bool is_gzipped;
 };
 
 class NestedMessageLoopRunnerImpl
@@ -260,6 +257,11 @@ WebThemeEngine* BlinkPlatformImpl::ThemeEngine() {
 
 bool BlinkPlatformImpl::IsURLSupportedForAppCache(const blink::WebURL& url) {
   return IsSchemeSupportedForAppCache(url);
+}
+
+bool BlinkPlatformImpl::IsURLSavableForSavableResource(
+    const blink::WebURL& url) {
+  return IsSavableURL(url);
 }
 
 size_t BlinkPlatformImpl::MaxDecodedImageBytes() {

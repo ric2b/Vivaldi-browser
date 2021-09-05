@@ -95,6 +95,7 @@ _BANNED_JAVA_IMPORTS = (
         'net/android/javatests/src/org/chromium/net/'
         'AndroidProxySelectorTest.java',
         'components/cronet/',
+        'third_party/robolectric/local/',
       ),
     ),
 )
@@ -458,7 +459,16 @@ _BANNED_CPP_FUNCTIONS = (
         r"^ui[\\/]gl[\\/].*\.cc$",
         r"^media[\\/]gpu[\\/].*\.cc$",
         r"^gpu[\\/].*\.cc$",
+        r"^ui[\\/]base[\\/]x[\\/]xwmstartupcheck[\\/]xwmstartupcheck\.cc$",
+        ),
+    ),
+    (
+      r'/\WX?(((Width|Height)(MM)?OfScreen)|(Display(Width|Height)))\(',
+      (
+       'Use the corresponding fields in x11::Screen instead.',
       ),
+      True,
+      (),
     ),
     (
       r'/XInternAtom|xcb_intern_atom',
@@ -1295,11 +1305,26 @@ _VALID_OS_MACROS = (
 )
 
 
+# These are not checked on the public chromium-presubmit trybot.
+# Add files here that rely on .py files that exists only for target_os="android"
+# checkouts (e.g. //third_party/catapult).
 _ANDROID_SPECIFIC_PYDEPS_FILES = [
     'android_webview/tools/run_cts.pydeps',
+    'build/android/devil_chromium.pydeps',
+    'build/android/gyp/create_bundle_wrapper_script.pydeps',
+    'build/android/gyp/jinja_template.pydeps',
+    'build/android/resource_sizes.pydeps',
+    'build/android/test_runner.pydeps',
+    'build/android/test_wrapper/logdog_wrapper.pydeps',
+    'chrome/android/features/create_stripped_java_factory.pydeps',
+    'testing/scripts/run_android_wpt.pydeps',
+    'third_party/android_platform/development/scripts/stack.pydeps',
+]
+
+
+_GENERIC_PYDEPS_FILES = [
     'base/android/jni_generator/jni_generator.pydeps',
     'base/android/jni_generator/jni_registration_generator.pydeps',
-    'build/android/devil_chromium.pydeps',
     'build/android/gyp/aar.pydeps',
     'build/android/gyp/aidl.pydeps',
     'build/android/gyp/allot_native_libraries.pydeps',
@@ -1312,9 +1337,9 @@ _ANDROID_SPECIFIC_PYDEPS_FILES = [
     'build/android/gyp/create_apk_operations_script.pydeps',
     'build/android/gyp/create_app_bundle_apks.pydeps',
     'build/android/gyp/create_app_bundle.pydeps',
-    'build/android/gyp/create_bundle_wrapper_script.pydeps',
     'build/android/gyp/create_java_binary_script.pydeps',
     'build/android/gyp/create_size_info_files.pydeps',
+    'build/android/gyp/create_ui_locale_resources.pydeps',
     'build/android/gyp/desugar.pydeps',
     'build/android/gyp/dexsplitter.pydeps',
     'build/android/gyp/dex.pydeps',
@@ -1328,7 +1353,6 @@ _ANDROID_SPECIFIC_PYDEPS_FILES = [
     'build/android/gyp/java_cpp_enum.pydeps',
     'build/android/gyp/java_cpp_strings.pydeps',
     'build/android/gyp/jetify_jar.pydeps',
-    'build/android/gyp/jinja_template.pydeps',
     'build/android/gyp/lint.pydeps',
     'build/android/gyp/main_dex_list.pydeps',
     'build/android/gyp/merge_manifest.pydeps',
@@ -1341,21 +1365,14 @@ _ANDROID_SPECIFIC_PYDEPS_FILES = [
     'build/android/gyp/zip.pydeps',
     'build/android/incremental_install/generate_android_manifest.pydeps',
     'build/android/incremental_install/write_installer_json.pydeps',
-    'build/android/resource_sizes.pydeps',
-    'build/android/test_runner.pydeps',
-    'build/android/test_wrapper/logdog_wrapper.pydeps',
     'build/protoc_java.pydeps',
-    'chrome/android/features/create_stripped_java_factory.pydeps',
-    'components/module_installer/android/module_desc_java.pydeps',
-    'net/tools/testserver/testserver.pydeps',
-    'testing/scripts/run_android_wpt.pydeps',
-    'third_party/android_platform/development/scripts/stack.pydeps',
-]
-
-
-_GENERIC_PYDEPS_FILES = [
     'chrome/test/chromedriver/log_replay/client_replay_unittest.pydeps',
     'chrome/test/chromedriver/test/run_py_tests.pydeps',
+    'components/cronet/tools/generate_javadoc.pydeps',
+    'components/cronet/tools/jar_src.pydeps',
+    'components/module_installer/android/module_desc_java.pydeps',
+    'content/public/android/generate_child_service.pydeps',
+    'net/tools/testserver/testserver.pydeps',
     'third_party/blink/renderer/bindings/scripts/build_web_idl_database.pydeps',
     'third_party/blink/renderer/bindings/scripts/collect_idl_files.pydeps',
     'third_party/blink/renderer/bindings/scripts/generate_bindings.pydeps',
@@ -1611,7 +1628,7 @@ def _CheckNoDISABLETypoInTests(input_api, output_api):
 def _CheckDCHECK_IS_ONHasBraces(input_api, output_api):
   """Checks to make sure DCHECK_IS_ON() does not skip the parentheses."""
   errors = []
-  pattern = input_api.re.compile(r'DCHECK_IS_ON(?!\(\))',
+  pattern = input_api.re.compile(r'DCHECK_IS_ON\b(?!\(\))',
                                  input_api.re.MULTILINE)
   for f in input_api.AffectedSourceFiles(input_api.FilterSourceFile):
     if (not f.LocalPath().endswith(('.cc', '.mm', '.h'))):
@@ -1819,6 +1836,11 @@ def _GetMessageForMatchingType(input_api, affected_file, line_number, line,
   match has been found and the additional text passed as |message| in case the
   target type name matches the text inside the line passed as parameter.
   """
+  result = []
+
+  if line.endswith(" nocheck"):
+    return result
+
   matched = False
   if type_name[0:1] == '/':
     regex = type_name[1:]
@@ -1827,7 +1849,6 @@ def _GetMessageForMatchingType(input_api, affected_file, line_number, line,
   elif type_name in line:
     matched = True
 
-  result = []
   if matched:
     result.append('    %s:%d:' % (affected_file.LocalPath(), line_number))
     for message_line in message:
@@ -2504,7 +2525,9 @@ def _CheckSpamLogging(input_api, output_api):
                  r"^tools[\\/]",
                  r"^ui[\\/]base[\\/]resource[\\/]data_pack.cc$",
                  r"^ui[\\/]aura[\\/]bench[\\/]bench_main\.cc$",
-                 r"^ui[\\/]ozone[\\/]platform[\\/]cast[\\/]"))
+                 r"^ui[\\/]ozone[\\/]platform[\\/]cast[\\/]",
+                 r"^ui[\\/]base[\\/]x[\\/]xwmstartupcheck[\\/]"
+                     r"xwmstartupcheck\.cc$"))
   source_file_filter = lambda x: input_api.FilterSourceFile(
       x, white_list=file_inclusion_pattern, black_list=black_list)
 
@@ -3093,8 +3116,8 @@ def _GetFilesUsingSecurityCriticalFunctions(input_api):
   # Map of function pretty name (displayed in an error) to the pattern to
   # match it with.
   _PATTERNS_TO_CHECK = {
-      'content::ServiceProcessHost::LaunchOptions::WithSandboxType':
-          'WithSandboxType\\('
+      'content::GetServiceSandboxType<>()':
+          'GetServiceSandboxType\\<'
   }
   _PATTERNS_TO_CHECK = {
       k: input_api.re.compile(v)
@@ -3642,7 +3665,8 @@ class PydepsChecker(object):
       # subrepositories. We can't figure out which files change, so re-check
       # all files.
       # Changes to print_python_deps.py affect all .pydeps.
-      if local_path == 'DEPS' or local_path.endswith('print_python_deps.py'):
+      if local_path in ('DEPS', 'PRESUBMIT.py') or local_path.endswith(
+          'print_python_deps.py'):
         return self._pydeps_files
       elif local_path.endswith('.pydeps'):
         if local_path in self._pydeps_files:
@@ -3690,7 +3714,7 @@ def _CheckPydepsNeedsUpdating(input_api, output_api, checker_for_tests=None):
   if input_api.platform != 'linux2':
     return []
   is_android = _ParseGclientArgs().get('checkout_android', 'false') == 'true'
-  pydeps_files = _ALL_PYDEPS_FILES if is_android else _GENERIC_PYDEPS_FILES
+  pydeps_to_check = _ALL_PYDEPS_FILES if is_android else _GENERIC_PYDEPS_FILES
   results = []
   # First, check for new / deleted .pydeps.
   for f in input_api.AffectedFiles(include_deletes=True):
@@ -3713,9 +3737,22 @@ def _CheckPydepsNeedsUpdating(input_api, output_api, checker_for_tests=None):
   if results:
     return results
 
-  checker = checker_for_tests or PydepsChecker(input_api, pydeps_files)
+  checker = checker_for_tests or PydepsChecker(input_api, _ALL_PYDEPS_FILES)
+  affected_pydeps = set(checker.ComputeAffectedPydeps())
+  affected_android_pydeps = affected_pydeps.intersection(
+      set(_ANDROID_SPECIFIC_PYDEPS_FILES))
+  if affected_android_pydeps and not is_android:
+    results.append(output_api.PresubmitPromptOrNotify(
+        'You have changed python files that may affect pydeps for android\n'
+        'specific scripts. However, the relevant presumbit check cannot be\n'
+        'run because you are not using an Android checkout. To validate that\n'
+        'the .pydeps are correct, re-run presubmit in an Android checkout, or\n'
+        'use the android-internal-presubmit optional trybot.\n'
+        'Possibly stale pydeps files:\n{}'.format(
+            '\n'.join(affected_android_pydeps))))
 
-  for pydep_path in checker.ComputeAffectedPydeps():
+  affected_pydeps_to_check = affected_pydeps.intersection(set(pydeps_to_check))
+  for pydep_path in affected_pydeps_to_check:
     try:
       result = checker.DetermineIfStale(pydep_path)
       if result:
@@ -4310,8 +4347,16 @@ def _CheckAccessibilityRelnotesField(input_api, output_api):
   if not any(input_api.AffectedFiles(file_filter=FileFilter)):
     return []
 
-  relnotes = input_api.change.GitFootersFromDescription().get('AX-Relnotes', [])
-  if relnotes:
+  # AX-Relnotes can appear in either the description or the footer.
+  # When searching the description, require 'AX-Relnotes:' to appear at the
+  # beginning of a line.
+  ax_regex = input_api.re.compile('ax-relnotes[:=]')
+  description_has_relnotes = any(ax_regex.match(line)
+    for line in input_api.change.DescriptionText().lower().splitlines())
+
+  footer_relnotes = input_api.change.GitFootersFromDescription().get(
+    'AX-Relnotes', [])
+  if description_has_relnotes or footer_relnotes:
     return []
 
   # TODO(chrishall): link to Relnotes documentation in message.
@@ -4392,12 +4437,13 @@ def _CommonChecks(input_api, output_api):
   results.extend(_CheckWATCHLISTS(input_api, output_api))
   results.extend(input_api.RunTests(
     input_api.canned_checks.CheckVPythonSpec(input_api, output_api)))
-  results.extend(_CheckTranslationScreenshots(input_api, output_api))
+  results.extend(_CheckStrings(input_api, output_api))
   results.extend(_CheckTranslationExpectations(input_api, output_api))
   results.extend(_CheckCorrectProductNameInMessages(input_api, output_api))
   results.extend(_CheckBuildtoolsRevisionsAreInSync(input_api, output_api))
   results.extend(_CheckForTooLargeFiles(input_api, output_api))
   results.extend(_CheckPythonDevilInit(input_api, output_api))
+  results.extend(_CheckStableMojomChanges(input_api, output_api))
 
   for f in input_api.AffectedFiles():
     path, name = input_api.os_path.split(f.LocalPath())
@@ -4832,8 +4878,18 @@ def CheckChangeOnCommit(input_api, output_api):
   return results
 
 
-def _CheckTranslationScreenshots(input_api, output_api):
+def _CheckStrings(input_api, output_api):
+  """Check string ICU syntax validity and if translation screenshots exist."""
+  # Skip translation screenshots check if a SkipTranslationScreenshotsCheck
+  # footer is set to true.
+  git_footers = input_api.change.GitFootersFromDescription()
+  skip_screenshot_check_footer = [
+      footer.lower()
+      for footer in git_footers.get(u'Skip-Translation-Screenshots-Check', [])]
+  run_screenshot_check = u'true' not in skip_screenshot_check_footer
+
   import os
+  import re
   import sys
   from io import StringIO
 
@@ -4845,8 +4901,7 @@ def _CheckTranslationScreenshots(input_api, output_api):
       if f.Action() == 'D')
 
   affected_grds = [f for f in input_api.AffectedFiles()
-      if (f.LocalPath().endswith('.grd') or
-          f.LocalPath().endswith('.grdp'))]
+      if (f.LocalPath().endswith(('.grd', '.grdp')))]
   if not affected_grds:
     return []
 
@@ -4879,6 +4934,13 @@ def _CheckTranslationScreenshots(input_api, output_api):
   missing_sha1 = []
   unnecessary_sha1_files = []
 
+  # This checks verifies that the ICU syntax of messages this CL touched is
+  # valid, and reports any found syntax errors.
+  # Without this presubmit check, ICU syntax errors in Chromium strings can land
+  # without developers being aware of them. Later on, such ICU syntax errors
+  # break message extraction for translation, hence would block Chromium
+  # translations until they are fixed.
+  icu_syntax_errors = []
 
   def _CheckScreenshotAdded(screenshots_dir, message_id):
     sha1_path = input_api.os_path.join(
@@ -4892,6 +4954,136 @@ def _CheckTranslationScreenshots(input_api, output_api):
         screenshots_dir, message_id + '.png.sha1')
     if input_api.os_path.exists(sha1_path) and sha1_path not in removed_paths:
       unnecessary_sha1_files.append(sha1_path)
+
+
+  def _ValidateIcuSyntax(text, level, signatures):
+      """Validates ICU syntax of a text string.
+
+      Check if text looks similar to ICU and checks for ICU syntax correctness
+      in this case. Reports various issues with ICU syntax and values of
+      variants. Supports checking of nested messages. Accumulate information of
+      each ICU messages found in the text for further checking.
+
+      Args:
+        text: a string to check.
+        level: a number of current nesting level.
+        signatures: an accumulator, a list of tuple of (level, variable,
+          kind, variants).
+
+      Returns:
+        None if a string is not ICU or no issue detected.
+        A tuple of (message, start index, end index) if an issue detected.
+      """
+      valid_types = {
+          'plural': (frozenset(
+              ['=0', '=1', 'zero', 'one', 'two', 'few', 'many', 'other']),
+                     frozenset(['=1', 'other'])),
+          'selectordinal': (frozenset(
+              ['=0', '=1', 'zero', 'one', 'two', 'few', 'many', 'other']),
+                            frozenset(['one', 'other'])),
+          'select': (frozenset(), frozenset(['other'])),
+      }
+
+      # Check if the message looks like an attempt to use ICU
+      # plural. If yes - check if its syntax strictly matches ICU format.
+      like = re.match(r'^[^{]*\{[^{]*\b(plural|selectordinal|select)\b', text)
+      if not like:
+        signatures.append((level, None, None, None))
+        return
+
+      # Check for valid prefix and suffix
+      m = re.match(
+          r'^([^{]*\{)([a-zA-Z0-9_]+),\s*'
+          r'(plural|selectordinal|select),\s*'
+          r'(?:offset:\d+)?\s*(.*)', text, re.DOTALL)
+      if not m:
+        return (('This message looks like an ICU plural, '
+                 'but does not follow ICU syntax.'), like.start(), like.end())
+      starting, variable, kind, variant_pairs = m.groups()
+      variants, depth, last_pos = _ParseIcuVariants(variant_pairs, m.start(4))
+      if depth:
+        return ('Invalid ICU format. Unbalanced opening bracket', last_pos,
+                len(text))
+      first = text[0]
+      ending = text[last_pos:]
+      if not starting:
+        return ('Invalid ICU format. No initial opening bracket', last_pos - 1,
+                last_pos)
+      if not ending or '}' not in ending:
+        return ('Invalid ICU format. No final closing bracket', last_pos - 1,
+                last_pos)
+      elif first != '{':
+        return (
+            ('Invalid ICU format. Extra characters at the start of a complex '
+             'message (go/icu-message-migration): "%s"') %
+            starting, 0, len(starting))
+      elif ending != '}':
+        return (('Invalid ICU format. Extra characters at the end of a complex '
+                 'message (go/icu-message-migration): "%s"')
+                % ending, last_pos - 1, len(text) - 1)
+      if kind not in valid_types:
+        return (('Unknown ICU message type %s. '
+                 'Valid types are: plural, select, selectordinal') % kind, 0, 0)
+      known, required = valid_types[kind]
+      defined_variants = set()
+      for variant, variant_range, value, value_range in variants:
+        start, end = variant_range
+        if variant in defined_variants:
+          return ('Variant "%s" is defined more than once' % variant,
+                  start, end)
+        elif known and variant not in known:
+          return ('Variant "%s" is not valid for %s message' % (variant, kind),
+                  start, end)
+        defined_variants.add(variant)
+        # Check for nested structure
+        res = _ValidateIcuSyntax(value[1:-1], level + 1, signatures)
+        if res:
+          return (res[0], res[1] + value_range[0] + 1,
+                  res[2] + value_range[0] + 1)
+      missing = required - defined_variants
+      if missing:
+        return ('Required variants missing: %s' % ', '.join(missing), 0,
+                len(text))
+      signatures.append((level, variable, kind, defined_variants))
+
+
+  def _ParseIcuVariants(text, offset=0):
+    """Parse variants part of ICU complex message.
+
+    Builds a tuple of variant names and values, as well as
+    their offsets in the input string.
+
+    Args:
+      text: a string to parse
+      offset: additional offset to add to positions in the text to get correct
+        position in the complete ICU string.
+
+    Returns:
+      List of tuples, each tuple consist of four fields: variant name,
+      variant name span (tuple of two integers), variant value, value
+      span (tuple of two integers).
+    """
+    depth, start, end = 0, -1, -1
+    variants = []
+    key = None
+    for idx, char in enumerate(text):
+      if char == '{':
+        if not depth:
+          start = idx
+          chunk = text[end + 1:start]
+          key = chunk.strip()
+          pos = offset + end + 1 + chunk.find(key)
+          span = (pos, pos + len(key))
+        depth += 1
+      elif char == '}':
+        if not depth:
+          return variants, depth, offset + idx
+        depth -= 1
+        if not depth:
+          end = idx
+          variants.append((key, span, text[start:end + 1], (offset + start,
+                                                            offset + end + 1)))
+    return variants, depth, offset + end + 1
 
   try:
     old_sys_path = sys.path
@@ -4944,38 +5136,55 @@ def _CheckTranslationScreenshots(input_api, output_api):
     screenshots_dir = input_api.os_path.join(
         input_api.os_path.dirname(file_path), grd_name + ext.replace('.', '_'))
 
-    # Check the screenshot directory for .png files. Warn if there is any.
-    for png_path in affected_png_paths:
-      if png_path.startswith(screenshots_dir):
-        unnecessary_screenshots.append(png_path)
+    if run_screenshot_check:
+      # Check the screenshot directory for .png files. Warn if there is any.
+      for png_path in affected_png_paths:
+        if png_path.startswith(screenshots_dir):
+          unnecessary_screenshots.append(png_path)
 
-    for added_id in added_ids:
-      _CheckScreenshotAdded(screenshots_dir, added_id)
+      for added_id in added_ids:
+        _CheckScreenshotAdded(screenshots_dir, added_id)
 
-    for modified_id in modified_ids:
-      _CheckScreenshotAdded(screenshots_dir, modified_id)
+      for modified_id in modified_ids:
+        _CheckScreenshotAdded(screenshots_dir, modified_id)
 
-    for removed_id in removed_ids:
-      _CheckScreenshotRemoved(screenshots_dir, removed_id)
+      for removed_id in removed_ids:
+        _CheckScreenshotRemoved(screenshots_dir, removed_id)
+
+    # Check new and changed strings for ICU syntax errors.
+    for key in added_ids.union(modified_ids):
+      msg = new_id_to_msg_map[key].ContentsAsXml('', True)
+      err = _ValidateIcuSyntax(msg, 0, [])
+      if err is not None:
+        icu_syntax_errors.append(str(key) + ': ' + str(err[0]))
 
   results = []
-  if unnecessary_screenshots:
-    results.append(output_api.PresubmitNotifyResult(
-      'Do not include actual screenshots in the changelist. Run '
-      'tools/translate/upload_screenshots.py to upload them instead:',
-      sorted(unnecessary_screenshots)))
+  if run_screenshot_check:
+    if unnecessary_screenshots:
+      results.append(output_api.PresubmitNotifyResult(
+        'Do not include actual screenshots in the changelist. Run '
+        'tools/translate/upload_screenshots.py to upload them instead:',
+        sorted(unnecessary_screenshots)))
 
-  if missing_sha1:
-    results.append(output_api.PresubmitNotifyResult(
-      'You are adding or modifying UI strings.\n'
-      'To ensure the best translations, take screenshots of the relevant UI '
-      '(https://g.co/chrome/translation) and add these files to your '
-      'changelist:', sorted(missing_sha1)))
+    if missing_sha1:
+      results.append(output_api.PresubmitNotifyResult(
+        'You are adding or modifying UI strings.\n'
+        'To ensure the best translations, take screenshots of the relevant UI '
+        '(https://g.co/chrome/translation) and add these files to your '
+        'changelist:', sorted(missing_sha1)))
 
-  if unnecessary_sha1_files:
-    results.append(output_api.PresubmitNotifyResult(
-      'You removed strings associated with these files. Remove:',
-      sorted(unnecessary_sha1_files)))
+    if unnecessary_sha1_files:
+      results.append(output_api.PresubmitNotifyResult(
+        'You removed strings associated with these files. Remove:',
+        sorted(unnecessary_sha1_files)))
+  else:
+    results.append(output_api.PresubmitPromptOrNotify('Skipping translation '
+      'screenshots check.'))
+
+  if icu_syntax_errors:
+    results.append(output_api.PresubmitError(
+      'ICU syntax errors were found in the following strings (problems or '
+      'feedback? Contact rainhard@chromium.org):', items=icu_syntax_errors))
 
   return results
 
@@ -5022,4 +5231,38 @@ def _CheckTranslationExpectations(input_api, output_api,
       ' - One of the modified grd or grdp files cannot be parsed or\n'
       ' - %s is not updated.\n'
       'Stack:\n%s' % (translation_expectations_path, str(e)))]
+  return []
+
+
+def _CheckStableMojomChanges(input_api, output_api):
+  """Changes to [Stable] mojom types must preserve backward-compatibility."""
+  changed_mojoms = input_api.AffectedFiles(
+      include_deletes=True,
+      file_filter=lambda f: f.LocalPath().endswith(('.mojom')))
+  delta = []
+  for mojom in changed_mojoms:
+    old_contents = ''.join(mojom.OldContents()) or None
+    new_contents = ''.join(mojom.NewContents()) or None
+    delta.append({
+      'filename': mojom.LocalPath(),
+      'old': '\n'.join(mojom.OldContents()) or None,
+      'new': '\n'.join(mojom.NewContents()) or None,
+      })
+
+  process = input_api.subprocess.Popen(
+      [input_api.python_executable,
+       input_api.os_path.join(input_api.PresubmitLocalPath(), 'mojo',
+                              'public', 'tools', 'mojom',
+                              'check_stable_mojom_compatibility.py'),
+       '--src-root', input_api.PresubmitLocalPath()],
+       stdin=input_api.subprocess.PIPE,
+       stdout=input_api.subprocess.PIPE,
+       stderr=input_api.subprocess.PIPE,
+       universal_newlines=True)
+  (x, error) = process.communicate(input=input_api.json.dumps(delta))
+  if process.returncode:
+    return [output_api.PresubmitError(
+        'One or more [Stable] mojom definitions appears to have been changed '
+        'in a way that is not backward-compatible.',
+        long_text=error)]
   return []

@@ -86,10 +86,23 @@
              file="autofill_page/blocking_request_manager.js"
              compress="false" type="BINDATA" />
   </if>
-  <include name="IDR_SETTINGS_AUTOFILL_PAGE_SHOW_PASSWORD_BEHAVIOR_JS"
-           file="autofill_page/show_password_behavior.js"
+  <include name="IDR_SETTINGS_AUTOFILL_PAGE_MERGE_EXCEPTIONS_STORE_COPIES_BEHAVIOR_JS"
+           file="autofill_page/merge_exceptions_store_copies_behavior.js"
            compress="false" type="BINDATA"
            preprocess="true" />
+  <include name="IDR_SETTINGS_AUTOFILL_PAGE_MERGE_PASSWORDS_STORE_COPIES_BEHAVIOR_JS"
+           file="autofill_page/merge_passwords_store_copies_behavior.js"
+           compress="false" type="BINDATA"
+           preprocess="true" />
+  <include name="IDR_SETTINGS_AUTOFILL_PAGE_MULTI_STORE_EXCEPTION_ENTRY_JS"
+           file="autofill_page/multi_store_exception_entry.js"
+           compress="false" type="BINDATA" />
+  <include name="IDR_SETTINGS_AUTOFILL_PAGE_MULTI_STORE_ID_HANDLER_JS"
+           file="autofill_page/multi_store_id_handler.js"
+           compress="false" type="BINDATA" />
+  <include name="IDR_SETTINGS_AUTOFILL_PAGE_MULTI_STORE_PASSWORD_UI_ENTRY_JS"
+           file="autofill_page/multi_store_password_ui_entry.js"
+           compress="false" type="BINDATA" />
   <include name="IDR_SETTINGS_AUTOFILL_PAGE_PASSWORD_CHECK_JS"
            file="${root_gen_dir}/chrome/browser/resources/settings/autofill_page/password_check.js"
            use_base_dir="false"
@@ -115,6 +128,11 @@
            file="${root_gen_dir}/chrome/browser/resources/settings/autofill_page/password_list_item.js"
            use_base_dir="false"
            compress="false" type="BINDATA" />
+  <include name="IDR_SETTINGS_AUTOFILL_PAGE_PASSWORDS_LIST_HANDLER_JS"
+           file="${root_gen_dir}/chrome/browser/resources/settings/autofill_page/passwords_list_handler.js"
+           use_base_dir="false"
+           compress="false" type="BINDATA"
+           preprocess="true"/>
   <include name="IDR_SETTINGS_AUTOFILL_PAGE_PASSWORD_MANAGER_PROXY_JS"
            file="autofill_page/password_manager_proxy.js"
            compress="false" type="BINDATA" />
@@ -127,8 +145,23 @@
            use_base_dir="false"
            compress="false" type="BINDATA"
            preprocess="true" />
+  <include name="IDR_SETTINGS_AUTOFILL_PAGE_PASSWORDS_DEVICE_SECTION_JS"
+           file="${root_gen_dir}/chrome/browser/resources/settings/autofill_page/passwords_device_section.js"
+           use_base_dir="false"
+           compress="false" type="BINDATA"
+           preprocess="true" />
   <include name="IDR_SETTINGS_AUTOFILL_PAGE_PASSWORD_EDIT_DIALOG_JS"
            file="${root_gen_dir}/chrome/browser/resources/settings/autofill_page/password_edit_dialog.js"
+           use_base_dir="false"
+           compress="false" type="BINDATA"
+           preprocess="true" />
+  <include name="IDR_SETTINGS_AUTOFILL_PAGE_PASSWORD_MOVE_TO_ACCOUNT_DIALOG_JS"
+           file="${root_gen_dir}/chrome/browser/resources/settings/autofill_page/password_move_to_account_dialog.js"
+           use_base_dir="false"
+           compress="false" type="BINDATA"
+           preprocess="true" />
+  <include name="IDR_SETTINGS_AUTOFILL_PAGE_PASSWORD_REMOVE_DIALOG_JS"
+           file="${root_gen_dir}/chrome/browser/resources/settings/autofill_page/password_remove_dialog.js"
            use_base_dir="false"
            compress="false" type="BINDATA"
            preprocess="true" />
@@ -141,6 +174,10 @@
            file="${root_gen_dir}/chrome/browser/resources/settings/autofill_page/payments_section.js"
            use_base_dir="false"
            compress="false" type="BINDATA" />
+  <include name="IDR_SETTINGS_AUTOFILL_PAGE_SHOW_PASSWORD_BEHAVIOR_JS"
+           file="autofill_page/show_password_behavior.js"
+           compress="false" type="BINDATA"
+           preprocess="true" />
   <include name="IDR_SETTINGS_BASIC_PAGE_BASIC_PAGE_JS"
            file="${root_gen_dir}/chrome/browser/resources/settings/basic_page/basic_page.js"
            use_base_dir="false"
@@ -412,9 +449,6 @@
            use_base_dir="false"
            preprocess="true"
            compress="false" type="BINDATA" />
-  <include name="IDR_SETTINGS_PLURAL_STRING_PROXY_JS"
-           file="plural_string_proxy.js"
-           compress="false" type="BINDATA" />
   <include name="IDR_SETTINGS_PREFS_PREFS_M_JS"
            file="${root_gen_dir}/chrome/browser/resources/settings/prefs/prefs.m.js"
            use_base_dir="false"
@@ -551,24 +585,28 @@
            file="${root_gen_dir}/chrome/browser/resources/settings/safety_check_page/safety_check_child.js"
            use_base_dir="false"
            compress="false" type="BINDATA" />
-  <include name="IDR_SETTINGS_SAFETY_CHECK_PAGE_SAFETY_CHECK_EXTENSIONS_ELEMENT_JS"
-           file="${root_gen_dir}/chrome/browser/resources/settings/safety_check_page/safety_check_extensions_element.js"
+  <include name="IDR_SETTINGS_SAFETY_CHECK_PAGE_SAFETY_CHECK_CHROME_CLEANER_CHILD_JS"
+           file="${root_gen_dir}/chrome/browser/resources/settings/safety_check_page/safety_check_chrome_cleaner_child.js"
+           use_base_dir="false"
+           compress="false" type="BINDATA" />
+  <include name="IDR_SETTINGS_SAFETY_CHECK_PAGE_SAFETY_CHECK_EXTENSIONS_CHILD_JS"
+           file="${root_gen_dir}/chrome/browser/resources/settings/safety_check_page/safety_check_extensions_child.js"
            use_base_dir="false"
            compress="false" type="BINDATA" />
   <include name="IDR_SETTINGS_SAFETY_CHECK_PAGE_SAFETY_CHECK_PAGE_JS"
            file="${root_gen_dir}/chrome/browser/resources/settings/safety_check_page/safety_check_page.js"
            use_base_dir="false"
            compress="false" type="BINDATA" />
-  <include name="IDR_SETTINGS_SAFETY_CHECK_PAGE_SAFETY_CHECK_PASSWORDS_ELEMENT_JS"
-           file="${root_gen_dir}/chrome/browser/resources/settings/safety_check_page/safety_check_passwords_element.js"
+  <include name="IDR_SETTINGS_SAFETY_CHECK_PAGE_SAFETY_CHECK_PASSWORDS_CHILD_JS"
+           file="${root_gen_dir}/chrome/browser/resources/settings/safety_check_page/safety_check_passwords_child.js"
            use_base_dir="false"
            compress="false" type="BINDATA" />
-  <include name="IDR_SETTINGS_SAFETY_CHECK_PAGE_SAFETY_CHECK_SAFE_BROWSING_ELEMENT_JS"
-           file="${root_gen_dir}/chrome/browser/resources/settings/safety_check_page/safety_check_safe_browsing_element.js"
+  <include name="IDR_SETTINGS_SAFETY_CHECK_PAGE_SAFETY_CHECK_SAFE_BROWSING_CHILD_JS"
+           file="${root_gen_dir}/chrome/browser/resources/settings/safety_check_page/safety_check_safe_browsing_child.js"
            use_base_dir="false"
            compress="false" type="BINDATA" />
-  <include name="IDR_SETTINGS_SAFETY_CHECK_PAGE_SAFETY_CHECK_UPDATES_ELEMENT_JS"
-           file="${root_gen_dir}/chrome/browser/resources/settings/safety_check_page/safety_check_updates_element.js"
+  <include name="IDR_SETTINGS_SAFETY_CHECK_PAGE_SAFETY_CHECK_UPDATES_CHILD_JS"
+           file="${root_gen_dir}/chrome/browser/resources/settings/safety_check_page/safety_check_updates_child.js"
            use_base_dir="false"
            compress="false" type="BINDATA" />
   <include name="IDR_SETTINGS_SEARCH_ENGINES_BROWSER_PROXY_M_JS"
@@ -627,7 +665,8 @@
   <include name="IDR_SETTINGS_SETTINGS_PAGE_SETTINGS_SUBPAGE_M_JS"
            file="${root_gen_dir}/chrome/browser/resources/settings/settings_page/settings_subpage.m.js"
            use_base_dir="false"
-           compress="false" type="BINDATA" />
+           compress="false" type="BINDATA"
+           preprocess="true" />
   <include name="IDR_SETTINGS_SETTINGS_UI_SETTINGS_UI_JS"
            file="${root_gen_dir}/chrome/browser/resources/settings/settings_ui/settings_ui.js"
            use_base_dir="false"

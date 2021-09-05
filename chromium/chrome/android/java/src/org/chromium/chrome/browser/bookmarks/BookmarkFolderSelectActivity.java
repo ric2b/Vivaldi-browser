@@ -255,9 +255,13 @@ public class BookmarkFolderSelectActivity extends SynchronousInitializationActiv
         } else if (entry.mType == FolderListEntry.TYPE_NEW_FOLDER) {
             BookmarkAddEditFolderActivity.startAddFolderActivity(this, mBookmarksToMove);
         } else if (entry.mType == FolderListEntry.TYPE_NORMAL) {
-            mModel.moveBookmarks(mBookmarksToMove, entry.mId);
-            BookmarkUtils.setLastUsedParent(this, entry.mId);
-            finish();
+            if (entry.mId.equals(mParentId)) {
+                finish();
+            } else {
+                mModel.moveBookmarks(mBookmarksToMove, entry.mId);
+                BookmarkUtils.setLastUsedParent(this, entry.mId);
+                finish();
+            }
         }
     }
 

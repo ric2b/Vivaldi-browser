@@ -7,6 +7,7 @@
 
 #include <fuchsia/web/cpp/fidl.h>
 #include <lib/fidl/cpp/binding_set.h>
+#include <lib/ui/scenic/cpp/view_ref_pair.h>
 #include <lib/zx/channel.h>
 
 #include <list>
@@ -35,6 +36,7 @@ namespace content {
 class FromRenderFrameHost;
 }  // namespace content
 
+class CastStreamingSessionClient;
 class ContextImpl;
 class FrameWindowTreeHost;
 class FrameLayoutManager;
@@ -84,6 +86,9 @@ class FrameImpl : public fuchsia::web::Frame,
   void set_handle_actions_for_test(bool handle) {
     accessibility_bridge_->set_handle_actions_for_test(handle);
   }
+  CastStreamingSessionClient* cast_streaming_session_client_for_test() {
+    return cast_streaming_session_client_.get();
+  }
 
  private:
   FRIEND_TEST_ALL_PREFIXES(FrameImplTest, DelayedNavigationEventAck);
@@ -130,7 +135,8 @@ class FrameImpl : public fuchsia::web::Frame,
 
   // Initializes WindowTreeHost for the view with the specified |view_token|.
   // |view_token| may be uninitialized in headless mode.
-  void InitWindowTreeHost(fuchsia::ui::views::ViewToken view_token);
+  void InitWindowTreeHost(fuchsia::ui::views::ViewToken view_token,
+                          scenic::ViewRefPair view_ref_pair);
 
   // Destroys the WindowTreeHost along with its view or other associated
   // resources.
@@ -139,8 +145,25 @@ class FrameImpl : public fuchsia::web::Frame,
   // Destroys |this| and sends the FIDL |error| to the client.
   void CloseAndDestroyFrame(zx_status_t error);
 
+  // Determines whether |message| is a Cast Streaming message and if so, handles
+  // it. Returns whether it handled the message, regardless of whether that was
+  // successful. If true is returned, |callback| has been called. Returns false
+  // immediately if Cast Streaming support is not enabled. Called by
+  // PostMessage().
+  bool MaybeHandleCastStreamingMessage(std::string* origin,
+                                       fuchsia::web::WebMessage* message,
+                                       PostMessageCallback* callback);
+
+  void MaybeInjectBeforeLoadScripts(
+      content::NavigationHandle* navigation_handle);
+
+  void MaybeStartCastStreaming(content::NavigationHandle* navigation_handle);
+
   // fuchsia::web::Frame implementation.
   void CreateView(fuchsia::ui::views::ViewToken view_token) override;
+  void CreateViewWithViewRef(fuchsia::ui::views::ViewToken view_token,
+                             fuchsia::ui::views::ViewRefControl control_ref,
+                             fuchsia::ui::views::ViewRef view_ref) override;
   void GetMediaPlayer(fidl::InterfaceRequest<fuchsia::media::sessions2::Player>
                           player) override;
   void GetNavigationController(
@@ -272,6 +295,7 @@ class FrameImpl : public fuchsia::web::Frame,
   gfx::Size render_size_override_;
 
   std::unique_ptr<MediaPlayerImpl> media_player_;
+  std::unique_ptr<CastStreamingSessionClient> cast_streaming_session_client_;
 
   fidl::Binding<fuchsia::web::Frame> binding_;
   media_control::MediaBlocker media_blocker_;

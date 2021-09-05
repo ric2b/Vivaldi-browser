@@ -48,20 +48,6 @@ enum ResourceType : ushort (bit_flags) {
   OTHER,
 }
 
-enum RedirectResource : ubyte {
-  NO_REDIRECT,
-  BLANK_TEXT,
-  BLANK_CSS,
-  BANK_JS,
-  BLANK_HTML,
-  BLANK_MP3,
-  BLANK_MP4,
-  TRANSPARENT_1x1_GIF,
-  TRANSPARENT_2x2_PNG,
-  TRANSPARENT_3x2_PNG,
-  TRANSPARENT_32x32_PNG,
-}
-
 table FilterRule {
   // Rule matching options, a bitmask consisting of OptionFlags.
   options : ubyte;
@@ -90,7 +76,7 @@ table FilterRule {
   domains_excluded : [string];
 
   // Set for redirect/rewrite rules
-  redirect: RedirectResource = NO_REDIRECT;
+  redirect: string;
 
   // Set for CSP rules.
   csp: string;

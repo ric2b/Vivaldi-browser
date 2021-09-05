@@ -4,11 +4,15 @@
 
 #include "chrome/browser/subresource_redirect/subresource_redirect_observer.h"
 
+#include "build/build_config.h"
+#include "chrome/browser/data_reduction_proxy/data_reduction_proxy_chrome_settings.h"
+#include "chrome/browser/data_reduction_proxy/data_reduction_proxy_chrome_settings_factory.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/subresource_redirect/https_image_compression_bypass_decider.h"
+#include "chrome/browser/subresource_redirect/https_image_compression_infobar_decider.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_settings.h"
-#include "components/optimization_guide/optimization_guide_decider.h"
 #include "components/optimization_guide/proto/performance_hints_metadata.pb.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
@@ -19,6 +23,10 @@
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/loader/previews_resource_loading_hints.mojom.h"
 #include "url/gurl.h"
+
+#if defined(OS_ANDROID)
+#include "chrome/browser/previews/android/previews_android_bridge.h"
+#endif
 
 namespace subresource_redirect {
 
@@ -43,6 +51,15 @@ GetOptimizationGuideDeciderFromWebContents(content::WebContents* web_contents) {
   return nullptr;
 }
 
+DataReductionProxyChromeSettings* GetDataReductionProxyChromeSettings(
+    content::WebContents* web_contents) {
+  DCHECK(base::FeatureList::IsEnabled(blink::features::kSubresourceRedirect));
+  if (!web_contents)
+    return nullptr;
+  return DataReductionProxyChromeSettingsFactory::GetForBrowserContext(
+      web_contents->GetBrowserContext());
+}
+
 // Pass down the |images_hints| to |render_frame_host|.
 void SetResourceLoadingImageHints(
     content::RenderFrameHost* render_frame_host,
@@ -57,15 +74,136 @@ void SetResourceLoadingImageHints(
   }
 }
 
-// Invoked when the OptimizationGuideKeyedService has sufficient information
-// to make a decision for whether we can send resource loading image hints.
-// If |decision| is true, public image URLs contained in |metadata| will be
-// sent to the render frame host as specified by
-// |render_frame_host_routing_id| to later be compressed.
-void OnReadyToSendResourceLoadingImageHints(
+// Should the subresource be redirected to its compressed version. This returns
+// false if only coverage metrics need to be recorded and actual redirection
+// should not happen.
+bool ShouldCompressionServerRedirectSubresource() {
+  return base::FeatureList::IsEnabled(blink::features::kSubresourceRedirect) &&
+         base::GetFieldTrialParamByFeatureAsBool(
+             blink::features::kSubresourceRedirect,
+             "enable_subresource_server_redirect", false);
+}
+
+bool ShowInfoBarOnAndroid(content::WebContents* web_contents) {
+#if defined(OS_ANDROID)
+  return PreviewsAndroidBridge::CreateHttpsImageCompressionInfoBar(
+      web_contents);
+#endif
+  return true;
+}
+
+}  // namespace
+
+// static
+void SubresourceRedirectObserver::MaybeCreateForWebContents(
+    content::WebContents* web_contents) {
+  if (!web_contents ||
+      !base::FeatureList::IsEnabled(blink::features::kSubresourceRedirect)) {
+    return;
+  }
+  const auto* data_reduction_proxy_settings =
+      GetDataReductionProxyChromeSettings(web_contents);
+  if (!data_reduction_proxy_settings ||
+      !data_reduction_proxy_settings->IsDataReductionProxyEnabled()) {
+    return;
+  }
+  return SubresourceRedirectObserver::CreateForWebContents(web_contents);
+}
+
+// static
+bool SubresourceRedirectObserver::IsHttpsImageCompressionApplied(
+    content::WebContents* web_contents) {
+  if (!ShouldCompressionServerRedirectSubresource()) {
+    return false;
+  }
+  SubresourceRedirectObserver* observer =
+      SubresourceRedirectObserver::FromWebContents(web_contents);
+  return observer && observer->is_https_image_compression_applied_;
+}
+
+SubresourceRedirectObserver::SubresourceRedirectObserver(
+    content::WebContents* web_contents)
+    : content::WebContentsObserver(web_contents),
+      receivers_(web_contents, this) {
+  DCHECK(base::FeatureList::IsEnabled(blink::features::kSubresourceRedirect));
+  auto* optimization_guide_decider =
+      GetOptimizationGuideDeciderFromWebContents(web_contents);
+  if (optimization_guide_decider) {
+    optimization_guide_decider->RegisterOptimizationTypesAndTargets(
+        {optimization_guide::proto::COMPRESS_PUBLIC_IMAGES}, {});
+  }
+}
+
+SubresourceRedirectObserver::~SubresourceRedirectObserver() = default;
+
+void SubresourceRedirectObserver::DidFinishNavigation(
+    content::NavigationHandle* navigation_handle) {
+  DCHECK(navigation_handle);
+  DCHECK(base::FeatureList::IsEnabled(blink::features::kSubresourceRedirect));
+  if (!navigation_handle->IsInMainFrame() ||
+      !navigation_handle->HasCommitted() ||
+      navigation_handle->IsSameDocument()) {
+    return;
+  }
+  if (!GetDataReductionProxyChromeSettings(web_contents())
+           ->IsDataReductionProxyEnabled()) {
+    return;
+  }
+
+  auto* https_image_compression_infobar_decider =
+      GetDataReductionProxyChromeSettings(web_contents())
+          ->https_image_compression_infobar_decider();
+  if (!https_image_compression_infobar_decider ||
+      https_image_compression_infobar_decider->NeedToShowInfoBar()) {
+    if (https_image_compression_infobar_decider->CanShowInfoBar(
+            navigation_handle) &&
+        ShowInfoBarOnAndroid(web_contents())) {
+      https_image_compression_infobar_decider->SetUserHasSeenInfoBar();
+    }
+    // Do not enable image compression on this page.
+    return;
+  }
+
+  is_https_image_compression_applied_ = false;
+
+  if (!navigation_handle->GetURL().SchemeIsHTTPOrHTTPS())
+    return;
+
+  if (GetDataReductionProxyChromeSettings(web_contents())
+          ->https_image_compression_bypass_decider()
+          ->ShouldBypassNow()) {
+    return;
+  }
+
+  auto* optimization_guide_decider = GetOptimizationGuideDeciderFromWebContents(
+      navigation_handle->GetWebContents());
+  if (!optimization_guide_decider)
+    return;
+
+  content::RenderFrameHost* render_frame_host =
+      navigation_handle->GetRenderFrameHost();
+  if (!render_frame_host || !render_frame_host->GetProcess())
+    return;
+
+  optimization_guide_decider->CanApplyOptimizationAsync(
+      navigation_handle, optimization_guide::proto::COMPRESS_PUBLIC_IMAGES,
+      base::BindOnce(
+          &SubresourceRedirectObserver::OnResourceLoadingImageHintsReceived,
+          weak_factory_.GetWeakPtr(),
+          content::GlobalFrameRoutingId(
+              render_frame_host->GetProcess()->GetID(),
+              render_frame_host->GetRoutingID())));
+}
+
+void SubresourceRedirectObserver::OnResourceLoadingImageHintsReceived(
     content::GlobalFrameRoutingId render_frame_host_routing_id,
     optimization_guide::OptimizationGuideDecision decision,
     const optimization_guide::OptimizationMetadata& optimization_metadata) {
+  // Clear |is_https_image_compression_applied_| since it may be set to true
+  // when multiple navigations are starting and image hints is received for the
+  // first one.
+  is_https_image_compression_applied_ = false;
+
   content::RenderFrameHost* current_render_frame_host =
       content::RenderFrameHost::FromID(render_frame_host_routing_id);
   // Check if the same render frame host is still valid.
@@ -83,62 +221,22 @@ void OnReadyToSendResourceLoadingImageHints(
   public_image_urls.reserve(public_image_metadata.url_size());
   for (const auto& url : public_image_metadata.url())
     public_image_urls.push_back(url);
+
   // Pass down the image URLs to renderer even if it could be empty. This acts
   // as a signal that the image hint fetch has finished, for coverage metrics
   // purposes.
   SetResourceLoadingImageHints(
       current_render_frame_host,
       blink::mojom::CompressPublicImagesHints::New(public_image_urls));
+  if (!public_image_urls.empty())
+    is_https_image_compression_applied_ = true;
 }
 
-}  // namespace
-
-// static
-void SubresourceRedirectObserver::MaybeCreateForWebContents(
-    content::WebContents* web_contents) {
-  if (base::FeatureList::IsEnabled(blink::features::kSubresourceRedirect)) {
-    SubresourceRedirectObserver::CreateForWebContents(web_contents);
-  }
-}
-
-SubresourceRedirectObserver::SubresourceRedirectObserver(
-    content::WebContents* web_contents)
-    : content::WebContentsObserver(web_contents) {
-  auto* optimization_guide_decider =
-      GetOptimizationGuideDeciderFromWebContents(web_contents);
-  if (optimization_guide_decider) {
-    optimization_guide_decider->RegisterOptimizationTypesAndTargets(
-        {optimization_guide::proto::COMPRESS_PUBLIC_IMAGES}, {});
-  }
-}
-
-SubresourceRedirectObserver::~SubresourceRedirectObserver() = default;
-
-void SubresourceRedirectObserver::DidFinishNavigation(
-    content::NavigationHandle* navigation_handle) {
-  DCHECK(navigation_handle);
-  if (!navigation_handle->IsInMainFrame() ||
-      !navigation_handle->HasCommitted() ||
-      navigation_handle->IsSameDocument() ||
-      !navigation_handle->GetURL().SchemeIsHTTPOrHTTPS()) {
-    return;
-  }
-  auto* optimization_guide_decider = GetOptimizationGuideDeciderFromWebContents(
-      navigation_handle->GetWebContents());
-  if (!optimization_guide_decider)
-    return;
-
-  content::RenderFrameHost* render_frame_host =
-      navigation_handle->GetRenderFrameHost();
-  if (!render_frame_host || !render_frame_host->GetProcess())
-    return;
-
-  optimization_guide_decider->CanApplyOptimizationAsync(
-      navigation_handle, optimization_guide::proto::COMPRESS_PUBLIC_IMAGES,
-      base::BindOnce(&OnReadyToSendResourceLoadingImageHints,
-                     content::GlobalFrameRoutingId(
-                         render_frame_host->GetProcess()->GetID(),
-                         render_frame_host->GetRoutingID())));
+void SubresourceRedirectObserver::NotifyCompressedImageFetchFailed(
+    base::TimeDelta retry_after) {
+  GetDataReductionProxyChromeSettings(web_contents())
+      ->https_image_compression_bypass_decider()
+      ->NotifyCompressedImageFetchFailed(retry_after);
 }
 
 WEB_CONTENTS_USER_DATA_KEY_IMPL(SubresourceRedirectObserver)

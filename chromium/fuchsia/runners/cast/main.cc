@@ -5,7 +5,7 @@
 #include <lib/sys/cpp/component_context.h>
 
 #include "base/command_line.h"
-#include "base/fuchsia/default_context.h"
+#include "base/fuchsia/process_context.h"
 #include "base/fuchsia/scoped_service_binding.h"
 #include "base/message_loop/message_pump_type.h"
 #include "base/optional.h"
@@ -13,11 +13,18 @@
 #include "base/task/single_thread_task_executor.h"
 #include "base/values.h"
 #include "fuchsia/base/config_reader.h"
+#include "fuchsia/base/feedback_registration.h"
 #include "fuchsia/base/fuchsia_dir_scheme.h"
 #include "fuchsia/base/init_logging.h"
+#include "fuchsia/base/inspect.h"
 #include "fuchsia/runners/cast/cast_runner.h"
 
 namespace {
+
+constexpr char kCrashProductName[] = "FuchsiaCastRunner";
+// TODO(https://fxbug.dev/51490): Use a programmatic mechanism to obtain this.
+constexpr char kComponentUrl[] =
+    "fuchsia-pkg://fuchsia.com/cast_runner#meta/cast_runner.cmx";
 
 bool IsHeadless() {
   constexpr char kHeadlessConfigKey[] = "headless";
@@ -37,6 +44,8 @@ int main(int argc, char** argv) {
   base::SingleThreadTaskExecutor io_task_executor(base::MessagePumpType::IO);
   base::RunLoop run_loop;
 
+  cr_fuchsia::RegisterCrashReportingFields(kComponentUrl, kCrashProductName);
+
   base::CommandLine::Init(argc, argv);
   CHECK(cr_fuchsia::InitLoggingFromCommandLine(
       *base::CommandLine::ForCurrentProcess()))
@@ -46,12 +55,12 @@ int main(int argc, char** argv) {
 
   CastRunner runner(IsHeadless());
   base::fuchsia::ScopedServiceBinding<fuchsia::sys::Runner> binding(
-      base::fuchsia::ComponentContextForCurrentProcess()->outgoing().get(),
-      &runner);
+      base::ComponentContextForProcess()->outgoing().get(), &runner);
 
-  base::fuchsia::ComponentContextForCurrentProcess()
-      ->outgoing()
-      ->ServeFromStartupInfo();
+  base::ComponentContextForProcess()->outgoing()->ServeFromStartupInfo();
+
+  // Publish version information for this component to Inspect.
+  cr_fuchsia::PublishVersionInfoToInspect(base::ComponentInspectorForProcess());
 
   // Run until there are no Components, or the last service client channel is
   // closed.

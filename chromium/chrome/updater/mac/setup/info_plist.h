@@ -6,6 +6,7 @@
 #define CHROME_UPDATER_MAC_SETUP_INFO_PLIST_H_
 
 #include <memory>
+#include <string>
 
 #import "base/mac/scoped_cftyperef.h"
 #import "base/mac/scoped_nsobject.h"
@@ -38,15 +39,18 @@ class InfoPlist {
       const base::FilePath& updater_app_name,
       const base::FilePath& updater_app_executable_path) const;
 
-  base::ScopedCFTypeRef<CFStringRef> GoogleUpdateCheckLaunchdNameVersioned()
-      const;
-
   base::ScopedCFTypeRef<CFStringRef> GoogleUpdateServiceLaunchdNameVersioned()
       const;
+
+  base::ScopedCFTypeRef<CFStringRef>
+  GoogleUpdateAdministrationLaunchdNameVersioned() const;
 
  private:
   InfoPlist(base::scoped_nsobject<NSDictionary> info_plist_dictionary,
             base::scoped_nsobject<NSString> bundle_version);
+
+  base::ScopedCFTypeRef<CFStringRef> MakeVersionedLaunchdName(
+      base::ScopedCFTypeRef<CFStringRef> name) const;
 
   const base::scoped_nsobject<NSDictionary> info_plist_;
   const std::string bundle_version_;

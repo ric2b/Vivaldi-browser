@@ -20,6 +20,7 @@
 #include "components/autofill/core/browser/field_filler.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/form_parsing/autofill_scanner.h"
+#include "components/autofill/core/browser/form_parsing/form_field.h"
 #include "components/autofill/core/common/autofill_clock.h"
 #include "components/autofill/core/common/autofill_regex_constants.h"
 #include "components/autofill/core/common/autofill_regexes.h"
@@ -212,7 +213,7 @@ std::unique_ptr<FormField> CreditCardField::Parse(AutofillScanner* scanner,
       continue;
     }
 
-    if (credit_card_field->ParseExpirationDate(scanner)) {
+    if (credit_card_field->ParseExpirationDate(scanner, log_manager)) {
       nb_unknown_fields = 0;
       continue;
     }
@@ -308,7 +309,8 @@ bool CreditCardField::LikelyCardMonthSelectField(AutofillScanner* scanner) {
 }
 
 // static
-bool CreditCardField::LikelyCardYearSelectField(AutofillScanner* scanner) {
+bool CreditCardField::LikelyCardYearSelectField(AutofillScanner* scanner,
+                                                LogManager* log_manager) {
   if (scanner->IsEnd())
     return false;
 
@@ -317,18 +319,48 @@ bool CreditCardField::LikelyCardYearSelectField(AutofillScanner* scanner) {
                               MATCH_SELECT | MATCH_SEARCH))
     return false;
 
+  // Filter out days - elements for date entries would have
+  // numbers 1 to 9 as well in them, which we can filter on.
+  const base::string16 kSingleDigitDateRe = base::ASCIIToUTF16("\\b[1-9]\\b");
+  for (const auto& value : field->option_contents) {
+    if (MatchesPattern(value, kSingleDigitDateRe)) {
+      return false;
+    }
+  }
+
+  // Another way to eliminate days - filter out 'day' fields.
+  if (FormField::ParseFieldSpecifics(scanner, base::UTF8ToUTF16(kDayRe),
+                                     MATCH_DEFAULT | MATCH_SELECT, nullptr,
+                                     {log_manager, "kDayRe"})) {
+    return false;
+  }
+
+  // Filter out birth years - a website would not offer 1999 as a credit card
+  // expiration year, but show it in the context of a birth year selector.
+  const base::string16 kBirthYearRe = base::ASCIIToUTF16("(1999|99)");
+  for (const auto& value : field->option_contents) {
+    if (MatchesPattern(value, kBirthYearRe)) {
+      return false;
+    }
+  }
+
   const base::Time time_now = AutofillClock::Now();
   base::Time::Exploded time_exploded;
   time_now.UTCExplode(&time_exploded);
 
   const int kYearsToMatch = 3;
-  std::vector<base::string16> years_to_check;
+  std::vector<base::string16> years_to_check_4_digit;
+  std::vector<base::string16> years_to_check_2_digit;
   for (int year = time_exploded.year; year < time_exploded.year + kYearsToMatch;
        ++year) {
-    years_to_check.push_back(base::NumberToString16(year));
+    years_to_check_4_digit.push_back(base::NumberToString16(year));
+    years_to_check_2_digit.push_back(base::NumberToString16(year).substr(2));
   }
-  return (FindConsecutiveStrings(years_to_check, field->option_values) ||
-          FindConsecutiveStrings(years_to_check, field->option_contents));
+  return (
+      FindConsecutiveStrings(years_to_check_4_digit, field->option_values) ||
+      FindConsecutiveStrings(years_to_check_4_digit, field->option_contents) ||
+      FindConsecutiveStrings(years_to_check_2_digit, field->option_values) ||
+      FindConsecutiveStrings(years_to_check_2_digit, field->option_contents));
 }
 
 // static
@@ -359,20 +391,25 @@ bool CreditCardField::IsGiftCardField(AutofillScanner* scanner,
   if (scanner->IsEnd())
     return false;
 
+  const int kMatchFieldTypes =
+      MATCH_DEFAULT | MATCH_NUMBER | MATCH_TELEPHONE | MATCH_SEARCH;
   size_t saved_cursor = scanner->SaveCursor();
-  if (ParseField(scanner, base::UTF8ToUTF16(kDebitCardRe), nullptr,
-                 {log_manager, "kDebitCardRe"})) {
+  if (ParseFieldSpecifics(scanner, base::UTF8ToUTF16(kDebitCardRe),
+                          kMatchFieldTypes, nullptr,
+                          {log_manager, "kDebitCardRe"})) {
     scanner->RewindTo(saved_cursor);
     return false;
   }
-  if (ParseField(scanner, base::UTF8ToUTF16(kDebitGiftCardRe), nullptr,
-                 {log_manager, "kDebitGiftCardRe"})) {
+  if (ParseFieldSpecifics(scanner, base::UTF8ToUTF16(kDebitGiftCardRe),
+                          kMatchFieldTypes, nullptr,
+                          {log_manager, "kDebitGiftCardRe"})) {
     scanner->RewindTo(saved_cursor);
     return false;
   }
 
-  return ParseField(scanner, base::UTF8ToUTF16(kGiftCardRe), nullptr,
-                    {log_manager, "kGiftCardRe"});
+  return ParseFieldSpecifics(scanner, base::UTF8ToUTF16(kGiftCardRe),
+                             kMatchFieldTypes, nullptr,
+                             {log_manager, "kGiftCardRe"});
 }
 
 CreditCardField::CreditCardField(LogManager* log_manager)
@@ -427,7 +464,8 @@ void CreditCardField::AddClassifications(
   }
 }
 
-bool CreditCardField::ParseExpirationDate(AutofillScanner* scanner) {
+bool CreditCardField::ParseExpirationDate(AutofillScanner* scanner,
+                                          LogManager* log_manager) {
   if (!expiration_date_ && base::LowerCaseEqualsASCII(
                                scanner->Cursor()->form_control_type, "month")) {
     expiration_date_ = scanner->Cursor();
@@ -447,7 +485,7 @@ bool CreditCardField::ParseExpirationDate(AutofillScanner* scanner) {
   if (LikelyCardMonthSelectField(scanner)) {
     expiration_month_ = scanner->Cursor();
     scanner->Advance();
-    if (LikelyCardYearSelectField(scanner)) {
+    if (LikelyCardYearSelectField(scanner, log_manager)) {
       expiration_year_ = scanner->Cursor();
       scanner->Advance();
       return true;

@@ -4,6 +4,8 @@
 
 #include "chrome/browser/web_applications/test/test_app_registrar.h"
 
+#include <utility>
+
 #include "base/callback.h"
 #include "base/check.h"
 #include "base/notreached.h"
@@ -123,6 +125,16 @@ DisplayMode TestAppRegistrar::GetAppUserDisplayMode(const AppId& app_id) const {
   return DisplayMode::kBrowser;
 }
 
+base::Time TestAppRegistrar::GetAppLastLaunchTime(const AppId& app_id) const {
+  NOTIMPLEMENTED();
+  return base::Time();
+}
+
+base::Time TestAppRegistrar::GetAppInstallTime(const AppId& app_id) const {
+  NOTIMPLEMENTED();
+  return base::Time();
+}
+
 std::vector<WebApplicationIconInfo> TestAppRegistrar::GetAppIconInfos(
     const AppId& app_id) const {
   NOTIMPLEMENTED();
@@ -133,6 +145,19 @@ std::vector<SquareSizePx> TestAppRegistrar::GetAppDownloadedIconSizes(
     const AppId& app_id) const {
   NOTIMPLEMENTED();
   return {};
+}
+
+std::vector<WebApplicationShortcutsMenuItemInfo>
+TestAppRegistrar::GetAppShortcutInfos(const AppId& app_id) const {
+  NOTIMPLEMENTED();
+  return {};
+}
+
+std::vector<std::vector<SquareSizePx>>
+TestAppRegistrar::GetAppDownloadedShortcutsMenuIconsSizes(
+    const AppId& app_id) const {
+  NOTIMPLEMENTED();
+  return {{}};
 }
 
 std::vector<AppId> TestAppRegistrar::GetAppIds() const {

@@ -25,11 +25,11 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
-#include "base/task/post_task.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
+#include "chrome/browser/pdf/pdf_extension_util.h"
 #include "chrome/browser/printing/background_printing_manager.h"
 #include "chrome/browser/printing/print_job_manager.h"
 #include "chrome/browser/printing/print_preview_data_service.h"
@@ -37,6 +37,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/webui/metrics_handler.h"
+#include "chrome/browser/ui/webui/plural_string_handler.h"
 #include "chrome/browser/ui/webui/print_preview/print_preview_handler.h"
 #include "chrome/browser/ui/webui/theme_source.h"
 #include "chrome/browser/ui/webui/webui_util.h"
@@ -46,6 +47,7 @@
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/component_extension_resources.h"
 #include "chrome/grit/generated_resources.h"
+#include "chrome/grit/print_preview_pdf_resources.h"
 #include "chrome/grit/print_preview_resources.h"
 #include "chrome/grit/print_preview_resources_map.h"
 #include "chromeos/constants/chromeos_features.h"
@@ -59,8 +61,9 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "extensions/common/constants.h"
-#include "printing/page_size_margins.h"
+#include "printing/mojom/print.mojom.h"
 #include "printing/print_job_constants.h"
+#include "services/network/public/mojom/content_security_policy.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
 #include "ui/gfx/geometry/rect.h"
@@ -77,7 +80,6 @@
 #include "chrome/browser/ui/webui/managed_ui_handler.h"
 #endif
 
-using content::BrowserThread;
 using content::WebContents;
 
 namespace printing {
@@ -106,8 +108,8 @@ void StopWorker(int document_cookie) {
   std::unique_ptr<PrinterQuery> printer_query =
       queue->PopPrinterQuery(document_cookie);
   if (printer_query) {
-    base::PostTask(
-        FROM_HERE, {BrowserThread::IO},
+    content::GetIOThreadTaskRunner({})->PostTask(
+        FROM_HERE,
         base::BindOnce(&PrinterQuery::StopWorker, std::move(printer_query)));
   }
 }
@@ -290,12 +292,6 @@ void AddPrintPreviewStrings(content::WebUIDataSource* source) {
     {"printButton", IDS_PRINT_PREVIEW_PRINT_BUTTON},
     {"printDestinationsTitle", IDS_PRINT_PREVIEW_PRINT_DESTINATIONS_TITLE},
     {"printPagesLabel", IDS_PRINT_PREVIEW_PRINT_PAGES_LABEL},
-    {"printPreviewPageLabelPlural", IDS_PRINT_PREVIEW_PAGE_LABEL_PLURAL},
-    {"printPreviewPageLabelSingular", IDS_PRINT_PREVIEW_PAGE_LABEL_SINGULAR},
-    {"printPreviewSheetsLabelPlural", IDS_PRINT_PREVIEW_SHEETS_LABEL_PLURAL},
-    {"printPreviewSheetsLabelSingular",
-     IDS_PRINT_PREVIEW_SHEETS_LABEL_SINGULAR},
-    {"printPreviewSummaryFormatShort", IDS_PRINT_PREVIEW_SUMMARY_FORMAT_SHORT},
     {"printToGoogleDrive", IDS_PRINT_PREVIEW_PRINT_TO_GOOGLE_DRIVE},
     {"printToPDF", IDS_PRINT_PREVIEW_PRINT_TO_PDF},
     {"printerSharingInviteText", IDS_PRINT_PREVIEW_INVITE_TEXT},
@@ -331,9 +327,25 @@ void AddPrintPreviewStrings(content::WebUIDataSource* source) {
     {"pinErrorMessage", IDS_PRINT_PREVIEW_PIN_ERROR_MESSAGE},
     {"pinPlaceholder", IDS_PRINT_PREVIEW_PIN_PLACEHOLDER},
     {"printerEulaURL", IDS_PRINT_PREVIEW_EULA_URL},
-    {"sheetsLimitErrorMessage", IDS_PRINT_PREVIEW_SHEETS_LIMIT_ERROR_MESSAGE},
-    {"sheetsLimitLabelSingular", IDS_PRINT_PREVIEW_SHEETS_LIMIT_LABEL_SINGULAR},
-    {"sheetsLimitLabelPlural", IDS_PRINT_PREVIEW_SHEETS_LIMIT_LABEL_PLURAL},
+    {"printerStatusConnectingToDevice",
+     IDS_PRINT_PREVIEW_PRINTER_STATUS_CONNECTING_TO_DEVICE},
+    {"printerStatusDeviceError", IDS_PRINT_PREVIEW_PRINTER_STATUS_DEVICE_ERROR},
+    {"printerStatusDoorOpen", IDS_PRINT_PREVIEW_PRINTER_STATUS_DOOR_OPEN},
+    {"printerStatusLowOnInk", IDS_PRINT_PREVIEW_PRINTER_STATUS_LOW_ON_INK},
+    {"printerStatusLowOnPaper", IDS_PRINT_PREVIEW_PRINTER_STATUS_LOW_ON_PAPER},
+    {"printerStatusOutOfInk", IDS_PRINT_PREVIEW_PRINTER_STATUS_OUT_OF_INK},
+    {"printerStatusOutOfPaper", IDS_PRINT_PREVIEW_PRINTER_STATUS_OUT_OF_PAPER},
+    {"printerStatusOutputAlmostFull",
+     IDS_PRINT_PREVIEW_PRINTER_STATUS_OUPUT_ALMOST_FULL},
+    {"printerStatusOutputFull", IDS_PRINT_PREVIEW_PRINTER_STATUS_OUPUT_FULL},
+    {"printerStatusPaperJam", IDS_PRINT_PREVIEW_PRINTER_STATUS_PAPER_JAM},
+    {"printerStatusPaused", IDS_PRINT_PREVIEW_PRINTER_STATUS_PAUSED},
+    {"printerStatusPrinterQueueFull",
+     IDS_PRINT_PREVIEW_PRINTER_STATUS_PRINTER_QUEUE_FULL},
+    {"printerStatusPrinterUnreachable",
+     IDS_PRINT_PREVIEW_PRINTER_STATUS_PRINTER_UNREACHABLE},
+    {"printerStatusStopped", IDS_PRINT_PREVIEW_PRINTER_STATUS_STOPPED},
+    {"printerStatusTrayMissing", IDS_PRINT_PREVIEW_PRINTER_STATUS_TRAY_MISSING},
 #endif
 #if defined(OS_MACOSX)
     {"openPdfInPreviewOption", IDS_PRINT_PREVIEW_OPEN_PDF_IN_PREVIEW_APP},
@@ -351,6 +363,13 @@ void AddPrintPreviewStrings(content::WebUIDataSource* source) {
                     l10n_util::GetStringFUTF16(
                         IDS_PRINT_PREVIEW_SYSTEM_DIALOG_OPTION, shortcut_text));
 #endif
+
+  // Register strings for the PDF viewer, so that $i18n{} replacements work.
+  base::Value pdf_strings(base::Value::Type::DICTIONARY);
+  pdf_extension_util::AddStrings(
+      pdf_extension_util::PdfViewerContext::kPrintPreview, &pdf_strings);
+  pdf_extension_util::AddAdditionalData(&pdf_strings);
+  source->AddLocalizedStrings(base::Value::AsDictionaryValue(pdf_strings));
 }
 
 void AddPrintPreviewFlags(content::WebUIDataSource* source, Profile* profile) {
@@ -381,39 +400,41 @@ void AddPrintPreviewFlags(content::WebUIDataSource* source, Profile* profile) {
 
 void SetupPrintPreviewPlugin(content::WebUIDataSource* source) {
   static constexpr webui::ResourcePath kPdfResources[] = {
-    {"pdf/bookmark_type.js", IDR_PDF_BOOKMARK_TYPE_JS},
-    {"pdf/browser_api.js", IDR_PDF_BROWSER_API_JS},
-    {"pdf/constants.js", IDR_PDF_CONSTANTS_JS},
-    {"pdf/controller.js", IDR_PDF_CONTROLLER_JS},
-    {"pdf/elements/icons.js", IDR_PDF_ICONS_JS},
-    {"pdf/elements/shared-vars.js", IDR_PDF_SHARED_VARS_JS},
-    {"pdf/elements/viewer-error-screen.js", IDR_PDF_VIEWER_ERROR_SCREEN_JS},
-    {"pdf/elements/viewer-page-indicator.js",
-     IDR_PRINT_PREVIEW_PDF_VIEWER_PAGE_INDICATOR_JS},
-    {"pdf/elements/viewer-zoom-button.js", IDR_PDF_VIEWER_ZOOM_BUTTON_JS},
-    {"pdf/elements/viewer-zoom-toolbar.js", IDR_PDF_VIEWER_ZOOM_SELECTOR_JS},
-    {"pdf/gesture_detector.js", IDR_PDF_GESTURE_DETECTOR_JS},
-    {"pdf/index.css", IDR_PDF_INDEX_CSS},
-    {"pdf/index.html", IDR_PRINT_PREVIEW_PDF_INDEX_PP_HTML},
-    {"pdf/main_pp.js", IDR_PRINT_PREVIEW_PDF_MAIN_PP_JS},
-    {"pdf/main_util.js", IDR_PDF_MAIN_UTIL_JS},
-    {"pdf/metrics.js", IDR_PDF_METRICS_JS},
-    {"pdf/navigator.js", IDR_PDF_NAVIGATOR_JS},
-    {"pdf/open_pdf_params_parser.js", IDR_PDF_OPEN_PDF_PARAMS_PARSER_JS},
-    {"pdf/pdf_scripting_api.js", IDR_PDF_PDF_SCRIPTING_API_JS},
-    {"pdf/pdf_viewer.js", IDR_PDF_PDF_VIEWER_JS},
-    {"pdf/toolbar_manager.js", IDR_PDF_TOOLBAR_MANAGER_JS},
-    {"pdf/viewport.js", IDR_PDF_VIEWPORT_JS},
-    {"pdf/viewport_scroller.js", IDR_PDF_VIEWPORT_SCROLLER_JS},
-    {"pdf/zoom_manager.js", IDR_PDF_ZOOM_MANAGER_JS},
+      {"pdf/browser_api.js", IDR_PDF_BROWSER_API_JS},
+      {"pdf/constants.js", IDR_PDF_CONSTANTS_JS},
+      {"pdf/controller.js", IDR_PDF_CONTROLLER_JS},
+      {"pdf/elements/icons.js", IDR_PDF_ICONS_JS},
+      {"pdf/elements/shared-vars.js", IDR_PDF_SHARED_VARS_JS},
+      {"pdf/elements/viewer-error-screen.js", IDR_PDF_VIEWER_ERROR_SCREEN_JS},
+      {"pdf/elements/viewer-page-indicator.js",
+       IDR_PRINT_PREVIEW_PDF_VIEWER_PAGE_INDICATOR_JS},
+      {"pdf/elements/viewer-zoom-button.js", IDR_PDF_VIEWER_ZOOM_BUTTON_JS},
+      {"pdf/elements/viewer-zoom-toolbar.js", IDR_PDF_VIEWER_ZOOM_SELECTOR_JS},
+      {"pdf/gesture_detector.js", IDR_PDF_GESTURE_DETECTOR_JS},
+      {"pdf/index.css", IDR_PDF_INDEX_CSS},
+      {"pdf/index.html", IDR_PRINT_PREVIEW_PDF_INDEX_PP_HTML},
+      {"pdf/main.js", IDR_PDF_MAIN_JS},
+      {"pdf/metrics.js", IDR_PDF_METRICS_JS},
+      {"pdf/open_pdf_params_parser.js", IDR_PDF_OPEN_PDF_PARAMS_PARSER_JS},
+      {"pdf/pdf_scripting_api.js", IDR_PDF_PDF_SCRIPTING_API_JS},
+      {"pdf/pdf_viewer_base.js", IDR_PDF_PDF_VIEWER_BASE_JS},
+      {"pdf/pdf_viewer.js", IDR_PRINT_PREVIEW_PDF_PDF_VIEWER_PP_JS},
+      {"pdf/pdf_viewer_shared_style.js", IDR_PDF_PDF_VIEWER_SHARED_STYLE_JS},
+      {"pdf/pdf_viewer_utils.js", IDR_PDF_PDF_VIEWER_UTILS_JS},
+      {"pdf/toolbar_manager.js", IDR_PDF_TOOLBAR_MANAGER_JS},
+      {"pdf/viewport.js", IDR_PDF_VIEWPORT_JS},
+      {"pdf/viewport_scroller.js", IDR_PDF_VIEWPORT_SCROLLER_JS},
+      {"pdf/zoom_manager.js", IDR_PDF_ZOOM_MANAGER_JS},
   };
   webui::AddResourcePathsBulk(source, kPdfResources);
 
   source->SetRequestFilter(base::BindRepeating(&ShouldHandleRequestCallback),
                            base::BindRepeating(&HandleRequestCallback));
-  source->OverrideContentSecurityPolicyChildSrc("child-src 'self';");
+  source->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::ChildSrc, "child-src 'self';");
   source->DisableDenyXFrameOptions();
-  source->OverrideContentSecurityPolicyObjectSrc("object-src 'self';");
+  source->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::ObjectSrc, "object-src 'self';");
 }
 
 content::WebUIDataSource* CreatePrintPreviewUISource(Profile* profile) {
@@ -440,6 +461,19 @@ PrintPreviewHandler* CreatePrintPreviewHandlers(content::WebUI* web_ui) {
   PrintPreviewHandler* handler_ptr = handler.get();
   web_ui->AddMessageHandler(std::move(handler));
   web_ui->AddMessageHandler(std::make_unique<MetricsHandler>());
+
+  // Add a handler to provide pluralized strings.
+  auto plural_string_handler = std::make_unique<PluralStringHandler>();
+  plural_string_handler->AddLocalizedString(
+      "printPreviewPageSummaryLabel", IDS_PRINT_PREVIEW_PAGE_SUMMARY_LABEL);
+  plural_string_handler->AddLocalizedString(
+      "printPreviewSheetSummaryLabel", IDS_PRINT_PREVIEW_SHEET_SUMMARY_LABEL);
+#if defined(OS_CHROMEOS)
+  plural_string_handler->AddLocalizedString(
+      "sheetsLimitErrorMessage", IDS_PRINT_PREVIEW_SHEETS_LIMIT_ERROR_MESSAGE);
+#endif
+  web_ui->AddMessageHandler(std::move(plural_string_handler));
+
   return handler_ptr;
 }
 
@@ -624,10 +658,6 @@ void PrintPreviewUI::OnInitiatorClosed() {
   }
 }
 
-void PrintPreviewUI::OnPrintPreviewCancelled(int request_id) {
-  handler_->OnPrintPreviewCancelled(request_id);
-}
-
 void PrintPreviewUI::OnPrintPreviewRequest(int request_id) {
   if (!initial_preview_start_time_.is_null()) {
     base::UmaHistogramTimes(
@@ -638,7 +668,7 @@ void PrintPreviewUI::OnPrintPreviewRequest(int request_id) {
 }
 
 void PrintPreviewUI::OnDidStartPreview(
-    const PrintHostMsg_DidStartPreview_Params& params,
+    const mojom::DidStartPreviewParams& params,
     int request_id) {
   DCHECK_GT(params.page_count, 0);
   DCHECK(!params.pages_to_render.empty());
@@ -656,7 +686,7 @@ void PrintPreviewUI::OnDidStartPreview(
 }
 
 void PrintPreviewUI::OnDidGetDefaultPageLayout(
-    const PageSizeMargins& page_layout,
+    const mojom::PageSizeMargins& page_layout,
     const gfx::Rect& printable_area,
     bool has_custom_page_size_style,
     int request_id) {
@@ -729,10 +759,6 @@ void PrintPreviewUI::OnPrintPreviewFailed(int request_id) {
   handler_->OnPrintPreviewFailed(request_id);
 }
 
-void PrintPreviewUI::OnInvalidPrinterSettings(int request_id) {
-  handler_->OnInvalidPrinterSettings(request_id);
-}
-
 void PrintPreviewUI::OnHidePreviewDialog() {
   WebContents* preview_dialog = web_ui()->GetWebContents();
   BackgroundPrintingManager* background_printing_manager =
@@ -774,6 +800,19 @@ void PrintPreviewUI::PrintPreviewFailed(int32_t document_cookie,
                                         int32_t request_id) {
   StopWorker(document_cookie);
   OnPrintPreviewFailed(request_id);
+}
+
+void PrintPreviewUI::PrintPreviewCancelled(int32_t document_cookie,
+                                           int32_t request_id) {
+  // Always need to stop the worker.
+  StopWorker(document_cookie);
+  handler_->OnPrintPreviewCancelled(request_id);
+}
+
+void PrintPreviewUI::PrinterSettingsInvalid(int32_t document_cookie,
+                                            int32_t request_id) {
+  StopWorker(document_cookie);
+  handler_->OnInvalidPrinterSettings(request_id);
 }
 
 // static

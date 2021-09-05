@@ -13,6 +13,7 @@
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/callback_list.h"
+#include "base/cancelable_callback.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
@@ -120,7 +121,7 @@ class PasswordStore : protected PasswordStoreSync,
   struct FormDigest {
     FormDigest(autofill::PasswordForm::Scheme scheme,
                const std::string& signon_realm,
-               const GURL& origin);
+               const GURL& url);
     explicit FormDigest(const autofill::PasswordForm& form);
     explicit FormDigest(const autofill::FormData& form);
     FormDigest(const FormDigest& other);
@@ -131,7 +132,7 @@ class PasswordStore : protected PasswordStoreSync,
 
     autofill::PasswordForm::Scheme scheme;
     std::string signon_realm;
-    GURL origin;
+    GURL url;
   };
 
   PasswordStore();
@@ -159,7 +160,7 @@ class PasswordStore : protected PasswordStoreSync,
   virtual void AddLogin(const autofill::PasswordForm& form);
 
   // Updates the matching PasswordForm in the secure password store (async).
-  // If any of the primary key fields (signon_realm, origin, username_element,
+  // If any of the primary key fields (signon_realm, url, username_element,
   // username_value, password_element) are updated, then the second version of
   // the method must be used that takes |old_primary_key|, i.e., the old values
   // for the primary key fields (the rest of the fields are ignored).
@@ -172,15 +173,20 @@ class PasswordStore : protected PasswordStoreSync,
   virtual void RemoveLogin(const autofill::PasswordForm& form);
 
   // Remove all logins whose origins match the given filter and that were
-  // created
-  // in the given date range. |completion| will be posted to the
-  // |main_task_runner_| after deletions have been completed and notification
-  // have been sent out.
+  // created in the given date range. |completion| will be posted to the
+  // |main_task_runner_| after deletions have been completed and notifications
+  // have been sent out. |sync_completion| will be posted to
+  // |main_task_runner_| once the deletions have also been propagated to the
+  // server (or, in rare cases, if the user permanently disables Sync or
+  // deletions haven't been propagated after 30 seconds). This is
+  // only relevant for Sync users and for account store users - for other users,
+  // |sync_completion| will be run immediately after |completion|.
   void RemoveLoginsByURLAndTime(
       const base::RepeatingCallback<bool(const GURL&)>& url_filter,
       base::Time delete_begin,
       base::Time delete_end,
-      base::OnceClosure completion);
+      base::OnceClosure completion,
+      base::OnceCallback<void(bool)> sync_completion = base::NullCallback());
 
   // Removes all logins created in the given date range. If |completion| is not
   // null, it will be posted to the |main_task_runner_| after deletions have
@@ -252,6 +258,7 @@ class PasswordStore : protected PasswordStoreSync,
   // Adds or replaces the statistics for the domain |stats.origin_domain|.
   void AddSiteStats(const InteractionsStats& stats);
 
+  // TODO(crbug/1081389): replace GURL with Origin.
   // Removes the statistics for |origin_domain|.
   void RemoveSiteStats(const GURL& origin_domain);
 
@@ -572,6 +579,8 @@ class PasswordStore : protected PasswordStoreSync,
   // been changed.
   void NotifyLoginsChanged(const PasswordStoreChangeList& changes) override;
 
+  void NotifyDeletionsHaveSynced(bool success) override;
+
   void NotifyUnsyncedCredentialsWillBeDeleted(
       const std::vector<autofill::PasswordForm>& unsynced_credentials) override;
 
@@ -699,7 +708,8 @@ class PasswordStore : protected PasswordStoreSync,
       const base::RepeatingCallback<bool(const GURL&)>& url_filter,
       base::Time delete_begin,
       base::Time delete_end,
-      base::OnceClosure completion);
+      base::OnceClosure completion,
+      base::OnceCallback<void(bool)> sync_completion);
   void RemoveLoginsCreatedBetweenInternal(base::Time delete_begin,
                                           base::Time delete_end,
                                           base::OnceClosure completion);
@@ -786,7 +796,7 @@ class PasswordStore : protected PasswordStoreSync,
       const std::vector<std::string>& additional_android_realms);
 
   // Retrieves the currently stored form, if any, with the same primary key as
-  // |form|, that is, with the same signon_realm, origin, username_element,
+  // |form|, that is, with the same signon_realm, url, username_element,
   // username_value and password_element attributes. To be called on the
   // background sequence.
   std::unique_ptr<autofill::PasswordForm> GetLoginImpl(
@@ -859,9 +869,16 @@ class PasswordStore : protected PasswordStoreSync,
 
   std::unique_ptr<UnsyncedCredentialsDeletionNotifier> deletion_notifier_;
 
-  bool shutdown_called_;
+  // A list of callbacks that should be run once all pending deletions have been
+  // sent to the Sync server. Note that the vector itself lives on the
+  // background thread, but the callbacks must be run on the main thread!
+  std::vector<base::OnceCallback<void(bool)>> deletions_have_synced_callbacks_;
+  // Timeout closure that runs if sync takes too long to propagate deletions.
+  base::CancelableClosure deletions_have_synced_timeout_;
 
-  InitStatus init_status_;
+  bool shutdown_called_ = false;
+
+  InitStatus init_status_ = InitStatus::kUnknown;
 
   DISALLOW_COPY_AND_ASSIGN(PasswordStore);
 };

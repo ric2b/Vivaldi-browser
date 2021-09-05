@@ -10,6 +10,7 @@
 #include "build/build_config.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
@@ -19,11 +20,14 @@
 #include "chrome/browser/ui/web_applications/web_app_metrics.h"
 #include "chrome/browser/web_applications/system_web_app_manager.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
+#include "extensions/browser/app_sorting.h"
+#include "extensions/browser/extension_system.h"
 
 #if defined(OS_CHROMEOS)
 #include "ash/public/cpp/shelf_model.h"
 #include "chrome/browser/ui/app_list/app_list_syncable_service.h"
 #include "chrome/browser/ui/app_list/app_list_syncable_service_factory.h"
+#include "chrome/browser/ui/app_list/extension_app_utils.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #endif
 
@@ -35,12 +39,30 @@ std::unique_ptr<WebAppUiManager> WebAppUiManager::Create(Profile* profile) {
 }
 
 // static
+bool WebAppUiManager::ShouldHideAppFromUser(const AppId& app_id) {
+#if defined(OS_CHROMEOS)
+  return app_list::HideInLauncherById(app_id);
+#else
+  return false;
+#endif
+}
+
+// static
 WebAppUiManagerImpl* WebAppUiManagerImpl::Get(Profile* profile) {
   auto* provider = WebAppProvider::Get(profile);
   return provider ? provider->ui_manager().AsImpl() : nullptr;
 }
 
-WebAppUiManagerImpl::WebAppUiManagerImpl(Profile* profile) : profile_(profile) {
+WebAppUiManagerImpl::WebAppUiManagerImpl(Profile* profile)
+    : dialog_manager_(std::make_unique<WebAppDialogManager>(profile)),
+      profile_(profile) {}
+
+WebAppUiManagerImpl::~WebAppUiManagerImpl() = default;
+
+void WebAppUiManagerImpl::Start() {
+  DCHECK(!started_);
+  started_ = true;
+
   for (Browser* browser : *BrowserList::GetInstance()) {
     if (!IsBrowserForInstalledApp(browser))
       continue;
@@ -48,13 +70,16 @@ WebAppUiManagerImpl::WebAppUiManagerImpl(Profile* profile) : profile_(profile) {
     ++num_windows_for_apps_map_[GetAppIdForBrowser(browser)];
   }
 
-  BrowserList::AddObserver(this);
+  extensions::ExtensionSystem::Get(profile_)
+      ->app_sorting()
+      ->InitializePageOrdinalMapFromWebApps();
 
-  dialog_manager_ = std::make_unique<WebAppDialogManager>(profile);
+  BrowserList::AddObserver(this);
 }
 
-WebAppUiManagerImpl::~WebAppUiManagerImpl() {
+void WebAppUiManagerImpl::Shutdown() {
   BrowserList::RemoveObserver(this);
+  started_ = false;
 }
 
 WebAppDialogManager& WebAppUiManagerImpl::dialog_manager() {
@@ -66,6 +91,8 @@ WebAppUiManagerImpl* WebAppUiManagerImpl::AsImpl() {
 }
 
 size_t WebAppUiManagerImpl::GetNumWindowsForApp(const AppId& app_id) {
+  DCHECK(started_);
+
   auto it = num_windows_for_apps_map_.find(app_id);
   if (it == num_windows_for_apps_map_.end())
     return 0;
@@ -76,6 +103,8 @@ size_t WebAppUiManagerImpl::GetNumWindowsForApp(const AppId& app_id) {
 void WebAppUiManagerImpl::NotifyOnAllAppWindowsClosed(
     const AppId& app_id,
     base::OnceClosure callback) {
+  DCHECK(started_);
+
   const size_t num_windows_for_app = GetNumWindowsForApp(app_id);
   if (num_windows_for_app == 0) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
@@ -167,17 +196,17 @@ void WebAppUiManagerImpl::ReparentAppTabToWindow(content::WebContents* contents,
 }
 
 void WebAppUiManagerImpl::OnBrowserAdded(Browser* browser) {
-  if (!IsBrowserForInstalledApp(browser)) {
+  DCHECK(started_);
+  if (!IsBrowserForInstalledApp(browser))
     return;
-  }
 
   ++num_windows_for_apps_map_[GetAppIdForBrowser(browser)];
 }
 
 void WebAppUiManagerImpl::OnBrowserRemoved(Browser* browser) {
-  if (!IsBrowserForInstalledApp(browser)) {
+  DCHECK(started_);
+  if (!IsBrowserForInstalledApp(browser))
     return;
-  }
 
   const auto& app_id = GetAppIdForBrowser(browser);
 

@@ -38,6 +38,7 @@
 #include "chrome/browser/ui/tabs/tab_utils.h"
 #include "chrome/browser/ui/views/tabs/tab.h"
 #include "chrome/browser/ui/views/tabs/tab_drag_controller.h"
+#include "chrome/browser/ui/views/tabs/tab_groups_iph_controller.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
@@ -105,8 +106,12 @@ BrowserView* GetSourceBrowserViewInTabDragging() {
 class BrowserTabStripController::TabContextMenuContents
     : public ui::SimpleMenuModel::Delegate {
  public:
-  TabContextMenuContents(Tab* tab, BrowserTabStripController* controller)
-      : tab_(tab), controller_(controller) {
+  TabContextMenuContents(Tab* tab,
+                         BrowserTabStripController* controller,
+                         TabGroupsIPHController* tab_groups_iph_controller)
+      : tab_(tab),
+        controller_(controller),
+        tab_groups_iph_controller_(tab_groups_iph_controller) {
     model_ = controller_->menu_model_factory_->Create(
         this, controller->model_, controller->tabstrip_->GetModelIndexOf(tab));
     menu_runner_ = std::make_unique<views::MenuRunner>(
@@ -117,6 +122,7 @@ class BrowserTabStripController::TabContextMenuContents
   void Cancel() { controller_ = nullptr; }
 
   void RunMenuAt(const gfx::Point& point, ui::MenuSourceType source_type) {
+    tab_groups_iph_controller_->TabContextMenuOpened();
     menu_runner_->RunMenuAt(tab_->GetWidget(), nullptr,
                             gfx::Rect(point, gfx::Size()),
                             views::MenuAnchorPosition::kTopLeft, source_type);
@@ -129,6 +135,17 @@ class BrowserTabStripController::TabContextMenuContents
         static_cast<TabStripModel::ContextMenuCommand>(command_id),
         tab_);
   }
+
+  bool IsCommandIdAlerted(int command_id) const override {
+    return command_id == TabStripModel::CommandAddToNewGroup &&
+           tab_groups_iph_controller_ &&
+           tab_groups_iph_controller_->ShouldHighlightContextMenuItem();
+  }
+
+  void MenuClosed(ui::SimpleMenuModel*) override {
+    tab_groups_iph_controller_->TabContextMenuClosed();
+  }
+
   bool GetAcceleratorForCommandId(int command_id,
                                   ui::Accelerator* accelerator) const override {
     auto* app_controller =
@@ -160,6 +177,8 @@ class BrowserTabStripController::TabContextMenuContents
 
   // A pointer back to our hosting controller, for command state information.
   BrowserTabStripController* controller_;
+
+  TabGroupsIPHController* const tab_groups_iph_controller_;
 
   DISALLOW_COPY_AND_ASSIGN(TabContextMenuContents);
 };
@@ -347,11 +366,58 @@ void BrowserTabStripController::MoveGroup(const tab_groups::TabGroupId& group,
   model_->MoveGroupTo(group, final_index);
 }
 
+bool BrowserTabStripController::ToggleTabGroupCollapsedState(
+    const tab_groups::TabGroupId group,
+    bool record_user_action) {
+  const bool is_currently_collapsed = IsGroupCollapsed(group);
+  if (is_currently_collapsed) {
+    if (record_user_action) {
+      base::RecordAction(
+          base::UserMetricsAction("TabGroups_TabGroupHeader_Expanded"));
+    }
+  } else {
+    if (model_->GetTabGroupForTab(GetActiveIndex()) == group) {
+      // If the active tab is in the group that is toggling to collapse, the
+      // active tab should switch to the next available tab. If there are no
+      // available tabs for the active tab to switch to, the group will not
+      // toggle to collapse.
+      const base::Optional<int> next_active =
+          model_->GetNextExpandedActiveTab(GetActiveIndex(), group);
+      if (!next_active.has_value()) {
+        base::RecordAction(base::UserMetricsAction("TabGroups_CannotCollapse"));
+        return false;
+      }
+      model_->ActivateTabAt(next_active.value(),
+                            {TabStripModel::GestureType::kOther});
+    } else {
+      // If the active tab is not in the group that is toggling to collapse,
+      // reactive the active tab to deselect any other potentially selected
+      // tabs.
+      model_->ActivateTabAt(GetActiveIndex(),
+                            {TabStripModel::GestureType::kOther});
+    }
+    if (record_user_action) {
+      base::RecordAction(
+          base::UserMetricsAction("TabGroups_TabGroupHeader_Collapsed"));
+    }
+  }
+
+  std::vector<int> tabs_in_group = ListTabsInGroup(group);
+  for (int i : tabs_in_group)
+    tabstrip_->tab_at(i)->SetVisible(is_currently_collapsed);
+
+  tab_groups::TabGroupVisualData new_data(
+      GetGroupTitle(group), GetGroupColorId(group), !is_currently_collapsed);
+  model_->group_model()->GetTabGroup(group)->SetVisualData(new_data, true);
+  return true;
+}
+
 void BrowserTabStripController::ShowContextMenuForTab(
     Tab* tab,
     const gfx::Point& p,
     ui::MenuSourceType source_type) {
-  context_menu_contents_ = std::make_unique<TabContextMenuContents>(tab, this);
+  context_menu_contents_ = std::make_unique<TabContextMenuContents>(
+      tab, this, browser_view_->tab_groups_iph_controller());
   context_menu_contents_->RunMenuAt(p, source_type);
 }
 
@@ -464,6 +530,15 @@ base::string16 BrowserTabStripController::GetGroupContentString(
 tab_groups::TabGroupColorId BrowserTabStripController::GetGroupColorId(
     const tab_groups::TabGroupId& group) const {
   return model_->group_model()->GetTabGroup(group)->visual_data()->color();
+}
+
+bool BrowserTabStripController::IsGroupCollapsed(
+    const tab_groups::TabGroupId& group) const {
+  return model_->group_model()->ContainsTabGroup(group) &&
+         model_->group_model()
+             ->GetTabGroup(group)
+             ->visual_data()
+             ->is_collapsed();
 }
 
 void BrowserTabStripController::SetVisualDataForGroup(

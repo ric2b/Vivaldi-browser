@@ -5,7 +5,7 @@
 #include "ash/shortcut_viewer/keyboard_shortcut_viewer_metadata.h"
 
 #include "ash/shortcut_viewer/keyboard_shortcut_item.h"
-#include "ash/shortcut_viewer/strings/grit/ash_components_strings.h"
+#include "ash/shortcut_viewer/strings/grit/shortcut_viewer_strings.h"
 #include "ash/shortcut_viewer/vector_icons/vector_icons.h"
 #include "base/check.h"
 #include "base/macros.h"
@@ -772,20 +772,20 @@ const std::vector<KeyboardShortcutItem>& GetKeyboardShortcutItemList() {
       {// |categories|
        {ShortcutCategory::kPageAndBrowser},
        IDS_KSV_DESCRIPTION_PAGE_UP,
-       IDS_KSV_SHORTCUT_PAGE_UP,
+       IDS_KSV_SHORTCUT_ONE_MODIFIER_ONE_KEY,
        // |accelerator_ids|
        {},
        // |shortcut_key_codes|
-       {ui::VKEY_LMENU, ui::VKEY_COMMAND, ui::VKEY_UNKNOWN, ui::VKEY_UP}},
+       {ui::VKEY_COMMAND, ui::VKEY_UNKNOWN, ui::VKEY_UP}},
 
       {// |categories|
        {ShortcutCategory::kPageAndBrowser},
        IDS_KSV_DESCRIPTION_PAGE_DOWN,
-       IDS_KSV_SHORTCUT_PAGE_DOWN,
+       IDS_KSV_SHORTCUT_ONE_MODIFIER_ONE_KEY,
        // |accelerator_ids|
        {},
        // |shortcut_key_codes|
-       {ui::VKEY_LMENU, ui::VKEY_COMMAND, ui::VKEY_UNKNOWN, ui::VKEY_DOWN}},
+       {ui::VKEY_COMMAND, ui::VKEY_UNKNOWN, ui::VKEY_DOWN}},
 
       {// |categories|
        {ShortcutCategory::kPageAndBrowser},
@@ -1084,8 +1084,9 @@ const std::vector<KeyboardShortcutItem>& GetKeyboardShortcutItemList() {
        // |accelerator_ids|
        {},
        // |shortcut_key_codes|
-       {ui::VKEY_CONTROL, ui::VKEY_UNKNOWN, ui::VKEY_LEFT, ui::VKEY_CONTROL,
-        ui::VKEY_UNKNOWN, ui::VKEY_RIGHT}},
+       {ui::VKEY_CONTROL, ui::VKEY_UNKNOWN, ui::VKEY_BROWSER_BACK,
+        ui::VKEY_CONTROL, ui::VKEY_UNKNOWN, ui::VKEY_SHIFT, ui::VKEY_UNKNOWN,
+        ui::VKEY_BROWSER_BACK}},
 
       {// |categories|
        {ShortcutCategory::kAccessibility},
@@ -1184,9 +1185,9 @@ const std::vector<KeyboardShortcutItem>& GetKeyboardShortcutItemList() {
       {// |categories|
        {ShortcutCategory::kPageAndBrowser},
        IDS_KSV_DESCRIPTION_FOCUS_NEXT_PANE,
-       IDS_KSV_SHORTCUT_ONE_MODIFIER_ONE_KEY,
+       IDS_KSV_SHORTCUT_TWO_MODIFIERS_ONE_KEY,
        // |accelerator_ids|
-       {{ui::VKEY_BROWSER_FORWARD, ui::EF_CONTROL_DOWN}}},
+       {{ui::VKEY_BROWSER_BACK, ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN}}},
 
       {// |categories|
        {ShortcutCategory::kPageAndBrowser},

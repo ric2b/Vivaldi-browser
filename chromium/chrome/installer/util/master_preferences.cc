@@ -11,6 +11,7 @@
 #include "base/json/json_string_value_serializer.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/notreached.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
@@ -38,7 +39,7 @@ std::vector<std::string> GetNamedList(const char* name,
   if (!prefs)
     return list;
 
-  const base::ListValue* value_list = NULL;
+  const base::ListValue* value_list = nullptr;
   if (!prefs->GetList(name, &value_list))
     return list;
 
@@ -59,15 +60,15 @@ base::DictionaryValue* ParseDistributionPreferences(
     const std::string& json_data) {
   JSONStringValueDeserializer json(json_data);
   std::string error;
-  std::unique_ptr<base::Value> root(json.Deserialize(NULL, &error));
+  std::unique_ptr<base::Value> root(json.Deserialize(nullptr, &error));
   if (!root.get()) {
     LOG(WARNING) << "Failed to parse master prefs file: " << error;
-    return NULL;
+    return nullptr;
   }
   if (!root->is_dict()) {
     LOG(WARNING) << "Failed to parse master prefs file: "
                  << "Root item must be a dictionary.";
-    return NULL;
+    return nullptr;
   }
   return static_cast<base::DictionaryValue*>(root.release());
 }
@@ -92,15 +93,14 @@ MasterPreferences::MasterPreferences(const std::string& prefs) {
   InitializeFromString(prefs);
 }
 
-MasterPreferences::~MasterPreferences() {
-}
+MasterPreferences::~MasterPreferences() = default;
 
 void MasterPreferences::InitializeFromCommandLine(
     const base::CommandLine& cmd_line) {
 #if defined(OS_WIN)
   if (cmd_line.HasSwitch(installer::switches::kInstallerData)) {
-    base::FilePath prefs_path(cmd_line.GetSwitchValuePath(
-        installer::switches::kInstallerData));
+    base::FilePath prefs_path(
+        cmd_line.GetSwitchValuePath(installer::switches::kInstallerData));
     InitializeFromFilePath(prefs_path);
   } else {
     master_dictionary_.reset(new base::DictionaryValue());
@@ -142,8 +142,8 @@ void MasterPreferences::InitializeFromCommandLine(
   }
 
   // See if the log file path was specified on the command line.
-  std::wstring str_value(cmd_line.GetSwitchValueNative(
-      installer::switches::kLogFile));
+  std::wstring str_value(
+      cmd_line.GetSwitchValueNative(installer::switches::kLogFile));
   if (!str_value.empty()) {
     name.assign(installer::master_preferences::kDistroDict);
     name.append(".").append(installer::master_preferences::kLogFile);
@@ -153,7 +153,7 @@ void MasterPreferences::InitializeFromCommandLine(
   // Handle the special case of --system-level being implied by the presence of
   // the kGoogleUpdateIsMachineEnvVar environment variable.
   std::unique_ptr<base::Environment> env(base::Environment::Create());
-  if (env != NULL) {
+  if (env) {
     std::string is_machine_var;
     env->GetVar(env_vars::kGoogleUpdateIsMachineEnvVar, &is_machine_var);
     if (is_machine_var == "1") {
@@ -282,8 +282,8 @@ std::vector<std::string> MasterPreferences::GetFirstRunTabs() const {
 
 bool MasterPreferences::GetExtensionsBlock(
     base::DictionaryValue** extensions) const {
-  return master_dictionary_->GetDictionary(
-      master_preferences::kExtensionsBlock, extensions);
+  return master_dictionary_->GetDictionary(master_preferences::kExtensionsBlock,
+                                           extensions);
 }
 
 std::string MasterPreferences::GetCompressedVariationsSeed() const {

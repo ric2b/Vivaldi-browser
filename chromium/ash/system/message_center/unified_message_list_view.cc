@@ -13,6 +13,7 @@
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/unified/unified_system_tray_model.h"
 #include "base/auto_reset.h"
+#include "base/metrics/histogram_macros.h"
 #include "ui/gfx/animation/linear_animation.h"
 #include "ui/gfx/canvas.h"
 #include "ui/message_center/message_center.h"
@@ -22,9 +23,9 @@
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/fill_layout.h"
 
-using message_center::Notification;
 using message_center::MessageCenter;
 using message_center::MessageView;
+using message_center::Notification;
 
 namespace ash {
 
@@ -81,7 +82,7 @@ class UnifiedMessageListView::MessageViewContainer
                   : views::CreateSolidSidedBorder(
                         0, 0, kUnifiedNotificationSeparatorThickness, 0,
                         AshColorProvider::Get()->GetContentLayerColor(
-                            AshColorProvider::ContentLayerType::kSeparator,
+                            AshColorProvider::ContentLayerType::kSeparatorColor,
                             AshColorProvider::AshColorMode::kLight)));
     const int top_radius = is_top ? kUnifiedTrayCornerRadius : 0;
     const int bottom_radius = is_bottom ? kUnifiedTrayCornerRadius : 0;
@@ -261,6 +262,9 @@ void UnifiedMessageListView::ClearAllWithAnimation() {
     return;
   ResetBounds();
 
+  UMA_HISTOGRAM_COUNTS_100("ChromeOS.SystemTray.NotificationsRemovedByClearAll",
+                           children().size());
+
   // Record a ClosedByClearAll metric for each notification dismissed.
   for (auto* child : children()) {
     auto* view = AsMVC(child);
@@ -284,10 +288,7 @@ std::vector<Notification*> UnifiedMessageListView::GetNotificationsAboveY(
     int y_offset) const {
   std::vector<Notification*> notifications;
   for (views::View* view : children()) {
-    int bottom_limit =
-        features::IsUnifiedMessageCenterRefactorEnabled()
-            ? view->bounds().y() + kNotificationIconStackThreshold
-            : view->bounds().bottom();
+    int bottom_limit = view->bounds().y() + kNotificationIconStackThreshold;
     if (bottom_limit <= y_offset) {
       Notification* notification =
           MessageCenter::Get()->FindVisibleNotificationById(

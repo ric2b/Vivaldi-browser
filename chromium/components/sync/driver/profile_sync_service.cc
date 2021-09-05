@@ -49,7 +49,6 @@
 #include "components/sync/engine/sync_encryption_handler.h"
 #include "components/sync/model/sync_error.h"
 #include "components/sync/syncable/directory.h"
-#include "components/sync/syncable/user_share.h"
 #include "components/version_info/version_info_values.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
@@ -113,8 +112,6 @@ void RecordSyncInitialState(SyncService::DisableReasonSet disable_reasons,
   }
   base::UmaHistogramEnumeration("Sync.InitialState", sync_state);
 }
-
-constexpr char kSyncUnrecoverableErrorHistogram[] = "Sync.UnrecoverableErrors";
 
 EngineComponentsFactory::Switches EngineSwitchesFromCommandLine() {
   EngineComponentsFactory::Switches factory_switches = {
@@ -921,8 +918,6 @@ void ProfileSyncService::OnUnrecoverableErrorImpl(
   unrecoverable_error_message_ = message;
   unrecoverable_error_location_ = from_here;
 
-  UMA_HISTOGRAM_ENUMERATION(kSyncUnrecoverableErrorHistogram,
-                            unrecoverable_error_reason_, ERROR_REASON_LIMIT);
   LOG(ERROR) << "Unrecoverable error detected at " << from_here.ToString()
              << " -- ProfileSyncService unusable: " << message;
 
@@ -1364,9 +1359,10 @@ void ProfileSyncService::SyncAllowedByPlatformChanged(bool allowed) {
 
   if (!allowed) {
     StopImpl(KEEP_DATA);
+    // Try to start up again (in transport-only mode).
     // TODO(crbug.com/856179): Evaluate whether we can get away without a full
-    // restart (i.e. just reconfigure plus whatever cleanup is necessary). See
-    // also similar comment in OnSyncRequestedPrefChange().
+    // restart (i.e. just reconfigure). See also similar comment in
+    // OnSyncRequestedPrefChange().
     startup_controller_->TryStart(/*force_immediate=*/true);
   }
 }
@@ -1385,7 +1381,7 @@ void ProfileSyncService::ConfigureDataTypeManager(ConfigureReason reason) {
   if (!migrator_) {
     // We create the migrator at the same time.
     migrator_ = std::make_unique<BackendMigrator>(
-        debug_identifier_, GetUserShare(), data_type_manager_.get(),
+        debug_identifier_, data_type_manager_.get(),
         base::BindRepeating(&ProfileSyncService::ConfigureDataTypeManager,
                             base::Unretained(this), CONFIGURE_REASON_MIGRATION),
         base::BindRepeating(&ProfileSyncService::StartSyncingWithServer,
@@ -1484,15 +1480,6 @@ ModelTypeSet ProfileSyncService::GetModelTypesForTransportOnlyMode() const {
 #endif  // defined(OS_CHROMEOS)
 
   return allowed_types;
-}
-
-UserShare* ProfileSyncService::GetUserShare() const {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  if (engine_ && engine_->IsInitialized()) {
-    return engine_->GetUserShare();
-  }
-  NOTREACHED();
-  return nullptr;
 }
 
 SyncCycleSnapshot ProfileSyncService::GetLastCycleSnapshotForDebugging() const {
@@ -1595,11 +1582,6 @@ ProfileSyncService::GetTypeStatusMapForDebugging() {
   return std::move(result);
 }
 
-bool ProfileSyncService::IsEncryptionPendingForTest() const {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  return user_settings_->IsEncryptionPending();
-}
-
 void ProfileSyncService::OnSyncManagedPrefChange(bool is_sync_managed) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (is_sync_managed) {
@@ -1640,13 +1622,12 @@ void ProfileSyncService::OnSyncRequestedPrefChange(bool is_sync_requested) {
       is_stopping_and_clearing_ = false;
       StopImpl(CLEAR_DATA);
     } else {
+      // TODO(crbug.com/856179): Evaluate whether we can get away without a
+      // full restart in this case (i.e. just reconfigure).
       StopImpl(KEEP_DATA);
     }
 
-    // TODO(crbug.com/856179): Evaluate whether we can get away without a full
-    // restart (i.e. just reconfigure plus whatever cleanup is necessary).
-    // Especially in the CLEAR_DATA case, StopImpl does a lot of cleanup that
-    // might still be required.
+    // Try to start up again (in transport-only mode).
     // TODO(crbug.com/1035874): There's no real need to delay the startup here,
     // i.e. it should be fine to set force_immediate to true. However currently
     // some tests depend on the startup *not* happening immediately (because
@@ -1899,6 +1880,8 @@ void ProfileSyncService::StopAndClear() {
   // away or it treats all "Cancel the confirmation" cases?
   if (!user_settings_->IsSyncRequested()) {
     StopImpl(CLEAR_DATA);
+    // Try to start up again (in transport-only mode).
+    startup_controller_->TryStart(/*force_immediate=*/true);
     return;
   }
 
@@ -1990,13 +1973,6 @@ void ProfileSyncService::OverrideNetworkForTest(
   if (restart) {
     startup_controller_->TryStart(/*force_immediate=*/true);
     DCHECK(engine_);
-  }
-}
-
-void ProfileSyncService::FlushDirectory() const {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  if (engine_ && engine_->IsInitialized()) {
-    engine_->FlushDirectory();
   }
 }
 

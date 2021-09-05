@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 
+#include <memory>
 #include <string>
 
 #include "base/bind.h"
@@ -142,18 +143,18 @@ class TabStripTest : public ChromeViewsTestBase,
     tab_strip_ = new TabStrip(std::unique_ptr<TabStripController>(controller_));
     controller_->set_tab_strip(tab_strip_);
     // Do this to force TabStrip to create the buttons.
-    tab_strip_parent_ = new views::View;
-    views::FlexLayout* layout_manager = tab_strip_parent_->SetLayoutManager(
+    auto tab_strip_parent = std::make_unique<views::View>();
+    views::FlexLayout* layout_manager = tab_strip_parent->SetLayoutManager(
         std::make_unique<views::FlexLayout>());
     layout_manager->SetOrientation(views::LayoutOrientation::kHorizontal)
         .SetDefault(
             views::kFlexBehaviorKey,
             views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToZero,
                                      views::MaximumFlexSizeRule::kUnbounded));
-    tab_strip_parent_->AddChildView(tab_strip_);
+    tab_strip_parent->AddChildView(tab_strip_);
 
     widget_ = CreateTestWidget();
-    widget_->SetContentsView(tab_strip_parent_);
+    tab_strip_parent_ = widget_->SetContentsView(std::move(tab_strip_parent));
   }
 
   void TearDown() override {
@@ -496,6 +497,48 @@ TEST_P(TabStripTest, VisibilityInOverflow) {
   for (int i = tab_strip_->tab_count() - 1; i >= invisible_tab_index; --i)
     controller_->RemoveTab(i);
   EXPECT_TRUE(tab_strip_->tab_at(tab_strip_->tab_count() - 1)->GetVisible());
+}
+
+TEST_P(TabStripTest, GroupedTabSlotVisibility) {
+  constexpr int kInitialWidth = 250;
+  tab_strip_parent_->SetBounds(0, 0, kInitialWidth, 20);
+
+  // The first tab added to a reasonable-width strip should be visible.  If we
+  // add enough additional tabs, eventually one should be invisible due to
+  // overflow.
+  int invisible_tab_index = 0;
+  for (; invisible_tab_index < 100; ++invisible_tab_index) {
+    controller_->AddTab(invisible_tab_index, false);
+    CompleteAnimationAndLayout();
+    if (!tab_strip_->tab_at(invisible_tab_index)->GetVisible())
+      break;
+  }
+  ASSERT_GT(invisible_tab_index, 0);
+  ASSERT_LT(invisible_tab_index, 100);
+
+  // The tabs before the invisible tab should still be visible.
+  for (int i = 0; i < invisible_tab_index; ++i)
+    ASSERT_TRUE(tab_strip_->tab_at(i)->GetVisible());
+
+  // The group header of an invisible tab should not be visible.
+  base::Optional<tab_groups::TabGroupId> group1 =
+      tab_groups::TabGroupId::GenerateNew();
+  controller_->MoveTabIntoGroup(invisible_tab_index, group1);
+  CompleteAnimationAndLayout();
+  ASSERT_FALSE(tab_strip_->tab_at(invisible_tab_index)->GetVisible());
+  EXPECT_FALSE(tab_strip_->group_header(group1.value())->GetVisible());
+
+  // The group header of a visible tab should be visible when the group is
+  // expanded and collapsed.
+  base::Optional<tab_groups::TabGroupId> group2 =
+      tab_groups::TabGroupId::GenerateNew();
+  controller_->MoveTabIntoGroup(0, group2);
+  CompleteAnimationAndLayout();
+  ASSERT_FALSE(controller_->IsGroupCollapsed(group2.value()));
+  EXPECT_TRUE(tab_strip_->group_header(group2.value())->GetVisible());
+  controller_->ToggleTabGroupCollapsedState(group2.value(), false);
+  ASSERT_TRUE(controller_->IsGroupCollapsed(group2.value()));
+  EXPECT_TRUE(tab_strip_->group_header(group2.value())->GetVisible());
 }
 
 // Creates a tab strip in stacked layout mode and verifies that as we move
@@ -1235,10 +1278,10 @@ TEST_P(TabStripTest, GroupUnderlineBasics) {
 
   std::vector<TabGroupViews*> views = ListGroupViews();
   EXPECT_EQ(1u, views.size());
-  TabGroupUnderline* underline = views[0]->underline();
   // Update underline manually in the absence of a real Paint cycle.
-  underline->UpdateBounds();
+  views[0]->UpdateBounds();
 
+  const TabGroupUnderline* underline = views[0]->underline();
   EXPECT_EQ(underline->x(), TabGroupUnderline::GetStrokeInset());
   EXPECT_GT(underline->width(), 0);
   EXPECT_EQ(underline->bounds().right(),
@@ -1249,7 +1292,7 @@ TEST_P(TabStripTest, GroupUnderlineBasics) {
   // Endpoints are different if the last grouped tab is active.
   controller_->AddTab(1, true);
   controller_->MoveTabIntoGroup(1, group);
-  underline->UpdateBounds();
+  views[0]->UpdateBounds();
 
   EXPECT_EQ(underline->x(), TabGroupUnderline::GetStrokeInset());
   EXPECT_EQ(underline->bounds().right(),

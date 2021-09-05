@@ -93,7 +93,7 @@ class CORE_EXPORT InspectTool : public GarbageCollected<InspectTool> {
   virtual bool ForwardEventsToOverlay();
   virtual void Draw(float scale) {}
   virtual void Dispatch(const String& message) {}
-  virtual void Trace(Visitor* visitor);
+  virtual void Trace(Visitor* visitor) const;
   virtual void Dispose() {}
   virtual bool HideOnHideHighlight();
   virtual bool HideOnMouseMove();
@@ -114,7 +114,7 @@ class CORE_EXPORT Hinge final : public GarbageCollected<Hinge> {
   ~Hinge() = default;
   static int GetDataResourceId();
   void Draw(float scale);
-  void Trace(Visitor* visitor);
+  void Trace(Visitor* visitor) const;
 
  private:
   FloatQuad quad_;
@@ -139,7 +139,7 @@ class CORE_EXPORT InspectorOverlayAgent final
                         v8_inspector::V8InspectorSession*,
                         InspectorDOMAgent*);
   ~InspectorOverlayAgent() override;
-  void Trace(Visitor*) override;
+  void Trace(Visitor*) const override;
 
   // protocol::Dispatcher::OverlayCommandHandler implementation.
   protocol::Response enable() override;
@@ -184,6 +184,7 @@ class CORE_EXPORT InspectorOverlayAgent final
       protocol::Maybe<bool> include_distance,
       protocol::Maybe<bool> include_style,
       protocol::Maybe<String> color_format,
+      protocol::Maybe<bool> show_accessibility_info,
       std::unique_ptr<protocol::DictionaryValue>* highlight) override;
   protocol::Response setShowHinge(
       protocol::Maybe<protocol::Overlay::HingeConfig> hinge_config) override;
@@ -269,6 +270,9 @@ class CORE_EXPORT InspectorOverlayAgent final
   InspectorAgentState::String paused_in_debugger_message_;
   InspectorAgentState::String inspect_mode_;
   InspectorAgentState::Bytes inspect_mode_protocol_config_;
+  base::Time last_paint_time_;
+  bool backend_node_id_changed_;
+
   DISALLOW_COPY_AND_ASSIGN(InspectorOverlayAgent);
 };
 

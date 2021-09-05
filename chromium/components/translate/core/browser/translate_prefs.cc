@@ -5,6 +5,7 @@
 #include "components/translate/core/browser/translate_prefs.h"
 
 #include <algorithm>
+#include <limits>
 #include <memory>
 #include <set>
 #include <utility>
@@ -18,7 +19,7 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/value_conversions.h"
+#include "base/util/values/values_util.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "components/language/core/browser/language_prefs.h"
@@ -469,7 +470,7 @@ void TranslatePrefs::BlacklistSite(const std::string& site) {
   BlacklistValue(kPrefTranslateSiteBlacklistDeprecated, site);
   DictionaryPrefUpdate update(prefs_, kPrefTranslateSiteBlacklistWithTime);
   base::DictionaryValue* dict = update.Get();
-  dict->SetKey(site, base::CreateTimeValue(base::Time::Now()));
+  dict->SetKey(site, util::TimeToValue(base::Time::Now()));
 }
 
 void TranslatePrefs::RemoveSiteFromBlacklist(const std::string& site) {
@@ -487,12 +488,12 @@ std::vector<std::string> TranslatePrefs::GetBlacklistedSitesBetween(
   auto* dict = prefs_->GetDictionary(kPrefTranslateSiteBlacklistWithTime);
   for (const auto& entry : *dict) {
     std::string site = entry.first;
-    base::Time time;
-    if (!base::GetValueAsTime(*entry.second, &time)) {
+    base::Optional<base::Time> time = util::ValueToTime(*entry.second);
+    if (!time) {
       NOTREACHED();
       continue;
     }
-    if (begin <= time && time < end)
+    if (begin <= *time && *time < end)
       result.push_back(site);
   }
   return result;
@@ -803,7 +804,7 @@ int TranslatePrefs::GetForceTriggerOnEnglishPagesCount() const {
 
 void TranslatePrefs::ReportForceTriggerOnEnglishPages() {
   int current_count = GetForceTriggerOnEnglishPagesCount();
-  if (current_count != -1)
+  if (current_count != -1 && current_count < std::numeric_limits<int>::max())
     prefs_->SetInteger(kForceTriggerTranslateCount, current_count + 1);
 }
 

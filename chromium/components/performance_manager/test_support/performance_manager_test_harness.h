@@ -14,8 +14,14 @@ namespace performance_manager {
 // RenderViewHost harness. Allows for creating full WebContents, and their
 // accompanying structures in the graph. The task environment is accessed
 // via content::RenderViewHostTestHarness::task_environment(). RenderFrameHosts
-// and such are not created, so this is suitable for unittests but not
-// browsertests.
+// and such are not created, so this is suitable for unit tests but not
+// browser tests.
+//
+// Meant to be used from components_unittests, but not from unit_tests.
+//
+// If you just want to test how code interacts with the graph use
+// GraphTestHarness, which has a richer set of methods for creating graph
+// nodes.
 class PerformanceManagerTestHarness
     : public content::RenderViewHostTestHarness {
  public:
@@ -27,8 +33,9 @@ class PerformanceManagerTestHarness
   // initialize its BrowserTaskEnvironment.
   template <typename... TaskEnvironmentTraits>
   explicit PerformanceManagerTestHarness(TaskEnvironmentTraits&&... traits)
-      : RenderViewHostTestHarness(
-            std::forward<TaskEnvironmentTraits>(traits)...) {}
+      : Super(std::forward<TaskEnvironmentTraits>(traits)...) {
+    helper_ = std::make_unique<PerformanceManagerTestHarnessHelper>();
+  }
 
   PerformanceManagerTestHarness(const PerformanceManagerTestHarness&) = delete;
   PerformanceManagerTestHarness& operator=(
@@ -42,6 +49,10 @@ class PerformanceManagerTestHarness
   // attached. This is a test web contents that can be interacted with
   // via WebContentsTester.
   std::unique_ptr<content::WebContents> CreateTestWebContents();
+
+  // Allows a test to cause the PM to be torn down early, so it can explicitly
+  // test TearDown logic. This may only be called once.
+  void TearDownNow();
 
  private:
   std::unique_ptr<PerformanceManagerTestHarnessHelper> helper_;

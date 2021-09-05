@@ -13,23 +13,7 @@ function SwitchAccessPredicateTest() {
 }
 
 SwitchAccessPredicateTest.prototype = {
-  __proto__: SwitchAccessE2ETest.prototype,
-
-  setDesktop(desktop) {
-    this.desktop = desktop;
-  },
-
-  getNodeByName(name) {
-    assertTrue(this.desktop != undefined, 'Desktop is undefined');
-    const node = new AutomationTreeWalker(
-                     this.desktop, constants.Dir.FORWARD,
-                     {visit: (n) => n.name === name})
-                     .next()
-                     .node;
-    assertTrue(node != null, 'Node is null');
-
-    return node;
-  }
+  __proto__: SwitchAccessE2ETest.prototype
 };
 
 function fakeLoc(x) {
@@ -63,7 +47,7 @@ function getTree(desktop) {
                })
                    .next()
                    .node;
-  assertTrue(root != null, 'Root is null');
+  assertNotNullNorUndefined(root, 'Root is missing');
 
   const upper1 = root.firstChild;
   assertTrue(upper1 && upper1.name === 'upper1', 'Upper1 not found');
@@ -252,24 +236,23 @@ TEST_F('SwitchAccessPredicateTest', 'IsInterestingSubtree', function() {
 
 TEST_F('SwitchAccessPredicateTest', 'IsActionable', function() {
   const treeString =
-      `<button style="position:absolute; top:-100px;">button1</button>
-       <button disabled>button2</button>
+      `<button style="position:absolute; top:-100px;">offscreen</button>
+       <button disabled>disabled</button>
        <a href="https://www.google.com/" aria-label="link1">link1</a>
        <input type="text" aria-label="input1">input1</input>
        <button>button3</button>
        <input type="range" aria-label="slider" value=5 min=0 max=10>
-       <div aria-label="listitem" role="listitem" onclick="2+2"></div>
+       <div id="clickable" role="listitem" onclick="2+2"></div>
        <div aria-label="div1"><p>p1</p></div>`;
   this.runWithLoadedTree(treeString, (desktop) => {
-    this.setDesktop(desktop);
-    const button1 = this.getNodeByName('button1');
+    const offscreenButton = this.findNodeByNameAndRole('offscreen', 'button');
     assertFalse(
-        SwitchAccessPredicate.isActionable(button1),
+        SwitchAccessPredicate.isActionable(offscreenButton),
         'Offscreen objects should not be actionable');
 
-    const button2 = this.getNodeByName('button2');
+    const disabledButton = this.findNodeByNameAndRole('disabled', 'button');
     assertFalse(
-        SwitchAccessPredicate.isActionable(button2),
+        SwitchAccessPredicate.isActionable(disabledButton),
         'Disabled objects should not be actionable');
 
     const rwas =
@@ -280,37 +263,37 @@ TEST_F('SwitchAccessPredicateTest', 'IsActionable', function() {
           'Root web area should not be directly actionable');
     }
 
-    const link1 = this.getNodeByName('link1');
+    const link1 = this.findNodeByNameAndRole('link1', 'link');
     assertTrue(
         SwitchAccessPredicate.isActionable(link1),
         'Links should be actionable');
 
-    const input1 = this.getNodeByName('input1');
+    const input1 = this.findNodeByNameAndRole('input1', 'textField');
     assertTrue(
         SwitchAccessPredicate.isActionable(input1),
         'Inputs should be actionable');
 
-    const button3 = this.getNodeByName('button3');
+    const button3 = this.findNodeByNameAndRole('button3', 'button');
     assertTrue(
         SwitchAccessPredicate.isActionable(button3),
         'Buttons should be actionable');
 
-    const slider = this.getNodeByName('slider');
+    const slider = this.findNodeByNameAndRole('slider', 'slider');
     assertTrue(
         SwitchAccessPredicate.isActionable(slider),
         'Sliders should be actionable');
 
-    const listitem = this.getNodeByName('listitem');
+    const clickable = this.findNodeById('clickable');
     assertTrue(
-        SwitchAccessPredicate.isActionable(listitem),
+        SwitchAccessPredicate.isActionable(clickable),
         'Clickable list items should be actionable');
 
-    const div1 = this.getNodeByName('div1');
+    const div1 = this.findNodeByNameAndRole('div1', 'genericContainer');
     assertFalse(
         SwitchAccessPredicate.isActionable(div1),
         'Divs should not generally be actionable');
 
-    const p1 = this.getNodeByName('p1');
+    const p1 = this.findNodeByNameAndRole('p1', 'staticText');
     assertFalse(
         SwitchAccessPredicate.isActionable(p1),
         'Static text should not generally be actionable');
@@ -318,8 +301,8 @@ TEST_F('SwitchAccessPredicateTest', 'IsActionable', function() {
 });
 
 TEST_F('SwitchAccessPredicateTest', 'IsActionableFocusableElements', function() {
-  const treeString = `<div aria-label="noChildren" tabindex=0></div>
-       <div aria-label="oneInterestingChild" tabindex=0>
+  const treeString = `<div id="noChildren" tabindex=0></div>
+       <div id="oneInterestingChild" tabindex=0>
          <div>
            <div>
              <div>
@@ -328,41 +311,39 @@ TEST_F('SwitchAccessPredicateTest', 'IsActionableFocusableElements', function() 
            </div>
          </div>
        </div>
-       <div aria-label="oneUninterestingChild" tabindex=0>
+       <div id="oneUninterestingChild" tabindex=0>
          <p>p1</p>
        </div>
-       <div aria-label="interestingChildren" tabindex=0>
+       <div id="interestingChildren" tabindex=0>
          <button>button2</button>
          <button>button3</button>
        </div>
-       <div aria-label="uninterestingChildren" tabindex=0>
+       <div id="uninterestingChildren" tabindex=0>
          <p>p2</p>
          <p>p3</p>
        </div>`;
   this.runWithLoadedTree(treeString, (desktop) => {
-    this.setDesktop(desktop);
-
-    const noChildren = this.getNodeByName('noChildren');
+    const noChildren = this.findNodeById('noChildren');
     assertTrue(
         SwitchAccessPredicate.isActionable(noChildren),
         'Focusable element with no children should be actionable');
 
-    const oneInterestingChild = this.getNodeByName('oneInterestingChild');
+    const oneInterestingChild = this.findNodeById('oneInterestingChild');
     assertFalse(
         SwitchAccessPredicate.isActionable(oneInterestingChild),
         'Focusable element with an interesting child should not be actionable');
 
-    const interestingChildren = this.getNodeByName('interestingChildren');
+    const interestingChildren = this.findNodeById('interestingChildren');
     assertFalse(
         SwitchAccessPredicate.isActionable(interestingChildren),
         'Focusable element with interesting children should not be actionable');
 
-    const oneUninterestingChild = this.getNodeByName('oneUninterestingChild');
+    const oneUninterestingChild = this.findNodeById('oneUninterestingChild');
     assertTrue(
         SwitchAccessPredicate.isActionable(oneUninterestingChild),
         'Focusable element with one uninteresting child should be actionable');
 
-    const uninterestingChildren = this.getNodeByName('uninterestingChildren');
+    const uninterestingChildren = this.findNodeById('uninterestingChildren');
     assertTrue(
         SwitchAccessPredicate.isActionable(uninterestingChildren),
         'Focusable element with uninteresting children should be actionable');
@@ -374,20 +355,20 @@ TEST_F('SwitchAccessPredicateTest', 'LeafPredicate', function() {
     const t = getTree(desktop);
 
     // Start with root as scope
-    let leaf = SwitchAccessPredicate.leaf(RootNodeWrapper.buildTree(t.root));
+    let leaf = SwitchAccessPredicate.leaf(t.root);
     assertFalse(leaf(t.root), 'Root should not be a leaf node');
     assertTrue(leaf(t.upper1), 'Upper1 should be a leaf node for root tree');
     assertTrue(leaf(t.upper2), 'Upper2 should be a leaf node for root tree');
 
     // Set upper1 as scope
-    leaf = SwitchAccessPredicate.leaf(RootNodeWrapper.buildTree(t.upper1));
+    leaf = SwitchAccessPredicate.leaf(t.upper1);
     assertFalse(leaf(t.upper1), 'Upper1 should not be a leaf for upper1 tree');
     assertTrue(leaf(t.lower1), 'Lower1 should be a leaf for upper1 tree');
     assertTrue(leaf(t.leaf4), 'leaf4 should be a leaf for upper1 tree');
     assertTrue(leaf(t.leaf5), 'leaf5 should be a leaf for upper1 tree');
 
     // Set lower1 as scope
-    leaf = SwitchAccessPredicate.leaf(RootNodeWrapper.buildTree(t.lower1));
+    leaf = SwitchAccessPredicate.leaf(t.lower1);
     assertFalse(leaf(t.lower1), 'Lower1 should not be a leaf for lower1 tree');
     assertTrue(leaf(t.leaf1), 'Leaf1 should be a leaf for lower1 tree');
     assertTrue(leaf(t.leaf2), 'Leaf2 should be a leaf for lower1 tree');
@@ -400,13 +381,13 @@ TEST_F('SwitchAccessPredicateTest', 'RootPredicate', function() {
     const t = getTree(desktop);
 
     // Start with root as scope
-    let root = SwitchAccessPredicate.root(RootNodeWrapper.buildTree(t.root));
+    let root = SwitchAccessPredicate.root(t.root);
     assertTrue(root(t.root), 'Root should be a root of the root tree');
     assertFalse(root(t.upper1), 'Upper1 should not be a root of the root tree');
     assertFalse(root(t.upper2), 'Upper2 should not be a root of the root tree');
 
     // Set upper1 as scope
-    root = SwitchAccessPredicate.root(RootNodeWrapper.buildTree(t.upper1));
+    root = SwitchAccessPredicate.root(t.upper1);
     assertTrue(root(t.upper1), 'Upper1 should be a root of the upper1 tree');
     assertFalse(
         root(t.lower1), 'Lower1 should not be a root of the upper1 tree');
@@ -414,7 +395,7 @@ TEST_F('SwitchAccessPredicateTest', 'RootPredicate', function() {
         root(t.lower2), 'Lower2 should not be a root of the upper1 tree');
 
     // Set lower1 as scope
-    root = SwitchAccessPredicate.root(RootNodeWrapper.buildTree(t.lower1));
+    root = SwitchAccessPredicate.root(t.lower1);
     assertTrue(root(t.lower1), 'Lower1 should be a root of the lower1 tree');
     assertFalse(root(t.leaf1), 'Leaf1 should not be a root of the lower1 tree');
     assertFalse(root(t.leaf2), 'Leaf2 should not be a root of the lower1 tree');
@@ -427,13 +408,13 @@ TEST_F('SwitchAccessPredicateTest', 'VisitPredicate', function() {
     const t = getTree(desktop);
 
     // Start with root as scope
-    let visit = SwitchAccessPredicate.visit(RootNodeWrapper.buildTree(t.root));
+    let visit = SwitchAccessPredicate.visit(t.root);
     assertTrue(visit(t.root), 'Root should be visited in root tree');
     assertTrue(visit(t.upper1), 'Upper1 should be visited in root tree');
     assertTrue(visit(t.upper2), 'Upper2 should be visited in root tree');
 
     // Set upper1 as scope
-    visit = SwitchAccessPredicate.visit(RootNodeWrapper.buildTree(t.upper1));
+    visit = SwitchAccessPredicate.visit(t.upper1);
     assertTrue(visit(t.upper1), 'Upper1 should be visited in upper1 tree');
     assertTrue(visit(t.lower1), 'Lower1 should be visited in upper1 tree');
     assertFalse(visit(t.lower2), 'Lower2 should not be visited in upper1 tree');
@@ -441,7 +422,7 @@ TEST_F('SwitchAccessPredicateTest', 'VisitPredicate', function() {
     assertTrue(visit(t.leaf5), 'Leaf5 should be visited in upper1 tree');
 
     // Set lower1 as scope
-    visit = SwitchAccessPredicate.visit(RootNodeWrapper.buildTree(t.lower1));
+    visit = SwitchAccessPredicate.visit(t.lower1);
     assertTrue(visit(t.lower1), 'Lower1 should be visited in lower1 tree');
     assertTrue(visit(t.leaf1), 'Leaf1 should be visited in lower1 tree');
     assertFalse(visit(t.leaf2), 'Leaf2 should not be visited in lower1 tree');

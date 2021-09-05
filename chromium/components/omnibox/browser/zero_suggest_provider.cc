@@ -518,12 +518,9 @@ void ZeroSuggestProvider::ConvertResultsToAutocompleteMatches() {
 
   MatchMap map;
 
-  // Add all the SuggestResults to the map, re-classifying based on the
-  // permanent text as we go. This is to make ZeroSuggest results formatted in
-  // a congruent way with as-you-type search suggestions.
+  // Add all the SuggestResults to the map. We display all ZeroSuggest search
+  // suggestions as unbolded.
   for (size_t i = 0; i < results_.suggest_results.size(); ++i) {
-    results_.suggest_results[i].ClassifyMatchContents(true, permanent_text_);
-
     AddMatchToMap(results_.suggest_results[i], std::string(), i, false, false,
                   &map);
   }
@@ -568,13 +565,16 @@ void ZeroSuggestProvider::ConvertResultsToAutocompleteMatches() {
   if (num_results == 0)
     return;
 
-  // Do not add the default text match if we're on the NTP to prevent
-  // chrome-native://newtab or chrome://newtab from showing up on the list of
-  // suggestions.
+#if defined(OS_ANDROID) || defined(OS_IOS)
+  // Android needs the verbatim match on non-NTP surfaces to properly present
+  // the Search Ready Omnibox URL edit widget. Desktop specifically does NOT
+  // want to show verbatim matches in remotely-fetched ZeroSuggest anymore.
+  // iOS we are keeping the same as Android for now. No strong reason to change.
   if (!IsNTPPage(current_page_classification_) &&
       current_text_match_.destination_url.is_valid()) {
     matches_.push_back(current_text_match_);
   }
+#endif
 
   for (MatchMap::const_iterator it(map.begin()); it != map.end(); ++it)
     matches_.push_back(it->second);
@@ -701,14 +701,17 @@ ZeroSuggestProvider::ResultType ZeroSuggestProvider::TypeOfResultToRun(
   if (current_page_classification_ == OmniboxEventProto::CHROMEOS_APP_LIST)
     return REMOTE_NO_URL;
 
-  // Contextual Open Web.
+  // Contextual Open Web - (same client side behavior for multiple variants).
+  bool contextual_web_suggestions_enabled =
+      base::FeatureList::IsEnabled(omnibox::kOnFocusSuggestionsContextualWeb) ||
+      base::FeatureList::IsEnabled(
+          omnibox::kOnFocusSuggestionsContextualWebOnContent);
   if (current_page_classification_ == OmniboxEventProto::OTHER &&
-      base::FeatureList::IsEnabled(omnibox::kOnFocusSuggestionsContextualWeb) &&
-      can_send_current_url) {
+      can_send_current_url && contextual_web_suggestions_enabled) {
     return REMOTE_SEND_URL;
   }
 
-  // Proactive ZeroSuggest (PZPS) on NTP cases.
+  // Reactive Zero-Prefix Suggestions (rZPS) on NTP cases.
   bool remote_no_url_allowed =
       RemoteNoUrlSuggestionsAreAllowed(client(), template_url_service);
   if (remote_no_url_allowed) {
@@ -717,34 +720,20 @@ ZeroSuggestProvider::ResultType ZeroSuggestProvider::TypeOfResultToRun(
          current_page_classification_ ==
              OmniboxEventProto::INSTANT_NTP_WITH_OMNIBOX_AS_STARTING_FOCUS) &&
         base::FeatureList::IsEnabled(
-            omnibox::kProactiveZeroSuggestionsOnNTPOmnibox)) {
+            omnibox::kReactiveZeroSuggestionsOnNTPOmnibox)) {
       return REMOTE_NO_URL;
     }
     // NTP Realbox.
     if (current_page_classification_ == OmniboxEventProto::NTP_REALBOX &&
         base::FeatureList::IsEnabled(
-            omnibox::kProactiveZeroSuggestionsOnNTPRealbox)) {
+            omnibox::kReactiveZeroSuggestionsOnNTPRealbox)) {
       return REMOTE_NO_URL;
     }
   }
 
-  if (base::Contains(field_trial_variants, kRemoteNoUrlVariant)) {
-    if (remote_no_url_allowed)
-      return REMOTE_NO_URL;
-
-#if defined(OS_ANDROID)
-    // Android defaults to presenting Zero-prefix recent query suggestions on
-    // new tab page.
-    return (IsNTPPage(current_page_classification_)) ? REMOTE_NO_URL
-                                                     : MOST_VISITED;
-#elif defined(OS_IOS)
-    // Remote suggestions are replaced with the most visited ones.
-    // TODO(tommycli): Most likely this fallback concept should be replaced by
-    // a more general configuration setup.
-    return MOST_VISITED;
-#else
-    return NONE;
-#endif
+  if (base::Contains(field_trial_variants, kRemoteNoUrlVariant) &&
+      remote_no_url_allowed) {
+    return REMOTE_NO_URL;
   }
 
   if (base::Contains(field_trial_variants, kRemoteSendUrlVariant) &&
@@ -754,13 +743,15 @@ ZeroSuggestProvider::ResultType ZeroSuggestProvider::TypeOfResultToRun(
   if (base::Contains(field_trial_variants, kMostVisitedVariant))
     return MOST_VISITED;
 
+#if defined(OS_ANDROID)
+  // For Android NTP, default to REMOTE_NO_URL, if it's allowed.
+  if (IsNTPPage(current_page_classification_) && remote_no_url_allowed)
+    return REMOTE_NO_URL;
+#endif
+
 #if defined(OS_ANDROID) || defined(OS_IOS)
-  // For Android and iOS, default to MOST_VISITED so long as:
-  //  - There is no configured variant for |page_classification| AND
-  //  - The user is not on the search results page of the default search
-  //    provider.
-  if (field_trial_variants.empty() &&
-      current_page_classification_ !=
+  // Then, for Android and iOS, default to MOST_VISITED except on the SERP.
+  if (current_page_classification_ !=
           OmniboxEventProto::SEARCH_RESULT_PAGE_NO_SEARCH_TERM_REPLACEMENT &&
       current_page_classification_ !=
           OmniboxEventProto::SEARCH_RESULT_PAGE_DOING_SEARCH_TERM_REPLACEMENT) {

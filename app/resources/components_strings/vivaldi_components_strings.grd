@@ -122,6 +122,7 @@
       <message name="IDS_BOOKMARK_BAR_FOLDER_NAME" desc="Name shown in the tree for the Bookmarks Bar folder.">
         Bookmarks
       </message>
+      <part file="document_blocked_interstitial_strings.grdp" />
     </messages>
   </release>
 </grit>

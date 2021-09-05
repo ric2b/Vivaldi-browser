@@ -820,7 +820,7 @@ Range* Editor::FindRangeOfString(
       EphemeralRangeInFlatTree::RangeOfContents(document);
   EphemeralRangeInFlatTree search_range(document_range);
 
-  bool forward = !(options & kBackwards);
+  const bool forward = !(options & kBackwards);
   bool start_in_reference_range = false;
   if (reference_range.IsNotNull()) {
     start_in_reference_range = options & kStartInSelection;
@@ -846,7 +846,10 @@ Range* Editor::FindRangeOfString(
   // the reference range, find again. Build a selection with the found range
   // to remove collapsed whitespace. Compare ranges instead of selection
   // objects to ignore the way that the current selection was made.
-  if (result_range && start_in_reference_range &&
+  const bool find_next_if_selection_matches =
+      !(options & kDontFindNextIfSelectionMatches);
+  if (find_next_if_selection_matches && result_range &&
+      start_in_reference_range &&
       NormalizeRange(EphemeralRangeInFlatTree(result_range)) ==
           reference_range) {
     if (forward)
@@ -908,7 +911,7 @@ void Editor::ReplaceSelection(const String& text) {
                            InputEvent::InputType::kInsertReplacementText);
 }
 
-void Editor::Trace(Visitor* visitor) {
+void Editor::Trace(Visitor* visitor) const {
   visitor->Trace(frame_);
   visitor->Trace(last_edit_command_);
   visitor->Trace(undo_stack_);

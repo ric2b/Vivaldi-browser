@@ -13,7 +13,7 @@ import androidx.annotation.DrawableRes;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetController;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.embedder_support.delegate.WebContentsDelegateAndroid;
 import org.chromium.components.embedder_support.view.ContentView;
 import org.chromium.components.security_state.ConnectionSecurityLevel;
@@ -194,7 +194,6 @@ public class EphemeralTabMediator {
                 return R.drawable.omnibox_not_secure_warning;
             case ConnectionSecurityLevel.SECURE_WITH_POLICY_INSTALLED_CERT:
             case ConnectionSecurityLevel.SECURE:
-            case ConnectionSecurityLevel.EV_SECURE:
                 return R.drawable.omnibox_https_valid;
             default:
                 assert false;

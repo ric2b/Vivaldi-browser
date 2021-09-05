@@ -15,6 +15,7 @@
 #include "base/test/task_environment.h"
 #include "components/autofill/core/browser/autofill_field.h"
 #include "components/autofill/core/browser/autofill_metrics.h"
+#include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/browser/proto/password_requirements.pb.h"
 #include "components/autofill/core/common/form_data.h"
@@ -62,7 +63,6 @@ class TestPasswordManagerDriver : public StubPasswordManagerDriver {
     ON_CALL(*this, GetLastCommittedURL())
         .WillByDefault(testing::ReturnRef(empty_url_));
   }
-  ~TestPasswordManagerDriver() override {}
 
   // PasswordManagerDriver implementation.
   PasswordGenerationFrameHelper* GetPasswordGenerationHelper() override {
@@ -140,9 +140,11 @@ class MockPasswordManagerClient : public StubPasswordManagerClient {
   PasswordRequirementsService* GetPasswordRequirementsService() override {
     return &password_requirements_service_;
   }
-  void SetLastCommittedEntryUrl(const GURL& url) { last_committed_url_ = url; }
-  const GURL& GetLastCommittedEntryURL() const override {
-    return last_committed_url_;
+  void SetLastCommittedEntryUrl(const GURL& url) {
+    last_committed_origin_ = url::Origin::Create(url);
+  }
+  url::Origin GetLastCommittedOrigin() const override {
+    return last_committed_origin_;
   }
 
   TestPasswordManagerDriver* test_driver() { return &driver_; }
@@ -152,7 +154,7 @@ class MockPasswordManagerClient : public StubPasswordManagerClient {
   scoped_refptr<TestPasswordStore> store_;
   TestPasswordManagerDriver driver_;
   PasswordRequirementsService password_requirements_service_;
-  GURL last_committed_url_;
+  url::Origin last_committed_origin_;
 };
 
 }  // anonymous namespace
@@ -167,7 +169,7 @@ class PasswordGenerationFrameHelperTest : public testing::Test {
         new TestingPrefServiceSimple());
     prefs->registry()->RegisterBooleanPref(prefs::kCredentialsEnableService,
                                            true);
-    client_.reset(new MockPasswordManagerClient(std::move(prefs)));
+    client_ = std::make_unique<MockPasswordManagerClient>(std::move(prefs));
   }
 
   void TearDown() override { client_.reset(); }
@@ -305,8 +307,10 @@ TEST_F(PasswordGenerationFrameHelperTest, ProcessPasswordRequirements) {
 
     std::string response_string;
     ASSERT_TRUE(response.SerializeToString(&response_string));
-    autofill::FormStructure::ParseQueryResponse(response_string, forms,
-                                                nullptr);
+
+    autofill::FormStructure::ParseQueryResponse(
+        response_string, forms, autofill::test::GetEncodedSignatures(forms),
+        nullptr);
 
     GetGenerationHelper()->PrefetchSpec(origin.GetOrigin());
 

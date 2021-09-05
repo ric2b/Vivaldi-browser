@@ -56,6 +56,7 @@ _CONFIG = [
             'base::RepeatingTimer',
             'base::SequencedTaskRunner',
             'base::SingleThreadTaskRunner',
+            'base::ScopedAllowBlocking',
             'base::ScopedFD',
             'base::ScopedClosureRunner',
             'base::SupportsWeakPtr',
@@ -315,12 +316,16 @@ _CONFIG = [
             'cc::kManipulationInfoHasScrolledByPrecisionTouchPad',
             'cc::kManipulationInfoHasScrolledByTouch',
             'cc::kManipulationInfoHasScrolledByWheel',
+            'cc::kPixelsPerLineStep',
+            'cc::kMinFractionToStepWhenPaging',
+            'cc::kPercentDeltaForDirectionalScroll',
             'cc::MainThreadScrollingReason',
             'cc::ManipulationInfo',
             'cc::ScrollSnapAlign',
             'cc::ScrollSnapType',
             'cc::ScrollOffsetAnimationCurve',
             'cc::ScrollStateData',
+            'cc::ScrollUtils',
             'cc::SnapAlignment',
             'cc::SnapAreaData',
             'cc::SnapAxis',
@@ -408,6 +413,9 @@ _CONFIG = [
             # HTTP status codes
             'net::HTTP_.+',
 
+            # For ConnectionInfo enumeration
+            'net::HttpResponseInfo',
+
             # Network service.
             'network::.+',
 
@@ -449,6 +457,7 @@ _CONFIG = [
             'ui::AXEvent',
             'ui::AXEventIntent',
             'ui::AXNodeData',
+            'ui::IsDialog',
             'ax::mojom::BoolAttribute',
             'ax::mojom::HasPopup',
             'ax::mojom::State',
@@ -543,7 +552,9 @@ _CONFIG = [
         ],
     },
     {
-        'paths': ['third_party/blink/renderer/core/html/canvas/canvas_rendering_context_host.cc'],
+        'paths': [
+            'third_party/blink/renderer/core/html/canvas/canvas_rendering_context_host.cc'
+        ],
         'allowed': [
             'gpu::SHARED_IMAGE_USAGE_DISPLAY',
             'gpu::SHARED_IMAGE_USAGE_SCANOUT',
@@ -560,6 +571,7 @@ _CONFIG = [
             'cc::ApplyViewportChangesArgs',
             'cc::LayerTreeSettings',
             'cc::TaskGraphRunner',
+            'ui::ImeTextSpan',
         ],
     },
     {
@@ -583,6 +595,7 @@ _CONFIG = [
     {
         'paths': ['third_party/blink/renderer/core/editing/ime'],
         'allowed': [
+            'ui::ImeTextSpan',
             'ui::TextInputAction',
         ],
     },
@@ -614,6 +627,12 @@ _CONFIG = [
         ['third_party/blink/renderer/core/fileapi/file_reader_loader.cc'],
         'allowed': [
             'net::ERR_FILE_NOT_FOUND',
+        ],
+    },
+    {
+        'paths': ['third_party/blink/renderer/core/html/forms'],
+        'allowed': [
+            'ui::TextInputType',
         ],
     },
     {
@@ -701,13 +720,6 @@ _CONFIG = [
         ],
         'allowed': [
             'base::subtle::TimeTicksNowIgnoringOverride',
-        ],
-    },
-    {
-        'paths':
-        ['third_party/blink/renderer/core/scroll/scrollbar_theme_mac.mm'],
-        'allowed': [
-            'gfx::CocoaScrollbarPainter',
         ],
     },
     {
@@ -1037,6 +1049,7 @@ _CONFIG = [
             'base::MD5.*',
             'base::MessageLoopCurrent',
             'base::Passed',
+            'base::PowerObserver',
             'base::RetainedRef',
             'base::StringPrintf',
             'base::Value',

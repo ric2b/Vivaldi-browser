@@ -348,6 +348,10 @@ class TabStripModel : public TabGroupController {
   // See description above class for details on pinned tabs.
   bool IsTabPinned(int index) const;
 
+  bool IsTabCollapsed(int index) const;
+
+  bool IsGroupCollapsed(const tab_groups::TabGroupId& group) const;
+
   // Returns true if the tab at |index| is blocked by a tab modal dialog.
   bool IsTabBlocked(int index) const;
 
@@ -409,7 +413,7 @@ class TabStripModel : public TabGroupController {
   void SelectLastTab(
       UserGestureDetails detail = UserGestureDetails(GestureType::kOther));
 
-  // Swap adjacent tabs.
+  // Moves the active in the specified direction. Respects group boundaries.
   void MoveTabNext();
   void MoveTabPrevious();
 
@@ -545,6 +549,16 @@ class TabStripModel : public TabGroupController {
   int GetIndexOfNextWebContentsOpenedBy(const content::WebContents* opener,
                                         int start_index) const;
 
+  // Finds the next available tab to switch to as the active tab starting at
+  // |index|. This method will check the indices to the right of |index| before
+  // checking the indices to the left of |index|. |index| cannot be returned.
+  // |collapsing_group| is optional and used in cases where the group is
+  // collapsing but not yet reflected in the model. Returns base::nullopt if
+  // there are no valid tabs.
+  base::Optional<int> GetNextExpandedActiveTab(
+      int index,
+      base::Optional<tab_groups::TabGroupId> collapsing_group) const;
+
   // Forget all opener relationships, to reduce unpredictable tab switching
   // behavior in complex session states. The exact circumstances under which
   // this method is called are left up to TabStripModelOrderController.
@@ -672,6 +686,11 @@ class TabStripModel : public TabGroupController {
   // (|forward| is false).
   void SelectRelativeTab(bool forward, UserGestureDetails detail);
 
+  // Moves the active tabs into the next slot (|forward| is true), or the
+  // previous slot (|forward| is false). Respects group boundaries and creates
+  // movement slots into and out of groups.
+  void MoveTabRelative(bool forward);
+
   // Does the work of MoveWebContentsAt. This has no checks to make sure the
   // position is valid, those are done in MoveWebContentsAt.
   void MoveWebContentsAtImpl(int index,
@@ -788,6 +807,10 @@ class TabStripModel : public TabGroupController {
 // TabStripModelObserver already implements ScopedObserver's functionality
 // natively.
 template <>
-class ScopedObserver<TabStripModel, TabStripModelObserver> {};
+class ScopedObserver<TabStripModel, TabStripModelObserver> {
+ public:
+  // Deleting the constructor gives a clear error message traceable back to here.
+  explicit ScopedObserver(TabStripModelObserver* observer) = delete;
+};
 
 #endif  // CHROME_BROWSER_UI_TABS_TAB_STRIP_MODEL_H_

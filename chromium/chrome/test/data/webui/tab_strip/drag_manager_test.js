@@ -3,19 +3,24 @@
 // found in the LICENSE file.
 import {isChromeOS} from 'chrome://resources/js/cr.m.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
-import {DragManager, PLACEHOLDER_GROUP_ID, PLACEHOLDER_TAB_ID} from 'chrome://tab-strip/drag_manager.js';
+import {DragManager, DragManagerDelegate, PLACEHOLDER_GROUP_ID, PLACEHOLDER_TAB_ID} from 'chrome://tab-strip/drag_manager.js';
 import {TabElement} from 'chrome://tab-strip/tab.js';
 import {TabGroupElement} from 'chrome://tab-strip/tab_group.js';
-import {TabsApiProxy} from 'chrome://tab-strip/tabs_api_proxy.js';
+import {TabData, TabsApiProxyImpl} from 'chrome://tab-strip/tabs_api_proxy.js';
+
+import {assertEquals, assertFalse, assertTrue} from '../chai_assert.js';
 
 import {TestTabsApiProxy} from './test_tabs_api_proxy.js';
 
+/** @implements {DragManagerDelegate} */
 class MockDelegate extends HTMLElement {
+  /** @override */
   getIndexOfTab(tabElement) {
     return Array.from(this.querySelectorAll('tabstrip-tab'))
         .indexOf(tabElement);
   }
 
+  /** @override */
   placeTabElement(element, index, pinned, groupId) {
     element.remove();
 
@@ -24,13 +29,10 @@ class MockDelegate extends HTMLElement {
     parent.insertBefore(element, this.children[index]);
   }
 
+  /** @override */
   placeTabGroupElement(element, index) {
     element.remove();
     this.insertBefore(element, this.children[index]);
-  }
-
-  showDropPlaceholder(element) {
-    this.appendChild(element);
   }
 }
 customElements.define('mock-delegate', MockDelegate);
@@ -39,32 +41,41 @@ class MockDataTransfer extends DataTransfer {
   constructor() {
     super();
 
+    /** @private {!Object} */
     this.dragImageData = {
       image: undefined,
       offsetX: undefined,
       offsetY: undefined,
     };
 
+    /** @private {string} */
     this.dropEffect_ = 'none';
+
+    /** @private {string} */
     this.effectAllowed_ = 'none';
   }
 
+  /** @override */
   get dropEffect() {
     return this.dropEffect_;
   }
 
+  /** @override */
   set dropEffect(effect) {
     this.dropEffect_ = effect;
   }
 
+  /** @override */
   get effectAllowed() {
     return this.effectAllowed_;
   }
 
+  /** @override */
   set effectAllowed(effect) {
     this.effectAllowed_ = effect;
   }
 
+  /** @override */
   setDragImage(image, offsetX, offsetY) {
     this.dragImageData.image = image;
     this.dragImageData.offsetX = offsetX;
@@ -107,11 +118,13 @@ suite('DragManager', () => {
    * @return {!TabGroupElement}
    */
   function groupTab(tabElement, groupId) {
-    const groupElement = document.createElement('tabstrip-tab-group');
+    const groupElement = /** @type {!TabGroupElement} */ (
+        document.createElement('tabstrip-tab-group'));
     groupElement.setAttribute('data-group-id', groupId);
     delegate.replaceChild(groupElement, tabElement);
 
-    tabElement.tab = Object.assign({}, tabElement.tab, {groupId});
+    tabElement.tab =
+        /** @type {!TabData} */ (Object.assign({}, tabElement.tab, {groupId}));
     groupElement.appendChild(tabElement);
     return groupElement;
   }
@@ -119,7 +132,7 @@ suite('DragManager', () => {
   setup(() => {
     loadTimeData.overrideValues(strings);
     testTabsApiProxy = new TestTabsApiProxy();
-    TabsApiProxy.instance_ = testTabsApiProxy;
+    TabsApiProxyImpl.instance_ = testTabsApiProxy;
 
     delegate = new MockDelegate();
     tabs.forEach(tab => {
@@ -554,5 +567,36 @@ suite('DragManager', () => {
     delegate.dispatchEvent(dragLeaveEvent);
     assertFalse(
         !!delegate.querySelector(`[data-tab-id="${PLACEHOLDER_TAB_ID}"]`));
+  });
+
+  test('DragOverInvalidDragOverTarget', () => {
+    const draggedIndex = 0;
+    const dragOverIndex = 1;
+    const draggedTab = delegate.children[draggedIndex];
+    const dragOverTab = delegate.children[dragOverIndex];
+    const mockDataTransfer = new MockDataTransfer();
+
+    // Dispatch a dragstart event to start the drag process.
+    const dragStartEvent = new DragEvent('dragstart', {
+      bubbles: true,
+      composed: true,
+      clientX: 100,
+      clientY: 150,
+      dataTransfer: mockDataTransfer,
+    });
+    draggedTab.dispatchEvent(dragStartEvent);
+
+    // Mark the dragOverIndex tab to be an invalid dragover target.
+    dragOverTab.isValidDragOverTarget = false;
+    const dragOverEvent = new DragEvent('dragover', {
+      bubbles: true,
+      composed: true,
+      dataTransfer: mockDataTransfer,
+    });
+    dragOverTab.dispatchEvent(dragOverEvent);
+
+    // Dragover tab and dragged tab remain in their initial positions.
+    assertEquals(draggedTab, delegate.children[draggedIndex]);
+    assertEquals(dragOverTab, delegate.children[dragOverIndex]);
   });
 });

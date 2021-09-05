@@ -67,7 +67,8 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) PreflightController final {
       bool tainted,
       const net::NetworkTrafficAnnotationTag& traffic_annotation,
       mojom::URLLoaderFactory* loader_factory,
-      int32_t process_id);
+      int32_t process_id,
+      const net::IsolationInfo& isolation_info);
 
   const base::flat_set<std::string>& extra_safelisted_header_names() const {
     return extra_safelisted_header_names_;
@@ -84,6 +85,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) PreflightController final {
   void RemoveLoader(PreflightLoader* loader);
   void AppendToCache(const url::Origin& origin,
                      const GURL& url,
+                     const net::NetworkIsolationKey& network_isolation_key,
                      std::unique_ptr<PreflightResult> result);
 
   NetworkService* network_service() { return network_service_; }

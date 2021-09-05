@@ -90,7 +90,7 @@ void ChromeDataUseMeasurement::DeleteInstance() {
 ChromeDataUseMeasurement::ChromeDataUseMeasurement(
     network::NetworkConnectionTracker* network_connection_tracker,
     PrefService* local_state)
-    : DataUseMeasurement(network_connection_tracker),
+    : DataUseMeasurement(local_state, network_connection_tracker),
       local_state_(local_state) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 }
@@ -127,10 +127,6 @@ void ChromeDataUseMeasurement::ReportNetworkServiceDataUse(
   }
   UMA_HISTOGRAM_COUNTS_1M("DataUse.BytesReceived.Delegate", recv_bytes);
   UMA_HISTOGRAM_COUNTS_1M("DataUse.BytesSent.Delegate", sent_bytes);
-#if defined(OS_ANDROID)
-  bytes_transferred_since_last_traffic_stats_query_ += recv_bytes + sent_bytes;
-  MaybeRecordNetworkBytesOS();
-#endif
 }
 
 void ChromeDataUseMeasurement::ReportUserTrafficDataUse(bool is_tab_visible,
@@ -159,6 +155,11 @@ void ChromeDataUseMeasurement::UpdateMetricsUsagePrefs(
   metrics::DataUseTracker::UpdateMetricsUsagePrefs(
       base::saturated_cast<int>(total_bytes), is_cellular,
       is_metrics_service_usage, local_state_);
+}
+
+// static
+void ChromeDataUseMeasurement::RegisterPrefs(PrefRegistrySimple* registry) {
+  DataUseMeasurement::RegisterDataUseComponentLocalStatePrefs(registry);
 }
 
 }  // namespace data_use_measurement

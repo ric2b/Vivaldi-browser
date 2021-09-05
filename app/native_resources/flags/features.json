@@ -12,22 +12,10 @@
       "value": "false",
       "internal_value": "false"
     },
-    "glorified_find_in_page_results": {
-      "friendly_name": "Styled find in page",
-      "description": "Added some shine to the find in page results.",
-      "value": "false",
-      "internal_value": "true"
-    },
     "install_pwa": {
       "friendly_name": "Menu entries for installing Progressive Web Apps.",
       "description": "Enables menu entries to do installation of Progressive Web Apps.",
       "value": "false",
-      "internal_value": "true"
-    },
-    "notes_manager": {
-      "friendly_name": "Experimental Notes editor.",
-      "description": "Edit and view notes in a tab.",
-      "value": "true",
       "internal_value": "true"
     }
   }

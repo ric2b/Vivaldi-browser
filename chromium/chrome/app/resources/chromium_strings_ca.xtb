@@ -95,7 +95,7 @@
 <translation id="4746050847053251315">Vols sortir de Chromium igualment?</translation>
 <translation id="4748217263233248895">S'acaba d'aplicar una actualització de seguretat especial per a Chromium. Reinicia el navegador i restaurarem les pestanyes.</translation>
 <translation id="4750035648288509542">Gairebé has acabat amb l'actualització. Reinicia Chromium per completar-la. Les finestres d'incògnit no es tornaran a obrir.</translation>
-<translation id="4788777615168560705">Chromium no pot comprovar les teves contrasenyes. Torna-ho a provar al cap de 24 hores o <ph name="BEGIN_LINK" />comprova les contrasenyes al teu Compte de Google<ph name="END_LINK" />.</translation>
+<translation id="4788777615168560705">Chromium no pot comprovar les teves contrasenyes. Torna-ho a provar al cap de 24 hores o <ph name="BEGIN_LINK" />comprova les contrasenyes desades al teu Compte de Google<ph name="END_LINK" />.</translation>
 <translation id="479167709087336770">Fa servir el mateix corrector ortogràfic que s'utilitza a la Cerca de Google. El text que escrius al navegador s'envia a Google. Pots canviar aquest comportament sempre que vulguis a la configuració.</translation>
 <translation id="4888717733111232871">Regla d'entrada de Chromium per permetre el trànsit de mDNS.</translation>
 <translation id="4943838377383847465">Chromium està en mode de segon pla.</translation>
@@ -125,6 +125,7 @@
 <translation id="5903106910045431592"><ph name="PAGE_TITLE" /> - Inici de sessió a la xarxa</translation>
 <translation id="5987687638152509985">Actualitza Chromium per iniciar la sincronització</translation>
 <translation id="6013050204643758987">Chromium OS és possible gràcies a <ph name="BEGIN_LINK_CROS_OSS" />programari lliure<ph name="END_LINK_CROS_OSS" /> addicional, com ara <ph name="BEGIN_LINK_LINUX_OSS" />Linux (versió beta)<ph name="END_LINK_LINUX_OSS" />.</translation>
+<translation id="6039377483953237732">Versió de Chromium OS</translation>
 <translation id="6055895534982063517">Hi ha disponible una versió nova de Chromium, i és més ràpida que mai.</translation>
 <translation id="6063093106622310249">&amp;Obre a Chromium</translation>
 <translation id="6072279588547424923"><ph name="EXTENSION_NAME" /> s'ha afegit a Chromium</translation>
@@ -221,7 +222,6 @@ Chromium no pot recuperar la configuració.</translation>
 <translation id="8586442755830160949">Copyright <ph name="YEAR" /> Els autors de Chromium. Tots els drets reservats.</translation>
 <translation id="8619360774459241877">S'està iniciant Chromium...</translation>
 <translation id="8621669128220841554">La instal·lació ha fallat a causa d'un error no especificat. Torneu a baixar Chromium.</translation>
-<translation id="8682540261359803721">Si alguna opció de configuració no es mostra en aquesta pàgina, consulta la <ph name="LINK_BEGIN" />configuració del navegador Chromium<ph name="LINK_END" />.</translation>
 <translation id="8697124171261953979">També controla la pàgina que es mostra quan inicieu Chromium o quan feu una cerca des de l'omnibox.</translation>
 <translation id="8704119203788522458">Aquest és el vostre Chromium</translation>
 <translation id="8796602469536043152">Per visitar aquest lloc web, Chromium necessita permís per accedir a la càmera i al micròfon</translation>

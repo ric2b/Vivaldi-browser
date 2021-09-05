@@ -14,7 +14,8 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.MediumTest;
+
+import androidx.test.filters.MediumTest;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -187,6 +188,7 @@ public class IsReadyToPayServiceHelperTest {
                         mErrorReceived = true;
                     }
                 });
+        helper.query();
         CriteriaHelper.pollInstrumentationThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
@@ -215,6 +217,7 @@ public class IsReadyToPayServiceHelperTest {
                             Assert.fail();
                         }
                     });
+            helper.query();
         });
         CriteriaHelper.pollInstrumentationThread(new Criteria() {
             @Override
@@ -244,6 +247,7 @@ public class IsReadyToPayServiceHelperTest {
                             mErrorReceived = true;
                         }
                     });
+            helper.query();
         });
         CriteriaHelper.pollInstrumentationThread(new Criteria() {
             @Override
@@ -273,6 +277,7 @@ public class IsReadyToPayServiceHelperTest {
                             mErrorReceived = true;
                         }
                     });
+            helper.query();
         });
         CriteriaHelper.pollInstrumentationThread(new Criteria() {
             @Override
@@ -302,6 +307,7 @@ public class IsReadyToPayServiceHelperTest {
                             mErrorReceived = true;
                         }
                     });
+            helper.query();
         });
         // Assuming CriteriaHelper.DEFAULT_MAX_TIME_TO_POLL >
         // IsReadyToPayServiceHelper.SERVICE_CONNECTION_TIMEOUT_MS.

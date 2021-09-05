@@ -7,12 +7,16 @@ package org.chromium.components.paintpreview.player.frame;
 import android.content.Context;
 import android.graphics.Rect;
 import android.view.View;
-import android.widget.Scroller;
+import android.view.ViewConfiguration;
+import android.widget.OverScroller;
 
 import org.chromium.base.UnguessableToken;
+import org.chromium.components.paintpreview.player.OverscrollHandler;
 import org.chromium.components.paintpreview.player.PlayerCompositorDelegate;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
+
+import javax.annotation.Nullable;
 
 /**
  * Sets up the view and the logic behind it for a Paint Preview frame.
@@ -26,12 +30,18 @@ public class PlayerFrameCoordinator {
      * binds them together.
      */
     public PlayerFrameCoordinator(Context context, PlayerCompositorDelegate compositorDelegate,
-            UnguessableToken frameGuid, int contentWidth, int contentHeight,
-            boolean canDetectZoom) {
+            UnguessableToken frameGuid, int contentWidth, int contentHeight, int initialScrollX,
+            int initialScrollY, boolean canDetectZoom,
+            @Nullable OverscrollHandler overscrollHandler) {
         PropertyModel model = new PropertyModel.Builder(PlayerFrameProperties.ALL_KEYS).build();
-        mMediator = new PlayerFrameMediator(model, compositorDelegate, new Scroller(context),
-                frameGuid, contentWidth, contentHeight);
+        OverScroller scroller = new OverScroller(context);
+        scroller.setFriction(ViewConfiguration.getScrollFriction() / 2);
+        mMediator = new PlayerFrameMediator(model, compositorDelegate, scroller, frameGuid,
+                contentWidth, contentHeight, initialScrollX, initialScrollY);
         mView = new PlayerFrameView(context, canDetectZoom, mMediator);
+        if (overscrollHandler != null) {
+            mMediator.setOverscrollHandler(overscrollHandler);
+        }
         PropertyModelChangeProcessor.create(model, mView, PlayerFrameViewBinder::bind);
     }
 

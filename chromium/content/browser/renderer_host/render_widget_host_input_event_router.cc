@@ -484,10 +484,9 @@ RenderWidgetTargetResult RenderWidgetHostInputEventRouter::FindMouseEventTarget(
     // the OOPIF renderer. Instead of using the coordinate transformation in the
     // browser process process, use the cached coordinates that were determined
     // by the renderer process on the previous MouseDown.
-    // TODO(yigu): Currently there is a mismatch between the coordinate
-    // transforms from browser process and renderer process. We need to fix it
-    // so that we don't need to cache the transform from MouseDown.
-    // https://crbug.com/934434.
+    // TODO(crbug.com/989109): Currently there is a mismatch between the
+    // coordinate transforms from browser process and renderer process. We need
+    // to fix it so that we don't need to cache the transform from MouseDown.
     if (event.GetType() == blink::WebInputEvent::Type::kMouseUp &&
         target == last_mouse_down_target_ &&
         mouse_down_pre_transformed_coordinate_ == event.PositionInWidget()) {
@@ -645,8 +644,8 @@ void RenderWidgetHostInputEventRouter::DispatchMouseEvent(
     auto hit_test_result =
         FindViewAtLocation(root_view, mouse_event.PositionInWidget(),
                            viz::EventSource::MOUSE, &transformed_point);
-    // TODO(kenrb, yigu): This is skipped if the HitTestResult is requiring an
-    // asynchronous hit test to the renderer process, because it might mean
+    // TODO(crbug.com/893101): This is skipped if the HitTestResult is requiring
+    // an asynchronous hit test to the renderer process, because it might mean
     // sending extra MouseMoves to renderers that don't need the event updates
     // which is a worse outcome than the cursor being delayed in updating.
     // An asynchronous hit test can be added here to fix the problem.

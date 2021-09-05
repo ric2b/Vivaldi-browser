@@ -123,6 +123,25 @@ class StackedNotificationBar::StackedNotificationBarIcon
       layer()->GetAnimator()->StopAnimating();
   }
 
+  void OnThemeChanged() override {
+    views::ImageView::OnThemeChanged();
+
+    auto* notification =
+        message_center::MessageCenter::Get()->FindVisibleNotificationById(id_);
+    SkColor accent_color = GetNativeTheme()->GetSystemColor(
+        ui::NativeTheme::kColorId_NotificationDefaultAccentColor);
+    gfx::Image masked_small_icon = notification->GenerateMaskedSmallIcon(
+        kStackedNotificationIconSize, accent_color);
+
+    if (masked_small_icon.IsEmpty()) {
+      SetImage(gfx::CreateVectorIcon(message_center::kProductIcon,
+                                     kStackedNotificationIconSize,
+                                     accent_color));
+    } else {
+      SetImage(masked_small_icon.AsImageSkia());
+    }
+  }
+
   void AnimateIn() {
     DCHECK(!is_animating_out());
 
@@ -234,28 +253,22 @@ StackedNotificationBar::StackedNotificationBar(
               IDS_ASH_MESSAGE_CENTER_EXPAND_ALL_NOTIFICATIONS_BUTTON_LABEL),
           message_center_view)) {
   SetVisible(false);
-  int left_padding = features::IsUnifiedMessageCenterRefactorEnabled()
-                         ? 0
-                         : kStackingNotificationClearAllButtonPadding.left();
   auto* layout = SetLayoutManager(std::make_unique<views::BoxLayout>(
-      views::BoxLayout::Orientation::kHorizontal,
-      gfx::Insets(0, left_padding, 0, 0)));
+      views::BoxLayout::Orientation::kHorizontal));
   layout->set_cross_axis_alignment(
       views::BoxLayout::CrossAxisAlignment::kStretch);
 
-  if (features::IsUnifiedMessageCenterRefactorEnabled()) {
-    notification_icons_container_ = new views::View();
-    notification_icons_container_->SetLayoutManager(
-        std::make_unique<views::BoxLayout>(
-            views::BoxLayout::Orientation::kHorizontal,
-            kStackedNotificationIconsContainerPadding,
-            kStackedNotificationBarIconSpacing));
-    AddChildView(notification_icons_container_);
-    message_center::MessageCenter::Get()->AddObserver(this);
-  }
+  notification_icons_container_ = new views::View();
+  notification_icons_container_->SetLayoutManager(
+      std::make_unique<views::BoxLayout>(
+          views::BoxLayout::Orientation::kHorizontal,
+          kStackedNotificationIconsContainerPadding,
+          kStackedNotificationBarIconSpacing));
+  AddChildView(notification_icons_container_);
+  message_center::MessageCenter::Get()->AddObserver(this);
 
   count_label_->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
-      AshColorProvider::ContentLayerType::kTextSecondary,
+      AshColorProvider::ContentLayerType::kTextColorSecondary,
       AshColorProvider::AshColorMode::kLight));
   count_label_->SetFontList(views::Label::GetDefaultFontList().Derive(
       1, gfx::Font::NORMAL, gfx::Font::Weight::MEDIUM));
@@ -326,24 +339,12 @@ void StackedNotificationBar::SetExpanded() {
 void StackedNotificationBar::AddNotificationIcon(
     message_center::Notification* notification,
     bool at_front) {
-  views::ImageView* icon_view_ =
+  views::ImageView* icon_view =
       new StackedNotificationBarIcon(this, notification->id());
   if (at_front)
-    notification_icons_container_->AddChildViewAt(icon_view_, 0);
+    notification_icons_container_->AddChildViewAt(icon_view, 0);
   else
-    notification_icons_container_->AddChildView(icon_view_);
-
-  gfx::Image masked_small_icon = notification->GenerateMaskedSmallIcon(
-      kStackedNotificationIconSize,
-      message_center::kNotificationDefaultAccentColor);
-
-  if (masked_small_icon.IsEmpty()) {
-    icon_view_->SetImage(gfx::CreateVectorIcon(
-        message_center::kProductIcon, kStackedNotificationIconSize,
-        message_center::kNotificationDefaultAccentColor));
-  } else {
-    icon_view_->SetImage(masked_small_icon.AsImageSkia());
-  }
+    notification_icons_container_->AddChildView(icon_view);
 }
 
 void StackedNotificationBar::OnIconAnimatedOut(views::View* icon) {
@@ -434,18 +435,13 @@ void StackedNotificationBar::UpdateStackedNotifications(
   int stacked_notification_count = stacked_notifications.size();
   int notification_overflow_count = 0;
 
-  if (features::IsUnifiedMessageCenterRefactorEnabled()) {
-    if (stacked_notification_count_ > stacked_notification_count)
-      ShiftIconsLeft(stacked_notifications);
-    else if (stacked_notification_count_ < stacked_notification_count)
-      ShiftIconsRight(stacked_notifications);
+  if (stacked_notification_count_ > stacked_notification_count)
+    ShiftIconsLeft(stacked_notifications);
+  else if (stacked_notification_count_ < stacked_notification_count)
+    ShiftIconsRight(stacked_notifications);
 
-    notification_overflow_count = std::max(
-        stacked_notification_count_ - kStackedNotificationBarMaxIcons, 0);
-  } else {
-    stacked_notification_count_ = stacked_notification_count;
-    notification_overflow_count = stacked_notification_count;
-  }
+  notification_overflow_count = std::max(
+      stacked_notification_count_ - kStackedNotificationBarMaxIcons, 0);
 
   // Update overflow count label
   if (notification_overflow_count > 0) {
@@ -478,7 +474,7 @@ void StackedNotificationBar::OnPaint(gfx::Canvas* canvas) {
         gfx::PointF(bounds.bottom_left() - gfx::Vector2d(0, 1)),
         gfx::PointF(bounds.bottom_right() - gfx::Vector2d(0, 1)),
         AshColorProvider::Get()->GetContentLayerColor(
-            AshColorProvider::ContentLayerType::kSeparator,
+            AshColorProvider::ContentLayerType::kSeparatorColor,
             AshColorProvider::AshColorMode::kLight));
   }
 }

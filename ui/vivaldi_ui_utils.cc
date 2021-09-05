@@ -19,8 +19,8 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "components/sessions/content/session_tab_helper.h"
 #include "content/browser/web_contents/web_contents_impl.h"
-#include "extensions/browser/app_window/native_app_window.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
+#include "ui/base/base_window.h"
 #include "ui/gfx/codec/jpeg_codec.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/image/image.h"
@@ -34,7 +34,6 @@
 namespace vivaldi {
 namespace ui_tools {
 
-/*static*/
 extensions::WebViewGuest* GetActiveWebViewGuest() {
   Browser* browser = chrome::FindLastActive();
   if (!browser)
@@ -43,19 +42,6 @@ extensions::WebViewGuest* GetActiveWebViewGuest() {
   return GetActiveWebGuestFromBrowser(browser);
 }
 
-/*static*/
-extensions::WebViewGuest* GetActiveWebViewGuest(
-    extensions::NativeAppWindow* app_window) {
-  Browser* browser =
-      chrome::FindBrowserWithWindow(app_window->GetNativeWindow());
-
-  if (!browser)
-    return nullptr;
-
-  return GetActiveWebGuestFromBrowser(browser);
-}
-
-/*static*/
 extensions::WebViewGuest* GetActiveWebGuestFromBrowser(Browser* browser) {
   content::WebContents* active_web_contents =
       browser->tab_strip_model()->GetActiveWebContents();
@@ -65,7 +51,6 @@ extensions::WebViewGuest* GetActiveWebGuestFromBrowser(Browser* browser) {
   return extensions::WebViewGuest::FromWebContents(active_web_contents);
 }
 
-/*static*/
 VivaldiBrowserWindow* GetActiveAppWindow() {
 #if defined(OS_WIN) || defined(OS_LINUX)
   Browser* browser = chrome::FindLastActive();

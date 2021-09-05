@@ -26,17 +26,24 @@ class AmbientBackendControllerImpl : public AmbientBackendController {
 
   // AmbientBackendController:
   void FetchScreenUpdateInfo(
+      int num_topics,
       OnScreenUpdateInfoFetchedCallback callback) override;
   void GetSettings(GetSettingsCallback callback) override;
-  void UpdateSettings(AmbientModeTopicSource topic_source,
+  void UpdateSettings(const AmbientSettings& settings,
                       UpdateSettingsCallback callback) override;
+  void FetchPersonalAlbums(int banner_width,
+                           int banner_height,
+                           int num_albums,
+                           const std::string& resume_token,
+                           OnPersonalAlbumsFetchedCallback callback) override;
   void SetPhotoRefreshInterval(base::TimeDelta interval) override;
 
  private:
   using BackdropClientConfig = chromeos::ambient::BackdropClientConfig;
   void RequestAccessToken(AmbientClient::GetAccessTokenCallback callback);
 
-  void FetchScreenUpdateInfoInternal(OnScreenUpdateInfoFetchedCallback callback,
+  void FetchScreenUpdateInfoInternal(int num_topics,
+                                     OnScreenUpdateInfoFetchedCallback callback,
                                      const std::string& gaia_id,
                                      const std::string& access_token);
 
@@ -53,7 +60,7 @@ class AmbientBackendControllerImpl : public AmbientBackendController {
                      std::unique_ptr<BackdropURLLoader> backdrop_url_loader,
                      std::unique_ptr<std::string> response);
 
-  void StartToUpdateSettings(AmbientModeTopicSource topic_source,
+  void StartToUpdateSettings(const AmbientSettings& settings,
                              UpdateSettingsCallback callback,
                              const std::string& gaia_id,
                              const std::string& access_token);
@@ -61,6 +68,19 @@ class AmbientBackendControllerImpl : public AmbientBackendController {
   void OnUpdateSettings(UpdateSettingsCallback callback,
                         std::unique_ptr<BackdropURLLoader> backdrop_url_loader,
                         std::unique_ptr<std::string> response);
+
+  void FetchPersonalAlbumsInternal(int banner_width,
+                                   int banner_height,
+                                   int num_albums,
+                                   const std::string& resume_token,
+                                   OnPersonalAlbumsFetchedCallback callback,
+                                   const std::string& gaia_id,
+                                   const std::string& access_token);
+
+  void OnPersonalAlbumsFetched(
+      OnPersonalAlbumsFetchedCallback callback,
+      std::unique_ptr<BackdropURLLoader> backdrop_url_loader,
+      std::unique_ptr<std::string> response);
 
   BackdropClientConfig backdrop_client_config_;
 

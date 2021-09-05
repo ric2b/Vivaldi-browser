@@ -10,6 +10,7 @@
 <translation id="1201402288615127009">İleri</translation>
 <translation id="1242008676835033345"><ph name="WEBSITE_URL" /> adresinde yerleşik</translation>
 <translation id="1272079795634619415">Durdur</translation>
+<translation id="1289742167380433257">Veri tasarrufu amacıyla bu sayfadaki görseller Google tarafından optimize edilmiştir.</translation>
 <translation id="129382876167171263">Web siteleri tarafından kaydedilen dosyalar burada görünür</translation>
 <translation id="1364532808393826295"><ph name="APP_NAME" />-<ph name="NOTIFICATION_MESSAGE" /></translation>
 <translation id="1369915414381695676"><ph name="SITE_NAME" /> sitesi eklendi</translation>
@@ -42,6 +43,7 @@
 <translation id="2182457891543959921">Sitelerin çevremin 3D haritasını oluşturmasına veya kamera konumunu takip etmesine izin vermeden önce sor (önerilir)</translation>
 <translation id="2212565012507486665">Çerezlere izin ver</translation>
 <translation id="2289270750774289114">Bir site yakındaki Bluetooth cihazları bulmak istediğinde sor (önerilir)</translation>
+<translation id="2315043854645842844">İstemci tarafı sertifika seçimi, işletim sistemi tarafından desteklenmiyor.</translation>
 <translation id="2359808026110333948">Devam et</translation>
 <translation id="2402980924095424747"><ph name="MEGABYTES" /> MB</translation>
 <translation id="2434158240863470628">İndirme işlemi tamamlandı <ph name="SEPARATOR" /> <ph name="BYTES_DOWNLOADED" /></translation>
@@ -61,10 +63,12 @@
 <translation id="2704606927547763573">Kopyalandı</translation>
 <translation id="2822354292072154809"><ph name="CHOSEN_OBJECT_NAME" /> için tüm site izinlerini sıfırlamak istediğinizden emin misiniz?</translation>
 <translation id="2870560284913253234">Site</translation>
+<translation id="2874939134665556319">Önceki parça</translation>
 <translation id="2910701580606108292">Sitelerin korumalı içeriği oynatmasına izin verilmeden önce size sorulur</translation>
 <translation id="2913331724188855103">Sitelerin, çerez verilerini kaydetmelerine ve okumalarına izin ver (önerilir)</translation>
 <translation id="2968755619301702150">Sertifika görüntüleyici</translation>
 <translation id="300526633675317032">Bu işlem <ph name="SIZE_IN_KB" /> olan web sitesi depolama alanının tamamını temizleyecek.</translation>
+<translation id="301521992641321250">Otomatik olarak engellendi</translation>
 <translation id="3115898365077584848">Bilgileri Göster</translation>
 <translation id="3123473560110926937">Bazı sitelerde engellendi</translation>
 <translation id="3190152372525844641"><ph name="BEGIN_LINK" />Android Ayarları<ph name="END_LINK" />'nda Chrome için izinleri açın.</translation>
@@ -83,16 +87,19 @@
 <translation id="3744111561329211289">Arka plan senkronizasyonu</translation>
 <translation id="3822502789641063741">Site depolama silinsin mi?</translation>
 <translation id="385051799172605136">Geri</translation>
+<translation id="3859306556332390985">İleriye doğru git</translation>
 <translation id="3955193568934677022">Sitelerin korumalı içeriği oynatmasına izin ver (önerilir)</translation>
 <translation id="3987993985790029246">Bağlantıyı kopyala</translation>
 <translation id="3991845972263764475"><ph name="BYTES_DOWNLOADED_WITH_UNITS" /> / ?</translation>
 <translation id="4002066346123236978">Başlık</translation>
 <translation id="4008040567710660924">Belirli bir site için çerezlere izin verin.</translation>
+<translation id="4046123991198612571">Sonraki parça</translation>
 <translation id="4165986682804962316">Site ayarları</translation>
 <translation id="4226663524361240545">Bildirimler cihazı titretebilir</translation>
 <translation id="4242533952199664413">Ayarları aç</translation>
 <translation id="4259722352634471385">Gezinme engellendi: <ph name="URL" /></translation>
 <translation id="4278390842282768270">İzin verilen</translation>
+<translation id="429312253194641664">Bir site medya oynatıyor</translation>
 <translation id="4433925000917964731">Google tarafından sağlanan basit sayfa</translation>
 <translation id="4434045419905280838">Pop-up'lar ve yönlendirmeler</translation>
 <translation id="445467742685312942">Sitelerin korumalı içeriği oynatmasına izin ver</translation>
@@ -107,6 +114,7 @@
 <translation id="4962975101802056554">Cihaz için tüm izinleri iptal eder</translation>
 <translation id="4964199952259983386">Chrome'un artırılmış gerçekliği (AR) kullanması için <ph name="BEGIN_LINK" />Android Ayarlarında<ph name="END_LINK" /> kamerayı da açın.</translation>
 <translation id="497421865427891073">İlerle</translation>
+<translation id="4996978546172906250">Paylaşım yöntemi:</translation>
 <translation id="5039804452771397117">İzin ver</translation>
 <translation id="5048398596102334565">Sitelerin hareket sensörlerine erişmesine izin ver (önerilen)</translation>
 <translation id="5063480226653192405">Kullanım</translation>
@@ -141,7 +149,7 @@
 <translation id="6040143037577758943">Kapat</translation>
 <translation id="6042308850641462728">Daha fazla</translation>
 <translation id="6064125863973209585">Tamamlanan indirme işlemleri</translation>
-<translation id="6165508094623778733">Daha fazla bilgi edinin</translation>
+<translation id="6165508094623778733">Daha fazla bilgi</translation>
 <translation id="6177111841848151710">Geçerli arama motoru için engellendi</translation>
 <translation id="6181444274883918285">Site istisnası ekle</translation>
 <translation id="6192792657125177640">İstisnalar</translation>
@@ -163,7 +171,9 @@
 <translation id="6643016212128521049">Temizle</translation>
 <translation id="6697925417670533197">Etkin indirme işlemleri</translation>
 <translation id="6746124502594467657">Aşağı taşı</translation>
+<translation id="6766622839693428701">Kapatmak için aşağı kaydırın.</translation>
 <translation id="6782111308708962316">Üçüncü taraf web sitelerinin çerez verilerini kaydetmesini ve okumasını engelle</translation>
+<translation id="6790428901817661496">Oynat</translation>
 <translation id="6818926723028410516">Öğe seçin</translation>
 <translation id="6864395892908308021">Bu cihaz NFC'yi okuyamıyor</translation>
 <translation id="6910211073230771657">Silindi</translation>
@@ -197,6 +207,7 @@
 <translation id="7804248752222191302">Bir site kameranızı kullanıyor</translation>
 <translation id="7817023149356982970">Bu sitedeki oturumunuz kapatılacak.</translation>
 <translation id="7828557259026017104">Çerezler, ziyaret ettiğiniz web siteleri tarafından oluşturulan dosyalardır. Siteler tercihlerinizi hatırlamak için çerezleri kullanır. Üçüncü taraf çerezleri diğer siteler tarafından oluşturulur. Bu siteler, ziyaret ettiğiniz web sayfasında gördüğünüz reklam veya resim gibi içeriğin bir kısmına sahiptir.</translation>
+<translation id="7835852323729233924">Medya oynatılıyor/çalınıyor</translation>
 <translation id="7846076177841592234">Seçimi iptal et</translation>
 <translation id="7846621471902887024">Tüm sitelerdeki oturumunuz kapatılacak.</translation>
 <translation id="7882806643839505685">Belirli bir site için sese izin verin.</translation>
@@ -204,6 +215,7 @@
 <translation id="7999064672810608036">Bu web sitesine ilişkin çerezler dahil tüm yerel verileri temizlemek ve bu sitenin tüm izinlerini sıfırlamak istediğinizden emin misiniz?</translation>
 <translation id="8007176423574883786">Bu cihaz için kapatıldı</translation>
 <translation id="802154636333426148">İndirilemedi</translation>
+<translation id="8068648041423924542">Sertifika seçilemiyor.</translation>
 <translation id="8087000398470557479">Bu içerik Google tarafından <ph name="DOMAIN_NAME" /> adresinden sağlanmaktadır.</translation>
 <translation id="8116925261070264013">Ses kapatıldı</translation>
 <translation id="8131740175452115882">Onayla</translation>
@@ -216,6 +228,8 @@
 <translation id="83792324527827022">Bir site kameranızı ve mikrofonunuzu kullanıyor</translation>
 <translation id="8380167699614421159">Bu site, araya giren veya yanıltıcı reklamlar gösteriyor</translation>
 <translation id="8394832520002899662">Siteye dönmek için dokunun</translation>
+<translation id="8425213833346101688">Değiştir</translation>
+<translation id="8441146129660941386">Geriye doğru git</translation>
 <translation id="8447861592752582886">Cihaz iznini iptal et</translation>
 <translation id="8463851957836045671">Site hızlı yükleniyor</translation>
 <translation id="851751545965956758">Sitelerin cihazlara bağlanmasını engelle</translation>
@@ -236,6 +250,7 @@
 <translation id="8958424370300090006">Belirli bir site için çerezleri engelleyin.</translation>
 <translation id="8959122750345127698">Gezinme işlevine ulaşılamıyor: <ph name="URL" /></translation>
 <translation id="9019902583201351841">Ebeveynleriniz tarafından yönetiliyor</translation>
+<translation id="9074739597929991885">Bluetooth</translation>
 <translation id="945632385593298557">Mikrofonunuza erişim</translation>
 <translation id="965817943346481315">Site, araya giren veya yanıltıcı reklamlar gösteriyorsa engelle (önerilen)</translation>
 </translationbundle>

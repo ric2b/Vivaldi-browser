@@ -93,8 +93,6 @@ class CONTENT_EXPORT NavigationControllerImpl : public NavigationController {
   void DiscardNonCommittedEntries() override;
   NavigationEntryImpl* GetPendingEntry() override;
   int GetPendingEntryIndex() override;
-  NavigationEntryImpl* GetTransientEntry() override;
-  void SetTransientEntry(std::unique_ptr<NavigationEntry> entry) override;
   void LoadURL(const GURL& url,
                const Referrer& referrer,
                ui::PageTransition type,
@@ -317,8 +315,8 @@ class CONTENT_EXPORT NavigationControllerImpl : public NavigationController {
   // requests corresponding to the current pending entry.
   std::unique_ptr<PendingEntryRef> ReferencePendingEntry();
 
-  // Like NavigationController::CreateNavigationEntry, but takes an extra
-  // |source_site_instance| argument.
+  // Like NavigationController::CreateNavigationEntry, but takes extra arguments
+  // like |source_site_instance| and |should_replace_entry|.
   static std::unique_ptr<NavigationEntryImpl> CreateNavigationEntry(
       const GURL& url,
       Referrer referrer,
@@ -328,7 +326,8 @@ class CONTENT_EXPORT NavigationControllerImpl : public NavigationController {
       bool is_renderer_initiated,
       const std::string& extra_headers,
       BrowserContext* browser_context,
-      scoped_refptr<network::SharedURLLoaderFactory> blob_url_loader_factory);
+      scoped_refptr<network::SharedURLLoaderFactory> blob_url_loader_factory,
+      bool should_replace_entry);
 
  private:
   friend class RestoreHelper;
@@ -337,6 +336,17 @@ class CONTENT_EXPORT NavigationControllerImpl : public NavigationController {
   FRIEND_TEST_ALL_PREFIXES(TimeSmoother, SingleDuplicate);
   FRIEND_TEST_ALL_PREFIXES(TimeSmoother, ManyDuplicates);
   FRIEND_TEST_ALL_PREFIXES(TimeSmoother, ClockBackwardsJump);
+  FRIEND_TEST_ALL_PREFIXES(NavigationControllerTest,
+                           PostThenReplaceStateThenReload);
+
+  // Defines possible actions that are returned by
+  // DetermineActionForHistoryNavigation().
+  enum class HistoryNavigationAction {
+    kStopLooking,
+    kKeepLooking,
+    kSameDocument,
+    kDifferentDocument,
+  };
 
   // Helper class to smooth out runs of duplicate timestamps while still
   // allowing time to jump backwards.
@@ -352,6 +362,23 @@ class CONTENT_EXPORT NavigationControllerImpl : public NavigationController {
     base::Time high_water_mark_;
   };
 
+  // The repost dialog is suppressed during testing. However, it should be shown
+  // in some tests. This allows a test to elect to allow the repost dialog to
+  // show for a scoped duration.
+  class CONTENT_EXPORT ScopedShowRepostDialogForTesting {
+   public:
+    ScopedShowRepostDialogForTesting();
+    ~ScopedShowRepostDialogForTesting();
+
+    ScopedShowRepostDialogForTesting(const ScopedShowRepostDialogForTesting&) =
+        delete;
+    ScopedShowRepostDialogForTesting& operator=(
+        const ScopedShowRepostDialogForTesting&) = delete;
+
+   private:
+    const bool was_disallowed_;
+  };
+
   // Navigates in session history to the given index. If
   // |sandbox_frame_tree_node_id| is valid, then this request came
   // from a sandboxed iframe with top level navigation disallowed. This
@@ -364,6 +391,13 @@ class CONTENT_EXPORT NavigationControllerImpl : public NavigationController {
   // |sandbox_frame_tree_node_id|, which initiated the navigation.
   void NavigateToExistingPendingEntry(ReloadType reload_type,
                                       int sandboxed_source_frame_tree_node_id);
+
+  // Helper function used by FindFramesToNavigate to determine the appropriate
+  // action to take for a particular frame while navigating to
+  // |pending_entry_|.
+  HistoryNavigationAction DetermineActionForHistoryNavigation(
+      FrameTreeNode* frame,
+      ReloadType reload_type);
 
   // Recursively identifies which frames need to be navigated for a navigation
   // to |pending_entry_|, starting at |frame| and exploring its children.
@@ -507,9 +541,6 @@ class CONTENT_EXPORT NavigationControllerImpl : public NavigationController {
   // Removes the entry at |index|, as long as it is not the current entry.
   void RemoveEntryAtIndexInternal(int index);
 
-  // Discards only the transient entry.
-  void DiscardTransientEntry();
-
   // If we have the maximum number of entries, remove the oldest entry that is
   // marked to be skipped on back/forward button, in preparation to add another.
   // If no entry is skippable, then the oldest entry will be pruned.
@@ -524,8 +555,7 @@ class CONTENT_EXPORT NavigationControllerImpl : public NavigationController {
 
   // Inserts up to |max_index| entries from |source| into this. This does NOT
   // adjust any of the members that reference entries_
-  // (last_committed_entry_index_, pending_entry_index_ or
-  // transient_entry_index_).
+  // (last_committed_entry_index_ or pending_entry_index_)
   void InsertEntriesFrom(NavigationControllerImpl* source, int max_index);
 
   // Returns the navigation index that differs from the current entry by the
@@ -602,13 +632,6 @@ class CONTENT_EXPORT NavigationControllerImpl : public NavigationController {
   // The index of the pending entry if it is in entries_, or -1 if
   // pending_entry_ is a new entry (created by LoadURL).
   int pending_entry_index_ = -1;
-
-  // The index for the entry that is shown until a navigation occurs.  This is
-  // used for interstitial pages. -1 if there are no such entry.
-  // Note that this entry really appears in the list of entries, but only
-  // temporarily (until the next navigation).  Any index pointing to an entry
-  // after the transient entry will become invalid if you navigate forward.
-  int transient_entry_index_ = -1;
 
   // The delegate associated with the controller. Possibly NULL during
   // setup.

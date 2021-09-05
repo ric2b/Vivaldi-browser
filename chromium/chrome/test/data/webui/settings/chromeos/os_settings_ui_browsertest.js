@@ -7,6 +7,7 @@ const BROWSER_SETTINGS_PATH = '../';
 
 GEN_INCLUDE(['//chrome/test/data/webui/polymer_browser_test_base.js']);
 
+GEN('#include "chromeos/constants/chromeos_features.h"');
 GEN('#include "content/public/test/browser_test.h"');
 
 // Only run in release builds because we frequently see test timeouts in debug.
@@ -177,65 +178,6 @@ TEST_F('OSSettingsUIBrowserTest', 'AllJsTests', () => {
       assertTrue(ui.advancedOpenedInMenu_);
     });
 
-    test('URL initiated search propagates to search box', () => {
-      toolbar = /** @type {!OsToolbarElement} */ (ui.$$('os-toolbar'));
-      const searchField =
-          /** @type {CrToolbarSearchFieldElement} */ (toolbar.getSearchField());
-      assertEquals('', searchField.getSearchInput().value);
-
-      const query = 'foo';
-      settings.Router.getInstance().navigateTo(
-          settings.routes.BASIC, new URLSearchParams(`search=${query}`));
-      assertEquals(query, searchField.getSearchInput().value);
-    });
-
-    test('search box initiated search propagates to URL', () => {
-      toolbar = /** @type {!OsToolbarElement} */ (ui.$$('os-toolbar'));
-      const searchField =
-          /** @type {CrToolbarSearchFieldElement} */ (toolbar.getSearchField());
-
-      settings.Router.getInstance().navigateTo(
-          settings.routes.BASIC, /* dynamicParams */ null,
-          /* removeSearch */ true);
-      assertEquals('', searchField.getSearchInput().value);
-      assertFalse(
-          settings.Router.getInstance().getQueryParameters().has('search'));
-
-      let value = 'GOOG';
-      searchField.setValue(value);
-      assertEquals(
-          value,
-          settings.Router.getInstance().getQueryParameters().get('search'));
-
-      // Test that search queries are properly URL encoded.
-      value = '+++';
-      searchField.setValue(value);
-      assertEquals(
-          value,
-          settings.Router.getInstance().getQueryParameters().get('search'));
-    });
-
-    test('whitespace only search query is ignored', () => {
-      toolbar = /** @type {!OsToolbarElement} */ (ui.$$('os-toolbar'));
-      const searchField =
-          /** @type {CrToolbarSearchFieldElement} */ (toolbar.getSearchField());
-      searchField.setValue('    ');
-      let urlParams = settings.Router.getInstance().getQueryParameters();
-      assertFalse(urlParams.has('search'));
-
-      searchField.setValue('   foo');
-      urlParams = settings.Router.getInstance().getQueryParameters();
-      assertEquals('foo', urlParams.get('search'));
-
-      searchField.setValue('   foo ');
-      urlParams = settings.Router.getInstance().getQueryParameters();
-      assertEquals('foo ', urlParams.get('search'));
-
-      searchField.setValue('   ');
-      urlParams = settings.Router.getInstance().getQueryParameters();
-      assertFalse(urlParams.has('search'));
-    });
-
     // Test that navigating via the paper menu always clears the current
     // search URL parameter.
     test('clearsUrlSearchParam', function() {
@@ -259,9 +201,11 @@ TEST_F('OSSettingsUIBrowserTest', 'AllJsTests', () => {
 
     test('userActionRouteChange', function() {
       assertEquals(userActionRecorder.navigationCount, 0);
-      settings.Router.getInstance().navigateTo(settings.routes.POWER);
+      settings.Router.getInstance().navigateTo(settings.routes.BASIC);
+      Polymer.dom.flush();
       assertEquals(userActionRecorder.navigationCount, 1);
-      settings.Router.getInstance().navigateTo(settings.routes.POWER);
+      settings.Router.getInstance().navigateTo(settings.routes.BASIC);
+      Polymer.dom.flush();
       assertEquals(userActionRecorder.navigationCount, 1);
     });
 
@@ -283,14 +227,16 @@ TEST_F('OSSettingsUIBrowserTest', 'AllJsTests', () => {
       assertEquals(userActionRecorder.settingChangeCount, 1);
     });
 
-    test('userActionSearchEvent', function() {
-      const searchField =
-          /** @type {CrToolbarSearchFieldElement} */ (
-              ui.$$('os-toolbar').getSearchField());
+    test('Advanced menu expands on navigating to an advanced setting', () => {
+      const floatingMenu = ui.$$('#left os-settings-menu');
+      floatingMenu.advancedOpened = false;
+      const params = new URLSearchParams('search=test');
 
-      assertEquals(userActionRecorder.searchCount, 0);
-      searchField.setValue('GOOGLE');
-      assertEquals(userActionRecorder.searchCount, 1);
+      // If there are search params and the current route is a descendant of
+      // the Advanced route, then ensure that the advanced menu expands.
+      assertFalse(floatingMenu.advancedOpened);
+      settings.Router.getInstance().navigateTo(settings.routes.FILES, params);
+      assertTrue(floatingMenu.advancedOpened);
     });
 
     test('toolbar and nav menu are hidden in kiosk mode', function() {

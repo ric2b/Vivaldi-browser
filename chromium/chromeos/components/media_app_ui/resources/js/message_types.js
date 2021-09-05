@@ -13,6 +13,8 @@
  */
 const Message = {
   DELETE_FILE: 'delete-file',
+  IFRAME_READY: 'iframe-ready',
+  LOAD_EXTRA_FILES: 'load-extra-files',
   LOAD_FILES: 'load-files',
   NAVIGATE: 'navigate',
   OPEN_FEEDBACK_DIALOG: 'open-feedback-dialog',
@@ -22,7 +24,7 @@ const Message = {
 };
 
 /**
- * Enum for valid results of deleting a file.
+ * Enum for results of deleting a file.
  * @enum {number}
  */
 const DeleteResult = {
@@ -46,11 +48,17 @@ let DeleteFileMessage;
 let DeleteFileResponse;
 
 /**
+ * Representation of a file passed in on the LoadFilesMessage.
+ * @typedef {{token: number, file: ?File, name: string, error: string}}
+ */
+let FileContext;
+
+/**
  * Message sent by the privileged context to the unprivileged context indicating
  * the files available to open.
  * @typedef {{
  *    writableFileIndex: number,
- *    files: !Array<{token: number, file: ?File, name: string, error: string}>
+ *    files: !Array<!FileContext>
  * }}
  */
 let LoadFilesMessage;
@@ -72,7 +80,7 @@ let OverwriteFileMessage;
 let NavigateMessage;
 
 /**
- * Enum for valid results of renaming a file.
+ * Enum for results of renaming a file.
  * @enum {number}
  */
 const RenameResult = {

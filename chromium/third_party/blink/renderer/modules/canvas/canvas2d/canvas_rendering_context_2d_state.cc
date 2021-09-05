@@ -136,7 +136,7 @@ void CanvasRenderingContext2DState::FontsNeedUpdate(FontSelector* font_selector,
   resolved_filter_.reset();
 }
 
-void CanvasRenderingContext2DState::Trace(Visitor* visitor) {
+void CanvasRenderingContext2DState::Trace(Visitor* visitor) const {
   visitor->Trace(stroke_style_);
   visitor->Trace(fill_style_);
   visitor->Trace(filter_value_);
@@ -638,15 +638,16 @@ const PaintFlags* CanvasRenderingContext2DState::GetFlags(
   return flags;
 }
 
-bool CanvasRenderingContext2DState::HasPattern() const {
-  return FillStyle() && FillStyle()->GetCanvasPattern() &&
-         FillStyle()->GetCanvasPattern()->GetPattern();
+bool CanvasRenderingContext2DState::HasPattern(PaintType paint_type) const {
+  return Style(paint_type) && Style(paint_type)->GetCanvasPattern() &&
+         Style(paint_type)->GetCanvasPattern()->GetPattern();
 }
 
 // Only to be used if the CanvasRenderingContext2DState has Pattern
-bool CanvasRenderingContext2DState::PatternIsAccelerated() const {
-  DCHECK(HasPattern());
-  return FillStyle()->GetCanvasPattern()->GetPattern()->IsTextureBacked();
+bool CanvasRenderingContext2DState::PatternIsAccelerated(
+    PaintType paint_type) const {
+  DCHECK(HasPattern(paint_type));
+  return Style(paint_type)->GetCanvasPattern()->GetPattern()->IsTextureBacked();
 }
 
 }  // namespace blink

@@ -7,8 +7,9 @@
 #include <atomic>
 #include <utility>
 
+#include "base/logging.h"
 #include "base/power_monitor/power_monitor_source.h"
-#include "base/trace_event/trace_event.h"
+#include "base/trace_event/base_tracing.h"
 
 namespace base {
 
@@ -25,12 +26,8 @@ bool PowerMonitor::IsInitialized() {
   return GetInstance()->source_.get() != nullptr;
 }
 
-bool PowerMonitor::AddObserver(PowerObserver* obs) {
-  PowerMonitor* power_monitor = GetInstance();
-  if (!IsInitialized())
-    return false;
-  power_monitor->observers_->AddObserver(obs);
-  return true;
+void PowerMonitor::AddObserver(PowerObserver* obs) {
+  GetInstance()->observers_->AddObserver(obs);
 }
 
 void PowerMonitor::RemoveObserver(PowerObserver* obs) {
@@ -47,13 +44,17 @@ bool PowerMonitor::IsOnBatteryPower() {
 }
 
 void PowerMonitor::ShutdownForTesting() {
-  PowerMonitor::GetInstance()->observers_->AssertEmpty();
   GetInstance()->source_ = nullptr;
-  g_is_process_suspended.store(false);
+  g_is_process_suspended.store(false, std::memory_order_relaxed);
 }
 
 bool PowerMonitor::IsProcessSuspended() {
   return g_is_process_suspended.load(std::memory_order_relaxed);
+}
+
+PowerObserver::DeviceThermalState PowerMonitor::GetCurrentThermalState() {
+  DCHECK(IsInitialized());
+  return GetInstance()->source_->GetCurrentThermalState();
 }
 
 void PowerMonitor::NotifyPowerStateChange(bool battery_in_use) {
@@ -80,6 +81,15 @@ void PowerMonitor::NotifyResume() {
   DVLOG(1) << "Power Resuming";
   g_is_process_suspended.store(false, std::memory_order_relaxed);
   GetInstance()->observers_->Notify(FROM_HERE, &PowerObserver::OnResume);
+}
+
+void PowerMonitor::NotifyThermalStateChange(
+    PowerObserver::DeviceThermalState new_state) {
+  DCHECK(IsInitialized());
+  DVLOG(1) << "ThermalStateChange: "
+           << PowerMonitorSource::DeviceThermalStateToString(new_state);
+  GetInstance()->observers_->Notify(
+      FROM_HERE, &PowerObserver::OnThermalStateChange, new_state);
 }
 
 PowerMonitor* PowerMonitor::GetInstance() {

@@ -111,6 +111,9 @@ void WebURLResponse::SetLoadTiming(
   timing->SetConnectEnd(mojo_timing.connect_timing.connect_end);
   timing->SetWorkerStart(mojo_timing.service_worker_start_time);
   timing->SetWorkerReady(mojo_timing.service_worker_ready_time);
+  timing->SetWorkerFetchStart(mojo_timing.service_worker_fetch_start);
+  timing->SetWorkerRespondWithSettled(
+      mojo_timing.service_worker_respond_with_settled);
   timing->SetSendStart(mojo_timing.send_start);
   timing->SetSendEnd(mojo_timing.send_end);
   timing->SetReceiveHeadersStart(mojo_timing.receive_headers_start);
@@ -124,6 +127,10 @@ void WebURLResponse::SetLoadTiming(
 
 void WebURLResponse::SetHTTPLoadInfo(const WebHTTPLoadInfo& value) {
   resource_response_->SetResourceLoadInfo(value);
+}
+
+base::Time WebURLResponse::ResponseTime() const {
+  return resource_response_->ResponseTime();
 }
 
 void WebURLResponse::SetResponseTime(base::Time response_time) {
@@ -340,6 +347,16 @@ void WebURLResponse::SetWasFetchedViaServiceWorker(bool value) {
   resource_response_->SetWasFetchedViaServiceWorker(value);
 }
 
+network::mojom::FetchResponseSource
+WebURLResponse::GetServiceWorkerResponseSource() const {
+  return resource_response_->GetServiceWorkerResponseSource();
+}
+
+void WebURLResponse::SetServiceWorkerResponseSource(
+    network::mojom::FetchResponseSource value) {
+  resource_response_->SetServiceWorkerResponseSource(value);
+}
+
 void WebURLResponse::SetWasFallbackRequiredByServiceWorker(bool value) {
   resource_response_->SetWasFallbackRequiredByServiceWorker(value);
 }
@@ -365,6 +382,10 @@ bool WebURLResponse::HasUrlListViaServiceWorker() const {
   DCHECK(resource_response_->UrlListViaServiceWorker().size() == 0 ||
          WasFetchedViaServiceWorker());
   return resource_response_->UrlListViaServiceWorker().size() > 0;
+}
+
+WebString WebURLResponse::CacheStorageCacheName() const {
+  return resource_response_->CacheStorageCacheName();
 }
 
 void WebURLResponse::SetCacheStorageCacheName(

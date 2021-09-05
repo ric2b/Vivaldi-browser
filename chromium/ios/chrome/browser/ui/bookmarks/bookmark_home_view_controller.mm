@@ -6,6 +6,7 @@
 
 #include "base/mac/foundation_util.h"
 #include "base/metrics/user_metrics.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
@@ -16,6 +17,9 @@
 #include "ios/chrome/browser/bookmarks/bookmarks_utils.h"
 #import "ios/chrome/browser/bookmarks/managed_bookmark_service_factory.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#include "ios/chrome/browser/drag_and_drop/drag_and_drop_flag.h"
+#import "ios/chrome/browser/drag_and_drop/drag_item_util.h"
+#import "ios/chrome/browser/drag_and_drop/table_view_url_drag_drop_handler.h"
 #import "ios/chrome/browser/favicon/favicon_loader.h"
 #include "ios/chrome/browser/favicon/ios_chrome_favicon_loader_factory.h"
 #import "ios/chrome/browser/main/browser.h"
@@ -45,18 +49,21 @@
 #import "ios/chrome/browser/ui/bookmarks/cells/bookmark_table_signin_promo_cell.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
+#import "ios/chrome/browser/ui/commands/command_dispatcher.h"
 #import "ios/chrome/browser/ui/keyboard/UIKeyCommand+Chrome.h"
 #import "ios/chrome/browser/ui/material_components/utils.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_url_item.h"
 #import "ios/chrome/browser/ui/table_view/chrome_table_view_styler.h"
 #import "ios/chrome/browser/ui/table_view/table_view_model.h"
 #import "ios/chrome/browser/ui/table_view/table_view_navigation_controller_constants.h"
+#import "ios/chrome/browser/ui/util/multi_window_support.h"
 #import "ios/chrome/browser/ui/util/rtl_geometry.h"
 #import "ios/chrome/browser/ui/util/ui_util.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
+#import "ios/chrome/browser/window_activities/window_activity_helpers.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/favicon/favicon_attributes.h"
 #import "ios/chrome/common/ui/favicon/favicon_view.h"
@@ -112,23 +119,24 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 
 }  // namespace
 
-@interface BookmarkHomeViewController ()<BookmarkFolderViewControllerDelegate,
-                                         BookmarkHomeConsumer,
-                                         BookmarkHomeSharedStateObserver,
-                                         BookmarkInteractionControllerDelegate,
-                                         BookmarkModelBridgeObserver,
-                                         BookmarkTableCellTitleEditDelegate,
-                                         UIGestureRecognizerDelegate,
-                                         UISearchControllerDelegate,
-                                         UISearchResultsUpdating,
-                                         UITableViewDataSource,
-                                         UITableViewDelegate> {
+@interface BookmarkHomeViewController () <BookmarkFolderViewControllerDelegate,
+                                          BookmarkHomeConsumer,
+                                          BookmarkHomeSharedStateObserver,
+                                          BookmarkInteractionControllerDelegate,
+                                          BookmarkModelBridgeObserver,
+                                          BookmarkTableCellTitleEditDelegate,
+                                          TableViewURLDragDataSource,
+                                          TableViewURLDropDelegate,
+                                          UIGestureRecognizerDelegate,
+                                          UISearchControllerDelegate,
+                                          UISearchResultsUpdating,
+                                          UITableViewDataSource,
+                                          UITableViewDelegate> {
   // Bridge to register for bookmark changes.
   std::unique_ptr<bookmarks::BookmarkModelBridge> _bridge;
 
   // The root node, whose child nodes are shown in the bookmark table view.
   const bookmarks::BookmarkNode* _rootNode;
-
 }
 
 // Shared state between BookmarkHome classes.  Used as a temporary refactoring
@@ -202,6 +210,9 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
     BookmarkInteractionController* bookmarkInteractionController;
 
 @property(nonatomic, assign) WebStateList* webStateList;
+
+// Handler for URL drag and drop interactions.
+@property(nonatomic, strong) TableViewURLDragDropHandler* dragDropHandler;
 
 @end
 
@@ -455,6 +466,16 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
   self.sharedState.tableView = self.tableView;
   self.sharedState.observer = self;
   self.sharedState.currentlyShowingSearchResults = NO;
+
+  if (DragAndDropIsEnabled()) {
+    self.dragDropHandler = [[TableViewURLDragDropHandler alloc] init];
+    self.dragDropHandler.origin = WindowActivityBookmarksOrigin;
+    self.dragDropHandler.dragDataSource = self;
+    self.dragDropHandler.dropDelegate = self;
+    self.tableView.dragDelegate = self.dragDropHandler;
+    self.tableView.dropDelegate = self.dragDropHandler;
+    self.tableView.dragInteractionEnabled = YES;
+  }
 
   // Configure the table view.
   self.sharedState.tableView.accessibilityIdentifier =
@@ -1142,6 +1163,8 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
   self.searchController.searchBar.userInteractionEnabled = !editing;
   self.searchController.searchBar.alpha =
       editing ? kTableViewNavigationAlphaForDisabledSearchBar : 1.0;
+
+  self.tableView.dragInteractionEnabled = !editing;
 }
 
 // Row selection of the tableView will be cleared after reloadData.  This
@@ -1643,10 +1666,6 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
                            [weakSelf moveNodes:nodes];
                          }
                           style:UIAlertActionStyleDefault];
-
-  [coordinator addItemWithTitle:l10n_util::GetNSString(IDS_CANCEL)
-                         action:nil
-                          style:UIAlertActionStyleCancel];
 }
 
 - (void)configureCoordinator:(AlertCoordinator*)coordinator
@@ -1679,6 +1698,21 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
                 }
                  style:UIAlertActionStyleDefault];
 
+  if (IsMultiwindowSupported()) {
+    NSString* title =
+        l10n_util::GetNSString(IDS_IOS_CONTENT_CONTEXT_OPENINNEWWINDOW);
+    id<ApplicationCommands> windowOpener = HandlerForProtocol(
+        self.browser->GetCommandDispatcher(), ApplicationCommands);
+    auto action = ^{
+      [windowOpener openNewWindowWithActivity:ActivityToLoadURL(
+                                                  WindowActivityBookmarksOrigin,
+                                                  node->url())];
+    };
+    [coordinator addItemWithTitle:title
+                           action:action
+                            style:UIAlertActionStyleDefault];
+  }
+
   [coordinator
       addItemWithTitle:l10n_util::GetNSString(
                            IDS_IOS_CONTENT_CONTEXT_OPENLINKNEWINCOGNITOTAB)
@@ -1696,10 +1730,6 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
                   [weakSelf setTableViewEditing:NO];
                 }
                  style:UIAlertActionStyleDefault];
-
-  [coordinator addItemWithTitle:l10n_util::GetNSString(IDS_CANCEL)
-                         action:nil
-                          style:UIAlertActionStyleCancel];
 }
 
 - (void)configureCoordinator:(AlertCoordinator*)coordinator
@@ -1731,10 +1761,6 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
     coordinator.alertController.actions[0].enabled = NO;
     coordinator.alertController.actions[1].enabled = NO;
   }
-
-  [coordinator addItemWithTitle:l10n_util::GetNSString(IDS_CANCEL)
-                         action:nil
-                          style:UIAlertActionStyleCancel];
 }
 
 - (void)configureCoordinator:(AlertCoordinator*)coordinator
@@ -1750,10 +1776,6 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
                            [weakSelf moveNodes:nodes];
                          }
                           style:UIAlertActionStyleDefault];
-
-  [coordinator addItemWithTitle:l10n_util::GetNSString(IDS_CANCEL)
-                         action:nil
-                          style:UIAlertActionStyleCancel];
 }
 
 #pragma mark - UIGestureRecognizerDelegate and gesture handling
@@ -1964,8 +1986,10 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 
 - (BOOL)tableView:(UITableView*)tableView
     canMoveRowAtIndexPath:(NSIndexPath*)indexPath {
-  // No reorering with filtered results.
-  if (self.sharedState.currentlyShowingSearchResults) {
+  // No reorering with filtered results or when displaying the top-most
+  // Bookmarks node.
+  if (self.sharedState.currentlyShowingSearchResults ||
+      _rootNode == self.bookmarks->root_node() || !self.tableView.editing) {
     return NO;
   }
   TableViewItem* item =
@@ -2075,6 +2099,36 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
       base::UserMetricsAction("IOSBookmarkManagerCloseWithSwipe"));
   // Cleanup once the dismissal is complete.
   [self dismissWithURL:GURL()];
+}
+
+#pragma mark - TableViewURLDragDataSource
+
+- (URLInfo*)tableView:(UITableView*)tableView
+    URLInfoAtIndexPath:(NSIndexPath*)indexPath {
+  const bookmarks::BookmarkNode* node = [self nodeAtIndexPath:indexPath];
+  if (node->is_folder()) {
+    return nil;
+  }
+  return [[URLInfo alloc]
+      initWithURL:node->url()
+            title:bookmark_utils_ios::TitleForBookmarkNode(node)];
+}
+
+#pragma mark - TableViewURLDropDelegate
+
+- (BOOL)canHandleURLDropInTableView:(UITableView*)tableView {
+  return !self.sharedState.currentlyShowingSearchResults &&
+         !self.tableView.hasActiveDrag;
+}
+
+- (void)tableView:(UITableView*)tableView
+       didDropURL:(const GURL&)URL
+      atIndexPath:(NSIndexPath*)indexPath {
+  NSUInteger index = base::checked_cast<NSUInteger>(indexPath.item);
+  [self.handler showSnackbarMessage:
+                    bookmark_utils_ios::CreateBookmarkAtPositionWithUndoToast(
+                        base::SysUTF8ToNSString(URL.spec()), URL, _rootNode,
+                        index, self.bookmarks, self.browserState)];
 }
 
 @end

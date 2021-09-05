@@ -115,6 +115,8 @@ COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kEnableHoudini[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kEnableHoudini64[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kEnableNdkTranslation[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
+extern const char kEnableNdkTranslation64[];
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kEnableRequestTabletSite[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kEnableTouchCalibrationSetting[];
@@ -125,6 +127,8 @@ COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kEnterpriseEnableForcedReEnrollment[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kEnterpriseEnableInitialEnrollment[];
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
+extern const char kEnterpriseEnablePrivateSetMembership[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kEnterpriseEnableZeroTouchEnrollment[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
@@ -147,6 +151,8 @@ extern const char kForceDevToolsAvailable[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kForceFirstRunUI[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kForceHappinessTrackingSystem[];
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
+extern const char kForceHWIDCheckFailureForTest[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kForceLoginManagerInTests[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
@@ -199,6 +205,8 @@ COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kShowLoginDevOverlay[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kShowOobeDevOverlay[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kOobeScreenshotDirectory[];
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
+extern const char kTelemetryExtensionDirectory[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kTestEncryptionMigrationUI[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kTestWallpaperServer[];

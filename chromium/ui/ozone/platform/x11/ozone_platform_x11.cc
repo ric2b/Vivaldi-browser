@@ -11,9 +11,11 @@
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "ui/base/buildflags.h"
+#include "ui/base/cursor/cursor_factory.h"
 #include "ui/base/dragdrop/os_exchange_data_provider_factory.h"
 #include "ui/base/dragdrop/os_exchange_data_provider_factory_ozone.h"
-#include "ui/base/ime/linux/linux_input_method_context_factory.h"
+#include "ui/base/x/x11_cursor_factory.h"
+#include "ui/base/x/x11_error_handler.h"
 #include "ui/base/x/x11_util.h"
 #include "ui/display/fake/fake_display_delegate.h"
 #include "ui/events/devices/x11/touch_factory_x11.h"
@@ -25,22 +27,22 @@
 #include "ui/ozone/common/stub_overlay_manager.h"
 #include "ui/ozone/platform/x11/gl_egl_utility_x11.h"
 #include "ui/ozone/platform/x11/x11_clipboard_ozone.h"
-#include "ui/ozone/platform/x11/x11_cursor_factory_ozone.h"
 #include "ui/ozone/platform/x11/x11_screen_ozone.h"
 #include "ui/ozone/platform/x11/x11_surface_factory.h"
-#include "ui/ozone/platform/x11/x11_window_ozone.h"
 #include "ui/ozone/public/gpu_platform_support_host.h"
 #include "ui/ozone/public/input_controller.h"
 #include "ui/ozone/public/ozone_platform.h"
 #include "ui/ozone/public/system_input_injector.h"
 #include "ui/platform_window/platform_window.h"
 #include "ui/platform_window/platform_window_init_properties.h"
+#include "ui/platform_window/x11/x11_window.h"
 
 #if defined(OS_CHROMEOS)
-#include "ui/base/dragdrop/os_exchange_data_provider_aura.h"
+#include "ui/base/dragdrop/os_exchange_data_provider_non_backed.h"
 #include "ui/base/ime/chromeos/input_method_chromeos.h"
 #else
-#include "ui/base/ime/linux/input_method_auralinux.h"
+#include "ui/base/ime/linux/input_method_auralinux.h"              // nogncheck
+#include "ui/base/ime/linux/linux_input_method_context_factory.h"  // nogncheck
 #include "ui/ozone/platform/x11/x11_os_exchange_data_provider_ozone.h"
 #endif
 
@@ -88,9 +90,7 @@ class OzonePlatformX11 : public OzonePlatform,
     return overlay_manager_.get();
   }
 
-  CursorFactoryOzone* GetCursorFactoryOzone() override {
-    return cursor_factory_ozone_.get();
-  }
+  CursorFactory* GetCursorFactory() override { return cursor_factory_.get(); }
 
   std::unique_ptr<SystemInputInjector> CreateSystemInputInjector() override {
     return nullptr;
@@ -107,8 +107,7 @@ class OzonePlatformX11 : public OzonePlatform,
   std::unique_ptr<PlatformWindow> CreatePlatformWindow(
       PlatformWindowDelegate* delegate,
       PlatformWindowInitProperties properties) override {
-    std::unique_ptr<X11WindowOzone> window =
-        std::make_unique<X11WindowOzone>(delegate);
+    auto window = std::make_unique<X11Window>(delegate);
     window->Initialize(std::move(properties));
     window->SetTitle(base::ASCIIToUTF16("Ozone X11"));
     return std::move(window);
@@ -151,7 +150,7 @@ class OzonePlatformX11 : public OzonePlatform,
 
   std::unique_ptr<OSExchangeDataProvider> CreateProvider() override {
 #if defined(OS_CHROMEOS)
-    return std::make_unique<OSExchangeDataProviderAura>();
+    return std::make_unique<OSExchangeDataProviderNonBacked>();
 #else
     return std::make_unique<X11OSExchangeDataProviderOzone>();
 #endif
@@ -167,7 +166,7 @@ class OzonePlatformX11 : public OzonePlatform,
     overlay_manager_ = std::make_unique<StubOverlayManager>();
     input_controller_ = CreateStubInputController();
     clipboard_ = std::make_unique<X11ClipboardOzone>();
-    cursor_factory_ozone_ = std::make_unique<X11CursorFactoryOzone>();
+    cursor_factory_ = std::make_unique<X11CursorFactory>();
     gpu_platform_support_host_.reset(CreateStubGpuPlatformSupportHost());
 
 #if BUILDFLAG(USE_XKBCOMMON)
@@ -200,6 +199,28 @@ class OzonePlatformX11 : public OzonePlatform,
 
     surface_factory_ozone_ = std::make_unique<X11SurfaceFactory>();
     gl_egl_utility_ = std::make_unique<GLEGLUtilityX11>();
+  }
+
+  void PostMainMessageLoopStart(
+      base::OnceCallback<void()> shutdown_cb) override {
+    // Installs the X11 error handlers for the UI process after the
+    // main message loop has started. This will allow us to exit cleanly
+    // if X exits before we do.
+    SetErrorHandlers(std::move(shutdown_cb));
+  }
+
+  void PostMainMessageLoopRun() override {
+    // Unset the X11 error handlers. The X11 error handlers log the errors using
+    // a |PostTask()| on the message-loop. But since the message-loop is in the
+    // process of terminating, this can cause errors.
+    SetEmptyErrorHandlers();
+  }
+
+  void PreEarlyInitialize() override {
+    // Installs the X11 error handlers for the browser process used during
+    // startup. They simply print error messages and exit because
+    // we can't shutdown properly while creating and initializing services.
+    SetNullErrorHandlers();
   }
 
  private:
@@ -238,7 +259,7 @@ class OzonePlatformX11 : public OzonePlatform,
   std::unique_ptr<OverlayManagerOzone> overlay_manager_;
   std::unique_ptr<InputController> input_controller_;
   std::unique_ptr<X11ClipboardOzone> clipboard_;
-  std::unique_ptr<X11CursorFactoryOzone> cursor_factory_ozone_;
+  std::unique_ptr<CursorFactory> cursor_factory_;
   std::unique_ptr<GpuPlatformSupportHost> gpu_platform_support_host_;
 
   // Objects in the GPU process.

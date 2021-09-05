@@ -75,6 +75,8 @@ class BrowserTabStripController : public TabStripController,
   void RemoveTabFromGroup(int model_index) override;
   void MoveTab(int start_index, int final_index) override;
   void MoveGroup(const tab_groups::TabGroupId& group, int final_index) override;
+  bool ToggleTabGroupCollapsedState(const tab_groups::TabGroupId group,
+                                    bool record_user_action) override;
   void ShowContextMenuForTab(Tab* tab,
                              const gfx::Point& p,
                              ui::MenuSourceType source_type) override;
@@ -92,6 +94,8 @@ class BrowserTabStripController : public TabStripController,
       const tab_groups::TabGroupId& group_id) const override;
   tab_groups::TabGroupColorId GetGroupColorId(
       const tab_groups::TabGroupId& group_id) const override;
+  bool IsGroupCollapsed(const tab_groups::TabGroupId& group) const override;
+
   void SetVisualDataForGroup(
       const tab_groups::TabGroupId& group,
       const tab_groups::TabGroupVisualData& visual_data) override;

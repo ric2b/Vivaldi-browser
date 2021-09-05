@@ -27,10 +27,10 @@
 #include "net/http/http_stream_factory.h"
 #include "net/quic/platform/impl/quic_flags_impl.h"
 #include "net/quic/quic_context.h"
-#include "net/quic/quic_utils_chromium.h"
 #include "net/spdy/spdy_session.h"
 #include "net/spdy/spdy_session_pool.h"
 #include "net/third_party/quiche/src/quic/core/quic_packets.h"
+#include "net/third_party/quiche/src/quic/core/quic_tag.h"
 #include "net/third_party/quiche/src/spdy/core/spdy_protocol.h"
 
 #if defined(OS_MACOSX) && !defined(OS_IOS)
@@ -205,7 +205,7 @@ quic::QuicTagVector GetQuicConnectionOptions(
     return quic::QuicTagVector();
   }
 
-  return net::ParseQuicConnectionOptions(it->second);
+  return quic::ParseQuicTagVector(it->second);
 }
 
 quic::QuicTagVector GetQuicClientConnectionOptions(
@@ -215,7 +215,7 @@ quic::QuicTagVector GetQuicClientConnectionOptions(
     return quic::QuicTagVector();
   }
 
-  return net::ParseQuicConnectionOptions(it->second);
+  return quic::ParseQuicTagVector(it->second);
 }
 
 bool ShouldQuicCloseSessionsOnIpChange(
@@ -344,6 +344,11 @@ bool ShouldQuicMigrateIdleSessions(
     const VariationParameters& quic_trial_params) {
   return base::LowerCaseEqualsASCII(
       GetVariationParam(quic_trial_params, "migrate_idle_sessions"), "true");
+}
+
+bool ShouldQuicDisableTlsZeroRtt(const VariationParameters& quic_trial_params) {
+  return base::LowerCaseEqualsASCII(
+      GetVariationParam(quic_trial_params, "disable_tls_zero_rtt"), "true");
 }
 
 int GetQuicRetransmittableOnWireTimeoutMilliseconds(
@@ -528,6 +533,10 @@ void ConfigureQuicParams(base::StringPiece quic_trial_group,
           base::TimeDelta::FromMilliseconds(
               initial_rtt_for_handshake_milliseconds);
     }
+
+    quic_params->disable_tls_zero_rtt =
+        ShouldQuicDisableTlsZeroRtt(quic_trial_params);
+
     int retransmittable_on_wire_timeout_milliseconds =
         GetQuicRetransmittableOnWireTimeoutMilliseconds(quic_trial_params);
     if (retransmittable_on_wire_timeout_milliseconds > 0) {
@@ -616,8 +625,13 @@ void ParseCommandLineAndFieldTrials(const base::CommandLine& command_line,
 
   if (params->enable_quic) {
     if (command_line.HasSwitch(switches::kQuicConnectionOptions)) {
-      quic_params->connection_options = net::ParseQuicConnectionOptions(
+      quic_params->connection_options = quic::ParseQuicTagVector(
           command_line.GetSwitchValueASCII(switches::kQuicConnectionOptions));
+    }
+    if (command_line.HasSwitch(switches::kQuicClientConnectionOptions)) {
+      quic_params->client_connection_options =
+          quic::ParseQuicTagVector(command_line.GetSwitchValueASCII(
+              switches::kQuicClientConnectionOptions));
     }
 
     if (command_line.HasSwitch(switches::kQuicMaxPacketLength)) {

@@ -259,24 +259,18 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
                    params->options.bounds.height);
 
   // App window specific parameters
-  extensions::AppWindow::CreateParams app_params;
+  VivaldiBrowserWindowParams window_params;
 
-  app_params.focused = focused;
+  window_params.focused = focused;
   if (params->options.window_decoration.get()) {
-    bool window_decoration = *params->options.window_decoration.get();
-    app_params.frame =
-        window_decoration ? AppWindow::FRAME_CHROME : AppWindow::FRAME_NONE;
+    window_params.native_decorations = *params->options.window_decoration.get();
   } else {
-    if (profile->GetPrefs()->GetBoolean(
-            vivaldiprefs::kWindowsUseNativeDecoration)) {
-      app_params.frame = extensions::AppWindow::FRAME_CHROME;
-    } else {
-      app_params.frame = extensions::AppWindow::FRAME_NONE;
-    }
+    window_params.native_decorations = profile->GetPrefs()->GetBoolean(
+        vivaldiprefs::kWindowsUseNativeDecoration);
   }
-  app_params.content_spec.bounds = bounds;
-  app_params.content_spec.minimum_size = gfx::Size(min_width, min_height);
-  app_params.state = ui::SHOW_STATE_DEFAULT;
+  window_params.content_bounds = bounds;
+  window_params.minimum_size = gfx::Size(min_width, min_height);
+  window_params.state = ui::SHOW_STATE_DEFAULT;
 
   if (profile->IsGuestSession() && !incognito) {
     // Opening a new window from a guest session is only allowed for
@@ -299,7 +293,7 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
 
   int window_id = window->browser()->session_id().id();
 
-  window->CreateWebContents(app_params, render_frame_host());
+  window->CreateWebContents(window_params, render_frame_host());
 
   // This sets up the parameters used in the "create" binding that fills in the
   // contentWindow parameter used in the create-callback.

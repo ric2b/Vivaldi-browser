@@ -803,6 +803,30 @@ TEST_P(PaintPropertyTreeBuilderTest, WillChangeContents) {
                           GetDocument().View()->GetLayoutView());
 }
 
+TEST_P(PaintPropertyTreeBuilderTest,
+       BackfaceVisibilityWithPseudoStacking3DChildren) {
+  ScopedTransformInteropForTest enabled(true);
+  // TODO(chrishtr): implement for CAP. This entails computing
+  // has_backface_invisible_ancestor_in_same_3d_context in the pre-paint tree
+  // walk.
+  if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
+    return;
+
+  SetBodyInnerHTML(R"HTML(
+    <div style="backface-visibility: hidden; transform-style: preserve-3d">
+      <div id=child style="isolation: isolate"></div>
+    </div>
+  )HTML");
+
+  // The child needs a transform node to communicate that it is backface
+  // visible to the compositor.
+  EXPECT_NE(nullptr, PaintPropertiesForElement("child")->Transform());
+  EXPECT_EQ(PaintPropertiesForElement("child")
+                ->Transform()
+                ->GetBackfaceVisibilityForTesting(),
+            TransformPaintPropertyNode::BackfaceVisibility::kVisible);
+}
+
 TEST_P(PaintPropertyTreeBuilderTest, NoEffectAndFilterForNonStackingContext) {
   SetBodyInnerHTML(R"HTML(
     <div id="target" style="will-change: right; backface-visibility: hidden">
@@ -1803,11 +1827,10 @@ TEST_P(PaintPropertyTreeBuilderTest, TransformNodesAcrossSubframes) {
   // frame's transform tree.
   // This asserts that we have the following tree structure:
   // Transform transform=translation=1.000000,2.000000,3.000000
-  //   PaintOffsetTranslation transform=Identity
-  //     PreTranslation transform=translation=7.000000,7.000000,0.000000
-  //       PaintOffsetTranslation transform=Identity
-  //         ScrollTranslation transform=translation=0.000000,0.000000,0.000000
-  //           Transform transform=translation=4.000000,5.000000,6.000000
+  //   PreTranslation transform=translation=7.000000,7.000000,0.000000
+  //     PaintOffsetTranslation transform=Identity
+  //       ScrollTranslation transform=translation=0.000000,0.000000,0.000000
+  //         Transform transform=translation=4.000000,5.000000,6.000000
   auto* inner_document_scroll_translation = inner_div_transform->Parent();
   EXPECT_TRUE(inner_document_scroll_translation->IsIdentity());
   auto* paint_offset_translation = inner_document_scroll_translation->Parent();
@@ -1821,16 +1844,8 @@ TEST_P(PaintPropertyTreeBuilderTest, TransformNodesAcrossSubframes) {
     EXPECT_EQ(div_with_transform_properties->Transform(),
               iframe_pre_translation->Parent());
   } else {
-    LayoutObject* iframe_element = GetLayoutObjectByElementId("iframe");
-    const ObjectPaintProperties* iframe_element_properties =
-        iframe_element->FirstFragment().PaintProperties();
-    EXPECT_EQ(iframe_element_properties->PaintOffsetTranslation(),
-              iframe_pre_translation->Parent());
-    EXPECT_EQ(
-        FloatSize(),
-        iframe_element_properties->PaintOffsetTranslation()->Translation2D());
     EXPECT_EQ(div_with_transform_properties->Transform(),
-              iframe_element_properties->PaintOffsetTranslation()->Parent());
+              iframe_pre_translation->Parent());
   }
 }
 
@@ -2864,10 +2879,100 @@ TEST_P(PaintPropertyTreeBuilderTest, Preserve3DCreatesSharedRenderingContext) {
   EXPECT_NE(a_properties->Transform(), b_properties->Transform());
   if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled()) {
     EXPECT_TRUE(a_properties->Transform()->HasRenderingContext());
+    EXPECT_FALSE(a_properties->Transform()->FlattensInheritedTransform());
     EXPECT_TRUE(b_properties->Transform()->HasRenderingContext());
+    EXPECT_FALSE(b_properties->Transform()->FlattensInheritedTransform());
     EXPECT_EQ(a_properties->Transform()->RenderingContextId(),
               b_properties->Transform()->RenderingContextId());
   }
+  CHECK_EXACT_VISUAL_RECT(PhysicalRect(8, 8, 30, 40), a,
+                          frame_view->GetLayoutView());
+  CHECK_EXACT_VISUAL_RECT(PhysicalRect(8, 48, 20, 10), b,
+                          frame_view->GetLayoutView());
+}
+
+TEST_P(PaintPropertyTreeBuilderTest,
+       IntermediateElementPreventsSharedRenderingContext) {
+  ScopedTransformInteropForTest enabled(true);
+
+  SetBodyInnerHTML(R"HTML(
+    <div id='parent' style='transform-style: preserve-3d'>
+      <div>
+        <div id='a' style='transform: translateZ(0); width: 30px; height: 40px'>
+        </div>
+      </div>
+      <div id='b' style='transform: translateZ(0); width: 20px; height: 10px'>
+      </div>
+    </div>
+  )HTML");
+  LocalFrameView* frame_view = GetDocument().View();
+
+  LayoutObject* a = GetLayoutObjectByElementId("a");
+  const ObjectPaintProperties* a_properties =
+      a->FirstFragment().PaintProperties();
+  LayoutObject* b = GetLayoutObjectByElementId("b");
+  const ObjectPaintProperties* b_properties =
+      b->FirstFragment().PaintProperties();
+  ASSERT_TRUE(a_properties->Transform() && b_properties->Transform());
+  EXPECT_NE(a_properties->Transform(), b_properties->Transform());
+
+  const ObjectPaintProperties* parent_properties =
+      b->FirstFragment().PaintProperties();
+
+  EXPECT_FALSE(a_properties->Transform()->HasRenderingContext());
+  EXPECT_TRUE(a_properties->Transform()->FlattensInheritedTransform());
+  EXPECT_TRUE(b_properties->Transform()->HasRenderingContext());
+  EXPECT_FALSE(b_properties->Transform()->FlattensInheritedTransform());
+  EXPECT_NE(a_properties->Transform()->RenderingContextId(),
+            b_properties->Transform()->RenderingContextId());
+
+  EXPECT_EQ(parent_properties->Transform()->RenderingContextId(),
+            b_properties->Transform()->RenderingContextId());
+
+  CHECK_EXACT_VISUAL_RECT(PhysicalRect(8, 8, 30, 40), a,
+                          frame_view->GetLayoutView());
+  CHECK_EXACT_VISUAL_RECT(PhysicalRect(8, 48, 20, 10), b,
+                          frame_view->GetLayoutView());
+}
+
+TEST_P(PaintPropertyTreeBuilderTest,
+       IntermediateElementWithPropertiesPreventsSharedRenderingContext) {
+  ScopedTransformInteropForTest enabled(true);
+
+  SetBodyInnerHTML(R"HTML(
+    <div id='parent' style='transform-style: preserve-3d'>
+      <div style="overflow: hidden">
+        <div id='a' style='transform: translateZ(0); width: 30px; height: 40px'>
+        </div>
+      </div>
+      <div id='b' style='transform: translateZ(0); width: 20px; height: 10px'>
+      </div>
+    </div>
+  )HTML");
+  LocalFrameView* frame_view = GetDocument().View();
+
+  LayoutObject* a = GetLayoutObjectByElementId("a");
+  const ObjectPaintProperties* a_properties =
+      a->FirstFragment().PaintProperties();
+  LayoutObject* b = GetLayoutObjectByElementId("b");
+  const ObjectPaintProperties* b_properties =
+      b->FirstFragment().PaintProperties();
+  ASSERT_TRUE(a_properties->Transform() && b_properties->Transform());
+  EXPECT_NE(a_properties->Transform(), b_properties->Transform());
+
+  const ObjectPaintProperties* parent_properties =
+      b->FirstFragment().PaintProperties();
+
+  EXPECT_FALSE(a_properties->Transform()->HasRenderingContext());
+  EXPECT_TRUE(a_properties->Transform()->FlattensInheritedTransform());
+  EXPECT_TRUE(b_properties->Transform()->HasRenderingContext());
+  EXPECT_FALSE(b_properties->Transform()->FlattensInheritedTransform());
+  EXPECT_NE(a_properties->Transform()->RenderingContextId(),
+            b_properties->Transform()->RenderingContextId());
+
+  EXPECT_EQ(parent_properties->Transform()->RenderingContextId(),
+            b_properties->Transform()->RenderingContextId());
+
   CHECK_EXACT_VISUAL_RECT(PhysicalRect(8, 8, 30, 40), a,
                           frame_view->GetLayoutView());
   CHECK_EXACT_VISUAL_RECT(PhysicalRect(8, 48, 20, 10), b,
@@ -4555,11 +4660,14 @@ TEST_P(PaintPropertyTreeBuilderTest, Reflection) {
       "</div>");
   const ObjectPaintProperties* filter_properties =
       GetLayoutObjectByElementId("filter")->FirstFragment().PaintProperties();
-  EXPECT_TRUE(filter_properties->Filter()->Parent()->IsRoot());
   EXPECT_EQ(DocScrollTranslation(),
+            filter_properties->PaintOffsetTranslation()->Parent());
+  EXPECT_EQ(FloatSize(8, 8),
+            filter_properties->PaintOffsetTranslation()->Translation2D());
+  EXPECT_TRUE(filter_properties->Filter()->Parent()->IsRoot());
+  EXPECT_EQ(filter_properties->PaintOffsetTranslation(),
             &filter_properties->Filter()->LocalTransformSpace());
   EXPECT_EQ(DocContentClip(), filter_properties->Filter()->OutputClip());
-  EXPECT_EQ(FloatPoint(8, 8), filter_properties->Filter()->FiltersOrigin());
 }
 
 TEST_P(PaintPropertyTreeBuilderTest, SimpleFilter) {
@@ -4568,11 +4676,11 @@ TEST_P(PaintPropertyTreeBuilderTest, SimpleFilter) {
       "</div>");
   const ObjectPaintProperties* filter_properties =
       GetLayoutObjectByElementId("filter")->FirstFragment().PaintProperties();
+  EXPECT_FALSE(filter_properties->PaintOffsetTranslation());
   EXPECT_TRUE(filter_properties->Filter()->Parent()->IsRoot());
   EXPECT_EQ(DocScrollTranslation(),
             &filter_properties->Filter()->LocalTransformSpace());
   EXPECT_EQ(DocContentClip(), filter_properties->Filter()->OutputClip());
-  EXPECT_EQ(FloatPoint(8, 8), filter_properties->Filter()->FiltersOrigin());
 }
 
 TEST_P(PaintPropertyTreeBuilderTest, FilterReparentClips) {
@@ -4592,7 +4700,6 @@ TEST_P(PaintPropertyTreeBuilderTest, FilterReparentClips) {
             filter_properties->Filter()->OutputClip());
   EXPECT_EQ(DocScrollTranslation(),
             &filter_properties->Filter()->LocalTransformSpace());
-  EXPECT_EQ(FloatPoint(8, 8), filter_properties->Filter()->FiltersOrigin());
 
   const PropertyTreeState& child_paint_state =
       GetLayoutObjectByElementId("child")

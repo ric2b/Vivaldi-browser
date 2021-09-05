@@ -17,13 +17,16 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_simple_task_runner.h"
 #include "build/build_config.h"
-#include "content/common/input/synthetic_web_input_event_builders.h"
 #include "content/renderer/input/main_thread_event_queue.h"
 #include "content/renderer/render_thread_impl.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/input/synthetic_web_input_event_builders.h"
 #include "third_party/blink/public/common/input/web_input_event_attribution.h"
 #include "third_party/blink/public/platform/scheduler/test/web_mock_thread_scheduler.h"
 
+using blink::SyntheticWebMouseEventBuilder;
+using blink::SyntheticWebMouseWheelEventBuilder;
+using blink::SyntheticWebTouchEvent;
 using blink::WebInputEvent;
 using blink::WebMouseEvent;
 using blink::WebMouseWheelEvent;
@@ -198,9 +201,11 @@ class MainThreadEventQueueTest : public testing::Test,
                    blink::mojom::InputEventResultState ack_result) {
     base::AutoReset<bool> in_handle_event(&handler_callback_->handling_event_,
                                           true);
-    queue_->HandleEvent(
-        event.Clone(), ui::LatencyInfo(), DISPATCH_TYPE_BLOCKING, ack_result,
-        blink::WebInputEventAttribution(), handler_callback_->GetCallback());
+    queue_->HandleEvent(std::make_unique<blink::WebCoalescedInputEvent>(
+                            event.Clone(), ui::LatencyInfo()),
+                        DISPATCH_TYPE_BLOCKING, ack_result,
+                        blink::WebInputEventAttribution(),
+                        handler_callback_->GetCallback());
   }
 
   void RunClosure(unsigned closure_id) {
@@ -370,8 +375,6 @@ TEST_F(MainThreadEventQueueTest, NonBlockingWheel) {
         handled_tasks_[0]->taskAsEvent()->GetCoalescedEventsPointers();
     const WebMouseWheelEvent* coalesced_wheel_event0 =
         static_cast<const WebMouseWheelEvent*>(coalesced_events[0].get());
-    coalesced_event.dispatch_type =
-        WebInputEvent::DispatchType::kListenersNonBlockingPassive;
     EXPECT_TRUE(Equal(coalesced_event, *coalesced_wheel_event0));
 
     coalesced_event = kEvents[1];
@@ -399,8 +402,6 @@ TEST_F(MainThreadEventQueueTest, NonBlockingWheel) {
         handled_tasks_[1]->taskAsEvent()->GetCoalescedEventsPointers();
     const WebMouseWheelEvent* coalesced_wheel_event0 =
         static_cast<const WebMouseWheelEvent*>(coalesced_events[0].get());
-    coalesced_event.dispatch_type =
-        WebInputEvent::DispatchType::kListenersNonBlockingPassive;
     EXPECT_TRUE(Equal(coalesced_event, *coalesced_wheel_event0));
 
     coalesced_event = kEvents[3];
@@ -444,9 +445,10 @@ TEST_F(MainThreadEventQueueTest, NonBlockingTouch) {
             handled_tasks_.at(0)->taskAsEvent()->Event().GetType());
   const WebTouchEvent* last_touch_event = static_cast<const WebTouchEvent*>(
       handled_tasks_.at(0)->taskAsEvent()->EventPointer());
-  kEvents[0].dispatch_type =
+  SyntheticWebTouchEvent non_blocking_touch = kEvents[0];
+  non_blocking_touch.dispatch_type =
       WebInputEvent::DispatchType::kListenersNonBlockingPassive;
-  EXPECT_TRUE(Equal(kEvents[0], *last_touch_event));
+  EXPECT_TRUE(Equal(non_blocking_touch, *last_touch_event));
 
   {
     EXPECT_EQ(1u, handled_tasks_[0]->taskAsEvent()->CoalescedEventSize());
@@ -462,9 +464,10 @@ TEST_F(MainThreadEventQueueTest, NonBlockingTouch) {
             handled_tasks_.at(1)->taskAsEvent()->Event().GetType());
   last_touch_event = static_cast<const WebTouchEvent*>(
       handled_tasks_.at(1)->taskAsEvent()->EventPointer());
-  kEvents[1].dispatch_type =
+  non_blocking_touch = kEvents[1];
+  non_blocking_touch.dispatch_type =
       WebInputEvent::DispatchType::kListenersNonBlockingPassive;
-  EXPECT_TRUE(Equal(kEvents[1], *last_touch_event));
+  EXPECT_TRUE(Equal(non_blocking_touch, *last_touch_event));
 
   {
     EXPECT_EQ(1u, handled_tasks_[1]->taskAsEvent()->CoalescedEventSize());
@@ -493,8 +496,6 @@ TEST_F(MainThreadEventQueueTest, NonBlockingTouch) {
         handled_tasks_[2]->taskAsEvent()->GetCoalescedEventsPointers();
     const WebTouchEvent* coalesced_touch_event0 =
         static_cast<const WebTouchEvent*>(coalesced_events[0].get());
-    coalesced_event.dispatch_type =
-        WebInputEvent::DispatchType::kListenersNonBlockingPassive;
     EXPECT_TRUE(Equal(coalesced_event, *coalesced_touch_event0));
 
     coalesced_event = kEvents[3];
@@ -1491,6 +1492,105 @@ TEST_F(MainThreadEventQueueTest, UnbufferedDispatchMouseEvent) {
   RunPendingTasksWithSimulatedRaf();
   EXPECT_FALSE(needs_low_latency_until_pointer_up());
   EXPECT_FALSE(needs_main_frame_);
+}
+
+// This test verifies that the events marked with kRelativeMotionEvent modifier
+// are not coalesced with other events. During pointer lock,
+// kRelativeMotionEvent is sent to the Renderer only to update the new screen
+// position. Events of this kind shouldn't be dispatched or coalesced.
+TEST_F(MainThreadEventQueueTest, PointerEventsWithRelativeMotionCoalescing) {
+  WebMouseEvent mouse_move = SyntheticWebMouseEventBuilder::Build(
+      WebInputEvent::Type::kMouseMove, 10, 10, 0);
+
+  EXPECT_FALSE(main_task_runner_->HasPendingTask());
+  EXPECT_EQ(0u, event_queue().size());
+
+  // Non blocking events are not reported to the scheduler.
+  EXPECT_CALL(thread_scheduler_,
+              DidHandleInputEventOnMainThread(testing::_, testing::_))
+      .Times(0);
+
+  queue_->HasPointerRawUpdateEventHandlers(true);
+
+  // Inject two mouse move events. For each event injected, there will be two
+  // events in the queue. One for kPointerRawUpdate and another kMouseMove
+  // event.
+  HandleEvent(mouse_move, blink::mojom::InputEventResultState::kSetNonBlocking);
+  EXPECT_EQ(2u, event_queue().size());
+  // When another event of the same kind is injected, it is coalesced with the
+  // previous event, hence queue size doesn't change.
+  HandleEvent(mouse_move, blink::mojom::InputEventResultState::kSetNonBlocking);
+  EXPECT_EQ(2u, event_queue().size());
+
+  // Inject a kRelativeMotionEvent, which cannot be coalesced. Thus, the queue
+  // size should increase.
+  WebMouseEvent fake_mouse_move = SyntheticWebMouseEventBuilder::Build(
+      WebInputEvent::Type::kMouseMove, 10, 10,
+      blink::WebInputEvent::Modifiers::kRelativeMotionEvent);
+  HandleEvent(fake_mouse_move,
+              blink::mojom::InputEventResultState::kSetNonBlocking);
+  EXPECT_EQ(4u, event_queue().size());
+
+  // Lastly inject another mouse move event. Since it cannot be coalesced with
+  // previous event, which is a kRelativeMotionEvent, expect the queue size to
+  // increase again.
+  HandleEvent(mouse_move, blink::mojom::InputEventResultState::kSetNonBlocking);
+  EXPECT_EQ(6u, event_queue().size());
+
+  RunPendingTasksWithSimulatedRaf();
+  EXPECT_EQ(0u, event_queue().size());
+  EXPECT_FALSE(needs_main_frame_);
+  EXPECT_FALSE(main_task_runner_->HasPendingTask());
+
+  // For the 4 events injected, verify that the queue size should be 6, that is
+  // 3 kPointerRawUpdate events and 3 kMouseMove events.
+  EXPECT_EQ(6u, handled_tasks_.size());
+  {
+    // The first event should have a |CoalescedEventSize| of 2, since two events
+    // of the same kind are coalesced.
+    EXPECT_EQ(WebInputEvent::Type::kPointerRawUpdate,
+              handled_tasks_.at(0)->taskAsEvent()->Event().GetType());
+    EXPECT_EQ(2u, handled_tasks_.at(0)->taskAsEvent()->CoalescedEventSize());
+  }
+  {
+    // The second event is a kRelativeMotionEvent, it cannot be coalesced, so
+    // the |CoalescedEventSize| should be 1.
+    EXPECT_EQ(WebInputEvent::Type::kPointerRawUpdate,
+              handled_tasks_.at(1)->taskAsEvent()->Event().GetType());
+    EXPECT_EQ(1u, handled_tasks_.at(1)->taskAsEvent()->CoalescedEventSize());
+    EXPECT_EQ(blink::WebInputEvent::Modifiers::kRelativeMotionEvent,
+              handled_tasks_.at(1)->taskAsEvent()->Event().GetModifiers());
+  }
+  {
+    // The third event cannot be coalesced with the previous kPointerRawUpdate,
+    // so |CoalescedEventSize| should be 1.
+    EXPECT_EQ(WebInputEvent::Type::kPointerRawUpdate,
+              handled_tasks_.at(2)->taskAsEvent()->Event().GetType());
+    EXPECT_EQ(1u, handled_tasks_.at(2)->taskAsEvent()->CoalescedEventSize());
+  }
+  {
+    // The fourth event should have a |CoalescedEventSize| of 2, since two
+    // events of the same kind are coalesced.
+    EXPECT_EQ(WebInputEvent::Type::kMouseMove,
+              handled_tasks_.at(3)->taskAsEvent()->Event().GetType());
+    EXPECT_EQ(2u, handled_tasks_.at(3)->taskAsEvent()->CoalescedEventSize());
+  }
+  {
+    // The fifth event is a kRelativeMotionEvent, it cannot be coalesced, so
+    // the |CoalescedEventSize| should be 1.
+    EXPECT_EQ(WebInputEvent::Type::kMouseMove,
+              handled_tasks_.at(4)->taskAsEvent()->Event().GetType());
+    EXPECT_EQ(1u, handled_tasks_.at(4)->taskAsEvent()->CoalescedEventSize());
+    EXPECT_EQ(blink::WebInputEvent::Modifiers::kRelativeMotionEvent,
+              handled_tasks_.at(4)->taskAsEvent()->Event().GetModifiers());
+  }
+  {
+    // The sixth event cannot be coalesced with the previous kMouseMove,
+    // so |CoalescedEventSize| should be 1.
+    EXPECT_EQ(WebInputEvent::Type::kMouseMove,
+              handled_tasks_.at(5)->taskAsEvent()->Event().GetType());
+    EXPECT_EQ(1u, handled_tasks_.at(5)->taskAsEvent()->CoalescedEventSize());
+  }
 }
 
 }  // namespace content

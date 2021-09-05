@@ -4,9 +4,15 @@
 
 #include "base/allocator/partition_allocator/partition_page.h"
 
+#include "base/allocator/partition_allocator/address_pool_manager.h"
+#include "base/allocator/partition_allocator/partition_alloc.h"
+#include "base/allocator/partition_allocator/partition_alloc_check.h"
+#include "base/allocator/partition_allocator/partition_alloc_features.h"
 #include "base/allocator/partition_allocator/partition_direct_map_extent.h"
-#include "base/allocator/partition_allocator/partition_root_base.h"
 #include "base/check.h"
+#include "base/feature_list.h"
+#include "base/notreached.h"
+#include "build/build_config.h"
 
 namespace base {
 namespace internal {
@@ -16,21 +22,20 @@ namespace {
 template <bool thread_safe>
 ALWAYS_INLINE DeferredUnmap
 PartitionDirectUnmap(PartitionPage<thread_safe>* page) {
-  PartitionRootBase<thread_safe>* root =
-      PartitionRootBase<thread_safe>::FromPage(page);
+  PartitionRoot<thread_safe>* root = PartitionRoot<thread_safe>::FromPage(page);
   const PartitionDirectMapExtent<thread_safe>* extent =
       PartitionDirectMapExtent<thread_safe>::FromPage(page);
   size_t unmap_size = extent->map_size;
 
   // Maintain the doubly-linked list of all direct mappings.
   if (extent->prev_extent) {
-    DCHECK(extent->prev_extent->next_extent == extent);
+    PA_DCHECK(extent->prev_extent->next_extent == extent);
     extent->prev_extent->next_extent = extent->next_extent;
   } else {
     root->direct_map_list = extent->next_extent;
   }
   if (extent->next_extent) {
-    DCHECK(extent->next_extent->prev_extent == extent);
+    PA_DCHECK(extent->next_extent->prev_extent == extent);
     extent->next_extent->prev_extent = extent->prev_extent;
   }
 
@@ -40,10 +45,10 @@ PartitionDirectUnmap(PartitionPage<thread_safe>* page) {
 
   size_t uncommitted_page_size = page->bucket->slot_size + kSystemPageSize;
   root->DecreaseCommittedPages(uncommitted_page_size);
-  DCHECK(root->total_size_of_direct_mapped_pages >= uncommitted_page_size);
+  PA_DCHECK(root->total_size_of_direct_mapped_pages >= uncommitted_page_size);
   root->total_size_of_direct_mapped_pages -= uncommitted_page_size;
 
-  DCHECK(!(unmap_size & kPageAllocationGranularityOffsetMask));
+  PA_DCHECK(!(unmap_size & kPageAllocationGranularityOffsetMask));
 
   char* ptr =
       reinterpret_cast<char*>(PartitionPage<thread_safe>::ToPointer(page));
@@ -56,16 +61,16 @@ PartitionDirectUnmap(PartitionPage<thread_safe>* page) {
 template <bool thread_safe>
 ALWAYS_INLINE void PartitionRegisterEmptyPage(
     PartitionPage<thread_safe>* page) {
-  DCHECK(page->is_empty());
-  PartitionRootBase<thread_safe>* root =
-      PartitionRootBase<thread_safe>::FromPage(page);
+  PA_DCHECK(page->is_empty());
+  PartitionRoot<thread_safe>* root = PartitionRoot<thread_safe>::FromPage(page);
   root->lock_.AssertAcquired();
 
   // If the page is already registered as empty, give it another life.
   if (page->empty_cache_index != -1) {
-    DCHECK(page->empty_cache_index >= 0);
-    DCHECK(static_cast<unsigned>(page->empty_cache_index) < kMaxFreeableSpans);
-    DCHECK(root->global_empty_page_ring[page->empty_cache_index] == page);
+    PA_DCHECK(page->empty_cache_index >= 0);
+    PA_DCHECK(static_cast<unsigned>(page->empty_cache_index) <
+              kMaxFreeableSpans);
+    PA_DCHECK(root->global_empty_page_ring[page->empty_cache_index] == page);
     root->global_empty_page_ring[page->empty_cache_index] = nullptr;
   }
 
@@ -103,7 +108,7 @@ PartitionPage<thread_safe>* PartitionPage<thread_safe>::get_sentinel_page() {
 
 template <bool thread_safe>
 DeferredUnmap PartitionPage<thread_safe>::FreeSlowPath() {
-  DCHECK(this != get_sentinel_page());
+  PA_DCHECK(this != get_sentinel_page());
   if (LIKELY(num_allocated_slots == 0)) {
     // Page became fully unused.
     if (UNLIKELY(bucket->is_direct_mapped())) {
@@ -113,27 +118,27 @@ DeferredUnmap PartitionPage<thread_safe>::FreeSlowPath() {
     // the empty list as a force towards defragmentation.
     if (LIKELY(this == bucket->active_pages_head))
       bucket->SetNewActivePage();
-    DCHECK(bucket->active_pages_head != this);
+    PA_DCHECK(bucket->active_pages_head != this);
 
     set_raw_size(0);
-    DCHECK(!get_raw_size());
+    PA_DCHECK(!get_raw_size());
 
     PartitionRegisterEmptyPage(this);
   } else {
-    DCHECK(!bucket->is_direct_mapped());
+    PA_DCHECK(!bucket->is_direct_mapped());
     // Ensure that the page is full. That's the only valid case if we
     // arrive here.
-    DCHECK(num_allocated_slots < 0);
+    PA_DCHECK(num_allocated_slots < 0);
     // A transition of num_allocated_slots from 0 to -1 is not legal, and
     // likely indicates a double-free.
-    CHECK(num_allocated_slots != -1);
+    PA_CHECK(num_allocated_slots != -1);
     num_allocated_slots = -num_allocated_slots - 2;
-    DCHECK(num_allocated_slots == bucket->get_slots_per_span() - 1);
+    PA_DCHECK(num_allocated_slots == bucket->get_slots_per_span() - 1);
     // Fully used page became partially used. It must be put back on the
     // non-full page list. Also make it the current page to increase the
     // chances of it being filled up again. The old current page will be
     // the next page.
-    DCHECK(!next_page);
+    PA_DCHECK(!next_page);
     if (LIKELY(bucket->active_pages_head != get_sentinel_page()))
       next_page = bucket->active_pages_head;
     bucket->active_pages_head = this;
@@ -147,11 +152,10 @@ DeferredUnmap PartitionPage<thread_safe>::FreeSlowPath() {
 }
 
 template <bool thread_safe>
-void PartitionPage<thread_safe>::Decommit(
-    PartitionRootBase<thread_safe>* root) {
+void PartitionPage<thread_safe>::Decommit(PartitionRoot<thread_safe>* root) {
   root->lock_.AssertAcquired();
-  DCHECK(is_empty());
-  DCHECK(!bucket->is_direct_mapped());
+  PA_DCHECK(is_empty());
+  PA_DCHECK(!bucket->is_direct_mapped());
   void* addr = PartitionPage::ToPointer(this);
   root->DecommitSystemPages(addr, bucket->get_bytes_per_span());
 
@@ -163,23 +167,33 @@ void PartitionPage<thread_safe>::Decommit(
   // 32 bytes in size.
   freelist_head = nullptr;
   num_unprovisioned_slots = 0;
-  DCHECK(is_decommitted());
+  PA_DCHECK(is_decommitted());
 }
 
 template <bool thread_safe>
 void PartitionPage<thread_safe>::DecommitIfPossible(
-    PartitionRootBase<thread_safe>* root) {
+    PartitionRoot<thread_safe>* root) {
   root->lock_.AssertAcquired();
-  DCHECK(empty_cache_index >= 0);
-  DCHECK(static_cast<unsigned>(empty_cache_index) < kMaxFreeableSpans);
-  DCHECK(this == root->global_empty_page_ring[empty_cache_index]);
+  PA_DCHECK(empty_cache_index >= 0);
+  PA_DCHECK(static_cast<unsigned>(empty_cache_index) < kMaxFreeableSpans);
+  PA_DCHECK(this == root->global_empty_page_ring[empty_cache_index]);
   empty_cache_index = -1;
   if (is_empty())
     Decommit(root);
 }
 
 void DeferredUnmap::Unmap() {
-  FreePages(ptr, size);
+  PA_DCHECK(ptr && size > 0);
+  if (IsManagedByPartitionAlloc(ptr)) {
+#if defined(ARCH_CPU_64_BITS) && !defined(OS_NACL)
+    internal::AddressPoolManager::GetInstance()->Free(
+        internal::GetDirectMapPool(), ptr, size);
+#else
+    NOTREACHED();
+#endif  // defined(ARCH_CPU_64_BITS) && !defined(OS_NACL)
+  } else {
+    FreePages(ptr, size);
+  }
 }
 
 template struct PartitionPage<ThreadSafe>;

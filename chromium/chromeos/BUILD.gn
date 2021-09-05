@@ -92,6 +92,8 @@ component("chromeos") {
 
   if (is_printing_ppd_provider_v3) {
     sources += [
+      "printing/ppd_metadata_parser.cc",
+      "printing/ppd_metadata_parser.h",
       "printing/ppd_provider_v3.cc",
       "printing/printer_config_cache.cc",
       "printing/printer_config_cache.h",
@@ -214,7 +216,12 @@ test("chromeos_unittests") {
   ]
 
   if (is_printing_ppd_provider_v3) {
-    sources += [ "printing/printer_config_cache_unittest.cc" ]
+    sources += [
+      "printing/fake_printer_config_cache.cc",
+      "printing/fake_printer_config_cache.h",
+      "printing/ppd_metadata_parser_unittest.cc",
+      "printing/printer_config_cache_unittest.cc",
+    ]
   } else {
     sources += [ "printing/ppd_provider_unittest.cc" ]
   }
@@ -271,6 +278,9 @@ if (is_chromeos_device) {
   tast_test("chrome_all_tast_tests") {
     # To disable a specific test, add it the following list and cite a bug.
     tast_disabled_tests = [
+      # crbug.com/1097630
+      "security.OpenFDs",
+
       # crbug.com/1051059
       "security.SELinuxProcessesARC",
 
@@ -287,6 +297,9 @@ if (is_chromeos_device) {
 
       # crbug.com/1073084
       "crostini.CopyPaste.wayland_to_x11_artifact",
+
+      # crbug.com/1098810
+      "security.SELinuxFilesSystem",
     ]
   }
 

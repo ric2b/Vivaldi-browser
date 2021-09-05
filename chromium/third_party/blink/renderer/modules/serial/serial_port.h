@@ -29,6 +29,7 @@ class ScriptState;
 class Serial;
 class SerialOptions;
 class SerialOutputSignals;
+class SerialPortInfo;
 class SerialPortUnderlyingSink;
 class SerialPortUnderlyingSource;
 class WritableStream;
@@ -44,6 +45,7 @@ class SerialPort final : public ScriptWrappable,
   ~SerialPort() override;
 
   // Web-exposed functions
+  SerialPortInfo* getInfo();
   ScriptPromise open(ScriptState*,
                      const SerialOptions* options,
                      ExceptionState&);
@@ -63,7 +65,7 @@ class SerialPort final : public ScriptWrappable,
   void AbortClose();
 
   void ContextDestroyed();
-  void Trace(Visitor*) override;
+  void Trace(Visitor*) const override;
 
   // ActiveScriptWrappable
   ExecutionContext* GetExecutionContext() const;
@@ -77,14 +79,8 @@ class SerialPort final : public ScriptWrappable,
   bool CreateDataPipe(mojo::ScopedDataPipeProducerHandle* producer,
                       mojo::ScopedDataPipeConsumerHandle* consumer);
   void OnConnectionError();
-  void OnOpen(mojo::ScopedDataPipeConsumerHandle,
-              mojo::ScopedDataPipeProducerHandle,
-              mojo::PendingReceiver<device::mojom::blink::SerialPortClient>,
+  void OnOpen(mojo::PendingReceiver<device::mojom::blink::SerialPortClient>,
               bool success);
-  void InitializeReadableStream(ScriptState*,
-                                mojo::ScopedDataPipeConsumerHandle);
-  void InitializeWritableStream(ScriptState*,
-                                mojo::ScopedDataPipeProducerHandle);
   void OnGetSignals(ScriptPromiseResolver*,
                     device::mojom::blink::SerialPortControlSignalsPtr);
   void OnSetSignals(ScriptPromiseResolver*, bool success);

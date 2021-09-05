@@ -377,10 +377,18 @@ class VIEWS_EXPORT Textfield : public View,
   ukm::SourceId GetClientSourceForMetrics() const override;
   bool ShouldDoLearning() override;
 
+  // Set whether the text should be used to improve typing suggestions.
+  void SetShouldDoLearning(bool value) { should_do_learning_ = value; }
+
 #if defined(OS_WIN) || defined(OS_CHROMEOS)
   bool SetCompositionFromExistingText(
       const gfx::Range& range,
       const std::vector<ui::ImeTextSpan>& ui_ime_text_spans) override;
+#endif
+
+#if defined(OS_CHROMEOS)
+  bool SetAutocorrectRange(const base::string16& autocorrect_text,
+                           const gfx::Range& range) override;
 #endif
 
 #if defined(OS_WIN)
@@ -651,6 +659,9 @@ class VIEWS_EXPORT Textfield : public View,
   // True if this textfield should use a focus ring to indicate focus.
   bool use_focus_ring_ = true;
 
+  // Whether the text should be used to improve typing suggestions.
+  base::Optional<bool> should_do_learning_;
+
   // Context menu related members.
   std::unique_ptr<ui::SimpleMenuModel> context_menu_contents_;
   std::unique_ptr<ViewsTextServicesContextMenu> text_services_context_menu_;
@@ -669,7 +680,7 @@ class VIEWS_EXPORT Textfield : public View,
       ui::TextInputClient::FOCUS_REASON_NONE;
 
   // The focus ring for this TextField.
-  std::unique_ptr<FocusRing> focus_ring_;
+  FocusRing* focus_ring_ = nullptr;
 
   // The password char reveal index, for testing only.
   int password_char_reveal_index_ = -1;

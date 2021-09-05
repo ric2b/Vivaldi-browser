@@ -40,7 +40,6 @@ class AppCacheQuotaClient : public storage::QuotaClient {
   explicit AppCacheQuotaClient(base::WeakPtr<AppCacheServiceImpl> service);
 
   // QuotaClient method overrides
-  storage::QuotaClientType type() const override;
   void OnQuotaManagerDestroyed() override;
   void GetOriginUsage(const url::Origin& origin,
                       blink::mojom::StorageType type,
@@ -55,7 +54,6 @@ class AppCacheQuotaClient : public storage::QuotaClient {
                         DeletionCallback callback) override;
   void PerformStorageCleanup(blink::mojom::StorageType type,
                              base::OnceClosure callback) override;
-  bool DoesSupport(blink::mojom::StorageType type) const override;
 
  private:
   friend class content::AppCacheQuotaClientTest;
@@ -65,8 +63,7 @@ class AppCacheQuotaClient : public storage::QuotaClient {
   ~AppCacheQuotaClient() override;
 
   void DidDeleteAppCachesForOrigin(int rv);
-  void GetOriginsHelper(blink::mojom::StorageType type,
-                        const std::string& opt_host,
+  void GetOriginsHelper(const std::string& opt_host,
                         GetOriginsCallback callback);
   void ProcessPendingRequests();
   void DeletePendingRequests();
@@ -77,7 +74,7 @@ class AppCacheQuotaClient : public storage::QuotaClient {
   CONTENT_EXPORT void NotifyAppCacheDestroyed();
 
   // Prior to appcache service being ready, we have to queue
-  // up reqeusts and defer acting on them until we're ready.
+  // up requests and defer acting on them until we're ready.
   RequestQueue pending_batch_requests_;
   RequestQueue pending_serial_requests_;
 

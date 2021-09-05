@@ -24,6 +24,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/metrics/user_action_tester.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -1671,10 +1672,6 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, ArcBrowserWindowFeaturesSetCorrectly) {
 
   EXPECT_TRUE(new_browser->SupportsWindowFeature(
       Browser::WindowFeature::FEATURE_TOOLBAR));
-  EXPECT_TRUE(new_browser->SupportsWindowFeature(
-      Browser::WindowFeature::FEATURE_INFOBAR));
-  EXPECT_TRUE(new_browser->SupportsWindowFeature(
-      Browser::WindowFeature::FEATURE_DOWNLOADSHELF));
 }
 #endif
 
@@ -2738,8 +2735,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, DialogsDropFullscreen) {
       static_cast<web_modal::WebContentsModalDialogManagerDelegate*>(browser());
 
   // Simulate the tab requesting fullscreen.
-  browser_as_wc_delegate->EnterFullscreenModeForTab(
-      tab, GURL(), blink::mojom::FullscreenOptions());
+  browser_as_wc_delegate->EnterFullscreenModeForTab(tab->GetMainFrame(), {});
   EXPECT_TRUE(browser_as_wc_delegate->IsFullscreenForTabOrPending(tab));
 
   // The tab gets a modal dialog.
@@ -2765,8 +2761,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, DialogsAllowedInFullscreenWithinTabMode) {
 
   // Simulate a screen-captured tab requesting fullscreen.
   tab->IncrementCapturerCount(gfx::Size(1280, 720), /* stay_hidden */ false);
-  browser_as_wc_delegate->EnterFullscreenModeForTab(
-      tab, GURL(), blink::mojom::FullscreenOptions());
+  browser_as_wc_delegate->EnterFullscreenModeForTab(tab->GetMainFrame(), {});
   EXPECT_TRUE(browser_as_wc_delegate->IsFullscreenForTabOrPending(tab));
 
   // The tab gets a modal dialog.
@@ -2780,50 +2775,68 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, DialogsAllowedInFullscreenWithinTabMode) {
 }
 
 IN_PROC_BROWSER_TEST_F(BrowserTest, CountIncognitoWindows) {
-  DCHECK_EQ(0, BrowserList::GetIncognitoSessionsActiveForProfile(
+  DCHECK_EQ(0, BrowserList::GetOffTheRecordBrowsersActiveForProfile(
                    browser()->profile()));
 
   // Create an incognito browser and check the count.
   Browser* browser1 = CreateIncognitoBrowser(browser()->profile());
-  DCHECK_EQ(1, BrowserList::GetIncognitoSessionsActiveForProfile(
+  DCHECK_EQ(1, BrowserList::GetOffTheRecordBrowsersActiveForProfile(
                    browser()->profile()));
 
   // Create another incognito browser and check the count.
   Browser* browser2 = CreateIncognitoBrowser(browser()->profile());
-  DCHECK_EQ(2, BrowserList::GetIncognitoSessionsActiveForProfile(
+  DCHECK_EQ(2, BrowserList::GetOffTheRecordBrowsersActiveForProfile(
                    browser()->profile()));
 
   // Open a docked DevTool window and count.
   DevToolsWindow* devtools_window =
       DevToolsWindowTesting::OpenDevToolsWindowSync(browser1, true);
-  DCHECK_EQ(2, BrowserList::GetIncognitoSessionsActiveForProfile(
+  DCHECK_EQ(2, BrowserList::GetOffTheRecordBrowsersActiveForProfile(
                    browser()->profile()));
   DevToolsWindowTesting::CloseDevToolsWindowSync(devtools_window);
 
   // Open a detached DevTool window and count.
   devtools_window =
       DevToolsWindowTesting::OpenDevToolsWindowSync(browser1, false);
-  DCHECK_EQ(2, BrowserList::GetIncognitoSessionsActiveForProfile(
+  DCHECK_EQ(2, BrowserList::GetOffTheRecordBrowsersActiveForProfile(
                    browser()->profile()));
   DevToolsWindowTesting::CloseDevToolsWindowSync(devtools_window);
 
   // Close one browser and count.
   CloseBrowserSynchronously(browser2);
-  DCHECK_EQ(1, BrowserList::GetIncognitoSessionsActiveForProfile(
+  DCHECK_EQ(1, BrowserList::GetOffTheRecordBrowsersActiveForProfile(
                    browser()->profile()));
 
   // Close another browser and count.
   CloseBrowserSynchronously(browser1);
-  DCHECK_EQ(0, BrowserList::GetIncognitoSessionsActiveForProfile(
+  DCHECK_EQ(0, BrowserList::GetOffTheRecordBrowsersActiveForProfile(
                    browser()->profile()));
 }
 
-IN_PROC_BROWSER_TEST_F(BrowserTest, IsIncognitoSessionInUse) {
-  EXPECT_FALSE(BrowserList::IsIncognitoSessionInUse(browser()->profile()));
+IN_PROC_BROWSER_TEST_F(BrowserTest, IsOffTheRecordBrowserInUse) {
+  EXPECT_FALSE(BrowserList::IsOffTheRecordBrowserInUse(browser()->profile()));
 
   Browser* incognito_browser = CreateIncognitoBrowser(browser()->profile());
-  EXPECT_TRUE(BrowserList::IsIncognitoSessionInUse(browser()->profile()));
+  EXPECT_TRUE(BrowserList::IsOffTheRecordBrowserInUse(browser()->profile()));
 
   CloseBrowserSynchronously(incognito_browser);
-  EXPECT_FALSE(BrowserList::IsIncognitoSessionInUse(browser()->profile()));
+  EXPECT_FALSE(BrowserList::IsOffTheRecordBrowserInUse(browser()->profile()));
+}
+
+IN_PROC_BROWSER_TEST_F(BrowserTest, TestActiveTabChangedUserAction) {
+  base::UserActionTester user_action_tester;
+  chrome::NewTab(browser());
+  EXPECT_EQ(user_action_tester.GetActionCount("ActiveTabChanged"), 1);
+}
+
+IN_PROC_BROWSER_TEST_F(BrowserTest, TestNavEntryCommittedUserAction) {
+  base::UserActionTester user_action_tester;
+  ui_test_utils::NavigateToURL(browser(), GURL("chrome://newtab"));
+  EXPECT_EQ(user_action_tester.GetActionCount("NavEntryCommitted"), 1);
+}
+
+IN_PROC_BROWSER_TEST_F(BrowserTest, TestActiveBrowserChangedUserAction) {
+  base::UserActionTester user_action_tester;
+  BrowserList::SetLastActive(browser());
+  EXPECT_EQ(user_action_tester.GetActionCount("ActiveBrowserChanged"), 1);
 }

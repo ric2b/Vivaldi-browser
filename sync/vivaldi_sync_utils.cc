@@ -7,7 +7,6 @@
 #include "base/logging.h"
 #include "components/sync/base/hash_util.h"
 #include "components/sync/base/model_type.h"
-#include "components/sync/engine_impl/syncer_util.h"
 #include "components/sync/protocol/proto_enum_conversions.h"
 #include "components/sync/protocol/sync.pb.h"
 #include "components/sync/syncable/base_transaction.h"
@@ -43,28 +42,6 @@ std::string GetUniqueNotesTagFromUpdate(const sync_pb::SyncEntity& update) {
 
   return GenerateSyncableNotesHash(update.originator_cache_guid(),
                                    update.originator_client_item_id());
-}
-
-void UpdateNotesPositioning(const sync_pb::SyncEntity& update,
-                            syncable::ModelNeutralMutableEntry* local_entry) {
-  // Update our unique notes tag.  In many cases this will be identical to
-  // the tag we already have.  However, clients that have recently upgraded to
-  // versions that support unique positions will have incorrect tags.  See the
-  // v86 migration logic in directory_backing_store.cc for more information.
-  //
-  // Both the old and new values are unique to this element.  Applying this
-  // update will not risk the creation of conflicting unique tags.
-  std::string notes_tag = GetUniqueNotesTagFromUpdate(update);
-  if (UniquePosition::IsValidSuffix(notes_tag)) {
-    local_entry->PutUniqueNotesTag(notes_tag);
-  }
-
-  // Update our position.
-  UniquePosition update_pos =
-      GetUpdatePosition(update, local_entry->GetUniqueNotesTag());
-  if (update_pos.IsValid()) {
-    local_entry->PutServerUniquePosition(update_pos);
-  }
 }
 
 // ProtoEnumToString

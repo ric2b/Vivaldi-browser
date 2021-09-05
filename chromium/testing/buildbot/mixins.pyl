@@ -170,7 +170,7 @@
   'chrome-swarming-pool': {
     'swarming': {
       'dimensions': {
-        'pool': 'chrome.tests.template',
+        'pool': 'chrome.tests',
       },
     },
   },
@@ -184,7 +184,7 @@
       'dimensions': {
         'kvm': '1',
         'os': 'Ubuntu-16.04',
-        'pool': 'chromium.tests.cros.vm.template',
+        'pool': 'chromium.tests.cros.vm',
       },
     },
   },
@@ -193,16 +193,7 @@
       'dimensions': {
         'os': 'ChromeOS',
         'device_type': 'kevin',
-        'pool': 'chrome-cros-dut.template',
-      },
-    },
-  },
-  # TODO(crbug.com/812428): Remove this mixin after all test pools have migrated
-  # to using templates.
-  'chromium-template-pool': {
-    'swarming': {
-      'dimensions': {
-        'pool': 'chromium.tests.template',
+        'pool': 'chrome-cros-dut',
       },
     },
   },
@@ -259,12 +250,17 @@
       ],
     },
   },
+  'fuchsia_runner_logs': {
+    '$mixin_append': {
+      'args': [
+        '--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs',
+      ],
+    },
+  },
   'gpu_pool': {
     'swarming': {
       'dimensions': {
-         # TODO(crbug.com/812428): Remove the ".template" bit once the old pool
-         # has been migrated to using templates.
-        'pool': 'chromium.tests.gpu.template',
+        'pool': 'chromium.tests.gpu',
       },
     },
   },
@@ -334,7 +330,7 @@
       'dimensions': {
         'gpu': '1002:6613',
         'os': 'Ubuntu',
-        'pool': 'chromium.tests.gpu.template',
+        'pool': 'chromium.tests.gpu',
       },
     },
   },
@@ -343,7 +339,7 @@
       'dimensions': {
         'gpu': '8086:1912',
         'os': 'Ubuntu',
-        'pool': 'chromium.tests.gpu.template',
+        'pool': 'chromium.tests.gpu',
       }
     }
   },
@@ -353,7 +349,7 @@
       'dimensions': {
         'gpu': '8086:5912-19.0.2',
         'os': 'Ubuntu-19.04',
-        'pool': 'chromium.tests.gpu.template',
+        'pool': 'chromium.tests.gpu',
       },
     },
   },
@@ -362,7 +358,7 @@
       'dimensions': {
         'gpu': '8086:5912-19.0.2',
         'os': 'Ubuntu-19.04',
-        'pool': 'chromium.tests.gpu.template',
+        'pool': 'chromium.tests.gpu',
       }
     }
   },
@@ -371,7 +367,7 @@
       'dimensions': {
         'gpu': '8086:3e92-19.0.8',
         'os': 'Ubuntu-19.04',
-        'pool': 'chromium.tests.gpu.template',
+        'pool': 'chromium.tests.gpu',
       },
       # Same long expiration as win10_intel_uhd_630_stable due to capacity.
       # TODO(https://crbug.com/986939): Remove this when more devices
@@ -384,7 +380,7 @@
       'dimensions': {
         'gpu': '10de:1cb3-418.56',
         'os': 'Ubuntu-19.04',
-        'pool': 'chromium.tests.gpu.template',
+        'pool': 'chromium.tests.gpu',
       },
     },
   },
@@ -393,7 +389,7 @@
       'dimensions': {
         'gpu': '10de:1cb3-418.56',
         'os': 'Ubuntu-19.04',
-        'pool': 'chromium.tests.gpu.template',
+        'pool': 'chromium.tests.gpu',
       }
     }
   },
@@ -466,6 +462,19 @@
       },
     },
   },
+  'mac_mini_7,1': {
+    'swarming': {
+      # We use explicit 'dimension_sets' instead of 'dimensions' since this is
+      # used in conjunction with 'mac_pro_11,5' to trigger tests on multiple
+      # configurations.
+      'dimension_sets': [
+        {
+          'gpu': '8086:0a2e',
+          'os': 'Mac',
+        },
+      ],
+    },
+  },
   'mac_mini_intel_gpu_experimental': {
     'swarming': {
       'dimensions': {
@@ -482,12 +491,27 @@
       },
     },
   },
+  'mac_pro_11,5': {
+    'swarming': {
+      # We use explicit 'dimension_sets' instead of 'dimensions' since this is
+      # used in conjunction with 'mac_mini_7,1' to trigger tests on multiple
+      # configurations.
+      'dimension_sets': [
+        {
+          'gpu': '1002:6821',
+          'hidpi': '1',
+          'os': 'Mac',
+          'pool': 'chromium.tests.gpu',
+        }
+      ],
+    },
+  },
   'mac_pro_amd_gpu': {
     'swarming': {
       'dimensions': {
         'gpu': '1002:679e',
         'os': 'Mac-10.12.6',
-        'pool': 'chromium.tests.gpu.template',
+        'pool': 'chromium.tests.gpu',
       },
     },
   },
@@ -498,7 +522,7 @@
         'gpu': '1002:6821',
         'hidpi': '1',
         'os': 'Mac-10.13.6',
-        'pool': 'chromium.tests.gpu.template',
+        'pool': 'chromium.tests.gpu',
       },
     },
   },
@@ -508,7 +532,7 @@
         'gpu': '1002:6821',
         'hidpi': '1',
         'os': 'Mac-10.14.6',
-        'pool': 'chromium.tests.gpu.template',
+        'pool': 'chromium.tests.gpu',
       },
     },
   },
@@ -519,7 +543,7 @@
         'gpu': '10de:0fe9',
         'hidpi': '1',
         'os': 'Mac-10.14.6',
-        'pool': 'chromium.tests.gpu.template',
+        'pool': 'chromium.tests.gpu',
       },
     },
   },
@@ -529,7 +553,7 @@
         'gpu': '10de:0fe9',
         'hidpi': '1',
         'os': 'Mac-10.14.6',
-        'pool': 'chromium.tests.gpu.template',
+        'pool': 'chromium.tests.gpu',
       },
     },
   },
@@ -561,8 +585,8 @@
       'dimensions': {
         'device_os': None,
         'device_type': None,
-        'pool': 'chromium.tests.avd.template',
-        'ssd': '1',
+        'pool': 'chromium.tests.avd',
+        'machine_type': 'n1-standard-8',
       },
       'named_caches': [
         {
@@ -623,8 +647,8 @@
       'dimensions': {
         'device_os': None,
         'device_type': None,
-        'pool': 'chromium.tests.avd.template',
-        'ssd': '1',
+        'machine_type': 'n1-standard-8',
+        'pool': 'chromium.tests.avd',
       },
       'named_caches': [
         {
@@ -659,6 +683,11 @@
     '$mixin_append': {
       'args': [
         '--git-revision=${got_revision}',
+        # BREAK GLASS IN CASE OF EMERGENCY
+        # Uncommenting this argument will bypass all interactions with Skia
+        # Gold in any tests that use it. This is meant as a temporary
+        # emergency stop in case of a Gold outage that's affecting the bots.
+        # '--bypass-skia-gold-functionality',
       ],
       'precommit_args': [
         '--gerrit-issue=${patch_issue}',
@@ -701,12 +730,27 @@
       },
     },
   },
+  # TODO(crbug.com/1087153): Remove this once the fleet is upgraded to 1909.
+  'win10_1803_intel_hd_630': {
+    'swarming': {
+      # We use explicit 'dimension_sets' instead of 'dimensions' since this is
+      # used in conjunction with 'win10_nvidia_quadro_p400_stable_dimension_set'
+      # to trigger tests on multiple configurations.
+      'dimension_sets': [
+        {
+          'gpu': '8086:5912-24.20.100.6286|8086:5912-26.20.100.8141',
+          'os': 'Windows-10-17134|Windows-10-18363',
+          'pool': 'chromium.tests.gpu',
+        },
+      ],
+    },
+  },
   'win10_amd_rx_550': {
     'swarming': {
       'dimensions': {
         'gpu': '1002:699f',
         'os': 'Windows-10',
-        'pool': 'chromium.tests.gpu.template',
+        'pool': 'chromium.tests.gpu',
       },
     },
   },
@@ -715,7 +759,7 @@
       'dimensions': {
         'gpu': '8086:5912-26.20.100.7870|8086:5912-26.20.100.8141|8086:3e92-26.20.100.8141',
         'os': 'Windows-10',
-        'pool': 'chromium.tests.gpu.experimental.template',
+        'pool': 'chromium.tests.gpu.experimental',
       },
     },
   },
@@ -724,7 +768,7 @@
       'dimensions': {
         'gpu': '8086:5912-24.20.100.6286|8086:5912-26.20.100.8141|8086:3e92-26.20.100.8141',
         'os': 'Windows-10',
-        'pool': 'chromium.tests.gpu.template',
+        'pool': 'chromium.tests.gpu',
       },
     },
   },
@@ -733,7 +777,7 @@
       'dimensions': {
         'gpu': '8086:3e92-24.20.100.6286',
         'os': 'Windows-10',
-        'pool': 'chromium.tests.gpu.template',
+        'pool': 'chromium.tests.gpu',
       },
       # ~50% of the WebGL2 conformance tests time out with the default
       # 1 hour expiration, but the last shard times out with a 3 hour
@@ -748,7 +792,7 @@
       'dimensions': {
         'gpu': '10de:2184',
         'os': 'Windows-10',
-        'pool': 'chromium.tests.gpu.template',
+        'pool': 'chromium.tests.gpu',
       },
     },
   },
@@ -757,17 +801,31 @@
       'dimensions': {
         'gpu': '10de:1cb3-26.21.14.3102',
         'os': 'Windows-10',
-        'pool': 'chromium.tests.gpu.template',
+        'pool': 'chromium.tests.gpu',
       },
     },
   },
   'win10_nvidia_quadro_p400_stable': {
     'swarming': {
       'dimensions': {
-        'gpu': '10de:1cb3-26.21.14.3102',
-        'os': 'Windows-10',
-        'pool': 'chromium.tests.gpu.template',
+        'gpu': '10de:1cb3-26.21.14.3102|10de:1cb3-27.21.14.5148',
+        'os': 'Windows-10|Windows-10-18363',
+        'pool': 'chromium.tests.gpu',
       },
+    },
+  },
+  # Version of win10_nvidia_quadro_p400_stable that uses 'dimension_sets'
+  # instead of 'dimensions' so it can be used to trigger tests on multiple
+  # configurations.
+  'win10_nvidia_quadro_p400_stable_dimension_set': {
+    'swarming': {
+      'dimension_sets': [
+        {
+          'gpu': '10de:1cb3-26.21.14.3102|10de:1cb3-27.21.14.5148',
+          'os': 'Windows-10|Windows-10-18363',
+          'pool': 'chromium.tests.gpu',
+        },
+      ],
     },
   },
   'win7': {
@@ -782,7 +840,7 @@
       'dimensions': {
         'gpu': '1002:6613',
         'os': 'Windows-2008ServerR2-SP1',
-        'pool': 'chromium.tests.gpu.template',
+        'pool': 'chromium.tests.gpu',
       },
     },
   },
@@ -791,7 +849,7 @@
       'dimensions': {
         'gpu': '10de:1cb3-24.21.14.1195',
         'os': 'Windows-2008ServerR2-SP1',
-        'pool': 'chromium.tests.gpu.template',
+        'pool': 'chromium.tests.gpu',
       },
     },
   },
@@ -827,6 +885,55 @@
       'named_caches': [
         {
           'name': 'xcode_ios_11e146',
+          'path': 'Xcode.app',
+        },
+      ],
+    },
+  },
+  'xcode_11e608c': {
+    '$mixin_append': {
+      'args': [
+        '--xcode-build-version',
+        '11e608c'
+      ],
+    },
+    'swarming': {
+      'named_caches': [
+        {
+          'name': 'xcode_ios_11e608c',
+          'path': 'Xcode.app',
+        },
+      ],
+    },
+  },
+  'xcode_11n700h': {
+    '$mixin_append': {
+      'args': [
+        '--xcode-build-version',
+        '11n700h'
+      ],
+    },
+    'swarming': {
+      'named_caches': [
+        {
+          'name': 'xcode_ios_11n700h',
+          'path': 'Xcode.app',
+        },
+      ],
+    },
+  },
+  # xcode 12
+  'xcode_12a6159': {
+    '$mixin_append': {
+      'args': [
+        '--xcode-build-version',
+        '12a6159'
+      ],
+    },
+    'swarming': {
+      'named_caches': [
+        {
+          'name': 'xcode_ios_12a6159',
           'path': 'Xcode.app',
         },
       ],

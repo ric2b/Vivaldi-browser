@@ -122,8 +122,8 @@ every day:
     enabling it to provide smarter autocomplete than C/C++ IntelliSense as well
     as allowing you to jump from functions to their definitions. See
     [clangd.md](clangd.md) for setup instructions.
-    If you need to debug, disable the vscode-clangd extension, enable C/C++
-    Intellisense, and restart VSCode.
+    If you need to debug, enable C/C++ extension but set "C_Cpp: Intelli Sense Engine" to disabled,
+    and restart VSCode.
 *   ***Rewrap*** -
     Wrap lines at 80 characters with `Alt+Q`.
 *   ***Remote*** -
@@ -274,8 +274,9 @@ Launch commands are the equivalent of `F5` in Visual Studio: They launch some
 program or a debugger. Optionally, they can run some task defined in
 `tasks.json`. Launch commands can be run from the debug view (`Ctrl+Shift+D`).
 Open the file at [//tools/vscode/launch.json5](/tools/vscode/launch.json5) and
-adjust the example launch commands to your situation and needs. To use these
-settings wholesale, enter the following command into your terminal:
+adjust the example launch commands to your situation and needs (e.g., the value
+of "type" needs adjustment for Windows). To use these settings wholesale, enter
+the following command into your terminal:
 ```
 $ cp tools/vscode/launch.json5 .vscode/launch.json
 ```
@@ -328,6 +329,12 @@ left. To launch VSCode with this connection, click on the '+window' icon next
 to the listed hostname. It has you choose a folder - use the 'src' folder root.
 This will open a new VSCode window in 'Remote' mode. ***Now you can install
 extensions specifically for your remote connection, like vscode-clangd, etc.***
+
+#### Chromebooks
+
+For Googlers, [here](http://go/vscode/remote_development_via_web) are
+Google-specific instructions for setting up remote development on chromebooks
+without using Crostini.
 
 #### Windows & SSH
 This currently is difficult on Windows because VSCode remote tools assumes

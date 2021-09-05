@@ -9,7 +9,7 @@
 // declarations instead of including more headers. If that is infeasible, adjust
 // the limit. For more info, see
 // https://chromium.googlesource.com/chromium/src/+/HEAD/docs/wmax_tokens.md
-#pragma clang max_tokens_here 840000
+#pragma clang max_tokens_here 860000
 
 #include <utility>
 
@@ -165,6 +165,12 @@ bool ContentBrowserClient::ShouldIgnoreSameSiteCookieRestrictionsWhenTopLevel(
     base::StringPiece scheme,
     bool is_embedded_origin_secure) {
   return false;
+}
+
+std::string ContentBrowserClient::GetSiteDisplayNameForCdmProcess(
+    BrowserContext* browser_context,
+    const GURL& site_url) {
+  return site_url.spec();
 }
 
 void ContentBrowserClient::OverrideURLLoaderFactoryParams(
@@ -415,6 +421,11 @@ std::string ContentBrowserClient::GetWebBluetoothBlocklist() {
   return std::string();
 }
 
+bool ContentBrowserClient::AllowConversionMeasurement(
+    content::BrowserContext* browser_context) {
+  return true;
+}
+
 scoped_refptr<QuotaPermissionContext>
 ContentBrowserClient::CreateQuotaPermissionContext() {
   return nullptr;
@@ -494,18 +505,12 @@ bool ContentBrowserClient::IsValidStoragePartitionId(
   return partition_id.empty();
 }
 
-void ContentBrowserClient::GetStoragePartitionConfigForSite(
+StoragePartitionConfig ContentBrowserClient::GetStoragePartitionConfigForSite(
     BrowserContext* browser_context,
-    const GURL& site,
-    bool can_be_default,
-    std::string* partition_domain,
-    std::string* partition_name,
-    bool* in_memory) {
+    const GURL& site) {
   DCHECK(browser_context);
 
-  partition_domain->clear();
-  partition_name->clear();
-  *in_memory = false;
+  return StoragePartitionConfig::CreateDefault();
 }
 
 MediaObserver* ContentBrowserClient::GetMediaObserver() {
@@ -545,9 +550,11 @@ ContentBrowserClient::CreateSpeechRecognitionManagerDelegate() {
   return nullptr;
 }
 
+#if defined(OS_CHROMEOS)
 TtsControllerDelegate* ContentBrowserClient::GetTtsControllerDelegate() {
   return nullptr;
 }
+#endif
 
 TtsPlatform* ContentBrowserClient::GetTtsPlatform() {
   return nullptr;
@@ -672,10 +679,6 @@ void ContentBrowserClient::OpenURL(
   std::move(callback).Run(nullptr);
 }
 
-std::string ContentBrowserClient::GetMetricSuffixForURL(const GURL& url) {
-  return std::string();
-}
-
 std::vector<std::unique_ptr<NavigationThrottle>>
 ContentBrowserClient::CreateThrottlesForNavigation(
     NavigationHandle* navigation_handle) {
@@ -730,10 +733,6 @@ ContentBrowserClient::GetExtraServiceManifests() {
 
 std::vector<std::string> ContentBrowserClient::GetStartupServices() {
   return std::vector<std::string>();
-}
-
-::rappor::RapporService* ContentBrowserClient::GetRapporService() {
-  return nullptr;
 }
 
 std::vector<std::unique_ptr<blink::URLLoaderThrottle>>
@@ -898,11 +897,13 @@ bool ContentBrowserClient::ShouldCreateThreadPool() {
   return true;
 }
 
+#if !defined(OS_ANDROID)
 std::unique_ptr<AuthenticatorRequestClientDelegate>
 ContentBrowserClient::GetWebAuthenticationRequestDelegate(
     RenderFrameHost* render_frame_host) {
   return std::make_unique<AuthenticatorRequestClientDelegate>();
 }
+#endif
 
 std::unique_ptr<net::ClientCertStore>
 ContentBrowserClient::CreateClientCertStore(BrowserContext* browser_context) {
@@ -1098,9 +1099,16 @@ bool ContentBrowserClient::IsOriginTrialRequiredForAppCache(
       blink::features::kAppCacheRequireOriginTrial);
 }
 
+void ContentBrowserClient::BindBrowserControlInterface(
+    mojo::GenericPendingReceiver receiver) {}
+
 bool ContentBrowserClient::ShouldInheritCrossOriginEmbedderPolicyImplicitly(
     const GURL& url) {
   return false;
+}
+
+ukm::UkmService* ContentBrowserClient::GetUkmService() {
+  return nullptr;
 }
 
 }  // namespace content

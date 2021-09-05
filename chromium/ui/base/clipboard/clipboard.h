@@ -110,6 +110,17 @@ class COMPONENT_EXPORT(UI_BASE_CLIPBOARD) Clipboard
   virtual bool IsFormatAvailable(const ClipboardFormatType& format,
                                  ClipboardBuffer buffer) const = 0;
 
+  // Returns whether the clipboard has data that is marked by its originator as
+  // confidential. This is available for opt-in checking by the user of this API
+  // as confidential information, like passwords, might legitimately need to be
+  // manipulated.
+  virtual bool IsMarkedByOriginatorAsConfidential() const;
+
+  // Mark the data on the clipboard as being confidential. This isn't
+  // implemented for all platforms yet, but this call should be made on every
+  // platform so that when it is implemented on other platforms it is picked up.
+  virtual void MarkAsConfidential();
+
   // Clear the clipboard data.
   virtual void Clear(ClipboardBuffer buffer) = 0;
 

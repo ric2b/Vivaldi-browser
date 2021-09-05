@@ -8,6 +8,7 @@
 
 #include "base/check.h"
 #include "base/feature_list.h"
+#include "base/logging.h"
 #include "base/notreached.h"
 #include "services/service_manager/sandbox/features.h"
 #include "services/service_manager/sandbox/switches.h"
@@ -26,6 +27,7 @@ bool IsUnsandboxedSandboxType(SandboxType sandbox_type) {
           service_manager::features::kXRSandbox);
     case SandboxType::kProxyResolver:
     case SandboxType::kPdfConversion:
+    case SandboxType::kIconReader:
       return false;
 #endif
     case SandboxType::kAudio:
@@ -57,6 +59,7 @@ bool IsUnsandboxedSandboxType(SandboxType sandbox_type) {
 #endif
 #if defined(OS_CHROMEOS)
     case SandboxType::kIme:
+    case SandboxType::kTts:
 #endif
 #if !defined(OS_MACOSX)
     case SandboxType::kSharingService:
@@ -116,9 +119,11 @@ void SetCommandLineFlagsForSandboxType(base::CommandLine* command_line,
     case SandboxType::kXrCompositing:
     case SandboxType::kProxyResolver:
     case SandboxType::kPdfConversion:
+    case SandboxType::kIconReader:
 #endif  // defined(OS_WIN)
 #if defined(OS_CHROMEOS)
     case SandboxType::kIme:
+    case SandboxType::kTts:
 #endif  // defined(OS_CHROMEOS)
 #if !defined(OS_MACOSX)
     case SandboxType::kSharingService:
@@ -237,10 +242,14 @@ std::string StringFromUtilitySandboxType(SandboxType sandbox_type) {
       return switches::kProxyResolverSandbox;
     case SandboxType::kPdfConversion:
       return switches::kPdfConversionSandbox;
+    case SandboxType::kIconReader:
+      return switches::kIconReaderSandbox;
 #endif  // defined(OS_WIN)
 #if defined(OS_CHROMEOS)
     case SandboxType::kIme:
       return switches::kImeSandbox;
+    case SandboxType::kTts:
+      return switches::kTtsSandbox;
 #endif  // defined(OS_CHROMEOS)
       // The following are not utility processes so should not occur.
     case SandboxType::kRenderer:
@@ -287,6 +296,8 @@ SandboxType UtilitySandboxTypeFromString(const std::string& sandbox_string) {
     return SandboxType::kProxyResolver;
   if (sandbox_string == switches::kPdfConversionSandbox)
     return SandboxType::kPdfConversion;
+  if (sandbox_string == switches::kIconReaderSandbox)
+    return SandboxType::kIconReader;
 #endif
   if (sandbox_string == switches::kAudioSandbox)
     return SandboxType::kAudio;
@@ -297,6 +308,8 @@ SandboxType UtilitySandboxTypeFromString(const std::string& sandbox_string) {
 #if defined(OS_CHROMEOS)
   if (sandbox_string == switches::kImeSandbox)
     return SandboxType::kIme;
+  if (sandbox_string == switches::kTtsSandbox)
+    return SandboxType::kTts;
 #endif  // defined(OS_CHROMEOS)
   return SandboxType::kUtility;
 }

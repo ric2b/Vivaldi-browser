@@ -125,6 +125,7 @@ Bəzi funksiyalar əlçatmaz ola bilər ki, nəticədə tərcihlərə edilən d�
 <translation id="5903106910045431592"><ph name="PAGE_TITLE" /> - Şəbəkəyə Giriş</translation>
 <translation id="5987687638152509985">Sinxronizasiyanı başlatmaq üçün Chromium'u güncəlləyin</translation>
 <translation id="6013050204643758987">Chromium OS <ph name="BEGIN_LINK_LINUX_OSS" />Linux (Beta)<ph name="END_LINK_LINUX_OSS" /> kimi <ph name="BEGIN_LINK_CROS_OSS" />açıq mənbə proqramında<ph name="END_LINK_CROS_OSS" /> dəstəklənir.</translation>
+<translation id="6039377483953237732">Chromium OS versiyası</translation>
 <translation id="6055895534982063517">Chromium'um yeni versiyası əlçatandır və həmişəkindən daha sürətlidir.</translation>
 <translation id="6063093106622310249">Chromium'də açın</translation>
 <translation id="6072279588547424923"><ph name="EXTENSION_NAME" /> Chromium'a əlavə edildi</translation>
@@ -220,8 +221,6 @@ Bəzi funksiyalar əlçatmaz ola bilər. Xüsusi profil direktoriyası göstəri
 <translation id="8586442755830160949">Müəlliflik Hüququ <ph name="YEAR" /> Chromium Müəllifləri. Bütün hüquqlar qorunur.</translation>
 <translation id="8619360774459241877">Chromium başlayır...</translation>
 <translation id="8621669128220841554">Naməlum xəta üzündən quraşdırmaq alınmadı. Chromium'u yenidən endirin.</translation>
-<translation id="8682540261359803721">Ayar bu səhifədə göstərilməsə, <ph name="LINK_BEGIN" />
-      Chromium brauzer ayarlarına<ph name="LINK_END" /> baxın</translation>
 <translation id="8697124171261953979">O, həmçinin Chromium'u başlatdığınız zaman və ya Omnibox'dan axtarış etdiyiniz zaman göstərilən səhifəyə nəzarət edir.</translation>
 <translation id="8704119203788522458">Bu, Sizin Chromium'dur</translation>
 <translation id="8796602469536043152">Chromium bu sayt üçün kamera və mikrofona giriş icazəsi tələb edir</translation>

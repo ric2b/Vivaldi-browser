@@ -106,8 +106,8 @@ ServiceWorkerManager* TestExtensionSystem::service_worker_manager() {
   return nullptr;
 }
 
-SharedUserScriptMaster* TestExtensionSystem::shared_user_script_master() {
-  return NULL;
+SharedUserScriptManager* TestExtensionSystem::shared_user_script_manager() {
+  return nullptr;
 }
 
 StateStore* TestExtensionSystem::state_store() {
@@ -134,6 +134,10 @@ AppSorting* TestExtensionSystem::app_sorting() {
 
 const base::OneShotEvent& TestExtensionSystem::ready() const {
   return ready_;
+}
+
+bool TestExtensionSystem::is_ready() const {
+  return ready_.is_signaled();
 }
 
 ContentVerifier* TestExtensionSystem::content_verifier() {

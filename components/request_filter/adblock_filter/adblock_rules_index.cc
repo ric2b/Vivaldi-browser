@@ -212,9 +212,9 @@ RulesIndex::ActivationsFound AddActivationsFromRule(
     RulesIndex::ActivationsFound activations,
     const flat::FilterRule& rule) {
   if ((rule.options() & flat::OptionFlag_IS_ALLOW_RULE) == 0)
-    activations.in_block_rules &= rule.activation_types();
+    activations.in_block_rules |= rule.activation_types();
   else
-    activations.in_allow_rules &= rule.activation_types();
+    activations.in_allow_rules |= rule.activation_types();
   return activations;
 }
 

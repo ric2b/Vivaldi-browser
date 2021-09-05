@@ -48,8 +48,7 @@ class MockNavigationHandle : public NavigationHandle {
   WebContents* GetWebContents() override { return web_contents_; }
   MOCK_METHOD0(NavigationStart, base::TimeTicks());
   MOCK_METHOD0(NavigationInputStart, base::TimeTicks());
-  MOCK_METHOD0(FirstRequestStart, base::TimeTicks());
-  MOCK_METHOD0(FirstResponseStart, base::TimeTicks());
+  MOCK_METHOD0(GetNavigationHandleTiming, const NavigationHandleTiming&());
   MOCK_METHOD0(WasStartedFromContextMenu, bool());
   MOCK_METHOD0(GetSearchableFormURL, const GURL&());
   MOCK_METHOD0(GetSearchableFormEncoding, const std::string&());
@@ -58,6 +57,7 @@ class MockNavigationHandle : public NavigationHandle {
   const GURL& GetBaseURLForDataURL() override { return base_url_for_data_url_; }
   MOCK_METHOD0(IsPost, bool());
   const blink::mojom::Referrer& GetReferrer() override { return referrer_; }
+  void SetReferrer(blink::mojom::ReferrerPtr referrer) override {}
   MOCK_METHOD0(HasUserGesture, bool());
   ui::PageTransition GetPageTransition() override { return page_transition_; }
   MOCK_METHOD0(GetNavigationUIData, NavigationUIData*());

@@ -46,6 +46,7 @@ def create_config(config_args, development):
     if development:
 
         class DevelopmentCodeSignConfig(config_class):
+
             @property
             def codesign_requirements_basic(self):
                 return ''

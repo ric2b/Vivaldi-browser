@@ -6,7 +6,8 @@ package org.chromium.weblayer.test;
 
 import android.os.Bundle;
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.SmallTest;
+
+import androidx.test.filters.SmallTest;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -114,7 +115,7 @@ public class CrashReporterTest {
         Assert.assertEquals(crashKeys.getString("foo"), "bar");
 
         // Expect that the crash report and its sidecar are deleted.
-        deleteHelper.waitForCallback(deleteHelper.getCallCount());
+        deleteHelper.waitForFirst();
         Assert.assertFalse(mCrashReport.exists());
         Assert.assertFalse(mCrashSidecar.exists());
     }

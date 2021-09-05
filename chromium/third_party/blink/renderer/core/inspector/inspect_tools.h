@@ -34,7 +34,7 @@ class SearchingForNodeTool : public InspectTool {
   bool HandlePointerEvent(const WebPointerEvent&) override;
   void Draw(float scale) override;
   void NodeHighlightRequested(Node*);
-  void Trace(Visitor* visitor) override;
+  void Trace(Visitor* visitor) const override;
 
   Member<InspectorDOMAgent> dom_agent_;
   bool ua_shadow_;
@@ -73,6 +73,10 @@ class NodeHighlightTool : public InspectTool {
                     String selector_list,
                     std::unique_ptr<InspectorHighlightConfig> highlight_config);
 
+  std::unique_ptr<protocol::DictionaryValue> GetNodeInspectorHighlightAsJson(
+      bool append_element_info,
+      bool append_distance_info) const;
+
  private:
   bool ForwardEventsToOverlay() override;
   bool HideOnMouseMove() override;
@@ -80,7 +84,7 @@ class NodeHighlightTool : public InspectTool {
   void Draw(float scale) override;
   void DrawNode();
   void DrawMatchingSelector();
-  void Trace(Visitor* visitor) override;
+  void Trace(Visitor* visitor) const override;
 
   bool is_locked_ancestor_ = false;
   Member<Node> node_;
@@ -103,7 +107,7 @@ class NearbyDistanceTool : public InspectTool {
   bool HandleMouseMove(const WebMouseEvent& event) override;
   bool HandleMouseUp(const WebMouseEvent& event) override;
   void Draw(float scale) override;
-  void Trace(Visitor* visitor) override;
+  void Trace(Visitor* visitor) const override;
 
   Member<Node> hovered_node_;
   DISALLOW_COPY_AND_ASSIGN(NearbyDistanceTool);

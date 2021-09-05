@@ -42,6 +42,9 @@ class TestPasswordSyncMetadataStore : public PasswordStoreSync::MetadataStore {
   bool ClearModelTypeState(syncer::ModelType model_type) override;
   std::unique_ptr<syncer::MetadataBatch> GetAllSyncMetadata() override;
   void DeleteAllSyncMetadata() override;
+  void SetDeletionsHaveSyncedCallback(
+      base::RepeatingCallback<void(bool)> callback) override;
+  bool HasUnsyncedDeletions() override;
 
  private:
   sync_pb::ModelTypeState sync_model_type_state_;
@@ -60,7 +63,7 @@ bool TestPasswordSyncMetadataStore::UpdateSyncMetadata(
 bool TestPasswordSyncMetadataStore::ClearSyncMetadata(
     syncer::ModelType model_type,
     const std::string& storage_key) {
-  sync_metadata_.clear();
+  sync_metadata_.erase(storage_key);
   return true;
 }
 
@@ -94,6 +97,15 @@ TestPasswordSyncMetadataStore::GetAllSyncMetadata() {
 void TestPasswordSyncMetadataStore::DeleteAllSyncMetadata() {
   ClearModelTypeState(syncer::PASSWORDS);
   sync_metadata_.clear();
+}
+
+void TestPasswordSyncMetadataStore::SetDeletionsHaveSyncedCallback(
+    base::RepeatingCallback<void(bool)> callback) {
+  NOTIMPLEMENTED();
+}
+
+bool TestPasswordSyncMetadataStore::HasUnsyncedDeletions() {
+  return false;
 }
 
 }  // namespace
@@ -170,12 +182,12 @@ PasswordStoreChangeList TestPasswordStore::UpdateLoginImpl(
   PasswordStoreChangeList changes;
   std::vector<autofill::PasswordForm>& forms =
       stored_passwords_[form.signon_realm];
-  for (auto it = forms.begin(); it != forms.end(); ++it) {
-    if (ArePasswordFormUniqueKeysEqual(form, *it)) {
-      *it = form;
-      it->in_store = is_account_store_
-                         ? autofill::PasswordForm::Store::kAccountStore
-                         : autofill::PasswordForm::Store::kProfileStore;
+  for (auto& stored_form : forms) {
+    if (ArePasswordFormUniqueKeysEqual(form, stored_form)) {
+      stored_form = form;
+      stored_form.in_store = is_account_store_
+                                 ? autofill::PasswordForm::Store::kAccountStore
+                                 : autofill::PasswordForm::Store::kProfileStore;
       changes.push_back(PasswordStoreChange(PasswordStoreChange::UPDATE, form));
     }
   }
@@ -211,15 +223,15 @@ TestPasswordStore::FillMatchingLogins(const FormDigest& form) {
         IsPublicSuffixDomainMatch(elements.first, form.signon_realm);
     if (realm_matches || realm_psl_matches ||
         (form.scheme == autofill::PasswordForm::Scheme::kHtml &&
-         password_manager::IsFederatedRealm(elements.first, form.origin))) {
+         password_manager::IsFederatedRealm(elements.first, form.url))) {
       const bool is_psl = !realm_matches && realm_psl_matches;
       for (const auto& stored_form : elements.second) {
         // Repeat the condition above with an additional check for origin.
         if (realm_matches || realm_psl_matches ||
             (form.scheme == autofill::PasswordForm::Scheme::kHtml &&
-             stored_form.origin.GetOrigin() == form.origin.GetOrigin() &&
+             stored_form.url.GetOrigin() == form.url.GetOrigin() &&
              password_manager::IsFederatedRealm(stored_form.signon_realm,
-                                                form.origin))) {
+                                                form.url))) {
           matched_forms.push_back(
               std::make_unique<autofill::PasswordForm>(stored_form));
           matched_forms.back()->is_public_suffix_match = is_psl;

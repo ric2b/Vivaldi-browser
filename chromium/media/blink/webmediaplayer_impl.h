@@ -142,7 +142,9 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   void SetRate(double rate) override;
   void SetVolume(double volume) override;
   void SetLatencyHint(double seconds) override;
+  void SetPreservesPitch(bool preserves_pitch) override;
   void OnRequestPictureInPicture() override;
+  void OnTimeUpdate() override;
   void SetSinkId(
       const blink::WebString& sink_id,
       blink::WebSetSinkIdCompleteCallback completion_callback) override;
@@ -464,21 +466,6 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   //   - pending_suspend_resume_cycle_,
   //   - enter_pip_callback_,
   void UpdatePlayState();
-
-  // Calculates the current position state for the media element and notifies
-  // |delegate_| if it has changed.
-  //
-  // Spec: https://wicg.github.io/mediasession/#position-state
-  //
-  // This method should be called any time its dependent values change. These
-  // are:
-  //   - pipeline_controller_->GetMediaDuration()
-  //   - pipeline_media_duration_for_test_
-  //   - pipeline_controller_->GetMediaTime()
-  //   - playback_rate_
-  //   - Seeking() / seek_time_
-  //   - paused_, paused_time_
-  void UpdateMediaPositionState();
 
   // Methods internal to UpdatePlayState().
   PlayState UpdatePlayState_ComputePlayState(bool is_flinging,
@@ -1067,15 +1054,6 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
 
   // Whether background video optimization is supported on current platform.
   bool is_background_video_track_optimization_supported_ = true;
-
-  // Whether the media in this frame is a remoting media.
-  //
-  // Remoting media is a special media that has the media streams are delivered
-  // to the browser directly from somewhere without any URL request
-  // (http, file, ...)
-  // When setting to true, a remoting renderer will be created as the remoting
-  // target in the client.
-  bool is_remoting_renderer_enabled_ = false;
 
   base::CancelableOnceClosure have_enough_after_lazy_load_cb_;
 

@@ -37,6 +37,7 @@
 #include "chrome/browser/chromeos/policy/device_policy_cloud_external_data_manager.h"
 #include "chrome/browser/chromeos/policy/device_wifi_allowed_handler.h"
 #include "chrome/browser/chromeos/policy/enrollment_config.h"
+#include "chrome/browser/chromeos/policy/enrollment_requisition_manager.h"
 #include "chrome/browser/chromeos/policy/external_data_handlers/device_native_printers_external_data_handler.h"
 #include "chrome/browser/chromeos/policy/external_data_handlers/device_wallpaper_image_external_data_handler.h"
 #include "chrome/browser/chromeos/policy/external_data_handlers/device_wilco_dtc_configuration_external_data_handler.h"
@@ -185,6 +186,7 @@ void BrowserPolicyConnectorChromeOS::Init(
     // initialized from here instead of BrowserPolicyConnector::Init().
 
     device_cloud_policy_manager_->Initialize(local_state);
+    EnrollmentRequisitionManager::Initialize();
     device_cloud_policy_manager_->AddDeviceCloudPolicyManagerObserver(this);
     RestartDeviceCloudPolicyInitializer();
   }
@@ -278,8 +280,8 @@ void BrowserPolicyConnectorChromeOS::Init(
             policy::DeviceWilcoDtcConfigurationExternalDataHandler>(
             GetPolicyService()));
   }
-  system_proxy_manager_ =
-      std::make_unique<SystemProxyManager>(chromeos::CrosSettings::Get());
+  system_proxy_manager_ = std::make_unique<SystemProxyManager>(
+      chromeos::CrosSettings::Get(), local_state);
 }
 
 void BrowserPolicyConnectorChromeOS::PreShutdown() {
@@ -293,6 +295,7 @@ void BrowserPolicyConnectorChromeOS::PreShutdown() {
 
 void BrowserPolicyConnectorChromeOS::Shutdown() {
   device_cert_provisioning_scheduler_.reset();
+  system_proxy_manager_.reset();
 
   // NetworkCertLoader may be not initialized in tests.
   if (chromeos::NetworkCertLoader::IsInitialized()) {
@@ -311,6 +314,11 @@ void BrowserPolicyConnectorChromeOS::Shutdown() {
     device_cloud_policy_manager_->RemoveDeviceCloudPolicyManagerObserver(this);
 
   device_scheduled_update_checker_.reset();
+
+  // The policy handler is registered as an observer to BuildState which gets
+  // destructed before BrowserPolicyConnectorChromeOS. So destruct the policy
+  // handler here so that it can de-register itself as an observer.
+  minimum_version_policy_handler_.reset();
 
   if (hostname_handler_)
     hostname_handler_->Shutdown();

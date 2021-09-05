@@ -185,6 +185,19 @@ const char kReportUploadFrequency[] =
 // should be recorded and reported along with device policy requests.
 const char kReportDeviceAppInfo[] = "cros.device_status.report_device_app_info";
 
+// A boolean pref that determines whether the device Bluetooth information
+// should be included in status reports to the device management server.
+const char kReportDeviceBluetoothInfo[] =
+    "cros.device_status.report_device_bluetooth_info";
+
+// A boolean pref that determines whether the device fan information should be
+// included in status reports to the device management server.
+const char kReportDeviceFanInfo[] = "cros.device_status.report_device_fan_info";
+
+// A boolean pref that determines whether the device's VPD information should be
+// included in status reports to the device management server.
+const char kReportDeviceVpdInfo[] = "cros.device_status.report_device_vpd_info";
+
 // Determines whether heartbeats should be sent to the policy service via
 // the GCM channel.
 const char kHeartbeatEnabled[] = "cros.device_status.heartbeat_enabled";
@@ -370,6 +383,12 @@ const char kTPMFirmwareUpdateSettings[] = "cros.tpm_firmware_update_settings";
 // If the list is empty no restrictions will be applied.
 const char kMinimumChromeVersionEnforced[] = "cros.min_version_enforced.chrome";
 
+// String shown on the update required dialog on the the login screen containing
+// return instructions from the device administrator. It is shown when update
+// is required but the device has reached end of life.
+const char kMinimumChromeVersionEolMessage[] =
+    "cros.min_version_eol_message.chrome";
+
 // String indicating what name should be advertised for casting to.
 // If the string is empty or blank the system name will be used.
 const char kCastReceiverName[] = "cros.device.cast_receiver.name";
@@ -453,4 +472,7 @@ const char kSystemProxySettingsKeySystemServicesUsername[] =
 const char kSystemProxySettingsKeySystemServicesPassword[] =
     "system_services_password";
 
+// An enum pref that indicates whether adb sideloading is allowed on this device
+const char kDeviceCrostiniArcAdbSideloadingAllowed[] =
+    "cros.device.crostini_arc_adb_sideloading_allowed";
 }  // namespace chromeos

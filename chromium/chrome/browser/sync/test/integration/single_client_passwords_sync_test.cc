@@ -307,8 +307,8 @@ IN_PROC_BROWSER_TEST_F(SingleClientPasswordsWithAccountStorageSyncTest,
   ASSERT_TRUE(GetClient(0)->AwaitSyncTransportActive());
   ASSERT_FALSE(GetSyncService(0)->IsSyncFeatureEnabled());
 
-  // Let the user opt in to the passwords account storage, and wait for it to
-  // become active.
+  // Let the user opt in to the account-scoped password storage, and wait for it
+  // to become active.
   OptInToAccountStorage(GetProfile(0)->GetPrefs(), GetSyncService(0));
   PasswordSyncActiveChecker(GetSyncService(0)).Wait();
   ASSERT_TRUE(GetSyncService(0)->GetActiveDataTypes().Has(syncer::PASSWORDS));
@@ -340,8 +340,8 @@ IN_PROC_BROWSER_TEST_F(SingleClientPasswordsWithAccountStorageSyncTest,
   ASSERT_TRUE(GetClient(0)->AwaitSyncTransportActive());
   ASSERT_FALSE(GetSyncService(0)->IsSyncFeatureEnabled());
 
-  // Let the user opt in to the passwords account storage, and wait for it to
-  // become active.
+  // Let the user opt in to the account-scoped password storage, and wait for it
+  // to become active.
   OptInToAccountStorage(GetProfile(0)->GetPrefs(), GetSyncService(0));
   PasswordSyncActiveChecker(GetSyncService(0)).Wait();
   ASSERT_TRUE(GetSyncService(0)->GetActiveDataTypes().Has(syncer::PASSWORDS));
@@ -406,8 +406,8 @@ IN_PROC_BROWSER_TEST_F(SingleClientPasswordsWithAccountStorageSyncTest,
   ASSERT_TRUE(GetClient(0)->AwaitSyncTransportActive());
   ASSERT_FALSE(GetSyncService(0)->IsSyncFeatureEnabled());
 
-  // Let the user opt in to the passwords account storage, and wait for it to
-  // become active.
+  // Let the user opt in to the account-scoped password storage, and wait for it
+  // to become active.
   OptInToAccountStorage(GetProfile(0)->GetPrefs(), GetSyncService(0));
   PasswordSyncActiveChecker(GetSyncService(0)).Wait();
 
@@ -445,8 +445,8 @@ IN_PROC_BROWSER_TEST_F(SingleClientPasswordsWithAccountStorageSyncTest,
   ASSERT_TRUE(GetClient(0)->AwaitSyncTransportActive());
   ASSERT_FALSE(GetSyncService(0)->IsSyncFeatureEnabled());
 
-  // Let the user opt in to the passwords account storage, and wait for it to
-  // become active.
+  // Let the user opt in to the account-scoped password storage, and wait for it
+  // to become active.
   OptInToAccountStorage(GetProfile(0)->GetPrefs(), GetSyncService(0));
   PasswordSyncActiveChecker(GetSyncService(0)).Wait();
 
@@ -498,8 +498,8 @@ IN_PROC_BROWSER_TEST_F(SingleClientPasswordsWithAccountStorageSyncTest,
   ASSERT_TRUE(GetClient(0)->AwaitSyncTransportActive());
   ASSERT_FALSE(GetSyncService(0)->IsSyncFeatureEnabled());
 
-  // Let the user opt in to the passwords account storage, and wait for it to
-  // become active.
+  // Let the user opt in to the account-scoped password storage, and wait for it
+  // to become active.
   OptInToAccountStorage(GetProfile(0)->GetPrefs(), GetSyncService(0));
   PasswordSyncActiveChecker(GetSyncService(0)).Wait();
 
@@ -531,6 +531,11 @@ IN_PROC_BROWSER_TEST_F(SingleClientPasswordsWithAccountStorageSyncTest,
       signin::ClearPrimaryAccountPolicy::KEEP_ALL_ACCOUNTS);
   ASSERT_TRUE(GetClient(0)->AwaitSyncTransportActive());
   ASSERT_FALSE(GetSyncService(0)->IsSyncFeatureEnabled());
+
+  // The account-storage opt-in gets cleared when turning off Sync, so opt in
+  // again.
+  OptInToAccountStorage(GetProfile(0)->GetPrefs(), GetSyncService(0));
+  PasswordSyncActiveChecker(GetSyncService(0)).Wait();
 
   // Now the password should be in both stores: The profile store does *not* get
   // cleared when Sync gets disabled.

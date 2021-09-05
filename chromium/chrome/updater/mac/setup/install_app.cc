@@ -22,14 +22,14 @@ class AppInstall : public App {
 
 void AppInstall::FirstTaskRun() {
   base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE, {base::MayBlock()}, base::BindOnce(&SetupUpdater),
+      FROM_HERE, {base::MayBlock()}, base::BindOnce(&InstallCandidate),
       base::BindOnce(&AppInstall::Shutdown, this));
 }
 
 }  // namespace
 
-scoped_refptr<App> AppInstallInstance() {
-  return AppInstance<AppInstall>();
+scoped_refptr<App> MakeAppInstall() {
+  return base::MakeRefCounted<AppInstall>();
 }
 
 }  // namespace updater

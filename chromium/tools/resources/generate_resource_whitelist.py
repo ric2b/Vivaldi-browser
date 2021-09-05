@@ -21,6 +21,8 @@ import os
 import subprocess
 import sys
 
+import ar
+
 llvm_bindir = os.path.join(
     os.path.dirname(sys.argv[0]), '..', '..', 'third_party', 'llvm-build',
     'Release+Asserts', 'bin')
@@ -100,17 +102,47 @@ def GetResourceWhitelistPDB(path):
   return resource_ids
 
 
+def GetResourceWhitelistFileList(file_list_path):
+  # Creates a list of resources given the list of linker input files.
+  # Simply grep's them for WhitelistedResource<...>.
+  with open(file_list_path) as f:
+    paths = f.read().splitlines()
+
+  paths = ar.ExpandThinArchives(paths)
+
+  resource_ids = set()
+  prefix = 'WhitelistedResource<'
+  for p in paths:
+    with open(p) as f:
+      data = f.read()
+    start_idx = 0
+    while start_idx != -1:
+      start_idx = data.find(prefix, start_idx)
+      if start_idx != -1:
+        end_idx = data.find('>', start_idx)
+        resource_ids.add(int(data[start_idx + len(prefix):end_idx]))
+        start_idx = end_idx
+  return resource_ids
+
+
 def WriteResourceWhitelist(args):
   resource_ids = set()
   for input in args.inputs:
     with open(input, 'r') as f:
       magic = f.read(4)
+      chunk = f.read(60)
     if magic == '\x7fELF':
-      resource_ids = resource_ids.union(GetResourceWhitelistELF(input))
+      func = GetResourceWhitelistELF
     elif magic == 'Micr':
-      resource_ids = resource_ids.union(GetResourceWhitelistPDB(input))
+      func = GetResourceWhitelistPDB
+    elif magic == 'obj/' or '/obj/' in chunk:
+      # For secondary toolchain, path will look like android_clang_arm/obj/...
+      func = GetResourceWhitelistFileList
     else:
       raise Exception('unknown file format')
+
+    resource_ids.update(func(input))
+
   if len(resource_ids) == 0:
     raise Exception('No debug info was dumped. Ensure GN arg "symbol_level" '
                     '!= 0 and that the file is not stripped.')

@@ -186,37 +186,6 @@ flat::PatternType PatternTypeFromFilterRule(const FilterRule& filter_rule) {
   }
 }
 
-flat::RedirectResource RedirectResourceFromFilterRule(
-    const FilterRule& filter_rule) {
-  switch (filter_rule.redirect) {
-    case FilterRule::kNoRedirect:
-      return flat::RedirectResource_NO_REDIRECT;
-    case FilterRule::kBlankText:
-      return flat::RedirectResource_BLANK_TEXT;
-    case FilterRule::kBlankCss:
-      return flat::RedirectResource_BLANK_CSS;
-    case FilterRule::kBlankJS:
-      return flat::RedirectResource_BANK_JS;
-    case FilterRule::kBlankHTML:
-      return flat::RedirectResource_BLANK_HTML;
-    case FilterRule::kBlankMP3:
-      return flat::RedirectResource_BLANK_MP3;
-    case FilterRule::kBlankMP4:
-      return flat::RedirectResource_BLANK_MP4;
-    case FilterRule::k1x1TransparentGIF:
-      return flat::RedirectResource_TRANSPARENT_1x1_GIF;
-    case FilterRule::k2x2TransparentPNG:
-      return flat::RedirectResource_TRANSPARENT_2x2_PNG;
-    case FilterRule::k3x2TransparentPNG:
-      return flat::RedirectResource_TRANSPARENT_3x2_PNG;
-    case FilterRule::k32x32TransparentPNG:
-      return flat::RedirectResource_TRANSPARENT_32x32_PNG;
-    default:
-      NOTREACHED();
-      return flat::RedirectResource_NO_REDIRECT;
-  }
-}
-
 uint8_t AnchorTypeFromFilterRule(const FilterRule& filter_rule) {
   uint8_t anchor_type = 0;
   if (filter_rule.anchor_type.test(FilterRule::kAnchorStart))
@@ -257,7 +226,8 @@ void AddRuleToBuffer(
       builder->CreateSharedString(filter_rule.ngram_search_string);
 
   FlatStringOffset host_offset = builder->CreateSharedString(filter_rule.host);
-
+  FlatStringOffset redirect_offset =
+      builder->CreateSharedString(filter_rule.redirect);
   FlatStringOffset csp_offset = builder->CreateSharedString(filter_rule.csp);
 
   filter_rules_offsets->push_back(flat::CreateFilterRule(
@@ -266,9 +236,8 @@ void AddRuleToBuffer(
       ActivationTypesFromFilterRule(filter_rule),
       PatternTypeFromFilterRule(filter_rule),
       AnchorTypeFromFilterRule(filter_rule), host_offset,
-      domains_included_offset, domains_excluded_offset,
-      RedirectResourceFromFilterRule(filter_rule), csp_offset, pattern_offset,
-      ngram_search_string_offset));
+      domains_included_offset, domains_excluded_offset, redirect_offset,
+      csp_offset, pattern_offset, ngram_search_string_offset));
 }
 
 void AddRuleToBuffer(
@@ -519,11 +488,11 @@ void RuleSourceHandler::Clear() {
   update_timer_.Stop();
 
   file_task_runner_->PostTask(
-      FROM_HERE, base::BindOnce(base::IgnoreResult(&base::DeleteFile),
-                                rules_list_path_, false));
+      FROM_HERE,
+      base::BindOnce(base::GetDeleteFileCallback(), rules_list_path_));
   file_task_runner_->PostTask(
-      FROM_HERE, base::BindOnce(base::IgnoreResult(&base::DeleteFile),
-                                tracker_infos_path_, false));
+      FROM_HERE,
+      base::BindOnce(base::GetDeleteFileCallback(), tracker_infos_path_));
 }
 
 void RuleSourceHandler::StartUpdateTimer() {

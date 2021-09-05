@@ -47,10 +47,25 @@ async function runTestInGuest(testCase) {
   await guestMessagePipe.sendMessage('run-test-case', message);
 }
 
+/**
+ * Gets a concatenated list of errors on the currently loaded files. Note the
+ * currently open file is always at index 0.
+ * @return {!Promise<string>}
+ */
+async function getFileErrors() {
+  const message = {getFileErrors: true};
+  const response = /** @type {TestMessageResponseData} */ (
+      await guestMessagePipe.sendMessage('test', message));
+  return response.testQueryResult;
+}
+
 /** @implements FileSystemWritableFileStream */
 class FakeWritableFileStream {
   constructor(/** !Blob= */ data = new Blob()) {
     this.data = data;
+
+    /** @type {!Array<!{position: number, size: (number|undefined)}>} */
+    this.writes = [];
 
     /** @type {function(!Blob)} */
     this.resolveClose;
@@ -62,6 +77,7 @@ class FakeWritableFileStream {
   /** @override */
   async write(data) {
     const position = 0;  // Assume no seeks.
+    this.writes.push({position, size: data.size});
     this.data = new Blob([
       this.data.slice(0, position),
       data,
@@ -107,9 +123,11 @@ class FakeFileSystemFileHandle extends FakeFileSystemHandle {
   /**
    * @param {!string=} name
    * @param {!string=} type
+   * @param {number=} lastModified
    * @param {!Blob} blob
    */
-  constructor(name = 'fake_file.png', type = '', blob = new Blob()) {
+  constructor(
+      name = 'fake_file.png', type = '', lastModified = 0, blob = new Blob()) {
     super(name);
     this.lastWritable = new FakeWritableFileStream();
 
@@ -117,6 +135,12 @@ class FakeFileSystemFileHandle extends FakeFileSystemHandle {
 
     /** @type {!string} */
     this.type = type;
+
+    /** @type {!number} */
+    this.lastModified = lastModified;
+
+    /** @type {?DOMException} */
+    this.nextCreateWritableError;
   }
   /** @override */
   createWriter(options) {
@@ -124,6 +148,9 @@ class FakeFileSystemFileHandle extends FakeFileSystemHandle {
   }
   /** @override */
   async createWritable(options) {
+    if (this.nextCreateWritableError) {
+      throw this.nextCreateWritableError;
+    }
     this.lastWritable = new FakeWritableFileStream();
     return this.lastWritable;
   }
@@ -134,7 +161,9 @@ class FakeFileSystemFileHandle extends FakeFileSystemHandle {
 
   /** @return {!File} */
   getFileSync() {
-    return new File([this.lastWritable.data], this.name, {type: this.type});
+    return new File(
+        [this.lastWritable.data], this.name,
+        {type: this.type, lastModified: this.lastModified});
   }
 }
 
@@ -169,16 +198,17 @@ class FakeFileSystemDirectoryHandle extends FakeFileSystemHandle {
    * Helper to get all entries as File.
    * @return {!Array<!File>}
    */
-  getFilesSync(index) {
+  getFilesSync() {
     return this.files.map(f => f.getFileSync());
   }
   /** @override */
   async getFile(name, options) {
     const fileHandle = this.files.find(f => f.name === name);
     if (!fileHandle && options.create === true) {
-      // Simulate creating a new file.
-      const newFileHandle = new FakeFileSystemFileHandle();
-      newFileHandle.name = name;
+      // Simulate creating a new file, assume it is an image. This is needed for
+      // renaming files to ensure it has the right mime type, the real
+      // implementation copies the mime type from the binary.
+      const newFileHandle = new FakeFileSystemFileHandle(name, 'image/png');
       this.files.push(newFileHandle);
       return Promise.resolve(newFileHandle);
     }
@@ -213,6 +243,7 @@ class FakeFileSystemDirectoryHandle extends FakeFileSystemHandle {
  * @typedef{{
  *   name: (string|undefined),
  *   type: (string|undefined),
+ *   lastModified: (number|undefined),
  *   arrayBuffer: (function(): (Promise<ArrayBuffer>)|undefined)
  * }}
  */
@@ -229,8 +260,8 @@ async function createMockTestDirectory(files = [{}]) {
     const fileBlob = file.arrayBuffer !== undefined ?
         new Blob([await file.arrayBuffer()]) :
         new Blob();
-    directory.addFileHandleForTest(
-        new FakeFileSystemFileHandle(file.name, file.type, fileBlob));
+    directory.addFileHandleForTest(new FakeFileSystemFileHandle(
+        file.name, file.type, file.lastModified, fileBlob));
   }
   return directory;
 }
@@ -263,6 +294,63 @@ async function loadMultipleFiles(files) {
 }
 
 /**
+ * Creates a mock LaunchParams object from the provided `files`.
+ * @param {!Array<FileSystemHandle>} files
+ * @return {LaunchParams}
+ */
+function handlesToLaunchParams(files) {
+  return /** @type{LaunchParams} */ ({files});
+}
+
+/**
+ * Helper to "launch" with the given `directoryContents`. Populates a fake
+ * directory containing those handles, then launches the app. The focus file is
+ * either the first file in `multiSelectionFiles`, or the first directory entry.
+ * @param {!Array<!FakeFileSystemFileHandle>} directoryContents
+ * @param {!Array<!FakeFileSystemFileHandle>=} multiSelectionFiles If provided,
+ *     holds additional files selected in the files app at launch time.
+ * @return {!Promise<FakeFileSystemDirectoryHandle>}
+ */
+async function launchWithHandles(directoryContents, multiSelectionFiles = []) {
+  /** @type {?FakeFileSystemFileHandle} */
+  let focusFile = multiSelectionFiles[0];
+  if (!focusFile) {
+    focusFile = directoryContents[0];
+  }
+  multiSelectionFiles = multiSelectionFiles.slice(1);
+  const directory = new FakeFileSystemDirectoryHandle();
+  for (const handle of directoryContents) {
+    directory.addFileHandleForTest(handle);
+  }
+  const files = [directory, focusFile, ...multiSelectionFiles];
+  await launchConsumer(handlesToLaunchParams(files));
+  return directory;
+}
+
+/**
+ * Wraps a file in a FakeFileSystemFileHandle.
+ * @param {!File} file
+ * @return {!FakeFileSystemFileHandle}
+ */
+function fileToFileHandle(file) {
+  return new FakeFileSystemFileHandle(
+      file.name, file.type, file.lastModified, file);
+}
+
+/**
+ * Helper to invoke launchWithHandles after wrapping `files` in fake handles.
+ * @param {!Array<!File>} files
+ * @param {!Array<!number>=} selectedIndexes
+ * @return {!Promise<FakeFileSystemDirectoryHandle>}
+ */
+async function launchWithFiles(files, selectedIndexes = []) {
+  const fileHandles = files.map(fileToFileHandle);
+  const selection =
+      selectedIndexes.map((/** @type {number} */ i) => fileHandles[i]);
+  return launchWithHandles(fileHandles, selection);
+}
+
+/**
  * Creates an `Error` with the name field set.
  * @param {string} name
  * @param {string} msg
@@ -272,6 +360,42 @@ function createNamedError(name, msg) {
   const error = new Error(msg);
   error.name = name;
   return error;
+}
+
+/**
+ * @param {!FileSystemDirectoryHandle} directory
+ * @param {!File} file
+ */
+async function loadFilesWithoutSendingToGuest(directory, file) {
+  const handle = await directory.getFile(file.name);
+  globalLaunchNumber++;
+  setCurrentDirectory(directory, {file, handle});
+  await processOtherFilesInDirectory(directory, file, globalLaunchNumber);
+}
+
+/**
+ * Checks that the `currentFiles` array maintained by launch.js has the same
+ * sequence of files as `expectedFiles`.
+ * @param {!Array<!File>} expectedFiles
+ * @param {?string} testCase
+ */
+function assertFilesToBe(expectedFiles, testCase) {
+  return assertFilenamesToBe(expectedFiles.map(f => f.name).join(), testCase);
+}
+
+/**
+ * Checks that the `currentFiles` array maintained by launch.js has the same
+ * sequence of filenames as `expectedFilenames`.
+ * @param {string} expectedFilenames
+ * @param {?string} testCase
+ */
+function assertFilenamesToBe(expectedFilenames, testCase) {
+  // Use filenames as an approximation of file uniqueness.
+  const currentFilenames = currentFiles.map(d => d.handle.name).join();
+  chai.assert.equal(
+      currentFilenames, expectedFilenames,
+      `Expected '${expectedFilenames}' but got '${currentFilenames}'` +
+          (testCase ? ` for ${testCase}` : ''));
 }
 
 /**
@@ -294,4 +418,75 @@ function assertMatch(string, regex, opt_message) {
 function assertMatchErrorStack(stackTrace, regexLines, opt_message) {
   const regex = `(.|\\n)*${regexLines.join('(.|\\n)*')}(.|\\n)*`;
   assertMatch(stackTrace, regex, opt_message);
+}
+
+/**
+ * Returns the files loaded in the most recent call to `loadFiles()`.
+ * @return {Promise<?Array<!ReceivedFile>>}
+ */
+async function getLoadedFiles() {
+  const response = /** @type {LastLoadedFilesResponse} */ (
+      await guestMessagePipe.sendMessage('get-last-loaded-files'));
+  if (response.fileList) {
+    return response.fileList;
+  }
+  return null;
+}
+
+/**
+ * Puts the app into valid but "unexpected" state for it to be in after handling
+ * a launch. Currently this restores part of the app state to what it would be
+ * on a launch from the icon (i.e. no launch files).
+ */
+function simulateLosingAccessToDirectory() {
+  currentDirectoryHandle = null;
+}
+
+/**
+ * @param {!FakeFileSystemDirectoryHandle} directory
+ */
+function launchWithFocusFile(directory) {
+  const focusFile = {
+    handle: directory.files[0],
+    file: directory.files[0].getFileSync()
+  };
+  globalLaunchNumber++;
+  setCurrentDirectory(directory, focusFile);
+  return focusFile;
+}
+
+/**
+ * @param {!FakeFileSystemDirectoryHandle} directory
+ * @param {number} totalFiles
+ */
+async function assertSingleFileLaunch(directory, totalFiles) {
+  chai.assert.equal(1, currentFiles.length);
+
+  await sendFilesToGuest();
+
+  const loadedFiles = await getLoadedFiles();
+  // The untrusted context only loads the first file.
+  chai.assert.equal(1, loadedFiles.length);
+  // All files are in the `FileSystemDirectoryHandle`.
+  chai.assert.equal(totalFiles, directory.files.length);
+}
+
+/**
+ * Check files loaded in the trusted context `currentFiles` against the working
+ * directory and the untrusted context.
+ * @param {!FakeFileSystemDirectoryHandle} directory
+ * @param {!Array<string>} fileNames
+ * @param {?string} testCase
+ */
+async function assertFilesLoaded(directory, fileNames, testCase) {
+  chai.assert.equal(fileNames.length, directory.files.length);
+  chai.assert.equal(fileNames.length, currentFiles.length);
+
+  const loadedFiles = /** @type {!Array<!File>} */ (await getLoadedFiles());
+  chai.assert.equal(fileNames.length, loadedFiles.length);
+
+  // Check `currentFiles` in the trusted context matches up with files sent
+  // to guest.
+  assertFilenamesToBe(fileNames.join(), testCase);
+  assertFilesToBe(loadedFiles, testCase);
 }

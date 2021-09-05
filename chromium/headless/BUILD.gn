@@ -30,7 +30,6 @@ repack("pak") {
     "$root_gen_dir/components/components_resources.pak",
     "$root_gen_dir/components/strings/components_strings_en-US.pak",
     "$root_gen_dir/content/app/resources/content_resources_100_percent.pak",
-    "$root_gen_dir/content/browser/devtools/devtools_resources.pak",
     "$root_gen_dir/content/browser/tracing/tracing_resources.pak",
     "$root_gen_dir/content/content_resources.pak",
     "$root_gen_dir/content/dev_ui_content_resources.pak",
@@ -59,7 +58,6 @@ repack("pak") {
     "//content:content_resources",
     "//content:dev_ui_content_resources",
     "//content/app/resources",
-    "//content/browser/devtools:resources",
     "//content/browser/tracing:resources",
     "//mojo/public/js:resources",
     "//net:net_resources",
@@ -69,6 +67,12 @@ repack("pak") {
     "//ui/resources",
     "//ui/strings",
   ]
+
+  if (!is_fuchsia) {
+    sources +=
+        [ "$root_gen_dir/content/browser/devtools/devtools_resources.pak" ]
+    deps += [ "//content/browser/devtools:devtools_resources" ]
+  }
 
   output = "$root_out_dir/headless_lib.pak"
 }
@@ -311,6 +315,7 @@ component("headless_non_renderer") {
     "lib/browser/headless_browser_impl_mac.mm",
     "lib/browser/headless_browser_main_parts.cc",
     "lib/browser/headless_browser_main_parts.h",
+    "lib/browser/headless_browser_main_parts_linux.cc",
     "lib/browser/headless_browser_main_parts_mac.mm",
     "lib/browser/headless_devtools.cc",
     "lib/browser/headless_devtools.h",
@@ -377,6 +382,7 @@ component("headless_non_renderer") {
 
   data_deps = []
   data = []
+  defines = []
 
   if (enable_basic_printing) {
     public_deps += [ "//skia" ]
@@ -489,6 +495,11 @@ component("headless_non_renderer") {
 
   if (use_ozone) {
     deps += [ "//ui/ozone" ]
+  }
+
+  if (use_dbus) {
+    defines += [ "USE_DBUS" ]
+    deps += [ "//device/bluetooth" ]
   }
 
   if (headless_fontconfig_utils && !is_fuchsia) {

@@ -97,6 +97,7 @@ void SafeBrowsingUserInteractionObserver::CreateForWebContents(
   if (FromWebContents(web_contents)) {
     return;
   }
+  DCHECK(!web_contents->IsPortal());
   auto observer = std::make_unique<SafeBrowsingUserInteractionObserver>(
       web_contents, resource, is_main_frame, ui_manager);
   web_contents->SetUserData(kWebContentsUserDataKey, std::move(observer));
@@ -187,6 +188,11 @@ void SafeBrowsingUserInteractionObserver::DidToggleFullscreenModeForTab(
   // DO NOT add code past this point. |this| is destroyed.
 }
 
+void SafeBrowsingUserInteractionObserver::OnPaste() {
+  ShowInterstitial(DelayedWarningEvent::kWarningShownOnPaste);
+  // DO NOT add code past this point. |this| is destroyed.
+}
+
 void SafeBrowsingUserInteractionObserver::OnBubbleAdded() {
   // The page requested a permission that triggered a permission prompt. Deny
   // and show the interstitial.
@@ -200,8 +206,31 @@ void SafeBrowsingUserInteractionObserver::OnBubbleAdded() {
   // DO NOT add code past this point. |this| is destroyed.
 }
 
+void SafeBrowsingUserInteractionObserver::OnJavaScriptDialog() {
+  ShowInterstitial(DelayedWarningEvent::kWarningShownOnJavaScriptDialog);
+  // DO NOT add code past this point. |this| is destroyed.
+}
+
+void SafeBrowsingUserInteractionObserver::OnPasswordSaveOrAutofillDenied() {
+  if (password_save_or_autofill_denied_metric_recorded_) {
+    return;
+  }
+  password_save_or_autofill_denied_metric_recorded_ = true;
+  RecordUMA(DelayedWarningEvent::kPasswordSaveOrAutofillDenied);
+}
+
+void SafeBrowsingUserInteractionObserver::OnDesktopCaptureRequest() {
+  ShowInterstitial(DelayedWarningEvent::kWarningShownOnDesktopCaptureRequest);
+  // DO NOT add code past this point. |this| is destroyed.
+}
+
 bool SafeBrowsingUserInteractionObserver::HandleKeyPress(
     const content::NativeWebKeyboardEvent& event) {
+  // Allow non-character keys such as ESC. These can be used to exit fullscreen,
+  // for example.
+  if (!event.IsCharacterKey()) {
+    return false;
+  }
   ShowInterstitial(DelayedWarningEvent::kWarningShownOnKeypress);
   // DO NOT add code past this point. |this| is destroyed.
   return true;

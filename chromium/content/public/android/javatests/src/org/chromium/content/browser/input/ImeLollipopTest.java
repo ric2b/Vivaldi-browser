@@ -6,10 +6,12 @@ package org.chromium.content.browser.input;
 
 import android.annotation.TargetApi;
 import android.os.Build;
-import android.support.test.filters.MediumTest;
 import android.view.inputmethod.CursorAnchorInfo;
 import android.view.inputmethod.InputConnection;
 
+import androidx.test.filters.MediumTest;
+
+import org.hamcrest.Matchers;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
@@ -18,8 +20,8 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.content_public.browser.test.ContentJUnit4ClassRunner;
+import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 
@@ -43,7 +45,6 @@ public class ImeLollipopTest {
     @Test
     @MediumTest
     @Feature({"TextInput"})
-    @RetryOnFailure
     public void testUpdateCursorAnchorInfo() throws Throwable {
         requestCursorUpdates(InputConnection.CURSOR_UPDATE_MONITOR);
 
@@ -95,11 +96,11 @@ public class ImeLollipopTest {
         CriteriaHelper.pollUiThread(() -> {
             CursorAnchorInfo info = mRule.getInputMethodManagerWrapper().getLastCursorAnchorInfo();
             if (info != null) {
-                Assert.assertNotNull(info.getComposingText());
+                Criteria.checkThat(info.getComposingText(), Matchers.notNullValue());
             }
 
             String actual = (info == null ? "" : info.getComposingText().toString());
-            Assert.assertEquals(expected, actual);
+            Criteria.checkThat(actual, Matchers.is(expected));
         });
     }
 }

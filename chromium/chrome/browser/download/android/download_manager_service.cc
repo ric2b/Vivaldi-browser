@@ -12,9 +12,11 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/metrics/field_trial_params.h"
+#include "base/optional.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/time/default_clock.h"
 #include "base/time/time.h"
 #include "chrome/android/chrome_jni_headers/DownloadItem_jni.h"
 #include "chrome/android/chrome_jni_headers/DownloadManagerService_jni.h"
@@ -40,6 +42,7 @@
 #include "components/download/public/common/simple_download_manager_coordinator.h"
 #include "components/download/public/common/url_download_handler_factory.h"
 #include "components/download/public/task/task_manager_impl.h"
+#include "components/offline_items_collection/core/android/offline_item_bridge.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/download_item_utils.h"
 #include "content/public/browser/download_request_utils.h"
@@ -51,6 +54,10 @@ using base::android::ConvertUTF16ToJavaString;
 using base::android::ConvertUTF8ToJavaString;
 using base::android::JavaParamRef;
 using base::android::ScopedJavaLocalRef;
+using offline_items_collection::android::OfflineItemBridge;
+using DownloadSchedule = download::DownloadSchedule;
+using OfflineItemSchedule = offline_items_collection::OfflineItemSchedule;
+
 namespace {
 
 // The remaining time for a download item if it cannot be calculated.
@@ -100,7 +107,8 @@ void DownloadManagerService::CreateAutoResumptionHandler() {
       chrome::android::IsJavaDrivenFeatureEnabled(
           download::features::kDownloadAutoResumptionNative);
   download::AutoResumptionHandler::Create(
-      std::move(network_listener), std::move(task_manager), std::move(config));
+      std::move(network_listener), std::move(task_manager), std::move(config),
+      base::DefaultClock::GetInstance());
 }
 
 // static
@@ -137,6 +145,15 @@ ScopedJavaLocalRef<jobject> DownloadManagerService::CreateJavaDownloadInfo(
                                  : item->GetOriginalUrl().spec();
   content::BrowserContext* browser_context =
       content::DownloadItemUtils::GetBrowserContext(item);
+
+  base::Optional<OfflineItemSchedule> offline_item_schedule;
+  auto download_schedule = item->GetDownloadSchedule();
+  if (download_schedule.has_value()) {
+    offline_item_schedule = base::make_optional<OfflineItemSchedule>(
+        download_schedule->only_on_wifi(), download_schedule->start_time());
+  }
+  auto j_offline_item_schedule =
+      OfflineItemBridge::CreateOfflineItemSchedule(env, offline_item_schedule);
   return Java_DownloadInfo_createDownloadInfo(
       env, ConvertUTF8ToJavaString(env, item->GetGuid()),
       ConvertUTF8ToJavaString(env, item->GetFileNameToReportUser().value()),
@@ -154,7 +171,8 @@ ScopedJavaLocalRef<jobject> DownloadManagerService::CreateJavaDownloadInfo(
       item->GetLastAccessTime().ToJavaTime(), item->IsDangerous(),
       static_cast<int>(
           OfflineItemUtils::ConvertDownloadInterruptReasonToFailState(
-              item->GetLastReason())));
+              item->GetLastReason())),
+      j_offline_item_schedule);
 }
 
 static jlong JNI_DownloadManagerService_Init(JNIEnv* env,
@@ -724,6 +742,29 @@ void DownloadManagerService::RenameDownload(
   item->Rename(base::FilePath(target_name), std::move(callback));
 }
 
+void DownloadManagerService::ChangeSchedule(JNIEnv* env,
+                                            const JavaParamRef<jobject>& obj,
+                                            const JavaParamRef<jstring>& id,
+                                            jboolean only_on_wifi,
+                                            jlong start_time,
+                                            jboolean is_off_the_record) {
+  std::string download_guid = ConvertJavaStringToUTF8(id);
+  download::DownloadItem* item = GetDownload(download_guid, is_off_the_record);
+  if (!item)
+    return;
+
+  base::Optional<DownloadSchedule> download_schedule;
+  if (only_on_wifi) {
+    download_schedule = base::make_optional<DownloadSchedule>(
+        true /*only_on_wifi*/, base::nullopt);
+  } else if (start_time > 0) {
+    download_schedule = base::make_optional<DownloadSchedule>(
+        false /*only_on_wifi*/, base::Time::FromJavaTime(start_time));
+  }
+
+  item->OnDownloadScheduleChanged(std::move(download_schedule));
+}
+
 void DownloadManagerService::CreateInterruptedDownloadForTest(
     JNIEnv* env,
     jobject obj,
@@ -746,7 +787,8 @@ void DownloadManagerService::CreateInterruptedDownloadForTest(
           download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS,
           download::DOWNLOAD_INTERRUPT_REASON_CRASH, false, false, false,
           base::Time(), false,
-          std::vector<download::DownloadItem::ReceivedSlice>(), nullptr));
+          std::vector<download::DownloadItem::ReceivedSlice>(),
+          base::nullopt /*download_schedule*/, nullptr));
 }
 
 void DownloadManagerService::InitializeForProfile(Profile* profile) {

@@ -35,10 +35,10 @@
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "third_party/blink/public/common/dom_storage/session_storage_namespace_id.h"
 #include "third_party/blink/public/common/feature_policy/feature_policy.h"
+#include "third_party/blink/public/common/page/web_drag_operation.h"
 #include "third_party/blink/public/mojom/devtools/console_message.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink-forward.h"
 #include "third_party/blink/public/platform/blame_context.h"
-#include "third_party/blink/public/platform/web_drag_operation.h"
 #include "third_party/blink/public/platform/web_float_rect.h"
 #include "third_party/blink/public/web/web_swap_result.h"
 #include "third_party/blink/public/web/web_widget_client.h"
@@ -148,7 +148,8 @@ class CORE_EXPORT ChromeClient : public GarbageCollected<ChromeClient> {
   // part of.
   virtual IntRect RootWindowRect(LocalFrame&) = 0;
 
-  virtual void Focus(LocalFrame*) = 0;
+  virtual void FocusPage() = 0;
+  virtual void DidFocusPage() = 0;
 
   virtual bool CanTakeFocus(mojom::blink::FocusType) = 0;
   virtual void TakeFocus(mojom::blink::FocusType) = 0;
@@ -313,6 +314,9 @@ class CORE_EXPORT ChromeClient : public GarbageCollected<ChromeClient> {
                                const HitTestResult&);
   virtual void SetToolTip(LocalFrame&, const String&, TextDirection) = 0;
   void ClearToolTip(LocalFrame&);
+  String GetLastToolTipTextForTesting() {
+    return current_tool_tip_text_for_test_;
+  }
 
   bool Print(LocalFrame*);
 
@@ -493,7 +497,7 @@ class CORE_EXPORT ChromeClient : public GarbageCollected<ChromeClient> {
   // tracing/debugging purposes.
   virtual int GetLayerTreeId(LocalFrame& frame) = 0;
 
-  virtual void Trace(Visitor*);
+  virtual void Trace(Visitor*) const;
 
   virtual void DidUpdateTextAutosizerPageInfo(const WebTextAutosizerPageInfo&) {
   }
@@ -505,6 +509,10 @@ class CORE_EXPORT ChromeClient : public GarbageCollected<ChromeClient> {
   // includes CSS zoom and the device scale factor (if use-zoom-for-dsf is
   // enabled). This only includes the zoom initiated by the user (ctrl +/-).
   virtual double UserZoomFactor() const { return 1; }
+
+  virtual void SetDelegatedInkMetadata(
+      LocalFrame* frame,
+      std::unique_ptr<viz::DelegatedInkMetadata> metadata) {}
 
  protected:
   ChromeClient() = default;
@@ -537,6 +545,9 @@ class CORE_EXPORT ChromeClient : public GarbageCollected<ChromeClient> {
   WeakMember<Node> last_mouse_over_node_;
   PhysicalOffset last_tool_tip_point_;
   String last_tool_tip_text_;
+  // |last_tool_tip_text_| is kept even if ClearToolTip is called. This is for
+  // the tooltip text that is cleared when ClearToolTip is called.
+  String current_tool_tip_text_for_test_;
 
   FRIEND_TEST_ALL_PREFIXES(ChromeClientTest, SetToolTipFlood);
   FRIEND_TEST_ALL_PREFIXES(ChromeClientTest, SetToolTipEmptyString);

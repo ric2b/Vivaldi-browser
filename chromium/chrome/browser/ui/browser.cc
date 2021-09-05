@@ -54,7 +54,6 @@
 #include "chrome/browser/extensions/api/tabs/tabs_event_router.h"
 #include "chrome/browser/extensions/api/tabs/tabs_windows_api.h"
 #include "chrome/browser/extensions/browser_extension_window_controller.h"
-#include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_ui_util.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/tab_helper.h"
@@ -92,11 +91,8 @@
 #include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
 #include "chrome/browser/ui/autofill/chrome_autofill_client.h"
+#include "chrome/browser/ui/blocked_content/chrome_popup_navigation_delegate.h"
 #include "chrome/browser/ui/blocked_content/framebust_block_tab_helper.h"
-#include "chrome/browser/ui/blocked_content/list_item_position.h"
-#include "chrome/browser/ui/blocked_content/popup_blocker.h"
-#include "chrome/browser/ui/blocked_content/popup_blocker_tab_helper.h"
-#include "chrome/browser/ui/blocked_content/popup_tracker.h"
 #include "chrome/browser/ui/bluetooth/bluetooth_chooser_controller.h"
 #include "chrome/browser/ui/bluetooth/bluetooth_chooser_desktop.h"
 #include "chrome/browser/ui/bluetooth/bluetooth_scanning_prompt_controller.h"
@@ -159,6 +155,10 @@
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/blocked_content/list_item_position.h"
+#include "components/blocked_content/popup_blocker.h"
+#include "components/blocked_content/popup_blocker_tab_helper.h"
+#include "components/blocked_content/popup_tracker.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
@@ -227,6 +227,7 @@
 #include "third_party/blink/public/mojom/frame/blocked_navigation_types.mojom.h"
 #include "third_party/blink/public/mojom/frame/fullscreen.mojom.h"
 #include "third_party/blink/public/mojom/web_feature/web_feature.mojom.h"
+#include "third_party/blink/public/mojom/window_features/window_features.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/gfx/font_list.h"
@@ -429,28 +430,6 @@ Browser::CreateParams Browser::CreateParams::CreateForDevTools(
   return params;
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// Browser, InterstitialObserver:
-
-class Browser::InterstitialObserver : public content::WebContentsObserver {
- public:
-  InterstitialObserver(Browser* browser, content::WebContents* web_contents)
-      : WebContentsObserver(web_contents), browser_(browser) {}
-
-  void DidAttachInterstitialPage() override {
-    browser_->UpdateBookmarkBarState(BOOKMARK_BAR_STATE_CHANGE_TAB_STATE);
-  }
-
-  void DidDetachInterstitialPage() override {
-    browser_->UpdateBookmarkBarState(BOOKMARK_BAR_STATE_CHANGE_TAB_STATE);
-  }
-
- private:
-  Browser* browser_;
-
-  DISALLOW_COPY_AND_ASSIGN(InterstitialObserver);
-};
-
 ///////////////////////////////////////////////////////////////////////////////
 // Browser, Constructors, Creation, Showing:
 
@@ -515,14 +494,7 @@ Browser::Browser(const CreateParams& params)
   CHECK(g_browser_process);
   CHECK(!g_browser_process->IsShuttingDown());
 
-  // If this causes a crash then a window is being opened using a profile type
-  // that is disallowed by policy. The crash prevents the disabled window type
-  // from opening at all, but the path that triggered it should be fixed.
-  CHECK(IncognitoModePrefs::CanOpenBrowser(profile_));
-  CHECK(!profile_->IsGuestSession() || profile_->IsOffTheRecord())
-      << "Only off the record browser may be opened in guest mode";
-  CHECK(!profile_->IsSystemProfile())
-      << "The system profile should never have a real browser.";
+  CHECK(CanCreateBrowserForProfile(profile_));
 
   tab_strip_model_->AddObserver(this);
 
@@ -644,7 +616,7 @@ Browser::~Browser() {
   // The system incognito profile should not try be destroyed using
   // ProfileDestroyer::DestroyProfileWhenAppropriate(). This profile can be
   // used, at least, by the user manager window. This window is not a browser,
-  // therefore, BrowserList::IsIncognitoSessionActiveForProfile(profile_)
+  // therefore, BrowserList::IsOffTheRecordBrowserActiveForProfile(profile_)
   // returns false, while the user manager window is still opened.
   // This cannot be fixed in ProfileDestroyer::DestroyProfileWhenAppropriate(),
   // because the ProfileManager needs to be able to destroy all profiles when
@@ -653,7 +625,7 @@ Browser::~Browser() {
   // Non-primary OffTheRecord profiles should not be destroyed directly by
   // Browser (e.g. for offscreen tabs, https://crbug.com/664351).
   if (profile_->IsPrimaryOTRProfile() &&
-      !BrowserList::IsIncognitoSessionInUse(profile_) &&
+      !BrowserList::IsOffTheRecordBrowserInUse(profile_) &&
       !profile_->GetOriginalProfile()->IsSystemProfile()) {
     if (profile_->IsGuestSession()) {
 // ChromeOS handles guest data independently.
@@ -852,8 +824,8 @@ base::string16 Browser::GetWindowTitleFromWebContents(
   if (title.empty() &&
       (is_type_app() || is_type_app_popup() || is_type_devtools()) &&
       include_app_name) {
-    return base::UTF8ToUTF16(
-        app_controller_ ? app_controller_->GetAppShortName() : app_name());
+    return app_controller_ ? app_controller_->GetAppShortName()
+                           : base::UTF8ToUTF16(app_name());
   }
 
   // Include the app name in window titles for tabbed browser windows when
@@ -1526,7 +1498,8 @@ void Browser::OnDidBlockNavigation(
       auto on_click = [](const GURL& url, size_t index, size_t total_elements) {
         UMA_HISTOGRAM_ENUMERATION(
             "WebCore.Framebust.ClickThroughPosition",
-            GetListItemPositionFromDistance(index, total_elements));
+            blocked_content::GetListItemPositionFromDistance(index,
+                                                             total_elements));
       };
       framebust_helper->AddBlockedUrl(blocked_url, base::BindOnce(on_click));
     }
@@ -1662,28 +1635,40 @@ WebContents* Browser::OpenURLFromTab(WebContents* source,
   nav_params.tabstrip_add_types = TabStripModel::ADD_NONE;
   if (params.user_gesture)
     nav_params.window_action = NavigateParams::SHOW_WINDOW;
-  bool is_popup = source && ConsiderForPopupBlocking(params.disposition);
-  if (is_popup && MaybeBlockPopup(source, nullptr, &nav_params, &params,
-                                  blink::mojom::WindowFeatures())) {
-    return nullptr;
-  }
-
-  chrome::ConfigureTabGroupForNavigation(&nav_params);
-
   if (vivaldi::IsVivaldiRunning()) {
     nav_params.should_create_guestframe = true;
   }
 
-  Navigate(&nav_params);
+  bool is_popup =
+      source && blocked_content::ConsiderForPopupBlocking(params.disposition);
+  auto popup_delegate =
+      std::make_unique<ChromePopupNavigationDelegate>(std::move(nav_params));
+  if (is_popup) {
+    popup_delegate.reset(static_cast<ChromePopupNavigationDelegate*>(
+        blocked_content::MaybeBlockPopup(
+            source, nullptr, std::move(popup_delegate), &params,
+            blink::mojom::WindowFeatures(),
+            HostContentSettingsMapFactory::GetForProfile(
+                source->GetBrowserContext()))
+            .release()));
+    if (!popup_delegate)
+      return nullptr;
+  }
 
-  if (is_popup && nav_params.navigated_or_inserted_contents) {
-    auto* tracker = PopupTracker::CreateForWebContents(
-        nav_params.navigated_or_inserted_contents, source, params.disposition);
+  chrome::ConfigureTabGroupForNavigation(popup_delegate->nav_params());
+
+  Navigate(popup_delegate->nav_params());
+
+  content::WebContents* navigated_or_inserted_contents =
+      popup_delegate->nav_params()->navigated_or_inserted_contents;
+  if (is_popup && navigated_or_inserted_contents) {
+    auto* tracker = blocked_content::PopupTracker::CreateForWebContents(
+        navigated_or_inserted_contents, source, params.disposition);
     tracker->set_is_trusted(params.triggering_event_info !=
                             blink::TriggeringEventInfo::kFromUntrustedEvent);
   }
 
-  return nav_params.navigated_or_inserted_contents;
+  return navigated_or_inserted_contents;
 }
 
 void Browser::NavigationStateChanged(WebContents* source,
@@ -1737,8 +1722,10 @@ void Browser::AddNewContents(WebContents* source,
 
   // At this point the |new_contents| is beyond the popup blocker, but we use
   // the same logic for determining if the popup tracker needs to be attached.
-  if (source && ConsiderForPopupBlocking(disposition))
-    PopupTracker::CreateForWebContents(new_contents.get(), source, disposition);
+  if (source && blocked_content::ConsiderForPopupBlocking(disposition)) {
+    blocked_content::PopupTracker::CreateForWebContents(new_contents.get(),
+                                                        source, disposition);
+  }
 
   chrome::AddWebContents(this, source, std::move(new_contents), target_url,
                          disposition, initial_rect);
@@ -1990,11 +1977,10 @@ bool Browser::EmbedsFullscreenWidget() {
 }
 
 void Browser::EnterFullscreenModeForTab(
-    WebContents* web_contents,
-    const GURL& origin,
+    content::RenderFrameHost* requesting_frame,
     const blink::mojom::FullscreenOptions& options) {
   exclusive_access_manager_->fullscreen_controller()->EnterFullscreenModeForTab(
-      web_contents, origin, options.display_id);
+      requesting_frame, options.display_id);
 }
 
 void Browser::ExitFullscreenModeForTab(WebContents* web_contents) {
@@ -2383,8 +2369,6 @@ void Browser::OnTabInsertedAt(WebContents* contents, int index) {
   // ScheduleUIUpdate() because the tab may not have been inserted in the UI
   // yet if this function is called before TabStripModel::TabInsertedAt().
   UpdateWindowForLoadingStateChanged(contents, true);
-
-  interstitial_observers_.push_back(new InterstitialObserver(this, contents));
 
   SessionService* session_service =
       SessionServiceFactory::GetForProfile(profile_);
@@ -2912,15 +2896,6 @@ void Browser::TabDetachedAtImpl(content::WebContents* contents,
 
   if (HasFindBarController() && was_active)
     find_bar_controller_->ChangeWebContents(NULL);
-
-  for (size_t i = 0; i < interstitial_observers_.size(); i++) {
-    if (interstitial_observers_[i]->web_contents() != contents)
-      continue;
-
-    delete interstitial_observers_[i];
-    interstitial_observers_.erase(interstitial_observers_.begin() + i);
-    return;
-  }
 }
 
 void Browser::UpdateWindowForLoadingStateChanged(content::WebContents* source,
@@ -2944,8 +2919,6 @@ bool Browser::NormalBrowserSupportsWindowFeature(WindowFeature feature,
                                                  bool check_can_support) const {
   bool fullscreen = ShouldHideUIForFullscreen();
   switch (feature) {
-    case FEATURE_INFOBAR:
-    case FEATURE_DOWNLOADSHELF:
     case FEATURE_BOOKMARKBAR:
       return true;
     case FEATURE_TABSTRIP:
@@ -2963,9 +2936,6 @@ bool Browser::PopupBrowserSupportsWindowFeature(WindowFeature feature,
   bool fullscreen = ShouldHideUIForFullscreen();
 
   switch (feature) {
-    case FEATURE_INFOBAR:
-    case FEATURE_DOWNLOADSHELF:
-      return true;
     case FEATURE_TITLEBAR:
     case FEATURE_LOCATIONBAR:
       return check_can_support || (!fullscreen && !is_trusted_source());
@@ -2990,7 +2960,8 @@ bool Browser::AppPopupBrowserSupportsWindowFeature(
     case FEATURE_TITLEBAR:
       return check_can_support || !fullscreen;
     case FEATURE_LOCATIONBAR:
-      return false;
+      return app_controller_ && app_controller_->HasAppId() &&
+             (check_can_support || !fullscreen);
     default:
       return PopupBrowserSupportsWindowFeature(feature, check_can_support);
   }
@@ -3008,8 +2979,6 @@ bool Browser::AppBrowserSupportsWindowFeature(WindowFeature feature,
     // TODO(crbug.com/992834): Make this control the visibility of Browser
     // Controls more generally.
     case FEATURE_TOOLBAR:
-    case FEATURE_INFOBAR:
-    case FEATURE_DOWNLOADSHELF:
       return true;
     case FEATURE_TITLEBAR:
     // TODO(crbug.com/992834): Make this control the visibility of
@@ -3030,8 +2999,6 @@ bool Browser::CustomTabBrowserSupportsWindowFeature(
     WindowFeature feature) const {
   switch (feature) {
     case FEATURE_TOOLBAR:
-    case FEATURE_INFOBAR:
-    case FEATURE_DOWNLOADSHELF:
       return true;
     case FEATURE_TITLEBAR:
     case FEATURE_LOCATIONBAR:
@@ -3134,11 +3101,11 @@ bool Browser::ShouldCreateBackgroundContents(
     content::SiteInstance* source_site_instance,
     const GURL& opener_url,
     const std::string& frame_name) {
-  extensions::ExtensionService* extensions_service =
-      extensions::ExtensionSystem::Get(profile_)->extension_service();
+  extensions::ExtensionSystem* extension_system =
+      extensions::ExtensionSystem::Get(profile_);
 
-  if (!opener_url.is_valid() || frame_name.empty() || !extensions_service ||
-      !extensions_service->is_ready())
+  if (!opener_url.is_valid() || frame_name.empty() ||
+      !extension_system->is_ready())
     return false;
 
   // Only hosted apps have web extents, so this ensures that only hosted apps

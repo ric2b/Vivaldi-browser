@@ -9,7 +9,6 @@
 #include <vector>
 
 #include "base/callback_helpers.h"
-#include "base/containers/circular_deque.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/threading/thread_checker.h"
@@ -57,6 +56,10 @@ class VIZ_SERVICE_EXPORT OutputSurface {
     Capabilities(const Capabilities& capabilities);
 
     int max_frames_pending = 1;
+    // The number of buffers for the SkiaOutputDevice. If the
+    // |supports_post_sub_buffer| true, SkiaOutputSurfaceImpl will track target
+    // damaged area based on this number.
+    int number_of_buffers = 2;
     // Whether this output surface renders to the default OpenGL zero
     // framebuffer or to an offscreen framebuffer.
     bool uses_default_gl_framebuffer = true;
@@ -88,6 +91,9 @@ class VIZ_SERVICE_EXPORT OutputSurface {
     // When this is false contents outside the damaged area might need to be
     // recomposited to the surface.
     bool only_invalidates_damage_rect = true;
+    // Whether OutputSurface::GetTargetDamageBoundingRect is implemented and
+    // will return a bounding rectangle of the target buffer invalidated area.
+    bool supports_target_damage = false;
     // Whether the gpu supports surfaceless surface (equivalent of using buffer
     // queue).
     bool supports_surfaceless = false;
@@ -96,6 +102,10 @@ class VIZ_SERVICE_EXPORT OutputSurface {
     bool android_surface_control_feature_enabled = false;
     // True if the buffer content will be preserved after presenting.
     bool preserve_buffer_content = false;
+    // True if the SkiaOutputDevice will set
+    // SwapBuffersCompleteParams::frame_buffer_damage_area for every
+    // SwapBuffers complete callback.
+    bool damage_area_from_skia_output_device = false;
     // The SkColorType and GrBackendFormat for non-HDR and HDR.
     // TODO(penghuang): remove SkColorType and GrBackendFormat when
     // OutputSurface uses the |format| passed to Reshape().

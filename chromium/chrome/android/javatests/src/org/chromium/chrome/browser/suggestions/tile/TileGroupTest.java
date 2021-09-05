@@ -5,11 +5,12 @@
 package org.chromium.chrome.browser.suggestions.tile;
 
 import android.support.test.InstrumentationRegistry;
-import android.support.test.espresso.matcher.ViewMatchers;
-import android.support.test.filters.MediumTest;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
+
+import androidx.test.espresso.matcher.ViewMatchers;
+import androidx.test.filters.MediumTest;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -21,7 +22,6 @@ import org.junit.runner.RunWith;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.explore_sites.ExploreSitesBridge;
@@ -56,7 +56,6 @@ import java.util.concurrent.TimeoutException;
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
-@RetryOnFailure
 public class TileGroupTest {
     @Rule
     public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();

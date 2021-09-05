@@ -100,6 +100,18 @@ bool AreDefaultSiteInstancesEnabled();
 // the test; the flag will be read on the first real navigation.
 void IsolateAllSitesForTesting(base::CommandLine* command_line);
 
+// Whether same-site navigations might result in a change of RenderFrameHosts -
+// this will happen when ProactivelySwapBrowsingInstance or RenderDocument
+// is enabled on same-site main frame navigations.
+bool CanSameSiteMainFrameNavigationsChangeRenderFrameHosts();
+
+// Whether same-site navigations might result in a change of SiteInstances -
+// this will happen when ProactivelySwapBrowsingInstance is enabled on
+// same-site main frame navigations.
+// Note that unlike CanSameSiteMainFrameNavigationsChangeRenderFrameHosts()
+// above, this will not be true when RenderDocument for main-frame is enabled.
+bool CanSameSiteMainFrameNavigationsChangeSiteInstances();
+
 // Returns a GURL constructed from the WebUI scheme and the given host.
 GURL GetWebUIURL(const std::string& host);
 

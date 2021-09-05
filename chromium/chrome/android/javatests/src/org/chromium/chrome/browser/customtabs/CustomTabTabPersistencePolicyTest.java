@@ -6,11 +6,11 @@ package org.chromium.chrome.browser.customtabs;
 
 import android.app.Activity;
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.MediumTest;
-import android.support.test.filters.SmallTest;
 import android.support.test.rule.UiThreadTestRule;
 
 import androidx.annotation.Nullable;
+import androidx.test.filters.MediumTest;
+import androidx.test.filters.SmallTest;
 
 import org.hamcrest.Matchers;
 import org.junit.After;
@@ -33,10 +33,12 @@ import org.chromium.base.test.util.AdvancedMockContext;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
+import org.chromium.chrome.browser.app.tabmodel.ChromeTabModelFilterFactory;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.tab.MockTab;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tab.TabState;
+import org.chromium.chrome.browser.tab.TabStateFileManager;
+import org.chromium.chrome.browser.tabmodel.NextTabPolicy;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorImpl;
 import org.chromium.chrome.browser.tabmodel.TabPersistencePolicy;
@@ -256,7 +258,7 @@ public class CustomTabTabPersistencePolicyTest {
         Assert.assertThat(filesToDelete.get(), Matchers.emptyIterable());
 
         // Create an unreferenced tab state file and ensure it is marked for deletion.
-        File tab999File = TabState.getTabStateFile(stateDirectory, 999, false);
+        File tab999File = TabStateFileManager.getTabStateFile(stateDirectory, 999, false);
         Assert.assertTrue(tab999File.createNewFile());
         policy.cleanupUnusedFiles(filesToDeleteCallback);
         callbackSignal.waitForCallback(1);
@@ -293,11 +295,11 @@ public class CustomTabTabPersistencePolicyTest {
         } finally {
             StreamUtil.closeQuietly(fos);
         }
-        File tab111File = TabState.getTabStateFile(stateDirectory, 111, false);
+        File tab111File = TabStateFileManager.getTabStateFile(stateDirectory, 111, false);
         Assert.assertTrue(tab111File.createNewFile());
-        File tab222File = TabState.getTabStateFile(stateDirectory, 222, false);
+        File tab222File = TabStateFileManager.getTabStateFile(stateDirectory, 222, false);
         Assert.assertTrue(tab222File.createNewFile());
-        File tab333File = TabState.getTabStateFile(stateDirectory, 333, false);
+        File tab333File = TabStateFileManager.getTabStateFile(stateDirectory, 333, false);
         Assert.assertTrue(tab333File.createNewFile());
         policy.cleanupUnusedFiles(filesToDeleteCallback);
         callbackSignal.waitForCallback(3);
@@ -463,8 +465,9 @@ public class CustomTabTabPersistencePolicyTest {
 
         CustomTabActivity activity = new CustomTabActivity();
         ApplicationStatus.onStateChangeForTesting(activity, ActivityState.CREATED);
-        TabModelSelectorImpl selector = new TabModelSelectorImpl(
-                activity, activity, buildTestPersistencePolicy(), false, false, false);
+        TabModelSelectorImpl selector = new TabModelSelectorImpl(activity, activity,
+                buildTestPersistencePolicy(), new ChromeTabModelFilterFactory(),
+                () -> NextTabPolicy.LOCATIONAL, false, false, false);
         selector.initializeForTesting(normalTabModel, incognitoTabModel);
         ApplicationStatus.onStateChangeForTesting(activity, ActivityState.DESTROYED);
         return selector;

@@ -112,6 +112,7 @@
 <translation id="1771761307086386028">Posunout doprava</translation>
 <translation id="1781173782405573156">Klávesa průchodu</translation>
 <translation id="1787176709638001873">Úprava hesla – text</translation>
+<translation id="180203835522132923">Vyhledávací tlačítko + O, poté W</translation>
 <translation id="1810107444790159527">Seznam</translation>
 <translation id="1812527064848182527">na šířku</translation>
 <translation id="1829244130665387512">Najít na stránce</translation>
@@ -256,6 +257,7 @@
 <translation id="297825089465017871">Přejeďte dvěma prsty doleva</translation>
 <translation id="2998131015536248178">Předchozí znak</translation>
 <translation id="2999559350546931576">Snížit výšku hlasu</translation>
+<translation id="3009352964623081324">Vyhledávací tlačítko + O, poté S. Slouží k instalaci, správě a přizpůsobení hlasů.</translation>
 <translation id="3014130421870723208">upr @ 8b</translation>
 <translation id="3030432017085518523">Položka nabídky – přepínač</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{apostrof}few{# apostrofy}many{# apostrophes}other{# apostrofů}}</translation>
@@ -454,6 +456,7 @@
 <translation id="4505167975768625962">Vložení</translation>
 <translation id="4511186779140817916">Mandlová</translation>
 <translation id="451510441928265982">Žádný předchozí nadpis 2. úrovně není</translation>
+<translation id="4515799157838123044">Zastínit obsah na pozadí</translation>
 <translation id="4517854969512651305">Zvýšit hodnotu</translation>
 <translation id="4532633738839459153">{COUNT,plural, =1{lomítko}few{# lomítka}many{# slashes}other{# lomítek}}</translation>
 <translation id="4537277403911487429">Další podobná položka</translation>
@@ -705,6 +708,7 @@
 <translation id="6628427060004938651">Část</translation>
 <translation id="6637586476836377253">protokol</translation>
 <translation id="6657128831881431364">Indikátor průběhu</translation>
+<translation id="6660819301598582123">Příliš žluťoučký kůň úpěl ďábelské ódy.</translation>
 <translation id="667999046851023355">Dokument</translation>
 <translation id="6688209025607531203">Nemodální upozornění</translation>
 <translation id="6689672606256159458">Tmavě lososová</translation>
@@ -740,7 +744,6 @@
 <translation id="6951482098621102657">Žádný další nadpis 5. úrovně není</translation>
 <translation id="6955705049214951590">Růžovobílá</translation>
 <translation id="696356426651109308">Přejít na začátek</translation>
-<translation id="699159175332639490">Hledat + O + W</translation>
 <translation id="6994042831499278539">Odkaz na glosář</translation>
 <translation id="6996566555547746822">Další rozbalovací seznam</translation>
 <translation id="6997224546856374593">Při čtení velkých písmen:</translation>
@@ -808,6 +811,7 @@
 <translation id="743783356331413498">Příklad</translation>
 <translation id="7439060726180460871">Adresář</translation>
 <translation id="744163271241493234">upr heslo</translation>
+<translation id="7484805699335881122">Změnit výšku hlasu při vyslovování typů prvků a textu, který je smazán nebo psán v uvozovkách, tučně, v závorkách nebo velkými písmeny.</translation>
 <translation id="7491962110804786152">karta</translation>
 <translation id="7505149250476994901">Před písmenem řekněte „velké“</translation>
 <translation id="7518543783849163354">Chcete-li hlasovou odezvu nástroje ChromeVox dočasně pozastavit, stiskněte klávesu Control.</translation>

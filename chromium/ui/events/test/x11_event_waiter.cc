@@ -11,19 +11,21 @@
 namespace ui {
 
 // static
-XEventWaiter* XEventWaiter::Create(XID window, base::OnceClosure callback) {
+XEventWaiter* XEventWaiter::Create(x11::Window window,
+                                   base::OnceClosure callback) {
   Display* display = gfx::GetXDisplay();
   static XEvent* marker_event = nullptr;
   if (!marker_event) {
     marker_event = new XEvent();
     marker_event->xclient.type = ClientMessage;
     marker_event->xclient.display = display;
-    marker_event->xclient.window = window;
+    marker_event->xclient.window = static_cast<uint32_t>(window);
     marker_event->xclient.format = 8;
   }
-  marker_event->xclient.message_type = MarkerEventAtom();
+  marker_event->xclient.message_type = static_cast<uint32_t>(MarkerEventAtom());
 
-  XSendEvent(display, window, x11::False, 0, marker_event);
+  XSendEvent(display, static_cast<uint32_t>(window), x11::False, 0,
+             marker_event);
   XFlush(display);
 
   // Will be deallocated when the expected event is received.
@@ -40,9 +42,10 @@ XEventWaiter::~XEventWaiter() {
   ui::X11EventSource::GetInstance()->RemoveXEventObserver(this);
 }
 
-void XEventWaiter::WillProcessXEvent(XEvent* xev) {
+void XEventWaiter::WillProcessXEvent(x11::Event* x11_event) {
+  XEvent* xev = &x11_event->xlib_event();
   if (xev->xany.type == ClientMessage &&
-      xev->xclient.message_type == MarkerEventAtom()) {
+      static_cast<x11::Atom>(xev->xclient.message_type) == MarkerEventAtom()) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
                                                   std::move(success_callback_));
     delete this;
@@ -50,7 +53,7 @@ void XEventWaiter::WillProcessXEvent(XEvent* xev) {
 }
 
 // Returns atom that indidates that the XEvent is marker event.
-XAtom XEventWaiter::MarkerEventAtom() {
+x11::Atom XEventWaiter::MarkerEventAtom() {
   return gfx::GetAtom("marker_event");
 }
 

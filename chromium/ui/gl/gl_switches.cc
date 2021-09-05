@@ -141,6 +141,10 @@ const char kEnableDirectCompositionVideoOverlays[] =
 const char kDisableDirectCompositionVideoOverlays[] =
     "disable-direct-composition-video-overlays";
 
+// Initialize the GPU process using the adapter with the specified LUID. This is
+// only used on Windows, as LUID is a Windows specific structure.
+const char kUseAdapterLuid[] = "use-adapter-luid";
+
 // This is the list of switches passed from this file that are passed from the
 // GpuProcessHost to the GPU Process. Add your switch to this list if you need
 // to read it in the GPU process, else don't add it.
@@ -200,6 +204,12 @@ const base::Feature kDirectCompositionPresentationFeedback{
 // software overlays.
 const base::Feature kDirectCompositionSoftwareOverlays{
     "DirectCompositionSoftwareOverlays", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Allow putting a video swapchain underneath the main swapchain, so overlays
+// can be used even if there are controls on top of the video. It can be
+// enabled only when overlay is supported.
+const base::Feature kDirectCompositionUnderlays{
+    "DirectCompositionUnderlays", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Use decode swap chain created from compatible video decoder buffers.
 const base::Feature kDirectCompositionUseNV12DecodeSwapChain{

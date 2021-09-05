@@ -39,7 +39,7 @@ SRes LzmaReadFile(HANDLE file, void* data, size_t* size) {
   DWORD maxSize = *size;
   do {
     DWORD processedLoc = 0;
-    BOOL res = ReadFile(file, data, maxSize, &processedLoc, NULL);
+    BOOL res = ReadFile(file, data, maxSize, &processedLoc, nullptr);
     data = (void*)((unsigned char*)data + processedLoc);
     maxSize -= processedLoc;
     processedSize += processedLoc;
@@ -157,7 +157,7 @@ UnPackStatus LzmaUtilImpl::OpenArchive(const base::FilePath& archivePath) {
 }
 
 UnPackStatus LzmaUtilImpl::UnPack(const base::FilePath& location) {
-  return UnPack(location, NULL);
+  return UnPack(location, nullptr);
 }
 
 UnPackStatus LzmaUtilImpl::UnPack(const base::FilePath& location,
@@ -210,7 +210,7 @@ UnPackStatus LzmaUtilImpl::UnPack(const base::FilePath& location,
         SzArEx_GetFileNameUtf16(&db, file_index, file_name.data());
     DCHECK_EQ(file_name_length, file_name.size());
 
-    // |file_name| is NULL-terminated.
+    // |file_name| has a string terminator.
     base::FilePath file_path = location.Append(
         base::FilePath::StringType(file_name.begin(), --file_name.end()));
 
@@ -312,7 +312,7 @@ UnPackStatus LzmaUtilImpl::UnPack(const base::FilePath& location,
               error_code_ = error_code;
             return UNPACK_EXTRACT_ERROR;
           }
-        } __except(FilterPageError(*mapped_file, GetExceptionCode(),
+        } __except (FilterPageError(*mapped_file, GetExceptionCode(),
                                     GetExceptionInformation(), &ntstatus)) {
           LOG(ERROR)
               << "EXCEPTION_IN_PAGE_ERROR while accessing mapped memory; "

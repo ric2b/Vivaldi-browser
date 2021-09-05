@@ -82,7 +82,7 @@
 namespace blink {
 
 struct SameSizeAsBorderValue {
-  RGBA32 color_;
+  StyleColor color_;
   unsigned bitfield_;
 };
 
@@ -288,7 +288,7 @@ ComputedStyle::ComputeDifferenceIgnoringInheritedFirstLineStyle(
       old_style.JustifyItems() != new_style.JustifyItems())
     return Difference::kInherited;
   bool non_inherited_equal = old_style.NonInheritedEqual(new_style);
-  if (!non_inherited_equal && old_style.HasExplicitlyInheritedProperties()) {
+  if (!non_inherited_equal && old_style.ChildHasExplicitInheritance()) {
     return Difference::kInherited;
   }
   bool variables_independent = RuntimeEnabledFeatures::CSSCascadeEnabled() &&
@@ -1050,35 +1050,33 @@ static bool HasPropertyThatCreatesStackingContext(
   return false;
 }
 
-void ComputedStyle::UpdateIsStackingContext(bool is_document_element,
-                                            bool is_in_top_layer,
-                                            bool is_svg_stacking) {
-  if (IsStackingContext())
+void ComputedStyle::UpdateIsStackingContextWithoutContainment(
+    bool is_document_element,
+    bool is_in_top_layer,
+    bool is_svg_stacking) {
+  if (IsStackingContextWithoutContainment())
     return;
 
   // Force a stacking context for transform-style: preserve-3d. This happens
   // even if preserves-3d is ignored due to a 'grouping property' being present
-  // which requires flattening. See ComputedStyle::UsedTransformStyle3D() and
-  // ComputedStyle::HasGroupingProperty().
+  // which requires flattening. See:
+  // ComputedStyle::HasGroupingPropertyForUsedTransformStyle3D().
   // This is legacy behavior that is left ambiguous in the official specs.
-  // See https://crbug.com/663650 for more details."
+  // See https://crbug.com/663650 for more details.
   if (TransformStyle3D() == ETransformStyle3D::kPreserve3d) {
-    SetIsStackingContext(true);
+    SetIsStackingContextWithoutContainment(true);
     return;
   }
 
   if (is_document_element || is_in_top_layer || is_svg_stacking ||
-      StyleType() == kPseudoIdBackdrop || HasOpacity() ||
-      HasTransformRelatedProperty() || HasMask() || ClipPath() ||
-      BoxReflect() || HasFilterInducingProperty() || HasBackdropFilter() ||
-      HasBlendMode() || HasIsolation() || HasViewportConstrainedPosition() ||
-      GetPosition() == EPosition::kSticky ||
+      StyleType() == kPseudoIdBackdrop || HasTransformRelatedProperty() ||
+      HasStackingGroupingProperty(BoxReflect()) ||
+      HasViewportConstrainedPosition() || GetPosition() == EPosition::kSticky ||
       HasPropertyThatCreatesStackingContext(WillChangeProperties()) ||
       /* TODO(882625): This becomes unnecessary when will-change correctly takes
       into account active animations. */
-      ShouldCompositeForCurrentAnimations() || ContainsPaint() ||
-      ContainsLayout()) {
-    SetIsStackingContext(true);
+      ShouldCompositeForCurrentAnimations()) {
+    SetIsStackingContextWithoutContainment(true);
   }
 }
 
@@ -1440,15 +1438,15 @@ FloatRoundedRect ComputedStyle::GetRoundedInnerBorderFor(
   bool horizontal = IsHorizontalWritingMode();
 
   int left_width = (!horizontal || include_logical_left_edge)
-                       ? roundf(BorderLeftWidth())
+                       ? floorf(BorderLeftWidth())
                        : 0;
   int right_width = (!horizontal || include_logical_right_edge)
-                        ? roundf(BorderRightWidth())
+                        ? floorf(BorderRightWidth())
                         : 0;
   int top_width =
-      (horizontal || include_logical_left_edge) ? roundf(BorderTopWidth()) : 0;
+      (horizontal || include_logical_left_edge) ? floorf(BorderTopWidth()) : 0;
   int bottom_width = (horizontal || include_logical_right_edge)
-                         ? roundf(BorderBottomWidth())
+                         ? floorf(BorderBottomWidth())
                          : 0;
 
   return GetRoundedInnerBorderFor(
@@ -1542,6 +1540,15 @@ void ComputedStyle::ClearResetDirectives() {
   Iterator end = map.end();
   for (Iterator it = map.begin(); it != end; ++it)
     it->value.ClearReset();
+}
+
+void ComputedStyle::ClearSetDirectives() {
+  if (!GetCounterDirectives())
+    return;
+
+  auto& map = AccessCounterDirectives();
+  for (auto& value_pair : map)
+    value_pair.value.ClearSet();
 }
 
 AtomicString ComputedStyle::LocaleForLineBreakIterator() const {
@@ -1854,7 +1861,8 @@ const Vector<AppliedTextDecoration>& ComputedStyle::AppliedTextDecorations()
         Vector<AppliedTextDecoration>, underline,
         (1, AppliedTextDecoration(
                 TextDecoration::kUnderline, ETextDecorationStyle::kSolid,
-                VisitedDependentColor(GetCSSPropertyTextDecorationColor()))));
+                VisitedDependentColor(GetCSSPropertyTextDecorationColor()),
+                TextDecorationThickness())));
     // Since we only have one of these in memory, just update the color before
     // returning.
     underline.at(0).SetColor(
@@ -2151,7 +2159,7 @@ void ComputedStyle::ApplyTextDecorations(
     SetHasSimpleUnderlineInternal(false);
     AddAppliedTextDecoration(AppliedTextDecoration(
         TextDecoration::kUnderline, ETextDecorationStyle::kSolid,
-        parent_text_decoration_color));
+        parent_text_decoration_color, TextDecorationThickness()));
   }
   if (override_existing_colors && AppliedTextDecorationsInternal())
     OverrideTextDecorationColors(current_text_decoration_color);
@@ -2164,14 +2172,16 @@ void ComputedStyle::ApplyTextDecorations(
   ETextDecorationStyle decoration_style = TextDecorationStyle();
   bool is_simple_underline = decoration_lines == TextDecoration::kUnderline &&
                              decoration_style == ETextDecorationStyle::kSolid &&
-                             TextDecorationColor().IsCurrentColor();
+                             TextDecorationColor().IsCurrentColor() &&
+                             TextUnderlineOffset().IsAuto();
   if (is_simple_underline && !AppliedTextDecorationsInternal()) {
     SetHasSimpleUnderlineInternal(true);
     return;
   }
 
   AddAppliedTextDecoration(AppliedTextDecoration(
-      decoration_lines, decoration_style, current_text_decoration_color));
+      decoration_lines, decoration_style, current_text_decoration_color,
+      GetTextDecorationThickness()));
 }
 
 void ComputedStyle::ClearAppliedTextDecorations() {
@@ -2199,8 +2209,6 @@ void ComputedStyle::ClearMultiCol() {
       LayoutUnit(ComputedStyleInitialValues::InitialColumnRuleWidth()));
   SetColumnRuleColorInternal(
       ComputedStyleInitialValues::InitialColumnRuleColor());
-  SetColumnRuleColorIsCurrentColor(
-      ComputedStyleInitialValues::InitialColumnRuleColorIsCurrentColor());
   SetInternalVisitedColumnRuleColorInternal(
       ComputedStyleInitialValues::InitialInternalVisitedColumnRuleColor());
   SetColumnCountInternal(ComputedStyleInitialValues::InitialColumnCount());
@@ -2433,8 +2441,8 @@ void ComputedStyle::GetBorderEdgeInfo(BorderEdge edges[],
 }
 
 void ComputedStyle::CopyChildDependentFlagsFrom(const ComputedStyle& other) {
-  if (other.HasExplicitlyInheritedProperties())
-    SetHasExplicitlyInheritedProperties();
+  if (other.ChildHasExplicitInheritance())
+    SetChildHasExplicitInheritance();
 }
 
 bool ComputedStyle::ShadowListHasCurrentColor(const ShadowList* shadow_list) {

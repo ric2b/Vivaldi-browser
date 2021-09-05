@@ -241,12 +241,6 @@ Polymer({
           loadTimeData.getBoolean('enableWebBluetoothNewPermissionsBackend'),
     },
 
-    /** @private */
-    enableWebXrContentSetting_: {
-      type: Boolean,
-      value: () => loadTimeData.getBoolean('enableWebXrContentSetting'),
-    },
-
     /** @private {!Map<string, string>} */
     focusConfig_: {
       type: Object,
@@ -300,6 +294,16 @@ Polymer({
 
     /** @private */
     siteDataFilter_: String,
+
+    /**
+     * Boolean which keeps a track if any of the displayed lists has discarded
+     * content setting patterns and hides the warning message accordingly.
+     * @private
+     */
+    pluginsHasDiscardedExceptions_: {
+      type: Boolean,
+      value: false,
+    },
   },
 
   observers: [
@@ -393,7 +397,7 @@ Polymer({
 
   /** @private */
   onSafeBrowsingReportingPrefChange_() {
-    if (this.prefs == undefined) {
+    if (this.prefs === undefined) {
       return;
     }
     const safeBrowsingScoutPref =
@@ -421,7 +425,7 @@ Polymer({
   /** @protected */
   currentRouteChanged() {
     this.showClearBrowsingDataDialog_ =
-        Router.getInstance().getCurrentRoute() == routes.CLEAR_BROWSER_DATA;
+        Router.getInstance().getCurrentRoute() === routes.CLEAR_BROWSER_DATA;
   },
 
 

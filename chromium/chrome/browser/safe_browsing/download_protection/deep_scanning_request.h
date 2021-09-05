@@ -9,6 +9,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/binary_upload_service.h"
 #include "chrome/browser/safe_browsing/download_protection/download_protection_util.h"
+#include "components/enterprise/common/proto/connectors.pb.h"
 #include "components/safe_browsing/core/proto/webprotect.pb.h"
 
 namespace download {
@@ -36,21 +37,11 @@ class DeepScanningRequest : public download::DownloadItem::Observer {
     TRIGGER_POLICY,
   };
 
-  // Enum representing the possible scans for a deep scanning request.
-  enum class DeepScanType {
-    // Scan for malware
-    SCAN_MALWARE,
-
-    // Scan for DLP policy violations
-    SCAN_DLP,
-  };
-
   // Checks the current policies to determine whether files must be uploaded by
-  // policy.
-  static bool ShouldUploadItemByPolicy(download::DownloadItem* item);
-
-  // Returns all scans supported.
-  static std::vector<DeepScanType> AllScans();
+  // policy. Returns the settings to apply to this analysis if it should happen
+  // or base::nullopt if no analysis should happen.
+  static base::Optional<enterprise_connectors::AnalysisSettings>
+  ShouldUploadBinary(download::DownloadItem* item);
 
   // Scan the given |item|, with the given |trigger|. The result of the scanning
   // will be provided through |callback|. Take references to the owning
@@ -58,15 +49,8 @@ class DeepScanningRequest : public download::DownloadItem::Observer {
   DeepScanningRequest(download::DownloadItem* item,
                       DeepScanTrigger trigger,
                       CheckDownloadRepeatingCallback callback,
-                      DownloadProtectionService* download_service);
-
-  // Same as the previous constructor, but only allowing the scans listed in
-  // |allowed_scans| to run.
-  DeepScanningRequest(download::DownloadItem* item,
-                      DeepScanTrigger trigger,
-                      CheckDownloadRepeatingCallback callback,
                       DownloadProtectionService* download_service,
-                      std::vector<DeepScanType> allowed_scans);
+                      enterprise_connectors::AnalysisSettings settings);
 
   ~DeepScanningRequest() override;
 
@@ -74,9 +58,14 @@ class DeepScanningRequest : public download::DownloadItem::Observer {
   void Start();
 
  private:
-  // Callback for when |binary_upload_service_| finishes uploading.
-  void OnScanComplete(BinaryUploadService::Result result,
-                      DeepScanningClientResponse response);
+  // Callbacks for when |binary_upload_service_| finishes uploading.
+  void OnLegacyScanComplete(BinaryUploadService::Result result,
+                            DeepScanningClientResponse response);
+  void OnConnectorScanComplete(
+      BinaryUploadService::Result result,
+      enterprise_connectors::ContentAnalysisResponse response);
+  template <typename T>
+  void OnScanComplete(BinaryUploadService::Result result, T response);
 
   // Finishes the request, providing the result through |callback_| and
   // notifying |download_service_|.
@@ -94,8 +83,11 @@ class DeepScanningRequest : public download::DownloadItem::Observer {
   // Called to open the download. This is triggered by the timeout modal dialog.
   void OpenDownload();
 
-  // Whether the given |scan| is in the list of |allowed_scans_|.
-  bool ScanIsAllowed(DeepScanType scan);
+  // Populates a request with the appropriate data depending on the used proto.
+  void PrepareLegacyRequest(BinaryUploadService::Request* request,
+                            Profile* profile);
+  void PrepareConnectorRequest(BinaryUploadService::Request* request,
+                               Profile* profile);
 
   // The download item to scan. This is unowned, and could become nullptr if the
   // download is destroyed.
@@ -110,9 +102,6 @@ class DeepScanningRequest : public download::DownloadItem::Observer {
   // The download protection service that initiated this upload. The
   // |download_service_| owns this class.
   DownloadProtectionService* download_service_;
-
-  // The scans allowed to be performed.
-  std::vector<DeepScanType> allowed_scans_;
 
   // The time when uploading starts.
   base::TimeTicks upload_start_time_;

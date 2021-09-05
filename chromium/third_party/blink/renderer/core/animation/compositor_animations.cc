@@ -775,4 +775,15 @@ void CompositorAnimations::GetAnimationOnCompositor(
   DCHECK(!keyframe_models.IsEmpty());
 }
 
+bool CompositorAnimations::CheckUsesCompositedScrolling(Node* target) {
+  if (!target)
+    return false;
+  DCHECK(target->GetDocument().Lifecycle().GetState() >=
+         DocumentLifecycle::kCompositingClean);
+  auto* layout_box_model_object = target->GetLayoutBoxModelObject();
+  if (!layout_box_model_object)
+    return false;
+  return layout_box_model_object->UsesCompositedScrolling();
+}
+
 }  // namespace blink

@@ -10,9 +10,9 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
 #include "chrome/browser/ui/ash/launcher/arc_app_shelf_id.h"
-#include "chrome/services/app_service/public/cpp/app_registry_cache.h"
-#include "chrome/services/app_service/public/cpp/app_update.h"
-#include "chrome/services/app_service/public/mojom/types.mojom.h"
+#include "components/services/app_service/public/cpp/app_registry_cache.h"
+#include "components/services/app_service/public/cpp/app_update.h"
+#include "components/services/app_service/public/mojom/types.mojom.h"
 
 namespace {
 
@@ -137,7 +137,7 @@ void AppServiceAppIconLoader::CallLoadIcon(const std::string& app_id,
   if (crostini::IsUnmatchedCrostiniShelfAppId(app_id)) {
     apps::mojom::IconKeyPtr icon_key = apps::mojom::IconKey::New();
     proxy->LoadIconFromIconKey(
-        apps::mojom::AppType::kCrostini, std::string(), std::move(icon_key),
+        apps::mojom::AppType::kCrostini, app_id, std::move(icon_key),
         apps::mojom::IconCompression::kUncompressed, icon_size_in_dip(),
         allow_placeholder_icon,
         base::BindOnce(&AppServiceAppIconLoader::OnLoadIcon,

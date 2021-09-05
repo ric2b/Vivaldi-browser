@@ -4,6 +4,7 @@
 
 #include "chrome/browser/spellchecker/spellcheck_service.h"
 
+#include <map>
 #include <string>
 #include <vector>
 
@@ -18,6 +19,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -33,6 +35,7 @@
 #include "components/spellcheck/browser/pref_names.h"
 #include "components/spellcheck/common/spellcheck.mojom.h"
 #include "components/spellcheck/common/spellcheck_common.h"
+#include "components/spellcheck/common/spellcheck_features.h"
 #include "components/spellcheck/common/spellcheck_result.h"
 #include "components/spellcheck/spellcheck_buildflags.h"
 #include "components/user_prefs/user_prefs.h"
@@ -44,9 +47,9 @@
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 
-#if BUILDFLAG(USE_WIN_HYBRID_SPELLCHECKER)
+#if defined(OS_WIN) && BUILDFLAG(USE_BROWSER_SPELLCHECKER)
 #include "components/spellcheck/common/spellcheck_features.h"
-#endif  // BUILDFLAG(USE_WIN_HYBRID_SPELLCHECKER)
+#endif  // defined(OS_WIN) && BUILDFLAG(USE_BROWSER_SPELLCHECKER)
 
 using content::BrowserContext;
 using content::RenderProcessHost;
@@ -55,6 +58,19 @@ class SpellcheckServiceBrowserTest : public InProcessBrowserTest,
                                      public spellcheck::mojom::SpellChecker {
  public:
   SpellcheckServiceBrowserTest() = default;
+
+#if defined(OS_WIN)
+  void SetUp() override {
+    // Tests were designed assuming Hunspell dictionary used and many fail when
+    // Windows spellcheck is enabled by default. The feature flag needs to be
+    // disabled in SetUp() instead of the constructor because the derived class
+    // SpellcheckServiceWindowsHybridBrowserTest overrides the base class
+    // behavior and sets the spellcheck::kWinUseBrowserSpellChecker feature
+    // flag. You can't use ScopedFeatureList to initialize a feature flag twice.
+    feature_list_.InitAndDisableFeature(spellcheck::kWinUseBrowserSpellChecker);
+    InProcessBrowserTest::SetUp();
+  }
+#endif  // defined(OS_WIN)
 
   void SetUpOnMainThread() override {
     renderer_.reset(new content::MockRenderProcessHost(GetContext()));
@@ -104,12 +120,12 @@ class SpellcheckServiceBrowserTest : public InProcessBrowserTest,
     SpellcheckService* spellcheck =
         SpellcheckServiceFactory::GetForContext(renderer_->GetBrowserContext());
 
-#if BUILDFLAG(USE_WIN_HYBRID_SPELLCHECKER)
-    if (spellcheck::UseWinHybridSpellChecker()) {
-      // If the Windows hybrid spell checker is in use, initialization is async.
+#if defined(OS_WIN) && BUILDFLAG(USE_BROWSER_SPELLCHECKER)
+    if (spellcheck::UseBrowserSpellChecker()) {
+      // If the Windows native spell checker is in use, initialization is async.
       RunTestRunLoop();
     }
-#endif  // BUILDFLAG(USE_WIN_HYBRID_SPELLCHECKER)
+#endif  // defined(OS_WIN) && BUILDFLAG(USE_BROWSER_SPELLCHECKER)
 
     ASSERT_NE(nullptr, spellcheck);
   }
@@ -223,6 +239,10 @@ class SpellcheckServiceBrowserTest : public InProcessBrowserTest,
  protected:
   // Quits the RunLoop on Mojo request flow completion.
   base::OnceClosure quit_;
+
+#if defined(OS_WIN)
+  base::test::ScopedFeatureList feature_list_;
+#endif  // defined(OS_WIN)
 
  private:
   // Mocked RenderProcessHost.
@@ -461,14 +481,14 @@ IN_PROC_BROWSER_TEST_F(SpellcheckServiceHostBrowserTest, CallSpellingService) {
 // Tests that we can delete a corrupted BDICT file used by hunspell. We do not
 // run this test on Mac because Mac does not use hunspell by default.
 IN_PROC_BROWSER_TEST_F(SpellcheckServiceBrowserTest, DeleteCorruptedBDICT) {
-#if BUILDFLAG(USE_WIN_HYBRID_SPELLCHECKER)
-  if (spellcheck::UseWinHybridSpellChecker()) {
-    // If doing hybrid spell checking on Windows, Hunspell dictionaries are not
+#if defined(OS_WIN) && BUILDFLAG(USE_BROWSER_SPELLCHECKER)
+  if (spellcheck::UseBrowserSpellChecker()) {
+    // If doing native spell checking on Windows, Hunspell dictionaries are not
     // used for en-US, so the corrupt dictionary event will never be raised.
     // Skip this test.
     return;
   }
-#endif  // BUILDFLAG(USE_WIN_HYBRID_SPELLCHECKER)
+#endif  // defined(OS_WIN) && BUILDFLAG(USE_BROWSER_SPELLCHECKER)
 
   // Corrupted BDICT data: please do not use this BDICT data for other tests.
   const uint8_t kCorruptedBDICT[] = {
@@ -509,13 +529,15 @@ IN_PROC_BROWSER_TEST_F(SpellcheckServiceBrowserTest, DeleteCorruptedBDICT) {
       SpellcheckServiceFactory::GetInstance()->GetServiceForBrowserContext(
           context,
           false));
-  ASSERT_EQ(NULL, service);
+  ASSERT_EQ(nullptr, service);
 
   // Getting the spellcheck_service will initialize the SpellcheckService
   // object with the corrupted BDICT file created above since the hunspell
   // dictionary is loaded in the SpellcheckService constructor right now.
   // The SpellCheckHost object will send a BDICT_CORRUPTED event.
-  SpellcheckServiceFactory::GetForContext(context);
+  service = SpellcheckServiceFactory::GetForContext(context);
+  ASSERT_NE(nullptr, service);
+  ASSERT_TRUE(service->dictionaries_loaded());
 
   // Check the received event. Also we check if Chrome has successfully deleted
   // the corrupted dictionary. We delete the corrupted dictionary to avoid
@@ -613,3 +635,132 @@ IN_PROC_BROWSER_TEST_F(SpellcheckServiceBrowserTest,
                   ->GetString(1, &pref));
   EXPECT_EQ("fr", pref);
 }
+
+#if defined(OS_WIN)
+class SpellcheckServiceWindowsHybridBrowserTest
+    : public SpellcheckServiceBrowserTest {
+ public:
+  SpellcheckServiceWindowsHybridBrowserTest() = default;
+
+  void SetUp() override {
+    feature_list_.InitAndEnableFeature(spellcheck::kWinUseBrowserSpellChecker);
+    InProcessBrowserTest::SetUp();
+  }
+};
+
+IN_PROC_BROWSER_TEST_F(SpellcheckServiceWindowsHybridBrowserTest,
+                       WindowsHybridSpellcheck) {
+  if (!spellcheck::WindowsVersionSupportsSpellchecker())
+    return;
+
+  ASSERT_TRUE(spellcheck::UseBrowserSpellChecker());
+
+  // Note that the base class forces dictionary sync to not be performed, which
+  // on its own would have created a SpellcheckService object. So testing here
+  // that we are still instantiating the SpellcheckService as a browser startup
+  // task to support hybrid spellchecking.
+  SpellcheckService* service = static_cast<SpellcheckService*>(
+      SpellcheckServiceFactory::GetInstance()->GetServiceForBrowserContext(
+          GetContext(), /* create */ false));
+  ASSERT_NE(nullptr, service);
+
+  // The list of Windows spellcheck languages should have been populated by at
+  // least one language. This assures that the spellcheck context menu will
+  // include Windows spellcheck languages that lack Hunspell support.
+  ASSERT_TRUE(service->dictionaries_loaded());
+  ASSERT_FALSE(service->windows_spellcheck_dictionary_map_.empty());
+}
+
+class SpellcheckServiceWindowsHybridBrowserTestDelayInit
+    : public SpellcheckServiceBrowserTest {
+ public:
+  SpellcheckServiceWindowsHybridBrowserTestDelayInit() = default;
+
+  void SetUp() override {
+    // Don't initialize the SpellcheckService on browser launch.
+    feature_list_.InitWithFeatures(
+        /*enabled_features=*/{spellcheck::kWinUseBrowserSpellChecker,
+                              spellcheck::kWinDelaySpellcheckServiceInit},
+        /*disabled_features=*/{});
+    InProcessBrowserTest::SetUp();
+  }
+
+  void OnDictionariesInitialized() {
+    dictionaries_initialized_received_ = true;
+    if (quit_on_callback_)
+      std::move(quit_on_callback_).Run();
+  }
+
+ protected:
+  void RunUntilCallbackReceived() {
+    if (dictionaries_initialized_received_)
+      return;
+    base::RunLoop run_loop;
+    quit_on_callback_ = run_loop.QuitClosure();
+    run_loop.Run();
+
+    // reset status.
+    dictionaries_initialized_received_ = false;
+  }
+
+ private:
+  bool dictionaries_initialized_received_ = false;
+
+  // Quits the RunLoop on receiving the callback from InitializeDictionaries.
+  base::OnceClosure quit_on_callback_;
+};
+
+IN_PROC_BROWSER_TEST_F(SpellcheckServiceWindowsHybridBrowserTestDelayInit,
+                       WindowsHybridSpellcheckDelayInit) {
+  if (!spellcheck::WindowsVersionSupportsSpellchecker())
+    return;
+
+  ASSERT_TRUE(spellcheck::UseBrowserSpellChecker());
+
+  // Note that the base class forces dictionary sync to not be performed, and
+  // the kWinDelaySpellcheckServiceInit flag is set, which together should
+  // prevent creation of a SpellcheckService object on browser startup. So
+  // testing here that this is indeed the case.
+  SpellcheckService* service = static_cast<SpellcheckService*>(
+      SpellcheckServiceFactory::GetInstance()->GetServiceForBrowserContext(
+          GetContext(), /* create */ false));
+  ASSERT_EQ(nullptr, service);
+
+  // Now create the SpellcheckService but don't call InitializeDictionaries().
+  service = static_cast<SpellcheckService*>(
+      SpellcheckServiceFactory::GetInstance()->GetServiceForBrowserContext(
+          GetContext(), /* create */ true));
+
+  ASSERT_NE(nullptr, service);
+
+  // The list of Windows spellcheck languages should not have been populated
+  // yet since InitializeDictionaries() has not been called.
+  ASSERT_FALSE(service->dictionaries_loaded());
+  ASSERT_TRUE(service->windows_spellcheck_dictionary_map_.empty());
+
+  service->InitializeDictionaries(
+      base::BindOnce(&SpellcheckServiceWindowsHybridBrowserTestDelayInit::
+                         OnDictionariesInitialized,
+                     base::Unretained(this)));
+
+  RunUntilCallbackReceived();
+  ASSERT_TRUE(service->dictionaries_loaded());
+  // The list of Windows spellcheck languages should now have been populated.
+  std::map<std::string, std::string>
+      windows_spellcheck_dictionary_map_first_call =
+          service->windows_spellcheck_dictionary_map_;
+  ASSERT_FALSE(windows_spellcheck_dictionary_map_first_call.empty());
+
+  // It should be safe to call InitializeDictionaries again (it should
+  // immediately run the callback).
+  service->InitializeDictionaries(
+      base::BindOnce(&SpellcheckServiceWindowsHybridBrowserTestDelayInit::
+                         OnDictionariesInitialized,
+                     base::Unretained(this)));
+
+  RunUntilCallbackReceived();
+  ASSERT_TRUE(service->dictionaries_loaded());
+  ASSERT_EQ(windows_spellcheck_dictionary_map_first_call,
+            service->windows_spellcheck_dictionary_map_);
+}
+#endif  // defined(OS_WIN)

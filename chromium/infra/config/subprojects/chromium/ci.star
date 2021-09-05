@@ -1,13 +1,22 @@
+# Copyright 2020 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
 load('//lib/builders.star', 'builder_name', 'cpu', 'goma', 'os')
 load('//lib/ci.star', 'ci')
 load('//project.star', 'settings')
+
+
+def main_console_if_on_branch():
+  return None if settings.is_master else settings.main_console_name
 
 
 ci.set_defaults(
     settings,
     add_to_console_view = True,
     bucketed_triggers = settings.is_master,
-    main_console_view = settings.main_console_name,
+    main_console_view = None if settings.is_master else settings.main_console_name,
+    cq_mirrors_console_view = settings.cq_mirrors_console_name,
 )
 
 ci.declare_bucket(settings)
@@ -18,7 +27,14 @@ ci.declare_bucket(settings)
 ci.console_view(
     name = 'chromium',
     include_experimental_builds = True,
-    ordering = {},
+    ordering = {
+        '*type*': ci.ordering(short_names=['dbg', 'rel', 'off']),
+        'android':'*type*',
+        'fuchsia':'*type*',
+        'linux':'*type*',
+        'mac':'*type*',
+        'win':'*type*',
+    },
 )
 
 ci.console_view(
@@ -419,6 +435,22 @@ ci.android_builder(
 )
 
 ci.android_builder(
+    name = 'android-marshmallow-x86-rel',
+    console_view_entry = ci.console_view_entry(
+        category = 'builder_tester|x86',
+        short_name = 'M',
+    ),
+)
+
+ci.android_builder(
+    name = 'android-nougat-arm64-rel',
+    console_view_entry = ci.console_view_entry(
+        category = 'builder_tester|arm64',
+        short_name = 'N',
+    ),
+)
+
+ci.android_builder(
     name = 'android-pie-arm64-dbg',
     console_view_entry = ci.console_view_entry(
         category = 'tester|phone',
@@ -435,6 +467,47 @@ ci.android_builder(
     ),
 )
 
+ci.chromium_builder(
+    name = 'android-official',
+    # TODO(https://crbug.com/1072012) Use the default console view and add
+    # main_console_view = settings.main_console_name once the build is green
+    console_view = 'chromium.fyi',
+    console_view_entry = ci.console_view_entry(
+        category = 'android',
+        short_name = 'off',
+    ),
+    # TODO: Change this back down to something reasonable once these builders
+    # have populated their cached by getting through the compile step
+    execution_timeout = 6 * time.hour,
+)
+
+ci.chromium_builder(
+    name = 'fuchsia-official',
+    # TODO(https://crbug.com/1072012) Use the default console view and add
+    # main_console_view = settings.main_console_name once the build is green
+    console_view = 'chromium.fyi',
+    console_view_entry = ci.console_view_entry(
+        category = 'fuchsia',
+        short_name = 'off',
+    ),
+    # TODO: Change this back down to something reasonable once these builders
+    # have populated their cached by getting through the compile step
+    execution_timeout = 6 * time.hour,
+)
+
+ci.chromium_builder(
+    name = 'linux-official',
+    # TODO(https://crbug.com/1072012) Use the default console view and add
+    # main_console_view = settings.main_console_name once the build is green
+    console_view = 'chromium.fyi',
+    console_view_entry = ci.console_view_entry(
+        category = 'linux',
+        short_name = 'off',
+    ),
+    # TODO: Change this back down to something reasonable once these builders
+    # have populated their cached by getting through the compile step
+    execution_timeout = 6 * time.hour,
+)
 
 ci.chromiumos_builder(
     name = 'chromeos-amd64-generic-dbg',
@@ -442,6 +515,7 @@ ci.chromiumos_builder(
         category = 'simple|debug|x64',
         short_name = 'dbg',
     ),
+    main_console_view = settings.main_console_name,
 )
 
 ci.chromiumos_builder(
@@ -450,6 +524,7 @@ ci.chromiumos_builder(
         category = 'simple|release|x64',
         short_name = 'rel',
     ),
+    main_console_view = settings.main_console_name,
 )
 
 ci.chromiumos_builder(
@@ -458,21 +533,7 @@ ci.chromiumos_builder(
         category = 'simple|release',
         short_name = 'arm',
     ),
-)
-
-ci.chromiumos_builder(
-    name = 'chromeos-kevin-rel',
-    console_view_entry = ci.console_view_entry(
-        category = 'simple|release',
-        short_name = 'kvn',
-    ),
-)
-
-ci.fyi_builder(
-    name = 'chromeos-kevin-rel-hw-tests',
-    console_view_entry = ci.console_view_entry(
-        category = 'chromeos',
-    ),
+    main_console_view = settings.main_console_name,
 )
 
 ci.chromiumos_builder(
@@ -481,6 +542,7 @@ ci.chromiumos_builder(
         category = 'default',
         short_name = 'dbg',
     ),
+    main_console_view = settings.main_console_name,
 )
 
 ci.chromiumos_builder(
@@ -489,6 +551,7 @@ ci.chromiumos_builder(
         category = 'default',
         short_name = 'rel',
     ),
+    main_console_view = settings.main_console_name,
 )
 
 
@@ -498,6 +561,7 @@ ci.dawn_builder(
         category = 'DEPS|Linux|Builder',
         short_name = 'x64',
     ),
+    main_console_view = None,
 )
 
 ci.dawn_builder(
@@ -507,6 +571,7 @@ ci.dawn_builder(
         short_name = 'x64',
     ),
     cores = 2,
+    main_console_view = None,
     os = os.LINUX_DEFAULT,
     triggered_by = [builder_name('Dawn Linux x64 DEPS Builder')],
 )
@@ -518,6 +583,7 @@ ci.dawn_builder(
         short_name = 'x64',
     ),
     cores = 2,
+    main_console_view = None,
     os = os.LINUX_DEFAULT,
     triggered_by = [builder_name('Dawn Linux x64 DEPS Builder')],
 )
@@ -530,6 +596,7 @@ ci.dawn_builder(
         short_name = 'x64',
     ),
     cores = None,
+    main_console_view = None,
     os = os.MAC_ANY,
 )
 
@@ -542,6 +609,7 @@ ci.dawn_builder(
         short_name = 'x64',
     ),
     cores = 2,
+    main_console_view = None,
     os = os.LINUX_DEFAULT,
     triggered_by = [builder_name('Dawn Mac x64 DEPS Builder')],
 )
@@ -553,6 +621,7 @@ ci.dawn_builder(
         short_name = 'x64',
     ),
     cores = 2,
+    main_console_view = None,
     os = os.LINUX_DEFAULT,
     triggered_by = [builder_name('Dawn Mac x64 DEPS Builder')],
 )
@@ -563,6 +632,7 @@ ci.dawn_builder(
         category = 'DEPS|Windows|Builder',
         short_name = 'x64',
     ),
+    main_console_view = None,
     os = os.WINDOWS_ANY,
 )
 
@@ -573,6 +643,7 @@ ci.dawn_builder(
         short_name = 'x64',
     ),
     cores = 2,
+    main_console_view = None,
     os = os.LINUX_DEFAULT,
     triggered_by = [builder_name('Dawn Win10 x64 DEPS Builder')],
 )
@@ -584,6 +655,7 @@ ci.dawn_builder(
         short_name = 'x64',
     ),
     cores = 2,
+    main_console_view = None,
     os = os.LINUX_DEFAULT,
     triggered_by = [builder_name('Dawn Win10 x64 DEPS Builder')],
 )
@@ -594,6 +666,7 @@ ci.dawn_builder(
         category = 'DEPS|Windows|Builder',
         short_name = 'x86',
     ),
+    main_console_view = None,
     os = os.WINDOWS_ANY,
 )
 
@@ -604,6 +677,7 @@ ci.dawn_builder(
         short_name = 'x86',
     ),
     cores = 2,
+    main_console_view = None,
     os = os.LINUX_DEFAULT,
     triggered_by = [builder_name('Dawn Win10 x86 DEPS Builder')],
 )
@@ -615,6 +689,7 @@ ci.dawn_builder(
         short_name = 'x86',
     ),
     cores = 2,
+    main_console_view = None,
     os = os.LINUX_DEFAULT,
     triggered_by = [builder_name('Dawn Win10 x86 DEPS Builder')],
 )
@@ -625,6 +700,7 @@ ci.fyi_builder(
     console_view_entry = ci.console_view_entry(
         category = 'linux',
     ),
+    main_console_view = None,
 )
 
 # This is launching & collecting entirely isolated tests.
@@ -636,9 +712,20 @@ ci.fyi_builder(
         short_name = 'beta',
     ),
     goma_backend = None,
+    main_console_view = None,
     triggered_by = [builder_name('Mac Builder')],
 )
 
+ci.fyi_builder(
+    name = 'mac-arm64',
+    console_view_entry = ci.console_view_entry(
+        category = 'mac',
+        short_name = 'arm64',
+    ),
+    main_console_view = None,
+    cores = None,
+    os = os.MAC_ANY,
+)
 
 ci.fyi_ios_builder(
     name = 'ios-simulator-cronet',
@@ -646,9 +733,10 @@ ci.fyi_ios_builder(
         category = 'cronet',
     ),
     executable = 'recipe:chromium',
+    main_console_view = None,
     notifies = ['cronet'],
     properties = {
-        'xcode_build_version': '11c29',
+        'xcode_build_version': '11e146',
     },
 )
 
@@ -659,6 +747,7 @@ ci.fyi_windows_builder(
         category = 'win10|1803',
     ),
     goma_backend = None,
+    main_console_view = None,
     os = os.WINDOWS_10,
     triggered_by = [builder_name('Win x64 Builder')],
 )
@@ -737,6 +826,7 @@ ci.linux_builder(
         short_name = 'vid',
     ),
     goma_jobs = goma.jobs.J50,
+    main_console_view = settings.main_console_name,
 )
 
 ci.linux_builder(
@@ -745,6 +835,7 @@ ci.linux_builder(
         category = 'fuchsia|a64',
         short_name = 'rel',
     ),
+    main_console_view = settings.main_console_name,
     notifies = ['cr-fuchsia'],
 )
 
@@ -754,6 +845,7 @@ ci.linux_builder(
         category = 'fuchsia|x64',
         short_name = 'rel',
     ),
+    main_console_view = settings.main_console_name,
     notifies = ['cr-fuchsia'],
 )
 
@@ -763,6 +855,7 @@ ci.linux_builder(
         category = 'release',
         short_name = 'bld',
     ),
+    main_console_view = settings.main_console_name,
 )
 
 ci.linux_builder(
@@ -771,6 +864,7 @@ ci.linux_builder(
         category = 'debug|builder',
         short_name = '64',
     ),
+    main_console_view = settings.main_console_name,
 )
 
 ci.linux_builder(
@@ -780,6 +874,7 @@ ci.linux_builder(
         short_name = 'tst',
     ),
     goma_backend = None,
+    main_console_view = settings.main_console_name,
     triggered_by = [builder_name('Linux Builder')],
 )
 
@@ -789,6 +884,7 @@ ci.linux_builder(
         category = 'debug|tester',
         short_name = '64',
     ),
+    main_console_view = settings.main_console_name,
     triggered_by = [builder_name('Linux Builder (dbg)')],
 )
 
@@ -798,6 +894,7 @@ ci.linux_builder(
         category = 'fuchsia|cast',
         short_name = 'a64',
     ),
+    main_console_view = settings.main_console_name,
     notifies = ['cr-fuchsia'],
 )
 
@@ -807,6 +904,7 @@ ci.linux_builder(
         category = 'fuchsia|cast',
         short_name = 'x64',
     ),
+    main_console_view = settings.main_console_name,
     notifies = ['cr-fuchsia'],
 )
 
@@ -816,6 +914,7 @@ ci.linux_builder(
         category = 'release',
         short_name = 'ozo',
     ),
+    main_console_view = settings.main_console_name,
 )
 
 ci.linux_builder(
@@ -825,6 +924,7 @@ ci.linux_builder(
         category = 'linux',
         short_name = 'loh',
     ),
+    main_console_view = None,
     triggered_by = [builder_name('linux-ozone-rel')],
 )
 
@@ -835,6 +935,7 @@ ci.linux_builder(
         category = 'linux',
         short_name = 'low',
     ),
+    main_console_view = None,
     triggered_by = [builder_name('linux-ozone-rel')],
 )
 
@@ -845,6 +946,7 @@ ci.linux_builder(
         category = 'linux',
         short_name = 'lox',
     ),
+    main_console_view = None,
     triggered_by = [builder_name('linux-ozone-rel')],
 )
 
@@ -855,6 +957,7 @@ ci.mac_builder(
         category = 'release',
         short_name = 'bld',
     ),
+    main_console_view = settings.main_console_name,
     os = os.MAC_10_14,
 )
 
@@ -864,6 +967,7 @@ ci.mac_builder(
         category = 'debug',
         short_name = 'bld',
     ),
+    main_console_view = settings.main_console_name,
     os = os.MAC_ANY,
 )
 
@@ -874,6 +978,7 @@ ci.thin_tester(
         category = 'release',
         short_name = '10',
     ),
+    main_console_view = settings.main_console_name,
     triggered_by = [builder_name('Mac Builder')],
 )
 
@@ -884,6 +989,7 @@ ci.thin_tester(
         category = 'release',
         short_name = '11',
     ),
+    main_console_view = settings.main_console_name,
     triggered_by = [builder_name('Mac Builder')],
 )
 
@@ -894,6 +1000,7 @@ ci.thin_tester(
         category = 'release',
         short_name = '12',
     ),
+    main_console_view = settings.main_console_name,
     triggered_by = [builder_name('Mac Builder')],
 )
 
@@ -904,6 +1011,7 @@ ci.thin_tester(
         category = 'release',
         short_name = '13',
     ),
+    main_console_view = settings.main_console_name,
     triggered_by = [builder_name('Mac Builder')],
 )
 
@@ -914,6 +1022,7 @@ ci.thin_tester(
         category = 'release',
         short_name = '14',
     ),
+    main_console_view = settings.main_console_name,
     triggered_by = [builder_name('Mac Builder')],
 )
 
@@ -924,6 +1033,7 @@ ci.thin_tester(
         category = 'debug',
         short_name = '13',
     ),
+    main_console_view = settings.main_console_name,
     triggered_by = [builder_name('Mac Builder (dbg)')],
 )
 
@@ -934,6 +1044,7 @@ ci.thin_tester(
         category = 'release',
         short_name = 'ret',
     ),
+    main_console_view = settings.main_console_name,
     triggered_by = [builder_name('Mac Builder')],
 )
 
@@ -944,10 +1055,7 @@ ci.mac_ios_builder(
         category = 'ios|default',
         short_name = 'sim',
     ),
-    executable = 'recipe:chromium',
-    properties = {
-        'xcode_build_version': '11c29',
-    },
+    main_console_view = settings.main_console_name,
 )
 
 ci.mac_ios_builder(
@@ -956,7 +1064,7 @@ ci.mac_ios_builder(
         category = 'ios|default',
         short_name = 'ful',
     ),
-    executable = 'recipe:chromium',
+    main_console_view = settings.main_console_name,
 )
 
 
@@ -966,6 +1074,7 @@ ci.memory_builder(
         category = 'linux|asan lsan',
         short_name = 'bld',
     ),
+    main_console_view = settings.main_console_name,
     ssd = True,
 )
 
@@ -975,6 +1084,7 @@ ci.memory_builder(
         category = 'linux|asan lsan',
         short_name = 'tst',
     ),
+    main_console_view = settings.main_console_name,
     triggered_by = [builder_name('Linux ASan LSan Builder')],
 )
 
@@ -984,6 +1094,7 @@ ci.memory_builder(
         category = 'linux|asan lsan',
         short_name = 'sbx',
     ),
+    main_console_view = settings.main_console_name,
     triggered_by = [builder_name('Linux ASan LSan Builder')],
 )
 
@@ -993,6 +1104,7 @@ ci.memory_builder(
         category = 'linux|TSan v2',
         short_name = 'bld',
     ),
+    main_console_view = settings.main_console_name,
 )
 
 ci.memory_builder(
@@ -1002,6 +1114,7 @@ ci.memory_builder(
         short_name = 'tst',
     ),
     triggered_by = [builder_name('Linux TSan Builder')],
+    main_console_view = settings.main_console_name,
 )
 
 
@@ -1012,6 +1125,7 @@ ci.win_builder(
         short_name = '7',
     ),
     os = os.WINDOWS_7,
+    main_console_view = settings.main_console_name,
     triggered_by = [builder_name('Win Builder (dbg)')],
 )
 
@@ -1022,6 +1136,7 @@ ci.win_builder(
         short_name = '64',
     ),
     os = os.WINDOWS_7,
+    main_console_view = settings.main_console_name,
     triggered_by = [builder_name('Win x64 Builder')],
 )
 
@@ -1032,6 +1147,7 @@ ci.win_builder(
         short_name = '32',
     ),
     cores = 32,
+    main_console_view = settings.main_console_name,
     os = os.WINDOWS_ANY,
 )
 
@@ -1042,6 +1158,7 @@ ci.win_builder(
         short_name = '64',
     ),
     cores = 32,
+    main_console_view = settings.main_console_name,
     os = os.WINDOWS_ANY,
 )
 
@@ -1051,5 +1168,6 @@ ci.win_builder(
         category = 'release|tester',
         short_name = 'w10',
     ),
+    main_console_view = settings.main_console_name,
     triggered_by = [builder_name('Win x64 Builder')],
 )

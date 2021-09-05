@@ -5,6 +5,7 @@
 #include "cc/paint/paint_image.h"
 
 #include <memory>
+#include <sstream>
 
 #include "base/atomic_sequence_num.h"
 #include "base/hash/hash.h"
@@ -113,6 +114,15 @@ const sk_sp<SkImage>& PaintImage::GetSkImage() const {
   return cached_sk_image_;
 }
 
+const sk_sp<SkImage>& PaintImage::GetRasterSkImage() const {
+  return cached_sk_image_;
+}
+
+gpu::Mailbox PaintImage::GetMailbox() const {
+  DCHECK(texture_backing_);
+  return texture_backing_->GetMailbox();
+}
+
 PaintImage PaintImage::MakeSubset(const gfx::Rect& subset) const {
   DCHECK(!subset.IsEmpty());
 
@@ -133,7 +143,7 @@ PaintImage PaintImage::MakeSubset(const gfx::Rect& subset) const {
   // PaintImage is an optimization to allow re-use of the original decode for
   // image subsets in skia, for cases that rely on skia's image decode cache.
   result.cached_sk_image_ =
-      GetSkImage()->makeSubset(gfx::RectToSkIRect(subset));
+      GetRasterSkImage()->makeSubset(gfx::RectToSkIRect(subset));
   return result;
 }
 
@@ -288,6 +298,14 @@ SkAlphaType PaintImage::GetAlphaType() const {
   return kUnknown_SkAlphaType;
 }
 
+bool PaintImage::IsTextureBacked() const {
+  if (texture_backing_)
+    return true;
+  if (cached_sk_image_)
+    return cached_sk_image_->isTextureBacked();
+  return false;
+}
+
 int PaintImage::width() const {
   return paint_worklet_input_
              ? static_cast<int>(paint_worklet_input_->GetSize().width())
@@ -361,18 +379,19 @@ sk_sp<SkImage> PaintImage::GetSkImageForFrame(
     size_t index,
     GeneratorClientId client_id) const {
   DCHECK_LT(index, FrameCount());
+  DCHECK(!IsTextureBacked());
 
   // |client_id| and |index| are only relevant for generator backed images which
   // perform lazy decoding and can be multi-frame.
   if (!paint_image_generator_) {
     DCHECK_EQ(index, kDefaultFrameIndex);
-    return GetSkImage();
+    return GetRasterSkImage();
   }
 
   // The internally cached SkImage is constructed using the default frame index
   // and GeneratorClientId. Avoid creating a new SkImage.
   if (index == kDefaultFrameIndex && client_id == kDefaultGeneratorClientId)
-    return GetSkImage();
+    return GetRasterSkImage();
 
   sk_sp<SkImage> image =
       SkImage::MakeFromGenerator(std::make_unique<SkiaPaintImageGenerator>(

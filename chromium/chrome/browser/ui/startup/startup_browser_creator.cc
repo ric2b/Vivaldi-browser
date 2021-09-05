@@ -25,7 +25,6 @@
 #include "base/scoped_observer.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_tokenizer.h"
-#include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "base/trace_event/trace_event.h"
@@ -85,7 +84,7 @@
 #include "chrome/browser/ui/user_manager.h"
 #endif
 
-#if defined(TOOLKIT_VIEWS) && defined(OS_LINUX)
+#if defined(TOOLKIT_VIEWS) && defined(USE_X11)
 #include "ui/events/devices/x11/touch_factory_x11.h"  // nogncheck
 #endif
 
@@ -103,6 +102,10 @@
 #include "chrome/browser/printing/print_dialog_cloud_win.h"
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
 #endif  // defined(OS_WIN)
+
+#if defined(USE_X11)
+#include "ui/base/ui_base_features.h"
+#endif
 
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_constants.h"
@@ -183,8 +186,8 @@ class ProfileLaunchObserver : public ProfileObserver,
     }
     // Asynchronous post to give a chance to the last window to completely
     // open and activate before trying to activate |profile_to_activate_|.
-    base::PostTask(FROM_HERE, {BrowserThread::UI},
-                   base::BindOnce(&ProfileLaunchObserver::ActivateProfile,
+    content::GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE, base::BindOnce(&ProfileLaunchObserver::ActivateProfile,
                                   base::Unretained(this)));
     // Avoid posting more than once before ActivateProfile gets called.
     observed_profiles_.RemoveAll();
@@ -704,7 +707,11 @@ bool StartupBrowserCreator::ProcessCmdLineImpl(
 #endif  // OS_CHROMEOS
 
 #if defined(TOOLKIT_VIEWS) && defined(USE_X11)
-  ui::TouchFactory::SetTouchDeviceListFromCommandLine();
+  // TODO(https://crbug.com/1097696): make it available on ozone/linux.
+  if (!features::IsUsingOzonePlatform())
+    ui::TouchFactory::SetTouchDeviceListFromCommandLine();
+  else
+    NOTIMPLEMENTED_LOG_ONCE();
 #endif
 
 #if defined(OS_MACOSX)
@@ -999,8 +1006,17 @@ void StartupBrowserCreator::ProcessCommandLineAlreadyRunning(
     return;
   }
   StartupBrowserCreator startup_browser_creator;
-  startup_browser_creator.ProcessCmdLineImpl(
-      command_line, cur_dir, /*process_startup=*/false, profile, Profiles());
+  Profiles last_opened_profiles;
+#if !defined(OS_CHROMEOS)
+  // On ChromeOS multiple profiles doesn't apply.
+  // If no browser windows are open, i.e. the browser is being kept alive in
+  // background mode or for other processing, restore |last_opened_profiles|.
+  if (chrome::GetTotalBrowserCount() == 0)
+    last_opened_profiles = profile_manager->GetLastOpenedProfiles();
+#endif  // defined(OS_CHROMEOS)
+  startup_browser_creator.ProcessCmdLineImpl(command_line, cur_dir,
+                                             /*process_startup=*/false, profile,
+                                             last_opened_profiles);
 }
 
 // static

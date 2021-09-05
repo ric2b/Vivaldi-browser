@@ -6,9 +6,12 @@
 
 #include "base/callback.h"
 #include "build/build_config.h"
+#include "chrome/browser/content_settings/generated_cookie_prefs.h"
 #include "chrome/browser/extensions/api/settings_private/generated_pref.h"
 #include "chrome/browser/extensions/api/settings_private/prefs_util_enums.h"
+#include "chrome/browser/safe_browsing/generated_safe_browsing_pref.h"
 #include "chrome/common/extensions/api/settings_private.h"
+#include "components/content_settings/core/common/pref_names.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/extensions/api/settings_private/chromeos_resolve_time_zone_by_geolocation_method_short.h"
@@ -25,6 +28,14 @@ GeneratedPrefs::GeneratedPrefs(Profile* profile) {
   prefs_[kResolveTimezoneByGeolocationMethodShort] =
       CreateGeneratedResolveTimezoneByGeolocationMethodShort(profile);
 #endif
+  prefs_[content_settings::kCookiePrimarySetting] =
+      std::make_unique<content_settings::GeneratedCookiePrimarySettingPref>(
+          profile);
+  prefs_[content_settings::kCookieSessionOnly] =
+      std::make_unique<content_settings::GeneratedCookieSessionOnlyPref>(
+          profile);
+  prefs_[safe_browsing::kGeneratedSafeBrowsingPref] =
+      std::make_unique<safe_browsing::GeneratedSafeBrowsingPref>(profile);
 }
 
 GeneratedPrefs::~GeneratedPrefs() = default;

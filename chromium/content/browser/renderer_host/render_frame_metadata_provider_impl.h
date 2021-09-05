@@ -47,8 +47,9 @@ class CONTENT_EXPORT RenderFrameMetadataProviderImpl
 
 #if defined(OS_ANDROID)
   // Notifies the renderer to begin sending a notification on all root scroll
-  // changes, which is needed for accessibility on Android.
-  void ReportAllRootScrollsForAccessibility(bool enabled);
+  // changes, which is needed for accessibility and GestureListenerManager on
+  // Android.
+  void ReportAllRootScrolls(bool enabled);
 #endif
 
   // Notifies the renderer to begin sending a notification on all frame
@@ -75,6 +76,10 @@ class CONTENT_EXPORT RenderFrameMetadataProviderImpl
       uint32_t frame_token,
       const cc::RenderFrameMetadata& metadata) override;
   void OnFrameSubmissionForTesting(uint32_t frame_token) override;
+#if defined(OS_ANDROID)
+  void OnRootScrollOffsetChanged(
+      const gfx::Vector2dF& root_scroll_offset) override;
+#endif
 
   base::ObserverList<Observer>::Unchecked observers_;
 
@@ -94,7 +99,7 @@ class CONTENT_EXPORT RenderFrameMetadataProviderImpl
       render_frame_metadata_observer_remote_;
 
 #if defined(OS_ANDROID)
-  base::Optional<bool> pending_report_all_root_scrolls_for_accessibility_;
+  base::Optional<bool> pending_report_all_root_scrolls_;
 #endif
   base::Optional<bool> pending_report_all_frame_submission_for_testing_;
 

@@ -62,6 +62,7 @@
 #include "third_party/blink/renderer/core/dom/dom_node_ids.h"
 #include "third_party/blink/renderer/core/dom/flat_tree_traversal.h"
 #include "third_party/blink/renderer/core/dom/node.h"
+#include "third_party/blink/renderer/core/dom/pseudo_element.h"
 #include "third_party/blink/renderer/core/dom/text.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
@@ -419,7 +420,7 @@ class InspectorCSSAgent::SetStyleSheetTextAction final
     text_ = other->text_;
   }
 
-  void Trace(Visitor* visitor) override {
+  void Trace(Visitor* visitor) const override {
     visitor->Trace(style_sheet_);
     InspectorCSSAgent::StyleSheetAction::Trace(visitor);
   }
@@ -517,7 +518,7 @@ class InspectorCSSAgent::ModifyRuleAction final
     return nullptr;
   }
 
-  void Trace(Visitor* visitor) override {
+  void Trace(Visitor* visitor) const override {
     visitor->Trace(style_sheet_);
     visitor->Trace(css_rule_);
     InspectorCSSAgent::StyleSheetAction::Trace(visitor);
@@ -572,7 +573,7 @@ class InspectorCSSAgent::SetElementStyleAction final
     return style_sheet_->SetText(text_, exception_state);
   }
 
-  void Trace(Visitor* visitor) override {
+  void Trace(Visitor* visitor) const override {
     visitor->Trace(style_sheet_);
     InspectorCSSAgent::StyleSheetAction::Trace(visitor);
   }
@@ -635,7 +636,7 @@ class InspectorCSSAgent::AddRuleAction final
     return result;
   }
 
-  void Trace(Visitor* visitor) override {
+  void Trace(Visitor* visitor) const override {
     visitor->Trace(style_sheet_);
     visitor->Trace(css_rule_);
     InspectorCSSAgent::StyleSheetAction::Trace(visitor);
@@ -918,8 +919,8 @@ Response InspectorCSSAgent::getMediaQueries(
     const CSSRuleVector& flat_rules = style_sheet->FlatRules();
     for (unsigned i = 0; i < flat_rules.size(); ++i) {
       CSSRule* rule = flat_rules.at(i).Get();
-      if (rule->type() == CSSRule::kMediaRule ||
-          rule->type() == CSSRule::kImportRule)
+      if (rule->GetType() == CSSRule::kMediaRule ||
+          rule->GetType() == CSSRule::kImportRule)
         CollectMediaQueriesFromRule(rule, medias->get());
     }
   }
@@ -959,6 +960,13 @@ Response InspectorCSSAgent::getMatchedStylesForNode(
   if (!owner_document->IsActive())
     return Response::ServerError("Document is not active");
 
+  // The source text of mutable stylesheets needs to be updated
+  // to sync the latest changes.
+  for (InspectorStyleSheet* stylesheet :
+       css_style_sheet_to_inspector_style_sheet_.Values()) {
+    stylesheet->SyncTextIfNeeded();
+  }
+
   // FIXME: It's really gross for the inspector to reach in and access
   // StyleResolver directly here. We need to provide the Inspector better APIs
   // to get this information without grabbing at internal style classes!
@@ -988,8 +996,15 @@ Response InspectorCSSAgent::getMatchedStylesForNode(
   for (PseudoId pseudo_id = kFirstPublicPseudoId;
        pseudo_id < kAfterLastInternalPseudoId;
        pseudo_id = static_cast<PseudoId>(pseudo_id + 1)) {
+    if (!PseudoElement::IsWebExposed(pseudo_id, element))
+      continue;
+    // If the pseudo-element doesn't exist, exclude UA rules to avoid cluttering
+    // all elements.
+    unsigned rules_to_include = element->GetPseudoElement(pseudo_id)
+                                    ? StyleResolver::kAllCSSRules
+                                    : StyleResolver::kAllButUACSSRules;
     RuleIndexList* matched_rules = style_resolver.PseudoCSSRulesForElement(
-        element, pseudo_id, StyleResolver::kAllCSSRules);
+        element, pseudo_id, rules_to_include);
     if (matched_rules && matched_rules->size()) {
       pseudo_id_matches->fromJust()->emplace_back(
           protocol::CSS::PseudoElementMatches::create()
@@ -2207,6 +2222,15 @@ void InspectorCSSAgent::DidModifyDOMAttr(Element* element) {
   it->value->DidModifyElementAttribute();
 }
 
+void InspectorCSSAgent::DidMutateStyleSheet(CSSStyleSheet* css_style_sheet) {
+  InspectorStyleSheet* style_sheet =
+      css_style_sheet_to_inspector_style_sheet_.at(css_style_sheet);
+  if (!style_sheet)
+    return;
+  style_sheet->MarkForSync();
+  StyleSheetChanged(style_sheet);
+}
+
 void InspectorCSSAgent::StyleSheetChanged(
     InspectorStyleSheetBase* style_sheet) {
   if (g_frontend_operation_counter)
@@ -2534,7 +2558,7 @@ Response InspectorCSSAgent::takeCoverageDelta(
     HeapHashMap<Member<const StyleRule>, Member<CSSStyleRule>> rule_to_css_rule;
     const CSSRuleVector& css_rules = style_sheet->FlatRules();
     for (auto css_rule : css_rules) {
-      if (css_rule->type() != CSSRule::kStyleRule)
+      if (css_rule->GetType() != CSSRule::kStyleRule)
         continue;
       CSSStyleRule* css_style_rule = AsCSSStyleRule(css_rule);
       rule_to_css_rule.Set(css_style_rule->GetStyleRule(), css_style_rule);
@@ -2551,7 +2575,7 @@ Response InspectorCSSAgent::takeCoverageDelta(
   return Response::Success();
 }
 
-void InspectorCSSAgent::Trace(Visitor* visitor) {
+void InspectorCSSAgent::Trace(Visitor* visitor) const {
   visitor->Trace(dom_agent_);
   visitor->Trace(inspected_frames_);
   visitor->Trace(network_agent_);

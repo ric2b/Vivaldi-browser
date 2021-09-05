@@ -24,7 +24,10 @@
 #include "base/test/icu_test_util.h"
 #include "base/test/scoped_feature_list.h"
 #include "chromeos/constants/chromeos_features.h"
+#include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/display/manager/display_manager.h"
+#include "ui/events/event_utils.h"
+#include "ui/views/animation/ink_drop.h"
 
 namespace ash {
 
@@ -53,6 +56,35 @@ class PageFlipWaiter : public ScrollableShelfView::TestObserver {
   std::unique_ptr<base::RunLoop> run_loop_;
 };
 
+class InkDropAnimationWaiter : public views::InkDropObserver {
+ public:
+  explicit InkDropAnimationWaiter(views::Button* button) : button_(button) {
+    button->GetInkDrop()->AddObserver(this);
+  }
+  ~InkDropAnimationWaiter() override {
+    button_->GetInkDrop()->RemoveObserver(this);
+  }
+
+  void Wait() {
+    run_loop_ = std::make_unique<base::RunLoop>();
+    run_loop_->Run();
+  }
+
+ private:
+  void InkDropAnimationStarted() override {}
+  void InkDropRippleAnimationEnded(
+      views::InkDropState ink_drop_state) override {
+    if (ink_drop_state != views::InkDropState::ACTIVATED &&
+        ink_drop_state != views::InkDropState::HIDDEN)
+      return;
+    if (run_loop_.get())
+      run_loop_->Quit();
+  }
+
+  views::Button* button_ = nullptr;
+  std::unique_ptr<base::RunLoop> run_loop_;
+};
+
 class TestShelfItemDelegate : public ShelfItemDelegate {
  public:
   explicit TestShelfItemDelegate(const ShelfID& shelf_id)
@@ -78,7 +110,6 @@ class ScrollableShelfViewTest : public AshTestBase {
   ~ScrollableShelfViewTest() override = default;
 
   void SetUp() override {
-
     AshTestBase::SetUp();
     scrollable_shelf_view_ = GetPrimaryShelf()
                                  ->shelf_widget()
@@ -90,9 +121,7 @@ class ScrollableShelfViewTest : public AshTestBase {
     test_api_->SetAnimationDuration(base::TimeDelta::FromMilliseconds(1));
   }
 
-  void TearDown() override {
-    AshTestBase::TearDown();
-  }
+  void TearDown() override { AshTestBase::TearDown(); }
 
  protected:
   void PopulateAppShortcut(int number) {
@@ -655,6 +684,145 @@ TEST_F(HotseatScrollableShelfViewTest, CheckRoundedCornersSetForInkDrop) {
   EXPECT_FALSE(HasRoundedCornersOnAppButtonAfterMouseRightClick(first_icon));
 }
 
+// Verify that the rounded corners work as expected after transition from
+// clamshell mode to tablet mode (https://crbug.com/1086484).
+TEST_F(ScrollableShelfViewTest, CheckRoundedCornersAfterTabletStateTransition) {
+  ui::ScopedAnimationDurationScaleMode regular_animations(
+      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
+  PopulateAppShortcut(1);
+
+  ShelfAppButton* icon = test_api_->GetButton(0);
+
+  // Right click on the app button to activate the ripple ring.
+  GetEventGenerator()->MoveMouseTo(icon->GetBoundsInScreen().CenterPoint());
+  GetEventGenerator()->ClickRightButton();
+  {
+    InkDropAnimationWaiter waiter(icon);
+    waiter.Wait();
+  }
+  ASSERT_EQ(views::InkDropState::ACTIVATED,
+            icon->GetInkDrop()->GetTargetInkDropState());
+
+  // Verify that in clamshell when the ripple ring is activated, the rounded
+  // corners should not be applied.
+  EXPECT_TRUE(
+      scrollable_shelf_view_->IsAnyCornerButtonInkDropActivatedForTest());
+  EXPECT_TRUE(scrollable_shelf_view_->shelf_container_view()
+                  ->layer()
+                  ->rounded_corner_radii()
+                  .IsEmpty());
+
+  // Switch to tablet mode. The ripple ring should be hidden.
+  Shell::Get()->tablet_mode_controller()->SetEnabledForTest(true);
+  {
+    InkDropAnimationWaiter waiter(icon);
+    waiter.Wait();
+  }
+  EXPECT_EQ(views::InkDropState::HIDDEN,
+            icon->GetInkDrop()->GetTargetInkDropState());
+
+  // Verify that the rounded corners should not be applied when the ripple ring
+  // is hidden.
+  ASSERT_TRUE(scrollable_shelf_view_->shelf_container_view()
+                  ->layer()
+                  ->rounded_corner_radii()
+                  .IsEmpty());
+  EXPECT_FALSE(
+      scrollable_shelf_view_->IsAnyCornerButtonInkDropActivatedForTest());
+}
+
+// Verify that the count of activated corner buttons is expected after removing
+// an app icon from context menu (https://crbug.com/1086484).
+TEST_F(ScrollableShelfViewTest,
+       CheckRoundedCornersAfterUnpinningFromContextMenu) {
+  ui::ScopedAnimationDurationScaleMode regular_animations(
+      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
+  Shell::Get()->tablet_mode_controller()->SetEnabledForTest(true);
+
+  AddAppShortcut();
+  const ShelfID app_id = AddAppShortcut();
+  ASSERT_EQ(2, test_api_->GetButtonCount());
+
+  ShelfModel* shelf_model = ShelfModel::Get();
+  const int index = shelf_model->ItemIndexByID(app_id);
+
+  ShelfAppButton* icon = test_api_->GetButton(index);
+
+  // Right click on the app button to activate the ripple ring.
+  GetEventGenerator()->MoveMouseTo(icon->GetBoundsInScreen().CenterPoint());
+  GetEventGenerator()->ClickRightButton();
+  {
+    InkDropAnimationWaiter waiter(icon);
+    waiter.Wait();
+  }
+  EXPECT_EQ(views::InkDropState::ACTIVATED,
+            icon->GetInkDrop()->GetTargetInkDropState());
+
+  // Emulate to remove a shelf icon from context menu.
+  shelf_model->RemoveItemAt(index);
+  test_api_->RunMessageLoopUntilAnimationsDone();
+  ASSERT_EQ(1, test_api_->GetButtonCount());
+
+  // Verify the count of activated corner buttons.
+  EXPECT_FALSE(
+      scrollable_shelf_view_->IsAnyCornerButtonInkDropActivatedForTest());
+}
+
+// Verifies that when two shelf app buttons are animating at the same time,
+// rounded corners are being kept if needed. (see https://crbug.com/1079330)
+TEST_F(ScrollableShelfViewTest, CheckRoundedCornersAfterLongPress) {
+  // Enable animations so that we can make sure that they occur.
+  ui::ScopedAnimationDurationScaleMode regular_animations(
+      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
+  Shell::Get()->tablet_mode_controller()->SetEnabledForTest(true);
+  PopulateAppShortcut(3);
+  ASSERT_EQ(ScrollableShelfView::kNotShowArrowButtons,
+            scrollable_shelf_view_->layout_strategy_for_test());
+  ASSERT_TRUE(scrollable_shelf_view_->shelf_container_view()
+                  ->layer()
+                  ->rounded_corner_radii()
+                  .IsEmpty());
+  ui::Layer* layer = scrollable_shelf_view_->shelf_container_view()->layer();
+  ShelfAppButton* first_icon = test_api_->GetButton(0);
+  ShelfAppButton* last_icon = test_api_->GetButton(2);
+
+  // Trigger the ripple animation over the leftmost icon and wait for it to
+  // finish. Rounded corners should be set.
+  GetEventGenerator()->MoveMouseTo(
+      first_icon->GetBoundsInScreen().CenterPoint());
+  GetEventGenerator()->ClickRightButton();
+  {
+    InkDropAnimationWaiter waiter(first_icon);
+    waiter.Wait();
+  }
+
+  ASSERT_EQ(first_icon->GetInkDropForTesting()->GetTargetInkDropState(),
+            views::InkDropState::ACTIVATED);
+  // The gfx::RoundedCornersF object is considered empty when all of the
+  // corners are squared (no effective radius).
+  EXPECT_FALSE(layer->rounded_corner_radii().IsEmpty());
+
+  // While ripple is showing on the leftmost icon, trigger the ripple animation
+  // over the rightmost icon and wait for it to finish. Rounded corners should
+  // be set.
+  GetEventGenerator()->MoveMouseTo(
+      last_icon->GetBoundsInScreen().CenterPoint());
+  // Click once so the ripple on the leftmost icon will animate to hide.
+  // Immediately click again to trigger the rightmost icon animation to show.
+  GetEventGenerator()->ClickRightButton();
+  GetEventGenerator()->ClickRightButton();
+  {
+    InkDropAnimationWaiter waiter(last_icon);
+    waiter.Wait();
+  }
+
+  ASSERT_EQ(first_icon->GetInkDropForTesting()->GetTargetInkDropState(),
+            views::InkDropState::HIDDEN);
+  ASSERT_EQ(last_icon->GetInkDropForTesting()->GetTargetInkDropState(),
+            views::InkDropState::ACTIVATED);
+  EXPECT_FALSE(layer->rounded_corner_radii().IsEmpty());
+}
+
 // Verifies that doing a mousewheel scroll on the scrollable shelf does scroll
 // forward.
 TEST_F(ScrollableShelfViewTest, ScrollWithMouseWheel) {
@@ -911,13 +1079,20 @@ class ScrollableShelfViewWithAppScalingTest : public ScrollableShelfViewTest {
   ~ScrollableShelfViewWithAppScalingTest() override = default;
 
   void SetUp() override {
-    scoped_feature_list_.InitWithFeatures({ash::features::kShelfAppScaling},
-                                          {});
+    scoped_feature_list_.InitWithFeatures(
+        {ash::features::kShelfAppScaling,
+         features::kHideShelfControlsInTabletMode},
+        {});
     ScrollableShelfViewTest::SetUp();
 
     // Display should be big enough (width and height are bigger than 600).
     // Otherwise, shelf is in dense mode by default.
-    UpdateDisplay("800x601");
+    // Note that the display width is hard coded. The display width should
+    // ensure that the two-stage scaling is possible to happen. Otherwise,
+    // there may be insufficient space to accommodate shelf icons in
+    // |ShelfConfig::shelf_button_mediate_size_| then hotseat density may switch
+    // from kNormal to kDense directly.
+    UpdateDisplay("820x601");
 
     // App scaling is only used in tablet mode.
     Shell::Get()->tablet_mode_controller()->SetEnabledForTest(true);
@@ -933,29 +1108,45 @@ class ScrollableShelfViewWithAppScalingTest : public ScrollableShelfViewTest {
  protected:
   // |kAppCount| is a magic number, which satisfies the following
   // conditions:
-  // (1) Scrollable shelf shows |kAppCount| app buttons without scrolling.
-  // (2) Scrollable shelf shows (|kAppCount| + 1) app buttons with scrolling.
-  // Addition or removal of shelf button should not change hotseat state. So
-  // Hotseat widget's width is a constant. Then |kAppCount| is in the range
-  // of [1, (hotseat width) / (shelf button + button spacing) + 1]. So we can
-  // get |kAppCount| in that range manually
-  static constexpr int kAppCount = 8;
+  // (1) Scrollable shelf shows |kAppCount| app buttons in size of
+  // |ShelfConfig::shelf_button_size_| without scrolling.
+  // (2) Scrollable shelf shows (|kAppCount| + 1) app buttons in size of
+  // |ShelfConfig::shelf_button_mediate_size_| without scrolling.
+  // (3) Scrollable shelf cannot show (|kAppCount| + 2) app buttons in size of
+  // |ShelfConfig::shelf_button_mediate_size_| without scrolling.
+
+  // Addition or removal of shelf button should not change hotseat state.
+  // So Hotseat widget's width is a constant. Then |kAppCount| is in the range
+  // of [1, (hotseat width) / (shelf button + button spacing) + 1].
+  // So we can get |kAppCount| in that range manually
+  static constexpr int kAppCount = 10;
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
-// Verifies that app scaling is turned on/off when having insufficient/enough
-// space for shelf buttons of normal size without scrolling.
+// Verifies the basic function of app scaling which scales down the hotseat and
+// its children's sizes if there is insufficient space for shelf buttons to show
+// without scrolling.
 TEST_F(ScrollableShelfViewWithAppScalingTest, AppScalingBasics) {
   PopulateAppShortcut(kAppCount);
   HotseatWidget* hotseat_widget =
       GetPrimaryShelf()->shelf_widget()->hotseat_widget();
-  EXPECT_FALSE(hotseat_widget->is_forced_dense());
+  EXPECT_EQ(HotseatDensity::kNormal, hotseat_widget->target_hotseat_density());
+  EXPECT_EQ(ScrollableShelfView::kNotShowArrowButtons,
+            scrollable_shelf_view_->layout_strategy_for_test());
 
-  // Pin an app icon. Verify that app scaling is turned on.
+  // Pin an app icon. Verify that hotseat's target density updates as expected.
+  AddAppShortcut();
+  EXPECT_EQ(HotseatDensity::kSemiDense,
+            hotseat_widget->target_hotseat_density());
+  EXPECT_EQ(ScrollableShelfView::kNotShowArrowButtons,
+            scrollable_shelf_view_->layout_strategy_for_test());
+
+  // Pin another app icon. Verify that hotseat's target density updates as
+  // expected.
   const ShelfID shelf_id = AddAppShortcut();
-  EXPECT_TRUE(hotseat_widget->is_forced_dense());
+  EXPECT_EQ(HotseatDensity::kDense, hotseat_widget->target_hotseat_density());
 
   // Unpin an app icon.
   ShelfModel* shelf_model = ShelfModel::Get();
@@ -966,12 +1157,13 @@ TEST_F(ScrollableShelfViewWithAppScalingTest, AppScalingBasics) {
   test_api_->RunMessageLoopUntilAnimationsDone();
 
   // Verify that:
-  // (1) After unpinning the app scaling is turned off.
+  // (1) After unpinning, hotseat's target density is expected.
   // (2) Hotseat widget's size and the shelf button size are expected.
   const gfx::Rect bounds_after_unpin =
       hotseat_widget->GetWindowBoundsInScreen();
   const int shelf_button_size_after = shelf_view_->GetButtonSize();
-  EXPECT_FALSE(hotseat_widget->is_forced_dense());
+  EXPECT_EQ(HotseatDensity::kSemiDense,
+            hotseat_widget->target_hotseat_density());
   EXPECT_EQ(bounds_before_unpin.width(), bounds_after_unpin.width());
   EXPECT_LT(bounds_before_unpin.height(), bounds_after_unpin.height());
   EXPECT_LT(shelf_button_size_before, shelf_button_size_after);
@@ -983,7 +1175,7 @@ TEST_F(ScrollableShelfViewWithAppScalingTest,
   PopulateAppShortcut(kAppCount);
   HotseatWidget* hotseat_widget =
       GetPrimaryShelf()->shelf_widget()->hotseat_widget();
-  EXPECT_FALSE(hotseat_widget->is_forced_dense());
+  EXPECT_EQ(HotseatDensity::kNormal, hotseat_widget->target_hotseat_density());
 
   // Pin an app icon then enter the overview mode. Verify that app scaling is
   // turned on.
@@ -993,21 +1185,22 @@ TEST_F(ScrollableShelfViewWithAppScalingTest,
     Shell::Get()->overview_controller()->StartOverview();
     waiter.Wait();
   }
-  EXPECT_TRUE(hotseat_widget->is_forced_dense());
+  EXPECT_EQ(HotseatDensity::kSemiDense,
+            hotseat_widget->target_hotseat_density());
 
-  // Unpin an app icon. Verify that app scaling is still on.
+  // Unpin an app icon. Verify that hotseat density updates.
   ShelfModel* shelf_model = ShelfModel::Get();
   shelf_model->RemoveItemAt(shelf_model->ItemIndexByID(shelf_id));
   test_api_->RunMessageLoopUntilAnimationsDone();
-  EXPECT_TRUE(hotseat_widget->is_forced_dense());
+  EXPECT_EQ(HotseatDensity::kNormal, hotseat_widget->target_hotseat_density());
 
-  // Exit overview mode. Verify that app scaling is off now.
+  // Exit overview mode. Verify the hotseat density.
   {
     OverviewAnimationWaiter waiter;
     Shell::Get()->overview_controller()->EndOverview();
     waiter.Wait();
   }
-  EXPECT_FALSE(hotseat_widget->is_forced_dense());
+  EXPECT_EQ(HotseatDensity::kNormal, hotseat_widget->target_hotseat_density());
 }
 
 }  // namespace ash

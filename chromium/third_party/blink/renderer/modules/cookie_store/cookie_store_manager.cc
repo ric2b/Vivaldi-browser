@@ -105,15 +105,14 @@ KURL DefaultCookieURL(ServiceWorkerRegistration* registration) {
 
 CookieStoreManager::CookieStoreManager(
     ServiceWorkerRegistration* registration,
-    mojo::Remote<mojom::blink::CookieStore> backend)
+    HeapMojoRemote<mojom::blink::CookieStore,
+                   HeapMojoWrapperMode::kWithoutContextObserver> backend)
     : registration_(registration),
       backend_(std::move(backend)),
       default_cookie_url_(DefaultCookieURL(registration)) {
   DCHECK(registration_);
-  DCHECK(backend_);
+  DCHECK(backend_.is_bound());
 }
-
-CookieStoreManager::~CookieStoreManager() = default;
 
 ScriptPromise CookieStoreManager::subscribe(
     ScriptState* script_state,
@@ -122,7 +121,7 @@ ScriptPromise CookieStoreManager::subscribe(
   Vector<mojom::blink::CookieChangeSubscriptionPtr> backend_subscriptions;
   backend_subscriptions.ReserveInitialCapacity(subscriptions.size());
   for (const CookieStoreGetOptions* subscription : subscriptions) {
-    RecordMatchType(subscription->matchType());
+    RecordMatchType(*subscription);
     mojom::blink::CookieChangeSubscriptionPtr backend_subscription =
         ToBackendSubscription(default_cookie_url_, subscription,
                               exception_state);
@@ -148,7 +147,7 @@ ScriptPromise CookieStoreManager::unsubscribe(
   Vector<mojom::blink::CookieChangeSubscriptionPtr> backend_subscriptions;
   backend_subscriptions.ReserveInitialCapacity(subscriptions.size());
   for (const CookieStoreGetOptions* subscription : subscriptions) {
-    RecordMatchType(subscription->matchType());
+    RecordMatchType(*subscription);
     mojom::blink::CookieChangeSubscriptionPtr backend_subscription =
         ToBackendSubscription(default_cookie_url_, subscription,
                               exception_state);
@@ -184,8 +183,9 @@ ScriptPromise CookieStoreManager::getSubscriptions(
   return resolver->Promise();
 }
 
-void CookieStoreManager::Trace(Visitor* visitor) {
+void CookieStoreManager::Trace(Visitor* visitor) const {
   visitor->Trace(registration_);
+  visitor->Trace(backend_);
   ScriptWrappable::Trace(visitor);
 }
 

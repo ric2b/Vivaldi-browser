@@ -16,7 +16,9 @@
 #include "base/containers/queue.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "content/browser/frame_host/frame_tree_node.h"
+#include "content/browser/frame_host/navigator.h"
+#include "content/browser/frame_host/navigator_delegate.h"
+#include "content/browser/frame_host/render_frame_host_manager.h"
 #include "content/common/content_export.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "services/service_manager/public/mojom/interface_provider.mojom.h"
@@ -29,7 +31,7 @@ struct FramePolicy;
 
 namespace content {
 
-class Navigator;
+class NavigationControllerImpl;
 class RenderFrameHostDelegate;
 class RenderViewHostDelegate;
 class RenderViewHostImpl;
@@ -96,7 +98,8 @@ class CONTENT_EXPORT FrameTree {
   // RenderFrameHostManagers.
   // TODO(creis): This set of delegates will change as we move things to
   // Navigator.
-  FrameTree(Navigator* navigator,
+  FrameTree(NavigationControllerImpl* navigation_controller,
+            NavigatorDelegate* navigator_delegate,
             RenderFrameHostDelegate* render_frame_delegate,
             RenderViewHostDelegate* render_view_delegate,
             RenderWidgetHostDelegate* render_widget_delegate,
@@ -279,6 +282,9 @@ class CONTENT_EXPORT FrameTree {
       const url::Origin& previously_visited_origin,
       NavigationRequest* navigation_request_to_exclude);
 
+  NavigationControllerImpl* controller() { return navigator_.controller(); }
+  Navigator& navigator() { return navigator_; }
+
 	// Vivaldi
   double loaded_bytes() const { return loaded_bytes_; }
   double loaded_elements() const { return loaded_elements_; }
@@ -299,6 +305,10 @@ class CONTENT_EXPORT FrameTree {
   RenderViewHostDelegate* render_view_delegate_;
   RenderWidgetHostDelegate* render_widget_delegate_;
   RenderFrameHostManager::Delegate* manager_delegate_;
+
+  // The Navigator object responsible for managing navigations on this frame
+  // tree.
+  Navigator navigator_;
 
   // Map of SiteInstance ID to RenderViewHost. This allows us to look up the
   // RenderViewHost for a given SiteInstance when creating RenderFrameHosts.

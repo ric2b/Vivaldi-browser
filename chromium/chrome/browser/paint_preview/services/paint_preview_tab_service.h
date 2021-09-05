@@ -90,6 +90,8 @@ class PaintPreviewTabService : public PaintPreviewBaseService {
   void AuditArtifactsAndroid(
       JNIEnv* env,
       const base::android::JavaParamRef<jintArray>& j_tab_ids);
+  jboolean IsCacheInitializedAndroid(JNIEnv* env);
+  base::android::ScopedJavaLocalRef<jstring> GetPathAndroid(JNIEnv* env);
 
   base::android::ScopedJavaGlobalRef<jobject> GetJavaRef() { return java_ref_; }
 #endif  // defined(OS_ANDROID)
@@ -114,6 +116,8 @@ class PaintPreviewTabService : public PaintPreviewBaseService {
                   std::unique_ptr<PaintPreviewProto>);
 
   void OnFinished(int tab_id, FinishedCallback callback, bool success);
+
+  void CleanupOldestFiles(int tab_id, const std::vector<DirectoryKey>& keys);
 
   void RunAudit(const std::vector<int>& active_tab_ids,
                 const base::flat_set<DirectoryKey>& in_use_keys);

@@ -393,7 +393,10 @@ class Internals final : public ScriptWrappable {
                                 float max_scale_factor,
                                 ExceptionState&);
 
+  float pageZoomFactor(ExceptionState&);
+
   void setIsCursorVisible(Document*, bool, ExceptionState&);
+  void setMaxNumberOfFramesToTen(bool);
 
   String effectivePreload(HTMLMediaElement*);
   void mediaPlayerRemoteRouteAvailabilityChanged(HTMLMediaElement*, bool);
@@ -484,7 +487,7 @@ class Internals final : public ScriptWrappable {
   ScriptPromise promiseCheckOverload(ScriptState*, Document*);
   ScriptPromise promiseCheckOverload(ScriptState*, Location*, int32_t, int32_t);
 
-  void Trace(Visitor*) override;
+  void Trace(Visitor*) const override;
 
   void setValueForUser(HTMLInputElement*, const String&);
 

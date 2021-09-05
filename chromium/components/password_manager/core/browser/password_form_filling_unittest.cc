@@ -52,26 +52,23 @@ constexpr char kSyncedPassword[] = "password";
 
 class MockPasswordManagerDriver : public StubPasswordManagerDriver {
  public:
-  MockPasswordManagerDriver() {}
-
-  ~MockPasswordManagerDriver() override = default;
-
-  MOCK_CONST_METHOD0(GetId, int());
-  MOCK_METHOD1(FillPasswordForm, void(const PasswordFormFillData&));
-  MOCK_METHOD0(InformNoSavedCredentials, void());
-  MOCK_METHOD1(ShowInitialPasswordAccountSuggestions,
-               void(const PasswordFormFillData&));
-  MOCK_METHOD1(AllowPasswordGenerationForForm, void(const PasswordForm&));
+  MOCK_METHOD(int, GetId, (), (const, override));
+  MOCK_METHOD(void,
+              FillPasswordForm,
+              (const PasswordFormFillData&),
+              (override));
+  MOCK_METHOD(void, InformNoSavedCredentials, (bool), (override));
 };
 
 class MockPasswordManagerClient : public StubPasswordManagerClient {
  public:
-  MOCK_METHOD3(PasswordWasAutofilled,
-               void(const std::vector<const PasswordForm*>&,
-                    const GURL&,
-                    const std::vector<const PasswordForm*>*));
-
-  MOCK_CONST_METHOD0(IsMainFrameSecure, bool());
+  MOCK_METHOD(void,
+              PasswordWasAutofilled,
+              (const std::vector<const PasswordForm*>&,
+               const url::Origin&,
+               const std::vector<const PasswordForm*>*),
+              (override));
+  MOCK_METHOD(bool, IsCommittedMainFrameSecure, (), (const, override));
 };
 
 PasswordForm CreateForm(std::string username,
@@ -105,9 +102,9 @@ PasswordFormFillData::LoginCollection::const_iterator FindPasswordByUsername(
 class PasswordFormFillingTest : public testing::Test {
  public:
   PasswordFormFillingTest() {
-    ON_CALL(client_, IsMainFrameSecure()).WillByDefault(Return(true));
+    ON_CALL(client_, IsCommittedMainFrameSecure()).WillByDefault(Return(true));
 
-    observed_form_.origin = GURL("https://accounts.google.com/a/LoginAuth");
+    observed_form_.url = GURL("https://accounts.google.com/a/LoginAuth");
     observed_form_.action = GURL("https://accounts.google.com/a/Login");
     observed_form_.username_element = ASCIIToUTF16("Email");
     observed_form_.username_element_renderer_id =
@@ -120,21 +117,20 @@ class PasswordFormFillingTest : public testing::Test {
     observed_form_.form_data.name = ASCIIToUTF16("the-form-name");
 
     saved_match_ = observed_form_;
-    saved_match_.origin =
-        GURL("https://accounts.google.com/a/ServiceLoginAuth");
+    saved_match_.url = GURL("https://accounts.google.com/a/ServiceLoginAuth");
     saved_match_.action = GURL("https://accounts.google.com/a/ServiceLogin");
     saved_match_.username_value = ASCIIToUTF16("test@gmail.com");
     saved_match_.password_value = ASCIIToUTF16("test1");
 
     psl_saved_match_ = saved_match_;
     psl_saved_match_.is_public_suffix_match = true;
-    psl_saved_match_.origin =
+    psl_saved_match_.url =
         GURL("https://m.accounts.google.com/a/ServiceLoginAuth");
     psl_saved_match_.action = GURL("https://m.accounts.google.com/a/Login");
     psl_saved_match_.signon_realm = "https://m.accounts.google.com";
 
     metrics_recorder_ = base::MakeRefCounted<PasswordFormMetricsRecorder>(
-        true, client_.GetUkmSourceId());
+        true, client_.GetUkmSourceId(), /*pref_service=*/nullptr);
   }
 
  protected:
@@ -150,9 +146,8 @@ class PasswordFormFillingTest : public testing::Test {
 TEST_F(PasswordFormFillingTest, NoSavedCredentials) {
   std::vector<const PasswordForm*> best_matches;
 
-  EXPECT_CALL(driver_, InformNoSavedCredentials());
+  EXPECT_CALL(driver_, InformNoSavedCredentials(_));
   EXPECT_CALL(driver_, FillPasswordForm(_)).Times(0);
-  EXPECT_CALL(driver_, ShowInitialPasswordAccountSuggestions(_)).Times(0);
 
   LikelyFormFilling likely_form_filling = SendFillInformationToRenderer(
       &client_, &driver_, observed_form_, best_matches, federated_matches_,
@@ -168,11 +163,10 @@ TEST_F(PasswordFormFillingTest, Autofill) {
   another_saved_match.password_value += ASCIIToUTF16("1");
   best_matches.push_back(&another_saved_match);
 
-  EXPECT_CALL(driver_, InformNoSavedCredentials()).Times(0);
+  EXPECT_CALL(driver_, InformNoSavedCredentials(_)).Times(0);
   PasswordFormFillData fill_data;
   EXPECT_CALL(driver_, FillPasswordForm(_)).WillOnce(SaveArg<0>(&fill_data));
-  EXPECT_CALL(driver_, ShowInitialPasswordAccountSuggestions(_)).Times(0);
-  EXPECT_CALL(client_, PasswordWasAutofilled(_, _, _));
+  EXPECT_CALL(client_, PasswordWasAutofilled);
 
   LikelyFormFilling likely_form_filling = SendFillInformationToRenderer(
       &client_, &driver_, observed_form_, best_matches, federated_matches_,
@@ -181,7 +175,7 @@ TEST_F(PasswordFormFillingTest, Autofill) {
 
   // Check that the message to the renderer (i.e. |fill_data|) is filled
   // correctly.
-  EXPECT_EQ(observed_form_.origin, fill_data.origin);
+  EXPECT_EQ(observed_form_.url, fill_data.url);
   EXPECT_FALSE(fill_data.wait_for_username);
   EXPECT_EQ(observed_form_.username_element, fill_data.username_field.name);
   EXPECT_EQ(saved_match_.username_value, fill_data.username_field.value);
@@ -237,7 +231,7 @@ TEST_F(PasswordFormFillingTest, TestFillOnLoadSuggestion) {
 
     PasswordFormFillData fill_data;
     EXPECT_CALL(driver_, FillPasswordForm(_)).WillOnce(SaveArg<0>(&fill_data));
-    EXPECT_CALL(client_, PasswordWasAutofilled(_, _, _));
+    EXPECT_CALL(client_, PasswordWasAutofilled);
 
     LikelyFormFilling likely_form_filling = SendFillInformationToRenderer(
         &client_, &driver_, observed_form, best_matches, federated_matches_,
@@ -256,11 +250,10 @@ TEST_F(PasswordFormFillingTest, TestFillOnLoadSuggestion) {
 TEST_F(PasswordFormFillingTest, AutofillPSLMatch) {
   std::vector<const PasswordForm*> best_matches = {&psl_saved_match_};
 
-  EXPECT_CALL(driver_, InformNoSavedCredentials()).Times(0);
+  EXPECT_CALL(driver_, InformNoSavedCredentials(_)).Times(0);
   PasswordFormFillData fill_data;
   EXPECT_CALL(driver_, FillPasswordForm(_)).WillOnce(SaveArg<0>(&fill_data));
-  EXPECT_CALL(driver_, ShowInitialPasswordAccountSuggestions(_)).Times(0);
-  EXPECT_CALL(client_, PasswordWasAutofilled(_, _, _));
+  EXPECT_CALL(client_, PasswordWasAutofilled);
 
   LikelyFormFilling likely_form_filling = SendFillInformationToRenderer(
       &client_, &driver_, observed_form_, best_matches, federated_matches_,
@@ -269,7 +262,7 @@ TEST_F(PasswordFormFillingTest, AutofillPSLMatch) {
 
   // Check that the message to the renderer (i.e. |fill_data|) is filled
   // correctly.
-  EXPECT_EQ(observed_form_.origin, fill_data.origin);
+  EXPECT_EQ(observed_form_.url, fill_data.url);
   EXPECT_TRUE(fill_data.wait_for_username);
   EXPECT_EQ(psl_saved_match_.signon_realm, fill_data.preferred_realm);
   EXPECT_EQ(observed_form_.username_element, fill_data.username_field.name);
@@ -280,20 +273,19 @@ TEST_F(PasswordFormFillingTest, AutofillPSLMatch) {
 
 TEST_F(PasswordFormFillingTest, NoAutofillOnHttp) {
   PasswordForm observed_http_form = observed_form_;
-  observed_http_form.origin = GURL("http://accounts.google.com/a/LoginAuth");
+  observed_http_form.url = GURL("http://accounts.google.com/a/LoginAuth");
   observed_http_form.action = GURL("http://accounts.google.com/a/Login");
   observed_http_form.signon_realm = "http://accounts.google.com";
 
   PasswordForm saved_http_match = saved_match_;
-  saved_http_match.origin =
-      GURL("http://accounts.google.com/a/ServiceLoginAuth");
+  saved_http_match.url = GURL("http://accounts.google.com/a/ServiceLoginAuth");
   saved_http_match.action = GURL("http://accounts.google.com/a/ServiceLogin");
   saved_http_match.signon_realm = "http://accounts.google.com";
 
   ASSERT_FALSE(GURL(saved_http_match.signon_realm).SchemeIsCryptographic());
   std::vector<const PasswordForm*> best_matches = {&saved_http_match};
 
-  EXPECT_CALL(client_, IsMainFrameSecure).WillOnce(Return(false));
+  EXPECT_CALL(client_, IsCommittedMainFrameSecure).WillOnce(Return(false));
   LikelyFormFilling likely_form_filling = SendFillInformationToRenderer(
       &client_, &driver_, observed_http_form, best_matches, federated_matches_,
       &saved_http_match, metrics_recorder_.get());
@@ -326,7 +318,7 @@ TEST_F(PasswordFormFillingTest, TouchToFill) {
 TEST(PasswordFormFillDataTest, TestSinglePreferredMatch) {
   // Create the current form on the page.
   PasswordForm form_on_page;
-  form_on_page.origin = GURL("https://foo.com/");
+  form_on_page.url = GURL("https://foo.com/");
   form_on_page.action = GURL("https://foo.com/login");
   form_on_page.username_element = ASCIIToUTF16("username");
   form_on_page.username_value = ASCIIToUTF16(kPreferredUsername);
@@ -338,7 +330,7 @@ TEST(PasswordFormFillDataTest, TestSinglePreferredMatch) {
 
   // Create an exact match in the database.
   PasswordForm preferred_match;
-  preferred_match.origin = GURL("https://foo.com/");
+  preferred_match.url = GURL("https://foo.com/");
   preferred_match.action = GURL("https://foo.com/login");
   preferred_match.username_element = ASCIIToUTF16("username");
   preferred_match.username_value = ASCIIToUTF16(kPreferredUsername);
@@ -375,7 +367,7 @@ TEST(PasswordFormFillDataTest, TestSinglePreferredMatch) {
 TEST(PasswordFormFillDataTest, TestPublicSuffixDomainMatching) {
   // Create the current form on the page.
   PasswordForm form_on_page;
-  form_on_page.origin = GURL("https://foo.com/");
+  form_on_page.url = GURL("https://foo.com/");
   form_on_page.action = GURL("https://foo.com/login");
   form_on_page.username_element = ASCIIToUTF16("username");
   form_on_page.username_value = ASCIIToUTF16(kPreferredUsername);
@@ -387,7 +379,7 @@ TEST(PasswordFormFillDataTest, TestPublicSuffixDomainMatching) {
 
   // Create a match from the database that matches using public suffix.
   PasswordForm preferred_match;
-  preferred_match.origin = GURL("https://mobile.foo.com/");
+  preferred_match.url = GURL("https://mobile.foo.com/");
   preferred_match.action = GURL("https://mobile.foo.com/login");
   preferred_match.username_element = ASCIIToUTF16("username");
   preferred_match.username_value = ASCIIToUTF16(kPreferredUsername);
@@ -401,7 +393,7 @@ TEST(PasswordFormFillDataTest, TestPublicSuffixDomainMatching) {
   // Create a match that matches exactly, so |is_public_suffix_match| has a
   // default value false.
   PasswordForm exact_match;
-  exact_match.origin = GURL("https://foo.com/");
+  exact_match.url = GURL("https://foo.com/");
   exact_match.action = GURL("https://foo.com/login");
   exact_match.username_element = ASCIIToUTF16("username");
   exact_match.username_value = ASCIIToUTF16("test1@gmail.com");
@@ -414,7 +406,7 @@ TEST(PasswordFormFillDataTest, TestPublicSuffixDomainMatching) {
   // Create a match that was matched using public suffix, so
   // |is_public_suffix_match| == true.
   PasswordForm public_suffix_match;
-  public_suffix_match.origin = GURL("https://foo.com/");
+  public_suffix_match.url = GURL("https://foo.com/");
   public_suffix_match.action = GURL("https://foo.com/login");
   public_suffix_match.username_element = ASCIIToUTF16("username");
   public_suffix_match.username_value = ASCIIToUTF16("test2@gmail.com");
@@ -456,7 +448,7 @@ TEST(PasswordFormFillDataTest, TestPublicSuffixDomainMatching) {
 TEST(PasswordFormFillDataTest, TestAffiliationMatch) {
   // Create the current form on the page.
   PasswordForm form_on_page;
-  form_on_page.origin = GURL("https://foo.com/");
+  form_on_page.url = GURL("https://foo.com/");
   form_on_page.action = GURL("https://foo.com/login");
   form_on_page.username_element = ASCIIToUTF16("username");
   form_on_page.username_value = ASCIIToUTF16(kPreferredUsername);
@@ -468,7 +460,7 @@ TEST(PasswordFormFillDataTest, TestAffiliationMatch) {
 
   // Create a match from the database that matches using affiliation.
   PasswordForm preferred_match;
-  preferred_match.origin = GURL("android://hash@foo.com/");
+  preferred_match.url = GURL("android://hash@foo.com/");
   preferred_match.username_value = ASCIIToUTF16(kPreferredUsername);
   preferred_match.password_value = ASCIIToUTF16(kPreferredPassword);
   preferred_match.signon_realm = "android://hash@foo.com/";
@@ -477,7 +469,7 @@ TEST(PasswordFormFillDataTest, TestAffiliationMatch) {
   // Create a match that matches exactly, so |is_affiliation_based_match| has a
   // default value false.
   PasswordForm exact_match;
-  exact_match.origin = GURL("https://foo.com/");
+  exact_match.url = GURL("https://foo.com/");
   exact_match.action = GURL("https://foo.com/login");
   exact_match.username_element = ASCIIToUTF16("username");
   exact_match.username_value = ASCIIToUTF16("test1@gmail.com");
@@ -490,7 +482,7 @@ TEST(PasswordFormFillDataTest, TestAffiliationMatch) {
   // Create a match that was matched using public suffix, so
   // |is_public_suffix_match| == true.
   PasswordForm affiliated_match;
-  affiliated_match.origin = GURL("android://hash@foo1.com/");
+  affiliated_match.url = GURL("android://hash@foo1.com/");
   affiliated_match.username_value = ASCIIToUTF16("test2@gmail.com");
   affiliated_match.password_value = ASCIIToUTF16(kPreferredPassword);
   affiliated_match.is_affiliation_based_match = true;
@@ -524,7 +516,7 @@ TEST(PasswordFormFillDataTest, TestAffiliationMatch) {
 TEST(PasswordFormFillDataTest, RendererIDs) {
   // Create the current form on the page.
   PasswordForm form_on_page;
-  form_on_page.origin = GURL("https://foo.com/");
+  form_on_page.url = GURL("https://foo.com/");
   form_on_page.action = GURL("https://foo.com/login");
   form_on_page.username_element = ASCIIToUTF16("username");
   form_on_page.password_element = ASCIIToUTF16("password");
@@ -561,7 +553,7 @@ TEST(PasswordFormFillDataTest, RendererIDs) {
 TEST(PasswordFormFillDataTest, NoPasswordElement) {
   // Create the current form on the page.
   PasswordForm form_on_page;
-  form_on_page.origin = GURL("https://foo.com/");
+  form_on_page.url = GURL("https://foo.com/");
   form_on_page.has_renderer_ids = true;
   form_on_page.username_element_renderer_id = FieldRendererId(123);
   // Set no password element.

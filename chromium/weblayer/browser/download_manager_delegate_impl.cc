@@ -5,13 +5,14 @@
 #include "weblayer/browser/download_manager_delegate_impl.h"
 
 #include "base/files/file_util.h"
-#include "base/task/post_task.h"
+#include "base/optional.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "build/build_config.h"
 #include "components/download/public/common/download_item.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_task_traits.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/download_item_utils.h"
 #include "content/public/browser/download_manager.h"
 #include "net/base/filename_util.h"
@@ -42,8 +43,8 @@ void GenerateFilename(
     base::CreateDirectory(suggested_directory);
 
   base::FilePath suggested_path(suggested_directory.Append(generated_name));
-  base::PostTask(FROM_HERE, {content::BrowserThread::UI},
-                 base::BindOnce(std::move(callback), suggested_path));
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE, base::BindOnce(std::move(callback), suggested_path));
 }
 
 }  // namespace
@@ -89,7 +90,8 @@ bool DownloadManagerDelegateImpl::DetermineDownloadTarget(
         download::DownloadItem::TARGET_DISPOSITION_OVERWRITE,
         download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS,
         download::DownloadItem::MixedContentStatus::UNKNOWN,
-        item->GetForcedFilePath(), download::DOWNLOAD_INTERRUPT_REASON_NONE);
+        item->GetForcedFilePath(), base::nullopt /*download_schedule*/,
+        download::DOWNLOAD_INTERRUPT_REASON_NONE);
     return true;
   }
 
@@ -240,6 +242,7 @@ void DownloadManagerDelegateImpl::OnDownloadPathGenerated(
       download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS,
       download::DownloadItem::MixedContentStatus::UNKNOWN,
       suggested_path.AddExtension(FILE_PATH_LITERAL(".crdownload")),
+      base::nullopt /*download_schedule*/,
       download::DOWNLOAD_INTERRUPT_REASON_NONE);
 }
 

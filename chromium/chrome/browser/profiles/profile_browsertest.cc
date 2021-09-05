@@ -665,12 +665,12 @@ IN_PROC_BROWSER_TEST_F(ProfileBrowserTest, Notifications) {
         chrome::NOTIFICATION_PROFILE_CREATED,
         content::NotificationService::AllSources());
 
-    otr_profile = profile->GetOffTheRecordProfile();
+    otr_profile = profile->GetPrimaryOTRProfile();
     profile_created_observer.Wait();
 
     EXPECT_EQ(profile_created_observer.source(),
               content::Source<Profile>(otr_profile));
-    EXPECT_TRUE(profile->HasOffTheRecordProfile());
+    EXPECT_TRUE(profile->HasPrimaryOTRProfile());
     EXPECT_TRUE(otr_profile->IsOffTheRecord());
     EXPECT_TRUE(otr_profile->IsPrimaryOTRProfile());
     EXPECT_TRUE(otr_profile->IsIncognitoProfile());
@@ -693,10 +693,12 @@ IN_PROC_BROWSER_TEST_F(ProfileBrowserTest, Notifications) {
         chrome::NOTIFICATION_PROFILE_DESTROYED,
         content::Source<Profile>(otr_profile));
 
-    profile->DestroyOffTheRecordProfile();
-    profile_destroyed_observer.Wait();
+    if (profile->HasPrimaryOTRProfile()) {
+      profile->DestroyOffTheRecordProfile(profile->GetPrimaryOTRProfile());
+      profile_destroyed_observer.Wait();
+    }
 
-    EXPECT_FALSE(profile->HasOffTheRecordProfile());
+    EXPECT_FALSE(profile->HasPrimaryOTRProfile());
   }
 
   // Destroy the regular profile.
@@ -817,8 +819,8 @@ IN_PROC_BROWSER_TEST_F(ProfileBrowserTest, TestGetAllOffTheRecordProfiles) {
   EXPECT_TRUE(base::Contains(all_otrs, incognito_profile));
 }
 
-// Tests Profile::IsSameProfile
-IN_PROC_BROWSER_TEST_F(ProfileBrowserTest, TestIsSameProfile) {
+// Tests Profile::IsSameOrParent
+IN_PROC_BROWSER_TEST_F(ProfileBrowserTest, TestIsSameOrParent) {
   Profile::OTRProfileID otr_profile_id("profile::otr");
 
   Profile* regular_profile = browser()->profile();
@@ -826,12 +828,25 @@ IN_PROC_BROWSER_TEST_F(ProfileBrowserTest, TestIsSameProfile) {
       regular_profile->GetOffTheRecordProfile(otr_profile_id);
   Profile* incognito_profile = regular_profile->GetPrimaryOTRProfile();
 
-  EXPECT_TRUE(regular_profile->IsSameProfile(otr_profile));
-  EXPECT_TRUE(otr_profile->IsSameProfile(regular_profile));
+  EXPECT_TRUE(regular_profile->IsSameOrParent(otr_profile));
+  EXPECT_TRUE(otr_profile->IsSameOrParent(regular_profile));
 
-  EXPECT_TRUE(regular_profile->IsSameProfile(incognito_profile));
-  EXPECT_TRUE(incognito_profile->IsSameProfile(regular_profile));
+  EXPECT_TRUE(regular_profile->IsSameOrParent(incognito_profile));
+  EXPECT_TRUE(incognito_profile->IsSameOrParent(regular_profile));
 
-  EXPECT_FALSE(incognito_profile->IsSameProfile(otr_profile));
-  EXPECT_FALSE(otr_profile->IsSameProfile(incognito_profile));
+  EXPECT_FALSE(incognito_profile->IsSameOrParent(otr_profile));
+  EXPECT_FALSE(otr_profile->IsSameOrParent(incognito_profile));
+}
+
+// Tests if browser creation using non primary OTRs is blocked.
+IN_PROC_BROWSER_TEST_F(ProfileBrowserTest,
+                       TestCreatingBrowserUsingNonPrimaryOffTheRecordProfile) {
+  Profile::OTRProfileID otr_profile_id("profile::otr");
+  Profile* otr_profile =
+      browser()->profile()->GetOffTheRecordProfile(otr_profile_id);
+
+  EXPECT_EQ(nullptr, Browser::Create(Browser::CreateParams(
+                         otr_profile, /* user_gesture = */ true)));
+  EXPECT_EQ(nullptr, Browser::Create(Browser::CreateParams(
+                         otr_profile, /* user_gesture = */ false)));
 }

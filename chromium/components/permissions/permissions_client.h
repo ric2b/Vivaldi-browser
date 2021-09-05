@@ -23,6 +23,10 @@ class BrowserContext;
 class WebContents;
 }  // namespace content
 
+namespace content_settings {
+class CookieSettings;
+}
+
 namespace infobars {
 class InfoBar;
 class InfoBarManager;
@@ -51,6 +55,10 @@ class PermissionsClient {
   // Retrieves the HostContentSettingsMap for this context. The returned pointer
   // has the same lifetime as |browser_context|.
   virtual HostContentSettingsMap* GetSettingsMap(
+      content::BrowserContext* browser_context) = 0;
+
+  // Retrieves the CookieSettings for this context.
+  virtual scoped_refptr<content_settings::CookieSettings> GetCookieSettings(
       content::BrowserContext* browser_context) = 0;
 
   // Retrieves the PermissionDecisionAutoBlocker for this context. The returned
@@ -119,6 +127,13 @@ class PermissionsClient {
   virtual void OnPromptResolved(content::BrowserContext* browser_context,
                                 PermissionRequestType request_type,
                                 PermissionAction action);
+
+  // Returns true if user has 3 consecutive notifications permission denies,
+  // returns false otherwise.
+  // Returns base::nullopt if the user is not in the adoptive activation quiet
+  // ui dry run experiment group.
+  virtual base::Optional<bool> HadThreeConsecutiveNotificationPermissionDenies(
+      content::BrowserContext* browser_context);
 
   // If the embedder returns an origin here, any requests matching that origin
   // will be approved. Requests that do not match the returned origin will

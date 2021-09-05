@@ -8,6 +8,7 @@
 <translation id="1046068652463704410">Input Jepun (untuk papan kekunci AS)</translation>
 <translation id="1047956942837015229">Memadamkan <ph name="COUNT" /> item...</translation>
 <translation id="1049926623896334335">Dokumen Word</translation>
+<translation id="1060368002126861100">Untuk membuka fail dengan <ph name="APP_NAME" />, alihkan fail itu ke folder fail Windows dahulu.</translation>
 <translation id="1062407476771304334">Gantikan</translation>
 <translation id="1065449928621190041">Papan kekunci Perancis Kanada</translation>
 <translation id="1119069657431255176">Arkib tar Bzip2 dimampatkan</translation>
@@ -45,6 +46,8 @@
 <translation id="1395262318152388157">Peluncur cari</translation>
 <translation id="1399648040768741453">Papan kekunci bahasa Telugu (Fonetik)</translation>
 <translation id="1430915738399379752">Cetak</translation>
+<translation id="1433600251059882049">Folder ini dikongsi dengan Linux dan Windows</translation>
+<translation id="1435838927755162558">Kongsi folder dengan Parallels Desktop</translation>
 <translation id="1439494416798956626">Dialihkan ke <ph name="FOLDER_NAME" />.</translation>
 <translation id="1441841714100794440">Papan kekunci bahasa Vietnam (Teleks)</translation>
 <translation id="1455548678241328678">Papan kekunci Norway</translation>
@@ -79,6 +82,7 @@
 <translation id="1844692022597038441">Fail ini tidak boleh didapati di luar talian.</translation>
 <translation id="184633654410729720">Papan kekunci bahasa Thai (Kedmanee)</translation>
 <translation id="1847880352285315359">Disimpan</translation>
+<translation id="1853795129690976061">Folder ini dikongsi dengan Linux</translation>
 <translation id="1864756863218646478">Fail tidak dapat dijumpai.</translation>
 <translation id="1921986354447415460">Papan kekunci Turki-F</translation>
 <translation id="1924372192547904021"><ph name="DRIVE_NAME" /> diformatkan</translation>
@@ -124,6 +128,7 @@
 <translation id="2384596874640104496">Papan kekunci bahasa Sinhala</translation>
 <translation id="240770291734945588"><ph name="SPACE_AVAILABLE" /> tersedia</translation>
 <translation id="2425665904502185219">Jumlah saiz fail</translation>
+<translation id="2428749644083375155">Menyalin <ph name="NUMBER_OF_ITEMS" /> item ke <ph name="FOLDER_NAME" /></translation>
 <translation id="2448312741937722512">Jenis</translation>
 <translation id="2453576648990281505">Fail sudah wujud</translation>
 <translation id="2464079411014186876">Aiskrim</translation>
@@ -178,6 +183,7 @@
 <translation id="303198083543495566">Geografi</translation>
 <translation id="3057861065630527966">Sandarkan foto dan video anda</translation>
 <translation id="3064388234319122767">Pengalihan huruf (zdravo → здраво)</translation>
+<translation id="3067790092342515856">Fail Windows</translation>
 <translation id="3078461028045006476">Berkongsi dengan <ph name="EXTENSION_NAME" /></translation>
 <translation id="3088034400796962477">Pengalihan huruf (salam ← سلام)</translation>
 <translation id="3116361045094675131">Papan kekunci UK</translation>
@@ -216,6 +222,7 @@
 <translation id="3524311639100184459">Awas: Fail ini bersifat sementara dan mungkin dipadamkan secara automatik untuk mengosongkan ruang cakera.  <ph name="BEGIN_LINK" />Ketahui Lebih Lanjut<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">Folder</translation>
 <translation id="3549797760399244642">Pergi ke drive.google.com...</translation>
+<translation id="3553048479571901246">Untuk membuka fail dengan <ph name="APP_NAME" />, salin fail itu ke folder fail Windows dahulu.</translation>
 <translation id="357479282490346887">Bahasa Lithuania</translation>
 <translation id="3583509704582854624">Input abjad angka (untuk papan kekunci Jepun)</translation>
 <translation id="3603385196401704894">Bahasa Perancis Kanada</translation>
@@ -239,6 +246,7 @@
 <translation id="3798449238516105146">Versi</translation>
 <translation id="3801082500826908679">Bahasa Faroese</translation>
 <translation id="3809272675881623365">Arnab</translation>
+<translation id="3810973564298564668">Urus</translation>
 <translation id="3811494700605067549">1 fail dipilih</translation>
 <translation id="3815016854028376614">Kaedah input Zhuyin</translation>
 <translation id="3825863595139017598">Papan kekunci bahasa Mongolia</translation>
@@ -259,8 +267,8 @@
 <translation id="3943857333388298514">Tampal</translation>
 <translation id="3958548648197196644">Kiwi</translation>
 <translation id="3966388904776714213">Pemain Audio</translation>
+<translation id="3984317463833596033">Berikan Parallels Desktop kebenaran untuk mengubah fail dalam folder <ph name="FOLDER_NAME" /></translation>
 <translation id="4002066346123236978">Tajuk</translation>
-<translation id="4065397611279318371">Untuk membuka fail dengan menggunakan apl <ph name="APP_NAME" />, alihkan fail itu ke folder <ph name="SHARED_DIRECTORY_LABEL" /> dahulu.</translation>
 <translation id="4070370845051020638">Kaedah input Kantonis</translation>
 <translation id="4072248638558688893">Papan kekunci bahasa Tamil (Fonetik)</translation>
 <translation id="4124935795427217608">Unikorn</translation>
@@ -288,6 +296,7 @@
 <translation id="4470564870223067757">Hangul 2 Set</translation>
 <translation id="4477219268485577442">Fonetik bahasa Bulgaria</translation>
 <translation id="4479812471636796472">Papan kekunci Dvorak AS</translation>
+<translation id="4481711095103932593">Folder ini dikongsi dengan Windows</translation>
 <translation id="4487088045714738411">Papan Kekunci Belgium</translation>
 <translation id="4522570452068850558">Butiran</translation>
 <translation id="4552678318981539154">Beli lagi storan</translation>
@@ -297,6 +306,7 @@
 <translation id="4579744207439506346"><ph name="ENTRY_NAME" />ditambahkan pada pilihan.</translation>
 <translation id="4582497162516204941">Pasang dengan Linux (Beta)</translation>
 <translation id="4594543368593301662">Menunjukkan hasil untuk <ph name="SEARCH_TERM" />.</translation>
+<translation id="4603392156942865207">Menyalin <ph name="FILE_NAME" /> ke <ph name="FOLDER_NAME" /></translation>
 <translation id="4631887759990505102">Artis</translation>
 <translation id="4656293982926141856">Komputer ini</translation>
 <translation id="4669606053856530811">Ahli '<ph name="SOURCE_NAME" />' akan kehilangan akses melainkan item ini dikongsi dengan mereka.</translation>
@@ -330,11 +340,12 @@
 <translation id="4880520557730313061">Autobaiki</translation>
 <translation id="4881695831933465202">Buka</translation>
 <translation id="4886021172213954916">Papan kekunci bahasa Tamil (Mesin Taip)</translation>
-<translation id="4892969127351273348">Tidak dapat membuka fail menggunakan <ph name="APP_NAME" /></translation>
+<translation id="4900532980794411603">Kongsi dengan Parallels Desktop</translation>
 <translation id="4905417359854579806">Sedia untuk menyandarkan <ph name="FILE_COUNT" /></translation>
 <translation id="4924638091161556692">Dibetulkan</translation>
 <translation id="4935975195727477204">Bunga Gazania</translation>
 <translation id="4943368462779413526">Bola Sepak</translation>
+<translation id="4961158930123534723">1 folder dikongsi dengan Parallels Desktop</translation>
 <translation id="4969785127455456148">Album</translation>
 <translation id="497244430928947428">Papan kekunci bahasa Malayalam (Fonetik)</translation>
 <translation id="4973523518332075481">Gunakan nama yang mengandungi tidak lebih daripada <ph name="MAX_LENGTH" /> aksara</translation>
@@ -346,10 +357,12 @@
 <translation id="5010406651457630570">Komputer</translation>
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5024856940085636730">Operasi mengambil masa lebih lama daripada yang dijangkakan. Adakah anda ingin menghenti paksanya?</translation>
+<translation id="5036159836254554629">Urus perkongsian Parallels Desktop</translation>
 <translation id="5038625366300922036">Lihat lagi...</translation>
 <translation id="5061708541166515394">Kontras</translation>
 <translation id="5068919226082848014">Piza</translation>
 <translation id="5081517858322016911"><ph name="TOTAL_FILE_SIZE" /> fail akan dipadamkan</translation>
+<translation id="508423945471810158">Mengalihkan <ph name="NUMBER_OF_ITEMS" /> item ke <ph name="FOLDER_NAME" /></translation>
 <translation id="509429900233858213">Ralat telah berlaku.</translation>
 <translation id="5098629044894065541">Bahasa Ibrani</translation>
 <translation id="5123433949759960244">Bola Keranjang</translation>
@@ -368,7 +381,7 @@
 <translation id="5177526793333269655">Paparan lakaran kenit</translation>
 <translation id="5194713942430106590">Klik untuk mengisih lajur dalam tertib menaik.</translation>
 <translation id="5218183485292899140">Bahasa Perancis Switzerland</translation>
-<translation id="5234764350956374838">Singkirkan</translation>
+<translation id="5234764350956374838">Ketepikan</translation>
 <translation id="5241298539944515331">Papan kekunci bahasa Vietnam (VIQR)</translation>
 <translation id="5253070652067921974">Dibuat oleh</translation>
 <translation id="5257456363153333584">Pepatung</translation>
@@ -453,6 +466,7 @@
 <translation id="6054173164583630569">Papan kekunci Perancis</translation>
 <translation id="6074825444536523002">Borang Google</translation>
 <translation id="6096979789310008754">Carian teks dikosongkan, menunjukkan semua fail dan folder.</translation>
+<translation id="610101264611565198">Mengalihkan <ph name="FILE_NAME" /> ke <ph name="FOLDER_NAME" /></translation>
 <translation id="6111770213269631447">Pengalihan huruf (namaskar → নমস্কার)</translation>
 <translation id="6129953537138746214">Ruang</translation>
 <translation id="6133173853026656527">Memindahkan <ph name="FILE_NAME" />...</translation>
@@ -493,6 +507,7 @@
 <translation id="656398493051028875">Memadamkan "<ph name="FILENAME" />"...</translation>
 <translation id="6581162200855843583">Pautan Google Drive</translation>
 <translation id="6607272825297743757">Maklumat fail</translation>
+<translation id="6609332149380188670"><ph name="NUMBER_OF_ITEMS" /> folder dikongsi dengan Parallels Desktop</translation>
 <translation id="6629841649550503054">Semua telah disandarkan pada <ph name="BEGIN_LINK" />Google Drive!<ph name="END_LINK" /></translation>
 <translation id="6643016212128521049">Kosongkan</translation>
 <translation id="6650726141019353908">Rama-rama merah jambu</translation>
@@ -536,6 +551,7 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">Gagal pemasangan.</translation>
 <translation id="7040138676081995583">Buka dengan...</translation>
+<translation id="7059566040011178088">Kurang daripada <ph name="REMAINING_TIME" /></translation>
 <translation id="7100897339030255923"><ph name="COUNT" /> item dipilih</translation>
 <translation id="7106346894903675391">Beli lagi storan...</translation>
 <translation id="7126604456862387217">'&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;' - &lt;em&gt;cari di Drive&lt;/em&gt;</translation>
@@ -646,6 +662,7 @@
 <translation id="8193175696669055101">Model peranti</translation>
 <translation id="8208580316430297579">Kerja seni</translation>
 <translation id="8223479393428528563">Bagi menyimpan fail-fail ini untuk kegunaan diluar talian, sila kembali ke dalam talian, klik kanan fail dan pilih pilihan <ph name="OFFLINE_CHECKBOX_NAME" />.</translation>
+<translation id="8231972167769262174">Kira-kira <ph name="REMAINING_TIME" /></translation>
 <translation id="8249296373107784235">Henti paksa</translation>
 <translation id="8261506727792406068">Padam</translation>
 <translation id="8269755669432358899">Runtuhkan panel maklum balas fail</translation>
@@ -672,6 +689,7 @@
 <translation id="8475647382427415476">Google Drive tidak dapat menyegerakkan "<ph name="FILENAME" />" pada masa ini. Google Drive akan mencuba lagi nanti.</translation>
 <translation id="8477649328507734757">Putar</translation>
 <translation id="8487700953926739672">Tersedia di luar talian</translation>
+<translation id="8490342535582768689">Berikan Parallels Desktop kebenaran untuk mengubah fail dalam Google Drive anda. Perubahan akan disegerakkan ke peranti anda yang lain.</translation>
 <translation id="8521441079177373948">UK</translation>
 <translation id="8525306231823319788">Skrin penuh</translation>
 <translation id="8551494947769799688">Bahasa Latvia</translation>

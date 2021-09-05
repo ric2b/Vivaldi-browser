@@ -85,6 +85,7 @@
 
 #if defined(USE_X11)
 #include "base/nix/xdg_util.h"
+#include "ui/base/ui_base_features.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
@@ -144,8 +145,8 @@ void CreateInterruptedDownload(
           base::Time::Now(), base::WrapUnique(new download::DownloadSaveInfo)));
   failed_created_info->url_chain.push_back(params->url());
   failed_created_info->result = reason;
-  base::PostTask(
-      FROM_HERE, {BrowserThread::UI},
+  GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE,
       base::BindOnce(&DownloadManagerImpl::StartDownload, download_manager,
                      std::move(failed_created_info),
                      std::make_unique<download::InputStream>(),
@@ -197,7 +198,8 @@ class DownloadItemFactoryImpl : public download::DownloadItemFactory {
         last_modified, received_bytes, total_bytes, auto_resume_count, hash,
         state, danger_type, interrupt_reason, false /* paused */,
         false /* allow_metered */, opened, last_access_time, transient,
-        received_slices, nullptr /* download_entry */);
+        received_slices, base::nullopt /*download_schedule*/,
+        nullptr /* download_entry */);
   }
 
   download::DownloadItemImpl* CreateActiveItem(
@@ -329,8 +331,7 @@ DownloadManagerImpl::DownloadManagerImpl(BrowserContext* browser_context)
            base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN})) {
   DCHECK(browser_context);
 
-  download::SetIOTaskRunner(
-      base::CreateSingleThreadTaskRunner({BrowserThread::IO}));
+  download::SetIOTaskRunner(GetIOThreadTaskRunner({}));
 
   if (!in_progress_manager_) {
     auto* proto_db_provider =
@@ -432,6 +433,7 @@ void DownloadManagerImpl::DetermineDownloadTarget(
         target_path, download::DownloadItem::TARGET_DISPOSITION_OVERWRITE,
         download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS,
         download::DownloadItem::MixedContentStatus::UNKNOWN, target_path,
+        base::nullopt /*download_schedule*/,
         download::DOWNLOAD_INTERRUPT_REASON_NONE);
   }
 }
@@ -577,14 +579,16 @@ base::FilePath DownloadManagerImpl::GetDefaultDownloadDirectory() {
   // distros with versions of GTK lower than 3.14.7 are no longer
   // supported.  This should happen when support for Ubuntu Trusty and
   // Debian Jessie are removed.
-  default_download_directory = GetTemporaryDownloadDirectory();
-#else
-  if (delegate_) {
+  if (!features::IsUsingOzonePlatform())
+    default_download_directory = GetTemporaryDownloadDirectory();
+#endif
+
+  if (delegate_ && default_download_directory.empty()) {
     base::FilePath website_save_directory;  // Unused
     delegate_->GetSaveDir(GetBrowserContext(), &website_save_directory,
                           &default_download_directory);
   }
-#endif
+
   if (default_download_directory.empty()) {
     // |default_download_directory| can still be empty if ContentBrowserClient
     // returned an empty path for the downloads directory.
@@ -912,7 +916,7 @@ void DownloadManagerImpl::InterceptNavigation(
   base::OnceCallback<void(bool /* download allowed */)>
       on_download_checks_done = base::BindOnce(
           &DownloadManagerImpl::InterceptNavigationOnChecksComplete,
-          weak_factory_.GetWeakPtr(), web_contents_getter,
+          weak_factory_.GetWeakPtr(), frame_tree_node_id,
           std::move(resource_request), std::move(url_chain), cert_status,
           std::move(response_head), std::move(response_body),
           std::move(url_loader_client_endpoints));
@@ -1263,7 +1267,7 @@ void DownloadManagerImpl::DropDownload() {
 }
 
 void DownloadManagerImpl::InterceptNavigationOnChecksComplete(
-    WebContents::Getter web_contents_getter,
+    int frame_tree_node_id,
     std::unique_ptr<network::ResourceRequest> resource_request,
     std::vector<GURL> url_chain,
     net::CertStatus cert_status,
@@ -1280,13 +1284,15 @@ void DownloadManagerImpl::InterceptNavigationOnChecksComplete(
   int render_frame_id = -1;
   GURL site_url, tab_url, tab_referrer_url;
   RenderFrameHost* render_frame_host = nullptr;
-  WebContents* web_contents = std::move(web_contents_getter).Run();
-  if (web_contents) {
-    render_frame_host = web_contents->GetMainFrame();
+  auto* ftn = FrameTreeNode::GloballyFindByID(frame_tree_node_id);
+  if (ftn) {
+    render_frame_host = ftn->current_frame_host();
     if (render_frame_host) {
       render_process_id = render_frame_host->GetProcess()->GetID();
       render_frame_id = render_frame_host->GetRoutingID();
     }
+    auto* web_contents = WebContentsImpl::FromFrameTreeNode(ftn);
+    DCHECK(web_contents);
     NavigationEntry* entry = web_contents->GetController().GetVisibleEntry();
     if (entry) {
       tab_url = entry->GetURL();
@@ -1362,20 +1368,17 @@ void DownloadManagerImpl::BeginResourceDownloadOnChecksComplete(
         static_cast<StoragePartitionImpl*>(
             BrowserContext::GetStoragePartitionForSite(browser_context_,
                                                        site_url));
-    std::string storage_domain;
-    auto* site_instance = rfh->GetSiteInstance();
-    if (site_instance) {
-      std::string partition_name;
-      bool in_memory;
-      GetContentClient()->browser()->GetStoragePartitionConfigForSite(
-          browser_context_, site_url, true, &storage_domain, &partition_name,
-          &in_memory);
-    }
+
+    auto storage_partition_config =
+        GetContentClient()->browser()->GetStoragePartitionConfigForSite(
+            browser_context_, site_url);
+
     pending_url_loader_factory =
         CreatePendingSharedURLLoaderFactoryFromURLLoaderFactory(
             CreateFileSystemURLLoaderFactory(
                 rfh->GetProcess()->GetID(), rfh->GetFrameTreeNodeId(),
-                storage_partition->GetFileSystemContext(), storage_domain));
+                storage_partition->GetFileSystemContext(),
+                storage_partition_config.partition_domain()));
   } else if (params->url().SchemeIs(url::kDataScheme)) {
     pending_url_loader_factory =
         CreatePendingSharedURLLoaderFactoryFromURLLoaderFactory(

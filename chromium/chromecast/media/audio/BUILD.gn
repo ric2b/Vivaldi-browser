@@ -57,6 +57,24 @@ cast_source_set("interleaved_channel_mixer") {
   ]
 }
 
+cast_source_set("cma_audio_output") {
+  sources = [
+    "cma_audio_output.cc",
+    "cma_audio_output.h",
+  ]
+
+  deps = [
+    "//base",
+    "//chromecast/base",
+    "//chromecast/common/mojom",
+    "//chromecast/media/base",
+    "//chromecast/media/cma/backend",
+    "//chromecast/media/cma/base",
+    "//chromecast/public/media",
+    "//media",
+  ]
+}
+
 cast_source_set("audio") {
   sources = [
     "cast_audio_input_stream.cc",
@@ -74,11 +92,13 @@ cast_source_set("audio") {
 
   deps = [
     ":audio_buildflags",
+    ":cma_audio_output",
     "//base",
     "//chromecast/base",
     "//chromecast/common/mojom",
     "//chromecast/media/api",
     "//chromecast/media/audio/capture_service:receiver",
+    "//chromecast/media/audio/capture_service:utils",
     "//chromecast/media/audio/mixer_service:common",
     "//chromecast/media/audio/mixer_service:output_stream_connection",
     "//chromecast/media/audio/mixer_service:proto",
@@ -100,6 +120,13 @@ cast_source_set("audio") {
     deps += [
       ":audio_buildflags",
       "//content/public/browser",
+    ]
+  }
+
+  if (is_android) {
+    sources += [
+      "cast_audio_manager_android.cc",
+      "cast_audio_manager_android.h",
     ]
   }
 

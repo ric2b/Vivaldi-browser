@@ -4,7 +4,8 @@
 
 #include "chrome/common/web_application_info.h"
 
-WebApplicationIconInfo::WebApplicationIconInfo() : square_size_px(0) {}
+// WebApplicationIconInfo
+WebApplicationIconInfo::WebApplicationIconInfo() = default;
 
 WebApplicationIconInfo::WebApplicationIconInfo(const WebApplicationIconInfo&) =
     default;
@@ -20,22 +21,47 @@ WebApplicationIconInfo& WebApplicationIconInfo::operator=(
 WebApplicationIconInfo& WebApplicationIconInfo::operator=(
     WebApplicationIconInfo&&) = default;
 
-WebApplicationShortcutInfo::WebApplicationShortcutInfo() = default;
+// WebApplicationShortcutsMenuItemInfo::Icon
+WebApplicationShortcutsMenuItemInfo::Icon::Icon() = default;
 
-WebApplicationShortcutInfo::WebApplicationShortcutInfo(
-    const WebApplicationShortcutInfo& other) = default;
+WebApplicationShortcutsMenuItemInfo::Icon::Icon(
+    const WebApplicationShortcutsMenuItemInfo::Icon&) = default;
 
-WebApplicationShortcutInfo::WebApplicationShortcutInfo(
-    WebApplicationShortcutInfo&&) noexcept = default;
+WebApplicationShortcutsMenuItemInfo::Icon::Icon(
+    WebApplicationShortcutsMenuItemInfo::Icon&&) = default;
 
-WebApplicationShortcutInfo::~WebApplicationShortcutInfo() = default;
+WebApplicationShortcutsMenuItemInfo::Icon::~Icon() = default;
 
-WebApplicationShortcutInfo& WebApplicationShortcutInfo::operator=(
-    const WebApplicationShortcutInfo&) = default;
+WebApplicationShortcutsMenuItemInfo::Icon&
+WebApplicationShortcutsMenuItemInfo::Icon::operator=(
+    const WebApplicationShortcutsMenuItemInfo::Icon&) = default;
 
-WebApplicationShortcutInfo& WebApplicationShortcutInfo::operator=(
-    WebApplicationShortcutInfo&&) noexcept = default;
+WebApplicationShortcutsMenuItemInfo::Icon&
+WebApplicationShortcutsMenuItemInfo::Icon::operator=(
+    WebApplicationShortcutsMenuItemInfo::Icon&&) = default;
 
+// WebApplicationShortcutsMenuItemInfo
+WebApplicationShortcutsMenuItemInfo::WebApplicationShortcutsMenuItemInfo() =
+    default;
+
+WebApplicationShortcutsMenuItemInfo::WebApplicationShortcutsMenuItemInfo(
+    const WebApplicationShortcutsMenuItemInfo& other) = default;
+
+WebApplicationShortcutsMenuItemInfo::WebApplicationShortcutsMenuItemInfo(
+    WebApplicationShortcutsMenuItemInfo&&) noexcept = default;
+
+WebApplicationShortcutsMenuItemInfo::~WebApplicationShortcutsMenuItemInfo() =
+    default;
+
+WebApplicationShortcutsMenuItemInfo&
+WebApplicationShortcutsMenuItemInfo::operator=(
+    const WebApplicationShortcutsMenuItemInfo&) = default;
+
+WebApplicationShortcutsMenuItemInfo&
+WebApplicationShortcutsMenuItemInfo::operator=(
+    WebApplicationShortcutsMenuItemInfo&&) noexcept = default;
+
+// WebApplicationInfo
 WebApplicationInfo::WebApplicationInfo() = default;
 
 WebApplicationInfo::WebApplicationInfo(const WebApplicationInfo& other) =
@@ -51,6 +77,24 @@ bool operator==(const WebApplicationIconInfo& icon_info1,
 
 std::ostream& operator<<(std::ostream& out,
                          const WebApplicationIconInfo& icon_info) {
-  return out << "url: " << icon_info.url
-             << " square_size_px: " << icon_info.square_size_px;
+  out << "url: " << icon_info.url << " square_size_px: ";
+  if (icon_info.square_size_px)
+    out << *icon_info.square_size_px;
+  else
+    out << "none";
+  return out;
+}
+
+bool operator==(const WebApplicationShortcutsMenuItemInfo::Icon& icon1,
+                const WebApplicationShortcutsMenuItemInfo::Icon& icon2) {
+  return std::tie(icon1.url, icon1.square_size_px) ==
+         std::tie(icon2.url, icon2.square_size_px);
+}
+
+bool operator==(const WebApplicationShortcutsMenuItemInfo& shortcut_info1,
+                const WebApplicationShortcutsMenuItemInfo& shortcut_info2) {
+  return std::tie(shortcut_info1.name, shortcut_info1.url,
+                  shortcut_info1.shortcut_icon_infos) ==
+         std::tie(shortcut_info2.name, shortcut_info2.url,
+                  shortcut_info2.shortcut_icon_infos);
 }

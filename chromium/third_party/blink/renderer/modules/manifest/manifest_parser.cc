@@ -12,7 +12,9 @@
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser.h"
 #include "third_party/blink/renderer/modules/manifest/manifest_uma_util.h"
+#include "third_party/blink/renderer/modules/navigatorcontentutils/navigator_content_utils.h"
 #include "third_party/blink/renderer/platform/json/json_parser.h"
+#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_utf8_adaptor.h"
@@ -82,6 +84,7 @@ void ManifestParser::Parse() {
     manifest_->share_target = std::move(*share_target);
 
   manifest_->file_handlers = ParseFileHandlers(root_object.get());
+  manifest_->protocol_handlers = ParseProtocolHandlers(root_object.get());
 
   manifest_->related_applications = ParseRelatedApplications(root_object.get());
   manifest_->prefer_related_applications =
@@ -848,6 +851,98 @@ bool ManifestParser::ParseFileHandlerAcceptExtension(const JSONValue* extension,
   }
 
   return true;
+}
+
+Vector<mojom::blink::ManifestProtocolHandlerPtr>
+ManifestParser::ParseProtocolHandlers(const JSONObject* from) {
+  Vector<mojom::blink::ManifestProtocolHandlerPtr> protocols;
+  if (!RuntimeEnabledFeatures::ParseUrlProtocolHandlerEnabled() ||
+      !from->Get("protocol_handlers")) {
+    return protocols;
+  }
+
+  JSONArray* protocol_list = from->GetArray("protocol_handlers");
+  if (!protocol_list) {
+    AddErrorInfo("property 'protocol_handlers' ignored, type array expected.");
+    return protocols;
+  }
+
+  for (wtf_size_t i = 0; i < protocol_list->size(); ++i) {
+    const JSONObject* protocol_object = JSONObject::Cast(protocol_list->at(i));
+    if (!protocol_object) {
+      AddErrorInfo("protocol_handlers entry ignored, type object expected.");
+      continue;
+    }
+
+    base::Optional<mojom::blink::ManifestProtocolHandlerPtr> protocol =
+        ParseProtocolHandler(protocol_object);
+    if (!protocol)
+      continue;
+
+    protocols.push_back(std::move(protocol.value()));
+  }
+
+  return protocols;
+}
+
+base::Optional<mojom::blink::ManifestProtocolHandlerPtr>
+ManifestParser::ParseProtocolHandler(const JSONObject* object) {
+  DCHECK(RuntimeEnabledFeatures::ParseUrlProtocolHandlerEnabled());
+  if (!object->Get("protocol")) {
+    AddErrorInfo(
+        "protocol_handlers entry ignored, required property 'protocol' is "
+        "missing.");
+    return base::nullopt;
+  }
+
+  auto protocol_handler = mojom::blink::ManifestProtocolHandler::New();
+  base::Optional<String> protocol = ParseString(object, "protocol", Trim);
+  String error_message;
+  bool is_valid_protocol = protocol.has_value();
+
+  if (is_valid_protocol &&
+      !VerifyCustomHandlerScheme(protocol.value(), error_message)) {
+    AddErrorInfo(error_message);
+    is_valid_protocol = false;
+  }
+
+  if (!is_valid_protocol) {
+    AddErrorInfo(
+        "protocol_handlers entry ignored, required property 'protocol' is "
+        "invalid.");
+    return base::nullopt;
+  }
+  protocol_handler->protocol = protocol.value();
+
+  if (!object->Get("url")) {
+    AddErrorInfo(
+        "protocol_handlers entry ignored, required property 'url' is missing.");
+    return base::nullopt;
+  }
+  protocol_handler->url = ParseURL(object, "url", manifest_url_,
+                                   ParseURLOriginRestrictions::kSameOriginOnly);
+  bool is_valid_url = protocol_handler->url.IsValid();
+  if (is_valid_url) {
+    const char kToken[] = "%s";
+    String user_url = protocol_handler->url.GetString();
+    String tokenless_url = protocol_handler->url.GetString();
+    tokenless_url.Remove(user_url.Find(kToken), base::size(kToken) - 1);
+    KURL full_url(manifest_url_, tokenless_url);
+
+    if (!VerifyCustomHandlerURLSyntax(full_url, manifest_url_, user_url,
+                                      error_message)) {
+      AddErrorInfo(error_message);
+      is_valid_url = false;
+    }
+  }
+
+  if (!is_valid_url) {
+    AddErrorInfo(
+        "protocol_handlers entry ignored, required property 'url' is invalid.");
+    return base::nullopt;
+  }
+
+  return std::move(protocol_handler);
 }
 
 String ManifestParser::ParseRelatedApplicationPlatform(

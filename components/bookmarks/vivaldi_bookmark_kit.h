@@ -31,6 +31,8 @@ void RunAfterModelLoad(BookmarkModel* model,
 
 base::WeakPtr<BookmarkModel> GetModelWeakPtr(BookmarkModel* model);
 
+const std::string& ThumbnailString();
+
 // Wrapper around BookmarkNode::MetaInfoMap to set Vivaldi-specific properties.
 class CustomMetaInfo {
  public:
@@ -56,10 +58,11 @@ class CustomMetaInfo {
 
 bool GetSpeeddial(const BookmarkNode* node);
 bool GetBookmarkbar(const BookmarkNode* node);
-std::string GetNickname(const BookmarkNode* node);
-std::string GetDescription(const BookmarkNode* node);
-std::string GetPartner(const BookmarkNode* node);
-std::string GetThumbnail(const BookmarkNode* node);
+const std::string& GetNickname(const BookmarkNode* node);
+const std::string& GetDescription(const BookmarkNode* node);
+const std::string* GetPartner(const BookmarkNode::MetaInfoMap& meta_info_map);
+const std::string& GetPartner(const BookmarkNode* node);
+const std::string& GetThumbnail(const BookmarkNode* node);
 
 bool IsSeparator(const BookmarkNode* node);
 

@@ -114,32 +114,6 @@
         ]
       },
       {
-        "name": "set",
-        "type": "function",
-        "description": "Saves a named menu.",
-        "parameters": [
-          {
-            "name": "namedMenu",
-            "type": "string"
-          },
-          {
-            "name": "items",
-            "type": "array",
-            "items": { "$ref": "MenuTreeNode" }
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "result",
-                "type": "boolean"
-              }
-            ]
-          }
-        ]
-      },
-      {
         "name": "move",
         "type": "function",
         "description": "Moves one or more items within a named menu.",

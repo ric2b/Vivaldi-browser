@@ -25,18 +25,14 @@ class VivaldiNativeAppWindowViewsAura : public VivaldiNativeAppWindowViews {
   ui::WindowShowState GetRestorableState(
       const ui::WindowShowState restore_state) const;
 
-  // ChromeNativeAppWindowViews implementation.
-  void OnBeforeWidgetInit(
-      const extensions::AppWindow::CreateParams& create_params,
-      views::Widget::InitParams* init_params,
+  // WidgetDelegate implementation.
+  views::NonClientFrameView* CreateNonClientFrameView(
       views::Widget* widget) override;
-  views::NonClientFrameView* CreateNonStandardAppFrame() override;
 
-  // ui::BaseWindow implementation.
+  // VivaldiNativeAppWindowViews implementation.
+  void OnBeforeWidgetInit(views::Widget::InitParams& init_params) override;
+
   ui::WindowShowState GetRestoredState() const override;
-
-  // NativeAppWindow implementation.
-  void UpdateShape(std::unique_ptr<ShapeRects> rects) override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(VivaldiNativeAppWindowViewsAura);

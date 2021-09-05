@@ -5,7 +5,6 @@
 
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "media/base/test_data_util.h"
 
 #include "media/base/limits.h"

@@ -16,7 +16,10 @@ import org.chromium.chrome.browser.tab.TabAssociatedApp;
 import org.chromium.chrome.browser.tab.TabImpl;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabState;
+import org.chromium.chrome.browser.tab.TabStateExtractor;
+import org.chromium.chrome.browser.tab.TabStateFileManager;
 import org.chromium.chrome.browser.tab.TabThemeColorHelper;
+import org.chromium.chrome.browser.tab.WebContentsState;
 import org.chromium.chrome.browser.tab.proto.CriticalPersistedTabData.CriticalPersistedTabDataProto;
 
 import java.util.Locale;
@@ -26,6 +29,9 @@ import java.util.Locale;
  */
 public class CriticalPersistedTabData extends PersistedTabData {
     private static final String TAG = "CriticalPTD";
+    private static final Class<CriticalPersistedTabData> USER_DATA_KEY =
+            CriticalPersistedTabData.class;
+
     private int mParentId;
     private int mRootId;
     private long mTimestampMillis;
@@ -34,6 +40,14 @@ public class CriticalPersistedTabData extends PersistedTabData {
     private String mOpenerAppId;
     private int mThemeColor;
     private @TabLaunchType Integer mTabLaunchTypeAtCreation;
+
+    private CriticalPersistedTabData(Tab tab) {
+        super(tab,
+                PersistedTabDataConfiguration.get(CriticalPersistedTabData.class, tab.isIncognito())
+                        .storage,
+                PersistedTabDataConfiguration.get(CriticalPersistedTabData.class, tab.isIncognito())
+                        .id);
+    }
 
     /**
      * @param tab {@link Tab} {@link CriticalPersistedTabData} is being stored for
@@ -79,6 +93,7 @@ public class CriticalPersistedTabData extends PersistedTabData {
     }
 
     /**
+     * TODO(crbug.com/1096142) asynchronous from can be removed
      * Acquire {@link CriticalPersistedTabData} from storage
      * @param tab {@link Tab} {@link CriticalPersistedTabData} is being stored for.
      *        At a minimum this needs to be a frozen {@link Tab} with an identifier
@@ -90,11 +105,27 @@ public class CriticalPersistedTabData extends PersistedTabData {
                 (data, storage, id)
                         -> { return new CriticalPersistedTabData(tab, data, storage, id); },
                 ()
-                        -> { return CriticalPersistedTabData.build(tab); },
+                        -> {
+                    if (tab.isInitialized()) {
+                        return CriticalPersistedTabData.build(tab);
+                    }
+                    return null;
+                },
                 CriticalPersistedTabData.class, callback);
     }
 
-    private static CriticalPersistedTabData build(Tab tab) {
+    /**
+     * Acquire {@link CriticalPersistedTabData} from a {@link Tab} or create if it doesn't exist
+     * @param  corresponding {@link Tab} for which {@link CriticalPersistedTabData} is sought
+     * @return acquired or created {@link CriticalPersistedTabData}
+     */
+    public static CriticalPersistedTabData from(Tab tab) {
+        return PersistedTabData.from(
+                tab, CriticalPersistedTabData.class, () -> { return build(tab); });
+    }
+
+    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    public static CriticalPersistedTabData build(Tab tab) {
         TabImpl tabImpl = (TabImpl) tab;
         // TODO(crbug.com/1059634) this can be removed once we access all fields
         // from CriticalPersistedTabData
@@ -103,22 +134,24 @@ public class CriticalPersistedTabData extends PersistedTabData {
         // This function will only be used to acquire the {@link CriticalPersistedTabData}
         // from the {@link Tab}.
         if (tabImpl.isInitialized()) {
-            TabState.WebContentsState webContentsState = TabState.getWebContentsState(tabImpl);
+            WebContentsState webContentsState = TabStateExtractor.getWebContentsState(tabImpl);
             PersistedTabDataConfiguration config = PersistedTabDataConfiguration.get(
                     CriticalPersistedTabData.class, tab.isIncognito());
             CriticalPersistedTabData criticalPersistedTabData = new CriticalPersistedTabData(tab,
-                    tab.getParentId(), tabImpl.getRootId(), tab.getTimestampMillis(),
-                    webContentsState != null
-                            ? TabState.getContentStateByteArray(webContentsState.buffer())
-                            : null,
-                    TabState.CONTENTS_STATE_CURRENT_VERSION, TabAssociatedApp.getAppId(tab),
+                    tab.getParentId(), tab.getId(), tab.getTimestampMillis(),
+                    webContentsState != null ? TabStateFileManager.getContentStateByteArray(
+                            webContentsState.buffer())
+                                             : null,
+                    WebContentsState.CONTENTS_STATE_CURRENT_VERSION, TabAssociatedApp.getAppId(tab),
                     TabThemeColorHelper.isUsingColorFromTabContents(tab)
                             ? TabThemeColorHelper.getColor(tab)
                             : TabState.UNSPECIFIED_THEME_COLOR,
                     tab.getLaunchTypeAtInitialTabCreation(), config.storage, config.id);
             return criticalPersistedTabData;
         }
-        return null;
+        CriticalPersistedTabData criticalPersistedTabData = new CriticalPersistedTabData(tab);
+        criticalPersistedTabData.setRootId(tab.getId());
+        return criticalPersistedTabData;
     }
 
     @Override
@@ -262,7 +295,6 @@ public class CriticalPersistedTabData extends PersistedTabData {
     public void setRootId(int rootId) {
         // TODO(crbug.com/1059640) add in setters for all mutable fields
         mRootId = rootId;
-        save();
     }
 
     /**

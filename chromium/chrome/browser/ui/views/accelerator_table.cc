@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include "base/no_destructor.h"
+#include "base/notreached.h"
 #include "base/stl_util.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
@@ -206,7 +207,7 @@ const AcceleratorMapping kAcceleratorMap[] = {
      IDC_ZOOM_MINUS},
     {ui::VKEY_OEM_PLUS, ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN, IDC_ZOOM_PLUS},
 #endif  // !OS_CHROMEOS
-#endif  // OS_MACOSX
+#endif  // !OS_MACOSX
 };
 
 const int kRepeatableCommandIds[] = {

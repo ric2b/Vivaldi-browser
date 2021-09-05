@@ -386,7 +386,7 @@ class SparseAttributeAXPropertyAdapter
                                    protocol::Array<AXProperty>& properties)
       : ax_object_(&ax_object), properties_(properties) {}
 
-  void Trace(Visitor* visitor) { visitor->Trace(ax_object_); }
+  void Trace(Visitor* visitor) const { visitor->Trace(ax_object_); }
 
  private:
   Member<AXObject> ax_object_;
@@ -732,7 +732,8 @@ Response InspectorAccessibilityAgent::getFullAXTree(
         BuildProtocolAXObject(*ax_object, nullptr, false, *nodes, cache);
 
     auto child_ids = std::make_unique<protocol::Array<AXNodeId>>();
-    const AXObject::AXObjectVector& children = ax_object->Children();
+    const AXObject::AXObjectVector& children =
+        ax_object->ChildrenIncludingIgnored();
     for (unsigned i = 0; i < children.size(); i++) {
       AXObject& child_ax_object = *children[i].Get();
       child_ids->emplace_back(String::Number(child_ax_object.AXObjectID()));
@@ -815,7 +816,8 @@ void InspectorAccessibilityAgent::AddChildren(
     return;
   }
 
-  const AXObject::AXObjectVector& children = ax_object.Children();
+  const AXObject::AXObjectVector& children =
+      ax_object.ChildrenIncludingIgnored();
   for (unsigned i = 0; i < children.size(); i++) {
     AXObject& child_ax_object = *children[i].Get();
     child_ids->emplace_back(String::Number(child_ax_object.AXObjectID()));
@@ -886,7 +888,7 @@ void InspectorAccessibilityAgent::CreateAXContext() {
     context_ = std::make_unique<AXContext>(*document);
 }
 
-void InspectorAccessibilityAgent::Trace(Visitor* visitor) {
+void InspectorAccessibilityAgent::Trace(Visitor* visitor) const {
   visitor->Trace(inspected_frames_);
   visitor->Trace(dom_agent_);
   InspectorBaseAgent::Trace(visitor);

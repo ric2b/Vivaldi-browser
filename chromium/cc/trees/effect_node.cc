@@ -23,6 +23,7 @@ EffectNode::EffectNode()
       double_sided(true),
       trilinear_filtering(false),
       is_drawn(true),
+      only_draws_visible_content(true),
       subtree_hidden(false),
       has_potential_filter_animation(false),
       has_potential_backdrop_filter_animation(false),
@@ -56,7 +57,6 @@ bool EffectNode::operator==(const EffectNode& other) const {
          backdrop_filters == other.backdrop_filters &&
          backdrop_filter_bounds == other.backdrop_filter_bounds &&
          backdrop_mask_element_id == other.backdrop_mask_element_id &&
-         filters_origin == other.filters_origin &&
          rounded_corner_bounds == other.rounded_corner_bounds &&
          is_fast_rounded_corner == other.is_fast_rounded_corner &&
          // The specific reason is just for tracing/testing/debugging, so just
@@ -67,7 +67,9 @@ bool EffectNode::operator==(const EffectNode& other) const {
          hidden_by_backface_visibility == other.hidden_by_backface_visibility &&
          double_sided == other.double_sided &&
          trilinear_filtering == other.trilinear_filtering &&
-         is_drawn == other.is_drawn && subtree_hidden == other.subtree_hidden &&
+         is_drawn == other.is_drawn &&
+         only_draws_visible_content == other.only_draws_visible_content &&
+         subtree_hidden == other.subtree_hidden &&
          has_potential_filter_animation ==
              other.has_potential_filter_animation &&
          has_potential_backdrop_filter_animation ==
@@ -163,6 +165,7 @@ void EffectNode::AsValueInto(base::trace_event::TracedValue* value) const {
                     hidden_by_backface_visibility);
   value->SetBoolean("trilinear_filtering", trilinear_filtering);
   value->SetBoolean("is_drawn", is_drawn);
+  value->SetBoolean("only_draws_visible_content", only_draws_visible_content);
   value->SetBoolean("has_potential_filter_animation",
                     has_potential_filter_animation);
   value->SetBoolean("has_potential_backdrop_filter_animation",

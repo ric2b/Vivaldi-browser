@@ -21,7 +21,7 @@ import androidx.annotation.IntDef;
 
 import org.chromium.base.MathUtils;
 import org.chromium.content_public.browser.GestureListenerManager;
-import org.chromium.content_public.browser.GestureStateListener;
+import org.chromium.content_public.browser.GestureStateListenerWithScroll;
 import org.chromium.content_public.browser.WebContents;
 
 import java.lang.annotation.Retention;
@@ -58,7 +58,7 @@ public abstract class SwipableOverlayView extends FrameLayout {
     private static final long ANIMATION_DURATION_MS = 250;
 
     /** Detects when the user is dragging the WebContents. */
-    private final GestureStateListener mGestureStateListener;
+    private final GestureStateListenerWithScroll mGestureStateListener;
 
     /** Listens for changes in the layout. */
     private final View.OnLayoutChangeListener mLayoutChangeListener;
@@ -113,7 +113,8 @@ public abstract class SwipableOverlayView extends FrameLayout {
         }
 
         mWebContents = webContents;
-        if (mWebContents != null) {
+        // See comment in onLayout() as to why the listener is only attached if mTotalHeight is > 0.
+        if (mWebContents != null && mTotalHeight > 0) {
             GestureListenerManager.fromWebContents(mWebContents).addListener(mGestureStateListener);
         }
     }
@@ -183,16 +184,28 @@ public abstract class SwipableOverlayView extends FrameLayout {
         MarginLayoutParams params = (MarginLayoutParams) getLayoutParams();
         mTotalHeight = getMeasuredHeight() + params.topMargin + params.bottomMargin;
 
+        // Adding a listener to GestureListenerManager results in extra IPCs on every frame, which
+        // is very costly. Only attach the listener if needed.
+        if (mWebContents != null) {
+            if (mTotalHeight > 0) {
+                GestureListenerManager.fromWebContents(mWebContents)
+                        .addListener(mGestureStateListener);
+            } else {
+                GestureListenerManager.fromWebContents(mWebContents)
+                        .removeListener(mGestureStateListener);
+            }
+        }
+
         super.onLayout(changed, l, t, r, b);
     }
 
     /**
      * Creates a listener than monitors the WebContents for scrolls and flings.
      * The listener updates the location of this View to account for the user's gestures.
-     * @return GestureStateListener to send to the WebContents.
+     * @return GestureStateListenerWithScroll to send to the WebContents.
      */
-    private GestureStateListener createGestureStateListener() {
-        return new GestureStateListener() {
+    private GestureStateListenerWithScroll createGestureStateListener() {
+        return new GestureStateListenerWithScroll() {
             /** Tracks the previous event's scroll offset to determine if a scroll is up or down. */
             private int mLastScrollOffsetY;
 

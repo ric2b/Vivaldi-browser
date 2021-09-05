@@ -108,39 +108,6 @@ TEST_P(HomeScreenControllerTest,
       home_screen_controller()->delegate()->GetHomeScreenWindow()->IsVisible());
 }
 
-TEST_P(HomeScreenControllerTest, ShowLauncherHistograms) {
-  ui::ScopedAnimationDurationScaleMode test_duration_mode(
-      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
-
-  Shell::Get()->tablet_mode_controller()->SetEnabledForTest(true);
-
-  auto window = CreateTestWindow();
-  base::HistogramTester tester;
-  tester.ExpectTotalCount(kHomescreenAnimationHistogram, 0);
-
-  // Note that going home animation minimizes the window, and the window layer
-  // is recreated after minimization animation is set up. Create waiter before
-  // the request to go home to ensure the waiter waits for the correct animator.
-  base::OnceClosure waiter =
-      ShellTestApi().CreateWaiterForFinishingWindowAnimation(window.get());
-
-  GetEventGenerator()->PressKey(ui::KeyboardCode::VKEY_BROWSER_SEARCH, 0);
-  GetEventGenerator()->ReleaseKey(ui::KeyboardCode::VKEY_BROWSER_SEARCH, 0);
-
-  std::move(waiter).Run();
-
-  // If window drag from shelf is disabled, the active window is minimized using
-  // different animation, and in that case the window might still be animating.
-  if (!IsWindowDragFromShelfEnabled()) {
-    ASSERT_TRUE(window->layer()->GetAnimator()->is_animating());
-    ShellTestApi().WaitForWindowFinishAnimating(window.get());
-  } else {
-    ASSERT_FALSE(window->layer()->GetAnimator()->is_animating());
-  }
-
-  tester.ExpectTotalCount(kHomescreenAnimationHistogram, 1);
-}
-
 TEST_P(HomeScreenControllerTest, DraggingHistograms) {
   UpdateDisplay("400x400");
 
@@ -185,6 +152,13 @@ TEST_P(HomeScreenControllerTest, DraggingHistograms) {
   // should have a animation smoothness histogram recorded.
   if (drag_enabled) {
     ShellTestApi().WaitForWindowFinishAnimating(window.get());
+
+    // Wait for one more frame presented for the metrics to get recorded.
+    // ignore_result() and timeout is because the frame could already be
+    // presented.
+    ignore_result(ui::WaitForNextFrameToBePresented(
+        compositor, base::TimeDelta::FromMilliseconds(500)));
+
     tester.ExpectTotalCount(kHomescreenAnimationHistogram, 1);
   }
 }

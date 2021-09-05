@@ -110,28 +110,11 @@ base::scoped_nsprotocol<id<MTLTexture>> API_AVAILABLE(macos(10.11))
                        viz::ResourceFormat format) {
   TRACE_EVENT0("gpu", "SharedImageBackingFactoryIOSurface::CreateMetalTexture");
   base::scoped_nsprotocol<id<MTLTexture>> mtl_texture;
-  MTLPixelFormat mtl_pixel_format;
-  switch (format) {
-    case viz::RED_8:
-    case viz::ALPHA_8:
-    case viz::LUMINANCE_8:
-      mtl_pixel_format = MTLPixelFormatR8Unorm;
-      break;
-    case viz::RG_88:
-      mtl_pixel_format = MTLPixelFormatRG8Unorm;
-      break;
-    case viz::RGBA_8888:
-      mtl_pixel_format = MTLPixelFormatRGBA8Unorm;
-      break;
-    case viz::BGRA_8888:
-      mtl_pixel_format = MTLPixelFormatBGRA8Unorm;
-      break;
-    default:
-      // TODO(https://crbug.com/952063): Add support for all formats supported
-      // by GLImageIOSurface.
-      DLOG(ERROR) << "Resource format not yet supported in Metal.";
-      return mtl_texture;
-  }
+  MTLPixelFormat mtl_pixel_format =
+      static_cast<MTLPixelFormat>(viz::ToMTLPixelFormat(format));
+  if (mtl_pixel_format == MTLPixelFormatInvalid)
+    return mtl_texture;
+
   base::scoped_nsobject<MTLTextureDescriptor> mtl_tex_desc(
       [MTLTextureDescriptor new]);
   [mtl_tex_desc setTextureType:MTLTextureType2D];
@@ -186,6 +169,32 @@ class SharedImageRepresentationGLTextureIOSurface
   DISALLOW_COPY_AND_ASSIGN(SharedImageRepresentationGLTextureIOSurface);
 };
 
+class SharedImageRepresentationGLTexturePassthroughIOSurface
+    : public SharedImageRepresentationGLTexturePassthrough {
+ public:
+  SharedImageRepresentationGLTexturePassthroughIOSurface(
+      SharedImageManager* manager,
+      SharedImageBacking* backing,
+      MemoryTypeTracker* tracker,
+      scoped_refptr<gles2::TexturePassthrough> texture_passthrough)
+      : SharedImageRepresentationGLTexturePassthrough(manager,
+                                                      backing,
+                                                      tracker),
+        texture_passthrough_(texture_passthrough) {}
+
+  const scoped_refptr<gles2::TexturePassthrough>& GetTexturePassthrough()
+      override {
+    return texture_passthrough_;
+  }
+  bool BeginAccess(GLenum mode) override { return true; }
+  void EndAccess() override { FlushIOSurfaceGLOperations(); }
+
+ private:
+  scoped_refptr<gles2::TexturePassthrough> texture_passthrough_;
+  DISALLOW_COPY_AND_ASSIGN(
+      SharedImageRepresentationGLTexturePassthroughIOSurface);
+};
+
 // Representation of a SharedImageBackingIOSurface as a Skia Texture.
 class SharedImageRepresentationSkiaIOSurface
     : public SharedImageRepresentationSkia {
@@ -217,7 +226,7 @@ class SharedImageRepresentationSkiaIOSurface
     SkColorType sk_color_type = viz::ResourceFormatToClosestSkColorType(
         /*gpu_compositing=*/true, format());
 
-    return SkSurface::MakeFromBackendTextureAsRenderTarget(
+    return SkSurface::MakeFromBackendTexture(
         context_state_->gr_context(), promise_texture_->backendTexture(),
         kTopLeft_GrSurfaceOrigin, final_msaa_count, sk_color_type,
         backing()->color_space().ToSkColorSpace(), &surface_props);
@@ -248,6 +257,26 @@ class SharedImageRepresentationSkiaIOSurface
   scoped_refptr<SharedContextState> context_state_;
   sk_sp<SkPromiseImageTexture> promise_texture_;
   gles2::Texture* const gles2_texture_;
+};
+
+class SharedImageRepresentationOverlayIOSurface
+    : public SharedImageRepresentationOverlay {
+ public:
+  SharedImageRepresentationOverlayIOSurface(SharedImageManager* manager,
+                                            SharedImageBacking* backing,
+                                            MemoryTypeTracker* tracker,
+                                            scoped_refptr<gl::GLImage> gl_image)
+      : SharedImageRepresentationOverlay(manager, backing, tracker),
+        gl_image_(gl_image) {}
+
+  ~SharedImageRepresentationOverlayIOSurface() override { EndReadAccess(); }
+
+ private:
+  bool BeginReadAccess() override { return true; }
+  void EndReadAccess() override {}
+  gl::GLImage* GetGLImage() override { return gl_image_.get(); }
+
+  scoped_refptr<gl::GLImage> gl_image_;
 };
 
 // Representation of a SharedImageBackingIOSurface as a Dawn Texture.
@@ -414,7 +443,7 @@ class SharedImageBackingIOSurface : public ClearTrackingSharedImageBacking {
   bool ProduceLegacyMailbox(MailboxManager* mailbox_manager) final {
     DCHECK(io_surface_);
 
-    legacy_texture_ = GenGLTexture();
+    GenGLTexture(&legacy_texture_, nullptr);
     if (!legacy_texture_) {
       return false;
     }
@@ -432,13 +461,26 @@ class SharedImageBackingIOSurface : public ClearTrackingSharedImageBacking {
   std::unique_ptr<SharedImageRepresentationGLTexture> ProduceGLTexture(
       SharedImageManager* manager,
       MemoryTypeTracker* tracker) final {
-    gles2::Texture* texture = GenGLTexture();
-    if (!texture) {
+    gles2::Texture* texture = nullptr;
+    GenGLTexture(&texture, nullptr);
+    if (!texture)
       return nullptr;
-    }
-
     return std::make_unique<SharedImageRepresentationGLTextureIOSurface>(
         manager, this, tracker, texture);
+  }
+
+  std::unique_ptr<SharedImageRepresentationGLTexturePassthrough>
+  ProduceGLTexturePassthrough(SharedImageManager* manager,
+                              MemoryTypeTracker* tracker) override {
+    TRACE_EVENT0("gpu",
+                 "SharedImageBackingFactoryIOSurface::GenGLTexturePassthrough");
+    scoped_refptr<gles2::TexturePassthrough> texture_passthrough;
+    GenGLTexture(nullptr, &texture_passthrough);
+    if (!texture_passthrough)
+      return nullptr;
+    return std::make_unique<
+        SharedImageRepresentationGLTexturePassthroughIOSurface>(
+        manager, this, tracker, texture_passthrough);
   }
 
   std::unique_ptr<SharedImageRepresentationSkia> ProduceSkia(
@@ -448,7 +490,7 @@ class SharedImageBackingIOSurface : public ClearTrackingSharedImageBacking {
     gles2::Texture* gles2_texture = nullptr;
     GrBackendTexture gr_backend_texture;
     if (context_state->GrContextIsGL()) {
-      gles2_texture = GenGLTexture();
+      GenGLTexture(&gles2_texture, nullptr);
       if (!gles2_texture)
         return nullptr;
       GetGrBackendTexture(
@@ -475,6 +517,15 @@ class SharedImageBackingIOSurface : public ClearTrackingSharedImageBacking {
         gles2_texture);
   }
 
+  std::unique_ptr<SharedImageRepresentationOverlay> ProduceOverlay(
+      SharedImageManager* manager,
+      MemoryTypeTracker* tracker) override {
+    if (!EnsureGLImage())
+      return nullptr;
+    return SharedImageBackingFactoryIOSurface::ProduceOverlay(
+        manager, this, tracker, gl_image_);
+  }
+
   std::unique_ptr<SharedImageRepresentationDawn> ProduceDawn(
       SharedImageManager* manager,
       MemoryTypeTracker* tracker,
@@ -493,19 +544,35 @@ class SharedImageBackingIOSurface : public ClearTrackingSharedImageBacking {
   }
 
  private:
-  gles2::Texture* GenGLTexture() {
+  bool EnsureGLImage() {
+    if (!gl_image_) {
+      GLFormatInfo gl_info = GetGLFormatInfo(format());
+      scoped_refptr<gl::GLImageIOSurface> gl_image(
+          gl::GLImageIOSurface::Create(size(), gl_info.internal_format));
+      if (!gl_image->Initialize(io_surface_, gfx::GenericSharedMemoryId(),
+                                viz::BufferFormat(format()))) {
+        LOG(ERROR) << "Failed to create GLImageIOSurface";
+      } else {
+        gl_image_ = gl_image;
+      }
+    }
+    return !!gl_image_;
+  }
+
+  void GenGLTexture(
+      gles2::Texture** texture,
+      scoped_refptr<gles2::TexturePassthrough>* texture_passthrough) {
     TRACE_EVENT0("gpu", "SharedImageBackingFactoryIOSurface::GenGLTexture");
     GLFormatInfo gl_info = GetGLFormatInfo(format());
     DCHECK(gl_info.supported);
+    if (texture)
+      *texture = nullptr;
+    if (texture_passthrough)
+      *texture_passthrough = nullptr;
 
     // Wrap the IOSurface in a GLImageIOSurface
-    scoped_refptr<gl::GLImageIOSurface> image(
-        gl::GLImageIOSurface::Create(size(), gl_info.internal_format));
-    if (!image->Initialize(io_surface_, gfx::GenericSharedMemoryId(),
-                           viz::BufferFormat(format()))) {
-      LOG(ERROR) << "Failed to create GLImageIOSurface";
-      return nullptr;
-    }
+    if (!EnsureGLImage())
+      return;
 
     gl::GLApi* api = gl::g_current_gl_context;
 
@@ -527,37 +594,48 @@ class SharedImageBackingIOSurface : public ClearTrackingSharedImageBacking {
                            GL_CLAMP_TO_EDGE);
 
     // Bind the GLImageIOSurface to our texture
-    if (!image->BindTexImage(GL_TEXTURE_RECTANGLE)) {
+    if (!gl_image_->BindTexImage(GL_TEXTURE_RECTANGLE)) {
       LOG(ERROR) << "Failed to bind GLImageIOSurface";
       api->glBindTextureFn(GL_TEXTURE_RECTANGLE, old_texture_binding);
       api->glDeleteTexturesFn(1, &service_id);
-      return nullptr;
+      return;
     }
 
     // If the backing is already cleared, no need to clear it again.
     gfx::Rect cleared_rect = ClearedRect();
 
     // Manually create a gles2::Texture wrapping our driver texture.
-    gles2::Texture* texture = new gles2::Texture(service_id);
-    texture->SetLightweightRef();
-    texture->SetTarget(GL_TEXTURE_RECTANGLE, 1);
-    texture->sampler_state_.min_filter = GL_LINEAR;
-    texture->sampler_state_.mag_filter = GL_LINEAR;
-    texture->sampler_state_.wrap_t = GL_CLAMP_TO_EDGE;
-    texture->sampler_state_.wrap_s = GL_CLAMP_TO_EDGE;
-    texture->SetLevelInfo(GL_TEXTURE_RECTANGLE, 0, gl_info.internal_format,
-                          size().width(), size().height(), 1, 0, gl_info.format,
-                          gl_info.type, cleared_rect);
-    texture->SetLevelImage(GL_TEXTURE_RECTANGLE, 0, image.get(),
-                           gles2::Texture::BOUND);
-    texture->SetImmutable(true, false);
+    if (texture) {
+      *texture = new gles2::Texture(service_id);
+      (*texture)->SetLightweightRef();
+      (*texture)->SetTarget(GL_TEXTURE_RECTANGLE, 1);
+      (*texture)->set_min_filter(GL_LINEAR);
+      (*texture)->set_mag_filter(GL_LINEAR);
+      (*texture)->set_wrap_t(GL_CLAMP_TO_EDGE);
+      (*texture)->set_wrap_s(GL_CLAMP_TO_EDGE);
+      (*texture)->SetLevelInfo(GL_TEXTURE_RECTANGLE, 0, gl_info.internal_format,
+                               size().width(), size().height(), 1, 0,
+                               gl_info.format, gl_info.type, cleared_rect);
+      (*texture)->SetLevelImage(GL_TEXTURE_RECTANGLE, 0, gl_image_.get(),
+                                gles2::Texture::BOUND);
+      (*texture)->SetImmutable(true, false);
+    }
+    if (texture_passthrough) {
+      *texture_passthrough = scoped_refptr<gles2::TexturePassthrough>(
+          new gles2::TexturePassthrough(service_id, GL_TEXTURE_RECTANGLE,
+                                        gl_info.internal_format, size().width(),
+                                        size().height(), 1, 0, gl_info.format,
+                                        gl_info.type));
+      (*texture_passthrough)
+          ->SetLevelImage(GL_TEXTURE_RECTANGLE, 0, gl_image_.get());
+    }
 
-    DCHECK_EQ(image->GetInternalFormat(), gl_info.internal_format);
+    DCHECK_EQ(gl_image_->GetInternalFormat(), gl_info.internal_format);
 
     api->glBindTextureFn(GL_TEXTURE_RECTANGLE, old_texture_binding);
-    return texture;
   }
 
+  scoped_refptr<gl::GLImageIOSurface> gl_image_;
   base::ScopedCFTypeRef<IOSurfaceRef> io_surface_;
   base::Optional<WGPUTextureFormat> dawn_format_;
   base::scoped_nsprotocol<id<MTLTexture>> mtl_texture_;
@@ -713,6 +791,75 @@ SharedImageBackingFactoryIOSurface::CreateSharedImage(
 bool SharedImageBackingFactoryIOSurface::CanImportGpuMemoryBuffer(
     gfx::GpuMemoryBufferType memory_buffer_type) {
   return false;
+}
+
+// static
+sk_sp<SkPromiseImageTexture>
+SharedImageBackingFactoryIOSurface::ProduceSkiaPromiseTextureMetal(
+    SharedImageBacking* backing,
+    scoped_refptr<SharedContextState> context_state,
+    scoped_refptr<gl::GLImage> image) {
+  if (@available(macOS 10.11, *)) {
+    DCHECK(context_state->GrContextIsMetal());
+
+    base::ScopedCFTypeRef<IOSurfaceRef> io_surface =
+        static_cast<gl::GLImageIOSurface*>(image.get())->io_surface();
+
+    id<MTLDevice> mtl_device =
+        context_state->metal_context_provider()->GetMTLDevice();
+    auto mtl_texture = CreateMetalTexture(mtl_device, io_surface.get(),
+                                          backing->size(), backing->format());
+    DCHECK(mtl_texture);
+
+    GrMtlTextureInfo info;
+    info.fTexture.retain(mtl_texture.get());
+    auto gr_backend_texture =
+        GrBackendTexture(backing->size().width(), backing->size().height(),
+                         GrMipMapped::kNo, info);
+    return SkPromiseImageTexture::Make(gr_backend_texture);
+  }
+  return nullptr;
+}
+
+// static
+std::unique_ptr<SharedImageRepresentationOverlay>
+SharedImageBackingFactoryIOSurface::ProduceOverlay(
+    SharedImageManager* manager,
+    SharedImageBacking* backing,
+    MemoryTypeTracker* tracker,
+    scoped_refptr<gl::GLImage> image) {
+  return std::make_unique<SharedImageRepresentationOverlayIOSurface>(
+      manager, backing, tracker, image);
+}
+
+// static
+std::unique_ptr<SharedImageRepresentationDawn>
+SharedImageBackingFactoryIOSurface::ProduceDawn(
+    SharedImageManager* manager,
+    SharedImageBacking* backing,
+    MemoryTypeTracker* tracker,
+    WGPUDevice device,
+    scoped_refptr<gl::GLImage> image) {
+#if BUILDFLAG(USE_DAWN)
+  // See comments in SharedImageBackingFactoryIOSurface::CreateSharedImage
+  // regarding RGBA versus BGRA.
+  viz::ResourceFormat actual_format = backing->format();
+  if (actual_format == viz::RGBA_8888)
+    actual_format = viz::BGRA_8888;
+
+  base::ScopedCFTypeRef<IOSurfaceRef> io_surface =
+      static_cast<gl::GLImageIOSurface*>(image.get())->io_surface();
+
+  base::Optional<WGPUTextureFormat> wgpu_format =
+      viz::ToWGPUFormat(actual_format);
+  if (wgpu_format.value() == WGPUTextureFormat_Undefined)
+    return nullptr;
+
+  return std::make_unique<SharedImageRepresentationDawnIOSurface>(
+      manager, backing, tracker, device, io_surface, wgpu_format.value());
+#else   // BUILDFLAG(USE_DAWN)
+  return nullptr;
+#endif  // BUILDFLAG(USE_DAWN)
 }
 
 }  // namespace gpu

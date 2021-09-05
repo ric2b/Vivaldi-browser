@@ -4,7 +4,7 @@
 
 package org.chromium.chrome.browser.payments;
 
-import android.support.test.filters.MediumTest;
+import androidx.test.filters.MediumTest;
 
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -29,6 +29,7 @@ import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.night_mode.ChromeNightModeTestUtils;
 import org.chromium.chrome.browser.payments.PaymentRequestTestRule.MainActivityStartCallback;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
+import org.chromium.components.payments.Event;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.modaldialog.ModalDialogProperties;
 import org.chromium.ui.test.util.DisableAnimationsTestRule;
@@ -53,8 +54,7 @@ public class PaymentRequestFreeShippingTest implements MainActivityStartCallback
             new PaymentRequestTestRule("payment_request_free_shipping_test.html", this, true);
 
     @Rule
-    public RenderTestRule mRenderTestRule =
-            new RenderTestRule("components/test/data/payments/render_tests");
+    public RenderTestRule mRenderTestRule = new RenderTestRule();
 
     @BeforeClass
     public static void setUpBeforeActivityLaunched() {

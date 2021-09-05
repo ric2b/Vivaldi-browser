@@ -210,17 +210,14 @@ TrayBubbleView::TrayBubbleView(const InitParams& init_params)
       preferred_width_(init_params.preferred_width),
       bubble_border_(new BubbleBorder(
           arrow(),
-          // Note: for legacy reasons, a shadow is rendered even if |has_shadow|
-          // is false. This is fixed with the
-          // IsUnifiedMessageCenterRefactorEnabled feature flag.
-          init_params.has_shadow ||
-                  features::IsUnifiedMessageCenterRefactorEnabled()
-              ? BubbleBorder::NO_ASSETS
-              : BubbleBorder::BIG_SHADOW,
+          BubbleBorder::NO_ASSETS,
           init_params.bg_color.value_or(gfx::kPlaceholderColor))),
       owned_bubble_border_(bubble_border_),
       is_gesture_dragging_(false),
       mouse_actively_entered_(false) {
+  // Bubbles that use transparent colors should not paint their ClientViews to a
+  // layer as doing so could result in visual artifacts.
+  SetPaintClientToLayer(false);
   SetButtons(ui::DIALOG_BUTTON_NONE);
   DCHECK(delegate_);
   DCHECK(params_.parent_window);

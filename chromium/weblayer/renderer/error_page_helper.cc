@@ -44,9 +44,8 @@ bool IsReloadableError(const error_page::Error& error, bool was_failed_post) {
          error.reason() != net::ERR_SSL_PROTOCOL_ERROR &&
          // Do not trigger for blacklisted URLs.
          // https://crbug.com/803839
-         error.reason() != net::ERR_BLOCKED_BY_ADMINISTRATOR &&
          // Do not trigger for requests that were blocked by the browser itself.
-         error.reason() != net::ERR_BLOCKED_BY_CLIENT && !was_failed_post &&
+         !net::IsRequestBlockedError(error.reason()) && !was_failed_post &&
          // Do not trigger for this error code because it is used by Chrome
          // while an auth prompt is being displayed.
          error.reason() != net::ERR_INVALID_AUTH_CREDENTIALS &&
@@ -133,11 +132,7 @@ void ErrorPageHelper::DidStartNavigation(
   }
 }
 
-void ErrorPageHelper::DidCommitProvisionalLoad(bool is_same_document_navigation,
-                                               ui::PageTransition transition) {
-  if (is_same_document_navigation)
-    return;
-
+void ErrorPageHelper::DidCommitProvisionalLoad(ui::PageTransition transition) {
   // If a page is committing, either it's an error page and autoreload will be
   // started again below, or it's a success page and we need to clear autoreload
   // state.
@@ -224,12 +219,17 @@ void ErrorPageHelper::SendCommand(
       interface->ReportPhishingError();
       break;
     case security_interstitials::CMD_DO_REPORT:
+      // Used when user opts in to extended safe browsing
+      interface->DoReport();
+      break;
     case security_interstitials::CMD_DONT_REPORT:
+      interface->DontReport();
+      break;
     case security_interstitials::CMD_OPEN_REPORTING_PRIVACY:
+      interface->OpenReportingPrivacy();
+      break;
     case security_interstitials::CMD_OPEN_WHITEPAPER:
-      // Commands not used by the generic SSL error pages.
-      // Also not currently used by the safebrowsing error pages.
-      NOTREACHED();
+      interface->OpenWhitepaper();
       break;
     case security_interstitials::CMD_ERROR:
     case security_interstitials::CMD_TEXT_FOUND:

@@ -37,8 +37,11 @@ class MODULES_EXPORT ImageDecoderExternal final : public ScriptWrappable,
   ImageDecoderExternal(ScriptState*, const ImageDecoderInit*, ExceptionState&);
   ~ImageDecoderExternal() override;
 
+  static bool canDecodeType(String type);
+
   // image_decoder.idl implementation.
   ScriptPromise decode(uint32_t frame_index, bool complete_frames_only);
+  ScriptPromise decodeMetadata();
   uint32_t frameCount() const;
   String type() const;
   uint32_t repetitionCount() const;
@@ -49,18 +52,23 @@ class MODULES_EXPORT ImageDecoderExternal final : public ScriptWrappable,
   String DebugName() const override;
 
   // GarbageCollected override.
-  void Trace(Visitor*) override;
+  void Trace(Visitor*) const override;
 
  private:
+  void CreateImageDecoder();
+
   void MaybeSatisfyPendingDecodes();
-  void MaybeCreateImageDecoder(scoped_refptr<SegmentReader> sr);
-  void UpdateFrameAndRepetitionCount();
+  void MaybeSatisfyPendingMetadataDecodes();
+  void MaybeUpdateMetadata();
 
   Member<ScriptState> script_state_;
 
   // Used when a ReadableStream is provided.
   Member<ReadableStreamBytesConsumer> consumer_;
   scoped_refptr<SharedBuffer> stream_buffer_;
+
+  // Used when all data is provided at construction time.
+  scoped_refptr<SegmentReader> segment_reader_;
 
   // Construction parameters.
   Member<const ImageDecoderInit> init_data_;
@@ -78,7 +86,7 @@ class MODULES_EXPORT ImageDecoderExternal final : public ScriptWrappable,
     DecodeRequest(ScriptPromiseResolver* resolver,
                   uint32_t frame_index,
                   bool complete_frames_only);
-    void Trace(Visitor*);
+    void Trace(Visitor*) const;
 
     Member<ScriptPromiseResolver> resolver;
     uint32_t frame_index;
@@ -86,6 +94,7 @@ class MODULES_EXPORT ImageDecoderExternal final : public ScriptWrappable,
     bool complete = false;
   };
   HeapVector<Member<DecodeRequest>> pending_decodes_;
+  HeapVector<Member<ScriptPromiseResolver>> pending_metadata_decodes_;
 
   // When decode() of incomplete frames has been requested, we need to track the
   // generation id for each SkBitmap that we've handed out. So that we can defer

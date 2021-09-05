@@ -25,7 +25,7 @@
 <translation id="1666409074978194368">‏تقریباً به‌روزرسانی شده است! برای تکمیل به‌روزرسانی، Google Chrome را مجدداً راه‌اندازی کنید. پنجره‌های ناشناس بازگشایی نمی‌شود.</translation>
 <translation id="1674870198290878346">‏باز کردن پیوند در پنجره &amp;ناشناس Chrome</translation>
 <translation id="1682634494516646069">‏Google Chrome نمی‌تواند مسیر داده‌های خود را بخواند یا در آن بنویسد: <ph name="USER_DATA_DIRECTORY" /></translation>
-<translation id="1698376642261615901">‏Google Chrome یک مرورگر وب است که برنامه‌های کاربردی و صفحات وب را در یک چشم به هم زدن اجرا و باز می‌کند. استفاده از آن سریع و آسان است و همیشه در دسترس است. با برنامه‌های حفاظت در برابر فیشینگ و بدافزار تعبیه شده در Google Chrome، وب را با امنیت بیشتر مرور کنید.</translation>
+<translation id="1698376642261615901">‏Google Chrome یک مرورگر وب است که برنامه‌های کاربردی و صفحات وب را در یک چشم به هم زدن اجرا و باز می‌کند. استفاده از آن سریع و آسان است و همیشه در دسترس است. با برنامه‌های حفاظت در برابر طعمه‌گذاری و بدافزار تعبیه شده در Google Chrome، وب را با امنیت بیشتر مرور کنید.</translation>
 <translation id="1713301662689114961">{0,plural, =1{‏Chrome یک ساعت دیگر راه‌اندازی مجدد می‌شود}one{‏Chrome # ساعت دیگر راه‌اندازی مجدد می‌شود}other{‏Chrome # ساعت دیگر راه‌اندازی مجدد می‌شود}}</translation>
 <translation id="1734234790201236882">‏Chrome این گذرواژه را در حساب Google شما ذخیره می‌کند. لازم نیست آن را به خاطر بسپارید.</translation>
 <translation id="174539241580958092">‏به دلیل وجود خطا در ورود به سیستم، Google Chrome قادر به همگام‌سازی داده‌های شما نبود.</translation>
@@ -35,8 +35,6 @@
 <translation id="1873233029667955273">‏Google Chrome مرورگر پیش‌فرض شما نیست</translation>
 <translation id="1874309113135274312">‏Google Chrome نسخه بتا (mDNS-In)</translation>
 <translation id="1877026089748256423">‏نسخه Chrome قدیمی است</translation>
-<translation id="1900795423379050516">‏اگر تنظیمی در این صفحه نشان داده نمی‌شود، در <ph name="LINK_BEGIN" />
-      تنظیمات مرورگر Chrome<ph name="LINK_END" /> آن را پیدا کنید</translation>
 <translation id="1919130412786645364">‏مجاز کردن ورود به سیستم Chrome</translation>
 <translation id="2063848847527508675">‏برای اعمال به‌روزرسانی، سیستم‌عامل Chrome باید راه‌اندازی مجدد شود.</translation>
 <translation id="2094919256425865063">‏درهرصورت از Chrome خارج می‌شوید؟</translation>
@@ -112,6 +110,7 @@
 <translation id="4251615635259297716">‏داده‌های Chrome شما به این حساب مرتبط شوند؟</translation>
 <translation id="4281844954008187215">شرایط استفاده از سرویس</translation>
 <translation id="4293420128516039005">‏برای همگام‌سازی و شخصی‌سازی Chrome در همه دستگاه‌هایتان، به سیستم وارد شوید</translation>
+<translation id="4325083532956419387">‏نسخه «سیستم عامل Chrome»</translation>
 <translation id="4328355335528187361">‏Google Chrome نسخه Dev‏، (mDNS-In)</translation>
 <translation id="4331809312908958774">‏سیستم عامل Chrome</translation>
 <translation id="4335235004908507846">‏Chrome می‌تواند به ایمن ماندن شما در برابر نقض داده، افزونه‌های مخرب، و خطرهای دیگر کمک کند</translation>

@@ -49,7 +49,7 @@ void CreateTestFieldDataPredictions(const std::string& signature,
 
 void CreateTestPasswordFormFillData(PasswordFormFillData* fill_data) {
   fill_data->form_renderer_id = autofill::FormRendererId(1234);
-  fill_data->origin = GURL("https://foo.com/");
+  fill_data->url = GURL("https://foo.com/");
   fill_data->action = GURL("https://foo.com/login");
   test::CreateTestSelectField("TestUsernameFieldLabel", "TestUsernameFieldName",
                               "TestUsernameFieldValue", kOptions, kOptions, 4,
@@ -78,7 +78,7 @@ void CreateTestPasswordFormFillData(PasswordFormFillData* fill_data) {
 void CreateTestPasswordForm(PasswordForm* form) {
   form->scheme = PasswordForm::Scheme::kHtml;
   form->signon_realm = "https://foo.com/";
-  form->origin = GURL("https://foo.com/");
+  form->url = GURL("https://foo.com/");
   form->action = GURL("https://foo.com/login");
   form->affiliated_web_realm = "https://foo.com/";
   form->submit_element = base::ASCIIToUTF16("test_submit");
@@ -132,7 +132,7 @@ void CreatePasswordGenerationUIData(
 void CheckEqualPasswordFormFillData(const PasswordFormFillData& expected,
                                     const PasswordFormFillData& actual) {
   EXPECT_EQ(expected.form_renderer_id, actual.form_renderer_id);
-  EXPECT_EQ(expected.origin, actual.origin);
+  EXPECT_EQ(expected.url, actual.url);
   EXPECT_EQ(expected.action, actual.action);
   EXPECT_TRUE(EquivalentData(expected.username_field, actual.username_field));
   EXPECT_TRUE(EquivalentData(expected.password_field, actual.password_field));
@@ -301,6 +301,36 @@ TEST_F(AutofillTypeTraitsTestImpl, PassFormFieldData) {
   FormFieldData input;
   test::CreateTestSelectField("TestLabel", "TestName", "TestValue", kOptions,
                               kOptions, 4, &input);
+  // Set other attributes to check if they are passed correctly.
+  input.id_attribute = base::ASCIIToUTF16("id");
+  input.name_attribute = base::ASCIIToUTF16("name");
+  input.autocomplete_attribute = "on";
+  input.placeholder = base::ASCIIToUTF16("placeholder");
+  input.css_classes = base::ASCIIToUTF16("class1");
+  input.aria_label = base::ASCIIToUTF16("aria label");
+  input.aria_description = base::ASCIIToUTF16("aria description");
+  input.max_length = 12345;
+  input.is_autofilled = true;
+  input.check_status = FormFieldData::CheckStatus::kChecked;
+  input.should_autocomplete = true;
+  input.role = FormFieldData::RoleAttribute::kPresentation;
+  input.text_direction = base::i18n::RIGHT_TO_LEFT;
+  input.properties_mask = FieldPropertiesFlags::kHadFocus;
+  input.typed_value = base::ASCIIToUTF16("TestTypedValue");
+  input.bounds = gfx::RectF(1, 2, 10, 100);
+
+  base::RunLoop loop;
+  mojo::Remote<mojom::TypeTraitsTest> remote(GetTypeTraitsTestRemote());
+  remote->PassFormFieldData(
+      input, base::BindOnce(&ExpectFormFieldData, input, loop.QuitClosure()));
+  loop.Run();
+}
+
+TEST_F(AutofillTypeTraitsTestImpl, PassDataListFormFieldData) {
+  // Basically copied from PassFormFieldData and replaced Select with Datalist.
+  FormFieldData input;
+  test::CreateTestDatalistField("DatalistLabel", "DatalistName",
+                                "DatalistValue", kOptions, kOptions, &input);
   // Set other attributes to check if they are passed correctly.
   input.id_attribute = base::ASCIIToUTF16("id");
   input.name_attribute = base::ASCIIToUTF16("name");

@@ -13,6 +13,15 @@ buildflag_header("buildflags") {
   flags = [ "IS_CT_SUPPORTED=$is_ct_supported" ]
 }
 
+jumbo_component("crash_keys") {
+  sources = [
+    "crash_keys.cc",
+    "crash_keys.h",
+  ]
+  deps = [ "//base" ]
+  defines = [ "IS_NETWORK_CPP_CRASH_KEYS_IMPL" ]
+}
+
 jumbo_component("cpp") {
   output_name = "network_cpp"
 
@@ -49,6 +58,8 @@ jumbo_component("cpp") {
     "cross_thread_pending_shared_url_loader_factory.h",
     "data_pipe_to_source_stream.cc",
     "data_pipe_to_source_stream.h",
+    "empty_url_loader_client.cc",
+    "empty_url_loader_client.h",
     "features.cc",
     "features.h",
     "header_util.cc",
@@ -67,6 +78,8 @@ jumbo_component("cpp") {
     "network_quality_tracker.h",
     "network_switches.cc",
     "network_switches.h",
+    "origin_isolation_parser.cc",
+    "origin_isolation_parser.h",
     "parsed_headers.cc",
     "parsed_headers.h",
     "request_destination.cc",
@@ -82,6 +95,9 @@ jumbo_component("cpp") {
     "simple_url_loader_stream_consumer.h",
     "source_stream_to_data_pipe.cc",
     "source_stream_to_data_pipe.h",
+    "spki_hash_set.cc",
+    "spki_hash_set.h",
+    "trust_token_operation_authorization.h",
     "weak_wrapper_shared_url_loader_factory.cc",
     "weak_wrapper_shared_url_loader_factory.h",
     "web_sandbox_flags.cc",
@@ -151,6 +167,7 @@ component("cookies_mojom_support") {
     "site_for_cookies_mojom_traits.h",
   ]
   deps = [
+    ":crash_keys",
     "//net",
     "//services/network/public/mojom:cookies_mojom_shared",
   ]
@@ -202,10 +219,13 @@ jumbo_component("cpp_base") {
     "proxy_config_mojom_traits.h",
     "proxy_config_with_annotation_mojom_traits.cc",
     "proxy_config_with_annotation_mojom_traits.h",
+    "quic_transport_error_mojom_traits.cc",
+    "quic_transport_error_mojom_traits.h",
     "resource_request.cc",
     "resource_request.h",
     "resource_request_body.cc",
     "resource_request_body.h",
+    "trust_token_parameterization.h",
     "url_loader_completion_status.cc",
     "url_loader_completion_status.h",
     "url_request_mojom_traits.cc",
@@ -225,6 +245,7 @@ jumbo_component("cpp_base") {
 
   public_deps = [
     ":cookies_mojom_support",
+    ":crash_keys",
     ":ip_address_mojom_support",
     "//services/network/public/mojom:data_pipe_interfaces",
     "//services/network/public/mojom:mutable_network_traffic_annotation_interface",
@@ -258,6 +279,7 @@ source_set("tests") {
     "content_security_policy/content_security_policy_unittest.cc",
     "content_security_policy/csp_context_unittest.cc",
     "content_security_policy/csp_source_list_unittest.cc",
+    "content_security_policy/csp_source_unittest.cc",
     "cookie_manager_mojom_traits_unittest.cc",
     "cors/cors_unittest.cc",
     "cors/origin_access_entry_unittest.cc",
@@ -285,6 +307,7 @@ source_set("tests") {
     "network_mojom_traits_unittest.cc",
     "network_quality_tracker_unittest.cc",
     "optional_trust_token_params_unittest.cc",
+    "origin_isolation_parser_unittest.cc",
     "proxy_config_mojom_traits_unittest.cc",
     "simple_url_loader_unittest.cc",
     "site_for_cookies_mojom_traits_unittest.cc",

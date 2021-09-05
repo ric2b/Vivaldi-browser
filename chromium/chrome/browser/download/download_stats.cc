@@ -60,6 +60,10 @@ void RecordDownloadPathValidation(download::PathValidationResult result,
   }
 }
 
+void RecordDownloadCancelReason(DownloadCancelReason reason) {
+  UMA_HISTOGRAM_ENUMERATION("Download.CancelReason", reason);
+}
+
 void RecordDownloadShelfDragEvent(DownloadShelfDragEvent drag_event) {
   UMA_HISTOGRAM_ENUMERATION("Download.Shelf.DragEvent", drag_event,
                             DownloadShelfDragEvent::COUNT);
@@ -71,4 +75,9 @@ void RecordDownloadPromptStatus(DownloadPromptStatus status) {
   UMA_HISTOGRAM_ENUMERATION("MobileDownload.DownloadPromptStatus", status,
                             DownloadPromptStatus::MAX_VALUE);
 }
+
+void RecordDownloadLaterPromptStatus(DownloadLaterPromptStatus status) {
+  UMA_HISTOGRAM_ENUMERATION("MobileDownload.DownloadLaterPromptStatus", status);
+}
+
 #endif  // OS_ANDROID

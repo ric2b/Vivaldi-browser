@@ -82,7 +82,8 @@ FlexItem::FlexItem(const FlexLayoutAlgorithm* algorithm,
                    base::Optional<MinMaxSizes> min_max_cross_sizes,
                    LayoutUnit main_axis_border_padding,
                    LayoutUnit cross_axis_border_padding,
-                   NGPhysicalBoxStrut physical_margins)
+                   NGPhysicalBoxStrut physical_margins,
+                   NGBoxStrut scrollbars)
     : algorithm(algorithm),
       line_number(0),
       box(box),
@@ -95,6 +96,7 @@ FlexItem::FlexItem(const FlexLayoutAlgorithm* algorithm,
       main_axis_border_padding(main_axis_border_padding),
       cross_axis_border_padding(cross_axis_border_padding),
       physical_margins(physical_margins),
+      scrollbars(scrollbars),
       frozen(false),
       needs_relayout_for_stretch(false),
       ng_input_node(/* LayoutBox* */ nullptr) {
@@ -588,16 +590,17 @@ LayoutUnit FlexLayoutAlgorithm::GapBetweenItems(
     return LayoutUnit();
   DCHECK_GE(percent_resolution_sizes.inline_size, 0);
   if (IsColumnFlow(style)) {
-    if (LIKELY(style.RowGap().IsNormal()))
-      return LayoutUnit();
-    return MinimumValueForLength(
-        style.RowGap().GetLength(),
-        percent_resolution_sizes.block_size.ClampNegativeToZero());
-  }
-  if (LIKELY(style.ColumnGap().IsNormal()))
+    if (const base::Optional<Length>& row_gap = style.RowGap()) {
+      return MinimumValueForLength(
+          *row_gap, percent_resolution_sizes.block_size.ClampNegativeToZero());
+    }
     return LayoutUnit();
-  return MinimumValueForLength(style.ColumnGap().GetLength(),
-                               percent_resolution_sizes.inline_size);
+  }
+  if (const base::Optional<Length>& column_gap = style.ColumnGap()) {
+    return MinimumValueForLength(*column_gap,
+                                 percent_resolution_sizes.inline_size);
+  }
+  return LayoutUnit();
 }
 
 // static
@@ -608,16 +611,17 @@ LayoutUnit FlexLayoutAlgorithm::GapBetweenLines(
     return LayoutUnit();
   DCHECK_GE(percent_resolution_sizes.inline_size, 0);
   if (!IsColumnFlow(style)) {
-    if (LIKELY(style.RowGap().IsNormal()))
-      return LayoutUnit();
-    return MinimumValueForLength(
-        style.RowGap().GetLength(),
-        percent_resolution_sizes.block_size.ClampNegativeToZero());
-  }
-  if (LIKELY(style.ColumnGap().IsNormal()))
+    if (const base::Optional<Length>& row_gap = style.RowGap()) {
+      return MinimumValueForLength(
+          *row_gap, percent_resolution_sizes.block_size.ClampNegativeToZero());
+    }
     return LayoutUnit();
-  return MinimumValueForLength(style.ColumnGap().GetLength(),
-                               percent_resolution_sizes.inline_size);
+  }
+  if (const base::Optional<Length>& column_gap = style.ColumnGap()) {
+    return MinimumValueForLength(*column_gap,
+                                 percent_resolution_sizes.inline_size);
+  }
+  return LayoutUnit();
 }
 
 FlexLayoutAlgorithm::FlexLayoutAlgorithm(const ComputedStyle* style,
@@ -633,13 +637,13 @@ FlexLayoutAlgorithm::FlexLayoutAlgorithm(const ComputedStyle* style,
   DCHECK_GE(gap_between_lines_, 0);
   const auto& row_gap = style->RowGap();
   const auto& column_gap = style->ColumnGap();
-  if (!row_gap.IsNormal() || !column_gap.IsNormal()) {
+  if (row_gap || column_gap) {
     UseCounter::Count(document, WebFeature::kFlexGapSpecified);
     if (gap_between_items_ || gap_between_lines_)
       UseCounter::Count(document, WebFeature::kFlexGapPositive);
   }
 
-  if (!row_gap.IsNormal() && row_gap.GetLength().IsPercentOrCalc()) {
+  if (row_gap && row_gap->IsPercentOrCalc()) {
     UseCounter::Count(document, WebFeature::kFlexRowGapPercent);
     if (percent_resolution_sizes.block_size == LayoutUnit(-1))
       UseCounter::Count(document, WebFeature::kFlexRowGapPercentIndefinite);
@@ -749,7 +753,8 @@ bool FlexLayoutAlgorithm::ShouldApplyMinSizeAutoForChild(
       IsHorizontalFlow() != child.StyleRef().IsHorizontalWritingMode();
   bool intrinsic_in_childs_block_axis =
       main_axis_is_childs_block_axis &&
-      (min.IsMinContent() || min.IsMaxContent() || min.IsFitContent());
+      (min.IsMinContent() || min.IsMaxContent() || min.IsMinIntrinsic() ||
+       min.IsFitContent());
   if (!min.IsAuto() && !intrinsic_in_childs_block_axis)
     return false;
 

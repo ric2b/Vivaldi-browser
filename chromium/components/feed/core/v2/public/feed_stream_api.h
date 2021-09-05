@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "base/callback_forward.h"
 #include "base/observer_list_types.h"
 #include "components/feed/core/v2/public/types.h"
 
@@ -69,10 +70,18 @@ class FeedStreamApi {
   // nothing if the model is not yet loaded.
   virtual EphemeralChangeId CreateEphemeralChange(
       std::vector<feedstore::DataOperation> operations) = 0;
+  // Same as |CreateEphemeralChange()|, but data is a serialized
+  // |feedpacking::DismissData| message.
+  virtual EphemeralChangeId CreateEphemeralChangeFromPackedData(
+      base::StringPiece data) = 0;
   // Commits a change. Returns false if the change does not exist.
   virtual bool CommitEphemeralChange(EphemeralChangeId id) = 0;
   // Rejects a change. Returns false if the change does not exist.
   virtual bool RejectEphemeralChange(EphemeralChangeId id) = 0;
+
+  // Sends 'ThereAndBackAgainData' back to the server. |data| is a serialized
+  // |feedwire::ThereAndBackAgainData| message.
+  virtual void ProcessThereAndBackAgain(base::StringPiece data) = 0;
 
   // User interaction reporting. These should have no side-effects other than
   // reporting metrics.
@@ -109,6 +118,9 @@ class FeedStreamApi {
   virtual void ReportContextMenuOpened() = 0;
   // The user scrolled the feed by |distance_dp| and then stopped.
   virtual void ReportStreamScrolled(int distance_dp) = 0;
+  // The user started scrolling the feed. Typically followed by a call to
+  // |ReportStreamScrolled()|.
+  virtual void ReportStreamScrollStart() = 0;
 
   // The following methods are used for the internals page.
 

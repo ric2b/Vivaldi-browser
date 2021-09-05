@@ -10,6 +10,7 @@
 
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/logging.h"
 #include "base/mac/scoped_nsobject.h"
 #include "base/path_service.h"
 #include "base/process/launch.h"
@@ -94,6 +95,7 @@ bool UnmountDMG(const base::FilePath& mounted_dmg_path) {
 }
 
 int RunExecutable(const base::FilePath& mounted_dmg_path,
+                  const base::FilePath& existence_checker_path,
                   const base::FilePath::StringPieceType executable_name,
                   const std::string& arguments) {
   if (!base::PathExists(mounted_dmg_path)) {
@@ -116,6 +118,7 @@ int RunExecutable(const base::FilePath& mounted_dmg_path,
     base::CommandLine::StringVector argv =
         base::SplitString(arguments, base::kWhitespaceASCII,
                           base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+    argv.insert(argv.begin(), existence_checker_path.value());
     argv.insert(argv.begin(), mounted_dmg_path.value());
     argv.insert(argv.begin(), executable_file_path.value());
     command = base::CommandLine(argv);
@@ -131,6 +134,7 @@ int RunExecutable(const base::FilePath& mounted_dmg_path,
 }  // namespace
 
 int InstallFromDMG(const base::FilePath& dmg_file_path,
+                   const base::FilePath& existence_checker_path,
                    const std::string& arguments) {
   std::string mount_point;
   if (!MountDMG(dmg_file_path, &mount_point))
@@ -141,7 +145,8 @@ int InstallFromDMG(const base::FilePath& dmg_file_path,
     return static_cast<int>(InstallErrors::kNoMountPoint);
   }
   const base::FilePath mounted_dmg_path = base::FilePath(mount_point);
-  int result = RunExecutable(mounted_dmg_path, ".install", arguments);
+  int result = RunExecutable(mounted_dmg_path, existence_checker_path,
+                             ".install", arguments);
 
   if (!UnmountDMG(mounted_dmg_path))
     DLOG(WARNING) << "Could not unmount the DMG: " << mounted_dmg_path;

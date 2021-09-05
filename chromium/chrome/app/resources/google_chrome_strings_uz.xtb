@@ -36,8 +36,6 @@
 <translation id="1873233029667955273">Google Chrome hozir birlamchi brauzeringiz emas</translation>
 <translation id="1874309113135274312">Google Chrome Beta (mDNS-In)</translation>
 <translation id="1877026089748256423">Chrome versiyasi eskirdi</translation>
-<translation id="1900795423379050516">Agar sozlama bu sahifada chiqmasa, <ph name="LINK_BEGIN" />
-      Chrome brauzeri sozlamalarini<ph name="LINK_END" /> tekshiring.</translation>
 <translation id="1919130412786645364">Chrome hisobiga kirishga ruxsat berish</translation>
 <translation id="2063848847527508675">Yangilov o‘rnatilishi uchun Chrome OS qaytadan ishga tushirilishi kerak.</translation>
 <translation id="2094919256425865063">Chrome baribir yopilsinmi?</translation>
@@ -113,6 +111,7 @@
 <translation id="4251615635259297716">Chrome ma’lumotlari bu hisobga bog‘lansinmi?</translation>
 <translation id="4281844954008187215">Foydalanish shartlari</translation>
 <translation id="4293420128516039005">Chrome brauzerini barcha qurilmalringizda sinxronlash va o‘zingizga moslab olish uchun hisobingizga kiring</translation>
+<translation id="4325083532956419387">Chrome OS versiyasi</translation>
 <translation id="4328355335528187361">Google Chrome Dev (mDNS-In)</translation>
 <translation id="4331809312908958774">Chrome OS</translation>
 <translation id="4335235004908507846">Chrome maʼlumotlaringizni axborotlar sizib chiqishi va xavfsizlikka oid boshqa muammolardan himoyalaydi</translation>

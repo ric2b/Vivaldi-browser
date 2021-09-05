@@ -1,11 +1,15 @@
+# Copyright 2020 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
 load('//lib/builders.star', 'cpu', 'goma', 'os', 'xcode_cache')
 load('//lib/ci.star', 'ci')
 load('//project.star', 'settings')
 
 # Execute the versioned files to define all of the per-branch entities
 # (bucket, builders, console, poller, etc.)
-exec('../versioned/m81/buckets/ci.star')
 exec('../versioned/m83/buckets/ci.star')
+exec('../versioned/m84/buckets/ci.star')
 
 
 ci.set_defaults(
@@ -89,6 +93,10 @@ ci.builder(
                 'cipd_yaml': 'third_party/android_sdk/cipd/build-tools/29.0.2.yaml'
             },
             {
+                'sdk_package_name': 'cmdline-tools;latest',
+                'cipd_yaml': 'third_party/android_sdk/cipd/cmdline-tools.yaml'
+            },
+            {
                 'sdk_package_name': 'emulator',
                 'cipd_yaml': 'third_party/android_sdk/cipd/emulator.yaml'
             },
@@ -128,10 +136,11 @@ ci.builder(
                 'sdk_package_name': 'system-images;android-23;google_apis;x86',
                 'cipd_yaml': 'third_party/android_sdk/cipd/system_images/android-23/google_apis/x86.yaml'
             },
-            {
-                'sdk_package_name': 'system-images;android-28;google_apis;x86',
-                'cipd_yaml': 'third_party/android_sdk/cipd/system_images/android-28/google_apis/x86.yaml'
-            },
+            # Missing due to http://b/155847875.
+            #{
+            #    'sdk_package_name': 'system-images;android-28;google_apis;x86',
+            #    'cipd_yaml': 'third_party/android_sdk/cipd/system_images/android-28/google_apis/x86.yaml'
+            #},
             {
                 'sdk_package_name': 'system-images;android-28;google_apis_playstore;x86',
                 'cipd_yaml': 'third_party/android_sdk/cipd/system_images/android-28/google_apis_playstore/x86.yaml'
@@ -166,7 +175,6 @@ ci.android_builder(
         category = 'tester|webview',
         short_name = 'L',
     ),
-    main_console_view = 'main',
     triggered_by = ['ci/Android arm Builder (dbg)'],
 )
 
@@ -199,7 +207,6 @@ ci.android_builder(
     # We have limited phone capacity and thus limited ability to run
     # tests in parallel, hence the high timeout.
     execution_timeout = 6 * time.hour,
-    main_console_view = 'main',
     triggered_by = ['ci/Android arm Builder (dbg)'],
 )
 
@@ -212,7 +219,6 @@ ci.android_builder(
     # We have limited tablet capacity and thus limited ability to run
     # tests in parallel, hence the high timeout.
     execution_timeout = 20 * time.hour,
-    main_console_view = 'main',
     triggered_by = ['ci/Android arm Builder (dbg)'],
 )
 
@@ -225,7 +231,6 @@ ci.android_builder(
     # We have limited tablet capacity and thus limited ability to run
     # tests in parallel, hence the high timeout.
     execution_timeout = 12 * time.hour,
-    main_console_view = 'main',
     triggered_by = ['ci/Android arm Builder (dbg)'],
 )
 
@@ -327,6 +332,15 @@ ci.android_builder(
     console_view_entry = ci.console_view_entry(
         category = 'builder_tester|arm64',
         short_name = '10',
+    ),
+)
+
+ci.android_builder(
+    name = 'android-binary-size-generator',
+    executable = 'recipe:binary_size_generator_tot',
+    console_view_entry = ci.console_view_entry(
+        category = 'builder|other',
+        short_name = 'size',
     ),
 )
 
@@ -507,6 +521,7 @@ ci.chromiumos_builder(
         category = 'default',
         short_name = 'ful',
     ),
+    main_console_view = 'main',
 )
 
 ci.chromiumos_builder(
@@ -515,6 +530,7 @@ ci.chromiumos_builder(
         category = 'simple|release|x64',
         short_name = 'asn',
     ),
+    main_console_view = 'main',
 )
 
 ci.chromiumos_builder(
@@ -523,6 +539,7 @@ ci.chromiumos_builder(
         category = 'simple|release|x64',
         short_name = 'cfi',
     ),
+    main_console_view = 'main',
 )
 
 ci.chromiumos_builder(
@@ -531,6 +548,16 @@ ci.chromiumos_builder(
         category = 'simple|debug',
         short_name = 'arm',
     ),
+    main_console_view = 'main',
+)
+
+ci.chromiumos_builder(
+    name = 'chromeos-kevin-rel',
+    console_view_entry = ci.console_view_entry(
+        category = 'simple|release',
+        short_name = 'kvn',
+    ),
+    main_console_view = 'main',
 )
 
 
@@ -625,77 +652,65 @@ ci.clang_builder(
     ),
 )
 
-ci.clang_builder(
+def clang_tot_linux_builder(short_name, category='ToT Linux', **kwargs):
+  ci.clang_builder(
+      console_view_entry = ci.console_view_entry(
+          category = category,
+          short_name = short_name,
+      ),
+      notifies = [luci.notifier(
+          name = 'ToT Linux notifier',
+          on_new_status = ['FAILURE'],
+          notify_emails = ['thomasanderson@chromium.org'],
+      )],
+      **kwargs,
+  )
+
+clang_tot_linux_builder(
     name = 'ToTLinux',
-    console_view_entry = ci.console_view_entry(
-        category = 'ToT Linux',
-        short_name = 'rel',
-    ),
+    short_name = 'rel',
 )
 
-ci.clang_builder(
+clang_tot_linux_builder(
     name = 'ToTLinux (dbg)',
-    console_view_entry = ci.console_view_entry(
-        category = 'ToT Linux',
-        short_name = 'dbg',
-    ),
+    short_name = 'dbg',
 )
 
-ci.clang_builder(
+clang_tot_linux_builder(
     name = 'ToTLinuxASan',
-    console_view_entry = ci.console_view_entry(
-        category = 'ToT Linux',
-        short_name = 'asn',
-    ),
+    short_name = 'asn',
 )
 
-ci.clang_builder(
+clang_tot_linux_builder(
     name = 'ToTLinuxASanLibfuzzer',
-    console_view_entry = ci.console_view_entry(
-        category = 'ToT Linux',
-        short_name = 'fuz',
-    ),
+    short_name = 'fuz',
 )
 
-ci.clang_builder(
+clang_tot_linux_builder(
     name = 'ToTLinuxCoverage',
-    console_view_entry = ci.console_view_entry(
-        category = 'ToT Code Coverage',
-        short_name = 'linux',
-    ),
+    category = 'ToT Code Coverage',
+    short_name = 'linux',
     executable = 'recipe:chromium_clang_coverage_tot',
 )
 
-ci.clang_builder(
+clang_tot_linux_builder(
     name = 'ToTLinuxMSan',
-    console_view_entry = ci.console_view_entry(
-        category = 'ToT Linux',
-        short_name = 'msn',
-    ),
+    short_name = 'msn',
 )
 
-ci.clang_builder(
+clang_tot_linux_builder(
     name = 'ToTLinuxTSan',
-    console_view_entry = ci.console_view_entry(
-        category = 'ToT Linux',
-        short_name = 'tsn',
-    ),
+    short_name = 'tsn',
 )
 
-ci.clang_builder(
+clang_tot_linux_builder(
     name = 'ToTLinuxThinLTO',
-    console_view_entry = ci.console_view_entry(
-        category = 'ToT Linux',
-        short_name = 'lto',
-    ),
+    short_name = 'lto',
 )
 
-ci.clang_builder(
+clang_tot_linux_builder(
     name = 'ToTLinuxUBSanVptr',
-    console_view_entry = ci.console_view_entry(
-        category = 'ToT Linux',
-        short_name = 'usn',
-    ),
+    short_name = 'usn',
 )
 
 ci.clang_builder(
@@ -969,6 +984,14 @@ ci.dawn_builder(
     triggered_by = ['Dawn Win10 x64 Builder'],
 )
 
+ci.dawn_builder(
+    name = 'Dawn Win10 x64 ASAN Release',
+    console_view_entry = ci.console_view_entry(
+        category = 'ToT|Windows|ASAN',
+        short_name = 'x64',
+    ),
+    os = os.WINDOWS_ANY,
+)
 
 ci.fuzz_builder(
     name = 'ASAN Debug',
@@ -1428,13 +1451,6 @@ ci.fyi_builder(
 )
 
 ci.fyi_builder(
-    name = 'chromeos-amd64-generic-rel-vm-tests',
-    console_view_entry = ci.console_view_entry(
-        category = 'chromeos',
-    ),
-)
-
-ci.fyi_builder(
     name = 'fuchsia-fyi-arm64-rel',
     console_view_entry = ci.console_view_entry(
         category = 'fuchsia|a64',
@@ -1481,13 +1497,6 @@ ci.fyi_builder(
     console_view_entry = ci.console_view_entry(
         category = 'linux|blink',
         short_name = 'TD',
-    ),
-)
-
-ci.fyi_builder(
-    name = 'linux-blink-cors-rel',
-    console_view_entry = ci.console_view_entry(
-        category = 'linux',
     ),
 )
 
@@ -1637,18 +1646,18 @@ ci.fyi_coverage_builder(
 
 ci.fyi_coverage_builder(
     name = 'ios-simulator-code-coverage',
-    caches = [xcode_cache.x11c29],
+    caches = [xcode_cache.x11e146],
     console_view_entry = ci.console_view_entry(
         category = 'code_coverage',
         short_name = 'ios',
     ),
     cores = None,
-    os = os.MAC_ANY,
+    os = os.MAC_10_15,
     use_clang_coverage = True,
+    coverage_exclude_sources = 'ios_test_files_and_test_utils',
+    coverage_test_types = ['overall', 'unit'],
     properties = {
-        'coverage_exclude_sources': 'ios_test_files_and_test_utils',
-        'coverage_test_types': ['overall', 'unit'],
-        'xcode_build_version': '11c29',
+        'xcode_build_version': '11e146',
     },
 )
 
@@ -1698,6 +1707,19 @@ ci.fyi_coverage_builder(
 
 
 ci.fyi_ios_builder(
+    name = 'ios-asan',
+    console_view_entry = ci.console_view_entry(
+        category = 'iOS',
+        short_name = 'asan',
+    ),
+    executable = 'recipe:chromium',
+    os = os.MAC_10_15,
+    properties = {
+        'xcode_build_version': '11e146',
+    },
+)
+
+ci.fyi_ios_builder(
     name = 'ios-simulator-cr-recipe',
     console_view_entry = ci.console_view_entry(
         category = 'iOS',
@@ -1716,21 +1738,22 @@ ci.fyi_ios_builder(
         short_name = 'mwd',
     ),
     executable = 'recipe:chromium',
+    os = os.MAC_10_15,
     properties = {
-        'xcode_build_version': '11c29',
+        'xcode_build_version': '11e146',
     },
 )
 
 ci.fyi_ios_builder(
     name = 'ios-webkit-tot',
-    caches = [xcode_cache.x11n605cwk],
+    caches = [xcode_cache.x11e608cwk],
     console_view_entry = ci.console_view_entry(
         category = 'iOS',
         short_name = 'wk',
     ),
     executable = 'recipe:chromium',
     properties = {
-        'xcode_build_version': '11n605cwk'
+        'xcode_build_version': '11e608cwk'
     },
     schedule = '0 1-23/6 * * *',
     triggered_by = [],
@@ -1743,9 +1766,12 @@ ci.fyi_ios_builder(
         short_name = 'ios13',
     ),
     executable = 'recipe:chromium',
+    os = os.MAC_10_15,
     properties = {
-        'xcode_build_version': '11c29',
+        'xcode_build_version': '11e146',
     },
+    schedule = '0 0,12 * * *',
+    triggered_by = [],
 )
 
 ci.fyi_ios_builder(
@@ -1754,9 +1780,11 @@ ci.fyi_ios_builder(
         category = 'iOS|iOS13',
         short_name = 'dev',
     ),
+    caches = [xcode_cache.x11n700h],
     executable = 'recipe:chromium',
+    os = os.MAC_10_15,
     properties = {
-        'xcode_build_version': '11c29',
+        'xcode_build_version': '11n700h',
     },
 )
 
@@ -1764,13 +1792,42 @@ ci.fyi_ios_builder(
     name = 'ios13-sdk-simulator',
     console_view_entry = ci.console_view_entry(
         category = 'iOS|iOS13',
-        short_name = 'sim',
+        short_name = 'sdk13',
     ),
-    caches = [xcode_cache.x11e146],
+    caches = [xcode_cache.x11n700h],
     executable = 'recipe:chromium',
     os = os.MAC_10_15,
     properties = {
-        'xcode_build_version': '11e146'
+        'xcode_build_version': '11n700h'
+    },
+    schedule = '0 6,18 * * *',
+    triggered_by = [],
+)
+
+ci.fyi_ios_builder(
+    name = 'ios14-beta-simulator',
+    console_view_entry = ci.console_view_entry(
+        category = 'iOS|iOS14',
+        short_name = 'ios14',
+    ),
+    executable = 'recipe:chromium',
+    os = os.MAC_10_15,
+    properties = {
+        'xcode_build_version': '11e146',
+    },
+)
+
+ci.fyi_ios_builder(
+    name = 'ios14-sdk-simulator',
+    console_view_entry = ci.console_view_entry(
+        category = 'iOS|iOS14',
+        short_name = 'sdk14',
+    ),
+    caches = [xcode_cache.x12a6159],
+    executable = 'recipe:chromium',
+    os = os.MAC_10_15,
+    properties = {
+        'xcode_build_version': '12a6159'
     }
 )
 
@@ -2665,6 +2722,7 @@ ci.linux_builder(
         category = 'cast',
         short_name = 'aud',
     ),
+    main_console_view = 'main',
     ssd = True,
 )
 
@@ -2677,6 +2735,7 @@ ci.linux_builder(
     executable = 'recipe:swarming/deterministic_build',
     execution_timeout = 6 * time.hour,
     goma_jobs = None,
+    main_console_view = 'main',
 )
 
 ci.linux_builder(
@@ -2687,6 +2746,7 @@ ci.linux_builder(
     ),
     executable = 'recipe:swarming/deterministic_build',
     execution_timeout = 6 * time.hour,
+    main_console_view = 'main',
 )
 
 ci.linux_builder(
@@ -2698,6 +2758,7 @@ ci.linux_builder(
     cores = 32,
     executable = 'recipe:swarming/deterministic_build',
     execution_timeout = 6 * time.hour,
+    main_console_view = 'main',
 )
 
 ci.linux_builder(
@@ -2715,6 +2776,7 @@ ci.linux_builder(
         category = 'debug|builder',
         short_name = '32',
     ),
+    main_console_view = 'main',
 )
 
 ci.linux_builder(
@@ -2723,6 +2785,7 @@ ci.linux_builder(
         category = 'release',
         short_name = 'nsl',
     ),
+    main_console_view = 'main',
 )
 
 ci.linux_builder(
@@ -2731,7 +2794,18 @@ ci.linux_builder(
         category = 'fuchsia|x64',
         short_name = 'dbg',
     ),
+    main_console_view = 'main',
     notifies = ['cr-fuchsia'],
+)
+
+ci.linux_builder(
+    name = 'linux-blink-cors-rel',
+    console_view_entry = ci.console_view_entry(
+        category = 'release',
+        short_name = 'crs',
+    ),
+    goma_jobs = None,
+    main_console_view = 'main',
 )
 
 ci.linux_builder(
@@ -2741,6 +2815,7 @@ ci.linux_builder(
         short_name = 'gcc',
     ),
     goma_backend = None,
+    main_console_view = 'main',
 )
 
 ci.linux_builder(
@@ -2749,6 +2824,7 @@ ci.linux_builder(
         category = 'release',
         short_name = 'tru',
     ),
+    main_console_view = 'main',
     os = os.LINUX_TRUSTY,
 )
 
@@ -2758,6 +2834,7 @@ ci.linux_builder(
     schedule = '0 0,6,12,18 * * *',
     service_account = 'component-mapping-updater@chops-service-accounts.iam.gserviceaccount.com',
     triggered_by = [],
+    notifies = ['component-mapping'],
 )
 
 
@@ -2767,7 +2844,6 @@ ci.mac_ios_builder(
         category = 'ios|default',
         short_name = 'dev',
     ),
-    executable = 'recipe:chromium',
     # We don't have necessary capacity to run this configuration in CQ, but it
     # is part of the main waterfall
     main_console_view = 'main',
@@ -2810,6 +2886,7 @@ ci.memory_builder(
     # TODO(thakis): Remove once https://crbug.com/927738 is resolved.
     execution_timeout = 4 * time.hour,
     goma_jobs = goma.jobs.MANY_JOBS_FOR_CI,
+    main_console_view = 'main',
 )
 
 ci.memory_builder(
@@ -2821,6 +2898,7 @@ ci.memory_builder(
     # TODO(crbug.com/1030593): Builds take more than 3 hours sometimes. Remove
     # once the builds are faster.
     execution_timeout = 6 * time.hour,
+    main_console_view = 'main',
 )
 
 ci.memory_builder(
@@ -2830,6 +2908,7 @@ ci.memory_builder(
         short_name = 'tst',
     ),
     triggered_by = ['Linux Chromium OS ASan LSan Builder'],
+    main_console_view = 'main',
 )
 
 ci.memory_builder(
@@ -2838,6 +2917,7 @@ ci.memory_builder(
         category = 'cros|msan',
         short_name = 'bld',
     ),
+    main_console_view = 'main',
 )
 
 ci.memory_builder(
@@ -2847,6 +2927,7 @@ ci.memory_builder(
         short_name = 'tst',
     ),
     triggered_by = ['Linux ChromiumOS MSan Builder'],
+    main_console_view = 'main',
 )
 
 ci.memory_builder(
@@ -2856,6 +2937,7 @@ ci.memory_builder(
         short_name = 'bld',
     ),
     goma_jobs = goma.jobs.MANY_JOBS_FOR_CI,
+    main_console_view = 'main',
 )
 
 ci.memory_builder(
@@ -2865,6 +2947,7 @@ ci.memory_builder(
         short_name = 'tst',
     ),
     triggered_by = ['Linux MSan Builder'],
+    main_console_view = 'main',
 )
 
 ci.memory_builder(
@@ -2877,6 +2960,7 @@ ci.memory_builder(
     goma_debug = True,  # TODO(hinoka): Remove this after debugging.
     goma_jobs = None,
     cores = None,  # Swapping between 8 and 24
+    main_console_view = 'main',
     os = os.MAC_DEFAULT,
     triggering_policy = scheduler.greedy_batching(
         max_concurrent_invocations = 2,
@@ -2890,6 +2974,7 @@ ci.memory_builder(
         category = 'mac',
         short_name = 'tst',
     ),
+    main_console_view = 'main',
     os = os.MAC_DEFAULT,
     triggered_by = ['Mac ASan 64 Builder'],
 )
@@ -2900,6 +2985,7 @@ ci.memory_builder(
         category = 'linux|webkit',
         short_name = 'asn',
     ),
+    main_console_view = 'main',
 )
 
 ci.memory_builder(
@@ -2908,6 +2994,7 @@ ci.memory_builder(
         category = 'linux|webkit',
         short_name = 'lk',
     ),
+    main_console_view = 'main',
 )
 
 ci.memory_builder(
@@ -2916,6 +3003,7 @@ ci.memory_builder(
         category = 'linux|webkit',
         short_name = 'msn',
     ),
+    main_console_view = 'main',
 )
 
 ci.memory_builder(
@@ -2924,6 +3012,7 @@ ci.memory_builder(
         category = 'android',
         short_name = 'asn',
     ),
+    main_console_view = 'main',
 )
 
 ci.memory_builder(
@@ -2934,6 +3023,7 @@ ci.memory_builder(
     ),
     cores = 32,
     builderless = True,
+    main_console_view = 'main',
     os = os.WINDOWS_DEFAULT,
 )
 
@@ -3067,6 +3157,7 @@ ci.win_builder(
         category = 'misc',
         short_name = 'wbk',
     ),
+    main_console_view = 'main',
     triggered_by = ['Win Builder'],
 )
 
@@ -3077,6 +3168,7 @@ ci.win_builder(
         short_name = '32',
     ),
     cores = 32,
+    main_console_view = 'main',
     os = os.WINDOWS_ANY,
 )
 
@@ -3088,6 +3180,7 @@ ci.win_builder(
     ),
     cores = 32,
     builderless = True,
+    main_console_view = 'main',
     os = os.WINDOWS_ANY,
 )
 
@@ -3097,6 +3190,7 @@ ci.win_builder(
         category = 'debug|tester',
         short_name = '10',
     ),
+    main_console_view = 'main',
     triggered_by = ['Win x64 Builder (dbg)'],
 )
 
@@ -3106,6 +3200,7 @@ ci.win_builder(
         category = 'release|tester',
         short_name = '32',
     ),
+    main_console_view = 'main',
     os = os.WINDOWS_7,
     triggered_by = ['Win Builder'],
 )
@@ -3116,6 +3211,7 @@ ci.win_builder(
         category = 'release|tester',
         short_name = '32',
     ),
+    main_console_view = 'main',
     os = os.WINDOWS_7,
     triggered_by = ['Win Builder'],
 )
@@ -3128,4 +3224,6 @@ ci.win_builder(
     ),
     executable = 'recipe:swarming/deterministic_build',
     execution_timeout = 6 * time.hour,
+    goma_jobs = goma.jobs.J150,
+    main_console_view = 'main',
 )

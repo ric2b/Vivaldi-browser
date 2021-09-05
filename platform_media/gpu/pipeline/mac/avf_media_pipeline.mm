@@ -8,6 +8,7 @@
 #include "platform_media/gpu/pipeline/mac/avf_media_pipeline.h"
 
 #include "base/bind.h"
+#include "base/logging.h"
 #include "base/stl_util.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"

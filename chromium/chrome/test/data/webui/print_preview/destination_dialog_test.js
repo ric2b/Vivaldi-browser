@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {Destination, DestinationStore, InvitationStore, makeRecentDestination, NativeLayer, PluginProxy} from 'chrome://print/print_preview.js';
+import {Destination, DestinationStore, InvitationStore, makeRecentDestination, NativeLayer, NativeLayerImpl, PluginProxy} from 'chrome://print/print_preview.js';
 import {assert} from 'chrome://resources/js/assert.m.js';
 import {keyEventOn} from 'chrome://resources/polymer/v3_0/iron-test-helpers/mock-interactions.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
@@ -52,17 +52,17 @@ suite(destination_dialog_test.suiteName, function() {
   setup(function() {
     // Create data classes
     nativeLayer = new NativeLayerStub();
-    NativeLayer.setInstance(nativeLayer);
+    NativeLayerImpl.instance_ = nativeLayer;
     cloudPrintInterface = new CloudPrintInterfaceStub();
     destinationStore = createDestinationStore();
     destinationStore.setCloudPrintInterface(cloudPrintInterface);
-    destinations = getDestinations(nativeLayer, localDestinations);
+    destinations = getDestinations(localDestinations);
     recentDestinations = [makeRecentDestination(destinations[4])];
+    nativeLayer.setLocalDestinations(localDestinations);
     destinationStore.init(
         false /* pdfPrinterDisabled */, 'FooDevice' /* printerName */,
         '' /* serializedDefaultDestinationSelectionRulesStr */,
         recentDestinations /* recentDestinations */);
-    nativeLayer.setLocalDestinations(localDestinations);
 
     // Set up dialog
     dialog = document.createElement('print-preview-destination-dialog');

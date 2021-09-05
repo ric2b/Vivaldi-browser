@@ -64,9 +64,13 @@ class VariationsHttpHeaderProvider : public base::FieldTrialList::Observer,
   // apps.
   std::string GetGoogleAppVariationsString();
 
-  // Returns the collection of of variation ids matching the given |key|. Each
+  // Returns the collection of variation ids matching the given |key|. Each
   // entry in the returned vector will be unique.
   std::vector<VariationID> GetVariationsVector(IDCollectionKey key);
+
+  // Returns the collection of variations ids for all Google Web Properties
+  // related keys.
+  std::vector<VariationID> GetVariationsVectorForWebPropertiesKeys();
 
   // Result of ForceVariationIds() call.
   enum class ForceIdsResult {
@@ -121,6 +125,10 @@ class VariationsHttpHeaderProvider : public base::FieldTrialList::Observer,
                            GetVariationsString);
   FRIEND_TEST_ALL_PREFIXES(VariationsHttpHeaderProviderTest,
                            GetVariationsVector);
+  FRIEND_TEST_ALL_PREFIXES(VariationsHttpHeaderProviderTest,
+                           GetVariationsVectorForWebPropertiesKeys);
+  FRIEND_TEST_ALL_PREFIXES(VariationsHttpHeaderProviderTest,
+                           GetVariationsVectorImpl);
 
   VariationsHttpHeaderProvider();
   ~VariationsHttpHeaderProvider() override;
@@ -174,6 +182,11 @@ class VariationsHttpHeaderProvider : public base::FieldTrialList::Observer,
   // Returns the currently active set of variation ids, which includes any
   // default values, synthetic variations and actual field trial variations.
   std::set<VariationIDEntry> GetAllVariationIds();
+
+  // Returns the collection of variation ids matching any of the given
+  // |keys|. Each entry in the returned vector will be unique.
+  std::vector<VariationID> GetVariationsVectorImpl(
+      const std::set<IDCollectionKey>& key);
 
   // Guards access to variables below.
   base::Lock lock_;

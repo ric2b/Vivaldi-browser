@@ -125,6 +125,7 @@
 <translation id="5903106910045431592"><ph name="PAGE_TITLE" /> - Log Masuk Rangkaian</translation>
 <translation id="5987687638152509985">Kemas kini Chromium untuk memulakan penyegerakan</translation>
 <translation id="6013050204643758987">OS Chromium menjadi kenyataan dengan <ph name="BEGIN_LINK_CROS_OSS" />perisian sumber terbuka<ph name="END_LINK_CROS_OSS" /> tambahan, sebagaimana <ph name="BEGIN_LINK_LINUX_OSS" />Linux (Beta)<ph name="END_LINK_LINUX_OSS" />.</translation>
+<translation id="6039377483953237732">Versi OS Chromium</translation>
 <translation id="6055895534982063517">Terdapat versi baharu Chromium yang lebih pantas daripada biasa tersedia.</translation>
 <translation id="6063093106622310249">&amp;Buka dalam Chromium</translation>
 <translation id="6072279588547424923"><ph name="EXTENSION_NAME" /> telah ditambahkan pada Chromium</translation>
@@ -222,8 +223,6 @@ Chromium tidak dapat mengembalikan tetapan anda.</translation>
 <translation id="8586442755830160949">Hak Cipta <ph name="YEAR" /> Pengarang Chromium. Hak cipta terpelihara.</translation>
 <translation id="8619360774459241877">Melancarkan Chromium...</translation>
 <translation id="8621669128220841554">Pemasangan gagal disebabkan ralat yang tidak dinyatakan. Sila muat turun semula Chromium.</translation>
-<translation id="8682540261359803721">Jika tetapan tidak ditunjukkan pada halaman ini, lihat dalam <ph name="LINK_BEGIN" />
-      tetapan penyemak imbas Chromium anda<ph name="LINK_END" /></translation>
 <translation id="8697124171261953979">Sambungan turut mengawal halaman yang ditunjukkan apabila anda memulakan Chromium atau membuat carian dari Kotak Omni.</translation>
 <translation id="8704119203788522458">Ini Chromium anda</translation>
 <translation id="8796602469536043152">Chromium memerlukan kebenaran untuk mengakses kamera dan mikrofon anda bagi tapak ini</translation>

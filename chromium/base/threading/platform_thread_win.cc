@@ -16,6 +16,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/scoped_blocking_call.h"
+#include "base/threading/scoped_thread_priority.h"
 #include "base/threading/thread_id_name_manager.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time_override.h"
@@ -114,6 +115,13 @@ DWORD __stdcall ThreadFunc(void* params) {
         scoped_platform_handle.Get(),
         PlatformThread::CurrentId());
   }
+
+  // Ensure thread priority is at least NORMAL before initiating thread
+  // destruction. Thread destruction on Windows holds the LdrLock while
+  // performing TLS destruction which causes hangs if performed at background
+  // priority (priority inversion) (see: http://crbug.com/1096203).
+  if (PlatformThread::GetCurrentThreadPriority() < ThreadPriority::NORMAL)
+    PlatformThread::SetCurrentThreadPriority(ThreadPriority::NORMAL);
 
   return 0;
 }
@@ -347,7 +355,9 @@ void PlatformThread::SetCurrentThreadPriorityImpl(ThreadPriority priority) {
       // MSDN recommends THREAD_MODE_BACKGROUND_BEGIN for threads that perform
       // background work, as it reduces disk and memory priority in addition to
       // CPU priority.
-      desired_priority = THREAD_MODE_BACKGROUND_BEGIN;
+      desired_priority = (win::GetVersion() != win::Version::WIN7 // Use lowest for Win7
+                              ? THREAD_MODE_BACKGROUND_BEGIN
+                              : THREAD_PRIORITY_LOWEST);
       break;
     case ThreadPriority::NORMAL:
       desired_priority = THREAD_PRIORITY_NORMAL;

@@ -90,8 +90,7 @@ class CrostiniUpgraderDialogBrowserTest : public CrostiniDialogBrowserTest {
     os_release.set_id("debian");
     os_release.set_version_id("9");
     auto container_id = crostini::DefaultContainerId();
-    crostini_manager()->SetContainerOsRelease(
-        container_id.vm_name, container_id.container_name, os_release);
+    crostini_manager()->SetContainerOsRelease(container_id, os_release);
   }
 
   const std::string& app_id() const { return app_id_; }
@@ -132,7 +131,7 @@ IN_PROC_BROWSER_TEST_F(CrostiniUpgraderDialogBrowserTest, ShowsOnAppLaunch) {
   ExpectNoDialog();
 
   histogram_tester.ExpectUniqueSample(
-      crostini::kUpgradeDialogEventHistogram,
+      "Crostini.UpgradeDialogEvent",
       static_cast<base::HistogramBase::Sample>(
           crostini::UpgradeDialogEvent::kDialogShown),
       1);

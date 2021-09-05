@@ -194,21 +194,34 @@ enum DoodleImageType {
   STATIC,
 };
 
-// The contents of simple and animated doodles.
-struct ImageDoodleContent {
+// An image doodle in either dark or light mode.
+struct ImageDoodle {
   // Doodle image encoded as data URL.
   url.mojom.Url image_url;
-  // URL opened in new tab when the doodle is clicked.
-  url.mojom.Url on_click_url;
   // URL pointing to animated content (e.g. gif). Only set for animated doodles.
   url.mojom.Url? animation_url;
+  // Dimensions of the original image in pixels.
+  uint32 width;
+  uint32 height;
+  // Color of the background the doodle was designed for. If the NTP background
+  // differs from that color we show the doodle in a box of that color.
+  skia.mojom.SkColor background_color;
   // Specification of the share button.
   DoodleShareButton share_button;
-  // URL displayed to users, which they can use to share the doodle.
-  url.mojom.Url share_url;
   // URLs to be pinged when an image has been shown.
   url.mojom.Url image_impression_log_url;
   url.mojom.Url? animation_impression_log_url;
+};
+
+// The contents of simple and animated doodles.
+struct ImageDoodleContent {
+  // Doodles for respective modes.
+  ImageDoodle light;
+  ImageDoodle? dark;
+  // URL opened in new tab when the doodle is clicked.
+  url.mojom.Url on_click_url;
+  // URL displayed to users, which they can use to share the doodle.
+  url.mojom.Url share_url;
 };
 
 // The contents of interactive doodles.
@@ -259,6 +272,33 @@ enum CustomizeDialogAction {
   SHORTCUTS_CUSTOM_LINKS_CLICKED,
   SHORTCUTS_MOST_VISITED_CLICKED,
   SHORTCUTS_VISIBILITY_TOGGLE_CLICKED,
+};
+
+// Action the user performed while using voice search. Used for metrics logging
+// only. Actions correspond to items in NTPLoggingEventType.
+enum VoiceSearchAction {
+  ACTIVATE_SEARCH_BOX,
+  ACTIVATE_KEYBOARD,
+  CLOSE_OVERLAY,
+  QUERY_SUBMITTED,
+  SUPPORT_LINK_CLICKED,
+  TRY_AGAIN_LINK,
+  TRY_AGAIN_MIC_BUTTON,
+};
+
+// Errors occurred while using voice search. Errors correspond to items in
+// NTPLoggingEventType.
+enum VoiceSearchError {
+  ABORTED,
+  NO_SPEECH,
+  AUDIO_CAPTURE,
+  NETWORK,
+  NOT_ALLOWED,
+  LANGUAGE_NOT_SUPPORTED,
+  NO_MATCH,
+  SERVICE_NOT_ALLOWED,
+  BAD_GRAMMAR,
+  OTHER,
 };
 
 // Used by the WebUI page to bootstrap bidirectional communication.
@@ -361,6 +401,10 @@ interface PageHandler {
                  string? share_id);
   // Logs that a link on a promo has been clicked.
   OnPromoLinkClicked();
+  // Logs an action performed while using voice search.
+  OnVoiceSearchAction(VoiceSearchAction action);
+  // Logs an error occurred while using voice search.
+  OnVoiceSearchError(VoiceSearchError error);
 
   // ======= REALBOX =======
   // Queries autocomplete matches from the browser.

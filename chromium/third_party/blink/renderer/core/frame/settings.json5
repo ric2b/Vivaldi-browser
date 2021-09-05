@@ -65,12 +65,17 @@
       type: "int",
     },
 
+    // Sets the minimum font-size in CSS px. That means the minimum font-size is
+    // applied before applying the device scale factor or page zoom.
     {
       name: "minimumFontSize",
       initial: 0,
       invalidate: "Style",
       type: "int",
     },
+
+    // Sets the minimum font-size in CSS px, but only applies to relative font
+    // units like 'small', em, and percentage sizes.
     {
       name: "minimumLogicalFontSize",
       initial: 0,
@@ -248,11 +253,6 @@
     // (rather than rounded) to make it possible to reftest the results.
     {
       name: "mockGestureTapHighlightsEnabled",
-      initial: false,
-    },
-
-    {
-      name: "shouldRespectImageOrientation",
       initial: false,
     },
 
@@ -905,12 +905,6 @@
       invalidate: "ForceDark",
     },
     {
-      name: "forceDarkModeClassifierType",
-      initial: "DarkModeClassifierType::kGeneric",
-      type: "DarkModeClassifierType",
-      invalidate: "ForceDark",
-    },
-    {
       name: "forceDarkModeImagePolicy",
       initial: "DarkModeImagePolicy::kFilterNone",
       type: "DarkModeImagePolicy",
@@ -1058,7 +1052,7 @@
     // evaluating the prefers-color-scheme media query.
     {
       name: "preferredColorScheme",
-      initial: "PreferredColorScheme::kNoPreference",
+      initial: "PreferredColorScheme::kLight",
       invalidate: "ColorScheme",
       type: "PreferredColorScheme",
     },
@@ -1082,19 +1076,27 @@
       invalidate: "MediaQuery",
       type: "NavigationControls",
     },
-
     {
       name: "accessibilityAlwaysShowFocus",
       initial: false,
       invalidate: "Style",
       type: "bool"
-    }
+    },
+    // aria-modal="true" on some platforms requires the accessibility tree to
+    // be pruned so no other background content is exposed to assistive
+    // technology.
+    // https://www.w3.org/TR/core-aam-1.1/#ariaModalTrue
+    {
+      name: "ariaModalPrunesAXTree",
+      initial: false,
+      type: "bool",
+    },
 
     // Vivaldi:
     // Will only serve a resource that is in cache,
     // see ResourceFetcher::requestResource
     // only used for images now.
-    , {
+    {
       name: "serveResourceFromCacheOnly",
       initial: false,
       invalidate: "ImageLoading",

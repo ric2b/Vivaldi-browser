@@ -32,6 +32,7 @@
 
 #include <memory>
 
+#include "base/optional.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -238,9 +239,9 @@ class FrameFetchContextSubresourceFilterTest : public FrameFetchContextTest {
                                             .GetSecurityOrigin());
     ResourceLoaderOptions options;
     // DJKim
-    return GetFetchContext()->CanRequest(
-        ResourceType::kImage, resource_request, input_url, options,
-        reporting_disposition, ResourceRequest::RedirectStatus::kNoRedirect);
+    return GetFetchContext()->CanRequest(ResourceType::kImage, resource_request,
+                                         input_url, options,
+                                         reporting_disposition, base::nullopt);
   }
 
   int filtered_load_callback_counter_;
@@ -1363,7 +1364,8 @@ TEST_F(FrameFetchContextTest, PopulateResourceRequestWhenDetached) {
   dummy_page_holder = nullptr;
 
   GetFetchContext()->PopulateResourceRequest(
-      ResourceType::kRaw, client_hints_preferences, resource_width, request);
+      ResourceType::kRaw, client_hints_preferences, resource_width, request,
+      FetchInitiatorInfo());
   // Should not crash.
 }
 

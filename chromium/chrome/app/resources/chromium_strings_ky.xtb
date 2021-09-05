@@ -127,6 +127,7 @@
 <translation id="5903106910045431592"><ph name="PAGE_TITLE" /> – Тармакка кирүү</translation>
 <translation id="5987687638152509985">Шайкештирип баштоо үчүн Chromium'ду жаңыртыңыз</translation>
 <translation id="6013050204643758987">Chromium OS тутуму, <ph name="BEGIN_LINK_LINUX_OSS" />Linux (бета-версиясы)<ph name="END_LINK_LINUX_OSS" /> сыяктуу, кошумча <ph name="BEGIN_LINK_CROS_OSS" />баштапкы коду ачык программалык камсыздоонун<ph name="END_LINK_CROS_OSS" /> жардамы менен, иштейт.</translation>
+<translation id="6039377483953237732">Chromium OS версиясы</translation>
 <translation id="6055895534982063517">Chromium'дун чагылгандай тездик менен иштеген жаңы версиясы бар.</translation>
 <translation id="6063093106622310249">&amp;Chromiumда ачуу</translation>
 <translation id="6072279588547424923"><ph name="EXTENSION_NAME" /> Chromium'га кошулду</translation>
@@ -224,8 +225,6 @@ Chromium жөндөөлөрүңүздү калыбына келтире алба
 <translation id="8586442755830160949">Автордук укук <ph name="YEAR" /> Chromium авторлору. Бардык укуктар корголгон.</translation>
 <translation id="8619360774459241877">Chromium иштетилүүдө…</translation>
 <translation id="8621669128220841554">Белгиси катадан улам, орнотулбай калды. Chromium'ду кайра жүктөп алыңыз.</translation>
-<translation id="8682540261359803721">Эгер жөндөө бул баракта көрүнбөсө, <ph name="LINK_BEGIN" />
-      Chromium серепчиңиздин жөндөөлөрүнөн<ph name="LINK_END" /> карап көрүңүз</translation>
 <translation id="8697124171261953979">Chromium иштеп баштаганда же Omnibox'тон изделгенде, кайсы бет көрсөтүлө тургандыгын көзөмөлдөйт.</translation>
 <translation id="8704119203788522458">Бул сиздин Chromium</translation>
 <translation id="8796602469536043152">Бул сайтта иштөө үчүн Chromium камераңызды жана микрофонуңузду колдонушу керек</translation>

@@ -125,6 +125,76 @@ class MFPhotoCallback final
   DISALLOW_COPY_AND_ASSIGN(MFPhotoCallback);
 };
 
+// Locks the given buffer using the fastest supported method when constructed,
+// and automatically unlocks the buffer when destroyed.
+class ScopedBufferLock {
+ public:
+  ScopedBufferLock(ComPtr<IMFMediaBuffer> buffer) : buffer_(std::move(buffer)) {
+    if (FAILED(buffer_.As(&buffer_2d_))) {
+      LockSlow();
+      return;
+    }
+    // Try lock methods from fastest to slowest: Lock2DSize(), then Lock2D(),
+    // then finally LockSlow().
+    if ((Lock2DSize() || Lock2D()) && !UnlockedNoncontiguousBuffer())
+      return;
+    // Fall back to LockSlow() if 2D buffer was unsupported or noncontiguous.
+    buffer_2d_ = nullptr;
+    LockSlow();
+  }
+
+  // Unlocks |buffer_2d_| and returns true if |buffer_2d_| is non-contiguous or
+  // has negative pitch. If |buffer_2d_| is contiguous with positive pitch,
+  // i.e., the buffer format that the surrounding code expects, returns false.
+  bool UnlockedNoncontiguousBuffer() {
+    BOOL is_contiguous;
+    if (pitch_ > 0 &&
+        SUCCEEDED(buffer_2d_->IsContiguousFormat(&is_contiguous)) &&
+        is_contiguous &&
+        (length_ || SUCCEEDED(buffer_2d_->GetContiguousLength(&length_)))) {
+      return false;
+    }
+    buffer_2d_->Unlock2D();
+    return true;
+  }
+
+  bool Lock2DSize() {
+    ComPtr<IMF2DBuffer2> buffer_2d_2;
+    if (FAILED(buffer_.As(&buffer_2d_2)))
+      return false;
+    BYTE* data_start;
+    return SUCCEEDED(buffer_2d_2->Lock2DSize(MF2DBuffer_LockFlags_Read, &data_,
+                                             &pitch_, &data_start, &length_));
+  }
+
+  bool Lock2D() { return SUCCEEDED(buffer_2d_->Lock2D(&data_, &pitch_)); }
+
+  void LockSlow() {
+    DWORD max_length = 0;
+    buffer_->Lock(&data_, &max_length, &length_);
+  }
+
+  ~ScopedBufferLock() {
+    if (buffer_2d_)
+      buffer_2d_->Unlock2D();
+    else
+      buffer_->Unlock();
+  }
+
+  ScopedBufferLock(const ScopedBufferLock&) = delete;
+  ScopedBufferLock& operator=(const ScopedBufferLock&) = delete;
+
+  BYTE* data() const { return data_; }
+  DWORD length() const { return length_; }
+
+ private:
+  ComPtr<IMFMediaBuffer> buffer_;
+  ComPtr<IMF2DBuffer> buffer_2d_;
+  BYTE* data_ = nullptr;
+  DWORD length_ = 0;
+  LONG pitch_ = 0;
+};
+
 scoped_refptr<IMFCaptureEngineOnSampleCallback> CreateMFPhotoCallback(
     VideoCaptureDevice::TakePhotoCallback callback,
     VideoCaptureFormat format) {
@@ -414,11 +484,19 @@ class MFVideoCallback final
   }
 
   IFACEMETHODIMP OnEvent(IMFMediaEvent* media_event) override {
+    base::AutoLock lock(lock_);
+    if (!observer_) {
+      return S_OK;
+    }
     observer_->OnEvent(media_event);
     return S_OK;
   }
 
   IFACEMETHODIMP OnSample(IMFSample* sample) override {
+    base::AutoLock lock(lock_);
+    if (!observer_) {
+      return S_OK;
+    }
     if (!sample) {
       observer_->OnFrameDropped(
           VideoCaptureFrameDropReason::kWinMediaFoundationReceivedSampleIsNull);
@@ -438,60 +516,16 @@ class MFVideoCallback final
       ComPtr<IMFMediaBuffer> buffer;
       sample->GetBufferByIndex(i, &buffer);
       if (buffer) {
-        // Lock the buffer using the fastest method that it supports. The
-        // Lock2DSize() method is faster than Lock2D(), which is faster than
-        // Lock().
-        DWORD length = 0;
-        BYTE* data = nullptr;
-        ComPtr<IMF2DBuffer> buffer_2d;
-        if (SUCCEEDED(buffer.As(&buffer_2d))) {
-          HRESULT lock_result;
-          BYTE* scanline_0 = nullptr;
-          LONG pitch = 0;
-          ComPtr<IMF2DBuffer2> buffer_2d_2;
-          if (SUCCEEDED(buffer.As(&buffer_2d_2))) {
-            BYTE* data_start;
-            lock_result =
-                buffer_2d_2->Lock2DSize(MF2DBuffer_LockFlags_Read, &scanline_0,
-                                        &pitch, &data_start, &length);
-          } else {
-            lock_result = buffer_2d->Lock2D(&scanline_0, &pitch);
-          }
-          if (SUCCEEDED(lock_result)) {
-            // Use |buffer_2d| only if it is contiguous and has positive pitch.
-            BOOL is_contiguous;
-            if (pitch > 0 &&
-                SUCCEEDED(buffer_2d->IsContiguousFormat(&is_contiguous)) &&
-                is_contiguous &&
-                (length ||
-                 SUCCEEDED(buffer_2d->GetContiguousLength(&length)))) {
-              data = scanline_0;
-            } else {
-              buffer_2d->Unlock2D();
-            }
-          }
-        }
-        if (!data) {
-          // If the faster methods fail, fall back to Lock to lock the buffer.
-          buffer_2d = nullptr;
-          DWORD max_length = 0;
-          buffer->Lock(&data, &max_length, &length);
-        }
-
-        if (data) {
-          observer_->OnIncomingCapturedData(data, length, reference_time,
-                                            timestamp);
+        ScopedBufferLock locked_buffer(buffer);
+        if (locked_buffer.data()) {
+          observer_->OnIncomingCapturedData(locked_buffer.data(),
+                                            locked_buffer.length(),
+                                            reference_time, timestamp);
         } else {
           observer_->OnFrameDropped(
               VideoCaptureFrameDropReason::
                   kWinMediaFoundationLockingBufferDelieveredNullptr);
         }
-
-        if (buffer_2d)
-          buffer_2d->Unlock2D();
-        else
-          buffer->Unlock();
-
       } else {
         observer_->OnFrameDropped(
             VideoCaptureFrameDropReason::
@@ -501,10 +535,18 @@ class MFVideoCallback final
     return S_OK;
   }
 
+  void Shutdown() {
+    base::AutoLock lock(lock_);
+    observer_ = nullptr;
+  }
+
  private:
   friend class base::RefCountedThreadSafe<MFVideoCallback>;
   ~MFVideoCallback() {}
-  VideoCaptureDeviceMFWin* observer_;
+
+  // Protects access to |observer_|.
+  base::Lock lock_;
+  VideoCaptureDeviceMFWin* observer_ GUARDED_BY(lock_);
 };
 
 // static
@@ -657,7 +699,12 @@ VideoCaptureDeviceMFWin::VideoCaptureDeviceMFWin(
       has_sent_on_started_to_client_(false),
       exposure_mode_manual_(false),
       focus_mode_manual_(false),
-      white_balance_mode_manual_(false) {
+      white_balance_mode_manual_(false),
+      capture_initialize_(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                          base::WaitableEvent::InitialState::NOT_SIGNALED),
+      // We never want to reset |capture_error_|.
+      capture_error_(base::WaitableEvent::ResetPolicy::MANUAL,
+                     base::WaitableEvent::InitialState::NOT_SIGNALED) {
   DETACH_FROM_SEQUENCE(sequence_checker_);
 }
 
@@ -672,6 +719,9 @@ VideoCaptureDeviceMFWin::~VideoCaptureDeviceMFWin() {
               ? IsHighResolution(selected_video_capability_->supported_format)
               : false);
     }
+  }
+  if (video_callback_) {
+    video_callback_->Shutdown();
   }
 }
 
@@ -705,6 +755,13 @@ bool VideoCaptureDeviceMFWin::Init() {
     LogError(FROM_HERE, hr);
     return false;
   }
+
+  hr = WaitOnCaptureEvent(MF_CAPTURE_ENGINE_INITIALIZED);
+  if (FAILED(hr)) {
+    LogError(FROM_HERE, hr);
+    return false;
+  }
+
   is_initialized_ = true;
   return true;
 }
@@ -1294,7 +1351,21 @@ void VideoCaptureDeviceMFWin::OnEvent(IMFMediaEvent* media_event) {
   base::AutoLock lock(lock_);
 
   HRESULT hr;
+  GUID capture_event_guid = GUID_NULL;
+
   media_event->GetStatus(&hr);
+  media_event->GetExtendedType(&capture_event_guid);
+  // TODO(http://crbug.com/1093521): Add cases for Start
+  // MF_CAPTURE_ENGINE_PREVIEW_STARTED and MF_CAPTURE_ENGINE_PREVIEW_STOPPED
+  // When MF_CAPTURE_ENGINE_ERROR is returned the captureengine object is no
+  // longer valid.
+  if (capture_event_guid == MF_CAPTURE_ENGINE_ERROR || FAILED(hr)) {
+    capture_error_.Signal();
+    // There should always be a valid error
+    hr = SUCCEEDED(hr) ? E_UNEXPECTED : hr;
+  } else if (capture_event_guid == MF_CAPTURE_ENGINE_INITIALIZED) {
+    capture_initialize_.Signal();
+  }
 
   if (FAILED(hr))
     OnError(VideoCaptureError::kWinMediaFoundationGetMediaEventStatusFailed,
@@ -1324,4 +1395,35 @@ void VideoCaptureDeviceMFWin::SendOnStartedIfNotYetSent() {
   client_->OnStarted();
 }
 
+HRESULT VideoCaptureDeviceMFWin::WaitOnCaptureEvent(GUID capture_event_guid) {
+  HRESULT hr = S_OK;
+  HANDLE events[] = {nullptr, capture_error_.handle()};
+
+  // TODO(http://crbug.com/1093521): Add cases for Start
+  // MF_CAPTURE_ENGINE_PREVIEW_STARTED and MF_CAPTURE_ENGINE_PREVIEW_STOPPED
+  if (capture_event_guid == MF_CAPTURE_ENGINE_INITIALIZED) {
+    events[0] = capture_initialize_.handle();
+  } else {
+    // no registered event handle for the event requested
+    hr = E_NOTIMPL;
+    LogError(FROM_HERE, hr);
+    return hr;
+  }
+
+  DWORD wait_result =
+      ::WaitForMultipleObjects(base::size(events), events, FALSE, INFINITE);
+  switch (wait_result) {
+    case WAIT_OBJECT_0:
+      break;
+    case WAIT_FAILED:
+      hr = HRESULT_FROM_WIN32(::GetLastError());
+      LogError(FROM_HERE, hr);
+      break;
+    default:
+      hr = E_UNEXPECTED;
+      LogError(FROM_HERE, hr);
+      break;
+  }
+  return hr;
+}
 }  // namespace media

@@ -14,6 +14,13 @@ namespace gfx {
 class Rect;
 }  // namespace gfx
 
+namespace ui {
+namespace ime {
+struct AssistiveWindowButton;
+struct SuggestionDetails;
+}  // namespace ime
+}  // namespace ui
+
 namespace chromeos {
 
 struct AssistiveWindowProperties;
@@ -27,9 +34,19 @@ class COMPONENT_EXPORT(UI_BASE_IME) IMEAssistiveWindowHandlerInterface {
   virtual void SetAssistiveWindowProperties(
       const AssistiveWindowProperties& window) {}
 
-  virtual void ShowSuggestion(const base::string16& text,
-                              const size_t confirmed_length,
-                              const bool show_tab) {}
+  virtual void ShowSuggestion(const ui::ime::SuggestionDetails& details) {}
+
+  virtual void ShowMultipleSuggestions(
+      const std::vector<base::string16>& suggestions) {}
+
+  // Highlights or unhighlights a given assistive button based on the given
+  // parameters.
+  virtual void SetButtonHighlighted(
+      const ui::ime::AssistiveWindowButton& button,
+      bool highlighted) {}
+
+  virtual void AcceptSuggestion(const base::string16& suggestion) {}
+
   virtual void HideSuggestion() {}
 
   // Called to get the current suggestion text.

@@ -11,7 +11,6 @@
 #include "base/bind.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/path_service.h"
-#include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -33,36 +32,8 @@
 
 namespace {
 
-void ShowDirectoryAccessConfirmationPromptOnUIThread(
-    int process_id,
-    int frame_id,
-    const url::Origin& origin,
-    const base::FilePath& path,
-    base::OnceCallback<void(permissions::PermissionAction result)> callback) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  content::RenderFrameHost* rfh =
-      content::RenderFrameHost::FromID(process_id, frame_id);
-  content::WebContents* web_contents =
-      content::WebContents::FromRenderFrameHost(rfh);
-
-  if (!web_contents) {
-    // Requested from a worker, or a no longer existing tab.
-    std::move(callback).Run(permissions::PermissionAction::DISMISSED);
-    return;
-  }
-
-  // Drop fullscreen mode so that the user sees the URL bar.
-  base::ScopedClosureRunner fullscreen_block =
-      web_contents->ForSecurityDropFullscreen();
-
-  ShowNativeFileSystemDirectoryAccessConfirmationDialog(
-      origin, path, std::move(callback), web_contents,
-      std::move(fullscreen_block));
-}
-
 void ShowNativeFileSystemRestrictedDirectoryDialogOnUIThread(
-    int process_id,
-    int frame_id,
+    content::GlobalFrameRoutingId frame_id,
     const url::Origin& origin,
     const base::FilePath& path,
     bool is_directory,
@@ -70,8 +41,7 @@ void ShowNativeFileSystemRestrictedDirectoryDialogOnUIThread(
         void(ChromeNativeFileSystemPermissionContext::SensitiveDirectoryResult)>
         callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  content::RenderFrameHost* rfh =
-      content::RenderFrameHost::FromID(process_id, frame_id);
+  content::RenderFrameHost* rfh = content::RenderFrameHost::FromID(frame_id);
   if (!rfh || !rfh->IsCurrent()) {
     // Requested from a no longer valid render frame host.
     std::move(callback).Run(ChromeNativeFileSystemPermissionContext::
@@ -215,8 +185,7 @@ BindResultCallbackToCurrentSequence(
 }
 
 void DoSafeBrowsingCheckOnUIThread(
-    int process_id,
-    int frame_id,
+    content::GlobalFrameRoutingId frame_id,
     std::unique_ptr<content::NativeFileSystemWriteItem> item,
     safe_browsing::CheckDownloadCallback callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -232,7 +201,7 @@ void DoSafeBrowsingCheckOnUIThread(
 
   if (!item->browser_context) {
     content::RenderProcessHost* rph =
-        content::RenderProcessHost::FromID(process_id);
+        content::RenderProcessHost::FromID(frame_id.child_id);
     if (!rph) {
       std::move(callback).Run(safe_browsing::DownloadCheckResult::UNKNOWN);
       return;
@@ -241,8 +210,7 @@ void DoSafeBrowsingCheckOnUIThread(
   }
 
   if (!item->web_contents) {
-    content::RenderFrameHost* rfh =
-        content::RenderFrameHost::FromID(process_id, frame_id);
+    content::RenderFrameHost* rfh = content::RenderFrameHost::FromID(frame_id);
     if (rfh)
       item->web_contents = content::WebContents::FromRenderFrameHost(rfh);
   }
@@ -332,39 +300,12 @@ bool ChromeNativeFileSystemPermissionContext::CanObtainWritePermission(
          GetWriteGuardContentSetting(origin) == CONTENT_SETTING_ALLOW;
 }
 
-void ChromeNativeFileSystemPermissionContext::ConfirmDirectoryReadAccess(
-    const url::Origin& origin,
-    const base::FilePath& path,
-    int process_id,
-    int frame_id,
-    base::OnceCallback<void(PermissionStatus)> callback) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  base::PostTask(
-      FROM_HERE, {content::BrowserThread::UI},
-      base::BindOnce(
-          &ShowDirectoryAccessConfirmationPromptOnUIThread, process_id,
-          frame_id, origin, path,
-          base::BindOnce(
-              [](scoped_refptr<base::TaskRunner> task_runner,
-                 base::OnceCallback<void(PermissionStatus result)> callback,
-                 permissions::PermissionAction result) {
-                task_runner->PostTask(
-                    FROM_HERE,
-                    base::BindOnce(
-                        std::move(callback),
-                        result == permissions::PermissionAction::GRANTED
-                            ? PermissionStatus::GRANTED
-                            : PermissionStatus::DENIED));
-              },
-              base::SequencedTaskRunnerHandle::Get(), std::move(callback))));
-}
-
 void ChromeNativeFileSystemPermissionContext::ConfirmSensitiveDirectoryAccess(
     const url::Origin& origin,
     const std::vector<base::FilePath>& paths,
     bool is_directory,
-    int process_id,
-    int frame_id,
+    content::GlobalFrameRoutingId frame_id,
+
     base::OnceCallback<void(SensitiveDirectoryResult)> callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (paths.empty()) {
@@ -379,20 +320,20 @@ void ChromeNativeFileSystemPermissionContext::ConfirmSensitiveDirectoryAccess(
       base::BindOnce(&ShouldBlockAccessToPath, paths[0]),
       base::BindOnce(&ChromeNativeFileSystemPermissionContext::
                          DidConfirmSensitiveDirectoryAccess,
-                     GetWeakPtr(), origin, paths, is_directory, process_id,
-                     frame_id, std::move(callback)));
+                     GetWeakPtr(), origin, paths, is_directory, frame_id,
+                     std::move(callback)));
 }
 
 void ChromeNativeFileSystemPermissionContext::PerformAfterWriteChecks(
     std::unique_ptr<content::NativeFileSystemWriteItem> item,
-    int process_id,
-    int frame_id,
+    content::GlobalFrameRoutingId frame_id,
+
     base::OnceCallback<void(AfterWriteCheckResult)> callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  base::PostTask(
-      FROM_HERE, {content::BrowserThread::UI},
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE,
       base::BindOnce(
-          &DoSafeBrowsingCheckOnUIThread, process_id, frame_id, std::move(item),
+          &DoSafeBrowsingCheckOnUIThread, frame_id, std::move(item),
           base::BindOnce(
               [](scoped_refptr<base::TaskRunner> task_runner,
                  base::OnceCallback<void(AfterWriteCheckResult result)>
@@ -411,8 +352,7 @@ void ChromeNativeFileSystemPermissionContext::
         const url::Origin& origin,
         const std::vector<base::FilePath>& paths,
         bool is_directory,
-        int process_id,
-        int frame_id,
+        content::GlobalFrameRoutingId frame_id,
         base::OnceCallback<void(SensitiveDirectoryResult)> callback,
         bool should_block) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -424,10 +364,10 @@ void ChromeNativeFileSystemPermissionContext::
   auto result_callback =
       BindResultCallbackToCurrentSequence(std::move(callback));
 
-  base::PostTask(
-      FROM_HERE, {content::BrowserThread::UI},
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE,
       base::BindOnce(&ShowNativeFileSystemRestrictedDirectoryDialogOnUIThread,
-                     process_id, frame_id, origin, paths[0], is_directory,
+                     frame_id, origin, paths[0], is_directory,
                      std::move(result_callback)));
 }
 

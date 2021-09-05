@@ -1,19 +1,15 @@
 include_rules = [
   # TODO(crbug/1022172): Remove this dependency when ShareActivity is moved to
   # chrome/browser/share.
-  "+chrome/android/java/src/org/chromium/chrome/browser/share",
   "+chrome/android/java/src/org/chromium/chrome/browser/ChromeActivity.java",
+  "+chrome/android/java/src/org/chromium/chrome/browser/FileProviderHelper.java",
   "+chrome/android/java/src/org/chromium/chrome/browser/IntentHandler.java",
   "+chrome/android/java/src/org/chromium/chrome/browser/ShortcutHelper.java",
   "+chrome/android/java/src/org/chromium/chrome/browser/document/ChromeLauncherActivity.java",
-  "+chrome/android/java/src/org/chromium/chrome/browser/modules/ModuleInstallUi.java",
-  "+chrome/android/java/src/org/chromium/chrome/browser/screenshot/EditorScreenshotTask.java",
-  "+chrome/android/java/src/org/chromium/chrome/browser/tab/Tab.java",
-  "+chrome/services/qrcode_generator",
-  "+content/public/android/java/src/org/chromium/content_public/browser/RenderWidgetHostView.java",
-  "+content/public/android/java/src/org/chromium/content_public/browser/WebContents.java",
-  "+content/public/test/android/javatests",
+  "+chrome/android/java/src/org/chromium/chrome/browser/download/DownloadController.java",
+  "+chrome/android/java/src/org/chromium/chrome/browser/init/ChromeBrowserInitializer.java",
   "+chrome/android/java/src/org/chromium/chrome/browser/media/MediaViewerUtils.java",
+  "+chrome/android/java/src/org/chromium/chrome/browser/modules/ModuleInstallUi.java",
   "+chrome/android/java/src/org/chromium/chrome/browser/notifications/ChromeNotificationBuilder.java",
   "+chrome/android/java/src/org/chromium/chrome/browser/notifications/NotificationBuilderFactory.java",
   "+chrome/android/java/src/org/chromium/chrome/browser/notifications/NotificationConstants.java",
@@ -21,5 +17,16 @@ include_rules = [
   "+chrome/android/java/src/org/chromium/chrome/browser/notifications/NotificationUmaTracker.java",
   "+chrome/android/java/src/org/chromium/chrome/browser/notifications/PendingIntentProvider.java",
   "+chrome/android/java/src/org/chromium/chrome/browser/notifications/channels/ChromeChannelDefinitions.java",
+  "+chrome/android/java/src/org/chromium/chrome/browser/screenshot/EditorScreenshotTask.java",
+  "+chrome/android/java/src/org/chromium/chrome/browser/share",
+  "+chrome/android/java/src/org/chromium/chrome/browser/tab/Tab.java",
+  "+chrome/services/qrcode_generator",
   "+components/browser_ui/notifications/android",
+  "+components/browser_ui/share/android",
+  "+components/browser_ui/android/bottomsheet",
+  "+content/public/android/java/src/org/chromium/content_public/browser/RenderWidgetHostView.java",
+  "+content/public/android/java/src/org/chromium/content_public/browser/WebContents.java",
+
+  # TODO(crbug/1090917): Remove this dependency once the STTS java code is moved.
+  "+chrome/android/java/src/org/chromium/chrome/browser/send_tab_to_self/SendTabToSelfShareActivity.java",
 ]

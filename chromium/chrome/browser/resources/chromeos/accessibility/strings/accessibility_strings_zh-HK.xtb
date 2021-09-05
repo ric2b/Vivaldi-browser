@@ -112,6 +112,7 @@
 <translation id="1771761307086386028">向右捲動</translation>
 <translation id="1781173782405573156">忽略按鍵</translation>
 <translation id="1787176709638001873">密碼編輯文字</translation>
+<translation id="180203835522132923">搜尋 + O，然後按 W</translation>
 <translation id="1810107444790159527">清單方塊</translation>
 <translation id="1812527064848182527">橫向</translation>
 <translation id="1829244130665387512">在網頁中尋找</translation>
@@ -256,6 +257,7 @@
 <translation id="297825089465017871">以兩隻手指向左滑動</translation>
 <translation id="2998131015536248178">上一個字元</translation>
 <translation id="2999559350546931576">降低音調</translation>
+<translation id="3009352964623081324">搜尋 + O，然後按 S。此操作用於安裝、管理和自訂語音。</translation>
 <translation id="3014130421870723208">@編輯 8 點欄位</translation>
 <translation id="3030432017085518523">選單選項圓形按鈕</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{1 個單引號}other{# 個單引號}}</translation>
@@ -454,6 +456,7 @@
 <translation id="4505167975768625962">插入</translation>
 <translation id="4511186779140817916">杏仁白色</translation>
 <translation id="451510441928265982">冇上一個第 2 級標題</translation>
+<translation id="4515799157838123044">淡化背景內容</translation>
 <translation id="4517854969512651305">提升值</translation>
 <translation id="4532633738839459153">{COUNT,plural, =1{1 個斜線}other{# 個斜線}}</translation>
 <translation id="4537277403911487429">下一個類似的項目</translation>
@@ -705,6 +708,7 @@
 <translation id="6628427060004938651">部分</translation>
 <translation id="6637586476836377253">記錄</translation>
 <translation id="6657128831881431364">進度列</translation>
+<translation id="6660819301598582123">狐狗大鬥法。</translation>
 <translation id="667999046851023355">文件</translation>
 <translation id="6688209025607531203">非強制回應警示</translation>
 <translation id="6689672606256159458">深鮭紅色</translation>
@@ -740,7 +744,6 @@
 <translation id="6951482098621102657">冇下一個第 5 級標題</translation>
 <translation id="6955705049214951590">霧玫瑰紅色</translation>
 <translation id="696356426651109308">跳至開頭</translation>
-<translation id="699159175332639490">搜尋鍵 + O + W</translation>
 <translation id="6994042831499278539">詞彙表參考資料</translation>
 <translation id="6996566555547746822">下一個下拉式方塊</translation>
 <translation id="6997224546856374593">在讀出大寫字母時：</translation>
@@ -765,7 +768,7 @@
 <translation id="7137397390322864165">鮭紅色</translation>
 <translation id="7140168702531682811">上標</translation>
 <translation id="7143034430156387447">在 6 點點字和 8 點點字之間切換</translation>
-<translation id="7143207342074048698">連線中</translation>
+<translation id="7143207342074048698">正在連接</translation>
 <translation id="7153618581592392745">淡紫色</translation>
 <translation id="7157306005867877619">摘要</translation>
 <translation id="7161771961008409533">彈出式按鈕</translation>
@@ -808,6 +811,7 @@
 <translation id="743783356331413498">例子</translation>
 <translation id="7439060726180460871">目錄</translation>
 <translation id="744163271241493234">pwded</translation>
+<translation id="7484805699335881122">在朗讀元素種類、引用文字、已刪除文字、粗體文字、加括號文字或大寫文字時改變音調。</translation>
 <translation id="7491962110804786152">分頁</translation>
 <translation id="7505149250476994901">先說「大寫」再讀出字母</translation>
 <translation id="7518543783849163354">如要暫時停止 ChromeVox 朗讀功能，請按 Control 鍵。</translation>

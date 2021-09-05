@@ -34,13 +34,13 @@
 -keep @org.chromium.base.annotations.UsedByReflection class ** {}
 
 # Keeps for method level annotations.
--keepclasseswithmembers,allowaccessmodification class ** {
+-keepclasseswithmembers class ** {
   @org.chromium.base.annotations.AccessedByNative <fields>;
 }
--keepclasseswithmembers,includedescriptorclasses,allowaccessmodification class ** {
+-keepclasseswithmembers,includedescriptorclasses class ** {
   @org.chromium.base.annotations.CalledByNative <methods>;
 }
--keepclasseswithmembers,includedescriptorclasses,allowaccessmodification class ** {
+-keepclasseswithmembers,includedescriptorclasses class ** {
   @org.chromium.base.annotations.CalledByNativeUnchecked <methods>;
 }
 -keepclasseswithmembers class ** {
@@ -70,11 +70,14 @@
 
 # Never inline classes or methods with this annotation, but allow shrinking and
 # obfuscation.
--keep,allowobfuscation,allowoptimization @org.chromium.base.annotations.DoNotInline class ** {
-  <methods>;
+-if @org.chromium.base.annotations.DoNotInline class * {
+    *** *(...);
 }
--keepclassmembers,allowobfuscation,allowoptimization class ** {
-  @org.chromium.base.annotations.DoNotInline <methods>;
+-keep,allowobfuscation class <1> {
+    *** <2>(...);
+}
+-keepclassmembers,allowobfuscation class * {
+   @org.chromium.base.annotations.DoNotInline <methods>;
 }
 
 # Keep all CREATOR fields within Parcelable that are kept.

@@ -8,6 +8,7 @@
 <translation id="1046068652463704410">Jaapanikeelne sisend (USA klaviatuuri jaoks)</translation>
 <translation id="1047956942837015229"><ph name="COUNT" /> üksuse kustutamine ...</translation>
 <translation id="1049926623896334335">Wordi dokument</translation>
+<translation id="1060368002126861100">Failide avamiseks rakendusega <ph name="APP_NAME" /> teisaldage need esmalt Windowsi failide kausta.</translation>
 <translation id="1062407476771304334">Asenda</translation>
 <translation id="1065449928621190041">Kanada prantsuse klaviatuur</translation>
 <translation id="1119069657431255176">Bzip2 tihendatud TAR-arhiiv</translation>
@@ -24,7 +25,7 @@
 <translation id="117624967391683467">Faili <ph name="FILE_NAME" /> kopeerimine ...</translation>
 <translation id="1178581264944972037">Peata</translation>
 <translation id="1190144681599273207">Faili toomine kasutab umbes <ph name="FILE_SIZE" /> mobiilsideandmeid.</translation>
-<translation id="1201402288615127009">Edasi</translation>
+<translation id="1201402288615127009">Järgmine</translation>
 <translation id="1208421848177517699">Transliteratsioon (namaste → નમસ્તે)</translation>
 <translation id="1243314992276662751">Laadi üles</translation>
 <translation id="1249250836236328755">Žanr</translation>
@@ -45,6 +46,8 @@
 <translation id="1395262318152388157">Otsinguliugur</translation>
 <translation id="1399648040768741453">Telugu klaviatuur (foneetiline)</translation>
 <translation id="1430915738399379752">Printimine</translation>
+<translation id="1433600251059882049">Seda kausta jagatakse Linuxi ja Windowsiga</translation>
+<translation id="1435838927755162558">Kausta jagamine üksusega Parallels Desktop</translation>
 <translation id="1439494416798956626">Teisaldati kausta <ph name="FOLDER_NAME" />.</translation>
 <translation id="1441841714100794440">Vietnami klaviatuur (Telex)</translation>
 <translation id="1455548678241328678">Norra klaviatuur</translation>
@@ -79,6 +82,7 @@
 <translation id="1844692022597038441">Fail ei ole võrguühenduseta saadaval.</translation>
 <translation id="184633654410729720">Tai klaviatuur (Kedmanee)</translation>
 <translation id="1847880352285315359">Salvestatud</translation>
+<translation id="1853795129690976061">Seda kausta jagatakse Linuxiga</translation>
 <translation id="1864756863218646478">Faili ei leitud.</translation>
 <translation id="1921986354447415460">Türgi F-klaviatuur</translation>
 <translation id="1924372192547904021">Ketas <ph name="DRIVE_NAME" /> vormindati</translation>
@@ -124,6 +128,7 @@
 <translation id="2384596874640104496">Singali klaviatuur</translation>
 <translation id="240770291734945588"><ph name="SPACE_AVAILABLE" /> on saadaval</translation>
 <translation id="2425665904502185219">Failide kogumaht</translation>
+<translation id="2428749644083375155"><ph name="NUMBER_OF_ITEMS" /> üksust kopeeritakse kausta <ph name="FOLDER_NAME" /></translation>
 <translation id="2448312741937722512">Tüüp</translation>
 <translation id="2453576648990281505">Fail on juba olemas</translation>
 <translation id="2464079411014186876">Jäätis</translation>
@@ -178,6 +183,7 @@
 <translation id="303198083543495566">Geograafia</translation>
 <translation id="3057861065630527966">Fotode ja videote varundamine</translation>
 <translation id="3064388234319122767">Transliteratsioon (zdravo → здраво)</translation>
+<translation id="3067790092342515856">Windowsi failid</translation>
 <translation id="3078461028045006476">Jaga laiendusega <ph name="EXTENSION_NAME" /></translation>
 <translation id="3088034400796962477">Transliteratsioon (salam ← سلام)</translation>
 <translation id="3116361045094675131">Ühendkuningriigi klaviatuur</translation>
@@ -216,6 +222,7 @@
 <translation id="3524311639100184459">Hoiatus. Need on ajutised failid ja võidakse kettaruumi vabastamiseks automaatselt kustutada.  <ph name="BEGIN_LINK" />Lisateave<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">Kaust</translation>
 <translation id="3549797760399244642">Ava sait drive.google.com ...</translation>
+<translation id="3553048479571901246">Failide avamiseks rakendusega <ph name="APP_NAME" /> kopeerige need esmalt Windowsi failide kausta.</translation>
 <translation id="357479282490346887">leedu keel</translation>
 <translation id="3583509704582854624">Tähtnumbriline sisend (Jaapani klaviatuuri jaoks)</translation>
 <translation id="3603385196401704894">Kanada prantsuse</translation>
@@ -239,6 +246,7 @@
 <translation id="3798449238516105146">Versioon</translation>
 <translation id="3801082500826908679">fääri</translation>
 <translation id="3809272675881623365">Küülik</translation>
+<translation id="3810973564298564668">Halda</translation>
 <translation id="3811494700605067549">1 fail on valitud</translation>
 <translation id="3815016854028376614">Zhuyini sisestusmeetod</translation>
 <translation id="3825863595139017598">Mongoolia klaviatuur</translation>
@@ -259,8 +267,8 @@
 <translation id="3943857333388298514">Kleebi</translation>
 <translation id="3958548648197196644">Kiivi</translation>
 <translation id="3966388904776714213">Heliesitaja</translation>
+<translation id="3984317463833596033">Andke üksusele Parallels Desktop luba muuta kaustas <ph name="FOLDER_NAME" /> olevaid faile</translation>
 <translation id="4002066346123236978">Pealkiri</translation>
-<translation id="4065397611279318371">Failide avamiseks rakendustega <ph name="APP_NAME" /> teisaldage need esmalt kausta <ph name="SHARED_DIRECTORY_LABEL" />.</translation>
 <translation id="4070370845051020638">Kantoni sisestusmeetod</translation>
 <translation id="4072248638558688893">Tamili klaviatuur (foneetiline)</translation>
 <translation id="4124935795427217608">Ükssarvik</translation>
@@ -288,6 +296,7 @@
 <translation id="4470564870223067757">Hanguli 2. seade</translation>
 <translation id="4477219268485577442">Bulgaaria foneetiline</translation>
 <translation id="4479812471636796472">USA Dvoraki klaviatuur</translation>
+<translation id="4481711095103932593">Seda kausta jagatakse Windowsiga</translation>
 <translation id="4487088045714738411">Belgia klaviatuur</translation>
 <translation id="4522570452068850558">Üksikasjad</translation>
 <translation id="4552678318981539154">Ostke rohkem salvestusruumi</translation>
@@ -297,6 +306,7 @@
 <translation id="4579744207439506346"><ph name="ENTRY_NAME" /> lisati valikusse.</translation>
 <translation id="4582497162516204941">Installimine Linuxiga (beetaversioon)</translation>
 <translation id="4594543368593301662">Kuvatakse otsingu <ph name="SEARCH_TERM" /> tulemusi.</translation>
+<translation id="4603392156942865207">Fail <ph name="FILE_NAME" /> kopeeritakse kausta <ph name="FOLDER_NAME" /></translation>
 <translation id="4631887759990505102">Esitaja</translation>
 <translation id="4656293982926141856">See arvuti</translation>
 <translation id="4669606053856530811">Üksuse „<ph name="SOURCE_NAME" />” liikmed kaotavad juurdepääsu, kui neid üksusi nendega ei jagata.</translation>
@@ -330,11 +340,12 @@
 <translation id="4880520557730313061">Automaatparandus</translation>
 <translation id="4881695831933465202">Ava</translation>
 <translation id="4886021172213954916">Tamili klaviatuur (kirjutusmasin)</translation>
-<translation id="4892969127351273348">Ei saa rakendusega <ph name="APP_NAME" /> avada</translation>
+<translation id="4900532980794411603">Jagamine üksusega Parallels Desktop</translation>
 <translation id="4905417359854579806">Valmis, et varundada <ph name="FILE_COUNT" /></translation>
 <translation id="4924638091161556692">Fikseeritud</translation>
 <translation id="4935975195727477204">Karikakar</translation>
 <translation id="4943368462779413526">Jalgpall</translation>
+<translation id="4961158930123534723">Üksusega Parallels Desktop jagatakse 1 kausta</translation>
 <translation id="4969785127455456148">Album</translation>
 <translation id="497244430928947428">Malajalami klaviatuur (foneetiline)</translation>
 <translation id="4973523518332075481">Kasutage nime, milles on kuni <ph name="MAX_LENGTH" /> tähemärki</translation>
@@ -346,10 +357,12 @@
 <translation id="5010406651457630570">Arvutid</translation>
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5024856940085636730">Toiming võtab oodatust kauem aega. Kas soovite selle katkestada?</translation>
+<translation id="5036159836254554629">Üksusega Parallels Desktop jagamise haldamine</translation>
 <translation id="5038625366300922036">Vaadake rohkem ...</translation>
 <translation id="5061708541166515394">Kontrast</translation>
 <translation id="5068919226082848014">Pitsa</translation>
 <translation id="5081517858322016911"><ph name="TOTAL_FILE_SIZE" /> jagu faile kustutatakse</translation>
+<translation id="508423945471810158"><ph name="NUMBER_OF_ITEMS" /> üksust teisaldatakse kausta <ph name="FOLDER_NAME" /></translation>
 <translation id="509429900233858213">Tekkis viga.</translation>
 <translation id="5098629044894065541">heebrea keel</translation>
 <translation id="5123433949759960244">Korvpall</translation>
@@ -453,6 +466,7 @@
 <translation id="6054173164583630569">Prantsuse klaviatuur</translation>
 <translation id="6074825444536523002">Google'i vorm</translation>
 <translation id="6096979789310008754">Otsingutekst on kustutatud, kuvatud on kõik failid ja kaustad.</translation>
+<translation id="610101264611565198">Fail <ph name="FILE_NAME" /> teisaldatakse kausta <ph name="FOLDER_NAME" /></translation>
 <translation id="6111770213269631447">Transliteratsioon (namaskar → নমস্কার)</translation>
 <translation id="6129953537138746214">Tühik</translation>
 <translation id="6133173853026656527">Faili <ph name="FILE_NAME" /> teisaldamine ...</translation>
@@ -493,6 +507,7 @@
 <translation id="656398493051028875">Faili „<ph name="FILENAME" />” kustutamine ...</translation>
 <translation id="6581162200855843583">Google Drive'i link</translation>
 <translation id="6607272825297743757">Faili teave</translation>
+<translation id="6609332149380188670">Üksusega Parallels Desktop jagatakse <ph name="NUMBER_OF_ITEMS" /> kausta</translation>
 <translation id="6629841649550503054">Kõik failid varundati teenuses <ph name="BEGIN_LINK" />Google Drive.<ph name="END_LINK" /></translation>
 <translation id="6643016212128521049">Tühjenda</translation>
 <translation id="6650726141019353908">Roosa liblikas</translation>
@@ -536,6 +551,7 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">Installimine ebaõnnestus.</translation>
 <translation id="7040138676081995583">Ava rakendusega ...</translation>
+<translation id="7059566040011178088">Vähem kui <ph name="REMAINING_TIME" /></translation>
 <translation id="7100897339030255923">Valitud on <ph name="COUNT" /> üksust</translation>
 <translation id="7106346894903675391">Ostke rohkem salvestusruumi ...</translation>
 <translation id="7126604456862387217">„&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;” – &lt;em&gt;otsi Drive'ist&lt;/em&gt;</translation>
@@ -646,6 +662,7 @@
 <translation id="8193175696669055101">Seadme mudel</translation>
 <translation id="8208580316430297579">Kujundus</translation>
 <translation id="8223479393428528563">Kui soovite salvestada need failid võrguühenduseta kasutamiseks, minge uuesti veebi, paremklõpsake failidel ja tehke valik <ph name="OFFLINE_CHECKBOX_NAME" />.</translation>
+<translation id="8231972167769262174">Umbes <ph name="REMAINING_TIME" /></translation>
 <translation id="8249296373107784235">Katkesta</translation>
 <translation id="8261506727792406068">Kustuta</translation>
 <translation id="8269755669432358899">Ahenda failide tagasisidepaneelid</translation>
@@ -672,6 +689,7 @@
 <translation id="8475647382427415476">Google Drive ei saanud praegu sünkroonida faili „<ph name="FILENAME" />”. Google Drive proovib hiljem uuesti.</translation>
 <translation id="8477649328507734757">Pöörlev</translation>
 <translation id="8487700953926739672">Võrguühenduseta saadaval</translation>
+<translation id="8490342535582768689">Andke üksusele Parallels Desktop luba muuta Google Drive'is olevaid faile. Muudatused sünkroonitakse muude seadmetega.</translation>
 <translation id="8521441079177373948">Ühendkuningriik</translation>
 <translation id="8525306231823319788">Täisekraan</translation>
 <translation id="8551494947769799688">läti keel</translation>
@@ -724,7 +742,7 @@
 <translation id="939736085109172342">Uus kaust</translation>
 <translation id="942954117721265519">Selles kataloogis pilte pole.</translation>
 <translation id="943972244133411984">Muutja:</translation>
-<translation id="945522503751344254">Saada tagasisidet</translation>
+<translation id="945522503751344254">Tagasiside saatmine</translation>
 <translation id="947144732524271678">Valiti <ph name="ENTRY_COUNT" /> kirjet vahemikus <ph name="FROM_ENTRY_NAME" /> kuni <ph name="TO_ENTRY_NAME" />.</translation>
 <translation id="981121421437150478">Võrguühenduseta</translation>
 <translation id="988685240266037636">Fail nimega „<ph name="FILE_NAME" />” on juba olemas. Kas soovite selle asendada?</translation>

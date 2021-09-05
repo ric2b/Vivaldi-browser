@@ -8,6 +8,7 @@
 #include "base/logging.h"
 #include "base/native_library.h"
 #include "base/no_destructor.h"
+#include "base/notreached.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/system/sys_info.h"
@@ -272,12 +273,6 @@ bool PathProvider(int key, base::FilePath* result) {
         return false;
       cur = cur.Append(FILE_PATH_LITERAL("resources"));
 #endif
-      break;
-    case chrome::DIR_INSPECTOR_DEBUG:
-      if (!base::PathService::Get(chrome::DIR_RESOURCES, &cur))
-        return false;
-      cur = cur.Append(FILE_PATH_LITERAL("inspector"))
-               .Append(FILE_PATH_LITERAL("debug"));
       break;
     case chrome::DIR_APP_DICTIONARIES:
 #if defined(OS_POSIX)

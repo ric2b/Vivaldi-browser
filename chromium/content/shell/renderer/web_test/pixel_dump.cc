@@ -20,6 +20,7 @@
 #include "content/shell/renderer/web_test/web_test_runtime_flags.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "printing/metafile_skia.h"
+#include "printing/mojom/print.mojom.h"
 #include "printing/print_settings.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "skia/ext/platform_canvas.h"
@@ -50,24 +51,25 @@ void CapturePixelsForPrinting(
   blink::WebSize page_size_in_pixels = frame_widget->Size();
 
   int page_count = web_frame->PrintBegin(page_size_in_pixels);
-  int total_height = page_count * (page_size_in_pixels.height + 1) - 1;
+  blink::WebSize spool_size =
+      web_frame->SpoolSizeInPixelsForTesting(page_size_in_pixels, page_count);
 
   bool is_opaque = false;
 
   SkBitmap bitmap;
-  if (!bitmap.tryAllocN32Pixels(page_size_in_pixels.width, total_height,
+  if (!bitmap.tryAllocN32Pixels(spool_size.width, spool_size.height,
                                 is_opaque)) {
     LOG(ERROR) << "Failed to create bitmap width=" << page_size_in_pixels.width
-               << " height=" << total_height;
+               << " height=" << spool_size.height;
     std::move(callback).Run(SkBitmap());
     return;
   }
 
-  printing::MetafileSkia metafile(printing::SkiaDocumentType::MSKP,
+  printing::MetafileSkia metafile(printing::mojom::SkiaDocumentType::kMSKP,
                                   printing::PrintSettings::NewCookie());
   cc::SkiaPaintCanvas canvas(bitmap);
   canvas.SetPrintingMetafile(&metafile);
-  web_frame->PrintPagesForTesting(&canvas, page_size_in_pixels);
+  web_frame->PrintPagesForTesting(&canvas, page_size_in_pixels, spool_size);
   web_frame->PrintEnd();
 
   std::move(callback).Run(bitmap);
@@ -83,30 +85,6 @@ void PrintFrameAsync(blink::WebLocalFrame* web_frame,
       ->PostTask(FROM_HERE, base::BindOnce(&CapturePixelsForPrinting,
                                            base::Unretained(web_frame),
                                            std::move(callback)));
-}
-
-void CopyImageAtAndCapturePixels(
-    RenderFrame* frame,
-    int x,
-    int y,
-    base::OnceCallback<void(const SkBitmap&)> callback) {
-  mojo::Remote<blink::mojom::ClipboardHost> clipboard;
-  frame->GetBrowserInterfaceBroker()->GetInterface(
-      clipboard.BindNewPipeAndPassReceiver());
-
-  uint64_t sequence_number_before = 0;
-  clipboard->GetSequenceNumber(ui::ClipboardBuffer::kCopyPaste,
-                               &sequence_number_before);
-  frame->GetWebFrame()->CopyImageAtForTesting(gfx::Point(x, y));
-  uint64_t sequence_number_after = 0;
-  while (sequence_number_before == sequence_number_after) {
-    clipboard->GetSequenceNumber(ui::ClipboardBuffer::kCopyPaste,
-                                 &sequence_number_after);
-  }
-
-  SkBitmap bitmap;
-  clipboard->ReadImage(ui::ClipboardBuffer::kCopyPaste, &bitmap);
-  std::move(callback).Run(bitmap);
 }
 
 }  // namespace content

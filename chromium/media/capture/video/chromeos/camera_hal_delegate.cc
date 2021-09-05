@@ -250,8 +250,13 @@ void CameraHalDelegate::GetSupportedFormats(
     }
     float max_fps = 1.0 * 1000000000LL / duration;
 
+    // There's no consumer information here to determine the buffer usage, so
+    // hard-code the usage that all the clients should be using.
+    constexpr gfx::BufferUsage kClientBufferUsage =
+        gfx::BufferUsage::SCANOUT_VEA_READ_CAMERA_AND_CPU_READ_WRITE;
     const ChromiumPixelFormat cr_format =
-        camera_buffer_factory_->ResolveStreamBufferFormat(hal_format);
+        camera_buffer_factory_->ResolveStreamBufferFormat(hal_format,
+                                                          kClientBufferUsage);
     if (cr_format.video_format == PIXEL_FORMAT_UNKNOWN) {
       continue;
     }
@@ -340,6 +345,7 @@ void CameraHalDelegate::GetDeviceDescriptors(
         // about malformed values.
       }
     }
+    desc.set_pan_tilt_zoom_supported(IsPanTiltZoomSupported(camera_info));
     device_id_to_camera_id_[desc.device_id] = camera_id;
     device_descriptors->push_back(desc);
   }
@@ -348,6 +354,41 @@ void CameraHalDelegate::GetDeviceDescriptors(
   // (http://crbug.com/543997).
   std::sort(device_descriptors->begin(), device_descriptors->end());
   DVLOG(1) << "Number of device descriptors: " << device_descriptors->size();
+}
+
+bool CameraHalDelegate::IsPanTiltZoomSupported(
+    const cros::mojom::CameraInfoPtr& camera_info) {
+  auto is_vendor_range_valid = [&](const std::string& key) -> bool {
+    const VendorTagInfo* info = vendor_tag_ops_delegate_.GetInfoByName(key);
+    if (info == nullptr)
+      return false;
+    auto range = GetMetadataEntryAsSpan<int32_t>(
+        camera_info->static_camera_characteristics, info->tag);
+    return range.size() == 3 && range[0] < range[1];
+  };
+
+  if (is_vendor_range_valid("com.google.control.panRange"))
+    return true;
+
+  if (is_vendor_range_valid("com.google.control.tiltRange"))
+    return true;
+
+  if (is_vendor_range_valid("com.google.control.zoomRange"))
+    return true;
+
+  auto scaler_crop_region = GetMetadataEntryAsSpan<int32_t>(
+      camera_info->static_camera_characteristics,
+      cros::mojom::CameraMetadataTag::ANDROID_SCALER_CROP_REGION);
+  auto max_digital_zoom = GetMetadataEntryAsSpan<float>(
+      camera_info->static_camera_characteristics,
+      cros::mojom::CameraMetadataTag::
+          ANDROID_SCALER_AVAILABLE_MAX_DIGITAL_ZOOM);
+  if (max_digital_zoom.size() == 1 && max_digital_zoom[0] > 1 &&
+      scaler_crop_region.size() == 4) {
+    return true;
+  }
+
+  return false;
 }
 
 cros::mojom::CameraInfoPtr CameraHalDelegate::GetCameraInfoFromDeviceId(
@@ -362,6 +403,11 @@ cros::mojom::CameraInfoPtr CameraHalDelegate::GetCameraInfoFromDeviceId(
     return {};
   }
   return it->second.Clone();
+}
+
+const VendorTagInfo* CameraHalDelegate::GetVendorTagInfoByName(
+    const std::string& full_name) {
+  return vendor_tag_ops_delegate_.GetInfoByName(full_name);
 }
 
 void CameraHalDelegate::OpenDevice(

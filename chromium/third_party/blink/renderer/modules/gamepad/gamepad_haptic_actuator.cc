@@ -57,18 +57,11 @@ String ResultToString(GamepadHapticsResult result) {
 
 namespace blink {
 
-// static
-GamepadHapticActuator* GamepadHapticActuator::Create(ExecutionContext* context,
-                                                     int pad_index) {
-  return MakeGarbageCollected<GamepadHapticActuator>(
-      context, pad_index, device::GamepadHapticActuatorType::kDualRumble);
-}
-
 GamepadHapticActuator::GamepadHapticActuator(
-    ExecutionContext* context,
+    ExecutionContext& context,
     int pad_index,
     device::GamepadHapticActuatorType type)
-    : ExecutionContextClient(context),
+    : ExecutionContextClient(&context),
       pad_index_(pad_index),
       gamepad_dispatcher_(MakeGarbageCollected<GamepadDispatcher>(context)) {
   SetType(type);
@@ -185,7 +178,7 @@ void GamepadHapticActuator::OnResetCompleted(
   resolver->Resolve(ResultToString(result));
 }
 
-void GamepadHapticActuator::Trace(Visitor* visitor) {
+void GamepadHapticActuator::Trace(Visitor* visitor) const {
   visitor->Trace(gamepad_dispatcher_);
   ScriptWrappable::Trace(visitor);
   ExecutionContextClient::Trace(visitor);

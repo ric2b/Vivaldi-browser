@@ -24,8 +24,10 @@
 #include "chrome/browser/site_isolation/chrome_site_per_process_test.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
+#include "chrome/browser/ui/search/local_ntp_test_utils.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_features.h"
+#include "chrome/common/url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/guest_view/browser/guest_view_base.h"
@@ -48,7 +50,6 @@
 #include "content/public/common/service_names.mojom.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
-#include "content/public/test/content_browser_test_utils.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_notification_tracker.h"
 #include "content/public/test/test_utils.h"
@@ -62,6 +63,13 @@
 #include "ui/events/base_event_utils.h"
 #include "ui/gfx/geometry/point.h"
 #include "url/gurl.h"
+
+#if defined(OS_CHROMEOS)
+#include "ash/public/cpp/test/shell_test_api.h"
+#include "ui/display/manager/display_manager.h"
+#include "ui/display/screen.h"
+#include "ui/display/test/display_manager_test_api.h"
+#endif
 
 namespace {
 
@@ -1488,7 +1496,10 @@ IN_PROC_BROWSER_TEST_F(ChromeSitePerProcessTest, NtpProcesses) {
       content::NotificationService::AllBrowserContextsAndSources());
 
   // Open a new tab and capture the initial state of the browser.
-  chrome::NewTab(browser());
+  // TODO(crbug/1094088): Replace the following with chrome::NewTab(browser());
+  // when fixed.
+  local_ntp_test_utils::OpenNewTab(browser(),
+                                   GURL(chrome::kChromeSearchLocalNtpUrl));
   EXPECT_EQ(2, browser()->tab_strip_model()->count());
   EXPECT_EQ(1, browser()->tab_strip_model()->active_index());
   content::WebContents* tab1 =
@@ -1508,7 +1519,10 @@ IN_PROC_BROWSER_TEST_F(ChromeSitePerProcessTest, NtpProcesses) {
   EXPECT_EQ(0u, process_termination_tracker.size());
 
   // Open another new tab and capture the resulting state of the browser.
-  chrome::NewTab(browser());
+  // TODO(crbug/1094088): Replace the following with chrome::NewTab(browser());
+  // when fixed.
+  local_ntp_test_utils::OpenNewTab(browser(),
+                                   GURL(chrome::kChromeSearchLocalNtpUrl));
   EXPECT_EQ(3, browser()->tab_strip_model()->count());
   EXPECT_EQ(2, browser()->tab_strip_model()->active_index());
   content::WebContents* tab2 =
@@ -1561,3 +1575,39 @@ IN_PROC_BROWSER_TEST_F(ChromeSitePerProcessTest, JSPrintDuringSwap) {
   watcher.Wait();
   EXPECT_TRUE(watcher.did_exit_normally());
 }
+
+#if defined(OS_CHROMEOS)
+// This test verifies that an OOPIF created in a tab on a secondary display
+// doesn't initialize its device scale factor based on the primary display.
+// Note: This test could probably be expanded to run on all ASH platforms.
+IN_PROC_BROWSER_TEST_F(ChromeSitePerProcessTest, TestInitialDSFForOOPIF) {
+  // Spec for a two-display system, where the primary display has non-unit
+  // device scale factor, but the secondary has unit device scale factor.
+  // Note: this test could really work with any two scale factors, so long as
+  // they're different.
+  std::string display_spec("0+0-500x500*2,0+501-500x500");
+  ash::ShellTestApi shell_test_api;
+  display::test::DisplayManagerTestApi(shell_test_api.display_manager())
+      .UpdateDisplay(display_spec);
+  ASSERT_EQ(2u, shell_test_api.display_manager()->GetNumDisplays());
+  display::test::DisplayManagerTestApi display_manager_test_api(
+      shell_test_api.display_manager());
+
+  display::Screen* screen = display::Screen::GetScreen();
+  int64_t display2 = display_manager_test_api.GetSecondaryDisplay().id();
+  screen->SetDisplayForNewWindows(display2);
+  Browser* browser_on_secondary_display = CreateBrowser(browser()->profile());
+
+  // Open a page with an OOPIF on the secondary display.
+  GURL main_url(embedded_test_server()->GetURL(
+      "a.com", "/cross_site_iframe_factory.html?a(b)"));
+  content::ProxyDSFObserver observer;
+  ui_test_utils::NavigateToURL(browser_on_secondary_display, main_url);
+  observer.WaitForOneProxyHostCreation();
+
+  EXPECT_EQ(1u, observer.num_creations());
+  // If the OOPIF correctly gets its device_scale_factor from the secondary
+  // screen, then it will satisfy the following expectation.
+  EXPECT_EQ(1.f, observer.get_proxy_host_dsf(0));
+}
+#endif

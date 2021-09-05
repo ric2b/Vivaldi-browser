@@ -69,6 +69,7 @@ GL_EXPORT extern const char kEnableSwapBuffersWithBounds[];
 GL_EXPORT extern const char kDisableDirectComposition[];
 GL_EXPORT extern const char kEnableDirectCompositionVideoOverlays[];
 GL_EXPORT extern const char kDisableDirectCompositionVideoOverlays[];
+GL_EXPORT extern const char kUseAdapterLuid[];
 
 // These flags are used by the test harness code, not passed in by users.
 GL_EXPORT extern const char kDisableGLDrawingForTests[];
@@ -87,6 +88,7 @@ GL_EXPORT extern const base::Feature kDirectCompositionNonrootOverlays;
 GL_EXPORT extern const base::Feature kDirectCompositionPreferNV12Overlays;
 GL_EXPORT extern const base::Feature kDirectCompositionPresentationFeedback;
 GL_EXPORT extern const base::Feature kDirectCompositionSoftwareOverlays;
+GL_EXPORT extern const base::Feature kDirectCompositionUnderlays;
 GL_EXPORT extern const base::Feature kDirectCompositionUseNV12DecodeSwapChain;
 GL_EXPORT extern const base::Feature kDefaultANGLEOpenGL;
 extern const base::Feature kTrackCurrentShaders;

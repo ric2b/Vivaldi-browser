@@ -35,8 +35,6 @@
 <translation id="1873233029667955273">Google Chrome はデフォルトのブラウザとして設定されていません</translation>
 <translation id="1874309113135274312">Google Chrome ベータ版（mDNS-In）</translation>
 <translation id="1877026089748256423">Chrome は古いバージョンです</translation>
-<translation id="1900795423379050516">このページに設定が表示されない場合は、<ph name="LINK_BEGIN" />
-      Chrome ブラウザの設定<ph name="LINK_END" />を確認してください</translation>
 <translation id="1919130412786645364">Chrome へのログインを許可する</translation>
 <translation id="2063848847527508675">アップデートを適用するには、Chrome OS を再起動する必要があります。</translation>
 <translation id="2094919256425865063">今すぐ Chrome を終了しますか？</translation>
@@ -112,6 +110,7 @@
 <translation id="4251615635259297716">Chrome データをこのアカウントにリンクしますか？</translation>
 <translation id="4281844954008187215">利用規約</translation>
 <translation id="4293420128516039005">ログインすると、同期してカスタマイズした Chrome をどのデバイスでも使用できます</translation>
+<translation id="4325083532956419387">Chrome OS のバージョン</translation>
 <translation id="4328355335528187361">Google Chrome Dev（mDNS-In）</translation>
 <translation id="4331809312908958774">Chrome OS</translation>
 <translation id="4335235004908507846">Chrome でデータ侵害や不正な拡張機能などの脅威から保護できているか確認します</translation>

@@ -8,6 +8,8 @@
 #include <utility>
 
 #include "base/memory/ptr_util.h"
+#include "ui/accessibility/ax_enums.mojom.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/gfx/canvas.h"
 #include "ui/views/controls/focusable_border.h"
 #include "ui/views/controls/highlight_path_generator.h"
@@ -53,14 +55,14 @@ SkPath GetHighlightPathInternal(const View* view) {
 }  // namespace
 
 // static
-std::unique_ptr<FocusRing> FocusRing::Install(View* parent) {
+FocusRing* FocusRing::Install(View* parent) {
   auto ring = base::WrapUnique<FocusRing>(new FocusRing());
-  ring->set_owned_by_client();
-  parent->AddChildView(ring.get());
   ring->InvalidateLayout();
   ring->SchedulePaint();
-  return ring;
+  return parent->AddChildView(std::move(ring));
 }
+
+FocusRing::~FocusRing() = default;
 
 void FocusRing::SetPathGenerator(
     std::unique_ptr<HighlightPathGenerator> generator) {
@@ -102,14 +104,14 @@ void FocusRing::ViewHierarchyChanged(
 
   if (details.is_add) {
     // Need to start observing the parent.
-    details.parent->AddObserver(this);
-  } else {
+    view_observer_.Add(details.parent);
+    RefreshLayer();
+  } else if (view_observer_.IsObserving(details.parent)) {
     // This view is being removed from its parent. It needs to remove itself
-    // from its parent's observer list. Otherwise, since its |parent_| will
-    // become a nullptr, it won't be able to do so in its destructor.
-    details.parent->RemoveObserver(this);
+    // from its parent's observer list in the case where the FocusView is
+    // removed from its parent but not deleted.
+    view_observer_.Remove(details.parent);
   }
-  RefreshLayer();
 }
 
 void FocusRing::OnPaint(gfx::Canvas* canvas) {
@@ -155,6 +157,12 @@ void FocusRing::OnPaint(gfx::Canvas* canvas) {
   }
 }
 
+void FocusRing::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  // Mark the focus ring in the accessibility tree as invisible so that it will
+  // not be accessed by assistive technologies.
+  node_data->AddState(ax::mojom::State::kInvisible);
+}
+
 void FocusRing::OnViewFocused(View* view) {
   RefreshLayer();
 }
@@ -166,11 +174,6 @@ void FocusRing::OnViewBlurred(View* view) {
 FocusRing::FocusRing() {
   // Don't allow the view to process events.
   set_can_process_events_within_subtree(false);
-}
-
-FocusRing::~FocusRing() {
-  if (parent())
-    parent()->RemoveObserver(this);
 }
 
 void FocusRing::RefreshLayer() {

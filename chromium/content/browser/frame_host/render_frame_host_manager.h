@@ -10,12 +10,14 @@
 #include <list>
 #include <map>
 #include <memory>
+#include <set>
 #include <unordered_map>
 #include <unordered_set>
 
-#include "base/logging.h"
+#include "base/containers/unique_ptr_adapters.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "content/browser/frame_host/back_forward_cache_impl.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/frame_host/should_swap_browsing_instance.h"
@@ -31,6 +33,7 @@
 #include "url/origin.h"
 
 namespace content {
+class FrameTree;
 class FrameTreeNode;
 class NavigationControllerImpl;
 class NavigationEntry;
@@ -42,7 +45,6 @@ class RenderViewHost;
 class RenderViewHostImpl;
 class RenderWidgetHostView;
 class TestWebContents;
-struct FrameReplicationState;
 
 // Manages RenderFrameHosts for a FrameTreeNode. It maintains a
 // current_frame_host() which is the content currently visible to the user. When
@@ -116,17 +118,14 @@ class CONTENT_EXPORT RenderFrameHostManager
     // automatically called from LoadURL.
     virtual bool CreateRenderViewForRenderManager(
         RenderViewHost* render_view_host,
-        int opener_frame_routing_id,
-        int proxy_routing_id,
-        const base::UnguessableToken& frame_token,
-        const base::UnguessableToken& devtools_frame_token,
-        const FrameReplicationState& replicated_frame_state) = 0;
+        const base::Optional<base::UnguessableToken>& opener_frame_token,
+        int proxy_routing_id) = 0;
     virtual void CreateRenderWidgetHostViewForRenderManager(
         RenderViewHost* render_view_host) = 0;
     virtual bool CreateRenderFrameForRenderManager(
         RenderFrameHost* render_frame_host,
         int proxy_routing_id,
-        int opener_routing_id,
+        const base::Optional<base::UnguessableToken>& opener_frame_token,
         int parent_routing_id,
         int previous_sibling_routing_id) = 0;
     virtual void BeforeUnloadFiredFromRenderManager(
@@ -259,12 +258,12 @@ class CONTENT_EXPORT RenderFrameHostManager
                         const blink::FramePolicy& frame_policy);
 
   // Called when this frame's opener is changed to the frame specified by
-  // |opener_routing_id| in |source_site_instance|'s process.  This change
+  // |opener_frame_token| in |source_site_instance|'s process.  This change
   // could come from either the current RenderFrameHost or one of the
   // proxies (e.g., window.open that targets a RemoteFrame by name).  The
   // updated opener will be forwarded to any other RenderFrameProxies and
   // RenderFrames for this FrameTreeNode.
-  void DidChangeOpener(int opener_routing_id,
+  void DidChangeOpener(const base::UnguessableToken& opener_frame_token,
                        SiteInstance* source_site_instance);
 
   // Creates and initializes a RenderFrameHost.
@@ -304,6 +303,12 @@ class CONTENT_EXPORT RenderFrameHostManager
   // that has the given SiteInstance and is associated with this
   // RenderFrameHostManager. Returns MSG_ROUTING_NONE if none is found.
   int GetRoutingIdForSiteInstance(SiteInstance* site_instance);
+
+  // Returns the frame token for a RenderFrameHost or RenderFrameProxyHost
+  // that has the given SiteInstance and is associated with this
+  // RenderFrameHostManager. Returns base::nullopt if none is found.
+  base::Optional<base::UnguessableToken> GetFrameTokenForSiteInstance(
+      SiteInstance* site_instance);
 
   // Notifies the RenderFrameHostManager that a new NavigationRequest has been
   // created and set in the FrameTreeNode so that it can speculatively create a
@@ -396,12 +401,13 @@ class CONTENT_EXPORT RenderFrameHostManager
   // https://crbug.com/511474.
   void CreateProxiesForNewNamedFrame();
 
-  // Returns a routing ID for the current FrameTreeNode's opener node in the
-  // given SiteInstance.  May return a routing ID of either a RenderFrameHost
-  // (if opener's current or pending RFH has SiteInstance |instance|) or a
-  // RenderFrameProxyHost.  Returns MSG_ROUTING_NONE if there is no opener, or
-  // if the opener node doesn't have a proxy for |instance|.
-  int GetOpenerRoutingID(SiteInstance* instance);
+  // Returns a base::UnguessableToken for the current FrameTreeNode's opener
+  // node in the given SiteInstance.  May return a frame token of either a
+  // RenderFrameHost (if opener's current or pending RFH has SiteInstance
+  // |instance|) or a RenderFrameProxyHost.  Returns base::nullopt if there is
+  // no opener, or if the opener node doesn't have a proxy for |instance|.
+  base::Optional<base::UnguessableToken> GetOpenerFrameToken(
+      SiteInstance* instance);
 
   // Called on the RFHM of the inner WebContents to create a
   // RenderFrameProxyHost in its outer WebContents's SiteInstance,
@@ -482,11 +488,11 @@ class CONTENT_EXPORT RenderFrameHostManager
   scoped_refptr<SiteInstance> GetSiteInstanceForNavigationRequest(
       NavigationRequest* navigation_request);
 
-  // Helper to initialize the current RenderFrame if it's not initialized.
-  // TODO(https://crbug.com/1006814): Remove this. For now debug URLs and
+  // Helper to initialize the main RenderFrame if it's not initialized.
+  // TODO(https://crbug.com/936696): Remove this. For now debug URLs and
   // WebView JS execution are an exception to replacing all crashed frames for
   // RenderDocument. This is a no-op if the frame is already initialized.
-  bool InitializeRenderFrameForImmediateUse();
+  bool InitializeMainRenderFrameForImmediateUse();
 
   // Prepares the FrameTreeNode for attaching an inner WebContents. This step
   // may involve replacing |current_frame_host()| with a new RenderFrameHost
@@ -599,8 +605,15 @@ class CONTENT_EXPORT RenderFrameHostManager
       ui::PageTransition transition,
       bool is_failure,
       bool is_reload,
+      bool is_same_document,
       bool cross_origin_opener_policy_mismatch,
-      bool was_server_redirect);
+      bool was_server_redirect,
+      bool should_replace_current_entry);
+
+  ShouldSwapBrowsingInstance ShouldProactivelySwapBrowsingInstance(
+      const GURL& destination_url,
+      bool is_reload,
+      bool should_replace_current_entry);
 
   // Returns the SiteInstance to use for the navigation.
   scoped_refptr<SiteInstance> GetSiteInstanceForNavigation(
@@ -611,10 +624,12 @@ class CONTENT_EXPORT RenderFrameHostManager
       ui::PageTransition transition,
       bool is_failure,
       bool is_reload,
+      bool is_same_document,
       bool dest_is_restore,
       bool dest_is_view_source_mode,
       bool was_server_redirect,
-      bool cross_origin_opener_policy_mismatch);
+      bool cross_origin_opener_policy_mismatch,
+      bool should_replace_current_entry);
 
   // Returns a descriptor of the appropriate SiteInstance object for the given
   // |dest_url|, possibly reusing the current, source or destination
@@ -821,9 +836,10 @@ class CONTENT_EXPORT RenderFrameHostManager
   // Proxy hosts, indexed by site instance ID.
   RenderFrameProxyHostMap proxy_hosts_;
 
-  // A list of RenderFrameHosts waiting to shut down after swapping out.
-  using RFHPendingDeleteList = std::list<std::unique_ptr<RenderFrameHostImpl>>;
-  RFHPendingDeleteList pending_delete_hosts_;
+  // A set of RenderFrameHosts waiting to shut down after swapping out.
+  using RFHPendingDeleteSet =
+      std::set<std::unique_ptr<RenderFrameHostImpl>, base::UniquePtrComparator>;
+  RFHPendingDeleteSet pending_delete_hosts_;
 
   // Stores a speculative RenderFrameHost which is created early in a navigation
   // so a renderer process can be started in parallel, if needed.

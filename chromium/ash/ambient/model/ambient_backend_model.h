@@ -5,8 +5,10 @@
 #ifndef ASH_AMBIENT_MODEL_AMBIENT_BACKEND_MODEL_H_
 #define ASH_AMBIENT_MODEL_AMBIENT_BACKEND_MODEL_H_
 
+#include <vector>
+
 #include "ash/ash_export.h"
-#include "base/containers/circular_deque.h"
+#include "ash/public/cpp/ambient/ambient_backend_controller.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
@@ -29,11 +31,11 @@ class ASH_EXPORT AmbientBackendModel {
   void AddObserver(AmbientBackendModelObserver* observer);
   void RemoveObserver(AmbientBackendModelObserver* observer);
 
+  void AppendTopics(const std::vector<AmbientModeTopic>& topics);
+  const std::vector<AmbientModeTopic>& topics() const { return topics_; }
+
   // Prefetch one more image for ShowNextImage animations.
   bool ShouldFetchImmediately() const;
-
-  // Show the next downloaded image.
-  void ShowNextImage();
 
   // Add image to local storage.
   void AddNextImage(const gfx::ImageSkia& image);
@@ -46,8 +48,6 @@ class ASH_EXPORT AmbientBackendModel {
   void Clear();
 
   // Get images from local storage. Could be null image.
-  gfx::ImageSkia GetPrevImage() const;
-  gfx::ImageSkia GetCurrImage() const;
   gfx::ImageSkia GetNextImage() const;
 
   // Updates the weather information and notifies observers if the icon image is
@@ -64,19 +64,18 @@ class ASH_EXPORT AmbientBackendModel {
   // Returns the cached temperature value in Fahrenheit.
   float temperature() const { return temperature_; }
 
-  void set_buffer_length_for_testing(int length) {
-    buffer_length_for_testing_ = length;
-  }
-
  private:
+  friend class AmbientBackendModelTest;
+
+  void NotifyTopicsChanged();
   void NotifyImagesChanged();
   void NotifyWeatherInfoUpdated();
 
-  int GetImageBufferLength() const;
+  std::vector<AmbientModeTopic> topics_;
 
-  // A local cache for downloaded images. This buffer is split into two equal
-  // length of kImageBufferLength / 2 for previous seen and next unseen images.
-  base::circular_deque<gfx::ImageSkia> images_;
+  // Local cache of downloaded images for photo transition animation.
+  gfx::ImageSkia current_image_;
+  gfx::ImageSkia next_image_;
 
   // The index of currently shown image.
   int current_image_index_ = 0;

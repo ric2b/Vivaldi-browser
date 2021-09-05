@@ -31,6 +31,7 @@ The Port classes encapsulate Port-specific (platform-specific) behavior
 in the web test infrastructure.
 """
 
+import time
 import collections
 import itertools
 import json
@@ -85,8 +86,11 @@ FONT_FILES = [
     [[CONTENT_SHELL_FONTS_DIR], 'Lohit-Gurmukhi.ttf', None],
     [[CONTENT_SHELL_FONTS_DIR], 'Lohit-Tamil.ttf', None],
     [[CONTENT_SHELL_FONTS_DIR], 'MuktiNarrow.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'NotoColorEmoji.ttf', None],
     [[CONTENT_SHELL_FONTS_DIR], 'NotoSansCJKjp-Regular.otf', None],
     [[CONTENT_SHELL_FONTS_DIR], 'NotoSansKhmer-Regular.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'NotoSansSymbols2-Regular.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'NotoSansTibetan-Regular.ttf', None],
     [[CONTENT_SHELL_FONTS_DIR], 'Tinos-Bold.ttf', None],
     [[CONTENT_SHELL_FONTS_DIR], 'Tinos-BoldItalic.ttf', None],
     [[CONTENT_SHELL_FONTS_DIR], 'Tinos-Italic.ttf', None],
@@ -146,12 +150,9 @@ class Port(object):
     )
 
     CONFIGURATION_SPECIFIER_MACROS = {
-        # NOTE: We don't support specifiers for mac10.15 because
-        # we don't have separate baselines for it (it shares the mac10.14
-        # results in the platform/mac directory). This list will need to be
-        # updated if/when we actually have separate baselines.
         'mac':
-        ['retina', 'mac10.10', 'mac10.11', 'mac10.12', 'mac10.13', 'mac10.14'],
+        ['retina', 'mac10.10', 'mac10.11', 'mac10.12', 'mac10.13', 'mac10.14',
+         'mac10.15'],
         'win': ['win7', 'win10'],
         'linux': ['trusty'],
         'fuschia': ['fuchsia'],
@@ -376,19 +377,36 @@ class Port(object):
     def default_smoke_test_only(self):
         return False
 
-    def default_timeout_ms(self):
-        timeout_ms = 6 * 1000
+    def _default_timeout_ms(self):
+        return 6000
+
+    def timeout_ms(self):
+        timeout_ms = self._default_timeout_ms()
         if self.get_option('configuration') == 'Debug':
-            # Debug is usually 2x-3x slower than Release.
-            return 3 * timeout_ms
+            # Debug is about 5x slower than Release.
+            return 5 * timeout_ms
+        if self._build_has_dcheck_always_on():
+            # Release with DCHECK is also slower than pure Release.
+            return 2 * timeout_ms
         return timeout_ms
+
+    @memoized
+    def _build_has_dcheck_always_on(self):
+        args_gn_file = self._build_path('args.gn')
+        if not self._filesystem.exists(args_gn_file):
+            _log.error('Unable to find %s', args_gn_file)
+            return False
+        contents = self._filesystem.read_text_file(args_gn_file)
+        return bool(
+            re.search(r'^\s*dcheck_always_on\s*=\s*true\s*(#.*)?$', contents,
+                      re.MULTILINE))
 
     def driver_stop_timeout(self):
         """Returns the amount of time in seconds to wait before killing the process in driver.stop()."""
         # We want to wait for at least 3 seconds, but if we are really slow, we
         # want to be slow on cleanup as well (for things like ASAN, Valgrind, etc.)
         return (3.0 * float(self.get_option('time_out_ms', '0')) /
-                self.default_timeout_ms())
+                self._default_timeout_ms())
 
     def default_batch_size(self):
         """Returns the default batch size to use for this port."""
@@ -843,7 +861,7 @@ class Port(object):
             reftest_list.append((expectation, ref_absolute_path))
         return reftest_list
 
-    def tests(self, paths):
+    def tests(self, paths=None):
         """Returns all tests or tests matching supplied paths.
 
         Args:
@@ -966,6 +984,14 @@ class Port(object):
         return self.wpt_manifest(wpt_path).is_crash_test(path_in_wpt)
 
     def is_slow_wpt_test(self, test_file):
+        # When DCHECK is enabled, idlharness tests run 5-6x slower due to the
+        # amount of JavaScript they use (most web_tests run very little JS).
+        # This causes flaky timeouts for a lot of them, as a 0.5-1s test becomes
+        # close to the default 6s timeout.
+        if (self.is_wpt_idlharness_test(test_file)
+                and self._build_has_dcheck_always_on()):
+            return True
+
         match = self.WPT_REGEX.match(test_file)
         if not match:
             return False
@@ -1198,7 +1224,20 @@ class Port(object):
 
     @memoized
     def args_for_test(self, test_name):
-        return self._lookup_virtual_test_args(test_name)
+        args = self._lookup_virtual_test_args(test_name)
+        tracing_categories = self.get_option('enable_tracing')
+        if tracing_categories:
+            args.append('--trace-startup=' + tracing_categories)
+            # Do not finish the trace until the test is finished.
+            args.append('--trace-startup-duration=0')
+            # Append the current time to the output file name to ensure that
+            # the subsequent repetitions of the test do not overwrite older
+            # trace files.
+            current_time = time.strftime("%Y-%m-%d-%H-%M-%S")
+            file_name = 'trace_layout_test_' + test_name.replace(
+                '/', '_').replace('.', '_') + '_' + current_time + '.json'
+            args.append('--trace-startup-file=' + file_name)
+        return args
 
     @memoized
     def name_for_test(self, test_name):

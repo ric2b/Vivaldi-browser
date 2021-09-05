@@ -7,9 +7,9 @@
 #include <algorithm>
 
 #include "base/files/file_util.h"
-#include "base/logging.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "gn/file_writer.h"
 #include "gn/location.h"
 #include "gn/settings.h"
 #include "gn/source_dir.h"
@@ -415,7 +415,7 @@ bool MakeAbsolutePathRelativeIfPossible(const std::string_view& source_root,
   // part after it.
 
   if (!IsSlash(path[after_common_index])) {
-    // path is ${source-root}SUFIX/...
+    // path is ${source-root}SUFFIX/...
     return false;
   }
   // A source-root relative path, The input may have an unknown number of
@@ -440,7 +440,7 @@ bool MakeAbsolutePathRelativeIfPossible(const std::string_view& source_root,
       *dest = "//";
       return true;
     } else if (!IsSlash(path[source_root_len])) {
-      // path is ${source-root}SUFIX/...
+      // path is ${source-root}SUFFIX/...
       return false;
     }
     // A source-root relative path, The input may have an unknown number of
@@ -671,14 +671,16 @@ std::string MakeRelativePath(const std::string& input,
   }
 #endif
 
+  DCHECK(EndsWithSlash(dest));
   std::string ret;
 
   // Skip the common prefixes of the source and dest as long as they end in
-  // a [back]slash.
+  // a [back]slash or end the string. dest always ends with a (back)slash in
+  // this function, so checking dest for just that is sufficient.
   size_t common_prefix_len = 0;
   size_t max_common_length = std::min(input.size(), dest.size());
-  for (size_t i = common_prefix_len; i < max_common_length; i++) {
-    if (IsSlash(input[i]) && IsSlash(dest[i]))
+  for (size_t i = common_prefix_len; i <= max_common_length; i++) {
+    if ((IsSlash(input[i]) || input[i] == '\0') && IsSlash(dest[i]))
       common_prefix_len = i + 1;
     else if (input[i] != dest[i])
       break;
@@ -691,7 +693,10 @@ std::string MakeRelativePath(const std::string& input,
   }
 
   // Append any remaining unique input.
-  ret.append(&input[common_prefix_len], input.size() - common_prefix_len);
+  if (common_prefix_len <= input.size())
+    ret.append(&input[common_prefix_len], input.size() - common_prefix_len);
+  else if (input.back() != '/' && !ret.empty())
+    ret.pop_back();
 
   // If the result is still empty, the paths are the same.
   if (ret.empty())
@@ -746,7 +751,7 @@ std::string RebasePath(const std::string& ainput,
     }
     ret = MakeRelativePath(input_full, dest_full);
     if (remove_slash && ret.size() > 1)
-      ret.resize(ret.size() - 1);
+      ret.pop_back();
     return ret;
   }
 
@@ -1008,44 +1013,10 @@ bool WriteFile(const base::FilePath& file_path,
     return false;
   }
 
-  int size = static_cast<int>(data.size());
-  bool write_success = false;
-
-#if defined(OS_WIN)
-  // On Windows, provide a custom implementation of base::WriteFile. Sometimes
-  // the base version fails, especially on the bots. The guess is that Windows
-  // Defender or other antivirus programs still have the file open (after
-  // checking for the read) when the write happens immediately after. This
-  // version opens with FILE_SHARE_READ (normally not what you want when
-  // replacing the entire contents of the file) which lets us continue even if
-  // another program has the file open for reading. See http://crbug.com/468437
-  base::win::ScopedHandle file(::CreateFile(
-      reinterpret_cast<LPCWSTR>(file_path.value().c_str()), GENERIC_WRITE,
-      FILE_SHARE_READ, NULL, CREATE_ALWAYS, 0, NULL));
-  if (file.IsValid()) {
-    DWORD written;
-    BOOL result = ::WriteFile(file.Get(), data.c_str(), size, &written, NULL);
-    if (result) {
-      if (static_cast<int>(written) == size) {
-        write_success = true;
-      } else {
-        // Didn't write all the bytes.
-        LOG(ERROR) << "wrote" << written << " bytes to "
-                   << base::UTF16ToUTF8(file_path.value()) << " expected "
-                   << size;
-      }
-    } else {
-      // WriteFile failed.
-      PLOG(ERROR) << "writing file " << base::UTF16ToUTF8(file_path.value())
-                  << " failed";
-    }
-  } else {
-    PLOG(ERROR) << "CreateFile failed for path "
-                << base::UTF16ToUTF8(file_path.value());
-  }
-#else
-  write_success = base::WriteFile(file_path, data.c_str(), size) == size;
-#endif
+  FileWriter writer;
+  writer.Create(file_path);
+  writer.Write(data);
+  bool write_success = writer.Close();
 
   if (!write_success && err) {
     *err = Err(Location(), "Unable to write file.",

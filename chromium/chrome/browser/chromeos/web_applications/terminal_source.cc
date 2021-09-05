@@ -21,6 +21,7 @@
 #include "components/prefs/pref_service.h"
 #include "net/base/escape.h"
 #include "net/base/mime_util.h"
+#include "services/network/public/mojom/content_security_policy.mojom.h"
 #include "third_party/zlib/google/compression_utils.h"
 #include "ui/webui/webui_allowlist.h"
 
@@ -100,6 +101,8 @@ TerminalSource::TerminalSource(Profile* profile,
       terminal_origin, ContentSettingsType::NOTIFICATIONS);
   webui_allowlist->RegisterAutoGrantedPermission(
       terminal_origin, ContentSettingsType::CLIPBOARD_READ_WRITE);
+  webui_allowlist->RegisterAutoGrantedPermission(terminal_origin,
+                                                 ContentSettingsType::COOKIES);
 }
 
 TerminalSource::~TerminalSource() = default;
@@ -149,4 +152,18 @@ bool TerminalSource::ShouldServeMimeTypeAsContentTypeHeader() {
 
 const ui::TemplateReplacements* TerminalSource::GetReplacements() {
   return &replacements_;
+}
+
+std::string TerminalSource::GetContentSecurityPolicy(
+    network::mojom::CSPDirectiveName directive) {
+  switch (directive) {
+    case network::mojom::CSPDirectiveName::ImgSrc:
+      return "img-src * data: blob:;";
+    case network::mojom::CSPDirectiveName::MediaSrc:
+      return "media-src data:;";
+    case network::mojom::CSPDirectiveName::StyleSrc:
+      return "style-src * 'unsafe-inline'; font-src *;";
+    default:
+      return content::URLDataSource::GetContentSecurityPolicy(directive);
+  }
 }

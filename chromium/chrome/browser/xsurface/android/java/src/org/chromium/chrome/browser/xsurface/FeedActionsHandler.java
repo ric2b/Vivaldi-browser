@@ -24,8 +24,9 @@ public interface FeedActionsHandler {
     /**
      * Requests to dismiss a card. A change ID will be returned and it can be used to commit or
      * discard the change.
+     * @param data A serialized feedpacking.DismissData message.
      */
-    default int requestDismissal() {
+    default int requestDismissal(byte[] data) {
         return 0;
     }
 
@@ -38,4 +39,43 @@ public interface FeedActionsHandler {
      * Discards a previous requested dismissal denoted by change ID.
      */
     default void discardDismissal(int changeId) {}
+
+    /**
+     * Interface for handling snackbar exit conditions.
+     */
+    public interface SnackbarController {
+        /**
+         * Called when the snackbar's action button is tapped.
+         */
+        default void onAction() {}
+        /**
+         * Called when the snackbar is dismissed without the button being tapped (usually when it
+         * times out).
+         */
+        default void onDismissNoAction() {}
+    }
+
+    /**
+     * Snackbar dismissal timeout.
+     */
+    public enum SnackbarDuration {
+        /**
+         * SHORT should be used with simple one-line snackbars.
+         */
+        SHORT,
+        /**
+         * LONG should be used with multi-line snackbars that take longer to read.
+         */
+        LONG
+    }
+
+    /**
+     * Show a snackbar.
+     * @param text Text to display.
+     * @param actionLabel Text for the button (e.g. "Undo").
+     * @param duration Whether to remove the snackbar after a short or long delay.
+     * @param controller Handlers for snackbar actions.
+     */
+    default void showSnackbar(String text, String actionLabel, SnackbarDuration duration,
+            SnackbarController controller) {}
 }

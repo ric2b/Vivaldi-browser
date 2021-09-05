@@ -54,12 +54,12 @@
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/common/input/web_keyboard_event.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
+#include "third_party/blink/public/common/page/web_drag_operation.h"
 #include "third_party/blink/public/mojom/frame/frame_owner_element_type.mojom-blink.h"
 #include "third_party/blink/public/mojom/frame/tree_scope_type.mojom-blink.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom-shared.h"
 #include "third_party/blink/public/platform/web_drag_data.h"
-#include "third_party/blink/public/platform/web_drag_operation.h"
 #include "third_party/blink/public/platform/web_size.h"
 #include "third_party/blink/public/platform/web_url_loader_mock_factory.h"
 #include "third_party/blink/public/public_buildflags.h"
@@ -211,40 +211,6 @@ class AutoResizeWebViewClient : public frame_test_helpers::TestWebViewClient {
 
  private:
   TestData test_data_;
-};
-
-class TapHandlingWebWidgetClient
-    : public frame_test_helpers::TestWebWidgetClient {
- public:
-  // WebWidgetClient overrides.
-  void DidHandleGestureEvent(const WebGestureEvent& event,
-                             bool event_cancelled) override {
-    if (event.GetType() == WebInputEvent::Type::kGestureTap) {
-      tap_x_ = event.PositionInWidget().x();
-      tap_y_ = event.PositionInWidget().y();
-    } else if (event.GetType() == WebInputEvent::Type::kGestureLongPress) {
-      longpress_x_ = event.PositionInWidget().x();
-      longpress_y_ = event.PositionInWidget().y();
-    }
-  }
-
-  // Local methods
-  void Reset() {
-    tap_x_ = -1;
-    tap_y_ = -1;
-    longpress_x_ = -1;
-    longpress_y_ = -1;
-  }
-  int TapX() { return tap_x_; }
-  int TapY() { return tap_y_; }
-  int LongpressX() { return longpress_x_; }
-  int LongpressY() { return longpress_y_; }
-
- private:
-  int tap_x_;
-  int tap_y_;
-  int longpress_x_;
-  int longpress_y_;
 };
 
 class WebViewTest : public testing::Test {
@@ -622,6 +588,19 @@ TEST_F(WebViewTest, SetBaseBackgroundColorWithColorScheme) {
   web_view->SetBaseBackgroundColor(SK_ColorTRANSPARENT);
   EXPECT_EQ(Color::kTransparent, frame_view->BaseBackgroundColor());
   web_view->SetBaseBackgroundColor(SK_ColorBLUE);
+  EXPECT_EQ(Color::kBlack, frame_view->BaseBackgroundColor());
+
+  color_scheme_helper.SetForcedColors(*(web_view->GetPage()),
+                                      ForcedColors::kActive);
+  UpdateAllLifecyclePhases();
+
+  Color system_background_color = LayoutTheme::GetTheme().SystemColor(
+      CSSValueID::kCanvas, WebColorScheme::kLight);
+  EXPECT_EQ(system_background_color, frame_view->BaseBackgroundColor());
+
+  color_scheme_helper.SetForcedColors(*(web_view->GetPage()),
+                                      ForcedColors::kNone);
+  UpdateAllLifecyclePhases();
   EXPECT_EQ(Color::kBlack, frame_view->BaseBackgroundColor());
 
   color_scheme_helper.SetPreferredColorScheme(PreferredColorScheme::kLight);
@@ -1186,7 +1165,7 @@ TEST_F(WebViewTest, FinishComposingTextDoesNotAssert) {
 
   // The test requires non-empty composition.
   std::string composition_text("hello");
-  WebVector<WebImeTextSpan> empty_ime_text_spans;
+  WebVector<ui::ImeTextSpan> empty_ime_text_spans;
   active_input_method_controller->SetComposition(
       WebString::FromUTF8(composition_text.c_str()), empty_ime_text_spans,
       WebRange(), 5, 5);
@@ -1243,7 +1222,7 @@ TEST_F(WebViewTest, FinishComposingTextCursorPositionChange) {
       web_view->MainFrameImpl()
           ->FrameWidget()
           ->GetActiveWebInputMethodController();
-  WebVector<WebImeTextSpan> empty_ime_text_spans;
+  WebVector<ui::ImeTextSpan> empty_ime_text_spans;
   active_input_method_controller->SetComposition(
       WebString::FromUTF8(composition_text.c_str()), empty_ime_text_spans,
       WebRange(), 3, 3);
@@ -1292,7 +1271,7 @@ TEST_F(WebViewTest, SetCompositionForNewCaretPositions) {
           ->FrameWidget()
           ->GetActiveWebInputMethodController();
 
-  WebVector<WebImeTextSpan> empty_ime_text_spans;
+  WebVector<ui::ImeTextSpan> empty_ime_text_spans;
 
   active_input_method_controller->CommitText("hello", empty_ime_text_spans,
                                              WebRange(), 0);
@@ -1408,7 +1387,7 @@ TEST_F(WebViewTest, SetCompositionWithEmptyText) {
           ->FrameWidget()
           ->GetActiveWebInputMethodController();
 
-  WebVector<WebImeTextSpan> empty_ime_text_spans;
+  WebVector<ui::ImeTextSpan> empty_ime_text_spans;
 
   active_input_method_controller->CommitText("hello", empty_ime_text_spans,
                                              WebRange(), 0);
@@ -1449,7 +1428,7 @@ TEST_F(WebViewTest, CommitTextForNewCaretPositions) {
           ->FrameWidget()
           ->GetActiveWebInputMethodController();
 
-  WebVector<WebImeTextSpan> empty_ime_text_spans;
+  WebVector<ui::ImeTextSpan> empty_ime_text_spans;
 
   // Caret is on the left of composing text.
   active_input_method_controller->CommitText("ab", empty_ime_text_spans,
@@ -1522,7 +1501,7 @@ TEST_F(WebViewTest, CommitTextWhileComposing) {
           ->FrameWidget()
           ->GetActiveWebInputMethodController();
 
-  WebVector<WebImeTextSpan> empty_ime_text_spans;
+  WebVector<ui::ImeTextSpan> empty_ime_text_spans;
   active_input_method_controller->SetComposition(
       WebString::FromUTF8("abc"), empty_ime_text_spans, WebRange(), 0, 0);
   WebTextInputInfo info = active_input_method_controller->TextInputInfo();
@@ -1623,7 +1602,7 @@ TEST_F(WebViewTest, InsertNewLinePlacementAfterFinishComposingText) {
       base_url_ + "text_area_populated.html");
   web_view->MainFrameImpl()->GetFrame()->SetInitialFocus(false);
 
-  WebVector<WebImeTextSpan> empty_ime_text_spans;
+  WebVector<ui::ImeTextSpan> empty_ime_text_spans;
 
   WebLocalFrameImpl* frame = web_view->MainFrameImpl();
   WebInputMethodController* active_input_method_controller =
@@ -1725,11 +1704,11 @@ TEST_F(WebViewTest, SetCompositionFromExistingText) {
   WebViewImpl* web_view = web_view_helper_.InitializeAndLoad(
       base_url_ + "input_field_populated.html");
   web_view->MainFrameImpl()->GetFrame()->SetInitialFocus(false);
-  WebVector<WebImeTextSpan> ime_text_spans(static_cast<size_t>(1));
+  WebVector<ui::ImeTextSpan> ime_text_spans(static_cast<size_t>(1));
   ime_text_spans[0] =
-      WebImeTextSpan(WebImeTextSpan::Type::kComposition, 0, 4,
-                     ui::mojom::ImeTextSpanThickness::kThin,
-                     ui::mojom::ImeTextSpanUnderlineStyle::kSolid, 0, 0);
+      ui::ImeTextSpan(ui::ImeTextSpan::Type::kComposition, 0, 4,
+                      ui::ImeTextSpan::Thickness::kThin,
+                      ui::ImeTextSpan::UnderlineStyle::kSolid, 0, 0);
   WebLocalFrameImpl* frame = web_view->MainFrameImpl();
   WebInputMethodController* active_input_method_controller =
       frame->GetInputMethodController();
@@ -1740,7 +1719,7 @@ TEST_F(WebViewTest, SetCompositionFromExistingText) {
   EXPECT_EQ(10, info.selection_end);
   EXPECT_EQ(8, info.composition_start);
   EXPECT_EQ(12, info.composition_end);
-  WebVector<WebImeTextSpan> empty_ime_text_spans;
+  WebVector<ui::ImeTextSpan> empty_ime_text_spans;
   frame->SetCompositionFromExistingText(0, 0, empty_ime_text_spans);
   info = active_input_method_controller->TextInputInfo();
   EXPECT_EQ(4, info.selection_start);
@@ -1754,17 +1733,17 @@ TEST_F(WebViewTest, SetCompositionFromExistingTextInTextArea) {
   WebViewImpl* web_view = web_view_helper_.InitializeAndLoad(
       base_url_ + "text_area_populated.html");
   web_view->MainFrameImpl()->GetFrame()->SetInitialFocus(false);
-  WebVector<WebImeTextSpan> ime_text_spans(static_cast<size_t>(1));
+  WebVector<ui::ImeTextSpan> ime_text_spans(static_cast<size_t>(1));
   ime_text_spans[0] =
-      WebImeTextSpan(WebImeTextSpan::Type::kComposition, 0, 4,
-                     ui::mojom::ImeTextSpanThickness::kThin,
-                     ui::mojom::ImeTextSpanUnderlineStyle::kSolid, 0, 0);
+      ui::ImeTextSpan(ui::ImeTextSpan::Type::kComposition, 0, 4,
+                      ui::ImeTextSpan::Thickness::kThin,
+                      ui::ImeTextSpan::UnderlineStyle::kSolid, 0, 0);
   WebLocalFrameImpl* frame = web_view->MainFrameImpl();
   WebInputMethodController* active_input_method_controller =
       frame->FrameWidget()->GetActiveWebInputMethodController();
   frame->SetEditableSelectionOffsets(27, 27);
   std::string new_line_text("\n");
-  WebVector<WebImeTextSpan> empty_ime_text_spans;
+  WebVector<ui::ImeTextSpan> empty_ime_text_spans;
   active_input_method_controller->CommitText(
       WebString::FromUTF8(new_line_text.c_str()), empty_ime_text_spans,
       WebRange(), 0);
@@ -1797,11 +1776,11 @@ TEST_F(WebViewTest, SetCompositionFromExistingTextInRichText) {
   WebViewImpl* web_view = web_view_helper_.InitializeAndLoad(
       base_url_ + "content_editable_rich_text.html");
   web_view->MainFrameImpl()->GetFrame()->SetInitialFocus(false);
-  WebVector<WebImeTextSpan> ime_text_spans(static_cast<size_t>(1));
+  WebVector<ui::ImeTextSpan> ime_text_spans(static_cast<size_t>(1));
   ime_text_spans[0] =
-      WebImeTextSpan(WebImeTextSpan::Type::kComposition, 0, 4,
-                     ui::mojom::ImeTextSpanThickness::kThin,
-                     ui::mojom::ImeTextSpanUnderlineStyle::kSolid, 0, 0);
+      ui::ImeTextSpan(ui::ImeTextSpan::Type::kComposition, 0, 4,
+                      ui::ImeTextSpan::Thickness::kThin,
+                      ui::ImeTextSpan::UnderlineStyle::kSolid, 0, 0);
   WebLocalFrameImpl* frame = web_view->MainFrameImpl();
   frame->SetEditableSelectionOffsets(1, 1);
   WebDocument document = web_view->MainFrameImpl()->GetDocument();
@@ -1818,7 +1797,7 @@ TEST_F(WebViewTest, SetEditableSelectionOffsetsKeepsComposition) {
 
   std::string composition_text_first("hello ");
   std::string composition_text_second("world");
-  WebVector<WebImeTextSpan> empty_ime_text_spans;
+  WebVector<ui::ImeTextSpan> empty_ime_text_spans;
   WebInputMethodController* active_input_method_controller =
       web_view->MainFrameImpl()
           ->FrameWidget()
@@ -2630,8 +2609,6 @@ TEST_F(WebViewTest, PrintWithXHRInFlight) {
 
 static void DragAndDropURL(WebViewImpl* web_view, const std::string& url) {
   WebDragData drag_data;
-  drag_data.Initialize();
-
   WebDragData::Item item;
   item.storage_type = WebDragData::Item::kStorageTypeString;
   item.string_type = "text/uri-list";
@@ -2727,33 +2704,6 @@ ExternalDateTimeChooser* WebViewTest::GetExternalDateTimeChooser(
     WebViewImpl* web_view_impl) {
   return web_view_impl->GetChromeClient()
       .GetExternalDateTimeChooserForTesting();
-}
-
-TEST_F(WebViewTest, ClientTapHandling) {
-  TapHandlingWebWidgetClient client;
-  WebView* web_view = web_view_helper_.InitializeAndLoad("about:blank", nullptr,
-                                                         nullptr, &client);
-  WebGestureEvent event(WebInputEvent::Type::kGestureTap,
-                        WebInputEvent::kNoModifiers,
-                        WebInputEvent::GetStaticTimeStampForTests(),
-                        WebGestureDevice::kTouchscreen);
-  event.SetPositionInWidget(gfx::PointF(3, 8));
-  web_view->MainFrameWidget()->HandleInputEvent(
-      WebCoalescedInputEvent(event, ui::LatencyInfo()));
-  RunPendingTasks();
-  EXPECT_EQ(3, client.TapX());
-  EXPECT_EQ(8, client.TapY());
-  client.Reset();
-  event.SetType(WebInputEvent::Type::kGestureLongPress);
-  event.SetPositionInWidget(gfx::PointF(25, 7));
-  web_view->MainFrameWidget()->HandleInputEvent(
-      WebCoalescedInputEvent(event, ui::LatencyInfo()));
-  RunPendingTasks();
-  EXPECT_EQ(25, client.LongpressX());
-  EXPECT_EQ(7, client.LongpressY());
-
-  // Explicitly reset to break dependency on locally scoped client.
-  web_view_helper_.Reset();
 }
 
 TEST_F(WebViewTest, ClientTapHandlingNullWebViewClient) {
@@ -3092,7 +3042,7 @@ TEST_F(WebViewTest, FinishComposingTextDoesNotDismissHandles) {
   WebInputMethodController* active_input_method_controller =
       frame->FrameWidget()->GetActiveWebInputMethodController();
   EXPECT_TRUE(TapElementById(WebInputEvent::Type::kGestureTap, target));
-  WebVector<WebImeTextSpan> empty_ime_text_spans;
+  WebVector<ui::ImeTextSpan> empty_ime_text_spans;
   frame->SetEditableSelectionOffsets(8, 8);
   EXPECT_TRUE(active_input_method_controller->SetComposition(
       "12345", empty_ime_text_spans, WebRange(), 8, 13));
@@ -3530,7 +3480,7 @@ TEST_F(WebViewTest, LosingFocusDoesNotTriggerAutofillTextChange) {
   web_view->MainFrameImpl()->GetFrame()->SetInitialFocus(false);
 
   // Set up a composition that needs to be committed.
-  WebVector<WebImeTextSpan> empty_ime_text_spans;
+  WebVector<ui::ImeTextSpan> empty_ime_text_spans;
   frame->SetEditableSelectionOffsets(4, 10);
   frame->SetCompositionFromExistingText(8, 12, empty_ime_text_spans);
   WebTextInputInfo info = frame->GetInputMethodController()->TextInputInfo();
@@ -3574,7 +3524,7 @@ TEST_F(WebViewTest, CompositionNotCancelledByBackspace) {
   // Test both input elements.
   for (int i = 0; i < 2; ++i) {
     // Select composition and do sanity check.
-    WebVector<WebImeTextSpan> empty_ime_text_spans;
+    WebVector<ui::ImeTextSpan> empty_ime_text_spans;
     frame->SetEditableSelectionOffsets(6, 6);
     WebInputMethodController* active_input_method_controller =
         frame->FrameWidget()->GetActiveWebInputMethodController();
@@ -3628,7 +3578,7 @@ TEST_F(WebViewTest, FinishComposingTextDoesntTriggerAutofillTextChange) {
   // Set up a composition that needs to be committed.
   std::string composition_text("testingtext");
 
-  WebVector<WebImeTextSpan> empty_ime_text_spans;
+  WebVector<ui::ImeTextSpan> empty_ime_text_spans;
   active_input_method_controller->SetComposition(
       WebString::FromUTF8(composition_text.c_str()), empty_ime_text_spans,
       WebRange(), 0, composition_text.length());
@@ -3661,7 +3611,7 @@ TEST_F(WebViewTest,
   frame->SetAutofillClient(&client);
   web_view->MainFrameImpl()->GetFrame()->SetInitialFocus(false);
 
-  WebVector<WebImeTextSpan> empty_ime_text_spans;
+  WebVector<ui::ImeTextSpan> empty_ime_text_spans;
 
   client.ClearChangeCounts();
   frame->SetCompositionFromExistingText(8, 12, empty_ime_text_spans);
@@ -3697,7 +3647,7 @@ class ViewCreatingWebViewClient : public frame_test_helpers::TestWebViewClient {
   }
 
   // WebWidgetClient methods
-  void DidFocus(WebLocalFrame*) override { did_focus_called_ = true; }
+  void DidFocus() override { did_focus_called_ = true; }
 
   bool DidFocusCalled() const { return did_focus_called_; }
   WebView* CreatedWebView() const { return web_view_helper_.GetWebView(); }
@@ -4109,6 +4059,7 @@ class FakeFrameWidgetHost : public mojom::blink::FrameWidgetHost {
   void AutoscrollStart(const gfx::PointF& position) override {}
   void AutoscrollFling(const gfx::Vector2dF& position) override {}
   void AutoscrollEnd() override {}
+  void DidFirstVisuallyNonEmptyPaint() override {}
 
  private:
   mojo::AssociatedReceiver<mojom::blink::FrameWidgetHost>
@@ -4329,6 +4280,7 @@ TEST_F(WebViewTest, SetHasTouchEventHandlers) {
 
   // Free the webView before the TouchEventHandlerWebViewClient gets freed.
   web_view_helper_.Reset();
+  web_view_impl->Close();
 }
 
 // This test checks that deleting nodes which have only non-JS-registered touch
@@ -4485,7 +4437,7 @@ TEST_F(WebViewTest, CompositionIsUserGesture) {
   EXPECT_TRUE(
       frame->FrameWidget()->GetActiveWebInputMethodController()->SetComposition(
           WebString::FromUTF8(std::string("hello").c_str()),
-          WebVector<WebImeTextSpan>(), WebRange(), 3, 3));
+          WebVector<ui::ImeTextSpan>(), WebRange(), 3, 3));
   EXPECT_TRUE(frame->HasTransientUserActivation());
   EXPECT_EQ(1, client.TextChanges());
   EXPECT_TRUE(frame->HasMarkedText());
@@ -5016,7 +4968,7 @@ TEST_F(WebViewTest, PasswordFieldEditingIsUserGesture) {
   frame->SetAutofillClient(&client);
   web_view->MainFrameImpl()->GetFrame()->SetInitialFocus(false);
 
-  WebVector<WebImeTextSpan> empty_ime_text_spans;
+  WebVector<ui::ImeTextSpan> empty_ime_text_spans;
 
   EXPECT_EQ(0, client.TextChanges());
   EXPECT_TRUE(

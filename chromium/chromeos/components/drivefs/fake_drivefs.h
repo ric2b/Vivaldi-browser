@@ -102,6 +102,21 @@ class FakeDriveFs : public drivefs::mojom::DriveFs,
       const std::string& request,
       SendNativeMessageRequestCallback callback) override;
 
+  void SetStartupArguments(const std::string& arguments,
+                           SetStartupArgumentsCallback callback) override;
+
+  void GetStartupArguments(GetStartupArgumentsCallback callback) override;
+
+  void SetTracingEnabled(bool enabled) override;
+
+  void SetNetworkingEnabled(bool enabled) override;
+
+  void ForcePauseSyncing(bool enable) override;
+
+  void DumpAccountSettings() override;
+
+  void LoadAccountSettings() override;
+
   const base::FilePath mount_path_;
 
   std::map<base::FilePath, FileMetadata> metadata_;

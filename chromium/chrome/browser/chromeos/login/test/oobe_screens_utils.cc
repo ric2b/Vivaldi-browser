@@ -58,14 +58,14 @@ void WaitForNetworkSelectionScreen() {
 void TapNetworkSelectionNext() {
   test::OobeJS()
       .CreateEnabledWaiter(true /* enabled */,
-                           {"oobe-network-md", "nextButton"})
+                           {"network-selection", "nextButton"})
       ->Wait();
-  test::OobeJS().TapOnPath({"oobe-network-md", "nextButton"});
+  test::OobeJS().TapOnPath({"network-selection", "nextButton"});
 }
 
 void WaitForUpdateScreen() {
   WaitFor(UpdateView::kScreenId);
-  test::OobeJS().CreateVisibilityWaiter(true, {"update"})->Wait();
+  test::OobeJS().CreateVisibilityWaiter(true, {"oobe-update"})->Wait();
 }
 
 void ExitUpdateScreenNoUpdate() {
@@ -84,25 +84,18 @@ void WaitForFingerprintScreen() {
                "to show.";
   test::OobeJS().CreateVisibilityWaiter(true, {"fingerprint-setup"})->Wait();
   LOG(INFO) << "Waiting for fingerprint setup screen "
-               "to initializes.";
-  test::OobeJS()
-      .CreateVisibilityWaiter(true, {"fingerprint-setup-impl"})
-      ->Wait();
-  LOG(INFO) << "Waiting for fingerprint setup screen "
                "to show setupFingerprint.";
   test::OobeJS()
-      .CreateVisibilityWaiter(true,
-                              {"fingerprint-setup-impl", "setupFingerprint"})
+      .CreateVisibilityWaiter(true, {"fingerprint-setup", "setupFingerprint"})
       ->Wait();
 }
 
 void ExitFingerprintPinSetupScreen() {
-  test::OobeJS().ExpectVisiblePath({"fingerprint-setup-impl", "placeFinger"});
+  test::OobeJS().ExpectVisiblePath({"fingerprint-setup", "placeFinger"});
   // This might be the last step in flow. Synchronous execute gets stuck as
   // WebContents may be destroyed in the process. So it may never return.
   // So we use ExecuteAsync() here.
-  test::OobeJS().ExecuteAsync(
-      "$('fingerprint-setup-impl').$.setupFingerprintLater.click()");
+  test::OobeJS().ExecuteAsync("$('fingerprint-setup').$.setupLater.click()");
   LOG(INFO) << "OobeInteractiveUITest: Waiting for fingerprint setup screen "
                "to close.";
   WaitForExit(FingerprintSetupScreenView::kScreenId);

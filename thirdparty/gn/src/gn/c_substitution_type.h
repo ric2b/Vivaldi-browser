@@ -31,6 +31,7 @@ extern const Substitution CSubstitutionLdFlags;
 extern const Substitution CSubstitutionLibs;
 extern const Substitution CSubstitutionSoLibs;
 extern const Substitution CSubstitutionFrameworks;
+extern const Substitution CSubstitutionRlibs;
 
 // Valid for alink only.
 extern const Substitution CSubstitutionArFlags;

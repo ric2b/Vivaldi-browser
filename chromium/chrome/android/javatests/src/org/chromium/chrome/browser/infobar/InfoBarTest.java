@@ -6,7 +6,8 @@ package org.chromium.chrome.browser.infobar;
 
 import android.content.Context;
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.MediumTest;
+
+import androidx.test.filters.MediumTest;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -22,7 +23,6 @@ import org.chromium.base.test.util.AdvancedMockContext;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
@@ -259,7 +259,6 @@ public class InfoBarTest {
     @Test
     @MediumTest
     @Feature({"Browser"})
-    @RetryOnFailure
     public void testInfoBarForGeolocationDisappearsOnBack() throws TimeoutException {
         LocationSettingsTestUtil.setSystemLocationSettingEnabled(true);
         mActivityTestRule.loadUrl(HELLO_WORLD_URL);
@@ -288,7 +287,6 @@ public class InfoBarTest {
     @CommandLineFlags.Add("force-fieldtrials=DataCompressionProxyPromoVisibility/Enabled")
     @EnableFeatures("DataReductionProxyEnabledWithNetworkService")
     @Feature({"Browser", "Main"})
-    @RetryOnFailure
     public void testDataReductionPromoInfoBar() {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             Assert.assertFalse("Data Reduction Proxy enabled",
@@ -340,7 +338,6 @@ public class InfoBarTest {
     @MediumTest
     @CommandLineFlags.Add("force-fieldtrials=DataCompressionProxyPromoVisibility/Enabled")
     @Feature({"Browser", "Main"})
-    @RetryOnFailure
     public void testDataReductionPromoInfoBarDismissed() {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             Assert.assertFalse("Data Reduction Proxy enabled",
@@ -420,7 +417,6 @@ public class InfoBarTest {
     @MediumTest
     @CommandLineFlags.Add("force-fieldtrials=DataCompressionProxyPromoVisibility/Enabled")
     @Feature({"Browser", "Main"})
-    @RetryOnFailure
     public void testDataReductionPromoInfoBarFreOptOut() throws Throwable {
         mActivityTestRule.runOnUiThread(new Runnable() {
             @Override
@@ -463,7 +459,6 @@ public class InfoBarTest {
     @Test
     @MediumTest
     @Feature({"Browser", "Main"})
-    @RetryOnFailure
     public void testInfoBarForHungRenderer() throws TimeoutException {
         mActivityTestRule.loadUrl(HELLO_WORLD_URL);
 
@@ -493,7 +488,6 @@ public class InfoBarTest {
     @Test
     @MediumTest
     @Feature({"Browser", "Main"})
-    @RetryOnFailure
     public void testInfoBarForHungRendererCanKillRenderer() throws TimeoutException {
         mActivityTestRule.loadUrl(HELLO_WORLD_URL);
 
@@ -531,7 +525,6 @@ public class InfoBarTest {
     @Test
     @MediumTest
     @Feature({"Browser", "Main"})
-    @RetryOnFailure
     public void testInfoBarContainerSwapsWebContents() throws TimeoutException {
         // Add an infobar.
         LocationSettingsTestUtil.setSystemLocationSettingEnabled(true);

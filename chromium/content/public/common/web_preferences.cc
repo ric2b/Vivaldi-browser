@@ -102,7 +102,6 @@ WebPreferences::WebPreferences()
       accelerated_2d_canvas_enabled(false),
       antialiased_2d_canvas_disabled(false),
       antialiased_clips_2d_canvas_enabled(true),
-      accelerated_2d_canvas_msaa_sample_count(0),
       accelerated_filters_enabled(false),
       deferred_filters_enabled(false),
       container_culling_enabled(false),
@@ -127,7 +126,6 @@ WebPreferences::WebPreferences()
       primary_hover_type(ui::HOVER_TYPE_NONE),
       dont_send_key_events_to_javascript(false),
       sync_xhr_in_documents_enabled(true),
-      should_respect_image_orientation(false),
       number_of_cpu_cores(1),
 #if defined(OS_MACOSX)
       editing_behavior(EDITING_BEHAVIOR_MAC),
@@ -224,7 +222,6 @@ WebPreferences::WebPreferences()
       media_controls_enabled(true),
       do_not_update_selection_on_mutating_selection_range(false),
       autoplay_policy(AutoplayPolicy::kDocumentUserActivationRequired),
-      preferred_color_scheme(blink::PreferredColorScheme::kNoPreference),
       low_priority_iframes_threshold(net::EFFECTIVE_CONNECTION_TYPE_UNKNOWN),
       picture_in_picture_enabled(true),
       translate_service_available(false),

@@ -9,7 +9,8 @@ import static org.chromium.chrome.browser.payments.PaymentRequestTestRule.FIRST_
 import static org.chromium.chrome.browser.payments.PaymentRequestTestRule.NEXT_YEAR;
 
 import android.os.Build;
-import android.support.test.filters.MediumTest;
+
+import androidx.test.filters.MediumTest;
 
 import org.junit.Assert;
 import org.junit.ClassRule;
@@ -28,6 +29,7 @@ import org.chromium.chrome.browser.autofill.PersonalDataManager.CreditCard;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.payments.PaymentRequestTestRule.MainActivityStartCallback;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.components.payments.Event;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.modaldialog.ModalDialogProperties;
 import org.chromium.ui.test.util.DisableAnimationsTestRule;

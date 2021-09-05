@@ -43,7 +43,18 @@ enum class DelayedWarningEvent {
   // The page triggered a permission request. It was denied and the warning was
   // shown.
   kWarningShownOnPermissionRequest = 7,
-  kMaxValue = kWarningShownOnPermissionRequest,
+  // The page tried to display a JavaScript dialog (alert/confirm/prompt). It
+  // was blocked and the warning was shown.
+  kWarningShownOnJavaScriptDialog = 8,
+  // The page was denied a password save or autofill request. This doesn't show
+  // an interstitial and is recorded once per navigation.
+  kPasswordSaveOrAutofillDenied = 9,
+  // The page triggered a desktop capture request ("example.com wants to share
+  // the contents of the screen"). It was denied and the warning was shown.
+  kWarningShownOnDesktopCaptureRequest = 10,
+  // User pasted something on the page and the warning was shown.
+  kWarningShownOnPaste = 11,
+  kMaxValue = kWarningShownOnPaste,
 };
 
 // Name of the histogram.
@@ -87,9 +98,21 @@ class SafeBrowsingUserInteractionObserver
   void DidFinishNavigation(content::NavigationHandle* handle) override;
   void DidToggleFullscreenModeForTab(bool entered_fullscreen,
                                      bool will_cause_resize) override;
+  void OnPaste() override;
 
   // permissions::PermissionRequestManager::Observer methods:
   void OnBubbleAdded() override;
+
+  // Called by the JavaScript dialog manager when the current page is about to
+  // show a JavaScript dialog (alert, confirm or prompt). Shows the
+  // delayed interstitial immediately.
+  void OnJavaScriptDialog();
+  // Called when a password save or autofill request is denied to the current
+  // page. Records a metric once per navigation.
+  void OnPasswordSaveOrAutofillDenied();
+  // Called by the desktop capture access handler when the current page requests
+  // a desktop capture. Shows the delayed interstitial immediately.
+  void OnDesktopCaptureRequest();
 
  private:
   bool HandleKeyPress(const content::NativeWebKeyboardEvent& event);
@@ -107,6 +130,7 @@ class SafeBrowsingUserInteractionObserver
   scoped_refptr<SafeBrowsingUIManager> ui_manager_;
   bool interstitial_shown_ = false;
   bool mouse_click_with_no_warning_recorded_ = false;
+  bool password_save_or_autofill_denied_metric_recorded_ = false;
   // This will be set to true if the initial navigation that caused this
   // observer to be created has finished. We need this extra bit because
   // observers can only detect download navigations in DidFinishNavigation.

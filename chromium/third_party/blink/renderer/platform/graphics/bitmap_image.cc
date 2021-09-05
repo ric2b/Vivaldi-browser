@@ -34,7 +34,6 @@
 #include "base/metrics/histogram_macros.h"
 #include "third_party/blink/renderer/platform/geometry/float_rect.h"
 #include "third_party/blink/renderer/platform/graphics/bitmap_image_metrics.h"
-#include "third_party/blink/renderer/platform/graphics/dark_mode_image_classifier.h"
 #include "third_party/blink/renderer/platform/graphics/deferred_image_decoder.h"
 #include "third_party/blink/renderer/platform/graphics/image_observer.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_canvas.h"
@@ -50,12 +49,6 @@
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
 namespace blink {
-namespace {
-
-const int kMinImageSizeForClassification1D = 24;
-const int kMaxImageSizeForClassification1D = 100;
-
-}  // namespace
 
 int GetRepetitionCountWithPolicyOverride(int actual_count,
                                          ImageAnimationPolicy policy) {
@@ -192,7 +185,7 @@ Image::SizeAvailability BitmapImage::SetData(scoped_refptr<SharedBuffer> data,
     return DataChanged(all_data_received);
   }
 
-  bool has_enough_data = ImageDecoder::HasSufficientDataToSniffImageType(*data);
+  bool has_enough_data = ImageDecoder::HasSufficientDataToSniffMimeType(*data);
   decoder_ = DeferredImageDecoder::Create(std::move(data), all_data_received,
                                           ImageDecoder::kAlphaPremultiplied,
                                           ColorBehavior::Tag());
@@ -444,23 +437,6 @@ void BitmapImage::SetAnimationPolicy(ImageAnimationPolicy policy) {
 
   animation_policy_ = policy;
   ResetAnimation();
-}
-
-DarkModeClassification BitmapImage::CheckTypeSpecificConditionsForDarkMode(
-    const FloatRect& dest_rect,
-    DarkModeImageClassifier* classifier) {
-  if (dest_rect.Width() < kMinImageSizeForClassification1D ||
-      dest_rect.Height() < kMinImageSizeForClassification1D)
-    return DarkModeClassification::kApplyFilter;
-
-  if (dest_rect.Width() > kMaxImageSizeForClassification1D ||
-      dest_rect.Height() > kMaxImageSizeForClassification1D) {
-    return DarkModeClassification::kDoNotApplyFilter;
-  }
-
-  classifier->SetImageType(DarkModeImageClassifier::ImageType::kBitmap);
-
-  return DarkModeClassification::kNotClassified;
 }
 
 }  // namespace blink

@@ -145,14 +145,6 @@ enum DownloadCountTypes {
   DOWNLOAD_COUNT_TYPES_LAST_ENTRY
 };
 
-enum DownloadDiscardReason {
-  // The download is being discarded due to a user action.
-  DOWNLOAD_DISCARD_DUE_TO_USER_ACTION,
-
-  // The download is being discarded due to the browser being shut down.
-  DOWNLOAD_DISCARD_DUE_TO_SHUTDOWN
-};
-
 // Enum for in-progress download DB, used in histogram
 // "Download.InProgressDB.Counts".
 enum InProgressDBCountTypes {
@@ -241,6 +233,18 @@ enum class ResumptionRestartCountTypes {
   kMissingStrongValidatorsCount = 2,
 
   kMaxValue = kMissingStrongValidatorsCount
+};
+
+// Events for user scheduled downloads. Used in histograms, don't reuse or
+// remove items. Keep in sync with DownloadLaterEvent in enums.xml.
+enum class DownloadLaterEvent {
+  // Schedule is added during download target determination process.
+  kScheduleAdded = 0,
+  // Scheduled is changed from the UI after download is scheduled.
+  kScheduleChanged = 1,
+  // Scheduled is removed during resumption.
+  kScheduleRemoved = 2,
+  kMaxValue = kScheduleRemoved
 };
 
 // Increment one of the above counts.
@@ -457,6 +461,10 @@ COMPONENTS_DOWNLOAD_EXPORT void RecordDownloadManagerMemoryUsage(
 
 COMPONENTS_DOWNLOAD_EXPORT void RecordParallelRequestCreationFailure(
     DownloadInterruptReason reason);
+
+// Record download later events.
+COMPONENTS_DOWNLOAD_EXPORT void RecordDownloadLaterEvent(
+    DownloadLaterEvent event);
 
 #if defined(OS_ANDROID)
 enum class BackgroudTargetDeterminationResultTypes {

@@ -1,11 +1,15 @@
+# Copyright 2020 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
 load('//lib/builders.star', 'cpu', 'goma', 'os', 'xcode_cache')
 load('//lib/try.star', 'try_')
 load('//project.star', 'settings')
 
 # Execute the versioned files to define all of the per-branch entities
 # (bucket, builders, console, cq_group, etc.)
-exec('../versioned/m81/buckets/try.star')
 exec('../versioned/m83/buckets/try.star')
+exec('../versioned/m84/buckets/try.star')
 
 
 try_.set_defaults(
@@ -20,6 +24,10 @@ try_.set_defaults(
 # Builders are sorted first lexicographically by the function used to define
 # them, then lexicographically by their name
 
+try_.blink_builder(
+    name = 'linux-blink-optional-highdpi-rel',
+    goma_backend = goma.backend.RBE_PROD,
+)
 
 try_.blink_builder(
     name = 'win10-blink-rel',
@@ -170,13 +178,6 @@ try_.chromium_android_builder(
 )
 
 try_.chromium_android_builder(
-    name = 'android_cronet_tester',
-    properties = {
-        'buildername': 'android-cronet-arm-dbg',
-    },
-)
-
-try_.chromium_android_builder(
     name = 'android_mojo',
 )
 
@@ -273,6 +274,27 @@ try_.chromium_chromiumos_builder(
 )
 
 try_.chromium_chromiumos_builder(
+    name = 'chromeos-kevin-compile-rel',
+    tryjob = try_.job(
+        location_regexp = [
+            '.+/[+]/chromeos/CHROMEOS_LKGM',
+        ],
+    ),
+    main_list_view = 'try'
+)
+
+try_.chromium_chromiumos_builder(
+    name = 'chromeos-kevin-rel',
+    tryjob = try_.job(
+        location_regexp = [
+            '.+/[+]/build/chromeos/.+',
+            '.+/[+]/build/config/chromeos/.*',
+        ],
+    ),
+    main_list_view = 'try',
+)
+
+try_.chromium_chromiumos_builder(
     name = 'linux-chromeos-dbg',
 )
 
@@ -288,6 +310,16 @@ try_.chromium_dawn_builder(
 
 try_.chromium_dawn_builder(
     name = 'win-dawn-rel',
+    os = os.WINDOWS_ANY,
+)
+
+try_.chromium_dawn_builder(
+    name = 'dawn-try-win10-x86-rel',
+    os = os.WINDOWS_ANY,
+)
+
+try_.chromium_dawn_builder(
+    name = 'dawn-try-win10-x64-asan-rel',
     os = os.WINDOWS_ANY,
 )
 
@@ -472,6 +504,10 @@ try_.chromium_linux_builder(
 )
 
 try_.chromium_linux_builder(
+    name = 'network_service_linux',
+)
+
+try_.chromium_linux_builder(
     name = 'tricium-metrics-analysis',
     executable = 'recipe:tricium_metrics',
 )
@@ -558,11 +594,13 @@ try_.chromium_mac_ios_builder(
     name = 'ios-simulator-code-coverage',
     executable = 'recipe:chromium_trybot',
     use_clang_coverage = True,
+    coverage_exclude_sources = 'ios_test_files_and_test_utils',
+    coverage_test_types = ['unit'],
+    os = os.MAC_10_15,
     properties = {
-        'coverage_exclude_sources': 'ios_test_files_and_test_utils',
-        'coverage_test_types': ['unit'],
-        'xcode_build_version': '11c29',
+        'xcode_build_version': '11e146',
     },
+    tryjob = try_.job(experiment_percentage = 3)
 )
 
 try_.chromium_mac_ios_builder(
@@ -586,15 +624,40 @@ try_.chromium_mac_ios_builder(
 try_.chromium_mac_ios_builder(
     name = 'ios13-beta-simulator',
     executable = 'recipe:chromium_trybot',
+    caches = [xcode_cache.x11e608c],
+    os = os.MAC_10_15,
+    properties = {
+        'xcode_build_version': '11e608c'
+    }
 )
 
 try_.chromium_mac_ios_builder(
     name = 'ios13-sdk-simulator',
     executable = 'recipe:chromium_trybot',
+    caches = [xcode_cache.x11n700h],
+    os = os.MAC_10_15,
+    properties = {
+        'xcode_build_version': '11n700h'
+    }
+)
+
+try_.chromium_mac_ios_builder(
+    name = 'ios14-beta-simulator',
+    executable = 'recipe:chromium_trybot',
     caches = [xcode_cache.x11e146],
     os = os.MAC_10_15,
     properties = {
         'xcode_build_version': '11e146'
+    }
+)
+
+try_.chromium_mac_ios_builder(
+    name = 'ios14-sdk-simulator',
+    executable = 'recipe:chromium_trybot',
+    caches = [xcode_cache.x11n700h],
+    os = os.MAC_10_15,
+    properties = {
+        'xcode_build_version': '11n700h'
     }
 )
 
@@ -616,15 +679,6 @@ try_.chromium_win_builder(
         'pool_size': 20,
         'tests': '*',
     },
-)
-
-try_.chromium_win_builder(
-    name = 'win10_chromium_x64_coverage_rel_ng',
-    os = os.WINDOWS_10,
-    use_clang_coverage = True,
-    goma_jobs = goma.jobs.J150,
-    ssd = True,
-    tryjob = try_.job(experiment_percentage = 3),
 )
 
 try_.chromium_win_builder(
@@ -704,7 +758,15 @@ chrome_internal_verifier(
 )
 
 chrome_internal_verifier(
+    builder = 'chromeos-eve-chrome',
+)
+
+chrome_internal_verifier(
     builder = 'chromeos-eve-compile-chrome',
+)
+
+chrome_internal_verifier(
+    builder = 'chromeos-kevin-chrome',
 )
 
 chrome_internal_verifier(
@@ -728,33 +790,9 @@ chrome_internal_verifier(
 )
 
 chrome_internal_verifier(
-    builder = 'mac-chrome-beta',
-)
-
-chrome_internal_verifier(
-    builder = 'mac-chrome-stable',
-)
-
-chrome_internal_verifier(
     builder = 'win-chrome',
 )
 
 chrome_internal_verifier(
-    builder = 'win-chrome-beta',
-)
-
-chrome_internal_verifier(
-    builder = 'win-chrome-stable',
-)
-
-chrome_internal_verifier(
     builder = 'win64-chrome',
-)
-
-chrome_internal_verifier(
-    builder = 'win64-chrome-beta',
-)
-
-chrome_internal_verifier(
-    builder = 'win64-chrome-stable',
 )

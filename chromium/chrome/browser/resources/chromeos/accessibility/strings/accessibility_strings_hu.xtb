@@ -112,6 +112,7 @@
 <translation id="1771761307086386028">Görgetés jobbra</translation>
 <translation id="1781173782405573156">Átugrás gomb</translation>
 <translation id="1787176709638001873">Jelszó – szövegszerkesztés</translation>
+<translation id="180203835522132923">Keresés + O, majd W</translation>
 <translation id="1810107444790159527">Lista mező</translation>
 <translation id="1812527064848182527">fekvő</translation>
 <translation id="1829244130665387512">Keresés ezen az oldalon</translation>
@@ -256,6 +257,7 @@
 <translation id="297825089465017871">Csúsztassa két ujját balra</translation>
 <translation id="2998131015536248178">Előző karakter</translation>
 <translation id="2999559350546931576">Hangszín csökkentése</translation>
+<translation id="3009352964623081324">Keresés + O, majd S. Használja a hangok telepítéséhez, kezeléséhez és személyre szabásához.</translation>
 <translation id="3014130421870723208">@szerk 8pont</translation>
 <translation id="3030432017085518523">Menüelem választógomb</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{aposztróf}other{# aposztróf}}</translation>
@@ -454,6 +456,7 @@
 <translation id="4505167975768625962">Beszúrás</translation>
 <translation id="4511186779140817916">Hámozott mandula</translation>
 <translation id="451510441928265982">Nincs előző 2. szintű címsor</translation>
+<translation id="4515799157838123044">Háttérben lévő tartalmak árnyékolása</translation>
 <translation id="4517854969512651305">Érték növelése</translation>
 <translation id="4532633738839459153">{COUNT,plural, =1{törtvonal}other{# törtvonal}}</translation>
 <translation id="4537277403911487429">Következő hasonló elem</translation>
@@ -705,6 +708,7 @@
 <translation id="6628427060004938651">Rész</translation>
 <translation id="6637586476836377253">napló</translation>
 <translation id="6657128831881431364">Folyamatjelző</translation>
+<translation id="6660819301598582123">Egy hűtlen vejét fülöncsípő, dühös mexikói úr Wesselényinél mázol Quitóban</translation>
 <translation id="667999046851023355">Dokumentum</translation>
 <translation id="6688209025607531203">Nem modális riasztás</translation>
 <translation id="6689672606256159458">Sötét lazacrózsaszín</translation>
@@ -740,7 +744,6 @@
 <translation id="6951482098621102657">Nincs következő 5. szintű címsor</translation>
 <translation id="6955705049214951590">Szürkésrózsaszín</translation>
 <translation id="696356426651109308">Ugrás az elejére</translation>
-<translation id="699159175332639490">Keresés + O + W</translation>
 <translation id="6994042831499278539">Szószedet-hivatkozás</translation>
 <translation id="6996566555547746822">Következő legördülő lista</translation>
 <translation id="6997224546856374593">Nagy kezdőbetűk felolvasásakor:</translation>
@@ -808,6 +811,7 @@
 <translation id="743783356331413498">Példa</translation>
 <translation id="7439060726180460871">Címtár</translation>
 <translation id="744163271241493234">jelszóbevitel</translation>
+<translation id="7484805699335881122">Hangmagasság módosítása az elemtípusok, valamint az idézett, törölt, félkövér, zárójelben lévő és nagybetűs szövegek esetén.</translation>
 <translation id="7491962110804786152">tab</translation>
 <translation id="7505149250476994901">A betű előtt mondja, hogy „nagy”</translation>
 <translation id="7518543783849163354">A ChromeVox beszédének átmeneti leállításához nyomja le a Control billentyűt.</translation>

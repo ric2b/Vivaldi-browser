@@ -20,6 +20,7 @@
 #include "net/base/expiring_cache.h"
 #include "net/base/hash_value.h"
 #include "net/base/net_export.h"
+#include "net/base/network_isolation_key.h"
 #include "net/cert/signed_certificate_timestamp_and_status.h"
 #include "net/http/transport_security_state_source.h"
 #include "url/gurl.h"
@@ -31,6 +32,7 @@ enum class CTPolicyCompliance;
 }
 
 class HostPortPair;
+class NetworkIsolationKey;
 class SSLInfo;
 class X509Certificate;
 
@@ -232,8 +234,6 @@ class NET_EXPORT TransportSecurityState {
     ExpectCTState();
     ~ExpectCTState();
 
-    // The domain which matched during a search for this DomainState entry.
-    std::string domain;
     // The URI to which reports should be sent if valid CT info is not
     // provided.
     GURL report_uri;
@@ -247,6 +247,30 @@ class NET_EXPORT TransportSecurityState {
     base::Time expiry;
   };
 
+  // Unlike other data, Expect-CT information is indexed by NetworkIsolationKey
+  // in addition to domain hash, to prevent leaking user IDs across different
+  // first party contexts. Public only because ExpectCTStateIterator is public
+  // and depends on it.
+  struct ExpectCTStateIndex {
+    // Creates an ExpectCTStateIndex. Uses an empty NetworkIsolationKey instead
+    // of the passed in one, depending on |respect_network_isolation_key|.
+    // The value of features::kPartitionExpectCTStateByNetworkIsolationKey is
+    // cached on creation of the TransportSecurityState, and then passed in to
+    // this method whenever an ExpectCTStateIndex() is created, to avoid
+    // constantly querying the field trial.
+    ExpectCTStateIndex(const std::string& hashed_host,
+                       const NetworkIsolationKey& network_isolation_key,
+                       bool respect_network_isolation_key);
+
+    bool operator<(const ExpectCTStateIndex& other) const {
+      return std::tie(hashed_host, network_isolation_key) <
+             std::tie(other.hashed_host, other.network_isolation_key);
+    }
+
+    std::string hashed_host;
+    NetworkIsolationKey network_isolation_key;
+  };
+
   class NET_EXPORT ExpectCTStateIterator {
    public:
     explicit ExpectCTStateIterator(const TransportSecurityState& state);
@@ -254,12 +278,15 @@ class NET_EXPORT TransportSecurityState {
 
     bool HasNext() const { return iterator_ != end_; }
     void Advance() { ++iterator_; }
-    const std::string& hostname() const { return iterator_->first; }
+    const std::string& hostname() const { return iterator_->first.hashed_host; }
+    const NetworkIsolationKey& network_isolation_key() const {
+      return iterator_->first.network_isolation_key;
+    }
     const ExpectCTState& domain_state() const { return iterator_->second; }
 
    private:
-    std::map<std::string, ExpectCTState>::const_iterator iterator_;
-    std::map<std::string, ExpectCTState>::const_iterator end_;
+    std::map<ExpectCTStateIndex, ExpectCTState>::const_iterator iterator_;
+    std::map<ExpectCTStateIndex, ExpectCTState>::const_iterator end_;
   };
 
   // An interface for asynchronously sending HPKP violation reports.
@@ -301,7 +328,8 @@ class NET_EXPORT TransportSecurityState {
         const X509Certificate* validated_certificate_chain,
         const X509Certificate* served_certificate_chain,
         const SignedCertificateTimestampAndStatusList&
-            signed_certificate_timestamps) = 0;
+            signed_certificate_timestamps,
+        const NetworkIsolationKey& network_isolation_key) = 0;
 
    protected:
     virtual ~ExpectCTReporter() {}
@@ -383,7 +411,8 @@ class NET_EXPORT TransportSecurityState {
       const SignedCertificateTimestampAndStatusList&
           signed_certificate_timestamps,
       const ExpectCTReportStatus report_status,
-      ct::CTPolicyCompliance policy_compliance);
+      ct::CTPolicyCompliance policy_compliance,
+      const NetworkIsolationKey& network_isolation_key);
 
   // Assign a |Delegate| for persisting the transport security state. If
   // |NULL|, state will not be persisted. The caller retains
@@ -425,8 +454,10 @@ class NET_EXPORT TransportSecurityState {
   // |hashed_host|. |hashed_host| is already in the internal representation.
   // Note: This is only used for serializing/deserializing the
   // TransportSecurityState.
-  void AddOrUpdateEnabledExpectCTHosts(const std::string& hashed_host,
-                                       const ExpectCTState& state);
+  void AddOrUpdateEnabledExpectCTHosts(
+      const std::string& hashed_host,
+      const NetworkIsolationKey& network_isolation_key,
+      const ExpectCTState& state);
 
   // Deletes all dynamic data (e.g. HSTS or HPKP data) created since a given
   // time.
@@ -465,19 +496,15 @@ class NET_EXPORT TransportSecurityState {
 
   // Returns true and updates |*result| iff |host| has dynamic
   // HSTS/HPKP/Expect-CT (respectively) state. If multiple entries match |host|,
-  // the most specific match determines the return value. |*should_be_dynamic|
-  // is set to true if |host| has no dynamic HSTS state based on the current
-  // implementation but would have it based on a spec-compliant implementation.
-  // See https://crbug.com/821811. |should_be_dynamic| may be nullptr to ignore
-  // the output.
+  // the most specific match determines the return value.
   //
   // Note that these methods are not const because they opportunistically remove
   // entries that have expired.
-  bool GetDynamicSTSState(const std::string& host,
-                          STSState* result,
-                          bool* should_be_dynamic);
+  bool GetDynamicSTSState(const std::string& host, STSState* result);
   bool GetDynamicPKPState(const std::string& host, PKPState* result);
-  bool GetDynamicExpectCTState(const std::string& host, ExpectCTState* result);
+  bool GetDynamicExpectCTState(const std::string& host,
+                               const NetworkIsolationKey& network_isolation_key,
+                               ExpectCTState* result);
 
   // Processes an HSTS header value from the host, adding entries to
   // dynamic state if necessary.
@@ -505,7 +532,8 @@ class NET_EXPORT TransportSecurityState {
   void AddExpectCT(const std::string& host,
                    const base::Time& expiry,
                    bool enforce,
-                   const GURL& report_uri);
+                   const GURL& report_uri,
+                   const NetworkIsolationKey& network_isolation_key);
 
   // Enables or disables public key pinning bypass for local trust anchors.
   // Disabling the bypass for local trust anchors is highly discouraged.
@@ -527,7 +555,8 @@ class NET_EXPORT TransportSecurityState {
   // connection is not CT-compliant, then a report will be sent.
   void ProcessExpectCTHeader(const std::string& value,
                              const HostPortPair& host_port_pair,
-                             const SSLInfo& ssl_info);
+                             const SSLInfo& ssl_info,
+                             const NetworkIsolationKey& network_isolation_key);
 
   void AssertCalledOnValidThread() const {
     DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
@@ -545,6 +574,9 @@ class NET_EXPORT TransportSecurityState {
   void EnableStaticPinsForTesting() { enable_static_pins_ = true; }
   bool has_dynamic_pkp_state() const { return !enabled_pkp_hosts_.empty(); }
 
+  // The number of cached ExpectCTState entries.
+  size_t num_expect_ct_entries() const;
+
  private:
   friend class TransportSecurityStateTest;
   friend class TransportSecurityStateStaticFuzzer;
@@ -553,7 +585,7 @@ class NET_EXPORT TransportSecurityState {
 
   typedef std::map<std::string, STSState> STSStateMap;
   typedef std::map<std::string, PKPState> PKPStateMap;
-  typedef std::map<std::string, ExpectCTState> ExpectCTStateMap;
+  typedef std::map<ExpectCTStateIndex, ExpectCTState> ExpectCTStateMap;
   typedef ExpiringCache<std::string,
                         bool,
                         base::TimeTicks,
@@ -579,34 +611,26 @@ class NET_EXPORT TransportSecurityState {
   // changed.
   void DirtyNotify();
 
-  // Adds HSTS state to |host|.
+  // Adds HSTS, HPKP, and Expect-CT state for |host|. The new state supercedes
+  // any previous state for the |host|, including static entries.
+  //
+  // The new state for |host| is persisted using the Delegate (if any).
   void AddHSTSInternal(const std::string& host,
                        STSState::UpgradeMode upgrade_mode,
                        const base::Time& expiry,
                        bool include_subdomains);
-
-  // Adds HPKP state to |host|.
   void AddHPKPInternal(const std::string& host,
                        const base::Time& last_observed,
                        const base::Time& expiry,
                        bool include_subdomains,
                        const HashValueVector& hashes,
                        const GURL& report_uri);
-
-  // Adds Expect-CT state to |host|.
   void AddExpectCTInternal(const std::string& host,
                            const base::Time& last_observed,
                            const base::Time& expiry,
                            bool enforce,
-                           const GURL& report_uri);
-
-  // Enable TransportSecurity for |host|. |state| supercedes any previous
-  // state for the |host|, including static entries.
-  //
-  // The new state for |host| is persisted using the Delegate (if any).
-  void EnableSTSHost(const std::string& host, const STSState& state);
-  void EnablePKPHost(const std::string& host, const PKPState& state);
-  void EnableExpectCTHost(const std::string& host, const ExpectCTState& state);
+                           const GURL& report_uri,
+                           const NetworkIsolationKey& network_isolation_key);
 
   // Returns true if a request to |host_port_pair| with the given
   // SubjectPublicKeyInfo |hashes| satisfies the pins in |pkp_state|,
@@ -637,7 +661,24 @@ class NET_EXPORT TransportSecurityState {
       const X509Certificate* validated_certificate_chain,
       const X509Certificate* served_certificate_chain,
       const SignedCertificateTimestampAndStatusList&
-          signed_certificate_timestamps);
+          signed_certificate_timestamps,
+      const NetworkIsolationKey& network_isolation_key);
+
+  // Convenience method to create ExpectCTStateIndex, taking into account
+  // |key_expect_ct_by_nik_|.
+  ExpectCTStateIndex CreateExpectCTStateIndex(
+      const std::string& hashed_host,
+      const NetworkIsolationKey& network_isolation_key);
+
+  // Checks if Expect-CT entries should be pruned, based on number of them and
+  // when entries were last pruned, and then performs pruning if necessary.
+  void MaybePruneExpectCTState();
+
+  // Sort ExpectCTState based on retention priority, with earlier entries to be
+  // removed first. Transient entries put in the front, then report-only
+  // entries, then entries are sorted by age, oldest first.
+  static bool ExpectCTPruningSorter(const ExpectCTStateMap::iterator& it1,
+                                    const ExpectCTStateMap::iterator& it2);
 
   // The sets of hosts that have enabled TransportSecurity. |domain| will always
   // be empty for a STSState, PKPState, or ExpectCTState in these maps; the
@@ -669,6 +710,16 @@ class NET_EXPORT TransportSecurityState {
   // rate-limiting.
   ReportCache sent_hpkp_reports_cache_;
   ReportCache sent_expect_ct_reports_cache_;
+
+  // Whether Expect-CT data should keyed by a NetworkIsolationKey. When false,
+  // ExpectCTStateIndex is always created with an empty NetworkIsolationKey.
+  // Populated based on features::kPartitionExpectCTStateByNetworkIsolationKey
+  // on construction of the TransportSecurityStateObject to avoid repeatedly
+  // querying the feature.
+  bool key_expect_ct_by_nik_;
+
+  // The earliest possible time for the next pruning of Expect-CT state.
+  base::Time earliest_next_prune_expect_ct_time_;
 
   std::set<std::string> hsts_host_bypass_list_;
 

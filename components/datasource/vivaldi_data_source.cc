@@ -11,7 +11,6 @@
 #include "base/callback.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
-#include "base/message_loop/message_loop.h"
 #include "base/task/post_task.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/url_constants.h"
@@ -28,42 +27,32 @@
 #include "components/datasource/desktop_data_source_win.h"
 #endif  // defined(OS_WIN)
 
-namespace {
-#if defined(OS_WIN)
-const char kDesktopImageType[] = "desktop-image";
-#endif
-const char kCSSModsType[] = "css-mods";
-const char kCSSModsData[] = "css";
-const char kCSSModsExtenssion[] = ".css";
-
-}
-
 VivaldiDataSource::VivaldiDataSource(Profile* profile) {
   profile = profile->GetOriginalProfile();
 
-  std::vector<std::pair<std::string, std::unique_ptr<VivaldiDataClassHandler>>>
+  std::vector<std::pair<PathType, std::unique_ptr<VivaldiDataClassHandler>>>
       handlers;
 #if defined(OS_WIN)
   handlers.emplace_back(
-      kDesktopImageType,
+      PathType::kDesktopWallpaper,
       std::make_unique<DesktopWallpaperDataClassHandlerWin>());
 #endif  // defined(OS_WIN)
   handlers.emplace_back(
-      VIVALDI_DATA_URL_PATH_MAPPING_DIR,
+      PathType::kLocalPath,
       std::make_unique<LocalImageDataClassHandler>(
           profile, extensions::VivaldiDataSourcesAPI::PATH_MAPPING_URL));
   handlers.emplace_back(
-      vivaldi::kVivaldiDataUrlThumbnailDir,
+      PathType::kThumbnail,
       std::make_unique<LocalImageDataClassHandler>(
           profile, extensions::VivaldiDataSourcesAPI::THUMBNAIL_URL));
   handlers.emplace_back(
-      VIVALDI_DATA_URL_NOTES_ATTACHMENT,
+      PathType::kNotesAttachment,
       std::make_unique<NotesAttachmentDataClassHandler>(profile));
-  handlers.emplace_back(
-      kCSSModsType, std::make_unique<CSSModsDataClassHandler>(profile));
+  handlers.emplace_back(PathType::kCSSMod,
+                        std::make_unique<CSSModsDataClassHandler>(profile));
 
   data_class_handlers_ =
-      base::flat_map<std::string, std::unique_ptr<VivaldiDataClassHandler>>(
+      base::flat_map<PathType, std::unique_ptr<VivaldiDataClassHandler>>(
           std::move(handlers));
 }
 
@@ -75,87 +64,32 @@ std::string VivaldiDataSource::GetSource() {
   return vivaldi::kVivaldiUIDataHost;
 }
 
-bool VivaldiDataSource::IsCSSRequest(const std::string& path) const {
-  base::StringPiece type;
-  base::StringPiece data;
-
-  ExtractRequestTypeAndData(path, type, data);
-
-  return type == kCSSModsType &&
-      (data == kCSSModsData || data.ends_with(kCSSModsExtenssion));
-}
-
 void VivaldiDataSource::StartDataRequest(
-    const GURL& path,
+    const GURL& url,
     const content::WebContents::Getter& wc_getter,
     content::URLDataSource::GotDataCallback callback) {
-  base::StringPiece type;
-  base::StringPiece data;
-
-  ExtractRequestTypeAndData(path.path_piece(), type, data);
-
-  auto it = data_class_handlers_.find(type);
-  if (it != data_class_handlers_.end()) {
-    it->second->GetData(data.as_string(), std::move(callback));
-    return;
-  }
-  std::move(callback).Run(nullptr);
-}
-
-// In a url such as chrome://vivaldi-data/desktop-image/0 type is
-// "desktop-image" and data is "0".
-void VivaldiDataSource::ExtractRequestTypeAndData(
-    base::StringPiece path,
-    base::StringPiece& type,
-    base::StringPiece& data) const {
-  if (!path.empty() && path[0] == '/') {
-    path = path.substr(1);
-  }
-  size_t pos = path.find("bookmark_thumbnail");
-  if (pos != std::string::npos) {
-    // This is a shortcut path to handle old-style
-    // bookmark thumbnail links.
-    pos = path.find('/', pos);
-    if (pos != std::string::npos) {
-      data = path.substr(pos + 1);
-      type = vivaldi::kVivaldiDataUrlThumbnailDir;
-
-      // Strip all after ? for links such as
-      // chrome://thumb/http://bookmark_thumbnail/610?1535393294240
-      pos = data.find('?');
-      if (pos != std::string::npos) {
-        data = data.substr(0, pos);
-      }
+  std::string data;
+  base::Optional<PathType> type =
+      vivaldi_data_url_utils::ParsePath(url.path_piece(), &data);
+  if (type) {
+    auto it = data_class_handlers_.find(*type);
+    if (it != data_class_handlers_.end()) {
+      it->second->GetData(data, std::move(callback));
       return;
     }
   }
-  // Default path for new links.
-  pos = path.find('/');
-  if (pos != std::string::npos) {
-    type = path.substr(0, pos);
-    data = path.substr(pos+1);
-  } else {
-    type = path;
-    data = base::StringPiece();
-  }
-  // Strip all after ?
-  pos = data.find('?');
-  if (pos != std::string::npos) {
-    data = data.substr(0, pos);
-  }
+  std::move(callback).Run(nullptr);
 }
 
 std::string VivaldiDataSource::GetMimeType(const std::string& path) {
   // We need to explicitly return a mime type, otherwise if the user tries to
   // drag the image they get no extension.
-  if (IsCSSRequest(path)) {
-    return "text/css";
-  }
-  return "image/png";
+  return vivaldi_data_url_utils::GetPathMimeType(path);
 }
 
-bool VivaldiDataSource::AllowCaching() {
-  return false;
+bool VivaldiDataSource::AllowCaching(const std::string& path) {
+  base::Optional<PathType> type = vivaldi_data_url_utils::ParsePath(path);
+  return type == PathType::kLocalPath || type == PathType::kThumbnail;
 }
 
 /*

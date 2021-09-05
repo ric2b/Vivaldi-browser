@@ -68,6 +68,7 @@ class CORE_EXPORT WorkletGlobalScope
   // WorkerOrWorkletGlobalScope
   void Dispose() override;
   WorkerThread* GetThread() const final;
+  const base::UnguessableToken& GetDevToolsToken() const override;
 
   virtual LocalFrame* GetFrame() const;
 
@@ -101,7 +102,7 @@ class CORE_EXPORT WorkletGlobalScope
   // document.
   bool DocumentSecureContext() const { return document_secure_context_; }
 
-  void Trace(Visitor*) override;
+  void Trace(Visitor*) const override;
 
   HttpsState GetHttpsState() const override { return https_state_; }
 

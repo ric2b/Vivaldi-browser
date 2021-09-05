@@ -40,7 +40,6 @@
 #include "third_party/blink/renderer/bindings/core/v8/script_source_code.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/document_timing.h"
-#include "third_party/blink/renderer/core/dom/dom_implementation.h"
 #include "third_party/blink/renderer/core/dom/dom_node_ids.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
@@ -235,7 +234,7 @@ static std::unique_ptr<TextResourceDecoder> CreateResourceTextDecoder(
         TextResourceDecoderOptions::kPlainTextContent,
         WTF::TextEncoding(text_encoding_name)));
   }
-  if (DOMImplementation::IsXMLMIMEType(mime_type)) {
+  if (MIMETypeRegistry::IsXMLMIMEType(mime_type)) {
     TextResourceDecoderOptions options(TextResourceDecoderOptions::kXMLContent);
     options.SetUseLenientXMLDecoding();
     return std::make_unique<TextResourceDecoder>(options);
@@ -249,7 +248,7 @@ static std::unique_ptr<TextResourceDecoder> CreateResourceTextDecoder(
     return std::make_unique<TextResourceDecoder>(TextResourceDecoderOptions(
         TextResourceDecoderOptions::kPlainTextContent, UTF8Encoding()));
   }
-  if (DOMImplementation::IsTextMIMEType(mime_type)) {
+  if (MIMETypeRegistry::IsPlainTextMIMEType(mime_type)) {
     return std::make_unique<TextResourceDecoder>(TextResourceDecoderOptions(
         TextResourceDecoderOptions::kPlainTextContent,
         WTF::TextEncoding("ISO-8859-1")));
@@ -1428,7 +1427,7 @@ Response InspectorPageAgent::generateTestReport(const String& message,
   return Response::Success();
 }
 
-void InspectorPageAgent::Trace(Visitor* visitor) {
+void InspectorPageAgent::Trace(Visitor* visitor) const {
   visitor->Trace(inspected_frames_);
   visitor->Trace(inspector_resource_content_loader_);
   visitor->Trace(isolated_worlds_);

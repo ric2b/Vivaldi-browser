@@ -14,6 +14,7 @@
 #include "base/debug/dump_without_crashing.h"
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
@@ -51,6 +52,8 @@ using autofill::PasswordForm;
 namespace password_manager {
 
 namespace {
+
+const base::TimeDelta kSyncTaskTimeout = base::TimeDelta::FromSeconds(30);
 
 // Utility function to simplify removing logins prior a given |cutoff| data.
 // Runs |callback| with the result.
@@ -90,7 +93,7 @@ PasswordStore::CheckReuseRequest::CheckReuseRequest(
   TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("passwords", "CheckReuseRequest", this);
 }
 
-PasswordStore::CheckReuseRequest::~CheckReuseRequest() {}
+PasswordStore::CheckReuseRequest::~CheckReuseRequest() = default;
 
 void PasswordStore::CheckReuseRequest::OnReuseFound(
     size_t password_length,
@@ -108,18 +111,16 @@ void PasswordStore::CheckReuseRequest::OnReuseFound(
 
 PasswordStore::FormDigest::FormDigest(autofill::PasswordForm::Scheme new_scheme,
                                       const std::string& new_signon_realm,
-                                      const GURL& new_origin)
-    : scheme(new_scheme), signon_realm(new_signon_realm), origin(new_origin) {}
+                                      const GURL& new_url)
+    : scheme(new_scheme), signon_realm(new_signon_realm), url(new_url) {}
 
 PasswordStore::FormDigest::FormDigest(const PasswordForm& form)
-    : scheme(form.scheme),
-      signon_realm(form.signon_realm),
-      origin(form.origin) {}
+    : scheme(form.scheme), signon_realm(form.signon_realm), url(form.url) {}
 
 PasswordStore::FormDigest::FormDigest(const autofill::FormData& form)
     : scheme(PasswordForm::Scheme::kHtml),
       signon_realm(form.url.GetOrigin().spec()),
-      origin(form.url) {}
+      url(form.url) {}
 
 PasswordStore::FormDigest::FormDigest(const FormDigest& other) = default;
 
@@ -133,13 +134,11 @@ PasswordStore::FormDigest& PasswordStore::FormDigest::operator=(
 
 bool PasswordStore::FormDigest::operator==(const FormDigest& other) const {
   return scheme == other.scheme && signon_realm == other.signon_realm &&
-         origin == other.origin;
+         url == other.url;
 }
 
 PasswordStore::PasswordStore()
-    : observers_(new base::ObserverListThreadSafe<Observer>()),
-      shutdown_called_(false),
-      init_status_(InitStatus::kUnknown) {}
+    : observers_(new base::ObserverListThreadSafe<Observer>()) {}
 
 bool PasswordStore::Init(PrefService* prefs,
                          base::RepeatingClosure sync_enabled_or_disabled_cb) {
@@ -196,11 +195,13 @@ void PasswordStore::RemoveLoginsByURLAndTime(
     const base::RepeatingCallback<bool(const GURL&)>& url_filter,
     base::Time delete_begin,
     base::Time delete_end,
-    base::OnceClosure completion) {
+    base::OnceClosure completion,
+    base::OnceCallback<void(bool)> sync_completion) {
   DCHECK(main_task_runner_->RunsTasksInCurrentSequence());
   ScheduleTask(base::BindOnce(&PasswordStore::RemoveLoginsByURLAndTimeInternal,
                               this, url_filter, delete_begin, delete_end,
-                              std::move(completion)));
+                              std::move(completion),
+                              std::move(sync_completion)));
 }
 
 void PasswordStore::RemoveLoginsCreatedBetween(base::Time delete_begin,
@@ -667,7 +668,7 @@ PasswordStore::CreateBackgroundTaskRunner() const {
 
 bool PasswordStore::InitOnBackgroundSequence() {
   DCHECK(background_task_runner_->RunsTasksInCurrentSequence());
-  sync_bridge_.reset(new PasswordSyncBridge(
+  sync_bridge_ = base::WrapUnique(new PasswordSyncBridge(
       std::make_unique<syncer::ClientTagBasedModelTypeProcessor>(
           syncer::PASSWORDS, base::DoNothing()),
       /*password_store_sync=*/this, sync_enabled_or_disabled_cb_));
@@ -677,8 +678,8 @@ bool PasswordStore::InitOnBackgroundSequence() {
 
   base::SequencedTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
-      base::BindOnce(&PasswordStoreConsumer::OnGetPasswordStoreResults,
-                     reuse_detector_->GetWeakPtr(),
+      base::BindOnce(&PasswordStoreConsumer::OnGetPasswordStoreResultsFrom,
+                     reuse_detector_->GetWeakPtr(), base::WrapRefCounted(this),
                      GetAutofillableLoginsImpl()));
 #endif
   return true;
@@ -744,6 +745,25 @@ void PasswordStore::NotifyLoginsChanged(
             },
             scoped_refptr<PasswordStore>(this)));
   }
+}
+
+void PasswordStore::NotifyDeletionsHaveSynced(bool success) {
+  DCHECK(background_task_runner_->RunsTasksInCurrentSequence());
+  // Either all deletions have been committed to the Sync server, or Sync is
+  // telling us that it won't commit them (because Sync was turned off
+  // permanently). In either case, run the corresponding callbacks now (on the
+  // main task runner).
+  DCHECK(!success || !GetMetadataStore()->HasUnsyncedDeletions());
+  if (!deletions_have_synced_callbacks_.empty()) {
+    base::UmaHistogramBoolean(
+        "PasswordManager.PasswordStoreDeletionsHaveSynced", success);
+  }
+  for (auto& callback : deletions_have_synced_callbacks_) {
+    main_task_runner_->PostTask(FROM_HERE,
+                                base::BindOnce(std::move(callback), success));
+  }
+  deletions_have_synced_timeout_.Cancel();
+  deletions_have_synced_callbacks_.clear();
 }
 
 void PasswordStore::InvokeAndNotifyAboutCompromisedPasswordsChange(
@@ -858,8 +878,8 @@ void PasswordStore::PostLoginsTaskAndReplyToConsumerWithResult(
     LoginsTask task) {
   consumer->cancelable_task_tracker()->PostTaskAndReplyWithResult(
       background_task_runner_.get(), FROM_HERE, std::move(task),
-      base::BindOnce(&PasswordStoreConsumer::OnGetPasswordStoreResults,
-                     consumer->GetWeakPtr()));
+      base::BindOnce(&PasswordStoreConsumer::OnGetPasswordStoreResultsFrom,
+                     consumer->GetWeakPtr(), base::WrapRefCounted(this)));
 }
 
 void PasswordStore::PostLoginsTaskAndReplyToConsumerWithProcessedResult(
@@ -869,8 +889,8 @@ void PasswordStore::PostLoginsTaskAndReplyToConsumerWithProcessedResult(
     LoginsResultProcessor processor) {
   auto call_consumer = base::BindOnce(
       CloseTraceAndCallBack, trace_name, consumer,
-      base::BindOnce(&PasswordStoreConsumer::OnGetPasswordStoreResults,
-                     consumer->GetWeakPtr()));
+      base::BindOnce(&PasswordStoreConsumer::OnGetPasswordStoreResultsFrom,
+                     consumer->GetWeakPtr(), base::WrapRefCounted(this)));
   consumer->cancelable_task_tracker()->PostTaskAndReplyWithResult(
       background_task_runner_.get(), FROM_HERE, std::move(task),
       base::BindOnce(std::move(processor), std::move(call_consumer)));
@@ -955,7 +975,8 @@ void PasswordStore::RemoveLoginsByURLAndTimeInternal(
     const base::RepeatingCallback<bool(const GURL&)>& url_filter,
     base::Time delete_begin,
     base::Time delete_end,
-    base::OnceClosure completion) {
+    base::OnceClosure completion,
+    base::OnceCallback<void(bool)> sync_completion) {
   DCHECK(background_task_runner_->RunsTasksInCurrentSequence());
   TRACE_EVENT0("passwords", "PasswordStore::RemoveLoginsByURLAndTimeInternal");
   BeginTransaction();
@@ -967,8 +988,23 @@ void PasswordStore::RemoveLoginsByURLAndTimeInternal(
   // sync codebase needs to update metadata atomically together with the login
   // data.
   CommitTransaction();
+
   if (completion)
     main_task_runner_->PostTask(FROM_HERE, std::move(completion));
+
+  if (sync_completion) {
+    deletions_have_synced_callbacks_.push_back(std::move(sync_completion));
+    // Start a timeout for sync, or restart it if it was already running.
+    deletions_have_synced_timeout_.Reset(base::BindRepeating(
+        &PasswordStore::NotifyDeletionsHaveSynced, this, /*success=*/false));
+    background_task_runner_->PostDelayedTask(
+        FROM_HERE, deletions_have_synced_timeout_.callback(), kSyncTaskTimeout);
+
+    // Do an immediate check for the case where there are already no unsynced
+    // deletions.
+    if (!GetMetadataStore()->HasUnsyncedDeletions())
+      NotifyDeletionsHaveSynced(/*success=*/true);
+  }
 }
 
 void PasswordStore::RemoveLoginsCreatedBetweenInternal(
@@ -1315,7 +1351,7 @@ std::ostream& operator<<(std::ostream& os,
                          const PasswordStore::FormDigest& digest) {
   return os << "FormDigest(scheme: " << digest.scheme
             << ", signon_realm: " << digest.signon_realm
-            << ", origin: " << digest.origin << ")";
+            << ", url: " << digest.url << ")";
 }
 
 }  // namespace password_manager

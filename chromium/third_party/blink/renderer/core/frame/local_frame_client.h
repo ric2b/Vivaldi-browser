@@ -312,8 +312,6 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
 
   virtual void DidChangeName(const String&) {}
 
-  virtual void DidChangeFramePolicy(Frame* child_frame, const FramePolicy&) {}
-
   virtual void DidSetFramePolicyHeaders(
       network::mojom::blink::WebSandboxFlags,
       const ParsedFeaturePolicy& feature_policy_header,
@@ -402,6 +400,12 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
 
   virtual std::unique_ptr<WebContentSettingsClient>
   CreateWorkerContentSettingsClient() {
+    return nullptr;
+  }
+
+  virtual std::unique_ptr<media::SpeechRecognitionClient>
+  CreateSpeechRecognitionClient(
+      media::SpeechRecognitionClient::OnReadyCallback callback) {
     return nullptr;
   }
 

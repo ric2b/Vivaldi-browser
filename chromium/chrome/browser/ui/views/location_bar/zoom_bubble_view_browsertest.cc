@@ -7,8 +7,8 @@
 #include "build/build_config.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
+#include "chrome/browser/ui/exclusive_access/exclusive_access_test.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
-#include "chrome/browser/ui/exclusive_access/fullscreen_controller_test.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/test/test_browser_dialog.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
@@ -67,10 +67,8 @@ IN_PROC_BROWSER_TEST_F(ZoomBubbleBrowserTest, NonImmersiveFullscreen) {
     // The fullscreen change notification is sent asynchronously. Wait for the
     // notification before testing the zoom bubble visibility.
     FullscreenNotificationObserver waiter(browser());
-    browser()
-        ->exclusive_access_manager()
-        ->fullscreen_controller()
-        ->EnterFullscreenModeForTab(web_contents, GURL());
+    static_cast<content::WebContentsDelegate*>(browser())
+        ->EnterFullscreenModeForTab(web_contents->GetMainFrame(), {});
     waiter.Wait();
   }
   ASSERT_FALSE(browser_view->immersive_mode_controller()->IsEnabled());

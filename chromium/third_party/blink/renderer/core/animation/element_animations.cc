@@ -106,7 +106,7 @@ void ElementAnimations::RestartAnimationOnCompositor() {
     entry.key->RestartAnimationOnCompositor();
 }
 
-void ElementAnimations::Trace(Visitor* visitor) {
+void ElementAnimations::Trace(Visitor* visitor) const {
   visitor->Trace(css_animations_);
   visitor->Trace(effect_stack_);
   visitor->Trace(animations_);
@@ -129,7 +129,6 @@ void ElementAnimations::UpdateBaseComputedStyle(
     const ComputedStyle* computed_style,
     std::unique_ptr<CSSBitset> base_important_set) {
   DCHECK(computed_style);
-  DCHECK(IsAnimationStyleChange());
   base_computed_style_ = ComputedStyle::Clone(*computed_style);
   base_important_set_ = std::move(base_important_set);
 }
@@ -142,11 +141,10 @@ void ElementAnimations::ClearBaseComputedStyle() {
 bool ElementAnimations::AnimationsPreserveAxisAlignment() const {
   for (const auto& entry : animations_) {
     const Animation& animation = *entry.key;
-    DCHECK(animation.effect());
-    DCHECK(IsA<KeyframeEffect>(animation.effect()));
-    const auto& effect = *To<KeyframeEffect>(animation.effect());
-    if (!effect.AnimationsPreserveAxisAlignment())
-      return false;
+    if (const auto* effect = DynamicTo<KeyframeEffect>(animation.effect())) {
+      if (!effect->AnimationsPreserveAxisAlignment())
+        return false;
+    }
   }
   return true;
 }

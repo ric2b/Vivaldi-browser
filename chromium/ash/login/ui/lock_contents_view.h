@@ -22,7 +22,6 @@
 #include "ash/public/cpp/keyboard/keyboard_controller_observer.h"
 #include "ash/public/cpp/login_types.h"
 #include "ash/public/cpp/system_tray_focus_observer.h"
-#include "ash/session/session_observer.h"
 #include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -33,6 +32,7 @@
 #include "ui/display/display_observer.h"
 #include "ui/display/screen.h"
 #include "ui/views/controls/styled_label_listener.h"
+#include "ui/views/metadata/metadata_header_macros.h"
 #include "ui/views/view.h"
 
 namespace keyboard {
@@ -69,10 +69,10 @@ class ASH_EXPORT LockContentsView
       public SystemTrayFocusObserver,
       public display::DisplayObserver,
       public views::StyledLabelListener,
-      public SessionObserver,
       public KeyboardControllerObserver,
       public chromeos::PowerManagerClient::Observer {
  public:
+  METADATA_HEADER(LockContentsView);
   class AuthErrorBubble;
   class UserState;
 
@@ -119,7 +119,7 @@ class ASH_EXPORT LockContentsView
   };
 
   enum class AcceleratorAction {
-    kShowSystemInfo,
+    kToggleSystemInfo,
     kShowFeedback,
     kShowResetScreen,
   };
@@ -139,8 +139,9 @@ class ASH_EXPORT LockContentsView
 
   void FocusNextUser();
   void FocusPreviousUser();
+  void ShowEntrepriseDomainName(const std::string& entreprise_domain_name);
   void ShowAdbEnabled();
-  void ShowSystemInfo();
+  void ToggleSystemInfo();
   void ShowParentAccessDialog();
 
   // views::View:
@@ -167,6 +168,9 @@ class ASH_EXPORT LockContentsView
   void OnAuthDisabledForUser(
       const AccountId& user,
       const AuthDisabledData& auth_disabled_data) override;
+  void OnSetTpmLockedState(const AccountId& user,
+                           bool is_locked,
+                           base::TimeDelta time_left) override;
   void OnLockScreenNoteStateChanged(mojom::TrayActionState state) override;
   void OnTapToUnlockEnabledForUserChanged(const AccountId& user,
                                           bool enabled) override;
@@ -212,8 +216,6 @@ class ASH_EXPORT LockContentsView
   void StyledLabelLinkClicked(views::StyledLabel* label,
                               const gfx::Range& range,
                               int event_flags) override {}
-  // SessionObserver:
-  void OnLockStateChanged(bool locked) override;
 
   // KeyboardControllerObserver:
   void OnKeyboardVisibilityChanged(bool is_visible) override;
@@ -272,12 +274,18 @@ class ASH_EXPORT LockContentsView
   void SetMediaControlsSpacing(bool landscape);
 
   // 1-2 users.
-  void CreateLowDensityLayout(const std::vector<LoginUserInfo>& users);
+  void CreateLowDensityLayout(
+      const std::vector<LoginUserInfo>& users,
+      std::unique_ptr<LoginBigUserView> primary_big_view);
   // 3-6 users.
-  void CreateMediumDensityLayout(const std::vector<LoginUserInfo>& users);
+  void CreateMediumDensityLayout(
+      const std::vector<LoginUserInfo>& users,
+      std::unique_ptr<LoginBigUserView> primary_big_view);
   // 7+ users.
-  void CreateHighDensityLayout(const std::vector<LoginUserInfo>& users,
-                               views::BoxLayout* main_layout);
+  void CreateHighDensityLayout(
+      const std::vector<LoginUserInfo>& users,
+      views::BoxLayout* main_layout,
+      std::unique_ptr<LoginBigUserView> primary_big_view);
 
   // Lay out the entire view. This is called when the view is attached to a
   // widget and when the screen is rotated.
@@ -288,7 +296,8 @@ class ASH_EXPORT LockContentsView
   void LayoutTopHeader();
 
   // Lay out the bottom status indicator. This is called when system information
-  // is shown if ADB is enabled.
+  // is shown if ADB is enabled and at the initialization of lock screen if the
+  // device is enrolled.
   void LayoutBottomStatusIndicator();
 
   // Lay out the expanded public session view.
@@ -361,8 +370,9 @@ class ASH_EXPORT LockContentsView
   void OnPublicAccountTapped(bool is_primary);
 
   // Helper method to allocate a LoginBigUserView instance.
-  LoginBigUserView* AllocateLoginBigUserView(const LoginUserInfo& user,
-                                             bool is_primary);
+  std::unique_ptr<LoginBigUserView> AllocateLoginBigUserView(
+      const LoginUserInfo& user,
+      bool is_primary);
 
   // Returns the big view for |user| if |user| is one of the active
   // big views. If |require_auth_active| is true then the view must
@@ -374,7 +384,7 @@ class ASH_EXPORT LockContentsView
   LoginUserView* TryToFindUserView(const AccountId& user);
 
   // Returns scrollable view with initialized size and rows for all |users|.
-  ScrollableUsersListView* BuildScrollableUsersListView(
+  std::unique_ptr<ScrollableUsersListView> BuildScrollableUsersListView(
       const std::vector<LoginUserInfo>& users,
       LoginDisplayStyle display_style);
 
@@ -407,7 +417,8 @@ class ASH_EXPORT LockContentsView
   ScrollableUsersListView* users_list_ = nullptr;
 
   // View for media controls that appear on the lock screen if user enabled.
-  std::unique_ptr<LockScreenMediaControlsView> media_controls_view_;
+  LockScreenMediaControlsView* media_controls_view_ = nullptr;
+  views::View* middle_spacing_view_ = nullptr;
 
   // View that contains the note action button and the system info labels,
   // placed on the top right corner of the screen without affecting layout of
@@ -430,7 +441,6 @@ class ASH_EXPORT LockContentsView
 
   ScopedObserver<display::Screen, display::DisplayObserver> display_observer_{
       this};
-  ScopedSessionObserver session_observer_{this};
 
   // All error bubbles and the tooltip view are child views of LockContentsView,
   // and will be torn down when LockContentsView is torn down.
@@ -445,7 +455,7 @@ class ASH_EXPORT LockContentsView
   // Bubble for displaying supervised user deprecation message.
   LoginErrorBubble* supervised_user_deprecation_bubble_;
 
-  // Bottom status indicator displaying ADB enabled alert.
+  // Bottom status indicator displaying entreprise domain or ADB enabled alert
   BottomStatusIndicator* bottom_status_indicator_;
 
   // Tracks the visibility of the extension Ui window.

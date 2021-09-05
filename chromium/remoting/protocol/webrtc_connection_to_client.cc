@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/location.h"
+#include "base/logging.h"
 #include "jingle/glue/thread_wrapper.h"
 #include "net/base/io_buffer.h"
 #include "remoting/codec/video_encoder.h"
@@ -127,6 +128,10 @@ void WebrtcConnectionToClient::ApplySessionOptions(
   session_options_ = options;
   DCHECK(transport_);
   transport_->ApplySessionOptions(options);
+}
+
+PeerConnectionControls* WebrtcConnectionToClient::peer_connection_controls() {
+  return transport_.get();
 }
 
 void WebrtcConnectionToClient::OnSessionStateChange(Session::State state) {

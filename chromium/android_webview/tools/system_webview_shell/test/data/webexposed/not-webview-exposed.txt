@@ -100,7 +100,7 @@ interface AuthenticatorResponse
 interface AuthenticatorAttestationResponse : AuthenticatorResponse
 
 # Picture-in-Picture API is disabled in Android WebView, crbug.com/852449
-interface EnterPictureInPictureEvent : Event
+interface PictureInPictureEvent : Event
 interface PictureInPictureWindow : EventTarget
 interface Document : Node
     method exitPictureInPicture
@@ -156,6 +156,8 @@ interface XRRay
 interface XRTransientInputHitTestResult
 interface XRHitTestResult
 interface XRTransientInputHitTestSource
+interface XRAnchor
+interface XRAnchorSet
 
 [GLOBAL OBJECT]
     method openDatabase

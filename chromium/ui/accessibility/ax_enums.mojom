@@ -27,7 +27,7 @@ module ax.mojom;
 
 enum Event {
   kNone,
-  kActiveDescendantChanged,  // Web
+  kActiveDescendantChanged,
   kAlert,
   kAriaAttributeChanged,   // Implicit
   kAutocorrectionOccured,  // Unknown: http://crbug.com/392498
@@ -56,13 +56,12 @@ enum Event {
   kLocationChanged,       // Web
   kMediaStartedPlaying,   // Native / Automation
   kMediaStoppedPlaying,   // Native / Automation
-  kMenuEnd,               // Native / Win
+  kMenuEnd,               // Native / web: menu interaction has ended.
   kMenuListItemSelected,  // Web
   kMenuListValueChanged,  // Web
-  kMenuPopupEnd,          // Native
-  kMenuPopupHide,         // Native / AuraLinux
-  kMenuPopupStart,        // Native
-  kMenuStart,             // Native / Win
+  kMenuPopupEnd,          // Native / web: a menu/submenu is hidden/closed.
+  kMenuPopupStart,        // Native / web: a menu/submenu is shown/opened.
+  kMenuStart,             // Native / web: menu interaction has begun.
   kMouseCanceled,
   kMouseDragged,
   kMouseMoved,
@@ -77,7 +76,7 @@ enum Event {
   kSelection,                // Native
   kSelectionAdd,             // Native
   kSelectionRemove,          // Native
-  kShow,                     // Remove: http://crbug.com/392502
+  kShow,                     // Native / Automation
   kStateChanged,             // Native / Automation
   kTextChanged,
   kWindowActivated,             // Native
@@ -734,6 +733,9 @@ enum BoolAttribute {
   // Indicates whether this node is selected or unselected.
   kSelected,
 
+  // Indicates whether this node is selected due to selection follows focus.
+  kSelectedFromFocus,
+
   // Indicates whether this node supports text location.
   kSupportsTextLocation,
 
@@ -984,14 +986,14 @@ enum SortDirection {
 enum NameFrom {
   kNone,
   kUninitialized,
-  kAttribute,
+  kAttribute,  // E.g. aria-label.
   kAttributeExplicitlyEmpty,
-  kCaption,
+  kCaption,  // E.g. in the case of a table, from a caption element.
   kContents,
-  kPlaceholder,
-  kRelatedElement,
-  kTitle,
-  kValue,
+  kPlaceholder,  // E.g. from an HTML placeholder attribute on a text field.
+  kRelatedElement, // E.g. from a figcaption Element in a figure.
+  kTitle,  // E.g. <input type="text" title="title">.
+  kValue,  // E.g. <input type="button" value="Button's name">.
 };
 
 enum DescriptionFrom {

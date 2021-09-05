@@ -9,6 +9,7 @@
 
 #include "platform_media/gpu/pipeline/win/wmf_media_pipeline.h"
 
+#include "base/logging.h"
 #include "media/base/win/mf_initializer.h"
 
 namespace media {

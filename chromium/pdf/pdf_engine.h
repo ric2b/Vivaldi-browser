@@ -56,6 +56,7 @@ class VarDictionary;
 
 namespace chrome_pdf {
 
+struct DocumentAttachmentInfo;
 struct DocumentMetadata;
 
 // Do one time initialization of the SDK.
@@ -176,6 +177,8 @@ class PDFEngine {
     // Updates the index of the currently selected search item.
     virtual void NotifySelectedFindResultChanged(int current_find_index) {}
 
+    virtual void NotifyTouchSelectionOccurred() {}
+
     // Prompts the user for a password to open this document. The callback is
     // called when the password is retrieved.
     virtual void GetDocumentPassword(
@@ -258,12 +261,15 @@ class PDFEngine {
     virtual void SelectionChanged(const pp::Rect& left, const pp::Rect& right) {
     }
 
-    // Sets edit mode state.
-    virtual void IsEditModeChanged(bool is_edit_mode) {}
+    // Notifies the client that the PDF has been edited.
+    virtual void EnteredEditMode() {}
 
     // Gets the height of the top toolbar in screen coordinates. This is
     // independent of whether it is hidden or not at the moment.
     virtual float GetToolbarHeightInScreenCoords() = 0;
+
+    // Notifies the client about focus changes for the document.
+    virtual void DocumentFocusChanged(bool document_has_focus) {}
   };
 
   struct AccessibilityLinkInfo {
@@ -283,6 +289,7 @@ class PDFEngine {
     int char_count;
     pp::FloatRect bounds;
     uint32_t color;
+    std::string note_text;
   };
 
   struct AccessibilityTextFieldInfo {
@@ -336,6 +343,7 @@ class PDFEngine {
   virtual void RotateClockwise() = 0;
   virtual void RotateCounterclockwise() = 0;
   virtual void SetTwoUpView(bool enable) = 0;
+  virtual void DisplayAnnotations(bool display) = 0;
 
   // Applies the document layout options proposed by a call to
   // PDFEngine::Client::ProposeDocumentLayout(), returning the overall size of
@@ -365,6 +373,9 @@ class PDFEngine {
   // Checks the permissions associated with this document.
   virtual bool HasPermission(DocumentPermission permission) const = 0;
   virtual void SelectAll() = 0;
+  // Gets the list of DocumentAttachmentInfo from the document.
+  virtual const std::vector<DocumentAttachmentInfo>&
+  GetDocumentAttachmentInfoList() const = 0;
   // Gets metadata about the document.
   virtual const DocumentMetadata& GetDocumentMetadata() const = 0;
   // Gets the number of pages in the document.

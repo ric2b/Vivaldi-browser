@@ -207,6 +207,22 @@ sql::InitStatus MediaHistoryFeedItemsTable::CreateTableIfNonExistent() {
         "mediaFeedItem (safe_search_result, feed_id)");
   }
 
+  if (success) {
+    success = DB()->Execute(
+        "CREATE INDEX IF NOT EXISTS "
+        "mediaFeedItem_continue_watching_index ON "
+        "mediaFeedItem (action_status, play_next_candidate, "
+        "safe_search_result)");
+  }
+
+  if (success) {
+    success = DB()->Execute(
+        "CREATE INDEX IF NOT EXISTS "
+        "mediaFeedItem_for_feed_index ON "
+        "mediaFeedItem (feed_id, action_status, play_next_candidate, "
+        "safe_search_result)");
+  }
+
   if (!success) {
     ResetDB();
     LOG(ERROR) << "Failed to create media history feed items table.";
@@ -238,7 +254,7 @@ bool MediaHistoryFeedItemsTable::SaveItem(
   statement.BindString16(2, item->name);
   statement.BindInt64(
       3, item->date_published.ToDeltaSinceWindowsEpoch().InSeconds());
-  statement.BindBool(4, item->is_family_friendly);
+  statement.BindInt64(4, static_cast<int>(item->is_family_friendly));
   statement.BindInt64(5, static_cast<int>(item->action_status));
 
   if (!item->genre.empty()) {
@@ -408,20 +424,97 @@ bool MediaHistoryFeedItemsTable::DeleteItems(const int64_t feed_id) {
 }
 
 std::vector<media_feeds::mojom::MediaFeedItemPtr>
-MediaHistoryFeedItemsTable::GetItemsForFeed(const int64_t feed_id) {
+MediaHistoryFeedItemsTable::GetItems(
+    const MediaHistoryKeyedService::GetMediaFeedItemsRequest& request) {
   std::vector<media_feeds::mojom::MediaFeedItemPtr> items;
   if (!CanAccessDatabase())
     return items;
 
-  sql::Statement statement(DB()->GetUniqueStatement(
+  std::vector<std::string> sql;
+  sql.push_back(
       "SELECT type, name, date_published_s, is_family_friendly, "
       "action_status, genre, duration_s, is_live, live_start_time_s, "
       "live_end_time_s, shown_count, clicked, author, action, "
       "interaction_counters, content_rating, identifiers, tv_episode, "
-      "play_next_candidate, images, safe_search_result FROM "
-      "mediaFeedItem WHERE feed_id = ?"));
+      "play_next_candidate, images, safe_search_result, id FROM mediaFeedItem");
 
-  statement.BindInt64(0, feed_id);
+  sql::Statement statement;
+
+  if (request.type ==
+      MediaHistoryKeyedService::GetMediaFeedItemsRequest::Type::kDebugAll) {
+    // Debug request should just return all feed items for a single feed.
+    sql.push_back("WHERE feed_id = ?");
+
+    statement.Assign(DB()->GetCachedStatement(
+        SQL_FROM_HERE, base::JoinString(sql, " ").c_str()));
+
+    statement.BindInt64(0, *request.feed_id);
+  } else if (request.type ==
+             MediaHistoryKeyedService::GetMediaFeedItemsRequest::Type::
+                 kItemsForFeed) {
+    // kItemsForFeed should return items for a feed. Ordered by clicked and
+    // shown count so items that have been clicked and shown a lot will be at
+    // the end. Items must not be continue watching items.
+    sql.push_back(
+        "WHERE feed_id = ? AND action_status != ? AND play_next_candidate IS "
+        "NULL");
+
+    if (request.fetched_items_should_be_safe)
+      sql.push_back("AND safe_search_result = ?");
+
+    sql.push_back("ORDER BY clicked ASC, shown_count ASC LIMIT ?");
+
+    if (request.fetched_items_should_be_safe) {
+      statement.Assign(DB()->GetCachedStatement(
+          SQL_FROM_HERE, base::JoinString(sql, " ").c_str()));
+
+      statement.BindInt64(
+          2, static_cast<int>(media_feeds::mojom::SafeSearchResult::kSafe));
+      statement.BindInt64(3, *request.limit);
+    } else {
+      statement.Assign(DB()->GetCachedStatement(
+          SQL_FROM_HERE, base::JoinString(sql, " ").c_str()));
+
+      statement.BindInt64(2, *request.limit);
+    }
+
+    // Bind common parameters.
+    statement.BindInt64(0, *request.feed_id);
+    statement.BindInt64(
+        1, static_cast<int>(
+               media_feeds::mojom::MediaFeedItemActionStatus::kActive));
+  } else if (request.type ==
+             MediaHistoryKeyedService::GetMediaFeedItemsRequest::Type::
+                 kContinueWatching) {
+    // kContinueWatching should return items across all feeds that either have
+    // an active action status or a play next candidate. Ordered by most recent
+    // first.
+    sql.push_back("WHERE action_status = ? OR play_next_candidate IS NOT NULL");
+
+    if (request.fetched_items_should_be_safe)
+      sql.push_back("AND safe_search_result = ?");
+
+    sql.push_back("ORDER BY id DESC LIMIT ?");
+
+    if (request.fetched_items_should_be_safe) {
+      statement.Assign(DB()->GetCachedStatement(
+          SQL_FROM_HERE, base::JoinString(sql, " ").c_str()));
+
+      statement.BindInt64(
+          1, static_cast<int>(media_feeds::mojom::SafeSearchResult::kSafe));
+      statement.BindInt64(2, *request.limit);
+    } else {
+      statement.Assign(DB()->GetCachedStatement(
+          SQL_FROM_HERE, base::JoinString(sql, " ").c_str()));
+
+      statement.BindInt64(1, *request.limit);
+    }
+
+    // Bind common parameters.
+    statement.BindInt64(
+        0, static_cast<int>(
+               media_feeds::mojom::MediaFeedItemActionStatus::kActive));
+  }
 
   DCHECK(statement.is_valid());
 
@@ -430,6 +523,9 @@ MediaHistoryFeedItemsTable::GetItemsForFeed(const int64_t feed_id) {
 
     item->type = static_cast<media_feeds::mojom::MediaFeedItemType>(
         statement.ColumnInt64(0));
+    item->is_family_friendly =
+        static_cast<media_feeds::mojom::IsFamilyFriendly>(
+            statement.ColumnInt64(3));
     item->action_status =
         static_cast<media_feeds::mojom::MediaFeedItemActionStatus>(
             statement.ColumnInt64(4));
@@ -452,6 +548,12 @@ MediaHistoryFeedItemsTable::GetItemsForFeed(const int64_t feed_id) {
     if (!IsKnownEnumValue(item->safe_search_result)) {
       base::UmaHistogramEnumeration(kFeedItemReadResultHistogramName,
                                     FeedItemReadResult::kBadSafeSearchResult);
+      continue;
+    }
+
+    if (!IsKnownEnumValue(item->is_family_friendly)) {
+      base::UmaHistogramEnumeration(kFeedItemReadResultHistogramName,
+                                    FeedItemReadResult::kBadIsFamilyFriendly);
       continue;
     }
 
@@ -604,7 +706,6 @@ MediaHistoryFeedItemsTable::GetItemsForFeed(const int64_t feed_id) {
     item->name = statement.ColumnString16(1);
     item->date_published = base::Time::FromDeltaSinceWindowsEpoch(
         base::TimeDelta::FromSeconds(statement.ColumnInt64(2)));
-    item->is_family_friendly = statement.ColumnBool(3);
 
     if (statement.GetColumnType(5) == sql::ColumnType::kBlob) {
       media_feeds::GenreSet genre_set;
@@ -643,6 +744,7 @@ MediaHistoryFeedItemsTable::GetItemsForFeed(const int64_t feed_id) {
 
     item->shown_count = statement.ColumnInt64(10);
     item->clicked = statement.ColumnBool(11);
+    item->id = statement.ColumnInt64(21);
 
     items.push_back(std::move(item));
   }
@@ -670,6 +772,7 @@ MediaHistoryFeedItemsTable::GetPendingSafeSearchCheckItems() {
   while (statement.Step()) {
     auto check =
         std::make_unique<MediaHistoryKeyedService::PendingSafeSearchCheck>(
+            MediaHistoryKeyedService::SafeSearchCheckedType::kFeedItem,
             statement.ColumnInt64(0));
 
     if (statement.GetColumnType(1) == sql::ColumnType::kBlob) {

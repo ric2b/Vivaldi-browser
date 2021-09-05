@@ -22,10 +22,12 @@
 #include "base/optional.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/media/router/issue_manager.h"
+#include "chrome/browser/media/router/logger_impl.h"
 #include "chrome/browser/media/router/media_router_base.h"
 #include "chrome/browser/media/router/media_routes_observer.h"
 #include "chrome/browser/media/webrtc/desktop_media_picker_controller.h"
 #include "chrome/common/media_router/issue.h"
+#include "chrome/common/media_router/mojom/logger.mojom.h"
 #include "chrome/common/media_router/mojom/media_router.mojom.h"
 #include "chrome/common/media_router/route_request_result.h"
 #include "content/public/browser/browser_thread.h"
@@ -55,21 +57,21 @@ class MediaRouterMojoImpl : public MediaRouterBase, public mojom::MediaRouter {
                    content::WebContents* web_contents,
                    MediaRouteResponseCallback callback,
                    base::TimeDelta timeout,
-                   bool incognito) final;
+                   bool off_the_record) final;
   void JoinRoute(const MediaSource::Id& source_id,
                  const std::string& presentation_id,
                  const url::Origin& origin,
                  content::WebContents* web_contents,
                  MediaRouteResponseCallback callback,
                  base::TimeDelta timeout,
-                 bool incognito) final;
+                 bool off_the_record) final;
   void ConnectRouteByRouteId(const MediaSource::Id& source,
                              const MediaRoute::Id& route_id,
                              const url::Origin& origin,
                              content::WebContents* web_contents,
                              MediaRouteResponseCallback callback,
                              base::TimeDelta timeout,
-                             bool incognito) final;
+                             bool off_the_record) final;
   void TerminateRoute(const MediaRoute::Id& route_id) final;
   void DetachRoute(const MediaRoute::Id& route_id) final;
   void SendRouteMessage(const MediaRoute::Id& route_id,
@@ -128,7 +130,7 @@ class MediaRouterMojoImpl : public MediaRouterBase, public mojom::MediaRouter {
       const url::Origin& origin,
       content::WebContents* web_contents,
       base::TimeDelta timeout,
-      bool incognito,
+      bool off_the_record,
       mojom::MediaRouteProvider::CreateRouteCallback mr_callback,
       const std::string& err,
       content::DesktopMediaID media_id);
@@ -150,43 +152,14 @@ class MediaRouterMojoImpl : public MediaRouterBase, public mojom::MediaRouter {
   friend class MediaRouterFactory;
   friend class MediaRouterMojoImplTest;
   friend class MediaRouterMojoTest;
-  FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoImplTest, JoinRoute);
   FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoImplTest, JoinRouteTimedOutFails);
   FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoImplTest,
                            JoinRouteIncognitoMismatchFails);
-  FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoImplTest,
-                           IncognitoRoutesTerminatedOnProfileShutdown);
-  FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoImplTest,
-                           RegisterAndUnregisterMediaSinksObserver);
-  FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoImplTest,
-                           RegisterMediaSinksObserverWithAvailabilityChange);
-  FRIEND_TEST_ALL_PREFIXES(
-      MediaRouterMojoImplTest,
-      RegisterAndUnregisterMediaSinksObserverWithAvailabilityChange);
-  FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoImplTest,
-                           RegisterAndUnregisterMediaRoutesObserver);
-  FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoImplTest,
-                           RouteMessagesSingleObserver);
-  FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoImplTest,
-                           RouteMessagesMultipleObservers);
   FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoImplTest, HandleIssue);
-  FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoImplTest, GetMediaController);
-  FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoImplTest,
-                           FailToCreateRouteController);
-  FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoImplTest,
-                           RegisterMediaRoutesObserver_DedupingWithCache);
   FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoImplTest,
                            PresentationConnectionStateChangedCallback);
   FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoImplTest,
                            PresentationConnectionStateChangedCallbackRemoved);
-  FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoImplTest,
-                           SendSinkRequestsToMultipleProviders);
-  FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoImplTest,
-                           SendRouteRequestsToMultipleProviders);
-  FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoImplTest,
-                           ObserveSinksFromMultipleProviders);
-  FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoImplTest,
-                           ObserveRoutesFromMultipleProviders);
   FRIEND_TEST_ALL_PREFIXES(MediaRouterDesktopTest,
                            SyncStateToMediaRouteProvider);
   FRIEND_TEST_ALL_PREFIXES(ExtensionMediaRouteProviderProxyTest,
@@ -198,6 +171,9 @@ class MediaRouterMojoImpl : public MediaRouterBase, public mojom::MediaRouter {
    public:
     MediaSinksQuery();
     ~MediaSinksQuery();
+
+    static MediaSource GetKey(const MediaSource::Id& source_id);
+    static MediaSource GetKey(const MediaSinksObserver& observer);
 
     // Caches the list of sinks for the provider returned from the query.
     void SetSinksForProvider(MediaRouteProviderId provider_id,
@@ -362,6 +338,8 @@ class MediaRouterMojoImpl : public MediaRouterBase, public mojom::MediaRouter {
       mojo::PendingRemote<media::mojom::MirrorServiceRemoter> remoter,
       mojo::PendingReceiver<media::mojom::MirrorServiceRemotingSource>
           source_receiver) override;
+  void GetLogger(mojo::PendingReceiver<mojom::Logger> receiver) override;
+  void GetLogsAsString(GetLogsAsStringCallback callback) override;
   void GetMediaSinkServiceStatus(
       mojom::MediaRouter::GetMediaSinkServiceStatusCallback callback) override;
   void GetMirroringServiceHostForTab(
@@ -398,7 +376,7 @@ class MediaRouterMojoImpl : public MediaRouterBase, public mojom::MediaRouter {
   // into a local callback.
   void RouteResponseReceived(const std::string& presentation_id,
                              MediaRouteProviderId provider_id,
-                             bool is_incognito,
+                             bool is_off_the_record,
                              MediaRouteResponseCallback callback,
                              bool is_join,
                              const base::Optional<MediaRoute>& media_route,
@@ -408,8 +386,6 @@ class MediaRouterMojoImpl : public MediaRouterBase, public mojom::MediaRouter {
 
   // Callback called by MRP's CreateMediaRouteController().
   void OnMediaControllerCreated(const MediaRoute::Id& route_id, bool success);
-
-  void RecordTabMirroringMetrics(content::WebContents* web_contents);
 
   // Method for obtaining a pointer to the provider associated with the given
   // object. Returns a nullopt when such a provider is not found.
@@ -447,6 +423,10 @@ class MediaRouterMojoImpl : public MediaRouterBase, public mojom::MediaRouter {
   DesktopMediaPickerController desktop_picker_;
 
   base::Optional<PendingStreamRequest> pending_stream_request_;
+
+  // Collects logs from the Media Router and the native Media Route Providers.
+  // TODO(crbug.com/1077138): Limit logging before Media Router usage.
+  LoggerImpl logger_;
 
   base::WeakPtrFactory<MediaRouterMojoImpl> weak_factory_{this};
 

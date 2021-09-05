@@ -45,6 +45,7 @@
 #import "ui/gfx/mac/nswindow_frame_controls.h"
 
 #include "app/vivaldi_apptools.h"
+#include "components/remote_cocoa/app_shim/vivaldi_window_size_helper.h"
 
 using remote_cocoa::mojom::VisibilityTransition;
 using remote_cocoa::mojom::WindowVisibilityState;
@@ -1144,7 +1145,7 @@ void NativeWidgetNSWindowBridge::OnDisplayRemoved(
     const display::Display& display) {
   UpdateWindowDisplay();
   if (vivaldi::IsVivaldiRunning()) {
-    VerifyWindowSize();
+    vivaldi::VerifyWindowSize(window_);
   }
 }
 

@@ -38,7 +38,6 @@
 #include "chrome/browser/ui/android/infobars/infobar_container_android.h"
 #include "chrome/browser/ui/android/tab_model/tab_model.h"
 #include "chrome/browser/ui/android/tab_model/tab_model_list.h"
-#include "chrome/browser/ui/android/view_android_helper.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/startup/bad_flags_prompt.h"
 #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
@@ -222,6 +221,16 @@ std::unique_ptr<content::WebContents> TabAndroid::SwapWebContents(
   return base::WrapUnique(old_contents);
 }
 
+bool TabAndroid::IsCustomTab() {
+  JNIEnv* env = base::android::AttachCurrentThread();
+  return Java_TabImpl_isCustomTab(env, weak_java_tab_.get(env));
+}
+
+bool TabAndroid::IsHidden() {
+  JNIEnv* env = base::android::AttachCurrentThread();
+  return Java_TabImpl_isHidden(env, weak_java_tab_.get(env));
+}
+
 void TabAndroid::Destroy(JNIEnv* env, const JavaParamRef<jobject>& obj) {
   delete this;
 }
@@ -250,8 +259,6 @@ void TabAndroid::InitWebContents(
 
   ContextMenuHelper::FromWebContents(web_contents())->SetPopulator(
       jcontext_menu_populator);
-  ViewAndroidHelper::FromWebContents(web_contents())->
-      SetViewAndroid(web_contents()->GetNativeView());
 
   synced_tab_delegate_->SetWebContents(web_contents(), jparent_tab_id);
 
@@ -345,7 +352,7 @@ TabAndroid::TabLoadStatus TabAndroid::LoadUrl(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
     const JavaParamRef<jstring>& url,
-    const JavaParamRef<jstring>& j_initiator_origin,
+    const JavaParamRef<jobject>& j_initiator_origin,
     const JavaParamRef<jstring>& j_extra_headers,
     const JavaParamRef<jobject>& j_post_data,
     jint page_transition,
@@ -407,8 +414,8 @@ TabAndroid::TabLoadStatus TabAndroid::LoadUrl(
           content::Referrer::ConvertToPolicy(referrer_policy));
     }
     if (j_initiator_origin) {
-      load_params.initiator_origin = url::Origin::Create(GURL(
-          base::android::ConvertJavaStringToUTF8(env, j_initiator_origin)));
+      load_params.initiator_origin =
+          url::Origin::FromJavaObject(j_initiator_origin);
     }
     load_params.is_renderer_initiated = is_renderer_initiated;
     load_params.should_replace_current_entry = should_replace_current_entry;

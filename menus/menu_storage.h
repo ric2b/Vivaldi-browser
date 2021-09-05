@@ -32,30 +32,30 @@ class Menu_Node;
 
 class MenuLoadDetails {
  public:
-  explicit MenuLoadDetails(Menu_Node* root,  Menu_Control* control,
+  explicit MenuLoadDetails(Menu_Node* mainmenu, Menu_Control* control,
                            int64_t id, bool force_bundle);
-  explicit MenuLoadDetails(Menu_Node* root, Menu_Control* control,
+  explicit MenuLoadDetails(Menu_Node* mainmenu, Menu_Control* control,
                            const std::string& menu, bool force_bundle);
   ~MenuLoadDetails();
 
   void SetHasUpgraded();
 
-  Menu_Node* root_node() const { return root_.get(); }
+  Menu_Node* mainmenu_node() const { return mainmenu_node_.get(); }
   Menu_Control* control() const { return control_.get(); }
 
   int64_t id() { return id_; }
   const std::string& menu() { return menu_; }
   bool has_upgraded() const { return has_upgraded_; }
   bool force_bundle() const { return force_bundle_; }
-  std::unique_ptr<Menu_Node> release_root_node() {
-    return std::move(root_);
+  std::unique_ptr<Menu_Node> release_mainmenu_node() {
+    return std::move(mainmenu_node_);
   }
   std::unique_ptr<Menu_Control> release_control() {
     return std::move(control_);
   }
 
  private:
-  std::unique_ptr<Menu_Node> root_;
+  std::unique_ptr<Menu_Node> mainmenu_node_;
   std::unique_ptr<Menu_Control> control_;
   int64_t id_;
   bool has_upgraded_;

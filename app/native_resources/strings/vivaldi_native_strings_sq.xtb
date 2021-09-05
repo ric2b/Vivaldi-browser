@@ -6,7 +6,7 @@
 <translation id="1158503667684816647">Nuk e kërkoj më konfirmimin</translation>
 <translation id="1276145862619442150">Tastet e shpejta</translation>
 <translation id="1281950884873973195">Kafsha 6</translation>
-<translation id="1411638389238344450">Dërgoj lidhjen me postë</translation>
+<translation id="1411638389238344450">Dërgoj lidhjen me imejl</translation>
 <translation id="1454726940098520109">Nuk e kërkoj më konfirmimin</translation>
 <translation id="1462666970065907900">Vërtet do e mbyllni dritaren?</translation>
 <translation id="1657174850639146440">Monstra 9</translation>
@@ -64,14 +64,16 @@
 <translation id="4515472507709384008">Opera version 15+</translation>
 <translation id="4548358047305717967">Hap imazhin në skedën e re në sfond</translation>
 <translation id="4582480609585453144">Hap lidhjen në skedën në sfond</translation>
-<translation id="4636708767492582204">Dërgoj me korrierin elektronik</translation>
+<translation id="4636708767492582204">Dërgoj me imejl</translation>
 <translation id="4677434526832593569">Kafsha 8</translation>
+<translation id="474217410105706308">Heq zërin e skedës</translation>
 <translation id="4881695831933465202">Hap</translation>
 <translation id="5014281392052865061">Taste të shpejta të importuara</translation>
-<translation id="5092656712000637858">Shtoj faqen në panelin anësor</translation>
+<translation id="5092656712000637858">Shtoj faqen te paneli anësor</translation>
 <translation id="5177818338935286353">Monstra 7</translation>
 <translation id="5213743983876949565">Kafsha 1</translation>
 <translation id="5238244642230426581">Faqet interesante të importuara</translation>
+<translation id="527605719918376753">Heq zërin e skedës</translation>
 <translation id="5305569355661722298">Konfirmoni mbylljen e dritares</translation>
 <translation id="5388358297987318779">Hap imazhin</translation>
 <translation id="5416008465899576639">Ka dalë versioni i ri i Vivaldit.</translation>
@@ -121,7 +123,7 @@
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8768970203213061953">Peizazhi 14</translation>
 <translation id="8773635261052182196">Nuk do të shfaqen më njoftimet. Mund të aktivizohen sërish te parametrat e Vivaldit.</translation>
-<translation id="8894900864683381599">Shtoj lidhjen në panelin anësor</translation>
+<translation id="8894900864683381599">Shtoj lidhjen te paneli anësor</translation>
 <translation id="8912720443398351457">Vërtet doni të dilni nga Vivaldi?</translation>
 <translation id="8947109330183116400">Përzgjidhni skedarin HTML të faqeve interesante</translation>
 <translation id="9017566390391482291">Përzgjidhni dosjen e profilit të Vivaldit për ta importuar</translation>

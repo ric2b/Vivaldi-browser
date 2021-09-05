@@ -5,14 +5,13 @@ include_rules = [
   # crbug.com/728877
   "+chrome/browser/ui/views/chrome_layout_provider.h",
 
-  "+chrome/services/app_service/public",
   "+chrome/services/keymaster/public",
   "+chrome/services/wilco_dtc_supportd/public",
   "+components/guest_os",
+  "+components/services/app_service/public",
   "+cros",
   "+dbus",
   "+device/bluetooth",
-  "+mash/public/mojom",
   "+media/audio/sounds",  # For system sounds
   "+media/base/media_switches.h",  # For media command line switches.
   "+media/mojo/mojom",  # For platform verification mojom interface.
@@ -32,7 +31,6 @@ specific_include_rules = {
   ".*test.*": [
    "!ash",
    "+ash/public",
-   "+ash/keyboard/ui/public",
   ],
   "assistant_util_unittest\.cc": [
     "+ui/events/devices/device_data_manager.h",

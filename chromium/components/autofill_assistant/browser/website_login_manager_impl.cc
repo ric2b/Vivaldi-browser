@@ -6,8 +6,8 @@
 
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/post_task.h"
 #include "components/password_manager/core/browser/form_fetcher_impl.h"
+#include "components/password_manager/core/browser/form_parsing/form_parser.h"
 #include "components/password_manager/core/browser/password_form_metrics_recorder.h"
 #include "components/password_manager/core/browser/password_generation_frame_helper.h"
 #include "components/password_manager/core/browser/password_manager_client.h"
@@ -27,8 +27,8 @@ autofill::PasswordForm CreatePasswordForm(
     const WebsiteLoginManager::Login& login,
     const std::string& password) {
   autofill::PasswordForm form;
-  form.signon_realm = login.origin.spec();
-  form.origin = login.origin.GetOrigin();
+  form.url = login.origin.GetOrigin();
+  form.signon_realm = password_manager::GetSignonRealm(form.url);
   form.username_value = base::UTF8ToUTF16(login.username);
   form.password_value = base::UTF8ToUTF16(password);
 
@@ -71,8 +71,8 @@ class WebsiteLoginManagerImpl::PendingRequest
     // destruction of |this|, which needs to happen *after* this call has
     // returned.
     if (notify_finished_callback_) {
-      base::PostTask(FROM_HERE, {content::BrowserThread::UI},
-                     base::BindOnce(&PendingRequest::NotifyFinished,
+      content::GetUIThreadTaskRunner({})->PostTask(
+          FROM_HERE, base::BindOnce(&PendingRequest::NotifyFinished,
                                     weak_ptr_factory_.GetWeakPtr(),
                                     std::move(notify_finished_callback_)));
     }
@@ -110,7 +110,7 @@ class WebsiteLoginManagerImpl::PendingFetchLoginsRequest
   void OnFetchCompleted() override {
     std::vector<Login> logins;
     for (const auto* match : form_fetcher_->GetBestMatches()) {
-      logins.emplace_back(match->origin.GetOrigin(),
+      logins.emplace_back(match->url.GetOrigin(),
                           base::UTF16ToUTF8(match->username_value));
     }
     std::move(callback_).Run(logins);
@@ -176,8 +176,9 @@ class WebsiteLoginManagerImpl::UpdatePasswordRequest
                                    CreatePasswordSaveManagerImpl(client)),
         metrics_recorder_(
             base::MakeRefCounted<password_manager::PasswordFormMetricsRecorder>(
-                client->IsMainFrameSecure(),
-                client->GetUkmSourceId())),
+                client->IsCommittedMainFrameSecure(),
+                client->GetUkmSourceId(),
+                client->GetPrefs())),
         votes_uploader_(client, true /* is_possible_change_password_form */) {
     DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 

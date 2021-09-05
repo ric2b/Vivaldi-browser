@@ -9,8 +9,10 @@
 #include <utility>
 #include <vector>
 
+#include "base/feature_list.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
+#include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/passwords/manage_passwords_view_utils.h"
 #include "chrome/browser/ui/passwords/password_dialog_prompts.h"
@@ -23,6 +25,7 @@
 #include "chrome/browser/ui/views/passwords/password_sign_in_promo_view.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
+#include "components/password_manager/core/common/password_manager_features.h"
 #include "content/public/browser/storage_partition.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/combobox_model.h"
@@ -33,6 +36,7 @@
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/bubble/bubble_frame_view.h"
 #include "ui/views/controls/button/image_button.h"
+#include "ui/views/controls/button/image_button_factory.h"
 #include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/editable_combobox/editable_combobox.h"
 #include "ui/views/controls/textfield/textfield.h"
@@ -163,13 +167,6 @@ std::unique_ptr<views::ToggleImageButton> CreatePasswordViewButton(
       l10n_util::GetStringUTF16(IDS_MANAGE_PASSWORDS_SHOW_PASSWORD));
   button->SetToggledTooltipText(
       l10n_util::GetStringUTF16(IDS_MANAGE_PASSWORDS_HIDE_PASSWORD));
-  button->SetImage(views::ImageButton::STATE_NORMAL,
-                   *ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
-                       IDR_SHOW_PASSWORD_HOVER));
-  button->SetToggledImage(
-      views::ImageButton::STATE_NORMAL,
-      ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
-          IDR_HIDE_PASSWORD_HOVER));
   button->SetImageHorizontalAlignment(views::ImageButton::ALIGN_CENTER);
   button->SetImageVerticalAlignment(views::ImageButton::ALIGN_MIDDLE);
   button->SetToggled(are_passwords_revealed);
@@ -261,13 +258,14 @@ PasswordSaveUpdateView::PasswordSaveUpdateView(
               : PasswordBubbleControllerBase::DisplayReason::kUserAction),
       is_update_bubble_(controller_.state() ==
                         password_manager::ui::PENDING_PASSWORD_UPDATE_STATE),
-      sign_in_promo_(nullptr),
-
-      username_dropdown_(nullptr),
-      password_view_button_(nullptr),
-      password_dropdown_(nullptr),
       are_passwords_revealed_(
           controller_.are_passwords_revealed_when_bubble_is_opened()) {
+  // If kEnablePasswordsAccountStorage is enabled, then
+  // PasswordSaveUpdateWithAccountStoreView should be used instead of this
+  // class.
+  DCHECK(!base::FeatureList::IsEnabled(
+      password_manager::features::kEnablePasswordsAccountStorage));
+
   DCHECK(controller_.state() == password_manager::ui::PENDING_PASSWORD_STATE ||
          controller_.state() ==
              password_manager::ui::PENDING_PASSWORD_UPDATE_STATE);
@@ -311,7 +309,7 @@ PasswordSaveUpdateView::PasswordSaveUpdateView(
   SetFootnoteView(CreateFooterView());
   SetCancelCallback(base::BindOnce(&PasswordSaveUpdateView::OnDialogCancelled,
                                    base::Unretained(this)));
-  UpdateDialogButtons();
+  UpdateBubbleUIElements();
 }
 
 views::View* PasswordSaveUpdateView::GetUsernameTextfieldForTest() const {
@@ -364,7 +362,7 @@ void PasswordSaveUpdateView::OnContentChanged(
   if (is_update_state_before != controller_.IsCurrentStateUpdate() ||
       is_ok_button_enabled_before !=
           IsDialogButtonEnabled(ui::DIALOG_BUTTON_OK)) {
-    UpdateDialogButtons();
+    UpdateBubbleUIElements();
     DialogModelChanged();
     // TODO(ellyjones): This should not be necessary; DialogModelChanged()
     // implies a re-layout of the dialog.
@@ -421,6 +419,20 @@ void PasswordSaveUpdateView::OnThemeChanged() {
                ? IDR_SAVE_PASSWORD_DARK
                : IDR_SAVE_PASSWORD;
   GetBubbleFrameView()->SetHeaderView(CreateHeaderImage(id));
+  if (password_view_button_) {
+    auto* theme = GetNativeTheme();
+    const SkColor icon_color =
+        theme->GetSystemColor(ui::NativeTheme::kColorId_DefaultIconColor);
+    const SkColor disabled_icon_color =
+        theme->GetSystemColor(ui::NativeTheme::kColorId_DisabledIconColor);
+    views::SetImageFromVectorIconWithColor(password_view_button_, kEyeIcon,
+                                           GetDefaultSizeOfVectorIcon(kEyeIcon),
+                                           icon_color);
+    views::SetToggledImageFromVectorIconWithColor(
+        password_view_button_, kEyeCrossedIcon,
+        GetDefaultSizeOfVectorIcon(kEyeCrossedIcon), icon_color,
+        disabled_icon_color);
+  }
 }
 
 void PasswordSaveUpdateView::TogglePasswordVisibility() {
@@ -466,15 +478,15 @@ void PasswordSaveUpdateView::ReplaceWithPromo() {
     NOTREACHED();
   }
   GetWidget()->UpdateWindowIcon();
-  GetWidget()->UpdateWindowTitle();
-  UpdateDialogButtons();
+  SetTitle(controller_.GetTitle());
+  UpdateBubbleUIElements();
   DialogModelChanged();
 
   SizeToContents();
 #endif  // defined(OS_CHROMEOS)
 }
 
-void PasswordSaveUpdateView::UpdateDialogButtons() {
+void PasswordSaveUpdateView::UpdateBubbleUIElements() {
   if (sign_in_promo_) {
     SetButtons(ui::DIALOG_BUTTON_NONE);
     return;
@@ -490,6 +502,8 @@ void PasswordSaveUpdateView::UpdateDialogButtons() {
       l10n_util::GetStringUTF16(
           is_update_bubble_ ? IDS_PASSWORD_MANAGER_CANCEL_BUTTON
                             : IDS_PASSWORD_MANAGER_BUBBLE_BLACKLIST_BUTTON));
+
+  SetTitle(controller_.GetTitle());
 }
 
 std::unique_ptr<views::View> PasswordSaveUpdateView::CreateFooterView() {

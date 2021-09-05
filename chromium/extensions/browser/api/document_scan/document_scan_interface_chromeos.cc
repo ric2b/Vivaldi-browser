@@ -9,6 +9,7 @@
 
 #include "base/base64.h"
 #include "base/bind.h"
+#include "base/logging.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/lorgnette_manager_client.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
@@ -42,25 +43,15 @@ void DocumentScanInterfaceChromeos::ListScanners(
 
 void DocumentScanInterfaceChromeos::OnScannerListReceived(
     ListScannersResultsCallback callback,
-    base::Optional<chromeos::LorgnetteManagerClient::ScannerTable> scanners) {
+    base::Optional<lorgnette::ListScannersResponse> response) {
   std::vector<ScannerDescription> scanner_descriptions;
-  if (scanners.has_value()) {
-    for (const auto& scanner : scanners.value()) {
+  if (response) {
+    for (const auto& scanner : response->scanners()) {
       ScannerDescription description;
-      description.name = scanner.first;
-      const auto& entry = scanner.second;
-      auto info_it = entry.find(lorgnette::kScannerPropertyManufacturer);
-      if (info_it != entry.end()) {
-        description.manufacturer = info_it->second;
-      }
-      info_it = entry.find(lorgnette::kScannerPropertyModel);
-      if (info_it != entry.end()) {
-        description.model = info_it->second;
-      }
-      info_it = entry.find(lorgnette::kScannerPropertyType);
-      if (info_it != entry.end()) {
-        description.scanner_type = info_it->second;
-      }
+      description.name = scanner.name();
+      description.manufacturer = scanner.manufacturer();
+      description.model = scanner.model();
+      description.scanner_type = scanner.type();
       description.image_mime_type = kScannerImageMimeTypePng;
       scanner_descriptions.push_back(description);
     }

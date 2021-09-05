@@ -12,15 +12,18 @@ import android.os.Handler;
 import android.view.ContextThemeWrapper;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.view.View.OnAttachStateChangeListener;
 import android.view.ViewGroup;
 import android.view.Window;
 
+import androidx.appcompat.app.AppCompatDelegate;
 import androidx.fragment.app.FragmentActivity;
 import androidx.fragment.app.FragmentController;
 import androidx.fragment.app.FragmentHostCallback;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
 
+import org.chromium.components.browser_ui.settings.SettingsUtils;
 import org.chromium.components.browser_ui.site_settings.SingleCategorySettings;
 import org.chromium.components.browser_ui.site_settings.SingleWebsiteSettings;
 import org.chromium.components.browser_ui.site_settings.SiteSettings;
@@ -59,6 +62,7 @@ public class SiteSettingsFragmentImpl extends RemoteFragmentImpl {
     // resource IDs.
     private Context mContext;
 
+    private boolean mStarted;
     private FragmentController mFragmentController;
 
     /**
@@ -78,6 +82,12 @@ public class SiteSettingsFragmentImpl extends RemoteFragmentImpl {
         private PassthroughFragmentActivity(SiteSettingsFragmentImpl fragmentImpl) {
             mFragmentImpl = fragmentImpl;
             attachBaseContext(mFragmentImpl.getWebLayerContext());
+            // This class doesn't extend AppCompatActivity, so some appcompat functionality doesn't
+            // get initialized, which leads to some appcompat widgets (like switches) rendering
+            // incorrectly. There are some resource issues with having this class extend
+            // AppCompatActivity, but until we sort those out, creating an AppCompatDelegate will
+            // perform the necessary initialization.
+            AppCompatDelegate.create(this, null);
         }
 
         @Override
@@ -182,8 +192,9 @@ public class SiteSettingsFragmentImpl extends RemoteFragmentImpl {
 
         @Override
         public LayoutInflater onGetLayoutInflater() {
-            return (LayoutInflater) mFragmentImpl.getWebLayerContext().getSystemService(
-                    Context.LAYOUT_INFLATER_SERVICE);
+            Context context = mFragmentImpl.getWebLayerContext();
+            return ((LayoutInflater) context.getSystemService(Context.LAYOUT_INFLATER_SERVICE))
+                    .cloneInContext(context);
         }
 
         @Override
@@ -271,6 +282,24 @@ public class SiteSettingsFragmentImpl extends RemoteFragmentImpl {
                 throw new RuntimeException("Failed to create Site Settings Fragment", e);
             }
         }
+
+        root.addOnAttachStateChangeListener(new OnAttachStateChangeListener() {
+            @Override
+            public void onViewAttachedToWindow(View view) {
+                // Add the shadow scroll listener here once the View is attached to the Window.
+                SiteSettingsPreferenceFragment preferenceFragment =
+                        (SiteSettingsPreferenceFragment) mFragmentController
+                                .getSupportFragmentManager()
+                                .findFragmentByTag(FRAGMENT_TAG);
+                ViewGroup listView = preferenceFragment.getListView();
+                listView.getViewTreeObserver().addOnScrollChangedListener(
+                        SettingsUtils.getShowShadowOnScrollListener(
+                                listView, view.findViewById(R.id.shadow)));
+            }
+
+            @Override
+            public void onViewDetachedFromWindow(View v) {}
+        });
         return root;
     }
 
@@ -298,7 +327,11 @@ public class SiteSettingsFragmentImpl extends RemoteFragmentImpl {
     @Override
     public void onStart() {
         super.onStart();
-        mFragmentController.dispatchActivityCreated();
+
+        if (!mStarted) {
+            mStarted = true;
+            mFragmentController.dispatchActivityCreated();
+        }
         mFragmentController.noteStateNotSaved();
         mFragmentController.execPendingActions();
         mFragmentController.dispatchStart();

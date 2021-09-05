@@ -207,10 +207,6 @@ SK_API void SkDebugf_FileLine(const char* file,
 #define SK_USE_LEGACY_GPU_BLUR
 #endif
 
-#ifndef SK_SUPPORT_LEGACY_MATRIX44
-#define SK_SUPPORT_LEGACY_MATRIX44
-#endif
-
 // Max. verb count for paths rendered by the edge-AA tessellating path renderer.
 #define GR_AA_TESSELLATOR_MAX_VERB_COUNT 100
 
@@ -220,6 +216,9 @@ SK_API void SkDebugf_FileLine(const char* file,
 
 // Staging for lowp::bilerp_clamp_8888, and for planned misc. others.
 #define SK_DISABLE_LOWP_BILERP_CLAMP_CLAMP_STAGE
+
+// Staging for migrating SkDeferredDisplayList from unique_ptr to sk_sp.
+#define SK_DDL_IS_UNIQUE_POINTER
 
 ///////////////////////// Imported from BUILD.gn and skia_common.gypi
 

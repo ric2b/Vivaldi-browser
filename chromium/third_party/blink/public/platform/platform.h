@@ -44,15 +44,16 @@
 #include "media/base/audio_renderer_sink.h"
 #include "mojo/public/cpp/base/big_buffer.h"
 #include "mojo/public/cpp/bindings/generic_pending_receiver.h"
-#include "mojo/public/cpp/system/data_pipe.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/network/public/mojom/url_loader_factory.mojom-shared.h"
 #include "third_party/blink/public/common/feature_policy/feature_policy.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 #include "third_party/blink/public/mojom/loader/code_cache.mojom-shared.h"
 #include "third_party/blink/public/platform/audio/web_audio_device_source_type.h"
 #include "third_party/blink/public/platform/blame_context.h"
 #include "third_party/blink/public/platform/code_cache_loader.h"
+#include "third_party/blink/public/platform/cross_variant_mojo_util.h"
 #include "third_party/blink/public/platform/user_metrics_action.h"
 #include "third_party/blink/public/platform/web_audio_device.h"
 #include "third_party/blink/public/platform/web_common.h"
@@ -108,7 +109,6 @@ class WebPublicSuffixList;
 class WebSandboxSupport;
 class WebSecurityOrigin;
 class WebThemeEngine;
-class WebURLLoaderMockFactory;
 class WebURLResponse;
 class WebURLResponse;
 class WebVideoCaptureImplManager;
@@ -180,6 +180,12 @@ class BLINK_PLATFORM_EXPORT Platform {
   virtual double AudioHardwareSampleRate() { return 0; }
   virtual size_t AudioHardwareBufferSize() { return 0; }
   virtual unsigned AudioHardwareOutputChannels() { return 0; }
+
+  // SavableResource ----------------------------------------------------
+
+  virtual bool IsURLSavableForSavableResource(const WebURL& url) {
+    return false;
+  }
 
   // Creates a device for audio I/O.
   // Pass in (number_of_input_channels > 0) if live/local audio input is
@@ -275,7 +281,8 @@ class BLINK_PLATFORM_EXPORT Platform {
   // Returns a new WebURLLoaderFactory that wraps the given
   // network::mojom::URLLoaderFactory.
   virtual std::unique_ptr<WebURLLoaderFactory> WrapURLLoaderFactory(
-      mojo::ScopedMessagePipeHandle url_loader_factory_handle) {
+      CrossVariantMojoRemote<network::mojom::URLLoaderFactoryInterfaceBase>
+          url_loader_factory) {
     return nullptr;
   }
 
@@ -428,11 +435,6 @@ class BLINK_PLATFORM_EXPORT Platform {
     return nullptr;
   }
   // Testing -------------------------------------------------------------
-
-  // Gets a pointer to URLLoaderMockFactory for testing. Will not be available
-  // in production builds.
-  // TODO(kinuko,toyoshim): Deprecate this one. (crbug.com/751425)
-  virtual WebURLLoaderMockFactory* GetURLLoaderMockFactory() { return nullptr; }
 
   // Record a UMA sequence action.  The UserMetricsAction construction must
   // be on a single line for extract_actions.py to find it.  Please see

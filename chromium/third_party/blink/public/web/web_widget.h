@@ -39,14 +39,16 @@
 #include "cc/trees/layer_tree_host_client.h"
 #include "third_party/blink/public/common/input/web_menu_source_type.h"
 #include "third_party/blink/public/common/metrics/document_update_reason.h"
+#include "third_party/blink/public/mojom/input/input_event_result.mojom-shared.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom-shared.h"
+#include "third_party/blink/public/platform/input/input_handler_proxy.h"
 #include "third_party/blink/public/platform/web_common.h"
 #include "third_party/blink/public/platform/web_input_event_result.h"
 #include "third_party/blink/public/platform/web_rect.h"
 #include "third_party/blink/public/platform/web_size.h"
 #include "third_party/blink/public/platform/web_text_input_info.h"
+#include "third_party/blink/public/platform/web_vector.h"
 #include "third_party/blink/public/web/web_hit_test_result.h"
-#include "third_party/blink/public/web/web_ime_text_span.h"
 #include "third_party/blink/public/web/web_lifecycle_update.h"
 #include "third_party/blink/public/web/web_range.h"
 #include "third_party/blink/public/web/web_swap_result.h"
@@ -60,6 +62,7 @@ class LayerTreeSettings;
 
 namespace ui {
 class Cursor;
+class LatencyInfo;
 }
 
 namespace blink {
@@ -148,9 +151,15 @@ class WebWidget {
   // Called to inform the WebWidget that it has gained or lost keyboard focus.
   virtual void SetFocus(bool) {}
 
+  // Returns the state of focus for the WebWidget.
+  virtual bool HasFocus() { return false; }
+
   // Sets the display mode, which comes from the top-level browsing context and
   // is applied to all widgets.
   virtual void SetDisplayMode(mojom::DisplayMode) {}
+
+  // Sets the root widget's window segments.
+  virtual void SetWindowSegments(WebVector<WebRect> window_segments) {}
 
   // Returns the anchor and focus bounds of the current selection.
   // If the selection range is empty, it returns the caret bounds.
@@ -185,6 +194,56 @@ class WebWidget {
   virtual WebURL GetURLForDebugTrace() = 0;
 
   virtual void SetCursor(const ui::Cursor& cursor) = 0;
+
+  // Get the current tooltip text.
+  virtual WebString GetLastToolTipTextForTesting() const { return WebString(); }
+
+  // Whether or not the widget is in the process of handling input events.
+  virtual bool HandlingInputEvent() = 0;
+
+  // Set state that the widget is in the process of handling input events.
+  virtual void SetHandlingInputEvent(bool handling) = 0;
+
+  using HandledEventCallback = base::OnceCallback<void(
+      mojom::InputEventResultState ack_state,
+      const ui::LatencyInfo& latency_info,
+      std::unique_ptr<InputHandlerProxy::DidOverscrollParams>,
+      base::Optional<cc::TouchAction>)>;
+
+  // Process the input event, invoking the callback when complete. This
+  // method will call the callback synchronously.
+  virtual void ProcessInputEventSynchronously(const WebCoalescedInputEvent&,
+                                              HandledEventCallback) = 0;
+
+  virtual void DidOverscrollForTesting(
+      const gfx::Vector2dF& overscroll_delta,
+      const gfx::Vector2dF& accumulated_overscroll,
+      const gfx::PointF& position_in_viewport,
+      const gfx::Vector2dF& velocity_in_viewport) {}
+
+  // Requests the text input state be updated. If anything has changed the
+  // updated state will be sent to the browser.
+  virtual void UpdateTextInputState() = 0;
+
+  // Requests the text input state be updated. An updated state will always be
+  // sent to the browser.
+  virtual void ForceTextInputStateUpdate() = 0;
+
+  // Checks if the composition range or composition character bounds have been
+  // changed. If they are changed, the new value will be sent to the browser
+  // process. This method does nothing when the browser process is not able to
+  // handle composition range and composition character bounds.
+  virtual void UpdateCompositionInfo() = 0;
+
+  // Requests the selection bounds be updated.
+  virtual void UpdateSelectionBounds() = 0;
+
+  // Request the virtual keyboard be shown.
+  virtual void ShowVirtualKeyboard() = 0;
+
+  // Request composition updates be sent to the browser.
+  virtual void RequestCompositionUpdates(bool immediate_request,
+                                         bool monitor_updates) = 0;
 
  protected:
   ~WebWidget() = default;

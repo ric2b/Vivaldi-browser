@@ -24,6 +24,7 @@
 #include "url/gurl.h"
 
 using ::base::test::RunClosure;
+using ::testing::Return;
 
 namespace chromeos {
 
@@ -33,11 +34,14 @@ class MockAppLauncherDelegate : public WebKioskAppLauncher::Delegate {
   ~MockAppLauncherDelegate() override = default;
 
   MOCK_METHOD0(InitializeNetwork, void());
-  MOCK_METHOD0(OnAppStartedInstalling, void());
+  MOCK_METHOD0(OnAppInstalling, void());
   MOCK_METHOD0(OnAppPrepared, void());
-  MOCK_METHOD0(OnAppInstallFailed, void());
   MOCK_METHOD0(OnAppLaunched, void());
-  MOCK_METHOD0(OnAppLaunchFailed, void());
+  MOCK_METHOD1(OnLaunchFailed, void(KioskAppLaunchError::Error));
+
+  MOCK_CONST_METHOD0(IsNetworkReady, bool());
+  MOCK_CONST_METHOD0(IsShowingNetworkConfigScreen, bool());
+  MOCK_CONST_METHOD0(ShouldSkipAppInstallation, bool());
 };
 
 const char kAppEmail[] = "lala@example.com";
@@ -95,8 +99,8 @@ class WebKioskAppLauncherTest : public ChromeRenderViewHostTestHarness {
     ChromeRenderViewHostTestHarness::SetUp();
     app_manager_ = std::make_unique<WebKioskAppManager>();
     delegate_ = std::make_unique<MockAppLauncherDelegate>();
-    launcher_ =
-        std::make_unique<WebKioskAppLauncher>(profile(), delegate_.get());
+    launcher_ = std::make_unique<WebKioskAppLauncher>(
+        profile(), delegate_.get(), AccountId::FromUserEmail(kAppEmail));
 
     browser_window_ = new TestBrowserWindow();
     new TestBrowserWindowOwner(browser_window_);
@@ -160,7 +164,7 @@ class WebKioskAppLauncherTest : public ChromeRenderViewHostTestHarness {
   }
 
   MockAppLauncherDelegate* delegate() { return delegate_.get(); }
-  WebKioskAppLauncher* launcher() { return launcher_.get(); }
+  KioskAppLauncher* launcher() { return launcher_.get(); }
 
  protected:
   AccountId account_id_;
@@ -176,19 +180,22 @@ class WebKioskAppLauncherTest : public ChromeRenderViewHostTestHarness {
   std::unique_ptr<AppWindowCloser> closer_;
 };
 
+// TODO(crbug.com/1097708): these tests flakily fail on MSAN Builds. 
+#if !defined(MEMORY_SANITIZER)
 TEST_F(WebKioskAppLauncherTest, NormalFlowNotInstalled) {
   SetupAppData(/*installed*/ false);
 
   base::RunLoop loop1;
+  EXPECT_CALL(*delegate(), ShouldSkipAppInstallation()).WillOnce(Return(false));
   EXPECT_CALL(*delegate(), InitializeNetwork())
       .WillOnce(RunClosure(loop1.QuitClosure()));
-  launcher()->Initialize(account_id_);
+  launcher()->Initialize();
   loop1.Run();
 
   SetupInstallData();
 
   base::RunLoop loop2;
-  EXPECT_CALL(*delegate(), OnAppStartedInstalling());
+  EXPECT_CALL(*delegate(), OnAppInstalling());
   EXPECT_CALL(*delegate(), OnAppPrepared())
       .WillOnce(RunClosure(loop2.QuitClosure()));
   launcher()->ContinueWithNetworkReady();
@@ -205,13 +212,14 @@ TEST_F(WebKioskAppLauncherTest, NormalFlowNotInstalled) {
 
   CloseAppWindow();
 }
+#endif
 
 TEST_F(WebKioskAppLauncherTest, NormalFlowAlreadyInstalled) {
   SetupAppData(/*installed*/ true);
   base::RunLoop loop1;
   EXPECT_CALL(*delegate(), OnAppPrepared())
       .WillOnce(RunClosure(loop1.QuitClosure()));
-  launcher()->Initialize(account_id_);
+  launcher()->Initialize();
   loop1.Run();
 
   base::RunLoop loop2;
@@ -223,20 +231,24 @@ TEST_F(WebKioskAppLauncherTest, NormalFlowAlreadyInstalled) {
   CloseAppWindow();
 }
 
+// TODO(crbug.com/1097708): these tests flakily fail on MSAN Builds. 
+#if !defined(MEMORY_SANITIZER)
 TEST_F(WebKioskAppLauncherTest, NormalFlowBadLaunchUrl) {
   SetupAppData(/*installed*/ false);
 
   base::RunLoop loop1;
+  EXPECT_CALL(*delegate(), ShouldSkipAppInstallation()).WillOnce(Return(false));
   EXPECT_CALL(*delegate(), InitializeNetwork())
       .WillOnce(RunClosure(loop1.QuitClosure()));
-  launcher()->Initialize(account_id_);
+  launcher()->Initialize();
   loop1.Run();
 
   SetupBadInstallData();
 
   base::RunLoop loop2;
-  EXPECT_CALL(*delegate(), OnAppStartedInstalling());
-  EXPECT_CALL(*delegate(), OnAppLaunchFailed())
+  EXPECT_CALL(*delegate(), OnAppInstalling());
+  EXPECT_CALL(*delegate(),
+              OnLaunchFailed((KioskAppLaunchError::Error::UNABLE_TO_LAUNCH)))
       .WillOnce(RunClosure(loop2.QuitClosure()));
   launcher()->ContinueWithNetworkReady();
   loop2.Run();
@@ -250,17 +262,20 @@ TEST_F(WebKioskAppLauncherTest, InstallationRestarted) {
   url_loader_->SaveLoadUrlRequests();
 
   base::RunLoop loop1;
+  EXPECT_CALL(*delegate(), ShouldSkipAppInstallation()).WillOnce(Return(false));
   EXPECT_CALL(*delegate(), InitializeNetwork())
       .WillOnce(RunClosure(loop1.QuitClosure()));
-  launcher()->Initialize(account_id_);
+  launcher()->Initialize();
   loop1.Run();
 
   SetupInstallData();
 
-  EXPECT_CALL(*delegate(), OnAppStartedInstalling());
+  EXPECT_CALL(*delegate(), OnAppInstalling());
   launcher()->ContinueWithNetworkReady();
 
-  launcher()->CancelCurrentInstallation();
+  EXPECT_CALL(*delegate(), ShouldSkipAppInstallation()).WillOnce(Return(false));
+  EXPECT_CALL(*delegate(), InitializeNetwork()).Times(1);
+  launcher()->RestartLauncher();
 
   // App should not be installed yet.
   EXPECT_NE(app_data()->status(), WebKioskAppData::STATUS_INSTALLED);
@@ -271,7 +286,7 @@ TEST_F(WebKioskAppLauncherTest, InstallationRestarted) {
   SetupInstallData();
 
   base::RunLoop loop2;
-  EXPECT_CALL(*delegate(), OnAppStartedInstalling()).Times(1);
+  EXPECT_CALL(*delegate(), OnAppInstalling()).Times(1);
   EXPECT_CALL(*delegate(), OnAppPrepared())
       .Times(1)
       .WillOnce(RunClosure(loop2.QuitClosure()));
@@ -289,26 +304,51 @@ TEST_F(WebKioskAppLauncherTest, InstallationRestarted) {
 
   CloseAppWindow();
 }
+#endif
 
 TEST_F(WebKioskAppLauncherTest, UrlNotLoaded) {
   SetupAppData(/*installed*/ false);
 
   base::RunLoop loop1;
+  EXPECT_CALL(*delegate(), ShouldSkipAppInstallation()).WillOnce(Return(false));
   EXPECT_CALL(*delegate(), InitializeNetwork())
       .WillOnce(RunClosure(loop1.QuitClosure()));
-  launcher()->Initialize(account_id_);
+  launcher()->Initialize();
   loop1.Run();
 
   SetupNotLoadedAppData();
 
   base::RunLoop loop2;
-  EXPECT_CALL(*delegate(), OnAppStartedInstalling());
-  EXPECT_CALL(*delegate(), OnAppInstallFailed())
+  EXPECT_CALL(*delegate(), OnAppInstalling());
+  EXPECT_CALL(*delegate(),
+              OnLaunchFailed(KioskAppLaunchError::Error::UNABLE_TO_INSTALL))
       .WillOnce(RunClosure(loop2.QuitClosure()));
   launcher()->ContinueWithNetworkReady();
   loop2.Run();
 
   EXPECT_NE(app_data()->status(), WebKioskAppData::STATUS_INSTALLED);
+}
+
+TEST_F(WebKioskAppLauncherTest, SkipInstallation) {
+  SetupAppData(/*installed*/ false);
+
+  base::RunLoop loop1;
+  EXPECT_CALL(*delegate(), ShouldSkipAppInstallation()).WillOnce(Return(true));
+  EXPECT_CALL(*delegate(), OnAppPrepared())
+      .WillOnce(RunClosure(loop1.QuitClosure()));
+  launcher()->Initialize();
+  loop1.Run();
+
+  EXPECT_EQ(app_data()->status(), WebKioskAppData::STATUS_INIT);
+  EXPECT_EQ(app_data()->launch_url(), GURL());
+
+  base::RunLoop loop2;
+  EXPECT_CALL(*delegate(), OnAppLaunched())
+      .WillOnce(RunClosure(loop2.QuitClosure()));
+  launcher()->LaunchApp();
+  loop2.Run();
+
+  CloseAppWindow();
 }
 
 }  // namespace chromeos

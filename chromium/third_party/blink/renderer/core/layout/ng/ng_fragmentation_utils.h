@@ -70,8 +70,11 @@ NGBreakAppeal CalculateBreakAppealInside(const NGConstraintSpace& space,
 // start of the current block formatting context. Note that if the start of the
 // current block formatting context is in a previous fragmentainer, the size of
 // the current fragmentainer is returned instead.
+// In the case of initial column balancing, the size is unknown, in which case
+// kIndefiniteSize is returned.
 inline LayoutUnit FragmentainerSpaceAtBfcStart(const NGConstraintSpace& space) {
-  DCHECK(space.HasKnownFragmentainerBlockSize());
+  if (!space.HasKnownFragmentainerBlockSize())
+    return kIndefiniteSize;
   return space.FragmentainerBlockSize() - space.FragmentainerOffsetAtBfc();
 }
 
@@ -111,11 +114,27 @@ inline void SetupFragmentBuilderForFragmentation(const NGConstraintSpace&,
                                                  const NGInlineBreakToken*,
                                                  NGLineBoxFragmentBuilder*) {}
 
-// Write fragmentation information to the fragment builder after layout.
-void FinishFragmentation(const NGConstraintSpace&,
+// Return true if the node is fully grown at its current size.
+// |current_total_block_size| is the total block-size of the node, as if all
+// fragments were stitched together.
+bool IsNodeFullyGrown(NGBlockNode,
+                      const NGConstraintSpace&,
+                      LayoutUnit current_total_block_size,
+                      const NGBoxStrut& border_padding,
+                      LayoutUnit inline_size);
+
+// Update and write fragmentation information to the fragment builder after
+// layout. This will update the block-size stored in the builder. When
+// calculating the block-size, a layout algorithm will include the accumulated
+// block-size of all fragments generated for this node - as if they were all
+// stitched together as one tall fragment. This is the most convenient thing to
+// do, since any block-size specified in CSS applies to the entire box,
+// regardless of fragmentation. This function will update the block-size to the
+// actual fragment size, by examining possible breakpoints, if necessary.
+void FinishFragmentation(NGBlockNode node,
+                         const NGConstraintSpace&,
                          const NGBlockBreakToken* previous_break_token,
-                         LayoutUnit block_size,
-                         LayoutUnit intrinsic_block_size,
+                         const NGBoxStrut& border_padding,
                          LayoutUnit space_left,
                          NGBoxFragmentBuilder*);
 
@@ -224,6 +243,19 @@ bool AttemptSoftBreak(const NGConstraintSpace&,
                       LayoutUnit fragmentainer_block_offset,
                       NGBreakAppeal appeal_before,
                       NGBoxFragmentBuilder*);
+
+// Return the adjusted child margin to be applied at the end of a fragment.
+// Margins should collapse with the fragmentainer boundary. |bfc_block_offset|
+// is the BFC offset where the margin should be applied (i.e. after the
+// block-end border edge of the last child fragment).
+inline LayoutUnit AdjustedMarginAfterFinalChildFragment(
+    const NGConstraintSpace& space,
+    LayoutUnit bfc_block_offset,
+    LayoutUnit block_end_margin) {
+  LayoutUnit space_left =
+      FragmentainerSpaceAtBfcStart(space) - bfc_block_offset;
+  return std::min(block_end_margin, space_left.ClampNegativeToZero());
+}
 
 }  // namespace blink
 

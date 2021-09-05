@@ -39,6 +39,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/prefs/pref_service_factory.h"
 #include "crypto/sha2.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
 #include "net/base/network_delegate.h"
@@ -53,7 +54,6 @@
 #include "net/dns/host_cache.h"
 #include "net/dns/mapped_host_resolver.h"
 #include "net/extras/sqlite/sqlite_persistent_cookie_store.h"
-#include "net/http/failing_http_transaction_factory.h"
 #include "net/http/http_auth.h"
 #include "net/http/http_auth_handler_factory.h"
 #include "net/http/http_auth_preferences.h"
@@ -86,11 +86,14 @@
 #include "services/network/proxy_lookup_request.h"
 #include "services/network/proxy_resolving_socket_factory_mojo.h"
 #include "services/network/public/cpp/cert_verifier/cert_verifier_creation.h"
+#include "services/network/public/cpp/cert_verifier/mojo_cert_verifier.h"
 #include "services/network/public/cpp/content_security_policy/content_security_policy.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/network_switches.h"
 #include "services/network/public/cpp/parsed_headers.h"
+#include "services/network/public/mojom/network_context.mojom-forward.h"
 #include "services/network/public/mojom/network_context.mojom.h"
+#include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "services/network/quic_transport.h"
 #include "services/network/resolve_host_request.h"
 #include "services/network/resource_scheduler/resource_scheduler_client.h"
@@ -126,7 +129,6 @@
 
 #if defined(OS_CHROMEOS)
 #include "services/network/cert_verifier_with_trust_anchors.h"
-#include "services/network/nss_temp_certs_cache_chromeos.h"
 #endif  // defined(OS_CHROMEOS)
 
 #if !defined(OS_IOS)
@@ -345,7 +347,15 @@ NetworkContext::NetworkContext(
       cors_preflight_controller_(
           params_->cors_extra_safelisted_request_header_names,
           network_service) {
-  url_request_context_owner_ = MakeURLRequestContext();
+  mojo::PendingRemote<mojom::URLLoaderFactory>
+      url_loader_factory_for_cert_net_fetcher;
+  mojo::PendingReceiver<mojom::URLLoaderFactory>
+      url_loader_factory_for_cert_net_fetcher_receiver =
+          url_loader_factory_for_cert_net_fetcher
+              .InitWithNewPipeAndPassReceiver();
+
+  url_request_context_owner_ =
+      MakeURLRequestContext(std::move(url_loader_factory_for_cert_net_fetcher));
   url_request_context_ = url_request_context_owner_.url_request_context.get();
 
   network_service_->RegisterNetworkContext(this);
@@ -383,6 +393,9 @@ NetworkContext::NetworkContext(
   if (params_->cookie_manager)
     GetCookieManager(std::move(params_->cookie_manager));
 #endif
+
+  CreateURLLoaderFactoryForCertNetFetcher(
+      std::move(url_loader_factory_for_cert_net_fetcher_receiver));
 }
 
 NetworkContext::NetworkContext(
@@ -463,13 +476,10 @@ NetworkContext::~NetworkContext() {
   }
 }
 
+// static
 void NetworkContext::SetCertVerifierForTesting(
     net::CertVerifier* cert_verifier) {
   g_cert_verifier_for_testing = cert_verifier;
-}
-
-bool NetworkContext::IsPrimaryNetworkContext() const {
-  return params_ && params_->primary_network_context;
 }
 
 void NetworkContext::CreateURLLoaderFactory(
@@ -479,6 +489,18 @@ void NetworkContext::CreateURLLoaderFactory(
   url_loader_factories_.emplace(std::make_unique<cors::CorsURLLoaderFactory>(
       this, std::move(params), std::move(resource_scheduler_client),
       std::move(receiver), &cors_origin_access_list_));
+}
+
+void NetworkContext::CreateURLLoaderFactoryForCertNetFetcher(
+    mojo::PendingReceiver<mojom::URLLoaderFactory> factory_receiver) {
+  // TODO(crbug.com/1087790): investigate changing these params.
+  auto url_loader_factory_params = mojom::URLLoaderFactoryParams::New();
+  url_loader_factory_params->is_trusted = true;
+  url_loader_factory_params->process_id = mojom::kBrowserProcessId;
+  url_loader_factory_params->automatically_assign_isolation_info = true;
+  url_loader_factory_params->is_corb_enabled = false;
+  CreateURLLoaderFactory(std::move(factory_receiver),
+                         std::move(url_loader_factory_params));
 }
 
 void NetworkContext::ActivateDohProbes() {
@@ -946,19 +968,18 @@ void NetworkContext::SetEnableReferrers(bool enable_referrers) {
 void NetworkContext::UpdateAdditionalCertificates(
     mojom::AdditionalCertificatesPtr additional_certificates) {
   if (!cert_verifier_with_trust_anchors_) {
-    CHECK(g_cert_verifier_for_testing ||
-          params_->cert_verifier_creation_params->username_hash.empty());
+    CHECK(g_cert_verifier_for_testing);
     return;
   }
   if (!additional_certificates) {
-    nss_temp_certs_cache_.reset();
-    cert_verifier_with_trust_anchors_->SetTrustAnchors(net::CertificateList());
+    cert_verifier_with_trust_anchors_->SetAdditionalCerts(
+        net::CertificateList(), net::CertificateList());
     return;
   }
-  nss_temp_certs_cache_ = std::make_unique<network::NSSTempCertsCacheChromeOS>(
+
+  cert_verifier_with_trust_anchors_->SetAdditionalCerts(
+      additional_certificates->trust_anchors,
       additional_certificates->all_certificates);
-  cert_verifier_with_trust_anchors_->SetTrustAnchors(
-      additional_certificates->trust_anchors);
 }
 #endif  // defined(OS_CHROMEOS)
 
@@ -972,11 +993,13 @@ void NetworkContext::SetCTPolicy(mojom::CTPolicyPtr ct_policy) {
       ct_policy->excluded_spkis, ct_policy->excluded_legacy_spkis);
 }
 
-void NetworkContext::AddExpectCT(const std::string& domain,
-                                 base::Time expiry,
-                                 bool enforce,
-                                 const GURL& report_uri,
-                                 AddExpectCTCallback callback) {
+void NetworkContext::AddExpectCT(
+    const std::string& domain,
+    base::Time expiry,
+    bool enforce,
+    const GURL& report_uri,
+    const net::NetworkIsolationKey& network_isolation_key,
+    AddExpectCTCallback callback) {
   net::TransportSecurityState* transport_security_state =
       url_request_context()->transport_security_state();
   if (!transport_security_state) {
@@ -984,7 +1007,8 @@ void NetworkContext::AddExpectCT(const std::string& domain,
     return;
   }
 
-  transport_security_state->AddExpectCT(domain, expiry, enforce, report_uri);
+  transport_security_state->AddExpectCT(domain, expiry, enforce, report_uri,
+                                        network_isolation_key);
   std::move(callback).Run(true);
 }
 
@@ -1010,7 +1034,11 @@ void NetworkContext::SetExpectCTTestReport(
   net::SignedCertificateTimestampAndStatusList dummy_sct_list;
   expect_ct_reporter_->OnExpectCTFailed(
       net::HostPortPair("expect-ct-report.test", 443), report_uri,
-      base::Time::Now(), dummy_cert.get(), dummy_cert.get(), dummy_sct_list);
+      base::Time::Now(), dummy_cert.get(), dummy_cert.get(), dummy_sct_list,
+      // No need for a shared NetworkIsolationKey here, as this is test-only
+      // code and none
+      // of the tests that call it care about the NetworkIsolationKey.
+      net::NetworkIsolationKey::CreateTransient());
 }
 
 void NetworkContext::LazyCreateExpectCTReporter(
@@ -1042,8 +1070,10 @@ void NetworkContext::OnSetExpectCTTestReportFailure() {
   outstanding_set_expect_ct_callbacks_.pop();
 }
 
-void NetworkContext::GetExpectCTState(const std::string& domain,
-                                      GetExpectCTStateCallback callback) {
+void NetworkContext::GetExpectCTState(
+    const std::string& domain,
+    const net::NetworkIsolationKey& network_isolation_key,
+    GetExpectCTStateCallback callback) {
   base::DictionaryValue result;
   if (base::IsStringASCII(domain)) {
     net::TransportSecurityState* transport_security_state =
@@ -1051,7 +1081,7 @@ void NetworkContext::GetExpectCTState(const std::string& domain,
     if (transport_security_state) {
       net::TransportSecurityState::ExpectCTState dynamic_expect_ct_state;
       bool found = transport_security_state->GetDynamicExpectCTState(
-          domain, &dynamic_expect_ct_state);
+          domain, network_isolation_key, &dynamic_expect_ct_state);
 
       // TODO(estark): query static Expect-CT state as well.
       if (found) {
@@ -1192,10 +1222,12 @@ void NetworkContext::CreateQuicTransport(
     const GURL& url,
     const url::Origin& origin,
     const net::NetworkIsolationKey& key,
+    std::vector<mojom::QuicTransportCertificateFingerprintPtr> fingerprints,
     mojo::PendingRemote<mojom::QuicTransportHandshakeClient>
         pending_handshake_client) {
-  quic_transports_.insert(std::make_unique<QuicTransport>(
-      url, origin, key, this, std::move(pending_handshake_client)));
+  quic_transports_.insert(
+      std::make_unique<QuicTransport>(url, origin, key, fingerprints, this,
+                                      std::move(pending_handshake_client)));
 }
 
 void NetworkContext::CreateNetLogExporter(
@@ -1384,7 +1416,7 @@ void NetworkContext::GetHSTSState(const std::string& domain,
       net::TransportSecurityState::STSState dynamic_sts_state;
       net::TransportSecurityState::PKPState dynamic_pkp_state;
       bool found_sts_dynamic = transport_security_state->GetDynamicSTSState(
-          domain, &dynamic_sts_state, nullptr);
+          domain, &dynamic_sts_state);
 
       bool found_pkp_dynamic = transport_security_state->GetDynamicPKPState(
           domain, &dynamic_pkp_state);
@@ -1510,14 +1542,15 @@ void NetworkContext::PreconnectSockets(
 }
 
 void NetworkContext::CreateP2PSocketManager(
+    const net::NetworkIsolationKey& network_isolation_key,
     mojo::PendingRemote<mojom::P2PTrustedSocketManagerClient> client,
     mojo::PendingReceiver<mojom::P2PTrustedSocketManager>
         trusted_socket_manager,
     mojo::PendingReceiver<mojom::P2PSocketManager> socket_manager_receiver) {
   std::unique_ptr<P2PSocketManager> socket_manager =
       std::make_unique<P2PSocketManager>(
-          std::move(client), std::move(trusted_socket_manager),
-          std::move(socket_manager_receiver),
+          network_isolation_key, std::move(client),
+          std::move(trusted_socket_manager), std::move(socket_manager_receiver),
           base::BindRepeating(&NetworkContext::DestroySocketManager,
                               base::Unretained(this)),
           url_request_context_);
@@ -1674,26 +1707,56 @@ void NetworkContext::OnHttpAuthDynamicParamsChanged(
 #endif
 }
 
-URLRequestContextOwner NetworkContext::MakeURLRequestContext() {
+URLRequestContextOwner NetworkContext::MakeURLRequestContext(
+    mojo::PendingRemote<mojom::URLLoaderFactory>
+        url_loader_factory_for_cert_net_fetcher) {
   URLRequestContextBuilderMojo builder;
   const base::CommandLine* command_line =
       base::CommandLine::ForCurrentProcess();
+
+  DCHECK(
+      g_cert_verifier_for_testing ||
+      !base::FeatureList::IsEnabled(network::features::kCertVerifierService) ||
+      (params_->cert_verifier_params &&
+       params_->cert_verifier_params->is_remote_params()))
+      << "If cert verification service is on, the creator of the "
+         "NetworkContext should pass CertVerifierServiceRemoteParams.";
 
   std::unique_ptr<net::CertVerifier> cert_verifier;
   if (g_cert_verifier_for_testing) {
     cert_verifier = std::make_unique<WrappedTestingCertVerifier>();
   } else {
-    mojom::CertVerifierCreationParams* creation_params = nullptr;
-    if (params_->cert_verifier_creation_params)
-      creation_params = params_->cert_verifier_creation_params.get();
+    if (params_->cert_verifier_params &&
+        params_->cert_verifier_params->is_remote_params()) {
+      // base::Unretained() is safe below because |this| will own
+      // |cert_verifier|.
+      // TODO(https://crbug.com/1085233): this cert verifier should deal with
+      // disconnections if the CertVerifierService is run outside of the browser
+      // process.
+      cert_verifier = std::make_unique<cert_verifier::MojoCertVerifier>(
+          std::move(params_->cert_verifier_params->get_remote_params()
+                        ->cert_verifier_service),
+          std::move(url_loader_factory_for_cert_net_fetcher),
+          base::BindRepeating(
+              &NetworkContext::CreateURLLoaderFactoryForCertNetFetcher,
+              base::Unretained(this)));
+    } else {
+      mojom::CertVerifierCreationParams* creation_params = nullptr;
+      if (params_->cert_verifier_params &&
+          params_->cert_verifier_params->is_creation_params()) {
+        creation_params =
+            params_->cert_verifier_params->get_creation_params().get();
+      }
 
-    if (IsUsingCertNetFetcher())
-      cert_net_fetcher_ = base::MakeRefCounted<net::CertNetFetcherURLRequest>();
+      if (IsUsingCertNetFetcher())
+        cert_net_fetcher_ =
+            base::MakeRefCounted<net::CertNetFetcherURLRequest>();
 
-    cert_verifier = CreateCertVerifier(creation_params, cert_net_fetcher_);
+      cert_verifier = CreateCertVerifier(creation_params, cert_net_fetcher_);
+    }
 
-    // Wrap the cert verifier in caching and coalescing layers to avoid extra
-    // verifications.
+    // Whether the cert verifier is remote or in-process, we should wrap it in
+    // caching and coalescing layers to avoid extra verifications and IPCs.
     cert_verifier = std::make_unique<net::CachingCertVerifier>(
         std::make_unique<net::CoalescingCertVerifier>(
             std::move(cert_verifier)));
@@ -2223,6 +2286,9 @@ void NetworkContext::OnCertVerifyForSignedExchangeComplete(int cert_verify_id,
       pending_cert_verify->result->cert_status &= ~net::CERT_STATUS_IS_EV;
     }
 
+    // TODO(https://crbug.com/1087091): Update
+    // NetworkContext::VerifyCertForSignedExchange() to take a
+    // NetworkIsolationKey, and pass it in here.
     net::TransportSecurityState::CTRequirementsStatus ct_requirement_status =
         url_request_context_->transport_security_state()->CheckCTRequirements(
             net::HostPortPair::FromURL(pending_cert_verify->url),
@@ -2230,7 +2296,8 @@ void NetworkContext::OnCertVerifyForSignedExchangeComplete(int cert_verify_id,
             pending_cert_verify->result->public_key_hashes, verified_cert,
             pending_cert_verify->certificate.get(), ct_verify_result.scts,
             net::TransportSecurityState::ENABLE_EXPECT_CT_REPORTS,
-            ct_verify_result.policy_compliance);
+            ct_verify_result.policy_compliance,
+            net::NetworkIsolationKey::Todo());
 
     switch (ct_requirement_status) {
       case net::TransportSecurityState::CT_REQUIREMENTS_NOT_MET:

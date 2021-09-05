@@ -13,6 +13,7 @@
 #include "components/signin/public/identity_manager/identity_test_environment.h"
 #include "net/http/http_util.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
+#include "services/data_decoder/public/cpp/test_support/in_process_data_decoder.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 #include "services/network/test/test_url_loader_factory.h"
@@ -25,10 +26,12 @@ namespace {
 const char kContentType[] = "mock_content_type";
 const char kEmail[] = "mock_email@gmail.com";
 const char kEndpoint[] = "https://my-endpoint.com";
-const char kExpectedResponse[] = "mock_response";
+const char kExpectedResponse[] = "{}";
 const char kExpectedAuthError[] = "There was an authentication error";
 const char kExpectedResponseError[] = "There was a response error";
+const char kExpectedSanitizationError[] = "There was a sanitization error";
 const char kHttpMethod[] = "POST";
+const char kMalformedResponse[] = "asdf";
 const char kMockPostData[] = "mock_post_data";
 int64_t kMockTimeoutMs = 1000000;
 const char kOAuthConsumerName[] = "mock_oauth_consumer_name";
@@ -58,6 +61,8 @@ class EndpointFetcherTest : public testing::Test {
         std::vector<std::string>{kScope}, kMockTimeoutMs, kMockPostData,
         TRAFFIC_ANNOTATION_FOR_TESTS, test_url_loader_factory,
         identity_test_env_.identity_manager());
+    in_process_data_decoder_ =
+        std::make_unique<data_decoder::test::InProcessDataDecoder>();
     SignIn();
   }
 
@@ -103,6 +108,8 @@ class EndpointFetcherTest : public testing::Test {
   MockEndpointFetcherCallback mock_callback_;
   network::TestURLLoaderFactory test_url_loader_factory_;
   std::unique_ptr<EndpointFetcher> endpoint_fetcher_;
+  std::unique_ptr<data_decoder::test::InProcessDataDecoder>
+      in_process_data_decoder_;
 };
 
 TEST_F(EndpointFetcherTest, FetchResponse) {
@@ -114,8 +121,19 @@ TEST_F(EndpointFetcherTest, FetchResponse) {
   base::RunLoop().RunUntilIdle();
 }
 
+TEST_F(EndpointFetcherTest, FetchMalformedResponse) {
+  SetMockResponse(GURL(kEndpoint), kMalformedResponse, net::HTTP_OK, net::OK);
+  EXPECT_CALL(
+      endpoint_fetcher_callback(),
+      Run(Pointee(Field(&EndpointResponse::response,
+                        testing::StartsWith(kExpectedSanitizationError)))));
+  endpoint_fetcher()->Fetch(endpoint_fetcher_callback().Get());
+  base::RunLoop().RunUntilIdle();
+}
+
 TEST_F(EndpointFetcherTest, FetchEndpointResponseError) {
-  SetMockResponse(GURL(kEndpoint), "", net::HTTP_BAD_REQUEST, net::ERR_FAILED);
+  SetMockResponse(GURL(kEndpoint), kExpectedResponse, net::HTTP_BAD_REQUEST,
+                  net::ERR_FAILED);
   EXPECT_CALL(
       endpoint_fetcher_callback(),
       Run(Pointee(Field(&EndpointResponse::response, kExpectedResponseError))));

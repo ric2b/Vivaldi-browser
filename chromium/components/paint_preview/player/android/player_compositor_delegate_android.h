@@ -19,10 +19,11 @@ class PlayerCompositorDelegateAndroid : public PlayerCompositorDelegate {
  public:
   PlayerCompositorDelegateAndroid(
       JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& jobject,
+      const base::android::JavaParamRef<jobject>& j_object,
       PaintPreviewBaseService* paint_preview_service,
       const base::android::JavaParamRef<jstring>& j_url_spec,
-      const base::android::JavaParamRef<jstring>& j_directory_key);
+      const base::android::JavaParamRef<jstring>& j_directory_key,
+      const base::android::JavaParamRef<jobject>& j_compositor_error_callback);
 
   void OnCompositorReady(
       mojom::PaintPreviewCompositor::Status status,
@@ -54,6 +55,7 @@ class PlayerCompositorDelegateAndroid : public PlayerCompositorDelegate {
       const base::flat_map<base::UnguessableToken, mojom::FrameDataPtr>& frames,
       std::vector<base::UnguessableToken>* all_guids,
       std::vector<int>* scroll_extents,
+      std::vector<int>* scroll_offsets,
       std::vector<int>* subframe_count,
       std::vector<base::UnguessableToken>* subframe_ids,
       std::vector<int>* subframe_rects);
@@ -72,6 +74,7 @@ class PlayerCompositorDelegateAndroid : public PlayerCompositorDelegate {
   base::android::ScopedJavaGlobalRef<jobject> java_ref_;
 
   int request_id_;
+  base::TimeTicks startup_timestamp_;
 
   base::WeakPtrFactory<PlayerCompositorDelegateAndroid> weak_factory_{this};
 

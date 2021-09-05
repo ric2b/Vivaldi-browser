@@ -6,7 +6,6 @@
 
 #include <utility>
 
-#include "ash/public/cpp/arc_custom_tab.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
@@ -20,6 +19,7 @@
 #include "chrome/browser/chromeos/arc/print_spooler/print_session_impl.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/arc/arc_browser_context_keyed_service_factory_base.h"
+#include "components/arc/intent_helper/custom_tab.h"
 #include "components/arc/session/arc_bridge_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
@@ -76,7 +76,7 @@ void ArcPrintSpoolerBridge::StartPrintInCustomTab(
     int32_t task_id,
     int32_t surface_id,
     int32_t top_margin,
-    mojom::PrintSessionInstancePtr instance,
+    mojo::PendingRemote<mojom::PrintSessionInstance> instance,
     StartPrintInCustomTabCallback callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   base::ThreadPool::PostTaskAndReplyWithResult(
@@ -91,7 +91,7 @@ void ArcPrintSpoolerBridge::OnPrintDocumentSaved(
     int32_t task_id,
     int32_t surface_id,
     int32_t top_margin,
-    mojom::PrintSessionInstancePtr instance,
+    mojo::PendingRemote<mojom::PrintSessionInstance> instance,
     StartPrintInCustomTabCallback callback,
     base::FilePath file_path) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -110,7 +110,7 @@ void ArcPrintSpoolerBridge::OnPrintDocumentSaved(
   }
 
   auto custom_tab =
-      ash::ArcCustomTab::Create(arc_window, surface_id, top_margin);
+      std::make_unique<CustomTab>(arc_window, surface_id, top_margin);
   auto web_contents = CreateArcCustomTabWebContents(profile_, url);
 
   // TODO(crbug.com/955171): Remove this temporary conversion to InterfacePtr

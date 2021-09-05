@@ -54,7 +54,7 @@ PasswordForm CreateForm(std::string username,
   PasswordForm form;
   form.username_value = base::ASCIIToUTF16(username);
   form.password_value = base::ASCIIToUTF16(password);
-  form.origin = origin;
+  form.url = origin;
   form.signon_realm = origin.spec();
   return form;
 }
@@ -104,10 +104,13 @@ TEST_F(PasswordManagerClientHelperTest, PromptAutosigninAfterSuccessfulLogin) {
       CreateFormManager(&form, /*is_movable=*/true));
 }
 
-TEST_F(PasswordManagerClientHelperTest, PromptAutosigninDisabledInIncognito) {
+TEST_F(PasswordManagerClientHelperTest,
+       PromptAutosigninAndMoveDisabledInIncognito) {
   EXPECT_CALL(*client(), IsIncognito)
       .Times(AnyNumber())
       .WillRepeatedly(Return(true));
+  // In Incognito, both the auto-signin and the "Move password to account?"
+  // bubbles should be disabled.
   EXPECT_CALL(*client(), PromptUserToEnableAutosignin).Times(0);
   EXPECT_CALL(*client(), PromptUserToMovePasswordToAccount).Times(0);
 
@@ -118,14 +121,33 @@ TEST_F(PasswordManagerClientHelperTest, PromptAutosigninDisabledInIncognito) {
       CreateFormManager(&form, /*is_movable=*/true));
 }
 
-TEST_F(PasswordManagerClientHelperTest, PromptMoveForMovableForm) {
-  base::test::ScopedFeatureList account_storage_feature;
-  account_storage_feature.InitAndEnableFeature(
-      password_manager::features::kEnablePasswordsAccountStorage);
+TEST_F(PasswordManagerClientHelperTest, PromptMoveForMovableFormInAccountMode) {
+  EXPECT_CALL(*client()->GetPasswordFeatureManager(),
+              ShouldShowAccountStorageBubbleUi)
+      .WillOnce(Return(true));
+  EXPECT_CALL(*client()->GetPasswordFeatureManager(), GetDefaultPasswordStore)
+      .WillOnce(Return(autofill::PasswordForm::Store::kAccountStore));
   EXPECT_CALL(*client(), PromptUserToMovePasswordToAccount);
   EXPECT_CALL(*client(), PromptUserToEnableAutosignin).Times(0);
 
-  // Indicate successful login without matching form.
+  // Indicate successful login.
+  const PasswordForm form =
+      CreateForm(kTestUsername, kTestPassword, GURL(kTestOrigin));
+  helper()->NotifySuccessfulLoginWithExistingPassword(
+      CreateFormManager(&form, /*is_movable=*/true));
+}
+
+TEST_F(PasswordManagerClientHelperTest,
+       NoPromptToMoveForMovableFormInProfileMode) {
+  EXPECT_CALL(*client()->GetPasswordFeatureManager(),
+              ShouldShowAccountStorageBubbleUi)
+      .WillOnce(Return(true));
+  EXPECT_CALL(*client()->GetPasswordFeatureManager(), GetDefaultPasswordStore)
+      .WillOnce(Return(autofill::PasswordForm::Store::kProfileStore));
+  EXPECT_CALL(*client(), PromptUserToMovePasswordToAccount).Times(0);
+  EXPECT_CALL(*client(), PromptUserToEnableAutosignin).Times(0);
+
+  // Indicate successful login.
   const PasswordForm form =
       CreateForm(kTestUsername, kTestPassword, GURL(kTestOrigin));
   helper()->NotifySuccessfulLoginWithExistingPassword(

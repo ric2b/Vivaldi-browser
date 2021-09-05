@@ -5,15 +5,16 @@
 package org.chromium.chrome.browser.tasks.tab_management;
 
 import static android.os.Build.VERSION_CODES.M;
-import static android.support.test.espresso.Espresso.onView;
-import static android.support.test.espresso.action.ViewActions.click;
-import static android.support.test.espresso.action.ViewActions.longClick;
-import static android.support.test.espresso.assertion.ViewAssertions.doesNotExist;
-import static android.support.test.espresso.assertion.ViewAssertions.matches;
-import static android.support.test.espresso.matcher.ViewMatchers.isDisplayed;
-import static android.support.test.espresso.matcher.ViewMatchers.withId;
-import static android.support.test.espresso.matcher.ViewMatchers.withParent;
-import static android.support.test.espresso.matcher.ViewMatchers.withText;
+
+import static androidx.test.espresso.Espresso.onView;
+import static androidx.test.espresso.action.ViewActions.click;
+import static androidx.test.espresso.action.ViewActions.longClick;
+import static androidx.test.espresso.assertion.ViewAssertions.doesNotExist;
+import static androidx.test.espresso.assertion.ViewAssertions.matches;
+import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
+import static androidx.test.espresso.matcher.ViewMatchers.withId;
+import static androidx.test.espresso.matcher.ViewMatchers.withParent;
+import static androidx.test.espresso.matcher.ViewMatchers.withText;
 
 import static org.hamcrest.CoreMatchers.allOf;
 import static org.hamcrest.CoreMatchers.containsString;
@@ -35,13 +36,14 @@ import static org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper.v
 import static org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper.verifyTabStripFaviconCount;
 
 import android.content.Context;
+import android.os.Build;
 import android.support.test.InstrumentationRegistry;
-import android.support.test.espresso.contrib.RecyclerViewActions;
-import android.support.test.filters.MediumTest;
 import android.view.View;
 import android.widget.ListView;
 
 import androidx.recyclerview.widget.RecyclerView;
+import androidx.test.espresso.contrib.RecyclerViewActions;
+import androidx.test.filters.MediumTest;
 
 import org.junit.Before;
 import org.junit.Rule;
@@ -74,7 +76,7 @@ import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tasks.ConditionalTabStripUtils;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.undo_tab_close_snackbar.UndoBarController;
-import org.chromium.chrome.browser.util.AccessibilityUtil;
+import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
@@ -217,7 +219,6 @@ public class ConditionalTabStripTest {
 
     @Test
     @MediumTest
-    @DisableIf.Build(sdk_is_less_than = M, message = "crbug.com/1081832")
     public void testStrip_updateWithSelection() throws Exception {
         ChromeTabbedActivity cta = mActivityTestRule.getActivity();
         verifyHidingStrip();
@@ -307,7 +308,6 @@ public class ConditionalTabStripTest {
 
     @Test
     @MediumTest
-    @DisableIf.Build(sdk_is_less_than = M, message = "crbug.com/1081832")
     public void testStrip_switchTabWithStrip() throws Exception {
         ChromeTabbedActivity cta = mActivityTestRule.getActivity();
         verifyHidingStrip();
@@ -325,7 +325,6 @@ public class ConditionalTabStripTest {
 
     @Test
     @MediumTest
-    @DisableIf.Build(sdk_is_less_than = M, message = "crbug.com/1081832")
     public void testStrip_closeTabWithStrip() throws Exception {
         ChromeTabbedActivity cta = mActivityTestRule.getActivity();
         verifyHidingStrip();
@@ -461,6 +460,7 @@ public class ConditionalTabStripTest {
 
     @Test
     @MediumTest
+    @DisableIf.Build(supported_abis_includes = "x86", message = "https://crbug.com/1094998")
     public void testStrip_InfoBarOptOut() throws Exception {
         ChromeTabbedActivity cta = mActivityTestRule.getActivity();
         for (int i = 0; i < 3; i++) {
@@ -508,6 +508,7 @@ public class ConditionalTabStripTest {
 
     @Test
     @MediumTest
+    @DisableIf.Build(supported_abis_includes = "x86", message = "https://crbug.com/1094998")
     public void testStrip_InfoBarOptIn() throws Exception {
         ChromeTabbedActivity cta = mActivityTestRule.getActivity();
         for (int i = 0; i < 3; i++) {
@@ -552,6 +553,7 @@ public class ConditionalTabStripTest {
 
     @Test
     @MediumTest
+    @DisableIf.Build(supported_abis_includes = "x86", message = "https://crbug.com/1094998")
     public void testStrip_ContinuousDismissCounter() throws Exception {
         // Mock that the tab strip has been dismissed for two continuous sessions.
         ConditionalTabStripUtils.setContinuousDismissCount(2);
@@ -606,7 +608,7 @@ public class ConditionalTabStripTest {
     @MediumTest
     public void testUndoClosure_AccessibilityMode() throws Exception {
         TestThreadUtils.runOnUiThreadBlocking(
-                () -> AccessibilityUtil.setAccessibilityEnabledForTesting(true));
+                () -> ChromeAccessibilityUtil.get().setAccessibilityEnabledForTesting(true));
         ChromeTabbedActivity cta = mActivityTestRule.getActivity();
         SnackbarManager snackbarManager = mActivityTestRule.getActivity().getSnackbarManager();
         createTabs(cta, false, 3);
@@ -721,8 +723,8 @@ public class ConditionalTabStripTest {
         assertTrue(
                 "try to close tab at invalid index", index < stack.getTabs().length && index >= 0);
         LayoutTab layoutTab = stack.getTabs()[index].getLayoutTab();
-        float x = layoutTab.getCloseBounds().centerX();
-        float y = layoutTab.getCloseBounds().centerY();
+        float x = stack.getCloseBoundsOnLayoutTab(layoutTab).centerX();
+        float y = stack.getCloseBoundsOnLayoutTab(layoutTab).centerY();
         ChromeTabUtils.closeTabWithAction(InstrumentationRegistry.getInstrumentation(), cta,
                 ()
                         -> TestThreadUtils.runOnUiThreadBlocking(
@@ -730,6 +732,13 @@ public class ConditionalTabStripTest {
     }
 
     private void verifyStripSelectedPosition(ChromeTabbedActivity cta, int index) {
+        assertEquals(cta.getCurrentTabModel().index(), index);
+        // Since View.getForeground() is not supported in 23-, there is not good way for us to
+        // check the selected item from the perspective of Android View. Therefore, skip this check
+        // for API below 23.
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.LOLLIPOP_MR1) {
+            return;
+        }
         onView(allOf(withParent(withId(R.id.toolbar_container_view)), withId(R.id.tab_list_view)))
                 .check(matches(isDisplayed()))
                 .check((v, e) -> {
@@ -739,7 +748,6 @@ public class ConditionalTabStripTest {
                         View itemView = recyclerView.findViewHolderForAdapterPosition(i).itemView;
                         if (itemView.getForeground() != null) {
                             assertEquals(index, i);
-                            assertEquals(cta.getCurrentTabModel().index(), i);
                         }
                     }
                 });

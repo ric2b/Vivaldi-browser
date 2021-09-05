@@ -78,10 +78,12 @@ class ScriptExecutorDelegate {
   virtual void WriteUserData(
       base::OnceCallback<void(UserData*, UserData::FieldChange*)>
           write_callback) = 0;
-  virtual void WriteUserModel(
-      base::OnceCallback<void(UserModel*)> write_callback) = 0;
   virtual void SetProgress(int progress) = 0;
+  virtual void SetProgressActiveStep(int active_step) = 0;
   virtual void SetProgressVisible(bool visible) = 0;
+  virtual void SetStepProgressBarConfiguration(
+      const ShowProgressBarProto::StepProgressBarConfiguration&
+          configuration) = 0;
   virtual void SetUserActions(
       std::unique_ptr<std::vector<UserAction>> user_action) = 0;
   virtual ViewportMode GetViewportMode() = 0;
@@ -101,6 +103,9 @@ class ScriptExecutorDelegate {
   void ClearTouchableElementArea() {
     SetTouchableElementArea(ElementAreaProto::default_instance());
   }
+
+  // The next navigation is expected and will not cause an error.
+  virtual void ExpectNavigation() = 0;
 
   // Returns true if a new document is being fetched for the main frame.
   //
@@ -147,9 +152,9 @@ class ScriptExecutorDelegate {
   // Sets the generic UI to show to the user.
   virtual void SetGenericUi(
       std::unique_ptr<GenericUserInterfaceProto> generic_ui,
-      base::OnceCallback<void(bool,
-                              ProcessedActionStatusProto,
-                              const UserModel*)> end_action_callback) = 0;
+      base::OnceCallback<void(const ClientStatus&)> end_action_callback,
+      base::OnceCallback<void(const ClientStatus&)>
+          view_inflation_finished_callback) = 0;
 
   // Clears the generic UI.
   virtual void ClearGenericUi() = 0;

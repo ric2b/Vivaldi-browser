@@ -61,13 +61,6 @@ class MockPasswordManagerClient : public StubPasswordManagerClient {
 class FakePasswordAutofillAgent
     : public autofill::mojom::PasswordAutofillAgent {
  public:
-  FakePasswordAutofillAgent()
-      : called_set_logging_state_(false),
-        logging_state_active_(false),
-        receiver_(this) {}
-
-  ~FakePasswordAutofillAgent() override {}
-
   void BindPendingReceiver(mojo::ScopedInterfaceEndpointHandle handle) {
     receiver_.Bind(
         mojo::PendingAssociatedReceiver<autofill::mojom::PasswordAutofillAgent>(
@@ -85,7 +78,7 @@ class FakePasswordAutofillAgent
 
   // autofill::mojom::PasswordAutofillAgent:
   MOCK_METHOD1(FillPasswordForm, void(const PasswordFormFillData&));
-  MOCK_METHOD0(InformNoSavedCredentials, void());
+  MOCK_METHOD1(InformNoSavedCredentials, void(bool));
   MOCK_METHOD2(FillIntoFocusedField, void(bool, const base::string16&));
   MOCK_METHOD1(TouchToFillClosed, void(bool));
   MOCK_METHOD1(AnnotateFieldsWithParsingResult, void(const ParsingResult&));
@@ -99,17 +92,18 @@ class FakePasswordAutofillAgent
   }
 
   // Records whether SetLoggingState() gets called.
-  bool called_set_logging_state_;
+  bool called_set_logging_state_ = false;
   // Records data received via SetLoggingState() call.
-  bool logging_state_active_;
+  bool logging_state_active_ = false;
 
-  mojo::AssociatedReceiver<autofill::mojom::PasswordAutofillAgent> receiver_;
+  mojo::AssociatedReceiver<autofill::mojom::PasswordAutofillAgent> receiver_{
+      this};
 };
 
 PasswordFormFillData GetTestPasswordFormFillData() {
   // Create the current form on the page.
   PasswordForm form_on_page;
-  form_on_page.origin = GURL("https://foo.com/");
+  form_on_page.url = GURL("https://foo.com/");
   form_on_page.action = GURL("https://foo.com/login");
   form_on_page.signon_realm = "https://foo.com/";
   form_on_page.scheme = PasswordForm::Scheme::kHtml;

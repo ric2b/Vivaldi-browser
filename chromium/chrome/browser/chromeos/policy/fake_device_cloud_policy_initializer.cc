@@ -22,7 +22,7 @@ FakeDeviceCloudPolicyInitializer::FakeDeviceCloudPolicyInitializer()
           nullptr,  // install_attributes
           nullptr,  // state_keys_broker
           nullptr,  // device_store
-          nullptr,  // manager
+          nullptr,  // policy_manager
           nullptr,  // async_caller
           std::make_unique<chromeos::attestation::MockAttestationFlow>(),
           nullptr),  // statistics_provider

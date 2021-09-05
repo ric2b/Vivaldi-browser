@@ -34,10 +34,12 @@ import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.BuildInfo;
 import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
+import org.chromium.base.LifetimeAssert;
 import org.chromium.base.Log;
 import org.chromium.base.ObserverList;
 import org.chromium.base.PackageManagerUtils;
 import org.chromium.base.StrictModeContext;
+import org.chromium.base.UnownedUserDataHost;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
@@ -67,6 +69,8 @@ public class WindowAndroid implements AndroidPermissionDelegate, DisplayAndroidO
     // Arbitrary error margin to account for cases where the display's refresh rate might not
     // exactly match the target rate.
     private static final float MAX_REFRESH_RATE_DELTA = 2.f;
+
+    private final LifetimeAssert mLifetimeAssert;
 
     private KeyboardVisibilityDelegate mKeyboardVisibilityDelegate =
             KeyboardVisibilityDelegate.getInstance();
@@ -140,6 +144,10 @@ public class WindowAndroid implements AndroidPermissionDelegate, DisplayAndroidO
     // List of display modes with the same dimensions as the current mode but varying refresh rate.
     private List<Display.Mode> mSupportedRefreshRateModes;
 
+    // A container for UnownedUserData objects that are not owned by, but can be accessed through
+    // WindowAndroid.
+    private final UnownedUserDataHost mUnownedUserDataHost = new UnownedUserDataHost();
+
     /**
      * An interface to notify listeners that a context menu is closed.
      */
@@ -204,6 +212,7 @@ public class WindowAndroid implements AndroidPermissionDelegate, DisplayAndroidO
      */
     @SuppressLint("UseSparseArrays")
     protected WindowAndroid(Context context, DisplayAndroid display) {
+        mLifetimeAssert = LifetimeAssert.create(this);
         // context does not have the same lifetime guarantees as an application context so we can't
         // hold a strong reference to it.
         mContextRef = new ImmutableWeakReference<>(context);
@@ -628,10 +637,13 @@ public class WindowAndroid implements AndroidPermissionDelegate, DisplayAndroidO
      * Destroys the c++ WindowAndroid object if one has been created.
      */
     public void destroy() {
+        LifetimeAssert.setSafeToGc(mLifetimeAssert, true);
         if (mNativeWindowAndroid != 0) {
             // Native code clears |mNativeWindowAndroid|.
             WindowAndroidJni.get().destroy(mNativeWindowAndroid, WindowAndroid.this);
         }
+
+        mUnownedUserDataHost.destroy();
 
         if (mTouchExplorationMonitor != null) mTouchExplorationMonitor.destroy();
 
@@ -946,6 +958,7 @@ public class WindowAndroid implements AndroidPermissionDelegate, DisplayAndroidO
 
         int preferredModeId = getPreferredModeId(preferredRefreshRate);
         Window window = getWindow();
+        if (window == null) return;
         WindowManager.LayoutParams params = window.getAttributes();
         if (params.preferredDisplayModeId == preferredModeId) return;
 
@@ -982,6 +995,13 @@ public class WindowAndroid implements AndroidPermissionDelegate, DisplayAndroidO
         }
 
         return preferredMode.getModeId();
+    }
+
+    /**
+     * @return The {@link UnownedUserDataHost} attached to the current {@link WindowAndroid}.
+     */
+    public UnownedUserDataHost getUnownedUserDataHost() {
+        return mUnownedUserDataHost;
     }
 
     @NativeMethods

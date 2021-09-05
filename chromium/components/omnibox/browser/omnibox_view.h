@@ -103,7 +103,9 @@ class OmniboxView {
                            bool update_popup);
 
   // Sets the window text and the caret position. |notify_text_changed| is true
-  // if the model should be notified of the change.
+  // if the model should be notified of the change. If rich autocompletion is
+  // enabled, |additional_text| is displayed in a non-editable views::Label
+  // adjacent to the omnibox.
   virtual void SetWindowTextAndCaretPos(const base::string16& text,
                                         size_t caret_pos,
                                         bool update_popup,
@@ -112,6 +114,9 @@ class OmniboxView {
   // Sets the caret position. Removes any selection. Clamps the requested caret
   // position to the length of the current text.
   virtual void SetCaretPos(size_t caret_pos) = 0;
+
+  // Sets the omnibox adjacent additional text label in the location bar view.
+  virtual void SetAdditionalText(const base::string16& text) = 0;
 
   // Transitions the user into keyword mode with their default search provider,
   // preserving and selecting the user's text if they already typed in a query.
@@ -125,6 +130,11 @@ class OmniboxView {
   // directed.  If there is no selection, |start| and |end| will both be equal
   // to the current cursor position.
   virtual void GetSelectionBounds(size_t* start, size_t* end) const = 0;
+
+  // Returns the sum of all selections' lengths. This is used to detect when
+  // the user has deleted text, and therefore, their input should not be
+  // autocompleted.
+  virtual size_t GetAllSelectionsLength() const = 0;
 
   // Selects all the text in the edit.  Use this in place of SetSelAll() to
   // avoid selecting the "phantom newline" at the end of the edit.
@@ -168,11 +178,15 @@ class OmniboxView {
                                            bool notify_text_changed) = 0;
 
   // Called when the inline autocomplete text in the model may have changed.
-  // |display_text| is the new text to show; |user_text_length| is the length of
-  // the user input portion of that (so, up to but not including the inline
-  // autocompletion).  Returns whether the display text actually changed.
-  virtual bool OnInlineAutocompleteTextMaybeChanged(
-      const base::string16& display_text, size_t user_text_length) = 0;
+  // |display_text| is the new text to show. |user_text_start| and
+  // |user_text_length| are the start and length of the user input portion of
+  // the text (not including the inline autocompletion or prefix inline
+  // autocompletion). If rich autocompletion is enabled, |additional_text| is
+  // displayed in a non-editable views::Label adjacent to the omnibox.
+  virtual void OnInlineAutocompleteTextMaybeChanged(
+      const base::string16& display_text,
+      size_t user_text_start,
+      size_t user_text_length) = 0;
 
   // Called when the inline autocomplete text in the model has been cleared.
   virtual void OnInlineAutocompleteTextCleared() = 0;
@@ -251,6 +265,10 @@ class OmniboxView {
     bool is_keyword_selected;
     size_t sel_start;
     size_t sel_end;
+    size_t all_sel_length;
+
+    State();
+    State(const State& state);
   };
 
   OmniboxView(OmniboxEditController* controller,
@@ -291,8 +309,8 @@ class OmniboxView {
   // everything is emphasized equally, whereas for URLs the scheme may be styled
   // based on the current security state, with parts of the URL de-emphasized to
   // draw attention to whatever best represents the "identity" of the current
-  // URL. Returns true if the path component is eligible for fadeout.
-  bool UpdateTextStyle(const base::string16& display_text,
+  // URL.
+  void UpdateTextStyle(const base::string16& display_text,
                        const bool text_is_url,
                        const AutocompleteSchemeClassifier& classifier);
 

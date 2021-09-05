@@ -44,6 +44,8 @@ class COMPONENT_EXPORT(UI_BASE_IME_CHROMEOS) InputMethodChromeOS
   InputMethodKeyboardController* GetInputMethodKeyboardController() override;
 
   // Overridden from InputMethodBase:
+  void OnFocus() override;
+  void OnBlur() override;
   void OnWillChangeFocusedClient(TextInputClient* focused_before,
                                  TextInputClient* focused) override;
   void OnDidChangeFocusedClient(TextInputClient* focused_before,
@@ -52,7 +54,9 @@ class COMPONENT_EXPORT(UI_BASE_IME_CHROMEOS) InputMethodChromeOS
       uint32_t before,
       uint32_t after,
       const std::vector<ui::ImeTextSpan>& text_spans) override;
-
+  bool SetAutocorrectRange(const base::string16& autocorrect_text,
+                           uint32_t start,
+                           uint32_t end) override;
   bool SetSelectionRange(uint32_t start, uint32_t end) override;
   void ConfirmCompositionText(bool reset_engine, bool keep_selection) override;
 

@@ -4,30 +4,31 @@
 
 package org.chromium.chrome.browser.password_manager.settings;
 
-import static android.support.test.espresso.Espresso.openActionBarOverflowOrOptionsMenu;
-import static android.support.test.espresso.action.ViewActions.click;
-import static android.support.test.espresso.action.ViewActions.closeSoftKeyboard;
-import static android.support.test.espresso.action.ViewActions.typeText;
-import static android.support.test.espresso.assertion.ViewAssertions.doesNotExist;
-import static android.support.test.espresso.assertion.ViewAssertions.matches;
-import static android.support.test.espresso.intent.Intents.intended;
-import static android.support.test.espresso.intent.Intents.intending;
-import static android.support.test.espresso.intent.matcher.BundleMatchers.hasEntry;
-import static android.support.test.espresso.intent.matcher.IntentMatchers.hasAction;
-import static android.support.test.espresso.intent.matcher.IntentMatchers.hasData;
-import static android.support.test.espresso.intent.matcher.IntentMatchers.hasExtras;
-import static android.support.test.espresso.intent.matcher.IntentMatchers.hasType;
-import static android.support.test.espresso.intent.matcher.UriMatchers.hasHost;
-import static android.support.test.espresso.matcher.RootMatchers.withDecorView;
-import static android.support.test.espresso.matcher.ViewMatchers.isAssignableFrom;
-import static android.support.test.espresso.matcher.ViewMatchers.isDisplayed;
-import static android.support.test.espresso.matcher.ViewMatchers.isEnabled;
-import static android.support.test.espresso.matcher.ViewMatchers.isRoot;
-import static android.support.test.espresso.matcher.ViewMatchers.withContentDescription;
-import static android.support.test.espresso.matcher.ViewMatchers.withId;
-import static android.support.test.espresso.matcher.ViewMatchers.withParent;
-import static android.support.test.espresso.matcher.ViewMatchers.withText;
 import static android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD;
+
+import static androidx.test.espresso.Espresso.openActionBarOverflowOrOptionsMenu;
+import static androidx.test.espresso.action.ViewActions.click;
+import static androidx.test.espresso.action.ViewActions.closeSoftKeyboard;
+import static androidx.test.espresso.action.ViewActions.typeText;
+import static androidx.test.espresso.assertion.ViewAssertions.doesNotExist;
+import static androidx.test.espresso.assertion.ViewAssertions.matches;
+import static androidx.test.espresso.intent.Intents.intended;
+import static androidx.test.espresso.intent.Intents.intending;
+import static androidx.test.espresso.intent.matcher.BundleMatchers.hasEntry;
+import static androidx.test.espresso.intent.matcher.IntentMatchers.hasAction;
+import static androidx.test.espresso.intent.matcher.IntentMatchers.hasData;
+import static androidx.test.espresso.intent.matcher.IntentMatchers.hasExtras;
+import static androidx.test.espresso.intent.matcher.IntentMatchers.hasType;
+import static androidx.test.espresso.intent.matcher.UriMatchers.hasHost;
+import static androidx.test.espresso.matcher.RootMatchers.withDecorView;
+import static androidx.test.espresso.matcher.ViewMatchers.isAssignableFrom;
+import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
+import static androidx.test.espresso.matcher.ViewMatchers.isEnabled;
+import static androidx.test.espresso.matcher.ViewMatchers.isRoot;
+import static androidx.test.espresso.matcher.ViewMatchers.withContentDescription;
+import static androidx.test.espresso.matcher.ViewMatchers.withId;
+import static androidx.test.espresso.matcher.ViewMatchers.withParent;
+import static androidx.test.espresso.matcher.ViewMatchers.withText;
 
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.anyOf;
@@ -55,11 +56,6 @@ import android.graphics.ColorFilter;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.support.test.InstrumentationRegistry;
-import android.support.test.espresso.Espresso;
-import android.support.test.espresso.intent.Intents;
-import android.support.test.espresso.intent.rule.IntentsTestRule;
-import android.support.test.espresso.matcher.BoundedMatcher;
-import android.support.test.filters.SmallTest;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.EditText;
@@ -71,6 +67,11 @@ import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 import androidx.appcompat.view.menu.ActionMenuItemView;
 import androidx.core.graphics.drawable.DrawableCompat;
+import androidx.test.espresso.Espresso;
+import androidx.test.espresso.intent.Intents;
+import androidx.test.espresso.intent.rule.IntentsTestRule;
+import androidx.test.espresso.matcher.BoundedMatcher;
+import androidx.test.filters.SmallTest;
 
 import org.hamcrest.Description;
 import org.hamcrest.Matcher;
@@ -103,7 +104,8 @@ import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
 import org.chromium.chrome.test.ChromeBrowserTestRule;
 import org.chromium.chrome.test.util.browser.Features;
-import org.chromium.chrome.test.util.browser.signin.SigninTestUtil;
+import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
+import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.components.browser_ui.settings.ChromeBaseCheckBoxPreference;
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
 import org.chromium.components.sync.ModelType;
@@ -480,7 +482,7 @@ public class PasswordSettingsTest {
     /** Requests showing an arbitrary password export error. */
     private void requestShowingExportError() {
         TestThreadUtils.runOnUiThreadBlocking(
-                () -> { mHandler.getExportErrorCallback().onResult("Arbitrary error"); });
+                mHandler.getExportErrorCallback().bind("Arbitrary error"));
     }
 
     /**
@@ -561,7 +563,7 @@ public class PasswordSettingsTest {
     @Feature({"Preferences"})
     public void testSavePasswordsSwitch() {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            PrefServiceBridge.getInstance().setBoolean(Pref.REMEMBER_PASSWORDS_ENABLED, true);
+            PrefServiceBridge.getInstance().setBoolean(Pref.CREDENTIALS_ENABLE_SERVICE, true);
         });
 
         final SettingsActivity settingsActivity = mSettingsActivityTestRule.startSettingsActivity();
@@ -575,14 +577,14 @@ public class PasswordSettingsTest {
 
             onOffSwitch.performClick();
             Assert.assertFalse(
-                    PrefServiceBridge.getInstance().getBoolean(Pref.REMEMBER_PASSWORDS_ENABLED));
+                    PrefServiceBridge.getInstance().getBoolean(Pref.CREDENTIALS_ENABLE_SERVICE));
             onOffSwitch.performClick();
             Assert.assertTrue(
-                    PrefServiceBridge.getInstance().getBoolean(Pref.REMEMBER_PASSWORDS_ENABLED));
+                    PrefServiceBridge.getInstance().getBoolean(Pref.CREDENTIALS_ENABLE_SERVICE));
 
             settingsActivity.finish();
 
-            PrefServiceBridge.getInstance().setBoolean(Pref.REMEMBER_PASSWORDS_ENABLED, false);
+            PrefServiceBridge.getInstance().setBoolean(Pref.CREDENTIALS_ENABLE_SERVICE, false);
         });
 
         mSettingsActivityTestRule.startSettingsActivity();
@@ -624,7 +626,7 @@ public class PasswordSettingsTest {
         // empty.
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
         overrideProfileSyncService(false, false);
-        SigninTestUtil.addAndSignInTestAccount();
+        mBrowserTestRule.addAndSignInTestAccount();
 
         mSettingsActivityTestRule.startSettingsActivity();
         PasswordSettings savedPasswordPrefs = mSettingsActivityTestRule.getFragment();
@@ -645,7 +647,7 @@ public class PasswordSettingsTest {
         // empty.
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
         overrideProfileSyncService(false, true);
-        SigninTestUtil.addAndSignInTestAccount();
+        mBrowserTestRule.addAndSignInTestAccount();
 
         mSettingsActivityTestRule.startSettingsActivity();
         PasswordSettings savedPasswordPrefs = mSettingsActivityTestRule.getFragment();
@@ -666,7 +668,7 @@ public class PasswordSettingsTest {
         // empty.
         setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
         overrideProfileSyncService(true, true);
-        SigninTestUtil.addAndSignInTestAccount();
+        mBrowserTestRule.addAndSignInTestAccount();
 
         mSettingsActivityTestRule.startSettingsActivity();
         PasswordSettings savedPasswordPrefs = mSettingsActivityTestRule.getFragment();
@@ -684,8 +686,7 @@ public class PasswordSettingsTest {
     @Feature({"Preferences"})
     public void testAutoSignInCheckbox() {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            PrefServiceBridge.getInstance().setBoolean(
-                    Pref.PASSWORD_MANAGER_AUTO_SIGNIN_ENABLED, true);
+            PrefServiceBridge.getInstance().setBoolean(Pref.CREDENTIALS_ENABLE_AUTOSIGNIN, true);
         });
 
         final SettingsActivity settingsActivity = mSettingsActivityTestRule.startSettingsActivity();
@@ -698,16 +699,15 @@ public class PasswordSettingsTest {
             Assert.assertTrue(onOffSwitch.isChecked());
 
             onOffSwitch.performClick();
-            Assert.assertFalse(PrefServiceBridge.getInstance().getBoolean(
-                    Pref.PASSWORD_MANAGER_AUTO_SIGNIN_ENABLED));
+            Assert.assertFalse(
+                    PrefServiceBridge.getInstance().getBoolean(Pref.CREDENTIALS_ENABLE_AUTOSIGNIN));
             onOffSwitch.performClick();
-            Assert.assertTrue(PrefServiceBridge.getInstance().getBoolean(
-                    Pref.PASSWORD_MANAGER_AUTO_SIGNIN_ENABLED));
+            Assert.assertTrue(
+                    PrefServiceBridge.getInstance().getBoolean(Pref.CREDENTIALS_ENABLE_AUTOSIGNIN));
 
             settingsActivity.finish();
 
-            PrefServiceBridge.getInstance().setBoolean(
-                    Pref.PASSWORD_MANAGER_AUTO_SIGNIN_ENABLED, false);
+            PrefServiceBridge.getInstance().setBoolean(Pref.CREDENTIALS_ENABLE_AUTOSIGNIN, false);
         });
 
         mSettingsActivityTestRule.startSettingsActivity();
@@ -721,13 +721,47 @@ public class PasswordSettingsTest {
     }
 
     /**
+     * Check that the check passwords preference is shown when the corresponding feature is enabled.
+     */
+    @Test
+    @SmallTest
+    @Feature({"Preferences"})
+    @EnableFeatures(ChromeFeatureList.PASSWORD_CHECK)
+    public void testCheckPasswordsEnabled() {
+        final SettingsActivity settingsActivity = mSettingsActivityTestRule.startSettingsActivity();
+
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            PasswordSettings passwordPrefs = mSettingsActivityTestRule.getFragment();
+            Assert.assertNotNull(
+                    passwordPrefs.findPreference(PasswordSettings.PREF_CHECK_PASSWORDS));
+        });
+    }
+
+    /**
+     * Check that the check passwords preference is not shown when the corresponding feature is
+     * disabled.
+     */
+    @Test
+    @SmallTest
+    @Feature({"Preferences"})
+    @DisableFeatures(ChromeFeatureList.PASSWORD_CHECK)
+    public void testCheckPasswordsDisabled() {
+        final SettingsActivity settingsActivity = mSettingsActivityTestRule.startSettingsActivity();
+
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            PasswordSettings passwordPrefs = mSettingsActivityTestRule.getFragment();
+            Assert.assertNull(passwordPrefs.findPreference(PasswordSettings.PREF_CHECK_PASSWORDS));
+        });
+    }
+
+    /**
      * Check that {@link #showPasswordEntryEditingView()} was called with the index matching the one
      * of the password that was clicked.
      */
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @Features.EnableFeatures(ChromeFeatureList.PASSWORD_EDITING_ANDROID)
+    @EnableFeatures(ChromeFeatureList.PASSWORD_EDITING_ANDROID)
     public void testSelectedStoredPasswordIndexIsSameAsInShowPasswordEntryEditingView() {
         PasswordEditingDelegateProvider.getInstance().setPasswordEditingDelegate(
                 mMockPasswordEditingDelegate);
@@ -751,7 +785,7 @@ public class PasswordSettingsTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @Features.EnableFeatures(ChromeFeatureList.PASSWORD_EDITING_ANDROID)
+    @EnableFeatures(ChromeFeatureList.PASSWORD_EDITING_ANDROID)
     public void testPasswordDataDisplayedInEditingActivity() {
         PasswordEditingDelegateProvider.getInstance().setPasswordEditingDelegate(
                 mMockPasswordEditingDelegate);
@@ -773,7 +807,7 @@ public class PasswordSettingsTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @Features.EnableFeatures(ChromeFeatureList.PASSWORD_EDITING_ANDROID)
+    @EnableFeatures(ChromeFeatureList.PASSWORD_EDITING_ANDROID)
     public void testPasswordEditingMethodWasCalled() throws Exception {
         PasswordEditingDelegateProvider.getInstance().setPasswordEditingDelegate(
                 mMockPasswordEditingDelegate);
@@ -802,7 +836,7 @@ public class PasswordSettingsTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @Features.EnableFeatures(ChromeFeatureList.PASSWORD_EDITING_ANDROID)
+    @EnableFeatures(ChromeFeatureList.PASSWORD_EDITING_ANDROID)
     public void testChangeOfStoredPasswordDataIsPropagated() throws Exception {
         PasswordEditingDelegateProvider.getInstance().setPasswordEditingDelegate(
                 mMockPasswordEditingDelegate);
@@ -835,7 +869,7 @@ public class PasswordSettingsTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @Features.EnableFeatures(ChromeFeatureList.PASSWORD_EDITING_ANDROID)
+    @EnableFeatures(ChromeFeatureList.PASSWORD_EDITING_ANDROID)
     public void testStoredPasswordCanBeUnmaskedAndMaskedAgain() {
         PasswordEditingDelegateProvider.getInstance().setPasswordEditingDelegate(
                 mMockPasswordEditingDelegate);
@@ -1696,7 +1730,7 @@ public class PasswordSettingsTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @Features.EnableFeatures(ChromeFeatureList.PASSWORD_EDITING_ANDROID)
+    @EnableFeatures(ChromeFeatureList.PASSWORD_EDITING_ANDROID)
     public void testEditSavedPasswordIconVisibleInActionBarWithFeature() {
         setPasswordSource( // Initialize preferences
                 new SavedPasswordEntry("https://example.com", "test user", "test password"));

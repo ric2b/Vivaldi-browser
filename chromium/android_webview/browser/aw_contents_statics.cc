@@ -14,7 +14,7 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/command_line.h"
-#include "base/task/post_task.h"
+#include "components/flags_ui/flags_ui_metrics.h"
 #include "components/google/core/common/google_util.h"
 #include "components/security_interstitials/core/urls.h"
 #include "components/version_info/version_info.h"
@@ -75,9 +75,8 @@ void JNI_AwContentsStatics_ClearClientCertPreferences(
     JNIEnv* env,
     const JavaParamRef<jobject>& callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  base::PostTaskAndReply(
-      FROM_HERE, {BrowserThread::IO},
-      base::BindOnce(&NotifyClientCertificatesChanged),
+  content::GetIOThreadTaskRunner({})->PostTaskAndReply(
+      FROM_HERE, base::BindOnce(&NotifyClientCertificatesChanged),
       base::BindOnce(&ClientCertificatesCleared,
                      ScopedJavaGlobalRef<jobject>(env, callback)));
 }
@@ -138,6 +137,23 @@ void JNI_AwContentsStatics_LogCommandLineForDebugging(JNIEnv* env) {
     const base::CommandLine::StringType& value = pair.second;
     LOG(INFO) << "WebViewCommandLine '" << key << "': '" << value << "'";
   }
+}
+
+// static
+void JNI_AwContentsStatics_LogFlagMetrics(
+    JNIEnv* env,
+    const JavaParamRef<jobjectArray>& jswitches,
+    const JavaParamRef<jobjectArray>& jfeatures) {
+  std::set<std::string> switches;
+  for (const auto& jswitch : jswitches.ReadElements<jstring>()) {
+    switches.insert(ConvertJavaStringToUTF8(jswitch));
+  }
+  std::set<std::string> features;
+  for (const auto& jfeature : jfeatures.ReadElements<jstring>()) {
+    features.insert(ConvertJavaStringToUTF8(jfeature));
+  }
+  flags_ui::ReportAboutFlagsHistogram("Launch.FlagsAtStartup", switches,
+                                      features);
 }
 
 // static

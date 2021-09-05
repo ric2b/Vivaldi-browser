@@ -11,6 +11,10 @@
 
 class Profile;
 
+namespace base {
+class Time;
+}
+
 namespace web_app {
 
 class WebAppSyncBridge;
@@ -44,6 +48,12 @@ class AppRegistryController {
 
   virtual void SetAppIsLocallyInstalled(const AppId& app_id,
                                         bool is_locally_installed) = 0;
+
+  virtual void SetAppLastLaunchTime(const AppId& app_id,
+                                    const base::Time& time) = 0;
+
+  virtual void SetAppInstallTime(const AppId& app_id,
+                                 const base::Time& time) = 0;
 
   // Safe downcast:
   virtual WebAppSyncBridge* AsWebAppSyncBridge() = 0;

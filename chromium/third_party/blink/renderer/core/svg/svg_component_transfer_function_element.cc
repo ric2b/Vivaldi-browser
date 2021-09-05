@@ -79,7 +79,7 @@ SVGComponentTransferFunctionElement::SVGComponentTransferFunctionElement(
   AddToPropertyMap(type_);
 }
 
-void SVGComponentTransferFunctionElement::Trace(Visitor* visitor) {
+void SVGComponentTransferFunctionElement::Trace(Visitor* visitor) const {
   visitor->Trace(table_values_);
   visitor->Trace(slope_);
   visitor->Trace(intercept_);
@@ -110,7 +110,7 @@ void SVGComponentTransferFunctionElement::SvgAttributeChanged(
 ComponentTransferFunction
 SVGComponentTransferFunctionElement::TransferFunction() const {
   ComponentTransferFunction func;
-  func.type = type_->CurrentValue()->EnumValue();
+  func.type = type_->CurrentEnumValue();
   func.slope = slope_->CurrentValue()->Value();
   func.intercept = intercept_->CurrentValue()->Value();
   func.amplitude = amplitude_->CurrentValue()->Value();

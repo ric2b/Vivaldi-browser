@@ -175,13 +175,11 @@ class HostedOrWebAppTest : public extensions::ExtensionBrowserTest,
         https_server_(net::EmbeddedTestServer::TYPE_HTTPS) {
     if (GetParam() == AppType::HOSTED_APP) {
       scoped_feature_list_.InitWithFeatures(
-          {}, {features::kDesktopPWAsUnifiedUiController,
-               predictors::kSpeculativePreconnectFeature});
+          {}, {predictors::kSpeculativePreconnectFeature});
     } else if (GetParam() == AppType::BOOKMARK_APP) {
       scoped_feature_list_.InitWithFeatures(
-          {features::kDesktopPWAsUnifiedUiController},
-          {features::kDesktopPWAsWithoutExtensions,
-           predictors::kSpeculativePreconnectFeature});
+          {}, {features::kDesktopPWAsWithoutExtensions,
+               predictors::kSpeculativePreconnectFeature});
     } else {
       scoped_feature_list_.InitWithFeatures(
           {features::kDesktopPWAsWithoutExtensions},
@@ -650,6 +648,13 @@ IN_PROC_BROWSER_TEST_P(HostedOrWebAppTest, SubframeRedirectsToHostedApp) {
   EXPECT_EQ(
       "This page has no title.",
       EvalJs(subframe, "document.body.innerText.trim();").ExtractString());
+}
+
+IN_PROC_BROWSER_TEST_P(HostedOrWebAppTest, CanUserUninstall) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL app_url = embedded_test_server()->GetURL("app.com", "/title1.html");
+  SetupAppWithURL(app_url);
+  EXPECT_TRUE(app_browser_->app_controller()->CanUninstall());
 }
 
 using BookmarkAppTest = HostedOrWebAppTest;

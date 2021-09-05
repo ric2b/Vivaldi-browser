@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="pt-PT">
-<translation id="1169602411434249000">Bloquear rastreios</translation>
 <translation id="1397811292916898096">Pesquisar com <ph name="PRODUCT_NAME" /></translation>
 <translation id="1598449788754183301">Alternar separadores normais/privados</translation>
 <translation id="1644574205037202324">Histórico</translation>
@@ -19,9 +18,12 @@
 <translation id="4526803704855831732">Separadores privados</translation>
 <translation id="4883379392681899581">Deixar o modo privado</translation>
 <translation id="4943872375798546930">Sem resultados</translation>
+<translation id="49576331685473090">Bloqueador de conteúdos</translation>
+<translation id="4960569554487356883">Dê permissão ao Vivaldi nas <ph name="BEGIN_LINK" />Definições Android<ph name="END_LINK" />.</translation>
 <translation id="5118676864324397542">Armazenamento <ph name="APP_NAME" /></translation>
 <translation id="5233638681132016545">Novo separador</translation>
 <translation id="5495228542153126976">Passou para modo privado</translation>
+<translation id="5553467336321715093">Dê permissões ao Vivaldi nas <ph name="BEGIN_LINK" />Definições Android<ph name="END_LINK" />.</translation>
 <translation id="572328651809341494">Separadores recentes</translation>
 <translation id="5840488417521835756">Saiba mais acerca dos tópicos nos websites sem sair da página. A funcionalidade Tocar para pesquisar só está disponível quando o Google está configurado como motor de pesquisa padrão no Vivaldi. Esta funcionalidade envia uma palavra e o seu contexto para a Pesquisa Google, que devolve definições, imagens, resultados de pesquisa e outros detalhes.
 

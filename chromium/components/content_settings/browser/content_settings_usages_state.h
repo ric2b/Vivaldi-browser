@@ -9,19 +9,23 @@
 #include <set>
 
 #include "base/macros.h"
+#include "components/content_settings/browser/tab_specific_content_settings.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "url/gurl.h"
 
-class HostContentSettingsMap;
-
-// This class manages a content setting state per tab for a given
+// This class manages a content setting state per page for a given
 // |ContentSettingsType|, and provides information and presentation data about
 // the content setting usage.
+// TODO(crbug.com/1086363): Move this class into the `content_settings`
+// namespace.
 class ContentSettingsUsagesState {
  public:
-  ContentSettingsUsagesState(HostContentSettingsMap* host_content_settings_map,
-                             ContentSettingsType type);
+  ContentSettingsUsagesState(
+      content_settings::TabSpecificContentSettings::Delegate* delegate_,
+      ContentSettingsType type,
+      const GURL& embedder_url);
+
   ~ContentSettingsUsagesState();
 
   typedef std::map<GURL, ContentSetting> StateMap;
@@ -29,12 +33,6 @@ class ContentSettingsUsagesState {
 
   // Sets the state for |requesting_origin|.
   void OnPermissionSet(const GURL& requesting_origin, bool allowed);
-
-  // Delegated by WebContents to indicate a navigation has happened and we
-  // may need to clear our settings.
-  void DidNavigate(const GURL& url, const GURL& previous_url);
-
-  void ClearStateMap();
 
   enum TabState {
     TABSTATE_NONE = 0,
@@ -57,8 +55,7 @@ class ContentSettingsUsagesState {
 
  private:
   std::string GURLToFormattedHost(const GURL& url) const;
-
-  HostContentSettingsMap* const host_content_settings_map_;
+  content_settings::TabSpecificContentSettings::Delegate* delegate_;
   ContentSettingsType type_;
   StateMap state_map_;
   GURL embedder_url_;

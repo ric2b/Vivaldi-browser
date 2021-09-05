@@ -14,7 +14,6 @@
 #include <string>
 #include <vector>
 
-#include "base/containers/circular_deque.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
@@ -159,6 +158,13 @@ class CONTENT_EXPORT ResourceDispatcher {
 
   void OnTransferSizeUpdated(int request_id, int32_t transfer_size_diff);
 
+  // Sets the CORS exempt header list for sanity checking.
+  void SetCorsExemptHeaderList(const std::vector<std::string>& list);
+
+  std::vector<std::string> cors_exempt_header_list() const {
+    return cors_exempt_header_list_;
+  }
+
   // This is used only when |this| is created for a worker thread.
   // Sets |terminate_sync_load_event_| which will be signaled from the main
   // thread when the worker thread is being terminated so that the sync requests
@@ -252,6 +258,8 @@ class CONTENT_EXPORT ResourceDispatcher {
   ResourceDispatcherDelegate* delegate_;
 
   base::WaitableEvent* terminate_sync_load_event_ = nullptr;
+
+  std::vector<std::string> cors_exempt_header_list_;
 
   base::WeakPtrFactory<ResourceDispatcher> weak_factory_{this};
 

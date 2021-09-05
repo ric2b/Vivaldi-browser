@@ -121,7 +121,8 @@ class FakeSchedulerClient : public SchedulerClient,
       scheduler_->SetNeedsRedraw();
     return will_begin_impl_frame_might_have_damage_;
   }
-  void DidFinishImplFrame() override {
+  void DidFinishImplFrame(
+      const viz::BeginFrameArgs& last_activated_args) override {
     EXPECT_TRUE(inside_begin_impl_frame_);
     EXPECT_FALSE(inside_action_);
     base::AutoReset<bool> mark_inside(&inside_action_, true);
@@ -262,11 +263,7 @@ class FakeSchedulerClient : public SchedulerClient,
     PushAction("RemoveObserver(this)");
   }
 
-  size_t CompositedAnimationsCount() const override { return 0; }
-  size_t MainThreadAnimationsCount() const override { return 0; }
   bool HasCustomPropertyAnimations() const override { return false; }
-  bool CurrentFrameHadRAF() const override { return false; }
-  bool NextFrameHasPendingRAF() const override { return false; }
 
  protected:
   bool InsideBeginImplFrameCallback(bool state) {
@@ -4359,6 +4356,47 @@ TEST_F(SchedulerTest, SendEarlyDidNotProduceFrameIfIdle) {
   scheduler_->BeginMainFrameAborted(CommitEarlyOutReason::FINISHED_NO_UPDATES);
   EXPECT_EQ(client_->last_begin_frame_ack().frame_id.sequence_number,
             begin_main_frame_args.frame_id.sequence_number);
+}
+
+TEST_F(SchedulerTest,
+       HighImplLatencyModePrioritizesMainFramesOverImplInvalidation) {
+  scheduler_settings_.enable_main_latency_recovery = false;
+  scheduler_settings_.enable_impl_latency_recovery = false;
+  SetUpScheduler(EXTERNAL_BFS);
+  fake_compositor_timing_history_->SetAllEstimatesTo(kFastDuration);
+
+  // Place the impl thread in high latency mode.
+  scheduler_->SetNeedsImplSideInvalidation(true);
+  client_->Reset();
+  EXPECT_SCOPED(AdvanceFrame());
+  EXPECT_ACTIONS("WillBeginImplFrame",
+                 "ScheduledActionPerformImplSideInvalidation");
+
+  // Request a main frame and start the next impl frame. Since we have an impl
+  // side pending tree, we will activate and draw it. This finishes the impl
+  // frame before the main thread can respond causing the scheduler to
+  // incorrectly assume the main thread is slow.
+  client_->Reset();
+  EXPECT_SCOPED(AdvanceFrame());
+  EXPECT_ACTIONS("WillBeginImplFrame");
+  client_->Reset();
+  scheduler_->SetNeedsBeginMainFrame();
+  EXPECT_ACTIONS("ScheduledActionSendBeginMainFrame");
+  fake_compositor_timing_history_->SetBeginMainFrameSentTime(
+      task_runner_->NowTicks() + base::TimeDelta::FromMilliseconds(8));
+  client_->Reset();
+  scheduler_->NotifyReadyToActivate();
+  task_runner_->RunTasksWhile(client_->InsideBeginImplFrame(true));
+  EXPECT_ACTIONS("ScheduledActionActivateSyncTree",
+                 "ScheduledActionDrawIfPossible");
+
+  // Start a new frame. We should not assume the main thread is slow.
+  client_->Reset();
+  EXPECT_SCOPED(AdvanceFrame());
+  scheduler_->SetNeedsImplSideInvalidation(true);
+  // No invalidation should be performed since we are waiting for the main
+  // thread to respond and merge with the commit.
+  EXPECT_ACTIONS("WillBeginImplFrame");
 }
 
 }  // namespace

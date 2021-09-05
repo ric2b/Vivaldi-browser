@@ -9,7 +9,6 @@
 #include <vector>
 
 #include "base/memory/scoped_refptr.h"
-#include "base/memory/shared_memory_mapping.h"
 #include "base/optional.h"
 #include "base/util/type_safety/pass_key.h"
 #include "build/build_config.h"
@@ -17,6 +16,7 @@
 #include "gpu/command_buffer/common/shared_image_usage.h"
 #include "gpu/command_buffer/service/shared_context_state.h"
 #include "gpu/command_buffer/service/shared_image_backing.h"
+#include "gpu/command_buffer/service/shared_memory_region_wrapper.h"
 #include "gpu/command_buffer/service/texture_manager.h"
 #include "gpu/vulkan/semaphore_handle.h"
 #include "gpu/vulkan/vulkan_device_queue.h"
@@ -99,6 +99,9 @@ class ExternalVkImageBacking final : public ClearTrackingSharedImageBacking {
     return !context_state()->support_vulkan_external_object();
   }
 
+  uint32_t reads_in_progress() const { return reads_in_progress_; }
+  uint32_t gl_reads_in_progress() const { return gl_reads_in_progress_; }
+
   // Notifies the backing that an access will start. Return false if there is
   // currently any other conflict access in progress. Otherwise, returns true
   // and semaphore handles which will be waited on before accessing.
@@ -157,17 +160,17 @@ class ExternalVkImageBacking final : public ClearTrackingSharedImageBacking {
 #endif
 
   // Install a shared memory GMB to the backing.
-  void InstallSharedMemory(
-      base::WritableSharedMemoryMapping shared_memory_mapping,
-      size_t stride,
-      size_t memory_offset);
+  void InstallSharedMemory(SharedMemoryRegionWrapper shared_memory_wrapper);
   // Returns texture_service_id for ProduceGLTexture and GLTexturePassthrough.
   GLuint ProduceGLTextureInternal();
 
   using FillBufferCallback = base::OnceCallback<void(void* buffer)>;
-  bool WritePixels(size_t data_size,
-                   size_t stride,
-                   FillBufferCallback callback);
+  // TODO(penghuang): Remove it when GrContext::updateBackendTexture() supports
+  // compressed texture and callback.
+  bool WritePixelsWithCallback(size_t data_size,
+                               size_t stride,
+                               FillBufferCallback callback);
+  bool WritePixels();
   void CopyPixelsFromGLTextureToVkImage();
   void CopyPixelsFromShmToGLTexture();
 
@@ -181,13 +184,12 @@ class ExternalVkImageBacking final : public ClearTrackingSharedImageBacking {
 
   bool is_write_in_progress_ = false;
   uint32_t reads_in_progress_ = 0;
+  uint32_t gl_reads_in_progress_ = 0;
   gles2::Texture* texture_ = nullptr;
   scoped_refptr<gles2::TexturePassthrough> texture_passthrough_;
 
   // GMB related stuff.
-  base::WritableSharedMemoryMapping shared_memory_mapping_;
-  size_t stride_ = 0;
-  size_t memory_offset_ = 0;
+  SharedMemoryRegionWrapper shared_memory_wrapper_;
 
   enum LatestContent {
     kInVkImage = 1 << 0,

@@ -26,6 +26,7 @@
 #include "chromecast/base/cast_features.h"
 #include "chromecast/base/cast_paths.h"
 #include "chromecast/base/chromecast_switches.h"
+#include "chromecast/base/pref_names.h"
 #include "chromecast/browser/application_media_info_manager.h"
 #include "chromecast/browser/browser_buildflags.h"
 #include "chromecast/browser/cast_browser_context.h"
@@ -52,11 +53,13 @@
 #include "chromecast/media/audio/cast_audio_manager.h"
 #include "chromecast/media/base/media_resource_tracker.h"
 #include "chromecast/media/cdm/cast_cdm_factory.h"
+#include "chromecast/media/cdm/cast_cdm_origin_provider.h"
 #include "chromecast/media/cma/backend/cma_backend_factory_impl.h"
 #include "chromecast/media/cma/backend/media_pipeline_backend_manager.h"
 #include "chromecast/media/service/cast_renderer.h"
 #include "chromecast/media/service/mojom/video_geometry_setter.mojom.h"
 #include "chromecast/public/media/media_pipeline_backend.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/certificate_request_result_type.h"
@@ -98,6 +101,7 @@
 #endif  // defined(OS_LINUX)
 
 #if defined(OS_ANDROID)
+#include "chromecast/media/audio/cast_audio_manager_android.h"  //nogncheck
 #include "components/cdm/browser/cdm_message_filter_android.h"
 #include "components/crash/core/app/crashpad.h"
 #else
@@ -270,6 +274,16 @@ CastContentBrowserClient::CreateAudioManager(
       GetMediaTaskRunner(),
       ServiceConnector::MakeRemote(kBrowserProcessClientId),
       BUILDFLAG(ENABLE_CAST_AUDIO_MANAGER_MIXER));
+#elif defined(OS_ANDROID)
+  return std::make_unique<media::CastAudioManagerAndroid>(
+      std::move(audio_thread), audio_log_factory,
+      base::BindRepeating(&CastContentBrowserClient::GetCmaBackendFactory,
+                          base::Unretained(this)),
+      base::BindRepeating(&shell::CastSessionIdMap::GetSessionId),
+      base::CreateSingleThreadTaskRunner({content::BrowserThread::UI}),
+      GetMediaTaskRunner(),
+      ServiceConnector::MakeRemote(kBrowserProcessClientId),
+      BUILDFLAG(ENABLE_CAST_AUDIO_MANAGER_MIXER));
 #else
   return std::make_unique<media::CastAudioManager>(
       std::move(audio_thread), audio_log_factory,
@@ -280,7 +294,7 @@ CastContentBrowserClient::CreateAudioManager(
       GetMediaTaskRunner(),
       ServiceConnector::MakeRemote(kBrowserProcessClientId),
       BUILDFLAG(ENABLE_CAST_AUDIO_MANAGER_MIXER));
-#endif  // defined(USE_ALSA)
+#endif
 }
 
 bool CastContentBrowserClient::OverridesAudioManager() {
@@ -289,8 +303,12 @@ bool CastContentBrowserClient::OverridesAudioManager() {
 
 std::unique_ptr<::media::CdmFactory> CastContentBrowserClient::CreateCdmFactory(
     ::media::mojom::FrameInterfaceFactory* frame_interfaces) {
-  return std::make_unique<media::CastCdmFactory>(GetMediaTaskRunner(),
-                                                 media_resource_tracker());
+  url::Origin cdm_origin;
+  if (!CastCdmOriginProvider::GetCdmOrigin(frame_interfaces, &cdm_origin))
+    return nullptr;
+
+  return std::make_unique<media::CastCdmFactory>(
+      GetMediaTaskRunner(), cdm_origin, media_resource_tracker());
 }
 
 media::MediaCapsImpl* CastContentBrowserClient::media_caps() {
@@ -548,6 +566,10 @@ void CastContentBrowserClient::OverrideWebkitPrefs(
       prefs->databases_enabled = true;
     }
   }
+
+  prefs->preferred_color_scheme = static_cast<blink::PreferredColorScheme>(
+      CastBrowserProcess::GetInstance()->pref_service()->GetInteger(
+          prefs::kWebColorScheme));
 }
 
 std::string CastContentBrowserClient::GetApplicationLocale() {

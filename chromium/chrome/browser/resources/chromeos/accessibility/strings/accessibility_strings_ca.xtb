@@ -112,6 +112,7 @@
 <translation id="1771761307086386028">Desplaça't cap a la dreta</translation>
 <translation id="1781173782405573156">Tecla de traspàs</translation>
 <translation id="1787176709638001873">Text d'edició de la contrasenya</translation>
+<translation id="180203835522132923">Cerca+O i, després, W</translation>
 <translation id="1810107444790159527">Quadre de llista</translation>
 <translation id="1812527064848182527">horitzontal</translation>
 <translation id="1829244130665387512">Cerca a la pàgina</translation>
@@ -256,6 +257,7 @@
 <translation id="297825089465017871">Fes lliscar dos dits cap a l'esquerra</translation>
 <translation id="2998131015536248178">Caràcter anterior</translation>
 <translation id="2999559350546931576">Disminueix la presentació.</translation>
+<translation id="3009352964623081324">Cerca+O i, després, S. Fes-ho servir per instal·lar, gestionar i personalitzar veus.</translation>
 <translation id="3014130421870723208">@ed 8punts</translation>
 <translation id="3030432017085518523">Botó d'opció de l'element del menú</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{apòstrof}other{# apòstrofs}}</translation>
@@ -445,7 +447,7 @@
 <translation id="4391478986194775161">cntntinfo</translation>
 <translation id="4402014469255336455">Blau cel intens</translation>
 <translation id="4432457053224379116">Vermell indi</translation>
-<translation id="4437615272777527928">Escriu per cercar als menús. Fes servir les fletxes cap amunt i cap avall per moure't entre els resultats. Fes servir les tecles de fletxa esquerra i dreta per ajustar la marca d'inserció de text i per moure't entre els menús.</translation>
+<translation id="4437615272777527928">Escriu per cercar als menús. Fes servir les fletxes amunt i cp avall per moure't entre els resultats. Fes servir les tecles de fletxa esquerra i dreta per ajustar la marca d'inserció de text i per moure't entre els menús.</translation>
 <translation id="4457472090507035117">Selecciona la veu actual:</translation>
 <translation id="4476183483923481720">línia nova</translation>
 <translation id="4479068155583208887">Maó</translation>
@@ -454,6 +456,7 @@
 <translation id="4505167975768625962">Inserció</translation>
 <translation id="4511186779140817916">Blanc ametlla</translation>
 <translation id="451510441928265982">No hi ha cap encapçalament anterior de nivell 2</translation>
+<translation id="4515799157838123044">Ombreja el contingut en segon pla</translation>
 <translation id="4517854969512651305">Augmenta el valor</translation>
 <translation id="4532633738839459153">{COUNT,plural, =1{barra inclinada}other{# barres inclinades}}</translation>
 <translation id="4537277403911487429">Element similar següent</translation>
@@ -705,6 +708,7 @@
 <translation id="6628427060004938651">Part</translation>
 <translation id="6637586476836377253">registre</translation>
 <translation id="6657128831881431364">Barra de progrés</translation>
+<translation id="6660819301598582123">El pàl·lid xinès i el jove marquès bevien whisky en la fosca atziaga.</translation>
 <translation id="667999046851023355">Document</translation>
 <translation id="6688209025607531203">Una alerta no modal</translation>
 <translation id="6689672606256159458">Salmó fosc</translation>
@@ -740,7 +744,6 @@
 <translation id="6951482098621102657">No hi ha cap encapçalament més de nivell 5</translation>
 <translation id="6955705049214951590">Rosa difuminat</translation>
 <translation id="696356426651109308">Ves al principi</translation>
-<translation id="699159175332639490">Cerca+O+W</translation>
 <translation id="6994042831499278539">Referència del glossari</translation>
 <translation id="6996566555547746822">Quadre combinat següent</translation>
 <translation id="6997224546856374593">Quan llegeixis majúscules:</translation>
@@ -765,7 +768,7 @@
 <translation id="7137397390322864165">Salmó</translation>
 <translation id="7140168702531682811">Superíndex</translation>
 <translation id="7143034430156387447">Alterna entre braille de sis i vuit punts</translation>
-<translation id="7143207342074048698">S'està connectant</translation>
+<translation id="7143207342074048698">Connectant</translation>
 <translation id="7153618581592392745">Lavanda</translation>
 <translation id="7157306005867877619">Resum</translation>
 <translation id="7161771961008409533">Botó emergent</translation>
@@ -809,6 +812,7 @@
 <translation id="743783356331413498">Exemple</translation>
 <translation id="7439060726180460871">Directori</translation>
 <translation id="744163271241493234">pwded</translation>
+<translation id="7484805699335881122">Canvia el to quan hi hagi tipus d'elements parlats i text entre cometes, suprimit, en negreta, entre parèntesis o en majúscula.</translation>
 <translation id="7491962110804786152">pestanya</translation>
 <translation id="7505149250476994901">Digues "majúscula" abans de la lletra</translation>
 <translation id="7518543783849163354">Per aturar els comentaris de ChromeVox temporalment, prem la tecla Control.</translation>

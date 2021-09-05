@@ -16,9 +16,9 @@
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
-#include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/optional.h"
 #include "base/process/kill.h"
 #include "build/build_config.h"
 #include "content/browser/renderer_host/input/input_device_change_observer.h"
@@ -27,6 +27,7 @@
 #include "content/browser/renderer_host/render_widget_host_owner_delegate.h"
 #include "content/browser/site_instance_impl.h"
 #include "content/common/render_message_filter.mojom.h"
+#include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/render_process_host_observer.h"
 #include "content/public/browser/render_view_host.h"
@@ -42,7 +43,6 @@
 
 namespace content {
 
-struct FrameReplicationState;
 class TimeoutMonitor;
 
 // A callback which will be called immediately before EnterBackForwardCache
@@ -129,18 +129,9 @@ class CONTENT_EXPORT RenderViewHostImpl
   //   created with an opener. (The opener may have been closed since.)
   // |proxy_route_id| is only used when creating a RenderView in an inactive
   //   state.
-  // |frame_token| contains the frame token for the associated
-  //   RenderFrameHostImpl or RenderFrameProxyHost.
-  // |devtools_frame_token| contains the devtools token for tagging requests
-  //   and attributing them to the context frame.
-  // |replicated_frame_state| contains replicated data for the top-level
-  //   frame, such as its name and sandbox flags.
   virtual bool CreateRenderView(
-      int opener_frame_route_id,
+      const base::Optional<base::UnguessableToken>& opener_frame_token,
       int proxy_route_id,
-      const base::UnguessableToken& frame_token,
-      const base::UnguessableToken& devtools_frame_token,
-      const FrameReplicationState& replicated_frame_state,
       bool window_was_created_with_opener);
 
   // Tracks whether this RenderViewHost is in an active state (rather than
@@ -209,10 +200,6 @@ class CONTENT_EXPORT RenderViewHostImpl
   // view is not considered active.
   void SetMainFrameRoutingId(int routing_id);
 
-  // TODO(https://crbug.com/1006814): Delete this.
-  // Do not use this for anything except debugging.
-  int GetMainFrameRoutingIdForCrbug1006814();
-
   // Called when the RenderFrameHostImpls/RenderFrameProxyHosts that own this
   // RenderViewHost enter the BackForwardCache.
   void EnterBackForwardCache();
@@ -225,8 +212,10 @@ class CONTENT_EXPORT RenderViewHostImpl
   // to allow it to record the latency of this navigation.
   void LeaveBackForwardCache(base::TimeTicks navigation_start);
 
-  void SetIsFrozen(bool frozen);
   void SetVisibility(blink::mojom::PageVisibilityState visibility);
+
+  void SetIsFrozen(bool frozen);
+  void OnBackForwardCacheTimeout();
 
   // Called during frame eviction to return all SurfaceIds in the frame tree.
   // Marks all views in the frame tree as evicted.
@@ -249,6 +238,9 @@ class CONTENT_EXPORT RenderViewHostImpl
     return main_frame_theme_color_;
   }
 
+  void SetContentsMimeType(std::string mime_type);
+  const std::string& contents_mime_type() { return contents_mime_type_; }
+
   // Notifies that / returns whether main document's onload() handler was
   // completed.
   void DocumentOnLoadCompletedInMainFrame();
@@ -259,6 +251,10 @@ class CONTENT_EXPORT RenderViewHostImpl
 
   void SetWillEnterBackForwardCacheCallbackForTesting(
       const WillEnterBackForwardCacheCallbackForTesting& callback);
+
+  void BindPageBroadcast(
+      mojo::PendingAssociatedRemote<blink::mojom::PageBroadcast>
+          page_broadcast);
 
   // The remote mojom::PageBroadcast interface that is used to send messages to
   // the renderer's blink::WebViewImpl when broadcasting messages to all
@@ -418,6 +414,10 @@ class CONTENT_EXPORT RenderViewHostImpl
   // The theme color for the underlying document as specified
   // by theme-color meta tag.
   base::Optional<SkColor> main_frame_theme_color_;
+
+  // Contents MIME type for the main document. It can be used to check whether
+  // we can do something for special contents.
+  std::string contents_mime_type_;
 
   // ---------- Per page state END --------------------------------------------
 

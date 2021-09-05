@@ -177,9 +177,12 @@ void InspectorTraceEvents::DidFinishLoading(uint64_t identifier,
                                             decoded_body_length));
 }
 
-void InspectorTraceEvents::DidFailLoading(uint64_t identifier,
-                                          DocumentLoader* loader,
-                                          const ResourceError&) {
+void InspectorTraceEvents::DidFailLoading(
+    CoreProbeSink* sink,
+    uint64_t identifier,
+    DocumentLoader* loader,
+    const ResourceError&,
+    const base::UnguessableToken& devtools_frame_or_worker_token) {
   TRACE_EVENT_INSTANT1("devtools.timeline", "ResourceFinish",
                        TRACE_EVENT_SCOPE_THREAD, "data",
                        inspector_resource_finish_event::Data(
@@ -392,43 +395,47 @@ const char* CompileOptionsString(v8::ScriptCompiler::CompileOptions options) {
 
 const char* NotStreamedReasonString(ScriptStreamer::NotStreamingReason reason) {
   switch (reason) {
-    case ScriptStreamer::kNotHTTP:
+    case ScriptStreamer::NotStreamingReason::kNotHTTP:
       return "not http/https protocol";
-    case ScriptStreamer::kRevalidate:
+    case ScriptStreamer::NotStreamingReason::kRevalidate:
       return "revalidation event";
-    case ScriptStreamer::kContextNotValid:
+    case ScriptStreamer::NotStreamingReason::kContextNotValid:
       return "script context not valid";
-    case ScriptStreamer::kEncodingNotSupported:
+    case ScriptStreamer::NotStreamingReason::kEncodingNotSupported:
       return "encoding not supported";
-    case ScriptStreamer::kThreadBusy:
+    case ScriptStreamer::NotStreamingReason::kThreadBusy:
       return "script streamer thread busy";
-    case ScriptStreamer::kV8CannotStream:
+    case ScriptStreamer::NotStreamingReason::kV8CannotStream:
       return "V8 cannot stream script";
-    case ScriptStreamer::kScriptTooSmall:
+    case ScriptStreamer::NotStreamingReason::kScriptTooSmall:
       return "script too small";
-    case ScriptStreamer::kNoResourceBuffer:
+    case ScriptStreamer::NotStreamingReason::kNoResourceBuffer:
       return "resource no longer alive";
-    case ScriptStreamer::kHasCodeCache:
+    case ScriptStreamer::NotStreamingReason::kHasCodeCache:
       return "script has code-cache available";
-    case ScriptStreamer::kStreamerNotReadyOnGetSource:
+    case ScriptStreamer::NotStreamingReason::kStreamerNotReadyOnGetSource:
       return "streamer not ready";
-    case ScriptStreamer::kInlineScript:
+    case ScriptStreamer::NotStreamingReason::kInlineScript:
       return "inline script";
-    case ScriptStreamer::kDidntTryToStartStreaming:
-      return "start streaming not called";
-    case ScriptStreamer::kErrorOccurred:
+    case ScriptStreamer::NotStreamingReason::kErrorOccurred:
       return "an error occurred";
-    case ScriptStreamer::kStreamingDisabled:
+    case ScriptStreamer::NotStreamingReason::kStreamingDisabled:
       return "already disabled streaming";
-    case ScriptStreamer::kSecondScriptResourceUse:
+    case ScriptStreamer::NotStreamingReason::kSecondScriptResourceUse:
       return "already used streamed data";
-    case ScriptStreamer::kWorkerTopLevelScript:
+    case ScriptStreamer::NotStreamingReason::kWorkerTopLevelScript:
       return "worker top-level scripts are not streamable";
-    case ScriptStreamer::kModuleScript:
+    case ScriptStreamer::NotStreamingReason::kModuleScript:
       return "module script";
-    case ScriptStreamer::kAlreadyLoaded:
-    case ScriptStreamer::kCount:
-    case ScriptStreamer::kInvalid:
+    case ScriptStreamer::NotStreamingReason::kNoDataPipe:
+      return "no data pipe received";
+    case ScriptStreamer::NotStreamingReason::kDisabledByFeatureList:
+      return "streaming disabled from the feature list";
+    case ScriptStreamer::NotStreamingReason::kLoadingCancelled:
+      return "loading was cancelled";
+    case ScriptStreamer::NotStreamingReason::kDidntTryToStartStreaming:
+    case ScriptStreamer::NotStreamingReason::kAlreadyLoaded:
+    case ScriptStreamer::NotStreamingReason::kInvalid:
       NOTREACHED();
   }
   NOTREACHED();
@@ -835,6 +842,30 @@ std::unique_ptr<TracedValue> inspector_receive_response_event::Data(
   value->SetDouble("encodedDataLength", response.EncodedDataLength());
   value->SetBoolean("fromCache", response.WasCached());
   value->SetBoolean("fromServiceWorker", response.WasFetchedViaServiceWorker());
+
+  if (response.WasFetchedViaServiceWorker()) {
+    switch (response.GetServiceWorkerResponseSource()) {
+      case network::mojom::FetchResponseSource::kCacheStorage:
+        value->SetString("serviceWorkerResponseSource", "cacheStorage");
+        break;
+      case network::mojom::FetchResponseSource::kHttpCache:
+        value->SetString("serviceWorkerResponseSource", "httpCache");
+        break;
+      case network::mojom::FetchResponseSource::kNetwork:
+        value->SetString("serviceWorkerResponseSource", "network");
+        break;
+      case network::mojom::FetchResponseSource::kUnspecified:
+        value->SetString("serviceWorkerResponseSource", "fallbackCode");
+    }
+  }
+
+  if (!response.ResponseTime().is_null()) {
+    value->SetDouble("responseTime", response.ResponseTime().ToJsTime());
+  }
+  if (!response.CacheStorageCacheName().IsEmpty()) {
+    value->SetString("cacheStorageCacheName", response.CacheStorageCacheName());
+  }
+
   if (response.GetResourceLoadTiming()) {
     value->BeginDictionary("timing");
     RecordTiming(*response.GetResourceLoadTiming(), value.get());
@@ -1209,8 +1240,8 @@ std::unique_ptr<TracedValue> inspector_paint_image_event::Data(
     const FloatRect& dest_rect) {
   auto value = std::make_unique<TracedValue>();
   SetGeneratingNodeInfo(value.get(), &layout_image, "nodeId");
-  if (const ImageResourceContent* resource = layout_image.CachedImage())
-    value->SetString("url", resource->Url().GetString());
+  if (const ImageResourceContent* content = layout_image.CachedImage())
+    value->SetString("url", content->Url().GetString());
 
   value->SetInteger("x", dest_rect.X());
   value->SetInteger("y", dest_rect.Y());
@@ -1227,8 +1258,8 @@ std::unique_ptr<TracedValue> inspector_paint_image_event::Data(
     const StyleImage& style_image) {
   auto value = std::make_unique<TracedValue>();
   SetGeneratingNodeInfo(value.get(), &owning_layout_object, "nodeId");
-  if (const ImageResourceContent* resource = style_image.CachedImage())
-    value->SetString("url", resource->Url().GetString());
+  if (const ImageResourceContent* content = style_image.CachedImage())
+    value->SetString("url", content->Url().GetString());
   return value;
 }
 
@@ -1240,8 +1271,8 @@ std::unique_ptr<TracedValue> inspector_paint_image_event::Data(
   auto value = std::make_unique<TracedValue>();
   if (node)
     SetNodeInfo(value.get(), node, "nodeId", nullptr);
-  if (const ImageResourceContent* resource = style_image.CachedImage())
-    value->SetString("url", resource->Url().GetString());
+  if (const ImageResourceContent* content = style_image.CachedImage())
+    value->SetString("url", content->Url().GetString());
 
   value->SetInteger("x", dest_rect.X());
   value->SetInteger("y", dest_rect.Y());
@@ -1255,10 +1286,10 @@ std::unique_ptr<TracedValue> inspector_paint_image_event::Data(
 
 std::unique_ptr<TracedValue> inspector_paint_image_event::Data(
     const LayoutObject* owning_layout_object,
-    const ImageResourceContent& image_resource) {
+    const ImageResourceContent& image_content) {
   auto value = std::make_unique<TracedValue>();
   SetGeneratingNodeInfo(value.get(), owning_layout_object, "nodeId");
-  value->SetString("url", image_resource.Url().GetString());
+  value->SetString("url", image_content.Url().GetString());
   return value;
 }
 

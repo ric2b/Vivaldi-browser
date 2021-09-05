@@ -330,6 +330,10 @@ viz_source_set("gpu_service_dependencies") {
   sources = [
     "display_embedder/image_context_impl.cc",
     "display_embedder/image_context_impl.h",
+    "display_embedder/output_presenter.cc",
+    "display_embedder/output_presenter.h",
+    "display_embedder/output_presenter_gl.cc",
+    "display_embedder/output_presenter_gl.h",
     "display_embedder/skia_output_device.cc",
     "display_embedder/skia_output_device.h",
     "display_embedder/skia_output_device_buffer_queue.cc",
@@ -365,7 +369,10 @@ viz_source_set("gpu_service_dependencies") {
 
   defines = [ "VIZ_SERVICE_IMPLEMENTATION" ]
 
-  deps = [ "//gpu/config" ]
+  deps = [
+    "//base",
+    "//gpu/config",
+  ]
 
   if (is_win) {
     sources += [
@@ -409,7 +416,7 @@ viz_source_set("gpu_service_dependencies") {
     deps += [ "//ui/gfx/x" ]
   }
 
-  if (skia_use_dawn) {
+  if (skia_use_dawn && is_win) {
     sources += [
       "display_embedder/skia_output_device_dawn.cc",
       "display_embedder/skia_output_device_dawn.h",
@@ -421,6 +428,19 @@ viz_source_set("gpu_service_dependencies") {
       "//third_party/dawn/src/dawn:dawn_proc",
       "//third_party/dawn/src/dawn:dawncpp",
       "//third_party/dawn/src/dawn_native",
+    ]
+  }
+
+  if (is_fuchsia) {
+    sources += [
+      "display_embedder/output_presenter_fuchsia.cc",
+      "display_embedder/output_presenter_fuchsia.h",
+    ]
+
+    deps += [
+      "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.images",
+      "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.sysmem",
+      "//third_party/fuchsia-sdk/sdk/pkg/sys_inspect_cpp",
     ]
   }
 }
@@ -491,6 +511,7 @@ viz_source_set("unit_tests") {
     "//components/viz/common",
     "//components/viz/host",
     "//components/viz/service/main:main",
+    "//components/viz/test:test_suite",
     "//components/viz/test:test_support",
     "//gpu/command_buffer/client",
     "//gpu/command_buffer/client:gles2_implementation",
@@ -554,7 +575,9 @@ viz_source_set("unit_tests") {
     # TODO(samans): Support more configurations.
     # CFI issue: https://crbug.com/967819
     # LSAN issue: https://crbug.com/971357
-    if (use_x11 && !is_cfi && !is_lsan) {
+    # Fuchsia ARM64 https://crbug.com/1058247
+    if ((use_x11 && !is_cfi && !is_lsan) ||
+        (is_fuchsia && target_cpu == "x64")) {
       defines += [ "ENABLE_VIZ_VULKAN_TESTS" ]
     }
   }

@@ -50,6 +50,7 @@
 #include "net/cert/internal/parse_name.h"
 #include "net/cert/test_root_certs.h"
 #include "net/cookies/cookie_change_dispatcher.h"
+#include "net/cookies/cookie_inclusion_status.h"
 #include "net/cookies/cookie_util.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/http/http_response_info.h"
@@ -502,7 +503,8 @@ class URLLoaderTest : public testing::Test {
         network_context_client.get(),
         DeleteLoaderCallback(&delete_run_loop, &url_loader),
         loader.BindNewPipeAndPassReceiver(), options, request,
-        client_.CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+        client_.CreateRemote(), /*reponse_body_use_tracker=*/base::nullopt,
+        TRAFFIC_ANNOTATION_FOR_TESTS, &params,
         /*coep_reporter=*/nullptr, 0 /* request_id */,
         0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
         nullptr /* network_usage_accumulator */, nullptr /* header_client */,
@@ -1080,7 +1082,8 @@ TEST_F(URLLoaderTest, DestroyOnURLLoaderPipeClosed) {
       nullptr /* network_context_client */,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader.InitWithNewPipeAndPassReceiver(), 0, request,
-      client()->CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+      client()->CreateRemote(), /*reponse_body_use_tracker=*/base::nullopt,
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params,
       /*coep_reporter=*/nullptr, 0 /* request_id */,
       0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
       nullptr /* network_usage_accumulator */, nullptr /* header_client */,
@@ -1136,7 +1139,8 @@ TEST_F(URLLoaderTest, CloseResponseBodyConsumerBeforeProducer) {
       nullptr /* network_context_client */,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader.InitWithNewPipeAndPassReceiver(), 0, request,
-      client()->CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+      client()->CreateRemote(), /*reponse_body_use_tracker=*/base::nullopt,
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params,
       /*coep_reporter=*/nullptr, 0 /* request_id */,
       0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
       nullptr /* network_usage_accumulator */, nullptr /* header_client */,
@@ -1194,9 +1198,9 @@ TEST_F(URLLoaderTest, PauseReadingBodyFromNetBeforeResponseHeaders) {
       nullptr /* network_context_client */,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader.BindNewPipeAndPassReceiver(), 0, request, client()->CreateRemote(),
-      TRAFFIC_ANNOTATION_FOR_TESTS, &params, /*coep_reporter=*/nullptr,
-      0 /* request_id */, 0 /* keepalive_request_size */,
-      resource_scheduler_client(), nullptr,
+      /*reponse_body_use_tracker=*/base::nullopt, TRAFFIC_ANNOTATION_FOR_TESTS,
+      &params, /*coep_reporter=*/nullptr, 0 /* request_id */,
+      0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
       nullptr /* network_usage_accumulator */, nullptr /* header_client */,
       nullptr /* origin_policy_manager */, nullptr /* trust_token_helper */,
       mojo::NullRemote() /* cookie_observer */);
@@ -1274,9 +1278,9 @@ TEST_F(URLLoaderTest, PauseReadingBodyFromNetWhenReadIsPending) {
       nullptr /* network_context_client */,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader.BindNewPipeAndPassReceiver(), 0, request, client()->CreateRemote(),
-      TRAFFIC_ANNOTATION_FOR_TESTS, &params, /*coep_reporter=*/nullptr,
-      0 /* request_id */, 0 /* keepalive_request_size */,
-      resource_scheduler_client(), nullptr,
+      /*reponse_body_use_tracker=*/base::nullopt, TRAFFIC_ANNOTATION_FOR_TESTS,
+      &params, /*coep_reporter=*/nullptr, 0 /* request_id */,
+      0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
       nullptr /* network_usage_accumulator */, nullptr /* header_client */,
       nullptr /* origin_policy_manager */, nullptr /* trust_token_helper */,
       mojo::NullRemote() /* cookie_observer */);
@@ -1343,9 +1347,9 @@ TEST_F(URLLoaderTest, ResumeReadingBodyFromNetAfterClosingConsumer) {
       nullptr /* network_context_client */,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader.BindNewPipeAndPassReceiver(), 0, request, client()->CreateRemote(),
-      TRAFFIC_ANNOTATION_FOR_TESTS, &params, /*coep_reporter=*/nullptr,
-      0 /* request_id */, 0 /* keepalive_request_size */,
-      resource_scheduler_client(), nullptr,
+      /*reponse_body_use_tracker=*/base::nullopt, TRAFFIC_ANNOTATION_FOR_TESTS,
+      &params, /*coep_reporter=*/nullptr, 0 /* request_id */,
+      0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
       nullptr /* network_usage_accumulator */, nullptr /* header_client */,
       nullptr /* origin_policy_manager */, nullptr /* trust_token_helper */,
       mojo::NullRemote() /* cookie_observer */);
@@ -1407,9 +1411,9 @@ TEST_F(URLLoaderTest, MultiplePauseResumeReadingBodyFromNet) {
       nullptr /* network_context_client */,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader.BindNewPipeAndPassReceiver(), 0, request, client()->CreateRemote(),
-      TRAFFIC_ANNOTATION_FOR_TESTS, &params, /*coep_reporter=*/nullptr,
-      0 /* request_id */, 0 /* keepalive_request_size */,
-      resource_scheduler_client(), nullptr,
+      /*reponse_body_use_tracker=*/base::nullopt, TRAFFIC_ANNOTATION_FOR_TESTS,
+      &params, /*coep_reporter=*/nullptr, 0 /* request_id */,
+      0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
       nullptr /* network_usage_accumulator */, nullptr /* header_client */,
       nullptr /* origin_policy_manager */, nullptr /* trust_token_helper */,
       mojo::NullRemote() /* cookie_observer */);
@@ -1662,9 +1666,9 @@ TEST_F(URLLoaderTest, UploadFileCanceled) {
       network_context_client.get(),
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader.BindNewPipeAndPassReceiver(), 0, request, client()->CreateRemote(),
-      TRAFFIC_ANNOTATION_FOR_TESTS, &params, /*coep_reporter=*/nullptr,
-      0 /* request_id */, 0 /* keepalive_request_size */,
-      resource_scheduler_client(), nullptr,
+      /*reponse_body_use_tracker=*/base::nullopt, TRAFFIC_ANNOTATION_FOR_TESTS,
+      &params, /*coep_reporter=*/nullptr, 0 /* request_id */,
+      0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
       nullptr /* network_usage_accumulator */, nullptr /* header_client */,
       nullptr /* origin_policy_manager */, nullptr /* trust_token_helper */,
       mojo::NullRemote() /* cookie_observer */);
@@ -1850,9 +1854,9 @@ TEST_F(URLLoaderTest, UploadChunkedDataPipe) {
       nullptr /* network_context_client */,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader.BindNewPipeAndPassReceiver(), 0, request, client()->CreateRemote(),
-      TRAFFIC_ANNOTATION_FOR_TESTS, &params, /*coep_reporter=*/nullptr,
-      0 /* request_id */, 0 /* keepalive_request_size */,
-      nullptr /* resource_scheduler_client */,
+      /*reponse_body_use_tracker=*/base::nullopt, TRAFFIC_ANNOTATION_FOR_TESTS,
+      &params, /*coep_reporter=*/nullptr, 0 /* request_id */,
+      0 /* keepalive_request_size */, nullptr /* resource_scheduler_client */,
       nullptr /* keepalive_statistics_reporter */,
       nullptr /* network_usage_accumulator */, nullptr /* header_client */,
       nullptr /* origin_policy_manager */, nullptr /* trust_token_helper */,
@@ -1922,7 +1926,8 @@ TEST_F(URLLoaderTest, RedirectModifiedHeaders) {
       nullptr /* network_context_client */,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader.BindNewPipeAndPassReceiver(), mojom::kURLLoadOptionNone, request,
-      client()->CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+      client()->CreateRemote(), /*reponse_body_use_tracker=*/base::nullopt,
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params,
       /*coep_reporter=*/nullptr,
 
       0 /* request_id */, 0 /* keepalive_request_size */,
@@ -1980,7 +1985,8 @@ TEST_F(URLLoaderTest, RedirectFailsOnModifyUnsafeHeader) {
         nullptr /* network_context_client */,
         DeleteLoaderCallback(&delete_run_loop, &url_loader),
         loader.BindNewPipeAndPassReceiver(), mojom::kURLLoadOptionNone, request,
-        client.CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+        client.CreateRemote(), /*reponse_body_use_tracker=*/base::nullopt,
+        TRAFFIC_ANNOTATION_FOR_TESTS, &params,
         /*coep_reporter=*/nullptr, 0 /* request_id */,
         0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
         nullptr /* network_usage_accumulator */, nullptr /* header_client */,
@@ -2021,7 +2027,8 @@ TEST_F(URLLoaderTest, RedirectLogsModifiedConcerningHeader) {
       nullptr /* network_context_client */,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader.BindNewPipeAndPassReceiver(), mojom::kURLLoadOptionNone, request,
-      client.CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+      client.CreateRemote(), /*reponse_body_use_tracker=*/base::nullopt,
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params,
       /*coep_reporter=*/nullptr, 0 /* request_id */,
       0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
       nullptr /* network_usage_accumulator */, nullptr /* header_client */,
@@ -2076,7 +2083,8 @@ TEST_F(URLLoaderTest, RedirectRemoveHeader) {
       nullptr /* network_context_client */,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader.BindNewPipeAndPassReceiver(), mojom::kURLLoadOptionNone, request,
-      client()->CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+      client()->CreateRemote(), /*reponse_body_use_tracker=*/base::nullopt,
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params,
       /*coep_reporter=*/nullptr, 0 /* request_id */,
       0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
       nullptr /* network_usage_accumulator */, nullptr /* header_client */,
@@ -2121,7 +2129,8 @@ TEST_F(URLLoaderTest, RedirectRemoveHeaderAndAddItBack) {
       nullptr /* network_context_client */,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader.BindNewPipeAndPassReceiver(), mojom::kURLLoadOptionNone, request,
-      client()->CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+      client()->CreateRemote(), /*reponse_body_use_tracker=*/base::nullopt,
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params,
       /*coep_reporter=*/nullptr, 0 /* request_id */,
       0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
       nullptr /* network_usage_accumulator */, nullptr /* header_client */,
@@ -2170,7 +2179,8 @@ TEST_F(URLLoaderTest, UpgradeAddsSecHeaders) {
       nullptr /* network_context_client */,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader.BindNewPipeAndPassReceiver(), mojom::kURLLoadOptionNone, request,
-      client()->CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+      client()->CreateRemote(), /*reponse_body_use_tracker=*/base::nullopt,
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params,
       /*coep_reporter=*/nullptr, 0 /* request_id */,
       0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
       nullptr /* network_usage_accumulator */, nullptr /* header_client */,
@@ -2223,7 +2233,8 @@ TEST_F(URLLoaderTest, DowngradeRemovesSecHeaders) {
       nullptr /* network_context_client */,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader.BindNewPipeAndPassReceiver(), mojom::kURLLoadOptionNone, request,
-      client()->CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+      client()->CreateRemote(), /*reponse_body_use_tracker=*/base::nullopt,
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params,
       /*coep_reporter=*/nullptr, 0 /* request_id */,
       0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
       nullptr /* network_usage_accumulator */, nullptr /* header_client */,
@@ -2285,7 +2296,8 @@ TEST_F(URLLoaderTest, RedirectChainRemovesAndAddsSecHeaders) {
       nullptr /* network_context_client */,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader.BindNewPipeAndPassReceiver(), mojom::kURLLoadOptionNone, request,
-      client()->CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+      client()->CreateRemote(), /*reponse_body_use_tracker=*/base::nullopt,
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params,
       /*coep_reporter=*/nullptr, 0 /* request_id */,
       0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
       nullptr /* network_usage_accumulator */, nullptr /* header_client */,
@@ -2353,7 +2365,9 @@ TEST_F(URLLoaderTest, RedirectSecHeadersUser) {
       nullptr /* network_context_client */,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader.InitWithNewPipeAndPassReceiver(), mojom::kURLLoadOptionNone,
-      request, client()->CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+      request, client()->CreateRemote(),
+      /*reponse_body_use_tracker=*/base::nullopt, TRAFFIC_ANNOTATION_FOR_TESTS,
+      &params,
       /*coep_reporter=*/nullptr, 0 /* request_id */,
       0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
       nullptr /* network_usage_accumulator */, nullptr /* header_client */,
@@ -2387,7 +2401,9 @@ TEST_F(URLLoaderTest, RedirectDirectlyModifiedSecHeadersUser) {
       nullptr /* network_context_client */,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader.InitWithNewPipeAndPassReceiver(), mojom::kURLLoadOptionNone,
-      request, client()->CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+      request, client()->CreateRemote(),
+      /*reponse_body_use_tracker=*/base::nullopt, TRAFFIC_ANNOTATION_FOR_TESTS,
+      &params,
       /*coep_reporter=*/nullptr, 0 /* request_id */,
       0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
       nullptr /* network_usage_accumulator */, nullptr /* header_client */,
@@ -2494,7 +2510,8 @@ TEST_F(URLLoaderTest, ResourceSchedulerIntegration) {
         nullptr /* network_context_client */,
         NeverInvokedDeleteLoaderCallback(),
         loader_remote.InitWithNewPipeAndPassReceiver(), 0, request,
-        client.CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+        client.CreateRemote(), /*reponse_body_use_tracker=*/base::nullopt,
+        TRAFFIC_ANNOTATION_FOR_TESTS, &params,
         /*coep_reporter=*/nullptr, 0 /* request_id */,
         0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
         nullptr /* network_usage_accumulator */, nullptr /* header_client */,
@@ -2518,7 +2535,8 @@ TEST_F(URLLoaderTest, ResourceSchedulerIntegration) {
       context(), nullptr /* network_service_client */,
       nullptr /* network_context_client */, NeverInvokedDeleteLoaderCallback(),
       loader_remote.InitWithNewPipeAndPassReceiver(), 0, request,
-      client()->CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+      client()->CreateRemote(), /*reponse_body_use_tracker=*/base::nullopt,
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params,
       /*coep_reporter=*/nullptr, 0 /* request_id */,
       0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
       nullptr /* network_usage_accumulator */, nullptr /* header_client */,
@@ -2557,7 +2575,9 @@ TEST_F(URLLoaderTest, ReadPipeClosedWhileReadTaskPosted) {
       nullptr /* network_context_client */,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader.InitWithNewPipeAndPassReceiver(), mojom::kURLLoadOptionNone,
-      request, client()->CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+      request, client()->CreateRemote(),
+      /*reponse_body_use_tracker=*/base::nullopt, TRAFFIC_ANNOTATION_FOR_TESTS,
+      &params,
       /*coep_reporter=*/nullptr, 0 /* request_id */,
       0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
       nullptr /* network_usage_accumulator */, nullptr /* header_client */,
@@ -2637,7 +2657,7 @@ class MockCookieObserver : public network::mojom::CookieAccessObserver {
     // The full details are available for the tests to query manually, but
     // they are not covered by operator== (and testing::ElementsAre).
     GURL url;
-    net::CanonicalCookie::CookieInclusionStatus status;
+    net::CookieInclusionStatus status;
   };
 
   mojo::PendingRemote<mojom::CookieAccessObserver> GetRemote() {
@@ -2696,11 +2716,11 @@ class MockNetworkServiceClient : public TestNetworkServiceClient {
       int32_t process_id,
       int32_t routing_id,
       const std::string& devtools_request_id,
-      const net::CookieStatusList& cookies_with_status,
+      const net::CookieAccessResultList& cookies_with_access_result,
       std::vector<network::mojom::HttpRawHeaderPairPtr> headers) override {
     raw_request_cookies_.insert(raw_request_cookies_.end(),
-                                cookies_with_status.begin(),
-                                cookies_with_status.end());
+                                cookies_with_access_result.begin(),
+                                cookies_with_access_result.end());
 
     devtools_request_id_ = devtools_request_id;
 
@@ -2758,7 +2778,7 @@ class MockNetworkServiceClient : public TestNetworkServiceClient {
     return raw_response_cookies_;
   }
 
-  const net::CookieStatusList& raw_request_cookies() const {
+  const net::CookieAccessResultList& raw_request_cookies() const {
     return raw_request_cookies_;
   }
 
@@ -2775,7 +2795,7 @@ class MockNetworkServiceClient : public TestNetworkServiceClient {
   std::string devtools_request_id_;
   base::Optional<std::string> raw_response_headers_;
 
-  net::CookieStatusList raw_request_cookies_;
+  net::CookieAccessResultList raw_request_cookies_;
   base::OnceClosure wait_for_raw_request_;
   size_t wait_for_raw_request_goal_ = 0u;
 
@@ -2947,7 +2967,8 @@ TEST_F(URLLoaderTest, SetAuth) {
       context(), &network_service_client, &network_context_client,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader.InitWithNewPipeAndPassReceiver(), 0, request,
-      client()->CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+      client()->CreateRemote(), /*reponse_body_use_tracker=*/base::nullopt,
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params,
       /*coep_reporter=*/nullptr, 0 /* request_id */,
       0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
       nullptr /* network_usage_accumulator */, nullptr /* header_client */,
@@ -2993,7 +3014,8 @@ TEST_F(URLLoaderTest, CancelAuth) {
       context(), &network_service_client, &network_context_client,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader.InitWithNewPipeAndPassReceiver(), 0, request,
-      client()->CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+      client()->CreateRemote(), /*reponse_body_use_tracker=*/base::nullopt,
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params,
       /*coep_reporter=*/nullptr, 0 /* request_id */,
       0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
       nullptr /* network_usage_accumulator */, nullptr /* header_client */,
@@ -3039,7 +3061,8 @@ TEST_F(URLLoaderTest, TwoChallenges) {
       context(), &network_service_client, &network_context_client,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader.InitWithNewPipeAndPassReceiver(), 0, request,
-      client()->CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+      client()->CreateRemote(), /*reponse_body_use_tracker=*/base::nullopt,
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params,
       /*coep_reporter=*/nullptr, 0 /* request_id */,
       0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
       nullptr /* network_usage_accumulator */, nullptr /* header_client */,
@@ -3086,7 +3109,8 @@ TEST_F(URLLoaderTest, NoAuthRequiredForFavicon) {
       context(), &network_service_client, &network_context_client,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader.InitWithNewPipeAndPassReceiver(), 0, request,
-      client()->CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+      client()->CreateRemote(), /*reponse_body_use_tracker=*/base::nullopt,
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params,
       /*coep_reporter=*/nullptr, 0 /* request_id */,
       0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
       nullptr /* network_usage_accumulator */, nullptr /* header_client */,
@@ -3132,7 +3156,8 @@ TEST_F(URLLoaderTest, HttpAuthResponseHeadersAvailable) {
       context(), &network_service_client, &network_context_client,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader.InitWithNewPipeAndPassReceiver(), 0, request,
-      client()->CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+      client()->CreateRemote(), /*reponse_body_use_tracker=*/base::nullopt,
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params,
       /*coep_reporter=*/nullptr, 0 /* request_id */,
       0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
       nullptr /* network_usage_accumulator */, nullptr /* header_client */,
@@ -3176,7 +3201,8 @@ TEST_F(URLLoaderTest, CorbEffectiveWithCors) {
       nullptr /* network_context_client */,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader.InitWithNewPipeAndPassReceiver(), 0, request,
-      client()->CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+      client()->CreateRemote(), /*reponse_body_use_tracker=*/base::nullopt,
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params,
       /*coep_reporter=*/nullptr, 0 /* request_id */,
       0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
       nullptr /* network_usage_accumulator */, nullptr /* header_client */,
@@ -3218,7 +3244,8 @@ TEST_F(URLLoaderTest, CorbExcludedWithNoCors) {
       nullptr /* network_context_client */,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader.InitWithNewPipeAndPassReceiver(), 0, request,
-      client()->CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+      client()->CreateRemote(), /*reponse_body_use_tracker=*/base::nullopt,
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params,
       /*coep_reporter=*/nullptr, 0 /* request_id */,
       0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
       nullptr /* network_usage_accumulator */, nullptr /* header_client */,
@@ -3263,7 +3290,8 @@ TEST_F(URLLoaderTest, CorbEffectiveWithNoCorsWhenNoActualPlugin) {
       nullptr /* network_context_client */,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader.InitWithNewPipeAndPassReceiver(), 0, request,
-      client()->CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+      client()->CreateRemote(), /*reponse_body_use_tracker=*/base::nullopt,
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params,
       /*coep_reporter=*/nullptr, 0 /* request_id */,
       0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
       nullptr /* network_usage_accumulator */, nullptr /* header_client */,
@@ -3300,7 +3328,9 @@ TEST_F(URLLoaderTest, FollowRedirectTwice) {
       nullptr /* network_context_client */,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader.InitWithNewPipeAndPassReceiver(), mojom::kURLLoadOptionNone,
-      request, client()->CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+      request, client()->CreateRemote(),
+      /*reponse_body_use_tracker=*/base::nullopt, TRAFFIC_ANNOTATION_FOR_TESTS,
+      &params,
       /*coep_reporter=*/nullptr, 0 /* request_id */,
       0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
       nullptr /* network_usage_accumulator */, nullptr /* header_client */,
@@ -3404,7 +3434,8 @@ TEST_F(URLLoaderTest, ClientAuthRespondTwice) {
       context(), &network_service_client, &network_context_client,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader.BindNewPipeAndPassReceiver(), mojom::kURLLoadOptionNone, request,
-      client()->CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+      client()->CreateRemote(), /*reponse_body_use_tracker=*/base::nullopt,
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params,
       /*coep_reporter=*/nullptr, 0 /* request_id */,
       0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
       nullptr /* network_usage_accumulator */, nullptr /* header_client */,
@@ -3457,9 +3488,9 @@ TEST_F(URLLoaderTest, ClientAuthDestroyResponder) {
       context(), &network_service_client, &network_context_client,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader.BindNewPipeAndPassReceiver(), 0, request, client()->CreateRemote(),
-      TRAFFIC_ANNOTATION_FOR_TESTS, &params, /*coep_reporter=*/nullptr,
-      0 /* request_id */, 0 /* keepalive_request_size */,
-      resource_scheduler_client(), nullptr,
+      /*reponse_body_use_tracker=*/base::nullopt, TRAFFIC_ANNOTATION_FOR_TESTS,
+      &params, /*coep_reporter=*/nullptr, 0 /* request_id */,
+      0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
       nullptr /* network_usage_accumulator */, nullptr /* header_client */,
       nullptr /* origin_policy_manager */, nullptr /* trust_token_helper */,
       mojo::NullRemote() /* cookie_observer */);
@@ -3501,9 +3532,9 @@ TEST_F(URLLoaderTest, ClientAuthCancelConnection) {
       context(), &network_service_client, &network_context_client,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader.BindNewPipeAndPassReceiver(), 0, request, client()->CreateRemote(),
-      TRAFFIC_ANNOTATION_FOR_TESTS, &params, /*coep_reporter=*/nullptr,
-      0 /* request_id */, 0 /* keepalive_request_size */,
-      resource_scheduler_client(), nullptr,
+      /*reponse_body_use_tracker=*/base::nullopt, TRAFFIC_ANNOTATION_FOR_TESTS,
+      &params, /*coep_reporter=*/nullptr, 0 /* request_id */,
+      0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
       nullptr /* network_usage_accumulator */, nullptr /* header_client */,
       nullptr /* origin_policy_manager */, nullptr /* trust_token_helper */,
       mojo::NullRemote() /* cookie_observer */);
@@ -3544,7 +3575,8 @@ TEST_F(URLLoaderTest, ClientAuthCancelCertificateSelection) {
       context(), &network_service_client, &network_context_client,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader.InitWithNewPipeAndPassReceiver(), 0, request,
-      client()->CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+      client()->CreateRemote(), /*reponse_body_use_tracker=*/base::nullopt,
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params,
       /*coep_reporter=*/nullptr, 0 /* request_id */,
       0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
       nullptr /* network_usage_accumulator */, nullptr /* header_client */,
@@ -3596,7 +3628,8 @@ TEST_F(URLLoaderTest, ClientAuthNoCertificate) {
       context(), &network_service_client, &network_context_client,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader.InitWithNewPipeAndPassReceiver(), 0, request,
-      client()->CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+      client()->CreateRemote(), /*reponse_body_use_tracker=*/base::nullopt,
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params,
       /*coep_reporter=*/nullptr, 0 /* request_id */,
       0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
       nullptr /* network_usage_accumulator */, nullptr /* header_client */,
@@ -3653,7 +3686,8 @@ TEST_F(URLLoaderTest, ClientAuthCertificateWithValidSignature) {
       context(), &network_service_client, &network_context_client,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader.InitWithNewPipeAndPassReceiver(), 0, request,
-      client()->CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+      client()->CreateRemote(), /*reponse_body_use_tracker=*/base::nullopt,
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params,
       /*coep_reporter=*/nullptr, 0 /* request_id */,
       0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
       nullptr /* network_usage_accumulator */, nullptr /* header_client */,
@@ -3712,7 +3746,8 @@ TEST_F(URLLoaderTest, ClientAuthCertificateWithInvalidSignature) {
       context(), &network_service_client, &network_context_client,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader.InitWithNewPipeAndPassReceiver(), 0, request,
-      client()->CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+      client()->CreateRemote(), /*reponse_body_use_tracker=*/base::nullopt,
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params,
       /*coep_reporter=*/nullptr, 0 /* request_id */,
       0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
       nullptr /* network_usage_accumulator */, nullptr /* header_client */,
@@ -3753,9 +3788,9 @@ TEST_F(URLLoaderTest, BlockAllCookies) {
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader.InitWithNewPipeAndPassReceiver(),
       mojom::kURLLoadOptionBlockAllCookies, request, client()->CreateRemote(),
-      TRAFFIC_ANNOTATION_FOR_TESTS, &params, /*coep_reporter=*/nullptr,
-      0 /* request_id */, 0 /* keepalive_request_size */,
-      resource_scheduler_client(), nullptr,
+      /*reponse_body_use_tracker=*/base::nullopt, TRAFFIC_ANNOTATION_FOR_TESTS,
+      &params, /*coep_reporter=*/nullptr, 0 /* request_id */,
+      0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
       nullptr /* network_usage_accumulator */, nullptr /* header_client */,
       nullptr /* origin_policy_manager */, nullptr /* trust_token_helper */,
       mojo::NullRemote() /* cookie_observer */);
@@ -3783,7 +3818,8 @@ TEST_F(URLLoaderTest, BlockOnlyThirdPartyCookies) {
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader.InitWithNewPipeAndPassReceiver(),
       mojom::kURLLoadOptionBlockThirdPartyCookies, request,
-      client()->CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+      client()->CreateRemote(), /*reponse_body_use_tracker=*/base::nullopt,
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params,
       /*coep_reporter=*/nullptr, 0 /* request_id */,
       0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
       nullptr /* network_usage_accumulator */, nullptr /* header_client */,
@@ -3812,7 +3848,9 @@ TEST_F(URLLoaderTest, AllowAllCookies) {
       context(), &network_service_client, nullptr /* network_context_client */,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader.InitWithNewPipeAndPassReceiver(), mojom::kURLLoadOptionNone,
-      request, client()->CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+      request, client()->CreateRemote(),
+      /*reponse_body_use_tracker=*/base::nullopt, TRAFFIC_ANNOTATION_FOR_TESTS,
+      &params,
       /*coep_reporter=*/nullptr, 0 /* request_id */,
       0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
       nullptr /* network_usage_accumulator */, nullptr /* header_client */,
@@ -3821,6 +3859,180 @@ TEST_F(URLLoaderTest, AllowAllCookies) {
 
   EXPECT_TRUE(url_loader->AllowCookies(first_party_url, site_for_cookies));
   EXPECT_TRUE(url_loader->AllowCookies(third_party_url, site_for_cookies));
+}
+
+// Tests that a request with CredentialsMode::kOmit still sends client
+// certificates. This should be removed when crbug.com/775438 is fixed.
+TEST_F(URLLoaderTest, CredentialsModeOmit) {
+  // Set up a server that requires certificates.
+  net::SSLServerConfig ssl_config;
+  ssl_config.client_cert_type =
+      net::SSLServerConfig::ClientCertType::REQUIRE_CLIENT_CERT;
+  net::EmbeddedTestServer test_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  test_server.SetSSLConfig(net::EmbeddedTestServer::CERT_OK, ssl_config);
+  test_server.AddDefaultHandlers(
+      base::FilePath(FILE_PATH_LITERAL("services/test/data")));
+  ASSERT_TRUE(test_server.Start());
+
+  // Make sure the client has valid certificates.
+  std::unique_ptr<net::FakeClientCertIdentity> identity =
+      net::FakeClientCertIdentity::CreateFromCertAndKeyFiles(
+          net::GetTestCertsDirectory(), "client_1.pem", "client_1.pk8");
+  ASSERT_TRUE(identity);
+  scoped_refptr<TestSSLPrivateKey> private_key =
+      base::MakeRefCounted<TestSSLPrivateKey>(identity->ssl_private_key());
+
+  MockNetworkServiceClient network_service_client;
+  MockNetworkContextClient network_context_client;
+  network_context_client.set_certificate_response(
+      MockNetworkContextClient::CertificateResponse::
+          VALID_CERTIFICATE_SIGNATURE);
+  network_context_client.set_private_key(private_key);
+  network_context_client.set_certificate(identity->certificate());
+
+  ResourceRequest request =
+      CreateResourceRequest("GET", test_server.GetURL("/simple_page.html"));
+  request.credentials_mode = mojom::CredentialsMode::kOmit;
+
+  base::RunLoop delete_run_loop;
+  mojo::Remote<mojom::URLLoader> loader;
+  std::unique_ptr<URLLoader> url_loader;
+  mojom::URLLoaderFactoryParams params;
+  params.process_id = kProcessId;
+  params.is_corb_enabled = false;
+  url_loader = std::make_unique<URLLoader>(
+      context(), &network_service_client, &network_context_client,
+      DeleteLoaderCallback(&delete_run_loop, &url_loader),
+      loader.BindNewPipeAndPassReceiver(), mojom::kURLLoadOptionNone, request,
+      client()->CreateRemote(), /*reponse_body_use_tracker=*/base::nullopt,
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+      /*coep_reporter=*/nullptr, 0 /* request_id */,
+      0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
+      nullptr /* network_usage_accumulator */, nullptr /* header_client */,
+      nullptr /* origin_policy_manager */, nullptr /* trust_token_helper */,
+      mojo::NullRemote() /* cookie_observer */);
+
+  client()->RunUntilComplete();
+  delete_run_loop.Run();
+
+  EXPECT_EQ(net::OK, client()->completion_status().error_code);
+}
+
+// Tests that a request with CredentialsMode::kOmitBug_775438_Workaround
+// doesn't send client certificates.
+TEST_F(URLLoaderTest, CredentialsModeOmitWorkaround) {
+  // Set up a server that requires certificates.
+  net::SSLServerConfig ssl_config;
+  ssl_config.client_cert_type =
+      net::SSLServerConfig::ClientCertType::REQUIRE_CLIENT_CERT;
+  net::EmbeddedTestServer test_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  test_server.SetSSLConfig(net::EmbeddedTestServer::CERT_OK, ssl_config);
+  test_server.AddDefaultHandlers(
+      base::FilePath(FILE_PATH_LITERAL("services/test/data")));
+  ASSERT_TRUE(test_server.Start());
+
+  // Make sure the client has valid certificates.
+  std::unique_ptr<net::FakeClientCertIdentity> identity =
+      net::FakeClientCertIdentity::CreateFromCertAndKeyFiles(
+          net::GetTestCertsDirectory(), "client_1.pem", "client_1.pk8");
+  ASSERT_TRUE(identity);
+  scoped_refptr<TestSSLPrivateKey> private_key =
+      base::MakeRefCounted<TestSSLPrivateKey>(identity->ssl_private_key());
+
+  MockNetworkServiceClient network_service_client;
+  MockNetworkContextClient network_context_client;
+  network_context_client.set_certificate_response(
+      MockNetworkContextClient::CertificateResponse::
+          VALID_CERTIFICATE_SIGNATURE);
+  network_context_client.set_private_key(private_key);
+  network_context_client.set_certificate(identity->certificate());
+
+  ResourceRequest request =
+      CreateResourceRequest("GET", test_server.GetURL("/simple_page.html"));
+  request.credentials_mode = mojom::CredentialsMode::kOmitBug_775438_Workaround;
+
+  base::RunLoop delete_run_loop;
+  mojo::Remote<mojom::URLLoader> loader;
+  std::unique_ptr<URLLoader> url_loader;
+  mojom::URLLoaderFactoryParams params;
+  params.process_id = kProcessId;
+  params.is_corb_enabled = false;
+  url_loader = std::make_unique<URLLoader>(
+      context(), &network_service_client, &network_context_client,
+      DeleteLoaderCallback(&delete_run_loop, &url_loader),
+      loader.BindNewPipeAndPassReceiver(), mojom::kURLLoadOptionNone, request,
+      client()->CreateRemote(), /*reponse_body_use_tracker=*/base::nullopt,
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+      /*coep_reporter=*/nullptr, 0 /* request_id */,
+      0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
+      nullptr /* network_usage_accumulator */, nullptr /* header_client */,
+      nullptr /* origin_policy_manager */, nullptr /* trust_token_helper */,
+      mojo::NullRemote() /* cookie_observer */);
+
+  client()->RunUntilComplete();
+  delete_run_loop.Run();
+
+  EXPECT_EQ(0, network_context_client.on_certificate_requested_counter());
+  EXPECT_NE(net::OK, client()->completion_status().error_code);
+}
+
+// Tests that a request with CredentialsMode::kOmitBug_775438_Workaround
+// doesn't send client certificates with a server that optionally requires
+// certificates.
+TEST_F(URLLoaderTest, CredentialsModeOmitWorkaroundWithOptionalCerts) {
+  // Set up a server that requires certificates.
+  net::SSLServerConfig ssl_config;
+  ssl_config.client_cert_type =
+      net::SSLServerConfig::ClientCertType::OPTIONAL_CLIENT_CERT;
+  net::EmbeddedTestServer test_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  test_server.SetSSLConfig(net::EmbeddedTestServer::CERT_OK, ssl_config);
+  test_server.AddDefaultHandlers(
+      base::FilePath(FILE_PATH_LITERAL("services/test/data")));
+  ASSERT_TRUE(test_server.Start());
+
+  // Make sure the client has valid certificates.
+  std::unique_ptr<net::FakeClientCertIdentity> identity =
+      net::FakeClientCertIdentity::CreateFromCertAndKeyFiles(
+          net::GetTestCertsDirectory(), "client_1.pem", "client_1.pk8");
+  ASSERT_TRUE(identity);
+  scoped_refptr<TestSSLPrivateKey> private_key =
+      base::MakeRefCounted<TestSSLPrivateKey>(identity->ssl_private_key());
+
+  MockNetworkServiceClient network_service_client;
+  MockNetworkContextClient network_context_client;
+  network_context_client.set_certificate_response(
+      MockNetworkContextClient::CertificateResponse::
+          VALID_CERTIFICATE_SIGNATURE);
+  network_context_client.set_private_key(private_key);
+  network_context_client.set_certificate(identity->certificate());
+
+  ResourceRequest request =
+      CreateResourceRequest("GET", test_server.GetURL("/simple_page.html"));
+  request.credentials_mode = mojom::CredentialsMode::kOmitBug_775438_Workaround;
+
+  base::RunLoop delete_run_loop;
+  mojo::Remote<mojom::URLLoader> loader;
+  std::unique_ptr<URLLoader> url_loader;
+  mojom::URLLoaderFactoryParams params;
+  params.process_id = kProcessId;
+  params.is_corb_enabled = false;
+  url_loader = std::make_unique<URLLoader>(
+      context(), &network_service_client, &network_context_client,
+      DeleteLoaderCallback(&delete_run_loop, &url_loader),
+      loader.BindNewPipeAndPassReceiver(), mojom::kURLLoadOptionNone, request,
+      client()->CreateRemote(), /*reponse_body_use_tracker=*/base::nullopt,
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+      /*coep_reporter=*/nullptr, 0 /* request_id */,
+      0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
+      nullptr /* network_usage_accumulator */, nullptr /* header_client */,
+      nullptr /* origin_policy_manager */, nullptr /* trust_token_helper */,
+      mojo::NullRemote() /* cookie_observer */);
+
+  client()->RunUntilComplete();
+  delete_run_loop.Run();
+
+  EXPECT_EQ(0, network_context_client.on_certificate_requested_counter());
+  EXPECT_EQ(net::OK, client()->completion_status().error_code);
 }
 #endif  // !defined(OS_IOS)
 
@@ -3843,9 +4055,11 @@ TEST_F(URLLoaderTest, CookieReporting) {
         context(), &network_service_client, &network_context_client,
         DeleteLoaderCallback(&delete_run_loop, &url_loader),
         loader.InitWithNewPipeAndPassReceiver(), mojom::kURLLoadOptionNone,
-        request, loader_client.CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS,
-        &params, /*coep_reporter=*/nullptr, 0 /* request_id */,
-        0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
+        request, loader_client.CreateRemote(),
+        /*reponse_body_use_tracker=*/base::nullopt,
+        TRAFFIC_ANNOTATION_FOR_TESTS, &params, /*coep_reporter=*/nullptr,
+        0 /* request_id */, 0 /* keepalive_request_size */,
+        resource_scheduler_client(), nullptr,
         nullptr /* network_usage_accumulator */, nullptr /* header_client */,
         nullptr /* origin_policy_manager */, nullptr /* trust_token_helper */,
         cookie_observer.GetRemote());
@@ -3875,9 +4089,11 @@ TEST_F(URLLoaderTest, CookieReporting) {
         context(), &network_service_client, &network_context_client,
         DeleteLoaderCallback(&delete_run_loop, &url_loader),
         loader.InitWithNewPipeAndPassReceiver(), mojom::kURLLoadOptionNone,
-        request, loader_client.CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS,
-        &params, /*coep_reporter=*/nullptr, 0 /* request_id */,
-        0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
+        request, loader_client.CreateRemote(),
+        /*reponse_body_use_tracker=*/base::nullopt,
+        TRAFFIC_ANNOTATION_FOR_TESTS, &params, /*coep_reporter=*/nullptr,
+        0 /* request_id */, 0 /* keepalive_request_size */,
+        resource_scheduler_client(), nullptr,
         nullptr /* network_usage_accumulator */, nullptr /* header_client */,
         nullptr /* origin_policy_manager */, nullptr /* trust_token_helper */,
         cookie_observer.GetRemote());
@@ -3914,7 +4130,8 @@ TEST_F(URLLoaderTest, CookieReportingRedirect) {
       context(), &network_service_client, &network_context_client,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader.BindNewPipeAndPassReceiver(), mojom::kURLLoadOptionNone, request,
-      loader_client.CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+      loader_client.CreateRemote(), /*reponse_body_use_tracker=*/base::nullopt,
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params,
       /*coep_reporter=*/nullptr, 0 /* request_id */,
       0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
       nullptr /* network_usage_accumulator */, nullptr /* header_client */,
@@ -3958,9 +4175,11 @@ TEST_F(URLLoaderTest, CookieReportingAuth) {
         context(), &network_service_client, &network_context_client,
         DeleteLoaderCallback(&delete_run_loop, &url_loader),
         loader.InitWithNewPipeAndPassReceiver(), mojom::kURLLoadOptionNone,
-        request, loader_client.CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS,
-        &params, /*coep_reporter=*/nullptr, 0 /* request_id */,
-        0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
+        request, loader_client.CreateRemote(),
+        /*reponse_body_use_tracker=*/base::nullopt,
+        TRAFFIC_ANNOTATION_FOR_TESTS, &params, /*coep_reporter=*/nullptr,
+        0 /* request_id */, 0 /* keepalive_request_size */,
+        resource_scheduler_client(), nullptr,
         nullptr /* network_usage_accumulator */, nullptr /* header_client */,
         nullptr /* origin_policy_manager */, nullptr /* trust_token_helper */,
         cookie_observer.GetRemote());
@@ -4003,9 +4222,11 @@ TEST_F(URLLoaderTest, RawRequestCookies) {
         context(), &network_service_client, &network_context_client,
         DeleteLoaderCallback(&delete_run_loop, &url_loader),
         loader.InitWithNewPipeAndPassReceiver(), mojom::kURLLoadOptionNone,
-        request, loader_client.CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS,
-        &params, /*coep_reporter=*/nullptr, 0 /* request_id */,
-        0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
+        request, loader_client.CreateRemote(),
+        /*reponse_body_use_tracker=*/base::nullopt,
+        TRAFFIC_ANNOTATION_FOR_TESTS, &params, /*coep_reporter=*/nullptr,
+        0 /* request_id */, 0 /* keepalive_request_size */,
+        resource_scheduler_client(), nullptr,
         nullptr /* network_usage_accumulator */, nullptr /* header_client */,
         nullptr /* origin_policy_manager */, nullptr /* trust_token_helper */,
         mojo::NullRemote() /* cookie_observer */);
@@ -4019,8 +4240,8 @@ TEST_F(URLLoaderTest, RawRequestCookies) {
               network_service_client.raw_request_cookies()[0].cookie.Name());
     EXPECT_EQ("b",
               network_service_client.raw_request_cookies()[0].cookie.Value());
-    EXPECT_TRUE(
-        network_service_client.raw_request_cookies()[0].status.IsInclude());
+    EXPECT_TRUE(network_service_client.raw_request_cookies()[0]
+                    .access_result.status.IsInclude());
 
     EXPECT_EQ("TEST", network_service_client.devtools_request_id());
   }
@@ -4054,9 +4275,11 @@ TEST_F(URLLoaderTest, RawRequestCookiesFlagged) {
         context(), &network_service_client, &network_context_client,
         DeleteLoaderCallback(&delete_run_loop, &url_loader),
         loader.InitWithNewPipeAndPassReceiver(), mojom::kURLLoadOptionNone,
-        request, loader_client.CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS,
-        &params, /*coep_reporter=*/nullptr, 0 /* request_id */,
-        0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
+        request, loader_client.CreateRemote(),
+        /*reponse_body_use_tracker=*/base::nullopt,
+        TRAFFIC_ANNOTATION_FOR_TESTS, &params, /*coep_reporter=*/nullptr,
+        0 /* request_id */, 0 /* keepalive_request_size */,
+        resource_scheduler_client(), nullptr,
         nullptr /* network_usage_accumulator */, nullptr /* header_client */,
         nullptr /* origin_policy_manager */, nullptr /* trust_token_helper */,
         mojo::NullRemote() /* cookie_observer */);
@@ -4071,9 +4294,8 @@ TEST_F(URLLoaderTest, RawRequestCookiesFlagged) {
     EXPECT_EQ("b",
               network_service_client.raw_request_cookies()[0].cookie.Value());
     EXPECT_TRUE(network_service_client.raw_request_cookies()[0]
-                    .status.HasExactlyExclusionReasonsForTesting(
-                        {net::CanonicalCookie::CookieInclusionStatus::
-                             EXCLUDE_NOT_ON_PATH}));
+                    .access_result.status.HasExactlyExclusionReasonsForTesting(
+                        {net::CookieInclusionStatus::EXCLUDE_NOT_ON_PATH}));
 
     EXPECT_EQ("TEST", network_service_client.devtools_request_id());
   }
@@ -4098,9 +4320,11 @@ TEST_F(URLLoaderTest, RawResponseCookies) {
         context(), &network_service_client, &network_context_client,
         DeleteLoaderCallback(&delete_run_loop, &url_loader),
         loader.InitWithNewPipeAndPassReceiver(), mojom::kURLLoadOptionNone,
-        request, loader_client.CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS,
-        &params, /*coep_reporter=*/nullptr, 0 /* request_id */,
-        0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
+        request, loader_client.CreateRemote(),
+        /*reponse_body_use_tracker=*/base::nullopt,
+        TRAFFIC_ANNOTATION_FOR_TESTS, &params, /*coep_reporter=*/nullptr,
+        0 /* request_id */, 0 /* keepalive_request_size */,
+        resource_scheduler_client(), nullptr,
         nullptr /* network_usage_accumulator */, nullptr /* header_client */,
         nullptr /* origin_policy_manager */, nullptr /* trust_token_helper */,
         mojo::NullRemote() /* cookie_observer */);
@@ -4145,9 +4369,11 @@ TEST_F(URLLoaderTest, RawResponseCookiesInvalid) {
         context(), &network_service_client, &network_context_client,
         DeleteLoaderCallback(&delete_run_loop, &url_loader),
         loader.InitWithNewPipeAndPassReceiver(), mojom::kURLLoadOptionNone,
-        request, loader_client.CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS,
-        &params, /*coep_reporter=*/nullptr, 0 /* request_id */,
-        0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
+        request, loader_client.CreateRemote(),
+        /*reponse_body_use_tracker=*/base::nullopt,
+        TRAFFIC_ANNOTATION_FOR_TESTS, &params, /*coep_reporter=*/nullptr,
+        0 /* request_id */, 0 /* keepalive_request_size */,
+        resource_scheduler_client(), nullptr,
         nullptr /* network_usage_accumulator */, nullptr /* header_client */,
         nullptr /* origin_policy_manager */, nullptr /* trust_token_helper */,
         mojo::NullRemote() /* cookie_observer */);
@@ -4159,10 +4385,10 @@ TEST_F(URLLoaderTest, RawResponseCookiesInvalid) {
     network_service_client.WaitUntilRawResponse(1u);
     // On these failures the cookie object is not created
     EXPECT_FALSE(network_service_client.raw_response_cookies()[0].cookie);
-    EXPECT_TRUE(network_service_client.raw_response_cookies()[0]
-                    .status.HasExactlyExclusionReasonsForTesting(
-                        {net::CanonicalCookie::CookieInclusionStatus::
-                             EXCLUDE_FAILURE_TO_STORE}));
+    EXPECT_TRUE(
+        network_service_client.raw_response_cookies()[0]
+            .status.HasExactlyExclusionReasonsForTesting(
+                {net::CookieInclusionStatus::EXCLUDE_FAILURE_TO_STORE}));
 
     EXPECT_EQ("TEST", network_service_client.devtools_request_id());
   }
@@ -4191,7 +4417,9 @@ TEST_F(URLLoaderTest, RawResponseCookiesRedirect) {
         context(), &network_service_client, &network_context_client,
         DeleteLoaderCallback(&delete_run_loop, &url_loader),
         loader.BindNewPipeAndPassReceiver(), mojom::kURLLoadOptionNone, request,
-        loader_client.CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+        loader_client.CreateRemote(),
+        /*reponse_body_use_tracker=*/base::nullopt,
+        TRAFFIC_ANNOTATION_FOR_TESTS, &params,
         /*coep_reporter=*/nullptr, 0 /* request_id */,
         0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
         nullptr /* network_usage_accumulator */, nullptr /* header_client */,
@@ -4243,7 +4471,9 @@ TEST_F(URLLoaderTest, RawResponseCookiesRedirect) {
         context(), &network_service_client, &network_context_client,
         DeleteLoaderCallback(&delete_run_loop, &url_loader),
         loader.BindNewPipeAndPassReceiver(), mojom::kURLLoadOptionNone, request,
-        loader_client.CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+        loader_client.CreateRemote(),
+        /*reponse_body_use_tracker=*/base::nullopt,
+        TRAFFIC_ANNOTATION_FOR_TESTS, &params,
         /*coep_reporter=*/nullptr, 0 /* request_id */,
         0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
         nullptr /* network_usage_accumulator */, nullptr /* header_client */,
@@ -4262,8 +4492,7 @@ TEST_F(URLLoaderTest, RawResponseCookiesRedirect) {
         network_service_client.raw_response_cookies()[0].cookie->IsSecure());
     EXPECT_TRUE(network_service_client.raw_response_cookies()[0]
                     .status.HasExactlyExclusionReasonsForTesting(
-                        {net::CanonicalCookie::CookieInclusionStatus::
-                             EXCLUDE_SECURE_ONLY}));
+                        {net::CookieInclusionStatus::EXCLUDE_SECURE_ONLY}));
   }
 }
 
@@ -4291,9 +4520,11 @@ TEST_F(URLLoaderTest, RawResponseCookiesAuth) {
         context(), &network_service_client, &network_context_client,
         DeleteLoaderCallback(&delete_run_loop, &url_loader),
         loader.InitWithNewPipeAndPassReceiver(), mojom::kURLLoadOptionNone,
-        request, loader_client.CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS,
-        &params, /*coep_reporter=*/nullptr, 0 /* request_id */,
-        0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
+        request, loader_client.CreateRemote(),
+        /*reponse_body_use_tracker=*/base::nullopt,
+        TRAFFIC_ANNOTATION_FOR_TESTS, &params, /*coep_reporter=*/nullptr,
+        0 /* request_id */, 0 /* keepalive_request_size */,
+        resource_scheduler_client(), nullptr,
         nullptr /* network_usage_accumulator */, nullptr /* header_client */,
         nullptr /* origin_policy_manager */, nullptr /* trust_token_helper */,
         mojo::NullRemote() /* cookie_observer */);
@@ -4336,9 +4567,11 @@ TEST_F(URLLoaderTest, RawResponseCookiesAuth) {
         context(), &network_service_client, &network_context_client,
         DeleteLoaderCallback(&delete_run_loop, &url_loader),
         loader.InitWithNewPipeAndPassReceiver(), mojom::kURLLoadOptionNone,
-        request, loader_client.CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS,
-        &params, /*coep_reporter=*/nullptr, 0 /* request_id */,
-        0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
+        request, loader_client.CreateRemote(),
+        /*reponse_body_use_tracker=*/base::nullopt,
+        TRAFFIC_ANNOTATION_FOR_TESTS, &params, /*coep_reporter=*/nullptr,
+        0 /* request_id */, 0 /* keepalive_request_size */,
+        resource_scheduler_client(), nullptr,
         nullptr /* network_usage_accumulator */, nullptr /* header_client */,
         nullptr /* origin_policy_manager */, nullptr /* trust_token_helper */,
         mojo::NullRemote() /* cookie_observer */);
@@ -4352,8 +4585,7 @@ TEST_F(URLLoaderTest, RawResponseCookiesAuth) {
         network_service_client.raw_response_cookies()[0].cookie->IsSecure());
     EXPECT_TRUE(network_service_client.raw_response_cookies()[0]
                     .status.HasExactlyExclusionReasonsForTesting(
-                        {net::CanonicalCookie::CookieInclusionStatus::
-                             EXCLUDE_SECURE_ONLY}));
+                        {net::CookieInclusionStatus::EXCLUDE_SECURE_ONLY}));
 
     EXPECT_EQ("TEST", network_service_client.devtools_request_id());
   }
@@ -4379,9 +4611,11 @@ TEST_F(URLLoaderTest, RawResponseQUIC) {
         context(), &network_service_client, &network_context_client,
         DeleteLoaderCallback(&delete_run_loop, &url_loader),
         loader.InitWithNewPipeAndPassReceiver(), mojom::kURLLoadOptionNone,
-        request, loader_client.CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS,
-        &params, /*coep_reporter=*/nullptr, 0 /* request_id */,
-        0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
+        request, loader_client.CreateRemote(),
+        /*reponse_body_use_tracker=*/base::nullopt,
+        TRAFFIC_ANNOTATION_FOR_TESTS, &params, /*coep_reporter=*/nullptr,
+        0 /* request_id */, 0 /* keepalive_request_size */,
+        resource_scheduler_client(), nullptr,
         nullptr /* network_usage_accumulator */, nullptr /* header_client */,
         nullptr /* origin_policy_manager */, nullptr /* trust_token_helper */,
         mojo::NullRemote() /* cookie_observer */);
@@ -4431,9 +4665,11 @@ TEST_F(URLLoaderTest, CookieReportingCategories) {
         context(), &network_service_client, &network_context_client,
         DeleteLoaderCallback(&delete_run_loop, &url_loader),
         loader.InitWithNewPipeAndPassReceiver(), mojom::kURLLoadOptionNone,
-        request, loader_client.CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS,
-        &params, /*coep_reporter=*/nullptr, 0 /* request_id */,
-        0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
+        request, loader_client.CreateRemote(),
+        /*reponse_body_use_tracker=*/base::nullopt,
+        TRAFFIC_ANNOTATION_FOR_TESTS, &params, /*coep_reporter=*/nullptr,
+        0 /* request_id */, 0 /* keepalive_request_size */,
+        resource_scheduler_client(), nullptr,
         nullptr /* network_usage_accumulator */, nullptr /* header_client */,
         nullptr /* origin_policy_manager */, nullptr /* trust_token_helper */,
         cookie_observer.GetRemote());
@@ -4452,11 +4688,11 @@ TEST_F(URLLoaderTest, CookieReportingCategories) {
     if (net::cookie_util::IsSameSiteByDefaultCookiesEnabled()) {
       EXPECT_TRUE(cookie_observer.observed_cookies()[0]
                       .status.HasExactlyExclusionReasonsForTesting(
-                          {net::CanonicalCookie::CookieInclusionStatus::
+                          {net::CookieInclusionStatus::
                                EXCLUDE_SAMESITE_UNSPECIFIED_TREATED_AS_LAX}));
     }
     EXPECT_TRUE(cookie_observer.observed_cookies()[0].status.HasWarningReason(
-        net::CanonicalCookie::CookieInclusionStatus::WarningReason::
+        net::CookieInclusionStatus::WarningReason::
             WARN_SAMESITE_UNSPECIFIED_CROSS_SITE_CONTEXT));
   }
 
@@ -4486,9 +4722,11 @@ TEST_F(URLLoaderTest, CookieReportingCategories) {
         context(), &network_service_client, &network_context_client,
         DeleteLoaderCallback(&delete_run_loop, &url_loader),
         loader.InitWithNewPipeAndPassReceiver(), mojom::kURLLoadOptionNone,
-        request, loader_client.CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS,
-        &params, /*coep_reporter=*/nullptr, 0 /* request_id */,
-        0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
+        request, loader_client.CreateRemote(),
+        /*reponse_body_use_tracker=*/base::nullopt,
+        TRAFFIC_ANNOTATION_FOR_TESTS, &params, /*coep_reporter=*/nullptr,
+        0 /* request_id */, 0 /* keepalive_request_size */,
+        resource_scheduler_client(), nullptr,
         nullptr /* network_usage_accumulator */, nullptr /* header_client */,
         nullptr /* origin_policy_manager */, nullptr /* trust_token_helper */,
         cookie_observer.GetRemote());
@@ -4501,10 +4739,10 @@ TEST_F(URLLoaderTest, CookieReportingCategories) {
     EXPECT_THAT(cookie_observer.observed_cookies(),
                 testing::ElementsAre(MockCookieObserver::CookieDetails{
                     CookieAccessType::kChange, "a", "b", false}));
-    EXPECT_TRUE(cookie_observer.observed_cookies()[0]
-                    .status.HasExactlyExclusionReasonsForTesting(
-                        {net::CanonicalCookie::CookieInclusionStatus::
-                             EXCLUDE_USER_PREFERENCES}));
+    EXPECT_TRUE(
+        cookie_observer.observed_cookies()[0]
+            .status.HasExactlyExclusionReasonsForTesting(
+                {net::CookieInclusionStatus::EXCLUDE_USER_PREFERENCES}));
 
     test_network_delegate()->set_cookie_options(0);
   }
@@ -4528,9 +4766,11 @@ TEST_F(URLLoaderTest, CookieReportingCategories) {
         context(), &network_service_client, &network_context_client,
         DeleteLoaderCallback(&delete_run_loop, &url_loader),
         loader.InitWithNewPipeAndPassReceiver(), mojom::kURLLoadOptionNone,
-        request, loader_client.CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS,
-        &params, /*coep_reporter=*/nullptr, 0 /* request_id */,
-        0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
+        request, loader_client.CreateRemote(),
+        /*reponse_body_use_tracker=*/base::nullopt,
+        TRAFFIC_ANNOTATION_FOR_TESTS, &params, /*coep_reporter=*/nullptr,
+        0 /* request_id */, 0 /* keepalive_request_size */,
+        resource_scheduler_client(), nullptr,
         nullptr /* network_usage_accumulator */, nullptr /* header_client */,
         nullptr /* origin_policy_manager */, nullptr /* trust_token_helper */,
         cookie_observer.GetRemote());
@@ -4620,7 +4860,9 @@ TEST_F(URLLoaderTest, OriginPolicyManagerCalled) {
         nullptr /* network_context_client */,
         DeleteLoaderCallback(&delete_run_loop, &url_loader),
         loader.InitWithNewPipeAndPassReceiver(), 0, request,
-        loader_client.CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+        loader_client.CreateRemote(),
+        /*reponse_body_use_tracker=*/base::nullopt,
+        TRAFFIC_ANNOTATION_FOR_TESTS, &params,
         /*coep_reporter=*/nullptr, 0 /* request_id */,
         0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
         nullptr /* network_usage_accumulator */, nullptr /* header_client */,
@@ -4672,7 +4914,9 @@ TEST_F(URLLoaderTest, OriginPolicyManagerCalled) {
         nullptr /* network_context_client */,
         DeleteLoaderCallback(&delete_run_loop, &url_loader),
         loader.InitWithNewPipeAndPassReceiver(), 0, request,
-        loader_client.CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+        loader_client.CreateRemote(),
+        /*reponse_body_use_tracker=*/base::nullopt,
+        TRAFFIC_ANNOTATION_FOR_TESTS, &params,
         /*coep_reporter=*/nullptr, 0 /* request_id */,
         0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
         nullptr /* network_usage_accumulator */, nullptr /* header_client */,
@@ -4711,7 +4955,9 @@ TEST_F(URLLoaderTest, OriginPolicyManagerCalled) {
         nullptr /* network_context_client */,
         DeleteLoaderCallback(&delete_run_loop, &url_loader),
         loader.InitWithNewPipeAndPassReceiver(), 0, request,
-        loader_client.CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+        loader_client.CreateRemote(),
+        /*reponse_body_use_tracker=*/base::nullopt,
+        TRAFFIC_ANNOTATION_FOR_TESTS, &params,
         /*coep_reporter=*/nullptr, 0 /* request_id */,
         0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
         nullptr /* network_usage_accumulator */, nullptr /* header_client */,
@@ -4756,7 +5002,9 @@ TEST_F(URLLoaderTest, OriginPolicyManagerCalled) {
         nullptr /* network_context_client */,
         DeleteLoaderCallback(&delete_run_loop, &url_loader),
         loader.InitWithNewPipeAndPassReceiver(), 0, request,
-        loader_client.CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+        loader_client.CreateRemote(),
+        /*reponse_body_use_tracker=*/base::nullopt,
+        TRAFFIC_ANNOTATION_FOR_TESTS, &params,
         /*coep_reporter=*/nullptr, 0 /* request_id */,
         0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
         nullptr /* network_usage_accumulator */, nullptr /* header_client */,
@@ -5001,7 +5249,8 @@ TEST_P(URLLoaderSyncOrAsyncTrustTokenOperationTest,
       nullptr /* network_context_client */,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader_remote.InitWithNewPipeAndPassReceiver(), 0, request,
-      client()->CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+      client()->CreateRemote(), /*reponse_body_use_tracker=*/base::nullopt,
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params,
       /*coep_reporter=*/nullptr, 0 /* request_id */,
       0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
       nullptr /* network_usage_accumulator */, nullptr /* header_client */,
@@ -5056,7 +5305,8 @@ TEST_P(URLLoaderSyncOrAsyncTrustTokenOperationTest,
       nullptr /* network_context_client */,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader_remote.InitWithNewPipeAndPassReceiver(), 0, request,
-      client()->CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+      client()->CreateRemote(), /*reponse_body_use_tracker=*/base::nullopt,
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params,
       /*coep_reporter=*/nullptr, 0 /* request_id */,
       0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
       nullptr /* network_usage_accumulator */, nullptr /* header_client */,
@@ -5100,7 +5350,8 @@ TEST_P(URLLoaderSyncOrAsyncTrustTokenOperationTest,
       nullptr /* network_context_client */,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader_remote.InitWithNewPipeAndPassReceiver(), 0, request,
-      client()->CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+      client()->CreateRemote(), /*reponse_body_use_tracker=*/base::nullopt,
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params,
       /*coep_reporter=*/nullptr, 0 /* request_id */,
       0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
       nullptr /* network_usage_accumulator */, nullptr /* header_client */,
@@ -5143,7 +5394,8 @@ TEST_P(URLLoaderSyncOrAsyncTrustTokenOperationTest,
       nullptr /* network_context_client */,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader_remote.InitWithNewPipeAndPassReceiver(), 0, request,
-      client()->CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+      client()->CreateRemote(), /*reponse_body_use_tracker=*/base::nullopt,
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params,
       /*coep_reporter=*/nullptr, 0 /* request_id */,
       0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
       nullptr /* network_usage_accumulator */, nullptr /* header_client */,
@@ -5185,7 +5437,8 @@ TEST_P(URLLoaderSyncOrAsyncTrustTokenOperationTest,
       nullptr /* network_context_client */,
       DeleteLoaderCallback(&delete_run_loop, &url_loader),
       loader_remote.InitWithNewPipeAndPassReceiver(), 0, request,
-      client()->CreateRemote(), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
+      client()->CreateRemote(), /*reponse_body_use_tracker=*/base::nullopt,
+      TRAFFIC_ANNOTATION_FOR_TESTS, &params,
       /*coep_reporter=*/nullptr, 0 /* request_id */,
       0 /* keepalive_request_size */, resource_scheduler_client(), nullptr,
       nullptr /* network_usage_accumulator */, nullptr /* header_client */,

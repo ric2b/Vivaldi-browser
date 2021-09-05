@@ -10,6 +10,7 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_serial_input_signals.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_serial_options.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_serial_output_signals.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_serial_port_info.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/streams/readable_stream.h"
 #include "third_party/blink/renderer/core/streams/writable_stream.h"
@@ -29,6 +30,8 @@ const char kResourcesExhaustedReadBuffer[] =
     "Resources exhausted allocating read buffer.";
 const char kResourcesExhaustedWriteBuffer[] =
     "Resources exhausted allocation write buffer.";
+const char kNoSignals[] =
+    "Signals dictionary must contain at least one member.";
 const char kPortClosed[] = "The port is closed.";
 const char kOpenError[] = "Failed to open serial port.";
 const char kDeviceLostError[] = "The device has been lost.";
@@ -122,7 +125,7 @@ class ContinueCloseFunction : public ScriptFunction {
     return port_->ContinueClose(GetScriptState()).GetScriptValue();
   }
 
-  void Trace(Visitor* visitor) override {
+  void Trace(Visitor* visitor) const override {
     visitor->Trace(port_);
     ScriptFunction::Trace(visitor);
   }
@@ -148,7 +151,7 @@ class AbortCloseFunction : public ScriptFunction {
     return ScriptValue();
   }
 
-  void Trace(Visitor* visitor) override {
+  void Trace(Visitor* visitor) const override {
     visitor->Trace(port_);
     ScriptFunction::Trace(visitor);
   }
@@ -165,6 +168,15 @@ SerialPort::SerialPort(Serial* parent, mojom::blink::SerialPortInfoPtr info)
       client_receiver_(this, parent->GetExecutionContext()) {}
 
 SerialPort::~SerialPort() = default;
+
+SerialPortInfo* SerialPort::getInfo() {
+  auto* info = MakeGarbageCollected<SerialPortInfo>();
+  if (info_->has_usb_vendor_id)
+    info->setUsbVendorId(info_->usb_vendor_id);
+  if (info_->has_usb_product_id)
+    info->setUsbProductId(info_->usb_product_id);
+  return info;
+}
 
 ScriptPromise SerialPort::open(ScriptState* script_state,
                                const SerialOptions* options,
@@ -246,24 +258,6 @@ ScriptPromise SerialPort::open(ScriptState* script_state,
   mojo_options->has_cts_flow_control = true;
   mojo_options->cts_flow_control = options->rtscts();
 
-  // Pipe handle pair for the ReadableStream.
-  mojo::ScopedDataPipeConsumerHandle readable_pipe;
-  mojo::ScopedDataPipeProducerHandle readable_pipe_producer;
-  if (!CreateDataPipe(&readable_pipe_producer, &readable_pipe)) {
-    exception_state.ThrowDOMException(DOMExceptionCode::kQuotaExceededError,
-                                      kResourcesExhaustedReadBuffer);
-    return ScriptPromise();
-  }
-
-  // Pipe handle pair for the WritableStream.
-  mojo::ScopedDataPipeProducerHandle writable_pipe;
-  mojo::ScopedDataPipeConsumerHandle writable_pipe_consumer;
-  if (!CreateDataPipe(&writable_pipe, &writable_pipe_consumer)) {
-    exception_state.ThrowDOMException(DOMExceptionCode::kQuotaExceededError,
-                                      kResourcesExhaustedWriteBuffer);
-    return ScriptPromise();
-  }
-
   mojo::PendingRemote<device::mojom::blink::SerialPortClient> client;
   parent_->GetPort(
       info_->token,
@@ -274,12 +268,9 @@ ScriptPromise SerialPort::open(ScriptState* script_state,
 
   open_resolver_ = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
   auto callback = WTF::Bind(&SerialPort::OnOpen, WrapPersistent(this),
-                            std::move(readable_pipe), std::move(writable_pipe),
                             client.InitWithNewPipeAndPassReceiver());
 
-  port_->Open(std::move(mojo_options), std::move(writable_pipe_consumer),
-              std::move(readable_pipe_producer), std::move(client),
-              std::move(callback));
+  port_->Open(std::move(mojo_options), std::move(client), std::move(callback));
   return open_resolver_->Promise();
 }
 
@@ -291,16 +282,25 @@ ReadableStream* SerialPort::readable(ScriptState* script_state,
   if (!port_.is_bound() || open_resolver_ || closing_ || read_fatal_)
     return nullptr;
 
-  mojo::ScopedDataPipeConsumerHandle readable_pipe;
-  mojo::ScopedDataPipeProducerHandle readable_pipe_producer;
-  if (!CreateDataPipe(&readable_pipe_producer, &readable_pipe)) {
+  mojo::ScopedDataPipeProducerHandle producer;
+  mojo::ScopedDataPipeConsumerHandle consumer;
+  if (!CreateDataPipe(&producer, &consumer)) {
     exception_state.ThrowDOMException(DOMExceptionCode::kQuotaExceededError,
                                       kResourcesExhaustedReadBuffer);
     return nullptr;
   }
 
-  port_->ClearReadError(std::move(readable_pipe_producer));
-  InitializeReadableStream(script_state, std::move(readable_pipe));
+  port_->StartReading(std::move(producer));
+
+  DCHECK(!underlying_source_);
+  underlying_source_ = MakeGarbageCollected<SerialPortUnderlyingSource>(
+      script_state, this, std::move(consumer));
+  // Ideally the stream would report the number of bytes that can be read from
+  // the underlying Mojo data pipe. As an approximation the high water mark is
+  // set to 0 so that data remains in the pipe rather than being queued in the
+  // stream and thus adding an extra layer of buffering.
+  readable_ = ReadableStream::CreateWithCountQueueingStrategy(
+      script_state, underlying_source_, /*high_water_mark=*/0);
   return readable_;
 }
 
@@ -312,16 +312,26 @@ WritableStream* SerialPort::writable(ScriptState* script_state,
   if (!port_.is_bound() || open_resolver_ || closing_ || write_fatal_)
     return nullptr;
 
-  mojo::ScopedDataPipeProducerHandle writable_pipe;
-  mojo::ScopedDataPipeConsumerHandle writable_pipe_consumer;
-  if (!CreateDataPipe(&writable_pipe, &writable_pipe_consumer)) {
+  mojo::ScopedDataPipeProducerHandle producer;
+  mojo::ScopedDataPipeConsumerHandle consumer;
+  if (!CreateDataPipe(&producer, &consumer)) {
     exception_state.ThrowDOMException(DOMExceptionCode::kQuotaExceededError,
                                       kResourcesExhaustedWriteBuffer);
     return nullptr;
   }
 
-  port_->ClearSendError(std::move(writable_pipe_consumer));
-  InitializeWritableStream(script_state, std::move(writable_pipe));
+  port_->StartWriting(std::move(consumer));
+
+  DCHECK(!underlying_sink_);
+  underlying_sink_ =
+      MakeGarbageCollected<SerialPortUnderlyingSink>(this, std::move(producer));
+  // Ideally the stream would report the number of bytes that could be written
+  // to the underlying Mojo data pipe. As an approximation the high water mark
+  // is set to 1 so that the stream appears ready but producers observing
+  // backpressure won't queue additional chunks in the stream and thus add an
+  // extra layer of buffering.
+  writable_ = WritableStream::CreateWithCountQueueingStrategy(
+      script_state, underlying_sink_, /*high_water_mark=*/1);
   return writable_;
 }
 
@@ -347,6 +357,11 @@ ScriptPromise SerialPort::setSignals(ScriptState* script_state,
   if (!port_.is_bound()) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                       kPortClosed);
+    return ScriptPromise();
+  }
+
+  if (!signals->hasDtr() && !signals->hasRts() && !signals->hasBrk()) {
+    exception_state.ThrowTypeError(kNoSignals);
     return ScriptPromise();
   }
 
@@ -449,7 +464,7 @@ void SerialPort::ContextDestroyed() {
   port_.reset();
 }
 
-void SerialPort::Trace(Visitor* visitor) {
+void SerialPort::Trace(Visitor* visitor) const {
   visitor->Trace(parent_);
   visitor->Trace(port_);
   visitor->Trace(client_receiver_);
@@ -546,8 +561,6 @@ void SerialPort::OnConnectionError() {
 }
 
 void SerialPort::OnOpen(
-    mojo::ScopedDataPipeConsumerHandle readable_pipe,
-    mojo::ScopedDataPipeProducerHandle writable_pipe,
     mojo::PendingReceiver<device::mojom::blink::SerialPortClient>
         client_receiver,
     bool success) {
@@ -563,45 +576,11 @@ void SerialPort::OnOpen(
     return;
   }
 
-  ScriptState::Scope scope(script_state);
-  InitializeReadableStream(script_state, std::move(readable_pipe));
-  InitializeWritableStream(script_state, std::move(writable_pipe));
   client_receiver_.Bind(
       std::move(client_receiver),
       GetExecutionContext()->GetTaskRunner(TaskType::kMiscPlatformAPI));
   open_resolver_->Resolve();
   open_resolver_ = nullptr;
-}
-
-void SerialPort::InitializeReadableStream(
-    ScriptState* script_state,
-    mojo::ScopedDataPipeConsumerHandle readable_pipe) {
-  DCHECK(!underlying_source_);
-  DCHECK(!readable_);
-  underlying_source_ = MakeGarbageCollected<SerialPortUnderlyingSource>(
-      script_state, this, std::move(readable_pipe));
-  // Ideally the stream would report the number of bytes that can be read from
-  // the underlying Mojo data pipe. As an approximation the high water mark is
-  // set to 0 so that data remains in the pipe rather than being queued in the
-  // stream and thus adding an extra layer of buffering.
-  readable_ = ReadableStream::CreateWithCountQueueingStrategy(
-      script_state, underlying_source_, /*high_water_mark=*/0);
-}
-
-void SerialPort::InitializeWritableStream(
-    ScriptState* script_state,
-    mojo::ScopedDataPipeProducerHandle writable_pipe) {
-  DCHECK(!underlying_sink_);
-  DCHECK(!writable_);
-  underlying_sink_ = MakeGarbageCollected<SerialPortUnderlyingSink>(
-      this, std::move(writable_pipe));
-  // Ideally the stream would report the number of bytes that could be written
-  // to the underlying Mojo data pipe. As an approximation the high water mark
-  // is set to 1 so that the stream appears ready but producers observing
-  // backpressure won't queue additional chunks in the stream and thus add an
-  // extra layer of buffering.
-  writable_ = WritableStream::CreateWithCountQueueingStrategy(
-      script_state, underlying_sink_, /*high_water_mark=*/1);
 }
 
 void SerialPort::OnGetSignals(

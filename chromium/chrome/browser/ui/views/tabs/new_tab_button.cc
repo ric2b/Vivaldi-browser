@@ -126,6 +126,7 @@ void NewTabButton::ShowPromo() {
   new_tab_promo_ = FeaturePromoBubbleView::CreateOwned(
       this, views::BubbleBorder::LEFT_CENTER,
       FeaturePromoBubbleView::ActivationAction::DO_NOT_ACTIVATE,
+      /*title_string_specifier=*/base::nullopt,
       GetNewTabPromoStringSpecifier());
   new_tab_promo_observer_.Add(new_tab_promo_->GetWidget());
   SchedulePaint();
@@ -215,7 +216,7 @@ bool NewTabButton::GetHitTestMask(SkPath* mask) const {
   // TODO(pkasting): Fitts' Law horizontally when appropriate.
   SkPath border = GetBorderPath(GetContentsBounds().origin(), scale,
                                 tab_strip_->controller()->IsFrameCondensed());
-  mask->addPath(border, SkMatrix::MakeScale(1 / scale));
+  mask->addPath(border, SkMatrix::Scale(1 / scale, 1 / scale));
   return true;
 }
 

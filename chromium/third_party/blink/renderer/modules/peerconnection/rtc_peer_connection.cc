@@ -184,7 +184,7 @@ bool IsIceCandidateMissingSdp(
     const RTCIceCandidateInit* ice_candidate_init =
         candidate.GetAsRTCIceCandidateInit();
     return ice_candidate_init->sdpMid().IsNull() &&
-           !ice_candidate_init->hasSdpMLineIndex();
+           !ice_candidate_init->hasSdpMLineIndexNonNull();
   }
 
   DCHECK(candidate.IsRTCIceCandidate());
@@ -221,8 +221,8 @@ RTCIceCandidatePlatform* ConvertToRTCIceCandidatePlatform(
         candidate.GetAsRTCIceCandidateInit();
     // TODO(guidou): Change default value to -1. crbug.com/614958.
     uint16_t sdp_m_line_index = 0;
-    if (ice_candidate_init->hasSdpMLineIndex()) {
-      sdp_m_line_index = ice_candidate_init->sdpMLineIndex();
+    if (ice_candidate_init->hasSdpMLineIndexNonNull()) {
+      sdp_m_line_index = ice_candidate_init->sdpMLineIndexNonNull();
     } else {
       UseCounter::Count(context,
                         WebFeature::kRTCIceCandidateDefaultSdpMLineIndex);
@@ -370,9 +370,6 @@ webrtc::PeerConnectionInterface::RTCConfiguration ParseConfiguration(
         return {};
       }
 
-      String username = ice_server->username();
-      String credential = ice_server->credential();
-
       for (const String& url_string : url_strings) {
         KURL url(NullURL(), url_string);
         if (!url.IsValid()) {
@@ -391,7 +388,7 @@ webrtc::PeerConnectionInterface::RTCConfiguration ParseConfiguration(
           return {};
         }
         if ((url.ProtocolIs("turn") || url.ProtocolIs("turns")) &&
-            (username.IsNull() || credential.IsNull())) {
+            (!ice_server->hasUsername() || !ice_server->hasCredential())) {
           exception_state->ThrowDOMException(
               DOMExceptionCode::kInvalidAccessError,
               "Both username and credential are "
@@ -402,8 +399,12 @@ webrtc::PeerConnectionInterface::RTCConfiguration ParseConfiguration(
         auto converted_ice_server =
             webrtc::PeerConnectionInterface::IceServer();
         converted_ice_server.urls.push_back(String(url).Utf8());
-        converted_ice_server.username = username.Utf8();
-        converted_ice_server.password = credential.Utf8();
+        if (ice_server->hasUsername()) {
+          converted_ice_server.username = ice_server->username().Utf8();
+        }
+        if (ice_server->hasCredential()) {
+          converted_ice_server.password = ice_server->credential().Utf8();
+        }
 
         ice_servers.emplace_back(std::move(converted_ice_server));
       }
@@ -632,7 +633,7 @@ bool RTCPeerConnection::EventWrapper::Setup() {
   return true;
 }
 
-void RTCPeerConnection::EventWrapper::Trace(Visitor* visitor) {
+void RTCPeerConnection::EventWrapper::Trace(Visitor* visitor) const {
   visitor->Trace(event_);
 }
 
@@ -749,8 +750,9 @@ RTCPeerConnection::RTCPeerConnection(
       peer_connection_state_(
           webrtc::PeerConnectionInterface::PeerConnectionState::kNew),
       negotiation_needed_(false),
-      stopped_(false),
-      closed_(false),
+      peer_handler_unregistered_(true),
+      closed_(true),
+      suppress_events_(true),
       has_data_channels_(false),
       sdp_semantics_(configuration.sdp_semantics),
       sdp_semantics_specified_(sdp_semantics_specified),
@@ -769,8 +771,6 @@ RTCPeerConnection::RTCPeerConnection(
   // assert in the destructor.
   if (InstanceCounters::CounterValue(
           InstanceCounters::kRTCPeerConnectionCounter) > kMaxPeerConnections) {
-    closed_ = true;
-    stopped_ = true;
     exception_state.ThrowDOMException(DOMExceptionCode::kUnknownError,
                                       "Cannot create so many PeerConnections");
     return;
@@ -790,8 +790,6 @@ RTCPeerConnection::RTCPeerConnection(
   }
 
   if (!peer_handler_) {
-    closed_ = true;
-    stopped_ = true;
     exception_state.ThrowDOMException(DOMExceptionCode::kNotSupportedError,
                                       "No PeerConnection handler can be "
                                       "created, perhaps WebRTC is disabled?");
@@ -801,26 +799,33 @@ RTCPeerConnection::RTCPeerConnection(
   auto* web_frame =
       static_cast<WebLocalFrame*>(WebFrame::FromFrame(window->GetFrame()));
   if (!peer_handler_->Initialize(configuration, constraints, web_frame)) {
-    closed_ = true;
-    stopped_ = true;
     exception_state.ThrowDOMException(
         DOMExceptionCode::kNotSupportedError,
         "Failed to initialize native PeerConnection.");
     return;
   }
+  // The RTCPeerConnection was successfully constructed.
+  closed_ = false;
+  peer_handler_unregistered_ = false;
+  suppress_events_ = false;
 
   feature_handle_for_scheduler_ =
       window->GetFrame()->GetFrameScheduler()->RegisterFeature(
           SchedulingPolicy::Feature::kWebRTC,
-          {SchedulingPolicy::DisableAggressiveThrottling(),
-           SchedulingPolicy::RecordMetricsForBackForwardCache()});
+          base::FeatureList::IsEnabled(features::kOptOutWebRTCFromAllThrottling)
+              ? SchedulingPolicy{SchedulingPolicy::DisableAllThrottling(),
+                                 SchedulingPolicy::
+                                     RecordMetricsForBackForwardCache()}
+              : SchedulingPolicy{
+                    SchedulingPolicy::DisableAggressiveThrottling(),
+                    SchedulingPolicy::RecordMetricsForBackForwardCache()});
 }
 
 RTCPeerConnection::~RTCPeerConnection() {
   // This checks that close() or stop() is called before the destructor.
   // We are assuming that a wrapper is always created when RTCPeerConnection is
   // created.
-  DCHECK(closed_ || stopped_);
+  DCHECK(closed_ || peer_handler_unregistered_);
   InstanceCounters::DecrementCounter(
       InstanceCounters::kRTCPeerConnectionCounter);
   DCHECK_GE(InstanceCounters::CounterValue(
@@ -2302,7 +2307,7 @@ RTCRtpTransceiver* RTCPeerConnection::addTransceiver(
   }
   if (ThrowExceptionIfSignalingStateClosed(signaling_state_, &exception_state))
     return nullptr;
-  auto webrtc_init = ToRtpTransceiverInit(init);
+  auto webrtc_init = ToRtpTransceiverInit(GetExecutionContext(), init);
   // Validate sendEncodings.
   for (auto& encoding : webrtc_init.send_encodings) {
     if (encoding.rid.length() > 16) {
@@ -2672,10 +2677,11 @@ RTCRtpReceiver* RTCPeerConnection::CreateOrUpdateReceiver(
 
 RTCRtpTransceiver* RTCPeerConnection::CreateOrUpdateTransceiver(
     std::unique_ptr<RTCRtpTransceiverPlatform> platform_transceiver) {
-  String kind = (platform_transceiver->Receiver()->Track().Source().GetType() ==
-                 WebMediaStreamSource::kTypeAudio)
-                    ? "audio"
-                    : "video";
+  String kind =
+      (platform_transceiver->Receiver()->Track()->Source()->GetType() ==
+       MediaStreamSource::kTypeAudio)
+          ? "audio"
+          : "video";
   RTCRtpSender* sender =
       CreateOrUpdateSender(platform_transceiver->Sender(), kind);
   RTCRtpReceiver* receiver =
@@ -2770,6 +2776,7 @@ RTCDTMFSender* RTCPeerConnection::createDTMFSender(
 }
 
 void RTCPeerConnection::close() {
+  suppress_events_ = true;
   if (signaling_state_ ==
       webrtc::PeerConnectionInterface::SignalingState::kClosed) {
     return;
@@ -2836,7 +2843,7 @@ void RTCPeerConnection::MaybeFireNegotiationNeeded() {
   if (!negotiation_needed_ || closed_)
     return;
   negotiation_needed_ = false;
-  DispatchEvent(*Event::Create(event_type_names::kNegotiationneeded));
+  MaybeDispatchEvent(Event::Create(event_type_names::kNegotiationneeded));
 }
 
 void RTCPeerConnection::DidGenerateICECandidate(
@@ -3123,7 +3130,7 @@ void RTCPeerConnection::DidModifyTransceivers(
     auto* track_event = MakeGarbageCollected<RTCTrackEvent>(
         transceiver->receiver(), transceiver->receiver()->track(),
         transceiver->receiver()->streams(), transceiver);
-    DispatchEvent(*track_event);
+    MaybeDispatchEvent(track_event);
   }
 
   // Unmute "pc.ontrack" tracks. Fires "track.onunmute" synchronously.
@@ -3201,7 +3208,7 @@ void RTCPeerConnection::DidAddRemoteDataChannel(
       GetExecutionContext(), std::move(channel), peer_handler_.get());
   has_data_channels_ = true;
   blink_channel->SetStateToOpenWithoutEvent();
-  DispatchEvent(*MakeGarbageCollected<RTCDataChannelEvent>(
+  MaybeDispatchEvent(MakeGarbageCollected<RTCDataChannelEvent>(
       event_type_names::kDatachannel, blink_channel));
   // The event handler might have closed the channel.
   if (blink_channel->readyState() == "open") {
@@ -3213,22 +3220,27 @@ void RTCPeerConnection::DidNoteInterestingUsage(int usage_pattern) {
   if (!GetExecutionContext())
     return;
   LocalDOMWindow* window = To<LocalDOMWindow>(GetExecutionContext());
-  ukm::SourceId source_id = window->document()->UkmSourceID();
+  ukm::SourceId source_id = window->UkmSourceID();
   ukm::builders::WebRTC_AddressHarvesting(source_id)
       .SetUsagePattern(usage_pattern)
-      .Record(window->document()->UkmRecorder());
+      .Record(window->UkmRecorder());
 }
 
 void RTCPeerConnection::UnregisterPeerConnectionHandler() {
-  if (stopped_)
+  if (peer_handler_unregistered_) {
+    DCHECK(scheduled_events_.IsEmpty())
+        << "Undelivered events can cause memory leaks due to "
+        << "WrapPersistent(this) in setup function callbacks";
     return;
+  }
 
-  stopped_ = true;
+  peer_handler_unregistered_ = true;
   ice_connection_state_ = webrtc::PeerConnectionInterface::kIceConnectionClosed;
   signaling_state_ = webrtc::PeerConnectionInterface::SignalingState::kClosed;
 
   peer_handler_->StopAndUnregister();
   dispatch_scheduled_events_task_handle_.Cancel();
+  scheduled_events_.clear();
   feature_handle_for_scheduler_.reset();
 }
 
@@ -3247,6 +3259,7 @@ ExecutionContext* RTCPeerConnection::GetExecutionContext() const {
 }
 
 void RTCPeerConnection::ContextDestroyed() {
+  suppress_events_ = true;
   if (!closed_) {
     CloseInternal();
   }
@@ -3263,7 +3276,7 @@ void RTCPeerConnection::ChangeSignalingState(
     signaling_state_ = signaling_state;
     Event* event = Event::Create(event_type_names::kSignalingstatechange);
     if (dispatch_event_immediately)
-      DispatchEvent(*event);
+      MaybeDispatchEvent(event);
     else
       ScheduleDispatchEvent(event);
   }
@@ -3306,7 +3319,8 @@ void RTCPeerConnection::ChangeIceConnectionState(
     return;
   }
   ice_connection_state_ = ice_connection_state;
-  DispatchEvent(*Event::Create(event_type_names::kIceconnectionstatechange));
+  MaybeDispatchEvent(
+      Event::Create(event_type_names::kIceconnectionstatechange));
 }
 
 webrtc::PeerConnectionInterface::IceConnectionState
@@ -3431,12 +3445,30 @@ void RTCPeerConnection::CloseInternal() {
   feature_handle_for_scheduler_.reset();
 }
 
+void RTCPeerConnection::MaybeDispatchEvent(Event* event) {
+  if (suppress_events_)
+    return;
+  DispatchEvent(*event);
+}
+
 void RTCPeerConnection::ScheduleDispatchEvent(Event* event) {
   ScheduleDispatchEvent(event, BoolFunction());
 }
 
 void RTCPeerConnection::ScheduleDispatchEvent(Event* event,
                                               BoolFunction setup_function) {
+  if (peer_handler_unregistered_) {
+    DCHECK(scheduled_events_.IsEmpty())
+        << "Undelivered events can cause memory leaks due to "
+        << "WrapPersistent(this) in setup function callbacks";
+    return;
+  }
+  if (suppress_events_) {
+    // If suppressed due to closing we also want to ignore the event, but we
+    // don't need to crash.
+    return;
+  }
+
   scheduled_events_.push_back(
       MakeGarbageCollected<EventWrapper>(event, std::move(setup_function)));
 
@@ -3444,6 +3476,13 @@ void RTCPeerConnection::ScheduleDispatchEvent(Event* event,
     return;
 
   if (auto* context = GetExecutionContext()) {
+    if (dispatch_events_task_created_callback_for_testing_) {
+      context->GetTaskRunner(TaskType::kNetworking)
+          ->PostTask(
+              FROM_HERE,
+              std::move(dispatch_events_task_created_callback_for_testing_));
+    }
+
     // WebRTC spec specifies kNetworking as task source.
     // https://www.w3.org/TR/webrtc/#operation
     dispatch_scheduled_events_task_handle_ = PostCancellableTask(
@@ -3454,8 +3493,17 @@ void RTCPeerConnection::ScheduleDispatchEvent(Event* event,
 }
 
 void RTCPeerConnection::DispatchScheduledEvents() {
-  if (stopped_)
+  if (peer_handler_unregistered_) {
+    DCHECK(scheduled_events_.IsEmpty())
+        << "Undelivered events can cause memory leaks due to "
+        << "WrapPersistent(this) in setup function callbacks";
     return;
+  }
+  if (suppress_events_) {
+    // If suppressed due to closing we also want to ignore the event, but we
+    // don't need to crash.
+    return;
+  }
 
   HeapVector<Member<EventWrapper>> events;
   events.swap(scheduled_events_);
@@ -3470,7 +3518,7 @@ void RTCPeerConnection::DispatchScheduledEvents() {
   events.clear();
 }
 
-void RTCPeerConnection::Trace(Visitor* visitor) {
+void RTCPeerConnection::Trace(Visitor* visitor) const {
   visitor->Trace(tracks_);
   visitor->Trace(rtp_senders_);
   visitor->Trace(rtp_receivers_);

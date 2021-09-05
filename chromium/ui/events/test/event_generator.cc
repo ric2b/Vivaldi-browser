@@ -265,11 +265,16 @@ void EventGenerator::SetTouchTilt(float x, float y) {
   touch_pointer_details_.tilt_y = y;
 }
 
-void EventGenerator::PressTouch() {
-  PressTouchId(0);
+void EventGenerator::PressTouch(
+    const base::Optional<gfx::Point>& touch_location_in_screen) {
+  PressTouchId(0, touch_location_in_screen);
 }
 
-void EventGenerator::PressTouchId(int touch_id) {
+void EventGenerator::PressTouchId(
+    int touch_id,
+    const base::Optional<gfx::Point>& touch_location_in_screen) {
+  if (touch_location_in_screen.has_value())
+    current_screen_location_ = *touch_location_in_screen;
   TestTouchEvent touchev(ui::ET_TOUCH_PRESSED, GetLocationInCurrentRoot(),
                          touch_id, flags_, ui::EventTimeForNow());
   Dispatch(&touchev);
@@ -642,10 +647,13 @@ void EventGenerator::DispatchKeyEvent(bool is_press,
       ui::UsLayoutKeyboardCodeToDomCode(key_code), flags);
   if (is_press && character) {
     MSG native_event = { NULL, WM_KEYDOWN, key_code, 0 };
+    native_event.time =
+        (ui::EventTimeForNow() - base::TimeTicks()).InMilliseconds() &
+        UINT32_MAX;
     ui::KeyEvent keyev(native_event, flags);
     Dispatch(&keyev);
     // On Windows, WM_KEYDOWN event is followed by WM_CHAR with a character
-    // if the key event cooresponds to a real character.
+    // if the key event corresponds to a real character.
     key_press = WM_CHAR;
     key_code = static_cast<ui::KeyboardCode>(character);
   }

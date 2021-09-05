@@ -6,7 +6,7 @@ package org.chromium.chrome.browser.tab;
 
 import static org.chromium.base.test.util.Restriction.RESTRICTION_TYPE_NON_LOW_END_DEVICE;
 
-import android.support.test.filters.LargeTest;
+import androidx.test.filters.LargeTest;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -17,7 +17,6 @@ import org.junit.runner.RunWith;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.FlakyTest;
 import org.chromium.base.test.util.Restriction;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.tabmodel.TabModel;
@@ -70,7 +69,6 @@ public class UndoIntegrationTest {
     @FlakyTest(message = "https://crbug.com/679480")
     @LargeTest
     @Restriction(RESTRICTION_TYPE_NON_LOW_END_DEVICE)
-    @RetryOnFailure
     public void testAddNewContentsFromClosingTab() throws TimeoutException {
         mActivityTestRule.loadUrl(WINDOW_OPEN_BUTTON_URL);
 

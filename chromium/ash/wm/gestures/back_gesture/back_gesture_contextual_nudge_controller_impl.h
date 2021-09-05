@@ -91,11 +91,15 @@ class ASH_EXPORT BackGestureContextualNudgeControllerImpl
   // whether the controller should attempt to show it immediately, or wait for a
   // window navigation (this should be set if monitoring is updated due to a
   // user action rather than a timer callback).
+  // Dismiss nudge metrics should be recorded before calling
+  // UpdateWindowMonitoring.
   void UpdateWindowMonitoring(bool can_show_nudge_immediately);
 
   // Callback function to be called after nudge animation is cancelled or
-  // completed.
-  void OnNudgeAnimationFinished();
+  // completed. |animation_completed| is true when the nudge animation has
+  // completed (i.e., finishes the entire animation sequence, which includes
+  // sliding in, bouncing and sliding out animation.)
+  void OnNudgeAnimationFinished(bool animation_completed);
 
   // Do necessary cleanup when |this| is destroyed or system is shutdown.
   void DoCleanUp();

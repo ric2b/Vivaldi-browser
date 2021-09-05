@@ -113,7 +113,7 @@ bool ChromiumImporter::ReadAndParseSignons(
 
   while (s2.Step()) {
     autofill::PasswordForm form;
-    form.origin = GURL(s2.ColumnString(0));
+    form.url = GURL(s2.ColumnString(0));
     form.action = GURL(s2.ColumnString(1));
     form.username_element = base::UTF8ToUTF16(s2.ColumnString(2));
     form.username_value = base::UTF8ToUTF16(s2.ColumnString(3));

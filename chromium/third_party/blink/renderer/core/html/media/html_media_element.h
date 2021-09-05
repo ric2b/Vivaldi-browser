@@ -108,7 +108,7 @@ class CORE_EXPORT HTMLMediaElement
   // for the given document.
   static void OnMediaControlsEnabledChange(Document*);
 
-  void Trace(Visitor*) override;
+  void Trace(Visitor*) const override;
 
   WebMediaPlayer* GetWebMediaPlayer() const { return web_media_player_.get(); }
 
@@ -205,6 +205,8 @@ class CORE_EXPORT HTMLMediaElement
   void pause();
   double latencyHint() const;
   void setLatencyHint(double);
+  bool preservesPitch() const;
+  void setPreservesPitch(bool);
   void FlingingStarted();
   void FlingingStopped();
 
@@ -332,6 +334,8 @@ class CORE_EXPORT HTMLMediaElement
 
   void SetCcLayerForTesting(cc::Layer* layer) { SetCcLayer(layer); }
 
+  bool IsShowPosterFlagSet() const { return show_poster_flag_; }
+
  protected:
   // Assert the correct order of the children in shadow dom when DCHECK is on.
   static void AssertShadowRootChildren(ShadowRoot&);
@@ -359,12 +363,10 @@ class CORE_EXPORT HTMLMediaElement
   void DidMoveToNewDocument(Document& old_document) override;
   virtual KURL PosterImageURL() const { return KURL(); }
 
-  enum DisplayMode { kUnknown, kPoster, kVideo };
-  DisplayMode GetDisplayMode() const { return display_mode_; }
-  virtual void SetDisplayMode(DisplayMode mode) { display_mode_ = mode; }
-
   // Called after the creation of |web_media_player_|.
   virtual void OnWebMediaPlayerCreated() {}
+
+  void UpdateLayoutObject();
 
  private:
   // Friend class for testing.
@@ -394,10 +396,11 @@ class CORE_EXPORT HTMLMediaElement
   void ContextLifecycleStateChanged(mojom::FrameLifecycleState) override;
   void ContextDestroyed() override;
 
-  virtual void UpdateDisplayState() {}
   virtual void OnPlay() {}
   virtual void OnLoadStarted() {}
   virtual void OnLoadFinished() {}
+
+  void SetShowPosterFlag(bool value);
 
   void SetReadyState(ReadyState);
   void SetNetworkState(WebMediaPlayer::NetworkState);
@@ -624,8 +627,6 @@ class CORE_EXPORT HTMLMediaElement
   std::unique_ptr<WebMediaPlayer> web_media_player_;
   cc::Layer* cc_layer_;
 
-  DisplayMode display_mode_;
-
   Member<MediaSource> media_source_;
 
   // Stores "official playback position", updated periodically from "current
@@ -648,6 +649,7 @@ class CORE_EXPORT HTMLMediaElement
   bool paused_ : 1;
   bool seeking_ : 1;
   bool paused_by_context_paused_ : 1;
+  bool show_poster_flag_ : 1;
 
   // data has not been loaded since sending a "stalled" event
   bool sent_stalled_event_ : 1;
@@ -661,6 +663,10 @@ class CORE_EXPORT HTMLMediaElement
   bool processing_preference_change_ : 1;
 
   bool was_always_muted_ : 1;
+
+  // Whether or not |web_media_player_| should apply pitch adjustments at
+  // playback raters other than 1.0.
+  bool preserves_pitch_ = true;
 
   Member<AudioTrackList> audio_tracks_;
   Member<VideoTrackList> video_tracks_;
@@ -693,7 +699,7 @@ class CORE_EXPORT HTMLMediaElement
     // WebAudioSourceProviderClient
     void SetFormat(uint32_t number_of_channels, float sample_rate) override;
 
-    void Trace(Visitor*);
+    void Trace(Visitor*) const;
 
    private:
     Member<AudioSourceProviderClient> client_;
@@ -715,7 +721,7 @@ class CORE_EXPORT HTMLMediaElement
     void SetClient(AudioSourceProviderClient*) override;
     void ProvideInput(AudioBus*, uint32_t frames_to_process) override;
 
-    void Trace(Visitor*);
+    void Trace(Visitor*) const;
 
    private:
     scoped_refptr<WebAudioSourceProviderImpl> web_audio_source_provider_;

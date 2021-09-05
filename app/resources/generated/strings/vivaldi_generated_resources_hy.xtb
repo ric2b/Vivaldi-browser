@@ -38,14 +38,13 @@
 <translation id="1603914832182249871">(Գաղտնի)</translation>
 <translation id="1620510694547887537">Տեսախցիկ</translation>
 <translation id="1627276047960621195">Ֆայլերի դեսկրիպտորներ</translation>
-<translation id="1635033183663317347">Տեղակայված է Ձեր խնամակալի կողմից։</translation>
 <translation id="1682548588986054654">Նոր գաղտնի պատուհան</translation>
 <translation id="1698122934742150150">Միայն ընթացիկ գաղտնի սեսիայի համար</translation>
 <translation id="1706625117072057435">Խոշորացումներ</translation>
 <translation id="1708338024780164500">(Ոչ ակտիվ)</translation>
 <translation id="1723824996674794290">Ն&amp;որ պատուհան</translation>
 <translation id="1725149567830788547">Ցույց տալ կա&amp;ռավարման տարրերը</translation>
-<translation id="1729533290416704613">Այն նաև փոխել է ստանդարտ որոնիչը, որով Դուք որոնում եք հասցեի տողի միջոցով։</translation>
+<translation id="1729533290416704613">Այն նաև փոխել է ստանդարտ որոնիչը, որով Դուք որոնում եք հասցեի դաշտի միջոցով։</translation>
 <translation id="1744108098763830590">հետին էջ</translation>
 <translation id="176587472219019965">Ն&amp;որ պատուհան</translation>
 <translation id="1769104665586091481">Բացել հղումը նոր &amp;պատուհանում</translation>
@@ -55,6 +54,7 @@
 <translation id="1886996562706621347">Թույլ տալ, որ կայքերը հայցեն դառնալ պրոտոկոլների ստանդարտ մշակիչներ (խորհուրդ է տրվում)</translation>
 <translation id="1901303067676059328">Նշել &amp;ամբողջը</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
+<translation id="1936931585862840749">Թվով նշեք, թե քանի օրինակ է պետք տպել (1-ից <ph name="MAX_COPIES" />)։</translation>
 <translation id="1963227389609234879">Հեռացնել բոլորը</translation>
 <translation id="1994173015038366702">Կայքի հասցե</translation>
 <translation id="2019718679933488176">&amp;Բացել աուդիոն նոր ներդիրում</translation>
@@ -169,7 +169,6 @@
 <translation id="3678156199662914018">Ընդլայնում. <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Էկրանի ընդհանրացման հարցում <ph name="APP_NAME" />-ից</translation>
 <translation id="3711931198657368127">Փակ&amp;ցնել ու անցնել <ph name="URL" /></translation>
-<translation id="3725367690636977613">էջ</translation>
 <translation id="3727187387656390258">Հետազոտել թռուցիկը</translation>
 <translation id="3744111561329211289">Ֆոնային սինք</translation>
 <translation id="3760460896538743390">Հետազոտել հ&amp;ետին էջը</translation>
@@ -197,12 +196,11 @@
 
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4088095054444612037">Հաստատել խմբի համար</translation>
-<translation id="4091434297613116013">թերթ</translation>
 <translation id="4096508467498758490">Անջատել մշակողի ռեժիմում աշխատող ընդլայնումները</translation>
 <translation id="4100839878934973028">Ձեր համակարգչի մեկ այլ ծրագիր ավելացրել է հավելված, որը կարող է ազդել Vivaldi-ի աշխատանքի վրա ու փոխել այն։</translation>
 <translation id="4109898769411476438">Փակեք բրաուզերը մինչ ներկրելը</translation>
 <translation id="4115080753528843955">Որոշ ծառայություններ օգտագործում են եզակի իդենտիֆիկատորներ՝ պաշտպանված բովանդակության օգտագործումը լիազորելու նպատակով</translation>
-<translation id="4130207949184424187">Այս ընդլայնումը փոխել է ստանդարտ որոնիչը, որով Դուք որոնում եք հասցեի տողի միջոցով։</translation>
+<translation id="4130207949184424187">Այս ընդլայնումը փոխել է ստանդարտ որոնիչը, որով Դուք որոնում եք հասցեի դաշտի միջոցով։</translation>
 <translation id="4131410914670010031">Սև ու սպիտակ</translation>
 <translation id="4176463684765177261">Անջատած է</translation>
 <translation id="4200983522494130825">Նոր &amp;ներդիր</translation>
@@ -263,7 +261,7 @@
 <translation id="5301954838959518834">Լավ, հասկանալի է</translation>
 <translation id="5317780077021120954">Պահպանել</translation>
 <translation id="5334142896108694079">Սկրիպտների քեշ</translation>
-<translation id="5355926466126177564">«<ph name="EXTENSION_NAME" />» ընդլայնումը փոխել է ստանդարտ որոնիչը, որով Դուք որոնում եք հասցեի տողի միջոցով։</translation>
+<translation id="5355926466126177564">«<ph name="EXTENSION_NAME" />» ընդլայնումը փոխել է ստանդարտ որոնիչը, որով Դուք որոնում եք հասցեի դաշտի միջոցով։</translation>
 <translation id="5360150013186312835">Ցույց տալ գործիքների երիզում</translation>
 <translation id="5362741141255528695">Ընտրեք մասնավոր բանալիի ֆայլը։</translation>
 <translation id="5370819323174483825">&amp;Թարմացնել</translation>
@@ -304,7 +302,7 @@
 <translation id="5910363049092958439">Պահպանել պատկերը որպե&amp;ս…</translation>
 <translation id="5956585768868398362">Արդյոք սա՞ է Ձեր ակնկալած որոնիչը։</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (մաքս. <ph name="NUM_KILOBYTES_LIVE" />)</translation>
-<translation id="5965661248935608907">Այն նաև փոխել է այն հասցեները, որոնք բացվում են, երբ սեղմում եք գլխավոր էջի կոճակը կամ որոնում եք հասցեի տողի միջոցով։</translation>
+<translation id="5965661248935608907">Այն նաև փոխել է այն հասցեները, որոնք բացվում են, երբ սեղմում եք գլխավոր էջի կոճակը կամ որոնում եք հասցեի դաշտի միջոցով։</translation>
 <translation id="5978277834170881274">Ուղղագրության հիմնական ստուգում</translation>
 <translation id="5979421442488174909">Թարգմանել <ph name="LANGUAGE" /></translation>
 <translation id="6011449291337289699">Կայքի տվյալների մաքրում</translation>
@@ -375,7 +373,7 @@
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">Ցույց տալ կա&amp;ռավարման տարրերը</translation>
 <translation id="7311079019872751559">Փլագինի աշխատանք փորձնական միջավայրից դուրս</translation>
-<translation id="7385854874724088939">Փորձելիս տպել ինչ-որ սխալ տեղի ունեցավ։ Խնդրում ենք ստուգեք Ձեր տպիչն ու փորձեք նորից։</translation>
+<translation id="7385854874724088939">Տպել փորձելիս ինչ-որ սխալ տեղի ունեցավ։ Խնդրում ենք ստուգեք Ձեր տպիչն ու փորձեք նորից։</translation>
 <translation id="7412226954991670867">GPU-ի հիշողություն</translation>
 <translation id="7421925624202799674">&amp;Դիտել էջի կոդը</translation>
 <translation id="7423098979219808738">Նախ հարցնել</translation>
@@ -391,7 +389,7 @@
 <translation id="7663719505383602579">Ստացող. <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Տեղակայված է Ձեր ադմինիստրատորի կողմից</translation>
 <translation id="7685049629764448582">JavaScript-ի հիշողություն</translation>
-<translation id="7701040980221191251">Չկա</translation>
+<translation id="7701040980221191251">Ոչ մի</translation>
 <translation id="7701869757853594372">USER մշակիչներ</translation>
 <translation id="7704305437604973648">Խնդիր</translation>
 <translation id="7710568461918838723">Հե&amp;ռարձակել…</translation>
@@ -431,7 +429,6 @@
 <translation id="8071432093239591881">Տպել որպես պատկեր</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> ԿԲ</translation>
 <translation id="8137559199583651773">Կառավարել ընդլայնումները</translation>
-<translation id="8180239481735238521">էջ</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {Ընթանում է ներբեռնում} other {Ընթանում են ներբեռնումներ}}</translation>
 <translation id="8230134520748321204">Գաղտնաբառը <ph name="ORIGIN" />-ի համար պահպանե՞լ։</translation>
@@ -464,7 +461,6 @@
 <translation id="8798099450830957504">Ստանդարտ</translation>
 <translation id="8800004011501252845">Վերջնակետեր հետևյալ հաշվից՝</translation>
 <translation id="8808478386290700967">Ինտերնետ-խանութ</translation>
-<translation id="8813811964357448561">թերթ</translation>
 <translation id="8823514049557262177">Պատճենել հղման տե&amp;քստը</translation>
 <translation id="8823704566850948458">Առաջարկել գաղտնաբառ…</translation>
 <translation id="8859174528519900719">Սաբֆրեյմ. <ph name="SUBFRAME_SITE" /></translation>

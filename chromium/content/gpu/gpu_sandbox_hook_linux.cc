@@ -16,6 +16,7 @@
 #include "base/bind.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/scoped_file.h"
+#include "base/logging.h"
 #include "base/strings/stringprintf.h"
 #include "build/build_config.h"
 #include "build/buildflag.h"
@@ -132,8 +133,16 @@ void AddV4L2GpuWhitelist(
 
   if (options.accelerated_video_encode_enabled) {
     // Device node for V4L2 video encode accelerator drivers.
-    static const char kDevVideoEncPath[] = "/dev/video-enc";
-    permissions->push_back(BrokerFilePermission::ReadWrite(kDevVideoEncPath));
+    // See comments above for why we don't use a FileEnumerator.
+    static constexpr size_t MAX_V4L2_ENCODERS = 5;
+    static const base::FilePath::CharType kVideoEncBase[] = "/dev/video-enc";
+    permissions->push_back(BrokerFilePermission::ReadWrite(kVideoEncBase));
+    for (size_t i = 0; i < MAX_V4L2_ENCODERS; i++) {
+      std::ostringstream encoderPath;
+      encoderPath << kVideoEncBase << i;
+      permissions->push_back(
+          BrokerFilePermission::ReadWrite(encoderPath.str()));
+    }
   }
 
   // Device node for V4L2 JPEG decode accelerator drivers.
@@ -264,6 +273,14 @@ void AddChromecastArmGpuWhitelist(
 
   static const char kLdSoCache[] = "/etc/ld.so.cache";
   permissions->push_back(BrokerFilePermission::ReadOnly(kLdSoCache));
+
+  base::FileEnumerator enumerator(
+      base::FilePath(FILE_PATH_LITERAL("/dev/dri/")), false /* recursive */,
+      base::FileEnumerator::FILES, FILE_PATH_LITERAL("renderD*"));
+  for (base::FilePath name = enumerator.Next(); !name.empty();
+       name = enumerator.Next()) {
+    permissions->push_back(BrokerFilePermission::ReadWrite(name.value()));
+  }
 }
 
 void AddStandardGpuWhiteList(std::vector<BrokerFilePermission>* permissions) {

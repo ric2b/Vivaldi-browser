@@ -14,7 +14,7 @@
 #include <string>
 #include <vector>
 
-#include "base/logging.h"
+#include "base/check.h"
 #include "base/memory/ptr_util.h"
 #include "cc/base/region.h"
 #include "cc/base/synced_property.h"
@@ -165,8 +165,12 @@ class CC_EXPORT LayerImpl {
   // non-opaque color.  Tries to return background_color(), if possible.
   SkColor SafeOpaqueBackgroundColor() const;
 
+  // See Layer::SetContentsOpaque() and SetContentsOpaqueForText() for the
+  // relationship between the two flags.
   void SetContentsOpaque(bool opaque);
   bool contents_opaque() const { return contents_opaque_; }
+  void SetContentsOpaqueForText(bool opaque);
+  bool contents_opaque_for_text() const { return contents_opaque_for_text_; }
 
   float Opacity() const;
 
@@ -221,8 +225,8 @@ class CC_EXPORT LayerImpl {
     return draw_properties_.screen_space_transform_is_animating;
   }
   gfx::Rect clip_rect() const { return draw_properties_.clip_rect; }
-  gfx::Rect drawable_content_rect() const {
-    return draw_properties_.drawable_content_rect;
+  gfx::Rect visible_drawable_content_rect() const {
+    return draw_properties_.visible_drawable_content_rect;
   }
   gfx::Rect visible_layer_rect() const {
     return draw_properties_.visible_layer_rect;
@@ -475,6 +479,7 @@ class CC_EXPORT LayerImpl {
 
   bool may_contain_video_ : 1;
   bool contents_opaque_ : 1;
+  bool contents_opaque_for_text_ : 1;
   bool should_check_backface_visibility_ : 1;
   bool draws_content_ : 1;
   bool contributes_to_drawn_render_surface_ : 1;

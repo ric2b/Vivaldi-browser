@@ -38,7 +38,6 @@
 <translation id="1603914832182249871">(Súkromný režim)</translation>
 <translation id="1620510694547887537">Kamera</translation>
 <translation id="1627276047960621195">Deskriptory súborov</translation>
-<translation id="1635033183663317347">Nainštalované vaším opatrovníkom.</translation>
 <translation id="1682548588986054654">Nové súkromné okno</translation>
 <translation id="1698122934742150150">Iba aktuálna súkromná relácia</translation>
 <translation id="1706625117072057435">Úrovne priblíženia</translation>
@@ -55,6 +54,7 @@
 <translation id="1886996562706621347">Povoliť stránkam požiadať o nastavenie za predvolené obslužné nástroje protokolov (odporúčané)</translation>
 <translation id="1901303067676059328">Vybrať &amp;všetko</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
+<translation id="1936931585862840749">Zadajte číslo označujúce počet kópií, ktoré chcete vytlačiť (od 1 do <ph name="MAX_COPIES" />).</translation>
 <translation id="1963227389609234879">Odstrániť všetko</translation>
 <translation id="1994173015038366702">URL adresa stránky</translation>
 <translation id="2019718679933488176">&amp;Otvoriť zvuk na novom liste</translation>
@@ -169,7 +169,6 @@
 <translation id="3678156199662914018">Rozšírenie: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Žiadosť o zdieľanie obrazovky s aplikáciou <ph name="APP_NAME" /></translation>
 <translation id="3711931198657368127">Prilepiť a prejsť na <ph name="URL" /></translation>
-<translation id="3725367690636977613">strany</translation>
 <translation id="3727187387656390258">Preskúmať vyskakovacie okno</translation>
 <translation id="3744111561329211289">Synchronizácia na pozadí</translation>
 <translation id="3760460896538743390">Skontrolovať &amp;stránku na pozadí</translation>
@@ -197,7 +196,6 @@
 
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4088095054444612037">Prijať pozvanie pre skupinu</translation>
-<translation id="4091434297613116013">listy/listov papiera</translation>
 <translation id="4096508467498758490">Zakázať rozšírenia v režime pre vývojárov</translation>
 <translation id="4100839878934973028">Iný program v počítači pridal aplikáciu, ktorá môže zmeniť spôsob fungovania prehliadača Vivaldi.</translation>
 <translation id="4109898769411476438">Zatvoriť prehliadač pred importovaním</translation>
@@ -431,7 +429,6 @@ Súbor kľúča uložte na bezpečné miesto. Budete ho potrebovať na vytvoreni
 <translation id="8071432093239591881">Vytlačiť ako obrázok</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> kB</translation>
 <translation id="8137559199583651773">Spravovať rozšírenia</translation>
-<translation id="8180239481735238521">strana</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD,plural, =1{Prebieha sťahovanie}few{Prebiehajú sťahovania}many{Prebiehajúcich sťahovaní}other{Prebiehajúcich sťahovaní}}</translation>
 <translation id="8230134520748321204">Uložiť heslo pre adresu <ph name="ORIGIN" />?</translation>
 <translation id="8261378640211443080">Toto rozšírenie nie je uvedené na webe <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> a mohlo byť pridané bez vášho vedomia.</translation>
@@ -463,7 +460,6 @@ Súbor kľúča uložte na bezpečné miesto. Budete ho potrebovať na vytvoreni
 <translation id="8798099450830957504">Predvolené</translation>
 <translation id="8800004011501252845">Zobrazujú sa ciele pre</translation>
 <translation id="8808478386290700967">Internetový obchod</translation>
-<translation id="8813811964357448561">list papiera</translation>
 <translation id="8823514049557262177">Kopírovať te&amp;xt odkazu</translation>
 <translation id="8823704566850948458">Navrhnúť heslo…</translation>
 <translation id="8859174528519900719">Podrámec: <ph name="SUBFRAME_SITE" /></translation>

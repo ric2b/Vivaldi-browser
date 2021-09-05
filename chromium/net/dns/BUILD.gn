@@ -5,6 +5,10 @@
 import("//net/features.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
 
+if (is_android) {
+  import("//build/config/android/rules.gni")
+}
+
 enable_built_in_dns = !is_ios
 
 source_set("dns") {
@@ -62,7 +66,6 @@ source_set("dns") {
       "dns_transaction.cc",
       "dns_udp_tracker.cc",
       "dns_udp_tracker.h",
-      "esni_content.cc",
       "host_cache.cc",
       "host_resolver.cc",
       "host_resolver_manager.cc",
@@ -72,6 +75,8 @@ source_set("dns") {
       "host_resolver_mdns_task.h",
       "host_resolver_proc.cc",
       "host_resolver_proc.h",
+      "httpssvc_metrics.cc",
+      "httpssvc_metrics.h",
       "mapped_host_resolver.cc",
       "notify_watcher_mac.cc",
       "notify_watcher_mac.h",
@@ -198,7 +203,6 @@ source_set("host_resolver") {
     sources += [
       "dns_config.h",
       "dns_config_overrides.h",
-      "esni_content.h",
       "host_cache.h",
       "host_resolver.h",
       "host_resolver_source.h",
@@ -371,6 +375,12 @@ source_set("mdns_client") {
   public_deps = [ "//net:net_public_deps" ]
 }
 
+if (is_android) {
+  java_cpp_enum("secure_dns_mode_generated_enum") {
+    sources = [ "dns_config.h" ]
+  }
+}
+
 source_set("tests") {
   testonly = true
   sources = [
@@ -386,9 +396,9 @@ source_set("tests") {
     "dns_transaction_unittest.cc",
     "dns_udp_tracker_unittest.cc",
     "dns_util_unittest.cc",
-    "esni_content_unittest.cc",
     "host_cache_unittest.cc",
     "host_resolver_manager_unittest.cc",
+    "httpssvc_metrics_unittest.cc",
     "mapped_host_resolver_unittest.cc",
     "record_parsed_unittest.cc",
     "record_rdata_unittest.cc",

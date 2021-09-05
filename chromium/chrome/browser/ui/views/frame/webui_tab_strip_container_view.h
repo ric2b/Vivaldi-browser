@@ -14,6 +14,7 @@
 #include "chrome/browser/ui/views/toolbar/toolbar_button.h"
 #include "chrome/browser/ui/webui/tab_strip/tab_strip_ui.h"
 #include "chrome/browser/ui/webui/tab_strip/tab_strip_ui_embedder.h"
+#include "chrome/browser/ui/webui/tab_strip/tab_strip_ui_metrics.h"
 #include "chrome/common/buildflags.h"
 #include "components/tab_groups/tab_group_id.h"
 #include "ui/events/event_handler.h"
@@ -37,6 +38,8 @@ class WebView;
 }  // namespace views
 
 class Browser;
+class BrowserView;
+class ImmersiveRevealedLock;
 
 class WebUITabStripContainerView : public TabStripUIEmbedder,
                                    public gfx::AnimationDelegate,
@@ -44,12 +47,13 @@ class WebUITabStripContainerView : public TabStripUIEmbedder,
                                    public views::ButtonListener,
                                    public views::ViewObserver {
  public:
-  WebUITabStripContainerView(Browser* browser,
+  WebUITabStripContainerView(BrowserView* browser_view,
                              views::View* tab_contents_container,
-                             views::View* drag_handle);
+                             views::View* drag_handle,
+                             views::View* omnibox);
   ~WebUITabStripContainerView() override;
 
-  static bool UseTouchableTabStrip();
+  static bool UseTouchableTabStrip(const Browser* browser);
 
   // For drag-and-drop support:
   static void GetDropFormatsForView(
@@ -76,6 +80,9 @@ class WebUITabStripContainerView : public TabStripUIEmbedder,
   views::WebView* web_view_for_testing() const { return web_view_; }
   views::View* tab_counter_for_testing() const { return tab_counter_; }
 
+  // Finish the open or close animation if it's active.
+  void FinishAnimationForTesting();
+
  private:
   class AutoCloser;
   class DragToOpenHandler;
@@ -97,13 +104,8 @@ class WebUITabStripContainerView : public TabStripUIEmbedder,
 
   void SetContainerTargetVisibility(bool target_visible);
 
-  // When the container is open, it intercepts most tap and click
-  // events. This checks if each event should be intercepted or passed
-  // through to its target.
-  bool EventShouldPropagate(const ui::Event& event);
-
   // Passed to the AutoCloser to handle closing.
-  void CloseForEventOutsideTabStrip();
+  void CloseForEventOutsideTabStrip(TabStripUICloseAction reason);
 
   // TabStripUI::Embedder:
   const ui::AcceleratorProvider* GetAcceleratorProvider() const override;
@@ -118,9 +120,10 @@ class WebUITabStripContainerView : public TabStripUIEmbedder,
   SkColor GetColor(int id) const override;
 
   // views::View:
-  void AddedToWidget() override;
-  void RemovedFromWidget() override;
   int GetHeightForWidth(int w) const override;
+
+  gfx::Size FlexRule(const views::View* view,
+                     const views::SizeBounds& bounds) const;
 
   // gfx::AnimationDelegate:
   void AnimationEnded(const gfx::Animation* animation) override;
@@ -141,12 +144,14 @@ class WebUITabStripContainerView : public TabStripUIEmbedder,
   views::View* tab_contents_container_;
   views::View* tab_counter_ = nullptr;
 
-  int desired_height_ = 0;
   base::Optional<float> current_drag_height_;
 
   // When opened, if currently open. Used to calculate metric for how
   // long the tab strip is kept open.
   base::Optional<base::TimeTicks> time_at_open_;
+
+  // Used to keep the toolbar revealed while the tab strip is open.
+  std::unique_ptr<ImmersiveRevealedLock> immersive_revealed_lock_;
 
   gfx::SlideAnimation animation_{this};
 

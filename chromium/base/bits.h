@@ -7,13 +7,14 @@
 #ifndef BASE_BITS_H_
 #define BASE_BITS_H_
 
+#include <limits.h>
 #include <stddef.h>
 #include <stdint.h>
 
 #include <type_traits>
 
+#include "base/check.h"
 #include "base/compiler_specific.h"
-#include "base/logging.h"
 #include "build/build_config.h"
 
 #if defined(COMPILER_MSVC)
@@ -201,6 +202,16 @@ inline int Log2Ceiling(uint32_t n) {
   // When n == 0, (n - 1) will underflow to 0xFFFFFFFF, which is
   // why the statement below starts with (n ? 32 : -1).
   return (n ? 32 : -1) - CountLeadingZeroBits(n - 1);
+}
+
+// Returns a value of type T with a single bit set in the left-most position.
+// Can be used instead of manually shifting a 1 to the left.
+template <typename T>
+constexpr T LeftmostBit() {
+  static_assert(std::is_integral<T>::value,
+                "This function can only be used with integral types.");
+  T one(1u);
+  return one << ((CHAR_BIT * sizeof(T) - 1));
 }
 
 }  // namespace bits

@@ -9,13 +9,12 @@
 #include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/location.h"
-#include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/time/default_tick_clock.h"
 #include "base/time/time.h"
-#include "chrome/renderer/safe_browsing/feature_extractor_clock.h"
 #include "chrome/renderer/safe_browsing/features.h"
 #include "content/public/renderer/render_view.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
@@ -102,16 +101,17 @@ struct PhishingDOMFeatureExtractor::FrameData {
   std::string domain;
 };
 
-PhishingDOMFeatureExtractor::PhishingDOMFeatureExtractor(
-    FeatureExtractorClock* clock)
-    : clock_(clock) {
+PhishingDOMFeatureExtractor::PhishingDOMFeatureExtractor()
+    : clock_(base::DefaultTickClock::GetInstance()) {
   Clear();
 }
 
 PhishingDOMFeatureExtractor::~PhishingDOMFeatureExtractor() {
   // The RenderView should have called CancelPendingExtraction() before
   // we are destroyed.
-  CheckNoPendingExtraction();
+  DCHECK(done_callback_.is_null());
+  DCHECK(!cur_frame_data_.get());
+  DCHECK(cur_document_.IsNull());
 }
 
 void PhishingDOMFeatureExtractor::ExtractFeatures(blink::WebDocument document,
@@ -119,7 +119,9 @@ void PhishingDOMFeatureExtractor::ExtractFeatures(blink::WebDocument document,
                                                   DoneCallback done_callback) {
   // The RenderView should have called CancelPendingExtraction() before
   // starting a new extraction, so DCHECK this.
-  CheckNoPendingExtraction();
+  DCHECK(done_callback_.is_null());
+  DCHECK(!cur_frame_data_.get());
+  DCHECK(cur_document_.IsNull());
   // However, in an opt build, we will go ahead and clean up the pending
   // extraction so that we can start in a known state.
   CancelPendingExtraction();
@@ -127,7 +129,7 @@ void PhishingDOMFeatureExtractor::ExtractFeatures(blink::WebDocument document,
   features_ = features;
   done_callback_ = std::move(done_callback);
 
-  page_feature_state_.reset(new PageFeatureState(clock_->Now()));
+  page_feature_state_ = std::make_unique<PageFeatureState>(clock_->NowTicks());
   cur_document_ = document;
 
   base::ThreadTaskRunnerHandle::Get()->PostTask(
@@ -145,7 +147,7 @@ void PhishingDOMFeatureExtractor::CancelPendingExtraction() {
 void PhishingDOMFeatureExtractor::ExtractFeaturesWithTimeout() {
   DCHECK(page_feature_state_.get());
   ++page_feature_state_->num_iterations;
-  base::TimeTicks current_chunk_start_time = clock_->Now();
+  base::TimeTicks current_chunk_start_time = clock_->NowTicks();
 
   if (cur_document_.IsNull()) {
     // This will only happen if we weren't able to get the document for the
@@ -166,7 +168,7 @@ void PhishingDOMFeatureExtractor::ExtractFeaturesWithTimeout() {
       // modified between our chunks of work.  Log how long this takes, so we
       // can tell if it's too slow.
       UMA_HISTOGRAM_TIMES("SBClientPhishing.DOMFeatureResumeTime",
-                          clock_->Now() - current_chunk_start_time);
+                          clock_->NowTicks() - current_chunk_start_time);
     } else {
       // We just moved to a new frame, so update our frame state
       // and advance to the first element.
@@ -190,10 +192,9 @@ void PhishingDOMFeatureExtractor::ExtractFeaturesWithTimeout() {
 
       if (++num_elements >= kClockCheckGranularity) {
         num_elements = 0;
-        base::TimeTicks now = clock_->Now();
+        base::TimeTicks now = clock_->NowTicks();
         if (now - page_feature_state_->start_time >=
             base::TimeDelta::FromMilliseconds(kMaxTotalTimeMs)) {
-          DLOG(ERROR) << "Feature extraction took too long, giving up";
           // We expect this to happen infrequently, so record when it does.
           UMA_HISTOGRAM_COUNTS_1M("SBClientPhishing.DOMFeatureTimeout", 1);
           RunCallback(false);
@@ -233,20 +234,16 @@ void PhishingDOMFeatureExtractor::ExtractFeaturesWithTimeout() {
 void PhishingDOMFeatureExtractor::HandleLink(
     const blink::WebElement& element) {
   // Count the number of times we link to a different host.
-  if (!element.HasAttribute("href")) {
-    DVLOG(1) << "Skipping anchor tag with no href";
+  if (!element.HasAttribute("href"))
     return;
-  }
 
   // Retrieve the link and resolve the link in case it's relative.
   blink::WebURL full_url = CompleteURL(element, element.GetAttribute("href"));
 
   std::string domain;
   bool is_external = IsExternalDomain(full_url, &domain);
-  if (domain.empty()) {
-    DVLOG(1) << "Could not extract domain from link: " << full_url;
+  if (domain.empty())
     return;
-  }
 
   if (is_external) {
     ++page_feature_state_->external_links;
@@ -279,10 +276,8 @@ void PhishingDOMFeatureExtractor::HandleForm(
 
   std::string domain;
   bool is_external = IsExternalDomain(full_url, &domain);
-  if (domain.empty()) {
-    DVLOG(1) << "Could not extract domain from form action: " << full_url;
+  if (domain.empty())
     return;
-  }
 
   if (is_external) {
     ++page_feature_state_->action_other_domain;
@@ -292,22 +287,16 @@ void PhishingDOMFeatureExtractor::HandleForm(
 
 void PhishingDOMFeatureExtractor::HandleImage(
     const blink::WebElement& element) {
-  if (!element.HasAttribute("src")) {
-    DVLOG(1) << "Skipping img tag with no src";
-  }
-
   // Record whether the image points to a different domain.
   blink::WebURL full_url = CompleteURL(element, element.GetAttribute("src"));
   std::string domain;
   bool is_external = IsExternalDomain(full_url, &domain);
-  if (domain.empty()) {
-    DVLOG(1) << "Could not extract domain from image src: " << full_url;
+  if (domain.empty())
     return;
-  }
 
-  if (is_external) {
+  if (is_external)
     ++page_feature_state_->img_other_domain;
-  }
+
   ++page_feature_state_->total_imgs;
 }
 
@@ -340,17 +329,6 @@ void PhishingDOMFeatureExtractor::HandleScript(
   ++page_feature_state_->num_script_tags;
 }
 
-void PhishingDOMFeatureExtractor::CheckNoPendingExtraction() {
-  DCHECK(done_callback_.is_null());
-  DCHECK(!cur_frame_data_.get());
-  DCHECK(cur_document_.IsNull());
-  if (!done_callback_.is_null() || cur_frame_data_.get() ||
-      !cur_document_.IsNull()) {
-    LOG(ERROR) << "Extraction in progress, missing call to "
-               << "CancelPendingExtraction";
-  }
-}
-
 void PhishingDOMFeatureExtractor::RunCallback(bool success) {
   // Record some timing stats that we can use to evaluate feature extraction
   // performance.  These include both successful and failed extractions.
@@ -358,7 +336,7 @@ void PhishingDOMFeatureExtractor::RunCallback(bool success) {
   UMA_HISTOGRAM_COUNTS_1M("SBClientPhishing.DOMFeatureIterations",
                           page_feature_state_->num_iterations);
   UMA_HISTOGRAM_TIMES("SBClientPhishing.DOMFeatureTotalTime",
-                      clock_->Now() - page_feature_state_->start_time);
+                      clock_->NowTicks() - page_feature_state_->start_time);
 
   DCHECK(!done_callback_.is_null());
   std::move(done_callback_).Run(success);
@@ -366,9 +344,9 @@ void PhishingDOMFeatureExtractor::RunCallback(bool success) {
 }
 
 void PhishingDOMFeatureExtractor::Clear() {
-  features_ = NULL;
+  features_ = nullptr;
   done_callback_.Reset();
-  cur_frame_data_.reset(NULL);
+  cur_frame_data_.reset(nullptr);
   cur_document_.Reset();
 }
 

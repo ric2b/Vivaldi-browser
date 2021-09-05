@@ -15,6 +15,7 @@ import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.Callback;
+import org.chromium.base.CallbackController;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.ObservableSupplier;
@@ -31,6 +32,7 @@ import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelManager;
 import org.chromium.chrome.browser.compositor.layouts.EmptyOverviewModeObserver;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManager;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
+import org.chromium.chrome.browser.contextualsearch.ContextualSearchManager;
 import org.chromium.chrome.browser.directactions.DirectActionInitializer;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.findinpage.FindToolbarManager;
@@ -62,7 +64,12 @@ import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.ui.system.StatusBarColorController;
 import org.chromium.chrome.browser.vr.VrModuleProvider;
 import org.chromium.chrome.browser.widget.ScrimView;
-import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetController;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.SheetState;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetControllerFactory;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetObserver;
+import org.chromium.components.browser_ui.bottomsheet.EmptyBottomSheetObserver;
+import org.chromium.components.browser_ui.bottomsheet.ManagedBottomSheetController;
 import org.chromium.components.browser_ui.widget.MenuOrKeyboardActionController;
 import org.chromium.components.browser_ui.widget.scrim.ScrimCoordinator;
 import org.chromium.components.feature_engagement.EventConstants;
@@ -104,8 +111,9 @@ public class RootUiCoordinator
     private OverlayPanelManager mOverlayPanelManager;
     private OverlayPanelManager.OverlayPanelManagerObserver mOverlayPanelManagerObserver;
 
-    private Callback<OverviewModeBehavior> mOverviewModeBehaviorSupplierCallback;
     private OverviewModeBehavior mOverviewModeBehavior;
+    private Callback<OverviewModeBehavior> mOverviewModeBehaviorSupplierObserver;
+    private ObservableSupplier<OverviewModeBehavior> mOverviewModeBehaviorSupplier;
     private OverviewModeBehavior.OverviewModeObserver mOverviewModeObserver;
 
     /** A means of providing the theme color to different features. */
@@ -119,7 +127,7 @@ public class RootUiCoordinator
     private VrModeObserver mVrModeObserver;
 
     private BottomSheetManager mBottomSheetManager;
-    private BottomSheetController mBottomSheetController;
+    private ManagedBottomSheetController mBottomSheetController;
     private SnackbarManager mBottomSheetSnackbarManager;
 
     private ScrimView mScrimView;
@@ -128,11 +136,15 @@ public class RootUiCoordinator
     private List<ButtonDataProvider> mButtonDataProviders;
     private IdentityDiscController mIdentityDiscController;
     private ChromeActionModeHandler mChromeActionModeHandler;
-    private ToolbarActionModeCallback mActionModeControllerCallback;
+    private final ToolbarActionModeCallback mActionModeControllerCallback;
     private ObservableSupplierImpl<Boolean> mOmniboxFocusStateSupplier =
             new ObservableSupplierImpl<>();
-    private final ObservableSupplier<Profile> mProfileSupplier;
+    protected final ObservableSupplier<Profile> mProfileSupplier;
     private final ObservableSupplier<BookmarkBridge> mBookmarkBridgeSupplier;
+    private final ObservableSupplierImpl<AppMenuCoordinator> mAppMenuSupplier;
+    private BottomSheetObserver mContextualSearchSuppressor;
+    private final Supplier<ContextualSearchManager> mContextualSearchManagerSupplier;
+    protected final CallbackController mCallbackController;
 
     /**
      * Create a new {@link RootUiCoordinator} for the given activity.
@@ -144,12 +156,18 @@ public class RootUiCoordinator
      * @param tabProvider The {@link ActivityTabProvider} to get current tab of the activity.
      * @param profileSupplier Supplier of the currently applicable profile.
      * @param bookmarkBridgeSupplier Supplier of the bookmark bridge for the current profile.
+     * @param overviewModeBehaviorSupplier Supplier of the overview mode manager for the current
+     *                                     profile.
+     * @param contextualSearchManagerSupplier Supplier of the {@link ContextualSearchManager}.
      */
     public RootUiCoordinator(ChromeActivity activity,
             @Nullable Callback<Boolean> onOmniboxFocusChangedListener,
             ObservableSupplier<ShareDelegate> shareDelegateSupplier,
             ActivityTabProvider tabProvider, ObservableSupplier<Profile> profileSupplier,
-            ObservableSupplier<BookmarkBridge> bookmarkBridgeSupplier) {
+            ObservableSupplier<BookmarkBridge> bookmarkBridgeSupplier,
+            ObservableSupplier<OverviewModeBehavior> overviewModeBehaviorSupplier,
+            Supplier<ContextualSearchManager> contextualSearchManagerSupplier) {
+        mCallbackController = new CallbackController();
         mActivity = activity;
         mOnOmniboxFocusChangedListener = onOmniboxFocusChangedListener;
         mActivity.getLifecycleDispatcher().register(this);
@@ -167,10 +185,15 @@ public class RootUiCoordinator
                 activity.getLifecycleDispatcher(), mActivityTabProvider, mTabObscuringHandler);
         mProfileSupplier = profileSupplier;
         mBookmarkBridgeSupplier = bookmarkBridgeSupplier;
+        mAppMenuSupplier = new ObservableSupplierImpl<>();
+        mContextualSearchManagerSupplier = contextualSearchManagerSupplier;
+        mActionModeControllerCallback = new ToolbarActionModeCallback();
 
         mOmniboxFocusStateSupplier.set(false);
 
-        initOverviewModeSupplierObserver();
+        mOverviewModeBehaviorSupplier = overviewModeBehaviorSupplier;
+        mOverviewModeBehaviorSupplierObserver = this::setOverviewModeBehavior;
+        mOverviewModeBehaviorSupplier.addObserver(mOverviewModeBehaviorSupplierObserver);
     }
 
     // TODO(pnoland, crbug.com/865801): remove this in favor of wiring it directly.
@@ -180,6 +203,7 @@ public class RootUiCoordinator
 
     @Override
     public void destroy() {
+        mCallbackController.destroy();
         mMenuOrKeyboardActionController.unregisterMenuOrKeyboardActionHandler(this);
 
         mActivity.getLayoutManagerSupplier().removeObserver(mLayoutManagerSupplierCallback);
@@ -188,13 +212,17 @@ public class RootUiCoordinator
             mOverlayPanelManager.removeObserver(mOverlayPanelManagerObserver);
         }
 
-        if (mActivity.getOverviewModeBehaviorSupplier() != null) {
-            mActivity.getOverviewModeBehaviorSupplier().removeObserver(
-                    mOverviewModeBehaviorSupplierCallback);
-        }
         if (mOverviewModeBehavior != null) {
             mOverviewModeBehavior.removeOverviewModeObserver(mOverviewModeObserver);
+            mOverviewModeBehavior = null;
         }
+
+        if (mOverviewModeBehaviorSupplier != null) {
+            mOverviewModeBehaviorSupplier.removeObserver(mOverviewModeBehaviorSupplierObserver);
+            mOverviewModeBehaviorSupplier = null;
+            mOverviewModeBehaviorSupplierObserver = null;
+        }
+
         if (mToolbarManager != null) {
             mToolbarManager.destroy();
             mToolbarManager = null;
@@ -219,7 +247,12 @@ public class RootUiCoordinator
         }
 
         if (mBottomSheetManager != null) mBottomSheetManager.destroy();
-        if (mBottomSheetController != null) mBottomSheetController.destroy();
+        if (mBottomSheetController != null) {
+            if (mContextualSearchSuppressor != null) {
+                mBottomSheetController.removeObserver(mContextualSearchSuppressor);
+            }
+            mBottomSheetController.destroy();
+        }
 
         if (mButtonDataProviders != null) {
             for (ButtonDataProvider provider : mButtonDataProviders) {
@@ -241,7 +274,7 @@ public class RootUiCoordinator
     }
 
     @Override
-    public void onPostInflationStartup() {
+    public void onInflationComplete() {
         ViewGroup coordinator = mActivity.findViewById(R.id.coordinator);
         StatusBarColorController statusBarColorController = mActivity.getStatusBarColorController();
         mScrimView = new ScrimView(mActivity,
@@ -259,18 +292,19 @@ public class RootUiCoordinator
 
         initFindToolbarManager();
         initializeToolbar();
+    }
+
+    @Override
+    public void onPostInflationStartup() {
         initAppMenu();
         initDirectActionInitializer();
+        initContextualSearchSuppressor();
         if (mAppMenuCoordinator != null) {
-            mToolbarManager.onAppMenuInitialized(mAppMenuCoordinator);
             mModalDialogManagerObserver = new ModalDialogManagerObserver() {
                 @Override
-                public void onDialogShown(PropertyModel model) {
+                public void onDialogAdded(PropertyModel model) {
                     mAppMenuCoordinator.getAppMenuHandler().hideAppMenu();
                 }
-
-                @Override
-                public void onDialogHidden(PropertyModel model) {}
             };
             mActivity.getModalDialogManager().addObserver(mModalDialogManagerObserver);
         }
@@ -290,7 +324,7 @@ public class RootUiCoordinator
 
                     selector.openNewTab(generateUrlParamsForSearch(tab, query),
                             TabLaunchType.FROM_LONGPRESS_FOREGROUND, tab, tab.isIncognito());
-                });
+                }, mShareDelegateSupplier);
         mVrModeObserver = new VrModeObserver() {
             @Override
             public void onEnterVr() {
@@ -374,8 +408,8 @@ public class RootUiCoordinator
         // EphemeralTabCoordinator, and FindToolbarManager will all be owned by this class.
 
         // Do not show the menu if Contextual Search panel is opened.
-        if (mActivity.getContextualSearchManager() != null
-                && mActivity.getContextualSearchManager().isSearchPanelOpened()) {
+        if (mContextualSearchManagerSupplier.get() != null
+                && mContextualSearchManagerSupplier.get().isSearchPanelOpened()) {
             return false;
         }
 
@@ -412,7 +446,7 @@ public class RootUiCoordinator
      * @param cancellationSignal Signal used to cancel a direct action from the caller.
      * @param callback Callback to run when the action is done.
      */
-    public void onGetDirectActions(CancellationSignal cancellationSignal, Consumer callback) {
+    public void onGetDirectActions(CancellationSignal cancellationSignal, Consumer<List> callback) {
         if (mDirectActionInitializer == null) return;
         mDirectActionInitializer.onGetDirectActions(cancellationSignal, callback);
     }
@@ -466,70 +500,61 @@ public class RootUiCoordinator
                     mActivity, mActivity.getLifecycleDispatcher(), bottomToolbarVisibilitySupplier);
             ShareButtonController shareButtonController = new ShareButtonController(mActivity,
                     mActivityTabProvider, mShareDelegateSupplier, new ShareUtils(),
-                    bottomToolbarVisibilitySupplier, mActivity.getLifecycleDispatcher());
+                    bottomToolbarVisibilitySupplier, mActivity.getLifecycleDispatcher(),
+                    mActivity.getModalDialogManager());
             mButtonDataProviders = Arrays.asList(mIdentityDiscController, shareButtonController);
-            mActionModeControllerCallback = new ToolbarActionModeCallback();
             mToolbarManager = new ToolbarManager(mActivity, mActivity.getFullscreenManager(),
-                    toolbarContainer, mActivity.getCompositorViewHolder().getInvalidator(),
-                    urlFocusChangedCallback, mTabThemeColorProvider, mTabObscuringHandler,
-                    mShareDelegateSupplier, bottomToolbarVisibilitySupplier,
-                    mIdentityDiscController, mButtonDataProviders, mActivityTabProvider,
-                    mScrimCoordinator, mActionModeControllerCallback, mFindToolbarManager,
-                    mProfileSupplier, mBookmarkBridgeSupplier, mCanAnimateBrowserControls);
+                    mActivity.getFullscreenManager(), toolbarContainer,
+                    mActivity.getCompositorViewHolder().getInvalidator(), urlFocusChangedCallback,
+                    mTabThemeColorProvider, mTabObscuringHandler, mShareDelegateSupplier,
+                    bottomToolbarVisibilitySupplier, mIdentityDiscController, mButtonDataProviders,
+                    mActivityTabProvider, mScrimCoordinator, mActionModeControllerCallback,
+                    mFindToolbarManager, mProfileSupplier, mBookmarkBridgeSupplier,
+                    mCanAnimateBrowserControls, mOverviewModeBehaviorSupplier, mAppMenuSupplier,
+                    shouldShowMenuUpdateBadge());
             if (!mActivity.supportsAppMenu()) {
                 mToolbarManager.getToolbar().disableMenuButton();
             }
         }
     }
 
-    // Private class methods
+    private void setOverviewModeBehavior(OverviewModeBehavior overviewModeBehavior) {
+        assert overviewModeBehavior != null;
+        assert mOverviewModeBehavior
+                == null
+            : "TODO(https://crbug.com/1084528): the overview mode manager should set at most once.";
 
-    private void initOverviewModeSupplierObserver() {
-        if (mActivity.getOverviewModeBehaviorSupplier() != null) {
-            mOverviewModeBehaviorSupplierCallback = overviewModeBehavior -> {
-                if (mOverviewModeBehavior != null) {
-                    mOverviewModeBehavior.removeOverviewModeObserver(mOverviewModeObserver);
-                }
+        mOverviewModeBehavior = overviewModeBehavior;
+        mOverviewModeObserver = new EmptyOverviewModeObserver() {
+            @Override
+            public void onOverviewModeStartedShowing(boolean showToolbar) {
+                if (mFindToolbarManager != null) mFindToolbarManager.hideToolbar();
+                hideAppMenu();
+            }
 
-                mOverviewModeBehavior = overviewModeBehavior;
+            @Override
+            public void onOverviewModeFinishedShowing() {
+                // Ideally we wouldn't allow the app menu to show while animating the
+                // overview mode. This is hard to track, however, because in some
+                // instances #onOverviewModeStartedShowing is called after
+                // #onOverviewModeFinishedShowing (see https://crbug.com/969047).
+                // Once that bug is fixed, we can remove this call to hide in favor of
+                // disallowing app menu shows during animation. Alternatively, we
+                // could expose a way to query whether an animation is in progress.
+                hideAppMenu();
+            }
 
-                if (mOverviewModeObserver == null) {
-                    mOverviewModeObserver = new EmptyOverviewModeObserver() {
-                        @Override
-                        public void onOverviewModeStartedShowing(boolean showToolbar) {
-                            if (mFindToolbarManager != null) mFindToolbarManager.hideToolbar();
-                            hideAppMenu();
-                        }
+            @Override
+            public void onOverviewModeStartedHiding(boolean showToolbar, boolean delayAnimation) {
+                hideAppMenu();
+            }
 
-                        @Override
-                        public void onOverviewModeFinishedShowing() {
-                            // Ideally we wouldn't allow the app menu to show while animating the
-                            // overview mode. This is hard to track, however, because in some
-                            // instances #onOverviewModeStartedShowing is called after
-                            // #onOverviewModeFinishedShowing (see https://crbug.com/969047).
-                            // Once that bug is fixed, we can remove this call to hide in favor of
-                            // disallowing app menu shows during animation. Alternatively, we
-                            // could expose a way to query whether an animation is in progress.
-                            hideAppMenu();
-                        }
-
-                        @Override
-                        public void onOverviewModeStartedHiding(
-                                boolean showToolbar, boolean delayAnimation) {
-                            hideAppMenu();
-                        }
-
-                        @Override
-                        public void onOverviewModeFinishedHiding() {
-                            hideAppMenu();
-                        }
-                    };
-                }
-                mOverviewModeBehavior.addOverviewModeObserver(mOverviewModeObserver);
-            };
-            mActivity.getOverviewModeBehaviorSupplier().addObserver(
-                    mOverviewModeBehaviorSupplierCallback);
-        }
+            @Override
+            public void onOverviewModeFinishedHiding() {
+                hideAppMenu();
+            }
+        };
+        mOverviewModeBehavior.addOverviewModeObserver(mOverviewModeObserver);
     }
 
     private void initAppMenu() {
@@ -543,6 +568,8 @@ public class RootUiCoordinator
 
             mAppMenuCoordinator.registerAppMenuBlocker(this);
             mAppMenuCoordinator.registerAppMenuBlocker(mActivity);
+
+            mAppMenuSupplier.set(mAppMenuCoordinator);
         }
     }
 
@@ -579,10 +606,18 @@ public class RootUiCoordinator
      * cross-feature interaction, e.g. hide other features when this feature is shown.
      */
     protected void onFindToolbarShown() {
-        if (mActivity.getContextualSearchManager() != null) {
-            mActivity.getContextualSearchManager().hideContextualSearch(
+        if (mContextualSearchManagerSupplier.get() != null) {
+            mContextualSearchManagerSupplier.get().hideContextualSearch(
                     OverlayPanel.StateChangeReason.UNKNOWN);
         }
+    }
+
+    /**
+     * @return Whether the "update available" badge should be displayed on menu button(s) in the
+     * context of this coordinator's UI.
+     **/
+    protected boolean shouldShowMenuUpdateBadge() {
+        return false;
     }
 
     /**
@@ -590,32 +625,27 @@ public class RootUiCoordinator
      * until content is requested in the sheet.
      */
     private void initializeBottomSheetController() {
-        Supplier<View> sheetViewSupplier = () -> {
-            ViewGroup coordinator = mActivity.findViewById(R.id.coordinator);
-            mActivity.getLayoutInflater().inflate(R.layout.bottom_sheet, coordinator);
-
-            View sheet = coordinator.findViewById(R.id.bottom_sheet);
-
+        // TODO(1093999): Componentize SnackbarManager so BottomSheetController can own this.
+        Callback<View> sheetInitializedCallback = (view) -> {
             mBottomSheetSnackbarManager = new SnackbarManager(mActivity,
-                    sheet.findViewById(R.id.bottom_sheet_snackbar_container),
+                    view.findViewById(org.chromium.components.browser_ui.bottomsheet.R.id
+                                              .bottom_sheet_snackbar_container),
                     mActivity.getWindowAndroid());
-
-            return sheet;
         };
 
         Supplier<OverlayPanelManager> panelManagerSupplier = ()
                 -> mActivity.getCompositorViewHolder().getLayoutManager().getOverlayPanelManager();
 
-        mBottomSheetController =
-                new BottomSheetController(mActivity.getLifecycleDispatcher(), mActivityTabProvider,
-                        () -> mScrimCoordinator, sheetViewSupplier, panelManagerSupplier,
-                        mActivity.getFullscreenManager(), mActivity.getWindow(),
-                        mActivity.getWindowAndroid().getKeyboardDelegate(),
-                        mOmniboxFocusStateSupplier);
+        // TODO(1094000): Initialize after inflation so we don't need to pass in view suppliers.
+        mBottomSheetController = BottomSheetControllerFactory.createBottomSheetController(
+                () -> mScrimCoordinator, sheetInitializedCallback, mActivity.getWindow(),
+                mActivity.getWindowAndroid().getKeyboardDelegate(),
+                () -> mActivity.findViewById(R.id.coordinator));
 
         mBottomSheetManager = new BottomSheetManager(mBottomSheetController, mActivityTabProvider,
+                mActivity.getFullscreenManager(), mActivity.getFullscreenManager(),
                 mActivity::getModalDialogManager, this::getBottomSheetSnackbarManager,
-                mTabObscuringHandler);
+                mTabObscuringHandler, mOmniboxFocusStateSupplier, panelManagerSupplier);
     }
 
     /**
@@ -627,13 +657,21 @@ public class RootUiCoordinator
     }
 
     /** @return The {@link BottomSheetController} for this activity. */
-    public BottomSheetController getBottomSheetController() {
+    public ManagedBottomSheetController getBottomSheetController() {
         return mBottomSheetController;
     }
 
     /** @return The root coordinator / activity's primary scrim. */
     public ScrimView getScrim() {
         return mScrimView;
+    }
+
+    /** @return The {@link ScrimCoordinator} to control activity's primary scrim. */
+    // TODO(crbug.com/1064140): This method is used to pass ScrimCoordinator to StartSurface. We
+    // should be able to create StartSurface in this class so that we don't need to expose this
+    // getter.
+    public ScrimCoordinator getScrimCoordinator() {
+        return mScrimCoordinator;
     }
 
     /** @return The {@link SnackbarManager} for the {@link BottomSheetController}. */
@@ -651,6 +689,39 @@ public class RootUiCoordinator
                 mActivity.getCompositorViewHolder(), mActivity.getActivityTabProvider(),
                 mScrimView);
         mActivity.getLifecycleDispatcher().register(mDirectActionInitializer);
+    }
+
+    /**
+     * Initializes a glue logic that suppresses Contextual Search while a Bottom Sheet feature is
+     * in action.
+     */
+    private void initContextualSearchSuppressor() {
+        if (mBottomSheetController == null) return;
+        mContextualSearchSuppressor = new EmptyBottomSheetObserver() {
+            private boolean mOpened;
+
+            @Override
+            public void onSheetStateChanged(int newState) {
+                switch (newState) {
+                    case SheetState.PEEK:
+                    case SheetState.HALF:
+                    case SheetState.FULL:
+                        if (!mOpened) {
+                            mOpened = true;
+                            ContextualSearchManager manager =
+                                    mContextualSearchManagerSupplier.get();
+                            if (manager != null) manager.onBottomSheetVisible(true);
+                        }
+                        break;
+                    case SheetState.HIDDEN:
+                        mOpened = false;
+                        ContextualSearchManager manager = mContextualSearchManagerSupplier.get();
+                        if (manager != null) manager.onBottomSheetVisible(false);
+                        break;
+                }
+            }
+        };
+        mBottomSheetController.addObserver(mContextualSearchSuppressor);
     }
 
     // Testing methods

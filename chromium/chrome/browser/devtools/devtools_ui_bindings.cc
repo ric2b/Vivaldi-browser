@@ -103,6 +103,10 @@ static const char kDevToolsKeyboardShortcutFiredHistogram[] =
     "DevTools.KeyboardShortcutFired";
 static const char kDevToolsIssuesPanelOpenedFromHistogram[] =
     "DevTools.IssuesPanelOpenedFrom";
+static const char kDevToolsKeybindSetSettingChanged[] =
+    "DevTools.KeybindSetSettingChanged";
+static const char kDevToolsDualScreenDeviceEmulatedHistogram[] =
+    "DevTools.DualScreenDeviceEmulated";
 
 static const char kRemotePageActionInspect[] = "inspect";
 static const char kRemotePageActionReload[] = "reload";
@@ -1237,13 +1241,17 @@ void DevToolsUIBindings::RecordEnumeratedHistogram(const std::string& name,
   // Each histogram name must follow a different code path in
   // order to UMA_HISTOGRAM_EXACT_LINEAR work correctly.
   if (name == kDevToolsActionTakenHistogram)
-    UMA_HISTOGRAM_EXACT_LINEAR(name, sample, boundary_value);
+    base::UmaHistogramExactLinear(name, sample, boundary_value);
   else if (name == kDevToolsPanelShownHistogram)
-    UMA_HISTOGRAM_EXACT_LINEAR(name, sample, boundary_value);
+    base::UmaHistogramExactLinear(name, sample, boundary_value);
   else if (name == kDevToolsKeyboardShortcutFiredHistogram)
-    UMA_HISTOGRAM_EXACT_LINEAR(name, sample, boundary_value);
+    base::UmaHistogramExactLinear(name, sample, boundary_value);
   else if (name == kDevToolsIssuesPanelOpenedFromHistogram)
-    UMA_HISTOGRAM_EXACT_LINEAR(name, sample, boundary_value);
+    base::UmaHistogramExactLinear(name, sample, boundary_value);
+  else if (name == kDevToolsKeybindSetSettingChanged)
+    base::UmaHistogramExactLinear(name, sample, boundary_value);
+  else if (name == kDevToolsDualScreenDeviceEmulatedHistogram)
+    base::UmaHistogramExactLinear(name, sample, boundary_value);
   else
     frontend_host_->BadMessageRecieved();
 }
@@ -1551,12 +1559,7 @@ void DevToolsUIBindings::ReadyToCommitNavigation(
 }
 
 void DevToolsUIBindings::DocumentOnLoadCompletedInMainFrame() {
-  // In the DEBUG_DEVTOOLS mode, the DocumentOnLoadCompletedInMainFrame event
-  // arrives before the LoadCompleted event, thus it should not trigger the
-  // frontend load handling.
-#if !BUILDFLAG(DEBUG_DEVTOOLS)
   FrontendLoaded();
-#endif
 }
 
 void DevToolsUIBindings::DidNavigateMainFrame() {

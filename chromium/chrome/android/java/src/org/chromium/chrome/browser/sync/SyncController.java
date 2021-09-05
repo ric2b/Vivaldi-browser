@@ -5,14 +5,10 @@
 package org.chromium.chrome.browser.sync;
 
 import android.annotation.SuppressLint;
-import android.app.Activity;
 
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
-import org.chromium.base.ActivityState;
-import org.chromium.base.ApplicationStatus;
-import org.chromium.base.ApplicationStatus.ActivityStateListener;
 import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.metrics.RecordHistogram;
@@ -22,7 +18,6 @@ import org.chromium.chrome.browser.identity.UniqueIdentificationGeneratorFactory
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.SigninManager;
-import org.chromium.components.sync.AndroidSyncSettings;
 import org.chromium.components.sync.ModelType;
 import org.chromium.components.sync.PassphraseType;
 import org.chromium.components.sync.StopSource;
@@ -81,18 +76,9 @@ public class SyncController implements ProfileSyncService.SyncStateChangedListen
 
         updateSyncStateFromAndroid();
 
-        // When the application gets paused, tell sync to flush the directory to disk.
-        ApplicationStatus.registerStateListenerForAllActivities(new ActivityStateListener() {
-            @Override
-            public void onActivityStateChange(Activity activity, int newState) {
-                if (newState == ActivityState.PAUSED) {
-                    mProfileSyncService.flushDirectory();
-                }
-            }
-        });
-
-        IdentityServicesProvider.get().getSigninManager().addSignInStateObserver(
-                new SigninManager.SignInStateObserver() {
+        IdentityServicesProvider.get()
+                .getSigninManager(Profile.getLastUsedRegularProfile())
+                .addSignInStateObserver(new SigninManager.SignInStateObserver() {
                     @Override
                     public void onSignedIn() {
                         mProfileSyncService.requestStart();

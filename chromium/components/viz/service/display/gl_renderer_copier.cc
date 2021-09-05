@@ -10,6 +10,7 @@
 #include "base/bind.h"
 #include "base/process/memory.h"
 #include "base/stl_util.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "components/viz/common/frame_sinks/copy_output_request.h"
 #include "components/viz/common/frame_sinks/copy_output_result.h"
 #include "components/viz/common/frame_sinks/copy_output_util.h"
@@ -215,7 +216,9 @@ void GLRendererCopier::CopyFromTextureOrFramebuffer(
       // requires that the result be accessed via a task in the same task runner
       // sequence as the GLRendererCopier. Since I420_PLANES requests are meant
       // to be VIZ-internal, this is an acceptable limitation to enforce.
-      DCHECK(request->SendsResultsInCurrentSequence() || async_gl_task_runner_);
+      if (!request->SendsResultsInCurrentSequence() && !async_gl_task_runner_) {
+        request->set_result_task_runner(base::SequencedTaskRunnerHandle::Get());
+      }
 
       const gfx::Rect aligned_rect = RenderI420Textures(
           *request, flipped_source, color_space, source_texture,
@@ -508,9 +511,10 @@ class ReadPixelsWorkflow {
     // Create a buffer for the pixel transfer.
     gl->GenBuffers(1, &transfer_buffer_);
     gl->BindBuffer(GL_PIXEL_PACK_TRANSFER_BUFFER_CHROMIUM, transfer_buffer_);
-    gl->BufferData(GL_PIXEL_PACK_TRANSFER_BUFFER_CHROMIUM,
-                   kRGBABytesPerPixel * result_rect.size().GetArea(), nullptr,
-                   GL_STREAM_READ);
+    gl->BufferData(
+        GL_PIXEL_PACK_TRANSFER_BUFFER_CHROMIUM,
+        (result_rect.size().GetCheckedArea() * kRGBABytesPerPixel).ValueOrDie(),
+        nullptr, GL_STREAM_READ);
 
     // Execute an asynchronous read-pixels operation, with a query that triggers
     // when Finish() should be run.
@@ -749,13 +753,15 @@ class ReadI420PlanesWorkflow
     auto* const gl = context_provider_->ContextGL();
     gl->GenBuffers(1, &transfer_buffer_);
     gl->BindBuffer(GL_PIXEL_PACK_TRANSFER_BUFFER_CHROMIUM, transfer_buffer_);
-    const int y_plane_bytes = kRGBABytesPerPixel * y_texture_size().GetArea();
-    const int chroma_plane_bytes =
-        kRGBABytesPerPixel * chroma_texture_size().GetArea();
+    base::CheckedNumeric<int> y_plane_bytes =
+        y_texture_size().GetCheckedArea() * kRGBABytesPerPixel;
+    base::CheckedNumeric<int> chroma_plane_bytes =
+        chroma_texture_size().GetCheckedArea() * kRGBABytesPerPixel;
     gl->BufferData(GL_PIXEL_PACK_TRANSFER_BUFFER_CHROMIUM,
-                   y_plane_bytes + 2 * chroma_plane_bytes, nullptr,
-                   GL_STREAM_READ);
-    data_offsets_ = {0, y_plane_bytes, y_plane_bytes + chroma_plane_bytes};
+                   (y_plane_bytes + chroma_plane_bytes * 2).ValueOrDie(),
+                   nullptr, GL_STREAM_READ);
+    data_offsets_ = {0, y_plane_bytes.ValueOrDie(),
+                     (y_plane_bytes + chroma_plane_bytes).ValueOrDie()};
     gl->BindBuffer(GL_PIXEL_PACK_TRANSFER_BUFFER_CHROMIUM, 0);
 
     // Generate the three queries used for determining when each of the plane

@@ -92,3 +92,35 @@ TEST(NinjaCopyTargetWriter, OrderOnlyDeps) {
   std::string out_str = out.str();
   EXPECT_EQ(expected_linux, out_str);
 }
+
+TEST(NinjaCopyTargetWriter, DataDeps) {
+  Err err;
+  TestWithScope setup;
+
+  Target target(setup.settings(), Label(SourceDir("//foo/"), "bar"));
+  target.set_output_type(Target::COPY_FILES);
+  target.sources().push_back(SourceFile("//foo/input1.txt"));
+  target.action_values().outputs() =
+      SubstitutionList::MakeForTest("//out/Debug/{{source_name_part}}.out");
+
+  Target data_dep(setup.settings(), Label(SourceDir("//foo/"), "datadep"));
+  data_dep.set_output_type(Target::ACTION);
+  data_dep.visibility().SetPublic();
+  data_dep.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(data_dep.OnResolved(&err));
+
+  target.data_deps().push_back(LabelTargetPair(&data_dep));
+  target.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(target.OnResolved(&err));
+
+  std::ostringstream out;
+  NinjaCopyTargetWriter writer(&target, out);
+  writer.Run();
+
+  const char expected_linux[] =
+      "build input1.out: copy ../../foo/input1.txt || obj/foo/datadep.stamp\n"
+      "\n"
+      "build obj/foo/bar.stamp: stamp input1.out\n";
+  std::string out_str = out.str();
+  EXPECT_EQ(expected_linux, out_str);
+}

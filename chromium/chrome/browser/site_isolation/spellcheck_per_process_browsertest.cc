@@ -10,7 +10,6 @@
 #include "base/bind_helpers.h"
 #include "base/feature_list.h"
 #include "base/run_loop.h"
-#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/site_isolation/chrome_site_per_process_test.h"
@@ -65,8 +64,7 @@ class MockSpellCheckHost : spellcheck::mojom::SpellCheckHost {
     if (text_received_)
       return;
 
-    auto ui_task_runner =
-        base::CreateSingleThreadTaskRunner({content::BrowserThread::UI});
+    auto ui_task_runner = content::GetUIThreadTaskRunner({});
     ui_task_runner->PostDelayedTask(
         FROM_HERE,
         base::BindOnce(&MockSpellCheckHost::Timeout, base::Unretained(this)),
@@ -124,16 +122,17 @@ class MockSpellCheckHost : spellcheck::mojom::SpellCheckHost {
                      CheckSpellingCallback) override {}
   void FillSuggestionList(const base::string16& word,
                           FillSuggestionListCallback) override {}
-#endif
 
-#if BUILDFLAG(USE_WIN_HYBRID_SPELLCHECKER)
+#if defined(OS_WIN)
   void GetPerLanguageSuggestions(
       const base::string16& word,
       GetPerLanguageSuggestionsCallback callback) override {
     DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
     std::move(callback).Run(std::vector<std::vector<base::string16>>());
   }
-#endif  // BUILDFLAG(USE_WIN_HYBRID_SPELLCHECKER)
+#endif  // defined(OS_WIN)
+
+#endif  // BUILDFLAG(USE_BROWSER_SPELLCHECKER)
 
 #if defined(OS_ANDROID)
   // spellcheck::mojom::SpellCheckHost:
@@ -187,8 +186,7 @@ class SpellCheckBrowserTestHelper {
     if (!spell_check_hosts_.empty())
       return;
 
-    auto ui_task_runner =
-        base::CreateSingleThreadTaskRunner({content::BrowserThread::UI});
+    auto ui_task_runner = content::GetUIThreadTaskRunner({});
     ui_task_runner->PostDelayedTask(
         FROM_HERE,
         base::BindOnce(&SpellCheckBrowserTestHelper::Timeout,

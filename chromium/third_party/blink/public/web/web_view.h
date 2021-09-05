@@ -32,11 +32,11 @@
 #define THIRD_PARTY_BLINK_PUBLIC_WEB_WEB_VIEW_H_
 
 #include "base/time/time.h"
+#include "third_party/blink/public/common/page/web_drag_operation.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-shared.h"
 #include "third_party/blink/public/mojom/page/page.mojom-shared.h"
 #include "third_party/blink/public/mojom/page/page_visibility_state.mojom-shared.h"
 #include "third_party/blink/public/platform/cross_variant_mojo_util.h"
-#include "third_party/blink/public/platform/web_drag_operation.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/geometry/size.h"
@@ -120,6 +120,16 @@ class WebView {
   // detached.
   virtual void DidAttachLocalMainFrame() = 0;
 
+  // Called while the main LocalFrame is being detached. The MainFrameImpl() is
+  // still valid until after this method is called.
+  virtual void DidDetachLocalMainFrame() = 0;
+
+  // Called to inform WebViewImpl that a remote main frame has been attached.
+  virtual void DidAttachRemoteMainFrame() = 0;
+
+  // Called to inform WebViewImpl that a remote main frame has been detached.
+  virtual void DidDetachRemoteMainFrame() = 0;
+
   // Initializes the various client interfaces.
   virtual void SetPrerendererClient(WebPrerendererClient*) = 0;
 
@@ -195,14 +205,6 @@ class WebView {
   // change.
   virtual double SetZoomLevel(double) = 0;
 
-  // Returns the current text zoom factor, where 1.0 is the normal size, > 1.0
-  // is scaled up and < 1.0 is scaled down.
-  virtual float TextZoomFactor() = 0;
-
-  // Scales the text in the page by a factor of textZoomFactor.
-  // Note: this has no effect on plugins.
-  virtual float SetTextZoomFactor(float) = 0;
-
   // Gets the scale factor of the page, where 1.0 is the normal size, > 1.0
   // is scaled up, < 1.0 is scaled down.
   virtual float PageScaleFactor() const = 0;
@@ -267,6 +269,9 @@ class WebView {
 
   // Indicates that view's preferred size changes will be sent to the browser.
   virtual void EnablePreferredSizeChangedMode() = 0;
+
+  // Asks the browser process to activate this web view.
+  virtual void Focus() = 0;
 
   // Sets the ratio as computed by computePageScaleConstraints.
   // TODO(oshima): Remove this once the device scale factor implementation is
@@ -430,13 +435,6 @@ class WebView {
 
   // Freezes or unfreezes the page and all the local frames.
   virtual void SetPageFrozen(bool frozen) = 0;
-
-  // Dispatches a pagehide event, freezes a page and hooks page eviction.
-  virtual void PutPageIntoBackForwardCache() = 0;
-
-  // Unhooks eviction, resumes a page and dispatches a pageshow event.
-  virtual void RestorePageFromBackForwardCache(
-      base::TimeTicks navigation_start) = 0;
 
   // Autoplay configuration -----------------------------------------------
 

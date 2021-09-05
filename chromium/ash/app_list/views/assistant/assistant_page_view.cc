@@ -19,6 +19,7 @@
 #include "ash/assistant/util/assistant_util.h"
 #include "ash/public/cpp/app_list/app_list_config.h"
 #include "ash/public/cpp/assistant/assistant_state.h"
+#include "ash/public/cpp/assistant/controller/assistant_ui_controller.h"
 #include "ash/public/cpp/view_shadow.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "base/strings/utf_string_conversions.h"
@@ -61,10 +62,13 @@ AssistantPageView::AssistantPageView(
     assistant_controller_observer_.Add(AssistantController::Get());
 
   if (AssistantUiController::Get())  // May be |nullptr| in tests.
-    assistant_ui_model_observer_.Add(AssistantUiController::Get());
+    AssistantUiController::Get()->GetModel()->AddObserver(this);
 }
 
-AssistantPageView::~AssistantPageView() = default;
+AssistantPageView::~AssistantPageView() {
+  if (AssistantUiController::Get())
+    AssistantUiController::Get()->GetModel()->RemoveObserver(this);
+}
 
 void AssistantPageView::InitLayout() {
   SetPaintToLayer();
@@ -180,7 +184,12 @@ void AssistantPageView::OnGestureEvent(ui::GestureEvent* event) {
 void AssistantPageView::OnShown() {
   // The preferred size might be different from the previous time, so updating
   // to the correct size here.
-  SetSize(CalculatePreferredSize());
+  const gfx::Size size = CalculatePreferredSize();
+  SetSize(size);
+
+  // Our |size| may require a change in app list state in order to ensure that
+  // the AssistantPageView renders fully on screen w/o being clipped.
+  MaybeUpdateAppListState(size.height());
 }
 
 void AssistantPageView::OnAnimationStarted(AppListState from_state,
@@ -247,7 +256,7 @@ gfx::Rect AssistantPageView::GetPageBoundsForState(
 
 void AssistantPageView::OnAssistantControllerDestroying() {
   if (AssistantUiController::Get())  // May be |nullptr| in tests.
-    assistant_ui_model_observer_.Remove(AssistantUiController::Get());
+    AssistantUiController::Get()->GetModel()->RemoveObserver(this);
 
   if (AssistantController::Get())  // May be |nullptr| in tests.
     assistant_controller_observer_.Remove(AssistantController::Get());
@@ -297,13 +306,14 @@ int AssistantPageView::GetChildViewHeightForWidth(int width) const {
 void AssistantPageView::MaybeUpdateAppListState(int child_height) {
   auto* app_list_view = contents_view_->app_list_view();
   auto* widget = app_list_view->GetWidget();
+
   // |app_list_view| may not be initialized.
   if (!widget || !widget->IsVisible())
     return;
 
   // Update app list view state for |assistant_page_view_|.
-  // Embedded Assistant Ui only has two sizes. The only states change is from
-  // kPeeking to kHalf state.
+  // Embedded Assistant Ui only has two sizes. The only state change is from
+  // |kPeeking| to |kHalf| state.
   if (app_list_view->app_list_state() != AppListViewState::kPeeking)
     return;
 

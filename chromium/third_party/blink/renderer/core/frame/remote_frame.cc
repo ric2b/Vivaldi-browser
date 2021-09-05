@@ -16,6 +16,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_fullscreen_options.h"
 #include "third_party/blink/renderer/bindings/core/v8/window_proxy.h"
 #include "third_party/blink/renderer/bindings/core/v8/window_proxy_manager.h"
+#include "third_party/blink/renderer/core/events/message_event.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
@@ -24,6 +25,7 @@
 #include "third_party/blink/renderer/core/frame/remote_frame_client.h"
 #include "third_party/blink/renderer/core/frame/remote_frame_owner.h"
 #include "third_party/blink/renderer/core/frame/remote_frame_view.h"
+#include "third_party/blink/renderer/core/frame/user_activation.h"
 #include "third_party/blink/renderer/core/fullscreen/fullscreen.h"
 #include "third_party/blink/renderer/core/html/html_frame_owner_element.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
@@ -34,6 +36,7 @@
 #include "third_party/blink/renderer/core/loader/frame_load_request.h"
 #include "third_party/blink/renderer/core/loader/frame_loader.h"
 #include "third_party/blink/renderer/core/loader/mixed_content_checker.h"
+#include "third_party/blink/renderer/core/messaging/blink_transferable_message.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/page/plugin_script_forbidden_scope.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
@@ -93,9 +96,14 @@ RemoteFrame::RemoteFrame(
             frame_token,
             MakeGarbageCollected<RemoteWindowProxyManager>(*this),
             inheriting_agent_factory) {
-  auto frame_tracking_result = GetRemoteFramesMap().insert(
-      base::UnguessableTokenHash()(frame_token), this);
-  CHECK(frame_tracking_result.stored_value) << "Inserting a duplicate item.";
+  // TODO(crbug.com/1094850): Remove this check once the renderer is correctly
+  // handling errors during the creation of HTML portal elements, which would
+  // otherwise cause RemoteFrame() being created with empty frame tokens.
+  if (!frame_token.is_empty()) {
+    auto frame_tracking_result = GetRemoteFramesMap().insert(
+        base::UnguessableTokenHash()(frame_token), this);
+    CHECK(frame_tracking_result.stored_value) << "Inserting a duplicate item.";
+  }
 
   dom_window_ = MakeGarbageCollected<RemoteDOMWindow>(*this);
 
@@ -115,7 +123,7 @@ RemoteFrame::~RemoteFrame() {
   DCHECK(!view_);
 }
 
-void RemoteFrame::Trace(Visitor* visitor) {
+void RemoteFrame::Trace(Visitor* visitor) const {
   visitor->Trace(view_);
   visitor->Trace(security_context_);
   Frame::Trace(visitor);
@@ -279,7 +287,8 @@ void RemoteFrame::AddResourceTimingFromChild(
   // WorkerTimingContainer for navigation from the calling function.
   DOMWindowPerformance::performance(*owner_element->GetDocument().domWindow())
       ->AddResourceTiming(std::move(timing), owner_element->localName(),
-                          /*worker_timing_receiver=*/mojo::NullReceiver());
+                          /*worker_timing_receiver=*/mojo::NullReceiver(),
+                          owner_element->GetDocument().GetExecutionContext());
 }
 
 void RemoteFrame::DidStartLoading() {
@@ -322,8 +331,32 @@ void RemoteFrame::CreateView() {
     DeprecatedLocalOwner()->SetEmbeddedContentView(view_);
 }
 
+void RemoteFrame::ForwardPostMessage(
+    MessageEvent* message_event,
+    base::Optional<base::UnguessableToken> cluster_id,
+    scoped_refptr<const SecurityOrigin> target_security_origin,
+    LocalFrame* source_frame) {
+  base::Optional<base::UnguessableToken> source_token;
+  if (source_frame)
+    source_token = source_frame->GetFrameToken();
+
+  String source_origin = message_event->origin();
+  String target_origin = g_empty_string;
+  if (target_security_origin)
+    target_origin = target_security_origin->ToString();
+
+  GetRemoteFrameHostRemote().RouteMessageEvent(
+      source_token, source_origin, target_origin,
+      BlinkTransferableMessage::FromMessageEvent(message_event, cluster_id));
+}
+
 mojom::blink::RemoteFrameHost& RemoteFrame::GetRemoteFrameHostRemote() {
   return *remote_frame_host_remote_.get();
+}
+
+AssociatedInterfaceProvider* RemoteFrame::GetRemoteAssociatedInterfaces() {
+  DCHECK(Client());
+  return Client()->GetRemoteAssociatedInterfaces();
 }
 
 RemoteFrameClient* RemoteFrame::Client() const {
@@ -586,7 +619,7 @@ void RemoteFrame::IntrinsicSizingInfoOfChildChanged(
 
 // Update the proxy's SecurityContext with new sandbox flags or feature policy
 // that were set during navigation. Unlike changes to the FrameOwner, which are
-// handled by RenderFrameProxy::OnDidUpdateFramePolicy, these changes should be
+// handled by RemoteFrame::DidUpdateFramePolicy, these changes should be
 // considered effective immediately.
 //
 // These flags / policy are needed on the remote frame's SecurityContext to
@@ -630,6 +663,24 @@ void RemoteFrame::DidUpdateFramePolicy(const FramePolicy& frame_policy) {
   To<RemoteFrameOwner>(Owner())->SetFramePolicy(frame_policy);
 }
 
+void RemoteFrame::UpdateOpener(
+    const base::Optional<base::UnguessableToken>& opener_frame_token) {
+  if (auto* web_frame = WebFrame::FromFrame(this)) {
+    auto* opener_frame = LocalFrame::ResolveFrame(
+        opener_frame_token.value_or(base::UnguessableToken()));
+    auto* opener_web_frame = WebFrame::FromFrame(opener_frame);
+    web_frame->SetOpener(opener_web_frame);
+  }
+}
+
+void RemoteFrame::TransferUserActivationToRenderer(
+    const base::UnguessableToken& source_frame_token) {
+  RemoteFrame* source_frame = RemoteFrame::FromFrameToken(source_frame_token);
+  if (!source_frame)
+    return;
+  TransferUserActivationFrom(source_frame);
+}
+
 IntSize RemoteFrame::GetMainFrameViewportSize() const {
   HTMLFrameOwnerElement* owner = DeprecatedLocalOwner();
   DCHECK(owner);
@@ -642,6 +693,27 @@ IntPoint RemoteFrame::GetMainFrameScrollOffset() const {
   DCHECK(owner);
   DCHECK(owner->GetDocument().GetFrame());
   return owner->GetDocument().GetFrame()->GetMainFrameScrollOffset();
+}
+
+void RemoteFrame::SetOpener(Frame* opener_frame) {
+  auto* opener_web_frame = WebFrame::FromFrame(opener_frame);
+  auto* web_frame = WebFrame::FromFrame(this);
+
+  if (web_frame && web_frame->Opener() != opener_web_frame) {
+    // A proxy shouldn't normally be disowning its opener.  It is possible to
+    // get here when a proxy that is being detached clears its opener, in which
+    // case there is no need to notify the browser process.
+    if (opener_frame) {
+      // Only a LocalFrame (i.e., the caller of window.open) should be able to
+      // update another frame's opener.
+      DCHECK(opener_frame->IsLocalFrame());
+      GetRemoteFrameHostRemote().DidChangeOpener(
+          opener_frame ? base::Optional<base::UnguessableToken>(
+                             opener_frame->GetFrameToken())
+                       : base::nullopt);
+    }
+    web_frame->SetOpener(opener_web_frame);
+  }
 }
 
 bool RemoteFrame::IsIgnoredForHitTest() const {
@@ -667,13 +739,22 @@ void RemoteFrame::SetCcLayer(cc::Layer* cc_layer,
           IsIgnoredForHitTest());
     }
   }
+  HTMLFrameOwnerElement* owner = To<HTMLFrameOwnerElement>(Owner());
+  owner->SetNeedsCompositingUpdate();
 
-  To<HTMLFrameOwnerElement>(Owner())->SetNeedsCompositingUpdate();
+  if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled()) {
+    // New layers for remote frames are controlled by Blink's embedder.
+    // To ensure the new surface is painted, we need to repaint the frame
+    // owner's PaintLayer.
+    LayoutBoxModelObject* layout_object = owner->GetLayoutBoxModelObject();
+    if (layout_object && layout_object->Layer())
+      layout_object->Layer()->SetNeedsRepaint();
+  }
 }
 
 void RemoteFrame::AdvanceFocus(mojom::blink::FocusType type,
                                LocalFrame* source) {
-  Client()->AdvanceFocus(type, source);
+  GetRemoteFrameHostRemote().AdvanceFocus(type, source->GetFrameToken());
 }
 
 void RemoteFrame::DetachChildren() {

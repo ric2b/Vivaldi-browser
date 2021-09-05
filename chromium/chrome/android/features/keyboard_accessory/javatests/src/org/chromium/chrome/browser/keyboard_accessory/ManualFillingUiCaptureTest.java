@@ -4,10 +4,10 @@
 
 package org.chromium.chrome.browser.keyboard_accessory;
 
-import static android.support.test.espresso.Espresso.onView;
-import static android.support.test.espresso.contrib.RecyclerViewActions.actionOnItem;
-import static android.support.test.espresso.contrib.RecyclerViewActions.scrollTo;
-import static android.support.test.espresso.matcher.ViewMatchers.withId;
+import static androidx.test.espresso.Espresso.onView;
+import static androidx.test.espresso.contrib.RecyclerViewActions.actionOnItem;
+import static androidx.test.espresso.contrib.RecyclerViewActions.scrollTo;
+import static androidx.test.espresso.matcher.ViewMatchers.withId;
 
 import static org.chromium.base.test.util.ScalableTimeout.scaleTimeout;
 import static org.chromium.chrome.browser.keyboard_accessory.ManualFillingTestHelper.scrollToLastElement;
@@ -15,9 +15,8 @@ import static org.chromium.chrome.browser.keyboard_accessory.ManualFillingTestHe
 import static org.chromium.chrome.browser.keyboard_accessory.ManualFillingTestHelper.whenDisplayed;
 import static org.chromium.chrome.browser.keyboard_accessory.tab_layout_component.KeyboardAccessoryTabTestHelper.isKeyboardAccessoryTabLayout;
 
-import android.support.test.filters.MediumTest;
-
 import androidx.recyclerview.widget.RecyclerView;
+import androidx.test.filters.MediumTest;
 
 import org.junit.After;
 import org.junit.Rule;
@@ -26,7 +25,6 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.test.ScreenShooter;
@@ -44,7 +42,6 @@ import java.util.concurrent.TimeoutException;
  * components belong into {@link ManualFillingIntegrationTest}.
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
-@RetryOnFailure
 @EnableFeatures({ChromeFeatureList.AUTOFILL_KEYBOARD_ACCESSORY})
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class ManualFillingUiCaptureTest {

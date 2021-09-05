@@ -43,20 +43,13 @@ CanvasRenderingContext::CanvasRenderingContext(
                     CanvasColorParams::GetNativeCanvasPixelFormat(),
                     kNonOpaque),
       creation_attributes_(attrs) {
-  // Supported color spaces and pixel formats: sRGB in uint8, e-sRGB in f16,
-  // linear sRGB and p3 and rec2020 with linear gamma transfer function in f16.
-  // For wide gamut color spaces, user must explicitly request half float
-  // storage. Otherwise, we fall back to sRGB in uint8. Invalid requests fall
-  // back to sRGB in uint8 too.
-  if (creation_attributes_.pixel_format == kF16CanvasPixelFormatName) {
+  if (creation_attributes_.pixel_format == kF16CanvasPixelFormatName)
     color_params_.SetCanvasPixelFormat(CanvasPixelFormat::kF16);
-    if (creation_attributes_.color_space == kLinearRGBCanvasColorSpaceName)
-      color_params_.SetCanvasColorSpace(CanvasColorSpace::kLinearRGB);
-    if (creation_attributes_.color_space == kRec2020CanvasColorSpaceName)
-      color_params_.SetCanvasColorSpace(CanvasColorSpace::kRec2020);
-    else if (creation_attributes_.color_space == kP3CanvasColorSpaceName)
-      color_params_.SetCanvasColorSpace(CanvasColorSpace::kP3);
-  }
+
+  if (creation_attributes_.color_space == kRec2020CanvasColorSpaceName)
+    color_params_.SetCanvasColorSpace(CanvasColorSpace::kRec2020);
+  else if (creation_attributes_.color_space == kP3CanvasColorSpaceName)
+    color_params_.SetCanvasColorSpace(CanvasColorSpace::kP3);
 
   if (!creation_attributes_.alpha)
     color_params_.SetOpacityMode(kOpaque);
@@ -71,8 +64,6 @@ WTF::String CanvasRenderingContext::ColorSpaceAsString() const {
   switch (color_params_.ColorSpace()) {
     case CanvasColorSpace::kSRGB:
       return kSRGBCanvasColorSpaceName;
-    case CanvasColorSpace::kLinearRGB:
-      return kLinearRGBCanvasColorSpaceName;
     case CanvasColorSpace::kRec2020:
       return kRec2020CanvasColorSpaceName;
     case CanvasColorSpace::kP3:
@@ -177,7 +168,7 @@ bool CanvasRenderingContext::WouldTaintOrigin(CanvasImageSource* image_source) {
   return image_source->WouldTaintOrigin();
 }
 
-void CanvasRenderingContext::Trace(Visitor* visitor) {
+void CanvasRenderingContext::Trace(Visitor* visitor) const {
   visitor->Trace(host_);
   ScriptWrappable::Trace(visitor);
 }

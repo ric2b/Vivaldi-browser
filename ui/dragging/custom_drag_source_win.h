@@ -9,7 +9,6 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "ui/base/dragdrop/drag_source_win.h"
-#include "ui/base/ui_base_export.h"
 
 namespace vivaldi {
 
@@ -19,7 +18,7 @@ class OSExchangeData;
 // drag-drop operation as the user mouses over other drop targets on their
 // system. This object tells Windows whether or not the drag should continue,
 // and supplies the appropriate cursors.
-class UI_BASE_EXPORT CustomDragSourceWin : public ui::DragSourceWin {
+class COMPONENT_EXPORT(UI_BASE) CustomDragSourceWin : public ui::DragSourceWin {
  public:
   CustomDragSourceWin() = default;
   explicit CustomDragSourceWin(bool dragging_in_progress);

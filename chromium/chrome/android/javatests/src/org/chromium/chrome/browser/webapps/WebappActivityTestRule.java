@@ -4,6 +4,9 @@
 
 package org.chromium.chrome.browser.webapps;
 
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+
 import android.content.Intent;
 import android.net.Uri;
 import android.support.test.InstrumentationRegistry;
@@ -12,16 +15,17 @@ import android.view.ViewGroup;
 
 import androidx.browser.customtabs.TrustedWebUtils;
 
-import org.junit.Assert;
 import org.junit.runner.Description;
 import org.junit.runners.model.Statement;
 
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ShortcutHelper;
+import org.chromium.chrome.browser.browserservices.ui.splashscreen.SplashController;
 import org.chromium.chrome.browser.customtabs.CustomTabsTestUtils;
 import org.chromium.chrome.browser.tab.TabBrowserControlsConstraintsHelper;
 import org.chromium.chrome.test.ChromeActivityTestRule;
+import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.DOMUtils;
@@ -147,18 +151,35 @@ public class WebappActivityTestRule extends ChromeActivityTestRule<WebappActivit
      * Starts up the WebappActivity with a specific Intent and sets up the test observer.
      */
     public final void startWebappActivity(Intent intent) {
+        String startUrl = intent.getStringExtra(ShortcutHelper.EXTRA_URL);
+
         launchActivity(intent);
-        waitUntilIdle();
+
+        WebappActivity webappActivity = getActivity();
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+
+        CriteriaHelper.pollInstrumentationThread(new Criteria() {
+            @Override
+            public boolean isSatisfied() {
+                return webappActivity.getActivityTab() != null;
+            }
+        }, STARTUP_TIMEOUT, CriteriaHelper.DEFAULT_POLLING_INTERVAL);
+
+        ChromeTabUtils.waitForTabPageLoaded(webappActivity.getActivityTab(), startUrl);
+        waitUntilSplashscreenHides();
     }
 
-    public static void assertToolbarShowState(ChromeActivity activity, boolean showState) {
+    public static void assertToolbarShownMaybeHideable(ChromeActivity activity) {
         @BrowserControlsState
-        int expectedState = showState ? BrowserControlsState.SHOWN : BrowserControlsState.HIDDEN;
-        Assert.assertEquals(expectedState,
-                (int) TestThreadUtils.runOnUiThreadBlockingNoException(
-                        ()
-                                -> TabBrowserControlsConstraintsHelper.getConstraints(
-                                        activity.getActivityTab())));
+        int state = getToolbarShowState(activity);
+        assertTrue(state == BrowserControlsState.SHOWN || state == BrowserControlsState.BOTH);
+    }
+
+    public static @BrowserControlsState int getToolbarShowState(ChromeActivity activity) {
+        return TestThreadUtils.runOnUiThreadBlockingNoException(
+                ()
+                        -> TabBrowserControlsConstraintsHelper.getConstraints(
+                                activity.getActivityTab()));
     }
 
     /**
@@ -178,28 +199,6 @@ public class WebappActivityTestRule extends ChromeActivityTestRule<WebappActivit
         JavaScriptUtils.executeJavaScriptAndWaitForResult(
                 activity.getActivityTab().getWebContents(), injectedHtml);
         DOMUtils.clickNode(activity.getActivityTab().getWebContents(), "testId");
-    }
-
-    /**
-     * Waits until any loads in progress of the activity under test have completed.
-     */
-    protected void waitUntilIdle() {
-        waitUntilIdle(getActivity());
-    }
-
-    /**
-     * Waits until any loads in progress of a selected activity have completed.
-     */
-    protected void waitUntilIdle(final ChromeActivity activity) {
-        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
-        CriteriaHelper.pollInstrumentationThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return activity.getActivityTab() != null && !activity.getActivityTab().isLoading();
-            }
-        }, STARTUP_TIMEOUT, CriteriaHelper.DEFAULT_POLLING_INTERVAL);
-
-        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
     }
 
     /**
@@ -239,7 +238,7 @@ public class WebappActivityTestRule extends ChromeActivityTestRule<WebappActivit
 
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();
         View splashScreen = getSplashController(getActivity()).getSplashScreenForTests();
-        Assert.assertNotNull("No splash screen available.", splashScreen);
+        assertNotNull("No splash screen available.", splashScreen);
 
         // TODO(pkotwicz): Change return type in order to accommodate new-style WebAPKs.
         // (crbug.com/958288)

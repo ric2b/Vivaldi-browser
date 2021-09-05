@@ -17,7 +17,6 @@
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/test/task_environment.h"
-#include "chrome/browser/chromeos/input_method/mock_assistive_window_controller.h"
 #include "chrome/browser/chromeos/input_method/mock_candidate_window_controller.h"
 #include "chrome/browser/chromeos/input_method/mock_input_method_engine.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -32,9 +31,9 @@
 #include "ui/base/ime/chromeos/extension_ime_util.h"
 #include "ui/base/ime/chromeos/fake_ime_keyboard.h"
 #include "ui/base/ime/chromeos/fake_input_method_delegate.h"
+#include "ui/base/ime/chromeos/ime_bridge.h"
 #include "ui/base/ime/chromeos/mock_component_extension_ime_manager_delegate.h"
 #include "ui/base/ime/chromeos/mock_ime_engine_handler.h"
-#include "ui/base/ime/ime_bridge.h"
 #include "ui/base/ime/init/input_method_initializer.h"
 
 namespace chromeos {
@@ -135,7 +134,6 @@ class InputMethodManagerImplTest :  public BrowserWithTestWindowTest {
   InputMethodManagerImplTest()
       : delegate_(nullptr),
         candidate_window_controller_(nullptr),
-        assistive_window_controller_(nullptr),
         keyboard_(nullptr) {}
 
   ~InputMethodManagerImplTest() override = default;
@@ -147,9 +145,6 @@ class InputMethodManagerImplTest :  public BrowserWithTestWindowTest {
     manager_.reset(new InputMethodManagerImpl(
         std::unique_ptr<InputMethodDelegate>(delegate_), false));
     manager_->GetInputMethodUtil()->UpdateHardwareLayoutCache();
-    assistive_window_controller_ = new MockAssistiveWindowController;
-    manager_->SetAssistiveWindowControllerForTesting(
-        assistive_window_controller_);
     candidate_window_controller_ = new MockCandidateWindowController;
     manager_->SetCandidateWindowControllerForTesting(
         candidate_window_controller_);
@@ -180,7 +175,6 @@ class InputMethodManagerImplTest :  public BrowserWithTestWindowTest {
 
     delegate_ = nullptr;
     candidate_window_controller_ = nullptr;
-    assistive_window_controller_ = nullptr;
     keyboard_ = nullptr;
     manager_.reset();
   }
@@ -371,7 +365,6 @@ class InputMethodManagerImplTest :  public BrowserWithTestWindowTest {
   std::unique_ptr<InputMethodManagerImpl> manager_;
   FakeInputMethodDelegate* delegate_;
   MockCandidateWindowController* candidate_window_controller_;
-  MockAssistiveWindowController* assistive_window_controller_;
   std::unique_ptr<MockInputMethodEngine> mock_engine_handler_;
   FakeImeKeyboard* keyboard_;
   MockComponentExtIMEManagerDelegate* mock_delegate_;

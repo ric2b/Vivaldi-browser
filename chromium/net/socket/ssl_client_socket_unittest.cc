@@ -563,33 +563,39 @@ class MockExpectCTReporter : public TransportSecurityState::ExpectCTReporter {
   MockExpectCTReporter() : num_failures_(0) {}
   ~MockExpectCTReporter() override = default;
 
-  void OnExpectCTFailed(const HostPortPair& host_port_pair,
-                        const GURL& report_uri,
-                        base::Time expiration,
-                        const X509Certificate* validated_certificate_chain,
-                        const X509Certificate* served_certificate_chain,
-                        const SignedCertificateTimestampAndStatusList&
-                            signed_certificate_timestamps) override {
+  void OnExpectCTFailed(
+      const HostPortPair& host_port_pair,
+      const GURL& report_uri,
+      base::Time expiration,
+      const X509Certificate* validated_certificate_chain,
+      const X509Certificate* served_certificate_chain,
+      const SignedCertificateTimestampAndStatusList&
+          signed_certificate_timestamps,
+      const NetworkIsolationKey& network_isolation_key) override {
     num_failures_++;
     host_port_pair_ = host_port_pair;
     report_uri_ = report_uri;
     served_certificate_chain_ = served_certificate_chain;
     validated_certificate_chain_ = validated_certificate_chain;
     signed_certificate_timestamps_ = signed_certificate_timestamps;
+    network_isolation_key_ = network_isolation_key;
   }
 
-  const HostPortPair& host_port_pair() { return host_port_pair_; }
-  const GURL& report_uri() { return report_uri_; }
-  uint32_t num_failures() { return num_failures_; }
-  const X509Certificate* served_certificate_chain() {
+  const HostPortPair& host_port_pair() const { return host_port_pair_; }
+  const GURL& report_uri() const { return report_uri_; }
+  uint32_t num_failures() const { return num_failures_; }
+  const X509Certificate* served_certificate_chain() const {
     return served_certificate_chain_;
   }
-  const X509Certificate* validated_certificate_chain() {
+  const X509Certificate* validated_certificate_chain() const {
     return validated_certificate_chain_;
   }
-  const SignedCertificateTimestampAndStatusList&
-  signed_certificate_timestamps() {
+  const SignedCertificateTimestampAndStatusList& signed_certificate_timestamps()
+      const {
     return signed_certificate_timestamps_;
+  }
+  const NetworkIsolationKey network_isolation_key() const {
+    return network_isolation_key_;
   }
 
  private:
@@ -599,6 +605,7 @@ class MockExpectCTReporter : public TransportSecurityState::ExpectCTReporter {
   const X509Certificate* served_certificate_chain_;
   const X509Certificate* validated_certificate_chain_;
   SignedCertificateTimestampAndStatusList signed_certificate_timestamps_;
+  NetworkIsolationKey network_isolation_key_;
 };
 
 // A mock CTVerifier that records every call to Verify but doesn't verify
@@ -4172,9 +4179,9 @@ TEST_P(SSLClientSocketVersionTest, CTRequiredHistogramCompliant) {
   // Set up the Expect-CT opt-in.
   const base::Time current_time(base::Time::Now());
   const base::Time expiry = current_time + base::TimeDelta::FromSeconds(1000);
-  transport_security_state_->AddExpectCT(host_port_pair().host(), expiry,
-                                         true /* enforce */,
-                                         GURL("https://example-report.test"));
+  transport_security_state_->AddExpectCT(
+      host_port_pair().host(), expiry, true /* enforce */,
+      GURL("https://example-report.test"), NetworkIsolationKey());
   MockExpectCTReporter reporter;
   transport_security_state_->SetExpectCTReporter(&reporter);
 
@@ -4257,9 +4264,9 @@ TEST_P(SSLClientSocketVersionTest, CTRequiredHistogramNonCompliant) {
   // Set up the Expect-CT opt-in.
   const base::Time current_time(base::Time::Now());
   const base::Time expiry = current_time + base::TimeDelta::FromSeconds(1000);
-  transport_security_state_->AddExpectCT(host_port_pair().host(), expiry,
-                                         true /* enforce */,
-                                         GURL("https://example-report.test"));
+  transport_security_state_->AddExpectCT(
+      host_port_pair().host(), expiry, true /* enforce */,
+      GURL("https://example-report.test"), NetworkIsolationKey());
   MockExpectCTReporter reporter;
   transport_security_state_->SetExpectCTReporter(&reporter);
 
@@ -4301,7 +4308,8 @@ TEST_P(SSLClientSocketVersionTest, CTRequirementsFlagNotMet) {
   const base::Time current_time(base::Time::Now());
   const base::Time expiry = current_time + base::TimeDelta::FromSeconds(1000);
   transport_security_state_->AddExpectCT(host_port_pair().host(), expiry,
-                                         true /* enforce */, GURL());
+                                         true /* enforce */, GURL(),
+                                         NetworkIsolationKey());
 
   EXPECT_CALL(*ct_policy_enforcer_, CheckCompliance(server_cert.get(), _, _))
       .WillRepeatedly(
@@ -4335,7 +4343,8 @@ TEST_P(SSLClientSocketVersionTest, CTRequirementsFlagMet) {
   const base::Time current_time(base::Time::Now());
   const base::Time expiry = current_time + base::TimeDelta::FromSeconds(1000);
   transport_security_state_->AddExpectCT(host_port_pair().host(), expiry,
-                                         true /* enforce */, GURL());
+                                         true /* enforce */, GURL(),
+                                         NetworkIsolationKey());
 
   EXPECT_CALL(*ct_policy_enforcer_, CheckCompliance(server_cert.get(), _, _))
       .WillRepeatedly(
@@ -4417,11 +4426,13 @@ TEST_P(SSLClientSocketVersionTest, CTIsRequiredByExpectCT) {
   cert_verifier_->AddResultForCert(server_cert.get(), verify_result, OK);
 
   // Set up the Expect-CT opt-in.
+  NetworkIsolationKey network_isolation_key =
+      NetworkIsolationKey::CreateTransient();
   const base::Time current_time(base::Time::Now());
   const base::Time expiry = current_time + base::TimeDelta::FromSeconds(1000);
-  transport_security_state_->AddExpectCT(host_port_pair().host(), expiry,
-                                         true /* enforce */,
-                                         GURL("https://example-report.test"));
+  transport_security_state_->AddExpectCT(
+      host_port_pair().host(), expiry, true /* enforce */,
+      GURL("https://example-report.test"), NetworkIsolationKey());
   MockExpectCTReporter reporter;
   transport_security_state_->SetExpectCTReporter(&reporter);
 
@@ -4430,6 +4441,7 @@ TEST_P(SSLClientSocketVersionTest, CTIsRequiredByExpectCT) {
           Return(ct::CTPolicyCompliance::CT_POLICY_NOT_ENOUGH_SCTS));
 
   SSLConfig ssl_config;
+  ssl_config.network_isolation_key = network_isolation_key;
   int rv;
   ASSERT_TRUE(CreateAndConnectSSLClientSocket(ssl_config, &rv));
   SSLInfo ssl_info;
@@ -4446,6 +4458,7 @@ TEST_P(SSLClientSocketVersionTest, CTIsRequiredByExpectCT) {
             reporter.served_certificate_chain());
   EXPECT_EQ(ssl_info.cert.get(), reporter.validated_certificate_chain());
   EXPECT_EQ(0u, reporter.signed_certificate_timestamps().size());
+  EXPECT_EQ(network_isolation_key, reporter.network_isolation_key());
 
   transport_security_state_->ClearReportCachesForTesting();
   EXPECT_CALL(*ct_policy_enforcer_, CheckCompliance(server_cert.get(), _, _))
@@ -4465,6 +4478,7 @@ TEST_P(SSLClientSocketVersionTest, CTIsRequiredByExpectCT) {
             reporter.served_certificate_chain());
   EXPECT_EQ(ssl_info.cert.get(), reporter.validated_certificate_chain());
   EXPECT_EQ(0u, reporter.signed_certificate_timestamps().size());
+  EXPECT_EQ(network_isolation_key, reporter.network_isolation_key());
 
   // If the connection is CT compliant, then there should be no socket error nor
   // a report.
@@ -5586,6 +5600,7 @@ TEST_P(TLS13DowngradeMetricsTest, Metrics) {
 
   SSLContextConfig config;
   config.version_max = SSL_PROTOCOL_VERSION_TLS1_3;
+  config.tls13_hardening_for_local_anchors_enabled = false;
   ssl_config_service_->UpdateSSLConfigAndNotify(config);
 
   std::unique_ptr<SSLClientSocket> ssl_socket =

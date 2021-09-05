@@ -101,8 +101,7 @@ fieldset {
   z-index: 1;
 }
 
-#settings-dialog h2 {
-  font-family: 'Roboto Medium', 'Roboto', sans-serif;
+#settings-header h1 {
   font-size: 15px;
 }
 
@@ -153,7 +152,12 @@ fieldset {
   width: 100%;
 }
 
+.font-family-container {
+  position: relative;
+}
+
 select#font-family-selection {
+  -webkit-appearance: none;
   background: transparent;
   border: 1px solid silver;
   border-radius: 2px;
@@ -161,7 +165,15 @@ select#font-family-selection {
   font-family: inherit;
   font-size: inherit;
   height: 32px;
+  padding: 0 8px 0 8px;
   width: 100%;
+}
+
+#arrow-drop-down {
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  top: 4px;
 }
 
 select#font-family-selection:focus {

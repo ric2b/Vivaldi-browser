@@ -552,7 +552,7 @@ android_java_prebuilt("package_impl_fake_java") {
 }
 
 template("jar_src") {
-  action(target_name) {
+  action_with_pydeps(target_name) {
     _rebased_src_search_dirs =
         rebase_path(invoker.src_search_dirs, root_build_dir)
 
@@ -731,7 +731,7 @@ android_java_prebuilt("repackage_native_java") {
 
   # Since only the unprocessed jar is used, no need to complete the bytecode
   # processing steps.
-  enable_bytecode_rewriter = false
+  enable_bytecode_checks = false
   deps = [ ":repackage_native_impl" ]
 }
 
@@ -767,9 +767,11 @@ if (!is_component_build) {
     min_sdk_version = _cronet_min_sdk_version
     sources = [ "sample/javatests/src/org/chromium/cronet_sample_apk/CronetSampleTest.java" ]
     deps = [
+      ":cronet_sample_apk_java",
+      "//third_party/android_deps:androidx_test_runner_java",
+      "//third_party/android_deps:espresso_java",
       "//third_party/android_support_test_runner:rules_java",
       "//third_party/android_support_test_runner:runner_java",
-      "//third_party/espresso:espresso_all_java",
       "//third_party/junit",
     ]
 
@@ -1109,6 +1111,7 @@ if (!is_component_build) {
       "cronet_smoketests_missing_native_library_instrumentation_apk") {
     apk_name = "MissingNativeLibrarySmokeTestInstrumentation"
     android_manifest = "test/javatests/AndroidManifest.xml"
+    min_sdk_version = _cronet_min_sdk_version
 
     sources = cronet_smoketests_native_common_srcs + [ "test/smoketests/src/org/chromium/net/smoke/MissingNativeLibraryTest.java" ]
     deps = [
@@ -1178,6 +1181,7 @@ if (!is_component_build) {
   }
 
   test("cronet_unittests_android") {
+    min_sdk_version = _cronet_min_sdk_version
     deps = [
       ":cronet_impl_native_base_java",
       ":cronet_static",
@@ -1203,6 +1207,7 @@ if (!is_component_build) {
   }
 
   test("cronet_tests_android") {
+    min_sdk_version = _cronet_min_sdk_version
     deps = [
       ":cronet_impl_native_base_java",
       ":cronet_static",
@@ -1295,7 +1300,7 @@ if (!is_component_build) {
     ]
   }
 
-  action("generate_javadoc") {
+  action_with_pydeps("generate_javadoc") {
     script = "//components/cronet/tools/generate_javadoc.py"
     depfile = "$target_gen_dir/$target_name.d"
     _zip_file = "$target_gen_dir/$target_name.zip"
@@ -1468,23 +1473,20 @@ if (!is_component_build) {
   action("api_static_checks") {
     script = "//components/cronet/tools/api_static_checks.py"
     outputs = [ "$target_gen_dir/$target_name.stamp" ]
+    _api_jar =
+        "$root_build_dir/lib.java/components/cronet/android/cronet_api_java.jar"
+    _common_jar = "$root_build_dir/lib.java/components/cronet/android/cronet_impl_common_base_java.jar"
+    _platform_jar = "$root_build_dir/lib.java/components/cronet/android/cronet_impl_platform_base_java.jar"
+    _native_jar = "$root_build_dir/lib.java/components/cronet/android/cronet_impl_native_base_java.jar"
     args = [
       "--api_jar",
-      rebase_path(
-          "$root_out_dir/lib.java/components/cronet/android/cronet_api_java.jar",
-          root_build_dir),
+      rebase_path(_api_jar, root_build_dir),
       "--impl_jar",
-      rebase_path(
-          "$root_out_dir/lib.java/components/cronet/android/cronet_impl_common_base_java.jar",
-          root_build_dir),
+      rebase_path(_common_jar, root_build_dir),
       "--impl_jar",
-      rebase_path(
-          "$root_out_dir/lib.java/components/cronet/android/cronet_impl_platform_base_java.jar",
-          root_build_dir),
+      rebase_path(_platform_jar, root_build_dir),
       "--impl_jar",
-      rebase_path(
-          "$root_out_dir/lib.java/components/cronet/android/cronet_impl_native_base_java.jar",
-          root_build_dir),
+      rebase_path(_native_jar, root_build_dir),
       "--stamp",
       rebase_path(outputs[0], root_build_dir),
     ]
@@ -1494,7 +1496,13 @@ if (!is_component_build) {
       ":cronet_impl_native_base_java",
       ":cronet_impl_platform_base_java",
     ]
-    inputs = [ "//components/cronet/tools/update_api.py" ]
+    inputs = [
+      _api_jar,
+      _common_jar,
+      _platform_jar,
+      _native_jar,
+      "//components/cronet/tools/update_api.py",
+    ]
     sources = [
       "//components/cronet/android/api.txt",
       "//components/cronet/android/api_version.txt",

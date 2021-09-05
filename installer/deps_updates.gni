@@ -6,6 +6,7 @@ if (is_win) {
       "//components/version_info",
       "//vivaldi/installer/win:dpi_aware_exe_manifest"
     ]
+    libs += [ "comctl32.lib" ]
   }
 }
 

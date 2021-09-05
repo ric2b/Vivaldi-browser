@@ -10,6 +10,7 @@
 #include "third_party/blink/renderer/core/paint/decoration_info.h"
 #include "third_party/blink/renderer/core/paint/text_paint_style.h"
 #include "third_party/blink/renderer/core/style/applied_text_decoration.h"
+#include "third_party/blink/renderer/core/style/text_decoration_thickness.h"
 #include "third_party/blink/renderer/platform/fonts/font.h"
 #include "third_party/blink/renderer/platform/graphics/color.h"
 #include "third_party/blink/renderer/platform/transforms/affine_transform.h"
@@ -64,6 +65,7 @@ class CORE_EXPORT TextPainterBase {
   void PaintDecorationUnderOrOverLine(GraphicsContext&,
                                       const DecorationInfo&,
                                       const AppliedTextDecoration&,
+                                      size_t decoration_info_thickness_index,
                                       int line_offset,
                                       float decoration_offset);
 
@@ -74,6 +76,12 @@ class CORE_EXPORT TextPainterBase {
                              FontBaseline,
                              const ComputedStyle&,
                              const ComputedStyle* decorating_box_style);
+
+  float ComputeUnderlineThickness(
+      const ResolvedUnderlinePosition& underline_position,
+      const TextDecorationThickness& applied_decoration_thickness,
+      const ComputedStyle&,
+      const ComputedStyle* decorating_box_style);
 
   static Color TextColorForWhiteBackground(Color);
   static TextPaintStyle TextPaintingStyle(const Document&,

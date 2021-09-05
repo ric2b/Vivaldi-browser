@@ -38,7 +38,6 @@
 <translation id="1603914832182249871">(Privat)</translation>
 <translation id="1620510694547887537">Kamera</translation>
 <translation id="1627276047960621195">Fildeskriptorar</translation>
-<translation id="1635033183663317347">Installert av verjen din.</translation>
 <translation id="1682548588986054654">Nytt privatvindauge</translation>
 <translation id="1698122934742150150">Berre den gjeldande privatøkta</translation>
 <translation id="1706625117072057435">Skaleringsnivå</translation>
@@ -55,6 +54,7 @@
 <translation id="1886996562706621347">La nettstadar få lov til å spørja om å verta standard protokollhandterarar (tilrådd)</translation>
 <translation id="1901303067676059328">Vel &amp;alle</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
+<translation id="1936931585862840749">Bruk eit tal for å visa kor mange kopiar som skal skrivast ut (1 to <ph name= "MAX_COPIES" />).</translation>
 <translation id="1963227389609234879">Fjern alt</translation>
 <translation id="1994173015038366702">Nettstadadresse</translation>
 <translation id="2019718679933488176">Opna ly&amp;dfila i ei ny fane</translation>
@@ -169,7 +169,6 @@
 <translation id="3678156199662914018">Utviding: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> Skjermdelingsførespurnad</translation>
 <translation id="3711931198657368127">Lim &amp;inn og gå til <ph name="URL" /></translation>
-<translation id="3725367690636977613">sider</translation>
 <translation id="3727187387656390258">Inspeksjonsmeny</translation>
 <translation id="3744111561329211289">Bakgrunnssynk</translation>
 <translation id="3760460896538743390">Inspiser &amp;bakgrunnssida</translation>
@@ -197,7 +196,6 @@
 
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4088095054444612037">Godta for gruppa</translation>
-<translation id="4091434297613116013">papirark</translation>
 <translation id="4096508467498758490">Slå av utviklarmodus-utvidingar</translation>
 <translation id="4100839878934973028">Eit anna program på maskina di la til ein app som kanskje endrar måten Vivaldi oppfører seg på.</translation>
 <translation id="4109898769411476438">Lukk nettlesar før du importerer</translation>
@@ -431,7 +429,6 @@ Ta godt vare på nøkkelfila. Du treng ho for å kunna laga nye utgåver av utvi
 <translation id="8071432093239591881">Skriv ut som bilde</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />kB</translation>
 <translation id="8137559199583651773">Utvidingsstyring</translation>
-<translation id="8180239481735238521">side</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {Nedlasting er i gang} other {Nedlastingar er i gang}}</translation>
 <translation id="8230134520748321204">Lagra passordet for <ph name="ORIGIN" />?</translation>
@@ -464,7 +461,6 @@ Ta godt vare på nøkkelfila. Du treng ho for å kunna laga nye utgåver av utvi
 <translation id="8798099450830957504">Standard</translation>
 <translation id="8800004011501252845">Syner mål for</translation>
 <translation id="8808478386290700967">Nettbutikk</translation>
-<translation id="8813811964357448561">papirark</translation>
 <translation id="8823514049557262177">Kopier lenkje&amp;teksten</translation>
 <translation id="8823704566850948458">Foreslå passord …</translation>
 <translation id="8859174528519900719">Underramme: <ph name="SUBFRAME_SITE" /></translation>

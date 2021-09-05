@@ -50,8 +50,19 @@ const char kMainNotesTag[] = "main_notes";
 const char kOtherNotesTag[] = "other_notes";
 const char kTrashNotesTag[] = "trash_notes";
 
+// The value must be a list since there is a container using pointers to its
+// elements.
 using UpdatesPerParentId =
-    std::unordered_map<std::string, syncer::UpdateResponseDataList>;
+    std::unordered_map<std::string, std::list<syncer::UpdateResponseData>>;
+
+enum class NotesGUIDDuplicates {
+  // Both entities are notes.
+  kBothNotes = 0,
+  // Both entities are folders.
+  kBothFolders = 1,
+  // Entities have different types.
+  kDifferentTypes = 2,
+};
 
 // Gets the note node corresponding to a permanent folder identified by
 // |server_defined_unique_tag|. |notes_model| must not be null.
@@ -117,34 +128,112 @@ bool NodeSemanticsMatch(const vivaldi::NoteNode* local_node,
          local_node->GetContent() == base::UTF8ToUTF16(specifics.content());
 }
 
-// Goes through remote updates to detect duplicate GUIDs, which cannot exist
-// because GUIDs are guaranteed to match the originator client item ID (handled
-// in GroupValidUpdatesByParentId()) and duplicates of originator client item
-// ID are sorted out by ModelTypeWorker.
-void CheckNoDuplicatesInRemoteGUIDs(
-    const UpdatesPerParentId& updates_per_parent_id) {
-#if DCHECK_IS_ON()
-  std::unordered_map<std::string, std::string> guid_to_sync_id;
+NotesGUIDDuplicates MatchNotesGUIDDuplicates(
+    const UpdateResponseData& update,
+    const UpdateResponseData& duplicate_update) {
+  if (update.entity.is_folder != duplicate_update.entity.is_folder) {
+    return NotesGUIDDuplicates::kDifferentTypes;
+  }
+  if (update.entity.is_folder) {
+    return NotesGUIDDuplicates::kBothFolders;
+  }
+  return NotesGUIDDuplicates::kBothNotes;
+}
 
-  for (const auto& parent_id_and_updates : updates_per_parent_id) {
-    for (const UpdateResponseData& update : parent_id_and_updates.second) {
-      // |originator_client_item_id| is empty for permanent nodes.
-      if (update.entity.is_deleted() ||
-          !update.entity.server_defined_unique_tag.empty()) {
-        continue;
-      }
+void ReparentAllChildren(const std::string& from_parent_id,
+                         const std::string& to_parent_id,
+                         UpdatesPerParentId* updates_per_parent_id) {
+  // Any of parents may be empty.
+  auto from_parent_updates_iter = updates_per_parent_id->find(from_parent_id);
+  if (from_parent_updates_iter == updates_per_parent_id->end()) {
+    // There is nothing to merge.
+    return;
+  }
+
+  // Update parent ids for all entities before moving.
+  for (auto& update : from_parent_updates_iter->second) {
+    DCHECK_EQ(update.entity.parent_id, from_parent_id);
+    update.entity.parent_id = to_parent_id;
+  }
+
+  // Move all elements to a new parent (create one if it didn't exist).
+  (*updates_per_parent_id)[to_parent_id].splice(
+      (*updates_per_parent_id)[to_parent_id].end(),
+      from_parent_updates_iter->second);
+  updates_per_parent_id->erase(from_parent_id);
+
+  // No need to update iterators since splice doesn't invalidate them.
+}
+
+void DeduplicateValidUpdatesByGUID(UpdatesPerParentId* updates_per_parent_id) {
+  DCHECK(updates_per_parent_id);
+
+  std::unordered_map<std::string, std::list<UpdateResponseData>::iterator>
+      guid_to_update;
+
+  // Removing data in a separate loop helps easier merge parents since one of
+  // them may have already been processed.
+  std::list<std::list<UpdateResponseData>::iterator> updates_to_remove;
+  for (auto& parent_id_and_updates : *updates_per_parent_id) {
+    std::list<UpdateResponseData>* updates = &parent_id_and_updates.second;
+    for (auto updates_iter = updates->begin(); updates_iter != updates->end();
+         ++updates_iter) {
+      const UpdateResponseData& update = *updates_iter;
+      DCHECK(!update.entity.is_deleted());
 
       const std::string& guid_in_specifics =
           update.entity.specifics.notes().guid();
+      DCHECK(!guid_in_specifics.empty());
 
       auto it_and_success =
-          guid_to_sync_id.emplace(guid_in_specifics, update.entity.id);
-      DCHECK(it_and_success.second)
-          << " for new sync ID " << update.entity.id << " and original sync ID "
-          << it_and_success.first->second;
+          guid_to_update.emplace(guid_in_specifics, updates_iter);
+      if (it_and_success.second) {
+        continue;
+      }
+      const UpdateResponseData& duplicate_update =
+          *it_and_success.first->second;
+      DCHECK_EQ(guid_in_specifics,
+                duplicate_update.entity.specifics.notes().guid());
+      DLOG(ERROR) << "Duplicate guid for new sync ID " << update.entity.id
+                  << " and original sync ID " << duplicate_update.entity.id;
+      const NotesGUIDDuplicates match_result =
+          MatchNotesGUIDDuplicates(update, duplicate_update);
+      if (match_result == NotesGUIDDuplicates::kDifferentTypes ||
+          !base::FeatureList::IsEnabled(
+              switches::kSyncDeduplicateAllBookmarksWithSameGUID)) {
+        // There shouldn't be cases with different types for duplicate
+        // entities.
+        continue;
+      }
+
+      // Choose the latest element to keep.
+      if (update.entity.creation_time > duplicate_update.entity.creation_time) {
+        updates_to_remove.push_back(it_and_success.first->second);
+        // Update |guid_to_update| to find a duplicate folder and merge them.
+        guid_to_update[guid_in_specifics] = updates_iter;
+      } else {
+        updates_to_remove.push_back(updates_iter);
+      }
     }
   }
-#endif  // DCHECK_IS_ON()
+
+  for (std::list<UpdateResponseData>::iterator updates_iter :
+       updates_to_remove) {
+    if (updates_iter->entity.is_folder) {
+      const std::string& guid = updates_iter->entity.specifics.notes().guid();
+      DCHECK_EQ(1U, guid_to_update.count(guid));
+      DCHECK(guid_to_update[guid] != updates_iter);
+      // Merge doesn't affect iterators.
+      ReparentAllChildren(
+          /*from_parent_id=*/updates_iter->entity.id,
+          /*to_parent_id=*/guid_to_update[guid]->entity.id,
+          updates_per_parent_id);
+    }
+
+    const std::string& parent_id = updates_iter->entity.parent_id;
+    DCHECK_EQ(1U, updates_per_parent_id->count(parent_id));
+    (*updates_per_parent_id)[parent_id].erase(updates_iter);
+  }
 }
 
 // Groups all valid updates by the server ID of their parent and moves them away
@@ -308,6 +397,13 @@ void NoteModelMerger::Merge() {
     MergeSubtree(/*local_subtree_root=*/permanent_folder,
                  /*remote_node=*/tree_tag_and_root.second);
   }
+
+  if (base::FeatureList::IsEnabled(switches::kSyncReuploadBookmarkFullTitles)) {
+    // When the reupload feature is enabled, all new empty trackers are
+    // automatically reuploaded (since there are no entities to reupload). This
+    // is used to disable reupload after initial merge.
+    note_tracker_->SetNotesFullTitleReuploaded();
+  }
 }
 
 // static
@@ -318,7 +414,7 @@ NoteModelMerger::RemoteForest NoteModelMerger::BuildRemoteForest(
   UpdatesPerParentId updates_per_parent_id =
       GroupValidUpdatesByParentId(&updates);
 
-  CheckNoDuplicatesInRemoteGUIDs(updates_per_parent_id);
+  DeduplicateValidUpdatesByGUID(&updates_per_parent_id);
 
   // Construct one tree per permanent entity.
   RemoteForest update_forest;
@@ -541,6 +637,9 @@ NoteModelMerger::UpdateNoteNodeFromSpecificsIncludingGUID(
     possibly_replaced_local_node =
         ReplaceNoteNodeGUID(local_node, specifics.guid(), notes_model_);
 
+    // TODO(rushans): remove the code below since DCHECKs above guarantee that
+    // |guid_to_match_map_| has no such GUID.
+    //
     // Update |guid_to_match_map_| to avoid pointing to a deleted node. This
     // should not be required in practice, because the algorithm processes each
     // GUID once, but let's update nevertheless to avoid future issues.

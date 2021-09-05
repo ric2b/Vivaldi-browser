@@ -15,7 +15,6 @@
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/task/post_task.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/default_clock.h"
@@ -600,8 +599,8 @@ base::FilePath OfflinePageRequestHandlerTest::CreateFileWithContent(
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   base::RunLoop run_loop;
-  base::PostTask(
-      FROM_HERE, {content::BrowserThread::IO},
+  content::GetIOThreadTaskRunner({})->PostTask(
+      FROM_HERE,
       base::BindOnce(&OfflinePageRequestHandlerTest::CreateFileWithContentOnIO,
                      base::Unretained(this), content, run_loop.QuitClosure()));
   run_loop.Run();
@@ -851,8 +850,8 @@ int64_t OfflinePageRequestHandlerTest::SavePage(const GURL& url,
   save_page_params.original_url = original_url;
   OfflinePageModelFactory::GetForBrowserContext(profile())->SavePage(
       save_page_params, std::move(archiver), nullptr,
-      base::Bind(&OfflinePageRequestHandlerTest::OnSavePageDone,
-                 base::Unretained(this)));
+      base::BindOnce(&OfflinePageRequestHandlerTest::OnSavePageDone,
+                     base::Unretained(this)));
   WaitForAsyncOperation();
   return last_offline_id_;
 }
@@ -902,8 +901,8 @@ void OfflinePageRequestHandlerTest::OnSavePageDone(SavePageResult result,
 OfflinePageItem OfflinePageRequestHandlerTest::GetPage(int64_t offline_id) {
   OfflinePageModelFactory::GetForBrowserContext(profile())->GetPageByOfflineId(
       offline_id,
-      base::Bind(&OfflinePageRequestHandlerTest::OnGetPageByOfflineIdDone,
-                 base::Unretained(this)));
+      base::BindOnce(&OfflinePageRequestHandlerTest::OnGetPageByOfflineIdDone,
+                     base::Unretained(this)));
   RunUntilIdle();
   return page_;
 }

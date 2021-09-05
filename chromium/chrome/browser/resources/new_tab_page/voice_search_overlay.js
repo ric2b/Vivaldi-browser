@@ -5,6 +5,7 @@
 import 'chrome://resources/polymer/v3_0/iron-pages/iron-pages.js';
 import 'chrome://resources/polymer/v3_0/iron-selector/iron-selector.js';
 import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
+import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
 
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
@@ -90,20 +91,9 @@ const State = {
   RESULT_FINAL: 5,
 };
 
-/**
- * The set of possible recognition errors.
- * @enum {!number}
- */
-const Error = {
-  ABORTED: 0,
-  NO_SPEECH: 1,
-  AUDIO_CAPTURE: 2,
-  NETWORK: 3,
-  NOT_ALLOWED: 4,
-  LANGUAGE_NOT_SUPPORTED: 5,
-  NO_MATCH: 6,
-  OTHER: 7,
-};
+
+/** @typedef {newTabPage.mojom.VoiceSearchError} */
+const Error = newTabPage.mojom.VoiceSearchError;
 
 /**
  * Returns the error type based on the error string received from the webkit
@@ -125,8 +115,11 @@ function toError(webkitError) {
     case 'no-speech':
       return Error.NO_SPEECH;
     case 'not-allowed':
-    case 'service-not-allowed':
       return Error.NOT_ALLOWED;
+    case 'service-not-allowed':
+      return Error.SERVICE_NOT_ALLOWED;
+    case 'bad-grammar':
+      return Error.BAD_GRAMMAR;
     default:
       return Error.OTHER;
   }
@@ -201,6 +194,8 @@ class VoiceSearchOverlayElement extends PolymerElement {
 
   constructor() {
     super();
+    /** @private {newTabPage.mojom.PageHandlerRemote} */
+    this.pageHandler_ = BrowserProxy.getInstance().handler;
     /** @private {webkitSpeechRecognition} */
     this.voiceRecognition_ = new webkitSpeechRecognition();
     this.voiceRecognition_.continuous = false;
@@ -243,19 +238,71 @@ class VoiceSearchOverlayElement extends PolymerElement {
   /** @private */
   onOverlayClick_() {
     this.$.dialog.close();
+    this.pageHandler_.onVoiceSearchAction(
+        newTabPage.mojom.VoiceSearchAction.CLOSE_OVERLAY);
+  }
+
+  /**
+   * Handles <ENTER> or <SPACE> to trigger a query if we have recognized speech.
+   * @param {KeyboardEvent} e
+   * @private
+   */
+  onOverlayKeydown_(e) {
+    if (['Enter', ' '].includes(e.key) && this.finalResult_) {
+      this.onFinalResult_();
+    } else if (e.key === 'Escape') {
+      this.onOverlayClick_();
+    }
+  }
+
+  /**
+   * Handles <ENTER> or <SPACE> to simulate click.
+   * @param {KeyboardEvent} e
+   * @private
+   */
+  onLinkKeydown_(e) {
+    if (!['Enter', ' '].includes(e.key)) {
+      return;
+    }
+    // Otherwise, we may trigger overlay-wide keyboard shortcuts.
+    e.stopPropagation();
+    // Otherwise, we open the link twice.
+    e.preventDefault();
+    e.target.click();
+  }
+
+  /** @private */
+  onLearnMoreClick_() {
+    this.pageHandler_.onVoiceSearchAction(
+        newTabPage.mojom.VoiceSearchAction.SUPPORT_LINK_CLICKED);
   }
 
   /**
    * @param {!Event} e
    * @private
    */
-  onRetryClick_(e) {
+  onTryAgainClick_(e) {
+    // Otherwise, we close the overlay.
+    e.stopPropagation();
+    this.start();
+    this.pageHandler_.onVoiceSearchAction(
+        newTabPage.mojom.VoiceSearchAction.TRY_AGAIN_LINK);
+  }
+
+  /**
+   * @param {!Event} e
+   * @private
+   */
+  onMicClick_(e) {
     if (this.state_ !== State.ERROR_RECEIVED ||
         this.error_ !== Error.NO_MATCH) {
       return;
     }
+    // Otherwise, we close the overlay.
     e.stopPropagation();
     this.start();
+    this.pageHandler_.onVoiceSearchAction(
+        newTabPage.mojom.VoiceSearchAction.TRY_AGAIN_MIC_BUTTON);
   }
 
   /** @private */
@@ -286,8 +333,9 @@ class VoiceSearchOverlayElement extends PolymerElement {
    */
   resetErrorTimer_(duration) {
     BrowserProxy.getInstance().clearTimeout(this.timerId_);
-    this.timerId_ = BrowserProxy.getInstance().setTimeout(
-        this.onOverlayClick_.bind(this), duration);
+    this.timerId_ = BrowserProxy.getInstance().setTimeout(() => {
+      this.$.dialog.close();
+    }, duration);
   }
 
   /** @private */
@@ -376,6 +424,8 @@ class VoiceSearchOverlayElement extends PolymerElement {
     const queryUrl =
         new URL('/search', loadTimeData.getString('googleBaseUrl'));
     queryUrl.search = searchParams.toString();
+    this.pageHandler_.onVoiceSearchAction(
+        newTabPage.mojom.VoiceSearchAction.QUERY_SUBMITTED);
     BrowserProxy.getInstance().navigate(queryUrl.href);
   }
 
@@ -406,6 +456,7 @@ class VoiceSearchOverlayElement extends PolymerElement {
    * @private
    */
   onError_(error) {
+    this.pageHandler_.onVoiceSearchError(error);
     if (error === Error.ABORTED) {
       // We are in the process of closing voice search.
       return;
@@ -457,12 +508,39 @@ class VoiceSearchOverlayElement extends PolymerElement {
    * @return {string}
    * @private
    */
+  getErrorText_() {
+    switch (this.error_) {
+      case Error.NO_SPEECH:
+        return 'no-speech';
+      case Error.AUDIO_CAPTURE:
+        return 'audio-capture';
+      case Error.NETWORK:
+        return 'network';
+      case Error.NOT_ALLOWED:
+      case Error.SERVICE_NOT_ALLOWED:
+        return 'not-allowed';
+      case Error.LANGUAGE_NOT_SUPPORTED:
+        return 'language-not-supported';
+      case Error.NO_MATCH:
+        return 'no-match';
+      case Error.ABORTED:
+      case Error.OTHER:
+      default:
+        return 'other';
+    }
+  }
+
+  /**
+   * @return {string}
+   * @private
+   */
   getErrorLink_() {
     switch (this.error_) {
       case Error.NO_SPEECH:
       case Error.AUDIO_CAPTURE:
         return 'learn-more';
       case Error.NOT_ALLOWED:
+      case Error.SERVICE_NOT_ALLOWED:
         return 'details';
       case Error.NO_MATCH:
         return 'try-again';

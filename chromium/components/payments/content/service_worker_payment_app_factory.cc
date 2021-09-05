@@ -10,7 +10,6 @@
 #include "base/bind.h"
 #include "base/check_op.h"
 #include "base/memory/weak_ptr.h"
-#include "components/payments/content/content_payment_request_delegate.h"
 #include "components/payments/content/payment_manifest_web_data_service.h"
 #include "components/payments/content/service_worker_payment_app.h"
 #include "components/payments/content/service_worker_payment_app_finder.h"
@@ -56,22 +55,15 @@ class ServiceWorkerPaymentAppCreator {
       FinishAndCleanup();
       return;
     }
-
-    if (delegate_->SkipCreatingNativePaymentApps()) {
-      delegate_->OnCreatingNativePaymentAppsSkipped(
-          std::move(apps), std::move(installable_apps));
-      FinishAndCleanup();
-      return;
-    }
+    base::RepeatingClosure show_processing_spinner = base::BindRepeating(
+        &PaymentAppFactory::Delegate::ShowProcessingSpinner, delegate_);
 
     for (auto& installed_app : apps) {
       auto app = std::make_unique<ServiceWorkerPaymentApp>(
-          delegate_->GetWebContents()->GetBrowserContext(),
-          delegate_->GetTopOrigin(), delegate_->GetFrameOrigin(),
-          delegate_->GetSpec(), std::move(installed_app.second),
-          delegate_->GetPaymentRequestDelegate(),
-          base::BindRepeating(
-              &PaymentAppFactory::Delegate::OnPaymentAppInstalled, delegate_));
+          delegate_->GetWebContents(), delegate_->GetTopOrigin(),
+          delegate_->GetFrameOrigin(), delegate_->GetSpec(),
+          std::move(installed_app.second), delegate_->IsOffTheRecord(),
+          show_processing_spinner);
       app->ValidateCanMakePayment(base::BindOnce(
           &ServiceWorkerPaymentAppCreator::OnSWPaymentAppValidated,
           weak_ptr_factory_.GetWeakPtr()));
@@ -84,9 +76,7 @@ class ServiceWorkerPaymentAppCreator {
           delegate_->GetWebContents(), delegate_->GetTopOrigin(),
           delegate_->GetFrameOrigin(), delegate_->GetSpec(),
           std::move(installable_app.second), installable_app.first.spec(),
-          delegate_->GetPaymentRequestDelegate(),
-          base::BindRepeating(
-              &PaymentAppFactory::Delegate::OnPaymentAppInstalled, delegate_));
+          delegate_->IsOffTheRecord(), show_processing_spinner);
       app->ValidateCanMakePayment(base::BindOnce(
           &ServiceWorkerPaymentAppCreator::OnSWPaymentAppValidated,
           weak_ptr_factory_.GetWeakPtr()));
@@ -145,18 +135,19 @@ void ServiceWorkerPaymentAppFactory::Create(base::WeakPtr<Delegate> delegate) {
   ServiceWorkerPaymentAppCreator* creator_raw_pointer = creator.get();
   creators_[creator_raw_pointer] = std::move(creator);
 
-  ServiceWorkerPaymentAppFinder::GetInstance()->GetAllPaymentApps(
-      delegate->GetFrameSecurityOrigin(),
-      delegate->GetInitiatorRenderFrameHost(), delegate->GetWebContents(),
-      delegate->GetPaymentManifestWebDataService(),
-      Clone(delegate->GetMethodData()),
-      delegate->MayCrawlForInstallablePaymentApps(),
-      base::BindOnce(&ServiceWorkerPaymentAppCreator::CreatePaymentApps,
-                     creator_raw_pointer->GetWeakPtr()),
-      base::BindOnce([]() {
-        // Nothing needs to be done after writing cache. This callback is used
-        // only in tests.
-      }));
+  ServiceWorkerPaymentAppFinder::GetOrCreateForCurrentDocument(
+      delegate->GetInitiatorRenderFrameHost())
+      ->GetAllPaymentApps(
+          delegate->GetFrameSecurityOrigin(),
+          delegate->GetPaymentManifestWebDataService(),
+          Clone(delegate->GetMethodData()),
+          delegate->MayCrawlForInstallablePaymentApps(),
+          base::BindOnce(&ServiceWorkerPaymentAppCreator::CreatePaymentApps,
+                         creator_raw_pointer->GetWeakPtr()),
+          base::BindOnce([]() {
+            // Nothing needs to be done after writing cache. This callback is
+            // used only in tests.
+          }));
 }
 
 void ServiceWorkerPaymentAppFactory::DeleteCreator(

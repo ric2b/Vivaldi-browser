@@ -863,6 +863,22 @@ class DeviceStatusCollectorState : public StatusCollectorState {
             disk_info_out->set_model(storage->name);
             disk_info_out->set_type(storage->type);
             disk_info_out->set_size(storage->size);
+            disk_info_out->set_bytes_read_since_last_boot(
+                storage->bytes_read_since_last_boot);
+            disk_info_out->set_bytes_written_since_last_boot(
+                storage->bytes_written_since_last_boot);
+            disk_info_out->set_read_time_seconds_since_last_boot(
+                storage->read_time_seconds_since_last_boot);
+            disk_info_out->set_write_time_seconds_since_last_boot(
+                storage->write_time_seconds_since_last_boot);
+            disk_info_out->set_io_time_seconds_since_last_boot(
+                storage->io_time_seconds_since_last_boot);
+            const auto& discard_time =
+                storage->discard_time_seconds_since_last_boot;
+            if (!discard_time.is_null()) {
+              disk_info_out->set_discard_time_seconds_since_last_boot(
+                  discard_time->value);
+            }
           }
           break;
         }
@@ -1098,6 +1114,32 @@ class DeviceStatusCollectorState : public StatusCollectorState {
         }
       }
     }
+
+    // Process Bluetooth result.
+    const auto& bluetooth_result = probe_result->bluetooth_result;
+    if (!bluetooth_result.is_null()) {
+      switch (bluetooth_result->which()) {
+        case cros_healthd::BluetoothResult::Tag::ERROR: {
+          LOG(ERROR) << "cros_healthd: Error getting Bluetooth info: "
+                     << bluetooth_result->get_error()->msg;
+          break;
+        }
+
+        case cros_healthd::BluetoothResult::Tag::BLUETOOTH_ADAPTER_INFO: {
+          for (const auto& adapter :
+               bluetooth_result->get_bluetooth_adapter_info()) {
+            em::BluetoothAdapterInfo* const adapter_info_out =
+                response_params_.device_status->add_bluetooth_adapter_info();
+            adapter_info_out->set_name(adapter->name);
+            adapter_info_out->set_address(adapter->address);
+            adapter_info_out->set_powered(adapter->powered);
+            adapter_info_out->set_num_connected_devices(
+                adapter->num_connected_devices);
+          }
+          break;
+        }
+      }
+    }
   }
 
   void OnEMMCLifetimeReceived(const em::DiskLifetimeEstimation& est) {
@@ -1173,8 +1215,9 @@ DeviceStatusCollector::DeviceStatusCollector(
     const StatefulPartitionInfoFetcher& stateful_partition_info_fetcher,
     const CrosHealthdDataFetcher& cros_healthd_data_fetcher,
     const GraphicsStatusFetcher& graphics_status_fetcher,
-    const CrashReportInfoFetcher& crash_report_info_fetcher)
-    : StatusCollector(provider, chromeos::CrosSettings::Get()),
+    const CrashReportInfoFetcher& crash_report_info_fetcher,
+    base::Clock* clock)
+    : StatusCollector(provider, chromeos::CrosSettings::Get(), clock),
       pref_service_(pref_service),
       firmware_fetch_error_(kFirmwareNotInitialized),
       volume_info_fetcher_(volume_info_fetcher),
@@ -1187,7 +1230,8 @@ DeviceStatusCollector::DeviceStatusCollector(
       cros_healthd_data_fetcher_(cros_healthd_data_fetcher),
       graphics_status_fetcher_(graphics_status_fetcher),
       crash_report_info_fetcher_(crash_report_info_fetcher),
-      power_manager_(chromeos::PowerManagerClient::Get()) {
+      power_manager_(chromeos::PowerManagerClient::Get()),
+      app_info_generator_(kMaxStoredPastActivityInterval, clock_) {
   // protected fields of `StatusCollector`.
   max_stored_past_activity_interval_ = kMaxStoredPastActivityInterval;
   max_stored_future_activity_interval_ = kMaxStoredFutureActivityInterval;
@@ -1276,8 +1320,18 @@ DeviceStatusCollector::DeviceStatusCollector(
       chromeos::kReportDeviceBacklightInfo, callback);
   crash_report_info_subscription_ = cros_settings_->AddSettingsObserver(
       chromeos::kReportDeviceCrashReportInfo, callback);
+  bluetooth_info_subscription_ = cros_settings_->AddSettingsObserver(
+      chromeos::kReportDeviceBluetoothInfo, callback);
+  fan_info_subscription_ = cros_settings_->AddSettingsObserver(
+      chromeos::kReportDeviceFanInfo, callback);
+  vpd_info_subscription_ = cros_settings_->AddSettingsObserver(
+      chromeos::kReportDeviceVpdInfo, callback);
+  app_info_subscription_ = cros_settings_->AddSettingsObserver(
+      chromeos::kReportDeviceAppInfo, callback);
   stats_reporting_pref_subscription_ = cros_settings_->AddSettingsObserver(
       chromeos::kStatsReportingPref, callback);
+
+  affiliated_session_service_.AddObserver(&app_info_generator_);
 
   power_manager_->AddObserver(this);
 
@@ -1331,6 +1385,7 @@ DeviceStatusCollector::DeviceStatusCollector(
 
 DeviceStatusCollector::~DeviceStatusCollector() {
   power_manager_->RemoveObserver(this);
+  affiliated_session_service_.RemoveObserver(&app_info_generator_);
 }
 
 // static
@@ -1421,6 +1476,24 @@ void DeviceStatusCollector::UpdateReportingSettings() {
                                   &report_crash_report_info_)) {
     report_crash_report_info_ = false;
   }
+  if (!cros_settings_->GetBoolean(chromeos::kReportDeviceBluetoothInfo,
+                                  &report_bluetooth_info_)) {
+    report_bluetooth_info_ = false;
+  }
+  if (!cros_settings_->GetBoolean(chromeos::kReportDeviceFanInfo,
+                                  &report_fan_info_)) {
+    report_fan_info_ = false;
+  }
+  if (!cros_settings_->GetBoolean(chromeos::kReportDeviceVpdInfo,
+                                  &report_vpd_info_)) {
+    report_vpd_info_ = false;
+  }
+  report_app_info_ = false;
+  if (!cros_settings_->GetBoolean(chromeos::kReportDeviceAppInfo,
+                                  &report_app_info_)) {
+    report_app_info_ = false;
+  }
+  app_info_generator_.OnReportingChanged(report_app_info_);
   if (!cros_settings_->GetBoolean(chromeos::kStatsReportingPref,
                                   &stat_reporting_pref_)) {
     stat_reporting_pref_ = false;
@@ -1698,9 +1771,8 @@ void DeviceStatusCollector::FetchCrosHealthdData(
   SamplingProbeResultCallback completion_callback;
   switch (mode) {
     case CrosHealthdCollectionMode::kFull: {
-      categories_to_probe.push_back(ProbeCategoryEnum::kCachedVpdData);
-      categories_to_probe.push_back(ProbeCategoryEnum::kFan);
-
+      if (report_vpd_info_)
+        categories_to_probe.push_back(ProbeCategoryEnum::kCachedVpdData);
       if (report_storage_status_) {
         categories_to_probe.push_back(
             ProbeCategoryEnum::kNonRemovableBlockDevices);
@@ -1715,6 +1787,10 @@ void DeviceStatusCollector::FetchCrosHealthdData(
         categories_to_probe.push_back(ProbeCategoryEnum::kMemory);
       if (report_backlight_info_)
         categories_to_probe.push_back(ProbeCategoryEnum::kBacklight);
+      if (report_fan_info_)
+        categories_to_probe.push_back(ProbeCategoryEnum::kFan);
+      if (report_bluetooth_info_)
+        categories_to_probe.push_back(ProbeCategoryEnum::kBluetooth);
 
       completion_callback =
           base::BindOnce(&DeviceStatusCollector::OnProbeDataFetched,
@@ -1745,8 +1821,9 @@ void DeviceStatusCollector::OnProbeDataFetched(
 }
 
 bool DeviceStatusCollector::ShouldFetchCrosHealthdData() const {
-  return report_power_status_ || report_storage_status_ || report_cpu_info_ ||
-         report_timezone_info_ || report_memory_info_ || report_backlight_info_;
+  return report_vpd_info_ || report_power_status_ || report_storage_status_ ||
+         report_cpu_info_ || report_timezone_info_ || report_memory_info_ ||
+         report_backlight_info_ || report_fan_info_ || report_bluetooth_info_;
 }
 
 void DeviceStatusCollector::ReportingUsersChanged() {
@@ -1787,34 +1864,36 @@ bool DeviceStatusCollector::GetActivityTimes(
     em::DeviceStatusReportRequest* status) {
   // If user reporting is off, data should be aggregated per day.
   // Signed-in user is reported in non-enterprise reporting.
+  activity_storage_->RemoveOverlappingActivityPeriods();
   auto activity_times = activity_storage_->GetFilteredActivityPeriods(
       !IncludeEmailsInActivityReports());
 
   bool anything_reported = false;
-  for (const auto& activity_period : activity_times) {
-    // Skip intervals where there was no activity.
-    if (!activity_period.second.has_value()) {
-      continue;
-    }
-    // This is correct even when there are leap seconds, because when a leap
-    // second occurs, two consecutive seconds have the same timestamp.
-    int64_t end_timestamp =
-        activity_period.first.begin + Time::kMillisecondsPerDay;
+  for (const auto& activity_pair : activity_times) {
+    const auto& user_email = activity_pair.first;
+    const auto& activity_periods = activity_pair.second;
 
-    em::ActiveTimePeriod* active_period = status->add_active_periods();
-    em::TimePeriod* period = active_period->mutable_time_period();
-    period->set_start_timestamp(activity_period.first.begin);
-    period->set_end_timestamp(end_timestamp);
-    active_period->set_active_duration(activity_period.first.end -
-                                       activity_period.first.begin);
-    // Report user email only if users reporting is turned on.
-    if (!activity_period.second.value().user_email.empty()) {
-      active_period->set_user_email(activity_period.second.value().user_email);
+    for (const auto& activity_period : activity_periods) {
+      // This is correct even when there are leap seconds, because when a leap
+      // second occurs, two consecutive seconds have the same timestamp.
+      int64_t end_timestamp =
+          activity_period.start_timestamp() + Time::kMillisecondsPerDay;
+
+      em::ActiveTimePeriod* active_period = status->add_active_periods();
+      em::TimePeriod* period = active_period->mutable_time_period();
+      period->set_start_timestamp(activity_period.start_timestamp());
+      period->set_end_timestamp(end_timestamp);
+      active_period->set_active_duration(activity_period.end_timestamp() -
+                                         activity_period.start_timestamp());
+      // Report user email only if users reporting is turned on.
+      if (!user_email.empty()) {
+        active_period->set_user_email(user_email);
+      }
+      if (last_reported_end_timestamp_ < end_timestamp) {
+        last_reported_end_timestamp_ = end_timestamp;
+      }
+      anything_reported = true;
     }
-    if (last_reported_end_timestamp_ < end_timestamp) {
-      last_reported_end_timestamp_ = end_timestamp;
-    }
-    anything_reported = true;
   }
   return anything_reported;
 }
@@ -2227,6 +2306,10 @@ bool DeviceStatusCollector::GetCrashReportInfo(
 
 void DeviceStatusCollector::GetStatusAsync(
     const StatusCollectorCallback& response) {
+  last_requested_ = clock_->Now();
+
+  app_info_generator_.OnWillReport();
+
   // Must be on creation thread since some stats are written to in that thread
   // and accessing them from another thread would lead to race conditions.
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -2343,6 +2426,14 @@ void DeviceStatusCollector::GetSessionStatus(
     anything_reported |= GetSessionStatusForUser(state, status, primary_user);
   }
 
+  // |app_infos|
+  const auto app_infos = app_info_generator_.Generate();
+  anything_reported |= app_infos.has_value();
+  if (app_infos) {
+    *status->mutable_app_infos() = {app_infos.value().begin(),
+                                    app_infos.value().end()};
+  }
+
   // Wipe pointer if we didn't actually add any data.
   if (!anything_reported)
     state->response_params().session_status.reset();
@@ -2435,6 +2526,7 @@ std::string DeviceStatusCollector::GetAppVersion(
 void DeviceStatusCollector::OnSubmittedSuccessfully() {
   activity_storage_->TrimActivityPeriods(last_reported_end_timestamp_,
                                          std::numeric_limits<int64_t>::max());
+  app_info_generator_.OnReportedSuccessfully(last_requested_);
 }
 
 bool DeviceStatusCollector::ShouldReportActivityTimes() const {
@@ -2451,6 +2543,9 @@ bool DeviceStatusCollector::ShouldReportHardwareStatus() const {
 }
 bool DeviceStatusCollector::ShouldReportCrashReportInfo() const {
   return report_crash_report_info_ && stat_reporting_pref_;
+}
+bool DeviceStatusCollector::ShouldReportAppInfoAndActivity() const {
+  return report_app_info_;
 }
 
 void DeviceStatusCollector::OnOSVersion(const std::string& version) {

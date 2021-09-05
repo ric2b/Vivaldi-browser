@@ -4,6 +4,7 @@
 
 #include "base/strings/stringprintf.h"
 #include "base/test/scoped_feature_list.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -14,6 +15,7 @@
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
 #include "chrome/browser/ui/web_applications/web_app_controller_browsertest.h"
 #include "chrome/browser/ui/web_applications/web_app_launch_utils.h"
+#include "chrome/browser/web_applications/test/web_app_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
@@ -232,8 +234,16 @@ IN_PROC_BROWSER_TEST_P(
 
 // Tests that iframes can't dynamically load mixed content in a regular browser
 // tab, when the iframe was created in a PWA window.
+// https://crbug.com/1087382: Flaky on Windows, CrOS and ASAN
+#if defined(OS_WIN) || defined(OS_CHROMEOS) || defined(ADDRESS_SANITIZER)
+#define MAYBE_IFrameDynamicMixedContentInPWAOpenInChrome \
+  DISABLED_IFrameDynamicMixedContentInPWAOpenInChrome
+#else
+#define MAYBE_IFrameDynamicMixedContentInPWAOpenInChrome \
+  IFrameDynamicMixedContentInPWAOpenInChrome
+#endif
 IN_PROC_BROWSER_TEST_P(PWAMixedContentBrowserTestWithAutoupgradesDisabled,
-                       IFrameDynamicMixedContentInPWAOpenInChrome) {
+                       MAYBE_IFrameDynamicMixedContentInPWAOpenInChrome) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   const GURL app_url = GetSecureIFrameAppURL();
@@ -252,20 +262,16 @@ IN_PROC_BROWSER_TEST_P(PWAMixedContentBrowserTestWithAutoupgradesDisabled,
   CheckMixedContentLoaded(browser());
 }
 
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    PWAMixedContentBrowserTest,
-    ::testing::Values(ControllerType::kHostedAppController,
-                      ControllerType::kUnifiedControllerWithBookmarkApp,
-                      ControllerType::kUnifiedControllerWithWebApp),
-    ControllerTypeParamToString);
+INSTANTIATE_TEST_SUITE_P(All,
+                         PWAMixedContentBrowserTest,
+                         ::testing::Values(ProviderType::kBookmarkApps,
+                                           ProviderType::kWebApps),
+                         ProviderTypeParamToString);
 
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    PWAMixedContentBrowserTestWithAutoupgradesDisabled,
-    ::testing::Values(ControllerType::kHostedAppController,
-                      ControllerType::kUnifiedControllerWithBookmarkApp,
-                      ControllerType::kUnifiedControllerWithWebApp),
-    ControllerTypeParamToString);
+INSTANTIATE_TEST_SUITE_P(All,
+                         PWAMixedContentBrowserTestWithAutoupgradesDisabled,
+                         ::testing::Values(ProviderType::kBookmarkApps,
+                                           ProviderType::kWebApps),
+                         ProviderTypeParamToString);
 
 }  // namespace web_app

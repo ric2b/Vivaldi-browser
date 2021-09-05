@@ -8,7 +8,7 @@ import static org.chromium.chrome.browser.payments.PaymentRequestTestRule.DECEMB
 import static org.chromium.chrome.browser.payments.PaymentRequestTestRule.FIRST_BILLING_ADDRESS;
 import static org.chromium.chrome.browser.payments.PaymentRequestTestRule.NEXT_YEAR;
 
-import android.support.test.filters.MediumTest;
+import androidx.test.filters.MediumTest;
 
 import org.junit.Assert;
 import org.junit.ClassRule;
@@ -19,7 +19,6 @@ import org.junit.runner.RunWith;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.autofill.AutofillTestHelper;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
@@ -29,6 +28,7 @@ import org.chromium.chrome.browser.payments.PaymentRequestTestRule.AppPresence;
 import org.chromium.chrome.browser.payments.PaymentRequestTestRule.FactorySpeed;
 import org.chromium.chrome.browser.payments.PaymentRequestTestRule.MainActivityStartCallback;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.components.payments.Event;
 import org.chromium.ui.modaldialog.ModalDialogProperties;
 import org.chromium.ui.test.util.DisableAnimationsTestRule;
 
@@ -75,7 +75,6 @@ public class PaymentRequestJourneyLoggerTest implements MainActivityStartCallbac
     @Test
     @MediumTest
     @Feature({"Payments"})
-    @RetryOnFailure
     public void testNumberOfSuggestionsShown_ShippingAddress_Completed() throws TimeoutException {
         createTestData();
 

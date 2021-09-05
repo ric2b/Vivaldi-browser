@@ -48,6 +48,11 @@ struct ShortcutInfo {
   std::set<std::string> file_handler_extensions;
   std::set<std::string> file_handler_mime_types;
 
+  // An app is multi-profile if there is a single shortcut and single app shim
+  // for all profiles. The app itself has a profile switcher that may be used
+  // to open windows for the various profiles. This is relevant only on macOS.
+  bool is_multi_profile = false;
+
  private:
   // Since gfx::ImageFamily |favicon| has a non-thread-safe reference count in
   // its member and is bound to current thread, always destroy ShortcutInfo
@@ -87,6 +92,10 @@ struct ShortcutLocations {
   // Mac dock or the gnome/kde application launcher. However, those are not
   // implemented yet.
   bool in_quick_launch_bar;
+
+  // For Windows, this refers to the Startup folder.
+  // TODO(crbug.com/897302): where to create shortcuts in other OS.
+  bool in_startup;
 };
 
 // This encodes the cause of shortcut creation as the correct behavior in each

@@ -30,6 +30,7 @@ UninstallView::UninstallView(int* user_selection,
       quit_closure_(quit_closure) {
   SetButtonLabel(ui::DIALOG_BUTTON_OK,
                  l10n_util::GetStringUTF16(IDS_UNINSTALL_BUTTON_TEXT));
+  SetTitle(IDS_UNINSTALL_CHROME);
   SetAcceptCallback(
       base::BindOnce(&UninstallView::OnDialogAccepted, base::Unretained(this)));
   SetCancelCallback(base::BindOnce(&UninstallView::OnDialogCancelled,
@@ -160,16 +161,12 @@ void UninstallView::ButtonPressed(views::Button* sender,
   }
 }
 
-base::string16 UninstallView::GetWindowTitle() const {
-  return l10n_util::GetStringUTF16(IDS_UNINSTALL_CHROME);
-}
-
 int UninstallView::GetItemCount() const {
   DCHECK(!browsers_->empty());
   return browsers_->size();
 }
 
-base::string16 UninstallView::GetItemAt(int index) {
+base::string16 UninstallView::GetItemAt(int index) const {
   DCHECK_LT(index, static_cast<int>(browsers_->size()));
   BrowsersMap::const_iterator i = browsers_->begin();
   std::advance(i, index);

@@ -28,7 +28,10 @@
 
 #include "third_party/blink/renderer/core/frame/screen.h"
 
+#include "third_party/blink/public/common/privacy_budget/identifiability_metrics.h"
+#include "third_party/blink/public/common/privacy_budget/identifiability_metric_builder.h"
 #include "third_party/blink/public/platform/web_screen_info.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
@@ -165,7 +168,7 @@ int Screen::availWidth() const {
   return GetScreenInfo(*frame).available_rect.width;
 }
 
-void Screen::Trace(Visitor* visitor) {
+void Screen::Trace(Visitor* visitor) const {
   ScriptWrappable::Trace(visitor);
   ExecutionContextClient::Trace(visitor);
   Supplementable<Screen>::Trace(visitor);

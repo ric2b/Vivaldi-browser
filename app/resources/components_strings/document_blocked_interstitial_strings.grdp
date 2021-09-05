@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<grit-part>
+  <message name="IDS_DOCUMENT_BLOCKED_TAB_TITLE" desc="Title used for the tab indicating that a page was blocked by the ad/tracker blocker">
+    Blocked by <ph name="BLOCKER_NAME">$1<ex>tracker blocker</ex></ph>
+  </message>
+  <message name="IDS_DOCUMENT_BLOCKED_HEADING" desc="Heading of the page indicating that a page was blocked by the ad/tracker blocker">
+    The page you were trying to access was blocked by Vivaldi's <ph name="BLOCKER_NAME">$1<ex>tracker blocker</ex></ph>
+  </message>
+  <message name="IDS_DOCUMENT_BLOCKED_AD_BLOCKER" desc="Replaces placeholder in IDS_DOCUMENT_BLOCKED_TAB_TITLE and IDS_DOCUMENT_BLOCKED_HEADING">
+    Ad Blocker
+  </message>
+  <message name="IDS_DOCUMENT_BLOCKED_TRACKER_BLOCKER" desc="Replaces placeholder in IDS_DOCUMENT_BLOCKED_TAB_TITLE and IDS_DOCUMENT_BLOCKED_HEADING">
+    Tracker Blocker
+  </message>
+  <message name="IDS_DOCUMENT_BLOCKED_INFO" desc="Explains how to unblock blocked document">
+    If you wish to view the page anyway, you can change its tracking protection level in the Tracker-blocker popup or by clicking the Allow button
+  </message>
+  <message name="IDS_DOCUMENT_BLOCKED_ALLOW_DOMAIN" desc="Change the tracking protection level of the domain">
+    Allow <ph name="BLOCKED_TYPE">$1<ex>ads</ex></ph> from <ph name="DOMAIN">$2<ex>example.com</ex></ph>
+  </message>
+  <message name="IDS_DOCUMENT_BLOCKED_GO_BACK" desc="Change the tracking protection level of the domain">
+    Go back
+  </message>
+  <message name="IDS_DOCUMENT_BLOCKED_TRACKERS" desc="Replaces placeholder in IDS_DOCUMENT_BLOCKED_ALLOW_DOMAIN">
+    trackers and ads
+  </message>
+  <message name="IDS_DOCUMENT_BLOCKED_ADS" desc="Replaces placeholder in IDS_DOCUMENT_BLOCKED_ALLOW_DOMAIN">
+    ads
+  </message>
+</grit-part>

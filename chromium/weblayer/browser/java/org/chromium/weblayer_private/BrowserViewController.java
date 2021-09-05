@@ -17,6 +17,7 @@ import android.widget.RelativeLayout;
 
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.components.browser_ui.modaldialog.AppModalPresenter;
+import org.chromium.components.embedder_support.view.ContentView;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.modaldialog.DialogDismissalCause;
 import org.chromium.ui.modaldialog.ModalDialogManager;
@@ -79,7 +80,7 @@ public final class BrowserViewController
                 new BrowserControlsContainerView(context, mContentViewRenderView, this, false);
         mBottomControlsContainerView.setId(View.generateViewId());
         mContentView = ContentView.createContentView(
-                context, mTopControlsContainerView.getEventOffsetHandler());
+                context, mTopControlsContainerView.getEventOffsetHandler(), null /* webContents */);
         mContentViewRenderView.addView(mContentView,
                 new RelativeLayout.LayoutParams(RelativeLayout.LayoutParams.MATCH_PARENT,
                         RelativeLayout.LayoutParams.MATCH_PARENT));
@@ -125,6 +126,11 @@ public final class BrowserViewController
         return mContentViewRenderView;
     }
 
+    /** Returns the ViewGroup into which the InfoBarContainer should be parented. **/
+    public ViewGroup getInfoBarContainerParentView() {
+        return mContentViewRenderView;
+    }
+
     public ViewGroup getContentView() {
         return mContentView;
     }
@@ -135,6 +141,14 @@ public final class BrowserViewController
 
     public ViewGroup getAutofillView() {
         return mAutofillView;
+    }
+
+    // Returns the index at which the infobar container view should be inserted.
+    public int getDesiredInfoBarContainerViewIndex() {
+        // Ensure that infobars are positioned behind WebContents overlays in z-order.
+        // TODO(blundell): Should infobars instead be hidden while a WebContents overlay is
+        // presented?
+        return mContentViewRenderView.indexOfChild(mWebContentsOverlayView) - 1;
     }
 
     public void setActiveTab(TabImpl tab) {
@@ -160,8 +174,8 @@ public final class BrowserViewController
                     new WebContentsGestureStateTracker(mContentView, webContents, this);
         }
         mAutofillView.setTab(mTab);
-        mContentView.setTab(mTab);
 
+        mContentView.setWebContents(webContents);
         mContentViewRenderView.setWebContents(webContents);
         mTopControlsContainerView.setWebContents(webContents);
         mBottomControlsContainerView.setWebContents(webContents);
@@ -182,6 +196,10 @@ public final class BrowserViewController
 
     public void setBottomView(View view) {
         mBottomControlsContainerView.setView(view);
+    }
+
+    public int getBottomContentHeightDelta() {
+        return mBottomControlsContainerView.getContentHeightDelta();
     }
 
     public boolean compositorHasSurface() {
@@ -210,12 +228,12 @@ public final class BrowserViewController
     }
 
     @Override
-    public void onDialogShown(PropertyModel model) {
+    public void onDialogAdded(PropertyModel model) {
         onDialogVisibilityChanged(true);
     }
 
     @Override
-    public void onDialogHidden(PropertyModel model) {
+    public void onLastDialogDismissed() {
         onDialogVisibilityChanged(false);
     }
 

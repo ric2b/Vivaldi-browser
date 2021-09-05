@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/debug/alias.h"
+#include "base/logging.h"
 #include "base/memory/platform_shared_memory_region.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/string_piece.h"
@@ -118,7 +119,7 @@ Broker::Broker(PlatformHandle handle, bool wait_for_channel_handle)
   }
 }
 
-Broker::~Broker() {}
+Broker::~Broker() = default;
 
 PlatformChannelEndpoint Broker::GetInviterEndpoint() {
   return std::move(inviter_endpoint_);

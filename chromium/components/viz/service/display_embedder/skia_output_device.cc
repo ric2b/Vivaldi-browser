@@ -6,15 +6,43 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/check_op.h"
 #include "base/notreached.h"
+#include "base/task/task_traits.h"
+#include "base/task/thread_pool.h"
+#include "base/task/thread_pool/thread_pool_instance.h"
 #include "components/viz/service/display/dc_layer_overlay.h"
 #include "gpu/command_buffer/service/memory_tracking.h"
 #include "third_party/skia/include/core/SkSurface.h"
 #include "ui/gfx/gpu_fence.h"
 #include "ui/gfx/presentation_feedback.h"
+#include "ui/latency/latency_tracker.h"
 
 namespace viz {
+namespace {
+
+scoped_refptr<base::SequencedTaskRunner> CreateLatencyTracerRunner() {
+  if (!base::ThreadPoolInstance::Get())
+    return nullptr;
+  return base::ThreadPool::CreateSequencedTaskRunner(
+      {base::TaskPriority::BEST_EFFORT,
+       base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
+}
+
+void ReportLatency(const gfx::SwapTimings& timings,
+                   ui::LatencyTracker* tracker,
+                   std::vector<ui::LatencyInfo> latency_info) {
+  for (auto& latency : latency_info) {
+    latency.AddLatencyNumberWithTimestamp(
+        ui::INPUT_EVENT_GPU_SWAP_BUFFER_COMPONENT, timings.swap_start);
+    latency.AddLatencyNumberWithTimestamp(
+        ui::INPUT_EVENT_LATENCY_FRAME_SWAP_COMPONENT, timings.swap_end);
+  }
+  tracker->OnGpuSwapBuffersCompleted(std::move(latency_info));
+}
+
+}  // namespace
 
 SkiaOutputDevice::ScopedPaint::ScopedPaint(SkiaOutputDevice* device)
     : device_(device), sk_surface_(device->BeginPaint(&end_semaphores_)) {
@@ -31,9 +59,14 @@ SkiaOutputDevice::SkiaOutputDevice(
     : did_swap_buffer_complete_callback_(
           std::move(did_swap_buffer_complete_callback)),
       memory_type_tracker_(
-          std::make_unique<gpu::MemoryTypeTracker>(memory_tracker)) {}
+          std::make_unique<gpu::MemoryTypeTracker>(memory_tracker)),
+      latency_tracker_(std::make_unique<ui::LatencyTracker>()),
+      latency_tracker_runner_(CreateLatencyTracerRunner()) {}
 
-SkiaOutputDevice::~SkiaOutputDevice() = default;
+SkiaOutputDevice::~SkiaOutputDevice() {
+  if (latency_tracker_runner_)
+    latency_tracker_runner_->DeleteSoon(FROM_HERE, std::move(latency_tracker_));
+}
 
 void SkiaOutputDevice::CommitOverlayPlanes(
     BufferPresentedCallback feedback,
@@ -48,7 +81,9 @@ void SkiaOutputDevice::PostSubBuffer(
   NOTREACHED();
 }
 
-void SkiaOutputDevice::SetDrawRectangle(const gfx::Rect& draw_rectangle) {}
+bool SkiaOutputDevice::SetDrawRectangle(const gfx::Rect& draw_rectangle) {
+  return false;
+}
 
 void SkiaOutputDevice::SetGpuVSyncEnabled(bool enabled) {
   NOTIMPLEMENTED();
@@ -74,6 +109,9 @@ void SkiaOutputDevice::SetEnableDCLayers(bool enable) {
 }
 #endif
 
+void SkiaOutputDevice::EnsureBackbuffer() {}
+void SkiaOutputDevice::DiscardBackbuffer() {}
+
 void SkiaOutputDevice::StartSwapBuffers(BufferPresentedCallback feedback) {
   DCHECK_LT(static_cast<int>(pending_swaps_.size()),
             capabilities_.max_frames_pending);
@@ -82,33 +120,32 @@ void SkiaOutputDevice::StartSwapBuffers(BufferPresentedCallback feedback) {
 }
 
 void SkiaOutputDevice::FinishSwapBuffers(
-    gfx::SwapResult result,
+    gfx::SwapCompletionResult result,
     const gfx::Size& size,
-    std::vector<ui::LatencyInfo> latency_info) {
+    std::vector<ui::LatencyInfo> latency_info,
+    const base::Optional<gfx::Rect>& damage_area) {
   DCHECK(!pending_swaps_.empty());
 
   const gpu::SwapBuffersCompleteParams& params =
-      pending_swaps_.front().Complete(result);
+      pending_swaps_.front().Complete(std::move(result), damage_area);
 
   did_swap_buffer_complete_callback_.Run(params, size);
 
   pending_swaps_.front().CallFeedback();
 
-  for (auto& latency : latency_info) {
-    latency.AddLatencyNumberWithTimestamp(
-        ui::INPUT_EVENT_GPU_SWAP_BUFFER_COMPONENT,
-        params.swap_response.timings.swap_start);
-    latency.AddLatencyNumberWithTimestamp(
-        ui::INPUT_EVENT_LATENCY_FRAME_SWAP_COMPONENT,
-        params.swap_response.timings.swap_end);
+  if (latency_tracker_runner_) {
+    // Report latency off GPU main thread.
+    latency_tracker_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(&ReportLatency, params.swap_response.timings,
+                       latency_tracker_.get(), std::move(latency_info)));
+  } else {
+    ReportLatency(params.swap_response.timings, latency_tracker_.get(),
+                  std::move(latency_info));
   }
-  latency_tracker_.OnGpuSwapBuffersCompleted(latency_info);
 
   pending_swaps_.pop();
 }
-
-void SkiaOutputDevice::EnsureBackbuffer() {}
-void SkiaOutputDevice::DiscardBackbuffer() {}
 
 SkiaOutputDevice::SwapInfo::SwapInfo(
     uint64_t swap_id,
@@ -123,10 +160,13 @@ SkiaOutputDevice::SwapInfo::SwapInfo(SwapInfo&& other) = default;
 SkiaOutputDevice::SwapInfo::~SwapInfo() = default;
 
 const gpu::SwapBuffersCompleteParams& SkiaOutputDevice::SwapInfo::Complete(
-    gfx::SwapResult result) {
-  params_.swap_response.result = result;
+    gfx::SwapCompletionResult result,
+    const base::Optional<gfx::Rect>& damage_rect) {
+  params_.swap_response.result = result.swap_result;
   params_.swap_response.timings.swap_end = base::TimeTicks::Now();
-
+  params_.frame_buffer_damage_area = damage_rect;
+  if (result.ca_layer_params)
+    params_.ca_layer_params = *result.ca_layer_params;
   return params_;
 }
 

@@ -4,6 +4,8 @@
 
 #include "components/password_manager/core/browser/password_form_filling.h"
 
+#include <memory>
+
 #include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
@@ -13,6 +15,7 @@
 #include "components/autofill/core/common/password_form_fill_data.h"
 #include "components/password_manager/core/browser/android_affiliation/affiliation_utils.h"
 #include "components/password_manager/core/browser/browser_save_password_progress_logger.h"
+#include "components/password_manager/core/browser/password_feature_manager.h"
 #include "components/password_manager/core/browser/password_form_metrics_recorder.h"
 #include "components/password_manager/core/browser/password_manager_client.h"
 #include "components/password_manager/core/browser/password_manager_driver.h"
@@ -94,8 +97,8 @@ void Autofill(PasswordManagerClient* client,
 
   std::unique_ptr<BrowserSavePasswordProgressLogger> logger;
   if (password_manager_util::IsLoggingActive(client)) {
-    logger.reset(
-        new BrowserSavePasswordProgressLogger(client->GetLogManager()));
+    logger = std::make_unique<BrowserSavePasswordProgressLogger>(
+        client->GetLogManager());
     logger->LogMessage(Logger::STRING_PASSWORDMANAGER_AUTOFILL);
   }
 
@@ -110,7 +113,8 @@ void Autofill(PasswordManagerClient* client,
       PreferredRealmIsFromAndroid(fill_data));
   driver->FillPasswordForm(fill_data);
 
-  client->PasswordWasAutofilled(best_matches, form_for_autofill.origin,
+  client->PasswordWasAutofilled(best_matches,
+                                url::Origin::Create(form_for_autofill.url),
                                 &federated_matches);
 }
 
@@ -138,7 +142,10 @@ LikelyFormFilling SendFillInformationToRenderer(
   }
 
   if (best_matches.empty()) {
-    driver->InformNoSavedCredentials();
+    bool should_show_popup_without_passwords =
+        client->GetPasswordFeatureManager()->ShouldShowAccountStorageOptIn() ||
+        client->GetPasswordFeatureManager()->ShouldShowAccountStorageReSignin();
+    driver->InformNoSavedCredentials(should_show_popup_without_passwords);
     metrics_recorder->RecordFillEvent(
         PasswordFormMetricsRecorder::kManagerFillEventNoCredential);
     return LikelyFormFilling::kNoFilling;
@@ -169,7 +176,7 @@ LikelyFormFilling SendFillInformationToRenderer(
   } else if (no_sign_in_form) {
     // If the parser did not find a current password element, don't fill.
     wait_for_username_reason = WaitForUsernameReason::kFormNotGoodForFilling;
-  } else if (!client->IsMainFrameSecure()) {
+  } else if (!client->IsCommittedMainFrameSecure()) {
     wait_for_username_reason = WaitForUsernameReason::kInsecureOrigin;
   } else if (autofill::IsTouchToFillEnabled()) {
     wait_for_username_reason = WaitForUsernameReason::kTouchToFill;
@@ -217,7 +224,7 @@ PasswordFormFillData CreatePasswordFormFillData(
 
   result.form_renderer_id = form_on_page.form_data.unique_renderer_id;
   result.name = form_on_page.form_data.name;
-  result.origin = form_on_page.origin;
+  result.url = form_on_page.url;
   result.action = form_on_page.action;
   result.uses_account_store = preferred_match.IsUsingAccountStore();
   result.wait_for_username = wait_for_username;

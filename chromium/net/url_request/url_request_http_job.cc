@@ -88,7 +88,7 @@ base::Value CookieInclusionStatusNetLogParams(
     const std::string& cookie_name,
     const std::string& cookie_domain,
     const std::string& cookie_path,
-    const net::CanonicalCookie::CookieInclusionStatus& status,
+    const net::CookieInclusionStatus& status,
     net::NetLogCaptureMode capture_mode) {
   base::Value dict(base::Value::Type::DICTIONARY);
   dict.SetStringKey("operation", operation);
@@ -157,6 +157,58 @@ void RecordCTHistograms(const net::SSLInfo& ssl_info) {
         "Net.CertificateTransparency.CTRequiredRequestComplianceStatus",
         ssl_info.ct_policy_compliance,
         net::ct::CTPolicyCompliance::CT_POLICY_COUNT);
+  }
+}
+
+template <typename CookieWithMetadata>
+bool ShouldMarkSameSiteCompatPairs(
+    const std::vector<CookieWithMetadata>& cookie_list,
+    const net::CookieOptions& options) {
+  // If the context is same-site then there cannot be any SameSite-by-default
+  // warnings, so the compat pair warning is irrelevant.
+  if (options.same_site_cookie_context().GetContextForCookieInclusion() >
+      net::CookieOptions::SameSiteCookieContext::ContextType::
+          SAME_SITE_LAX_METHOD_UNSAFE) {
+    return false;
+  }
+  return cookie_list.size() >= 2;
+}
+
+void MarkSameSiteCompatPairs(
+    std::vector<net::CookieWithAccessResult>& cookie_list,
+    const net::CookieOptions& options) {
+  for (size_t i = 0; i < cookie_list.size() - 1; ++i) {
+    const net::CanonicalCookie& c1 = cookie_list[i].cookie;
+    for (size_t j = i + 1; j < cookie_list.size(); ++j) {
+      const net::CanonicalCookie& c2 = cookie_list[j].cookie;
+      if (net::cookie_util::IsSameSiteCompatPair(c1, c2, options)) {
+        cookie_list[i].access_result.status.AddWarningReason(
+            net::CookieInclusionStatus::WARN_SAMESITE_COMPAT_PAIR);
+        cookie_list[j].access_result.status.AddWarningReason(
+            net::CookieInclusionStatus::WARN_SAMESITE_COMPAT_PAIR);
+      }
+    }
+  }
+}
+
+void MarkSameSiteCompatPairs(
+    std::vector<net::CookieAndLineWithStatus>& cookie_list,
+    const net::CookieOptions& options) {
+  for (size_t i = 0; i < cookie_list.size() - 1; ++i) {
+    if (!cookie_list[i].cookie.has_value())
+      continue;
+    const net::CanonicalCookie& c1 = cookie_list[i].cookie.value();
+    for (size_t j = i + 1; j < cookie_list.size(); ++j) {
+      if (!cookie_list[j].cookie.has_value())
+        continue;
+      const net::CanonicalCookie& c2 = cookie_list[j].cookie.value();
+      if (net::cookie_util::IsSameSiteCompatPair(c1, c2, options)) {
+        cookie_list[i].status.AddWarningReason(
+            net::CookieInclusionStatus::WARN_SAMESITE_COMPAT_PAIR);
+        cookie_list[j].status.AddWarningReason(
+            net::CookieInclusionStatus::WARN_SAMESITE_COMPAT_PAIR);
+      }
+    }
   }
 }
 
@@ -279,18 +331,10 @@ void URLRequestHttpJob::Start() {
   // plugin could set a referrer although sending the referrer is inhibited.
   request_info_.extra_headers.RemoveHeader(HttpRequestHeaders::kReferer);
 
-  // Our consumer should have made sure that this is a safe referrer. See for
-  // instance WebCore::FrameLoader::HideReferrer.
+  // Our consumer should have made sure that this is a safe referrer (e.g. via
+  // URLRequestJob::ComputeReferrerForPolicy).
   if (referrer.is_valid()) {
     std::string referer_value = referrer.spec();
-    // We limit the `referer` header to 4k: see step 6 of
-    // https://w3c.github.io/webappsec-referrer-policy/#determine-requests-referrer
-    // and https://github.com/whatwg/fetch/issues/903.
-    if (referer_value.length() > 4096) {
-      // Strip the referrer down to its origin, but ensure that it's serialized
-      // as a URL (e.g. retaining a trailing `/` character).
-      referer_value = url::Origin::Create(referrer).GetURL().spec();
-    }
     request_info_.extra_headers.SetHeader(HttpRequestHeaders::kReferer,
                                           referer_value);
   }
@@ -552,21 +596,14 @@ void URLRequestHttpJob::AddCookieHeaderAndStart() {
 
 void URLRequestHttpJob::SetCookieHeaderAndStart(
     const CookieOptions& options,
-    const CookieStatusList& cookies_with_status_list,
-    const CookieStatusList& excluded_list) {
+    const CookieAccessResultList& cookies_with_access_result_list,
+    const CookieAccessResultList& excluded_list) {
   DCHECK(request_->maybe_sent_cookies().empty());
 
-  // TODO(chlily): This is just for passing to CanGetCookies(), however the
-  // CookieList parameter of CanGetCookies(), which eventually gets passed to
-  // the NetworkDelegate, never actually gets used anywhere except in tests. The
-  // parameter should be removed.
-  CookieList cookie_list =
-      net::cookie_util::StripStatuses(cookies_with_status_list);
-
-  bool can_get_cookies = CanGetCookies(cookie_list);
-  if (!cookies_with_status_list.empty() && can_get_cookies) {
+  bool can_get_cookies = CanGetCookies();
+  if (!cookies_with_access_result_list.empty() && can_get_cookies) {
     std::string cookie_line =
-        CanonicalCookie::BuildCookieLine(cookies_with_status_list);
+        CanonicalCookie::BuildCookieLine(cookies_with_access_result_list);
     UMA_HISTOGRAM_COUNTS_10000("Cookie.HeaderLength", cookie_line.length());
     request_info_.extra_headers.SetHeader(HttpRequestHeaders::kCookie,
                                           cookie_line);
@@ -576,7 +613,7 @@ void URLRequestHttpJob::SetCookieHeaderAndStart(
 
     // TODO(crbug.com/1031664): Reduce the number of times the cookie list is
     // iterated over. Get metrics for every cookie which is included.
-    for (const auto& c : cookies_with_status_list) {
+    for (const auto& c : cookies_with_access_result_list) {
       bool request_is_secure = request_->url().SchemeIsCryptographic();
       net::CookieSourceScheme cookie_scheme = c.cookie.SourceScheme();
       CookieRequestScheme cookie_request_schemes;
@@ -606,42 +643,48 @@ void URLRequestHttpJob::SetCookieHeaderAndStart(
     }
   }
 
-  // Report status for things in |excluded_list| and |cookies_with_status_list|
+  // Report status for things in |excluded_list| and
+  // |cookies_with_access_result_list|
   // after the delegate got a chance to block them.
-  CookieStatusList maybe_sent_cookies = excluded_list;
-  // CanGetCookies only looks at the fields of the URLRequest, not the cookies
-  // it is passed, so if CanGetCookies(cookie_list) is false, then
-  // CanGetCookies(excluded_list) would also be false, so tag also the
-  // excluded cookies as having been blocked by user preferences.
+  CookieAccessResultList maybe_sent_cookies = excluded_list;
+
   if (!can_get_cookies) {
-    for (CookieStatusList::iterator it = maybe_sent_cookies.begin();
+    for (CookieAccessResultList::iterator it = maybe_sent_cookies.begin();
          it != maybe_sent_cookies.end(); ++it) {
-      it->status.AddExclusionReason(
-          CanonicalCookie::CookieInclusionStatus::EXCLUDE_USER_PREFERENCES);
+      it->access_result.status.AddExclusionReason(
+          CookieInclusionStatus::EXCLUDE_USER_PREFERENCES);
     }
   }
-  for (const auto& cookie_with_status : cookies_with_status_list) {
-    CanonicalCookie::CookieInclusionStatus status = cookie_with_status.status;
+
+  for (const auto& cookie_with_access_result :
+       cookies_with_access_result_list) {
+    CookieAccessResult access_result = cookie_with_access_result.access_result;
     if (!can_get_cookies) {
-      status.AddExclusionReason(
-          CanonicalCookie::CookieInclusionStatus::EXCLUDE_USER_PREFERENCES);
+      access_result.status.AddExclusionReason(
+          CookieInclusionStatus::EXCLUDE_USER_PREFERENCES);
     }
-    maybe_sent_cookies.push_back({cookie_with_status.cookie, status});
+    maybe_sent_cookies.push_back(
+        {cookie_with_access_result.cookie, access_result});
   }
 
   if (request_->net_log().IsCapturing()) {
-    for (const auto& cookie_and_status : maybe_sent_cookies) {
+    for (const auto& cookie_with_access_result : maybe_sent_cookies) {
       request_->net_log().AddEvent(
           NetLogEventType::COOKIE_INCLUSION_STATUS,
           [&](NetLogCaptureMode capture_mode) {
             return CookieInclusionStatusNetLogParams(
-                "send", cookie_and_status.cookie.Name(),
-                cookie_and_status.cookie.Domain(),
-                cookie_and_status.cookie.Path(), cookie_and_status.status,
-                capture_mode);
+                "send", cookie_with_access_result.cookie.Name(),
+                cookie_with_access_result.cookie.Domain(),
+                cookie_with_access_result.cookie.Path(),
+                cookie_with_access_result.access_result.status, capture_mode);
           });
     }
   }
+
+  // Mark the CookieInclusionStatuses of items in |maybe_sent_cookies| if they
+  // are part of a presumed SameSite compatibility pair.
+  if (ShouldMarkSameSiteCompatPairs(maybe_sent_cookies, options))
+    MarkSameSiteCompatPairs(maybe_sent_cookies, options);
 
   request_->set_maybe_sent_cookies(std::move(maybe_sent_cookies));
 
@@ -707,7 +750,7 @@ void URLRequestHttpJob::SaveCookiesAndNotifyHeadersComplete(int result) {
   // it reaches 0 in the callback itself.
   num_cookie_lines_left_ = 1;
   while (headers->EnumerateHeader(&iter, name, &cookie_string)) {
-    CanonicalCookie::CookieInclusionStatus returned_status;
+    CookieInclusionStatus returned_status;
 
     num_cookie_lines_left_++;
 
@@ -723,7 +766,7 @@ void URLRequestHttpJob::SaveCookiesAndNotifyHeadersComplete(int result) {
     }
     if (cookie && !CanSetCookie(*cookie, &options)) {
       returned_status.AddExclusionReason(
-          CanonicalCookie::CookieInclusionStatus::EXCLUDE_USER_PREFERENCES);
+          CookieInclusionStatus::EXCLUDE_USER_PREFERENCES);
     }
     if (!returned_status.IsInclude()) {
       OnSetCookieResult(options, cookie_to_return, std::move(cookie_string),
@@ -741,15 +784,21 @@ void URLRequestHttpJob::SaveCookiesAndNotifyHeadersComplete(int result) {
   // loop has been exited.
   num_cookie_lines_left_--;
 
-  if (num_cookie_lines_left_ == 0)
+  if (num_cookie_lines_left_ == 0) {
+    // Mark the CookieInclusionStatuses of items in |set_cookie_status_list_| if
+    // they are part of a presumed SameSite compatibility pair.
+    if (ShouldMarkSameSiteCompatPairs(set_cookie_status_list_, options))
+      MarkSameSiteCompatPairs(set_cookie_status_list_, options);
+
     NotifyHeadersComplete();
+  }
 }
 
 void URLRequestHttpJob::OnSetCookieResult(
     const CookieOptions& options,
     base::Optional<CanonicalCookie> cookie,
     std::string cookie_string,
-    CanonicalCookie::CookieInclusionStatus status) {
+    CookieInclusionStatus status) {
   if (request_->net_log().IsCapturing()) {
     request_->net_log().AddEvent(
         NetLogEventType::COOKIE_INCLUSION_STATUS,
@@ -768,8 +817,14 @@ void URLRequestHttpJob::OnSetCookieResult(
   // If all the cookie lines have been handled, |set_cookie_status_list_| now
   // reflects the result of all Set-Cookie lines, and the request can be
   // continued.
-  if (num_cookie_lines_left_ == 0)
+  if (num_cookie_lines_left_ == 0) {
+    // Mark the CookieInclusionStatuses of items in |set_cookie_status_list_| if
+    // they are part of a presumed SameSite compatibility pair.
+    if (ShouldMarkSameSiteCompatPairs(set_cookie_status_list_, options))
+      MarkSameSiteCompatPairs(set_cookie_status_list_, options);
+
     NotifyHeadersComplete();
+  }
 }
 
 void URLRequestHttpJob::ProcessStrictTransportSecurityHeader() {
@@ -817,7 +872,8 @@ void URLRequestHttpJob::ProcessExpectCTHeader() {
   std::string value;
   if (headers->GetNormalizedHeader("Expect-CT", &value)) {
     security_state->ProcessExpectCTHeader(
-        value, HostPortPair::FromURL(request_info_.url), ssl_info);
+        value, HostPortPair::FromURL(request_info_.url), ssl_info,
+        request_->isolation_info().network_isolation_key());
   }
 }
 

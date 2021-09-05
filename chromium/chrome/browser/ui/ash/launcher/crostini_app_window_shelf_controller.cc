@@ -126,7 +126,7 @@ ash::ShelfID CrostiniAppWindowShelfController::RemoveFromShelf(
       owner()->shelf_model()->GetAppWindowLauncherItemController(
           app_window->shelf_id());
 
-  if (item_controller != nullptr && item_controller->window_count() == 0) {
+  if (item_controller && item_controller->window_count() == 0) {
     ash::ShelfID shelf_id = item_controller->shelf_id();
     owner()->CloseLauncherItem(shelf_id);
     return shelf_id;
@@ -176,7 +176,7 @@ void CrostiniAppWindowShelfController::OnWindowVisibilityChanging(
   // know about them.
   if (wm::GetTransientParent(window) ||
       arc::GetWindowTaskId(window) != arc::kNoTaskId ||
-      plugin_vm::IsPluginVmWindow(window)) {
+      plugin_vm::IsPluginVmAppWindow(window)) {
     DCHECK(aura_window_to_app_window_.find(window) ==
            aura_window_to_app_window_.end());
     auto it = observed_windows_.find(window);

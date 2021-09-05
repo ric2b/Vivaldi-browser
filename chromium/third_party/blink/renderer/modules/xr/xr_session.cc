@@ -27,7 +27,6 @@
 #include "third_party/blink/renderer/core/resize_observer/resize_observer.h"
 #include "third_party/blink/renderer/core/resize_observer/resize_observer_entry.h"
 #include "third_party/blink/renderer/modules/event_target_modules.h"
-#include "third_party/blink/renderer/modules/screen_orientation/screen_orientation.h"
 #include "third_party/blink/renderer/modules/xr/type_converters.h"
 #include "third_party/blink/renderer/modules/xr/xr_anchor_set.h"
 #include "third_party/blink/renderer/modules/xr/xr_bounded_reference_space.h"
@@ -46,6 +45,7 @@
 #include "third_party/blink/renderer/modules/xr/xr_session_event.h"
 #include "third_party/blink/renderer/modules/xr/xr_system.h"
 #include "third_party/blink/renderer/modules/xr/xr_transient_input_hit_test_source.h"
+#include "third_party/blink/renderer/modules/xr/xr_utils.h"
 #include "third_party/blink/renderer/modules/xr/xr_view.h"
 #include "third_party/blink/renderer/modules/xr/xr_webgl_layer.h"
 #include "third_party/blink/renderer/modules/xr/xr_world_information.h"
@@ -87,6 +87,8 @@ const char kHitTestFeatureNotSupported[] =
 
 const char kHitTestSubscriptionFailed[] = "Hit test subscription failed.";
 
+const char kAnchorCreationFailed[] = "Anchor creation failed.";
+
 const char kLightEstimationFeatureNotSupported[] =
     "Light estimation feature is not supported.";
 
@@ -117,17 +119,17 @@ void UpdateViewFromEyeParameters(
 
 // Returns the session feature corresponding to the given reference space type.
 base::Optional<device::mojom::XRSessionFeature> MapReferenceSpaceTypeToFeature(
-    XRReferenceSpace::Type type) {
+    device::mojom::blink::XRReferenceSpaceType type) {
   switch (type) {
-    case XRReferenceSpace::Type::kTypeViewer:
+    case device::mojom::blink::XRReferenceSpaceType::kViewer:
       return device::mojom::XRSessionFeature::REF_SPACE_VIEWER;
-    case XRReferenceSpace::Type::kTypeLocal:
+    case device::mojom::blink::XRReferenceSpaceType::kLocal:
       return device::mojom::XRSessionFeature::REF_SPACE_LOCAL;
-    case XRReferenceSpace::Type::kTypeLocalFloor:
+    case device::mojom::blink::XRReferenceSpaceType::kLocalFloor:
       return device::mojom::XRSessionFeature::REF_SPACE_LOCAL_FLOOR;
-    case XRReferenceSpace::Type::kTypeBoundedFloor:
+    case device::mojom::blink::XRReferenceSpaceType::kBoundedFloor:
       return device::mojom::XRSessionFeature::REF_SPACE_BOUNDED_FLOOR;
-    case XRReferenceSpace::Type::kTypeUnbounded:
+    case device::mojom::blink::XRReferenceSpaceType::kUnbounded:
       return device::mojom::XRSessionFeature::REF_SPACE_UNBOUNDED;
   }
 
@@ -140,9 +142,12 @@ std::unique_ptr<TransformationMatrix> getPoseMatrix(
   if (!pose)
     return nullptr;
 
+  device::Pose device_pose =
+      device::Pose(pose->position.value_or(gfx::Point3F()),
+                   pose->orientation.value_or(gfx::Quaternion()));
+
   return std::make_unique<TransformationMatrix>(
-      mojo::TypeConverter<TransformationMatrix,
-                          device::mojom::blink::VRPosePtr>::Convert(pose));
+      device_pose.ToTransform().matrix());
 }
 
 base::Optional<device::mojom::blink::EntityTypeForHitTest>
@@ -262,7 +267,7 @@ class XRSession::XRSessionResizeObserverDelegate final
     session_->UpdateCanvasDimensions(entries[0]->target());
   }
 
-  void Trace(Visitor* visitor) override {
+  void Trace(Visitor* visitor) const override {
     visitor->Trace(session_);
     ResizeObserver::Delegate::Trace(visitor);
   }
@@ -304,6 +309,7 @@ void XRSession::MetricsReporter::ReportFeatureUsed(
     case XRSessionFeature::HIT_TEST:
     case XRSessionFeature::LIGHT_ESTIMATION:
     case XRSessionFeature::ANCHORS:
+    case XRSessionFeature::CAMERA_ACCESS:
       // Not recording metrics for these features currently.
       break;
   }
@@ -503,14 +509,14 @@ ScriptPromise XRSession::requestReferenceSpace(
     return ScriptPromise();
   }
 
-  XRReferenceSpace::Type requested_type =
+  device::mojom::blink::XRReferenceSpaceType requested_type =
       XRReferenceSpace::StringToReferenceSpaceType(type);
 
   UMA_HISTOGRAM_ENUMERATION("XR.WebXR.ReferenceSpace.Requested",
                             requested_type);
 
   if (sensorless_session_ &&
-      requested_type != XRReferenceSpace::Type::kTypeViewer) {
+      requested_type != device::mojom::blink::XRReferenceSpaceType::kViewer) {
     exception_state.ThrowDOMException(DOMExceptionCode::kNotSupportedError,
                                       kReferenceSpaceNotSupported);
     return ScriptPromise();
@@ -538,22 +544,22 @@ ScriptPromise XRSession::requestReferenceSpace(
 
   XRReferenceSpace* reference_space = nullptr;
   switch (requested_type) {
-    case XRReferenceSpace::Type::kTypeViewer:
-    case XRReferenceSpace::Type::kTypeLocal:
-    case XRReferenceSpace::Type::kTypeLocalFloor:
+    case device::mojom::blink::XRReferenceSpaceType::kViewer:
+    case device::mojom::blink::XRReferenceSpaceType::kLocal:
+    case device::mojom::blink::XRReferenceSpaceType::kLocalFloor:
       reference_space =
           MakeGarbageCollected<XRReferenceSpace>(this, requested_type);
       break;
-    case XRReferenceSpace::Type::kTypeBoundedFloor: {
+    case device::mojom::blink::XRReferenceSpaceType::kBoundedFloor: {
       if (immersive()) {
         reference_space = MakeGarbageCollected<XRBoundedReferenceSpace>(this);
       }
       break;
     }
-    case XRReferenceSpace::Type::kTypeUnbounded:
+    case device::mojom::blink::XRReferenceSpaceType::kUnbounded:
       if (immersive()) {
-        reference_space = MakeGarbageCollected<XRReferenceSpace>(
-            this, XRReferenceSpace::Type::kTypeUnbounded);
+        reference_space =
+            MakeGarbageCollected<XRReferenceSpace>(this, requested_type);
       }
       break;
   }
@@ -582,7 +588,8 @@ ScriptPromise XRSession::requestReferenceSpace(
 ScriptPromise XRSession::CreateAnchorHelper(
     ScriptState* script_state,
     const blink::TransformationMatrix& native_origin_from_anchor,
-    const XRNativeOriginInformation& native_origin_information,
+    const device::mojom::blink::XRNativeOriginInformation&
+        native_origin_information,
     ExceptionState& exception_state) {
   DVLOG(2) << __func__;
 
@@ -599,34 +606,26 @@ ScriptPromise XRSession::CreateAnchorHelper(
     return ScriptPromise();
   }
 
-  TransformationMatrix::DecomposedType decomposed_native_origin_from_anchor;
-  if (!native_origin_from_anchor.Decompose(
-          decomposed_native_origin_from_anchor)) {
+  auto maybe_native_origin_from_anchor_pose =
+      CreatePose(native_origin_from_anchor);
+
+  if (!maybe_native_origin_from_anchor_pose) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                       kUnableToDecomposeMatrix);
     return ScriptPromise();
   }
 
-  // TODO(https://crbug.com/929841): Remove negation in quaternion once the bug
-  // is fixed.
-  device::mojom::blink::PosePtr pose_ptr = device::mojom::blink::Pose::New(
-      gfx::Quaternion(-decomposed_native_origin_from_anchor.quaternion_x,
-                      -decomposed_native_origin_from_anchor.quaternion_y,
-                      -decomposed_native_origin_from_anchor.quaternion_z,
-                      decomposed_native_origin_from_anchor.quaternion_w),
-      blink::FloatPoint3D(decomposed_native_origin_from_anchor.translate_x,
-                          decomposed_native_origin_from_anchor.translate_y,
-                          decomposed_native_origin_from_anchor.translate_z));
-
   DVLOG(3) << __func__
-           << ": pose_ptr->orientation = " << pose_ptr->orientation.ToString()
-           << ", pose_ptr->position = " << pose_ptr->position.ToString();
+           << ": maybe_native_origin_from_anchor_pose->orientation()= "
+           << maybe_native_origin_from_anchor_pose->orientation().ToString()
+           << ", maybe_native_origin_from_anchor_pose->position()= "
+           << maybe_native_origin_from_anchor_pose->position().ToString();
 
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
   ScriptPromise promise = resolver->Promise();
 
   xr_->xrEnvironmentProviderRemote()->CreateAnchor(
-      native_origin_information.ToMojo(), std::move(pose_ptr),
+      native_origin_information.Clone(), *maybe_native_origin_from_anchor_pose,
       WTF::Bind(&XRSession::OnCreateAnchorResult, WrapPersistent(this),
                 WrapPersistent(resolver)));
 
@@ -637,7 +636,9 @@ ScriptPromise XRSession::CreateAnchorHelper(
 
 ScriptPromise XRSession::CreatePlaneAnchorHelper(
     ScriptState* script_state,
-    const blink::TransformationMatrix& plane_from_anchor,
+    const blink::TransformationMatrix& native_origin_from_anchor,
+    const device::mojom::blink::XRNativeOriginInformation&
+        native_origin_information,
     uint64_t plane_id,
     ExceptionState& exception_state) {
   DVLOG(2) << __func__ << ", plane_id=" << plane_id;
@@ -655,39 +656,62 @@ ScriptPromise XRSession::CreatePlaneAnchorHelper(
     return ScriptPromise();
   }
 
-  TransformationMatrix::DecomposedType decomposed_plane_from_anchor;
-  if (!plane_from_anchor.Decompose(decomposed_plane_from_anchor)) {
+  auto maybe_native_origin_from_anchor_pose =
+      CreatePose(native_origin_from_anchor);
+
+  if (!maybe_native_origin_from_anchor_pose) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                       kUnableToDecomposeMatrix);
     return ScriptPromise();
   }
 
-  // TODO(https://crbug.com/929841): Remove negation in quaternion once the bug
-  // is fixed.
-  device::mojom::blink::PosePtr pose_ptr = device::mojom::blink::Pose::New(
-      gfx::Quaternion(-decomposed_plane_from_anchor.quaternion_x,
-                      -decomposed_plane_from_anchor.quaternion_y,
-                      -decomposed_plane_from_anchor.quaternion_z,
-                      decomposed_plane_from_anchor.quaternion_w),
-      blink::FloatPoint3D(decomposed_plane_from_anchor.translate_x,
-                          decomposed_plane_from_anchor.translate_y,
-                          decomposed_plane_from_anchor.translate_z));
-
   DVLOG(3) << __func__
-           << ": pose_ptr->orientation = " << pose_ptr->orientation.ToString()
-           << ", pose_ptr->position = " << pose_ptr->position.ToString();
+           << ": maybe_native_origin_from_anchor_pose->orientation()= "
+           << maybe_native_origin_from_anchor_pose->orientation().ToString()
+           << ", maybe_native_origin_from_anchor_pose->position()= "
+           << maybe_native_origin_from_anchor_pose->position().ToString();
 
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
   ScriptPromise promise = resolver->Promise();
 
   xr_->xrEnvironmentProviderRemote()->CreatePlaneAnchor(
-      std::move(pose_ptr), plane_id,
+      native_origin_information.Clone(), *maybe_native_origin_from_anchor_pose,
+      plane_id,
       WTF::Bind(&XRSession::OnCreateAnchorResult, WrapPersistent(this),
                 WrapPersistent(resolver)));
 
   create_anchor_promises_.insert(resolver);
 
   return promise;
+}
+
+base::Optional<XRSession::ReferenceSpaceInformation>
+XRSession::GetStationaryReferenceSpace() const {
+  // For anchor creation, we should first attempt to use the local space as it
+  // is supposed to be more stable, but if that is unavailable, we can try using
+  // unbounded space. Otherwise, there's not much we can do & we have to return
+  // nullopt.
+
+  // Try to get mojo_from_local:
+  auto reference_space_type = device::mojom::XRReferenceSpaceType::kLocal;
+  auto mojo_from_space = GetMojoFrom(reference_space_type);
+
+  if (!mojo_from_space) {
+    // Local space is not available, try to get mojo_from_unbounded:
+    reference_space_type = device::mojom::XRReferenceSpaceType::kUnbounded;
+    mojo_from_space = GetMojoFrom(reference_space_type);
+  }
+
+  if (!mojo_from_space) {
+    // Unbounded is also not available.
+    return base::nullopt;
+  }
+
+  ReferenceSpaceInformation result;
+  result.mojo_from_space = *mojo_from_space;
+  result.native_origin =
+      XRNativeOriginInformation::Create(reference_space_type);
+  return result;
 }
 
 int XRSession::requestAnimationFrame(V8XRFrameRequestCallback* callback) {
@@ -711,7 +735,7 @@ XRInputSourceArray* XRSession::inputSources(ScriptState* script_state) const {
   if (!did_log_getInputSources_ && script_state->ContextIsValid()) {
     ukm::builders::XR_WebXR(xr_->GetSourceId())
         .SetDidGetXRInputSources(1)
-        .Record(LocalDOMWindow::From(script_state)->document()->UkmRecorder());
+        .Record(LocalDOMWindow::From(script_state)->UkmRecorder());
     did_log_getInputSources_ = true;
   }
 
@@ -738,10 +762,10 @@ ScriptPromise XRSession::requestHitTestSource(
   }
 
   // 1. Grab the native origin from the passed in XRSpace.
-  base::Optional<XRNativeOriginInformation> maybe_native_origin =
-      options_init && options_init->hasSpace()
-          ? options_init->space()->NativeOrigin()
-          : base::nullopt;
+  base::Optional<device::mojom::blink::XRNativeOriginInformation>
+      maybe_native_origin = options_init && options_init->hasSpace()
+                                ? options_init->space()->NativeOrigin()
+                                : base::nullopt;
 
   if (!maybe_native_origin) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
@@ -799,7 +823,7 @@ ScriptPromise XRSession::requestHitTestSource(
   ScriptPromise promise = resolver->Promise();
 
   xr_->xrEnvironmentProviderRemote()->SubscribeToHitTest(
-      maybe_native_origin->ToMojo(), entity_types, std::move(ray_mojo),
+      maybe_native_origin->Clone(), entity_types, std::move(ray_mojo),
       WTF::Bind(&XRSession::OnSubscribeToHitTestResult, WrapPersistent(this),
                 WrapPersistent(resolver)));
   request_hit_test_source_promises_.insert(resolver);
@@ -912,6 +936,8 @@ void XRSession::OnSubscribeToHitTestForTransientInputResult(
 void XRSession::OnCreateAnchorResult(ScriptPromiseResolver* resolver,
                                      device::mojom::CreateAnchorResult result,
                                      uint64_t id) {
+  DVLOG(2) << __func__ << ": result=" << result << ", id=" << id;
+
   DCHECK(create_anchor_promises_.Contains(resolver));
   create_anchor_promises_.erase(resolver);
 
@@ -920,7 +946,8 @@ void XRSession::OnCreateAnchorResult(ScriptPromiseResolver* resolver,
     // must contain newly created anchor data.
     anchor_ids_to_pending_anchor_promises_.insert(id, resolver);
   } else {
-    resolver->Reject();
+    resolver->Reject(MakeGarbageCollected<DOMException>(
+        DOMExceptionCode::kOperationError, kAnchorCreationFailed));
   }
 }
 
@@ -1610,7 +1637,7 @@ void XRSession::LogGetPose() const {
 
     ukm::builders::XR_WebXR(xr_->GetSourceId())
         .SetDidRequestPose(1)
-        .Record(window->document()->UkmRecorder());
+        .Record(window->UkmRecorder());
   }
 }
 
@@ -1623,12 +1650,12 @@ bool XRSession::CanReportPoses() const {
 }
 
 base::Optional<TransformationMatrix> XRSession::GetMojoFrom(
-    XRReferenceSpace::Type space_type) {
+    device::mojom::blink::XRReferenceSpaceType space_type) const {
   if (!CanReportPoses())
     return base::nullopt;
 
   switch (space_type) {
-    case XRReferenceSpace::Type::kTypeViewer:
+    case device::mojom::blink::XRReferenceSpaceType::kViewer:
       if (!mojo_from_viewer_) {
         if (sensorless_session_) {
           return TransformationMatrix();
@@ -1638,16 +1665,16 @@ base::Optional<TransformationMatrix> XRSession::GetMojoFrom(
       }
 
       return *mojo_from_viewer_;
-    case XRReferenceSpace::Type::kTypeLocal:
+    case device::mojom::blink::XRReferenceSpaceType::kLocal:
       // TODO(https://crbug.com/1070380): This assumes that local space is
       // equivalent to mojo space! Remove the assumption once the bug is fixed.
       return TransformationMatrix();
-    case XRReferenceSpace::Type::kTypeUnbounded:
+    case device::mojom::blink::XRReferenceSpaceType::kUnbounded:
       // TODO(https://crbug.com/1070380): This assumes that unbounded space is
       // equivalent to mojo space! Remove the assumption once the bug is fixed.
       return TransformationMatrix();
-    case XRReferenceSpace::Type::kTypeLocalFloor:
-    case XRReferenceSpace::Type::kTypeBoundedFloor:
+    case device::mojom::blink::XRReferenceSpaceType::kLocalFloor:
+    case device::mojom::blink::XRReferenceSpaceType::kBoundedFloor:
       // Information about -floor spaces is currently stored elsewhere (in stage
       // parameters of display_info_). It probably should eventually move here.
       return base::nullopt;
@@ -1675,16 +1702,6 @@ void XRSession::UpdateCanvasDimensions(Element* element) {
   update_views_next_frame_ = true;
   output_width_ = element->OffsetWidth() * devicePixelRatio;
   output_height_ = element->OffsetHeight() * devicePixelRatio;
-  int output_angle = 0;
-
-  // TODO(crbug.com/836948): handle square canvases.
-  // TODO(crbug.com/840346): we should not need to use ScreenOrientation here.
-  ScreenOrientation* orientation = ScreenOrientation::Create(window);
-
-  if (orientation) {
-    output_angle = orientation->angle();
-    DVLOG(2) << __func__ << ": got angle=" << output_angle;
-  }
 
   if (render_state_->baseLayer()) {
     render_state_->baseLayer()->OnResize();
@@ -1976,7 +1993,7 @@ bool XRSession::HasPendingActivity() const {
   return !callback_collection_->IsEmpty() && !ended_;
 }
 
-void XRSession::Trace(Visitor* visitor) {
+void XRSession::Trace(Visitor* visitor) const {
   visitor->Trace(xr_);
   visitor->Trace(render_state_);
   visitor->Trace(world_tracking_state_);

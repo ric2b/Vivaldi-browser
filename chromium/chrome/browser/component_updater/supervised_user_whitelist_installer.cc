@@ -26,11 +26,10 @@
 #include "base/sequenced_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
-#include "base/task/post_task.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "base/value_conversions.h"
+#include "base/util/values/values_util.h"
 #include "base/values.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/supervised_user/supervised_user_whitelist_service.h"
@@ -84,14 +83,14 @@ base::FilePath GetSafeFilePath(const base::DictionaryValue& dictionary,
   const base::Value* path_value = nullptr;
   if (!dictionary.Get(key, &path_value))
     return base::FilePath();
-  base::FilePath path;
-  if (!base::GetValueAsFilePath(*path_value, &path))
+  base::Optional<base::FilePath> path = util::ValueToFilePath(*path_value);
+  if (!path)
     return base::FilePath();
   // Path components ("..") are not allowed.
-  if (path.ReferencesParent())
+  if (path->ReferencesParent())
     return base::FilePath();
 
-  return install_dir.Append(path);
+  return install_dir.Append(*path);
 }
 
 base::FilePath GetLargeIconPath(const base::DictionaryValue& manifest,
@@ -122,12 +121,11 @@ base::FilePath GetSanitizedWhitelistPath(const std::string& crx_id) {
 }
 
 void RecordUncleanUninstall() {
-  base::CreateSingleThreadTaskRunner({content::BrowserThread::UI})
-      ->PostTask(
-          FROM_HERE,
-          base::BindOnce(&base::RecordAction,
-                         base::UserMetricsAction(
-                             "ManagedUsers_Whitelist_UncleanUninstall")));
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          &base::RecordAction,
+          base::UserMetricsAction("ManagedUsers_Whitelist_UncleanUninstall")));
 }
 
 void DeleteFileOnTaskRunner(const base::FilePath& path) {
@@ -310,8 +308,7 @@ SupervisedUserWhitelistComponentInstallerPolicy::OnCustomInstall(
     const base::DictionaryValue& manifest,
     const base::FilePath& install_dir) {
   // Delete the existing sanitized whitelist.
-  const bool success =
-      base::DeleteFile(GetSanitizedWhitelistPath(crx_id_), false);
+  const bool success = base::DeleteFile(GetSanitizedWhitelistPath(crx_id_));
   return update_client::CrxInstaller::Result(
       success ? update_client::InstallError::NONE
               : update_client::InstallError::GENERIC_ERROR);

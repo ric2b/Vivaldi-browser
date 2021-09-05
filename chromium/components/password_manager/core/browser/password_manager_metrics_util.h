@@ -164,7 +164,9 @@ enum class CredentialManagerGetResult {
   kAutoSignIn,
   // No credentials are returned in incognito mode.
   kNoneIncognito,
-  kMaxValue = kNoneIncognito,
+  // No credentials are returned while autofill_assistant is running.
+  kNoneAutofillAssistant,
+  kMaxValue = kNoneAutofillAssistant,
 };
 
 enum PasswordReusePasswordFieldDetected {
@@ -355,6 +357,8 @@ enum class PasswordDropdownState {
 };
 
 // Type of the item the user selects in the password drop-down.
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
 enum class PasswordDropdownSelectedOption {
   // User selected a credential to fill.
   kPassword = 0,
@@ -362,7 +366,13 @@ enum class PasswordDropdownSelectedOption {
   kShowAll = 1,
   // User selected to generate a password.
   kGenerate = 2,
-  kMaxValue = kGenerate
+  // User unlocked the account-store to fill a password.
+  kUnlockAccountStorePasswords = 3,
+  // User unlocked the account-store to generate a password.
+  kUnlockAccountStoreGeneration = 4,
+  // Previoulsy opted-in user decided to log-in again to access their passwords.
+  kResigninToUnlockAccountStore = 5,
+  kMaxValue = kResigninToUnlockAccountStore
 };
 
 // Used in UMA histograms, please do NOT reorder.
@@ -398,6 +408,20 @@ enum class PasswordAccountStorageUserState {
   // Syncing user.
   kSyncUser,
 };
+
+// Metrics: PasswordManager.MoveToAccountStoreTrigger.
+// This must be kept in sync with the enum in password_move_to_account_dialog.js
+// (in chrome/browser/resources/settings/autofill_page).
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class MoveToAccountStoreTrigger {
+  // The user successfully logged in with a password from the profile store.
+  kSuccessfulLoginWithProfileStorePassword = 0,
+  // The user explicitly asked to move a password listed in Settings.
+  kExplicitlyTriggeredInSettings = 1,
+  kMaxValue = kExplicitlyTriggeredInSettings,
+};
+
 std::string GetPasswordAccountStorageUserStateHistogramSuffix(
     PasswordAccountStorageUserState user_state);
 
@@ -421,11 +445,24 @@ std::string GetPasswordAccountStorageUsageLevelHistogramSuffix(
 // bubbles.
 void LogGeneralUIDismissalReason(UIDismissalReason reason);
 
-// Log the |reason| a user dismissed the save password bubble.
-void LogSaveUIDismissalReason(UIDismissalReason reason);
+// Log the |reason| a user dismissed the save password bubble. If
+// |user_state| is set, the |reason| is also logged to a separate
+// user-state-specific histogram. |user_state| must be non-null iff the feature
+// kEnablePasswordsAccountStorage is enabled.
+void LogSaveUIDismissalReason(
+    UIDismissalReason reason,
+    base::Optional<PasswordAccountStorageUserState> user_state);
+
+// Log the |reason| a user dismissed the save password prompt after previously
+// having unblacklisted the origin while on the page.
+void LogSaveUIDismissalReasonAfterUnblacklisting(UIDismissalReason reason);
 
 // Log the |reason| a user dismissed the update password bubble.
 void LogUpdateUIDismissalReason(UIDismissalReason reason);
+
+// Log the |reason| a user dismissed the move password bubble.
+void LogMoveUIDismissalReason(UIDismissalReason reason,
+                              PasswordAccountStorageUserState user_state);
 
 // Log the |type| of a leak dialog shown to the user and the |reason| why it was
 // dismissed.
@@ -500,16 +537,15 @@ void LogPasswordAcceptedSaveUpdateSubmissionIndicatorEvent(
 // Log a frame of a submitted password form.
 void LogSubmittedFormFrame(SubmittedFormFrame frame);
 
+// Logs how many account-stored passwords are available right after unlock.
+void LogPasswordsCountFromAccountStoreAfterUnlock(int account_store_passwords);
+
 // Logs the result of a re-auth challenge in the password settings.
 void LogPasswordSettingsReauthResult(ReauthResult result);
 
 // Log a return value of LoginDatabase::DeleteUndecryptableLogins method.
 void LogDeleteUndecryptableLoginsReturnValue(
     DeleteCorruptedPasswordsResult result);
-
-// Log a result of removing passwords that couldn't be decrypted with the
-// present encryption key on MacOS.
-void LogDeleteCorruptedPasswordsResult(DeleteCorruptedPasswordsResult result);
 
 // Log whether a saved password was generated.
 void LogNewlySavedPasswordIsGenerated(

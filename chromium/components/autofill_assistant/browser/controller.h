@@ -119,7 +119,11 @@ class Controller : public ScriptExecutorDelegate,
   void SetInfoBox(const InfoBox& info_box) override;
   void ClearInfoBox() override;
   void SetProgress(int progress) override;
+  void SetProgressActiveStep(int active_step) override;
   void SetProgressVisible(bool visible) override;
+  void SetStepProgressBarConfiguration(
+      const ShowProgressBarProto::StepProgressBarConfiguration& configuration)
+      override;
   void SetUserActions(
       std::unique_ptr<std::vector<UserAction>> user_actions) override;
   void SetViewportMode(ViewportMode mode) override;
@@ -130,13 +134,14 @@ class Controller : public ScriptExecutorDelegate,
       std::unique_ptr<FormProto> form,
       base::RepeatingCallback<void(const FormProto::Result*)> changed_callback,
       base::OnceCallback<void(const ClientStatus&)> cancel_callback) override;
+  void ExpectNavigation() override;
   bool IsNavigatingToNewDocument() override;
   bool HasNavigationError() override;
   void SetGenericUi(
       std::unique_ptr<GenericUserInterfaceProto> generic_ui,
-      base::OnceCallback<void(bool,
-                              ProcessedActionStatusProto,
-                              const UserModel*)> end_action_callback) override;
+      base::OnceCallback<void(const ClientStatus&)> end_action_callback,
+      base::OnceCallback<void(const ClientStatus&)>
+          view_inflation_finished_callback) override;
   void ClearGenericUi() override;
 
   // Show the UI if it's not already shown. This is only meaningful while in
@@ -153,18 +158,21 @@ class Controller : public ScriptExecutorDelegate,
   void SetCollectUserDataOptions(CollectUserDataOptions* options) override;
   void WriteUserData(
       base::OnceCallback<void(UserData*, UserData::FieldChange*)>) override;
-  void WriteUserModel(
-      base::OnceCallback<void(UserModel*)> write_callback) override;
   void OnScriptError(const std::string& error_message,
                      Metrics::DropOutReason reason);
 
   // Overrides autofill_assistant::UiDelegate:
   AutofillAssistantState GetState() override;
+  int64_t GetErrorCausingNavigationId() const override;
   void OnUserInteractionInsideTouchableArea() override;
   const Details* GetDetails() const override;
   const InfoBox* GetInfoBox() const override;
   int GetProgress() const override;
+  base::Optional<int> GetProgressActiveStep() const override;
   bool GetProgressVisible() const override;
+  bool GetProgressBarErrorState() const override;
+  base::Optional<ShowProgressBarProto::StepProgressBarConfiguration>
+  GetStepProgressBarConfiguration() const override;
   const std::vector<UserAction>& GetUserActions() const override;
   bool PerformUserActionWithContext(
       int index,
@@ -279,7 +287,6 @@ class Controller : public ScriptExecutorDelegate,
       const std::vector<ScriptHandle>& runnable_scripts) override;
 
   // Overrides content::WebContentsObserver:
-  void DidAttachInterstitialPage() override;
   void DidFinishLoad(content::RenderFrameHost* render_frame_host,
                      const GURL& validated_url) override;
   void DidStartNavigation(
@@ -311,6 +318,8 @@ class Controller : public ScriptExecutorDelegate,
   // Clear out visible state and enter the stopped state.
   void EnterStoppedState();
 
+  void SetProgressBarErrorState(bool error);
+
   ElementArea* touchable_element_area();
   ScriptTracker* script_tracker();
   bool allow_autostart() { return state_ == AutofillAssistantState::STARTING; }
@@ -327,6 +336,7 @@ class Controller : public ScriptExecutorDelegate,
   std::unique_ptr<TriggerContext> trigger_context_;
 
   AutofillAssistantState state_ = AutofillAssistantState::INACTIVE;
+  int64_t error_causing_navigation_id_ = -1;
 
   // The URL passed to Start(). Used only as long as there's no committed URL.
   // Note that this is the deeplink passed by a caller.
@@ -373,9 +383,13 @@ class Controller : public ScriptExecutorDelegate,
 
   // Current progress.
   int progress_ = 0;
+  base::Optional<int> progress_active_step_;
 
   // Current visibility of the progress bar. It is initially visible.
   bool progress_visible_ = true;
+  bool progress_bar_error_state_ = false;
+  base::Optional<ShowProgressBarProto::StepProgressBarConfiguration>
+      step_progress_bar_configuration_;
 
   // Current set of user actions. May be null, but never empty.
   std::unique_ptr<std::vector<UserAction>> user_actions_;
@@ -410,6 +424,9 @@ class Controller : public ScriptExecutorDelegate,
   // Value for ScriptExecutorDelegate::HasNavigationError()
   bool navigation_error_ = false;
   base::ObserverList<NavigationListener> navigation_listeners_;
+
+  // The next DidStartNavigation will not cause an error.
+  bool expect_navigation_ = false;
 
   // Tracks scripts and script execution. It's kept at the end, as it tend to
   // depend on everything the controller support, through script and script

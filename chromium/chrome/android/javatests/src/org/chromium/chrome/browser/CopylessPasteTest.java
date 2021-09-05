@@ -5,7 +5,8 @@
 package org.chromium.chrome.browser;
 
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.LargeTest;
+
+import androidx.test.filters.LargeTest;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -18,7 +19,6 @@ import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.blink.mojom.WebPage;
 import org.chromium.chrome.browser.firstrun.FirstRunStatus;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -118,7 +118,6 @@ public class CopylessPasteTest {
     /** Tests that CopylessPaste works on pages without desired metadata. */
     @Test
     @LargeTest
-    @RetryOnFailure
     @Feature({"CopylessPaste"})
     public void testNoMeta() throws TimeoutException {
         mActivityTestRule.loadUrl(mTestServer.getURL(NODATA_PAGE));
@@ -129,7 +128,6 @@ public class CopylessPasteTest {
     /** Tests that CopylessPaste works end-to-end. */
     @Test
     @LargeTest
-    @RetryOnFailure
     @Feature({"CopylessPaste"})
     public void testValid() throws TimeoutException {
         mActivityTestRule.loadUrl(mTestServer.getURL(DATA_PAGE));
@@ -159,7 +157,6 @@ public class CopylessPasteTest {
     /** Tests that CopylessPaste skips parsing visited pages. */
     @Test
     @LargeTest
-    @RetryOnFailure
     @Feature({"CopylessPaste"})
     public void testCache() throws TimeoutException {
         mActivityTestRule.loadUrl(mTestServer.getURL(NODATA_PAGE));

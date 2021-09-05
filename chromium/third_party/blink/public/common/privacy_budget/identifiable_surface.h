@@ -24,13 +24,28 @@ namespace blink {
 //   * Immutable.
 //   * Efficient enough to pass by value.
 //
+// Internally, an identifiable surface is represented as a 64-bit unsigned
+// integer that can be used as the metric hash for reporting metrics via UKM.
+//
+// The least-significant |kTypeBits| of the value is used to store
+// a IdentifiableSurface::Type value. The remainder stores the 56
+// least-significant bits of an IdentifiableToken.
 class IdentifiableSurface {
  public:
+  // Number of bits used by Type.
+  static constexpr int kTypeBits = 8;
+
+  // Bitmask for extracting Type value from a surface hash.
+  static constexpr uint64_t kTypeMask = (1 << kTypeBits) - 1;
+
+  // Indicator for an uninitialized IdentifiableSurface. Maps to
+  // {Type::kReservedInternal, 0} which is not possible for a valid surface.
+  static constexpr uint64_t kInvalidHash = 0;
+
   // Type of identifiable surface.
   //
   // Even though the data type is uint64_t, we can only use 8 bits due to how we
-  // pack the surface type and a digest of the input into a 64 bits. See
-  // README.md in this directory for details on encoding.
+  // pack the surface type and a digest of the input into a 64 bits.
   //
   // These values are used for aggregation across versions. Entries should not
   // be renumbered and numeric values should never be reused.
@@ -47,8 +62,11 @@ class IdentifiableSurface {
     kCanvasReadback = 2,
 
     // We can use values up to and including |kMax|.
-    kMax = 0xff
+    kMax = (1 << kTypeBits) - 1
   };
+
+  // Default constructor is invalid.
+  IdentifiableSurface() : IdentifiableSurface(kInvalidHash) {}
 
   // Construct an IdentifiableSurface based on a precalculated metric hash. Can
   // also be used as the first step in decoding an encoded metric hash.
@@ -60,6 +78,11 @@ class IdentifiableSurface {
   static constexpr IdentifiableSurface FromTypeAndInput(Type type,
                                                         uint64_t input) {
     return IdentifiableSurface(KeyFromSurfaceTypeAndInput(type, input));
+  }
+
+  // Construct an invalid identifiable surface.
+  static constexpr IdentifiableSurface Invalid() {
+    return IdentifiableSurface(kInvalidHash);
   }
 
   // Returns the UKM metric hash corresponding to this IdentifiableSurface.
@@ -79,7 +102,12 @@ class IdentifiableSurface {
     return std::get<1>(SurfaceTypeAndInputFromMetricKey(metric_hash_));
   }
 
+  constexpr bool IsValid() const { return metric_hash_ != kInvalidHash; }
+
  private:
+  constexpr explicit IdentifiableSurface(uint64_t metric_hash)
+      : metric_hash_(metric_hash) {}
+
   // Returns a 64-bit metric key given an IdentifiableSurfaceType and a 64 bit
   // input digest.
   //
@@ -88,7 +116,7 @@ class IdentifiableSurface {
   static constexpr uint64_t KeyFromSurfaceTypeAndInput(Type type,
                                                        uint64_t input) {
     uint64_t type_as_int = static_cast<uint64_t>(type);
-    return type_as_int | (input << 8);
+    return type_as_int | (input << kTypeBits);
   }
 
   // Returns the IdentifiableSurfaceType and the input hash given a metric key.
@@ -98,18 +126,31 @@ class IdentifiableSurface {
   // from that used to construct this IdentifiableSurface.
   static constexpr std::tuple<Type, uint64_t> SurfaceTypeAndInputFromMetricKey(
       uint64_t metric) {
-    return std::make_tuple(static_cast<Type>(metric & 0xff), metric >> 8);
+    return std::make_tuple(static_cast<Type>(metric & kTypeMask),
+                           metric >> kTypeBits);
   }
 
- private:
-  constexpr explicit IdentifiableSurface(uint64_t metric_hash)
-      : metric_hash_(metric_hash) {}
   uint64_t metric_hash_;
 };
 
 constexpr bool operator<(const IdentifiableSurface& left,
                          const IdentifiableSurface& right) {
   return left.ToUkmMetricHash() < right.ToUkmMetricHash();
+}
+
+constexpr bool operator<=(const IdentifiableSurface& left,
+                          const IdentifiableSurface& right) {
+  return left.ToUkmMetricHash() <= right.ToUkmMetricHash();
+}
+
+constexpr bool operator>(const IdentifiableSurface& left,
+                         const IdentifiableSurface& right) {
+  return left.ToUkmMetricHash() > right.ToUkmMetricHash();
+}
+
+constexpr bool operator>=(const IdentifiableSurface& left,
+                          const IdentifiableSurface& right) {
+  return left.ToUkmMetricHash() >= right.ToUkmMetricHash();
 }
 
 constexpr bool operator==(const IdentifiableSurface& left,
@@ -126,6 +167,14 @@ constexpr bool operator!=(const IdentifiableSurface& left,
 struct IdentifiableSurfaceHash {
   size_t operator()(const IdentifiableSurface& s) const {
     return std::hash<uint64_t>{}(s.ToUkmMetricHash());
+  }
+};
+
+// Compare function compatible with std::less
+struct IdentifiableSurfaceCompLess {
+  bool operator()(const IdentifiableSurface& lhs,
+                  const IdentifiableSurface& rhs) const {
+    return lhs.ToUkmMetricHash() < rhs.ToUkmMetricHash();
   }
 };
 

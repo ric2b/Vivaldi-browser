@@ -4,20 +4,55 @@
 
 #include "media/gpu/test/video_encoder/video_encoder_test_environment.h"
 
+#include <algorithm>
 #include <utility>
 
+#include "build/buildflag.h"
 #include "gpu/ipc/service/gpu_memory_buffer_factory.h"
+#include "media/base/media_switches.h"
+#include "media/gpu/buildflags.h"
 #include "media/gpu/macros.h"
 #include "media/gpu/test/video.h"
 
 namespace media {
 namespace test {
+namespace {
+struct CodecParamToProfile {
+  const char* codec;
+  const VideoCodecProfile profile;
+} kCodecParamToProfile[] = {
+    {"h264baseline", H264PROFILE_BASELINE}, {"h264", H264PROFILE_MAIN},
+    {"h264main", H264PROFILE_MAIN},         {"vp8", VP8PROFILE_ANY},
+    {"vp9", VP9PROFILE_PROFILE0},
+};
+
+const std::vector<base::Feature> kEnabledFeaturesForVideoEncoderTest = {
+#if BUILDFLAG(USE_VAAPI)
+    // TODO(crbug.com/828482): remove once enabled by default.
+    media::kVaapiLowPowerEncoderGen9x,
+    // TODO(crbug.com/811912): remove once enabled by default.
+    kVaapiVP9Encoder,
+#endif
+};
+
+const std::vector<base::Feature> kDisabledFeaturesForVideoEncoderTest = {
+    // FFmpegVideoDecoder is used for vp8 stream whose alpha mode is opaque in
+    // chromium browser. However, VpxVideoDecoder will be used to decode any vp8
+    // stream for the rightness (b/138840822), and currently be experimented
+    // with this feature flag. We disable the feature to use VpxVideoDecoder to
+    // decode any vp8 stream in BitstreamValidator.
+    kFFmpegDecodeOpaqueVP8,
+};
+}  // namespace
 
 // static
 VideoEncoderTestEnvironment* VideoEncoderTestEnvironment::Create(
     const base::FilePath& video_path,
     const base::FilePath& video_metadata_path,
-    const base::FilePath& output_folder) {
+    bool enable_bitstream_validator,
+    const base::FilePath& output_folder,
+    const std::string& codec,
+    bool output_bitstream) {
   if (video_path.empty()) {
     LOG(ERROR) << "No video specified";
     return nullptr;
@@ -47,25 +82,69 @@ VideoEncoderTestEnvironment* VideoEncoderTestEnvironment::Create(
     return nullptr;
   }
 
-  return new VideoEncoderTestEnvironment(std::move(video), output_folder);
+  base::Optional<base::FilePath> bitstream_filename;
+  if (output_bitstream) {
+    base::FilePath::StringPieceType extension =
+        codec.find("h264") != std::string::npos ? FILE_PATH_LITERAL("h264")
+                                                : FILE_PATH_LITERAL("ivf");
+    bitstream_filename = video_path.BaseName().ReplaceExtension(extension);
+  }
+
+  const auto* it = std::find_if(
+      std::begin(kCodecParamToProfile), std::end(kCodecParamToProfile),
+      [codec](const auto& cp) { return cp.codec == codec; });
+  if (it == std::end(kCodecParamToProfile)) {
+    LOG(ERROR) << "Unknown codec: " << codec;
+    return nullptr;
+  }
+
+  VideoCodecProfile profile = it->profile;
+  return new VideoEncoderTestEnvironment(
+      std::move(video), enable_bitstream_validator, output_folder, profile,
+      bitstream_filename);
 }
 
 VideoEncoderTestEnvironment::VideoEncoderTestEnvironment(
     std::unique_ptr<media::test::Video> video,
-    const base::FilePath& output_folder)
-    : video_(std::move(video)),
+    bool enable_bitstream_validator,
+    const base::FilePath& output_folder,
+    VideoCodecProfile profile,
+    const base::Optional<base::FilePath>& bitstream_filename)
+    : VideoTestEnvironment(kEnabledFeaturesForVideoEncoderTest,
+                           kDisabledFeaturesForVideoEncoderTest),
+      video_(std::move(video)),
+      enable_bitstream_validator_(enable_bitstream_validator),
       output_folder_(output_folder),
+      profile_(profile),
+      bitstream_filename_(bitstream_filename),
       gpu_memory_buffer_factory_(
           gpu::GpuMemoryBufferFactory::CreateNativeType(nullptr)) {}
 
 VideoEncoderTestEnvironment::~VideoEncoderTestEnvironment() = default;
 
-const media::test::Video* VideoEncoderTestEnvironment::Video() const {
+media::test::Video* VideoEncoderTestEnvironment::Video() const {
   return video_.get();
+}
+
+bool VideoEncoderTestEnvironment::IsBitstreamValidatorEnabled() const {
+  return enable_bitstream_validator_;
 }
 
 const base::FilePath& VideoEncoderTestEnvironment::OutputFolder() const {
   return output_folder_;
+}
+
+VideoCodecProfile VideoEncoderTestEnvironment::Profile() const {
+  return profile_;
+}
+
+base::Optional<base::FilePath>
+VideoEncoderTestEnvironment::OutputBitstreamFilePath() const {
+  if (!bitstream_filename_)
+    return base::nullopt;
+
+  return output_folder_.Append(GetTestOutputFilePath())
+      .Append(*bitstream_filename_);
 }
 
 gpu::GpuMemoryBufferFactory*

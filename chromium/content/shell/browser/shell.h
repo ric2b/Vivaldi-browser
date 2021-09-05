@@ -26,8 +26,8 @@ class GURL;
 
 namespace content {
 class BrowserContext;
+class JavaScriptDialogManager;
 class ShellDevToolsFrontend;
-class ShellJavaScriptDialogManager;
 class SiteInstance;
 class WebContents;
 
@@ -71,13 +71,6 @@ class Shell : public WebContentsDelegate,
       const GURL& url,
       const scoped_refptr<SiteInstance>& site_instance,
       const gfx::Size& initial_size);
-
-  static Shell* CreateNewWindowWithSessionStorageNamespace(
-      BrowserContext* browser_context,
-      const GURL& url,
-      const scoped_refptr<SiteInstance>& site_instance,
-      const gfx::Size& initial_size,
-      scoped_refptr<SessionStorageNamespace> session_storage_namespace);
 
   // Returns the Shell object corresponding to the given WebContents.
   static Shell* FromWebContents(WebContents* web_contents);
@@ -131,8 +124,7 @@ class Shell : public WebContentsDelegate,
   void SetOverlayMode(bool use_overlay_mode) override;
 #endif
   void EnterFullscreenModeForTab(
-      WebContents* web_contents,
-      const GURL& origin,
+      RenderFrameHost* requesting_frame,
       const blink::mojom::FullscreenOptions& options) override;
   void ExitFullscreenModeForTab(WebContents* web_contents) override;
   bool IsFullscreenForTabOrPending(const WebContents* web_contents) override;
@@ -180,6 +172,7 @@ class Shell : public WebContentsDelegate,
       const viz::SurfaceId&,
       const gfx::Size& natural_size) override;
   bool ShouldResumeRequestsForCreatedWindow() override;
+  void SetContentsBounds(WebContents* source, const gfx::Rect& bounds) override;
 
   static gfx::Size GetShellDefaultSize();
 
@@ -224,7 +217,7 @@ class Shell : public WebContentsDelegate,
 
   void OnDevToolsWebContentsDestroyed();
 
-  std::unique_ptr<ShellJavaScriptDialogManager> dialog_manager_;
+  std::unique_ptr<JavaScriptDialogManager> dialog_manager_;
 
   std::unique_ptr<WebContents> web_contents_;
 

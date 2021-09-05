@@ -33,6 +33,7 @@
 #include "third_party/blink/renderer/core/dom/document_fragment.h"
 #include "third_party/blink/renderer/core/dom/element_traversal.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
+#include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/html/forms/html_form_control_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_form_element.h"
@@ -57,6 +58,7 @@
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/text/platform_locale.h"
 #include "third_party/blink/renderer/platform/wtf/text/character_names.h"
+#include "third_party/blink/renderer/platform/wtf/text/character_visitor.h"
 
 namespace blink {
 
@@ -165,10 +167,9 @@ class HTMLTreeBuilder::CharacterTokenBuffer {
   }
 
   void GiveRemainingTo(StringBuilder& recipient) {
-    if (characters_->Is8Bit())
-      recipient.Append(characters_->Characters8() + current_, end_ - current_);
-    else
-      recipient.Append(characters_->Characters16() + current_, end_ - current_);
+    WTF::VisitCharacters(*characters_, [&](const auto* chars, unsigned length) {
+      recipient.Append(chars + current_, end_ - current_);
+    });
     current_ = end_;
   }
 
@@ -277,12 +278,12 @@ void HTMLTreeBuilder::FragmentParsingContext::Init(DocumentFragment* fragment,
       context_element, HTMLStackItem::kItemForContextElement);
 }
 
-void HTMLTreeBuilder::FragmentParsingContext::Trace(Visitor* visitor) {
+void HTMLTreeBuilder::FragmentParsingContext::Trace(Visitor* visitor) const {
   visitor->Trace(fragment_);
   visitor->Trace(context_element_stack_item_);
 }
 
-void HTMLTreeBuilder::Trace(Visitor* visitor) {
+void HTMLTreeBuilder::Trace(Visitor* visitor) const {
   visitor->Trace(fragment_context_);
   visitor->Trace(tree_);
   visitor->Trace(parser_);
@@ -896,7 +897,8 @@ void HTMLTreeBuilder::ProcessTemplateStartTag(AtomicHTMLToken* token) {
 
   DeclarativeShadowRootType declarative_shadow_root_type(
       DeclarativeShadowRootType::kNone);
-  if (RuntimeEnabledFeatures::DeclarativeShadowDOMEnabled()) {
+  if (RuntimeEnabledFeatures::DeclarativeShadowDOMEnabled(
+          tree_.CurrentNode()->GetExecutionContext())) {
     if (Attribute* type_attribute =
             token->GetAttributeItem(html_names::kShadowrootAttr)) {
       String shadow_mode = type_attribute->Value();
@@ -942,7 +944,8 @@ bool HTMLTreeBuilder::ProcessTemplateEndTag(AtomicHTMLToken* token) {
   tree_.ActiveFormattingElements()->ClearToLastMarker();
   template_insertion_modes_.pop_back();
   ResetInsertionModeAppropriately();
-  if (RuntimeEnabledFeatures::DeclarativeShadowDOMEnabled() &&
+  if (RuntimeEnabledFeatures::DeclarativeShadowDOMEnabled(
+          shadow_host_stack_item->GetNode()->GetExecutionContext()) &&
       template_stack_item) {
     DCHECK(template_stack_item->IsElementNode());
     HTMLTemplateElement* template_element =
@@ -951,29 +954,32 @@ bool HTMLTreeBuilder::ProcessTemplateEndTag(AtomicHTMLToken* token) {
     // attribute with the name "shadowroot" whose value was an ASCII
     // case-insensitive match for the strings "open" or "closed", then stop this
     // algorithm.
-    // 10. If the adjusted current node is the topmost element in the stack of
-    // open elements, then stop this algorithm.
-    if (template_element->IsDeclarativeShadowRoot() &&
-        shadow_host_stack_item->GetNode() != tree_.OpenElements()->RootNode()) {
-      DCHECK(shadow_host_stack_item);
-      DCHECK(shadow_host_stack_item->IsElementNode());
-      UseCounter::Count(shadow_host_stack_item->GetElement()->GetDocument(),
-                        WebFeature::kDeclarativeShadowRoot);
-      bool delegates_focus = template_stack_item->GetAttributeItem(
-          html_names::kShadowrootdelegatesfocusAttr);
-      // TODO(crbug.com/1063157): Add an attribute for imperative slot
-      // assignment.
-      bool manual_slotting = false;
-      shadow_host_stack_item->GetElement()->AttachDeclarativeShadowRoot(
-          template_element,
-          template_element->GetDeclarativeShadowRootType() ==
-                  DeclarativeShadowRootType::kOpen
-              ? ShadowRootType::kOpen
-              : ShadowRootType::kClosed,
-          delegates_focus ? FocusDelegation::kDelegateFocus
-                          : FocusDelegation::kNone,
-          manual_slotting ? SlotAssignmentMode::kManual
-                          : SlotAssignmentMode::kAuto);
+    if (template_element->IsDeclarativeShadowRoot()) {
+      if (shadow_host_stack_item->GetNode() ==
+          tree_.OpenElements()->RootNode()) {
+        // 10. If the adjusted current node is the topmost element in the stack
+        // of open elements, then stop this algorithm.
+        template_element->SetDeclarativeShadowRootType(
+            DeclarativeShadowRootType::kNone);
+      } else {
+        DCHECK(shadow_host_stack_item);
+        DCHECK(shadow_host_stack_item->IsElementNode());
+        bool delegates_focus = template_stack_item->GetAttributeItem(
+            html_names::kShadowrootdelegatesfocusAttr);
+        // TODO(crbug.com/1063157): Add an attribute for imperative slot
+        // assignment.
+        bool manual_slotting = false;
+        shadow_host_stack_item->GetElement()->AttachDeclarativeShadowRoot(
+            template_element,
+            template_element->GetDeclarativeShadowRootType() ==
+                    DeclarativeShadowRootType::kOpen
+                ? ShadowRootType::kOpen
+                : ShadowRootType::kClosed,
+            delegates_focus ? FocusDelegation::kDelegateFocus
+                            : FocusDelegation::kNone,
+            manual_slotting ? SlotAssignmentMode::kManual
+                            : SlotAssignmentMode::kAuto);
+      }
     }
   }
   return true;

@@ -13,7 +13,7 @@
 #include "media/base/video_decoder.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
-#include "third_party/blink/renderer/bindings/modules/v8/v8_video_decoder_output_callback.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_video_frame_output_callback.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_web_codecs_error_callback.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
@@ -43,14 +43,13 @@ class MODULES_EXPORT VideoDecoder final : public ScriptWrappable {
 
   // video_decoder.idl implementation.
   int32_t decodeQueueSize();
-  int32_t decodeProcessingCount();
-  ScriptPromise configure(const EncodedVideoConfig*, ExceptionState&);
-  ScriptPromise decode(const EncodedVideoChunk*, ExceptionState&);
+  void configure(const EncodedVideoConfig*, ExceptionState&);
+  void decode(const EncodedVideoChunk*, ExceptionState&);
   ScriptPromise flush(ExceptionState&);
-  ScriptPromise reset(ExceptionState&);
+  void reset(ExceptionState&);
 
   // GarbageCollected override.
-  void Trace(Visitor*) override;
+  void Trace(Visitor*) const override;
 
  private:
   struct Request : public GarbageCollected<Request> {
@@ -61,11 +60,17 @@ class MODULES_EXPORT VideoDecoder final : public ScriptWrappable {
       kReset,
     };
 
-    void Trace(Visitor*);
+    void Trace(Visitor*) const;
 
     Type type;
+
+    // For kConfigure Requests.
     Member<const EncodedVideoConfig> config;
+
+    // For kDecode Requests.
     Member<const EncodedVideoChunk> chunk;
+
+    // For kFlush Requests.
     Member<ScriptPromiseResolver> resolver;
   };
 
@@ -86,7 +91,7 @@ class MODULES_EXPORT VideoDecoder final : public ScriptWrappable {
   void OnOutput(scoped_refptr<media::VideoFrame>);
 
   Member<ScriptState> script_state_;
-  Member<V8VideoDecoderOutputCallback> output_cb_;
+  Member<V8VideoFrameOutputCallback> output_cb_;
   Member<V8WebCodecsErrorCallback> error_cb_;
 
   HeapDeque<Member<Request>> requests_;

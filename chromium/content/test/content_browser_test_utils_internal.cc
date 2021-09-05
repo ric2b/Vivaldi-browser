@@ -15,9 +15,10 @@
 
 #include "base/bind.h"
 #include "base/containers/stack.h"
+#include "base/json/json_reader.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
-#include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/frame_host/frame_tree_node.h"
@@ -50,7 +51,7 @@ bool NavigateFrameToURL(FrameTreeNode* node, const GURL& url) {
   NavigationController::LoadURLParams params(url);
   params.transition_type = ui::PAGE_TRANSITION_LINK;
   params.frame_tree_node_id = node->frame_tree_node_id();
-  node->navigator()->GetController()->LoadURLWithParams(params);
+  node->navigator().GetController()->LoadURLWithParams(params);
   observer.Wait();
 
   if (!observer.last_navigation_succeeded()) {
@@ -418,8 +419,8 @@ void ShowWidgetMessageFilter::Reset() {
 
 void ShowWidgetMessageFilter::OnShowWidget(int route_id,
                                            const gfx::Rect& initial_rect) {
-  base::PostTask(FROM_HERE, {content::BrowserThread::UI},
-                 base::BindOnce(&ShowWidgetMessageFilter::OnShowWidgetOnUI,
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE, base::BindOnce(&ShowWidgetMessageFilter::OnShowWidgetOnUI,
                                 this, route_id, initial_rect));
 }
 
@@ -434,8 +435,8 @@ bool ShowWidgetMessageFilter::ShowPopupMenu(
     std::vector<blink::mojom::MenuItemPtr>* menu_items,
     bool right_aligned,
     bool allow_multiple_selection) {
-  base::PostTask(FROM_HERE, {content::BrowserThread::UI},
-                 base::BindOnce(&ShowWidgetMessageFilter::OnShowWidgetOnUI,
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE, base::BindOnce(&ShowWidgetMessageFilter::OnShowWidgetOnUI,
                                 this, MSG_ROUTING_NONE, bounds));
   return true;
 }
@@ -476,8 +477,8 @@ bool ObserveMessageFilter::OnMessageReceived(const IPC::Message& message) {
     // Exit the Wait() method if it's being used, but in a fresh stack once the
     // message is actually handled.
     if (quit_closure_ && !received_) {
-      base::PostTask(FROM_HERE,
-                     base::BindOnce(&ObserveMessageFilter::QuitWait, this));
+      base::ThreadPool::PostTask(
+          FROM_HERE, base::BindOnce(&ObserveMessageFilter::QuitWait, this));
     }
     received_ = true;
   }
@@ -560,6 +561,68 @@ bool BeforeUnloadBlockingDelegate::HandleJavaScriptDialog(
     const base::string16* prompt_override) {
   NOTREACHED();
   return true;
+}
+
+namespace {
+static constexpr int kEnableLogMessageId = 0;
+static constexpr char kEnableLogMessage[] = R"({"id":0,"method":"Log.enable"})";
+static constexpr int kDisableLogMessageId = 1;
+static constexpr char kDisableLogMessage[] =
+    R"({"id":1,"method":"Log.disable"})";
+}  // namespace
+
+DevToolsInspectorLogWatcher::DevToolsInspectorLogWatcher(
+    WebContents* web_contents) {
+  host_ = DevToolsAgentHost::GetOrCreateFor(web_contents);
+  host_->AttachClient(this);
+
+  host_->DispatchProtocolMessage(
+      this, base::as_bytes(
+                base::make_span(kEnableLogMessage, strlen(kEnableLogMessage))));
+
+  run_loop_enable_log_.Run();
+}
+
+DevToolsInspectorLogWatcher::~DevToolsInspectorLogWatcher() {
+  host_->DetachClient(this);
+}
+
+void DevToolsInspectorLogWatcher::DispatchProtocolMessage(
+    DevToolsAgentHost* host,
+    base::span<const uint8_t> message) {
+  base::StringPiece message_str(reinterpret_cast<const char*>(message.data()),
+                                message.size());
+  auto parsed_message = base::JSONReader::Read(message_str);
+  base::Optional<int> command_id = parsed_message->FindIntPath("id");
+  if (command_id.has_value()) {
+    switch (command_id.value()) {
+      case kEnableLogMessageId:
+        run_loop_enable_log_.Quit();
+        break;
+      case kDisableLogMessageId:
+        run_loop_disable_log_.Quit();
+        break;
+      default:
+        NOTREACHED();
+    }
+    return;
+  }
+
+  std::string* notification = parsed_message->FindStringPath("method");
+  if (notification && *notification == "Log.entryAdded") {
+    std::string* text = parsed_message->FindStringPath("params.entry.text");
+    DCHECK(text);
+    last_message_ = *text;
+  }
+}
+
+void DevToolsInspectorLogWatcher::AgentHostClosed(DevToolsAgentHost* host) {}
+
+void DevToolsInspectorLogWatcher::FlushAndStopWatching() {
+  host_->DispatchProtocolMessage(
+      this, base::as_bytes(base::make_span(kDisableLogMessage,
+                                           strlen(kDisableLogMessage))));
+  run_loop_disable_log_.Run();
 }
 
 }  // namespace content

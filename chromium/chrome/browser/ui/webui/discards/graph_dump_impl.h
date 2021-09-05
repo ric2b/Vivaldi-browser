@@ -99,6 +99,9 @@ class DiscardsGraphDumpImpl : public discards::mojom::GraphDump,
   void OnHadFormInteractionChanged(
       const performance_manager::FrameNode* frame_node) override {}
   // Ignored.
+  void OnIsAudibleChanged(
+      const performance_manager::FrameNode* frame_node) override {}
+  // Ignored.
   void OnFirstContentfulPaint(
       const performance_manager::FrameNode* frame_node,
       base::TimeDelta time_since_navigation_start) override {}
@@ -107,6 +110,10 @@ class DiscardsGraphDumpImpl : public discards::mojom::GraphDump,
   void OnPageNodeAdded(const performance_manager::PageNode* page_node) override;
   void OnBeforePageNodeRemoved(
       const performance_manager::PageNode* page_node) override;
+  void OnOpenerFrameNodeChanged(
+      const performance_manager::PageNode* page_node,
+      const performance_manager::FrameNode* previous_opener,
+      OpenedType previous_opened_type) override;
   void OnIsVisibleChanged(
       const performance_manager::PageNode* page_node) override {}  // Ignored.
   void OnIsAudibleChanged(
@@ -186,7 +193,8 @@ class DiscardsGraphDumpImpl : public discards::mojom::GraphDump,
 
   void AddNode(const performance_manager::Node* node);
   void RemoveNode(const performance_manager::Node* node);
-  int64_t GetNodeId(const performance_manager::Node* node);
+  bool HasNode(const performance_manager::Node* node) const;
+  int64_t GetNodeId(const performance_manager::Node* node) const;
 
   FaviconRequestHelper* EnsureFaviconRequestHelper();
 
@@ -194,6 +202,7 @@ class DiscardsGraphDumpImpl : public discards::mojom::GraphDump,
   void StartFrameFaviconRequest(
       const performance_manager::FrameNode* frame_node);
 
+  void SendNotificationToAllNodes(bool created);
   void SendFrameNotification(const performance_manager::FrameNode* frame,
                              bool created);
   void SendPageNotification(const performance_manager::PageNode* page,

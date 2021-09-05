@@ -2,7 +2,25 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="be">
 <translation id="3830627370375585318">Дазвольце Vivaldi падлучацца да інтэрнэту ў Фаерволе ці Антывірусе.</translation>
+<translation id="4200102020577305737">Выберыце
+          мэню Vivaldi &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          Налады Сеткі
+          і Зніміце Сцяжок "Карыстаць Proxy-Server для Лакальных Злучэній".</translation>
+<translation id="4932161901409251843">Выберыце мэню Vivaldi &gt; <ph name="SETTINGS_TITLE" /> &gt; <ph name="ADVANCED_TITLE" /> &gt; <ph name="PROXIES_TITLE" /> і упэўніцесь, што ў канфігурацыі адключаны "Проксі-Сэрвэр" або выбрана "Злучэнне Напрамую".</translation>
 <translation id="5248344925342018662">Вы праглядеце бяспечную старонку Vivaldi</translation>
+<translation id="7023871570427738255">Зайдзіце ў
+мэню Vivaldi, націсніце "<ph name="SETTINGS_TITLE" />"
+ &gt;
+"<ph name="ADVANCED_TITLE" />"
+і здыміце сцяжок "<ph name="NO_PREFETCH_DESCRIPTION" />".
+ Калі праблема не знікла, то зноў усталюйце сцяжок,
+каб старонкі ладавалісь хучэй.</translation>
 <translation id="8187289872471304532">Ісці да
 Праграмы -&gt; Сістэмныя налады -&gt; Сетка -&gt; Дапаўніцельна -&gt; Проксі
 і здыміце сцяжкі супраць усех выбраных проксі сэрвэроў.</translation>

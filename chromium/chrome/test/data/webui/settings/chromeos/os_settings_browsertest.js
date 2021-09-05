@@ -403,6 +403,8 @@ var OSSettingsAppManagementPluginVmDetailViewTest =
   /** @override */
   get extraLibraries() {
     return super.extraLibraries.concat([
+      BROWSER_SETTINGS_PATH + '../test_browser_proxy.js',
+      'app_management/test_plugin_vm_browser_proxy.js',
       'app_management/plugin_vm_detail_view_test.js',
     ]);
   }
@@ -524,27 +526,27 @@ var OSSettingsCrostiniPageTest = class extends OSSettingsBrowserTest {
 };
 
 TEST_F('OSSettingsCrostiniPageTest', 'MainPage', function() {
-  mocha.grep('MainPage').run();
+  mocha.grep('\\bMainPage\\b').run();
 });
 
-TEST_F('OSSettingsCrostiniPageTest', 'DISABLED_SubPageDefault', function() {
-  mocha.grep('SubPageDefault').run();
+TEST_F('OSSettingsCrostiniPageTest', 'SubPageDefault', function() {
+  mocha.grep('\\bSubPageDefault\\b').run();
 });
 
 TEST_F('OSSettingsCrostiniPageTest', 'SubPagePortForwarding', function() {
-  mocha.grep('SubPagePortForwarding').run();
+  mocha.grep('\\bSubPagePortForwarding\\b').run();
 });
 
-TEST_F('OSSettingsCrostiniPageTest', 'DISABLED_DiskResize', function() {
-  mocha.grep('DiskResize').run();
+TEST_F('OSSettingsCrostiniPageTest', 'DiskResize', function() {
+  mocha.grep('\\bDiskResize\\b').run();
 });
 
 TEST_F('OSSettingsCrostiniPageTest', 'SubPageSharedPaths', function() {
-  mocha.grep('SubPageSharedPaths').run();
+  mocha.grep('\\bSubPageSharedPaths\\b').run();
 });
 
 TEST_F('OSSettingsCrostiniPageTest', 'SubPageSharedUsbDevices', function() {
-  mocha.grep('SubPageSharedUsbDevices').run();
+  mocha.grep('\\bSubPageSharedUsbDevices\\b').run();
 });
 
 // Test fixture for the Date and Time page.
@@ -558,6 +560,7 @@ var OSSettingsDateTimePageTest = class extends OSSettingsBrowserTest {
   /** @override */
   get extraLibraries() {
     return super.extraLibraries.concat([
+      BROWSER_SETTINGS_PATH + '../test_browser_proxy.js',
       'date_time_page_tests.js',
     ]);
   }
@@ -580,6 +583,7 @@ var OSSettingsDevicePageTest = class extends OSSettingsBrowserTest {
     return {
       enabled: [
         'ash::features::kDisplayIdentification',
+        'chromeos::features::kDlcSettingsUi',
         'display::features::kListAllDisplayModes'
       ]
     };
@@ -782,14 +786,9 @@ TEST_F('OSSettingsMainTest', 'AllJsTests', () => {
   mocha.run();
 });
 
-// Tests for the new OS Settings Search Box
+// Tests for the OS Settings Search Box
 // eslint-disable-next-line no-var
 var OSSettingsSearchBoxBrowserTest = class extends OSSettingsBrowserTest {
-  /** @override */
-  get featureList() {
-    return {enabled: ['chromeos::features::kNewOsSettingsSearch']};
-  }
-
   /** @override */
   get extraLibraries() {
     return super.extraLibraries.concat([
@@ -938,6 +937,26 @@ var OSSettingsMultideviceSubpageTest = class extends OSSettingsBrowserTest {
 };
 
 TEST_F('OSSettingsMultideviceSubpageTest', 'AllJsTests', () => {
+  mocha.run();
+});
+
+// Test fixture for the Nearby Share settings subpage.
+// eslint-disable-next-line no-var
+var OSSettingsNearbyShareSubPageTest = class extends OSSettingsBrowserTest {
+  /** @override */
+  get browsePreload() {
+    return super.browsePreload + 'nearby_share_page/nearby_share_subpage.html';
+  }
+
+  /** @override */
+  get extraLibraries() {
+    return super.extraLibraries.concat([
+      'nearby_share_subpage_tests.js',
+    ]);
+  }
+};
+
+TEST_F('OSSettingsNearbyShareSubPageTest', 'AllJsTests', () => {
   mocha.run();
 });
 
@@ -1179,7 +1198,9 @@ var OSSettingsPersonalizationPageTest = class extends OSSettingsBrowserTest {
   }
 };
 
-TEST_F('OSSettingsPersonalizationPageTest', 'AllJsTests', () => {
+
+// TODO(https://crbug.com/1094896): Re-enable once we fix the cause for flakes.
+TEST_F('OSSettingsPersonalizationPageTest', 'DISABLED_AllJsTests', () => {
   mocha.run();
 });
 
@@ -1317,6 +1338,29 @@ TEST_F('OSSettingsSmartInputsPageTest', 'AllJsTests', () => {
   mocha.run();
 });
 
+// eslint-disable-next-line no-var
+var OSSettingsInputMethodOptionsPageTest = class extends OSSettingsBrowserTest {
+  /** @override */
+  get browsePreload() {
+    return super.browsePreload +
+        'chromeos/os_language_page/input_method_options_page.html';
+  }
+
+  /** @override */
+  get extraLibraries() {
+    return super.extraLibraries.concat([
+      BROWSER_SETTINGS_PATH + '../fake_chrome_event.js',
+      BROWSER_SETTINGS_PATH + 'fake_settings_private.js',
+      BROWSER_SETTINGS_PATH + '../test_util.js',
+      'input_method_options_page_test.js',
+    ]);
+  }
+};
+
+TEST_F('OSSettingsInputMethodOptionsPageTest', 'AllJsTests', () => {
+  mocha.run();
+});
+
 // Tests for the Reset section.
 // eslint-disable-next-line no-var
 var OSSettingsResetPageTest = class extends OSSettingsBrowserTest {
@@ -1333,6 +1377,7 @@ var OSSettingsResetPageTest = class extends OSSettingsBrowserTest {
       BROWSER_SETTINGS_PATH + '../test_util.js',
       'test_os_reset_browser_proxy.js',
       'os_reset_page_test.js',
+      'test_os_lifetime_browser_proxy.js',
     ]);
   }
 };

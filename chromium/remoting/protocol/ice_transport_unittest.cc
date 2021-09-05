@@ -9,6 +9,7 @@
 
 #include "base/bind.h"
 #include "base/location.h"
+#include "base/logging.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -54,7 +55,7 @@ class MockChannelCreatedCallback {
 
 class TestTransportEventHandler : public IceTransport::EventHandler {
  public:
-  typedef base::Callback<void(ErrorCode error)> ErrorCallback;
+  typedef base::RepeatingCallback<void(ErrorCode error)> ErrorCallback;
 
   TestTransportEventHandler() = default;
   ~TestTransportEventHandler() = default;

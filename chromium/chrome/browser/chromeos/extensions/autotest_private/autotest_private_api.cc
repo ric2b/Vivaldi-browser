@@ -12,18 +12,21 @@
 #include <utility>
 
 #include "ash/public/cpp/accelerators.h"
+#include "ash/public/cpp/accessibility_controller.h"
+#include "ash/public/cpp/ambient/ambient_ui_model.h"
 #include "ash/public/cpp/app_list/app_list_types.h"
 #include "ash/public/cpp/app_types.h"
 #include "ash/public/cpp/ash_pref_names.h"
 #include "ash/public/cpp/assistant/assistant_client.h"
+#include "ash/public/cpp/autotest_ambient_api.h"
 #include "ash/public/cpp/autotest_desks_api.h"
 #include "ash/public/cpp/autotest_private_api_utils.h"
 #include "ash/public/cpp/default_frame_header.h"
 #include "ash/public/cpp/desks_helper.h"
-#include "ash/public/cpp/fps_counter.h"
 #include "ash/public/cpp/frame_header.h"
 #include "ash/public/cpp/immersive/immersive_fullscreen_controller.h"
 #include "ash/public/cpp/login_screen.h"
+#include "ash/public/cpp/metrics_util.h"
 #include "ash/public/cpp/overview_test_api.h"
 #include "ash/public/cpp/shelf_item.h"
 #include "ash/public/cpp/shelf_model.h"
@@ -43,6 +46,7 @@
 #include "base/json/json_reader.h"
 #include "base/lazy_instance.h"
 #include "base/no_destructor.h"
+#include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/scoped_observer.h"
 #include "base/strings/strcat.h"
@@ -70,6 +74,7 @@
 #include "chrome/browser/chromeos/crostini/crostini_installer.h"
 #include "chrome/browser/chromeos/crostini/crostini_manager.h"
 #include "chrome/browser/chromeos/crostini/crostini_pref_names.h"
+#include "chrome/browser/chromeos/crostini/crostini_util.h"
 #include "chrome/browser/chromeos/file_manager/path_util.h"
 #include "chrome/browser/chromeos/guest_os/guest_os_registry_service.h"
 #include "chrome/browser/chromeos/guest_os/guest_os_registry_service_factory.h"
@@ -107,18 +112,18 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/extensions/api/autotest_private.h"
 #include "chrome/common/pref_names.h"
-#include "chrome/services/app_service/public/mojom/types.mojom.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/session_manager/session_manager_client.h"
 #include "chromeos/printing/printer_configuration.h"
 #include "chromeos/services/assistant/public/cpp/assistant_prefs.h"
-#include "chromeos/services/assistant/public/cpp/default_assistant_interaction_subscriber.h"
+#include "chromeos/services/assistant/public/cpp/assistant_service.h"
 #include "chromeos/services/machine_learning/public/cpp/service_connection.h"
 #include "chromeos/settings/cros_settings_names.h"
 #include "components/arc/arc_prefs.h"
 #include "components/arc/metrics/arc_metrics_constants.h"
 #include "components/policy/core/browser/policy_conversions.h"
 #include "components/policy/core/common/policy_service.h"
+#include "components/services/app_service/public/mojom/types.mojom.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_controller.h"
@@ -136,20 +141,19 @@
 #include "extensions/common/permissions/api_permission_set.h"
 #include "extensions/common/permissions/permission_set.h"
 #include "extensions/common/permissions/permissions_data.h"
-#include "mojo/public/cpp/bindings/associated_binding.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "net/base/filename_util.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
-#include "ui/aura/window_event_dispatcher_observer.h"
 #include "ui/aura/window_observer.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/accelerators/accelerator_history.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
-#include "ui/base/ime/ime_bridge.h"
+#include "ui/base/ime/chromeos/ime_bridge.h"
 #include "ui/base/ui_base_features.h"
+#include "ui/compositor/throughput_tracker.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/events/event_constants.h"
@@ -341,7 +345,7 @@ api::autotest_private::AppReadiness GetAppReadiness(
   switch (readiness) {
     case apps::mojom::Readiness::kReady:
       return api::autotest_private::AppReadiness::APP_READINESS_READY;
-    case apps::mojom::Readiness::kDisabledByBlacklist:
+    case apps::mojom::Readiness::kDisabledByBlocklist:
       return api::autotest_private::AppReadiness::
           APP_READINESS_DISABLEDBYBLACKLIST;
     case apps::mojom::Readiness::kDisabledByPolicy:
@@ -364,6 +368,8 @@ api::autotest_private::AppReadiness GetAppReadiness(
 api::autotest_private::HotseatState GetHotseatState(
     ash::HotseatState hotseat_state) {
   switch (hotseat_state) {
+    case ash::HotseatState::kNone:
+      return api::autotest_private::HotseatState::HOTSEAT_STATE_NONE;
     case ash::HotseatState::kHidden:
       return api::autotest_private::HotseatState::HOTSEAT_STATE_HIDDEN;
     case ash::HotseatState::kShownClamshell:
@@ -644,11 +650,11 @@ ui::KeyboardCode StringToKeyCode(const std::string& str) {
   DCHECK(base::IsStringASCII(str));
   if (str.length() == 1) {
     char c = str[0];
-    if (c >= 'a' || c <= 'z') {
+    if (c >= 'a' && c <= 'z') {
       return static_cast<ui::KeyboardCode>(static_cast<int>(ui::VKEY_A) +
                                            (c - 'a'));
     }
-    if (c >= '0' || c <= '9') {
+    if (c >= '0' && c <= '9') {
       return static_cast<ui::KeyboardCode>(static_cast<int>(ui::VKEY_0) +
                                            (c - '0'));
     }
@@ -711,11 +717,44 @@ bool GetDisplayIdFromOptionalArg(const std::unique_ptr<std::string>& arg,
   return true;
 }
 
-using DisplaySmoothnessTrackers =
-    std::map<int64_t, std::unique_ptr<ash::FpsCounter>>;
-DisplaySmoothnessTrackers* GetDisplaySmoothnessTrackers() {
-  static base::NoDestructor<DisplaySmoothnessTrackers> trackers;
+struct SmoothnessTrackerInfo {
+  base::Optional<ui::ThroughputTracker> tracker;
+  base::OnceCallback<void(int smoothness)> callback;
+};
+using DisplaySmoothnessTrackerInfos = std::map<int64_t, SmoothnessTrackerInfo>;
+DisplaySmoothnessTrackerInfos* GetDisplaySmoothnessTrackerInfos() {
+  static base::NoDestructor<DisplaySmoothnessTrackerInfos> trackers;
   return trackers.get();
+}
+
+// Forwards |smoothness| to the callback for |display_id| and resets.
+void ForwardSmoothessAndReset(int64_t display_id, int smoothness) {
+  auto* infos = GetDisplaySmoothnessTrackerInfos();
+  auto it = infos->find(display_id);
+  DCHECK(it != infos->end());
+  DCHECK(it->second.callback);
+  std::move(it->second.callback).Run(smoothness);
+  infos->erase(it);
+}
+
+std::string ResolutionToString(
+    chromeos::assistant::AssistantInteractionResolution resolution) {
+  using chromeos::assistant::AssistantInteractionResolution;
+  switch (resolution) {
+    case AssistantInteractionResolution::kNormal:
+      return "kNormal";
+    case AssistantInteractionResolution::kError:
+      return "kError";
+    case AssistantInteractionResolution::kInterruption:
+      return "kInterruption";
+    case AssistantInteractionResolution::kMicTimeout:
+      return "kMicTimeout";
+    case AssistantInteractionResolution::kMultiDeviceHotwordLoss:
+      return "kMultiDeviceHotwordLoss";
+  }
+
+  // Not reachable here.
+  DCHECK(false);
 }
 
 }  // namespace
@@ -815,7 +854,7 @@ class WindowBoundsChangeObserver : public aura::WindowObserver {
   base::OnceCallback<void(const gfx::Rect&, int64_t, bool)> callback_;
 };
 
-class EventGenerator : public aura::WindowEventDispatcherObserver {
+class EventGenerator {
  public:
   EventGenerator(aura::WindowTreeHost* host, base::OnceClosure closure)
       : input_injector_(
@@ -828,11 +867,8 @@ class EventGenerator : public aura::WindowEventDispatcherObserver {
     LOG_IF(ERROR, host->compositor()->refresh_rate() < 60.0f)
         << "Refresh rate (" << host->compositor()->refresh_rate()
         << ") is too low.";
-    aura::Env::GetInstance()->AddWindowEventDispatcherObserver(this);
   }
-  ~EventGenerator() override {
-    aura::Env::GetInstance()->RemoveWindowEventDispatcherObserver(this);
-  }
+  ~EventGenerator() = default;
 
   void ScheduleMouseEvent(ui::EventType type,
                           gfx::PointF location_in_host,
@@ -856,12 +892,11 @@ class EventGenerator : public aura::WindowEventDispatcherObserver {
     enum Status {
       kNotScheduled,
       kScheduled,
-      kStartedProcessing,
     };
 
-    ui::EventType type;
-    gfx::PointF location_in_host;
-    int flags;
+    const ui::EventType type;
+    const gfx::PointF location_in_host;
+    const int flags;
     Status status = kNotScheduled;
 
     Task(ui::EventType type, gfx::PointF location_in_host, int flags)
@@ -876,7 +911,13 @@ class EventGenerator : public aura::WindowEventDispatcherObserver {
     Task* task = &tasks_.front();
     DCHECK_EQ(task->status, Task::kNotScheduled);
     // A task can be processed asynchronously; the next task will be scheduled
-    // after processing of the current task has finished.
+    // after the control returns to the message pump, assuming that implies the
+    // processing of the current task has finished.
+    // WindowEventDispatcherObserver was used but the way it works does not
+    // support nested loop in window move/resize or drag-n-drop. In such
+    // cases, the mouse move event triggers the nested loop does not finish
+    // until the nested loop quits. But this blocks future mouse events. Hence
+    // the operation does not finish and the nested loop does not quit.
     task->status = Task::kScheduled;
     switch (task->type) {
       case ui::ET_MOUSE_PRESSED:
@@ -905,27 +946,19 @@ class EventGenerator : public aura::WindowEventDispatcherObserver {
       default:
         NOTREACHED();
     }
+
+    // Post a task after scheduling the event and assumes that when the task
+    // runs, it implies that the processing of the scheduled event is finished.
+    base::SequencedTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(&EventGenerator::OnFinishedProcessingEvent,
+                                  weak_ptr_factory_.GetWeakPtr()));
   }
 
-  // aura::WindowEventDispatcherObserver:
-  void OnWindowEventDispatcherStartedProcessing(
-      aura::WindowEventDispatcher* dispatcher,
-      const ui::Event& event) override {
-    // Do nothing if no tasks are scheduled.
+  void OnFinishedProcessingEvent() {
     if (tasks_.empty())
       return;
-    Task* task = &tasks_.front();
-    // Unrelated event.
-    if (task->status != Task::kScheduled || task->type != event.type())
-      return;
-    task->status = Task::kStartedProcessing;
-  }
 
-  void OnWindowEventDispatcherFinishedProcessingEvent(
-      aura::WindowEventDispatcher* dispatcher) override {
-    // Unrelated event.
-    if (tasks_.empty() || tasks_.front().status != Task::kStartedProcessing)
-      return;
+    DCHECK_EQ(tasks_.front().status, Task::kScheduled);
     tasks_.pop_front();
     auto runner = base::SequencedTaskRunnerHandle::Get();
     auto closure = base::BindOnce(&EventGenerator::SendEvent,
@@ -1790,7 +1823,7 @@ AutotestPrivateRunCrostiniInstallerFunction::Run() {
         installer_ui->ClickInstallForTesting();
       }));
   crostini::CrostiniManager::GetForProfile(profile)->RestartCrostini(
-      crostini::kCrostiniDefaultVmName, crostini::kCrostiniDefaultContainerName,
+      crostini::ContainerId::GetDefault(),
       base::BindOnce(
           &AutotestPrivateRunCrostiniInstallerFunction::CrostiniRestarted,
           this));
@@ -1865,8 +1898,7 @@ ExtensionFunction::ResponseAction AutotestPrivateExportCrostiniFunction::Run() {
   }
 
   crostini::CrostiniExportImport::GetForProfile(profile)->ExportContainer(
-      crostini::ContainerId(crostini::kCrostiniDefaultVmName,
-                            crostini::kCrostiniDefaultContainerName),
+      crostini::ContainerId::GetDefault(),
       file_manager::util::GetDownloadsFolderForProfile(profile).Append(path),
       base::BindOnce(&AutotestPrivateExportCrostiniFunction::CrostiniExported,
                      this));
@@ -1905,8 +1937,7 @@ ExtensionFunction::ResponseAction AutotestPrivateImportCrostiniFunction::Run() {
     return RespondNow(Error("Invalid import path must not reference parent"));
   }
   crostini::CrostiniExportImport::GetForProfile(profile)->ImportContainer(
-      crostini::ContainerId(crostini::kCrostiniDefaultVmName,
-                            crostini::kCrostiniDefaultContainerName),
+      crostini::ContainerId::GetDefault(),
       file_manager::util::GetDownloadsFolderForProfile(profile).Append(path),
       base::BindOnce(&AutotestPrivateImportCrostiniFunction::CrostiniImported,
                      this));
@@ -1941,7 +1972,8 @@ AutotestPrivateInstallPluginVMFunction::Run() {
   Profile* profile = Profile::FromBrowserContext(browser_context());
   plugin_vm::PluginVmInstallerFactory::GetForProfile(profile)
       ->SetFreeDiskSpaceForTesting(
-          plugin_vm::PluginVmInstaller::kRecommendedFreeDiskSpace);
+          plugin_vm::PluginVmInstallerFactory::GetForProfile(profile)
+              ->RequiredFreeDiskSpace());
   plugin_vm::SetFakePluginVmPolicy(profile, params->image_url,
                                    params->image_hash, params->license_key);
 
@@ -1965,6 +1997,49 @@ void AutotestPrivateInstallPluginVMFunction::OnInstallFinished(bool success) {
   PluginVmInstallerView::GetActiveViewForTesting()->AcceptDialog();
 
   Respond(NoArguments());
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// AutotestPrivateSetPluginVMPolicyFunction
+///////////////////////////////////////////////////////////////////////////////
+
+AutotestPrivateSetPluginVMPolicyFunction::
+    ~AutotestPrivateSetPluginVMPolicyFunction() = default;
+
+ExtensionFunction::ResponseAction
+AutotestPrivateSetPluginVMPolicyFunction::Run() {
+  std::unique_ptr<api::autotest_private::SetPluginVMPolicy::Params> params(
+      api::autotest_private::SetPluginVMPolicy::Params::Create(*args_));
+  EXTENSION_FUNCTION_VALIDATE(params);
+  DVLOG(1) << "AutotestPrivateSetPluginVMPolicyFunction " << params->image_url
+           << ", " << params->image_hash << ", " << params->license_key;
+
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  plugin_vm::SetFakePluginVmPolicy(profile, params->image_url,
+                                   params->image_hash, params->license_key);
+
+  return RespondNow(NoArguments());
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// AutotestPrivateShowPluginVMInstallerFunction
+///////////////////////////////////////////////////////////////////////////////
+
+AutotestPrivateShowPluginVMInstallerFunction::
+    ~AutotestPrivateShowPluginVMInstallerFunction() = default;
+
+ExtensionFunction::ResponseAction
+AutotestPrivateShowPluginVMInstallerFunction::Run() {
+  DVLOG(1) << "AutotestPrivateShowPluginVMInstallerFunction";
+
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  plugin_vm::PluginVmInstallerFactory::GetForProfile(profile)
+      ->SetFreeDiskSpaceForTesting(
+          plugin_vm::PluginVmInstallerFactory::GetForProfile(profile)
+              ->RequiredFreeDiskSpace());
+  plugin_vm::ShowPluginVmInstallerView(profile);
+
+  return RespondNow(NoArguments());
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -2389,7 +2464,7 @@ void AutotestPrivateEnableAssistantAndWaitForReadyFunction::
 
 void AutotestPrivateEnableAssistantAndWaitForReadyFunction::
     OnAssistantStatusChanged(chromeos::assistant::AssistantStatus status) {
-  if (status == chromeos::assistant::AssistantStatus::NEW_READY) {
+  if (status == chromeos::assistant::AssistantStatus::READY) {
     Respond(NoArguments());
     self_.reset();
   }
@@ -2400,22 +2475,23 @@ void AutotestPrivateEnableAssistantAndWaitForReadyFunction::
 // |AutotestPrivateSendAssistantTextQueryFunction| and
 // |AutotestPrivateWaitForAssistantQueryStatusFunction|.
 class AssistantInteractionHelper
-    : public chromeos::assistant::DefaultAssistantInteractionSubscriber {
+    : public chromeos::assistant::AssistantInteractionSubscriber {
  public:
-  using OnInteractionFinishedCallback = base::OnceCallback<void(bool)>;
+  using OnInteractionFinishedCallback =
+      base::OnceCallback<void(const base::Optional<std::string>& error)>;
 
   AssistantInteractionHelper()
       : query_status_(std::make_unique<base::DictionaryValue>()) {}
 
-  ~AssistantInteractionHelper() override = default;
+  ~AssistantInteractionHelper() override {
+    if (GetAssistant()) {
+      GetAssistant()->RemoveAssistantInteractionSubscriber(this);
+    }
+  }
 
   void Init(OnInteractionFinishedCallback on_interaction_finished_callback) {
-    // Bind to Assistant service interface.
-    ash::AssistantClient::Get()->BindAssistant(
-        assistant_.BindNewPipeAndPassReceiver());
-
     // Subscribe to Assistant interaction events.
-    assistant_->AddAssistantInteractionSubscriber(BindNewPipeAndPassRemote());
+    GetAssistant()->AddAssistantInteractionSubscriber(this);
 
     on_interaction_finished_callback_ =
         std::move(on_interaction_finished_callback);
@@ -2423,8 +2499,8 @@ class AssistantInteractionHelper
 
   void SendTextQuery(const std::string& query, bool allow_tts) {
     // Start text interaction with Assistant server.
-    assistant_->StartTextInteraction(
-        query, chromeos::assistant::mojom::AssistantQuerySource::kUnspecified,
+    GetAssistant()->StartTextInteraction(
+        query, chromeos::assistant::AssistantQuerySource::kUnspecified,
         allow_tts);
 
     query_status_->SetKey("queryText", base::Value(query));
@@ -2434,24 +2510,31 @@ class AssistantInteractionHelper
     return std::move(query_status_);
   }
 
- private:
-  // chromeos::assistant::mojom::AssistantInteractionSubscriber:
-  using AssistantSuggestionPtr =
-      chromeos::assistant::mojom::AssistantSuggestionPtr;
-  using AssistantInteractionMetadataPtr =
-      chromeos::assistant::mojom::AssistantInteractionMetadataPtr;
-  using AssistantInteractionResolution =
-      chromeos::assistant::mojom::AssistantInteractionResolution;
+  chromeos::assistant::Assistant* GetAssistant() {
+    auto* assistant_service = chromeos::assistant::AssistantService::Get();
+    return assistant_service ? assistant_service->GetAssistant() : nullptr;
+  }
 
-  void OnInteractionStarted(AssistantInteractionMetadataPtr metadata) override {
+ private:
+  // chromeos::assistant::AssistantInteractionSubscriber:
+  using AssistantSuggestion = chromeos::assistant::AssistantSuggestion;
+  using AssistantInteractionMetadata =
+      chromeos::assistant::AssistantInteractionMetadata;
+  using AssistantInteractionResolution =
+      chromeos::assistant::AssistantInteractionResolution;
+
+  void OnInteractionStarted(
+      const AssistantInteractionMetadata& metadata) override {
     const bool is_voice_interaction =
-        chromeos::assistant::mojom::AssistantInteractionType::kVoice ==
-        metadata->type;
+        chromeos::assistant::AssistantInteractionType::kVoice == metadata.type;
     query_status_->SetKey("isMicOpen", base::Value(is_voice_interaction));
+    interaction_in_progress_ = true;
   }
 
   void OnInteractionFinished(
       AssistantInteractionResolution resolution) override {
+    interaction_in_progress_ = false;
+
     // Only invoke the callback when |result_| is not empty to avoid an early
     // return before the entire session is completed. This happens when
     // sending queries to modify device settings, e.g. "turn on bluetooth",
@@ -2464,10 +2547,12 @@ class AssistantInteractionHelper
     query_status_->SetKey("queryResponse", std::move(result_));
 
     if (on_interaction_finished_callback_) {
-      const bool success =
-          (resolution == AssistantInteractionResolution::kNormal) ? true
-                                                                  : false;
-      std::move(on_interaction_finished_callback_).Run(success);
+      if (resolution == AssistantInteractionResolution::kNormal) {
+        SendSuccessResponse();
+      } else {
+        SendErrorResponse("Interaction closed with resolution " +
+                          ResolutionToString(resolution));
+      }
     }
   }
 
@@ -2475,10 +2560,23 @@ class AssistantInteractionHelper
                       const std::string& fallback) override {
     result_.SetKey("htmlResponse", base::Value(response));
     result_.SetKey("htmlFallback", base::Value(fallback));
+    CheckResponseIsValid(__FUNCTION__);
   }
 
   void OnTextResponse(const std::string& response) override {
     result_.SetKey("text", base::Value(response));
+    CheckResponseIsValid(__FUNCTION__);
+  }
+
+  void OnOpenUrlResponse(const ::GURL& url, bool in_background) override {
+    result_.SetKey("openUrl", base::Value(url.possibly_invalid_spec()));
+  }
+
+  bool OnOpenAppResponse(
+      const chromeos::assistant::AndroidAppInfo& app_info) override {
+    result_.SetKey("openAppResponse", base::Value(app_info.package_name));
+    CheckResponseIsValid(__FUNCTION__);
+    return true;
   }
 
   void OnSpeechRecognitionFinalResult(
@@ -2486,15 +2584,26 @@ class AssistantInteractionHelper
     query_status_->SetKey("queryText", base::Value(final_result));
   }
 
-  void OnOpenAppResponse(chromeos::assistant::mojom::AndroidAppInfoPtr app_info,
-                         OnOpenAppResponseCallback callback) override {
-    result_.SetKey("openAppResponse", base::Value(app_info->package_name));
-    std::move(callback).Run(true);
+  void CheckResponseIsValid(const std::string& function_name) {
+    if (!interaction_in_progress_) {
+      // We should only get a response while the interaction is open
+      // (started and not finished).
+      SendErrorResponse(function_name +
+                        " was called after the interaction was closed");
+    }
   }
 
-  mojo::Remote<chromeos::assistant::mojom::Assistant> assistant_;
+  void SendSuccessResponse() {
+    std::move(on_interaction_finished_callback_).Run(base::nullopt);
+  }
+
+  void SendErrorResponse(const std::string& error) {
+    std::move(on_interaction_finished_callback_).Run(error);
+  }
+
   std::unique_ptr<base::DictionaryValue> query_status_;
   base::DictionaryValue result_;
+  bool interaction_in_progress_ = false;
 
   // Callback triggered when interaction finished with non-empty response.
   OnInteractionFinishedCallback on_interaction_finished_callback_;
@@ -2549,16 +2658,14 @@ AutotestPrivateSendAssistantTextQueryFunction::Run() {
 }
 
 void AutotestPrivateSendAssistantTextQueryFunction::
-    OnInteractionFinishedCallback(bool success) {
+    OnInteractionFinishedCallback(const base::Optional<std::string>& error) {
+  if (error)
+    Respond(Error(error.value()));
+  else
+    Respond(OneArgument(interaction_helper_->GetQueryStatus()));
+
   // |timeout_timer_| need to be hold until |Respond(.)| is called to avoid
   // |this| being destructed.
-  if (!success) {
-    Respond(Error("Interaction ends abnormally."));
-    timeout_timer_.AbandonAndStop();
-    return;
-  }
-
-  Respond(OneArgument(interaction_helper_->GetQueryStatus()));
   timeout_timer_.AbandonAndStop();
 }
 
@@ -2607,16 +2714,14 @@ AutotestPrivateWaitForAssistantQueryStatusFunction::Run() {
 }
 
 void AutotestPrivateWaitForAssistantQueryStatusFunction::
-    OnInteractionFinishedCallback(bool success) {
+    OnInteractionFinishedCallback(const base::Optional<std::string>& error) {
+  if (error)
+    Respond(Error(error.value()));
+  else
+    Respond(OneArgument(interaction_helper_->GetQueryStatus()));
+
   // |timeout_timer_| need to be hold until |Respond(.)| is called to avoid
   // |this| being destructed.
-  if (!success) {
-    Respond(Error("Interaction ends abnormally."));
-    timeout_timer_.AbandonAndStop();
-    return;
-  }
-
-  Respond(OneArgument(interaction_helper_->GetQueryStatus()));
   timeout_timer_.AbandonAndStop();
 }
 
@@ -4350,8 +4455,8 @@ AutotestPrivateStartSmoothnessTrackingFunction::Run() {
         Error(base::StrCat({"Invalid display id: ", *params->display_id})));
   }
 
-  auto* trackers = GetDisplaySmoothnessTrackers();
-  if (trackers->find(display_id) != trackers->end()) {
+  auto* infos = GetDisplaySmoothnessTrackerInfos();
+  if (infos->find(display_id) != infos->end()) {
     return RespondNow(
         Error(base::StrCat({"Smoothness already tracked for display: ",
                             base::NumberToString(display_id)})));
@@ -4364,8 +4469,11 @@ AutotestPrivateStartSmoothnessTrackingFunction::Run() {
          base::NumberToString(display_id)})));
   }
 
-  (*trackers)[display_id] =
-      std::make_unique<ash::FpsCounter>(root_window->layer()->GetCompositor());
+  auto tracker =
+      root_window->layer()->GetCompositor()->RequestNewThroughputTracker();
+  tracker.Start(ash::metrics_util::ForSmoothness(
+      base::BindRepeating(&ForwardSmoothessAndReset, display_id)));
+  (*infos)[display_id].tracker = std::move(tracker);
   return RespondNow(NoArguments());
 }
 
@@ -4388,22 +4496,91 @@ AutotestPrivateStopSmoothnessTrackingFunction::Run() {
         Error(base::StrCat({"Invalid display id: ", *params->display_id})));
   }
 
-  auto* trackers = GetDisplaySmoothnessTrackers();
-  auto it = trackers->find(display_id);
-  if (it == trackers->end()) {
+  auto* infos = GetDisplaySmoothnessTrackerInfos();
+  auto it = infos->find(display_id);
+  if (it == infos->end()) {
     return RespondNow(
         Error(base::StrCat({"Smoothness is not tracked for display: ",
                             base::NumberToString(display_id)})));
   }
 
-  auto fps_tracker = std::move(it->second);
-  trackers->erase(it);
+  it->second.callback = base::BindOnce(
+      &AutotestPrivateStopSmoothnessTrackingFunction::OnReportSmoothness, this);
+  it->second.tracker->Stop();
 
-  const int smoothness = fps_tracker->ComputeSmoothness();
-  if (smoothness == -1)
-    return RespondNow(Error("Could not compute smoothness."));
+  return did_respond() ? AlreadyResponded() : RespondLater();
+}
 
-  return RespondNow(OneArgument(std::make_unique<base::Value>(smoothness)));
+void AutotestPrivateStopSmoothnessTrackingFunction::OnReportSmoothness(
+    int smoothness) {
+  Respond(OneArgument(std::make_unique<base::Value>(smoothness)));
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// AutotestPrivateWaitForAmbientPhotoAnimationFunction
+//////////////////////////////////////////////////////////////////////////////
+
+AutotestPrivateWaitForAmbientPhotoAnimationFunction::
+    AutotestPrivateWaitForAmbientPhotoAnimationFunction() = default;
+
+AutotestPrivateWaitForAmbientPhotoAnimationFunction::
+    ~AutotestPrivateWaitForAmbientPhotoAnimationFunction() = default;
+
+ExtensionFunction::ResponseAction
+AutotestPrivateWaitForAmbientPhotoAnimationFunction::Run() {
+  std::unique_ptr<api::autotest_private::WaitForAmbientPhotoAnimation::Params>
+      params(
+          api::autotest_private::WaitForAmbientPhotoAnimation::Params::Create(
+              *args_));
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  // Wait for photo transition animation completed in ambient mode.
+  ash::AutotestAmbientApi().WaitForPhotoTransitionAnimationCompleted(
+      params->photo_refresh_interval, params->num_completions,
+      base::BindOnce(&AutotestPrivateWaitForAmbientPhotoAnimationFunction::
+                         OnPhotoTransitionAnimationCompleted,
+                     this));
+
+  // Set up a timer to finish waiting after |timeout_s|.
+  timeout_timer_.Start(
+      FROM_HERE, base::TimeDelta::FromSeconds(params->timeout),
+      base::BindOnce(
+          &AutotestPrivateWaitForAmbientPhotoAnimationFunction::Timeout, this));
+
+  return did_respond() ? AlreadyResponded() : RespondLater();
+}
+
+void AutotestPrivateWaitForAmbientPhotoAnimationFunction::
+    OnPhotoTransitionAnimationCompleted() {
+  if (did_respond())
+    return;
+
+  Respond(NoArguments());
+}
+
+void AutotestPrivateWaitForAmbientPhotoAnimationFunction::Timeout() {
+  if (did_respond())
+    return;
+
+  Respond(Error("No enough animations completed before time out."));
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// AutotestPrivateDisableSwitchAccessDialogFunction
+//////////////////////////////////////////////////////////////////////////////
+
+AutotestPrivateDisableSwitchAccessDialogFunction::
+    AutotestPrivateDisableSwitchAccessDialogFunction() = default;
+
+AutotestPrivateDisableSwitchAccessDialogFunction::
+    ~AutotestPrivateDisableSwitchAccessDialogFunction() = default;
+
+ExtensionFunction::ResponseAction
+AutotestPrivateDisableSwitchAccessDialogFunction::Run() {
+  auto* accessibility_controller = ash::AccessibilityController::Get();
+  accessibility_controller
+      ->DisableSwitchAccessDisableConfirmationDialogTesting();
+  return RespondNow(NoArguments());
 }
 
 ///////////////////////////////////////////////////////////////////////////////

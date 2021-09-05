@@ -201,7 +201,7 @@ void GLContext::DirtyVirtualContextState() {
 constexpr uint64_t kInvalidFenceId = 0;
 
 uint64_t GLContext::BackpressureFenceCreate() {
-  TRACE_EVENT0("gpu", "GLContextEGL::BackpressureFenceCreate");
+  TRACE_EVENT0("gpu", "GLContext::BackpressureFenceCreate");
 
   // This flush will trigger a crash if FlushForDriverCrashWorkaround is not
   // called sufficiently frequently.
@@ -392,6 +392,9 @@ bool GLContext::MakeVirtuallyCurrent(
     GLContext* virtual_context, GLSurface* surface) {
   if (!ForceGpuSwitchIfNeeded())
     return false;
+  if (virtual_context_lost_)
+    return false;
+
   bool switched_real_contexts = GLContext::GetRealCurrent() != this;
   if (switched_real_contexts || !surface->IsCurrent()) {
     GLSurface* current_surface = GLSurface::GetCurrent();
@@ -401,6 +404,7 @@ bool GLContext::MakeVirtuallyCurrent(
     if (switched_real_contexts || !current_surface ||
         !virtual_context->IsCurrent(surface)) {
       if (!MakeCurrent(surface)) {
+        virtual_context_lost_ = true;
         return false;
       }
     }
@@ -441,6 +445,7 @@ bool GLContext::MakeVirtuallyCurrent(
   virtual_context->SetCurrent(surface);
   if (!surface->OnMakeCurrent(virtual_context)) {
     LOG(ERROR) << "Could not make GLSurface current.";
+    virtual_context_lost_ = true;
     return false;
   }
   return true;

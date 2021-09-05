@@ -28,6 +28,12 @@ class CORE_EXPORT LayoutNGTableRow : public LayoutNGMixin<LayoutBlock>,
 
   const char* GetName() const override { return "LayoutNGTableRow"; }
 
+  void AddChild(LayoutObject* child,
+                LayoutObject* before_child = nullptr) override;
+
+  LayoutBox* CreateAnonymousBoxWithSameTypeAs(
+      const LayoutObject* parent) const override;
+
   // Whether a row has opaque background depends on many factors, e.g. border
   // spacing, border collapsing, missing cells, etc.
   // For simplicity, just conservatively assume all table rows are not opaque.

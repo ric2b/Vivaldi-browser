@@ -84,7 +84,6 @@ public class OfflineNotificationBackgroundTask extends NativeBackgroundTask {
 
         TaskInfo taskInfo =
                 TaskInfo.createOneOffTask(TaskIds.OFFLINE_PAGES_PREFETCH_NOTIFICATION_JOB_ID,
-                                OfflineNotificationBackgroundTask.class,
                                 // Minimum time to wait.
                                 delayInMillis,
                                 // Maximum time to wait.  After this interval the event will fire
@@ -271,9 +270,7 @@ public class OfflineNotificationBackgroundTask extends NativeBackgroundTask {
         if (sOfflinePageBridgeForTesting != null) {
             return sOfflinePageBridgeForTesting;
         }
-        // TODO(https://crbug.com/1067314): Use the current profile (i.e., regular profile or
-        // incognito profile) instead of always using regular profile. It is wrong and need to be
-        // fixed.
+        // Using regular profile here, since this function is only called in regular mode.
         return OfflinePageBridge.getForProfile(Profile.getLastUsedRegularProfile());
     }
 

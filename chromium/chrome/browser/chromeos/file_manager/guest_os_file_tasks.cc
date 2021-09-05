@@ -13,6 +13,7 @@
 #include "base/base64.h"
 #include "base/bind.h"
 #include "base/files/file_path.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/chromeos/crostini/crostini_features.h"
@@ -20,12 +21,15 @@
 #include "chrome/browser/chromeos/crostini/crostini_mime_types_service_factory.h"
 #include "chrome/browser/chromeos/crostini/crostini_util.h"
 #include "chrome/browser/chromeos/file_manager/app_id.h"
+#include "chrome/browser/chromeos/file_manager/fileapi_util.h"
 #include "chrome/browser/chromeos/file_manager/path_util.h"
 #include "chrome/browser/chromeos/guest_os/guest_os_registry_service.h"
 #include "chrome/browser/chromeos/guest_os/guest_os_registry_service_factory.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_files.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_util.h"
+#include "chrome/common/webui_url_constants.h"
 #include "extensions/browser/entry_info.h"
+#include "storage/browser/file_system/file_system_context.h"
 #include "storage/browser/file_system/file_system_url.h"
 #include "ui/base/layout.h"
 #include "ui/display/types/display_constants.h"
@@ -39,83 +43,12 @@ namespace file_tasks {
 
 namespace {
 
-constexpr base::TimeDelta kIconLoadTimeout =
-    base::TimeDelta::FromMilliseconds(100);
-constexpr size_t kIconSizeInDip = 16;
 // When MIME type detection is done; if we can't be properly determined then
 // the detection system will end up guessing one of the 2 values below depending
 // upon whether it "thinks" it is binary or text content.
 constexpr char kUnknownBinaryMimeType[] = "application/octet-stream";
 constexpr char kUnknownTextMimeType[] = "text/plain";
-
-GURL GeneratePNGDataUrl(const SkBitmap& sk_bitmap) {
-  std::vector<unsigned char> output;
-  gfx::PNGCodec::EncodeBGRASkBitmap(sk_bitmap, false /* discard_transparency */,
-                                    &output);
-  std::string encoded;
-  base::Base64Encode(
-      base::StringPiece(reinterpret_cast<const char*>(output.data()),
-                        output.size()),
-      &encoded);
-  return GURL("data:image/png;base64," + encoded);
-}
-
-void OnAppIconsLoaded(
-    Profile* profile,
-    const std::vector<std::string>& app_ids,
-    const std::vector<std::string>& app_names,
-    const std::vector<guest_os::GuestOsRegistryService::VmType>& vm_types,
-    ui::ScaleFactor scale_factor,
-    std::vector<FullTaskDescriptor>* result_list,
-    base::OnceClosure completion_closure,
-    const std::vector<gfx::ImageSkia>& icons) {
-  DCHECK(!app_ids.empty());
-  DCHECK_EQ(app_ids.size(), icons.size());
-
-  float scale = ui::GetScaleForScaleFactor(scale_factor);
-
-  std::vector<TaskType> task_types;
-  task_types.reserve(vm_types.size());
-  for (auto vm_type : vm_types) {
-    switch (vm_type) {
-      case guest_os::GuestOsRegistryService::VmType::
-          ApplicationList_VmType_TERMINA:
-        task_types.push_back(TASK_TYPE_CROSTINI_APP);
-        break;
-      case guest_os::GuestOsRegistryService::VmType::
-          ApplicationList_VmType_PLUGIN_VM:
-        task_types.push_back(TASK_TYPE_PLUGIN_VM_APP);
-        break;
-      default:
-        LOG(ERROR) << "Unsupported VmType: " << static_cast<int>(vm_type);
-        return;
-    }
-  }
-
-  for (size_t i = 0; i < app_ids.size(); ++i) {
-    result_list->push_back(FullTaskDescriptor(
-        TaskDescriptor(app_ids[i], task_types[i], kGuestOsAppActionID),
-        app_names[i],
-        extensions::api::file_manager_private::Verb::VERB_OPEN_WITH,
-        GeneratePNGDataUrl(icons[i].GetRepresentation(scale).GetBitmap()),
-        false /* is_default */, false /* is_generic */,
-        false /* is_file_extension_match */));
-  }
-
-  std::move(completion_closure).Run();
-}
-
-void OnTaskComplete(FileTaskFinishedCallback done,
-                    bool success,
-                    const std::string& failure_reason) {
-  if (!success) {
-    LOG(ERROR) << "Crostini task error: " << failure_reason;
-  }
-  std::move(done).Run(
-      success ? extensions::api::file_manager_private::TASK_RESULT_MESSAGE_SENT
-              : extensions::api::file_manager_private::TASK_RESULT_FAILED,
-      failure_reason);
-}
+constexpr char kPluginVmAppNameSuffix[] = " (Windows)";
 
 bool HasSupportedMimeType(
     const std::set<std::string>& supported_mime_types,
@@ -197,14 +130,43 @@ bool AppSupportsAllEntries(
   }
 }
 
+auto ConvertLaunchPluginVmAppResultToTaskResult(
+    plugin_vm::LaunchPluginVmAppResult result) {
+  namespace fmp = extensions::api::file_manager_private;
+  switch (result) {
+    case plugin_vm::LaunchPluginVmAppResult::SUCCESS:
+      return fmp::TASK_RESULT_MESSAGE_SENT;
+    case plugin_vm::LaunchPluginVmAppResult::FAILED_DIRECTORY_NOT_SHARED:
+      return fmp::TASK_RESULT_FAILED_PLUGIN_VM_TASK_DIRECTORY_NOT_SHARED;
+    case plugin_vm::LaunchPluginVmAppResult::FAILED_FILE_ON_EXTERNAL_DRIVE:
+      return fmp::TASK_RESULT_FAILED_PLUGIN_VM_TASK_EXTERNAL_DRIVE;
+    case plugin_vm::LaunchPluginVmAppResult::FAILED:
+      return fmp::TASK_RESULT_FAILED;
+  }
+}
+
 }  // namespace
 
 void FindGuestOsApps(
     Profile* profile,
     const std::vector<extensions::EntryInfo>& entries,
+    const std::vector<GURL>& file_urls,
     std::vector<std::string>* app_ids,
     std::vector<std::string>* app_names,
     std::vector<guest_os::GuestOsRegistryService::VmType>* vm_types) {
+  // Ensure all files can be shared with VMs.
+  storage::FileSystemContext* file_system_context =
+      util::GetFileSystemContextForExtensionId(profile, kFileManagerAppId);
+  base::FilePath dummy_vm_mount("/");
+  base::FilePath not_used;
+  for (const GURL& file_url : file_urls) {
+    if (!file_manager::util::ConvertFileSystemURLToPathInsideVM(
+            profile, file_system_context->CrackURL(file_url), dummy_vm_mount,
+            &not_used)) {
+      return;
+    }
+  }
+
   auto* registry_service =
       guest_os::GuestOsRegistryServiceFactory::GetForProfile(profile);
   crostini::CrostiniMimeTypesService* mime_types_service =
@@ -217,13 +179,19 @@ void FindGuestOsApps(
       continue;
 
     app_ids->push_back(app_id);
-    app_names->push_back(registration.Name());
+    if (registration.VmType() == guest_os::GuestOsRegistryService::VmType::
+                                     ApplicationList_VmType_PLUGIN_VM) {
+      app_names->push_back(registration.Name() + kPluginVmAppNameSuffix);
+    } else {
+      app_names->push_back(registration.Name());
+    }
     vm_types->push_back(registration.VmType());
   }
 }
 
 void FindGuestOsTasks(Profile* profile,
                       const std::vector<extensions::EntryInfo>& entries,
+                      const std::vector<GURL>& file_urls,
                       std::vector<FullTaskDescriptor>* result_list,
                       base::OnceClosure completion_closure) {
   if (!crostini::CrostiniFeatures::Get()->IsUIAllowed(profile) &&
@@ -235,21 +203,44 @@ void FindGuestOsTasks(Profile* profile,
   std::vector<std::string> result_app_ids;
   std::vector<std::string> result_app_names;
   std::vector<guest_os::GuestOsRegistryService::VmType> result_vm_types;
-  FindGuestOsApps(profile, entries, &result_app_ids, &result_app_names,
-                  &result_vm_types);
+  FindGuestOsApps(profile, entries, file_urls, &result_app_ids,
+                  &result_app_names, &result_vm_types);
 
   if (result_app_ids.empty()) {
     std::move(completion_closure).Run();
     return;
   }
 
-  ui::ScaleFactor scale_factor = ui::GetSupportedScaleFactors().back();
+  std::vector<TaskType> task_types;
+  task_types.reserve(result_vm_types.size());
+  for (auto vm_type : result_vm_types) {
+    switch (vm_type) {
+      case guest_os::GuestOsRegistryService::VmType::
+          ApplicationList_VmType_TERMINA:
+        task_types.push_back(TASK_TYPE_CROSTINI_APP);
+        break;
+      case guest_os::GuestOsRegistryService::VmType::
+          ApplicationList_VmType_PLUGIN_VM:
+        task_types.push_back(TASK_TYPE_PLUGIN_VM_APP);
+        break;
+      default:
+        LOG(ERROR) << "Unsupported VmType: " << static_cast<int>(vm_type);
+        return;
+    }
+  }
 
-  crostini::LoadIcons(
-      profile, result_app_ids, kIconSizeInDip, scale_factor, kIconLoadTimeout,
-      base::BindOnce(OnAppIconsLoaded, profile, result_app_ids,
-                     std::move(result_app_names), std::move(result_vm_types),
-                     scale_factor, result_list, std::move(completion_closure)));
+  for (size_t i = 0; i < result_app_ids.size(); ++i) {
+    GURL icon_url(
+        base::StrCat({chrome::kChromeUIAppIconURL, result_app_ids[i], "/32"}));
+    result_list->push_back(FullTaskDescriptor(
+        TaskDescriptor(result_app_ids[i], task_types[i], kGuestOsAppActionID),
+        result_app_names[i],
+        extensions::api::file_manager_private::Verb::VERB_OPEN_WITH, icon_url,
+        /*is_default=*/false, /*is_generic=*/false,
+        /*is_file_extension_match=*/false));
+  }
+
+  std::move(completion_closure).Run();
 }
 
 void ExecuteGuestOsTask(
@@ -276,14 +267,38 @@ void ExecuteGuestOsTask(
       DCHECK(crostini::CrostiniFeatures::Get()->IsUIAllowed(profile));
       crostini::LaunchCrostiniApp(
           profile, task.app_id, display::kInvalidDisplayId, file_system_urls,
-          base::BindOnce(OnTaskComplete, std::move(done)));
+          base::BindOnce(
+              [](FileTaskFinishedCallback done, bool success,
+                 const std::string& failure_reason) {
+                if (!success) {
+                  LOG(ERROR) << "Crostini task error: " << failure_reason;
+                }
+                std::move(done).Run(
+                    success ? extensions::api::file_manager_private::
+                                  TASK_RESULT_MESSAGE_SENT
+                            : extensions::api::file_manager_private::
+                                  TASK_RESULT_FAILED,
+                    failure_reason);
+              },
+              std::move(done)));
       return;
     case guest_os::GuestOsRegistryService::VmType::
         ApplicationList_VmType_PLUGIN_VM:
       DCHECK(plugin_vm::IsPluginVmEnabled(profile));
       plugin_vm::LaunchPluginVmApp(
           profile, task.app_id, file_system_urls,
-          base::BindOnce(OnTaskComplete, std::move(done)));
+          base::BindOnce(
+              [](FileTaskFinishedCallback done,
+                 plugin_vm::LaunchPluginVmAppResult result,
+                 const std::string& failure_reason) {
+                if (result != plugin_vm::LaunchPluginVmAppResult::SUCCESS) {
+                  LOG(ERROR) << "Plugin VM task error: " << failure_reason;
+                }
+                std::move(done).Run(
+                    ConvertLaunchPluginVmAppResultToTaskResult(result),
+                    failure_reason);
+              },
+              std::move(done)));
       return;
     default:
       std::move(done).Run(

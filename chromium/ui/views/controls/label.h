@@ -91,6 +91,11 @@ class VIEWS_EXPORT Label : public View,
   // a value from views::style::TextContext or an enum that extends it.
   int GetTextContext() const;
 
+  // The style of the label.  This is a value from views::style::TextStyle or an
+  // enum that extends it.
+  int GetTextStyle() const;
+  void SetTextStyle(int style);
+
   // Enables or disables auto-color-readability (enabled by default).  If this
   // is enabled, then calls to set any foreground or background color will
   // trigger an automatic mapper that uses color_utils::BlendForMinContrast()
@@ -176,6 +181,13 @@ class VIEWS_EXPORT Label : public View,
   // TODO(mukai): allow specifying WordWrapBehavior.
   bool GetAllowCharacterBreak() const;
   void SetAllowCharacterBreak(bool allow_character_break);
+
+  // For the provided line index, gets the corresponding rendered line and
+  // returns the text position of the first character of that line.
+  size_t GetTextIndexOfLine(size_t line) const;
+
+  // Set the truncate length of the rendered text.
+  void SetTruncateLength(size_t truncate_length);
 
   // Gets/Sets the eliding or fading behavior, applied as necessary. The default
   // is to elide at the end. Eliding is not well-supported for multi-line
@@ -377,7 +389,7 @@ class VIEWS_EXPORT Label : public View,
   void BuildContextMenuContents();
 
   const int text_context_;
-  const int text_style_;
+  int text_style_;
 
   // An un-elided and single-line RenderText object used for preferred sizing.
   std::unique_ptr<gfx::RenderText> full_text_;

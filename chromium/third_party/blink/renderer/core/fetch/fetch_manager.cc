@@ -102,7 +102,7 @@ class FetchManager::Loader final
          bool is_isolated_world,
          AbortSignal*);
   ~Loader() override;
-  void Trace(Visitor*) override;
+  void Trace(Visitor*) const override;
 
   // ThreadableLoaderClient implementation.
   bool WillFollowRedirect(const KURL&, const ResourceResponse&) override;
@@ -203,7 +203,7 @@ class FetchManager::Loader final
 
     bool IsFinished() const { return finished_; }
 
-    void Trace(Visitor* visitor) override {
+    void Trace(Visitor* visitor) const override {
       visitor->Trace(body_);
       visitor->Trace(updater_);
       visitor->Trace(response_);
@@ -274,7 +274,7 @@ FetchManager::Loader::~Loader() {
   DCHECK(!threadable_loader_);
 }
 
-void FetchManager::Loader::Trace(Visitor* visitor) {
+void FetchManager::Loader::Trace(Visitor* visitor) const {
   visitor->Trace(fetch_manager_);
   visitor->Trace(resolver_);
   visitor->Trace(fetch_request_data_);
@@ -407,6 +407,20 @@ void FetchManager::Loader::DidReceiveResponse(
     }
   }
 
+  // TODO(crbug.com/1072350): Remove this once enough data is collected.
+  if (fetch_request_data_->Method() != http_names::kGET &&
+      fetch_request_data_->Method() != http_names::kHEAD &&
+      fetch_request_data_->Mode() == network::mojom::RequestMode::kNoCors &&
+      tainting == FetchRequestData::kOpaqueTainting) {
+    UseCounter::Count(execution_context_,
+                      WebFeature::kFetchAPINonGetOrHeadOpaqueResponse);
+    if (url_list_.size() > 1) {
+      UseCounter::Count(
+          execution_context_,
+          WebFeature::kFetchAPINonGetOrHeadOpaqueResponseWithRedirect);
+    }
+  }
+
   place_holder_body_ = MakeGarbageCollected<PlaceHolderBytesConsumer>();
   FetchResponseData* response_data = FetchResponseData::CreateWithBuffer(
       BodyStreamBuffer::Create(script_state, place_holder_body_, signal_));
@@ -535,7 +549,9 @@ void FetchManager::Loader::Start(ExceptionState& exception_state) {
   // "- should fetching |request| be blocked as content security returns
   //    blocked"
   if (!execution_context_->GetContentSecurityPolicyForWorld()
-           ->AllowConnectToSource(fetch_request_data_->Url())) {
+           ->AllowConnectToSource(fetch_request_data_->Url(),
+                                  fetch_request_data_->Url(),
+                                  RedirectStatus::kNoRedirect)) {
     // "A network error."
     PerformNetworkError(
         "Refused to connect to '" + fetch_request_data_->Url().ElidedString() +
@@ -713,10 +729,29 @@ void FetchManager::Loader::PerformHTTPFetch(ExceptionState& exception_state) {
   if (fetch_request_data_->Method() != http_names::kGET &&
       fetch_request_data_->Method() != http_names::kHEAD) {
     if (fetch_request_data_->Buffer()) {
-      request.SetHttpBody(
-          fetch_request_data_->Buffer()->DrainAsFormData(exception_state));
+      scoped_refptr<EncodedFormData> form_data =
+          fetch_request_data_->Buffer()->DrainAsFormData(exception_state);
+
       if (exception_state.HadException())
         return;
+      if (form_data) {
+        request.SetHttpBody(form_data);
+      } else if (RuntimeEnabledFeatures::OutOfBlinkCorsEnabled() &&
+                 RuntimeEnabledFeatures::FetchUploadStreamingEnabled(
+                     execution_context_)) {
+        UseCounter::Count(execution_context_,
+                          WebFeature::kFetchUploadStreaming);
+        mojo::PendingRemote<network::mojom::blink::ChunkedDataPipeGetter>
+            pending_remote;
+        fetch_request_data_->Buffer()->DrainAsChunkedDataPipeGetter(
+            resolver_->GetScriptState(),
+            pending_remote.InitWithNewPipeAndPassReceiver(), exception_state);
+        if (exception_state.HadException())
+          return;
+        request.MutableBody().SetStreamBody(std::move(pending_remote));
+        request.SetAllowHTTP1ForStreamingUpload(
+            fetch_request_data_->AllowHTTP1ForStreamingUpload());
+      }
     }
   }
   request.SetCacheMode(fetch_request_data_->CacheMode());
@@ -878,7 +913,7 @@ void FetchManager::OnLoaderFinished(Loader* loader) {
   loader->Dispose();
 }
 
-void FetchManager::Trace(Visitor* visitor) {
+void FetchManager::Trace(Visitor* visitor) const {
   visitor->Trace(loaders_);
   ExecutionContextLifecycleObserver::Trace(visitor);
 }

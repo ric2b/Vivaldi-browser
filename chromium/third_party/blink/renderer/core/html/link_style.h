@@ -36,7 +36,7 @@ class LinkStyle final : public LinkResource, ResourceClient {
   void Process() override;
   void OwnerRemoved() override;
   bool HasLoaded() const override { return loaded_sheet_; }
-  void Trace(Visitor*) override;
+  void Trace(Visitor*) const override;
 
   void StartLoadingDynamicSheet();
   void NotifyLoadedSheetAndAllCriticalSubresources(
@@ -53,6 +53,8 @@ class LinkStyle final : public LinkResource, ResourceClient {
     return disabled_state_ == kEnabledViaScript;
   }
   bool IsUnset() const { return disabled_state_ == kUnset; }
+
+  bool IsExplicitlyEnabled() const { return explicitly_enabled_; }
 
   CSSStyleSheet* Sheet() const { return sheet_.Get(); }
 
@@ -76,6 +78,7 @@ class LinkStyle final : public LinkResource, ResourceClient {
   DisabledState disabled_state_;
   PendingSheetType pending_sheet_type_;
   StyleEngineContext style_engine_context_;
+  bool explicitly_enabled_;
   bool loading_;
   bool fired_load_;
   bool loaded_sheet_;

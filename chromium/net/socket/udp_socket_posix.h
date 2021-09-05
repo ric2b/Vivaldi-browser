@@ -11,6 +11,7 @@
 
 #include <memory>
 
+#include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_pump_for_io.h"
@@ -493,7 +494,7 @@ class NET_EXPORT UDPSocketPosix {
 
   // Same as SendTo(), except that address is passed by pointer
   // instead of by reference. It is called from Write() with |address|
-  // set to NULL.
+  // set to nullptr.
   int SendToOrWrite(IOBuffer* buf,
                     int buf_len,
                     const IPEndPoint* address,

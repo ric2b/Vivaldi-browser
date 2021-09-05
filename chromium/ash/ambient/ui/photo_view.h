@@ -13,6 +13,10 @@
 #include "ui/compositor/layer_animation_observer.h"
 #include "ui/views/view.h"
 
+namespace gfx {
+class ImageSkia;
+}  // namespace gfx
+
 namespace ui {
 class AnimationMetricsReporter;
 }  // namespace ui
@@ -34,16 +38,17 @@ class ASH_EXPORT PhotoView : public views::View,
 
   // views::View:
   const char* GetClassName() const override;
-  void AddedToWidget() override;
+  void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
 
   // AmbientBackendModelObserver:
   void OnImagesChanged() override;
-  void OnWeatherInfoUpdated() override {}
 
   // ui::ImplicitAnimationObserver:
   void OnImplicitAnimationsCompleted() override;
 
  private:
+  friend class AmbientAshTestBase;
+
   void Init();
   void UpdateImages();
   void StartTransitionAnimation();
@@ -51,17 +56,22 @@ class ASH_EXPORT PhotoView : public views::View,
   // Return if can start transition animation.
   bool NeedToAnimateTransition() const;
 
+  const gfx::ImageSkia& GetCurrentImagesForTesting();
+
   // Note that we should be careful when using |delegate_|, as there is no
-  // strong guarantee on the life cycle, especially given that the widget |this|
-  // lived in is destroyed asynchronously.
-  AmbientViewDelegate* delegate_ = nullptr;
+  // strong guarantee on the life cycle.
+  AmbientViewDelegate* const delegate_ = nullptr;
 
   std::unique_ptr<ui::AnimationMetricsReporter> metrics_reporter_;
 
   // Image containers used for animation. Owned by view hierarchy.
-  AmbientBackgroundImageView* image_view_prev_ = nullptr;
-  AmbientBackgroundImageView* image_view_curr_ = nullptr;
-  AmbientBackgroundImageView* image_view_next_ = nullptr;
+  AmbientBackgroundImageView* image_views_[2]{nullptr, nullptr};
+
+  // The unscaled images used for scaling and displaying in different bounds.
+  gfx::ImageSkia images_unscaled_[2];
+
+  // The index of |image_views_| to update the next image.
+  int image_index_ = 0;
 };
 
 }  // namespace ash

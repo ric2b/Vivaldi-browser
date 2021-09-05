@@ -7,16 +7,12 @@ assert(is_fuchsia)
 import("//build/buildflag_header.gni")
 import("//build/config/fuchsia/generate_runner_scripts.gni")
 import("//build/config/fuchsia/symbol_archive.gni")
-import("//fuchsia/release_channel.gni")
 import("//testing/test.gni")
 
 declare_args() {
   # Set to a non-zero value to enable remote debugging on that port in WebRunner.
   web_runner_remote_debugging_port = 0
 }
-
-_cast_runner_package_name = "cast_runner${release_channel_suffix}"
-_web_runner_package_name = "web_runner${release_channel_suffix}"
 
 buildflag_header("buildflags") {
   header = "buildflags.h"
@@ -38,6 +34,7 @@ source_set("common") {
     "//base",
     "//fuchsia/base",
     "//fuchsia/base:modular",
+    "//third_party/fuchsia-sdk/sdk/pkg/scenic_cpp",
     "//ui/gfx/geometry",
     "//url",
   ]
@@ -63,17 +60,21 @@ source_set("cast_runner_core") {
     "cast/cast_component.h",
     "cast/cast_runner.cc",
     "cast/cast_runner.h",
+    "cast/cast_streaming.cc",
+    "cast/cast_streaming.h",
     "cast/named_message_port_connector.cc",
     "cast/named_message_port_connector.h",
     "cast/pending_cast_component.cc",
     "cast/pending_cast_component.h",
   ]
   data_deps = [ "//chromecast/bindings:named_message_port_connector_resources" ]
+  data = [ "cast/data" ]
   deps = [
     "//base",
     "//fuchsia/base",
     "//fuchsia/base:modular",
     "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.modular",
+    "//third_party/fuchsia-sdk/sdk/pkg/scenic_cpp",
     "//third_party/fuchsia-sdk/sdk/pkg/sys_cpp",
     "//url",
   ]
@@ -100,19 +101,17 @@ executable("cast_runner_exe") {
 
 cr_fuchsia_package("cast_runner_pkg") {
   binary = ":cast_runner_exe"
-  package_name_override = _cast_runner_package_name
-  archive_name_override = "cast_runner"
-  component_name_override = "cast_runner"
+  package_name_override = "cast_runner"
   manifest = "cast/cast_runner.cmx"
 }
 
 fuchsia_package_runner("cast_runner") {
   package = ":cast_runner_pkg"
-  archive_name_override = "cast_runner"
+  package_name_override = "cast_runner"
   install_only = true
   package_deps = [ [
         "//fuchsia/engine:web_engine",
-        "web_engine${release_channel_suffix}",
+        "web_engine",
       ] ]
 }
 
@@ -208,19 +207,17 @@ executable("web_runner_exe") {
 
 cr_fuchsia_package("web_runner_pkg") {
   binary = ":web_runner_exe"
-  package_name_override = _web_runner_package_name
-  component_name_override = "web_runner"
-  archive_name_override = "web_runner"
+  package_name_override = "web_runner"
   manifest = "web/web_runner.cmx"
 }
 
 fuchsia_package_runner("web_runner") {
   package = ":web_runner_pkg"
-  archive_name_override = "web_runner"
+  package_name_override = "web_runner"
   install_only = true
   package_deps = [ [
         "//fuchsia/engine:web_engine",
-        "web_engine${release_channel_suffix}",
+        "web_engine",
       ] ]
 }
 

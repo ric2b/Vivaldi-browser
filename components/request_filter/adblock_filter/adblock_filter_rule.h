@@ -54,20 +54,6 @@ struct FilterRule {
     kRegex,
   };
 
-  enum RedirectResource {
-    kNoRedirect = 0,
-    kBlankText,
-    kBlankCss,
-    kBlankJS,
-    kBlankHTML,
-    kBlankMP3,
-    kBlankMP4,
-    k1x1TransparentGIF,
-    k2x2TransparentPNG,
-    k3x2TransparentPNG,
-    k32x32TransparentPNG,
-  };
-
   FilterRule();
   ~FilterRule();
   FilterRule(FilterRule&& filter_rule);
@@ -91,7 +77,7 @@ struct FilterRule {
   std::vector<std::string> included_domains;
   std::vector<std::string> excluded_domains;
 
-  RedirectResource redirect = kNoRedirect;
+  std::string redirect;
   std::string csp;
 
   std::string pattern;

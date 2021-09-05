@@ -6,8 +6,9 @@ package org.chromium.chrome.browser.site_settings;
 
 import static org.chromium.components.browser_ui.site_settings.WebsitePreferenceBridge.SITE_WILDCARD;
 
-import android.support.test.filters.SmallTest;
 import android.util.Pair;
+
+import androidx.test.filters.SmallTest;
 
 import org.junit.Assert;
 import org.junit.Rule;
@@ -17,11 +18,11 @@ import org.junit.runner.RunWith;
 import org.chromium.base.Callback;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.test.ChromeBrowserTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
-import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.components.browser_ui.site_settings.ChosenObjectInfo;
 import org.chromium.components.browser_ui.site_settings.ContentSettingException;
 import org.chromium.components.browser_ui.site_settings.LocalStorageInfo;
@@ -36,7 +37,6 @@ import org.chromium.components.browser_ui.site_settings.WebsitePreferenceBridgeJ
 import org.chromium.components.content_settings.ContentSettingValues;
 import org.chromium.components.content_settings.ContentSettingsType;
 import org.chromium.components.embedder_support.browser_context.BrowserContextHandle;
-import org.chromium.content_public.browser.ContentFeatureList;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 
 import java.util.ArrayList;
@@ -51,7 +51,8 @@ import java.util.concurrent.TimeUnit;
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
-        WebsitePermissionsFetcherTest.ENABLE_EXPERIMENTAL_WEB_PLATFORM_FEATURES})
+        WebsitePermissionsFetcherTest.ENABLE_EXPERIMENTAL_WEB_PLATFORM_FEATURES,
+        WebsitePermissionsFetcherTest.ENABLE_WEB_BLUETOOTH_NEW_PERMISSIONS_BACKEND})
 public class WebsitePermissionsFetcherTest {
     @Rule
     public final ChromeBrowserTestRule mBrowserTestRule = new ChromeBrowserTestRule();
@@ -59,6 +60,13 @@ public class WebsitePermissionsFetcherTest {
     /** Command line flag to enable experimental web platform features in tests. */
     public static final String ENABLE_EXPERIMENTAL_WEB_PLATFORM_FEATURES =
             "enable-experimental-web-platform-features";
+
+    /**
+     * Command line flag to enable the new Web Bluetooth permissions backend in
+     * tests.
+     */
+    public static final String ENABLE_WEB_BLUETOOTH_NEW_PERMISSIONS_BACKEND =
+            "enable-features=WebBluetoothNewPermissionsBackend";
 
     private static final BrowserContextHandle UNUSED_BROWSER_CONTEXT_HANDLE = null;
 
@@ -297,6 +305,7 @@ public class WebsitePermissionsFetcherTest {
 
     @Test
     @SmallTest
+    @DisabledTest(message = "https://crbug.com/1085592")
     public void testFetcherDoesNotTimeOutWithManyUrls() throws Exception {
         final WebsitePermissionsWaiter waiter = new WebsitePermissionsWaiter();
         // Set lots of permissions values.
@@ -425,7 +434,6 @@ public class WebsitePermissionsFetcherTest {
 
     @Test
     @SmallTest
-    @EnableFeatures(ContentFeatureList.WEBXR_PERMISSIONS_API)
     public void testFetchAllPreferencesForSingleOrigin() {
         WebsitePermissionsFetcher fetcher =
                 new WebsitePermissionsFetcher(UNUSED_BROWSER_CONTEXT_HANDLE);
@@ -500,6 +508,9 @@ public class WebsitePermissionsFetcherTest {
         websitePreferenceBridge.addChosenObjectInfo(
                 new ChosenObjectInfo(ContentSettingsType.USB_CHOOSER_DATA, googleOrigin,
                         SITE_WILDCARD, "Gadget", "Object", false));
+        websitePreferenceBridge.addChosenObjectInfo(
+                new ChosenObjectInfo(ContentSettingsType.BLUETOOTH_CHOOSER_DATA, googleOrigin,
+                        SITE_WILDCARD, "Wireless", "Object", false));
 
         fetcher.fetchAllPreferences((sites) -> {
             Assert.assertEquals(1, sites.size());
@@ -554,9 +565,11 @@ public class WebsitePermissionsFetcherTest {
             // Check chooser info types.
             ArrayList<ChosenObjectInfo> chosenObjectInfos =
                     new ArrayList<>(site.getChosenObjectInfo());
-            Assert.assertEquals(1, chosenObjectInfos.size());
+            Assert.assertEquals(2, chosenObjectInfos.size());
             Assert.assertEquals(ContentSettingsType.USB_CHOOSER_DATA,
                     chosenObjectInfos.get(0).getContentSettingsType());
+            Assert.assertEquals(ContentSettingsType.BLUETOOTH_CHOOSER_DATA,
+                    chosenObjectInfos.get(1).getContentSettingsType());
         });
     }
 
@@ -645,7 +658,6 @@ public class WebsitePermissionsFetcherTest {
 
     @Test
     @SmallTest
-    @EnableFeatures(ContentFeatureList.WEBXR_PERMISSIONS_API)
     public void testFetchPreferencesForCategoryPermissionInfoTypes() {
         WebsitePermissionsFetcher fetcher =
                 new WebsitePermissionsFetcher(UNUSED_BROWSER_CONTEXT_HANDLE);
@@ -889,16 +901,15 @@ public class WebsitePermissionsFetcherTest {
     @Test
     @SmallTest
     public void testFetchPreferencesForCategoryChooserDataTypes() {
-        WebsitePermissionsFetcher fetcher =
-                new WebsitePermissionsFetcher(UNUSED_BROWSER_CONTEXT_HANDLE);
-        FakeWebsitePreferenceBridge websitePreferenceBridge = new FakeWebsitePreferenceBridge();
-        fetcher.setWebsitePreferenceBridgeForTesting(websitePreferenceBridge);
-
         String googleOrigin = "https://google.com";
-        ArrayList<Integer> chooserDataTypes =
-                new ArrayList<>(Arrays.asList(SiteSettingsCategory.Type.USB));
+        ArrayList<Integer> chooserDataTypes = new ArrayList<>(
+                Arrays.asList(SiteSettingsCategory.Type.USB, SiteSettingsCategory.Type.BLUETOOTH));
 
         for (@SiteSettingsCategory.Type int type : chooserDataTypes) {
+            WebsitePermissionsFetcher fetcher =
+                    new WebsitePermissionsFetcher(UNUSED_BROWSER_CONTEXT_HANDLE);
+            FakeWebsitePreferenceBridge websitePreferenceBridge = new FakeWebsitePreferenceBridge();
+            fetcher.setWebsitePreferenceBridgeForTesting(websitePreferenceBridge);
             @ContentSettingsType
             int chooserDataType = SiteSettingsCategory.objectChooserDataTypeFromGuard(
                     SiteSettingsCategory.contentSettingsType(type));

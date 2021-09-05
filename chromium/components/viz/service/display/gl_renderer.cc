@@ -83,6 +83,10 @@
 #include "ui/gfx/rrect_f.h"
 #include "ui/gfx/skia_util.h"
 
+#if defined(USE_X11)
+#include "ui/base/ui_base_features.h"
+#endif
+
 using gpu::gles2::GLES2Interface;
 
 namespace viz {
@@ -2826,7 +2830,12 @@ void GLRenderer::FinishDrawingFrame() {
   ScheduleOutputSurfaceAsOverlay();
 
 #if defined(OS_ANDROID) || defined(USE_OZONE)
-  ScheduleOverlays();
+  bool schedule_overlays = true;
+#if defined(USE_X11)
+  schedule_overlays = features::IsUsingOzonePlatform();
+#endif
+  if (schedule_overlays)
+    ScheduleOverlays();
 #elif defined(OS_MACOSX)
   ScheduleCALayers();
 #elif defined(OS_WIN)
@@ -2855,8 +2864,9 @@ void GLRenderer::FinishDrawingQuadList() {
     // Use the current surface area as max result. The effect is that overdraw
     // is reported as a percentage of the output surface size. ie. 2x overdraw
     // for the whole screen is reported as 200.
-    const int surface_area = current_surface_size_.GetArea();
-    DCHECK_GT(surface_area, 0);
+    base::CheckedNumeric<int> surface_area =
+        current_surface_size_.GetCheckedArea();
+    DCHECK_GT(static_cast<int>(surface_area.ValueOrDefault(INT_MAX)), 0);
 
     gl_->EndQueryEXT(GL_SAMPLES_PASSED_ARB);
     context_support_->SignalQuery(
@@ -3528,7 +3538,7 @@ void GLRenderer::ScheduleCALayers() {
     unsigned texture_id = 0;
     if (contents_resource_id) {
       pending_overlay_resources_.push_back(
-          std::make_unique<DisplayResourceProvider::ScopedReadLockGL>(
+          std::make_unique<DisplayResourceProvider::ScopedOverlayLockGL>(
               resource_provider_, contents_resource_id));
       texture_id = pending_overlay_resources_.back()->texture_id();
     }
@@ -3585,7 +3595,7 @@ void GLRenderer::ScheduleDCLayers() {
       if (resource_id == kInvalidResourceId)
         break;
       pending_overlay_resources_.push_back(
-          std::make_unique<DisplayResourceProvider::ScopedReadLockGL>(
+          std::make_unique<DisplayResourceProvider::ScopedOverlayLockGL>(
               resource_provider_, resource_id));
       texture_ids[i] = pending_overlay_resources_.back()->texture_id();
     }
@@ -3624,7 +3634,7 @@ void GLRenderer::ScheduleOverlays() {
   OverlayCandidateList& overlays = current_frame()->overlay_list;
   for (const auto& overlay_candidate : overlays) {
     pending_overlay_resources_.push_back(
-        std::make_unique<DisplayResourceProvider::ScopedReadLockGL>(
+        std::make_unique<DisplayResourceProvider::ScopedOverlayLockGL>(
             resource_provider_, overlay_candidate.resource_id));
     unsigned texture_id = pending_overlay_resources_.back()->texture_id();
 
@@ -3981,7 +3991,7 @@ void GLRenderer::FlushOverdrawFeedback(const gfx::Rect& output_rect) {
   }
 }
 
-void GLRenderer::ProcessOverdrawFeedback(int surface_area,
+void GLRenderer::ProcessOverdrawFeedback(base::CheckedNumeric<int> surface_area,
                                          unsigned occlusion_query) {
   unsigned result = 0;
   DCHECK(occlusion_query);
@@ -3990,7 +4000,8 @@ void GLRenderer::ProcessOverdrawFeedback(int surface_area,
 
   // Report GPU overdraw as a percentage of |surface_area|.
   TRACE_COUNTER1(TRACE_DISABLED_BY_DEFAULT("viz.overdraw"), "GPU Overdraw",
-                 (result * 100.0 / surface_area));
+                 (result * 100.0 /
+                  static_cast<int>(surface_area.ValueOrDefault(INT_MAX))));
 }
 
 void GLRenderer::UpdateRenderPassTextures(
@@ -4041,8 +4052,11 @@ void GLRenderer::AllocateRenderPassResourceIfNeeded(
     const RenderPassId& render_pass_id,
     const RenderPassRequirements& requirements) {
   auto contents_texture_it = render_pass_textures_.find(render_pass_id);
-  if (contents_texture_it != render_pass_textures_.end())
+  if (contents_texture_it != render_pass_textures_.end()) {
+    DCHECK(gfx::Rect(contents_texture_it->second.size())
+               .Contains(gfx::Rect(requirements.size)));
     return;
+  }
 
   ScopedRenderPassTexture contents_texture(
       output_surface_->context_provider(), requirements.size,

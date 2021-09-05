@@ -10,6 +10,7 @@
 <translation id="1201402288615127009">ถัดไป</translation>
 <translation id="1242008676835033345">ฝังอยู่ใน <ph name="WEBSITE_URL" /></translation>
 <translation id="1272079795634619415">หยุด</translation>
+<translation id="1289742167380433257">Google ได้เพิ่มประสิทธิภาพให้รูปภาพในหน้านี้เพื่อประหยัดอินเทอร์เน็ตมือถือ</translation>
 <translation id="129382876167171263">ไฟล์ที่เว็บไซต์บันทึกไว้จะปรากฏที่นี่</translation>
 <translation id="1364532808393826295"><ph name="APP_NAME" /> - <ph name="NOTIFICATION_MESSAGE" /></translation>
 <translation id="1369915414381695676">เพิ่มเว็บไซต์ <ph name="SITE_NAME" /> แล้ว</translation>
@@ -42,6 +43,7 @@
 <translation id="2182457891543959921">ถามก่อนที่จะอนุญาตให้เว็บไซต์สร้างแผนที่ 3 มิติของสิ่งที่อยู่รอบตัวคุณหรือติดตามตำแหน่งของกล้อง (แนะนำ)</translation>
 <translation id="2212565012507486665">อนุญาตคุกกี้</translation>
 <translation id="2289270750774289114">ถามเมื่อเว็บไซต์ต้องการค้นหาอุปกรณ์บลูทูธใกล้เคียง (แนะนำ)</translation>
+<translation id="2315043854645842844">ระบบปฏิบัติการไม่สนับสนุนการเลือกใบรับรองฝั่งลูกค้า</translation>
 <translation id="2359808026110333948">ต่อไป</translation>
 <translation id="2402980924095424747"><ph name="MEGABYTES" /> MB</translation>
 <translation id="2434158240863470628">ดาวน์โหลดเสร็จสมบูรณ์ <ph name="SEPARATOR" /> <ph name="BYTES_DOWNLOADED" /></translation>
@@ -61,10 +63,12 @@
 <translation id="2704606927547763573">คัดลอกแล้ว</translation>
 <translation id="2822354292072154809">แน่ใจไหมว่าต้องการรีเซ็ตสิทธิ์ทั้งหมดของเว็บไซต์สำหรับ <ph name="CHOSEN_OBJECT_NAME" /></translation>
 <translation id="2870560284913253234">เว็บไซต์</translation>
+<translation id="2874939134665556319">แทร็กก่อนหน้า</translation>
 <translation id="2910701580606108292">ถามก่อนอนุญาตให้เว็บไซต์เล่นเนื้อหาที่ได้รับความคุ้มครอง</translation>
 <translation id="2913331724188855103">อนุญาตให้เว็บไซต์บันทึกและอ่านข้อมูลคุกกี้ (แนะนำ)</translation>
 <translation id="2968755619301702150">เครื่องมือดูใบรับรอง</translation>
 <translation id="300526633675317032">การดำเนินการนี้จะล้างพื้นที่เก็บข้อมูลเว็บไซต์ทั้ง <ph name="SIZE_IN_KB" /></translation>
+<translation id="301521992641321250">ถูกบล็อกโดยอัตโนมัติ</translation>
 <translation id="3115898365077584848">แสดงข้อมูล</translation>
 <translation id="3123473560110926937">บล็อกในบางเว็บไซต์</translation>
 <translation id="3190152372525844641">เปิดการใช้สิทธิ์สำหรับ Chrome ใน<ph name="BEGIN_LINK" />การตั้งค่า Android<ph name="END_LINK" /></translation>
@@ -83,16 +87,19 @@
 <translation id="3744111561329211289">ซิงค์ในแบ็กกราวด์</translation>
 <translation id="3822502789641063741">ล้างพื้นที่เก็บข้อมูลเว็บไซต์ไหม</translation>
 <translation id="385051799172605136">กลับ</translation>
+<translation id="3859306556332390985">ไปข้างหน้า</translation>
 <translation id="3955193568934677022">อนุญาตให้เว็บไซต์เล่นเนื้อหาที่ได้รับความคุ้มครอง (แนะนำ)</translation>
 <translation id="3987993985790029246">คัดลอกลิงก์</translation>
 <translation id="3991845972263764475"><ph name="BYTES_DOWNLOADED_WITH_UNITS" />/?</translation>
 <translation id="4002066346123236978">ชื่อ</translation>
 <translation id="4008040567710660924">อนุญาตคุกกี้ของเว็บไซต์ที่เจาะจง</translation>
+<translation id="4046123991198612571">แทร็กถัดไป</translation>
 <translation id="4165986682804962316">การตั้งค่าเว็บไซต์</translation>
 <translation id="4226663524361240545">การแจ้งเตือนอาจทำให้อุปกรณ์สั่น</translation>
 <translation id="4242533952199664413">เปิดการตั้งค่า</translation>
 <translation id="4259722352634471385">มีการบล็อกการนำทาง: <ph name="URL" /></translation>
 <translation id="4278390842282768270">อนุญาตแล้ว</translation>
+<translation id="429312253194641664">เว็บไซต์กำลังเล่นสื่อ</translation>
 <translation id="4433925000917964731">หน้าเวอร์ชัน Lite ให้บริการโดย Google</translation>
 <translation id="4434045419905280838">ป๊อปอัปและการเปลี่ยนเส้นทาง</translation>
 <translation id="445467742685312942">อนุญาตให้เว็บไซต์เล่นเนื้อหาที่ได้รับความคุ้มครอง</translation>
@@ -107,6 +114,7 @@
 <translation id="4962975101802056554">เพิกถอนสิทธิ์ทั้งหมดสำหรับอุปกรณ์</translation>
 <translation id="4964199952259983386">หากต้องการให้ Chrome ใช้ AR ให้เปิดกล้องใน<ph name="BEGIN_LINK" />การตั้งค่า Android<ph name="END_LINK" /> ด้วย</translation>
 <translation id="497421865427891073">ไปข้างหน้า</translation>
+<translation id="4996978546172906250">แชร์ผ่าน</translation>
 <translation id="5039804452771397117">อนุญาต</translation>
 <translation id="5048398596102334565">อนุญาตให้เว็บไซต์เข้าถึงเซ็นเซอร์ตรวจจับความเคลื่อนไหว (แนะนำ)</translation>
 <translation id="5063480226653192405">การใช้</translation>
@@ -139,7 +147,7 @@
 <translation id="5922853908706496913">กำลังแชร์หน้าจอ</translation>
 <translation id="5939518447894949180">รีเซ็ต</translation>
 <translation id="6040143037577758943">ปิด</translation>
-<translation id="6042308850641462728">เพิ่มเติม</translation>
+<translation id="6042308850641462728">แสดงเพิ่ม</translation>
 <translation id="6064125863973209585">การดาวน์โหลดที่เสร็จสมบูรณ์แล้ว</translation>
 <translation id="6165508094623778733">ดูข้อมูลเพิ่มเติม</translation>
 <translation id="6177111841848151710">ถูกบล็อกสำหรับเครื่องมือค้นหาปัจจุบัน</translation>
@@ -163,7 +171,9 @@
 <translation id="6643016212128521049">ล้าง</translation>
 <translation id="6697925417670533197">การดาวน์โหลดที่ทำงานอยู่</translation>
 <translation id="6746124502594467657">เลื่อนลง</translation>
+<translation id="6766622839693428701">เลื่อนลงเพื่อปิด</translation>
 <translation id="6782111308708962316">ป้องกันไม่ให้เว็บไซต์ของบุคคลที่สามบันทึกและอ่านข้อมูลคุกกี้</translation>
+<translation id="6790428901817661496">เล่น</translation>
 <translation id="6818926723028410516">เลือกรายการ</translation>
 <translation id="6864395892908308021">อุปกรณ์นี้อ่าน NFC ไม่ได้</translation>
 <translation id="6910211073230771657">ลบแล้ว</translation>
@@ -189,7 +199,7 @@
 <translation id="7572498721684305250">บล็อกเว็บไซต์ไม่ให้ส่งหรือรับข้อมูลเมื่อคุณแตะอุปกรณ์ NFC</translation>
 <translation id="757524316907819857">บล็อกไม่ให้เว็บไซต์เล่นเนื้อหาที่ได้รับความคุ้มครอง</translation>
 <translation id="7589445247086920869">บล็อกสำหรับเครื่องมือค้นหาปัจจุบัน</translation>
-<translation id="7649070708921625228">ช่วยเหลือ</translation>
+<translation id="7649070708921625228">ความช่วยเหลือ</translation>
 <translation id="7658239707568436148">ยกเลิก</translation>
 <translation id="7781829728241885113">เมื่อวานนี้</translation>
 <translation id="7791543448312431591">เพิ่ม</translation>
@@ -197,6 +207,7 @@
 <translation id="7804248752222191302">มีเว็บไซต์กำลังใช้กล้อง</translation>
 <translation id="7817023149356982970">คุณจะออกจากระบบของเว็บไซต์นี้</translation>
 <translation id="7828557259026017104">คุกกี้คือไฟล์ที่เว็บไซต์ต่างๆ ที่คุณเข้าชมสร้างขึ้น เว็บไซต์ใช้คุกกี้เพื่อจดจำข้อมูลการท่องเว็บของคุณ คุกกี้ของบุคคลที่สามซึ่งเว็บไซต์อื่นๆ เป็นผู้สร้างขึ้น เว็บไซต์เหล่านี้เป็นเจ้าของเนื้อหาบางอย่าง เช่น โฆษณาหรือรูปภาพที่คุณเห็นในหน้าเว็บที่เข้าชม</translation>
+<translation id="7835852323729233924">กำลังเล่นสื่อ</translation>
 <translation id="7846076177841592234">ยกเลิกการเลือก</translation>
 <translation id="7846621471902887024">คุณจะออกจากระบบของทุกเว็บไซต์</translation>
 <translation id="7882806643839505685">อนุญาตให้เว็บไซต์ที่ต้องการเล่นเสียงได้</translation>
@@ -204,6 +215,7 @@
 <translation id="7999064672810608036">คุณแน่ใจไหมว่าต้องการล้างข้อมูลในเครื่องทั้งหมด รวมถึงคุกกี้ และรีเซ็ตสิทธิ์ทั้งหมดสำหรับเว็บไซต์นี้</translation>
 <translation id="8007176423574883786">ปิดสำหรับอุปกรณ์นี้</translation>
 <translation id="802154636333426148">การดาวน์โหลดล้มเหลว</translation>
+<translation id="8068648041423924542">เลือกใบรับรองไม่ได้</translation>
 <translation id="8087000398470557479">เนื้อหานี้มาจาก <ph name="DOMAIN_NAME" /> และนำส่งโดย Google</translation>
 <translation id="8116925261070264013">ปิดเสียง</translation>
 <translation id="8131740175452115882">ยืนยัน</translation>
@@ -216,6 +228,8 @@
 <translation id="83792324527827022">มีเว็บไซต์กำลังใช้กล้องถ่ายรูปและไมโครโฟน</translation>
 <translation id="8380167699614421159">เว็บไซต์นี้แสดงโฆษณาที่แทรกหรือทำให้เข้าใจผิด</translation>
 <translation id="8394832520002899662">แตะเพื่อกลับไปที่เว็บไซต์</translation>
+<translation id="8425213833346101688">เปลี่ยน</translation>
+<translation id="8441146129660941386">ย้อนกลับ</translation>
 <translation id="8447861592752582886">เพิกถอนสิทธิ์ของอุปกรณ์</translation>
 <translation id="8463851957836045671">เว็บไซต์โหลดเร็ว</translation>
 <translation id="851751545965956758">บล็อกเว็บไซต์ไม่ให้เชื่อมต่อกับอุปกรณ์</translation>
@@ -236,6 +250,7 @@
 <translation id="8958424370300090006">บล็อกคุกกี้ของเว็บไซต์ที่เจาะจง</translation>
 <translation id="8959122750345127698">ไม่สามารถเข้าถึงการนำทางได้: <ph name="URL" /></translation>
 <translation id="9019902583201351841">มีการจัดการโดยผู้ปกครอง</translation>
+<translation id="9074739597929991885">บลูทูธ</translation>
 <translation id="945632385593298557">เข้าถึงไมโครโฟน</translation>
 <translation id="965817943346481315">บล็อกหากเว็บไซต์แสดงโฆษณาที่แทรกหรือทำให้เข้าใจผิด (แนะนำ)</translation>
 </translationbundle>

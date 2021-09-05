@@ -60,6 +60,7 @@ class StylePropertySerializer {
   bool AppendFontLonghandValueIfNotNormal(const CSSProperty&,
                                           StringBuilder& result) const;
   String OffsetValue() const;
+  String TextDecorationValue() const;
   String BackgroundRepeatPropertyValue() const;
   String GetPropertyText(const CSSProperty&,
                          const String& value,
@@ -129,7 +130,7 @@ class StylePropertySerializer {
     const CSSValue* GetPropertyCSSValue(const CSSProperty&) const;
     bool IsDescriptorContext() const;
 
-    void Trace(Visitor*);
+    void Trace(Visitor*) const;
 
    private:
     bool HasExpandedAllProperty() const {

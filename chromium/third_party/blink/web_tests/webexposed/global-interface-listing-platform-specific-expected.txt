@@ -29,8 +29,12 @@ interface BluetoothDevice : EventTarget
     getter gatt
     getter id
     getter name
+    getter onadvertisementreceived
     getter ongattserverdisconnected
+    getter watchingAdvertisements
     method constructor
+    method watchAdvertisements
+    setter onadvertisementreceived
     setter ongattserverdisconnected
 interface BluetoothRemoteGATTCharacteristic : EventTarget
     attribute @@toStringTag
@@ -46,6 +50,8 @@ interface BluetoothRemoteGATTCharacteristic : EventTarget
     method startNotifications
     method stopNotifications
     method writeValue
+    method writeValueWithResponse
+    method writeValueWithoutResponse
     setter oncharacteristicvaluechanged
 interface BluetoothRemoteGATTDescriptor
     attribute @@toStringTag

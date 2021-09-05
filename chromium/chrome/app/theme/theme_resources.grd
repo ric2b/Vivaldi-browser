@@ -133,7 +133,6 @@
       </if>
       <if expr="not is_android">
         <structure type="chrome_scaled_image" name="IDR_HELP_MENU" file="common/help_16.png" />
-        <structure type="chrome_scaled_image" name="IDR_HIDE_PASSWORD_HOVER" file="common/hide_password_hover.png" />
         <if expr="not chromeos">
         <!-- User Manager tutorial -->
         <structure type="chrome_scaled_image" name="IDR_ICON_USER_MANAGER_TUTORIAL_YOUR_CHROME" file="common/user_manager_tutorial/your_chrome.png" />
@@ -169,6 +168,7 @@
         <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_16" file="chromium/product_logo_16.png" />
         <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_32" file="chromium/product_logo_32.png" />
         <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_NAME_22" file="chromium/product_logo_name_22.png" />
+        <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_NAME_22_WHITE" file="chromium/product_logo_name_22_white.png" />
       </if>
       <if expr="_google_chrome">
         <if expr="not is_android">
@@ -180,6 +180,7 @@
         <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_32_DEV" file="google_chrome/product_logo_32_dev.png" />
         <if expr="not is_android">
           <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_NAME_22" file="google_chrome/product_logo_name_22.png" />
+          <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_NAME_22_WHITE" file="google_chrome/product_logo_name_22_white.png" />
         </if>
         <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_ENTERPRISE" file="google_chrome/product_logo_enterprise.png" />
         <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_ENTERPRISE_WHITE" file="google_chrome/product_logo_enterprise_white.png" />
@@ -250,6 +251,8 @@
       </if>
       <if expr="chromeos">
         <structure type="chrome_scaled_image" name="IDR_RESET_WARNING" file="cros/reset_warning.png" />
+        <structure type="chrome_scaled_image" name="IDR_ENABLE_DEBUGGING_FAILURE" file="cros/enable_debugging_failure.png" />
+        <structure type="chrome_scaled_image" name="IDR_ENABLE_DEBUGGING_SUCCESS" file="cros/enable_debugging_success.png" />
       </if>
       <structure type="chrome_scaled_image" name="IDR_RESTORE_BUTTON_MASK" file="common/restore_button_mask.png" />
       <if expr="not is_android">
@@ -266,7 +269,6 @@
       </if>
       <if expr="not is_android">
         <structure type="chrome_scaled_image" name="IDR_SETTINGS_FAVICON" file="common/favicon_settings.png" />
-        <structure type="chrome_scaled_image" name="IDR_SHOW_PASSWORD_HOVER" file="common/show_password_hover.png" />
       </if>
       <if expr="chromeos">
         <structure type="chrome_scaled_image" name="IDR_SMB_ICON" file="cros/smb_icon.png" />

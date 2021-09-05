@@ -17,6 +17,7 @@
 #include "build/build_config.h"
 #include "remoting/protocol/video_channel_state_observer.h"
 #include "third_party/webrtc/api/video_codecs/sdp_video_format.h"
+#include "third_party/webrtc/media/base/vp9_profile.h"
 
 #if defined(USE_H264_ENCODER)
 #include "media/video/h264_parser.h"
@@ -235,7 +236,11 @@ WebrtcDummyVideoEncoderFactory::WebrtcDummyVideoEncoderFactory()
     : main_task_runner_(base::ThreadTaskRunnerHandle::Get()) {
   formats_.push_back(webrtc::SdpVideoFormat("VP8"));
   formats_.push_back(webrtc::SdpVideoFormat("VP9"));
+  formats_.push_back(
+      webrtc::SdpVideoFormat("VP9", {{webrtc::kVP9FmtpProfileId, "1"}}));
+#if defined(USE_H264_ENCODER)
   formats_.push_back(webrtc::SdpVideoFormat("H264"));
+#endif
 }
 
 WebrtcDummyVideoEncoderFactory::~WebrtcDummyVideoEncoderFactory() {
@@ -253,7 +258,8 @@ WebrtcDummyVideoEncoderFactory::CreateVideoEncoder(
   encoders_.push_back(encoder.get());
   if (encoder_created_callback_) {
     main_task_runner_->PostTask(
-        FROM_HERE, base::BindOnce(encoder_created_callback_, type));
+        FROM_HERE,
+        base::BindOnce(encoder_created_callback_, type, format.parameters));
   }
   return encoder;
 }
@@ -291,7 +297,9 @@ WebrtcDummyVideoEncoderFactory::SendEncodedFrame(
 }
 
 void WebrtcDummyVideoEncoderFactory::RegisterEncoderSelectedCallback(
-    const base::Callback<void(webrtc::VideoCodecType)>& callback) {
+    const base::RepeatingCallback<
+        void(webrtc::VideoCodecType,
+             const webrtc::SdpVideoFormat::Parameters&)>& callback) {
   encoder_created_callback_ = callback;
 }
 

@@ -28,6 +28,7 @@ import static org.chromium.chrome.browser.tasks.TasksSurfaceProperties.MV_TILES_
 import static org.chromium.chrome.browser.tasks.TasksSurfaceProperties.MV_TILES_VISIBLE;
 import static org.chromium.chrome.browser.tasks.TasksSurfaceProperties.TAB_SWITCHER_TITLE_TOP_MARGIN;
 import static org.chromium.chrome.browser.tasks.TasksSurfaceProperties.TASKS_SURFACE_BODY_TOP_MARGIN;
+import static org.chromium.chrome.browser.tasks.TasksSurfaceProperties.TRENDY_TERMS_VISIBLE;
 import static org.chromium.chrome.features.start_surface.StartSurfaceProperties.BOTTOM_BAR_CLICKLISTENER;
 import static org.chromium.chrome.features.start_surface.StartSurfaceProperties.BOTTOM_BAR_HEIGHT;
 import static org.chromium.chrome.features.start_surface.StartSurfaceProperties.BOTTOM_BAR_SELECTED_TAB_POSITION;
@@ -37,7 +38,7 @@ import static org.chromium.chrome.features.start_surface.StartSurfaceProperties.
 import static org.chromium.chrome.features.start_surface.StartSurfaceProperties.IS_SECONDARY_SURFACE_VISIBLE;
 import static org.chromium.chrome.features.start_surface.StartSurfaceProperties.IS_SHOWING_OVERVIEW;
 import static org.chromium.chrome.features.start_surface.StartSurfaceProperties.IS_SHOWING_STACK_TAB_SWITCHER;
-import static org.chromium.chrome.features.start_surface.StartSurfaceProperties.TOP_BAR_HEIGHT;
+import static org.chromium.chrome.features.start_surface.StartSurfaceProperties.TOP_MARGIN;
 
 import android.content.res.Resources;
 import android.view.View;
@@ -56,8 +57,8 @@ import org.robolectric.annotation.Config;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.test.BaseRobolectricTestRunner;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeState;
-import org.chromium.chrome.browser.fullscreen.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.night_mode.NightModeStateProvider;
 import org.chromium.chrome.browser.ntp.FakeboxDelegate;
 import org.chromium.chrome.browser.omnibox.UrlFocusChangeListener;
@@ -194,6 +195,7 @@ public class StartSurfaceMediatorUnitTest {
         assertThat(mPropertyModel.get(IS_EXPLORE_SURFACE_VISIBLE), equalTo(false));
         assertThat(mPropertyModel.get(MV_TILES_VISIBLE), equalTo(true));
         assertThat(mPropertyModel.get(IS_SHOWING_OVERVIEW), equalTo(true));
+        assertThat(mPropertyModel.get(TRENDY_TERMS_VISIBLE), equalTo(false));
 
         mOverviewModeObserverCaptor.getValue().startedShowing();
         mOverviewModeObserverCaptor.getValue().finishedShowing();
@@ -239,6 +241,7 @@ public class StartSurfaceMediatorUnitTest {
         assertThat(mPropertyModel.get(IS_EXPLORE_SURFACE_VISIBLE), equalTo(false));
         assertThat(mPropertyModel.get(MV_TILES_VISIBLE), equalTo(false));
         assertThat(mPropertyModel.get(IS_SHOWING_OVERVIEW), equalTo(true));
+        assertThat(mPropertyModel.get(TRENDY_TERMS_VISIBLE), equalTo(false));
 
         mOverviewModeObserverCaptor.getValue().startedShowing();
         mOverviewModeObserverCaptor.getValue().finishedShowing();
@@ -263,6 +266,50 @@ public class StartSurfaceMediatorUnitTest {
     }
 
     @Test
+    public void showAndHideTrendyTermsSurface() {
+        doReturn(false).when(mTabModelSelector).isIncognitoSelected();
+        doReturn(mVoiceRecognitionHandler).when(mFakeBoxDelegate).getVoiceRecognitionHandler();
+        doReturn(true).when(mVoiceRecognitionHandler).isVoiceSearchEnabled();
+
+        StartSurfaceMediator mediator = createStartSurfaceMediator(SurfaceMode.TRENDY_TERMS, true);
+        verify(mMainTabGridController)
+                .addOverviewModeObserver(mOverviewModeObserverCaptor.capture());
+
+        assertThat(mediator.getOverviewState(), equalTo(OverviewModeState.NOT_SHOWN));
+
+        mediator.showOverview(false);
+        verify(mMainTabGridController).showOverview(eq(false));
+        verify(mFakeBoxDelegate).addUrlFocusChangeListener(mUrlFocusChangeListenerCaptor.capture());
+        assertThat(mediator.getOverviewState(),
+                equalTo(OverviewModeState.SHOWN_TABSWITCHER_TRENDY_TERMS));
+        assertThat(mPropertyModel.get(IS_INCOGNITO), equalTo(false));
+        assertThat(mPropertyModel.get(IS_VOICE_RECOGNITION_BUTTON_VISIBLE), equalTo(true));
+        assertThat(mPropertyModel.get(IS_EXPLORE_SURFACE_VISIBLE), equalTo(false));
+        assertThat(mPropertyModel.get(MV_TILES_VISIBLE), equalTo(false));
+        assertThat(mPropertyModel.get(IS_SHOWING_OVERVIEW), equalTo(true));
+        assertThat(mPropertyModel.get(TRENDY_TERMS_VISIBLE), equalTo(true));
+
+        mOverviewModeObserverCaptor.getValue().startedShowing();
+        mOverviewModeObserverCaptor.getValue().finishedShowing();
+
+        mUrlFocusChangeListenerCaptor.getValue().onUrlFocusChange(true);
+        assertThat(mPropertyModel.get(IS_FAKE_SEARCH_BOX_VISIBLE), equalTo(false));
+        mUrlFocusChangeListenerCaptor.getValue().onUrlFocusChange(false);
+        assertThat(mPropertyModel.get(IS_FAKE_SEARCH_BOX_VISIBLE), equalTo(true));
+        assertThat(mPropertyModel.get(IS_VOICE_RECOGNITION_BUTTON_VISIBLE), equalTo(true));
+
+        mediator.hideOverview(true);
+        verify(mMainTabGridController).hideOverview(eq(true));
+
+        mOverviewModeObserverCaptor.getValue().startedHiding();
+        assertThat(mPropertyModel.get(IS_SHOWING_OVERVIEW), equalTo(false));
+        verify(mFakeBoxDelegate)
+                .removeUrlFocusChangeListener(mUrlFocusChangeListenerCaptor.getValue());
+
+        mOverviewModeObserverCaptor.getValue().finishedHiding();
+    }
+
+    @Test
     public void showAndHideSingleSurface() {
         doReturn(false).when(mTabModelSelector).isIncognitoSelected();
         doReturn(mVoiceRecognitionHandler).when(mFakeBoxDelegate).getVoiceRecognitionHandler();
@@ -283,6 +330,7 @@ public class StartSurfaceMediatorUnitTest {
         assertThat(mPropertyModel.get(IS_EXPLORE_SURFACE_VISIBLE), equalTo(true));
         assertThat(mPropertyModel.get(MV_TILES_VISIBLE), equalTo(true));
         assertThat(mPropertyModel.get(IS_SHOWING_OVERVIEW), equalTo(true));
+        assertThat(mPropertyModel.get(TRENDY_TERMS_VISIBLE), equalTo(false));
 
         mOverviewModeObserverCaptor.getValue().startedShowing();
         mOverviewModeObserverCaptor.getValue().finishedShowing();
@@ -327,6 +375,7 @@ public class StartSurfaceMediatorUnitTest {
         assertThat(mPropertyModel.get(IS_EXPLORE_SURFACE_VISIBLE), equalTo(true));
         assertThat(mPropertyModel.get(MV_TILES_VISIBLE), equalTo(false));
         assertThat(mPropertyModel.get(IS_SHOWING_OVERVIEW), equalTo(true));
+        assertThat(mPropertyModel.get(TRENDY_TERMS_VISIBLE), equalTo(false));
 
         mOverviewModeObserverCaptor.getValue().startedShowing();
         mOverviewModeObserverCaptor.getValue().finishedShowing();
@@ -373,6 +422,7 @@ public class StartSurfaceMediatorUnitTest {
         assertThat(mPropertyModel.get(MV_TILES_VISIBLE), equalTo(false));
         assertThat(mPropertyModel.get(IS_SHOWING_OVERVIEW), equalTo(true));
         assertThat(mPropertyModel.get(IS_SHOWING_STACK_TAB_SWITCHER), equalTo(false));
+        assertThat(mPropertyModel.get(TRENDY_TERMS_VISIBLE), equalTo(false));
 
         mOverviewModeObserverCaptor.getValue().startedShowing();
         mOverviewModeObserverCaptor.getValue().finishedShowing();
@@ -421,6 +471,7 @@ public class StartSurfaceMediatorUnitTest {
         assertThat(mPropertyModel.get(IS_BOTTOM_BAR_VISIBLE), equalTo(true));
         assertThat(mPropertyModel.get(MV_TILES_VISIBLE), equalTo(true));
         assertThat(mPropertyModel.get(IS_SHOWING_OVERVIEW), equalTo(true));
+        assertThat(mPropertyModel.get(TRENDY_TERMS_VISIBLE), equalTo(false));
 
         mOverviewModeObserverCaptor.getValue().startedShowing();
         mOverviewModeObserverCaptor.getValue().finishedShowing();
@@ -1437,7 +1488,7 @@ public class StartSurfaceMediatorUnitTest {
     }
 
     @Test
-    public void changeTopControlsHeight() {
+    public void changeTopContentOffset() {
         doReturn(false).when(mTabModelSelector).isIncognitoSelected();
         doReturn(mVoiceRecognitionHandler).when(mFakeBoxDelegate).getVoiceRecognitionHandler();
         doReturn(true).when(mVoiceRecognitionHandler).isVoiceSearchEnabled();
@@ -1451,10 +1502,14 @@ public class StartSurfaceMediatorUnitTest {
         verify(mBrowserControlsStateProvider).addObserver(ArgumentMatchers.any());
 
         mBrowserControlsStateProviderCaptor.getValue().onTopControlsHeightChanged(100, 20);
-        assertEquals("Wrong top bar height.", 100, mPropertyModel.get(TOP_BAR_HEIGHT));
+        doReturn(100).when(mBrowserControlsStateProvider).getContentOffset();
+        mBrowserControlsStateProviderCaptor.getValue().onControlsOffsetChanged(
+                100, 20, 0, 0, false);
+        assertEquals("Wrong top content offset.", 100, mPropertyModel.get(TOP_MARGIN));
 
-        mBrowserControlsStateProviderCaptor.getValue().onTopControlsHeightChanged(50, 20);
-        assertEquals("Wrong top bar height.", 50, mPropertyModel.get(TOP_BAR_HEIGHT));
+        doReturn(50).when(mBrowserControlsStateProvider).getContentOffset();
+        mBrowserControlsStateProviderCaptor.getValue().onControlsOffsetChanged(50, 20, 0, 0, false);
+        assertEquals("Wrong top content offset.", 50, mPropertyModel.get(TOP_MARGIN));
     }
 
     @Test

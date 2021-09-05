@@ -36,7 +36,7 @@ public class TileSuggestionProcessor implements SuggestionProcessor {
     }
 
     @Override
-    public boolean doesProcessSuggestion(OmniboxSuggestion suggestion) {
+    public boolean doesProcessSuggestion(OmniboxSuggestion suggestion, int position) {
         return suggestion.getType() == OmniboxSuggestionType.TILE_SUGGESTION;
     }
 
@@ -80,6 +80,9 @@ public class TileSuggestionProcessor implements SuggestionProcessor {
     public void recordItemPresented(PropertyModel model) {
         // TODO(crbug.com/1068672): Record metrics.
     }
+
+    @Override
+    public void recordItemUsed(PropertyModel model) {}
 
     @Override
     public void onSuggestionsReceived() {}

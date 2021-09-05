@@ -4,11 +4,16 @@
 
 #include "chrome/test/payments/payment_request_test_controller.h"
 
+#include "base/check.h"
+#include "base/location.h"
+#include "base/sequenced_task_runner.h"
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/payments/chrome_payment_request_delegate.h"
 #include "chrome/browser/payments/payment_request_factory.h"
 #include "components/payments/content/payment_request.h"
 #include "components/payments/content/payment_request_web_contents_manager.h"
 #include "components/payments/core/payment_prefs.h"
+#include "components/payments/core/payment_request_delegate.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 
@@ -19,15 +24,15 @@ class CanMakePaymentTestChromePaymentRequestDelegate
  public:
   CanMakePaymentTestChromePaymentRequestDelegate(
       content::WebContents* web_contents,
-      bool is_incognito,
+      bool is_off_the_record,
       bool valid_ssl,
       PrefService* prefs)
       : ChromePaymentRequestDelegate(web_contents),
-        is_incognito_(is_incognito),
+        is_off_the_record_(is_off_the_record),
         valid_ssl_(valid_ssl),
         prefs_(prefs) {}
 
-  bool IsIncognito() const override { return is_incognito_; }
+  bool IsOffTheRecord() const override { return is_off_the_record_; }
   std::string GetInvalidSslCertificateErrorMessage() override {
     return valid_ssl_ ? "" : "Invalid SSL certificate";
   }
@@ -35,7 +40,7 @@ class CanMakePaymentTestChromePaymentRequestDelegate
   bool IsBrowserWindowActive() const override { return true; }
 
  private:
-  const bool is_incognito_;
+  const bool is_off_the_record_;
   const bool valid_ssl_;
   PrefService* const prefs_;
 };
@@ -58,7 +63,23 @@ class PaymentRequestTestController::ObserverConverter
   void OnHasEnrolledInstrumentReturned() override {
     controller_->OnHasEnrolledInstrumentReturned();
   }
-  void OnShowAppsReady() override { controller_->OnShowAppsReady(); }
+  void OnShowAppsReady(base::WeakPtr<PaymentRequest> payment_request) override {
+    DCHECK(payment_request);
+    std::vector<AppDescription> descriptions(
+        payment_request->state()->available_apps().size());
+    size_t i = 0;
+    for (const auto& app : payment_request->state()->available_apps()) {
+      auto* description = &descriptions[i++];
+      description->label = base::UTF16ToUTF8(app->GetLabel());
+      description->sublabel = base::UTF16ToUTF8(app->GetSublabel());
+      auto* spec = payment_request->spec();
+      const auto& total = spec->GetTotal(app.get());
+      description->total = total->amount->currency + " " + total->amount->value;
+    }
+    controller_->set_app_descriptions(descriptions);
+
+    controller_->OnShowAppsReady();
+  }
   void OnNotSupportedError() override { controller_->OnNotSupportedError(); }
   void OnConnectionTerminated() override {
     controller_->OnConnectionTerminated();
@@ -109,8 +130,8 @@ void PaymentRequestTestController::SetObserver(
   observer_ = observer;
 }
 
-void PaymentRequestTestController::SetIncognito(bool is_incognito) {
-  is_incognito_ = is_incognito;
+void PaymentRequestTestController::SetOffTheRecord(bool is_off_the_record) {
+  is_off_the_record_ = is_off_the_record;
   UpdateDelegateFactory();
 }
 
@@ -128,8 +149,8 @@ void PaymentRequestTestController::SetCanMakePaymentEnabledPref(
 
 void PaymentRequestTestController::UpdateDelegateFactory() {
   SetPaymentRequestFactoryForTesting(base::BindRepeating(
-      [](PaymentRequest::ObserverForTest* observer_for_test, bool is_incognito,
-         bool valid_ssl, PrefService* prefs,
+      [](PaymentRequest::ObserverForTest* observer_for_test,
+         bool is_off_the_record, bool valid_ssl, PrefService* prefs,
          mojo::PendingReceiver<payments::mojom::PaymentRequest> receiver,
          content::RenderFrameHost* render_frame_host) {
         content::WebContents* web_contents =
@@ -137,7 +158,7 @@ void PaymentRequestTestController::UpdateDelegateFactory() {
         DCHECK(web_contents);
         auto delegate =
             std::make_unique<CanMakePaymentTestChromePaymentRequestDelegate>(
-                web_contents, is_incognito, valid_ssl, prefs);
+                web_contents, is_off_the_record, valid_ssl, prefs);
         PaymentRequestWebContentsManager* manager =
             PaymentRequestWebContentsManager::GetOrCreateForWebContents(
                 web_contents);
@@ -145,7 +166,7 @@ void PaymentRequestTestController::UpdateDelegateFactory() {
                                       std::move(delegate), std::move(receiver),
                                       observer_for_test);
       },
-      observer_converter_.get(), is_incognito_, valid_ssl_, prefs_.get()));
+      observer_converter_.get(), is_off_the_record_, valid_ssl_, prefs_.get()));
 }
 
 void PaymentRequestTestController::OnCanMakePaymentCalled() {

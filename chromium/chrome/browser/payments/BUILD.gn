@@ -6,6 +6,7 @@ source_set("browsertests") {
   testonly = true
 
   sources = [
+    "abort_payment_handler_browsertest.cc",
     "colocated_payment_manifests_browsertest.cc",
     "empty_parameters_browsertest.cc",
     "has_enrolled_instrument_browsertest.cc",
@@ -13,14 +14,17 @@ source_set("browsertests") {
     "iframe_csp_browsertest.cc",
     "ignore_payment_method_browsertest.cc",
     "journey_logger_browsertest.cc",
+    "payment_handler_capabilities_browsertest.cc",
     "payment_handler_change_shipping_address_option_browsertest.cc",
     "payment_handler_enable_delegations_browsertest.cc",
     "payment_handler_exploit_browsertest.cc",
     "payment_handler_just_in_time_installation_browsertest.cc",
+    "payment_request_app_store_billing_browsertest.cc",
     "payment_request_can_make_payment_browsertest.cc",
     "payment_request_can_make_payment_event_browsertest.cc",
     "payment_request_minimal_ui_browsertest.cc",
     "sec_fetch_site_browsertest.cc",
+    "two_payment_requests_browsertest.cc",
   ]
 
   defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
@@ -41,6 +45,7 @@ source_set("browsertests") {
       "expandable_payment_handler_browsertest.cc",
       "hybrid_request_skip_ui_browsertest.cc",
     ]
+    deps += [ "//components/payments/content/android" ]
   }
 
   if (!is_android) {
@@ -81,6 +86,7 @@ source_set("unittests") {
 
     deps += [
       "//chrome/android:native_j_unittests_jni_headers",
+      "//components/payments/content",
       "//components/payments/content:utils",
     ]
   }

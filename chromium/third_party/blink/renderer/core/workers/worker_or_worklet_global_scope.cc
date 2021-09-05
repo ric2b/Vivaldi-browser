@@ -66,7 +66,7 @@ class OutsideSettingsCSPDelegate final
     DCHECK(global_scope_for_logging_->IsContextThread());
   }
 
-  void Trace(Visitor* visitor) override {
+  void Trace(Visitor* visitor) const override {
     visitor->Trace(global_scope_for_logging_);
     visitor->Trace(outside_settings_object_);
   }
@@ -183,11 +183,10 @@ WorkerOrWorkletGlobalScope::WorkerOrWorkletGlobalScope(
     std::unique_ptr<WebContentSettingsClient> content_settings_client,
     scoped_refptr<WebWorkerFetchContext> web_worker_fetch_context,
     WorkerReportingProxy& reporting_proxy)
-    : ExecutionContext(isolate),
+    : ExecutionContext(isolate, agent),
       security_context_(
           SecurityContextInit(origin,
-                              MakeGarbageCollected<OriginTrialContext>(),
-                              agent),
+                              MakeGarbageCollected<OriginTrialContext>()),
           SecurityContext::kWorker),
       name_(name),
       parent_devtools_token_(parent_devtools_token),
@@ -359,7 +358,8 @@ ResourceFetcher* WorkerOrWorkletGlobalScope::CreateFetcherInternal(
     fetcher->SetResourceLoadObserver(
         MakeGarbageCollected<ResourceLoadObserverForWorker>(
             *probe::ToCoreProbeSink(static_cast<ExecutionContext*>(this)),
-            fetcher->GetProperties(), web_worker_fetch_context_));
+            fetcher->GetProperties(), web_worker_fetch_context_,
+            GetDevToolsToken()));
   } else {
     auto& properties =
         *MakeGarbageCollected<DetachableResourceFetcherProperties>(
@@ -545,7 +545,7 @@ int WorkerOrWorkletGlobalScope::GetOutstandingThrottledLimit() const {
   return 2;
 }
 
-void WorkerOrWorkletGlobalScope::Trace(Visitor* visitor) {
+void WorkerOrWorkletGlobalScope::Trace(Visitor* visitor) const {
   visitor->Trace(security_context_);
   visitor->Trace(inside_settings_resource_fetcher_);
   visitor->Trace(resource_fetchers_);

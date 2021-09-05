@@ -81,6 +81,48 @@ bool EnumTraits<network::mojom::CookieSameSite, net::CookieSameSite>::FromMojom(
   return false;
 }
 
+network::mojom::CookieEffectiveSameSite EnumTraits<
+    network::mojom::CookieEffectiveSameSite,
+    net::CookieEffectiveSameSite>::ToMojom(net::CookieEffectiveSameSite input) {
+  switch (input) {
+    case net::CookieEffectiveSameSite::NO_RESTRICTION:
+      return network::mojom::CookieEffectiveSameSite::kNoRestriction;
+    case net::CookieEffectiveSameSite::LAX_MODE:
+      return network::mojom::CookieEffectiveSameSite::kLaxMode;
+    case net::CookieEffectiveSameSite::STRICT_MODE:
+      return network::mojom::CookieEffectiveSameSite::kStrictMode;
+    case net::CookieEffectiveSameSite::LAX_MODE_ALLOW_UNSAFE:
+      return network::mojom::CookieEffectiveSameSite::kLaxModeAllowUnsafe;
+    default:
+      break;
+  }
+  NOTREACHED();
+  return static_cast<network::mojom::CookieEffectiveSameSite>(input);
+}
+
+bool EnumTraits<network::mojom::CookieEffectiveSameSite,
+                net::CookieEffectiveSameSite>::
+    FromMojom(network::mojom::CookieEffectiveSameSite input,
+              net::CookieEffectiveSameSite* output) {
+  switch (input) {
+    case network::mojom::CookieEffectiveSameSite::kNoRestriction:
+      *output = net::CookieEffectiveSameSite::NO_RESTRICTION;
+      return true;
+    case network::mojom::CookieEffectiveSameSite::kLaxMode:
+      *output = net::CookieEffectiveSameSite::LAX_MODE;
+      return true;
+    case network::mojom::CookieEffectiveSameSite::kStrictMode:
+      *output = net::CookieEffectiveSameSite::STRICT_MODE;
+      return true;
+    case network::mojom::CookieEffectiveSameSite::kLaxModeAllowUnsafe:
+      *output = net::CookieEffectiveSameSite::LAX_MODE_ALLOW_UNSAFE;
+      return true;
+    default:
+      break;
+  }
+  return false;
+}
+
 network::mojom::CookieSourceScheme
 EnumTraits<network::mojom::CookieSourceScheme,
            net::CookieSourceScheme>::ToMojom(net::CookieSourceScheme input) {
@@ -351,10 +393,10 @@ bool StructTraits<
 }
 
 bool StructTraits<network::mojom::CookieInclusionStatusDataView,
-                  net::CanonicalCookie::CookieInclusionStatus>::
+                  net::CookieInclusionStatus>::
     Read(network::mojom::CookieInclusionStatusDataView status,
-         net::CanonicalCookie::CookieInclusionStatus* out) {
-  *out = net::CanonicalCookie::CookieInclusionStatus();
+         net::CookieInclusionStatus* out) {
+  *out = net::CookieInclusionStatus();
   out->set_exclusion_reasons(status.exclusion_reasons());
   out->set_warning_reasons(status.warning_reasons());
 
@@ -366,7 +408,7 @@ bool StructTraits<
     net::CookieWithStatus>::Read(network::mojom::CookieWithStatusDataView c,
                                  net::CookieWithStatus* out) {
   net::CanonicalCookie cookie;
-  net::CanonicalCookie::CookieInclusionStatus status;
+  net::CookieInclusionStatus status;
   if (!c.ReadCookie(&cookie))
     return false;
   if (!c.ReadStatus(&status))
@@ -383,7 +425,7 @@ bool StructTraits<network::mojom::CookieAndLineWithStatusDataView,
          net::CookieAndLineWithStatus* out) {
   base::Optional<net::CanonicalCookie> cookie;
   std::string cookie_string;
-  net::CanonicalCookie::CookieInclusionStatus status;
+  net::CookieInclusionStatus status;
   if (!c.ReadCookie(&cookie))
     return false;
   if (!c.ReadCookieString(&cookie_string))
@@ -392,6 +434,39 @@ bool StructTraits<network::mojom::CookieAndLineWithStatusDataView,
     return false;
 
   *out = {cookie, cookie_string, status};
+
+  return true;
+}
+
+bool StructTraits<
+    network::mojom::CookieAccessResultDataView,
+    net::CookieAccessResult>::Read(network::mojom::CookieAccessResultDataView c,
+                                   net::CookieAccessResult* out) {
+  net::CookieEffectiveSameSite effective_same_site;
+  net::CookieInclusionStatus status;
+
+  if (!c.ReadEffectiveSameSite(&effective_same_site))
+    return false;
+  if (!c.ReadStatus(&status))
+    return false;
+
+  *out = {effective_same_site, status};
+
+  return true;
+}
+
+bool StructTraits<network::mojom::CookieWithAccessResultDataView,
+                  net::CookieWithAccessResult>::
+    Read(network::mojom::CookieWithAccessResultDataView c,
+         net::CookieWithAccessResult* out) {
+  net::CanonicalCookie cookie;
+  net::CookieAccessResult access_result;
+  if (!c.ReadCookie(&cookie))
+    return false;
+  if (!c.ReadAccessResult(&access_result))
+    return false;
+
+  *out = {cookie, access_result};
 
   return true;
 }

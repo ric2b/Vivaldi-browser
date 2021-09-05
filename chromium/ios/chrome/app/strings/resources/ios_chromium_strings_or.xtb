@@ -3,6 +3,7 @@
 <translationbundle lang="or">
 <translation id="102360288709523007">Googleକୁ ବ୍ୟବହାରର ପରିସଂଖ୍ୟାନ ଏବଂ କ୍ରାସ୍‌ ରିପୋର୍ଟ ପଠାଇ, Chromiumକୁ ଉନ୍ନତ କରିବାରେ ସାହାଯ୍ୟ କରନ୍ତୁ।</translation>
 <translation id="1185134272377778587">Chromium ବିଷୟରେ</translation>
+<translation id="1257458525759135959">ଛବିଗୁଡ଼ିକୁ ସେଭ୍ କରିବା ପାଇଁ, Chromiumକୁ ଆପଣଙ୍କ ଫଟୋଗୁଡ଼ିକରେ ଯୋଗ କରିବାକୁ ଅନୁମତି ଦେବା ପାଇଁ ସେଟିଂସରେ ଟାପ୍ କରନ୍ତୁ</translation>
 <translation id="1472013873724362412">ଆପଣଙ୍କର ଆକାଉଣ୍ଟ Chromiumରେ କାର୍ଯ୍ୟ କରେ ନାହିଁ। ଦୟାକରି, ଆପଣଙ୍କ ଡୋମେନ୍‍ ବ୍ୟବସ୍ଥାପକଙ୍କ ସହ ଯୋଗାଯୋଗ କରନ୍ତୁ କିମ୍ବା ସାଇନ୍‍ ଇନ୍‍ କରିବା ପାଇଁ ଏକ ନିୟମିତ Google ଆକାଉଣ୍ଟ ବ୍ୟବହାର କରନ୍ତୁ।</translation>
 <translation id="1507010443238049608">Chromiumର ଫିଚର୍ ଓ କାର୍ଯ୍ୟଦକ୍ଷତାକୁ ଉନ୍ନତ କରିବାରେ ସାହାଯ୍ୟ କରେ</translation>
 <translation id="1617663976202781617">Chromium ସିଙ୍କ୍‍ରୁ ଡାଟା</translation>
@@ -15,6 +16,7 @@
 <translation id="2178608107313874732">Chromium, ଆପଣଙ୍କର କ୍ୟାମେରାକୁ ବର୍ତ୍ତମାନ ବ୍ୟବହାର କରିପାରିବ ନାହିଁ।</translation>
 <translation id="2195025571279539885">ଆପଣ କ’ଣ ଚାହୁଁଛନ୍ତି ଯେ Chromium ପରବର୍ତ୍ତୀ ସମୟରେ ଏହି ସାଇଟ୍‌ର <ph name="LANGUAGE_NAME" /> ପୃଷ୍ଠାଗୁଡ଼ିକର ଅନୁବାଦ କରିବା ଅଫର୍‌ ଦେଉ?</translation>
 <translation id="2590893390871230428">ଆପଣଙ୍କ Chromium ଡାଟା ସିଙ୍କ୍ କରନ୍ତୁ</translation>
+<translation id="2650312721222849884">ଆପଣ Chromium ବ୍ୟବହାର କରୁଥିବା ଯେ କୌଣସି ସ୍ଥାନରୁ ଆପଣଙ୍କ ଟାବଗୁଡ଼ିକ ଦେଖିବାକୁ, ସିଙ୍କ୍ ଚାଲୁ କରନ୍ତୁ</translation>
 <translation id="2730884209570016437">Chromium ଆପଣଙ୍କ କ୍ୟାମେରା ବ୍ୟବହାର କରିପାରିବ ନାହିଁ କାରଣ ଏହା ଅନ୍ୟ ଆପ୍ଲିକେସନ୍ ଦ୍ଵାରା ବ୍ୟବହୃତ ହେଉଛି</translation>
 <translation id="2915596697727466327">ଆପଣଙ୍କର ପାସ୍‌ୱର୍ଡଗୁଡ଼ିକୁ ଅଧିକୃତ ଆକ୍‌ସେସ୍ ସୁନିଶ୍ଚିତ କରିବା ପାଇଁ, Chromium Face ID ବ୍ୟବହାର କରେ।</translation>
 <translation id="3256316712990552818">Chromiumକୁ କପି କରାଗଲା</translation>
@@ -23,7 +25,9 @@
 <translation id="4681781466797808448">Chromium ସ୍କାନର୍‌କୁ ଚାଲୁ କରନ୍ତୁ</translation>
 <translation id="4787850887676698916">ଆପଣଙ୍କର ଅନ୍ୟ ଡିଭାଇସ୍‌ର Chromiumରେ ଯେଉଁ ଟାବ୍ ଖୋଲିଛନ୍ତି ତାହା ଏଠାରେ ଦେଖାଯିବ।</translation>
 <translation id="4999538639245140991"><ph name="SIGNOUT_MANAGED_DOMAIN" /> ଦ୍ବାରା ପରିଚାଳିତ ଏକ ଆକାଉଣ୍ଟରୁ ଆପଣ ସାଇନ୍ ଆଉଟ୍ କରିଥିବାରୁ, ଏହି ଡିଭାଇସ୍‌ରୁ ଆପଣଙ୍କର Chromium ଡାଟା ଡିଲିଟ୍ କରାଯିବ। ଆପଣଙ୍କ ଡାଟା ଆପଣଙ୍କ Google ଆକାଉଣ୍ଟରେ ରହିବ।</translation>
+<translation id="5521125884468363740">ଆପଣ Chromium ବ୍ୟବହାର କରୁଥିବା ଯେ କୌଣସି ସ୍ଥାନରୁ ଆପଣଙ୍କ ଟାବଗୁଡ଼ିକ ଦେଖିବାକୁ, ସାଇନ୍ ଇନ୍ କରି ସିଙ୍କ୍ ଚାଲୁ କରନ୍ତୁ</translation>
 <translation id="5573014823074921752">Chromium ଟିପ୍। ଅଧିକ ଟାବ୍ ବିକଳ୍ପ ପାଇଁ, ଟୁଲ୍‌ବାର୍‌ରେ ଥିବା 'ଟାବ୍‍ଗୁଡ଼ିକ ଦେଖାନ୍ତୁ' ବଟନ୍‍କୁ ସ୍ପର୍ଶ କରି ଧରି ରଖନ୍ତୁ ଯାହା ଆପଣଙ୍କ ସ୍କ୍ରିନ୍‌ର ନିମ୍ନରେ କିମ୍ବା ଶୀର୍ଷରେ ରହିଥାଏ।</translation>
+<translation id="5777187867430702742">Chromium ପୃଷ୍ଠା</translation>
 <translation id="5862307444128926510">Chromiumକୁ ସ୍ଵାଗତ</translation>
 <translation id="5945387852661427312">ଆପଣ <ph name="DOMAIN" />ଙ୍କ ଦ୍ୱାରା ପରିଚାଳିତ ଏକ ଆକାଉଣ୍ଟ ମାଧ୍ୟମରେ ସାଇନ୍ ଇନ୍ କରିଛନ୍ତି ଏବଂ ଏହାର ବ୍ୟବସ୍ଥାପକଙ୍କୁ ଆପଣଙ୍କ Chromium ଡାଟାର ନିୟନ୍ତ୍ରଣ ଦେ‍ଇଛନ୍ତି। ଆପଣଙ୍କର ଡାଟା ଏହି ଆକାଉଣ୍ଟ ସହ ସ୍ଥାୟୀଭାବେ ଆବଦ୍ଧ ହେବ। Chromiumରୁ ସାଇନ୍ ଆଉଟ୍ କରିବା ଦ୍ୱାରା ଆପଣଙ୍କର ଡାଟା ଏହି ଡିଭାଇସ୍‍ରୁ ଡିଲିଟ୍ ହୋଇଯିବ, କିନ୍ତୁ ଏହା ଆପଣଙ୍କ Google ଆକାଉଣ୍ଟରେ ଷ୍ଟୋର୍ ହୋଇ ରହିବ।</translation>
 <translation id="602807004951640891">Chromium ବ୍ୟବହାର କରି, ଆପଣ <ph name="BEGIN_LINK_TOS" />ସେବାର ସର୍ତ୍ତାବଳୀ<ph name="END_LINK_TOS" />ରେ ସମ୍ମତ ହୁଅନ୍ତି।</translation>
@@ -40,11 +44,12 @@
 <translation id="7746854981345936341">Chromium ପରାମର୍ଶ। ବ୍ୟାକ୍, ଫର୍‌ୱର୍ଡ, ଏବଂ ସର୍ଚ୍ଚ ଭଳି କିଛି ବଟନ୍ ବର୍ତ୍ତମାନ ଆପଣଙ୍କ ସ୍କ୍ରିନ୍‌ର ତଳେ ଅଛି।</translation>
 <translation id="786327964234957808">ଆପଣ ସିଙ୍କ ଆକାଉଣ୍ଟ <ph name="USER_EMAIL1" /> ରୁ <ph name="USER_EMAIL2" />କୁ ସ୍ୱିଚ୍ କରୁଛନ୍ତି। ଆପଣଙ୍କର ପୂର୍ବରୁ ଥିବା Chromium ଡାଟା <ph name="DOMAIN" /> ଦ୍ୱାରା ପରିଚାଳିତ ହେଉଛି। ଏହା ଏହି ଡିଭାଇସ୍‌ରୁ ଆପଣଙ୍କର ଡାଟା ଡିଲିଟ୍ କରିଦେବ, କିନ୍ତୁ ଆପଣଙ୍କର ଡାଟା <ph name="USER_EMAIL1" />ରେ ରହିବ।</translation>
 <translation id="7890287942691234100">Chromium ସ୍କାନର୍ ବ୍ୟବହାର କରିବାକୁ ଆରମ୍ଭ କରନ୍ତୁ</translation>
+<translation id="8013573822802650211">ଆପଣ Chromium ବ୍ୟବହାର କରୁଥିବା ଯେ କୌଣସି ସ୍ଥାନରୁ ଆପଣଙ୍କ ଟାବଗୁଡ଼ିକ ଦେଖିବାକୁ, ଆପଣଙ୍କ ସମସ୍ତ ଡିଭାଇସରେ ସାଇନ୍ ଇନ୍ କରନ୍ତୁ</translation>
 <translation id="8073677936375100957">ଏହି ଡିଭାଇସ୍‍ରୁ ଆପଣଙ୍କର Chromium ଡାଟା ଖାଲି କରିବେ କି?</translation>
 <translation id="8175055321229419309">ପରାମର୍ଶ: <ph name="BEGIN_LINK" />ଆପଣଙ୍କର ଡକ୍‍କୁ Chromium ଘୁଞ୍ଚାନ୍ତୁ<ph name="END_LINK" /></translation>
 <translation id="8252885722420466166">ଆପଣଙ୍କର ଲୋକେସନ୍‌କୁ ଆଧାର କରି, Chromiumରେ Googleର ଏକ ଉନ୍ନତ ଅନୁଭୂତି ପାଆନ୍ତୁ।</translation>
 <translation id="8586442755830160949">କପିରାଇଟ୍ <ph name="YEAR" /> Chromium ଲେଖକ। ସମସ୍ତ ଅଧିକାର ସଂରକ୍ଷିତ ଅଛି।</translation>
-<translation id="8809780021347235332">ଛବିଗୁଡିକୁ ସେ‍ଭ୍‌ କରିବାକୁ, Chromiumକୁ ଆପଣଙ୍କର ଫଟୋଗୁଡିକୁ ବ୍ୟବହାର କରିବାକୁ ଦେବା ପାଇଁ ସେଟିଂସ୍‍‍‍‍‍ରେ ଟାପ୍‍ କରନ୍ତୁ</translation>
+<translation id="8776843108004031667">ଏହି ଆକାଉଣ୍ଟ ଏବଂ ଯେ କୌଣସି ସେଭ୍ କରାଯାଇନଥିବା ଡାଟା Chromiumରୁ କାଢ଼ି ଦିଆଯିବ।</translation>
 <translation id="9022552996538154597">Chromiumରେ ସାଇନ୍ ଇନ୍ କରନ୍ତୁ</translation>
 <translation id="985602178874221306">Chromium ଲେଖକ</translation>
 </translationbundle>

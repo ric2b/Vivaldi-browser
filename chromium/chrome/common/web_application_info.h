@@ -21,7 +21,10 @@
 #include "url/gurl.h"
 
 using SquareSizePx = int;
+using ShortcutsMenuIconsBitmaps = std::vector<std::map<SquareSizePx, SkBitmap>>;
 
+// TODO(https://crbug.com/1091473): Rename WebApplication* occurrences in this
+// file to WebApp*.
 struct WebApplicationIconInfo {
   WebApplicationIconInfo();
   WebApplicationIconInfo(const WebApplicationIconInfo&);
@@ -31,18 +34,34 @@ struct WebApplicationIconInfo {
   WebApplicationIconInfo& operator=(WebApplicationIconInfo&&);
 
   GURL url;
-  SquareSizePx square_size_px;
+  base::Optional<SquareSizePx> square_size_px;
 };
 
 // Structure used when creating app icon shortcuts menu and for downloading
 // associated shortcut icons when supported by OS platform (eg. Windows).
-struct WebApplicationShortcutInfo {
-  WebApplicationShortcutInfo();
-  WebApplicationShortcutInfo(const WebApplicationShortcutInfo&);
-  WebApplicationShortcutInfo(WebApplicationShortcutInfo&&) noexcept;
-  ~WebApplicationShortcutInfo();
-  WebApplicationShortcutInfo& operator=(const WebApplicationShortcutInfo&);
-  WebApplicationShortcutInfo& operator=(WebApplicationShortcutInfo&&) noexcept;
+struct WebApplicationShortcutsMenuItemInfo {
+  struct Icon {
+    Icon();
+    Icon(const Icon&);
+    Icon(Icon&&);
+    ~Icon();
+    Icon& operator=(const Icon&);
+    Icon& operator=(Icon&&);
+
+    GURL url;
+    SquareSizePx square_size_px = 0;
+  };
+
+  WebApplicationShortcutsMenuItemInfo();
+  WebApplicationShortcutsMenuItemInfo(
+      const WebApplicationShortcutsMenuItemInfo&);
+  WebApplicationShortcutsMenuItemInfo(
+      WebApplicationShortcutsMenuItemInfo&&) noexcept;
+  ~WebApplicationShortcutsMenuItemInfo();
+  WebApplicationShortcutsMenuItemInfo& operator=(
+      const WebApplicationShortcutsMenuItemInfo&);
+  WebApplicationShortcutsMenuItemInfo& operator=(
+      WebApplicationShortcutsMenuItemInfo&&) noexcept;
 
   // Title of shortcut item in App Icon Shortcut Menu.
   base::string16 name;
@@ -51,10 +70,7 @@ struct WebApplicationShortcutInfo {
   GURL url;
 
   // List of shortcut icon URLs with associated square size.
-  std::vector<WebApplicationIconInfo> shortcut_icon_infos;
-
-  // Shortcut icon bitmaps keyed by their square size.
-  std::map<SquareSizePx, SkBitmap> shortcut_icon_bitmaps;
+  std::vector<Icon> shortcut_icon_infos;
 };
 
 // Structure used when installing a web page as an app.
@@ -120,7 +136,18 @@ struct WebApplicationInfo {
   std::vector<std::string> additional_search_terms;
 
   // Set of shortcut infos populated using shortcuts specified in the manifest.
-  std::vector<WebApplicationShortcutInfo> shortcut_infos;
+  //
+  // TODO(https://crbug.com/1100751): Rename this to shortcuts_menu_item_infos.
+  std::vector<WebApplicationShortcutsMenuItemInfo> shortcut_infos;
+
+  // Vector of shortcut icon bitmaps keyed by their square size. The index of a
+  // given std::map matches that of the shortcut in shortcut_infos whose bitmaps
+  // it contains.
+  ShortcutsMenuIconsBitmaps shortcuts_menu_icons_bitmaps;
+
+  // User preference as to whether to auto run the app on OS login.
+  // Currently only supported in Windows platform.
+  bool run_on_os_login = false;
 };
 
 std::ostream& operator<<(std::ostream& out,
@@ -128,5 +155,11 @@ std::ostream& operator<<(std::ostream& out,
 
 bool operator==(const WebApplicationIconInfo& icon_info1,
                 const WebApplicationIconInfo& icon_info2);
+
+bool operator==(const WebApplicationShortcutsMenuItemInfo::Icon& icon1,
+                const WebApplicationShortcutsMenuItemInfo::Icon& icon2);
+
+bool operator==(const WebApplicationShortcutsMenuItemInfo& shortcut_info1,
+                const WebApplicationShortcutsMenuItemInfo& shortcut_info2);
 
 #endif  // CHROME_COMMON_WEB_APPLICATION_INFO_H_

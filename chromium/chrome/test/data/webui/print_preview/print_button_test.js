@@ -2,11 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {NativeLayer, PluginProxy} from 'chrome://print/print_preview.js';
+import {NativeLayer, NativeLayerImpl, PluginProxy} from 'chrome://print/print_preview.js';
 import {assert} from 'chrome://resources/js/assert.m.js';
 import {NativeLayerStub} from 'chrome://test/print_preview/native_layer_stub.js';
 import {PDFPluginStub} from 'chrome://test/print_preview/plugin_stub.js';
-import {getCddTemplate, getDefaultInitialSettings, getPdfPrinter} from 'chrome://test/print_preview/print_preview_test_utils.js';
+import {getDefaultInitialSettings} from 'chrome://test/print_preview/print_preview_test_utils.js';
 
 window.print_button_test = {};
 print_button_test.suiteName = 'PrintButtonTest';
@@ -35,16 +35,13 @@ suite(print_button_test.suiteName, function() {
   /** @override */
   setup(function() {
     nativeLayer = new NativeLayerStub();
-    NativeLayer.setInstance(nativeLayer);
-    PolymerTest.clearBody();
+    NativeLayerImpl.instance_ = nativeLayer;
+    document.body.innerHTML = '';
     nativeLayer.setInitialSettings(initialSettings);
     const localDestinationInfos = [
       {printerName: 'FooName', deviceName: 'FooDevice'},
     ];
     nativeLayer.setLocalDestinations(localDestinationInfos);
-    nativeLayer.setLocalDestinationCapabilities(
-        getCddTemplate(initialSettings.printerName));
-    nativeLayer.setLocalDestinationCapabilities(getPdfPrinter());
 
     const pluginProxy = new PDFPluginStub();
     pluginProxy.setPluginCompatible(true);

@@ -15,11 +15,10 @@ namespace ui {
 
 namespace {
 
-x11::Future<x11::XProto::GetPropertyReply> GetWorkspace() {
+x11::Future<x11::GetPropertyReply> GetWorkspace() {
   auto* connection = x11::Connection::Get();
   return connection->GetProperty({
-      .window =
-          static_cast<x11::Window>(XDefaultRootWindow(connection->display())),
+      .window = connection->default_screen().root,
       .property = static_cast<x11::Atom>(gfx::GetAtom("_NET_CURRENT_DESKTOP")),
       .type = static_cast<x11::Atom>(gfx::GetAtom("CARDINAL")),
       .long_length = 1,
@@ -30,7 +29,7 @@ x11::Future<x11::XProto::GetPropertyReply> GetWorkspace() {
 
 X11WorkspaceHandler::X11WorkspaceHandler(Delegate* delegate)
     : xdisplay_(gfx::GetXDisplay()),
-      x_root_window_(DefaultRootWindow(xdisplay_)),
+      x_root_window_(ui::GetX11RootWindow()),
       delegate_(delegate) {
   DCHECK(delegate_);
   if (ui::X11EventSource::HasInstance())
@@ -51,14 +50,16 @@ std::string X11WorkspaceHandler::GetCurrentWorkspace() {
   return workspace_;
 }
 
-bool X11WorkspaceHandler::DispatchXEvent(XEvent* event) {
+bool X11WorkspaceHandler::DispatchXEvent(x11::Event* x11_event) {
+  XEvent* event = &x11_event->xlib_event();
   if (event->type != PropertyNotify ||
-      event->xproperty.window != x_root_window_) {
+      event->xproperty.window != static_cast<uint32_t>(x_root_window_)) {
     return false;
   }
   switch (event->type) {
-    case PropertyNotify: {
-      if (event->xproperty.atom == gfx::GetAtom("_NET_CURRENT_DESKTOP")) {
+    case x11::PropertyNotifyEvent::opcode: {
+      if (event->xproperty.atom ==
+          static_cast<uint32_t>(gfx::GetAtom("_NET_CURRENT_DESKTOP"))) {
         GetWorkspace().OnResponse(
             base::BindOnce(&X11WorkspaceHandler::OnWorkspaceResponse,
                            weak_factory_.GetWeakPtr()));
@@ -72,7 +73,7 @@ bool X11WorkspaceHandler::DispatchXEvent(XEvent* event) {
 }
 
 void X11WorkspaceHandler::OnWorkspaceResponse(
-    x11::XProto::GetPropertyResponse response) {
+    x11::GetPropertyResponse response) {
   if (!response || response->format != 32 || response->value.size() < 4)
     return;
   DCHECK_EQ(response->bytes_after, 0U);

@@ -8,7 +8,6 @@
 #import "base/mac/foundation_util.h"
 #import "base/mac/mac_util.h"
 #import "base/mac/scoped_nsobject.h"
-#include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "base/strings/sys_string_conversions.h"
 #import "components/remote_cocoa/app_shim/drag_drop_client.h"
@@ -26,6 +25,7 @@
 #include "ui/events/event_utils.h"
 #include "ui/events/keycodes/dom/dom_code.h"
 #import "ui/events/keycodes/keyboard_code_conversion_mac.h"
+#include "ui/events/platform/platform_event_source.h"
 #include "ui/gfx/canvas_paint_mac.h"
 #include "ui/gfx/decorated_text.h"
 #import "ui/gfx/decorated_text_mac.h"
@@ -280,6 +280,8 @@ ui::TextEditCommand GetTextEditCommandForMenuAction(SEL action) {
   NSWindow* source = [theEvent window];
   NSWindow* target = [self window];
   DCHECK(target);
+  if (ui::PlatformEventSource::ShouldIgnoreNativePlatformEvents())
+    return;
 
   BOOL isScrollEvent = [theEvent type] == NSScrollWheel;
 
@@ -380,6 +382,15 @@ ui::TextEditCommand GetTextEditCommandForMenuAction(SEL action) {
 
   // Generate a synthetic event with the keycode toolkit-views expects.
   ui::KeyEvent event(ui::ET_KEY_PRESSED, keyCode, domCode, eventFlags);
+
+  // If the current event is a key event, assume it's the event that led to this
+  // edit command and attach it. Note that it isn't always the case that the
+  // current event is that key event, especially in tests which use synthetic
+  // key events!
+  if (NSApp.currentEvent.type == NSEventTypeKeyDown ||
+      NSApp.currentEvent.type == NSEventTypeKeyUp) {
+    event.SetNativeEvent(NSApp.currentEvent);
+  }
 
   if ([self dispatchKeyEventToMenuController:&event])
     return;
@@ -655,11 +666,7 @@ ui::TextEditCommand GetTextEditCommandForMenuAction(SEL action) {
 
 - (NSDragOperation)draggingUpdated:(id<NSDraggingInfo>)sender {
   remote_cocoa::DragDropClient* client = [self dragDropClient];
-  const auto drag_operation =
-      client ? client->DragUpdate(sender) : ui::DragDropTypes::DRAG_NONE;
-  UMA_HISTOGRAM_BOOLEAN("Event.DragDrop.AcceptDragUpdate",
-                        drag_operation != ui::DragDropTypes::DRAG_NONE);
-  return drag_operation;
+  return client ? client->DragUpdate(sender) : ui::DragDropTypes::DRAG_NONE;
 }
 
 - (void)draggingExited:(id<NSDraggingInfo>)sender {

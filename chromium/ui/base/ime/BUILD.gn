@@ -58,8 +58,6 @@ jumbo_component("ime") {
     "constants.cc",
     "constants.h",
     "ime_assistive_window_handler_interface.h",
-    "ime_bridge.cc",
-    "ime_bridge.h",
     "ime_candidate_window_handler_interface.h",
     "ime_engine_handler_interface.h",
     "ime_input_context_handler_interface.h",
@@ -81,7 +79,6 @@ jumbo_component("ime") {
     "text_edit_commands.h",
     "text_input_client.cc",
     "text_input_client.h",
-    "virtual_keyboard_visibility_request.h",
   ]
 
   defines = [ "IS_UI_BASE_IME_IMPL" ]

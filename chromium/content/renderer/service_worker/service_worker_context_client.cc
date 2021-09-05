@@ -47,6 +47,7 @@
 #include "third_party/blink/public/common/service_worker/service_worker_utils.h"
 #include "third_party/blink/public/mojom/blob/blob.mojom.h"
 #include "third_party/blink/public/mojom/blob/blob_registry.mojom.h"
+#include "third_party/blink/public/mojom/browser_interface_broker.mojom.h"
 #include "third_party/blink/public/mojom/loader/request_context_frame_type.mojom.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker.mojom.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_client.mojom.h"
@@ -112,7 +113,8 @@ ServiceWorkerContextClient::ServiceWorkerContextClient(
         subresource_loader_updater,
     const GURL& script_url_to_skip_throttling,
     scoped_refptr<base::SingleThreadTaskRunner> initiator_thread_task_runner,
-    int32_t service_worker_route_id)
+    int32_t service_worker_route_id,
+    const std::vector<std::string>& cors_exempt_header_list)
     : service_worker_version_id_(service_worker_version_id),
       service_worker_scope_(service_worker_scope),
       script_url_(script_url),
@@ -128,7 +130,8 @@ ServiceWorkerContextClient::ServiceWorkerContextClient(
           std::move(subresource_loader_updater)),
       owner_(owner),
       start_timing_(std::move(start_timing)),
-      service_worker_route_id_(service_worker_route_id) {
+      service_worker_route_id_(service_worker_route_id),
+      cors_exempt_header_list_(cors_exempt_header_list) {
   DCHECK(initiator_thread_task_runner_->RunsTasksInCurrentSequence());
   DCHECK(owner_);
   DCHECK(subresource_loaders);
@@ -176,14 +179,16 @@ void ServiceWorkerContextClient::StartWorkerContextOnInitiatorThread(
     std::unique_ptr<blink::WebEmbeddedWorkerStartData> start_data,
     std::unique_ptr<blink::WebServiceWorkerInstalledScriptsManagerParams>
         installed_scripts_manager_params,
-    mojo::ScopedMessagePipeHandle content_settings_handle,
-    mojo::ScopedMessagePipeHandle cache_storage,
-    mojo::ScopedMessagePipeHandle browser_interface_broker) {
+    mojo::PendingRemote<blink::mojom::WorkerContentSettingsProxy>
+        content_settings,
+    mojo::PendingRemote<blink::mojom::CacheStorage> cache_storage,
+    mojo::PendingRemote<blink::mojom::BrowserInterfaceBroker>
+        browser_interface_broker) {
   DCHECK(initiator_thread_task_runner_->RunsTasksInCurrentSequence());
   worker_ = std::move(worker);
   worker_->StartWorkerContext(
       std::move(start_data), std::move(installed_scripts_manager_params),
-      std::move(content_settings_handle), std::move(cache_storage),
+      std::move(content_settings), std::move(cache_storage),
       std::move(browser_interface_broker), initiator_thread_task_runner_);
 }
 
@@ -193,15 +198,14 @@ blink::WebEmbeddedWorker& ServiceWorkerContextClient::worker() {
 }
 
 void ServiceWorkerContextClient::WorkerReadyForInspectionOnInitiatorThread(
-    mojo::ScopedMessagePipeHandle devtools_agent_remote,
-    mojo::ScopedMessagePipeHandle devtools_agent_host_receiver) {
+    blink::CrossVariantMojoRemote<blink::mojom::DevToolsAgentInterfaceBase>
+        devtools_agent_remote,
+    blink::CrossVariantMojoReceiver<
+        blink::mojom::DevToolsAgentHostInterfaceBase>
+        devtools_agent_host_receiver) {
   DCHECK(initiator_thread_task_runner_->RunsTasksInCurrentSequence());
-  mojo::PendingRemote<blink::mojom::DevToolsAgent> agent_remote(
-      std::move(devtools_agent_remote), blink::mojom::DevToolsAgent::Version_);
-  mojo::PendingReceiver<blink::mojom::DevToolsAgentHost> receiver(
-      std::move(devtools_agent_host_receiver));
-  instance_host_->OnReadyForInspection(std::move(agent_remote),
-                                       std::move(receiver));
+  instance_host_->OnReadyForInspection(std::move(devtools_agent_remote),
+                                       std::move(devtools_agent_host_receiver));
 }
 
 void ServiceWorkerContextClient::FailedToFetchClassicScript() {
@@ -241,10 +245,10 @@ void ServiceWorkerContextClient::WorkerContextStarted(
   context_ = std::make_unique<WorkerContextData>(this);
 
   DCHECK(pending_service_worker_receiver_.is_valid());
-  proxy_->BindServiceWorker(pending_service_worker_receiver_.PassPipe());
+  proxy_->BindServiceWorker(std::move(pending_service_worker_receiver_));
 
   DCHECK(controller_receiver_.is_valid());
-  proxy_->BindControllerServiceWorker(controller_receiver_.PassPipe());
+  proxy_->BindControllerServiceWorker(std::move(controller_receiver_));
 
   GetContentClient()
       ->renderer()
@@ -386,7 +390,8 @@ ServiceWorkerContextClient::CreateWorkerFetchContextOnInitiatorThread() {
           ->renderer()
           ->CreateWebSocketHandshakeThrottleProvider(),
       std::move(preference_watcher_receiver_),
-      std::move(pending_subresource_loader_updater_), service_worker_route_id_);
+      std::move(pending_subresource_loader_updater_), service_worker_route_id_,
+      cors_exempt_header_list_);
 }
 
 void ServiceWorkerContextClient::OnNavigationPreloadResponse(

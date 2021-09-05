@@ -14,7 +14,6 @@
 #include "base/lazy_instance.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "content/browser/bad_message.h"
 #include "content/browser/child_process_security_policy_impl.h"
@@ -59,7 +58,6 @@
 #include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/render_widget_host_iterator.h"
 #include "content/public/browser/web_contents_delegate.h"
-#include "mojo/public/cpp/bindings/associated_binding.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/mojom/devtools/devtools_agent.mojom.h"
 
@@ -98,14 +96,14 @@ bool ShouldCreateDevToolsForNode(FrameTreeNode* ftn) {
           ftn->current_frame_host()->IsCrossProcessSubframe());
 }
 
+}  // namespace
+
 FrameTreeNode* GetFrameTreeNodeAncestor(FrameTreeNode* frame_tree_node) {
   while (frame_tree_node && !ShouldCreateDevToolsForNode(frame_tree_node))
     frame_tree_node = FrameTreeNode::From(frame_tree_node->parent());
   DCHECK(frame_tree_node);
   return frame_tree_node;
 }
-
-}  // namespace
 
 // static
 scoped_refptr<DevToolsAgentHost> DevToolsAgentHost::GetOrCreateFor(
@@ -446,13 +444,6 @@ void RenderFrameDevToolsAgentHost::DidFinishNavigation(
   }
   for (auto* target : protocol::TargetHandler::ForAgentHost(this))
     target->DidFinishNavigation();
-
-  // RenderFrameDevToolsAgentHost is associated with frame_tree_node, while
-  // documents in the back-forward cache share a node, therefore we can't cache
-  // them. TODO(1001087): add support long-term.
-  content::BackForwardCache::DisableForRenderFrameHost(
-      navigation_handle->GetPreviousRenderFrameHostId(),
-      "RenderFrameDevToolsAgentHost");
 }
 
 void RenderFrameDevToolsAgentHost::UpdateFrameHost(
@@ -599,16 +590,6 @@ void RenderFrameDevToolsAgentHost::RenderProcessExited(
         inspector->TargetDetached("Render process gone.");
       break;
   }
-}
-
-void RenderFrameDevToolsAgentHost::DidAttachInterstitialPage() {
-  for (auto* page : protocol::PageHandler::ForAgentHost(this))
-    page->DidAttachInterstitialPage();
-}
-
-void RenderFrameDevToolsAgentHost::DidDetachInterstitialPage() {
-  for (auto* page : protocol::PageHandler::ForAgentHost(this))
-    page->DidDetachInterstitialPage();
 }
 
 void RenderFrameDevToolsAgentHost::OnVisibilityChanged(
@@ -785,8 +766,8 @@ void RenderFrameDevToolsAgentHost::SignalSynchronousSwapCompositorFrame(
       static_cast<RenderFrameHostImpl*>(frame_host)->frame_tree_node()));
   if (dtah) {
     // Unblock the compositor.
-    base::PostTask(
-        FROM_HERE, {BrowserThread::UI},
+    GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE,
         base::BindOnce(
             &RenderFrameDevToolsAgentHost::SynchronousSwapCompositorFrame,
             dtah.get(), frame_metadata));

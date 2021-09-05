@@ -66,8 +66,10 @@ struct CrosUsbDeviceInfo {
   base::flat_map<std::string, VmSharingInfo> vm_sharing_info;
   std::string guid;
   base::string16 label;
-  // Whether the device can be shared with Crostini.
+  // Whether the device can be shared with guest OSes.
   bool sharable_with_crostini = false;
+  // Interfaces shareable with guest OSes
+  uint32_t allowed_interfaces_mask = 0;
   // TODO(nverne): Add current state and errors etc.
 };
 
@@ -166,7 +168,8 @@ class CrosUsbDetector : public device::mojom::UsbDeviceManagerClient {
       bool success);
 
   // Returns true when a device should show a notification when attached.
-  bool ShouldShowNotification(const device::mojom::UsbDeviceInfo& device_info);
+  bool ShouldShowNotification(const device::mojom::UsbDeviceInfo& device_info,
+                              uint32_t allowed_interfaces_mask);
 
   mojo::Remote<device::mojom::UsbDeviceManager> device_manager_;
   mojo::AssociatedReceiver<device::mojom::UsbDeviceManagerClient>

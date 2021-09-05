@@ -16,6 +16,7 @@
 #import "components/language/ios/browser/ios_language_detection_tab_helper.h"
 #import "components/password_manager/ios/unique_id_tab_helper.h"
 #include "components/safe_browsing/core/features.h"
+#import "components/safe_browsing/ios/browser/safe_browsing_url_allow_list.h"
 #import "components/security_state/ios/insecure_input_tab_helper.h"
 #import "components/ukm/ios/ukm_url_recorder.h"
 #import "ios/chrome/browser/app_launcher/app_launcher_tab_helper.h"
@@ -36,9 +37,11 @@
 #import "ios/chrome/browser/infobars/overlays/infobar_overlay_request_factory_impl.h"
 #import "ios/chrome/browser/infobars/overlays/infobar_overlay_request_inserter.h"
 #import "ios/chrome/browser/infobars/overlays/infobar_overlay_tab_helper.h"
+#import "ios/chrome/browser/infobars/overlays/translate_overlay_tab_helper.h"
 #import "ios/chrome/browser/itunes_urls/itunes_urls_handler_tab_helper.h"
 #import "ios/chrome/browser/metrics/pageload_foreground_duration_tab_helper.h"
 #import "ios/chrome/browser/network_activity/network_activity_indicator_tab_helper.h"
+#import "ios/chrome/browser/ntp/new_tab_page_tab_helper.h"
 #import "ios/chrome/browser/open_in/open_in_tab_helper.h"
 #import "ios/chrome/browser/overscroll_actions/overscroll_actions_tab_helper.h"
 #import "ios/chrome/browser/passwords/password_tab_helper.h"
@@ -48,7 +51,6 @@
 #import "ios/chrome/browser/reading_list/reading_list_web_state_observer.h"
 #import "ios/chrome/browser/safe_browsing/safe_browsing_tab_helper.h"
 #import "ios/chrome/browser/safe_browsing/safe_browsing_unsafe_resource_container.h"
-#import "ios/chrome/browser/safe_browsing/safe_browsing_url_allow_list.h"
 #import "ios/chrome/browser/search_engines/search_engine_tab_helper.h"
 #import "ios/chrome/browser/sessions/ios_chrome_session_tab_helper.h"
 #import "ios/chrome/browser/snapshots/snapshot_tab_helper.h"
@@ -120,6 +122,7 @@ void AttachTabHelpers(web::WebState* web_state, bool for_prerender) {
   if (base::FeatureList::IsEnabled(kInfobarOverlayUI)) {
     InfobarOverlayRequestInserter::CreateForWebState(web_state);
     InfobarOverlayTabHelper::CreateForWebState(web_state);
+    TranslateOverlayTabHelper::CreateForWebState(web_state);
   }
 
   if (base::FeatureList::IsEnabled(kCaptivePortalMetrics)) {
@@ -147,6 +150,7 @@ void AttachTabHelpers(web::WebState* web_state, bool for_prerender) {
 
   ImageFetchTabHelper::CreateForWebState(web_state);
 
+  NewTabPageTabHelper::CreateForWebState(web_state);
   OpenInTabHelper::CreateForWebState(web_state);
   ChromeBrowserState* original_browser_state =
       browser_state->GetOriginalChromeBrowserState();

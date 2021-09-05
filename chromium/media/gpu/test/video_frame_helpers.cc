@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "base/bind_helpers.h"
+#include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
 #include "gpu/ipc/common/gpu_memory_buffer_support.h"
 #include "gpu/ipc/service/gpu_memory_buffer_factory.h"
@@ -241,8 +242,7 @@ scoped_refptr<VideoFrame> CloneVideoFrame(
       dst_frame = CreatePlatformVideoFrame(
           gpu_memory_buffer_factory, dst_layout.format(),
           dst_layout.coded_size(), src_frame->visible_rect(),
-          src_frame->visible_rect().size(), src_frame->timestamp(),
-          *dst_buffer_usage);
+          src_frame->natural_size(), src_frame->timestamp(), *dst_buffer_usage);
       break;
 #endif  // BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
     case VideoFrame::STORAGE_OWNED_MEMORY:

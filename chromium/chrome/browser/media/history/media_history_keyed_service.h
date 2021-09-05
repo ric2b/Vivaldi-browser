@@ -11,9 +11,14 @@
 #include "components/history/core/browser/history_service_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "content/public/browser/media_player_watch_time.h"
+#include "net/cookies/cookie_change_dispatcher.h"
 #include "services/media_session/public/cpp/media_metadata.h"
 
 class Profile;
+
+namespace media_feeds {
+class MediaFeedsService;
+}  // namespace media_feeds
 
 namespace media_session {
 struct MediaImage;
@@ -83,12 +88,52 @@ class MediaHistoryKeyedService : public KeyedService,
       const base::Optional<media_session::MediaPosition>& position,
       const std::vector<media_session::MediaImage>& artwork);
 
-  // Saves a newly discovered media feed in the media history store.
-  void DiscoverMediaFeed(const GURL& url);
+  // Returns Media Feeds items.
+  struct GetMediaFeedItemsRequest {
+    enum class Type {
+      // Return all the feed items for a feed for debugging.
+      kDebugAll,
 
-  // Gets the media items in |feed_id|.
-  void GetItemsForMediaFeedForDebug(
-      const int64_t feed_id,
+      // Returns items across all feeds that either have an active action status
+      // or a play next candidate. Ordered by most recent first.
+      kContinueWatching,
+
+      // Returns all the items for a single feed. Ordered by clicked and shown
+      // count so items that have been clicked and shown a lot will be at the
+      // end. Items must not be continue watching items.
+      kItemsForFeed
+    };
+
+    static GetMediaFeedItemsRequest CreateItemsForDebug(int64_t feed_id);
+
+    static GetMediaFeedItemsRequest CreateItemsForFeed(
+        int64_t feed_id,
+        unsigned limit,
+        bool fetched_items_should_be_safe);
+
+    static GetMediaFeedItemsRequest CreateItemsForContinueWatching(
+        unsigned limit,
+        bool fetched_items_should_be_safe);
+
+    GetMediaFeedItemsRequest();
+    GetMediaFeedItemsRequest(const GetMediaFeedItemsRequest& t);
+
+    Type type = Type::kDebugAll;
+
+    // The ID of the feed to retrieve items for. Only valid for |kDebugAll| and
+    // |kItemsForFeed|.
+    base::Optional<int64_t> feed_id;
+
+    // The maximum number of feeds to return. Only valid for |kContinueWatching|
+    // and |kItemsForFeed|.
+    base::Optional<unsigned> limit;
+
+    // True if the item should have passed Safe Search checks. Only valid for
+    // |kContinueWatching| and |kItemsForFeed|.
+    bool fetched_items_should_be_safe = false;
+  };
+  void GetMediaFeedItems(
+      const GetMediaFeedItemsRequest& request,
       base::OnceCallback<
           void(std::vector<media_feeds::mojom::MediaFeedItemPtr>)> callback);
 
@@ -119,15 +164,22 @@ class MediaHistoryKeyedService : public KeyedService,
     // The display name for the feed.
     std::string display_name;
 
-    // Origins associated with the feed that are linked to the login state of
-    // the feed.
-    std::set<url::Origin> associated_origins;
-
     // The reset token for the feed.
     base::Optional<base::UnguessableToken> reset_token;
 
     // Information about the currently logged in user.
     media_feeds::mojom::UserIdentifierPtr user_identifier;
+
+    // If set then changes to the cookie name provided on the feed origin or any
+    // associated origin will trigger the feed to be reset.
+    std::string cookie_name_filter;
+
+    // Logs about any errors that may have occurred while fetching or converting
+    // the feed data. New-line delimited human-readable text.
+    std::string error_logs;
+
+    // If true then the backend returned a 410 Gone error.
+    bool gone = false;
   };
   // Replaces the media items in |result.feed_id|. This will delete any old feed
   // items and store the new ones in |result.items|. This will also update the
@@ -138,15 +190,20 @@ class MediaHistoryKeyedService : public KeyedService,
   void GetURLsInTableForTest(const std::string& table,
                              base::OnceCallback<void(std::set<GURL>)> callback);
 
-  // Represents a Media Feed Item that needs to be checked against Safe Search.
-  // Contains the ID of the feed item and a set of URLs that should be checked.
+  // Represents an object that needs to be checked against Safe Search.
+  // Contains the ID of the item and a set of URLs that should be checked.
+  enum class SafeSearchCheckedType {
+    kFeed,
+    kFeedItem,
+  };
+  using SafeSearchID = std::pair<SafeSearchCheckedType, int64_t>;
   struct PendingSafeSearchCheck {
-    explicit PendingSafeSearchCheck(int64_t id);
+    PendingSafeSearchCheck(SafeSearchCheckedType type, int64_t id);
     ~PendingSafeSearchCheck();
     PendingSafeSearchCheck(const PendingSafeSearchCheck&) = delete;
     PendingSafeSearchCheck& operator=(const PendingSafeSearchCheck&) = delete;
 
-    int64_t const id;
+    SafeSearchID const id;
     std::set<GURL> urls;
   };
   using PendingSafeSearchCheckList =
@@ -154,10 +211,10 @@ class MediaHistoryKeyedService : public KeyedService,
   void GetPendingSafeSearchCheckMediaFeedItems(
       base::OnceCallback<void(PendingSafeSearchCheckList)> callback);
 
-  // Store the Safe Search check results for multiple Media Feed Items. The
-  // map key is the ID of the feed item.
+  // Store the Safe Search check results for multiple object. The map key is
+  // the ID of the object.
   void StoreMediaFeedItemSafeSearchResults(
-      std::map<int64_t, media_feeds::mojom::SafeSearchResult> results);
+      std::map<SafeSearchID, media_feeds::mojom::SafeSearchResult> results);
 
   // Posts an empty task to the database thread. The callback will be called
   // on the calling thread when the empty task is completed. This can be used
@@ -227,9 +284,10 @@ class MediaHistoryKeyedService : public KeyedService,
   // Resets a Media Feed by deleting any items and resetting it to defaults. If
   // |include_subdomains| is true then this will reset any feeds on any
   // subdomain of |origin|.
-  void ResetMediaFeed(const url::Origin& origin,
-                      media_feeds::mojom::ResetReason reason,
-                      const bool include_subdomains = false);
+  void ResetMediaFeedDueToCookies(const url::Origin& origin,
+                                  const bool include_subdomains,
+                                  const std::string& name,
+                                  const net::CookieChangeCause& cause);
 
   // Resets any Media Feeds that were fetched between |start_time| and
   // |end_time|. This will delete any items and reset them to defaults. The
@@ -258,6 +316,19 @@ class MediaHistoryKeyedService : public KeyedService,
       base::OnceCallback<void(base::Optional<MediaFeedFetchDetails>)>;
   void GetMediaFeedFetchDetails(const int64_t feed_id,
                                 GetMediaFeedFetchDetailsCallback callback);
+
+ protected:
+  friend class media_feeds::MediaFeedsService;
+
+  // Resets a Media Feed by deleting any items and resetting it to defaults. If
+  // |include_subdomains| is true then this will reset any feeds on any
+  // subdomain of |origin|.
+  void ResetMediaFeed(const url::Origin& origin,
+                      media_feeds::mojom::ResetReason reason);
+
+  // Saves a newly discovered media feed in the media history store.
+  void DiscoverMediaFeed(const GURL& url,
+                         base::OnceClosure callback = base::DoNothing());
 
  private:
   class StoreHolder;

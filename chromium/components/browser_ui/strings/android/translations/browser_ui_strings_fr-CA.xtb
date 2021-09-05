@@ -10,6 +10,7 @@
 <translation id="1201402288615127009">Suivant</translation>
 <translation id="1242008676835033345">Intégré sur <ph name="WEBSITE_URL" /></translation>
 <translation id="1272079795634619415">Arrêter</translation>
+<translation id="1289742167380433257">Pour vous faire économiser les données, Google a optimisé les images de cette page.</translation>
 <translation id="129382876167171263">Les fichiers enregistrés par les sites Web s'affichent ici</translation>
 <translation id="1364532808393826295"><ph name="APP_NAME" /> : <ph name="NOTIFICATION_MESSAGE" /></translation>
 <translation id="1369915414381695676">Le site <ph name="SITE_NAME" /> a été ajouté</translation>
@@ -42,6 +43,7 @@
 <translation id="2182457891543959921">Demander avant d'autoriser les sites à créer une carte 3D de votre environnement ou à faire le suivi de la position de l'appareil photo (recommandé)</translation>
 <translation id="2212565012507486665">Autoriser les témoins</translation>
 <translation id="2289270750774289114">Demander quand un site souhaite rechercher les appareils Bluetooth à proximité (recommandé)</translation>
+<translation id="2315043854645842844">La sélection du certificat client SSL n'est pas prise en charge par le système d'exploitation.</translation>
 <translation id="2359808026110333948">Continuer</translation>
 <translation id="2402980924095424747"><ph name="MEGABYTES" /> Mo</translation>
 <translation id="2434158240863470628">Téléchargement terminé <ph name="SEPARATOR" /> <ph name="BYTES_DOWNLOADED" /></translation>
@@ -61,10 +63,12 @@
 <translation id="2704606927547763573">Copié</translation>
 <translation id="2822354292072154809">Voulez-vous vraiment réinitialiser toutes les autorisations de site pour <ph name="CHOSEN_OBJECT_NAME" />?</translation>
 <translation id="2870560284913253234">Site</translation>
+<translation id="2874939134665556319">Chanson précédente</translation>
 <translation id="2910701580606108292">Demander avant d'autoriser les sites à lire du contenu protégé</translation>
 <translation id="2913331724188855103">Autoriser les sites à enregistrer et à lire les données des témoins (recommandé)</translation>
 <translation id="2968755619301702150">Lecteur de certificats</translation>
 <translation id="300526633675317032">Cette action entraînera la suppression de l'ensemble des <ph name="SIZE_IN_KB" /> d'espace de stockage des sites Web.</translation>
+<translation id="301521992641321250">Bloquée automatiquement</translation>
 <translation id="3115898365077584848">Afficher les renseignements</translation>
 <translation id="3123473560110926937">Annonces bloquées sur certains sites</translation>
 <translation id="3190152372525844641">Activer les autorisations pour Chrome dans les <ph name="BEGIN_LINK" />paramètres Android<ph name="END_LINK" />.</translation>
@@ -83,16 +87,19 @@
 <translation id="3744111561329211289">Synchronisation en arrière-plan</translation>
 <translation id="3822502789641063741">Suppr. stock. des sites?</translation>
 <translation id="385051799172605136">Retour</translation>
+<translation id="3859306556332390985">Rechercher vers l'avant</translation>
 <translation id="3955193568934677022">Autoriser les sites à lire le contenu protégé (recommandé)</translation>
 <translation id="3987993985790029246">Copier lien</translation>
 <translation id="3991845972263764475"><ph name="BYTES_DOWNLOADED_WITH_UNITS" />/?</translation>
 <translation id="4002066346123236978">Titre</translation>
 <translation id="4008040567710660924">Autoriser les témoins pour un site en particulier.</translation>
+<translation id="4046123991198612571">Chanson suivante</translation>
 <translation id="4165986682804962316">Paramètres du site</translation>
 <translation id="4226663524361240545">Les notifications peuvent faire vibrer l'appareil</translation>
 <translation id="4242533952199664413">Ouvrir les paramètres</translation>
 <translation id="4259722352634471385">Navigation bloquée : <ph name="URL" /></translation>
 <translation id="4278390842282768270">Autorisé</translation>
+<translation id="429312253194641664">Un site lit du contenu multimédia</translation>
 <translation id="4433925000917964731">Page en version simplifiée fournie par Google</translation>
 <translation id="4434045419905280838">Fenêt. context. et redirections</translation>
 <translation id="445467742685312942">Autoriser les sites à lire du contenu protégé</translation>
@@ -107,6 +114,7 @@
 <translation id="4962975101802056554">Révoquer toutes les autorisations pour l'appareil</translation>
 <translation id="4964199952259983386">Pour autoriser Chrome à utiliser la RA, activez aussi l'accès à l'appareil photo dans les <ph name="BEGIN_LINK" />paramètres Android<ph name="END_LINK" />.</translation>
 <translation id="497421865427891073">Avancer</translation>
+<translation id="4996978546172906250">Partager par</translation>
 <translation id="5039804452771397117">Autoriser</translation>
 <translation id="5048398596102334565">Autoriser les sites à accéder à vos capteurs de mouvements (recommandé)</translation>
 <translation id="5063480226653192405">Utilisation</translation>
@@ -163,7 +171,9 @@
 <translation id="6643016212128521049">Effacer</translation>
 <translation id="6697925417670533197">Téléchargements actifs</translation>
 <translation id="6746124502594467657">Déplacer vers le bas</translation>
+<translation id="6766622839693428701">Glissez le doigt vers le bas pour fermer.</translation>
 <translation id="6782111308708962316">Empêcher les sites Web tiers d'enregistrer et de lire les données des témoins</translation>
+<translation id="6790428901817661496">Jouer</translation>
 <translation id="6818926723028410516">Sélectionner des éléments</translation>
 <translation id="6864395892908308021">Cet appareil ne prend pas en charge la technologie NFC</translation>
 <translation id="6910211073230771657">Supprimé</translation>
@@ -197,6 +207,7 @@
 <translation id="7804248752222191302">Un site utilise votre appareil photo</translation>
 <translation id="7817023149356982970">Vous serez déconnecté de ce site.</translation>
 <translation id="7828557259026017104">Les témoins sont des fichiers créés par les sites Web que vous visitez. Les sites les utilisent pour mémoriser vos préférences. Les témoins tiers sont ceux que créent d'autres sites. Ces sites possèdent certains types de contenu, comme des annonces et des images, que vous voyez sur les pages que vous visitez.</translation>
+<translation id="7835852323729233924">Élém. multim. en cours de lecture</translation>
 <translation id="7846076177841592234">Annuler la sélection</translation>
 <translation id="7846621471902887024">Vous serez déconnecté de tous les sites.</translation>
 <translation id="7882806643839505685">Autorisez le son sur un site précis.</translation>
@@ -204,6 +215,7 @@
 <translation id="7999064672810608036">Voulez-vous vraiment effacer toutes les données locales de ce site Web, y compris les témoins, et réinitialiser toutes les autorisations pour ce site Web?</translation>
 <translation id="8007176423574883786">Désactivé pour cet appareil</translation>
 <translation id="802154636333426148">Échec du téléchargement</translation>
+<translation id="8068648041423924542">Impossible de sélectionner le certificat.</translation>
 <translation id="8087000398470557479">Ce contenu provient de <ph name="DOMAIN_NAME" />, fourni par Google.</translation>
 <translation id="8116925261070264013">Désactivés</translation>
 <translation id="8131740175452115882">Confirmer</translation>
@@ -216,6 +228,8 @@
 <translation id="83792324527827022">Un site utilise votre appareil photo et votre microphone</translation>
 <translation id="8380167699614421159">Ce site diffuse des annonces intrusives ou trompeuses</translation>
 <translation id="8394832520002899662">Touchez pour revenir au site</translation>
+<translation id="8425213833346101688">Modifier</translation>
+<translation id="8441146129660941386">Rechercher vers l'arrière</translation>
 <translation id="8447861592752582886">Révoquer l'autorisation de l'appareil</translation>
 <translation id="8463851957836045671">Le site est rapide</translation>
 <translation id="851751545965956758">Empêcher les sites de se connecter à des appareils</translation>
@@ -236,6 +250,7 @@
 <translation id="8958424370300090006">Bloquer les témoins pour un site en particulier.</translation>
 <translation id="8959122750345127698">Navigation inaccessible : <ph name="URL" /></translation>
 <translation id="9019902583201351841">Géré par tes parents</translation>
+<translation id="9074739597929991885">Bluetooth</translation>
 <translation id="945632385593298557">Accès à votre microphone</translation>
 <translation id="965817943346481315">Bloquer si le site diffuse des annonces intrusives ou trompeuses (recommandé)</translation>
 </translationbundle>

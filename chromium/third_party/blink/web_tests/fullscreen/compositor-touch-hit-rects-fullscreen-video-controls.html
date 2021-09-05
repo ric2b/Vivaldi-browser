@@ -31,6 +31,11 @@ window.onload = function () {
             consoleWrite("Should keep rect on document");
         internals.forceCompositingUpdate(document);
         logRects('handler');
+        if (JSON.parse(internals.layerTreeAsText(document)).layers.find(
+            layer => layer.name.includes("LayoutVideo")))
+          log('Found composited video layer, as expected')
+        else
+          log('ERROR: Failed to find composited video composited layer')
         endTest();
     });
 

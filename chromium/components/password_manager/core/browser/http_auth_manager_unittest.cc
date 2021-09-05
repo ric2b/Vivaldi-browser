@@ -27,6 +27,7 @@
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/core/browser/password_store_consumer.h"
 #include "components/password_manager/core/browser/stub_password_manager_client.h"
+#include "components/password_manager/core/common/password_manager_features.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -49,14 +50,13 @@ namespace {
 
 class MockPasswordManagerClient : public StubPasswordManagerClient {
  public:
-  MockPasswordManagerClient() {}
-
   MOCK_CONST_METHOD1(IsSavingAndFillingEnabled, bool(const GURL&));
   MOCK_CONST_METHOD1(IsFillingEnabled, bool(const GURL&));
   MOCK_METHOD2(AutofillHttpAuth,
                void(const autofill::PasswordForm&,
                     const PasswordFormManagerForUI*));
   MOCK_CONST_METHOD0(GetProfilePasswordStore, PasswordStore*());
+  MOCK_CONST_METHOD0(GetAccountPasswordStore, PasswordStore*());
   MOCK_METHOD0(PromptUserToSaveOrUpdatePasswordPtr, void());
 
   // Workaround for std::unique_ptr<> lacking a copy constructor.
@@ -71,7 +71,6 @@ class MockPasswordManagerClient : public StubPasswordManagerClient {
 class MockHttpAuthObserver : public HttpAuthObserver {
  public:
   MockHttpAuthObserver() = default;
-  ~MockHttpAuthObserver() override = default;
 
   MOCK_METHOD0(OnLoginModelDestroying, void());
   MOCK_METHOD2(OnAutofillDataAvailable,
@@ -80,15 +79,9 @@ class MockHttpAuthObserver : public HttpAuthObserver {
   DISALLOW_COPY_AND_ASSIGN(MockHttpAuthObserver);
 };
 
-// Invokes the password store consumer with a single copy of |form|.
-ACTION_P(InvokeConsumer, form) {
-  std::vector<std::unique_ptr<PasswordForm>> result;
-  result.push_back(std::make_unique<PasswordForm>(form));
-  arg0->OnGetPasswordStoreResults(std::move(result));
-}
-
-ACTION(InvokeEmptyConsumerWithForms) {
-  arg0->OnGetPasswordStoreResults(std::vector<std::unique_ptr<PasswordForm>>());
+ACTION_P(InvokeEmptyConsumerWithForms, store) {
+  arg0->OnGetPasswordStoreResultsFrom(
+      store, std::vector<std::unique_ptr<PasswordForm>>());
 }
 }  // namespace
 
@@ -100,13 +93,31 @@ class HttpAuthManagerTest : public testing::Test {
  protected:
   void SetUp() override {
     store_ = new testing::StrictMock<MockPasswordStore>;
-    ASSERT_TRUE(store_->Init(nullptr));
+    ASSERT_TRUE(store_->Init(/*prefs=*/nullptr));
+
+    if (base::FeatureList::IsEnabled(
+            features::kEnablePasswordsAccountStorage)) {
+      account_store_ = new testing::NiceMock<MockPasswordStore>;
+      ASSERT_TRUE(account_store_->Init(/*prefs=*/nullptr));
+
+      // Most tests don't really need the account store, but it'll still get
+      // queried by MultiStoreFormFetcher, so it needs to return something to
+      // its consumers. Let the account store return empty results by default,
+      // so that not every test has to set this up individually. Individual
+      // tests that do cover the account store can still override this.
+      ON_CALL(*account_store_, GetLogins(_, _))
+          .WillByDefault(
+              WithArg<1>(InvokeEmptyConsumerWithForms(account_store_.get())));
+    }
 
     ON_CALL(client_, GetProfilePasswordStore())
         .WillByDefault(Return(store_.get()));
+    ON_CALL(client_, GetAccountPasswordStore())
+        .WillByDefault(Return(account_store_.get()));
+
     EXPECT_CALL(*store_, GetSiteStatsImpl(_)).Times(AnyNumber());
 
-    httpauth_manager_.reset(new HttpAuthManagerImpl(&client_));
+    httpauth_manager_ = std::make_unique<HttpAuthManagerImpl>(&client_);
 
     EXPECT_CALL(*store_, IsAbleToSavePasswords()).WillRepeatedly(Return(true));
 
@@ -116,6 +127,10 @@ class HttpAuthManagerTest : public testing::Test {
   }
 
   void TearDown() override {
+    if (account_store_) {
+      account_store_->ShutdownOnUIThread();
+      account_store_ = nullptr;
+    }
     store_->ShutdownOnUIThread();
     store_ = nullptr;
   }
@@ -124,6 +139,7 @@ class HttpAuthManagerTest : public testing::Test {
 
   base::test::TaskEnvironment task_environment_;
   scoped_refptr<MockPasswordStore> store_;
+  scoped_refptr<MockPasswordStore> account_store_;
   testing::NiceMock<MockPasswordManagerClient> client_;
   std::unique_ptr<HttpAuthManagerImpl> httpauth_manager_;
 };
@@ -136,7 +152,7 @@ TEST_F(HttpAuthManagerTest, HttpAuthFilling) {
 
     PasswordForm observed_form;
     observed_form.scheme = PasswordForm::Scheme::kBasic;
-    observed_form.origin = GURL("http://proxy.com/");
+    observed_form.url = GURL("http://proxy.com/");
     observed_form.signon_realm = "proxy.com/realm";
 
     PasswordForm stored_form = observed_form;
@@ -155,7 +171,7 @@ TEST_F(HttpAuthManagerTest, HttpAuthFilling) {
     ASSERT_TRUE(consumer);
     std::vector<std::unique_ptr<PasswordForm>> result;
     result.push_back(std::make_unique<PasswordForm>(stored_form));
-    consumer->OnGetPasswordStoreResults(std::move(result));
+    consumer->OnGetPasswordStoreResultsFrom(store_, std::move(result));
     testing::Mock::VerifyAndClearExpectations(&store_);
     httpauth_manager()->DetachObserver(&observer);
   }
@@ -170,12 +186,12 @@ TEST_F(HttpAuthManagerTest, HttpAuthSaving) {
         .WillRepeatedly(Return(filling_and_saving_enabled));
     PasswordForm observed_form;
     observed_form.scheme = PasswordForm::Scheme::kBasic;
-    observed_form.origin = GURL("http://proxy.com/");
+    observed_form.url = GURL("http://proxy.com/");
     observed_form.signon_realm = "proxy.com/realm";
 
     MockHttpAuthObserver observer;
     EXPECT_CALL(*store_, GetLogins(_, _))
-        .WillRepeatedly(WithArg<1>(InvokeEmptyConsumerWithForms()));
+        .WillRepeatedly(WithArg<1>(InvokeEmptyConsumerWithForms(store_.get())));
 
     // Initiate creating a form manager.
     httpauth_manager()->SetObserverAndDeliverCredentials(&observer,
@@ -202,12 +218,12 @@ TEST_F(HttpAuthManagerTest, NavigationWithoutSubmission) {
       .WillRepeatedly(Return(true));
   PasswordForm observed_form;
   observed_form.scheme = PasswordForm::Scheme::kBasic;
-  observed_form.origin = GURL("http://proxy.com/");
+  observed_form.url = GURL("http://proxy.com/");
   observed_form.signon_realm = "proxy.com/realm";
 
   MockHttpAuthObserver observer;
   EXPECT_CALL(*store_, GetLogins(_, _))
-      .WillRepeatedly(WithArg<1>(InvokeEmptyConsumerWithForms()));
+      .WillRepeatedly(WithArg<1>(InvokeEmptyConsumerWithForms(store_.get())));
 
   // Initiate creating a form manager.
   httpauth_manager()->SetObserverAndDeliverCredentials(&observer,
@@ -223,7 +239,7 @@ TEST_F(HttpAuthManagerTest, NavigationWhenMatchingNotReady) {
   EXPECT_CALL(client_, IsSavingAndFillingEnabled).WillRepeatedly(Return(true));
   PasswordForm observed_form;
   observed_form.scheme = PasswordForm::Scheme::kBasic;
-  observed_form.origin = GURL("http://proxy.com/");
+  observed_form.url = GURL("http://proxy.com/");
   observed_form.signon_realm = "proxy.com/realm";
 
   MockHttpAuthObserver observer;

@@ -76,7 +76,7 @@ class PLATFORM_EXPORT FetchContext : public GarbageCollected<FetchContext> {
 
   virtual ~FetchContext() = default;
 
-  virtual void Trace(Visitor*) {}
+  virtual void Trace(Visitor*) const {}
 
   virtual void AddAdditionalRequestHeaders(ResourceRequest&);
 
@@ -114,7 +114,8 @@ class PLATFORM_EXPORT FetchContext : public GarbageCollected<FetchContext> {
       const KURL&,
       const ResourceLoaderOptions&,
       ReportingDisposition,
-      ResourceRequest::RedirectStatus) const {
+      const base::Optional<ResourceRequest::RedirectInfo>& redirect_info)
+      const {
     return ResourceRequestBlockedReason::kOther;
   }
   virtual base::Optional<ResourceRequestBlockedReason> CheckCSPForRequest(
@@ -123,6 +124,7 @@ class PLATFORM_EXPORT FetchContext : public GarbageCollected<FetchContext> {
       const KURL&,
       const ResourceLoaderOptions&,
       ReportingDisposition,
+      const KURL& url_before_redirects,
       ResourceRequest::RedirectStatus) const {
     return ResourceRequestBlockedReason::kOther;
   }
@@ -133,7 +135,8 @@ class PLATFORM_EXPORT FetchContext : public GarbageCollected<FetchContext> {
   virtual void PopulateResourceRequest(ResourceType,
                                        const ClientHintsPreferences&,
                                        const FetchParameters::ResourceWidth&,
-                                       ResourceRequest&);
+                                       ResourceRequest&,
+                                       const FetchInitiatorInfo&);
 
   // Called when the underlying context is detached. Note that some
   // FetchContexts continue working after detached (e.g., for fetch() operations

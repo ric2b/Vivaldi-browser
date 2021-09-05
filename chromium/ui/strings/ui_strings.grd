@@ -367,6 +367,10 @@ need to be translated for each locale.-->
         (empty)
       </message>
 
+      <message name="IDS_MENU_ITEM_NEW_BADGE" desc="Appears as a badge on menu items denoting new features">
+        New
+      </message>
+
       <!-- General application strings -->
       <message name="IDS_SENTENCE_END" desc="The symbol that is used to end a sentence.">
         .
@@ -979,11 +983,17 @@ need to be translated for each locale.-->
       <message name="IDS_APP_LIST_LEARN_MORE" desc="Text of Learn more links.">
         Learn more
       </message>
+      <message name="IDS_APP_LIST_MANAGE_SETTINGS" desc="Text of Manage settings links.">
+        Manage settings
+      </message>
       <message name="IDS_APP_LIST_ASSISTANT_PRIVACY_INFO" desc="Text shown in Launcher to imply Assistant search.">
         Your searches are powered by the Google Assistant. <ph name="LEARN_MORE">$1<ex>Learn more</ex></ph>
       </message>
       <message name="IDS_APP_LIST_ASSISTANT_PRIVACY_INFO_CLOSE" desc="Close button text.">
         Close
+      </message>
+      <message name="IDS_APP_LIST_SUGGESTED_CONTENT_INFO" desc="Text shown in launcher to notify users about Suggested Content. Suggested Content includes app search recommendations and website recommendations which can show up in places such as launcher search and suggestion chips.">
+          Chrome OS shows suggestions for new content to explore. Sends statistics to improve quality only if you’ve chosen to share usage data. <ph name="MANAGE_SETTINGS">$1<ex>Manage settings</ex></ph>
       </message>
 
 
@@ -1005,6 +1015,16 @@ need to be translated for each locale.-->
       <message name="IDS_APP_ACCESSIBILITY_APP_RECOMMENDATION_ARC" desc="Accessibility text to specify a search result is an app recommendation.">
         <ph name="APP_NAME">$1<ex>Instagram</ex></ph>, App recommendation
       </message>
+      <message name="IDS_APP_LIST_SEARCH_BOX_ACCESSIBILITY_NAME_CLAMSHELL" desc="Hint text for the search box in fullscreen app list window with additional instructions to use the arrow keys in Accessibility mode.">
+        Search your device, apps, settings, and web. Use the arrow keys to navigate your apps.
+      </message>
+      <message name="IDS_APP_LIST_SEARCH_BOX_ACCESSIBILITY_NAME_TABLET" desc="Hint text for the search box in fullscreen app list window. Tablet mode only, so we don't mention the arrow keys.">
+        Search your device, apps, settings, and web.
+      </message>
+      <message name="IDS_APP_LIST_SEARCH_BOX_PLACEHOLDER" desc="Placeholder text for the search box shown in the app list UI.">
+        Search your device, apps, settings, web...
+      </message>
+
       <!-- Strings describing the touch calibration UX -->
       <message name="IDS_DISPLAY_TOUCH_CALIBRATION_EXIT_LABEL" desc="A message to notify the user about using the escape key to exit the calibration mode.">
         To exit calibration press Esc.
@@ -1124,7 +1144,7 @@ need to be translated for each locale.-->
       <if expr="is_android">
         <!-- DevUI DFM Loader error strings -->
         <message name="IDS_DEV_UI_LOADER_ERROR_HEADING" desc="Heading text for error page shown when Chrome fails to dynamically install the DevUI module.">
-          Something went wrong
+          Page load failed because the developer UI module (dev_ui) is not installed
         </message>
         <message name="IDS_DEV_UI_LOADER_ERROR_SUGGEST_RELOAD" desc="Suggests to reload page to retry install of the DevUI module.">
           Reloading this page

@@ -12,13 +12,13 @@
 
 #include "base/macros.h"
 #include "base/observer_list.h"
+#include "components/web_modal/web_contents_modal_dialog_host.h"
+#include "components/web_modal/web_contents_modal_dialog_manager_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "extensions/browser/app_window/app_window.h"
-#include "extensions/browser/app_window/native_app_window.h"
-#include "extensions/browser/app_window/size_constraints.h"
+#include "extensions/common/draggable_region.h"
+#include "ui/base/base_window.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/image/image_family.h"
-#include "ui/views/controls/webview/unhandled_keyboard_event_handler.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
 #include "ui/views/widget/widget_observer.h"
@@ -26,7 +26,7 @@
 
 class SkRegion;
 class VivaldiBrowserWindow;
-class ExtensionKeybindingRegistryViews;
+struct VivaldiBrowserWindowParams;
 
 namespace content {
 class RenderViewHost;
@@ -69,13 +69,9 @@ class VivaldiAppWindowClientView : public views::ClientView {
   DISALLOW_COPY_AND_ASSIGN(VivaldiAppWindowClientView);
 };
 
-// A VivaldiNativeAppWindow backed by a views::Widget and is based on the
-// NativeAppWindow, but decoupled from AppWindow. This is a merge of
-// NativeAppWindowViews and ChromeNativeAppWindowViews.
-class VivaldiNativeAppWindowViews : public extensions::NativeAppWindow,
-                                    public views::WidgetDelegateView,
-                                    public views::WidgetObserver,
-                                    public content::WebContentsObserver {
+// This is a merge of NativeAppWindowViews and ChromeNativeAppWindowViews.
+class VivaldiNativeAppWindowViews : public views::WidgetDelegateView,
+                                    public views::WidgetObserver {
  public:
   static std::unique_ptr<VivaldiNativeAppWindowViews> Create();
 
@@ -83,7 +79,7 @@ class VivaldiNativeAppWindowViews : public extensions::NativeAppWindow,
   ~VivaldiNativeAppWindowViews() override;
 
   void Init(VivaldiBrowserWindow* window,
-            const extensions::AppWindow::CreateParams& create_params);
+            const VivaldiBrowserWindowParams& create_params);
 
   // Signal that CanHaveTransparentBackground has changed.
   void OnCanHaveAlphaEnabledChanged();
@@ -97,58 +93,60 @@ class VivaldiNativeAppWindowViews : public extensions::NativeAppWindow,
   views::Widget* widget() { return widget_; }
   const views::Widget* widget() const { return widget_; }
 
+  SkRegion* draggable_region() { return draggable_region_.get(); }
+  bool is_frameless() const { return frameless_; }
+
+  gfx::NativeWindow GetNativeWindow() const;
   gfx::NativeView GetNativeView();
+  bool CanHaveAlphaEnabled() const;
+
+  // Informs modal dialogs that they need to update their positions.
+  void OnViewWasResized();
+
+  void UpdateDraggableRegions(
+      const std::vector<extensions::DraggableRegion>& regions);
 
  protected:
   // Called before views::Widget::Init() in InitializeDefaultWindow() to allow
   // subclasses to customize the InitParams that would be passed.
-  virtual void OnBeforeWidgetInit(
-      const extensions::AppWindow::CreateParams& create_params,
-      views::Widget::InitParams* init_params,
-      views::Widget* widget);
-  // Called before views::Widget::Init() in InitializeDefaultWindow() to allow
-  // subclasses to customize the InitParams that would be passed.
-  virtual void OnBeforePanelWidgetInit(views::Widget::InitParams* init_params,
-                                       views::Widget* widget);
+  virtual void OnBeforeWidgetInit(views::Widget::InitParams& init_params) = 0;
 
   virtual void InitializeDefaultWindow(
-      const extensions::AppWindow::CreateParams& create_params);
-  virtual void InitializePanelWindow(
-      const extensions::AppWindow::CreateParams& create_params);
-  virtual views::NonClientFrameView* CreateStandardDesktopAppFrame();
-  virtual views::NonClientFrameView* CreateNonStandardAppFrame() = 0;
+      const VivaldiBrowserWindowParams& create_params);
   virtual bool IsOnCurrentWorkspace() const;
   virtual void UpdateEventTargeterWithInset();
   virtual void ShowEmojiPanel();
 
-  // Initializes |widget_| for |window|.
-  virtual void InitializeWindow(
-      VivaldiBrowserWindow* window,
-      const extensions::AppWindow::CreateParams& create_params);
+  virtual ui::WindowShowState GetRestoredState() const;
 
-  // ui::BaseWindow implementation.
-  bool IsActive() const override;
-  bool IsMaximized() const override;
-  bool IsMinimized() const override;
-  bool IsFullscreen() const override;
-  gfx::NativeWindow GetNativeWindow() const override;
-  gfx::Rect GetRestoredBounds() const override;
-  ui::WindowShowState GetRestoredState() const override;
-  gfx::Rect GetBounds() const override;
-  void Show() override;
-  void ShowInactive() override;
-  void Hide() override;
-  bool IsVisible() const override;
-  void Close() override;
-  void Activate() override;
-  void Deactivate() override;
-  void Maximize() override;
-  void Minimize() override;
-  void Restore() override;
-  void SetBounds(const gfx::Rect& bounds) override;
-  void FlashFrame(bool flash) override;
-  ui::ZOrderLevel GetZOrderLevel() const override;
-  void SetZOrderLevel(ui::ZOrderLevel order) override;
+  virtual bool IsMaximized() const;
+  virtual void Maximize();
+  virtual gfx::Rect GetRestoredBounds() const;
+  virtual void Restore();
+  virtual void Show();
+  virtual void FlashFrame(bool flash);
+
+  void SetFullscreen(bool is_fullscreen);
+  bool IsFullscreenOrPending() const;
+  void UpdateWindowIcon();
+  void UpdateWindowTitle();
+  virtual gfx::Insets GetFrameInsets() const;
+  void SetVisibleOnAllWorkspaces(bool always_visible);
+  void SetActivateOnPointer(bool activate_on_pointer);
+
+  bool IsActive() const;
+  bool IsMinimized() const;
+  bool IsFullscreen() const;
+  gfx::Rect GetBounds() const;
+  void Hide();
+  bool IsVisible() const;
+  void Close();
+  void Activate();
+  void Deactivate();
+  void Minimize();
+  void SetBounds(const gfx::Rect& bounds);
+  ui::ZOrderLevel GetZOrderLevel() const;
+  void SetZOrderLevel(ui::ZOrderLevel order);
 
   // WidgetDelegate implementation.
   void OnWidgetMove() override;
@@ -172,8 +170,6 @@ class VivaldiNativeAppWindowViews : public extensions::NativeAppWindow,
   void HandleKeyboardCode(ui::KeyboardCode code) override;
   gfx::ImageSkia GetWindowAppIcon() override;
   gfx::ImageSkia GetWindowIcon() override;
-  views::NonClientFrameView* CreateNonClientFrameView(
-      views::Widget* widget) override;
   bool WidgetHasHitTestMask() const override;
   void GetWidgetHitTestMask(SkPath* mask) const override;
   void OnWindowBeginUserBoundsChange() override;
@@ -186,11 +182,6 @@ class VivaldiNativeAppWindowViews : public extensions::NativeAppWindow,
   void OnWidgetActivationChanged(views::Widget* widget, bool active) override;
   void OnWidgetDestroyed(views::Widget* widget) override;
 
-  // WebContentsObserver implementation.
-  void RenderViewCreated(content::RenderViewHost* render_view_host) override;
-  void RenderViewHostChanged(content::RenderViewHost* old_host,
-                             content::RenderViewHost* new_host) override;
-
   // views::View implementation.
   void Layout() override;
   void ViewHierarchyChanged(
@@ -200,72 +191,41 @@ class VivaldiNativeAppWindowViews : public extensions::NativeAppWindow,
   void OnFocus() override;
   bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
 
-  // NativeAppWindow implementation.
-  void SetFullscreen(int fullscreen_types) override;
-  bool IsFullscreenOrPending() const override;
-  void UpdateWindowIcon() override;
-  void UpdateWindowTitle() override;
-  void UpdateDraggableRegions(
-      const std::vector<extensions::DraggableRegion>& regions) override;
-  SkRegion* GetDraggableRegion() override;
-  void UpdateShape(std::unique_ptr<ShapeRects> rects) override;
-  bool HandleKeyboardEvent(
-      const content::NativeWebKeyboardEvent& event) override;
-  bool IsFrameless() const override;
-  bool HasFrameColor() const override;
-  SkColor ActiveFrameColor() const override;
-  SkColor InactiveFrameColor() const override;
-  gfx::Insets GetFrameInsets() const override;
-  gfx::Size GetContentMinimumSize() const override;
-  gfx::Size GetContentMaximumSize() const override;
-  void SetContentSizeConstraints(const gfx::Size& min_size,
-                                 const gfx::Size& max_size) override;
-  bool CanHaveAlphaEnabled() const override;
-  void SetVisibleOnAllWorkspaces(bool always_visible) override;
-  void SetActivateOnPointer(bool activate_on_pointer) override;
-
-  // web_modal::WebContentsModalDialogHost implementation.
-  gfx::NativeView GetHostView() const override;
-  gfx::Point GetDialogPosition(const gfx::Size& size) override;
-  gfx::Size GetMaximumDialogSize() override;
-  void AddObserver(web_modal::ModalDialogHostObserver* observer) override;
-  void RemoveObserver(web_modal::ModalDialogHostObserver* observer) override;
-
- protected:
-  // The icon family for the task bar and elsewhere.
-  gfx::ImageFamily icon_family_;
-
  private:
+  class ModalDialogHost : public web_modal::WebContentsModalDialogHost {
+   public:
+    ModalDialogHost(VivaldiNativeAppWindowViews* views);
+    ~ModalDialogHost() override;
+
+    // web_modal::WebContentsModalDialogHost implementation.
+    gfx::NativeView GetHostView() const override;
+    gfx::Point GetDialogPosition(const gfx::Size& size) override;
+    gfx::Size GetMaximumDialogSize() override;
+    void AddObserver(web_modal::ModalDialogHostObserver* observer) override;
+    void RemoveObserver(web_modal::ModalDialogHostObserver* observer) override;
+
+    VivaldiNativeAppWindowViews* const views_;
+    base::ObserverList<web_modal::ModalDialogHostObserver>::Unchecked
+        observers_;
+  };
+
+  friend class ModalDialogHost;
   friend class VivaldiBrowserWindow;
 
-  // Informs modal dialogs that they need to update their positions.
-  void OnViewWasResized();
-
   void OnImagesLoaded(gfx::ImageFamily image_family);
-
-  bool has_frame_color_;
-  SkColor active_frame_color_;
-  SkColor inactive_frame_color_;
 
   VivaldiBrowserWindow* window_;  // Not owned.
   views::WebView* web_view_;
   views::Widget* widget_;
 
   std::unique_ptr<SkRegion> draggable_region_;
+  ModalDialogHost modal_dialog_host_{this};
 
   bool frameless_;
-  bool resizable_;
-  bool shown_ = false;
-  extensions::SizeConstraints size_constraints_;
+  gfx::Size minimum_size_;
 
-  views::UnhandledKeyboardEventHandler unhandled_keyboard_event_handler_;
-
-  base::ObserverList<web_modal::ModalDialogHostObserver>::Unchecked
-      observer_list_;
-
-  // The class that registers for keyboard shortcuts for extension commands.
-  std::unique_ptr<ExtensionKeybindingRegistryViews>
-      extension_keybinding_registry_;
+  // The icon family for the task bar and elsewhere.
+  gfx::ImageFamily icon_family_;
 
   base::WeakPtrFactory<VivaldiNativeAppWindowViews> weak_ptr_factory_;
 

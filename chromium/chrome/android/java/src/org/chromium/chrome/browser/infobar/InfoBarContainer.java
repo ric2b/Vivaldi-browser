@@ -20,13 +20,12 @@ import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabObserver;
-import org.chromium.chrome.browser.tab.TabUtils;
 import org.chromium.chrome.browser.ui.messages.infobar.InfoBar;
 import org.chromium.chrome.browser.ui.messages.infobar.InfoBarUiItem;
-import org.chromium.chrome.browser.util.AccessibilityUtil;
-import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetController;
-import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetObserver;
-import org.chromium.chrome.browser.widget.bottomsheet.EmptyBottomSheetObserver;
+import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetObserver;
+import org.chromium.components.browser_ui.bottomsheet.EmptyBottomSheetObserver;
 import org.chromium.content_public.browser.NavigationHandle;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.KeyboardVisibilityDelegate.KeyboardVisibilityListener;
@@ -45,11 +44,11 @@ public class InfoBarContainer implements UserData, KeyboardVisibilityListener, I
 
     private static final Class<InfoBarContainer> USER_DATA_KEY = InfoBarContainer.class;
 
-    private static final AccessibilityUtil.Observer sAccessibilityObserver;
+    private static final ChromeAccessibilityUtil.Observer sAccessibilityObserver;
 
     static {
         sAccessibilityObserver = (enabled) -> setIsAllowedToAutoHide(!enabled);
-        AccessibilityUtil.addObserver(sAccessibilityObserver);
+        ChromeAccessibilityUtil.get().addObserver(sAccessibilityObserver);
     }
 
     /**
@@ -245,7 +244,7 @@ public class InfoBarContainer implements UserData, KeyboardVisibilityListener, I
     }
 
     private static ChromeActivity getActivity(Tab tab) {
-        Activity activity = TabUtils.getActivity(tab);
+        Activity activity = tab.getWindowAndroid().getActivity().get();
         return activity instanceof ChromeActivity ? (ChromeActivity) activity : null;
     }
 

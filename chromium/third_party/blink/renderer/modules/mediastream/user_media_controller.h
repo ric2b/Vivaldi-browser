@@ -46,7 +46,7 @@ class UserMediaController final : public GarbageCollected<UserMediaController>,
   static const char kSupplementName[];
 
   explicit UserMediaController(LocalDOMWindow*);
-  void Trace(Visitor*) override;
+  void Trace(Visitor*) const override;
 
   UserMediaClient* Client();
 
@@ -82,7 +82,7 @@ inline void UserMediaController::ApplyConstraints(
 }
 
 inline void UserMediaController::StopTrack(MediaStreamComponent* track) {
-  Client()->StopTrack(WebMediaStreamTrack(track));
+  Client()->StopTrack(track);
 }
 
 inline bool UserMediaController::HasRequestedUserMedia() {

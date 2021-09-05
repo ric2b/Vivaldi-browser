@@ -78,7 +78,7 @@ const char kExternalClearKeyStorageIdTestKeySystem[] =
 // Sessions to load.
 const char kNoSessionToLoad[] = "";
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
-const char kLoadableSession[] = "LoadableSession";
+const char kPersistentLicense[] = "PersistentLicense";
 const char kUnknownSession[] = "UnknownSession";
 #endif
 
@@ -115,7 +115,14 @@ enum class ConfigChangeType {
 enum class PlayCount { ONCE, TWICE };
 
 // Base class for encrypted media tests.
-class EncryptedMediaTestBase : public MediaBrowserTest {
+#if defined(OS_ANDROID)
+// Flaky on Android: https://crbug.com/1099384
+#define MAYBE_EncryptedMediaTestBase DISABLED_EncryptedMediaTestBase
+#else
+#define MAYBE_EncryptedMediaTestBase EncryptedMediaTestBase
+#endif
+
+class MAYBE_EncryptedMediaTestBase : public MediaBrowserTest {
  public:
   bool IsExternalClearKey(const std::string& key_system) {
     if (key_system == kExternalClearKeyKeySystem)
@@ -862,8 +869,9 @@ IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, MAYBE_MessageTypeTest) {
   EXPECT_EQ(3, num_received_message_types);
 }
 
-IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, LoadLoadableSession) {
-  TestPlaybackCase(kExternalClearKeyKeySystem, kLoadableSession, media::kEnded);
+IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, LoadPersistentLicense) {
+  TestPlaybackCase(kExternalClearKeyKeySystem, kPersistentLicense,
+                   media::kEnded);
 }
 
 IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, LoadUnknownSession) {

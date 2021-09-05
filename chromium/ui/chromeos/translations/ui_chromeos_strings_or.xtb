@@ -8,6 +8,7 @@
 <translation id="1046068652463704410">ଜାପାନୀଜ୍ ଇନ୍‌ପୁଟ୍ (US କୀ'ବୋର୍ଡ ପାଇଁ)</translation>
 <translation id="1047956942837015229"><ph name="COUNT" />ଟି ଆଇଟମ୍‍କୁ ଡିଲିଟ୍ କରାଯାଉଛି...</translation>
 <translation id="1049926623896334335">Word ଡକ୍ୟୁମେଣ୍ଟ</translation>
+<translation id="1060368002126861100"><ph name="APP_NAME" /> ମାଧ୍ୟମରେ ଫାଇଲଗୁଡ଼ିକ ଖୋଲିବାକୁ, ପ୍ରଥମେ ସେଗୁଡ଼ିକୁ Windows ଫାଇଲ୍ ଫୋଲ୍ଡରକୁ ମୁଭ୍ କରନ୍ତୁ।</translation>
 <translation id="1062407476771304334">ପ୍ରତିସ୍ଥାପନ କରନ୍ତୁ</translation>
 <translation id="1065449928621190041">କାନାଡିଆନ୍ ଫ୍ରେଞ୍ଚ କୀ'ବୋର୍ଡ</translation>
 <translation id="1119069657431255176">Bzip2 ସଙ୍କୁଚିତ ଟାର୍ ଆରକାଇଭ୍</translation>
@@ -41,10 +42,12 @@
 <translation id="1358735829858566124">ଫାଇଲ୍ ବା ଡିରେକ୍ଟୋରୀ ବ୍ୟବହାର ଯୋଗ୍ୟ ନୁହେଁ।</translation>
 <translation id="1363028406613469049">ଟ୍ରାକ୍‌ କରନ୍ତୁ</translation>
 <translation id="1378727793141957596">Google Driveକୁ ସ୍ୱାଗତ!</translation>
-<translation id="1383876407941801731">ସନ୍ଧାନ</translation>
+<translation id="1383876407941801731">Search</translation>
 <translation id="1395262318152388157">ସୀକ୍ ସ୍ଲାଇଡର୍‍</translation>
 <translation id="1399648040768741453">ତେଲୁଗୁ କୀବୋର୍ଡ (ଫୋନେଟିକ୍)</translation>
 <translation id="1430915738399379752">ପ୍ରିଣ୍ଟ କରନ୍ତୁ</translation>
+<translation id="1433600251059882049">ଏହି ଫୋଲ୍ଡରକୁ Linux ଏବଂ Windows ସହ ସେୟାର୍ କରାଯାଇଛି</translation>
+<translation id="1435838927755162558">Parallels Desktop ସହ ଫୋଲ୍ଡର ସେୟାର୍ କରନ୍ତୁ</translation>
 <translation id="1439494416798956626"><ph name="FOLDER_NAME" />କୁ ନିଆଗଲା।</translation>
 <translation id="1441841714100794440">ଭିଏତ୍‌ନାମିସ୍ କୀ'ବୋର୍ଡ (Telex)</translation>
 <translation id="1455548678241328678">ନରୱେଜିଆନ୍ କୀ-ବୋର୍ଡ</translation>
@@ -79,6 +82,7 @@
 <translation id="1844692022597038441">ଏହି ଫାଇଲ୍‍ ଅଫ୍‍ଲାଇନ୍‌ରେ ଉପଲବ୍ଧ ନାହିଁ।</translation>
 <translation id="184633654410729720">ଥାଇ କୀବୋର୍ଡ (କେଡମାନି)</translation>
 <translation id="1847880352285315359">ସେଭ୍‍ ହୋ‍ଇଗଲା</translation>
+<translation id="1853795129690976061">ଏହି ଫୋଲ୍ଡରକୁ Linux ସହିତ ସେୟାର୍ କରାଯାଇଛି</translation>
 <translation id="1864756863218646478">ଏହି ଫାଇଲ୍ ମିଳିଲା ନାହଁ।</translation>
 <translation id="1921986354447415460">ତୁର୍କିସ୍-F କୀବୋର୍ଡ</translation>
 <translation id="1924372192547904021"><ph name="DRIVE_NAME" /> ଫର୍ମାଟ୍ କରାଯାଇଛି</translation>
@@ -124,6 +128,7 @@
 <translation id="2384596874640104496">ସିଂହଳ କୀବୋର୍ଡ</translation>
 <translation id="240770291734945588"><ph name="SPACE_AVAILABLE" /> ଉପଲବ୍ଧ</translation>
 <translation id="2425665904502185219">ମୋଟ ଫାଇଲ୍‍ର ଆକାର</translation>
+<translation id="2428749644083375155"><ph name="FOLDER_NAME" />ରେ <ph name="NUMBER_OF_ITEMS" />ଟି ଆଇଟମ୍ କପି କରାଯାଉଛି</translation>
 <translation id="2448312741937722512">ପ୍ରକାର</translation>
 <translation id="2453576648990281505">ପୂର୍ବରୁ ଏହି ଫାଇଲ୍‌ଟି ଅଛି</translation>
 <translation id="2464079411014186876">ଆଇସ୍‍କ୍ରିମ୍</translation>
@@ -165,7 +170,7 @@
 <translation id="2925966894897775835">Sheets</translation>
 <translation id="2938685643439809023">ମଙ୍ଗୋଲିଆ</translation>
 <translation id="2942290791863759244">ଜର୍ମାନ୍‌ NEO 2 କୀବୋର୍ଡ</translation>
-<translation id="2943400156390503548">ସ୍ଲାଇଡ୍‌</translation>
+<translation id="2943400156390503548">Slides</translation>
 <translation id="2943503720238418293">ଟିକେ ଛୋଟ ନାମର ବ୍ୟବହାର କରନ୍ତୁ</translation>
 <translation id="2949781154072577687"><ph name="DRIVE_NAME" /> ଫର୍ମାଟ୍ କରାଯାଉଛି...</translation>
 <translation id="2951236788251446349">ଜେଲିଫିସ୍</translation>
@@ -178,6 +183,7 @@
 <translation id="303198083543495566">ଭୌଗଳିକ</translation>
 <translation id="3057861065630527966">ଆପଣଙ୍କର ଫଟୋ ଓ ଭିଡିଓଗୁଡ଼ିକର ବ୍ୟାକ୍‌ଅପ୍ ନିଅନ୍ତୁ</translation>
 <translation id="3064388234319122767">ଆକ୍ଷରିକ ଅନୁବାଦକରଣ (zdravo → здраво)</translation>
+<translation id="3067790092342515856">Windows ଫାଇଲଗୁଡ଼ିକ</translation>
 <translation id="3078461028045006476"><ph name="EXTENSION_NAME" /> ସହ ସେୟାର୍ କରନ୍ତୁ</translation>
 <translation id="3088034400796962477">ଟ୍ରାନ୍ସଲିଟ୍ରେସନ୍ (salam ← سلام)</translation>
 <translation id="3116361045094675131">UK କୀବୋର୍ଡ</translation>
@@ -216,6 +222,7 @@
 <translation id="3524311639100184459">ସାବଧାନ: ଏହି ଫାଇଲଗୁଡ଼ିକ ଅସ୍ଥାୟୀ ଅଟେ ଏବଂ ଡିସ୍କରେ ଜାଗା ଖାଲି କରିବା ପାଇଁ ଏଗୁଡ଼ିକ ସ୍ୱଚାଳିତ ଭାବେ ଡିଲିଟ୍ ହୋଇଯାଇପାରେ।  <ph name="BEGIN_LINK" />ଅଧିକ ଜାଣନ୍ତୁ<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">ଫୋଲ୍ଡର୍</translation>
 <translation id="3549797760399244642">drive.google.comକୁ ଯାଆନ୍ତୁ …</translation>
+<translation id="3553048479571901246"><ph name="APP_NAME" /> ମାଧ୍ୟମରେ ଫାଇଲଗୁଡ଼ିକ ଖୋଲିବାକୁ, ପ୍ରଥମେ ସେଗୁଡ଼ିକୁ Windows ଫାଇଲ୍ ଫୋଲ୍ଡରରେ କପି କରନ୍ତୁ।</translation>
 <translation id="357479282490346887">ଲିଥୁଆନିଆନ୍</translation>
 <translation id="3583509704582854624">ଆଲ୍ଫାନ୍ୟୁମେରିକ୍ ଇନ୍‌ପୁଟ୍ (ଜାପାନୀଜ୍ କୀ'ବୋର୍ଡ ପାଇଁ)</translation>
 <translation id="3603385196401704894">କାନାଡିଆନ୍ ଫ୍ରେଞ୍ଚ୍</translation>
@@ -239,6 +246,7 @@
 <translation id="3798449238516105146">ସଂସ୍କରଣ</translation>
 <translation id="3801082500826908679">ଫାରୋଏସେ</translation>
 <translation id="3809272675881623365">ଠେକୁଆ</translation>
+<translation id="3810973564298564668">ପରିଚାଳନା</translation>
 <translation id="3811494700605067549">1ଟି ଫାଇଲ୍ ଚୟନ କରାଯାଇଛି</translation>
 <translation id="3815016854028376614">Zhuyin ଇନ୍‌ପୁଟ୍ ପଦ୍ଧତି</translation>
 <translation id="3825863595139017598">ମଙ୍ଗୋଲିଆନ୍ କୀବୋର୍ଡ</translation>
@@ -259,8 +267,8 @@
 <translation id="3943857333388298514">ପେଷ୍ଟ କରନ୍ତୁ</translation>
 <translation id="3958548648197196644">କିୱି</translation>
 <translation id="3966388904776714213">ଅଡିଓ ପ୍ଲେୟାର୍</translation>
+<translation id="3984317463833596033">Parallels Desktopକୁ<ph name="FOLDER_NAME" /> ଫୋଲ୍ଡରରେ ଥିବା ଫାଇଲଗୁଡ଼ିକରେ ପରିବର୍ତ୍ତନ କରିବାକୁ ଅନୁମତି ଦିଅନ୍ତୁ</translation>
 <translation id="4002066346123236978">ଆଖ୍ୟା</translation>
-<translation id="4065397611279318371"><ph name="APP_NAME" /> ଆପ୍ ମାଧ୍ୟମରେ ଫାଇଲଗୁଡ଼ିକ ଖୋଲିବାକୁ, ପ୍ରଥମେ ସେଗୁଡ଼ିକ <ph name="SHARED_DIRECTORY_LABEL" /> ଫୋଲ୍ଡରକୁ ମୁଭ୍ କରନ୍ତୁ।</translation>
 <translation id="4070370845051020638">କାଣ୍ଟୋନିଜ୍‍ ଇନ୍‌ପୁଟ୍‌ ପଦ୍ଧତି</translation>
 <translation id="4072248638558688893">ତାମିଲ୍ କୀ'ବୋର୍ଡ (ଫୋନେଟିକ୍)</translation>
 <translation id="4124935795427217608">ୟୁନିକର୍ନ</translation>
@@ -288,6 +296,7 @@
 <translation id="4470564870223067757">ହଂଗୁଲ୍ 2 ସେଟ୍</translation>
 <translation id="4477219268485577442">ବୁଲ୍‍‍ଗେରିଆନ୍ ଫୋନେଟିକ୍</translation>
 <translation id="4479812471636796472">US ଡଭୋର୍କ୍ କୀବୋର୍ଡ୍</translation>
+<translation id="4481711095103932593">ଏହି ଫୋଲ୍ଡରକୁ Windows ସହ ସେୟାର୍ କରାଯାଇଛି</translation>
 <translation id="4487088045714738411">ବେଲ୍‍ଜିଆନ୍ କୀବୋର୍ଡ</translation>
 <translation id="4522570452068850558">ବିବରଣୀ</translation>
 <translation id="4552678318981539154">ଅଧିକ ଷ୍ଟୋରେଜ୍ କିଣନ୍ତୁ</translation>
@@ -297,6 +306,7 @@
 <translation id="4579744207439506346"><ph name="ENTRY_NAME" />କୁ ବଛାଯାଇଛି।</translation>
 <translation id="4582497162516204941">Linux (ବିଟା) ମାଧ୍ୟମରେ ଇନ୍‌ଷ୍ଟଲ୍ କରନ୍ତୁ</translation>
 <translation id="4594543368593301662"><ph name="SEARCH_TERM" /> ପାଇଁ ଫଳାଫଳ ଦେଖାଉଛି।</translation>
+<translation id="4603392156942865207"><ph name="FOLDER_NAME" />କୁ <ph name="FILE_NAME" /> କପି କରାଯାଉଛି</translation>
 <translation id="4631887759990505102">କଳାକାର</translation>
 <translation id="4656293982926141856">ଏହି କମ୍ପ୍ୟୁଟର୍</translation>
 <translation id="4669606053856530811"><ph name="SOURCE_NAME" />ର ସଦସ୍ୟମାନେ ସେପର୍ଯ୍ୟନ୍ତ ଆକ୍ସେସ୍ ହରାଇବେ ଯେପର୍ଯ୍ୟନ୍ତ ଏହି ଆଇଟମ୍‍ଗୁଡ଼ିକୁ ସେମାନଙ୍କ ସହିତ ସେୟାର୍‌ କରାଯାଇ ନାହିଁ।</translation>
@@ -330,11 +340,12 @@
 <translation id="4880520557730313061">ଅଟୋ-ଫିକ୍ସ</translation>
 <translation id="4881695831933465202">ଖୋଲନ୍ତୁ</translation>
 <translation id="4886021172213954916">ତାମିଲ୍‌ କୀବୋର୍ଡ (ଟାଇପ୍‌ରାଇଟର୍‌)</translation>
-<translation id="4892969127351273348"><ph name="APP_NAME" /> ମାଧ୍ୟମରେ ଖୋଲିବାକୁ ଅସମର୍ଥ</translation>
+<translation id="4900532980794411603">Parallels Desktop ସହ ସେୟାର୍ କରନ୍ତୁ</translation>
 <translation id="4905417359854579806"><ph name="FILE_COUNT" />ର ବ୍ୟାକ୍‌ଅପ୍ ନେବାକୁ ପ୍ରସ୍ତୁତ ଅଛି</translation>
 <translation id="4924638091161556692">ନିର୍ଦ୍ଦିଷ୍ଟ</translation>
 <translation id="4935975195727477204">ଗାଜାନିଆ ଫୁଲ</translation>
 <translation id="4943368462779413526">ଫୁଟ୍‍ବଲ୍‌</translation>
+<translation id="4961158930123534723">Parallels Desktop ସହ 1ଟି ଫୋଲ୍ଡର ସେୟାର୍ କରାଯାଇଛି</translation>
 <translation id="4969785127455456148">ଆଲ୍‌ବମ୍</translation>
 <translation id="497244430928947428">ମାଲୟାଲମ୍ କୀ'ବୋର୍ଡ୍ (ଫୋନେଟିକ୍)</translation>
 <translation id="4973523518332075481"><ph name="MAX_LENGTH" /> କିମ୍ବା ତା’ଠାରୁ କମ୍‌ ଅକ୍ଷରର ନାମ ବ୍ୟବହାର କରନ୍ତୁ</translation>
@@ -346,10 +357,12 @@
 <translation id="5010406651457630570">କମ୍ପ୍ୟୁଟର୍</translation>
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5024856940085636730">ଗୋଟିଏ କାର୍ଯ୍ୟ ଆଶା କରାଯାଉଥିବା ସମୟରୁ ଅଧିକ ସମୟ ନେଉଛି। ଆପଣ ଏହାକୁ ବନ୍ଦ କରିବାକୁ ଚାହାଁନ୍ତି କି?</translation>
+<translation id="5036159836254554629">Parallels Desktop ସେୟାରିଂ ପରିଚାଳନା କରନ୍ତୁ</translation>
 <translation id="5038625366300922036">ଅଧିକ ଦେଖନ୍ତୁ...</translation>
 <translation id="5061708541166515394">କଣ୍ଟ୍ରାଷ୍ଟ</translation>
 <translation id="5068919226082848014">ପିଜା</translation>
 <translation id="5081517858322016911"><ph name="TOTAL_FILE_SIZE" />ଟି ଫାଇଲ୍ ଡିଲିଟ୍ କରାଯିବ</translation>
+<translation id="508423945471810158"><ph name="FOLDER_NAME" />କୁ <ph name="NUMBER_OF_ITEMS" />ଟି ଆଇଟମ୍ ମୁଭ୍ କରାଯାଉଛି</translation>
 <translation id="509429900233858213">ଏକ ତ୍ରୁଟି ଦେଖାଦେଲା।</translation>
 <translation id="5098629044894065541">ହେବ୍ର୍ୟୁ</translation>
 <translation id="5123433949759960244">ବାସ୍କେଟବଲ୍</translation>
@@ -447,6 +460,7 @@
 <translation id="6054173164583630569">ଫ୍ରେଞ୍ଚ କୀବୋର୍ଡ୍</translation>
 <translation id="6074825444536523002">Google ଫର୍ମ</translation>
 <translation id="6096979789310008754">ସନ୍ଧାନ ଟେକ୍ସଟ୍ ଖାଲି ହୋଇଛି, ସମସ୍ତ ଫାଇଲ୍ ଏବଂ ଫୋଲ୍ଡର୍ ଦେଖାଉଛି।</translation>
+<translation id="610101264611565198"><ph name="FOLDER_NAME" />କୁ <ph name="FILE_NAME" /> ମୁଭ୍ କରାଯାଉଛି</translation>
 <translation id="6111770213269631447">ଆକ୍ଷରିକ ଅନୁବାଦକରଣ (namaskar → নমস্কার)</translation>
 <translation id="6129953537138746214">ସ୍ପେସ୍</translation>
 <translation id="6133173853026656527"><ph name="FILE_NAME" /> ଘୁଞ୍ଚୁଛି...</translation>
@@ -487,6 +501,7 @@
 <translation id="656398493051028875">"<ph name="FILENAME" />" ଡିଲିଟ୍‌ ହେଉଛି...</translation>
 <translation id="6581162200855843583">Google Drive ଲିଙ୍କ୍</translation>
 <translation id="6607272825297743757">ଫାଇଲ୍ ସୂଚନା</translation>
+<translation id="6609332149380188670">Parallels Desktop ସହ <ph name="NUMBER_OF_ITEMS" />ଟି ଫୋଲ୍ଡର ସେୟାର୍ କରାଯାଇଛି</translation>
 <translation id="6629841649550503054"><ph name="BEGIN_LINK" />Google Drive!<ph name="END_LINK" />ରେ ବ୍ୟାକ୍‍ଅପ୍‌ ନିଆଯାଇଛି</translation>
 <translation id="6643016212128521049">ଖାଲି କରନ୍ତୁ</translation>
 <translation id="6650726141019353908">ଗୋଲାପି ପ୍ରଜାପତି</translation>
@@ -530,6 +545,7 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">ଇନ୍‍ଷ୍ଟଲ୍ କରିହେଲା ନାହିଁ</translation>
 <translation id="7040138676081995583">ଏହା ମାଧ୍ୟମରେ ଖୋଲନ୍ତୁ...</translation>
+<translation id="7059566040011178088"><ph name="REMAINING_TIME" />ରୁ କମ୍</translation>
 <translation id="7100897339030255923"><ph name="COUNT" />ଟି ଆଇଟମ୍ ଚୟନ କରାଯାଇଛି</translation>
 <translation id="7106346894903675391">ଅଧିକ ଷ୍ଟୋରେଜ୍ କିଣନ୍ତୁ...</translation>
 <translation id="7126604456862387217">'&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;' - &lt;em&gt;ଡ୍ରାଇଭ୍‍‍ରେ ଖୋଜନ୍ତୁ&lt;/em&gt;</translation>
@@ -640,6 +656,7 @@
 <translation id="8193175696669055101">ଡିଭାଇସ୍‍ର ମଡେଲ୍</translation>
 <translation id="8208580316430297579">କଳାକୃତି</translation>
 <translation id="8223479393428528563">ଅଫ୍‍ଲାଇନ୍‍‍ରେ ବ୍ୟବହାର କରିବା ପାଇଁ ଏହି ଫାଇଲ୍‍ଗୁଡ଼ିକୁ ସେଭ୍ କରିବାକୁ, ଅନ୍‍ଲାଇନ୍‍‍ରେ ଫେରି ଆସନ୍ତୁ, ଫାଇଲ୍‍ଗୁଡ଼ିକ ଉପରେ ଡାହାଣ-କ୍ଲିକ୍ କରନ୍ତୁ ଏବଂ <ph name="OFFLINE_CHECKBOX_NAME" /> ବିକଳ୍ପ ଚୟନ କରନ୍ତୁ।</translation>
+<translation id="8231972167769262174"><ph name="REMAINING_TIME" /> ବିଷୟରେ</translation>
 <translation id="8249296373107784235">ବନ୍ଦ କରନ୍ତୁ</translation>
 <translation id="8261506727792406068">ବିଲୋପ</translation>
 <translation id="8269755669432358899">ଫାଇଲ୍ ମତାମତ ପ୍ୟାନେଲ୍‍ଗୁଡ଼ିକୁ ସଙ୍କୁଚିତ କରନ୍ତୁ</translation>
@@ -666,6 +683,7 @@
 <translation id="8475647382427415476">Google ଡ୍ରାଇଭ୍ ଏହିକ୍ଷଣି "<ph name="FILENAME" />"କୁ ସିଙ୍କ କରିପାରିଲା ନାହିଁ। Google ଡ୍ରାଇଭ୍ ପୁଣି ପରେ ଚେଷ୍ଟା କରିବ।</translation>
 <translation id="8477649328507734757">ସ୍ପିନ୍‌</translation>
 <translation id="8487700953926739672">ଅଫ୍‍ଲାଇନ୍‌ରେ ଉପଲବ୍ଧ</translation>
+<translation id="8490342535582768689">Parallels Desktopକୁ ଆପଣଙ୍କ Google Driveରେ ଥିବା ଫାଇଲଗୁଡ଼ିକରେ ପରିବର୍ତ୍ତନ କରିବାକୁ ଅନୁମତି ଦିଅନ୍ତୁ। ପରିବର୍ତ୍ତନଗୁଡ଼ିକ ଆପଣଙ୍କ ଅନ୍ୟ ଡିଭାଇସଗୁଡ଼ିକ ସହିତ ସିଙ୍କ୍ ହୋଇଯିବ।</translation>
 <translation id="8521441079177373948">UK</translation>
 <translation id="8525306231823319788">ପୂର୍ଣ୍ଣ ସ୍କ୍ରିନ୍‌</translation>
 <translation id="8551494947769799688">ଲାଟଭିଆନ୍</translation>

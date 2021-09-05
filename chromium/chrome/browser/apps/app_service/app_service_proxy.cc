@@ -16,10 +16,12 @@
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_features.h"
-#include "chrome/services/app_service/app_service_impl.h"
-#include "chrome/services/app_service/public/cpp/intent_filter_util.h"
-#include "chrome/services/app_service/public/cpp/intent_util.h"
-#include "chrome/services/app_service/public/mojom/types.mojom.h"
+#include "components/account_id/account_id.h"
+#include "components/services/app_service/app_service_impl.h"
+#include "components/services/app_service/public/cpp/app_registry_cache_wrapper.h"
+#include "components/services/app_service/public/cpp/intent_filter_util.h"
+#include "components/services/app_service/public/cpp/intent_util.h"
+#include "components/services/app_service/public/mojom/types.mojom.h"
 #include "content/public/browser/url_data_source.h"
 #include "url/url_constants.h"
 
@@ -30,10 +32,18 @@
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/supervised_user/grit/supervised_user_unscaled_resources.h"
 #include "chromeos/constants/chromeos_features.h"
+#include "components/user_manager/user.h"
 #include "extensions/common/constants.h"
 #endif
 
 namespace apps {
+
+namespace {
+
+bool g_omit_built_in_apps_for_testing_ = false;
+bool g_omit_plugin_vm_apps_for_testing_ = false;
+
+}  // anonymous namespace
 
 AppServiceProxy::InnerIconLoader::InnerIconLoader(AppServiceProxy* host)
     : host_(host), overriding_icon_loader_for_testing_(nullptr) {}
@@ -93,7 +103,11 @@ AppServiceProxy::AppServiceProxy(Profile* profile)
   Initialize();
 }
 
-AppServiceProxy::~AppServiceProxy() = default;
+AppServiceProxy::~AppServiceProxy() {
+#if defined(OS_CHROMEOS)
+  AppRegistryCacheWrapper::Get().RemoveAppRegistryCache(&cache_);
+#endif
+}
 
 // static
 void AppServiceProxy::RegisterProfilePrefs(PrefRegistrySimple* registry) {
@@ -122,6 +136,16 @@ void AppServiceProxy::Initialize() {
     return;
   }
 
+#if defined(OS_CHROMEOS)
+  const user_manager::User* user =
+      chromeos::ProfileHelper::Get()->GetUserByProfile(profile_);
+  if (user) {
+    cache_.SetAccountId(user->GetAccountId());
+    AppRegistryCacheWrapper::Get().AddAppRegistryCache(user->GetAccountId(),
+                                                       &cache_);
+  }
+#endif
+
   browser_app_launcher_ = std::make_unique<apps::BrowserAppLauncher>(profile_);
 
   app_service_impl_ = std::make_unique<apps::AppServiceImpl>(
@@ -139,19 +163,22 @@ void AppServiceProxy::Initialize() {
     // The AppServiceProxy is also a publisher, of a variety of app types. That
     // responsibility isn't intrinsically part of the AppServiceProxy, but doing
     // that here, for each such app type, is as good a place as any.
-    built_in_chrome_os_apps_ =
-        std::make_unique<BuiltInChromeOsApps>(app_service_, profile_);
+    if (!g_omit_built_in_apps_for_testing_) {
+      built_in_chrome_os_apps_ =
+          std::make_unique<BuiltInChromeOsApps>(app_service_, profile_);
+    }
     crostini_apps_ = std::make_unique<CrostiniApps>(app_service_, profile_);
     extension_apps_ = std::make_unique<ExtensionAppsChromeOs>(
         app_service_, profile_, apps::mojom::AppType::kExtension,
         &instance_registry_);
-    plugin_vm_apps_ = std::make_unique<PluginVmApps>(app_service_, profile_);
+    if (!g_omit_plugin_vm_apps_for_testing_) {
+      plugin_vm_apps_ = std::make_unique<PluginVmApps>(app_service_, profile_);
+    }
     if (chromeos::features::IsLacrosSupportEnabled()) {
-      // LacrosApps uses LacrosLoader, which is a singleton. Don't create an
+      // LacrosApps uses LacrosManager, which is a singleton. Don't create an
       // instance of LacrosApps for the lock screen app profile, as we want to
       // maintain a single instance of LacrosApps.
-      // TODO(jamescook): Multiprofile support. Consider adding a list of
-      // "ready" callbacks to LacrosLoader.
+      // TODO(jamescook): Multiprofile support. Consider switching to observers.
       if (!chromeos::ProfileHelper::IsLockScreenAppProfile(profile_)) {
         lacros_apps_ = std::make_unique<LacrosApps>(app_service_);
       }
@@ -323,6 +350,13 @@ void AppServiceProxy::Uninstall(const std::string& app_id,
 #endif
 }
 
+void AppServiceProxy::UninstallSilently(const std::string& app_id) {
+  if (app_service_.is_connected()) {
+    app_service_->Uninstall(cache_.GetAppType(app_id), app_id,
+                            /*clear_site_data=*/false, /*report_abuse=*/false);
+  }
+}
+
 #if defined(OS_CHROMEOS)
 void AppServiceProxy::PauseApps(
     const std::map<std::string, PauseData>& pause_data) {
@@ -375,6 +409,14 @@ void AppServiceProxy::UnpauseApps(const std::set<std::string>& app_ids) {
 }
 #endif  // OS_CHROMEOS
 
+void AppServiceProxy::StopApp(const std::string& app_id) {
+  if (!app_service_.is_connected()) {
+    return;
+  }
+  apps::mojom::AppType app_type = cache_.GetAppType(app_id);
+  app_service_->StopApp(app_type, app_id);
+}
+
 void AppServiceProxy::GetMenuModel(
     const std::string& app_id,
     apps::mojom::MenuType menu_type,
@@ -400,10 +442,12 @@ void AppServiceProxy::OpenNativeSettings(const std::string& app_id) {
 void AppServiceProxy::FlushMojoCallsForTesting() {
   app_service_impl_->FlushMojoCallsForTesting();
 #if defined(OS_CHROMEOS)
-  built_in_chrome_os_apps_->FlushMojoCallsForTesting();
+  if (built_in_chrome_os_apps_)
+    built_in_chrome_os_apps_->FlushMojoCallsForTesting();
   crostini_apps_->FlushMojoCallsForTesting();
   extension_apps_->FlushMojoCallsForTesting();
-  plugin_vm_apps_->FlushMojoCallsForTesting();
+  if (plugin_vm_apps_)
+    plugin_vm_apps_->FlushMojoCallsForTesting();
   if (lacros_apps_) {
     lacros_apps_->FlushMojoCallsForTesting();
   }
@@ -441,6 +485,7 @@ void AppServiceProxy::UninstallForTesting(const std::string& app_id,
                                           base::OnceClosure callback) {
   UninstallImpl(app_id, parent_window, std::move(callback));
 }
+
 #endif
 
 std::vector<std::string> AppServiceProxy::GetAppIdsForUrl(const GURL& url) {
@@ -759,6 +804,27 @@ apps::mojom::IntentFilterPtr AppServiceProxy::FindBestMatchingFilter(
     }
   });
   return best_matching_intent_filter;
+}
+
+ScopedOmitBuiltInAppsForTesting::ScopedOmitBuiltInAppsForTesting()
+    : previous_omit_built_in_apps_for_testing_(
+          g_omit_built_in_apps_for_testing_) {
+  g_omit_built_in_apps_for_testing_ = true;
+}
+
+ScopedOmitBuiltInAppsForTesting::~ScopedOmitBuiltInAppsForTesting() {
+  g_omit_built_in_apps_for_testing_ = previous_omit_built_in_apps_for_testing_;
+}
+
+ScopedOmitPluginVmAppsForTesting::ScopedOmitPluginVmAppsForTesting()
+    : previous_omit_plugin_vm_apps_for_testing_(
+          g_omit_plugin_vm_apps_for_testing_) {
+  g_omit_plugin_vm_apps_for_testing_ = true;
+}
+
+ScopedOmitPluginVmAppsForTesting::~ScopedOmitPluginVmAppsForTesting() {
+  g_omit_plugin_vm_apps_for_testing_ =
+      previous_omit_plugin_vm_apps_for_testing_;
 }
 
 }  // namespace apps

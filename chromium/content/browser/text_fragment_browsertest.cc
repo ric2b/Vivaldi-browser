@@ -431,6 +431,21 @@ IN_PROC_BROWSER_TEST_F(ForceLoadAtTopBrowserTest, FragmentAnchorDisabled) {
   EXPECT_TRUE(main_contents->GetMainFrame()->GetView()->IsScrollOffsetAtTop());
 }
 
+IN_PROC_BROWSER_TEST_F(ForceLoadAtTopBrowserTest, SameDocumentNavigation) {
+  GURL url(
+      embedded_test_server()->GetURL("/scrollable_page_with_content.html"));
+  WebContents* main_contents = shell()->web_contents();
+
+  EXPECT_TRUE(NavigateToURL(shell(), url));
+  EXPECT_TRUE(WaitForRenderFrameReady(main_contents->GetMainFrame()));
+  EXPECT_TRUE(main_contents->GetMainFrame()->GetView()->IsScrollOffsetAtTop());
+
+  ClickElementWithId(main_contents, "link");
+
+  RunUntilInputProcessed(GetWidgetHost());
+  EXPECT_FALSE(main_contents->GetMainFrame()->GetView()->IsScrollOffsetAtTop());
+}
+
 IN_PROC_BROWSER_TEST_F(ForceLoadAtTopBrowserTest, TextFragmentAnchorDisabled) {
   GURL url(embedded_test_server()->GetURL(
       "/scrollable_page_with_content.html#:~:text=text"));
@@ -448,6 +463,28 @@ IN_PROC_BROWSER_TEST_F(ForceLoadAtTopBrowserTest, TextFragmentAnchorDisabled) {
   RunUntilInputProcessed(RenderWidgetHostImpl::From(
       main_contents->GetRenderViewHost()->GetWidget()));
   EXPECT_TRUE(main_contents->GetMainFrame()->GetView()->IsScrollOffsetAtTop());
+}
+
+// Test that Tab key press puts focus from the start of selection.
+IN_PROC_BROWSER_TEST_F(TextFragmentAnchorBrowserTest, TabFocus) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL url(embedded_test_server()->GetURL(
+      "/scrollable_page_with_anchor.html#:~:text=text"));
+  WebContents* main_contents = shell()->web_contents();
+  RenderFrameSubmissionObserver frame_observer(main_contents);
+  EXPECT_TRUE(NavigateToURL(shell(), url));
+  WaitForPageLoad(main_contents);
+  frame_observer.WaitForScrollOffsetAtTop(
+      /*expected_scroll_offset_at_top=*/false);
+
+  DOMMessageQueue msg_queue;
+  SimulateKeyPress(main_contents, ui::DomKey::TAB, ui::DomCode::TAB,
+                   ui::VKEY_TAB, false, false, false, false);
+
+  // Wait for focus to happen.
+  std::string message;
+  EXPECT_TRUE(msg_queue.WaitForMessage(&message));
+  EXPECT_EQ("\"FocusDone2\"", message);
 }
 
 }  // namespace content

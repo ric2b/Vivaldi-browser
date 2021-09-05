@@ -37,8 +37,7 @@ SVGScriptElement::SVGScriptElement(Document& document,
                                    const CreateElementFlags flags)
     : SVGElement(svg_names::kScriptTag, document),
       SVGURIReference(this),
-      loader_(InitializeScriptLoader(flags.IsCreatedByParser(),
-                                     flags.WasAlreadyStarted())) {}
+      loader_(InitializeScriptLoader(flags)) {}
 
 void SVGScriptElement::ParseAttribute(
     const AttributeModificationParams& params) {
@@ -138,7 +137,7 @@ bool SVGScriptElement::AllowInlineScriptForCSP(
     const AtomicString& nonce,
     const WTF::OrdinalNumber& context_line,
     const String& script_content) {
-  return GetDocument().GetContentSecurityPolicyForWorld()->AllowInline(
+  return GetExecutionContext()->GetContentSecurityPolicyForWorld()->AllowInline(
       ContentSecurityPolicy::InlineType::kScript, this, script_content, nonce,
       GetDocument().Url(), context_line);
 }
@@ -197,7 +196,7 @@ const AttrNameToTrustedType& SVGScriptElement::GetCheckedAttributeTypes()
   return attribute_map;
 }
 
-void SVGScriptElement::Trace(Visitor* visitor) {
+void SVGScriptElement::Trace(Visitor* visitor) const {
   visitor->Trace(loader_);
   SVGElement::Trace(visitor);
   SVGURIReference::Trace(visitor);

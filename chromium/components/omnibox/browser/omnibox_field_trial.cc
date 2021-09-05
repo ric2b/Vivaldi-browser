@@ -813,6 +813,25 @@ std::string OmniboxFieldTrial::OnDeviceHeadSuggestDemoteMode() {
       kOnDeviceHeadSuggestDemoteMode);
 }
 
+bool OmniboxFieldTrial::ShouldRevealPathQueryRefOnHover() {
+  return base::FeatureList::IsEnabled(
+      omnibox::kRevealSteadyStateUrlPathQueryAndRefOnHover);
+}
+
+bool OmniboxFieldTrial::ShouldHidePathQueryRefOnInteraction() {
+  return base::FeatureList::IsEnabled(
+      omnibox::kHideSteadyStateUrlPathQueryAndRefOnInteraction);
+}
+
+int OmniboxFieldTrial::RevealPathQueryRefOnHoverThresholdMs() {
+  const int kDefaultThresholdMs = 150;
+  int threshold = base::GetFieldTrialParamByFeatureAsInt(
+      omnibox::kRevealSteadyStateUrlPathQueryAndRefOnHover,
+      kOmniboxUIRevealPathQueryAndRefOnHoverThresholdMsParam,
+      kDefaultThresholdMs);
+  return threshold < 0 ? kDefaultThresholdMs : threshold;
+}
+
 const char OmniboxFieldTrial::kBundledExperimentFieldTrialName[] =
     "OmniboxBundledExperimentV1";
 const char OmniboxFieldTrial::kDisableProvidersRule[] = "DisableProviders";
@@ -910,6 +929,10 @@ const char OmniboxFieldTrial::kRichAutocompletionAutocompleteNonPrefix[] =
 
 const char OmniboxFieldTrial::kImageSearchSuggestionThumbnail[] =
     "ImageSearchSuggestionThumbnail";
+
+const char OmniboxFieldTrial::
+    kOmniboxUIRevealPathQueryAndRefOnHoverThresholdMsParam[] =
+        "OmniboxUIRevealPathQueryAndRefOnHoverThresholdMs";
 
 std::string OmniboxFieldTrial::internal::GetValueForRuleInContext(
     const std::string& rule,

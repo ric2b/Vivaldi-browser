@@ -11,6 +11,7 @@
 #include "base/files/file_util.h"
 #include "base/i18n/rtl.h"
 #include "base/memory/ref_counted_memory.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/optional.h"
 #include "base/strings/string_piece.h"
@@ -19,6 +20,7 @@
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/search/ntp_features.h"
 #include "chrome/browser/search/one_google_bar/one_google_bar_data.h"
 #include "chrome/browser/search/one_google_bar/one_google_bar_service_factory.h"
 #include "chrome/browser/search/promos/promo_data.h"
@@ -28,6 +30,7 @@
 #include "chrome/grit/new_tab_page_resources.h"
 #include "content/public/common/url_constants.h"
 #include "net/base/url_util.h"
+#include "services/network/public/mojom/content_security_policy.mojom.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/template_expressions.h"
 #include "url/url_util.h"
@@ -39,7 +42,8 @@ constexpr int kMaxUriDecodeLen = 2048;
 std::string FormatTemplate(int resource_id,
                            const ui::TemplateReplacements& replacements) {
   ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
-  base::RefCountedMemory* bytes = bundle.LoadDataResourceBytes(resource_id);
+  scoped_refptr<base::RefCountedMemory> bytes =
+      bundle.LoadDataResourceBytes(resource_id);
   base::StringPiece string_piece(reinterpret_cast<const char*>(bytes->front()),
                                  bytes->size());
   return ui::ReplaceTemplateExpressions(
@@ -81,12 +85,21 @@ UntrustedSource::UntrustedSource(Profile* profile)
 
 UntrustedSource::~UntrustedSource() = default;
 
-std::string UntrustedSource::GetContentSecurityPolicyScriptSrc() {
-  return "script-src 'self' 'unsafe-inline' https:;";
-}
+std::string UntrustedSource::GetContentSecurityPolicy(
+    network::mojom::CSPDirectiveName directive) {
+  if (directive == network::mojom::CSPDirectiveName::ScriptSrc) {
+    return "script-src 'self' 'unsafe-inline' https:;";
+  } else if (directive == network::mojom::CSPDirectiveName::ChildSrc) {
+    return "child-src https:;";
+  } else if (directive == network::mojom::CSPDirectiveName::DefaultSrc) {
+    // TODO(https://crbug.com/1085325): Audit and tighten CSP.
+    return std::string();
+  } else if (directive == network::mojom::CSPDirectiveName::FrameAncestors) {
+    return base::StringPrintf("frame-ancestors %s",
+                              chrome::kChromeUINewTabPageURL);
+  }
 
-std::string UntrustedSource::GetContentSecurityPolicyChildSrc() {
-  return "child-src https:;";
+  return content::URLDataSource::GetContentSecurityPolicy(directive);
 }
 
 std::string UntrustedSource::GetSource() {
@@ -135,14 +148,13 @@ void UntrustedSource::StartDataRequest(
         bundle.LoadDataResourceBytes(IDR_NEW_TAB_PAGE_UNTRUSTED_PROMO_JS));
     return;
   }
-  if ((path == "image" || path == "iframe") && url_param.is_valid() &&
+  if (path == "image" && url_param.is_valid() &&
       (url_param.SchemeIs(url::kHttpsScheme) ||
        url_param.SchemeIs(content::kChromeUIUntrustedScheme))) {
     ui::TemplateReplacements replacements;
     replacements["url"] = url_param.spec();
-    int resource_id = path == "image" ? IDR_NEW_TAB_PAGE_UNTRUSTED_IMAGE_HTML
-                                      : IDR_NEW_TAB_PAGE_UNTRUSTED_IFRAME_HTML;
-    std::string html = FormatTemplate(resource_id, replacements);
+    std::string html =
+        FormatTemplate(IDR_NEW_TAB_PAGE_UNTRUSTED_IMAGE_HTML, replacements);
     std::move(callback).Run(base::RefCountedString::TakeString(&html));
     return;
   }
@@ -210,11 +222,6 @@ bool UntrustedSource::AllowCaching() {
   return false;
 }
 
-std::string UntrustedSource::GetContentSecurityPolicyFrameAncestors() {
-  return base::StringPrintf("frame-ancestors %s",
-                            chrome::kChromeUINewTabPageURL);
-}
-
 bool UntrustedSource::ShouldReplaceExistingSource() {
   return false;
 }
@@ -230,8 +237,7 @@ bool UntrustedSource::ShouldServiceRequest(
   return path == "one-google-bar" || path == "one_google_bar.js" ||
          path == "promo" || path == "promo.js" || path == "image" ||
          path == "background_image" || path == "custom_background_image" ||
-         path == "background_image.js" || path == "iframe" ||
-         path == "background.jpg";
+         path == "background_image.js" || path == "background.jpg";
 }
 
 void UntrustedSource::OnOneGoogleBarDataUpdated() {
@@ -249,6 +255,10 @@ void UntrustedSource::OnOneGoogleBarDataUpdated() {
   if (data.has_value()) {
     ui::TemplateReplacements replacements;
     replacements["textdirection"] = base::i18n::IsRTL() ? "rtl" : "ltr";
+    replacements["modalOverlays"] =
+        base::FeatureList::IsEnabled(ntp_features::kOneGoogleBarModalOverlays)
+            ? "modal-overlays"
+            : "";
     replacements["barHtml"] = data->bar_html;
     replacements["inHeadScript"] = data->in_head_script;
     replacements["inHeadStyle"] = data->in_head_style;

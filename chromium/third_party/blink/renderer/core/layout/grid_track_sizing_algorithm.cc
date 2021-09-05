@@ -798,7 +798,9 @@ LayoutUnit IndefiniteSizeStrategy::MaxContentForChild(LayoutBox& child) const {
   DCHECK(GridLayoutUtils::IsOrthogonalChild(*GetLayoutGrid(), child));
 
   return child.LogicalHeight() +
-         GridLayoutUtils::MarginLogicalHeightForChild(*GetLayoutGrid(), child);
+         GridLayoutUtils::MarginLogicalHeightForChild(*GetLayoutGrid(), child) +
+         algorithm_.BaselineOffsetForChild(child,
+                                           GridAxisForDirection(Direction()));
 }
 
 bool IndefiniteSizeStrategy::IsComputingSizeContainment() const {
@@ -875,7 +877,7 @@ const GridTrackSize& GridTrackSizingAlgorithm::RawGridTrackSize(
   size_t explicit_tracks_count = track_styles.size() + auto_repeat_tracks_count;
 
   int untranslated_index_as_int =
-      translated_index + grid_.SmallestTrackStart(direction);
+      translated_index - grid_.ExplicitGridStart(direction);
   size_t auto_track_styles_size = auto_track_styles.size();
   if (untranslated_index_as_int < 0) {
     int index =
@@ -946,8 +948,20 @@ GridTrackSize GridTrackSizingAlgorithm::CalculateGridTrackSize(
   // values are treated as <auto>.
   if (IsRelativeSizedTrackAsAuto(track_size, direction)) {
     if (direction == kForRows) {
-      UseCounter::Count(layout_grid_->GetDocument(),
-                        WebFeature::kGridRowTrackPercentIndefiniteHeight);
+      // We avoid counting the cases in which it doesn't matter if we resolve
+      // the percentages row tracks against the intrinsic height of the grid
+      // container or we treat them as auto. Basically if we have just one row,
+      // it has 100% size and the max-block-size is none.
+      if ((grid_.NumTracks(direction) != 1) || !min_track_breadth.IsLength() ||
+          !min_track_breadth.length().IsPercent() ||
+          (min_track_breadth.length().Percent() != 100.0f) ||
+          !max_track_breadth.IsLength() ||
+          !max_track_breadth.length().IsPercent() ||
+          (max_track_breadth.length().Percent() != 100.0f) ||
+          !layout_grid_->StyleRef().LogicalMaxHeight().IsNone()) {
+        UseCounter::Count(layout_grid_->GetDocument(),
+                          WebFeature::kGridRowTrackPercentIndefiniteHeight);
+      }
     }
     if (min_track_breadth.HasPercentage())
       min_track_breadth = Length::Auto();

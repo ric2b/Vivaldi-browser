@@ -45,7 +45,6 @@ import org.chromium.chrome.browser.omaha.UpdateMenuItemHelper;
 import org.chromium.chrome.browser.share.ShareHelper;
 import org.chromium.chrome.browser.share.ShareUtils;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tab.TabImpl;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 import org.chromium.chrome.browser.toolbar.ToolbarManager;
@@ -57,8 +56,8 @@ import org.chromium.chrome.features.start_surface.StartSurfaceConfiguration;
 import org.chromium.components.browser_ui.settings.ManagedPreferencesUtils;
 import org.chromium.components.dom_distiller.core.DomDistillerUrlUtils;
 import org.chromium.components.embedder_support.util.UrlConstants;
+import org.chromium.components.webapk.lib.client.WebApkValidator;
 import org.chromium.ui.base.DeviceFormFactor;
-import org.chromium.webapk.lib.client.WebApkValidator;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -452,10 +451,8 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
      */
     protected boolean shouldShowPaintPreview(
             boolean isChromeScheme, @NonNull Tab currentTab, boolean isIncognito) {
-        boolean isChromeOrInterstitialPage =
-                isChromeScheme || ((TabImpl) currentTab).isShowingInterstitialPage();
-        return CachedFeatureFlags.isEnabled(ChromeFeatureList.PAINT_PREVIEW_DEMO)
-                && !isChromeOrInterstitialPage && !isIncognito;
+        return CachedFeatureFlags.isEnabled(ChromeFeatureList.PAINT_PREVIEW_DEMO) && !isChromeScheme
+                && !isIncognito;
     }
 
     /**
@@ -713,7 +710,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
 
         boolean itemVisible = canShowRequestDesktopSite
                 && (!isChromeScheme || currentTab.isNativePage())
-                && !shouldShowReaderModePrefs(currentTab);
+                && !shouldShowReaderModePrefs(currentTab) && currentTab.getWebContents() != null;
         requestMenuRow.setVisible(itemVisible);
         if (!itemVisible) return;
 

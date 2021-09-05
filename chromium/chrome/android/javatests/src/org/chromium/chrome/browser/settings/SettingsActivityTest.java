@@ -4,13 +4,13 @@
 
 package org.chromium.chrome.browser.settings;
 
-import static android.support.test.espresso.Espresso.onView;
-import static android.support.test.espresso.action.ViewActions.click;
-import static android.support.test.espresso.assertion.ViewAssertions.matches;
-import static android.support.test.espresso.matcher.ViewMatchers.isDisplayed;
-import static android.support.test.espresso.matcher.ViewMatchers.withText;
+import static androidx.test.espresso.Espresso.onView;
+import static androidx.test.espresso.action.ViewActions.click;
+import static androidx.test.espresso.assertion.ViewAssertions.matches;
+import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
+import static androidx.test.espresso.matcher.ViewMatchers.withText;
 
-import android.support.test.filters.SmallTest;
+import androidx.test.filters.SmallTest;
 
 import org.junit.Rule;
 import org.junit.Test;
@@ -46,7 +46,7 @@ public class SettingsActivityTest {
             @Override
             public boolean isSatisfied() {
                 return PrefServiceBridge.getInstance().isManagedPreference(
-                        Pref.REMEMBER_PASSWORDS_ENABLED);
+                        Pref.CREDENTIALS_ENABLE_SERVICE);
             }
         });
 

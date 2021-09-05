@@ -412,6 +412,13 @@ static bool NeedsPaintOffsetTranslation(
   if (NeedsReplacedContentTransform(object))
     return true;
 
+  // Reference filter and reflection (which creates a reference filter) requires
+  // zero paint offset.
+  if (box_model.HasLayer() &&
+      (object.StyleRef().Filter().HasReferenceFilter() ||
+       object.HasReflection()))
+    return true;
+
   // Don't let paint offset cross composited layer boundaries, to avoid
   // unnecessary full layer paint/raster invalidation when paint offset in
   // ancestor transform node changes which should not affect the descendants
@@ -708,6 +715,10 @@ static CompositingReasons CompositingReasonsForTransformProperty() {
   reasons |= CompositingReason::kWillChangeOpacity;
   reasons |= CompositingReason::kWillChangeFilter;
   reasons |= CompositingReason::kWillChangeBackdropFilter;
+
+  if (RuntimeEnabledFeatures::TransformInteropEnabled())
+    reasons |= CompositingReason::kBackfaceInvisibility3DAncestor;
+
   return reasons;
 }
 
@@ -840,6 +851,9 @@ void FragmentPaintPropertyTreeBuilder::UpdateTransform() {
     }
   }
 
+  // properties_->Transform() is present if a CSS transform is present,
+  // and is also present if transform-style: preserve-3d is set.
+  // See NeedsTransform.
   if (properties_->Transform()) {
     context_.current.transform = properties_->Transform();
     if (object_.StyleRef().Preserves3D()) {
@@ -850,6 +864,13 @@ void FragmentPaintPropertyTreeBuilder::UpdateTransform() {
       context_.current.rendering_context_id = 0;
       context_.current.should_flatten_inherited_transform = true;
     }
+  } else if (RuntimeEnabledFeatures::TransformInteropEnabled() &&
+             !object_.IsAnonymous()) {
+    // With kTransformInterop enabled, 3D rendering contexts follow the
+    // DOM ancestor chain, so flattening should apply regardless of
+    // presence of transform.
+    context_.current.rendering_context_id = 0;
+    context_.current.should_flatten_inherited_transform = true;
   }
 }
 
@@ -897,7 +918,7 @@ static bool NeedsEffect(const LayoutObject& object,
   // don't create layer thus are not actual stacking contexts, so the HasLayer()
   // condition. TODO(crbug.com/892734): Support effects for LayoutTableCol.
   const bool is_css_isolated_group =
-      object.HasLayer() && style.IsStackingContext();
+      object.HasLayer() && object.IsStackingContext();
 
   if (!is_css_isolated_group && !object.IsSVG())
     return false;
@@ -1218,7 +1239,6 @@ static bool NeedsFilter(const LayoutObject& object,
   if (!object.IsBoxModelObject() || !ToLayoutBoxModelObject(object).Layer())
     return false;
 
-  // TODO(trchen): SVG caches filters in SVGResources. Implement it.
   if (object.StyleRef().HasFilter() || object.HasReflection())
     return true;
 
@@ -1231,7 +1251,6 @@ void FragmentPaintPropertyTreeBuilder::UpdateFilter() {
     if (NeedsFilter(object_, full_context_.direct_compositing_reasons)) {
       EffectPaintPropertyNode::State state;
       state.local_transform_space = context_.current.transform;
-      state.filters_origin = FloatPoint(context_.current.paint_offset);
 
       if (auto* layer = ToLayoutBoxModelObject(object_).Layer()) {
         // Try to use the cached filter.
@@ -1984,6 +2003,13 @@ void FragmentPaintPropertyTreeBuilder::UpdateScrollAndScrollTranslation() {
           CompositingReason::kDirectReasonsForScrollTranslationProperty;
       state.rendering_context_id = context_.current.rendering_context_id;
       state.scroll = properties_->Scroll();
+      // If scroll and transform are both present, we should use the
+      // transform property tree node to determine visibility of the
+      // scrolling contents.
+      if (object_.StyleRef().HasTransform() &&
+          object_.StyleRef().BackfaceVisibility() ==
+              EBackfaceVisibility::kHidden)
+        state.flags.delegates_to_parent_for_backface = true;
       auto effective_change_type = properties_->UpdateScrollTranslation(
           *context_.current.transform, std::move(state));
       if (effective_change_type ==
@@ -2360,15 +2386,21 @@ void FragmentPaintPropertyTreeBuilder::UpdatePaintOffset() {
             box_model_object.OffsetForInFlowPosition();
         break;
       case EPosition::kAbsolute: {
+        // TODO(almaher): Remove call to IsInNGFragmentTraversal().
         DCHECK(full_context_.container_for_absolute_position ==
-               box_model_object.Container());
+                   box_model_object.Container() ||
+               (IsInNGFragmentTraversal() &&
+                box_model_object.IsInsideFlowThread()));
         context_.current = context_.absolute_position;
 
         // Absolutely positioned content in an inline should be positioned
         // relative to the inline.
         const auto* container = full_context_.container_for_absolute_position;
         if (container && container->IsLayoutInline()) {
-          DCHECK(container->CanContainAbsolutePositionObjects());
+          // TODO(almaher): Remove call to IsInNGFragmentTraversal().
+          DCHECK(container->CanContainAbsolutePositionObjects() ||
+                 (IsInNGFragmentTraversal() &&
+                  box_model_object.IsInsideFlowThread()));
           DCHECK(box_model_object.IsBox());
           context_.current.paint_offset +=
               ToLayoutInline(container)->OffsetForInFlowPositionedInline(
@@ -2379,8 +2411,11 @@ void FragmentPaintPropertyTreeBuilder::UpdatePaintOffset() {
       case EPosition::kSticky:
         break;
       case EPosition::kFixed: {
+        // TODO(almaher): Remove call to IsInNGFragmentTraversal().
         DCHECK(full_context_.container_for_fixed_position ==
-               box_model_object.Container());
+                   box_model_object.Container() ||
+               (IsInNGFragmentTraversal() &&
+                box_model_object.IsInsideFlowThread()));
         context_.current = context_.fixed_position;
         // Fixed-position elements that are fixed to the viewport have a
         // transform above the scroll of the LayoutView. Child content is
@@ -2515,7 +2550,7 @@ void FragmentPaintPropertyTreeBuilder::UpdateForObjectLocationAndSize(
     fragment_data_.InvalidateClipPathCache();
 
     if (object_.IsBox()) {
-      // See PaintLayerScrollableArea::PixelSnappedBorderBoxRect() for the
+      // See PaintLayerScrollableArea::PixelSnappedBorderBoxSize() for the
       // reason of this.
       if (auto* scrollable_area = ToLayoutBox(object_).GetScrollableArea())
         scrollable_area->PositionOverflowControls();
@@ -2602,6 +2637,13 @@ void FragmentPaintPropertyTreeBuilder::UpdateForSelf() {
     UpdateCssClip();
     UpdateFilter();
     UpdateOverflowControlsClip();
+  } else if (RuntimeEnabledFeatures::TransformInteropEnabled() &&
+             !object_.IsAnonymous()) {
+    // With kTransformInterop enabled, 3D rendering contexts follow the
+    // DOM ancestor chain, so flattening should apply regardless of
+    // presence of transform.
+    context_.current.rendering_context_id = 0;
+    context_.current.should_flatten_inherited_transform = true;
   }
   UpdateLocalBorderBoxContext();
 }

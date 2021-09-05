@@ -45,6 +45,8 @@ namespace {
 // is made current, then this surface will be suspended.
 IDCompositionSurface* g_current_surface = nullptr;
 
+bool g_direct_composition_swap_chain_failed = false;
+
 }  // namespace
 
 DirectCompositionChildSurfaceWin::DirectCompositionChildSurfaceWin(
@@ -282,8 +284,13 @@ bool DirectCompositionChildSurfaceWin::SetDrawRectangle(
     HRESULT hr = dcomp_device_->CreateSurface(
         size_.width(), size_.height(), dxgi_format,
         DXGI_ALPHA_MODE_PREMULTIPLIED, &dcomp_surface_);
+    base::UmaHistogramSparse("GPU.DirectComposition.DcompDeviceCreateSurface",
+                             hr);
     if (FAILED(hr)) {
       DLOG(ERROR) << "CreateSurface failed with error " << std::hex << hr;
+      // Disable direct composition because CreateSurface might fail again next
+      // time.
+      g_direct_composition_swap_chain_failed = true;
       return false;
     }
   } else if (!swap_chain_ && !enable_dc_layers_) {
@@ -323,9 +330,17 @@ bool DirectCompositionChildSurfaceWin::SetDrawRectangle(
         "GPU.DirectComposition.CreateSwapChainForComposition", hr);
 
     // If CreateSwapChainForComposition fails, we cannot draw to the
-    // browser window. Failure here is indicative of an unrecoverable driver
-    // bug.
-    CHECK(SUCCEEDED(hr));
+    // browser window. Return false after disabling Direct Composition support
+    // and let the Renderer handle it. Either the GPU command buffer or the GPU
+    // process will be restarted.
+    if (FAILED(hr)) {
+      DLOG(ERROR) << "CreateSwapChainForComposition failed with error "
+                  << std::hex << hr;
+      // Disable direct composition because SwapChain creation might fail again
+      // next time.
+      g_direct_composition_swap_chain_failed = true;
+      return false;
+    }
 
     Microsoft::WRL::ComPtr<IDXGISwapChain3> swap_chain;
     if (SUCCEEDED(swap_chain_.As(&swap_chain))) {
@@ -456,6 +471,11 @@ bool DirectCompositionChildSurfaceWin::SetEnableDCLayers(bool enable) {
   swap_chain_.Reset();
   dcomp_surface_.Reset();
   return true;
+}
+
+// static
+bool DirectCompositionChildSurfaceWin::IsDirectCompositionSwapChainFailed() {
+  return g_direct_composition_swap_chain_failed;
 }
 
 }  // namespace gl

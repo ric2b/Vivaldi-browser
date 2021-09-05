@@ -4,7 +4,13 @@
 
 #include "cc/metrics/frame_sequence_tracker.h"
 
+#include <algorithm>
+#include <memory>
+#include <string>
+#include <utility>
+
 #include "base/bind.h"
+#include "base/logging.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/trace_event/trace_event.h"
@@ -26,6 +32,8 @@
 #endif
 
 namespace cc {
+
+using ThreadType = FrameSequenceMetrics::ThreadType;
 
 // In the |TRACKER_TRACE_STREAM|, we mod the numbers such as frame sequence
 // number, or frame token, such that the debug string is not too long.
@@ -63,9 +71,9 @@ FrameSequenceTracker::FrameSequenceTracker(
     FrameSequenceTrackerType type,
     ThroughputUkmReporter* throughput_ukm_reporter)
     : custom_sequence_id_(-1),
-      metrics_(std::make_unique<FrameSequenceMetrics>(type,
-                                                      throughput_ukm_reporter)),
-      trace_data_(metrics_.get()) {
+      metrics_(
+          std::make_unique<FrameSequenceMetrics>(type,
+                                                 throughput_ukm_reporter)) {
   DCHECK_LT(type, FrameSequenceTrackerType::kMaxType);
   DCHECK(type != FrameSequenceTrackerType::kCustom);
 }
@@ -76,13 +84,14 @@ FrameSequenceTracker::FrameSequenceTracker(
     : custom_sequence_id_(custom_sequence_id),
       metrics_(std::make_unique<FrameSequenceMetrics>(
           FrameSequenceTrackerType::kCustom,
-          /*ukm_reporter=*/nullptr)),
-      trace_data_(metrics_.get()) {
+          /*ukm_reporter=*/nullptr)) {
   DCHECK_GT(custom_sequence_id_, 0);
   metrics_->SetCustomReporter(std::move(custom_reporter));
 }
 
-FrameSequenceTracker::~FrameSequenceTracker() = default;
+FrameSequenceTracker::~FrameSequenceTracker() {
+  CleanUp();
+}
 
 void FrameSequenceTracker::ScheduleTerminate() {
   // If the last frame has ended and there is no frame awaiting presentation,
@@ -125,6 +134,8 @@ void FrameSequenceTracker::ReportBeginImplFrame(
   UpdateTrackedFrameData(&begin_impl_frame_data_, args.frame_id.source_id,
                          args.frame_id.sequence_number);
   impl_throughput().frames_expected +=
+      begin_impl_frame_data_.previous_sequence_delta;
+  aggregated_throughput().frames_expected +=
       begin_impl_frame_data_.previous_sequence_delta;
 #if DCHECK_IS_ON()
   ++impl_throughput().frames_received;
@@ -363,6 +374,8 @@ void FrameSequenceTracker::ReportFrameEnd(
       NOTREACHED() << TRACKER_DCHECK_MSG;
 #endif
     begin_impl_frame_data_.previous_sequence = 0;
+    if (!IsExpectingMainFrame())
+      --aggregated_throughput().frames_expected;
   }
   // last_submitted_frame_ == 0 means the last impl frame has been presented.
   if (termination_status_ == TerminationStatus::kScheduledForTermination &&
@@ -423,15 +436,17 @@ void FrameSequenceTracker::ReportFramePresented(
 
   uint32_t impl_frames_produced = 0;
   uint32_t main_frames_produced = 0;
-  trace_data_.Advance(feedback.timestamp);
 
-  const bool was_presented = !feedback.timestamp.is_null();
+  const bool was_presented = !feedback.failed();
   if (was_presented && submitted_frame_since_last_presentation) {
     DCHECK_LT(impl_throughput().frames_produced,
               impl_throughput().frames_expected)
         << TRACKER_DCHECK_MSG;
     ++impl_throughput().frames_produced;
     ++impl_frames_produced;
+    if (metrics()->GetEffectiveThread() == ThreadType::kCompositor) {
+      metrics()->AdvanceTrace(feedback.timestamp);
+    }
   }
 
   if (was_presented) {
@@ -448,6 +463,9 @@ void FrameSequenceTracker::ReportFramePresented(
           << TRACKER_DCHECK_MSG;
       ++main_throughput().frames_produced;
       ++main_frames_produced;
+      if (metrics()->GetEffectiveThread() == ThreadType::kMain) {
+        metrics()->AdvanceTrace(feedback.timestamp);
+      }
     }
 
     if (impl_frames_produced > 0) {
@@ -647,16 +665,11 @@ bool FrameSequenceTracker::ShouldIgnoreSequence(
   return sequence_number != begin_impl_frame_data_.previous_sequence;
 }
 
-std::unique_ptr<base::trace_event::TracedValue>
-FrameSequenceMetrics::ThroughputData::ToTracedValue(
-    const ThroughputData& impl,
-    const ThroughputData& main) {
-  auto dict = std::make_unique<base::trace_event::TracedValue>();
-  dict->SetInteger("impl-frames-produced", impl.frames_produced);
-  dict->SetInteger("impl-frames-expected", impl.frames_expected);
-  dict->SetInteger("main-frames-produced", main.frames_produced);
-  dict->SetInteger("main-frames-expected", main.frames_expected);
-  return dict;
+bool FrameSequenceTracker::IsExpectingMainFrame() const {
+  bool last_main_not_processed =
+      begin_main_frame_data_.previous_sequence != 0 &&
+      begin_main_frame_data_.previous_sequence != last_processed_main_sequence_;
+  return !main_frames_.empty() || last_main_not_processed;
 }
 
 bool FrameSequenceTracker::ShouldReportMetricsNow(
@@ -675,22 +688,12 @@ std::unique_ptr<FrameSequenceMetrics> FrameSequenceTracker::TakeMetrics() {
   return std::move(metrics_);
 }
 
+void FrameSequenceTracker::CleanUp() {
+  if (metrics_)
+    metrics_->ReportLeftoverData();
+}
+
 FrameSequenceTracker::CheckerboardingData::CheckerboardingData() = default;
 FrameSequenceTracker::CheckerboardingData::~CheckerboardingData() = default;
-
-FrameSequenceTracker::TraceData::TraceData(const void* id) : trace_id(id) {}
-void FrameSequenceTracker::TraceData::Advance(base::TimeTicks new_timestamp) {
-  // Use different names, because otherwise the trace-viewer shows the slices in
-  // the same color, and that makes it difficult to tell the traces apart from
-  // each other.
-  const char* trace_names[] = {"Frame", "Frame ", "Frame   "};
-  TRACE_EVENT_NESTABLE_ASYNC_BEGIN_WITH_TIMESTAMP0(
-      "cc,benchmark", trace_names[++this->frame_count % 3],
-      TRACE_ID_LOCAL(this->trace_id), this->last_timestamp);
-  TRACE_EVENT_NESTABLE_ASYNC_END_WITH_TIMESTAMP0(
-      "cc,benchmark", trace_names[this->frame_count % 3],
-      TRACE_ID_LOCAL(this->trace_id), new_timestamp);
-  this->last_timestamp = new_timestamp;
-}
 
 }  // namespace cc

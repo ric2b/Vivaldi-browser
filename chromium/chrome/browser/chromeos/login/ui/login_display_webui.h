@@ -11,7 +11,6 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "chrome/browser/chromeos/login/signin_specifics.h"
-#include "chrome/browser/ui/webui/chromeos/login/native_window_delegate.h"
 #include "chrome/browser/ui/webui/chromeos/login/signin_screen_handler.h"
 #include "components/user_manager/user.h"
 #include "ui/base/user_activity/user_activity_observer.h"
@@ -23,7 +22,6 @@ namespace chromeos {
 
 // WebUI-based login UI implementation.
 class LoginDisplayWebUI : public LoginDisplay,
-                          public NativeWindowDelegate,
                           public SigninScreenHandlerDelegate,
                           public ui::UserActivityObserver {
  public:
@@ -37,19 +35,14 @@ class LoginDisplayWebUI : public LoginDisplay,
             bool show_users,
             bool allow_new_user) override;
   void OnPreferencesChanged() override;
-  void RemoveUser(const AccountId& account_id) override;
   void SetUIEnabled(bool is_enabled) override;
   void ShowError(int error_msg_id,
                  int login_attempts,
                  HelpAppLauncher::HelpTopic help_topic_id) override;
-  void ShowErrorScreen(LoginDisplay::SigninError error_id) override;
   void ShowPasswordChangedDialog(bool show_password_error,
-                                 const std::string& email) override;
+                                 const AccountId& account_id) override;
   void ShowSigninUI(const std::string& email) override;
   void ShowWhitelistCheckFailedError() override;
-
-  // NativeWindowDelegate implementation:
-  gfx::NativeWindow GetNativeWindow() const override;
 
   // SigninScreenHandlerDelegate implementation:
   void Login(const UserContext& user_context,
@@ -63,7 +56,6 @@ class LoginDisplayWebUI : public LoginDisplay,
   void ShowEnableDebuggingScreen() override;
   void ShowKioskEnableScreen() override;
   void ShowKioskAutolaunchScreen() override;
-  void ShowUpdateRequiredScreen() override;
   void ShowWrongHWIDScreen() override;
   void SetWebUIHandler(LoginDisplayWebUIHandler* webui_handler) override;
   bool IsShowGuest() const override;

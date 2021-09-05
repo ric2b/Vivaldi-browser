@@ -16,6 +16,7 @@
 #include "chrome/browser/chromeos/extensions/autotest_private/autotest_private_api.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
+#include "chrome/browser/ui/ash/chrome_launcher_prefs.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "components/arc/arc_prefs.h"
 #include "components/arc/arc_util.h"
@@ -46,7 +47,12 @@ namespace extensions {
 
 class AutotestPrivateApiTest : public ExtensionApiTest {
  public:
-  AutotestPrivateApiTest() = default;
+  AutotestPrivateApiTest() {
+    // SplitSettingsSync makes an untitled Play Store icon appear in the shelf
+    // due to app pin syncing code. Sync isn't relevant to this test, so skip
+    // pinned app sync. https://crbug.com/1085597
+    SkipPinnedAppsFromSyncForTest();
+  }
   ~AutotestPrivateApiTest() override = default;
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -235,8 +241,7 @@ class AutotestPrivateWithPolicyApiTest : public AutotestPrivateApiTest {
     policy::PolicyMap policy;
     policy.Set(policy::key::kAllowDinosaurEasterEgg,
                policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
-               policy::POLICY_SOURCE_CLOUD, std::make_unique<base::Value>(true),
-               nullptr);
+               policy::POLICY_SOURCE_CLOUD, base::Value(true), nullptr);
     provider_.UpdateChromePolicy(policy);
     base::RunLoop().RunUntilIdle();
   }

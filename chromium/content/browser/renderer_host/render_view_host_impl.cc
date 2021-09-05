@@ -36,6 +36,9 @@
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/dom_storage/session_storage_namespace_impl.h"
 #include "content/browser/frame_host/frame_tree.h"
+#include "content/browser/frame_host/frame_tree_node.h"
+#include "content/browser/frame_host/navigation_controller_impl.h"
+#include "content/browser/frame_host/render_frame_proxy_host.h"
 #include "content/browser/gpu/compositor_util.h"
 #include "content/browser/gpu/gpu_data_manager_impl.h"
 #include "content/browser/gpu/gpu_process_host.h"
@@ -331,11 +334,8 @@ SiteInstanceImpl* RenderViewHostImpl::GetSiteInstance() {
 }
 
 bool RenderViewHostImpl::CreateRenderView(
-    int opener_frame_route_id,
+    const base::Optional<base::UnguessableToken>& opener_frame_token,
     int proxy_route_id,
-    const base::UnguessableToken& frame_token,
-    const base::UnguessableToken& devtools_frame_token,
-    const FrameReplicationState& replicated_frame_state,
     bool window_was_created_with_opener) {
   TRACE_EVENT0("renderer_host,navigation",
                "RenderViewHostImpl::CreateRenderView");
@@ -357,14 +357,19 @@ bool RenderViewHostImpl::CreateRenderView(
          proxy_route_id != MSG_ROUTING_NONE));
 
   RenderFrameHostImpl* main_rfh = nullptr;
+  RenderFrameProxyHost* main_rfph = nullptr;
   if (main_frame_routing_id_ != MSG_ROUTING_NONE) {
     main_rfh = RenderFrameHostImpl::FromID(GetProcess()->GetID(),
                                            main_frame_routing_id_);
     DCHECK(main_rfh);
+  } else {
+    main_rfph =
+        RenderFrameProxyHost::FromID(GetProcess()->GetID(), proxy_route_id);
   }
+  const FrameTreeNode* const frame_tree_node =
+      main_rfh ? main_rfh->frame_tree_node() : main_rfph->frame_tree_node();
 
-  GetWidget()->SetRendererInitialized(
-      true, RenderWidgetHostImpl::RendererInitializer::kCreateRenderView);
+  GetWidget()->set_renderer_initialized(true);
 
   mojom::CreateViewParamsPtr params = mojom::CreateViewParams::New();
   params->renderer_preferences =
@@ -391,12 +396,13 @@ bool RenderViewHostImpl::CreateRenderView(
     std::tie(params->frame_widget_host, params->frame_widget) =
         main_rfh->GetRenderWidgetHost()->BindNewFrameWidgetInterfaces();
   }
-  params->main_frame_frame_token = frame_token;
+  params->main_frame_frame_token =
+      main_rfh ? main_rfh->GetFrameToken() : main_rfph->GetFrameToken();
   params->session_storage_namespace_id =
       delegate_->GetSessionStorageNamespace(instance_.get())->id();
   // Ensure the RenderView sets its opener correctly.
-  params->opener_frame_route_id = opener_frame_route_id;
-  params->replicated_frame_state = replicated_frame_state;
+  params->opener_frame_token = opener_frame_token;
+  params->replicated_frame_state = frame_tree_node->current_replication_state();
   params->proxy_routing_id = proxy_route_id;
   params->hidden = GetWidget()->delegate()->IsHidden();
   params->never_composited = delegate_->IsNeverComposited();
@@ -404,9 +410,9 @@ bool RenderViewHostImpl::CreateRenderView(
   if (main_rfh) {
     params->has_committed_real_load =
         main_rfh->frame_tree_node()->has_committed_real_load();
-    DCHECK_EQ(params->main_frame_frame_token, main_rfh->frame_token());
+    DCHECK_EQ(params->main_frame_frame_token, main_rfh->GetFrameToken());
   }
-  params->devtools_main_frame_token = devtools_frame_token;
+  params->devtools_main_frame_token = frame_tree_node->devtools_frame_token();
   // GuestViews in the same StoragePartition need to find each other's frames.
   params->renderer_wide_named_frame_lookup = GetSiteInstance()->IsGuest();
   params->inside_portal = delegate_->IsPortal();
@@ -443,11 +449,6 @@ void RenderViewHostImpl::SetMainFrameRoutingId(int routing_id) {
   GetWidget()->UpdatePriority();
 }
 
-// TODO(https://crbug.com/1006814): Delete this.
-int RenderViewHostImpl::GetMainFrameRoutingIdForCrbug1006814() {
-  return main_frame_routing_id_;
-}
-
 void RenderViewHostImpl::EnterBackForwardCache() {
   if (!will_enter_back_forward_cache_callback_for_testing_.is_null())
     will_enter_back_forward_cache_callback_for_testing_.Run();
@@ -456,8 +457,9 @@ void RenderViewHostImpl::EnterBackForwardCache() {
   FrameTree* frame_tree = GetDelegate()->GetFrameTree();
   frame_tree->UnregisterRenderViewHost(this);
   is_in_back_forward_cache_ = true;
-  // TODO(altimin, dcheng): This should be a ViewMsg.
-  Send(new PageMsg_PutPageIntoBackForwardCache(GetRoutingID()));
+  page_lifecycle_state_manager_->SetIsInBackForwardCache(
+      is_in_back_forward_cache_,
+      /*navigation_start=*/base::nullopt);
 }
 
 void RenderViewHostImpl::LeaveBackForwardCache(
@@ -468,17 +470,37 @@ void RenderViewHostImpl::LeaveBackForwardCache(
   // guaranteed to be committed, so it should be reused going forward.
   frame_tree->RegisterRenderViewHost(this);
   is_in_back_forward_cache_ = false;
-  Send(new PageMsg_RestorePageFromBackForwardCache(GetRoutingID(),
-                                                   navigation_start));
+  page_lifecycle_state_manager_->SetIsInBackForwardCache(
+      is_in_back_forward_cache_, navigation_start);
+}
+
+void RenderViewHostImpl::SetVisibility(
+    blink::mojom::PageVisibilityState visibility) {
+  page_lifecycle_state_manager_->SetWebContentsVisibility(visibility);
 }
 
 void RenderViewHostImpl::SetIsFrozen(bool frozen) {
   page_lifecycle_state_manager_->SetIsFrozen(frozen);
 }
 
-void RenderViewHostImpl::SetVisibility(
-    blink::mojom::PageVisibilityState visibility) {
-  page_lifecycle_state_manager_->SetVisibility(visibility);
+void RenderViewHostImpl::OnBackForwardCacheTimeout() {
+  // TODO(yuzus): Implement a method to get a list of RenderFrameHosts
+  // associated with |this|, instead of iterating through all the
+  // RenderFrameHosts in bfcache.
+  const auto& entries = delegate_->GetFrameTree()
+                            ->controller()
+                            ->GetBackForwardCache()
+                            .GetEntries();
+  for (auto& entry : entries) {
+    for (auto* const rvh : entry->render_view_hosts) {
+      if (rvh == this) {
+        RenderFrameHostImpl* rfh = entry->render_frame_host.get();
+        rfh->EvictFromBackForwardCacheWithReason(
+            BackForwardCacheMetrics::NotRestoredReason::kTimeoutPuttingInCache);
+        break;
+      }
+    }
+  }
 }
 
 bool RenderViewHostImpl::IsRenderViewLive() {
@@ -559,9 +581,6 @@ const WebPreferences RenderViewHostImpl::ComputeWebPreferences() {
       command_line.HasSwitch(switches::kDisable2dCanvasAntialiasing);
   prefs.antialiased_clips_2d_canvas_enabled =
       !command_line.HasSwitch(switches::kDisable2dCanvasClipAntialiasing);
-  prefs.accelerated_2d_canvas_msaa_sample_count =
-      atoi(command_line.GetSwitchValueASCII(
-      switches::kAcceleratedCanvas2dMSAASampleCount).c_str());
 
   prefs.disable_ipc_flooding_protection =
       command_line.HasSwitch(switches::kDisableIpcFloodingProtection) ||
@@ -897,7 +916,6 @@ bool RenderViewHostImpl::OnMessageReceived(const IPC::Message& msg) {
     IPC_MESSAGE_HANDLER(ViewHostMsg_RouteCloseEvent, OnRouteCloseEvent)
     IPC_MESSAGE_HANDLER(ViewHostMsg_UpdateTargetURL, OnUpdateTargetURL)
     IPC_MESSAGE_HANDLER(ViewHostMsg_TakeFocus, OnTakeFocus)
-    IPC_MESSAGE_HANDLER(ViewHostMsg_Focus, OnFocus)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
 
@@ -962,6 +980,12 @@ void RenderViewHostImpl::OnFocus() {
   // Note: We allow focus and blur from swapped out RenderViewHosts, even when
   // the active RenderViewHost is in a different BrowsingInstance (e.g., WebUI).
   delegate_->Activate();
+}
+
+void RenderViewHostImpl::BindPageBroadcast(
+    mojo::PendingAssociatedRemote<blink::mojom::PageBroadcast> page_broadcast) {
+  page_broadcast_.reset();
+  page_broadcast_.Bind(std::move(page_broadcast));
 }
 
 const mojo::AssociatedRemote<blink::mojom::PageBroadcast>&
@@ -1121,6 +1145,10 @@ void RenderViewHostImpl::OnThemeColorChanged(
     return;
   main_frame_theme_color_ = theme_color;
   delegate_->OnThemeColorChanged(this);
+}
+
+void RenderViewHostImpl::SetContentsMimeType(const std::string mime_type) {
+  contents_mime_type_ = mime_type;
 }
 
 void RenderViewHostImpl::DocumentOnLoadCompletedInMainFrame() {

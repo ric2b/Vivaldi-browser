@@ -24,14 +24,8 @@ ASH_PUBLIC_EXPORT extern const base::Feature kAutoNightLight;
 // Enables contextual nudges for gesture education.
 ASH_PUBLIC_EXPORT extern const base::Feature kContextualNudges;
 
-// Enables shortcuts on corners of the display.
-ASH_PUBLIC_EXPORT extern const base::Feature kCornerShortcuts;
-
 // Enables indicators to hint where displays are connected.
 ASH_PUBLIC_EXPORT extern const base::Feature kDisplayAlignAssist;
-
-// Enables a modal dialog when resolution or refresh rate change.
-ASH_PUBLIC_EXPORT extern const base::Feature kDisplayChangeModal;
 
 // Enables identification overlays on each display.
 ASH_PUBLIC_EXPORT extern const base::Feature kDisplayIdentification;
@@ -56,6 +50,10 @@ ASH_PUBLIC_EXPORT extern const base::Feature kEnableOverviewRoundedCorners;
 // Limits the windows listed in Alt-Tab to the ones in the currently active
 // desk.
 ASH_PUBLIC_EXPORT extern const base::Feature kLimitAltTabToActiveDesk;
+
+// Limits the items on the shelf to the ones associated with windows the
+// currently active desk.
+ASH_PUBLIC_EXPORT extern const base::Feature kPerDeskShelf;
 
 // Enables notifications on the lock screen.
 ASH_PUBLIC_EXPORT extern const base::Feature kLockScreenNotifications;
@@ -117,9 +115,6 @@ ASH_PUBLIC_EXPORT extern const base::Feature kSeparateNetworkIcons;
 // Enables trilinear filtering.
 ASH_PUBLIC_EXPORT extern const base::Feature kTrilinearFiltering;
 
-// Enables running an external binary which provides lock screen authentication.
-ASH_PUBLIC_EXPORT extern const base::Feature kUnlockWithExternalBinary;
-
 // Enables using the BluetoothSystem Mojo interface for Bluetooth operations.
 ASH_PUBLIC_EXPORT extern const base::Feature kUseBluetoothSystemInAsh;
 
@@ -139,10 +134,6 @@ ASH_PUBLIC_EXPORT extern const base::Feature kShelfAppScaling;
 // autoclick menu, etc. Also enables the AppsGridView mask layer, slower devices
 // may have choppier app list animations while in this mode. crbug.com/765292.
 ASH_PUBLIC_EXPORT extern const base::Feature kEnableBackgroundBlur;
-
-// Enables refactored UnifiedMessageCenter which is completely separated from
-// the UnifiedSystemTrayView.
-ASH_PUBLIC_EXPORT extern const base::Feature kUnifiedMessageCenterRefactor;
 
 // Enables going back to previous page while swiping from the left edge of the
 // display. Only for tablet mode.
@@ -169,9 +160,18 @@ ASH_PUBLIC_EXPORT extern const base::Feature kSystemTrayMicGainSetting;
 // right now since it is under development.
 ASH_PUBLIC_EXPORT extern const base::Feature kWebUITabStripTabDragIntegration;
 
+// Enables notifications to be shown within context menus.
+ASH_PUBLIC_EXPORT extern const base::Feature kNotificationsInContextMenu;
+
+// Preserve shelf state when entering and exiting overview mode.
+ASH_PUBLIC_EXPORT extern const base::Feature
+    kMaintainShelfStateWhenEnteringOverview;
+
 ASH_PUBLIC_EXPORT bool IsAllowAmbientEQEnabled();
 
 ASH_PUBLIC_EXPORT bool IsAltTabLimitedToActiveDesk();
+
+ASH_PUBLIC_EXPORT bool IsPerDeskShelfEnabled();
 
 ASH_PUBLIC_EXPORT bool IsAutoNightLightEnabled();
 
@@ -203,8 +203,6 @@ ASH_PUBLIC_EXPORT bool IsSupervisedUserDeprecationNoticeEnabled();
 
 ASH_PUBLIC_EXPORT bool IsSwapSideVolumeButtonsForOrientationEnabled();
 
-ASH_PUBLIC_EXPORT bool IsUnifiedMessageCenterRefactorEnabled();
-
 ASH_PUBLIC_EXPORT bool IsBackgroundBlurEnabled();
 
 ASH_PUBLIC_EXPORT bool IsSwipingFromLeftEdgeToGoBackEnabled();
@@ -215,11 +213,7 @@ ASH_PUBLIC_EXPORT bool IsReduceDisplayNotificationsEnabled();
 
 ASH_PUBLIC_EXPORT bool IsHideShelfControlsInTabletModeEnabled();
 
-ASH_PUBLIC_EXPORT bool IsDisplayChangeModalEnabled();
-
 ASH_PUBLIC_EXPORT bool AreContextualNudgesEnabled();
-
-ASH_PUBLIC_EXPORT bool IsCornerShortcutsEnabled();
 
 ASH_PUBLIC_EXPORT bool IsSystemTrayMicGainSettingEnabled();
 
@@ -232,6 +226,10 @@ ASH_PUBLIC_EXPORT bool IsDisplayAlignmentAssistanceEnabled();
 ASH_PUBLIC_EXPORT bool IsMovablePartialScreenshotEnabled();
 
 ASH_PUBLIC_EXPORT bool IsAppScalingEnabled();
+
+ASH_PUBLIC_EXPORT bool IsNotificationsInContextMenuEnabled();
+
+ASH_PUBLIC_EXPORT bool IsMaintainShelfStateWhenEnteringOverviewEnabled();
 
 // These two functions are supposed to be temporary functions to set or get
 // whether "WebUITabStrip" feature is enabled from Chrome.

@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_CHROMEOS_LOGIN_SCREENS_USER_SELECTION_SCREEN_H_
 
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -13,6 +14,7 @@
 #include "ash/public/cpp/session/user_info.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
+#include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "base/values.h"
 #include "chrome/browser/chromeos/login/screens/base_screen.h"
@@ -20,7 +22,9 @@
 #include "chrome/browser/chromeos/login/ui/login_display.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chromeos/components/proximity_auth/screenlock_bridge.h"
+#include "chromeos/dbus/cryptohome/rpc.pb.h"
 #include "components/account_id/account_id.h"
+#include "components/session_manager/core/session_manager_observer.h"
 #include "components/user_manager/user.h"
 #include "ui/base/ime/chromeos/ime_keyboard.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
@@ -38,7 +42,8 @@ class UserBoardView;
 class UserSelectionScreen
     : public ui::UserActivityObserver,
       public proximity_auth::ScreenlockBridge::LockHandler,
-      public BaseScreen {
+      public BaseScreen,
+      public session_manager::SessionManagerObserver {
  public:
   explicit UserSelectionScreen(const std::string& display_type);
   ~UserSelectionScreen() override;
@@ -76,6 +81,8 @@ class UserSelectionScreen
 
   void InitEasyUnlock();
 
+  void SetTpmLockedState(bool is_locked, base::TimeDelta time_left);
+
   // proximity_auth::ScreenlockBridge::LockHandler implementation:
   void ShowBannerMessage(const base::string16& message,
                          bool is_warning) override;
@@ -97,6 +104,9 @@ class UserSelectionScreen
   void AttemptEasySignin(const AccountId& account_id,
                          const std::string& secret,
                          const std::string& key_label) override;
+
+  // session_manager::SessionManagerObserver
+  void OnSessionStateChanged() override;
 
   // Fills |user_dict| with information about |user|.
   static void FillUserDictionary(
@@ -141,6 +151,7 @@ class UserSelectionScreen
 
  private:
   class DircryptoMigrationChecker;
+  class TpmLockedChecker;
 
   EasyUnlockService* GetEasyUnlockServiceForUser(
       const AccountId& account_id) const;
@@ -170,9 +181,18 @@ class UserSelectionScreen
   // Helper to check whether a user needs dircrypto migration.
   std::unique_ptr<DircryptoMigrationChecker> dircrypto_migration_checker_;
 
+  // Helper to check whether TPM is locked or not.
+  std::unique_ptr<TpmLockedChecker> tpm_locked_checker_;
+
   user_manager::UserList users_to_send_;
 
   AccountId focused_pod_account_id_;
+
+  // Sometimes we might get focused pod while user session is still active. e.g.
+  // while creating lock screen. So postpone any work until after the session
+  // state changes.
+  base::Optional<AccountId> pending_focused_account_id_;
+
   // Input Method Engine state used at the user selection screen.
   scoped_refptr<input_method::InputMethodManager::State> ime_state_;
 

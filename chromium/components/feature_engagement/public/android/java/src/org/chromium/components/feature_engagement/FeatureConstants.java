@@ -27,6 +27,7 @@ import java.lang.annotation.RetentionPolicy;
         FeatureConstants.CONTEXTUAL_SEARCH_PROMOTE_TAP_FEATURE,
         FeatureConstants.CONTEXTUAL_SEARCH_PROMOTE_PANEL_OPEN_FEATURE,
         FeatureConstants.CONTEXTUAL_SEARCH_OPT_IN_FEATURE,
+        FeatureConstants.CONTEXTUAL_SEARCH_TAPPED_BUT_SHOULD_LONGPRESS_FEATURE,
         FeatureConstants.KEYBOARD_ACCESSORY_ADDRESS_FILL_FEATURE,
         FeatureConstants.KEYBOARD_ACCESSORY_PASSWORD_FILLING_FEATURE,
         FeatureConstants.KEYBOARD_ACCESSORY_PAYMENT_FILLING_FEATURE,
@@ -39,7 +40,10 @@ import java.lang.annotation.RetentionPolicy;
         FeatureConstants.FEED_CARD_MENU_FEATURE, FeatureConstants.IDENTITY_DISC_FEATURE,
         FeatureConstants.TAB_GROUPS_DRAG_AND_DROP_FEATURE,
         FeatureConstants.QUIET_NOTIFICATION_PROMPTS_FEATURE,
-        FeatureConstants.HOMEPAGE_PROMO_CARD_FEATURE, FeatureConstants.FEED_HEADER_MENU_FEATURE})
+        FeatureConstants.HOMEPAGE_PROMO_CARD_FEATURE, FeatureConstants.FEED_HEADER_MENU_FEATURE,
+        FeatureConstants.CHROME_REENGAGEMENT_NOTIFICATION_1_FEATURE,
+        FeatureConstants.CHROME_REENGAGEMENT_NOTIFICATION_2_FEATURE,
+        FeatureConstants.CHROME_REENGAGEMENT_NOTIFICATION_3_FEATURE})
 @Retention(RetentionPolicy.SOURCE)
 public @interface FeatureConstants {
     String DOWNLOAD_PAGE_FEATURE = "IPH_DownloadPage";
@@ -81,6 +85,12 @@ public @interface FeatureConstants {
      * An IPH feature for encouraging users to opt-in for Contextual Search.
      */
     String CONTEXTUAL_SEARCH_OPT_IN_FEATURE = "IPH_ContextualSearchOptIn";
+
+    /**
+     * An IPH feature educating users that tap to use longpress instead.
+     */
+    String CONTEXTUAL_SEARCH_TAPPED_BUT_SHOULD_LONGPRESS_FEATURE =
+            "IPH_ContextualSearchTappedButShouldLongpress";
 
     /**
      * An IPH feature indicating to users that there are settings for downloads and they are
@@ -147,4 +157,19 @@ public @interface FeatureConstants {
      * An IPH feature to show on the feed header menu button of the FeedNewTabPage.
      */
     String FEED_HEADER_MENU_FEATURE = "IPH_FeedHeaderMenu";
+
+    /**
+     * An IPH feature to show the first re-engagement notification.
+     */
+    String CHROME_REENGAGEMENT_NOTIFICATION_1_FEATURE = "IPH_ChromeReengagementNotification1";
+
+    /**
+     * An IPH feature to show the second re-engagement notification.
+     */
+    String CHROME_REENGAGEMENT_NOTIFICATION_2_FEATURE = "IPH_ChromeReengagementNotification2";
+
+    /**
+     * An IPH feature to show the third re-engagement notification.
+     */
+    String CHROME_REENGAGEMENT_NOTIFICATION_3_FEATURE = "IPH_ChromeReengagementNotification3";
 }

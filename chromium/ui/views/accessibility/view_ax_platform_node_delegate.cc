@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/containers/adapters.h"
 #include "base/lazy_instance.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "ui/accessibility/ax_action_data.h"
@@ -121,9 +122,6 @@ struct ViewAXPlatformNodeDelegate::ChildWidgetsResult {
   bool is_tab_modal_showing;
 };
 
-// static
-int ViewAXPlatformNodeDelegate::menu_depth_ = 0;
-
 ViewAXPlatformNodeDelegate::ViewAXPlatformNodeDelegate(View* view)
     : ViewAccessibility(view) {
   ax_platform_node_ = ui::AXPlatformNode::Create(this);
@@ -139,13 +137,28 @@ ViewAXPlatformNodeDelegate::ViewAXPlatformNodeDelegate(View* view)
 
 ViewAXPlatformNodeDelegate::~ViewAXPlatformNodeDelegate() {
   if (ui::AXPlatformNode::GetPopupFocusOverride() == GetNativeObject())
-    ui::AXPlatformNode::SetPopupFocusOverride(nullptr);
+    EndPopupFocusOverride();
   ax_platform_node_->Destroy();
 }
 
 gfx::NativeViewAccessible ViewAXPlatformNodeDelegate::GetNativeObject() const {
   DCHECK(ax_platform_node_);
   return ax_platform_node_->GetNativeViewAccessible();
+}
+
+void ViewAXPlatformNodeDelegate::SetPopupFocusOverride() {
+  ui::AXPlatformNode::SetPopupFocusOverride(GetNativeObject());
+}
+
+void ViewAXPlatformNodeDelegate::EndPopupFocusOverride() {
+  ui::AXPlatformNode::SetPopupFocusOverride(nullptr);
+}
+
+bool ViewAXPlatformNodeDelegate::IsFocusedForTesting() {
+  if (ui::AXPlatformNode::GetPopupFocusOverride())
+    return ui::AXPlatformNode::GetPopupFocusOverride() == GetNativeObject();
+
+  return ViewAccessibility::IsFocusedForTesting();
 }
 
 void ViewAXPlatformNodeDelegate::NotifyAccessibilityEvent(
@@ -160,16 +173,21 @@ void ViewAXPlatformNodeDelegate::NotifyAccessibilityEvent(
 
   // Some events have special handling.
   switch (event_type) {
-    case ax::mojom::Event::kMenuStart:
-      OnMenuStart();
+    case ax::mojom::Event::kFocusAfterMenuClose: {
+      DCHECK(!ui::AXPlatformNode::GetPopupFocusOverride())
+          << "Must call ViewAccessibility::EndPopupFocusOverride() as menu "
+             "closes.";
       break;
-    case ax::mojom::Event::kMenuEnd:
-      OnMenuEnd();
-      break;
-    case ax::mojom::Event::kSelection: {
-      ax::mojom::Role role = GetData().role;
-      if (menu_depth_ && (ui::IsMenuItem(role) || ui::IsListItem(role)))
-        OnMenuItemActive();
+    }
+    case ax::mojom::Event::kFocus: {
+      if (ui::AXPlatformNode::GetPopupFocusOverride()) {
+        DCHECK_EQ(ui::AXPlatformNode::GetPopupFocusOverride(),
+                  GetNativeObject())
+            << "If the popup focus override is on, then the kFocus event must "
+               "match it. Most likely the popup has closed, but did not call "
+               "ViewAccessibility::EndPopupFocusOverride(), and focus has "
+               "now moved on.";
+      }
       break;
     }
     case ax::mojom::Event::kFocusContext: {
@@ -200,27 +218,6 @@ void ViewAXPlatformNodeDelegate::AnnounceText(const base::string16& text) {
   ax_platform_node_->AnnounceText(text);
 }
 #endif
-
-void ViewAXPlatformNodeDelegate::OnMenuItemActive() {
-  // When a native menu is shown and has an item selected, treat it and the
-  // currently selected item as focused, even though the actual focus is in the
-  // browser's currently focused textfield.
-  ui::AXPlatformNode::SetPopupFocusOverride(
-      ax_platform_node_->GetNativeViewAccessible());
-}
-
-void ViewAXPlatformNodeDelegate::OnMenuStart() {
-  ++menu_depth_;
-}
-
-void ViewAXPlatformNodeDelegate::OnMenuEnd() {
-  // When a native menu is hidden, restore accessibility focus to the current
-  // focus in the document.
-  if (menu_depth_ >= 1)
-    --menu_depth_;
-  if (menu_depth_ == 0)
-    ui::AXPlatformNode::SetPopupFocusOverride(nullptr);
-}
 
 void ViewAXPlatformNodeDelegate::FireFocusAfterMenuClose() {
   ui::AXPlatformNodeBase* focused_node =
@@ -276,7 +273,7 @@ const ui::AXNodeData& ViewAXPlatformNodeDelegate::GetData() const {
 }
 
 int ViewAXPlatformNodeDelegate::GetChildCount() const {
-  if (IsLeaf())
+  if (ViewAccessibility::IsLeaf())
     return 0;
 
   if (!virtual_children().empty()) {
@@ -371,6 +368,15 @@ gfx::NativeViewAccessible ViewAXPlatformNodeDelegate::GetParent() {
   return nullptr;
 }
 
+bool ViewAXPlatformNodeDelegate::IsChildOfLeaf() const {
+  // Needed to prevent endless loops, see: http://crbug.com/1100047
+  return false;
+}
+
+bool ViewAXPlatformNodeDelegate::IsLeaf() const {
+  return ViewAccessibility::IsLeaf() || AXPlatformNodeDelegateBase::IsLeaf();
+}
+
 gfx::Rect ViewAXPlatformNodeDelegate::GetBoundsRect(
     const ui::AXCoordinateSystem coordinate_system,
     const ui::AXClippingBehavior clipping_behavior,
@@ -419,12 +425,32 @@ gfx::NativeViewAccessible ViewAXPlatformNodeDelegate::HitTestSync(
   if (!view()->HitTestPoint(point))
     return nullptr;
 
+  // Check if the point is within any of the virtual children of this view.
+  // AXVirtualView's HitTestSync is a recursive function that will return the
+  // deepest child, since it does not support relative bounds.
+  if (!virtual_children().empty()) {
+    // Search the greater indices first, since they're on top in the z-order.
+    for (const std::unique_ptr<AXVirtualView>& child :
+         base::Reversed(virtual_children())) {
+      gfx::NativeViewAccessible result =
+          child->HitTestSync(screen_physical_pixel_x, screen_physical_pixel_y);
+      if (result)
+        return result;
+    }
+    // If it's not inside any of our virtual children, it's inside this view.
+    return GetNativeObject();
+  }
+
   // Check if the point is within any of the immediate children of this
   // view. We don't have to search further because AXPlatformNode will
   // do a recursive hit test if we return anything other than |this| or NULL.
   View* v = view();
   const auto is_point_in_child = [point, v](View* child) {
     if (!child->GetVisible())
+      return false;
+    ui::AXNodeData child_data;
+    child->GetViewAccessibility().GetAccessibleNodeData(&child_data);
+    if (child_data.HasState(ax::mojom::State::kInvisible))
       return false;
     gfx::Point point_in_child_coords = point;
     v->ConvertPointToTarget(v, child, &point_in_child_coords);

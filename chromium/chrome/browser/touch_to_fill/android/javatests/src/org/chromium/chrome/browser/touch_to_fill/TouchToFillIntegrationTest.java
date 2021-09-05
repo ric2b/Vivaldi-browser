@@ -4,9 +4,9 @@
 
 package org.chromium.chrome.browser.touch_to_fill;
 
-import static android.support.test.espresso.assertion.ViewAssertions.matches;
-import static android.support.test.espresso.matcher.ViewMatchers.isDisplayed;
-import static android.support.test.espresso.matcher.ViewMatchers.withText;
+import static androidx.test.espresso.assertion.ViewAssertions.matches;
+import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
+import static androidx.test.espresso.matcher.ViewMatchers.withText;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
@@ -17,13 +17,13 @@ import static org.chromium.content_public.browser.test.util.CriteriaHelper.pollU
 import static org.chromium.content_public.browser.test.util.TestThreadUtils.runOnUiThreadBlocking;
 
 import android.annotation.SuppressLint;
-import android.support.test.espresso.Espresso;
-import android.support.test.filters.MediumTest;
 import android.view.View;
 import android.widget.TextView;
 
 import androidx.annotation.Nullable;
 import androidx.recyclerview.widget.RecyclerView;
+import androidx.test.espresso.Espresso;
+import androidx.test.filters.MediumTest;
 
 import org.junit.Before;
 import org.junit.Rule;
@@ -34,15 +34,14 @@ import org.mockito.MockitoAnnotations;
 
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.base.test.util.ScalableTimeout;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.touch_to_fill.data.Credential;
-import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetController;
-import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetController.SheetState;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetContent;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.SheetState;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TouchCommon;
 
@@ -54,7 +53,6 @@ import java.util.Collections;
  * end up rendering a View.
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
-@RetryOnFailure
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class TouchToFillIntegrationTest {
     private static final String EXAMPLE_URL = "https://www.example.xyz";

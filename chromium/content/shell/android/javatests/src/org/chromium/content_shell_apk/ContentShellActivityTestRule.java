@@ -13,7 +13,7 @@ import android.os.Build;
 import android.os.PowerManager;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.rule.ActivityTestRule;
-import android.view.ViewGroup;
+import android.view.View;
 
 import org.hamcrest.Matchers;
 import org.junit.Assert;
@@ -219,7 +219,7 @@ public class ContentShellActivityTestRule extends ActivityTestRule<ContentShellA
     /**
      * Returns the current container view or null if there is no WebContents.
      */
-    public ViewGroup getContainerView() {
+    public View getContainerView() {
         final WebContents webContents = getWebContents();
         try {
             return TestThreadUtils.runOnUiThreadBlocking(() -> {
@@ -246,9 +246,9 @@ public class ContentShellActivityTestRule extends ActivityTestRule<ContentShellA
         // Wait for the Content Shell to be initialized.
         CriteriaHelper.pollUiThread(() -> {
             Shell shell = getActivity().getActiveShell();
-            Assert.assertNotNull("Shell is null.", shell);
-            Assert.assertFalse("Shell is still loading.", shell.isLoading());
-            Assert.assertThat("Shell's URL is empty or null.",
+            Criteria.checkThat("Shell is null.", shell, Matchers.notNullValue());
+            Criteria.checkThat("Shell is still loading.", shell.isLoading(), Matchers.is(false));
+            Criteria.checkThat("Shell's URL is empty or null.",
                     shell.getWebContents().getLastCommittedUrl(),
                     Matchers.not(Matchers.isEmptyOrNullString()));
         }, WAIT_FOR_ACTIVE_SHELL_LOADING_TIMEOUT, CriteriaHelper.DEFAULT_POLLING_INTERVAL);
@@ -317,13 +317,9 @@ public class ContentShellActivityTestRule extends ActivityTestRule<ContentShellA
      */
     public void assertWaitForPageScaleFactorMatch(float expectedScale) {
         final RenderCoordinatesImpl coord = getRenderCoordinates();
-        CriteriaHelper.pollInstrumentationThread(
-                Criteria.equals(expectedScale, new Callable<Float>() {
-                    @Override
-                    public Float call() {
-                        return coord.getPageScaleFactor();
-                    }
-                }));
+        CriteriaHelper.pollInstrumentationThread(() -> {
+            Criteria.checkThat(coord.getPageScaleFactor(), Matchers.is(expectedScale));
+        });
     }
 
     /**

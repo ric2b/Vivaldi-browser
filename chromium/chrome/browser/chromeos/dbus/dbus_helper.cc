@@ -12,13 +12,16 @@
 #include "chromeos/constants/chromeos_paths.h"
 #include "chromeos/cryptohome/system_salt_getter.h"
 #include "chromeos/dbus/arc_camera_client.h"
+#include "chromeos/dbus/attestation/attestation_client.h"
 #include "chromeos/dbus/audio/cras_audio_client.h"
 #include "chromeos/dbus/authpolicy/authpolicy_client.h"
 #include "chromeos/dbus/biod/biod_client.h"
+#include "chromeos/dbus/cdm_factory_daemon/cdm_factory_daemon_client.h"
 #include "chromeos/dbus/cros_healthd/cros_healthd_client.h"
 #include "chromeos/dbus/cups_proxy/cups_proxy_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/dlcservice/dlcservice_client.h"
+#include "chromeos/dbus/hermes/hermes_clients.h"
 #include "chromeos/dbus/initialize_dbus_client.h"
 #include "chromeos/dbus/ip_peripheral/ip_peripheral_service_client.h"
 #include "chromeos/dbus/kerberos/kerberos_client.h"
@@ -61,13 +64,16 @@ void InitializeDBus() {
   // NOTE: base::Feature is not initialized yet, so any non MultiProcessMash
   // dbus client initialization for Ash should be done in Shell::Init.
   InitializeDBusClient<ArcCameraClient>(bus);
+  InitializeDBusClient<AttestationClient>(bus);
   InitializeDBusClient<AuthPolicyClient>(bus);
   InitializeDBusClient<BiodClient>(bus);  // For device::Fingerprint.
+  InitializeDBusClient<CdmFactoryDaemonClient>(bus);
   InitializeDBusClient<CrasAudioClient>(bus);
   InitializeDBusClient<CrosHealthdClient>(bus);
   InitializeDBusClient<CryptohomeClient>(bus);
   InitializeDBusClient<CupsProxyClient>(bus);
   InitializeDBusClient<DlcserviceClient>(bus);
+  hermes_clients::Initialize(bus);
   InitializeDBusClient<IpPeripheralServiceClient>(bus);
   InitializeDBusClient<KerberosClient>(bus);
   InitializeDBusClient<MachineLearningClient>(bus);
@@ -109,13 +115,16 @@ void ShutdownDBus() {
   MachineLearningClient::Shutdown();
   KerberosClient::Shutdown();
   IpPeripheralServiceClient::Shutdown();
+  hermes_clients::Shutdown();
   DlcserviceClient::Shutdown();
   CupsProxyClient::Shutdown();
   CryptohomeClient::Shutdown();
   CrosHealthdClient::Shutdown();
   CrasAudioClient::Shutdown();
+  CdmFactoryDaemonClient::Shutdown();
   BiodClient::Shutdown();
   AuthPolicyClient::Shutdown();
+  AttestationClient::Shutdown();
   ArcCameraClient::Shutdown();
 
   DBusThreadManager::Shutdown();

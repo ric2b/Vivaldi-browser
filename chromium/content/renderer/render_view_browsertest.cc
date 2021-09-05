@@ -18,7 +18,6 @@
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/post_task.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -43,6 +42,7 @@
 #include "content/public/common/use_zoom_for_dsf_policy.h"
 #include "content/public/renderer/content_renderer_client.h"
 #include "content/public/test/browser_test_utils.h"
+#include "content/public/test/fake_render_widget_host.h"
 #include "content/public/test/frame_load_waiter.h"
 #include "content/public/test/local_frame_host_interceptor.h"
 #include "content/public/test/render_view_test.h"
@@ -63,6 +63,7 @@
 #include "content/test/mock_keyboard.h"
 #include "content/test/test_render_frame.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/mojom/base/text_direction.mojom-blink.h"
 #include "net/base/net_errors.h"
 #include "net/cert/cert_status_flags.h"
 #include "net/dns/public/resolve_error_info.h"
@@ -99,6 +100,7 @@
 #include "third_party/blink/public/web/web_view.h"
 #include "third_party/blink/public/web/web_window_features.h"
 #include "ui/accessibility/ax_mode.h"
+#include "ui/base/ime/mojom/text_input_state.mojom.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/event.h"
 #include "ui/events/keycodes/dom/dom_code.h"
@@ -130,6 +132,10 @@
 
 #if defined(USE_OZONE)
 #include "ui/events/keycodes/keyboard_code_conversion.h"
+#endif
+
+#if defined(USE_X11) && defined(USE_OZONE)
+#include "ui/base/ui_base_features.h"
 #endif
 
 using base::TimeDelta;
@@ -256,12 +262,27 @@ class RenderViewImplTest : public RenderViewTest {
     return static_cast<TestRenderFrame*>(view()->GetMainRenderFrame());
   }
 
+  blink::mojom::FrameWidgetInputHandler* GetFrameWidgetInputHandler() {
+    return render_widget_host_->GetFrameWidgetInputHandler();
+  }
+
+  blink::mojom::WidgetInputHandler* GetWidgetInputHandler() {
+    return render_widget_host_->GetWidgetInputHandler();
+  }
+
   RenderAccessibilityManager* GetRenderAccessibilityManager() {
     return frame()->GetRenderAccessibilityManager();
   }
 
   ui::AXMode GetAccessibilityMode() {
     return GetRenderAccessibilityManager()->GetAccessibilityMode();
+  }
+
+  const std::vector<gfx::Rect>& LastCompositionBounds() {
+    render_widget_host_->GetWidgetInputHandler()->RequestCompositionUpdates(
+        true, false);
+    base::RunLoop().RunUntilIdle();
+    return render_widget_host_->LastCompositionBounds();
   }
 
   void ReceiveDisableDeviceEmulation(RenderViewImpl* view) {
@@ -278,12 +299,6 @@ class RenderViewImplTest : public RenderViewTest {
     RenderWidget* widget =
         view->GetMainRenderFrame()->GetLocalRootRenderWidget();
     widget->OnEnableDeviceEmulation(params);
-  }
-
-  void ReceiveSetTextDirection(RenderWidget* widget,
-                               base::i18n::TextDirection direction) {
-    // Emulates receiving an IPC message.
-    widget->OnSetTextDirection(direction);
   }
 
   void GoToOffsetWithParams(int offset,
@@ -317,6 +332,80 @@ class RenderViewImplTest : public RenderViewTest {
     return param;
   }
 
+#if defined(USE_X11)
+  int SendKeyEventX11(MockKeyboard::Layout layout,
+                      int key_code,
+                      MockKeyboard::Modifiers modifiers,
+                      base::string16* output) {
+    // We ignore |layout|, which means we are only testing the layout of the
+    // current locale. TODO(mazda): fix this to respect |layout|.
+    CHECK(output);
+    const int flags = ConvertMockKeyboardModifier(modifiers);
+
+    ui::ScopedXI2Event xevent;
+    xevent.InitKeyEvent(ui::ET_KEY_PRESSED,
+                        static_cast<ui::KeyboardCode>(key_code), flags);
+    auto event1 = ui::BuildKeyEventFromXEvent(*xevent);
+    NativeWebKeyboardEvent keydown_event(*event1);
+    SendNativeKeyEvent(keydown_event);
+
+    // X11 doesn't actually have native character events, but give the test
+    // what it wants.
+    xevent.InitKeyEvent(ui::ET_KEY_PRESSED,
+                        static_cast<ui::KeyboardCode>(key_code), flags);
+    auto event2 = ui::BuildKeyEventFromXEvent(*xevent);
+    event2->set_character(
+        DomCodeToUsLayoutCharacter(event2->code(), event2->flags()));
+    ui::KeyEventTestApi test_event2(event2.get());
+    test_event2.set_is_char(true);
+    NativeWebKeyboardEvent char_event(*event2);
+    SendNativeKeyEvent(char_event);
+
+    xevent.InitKeyEvent(ui::ET_KEY_RELEASED,
+                        static_cast<ui::KeyboardCode>(key_code), flags);
+    auto event3 = ui::BuildKeyEventFromXEvent(*xevent);
+    NativeWebKeyboardEvent keyup_event(*event3);
+    SendNativeKeyEvent(keyup_event);
+
+    base::char16 c = DomCodeToUsLayoutCharacter(
+        UsLayoutKeyboardCodeToDomCode(static_cast<ui::KeyboardCode>(key_code)),
+        flags);
+    output->assign(1, static_cast<base::char16>(c));
+    return 1;
+  }
+#endif
+
+#if defined(USE_OZONE)
+  int SendKeyEventOzone(MockKeyboard::Layout layout,
+                        int key_code,
+                        MockKeyboard::Modifiers modifiers,
+                        base::string16* output) {
+    int flags = ConvertMockKeyboardModifier(modifiers);
+
+    ui::KeyEvent keydown_event(ui::ET_KEY_PRESSED,
+                               static_cast<ui::KeyboardCode>(key_code), flags);
+    NativeWebKeyboardEvent keydown_web_event(keydown_event);
+    SendNativeKeyEvent(keydown_web_event);
+
+    ui::KeyEvent char_event(keydown_event.GetCharacter(),
+                            static_cast<ui::KeyboardCode>(key_code),
+                            ui::DomCode::NONE, flags);
+    NativeWebKeyboardEvent char_web_event(char_event);
+    SendNativeKeyEvent(char_web_event);
+
+    ui::KeyEvent keyup_event(ui::ET_KEY_RELEASED,
+                             static_cast<ui::KeyboardCode>(key_code), flags);
+    NativeWebKeyboardEvent keyup_web_event(keyup_event);
+    SendNativeKeyEvent(keyup_web_event);
+
+    base::char16 c = DomCodeToUsLayoutCharacter(
+        UsLayoutKeyboardCodeToDomCode(static_cast<ui::KeyboardCode>(key_code)),
+        flags);
+    output->assign(1, static_cast<base::char16>(c));
+    return 1;
+  }
+#endif
+
   // Sends IPC messages that emulates a key-press event.
   int SendKeyEvent(MockKeyboard::Layout layout,
                    int key_code,
@@ -330,8 +419,8 @@ class RenderViewImplTest : public RenderViewTest {
     // object.
     CHECK(mock_keyboard_.get());
     CHECK(output);
-    int length = mock_keyboard_->GetCharacters(layout, key_code, modifiers,
-                                               output);
+    int length =
+        mock_keyboard_->GetCharacters(layout, key_code, modifiers, output);
     if (length != 1)
       return -1;
 
@@ -341,87 +430,30 @@ class RenderViewImplTest : public RenderViewTest {
     // WM_KEYDOWN, WM_CHAR, and WM_KEYUP.
     // WM_KEYDOWN and WM_KEYUP sends virtual-key codes. On the other hand,
     // WM_CHAR sends a composed Unicode character.
-    MSG msg1 = { NULL, WM_KEYDOWN, key_code, 0 };
+    MSG msg1 = {NULL, WM_KEYDOWN, key_code, 0};
     ui::KeyEvent evt1(msg1);
     NativeWebKeyboardEvent keydown_event(evt1);
     SendNativeKeyEvent(keydown_event);
 
-    MSG msg2 = { NULL, WM_CHAR, (*output)[0], 0 };
+    MSG msg2 = {NULL, WM_CHAR, (*output)[0], 0};
     ui::KeyEvent evt2(msg2);
     NativeWebKeyboardEvent char_event(evt2);
     SendNativeKeyEvent(char_event);
 
-    MSG msg3 = { NULL, WM_KEYUP, key_code, 0 };
+    MSG msg3 = {NULL, WM_KEYUP, key_code, 0};
     ui::KeyEvent evt3(msg3);
     NativeWebKeyboardEvent keyup_event(evt3);
     SendNativeKeyEvent(keyup_event);
 
     return length;
-#elif defined(USE_AURA) && defined(USE_X11)
-    // We ignore |layout|, which means we are only testing the layout of the
-    // current locale. TODO(mazda): fix this to respect |layout|.
-    CHECK(output);
-    const int flags = ConvertMockKeyboardModifier(modifiers);
-
-    ui::ScopedXI2Event xevent;
-    xevent.InitKeyEvent(ui::ET_KEY_PRESSED,
-                        static_cast<ui::KeyboardCode>(key_code),
-                        flags);
-    auto event1 = ui::BuildKeyEventFromXEvent(*xevent);
-    NativeWebKeyboardEvent keydown_event(*event1);
-    SendNativeKeyEvent(keydown_event);
-
-    // X11 doesn't actually have native character events, but give the test
-    // what it wants.
-    xevent.InitKeyEvent(ui::ET_KEY_PRESSED,
-                        static_cast<ui::KeyboardCode>(key_code),
-                        flags);
-    auto event2 = ui::BuildKeyEventFromXEvent(*xevent);
-    event2->set_character(
-        DomCodeToUsLayoutCharacter(event2->code(), event2->flags()));
-    ui::KeyEventTestApi test_event2(event2.get());
-    test_event2.set_is_char(true);
-    NativeWebKeyboardEvent char_event(*event2);
-    SendNativeKeyEvent(char_event);
-
-    xevent.InitKeyEvent(ui::ET_KEY_RELEASED,
-                        static_cast<ui::KeyboardCode>(key_code),
-                        flags);
-    auto event3 = ui::BuildKeyEventFromXEvent(*xevent);
-    NativeWebKeyboardEvent keyup_event(*event3);
-    SendNativeKeyEvent(keyup_event);
-
-    base::char16 c = DomCodeToUsLayoutCharacter(
-        UsLayoutKeyboardCodeToDomCode(static_cast<ui::KeyboardCode>(key_code)),
-        flags);
-    output->assign(1, static_cast<base::char16>(c));
-    return 1;
+#elif defined(USE_X11)
+#if defined(USE_OZONE)
+    if (features::IsUsingOzonePlatform())
+      return SendKeyEventOzone(layout, key_code, modifiers, output);
+#endif
+    return SendKeyEventX11(layout, key_code, modifiers, output);
 #elif defined(USE_OZONE)
-    const int flags = ConvertMockKeyboardModifier(modifiers);
-
-    ui::KeyEvent keydown_event(ui::ET_KEY_PRESSED,
-                               static_cast<ui::KeyboardCode>(key_code),
-                               flags);
-    NativeWebKeyboardEvent keydown_web_event(keydown_event);
-    SendNativeKeyEvent(keydown_web_event);
-
-    ui::KeyEvent char_event(keydown_event.GetCharacter(),
-                            static_cast<ui::KeyboardCode>(key_code),
-                            ui::DomCode::NONE, flags);
-    NativeWebKeyboardEvent char_web_event(char_event);
-    SendNativeKeyEvent(char_web_event);
-
-    ui::KeyEvent keyup_event(ui::ET_KEY_RELEASED,
-                             static_cast<ui::KeyboardCode>(key_code),
-                             flags);
-    NativeWebKeyboardEvent keyup_web_event(keyup_event);
-    SendNativeKeyEvent(keyup_web_event);
-
-    base::char16 c = DomCodeToUsLayoutCharacter(
-        UsLayoutKeyboardCodeToDomCode(static_cast<ui::KeyboardCode>(key_code)),
-        flags);
-    output->assign(1, static_cast<base::char16>(c));
-    return 1;
+    return SendKeyEventOzone(layout, key_code, modifiers, output);
 #else
     NOTIMPLEMENTED();
     return L'\0';
@@ -624,9 +656,7 @@ TEST_F(RenderViewImplTest, OnNavStateChanged) {
   LoadHTML("<input type=\"text\" id=\"elt_text\"></input>");
 
   // We should NOT have gotten a form state change notification yet.
-  EXPECT_FALSE(render_thread_->sink().GetFirstMessageMatching(
-      FrameHostMsg_UpdateState::ID));
-  render_thread_->sink().ClearMessages();
+  EXPECT_FALSE(frame()->IsPageStateUpdated());
 
   // Change the value of the input. We should have gotten an update state
   // notification. We need to spin the message loop to catch this update.
@@ -634,8 +664,8 @@ TEST_F(RenderViewImplTest, OnNavStateChanged) {
       "document.getElementById('elt_text').value = 'foo';");
   base::RunLoop().RunUntilIdle();
 
-  EXPECT_TRUE(render_thread_->sink().GetUniqueMessageMatching(
-      FrameHostMsg_UpdateState::ID));
+  // Check the page state is updated after the value of the input is changed.
+  EXPECT_TRUE(frame()->IsPageStateUpdated());
 }
 
 class RenderViewImplEmulatingPopupTest : public RenderViewImplTest {
@@ -941,8 +971,7 @@ TEST_F(RenderViewImplTest, BeginNavigation) {
       blink::kWebNavigationPolicyCurrentTab;
   render_thread_->sink().ClearMessages();
   frame()->BeginNavigation(std::move(form_navigation_info));
-  EXPECT_TRUE(render_thread_->sink().GetUniqueMessageMatching(
-      FrameHostMsg_OpenURL::ID));
+  EXPECT_TRUE(frame()->IsURLOpened());
 
   // Popup links to WebUI URLs.
   blink::WebURLRequest popup_request(GetWebUIURL("foo"));
@@ -962,8 +991,7 @@ TEST_F(RenderViewImplTest, BeginNavigation) {
       blink::kWebNavigationPolicyNewForegroundTab;
   render_thread_->sink().ClearMessages();
   frame()->BeginNavigation(std::move(popup_navigation_info));
-  EXPECT_TRUE(render_thread_->sink().GetUniqueMessageMatching(
-      FrameHostMsg_OpenURL::ID));
+  EXPECT_TRUE(frame()->IsURLOpened());
 }
 
 TEST_F(RenderViewImplTest, BeginNavigationHandlesAllTopLevel) {
@@ -992,8 +1020,7 @@ TEST_F(RenderViewImplTest, BeginNavigationHandlesAllTopLevel) {
 
     render_thread_->sink().ClearMessages();
     frame()->BeginNavigation(std::move(navigation_info));
-    EXPECT_TRUE(render_thread_->sink().GetUniqueMessageMatching(
-        FrameHostMsg_OpenURL::ID));
+    EXPECT_TRUE(frame()->IsURLOpened());
   }
 }
 
@@ -1020,8 +1047,7 @@ TEST_F(RenderViewImplTest, BeginNavigationForWebUI) {
 
   render_thread_->sink().ClearMessages();
   frame()->BeginNavigation(std::move(navigation_info));
-  EXPECT_TRUE(render_thread_->sink().GetUniqueMessageMatching(
-      FrameHostMsg_OpenURL::ID));
+  EXPECT_TRUE(frame()->IsURLOpened());
 
   // Navigations to WebUI URLs.
   auto webui_navigation_info = std::make_unique<blink::WebNavigationInfo>();
@@ -1040,8 +1066,7 @@ TEST_F(RenderViewImplTest, BeginNavigationForWebUI) {
       blink::kWebNavigationPolicyCurrentTab;
   render_thread_->sink().ClearMessages();
   frame()->BeginNavigation(std::move(webui_navigation_info));
-  EXPECT_TRUE(render_thread_->sink().GetUniqueMessageMatching(
-      FrameHostMsg_OpenURL::ID));
+  EXPECT_TRUE(frame()->IsURLOpened());
 
   // Form posts to data URLs.
   auto data_navigation_info = std::make_unique<blink::WebNavigationInfo>();
@@ -1067,8 +1092,7 @@ TEST_F(RenderViewImplTest, BeginNavigationForWebUI) {
       blink::kWebNavigationPolicyCurrentTab;
   render_thread_->sink().ClearMessages();
   frame()->BeginNavigation(std::move(data_navigation_info));
-  EXPECT_TRUE(render_thread_->sink().GetUniqueMessageMatching(
-      FrameHostMsg_OpenURL::ID));
+  EXPECT_TRUE(frame()->IsURLOpened());
 
   // A popup that creates a view first and then navigates to a
   // normal HTTP URL.
@@ -1094,8 +1118,7 @@ TEST_F(RenderViewImplTest, BeginNavigationForWebUI) {
   render_thread_->sink().ClearMessages();
   static_cast<RenderFrameImpl*>(new_view->GetMainRenderFrame())
       ->BeginNavigation(std::move(popup_navigation_info));
-  EXPECT_TRUE(render_thread_->sink().GetUniqueMessageMatching(
-      FrameHostMsg_OpenURL::ID));
+  EXPECT_TRUE(frame()->IsURLOpened());
 }
 
 // This test verifies that when device emulation is enabled, RenderFrameProxy
@@ -1248,7 +1271,7 @@ TEST_F(RenderViewImplEnableZoomForDSFTest,
   RenderFrameImpl::CreateFrame(
       routing_id, std::move(stub_interface_provider),
       std::move(stub_browser_interface_broker), kProxyRoutingId,
-      MSG_ROUTING_NONE, MSG_ROUTING_NONE, MSG_ROUTING_NONE,
+      base::UnguessableToken(), MSG_ROUTING_NONE, MSG_ROUTING_NONE,
       base::UnguessableToken::Create(), base::UnguessableToken::Create(),
       replication_state, compositor_deps_.get(), std::move(widget_params),
       blink::mojom::FrameOwnerProperties::New(),
@@ -1316,7 +1339,7 @@ TEST_F(RenderViewImplTest, DetachingProxyAlsoDestroysProvisionalFrame) {
   RenderFrameImpl::CreateFrame(
       routing_id, std::move(stub_interface_provider),
       std::move(stub_browser_interface_broker), kProxyRoutingId,
-      MSG_ROUTING_NONE, frame()->GetRoutingID(), MSG_ROUTING_NONE,
+      base::UnguessableToken(), frame()->GetRoutingID(), MSG_ROUTING_NONE,
       base::UnguessableToken::Create(), base::UnguessableToken::Create(),
       replication_state, nullptr,
       /*widget_params=*/nullptr, blink::mojom::FrameOwnerProperties::New(),
@@ -1360,9 +1383,43 @@ TEST_F(RenderViewImplEnableZoomForDSFTest,
   EXPECT_TRUE(view()->GetWebView()->MainFrame()->IsWebRemoteFrame());
 }
 
+class TextInputStateFakeRenderWidgetHost : public FakeRenderWidgetHost {
+ public:
+  void TextInputStateChanged(ui::mojom::TextInputStatePtr state) override {
+    updated_states_.push_back(std::move(state));
+  }
+
+  const std::vector<ui::mojom::TextInputStatePtr>& updated_states() {
+    return updated_states_;
+  }
+
+  void ClearState() { updated_states_.clear(); }
+
+ private:
+  std::vector<ui::mojom::TextInputStatePtr> updated_states_;
+};
+
+class RenderViewImplTextInputStateChanged : public RenderViewImplTest {
+ public:
+  std::unique_ptr<FakeRenderWidgetHost> CreateRenderWidgetHost() override {
+    return std::make_unique<TextInputStateFakeRenderWidgetHost>();
+  }
+
+  const std::vector<ui::mojom::TextInputStatePtr>& updated_states() {
+    return static_cast<TextInputStateFakeRenderWidgetHost*>(
+               render_widget_host_.get())
+        ->updated_states();
+  }
+
+  void ClearState() {
+    static_cast<TextInputStateFakeRenderWidgetHost*>(render_widget_host_.get())
+        ->ClearState();
+  }
+};
+
 // Test that our IME backend sends a notification message when the input focus
 // changes.
-TEST_F(RenderViewImplTest, OnImeTypeChanged) {
+TEST_F(RenderViewImplTextInputStateChanged, OnImeTypeChanged) {
   // Load an HTML page consisting of two input fields.
   LoadHTML(
       "<html>"
@@ -1382,7 +1439,6 @@ TEST_F(RenderViewImplTest, OnImeTypeChanged) {
       "<input id=\"test11\" type=\"text\" inputmode=\"unknown\"></input>"
       "</body>"
       "</html>");
-  render_thread_->sink().ClearMessages();
 
   struct InputModeTestCase {
     const char* input_id;
@@ -1407,21 +1463,16 @@ TEST_F(RenderViewImplTest, OnImeTypeChanged) {
     // activate IMEs.
     ExecuteJavaScriptForTests("document.getElementById('test1').focus();");
     base::RunLoop().RunUntilIdle();
-    render_thread_->sink().ClearMessages();
+    ClearState();
 
     // Update the IME status and verify if our IME backend sends an IPC message
     // to activate IMEs.
     main_widget()->UpdateTextInputState();
-    const IPC::Message* msg = render_thread_->sink().GetMessageAt(0);
-    EXPECT_TRUE(msg != nullptr);
-    EXPECT_EQ(static_cast<uint32_t>(WidgetHostMsg_TextInputStateChanged::ID),
-              msg->type());
-    WidgetHostMsg_TextInputStateChanged::Param params;
-    WidgetHostMsg_TextInputStateChanged::Read(msg, &params);
-    TextInputState p = std::get<0>(params);
-    ui::TextInputType type = p.type;
-    ui::TextInputMode input_mode = p.mode;
-    bool can_compose_inline = p.can_compose_inline;
+    base::RunLoop().RunUntilIdle();
+    EXPECT_EQ(1u, updated_states().size());
+    ui::TextInputType type = updated_states()[0]->type;
+    ui::TextInputMode input_mode = updated_states()[0]->mode;
+    bool can_compose_inline = updated_states()[0]->can_compose_inline;
     EXPECT_EQ(ui::TEXT_INPUT_TYPE_TEXT, type);
     EXPECT_EQ(true, can_compose_inline);
 
@@ -1429,19 +1480,15 @@ TEST_F(RenderViewImplTest, OnImeTypeChanged) {
     // de-activate IMEs.
     ExecuteJavaScriptForTests("document.getElementById('test2').focus();");
     base::RunLoop().RunUntilIdle();
-    render_thread_->sink().ClearMessages();
+    ClearState();
 
     // Update the IME status and verify if our IME backend sends an IPC message
     // to de-activate IMEs.
     main_widget()->UpdateTextInputState();
-    msg = render_thread_->sink().GetMessageAt(0);
-    EXPECT_TRUE(msg != nullptr);
-    EXPECT_EQ(static_cast<uint32_t>(WidgetHostMsg_TextInputStateChanged::ID),
-              msg->type());
-    WidgetHostMsg_TextInputStateChanged::Read(msg, &params);
-    p = std::get<0>(params);
-    type = p.type;
-    input_mode = p.mode;
+    base::RunLoop().RunUntilIdle();
+    EXPECT_EQ(1u, updated_states().size());
+    type = updated_states()[0]->type;
+    input_mode = updated_states()[0]->mode;
     EXPECT_EQ(ui::TEXT_INPUT_TYPE_PASSWORD, type);
 
     for (size_t i = 0; i < base::size(kInputModeTestCases); i++) {
@@ -1454,26 +1501,22 @@ TEST_F(RenderViewImplTest, OnImeTypeChanged) {
       ExecuteJavaScriptAndReturnIntValue(base::ASCIIToUTF16(javascript),
                                          nullptr);
       base::RunLoop().RunUntilIdle();
-      render_thread_->sink().ClearMessages();
+      ClearState();
 
       // Update the IME status and verify if our IME backend sends an IPC
       // message to activate IMEs.
       main_widget()->UpdateTextInputState();
       base::RunLoop().RunUntilIdle();
-      const IPC::Message* msg = render_thread_->sink().GetMessageAt(0);
-      EXPECT_TRUE(msg != nullptr);
-      EXPECT_EQ(static_cast<uint32_t>(WidgetHostMsg_TextInputStateChanged::ID),
-                msg->type());
-      WidgetHostMsg_TextInputStateChanged::Read(msg, &params);
-      p = std::get<0>(params);
-      type = p.type;
-      input_mode = p.mode;
+      EXPECT_EQ(1u, updated_states().size());
+      type = updated_states()[0]->type;
+      input_mode = updated_states()[0]->mode;
       EXPECT_EQ(test_case->expected_mode, input_mode);
     }
   }
 }
 
-TEST_F(RenderViewImplTest, ShouldSuppressKeyboardIsPropagated) {
+TEST_F(RenderViewImplTextInputStateChanged,
+       ShouldSuppressKeyboardIsPropagated) {
   class TestAutofillClient : public blink::WebAutofillClient {
    public:
     TestAutofillClient() = default;
@@ -1508,25 +1551,27 @@ TEST_F(RenderViewImplTest, ShouldSuppressKeyboardIsPropagated) {
   // Focus the text field, trigger a state update and check that the right IPC
   // is sent.
   ExecuteJavaScriptForTests("document.getElementById('test').focus();");
-  base::RunLoop().RunUntilIdle();
   main_widget()->UpdateTextInputState();
-  auto params = ProcessAndReadIPC<WidgetHostMsg_TextInputStateChanged>();
-  EXPECT_FALSE(std::get<0>(params).always_hide_ime);
-  render_thread_->sink().ClearMessages();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(1u, updated_states().size());
+  EXPECT_FALSE(updated_states()[0]->always_hide_ime);
+  ClearState();
 
   // Tell the client to suppress the keyboard. Check whether always_hide_ime is
   // set correctly.
   client.SetShouldSuppressKeyboard(true);
   main_widget()->UpdateTextInputState();
-  params = ProcessAndReadIPC<WidgetHostMsg_TextInputStateChanged>();
-  EXPECT_TRUE(std::get<0>(params).always_hide_ime);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(1u, updated_states().size());
+  EXPECT_TRUE(updated_states()[0]->always_hide_ime);
 
   // Explicitly clean-up the autofill client, as otherwise a use-after-free
   // happens.
   GetMainFrame()->SetAutofillClient(nullptr);
 }
 
-TEST_F(RenderViewImplTest, EditContextGetLayoutBoundsAndInputPanelPolicy) {
+TEST_F(RenderViewImplTextInputStateChanged,
+       EditContextGetLayoutBoundsAndInputPanelPolicy) {
   // Load an HTML page.
   LoadHTML(
       "<html>"
@@ -1535,7 +1580,7 @@ TEST_F(RenderViewImplTest, EditContextGetLayoutBoundsAndInputPanelPolicy) {
       "<body>"
       "</body>"
       "</html>");
-  render_thread_->sink().ClearMessages();
+  ClearState();
   // Create an EditContext with control and selection bounds and set input
   // panel policy to auto.
   ExecuteJavaScriptForTests(
@@ -1547,30 +1592,32 @@ TEST_F(RenderViewImplTest, EditContextGetLayoutBoundsAndInputPanelPolicy) {
   // This RunLoop is waiting for EditContext to be created and layout bounds
   // to be updated in the EditContext.
   base::RunLoop run_loop;
-  base::PostTask(FROM_HERE, run_loop.QuitClosure());
+  base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
+                                                run_loop.QuitClosure());
   run_loop.Run();
 
   // Update the IME status and verify if our IME backend sends an IPC message
   // to notify layout bounds of the EditContext.
   main_widget()->UpdateTextInputState();
-  auto params = ProcessAndReadIPC<WidgetHostMsg_TextInputStateChanged>();
-  EXPECT_EQ(true, std::get<0>(params).show_ime_if_needed);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(1u, updated_states().size());
   blink::WebRect edit_context_control_bounds_expected(10, 20, 30, 40);
   blink::WebRect edit_context_selection_bounds_expected(10, 20, 1, 5);
   main_widget()->ConvertViewportToWindow(&edit_context_control_bounds_expected);
   main_widget()->ConvertViewportToWindow(
       &edit_context_selection_bounds_expected);
   blink::WebRect actual_active_element_control_bounds(
-      std::get<0>(params).edit_context_control_bounds.value());
+      updated_states()[0]->edit_context_control_bounds.value());
   blink::WebRect actual_active_element_selection_bounds(
-      std::get<0>(params).edit_context_selection_bounds.value());
+      updated_states()[0]->edit_context_selection_bounds.value());
   EXPECT_EQ(edit_context_control_bounds_expected,
             actual_active_element_control_bounds);
   EXPECT_EQ(edit_context_selection_bounds_expected,
             actual_active_element_selection_bounds);
 }
 
-TEST_F(RenderViewImplTest, EditContextGetLayoutBoundsWithFloatingValues) {
+TEST_F(RenderViewImplTextInputStateChanged,
+       EditContextGetLayoutBoundsWithFloatingValues) {
   // Load an HTML page.
   LoadHTML(
       "<html>"
@@ -1579,7 +1626,7 @@ TEST_F(RenderViewImplTest, EditContextGetLayoutBoundsWithFloatingValues) {
       "<body>"
       "</body>"
       "</html>");
-  render_thread_->sink().ClearMessages();
+  ClearState();
   // Create an EditContext with control and selection bounds and set input
   // panel policy to auto.
   ExecuteJavaScriptForTests(
@@ -1591,29 +1638,30 @@ TEST_F(RenderViewImplTest, EditContextGetLayoutBoundsWithFloatingValues) {
   // This RunLoop is waiting for EditContext to be created and layout bounds
   // to be updated in the EditContext.
   base::RunLoop run_loop;
-  base::PostTask(FROM_HERE, run_loop.QuitClosure());
+  base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
+                                                run_loop.QuitClosure());
   run_loop.Run();
   // Update the IME status and verify if our IME backend sends an IPC message
   // to notify layout bounds of the EditContext.
   main_widget()->UpdateTextInputState();
-  auto params = ProcessAndReadIPC<WidgetHostMsg_TextInputStateChanged>();
-  EXPECT_EQ(true, std::get<0>(params).show_ime_if_needed);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(1u, updated_states().size());
   blink::WebRect edit_context_control_bounds_expected(10, 20, 31, 41);
   blink::WebRect edit_context_selection_bounds_expected(10, 20, 1, 5);
   main_widget()->ConvertViewportToWindow(&edit_context_control_bounds_expected);
   main_widget()->ConvertViewportToWindow(
       &edit_context_selection_bounds_expected);
   blink::WebRect actual_active_element_control_bounds(
-      std::get<0>(params).edit_context_control_bounds.value());
+      updated_states()[0]->edit_context_control_bounds.value());
   blink::WebRect actual_active_element_selection_bounds(
-      std::get<0>(params).edit_context_selection_bounds.value());
+      updated_states()[0]->edit_context_selection_bounds.value());
   EXPECT_EQ(edit_context_control_bounds_expected,
             actual_active_element_control_bounds);
   EXPECT_EQ(edit_context_selection_bounds_expected,
             actual_active_element_selection_bounds);
 }
 
-TEST_F(RenderViewImplTest, ActiveElementGetLayoutBounds) {
+TEST_F(RenderViewImplTextInputStateChanged, ActiveElementGetLayoutBounds) {
   // Load an HTML page consisting of one input fields.
   LoadHTML(
       "<html>"
@@ -1623,18 +1671,20 @@ TEST_F(RenderViewImplTest, ActiveElementGetLayoutBounds) {
       "<input id=\"test\" type=\"text\"></input>"
       "</body>"
       "</html>");
-  render_thread_->sink().ClearMessages();
+  ClearState();
   // Create an EditContext with control and selection bounds and set input
   // panel policy to auto.
   ExecuteJavaScriptForTests("document.getElementById('test').focus();");
   // This RunLoop is waiting for focus to be processed for the active element.
   base::RunLoop run_loop;
-  base::PostTask(FROM_HERE, run_loop.QuitClosure());
+  base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
+                                                run_loop.QuitClosure());
   run_loop.Run();
   // Update the IME status and verify if our IME backend sends an IPC message
   // to notify layout bounds of the EditContext.
   main_widget()->UpdateTextInputState();
-  auto params = ProcessAndReadIPC<WidgetHostMsg_TextInputStateChanged>();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(1u, updated_states().size());
   blink::WebInputMethodController* controller =
       frame()->GetWebFrame()->GetInputMethodController();
   blink::WebRect expected_control_bounds;
@@ -1642,8 +1692,150 @@ TEST_F(RenderViewImplTest, ActiveElementGetLayoutBounds) {
   controller->GetLayoutBounds(&expected_control_bounds, &temp_selection_bounds);
   main_widget()->ConvertViewportToWindow(&expected_control_bounds);
   blink::WebRect actual_active_element_control_bounds(
-      std::get<0>(params).edit_context_control_bounds.value());
+      updated_states()[0]->edit_context_control_bounds.value());
   EXPECT_EQ(actual_active_element_control_bounds, expected_control_bounds);
+}
+
+TEST_F(RenderViewImplTextInputStateChanged, VirtualKeyboardPolicyAuto) {
+  // Load an HTML page consisting of one input field.
+  LoadHTML(
+      "<html>"
+      "<head>"
+      "</head>"
+      "<body>"
+      "<input id=\"test\" type=\"text\"></input>"
+      "</body>"
+      "</html>");
+  ClearState();
+  // Set focus on the editable element.
+  ExecuteJavaScriptForTests("document.getElementById('test').focus();");
+  // This RunLoop is waiting for focus to be processed for the active element.
+  base::RunLoop run_loop;
+  base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
+                                                run_loop.QuitClosure());
+  run_loop.Run();
+  // Update the text input state and verify the virtualkeyboardpolicy attribute
+  // value.
+  main_widget()->UpdateTextInputState();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(1u, updated_states().size());
+  EXPECT_EQ(updated_states()[0]->vk_policy,
+            ui::mojom::VirtualKeyboardPolicy::AUTO);
+}
+
+TEST_F(RenderViewImplTextInputStateChanged, VirtualKeyboardPolicyAutoToManual) {
+  // Load an HTML page consisting of one input field.
+  LoadHTML(
+      "<html>"
+      "<head>"
+      "</head>"
+      "<body>"
+      "<input id=\"test\" type=\"text\" "
+      "virtualkeyboardpolicy=\"manual\"></input>"
+      "</body>"
+      "</html>");
+  ClearState();
+  // Set focus on the editable element.
+  ExecuteJavaScriptForTests("document.getElementById('test').focus();");
+  // This RunLoop is waiting for focus to be processed for the active element.
+  base::RunLoop run_loop;
+  base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
+                                                run_loop.QuitClosure());
+  run_loop.Run();
+  // Update the IME status and verify if our IME backend sends an IPC message
+  // to notify virtualkeyboardpolicy change of the focused element.
+  main_widget()->UpdateTextInputState();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(1u, updated_states().size());
+  EXPECT_EQ(updated_states()[0]->vk_policy,
+            ui::mojom::VirtualKeyboardPolicy::MANUAL);
+  EXPECT_EQ(updated_states()[0]->last_vk_visibility_request,
+            ui::mojom::VirtualKeyboardVisibilityRequest::NONE);
+}
+
+TEST_F(RenderViewImplTextInputStateChanged,
+       VirtualKeyboardPolicyManualAndShowHideAPIsCalled) {
+  // Load an HTML page consisting of two input fields.
+  LoadHTML(
+      "<html>"
+      "<head>"
+      "</head>"
+      "<body>"
+      "<input id=\"test1\" type=\"text\" "
+      "virtualkeyboardpolicy=\"manual\"></input>"
+      "<input id=\"test2\" type=\"text\" "
+      "virtualkeyboardpolicy=\"manual\"></input>"
+      "</body>"
+      "</html>");
+  ExecuteJavaScriptForTests(
+      "document.getElementById('test2').focus(); "
+      "navigator.virtualKeyboard.show();");
+  // This RunLoop is waiting for focus to be processed for the active element.
+  base::RunLoop run_loop1;
+  base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
+                                                run_loop1.QuitClosure());
+  run_loop1.Run();
+  // Update the IME status and verify if our IME backend sends an IPC message
+  // to notify virtualkeyboardpolicy change of the focused element and the show
+  // API call.
+  main_widget()->UpdateTextInputState();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(1u, updated_states().size());
+  EXPECT_EQ(updated_states()[0]->vk_policy,
+            ui::mojom::VirtualKeyboardPolicy::MANUAL);
+  EXPECT_EQ(updated_states()[0]->last_vk_visibility_request,
+            ui::mojom::VirtualKeyboardVisibilityRequest::NONE);
+  ExecuteJavaScriptForTests(
+      "document.getElementById('test1').focus(); "
+      "navigator.virtualKeyboard.hide();");
+  base::RunLoop run_loop2;
+  base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
+                                                run_loop2.QuitClosure());
+  run_loop2.Run();
+  ClearState();
+  // Update the IME status and verify if our IME backend sends an IPC message
+  // to notify virtualkeyboardpolicy change of the focused element and the hide
+  // API call.
+  main_widget()->UpdateTextInputState();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(1u, updated_states().size());
+  EXPECT_EQ(updated_states()[0]->vk_policy,
+            ui::mojom::VirtualKeyboardPolicy::MANUAL);
+  EXPECT_EQ(updated_states()[0]->last_vk_visibility_request,
+            ui::mojom::VirtualKeyboardVisibilityRequest::HIDE);
+}
+
+TEST_F(RenderViewImplTextInputStateChanged,
+       VirtualKeyboardPolicyAutoAndShowHideAPIsCalled) {
+  // Load an HTML page consisting of one input field.
+  LoadHTML(
+      "<html>"
+      "<head>"
+      "</head>"
+      "<body>"
+      "<input id=\"test1\" type=\"text\" "
+      "virtualkeyboardpolicy=\"auto\"></input>"
+      "</body>"
+      "</html>");
+  render_thread_->sink().ClearMessages();
+  ExecuteJavaScriptForTests(
+      "document.getElementById('test1').focus(); "
+      "navigator.virtualKeyboard.show();");
+  // This RunLoop is waiting for focus to be processed for the active element.
+  base::RunLoop run_loop;
+  base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
+                                                run_loop.QuitClosure());
+  run_loop.Run();
+  // Update the IME status and verify if our IME backend sends an IPC message
+  // to notify virtualkeyboardpolicy change of the focused element and the show
+  // API call.
+  main_widget()->UpdateTextInputState();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(1u, updated_states().size());
+  EXPECT_EQ(updated_states()[0]->vk_policy,
+            ui::mojom::VirtualKeyboardPolicy::AUTO);
+  EXPECT_EQ(updated_states()[0]->last_vk_visibility_request,
+            ui::mojom::VirtualKeyboardVisibilityRequest::NONE);
 }
 
 // Test that our IME backend can compose CJK words.
@@ -1739,31 +1931,31 @@ TEST_F(RenderViewImplTest, ImeComposition) {
 
       case IME_SETFOCUS:
         // Update the window focus.
-        main_widget()->OnSetFocus(ime_message->enable);
+        GetWidgetInputHandler()->SetFocus(ime_message->enable);
         break;
 
       case IME_SETCOMPOSITION:
-        main_widget()->OnImeSetComposition(
+        GetWidgetInputHandler()->ImeSetComposition(
             base::WideToUTF16(ime_message->ime_string),
-            std::vector<blink::WebImeTextSpan>(), gfx::Range::InvalidRange(),
+            std::vector<ui::ImeTextSpan>(), gfx::Range::InvalidRange(),
             ime_message->selection_start, ime_message->selection_end);
         break;
 
       case IME_COMMITTEXT:
-        main_widget()->OnImeCommitText(
+        GetWidgetInputHandler()->ImeCommitText(
             base::WideToUTF16(ime_message->ime_string),
-            std::vector<blink::WebImeTextSpan>(), gfx::Range::InvalidRange(),
-            0);
+            std::vector<ui::ImeTextSpan>(), gfx::Range::InvalidRange(), 0,
+            base::DoNothing());
         break;
 
       case IME_FINISHCOMPOSINGTEXT:
-        main_widget()->OnImeFinishComposingText(false);
+        GetWidgetInputHandler()->ImeFinishComposingText(false);
         break;
 
       case IME_CANCELCOMPOSITION:
-        main_widget()->OnImeSetComposition(base::string16(),
-                                           std::vector<blink::WebImeTextSpan>(),
-                                           gfx::Range::InvalidRange(), 0, 0);
+        GetWidgetInputHandler()->ImeSetComposition(
+            base::string16(), std::vector<ui::ImeTextSpan>(),
+            gfx::Range::InvalidRange(), 0, 0);
         break;
     }
 
@@ -1806,13 +1998,13 @@ TEST_F(RenderViewImplTest, OnSetTextDirection) {
     base::i18n::TextDirection direction;
     const wchar_t* expected_result;
   } kTextDirection[] = {
-      {base::i18n::RIGHT_TO_LEFT, L"rtl,rtl"},
-      {base::i18n::LEFT_TO_RIGHT, L"ltr,ltr"},
+      {base::i18n::TextDirection::RIGHT_TO_LEFT, L"rtl,rtl"},
+      {base::i18n::TextDirection::LEFT_TO_RIGHT, L"ltr,ltr"},
   };
   for (auto& test_case : kTextDirection) {
     // Set the text direction of the <textarea> element.
     ExecuteJavaScriptForTests("document.getElementById('test').focus();");
-    ReceiveSetTextDirection(main_widget(), test_case.direction);
+    GetMainFrame()->SetTextDirectionForTesting(test_case.direction);
 
     // Write the values of its DOM 'dir' attribute and its CSS 'direction'
     // property to the <div> element.
@@ -2002,47 +2194,52 @@ TEST_F(RenderViewImplTest, GetCompositionCharacterBoundsTest) {
   LoadHTML("<textarea id=\"test\" cols=\"100\"></textarea>");
   ExecuteJavaScriptForTests("document.getElementById('test').focus();");
 
+  auto* widget_input_handler = GetWidgetInputHandler();
   const base::string16 empty_string;
-  const std::vector<blink::WebImeTextSpan> empty_ime_text_span;
+  const std::vector<ui::ImeTextSpan> empty_ime_text_span;
   std::vector<gfx::Rect> bounds;
-  main_widget()->OnSetFocus(true);
+  widget_input_handler->SetFocus(true);
 
   // ASCII composition
   const base::string16 ascii_composition = base::UTF8ToUTF16("aiueo");
-  main_widget()->OnImeSetComposition(ascii_composition, empty_ime_text_span,
-                                     gfx::Range::InvalidRange(), 0, 0);
-  main_widget()->GetCompositionCharacterBounds(&bounds);
+  widget_input_handler->ImeSetComposition(
+      ascii_composition, empty_ime_text_span, gfx::Range::InvalidRange(), 0, 0);
+  bounds = LastCompositionBounds();
   ASSERT_EQ(ascii_composition.size(), bounds.size());
 
   for (const gfx::Rect& r : bounds)
     EXPECT_LT(0, r.width());
-  main_widget()->OnImeCommitText(empty_string,
-                                 std::vector<blink::WebImeTextSpan>(),
-                                 gfx::Range::InvalidRange(), 0);
+  widget_input_handler->ImeCommitText(
+      empty_string, std::vector<ui::ImeTextSpan>(), gfx::Range::InvalidRange(),
+      0, base::DoNothing());
 
   // Non surrogate pair unicode character.
   const base::string16 unicode_composition = base::UTF8ToUTF16(
       "\xE3\x81\x82\xE3\x81\x84\xE3\x81\x86\xE3\x81\x88\xE3\x81\x8A");
-  main_widget()->OnImeSetComposition(unicode_composition, empty_ime_text_span,
-                                     gfx::Range::InvalidRange(), 0, 0);
-  main_widget()->GetCompositionCharacterBounds(&bounds);
+  widget_input_handler->ImeSetComposition(unicode_composition,
+                                          empty_ime_text_span,
+                                          gfx::Range::InvalidRange(), 0, 0);
+  bounds = LastCompositionBounds();
   ASSERT_EQ(unicode_composition.size(), bounds.size());
   for (const gfx::Rect& r : bounds)
     EXPECT_LT(0, r.width());
-  main_widget()->OnImeCommitText(empty_string, empty_ime_text_span,
-                                 gfx::Range::InvalidRange(), 0);
+  widget_input_handler->ImeCommitText(empty_string, empty_ime_text_span,
+                                      gfx::Range::InvalidRange(), 0,
+                                      base::DoNothing());
 
   // Surrogate pair character.
   const base::string16 surrogate_pair_char =
       base::UTF8ToUTF16("\xF0\xA0\xAE\x9F");
-  main_widget()->OnImeSetComposition(surrogate_pair_char, empty_ime_text_span,
-                                     gfx::Range::InvalidRange(), 0, 0);
-  main_widget()->GetCompositionCharacterBounds(&bounds);
+  widget_input_handler->ImeSetComposition(surrogate_pair_char,
+                                          empty_ime_text_span,
+                                          gfx::Range::InvalidRange(), 0, 0);
+  bounds = LastCompositionBounds();
   ASSERT_EQ(surrogate_pair_char.size(), bounds.size());
   EXPECT_LT(0, bounds[0].width());
   EXPECT_EQ(0, bounds[1].width());
-  main_widget()->OnImeCommitText(empty_string, empty_ime_text_span,
-                                 gfx::Range::InvalidRange(), 0);
+  widget_input_handler->ImeCommitText(empty_string, empty_ime_text_span,
+                                      gfx::Range::InvalidRange(), 0,
+                                      base::DoNothing());
 
   // Mixed string.
   const base::string16 surrogate_pair_mixed_composition =
@@ -2051,10 +2248,10 @@ TEST_F(RenderViewImplTest, GetCompositionCharacterBoundsTest) {
   const size_t utf16_length = 8UL;
   const bool is_surrogate_pair_empty_rect[8] = {
     false, true, false, false, true, false, false, true };
-  main_widget()->OnImeSetComposition(surrogate_pair_mixed_composition,
-                                     empty_ime_text_span,
-                                     gfx::Range::InvalidRange(), 0, 0);
-  main_widget()->GetCompositionCharacterBounds(&bounds);
+  widget_input_handler->ImeSetComposition(surrogate_pair_mixed_composition,
+                                          empty_ime_text_span,
+                                          gfx::Range::InvalidRange(), 0, 0);
+  bounds = LastCompositionBounds();
   ASSERT_EQ(utf16_length, bounds.size());
   for (size_t i = 0; i < utf16_length; ++i) {
     if (is_surrogate_pair_empty_rect[i]) {
@@ -2063,8 +2260,9 @@ TEST_F(RenderViewImplTest, GetCompositionCharacterBoundsTest) {
       EXPECT_LT(0, bounds[i].width());
     }
   }
-  main_widget()->OnImeCommitText(empty_string, empty_ime_text_span,
-                                 gfx::Range::InvalidRange(), 0);
+  widget_input_handler->ImeCommitText(empty_string, empty_ime_text_span,
+                                      gfx::Range::InvalidRange(), 0,
+                                      base::DoNothing());
 }
 #endif
 
@@ -2077,10 +2275,12 @@ TEST_F(RenderViewImplTest, SetEditableSelectionAndComposition) {
            "<input id=\"test1\" value=\"some test text hello\"></input>"
            "</body>"
            "</html>");
+  auto* frame_widget_input_handler = GetFrameWidgetInputHandler();
   ExecuteJavaScriptForTests("document.getElementById('test1').focus();");
-  frame()->SetEditableSelectionOffsets(4, 8);
+  frame_widget_input_handler->SetEditableSelectionOffsets(4, 8);
   const std::vector<ui::ImeTextSpan> empty_ime_text_span;
-  frame()->SetCompositionFromExistingText(7, 10, empty_ime_text_span);
+  frame_widget_input_handler->SetCompositionFromExistingText(
+      7, 10, empty_ime_text_span);
   base::RunLoop().RunUntilIdle();
   blink::WebInputMethodController* controller =
       frame()->GetWebFrame()->GetInputMethodController();
@@ -2089,7 +2289,7 @@ TEST_F(RenderViewImplTest, SetEditableSelectionAndComposition) {
   EXPECT_EQ(8, info.selection_end);
   EXPECT_EQ(7, info.composition_start);
   EXPECT_EQ(10, info.composition_end);
-  frame()->CollapseSelection();
+  frame_widget_input_handler->CollapseSelection();
   base::RunLoop().RunUntilIdle();
   info = controller->TextInputInfo();
   EXPECT_EQ(8, info.selection_start);
@@ -2105,9 +2305,10 @@ TEST_F(RenderViewImplTest, OnExtendSelectionAndDelete) {
            "<input id=\"test1\" value=\"abcdefghijklmnopqrstuvwxyz\"></input>"
            "</body>"
            "</html>");
+  auto* frame_widget_input_handler = GetFrameWidgetInputHandler();
   ExecuteJavaScriptForTests("document.getElementById('test1').focus();");
-  frame()->SetEditableSelectionOffsets(10, 10);
-  frame()->ExtendSelectionAndDelete(3, 4);
+  frame_widget_input_handler->SetEditableSelectionOffsets(10, 10);
+  frame_widget_input_handler->ExtendSelectionAndDelete(3, 4);
   base::RunLoop().RunUntilIdle();
   blink::WebInputMethodController* controller =
       frame()->GetWebFrame()->GetInputMethodController();
@@ -2115,8 +2316,8 @@ TEST_F(RenderViewImplTest, OnExtendSelectionAndDelete) {
   EXPECT_EQ("abcdefgopqrstuvwxyz", info.value);
   EXPECT_EQ(7, info.selection_start);
   EXPECT_EQ(7, info.selection_end);
-  frame()->SetEditableSelectionOffsets(4, 8);
-  frame()->ExtendSelectionAndDelete(2, 5);
+  frame_widget_input_handler->SetEditableSelectionOffsets(4, 8);
+  frame_widget_input_handler->ExtendSelectionAndDelete(2, 5);
   base::RunLoop().RunUntilIdle();
   info = controller->TextInputInfo();
   EXPECT_EQ("abuvwxyz", info.value);
@@ -2136,8 +2337,9 @@ TEST_F(RenderViewImplTest, OnDeleteSurroundingText) {
       "</html>");
   ExecuteJavaScriptForTests("document.getElementById('test1').focus();");
 
-  frame()->SetEditableSelectionOffsets(10, 10);
-  frame()->DeleteSurroundingText(3, 4);
+  auto* frame_widget_input_handler = GetFrameWidgetInputHandler();
+  frame_widget_input_handler->SetEditableSelectionOffsets(10, 10);
+  frame_widget_input_handler->DeleteSurroundingText(3, 4);
   base::RunLoop().RunUntilIdle();
   blink::WebInputMethodController* controller =
       frame()->GetWebFrame()->GetInputMethodController();
@@ -2146,30 +2348,30 @@ TEST_F(RenderViewImplTest, OnDeleteSurroundingText) {
   EXPECT_EQ(7, info.selection_start);
   EXPECT_EQ(7, info.selection_end);
 
-  frame()->SetEditableSelectionOffsets(4, 8);
-  frame()->DeleteSurroundingText(2, 5);
+  frame_widget_input_handler->SetEditableSelectionOffsets(4, 8);
+  frame_widget_input_handler->DeleteSurroundingText(2, 5);
   base::RunLoop().RunUntilIdle();
   info = controller->TextInputInfo();
   EXPECT_EQ("abefgouvwxyz", info.value);
   EXPECT_EQ(2, info.selection_start);
   EXPECT_EQ(6, info.selection_end);
 
-  frame()->SetEditableSelectionOffsets(5, 5);
-  frame()->DeleteSurroundingText(10, 0);
+  frame_widget_input_handler->SetEditableSelectionOffsets(5, 5);
+  frame_widget_input_handler->DeleteSurroundingText(10, 0);
   base::RunLoop().RunUntilIdle();
   info = controller->TextInputInfo();
   EXPECT_EQ("ouvwxyz", info.value);
   EXPECT_EQ(0, info.selection_start);
   EXPECT_EQ(0, info.selection_end);
 
-  frame()->DeleteSurroundingText(0, 10);
+  frame_widget_input_handler->DeleteSurroundingText(0, 10);
   base::RunLoop().RunUntilIdle();
   info = controller->TextInputInfo();
   EXPECT_EQ("", info.value);
   EXPECT_EQ(0, info.selection_start);
   EXPECT_EQ(0, info.selection_end);
 
-  frame()->DeleteSurroundingText(10, 10);
+  frame_widget_input_handler->DeleteSurroundingText(10, 10);
   base::RunLoop().RunUntilIdle();
   info = controller->TextInputInfo();
   EXPECT_EQ("", info.value);
@@ -2193,8 +2395,9 @@ TEST_F(RenderViewImplTest, MAYBE_OnDeleteSurroundingTextInCodePoints) {
       "<input id=\"test1\" value=\"ab&#x1f3c6; cdef&#x1f3c6; gh\">");
   ExecuteJavaScriptForTests("document.getElementById('test1').focus();");
 
-  frame()->SetEditableSelectionOffsets(4, 4);
-  frame()->DeleteSurroundingTextInCodePoints(2, 2);
+  auto* frame_widget_input_handler = GetFrameWidgetInputHandler();
+  frame_widget_input_handler->SetEditableSelectionOffsets(4, 4);
+  frame_widget_input_handler->DeleteSurroundingTextInCodePoints(2, 2);
   base::RunLoop().RunUntilIdle();
   blink::WebInputMethodController* controller =
       frame()->GetWebFrame()->GetInputMethodController();
@@ -2204,8 +2407,8 @@ TEST_F(RenderViewImplTest, MAYBE_OnDeleteSurroundingTextInCodePoints) {
   EXPECT_EQ(1, info.selection_start);
   EXPECT_EQ(1, info.selection_end);
 
-  frame()->SetEditableSelectionOffsets(1, 3);
-  frame()->DeleteSurroundingTextInCodePoints(1, 4);
+  frame_widget_input_handler->SetEditableSelectionOffsets(1, 3);
+  frame_widget_input_handler->DeleteSurroundingTextInCodePoints(1, 4);
   base::RunLoop().RunUntilIdle();
   info = controller->TextInputInfo();
   EXPECT_EQ("deh", info.value);
@@ -2251,33 +2454,61 @@ TEST_F(RenderViewImplTest, BasicRenderFrame) {
   EXPECT_TRUE(view()->main_render_frame_);
 }
 
-TEST_F(RenderViewImplTest, MessageOrderInDidChangeSelection) {
+class MessageOrderFakeRenderWidgetHost : public FakeRenderWidgetHost,
+                                         public IPC::Listener {
+ public:
+  void TextInputStateChanged(ui::mojom::TextInputStatePtr state) override {
+    message_counter_++;
+    last_input_type_ = message_counter_;
+  }
+
+  ~MessageOrderFakeRenderWidgetHost() override {}
+
+  bool OnMessageReceived(const IPC::Message& message) override {
+    if (message.type() == FrameHostMsg_SelectionChanged::ID) {
+      base::RunLoop().RunUntilIdle();
+      message_counter_++;
+      last_selection_ = message_counter_;
+    }
+    return false;
+  }
+
+  uint32_t message_counter_ = 0;
+  uint32_t last_selection_ = 0;
+  uint32_t last_input_type_ = 0;
+};
+
+class RenderViewImplTextInputMessageOrder : public RenderViewImplTest {
+ public:
+  std::unique_ptr<FakeRenderWidgetHost> CreateRenderWidgetHost() override {
+    auto host = std::make_unique<MessageOrderFakeRenderWidgetHost>();
+    render_thread_->sink().AddFilter(host.get());
+    return host;
+  }
+
+  MessageOrderFakeRenderWidgetHost* GetMessageOrderFakeRenderWidgetHost() {
+    return static_cast<MessageOrderFakeRenderWidgetHost*>(
+        render_widget_host_.get());
+  }
+};
+
+TEST_F(RenderViewImplTextInputMessageOrder, MessageOrderInDidChangeSelection) {
   LoadHTML("<textarea id=\"test\"></textarea>");
 
   main_widget()->SetHandlingInputEvent(true);
   ExecuteJavaScriptForTests("document.getElementById('test').focus();");
 
-  bool is_input_type_called = false;
-  bool is_selection_called = false;
-  size_t last_input_type = 0;
-  size_t last_selection = 0;
+  uint32_t last_input_type =
+      GetMessageOrderFakeRenderWidgetHost()->last_input_type_;
+  uint32_t last_selection =
+      GetMessageOrderFakeRenderWidgetHost()->last_selection_;
 
-  for (size_t i = 0; i < render_thread_->sink().message_count(); ++i) {
-    const uint32_t type = render_thread_->sink().GetMessageAt(i)->type();
-    if (type == WidgetHostMsg_TextInputStateChanged::ID) {
-      is_input_type_called = true;
-      last_input_type = i;
-    } else if (type == FrameHostMsg_SelectionChanged::ID) {
-      is_selection_called = true;
-      last_selection = i;
-    }
-  }
-
-  EXPECT_TRUE(is_input_type_called);
-  EXPECT_TRUE(is_selection_called);
+  EXPECT_NE(0u, last_input_type);
+  EXPECT_NE(0u, last_selection);
 
   // InputTypeChange shold be called earlier than SelectionChanged.
   EXPECT_LT(last_input_type, last_selection);
+  render_thread_->sink().RemoveFilter(GetMessageOrderFakeRenderWidgetHost());
 }
 
 class RendererErrorPageTest : public RenderViewImplTest {
@@ -2952,21 +3183,21 @@ TEST_F(RenderViewImplEnableZoomForDSFTest,
   LoadHTML("<textarea id=\"test\"></textarea>");
   ExecuteJavaScriptForTests("document.getElementById('test').focus();");
 
+  auto* widget_input_handler = GetWidgetInputHandler();
   const base::string16 empty_string;
-  const std::vector<blink::WebImeTextSpan> empty_ime_text_span;
+  const std::vector<ui::ImeTextSpan> empty_ime_text_span;
   std::vector<gfx::Rect> bounds_at_1x;
-  main_widget()->OnSetFocus(true);
+  widget_input_handler->SetFocus(true);
 
   // ASCII composition
   const base::string16 ascii_composition = base::UTF8ToUTF16("aiueo");
-  main_widget()->OnImeSetComposition(ascii_composition, empty_ime_text_span,
-                                     gfx::Range::InvalidRange(), 0, 0);
-  main_widget()->GetCompositionCharacterBounds(&bounds_at_1x);
+  widget_input_handler->ImeSetComposition(
+      ascii_composition, empty_ime_text_span, gfx::Range::InvalidRange(), 0, 0);
+  bounds_at_1x = LastCompositionBounds();
   ASSERT_EQ(ascii_composition.size(), bounds_at_1x.size());
 
   SetDeviceScaleFactor(2.f);
-  std::vector<gfx::Rect> bounds_at_2x;
-  main_widget()->GetCompositionCharacterBounds(&bounds_at_2x);
+  std::vector<gfx::Rect> bounds_at_2x = LastCompositionBounds();
   ASSERT_EQ(bounds_at_1x.size(), bounds_at_2x.size());
   for (size_t i = 0; i < bounds_at_1x.size(); i++) {
     const gfx::Rect& b1 = bounds_at_1x[i];

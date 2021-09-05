@@ -226,25 +226,25 @@ TEST(CommandLineTest, GetArgumentsString) {
 
   CommandLine::StringType expected_str;
   expected_str.append(FILE_PATH_LITERAL("--"))
-              .append(expected_first_arg)
-              .append(FILE_PATH_LITERAL("="))
-              .append(QUOTE_ON_WIN)
-              .append(kPath1)
-              .append(QUOTE_ON_WIN)
-              .append(FILE_PATH_LITERAL(" "))
-              .append(FILE_PATH_LITERAL("--"))
-              .append(expected_second_arg)
-              .append(FILE_PATH_LITERAL("="))
-              .append(QUOTE_ON_WIN)
-              .append(kPath2)
-              .append(QUOTE_ON_WIN)
-              .append(FILE_PATH_LITERAL(" "))
-              .append(QUOTE_ON_WIN)
-              .append(expected_third_arg)
-              .append(QUOTE_ON_WIN)
-              .append(FILE_PATH_LITERAL(" "))
-              .append(expected_fourth_arg)
-              .append(FILE_PATH_LITERAL(" "));
+      .append(expected_first_arg)
+      .append(FILE_PATH_LITERAL("="))
+      .append(QUOTE_ON_WIN)
+      .append(kPath1)
+      .append(QUOTE_ON_WIN)
+      .append(FILE_PATH_LITERAL(" "))
+      .append(FILE_PATH_LITERAL("--"))
+      .append(expected_second_arg)
+      .append(FILE_PATH_LITERAL("="))
+      .append(QUOTE_ON_WIN)
+      .append(kPath2)
+      .append(QUOTE_ON_WIN)
+      .append(FILE_PATH_LITERAL(" "))
+      .append(QUOTE_ON_WIN)
+      .append(expected_third_arg)
+      .append(QUOTE_ON_WIN)
+      .append(FILE_PATH_LITERAL(" "))
+      .append(expected_fourth_arg)
+      .append(FILE_PATH_LITERAL(" "));
 
   CommandLine::StringType expected_str_no_quote_placeholders(expected_str);
   expected_str_no_quote_placeholders.append(expected_fifth_arg);
@@ -253,8 +253,8 @@ TEST(CommandLineTest, GetArgumentsString) {
 #if defined(OS_WIN)
   CommandLine::StringType expected_str_quote_placeholders(expected_str);
   expected_str_quote_placeholders.append(QUOTE_ON_WIN)
-                                 .append(expected_fifth_arg)
-                                 .append(QUOTE_ON_WIN);
+      .append(expected_fifth_arg)
+      .append(QUOTE_ON_WIN);
   EXPECT_EQ(expected_str_quote_placeholders,
             cl.GetArgumentsStringWithPlaceholders());
 #endif

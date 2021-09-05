@@ -120,10 +120,10 @@ class TabListMediator {
         /**
          * This method updates the status of the ungroup bar in TabGridDialog.
          *
-         * @param status The status in {@link TabGridDialogParent.UngroupBarStatus} that the ungroup
+         * @param status The status in {@link TabGridDialogView.UngroupBarStatus} that the ungroup
          *         bar should be updated to.
          */
-        void updateUngroupBarStatus(@TabGridDialogParent.UngroupBarStatus int status);
+        void updateUngroupBarStatus(@TabGridDialogView.UngroupBarStatus int status);
 
         /**
          * This method updates the content of the TabGridDialog.
@@ -375,7 +375,12 @@ class TabListMediator {
         @Override
         public void onTitleUpdated(Tab updatedTab) {
             int index = mModel.indexFromId(updatedTab.getId());
-            if (index == TabModel.INVALID_TAB_INDEX) return;
+            // TODO(crbug.com/1098100) The null check for tab here should be redundant once we have
+            // resolved the bug.
+            if (index == TabModel.INVALID_TAB_INDEX
+                    || mTabModelSelector.getTabById(updatedTab.getId()) == null) {
+                return;
+            }
             mModel.get(index).model.set(
                     TabProperties.TITLE, getLatestTitleForTab(PseudoTab.fromTab(updatedTab)));
         }
@@ -1091,11 +1096,8 @@ class TabListMediator {
      */
     void updateSpanCountForOrientation(GridLayoutManager manager, int orientation) {
         // When in multi-window mode, the span count is fixed to 2 to keep tab card size reasonable.
-        if (MultiWindowUtils.getInstance().isInMultiWindowMode((Activity) mContext)) {
-            manager.setSpanCount(TabListCoordinator.GRID_LAYOUT_SPAN_COUNT_PORTRAIT);
-            return;
-        }
         int spanCount = orientation == Configuration.ORIENTATION_PORTRAIT
+                        || MultiWindowUtils.getInstance().isInMultiWindowMode((Activity) mContext)
                 ? TabListCoordinator.GRID_LAYOUT_SPAN_COUNT_PORTRAIT
                 : TabListCoordinator.GRID_LAYOUT_SPAN_COUNT_LANDSCAPE;
         manager.setSpanCount(spanCount);
@@ -1245,8 +1247,6 @@ class TabListMediator {
                         .with(TabProperties.IS_SELECTED, isSelected)
                         .with(TabProperties.IPH_PROVIDER, showIPH ? mIphProvider : null)
                         .with(CARD_ALPHA, 1f)
-                        .with(TabProperties.TAB_CLOSED_LISTENER,
-                                isRealTab ? mTabClosedListener : null)
                         .with(TabProperties.CARD_ANIMATION_STATUS,
                                 ClosableTabGridView.AnimationStatus.CARD_RESTORE)
                         .with(TabProperties.TAB_SELECTION_DELEGATE,
@@ -1296,7 +1296,7 @@ class TabListMediator {
                     TabProperties.SELECTABLE_TAB_CLICKED_LISTENER, mSelectableTabOnClickListener);
         } else {
             tabInfo.set(TabProperties.TAB_SELECTED_LISTENER, tabSelectedListener);
-            tabInfo.set(TabProperties.TAB_CLOSED_LISTENER, mTabClosedListener);
+            tabInfo.set(TabProperties.TAB_CLOSED_LISTENER, isRealTab ? mTabClosedListener : null);
         }
 
         if (index >= mModel.size()) {

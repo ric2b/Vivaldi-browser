@@ -61,6 +61,7 @@ const EnumTable<CastDeviceCapability> EnumTable<CastDeviceCapability>::instance(
 template <>
 const EnumTable<ReceiverAppType> EnumTable<ReceiverAppType>::instance(
     {
+        {ReceiverAppType::kOther, "OTHER"},
         {ReceiverAppType::kWeb, "WEB"},
         {ReceiverAppType::kAndroidTv, "ANDROID_TV"},
     },
@@ -69,6 +70,9 @@ const EnumTable<ReceiverAppType> EnumTable<ReceiverAppType>::instance(
 }  // namespace cast_util
 
 namespace media_router {
+
+// The maximum length of presentation URL is 64KB.
+constexpr int kMaxCastPresentationUrlLength = 64 * 1024;
 
 namespace {
 
@@ -188,8 +192,8 @@ std::unique_ptr<CastMediaSource> CastMediaSourceForTabMirroring(
     const MediaSource::Id& source_id) {
   return std::make_unique<CastMediaSource>(
       source_id,
-      std::vector<CastAppInfo>({CastAppInfo(kCastStreamingAppId),
-                                CastAppInfo(kCastStreamingAudioAppId)}));
+      std::vector<CastAppInfo>({CastAppInfo::ForCastStreaming(),
+                                CastAppInfo::ForCastStreamingAudio()}));
 }
 
 std::unique_ptr<CastMediaSource> CastMediaSourceForDesktopMirroring(
@@ -197,7 +201,7 @@ std::unique_ptr<CastMediaSource> CastMediaSourceForDesktopMirroring(
   // TODO(https://crbug.com/849335): Add back audio-only devices for desktop
   // mirroring when proper support is implemented.
   return std::make_unique<CastMediaSource>(
-      source_id, std::vector<CastAppInfo>({CastAppInfo(kCastStreamingAppId)}));
+      source_id, std::vector<CastAppInfo>({CastAppInfo::ForCastStreaming()}));
 }
 
 // The logic shared by ParseCastUrl() and ParseLegacyCastUrl().
@@ -210,6 +214,8 @@ std::unique_ptr<CastMediaSource> CreateFromURLParams(
     const std::string& broadcast_namespace,
     const std::string& encoded_broadcast_message,
     const std::string& launch_timeout_str,
+    const std::string& target_playout_delay_millis_str,
+    const std::string& audio_capture_str,
     const std::vector<ReceiverAppType>& supported_app_types,
     const std::string& app_params) {
   if (app_infos.empty())
@@ -227,12 +233,23 @@ std::unique_ptr<CastMediaSource> CreateFromURLParams(
         broadcast_namespace, DecodeURLComponent(encoded_broadcast_message)));
   }
 
-  int launch_timeout_millis;
+  int launch_timeout_millis = 0;
   if (base::StringToInt(launch_timeout_str, &launch_timeout_millis) &&
       launch_timeout_millis > 0) {
     cast_source->set_launch_timeout(
         base::TimeDelta::FromMilliseconds(launch_timeout_millis));
   }
+
+  int target_playout_delay_millis = 0;
+  if (base::StringToInt(target_playout_delay_millis_str,
+                        &target_playout_delay_millis) &&
+      target_playout_delay_millis > 0) {
+    cast_source->set_target_playout_delay(
+        base::TimeDelta::FromMilliseconds(target_playout_delay_millis));
+  }
+
+  if (audio_capture_str == "0")
+    cast_source->set_allow_audio_capture(false);
 
   if (!supported_app_types.empty())
     cast_source->set_supported_app_types(supported_app_types);
@@ -259,6 +276,8 @@ std::unique_ptr<CastMediaSource> ParseCastUrl(const MediaSource::Id& source_id,
       FindValueOr(params, "broadcastNamespace", ""),
       FindValueOr(params, "broadcastMessage", ""),
       FindValueOr(params, "launchTimeout", ""),
+      FindValueOr(params, "streamingTargetPlayoutDelayMillis", ""),
+      FindValueOr(params, "streamingCaptureAudio", ""),
       SupportedAppTypesFromString(FindValueOr(params, "supportedAppTypes", "")),
       FindValueOr(params, "appParams", ""));
 }
@@ -318,6 +337,8 @@ std::unique_ptr<CastMediaSource> ParseLegacyCastUrl(
       FindValueOr(params, "__castBroadcastNamespace__", ""),
       FindValueOr(params, "__castBroadcastMessage__", ""),
       FindValueOr(params, "__castLaunchTimeout__", ""),
+      /* target_playout_delay_millis_str */ "",
+      /* audio_capture */ "",
       /* supported_app_types */ {},
       /* appParams */ "");
 }
@@ -339,27 +360,45 @@ bool IsAutoJoinAllowed(AutoJoinPolicy policy,
   }
 }
 
+bool IsSiteInitiatedMirroringSource(const MediaSource::Id& source_id) {
+  return base::StartsWith(source_id, kMirroringAppUri,
+                          base::CompareCase::SENSITIVE);
+}
+
 CastAppInfo::CastAppInfo(
     const std::string& app_id,
     BitwiseOr<cast_channel::CastDeviceCapability> required_capabilities)
     : app_id(app_id), required_capabilities(required_capabilities) {}
+
 CastAppInfo::~CastAppInfo() = default;
 
 CastAppInfo::CastAppInfo(const CastAppInfo& other) = default;
 
 // static
+CastAppInfo CastAppInfo::ForCastStreaming() {
+  return CastAppInfo(kCastStreamingAppId, {CastDeviceCapability::VIDEO_OUT,
+                                           CastDeviceCapability::AUDIO_OUT});
+}
+
+// static
+CastAppInfo CastAppInfo::ForCastStreamingAudio() {
+  return CastAppInfo(kCastStreamingAudioAppId,
+                     {CastDeviceCapability::AUDIO_OUT});
+}
+
+// static
 std::unique_ptr<CastMediaSource> CastMediaSource::FromMediaSource(
     const MediaSource& source) {
-  if (source.IsTabMirroringSource())
+  if (source.IsTabMirroringSource() || source.IsLocalFileSource())
     return CastMediaSourceForTabMirroring(source.id());
 
   if (source.IsDesktopMirroringSource())
     return CastMediaSourceForDesktopMirroring(source.id());
 
   const GURL& url = source.url();
-  if (!url.is_valid())
-    return nullptr;
 
+  if (!url.is_valid() || url.spec().length() > kMaxCastPresentationUrlLength)
+    return nullptr;
   if (url.SchemeIs(kCastPresentationUrlScheme)) {
     return ParseCastUrl(source.id(), url);
   } else if (IsLegacyCastPresentationUrl(url)) {

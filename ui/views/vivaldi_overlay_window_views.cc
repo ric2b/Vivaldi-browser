@@ -56,7 +56,7 @@ void OverlayWindowViews::CreateVivaldiVideoControls() {
   mute_button->layer()->SetName("MuteControlsView");
   mute_button_ = GetContentsView()->AddChildView(std::move(mute_button));
 
-  content::WebContents* contents = controller_->GetInitiatorWebContents();
+  content::WebContents* contents = controller_->GetWebContents();
 
   mute_button_->ChangeMode(contents->IsAudioMuted()
                                ? vivaldi::MuteButton::Mode::kMute
@@ -103,7 +103,7 @@ void OverlayWindowViews::CreateVivaldiVideoObserver() {
   video_pip_delegate_ = std::make_unique<VideoPipControllerDelegate>(
       progress_view_, mute_button_);
   video_pip_controller_ = std::make_unique<vivaldi::VideoPIPController>(
-      video_pip_delegate_.get(), controller_->GetInitiatorWebContents());
+      video_pip_delegate_.get(), controller_->GetWebContents());
   // base::Unretained() here because both progress_view_ and
   // video_pip_controller_ lifetimes are tied to |this|.
   progress_view_->set_callback(
@@ -131,7 +131,7 @@ void OverlayWindowViews::HandleVivaldiKeyboardEvents(ui::KeyEvent* event) {
 
 void OverlayWindowViews::HandleVivaldiButtonPressed(views::Button* sender) {
   if (sender == mute_button_) {
-    content::WebContents* contents = controller_->GetInitiatorWebContents();
+    content::WebContents* contents = controller_->GetWebContents();
 
     DCHECK_EQ(contents->IsAudioMuted(),
               mute_button_->muted_mode() == vivaldi::MuteButton::Mode::kMute);

@@ -13,8 +13,8 @@
 #include "base/files/file_util.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
+#include "base/strings/strcat.h"
 #include "base/synchronization/lock.h"
-#include "base/task/post_task.h"
 #include "base/test/bind_test_util.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
@@ -104,32 +104,6 @@ class URLLoaderInterceptor::IOState
     if (!parent_)
       return false;
     return parent_->Intercept(params);
-  }
-
-  bool BeginNavigationCallback(
-      mojo::PendingReceiver<network::mojom::URLLoader>* receiver,
-      int32_t routing_id,
-      int32_t request_id,
-      uint32_t options,
-      const network::ResourceRequest& url_request,
-      mojo::PendingRemote<network::mojom::URLLoaderClient>* client,
-      const net::MutableNetworkTrafficAnnotationTag& traffic_annotation) {
-    RequestParams params;
-    params.process_id = 0;
-    params.receiver = std::move(*receiver);
-    params.routing_id = routing_id;
-    params.request_id = request_id;
-    params.options = options;
-    params.url_request = url_request;
-    params.client.Bind(std::move(*client));
-    params.traffic_annotation = traffic_annotation;
-
-    if (Intercept(&params))
-      return true;
-
-    *receiver = std::move(params.receiver);
-    *client = params.client.Unbind();
-    return false;
   }
 
   // Callback on IO thread whenever NavigationURLLoaderImpl needs a
@@ -479,8 +453,8 @@ URLLoaderInterceptor::URLLoaderInterceptor(
   if (BrowserThread::IsThreadInitialized(BrowserThread::IO)) {
     if (use_runloop_) {
       base::RunLoop run_loop;
-      base::PostTask(
-          FROM_HERE, {BrowserThread::IO},
+      GetIOThreadTaskRunner({})->PostTask(
+          FROM_HERE,
           base::BindOnce(&URLLoaderInterceptor::IOState::Initialize, io_thread_,
                          std::move(completion_status_callback),
                          run_loop.QuitClosure()));
@@ -488,12 +462,12 @@ URLLoaderInterceptor::URLLoaderInterceptor(
     } else {
       base::OnceClosure wrapped_callback = base::BindOnce(
           [](base::OnceClosure callback) {
-            base::PostTask(FROM_HERE, {BrowserThread::UI}, std::move(callback));
+            GetUIThreadTaskRunner({})->PostTask(FROM_HERE, std::move(callback));
           },
           std::move(ready_callback));
 
-      base::PostTask(
-          FROM_HERE, {BrowserThread::IO},
+      GetIOThreadTaskRunner({})->PostTask(
+          FROM_HERE,
           base::BindOnce(&URLLoaderInterceptor::IOState::Initialize, io_thread_,
                          std::move(completion_status_callback),
                          std::move(wrapped_callback)));
@@ -523,15 +497,48 @@ URLLoaderInterceptor::~URLLoaderInterceptor() {
 
   if (use_runloop_) {
     base::RunLoop run_loop;
-    base::PostTask(FROM_HERE, {BrowserThread::IO},
-                   base::BindOnce(&URLLoaderInterceptor::IOState::Shutdown,
+    GetIOThreadTaskRunner({})->PostTask(
+        FROM_HERE, base::BindOnce(&URLLoaderInterceptor::IOState::Shutdown,
                                   io_thread_, run_loop.QuitClosure()));
     run_loop.Run();
   } else {
-    base::PostTask(FROM_HERE, {BrowserThread::IO},
-                   base::BindOnce(&URLLoaderInterceptor::IOState::Shutdown,
+    GetIOThreadTaskRunner({})->PostTask(
+        FROM_HERE, base::BindOnce(&URLLoaderInterceptor::IOState::Shutdown,
                                   io_thread_, base::OnceClosure()));
   }
+}
+
+// static
+std::unique_ptr<URLLoaderInterceptor>
+URLLoaderInterceptor::ServeFilesFromDirectoryAtOrigin(
+    const std::string& relative_base_path,
+    const GURL& origin,
+    base::RepeatingCallback<void(const GURL&)> callback) {
+  return std::make_unique<URLLoaderInterceptor>(base::BindLambdaForTesting(
+      [=](content::URLLoaderInterceptor::RequestParams* params) -> bool {
+        // Ignore requests for other origins.
+        if (params->url_request.url.GetOrigin() != origin.GetOrigin())
+          return false;
+
+        // Remove the leading slash from the url path, so that it can be
+        // treated as a relative path by base::FilePath::AppendASCII.
+        auto path = base::TrimString(params->url_request.url.path_piece(), "/",
+                                     base::TRIM_LEADING);
+
+        // URLLoaderInterceptor insists that all files exist unless
+        // explicitly said to be failing.  Many browsertests fetch
+        // nonessential urls like favicons, so just ignore missing files
+        // entirely, to behave more like net::test::EmbeddedTestServer.
+        base::ScopedAllowBlockingForTesting allow_blocking;
+        auto full_path = GetDataFilePath(relative_base_path).AppendASCII(path);
+        if (!base::PathExists(full_path))
+          return false;
+
+        callback.Run(params->url_request.url);
+        content::URLLoaderInterceptor::WriteResponse(full_path,
+                                                     params->client.get());
+        return true;
+      }));
 }
 
 void URLLoaderInterceptor::WriteResponse(
@@ -605,8 +612,8 @@ void URLLoaderInterceptor::CreateURLLoaderFactoryForRenderProcessHost(
     int process_id,
     mojo::PendingRemote<network::mojom::URLLoaderFactory> original_factory) {
   if (!BrowserThread::CurrentlyOn(BrowserThread::IO)) {
-    base::PostTask(
-        FROM_HERE, {BrowserThread::IO},
+    GetIOThreadTaskRunner({})->PostTask(
+        FROM_HERE,
         base::BindOnce(
             &URLLoaderInterceptor::CreateURLLoaderFactoryForRenderProcessHost,
             base::Unretained(this), std::move(receiver), process_id,

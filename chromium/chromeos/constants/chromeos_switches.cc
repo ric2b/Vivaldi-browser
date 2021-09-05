@@ -264,14 +264,17 @@ const char kEnableEncryptionMigration[] = "enable-encryption-migration";
 // Enables sharing assets for installed default apps.
 const char kEnableExtensionAssetsSharing[] = "enable-extension-assets-sharing";
 
-// Enables the use of Houdini library for ARM binary translation.
+// Enables the use of 32-bit Houdini library for ARM binary translation.
 const char kEnableHoudini[] = "enable-houdini";
 
-// Enables the use of Houdini 64-bit library for ARM binary translation.
+// Enables the use of 64-bit Houdini library for ARM binary translation.
 const char kEnableHoudini64[] = "enable-houdini64";
 
-// Enables the use of NDK translation library for ARM binary translation.
+// Enables the use of 32-bit NDK translation library for ARM binary translation.
 const char kEnableNdkTranslation[] = "enable-ndk-translation";
+
+// Enables the use of 64-bit NDK translation library for ARM binary translation.
+const char kEnableNdkTranslation64[] = "enable-ndk-translation64";
 
 // Enables request of tablet site (via user agent override).
 const char kEnableRequestTabletSite[] = "enable-request-tablet-site";
@@ -298,6 +301,9 @@ const char kEnterpriseEnableForcedReEnrollment[] =
 // Whether to enable initial enterprise enrollment.
 const char kEnterpriseEnableInitialEnrollment[] =
     "enterprise-enable-initial-enrollment";
+
+// Whether to enable private set membership queries.
+const char kEnterpriseEnablePrivateSetMembership[] = "enterprise-enable-psm";
 
 // Enables the zero-touch enterprise enrollment flow.
 const char kEnterpriseEnableZeroTouchEnrollment[] =
@@ -354,6 +360,11 @@ const char kForceFirstRunUI[] = "force-first-run-ui";
 // user profile check and time limits and shows the notification every time
 // for any type of user. Should be used only for testing.
 const char kForceHappinessTrackingSystem[] = "force-happiness-tracking-system";
+
+// Forces Hardware ID check (happens during OOBE) to fail. Should be used only
+// for testing.
+const char kForceHWIDCheckFailureForTest[] =
+    "force-hwid-check-failure-for-test";
 
 // Usually in browser tests the usual login manager bringup is skipped so that
 // tests can change how it's brought up. This flag disables that.
@@ -511,6 +522,9 @@ const char kShowOobeDevOverlay[] = "show-oobe-dev-overlay";
 
 // Specifies directory for screenshots taken with OOBE UI Debugger.
 const char kOobeScreenshotDirectory[] = "oobe-screenshot-dir";
+
+// Specifies directory for the Telemetry System Web Extension.
+const char kTelemetryExtensionDirectory[] = "telemetry-extension-dir";
 
 // Enables testing for encryption migration UI.
 const char kTestEncryptionMigrationUI[] = "test-encryption-migration-ui";

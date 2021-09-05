@@ -253,12 +253,12 @@ NavigateToURLWithDispositionBlockUntilNavigationsComplete(
     // Some other flag caused the wait prior to this.
     return nullptr;
   }
-  WebContents* web_contents = NULL;
+  WebContents* web_contents = nullptr;
   if (disposition == WindowOpenDisposition::NEW_BACKGROUND_TAB) {
     // We've opened up a new tab, but not selected it.
     TabStripModel* tab_strip = browser->tab_strip_model();
     web_contents = tab_strip->GetWebContentsAt(tab_strip->active_index() + 1);
-    EXPECT_TRUE(web_contents != NULL)
+    EXPECT_TRUE(web_contents)
         << " Unable to wait for navigation to \"" << url.spec()
         << "\" because the new tab is not available yet";
     if (!web_contents)
@@ -279,9 +279,9 @@ NavigateToURLWithDispositionBlockUntilNavigationsComplete(
     observer.Wait();
     return web_contents->GetMainFrame()->GetProcess();
   }
-  EXPECT_TRUE(NULL != web_contents) << " Unable to wait for navigation to \""
-                                    << url.spec() << "\""
-                                    << " because we can't get the tab contents";
+  EXPECT_TRUE(web_contents)
+      << " Unable to wait for navigation to \"" << url.spec() << "\""
+      << " because we can't get the tab contents";
   return nullptr;
 }
 
@@ -396,6 +396,7 @@ int FindInPage(WebContents* tab,
   find_in_page::FindTabHelper* find_tab_helper =
       find_in_page::FindTabHelper::FromWebContents(tab);
   find_tab_helper->StartFinding(search_string, forward, match_case,
+                                true, /* find_next_if_selection_matches */
                                 true /* run_synchronously_for_testing */);
   FindResultWaiter observer(tab);
   observer.Wait();
@@ -452,9 +453,9 @@ namespace {
 
 void GetCookieCallback(base::RepeatingClosure callback,
                        net::CookieList* cookies,
-                       const net::CookieStatusList& cookie_list,
-                       const net::CookieStatusList& excluded_cookies) {
-  *cookies = net::cookie_util::StripStatuses(cookie_list);
+                       const net::CookieAccessResultList& cookie_list,
+                       const net::CookieAccessResultList& excluded_cookies) {
+  *cookies = net::cookie_util::StripAccessResults(cookie_list);
   callback.Run();
 }
 

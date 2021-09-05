@@ -71,6 +71,7 @@ for m in re.findall(r"(.*node_modules/((@[^/]+)?[^@][^/]+))", maindeps):
   if "licensetype" in entry and entry["licensetype"] not in [
     "SEE LICENSE IN LICENSE", # Current license is "SEE LICENSE IN LICENSE" for rrule, but should be: BSD-3-Clause. 
                               # Pull request has been issued with this change. To be removed. VB-60638 arnar
+    "(BSD-3-Clause AND Apache-2.0)",
     "(MIT AND Zlib)",
     "Apache 2.0",
     "Apache License, Version 2.0",

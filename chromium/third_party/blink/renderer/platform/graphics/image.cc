@@ -40,6 +40,7 @@
 #include "third_party/blink/renderer/platform/geometry/float_size.h"
 #include "third_party/blink/renderer/platform/geometry/length.h"
 #include "third_party/blink/renderer/platform/graphics/bitmap_image.h"
+#include "third_party/blink/renderer/platform/graphics/dark_mode_image_classifier.h"
 #include "third_party/blink/renderer/platform/graphics/deferred_image_decoder.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_context.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_image.h"
@@ -64,7 +65,12 @@ Image::Image(ImageObserver* observer, bool is_multipart)
       stable_image_id_(PaintImage::GetNextId()),
       is_multipart_(is_multipart) {}
 
-Image::~Image() = default;
+Image::~Image() {
+  // TODO(prashant.n): This logic is needed to purge cache for the same origin
+  // page navigations. Redesign this once dark mode filter module gets moved to
+  // compositor side.
+  DarkModeImageClassifier::RemoveCache(stable_image_id_);
+}
 
 Image* Image::NullImage() {
   DCHECK(IsMainThread());
@@ -356,29 +362,6 @@ SkBitmap Image::AsSkBitmapForCurrentFrame(
   return bitmap;
 }
 
-bool Image::GetBitmap(const FloatRect& src_rect, SkBitmap* bitmap) {
-  if (!src_rect.Width() || !src_rect.Height())
-    return false;
-
-  SkScalar sx = SkFloatToScalar(src_rect.X());
-  SkScalar sy = SkFloatToScalar(src_rect.Y());
-  SkScalar sw = SkFloatToScalar(src_rect.Width());
-  SkScalar sh = SkFloatToScalar(src_rect.Height());
-  SkRect src = {sx, sy, sx + sw, sy + sh};
-  SkRect dest = {0, 0, sw, sh};
-
-  if (!bitmap || !bitmap->tryAllocPixels(SkImageInfo::MakeN32(
-                     static_cast<int>(src_rect.Width()),
-                     static_cast<int>(src_rect.Height()), kPremul_SkAlphaType)))
-    return false;
-
-  SkCanvas canvas(*bitmap);
-  canvas.clear(SK_ColorTRANSPARENT);
-  canvas.drawImageRect(PaintImageForCurrentFrame().GetSkImage(), src, dest,
-                       nullptr);
-  return true;
-}
-
 FloatRect Image::CorrectSrcRectForImageOrientation(FloatSize image_size,
                                                    FloatRect src_rect) const {
   ImageOrientation orientation = CurrentFrameOrientation();
@@ -386,29 +369,6 @@ FloatRect Image::CorrectSrcRectForImageOrientation(FloatSize image_size,
   AffineTransform forward_map = orientation.TransformFromDefault(image_size);
   AffineTransform inverse_map = forward_map.Inverse();
   return inverse_map.MapRect(src_rect);
-}
-
-DarkModeClassification Image::GetDarkModeClassification(
-    const FloatRect& src_rect) {
-  // Assuming that multiple uses of the same sprite region all have the same
-  // size, only the top left corner coordinates of the src_rect are used to
-  // generate the key for caching and retrieving the classification.
-  ClassificationKey key(src_rect.X(), src_rect.Y());
-  auto result = dark_mode_classifications_.find(key);
-  if (result == dark_mode_classifications_.end())
-    return DarkModeClassification::kNotClassified;
-
-  return result->value;
-}
-
-void Image::AddDarkModeClassification(
-    const FloatRect& src_rect,
-    DarkModeClassification dark_mode_classification) {
-  // Add the classification in the map only if the image is not classified yet.
-  DCHECK(GetDarkModeClassification(src_rect) ==
-         DarkModeClassification::kNotClassified);
-  ClassificationKey key(src_rect.X(), src_rect.Y());
-  dark_mode_classifications_.insert(key, dark_mode_classification);
 }
 
 }  // namespace blink

@@ -615,10 +615,24 @@ error::Error GLES2DecoderPassthroughImpl::DoBlendEquation(GLenum mode) {
   return error::kNoError;
 }
 
+error::Error GLES2DecoderPassthroughImpl::DoBlendEquationiOES(GLuint buf,
+                                                              GLenum mode) {
+  api()->glBlendEquationiOESFn(buf, mode);
+  return error::kNoError;
+}
+
 error::Error GLES2DecoderPassthroughImpl::DoBlendEquationSeparate(
     GLenum modeRGB,
     GLenum modeAlpha) {
   api()->glBlendEquationSeparateFn(modeRGB, modeAlpha);
+  return error::kNoError;
+}
+
+error::Error GLES2DecoderPassthroughImpl::DoBlendEquationSeparateiOES(
+    GLuint buf,
+    GLenum modeRGB,
+    GLenum modeAlpha) {
+  api()->glBlendEquationSeparateiOESFn(buf, modeRGB, modeAlpha);
   return error::kNoError;
 }
 
@@ -628,11 +642,28 @@ error::Error GLES2DecoderPassthroughImpl::DoBlendFunc(GLenum sfactor,
   return error::kNoError;
 }
 
+error::Error GLES2DecoderPassthroughImpl::DoBlendFunciOES(GLuint buf,
+                                                          GLenum sfactor,
+                                                          GLenum dfactor) {
+  api()->glBlendFunciOESFn(buf, sfactor, dfactor);
+  return error::kNoError;
+}
+
 error::Error GLES2DecoderPassthroughImpl::DoBlendFuncSeparate(GLenum srcRGB,
                                                               GLenum dstRGB,
                                                               GLenum srcAlpha,
                                                               GLenum dstAlpha) {
   api()->glBlendFuncSeparateFn(srcRGB, dstRGB, srcAlpha, dstAlpha);
+  return error::kNoError;
+}
+
+error::Error GLES2DecoderPassthroughImpl::DoBlendFuncSeparateiOES(
+    GLuint buf,
+    GLenum srcRGB,
+    GLenum dstRGB,
+    GLenum srcAlpha,
+    GLenum dstAlpha) {
+  api()->glBlendFuncSeparateiOESFn(buf, srcRGB, dstRGB, srcAlpha, dstAlpha);
   return error::kNoError;
 }
 
@@ -741,6 +772,15 @@ error::Error GLES2DecoderPassthroughImpl::DoColorMask(GLboolean red,
                                                       GLboolean blue,
                                                       GLboolean alpha) {
   api()->glColorMaskFn(red, green, blue, alpha);
+  return error::kNoError;
+}
+
+error::Error GLES2DecoderPassthroughImpl::DoColorMaskiOES(GLuint buf,
+                                                          GLboolean red,
+                                                          GLboolean green,
+                                                          GLboolean blue,
+                                                          GLboolean alpha) {
+  api()->glColorMaskiOESFn(buf, red, green, blue, alpha);
   return error::kNoError;
 }
 
@@ -1591,6 +1631,15 @@ error::Error GLES2DecoderPassthroughImpl::DoGetBooleanv(GLenum pname,
                           });
 }
 
+error::Error GLES2DecoderPassthroughImpl::DoGetBooleani_v(GLenum pname,
+                                                          GLuint index,
+                                                          GLsizei bufsize,
+                                                          GLsizei* length,
+                                                          GLboolean* data) {
+  glGetBooleani_vRobustANGLE(pname, index, bufsize, length, data);
+  return error::kNoError;
+}
+
 error::Error GLES2DecoderPassthroughImpl::DoGetBufferParameteri64v(
     GLenum target,
     GLenum pname,
@@ -2235,6 +2284,13 @@ error::Error GLES2DecoderPassthroughImpl::DoIsBuffer(GLuint buffer,
 error::Error GLES2DecoderPassthroughImpl::DoIsEnabled(GLenum cap,
                                                       uint32_t* result) {
   *result = api()->glIsEnabledFn(cap);
+  return error::kNoError;
+}
+
+error::Error GLES2DecoderPassthroughImpl::DoIsEnablediOES(GLenum target,
+                                                          GLuint index,
+                                                          uint32_t* result) {
+  *result = api()->glIsEnablediOESFn(target, index);
   return error::kNoError;
 }
 
@@ -5062,26 +5118,8 @@ GLES2DecoderPassthroughImpl::DoUniformMatrix4fvStreamTextureMatrixCHROMIUM(
     return error::kNoError;
   }
 
-  float gl_matrix[16] = {};
-
-  GLStreamTextureImage* image =
-      bound_texture->GetStreamLevelImage(kTextureTarget, 0);
-  if (image) {
-    gfx::Transform st_transform(gfx::Transform::kSkipInitialization);
-    gfx::Transform pre_transform(gfx::Transform::kSkipInitialization);
-    image->GetTextureMatrix(gl_matrix);
-    st_transform.matrix().setColMajorf(gl_matrix);
-    // const_cast is safe, because setColMajorf only does a memcpy.
-    // TODO(piman): can we remove this assumption without having to introduce
-    // an extra copy?
-    pre_transform.matrix().setColMajorf(const_cast<const GLfloat*>(transform));
-    gfx::Transform(pre_transform, st_transform).matrix().asColMajorf(gl_matrix);
-  } else {
-    // Missing stream texture. Treat matrix as identity.
-    memcpy(gl_matrix, const_cast<const GLfloat*>(transform), sizeof(gl_matrix));
-  }
-
-  api()->glUniformMatrix4fvFn(location, 1, transpose, gl_matrix);
+  api()->glUniformMatrix4fvFn(location, 1, transpose,
+                              const_cast<const GLfloat*>(transform));
 
   return error::kNoError;
 }
@@ -5406,7 +5444,8 @@ error::Error
 GLES2DecoderPassthroughImpl::DoBeginSharedImageAccessDirectCHROMIUM(
     GLuint client_id,
     GLenum mode) {
-  if (mode != GL_SHARED_IMAGE_ACCESS_MODE_READWRITE_CHROMIUM &&
+  if (mode != GL_SHARED_IMAGE_ACCESS_MODE_OVERLAY_CHROMIUM &&
+      mode != GL_SHARED_IMAGE_ACCESS_MODE_READWRITE_CHROMIUM &&
       mode != GL_SHARED_IMAGE_ACCESS_MODE_READ_CHROMIUM) {
     InsertError(GL_INVALID_ENUM, "unrecognized access mode");
     return error::kNoError;
@@ -5457,6 +5496,18 @@ error::Error
 GLES2DecoderPassthroughImpl::DoEndBatchReadAccessSharedImageCHROMIUM() {
   DCHECK(group_->shared_image_manager());
   group_->shared_image_manager()->EndBatchReadAccess();
+  return error::kNoError;
+}
+
+error::Error GLES2DecoderPassthroughImpl::DoEnableiOES(GLenum target,
+                                                       GLuint index) {
+  api()->glEnableiOESFn(target, index);
+  return error::kNoError;
+}
+
+error::Error GLES2DecoderPassthroughImpl::DoDisableiOES(GLenum target,
+                                                        GLuint index) {
+  api()->glDisableiOESFn(target, index);
   return error::kNoError;
 }
 

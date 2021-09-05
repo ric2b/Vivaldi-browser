@@ -41,6 +41,7 @@
 #include "chrome/browser/web_applications/components/app_shim_registry_mac.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/browser/web_applications/components/web_app_shortcut_mac.h"
+#include "chrome/browser/web_applications/web_app_provider.h"
 #include "components/crx_file/id_util.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/notification_details.h"
@@ -510,10 +511,6 @@ void AppShimManager::OnShimProcessConnectedAndAllLaunchesDone(
   // If we already have a host attached (e.g, due to multiple launches racing),
   // close down the app shim that didn't win the race.
   if (host->HasBootstrapConnected()) {
-    // If another app shim process has already connected to this (profile,
-    // app_id) pair, then focus the windows for the existing process. Note
-    // that this only does anything for non-RemoveCocoa apps.
-    OnShimFocus(profile_state->GetHost());
     bootstrap->OnFailedToConnectToHost(
         chrome::mojom::AppShimLaunchResult::kDuplicateHost);
     return;
@@ -571,43 +568,59 @@ void AppShimManager::CloseShimForApp(Profile* profile,
 void AppShimManager::LoadProfileAndApp(const base::FilePath& profile_path,
                                        const web_app::AppId& app_id,
                                        LoadProfileAppCallback callback) {
-  Profile* profile = ProfileForPath(profile_path);
-  if (profile) {
-    OnProfileLoaded(profile_path, app_id, std::move(callback), profile);
-  } else {
-    LoadProfileAsync(profile_path,
-                     base::BindOnce(&AppShimManager::OnProfileLoaded,
-                                    weak_factory_.GetWeakPtr(), profile_path,
-                                    app_id, std::move(callback)));
-  }
+  // Run |profile_loaded_callback| when the profile is loaded (be that now, or
+  // after having to asynchronously load the profile).
+  auto profile_loaded_callback = base::BindOnce(
+      &AppShimManager::OnProfileLoaded, weak_factory_.GetWeakPtr(),
+      profile_path, app_id, std::move(callback));
+  if (auto* profile = ProfileForPath(profile_path))
+    std::move(profile_loaded_callback).Run(profile);
+  else
+    LoadProfileAsync(profile_path, std::move(profile_loaded_callback));
 }
 
 void AppShimManager::OnProfileLoaded(const base::FilePath& profile_path,
                                      const web_app::AppId& app_id,
                                      LoadProfileAppCallback callback,
                                      Profile* profile) {
+  // It may be that the profile fails to load.
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (!profile) {
-    // User may have deleted the profile this shim was originally created for.
-    // TODO(jackhou): Add some UI for this case and remove the LOG.
-    LOG(ERROR) << "Requested directory is not a known profile '"
-               << profile_path.value() << "'.";
-    std::move(callback).Run(profile);
+    LOG(ERROR) << "Failed to load profile from " << profile_path.value() << ".";
+    std::move(callback).Run(nullptr);
     return;
   }
+  // Run |registry_ready_callback| when the WebAppProvider is ready (be that
+  // now, or after a callback). Failing to do so will result in apps not
+  // launching.
+  // https://crbug.com/1094419.
+  auto registry_ready_callback = base::BindOnce(
+      &AppShimManager::OnProfileAppRegistryReady, weak_factory_.GetWeakPtr(),
+      profile_path, app_id, std::move(callback));
+  WaitForAppRegistryReadyAsync(profile, std::move(registry_ready_callback));
+}
 
-  // TODO(jeremya): Handle the case that launching the app fails. Probably we
-  // need to watch for 'app successfully launched' or at least 'background page
-  // exists/was created' and time out with failure if we don't see that sign of
-  // life within a certain window.
+void AppShimManager::OnProfileAppRegistryReady(
+    const base::FilePath& profile_path,
+    const web_app::AppId& app_id,
+    LoadProfileAppCallback callback) {
+  // It may be that the profile was destroyed while waiting for the callback to
+  // be issued.
+  Profile* profile = ProfileForPath(profile_path);
+  if (!profile) {
+    std::move(callback).Run(nullptr);
+    return;
+  }
+  // Run |app_enabled_callback| once the app is enabled (now or async). Note
+  // that this is only relevant for extension-based apps.
+  auto app_enabled_callback =
+      base::BindOnce(&AppShimManager::OnAppEnabled, weak_factory_.GetWeakPtr(),
+                     profile_path, app_id, std::move(callback));
   if (delegate_->AppIsInstalled(profile, app_id)) {
-    std::move(callback).Run(profile);
+    std::move(app_enabled_callback).Run();
   } else {
-    delegate_->EnableExtension(
-        profile, app_id,
-        base::BindOnce(&AppShimManager::OnAppEnabled,
-                       weak_factory_.GetWeakPtr(), profile_path, app_id,
-                       std::move(callback)));
+    delegate_->EnableExtension(profile, app_id,
+                               std::move(app_enabled_callback));
   }
 }
 
@@ -635,6 +648,17 @@ void AppShimManager::LoadProfileAsync(
     base::OnceCallback<void(Profile*)> callback) {
   ProfileManager* profile_manager = g_browser_process->profile_manager();
   profile_manager->LoadProfileByPath(full_path, false, std::move(callback));
+}
+
+void AppShimManager::WaitForAppRegistryReadyAsync(
+    Profile* profile,
+    base::OnceCallback<void()> callback) {
+  auto* provider = web_app::WebAppProvider::Get(profile);
+  DCHECK(provider);
+  if (provider->on_registry_ready().is_signaled())
+    std::move(callback).Run();
+  else
+    provider->on_registry_ready().Post(FROM_HERE, std::move(callback));
 }
 
 bool AppShimManager::IsProfileLockedForPath(const base::FilePath& full_path) {
@@ -723,12 +747,21 @@ void AppShimManager::OnShimFocus(AppShimHost* host) {
   if (host->UsesRemoteViews())
     return;
 
+  // Legacy apps don't own their own windows, so when we focus the app,
+  // what we really want to do is focus the Chrome windows.
   Profile* profile = ProfileForPath(host->GetProfilePath());
-  if (!delegate_->AppIsInstalled(profile, host->GetAppId())) {
-    CloseShimForApp(profile, host->GetAppId());
-    return;
-  }
+  delegate_->ShowAppWindows(profile, host->GetAppId());
+}
 
+void AppShimManager::OnShimReopen(AppShimHost* host) {
+  // TODO(https://crbug.com/1080729): If the app has no windows open, this
+  // should trigger an app launch for PWAs as well.
+  if (host->UsesRemoteViews())
+    return;
+
+  // Legacy apps don't own their own windows, so when we focus the app,
+  // what we really want to do is focus the Chrome windows.
+  Profile* profile = ProfileForPath(host->GetProfilePath());
   if (delegate_->ShowAppWindows(profile, host->GetAppId()))
     return;
 

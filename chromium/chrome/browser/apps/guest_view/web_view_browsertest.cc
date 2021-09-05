@@ -3215,7 +3215,13 @@ class WebViewCaptureTest : public WebViewTest {
   }
 };
 
-IN_PROC_BROWSER_TEST_F(WebViewTest, Shim_TestZoomAPI) {
+// https://crbug.com/1087381
+#if defined(OS_CHROMEOS) || (defined(OS_LINUX) && defined(ADDRESS_SANITIZER))
+#define MAYBE_Shim_TestZoomAPI DISABLED_Shim_TestZoomAPI
+#else
+#define MAYBE_Shim_TestZoomAPI Shim_TestZoomAPI
+#endif
+IN_PROC_BROWSER_TEST_F(WebViewTest, MAYBE_Shim_TestZoomAPI) {
   TestHelper("testZoomAPI", "web_view/shim", NO_TEST_SERVER);
 }
 
@@ -3593,6 +3599,19 @@ IN_PROC_BROWSER_TEST_F(WebViewTest, LoadWebviewInaccessibleResource) {
   GURL foo_url(embedder_url.GetOrigin().spec() + "assets/foo.html");
 
   EXPECT_EQ(foo_url, web_view_contents->GetLastCommittedURL());
+}
+
+// Ensure that only app resources accessible to the webview can be loaded in a
+// webview even if the webview commits an app frame.
+IN_PROC_BROWSER_TEST_F(WebViewTest,
+                       LoadAccessibleSubresourceInAppWebviewFrame) {
+  TestHelper("testLoadAccessibleSubresourceInAppWebviewFrame",
+             "web_view/load_webview_accessible_resource", NEEDS_TEST_SERVER);
+}
+IN_PROC_BROWSER_TEST_F(WebViewTest,
+                       InaccessibleResourceDoesNotLoadInAppWebviewFrame) {
+  TestHelper("testInaccessibleResourceDoesNotLoadInAppWebviewFrame",
+             "web_view/load_webview_accessible_resource", NEEDS_TEST_SERVER);
 }
 
 // Makes sure that a webview will display correctly after reloading it after a
@@ -4126,7 +4145,7 @@ IN_PROC_BROWSER_TEST_F(ChromeSignInWebViewTest,
   auto* find_helper =
       find_in_page::FindTabHelper::FromWebContents(embedder_web_contents);
   find_helper->StartFinding(base::ASCIIToUTF16("doesn't matter"), true, true,
-                            false);
+                            true);
   auto pending =
       content::GetRenderFrameHostsWithPendingFindResults(embedder_web_contents);
   // Request for main frame of the tab.

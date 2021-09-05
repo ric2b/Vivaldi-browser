@@ -13,6 +13,7 @@
 #include "ash/style/ash_color_provider.h"
 #include "ash/system/model/system_tray_model.h"
 #include "ash/wallpaper/wallpaper_controller_impl.h"
+#include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/scoped_observer.h"
@@ -100,19 +101,24 @@ class ShelfConfig::ShelfAccessibilityObserver : public AccessibilityObserver {
 };
 
 ShelfConfig::ShelfConfig()
-    : in_tablet_mode_(false),
+    : use_in_app_shelf_in_overview_(false),
+      overview_mode_(false),
+      in_tablet_mode_(false),
       is_dense_(false),
       shelf_controls_shown_(true),
       is_virtual_keyboard_shown_(false),
       is_app_list_visible_(false),
       shelf_button_icon_size_(44),
+      shelf_button_icon_size_median_(40),
       shelf_button_icon_size_dense_(36),
       shelf_button_size_(56),
+      shelf_button_size_median_(52),
       shelf_button_size_dense_(48),
       shelf_button_spacing_(8),
       shelf_status_area_hit_region_padding_(4),
       shelf_status_area_hit_region_padding_dense_(2),
-      app_icon_group_margin_(16),
+      app_icon_group_margin_tablet_(16),
+      app_icon_group_margin_clamshell_(12),
       shelf_control_permanent_highlight_background_(
           SkColorSetA(SK_ColorWHITE, 26)),  // 10%
       shelf_focus_border_color_(gfx::kGoogleBlue300),
@@ -159,6 +165,7 @@ void ShelfConfig::Init() {
     shell->app_list_controller()->AddObserver(this);
     display::Screen::GetScreen()->AddObserver(this);
     shell->system_tray_model()->virtual_keyboard()->AddObserver(this);
+    shell->overview_controller()->AddObserver(this);
   }
 
   shell->tablet_mode_controller()->AddObserver(this);
@@ -173,9 +180,23 @@ void ShelfConfig::Shutdown() {
   if (!chromeos::switches::ShouldShowShelfHotseat())
     return;
 
+  shell->overview_controller()->RemoveObserver(this);
   shell->system_tray_model()->virtual_keyboard()->RemoveObserver(this);
   display::Screen::GetScreen()->RemoveObserver(this);
   shell->app_list_controller()->RemoveObserver(this);
+}
+
+void ShelfConfig::OnOverviewModeWillStart() {
+  DCHECK(!overview_mode_);
+  use_in_app_shelf_in_overview_ =
+      !features::IsMaintainShelfStateWhenEnteringOverviewEnabled() ||
+      is_in_app();
+  overview_mode_ = true;
+}
+
+void ShelfConfig::OnOverviewModeEnding(OverviewSession* overview_session) {
+  overview_mode_ = false;
+  UpdateConfig(is_app_list_visible_, /*tablet_mode_changed=*/false);
 }
 
 void ShelfConfig::OnTabletModeStarting() {
@@ -235,24 +256,41 @@ bool ShelfConfig::ShelfControlsForcedShownForAccessibility() const {
              ->tablet_mode_shelf_navigation_buttons_enabled();
 }
 
-int ShelfConfig::GetShelfButtonSize(bool force_dense) const {
-  return (is_dense_ || force_dense) ? shelf_button_size_dense_
-                                    : shelf_button_size_;
+int ShelfConfig::GetShelfButtonSize(HotseatDensity density) const {
+  if (is_dense_)
+    return shelf_button_size_dense_;
+
+  switch (density) {
+    case HotseatDensity::kNormal:
+      return shelf_button_size_;
+    case HotseatDensity::kSemiDense:
+      return shelf_button_size_median_;
+    case HotseatDensity::kDense:
+      return shelf_button_size_dense_;
+  }
 }
 
-int ShelfConfig::GetShelfButtonIconSize(bool force_dense) const {
-  return (is_dense_ || force_dense) ? shelf_button_icon_size_dense_
-                                    : shelf_button_icon_size_;
+int ShelfConfig::GetShelfButtonIconSize(HotseatDensity density) const {
+  if (is_dense_)
+    return shelf_button_icon_size_dense_;
+
+  switch (density) {
+    case HotseatDensity::kNormal:
+      return shelf_button_icon_size_;
+    case HotseatDensity::kSemiDense:
+      return shelf_button_icon_size_median_;
+    case HotseatDensity::kDense:
+      return shelf_button_icon_size_dense_;
+  }
 }
 
-int ShelfConfig::GetHotseatSize(bool force_dense) const {
+int ShelfConfig::GetHotseatSize(HotseatDensity density) const {
   if (!chromeos::switches::ShouldShowShelfHotseat() ||
       !Shell::Get()->IsInTabletMode()) {
     return shelf_size();
   }
 
-  return (is_dense_ || force_dense) ? shelf_button_size_dense_
-                                    : shelf_button_size_;
+  return GetShelfButtonSize(density);
 }
 
 int ShelfConfig::shelf_size() const {
@@ -327,10 +365,19 @@ int ShelfConfig::status_area_hit_region_padding() const {
 bool ShelfConfig::is_in_app() const {
   Shell* shell = Shell::Get();
   const auto* session = shell->session_controller();
-  if (!session)
+  if (!session ||
+      session->GetSessionState() != session_manager::SessionState::ACTIVE) {
     return false;
-  return session->GetSessionState() == session_manager::SessionState::ACTIVE &&
-         (!is_app_list_visible_ || is_virtual_keyboard_shown_);
+  }
+  if (is_virtual_keyboard_shown_)
+    return true;
+  if (is_app_list_visible_)
+    return false;
+  if (overview_mode_ &&
+      features::IsMaintainShelfStateWhenEnteringOverviewEnabled()) {
+    return use_in_app_shelf_in_overview_;
+  }
+  return true;
 }
 
 float ShelfConfig::drag_hide_ratio_threshold() const {
@@ -477,6 +524,11 @@ int ShelfConfig::GetShelfControlButtonBlurRadius() const {
 int ShelfConfig::GetAppIconEndPadding() const {
   return chromeos::switches::ShouldShowShelfHotseat() ? app_icon_end_padding_
                                                       : 0;
+}
+
+int ShelfConfig::GetAppIconGroupMargin() const {
+  return in_tablet_mode_ ? app_icon_group_margin_tablet_
+                         : app_icon_group_margin_clamshell_;
 }
 
 base::TimeDelta ShelfConfig::DimAnimationDuration() const {

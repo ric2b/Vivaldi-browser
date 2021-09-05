@@ -123,13 +123,6 @@ bool DownloadFeedbackService::GetPingsForDownloadForTesting(
   return true;
 }
 
-// static
-void DownloadFeedbackService::RecordEligibleDownloadShown(
-    download::DownloadDangerType danger_type) {
-  UMA_HISTOGRAM_ENUMERATION("SBDownloadFeedback.Eligible", danger_type,
-                            download::DOWNLOAD_DANGER_TYPE_MAX);
-}
-
 void DownloadFeedbackService::BeginFeedbackForDownload(
     download::DownloadItem* download,
     DownloadCommands::Command download_command) {
@@ -162,8 +155,7 @@ void DownloadFeedbackService::BeginFeedbackOrDeleteFile(
     service->BeginFeedback(ping_request, ping_response, path);
   } else {
     file_task_runner->PostTask(
-        FROM_HERE,
-        base::BindOnce(base::IgnoreResult(&base::DeleteFile), path, false));
+        FROM_HERE, base::BindOnce(base::GetDeleteFileCallback(), path));
   }
 }
 

@@ -15,7 +15,7 @@
 #include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/strings/string16.h"
-#include "chrome/browser/android/tab_state.h"
+#include "chrome/browser/android/web_contents_state.h"
 #include "chrome/browser/sync/glue/synced_tab_delegate_android.h"
 #include "components/infobars/core/infobar_manager.h"
 #include "components/omnibox/browser/location_bar_model.h"
@@ -103,6 +103,9 @@ class TabAndroid {
       bool did_start_load,
       bool did_finish_load);
 
+  bool IsCustomTab();
+  bool IsHidden();
+
   // Methods called from Java via JNI -----------------------------------------
 
   void Destroy(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
@@ -134,7 +137,7 @@ class TabAndroid {
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
       const base::android::JavaParamRef<jstring>& url,
-      const base::android::JavaParamRef<jstring>& j_initiator_origin,
+      const base::android::JavaParamRef<jobject>& j_initiator_origin,
       const base::android::JavaParamRef<jstring>& j_extra_headers,
       const base::android::JavaParamRef<jobject>& j_post_data,
       jint page_transition,

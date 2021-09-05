@@ -153,10 +153,6 @@ scoped_refptr<Dispatcher> Core::GetAndRemoveDispatcher(MojoHandle handle) {
   return dispatcher;
 }
 
-void Core::SetDefaultProcessErrorCallback(ProcessErrorCallback callback) {
-  default_process_error_callback_ = std::move(callback);
-}
-
 MojoHandle Core::CreatePartialMessagePipe(ports::PortRef* peer) {
   RequestContext request_context;
   ports::PortRef local_port;
@@ -1475,6 +1471,29 @@ MojoResult Core::QueryQuota(MojoHandle handle,
   if (!dispatcher)
     return MOJO_RESULT_INVALID_ARGUMENT;
   return dispatcher->QueryQuota(type, limit, usage);
+}
+
+MojoResult Core::SetDefaultProcessErrorHandler(
+    MojoDefaultProcessErrorHandler handler,
+    const MojoSetDefaultProcessErrorHandlerOptions* options) {
+  if (default_process_error_callback_ && handler)
+    return MOJO_RESULT_ALREADY_EXISTS;
+
+  if (!handler) {
+    default_process_error_callback_.Reset();
+    return MOJO_RESULT_OK;
+  }
+
+  default_process_error_callback_ = base::BindRepeating(
+      [](MojoDefaultProcessErrorHandler handler, const std::string& error) {
+        MojoProcessErrorDetails details = {0};
+        details.struct_size = sizeof(details);
+        details.error_message_length = static_cast<uint32_t>(error.size());
+        details.error_message = error.c_str();
+        handler(&details);
+      },
+      handler);
+  return MOJO_RESULT_OK;
 }
 
 void Core::GetActiveHandlesForTest(std::vector<MojoHandle>* handles) {

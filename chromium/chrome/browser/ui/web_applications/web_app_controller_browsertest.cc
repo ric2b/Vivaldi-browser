@@ -22,30 +22,13 @@
 
 namespace web_app {
 
-std::string ControllerTypeParamToString(
-    const ::testing::TestParamInfo<ControllerType>& controller_type) {
-  switch (controller_type.param) {
-    case ControllerType::kHostedAppController:
-      return "HostedAppController";
-    case ControllerType::kUnifiedControllerWithBookmarkApp:
-      return "UnifiedControllerWithBookmarkApp";
-    case ControllerType::kUnifiedControllerWithWebApp:
-      return "UnifiedControllerWithWebApp";
-  }
-}
-
 WebAppControllerBrowserTestBase::WebAppControllerBrowserTestBase() {
-  if (GetParam() == ControllerType::kUnifiedControllerWithWebApp) {
+  if (GetParam() == ProviderType::kWebApps) {
     scoped_feature_list_.InitWithFeatures(
         {features::kDesktopPWAsWithoutExtensions}, {});
-  } else if (GetParam() == ControllerType::kUnifiedControllerWithBookmarkApp) {
-    scoped_feature_list_.InitWithFeatures(
-        {features::kDesktopPWAsUnifiedUiController},
-        {features::kDesktopPWAsWithoutExtensions});
   } else {
     scoped_feature_list_.InitWithFeatures(
-        {}, {features::kDesktopPWAsUnifiedUiController,
-             features::kDesktopPWAsWithoutExtensions});
+        {}, {features::kDesktopPWAsWithoutExtensions});
   }
 }
 

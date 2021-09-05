@@ -114,11 +114,12 @@ std::string MonotonicTimestamp() {
 ArcBinaryTranslationType IdentifyBinaryTranslationType(
     const StartParams& start_params) {
   const auto* command_line = base::CommandLine::ForCurrentProcess();
-  bool is_houdini_available =
+  const bool is_houdini_available =
       command_line->HasSwitch(chromeos::switches::kEnableHoudini) ||
       command_line->HasSwitch(chromeos::switches::kEnableHoudini64);
-  bool is_ndk_translation_available =
-      command_line->HasSwitch(chromeos::switches::kEnableNdkTranslation);
+  const bool is_ndk_translation_available =
+      command_line->HasSwitch(chromeos::switches::kEnableNdkTranslation) ||
+      command_line->HasSwitch(chromeos::switches::kEnableNdkTranslation64);
 
   if (!is_houdini_available && !is_ndk_translation_available)
     return ArcBinaryTranslationType::NONE;
@@ -219,14 +220,6 @@ vm_tools::concierge::StartArcVmRequest CreateStartArcVmRequest(
   }
   request.add_params("init=/init");
 
-  // TIP: When you want to see all dmesg logs from the Android system processes
-  // such as init, uncomment the following line. By default, the guest kernel
-  // rate-limits the logging and you might not be able to see all LOGs from
-  // them. The logs could be silently dropped. This is useful when modifying
-  // init.bertha.rc, for example.
-  //
-  // request.add_params("printk.devkmsg=on");
-
   for (auto& entry : kernel_cmdline)
     request.add_params(std::move(entry));
 
@@ -234,27 +227,21 @@ vm_tools::concierge::StartArcVmRequest CreateStartArcVmRequest(
 
   vm->set_kernel(file_system_status.guest_kernel_path().value());
 
-  // Add / as /dev/vda.
+  // Add rootfs as /dev/vda.
   vm->set_rootfs(file_system_status.system_image_path().value());
   request.set_rootfs_writable(file_system_status.is_host_rootfs_writable() &&
                               file_system_status.is_system_image_ext_format());
 
-  // Add /vendor as /dev/vdb.
+  // Add /vendor as /dev/block/vdb. The device name has to be consistent with
+  // the one in GenerateFirstStageFstab() in ../arc_util.cc.
   vm_tools::concierge::DiskImage* disk_image = request.add_disks();
   disk_image->set_path(file_system_status.vendor_image_path().value());
   disk_image->set_image_type(vm_tools::concierge::DISK_IMAGE_AUTO);
   disk_image->set_writable(false);
   disk_image->set_do_mount(true);
 
-  // Add /vendor as /dev/vdc.
-  // TODO(yusukes): Remove /dev/vdc once Android side stops using it.
-  disk_image = request.add_disks();
-  disk_image->set_path(file_system_status.vendor_image_path().value());
-  disk_image->set_image_type(vm_tools::concierge::DISK_IMAGE_AUTO);
-  disk_image->set_writable(false);
-  disk_image->set_do_mount(true);
-
-  // Add /run/imageloader/.../android_demo_apps.squash as /dev/vdd if needed.
+  // Add /run/imageloader/.../android_demo_apps.squash as /dev/block/vdc if
+  // needed.
   // TODO(b/144542975): Do this on upgrade instead.
   if (!demo_session_apps_path.empty()) {
     disk_image = request.add_disks();
@@ -482,7 +469,7 @@ class ArcVmClientAdapter : public ArcClientAdapter,
     OnArcInstanceStopped();
   }
 
-  void ConciergeServiceRestarted() override {}
+  void ConciergeServiceStarted() override {}
 
  private:
   void OnArcBugReportBackedUp(bool result) {
@@ -536,8 +523,6 @@ class ArcVmClientAdapter : public ArcClientAdapter,
     // stopped for other reasons, but it's not considered as an error.
     VLOG(1) << "OnArcVmServerProxyJobStopped: job "
             << (result ? "stopped" : "not running?");
-
-    should_notify_observers_ = true;
 
     // Make sure to stop arc-keymasterd if it's already started. Always move
     // |callback| as is and ignore |result|.
@@ -616,6 +601,8 @@ class ArcVmClientAdapter : public ArcClientAdapter,
       return;
     }
     std::move(callback).Run(true);
+    // StartMiniArc() successful. Update the member variable here.
+    should_notify_observers_ = true;
   }
 
   void OnConciergeStarted(UpgradeParams params,

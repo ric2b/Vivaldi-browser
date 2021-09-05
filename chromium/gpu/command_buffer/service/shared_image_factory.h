@@ -99,7 +99,9 @@ class GPU_GLES2_EXPORT SharedImageFactory {
 
 #if defined(OS_FUCHSIA)
   bool RegisterSysmemBufferCollection(gfx::SysmemBufferCollectionId id,
-                                      zx::channel token);
+                                      zx::channel token,
+                                      gfx::BufferFormat format,
+                                      gfx::BufferUsage usage);
   bool ReleaseSysmemBufferCollection(gfx::SysmemBufferCollectionId id);
 #endif  // defined(OS_FUCHSIA)
 
@@ -117,20 +119,23 @@ class GPU_GLES2_EXPORT SharedImageFactory {
   void RegisterSharedImageBackingFactoryForTesting(
       SharedImageBackingFactory* factory);
 
+  MailboxManager* mailbox_manager() { return mailbox_manager_; }
+
  private:
   bool IsSharedBetweenThreads(uint32_t usage);
+  bool CanUseWrappedSkImage(uint32_t usage) const;
   SharedImageBackingFactory* GetFactoryByUsage(
       uint32_t usage,
       viz::ResourceFormat format,
       bool* allow_legacy_mailbox,
       gfx::GpuMemoryBufferType gmb_type = gfx::EMPTY_BUFFER);
+
   MailboxManager* mailbox_manager_;
   SharedImageManager* shared_image_manager_;
   SharedContextState* shared_context_state_;
   std::unique_ptr<MemoryTypeTracker> memory_tracker_;
   const bool using_vulkan_;
-  const bool using_metal_;
-  const bool using_dawn_;
+  const bool using_skia_dawn_;
 
   // The set of SharedImages which have been created (and are being kept alive)
   // by this factory.

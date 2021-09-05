@@ -13,7 +13,7 @@ namespace gpu {
 // If the actual time the watched GPU thread spent doing actual work is less
 // than the wathdog timeout, the GPU thread can continue running through
 // OnGPUWatchdogTimeout for at most 4 times before the gpu thread is killed.
-constexpr int kMaxCountOfMoreGpuThreadTimeAllowed = 4;
+constexpr int kMaxCountOfMoreGpuThreadTimeAllowed = 3;
 #endif
 constexpr int kMaxExtraCyclesBeforeKill = 0;
 
@@ -40,8 +40,6 @@ class GPU_IPC_SERVICE_EXPORT GpuWatchdogThreadImplV2
   void OnGpuProcessTearDown() override;
   void ResumeWatchdog() override;
   void PauseWatchdog() override;
-  // Records "GPU.WatchdogThread.Event.V2" and "GPU.WatchdogThread.Event".
-  void GpuWatchdogHistogram(GpuWatchdogThreadEvent thread_event) override;
   bool IsGpuHangDetectedForTesting() override;
   void WaitForPowerObserverAddedForTesting() override;
 
@@ -90,6 +88,9 @@ class GPU_IPC_SERVICE_EXPORT GpuWatchdogThreadImplV2
 
   // Do not change the function name. It is used for [GPU HANG] carsh reports.
   void DeliberatelyTerminateToRecoverFromHang();
+
+  // Records "GPU.WatchdogThread.Event".
+  void GpuWatchdogHistogram(GpuWatchdogThreadEvent thread_event);
 
   // Histogram recorded in OnWatchdogTimeout()
   // Records "GPU.WatchdogThread.Timeout"

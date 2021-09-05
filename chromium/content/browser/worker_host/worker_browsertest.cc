@@ -10,7 +10,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
 #include "base/system/sys_info.h"
-#include "base/task/post_task.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_timeouts.h"
@@ -39,6 +38,7 @@
 #include "net/base/escape.h"
 #include "net/base/filename_util.h"
 #include "net/cookies/canonical_cookie.h"
+#include "net/cookies/cookie_inclusion_status.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/ssl/ssl_server_config.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
@@ -136,7 +136,7 @@ class WorkerTest : public ContentBrowserTest,
 
   static void QuitUIMessageLoop(base::OnceClosure callback,
                                 bool is_main_frame /* unused */) {
-    base::PostTask(FROM_HERE, {BrowserThread::UI}, std::move(callback));
+    GetUIThreadTaskRunner({})->PostTask(FROM_HERE, std::move(callback));
   }
 
   void NavigateAndWaitForAuth(const GURL& url) {
@@ -168,7 +168,7 @@ class WorkerTest : public ContentBrowserTest,
     cookie_manager->SetCanonicalCookie(
         *cookie, cookie_url, options,
         base::BindLambdaForTesting(
-            [&](net::CanonicalCookie::CookieInclusionStatus set_cookie_result) {
+            [&](net::CookieInclusionStatus set_cookie_result) {
               EXPECT_TRUE(set_cookie_result.IsInclude());
               run_loop.Quit();
             }));

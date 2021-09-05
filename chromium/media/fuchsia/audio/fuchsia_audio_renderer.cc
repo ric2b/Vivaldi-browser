@@ -7,7 +7,6 @@
 #include <lib/sys/cpp/component_context.h>
 
 #include "base/bind.h"
-#include "base/fuchsia/default_context.h"
 #include "base/fuchsia/fuchsia_logging.h"
 #include "base/logging.h"
 #include "base/sequenced_task_runner.h"
@@ -235,6 +234,8 @@ void FuchsiaAudioRenderer::SetLatencyHint(
   // shape and usefulness outside of fuchsia.
 }
 
+void FuchsiaAudioRenderer::SetPreservesPitch(bool preserves_pitch) {}
+
 void FuchsiaAudioRenderer::StartTicking() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
@@ -290,8 +291,10 @@ void FuchsiaAudioRenderer::SetMediaTime(base::TimeDelta time) {
 
 base::TimeDelta FuchsiaAudioRenderer::CurrentMediaTime() {
   base::AutoLock lock(timeline_lock_);
-  if (state_ != PlaybackState::kPlaying)
+  if (state_ != PlaybackState::kPlaying &&
+      state_ != PlaybackState::kEndOfStream) {
     return media_pos_;
+  }
 
   return CurrentMediaTimeLocked();
 }
@@ -304,7 +307,8 @@ bool FuchsiaAudioRenderer::GetWallClockTimes(
 
   base::AutoLock lock(timeline_lock_);
 
-  const bool is_time_moving = state_ == PlaybackState::kPlaying;
+  const bool is_time_moving = state_ == PlaybackState::kPlaying ||
+                              state_ == PlaybackState::kEndOfStream;
 
   if (media_timestamps.empty()) {
     wall_clock_times->push_back(is_time_moving ? now : base::TimeTicks());
@@ -428,8 +432,7 @@ void FuchsiaAudioRenderer::OnAudioConsumerStatusChanged(
 void FuchsiaAudioRenderer::ScheduleReadDemuxerStream() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
-  if (!demuxer_stream_ || read_timer_.IsRunning() ||
-      demuxer_stream_->IsReadPending() ||
+  if (!demuxer_stream_ || read_timer_.IsRunning() || is_demuxer_read_pending_ ||
       GetPlaybackState() == PlaybackState::kEndOfStream ||
       num_pending_packets_ >= stream_sink_buffers_.size()) {
     return;
@@ -456,7 +459,9 @@ void FuchsiaAudioRenderer::ScheduleReadDemuxerStream() {
 void FuchsiaAudioRenderer::ReadDemuxerStream() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(demuxer_stream_);
+  DCHECK(!is_demuxer_read_pending_);
 
+  is_demuxer_read_pending_ = true;
   demuxer_stream_->Read(
       base::BindOnce(&FuchsiaAudioRenderer::OnDemuxerStreamReadDone,
                      weak_factory_.GetWeakPtr()));
@@ -466,6 +471,9 @@ void FuchsiaAudioRenderer::OnDemuxerStreamReadDone(
     DemuxerStream::Status read_status,
     scoped_refptr<DecoderBuffer> buffer) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  DCHECK(is_demuxer_read_pending_);
+
+  is_demuxer_read_pending_ = false;
 
   if (read_status != DemuxerStream::kOk) {
     if (read_status == DemuxerStream::kError) {

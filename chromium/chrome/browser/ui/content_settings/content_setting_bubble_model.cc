@@ -29,12 +29,12 @@
 #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
 #include "chrome/browser/media/webrtc/permission_bubble_media_access_handler.h"
 #include "chrome/browser/media/webrtc/system_media_capture_permissions_mac.h"
+#include "chrome/browser/permissions/permission_decision_auto_blocker_factory.h"
 #include "chrome/browser/permissions/quiet_notification_permission_ui_config.h"
 #include "chrome/browser/plugins/chrome_plugin_service_filter.h"
 #include "chrome/browser/plugins/plugin_utils.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/subresource_filter/chrome_subresource_filter_client.h"
-#include "chrome/browser/ui/blocked_content/popup_blocker_tab_helper.h"
 #include "chrome/browser/ui/collected_cookies_infobar_delegate.h"
 #include "chrome/browser/ui/content_settings/content_setting_bubble_model_delegate.h"
 #include "chrome/common/chrome_features.h"
@@ -43,15 +43,21 @@
 #include "chrome/common/render_messages.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
+#include "components/blocked_content/popup_blocker_tab_helper.h"
+#include "components/content_settings/browser/content_settings_usages_state.h"
 #include "components/content_settings/browser/tab_specific_content_settings.h"
 #include "components/content_settings/common/content_settings_agent.mojom.h"
 #include "components/content_settings/core/browser/content_settings_utils.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_utils.h"
+#include "components/permissions/permission_decision_auto_blocker.h"
+#include "components/permissions/permission_manager.h"
 #include "components/permissions/permission_request_manager.h"
+#include "components/permissions/permission_result.h"
 #include "components/permissions/permission_uma_util.h"
 #include "components/permissions/permission_util.h"
+#include "components/permissions/permissions_client.h"
 #include "components/prefs/pref_service.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/subresource_filter/core/browser/subresource_filter_constants.h"
@@ -566,6 +572,8 @@ void ContentSettingMidiSysExBubbleModel::OnCustomLinkClicked() {
       content_settings->midi_usages_state().state_map();
   HostContentSettingsMap* map =
       HostContentSettingsMapFactory::GetForProfile(GetProfile());
+  auto* auto_blocker =
+      PermissionDecisionAutoBlockerFactory::GetForProfile(GetProfile());
   for (const std::pair<const GURL, ContentSetting>& map_entry : state_map) {
     permissions::PermissionUmaUtil::ScopedRevocationReporter(
         GetProfile(), map_entry.first, embedder_url,
@@ -574,6 +582,8 @@ void ContentSettingMidiSysExBubbleModel::OnCustomLinkClicked() {
     map->SetContentSettingDefaultScope(map_entry.first, embedder_url,
                                        ContentSettingsType::MIDI_SYSEX,
                                        std::string(), CONTENT_SETTING_DEFAULT);
+    auto_blocker->RemoveEmbargoAndResetCounts(map_entry.first,
+                                              ContentSettingsType::MIDI_SYSEX);
   }
 }
 
@@ -655,6 +665,8 @@ void ContentSettingDomainListBubbleModel::OnCustomLinkClicked() {
       content_settings->geolocation_usages_state().state_map();
   HostContentSettingsMap* map =
       HostContentSettingsMapFactory::GetForProfile(GetProfile());
+  auto* auto_blocker =
+      PermissionDecisionAutoBlockerFactory::GetForProfile(GetProfile());
   for (const std::pair<const GURL, ContentSetting>& map_entry : state_map) {
     permissions::PermissionUmaUtil::ScopedRevocationReporter(
         GetProfile(), map_entry.first, embedder_url,
@@ -663,6 +675,8 @@ void ContentSettingDomainListBubbleModel::OnCustomLinkClicked() {
     map->SetContentSettingDefaultScope(map_entry.first, embedder_url,
                                        ContentSettingsType::GEOLOCATION,
                                        std::string(), CONTENT_SETTING_DEFAULT);
+    auto_blocker->RemoveEmbargoAndResetCounts(map_entry.first,
+                                              ContentSettingsType::GEOLOCATION);
   }
 }
 
@@ -923,8 +937,9 @@ void ContentSettingCookiesBubbleModel::OnCustomLinkClicked() {
 
 // ContentSettingPopupBubbleModel ----------------------------------------------
 
-class ContentSettingPopupBubbleModel : public ContentSettingSingleRadioGroup,
-                                       public UrlListManager::Observer {
+class ContentSettingPopupBubbleModel
+    : public ContentSettingSingleRadioGroup,
+      public blocked_content::UrlListManager::Observer {
  public:
   ContentSettingPopupBubbleModel(Delegate* delegate, WebContents* web_contents);
   ~ContentSettingPopupBubbleModel() override;
@@ -942,7 +957,9 @@ class ContentSettingPopupBubbleModel : public ContentSettingSingleRadioGroup,
     return bubble_content().list_items[index].item_id;
   }
 
-  ScopedObserver<UrlListManager, UrlListManager::Observer> url_list_observer_;
+  ScopedObserver<blocked_content::UrlListManager,
+                 blocked_content::UrlListManager::Observer>
+      url_list_observer_;
 
   DISALLOW_COPY_AND_ASSIGN(ContentSettingPopupBubbleModel);
 };
@@ -957,7 +974,8 @@ ContentSettingPopupBubbleModel::ContentSettingPopupBubbleModel(
   set_title(l10n_util::GetStringUTF16(IDS_BLOCKED_POPUPS_TITLE));
 
   // Build blocked popup list.
-  auto* helper = PopupBlockerTabHelper::FromWebContents(web_contents);
+  auto* helper =
+      blocked_content::PopupBlockerTabHelper::FromWebContents(web_contents);
   std::map<int32_t, GURL> blocked_popups = helper->GetBlockedPopupRequests();
   for (const auto& blocked_popup : blocked_popups)
     AddListItem(CreateUrlListItem(blocked_popup.first, blocked_popup.second));
@@ -974,7 +992,8 @@ void ContentSettingPopupBubbleModel::BlockedUrlAdded(int32_t id,
 
 void ContentSettingPopupBubbleModel::OnListItemClicked(int index,
                                                        int event_flags) {
-  auto* helper = PopupBlockerTabHelper::FromWebContents(web_contents());
+  auto* helper =
+      blocked_content::PopupBlockerTabHelper::FromWebContents(web_contents());
   helper->ShowBlockedPopup(item_id_from_item_index(index),
                            ui::DispositionFromEventFlags(event_flags));
   RemoveListItem(index);
@@ -1199,14 +1218,28 @@ void ContentSettingMediaStreamBubbleModel::SetRadioGroup() {
           CameraAccessed() ? IDS_BLOCKED_MEDIASTREAM_MIC_AND_CAMERA_NO_ACTION
                            : IDS_BLOCKED_MEDIASTREAM_MIC_NO_ACTION;
   } else {
+    permissions::PermissionManager* permission_manager =
+        permissions::PermissionsClient::Get()->GetPermissionManager(
+            web_contents()->GetBrowserContext());
+    permissions::PermissionResult pan_tilt_zoom_permission =
+        permission_manager->GetPermissionStatusForFrame(
+            ContentSettingsType::CAMERA_PAN_TILT_ZOOM,
+            web_contents()->GetMainFrame(), url);
+    bool has_pan_tilt_zoom_permission_granted =
+        pan_tilt_zoom_permission.content_setting == CONTENT_SETTING_ALLOW;
     if (MicrophoneAccessed() && CameraAccessed()) {
-      radio_allow_label_id = IDS_ALLOWED_MEDIASTREAM_MIC_AND_CAMERA_NO_ACTION;
+      radio_allow_label_id =
+          has_pan_tilt_zoom_permission_granted
+              ? IDS_ALLOWED_MEDIASTREAM_MIC_AND_CAMERA_PAN_TILT_ZOOM_NO_ACTION
+              : IDS_ALLOWED_MEDIASTREAM_MIC_AND_CAMERA_NO_ACTION;
       radio_block_label_id = IDS_ALLOWED_MEDIASTREAM_MIC_AND_CAMERA_BLOCK;
     } else if (MicrophoneAccessed()) {
       radio_allow_label_id = IDS_ALLOWED_MEDIASTREAM_MIC_NO_ACTION;
       radio_block_label_id = IDS_ALLOWED_MEDIASTREAM_MIC_BLOCK;
     } else {
-      radio_allow_label_id = IDS_ALLOWED_MEDIASTREAM_CAMERA_NO_ACTION;
+      radio_allow_label_id = has_pan_tilt_zoom_permission_granted
+                                 ? IDS_ALLOWED_CAMERA_PAN_TILT_ZOOM_NO_ACTION
+                                 : IDS_ALLOWED_MEDIASTREAM_CAMERA_NO_ACTION;
       radio_block_label_id = IDS_ALLOWED_MEDIASTREAM_CAMERA_BLOCK;
     }
   }
@@ -1652,6 +1685,7 @@ ContentSettingNotificationsBubbleModel::ContentSettingNotificationsBubbleModel(
           base::UserMetricsAction("Notifications.Quiet.StaticIconClicked"));
       break;
     case QuietUiReason::kTriggeredDueToAbusiveRequests:
+    case QuietUiReason::kTriggeredDueToAbusiveContent:
       set_message(l10n_util::GetStringUTF16(
           IDS_NOTIFICATIONS_QUIET_PERMISSION_BUBBLE_ABUSIVE_DESCRIPTION));
       // TODO(crbug.com/1082738): It is rather confusing to have the `Cancel`
@@ -1702,6 +1736,7 @@ void ContentSettingNotificationsBubbleModel::OnDoneButtonClicked() {
           base::UserMetricsAction("Notifications.Quiet.ShowForSiteClicked"));
       break;
     case QuietUiReason::kTriggeredDueToAbusiveRequests:
+    case QuietUiReason::kTriggeredDueToAbusiveContent:
       manager->Deny();
       base::RecordAction(base::UserMetricsAction(
           "Notifications.Quiet.ContinueBlockingClicked"));
@@ -1719,6 +1754,7 @@ void ContentSettingNotificationsBubbleModel::OnCancelButtonClicked() {
       // No-op.
       break;
     case QuietUiReason::kTriggeredDueToAbusiveRequests:
+    case QuietUiReason::kTriggeredDueToAbusiveContent:
       manager->Accept();
       base::RecordAction(
           base::UserMetricsAction("Notifications.Quiet.ShowForSiteClicked"));

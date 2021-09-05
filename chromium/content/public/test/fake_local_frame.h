@@ -18,6 +18,7 @@
 
 namespace gfx {
 class Point;
+class Rect;
 }
 
 namespace content {
@@ -42,6 +43,7 @@ class FakeLocalFrame : public blink::mojom::LocalFrame {
   void SetFrameOwnerProperties(
       blink::mojom::FrameOwnerPropertiesPtr properties) override;
   void NotifyUserActivation() override;
+  void NotifyVirtualKeyboardOverlayRect(const gfx::Rect&) override;
   void AddMessageToConsole(blink::mojom::ConsoleMessageLevel level,
                            const std::string& message,
                            bool discard_duplicates) override;
@@ -76,13 +78,16 @@ class FakeLocalFrame : public blink::mojom::LocalFrame {
       const base::string16& source_origin,
       const base::string16& target_origin,
       blink::TransferableMessage message) override;
-
+  void GetSavableResourceLinks(
+      GetSavableResourceLinksCallback callback) override;
 #if defined(OS_MACOSX)
   void GetCharacterIndexAtPoint(const gfx::Point& point) override;
   void GetFirstRectForRange(const gfx::Range& range) override;
 #endif
   void BindReportingObserver(
       mojo::PendingReceiver<blink::mojom::ReportingObserver> receiver) override;
+  void UpdateOpener(const base::Optional<base::UnguessableToken>&
+                        opener_frame_token) override;
 
  private:
   void BindFrameHostReceiver(mojo::ScopedInterfaceEndpointHandle handle);

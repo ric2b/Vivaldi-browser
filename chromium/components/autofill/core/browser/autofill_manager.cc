@@ -248,6 +248,12 @@ bool IsAddressForm(FieldTypeGroup field_type_group) {
 void LogAutofillTypePredictionsAvailable(
     LogManager* log_manager,
     const std::vector<FormStructure*>& forms) {
+  if (VLOG_IS_ON(1)) {
+    VLOG(1) << "Parsed forms:";
+    for (FormStructure* form : forms)
+      VLOG(1) << *form;
+  }
+
   if (!log_manager || !log_manager->IsLoggingActive())
     return;
 
@@ -425,7 +431,24 @@ int TypeValueFormFillingLimit(ServerFieldType field_type) {
 
 }  // namespace
 
-AutofillManager::FillingContext::FillingContext() = default;
+AutofillManager::FillingContext::FillingContext(
+    const AutofillField& field,
+    const AutofillProfile* optional_profile,
+    const CreditCard* optional_credit_card,
+    const base::string16* optional_cvc)
+    : profile(optional_profile ? base::make_optional(*optional_profile)
+                               : base::nullopt),
+      credit_card(optional_credit_card
+                      ? base::make_optional(std::make_pair(
+                            *optional_credit_card,
+                            optional_cvc ? *optional_cvc : base::string16()))
+                      : base::nullopt),
+      filled_field_name(field.unique_name()),
+      original_fill_time(AutofillTickClock::NowTicks()) {
+  DCHECK(optional_profile || optional_credit_card);
+  DCHECK(optional_credit_card || !optional_cvc);
+  DCHECK(profile || credit_card);
+}
 
 AutofillManager::FillingContext::~FillingContext() = default;
 
@@ -892,6 +915,7 @@ void AutofillManager::OnQueryFormFieldAutofillImpl(
     const FormFieldData& field,
     const gfx::RectF& transformed_box,
     bool autoselect_first_suggestion) {
+  SetDataList(field.datalist_values, field.datalist_labels);
   external_delegate_->OnQuery(query_id, form, field, transformed_box);
 
   std::vector<Suggestion> suggestions;
@@ -1022,9 +1046,9 @@ void AutofillManager::FillOrPreviewCreditCardForm(
         credit_card_, *form_structure, *autofill_field, sync_state_);
   }
 
-  FillOrPreviewDataModelForm(
-      action, query_id, form, field, credit_card_, /*is_credit_card=*/true,
-      /*cvc=*/base::string16(), form_structure, autofill_field);
+  FillOrPreviewDataModelForm(action, query_id, form, field, /*profile=*/nullptr,
+                             &credit_card_, /*cvc=*/nullptr, form_structure,
+                             autofill_field);
 }
 
 void AutofillManager::FillOrPreviewProfileForm(
@@ -1040,22 +1064,11 @@ void AutofillManager::FillOrPreviewProfileForm(
   if (action == AutofillDriver::FORM_DATA_ACTION_FILL) {
     address_form_event_logger_->OnDidFillSuggestion(
         profile, *form_structure, *autofill_field, sync_state_);
-
-    // Set up the information needed for an eventual refill of this form.
-    if (!form_structure->GetIdentifierForRefill().empty()) {
-      auto& entry =
-          filling_contexts_map_[form_structure->GetIdentifierForRefill()];
-      auto filling_context = std::make_unique<FillingContext>();
-      filling_context->temp_data_model = profile;
-      filling_context->filled_field_name = autofill_field->unique_name();
-      filling_context->original_fill_time = AutofillTickClock::NowTicks();
-      entry = std::move(filling_context);
-    }
   }
 
-  FillOrPreviewDataModelForm(
-      action, query_id, form, field, profile, /*is_credit_card=*/false,
-      /*cvc=*/base::string16(), form_structure, autofill_field);
+  FillOrPreviewDataModelForm(action, query_id, form, field, &profile,
+                             /*credit_card=*/nullptr,
+                             /*cvc=*/nullptr, form_structure, autofill_field);
 }
 
 void AutofillManager::FillOrPreviewForm(
@@ -1096,9 +1109,9 @@ void AutofillManager::FillCreditCardForm(int query_id,
   if (!GetCachedFormAndField(form, field, &form_structure, &autofill_field))
     return;
 
-  FillOrPreviewDataModelForm(
-      AutofillDriver::FORM_DATA_ACTION_FILL, query_id, form, field, credit_card,
-      /*is_credit_card=*/true, cvc, form_structure, autofill_field);
+  FillOrPreviewDataModelForm(AutofillDriver::FORM_DATA_ACTION_FILL, query_id,
+                             form, field, /*profile=*/nullptr, &credit_card,
+                             &cvc, form_structure, autofill_field);
 }
 
 void AutofillManager::FillProfileForm(const autofill::AutofillProfile& profile,
@@ -1167,11 +1180,13 @@ void AutofillManager::OnDidFillAutofillFormData(const FormData& form,
 
   UpdatePendingForm(form);
 
-  FormStructure* form_structure = nullptr;
   std::set<FormType> form_types;
   // Find the FormStructure that corresponds to |form|. Use default form type if
   // form is not present in our cache, which will happen rarely.
-  if (FindCachedForm(form, &form_structure)) {
+
+  FormStructure* form_structure =
+      FindCachedFormByRendererId(form.unique_renderer_id);
+  if (form_structure) {
     form_types = form_structure->GetFormTypes();
   }
 
@@ -1354,8 +1369,8 @@ void AutofillManager::SetTestDelegate(AutofillManagerTestDelegate* delegate) {
   test_delegate_ = delegate;
 }
 
-void AutofillManager::OnSetDataList(const std::vector<base::string16>& values,
-                                    const std::vector<base::string16>& labels) {
+void AutofillManager::SetDataList(const std::vector<base::string16>& values,
+                                  const std::vector<base::string16>& labels) {
   if (!IsValidString16Vector(values) || !IsValidString16Vector(labels) ||
       values.size() != labels.size())
     return;
@@ -1364,14 +1379,13 @@ void AutofillManager::OnSetDataList(const std::vector<base::string16>& values,
 }
 
 void AutofillManager::SelectFieldOptionsDidChange(const FormData& form) {
-  FormStructure* form_structure = nullptr;
-
   // Look for a cached version of the form. It will be a null pointer if none is
   // found, which is fine.
-  FormStructure* cached_form = nullptr;
-  ignore_result(FindCachedForm(form, &cached_form));
+  FormStructure* cached_form =
+      FindCachedFormByRendererId(form.unique_renderer_id);
 
-  if (!ParseForm(form, cached_form, &form_structure))
+  FormStructure* form_structure = ParseForm(form, cached_form);
+  if (!form_structure)
     return;
 
   if (ShouldTriggerRefill(*form_structure))
@@ -1380,20 +1394,22 @@ void AutofillManager::SelectFieldOptionsDidChange(const FormData& form) {
 
 void AutofillManager::OnLoadedServerPredictions(
     std::string response,
-    const std::vector<std::string>& form_signatures) {
-  // Get the current valid FormStructures represented by |form_signatures|.
+    const FormAndFieldSignatures& signatures) {
+  // Get the current valid FormStructures represented by |signatures|.
   std::vector<FormStructure*> queried_forms;
-  queried_forms.reserve(form_signatures.size());
-  for (const std::string& signature : form_signatures) {
-    // The |signature| is the direct string representation of the FormSignature.
-    // Convert it to a uint64_t to do the lookup.
-    FormSignature form_signature;
-    FormStructure* form_structure;
-    if (base::StringToUint64(signature, &form_signature.value()) &&
-        FindCachedForm(form_signature, &form_structure)) {
-      queried_forms.push_back(form_structure);
-    }
+  queried_forms.reserve(signatures.size());
+  for (const auto& p : signatures) {
+    FindCachedFormsBySignature(p.first, &queried_forms);
   }
+
+  // Each form signature in |signatures| is supposed to be unique, and therefore
+  // appear only once. This ensures that FindCachedFormsBySignature() produces
+  // an output without duplicates in the forms.
+  // TODO(crbug/1064709): |queried_forms| could be a set data structure; their
+  // order should be irrelevant.
+  DCHECK_EQ(queried_forms.size(),
+            std::set<FormStructure*>(queried_forms.begin(), queried_forms.end())
+                .size());
 
   // If there are no current forms corresponding to the queried signatures, drop
   // the query response.
@@ -1404,10 +1420,12 @@ void AutofillManager::OnLoadedServerPredictions(
   if (base::FeatureList::IsEnabled(features::kAutofillUseApi)) {
     // Parse response from API.
     FormStructure::ParseApiQueryResponse(std::move(response), queried_forms,
+                                         signatures,
                                          form_interactions_ukm_logger_.get());
   } else {
     // Parse response from legacy server.
     FormStructure::ParseQueryResponse(std::move(response), queried_forms,
+                                      signatures,
                                       form_interactions_ukm_logger_.get());
   }
 
@@ -1418,15 +1436,15 @@ void AutofillManager::OnLoadedServerPredictions(
         form_interactions_ukm_logger_.get());
   }
 
-  // Forward form structures to the password generation manager to detect
-  // account creation forms.
-  driver()->PropagateAutofillPredictions(queried_forms);
-
   // Send field type predictions to the renderer so that it can possibly
   // annotate forms with the predicted types or add console warnings.
   driver()->SendAutofillTypePredictionsToRenderer(queried_forms);
 
   LogAutofillTypePredictionsAvailable(log_manager_, queried_forms);
+
+  // Forward form structures to the password generation manager to detect
+  // account creation forms.
+  driver()->PropagateAutofillPredictions(queried_forms);
 }
 
 void AutofillManager::OnCreditCardFetched(bool did_succeed,
@@ -1687,14 +1705,24 @@ void AutofillManager::FillOrPreviewDataModelForm(
     int query_id,
     const FormData& form,
     const FormFieldData& field,
-    const AutofillDataModel& data_model,
-    bool is_credit_card,
-    const base::string16& cvc,
+    const AutofillProfile* optional_profile,
+    const CreditCard* optional_credit_card,
+    const base::string16* optional_cvc,
     FormStructure* form_structure,
     AutofillField* autofill_field,
     bool is_refill) {
+  DCHECK(optional_profile || optional_credit_card);
+  DCHECK(optional_credit_card || !optional_cvc);
   DCHECK(form_structure);
   DCHECK(autofill_field);
+
+  const AutofillDataModel& data_model = [&]() -> const AutofillDataModel& {
+    if (optional_profile)
+      return *optional_profile;
+    else
+      return *optional_credit_card;
+  }();
+  bool is_credit_card = !!optional_credit_card;
 
   LogBuffer buffer;
   buffer << "is credit card section: " << is_credit_card << Br{};
@@ -1707,21 +1735,25 @@ void AutofillManager::FillOrPreviewDataModelForm(
   FormData result = form;
   DCHECK_EQ(form_structure->field_count(), form.fields.size());
 
+  if (action == AutofillDriver::FORM_DATA_ACTION_FILL && !is_refill) {
+    filling_contexts_map_[form_structure->GetIdentifierForRefill()] =
+        std::make_unique<FillingContext>(*autofill_field, optional_profile,
+                                         optional_credit_card, optional_cvc);
+  }
+
   // Only record the types that are filled for an eventual refill if all the
   // following are satisfied:
   //  The refilling feature is enabled.
   //  A form with the given name is already filled.
   //  A refill has not been attempted for that form yet.
   //  This fill is not a refill attempt.
-  //  This is not a credit card fill.
   FillingContext* filling_context = nullptr;
   auto itr =
       filling_contexts_map_.find(form_structure->GetIdentifierForRefill());
   if (itr != filling_contexts_map_.end())
     filling_context = itr->second.get();
   bool could_attempt_refill = filling_context != nullptr &&
-                              !filling_context->attempted_refill &&
-                              !is_refill && !is_credit_card;
+                              !filling_context->attempted_refill && !is_refill;
 
   // Count the number of times the value of a specific type was filled into the
   // form.
@@ -1796,11 +1828,12 @@ void AutofillManager::FillOrPreviewDataModelForm(
       continue;
     }
 
+    ServerFieldType field_type = cached_field->Type().GetStorableType();
+
     // Don't fill expired cards expiration date.
-    if (data_util::IsCreditCardExpirationType(
-            cached_field->Type().GetStorableType()) &&
-        static_cast<const CreditCard*>(&data_model)
-            ->IsExpired(AutofillClock::Now())) {
+    if (data_util::IsCreditCardExpirationType(field_type) &&
+        (!optional_credit_card ||
+         optional_credit_card->IsExpired(AutofillClock::Now()))) {
       buffer << Tr{} << field_number
              << "Skipped: don't fill expiration date of expired cards";
       continue;
@@ -1808,7 +1841,6 @@ void AutofillManager::FillOrPreviewDataModelForm(
 
     // A field with a specific type is only allowed to be filled a limited
     // number of times given by |TypeValueFormFillingLimit(field_type)|.
-    const auto field_type = cached_field->Type().GetStorableType();
     if (type_filling_count[field_type] >=
         TypeValueFormFillingLimit(field_type)) {
       buffer << Tr{} << field_number
@@ -1831,12 +1863,14 @@ void AutofillManager::FillOrPreviewDataModelForm(
     bool has_value_before = !result.fields[i].value.empty();
     bool is_autofilled_before = result.fields[i].is_autofilled;
 
+    const base::string16 kEmptyCvc{};
     std::string failure_to_fill;  // Reason for failing to fill.
 
     // Fill the non-empty value from |data_model| into the result vector, which
     // will be sent to the renderer.
     FillFieldWithValue(
-        cached_field, data_model, &result.fields[i], should_notify, cvc,
+        cached_field, data_model, &result.fields[i], should_notify,
+        optional_cvc ? *optional_cvc : kEmptyCvc,
         data_util::DetermineGroups(form_structure->GetServerFieldTypes()),
         &failure_to_fill);
 
@@ -1880,9 +1914,9 @@ std::unique_ptr<FormStructure> AutofillManager::ValidateSubmittedForm(
     const FormData& form) {
   // Ignore forms not present in our cache.  These are typically forms with
   // wonky JavaScript that also makes them not auto-fillable.
-  FormStructure* cached_submitted_form;
-  if (!FindCachedForm(form, &cached_submitted_form) ||
-      !ShouldUploadForm(*cached_submitted_form)) {
+  FormStructure* cached_submitted_form =
+      FindCachedFormByRendererId(form.unique_renderer_id);
+  if (!cached_submitted_form || !ShouldUploadForm(*cached_submitted_form)) {
     return nullptr;
   }
 
@@ -2425,8 +2459,9 @@ bool AutofillManager::ShouldTriggerRefill(const FormStructure& form_structure) {
 }
 
 void AutofillManager::TriggerRefill(const FormData& form) {
-  FormStructure* form_structure = nullptr;
-  if (!FindCachedForm(form, &form_structure))
+  FormStructure* form_structure =
+      FindCachedFormByRendererId(form.unique_renderer_id);
+  if (!form_structure)
     return;
 
   DCHECK(form_structure);
@@ -2460,12 +2495,23 @@ void AutofillManager::TriggerRefill(const FormData& form) {
     return;
 
   FormFieldData field = *autofill_field;
-  base::string16 cvc;
-  FillOrPreviewDataModelForm(
-      AutofillDriver::RendererFormDataAction::FORM_DATA_ACTION_FILL,
-      /*query_id=*/-1, form, field, filling_context->temp_data_model,
-      /*is_credit_card=*/false, cvc, form_structure, autofill_field,
-      /*is_refill=*/true);
+  if (filling_context->credit_card) {
+    FillOrPreviewDataModelForm(
+        AutofillDriver::RendererFormDataAction::FORM_DATA_ACTION_FILL,
+        /*query_id=*/-1, form, field,
+        /*profile=*/nullptr, &filling_context->credit_card.value().first,
+        &filling_context->credit_card.value().second, form_structure,
+        autofill_field,
+        /*is_refill=*/true);
+  }
+  if (filling_context->profile) {
+    FillOrPreviewDataModelForm(
+        AutofillDriver::RendererFormDataAction::FORM_DATA_ACTION_FILL,
+        /*query_id=*/-1, form, field, &filling_context->profile.value(),
+        /*credic_card=*/nullptr, /*cvc=*/nullptr, form_structure,
+        autofill_field,
+        /*is_refill=*/true);
+  }
 }
 
 void AutofillManager::GetAvailableSuggestions(

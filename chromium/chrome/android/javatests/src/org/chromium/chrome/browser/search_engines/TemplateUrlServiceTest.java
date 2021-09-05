@@ -5,7 +5,8 @@
 package org.chromium.chrome.browser.search_engines;
 
 import android.net.Uri;
-import android.support.test.filters.SmallTest;
+
+import androidx.test.filters.SmallTest;
 
 import org.junit.Assert;
 import org.junit.Rule;
@@ -15,7 +16,6 @@ import org.junit.runner.RunWith;
 import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.search_engines.settings.SearchEngineAdapter;
 import org.chromium.chrome.test.ChromeBrowserTestRule;
 import org.chromium.components.search_engines.TemplateUrl;
@@ -62,7 +62,6 @@ public class TemplateUrlServiceTest {
     @Test
     @SmallTest
     @Feature({"ContextualSearch"})
-    @RetryOnFailure
     public void testUrlForContextualSearchQueryValid() throws ExecutionException {
         waitForTemplateUrlServiceToLoad();
 
@@ -122,7 +121,6 @@ public class TemplateUrlServiceTest {
     @Test
     @SmallTest
     @Feature({"SearchEngines"})
-    @RetryOnFailure
     @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE) // see crbug.com/581268
     public void testLoadUrlService() {
         waitForTemplateUrlServiceToLoad();

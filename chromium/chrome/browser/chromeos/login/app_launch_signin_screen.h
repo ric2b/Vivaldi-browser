@@ -58,12 +58,10 @@ class AppLaunchSigninScreen : public SigninScreenHandlerDelegate,
   void Login(const UserContext& user_context,
              const SigninSpecifics& specifics) override;
   void OnSigninScreenReady() override;
-  void RemoveUser(const AccountId& account_id) override;
   void ShowEnterpriseEnrollmentScreen() override;
   void ShowEnableDebuggingScreen() override;
   void ShowKioskEnableScreen() override;
   void ShowKioskAutolaunchScreen() override;
-  void ShowUpdateRequiredScreen() override;
   void ShowWrongHWIDScreen() override;
   void SetWebUIHandler(LoginDisplayWebUIHandler* webui_handler) override;
   bool IsShowGuest() const override;

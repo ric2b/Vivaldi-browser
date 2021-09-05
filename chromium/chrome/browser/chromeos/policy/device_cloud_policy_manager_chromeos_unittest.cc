@@ -24,6 +24,7 @@
 #include "chrome/browser/chromeos/policy/device_cloud_policy_initializer.h"
 #include "chrome/browser/chromeos/policy/device_cloud_policy_store_chromeos.h"
 #include "chrome/browser/chromeos/policy/enrollment_config.h"
+#include "chrome/browser/chromeos/policy/enrollment_requisition_manager.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/chromeos/settings/device_settings_service.h"
 #include "chrome/browser/chromeos/settings/device_settings_test_helper.h"
@@ -241,6 +242,7 @@ class DeviceCloudPolicyManagerChromeOSTest
     std::unique_ptr<chromeos::attestation::AttestationFlow> unique_flow(
         CreateAttestationFlow());
     manager_->Initialize(&local_state_);
+    policy::EnrollmentRequisitionManager::Initialize();
     initializer_ = std::make_unique<DeviceCloudPolicyInitializer>(
         &local_state_, &device_management_service_,
         base::ThreadTaskRunnerHandle::Get(), install_attributes_.get(),
@@ -266,8 +268,8 @@ class DeviceCloudPolicyManagerChromeOSTest
     PolicyBundle bundle;
     bundle.Get(PolicyNamespace(POLICY_DOMAIN_CHROME, std::string()))
         .Set(key::kDeviceMetricsReportingEnabled, POLICY_LEVEL_MANDATORY,
-             POLICY_SCOPE_MACHINE, POLICY_SOURCE_CLOUD,
-             std::make_unique<base::Value>(false), nullptr);
+             POLICY_SCOPE_MACHINE, POLICY_SOURCE_CLOUD, base::Value(false),
+             nullptr);
     EXPECT_TRUE(manager_->policies().Equals(bundle));
   }
 

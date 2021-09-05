@@ -119,7 +119,6 @@
               },
               {
                 "name": "pageHistory",
-                "optional": true,
                 "type": "array",
                 "description": "Array of history items with name and index.",
                 "items": {

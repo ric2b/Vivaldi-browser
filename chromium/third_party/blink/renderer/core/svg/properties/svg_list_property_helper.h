@@ -101,13 +101,13 @@ class SVGListPropertyHelper : public SVGPropertyHelper<Derived> {
   ItemPropertyType* AppendItem(ItemPropertyType*);
   ItemPropertyType* ReplaceItem(ItemPropertyType*, uint32_t, ExceptionState&);
 
-  void Trace(Visitor* visitor) override {
+  void Trace(Visitor* visitor) const override {
     visitor->Trace(values_);
     SVGPropertyHelper<Derived>::Trace(visitor);
   }
 
  protected:
-  void DeepCopy(Derived*);
+  void DeepCopy(const Derived*);
 
   bool AdjustFromToListValues(Derived* from_list,
                               Derived* to_list,
@@ -227,7 +227,8 @@ bool SVGListPropertyHelper<Derived, ItemProperty>::CheckIndexBound(
 }
 
 template <typename Derived, typename ItemProperty>
-void SVGListPropertyHelper<Derived, ItemProperty>::DeepCopy(Derived* from) {
+void SVGListPropertyHelper<Derived, ItemProperty>::DeepCopy(
+    const Derived* from) {
   Clear();
   for (const auto& from_value : from->values_)
     Append(from_value->Clone());

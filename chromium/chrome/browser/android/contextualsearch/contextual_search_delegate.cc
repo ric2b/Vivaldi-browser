@@ -22,7 +22,6 @@
 #include "chrome/browser/language/language_model_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/translate/translate_service.h"
 #include "components/contextual_search/core/browser/public.h"
 #include "components/language/core/browser/language_model.h"
@@ -76,7 +75,7 @@ const int kContextualSearchRequestVersion = 2;
 // Deprecated: kContextualSearchSingleRequest = 3;
 const int kRelatedSearchesVersion = 4;
 
-const int kContextualSearchMaxSelection = 100;
+const int kContextualSearchMaxSelection = 1000;
 const char kXssiEscape[] = ")]}'\n";
 const char kDiscourseContextHeaderPrefix[] = "X-Additional-Discourse-Context: ";
 const char kDoPreventPreloadValue[] = "1";
@@ -299,7 +298,8 @@ std::string ContextualSearchDelegate::BuildRequestUrl(
   }
 
   int mainFunctionVersion = kContextualSearchRequestVersion;
-  if (base::FeatureList::IsEnabled(chrome::android::kRelatedSearches)) {
+  if (base::FeatureList::IsEnabled(chrome::android::kRelatedSearches) &&
+      context_->GetStartOffset() == context_->GetEndOffset()) {
     mainFunctionVersion = kRelatedSearchesVersion;
   }
 
@@ -308,7 +308,8 @@ std::string ContextualSearchDelegate::BuildRequestUrl(
       context->GetPreviousEventId(), context->GetPreviousEventResults(),
       context->GetExactResolve(),
       context->GetTranslationLanguages().detected_language,
-      context->GetTranslationLanguages().target_language);
+      context->GetTranslationLanguages().target_language,
+      context->GetTranslationLanguages().fluent_languages);
 
   search_terms_args.contextual_search_params = params;
 
@@ -406,6 +407,12 @@ bool ContextualSearchDelegate::CanSendPageURL(
   if (field_trial_->IsSendBasePageURLDisabled())
     return false;
 
+  // TODO(donnd): privacy review needed before launch.
+  // See https://crbug.com/1064141.
+  if (base::FeatureList::IsEnabled(chrome::android::kRelatedSearches)) {
+    return true;
+  }
+
   // Ensure that the default search provider is Google.
   const TemplateURL* default_search_provider =
       template_url_service->GetDefaultSearchProvider();
@@ -421,19 +428,13 @@ bool ContextualSearchDelegate::CanSendPageURL(
       (current_page_url.scheme() != url::kHttpsScheme))
     return false;
 
-  syncer::SyncService* sync_service =
-      ProfileSyncServiceFactory::GetForProfile(profile);
-  if (!sync_service)
-    return false;
-
   // Check whether the user has enabled anonymous URL-keyed data collection
   // from the unified consent service.
   std::unique_ptr<UrlKeyedDataCollectionConsentHelper>
       anonymized_unified_consent_url_helper =
           UrlKeyedDataCollectionConsentHelper::
               NewAnonymizedDataCollectionConsentHelper(
-                  ProfileManager::GetActiveUserProfile()->GetPrefs(),
-                  sync_service);
+                  ProfileManager::GetActiveUserProfile()->GetPrefs());
   // If they have, then allow sending of the URL.
   return anonymized_unified_consent_url_helper->IsEnabled();
 }

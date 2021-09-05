@@ -26,6 +26,10 @@
 #include "device/fido/fido_transport_protocol.h"
 #include "device/fido/pin.h"
 
+namespace base {
+class ElapsedTimer;
+}
+
 namespace device {
 
 class FidoAuthenticator;
@@ -51,6 +55,7 @@ enum class MakeCredentialStatus {
   // there's no UI support for collecting a PIN. This could
   // be clearer.
   kAuthenticatorMissingUserVerification,
+  kNoCommonAlgorithms,
   kStorageFull,
   kWinInvalidStateError,
   kWinNotAllowedError,
@@ -121,6 +126,7 @@ class COMPONENT_EXPORT(DEVICE_FIDO) MakeCredentialRequestHandler
 
   void HandleResponse(
       FidoAuthenticator* authenticator,
+      base::ElapsedTimer request_timer,
       CtapDeviceResponseCode response_code,
       base::Optional<AuthenticatorMakeCredentialResponse> response);
   void CollectPINThenSendRequest(FidoAuthenticator* authenticator);

@@ -5,7 +5,7 @@
 
 #include "base/supports_user_data.h"
 #include "chromium/content/common/content_export.h" // nogncheck
-#include "third_party/blink/public/platform/web_drag_operation.h"
+#include "third_party/blink/public/common/page/web_drag_operation.h"
 
 namespace blink {
 class WebMouseEvent;

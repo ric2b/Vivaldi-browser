@@ -45,8 +45,7 @@ constexpr bool kDefaultPassCtrlW = false;
 namespace crostini {
 
 GURL GenerateVshInCroshUrl(Profile* profile,
-                           const std::string& vm_name,
-                           const std::string& container_name,
+                           const ContainerId& container_id,
                            const std::vector<std::string>& terminal_args) {
   std::string vsh_crosh = base::StrCat(
       {chrome::kChromeUIUntrustedTerminalURL, "html/terminal.html"});
@@ -56,9 +55,10 @@ GURL GenerateVshInCroshUrl(Profile* profile,
   }
   vsh_crosh += "?command=vmshell";
   std::string vm_name_param = net::EscapeQueryParamValue(
-      base::StringPrintf("--vm_name=%s", vm_name.c_str()), false);
+      base::StringPrintf("--vm_name=%s", container_id.vm_name.c_str()), false);
   std::string container_name_param = net::EscapeQueryParamValue(
-      base::StringPrintf("--target_container=%s", container_name.c_str()),
+      base::StringPrintf("--target_container=%s",
+                         container_id.container_name.c_str()),
       false);
   std::string owner_id_param = net::EscapeQueryParamValue(
       base::StringPrintf("--owner_id=%s",
@@ -79,11 +79,11 @@ GURL GenerateVshInCroshUrl(Profile* profile,
   return GURL(base::JoinString(pieces, "&args[]="));
 }
 
-apps::AppLaunchParams GenerateTerminalAppLaunchParams() {
+apps::AppLaunchParams GenerateTerminalAppLaunchParams(int64_t display_id) {
   apps::AppLaunchParams launch_params(
       /*app_id=*/"", apps::mojom::LaunchContainer::kLaunchContainerWindow,
       WindowOpenDisposition::NEW_WINDOW,
-      apps::mojom::AppLaunchSource::kSourceAppLauncher);
+      apps::mojom::AppLaunchSource::kSourceAppLauncher, display_id);
   launch_params.override_app_name =
       AppNameFromCrostiniAppId(kCrostiniTerminalId);
   return launch_params;
@@ -107,18 +107,21 @@ void ShowContainerTerminal(Profile* profile,
 }
 
 void LaunchContainerTerminal(Profile* profile,
-                             const std::string& vm_name,
-                             const std::string& container_name,
+                             int64_t display_id,
+                             const ContainerId& container_id,
                              const std::vector<std::string>& terminal_args) {
   GURL vsh_in_crosh_url =
-      GenerateVshInCroshUrl(profile, vm_name, container_name, terminal_args);
+      GenerateVshInCroshUrl(profile, container_id, terminal_args);
   if (base::FeatureList::IsEnabled(features::kTerminalSystemApp)) {
-    web_app::LaunchSystemWebApp(profile, web_app::SystemAppType::TERMINAL,
-                                vsh_in_crosh_url);
+    web_app::LaunchSystemWebApp(
+        profile, web_app::SystemAppType::TERMINAL, vsh_in_crosh_url,
+        web_app::CreateSystemWebAppLaunchParams(
+            profile, web_app::SystemAppType::TERMINAL, display_id));
     return;
   }
 
-  apps::AppLaunchParams launch_params = GenerateTerminalAppLaunchParams();
+  apps::AppLaunchParams launch_params =
+      GenerateTerminalAppLaunchParams(display_id);
 
   Browser* browser =
       CreateContainerTerminal(profile, launch_params, vsh_in_crosh_url);
@@ -126,18 +129,20 @@ void LaunchContainerTerminal(Profile* profile,
 }
 
 Browser* LaunchTerminal(Profile* profile,
-                        const std::string& vm_name,
-                        const std::string& container_name) {
-  GURL vsh_in_crosh_url = GenerateVshInCroshUrl(
-      profile, vm_name, container_name, std::vector<std::string>());
-  return web_app::LaunchSystemWebApp(profile, web_app::SystemAppType::TERMINAL,
-                                     vsh_in_crosh_url);
+                        int64_t display_id,
+                        const ContainerId& container_id) {
+  GURL vsh_in_crosh_url =
+      GenerateVshInCroshUrl(profile, container_id, std::vector<std::string>());
+  return web_app::LaunchSystemWebApp(
+      profile, web_app::SystemAppType::TERMINAL, vsh_in_crosh_url,
+      web_app::CreateSystemWebAppLaunchParams(
+          profile, web_app::SystemAppType::TERMINAL, display_id));
 }
 
-Browser* LaunchTerminalSettings(Profile* profile) {
+Browser* LaunchTerminalSettings(Profile* profile, int64_t display_id) {
   DCHECK(base::FeatureList::IsEnabled(features::kTerminalSystemApp));
   auto params = web_app::CreateSystemWebAppLaunchParams(
-      profile, web_app::SystemAppType::TERMINAL);
+      profile, web_app::SystemAppType::TERMINAL, display_id);
   if (!params.has_value()) {
     LOG(WARNING) << "Empty launch params for terminal";
     return nullptr;
@@ -152,7 +157,7 @@ Browser* LaunchTerminalSettings(Profile* profile) {
   return web_app::LaunchSystemWebApp(
       profile, web_app::SystemAppType::TERMINAL,
       GURL(base::StrCat({chrome::kChromeUIUntrustedTerminalURL, path})),
-      *params);
+      std::move(params));
 }
 
 void RecordTerminalSettingsChangesUMAs(Profile* profile) {

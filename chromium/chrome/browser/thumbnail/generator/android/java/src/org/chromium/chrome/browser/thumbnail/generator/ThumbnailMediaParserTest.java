@@ -5,7 +5,8 @@
 package org.chromium.chrome.browser.thumbnail.generator;
 
 import android.os.Build;
-import android.support.test.filters.LargeTest;
+
+import androidx.test.filters.LargeTest;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -20,6 +21,7 @@ import org.chromium.base.test.util.Restriction;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.test.ChromeBrowserTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.content_public.browser.test.NativeLibraryTestUtils;
 import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
@@ -55,7 +57,7 @@ public class ThumbnailMediaParserTest {
 
     @Before
     public void setUp() {
-        mTestRule.loadNativeLibraryAndInitBrowserProcess();
+        NativeLibraryTestUtils.loadNativeLibraryAndInitBrowserProcess();
     }
 
     private MediaParserResult parseMediaFile(String filePath, String mimeType) {

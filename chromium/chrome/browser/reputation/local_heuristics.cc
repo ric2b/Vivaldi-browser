@@ -48,16 +48,15 @@ bool ShouldTriggerSafetyTipFromLookalike(
 
   auto* config = GetSafetyTipsRemoteConfigProto();
   const LookalikeTargetAllowlistChecker in_target_allowlist =
-      base::BindRepeating(&IsTargetUrlAllowlistedBySafetyTipsComponent, config);
+      base::BindRepeating(&IsTargetHostAllowlistedBySafetyTipsComponent,
+                          config);
   if (!GetMatchingDomain(navigated_domain, engaged_sites, in_target_allowlist,
                          &matched_domain, &match_type)) {
     return false;
   }
 
   // If we're already displaying an interstitial, don't warn again.
-  if (base::FeatureList::IsEnabled(
-          features::kLookalikeUrlNavigationSuggestionsUI) &&
-      ShouldBlockLookalikeUrlNavigation(match_type, navigated_domain)) {
+  if (ShouldBlockLookalikeUrlNavigation(match_type, navigated_domain)) {
     return false;
   }
 
@@ -69,17 +68,22 @@ bool ShouldTriggerSafetyTipFromLookalike(
     case LookalikeUrlMatchType::kEditDistanceSiteEngagement:
       return kEnableLookalikeEditDistanceSiteEngagement.Get();
     case LookalikeUrlMatchType::kTargetEmbedding:
+      // Target Embedding should block URL Navigation.
+      return false;
+    case LookalikeUrlMatchType::kTargetEmbeddingForSafetyTips:
       return kEnableLookalikeTargetEmbedding.Get();
+    case LookalikeUrlMatchType::kSkeletonMatchTop5k:
+      return kEnableLookalikeTopSites.Get();
+    case LookalikeUrlMatchType::kFailedSpoofChecks:
+      // For now, no safety tip is shown for domain names that fail spoof checks
+      // and don't have a suggested URL.
+      return false;
     case LookalikeUrlMatchType::kSiteEngagement:
     case LookalikeUrlMatchType::kSkeletonMatchTop500:
       // We should only ever reach these cases when the lookalike interstitial
       // is disabled. Now that interstitial is fully launched, this only happens
       // in tests.
-      DCHECK(!base::FeatureList::IsEnabled(
-          features::kLookalikeUrlNavigationSuggestionsUI));
-      return true;
-    case LookalikeUrlMatchType::kSkeletonMatchTop5k:
-      return kEnableLookalikeTopSites.Get();
+      FALLTHROUGH;
     case LookalikeUrlMatchType::kNone:
       NOTREACHED();
   }

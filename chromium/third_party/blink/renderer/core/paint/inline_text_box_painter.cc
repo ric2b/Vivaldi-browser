@@ -618,7 +618,8 @@ void InlineTextBoxPainter::PaintDocumentMarkers(
               paint_info.context, box_origin, style, font,
               styleable_marker.BackgroundColor(), marker_offsets.start,
               marker_offsets.end);
-        } else {
+        } else if (DocumentMarkerPainter::ShouldPaintMarkerUnderline(
+                       styleable_marker)) {
           PaintStyleableMarkerUnderline(paint_info.context, box_origin,
                                         styleable_marker, style, font);
         }
@@ -826,7 +827,8 @@ void InlineTextBoxPainter::PaintStyleableMarkerUnderline(
       run, FloatPoint(), 0, marker_offsets.start, marker_offsets.end);
   DocumentMarkerPainter::PaintStyleableMarkerUnderline(
       context, PhysicalOffsetToBeNoop(box_origin), marker, style, marker_rect,
-      inline_text_box_.LogicalHeight());
+      inline_text_box_.LogicalHeight(),
+      inline_text_box_.GetLineLayoutItem().GetDocument().InDarkMode());
 }
 
 void InlineTextBoxPainter::PaintTextMarkerForeground(

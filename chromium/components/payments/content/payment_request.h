@@ -35,11 +35,11 @@ class ContentPaymentRequestDelegate;
 class PaymentRequestWebContentsManager;
 
 // This class manages the interaction between the renderer (through the
-// PaymentRequestClient and Mojo stub implementation) and the UI (through the
-// PaymentRequestDelegate). The API user (merchant) specification (supported
-// payment methods, required information, order details) is stored in
+// PaymentRequestClient and Mojo stub implementation) and the desktop Payment UI
+// (through the PaymentRequestDelegate). The API user (merchant) specification
+// (supported payment methods, required information, order details) is stored in
 // PaymentRequestSpec, and the current user selection state (and related data)
-// is stored in PaymentRequestSpec.
+// is stored in PaymentRequestState.
 class PaymentRequest : public mojom::PaymentRequest,
                        public PaymentHandlerHost::Delegate,
                        public PaymentRequestSpec::Observer,
@@ -51,7 +51,8 @@ class PaymentRequest : public mojom::PaymentRequest,
     virtual void OnCanMakePaymentReturned() = 0;
     virtual void OnHasEnrolledInstrumentCalled() = 0;
     virtual void OnHasEnrolledInstrumentReturned() = 0;
-    virtual void OnShowAppsReady() {}
+    virtual void OnShowAppsReady(
+        base::WeakPtr<PaymentRequest> payment_request) {}
     virtual void OnNotSupportedError() = 0;
     virtual void OnConnectionTerminated() = 0;
     virtual void OnAbortCalled() = 0;
@@ -101,9 +102,6 @@ class PaymentRequest : public mojom::PaymentRequest,
   void OnShippingAddressSelected(mojom::PaymentAddressPtr address) override;
   void OnPayerInfoSelected(mojom::PayerDetailPtr payer_info) override;
 
-  void SetInvokedServiceWorkerIdentity(const url::Origin& origin,
-                                       int64_t registration_id);
-
   // Called when the user explicitly cancelled the flow. Will send a message
   // to the renderer which will indirectly destroy this object (through
   // OnConnectionTerminated).
@@ -125,7 +123,7 @@ class PaymentRequest : public mojom::PaymentRequest,
   // Hide this Payment Request if it's already showing.
   void HideIfNecessary();
 
-  bool IsIncognito() const;
+  bool IsOffTheRecord() const;
 
   // Called when the payment handler requests to open a payment handler window.
   void OnPaymentHandlerOpenWindowCalled();
@@ -186,6 +184,8 @@ class PaymentRequest : public mojom::PaymentRequest,
   // version of the values instead.
   void RespondToHasEnrolledInstrumentQuery(bool has_enrolled_instrument,
                                            bool warn_localhost_or_file);
+
+  void OnAbortResult(bool aborted);
 
   content::WebContents* web_contents_;
   const content::GlobalFrameRoutingId initiator_frame_routing_id_;

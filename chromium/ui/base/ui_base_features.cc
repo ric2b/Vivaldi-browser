@@ -161,6 +161,18 @@ bool IsEyeDropperEnabled() {
          base::FeatureList::IsEnabled(features::kEyeDropper);
 }
 
+// Enable the CSSColorSchemeUARendering feature for Windows, ChromeOS, Linux,
+// and Mac. This feature will be released for Android in later milestones. See
+// crbug.com/1086530 for the Desktop launch bug.
+const base::Feature kCSSColorSchemeUARendering = {
+    "CSSColorSchemeUARendering", base::FEATURE_DISABLED_BY_DEFAULT};
+
+bool IsCSSColorSchemeUARenderingEnabled() {
+  static const bool css_color_scheme_ua_rendering_enabled =
+      base::FeatureList::IsEnabled(features::kCSSColorSchemeUARendering);
+  return css_color_scheme_ua_rendering_enabled;
+}
+
 // Enable the FormControlsRefresh feature for Windows, ChromeOS, Linux, and Mac.
 // This feature will be released for Android in later milestones. See
 // crbug.com/1012106 for the Windows launch bug, and crbug.com/1012108 for the
@@ -188,13 +200,9 @@ bool IsUseCommonSelectPopupEnabled() {
   return base::FeatureList::IsEnabled(features::kUseCommonSelectPopup);
 }
 
-// Enable WebUI accessibility enhancements for review and testing.
-const base::Feature kWebUIA11yEnhancements{"WebUIA11yEnhancements",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
-
 #if defined(OS_CHROMEOS)
 const base::Feature kHandwritingGesture = {"HandwritingGesture",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
+                                           base::FEATURE_ENABLED_BY_DEFAULT};
 #endif
 
 const base::Feature kSynchronousPageFlipTesting{
@@ -203,5 +211,31 @@ const base::Feature kSynchronousPageFlipTesting{
 bool IsSynchronousPageFlipTestingEnabled() {
   return base::FeatureList::IsEnabled(kSynchronousPageFlipTesting);
 }
+
+#if defined(USE_X11) || defined(USE_OZONE)
+const base::Feature kUseOzonePlatform {
+  "UseOzonePlatform",
+#if defined(USE_X11)
+      base::FEATURE_DISABLED_BY_DEFAULT
+};
+#else
+      base::FEATURE_ENABLED_BY_DEFAULT
+};
+#endif
+
+bool IsUsingOzonePlatform() {
+  // Only allow enabling and disabling the OzonePlatform on USE_X11 && USE_OZONE
+  // builds.
+#if defined(USE_X11) && defined(USE_OZONE)
+  return base::FeatureList::IsEnabled(kUseOzonePlatform);
+#elif defined(USE_X11) && !defined(USE_OZONE)
+  // This shouldn't be switchable for pure X11 builds.
+  return false;
+#else
+  // All the other platforms must use Ozone by default and can't disable that.
+  return true;
+#endif
+}
+#endif  // defined(USE_X11) || defined(USE_OZONE)
 
 }  // namespace features

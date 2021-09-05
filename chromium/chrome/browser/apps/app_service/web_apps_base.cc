@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/metrics/histogram_macros.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
 #include "chrome/browser/apps/app_service/launch_utils.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
@@ -21,13 +22,15 @@
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/browser/web_applications/components/web_app_utils.h"
 #include "chrome/browser/web_applications/system_web_app_manager.h"
+#include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
-#include "chrome/browser/web_applications/web_app_sync_bridge.h"
-#include "chrome/services/app_service/public/cpp/intent_filter_util.h"
+#include "chrome/common/chrome_features.h"
+#include "chrome/common/extensions/extension_constants.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/content_settings_types.h"
+#include "components/services/app_service/public/cpp/intent_filter_util.h"
 #include "content/public/browser/web_contents.h"
 
 namespace {
@@ -71,14 +74,14 @@ WebAppsBase::~WebAppsBase() = default;
 
 void WebAppsBase::Shutdown() {
   if (provider_) {
-    registrar_observer_.Remove(&provider_->registrar());
+    registrar_observer_.RemoveAll();
     content_settings_observer_.RemoveAll();
   }
 }
 
 const web_app::WebApp* WebAppsBase::GetWebApp(
     const web_app::AppId& app_id) const {
-  return GetRegistrar().GetAppById(app_id);
+  return GetRegistrar()->GetAppById(app_id);
 }
 
 void WebAppsBase::OnWebAppUninstalled(const web_app::AppId& app_id) {
@@ -112,16 +115,16 @@ apps::mojom::AppPtr WebAppsBase::ConvertImpl(const web_app::WebApp* web_app,
 
   app->description = web_app->description();
   app->additional_search_terms = web_app->additional_search_terms();
+  app->last_launch_time = web_app->last_launch_time();
+  app->install_time = web_app->install_time();
 
   // app->version is left empty here.
-  // TODO(loyso): Populate app->last_launch_time and app->install_time.
-
   PopulatePermissions(web_app, &app->permissions);
 
   SetShowInFields(app, web_app);
 
   // Get the intent filters for PWAs.
-  PopulateIntentFilters(GetRegistrar().GetAppScope(web_app->app_id()),
+  PopulateIntentFilters(GetRegistrar()->GetAppScope(web_app->app_id()),
                         &app->intent_filters);
 
   return app;
@@ -151,7 +154,7 @@ content::WebContents* WebAppsBase::LaunchAppWithIntentImpl(
   auto params = apps::CreateAppLaunchParamsForIntent(
       app_id, event_flags, GetAppLaunchSource(launch_source), display_id,
       web_app::ConvertDisplayModeToAppLaunchContainer(
-          GetRegistrar().GetAppEffectiveDisplayMode(app_id)),
+          GetRegistrar()->GetAppEffectiveDisplayMode(app_id)),
       intent);
   return web_app_launch_manager_->OpenApplication(params);
 }
@@ -177,14 +180,9 @@ void WebAppsBase::Initialize(
   app_service_ = app_service.get();
 }
 
-const web_app::WebAppRegistrar& WebAppsBase::GetRegistrar() const {
+const web_app::WebAppRegistrar* WebAppsBase::GetRegistrar() const {
   DCHECK(provider_);
-
-  // TODO(loyso): Remove this downcast after bookmark apps erasure.
-  web_app::WebAppSyncBridge* sync_bridge =
-      provider_->registry_controller().AsWebAppSyncBridge();
-  DCHECK(sync_bridge);
-  return sync_bridge->registrar();
+  return provider_->registrar().AsWebAppRegistrar();
 }
 
 void WebAppsBase::Connect(
@@ -229,10 +227,40 @@ void WebAppsBase::Launch(const std::string& app_id,
     return;
   }
 
-  // TODO(loyso): Record UMA_HISTOGRAM_ENUMERATION here based on launch_source.
+  switch (launch_source) {
+    case apps::mojom::LaunchSource::kUnknown:
+    case apps::mojom::LaunchSource::kFromParentalControls:
+      break;
+    case apps::mojom::LaunchSource::kFromAppListGrid:
+    case apps::mojom::LaunchSource::kFromAppListGridContextMenu:
+      UMA_HISTOGRAM_ENUMERATION("Extensions.AppLaunch",
+                                extension_misc::APP_LAUNCH_APP_LIST_MAIN,
+                                extension_misc::APP_LAUNCH_BUCKET_BOUNDARY);
+
+      break;
+    case apps::mojom::LaunchSource::kFromAppListQuery:
+    case apps::mojom::LaunchSource::kFromAppListQueryContextMenu:
+      UMA_HISTOGRAM_ENUMERATION("Extensions.AppLaunch",
+                                extension_misc::APP_LAUNCH_APP_LIST_SEARCH,
+                                extension_misc::APP_LAUNCH_BUCKET_BOUNDARY);
+      break;
+    case apps::mojom::LaunchSource::kFromAppListRecommendation:
+    case apps::mojom::LaunchSource::kFromShelf:
+    case apps::mojom::LaunchSource::kFromFileManager:
+    case apps::mojom::LaunchSource::kFromLink:
+    case apps::mojom::LaunchSource::kFromOmnibox:
+    case apps::mojom::LaunchSource::kFromChromeInternal:
+    case apps::mojom::LaunchSource::kFromKeyboard:
+    case apps::mojom::LaunchSource::kFromOtherApp:
+    case apps::mojom::LaunchSource::kFromMenu:
+    case apps::mojom::LaunchSource::kFromInstalledNotification:
+    case apps::mojom::LaunchSource::kFromTest:
+    case apps::mojom::LaunchSource::kFromArc:
+      break;
+  }
 
   web_app::DisplayMode display_mode =
-      GetRegistrar().GetAppEffectiveDisplayMode(app_id);
+      GetRegistrar()->GetAppEffectiveDisplayMode(app_id);
 
   AppLaunchParams params = apps::CreateAppIdLaunchParamsWithEventFlags(
       web_app->app_id(), event_flags, GetAppLaunchSource(launch_source),
@@ -341,7 +369,13 @@ void WebAppsBase::OnContentSettingChanged(
     return;
   }
 
-  for (const web_app::WebApp& web_app : GetRegistrar().AllApps()) {
+  const web_app::WebAppRegistrar* registrar = GetRegistrar();
+  // Can be nullptr in tests.
+  if (!registrar) {
+    return;
+  }
+
+  for (const web_app::WebApp& web_app : registrar->AllApps()) {
     if (web_app.is_in_sync_install()) {
       continue;
     }
@@ -359,6 +393,23 @@ void WebAppsBase::OnContentSettingChanged(
 }
 
 void WebAppsBase::OnWebAppInstalled(const web_app::AppId& app_id) {
+  const web_app::WebApp* web_app = GetWebApp(app_id);
+  if (web_app && Accepts(app_id)) {
+    Publish(Convert(web_app, apps::mojom::Readiness::kReady), subscribers_);
+  }
+}
+
+void WebAppsBase::OnWebAppLastLaunchTimeChanged(
+    const std::string& app_id,
+    const base::Time& last_launch_time) {
+  const web_app::WebApp* web_app = GetWebApp(app_id);
+  if (web_app && Accepts(app_id)) {
+    Publish(Convert(web_app, apps::mojom::Readiness::kReady), subscribers_);
+  }
+}
+
+void WebAppsBase::OnWebAppManifestUpdated(const web_app::AppId& app_id,
+                                          base::StringPiece old_name) {
   const web_app::WebApp* web_app = GetWebApp(app_id);
   if (web_app && Accepts(app_id)) {
     Publish(Convert(web_app, apps::mojom::Readiness::kReady), subscribers_);
@@ -389,9 +440,9 @@ void WebAppsBase::SetShowInFields(apps::mojom::AppPtr& app,
     app->show_in_launcher = chromeos_data.show_in_launcher
                                 ? apps::mojom::OptionalBool::kTrue
                                 : apps::mojom::OptionalBool::kFalse;
-    app->show_in_search = chromeos_data.show_in_search
-                              ? apps::mojom::OptionalBool::kTrue
-                              : apps::mojom::OptionalBool::kFalse;
+    app->show_in_shelf = app->show_in_search =
+        chromeos_data.show_in_search ? apps::mojom::OptionalBool::kTrue
+                                     : apps::mojom::OptionalBool::kFalse;
     app->show_in_management = chromeos_data.show_in_management
                                   ? apps::mojom::OptionalBool::kTrue
                                   : apps::mojom::OptionalBool::kFalse;
@@ -401,6 +452,7 @@ void WebAppsBase::SetShowInFields(apps::mojom::AppPtr& app,
   // Show the app everywhere by default.
   auto show = apps::mojom::OptionalBool::kTrue;
   app->show_in_launcher = show;
+  app->show_in_shelf = show;
   app->show_in_search = show;
   app->show_in_management = show;
 }
@@ -453,15 +505,21 @@ void WebAppsBase::PopulateIntentFilters(
     const base::Optional<GURL>& app_scope,
     std::vector<mojom::IntentFilterPtr>* target) {
   if (app_scope != base::nullopt) {
-    target->push_back(
-        apps_util::CreateIntentFilterForUrlScope(app_scope.value()));
+    target->push_back(apps_util::CreateIntentFilterForUrlScope(
+        app_scope.value(),
+        base::FeatureList::IsEnabled(features::kIntentHandlingSharing)));
   }
 }
 
 void WebAppsBase::ConvertWebApps(apps::mojom::Readiness readiness,
                                  std::vector<apps::mojom::AppPtr>* apps_out) {
-  for (const web_app::WebApp& web_app : GetRegistrar().AllApps()) {
-    if (!web_app.is_in_sync_install()) {
+  const web_app::WebAppRegistrar* registrar = GetRegistrar();
+  // Can be nullptr in tests.
+  if (!registrar)
+    return;
+
+  for (const web_app::WebApp& web_app : registrar->AllApps()) {
+    if (!web_app.is_in_sync_install() && Accepts(web_app.app_id())) {
       apps_out->push_back(Convert(&web_app, readiness));
     }
   }

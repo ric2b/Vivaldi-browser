@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="es">
-<translation id="3830627370375585318">Configura tu cortafuegos o tu antivirus para permitir el acceso de
-… Vivaldi a la red.</translation>
-<translation id="4200102020577305737">Ir al
+<translation id="3830627370375585318">Configura tu cortafuegos o antivirus para permitir el acceso de
+          Vivaldi a la red</translation>
+<translation id="4200102020577305737">Ve al
           menú de Vivaldi &gt;
           <ph name="SETTINGS_TITLE" />
           &gt;
@@ -12,25 +12,25 @@
           <ph name="PROXIES_TITLE" />
           &gt;
           Configuración de LAN
-          y desactiva la opción "Usar un servidor proxy para tu LAN".</translation>
-<translation id="4932161901409251843">Ir al
+          y deselecciona “Usar un servidor proxy para tu LAN”.</translation>
+<translation id="4932161901409251843">Ve al
           menú de Vivaldi &gt;
           <ph name="SETTINGS_TITLE" />
           &gt;
           <ph name="ADVANCED_TITLE" />
           &gt;
           <ph name="PROXIES_TITLE" />
-          y asegúrate de que tu configuración esté marcada como "sin proxy" o "directa."</translation>
+          y asegura que tu configuración esté marcada como “sin proxy” o “directa”.</translation>
 <translation id="5248344925342018662">Estás viendo una página segura de Vivaldi</translation>
-<translation id="7023871570427738255">Ir al
+<translation id="7023871570427738255">Ve al
           menú de Vivaldi &gt;
           <ph name="SETTINGS_TITLE" />
           &gt;
           <ph name="ADVANCED_TITLE" />
-          y desactiva la opción "<ph name="NO_PREFETCH_DESCRIPTION" />".
-          Si esto no soluciona el problema, te recomendamos que vuelvas a seleccionar esta opción
-          para conseguir un mejor rendimiento.</translation>
-<translation id="8187289872471304532">Ir a
-          Aplicaciones &gt; Preferencias del Sistema &gt; Red &gt; Configuración avanzada &gt; Proxis
-          y desactiva cualquier proxi que estuviera seleccionado.</translation>
+          y deselecciona "<ph name="NO_PREFETCH_DESCRIPTION" />".
+          Si esto no resuelve el problema, te recomendamos volver a seleccionar
+          esta opción para mejorar el rendimiento.</translation>
+<translation id="8187289872471304532">Ve a
+          Aplicaciones &gt; Preferencias del sistema &gt; Red &gt; Configuración &gt; Proxy
+          y deselecciona cualquier proxy que estuviera seleccionado.</translation>
 </translationbundle>

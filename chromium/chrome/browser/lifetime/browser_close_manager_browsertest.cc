@@ -11,8 +11,8 @@
 #include "base/command_line.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
+#include "base/optional.h"
 #include "base/run_loop.h"
-#include "base/task/post_task.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 #include "chrome/browser/background/background_mode_manager.h"
@@ -98,8 +98,8 @@ class RepeatedNotificationObserver : public content::NotificationObserver {
                const content::NotificationDetails& details) override {
     ASSERT_GT(num_outstanding_, 0);
     if (!--num_outstanding_ && running_) {
-      base::PostTask(FROM_HERE, {content::BrowserThread::UI},
-                     run_loop_.QuitClosure());
+      content::GetUIThreadTaskRunner({})->PostTask(FROM_HERE,
+                                                   run_loop_.QuitClosure());
     }
   }
 
@@ -222,16 +222,18 @@ class TestDownloadManagerDelegate : public ChromeDownloadManagerDelegate {
     return true;
   }
 
-  static void SetDangerous(content::DownloadTargetCallback callback,
-                           const base::FilePath& target_path,
-                           download::DownloadItem::TargetDisposition disp,
-                           download::DownloadDangerType danger_type,
-                           download::DownloadItem::MixedContentStatus mcs,
-                           const base::FilePath& intermediate_path,
-                           download::DownloadInterruptReason reason) {
+  static void SetDangerous(
+      content::DownloadTargetCallback callback,
+      const base::FilePath& target_path,
+      download::DownloadItem::TargetDisposition disp,
+      download::DownloadDangerType danger_type,
+      download::DownloadItem::MixedContentStatus mcs,
+      const base::FilePath& intermediate_path,
+      base::Optional<download::DownloadSchedule> download_schedule,
+      download::DownloadInterruptReason reason) {
     std::move(callback).Run(target_path, disp,
                             download::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL, mcs,
-                            intermediate_path, reason);
+                            intermediate_path, download_schedule, reason);
   }
 };
 
@@ -1006,7 +1008,7 @@ IN_PROC_BROWSER_TEST_F(BrowserCloseManagerBrowserTest, TestWithDownloads) {
 // Test shutdown with a download in progress in an off-the-record profile.
 IN_PROC_BROWSER_TEST_F(BrowserCloseManagerBrowserTest,
                        TestWithOffTheRecordDownloads) {
-  Profile* otr_profile = browser()->profile()->GetOffTheRecordProfile();
+  Profile* otr_profile = browser()->profile()->GetPrimaryOTRProfile();
   Browser* otr_browser = CreateBrowser(otr_profile);
   {
     browser()->window()->Close();
@@ -1038,7 +1040,7 @@ IN_PROC_BROWSER_TEST_F(BrowserCloseManagerBrowserTest,
 // call to AttemptClose.
 IN_PROC_BROWSER_TEST_F(BrowserCloseManagerBrowserTest,
                        DISABLED_TestWithOffTheRecordWindowAndRegularDownload) {
-  Profile* otr_profile = browser()->profile()->GetOffTheRecordProfile();
+  Profile* otr_profile = browser()->profile()->GetPrimaryOTRProfile();
   Browser* otr_browser = CreateBrowser(otr_profile);
   ASSERT_NO_FATAL_FAILURE(CreateStalledDownload(browser()));
 

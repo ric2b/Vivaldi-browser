@@ -92,7 +92,8 @@ MinMaxSizes LayoutNGMixin<Base>::ComputeIntrinsicLogicalWidths() const {
   NGConstraintSpace space = ConstraintSpaceForMinMaxSizes();
   MinMaxSizes sizes =
       node.ComputeMinMaxSizes(node.Style().GetWritingMode(),
-                              MinMaxSizesInput(available_logical_height),
+                              MinMaxSizesInput(available_logical_height,
+                                               MinMaxSizesType::kContent),
                               &space)
           .sizes;
 
@@ -154,8 +155,7 @@ void LayoutNGMixin<Base>::UpdateOutOfFlowBlockLayout() {
   NGBlockNode container_node(container);
   NGBoxFragmentBuilder container_builder(
       container_node, scoped_refptr<const ComputedStyle>(container_style),
-      /* space */ nullptr, container_style->GetWritingMode(),
-      container_style->Direction());
+      /* space */ nullptr, container_style->GetWritingDirection());
   container_builder.SetIsNewFormattingContext(
       container_node.CreatesNewFormattingContext());
 

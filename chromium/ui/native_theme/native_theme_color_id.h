@@ -91,6 +91,7 @@
   OP(kColorId_NotificationLargeImageBackground),                               \
   OP(kColorId_NotificationPlaceholderIconColor),                               \
   OP(kColorId_NotificationEmptyPlaceholderIconColor),                          \
+  OP(kColorId_NotificationDefaultAccentColor),                                 \
   /* Slider */                                                                 \
   OP(kColorId_SliderThumbDefault),                                             \
   OP(kColorId_SliderTroughDefault),                                            \
@@ -154,7 +155,8 @@
   OP(kColorId_AlertSeverityMedium),                                            \
   OP(kColorId_AlertSeverityHigh),                                              \
   /* Colors for icons in non-menu contexts. */                                 \
-  OP(kColorId_DefaultIconColor)
+  OP(kColorId_DefaultIconColor),                                               \
+  OP(kColorId_DisabledIconColor)
 
 #if defined(OS_CHROMEOS)
 #define NATIVE_THEME_CHROMEOS_COLOR_IDS                                        \

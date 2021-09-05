@@ -11,7 +11,8 @@
 #include "third_party/blink/renderer/core/editing/markers/text_match_marker.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/layout/geometry/logical_rect.h"
-#include "third_party/blink/renderer/core/layout/layout_list_marker.h"
+#include "third_party/blink/renderer/core/layout/layout_ruby_run.h"
+#include "third_party/blink/renderer/core/layout/list_marker.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_cursor.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_offset_mapping.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_physical_text_fragment.h"
@@ -55,8 +56,9 @@ Color SelectionBackgroundColor(const Document& document,
 
 // TODO(yosin): Remove |AsDisplayItemClient| once the transition to
 // |NGFragmentItem| is done. http://crbug.com/982194
-inline const NGFragmentItem& AsDisplayItemClient(const NGInlineCursor& cursor) {
-  return *cursor.CurrentItem();
+inline const DisplayItemClient& AsDisplayItemClient(
+    const NGInlineCursor& cursor) {
+  return *cursor.Current().GetDisplayItemClient();
 }
 
 inline const NGPaintFragment& AsDisplayItemClient(
@@ -329,12 +331,16 @@ void PaintDocumentMarkers(GraphicsContext& context,
                     styleable_marker.BackgroundColor());
           break;
         }
-        const SimpleFontData* font_data = style.GetFont().PrimaryFont();
-        DocumentMarkerPainter::PaintStyleableMarkerUnderline(
-            context, box_origin, styleable_marker, style,
-            FloatRect(MarkerRectForForeground(
-                text_fragment, text, paint_start_offset, paint_end_offset)),
-            LayoutUnit(font_data->GetFontMetrics().Height()));
+        if (DocumentMarkerPainter::ShouldPaintMarkerUnderline(
+                styleable_marker)) {
+          const SimpleFontData* font_data = style.GetFont().PrimaryFont();
+          DocumentMarkerPainter::PaintStyleableMarkerUnderline(
+              context, box_origin, styleable_marker, style,
+              FloatRect(MarkerRectForForeground(
+                  text_fragment, text, paint_start_offset, paint_end_offset)),
+              LayoutUnit(font_data->GetFontMetrics().Height()),
+              text_fragment.GetNode()->GetDocument().InDarkMode());
+        }
       } break;
 
       default:
@@ -430,6 +436,35 @@ class SelectionPaintState {
   bool paint_selected_text_separately_;
 };
 
+// Check if text-emphasis and ruby annotation text are on different sides.
+// See InlineTextBox::GetEmphasisMarkPosition().
+//
+// TODO(layout-dev): The current behavior is compatible with the legacy layout.
+// However, the specification asks to draw emphasis marks over ruby annotation
+// text.
+// https://drafts.csswg.org/css-text-decor-4/#text-emphasis-position-property
+bool ShouldPaintEmphasisMark(const ComputedStyle& style,
+                             const LayoutObject& layout_object) {
+  if (style.GetTextEmphasisMark() == TextEmphasisMark::kNone)
+    return false;
+  const LayoutObject* containing_block = layout_object.ContainingBlock();
+  if (!containing_block || !containing_block->IsRubyBase())
+    return true;
+  const LayoutObject* parent = containing_block->Parent();
+  if (!parent || !parent->IsRubyRun())
+    return true;
+  const LayoutRubyText* ruby_text = ToLayoutRubyRun(parent)->RubyText();
+  if (!ruby_text)
+    return true;
+  if (!NGInlineCursor(*ruby_text))
+    return true;
+  const LineLogicalSide ruby_logical_side =
+      parent->StyleRef().GetRubyPosition() == RubyPosition::kBefore
+          ? LineLogicalSide::kOver
+          : LineLogicalSide::kUnder;
+  return ruby_logical_side != style.GetTextEmphasisLineLogicalSide();
+}
+
 }  // namespace
 
 StringView NGTextPainterCursor::CurrentText() const {
@@ -450,7 +485,7 @@ void NGTextFragmentPainter<Cursor>::PaintSymbol(
     const PaintInfo& paint_info,
     const PhysicalOffset& paint_offset) {
   PhysicalRect marker_rect(
-      LayoutListMarker::RelativeSymbolMarkerRect(style, box_size.width));
+      ListMarker::RelativeSymbolMarkerRect(style, box_size.width));
   marker_rect.Move(paint_offset);
   IntRect rect = PixelSnappedIntRect(marker_rect);
 
@@ -593,7 +628,7 @@ void NGTextFragmentPainter<Cursor>::Paint(const PaintInfo& paint_info,
   NGTextPainter text_painter(context, font, fragment_paint_info, visual_rect,
                              text_origin, box_rect, is_horizontal);
 
-  if (style.GetTextEmphasisMark() != TextEmphasisMark::kNone) {
+  if (ShouldPaintEmphasisMark(style, *layout_object)) {
     text_painter.SetEmphasisMark(style.TextEmphasisMarkString(),
                                  style.GetTextEmphasisPosition());
   }

@@ -5,7 +5,7 @@
 Polymer({
   is: 'oobe-dialog',
 
-  behaviors: [OobeI18nBehavior, CrScrollableBehavior],
+  behaviors: [OobeI18nBehavior],
 
   properties: {
     /**
@@ -87,8 +87,42 @@ Polymer({
       type: Boolean,
       value: false,
       observer: 'onNoLazyChanged_',
+    },
+  },
+
+  /**
+   * Creates a ResizeObserver and attaches it to the relevant containers
+   * to be observed on size changes and scroll position.
+   */
+  observeScrolling_() {
+    if (this.resizeObserver_) {  // Already observing
+      return;
     }
 
+    var scrollContainer = this.$$('#topScrollContainer');
+    var footerContainer = this.$$('#footerContainer');
+    if (!scrollContainer || !footerContainer) {
+      return;
+    }
+
+    scrollContainer.addEventListener(
+        'scroll', this.applyScrollClassTags_.bind(this));
+    this.resizeObserver_ =
+        new ResizeObserver(this.applyScrollClassTags_.bind(this));
+    this.resizeObserver_.observe(scrollContainer);
+    this.resizeObserver_.observe(footerContainer);
+  },
+
+  /**
+   * Applies the class tags to topScrollContainer that control the shadows.
+   */
+  applyScrollClassTags_() {
+    var el = this.$$('#topScrollContainer');
+    el.classList.toggle('can-scroll', el.clientHeight < el.scrollHeight);
+    el.classList.toggle('is-scrolled', el.scrollTop > 0);
+    el.classList.toggle(
+        'scrolled-to-bottom',
+        el.scrollTop + el.clientHeight >= el.scrollHeight);
   },
 
   focus() {
@@ -103,6 +137,7 @@ Polymer({
 
   onBeforeShow() {
     this.$$('#lazy').get();
+    this.observeScrolling_();
     var isOobe = window.hasOwnProperty('Oobe') &&
         window.hasOwnProperty('DISPLAY_TYPE') && Oobe.getInstance() &&
         Oobe.getInstance().displayType == DISPLAY_TYPE.OOBE;
@@ -114,16 +149,22 @@ Polymer({
    * Scroll to the bottom of footer container.
    */
   scrollToBottom() {
-    var el = this.$$('#top-scroll-container');
+    var el = this.$$('#topScrollContainer');
     el.scrollTop = el.scrollHeight;
   },
 
-
   /**
-   * Updates the scroll behaviour.
+   * @private
+   * Focuses the element. As cr-input uses focusInput() instead of focus() due
+   * to bug, we have to handle this separately.
+   * TODO(crbug.com/882612): Replace this with focus() in show().
    */
-  updateScroll() {
-    this.requestUpdateScroll();
+  focusElement_(element) {
+    if (element.focusInput) {
+      element.focusInput();
+      return;
+    }
+    element.focus();
   },
 
   /**
@@ -137,14 +178,13 @@ Polymer({
         continue;
 
       focused = true;
-      focusedElements[i].focus();
+      this.focusElement_(focusedElements[i]);
       break;
     }
     if (!focused && focusedElements.length > 0)
-      focusedElements[0].focus();
+      this.focusElement_(focusedElements[0]);
 
     this.fire('show-dialog');
-    this.updateScroll();
   },
 
   /** @private */

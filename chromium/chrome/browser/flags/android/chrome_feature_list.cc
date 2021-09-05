@@ -13,6 +13,7 @@
 #include "base/metrics/field_trial_params.h"
 #include "base/stl_util.h"
 #include "chrome/browser/flags/jni_headers/ChromeFeatureList_jni.h"
+#include "chrome/browser/performance_hints/performance_hints_features.h"
 #include "chrome/browser/share/features.h"
 #include "chrome/browser/sharing/shared_clipboard/feature_flags.h"
 #include "chrome/common/chrome_features.h"
@@ -32,7 +33,6 @@
 #include "components/omnibox/common/omnibox_features.h"
 #include "components/paint_preview/features/features.h"
 #include "components/password_manager/core/common/password_manager_features.h"
-#include "components/payments/core/features.h"
 #include "components/permissions/features.h"
 #include "components/previews/core/previews_features.h"
 #include "components/query_tiles/switches.h"
@@ -66,6 +66,7 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &autofill::features::kAutofillKeyboardAccessory,
     &autofill::features::kAutofillManualFallbackAndroid,
     &autofill::features::kAutofillRefreshStyleAndroid,
+    &autofill::features::kAutofillEnableCardNicknameManagement,
     &autofill::features::kAutofillEnableCompanyName,
     &autofill::features::kAutofillEnableGoogleIssuedCard,
     &autofill::features::kAutofillEnableSurfacingServerCardNickname,
@@ -75,6 +76,7 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &autofill::features::kAutofillTouchToFill,
     &device::kWebAuthPhoneSupport,
     &download::features::kDownloadAutoResumptionNative,
+    &download::features::kDownloadLater,
     &download::features::kUseDownloadOfflineContentProvider,
     &features::kClearOldBrowsingData,
     &features::kDownloadsLocationChange,
@@ -83,14 +85,13 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &features::kNetworkServiceInProcess,
     &features::kOverscrollHistoryNavigation,
     &features::kPredictivePrefetchingAllowedOnAllConnectionTypes,
+    &features::kPrivacyElevatedAndroid,
     &features::kPrioritizeBootstrapTasks,
     &features::kQuietNotificationPrompts,
-    &features::kServiceWorkerPaymentApps,
+    &features::kSafetyCheckAndroid,
     &features::kShowTrustedPublisherURL,
     &features::kWebAuth,
     &features::kWebNfc,
-    &features::kWebPayments,
-    &features::kWebPaymentsMinimalUI,
     &feature_engagement::kIPHChromeDuetHomeButtonFeature,
     &feature_engagement::kIPHChromeDuetSearchFeature,
     &feature_engagement::kIPHChromeDuetTabSwitcherFeature,
@@ -103,10 +104,10 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &kAllowNewIncognitoTabIntents,
     &kAllowRemoteContextForNotifications,
     &kAndroidBlockIntentNonSafelistedHeaders,
+    &kAndroidDefaultBrowserPromo,
     &kAndroidMultipleDisplay,
     &kAndroidNightModeTabReparenting,
     &kAndroidPartnerCustomizationPhenotype,
-    &kAndroidPayIntegrationV1,
     &kAndroidPayIntegrationV2,
     &kAndroidSearchEngineChoiceNotification,
     &kCastDeviceFilter,
@@ -136,9 +137,11 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &kContentIndexingDownloadHome,
     &kContentIndexingNTP,
     &kContentSuggestionsScrollToLoad,
+    &kContextMenuEnableLensShoppingAllowlist,
     &kContextMenuCopyImage,
-    &kContextMenuPerformanceInfo,
     &kContextMenuSearchWithGoogleLens,
+    &kContextMenuShopWithGoogleLens,
+    &kContextMenuSearchAndShopWithGoogleLens,
     &kContextualSearchDebug,
     &kContextualSearchDefinitions,
     &kContextualSearchLongpressResolve,
@@ -179,9 +182,9 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &kProbabilisticCryptidRenderer,
     &kReachedCodeProfiler,
     &kReaderModeInCCT,
+    &kReengagementNotification,
     &kRelatedSearches,
     &kRevampedContextMenu,
-    &kScrollToExpandPaymentHandler,
     &kSearchEnginePromoExistingDevice,
     &kSearchEnginePromoNewDevice,
     &kServiceManagerForBackgroundPrefetch,
@@ -216,21 +219,12 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &kVrBrowsingFeedback,
     &kWebApkAdaptiveIcon,
     &kPrefetchNotificationSchedulingIntegration,
+    &features::kDnsOverHttps,
     &net::features::kSameSiteByDefaultCookies,
     &net::features::kCookiesWithoutSameSiteMustBeSecure,
     &paint_preview::kPaintPreviewCaptureExperiment,
     &paint_preview::kPaintPreviewDemo,
     &paint_preview::kPaintPreviewShowOnStartup,
-    &payments::features::kAlwaysAllowJustInTimePaymentApp,
-    &payments::features::kPaymentRequestSkipToGPay,
-    &payments::features::kPaymentRequestSkipToGPayIfNoCard,
-    &payments::features::kReturnGooglePayInBasicCard,
-    &payments::features::kStrictHasEnrolledAutofillInstrument,
-    &payments::features::kWebPaymentsExperimentalFeatures,
-    &payments::features::kWebPaymentsMethodSectionOrderV2,
-    &payments::features::kWebPaymentsModifiers,
-    &payments::features::kWebPaymentsRedactShippingAddress,
-    &payments::features::kWebPaymentsSingleAppUiSkip,
     &permissions::features::kPermissionDelegation,
     &language::kExplicitLanguageAsk,
     &ntp_snippets::kArticleSuggestionsFeature,
@@ -249,9 +243,11 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &omnibox::kHideSteadyStateUrlTrivialSubdomains,
     &omnibox::kOmniboxAssistantVoiceSearch,
     &omnibox::kOmniboxSearchEngineLogo,
+    &omnibox::kOmniboxSearchReadyIncognito,
     &omnibox::kOmniboxSuggestionsRecyclerView,
-    &omnibox::kQueryInOmnibox,
+    &omnibox::kOmniboxSuggestionsWrapAround,
     &password_manager::features::kGooglePasswordManager,
+    &password_manager::features::kPasswordCheck,
     &password_manager::features::kPasswordEditingAndroid,
     &password_manager::features::kPasswordManagerOnboardingAndroid,
     &password_manager::features::kRecoverFromNeverSaveAndroid,
@@ -283,18 +279,16 @@ const base::Feature kAdjustWebApkInstallationSpace = {
     "AdjustWebApkInstallationSpace", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kAndroidBlockIntentNonSafelistedHeaders{
-    "AndroidBlockIntentNonSafelistedHeaders",
-    base::FEATURE_DISABLED_BY_DEFAULT};
+    "AndroidBlockIntentNonSafelistedHeaders", base::FEATURE_ENABLED_BY_DEFAULT};
+
+const base::Feature kAndroidDefaultBrowserPromo{
+    "AndroidDefaultBrowserPromo", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kAndroidMultipleDisplay{"AndroidMultipleDisplay",
-                                            base::FEATURE_DISABLED_BY_DEFAULT};
+                                            base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kAndroidNightModeTabReparenting{
     "AndroidNightModeTabReparenting", base::FEATURE_ENABLED_BY_DEFAULT};
-
-// TODO(rouslan): Remove this.
-const base::Feature kAndroidPayIntegrationV1{"AndroidPayIntegrationV1",
-                                             base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kAllowNewIncognitoTabIntents{
     "AllowNewIncognitoTabIntents", base::FEATURE_ENABLED_BY_DEFAULT};
@@ -308,7 +302,8 @@ const base::Feature kAllowRemoteContextForNotifications{
 const base::Feature kAndroidPartnerCustomizationPhenotype{
     "AndroidPartnerCustomizationPhenotype", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// TODO(rouslan): Remove this.
+// TODO(rouslan): Remove this. (Currently used in
+// GooglePayPaymentAppFactory.java)
 const base::Feature kAndroidPayIntegrationV2{"AndroidPayIntegrationV2",
                                              base::FEATURE_ENABLED_BY_DEFAULT};
 
@@ -397,14 +392,22 @@ const base::Feature kContentIndexingNTP{"ContentIndexingNTP",
 const base::Feature kContentSuggestionsScrollToLoad{
     "ContentSuggestionsScrollToLoad", base::FEATURE_DISABLED_BY_DEFAULT};
 
+const base::Feature kContextMenuEnableLensShoppingAllowlist{
+    "ContextMenuEnableLensShoppingAllowlist",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
 const base::Feature kContextMenuCopyImage{"ContextMenuCopyImage",
                                           base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kContextMenuPerformanceInfo{
-    "ContextMenuPerformanceInfo", base::FEATURE_DISABLED_BY_DEFAULT};
-
 const base::Feature kContextMenuSearchWithGoogleLens{
     "ContextMenuSearchWithGoogleLens", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kContextMenuShopWithGoogleLens{
+    "ContextMenuShopWithGoogleLens", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kContextMenuSearchAndShopWithGoogleLens{
+    "ContextMenuSearchAndShopWithGoogleLens",
+    base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kContextualSearchDebug{"ContextualSearchDebug",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
@@ -521,10 +524,8 @@ const base::Feature kOmniboxSpareRenderer{"OmniboxSpareRenderer",
 const base::Feature kOverlayNewLayout{"OverlayNewLayout",
                                       base::FEATURE_ENABLED_BY_DEFAULT};
 
-const base::Feature kPageInfoPerformanceHints{
-    "PageInfoPerformanceHints", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// TODO(rouslan): Remove this.
+// TODO(rouslan): Remove this. (Currently used in
+// GooglePayPaymentAppFactory.java)
 const base::Feature kPayWithGoogleV1{"PayWithGoogleV1",
                                      base::FEATURE_ENABLED_BY_DEFAULT};
 
@@ -543,14 +544,14 @@ const base::Feature kReachedCodeProfiler{"ReachedCodeProfiler",
 const base::Feature kReaderModeInCCT{"ReaderModeInCCT",
                                      base::FEATURE_ENABLED_BY_DEFAULT};
 
+const base::Feature kReengagementNotification{
+    "ReengagementNotification", base::FEATURE_DISABLED_BY_DEFAULT};
+
 const base::Feature kRelatedSearches{"RelatedSearches",
                                      base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kRevampedContextMenu{"RevampedContextMenu",
                                          base::FEATURE_ENABLED_BY_DEFAULT};
-
-const base::Feature kScrollToExpandPaymentHandler{
-    "ScrollToExpandPaymentHandler", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kServiceManagerForBackgroundPrefetch{
     "ServiceManagerForBackgroundPrefetch", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -611,7 +612,7 @@ const base::Feature kTrustedWebActivityNewDisclosure{
     "TrustedWebActivityNewDisclosure", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kTrustedWebActivityLocationDelegation{
-    "TrustedWebActivityLocationDelegation", base::FEATURE_DISABLED_BY_DEFAULT};
+    "TrustedWebActivityLocationDelegation", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kTrustedWebActivityPostMessage{
     "TrustedWebActivityPostMessage", base::FEATURE_DISABLED_BY_DEFAULT};

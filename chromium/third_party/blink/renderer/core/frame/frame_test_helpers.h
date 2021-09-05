@@ -176,14 +176,8 @@ WebRemoteFrameImpl* CreateRemoteChild(WebRemoteFrame& parent,
                                       scoped_refptr<SecurityOrigin> = nullptr,
                                       TestWebRemoteFrameClient* = nullptr);
 
-struct InjectedScrollGestureData {
-  gfx::Vector2dF delta;
-  ScrollGranularity granularity;
-  CompositorElementId scrollable_area_element_id;
-  WebInputEvent::Type type;
-};
-
-class TestWebWidgetClient : public WebWidgetClient {
+class TestWebWidgetClient : public WebWidgetClient,
+                            public mojom::blink::WidgetHost {
  public:
   TestWebWidgetClient();
   ~TestWebWidgetClient() override = default;
@@ -209,9 +203,9 @@ class TestWebWidgetClient : public WebWidgetClient {
   int FinishedLoadingLayoutCount() const {
     return finished_loading_layout_count_;
   }
-  const Vector<InjectedScrollGestureData>& GetInjectedScrollGestureData()
-      const {
-    return injected_scroll_gesture_data_;
+  const Vector<std::unique_ptr<blink::WebCoalescedInputEvent>>&
+  GetInjectedScrollEvents() const {
+    return injected_scroll_events_;
   }
 
   cc::TaskGraphRunner* task_graph_runner() { return &test_task_graph_runner_; }
@@ -220,6 +214,8 @@ class TestWebWidgetClient : public WebWidgetClient {
     layer_tree_host_ = layer_tree_host;
   }
 
+  mojo::PendingAssociatedRemote<mojom::blink::WidgetHost> BindNewWidgetHost();
+
  protected:
   // WebWidgetClient overrides;
   void ScheduleAnimation() override { animation_scheduled_ = true; }
@@ -227,26 +223,37 @@ class TestWebWidgetClient : public WebWidgetClient {
                                   bool is_pinch_gesture_active,
                                   float minimum,
                                   float maximum) override;
-  void InjectGestureScrollEvent(WebGestureDevice device,
-                                const gfx::Vector2dF& delta,
-                                ScrollGranularity granularity,
-                                cc::ElementId scrollable_area_element_id,
-                                WebInputEvent::Type injected_type) override;
+  void QueueSyntheticEvent(
+      std::unique_ptr<blink::WebCoalescedInputEvent>) override;
   void DidMeaningfulLayout(WebMeaningfulLayout) override;
   viz::FrameSinkId GetFrameSinkId() override;
   void RequestNewLayerTreeFrameSink(
       LayerTreeFrameSinkCallback callback) override;
+
+  // mojom::blink::WidgetHost overrides:
+  void SetCursor(const ui::Cursor& cursor) override;
+  void SetToolTipText(const String& tooltip_text,
+                      base::i18n::TextDirection text_direction_hint) override;
+  void TextInputStateChanged(
+      ui::mojom::blink::TextInputStatePtr state) override;
+  void SelectionBoundsChanged(const gfx::Rect& anchor_rect,
+                              base::i18n::TextDirection anchor_dir,
+                              const gfx::Rect& focus_rect,
+                              base::i18n::TextDirection focus_dir,
+                              bool is_anchor_first) override;
 
  private:
   WebFrameWidget* frame_widget_ = nullptr;
   cc::LayerTreeHost* layer_tree_host_ = nullptr;
   cc::TestTaskGraphRunner test_task_graph_runner_;
   blink::scheduler::WebFakeThreadScheduler fake_thread_scheduler_;
-  Vector<InjectedScrollGestureData> injected_scroll_gesture_data_;
+  Vector<std::unique_ptr<blink::WebCoalescedInputEvent>>
+      injected_scroll_events_;
   bool animation_scheduled_ = false;
   int visually_non_empty_layout_count_ = 0;
   int finished_parsing_layout_count_ = 0;
   int finished_loading_layout_count_ = 0;
+  mojo::AssociatedReceiver<mojom::blink::WidgetHost> receiver_{this};
 };
 
 class TestWebViewClient : public WebViewClient {
@@ -463,12 +470,7 @@ class TestWebRemoteFrameClient : public WebRemoteFrameClient {
 
   // WebRemoteFrameClient:
   void FrameDetached(DetachType) override;
-  void ForwardPostMessage(WebLocalFrame* source_frame,
-                          WebRemoteFrame* target_frame,
-                          WebSecurityOrigin target_origin,
-                          WebDOMMessageEvent) override {}
-
-  AssociatedInterfaceProvider* GetAssociatedInterfaceProvider() {
+  AssociatedInterfaceProvider* GetRemoteAssociatedInterfaces() override {
     return associated_interface_provider_.get();
   }
 

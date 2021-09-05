@@ -38,7 +38,6 @@
 <translation id="1603914832182249871">(Privee)</translation>
 <translation id="1620510694547887537">Kamera</translation>
 <translation id="1627276047960621195">Triem omskriuwers</translation>
-<translation id="1635033183663317347">Ynstallearre troch dyn fersoarger.</translation>
 <translation id="1682548588986054654">Nij privee finster</translation>
 <translation id="1698122934742150150">Allinne hjoeddeiske privee sesje</translation>
 <translation id="1706625117072057435">Zoom nivo's</translation>
@@ -170,7 +169,6 @@
 <translation id="3678156199662914018">Tafoeging: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Fersyk om skerm te dielen fan <ph name="APP_NAME" /></translation>
 <translation id="3711931198657368127">Pla&amp;kke en gean nei <ph name="URL" /></translation>
-<translation id="3725367690636977613">siden</translation>
 <translation id="3727187387656390258">Popup ynspektearje</translation>
 <translation id="3744111561329211289">Syngronisaasje op 'e eftergrûn</translation>
 <translation id="3760460896538743390">&amp;Eftergrûn side ynspektearje</translation>
@@ -198,7 +196,6 @@
 
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4088095054444612037">Akseptearje foar groep</translation>
-<translation id="4091434297613116013">blêden papier</translation>
 <translation id="4096508467498758490">Tafoegings yn ûntwikkelders modus útskeakelje</translation>
 <translation id="4100839878934973028">In oar programma op jo kompjûter hat in app taheakke dy de manier hoe't Vivaldi wurket feroarje kin.</translation>
 <translation id="4109898769411476438">Sneuper slute foarôf it ymportearjen</translation>
@@ -376,7 +373,6 @@
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">Bestjoeringseleminten &amp;sjen litte</translation>
 <translation id="7311079019872751559">Ynstekker tagong sûnder sandbox</translation>
-<translation id="73174032666024687"><ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="7385854874724088939">Der barde in flater by it printsjen. Kontrolearje jo printer en besykje nochris.</translation>
 <translation id="7412226954991670867">GPU ûnthâld</translation>
 <translation id="7421925624202799674">&amp;Side boarne besjen</translation>
@@ -433,7 +429,6 @@ Bewarje jo kaai triem op in feilich plak. Jo ha it nedich om nije ferzjen fan jo
 <translation id="8071432093239591881">As ôfbylding printsje</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> Kb</translation>
 <translation id="8137559199583651773">Tafoegings beheare</translation>
-<translation id="8180239481735238521">side</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {Ynlaad is dwaande} other {Ynladen binne dwaande}}</translation>
 <translation id="8230134520748321204">Wachtwurd bewarje foar <ph name="ORIGIN" />?</translation>
@@ -466,7 +461,6 @@ Bewarje jo kaai triem op in feilich plak. Jo ha it nedich om nije ferzjen fan jo
 <translation id="8798099450830957504">Standert</translation>
 <translation id="8800004011501252845">Bestimmings sjen litte foar</translation>
 <translation id="8808478386290700967">Web Store</translation>
-<translation id="8813811964357448561">blêden papier</translation>
 <translation id="8823514049557262177">Keppeling te&amp;kst kopiearje</translation>
 <translation id="8823704566850948458">Wachtwurd foarstelle...</translation>
 <translation id="8859174528519900719">Sub ramt: <ph name="SUBFRAME_SITE" /></translation>

@@ -66,7 +66,7 @@ interface WebTestRenderFrame {
 
   // Performs the complete set of document lifecycle phases, including updates
   // to the compositor state and rasterization, then calling the given callback.
-  CompositeWithRaster() => ();
+  SynchronouslyCompositeAfterTest() => ();
 
   // Dumps the frame's contents into a string.
   DumpFrameLayout() => (string frame_layout_dump);
@@ -143,8 +143,14 @@ interface WebTestControlHost {
   // Trigger a reload navigation on the main WebView.
   Reload();
 
-  // Invoked when the embedder should close all but the main WebView.
-  CloseRemainingWindows();
+  // If the test will be closing its windows explicitly, and wants to look for
+  // leaks due to those windows closing incorrectly, it can specify this to
+  // avoid having them closed at the end of the test before the leak checker.
+  CheckForLeakedWindows();
+
+  // Show or hide the window. This mimics the user switching tabs in a
+  // multi-tab window, or occluding the window.
+  SetMainWindowHidden(bool hidden);
 
   // Trigger a GoToOffset navigation on the main WebView.
   GoToOffset(int32 offset);

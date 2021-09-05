@@ -7,6 +7,7 @@
 
 #include "base/containers/flat_set.h"
 #include "base/macros.h"
+#include "base/util/type_safety/strong_alias.h"
 #include "components/performance_manager/public/frame_priority/frame_priority.h"
 #include "components/performance_manager/public/graph/node.h"
 #include "components/performance_manager/public/mojom/coordination_unit.mojom.h"
@@ -25,6 +26,10 @@ class PageNode;
 class ProcessNode;
 class RenderFrameHostProxy;
 class WorkerNode;
+
+// A strongly typed unguessable token for the frame tokens.
+using FrameToken =
+    util::StrongAlias<class FrameTokenTag, base::UnguessableToken>;
 
 // Frame nodes form a tree structure, each FrameNode at most has one parent that
 // is a FrameNode. Conceptually, a frame corresponds to a
@@ -57,6 +62,7 @@ class FrameNode : public Node {
   using InterventionPolicy = mojom::InterventionPolicy;
   using LifecycleState = mojom::LifecycleState;
   using Observer = FrameNodeObserver;
+  using PageNodeVisitor = base::RepeatingCallback<bool(const PageNode*)>;
   using PriorityAndReason = frame_priority::PriorityAndReason;
 
   class ObserverDefaultImpl;
@@ -84,9 +90,9 @@ class FrameNode : public Node {
   // be current at a time. This is a constant over the lifetime of the frame.
   virtual int GetFrameTreeNodeId() const = 0;
 
-  // Gets the devtools token associated with this frame. This is a constant over
-  // the lifetime of the frame.
-  virtual const base::UnguessableToken& GetDevToolsToken() const = 0;
+  // Gets the unique token associated with this frame. This is a constant over
+  // the lifetime of the frame and unique across all frames for all time.
+  virtual const FrameToken& GetFrameToken() const = 0;
 
   // Gets the ID of the browsing instance to which this frame belongs. This is a
   // constant over the lifetime of the frame.
@@ -109,6 +115,17 @@ class FrameNode : public Node {
   // incurs a full container copy of all child nodes. Please use
   // VisitChildFrameNodes when that makes sense.
   virtual const base::flat_set<const FrameNode*> GetChildFrameNodes() const = 0;
+
+  // Visits the page nodes that have been opened by this frame. The iteration
+  // is halted if the visitor returns false. Returns true if every call to the
+  // visitor returned true, false otherwise.
+  virtual bool VisitOpenedPageNodes(const PageNodeVisitor& visitor) const = 0;
+
+  // Returns the set of opened pages associatted with this frame. Note that
+  // this incurs a full container copy all the opened nodes. Please use
+  // VisitOpenedPageNodes when that makes sense. This can change over the
+  // lifetime of the frame.
+  virtual const base::flat_set<const PageNode*> GetOpenedPageNodes() const = 0;
 
   // Returns the current lifecycle state of this frame. See
   // FrameNodeObserver::OnFrameLifecycleStateChanged.
@@ -159,6 +176,9 @@ class FrameNode : public Node {
 
   // Returns true if at least one form of the frame has been interacted with.
   virtual bool HadFormInteraction() const = 0;
+
+  // Returns true if the frame is audible, false otherwise.
+  virtual bool IsAudible() const = 0;
 
   // Returns a proxy to the RenderFrameHost associated with this node. The
   // proxy may only be dereferenced on the UI thread.
@@ -224,6 +244,9 @@ class FrameNodeObserver {
   // Called when the frame receives a form interaction.
   virtual void OnHadFormInteractionChanged(const FrameNode* frame_node) = 0;
 
+  // Invoked when the IsAudible property changes.
+  virtual void OnIsAudibleChanged(const FrameNode* frame_node) = 0;
+
   // Events with no property changes.
 
   // Invoked when a non-persistent notification has been issued by the frame.
@@ -270,6 +293,7 @@ class FrameNode::ObserverDefaultImpl : public FrameNodeObserver {
       const FrameNode* frame_node,
       const PriorityAndReason& previous_value) override {}
   void OnHadFormInteractionChanged(const FrameNode* frame_node) override {}
+  void OnIsAudibleChanged(const FrameNode* frame_node) override {}
   void OnNonPersistentNotificationCreated(
       const FrameNode* frame_node) override {}
   void OnFirstContentfulPaint(

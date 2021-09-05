@@ -88,6 +88,8 @@ static_library("router") {
       "//ui/base:buildflags",
     ]
 
+    public_deps += [ "//chrome/common/media_router/mojom:logger" ]
+
     sources += [
       "data_decoder_util.cc",
       "data_decoder_util.h",
@@ -95,6 +97,8 @@ static_library("router") {
       "event_page_request_manager.h",
       "event_page_request_manager_factory.cc",
       "event_page_request_manager_factory.h",
+      "logger_impl.cc",
+      "logger_impl.h",
       "mojo/media_route_provider_util_win.cc",
       "mojo/media_route_provider_util_win.h",
       "mojo/media_router_desktop.cc",
@@ -202,6 +206,8 @@ static_library("test_support") {
       "test/media_router_mojo_test.h",
       "test/mock_dns_sd_registry.cc",
       "test/mock_dns_sd_registry.h",
+      "test/mock_logger.cc",
+      "test/mock_logger.h",
       "test/mock_mojo_media_router.cc",
       "test/mock_mojo_media_router.h",
       "test/noop_dual_media_sink_service.cc",
@@ -248,11 +254,14 @@ source_set("unittests") {
       "discovery/mdns/dns_sd_registry_unittest.cc",
       "discovery/media_sink_discovery_metrics_unittest.cc",
       "event_page_request_manager_unittest.cc",
+      "logger_impl_unittest.cc",
       "media_router_feature_unittest.cc",
       "mojo/media_router_desktop_unittest.cc",
       "mojo/media_router_mojo_impl_unittest.cc",
       "mojo/media_router_mojo_metrics_unittest.cc",
       "mojo/media_sink_service_status_unittest.cc",
+      "providers/cast/activity_record_test_base.cc",
+      "providers/cast/activity_record_test_base.h",
       "providers/cast/cast_activity_manager_unittest.cc",
       "providers/cast/cast_activity_record_unittest.cc",
       "providers/cast/cast_app_availability_tracker_unittest.cc",
@@ -301,6 +310,7 @@ source_set("unittests") {
 if (enable_openscreen) {
   test("openscreen_unittests") {
     deps = [
+      "//base/test:run_all_unittests",
       "//base/test:test_support",
       "//chrome/browser",
       "//chrome/test:test_support",

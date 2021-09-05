@@ -7,8 +7,8 @@ package org.chromium.chrome.browser.night_mode;
 import androidx.annotation.NonNull;
 
 import org.chromium.chrome.browser.ActivityTabProvider;
+import org.chromium.chrome.browser.app.tab_activity_glue.ReparentingTask;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tab_activity_glue.ReparentingTask;
 import org.chromium.chrome.browser.tabmodel.AsyncTabParamsManager;
 import org.chromium.chrome.browser.tabmodel.TabList;
 import org.chromium.chrome.browser.tabmodel.TabModel;
@@ -65,7 +65,7 @@ public class NightModeReparentingController implements NightModeStateProvider.Ob
             // state themselves.
             if (mDelegate.isNTPUrl(tab.getUrlString())) continue;
 
-            TabReparentingParams params = new TabReparentingParams(tab, null, null);
+            TabReparentingParams params = new TabReparentingParams(tab, null);
             AsyncTabParamsManager.add(tab.getId(), params);
             ReparentingTask.from(tab).detach();
         }

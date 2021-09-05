@@ -64,7 +64,7 @@ void LoginDisplayMojo::Init(const user_manager::UserList& filtered_users,
                             bool show_guest,
                             bool show_users,
                             bool show_new_user) {
-  host_->SetUsers(filtered_users);
+  host_->SetUserCount(filtered_users.size());
   auto* client = LoginScreenClient::Get();
 
   // ExistingUserController::DeviceSettingsChanged and others may initialize the
@@ -189,13 +189,9 @@ void LoginDisplayMojo::ShowError(int error_msg_id,
                             help_topic_id);
 }
 
-void LoginDisplayMojo::ShowErrorScreen(LoginDisplay::SigninError error_id) {
-  host_->ShowErrorScreen(error_id);
-}
-
 void LoginDisplayMojo::ShowPasswordChangedDialog(bool show_password_error,
-                                                 const std::string& email) {
-  host_->ShowPasswordChangedDialog(show_password_error, email);
+                                                 const AccountId& account_id) {
+  host_->ShowPasswordChangedDialog(show_password_error, account_id);
 }
 
 void LoginDisplayMojo::ShowSigninUI(const std::string& email) {
@@ -247,15 +243,7 @@ void LoginDisplayMojo::ShowWrongHWIDScreen() {
   NOTIMPLEMENTED();
 }
 
-void LoginDisplayMojo::ShowUpdateRequiredScreen() {
-  NOTIMPLEMENTED();
-}
-
 void LoginDisplayMojo::CancelUserAdding() {
-  NOTIMPLEMENTED();
-}
-
-void LoginDisplayMojo::RemoveUser(const AccountId& account_id) {
   NOTIMPLEMENTED();
 }
 

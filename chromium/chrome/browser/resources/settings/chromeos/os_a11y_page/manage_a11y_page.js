@@ -98,11 +98,50 @@ Polymer({
       },
     },
 
+    /** @private {!Array<{name: string, value: number}>} */
+    cursorColorOptions_: {
+      readOnly: true,
+      type: Array,
+      value() {
+        return [
+          {
+            value: 0xd50000,  // Google Red A 700
+            name: loadTimeData.getString('cursorColorRed'),
+          },
+          {
+            value: 0xff6d00,  // Google Orange A 700
+            name: loadTimeData.getString('cursorColorOrange'),
+          },
+          {
+            value: 0x00c853,  // Google Green A 700
+            name: loadTimeData.getString('cursorColorGreen'),
+          },
+          {
+            value: 0x2962ff,  // Google Blue A 700
+            name: loadTimeData.getString('cursorColorBlue'),
+          },
+          {
+            value: 0xaa00ff,  // Google Purple A 700
+            name: loadTimeData.getString('cursorColorPurple'),
+          },
+        ];
+      },
+    },
+
     allowExperimentalSwitchAccess_: {
       type: Boolean,
       value() {
         return loadTimeData.getBoolean(
             'showExperimentalAccessibilitySwitchAccess');
+      },
+    },
+
+    /** @private */
+    shouldShowExperimentalCursorColor_: {
+      type: Boolean,
+      value() {
+        return loadTimeData.getBoolean(
+            'showExperimentalAccessibilityCursorColor');
       },
     },
 
@@ -123,6 +162,14 @@ Polymer({
       computed: 'computeShouldShowExperimentalSwitchAccess_(' +
           'allowExperimentalSwitchAccess_,' +
           'isKioskModeActive_)',
+    },
+
+    /** @private */
+    enableLiveCaption_: {
+      type: Boolean,
+      value: function() {
+        return loadTimeData.getBoolean('enableLiveCaption');
+      },
     },
 
     /**
@@ -375,6 +422,17 @@ Polymer({
         enabled);
     chrome.send('recordSelectedShowShelfNavigationButtonValue', [enabled]);
   },
+
+  /**
+   * @param {!Event} event
+   * @private
+   */
+  onA11yLiveCaptionChange_(event) {
+    const a11yLiveCaptionOn = event.target.checked;
+    chrome.metricsPrivate.recordBoolean(
+        'Accessibility.LiveCaption.ToggleEnabled', a11yLiveCaptionOn);
+  },
+
 
   /** @private */
   onMouseTap_() {

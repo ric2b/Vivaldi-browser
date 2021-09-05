@@ -36,6 +36,7 @@
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
 #include "components/password_manager/core/browser/reauth_purpose.h"
 #include "components/password_manager/core/browser/test_password_store.h"
+#include "components/signin/public/base/signin_metrics.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_renderer_host.h"
@@ -49,9 +50,11 @@ using MockReauthCallback = base::MockCallback<
 using PasswordFormList = std::vector<std::unique_ptr<autofill::PasswordForm>>;
 using password_manager::ReauthPurpose;
 using password_manager::TestPasswordStore;
+using ::testing::_;
 using ::testing::Eq;
 using ::testing::Ne;
 using ::testing::Return;
+using ::testing::SizeIs;
 using ::testing::StrictMock;
 namespace extensions {
 
@@ -84,7 +87,8 @@ class MockPasswordManagerClient : public ChromePasswordManagerClient {
   // ChromePasswordManagerClient overrides.
   MOCK_METHOD(void,
               TriggerReauthForPrimaryAccount,
-              (base::OnceCallback<void(ReauthSucceeded)>),
+              (signin_metrics::ReauthAccessPoint,
+               base::OnceCallback<void(ReauthSucceeded)>),
               (override));
   const password_manager::MockPasswordFeatureManager*
   GetPasswordFeatureManager() const override {
@@ -168,7 +172,7 @@ std::unique_ptr<KeyedService> BuildPasswordsPrivateEventRouter(
 autofill::PasswordForm CreateSampleForm() {
   autofill::PasswordForm form;
   form.signon_realm = "http://abc1.com";
-  form.origin = GURL("http://abc1.com");
+  form.url = GURL("http://abc1.com");
   form.username_value = base::ASCIIToUTF16("test@gmail.com");
   form.password_value = base::ASCIIToUTF16("test");
   return form;
@@ -247,6 +251,34 @@ TEST_F(PasswordsPrivateDelegateImplTest, GetSavedPasswordsList) {
   delegate.GetSavedPasswordsList(callback.Get());
 }
 
+TEST_F(PasswordsPrivateDelegateImplTest,
+       PasswordsDuplicatedInStoresHaveSameFrontendId) {
+  PasswordsPrivateDelegateImpl delegate(&profile_);
+
+  auto account_password = std::make_unique<autofill::PasswordForm>();
+  account_password->in_store = autofill::PasswordForm::Store::kAccountStore;
+  auto profile_password = std::make_unique<autofill::PasswordForm>();
+  profile_password->in_store = autofill::PasswordForm::Store::kProfileStore;
+
+  PasswordFormList list;
+  list.push_back(std::move(account_password));
+  list.push_back(std::move(profile_password));
+
+  delegate.SetPasswordList(list);
+
+  base::MockCallback<PasswordsPrivateDelegate::UiEntriesCallback> callback;
+  int first_frontend_id, second_frontend_id;
+  EXPECT_CALL(callback, Run(SizeIs(2)))
+      .WillOnce([&](const PasswordsPrivateDelegate::UiEntries& passwords) {
+        first_frontend_id = passwords[0].frontend_id;
+        second_frontend_id = passwords[1].frontend_id;
+      });
+
+  delegate.GetSavedPasswordsList(callback.Get());
+
+  EXPECT_EQ(first_frontend_id, second_frontend_id);
+}
+
 TEST_F(PasswordsPrivateDelegateImplTest, GetPasswordExceptionsList) {
   PasswordsPrivateDelegateImpl delegate(&profile_);
 
@@ -263,6 +295,38 @@ TEST_F(PasswordsPrivateDelegateImplTest, GetPasswordExceptionsList) {
 
   EXPECT_CALL(callback, Run);
   delegate.GetPasswordExceptionsList(callback.Get());
+}
+
+TEST_F(PasswordsPrivateDelegateImplTest,
+       ExceptionsDuplicatedInStoresHaveSameFrontendId) {
+  PasswordsPrivateDelegateImpl delegate(&profile_);
+
+  auto account_exception = std::make_unique<autofill::PasswordForm>();
+  account_exception->blacklisted_by_user = true;
+  account_exception->in_store = autofill::PasswordForm::Store::kAccountStore;
+  auto profile_exception = std::make_unique<autofill::PasswordForm>();
+  profile_exception->blacklisted_by_user = true;
+  profile_exception->in_store = autofill::PasswordForm::Store::kProfileStore;
+
+  PasswordFormList list;
+  list.push_back(std::move(account_exception));
+  list.push_back(std::move(profile_exception));
+
+  delegate.SetPasswordExceptionList(list);
+
+  base::MockCallback<PasswordsPrivateDelegate::ExceptionEntriesCallback>
+      callback;
+  int first_frontend_id, second_frontend_id;
+  EXPECT_CALL(callback, Run(SizeIs(2)))
+      .WillOnce(
+          [&](const PasswordsPrivateDelegate::ExceptionEntries& exceptions) {
+            first_frontend_id = exceptions[0].frontend_id;
+            second_frontend_id = exceptions[1].frontend_id;
+          });
+
+  delegate.GetPasswordExceptionsList(callback.Get());
+
+  EXPECT_EQ(first_frontend_id, second_frontend_id);
 }
 
 TEST_F(PasswordsPrivateDelegateImplTest, ChangeSavedPassword) {
@@ -348,7 +412,9 @@ TEST_F(PasswordsPrivateDelegateImplTest, TestShouldReauthForOptIn) {
   ON_CALL(*(client->GetPasswordFeatureManager()), IsOptedInForAccountStorage)
       .WillByDefault(Return(false));
 
-  EXPECT_CALL(*client, TriggerReauthForPrimaryAccount);
+  EXPECT_CALL(*client,
+              TriggerReauthForPrimaryAccount(
+                  signin_metrics::ReauthAccessPoint::kPasswordSettings, _));
 
   PasswordsPrivateDelegateImpl delegate(&profile_);
   delegate.SetAccountStorageOptIn(true, web_contents.get());
@@ -368,7 +434,10 @@ TEST_F(PasswordsPrivateDelegateImplTest,
   ON_CALL(*feature_manager, IsOptedInForAccountStorage)
       .WillByDefault(Return(true));
 
-  EXPECT_CALL(*client, TriggerReauthForPrimaryAccount).Times(0);
+  EXPECT_CALL(*client,
+              TriggerReauthForPrimaryAccount(
+                  signin_metrics::ReauthAccessPoint::kPasswordSettings, _))
+      .Times(0);
   EXPECT_CALL(*feature_manager, OptOutOfAccountStorageAndClearSettings);
 
   PasswordsPrivateDelegateImpl delegate(&profile_);

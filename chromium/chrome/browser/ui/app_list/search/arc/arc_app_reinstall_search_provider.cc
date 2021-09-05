@@ -209,7 +209,7 @@ ArcAppReinstallSearchProvider::ArcAppReinstallSearchProvider(
       icon_dimension_(ash::AppListConfig::instance().GetPreferredIconDimension(
           ash::SearchResultDisplayType::kTile)),
       app_fetch_timer_(std::make_unique<base::RepeatingTimer>()) {
-  DCHECK(profile_ != nullptr);
+  DCHECK(profile_);
   ArcAppListPrefs::Get(profile_)->AddObserver(this);
   MaybeUpdateFetching();
 }
@@ -235,6 +235,10 @@ void ArcAppReinstallSearchProvider::StopRepeatingFetch() {
   icon_urls_.clear();
   loading_icon_urls_.clear();
   UpdateResults();
+}
+
+ash::AppListSearchResultType ArcAppReinstallSearchProvider::ResultType() {
+  return ash::AppListSearchResultType::kPlayStoreReinstallApp;
 }
 
 void ArcAppReinstallSearchProvider::Start(const base::string16& query) {
@@ -329,7 +333,7 @@ void ArcAppReinstallSearchProvider::UpdateResults() {
   }
 
   ArcAppListPrefs* prefs = ArcAppListPrefs::Get(profile_);
-  DCHECK(prefs != nullptr);
+  DCHECK(prefs);
 
   std::vector<std::unique_ptr<ChromeSearchResult>> new_results;
   std::unordered_set<std::string> used_icon_urls;

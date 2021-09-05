@@ -6,6 +6,9 @@
 
 #include <memory>
 
+#include "ash/public/cpp/shelf_types.h"
+#include "ash/public/cpp/window_properties.h"
+#include "base/bind.h"
 #include "base/optional.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -14,19 +17,25 @@
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_manager_factory.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_metrics_util.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_util.h"
+#include "chrome/browser/ui/browser_navigator.h"
+#include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/grit/chrome_unscaled_resources.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/strings/grit/components_strings.h"
 #include "content/public/browser/browser_thread.h"
 #include "ui/accessibility/ax_enums.mojom.h"
+#include "ui/aura/window.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/text/bytes_formatting.h"
 #include "ui/chromeos/devicetype_utils.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
+#include "ui/views/controls/link.h"
 #include "ui/views/controls/progress_bar.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/view_class_properties.h"
@@ -39,6 +48,31 @@ constexpr gfx::Insets kButtonRowInsets(0, 64, 32, 64);
 constexpr int kWindowWidth = 768;
 constexpr int kWindowHeight = 636;
 
+plugin_vm::PluginVmSetupResult BucketForCancelledInstall(
+    plugin_vm::PluginVmInstaller::InstallingState installing_state) {
+  switch (installing_state) {
+    case plugin_vm::PluginVmInstaller::InstallingState::kInactive:
+      NOTREACHED();
+      FALLTHROUGH;
+    case plugin_vm::PluginVmInstaller::InstallingState::kCheckingLicense:
+      return plugin_vm::PluginVmSetupResult::kUserCancelledValidatingLicense;
+    case plugin_vm::PluginVmInstaller::InstallingState::kCheckingDiskSpace:
+      return plugin_vm::PluginVmSetupResult::kUserCancelledCheckingDiskSpace;
+    case plugin_vm::PluginVmInstaller::InstallingState::kDownloadingDlc:
+      return plugin_vm::PluginVmSetupResult::
+          kUserCancelledDownloadingPluginVmDlc;
+    case plugin_vm::PluginVmInstaller::InstallingState::kCheckingForExistingVm:
+      return plugin_vm::PluginVmSetupResult::
+          kUserCancelledCheckingForExistingVm;
+    case plugin_vm::PluginVmInstaller::InstallingState::kDownloadingImage:
+      return plugin_vm::PluginVmSetupResult::
+          kUserCancelledDownloadingPluginVmImage;
+    case plugin_vm::PluginVmInstaller::InstallingState::kImporting:
+      return plugin_vm::PluginVmSetupResult::
+          kUserCancelledImportingPluginVmImage;
+  }
+}
+
 }  // namespace
 
 void plugin_vm::ShowPluginVmInstallerView(Profile* profile) {
@@ -46,6 +80,9 @@ void plugin_vm::ShowPluginVmInstallerView(Profile* profile) {
     g_plugin_vm_installer_view = new PluginVmInstallerView(profile);
     views::DialogDelegate::CreateDialogWidget(g_plugin_vm_installer_view,
                                               nullptr, nullptr);
+    g_plugin_vm_installer_view->GetWidget()->GetNativeWindow()->SetProperty(
+        ash::kShelfIDKey,
+        ash::ShelfID(plugin_vm::kPluginVmShelfAppId).Serialize());
   }
   g_plugin_vm_installer_view->SetButtonRowInsets(kButtonRowInsets);
   g_plugin_vm_installer_view->GetWidget()->Show();
@@ -58,9 +95,7 @@ PluginVmInstallerView::PluginVmInstallerView(Profile* profile)
           plugin_vm::PluginVmInstallerFactory::GetForProfile(profile)) {
   // Layout constants from the spec.
   gfx::Insets kDialogInsets(60, 64, 0, 64);
-  constexpr gfx::Insets kLowerContainerInsets(12, 0, 52, 0);
   constexpr gfx::Size kLogoImageSize(32, 32);
-  constexpr gfx::Size kBigImageSize(264, 264);
   constexpr int kTitleFontSize = 28;
   const gfx::FontList kTitleFont({"Google Sans"}, gfx::Font::NORMAL,
                                  kTitleFontSize, gfx::Font::Weight::NORMAL);
@@ -77,6 +112,8 @@ PluginVmInstallerView::PluginVmInstallerView(Profile* profile)
   constexpr int kProgressBarHeight = 5;
   constexpr int kProgressBarTopMargin = 32;
 
+  SetDefaultButton(ui::DIALOG_BUTTON_OK);
+  SetCanMinimize(true);
   // Removed margins so dialog insets specify it instead.
   set_margins(gfx::Insets());
 
@@ -90,16 +127,16 @@ PluginVmInstallerView::PluginVmInstallerView(Profile* profile)
   AddChildView(upper_container_view);
 
   views::View* lower_container_view = new views::View();
-  views::BoxLayout* lower_container_layout =
+  lower_container_layout_ =
       lower_container_view->SetLayoutManager(std::make_unique<views::BoxLayout>(
-          views::BoxLayout::Orientation::kVertical, kLowerContainerInsets));
+          views::BoxLayout::Orientation::kVertical));
   AddChildView(lower_container_view);
 
   views::ImageView* logo_image = new views::ImageView();
   logo_image->SetImageSize(kLogoImageSize);
   logo_image->SetImage(
       ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
-          IDR_LOGO_PLUGIN_VM_DEFAULT_32));
+          IDR_LOGO_PLUGIN_VM_DEFAULT_192));
   logo_image->SetHorizontalAlignment(views::ImageView::Alignment::kLeading);
   upper_container_view->AddChildView(logo_image);
 
@@ -121,6 +158,12 @@ PluginVmInstallerView::PluginVmInstallerView(Profile* profile)
   message_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   message_container_view->AddChildView(message_label_);
 
+  learn_more_link_ = new views::Link(l10n_util::GetStringUTF16(IDS_LEARN_MORE));
+  learn_more_link_->set_callback(base::BindRepeating(
+      &PluginVmInstallerView::OnLinkClicked, base::Unretained(this)));
+  learn_more_link_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  message_container_view->AddChildView(learn_more_link_);
+
   progress_bar_ = new views::ProgressBar(kProgressBarHeight);
   progress_bar_->SetProperty(
       views::kMarginsKey,
@@ -139,14 +182,10 @@ PluginVmInstallerView::PluginVmInstallerView(Profile* profile)
   upper_container_view->AddChildView(download_progress_message_label_);
 
   big_image_ = new views::ImageView();
-  big_image_->SetImageSize(kBigImageSize);
-  big_image_->SetImage(
-      ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
-          IDR_PLUGIN_VM_INSTALLER));
   lower_container_view->AddChildView(big_image_);
 
   // Make sure the lower_container_view is pinned to the bottom of the dialog.
-  lower_container_layout->set_main_axis_alignment(
+  lower_container_layout_->set_main_axis_alignment(
       views::BoxLayout::MainAxisAlignment::kEnd);
   layout->SetFlexForView(lower_container_view, 1, true);
 }
@@ -165,24 +204,20 @@ bool PluginVmInstallerView::ShouldShowWindowTitle() const {
 }
 
 bool PluginVmInstallerView::Accept() {
-  if (state_ == State::CONFIRM_INSTALL) {
+  if (state_ == State::kConfirmInstall) {
+    delete learn_more_link_;
+    learn_more_link_ = nullptr;
     StartInstallation();
     return false;
   }
 
-  if (state_ == State::CREATED || state_ == State::IMPORTED) {
+  if (state_ == State::kCreated || state_ == State::kImported) {
     // Launch button has been clicked.
     plugin_vm::PluginVmManagerFactory::GetForProfile(profile_)->LaunchPluginVm(
         base::DoNothing());
     return true;
   }
-  if (state_ == State::LOW_DISK_SPACE) {
-    state_ = State::DOWNLOADING_DLC;
-    OnStateUpdated();
-    plugin_vm_installer_->Continue();
-    return false;
-  }
-  DCHECK_EQ(state_, State::ERROR);
+  DCHECK_EQ(state_, State::kError);
   // Retry button has been clicked to retry setting of PluginVm environment
   // after error occurred.
   StartInstallation();
@@ -191,49 +226,21 @@ bool PluginVmInstallerView::Accept() {
 
 bool PluginVmInstallerView::Cancel() {
   switch (state_) {
-    case State::CONFIRM_INSTALL:
+    case State::kConfirmInstall:
       plugin_vm::RecordPluginVmSetupResultHistogram(
           plugin_vm::PluginVmSetupResult::kUserCancelledWithoutStarting);
       break;
-    case State::CHECKING_LICENSE:
+    case State::kInstalling:
       plugin_vm::RecordPluginVmSetupResultHistogram(
-          plugin_vm::PluginVmSetupResult::kUserCancelledValidatingLicense);
+          BucketForCancelledInstall(installing_state_));
+      plugin_vm_installer_->Cancel();
       break;
-    case State::CHECKING_DISK_SPACE:
-      plugin_vm::RecordPluginVmSetupResultHistogram(
-          plugin_vm::PluginVmSetupResult::kUserCancelledCheckingDiskSpace);
-      break;
-    case State::LOW_DISK_SPACE:
-      plugin_vm::RecordPluginVmSetupResultHistogram(
-          plugin_vm::PluginVmSetupResult::kUserCancelledLowDiskSpace);
-      break;
-    case State::DOWNLOADING_DLC:
-      plugin_vm::RecordPluginVmSetupResultHistogram(
-          plugin_vm::PluginVmSetupResult::kUserCancelledDownloadingPluginVmDlc);
-      break;
-    case State::CHECKING_VMS:
-      plugin_vm::RecordPluginVmSetupResultHistogram(
-          plugin_vm::PluginVmSetupResult::kUserCancelledCheckingForExistingVm);
-      break;
-    case State::DOWNLOADING:
-      plugin_vm::RecordPluginVmSetupResultHistogram(
-          plugin_vm::PluginVmSetupResult::
-              kUserCancelledDownloadingPluginVmImage);
-      break;
-    case State::IMPORTING:
-      plugin_vm::RecordPluginVmSetupResultHistogram(
-          plugin_vm::PluginVmSetupResult::kUserCancelledImportingPluginVmImage);
-      break;
-    case State::CREATED:
-    case State::IMPORTED:
-    case State::ERROR:
+    case State::kCreated:
+    case State::kImported:
+    case State::kError:
       // Setup result has already been logged in these cases.
-      return true;
-    default:
-      NOTREACHED();
+      break;
   }
-
-  plugin_vm_installer_->Cancel();
 
   return true;
 }
@@ -242,68 +249,30 @@ gfx::Size PluginVmInstallerView::CalculatePreferredSize() const {
   return gfx::Size(kWindowWidth, kWindowHeight);
 }
 
+void PluginVmInstallerView::OnStateUpdated(InstallingState new_state) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  DCHECK_EQ(state_, State::kInstalling);
+  DCHECK_NE(new_state, InstallingState::kInactive);
+  installing_state_ = new_state;
+  OnStateUpdated();
+}
+
+void PluginVmInstallerView::OnLinkClicked() {
+  NavigateParams params(
+      profile_, GURL("https://support.google.com/chromebook/?p=pluginvm"),
+      ui::PAGE_TRANSITION_LINK);
+  params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
+  Navigate(&params);
+}
+
 void PluginVmInstallerView::OnProgressUpdated(double fraction_complete) {
   progress_bar_->SetValue(fraction_complete);
-}
-
-void PluginVmInstallerView::OnLicenseChecked() {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  DCHECK_EQ(state_, State::CHECKING_LICENSE);
-
-  state_ = State::CHECKING_DISK_SPACE;
-  OnStateUpdated();
-}
-
-void PluginVmInstallerView::OnCheckedDiskSpace(bool low_disk_space) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  DCHECK_EQ(state_, State::CHECKING_DISK_SPACE);
-
-  if (low_disk_space)
-    state_ = State::LOW_DISK_SPACE;
-  else
-    state_ = State::DOWNLOADING_DLC;
-  OnStateUpdated();
-}
-
-void PluginVmInstallerView::OnDlcDownloadCompleted() {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  DCHECK_EQ(state_, State::DOWNLOADING_DLC);
-
-  state_ = State::CHECKING_VMS;
-  OnStateUpdated();
-}
-
-void PluginVmInstallerView::OnExistingVmCheckCompleted(bool has_vm) {
-  DCHECK_EQ(state_, State::CHECKING_VMS);
-
-  if (has_vm) {
-    // This case should only occur if the user manually installed a VM via vmc,
-    // which is rare enough so we just re-use the regular success strings.
-    state_ = State::IMPORTED;
-    OnStateUpdated();
-
-    plugin_vm::RecordPluginVmSetupResultHistogram(
-        plugin_vm::PluginVmSetupResult::kVmAlreadyExists);
-    plugin_vm::RecordPluginVmSetupTimeHistogram(base::TimeTicks::Now() -
-                                                setup_start_tick_);
-  } else {
-    state_ = State::DOWNLOADING;
-    OnStateUpdated();
-  }
-}
-
-// TODO(timloh): Cancelling the installation immediately closes the dialog, but
-// getting back to a clean state could take several seconds. If a user then
-// re-opens the dialog, it could cause it to fail unexpectedly. We should make
-// use of these callback to avoid this.
-void PluginVmInstallerView::OnCancelFinished() {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 }
 
 void PluginVmInstallerView::OnDownloadProgressUpdated(uint64_t bytes_downloaded,
                                                       int64_t content_length) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  DCHECK_EQ(state_, State::DOWNLOADING);
+  DCHECK_EQ(installing_state_, InstallingState::kDownloadingImage);
 
   download_progress_message_label_->SetText(
       GetDownloadProgressMessage(bytes_downloaded, content_length));
@@ -311,19 +280,29 @@ void PluginVmInstallerView::OnDownloadProgressUpdated(uint64_t bytes_downloaded,
       ax::mojom::Event::kTextChanged, true);
 }
 
-void PluginVmInstallerView::OnDownloadCompleted() {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  DCHECK_EQ(state_, State::DOWNLOADING);
+void PluginVmInstallerView::OnVmExists() {
+  DCHECK_EQ(installing_state_, InstallingState::kCheckingForExistingVm);
 
-  state_ = State::IMPORTING;
+  // TODO(b/154140429): Consider automatically dismissing the dialog.
+
+  // This case should only occur if the user manually installed a VM via vmc,
+  // which is rare enough so we just re-use the regular success strings.
+  state_ = State::kImported;
+  installing_state_ = InstallingState::kInactive;
   OnStateUpdated();
+
+  plugin_vm::RecordPluginVmSetupResultHistogram(
+      plugin_vm::PluginVmSetupResult::kVmAlreadyExists);
+  plugin_vm::RecordPluginVmSetupTimeHistogram(base::TimeTicks::Now() -
+                                              setup_start_tick_);
 }
 
-void PluginVmInstallerView::OnImported() {
+void PluginVmInstallerView::OnCreated() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  DCHECK_EQ(state_, State::IMPORTING);
+  DCHECK_EQ(installing_state_, InstallingState::kImporting);
 
-  state_ = State::IMPORTED;
+  state_ = State::kCreated;
+  installing_state_ = InstallingState::kInactive;
   OnStateUpdated();
 
   plugin_vm::RecordPluginVmSetupResultHistogram(
@@ -332,11 +311,12 @@ void PluginVmInstallerView::OnImported() {
                                               setup_start_tick_);
 }
 
-void PluginVmInstallerView::OnCreated() {
+void PluginVmInstallerView::OnImported() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  DCHECK_EQ(state_, State::IMPORTING);
+  DCHECK_EQ(installing_state_, InstallingState::kImporting);
 
-  state_ = State::CREATED;
+  state_ = State::kImported;
+  installing_state_ = InstallingState::kInactive;
   OnStateUpdated();
 
   plugin_vm::RecordPluginVmSetupResultHistogram(
@@ -349,7 +329,8 @@ void PluginVmInstallerView::OnError(
     plugin_vm::PluginVmInstaller::FailureReason reason) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  state_ = State::ERROR;
+  state_ = State::kError;
+  installing_state_ = InstallingState::kInactive;
   reason_ = reason;
   OnStateUpdated();
 
@@ -357,26 +338,32 @@ void PluginVmInstallerView::OnError(
       plugin_vm::PluginVmSetupResult::kError);
 }
 
+// TODO(timloh): Cancelling the installation immediately closes the dialog, but
+// getting back to a clean state could take several seconds. If a user then
+// re-opens the dialog, it could cause it to fail unexpectedly. We should make
+// use of these callback to avoid this.
+void PluginVmInstallerView::OnCancelFinished() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+}
+
 base::string16 PluginVmInstallerView::GetBigMessage() const {
   switch (state_) {
-    case State::CONFIRM_INSTALL:
+    case State::kConfirmInstall:
       return l10n_util::GetStringFUTF16(
           IDS_PLUGIN_VM_INSTALLER_CONFIRMATION_TITLE, app_name_);
-    case State::CHECKING_LICENSE:
-    case State::CHECKING_DISK_SPACE:
-    case State::LOW_DISK_SPACE:
-    case State::DOWNLOADING_DLC:
-    case State::CHECKING_VMS:
-    case State::DOWNLOADING:
-    case State::IMPORTING:
+    case State::kInstalling:
       return l10n_util::GetStringFUTF16(
           IDS_PLUGIN_VM_INSTALLER_ENVIRONMENT_SETTING_TITLE, app_name_);
-    case State::CREATED:
-    case State::IMPORTED:
+    case State::kCreated:
+    case State::kImported:
       return l10n_util::GetStringUTF16(IDS_PLUGIN_VM_INSTALLER_FINISHED_TITLE);
-    case State::ERROR:
+    case State::kError:
       DCHECK(reason_);
       switch (*reason_) {
+        case plugin_vm::PluginVmInstaller::FailureReason::OFFLINE:
+          return l10n_util::GetStringFUTF16(
+              IDS_PLUGIN_VM_INSTALLER_ERROR_OFFLINE_TITLE,
+              ui::GetChromeOSDeviceName());
         case plugin_vm::PluginVmInstaller::FailureReason::NOT_ALLOWED:
           return l10n_util::GetStringFUTF16(
               IDS_PLUGIN_VM_INSTALLER_NOT_ALLOWED_TITLE, app_name_);
@@ -388,39 +375,37 @@ base::string16 PluginVmInstallerView::GetBigMessage() const {
 
 base::string16 PluginVmInstallerView::GetMessage() const {
   switch (state_) {
-    case State::CONFIRM_INSTALL:
+    case State::kConfirmInstall:
       return l10n_util::GetStringFUTF16(
           IDS_PLUGIN_VM_INSTALLER_CONFIRMATION_MESSAGE,
           ui::FormatBytesWithUnits(
-              plugin_vm::PluginVmInstaller::kRecommendedFreeDiskSpace,
+              plugin_vm_installer_->RequiredFreeDiskSpace(),
               ui::DATA_UNITS_GIBIBYTE,
               /*show_units=*/true));
-    case State::LOW_DISK_SPACE:
-      return l10n_util::GetStringFUTF16(
-          IDS_PLUGIN_VM_INSTALLER_LOW_DISK_SPACE_MESSAGE,
-          ui::FormatBytesWithUnits(
-              plugin_vm::PluginVmInstaller::kRecommendedFreeDiskSpace,
-              ui::DATA_UNITS_GIBIBYTE,
-              /*show_units=*/true),
-          app_name_);
-    case State::CHECKING_LICENSE:
-    case State::CHECKING_DISK_SPACE:
-    case State::DOWNLOADING_DLC:
-    case State::CHECKING_VMS:
-      return l10n_util::GetStringUTF16(
-          IDS_PLUGIN_VM_INSTALLER_START_DOWNLOADING_MESSAGE);
-    case State::DOWNLOADING:
-      return l10n_util::GetStringUTF16(
-          IDS_PLUGIN_VM_INSTALLER_DOWNLOADING_MESSAGE);
-    case State::IMPORTING:
-      return l10n_util::GetStringUTF16(
-          IDS_PLUGIN_VM_INSTALLER_IMPORTING_MESSAGE);
-    case State::IMPORTED:
+    case State::kInstalling:
+      switch (installing_state_) {
+        case InstallingState::kInactive:
+          NOTREACHED();
+          FALLTHROUGH;
+        case InstallingState::kCheckingLicense:
+        case InstallingState::kCheckingDiskSpace:
+        case InstallingState::kDownloadingDlc:
+        case InstallingState::kCheckingForExistingVm:
+          return l10n_util::GetStringUTF16(
+              IDS_PLUGIN_VM_INSTALLER_START_DOWNLOADING_MESSAGE);
+        case InstallingState::kDownloadingImage:
+          return l10n_util::GetStringUTF16(
+              IDS_PLUGIN_VM_INSTALLER_DOWNLOADING_MESSAGE);
+        case InstallingState::kImporting:
+          return l10n_util::GetStringUTF16(
+              IDS_PLUGIN_VM_INSTALLER_IMPORTING_MESSAGE);
+      }
+    case State::kImported:
       return l10n_util::GetStringFUTF16(
           IDS_PLUGIN_VM_INSTALLER_IMPORTED_MESSAGE, app_name_);
-    case State::CREATED:
+    case State::kCreated:
       return l10n_util::GetStringUTF16(IDS_PLUGIN_VM_INSTALLER_CREATED_MESSAGE);
-    case State::ERROR:
+    case State::kError:
       using Reason = plugin_vm::PluginVmInstaller::FailureReason;
       DCHECK(reason_);
       switch (*reason_) {
@@ -435,6 +420,9 @@ base::string16 PluginVmInstallerView::GetMessage() const {
               IDS_PLUGIN_VM_INSTALLER_ERROR_MESSAGE_LOGIC_ERROR, app_name_,
               base::NumberToString16(
                   static_cast<std::underlying_type_t<Reason>>(*reason_)));
+        case Reason::OFFLINE:
+          return l10n_util::GetStringUTF16(
+              IDS_PLUGIN_VM_INSTALLER_ERROR_OFFLINE_MESSAGE);
         case Reason::NOT_ALLOWED:
         case Reason::DLC_UNSUPPORTED:
           return l10n_util::GetStringFUTF16(
@@ -477,14 +465,10 @@ base::string16 PluginVmInstallerView::GetMessage() const {
           return l10n_util::GetStringFUTF16(
               IDS_PLUGIN_VM_INSUFFICIENT_DISK_SPACE_MESSAGE,
               ui::FormatBytesWithUnits(
-                  plugin_vm::PluginVmInstaller::kMinimumFreeDiskSpace,
+                  plugin_vm_installer_->RequiredFreeDiskSpace(),
                   ui::DATA_UNITS_GIBIBYTE,
                   /*show_units=*/true),
-              app_name_,
-              ui::FormatBytesWithUnits(
-                  plugin_vm::PluginVmInstaller::kRecommendedFreeDiskSpace,
-                  ui::DATA_UNITS_GIBIBYTE,
-                  /*show_units=*/true));
+              app_name_);
       }
   }
 }
@@ -501,19 +485,13 @@ PluginVmInstallerView::~PluginVmInstallerView() {
 
 int PluginVmInstallerView::GetCurrentDialogButtons() const {
   switch (state_) {
-    case State::CHECKING_LICENSE:
-    case State::CHECKING_DISK_SPACE:
-    case State::DOWNLOADING_DLC:
-    case State::CHECKING_VMS:
-    case State::DOWNLOADING:
-    case State::IMPORTING:
+    case State::kInstalling:
       return ui::DIALOG_BUTTON_CANCEL;
-    case State::CONFIRM_INSTALL:
-    case State::LOW_DISK_SPACE:
-    case State::IMPORTED:
-    case State::CREATED:
+    case State::kConfirmInstall:
+    case State::kImported:
+    case State::kCreated:
       return ui::DIALOG_BUTTON_CANCEL | ui::DIALOG_BUTTON_OK;
-    case State::ERROR:
+    case State::kError:
       DCHECK(reason_);
       switch (*reason_) {
         case plugin_vm::PluginVmInstaller::FailureReason::NOT_ALLOWED:
@@ -527,32 +505,21 @@ int PluginVmInstallerView::GetCurrentDialogButtons() const {
 base::string16 PluginVmInstallerView::GetCurrentDialogButtonLabel(
     ui::DialogButton button) const {
   switch (state_) {
-    case State::CONFIRM_INSTALL:
+    case State::kConfirmInstall:
       return l10n_util::GetStringUTF16(
           button == ui::DIALOG_BUTTON_OK
               ? IDS_PLUGIN_VM_INSTALLER_INSTALL_BUTTON
               : IDS_APP_CANCEL);
-    case State::CHECKING_LICENSE:
-    case State::CHECKING_DISK_SPACE:
-    case State::DOWNLOADING_DLC:
-    case State::CHECKING_VMS:
-    case State::DOWNLOADING:
-    case State::IMPORTING: {
+    case State::kInstalling:
       DCHECK_EQ(button, ui::DIALOG_BUTTON_CANCEL);
       return l10n_util::GetStringUTF16(IDS_APP_CANCEL);
-    }
-    case State::CREATED:
-    case State::IMPORTED: {
+    case State::kCreated:
+    case State::kImported: {
       return l10n_util::GetStringUTF16(
           button == ui::DIALOG_BUTTON_OK ? IDS_PLUGIN_VM_INSTALLER_LAUNCH_BUTTON
                                          : IDS_APP_CLOSE);
     }
-    case State::LOW_DISK_SPACE:
-      return l10n_util::GetStringUTF16(
-          button == ui::DIALOG_BUTTON_OK
-              ? IDS_PLUGIN_VM_INSTALLER_CONTINUE_BUTTON
-              : IDS_APP_CANCEL);
-    case State::ERROR: {
+    case State::kError: {
       DCHECK(reason_);
       switch (*reason_) {
         case plugin_vm::PluginVmInstaller::FailureReason::NOT_ALLOWED:
@@ -589,32 +556,28 @@ void PluginVmInstallerView::OnStateUpdated() {
                    GetCurrentDialogButtonLabel(ui::DIALOG_BUTTON_CANCEL));
   }
 
-  const bool progress_bar_visible =
-      state_ == State::CHECKING_LICENSE ||
-      state_ == State::CHECKING_DISK_SPACE ||
-      state_ == State::DOWNLOADING_DLC || state_ == State::CHECKING_VMS ||
-      state_ == State::DOWNLOADING || state_ == State::IMPORTING;
+  const bool progress_bar_visible = state_ == State::kInstalling;
   progress_bar_->SetVisible(progress_bar_visible);
 
   const bool download_progress_message_label_visible =
-      state_ == State::DOWNLOADING;
+      installing_state_ == InstallingState::kDownloadingImage;
   download_progress_message_label_->SetVisible(
       download_progress_message_label_visible);
 
   DialogModelChanged();
   GetWidget()->GetRootView()->Layout();
 
-  if (state_ == State::CREATED || state_ == State::IMPORTED ||
-      state_ == State::ERROR) {
+  if (state_ == State::kCreated || state_ == State::kImported ||
+      state_ == State::kError) {
     if (finished_callback_for_testing_)
-      std::move(finished_callback_for_testing_).Run(state_ != State::ERROR);
+      std::move(finished_callback_for_testing_).Run(state_ != State::kError);
   }
 }
 
 base::string16 PluginVmInstallerView::GetDownloadProgressMessage(
     uint64_t bytes_downloaded,
     int64_t content_length) const {
-  DCHECK_EQ(state_, State::DOWNLOADING);
+  DCHECK_EQ(installing_state_, InstallingState::kDownloadingImage);
 
   // If download size isn't known |fraction_complete| should be empty.
   if (content_length > 0) {
@@ -647,22 +610,34 @@ void PluginVmInstallerView::SetMessageLabel() {
 }
 
 void PluginVmInstallerView::SetBigImage() {
-  if (state_ == State::ERROR) {
+  constexpr gfx::Size kRegularImageSize(314, 191);
+  constexpr gfx::Size kErrorImageSize(264, 264);
+  constexpr int kRegularImageBottomInset = 52 + 57;
+  constexpr int kErrorImageBottomInset = 52;
+
+  auto setImage = [this](int image_id, gfx::Size size, int bottom_inset) {
+    big_image_->SetImageSize(size);
+    lower_container_layout_->set_inside_border_insets(
+        gfx::Insets(0, 0, bottom_inset, 0));
     big_image_->SetImage(
-        ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
-            IDR_PLUGIN_VM_INSTALLER_ERROR));
+        ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(image_id));
+  };
+
+  if (state_ == State::kError) {
+    setImage(IDR_PLUGIN_VM_INSTALLER_ERROR, kErrorImageSize,
+             kErrorImageBottomInset);
     return;
   }
-  big_image_->SetImage(
-      ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
-          IDR_PLUGIN_VM_INSTALLER));
+  setImage(IDR_PLUGIN_VM_INSTALLER, kRegularImageSize,
+           kRegularImageBottomInset);
 }
 
 void PluginVmInstallerView::StartInstallation() {
   // Setup always starts from this function, including retries.
   setup_start_tick_ = base::TimeTicks::Now();
 
-  state_ = State::CHECKING_LICENSE;
+  state_ = State::kInstalling;
+  installing_state_ = InstallingState::kCheckingLicense;
   progress_bar_->SetValue(0);
   OnStateUpdated();
 

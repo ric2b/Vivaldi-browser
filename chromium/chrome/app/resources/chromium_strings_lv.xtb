@@ -125,6 +125,7 @@
 <translation id="5903106910045431592"><ph name="PAGE_TITLE" /> — pierakstīšanās tīklā</translation>
 <translation id="5987687638152509985">Lai sāktu sinhronizēšanu, atjauniniet Chromium.</translation>
 <translation id="6013050204643758987">Chromium OS darbību nodrošina papildu <ph name="BEGIN_LINK_CROS_OSS" />atklātā pirmkoda programmatūra<ph name="END_LINK_CROS_OSS" />, tāpat kā <ph name="BEGIN_LINK_LINUX_OSS" />Linux (Beta)<ph name="END_LINK_LINUX_OSS" /> darbību.</translation>
+<translation id="6039377483953237732">Chromium OS versija</translation>
 <translation id="6055895534982063517">Ir pieejama jauna Chromium versija, un tā ir ātrāka nekā jebkad agrāk.</translation>
 <translation id="6063093106622310249">&amp;Atvērt pārlūkā Chromium</translation>
 <translation id="6072279588547424923">Paplašinājums <ph name="EXTENSION_NAME" /> ir pievienots pārlūkam Chromium</translation>
@@ -220,8 +221,6 @@ Dažas funkcijas var nebūt pieejamas. Norādiet citu profila direktoriju vai iz
 <translation id="8586442755830160949">Autortiesības <ph name="YEAR" /> Chromium autori. Visas tiesības paturētas.</translation>
 <translation id="8619360774459241877">Notiek Chromium palaišana...</translation>
 <translation id="8621669128220841554">Instalēšana neizdevās nenoteiktas kļūdas dēļ. Lejupielādējiet pārlūku Chromium vēlreiz.</translation>
-<translation id="8682540261359803721">Ja šajā lapā iestatījums nav pieejams, skatiet to sadaļā <ph name="LINK_BEGIN" />
-      Pārlūkprogrammas Chromium iestatījumi<ph name="LINK_END" />.</translation>
 <translation id="8697124171261953979">Tas nosaka arī to, kāda lapa tiks rādīta, kad atvērsiet pārlūku Chromium vai meklēsiet, izmantojot universālo lodziņu.</translation>
 <translation id="8704119203788522458">Šis ir jūsu Chromium</translation>
 <translation id="8796602469536043152">Pārlūkam Chromium ir nepieciešama atļauja piekļūt jūsu kamerai un mikrofonam šajā vietnē.</translation>

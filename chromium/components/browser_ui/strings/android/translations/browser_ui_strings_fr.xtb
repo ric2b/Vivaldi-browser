@@ -10,6 +10,7 @@
 <translation id="1201402288615127009">Suivant</translation>
 <translation id="1242008676835033345">Intégration sur <ph name="WEBSITE_URL" /></translation>
 <translation id="1272079795634619415">Arrêter</translation>
+<translation id="1289742167380433257">Pour sauvegarder vos données, les images de cette page ont été optimisées par Google.</translation>
 <translation id="129382876167171263">Les fichiers enregistrés par des sites Web sont répertoriés ici</translation>
 <translation id="1364532808393826295"><ph name="APP_NAME" /> - <ph name="NOTIFICATION_MESSAGE" /></translation>
 <translation id="1369915414381695676">Site "<ph name="SITE_NAME" />" ajouté</translation>
@@ -17,7 +18,7 @@
 <translation id="1384959399684842514">Téléchargement suspendu</translation>
 <translation id="1446450296470737166">Autoriser le contrôle complet des appareils MIDI</translation>
 <translation id="1509960214886564027">Des fonctionnalités sur de nombreux sites risquent de ne pas fonctionner</translation>
-<translation id="1620510694547887537">Appareil photo</translation>
+<translation id="1620510694547887537">Caméra</translation>
 <translation id="1647391597548383849">Accéder à votre caméra</translation>
 <translation id="1660204651932907780">Autoriser le son des sites (recommandé)</translation>
 <translation id="1688867105868176567">Effacer les données du site ?</translation>
@@ -42,6 +43,7 @@
 <translation id="2182457891543959921">Vous demander votre avis avant d'autoriser les sites à créer un plan 3D de votre environnement ou à suivre la position de la caméra (recommandé)</translation>
 <translation id="2212565012507486665">Autoriser les cookies</translation>
 <translation id="2289270750774289114">Me demander lorsqu'un site souhaite accéder aux appareils Bluetooth se trouvant à proximité (recommandé)</translation>
+<translation id="2315043854645842844">La sélection de certificat côté client n'est pas compatible avec le système d'exploitation.</translation>
 <translation id="2359808026110333948">Continuer</translation>
 <translation id="2402980924095424747"><ph name="MEGABYTES" /> Mo</translation>
 <translation id="2434158240863470628">Téléchargement terminé <ph name="SEPARATOR" /> <ph name="BYTES_DOWNLOADED" /></translation>
@@ -51,20 +53,22 @@
 <translation id="2498359688066513246">Aide et commentaires</translation>
 <translation id="2501278716633472235">Retour</translation>
 <translation id="2537296579376733324">Tous les cookies (sur ce site uniquement)</translation>
-<translation id="2569468611847789653">{COOKIE_COUNT,plural, =1{1 cookie bloqué}one{# cookies blocked}other{# cookies bloqués}}</translation>
+<translation id="2569468611847789653">{COOKIE_COUNT,plural, =1{1 cookie bloqué}one{# cookie bloqué}other{# cookies bloqués}}</translation>
 <translation id="2570922361219980984">L'accès à la position est également désactivé pour cet appareil. Activez-le dans les <ph name="BEGIN_LINK" />paramètres Android<ph name="END_LINK" />.</translation>
 <translation id="257931822824936280">Développé – Cliquer pour réduire</translation>
 <translation id="2586657967955657006">Presse-papiers</translation>
 <translation id="2621115761605608342">Autorisez le langage JavaScript pour un site spécifique.</translation>
-<translation id="2653659639078652383">Valider</translation>
+<translation id="2653659639078652383">Envoyer</translation>
 <translation id="2687403674020088961">Bloquer tous les cookies (non recommandé)</translation>
 <translation id="2704606927547763573">Copié</translation>
 <translation id="2822354292072154809">Voulez-vous vraiment réinitialiser toutes les autorisations du site pour <ph name="CHOSEN_OBJECT_NAME" /> ?</translation>
 <translation id="2870560284913253234">Site</translation>
+<translation id="2874939134665556319">Piste précédente</translation>
 <translation id="2910701580606108292">Demander avant d'autoriser les sites à lire les contenus protégés</translation>
 <translation id="2913331724188855103">Autoriser les sites à enregistrer et à lire les données des cookies (recommandé)</translation>
 <translation id="2968755619301702150">Lecteur de certificat</translation>
 <translation id="300526633675317032">Cette action aura pour effet de libérer l'espace de stockage utilisé pour les données de site (<ph name="SIZE_IN_KB" />).</translation>
+<translation id="301521992641321250">Bloquée automatiquement</translation>
 <translation id="3115898365077584848">Afficher les informations</translation>
 <translation id="3123473560110926937">Bloqué sur certains sites</translation>
 <translation id="3190152372525844641">Activer les autorisations pour Chrome dans les <ph name="BEGIN_LINK" />paramètres Android<ph name="END_LINK" /></translation>
@@ -83,16 +87,19 @@
 <translation id="3744111561329211289">Synchronisation en arrière-plan</translation>
 <translation id="3822502789641063741">Suppr. données de site ?</translation>
 <translation id="385051799172605136">Retour</translation>
+<translation id="3859306556332390985">Avance rapide</translation>
 <translation id="3955193568934677022">Autoriser les sites à lire les contenus protégés (recommandé)</translation>
 <translation id="3987993985790029246">Copier lien</translation>
 <translation id="3991845972263764475"><ph name="BYTES_DOWNLOADED_WITH_UNITS" />/ ?</translation>
 <translation id="4002066346123236978">Titre</translation>
 <translation id="4008040567710660924">Autorisez les cookies pour un site spécifique.</translation>
+<translation id="4046123991198612571">Piste suivante</translation>
 <translation id="4165986682804962316">Paramètres de site</translation>
 <translation id="4226663524361240545">L'appareil vibrera en cas de notifications.</translation>
 <translation id="4242533952199664413">Ouvrir les paramètres</translation>
 <translation id="4259722352634471385">La navigation sur <ph name="URL" /> est bloquée.</translation>
 <translation id="4278390842282768270">Autorisé</translation>
+<translation id="429312253194641664">Un site est en train de lire un contenu multimédia</translation>
 <translation id="4433925000917964731">Page simplifiée fournie par Google</translation>
 <translation id="4434045419905280838">Pop-up et redirections</translation>
 <translation id="445467742685312942">Autoriser les sites à lire les contenus protégés</translation>
@@ -107,6 +114,7 @@
 <translation id="4962975101802056554">Révoquer toutes les autorisations de l'appareil</translation>
 <translation id="4964199952259983386">Pour autoriser Chrome à utiliser la RA, activez également l'appareil photo dans les <ph name="BEGIN_LINK" />paramètres Android<ph name="END_LINK" />.</translation>
 <translation id="497421865427891073">Avancer</translation>
+<translation id="4996978546172906250">Partager via</translation>
 <translation id="5039804452771397117">Autoriser</translation>
 <translation id="5048398596102334565">Autoriser les sites à accéder à vos capteurs de mouvement (recommandé)</translation>
 <translation id="5063480226653192405">Utilisation</translation>
@@ -163,7 +171,9 @@
 <translation id="6643016212128521049">Effacer</translation>
 <translation id="6697925417670533197">Téléchargements actifs</translation>
 <translation id="6746124502594467657">Descendre</translation>
+<translation id="6766622839693428701">Balayez l'écran vers le bas pour fermer la feuille.</translation>
 <translation id="6782111308708962316">Empêcher les sites Web tiers d'enregistrer et de lire les données des cookies</translation>
+<translation id="6790428901817661496">Lire</translation>
 <translation id="6818926723028410516">Sélectionner des éléments</translation>
 <translation id="6864395892908308021">Lecture NFC impossible sur cet appareil</translation>
 <translation id="6910211073230771657">Supprimé</translation>
@@ -197,6 +207,7 @@
 <translation id="7804248752222191302">Un site utilise actuellement votre appareil photo</translation>
 <translation id="7817023149356982970">Vous allez être déconnecté de ce site.</translation>
 <translation id="7828557259026017104">Les cookies sont des fichiers créés par les sites Web que vous consultez. Les sites les utilisent pour mémoriser vos préférences. Les cookies tiers sont créés par d'autres sites, lesquels possèdent une partie du contenu, comme les annonces ou les images, que vous voyez sur la page Web que vous consultez.</translation>
+<translation id="7835852323729233924">Contenu en cours de lecture</translation>
 <translation id="7846076177841592234">Annuler la sélection</translation>
 <translation id="7846621471902887024">Vous allez être déconnecté de tous les sites.</translation>
 <translation id="7882806643839505685">Autorisez le son pour un site spécifique.</translation>
@@ -204,6 +215,7 @@
 <translation id="7999064672810608036">Voulez-vous vraiment effacer toutes les données locales, y compris les cookies, et réinitialiser toutes les autorisations pour ce site Web ?</translation>
 <translation id="8007176423574883786">Désactivée pour cet appareil</translation>
 <translation id="802154636333426148">Échec du téléchargement</translation>
+<translation id="8068648041423924542">Impossible de sélectionner le certificat</translation>
 <translation id="8087000398470557479">Ce contenu est issu de <ph name="DOMAIN_NAME" />. Il est diffusé par Google.</translation>
 <translation id="8116925261070264013">Son coupé</translation>
 <translation id="8131740175452115882">Confirmer</translation>
@@ -216,6 +228,8 @@
 <translation id="83792324527827022">Un site utilise votre appareil photo et votre micro</translation>
 <translation id="8380167699614421159">Ce site affiche des annonces intrusives ou trompeuses</translation>
 <translation id="8394832520002899662">Appuyez pour revenir au site</translation>
+<translation id="8425213833346101688">Modifier</translation>
+<translation id="8441146129660941386">Retour rapide</translation>
 <translation id="8447861592752582886">Révoquer l'autorisation d'accès à l'appareil</translation>
 <translation id="8463851957836045671">Le site est rapide</translation>
 <translation id="851751545965956758">Interdire à tous les sites de se connecter à des appareils</translation>
@@ -236,6 +250,7 @@
 <translation id="8958424370300090006">Bloquez les cookies pour un site spécifique.</translation>
 <translation id="8959122750345127698">Impossible d'accéder à <ph name="URL" />.</translation>
 <translation id="9019902583201351841">Géré par tes parents</translation>
+<translation id="9074739597929991885">Bluetooth</translation>
 <translation id="945632385593298557">Accéder à votre micro</translation>
 <translation id="965817943346481315">Bloquer si le site affiche des annonces intrusives ou trompeuses (recommandé)</translation>
 </translationbundle>

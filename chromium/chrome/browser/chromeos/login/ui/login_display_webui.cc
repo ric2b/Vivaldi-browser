@@ -150,17 +150,9 @@ void LoginDisplayWebUI::ShowError(int error_msg_id,
                             help_topic_id);
 }
 
-void LoginDisplayWebUI::ShowErrorScreen(LoginDisplay::SigninError error_id) {
-  VLOG(1) << "Show error screen, error_id: " << error_id;
-  if (!webui_handler_)
-    return;
-  webui_handler_->ShowErrorScreen(error_id);
-}
-
 void LoginDisplayWebUI::ShowPasswordChangedDialog(bool show_password_error,
-                                                  const std::string& email) {
-  if (webui_handler_)
-    webui_handler_->ShowPasswordChangedDialog(show_password_error, email);
+                                                  const AccountId& account_id) {
+  NOTIMPLEMENTED();
 }
 
 void LoginDisplayWebUI::ShowSigninUI(const std::string& email) {
@@ -171,11 +163,6 @@ void LoginDisplayWebUI::ShowSigninUI(const std::string& email) {
 void LoginDisplayWebUI::ShowWhitelistCheckFailedError() {
   if (webui_handler_)
     webui_handler_->ShowWhitelistCheckFailedError();
-}
-
-// LoginDisplayWebUI, NativeWindowDelegate implementation: ---------------------
-gfx::NativeWindow LoginDisplayWebUI::GetNativeWindow() const {
-  return parent_window();
 }
 
 // LoginDisplayWebUI, SigninScreenHandlerDelegate implementation: --------------
@@ -200,10 +187,6 @@ void LoginDisplayWebUI::OnSigninScreenReady() {
     delegate_->OnSigninScreenReady();
 }
 
-void LoginDisplayWebUI::RemoveUser(const AccountId& account_id) {
-  SignInScreenController::Get()->RemoveUser(account_id);
-}
-
 void LoginDisplayWebUI::ShowEnterpriseEnrollmentScreen() {
   if (delegate_)
     delegate_->OnStartEnterpriseEnrollment();
@@ -222,11 +205,6 @@ void LoginDisplayWebUI::ShowKioskEnableScreen() {
 void LoginDisplayWebUI::ShowKioskAutolaunchScreen() {
   if (delegate_)
     delegate_->OnStartKioskAutolaunchScreen();
-}
-
-void LoginDisplayWebUI::ShowUpdateRequiredScreen() {
-  if (delegate_)
-    delegate_->ShowUpdateRequiredScreen();
 }
 
 void LoginDisplayWebUI::ShowWrongHWIDScreen() {

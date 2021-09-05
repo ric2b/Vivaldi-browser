@@ -1,0 +1,5 @@
+per-file *.mojom=set noparent
+per-file *.mojom=file://ipc/SECURITY_OWNERS
+
+# Prefer Chrome OS owners for large changes to the Lacros API.
+per-file *.mojom=file://chromeos/SECURITY_OWNERS

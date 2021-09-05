@@ -21,7 +21,8 @@ import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.components.payments.ErrorStrings;
 import org.chromium.components.payments.PayerData;
 import org.chromium.components.payments.PaymentApp;
-import org.chromium.components.payments.PaymentApp.InstrumentDetailsCallback;
+import org.chromium.components.payments.PaymentAppType;
+import org.chromium.components.payments.PaymentDetailsUpdateServiceHelper;
 import org.chromium.components.payments.intent.IsReadyToPayServiceHelper;
 import org.chromium.components.payments.intent.WebPaymentIntentHelper;
 import org.chromium.components.payments.intent.WebPaymentIntentHelperType;
@@ -33,6 +34,7 @@ import org.chromium.payments.mojom.PaymentDetailsModifier;
 import org.chromium.payments.mojom.PaymentItem;
 import org.chromium.payments.mojom.PaymentMethodData;
 import org.chromium.payments.mojom.PaymentOptions;
+import org.chromium.payments.mojom.PaymentRequestDetailsUpdate;
 import org.chromium.payments.mojom.PaymentShippingOption;
 import org.chromium.ui.UiUtils;
 import org.chromium.ui.base.WindowAndroid;
@@ -264,6 +266,7 @@ public class AndroidPaymentApp
         }
         mIsReadyToPayServiceHelper = new IsReadyToPayServiceHelper(
                 ContextUtils.getApplicationContext(), isReadyToPayIntent, /*resultHandler=*/this);
+        mIsReadyToPayServiceHelper.query();
     }
 
     @VisibleForTesting
@@ -311,6 +314,25 @@ public class AndroidPaymentApp
         }
 
         mLauncher.showLeavingIncognitoWarning(this::notifyErrorInvokingPaymentApp, launchRunnable);
+    }
+
+    @Override
+    public void updateWith(PaymentRequestDetailsUpdate response) {
+        ThreadUtils.assertOnUiThread();
+        PaymentDetailsUpdateServiceHelper.getInstance().updateWith(
+                WebPaymentIntentHelperTypeConverter.fromMojoPaymentRequestDetailsUpdate(response));
+    }
+
+    @Override
+    public void onPaymentDetailsNotUpdated() {
+        ThreadUtils.assertOnUiThread();
+        PaymentDetailsUpdateServiceHelper.getInstance().onPaymentDetailsNotUpdated();
+    }
+
+    @Override
+    public boolean isWaitingForPaymentDetailsUpdate() {
+        ThreadUtils.assertOnUiThread();
+        return PaymentDetailsUpdateServiceHelper.getInstance().isWaitingForPaymentDetailsUpdate();
     }
 
     @Override
@@ -400,5 +422,17 @@ public class AndroidPaymentApp
     public void onIsReadyToPayServiceResponse(boolean isReadyToPay) {
         PostTask.runOrPostTask(
                 UiThreadTaskTraits.DEFAULT, () -> respondToIsReadyToPayQuery(isReadyToPay));
+    }
+
+    @Override
+    public @PaymentAppType int getPaymentAppType() {
+        return PaymentAppType.NATIVE_MOBILE_APP;
+    }
+
+    /**
+     * @return The package name of the invoked native app.
+     */
+    public String packageName() {
+        return mPackageName;
     }
 }

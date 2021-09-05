@@ -9,13 +9,12 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "chrome/browser/chromeos/local_search_service/shared_structs.h"
 #include "components/keyed_service/core/keyed_service.h"
 
 namespace local_search_service {
 
 class Index;
-
-enum class IndexId { kCrosSettings = 0 };
 
 // LocalSearchService creates and owns content-specific Indices. Clients can
 // call it |GetIndex| method to get an Index for a given index id.
@@ -26,10 +25,10 @@ class LocalSearchService : public KeyedService {
   LocalSearchService(const LocalSearchService&) = delete;
   LocalSearchService& operator=(const LocalSearchService&) = delete;
 
-  Index* GetIndex(local_search_service::IndexId index_id);
+  Index* GetIndex(IndexId index_id, Backend backend = Backend::kLinearMap);
 
  private:
-  std::map<local_search_service::IndexId, std::unique_ptr<Index>> indices_;
+  std::map<IndexId, std::unique_ptr<Index>> indices_;
 };
 
 }  // namespace local_search_service

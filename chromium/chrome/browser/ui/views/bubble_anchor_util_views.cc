@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/views/bubble_anchor_util_views.h"
 
 #include "build/build_config.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/frame/app_menu_button.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
@@ -15,7 +16,6 @@
 #include "content/public/browser/render_widget_host_view.h"
 #include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
 #include "ui/vivaldi_browser_window.h"
-#include "ui/vivaldi_native_app_window_views.h"
 
 // This file contains the bubble_anchor_util implementation for a Views
 // browser window (BrowserView).
@@ -46,6 +46,17 @@ AnchorConfiguration GetPageInfoAnchorConfiguration(Browser* browser,
   return {};
 }
 
+AnchorConfiguration GetPermissionPromptBubbleAnchorConfiguration(
+    Browser* browser) {
+  if (base::FeatureList::IsEnabled(features::kPermissionChip)) {
+    BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
+    return {browser_view->GetLocationBarView(),
+            browser_view->GetLocationBarView()->permission_chip()->button(),
+            views::BubbleBorder::TOP_LEFT};
+  }
+  return GetPageInfoAnchorConfiguration(browser);
+}
+
 gfx::Rect GetPageInfoAnchorRect(Browser* browser) {
   // GetPageInfoAnchorConfiguration()'s anchor_view should be preferred if
   // available.
@@ -66,17 +77,15 @@ gfx::Rect GetPageInfoAnchorRect(Browser* browser) {
 
     VivaldiBrowserWindow* vivaldi_browser_window =
         static_cast<VivaldiBrowserWindow*>(browser->window());
-    VivaldiNativeAppWindowViews* native_view =
-        static_cast<VivaldiNativeAppWindowViews*>(
-            vivaldi_browser_window->GetBaseWindow());
+    views::View* contents_view = vivaldi_browser_window->GetContentsView();
 
-    views::View::ConvertPointToScreen(native_view, &pos);
-    views::View::ConvertRectToScreen(native_view, &rect);
+    views::View::ConvertPointToScreen(contents_view, &pos);
+    views::View::ConvertRectToScreen(contents_view, &rect);
     rect.set_x(pos.x() - (rect.width() / 2));
 
     return rect;
+  }
 
-  } else {
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
   // Get position in view (taking RTL UI into account).
   int x_within_browser_view = browser_view->GetMirroredXInView(
@@ -87,7 +96,6 @@ gfx::Rect GetPageInfoAnchorRect(Browser* browser) {
   gfx::Point browser_view_origin = browser_view->GetBoundsInScreen().origin();
   browser_view_origin += gfx::Vector2d(x_within_browser_view, 0);
   return gfx::Rect(browser_view_origin, gfx::Size());
-  }
 }
 
 }  // namespace bubble_anchor_util

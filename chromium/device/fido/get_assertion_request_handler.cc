@@ -13,6 +13,7 @@
 #include "base/bind.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/stl_util.h"
+#include "base/timer/elapsed_timer.h"
 #include "build/build_config.h"
 #include "components/cbor/diagnostic_writer.h"
 #include "components/device_event_log/device_event_log.h"
@@ -333,28 +334,20 @@ void GetAssertionRequestHandler::DispatchRequest(
   }
 
   CtapGetAssertionRequest request(request_);
-  if (authenticator->Options()) {
-    if (authenticator->Options()->user_verification_availability ==
-            AuthenticatorSupportedOptions::UserVerificationAvailability::
-                kSupportedAndConfigured &&
-        request_.user_verification !=
-            UserVerificationRequirement::kDiscouraged) {
-      if (authenticator->Options()->supports_uv_token) {
-        FIDO_LOG(DEBUG) << "Getting UV token from "
-                        << authenticator->GetDisplayName();
-        authenticator->GetUvToken(
-            base::BindOnce(&GetAssertionRequestHandler::OnHaveUvToken,
-                           weak_factory_.GetWeakPtr(), authenticator));
-        return;
-      }
-      request.user_verification = UserVerificationRequirement::kRequired;
-    } else {
-      request.user_verification = UserVerificationRequirement::kDiscouraged;
-    }
-    if (android_client_data_ext_ && authenticator->Options() &&
-        authenticator->Options()->supports_android_client_data_ext) {
-      request.android_client_data_ext = *android_client_data_ext_;
-    }
+  if (request.user_verification != UserVerificationRequirement::kDiscouraged &&
+      authenticator->CanGetUvToken()) {
+    FIDO_LOG(DEBUG) << "Getting UV token from "
+                    << authenticator->GetDisplayName();
+    authenticator->GetUvToken(
+        request_.rp_id,
+        base::BindOnce(&GetAssertionRequestHandler::OnHaveUvToken,
+                       weak_factory_.GetWeakPtr(), authenticator));
+    return;
+  }
+
+  if (android_client_data_ext_ && authenticator->Options() &&
+      authenticator->Options()->supports_android_client_data_ext) {
+    request.android_client_data_ext = *android_client_data_ext_;
   }
 
   ReportGetAssertionRequestTransport(authenticator);
@@ -364,7 +357,8 @@ void GetAssertionRequestHandler::DispatchRequest(
   authenticator->GetAssertion(
       std::move(request),
       base::BindOnce(&GetAssertionRequestHandler::HandleResponse,
-                     weak_factory_.GetWeakPtr(), authenticator));
+                     weak_factory_.GetWeakPtr(), authenticator,
+                     base::ElapsedTimer()));
 }
 
 void GetAssertionRequestHandler::AuthenticatorAdded(
@@ -407,6 +401,7 @@ void GetAssertionRequestHandler::AuthenticatorRemoved(
 
 void GetAssertionRequestHandler::HandleResponse(
     FidoAuthenticator* authenticator,
+    base::ElapsedTimer request_timer,
     CtapDeviceResponseCode status,
     base::Optional<AuthenticatorGetAssertionResponse> response) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(my_sequence_checker_);
@@ -457,9 +452,12 @@ void GetAssertionRequestHandler::HandleResponse(
        status == CtapDeviceResponseCode::kCtap2ErrOperationDenied) &&
       authenticator->WillNeedPINToGetAssertion(request_, observer()) ==
           PINDisposition::kUsePINForFallback) {
-    // Some authenticators will return this error immediately without user
-    // interaction when internal UV is locked.
-    if (AuthenticatorMayHaveReturnedImmediately(authenticator->GetId())) {
+    // Authenticators without uvToken support will return this error immediately
+    // without user interaction when internal UV is locked.
+    const base::TimeDelta response_time = request_timer.Elapsed();
+    if (response_time < kMinExpectedAuthenticatorResponseTime) {
+      FIDO_LOG(DEBUG) << "Authenticator is probably locked, response_time="
+                      << response_time;
       authenticator->GetTouch(base::BindOnce(
           &GetAssertionRequestHandler::StartPINFallbackForInternalUv,
           weak_factory_.GetWeakPtr(), authenticator));
@@ -655,7 +653,7 @@ void GetAssertionRequestHandler::OnHavePIN(std::string pin) {
 
   state_ = State::kRequestWithPIN;
   authenticator_->GetPINToken(
-      std::move(pin),
+      std::move(pin), {pin::Permissions::kGetAssertion}, request_.rp_id,
       base::BindOnce(&GetAssertionRequestHandler::OnHavePINToken,
                      weak_factory_.GetWeakPtr()));
 }
@@ -721,6 +719,7 @@ void GetAssertionRequestHandler::OnUvRetriesResponse(
   }
   observer()->OnRetryUserVerification(response->retries);
   authenticator_->GetUvToken(
+      request_.rp_id,
       base::BindOnce(&GetAssertionRequestHandler::OnHaveUvToken,
                      weak_factory_.GetWeakPtr(), authenticator_));
 }
@@ -788,8 +787,6 @@ void GetAssertionRequestHandler::DispatchRequestWithToken(
   CtapGetAssertionRequest request(request_);
   request.pin_auth = token.PinAuth(request.client_data_hash);
   request.pin_protocol = pin::kProtocolVersion;
-  // Do not do internal UV again.
-  request.user_verification = UserVerificationRequirement::kDiscouraged;
 
   if (android_client_data_ext_ && authenticator_->Options() &&
       authenticator_->Options()->supports_android_client_data_ext) {
@@ -801,7 +798,8 @@ void GetAssertionRequestHandler::DispatchRequestWithToken(
   authenticator_->GetAssertion(
       std::move(request),
       base::BindOnce(&GetAssertionRequestHandler::HandleResponse,
-                     weak_factory_.GetWeakPtr(), authenticator_));
+                     weak_factory_.GetWeakPtr(), authenticator_,
+                     base::ElapsedTimer()));
 }
 
 }  // namespace device

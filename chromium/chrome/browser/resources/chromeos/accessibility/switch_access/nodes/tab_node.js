@@ -8,7 +8,7 @@
  */
 class TabNode extends NodeWrapper {
   /**
-   * @param {!chrome.automation.AutomationNode} node The node in the automation
+   * @param {!AutomationNode} node The node in the automation
    *    tree
    * @param {?SARootNode} parent
    * @param {!SARootNode} tabAsRoot A pre-calculated object for exploring the
@@ -25,7 +25,7 @@ class TabNode extends NodeWrapper {
 
   /** @override */
   get actions() {
-    return [];
+    return [SwitchAccessMenuAction.SELECT];
   }
 
   // ================= General methods =================
@@ -38,6 +38,15 @@ class TabNode extends NodeWrapper {
   /** @override */
   isGroup() {
     return true;
+  }
+
+  /** @override */
+  performAction(action) {
+    if (action !== SwitchAccessMenuAction.SELECT) {
+      return SAConstants.ActionResponse.NO_ACTION_TAKEN;
+    }
+    NavigationManager.enterGroup();
+    return SAConstants.ActionResponse.CLOSE_MENU;
   }
 
   // ================= Static methods =================
@@ -70,7 +79,7 @@ class TabNode extends NodeWrapper {
 /** This class handles the behavior of tabs as actionable elements */
 class ActionableTabNode extends NodeWrapper {
   /**
-   * @param {!chrome.automation.AutomationNode} node
+   * @param {!AutomationNode} node
    * @param {?SARootNode} parent
    * @param {?SAChildNode} closeButton
    */
@@ -85,7 +94,7 @@ class ActionableTabNode extends NodeWrapper {
 
   /** @override */
   get actions() {
-    return [SAConstants.MenuAction.SELECT];
+    return [SwitchAccessMenuAction.SELECT];
   }
 
   /** @override */

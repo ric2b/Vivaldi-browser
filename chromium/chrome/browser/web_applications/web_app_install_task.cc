@@ -28,7 +28,6 @@
 #include "chrome/browser/web_applications/components/web_app_utils.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/web_application_info.h"
-#include "components/performance_manager/embedder/performance_manager_registry.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
 #include "third_party/blink/public/common/manifest/manifest.h"
@@ -286,11 +285,6 @@ std::unique_ptr<content::WebContents> WebAppInstallTask::CreateWebContents(
   InstallableManager::CreateForWebContents(web_contents.get());
   SecurityStateTabHelper::CreateForWebContents(web_contents.get());
   favicon::CreateContentFaviconDriverForWebContents(web_contents.get());
-  if (auto* performance_manager_registry =
-          performance_manager::PerformanceManagerRegistry::GetInstance()) {
-    performance_manager_registry->CreatePageNodeForWebContents(
-        web_contents.get());
-  }
 
   return web_contents;
 }
@@ -687,8 +681,11 @@ void WebAppInstallTask::OnIconsRetrievedFinalizeUpdate(
   FilterAndResizeIconsGenerateMissing(web_app_info.get(), &icons_map);
 
   install_finalizer_->FinalizeUpdate(
-      *web_app_info, base::BindOnce(&WebAppInstallTask::OnInstallFinalized,
-                                    weak_ptr_factory_.GetWeakPtr()));
+      *web_app_info,
+      base::BindOnce(&WebAppInstallTask::OnUpdateFinalizedRegisterShortcutsMenu,
+                     weak_ptr_factory_.GetWeakPtr(),
+                     web_app_info->shortcut_infos,
+                     web_app_info->shortcuts_menu_icons_bitmaps));
 }
 
 void WebAppInstallTask::OnDialogCompleted(
@@ -825,15 +822,67 @@ void WebAppInstallTask::OnShortcutsCreated(
   if (registrar_->IsLocallyInstalled(app_id))
     file_handler_manager_->EnableAndRegisterOsFileHandlers(app_id);
 
-  // TODO(https://crbug.com/1069298) - Also create App Icon Shortcuts Menu when
-  // synced apps are locally installed from the chrome://apps page.
   if (base::FeatureList::IsEnabled(
           features::kDesktopPWAsAppIconShortcutsMenu) &&
-      !web_app_info->shortcut_infos.empty()) {
-    shortcut_manager_->RegisterShortcutsMenuWithOs(web_app_info->shortcut_infos,
-                                                   app_id);
+      !web_app_info->shortcut_infos.empty() && add_to_quick_launch_bar) {
+    shortcut_manager_->RegisterShortcutsMenuWithOs(
+        app_id, web_app_info->shortcut_infos,
+        web_app_info->shortcuts_menu_icons_bitmaps);
   }
+
+  if (base::FeatureList::IsEnabled(features::kDesktopPWAsRunOnOsLogin)) {
+    // TODO(crbug.com/897302): Add run on OS login dev activation from
+    // manifest, for now it is on by default if feature flag is enabled
+    bool run_on_os_login = web_app_info->run_on_os_login;
+
+    if (install_params_)
+      run_on_os_login = install_params_->run_on_os_login;
+
+    if (run_on_os_login) {
+      shortcut_manager_->RegisterRunOnOsLogin(
+          app_id, base::BindOnce(&WebAppInstallTask::OnRegisteredRunOnOsLogin,
+                                 weak_ptr_factory_.GetWeakPtr(), app_id));
+    } else {
+      CallInstallCallback(app_id, InstallResultCode::kSuccessNewInstall);
+    }
+  } else {
+    CallInstallCallback(app_id, InstallResultCode::kSuccessNewInstall);
+  }
+}
+
+void WebAppInstallTask::OnRegisteredRunOnOsLogin(
+    const AppId& app_id,
+    bool registered_run_on_os_login) {
   CallInstallCallback(app_id, InstallResultCode::kSuccessNewInstall);
+}
+
+// TODO(https://crbug.com/1087219): Move RegisterShortcutsMenuWithOs code into
+// OsIntegrationManager when that becomes available.
+void WebAppInstallTask::OnUpdateFinalizedRegisterShortcutsMenu(
+    const std::vector<WebApplicationShortcutsMenuItemInfo>& shortcut_infos,
+    const ShortcutsMenuIconsBitmaps& shortcuts_menu_icons_bitmaps,
+    const AppId& app_id,
+    InstallResultCode code) {
+  if (ShouldStopInstall())
+    return;
+
+  if (code != InstallResultCode::kSuccessAlreadyInstalled) {
+    CallInstallCallback(app_id, code);
+    return;
+  }
+
+  if (base::FeatureList::IsEnabled(
+          features::kDesktopPWAsAppIconShortcutsMenu) &&
+      !shortcut_infos.empty()) {
+    shortcut_manager_->RegisterShortcutsMenuWithOs(
+        app_id, shortcut_infos, shortcuts_menu_icons_bitmaps);
+  } else {
+    // Unregister shortcuts menu when feature is disabled or shortcut_infos is
+    // empty.
+    shortcut_manager_->UnregisterShortcutsMenuWithOs(app_id);
+  }
+
+  CallInstallCallback(app_id, code);
 }
 
 }  // namespace web_app

@@ -101,7 +101,7 @@ PendingAppManagerImpl::CreateInstallationTask(
     ExternalInstallOptions install_options) {
   return std::make_unique<PendingAppInstallTask>(
       profile_, registrar(), shortcut_manager(), file_handler_manager(),
-      ui_manager(), finalizer(), std::move(install_options));
+      ui_manager(), finalizer(), install_manager(), std::move(install_options));
 }
 
 std::unique_ptr<PendingAppRegistrationTaskBase>
@@ -220,6 +220,15 @@ void PendingAppManagerImpl::StartInstallationTask(
 
   CreateWebContentsIfNecessary();
 
+  url_loader_->PrepareForLoad(
+      web_contents_.get(),
+      base::BindOnce(&PendingAppManagerImpl::OnWebContentsReady,
+                     weak_ptr_factory_.GetWeakPtr()));
+}
+
+void PendingAppManagerImpl::OnWebContentsReady(WebAppUrlLoader::Result) {
+  // TODO(crbug.com/1098139): Handle the scenario where WebAppUrlLoader fails to
+  // load about:blank and flush WebContents states.
   url_loader_->LoadUrl(current_install_->task->install_options().url,
                        web_contents_.get(),
                        WebAppUrlLoader::UrlComparison::kSameOrigin,

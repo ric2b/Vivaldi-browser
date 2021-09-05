@@ -6,6 +6,7 @@
 import './appearance_page/appearance_fonts_page.js';
 import './autofill_page/password_check.js';
 import './autofill_page/passwords_section.js';
+import './autofill_page/passwords_device_section.js';
 import './autofill_page/payments_section.js';
 import './clear_browsing_data_dialog/clear_browsing_data_dialog.js';
 import './search_engines_page/search_engines_page.js';
@@ -87,7 +88,7 @@ export {cookieInfo} from './site_settings/cookie_info.js';
 export {CookieList, LocalDataBrowserProxy, LocalDataBrowserProxyImpl, LocalDataItem} from './site_settings/local_data_browser_proxy.js';
 export {HandlerEntry, ProtocolEntry} from './site_settings/protocol_handlers.js';
 export {kControlledByLookup} from './site_settings/site_settings_behavior.js';
-export {ContentSettingProvider, CookieControlsManagedState, DefaultContentSetting, RawChooserException, RawSiteException, RecentSitePermissions, SiteException, SiteGroup, SiteSettingsPrefsBrowserProxy, SiteSettingsPrefsBrowserProxyImpl, ZoomLevelEntry} from './site_settings/site_settings_prefs_browser_proxy.js';
+export {ContentSettingProvider, DefaultContentSetting, RawChooserException, RawSiteException, RecentSitePermissions, SiteException, SiteGroup, SiteSettingsPrefsBrowserProxy, SiteSettingsPrefsBrowserProxyImpl, ZoomLevelEntry} from './site_settings/site_settings_prefs_browser_proxy.js';
 export {WebsiteUsageBrowserProxyImpl} from './site_settings/website_usage_browser_proxy.js';
 export {defaultSettingLabel} from './site_settings_page/site_settings_list.js';
 // <if expr="not chromeos">

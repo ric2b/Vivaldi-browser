@@ -26,6 +26,7 @@
 #include "chrome/browser/chromeos/login/screens/assistant_optin_flow_screen.h"
 #include "chrome/browser/chromeos/login/screens/demo_preferences_screen.h"
 #include "chrome/browser/chromeos/login/screens/demo_setup_screen.h"
+#include "chrome/browser/chromeos/login/screens/discover_screen.h"
 #include "chrome/browser/chromeos/login/screens/enable_adb_sideloading_screen.h"
 #include "chrome/browser/chromeos/login/screens/enable_debugging_screen.h"
 #include "chrome/browser/chromeos/login/screens/eula_screen.h"
@@ -40,7 +41,7 @@
 #include "chrome/browser/chromeos/login/screens/terms_of_service_screen.h"
 #include "chrome/browser/chromeos/login/screens/update_screen.h"
 #include "chrome/browser/chromeos/policy/enrollment_config.h"
-#include "chrome/browser/chromeos/settings/cros_settings.h"
+#include "components/account_id/account_id.h"
 
 class PrefService;
 
@@ -53,6 +54,7 @@ class NetworkStateHelper;
 class DemoSetupController;
 class ErrorScreen;
 struct Geoposition;
+enum class KioskAppType;
 class LoginDisplayHost;
 class SimpleGeolocationProvider;
 class TimeZoneProvider;
@@ -95,6 +97,8 @@ class WizardController {
   // Returns true if OOBE is operating under the
   // Zero-Touch Hands-Off Enrollment Flow.
   static bool UsingHandsOffEnrollment();
+
+  bool is_initialized() { return is_initialized_; }
 
   // Shows the first screen defined by |first_screen| or by default if the
   // parameter is empty.
@@ -159,6 +163,12 @@ class WizardController {
 
   // Resets |current_screen_| when login screen has started.
   void LoginScreenStarted();
+
+  // Configure and show GAIA password changed screen.
+  void ShowGaiaPasswordChangedScreen(const AccountId& account_id,
+                                     bool has_error);
+  // Configure and show active directory password change screen.
+  void ShowActiveDirectoryPasswordChangeScreen(const std::string& username);
 
  private:
   // Create BaseScreen instances. These are owned by |screen_manager_|.
@@ -233,7 +243,7 @@ class WizardController {
   void OnTermsOfServiceScreenExit(TermsOfServiceScreen::Result result);
   void OnFingerprintSetupScreenExit(FingerprintSetupScreen::Result result);
   void OnSyncConsentScreenExit(SyncConsentScreen::Result result);
-  void OnDiscoverScreenExit();
+  void OnDiscoverScreenExit(DiscoverScreen::Result result);
   void OnArcTermsOfServiceScreenExit(ArcTermsOfServiceScreen::Result result);
   void OnArcTermsOfServiceAccepted();
   void OnRecommendAppsScreenExit(RecommendAppsScreen::Result result);
@@ -247,6 +257,7 @@ class WizardController {
   void OnSupervisionTransitionScreenExit();
   void OnOobeFlowFinished();
   void OnPackagedLicenseScreenExit(PackagedLicenseScreen::Result result);
+  void OnActiveDirectoryPasswordChangeScreenExit();
 
   // Callback invoked once it has been determined whether the device is disabled
   // or not.
@@ -278,9 +289,6 @@ class WizardController {
   void OnAccessibilityStatusChanged(
       const AccessibilityStatusEventDetails& details);
 
-  // Notification of Guest Mode policy changes.
-  void OnGuestModePolicyUpdated();
-
   // Switches from one screen to another.
   void SetCurrentScreen(BaseScreen* screen);
 
@@ -288,10 +296,7 @@ class WizardController {
   void UpdateStatusAreaVisibilityForScreen(OobeScreenId screen_id);
 
   // Launched kiosk app configured for auto-launch.
-  void AutoLaunchKioskApp();
-
-  // Launched webkiosk app configured for auto-launch.
-  void AutoLaunchWebKioskApp();
+  void AutoLaunchKioskApp(KioskAppType app_type);
 
   // Called when LocalState is initialized.
   void OnLocalStateInitialized(bool /* succeeded */);
@@ -403,8 +408,6 @@ class WizardController {
   friend class WizardControllerSupervisionTransitionOobeTest;
 
   std::unique_ptr<AccessibilityStatusSubscription> accessibility_subscription_;
-  std::unique_ptr<CrosSettings::ObserverSubscription>
-      guest_mode_policy_subscription_;
 
   std::unique_ptr<SimpleGeolocationProvider> geolocation_provider_;
   std::unique_ptr<TimeZoneProvider> timezone_provider_;
@@ -427,6 +430,8 @@ class WizardController {
   base::Value oobe_configuration_{base::Value::Type::DICTIONARY};
 
   BaseScreen* hid_screen_ = nullptr;
+
+  bool is_initialized_ = false;
 
   base::WeakPtrFactory<WizardController> weak_factory_{this};
 

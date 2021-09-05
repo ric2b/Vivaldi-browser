@@ -21,7 +21,6 @@ import org.chromium.components.browser_ui.notifications.NotificationManagerProxy
 import org.chromium.components.browser_ui.notifications.NotificationManagerProxyImpl;
 import org.chromium.components.browser_ui.notifications.NotificationMetadata;
 import org.chromium.components.browser_ui.notifications.PendingIntentProvider;
-import org.chromium.components.browser_ui.notifications.channels.ChannelsInitializer;
 import org.chromium.components.webrtc.MediaCaptureNotificationUtil;
 import org.chromium.components.webrtc.MediaCaptureNotificationUtil.MediaType;
 import org.chromium.content_public.browser.WebContents;
@@ -65,6 +64,7 @@ public class MediaStreamManager {
 
     /**
      * @return a string that prefixes all intents that can be handled by {@link forwardIntent}.
+     * @Deprecated in M85+, this class does not handle intents. Remove in M88.
      */
     public static String getIntentPrefix() {
         return WEBRTC_PREFIX;
@@ -73,6 +73,7 @@ public class MediaStreamManager {
     /**
      * Handles an intent coming from a media streaming notification.
      * @param intent the intent which was previously posted via {@link update}.
+     * @Deprecated in M85+, this class does not handle intents. Remove in M88.
      */
     public static void forwardIntent(Intent intent) {
         assert intent.getAction().equals(ACTIVATE_TAB_INTENT);
@@ -208,28 +209,28 @@ public class MediaStreamManager {
         }
 
         Context appContext = ContextUtils.getApplicationContext();
-        Intent intent = WebLayerImpl.createIntent();
-        intent.putExtra(EXTRA_TAB_ID, mNotificationId);
-        intent.setAction(ACTIVATE_TAB_INTENT);
+        Intent intent = null;
+        if (WebLayerFactoryImpl.getClientMajorVersion() >= 85) {
+            intent = IntentUtils.createBringTabToFrontIntent(mNotificationId);
+        } else {
+            intent = WebLayerImpl.createIntent();
+            intent.putExtra(EXTRA_TAB_ID, mNotificationId);
+            intent.setAction(ACTIVATE_TAB_INTENT);
+        }
         PendingIntentProvider contentIntent =
                 PendingIntentProvider.getBroadcast(appContext, mNotificationId, intent, 0);
 
         int mediaType = audio && video ? MediaType.AUDIO_AND_VIDEO
                                        : audio ? MediaType.AUDIO_ONLY : MediaType.VIDEO_ONLY;
 
-        NotificationManagerProxy notificationManagerProxy = getNotificationManager();
-        ChannelsInitializer channelsInitializer = new ChannelsInitializer(notificationManagerProxy,
-                WebLayerNotificationChannels.getInstance(), appContext.getResources());
-
         // TODO(crbug/1076098): don't pass a URL in incognito.
         ChromeNotification notification = MediaCaptureNotificationUtil.createNotification(
-                new WebLayerNotificationBuilder(appContext,
+                WebLayerNotificationBuilder.create(
                         WebLayerNotificationChannels.ChannelId.WEBRTC_CAM_AND_MIC,
-                        channelsInitializer,
                         new NotificationMetadata(0, AV_STREAM_TAG, mNotificationId)),
                 mediaType, mTab.getWebContents().getVisibleUrl().getSpec(),
                 WebLayerImpl.getClientApplicationName(), contentIntent, null /*stopIntent*/);
-        notificationManagerProxy.notify(notification);
+        getNotificationManager().notify(notification);
 
         updateActiveNotifications(true);
         notifyClient(audio, video);

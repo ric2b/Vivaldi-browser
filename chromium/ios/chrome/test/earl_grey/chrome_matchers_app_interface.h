@@ -109,9 +109,6 @@
 // Matcher for the Share menu button.
 + (id<GREYMatcher>)shareButton;
 
-// Returns the GREYMatcher for the button that opens the tab switcher.
-+ (id<GREYMatcher>)tabletTabSwitcherOpenButton;
-
 // Matcher for show tabs button.
 + (id<GREYMatcher>)showTabsButton;
 
@@ -152,6 +149,9 @@
 
 // Returns matcher for the sign out accounts button.
 + (id<GREYMatcher>)signOutAccountsButton;
+
+// Returns matcher for the sign out and clear data accounts button.
++ (id<GREYMatcher>)signOutAndClearDataAccountsButton;
 
 // Returns matcher for the Clear Browsing Data cell on the Privacy screen.
 + (id<GREYMatcher>)clearBrowsingDataCell;
@@ -338,9 +338,6 @@
 
 // Returns a matcher for "Open In..." button.
 + (id<GREYMatcher>)openInButton;
-
-// Returns the GREYMatcher for the button that opens the tab grid.
-+ (id<GREYMatcher>)tabGridOpenButton;
 
 // Returns the GREYMatcher for the cell at |index| in the tab grid.
 + (id<GREYMatcher>)tabGridCellAtIndex:(unsigned int)index;

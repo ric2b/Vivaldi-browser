@@ -222,7 +222,7 @@ void ParseCompilerOptions(const std::vector<std::string>& cflags,
 void QtCreatorWriter::HandleTarget(const Target* target) {
   using namespace QtCreatorWriterUtils;
 
-  SourceFile build_file = Loader::BuildFileForLabel(target->label());
+  SourceFile build_file = builder_.loader()->BuildFileForLabel(target->label());
   sources_.insert(FilePathToUTF8(build_settings_->GetFullPath(build_file)));
   AddToSources(target->settings()->import_manager().GetImportedFiles());
 

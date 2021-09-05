@@ -283,8 +283,8 @@ void XRWebGLLayer::OnFrameEnd() {
       if (!framebuffer_dirty) {
         // If the session doesn't have a pose then the framebuffer being clean
         // may be expected, so we won't count those frames.
-        bool frame_had_pose =
-            !!session()->GetMojoFrom(XRReferenceSpace::Type::kTypeViewer);
+        bool frame_had_pose = !!session()->GetMojoFrom(
+            device::mojom::blink::XRReferenceSpaceType::kViewer);
         if (frame_had_pose) {
           clean_frame_count++;
           if (clean_frame_count == kCleanFrameWarningLimit) {
@@ -327,7 +327,7 @@ scoped_refptr<StaticBitmapImage> XRWebGLLayer::TransferToStaticBitmapImage() {
   return nullptr;
 }
 
-void XRWebGLLayer::Trace(Visitor* visitor) {
+void XRWebGLLayer::Trace(Visitor* visitor) const {
   visitor->Trace(left_viewport_);
   visitor->Trace(right_viewport_);
   visitor->Trace(webgl_context_);

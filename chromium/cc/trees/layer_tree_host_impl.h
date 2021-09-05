@@ -29,6 +29,7 @@
 #include "cc/input/scrollbar_animation_controller.h"
 #include "cc/input/scrollbar_controller.h"
 #include "cc/layers/layer_collections.h"
+#include "cc/metrics/dropped_frame_counter.h"
 #include "cc/metrics/event_metrics.h"
 #include "cc/metrics/events_metrics_manager.h"
 #include "cc/metrics/frame_sequence_tracker_collection.h"
@@ -83,7 +84,6 @@ class BrowserControlsOffsetManager;
 class CompositorFrameReportingController;
 class DebugRectHistory;
 class EvictionTilePriorityQueue;
-class FrameRateCounter;
 class ImageAnimationController;
 class LCDTextMetricsReporter;
 class LayerImpl;
@@ -175,6 +175,17 @@ class LayerTreeHostImplClient {
       Scheduler::PaintWorkletState state) = 0;
 
   virtual void NotifyThroughputTrackerResults(CustomTrackerResults results) = 0;
+
+  // Send the throughput data to the main thread's LayerTreeHostClient, which
+  // then send the data to the browser process and eventually report to UKM.
+  virtual void SubmitThroughputData(ukm::SourceId source_id,
+                                    int aggregated_percent,
+                                    int impl_percent,
+                                    base::Optional<int> main_percent) = 0;
+
+  virtual void DidObserveFirstScrollDelay(
+      base::TimeDelta first_scroll_delay,
+      base::TimeTicks first_scroll_timestamp) = 0;
 
  protected:
   virtual ~LayerTreeHostImplClient() = default;
@@ -333,6 +344,8 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
   float CurrentTopControlsShownRatio() const override;
   float CurrentBottomControlsShownRatio() const override;
   void DidChangeBrowserControlsPosition() override;
+  void DidObserveScrollDelay(base::TimeDelta scroll_delay,
+                             base::TimeTicks scroll_timestamp);
   bool HaveRootScrollNode() const override;
   void SetNeedsCommit() override;
 
@@ -610,7 +623,8 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
   const ScrollNode* CurrentlyScrollingNode() const;
 
   bool scroll_affects_scroll_handler() const {
-    return scroll_affects_scroll_handler_;
+    return settings_.enable_synchronized_scrolling &&
+           scroll_affects_scroll_handler_;
   }
   void QueueSwapPromiseForMainThreadScrollUpdate(
       std::unique_ptr<SwapPromise> swap_promise);
@@ -641,9 +655,8 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
   const gfx::Transform& DrawTransform() const;
 
   std::unique_ptr<ScrollAndScaleSet> ProcessScrollDeltas();
-  FrameRateCounter* fps_counter() { return fps_counter_.get(); }
-  base::Optional<int> current_universal_throughput() {
-    return frame_trackers_.current_universal_throughput();
+  DroppedFrameCounter* dropped_frame_counter() {
+    return &dropped_frame_counter_;
   }
   MemoryHistory* memory_history() { return memory_history_.get(); }
   DebugRectHistory* debug_rect_history() { return debug_rect_history_.get(); }
@@ -735,6 +748,13 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
   gfx::Vector2dF ComputeScrollDelta(const ScrollNode& scroll_node,
                                     const gfx::Vector2dF& delta);
 
+  // Resolves a delta in the given granularity for the |scroll_node| into
+  // physical pixels to scroll.
+  gfx::Vector2dF ResolveScrollGranularityToPixels(
+      const ScrollNode& scroll_node,
+      const gfx::Vector2dF& scroll_delta,
+      ui::ScrollGranularity granularity);
+
   void ScheduleMicroBenchmark(std::unique_ptr<MicroBenchmarkImpl> benchmark);
 
   viz::CompositorFrameMetadata MakeCompositorFrameMetadata();
@@ -784,15 +804,6 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
                ? task_runner_provider_->ImplThreadTaskRunner()
                : task_runner_provider_->MainThreadTaskRunner();
   }
-
-  // Determines whether the given scroll node can scroll on the compositor
-  // thread or if there are any reasons it must be scrolled on the main thread
-  // or not at all. Note: in general, this is not sufficient to determine if a
-  // scroll can occur on the compositor thread. If hit testing to a scroll
-  // node, the caller must also check whether the hit point intersects a
-  // non-fast-scrolling-region of any ancestor scrolling layers.
-  InputHandler::ScrollStatus TryScroll(const ScrollTree& scroll_tree,
-                                       ScrollNode* scroll_node) const;
 
   // Return all ScrollNode indices that have an associated layer with a non-fast
   // region that intersects the point.
@@ -894,13 +905,19 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
   void CollectScrollDeltas(ScrollAndScaleSet* scroll_info);
   void CollectScrollbarUpdates(ScrollAndScaleSet* scroll_info) const;
 
-  gfx::Vector2dF ResolveScrollPercentageToPixels(
-      const ScrollNode& scroll_node,
-      const gfx::Vector2dF& resolved_pixels);
-
   // Returns the ScrollNode we should use to scroll, accounting for viewport
   // scroll chaining rules.
   ScrollNode* GetNodeToScroll(ScrollNode* node) const;
+
+  // Determines whether the given scroll node can scroll on the compositor
+  // thread or if there are any reasons it must be scrolled on the main thread
+  // or not at all. Note: in general, this is not sufficient to determine if a
+  // scroll can occur on the compositor thread. If hit testing to a scroll
+  // node, the caller must also check whether the hit point intersects a
+  // non-fast-scrolling-region of any ancestor scrolling layers. Can be removed
+  // after scroll unification https://crbug.com/476553.
+  InputHandler::ScrollStatus TryScroll(const ScrollTree& scroll_tree,
+                                       ScrollNode* scroll_node) const;
 
   // Transforms viewport start point and scroll delta to local start point and
   // local delta, respectively. If the transformation of either the start or end
@@ -957,13 +974,14 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
       LayerImpl* first_scrolling_layer_or_drawn_scrollbar,
       ui::ScrollInputType type);
 
-  // Initial scroll hit testing can be unreliable in the presence of squashed
-  // layers. In this case, we fall back to main thread scrolling. This function
-  // compares |layer_impl| returned from a regular hit test to the layer
-  // returned from a hit test performed only on scrollers and scrollbars. If the
-  // closest scrolling ancestor of |layer_impl| is not the other layer, then the
-  // layer_impl must be a squasing layer overtop of some other scroller and we
-  // must rely on the main thread.
+  // |layer| is returned from a regular hit test, and
+  // |first_scrolling_layer_or_drawn_scrollbar| is returned from a hit test
+  // performed only on scrollers and scrollbars. Initial scroll hit testing can
+  // be unreliable if the latter is not the direct scroll ancestor of the
+  // former. In this case, we will fall back to main thread scrolling because
+  // the compositor thread doesn't know which layer to scroll. This happens when
+  // a layer covers a scroller that doesn't scroll the former, or a scroller is
+  // masked by a mask layer for mask image, clip-path, rounded border, etc.
   //
   // Note, position: fixed layers use the inner viewport as their ScrollNode
   // (since they don't scroll with the outer viewport), however, scrolls from
@@ -1018,21 +1036,35 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
   void ClearCurrentlyScrollingNode();
 
   // Performs a hit test to determine the ScrollNode to use when scrolling at
-  // |viewport_point|. Can return nullptr if the hit test fails; see the
-  // comment in IsInitialScrollHitTestReliable
-  ScrollNode* HitTestScrollNode(const gfx::PointF& device_viewport_point) const;
+  // |viewport_point|. If no layer is hit, this falls back to the inner
+  // viewport scroll node. Returns:
+  // - If |hit_test_sucessful| is false, hit testing has failed and the
+  //   compositor cannot determine the correct scroll node (e.g. see comments in
+  //   IsInitialScrollHitTestReliable). |scroll_node| is always nullptr in this
+  //   case.
+  // - If |hit_test_successful| is true, returns the ScrollNode to use in
+  //   |scroll_node|. This can be nullptr if no layer was hit and there are no
+  //   viewport nodes (e.g. OOPIF, UI compositor).
+  struct ScrollHitTestResult {
+    ScrollNode* scroll_node;
+    bool hit_test_successful;
+  };
+  ScrollHitTestResult HitTestScrollNode(
+      const gfx::PointF& device_viewport_point) const;
 
   // Similar to above but includes complicated logic to determine whether the
   // ScrollNode is able to be scrolled on the compositor or requires main
   // thread scrolling. If main thread scrolling is required
   // |scroll_on_main_thread| is set to true and the reason is given in
   // |main_thread_scrolling_reason| to on of the enum values in
-  // main_thread_scrolling_reason.h.
+  // main_thread_scrolling_reason.h. Can be removed after scroll unification
+  // https://crbug.com/476553.
   ScrollNode* FindScrollNodeForCompositedScrolling(
       const gfx::PointF& device_viewport_point,
       LayerImpl* layer_hit_by_point,
       bool* scroll_on_main_thread,
       uint32_t* main_thread_scrolling_reason) const;
+
   void StartScrollbarFadeRecursive(LayerImpl* layer);
   void SetManagedMemoryPolicy(const ManagedMemoryPolicy& policy);
 
@@ -1226,7 +1258,7 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
 
   std::unique_ptr<PageScaleAnimation> page_scale_animation_;
 
-  std::unique_ptr<FrameRateCounter> fps_counter_;
+  DroppedFrameCounter dropped_frame_counter_;
   std::unique_ptr<MemoryHistory> memory_history_;
   std::unique_ptr<DebugRectHistory> debug_rect_history_;
 
@@ -1400,6 +1432,7 @@ class CC_EXPORT LayerTreeHostImpl : public InputHandler,
   std::unique_ptr<LCDTextMetricsReporter> lcd_text_metrics_reporter_;
 
   FrameRateEstimator frame_rate_estimator_;
+  bool has_observed_first_scroll_delay_ = false;
 
   // Must be the last member to ensure this is destroyed first in the
   // destruction order and invalidates all weak pointers.

@@ -47,4 +47,36 @@ bool IsAccessibilityTreeForViewsEnabled() {
       ::features::kEnableAccessibilityTreeForViews);
 }
 
+const base::Feature kAccessibilityFocusHighlight{
+    "AccessibilityFocusHighlight", base::FEATURE_DISABLED_BY_DEFAULT};
+
+bool IsAccessibilityFocusHighlightEnabled() {
+  return base::FeatureList::IsEnabled(::features::kAccessibilityFocusHighlight);
+}
+
+#if defined(OS_WIN)
+const base::Feature kIChromeAccessible{"IChromeAccessible",
+                                       base::FEATURE_DISABLED_BY_DEFAULT};
+
+bool IsIChromeAccessibleEnabled() {
+  return base::FeatureList::IsEnabled(::features::kIChromeAccessible);
+}
+#endif  // defined(OS_WIN)
+
+#if defined(OS_CHROMEOS)
+const base::Feature kAccessibilityCursorColor{
+    "AccessibilityCursorColor", base::FEATURE_DISABLED_BY_DEFAULT};
+
+bool IsAccessibilityCursorColorEnabled() {
+  return base::FeatureList::IsEnabled(::features::kAccessibilityCursorColor);
+}
+#endif  // defined(OS_CHROMEOS)
+
+const base::Feature kAugmentExistingImageLabels{
+    "AugmentExistingImageLabels", base::FEATURE_DISABLED_BY_DEFAULT};
+
+bool IsAugmentExistingImageLabelsEnabled() {
+  return base::FeatureList::IsEnabled(::features::kAugmentExistingImageLabels);
+}
+
 }  // namespace features

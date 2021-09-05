@@ -466,6 +466,27 @@ bool FormDataImporter::ImportAddressProfiles(const FormStructure& form) {
       // And close the div of the section import log.
       import_log_buffer << CTag{"div"};
     }
+    // TODO(crbug.com/1097125): Remove feature test.
+    // Run the import on the union of the section if the import was not
+    // successful and if there is more than one section.
+    if (num_saved_profiles > 0) {
+      AutofillMetrics::LogAddressFormImportStatustMetric(
+          AutofillMetrics::AddressProfileImportStatusMetric::REGULAR_IMPORT);
+    } else if (base::FeatureList::IsEnabled(
+                   features::kAutofillProfileImportFromUnifiedSection) &&
+               sections.size() > 1) {
+      // Try to import by combining all sections.
+      if (ImportAddressProfileForSection(form, "", &import_log_buffer)) {
+        num_saved_profiles++;
+        AutofillMetrics::LogAddressFormImportStatustMetric(
+            AutofillMetrics::AddressProfileImportStatusMetric::
+                SECTION_UNION_IMPORT);
+      }
+    }
+    if (num_saved_profiles == 0) {
+      AutofillMetrics::LogAddressFormImportStatustMetric(
+          AutofillMetrics::AddressProfileImportStatusMetric::NO_IMPORT);
+    }
   }
   import_log_buffer << LogMessage::kImportAddressProfileFromFormNumberOfImports
                     << num_saved_profiles << CTag{};
@@ -509,7 +530,8 @@ bool FormDataImporter::ImportAddressProfileForSection(
   // Go through each |form| field and attempt to constitute a valid profile.
   for (const auto& field : form) {
     // Reject fields that are not within the specified |section|.
-    if (field->section != section)
+    // If section is empty, use all fields.
+    if (field->section != section && !section.empty())
       continue;
 
     base::string16 value;
@@ -518,7 +540,12 @@ bool FormDataImporter::ImportAddressProfileForSection(
     // If we don't know the type of the field, or the user hasn't entered any
     // information into the field, or the field is non-focusable (hidden), then
     // skip it.
-    if (!field->IsFieldFillable() || !field->is_focusable || value.empty())
+    // TODO(crbug.com/1101280): Remove |skip_unfocussable_field|
+    bool skip_unfocussable_field =
+        !field->is_focusable &&
+        !base::FeatureList::IsEnabled(
+            features::kAutofillProfileImportFromUnfocusableFields);
+    if (!field->IsFieldFillable() || skip_unfocussable_field || value.empty())
       continue;
 
     AutofillType field_type = field->Type();
@@ -679,15 +706,10 @@ bool FormDataImporter::ImportCreditCard(
     }
   }
 
-  // If editable expiration date experiment is enabled, the card with invalid
-  // expiration date can be uploaded. However, the card with invalid card number
-  // must be ignored.
+  // Cards with invalid expiration dates can be uploaded due to the existence of
+  // the expiration date fix flow. However, cards with invalid card numbers must
+  // still be ignored.
   if (!candidate_credit_card.HasValidCardNumber()) {
-    return false;
-  }
-  if (!candidate_credit_card.HasValidExpirationDate() &&
-      !base::FeatureList::IsEnabled(
-          features::kAutofillUpstreamEditableExpirationDate)) {
     return false;
   }
 
@@ -711,6 +733,15 @@ bool FormDataImporter::ImportCreditCard(
       // already a local card.
       imported_credit_card_record_type_ =
           ImportedCreditCardRecordType::LOCAL_CARD;
+
+      // If the card is a local card and it has a nickname stored in the local
+      // database, copy the nickname to the |candidate_credit_card| so that the
+      // nickname also shows in the Upstream bubble.
+      if (base::FeatureList::IsEnabled(
+              features::kAutofillEnableSurfacingServerCardNickname)) {
+        candidate_credit_card.SetNickname(card_copy.nickname());
+      }
+
       // If we should not return the local card, return that we merged it,
       // without setting |imported_credit_card|.
       if (!should_return_local_card)

@@ -4,6 +4,7 @@
 
 #include "printing/backend/cups_helper.h"
 
+#include "build/build_config.h"
 #include "printing/backend/print_backend.h"
 #include "printing/mojom/print.mojom.h"
 #include "printing/print_settings.h"
@@ -56,7 +57,8 @@ TEST(PrintBackendCupsHelperTest, TestPpdParsingNoColorDuplexShortEdge) {
 *CloseGroup: General)";
 
   PrinterSemanticCapsAndDefaults caps;
-  EXPECT_TRUE(ParsePpdCapabilities("test", "", kTestPpdData, &caps));
+  EXPECT_TRUE(ParsePpdCapabilities(/*dest=*/nullptr, /*locale=*/"",
+                                   kTestPpdData, &caps));
   EXPECT_TRUE(caps.collate_capable);
   EXPECT_TRUE(caps.collate_default);
   EXPECT_EQ(caps.copies_max, 9999);
@@ -86,7 +88,8 @@ TEST(PrintBackendCupsHelperTest, TestPpdParsingNoColorDuplexSimples) {
 *CloseGroup: General)";
 
   PrinterSemanticCapsAndDefaults caps;
-  EXPECT_TRUE(ParsePpdCapabilities("test", "", kTestPpdData, &caps));
+  EXPECT_TRUE(ParsePpdCapabilities(/*dest=*/nullptr, /*locale=*/"",
+                                   kTestPpdData, &caps));
   EXPECT_TRUE(caps.collate_capable);
   EXPECT_TRUE(caps.collate_default);
   EXPECT_EQ(caps.copies_max, 9999);
@@ -113,7 +116,8 @@ TEST(PrintBackendCupsHelperTest, TestPpdParsingNoColorNoDuplex) {
 *CloseGroup: General)";
 
   PrinterSemanticCapsAndDefaults caps;
-  EXPECT_TRUE(ParsePpdCapabilities("test", "", kTestPpdData, &caps));
+  EXPECT_TRUE(ParsePpdCapabilities(/*dest=*/nullptr, /*locale=*/"",
+                                   kTestPpdData, &caps));
   EXPECT_TRUE(caps.collate_capable);
   EXPECT_TRUE(caps.collate_default);
   EXPECT_EQ(caps.copies_max, 9999);
@@ -146,7 +150,8 @@ TEST(PrintBackendCupsHelperTest, TestPpdParsingColorTrueDuplexShortEdge) {
 *CloseGroup: General)";
 
   PrinterSemanticCapsAndDefaults caps;
-  EXPECT_TRUE(ParsePpdCapabilities("test", "", kTestPpdData, &caps));
+  EXPECT_TRUE(ParsePpdCapabilities(/*dest=*/nullptr, /*locale=*/"",
+                                   kTestPpdData, &caps));
   EXPECT_TRUE(caps.collate_capable);
   EXPECT_TRUE(caps.collate_default);
   EXPECT_EQ(caps.copies_max, 9999);
@@ -188,7 +193,8 @@ TEST(PrintBackendCupsHelperTest, TestPpdParsingColorFalseDuplexLongEdge) {
 *CloseGroup: General)";
 
   PrinterSemanticCapsAndDefaults caps;
-  EXPECT_TRUE(ParsePpdCapabilities("test", "", kTestPpdData, &caps));
+  EXPECT_TRUE(ParsePpdCapabilities(/*dest=*/nullptr, /*locale=*/"",
+                                   kTestPpdData, &caps));
   EXPECT_TRUE(caps.collate_capable);
   EXPECT_TRUE(caps.collate_default);
   EXPECT_EQ(caps.copies_max, 9999);
@@ -220,7 +226,8 @@ TEST(PrintBackendCupsHelperTest, TestPpdParsingPageSize) {
 *CloseUI: *PageSize)";
 
   PrinterSemanticCapsAndDefaults caps;
-  EXPECT_TRUE(ParsePpdCapabilities("test", "", kTestPpdData, &caps));
+  EXPECT_TRUE(ParsePpdCapabilities(/*dest=*/nullptr, /*locale=*/"",
+                                   kTestPpdData, &caps));
   ASSERT_EQ(2UL, caps.papers.size());
   EXPECT_EQ("Letter", caps.papers[0].vendor_id);
   EXPECT_EQ("US Letter", caps.papers[0].display_name);
@@ -261,7 +268,8 @@ TEST(PrintBackendCupsHelperTest, TestPpdParsingPageSizeNoDefaultSpecified) {
 
   {
     PrinterSemanticCapsAndDefaults caps;
-    EXPECT_TRUE(ParsePpdCapabilities("test", "en-US", kTestPpdData, &caps));
+    EXPECT_TRUE(ParsePpdCapabilities(/*dest=*/nullptr, /*locale=*/"en-US",
+                                     kTestPpdData, &caps));
     ASSERT_EQ(4UL, caps.papers.size());
     EXPECT_EQ("Letter", caps.papers[3].vendor_id);
     EXPECT_EQ("US Letter", caps.papers[3].display_name);
@@ -271,7 +279,8 @@ TEST(PrintBackendCupsHelperTest, TestPpdParsingPageSizeNoDefaultSpecified) {
   }
   {
     PrinterSemanticCapsAndDefaults caps;
-    EXPECT_TRUE(ParsePpdCapabilities("test", "en-UK", kTestPpdData, &caps));
+    EXPECT_TRUE(ParsePpdCapabilities(/*dest=*/nullptr, /*locale=*/"en-UK",
+                                     kTestPpdData, &caps));
     ASSERT_EQ(4UL, caps.papers.size());
     EXPECT_EQ("A4", caps.papers[1].vendor_id);
     EXPECT_EQ("ISO A4", caps.papers[1].display_name);
@@ -294,7 +303,8 @@ TEST(PrintBackendCupsHelperTest, TestPpdParsingBrotherPrinters) {
 *CloseUI: *BRPrintQuality)";
 
     PrinterSemanticCapsAndDefaults caps;
-    EXPECT_TRUE(ParsePpdCapabilities("test", "", kTestPpdData, &caps));
+    EXPECT_TRUE(ParsePpdCapabilities(/*dest=*/nullptr, /*locale=*/"",
+                                     kTestPpdData, &caps));
     EXPECT_TRUE(caps.color_changeable);
     EXPECT_TRUE(caps.color_default);
     EXPECT_EQ(BROTHER_BRSCRIPT3_COLOR, caps.color_model);
@@ -313,7 +323,8 @@ TEST(PrintBackendCupsHelperTest, TestPpdParsingBrotherPrinters) {
 *CloseUI: *BRMonoColor)";
 
     PrinterSemanticCapsAndDefaults caps;
-    EXPECT_TRUE(ParsePpdCapabilities("test", "", kTestPpdData, &caps));
+    EXPECT_TRUE(ParsePpdCapabilities(/*dest=*/nullptr, /*locale=*/"",
+                                     kTestPpdData, &caps));
     EXPECT_TRUE(caps.color_changeable);
     EXPECT_TRUE(caps.color_default);
     EXPECT_EQ(BROTHER_CUPS_COLOR, caps.color_model);
@@ -332,7 +343,8 @@ TEST(PrintBackendCupsHelperTest, TestPpdParsingBrotherPrinters) {
 *CloseUI: *BRDuplex)";
 
     PrinterSemanticCapsAndDefaults caps;
-    EXPECT_TRUE(ParsePpdCapabilities("test", "", kTestPpdData, &caps));
+    EXPECT_TRUE(ParsePpdCapabilities(/*dest=*/nullptr, /*locale=*/"",
+                                     kTestPpdData, &caps));
     EXPECT_THAT(caps.duplex_modes,
                 testing::UnorderedElementsAre(mojom::DuplexMode::kSimplex,
                                               mojom::DuplexMode::kLongEdge,
@@ -354,7 +366,8 @@ TEST(PrintBackendCupsHelperTest, TestPpdParsingHpPrinters) {
 *CloseUI: *HPColorMode)";
 
   PrinterSemanticCapsAndDefaults caps;
-  EXPECT_TRUE(ParsePpdCapabilities("test", "", kTestPpdData, &caps));
+  EXPECT_TRUE(ParsePpdCapabilities(/*dest=*/nullptr, /*locale=*/"",
+                                   kTestPpdData, &caps));
   EXPECT_TRUE(caps.color_changeable);
   EXPECT_TRUE(caps.color_default);
   EXPECT_EQ(HP_COLOR_COLOR, caps.color_model);
@@ -362,7 +375,13 @@ TEST(PrintBackendCupsHelperTest, TestPpdParsingHpPrinters) {
   VerifyCapabilityColorModels(caps);
 }
 
-TEST(PrintBackendCupsHelperTest, TestPpdParsingEpsonPrinters) {
+// TODO(crbug.com/1081705): Epson "Ink" attribute bloats prints on Linux.
+#if defined(OS_LINUX)
+#define MAYBE_TestPpdParsingEpsonPrinters DISABLED_TestPpdParsingEpsonPrinters
+#else
+#define MAYBE_TestPpdParsingEpsonPrinters TestPpdParsingEpsonPrinters
+#endif
+TEST(PrintBackendCupsHelperTest, MAYBE_TestPpdParsingEpsonPrinters) {
   constexpr char kTestPpdData[] =
       R"(*PPD-Adobe: "4.3"
 *ColorDevice: True
@@ -377,7 +396,8 @@ TEST(PrintBackendCupsHelperTest, TestPpdParsingEpsonPrinters) {
 *CloseUI: *Ink)";
 
   PrinterSemanticCapsAndDefaults caps;
-  EXPECT_TRUE(ParsePpdCapabilities("test", "", kTestPpdData, &caps));
+  EXPECT_TRUE(ParsePpdCapabilities(/*dest=*/nullptr, /*locale=*/"",
+                                   kTestPpdData, &caps));
   EXPECT_TRUE(caps.color_changeable);
   EXPECT_TRUE(caps.color_default);
   EXPECT_EQ(EPSON_INK_COLOR, caps.color_model);
@@ -396,7 +416,8 @@ TEST(PrintBackendCupsHelperTest, TestPpdParsingSamsungPrinters) {
 *CloseUI: *ColorMode)";
 
   PrinterSemanticCapsAndDefaults caps;
-  EXPECT_TRUE(ParsePpdCapabilities("test", "", kTestPpdData, &caps));
+  EXPECT_TRUE(ParsePpdCapabilities(/*dest=*/nullptr, /*locale=*/"",
+                                   kTestPpdData, &caps));
   EXPECT_TRUE(caps.color_changeable);
   EXPECT_TRUE(caps.color_default);
   EXPECT_EQ(COLORMODE_COLOR, caps.color_model);
@@ -420,7 +441,8 @@ TEST(PrintBackendCupsHelperTest, TestPpdParsingSharpPrinters) {
 *CloseUI: *ARCMode)";
 
   PrinterSemanticCapsAndDefaults caps;
-  EXPECT_TRUE(ParsePpdCapabilities("test", "", kTestPpdData, &caps));
+  EXPECT_TRUE(ParsePpdCapabilities(/*dest=*/nullptr, /*locale=*/"",
+                                   kTestPpdData, &caps));
   EXPECT_TRUE(caps.color_changeable);
   EXPECT_TRUE(caps.color_default);
   EXPECT_EQ(SHARP_ARCMODE_CMCOLOR, caps.color_model);
@@ -442,7 +464,8 @@ TEST(PrintBackendCupsHelperTest, TestPpdParsingXeroxPrinters) {
 *CloseUI: *XRXColor)";
 
   PrinterSemanticCapsAndDefaults caps;
-  EXPECT_TRUE(ParsePpdCapabilities("test", "", kTestPpdData, &caps));
+  EXPECT_TRUE(ParsePpdCapabilities(/*dest=*/nullptr, /*locale=*/"",
+                                   kTestPpdData, &caps));
   EXPECT_TRUE(caps.color_changeable);
   EXPECT_TRUE(caps.color_default);
   EXPECT_EQ(XEROX_XRXCOLOR_AUTOMATIC, caps.color_model);
@@ -460,8 +483,9 @@ TEST(PrintBackendCupsHelperTest, TestPpdParsingCupsMaxCopies) {
 *CloseUI: *ColorMode)";
 
     PrinterSemanticCapsAndDefaults caps;
-    EXPECT_TRUE(ParsePpdCapabilities("test", "", kTestPpdData, &caps));
-    EXPECT_EQ(caps.copies_max, 99);
+    EXPECT_TRUE(ParsePpdCapabilities(/*dest=*/nullptr, /*locale=*/"",
+                                     kTestPpdData, &caps));
+    EXPECT_EQ(99, caps.copies_max);
   }
 
   {
@@ -473,9 +497,49 @@ TEST(PrintBackendCupsHelperTest, TestPpdParsingCupsMaxCopies) {
 *CloseUI: *ColorMode)";
 
     PrinterSemanticCapsAndDefaults caps;
-    EXPECT_TRUE(ParsePpdCapabilities("test", "", kTestPpdData, &caps));
-    EXPECT_EQ(caps.copies_max, 9999);
+    EXPECT_TRUE(ParsePpdCapabilities(/*dest=*/nullptr, /*locale=*/"",
+                                     kTestPpdData, &caps));
+    EXPECT_EQ(9999, caps.copies_max);
   }
+}
+
+TEST(PrintBackendCupsHelperTest, TestPpdSetsDestOptions) {
+  constexpr char kTestPpdData[] =
+      R"(*PPD-Adobe: "4.3"
+*OpenUI *Duplex/2-Sided Printing: PickOne
+*DefaultDuplex: DuplexTumble
+*Duplex None/Off: "
+  <</Duplex false>>setpagedevice"
+*Duplex DuplexNoTumble/LongEdge: "
+  </Duplex true/Tumble false>>setpagedevice"
+*Duplex DuplexTumble/ShortEdge: "
+  <</Duplex true/Tumble true>>setpagedevice"
+*CloseUI: *Duplex)";
+
+  cups_dest_t* dest;
+  int num_dests = 0;
+  num_dests =
+      cupsAddDest(/*name=*/"test_dest", /*instance=*/nullptr, num_dests, &dest);
+  ASSERT_EQ(1, num_dests);
+
+  // Set long edge duplex mode in the destination options even though the PPD
+  // sets short edge duplex mode as the default.
+  cups_option_t* options = nullptr;
+  int num_options = 0;
+  num_options =
+      cupsAddOption("Duplex", "DuplexNoTumble", num_options, &options);
+  dest->num_options = num_options;
+  dest->options = options;
+
+  PrinterSemanticCapsAndDefaults caps;
+  EXPECT_TRUE(ParsePpdCapabilities(dest, /*locale=*/"", kTestPpdData, &caps));
+  EXPECT_THAT(caps.duplex_modes,
+              testing::UnorderedElementsAre(mojom::DuplexMode::kSimplex,
+                                            mojom::DuplexMode::kLongEdge,
+                                            mojom::DuplexMode::kShortEdge));
+  EXPECT_EQ(mojom::DuplexMode::kLongEdge, caps.duplex_default);
+
+  cupsFreeDests(num_dests, dest);
 }
 
 }  // namespace printing

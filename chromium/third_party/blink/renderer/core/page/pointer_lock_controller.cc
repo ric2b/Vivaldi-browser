@@ -60,27 +60,25 @@ ScriptPromise PointerLockController::RequestPointerLock(
     return promise;
   }
 
-  target->GetDocument().CountUseOnlyInCrossOriginIframe(
+  LocalDOMWindow* window = To<LocalDOMWindow>(target->GetExecutionContext());
+  window->CountUseOnlyInCrossOriginIframe(
       WebFeature::kElementRequestPointerLockIframe);
   if (target->IsInShadowTree()) {
-    UseCounter::Count(target->GetDocument(),
-                      WebFeature::kElementRequestPointerLockInShadow);
+    UseCounter::Count(window, WebFeature::kElementRequestPointerLockInShadow);
   }
   if (options && options->unadjustedMovement()) {
-    UseCounter::Count(target->GetDocument(),
-                      WebFeature::kPointerLockUnadjustedMovement);
+    UseCounter::Count(window, WebFeature::kPointerLockUnadjustedMovement);
   }
 
-  if (target->GetDocument().IsSandboxed(
+  if (window->IsSandboxed(
           network::mojom::blink::WebSandboxFlags::kPointerLock)) {
     // FIXME: This message should be moved off the console once a solution to
     // https://bugs.webkit.org/show_bug.cgi?id=103274 exists.
-    target->GetDocument().AddConsoleMessage(
-        MakeGarbageCollected<ConsoleMessage>(
-            mojom::ConsoleMessageSource::kSecurity,
-            mojom::ConsoleMessageLevel::kError,
-            "Blocked pointer lock on an element because the element's frame is "
-            "sandboxed and the 'allow-pointer-lock' permission is not set."));
+    window->AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
+        mojom::blink::ConsoleMessageSource::kSecurity,
+        mojom::blink::ConsoleMessageLevel::kError,
+        "Blocked pointer lock on an element because the element's frame is "
+        "sandboxed and the 'allow-pointer-lock' permission is not set."));
     EnqueueEvent(event_type_names::kPointerlockerror, target);
     exception_state.ThrowSecurityError(
         "Blocked pointer lock on an element because the element's frame is "
@@ -104,7 +102,7 @@ ScriptPromise PointerLockController::RequestPointerLock(
     // Attempt to change options if necessary.
     if (unadjusted_movement_requested != current_unadjusted_movement_setting_) {
       if (!page_->GetChromeClient().RequestPointerLockChange(
-              target->GetDocument().GetFrame(),
+              window->GetFrame(),
               WTF::Bind(&PointerLockController::ChangeLockRequestCallback,
                         WrapWeakPersistent(this), WrapWeakPersistent(target),
                         WrapPersistent(resolver),
@@ -123,7 +121,7 @@ ScriptPromise PointerLockController::RequestPointerLock(
 
     // Subsequent steps are handled in the browser process.
   } else if (page_->GetChromeClient().RequestPointerLock(
-                 target->GetDocument().GetFrame(),
+                 window->GetFrame(),
                  WTF::Bind(&PointerLockController::LockRequestCallback,
                            WrapWeakPersistent(this), WrapPersistent(resolver),
                            unadjusted_movement_requested),
@@ -334,10 +332,19 @@ void PointerLockController::EnqueueEvent(const AtomicString& type,
   }
 }
 
-void PointerLockController::Trace(Visitor* visitor) {
+void PointerLockController::Trace(Visitor* visitor) const {
   visitor->Trace(page_);
   visitor->Trace(element_);
   visitor->Trace(document_of_removed_element_while_waiting_for_unlock_);
+}
+
+// static
+Element* PointerLockController::GetPointerLockedElement(LocalFrame* frame) {
+  if (Page* p = frame->GetPage()) {
+    if (!p->GetPointerLockController().LockPending())
+      return p->GetPointerLockController().GetElement();
+  }
+  return nullptr;
 }
 
 }  // namespace blink

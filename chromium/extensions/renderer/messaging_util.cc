@@ -122,7 +122,7 @@ std::unique_ptr<Message> MessageFromJSONString(
     return nullptr;
   }
 
-  bool has_transient_user_activation = !vivaldi::IsVivaldiRunning() &&
+  bool has_transient_user_activation =
       web_frame ? web_frame->HasTransientUserActivation() : false;
   return std::make_unique<Message>(message, has_transient_user_activation);
 }

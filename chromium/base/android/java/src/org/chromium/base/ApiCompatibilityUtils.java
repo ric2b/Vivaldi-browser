@@ -19,24 +19,23 @@ import android.content.res.Resources.NotFoundException;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.ColorFilter;
-import android.graphics.ImageDecoder;
 import android.graphics.PorterDuff;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.LayerDrawable;
 import android.graphics.drawable.TransitionDrawable;
-import android.net.Uri;
+import android.hardware.display.DisplayManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.PowerManager;
 import android.os.Process;
 import android.os.StrictMode;
 import android.os.UserManager;
-import android.provider.MediaStore;
 import android.provider.Settings;
 import android.text.Html;
 import android.text.Spanned;
 import android.text.TextUtils;
+import android.view.Display;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
@@ -60,9 +59,9 @@ import org.chromium.base.annotations.VerifiesOnO;
 import org.chromium.base.annotations.VerifiesOnP;
 import org.chromium.base.annotations.VerifiesOnQ;
 
-import java.io.FileNotFoundException;
-import java.io.IOException;
 import java.io.UnsupportedEncodingException;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Utility class to use new APIs that were added after KitKat (API level 19).
@@ -80,6 +79,25 @@ public class ApiCompatibilityUtils {
         static boolean isRunningInUserTestHarness() {
             return ActivityManager.isRunningInUserTestHarness();
         }
+
+        static List<Integer> getTargetableDisplayIds(@Nullable Activity activity) {
+            List<Integer> displayList = new ArrayList<>();
+            if (activity == null) return displayList;
+            DisplayManager displayManager =
+                    (DisplayManager) activity.getSystemService(Context.DISPLAY_SERVICE);
+            if (displayManager == null) return displayList;
+            Display[] displays = displayManager.getDisplays();
+            ActivityManager am =
+                    (ActivityManager) activity.getSystemService(Context.ACTIVITY_SERVICE);
+            for (Display display : displays) {
+                if (display.getState() == Display.STATE_ON
+                        && am.isActivityStartAllowedOnDisplay(activity, display.getDisplayId(),
+                                new Intent(activity, activity.getClass()))) {
+                    displayList.add(display.getDisplayId());
+                }
+            }
+            return displayList;
+        }
     }
 
     @VerifiesOnP
@@ -87,11 +105,6 @@ public class ApiCompatibilityUtils {
     private static class ApisP {
         static String getProcessName() {
             return Application.getProcessName();
-        }
-
-        static Bitmap getBitmapByUri(ContentResolver cr, Uri uri) throws IOException {
-            ImageDecoder.Source imageSource = ImageDecoder.createSource(cr, uri);
-            return ImageDecoder.decodeBitmap(imageSource);
         }
     }
 
@@ -602,6 +615,22 @@ public class ApiCompatibilityUtils {
     }
 
     /**
+     * Get a list of ids of targetable displays, including the default display for the
+     * current activity. A set of targetable displays can only be determined on Q+. An empty list
+     * is returned if called on prior Q.
+     * @param activity The {@link Activity} to check.
+     * @return A list of display ids. Empty if there is none or version is less than Q, or
+     *         windowAndroid does not contain an activity.
+     */
+    @NonNull
+    public static List<Integer> getTargetableDisplayIds(Activity activity) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            return ApisQ.getTargetableDisplayIds(activity);
+        }
+        return new ArrayList<>();
+    }
+
+    /**
      * Disables the Smart Select {@link TextClassifier} for the given {@link TextView} instance.
      * @param textView The {@link TextView} that should have its classifier disabled.
      */
@@ -777,16 +806,5 @@ public class ApiCompatibilityUtils {
         for (int i = 0; i < layerDrawable.getNumberOfLayers(); i++) {
             layerDrawable.getDrawable(i).setBounds(oldBounds[i]);
         }
-    }
-
-    /**
-     * Retrieves an image for the given url as a Bitmap.
-     */
-    public static Bitmap getBitmapByUri(ContentResolver cr, Uri uri)
-            throws FileNotFoundException, IOException {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            return ApisP.getBitmapByUri(cr, uri);
-        }
-        return MediaStore.Images.Media.getBitmap(cr, uri);
     }
 }

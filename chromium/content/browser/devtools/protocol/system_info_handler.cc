@@ -12,7 +12,6 @@
 #include "base/command_line.h"
 #include "base/process/process_metrics.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "content/browser/gpu/compositor_util.h"
 #include "content/browser/gpu/gpu_data_manager_impl.h"
@@ -106,10 +105,6 @@ class AuxGPUInfoEnumerator : public gpu::GPUInfo::Enumerator {
   void BeginImageDecodeAcceleratorSupportedProfile() override {}
 
   void EndImageDecodeAcceleratorSupportedProfile() override {}
-
-  void BeginDx12VulkanVersionInfo() override {}
-
-  void EndDx12VulkanVersionInfo() override {}
 
   void BeginOverlayInfo() override {}
 
@@ -291,8 +286,8 @@ class SystemInfoHandlerGpuObserver : public content::GpuDataManagerObserver {
   explicit SystemInfoHandlerGpuObserver(
       std::unique_ptr<GetInfoCallback> callback)
       : callback_(std::move(callback)) {
-    base::PostDelayedTask(
-        FROM_HERE, {BrowserThread::UI},
+    GetUIThreadTaskRunner({})->PostDelayedTask(
+        FROM_HERE,
         base::BindOnce(&SystemInfoHandlerGpuObserver::ObserverWatchdogCallback,
                        weak_factory_.GetWeakPtr()),
         base::TimeDelta::FromMilliseconds(kGPUInfoWatchdogTimeoutMs));
@@ -339,8 +334,7 @@ SystemInfoHandler::SystemInfoHandler()
     : DevToolsDomainHandler(SystemInfo::Metainfo::domainName) {
 }
 
-SystemInfoHandler::~SystemInfoHandler() {
-}
+SystemInfoHandler::~SystemInfoHandler() = default;
 
 void SystemInfoHandler::Wire(UberDispatcher* dispatcher) {
   SystemInfo::Dispatcher::wire(dispatcher, this);
@@ -431,9 +425,8 @@ void SystemInfoHandler::GetProcessInfo(
   AddRendererProcessInfo(process_info.get());
 
   // Collect child processes info on the IO thread.
-  base::PostTaskAndReplyWithResult(
-      FROM_HERE, {BrowserThread::IO},
-      base::BindOnce(&AddChildProcessInfo, std::move(process_info)),
+  GetIOThreadTaskRunner({})->PostTaskAndReplyWithResult(
+      FROM_HERE, base::BindOnce(&AddChildProcessInfo, std::move(process_info)),
       base::BindOnce(&GetProcessInfoCallback::sendSuccess,
                      std::move(callback)));
 }

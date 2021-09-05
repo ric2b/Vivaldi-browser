@@ -296,9 +296,6 @@ void AppWindow::Init(const GURL& url,
   // Initialize the window
   CreateParams new_params = LoadDefaults(params);
   window_type_ = new_params.window_type;
-  UMA_HISTOGRAM_ENUMERATION("Apps.Window.Type", new_params.window_type,
-                            WINDOW_TYPE_COUNT);
-
   window_key_ = new_params.window_key;
 
 #if !defined(OS_MACOSX)
@@ -977,10 +974,10 @@ void AppWindow::NavigationStateChanged(content::WebContents* source,
 }
 
 void AppWindow::EnterFullscreenModeForTab(
-    content::WebContents* source,
-    const GURL& origin,
+    content::RenderFrameHost* requesting_frame,
     const blink::mojom::FullscreenOptions& options) {
-  ToggleFullscreenModeForTab(source, true);
+  ToggleFullscreenModeForTab(WebContents::FromRenderFrameHost(requesting_frame),
+                             true);
 }
 
 void AppWindow::ExitFullscreenModeForTab(content::WebContents* source) {

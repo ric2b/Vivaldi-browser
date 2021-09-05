@@ -35,11 +35,10 @@
 #include "base/time/default_tick_clock.h"
 #include "base/unguessable_token.h"
 #include "build/build_config.h"
-#include "mojo/public/cpp/bindings/associated_receiver.h"
-#include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/unique_receiver_set.h"
+#include "third_party/blink/public/mojom/blob/blob_url_store.mojom-blink.h"
 #include "third_party/blink/public/mojom/frame/frame.mojom-blink.h"
 #include "third_party/blink/public/mojom/frame/frame_owner_properties.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/frame/lifecycle.mojom-blink-forward.h"
@@ -63,8 +62,14 @@
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/instrumentation/instance_counters.h"
 #include "third_party/blink/renderer/platform/loader/fetch/client_hints_preferences.h"
+#include "third_party/blink/renderer/platform/mojo/heap_mojo_associated_receiver.h"
+#include "third_party/blink/renderer/platform/mojo/heap_mojo_associated_remote.h"
+#include "third_party/blink/renderer/platform/mojo/heap_mojo_remote.h"
+#include "third_party/blink/renderer/platform/mojo/heap_mojo_unique_receiver_set.h"
+#include "third_party/blink/renderer/platform/mojo/heap_mojo_wrapper_mode.h"
 #include "third_party/blink/renderer/platform/scheduler/public/frame_scheduler.h"
 #include "third_party/blink/renderer/platform/supplementable.h"
+#include "third_party/blink/renderer/platform/wtf/hash_set.h"
 #if defined(OS_MACOSX)
 #include "third_party/blink/public/mojom/input/text_input_host.mojom-blink.h"
 #endif
@@ -102,6 +107,7 @@ class FrameOverlay;
 class FrameSelection;
 class FrameWidget;
 class InputMethodController;
+class InspectorIssueReporter;
 class InspectorTraceEvents;
 class CoreProbeSink;
 class IdlenessDetector;
@@ -120,7 +126,9 @@ class ScriptController;
 class SmoothScrollSequencer;
 class SpellChecker;
 class TextSuggestionController;
+class VirtualKeyboardOverlayChangedObserver;
 class WebContentSettingsClient;
+class WebInputEventAttribution;
 class WebPluginContainerImpl;
 class WebPrescientNetworking;
 class WebURLLoaderFactory;
@@ -135,6 +143,9 @@ class CORE_EXPORT LocalFrame final : public Frame,
   USING_GARBAGE_COLLECTED_MIXIN(LocalFrame);
 
  public:
+  // Returns the LocalFrame instance for the given |frame_token|.
+  static LocalFrame* FromFrameToken(const base::UnguessableToken& frame_token);
+
   // For a description of |inheriting_agent_factory| go see the comment on the
   // Frame constructor.
   LocalFrame(
@@ -152,7 +163,7 @@ class CORE_EXPORT LocalFrame final : public Frame,
 
   // Frame overrides:
   ~LocalFrame() override;
-  void Trace(Visitor*) override;
+  void Trace(Visitor*) const override;
   void Navigate(FrameLoadRequest&, WebFrameLoadType) override;
   bool ShouldClose() override;
   const SecurityContext* GetSecurityContext() const override;
@@ -163,6 +174,8 @@ class CORE_EXPORT LocalFrame final : public Frame,
   void DidChangeVisibilityState() override;
   void HookBackForwardCacheEviction() override;
   void RemoveBackForwardCacheEviction() override;
+
+  void SetTextDirection(base::i18n::TextDirection direction) override;
   // This sets the is_inert_ flag and also recurses through this frame's
   // subtree, updating the inert bit on all descendant frames.
   void SetIsInert(bool) override;
@@ -239,6 +252,16 @@ class CORE_EXPORT LocalFrame final : public Frame,
       UserActivationUpdateSource update_source =
           UserActivationUpdateSource::kRenderer);
 
+  // Registers an observer that will be notified if a VK occludes
+  // the content when it raises/dismisses. The observer is a HeapHashSet
+  // data structure that doesn't allow duplicates.
+  void RegisterVirtualKeyboardOverlayChangedObserver(
+      VirtualKeyboardOverlayChangedObserver*);
+
+  // Notify |virtual_keyboard_overlay_changed_observers_| that keyboard overlay
+  // rect has changed.
+  void NotifyVirtualKeyboardOverlayRectObservers(const gfx::Rect&) const;
+
   // =========================================================================
   // All public functions below this point are candidates to move out of
   // LocalFrame into another class.
@@ -286,7 +309,6 @@ class CORE_EXPORT LocalFrame final : public Frame,
   void RemoveSpellingMarkersUnderWords(const Vector<String>& words);
 
   bool ShouldThrottleRendering() const;
-  void DispatchBeforeUnloadEventForFreeze();
 
   // Returns frame scheduler for this frame.
   // FrameScheduler is destroyed during frame detach and nullptr will be
@@ -370,6 +392,8 @@ class CORE_EXPORT LocalFrame final : public Frame,
   IntSize GetMainFrameViewportSize() const override;
   IntPoint GetMainFrameScrollOffset() const override;
 
+  void SetOpener(Frame* opener) override;
+
   // See viewport_intersection_state.h for more info on these methods.
   gfx::Point RemoteViewportOffset() const {
     return intersection_state_.viewport_offset;
@@ -379,10 +403,6 @@ class CORE_EXPORT LocalFrame final : public Frame,
   }
   IntRect RemoteMainFrameDocumentIntersection() const {
     return intersection_state_.main_frame_document_intersection;
-  }
-
-  bool CanSkipStickyFrameTracking() const {
-    return intersection_state_.can_skip_sticky_frame_tracking;
   }
 
   FrameOcclusionState GetOcclusionState() const;
@@ -430,8 +450,7 @@ class CORE_EXPORT LocalFrame final : public Frame,
 
   SmoothScrollSequencer& GetSmoothScrollSequencer();
 
-  const mojo::Remote<mojom::blink::ReportingServiceProxy>& GetReportingService()
-      const;
+  mojom::blink::ReportingServiceProxy* GetReportingService();
 
   // Returns the frame host ptr. The interface returned is backed by an
   // associated interface with the legacy Chrome IPC channel.
@@ -452,7 +471,7 @@ class CORE_EXPORT LocalFrame final : public Frame,
   // To be called from OomInterventionImpl.
   void ForciblyPurgeV8Memory();
 
-  void SetLifecycleState(mojom::FrameLifecycleState state);
+  void OnPageLifecycleStateUpdated();
 
   void WasHidden();
   void WasShown();
@@ -511,7 +530,7 @@ class CORE_EXPORT LocalFrame final : public Frame,
   void DownloadURL(
       const ResourceRequest& request,
       network::mojom::blink::RedirectMode cross_origin_redirect_behavior,
-      mojo::ScopedMessagePipeHandle blob_url_token);
+      mojo::PendingRemote<mojom::blink::BlobURLToken> blob_url_token);
 
   // blink::mojom::LocalFrame overrides:
   void GetTextSurroundingSelection(
@@ -521,6 +540,7 @@ class CORE_EXPORT LocalFrame final : public Frame,
   void SetFrameOwnerProperties(
       mojom::blink::FrameOwnerPropertiesPtr properties) final;
   void NotifyUserActivation() final;
+  void NotifyVirtualKeyboardOverlayRect(const gfx::Rect& keyboard_rect) final;
   void AddMessageToConsole(mojom::blink::ConsoleMessageLevel level,
                            const WTF::String& message,
                            bool discard_duplicates) final;
@@ -562,6 +582,9 @@ class CORE_EXPORT LocalFrame final : public Frame,
       BlinkTransferableMessage message) final;
   void BindReportingObserver(
       mojo::PendingReceiver<mojom::blink::ReportingObserver> receiver) final;
+  void UpdateOpener(
+      const base::Optional<base::UnguessableToken>& opener_routing_id) final;
+  void GetSavableResourceLinks(GetSavableResourceLinksCallback callback) final;
 
   // blink::mojom::LocalMainFrame overrides:
   void AnimateDoubleTapZoom(const gfx::Point& point,
@@ -586,9 +609,10 @@ class CORE_EXPORT LocalFrame final : public Frame,
   // Indicate that this frame was attached as a MainFrame.
   void WasAttachedAsLocalMainFrame();
 
-  // Returns the first URL loaded in this frame that is cross-origin to the
-  // parent frame.
-  base::Optional<String> FirstUrlCrossOriginToParent() const;
+  // Return true if the frame is able to access an event with the given
+  // attribution (i.e. the event is targeted for an origin that the frame may
+  // access).
+  bool CanAccessEvent(const WebInputEventAttribution&) const;
 
  private:
   friend class FrameNavigationDisabler;
@@ -636,8 +660,7 @@ class CORE_EXPORT LocalFrame final : public Frame,
 
   void DidFreeze();
   void DidResume();
-  void PauseContext();
-  void UnpauseContext();
+  void SetContextPaused(bool);
 
   void EvictFromBackForwardCache();
 
@@ -661,8 +684,17 @@ class CORE_EXPORT LocalFrame final : public Frame,
 
   // Holds all PauseSubresourceLoadingHandles allowing either |this| to delete
   // them explicitly or the pipe closing to delete them.
-  mojo::UniqueReceiverSet<blink::mojom::blink::PauseSubresourceLoadingHandle>
-      pause_handle_receivers_;
+  //
+  // LocalFrame can be reused by multiple ExecutionContext.
+  HeapMojoUniqueReceiverSet<
+      blink::mojom::blink::PauseSubresourceLoadingHandle,
+      std::default_delete<blink::mojom::blink::PauseSubresourceLoadingHandle>,
+      HeapMojoWrapperMode::kWithoutContextObserver>
+      pause_handle_receivers_{nullptr};
+
+  // Keeps track of all the registered VK observers.
+  HeapHashSet<WeakMember<VirtualKeyboardOverlayChangedObserver>>
+      virtual_keyboard_overlay_changed_observers_;
 
   mutable FrameLoader loader_;
 
@@ -690,11 +722,22 @@ class CORE_EXPORT LocalFrame final : public Frame,
 
   bool in_view_source_mode_;
 
+  // Whether this frame is frozen or not. This is a copy of Page::IsFrozen()
+  // and is stored here to ensure that we do not dispatch onfreeze() twice
+  // in a row and every onfreeze() has a single corresponding onresume().
+  bool frozen_ = false;
+
+  // Whether this frame is paused or not. This is a copy of Page::IsPaused()
+  // and is stored here to ensure that we do not call SetContextPaused() twice
+  // in a row with the same argument.
+  bool paused_ = false;
+
   Member<CoreProbeSink> probe_sink_;
   scoped_refptr<InspectorTaskRunner> inspector_task_runner_;
   Member<PerformanceMonitor> performance_monitor_;
   Member<AdTracker> ad_tracker_;
   Member<IdlenessDetector> idleness_detector_;
+  Member<InspectorIssueReporter> inspector_issue_reporter_;
   Member<InspectorTraceEvents> inspector_trace_events_;
   // SmoothScrollSequencer is only populated for local roots; all local frames
   // use the instance owned by their local root.
@@ -704,10 +747,17 @@ class CORE_EXPORT LocalFrame final : public Frame,
   InterfaceRegistry* const interface_registry_;
   // This is declared mutable so that the service endpoint can be cached by
   // const methods.
-  mutable mojo::Remote<mojom::blink::ReportingServiceProxy> reporting_service_;
+  //
+  // LocalFrame can be reused by multiple ExecutionContext.
+  mutable HeapMojoRemote<mojom::blink::ReportingServiceProxy,
+                         HeapMojoWrapperMode::kWithoutContextObserver>
+      reporting_service_{nullptr};
 
 #if defined(OS_MACOSX)
-  mojo::Remote<mojom::blink::TextInputHost> text_input_host_;
+  // LocalFrame can be reused by multiple ExecutionContext.
+  HeapMojoRemote<mojom::blink::TextInputHost,
+                 HeapMojoWrapperMode::kWithoutContextObserver>
+      text_input_host_{nullptr};
 #endif
 
   ViewportIntersectionState intersection_state_;
@@ -734,14 +784,23 @@ class CORE_EXPORT LocalFrame final : public Frame,
   base::Optional<base::UnguessableToken> embedding_token_;
 
   mojom::FrameLifecycleState lifecycle_state_;
-  base::Optional<mojom::FrameLifecycleState> pending_lifecycle_state_;
 
   std::unique_ptr<WebPrescientNetworking> prescient_networking_;
 
-  mojo::AssociatedRemote<mojom::blink::LocalFrameHost> local_frame_host_remote_;
-  mojo::AssociatedReceiver<mojom::blink::LocalFrame> receiver_{this};
-  mojo::AssociatedReceiver<mojom::blink::LocalMainFrame> main_frame_receiver_{
-      this};
+  // LocalFrame can be reused by multiple ExecutionContext.
+  HeapMojoAssociatedRemote<mojom::blink::LocalFrameHost,
+                           HeapMojoWrapperMode::kWithoutContextObserver>
+      local_frame_host_remote_{nullptr};
+  // LocalFrame can be reused by multiple ExecutionContext.
+  HeapMojoAssociatedReceiver<mojom::blink::LocalFrame,
+                             LocalFrame,
+                             HeapMojoWrapperMode::kWithoutContextObserver>
+      receiver_{this, nullptr};
+  // LocalFrame can be reused by multiple ExecutionContext.
+  HeapMojoAssociatedReceiver<mojom::blink::LocalMainFrame,
+                             LocalFrame,
+                             HeapMojoWrapperMode::kWithoutContextObserver>
+      main_frame_receiver_{this, nullptr};
 
   // Variable to control burst of download requests.
   int num_burst_download_requests_ = 0;
@@ -751,14 +810,6 @@ class CORE_EXPORT LocalFrame final : public Frame,
   Member<SystemClipboard> system_clipboard_;
   // Access to the global raw/unsanitized system clipboard
   Member<RawSystemClipboard> raw_system_clipboard_;
-
-  // Stores the first URL that was loaded in this frame that is cross-origin
-  // to the parent frame. For this URL we know that the parent origin provided
-  // it by either setting the |src| attribute or by navigating the iframe.
-  // Thus we can safely reveal it to the parent origin in Web APIs.
-  // TODO(ulan): Move this to the browser process once performance.measureMemory
-  // starts using Performance Manager to support cross-site iframes.
-  base::Optional<String> first_url_cross_origin_to_parent_;
 };
 
 inline FrameLoader& LocalFrame::Loader() const {

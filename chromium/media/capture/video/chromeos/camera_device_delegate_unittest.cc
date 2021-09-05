@@ -249,6 +249,17 @@ class CameraDeviceDelegateTest : public ::testing::Test {
     entry->data.assign(as_int8, as_int8 + entry->count * sizeof(int32_t));
     static_metadata->entries->push_back(std::move(entry));
 
+    entry = cros::mojom::CameraMetadataEntry::New();
+    entry->index = 5;
+    entry->tag =
+        cros::mojom::CameraMetadataTag::ANDROID_SENSOR_INFO_ACTIVE_ARRAY_SIZE;
+    entry->type = cros::mojom::EntryType::TYPE_INT32;
+    entry->count = 4;
+    std::vector<int32_t> active_array_size = {0, 0, 1920, 1080};
+    as_int8 = reinterpret_cast<uint8_t*>(active_array_size.data());
+    entry->data.assign(as_int8, as_int8 + entry->count * sizeof(int32_t));
+    static_metadata->entries->push_back(std::move(entry));
+
     switch (camera_id) {
       case 0:
         camera_info->facing = cros::mojom::CameraFacing::CAMERA_FACING_FRONT;
@@ -363,9 +374,10 @@ class CameraDeviceDelegateTest : public ::testing::Test {
             Invoke(this, &CameraDeviceDelegateTest::ConfigureFakeStreams));
     EXPECT_CALL(
         mock_gpu_memory_buffer_manager_,
-        CreateGpuMemoryBuffer(_, gfx::BufferFormat::YUV_420_BIPLANAR,
-                              gfx::BufferUsage::SCANOUT_CAMERA_READ_WRITE,
-                              gpu::kNullSurfaceHandle))
+        CreateGpuMemoryBuffer(
+            _, gfx::BufferFormat::YUV_420_BIPLANAR,
+            gfx::BufferUsage::SCANOUT_VEA_READ_CAMERA_AND_CPU_READ_WRITE,
+            gpu::kNullSurfaceHandle))
         .Times(1)
         .WillOnce(Invoke(&unittest_internal::MockGpuMemoryBufferManager::
                              CreateFakeGpuMemoryBuffer));
@@ -379,10 +391,11 @@ class CameraDeviceDelegateTest : public ::testing::Test {
                              CreateFakeGpuMemoryBuffer));
     EXPECT_CALL(
         mock_gpu_memory_buffer_manager_,
-        CreateGpuMemoryBuffer(gfx::Size(kDefaultWidth, kDefaultHeight),
-                              gfx::BufferFormat::YUV_420_BIPLANAR,
-                              gfx::BufferUsage::SCANOUT_CAMERA_READ_WRITE,
-                              gpu::kNullSurfaceHandle))
+        CreateGpuMemoryBuffer(
+            gfx::Size(kDefaultWidth, kDefaultHeight),
+            gfx::BufferFormat::YUV_420_BIPLANAR,
+            gfx::BufferUsage::SCANOUT_VEA_READ_CAMERA_AND_CPU_READ_WRITE,
+            gpu::kNullSurfaceHandle))
         .Times(1)
         .WillOnce(Invoke(&unittest_internal::MockGpuMemoryBufferManager::
                              CreateFakeGpuMemoryBuffer));

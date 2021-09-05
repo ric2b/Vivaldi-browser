@@ -115,10 +115,18 @@ cc_library(
 
 cc_library(
     name = "dynamic_annotations",
-    srcs = ["dynamic_annotations.cc"],
-    hdrs = ["dynamic_annotations.h"],
+    srcs = [
+        "dynamic_annotations.cc",
+        "internal/dynamic_annotations.h",
+    ],
+    hdrs = [
+        "dynamic_annotations.h",
+    ],
     copts = ABSL_DEFAULT_COPTS,
     linkopts = ABSL_DEFAULT_LINKOPTS,
+    deps = [
+        ":config",
+    ],
 )
 
 cc_library(
@@ -788,6 +796,19 @@ cc_test(
     deps = [
         ":core_headers",
         "//absl/strings",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "optimization_test",
+    size = "small",
+    srcs = ["optimization_test.cc"],
+    copts = ABSL_TEST_COPTS,
+    linkopts = ABSL_DEFAULT_LINKOPTS,
+    deps = [
+        ":core_headers",
+        "//absl/types:optional",
         "@com_google_googletest//:gtest_main",
     ],
 )

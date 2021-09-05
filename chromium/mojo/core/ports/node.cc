@@ -15,6 +15,7 @@
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
+#include "base/notreached.h"
 #include "base/optional.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread_local.h"
@@ -1726,7 +1727,7 @@ Node::DelegateHolder::DelegateHolder(Node* node, NodeDelegate* delegate)
   DCHECK(node_);
 }
 
-Node::DelegateHolder::~DelegateHolder() {}
+Node::DelegateHolder::~DelegateHolder() = default;
 
 #if DCHECK_IS_ON()
 void Node::DelegateHolder::EnsureSafeDelegateAccess() const {

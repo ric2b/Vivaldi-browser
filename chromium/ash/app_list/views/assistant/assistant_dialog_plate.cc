@@ -14,6 +14,8 @@
 #include "ash/assistant/ui/logo_view/logo_view.h"
 #include "ash/assistant/util/animation_util.h"
 #include "ash/keyboard/ui/keyboard_ui_controller.h"
+#include "ash/public/cpp/assistant/controller/assistant_interaction_controller.h"
+#include "ash/public/cpp/assistant/controller/assistant_ui_controller.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "base/bind.h"
@@ -100,12 +102,17 @@ AssistantDialogPlate::AssistantDialogPlate(AssistantViewDelegate* delegate)
   InitLayout();
 
   assistant_controller_observer_.Add(AssistantController::Get());
-  assistant_interaction_model_observer_.Add(
-      AssistantInteractionController::Get());
-  assistant_ui_model_observer_.Add(AssistantUiController::Get());
+  AssistantInteractionController::Get()->GetModel()->AddObserver(this);
+  AssistantUiController::Get()->GetModel()->AddObserver(this);
 }
 
-AssistantDialogPlate::~AssistantDialogPlate() = default;
+AssistantDialogPlate::~AssistantDialogPlate() {
+  if (AssistantUiController::Get())
+    AssistantUiController::Get()->GetModel()->RemoveObserver(this);
+
+  if (AssistantInteractionController::Get())
+    AssistantInteractionController::Get()->GetModel()->RemoveObserver(this);
+}
 
 const char* AssistantDialogPlate::GetClassName() const {
   return "AssistantDialogPlate";
@@ -162,9 +169,8 @@ bool AssistantDialogPlate::HandleKeyEvent(views::Textfield* textfield,
 }
 
 void AssistantDialogPlate::OnAssistantControllerDestroying() {
-  assistant_ui_model_observer_.Remove(AssistantUiController::Get());
-  assistant_interaction_model_observer_.Remove(
-      AssistantInteractionController::Get());
+  AssistantUiController::Get()->GetModel()->RemoveObserver(this);
+  AssistantInteractionController::Get()->GetModel()->RemoveObserver(this);
   assistant_controller_observer_.Remove(AssistantController::Get());
 }
 
@@ -365,11 +371,13 @@ void AssistantDialogPlate::InitKeyboardLayoutContainer() {
   layout_manager->SetFlexForView(textfield_, 1);
 
   // Voice input toggle.
-  std::unique_ptr<AssistantButton> voice_input_toggle =
-      AssistantButton::Create(this, kMicIcon, kButtonSizeDip, kIconSizeDip,
-                              IDS_ASH_ASSISTANT_DIALOG_PLATE_MIC_ACCNAME,
-                              AssistantButtonId::kVoiceInputToggle,
-                              IDS_ASH_ASSISTANT_DIALOG_PLATE_MIC_TOOLTIP);
+  AssistantButton::InitParams params;
+  params.size_in_dip = kButtonSizeDip;
+  params.icon_size_in_dip = kIconSizeDip;
+  params.accessible_name_id = IDS_ASH_ASSISTANT_DIALOG_PLATE_MIC_ACCNAME;
+  params.tooltip_id = IDS_ASH_ASSISTANT_DIALOG_PLATE_MIC_TOOLTIP;
+  std::unique_ptr<AssistantButton> voice_input_toggle = AssistantButton::Create(
+      this, kMicIcon, AssistantButtonId::kVoiceInputToggle, std::move(params));
   voice_input_toggle->SetID(AssistantViewID::kVoiceInputToggle);
   voice_input_toggle_ =
       keyboard_layout_container->AddChildView(std::move(voice_input_toggle));
@@ -421,11 +429,15 @@ void AssistantDialogPlate::InitVoiceLayoutContainer() {
       voice_layout_container->AddChildView(std::make_unique<views::View>()), 1);
 
   // Keyboard input toggle.
-  keyboard_input_toggle_ = voice_layout_container->AddChildView(
-      AssistantButton::Create(this, kKeyboardIcon, kButtonSizeDip, kIconSizeDip,
-                              IDS_ASH_ASSISTANT_DIALOG_PLATE_KEYBOARD_ACCNAME,
-                              AssistantButtonId::kKeyboardInputToggle,
-                              IDS_ASH_ASSISTANT_DIALOG_PLATE_KEYBOARD_TOOLTIP));
+  AssistantButton::InitParams params;
+  params.size_in_dip = kButtonSizeDip;
+  params.icon_size_in_dip = kIconSizeDip;
+  params.accessible_name_id = IDS_ASH_ASSISTANT_DIALOG_PLATE_KEYBOARD_ACCNAME;
+  params.tooltip_id = IDS_ASH_ASSISTANT_DIALOG_PLATE_KEYBOARD_TOOLTIP;
+  keyboard_input_toggle_ =
+      voice_layout_container->AddChildView(AssistantButton::Create(
+          this, kKeyboardIcon, AssistantButtonId::kKeyboardInputToggle,
+          std::move(params)));
   keyboard_input_toggle_->SetID(AssistantViewID::kKeyboardInputToggle);
 
   voice_layout_container_ = input_modality_layout_container_->AddChildView(

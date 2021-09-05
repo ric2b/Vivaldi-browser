@@ -14,6 +14,7 @@
 #include "platform_media/renderer/decoders/ipc_demuxer.h"
 
 #include "base/bind.h"
+#include "base/logging.h"
 #include "base/callback_helpers.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/data_buffer.h"

@@ -36,6 +36,7 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/pref_names.h"
+#include "components/download/public/common/download_features.h"
 #include "components/download/public/common/download_item.h"
 #include "components/policy/core/browser/url_blacklist_manager.h"
 #include "components/pref_registry/pref_registry_syncable.h"
@@ -197,6 +198,13 @@ DownloadPrefs::DownloadPrefs(Profile* profile) : profile_(profile) {
   prompt_for_download_.Init(prefs::kPromptForDownload, prefs);
 #if defined(OS_ANDROID)
   prompt_for_download_android_.Init(prefs::kPromptForDownloadAndroid, prefs);
+  RecordDownloadPromptStatus(
+      static_cast<DownloadPromptStatus>(*prompt_for_download_android_));
+  if (base::FeatureList::IsEnabled(download::features::kDownloadLater)) {
+    prompt_for_download_later_.Init(prefs::kDownloadLaterPromptStatus, prefs);
+    RecordDownloadLaterPromptStatus(
+        static_cast<DownloadLaterPromptStatus>(*prompt_for_download_later_));
+  }
 
   // If |kDownloadsLocationChange| is not enabled, always uses the default
   // download location, in case that the feature is enabled and then disabled
@@ -303,10 +311,17 @@ void DownloadPrefs::RegisterProfilePrefs(
       prefs::kPromptForDownloadAndroid,
       static_cast<int>(download_prompt_status),
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+
+  if (base::FeatureList::IsEnabled(download::features::kDownloadLater)) {
+    registry->RegisterIntegerPref(
+        prefs::kDownloadLaterPromptStatus,
+        static_cast<int>(DownloadLaterPromptStatus::kShowInitial),
+        user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+  }
+
   registry->RegisterBooleanPref(
       prefs::kShowMissingSdCardErrorAndroid,
       base::FeatureList::IsEnabled(features::kDownloadsLocationChange));
-  RecordDownloadPromptStatus(download_prompt_status);
 #endif
 }
 
@@ -384,6 +399,17 @@ bool DownloadPrefs::PromptForDownload() const {
 #endif
 
   return *prompt_for_download_;
+}
+
+bool DownloadPrefs::PromptDownloadLater() const {
+#ifdef OS_ANDROID
+  if (base::FeatureList::IsEnabled(download::features::kDownloadLater)) {
+    return *prompt_for_download_later_ !=
+           static_cast<int>(DownloadLaterPromptStatus::kDontShow);
+  }
+#endif
+
+  return false;
 }
 
 bool DownloadPrefs::IsDownloadPathManaged() const {

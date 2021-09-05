@@ -4,15 +4,15 @@
 
 package org.chromium.chrome.browser.feed;
 
-import static android.support.test.espresso.Espresso.onView;
-import static android.support.test.espresso.action.ViewActions.click;
-import static android.support.test.espresso.assertion.ViewAssertions.doesNotExist;
-import static android.support.test.espresso.assertion.ViewAssertions.matches;
-import static android.support.test.espresso.matcher.RootMatchers.withDecorView;
-import static android.support.test.espresso.matcher.ViewMatchers.isDisplayed;
-import static android.support.test.espresso.matcher.ViewMatchers.isRoot;
-import static android.support.test.espresso.matcher.ViewMatchers.withId;
-import static android.support.test.espresso.matcher.ViewMatchers.withText;
+import static androidx.test.espresso.Espresso.onView;
+import static androidx.test.espresso.action.ViewActions.click;
+import static androidx.test.espresso.assertion.ViewAssertions.doesNotExist;
+import static androidx.test.espresso.assertion.ViewAssertions.matches;
+import static androidx.test.espresso.matcher.RootMatchers.withDecorView;
+import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
+import static androidx.test.espresso.matcher.ViewMatchers.isRoot;
+import static androidx.test.espresso.matcher.ViewMatchers.withId;
+import static androidx.test.espresso.matcher.ViewMatchers.withText;
 
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.instanceOf;
@@ -23,18 +23,18 @@ import static org.chromium.chrome.test.util.ViewUtils.VIEW_NULL;
 import static org.chromium.chrome.test.util.ViewUtils.waitForView;
 
 import android.support.test.InstrumentationRegistry;
-import android.support.test.espresso.ViewAction;
-import android.support.test.espresso.action.GeneralLocation;
-import android.support.test.espresso.action.GeneralSwipeAction;
-import android.support.test.espresso.action.Press;
-import android.support.test.espresso.action.Swipe;
-import android.support.test.espresso.contrib.RecyclerViewActions;
-import android.support.test.filters.MediumTest;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 
 import androidx.recyclerview.widget.RecyclerView;
+import androidx.test.espresso.ViewAction;
+import androidx.test.espresso.action.GeneralLocation;
+import androidx.test.espresso.action.GeneralSwipeAction;
+import androidx.test.espresso.action.Press;
+import androidx.test.espresso.action.Swipe;
+import androidx.test.espresso.contrib.RecyclerViewActions;
+import androidx.test.filters.MediumTest;
 
 import org.hamcrest.Matcher;
 import org.junit.After;
@@ -42,6 +42,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.RuleChain;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.params.ParameterAnnotations;
@@ -51,7 +52,6 @@ import org.chromium.base.test.params.ParameterizedRunner;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.FlakyTest;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -60,8 +60,8 @@ import org.chromium.chrome.browser.ntp.cards.SignInPromo;
 import org.chromium.chrome.browser.ntp.snippets.SectionHeader;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.Pref;
-import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.suggestions.SiteSuggestion;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
@@ -71,10 +71,13 @@ import org.chromium.chrome.test.util.NewTabPageTestUtils;
 import org.chromium.chrome.test.util.ViewUtils;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.chrome.test.util.browser.RecyclerViewTestUtils;
+import org.chromium.chrome.test.util.browser.signin.AccountManagerTestRule;
 import org.chromium.chrome.test.util.browser.suggestions.SuggestionsDependenciesRule;
 import org.chromium.chrome.test.util.browser.suggestions.mostvisited.FakeMostVisitedSites;
 import org.chromium.components.embedder_support.util.UrlConstants;
-import org.chromium.components.signin.test.util.AccountManagerTestRule;
+import org.chromium.components.prefs.PrefService;
+import org.chromium.components.signin.test.util.FakeAccountManagerFacade;
+import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.net.test.EmbeddedTestServer;
 
@@ -88,8 +91,11 @@ import java.util.List;
  */
 @RunWith(ParameterizedRunner.class)
 @ParameterAnnotations.UseRunnerDelegate(ChromeJUnit4RunnerDelegate.class)
-@CommandLineFlags.Add(ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE)
+@CommandLineFlags.
+Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE, "disable-features=IPH_FeedHeaderMenu"})
 @Features.EnableFeatures(ChromeFeatureList.INTEREST_FEED_CONTENT_SUGGESTIONS)
+@Features.
+DisableFeatures({ChromeFeatureList.REPORT_FEED_USER_ACTIONS, ChromeFeatureList.QUERY_TILES})
 public class FeedNewTabPageTest {
     private static final int ARTICLE_SECTION_HEADER_POSITION = 1;
     private static final int SIGNIN_PROMO_POSITION = 2;
@@ -100,14 +106,30 @@ public class FeedNewTabPageTest {
     private static final ViewAction SWIPE_LEFT = new GeneralSwipeAction(
             Swipe.FAST, GeneralLocation.CENTER, GeneralLocation.CENTER_LEFT, Press.FINGER);
 
-    @Rule
-    public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
+    private boolean mIsCachePopulatedInAccountManagerFacade = true;
 
     @Rule
-    public SuggestionsDependenciesRule mSuggestionsDeps = new SuggestionsDependenciesRule();
+    public final SuggestionsDependenciesRule mSuggestionsDeps = new SuggestionsDependenciesRule();
 
+    private final ChromeTabbedActivityTestRule mActivityTestRule =
+            new ChromeTabbedActivityTestRule();
+
+    private final AccountManagerTestRule mAccountManagerTestRule =
+            new AccountManagerTestRule(new FakeAccountManagerFacade(null) {
+                @Override
+                public boolean isCachePopulated() {
+                    // Attention. When isCachePopulated() returns false,
+                    // runAfterCacheIsPopulated(...) shouldn't run. If this becomes a problem,
+                    // we can override runAfterCacheIsPopulated(...) as well.
+                    return mIsCachePopulatedInAccountManagerFacade;
+                }
+            });
+
+    // Mock sign-in environment needs to be destroyed after ChromeActivity in case there are
+    // observers registered in the AccountManagerFacade mock.
     @Rule
-    public AccountManagerTestRule mAccountManagerTestRule = new AccountManagerTestRule();
+    public final RuleChain mRuleChain =
+            RuleChain.outerRule(mAccountManagerTestRule).around(mActivityTestRule);
 
     /** Parameter provider for enabling/disabling the signin promo card. */
     public static class SigninPromoParams implements ParameterProvider {
@@ -141,7 +163,15 @@ public class FeedNewTabPageTest {
         mMostVisitedSites = new FakeMostVisitedSites();
         mMostVisitedSites.setTileSuggestions(mSiteSuggestions);
         mSuggestionsDeps.getFactory().mostVisitedSites = mMostVisitedSites;
+    }
 
+    @After
+    public void tearDown() {
+        mTestServer.stopAndDestroyServer();
+        FeedProcessScopeFactory.setTestNetworkClient(null);
+    }
+
+    private void openNewTabPage() {
         mActivityTestRule.loadUrl(UrlConstants.NTP_URL);
         mTab = mActivityTestRule.getActivity().getActivityTab();
         NewTabPageTestUtils.waitForNtpLoaded(mTab);
@@ -150,12 +180,6 @@ public class FeedNewTabPageTest {
         mNtp = (NewTabPage) mTab.getNativePage();
         mTileGridLayout = mNtp.getView().findViewById(R.id.tile_grid_layout);
         Assert.assertEquals(mSiteSuggestions.size(), mTileGridLayout.getChildCount());
-    }
-
-    @After
-    public void tearDown() {
-        mTestServer.stopAndDestroyServer();
-        FeedProcessScopeFactory.setTestNetworkClient(null);
     }
 
     private void waitForPopup(Matcher<View> matcher) {
@@ -169,6 +193,7 @@ public class FeedNewTabPageTest {
     @MediumTest
     @Feature({"FeedNewTabPage"})
     public void testSignInPromo() {
+        openNewTabPage();
         SignInPromo.SigninObserver signinObserver = mNtp.getCoordinatorForTesting()
                                                             .getMediatorForTesting()
                                                             .getSignInPromoForTesting()
@@ -220,6 +245,7 @@ public class FeedNewTabPageTest {
     @Feature({"FeedNewTabPage"})
     @DisabledTest(message = "https://crbug.com/1046822")
     public void testSignInPromo_DismissBySwipe() {
+        openNewTabPage();
         boolean dismissed = SharedPreferencesManager.getInstance().readBoolean(
                 ChromePreferenceKeys.SIGNIN_PROMO_NTP_PROMO_DISMISSED, false);
         if (dismissed) {
@@ -255,18 +281,17 @@ public class FeedNewTabPageTest {
     @Test
     @MediumTest
     @Feature({"FeedNewTabPage"})
-    @FlakyTest(message = "https://crbug.com/996716")
-    @AccountManagerTestRule.BlockGetAccounts
     public void testSignInPromo_AccountsNotReady() {
+        mIsCachePopulatedInAccountManagerFacade = false;
+        openNewTabPage();
         // Check that the sign-in promo is not shown if accounts are not ready.
         onView(instanceOf(RecyclerView.class))
                 .perform(RecyclerViewActions.scrollToPosition(SIGNIN_PROMO_POSITION));
         onView(withId(R.id.signin_promo_view_container)).check(doesNotExist());
 
-        // Wait for accounts cache population to finish and reload ntp.
-        mAccountManagerTestRule.unblockGetAccountsAndWaitForAccountsPopulated();
-        TestThreadUtils.runOnUiThreadBlocking(() -> mTab.reload());
-        NewTabPageTestUtils.waitForNtpLoaded(mTab);
+        mIsCachePopulatedInAccountManagerFacade = true;
+        TestThreadUtils.runOnUiThreadBlocking(mTab::reload);
+        ChromeTabUtils.waitForTabPageLoaded(mTab, mTab.getUrlString());
 
         // Check that the sign-in promo is displayed this time.
         onView(instanceOf(RecyclerView.class))
@@ -280,6 +305,7 @@ public class FeedNewTabPageTest {
     @Feature({"NewTabPage", "FeedNewTabPage"})
     @ParameterAnnotations.UseMethodParameter(SigninPromoParams.class)
     public void testArticleSectionHeaderWithMenu(boolean disableSigninPromoCard) throws Exception {
+        openNewTabPage();
         // Scroll to the article section header in case it is not visible.
         onView(instanceOf(RecyclerView.class))
                 .perform(RecyclerViewActions.scrollToPosition(ARTICLE_SECTION_HEADER_POSITION));
@@ -318,6 +344,7 @@ public class FeedNewTabPageTest {
     @Feature({"FeedNewTabPage"})
     @DisabledTest(message = "https://crbug.com/914068")
     public void testArticleSectionHeader() throws Exception {
+        openNewTabPage();
         final int expectedCountWhenCollapsed = 2;
         final int expectedCountWhenExpanded = 4; // 3 header views and the empty view.
 
@@ -383,10 +410,9 @@ public class FeedNewTabPageTest {
     @Feature({"FeedNewTabPage"})
     @DisabledTest(message = "crbug.com/1064388")
     public void testFeedDisabledByPolicy() throws Exception {
+        openNewTabPage();
         final boolean pref = TestThreadUtils.runOnUiThreadBlocking(
-                ()
-                        -> PrefServiceBridge.getInstance().getBoolean(
-                                Pref.NTP_ARTICLES_SECTION_ENABLED));
+                () -> getPrefService().getBoolean(Pref.ENABLE_SNIPPETS));
 
         // Policy is disabled. Verify the NTP root view contains only the Stream view as child.
         ViewGroup rootView = (ViewGroup) mNtp.getView();
@@ -400,9 +426,7 @@ public class FeedNewTabPageTest {
         // Simulate that policy is enabled. Verify the NTP root view contains only the view for
         // policy as child.
         TestThreadUtils.runOnUiThreadBlocking(
-                ()
-                        -> PrefServiceBridge.getInstance().setBoolean(
-                                Pref.NTP_ARTICLES_SECTION_ENABLED, false));
+                () -> getPrefService().setBoolean(Pref.ENABLE_SNIPPETS, false));
         Assert.assertNotNull(mNtp.getCoordinatorForTesting().getScrollViewForPolicy());
         Assert.assertNull(mNtp.getCoordinatorForTesting().getStreamForTesting());
         Assert.assertEquals(1, rootView.getChildCount());
@@ -424,9 +448,7 @@ public class FeedNewTabPageTest {
         // Simulate that policy is disabled. Verify the NTP root view is the view for policy. We
         // don't re-enable the Feed until the next restart.
         TestThreadUtils.runOnUiThreadBlocking(
-                ()
-                        -> PrefServiceBridge.getInstance().setBoolean(
-                                Pref.NTP_ARTICLES_SECTION_ENABLED, true));
+                () -> getPrefService().setBoolean(Pref.ENABLE_SNIPPETS, true));
         Assert.assertNotNull(ntp2.getCoordinatorForTesting().getScrollViewForPolicy());
         Assert.assertNull(ntp2.getCoordinatorForTesting().getStream());
         Assert.assertEquals(1, rootView2.getChildCount());
@@ -443,9 +465,7 @@ public class FeedNewTabPageTest {
 
         // Reset state.
         TestThreadUtils.runOnUiThreadBlocking(
-                ()
-                        -> PrefServiceBridge.getInstance().setBoolean(
-                                Pref.NTP_ARTICLES_SECTION_ENABLED, pref));
+                () -> getPrefService().setBoolean(Pref.ENABLE_SNIPPETS, pref));
     }
 
     /**
@@ -465,6 +485,10 @@ public class FeedNewTabPageTest {
 
     private boolean getPreferenceForArticleSectionHeader() throws Exception {
         return TestThreadUtils.runOnUiThreadBlocking(
-                () -> PrefServiceBridge.getInstance().getBoolean(Pref.NTP_ARTICLES_LIST_VISIBLE));
+                () -> getPrefService().getBoolean(Pref.ARTICLES_LIST_VISIBLE));
+    }
+
+    private PrefService getPrefService() {
+        return UserPrefs.get(Profile.getLastUsedRegularProfile());
     }
 }

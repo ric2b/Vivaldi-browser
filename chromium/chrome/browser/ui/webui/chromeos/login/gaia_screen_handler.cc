@@ -54,7 +54,6 @@
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/ash/login_screen_client.h"
-#include "chrome/browser/ui/webui/chromeos/login/active_directory_password_change_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/enrollment_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/signin_screen_handler.h"
 #include "chrome/browser/ui/webui/metrics_handler.h"
@@ -340,14 +339,10 @@ GaiaScreenHandler::GaiaContext::GaiaContext() {}
 GaiaScreenHandler::GaiaScreenHandler(
     JSCallsContainer* js_calls_container,
     CoreOobeView* core_oobe_view,
-    const scoped_refptr<NetworkStateInformer>& network_state_informer,
-    ActiveDirectoryPasswordChangeScreenHandler*
-        active_directory_password_change_screen_handler)
+    const scoped_refptr<NetworkStateInformer>& network_state_informer)
     : BaseScreenHandler(kScreenId, js_calls_container),
       network_state_informer_(network_state_informer),
-      core_oobe_view_(core_oobe_view),
-      active_directory_password_change_screen_handler_(
-          active_directory_password_change_screen_handler) {
+      core_oobe_view_(core_oobe_view) {
   DCHECK(network_state_informer_.get());
 }
 
@@ -427,7 +422,7 @@ void GaiaScreenHandler::LoadGaiaWithPartition(
       base::BindOnce(&GaiaScreenHandler::OnSetCookieForLoadGaiaWithPartition,
                      weak_factory_.GetWeakPtr(), context, partition_name);
   if (context.gaps_cookie.empty()) {
-    std::move(callback).Run(net::CanonicalCookie::CookieInclusionStatus());
+    std::move(callback).Run(net::CookieInclusionStatus());
     return;
   }
 
@@ -465,7 +460,7 @@ void GaiaScreenHandler::LoadGaiaWithPartition(
 void GaiaScreenHandler::OnSetCookieForLoadGaiaWithPartition(
     const GaiaContext& context,
     const std::string& partition_name,
-    net::CanonicalCookie::CookieInclusionStatus status) {
+    net::CookieInclusionStatus status) {
   std::unique_ptr<std::string> version = std::make_unique<std::string>();
   std::unique_ptr<bool> consent = std::make_unique<bool>();
   base::OnceClosure get_version_and_consent =
@@ -858,7 +853,9 @@ void GaiaScreenHandler::DoAdAuth(
       break;
     }
     case authpolicy::ERROR_PASSWORD_EXPIRED:
-      active_directory_password_change_screen_handler_->ShowScreen(username);
+      LoginDisplayHost::default_host()
+          ->GetWizardController()
+          ->ShowActiveDirectoryPasswordChangeScreen(username);
       break;
     case authpolicy::ERROR_PARSE_UPN_FAILED:
     case authpolicy::ERROR_BAD_USER_NAME:
@@ -965,11 +962,11 @@ void GaiaScreenHandler::ContinueAuthenticationWhenCookiesAvailable() {
 }
 
 void GaiaScreenHandler::OnGetCookiesForCompleteAuthentication(
-    const net::CookieStatusList& cookies,
-    const net::CookieStatusList& excluded_cookies) {
+    const net::CookieAccessResultList& cookies,
+    const net::CookieAccessResultList& excluded_cookies) {
   std::string auth_code, gaps_cookie;
-  for (const auto& cookie_with_status : cookies) {
-    const auto& cookie = cookie_with_status.cookie;
+  for (const auto& cookie_with_access_result : cookies) {
+    const auto& cookie = cookie_with_access_result.cookie;
     if (cookie.Name() == kOAUTHCodeCookie)
       auth_code = cookie.Value();
     else if (cookie.Name() == kGAPSCookie)
@@ -1086,8 +1083,6 @@ void GaiaScreenHandler::HandleShowAddUser(const base::ListValue* args) {
   if (args)
     args->GetString(0, &email);
   set_populated_account(AccountId::FromUserEmail(email));
-  if (!email.empty())
-    SendReauthReason(AccountId::FromUserEmail(email));
   OnShowAddUser();
 }
 

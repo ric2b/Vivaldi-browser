@@ -17,8 +17,8 @@
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/task/post_task.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
@@ -203,9 +203,9 @@ std::unique_ptr<KeyedService> BuildBookmarkModel(
       new BookmarkModel(std::make_unique<ChromeBookmarkClient>(
           profile, ManagedBookmarkServiceFactory::GetForProfile(profile),
           BookmarkSyncServiceFactory::GetForProfile(profile))));
-  bookmark_model->Load(
-      profile->GetPrefs(), profile->GetPath(), profile->GetIOTaskRunner(),
-      base::CreateSingleThreadTaskRunner({content::BrowserThread::UI}));
+  bookmark_model->Load(profile->GetPrefs(), profile->GetPath(),
+                       profile->GetIOTaskRunner(),
+                       content::GetUIThreadTaskRunner({}));
   return std::move(bookmark_model);
 }
 
@@ -220,7 +220,7 @@ std::unique_ptr<KeyedService> BuildWebDataService(
   const base::FilePath& context_path = context->GetPath();
   return std::make_unique<WebDataServiceWrapper>(
       context_path, g_browser_process->GetApplicationLocale(),
-      base::CreateSingleThreadTaskRunner({BrowserThread::UI}),
+      content::GetUIThreadTaskRunner({}),
       base::BindRepeating(&TestProfileErrorCallback));
 }
 
@@ -267,7 +267,8 @@ TestingProfile::TestingProfile(const base::FilePath& path, Delegate* delegate)
       resource_context_(nullptr),
       delegate_(delegate),
       profile_name_(kTestingProfile),
-      override_policy_connector_is_managed_(base::nullopt) {
+      override_policy_connector_is_managed_(base::nullopt),
+      otr_profile_id_(base::nullopt) {
   if (profile_path_.empty()) {
     CreateTempProfileDir();
     profile_path_ = temp_dir_.GetPath();
@@ -298,7 +299,8 @@ TestingProfile::TestingProfile(
     std::unique_ptr<policy::PolicyService> policy_service,
     TestingFactories testing_factories,
     const std::string& profile_name,
-    base::Optional<bool> override_policy_connector_is_managed)
+    base::Optional<bool> override_policy_connector_is_managed,
+    base::Optional<OTRProfileID> otr_profile_id)
     : start_time_(Time::Now()),
       prefs_(std::move(prefs)),
       testing_prefs_(nullptr),
@@ -321,9 +323,13 @@ TestingProfile::TestingProfile(
       profile_name_(profile_name),
       override_policy_connector_is_managed_(
           override_policy_connector_is_managed),
+      otr_profile_id_(otr_profile_id),
       policy_service_(std::move(policy_service)) {
   if (parent)
     parent->SetOffTheRecordProfile(std::unique_ptr<Profile>(this));
+
+  // Only OffTheRecord profiles have an OTRProfileID.
+  DCHECK(!parent || otr_profile_id_.has_value());
 
   // If no profile path was supplied, create one.
   if (profile_path_.empty()) {
@@ -549,8 +555,11 @@ void TestingProfile::FinishInit() {
 }
 
 TestingProfile::~TestingProfile() {
-  // If this profile owns an incognito profile, tear it down first.
-  incognito_profile_.reset();
+  if (!profile_destruction_callback_.is_null())
+    std::move(profile_destruction_callback_).Run();
+
+  // If this profile owns OffTheRecord profiles, tear them down first.
+  otr_profiles_.clear();
 
   // Any objects holding live URLFetchers should be deleted before teardown.
   TemplateURLFetcherFactory::ShutdownForProfile(this);
@@ -737,12 +746,6 @@ std::string TestingProfile::GetProfileUserName() const {
   return profile_name_;
 }
 
-Profile::ProfileType TestingProfile::GetProfileType() const {
-  if (original_profile_)
-    return guest_session_ ? GUEST_PROFILE : INCOGNITO_PROFILE;
-  return REGULAR_PROFILE;
-}
-
 bool TestingProfile::IsOffTheRecord() {
   return original_profile_;
 }
@@ -752,68 +755,55 @@ bool TestingProfile::IsOffTheRecord() const {
 }
 
 const Profile::OTRProfileID& TestingProfile::GetOTRProfileID() const {
-  // TODO(https://crbug.com//1033903): Remove this variable and add support for
-  // non-primary OTRs.
-  static base::NoDestructor<Profile::OTRProfileID> incognito_profile_id(
-      Profile::OTRProfileID::PrimaryID());
   DCHECK(IsOffTheRecord());
-
-  return *incognito_profile_id;
+  return *otr_profile_id_;
 }
 
 void TestingProfile::SetOffTheRecordProfile(
     std::unique_ptr<Profile> otr_profile) {
-  // TODO(https://crbug.com//1033903): Add support for non-primary OTRs.
+  DCHECK(otr_profile);
   DCHECK(!IsOffTheRecord());
-  if (otr_profile)
-    DCHECK_EQ(this, otr_profile->GetOriginalProfile());
-  incognito_profile_ = std::move(otr_profile);
+  DCHECK_EQ(this, otr_profile->GetOriginalProfile());
+  otr_profiles_[otr_profile->GetOTRProfileID()] = std::move(otr_profile);
 }
 
 Profile* TestingProfile::GetOffTheRecordProfile(
     const OTRProfileID& otr_profile_id) {
-  // TODO(https://crbug.com//1033903): Add support for non-primary OTRs.
-  DCHECK(otr_profile_id == OTRProfileID::PrimaryID());
   if (IsOffTheRecord())
-    return this;
-  if (!incognito_profile_) {
+    return original_profile_->GetOffTheRecordProfile(otr_profile_id);
+
+  if (!HasOffTheRecordProfile(otr_profile_id)) {
     TestingProfile::Builder builder;
-    if (IsGuestSession())
+    if (IsGuestSession() && otr_profile_id == OTRProfileID::PrimaryID())
       builder.SetGuestSession();
-    builder.BuildIncognito(this);
+    builder.BuildOffTheRecord(this, otr_profile_id);
+    DCHECK(HasOffTheRecordProfile(otr_profile_id));
   }
-  return incognito_profile_.get();
+
+  return otr_profiles_[otr_profile_id].get();
 }
 
 std::vector<Profile*> TestingProfile::GetAllOffTheRecordProfiles() {
-  // TODO(https://crbug.com//1033903): Add support for non-primary OTRs.
   std::vector<Profile*> otr_profiles;
 
-  if (incognito_profile_)
-    otr_profiles.push_back(incognito_profile_.get());
+  for (auto& otr : otr_profiles_)
+    otr_profiles.push_back(otr.second.get());
 
   return otr_profiles;
 }
 
 void TestingProfile::DestroyOffTheRecordProfile(Profile* otr_profile) {
-  // TODO(https://crbug.com//1033903): Add support for non-primary OTRs.
-  incognito_profile_.reset();
-}
-
-void TestingProfile::DestroyOffTheRecordProfile() {
-  DestroyOffTheRecordProfile(incognito_profile_.get());
+  if (HasOffTheRecordProfile(otr_profile->GetOTRProfileID()))
+    otr_profiles_.erase(otr_profile->GetOTRProfileID());
 }
 
 bool TestingProfile::HasOffTheRecordProfile(
     const OTRProfileID& otr_profile_id) {
-  // TODO(https://crbug.com//1033903): Add support for non-primary OTRs.
-  DCHECK(otr_profile_id == OTRProfileID::PrimaryID());
-  return incognito_profile_.get() != nullptr;
+  return base::Contains(otr_profiles_, otr_profile_id);
 }
 
 bool TestingProfile::HasAnyOffTheRecordProfile() {
-  // TODO(https://crbug.com//1033903): Add support for non-primary OTRs.
-  return incognito_profile_.get() != nullptr;
+  return !otr_profiles_.empty();
 }
 
 Profile* TestingProfile::GetOriginalProfile() {
@@ -977,11 +967,10 @@ TestingProfile::GetStorageNotificationService() {
   return nullptr;
 }
 
-bool TestingProfile::IsSameProfile(Profile *profile) {
+bool TestingProfile::IsSameOrParent(Profile* profile) {
   if (this == profile)
     return true;
-  Profile* otr_profile = incognito_profile_.get();
-  return otr_profile && profile == otr_profile;
+  return profile && profile->GetOriginalProfile() == this;
 }
 
 base::Time TestingProfile::GetStartTime() const {
@@ -1239,11 +1228,12 @@ std::unique_ptr<TestingProfile> TestingProfile::Builder::Build() {
       allows_browser_windows_, std::move(is_new_profile_), supervised_user_id_,
       std::move(user_cloud_policy_manager_), std::move(policy_service_),
       std::move(testing_factories_), profile_name_,
-      override_policy_connector_is_managed_));
+      override_policy_connector_is_managed_, base::Optional<OTRProfileID>()));
 }
 
-TestingProfile* TestingProfile::Builder::BuildIncognito(
-    TestingProfile* original_profile) {
+TestingProfile* TestingProfile::Builder::BuildOffTheRecord(
+    TestingProfile* original_profile,
+    const OTRProfileID& otr_profile_id) {
   DCHECK(!build_called_);
   DCHECK(original_profile);
   build_called_ = true;
@@ -1258,5 +1248,11 @@ TestingProfile* TestingProfile::Builder::BuildIncognito(
       allows_browser_windows_, std::move(is_new_profile_), supervised_user_id_,
       std::move(user_cloud_policy_manager_), std::move(policy_service_),
       std::move(testing_factories_), profile_name_,
-      override_policy_connector_is_managed_);
+      override_policy_connector_is_managed_,
+      base::Optional<OTRProfileID>(otr_profile_id));
+}
+
+TestingProfile* TestingProfile::Builder::BuildIncognito(
+    TestingProfile* original_profile) {
+  return BuildOffTheRecord(original_profile, OTRProfileID::PrimaryID());
 }

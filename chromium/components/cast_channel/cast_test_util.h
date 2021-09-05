@@ -175,15 +175,15 @@ class MockCastMessageHandler : public CastMessageHandler {
                     GetAppAvailabilityCallback callback));
   MOCK_METHOD1(RequestReceiverStatus, void(int channel_id));
   MOCK_METHOD3(SendBroadcastMessage,
-               void(int,
-                    const std::vector<std::string>&,
-                    const BroadcastRequest&));
+               Result(int,
+                      const std::vector<std::string>&,
+                      const BroadcastRequest&));
   MOCK_METHOD6(LaunchSession,
                void(int,
                     const std::string&,
                     base::TimeDelta,
                     const std::vector<std::string>&,
-                    const std::string&,
+                    const base::Optional<base::Value>&,
                     LaunchSessionCallback callback));
   MOCK_METHOD4(StopSession,
                void(int channel_id,
@@ -191,6 +191,8 @@ class MockCastMessageHandler : public CastMessageHandler {
                     const base::Optional<std::string>& client_id,
                     ResultCallback callback));
   MOCK_METHOD2(SendAppMessage,
+               Result(int channel_id, const CastMessage& message));
+  MOCK_METHOD2(SendCastMessage,
                Result(int channel_id, const CastMessage& message));
   MOCK_METHOD4(SendMediaRequest,
                base::Optional<int>(int channel_id,

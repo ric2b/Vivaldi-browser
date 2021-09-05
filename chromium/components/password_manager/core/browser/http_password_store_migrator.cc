@@ -37,20 +37,20 @@ void OnHSTSQueryResultHelper(
 }  // namespace
 
 HttpPasswordStoreMigrator::HttpPasswordStoreMigrator(
-    const GURL& https_origin,
+    const url::Origin& https_origin,
     const PasswordManagerClient* client,
     Consumer* consumer)
     : client_(client), consumer_(consumer) {
   DCHECK(client_);
-  DCHECK(https_origin.is_valid());
-  DCHECK(https_origin.SchemeIs(url::kHttpsScheme)) << https_origin;
+  DCHECK(!https_origin.opaque());
+  DCHECK_EQ(https_origin.scheme(), url::kHttpsScheme) << https_origin;
 
   GURL::Replacements rep;
   rep.SetSchemeStr(url::kHttpScheme);
-  GURL http_origin = https_origin.ReplaceComponents(rep);
+  GURL http_origin = https_origin.GetURL().ReplaceComponents(rep);
   PasswordStore::FormDigest form(autofill::PasswordForm::Scheme::kHtml,
                                  http_origin.GetOrigin().spec(), http_origin);
-  http_origin_domain_ = http_origin.GetOrigin();
+  http_origin_domain_ = url::Origin::Create(http_origin);
   client_->GetProfilePasswordStore()->GetLogins(form, this);
   client_->PostHSTSQueryForHost(
       https_origin, base::BindOnce(&OnHSTSQueryResultHelper, GetWeakPtr()));
@@ -60,12 +60,12 @@ HttpPasswordStoreMigrator::~HttpPasswordStoreMigrator() = default;
 
 autofill::PasswordForm HttpPasswordStoreMigrator::MigrateHttpFormToHttps(
     const autofill::PasswordForm& http_form) {
-  DCHECK(http_form.origin.SchemeIs(url::kHttpScheme));
+  DCHECK(http_form.url.SchemeIs(url::kHttpScheme));
 
   autofill::PasswordForm https_form = http_form;
   GURL::Replacements rep;
   rep.SetSchemeStr(url::kHttpsScheme);
-  https_form.origin = http_form.origin.ReplaceComponents(rep);
+  https_form.url = http_form.url.ReplaceComponents(rep);
 
   // Only replace the scheme of the signon_realm in case it is HTTP. Do not
   // change the signon_realm for federated credentials.
@@ -78,7 +78,7 @@ autofill::PasswordForm HttpPasswordStoreMigrator::MigrateHttpFormToHttps(
   // If |action| is not HTTPS then it's most likely obsolete. Otherwise, it
   // may still be valid.
   if (!http_form.action.SchemeIs(url::kHttpsScheme))
-    https_form.action = https_form.origin;
+    https_form.action = https_form.url;
   https_form.form_data = autofill::FormData();
   https_form.generation_upload_status =
       autofill::PasswordForm::GenerationUploadStatus::kNoSignalSent;
@@ -103,7 +103,8 @@ void HttpPasswordStoreMigrator::OnHSTSQueryResult(HSTSResult is_hsts) {
   got_hsts_query_result_ = true;
 
   if (is_hsts == HSTSResult::kYes)
-    client_->GetProfilePasswordStore()->RemoveSiteStats(http_origin_domain_);
+    client_->GetProfilePasswordStore()->RemoveSiteStats(
+        http_origin_domain_.GetURL());
 
   if (got_password_store_results_)
     ProcessPasswordStoreResults();

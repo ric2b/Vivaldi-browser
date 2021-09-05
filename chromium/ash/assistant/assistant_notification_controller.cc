@@ -34,27 +34,36 @@ constexpr char kNotifierId[] = "assistant";
 
 std::unique_ptr<message_center::Notification> CreateSystemNotification(
     const message_center::NotifierId& notifier_id,
-    const chromeos::assistant::mojom::AssistantNotification* notification) {
-  const base::string16 title = base::UTF8ToUTF16(notification->title);
-  const base::string16 message = base::UTF8ToUTF16(notification->message);
+    const chromeos::assistant::mojom::AssistantNotification& notification) {
+  const base::string16 title = base::UTF8ToUTF16(notification.title);
+  const base::string16 message = base::UTF8ToUTF16(notification.message);
   const base::string16 display_source =
       l10n_util::GetStringUTF16(IDS_ASH_ASSISTANT_NOTIFICATION_DISPLAY_SOURCE);
 
   message_center::RichNotificationData data;
-  for (const auto& button : notification->buttons) {
-    data.buttons.push_back(
-        message_center::ButtonInfo(base::UTF8ToUTF16(button->label)));
-  }
+  for (const auto& button : notification.buttons)
+    data.buttons.emplace_back(base::UTF8ToUTF16(button->label));
 
   std::unique_ptr<message_center::Notification> system_notification =
       ash::CreateSystemNotification(
-          message_center::NOTIFICATION_TYPE_SIMPLE, notification->client_id,
+          message_center::NOTIFICATION_TYPE_SIMPLE, notification.client_id,
           title, message, display_source, GURL(), notifier_id, data,
           /*delegate=*/nullptr, kNotificationAssistantIcon,
           message_center::SystemNotificationWarningLevel::NORMAL);
 
-  if (notification->is_high_priority)
-    system_notification->set_priority(message_center::HIGH_PRIORITY);
+  system_notification->set_pinned(notification.is_pinned);
+
+  switch (notification.priority) {
+    case chromeos::assistant::mojom::AssistantNotificationPriority::kLow:
+      system_notification->set_priority(message_center::LOW_PRIORITY);
+      break;
+    case chromeos::assistant::mojom::AssistantNotificationPriority::kDefault:
+      system_notification->set_priority(message_center::DEFAULT_PRIORITY);
+      break;
+    case chromeos::assistant::mojom::AssistantNotificationPriority::kHigh:
+      system_notification->set_priority(message_center::HIGH_PRIORITY);
+      break;
+  }
 
   return system_notification;
 }
@@ -62,12 +71,6 @@ std::unique_ptr<message_center::Notification> CreateSystemNotification(
 message_center::NotifierId GetNotifierId() {
   return message_center::NotifierId(
       message_center::NotifierType::SYSTEM_COMPONENT, kNotifierId);
-}
-
-bool IsSystemNotification(
-    const chromeos::assistant::mojom::AssistantNotification* notification) {
-  return notification->type ==
-         chromeos::assistant::mojom::AssistantNotificationType::kSystem;
 }
 
 bool IsValidActionUrl(const GURL& action_url) {
@@ -81,13 +84,13 @@ bool IsValidActionUrl(const GURL& action_url) {
 
 AssistantNotificationController::AssistantNotificationController()
     : expiry_monitor_(this), notifier_id_(GetNotifierId()) {
-  AddModelObserver(this);
+  model_.AddObserver(this);
   message_center::MessageCenter::Get()->AddObserver(this);
 }
 
 AssistantNotificationController::~AssistantNotificationController() {
   message_center::MessageCenter::Get()->RemoveObserver(this);
-  RemoveModelObserver(this);
+  model_.RemoveObserver(this);
 }
 
 void AssistantNotificationController::BindReceiver(
@@ -95,18 +98,8 @@ void AssistantNotificationController::BindReceiver(
   receiver_.Bind(std::move(receiver));
 }
 
-void AssistantNotificationController::AddModelObserver(
-    AssistantNotificationModelObserver* observer) {
-  model_.AddObserver(observer);
-}
-
-void AssistantNotificationController::RemoveModelObserver(
-    AssistantNotificationModelObserver* observer) {
-  model_.RemoveObserver(observer);
-}
-
 void AssistantNotificationController::SetAssistant(
-    chromeos::assistant::mojom::Assistant* assistant) {
+    chromeos::assistant::Assistant* assistant) {
   assistant_ = assistant;
 }
 
@@ -140,13 +133,9 @@ void AssistantNotificationController::SetQuietMode(bool enabled) {
 // AssistantNotificationModelObserver ------------------------------------------
 
 void AssistantNotificationController::OnNotificationAdded(
-    const AssistantNotification* notification) {
+    const AssistantNotification& notification) {
   // Do not show system notifications if the setting is disabled.
   if (!AssistantState::Get()->notification_enabled().value_or(true))
-    return;
-
-  // We only show system notifications in the Message Center.
-  if (!IsSystemNotification(notification))
     return;
 
   message_center::MessageCenter::Get()->AddNotification(
@@ -154,35 +143,26 @@ void AssistantNotificationController::OnNotificationAdded(
 }
 
 void AssistantNotificationController::OnNotificationUpdated(
-    const AssistantNotification* notification) {
+    const AssistantNotification& notification) {
   // Do not show system notifications if the setting is disabled.
   if (!AssistantState::Get()->notification_enabled().value_or(true))
     return;
 
-  // If the notification that was updated is *not* a system notification, we
-  // need to ensure that it is removed from the Message Center (given that it
-  // may have been a system notification prior to update).
-  if (!IsSystemNotification(notification)) {
-    message_center::MessageCenter::Get()->RemoveNotification(
-        notification->client_id, /*by_user=*/false);
-    return;
-  }
-
   message_center::MessageCenter::Get()->UpdateNotification(
-      notification->client_id,
+      notification.client_id,
       CreateSystemNotification(notifier_id_, notification));
 }
 
 void AssistantNotificationController::OnNotificationRemoved(
-    const AssistantNotification* notification,
+    const AssistantNotification& notification,
     bool from_server) {
   // Remove the notification from the message center.
   message_center::MessageCenter::Get()->RemoveNotification(
-      notification->client_id, /*by_user=*/false);
+      notification.client_id, /*by_user=*/false);
 
   // Dismiss the notification on the server to sync across devices.
   if (!from_server)
-    assistant_->DismissNotification(notification->Clone());
+    assistant_->DismissNotification(notification);
 }
 
 void AssistantNotificationController::OnAllNotificationsRemoved(
@@ -211,29 +191,35 @@ void AssistantNotificationController::OnNotificationClicked(
     // NOTE: We copy construct a new GURL as our |notification| may be destroyed
     // during the OpenUrl() sequence leaving |action_url| in a bad state.
     AssistantController::Get()->OpenUrl(GURL(action_url));
-    model_.RemoveNotificationById(id, /*from_server=*/false);
+
+    const bool remove_notification =
+        button_index.has_value() ? notification->buttons[button_index.value()]
+                                       ->remove_notification_on_click
+                                 : notification->remove_on_click;
+
+    if (remove_notification)
+      model_.RemoveNotificationById(id, /*from_server=*/false);
     return;
   }
 
-  // Otherwise, we retrieve the notification payload from the server using the
-  // following indexing scheme:
+  if (!notification->from_server)
+    return;
+
+  // If the notification is from the server, we retrieve the notification
+  // payload using the following indexing scheme:
   //
   // Index:  |    [0]    |   [1]    |   [2]    | ...
   // -------------------------------------------------
   // Action: | Top Level | Button 1 | Button 2 | ...
   const int action_index = button_index.value_or(-1) + 1;
-  assistant_->RetrieveNotification(notification->Clone(), action_index);
+  assistant_->RetrieveNotification(*notification, action_index);
 }
 
 void AssistantNotificationController::OnNotificationRemoved(
     const std::string& notification_id,
     bool by_user) {
-  // If the notification that was removed is a system notification, we need to
-  // update our notification model. If it is *not* a system notification, then
-  // the notification was removed from the Message Center due to a change of
-  // |type| so it should be retained in the model.
-  const auto* notification = model_.GetNotificationById(notification_id);
-  if (notification && IsSystemNotification(notification))
+  // Update our notification model to remain in sync w/ Message Center.
+  if (model_.GetNotificationById(notification_id))
     model_.RemoveNotificationById(notification_id, /*from_server=*/false);
 }
 

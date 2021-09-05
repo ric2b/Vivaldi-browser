@@ -22,6 +22,7 @@
 #include "base/mac/mac_logging.h"
 #include "base/sys_byteorder.h"
 #include "media/base/video_frame.h"
+#include "media/base/async_destroy_video_decoder.h"
 
 #define NOTIFY_STATUS(name, status) \
   do {                                               \
@@ -142,16 +143,14 @@ void BufferHolder(const CVImageBufferRef& buffer) {
 }
 
 // static
-std::unique_ptr<VivVideoDecoder, std::default_delete<VideoDecoder>>
+std::unique_ptr<VideoDecoder>
 VivVideoDecoder::Create(
     scoped_refptr<base::SingleThreadTaskRunner> media_task_runner_,
     MediaLog* media_log) {
-  // Constructed in a variable to avoid _CheckUniquePtr() PRESUBMIT.py regular
-  // expressions, which do not understand custom deleters.
-  // TODO(sandersd): Extend base::WrapUnique() to handle this.
-  std::unique_ptr<VivVideoDecoder, std::default_delete<VideoDecoder>> ptr(
-      new VivVideoDecoder(std::move(media_task_runner_),media_log));
-  return ptr;
+  auto* decoder = new VivVideoDecoder(
+      std::move(media_task_runner_), media_log);
+  return std::make_unique<AsyncDestroyVideoDecoder<VivVideoDecoder>>(
+      base::WrapUnique(decoder));
 }
 
 VivVideoDecoder::Frame::Frame(int32_t bitstream_id, base::TimeDelta ts)
@@ -165,7 +164,6 @@ VivVideoDecoder::Task::Task(TaskType type) : type(type) {}
 VivVideoDecoder::Task::Task(Task&& other) = default;
 
 VivVideoDecoder::Task::~Task() {}
-
 
 bool VivVideoDecoder::FrameOrder::operator()(
     const std::unique_ptr<Frame>& lhs,
@@ -202,30 +200,34 @@ VivVideoDecoder::VivVideoDecoder(
   callback_.decompressionOutputRefCon = this;
 }
 
-void VivVideoDecoder::Destroy() {
+VivVideoDecoder::~VivVideoDecoder() {
   DVLOG(3) << __func__;
   DCHECK(media_task_runner_->BelongsToCurrentThread());
+  decoder_thread_.Stop();
+}
 
-  // In a forceful shutdown, the decoder thread may be dead already.
-  if (!decoder_thread_.IsRunning()) {
+// static
+void VivVideoDecoder::DestroyAsync(std::unique_ptr<VivVideoDecoder> decoder) {
+  DVLOG(3) << __func__;
+  DCHECK(decoder->media_task_runner_->BelongsToCurrentThread());
+
+  if (!decoder->decoder_thread_.IsRunning()) {
+    // Initialize was not called or failed.
     return;
   }
 
   // For a graceful shutdown, return assigned buffers and flush before
   // destructing |this|.
-  for (int32_t bitstream_id : assigned_bitstream_ids_)
-    NotifyEndOfBitstreamBuffer(bitstream_id);
-  assigned_bitstream_ids_.clear();
-  state_ = STATE_DESTROYING;
-  QueueFlush(TASK_DESTROY);
-}
+  for (int32_t bitstream_id : decoder->assigned_bitstream_ids_)
+    decoder->NotifyEndOfBitstreamBuffer(bitstream_id);
+  decoder->assigned_bitstream_ids_.clear();
+  decoder->state_ = STATE_DESTROYING;
+  decoder->QueueFlush(TASK_DESTROY);
+  decoder->media_log_ = nullptr;
 
-VivVideoDecoder::~VivVideoDecoder() {
-  DVLOG(3) << __func__;
-  DCHECK(media_task_runner_->BelongsToCurrentThread());
-  if (decoder_thread_.IsRunning()) {
-    decoder_thread_.Stop();
-  }
+  // The decoder will be deleted after we hop to the decoder thread and back to
+  // the media thread in FlushTaskDone.
+  decoder.release();
 }
 
 std::string VivVideoDecoder::GetDisplayName() const {
@@ -260,7 +262,7 @@ void VivVideoDecoder::DecodeDone(Frame* frame) {
   DCHECK_EQ(1u, pending_frames_.count(bitstream_id));
 
   if (state_ == STATE_ERROR || state_ == STATE_DESTROYING) {
-    // Destroy() handles NotifyEndOfBitstreamBuffer().
+    // DestroyAsync() handles NotifyEndOfBitstreamBuffer().
     pending_frames_.erase(bitstream_id);
     return;
   }
@@ -537,7 +539,8 @@ void VivVideoDecoder::DecodeTask(scoped_refptr<DecoderBuffer> buffer,
   // If there is nothing to decode, drop the request by returning a frame with
   // no image.
   if (!frame->has_slice) {
-    DecodeDone(frame);
+    media_task_runner_->PostTask(FROM_HERE,
+        base::BindOnce(&VivVideoDecoder::DecodeDone, weak_this_, frame));
     return;
   }
 
@@ -677,17 +680,12 @@ void VivVideoDecoder::ProcessWorkQueues() {
       return;
 
     case STATE_ERROR:
-      // Do nothing until Destroy() is called.
+      // Do nothing until DestroyAsync() is called.
       return;
 
     case STATE_DESTROYING:
-      // Drop tasks until we are ready to destruct.
-      while (!task_queue_.empty()) {
-        if (task_queue_.front().type == TASK_DESTROY) {
-          return;
-        }
-        task_queue_.pop();
-      }
+      // std::queue lacks clear().
+      task_queue_ = {};
       return;
   }
 }
@@ -994,6 +992,10 @@ void VivVideoDecoder::FlushTask(TaskType type) {
 void VivVideoDecoder::FlushTaskDone(TaskType type) {
   DVLOG(3) << __func__;
   DCHECK(media_task_runner_->BelongsToCurrentThread());
+  if (state_ == STATE_DESTROYING) {
+    delete this;
+    return;
+  }
   task_queue_.push(Task(type));
   ProcessWorkQueues();
 }
@@ -1020,7 +1022,7 @@ void VivVideoDecoder::QueueFlush(TaskType type) {
                                 base::Unretained(this), type));
 
   // If this is a new flush request, see if we can make progress.
-  if (pending_flush_tasks_.size() == 1)
+  if (state_ != STATE_DESTROYING && pending_flush_tasks_.size() == 1)
     ProcessWorkQueues();
 }
 

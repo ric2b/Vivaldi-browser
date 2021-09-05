@@ -54,6 +54,7 @@ void TabMenuModel::Build(TabStripModel* tab_strip, int index) {
       AddItem(TabStripModel::CommandAddToNewGroup,
               l10n_util::GetPluralStringFUTF16(
                   IDS_TAB_CXMENU_ADD_TAB_TO_NEW_GROUP, num_affected_tabs));
+      SetIsNewFeatureAt(GetItemCount() - 1, true);
     }
 
     for (size_t index = 0; index < affected_indices.size(); index++) {
@@ -104,8 +105,6 @@ void TabMenuModel::Build(TabStripModel* tab_strip, int index) {
                           IDS_TAB_CXMENU_SOUND_UNMUTE_SITE, num_affected_tabs));
   if (send_tab_to_self::ShouldOfferFeature(
           tab_strip->GetWebContentsAt(index))) {
-    send_tab_to_self::RecordSendTabToSelfClickResult(
-        send_tab_to_self::kTabMenu, SendTabToSelfClickResult::kShowItem);
     AddSeparator(ui::NORMAL_SEPARATOR);
 
     if (send_tab_to_self::GetValidDeviceCount(tab_strip->profile()) == 1) {
@@ -123,11 +122,6 @@ void TabMenuModel::Build(TabStripModel* tab_strip, int index) {
                               tab_strip->profile()))),
                       ui::ImageModel::FromVectorIcon(kSendTabToSelfIcon));
 #endif
-      send_tab_to_self::RecordSendTabToSelfClickResult(
-          send_tab_to_self::kTabMenu,
-          SendTabToSelfClickResult::kShowDeviceList);
-      send_tab_to_self::RecordSendTabToSelfDeviceCount(
-          send_tab_to_self::kTabMenu, 1);
     } else {
       send_tab_to_self_sub_menu_model_ =
           std::make_unique<send_tab_to_self::SendTabToSelfSubMenuModel>(

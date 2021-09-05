@@ -29,6 +29,7 @@
 #include "sandbox/win/src/registry_policy.h"
 #include "sandbox/win/src/restricted_token_utils.h"
 #include "sandbox/win/src/sandbox_policy.h"
+#include "sandbox/win/src/sandbox_policy_diagnostic.h"
 #include "sandbox/win/src/sandbox_utils.h"
 #include "sandbox/win/src/security_capabilities.h"
 #include "sandbox/win/src/signed_policy.h"
@@ -43,7 +44,7 @@ namespace {
 constexpr size_t kOneMemPage = 4096;
 // The IPC and Policy shared memory sizes.
 constexpr size_t kIPCMemSize = kOneMemPage * 2;
-constexpr size_t kPolMemSize = kOneMemPage * 14;
+constexpr size_t kPolMemSize = kOneMemPage * 6;
 
 // Helper function to allocate space (on the heap) for policy.
 sandbox::PolicyGlobal* MakeBrokerPolicyMemory() {
@@ -507,13 +508,6 @@ PSID PolicyBase::GetLowBoxSid() const {
   return lowbox_sid_;
 }
 
-size_t PolicyBase::GetPolicyGlobalSize() const {
-  // TODO(1059129) remove when Process.Sandbox.PolicyGlobalSize expires.
-  if (policy_maker_)
-    return policy_maker_->GetPolicyGlobalSize();
-  return 0;
-}
-
 ResultCode PolicyBase::AddTarget(TargetProcess* target) {
   if (policy_) {
     if (!policy_maker_->Done())
@@ -815,6 +809,11 @@ ResultCode PolicyBase::AddRuleInternal(SubSystem subsystem,
   }
 
   return SBOX_ALL_OK;
+}
+
+std::unique_ptr<PolicyInfo> PolicyBase::GetPolicyInfo() {
+  auto diagnostic = std::make_unique<PolicyDiagnostic>(this);
+  return diagnostic;
 }
 
 }  // namespace sandbox

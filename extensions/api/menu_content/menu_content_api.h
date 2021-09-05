@@ -73,22 +73,6 @@ class MenuContentGetFunction : public ExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(MenuContentGetFunction);
 };
 
-class MenuContentSetFunction : public ExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("menuContent.set", MENUCONTENT_SET)
-  MenuContentSetFunction() = default;
-
- private:
-  ~MenuContentSetFunction() override = default;
-  bool DecodeItems(menus::Menu_Node* parent,
-      const std::vector<vivaldi::menu_content::MenuTreeNode>& items);
-
-  // ExtensionFunction:
-  ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(MenuContentSetFunction);
-};
-
 class MenuContentMoveFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("menuContent.move", MENUCONTENT_MOVE)

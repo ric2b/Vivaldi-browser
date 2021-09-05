@@ -12,7 +12,6 @@
 #include "base/numerics/ranges.h"
 #include "base/strings/string16.h"
 #include "base/system/sys_info.h"
-#include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
 #include "chrome/browser/chromeos/crostini/ansible/ansible_management_service_factory.h"
@@ -35,6 +34,7 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/network_service_instance.h"
+#include "ui/display/types/display_constants.h"
 
 using crostini::mojom::InstallerError;
 using crostini::mojom::InstallerState;
@@ -284,8 +284,8 @@ void CrostiniInstaller::Cancel(base::OnceClosure callback) {
 
   if (require_cleanup_) {
     // Remove anything that got installed
-    base::PostTask(
-        FROM_HERE, {content::BrowserThread::UI},
+    content::GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE,
         base::BindOnce(&crostini::CrostiniManager::RemoveCrostini,
                        base::Unretained(
                            crostini::CrostiniManager::GetForProfile(profile_)),
@@ -294,8 +294,8 @@ void CrostiniInstaller::Cancel(base::OnceClosure callback) {
                                       weak_ptr_factory_.GetWeakPtr())));
     UpdateState(State::CANCEL_CLEANUP);
   } else {
-    base::PostTask(FROM_HERE, {content::BrowserThread::UI},
-                   std::move(cancel_callback_));
+    content::GetUIThreadTaskRunner({})->PostTask(FROM_HERE,
+                                                 std::move(cancel_callback_));
     UpdateState(State::IDLE);
   }
 }
@@ -661,9 +661,10 @@ void CrostiniInstaller::OnCrostiniRestartFinished(CrostiniResult result) {
   progress_callback_.Reset();
 
   if (!skip_launching_terminal_for_testing_) {
-    crostini::LaunchContainerTerminal(
-        profile_, crostini::kCrostiniDefaultVmName,
-        crostini::kCrostiniDefaultContainerName, std::vector<std::string>());
+    // kInvalidDisplayId will launch terminal on the current active display.
+    crostini::LaunchContainerTerminal(profile_, display::kInvalidDisplayId,
+                                      crostini::ContainerId::GetDefault(),
+                                      std::vector<std::string>());
   }
 }
 
@@ -702,9 +703,7 @@ void CrostiniInstaller::OnAvailableDiskSpace(int64_t bytes) {
   restart_id_ =
       crostini::CrostiniManager::GetForProfile(profile_)
           ->RestartCrostiniWithOptions(
-              crostini::kCrostiniDefaultVmName,
-              crostini::kCrostiniDefaultContainerName,
-              std::move(restart_options_),
+              crostini::ContainerId::GetDefault(), std::move(restart_options_),
               base::BindOnce(&CrostiniInstaller::OnCrostiniRestartFinished,
                              weak_ptr_factory_.GetWeakPtr()),
               this);

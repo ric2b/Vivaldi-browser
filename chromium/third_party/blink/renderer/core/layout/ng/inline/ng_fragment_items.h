@@ -24,15 +24,21 @@ class CORE_EXPORT NGFragmentItems {
 
   wtf_size_t Size() const { return size_; }
 
-  using Span = base::span<const scoped_refptr<const NGFragmentItem>>;
+  using Span = base::span<const NGFragmentItem>;
   Span Items() const { return base::make_span(ItemsData(), size_); }
+  bool Equals(const Span& span) const {
+    return ItemsData() == span.data() && Size() == span.size();
+  }
   bool IsSubSpan(const Span& span) const;
 
   const NGFragmentItem& front() const {
     CHECK_GE(size_, 1u);
-    return *items_[0];
+    return items_[0];
   }
 
+  // Text content for `::first-line`. Available only if `::first-line` has
+  // different style than non-first-line style.
+  const String& FirstLineText() const { return first_line_text_content_; }
   const String& Text(bool first_line) const {
     return UNLIKELY(first_line) ? first_line_text_content_ : text_content_;
   }
@@ -66,9 +72,7 @@ class CORE_EXPORT NGFragmentItems {
   wtf_size_t ByteSize() const { return ByteSizeFor(Size()); }
 
  private:
-  const scoped_refptr<const NGFragmentItem>* ItemsData() const {
-    return reinterpret_cast<const scoped_refptr<const NGFragmentItem>*>(items_);
-  }
+  const NGFragmentItem* ItemsData() const { return items_; }
 
   static bool CanReuseAll(NGInlineCursor* cursor);
   bool TryDirtyFirstLineFor(const LayoutObject& layout_object) const;
@@ -86,7 +90,7 @@ class CORE_EXPORT NGFragmentItems {
   static_assert(
       sizeof(NGFragmentItem*) == sizeof(scoped_refptr<const NGFragmentItem>),
       "scoped_refptr must be the size of a pointer for |ItemsData()| to work");
-  NGFragmentItem* items_[];
+  NGFragmentItem items_[0];
 };
 
 }  // namespace blink

@@ -169,6 +169,8 @@ jumbo_static_library("browser") {
     "metrics/form_event_logger_base.h",
     "metrics/form_events.h",
     "payments/account_info_getter.h",
+    "payments/autofill_offer_manager.cc",
+    "payments/autofill_offer_manager.h",
     "payments/autofill_wallet_model_type_controller.cc",
     "payments/autofill_wallet_model_type_controller.h",
     "payments/card_unmask_delegate.cc",
@@ -501,6 +503,7 @@ jumbo_static_library("test_support") {
     sources += [
       "payments/test_credit_card_fido_authenticator.cc",
       "payments/test_credit_card_fido_authenticator.h",
+      "payments/test_internal_authenticator.cc",
       "payments/test_internal_authenticator.h",
     ]
 
@@ -718,6 +721,8 @@ if (use_libfuzzer) {
       # TODO(crbug.com/896313): Reduce the dependency on "browser".
       ":browser",
       "//base:base",
+      "//components/autofill/core/browser",
+      "//components/autofill/core/browser:test_support",
       "//components/autofill/core/browser/proto",
       "//components/autofill/core/common",
       "//third_party/libprotobuf-mutator",

@@ -4,6 +4,11 @@
 
 import("//mojo/public/tools/bindings/mojom.gni")
 
+mojom("logger") {
+  sources = [ "logger.mojom" ]
+  public_deps = [ "//mojo/public/mojom/base" ]
+}
+
 mojom("media_controller") {
   sources = [
     "media_controller.mojom",
@@ -21,6 +26,7 @@ mojom("media_router") {
   sources = [ "media_router.mojom" ]
 
   public_deps = [
+    ":logger",
     ":media_controller",
     "//components/mirroring/mojom:host",
     "//media/mojo/mojom:mirror_service_remoting",

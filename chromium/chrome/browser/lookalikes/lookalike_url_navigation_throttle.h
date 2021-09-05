@@ -51,6 +51,10 @@ class LookalikeUrlNavigationThrottle : public content::NavigationThrottle {
   static std::unique_ptr<LookalikeUrlNavigationThrottle>
   MaybeCreateNavigationThrottle(content::NavigationHandle* navigation_handle);
 
+  // The throttle normally ignores testing profiles and returns PROCEED. This
+  // function forces unit tests to not ignore them .
+  void SetUseTestProfileForTesting() { use_test_profile_ = true; }
+
  private:
   // Checks whether the navigation to |url| can proceed. If
   // |check_safe_redirect| is true, will check if a safe redirect led to |url|.
@@ -76,9 +80,8 @@ class LookalikeUrlNavigationThrottle : public content::NavigationThrottle {
                                        ukm::SourceId source_id,
                                        LookalikeUrlMatchType match_type);
 
-  bool interstitials_enabled_;
-
   Profile* profile_;
+  bool use_test_profile_ = false;
   base::WeakPtrFactory<LookalikeUrlNavigationThrottle> weak_factory_{this};
 };
 

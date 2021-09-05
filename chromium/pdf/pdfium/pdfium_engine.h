@@ -17,6 +17,7 @@
 #include "base/optional.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+#include "pdf/document_attachment_info.h"
 #include "pdf/document_layout.h"
 #include "pdf/document_loader.h"
 #include "pdf/document_metadata.h"
@@ -99,6 +100,7 @@ class PDFiumEngine : public PDFEngine,
   void RotateClockwise() override;
   void RotateCounterclockwise() override;
   void SetTwoUpView(bool enable) override;
+  void DisplayAnnotations(bool display) override;
   pp::Size ApplyDocumentLayout(const DocumentLayout::Options& options) override;
   std::string GetSelectedText() override;
   bool CanEditText() override;
@@ -113,6 +115,8 @@ class PDFiumEngine : public PDFEngine,
   std::string GetLinkAtPosition(const pp::Point& point) override;
   bool HasPermission(DocumentPermission permission) const override;
   void SelectAll() override;
+  const std::vector<DocumentAttachmentInfo>& GetDocumentAttachmentInfoList()
+      const override;
   const DocumentMetadata& GetDocumentMetadata() const override;
   int GetNumberOfPages() override;
   pp::VarArray GetBookmarks() override;
@@ -564,7 +568,7 @@ class PDFiumEngine : public PDFEngine,
                            const pp::Point& global_point);
 
   // Set if the document has any local edits.
-  void SetEditMode(bool edit_mode);
+  void EnteredEditMode();
 
   // Navigates to a link destination depending on the type of destination.
   // Returns false if |area| is not a link.
@@ -580,11 +584,17 @@ class PDFiumEngine : public PDFEngine,
   void SetSelection(const PP_PdfPageCharacterIndex& selection_start_index,
                     const PP_PdfPageCharacterIndex& selection_end_index);
 
-  // Given |rect| in document coordinates, scroll the |rect| into view if not
-  // already in view.
-  void ScrollIntoView(const pp::Rect& rect);
+  // Scroll the current focused annotation into view if not already in view.
+  void ScrollFocusedAnnotationIntoView();
+
+  // Given |annot|, scroll the |annot| into view if not already in view.
+  void ScrollAnnotationIntoView(FPDF_ANNOTATION annot, int page_index);
 
   void OnFocusedAnnotationUpdated(FPDF_ANNOTATION annot, int page_index);
+
+  // Read the attachments' information inside the PDF document, and set
+  // |doc_attachment_info_list_|. To be called after the document is loaded.
+  void LoadDocumentAttachmentInfoList();
 
   // Fetches and populates the fields of |doc_metadata_|. To be called after the
   // document is loaded.
@@ -605,6 +615,10 @@ class PDFiumEngine : public PDFEngine,
   bool HandleTabEventWithModifiers(uint32_t modifiers);
   bool HandleTabForward(uint32_t modifiers);
   bool HandleTabBackward(uint32_t modifiers);
+
+  // Updates the currently focused object stored in |focus_item_type_|. Notifies
+  // |client_| about document focus change, if any.
+  void UpdateFocusItemType(FocusElementType focus_item_type);
 
   void UpdateLinkUnderCursor(const std::string& target_url);
   void SetLinkUnderCursorForAnnotation(FPDF_ANNOTATION annot, int page_index);
@@ -710,6 +724,9 @@ class PDFiumEngine : public PDFEngine,
   // Timer for touch long press detection.
   base::OneShotTimer touch_timer_;
 
+  // Set to true when handling long touch press.
+  bool handling_long_press_ = false;
+
   // Set to true when updating plugin focus.
   bool updating_focus_ = false;
 
@@ -791,6 +808,9 @@ class PDFiumEngine : public PDFEngine,
 
   // Shadow matrix for generating the page shadow bitmap.
   std::unique_ptr<draw_utils::ShadowMatrix> page_shadow_;
+
+  // A list of information of document attachments.
+  std::vector<DocumentAttachmentInfo> doc_attachment_info_list_;
 
   // Stores parsed document metadata.
   DocumentMetadata doc_metadata_;

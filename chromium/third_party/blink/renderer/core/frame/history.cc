@@ -25,8 +25,6 @@
 
 #include "third_party/blink/renderer/core/frame/history.h"
 
-#include "third_party/blink/public/common/privacy_budget/identifiability_metric_builder.h"
-#include "third_party/blink/public/common/privacy_budget/identifiability_metrics.h"
 #include "third_party/blink/public/mojom/web_feature/web_feature.mojom-shared.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
@@ -67,7 +65,7 @@ bool EqualIgnoringQueryAndFragment(const KURL& a, const KURL& b) {
 History::History(LocalFrame* frame)
     : ExecutionContextClient(frame), last_state_object_requested_(nullptr) {}
 
-void History::Trace(Visitor* visitor) {
+void History::Trace(Visitor* visitor) const {
   ScriptWrappable::Trace(visitor);
   ExecutionContextClient::Trace(visitor);
 }
@@ -79,14 +77,7 @@ unsigned History::length(ExceptionState& exception_state) const {
         "fully active");
     return 0;
   }
-
-  unsigned result = GetFrame()->Client()->BackForwardLength();
-  Document* document = DomWindow()->document();
-  IdentifiabilityMetricBuilder(document->UkmSourceID())
-      .SetWebfeature(WebFeature::kHistoryLength,
-                     IdentifiabilityDigestHelper(result))
-      .Record(document->UkmRecorder());
-  return result;
+  return GetFrame()->Client()->BackForwardLength();
 }
 
 ScriptValue History::state(ScriptState* script_state,

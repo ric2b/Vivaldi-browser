@@ -125,7 +125,7 @@ class WaylandBufferManagerTest : public WaylandTest {
     }
   }
 
-  void CreateDmabufBasedBufferAndSetTerminateExpecation(
+  void CreateDmabufBasedBufferAndSetTerminateExpectation(
       bool fail,
       uint32_t buffer_id,
       base::ScopedFD fd = base::ScopedFD(),
@@ -187,11 +187,14 @@ class WaylandBufferManagerTest : public WaylandTest {
     }
   }
 
-  std::unique_ptr<WaylandWindow> CreateWindow() {
+  std::unique_ptr<WaylandWindow> CreateWindow(
+      PlatformWindowType type = PlatformWindowType::kWindow,
+      gfx::AcceleratedWidget parent_widget = gfx::kNullAcceleratedWidget) {
     testing::Mock::VerifyAndClearExpectations(&delegate_);
     PlatformWindowInitProperties properties;
     properties.bounds = gfx::Rect(0, 0, 800, 600);
-    properties.type = PlatformWindowType::kWindow;
+    properties.type = type;
+    properties.parent_widget = parent_widget;
     auto new_window = WaylandWindow::Create(&delegate_, connection_.get(),
                                             std::move(properties));
     EXPECT_TRUE(new_window);
@@ -214,8 +217,8 @@ TEST_P(WaylandBufferManagerTest, CreateDmabufBasedBuffers) {
 
   EXPECT_CALL(*server_.zwp_linux_dmabuf_v1(), CreateParams(_, _, _)).Times(1);
 
-  CreateDmabufBasedBufferAndSetTerminateExpecation(false /*fail*/,
-                                                   kDmabufBufferId);
+  CreateDmabufBasedBufferAndSetTerminateExpectation(false /*fail*/,
+                                                    kDmabufBufferId);
   DestroyBufferAndSetTerminateExpectation(gfx::kNullAcceleratedWidget,
                                           kDmabufBufferId, false /*fail*/);
 }
@@ -255,7 +258,7 @@ TEST_P(WaylandBufferManagerTest, VerifyModifiers) {
 
   EXPECT_CALL(*server_.zwp_linux_dmabuf_v1(), CreateParams(_, _, _)).Times(1);
 
-  CreateDmabufBasedBufferAndSetTerminateExpecation(
+  CreateDmabufBasedBufferAndSetTerminateExpectation(
       false /*fail*/, kDmabufBufferId, base::ScopedFD(), kDefaultSize, {1}, {2},
       {kFormatModiferLinear}, kFourccFormatR8, 1);
 
@@ -304,7 +307,7 @@ TEST_P(WaylandBufferManagerTest, ValidateDataFromGpu) {
   for (const auto& bad : kBadInputs) {
     EXPECT_CALL(*server_.zwp_linux_dmabuf_v1(), CreateParams(_, _, _)).Times(0);
     base::ScopedFD dummy;
-    CreateDmabufBasedBufferAndSetTerminateExpecation(
+    CreateDmabufBasedBufferAndSetTerminateExpectation(
         true /*fail*/, bad.buffer_id,
         bad.has_file ? MakeFD() : std::move(dummy), bad.size, bad.strides,
         bad.offsets, bad.modifiers, bad.format, bad.planes_count);
@@ -321,25 +324,27 @@ TEST_P(WaylandBufferManagerTest, CreateAndDestroyBuffer) {
   // id if they haven't been assigned to any surfaces yet.
   {
     EXPECT_CALL(*server_.zwp_linux_dmabuf_v1(), CreateParams(_, _, _)).Times(2);
-    CreateDmabufBasedBufferAndSetTerminateExpecation(false /*fail*/,
-                                                     kBufferId1);
-    CreateDmabufBasedBufferAndSetTerminateExpecation(false /*fail*/,
-                                                     kBufferId2);
+    CreateDmabufBasedBufferAndSetTerminateExpectation(false /*fail*/,
+                                                      kBufferId1);
+    CreateDmabufBasedBufferAndSetTerminateExpectation(false /*fail*/,
+                                                      kBufferId2);
 
     // Can't create buffer with existing id.
-    CreateDmabufBasedBufferAndSetTerminateExpecation(true /*fail*/, kBufferId2);
+    CreateDmabufBasedBufferAndSetTerminateExpectation(true /*fail*/,
+                                                      kBufferId2);
   }
 
   // ... impossible to create buffers with the same id if one of them
   // has already been attached to a surface.
   {
     EXPECT_CALL(*server_.zwp_linux_dmabuf_v1(), CreateParams(_, _, _)).Times(1);
-    CreateDmabufBasedBufferAndSetTerminateExpecation(false /*fail*/,
-                                                     kBufferId1);
+    CreateDmabufBasedBufferAndSetTerminateExpectation(false /*fail*/,
+                                                      kBufferId1);
 
     buffer_manager_gpu_->CommitBuffer(widget, kBufferId1, window_->GetBounds());
 
-    CreateDmabufBasedBufferAndSetTerminateExpecation(true /*fail*/, kBufferId1);
+    CreateDmabufBasedBufferAndSetTerminateExpectation(true /*fail*/,
+                                                      kBufferId1);
   }
 
   // ... impossible to destroy non-existing buffer.
@@ -356,8 +361,8 @@ TEST_P(WaylandBufferManagerTest, CreateAndDestroyBuffer) {
   // specified.
   {
     EXPECT_CALL(*server_.zwp_linux_dmabuf_v1(), CreateParams(_, _, _)).Times(1);
-    CreateDmabufBasedBufferAndSetTerminateExpecation(false /*fail*/,
-                                                     kBufferId1);
+    CreateDmabufBasedBufferAndSetTerminateExpectation(false /*fail*/,
+                                                      kBufferId1);
 
     buffer_manager_gpu_->CommitBuffer(widget, kBufferId1, window_->GetBounds());
 
@@ -369,22 +374,22 @@ TEST_P(WaylandBufferManagerTest, CreateAndDestroyBuffer) {
   // widgets.
   {
     EXPECT_CALL(*server_.zwp_linux_dmabuf_v1(), CreateParams(_, _, _)).Times(1);
-    CreateDmabufBasedBufferAndSetTerminateExpecation(false /*fail*/,
-                                                     kBufferId1);
+    CreateDmabufBasedBufferAndSetTerminateExpectation(false /*fail*/,
+                                                      kBufferId1);
     DestroyBufferAndSetTerminateExpectation(widget, kBufferId1, false /*fail*/);
   }
 
   // ... impossible to destroy buffers twice.
   {
     EXPECT_CALL(*server_.zwp_linux_dmabuf_v1(), CreateParams(_, _, _)).Times(3);
-    CreateDmabufBasedBufferAndSetTerminateExpecation(false /*fail*/,
-                                                     kBufferId1);
+    CreateDmabufBasedBufferAndSetTerminateExpectation(false /*fail*/,
+                                                      kBufferId1);
     // Attach to a surface.
     buffer_manager_gpu_->CommitBuffer(widget, kBufferId1, window_->GetBounds());
 
     // Created non-attached buffer as well.
-    CreateDmabufBasedBufferAndSetTerminateExpecation(false /*fail*/,
-                                                     kBufferId2);
+    CreateDmabufBasedBufferAndSetTerminateExpectation(false /*fail*/,
+                                                      kBufferId2);
 
     DestroyBufferAndSetTerminateExpectation(widget, kBufferId1, false /*fail*/);
     // Can't destroy the buffer with non-existing id (the manager cleared the
@@ -397,8 +402,8 @@ TEST_P(WaylandBufferManagerTest, CreateAndDestroyBuffer) {
                                             kBufferId2, true /*fail*/);
 
     // Create and destroy non-attached buffer twice.
-    CreateDmabufBasedBufferAndSetTerminateExpecation(false /*fail*/,
-                                                     kBufferId2);
+    CreateDmabufBasedBufferAndSetTerminateExpectation(false /*fail*/,
+                                                      kBufferId2);
     DestroyBufferAndSetTerminateExpectation(gfx::kNullAcceleratedWidget,
                                             kBufferId2, false /*fail*/);
     DestroyBufferAndSetTerminateExpectation(gfx::kNullAcceleratedWidget,
@@ -408,7 +413,7 @@ TEST_P(WaylandBufferManagerTest, CreateAndDestroyBuffer) {
 
 TEST_P(WaylandBufferManagerTest, CommitBufferNonExistingBufferId) {
   EXPECT_CALL(*server_.zwp_linux_dmabuf_v1(), CreateParams(_, _, _)).Times(1);
-  CreateDmabufBasedBufferAndSetTerminateExpecation(false /*fail*/, 1u);
+  CreateDmabufBasedBufferAndSetTerminateExpectation(false /*fail*/, 1u);
 
   // Can't commit for non-existing buffer id.
   SetTerminateCallbackExpectationAndDestroyChannel(&callback_, true /*fail*/);
@@ -421,7 +426,7 @@ TEST_P(WaylandBufferManagerTest, CommitBufferNonExistingBufferId) {
 TEST_P(WaylandBufferManagerTest, CommitBufferNullWidget) {
   constexpr uint32_t kBufferId = 1;
   EXPECT_CALL(*server_.zwp_linux_dmabuf_v1(), CreateParams(_, _, _)).Times(1);
-  CreateDmabufBasedBufferAndSetTerminateExpecation(false /*fail*/, kBufferId);
+  CreateDmabufBasedBufferAndSetTerminateExpectation(false /*fail*/, kBufferId);
 
   // Can't commit for non-existing widget.
   SetTerminateCallbackExpectationAndDestroyChannel(&callback_, true /*fail*/);
@@ -443,8 +448,8 @@ TEST_P(WaylandBufferManagerTest, EnsureCorrectOrderOfCallbacks) {
 
   auto* linux_dmabuf = server_.zwp_linux_dmabuf_v1();
   EXPECT_CALL(*linux_dmabuf, CreateParams(_, _, _)).Times(2);
-  CreateDmabufBasedBufferAndSetTerminateExpecation(false /*fail*/, kBufferId1);
-  CreateDmabufBasedBufferAndSetTerminateExpecation(false /*fail*/, kBufferId2);
+  CreateDmabufBasedBufferAndSetTerminateExpectation(false /*fail*/, kBufferId1);
+  CreateDmabufBasedBufferAndSetTerminateExpectation(false /*fail*/, kBufferId2);
 
   Sync();
 
@@ -551,9 +556,9 @@ TEST_P(WaylandBufferManagerTest,
 
   auto* linux_dmabuf = server_.zwp_linux_dmabuf_v1();
   EXPECT_CALL(*linux_dmabuf, CreateParams(_, _, _)).Times(3);
-  CreateDmabufBasedBufferAndSetTerminateExpecation(false /*fail*/, kBufferId1);
-  CreateDmabufBasedBufferAndSetTerminateExpecation(false /*fail*/, kBufferId2);
-  CreateDmabufBasedBufferAndSetTerminateExpecation(false /*fail*/, kBufferId3);
+  CreateDmabufBasedBufferAndSetTerminateExpectation(false /*fail*/, kBufferId1);
+  CreateDmabufBasedBufferAndSetTerminateExpectation(false /*fail*/, kBufferId2);
+  CreateDmabufBasedBufferAndSetTerminateExpectation(false /*fail*/, kBufferId3);
 
   Sync();
 
@@ -650,7 +655,149 @@ TEST_P(WaylandBufferManagerTest,
   DestroyBufferAndSetTerminateExpectation(widget, kBufferId3, false /*fail*/);
 }
 
-TEST_P(WaylandBufferManagerTest, MultiplePendingPresentationsForSameBuffer) {}
+// This test ensures that a discarded presentation feedback sent prior receiving
+// results for the previous presentation feedback does not make them
+// automatically failed.
+TEST_P(WaylandBufferManagerTest,
+       EnsureDiscardedPresentationDoesNotMakePreviousFeedbacksFailed) {
+  constexpr uint32_t kBufferId1 = 1;
+  constexpr uint32_t kBufferId2 = 2;
+  constexpr uint32_t kBufferId3 = 3;
+
+  // Enable wp_presentation support.
+  auto* mock_wp_presentation = server_.EnsureWpPresentation();
+  ASSERT_TRUE(mock_wp_presentation);
+
+  const gfx::AcceleratedWidget widget = window_->GetWidget();
+  const gfx::Rect bounds = gfx::Rect({0, 0}, kDefaultSize);
+  window_->SetBounds(bounds);
+
+  MockSurfaceGpu mock_surface_gpu(buffer_manager_gpu_.get(), widget_);
+
+  auto* linux_dmabuf = server_.zwp_linux_dmabuf_v1();
+  EXPECT_CALL(*linux_dmabuf, CreateParams(_, _, _)).Times(3);
+  CreateDmabufBasedBufferAndSetTerminateExpectation(false /*fail*/, kBufferId1);
+  CreateDmabufBasedBufferAndSetTerminateExpectation(false /*fail*/, kBufferId2);
+  CreateDmabufBasedBufferAndSetTerminateExpectation(false /*fail*/, kBufferId3);
+
+  Sync();
+
+  ProcessCreatedBufferResourcesWithExpectation(3u /* expected size */,
+                                               false /* fail */);
+
+  auto* mock_surface = server_.GetObject<wl::MockSurface>(widget);
+
+  constexpr uint32_t kNumberOfCommits = 3;
+  EXPECT_CALL(*mock_surface, Attach(_, _, _)).Times(kNumberOfCommits);
+  EXPECT_CALL(*mock_surface, Frame(_)).Times(kNumberOfCommits);
+  EXPECT_CALL(*mock_surface, Commit()).Times(kNumberOfCommits);
+
+  // All the other expectations must come in order.
+  ::testing::InSequence sequence;
+  EXPECT_CALL(mock_surface_gpu,
+              OnSubmission(kBufferId1, gfx::SwapResult::SWAP_ACK))
+      .Times(1);
+  EXPECT_CALL(mock_surface_gpu, OnPresentation(_, _)).Times(0);
+
+  // Commit first buffer
+  buffer_manager_gpu_->CommitBuffer(widget, kBufferId1, bounds);
+
+  Sync();
+
+  // Will be sent later.
+  auto* presentation_callback1 =
+      mock_wp_presentation->ReleasePresentationCallback();
+
+  mock_surface->SendFrameCallback();
+
+  Sync();
+
+  EXPECT_CALL(mock_surface_gpu,
+              OnSubmission(kBufferId2, gfx::SwapResult::SWAP_ACK))
+      .Times(1);
+  EXPECT_CALL(mock_surface_gpu, OnPresentation(_, _)).Times(0);
+
+  // Commit second buffer
+  buffer_manager_gpu_->CommitBuffer(widget, kBufferId2, bounds);
+
+  Sync();
+
+  // Will be sent later.
+  auto* presentation_callback2 =
+      mock_wp_presentation->ReleasePresentationCallback();
+
+  // Release previous buffer and commit third buffer.
+  mock_surface->ReleasePrevAttachedBuffer();
+  mock_surface->SendFrameCallback();
+
+  Sync();
+
+  EXPECT_CALL(mock_surface_gpu,
+              OnSubmission(kBufferId3, gfx::SwapResult::SWAP_ACK))
+      .Times(1);
+  EXPECT_CALL(mock_surface_gpu, OnPresentation(_, _)).Times(0);
+
+  // Commit third buffer
+  buffer_manager_gpu_->CommitBuffer(widget, kBufferId3, bounds);
+
+  Sync();
+
+  mock_surface->ReleasePrevAttachedBuffer();
+
+  Sync();
+
+  // Even though WaylandBufferManagerHost stores the previous stores
+  // presentation feedbacks and waits for their value, the current last one
+  // mustn't result in the previous marked as failed. Thus, no feedback must be
+  // actually sent to the MockSurfaceGpu as it's required to send feedbacks in
+  // order.
+  EXPECT_CALL(mock_surface_gpu, OnPresentation(_, _)).Times(0);
+
+  mock_wp_presentation->SendPresentationCallbackDiscarded();
+
+  Sync();
+
+  // Now, start to send all the previous callbacks.
+  EXPECT_CALL(mock_surface_gpu,
+              OnPresentation(
+                  kBufferId1,
+                  ::testing::Field(
+                      &gfx::PresentationFeedback::flags,
+                      ::testing::Eq(gfx::PresentationFeedback::Flags::kVSync))))
+      .Times(1);
+
+  mock_wp_presentation->set_presentation_callback(presentation_callback1);
+  mock_wp_presentation->SendPresentationCallback();
+
+  Sync();
+
+  // Now, send the second presentation feedback. It will send both second and
+  // third feedback that was discarded.
+  EXPECT_CALL(mock_surface_gpu,
+              OnPresentation(
+                  kBufferId2,
+                  ::testing::Field(
+                      &gfx::PresentationFeedback::flags,
+                      ::testing::Eq(gfx::PresentationFeedback::Flags::kVSync))))
+      .Times(1);
+  EXPECT_CALL(
+      mock_surface_gpu,
+      OnPresentation(
+          kBufferId3,
+          ::testing::Field(
+              &gfx::PresentationFeedback::flags,
+              ::testing::Eq(gfx::PresentationFeedback::Flags::kFailure))))
+      .Times(1);
+
+  mock_wp_presentation->set_presentation_callback(presentation_callback2);
+  mock_wp_presentation->SendPresentationCallback();
+
+  Sync();
+
+  DestroyBufferAndSetTerminateExpectation(widget, kBufferId1, false /*fail*/);
+  DestroyBufferAndSetTerminateExpectation(widget, kBufferId2, false /*fail*/);
+  DestroyBufferAndSetTerminateExpectation(widget, kBufferId3, false /*fail*/);
+}
 
 TEST_P(WaylandBufferManagerTest, TestCommitBufferConditions) {
   constexpr uint32_t kDmabufBufferId = 1;
@@ -662,8 +809,8 @@ TEST_P(WaylandBufferManagerTest, TestCommitBufferConditions) {
   auto* linux_dmabuf = server_.zwp_linux_dmabuf_v1();
   EXPECT_CALL(*linux_dmabuf, CreateParams(_, _, _)).Times(1);
 
-  CreateDmabufBasedBufferAndSetTerminateExpecation(false /*fail*/,
-                                                   kDmabufBufferId);
+  CreateDmabufBasedBufferAndSetTerminateExpectation(false /*fail*/,
+                                                    kDmabufBufferId);
 
   // Part 1: the surface mustn't have a buffer attached until
   // zwp_linux_buffer_params_v1_send_created is called. Instead, the buffer must
@@ -694,8 +841,8 @@ TEST_P(WaylandBufferManagerTest, TestCommitBufferConditions) {
   // sent by the server.
 
   EXPECT_CALL(*linux_dmabuf, CreateParams(_, _, _)).Times(1);
-  CreateDmabufBasedBufferAndSetTerminateExpecation(false /*fail*/,
-                                                   kDmabufBufferId2);
+  CreateDmabufBasedBufferAndSetTerminateExpectation(false /*fail*/,
+                                                    kDmabufBufferId2);
 
   ProcessCreatedBufferResourcesWithExpectation(1u /* expected size */,
                                                false /* fail */);
@@ -726,6 +873,77 @@ TEST_P(WaylandBufferManagerTest, TestCommitBufferConditions) {
                                           false /*fail*/);
 }
 
+// Tests the surface does not have buffers attached until it's configured at
+// least once.
+TEST_P(WaylandBufferManagerTest, TestCommitBufferConditionsAckConfigured) {
+  constexpr uint32_t kDmabufBufferId = 1;
+
+  // Exercise three window types that create different windows - toplevel, popup
+  // and subsurface.
+  std::vector<PlatformWindowType> window_types{PlatformWindowType::kWindow,
+                                               PlatformWindowType::kPopup,
+                                               PlatformWindowType::kTooltip};
+
+  for (const auto& type : window_types) {
+    // If the type is not kWindow, provide default created window as parent of
+    // the newly created window.
+    auto temp_window = CreateWindow(type, type != PlatformWindowType::kWindow
+                                              ? widget_
+                                              : gfx::kNullAcceleratedWidget);
+    auto widget = temp_window->GetWidget();
+
+    // Subsurface doesn't have an interface for sending configure events.
+    // Thus, WaylandSubsurface notifies the manager that the window is
+    // activated upon creation of the subsurface. Skip calling Show() and call
+    // later then.
+    if (type != PlatformWindowType::kTooltip)
+      temp_window->Show(false);
+
+    Sync();
+
+    auto* mock_surface = server_.GetObject<wl::MockSurface>(widget);
+
+    auto* linux_dmabuf = server_.zwp_linux_dmabuf_v1();
+    EXPECT_CALL(*linux_dmabuf, CreateParams(_, _, _)).Times(1);
+
+    CreateDmabufBasedBufferAndSetTerminateExpectation(false /*fail*/,
+                                                      kDmabufBufferId);
+
+    Sync();
+
+    ProcessCreatedBufferResourcesWithExpectation(1u /* expected size */,
+                                                 false /* fail */);
+
+    EXPECT_CALL(*mock_surface, Attach(_, _, _)).Times(0);
+    EXPECT_CALL(*mock_surface, Frame(_)).Times(0);
+    EXPECT_CALL(*mock_surface, Commit()).Times(0);
+
+    buffer_manager_gpu_->CommitBuffer(widget, kDmabufBufferId,
+                                      window_->GetBounds());
+    Sync();
+
+    if (type != PlatformWindowType::kTooltip) {
+      DCHECK(mock_surface->xdg_surface());
+      ActivateSurface(mock_surface->xdg_surface());
+    } else {
+      // See the comment near Show() call above.
+      temp_window->Show(false);
+    }
+
+    EXPECT_CALL(*mock_surface, Attach(_, _, _)).Times(1);
+    EXPECT_CALL(*mock_surface, Frame(_)).Times(1);
+    EXPECT_CALL(*mock_surface, Commit()).Times(1);
+
+    Sync();
+
+    temp_window.reset();
+    DestroyBufferAndSetTerminateExpectation(widget, kDmabufBufferId,
+                                            false /*fail*/);
+
+    Sync();
+  }
+}
+
 // The buffer that is not originally attached to any of the surfaces,
 // must be attached when a commit request comes. Also, it must setup a buffer
 // release listener and OnSubmission must be called for that buffer if it is
@@ -743,7 +961,7 @@ TEST_P(WaylandBufferManagerTest, AnonymousBufferAttachedAndReleased) {
 
   auto* linux_dmabuf = server_.zwp_linux_dmabuf_v1();
   EXPECT_CALL(*linux_dmabuf, CreateParams(_, _, _)).Times(1);
-  CreateDmabufBasedBufferAndSetTerminateExpecation(false /*fail*/, kBufferId1);
+  CreateDmabufBasedBufferAndSetTerminateExpectation(false /*fail*/, kBufferId1);
 
   Sync();
 
@@ -776,7 +994,7 @@ TEST_P(WaylandBufferManagerTest, AnonymousBufferAttachedAndReleased) {
   // Now synchronously create a second buffer and commit it. The release
   // callback must be setup and OnSubmission must be called.
   EXPECT_CALL(*linux_dmabuf, CreateParams(_, _, _)).Times(1);
-  CreateDmabufBasedBufferAndSetTerminateExpecation(false /*fail*/, kBufferId2);
+  CreateDmabufBasedBufferAndSetTerminateExpectation(false /*fail*/, kBufferId2);
 
   Sync();
 
@@ -804,7 +1022,7 @@ TEST_P(WaylandBufferManagerTest, AnonymousBufferAttachedAndReleased) {
   // released once the buffer is committed and processed (that is, it must be
   // able to setup a buffer release callback).
   EXPECT_CALL(*linux_dmabuf, CreateParams(_, _, _)).Times(1);
-  CreateDmabufBasedBufferAndSetTerminateExpecation(false /*fail*/, kBufferId3);
+  CreateDmabufBasedBufferAndSetTerminateExpectation(false /*fail*/, kBufferId3);
 
   Sync();
 
@@ -845,7 +1063,7 @@ TEST_P(WaylandBufferManagerTest, DestroyBufferForDestroyedWindow) {
   auto widget = temp_window->GetWidget();
 
   EXPECT_CALL(*server_.zwp_linux_dmabuf_v1(), CreateParams(_, _, _)).Times(1);
-  CreateDmabufBasedBufferAndSetTerminateExpecation(false /*fail*/, kBufferId);
+  CreateDmabufBasedBufferAndSetTerminateExpectation(false /*fail*/, kBufferId);
 
   Sync();
 
@@ -866,7 +1084,7 @@ TEST_P(WaylandBufferManagerTest, DestroyedWindowNoSubmissionSingleBuffer) {
   auto bounds = temp_window->GetBounds();
 
   EXPECT_CALL(*server_.zwp_linux_dmabuf_v1(), CreateParams(_, _, _)).Times(1);
-  CreateDmabufBasedBufferAndSetTerminateExpecation(false /*fail*/, kBufferId);
+  CreateDmabufBasedBufferAndSetTerminateExpectation(false /*fail*/, kBufferId);
 
   ProcessCreatedBufferResourcesWithExpectation(1u /* expected size */,
                                                false /* fail */);
@@ -894,11 +1112,22 @@ TEST_P(WaylandBufferManagerTest, DestroyedWindowNoSubmissionMultipleBuffers) {
   constexpr uint32_t kBufferId2 = 2;
 
   auto temp_window = CreateWindow();
+  temp_window->Show(false);
+
+  Sync();
+
   auto widget = temp_window->GetWidget();
   auto bounds = temp_window->GetBounds();
 
+  auto* mock_surface = server_.GetObject<wl::MockSurface>(widget);
+  ASSERT_TRUE(mock_surface);
+
+  ActivateSurface(mock_surface->xdg_surface());
+
+  Sync();
+
   EXPECT_CALL(*server_.zwp_linux_dmabuf_v1(), CreateParams(_, _, _)).Times(1);
-  CreateDmabufBasedBufferAndSetTerminateExpecation(false /*fail*/, kBufferId1);
+  CreateDmabufBasedBufferAndSetTerminateExpectation(false /*fail*/, kBufferId1);
   ProcessCreatedBufferResourcesWithExpectation(1u /* expected size */,
                                                false /* fail */);
 
@@ -915,13 +1144,12 @@ TEST_P(WaylandBufferManagerTest, DestroyedWindowNoSubmissionMultipleBuffers) {
 
   Sync();
 
-  auto* mock_surface = server_.GetObject<wl::MockSurface>(widget);
   mock_surface->SendFrameCallback();
 
   Sync();
 
   EXPECT_CALL(*server_.zwp_linux_dmabuf_v1(), CreateParams(_, _, _)).Times(1);
-  CreateDmabufBasedBufferAndSetTerminateExpecation(false /*fail*/, kBufferId2);
+  CreateDmabufBasedBufferAndSetTerminateExpectation(false /*fail*/, kBufferId2);
   ProcessCreatedBufferResourcesWithExpectation(1u /* expected size */,
                                                false /* fail */);
 
@@ -966,8 +1194,8 @@ TEST_P(WaylandBufferManagerTest, SubmitSameBufferMultipleTimes) {
 
   auto* linux_dmabuf = server_.zwp_linux_dmabuf_v1();
   EXPECT_CALL(*linux_dmabuf, CreateParams(_, _, _)).Times(2);
-  CreateDmabufBasedBufferAndSetTerminateExpecation(false /*fail*/, kBufferId1);
-  CreateDmabufBasedBufferAndSetTerminateExpecation(false /*fail*/, kBufferId2);
+  CreateDmabufBasedBufferAndSetTerminateExpectation(false /*fail*/, kBufferId1);
+  CreateDmabufBasedBufferAndSetTerminateExpectation(false /*fail*/, kBufferId2);
 
   Sync();
 

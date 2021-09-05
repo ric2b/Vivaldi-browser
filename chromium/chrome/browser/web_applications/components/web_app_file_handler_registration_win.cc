@@ -10,6 +10,7 @@
 
 #include "base/command_line.h"
 #include "base/files/file_util.h"
+#include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -303,8 +304,8 @@ void UnregisterFileHandlersWithOs(const AppId& app_id, Profile* profile) {
     base::ThreadPool::PostTask(
         FROM_HERE,
         {base::MayBlock(), base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
-        base::BindOnce(IgnoreResult(&base::DeleteFile),
-                       app_specific_launcher_path, /*recursively=*/false));
+        base::BindOnce(base::GetDeleteFileCallback(),
+                       app_specific_launcher_path));
   }
   base::FilePath only_profile_with_app_installed;
   if (IsWebAppLauncherRegisteredWithWindows(app_id, profile,

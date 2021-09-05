@@ -153,7 +153,7 @@ public class TabSwitcherDrawable extends TintedDrawable {
     public static TabSwitcherDrawable createTabSwitcherDrawableFromSVG(Context context,
                                                                 boolean useLight) {
         Drawable drawable = ContextCompat.getDrawable(context,
-                        R.drawable.vivaldi_tab_switch_tab_counter_small);
+                        R.drawable.vivaldi_tab_switch_tab_counter_48dp);
         return createTabSwitcherDrawableFromSVG(context, drawable, useLight);
     }
 

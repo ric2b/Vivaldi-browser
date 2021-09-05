@@ -451,6 +451,7 @@ TEST(FilesystemUtils, RebasePath) {
 
   // Sharing prefix.
   EXPECT_EQ("foo", RebasePath("//a/foo", SourceDir("//a/"), source_root));
+  EXPECT_EQ("foo", RebasePath("//a/foo", SourceDir("//a"), source_root));
   EXPECT_EQ("foo/", RebasePath("//a/foo/", SourceDir("//a/"), source_root));
   EXPECT_EQ("foo", RebasePath("//a/b/foo", SourceDir("//a/b/"), source_root));
   EXPECT_EQ("foo/", RebasePath("//a/b/foo/", SourceDir("//a/b/"), source_root));
@@ -458,13 +459,12 @@ TEST(FilesystemUtils, RebasePath) {
             RebasePath("//a/b/foo/bar", SourceDir("//a/b/"), source_root));
   EXPECT_EQ("foo/bar/",
             RebasePath("//a/b/foo/bar/", SourceDir("//a/b/"), source_root));
-
-  // One could argue about this case. Since the input doesn't have a slash it
-  // would normally not be treated like a directory and we'd go up, which is
-  // simpler. However, since it matches the output directory's name, we could
-  // potentially infer that it's the same and return "." for this.
-  EXPECT_EQ("../bar",
+  EXPECT_EQ(".",
             RebasePath("//foo/bar", SourceDir("//foo/bar/"), source_root));
+  EXPECT_EQ("..",
+            RebasePath("//foo", SourceDir("//foo/bar/"), source_root));
+  EXPECT_EQ("../",
+            RebasePath("//foo/", SourceDir("//foo/bar/"), source_root));
 
   // Check when only |input| is system-absolute
   EXPECT_EQ("foo", RebasePath("/source/root/foo", SourceDir("//"),

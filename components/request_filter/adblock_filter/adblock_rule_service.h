@@ -15,6 +15,10 @@
 #include "components/request_filter/adblock_filter/adblock_metadata.h"
 #include "url/origin.h"
 
+namespace content {
+class RenderFrameHost;
+}
+
 namespace adblock_filter {
 class KnownRuleSourcesHandler;
 class BlockedUrlsReporter;
@@ -94,6 +98,12 @@ class RuleService : public KeyedService {
   // group or not, based on the active exception list.
   virtual bool IsExemptOfFiltering(RuleGroup group,
                                    url::Origin origin) const = 0;
+
+  // Check if a given document |url| is blocked to determine whether to show
+  // an interstiatial in the given |frame|.
+  virtual bool IsDocumentBlocked(RuleGroup group,
+                                 content::RenderFrameHost* frame,
+                                 const GURL& url) const = 0;
 
   virtual void AddObserver(Observer* observer) = 0;
   virtual void RemoveObserver(Observer* observer) = 0;

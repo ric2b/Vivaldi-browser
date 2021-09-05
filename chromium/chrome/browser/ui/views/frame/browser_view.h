@@ -54,6 +54,7 @@
 // NOTE: For more information about the objects and files in this directory,
 // view: http://dev.chromium.org/developers/design-documents/browser-window
 
+class AccessibilityFocusHighlight;
 class BookmarkBarView;
 class Browser;
 class ContentsLayoutManager;
@@ -63,6 +64,7 @@ class FullscreenControlHost;
 class InfoBarContainerView;
 class LocationBarView;
 class StatusBubbleViews;
+class TabGroupsIPHController;
 class TabStrip;
 class TabStripRegionView;
 class ToolbarButtonProvider;
@@ -241,8 +243,12 @@ class BrowserView : public BrowserWindow,
   // move it to a WindowDelegate subclass.
   content::WebContents* GetActiveWebContents() const;
 
+  // Returns true if the Browser object associated with this BrowserView
+  // supports tabs, such as all normal browsers, and tabbed apps like terminal.
+  bool IsTabStripSupported() const;
+
   // Returns true if the Browser object associated with this BrowserView is a
-  // tabbed-type window (i.e. a browser window, not an app or popup).
+  // normal window (i.e. a browser window, not an app or popup).
   bool IsBrowserTypeNormal() const { return browser_->is_type_normal(); }
 
   // Returns true if the Browser object associated with this BrowserView is a
@@ -278,6 +284,10 @@ class BrowserView : public BrowserWindow,
   void SetToolbarButtonProvider(ToolbarButtonProvider* provider);
   ToolbarButtonProvider* toolbar_button_provider() {
     return toolbar_button_provider_;
+  }
+
+  TabGroupsIPHController* tab_groups_iph_controller() {
+    return tab_groups_iph_controller_.get();
   }
 
   // BrowserWindow:
@@ -421,10 +431,6 @@ class BrowserView : public BrowserWindow,
   void ExecuteExtensionCommand(const extensions::Extension* extension,
                                const extensions::Command& command) override;
   ExclusiveAccessContext* GetExclusiveAccessContext() override;
-  void ShowImeWarningBubble(
-      const extensions::Extension* extension,
-      const base::Callback<void(ImeWarningBubblePermissionStatus status)>&
-          callback) override;
   std::string GetWorkspace() const override;
   bool IsVisibleOnAllWorkspaces() const override;
   void HideDownloadShelf();
@@ -456,9 +462,6 @@ class BrowserView : public BrowserWindow,
                                   ui::Accelerator* accelerator) const override;
 
   // views::WidgetDelegate:
-  bool CanResize() const override;
-  bool CanMaximize() const override;
-  bool CanMinimize() const override;
   bool CanActivate() const override;
   base::string16 GetWindowTitle() const override;
   base::string16 GetAccessibleWindowTitle() const override;
@@ -769,7 +772,7 @@ class BrowserView : public BrowserWindow,
   View* find_bar_host_view_ = nullptr;
 
   // The download shelf view (view at the bottom of the page).
-  std::unique_ptr<DownloadShelfView> download_shelf_;
+  DownloadShelfView* download_shelf_ = nullptr;
 
   // The InfoBarContainerView that contains InfoBars for the current tab.
   InfoBarContainerView* infobar_container_ = nullptr;
@@ -865,9 +868,9 @@ class BrowserView : public BrowserWindow,
   std::unique_ptr<FullscreenControlHost> fullscreen_control_host_;
 
   // If the Window Placement experiment is enabled and fullscreen is requested
-  // on a particular display, these are the original bounds before the window
-  // was moved to the requested display; they are restored on fullscreen exit.
-  base::Optional<gfx::Rect> pre_fullscreen_bounds_;
+  // on a particular display, this closure will be called after fullscreen is
+  // exited to restore the original pre-fullscreen bounds of the window.
+  base::OnceClosure restore_pre_fullscreen_bounds_callback_;
 
   ReopenTabPromoController reopen_tab_promo_controller_{this};
 
@@ -878,8 +881,11 @@ class BrowserView : public BrowserWindow,
 
   bool interactive_resize_in_progress_ = false;
 
-  mutable base::WeakPtrFactory<BrowserView> activate_modal_dialog_factory_{
-      this};
+  std::unique_ptr<AccessibilityFocusHighlight> accessibility_focus_highlight_;
+
+  std::unique_ptr<TabGroupsIPHController> tab_groups_iph_controller_;
+
+  mutable base::WeakPtrFactory<BrowserView> weak_ptr_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(BrowserView);
 };

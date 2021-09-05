@@ -239,6 +239,11 @@ const base::Feature kResumeBackgroundVideo {
 #endif
 };
 
+// When enabled, MediaCapabilities will check with GPU Video Accelerator
+// Factories to determine isPowerEfficient = true/false.
+const base::Feature kMediaCapabilitiesQueryGpuFactories{
+    "MediaCapabilitiesQueryGpuFactories", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enable Media Capabilities with finch-parameters.
 const base::Feature kMediaCapabilitiesWithParameters{
     "MediaCapabilitiesWithParameters", base::FEATURE_ENABLED_BY_DEFAULT};
@@ -260,6 +265,12 @@ const base::Feature kBackgroundVideoPauseOptimization{
 // Has no effect if ENABLE_CDM_HOST_VERIFICATION buildflag is false.
 const base::Feature kCdmHostVerification{"CdmHostVerification",
                                          base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Use per-CDM-type, per-user and per-site CDM processes (for library CDM). If
+// disabled, the CDM processes are only per-CDM-type, meaning different sites
+// using the same CDM type would share one CDM process.
+const base::Feature kCdmProcessSiteIsolation{"CdmProcessSiteIsolation",
+                                             base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Make MSE garbage collection algorithm more aggressive when we are under
 // moderate or critical memory pressure. This will relieve memory pressure by
@@ -365,7 +376,7 @@ const base::Feature kGlobalMediaControlsOverlayControls{
     "GlobalMediaControlsOverlayControls", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Show picture-in-picture button in Global Media Controls.
-const base::Feature kGlobalMediaControlsPictureInPicture{
+const base::Feature kGlobalMediaControlsPictureInPicture {
   "GlobalMediaControlsPictureInPicture",
 #if defined(OS_WIN) || defined(OS_MACOSX) || \
     (defined(OS_LINUX) && !defined(OS_CHROMEOS))
@@ -374,6 +385,10 @@ const base::Feature kGlobalMediaControlsPictureInPicture{
       base::FEATURE_DISABLED_BY_DEFAULT
 #endif
 };
+
+// Enable selection of audio output device in Global Media Controls.
+const base::Feature kGlobalMediaControlsSeamlessTransfer {
+  "GlobalMediaControlsSeamlessTransfer", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enable new cpu load estimator. Intended for evaluation in local
 // testing and origin-trial.
@@ -408,13 +423,9 @@ const base::Feature kUseR16Texture{"use-r16-texture",
 const base::Feature kUnifiedAutoplay{"UnifiedAutoplay",
                                      base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Enable VA-API hardware encode acceleration for H264 on AMD.
-const base::Feature kVaapiH264AMDEncoder{"VaapiH264AMDEncoder",
-                                         base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Enable VA-API hardware low power encoder for all codecs.
-const base::Feature kVaapiLowPowerEncoder{"VaapiLowPowerEncoder",
-                                          base::FEATURE_DISABLED_BY_DEFAULT};
+// Enable VA-API hardware low power encoder for all codecs on intel Gen9x gpu.
+const base::Feature kVaapiLowPowerEncoderGen9x{
+    "VaapiLowPowerEncoderGen9x", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enable VA-API hardware encode acceleration for VP8.
 const base::Feature kVaapiVP8Encoder{"VaapiVP8Encoder",
@@ -475,7 +486,7 @@ const base::Feature kWidevineAv1ForceSupportForTesting{
     "WidevineAv1ForceSupportForTesting", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables handling of hardware media keys for controlling media.
-const base::Feature kHardwareMediaKeyHandling{
+const base::Feature kHardwareMediaKeyHandling {
   "HardwareMediaKeyHandling",
 #if defined(OS_CHROMEOS) || defined(OS_WIN) || defined(OS_MACOSX) || \
     BUILDFLAG(USE_MPRIS)
@@ -505,6 +516,12 @@ const base::Feature kAutoplayWhitelistSettings{
     "AutoplayWhitelistSettings", base::FEATURE_ENABLED_BY_DEFAULT};
 
 #if defined(OS_ANDROID)
+// Should we allow video playback to use an overlay if it's not needed for
+// security?  Normally, we'd always want to allow this, except as part of the
+// power testing A/B experiment.  https://crbug.com/1081346 .
+const base::Feature kAllowNonSecureOverlays{"AllowNonSecureOverlays",
+                                            base::FEATURE_ENABLED_BY_DEFAULT};
+
 // Enable a gesture to make the media controls expaned into the display cutout.
 // TODO(beccahughes): Remove this.
 const base::Feature kMediaControlsExpandGesture{
@@ -584,7 +601,7 @@ const base::Feature kMediaFoundationAsyncH264Encoding{
 
 // Enables AV1 decode acceleration for Windows.
 const base::Feature MEDIA_EXPORT kMediaFoundationAV1Decoding{
-    "MediaFoundationAV1Decoding", base::FEATURE_DISABLED_BY_DEFAULT};
+    "MediaFoundationAV1Decoding", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables MediaFoundation based video capture
 const base::Feature kMediaFoundationVideoCapture{
@@ -653,6 +670,10 @@ const base::Feature kMediaEngagementHTTPSOnly{
 const base::Feature kMediaFeeds{"MediaFeeds",
                                 base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Enables fetching Media Feeds periodically in the background.
+const base::Feature kMediaFeedsBackgroundFetching{
+    "MediaFeedsBackgroundFetching", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables checking Media Feeds against safe search to prevent adult content.
 const base::Feature kMediaFeedsSafeSearch{"MediaFeedsSafeSearch",
                                           base::FEATURE_ENABLED_BY_DEFAULT};
@@ -710,7 +731,7 @@ const base::Feature kInternalMediaSession {
 };
 
 const base::Feature kKaleidoscope{"Kaleidoscope",
-                                  base::FEATURE_DISABLED_BY_DEFAULT};
+                                  base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kUseFakeDeviceForMediaStream{
     "use-fake-device-for-media-stream", base::FEATURE_DISABLED_BY_DEFAULT};

@@ -121,7 +121,7 @@ std::string ScreenToContentQuery(OobeScreenId screen) {
   if (screen == DemoPreferencesScreenView::kScreenId)
     return "$('demo-preferences-content')";
   if (screen == NetworkScreenView::kScreenId)
-    return "$('oobe-network-md')";
+    return "$('network-selection')";
   if (screen == EulaView::kScreenId)
     return "$('oobe-eula-md')";
   if (screen == ArcTermsOfServiceScreenView::kScreenId)
@@ -1156,8 +1156,9 @@ IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest, RetryOnErrorScreen) {
   OobeScreenWaiter(GaiaView::kScreenId).Wait();
 }
 
+// Test is flaky: crbug.com/1099402
 IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest,
-                       ShowOfflineSetupOptionOnNetworkList) {
+                       DISABLED_ShowOfflineSetupOptionOnNetworkList) {
   auto* const wizard_controller = WizardController::default_controller();
   wizard_controller->SimulateDemoModeSetupForTesting();
   SimulateOfflineEnvironment();

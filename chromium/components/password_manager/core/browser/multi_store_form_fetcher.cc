@@ -38,20 +38,23 @@ void MultiStoreFormFetcher::Fetch() {
     need_to_refetch_ = true;
     return;
   }
-  // Issue a fetch from the profile password store using the base class
-  // FormFetcherImpl.
-  FormFetcherImpl::Fetch();
-  if (state_ == State::WAITING) {
-    // Fetching from the profile password store is in progress.
-    wait_counter_++;
-  }
 
-  // Issue a fetch from the account password store if available.
   PasswordStore* account_password_store = client_->GetAccountPasswordStore();
-  if (account_password_store) {
-    account_password_store->GetLogins(form_digest_, this);
-    state_ = State::WAITING;
+
+  // Issue a fetch from the profile store and, if it exists, also from the
+  // account store.
+  // Set up |wait_counter_| *before* triggering any of the fetches. This ensures
+  // that things work correctly (i.e. we don't notify of completion too early)
+  // even if the fetches return synchronously (which is the case in tests).
+  wait_counter_++;
+  if (account_password_store)
     wait_counter_++;
+
+  // Let the base class handle the fetch from the profile store.
+  FormFetcherImpl::Fetch();
+  if (account_password_store) {
+    state_ = State::WAITING;
+    account_password_store->GetLogins(form_digest_, this);
   }
 }
 
@@ -98,9 +101,34 @@ std::unique_ptr<FormFetcher> MultiStoreFormFetcher::Clone() {
 
 void MultiStoreFormFetcher::OnGetPasswordStoreResults(
     std::vector<std::unique_ptr<PasswordForm>> results) {
+  // This class overrides OnGetPasswordStoreResultsFrom() (the version of this
+  // method that also receives the originating store), so the store-less version
+  // never gets called.
+  NOTREACHED();
+}
+
+void MultiStoreFormFetcher::OnGetPasswordStoreResultsFrom(
+    scoped_refptr<PasswordStore> store,
+    std::vector<std::unique_ptr<PasswordForm>> results) {
   DCHECK_EQ(State::WAITING, state_);
   DCHECK_GT(wait_counter_, 0);
 
+  if (store.get() == client_->GetProfilePasswordStore() &&
+      should_migrate_http_passwords_ && results.empty() &&
+      form_digest_.url.SchemeIs(url::kHttpsScheme)) {
+    // TODO(crbug.com/1095556): Consider also supporting HTTP->HTTPS migration
+    // for the account store.
+    http_migrator_ = std::make_unique<HttpPasswordStoreMigrator>(
+        url::Origin::Create(form_digest_.url), client_, this);
+    // The migrator will call us back at ProcessMigratedForms().
+    return;
+  }
+
+  AggregatePasswordStoreResults(std::move(results));
+}
+
+void MultiStoreFormFetcher::AggregatePasswordStoreResults(
+    std::vector<std::unique_ptr<PasswordForm>> results) {
   // Store the results.
   for (auto& form : results)
     partial_results_.push_back(std::move(form));
@@ -123,6 +151,13 @@ void MultiStoreFormFetcher::OnGetPasswordStoreResults(
         .LogNumber(Logger::STRING_ON_GET_STORE_RESULTS_METHOD, results.size());
   }
   ProcessPasswordStoreResults(std::move(partial_results_));
+}
+
+void MultiStoreFormFetcher::ProcessMigratedForms(
+    std::vector<std::unique_ptr<PasswordForm>> forms) {
+  // The migration from HTTP to HTTPS (within the profile store) was finished.
+  // Continue processing with the migrated results.
+  AggregatePasswordStoreResults(std::move(forms));
 }
 
 void MultiStoreFormFetcher::SplitResults(

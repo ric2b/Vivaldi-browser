@@ -36,7 +36,6 @@ extern const char kChromeUIAutofillInternalsHost[];
 extern const char kChromeUIBluetoothInternalsHost[];
 extern const char kChromeUIBookmarksHost[];
 extern const char kChromeUIBookmarksURL[];
-extern const char kChromeUICameraHost[];
 extern const char kChromeUICertificateViewerHost[];
 extern const char kChromeUICertificateViewerURL[];
 extern const char kChromeUIChromeSigninHost[];
@@ -68,6 +67,7 @@ extern const char kChromeUIDownloadInternalsHost[];
 extern const char kChromeUIDownloadsHost[];
 extern const char kChromeUIDownloadsURL[];
 extern const char kChromeUIDriveInternalsHost[];
+extern const char kChromeUIEDUCoexistenceLoginURL[];
 extern const char kChromeUIExtensionIconHost[];
 extern const char kChromeUIExtensionIconURL[];
 extern const char kChromeUIExtensionsHost[];
@@ -89,19 +89,11 @@ extern const char kChromeUIHistoryURL[];
 extern const char kChromeUIIdentityInternalsHost[];
 extern const char kChromeUIInspectHost[];
 extern const char kChromeUIInspectURL[];
+extern const char kChromeUIInternalsHost[];
 extern const char kChromeUIInterstitialHost[];
 extern const char kChromeUIInterstitialURL[];
 extern const char kChromeUIInterventionsInternalsHost[];
 extern const char kChromeUIInvalidationsHost[];
-
-// |kChromeUIKaleidoscopeHost| and |kChromeUIKaleidoscopeContentHost| are used
-// in the public repo, so are defined here. We only use the URL constants in the
-// internal repo, but they are defined here to be near the host constants.
-extern const char kChromeUIKaleidoscopeHost[];
-extern const char kChromeUIKaleidoscopeURL[];
-extern const char kChromeUIKaleidoscopeContentHost[];
-extern const char kChromeUIKaleidoscopeContentURL[];
-
 extern const char kChromeUIKillHost[];
 extern const char kChromeUILocalStateHost[];
 extern const char kChromeUIManagementHost[];
@@ -149,6 +141,8 @@ extern const char kChromeUISigninEmailConfirmationHost[];
 extern const char kChromeUISigninEmailConfirmationURL[];
 extern const char kChromeUISigninErrorHost[];
 extern const char kChromeUISigninErrorURL[];
+extern const char kChromeUISigninReauthHost[];
+extern const char kChromeUISigninReauthURL[];
 extern const char kChromeUISiteDetailsPrefixURL[];
 extern const char kChromeUISiteEngagementHost[];
 extern const char kChromeUISuggestionsHost[];
@@ -171,7 +165,6 @@ extern const char kChromeUIThumbnailHost[];
 extern const char kChromeUIThumbnailListHost[];
 extern const char kChromeUIThumbnailURL[];
 extern const char kChromeUITranslateInternalsHost[];
-extern const char kChromeUIUkmHost[];
 extern const char kChromeUIUsbInternalsHost[];
 extern const char kChromeUIUserActionsHost[];
 extern const char kChromeUIVersionHost[];
@@ -195,6 +188,8 @@ extern const char kChromeUINativeHistoryURL[];
 extern const char kChromeUINativeNewTabURL[];
 extern const char kChromeUISnippetsInternalsHost[];
 extern const char kChromeUIWebApksHost[];
+#else
+extern const char kChromeUINearbyInternalsHost[];
 #endif  // defined(OS_ANDROID)
 
 #if defined(OS_CHROMEOS)
@@ -288,8 +283,12 @@ extern const char kChromeUIDiscardsURL[];
 extern const char kChromeUIHatsHost[];
 extern const char kChromeUIHatsURL[];
 extern const char kChromeUIProfilePickerHost[];
-
 #endif
+
+#if !defined(OS_ANDROID)
+extern const char kChromeUINearbyShareHost[];
+extern const char kChromeUINearbyShareURL[];
+#endif  // !defined(OS_CHROMEOS)
 
 #if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_ANDROID)
 extern const char kChromeUILinuxProxyConfigHost[];
@@ -316,6 +315,11 @@ extern const char kChromeUIPrintHost[];
 #if BUILDFLAG(ENABLE_WEBUI_TAB_STRIP)
 extern const char kChromeUITabStripHost[];
 extern const char kChromeUITabStripURL[];
+#endif
+
+#if !defined(OS_ANDROID)
+extern const char kChromeUITabSearchHost[];
+extern const char kChromeUITabSearchURL[];
 #endif
 
 extern const char kChromeUIWebRtcLogsHost[];

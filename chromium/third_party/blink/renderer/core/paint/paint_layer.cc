@@ -164,7 +164,6 @@ PaintLayer::PaintLayer(LayoutBoxModelObject& layout_object)
       previous_paint_result_(kFullyPainted),
       needs_paint_phase_descendant_outlines_(false),
       needs_paint_phase_float_(false),
-      has_descendant_with_clip_path_(false),
       has_non_isolated_descendant_with_blend_mode_(false),
       has_fixed_position_descendant_(false),
       has_sticky_position_descendant_(false),
@@ -564,7 +563,8 @@ void PaintLayer::MapPointInPaintInvalidationContainerToBacking(
     return;
 
   GraphicsLayer* squashing_layer =
-      paint_invalidation_layer->GroupedMapping()->SquashingLayer();
+      paint_invalidation_layer->GroupedMapping()->SquashingLayer(
+          *paint_invalidation_layer);
 
   PropertyTreeState source_state =
       paint_invalidation_container.FirstFragment().LocalBorderBoxProperties();
@@ -578,31 +578,6 @@ void PaintLayer::MapPointInPaintInvalidationContainerToBacking(
                                                     dest_state.Transform())
           .MapPoint(FloatPoint(point)));
   point -= PhysicalOffset(squashing_layer->GetOffsetFromTransformNode());
-}
-
-void PaintLayer::MapQuadInPaintInvalidationContainerToBacking(
-    const LayoutBoxModelObject& paint_invalidation_container,
-    FloatQuad& quad) {
-  PaintLayer* paint_invalidation_layer = paint_invalidation_container.Layer();
-  if (!paint_invalidation_layer->GroupedMapping())
-    return;
-
-  GraphicsLayer* squashing_layer =
-      paint_invalidation_layer->GroupedMapping()->SquashingLayer();
-
-  PropertyTreeState source_state =
-      paint_invalidation_container.FirstFragment().LocalBorderBoxProperties();
-  PropertyTreeState dest_state = squashing_layer->GetPropertyTreeState();
-
-  // Move the rect into the source_state transform space, map to dest_state
-  // transform space, then move into squashing layer state.
-  quad.Move(
-      FloatSize(paint_invalidation_container.FirstFragment().PaintOffset()));
-  GeometryMapper::SourceToDestinationProjection(source_state.Transform(),
-                                                dest_state.Transform())
-      .MapQuad(quad);
-  quad.Move(
-      -ToFloatSize(FloatPoint(squashing_layer->GetOffsetFromTransformNode())));
 }
 
 void PaintLayer::DirtyVisibleContentStatus() {
@@ -637,7 +612,6 @@ void PaintLayer::UpdateDescendantDependentFlags() {
         has_non_isolated_descendant_with_blend_mode_;
     has_visible_descendant_ = false;
     has_non_isolated_descendant_with_blend_mode_ = false;
-    has_descendant_with_clip_path_ = false;
     has_fixed_position_descendant_ = false;
     has_sticky_position_descendant_ = false;
     has_non_contained_absolute_position_descendant_ = false;
@@ -667,12 +641,9 @@ void PaintLayer::UpdateDescendantDependentFlags() {
         has_visible_descendant_ = true;
 
       has_non_isolated_descendant_with_blend_mode_ |=
-          (!child_style.IsStackingContext() &&
+          (!child->GetLayoutObject().IsStackingContext() &&
            child->HasNonIsolatedDescendantWithBlendMode()) ||
           child_style.HasBlendMode();
-
-      has_descendant_with_clip_path_ |= child->HasDescendantWithClipPath() ||
-                                        child->GetLayoutObject().HasClipPath();
 
       has_fixed_position_descendant_ |=
           child->HasFixedPositionDescendant() ||
@@ -688,9 +659,9 @@ void PaintLayer::UpdateDescendantDependentFlags() {
       }
 
       if (!has_stacked_descendant_in_current_stacking_context_) {
-        if (child_style.IsStacked()) {
+        if (child->GetLayoutObject().IsStacked()) {
           has_stacked_descendant_in_current_stacking_context_ = true;
-        } else if (!child_style.IsStackingContext()) {
+        } else if (!child->GetLayoutObject().IsStackingContext()) {
           has_stacked_descendant_in_current_stacking_context_ =
               child->has_stacked_descendant_in_current_stacking_context_;
         }
@@ -959,7 +930,7 @@ PhysicalOffset PaintLayer::ComputeOffsetFromAncestor(
 PaintLayer* PaintLayer::CompositingContainer() const {
   if (IsReplacedNormalFlowStacking())
     return Parent();
-  if (!GetLayoutObject().StyleRef().IsStacked()) {
+  if (!GetLayoutObject().IsStacked()) {
     if (IsSelfPaintingLayer() || GetLayoutObject().IsColumnSpanAll())
       return Parent();
     return ContainingLayer();
@@ -970,7 +941,7 @@ PaintLayer* PaintLayer::CompositingContainer() const {
 PaintLayer* PaintLayer::AncestorStackingContext() const {
   for (PaintLayer* ancestor = Parent(); ancestor;
        ancestor = ancestor->Parent()) {
-    if (ancestor->GetLayoutObject().StyleRef().IsStackingContext())
+    if (ancestor->GetLayoutObject().IsStackingContext())
       return ancestor;
   }
   return nullptr;
@@ -1046,6 +1017,11 @@ void PaintLayer::SetNeedsCompositingInputsUpdate(bool mark_ancestor_flags) {
   /// removal of CompositingInputsUpdater.
   if (mark_ancestor_flags)
     MarkAncestorChainForFlagsUpdate(NeedsDescendantDependentUpdate);
+}
+
+void PaintLayer::SetNeedsGraphicsLayerRebuild() {
+  if (Compositor())
+    Compositor()->SetNeedsCompositingUpdate(kCompositingUpdateRebuildTree);
 }
 
 void PaintLayer::SetNeedsVisualOverflowRecalc() {
@@ -1228,14 +1204,13 @@ void PaintLayer::AddChild(PaintLayer* child, PaintLayer* before_child) {
 
   SetNeedsCompositingInputsUpdate();
 
-  const ComputedStyle& child_style = child->GetLayoutObject().StyleRef();
-
   if (Compositor()) {
-    if (!child_style.IsStacked() && !GetLayoutObject().DocumentBeingDestroyed())
+    if (!child->GetLayoutObject().IsStacked() &&
+        !GetLayoutObject().DocumentBeingDestroyed())
       Compositor()->SetNeedsCompositingUpdate(kCompositingUpdateRebuildTree);
   }
 
-  if (child_style.IsStacked() || child->FirstChild()) {
+  if (child->GetLayoutObject().IsStacked() || child->FirstChild()) {
     // Dirty the z-order list in which we are contained. The
     // ancestorStackingContextNode() can be null in the case where we're
     // building up generated content layers. This is ok, since the lists will
@@ -1273,12 +1248,9 @@ void PaintLayer::RemoveChild(PaintLayer* old_child) {
   if (last_ == old_child)
     last_ = old_child->PreviousSibling();
 
-  const ComputedStyle& old_child_style =
-      old_child->GetLayoutObject().StyleRef();
-
   if (!GetLayoutObject().DocumentBeingDestroyed()) {
     if (Compositor()) {
-      if (!old_child_style.IsStacked())
+      if (!old_child->GetLayoutObject().IsStacked())
         Compositor()->SetNeedsCompositingUpdate(kCompositingUpdateRebuildTree);
 
       if (Compositor()->GetCompositingInputsRoot() == old_child)
@@ -1317,7 +1289,7 @@ void PaintLayer::RemoveOnlyThisLayerAfterStyleChange(
   if (!parent_)
     return;
 
-  if (old_style && old_style->IsStacked())
+  if (old_style && GetLayoutObject().IsStacked(*old_style))
     DirtyStackingContextZOrderLists();
 
   bool did_set_paint_invalidation = false;
@@ -1392,10 +1364,10 @@ void PaintLayer::InsertOnlyThisLayerAfterStyleChange() {
   bool did_set_paint_invalidation = false;
   if (!RuntimeEnabledFeatures::CompositeAfterPaintEnabled() &&
       !IsA<LayoutView>(GetLayoutObject()) && GetLayoutObject().IsRooted() &&
-      GetLayoutObject().StyleRef().IsStacked()) {
+      GetLayoutObject().IsStacked()) {
     const LayoutBoxModelObject& previous_paint_invalidation_container =
         GetLayoutObject().Parent()->ContainerForPaintInvalidation();
-    if (!previous_paint_invalidation_container.StyleRef().IsStackingContext()) {
+    if (!previous_paint_invalidation_container.IsStackingContext()) {
       ObjectPaintInvalidator(GetLayoutObject())
           .InvalidatePaintIncludingNonSelfPaintingLayerDescendants();
       // Set needsRepaint along the original compositingContainer chain.
@@ -1527,7 +1499,7 @@ void PaintLayer::UpdateStackingNode() {
 
   bool needs_stacking_node =
       has_stacked_descendant_in_current_stacking_context_ &&
-      GetLayoutObject().StyleRef().IsStackingContext();
+      GetLayoutObject().IsStackingContext();
 
   if (needs_stacking_node != !!stacking_node_) {
     if (needs_stacking_node)
@@ -2356,7 +2328,10 @@ bool PaintLayer::IsReplacedNormalFlowStacking() const {
 
 void PaintLayer::SetNeedsCompositingLayerAssignment() {
   needs_compositing_layer_assignment_ = true;
+  PropagateDescendantNeedsCompositingLayerAssignment();
+}
 
+void PaintLayer::PropagateDescendantNeedsCompositingLayerAssignment() {
   for (PaintLayer* curr = CompositingContainer();
        curr && !curr->StackingDescendantNeedsCompositingLayerAssignment();
        curr = curr->CompositingContainer()) {
@@ -2595,9 +2570,9 @@ PhysicalRect PaintLayer::BoundingBoxForCompositingOverlapTest() const {
         style.BackdropFilter().MapRect(FloatRect(bounding_box)));
   }
 
-  if (base::FeatureList::IsEnabled(features::kMaxOverlapBoundsForFixed) &&
-      !bounding_box.IsEmpty()) {
-    if (FixedToViewport()) {
+  if (FixedToViewport()) {
+    if (base::FeatureList::IsEnabled(features::kMaxOverlapBoundsForFixed) &&
+        !bounding_box.IsEmpty()) {
       DCHECK_EQ(style.GetPosition(), EPosition::kFixed);
       // Note that we only expand the bounding box for overlap testing when the
       // fixed's containing block is the viewport. This keeps us from expanding
@@ -2786,7 +2761,7 @@ GraphicsLayer* PaintLayer::GraphicsLayerBacking(const LayoutObject* obj) const {
     case kNotComposited:
       return nullptr;
     case kPaintsIntoGroupedBacking:
-      return GroupedMapping()->SquashingLayer();
+      return GroupedMapping()->SquashingLayer(*this);
     default:
       return (obj != &GetLayoutObject() &&
               GetCompositedLayerMapping()->ScrollingContentsLayer())
@@ -2848,13 +2823,13 @@ void PaintLayer::SetGroupedMapping(CompositedLayerMapping* grouped_mapping,
   if (options == kInvalidateLayerAndRemoveFromMapping && old_grouped_mapping) {
     old_grouped_mapping->SetNeedsGraphicsLayerUpdate(
         kGraphicsLayerUpdateSubtree);
-    old_grouped_mapping->RemoveLayerFromSquashingGraphicsLayer(this);
+    old_grouped_mapping->RemoveLayerFromSquashingGraphicsLayer(*this);
   }
   if (rare_data_ || grouped_mapping)
     EnsureRareData().grouped_mapping = grouped_mapping;
 #if DCHECK_IS_ON()
-  DCHECK(!grouped_mapping ||
-         grouped_mapping->VerifyLayerInSquashingVector(this));
+  if (grouped_mapping)
+    grouped_mapping->AssertInSquashedLayersVector(*this);
 #endif
   if (options == kInvalidateLayerAndRemoveFromMapping && grouped_mapping)
     grouped_mapping->SetNeedsGraphicsLayerUpdate(kGraphicsLayerUpdateSubtree);
@@ -2896,7 +2871,7 @@ bool PaintLayer::SupportsSubsequenceCaching() const {
     return false;
 
   // Create subsequence for only stacking contexts whose painting are atomic.
-  return GetLayoutObject().StyleRef().IsStackingContext();
+  return GetLayoutObject().IsStackingContext();
 }
 
 ScrollingCoordinator* PaintLayer::GetScrollingCoordinator() {
@@ -3431,20 +3406,22 @@ void PaintLayer::SetSelfNeedsRepaint() {
 }
 
 void PaintLayer::MarkCompositingContainerChainForNeedsRepaint() {
-  // Need to access compositingState(). We've ensured correct flag setting when
-  // compositingState() changes.
-  DisableCompositingQueryAsserts disabler;
 
   PaintLayer* layer = this;
   while (true) {
-    if (layer->GetCompositingState() == kPaintsIntoOwnBacking)
-      return;
-    if (CompositedLayerMapping* grouped_mapping = layer->GroupedMapping()) {
-      // TODO(wkorman): As we clean up the CompositedLayerMapping needsRepaint
-      // logic to delegate to scrollbars, we may be able to remove the line
-      // below as well.
-      grouped_mapping->OwningLayer().SetNeedsRepaint();
-      return;
+    if (!RuntimeEnabledFeatures::CompositeAfterPaintEnabled()) {
+      // Need to access compositingState(). We've ensured correct flag setting
+      // when compositingState() changes.
+      DisableCompositingQueryAsserts disabler;
+      if (layer->GetCompositingState() == kPaintsIntoOwnBacking)
+        return;
+      if (CompositedLayerMapping* grouped_mapping = layer->GroupedMapping()) {
+        // TODO(wkorman): As we clean up the CompositedLayerMapping needsRepaint
+        // logic to delegate to scrollbars, we may be able to remove the line
+        // below as well.
+        grouped_mapping->OwningLayer().SetNeedsRepaint();
+        return;
+      }
     }
 
     // For a non-self-painting layer having self-painting descendant, the
@@ -3537,17 +3514,22 @@ void PaintLayer::DirtyStackingContextZOrderLists() {
 }
 
 DisableCompositingQueryAsserts::DisableCompositingQueryAsserts()
-    : disabler_(&g_compositing_query_mode, kCompositingQueriesAreAllowed) {}
+    : disabler_(&g_compositing_query_mode, kCompositingQueriesAreAllowed) {
+  DCHECK(!RuntimeEnabledFeatures::CompositeAfterPaintEnabled());
+}
 
 }  // namespace blink
 
 #if DCHECK_IS_ON()
 void showLayerTree(const blink::PaintLayer* layer) {
-  blink::DisableCompositingQueryAsserts disabler;
   if (!layer) {
     LOG(ERROR) << "Cannot showLayerTree. Root is (nil)";
     return;
   }
+
+  base::Optional<blink::DisableCompositingQueryAsserts> disabler;
+  if (!blink::RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
+    disabler.emplace();
 
   if (blink::LocalFrame* frame = layer->GetLayoutObject().GetFrame()) {
     WTF::String output =

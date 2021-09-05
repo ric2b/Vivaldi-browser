@@ -3,8 +3,7 @@
 // found in the LICENSE file.
 
 import {assert} from 'chrome://resources/js/assert.m.js';
-
-import {PluralStringProxyImpl} from '../plural_string_proxy.js';
+import {PluralStringProxyImpl} from 'chrome://resources/js/plural_string_proxy.js';
 
 import {PasswordManagerImpl, PasswordManagerProxy} from './password_manager_proxy.js';
 
@@ -42,6 +41,15 @@ export const PasswordCheckBehavior = {
       type: Object,
       value: () => ({state: chrome.passwordsPrivate.PasswordCheckState.IDLE}),
     },
+
+    /**
+     * Stores whether the status was fetched from the backend.
+     * @type {boolean}
+     */
+    isInitialStatus: {
+      type: Boolean,
+      value: true,
+    },
   },
 
   /**
@@ -59,7 +67,10 @@ export const PasswordCheckBehavior = {
 
   /** @override */
   attached() {
-    this.statusChangedListener_ = status => this.status = status;
+    this.statusChangedListener_ = status => {
+      this.status = status;
+      this.isInitialStatus = false;
+    };
     this.leakedCredentialsListener_ = compromisedCredentials => {
       this.updateCompromisedPasswordList(compromisedCredentials);
 
@@ -118,13 +129,13 @@ export const PasswordCheckBehavior = {
       // Phished passwords are always shown above leaked passwords.
       const isPhished = cred =>
           cred.compromiseType !== chrome.passwordsPrivate.CompromiseType.LEAKED;
-      if (isPhished(lhs) != isPhished(rhs)) {
+      if (isPhished(lhs) !== isPhished(rhs)) {
         return isPhished(lhs) ? -1 : 1;
       }
 
       // Sort by time only if the displayed elapsed time since compromise is
       // different.
-      if (lhs.elapsedTimeSinceCompromise != rhs.elapsedTimeSinceCompromise) {
+      if (lhs.elapsedTimeSinceCompromise !== rhs.elapsedTimeSinceCompromise) {
         return rhs.compromiseTime - lhs.compromiseTime;
       }
 

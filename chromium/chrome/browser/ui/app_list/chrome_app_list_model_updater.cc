@@ -121,22 +121,6 @@ void ChromeAppListModelUpdater::SetSearchEngineIsGoogle(bool is_google) {
     app_list_controller_->SetSearchEngineIsGoogle(is_google);
 }
 
-void ChromeAppListModelUpdater::SetSearchTabletAndClamshellAccessibleName(
-    const base::string16& tablet_accessible_name,
-    const base::string16& clamshell_accessible_name) {
-  if (!app_list_controller_)
-    return;
-  app_list_controller_->SetSearchTabletAndClamshellAccessibleName(
-      tablet_accessible_name, clamshell_accessible_name);
-}
-
-void ChromeAppListModelUpdater::SetSearchHintText(
-    const base::string16& hint_text) {
-  if (!app_list_controller_)
-    return;
-  app_list_controller_->SetSearchHintText(hint_text);
-}
-
 void ChromeAppListModelUpdater::UpdateSearchBox(const base::string16& text,
                                                 bool initiated_by_user) {
   if (!app_list_controller_)
@@ -146,6 +130,7 @@ void ChromeAppListModelUpdater::UpdateSearchBox(const base::string16& text,
 
 void ChromeAppListModelUpdater::PublishSearchResults(
     const std::vector<ChromeSearchResult*>& results) {
+  published_results_ = results;
   for (auto* const result : results)
     result->set_model_updater(this);
   if (!app_list_controller_)
@@ -154,6 +139,11 @@ void ChromeAppListModelUpdater::PublishSearchResults(
   for (auto* result : results)
     result_data.push_back(result->CloneMetadata());
   app_list_controller_->PublishSearchResults(std::move(result_data));
+}
+
+std::vector<ChromeSearchResult*>
+ChromeAppListModelUpdater::GetPublishedSearchResultsForTest() {
+  return published_results_;
 }
 
 void ChromeAppListModelUpdater::ActivateChromeItem(const std::string& id,

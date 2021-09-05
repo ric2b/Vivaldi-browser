@@ -15,6 +15,8 @@ import "services/network/public/mojom/fetch_api.mojom";
 import "services/network/public/mojom/web_sandbox_flags.mojom";
 import "skia/public/mojom/skcolor.mojom";
 import "third_party/blink/public/mojom/ad_tagging/ad_frame.mojom";
+import "third_party/blink/public/mojom/blob/blob.mojom";
+import "third_party/blink/public/mojom/blob/blob_url_store.mojom";
 import "third_party/blink/public/mojom/messaging/transferable_message.mojom";
 import "third_party/blink/public/mojom/choosers/popup_menu.mojom";
 import "third_party/blink/public/mojom/devtools/console_message.mojom";
@@ -46,6 +48,22 @@ import "url/mojom/url.mojom";
 [EnableIf=is_mac]
 import "ui/gfx/range/mojom/range.mojom";
 
+// Information about a subframe being saved as "complete html".
+struct SavableSubframe {
+  // Original url of the subframe (i.e. based the parent's html sources).
+  url.mojom.Url original_url;
+
+  // The unique identifier of the RenderFrameHost or RenderFrameProxy for the
+  // subframe.
+  mojo_base.mojom.UnguessableToken subframe_token;
+};
+
+struct GetSavableResourceLinksReply {
+  array<url.mojom.Url> resources_list;
+  blink.mojom.Referrer referrer;
+  array<SavableSubframe> subframes;
+};
+
 struct FindInPageResultAXParams {
   // The find in page request id.
   int32 request_id;
@@ -76,10 +94,10 @@ struct DownloadURLParams {
   network.mojom.RedirectMode cross_origin_redirects;
 
   // Non-null when |url| is for "blob:".
-  handle<message_pipe>? blob_url_token;
+  pending_remote<BlobURLToken>? blob_url_token;
 
   // Non-null when |url| is for "data:", eg. when saving an image.
-  handle<message_pipe>? data_url_blob;
+  pending_remote<Blob>? data_url_blob;
 };
 
 // Actions browser can ask renderer to perform on a Plugin.
@@ -159,9 +177,10 @@ interface LocalFrameHost {
   // in order to service IntersectionObserver's that track visibility.
   SetNeedsOcclusionTracking(bool needs_tracking);
 
-  // Notifies the browser that the current frame has changed its lifecycle
-  // state.
-  LifecycleStateChanged(blink.mojom.FrameLifecycleState state);
+  // Indication that the associated frame would like to change the policy on
+  // whether or not the virtual keyboard should overlay content (vs. default
+  // behavior of 'shifting' the content via insets and a scrollIntoView).
+  SetVirtualKeyboardOverlayPolicy(bool vk_overlays_content);
 
   // Evicts the page from the back/forward cache due to e.g., JavaScript
   // execution.
@@ -185,6 +204,10 @@ interface LocalFrameHost {
 
   // Sent by the renderer when the associated frame becomes focused.
   DidFocusFrame();
+
+  // Called to notify the browser process counterpart of this local frame that
+  // |window.focus()| on a page has been invoked in the renderer process.
+  DidCallFocus();
 
   // Notifies the browser process about a new Content Security Policy that needs
   // to be applies to the frame. This message is sent when a frame commits
@@ -377,6 +400,17 @@ interface LocalFrameHost {
   DidChangeFrameOwnerProperties(
     mojo_base.mojom.UnguessableToken child_frame_token,
     blink.mojom.FrameOwnerProperties frame_owner_properties);
+
+  // Sent when a local renderer frame either updates its opener to another
+  // frame identified by |opener_frame|, or, if |opener_frame| // is "empty",
+  // the frame disowns its opener for the lifetime of the window.
+  DidChangeOpener(mojo_base.mojom.UnguessableToken? opener_frame);
+
+  // Notifies the browser that sandbox flags or container policy have changed
+  // for a subframe of this frame.
+  DidChangeFramePolicy(
+      mojo_base.mojom.UnguessableToken child_frame_token,
+      blink.mojom.FramePolicy frame_policy);
 };
 
 // Implemented in Blink, this interface defines frame-specific methods that will
@@ -410,6 +444,10 @@ interface LocalFrame {
   // Notifies the RenderFrame about a user activation detected in the browser
   // side (e.g. during Android voice search).
   NotifyUserActivation();
+
+  // Notifies the |LocalFrame| about the Virtual keyboard rectangle that is occluding the web
+  // content.
+  NotifyVirtualKeyboardOverlayRect(gfx.mojom.Rect keyboard_rect);
 
   // Add message to the frame console.
   AddMessageToConsole(ConsoleMessageLevel level, string message,
@@ -535,6 +573,14 @@ interface LocalFrame {
   // Binds |receiver| to the document of this frame.
   BindReportingObserver(
       pending_receiver<blink.mojom.ReportingObserver> receiver);
+
+  // Requests that the blink::LocalFrame updates its opener to the specified
+  // frame. The frame token may be "empty" if the opener was disowned.
+  UpdateOpener(mojo_base.mojom.UnguessableToken? opener_frame_token);
+
+  // Request to enumerate and return links to all savable resources in the frame
+  // Note: this covers only the immediate frame / doesn't cover subframes.
+  GetSavableResourceLinks() => (GetSavableResourceLinksReply? reply);
 };
 
 // Implemented in Browser, this interface defines frame-specific methods that
@@ -585,6 +631,35 @@ interface RemoteFrameHost {
   //
   // https://html.spec.whatwg.org/multipage/interaction.html#inert
   SetIsInert(bool inert);
+
+  // Sent when a renderer remote frame either updates its opener to another
+  // frame identified by |opener_frame|, or, if |opener_frame| is "empty",
+  // the frame disowns its opener for the lifetime of the window.
+  DidChangeOpener(mojo_base.mojom.UnguessableToken? opener_frame);
+
+  // This message is sent from a RemoteFrame when sequential focus navigation
+  // needs to advance into its actual frame. |source_frame_token| identifies the
+  // frame that issued this request.  This is used when pressing <tab> or
+  // <shift-tab> hits an out-of-process iframe when searching for the next
+  // focusable element.
+  AdvanceFocus(blink.mojom.FocusType focus_type,
+               mojo_base.mojom.UnguessableToken source_frame_token);
+
+  // Sent to the browser to post a message to the frame's active renderer, which
+  // will receive the re-routed message from the browser process via the method
+  // PostMessageEvent(), from the blink.mojom.LocalFrame interface.
+  // |source_frame_token| is the frame token of the LocalFrame in the renderer
+  // process originating the request, which will be translated by the browser
+  // process to the frame token of the equivalent RemoteFrame in the target
+  // renderer process.
+  // |source_origin| is the origin of the source frame when the message was
+  // sent, |target_origin| specifies what the origin of the target frame must be
+  // for the message to be dispatched and |message| is the encoded data, plus
+  // any extra properties such as transferred ports or blobs.
+  RouteMessageEvent(mojo_base.mojom.UnguessableToken? source_frame_token,
+                    mojo_base.mojom.String16 source_origin,
+                    mojo_base.mojom.String16 target_origin,
+                    blink.mojom.TransferableMessage message);
 };
 
 // Implemented in Blink, this interface defines frame-specific methods that will
@@ -714,6 +789,14 @@ interface RemoteFrame {
   // Notifies the frame that its parent has changed the frame's sandbox flags or
   // container policy.
   DidUpdateFramePolicy(blink.mojom.FramePolicy frame_policy);
+
+  // Requests that the blink::RemoteFrame updates its opener to the specified
+  // frame. The frame token may be "empty" if the opener was disowned.
+  UpdateOpener(mojo_base.mojom.UnguessableToken? opener_frame_token);
+
+  // Transfers user activation state from the source frame to the current frame.
+  TransferUserActivationToRenderer(
+      mojo_base.mojom.UnguessableToken source_frame_token);
 };
 
 // Implemented in Blink, this interface defines main-frame-specific methods that
@@ -751,8 +834,8 @@ interface LocalMainFrame {
   ZoomToFindInPageRect(gfx.mojom.Rect rect_in_root_frame);
 };
 
-// Implemented in Browser, this interface defines main-frame-specific methods
-// that will be invoked from the renderer process (e.g. WebViewImpl).
+// Implemented in Browser, this interface defines local-main-frame-specific
+// methods that will be invoked from the renderer process (e.g. WebViewImpl).
 interface LocalMainFrameHost {
   // Indicates the scale of the view has changed.
   ScaleFactorChanged(float scale);
@@ -765,4 +848,14 @@ interface LocalMainFrameHost {
   // browser will share this information with other renderers that have frames
   // in the page.
   TextAutosizerPageInfoChanged(TextAutosizerPageInfo page_info);
+
+  // Asks the browser process to activate the page associated to the main frame.
+  FocusPage();
+};
+
+// Implemented in Browser, this interface defines remote-main-frame-specific
+// methods that will be invoked from the renderer process (e.g. WebViewImpl).
+interface RemoteMainFrameHost {
+  // Asks the browser process to activate the page associated to the main frame.
+  FocusPage();
 };

@@ -301,7 +301,7 @@ class NET_EXPORT_PRIVATE SpdyStream {
   void OnClose(int status);
 
   // Called by the SpdySession to log stream related errors.
-  void LogStreamError(int error, const std::string& description);
+  void LogStreamError(int error, base::StringPiece description);
 
   // If this stream is active, reset it, and close it otherwise. In
   // either case the stream is deleted.
@@ -515,6 +515,8 @@ class NET_EXPORT_PRIVATE SpdyStream {
   base::TimeTicks send_time_;
   base::TimeTicks recv_first_byte_time_;
   base::TimeTicks recv_last_byte_time_;
+  // The time at which the first 103 Early Hints response is received.
+  base::TimeTicks first_early_hints_time_;
 
   // Number of bytes that have been received on this stream, including frame
   // overhead and headers.

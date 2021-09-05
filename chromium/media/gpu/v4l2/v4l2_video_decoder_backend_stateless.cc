@@ -559,7 +559,7 @@ void V4L2StatelessVideoDecoderBackend::OnChangeResolutionDone(bool success) {
                                 weak_this_));
 }
 
-void V4L2StatelessVideoDecoderBackend::OnStreamStopped() {
+void V4L2StatelessVideoDecoderBackend::OnStreamStopped(bool stop_input_queue) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DVLOGF(3);
 
@@ -601,6 +601,10 @@ void V4L2StatelessVideoDecoderBackend::ClearPendingRequests(
     decode_request_queue_.pop();
     std::move(request.decode_cb).Run(status);
   }
+}
+
+bool V4L2StatelessVideoDecoderBackend::StopInputQueueOnResChange() const {
+  return true;
 }
 
 bool V4L2StatelessVideoDecoderBackend::IsSupportedProfile(

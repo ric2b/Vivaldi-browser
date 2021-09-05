@@ -828,7 +828,6 @@ void ShelfWidget::CalculateTargetBounds() {
 
   target_bounds_ =
       gfx::Rect(shelf_origin.x(), shelf_origin.y(), shelf_width, shelf_height);
-  screen_util::SnapBoundsToDisplayEdge(target_bounds_, GetNativeWindow());
 }
 
 void ShelfWidget::UpdateLayout(bool animate) {
@@ -862,7 +861,8 @@ void ShelfWidget::UpdateLayout(bool animate) {
   shelf_widget_target_transform.Translate(current_shelf_bounds.origin() -
                                           GetTargetBounds().origin());
   GetLayer()->SetTransform(shelf_widget_target_transform);
-  SetBounds(target_bounds_);
+  SetBounds(
+      screen_util::SnapBoundsToDisplayEdge(target_bounds_, GetNativeWindow()));
 
   {
     ui::ScopedLayerAnimationSettings shelf_animation_setter(
@@ -898,6 +898,10 @@ void ShelfWidget::UpdateTargetBoundsForGesture(int shelf_position) {
   } else {
     target_bounds_.set_x(shelf_position);
   }
+}
+
+void ShelfWidget::HandleLocaleChange() {
+  login_shelf_view_->HandleLocaleChange();
 }
 
 gfx::Rect ShelfWidget::GetTargetBounds() const {
@@ -1006,7 +1010,8 @@ void ShelfWidget::OnGestureEvent(ui::GestureEvent* event) {
 
   // Tap on in-app shelf should show a contextual nudge for in-app to home
   // gesture.
-  if (event->type() == ui::ET_GESTURE_TAP && ShelfConfig::Get()->is_in_app()) {
+  if (event->type() == ui::ET_GESTURE_TAP && ShelfConfig::Get()->is_in_app() &&
+      features::AreContextualNudgesEnabled()) {
     if (delegate_view_->drag_handle()->MaybeShowDragHandleNudge()) {
       event->StopPropagation();
       return;

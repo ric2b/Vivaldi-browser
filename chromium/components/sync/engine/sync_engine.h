@@ -151,11 +151,6 @@ class SyncEngine : public ModelTypeConfigurer {
   // Turns on encryption of all present and future sync data.
   virtual void EnableEncryptEverything() = 0;
 
-  // Obtain a handle to the UserShare needed for creating transactions. Should
-  // not be called before we signal initialization is complete with
-  // OnBackendInitialized().
-  virtual UserShare* GetUserShare() const = 0;
-
   // Returns current detailed status information.
   virtual const SyncStatus& GetDetailedStatus() const = 0;
 
@@ -167,9 +162,6 @@ class SyncEngine : public ModelTypeConfigurer {
 
 
   virtual void GetModelSafeRoutingInfo(ModelSafeRoutingInfo* out) const = 0;
-
-  // Send a message to the sync thread to persist the Directory to disk.
-  virtual void FlushDirectory() const = 0;
 
   // Requests that the backend forward to the fronent any protocol events in
   // its buffer and begin forwarding automatically from now on.  Repeated calls

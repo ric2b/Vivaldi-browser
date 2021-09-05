@@ -10,8 +10,10 @@
 #include <utility>
 
 #include "base/files/file_path.h"
+#include "components/autofill/core/browser/proto/api_v1.pb.h"
 #include "components/autofill/core/browser/proto/server.pb.h"
 #include "content/public/test/url_loader_interceptor.h"
+#include "third_party/protobuf/src/google/protobuf/stubs/statusor.h"
 
 namespace autofill {
 namespace test {
@@ -27,17 +29,78 @@ std::pair<std::string, std::string> SplitHTTP(const std::string& http_text);
 // components/autofill/core/browser/autofill_download_manager.cc
 std::ostream& operator<<(std::ostream& out,
                          const autofill::AutofillQueryContents& query);
+std::ostream& operator<<(std::ostream& out,
+                         const autofill::AutofillPageQueryRequest& query);
 
 // Streams in text format. For consistency, taken from anonymous namespace in
 // components/autofill/core/browser/form_structure.cc
 std::ostream& operator<<(
     std::ostream& out,
     const autofill::AutofillQueryResponseContents& response);
+std::ostream& operator<<(std::ostream& out,
+                         const autofill::AutofillQueryResponse& response);
+enum class RequestType {
+  kQueryProtoGET,
+  kQueryProtoPOST,
+  kNone,
+};
+
+class LegacyEnv {
+ public:
+  using Query = AutofillQueryContents;
+  using Response = AutofillQueryResponseContents;
+};
+
+class ApiEnv {
+ public:
+  using Query = AutofillPageQueryRequest;
+  using Response = AutofillQueryResponse;
+};
 
 // Gets a key from a given query request.
-std::string GetKeyFromQueryRequest(const AutofillQueryContents& query_request);
+template <typename Env>
+std::string GetKeyFromQuery(const typename Env::Query& query_request);
+template <>
+std::string GetKeyFromQuery<LegacyEnv>(const LegacyEnv::Query& query_request);
+template <>
+std::string GetKeyFromQuery<ApiEnv>(const ApiEnv::Query& query_request);
 
-enum class RequestType { kLegacyQueryProtoGET, kLegacyQueryProtoPOST };
+template <typename Env>
+bool GetResponseForQuery(const ServerCache& cache,
+                         const typename Env::Query& query,
+                         std::string* http_text);
+template <>
+bool GetResponseForQuery<LegacyEnv>(const ServerCache& cache,
+                                    const typename LegacyEnv::Query& query,
+                                    std::string* http_text);
+template <>
+bool GetResponseForQuery<ApiEnv>(const ServerCache& cache,
+                                 const typename ApiEnv::Query& query,
+                                 std::string* http_text);
+
+// Conversion between different versions of queries.
+template <typename ReadEnv, typename WriteEnv>
+typename WriteEnv::Query ConvertQuery(const typename ReadEnv::Query& in);
+template <>
+typename ApiEnv::Query ConvertQuery<LegacyEnv, ApiEnv>(
+    const typename LegacyEnv::Query& in);
+template <>
+typename LegacyEnv::Query ConvertQuery<ApiEnv, LegacyEnv>(
+    const typename ApiEnv::Query& in);
+
+// Conversion between different versions of responses.
+template <typename ReadEnv, typename WriteEnv>
+typename WriteEnv::Response ConvertResponse(
+    const typename ReadEnv::Response& in,
+    const typename ReadEnv::Query& query);
+template <>
+typename ApiEnv::Response ConvertResponse<LegacyEnv, ApiEnv>(
+    const typename LegacyEnv::Response& in,
+    const typename LegacyEnv::Query& query);
+template <>
+typename LegacyEnv::Response ConvertResponse<ApiEnv, LegacyEnv>(
+    const typename ApiEnv::Response& in,
+    const typename ApiEnv::Query& query);
 
 // Switch `--autofill-server-type` is used to override the default behavior of
 // using the cached responses from the wpr archive. The valid values match the
@@ -51,6 +114,8 @@ enum class AutofillServerBehaviorType {
 };
 // Check for command line flags to determine Autofill Server Behavior type.
 AutofillServerBehaviorType ParseAutofillServerBehaviorType();
+// The type of server that shall be emulated.
+enum class AutofillServerType { kLegacy, kApi };
 
 // Replayer for Autofill Server cache. Can be used in concurrency.
 class ServerCacheReplayer {
@@ -84,7 +149,10 @@ class ServerCacheReplayer {
   // }
   // You can set the replayer's behavior by setting |options| with a mix of
   // Options. Will crash if there is a failure when loading the cache.
-  ServerCacheReplayer(const base::FilePath& json_file_path, int options);
+  ServerCacheReplayer(
+      const base::FilePath& json_file_path,
+      int options,
+      AutofillServerType server_type = AutofillServerType::kLegacy);
   // Constructs the replayer from an already populated cache.
   explicit ServerCacheReplayer(ServerCache server_cache,
                                bool split_requests_by_form = false);
@@ -94,25 +162,23 @@ class ServerCacheReplayer {
   // key. Returns false if there was no match or the response could no be
   // decompressed. Nothing will be assigned to |http_text| on error. Leaves a
   // log when there is an error. Can be used in concurrency.
-  bool GetResponseForQuery(const AutofillQueryContents& query,
-                           std::string* http_text) const;
+  bool GetLegacyServerResponseForQuery(const AutofillQueryContents& query,
+                                       std::string* http_text) const;
+  bool GetApiServerResponseForQuery(const AutofillPageQueryRequest& query,
+                                    std::string* http_text) const;
+
+  const ServerCache& cache() const { return cache_; }
+  bool split_requests_by_form() const { return split_requests_by_form_; }
 
  private:
   // Server's cache. Will only be modified during construction of
   // ServerCacheReplayer.
   ServerCache cache_;
-  // Represents the cache at read time.
-  const ServerCache& const_cache_ = cache_;
   // Controls the type of matching behavior. If False, will cache form signature
   // groupings as they are recorded in the WPR archive. If True, will cache each
   // form individually and attempt to stitch them together on retrieval, which
   // allows a higher hit rate.
   const bool split_requests_by_form_;
-
-  // Assumes key exists, and decompresses and returns http body which is stored
-  // at that location.
-  bool RetrieveAndDecompressStoredHTTP(const std::string& key,
-                                       std::string* decompressed_http) const;
 };
 
 // Url loader that intercepts Autofill Server calls and serves back cached

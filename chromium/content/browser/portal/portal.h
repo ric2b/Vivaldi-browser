@@ -79,6 +79,7 @@ class CONTENT_EXPORT Portal : public blink::mojom::Portal,
                 blink::mojom::ReferrerPtr referrer,
                 NavigateCallback callback) override;
   void Activate(blink::TransferableMessage data,
+                base::TimeTicks activation_time,
                 ActivateCallback callback) override;
   void PostMessageToGuest(
       const blink::TransferableMessage message,
@@ -102,6 +103,12 @@ class CONTENT_EXPORT Portal : public blink::mojom::Portal,
   void PortalWebContentsCreated(WebContents* portal_web_contents) override;
   void CloseContents(WebContents*) override;
   WebContents* GetResponsibleWebContents(WebContents* web_contents) override;
+  void NavigationStateChanged(WebContents* source,
+                              InvalidateTypes changed_flags) override;
+  bool ShouldFocusPageAfterCrash() override;
+  void CanDownload(const GURL& url,
+                   const std::string& request_method,
+                   base::OnceCallback<void(bool)> callback) override;
 
   // Returns the token which uniquely identifies this Portal.
   const base::UnguessableToken& portal_token() const { return portal_token_; }
@@ -111,6 +118,8 @@ class CONTENT_EXPORT Portal : public blink::mojom::Portal,
 
   // Returns the Portal's WebContents.
   WebContentsImpl* GetPortalContents();
+  // Returns the WebContents that hosts this portal.
+  WebContentsImpl* GetPortalHostContents();
 
   RenderFrameHostImpl* owner_render_frame_host() {
     return owner_render_frame_host_;

@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "gn/escape.h"
+#include "gn/string_output_buffer.h"
 #include "util/test/test.h"
 
 TEST(Escape, Ninja) {
@@ -77,4 +78,26 @@ TEST(Escape, Space) {
   // ' ' is escaped.
   EXPECT_EQ("-VERSION=\"libsrtp2\\ 2.1.0-pre\"",
             EscapeString("-VERSION=\"libsrtp2 2.1.0-pre\"", opts, nullptr));
+}
+
+TEST(EscapeJSONString, NinjaPreformatted) {
+  EscapeOptions opts;
+  opts.mode = ESCAPE_NINJA_PREFORMATTED_COMMAND;
+  opts.inhibit_quoting = true;
+
+  StringOutputBuffer buffer;
+  std::ostream out(&buffer);
+
+  EscapeJSONStringToStream(out, "foo\\\" bar", opts);
+  EXPECT_EQ("foo\\\\\\\" bar", buffer.str());
+
+  StringOutputBuffer buffer1;
+  std::ostream out1(&buffer1);
+  EscapeJSONStringToStream(out1, "foo bar\\\\", opts);
+  EXPECT_EQ("foo bar\\\\\\\\", buffer1.str());
+
+  StringOutputBuffer buffer2;
+  std::ostream out2(&buffer2);
+  EscapeJSONStringToStream(out2, "a: \"$\\b", opts);
+  EXPECT_EQ("a: \\\"$$\\\\b", buffer2.str());
 }

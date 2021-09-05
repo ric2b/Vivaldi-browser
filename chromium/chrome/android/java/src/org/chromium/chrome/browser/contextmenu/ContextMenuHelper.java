@@ -23,6 +23,7 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.task.PostTask;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.performance_hints.PerformanceHintsObserver;
+import org.chromium.chrome.browser.share.LensUtils;
 import org.chromium.chrome.browser.share.ShareHelper;
 import org.chromium.components.embedder_support.contextmenu.ContextMenuParams;
 import org.chromium.content_public.browser.RenderFrameHost;
@@ -111,6 +112,10 @@ public class ContextMenuHelper implements OnCreateContextMenuListener {
             mMenuShownTimeMs =
                     TimeUnit.MICROSECONDS.toMillis(TimeUtilsJni.get().getTimeTicksNowUs());
             RecordHistogram.recordBooleanHistogram("ContextMenu.Shown", mWebContents != null);
+            if (LensUtils.isInShoppingAllowlist(mCurrentContextMenuParams.getPageUrl())) {
+                RecordHistogram.recordBooleanHistogram(
+                        "ContextMenu.Shown.ShoppingDomain", mWebContents != null);
+            }
         };
         mOnMenuClosed = (notAbandoned) -> {
             recordTimeToTakeActionHistogram(mSelectedItemBeforeDismiss || notAbandoned);
@@ -125,7 +130,7 @@ public class ContextMenuHelper implements OnCreateContextMenuListener {
             List<Pair<Integer, List<ContextMenuItem>>> items =
                     mPopulator.buildContextMenu(null, mActivity, mCurrentContextMenuParams);
             if (items.isEmpty()) {
-                PostTask.postTask(UiThreadTaskTraits.DEFAULT, () -> mOnMenuClosed.onResult(false));
+                PostTask.postTask(UiThreadTaskTraits.DEFAULT, mOnMenuClosed.bind(false));
                 return;
             }
 
@@ -187,7 +192,7 @@ public class ContextMenuHelper implements OnCreateContextMenuListener {
                 mPopulator.buildContextMenu(menu, v.getContext(), mCurrentContextMenuParams);
 
         if (items.isEmpty()) {
-            PostTask.postTask(UiThreadTaskTraits.DEFAULT, () -> mOnMenuClosed.onResult(false));
+            PostTask.postTask(UiThreadTaskTraits.DEFAULT, mOnMenuClosed.bind(false));
             return;
         }
         ContextMenuUi menuUi = new PlatformContextMenuUi(menu);

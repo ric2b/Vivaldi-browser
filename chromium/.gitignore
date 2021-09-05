@@ -46,6 +46,7 @@
 .project
 .pydevproject
 .checkstyle
+*.class
 compile_commands.json
 cscope.*
 GPATH
@@ -67,8 +68,6 @@ vs-chromium-project.txt
 .vscode/
 /_out
 /android_emulator_sdk
-/android_webview/tools/webview_log_verbosifier/.gradle/
-/android_webview/tools/webview_log_verbosifier/.settings/
 /ash/ash_unittests_run.xml
 /base/base_unittests_run.xml
 # See build/.gitignore for entries covering src/build.
@@ -175,6 +174,7 @@ vs-chromium-project.txt
 /chromeos/assistant/internal
 /chromeos/components/help_app_ui/resources/app
 /chromeos/components/help_app_ui/resources/prod
+/chromeos/components/media_app_ui/resources/prod
 /chromeos/components/media_app_ui/resources/app
 /chromeos/components/media_app_ui/resources/pkg
 /chromeos/profiles/chromeos.orderfile.txt
@@ -315,6 +315,9 @@ vs-chromium-project.txt
 
 # Ignore any Android RenderTest goldens
 **/render_tests/*.png
+
+# Ignore any WPR archive files
+**/wpr_tests/*.wprgo
 
 # Ignore IntelliJ files.
 .idea/
