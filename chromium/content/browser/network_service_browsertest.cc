@@ -79,14 +79,13 @@ class TestWebUIDataSource : public URLDataSource {
 
   std::string GetSource() override { return "webui"; }
 
-  void StartDataRequest(
-      const std::string& path,
-      const WebContents::Getter& wc_getter,
-      const URLDataSource::GotDataCallback& callback) override {
+  void StartDataRequest(const GURL& url,
+                        const WebContents::Getter& wc_getter,
+                        URLDataSource::GotDataCallback callback) override {
     std::string dummy_html = "<html><body>Foo</body></html>";
     scoped_refptr<base::RefCountedString> response =
         base::RefCountedString::TakeString(&dummy_html);
-    callback.Run(response.get());
+    std::move(callback).Run(response.get());
   }
 
   std::string GetMimeType(const std::string& path) override {
@@ -164,6 +163,11 @@ class NetworkServiceBrowserTest : public ContentBrowserTest {
     std::unique_ptr<network::ResourceRequest> request =
         std::make_unique<network::ResourceRequest>();
     request->url = url;
+    url::Origin origin = url::Origin::Create(url);
+    request->trusted_params = network::ResourceRequest::TrustedParams();
+    request->trusted_params->network_isolation_key =
+        net::NetworkIsolationKey(origin, origin);
+
     SimpleURLLoaderTestHelper simple_loader_helper;
     std::unique_ptr<network::SimpleURLLoader> simple_loader =
         network::SimpleURLLoader::Create(std::move(request),
@@ -186,7 +190,7 @@ class NetworkServiceBrowserTest : public ContentBrowserTest {
 IN_PROC_BROWSER_TEST_F(NetworkServiceBrowserTest, WebUIBindingsNoHttp) {
   GURL test_url(GetWebUIURL("webui/"));
   EXPECT_TRUE(NavigateToURL(shell(), test_url));
-  RenderProcessHostKillWaiter kill_waiter(
+  RenderProcessHostBadIpcMessageWaiter kill_waiter(
       shell()->web_contents()->GetMainFrame()->GetProcess());
   ASSERT_FALSE(CheckCanLoadHttp());
   EXPECT_EQ(bad_message::WEBUI_BAD_SCHEME_ACCESS, kill_waiter.Wait());
@@ -256,9 +260,10 @@ IN_PROC_BROWSER_TEST_F(NetworkServiceBrowserTest,
       network::mojom::URLLoaderFactoryParams::New();
   params->process_id = network::mojom::kBrowserProcessId;
   params->is_corb_enabled = false;
-  network::mojom::URLLoaderFactoryPtr loader_factory;
-  network_context->CreateURLLoaderFactory(mojo::MakeRequest(&loader_factory),
-                                          std::move(params));
+  params->is_trusted = true;
+  mojo::Remote<network::mojom::URLLoaderFactory> loader_factory;
+  network_context->CreateURLLoaderFactory(
+      loader_factory.BindNewPipeAndPassReceiver(), std::move(params));
 
   // Load a URL and check the cache index size.
   LoadURL(embedded_test_server()->GetURL("/cachetime"), loader_factory.get());
@@ -456,7 +461,6 @@ class NetworkServiceInvalidLogBrowserTest : public ContentBrowserTest {
   }
 
  private:
-
   DISALLOW_COPY_AND_ASSIGN(NetworkServiceInvalidLogBrowserTest);
 };
 
@@ -469,6 +473,122 @@ IN_PROC_BROWSER_TEST_F(NetworkServiceInvalidLogBrowserTest, Basic) {
   EXPECT_TRUE(NavigateToURL(shell(), test_url));
   ASSERT_EQ(net::OK,
             LoadBasicRequest(partition->GetNetworkContext(), test_url));
+}
+
+// TODO(yhirano): Merge this to NetworkServiceTest when OOR_CORS is enabled by
+// default.
+class NetworkServiceWithCorsBrowserTest : public NetworkServiceBrowserTest {
+ public:
+  NetworkServiceWithCorsBrowserTest() {
+    scoped_feature_list_.InitAndEnableFeature(
+        network::features::kOutOfBlinkCors);
+  }
+  NetworkServiceWithCorsBrowserTest(const NetworkServiceWithCorsBrowserTest&) =
+      delete;
+  NetworkServiceWithCorsBrowserTest& operator=(
+      const NetworkServiceWithCorsBrowserTest&) = delete;
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+// Tests that CORS is performed by the network service when |factory_override|
+// is used.
+IN_PROC_BROWSER_TEST_F(NetworkServiceWithCorsBrowserTest, FactoryOverride) {
+  class TestURLLoaderFactory final : public network::mojom::URLLoaderFactory {
+   public:
+    void CreateLoaderAndStart(
+        mojo::PendingReceiver<network::mojom::URLLoader> receiver,
+        int32_t routing_id,
+        int32_t request_id,
+        uint32_t options,
+        const network::ResourceRequest& resource_request,
+        mojo::PendingRemote<network::mojom::URLLoaderClient> pending_client,
+        const net::MutableNetworkTrafficAnnotationTag& traffic_annotation)
+        override {
+      mojo::Remote<network::mojom::URLLoaderClient> client(
+          std::move(pending_client));
+      EXPECT_EQ(resource_request.url,
+                GURL("https://www.example.com/hello.txt"));
+      if (resource_request.method == "OPTIONS") {
+        has_received_preflight_ = true;
+        auto response = network::mojom::URLResponseHead::New();
+        response->headers =
+            base::MakeRefCounted<net::HttpResponseHeaders>("HTTP/1.1 200 OK");
+        response->headers->AddHeader(
+            "access-control-allow-origin: https://www2.example.com");
+        response->headers->AddHeader("access-control-allow-methods: *");
+        client->OnReceiveResponse(std::move(response));
+      } else if (resource_request.method == "custom-method") {
+        has_received_request_ = true;
+        auto response = network::mojom::URLResponseHead::New();
+        response->headers = base::MakeRefCounted<net::HttpResponseHeaders>(
+            "HTTP/1.1 202 Accepted");
+        response->headers->AddHeader(
+            "access-control-allow-origin: https://www2.example.com");
+        client->OnReceiveResponse(std::move(response));
+        client->OnComplete(network::URLLoaderCompletionStatus(net::OK));
+      } else {
+        client->OnComplete(
+            network::URLLoaderCompletionStatus(net::ERR_INVALID_ARGUMENT));
+      }
+    }
+    void Clone(mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver)
+        override {
+      NOTREACHED();
+    }
+
+    bool has_received_preflight() const { return has_received_preflight_; }
+    bool has_received_request() const { return has_received_request_; }
+
+   private:
+    bool has_received_preflight_ = false;
+    bool has_received_request_ = false;
+  };
+
+  // Create a request that will trigger a CORS preflight request.
+  auto request = std::make_unique<network::ResourceRequest>();
+  request->url = GURL("https://www.example.com/hello.txt");
+  request->mode = network::mojom::RequestMode::kCors;
+  request->credentials_mode = network::mojom::CredentialsMode::kSameOrigin;
+  request->method = "custom-method";
+  request->request_initiator =
+      url::Origin::Create(GURL("https://www2.example.com/"));
+
+  // Inject TestURLLoaderFactory as the factory override.
+  auto test_loader_factory = std::make_unique<TestURLLoaderFactory>();
+  mojo::Receiver<network::mojom::URLLoaderFactory> test_loader_factory_receiver(
+      test_loader_factory.get());
+  mojo::Remote<network::mojom::URLLoaderFactory> loader_factory_remote;
+  auto loader = network::SimpleURLLoader::Create(std::move(request),
+                                                 TRAFFIC_ANNOTATION_FOR_TESTS);
+  auto params = network::mojom::URLLoaderFactoryParams::New();
+  params->process_id = 0;
+  params->factory_override = network::mojom::URLLoaderFactoryOverride::New();
+  params->factory_override->overriding_factory =
+      test_loader_factory_receiver.BindNewPipeAndPassRemote();
+  BrowserContext::GetDefaultStoragePartition(
+      shell()->web_contents()->GetBrowserContext())
+      ->GetNetworkContext()
+      ->CreateURLLoaderFactory(
+          loader_factory_remote.BindNewPipeAndPassReceiver(),
+          std::move(params));
+  scoped_refptr<net::HttpResponseHeaders> headers;
+
+  // Perform the request.
+  base::RunLoop loop;
+  loader->DownloadHeadersOnly(
+      loader_factory_remote.get(),
+      base::BindLambdaForTesting(
+          [&](scoped_refptr<net::HttpResponseHeaders> passed_headers) {
+            headers = passed_headers;
+            loop.Quit();
+          }));
+  loop.Run();
+  ASSERT_TRUE(headers.get());
+  EXPECT_EQ(headers->response_code(), 202);
+  EXPECT_TRUE(test_loader_factory->has_received_preflight());
+  EXPECT_TRUE(test_loader_factory->has_received_request());
 }
 
 }  // namespace

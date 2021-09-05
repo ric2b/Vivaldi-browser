@@ -7,13 +7,13 @@
 
 namespace vivaldi {
 
-bool IsVivaldiMail(WebContents* web_contents) {
+bool IsVivaldiMail(content::WebContents* web_contents) {
   extensions::WebViewGuest* web_view_guest =
       extensions::WebViewGuest::FromWebContents(web_contents);
   return web_view_guest && web_view_guest->IsVivaldiMail();
 }
 
-bool IsVivaldiWebPanel(WebContents* web_contents) {
+bool IsVivaldiWebPanel(content::WebContents* web_contents) {
   extensions::WebViewGuest* web_view_guest =
       extensions::WebViewGuest::FromWebContents(web_contents);
   return web_view_guest && web_view_guest->IsVivaldiWebPanel();

@@ -31,6 +31,7 @@ class TestFullscreenController : public FullscreenController {
   bool IsEnabled() const override;
   void IncrementDisabledCounter() override;
   void DecrementDisabledCounter() override;
+  bool ResizesScrollView() const override;
   void BrowserTraitCollectionChangedBegin() override;
   void BrowserTraitCollectionChangedEnd() override;
   CGFloat GetProgress() const override;
@@ -39,9 +40,6 @@ class TestFullscreenController : public FullscreenController {
   UIEdgeInsets GetCurrentViewportInsets() const override;
   void EnterFullscreen() override;
   void ExitFullscreen() override;
-
-  // KeyedService:
-  void Shutdown() override;
 
   // Calls FullscreenViewportInsetRangeChanged() on observers.
   void OnFullscreenViewportInsetRangeChanged(UIEdgeInsets min_viewport_insets,

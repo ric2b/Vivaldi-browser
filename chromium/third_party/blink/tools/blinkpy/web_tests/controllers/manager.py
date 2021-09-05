@@ -44,6 +44,7 @@ import sys
 import time
 
 from blinkpy.common import exit_codes
+from blinkpy.common import path_finder
 from blinkpy.common.net.file_uploader import FileUploader
 from blinkpy.common.path_finder import PathFinder
 from blinkpy.tool import grammar
@@ -53,6 +54,7 @@ from blinkpy.web_tests.layout_package import json_results_generator
 from blinkpy.web_tests.models import test_expectations
 from blinkpy.web_tests.models import test_failures
 from blinkpy.web_tests.models import test_run_results
+from blinkpy.web_tests.models.typ_types import ResultType
 from blinkpy.web_tests.models.test_input import TestInput
 
 _log = logging.getLogger(__name__)
@@ -87,6 +89,7 @@ class Manager(object):
         self._websockets_server_started = False
 
         self._results_directory = self._port.results_directory()
+        self._artifacts_directory = self._port.artifacts_directory()
         self._finder = WebTestFinder(self._port, self._options)
         self._path_finder = PathFinder(port.host.filesystem)
         self._runner = WebTestRunner(self._options, self._port, self._printer, self._results_directory, self._test_is_slow)
@@ -103,7 +106,7 @@ class Manager(object):
             # This is raised if --test-list doesn't exist
             return test_run_results.RunDetails(exit_code=exit_codes.NO_TESTS_EXIT_STATUS)
 
-        test_names, tests_in_other_chunks = self._finder.split_into_chunks(all_test_names)
+        test_names = self._finder.split_into_chunks(all_test_names)
 
         if self._options.order == 'natural':
             test_names.sort(key=self._port.test_key)
@@ -111,12 +114,11 @@ class Manager(object):
             test_names.sort()
             random.Random(self._options.seed).shuffle(test_names)
 
-        self._printer.write_update('Parsing expectations ...')
-        self._expectations = test_expectations.TestExpectations(self._port, test_names)
+        if not self._options.no_expectations:
+            self._printer.write_update('Parsing expectations ...')
+            self._expectations = test_expectations.TestExpectations(self._port)
 
         tests_to_run, tests_to_skip = self._prepare_lists(paths, test_names)
-
-        self._expectations.remove_tests_from_expectations(tests_in_other_chunks)
 
         self._printer.print_found(
             len(all_test_names), len(test_names), len(tests_to_run),
@@ -159,6 +161,9 @@ class Manager(object):
             self._stop_servers()
             self._clean_up_run()
 
+        if self._options.no_expectations:
+            return test_run_results.RunDetails(0, [], [], initial_results, all_retry_results)
+
         # Some crash logs can take a long time to be written out so look
         # for new logs after the test run finishes.
         self._printer.write_update('Looking for new crash logs ...')
@@ -184,7 +189,7 @@ class Manager(object):
 
             self._upload_json_files()
 
-            self._copy_results_html_file(self._results_directory, 'results.html')
+            self._copy_results_html_file(self._artifacts_directory, 'results.html')
             if initial_results.keyboard_interrupted:
                 exit_code = exit_codes.INTERRUPTED_EXIT_STATUS
             else:
@@ -192,7 +197,7 @@ class Manager(object):
                     exit_code = exit_codes.EARLY_EXIT_STATUS
                 if self._options.show_results and (exit_code or initial_results.total_failures):
                     self._port.show_results_html_file(
-                        self._filesystem.join(self._results_directory, 'results.html'))
+                        self._filesystem.join(self._artifacts_directory, 'results.html'))
                 self._printer.print_results(time.time() - start_time, initial_results)
 
         return test_run_results.RunDetails(
@@ -210,7 +215,7 @@ class Manager(object):
             for name in initial_results.failures_by_name:
                 failure = initial_results.failures_by_name[name][0]
                 if isinstance(failure, test_failures.FailureTextMismatch):
-                    full_test_path = self._filesystem.join(self._results_directory, name)
+                    full_test_path = self._filesystem.join(self._artifacts_directory, name)
                     filename, _ = self._filesystem.splitext(full_test_path)
                     pretty_diff_path = 'file://' + filename + '-pretty-diff.html'
                     self._printer.writeln('Link to pretty diff:')
@@ -303,9 +308,10 @@ class Manager(object):
         return self._is_http_test(test_file) or self._is_perf_test(test_file)
 
     def _test_is_slow(self, test_file):
-        expectations = self._expectations.model().get_expectations(test_file)
-        return (test_expectations.SLOW in expectations or
-                self._port.is_slow_wpt_test(test_file))
+        if not self._expectations:
+            return False
+        is_slow_test = self._expectations.get_expectations(test_file).is_slow_test
+        return is_slow_test or self._port.is_slow_wpt_test(test_file)
 
     def _needs_servers(self, test_names):
         return any(self._test_requires_lock(test_name) for test_name in test_names)
@@ -314,7 +320,7 @@ class Manager(object):
         try:
             timestamp = time.strftime(
                 "%Y-%m-%d-%H-%M-%S", time.localtime(
-                    self._filesystem.mtime(self._filesystem.join(self._results_directory, 'results.html'))))
+                    self._filesystem.mtime(self._filesystem.join(self._artifacts_directory, 'results.html'))))
         except (IOError, OSError) as error:
             # It might be possible that results.html was not generated in previous run, because the test
             # run was interrupted even before testing started. In those cases, don't archive the folder.
@@ -323,21 +329,21 @@ class Manager(object):
             if error.errno in (errno.EEXIST, errno.ENOENT):
                 self._printer.write_update('No results.html file found in previous run, skipping it.')
             return None
-        archived_name = ''.join((self._filesystem.basename(self._results_directory), '_', timestamp))
-        archived_path = self._filesystem.join(self._filesystem.dirname(self._results_directory), archived_name)
-        self._filesystem.move(self._results_directory, archived_path)
+        archived_name = ''.join((self._filesystem.basename(self._artifacts_directory), '_', timestamp))
+        archived_path = self._filesystem.join(self._filesystem.dirname(self._artifacts_directory), archived_name)
+        self._filesystem.move(self._artifacts_directory, archived_path)
 
     def _delete_dirs(self, dir_list):
         for dir_path in dir_list:
             self._filesystem.rmtree(dir_path)
 
     def _limit_archived_results_count(self):
-        results_directory_path = self._filesystem.dirname(self._results_directory)
+        results_directory_path = self._filesystem.dirname(self._artifacts_directory)
         file_list = self._filesystem.listdir(results_directory_path)
         results_directories = []
         for name in file_list:
             file_path = self._filesystem.join(results_directory_path, name)
-            if self._filesystem.isdir(file_path) and self._results_directory in file_path:
+            if self._filesystem.isdir(file_path) and self._artifacts_directory in file_path:
                 results_directories.append(file_path)
         results_directories.sort(key=self._filesystem.mtime)
         self._printer.write_update('Clobbering excess archived results in %s' % results_directory_path)
@@ -353,13 +359,13 @@ class Manager(object):
 
         if self._options.clobber_old_results:
             self._clobber_old_results()
-        elif self._filesystem.exists(self._results_directory):
+        elif self._filesystem.exists(self._artifacts_directory):
             self._limit_archived_results_count()
             # Rename the existing results folder for archiving.
             self._rename_results_folder()
 
         # Create the output directory if it doesn't already exist.
-        self._port.host.filesystem.maybe_make_directory(self._results_directory)
+        self._port.host.filesystem.maybe_make_directory(self._artifacts_directory)
 
         exit_code = self._port.setup_test_run()
         if exit_code:
@@ -440,12 +446,12 @@ class Manager(object):
         test_to_crash_failure = {}
 
         # reset static variables for Failure type classes
-        test_failures.TestFailure.port = self._port
-        test_failures.TestFailure.result_directory = self._results_directory
-        test_failures.TestFailure.filesystem = self._filesystem
+        test_failures.AbstractTestResultType.port = self._port
+        test_failures.AbstractTestResultType.result_directory = self._results_directory
+        test_failures.AbstractTestResultType.filesystem = self._filesystem
 
         for test, result in run_results.unexpected_results_by_name.iteritems():
-            if result.type != test_expectations.CRASH:
+            if result.type != ResultType.Crash:
                 continue
             for failure in result.failures:
                 if (not isinstance(failure, test_failures.FailureCrash) or
@@ -457,7 +463,7 @@ class Manager(object):
         sample_files = self._port.look_for_new_samples(
             crashed_processes, start_time) or {}
         for test, sample_file in sample_files.iteritems():
-            test_failures.TestFailure.test_name = test
+            test_failures.AbstractTestResultType.test_name = test
             test_result = run_results.unexpected_results_by_name[test]
             artifact_relative_path = self._port.output_filename(
                 test, test_failures.FILENAME_SUFFIX_SAMPLE, '.txt')
@@ -473,7 +479,7 @@ class Manager(object):
         new_crash_logs = self._port.look_for_new_crash_logs(
             crashed_processes, start_time) or {}
         for test, (crash_log, crash_site) in new_crash_logs.iteritems():
-            test_failures.TestFailure.test_name = test
+            test_failures.AbstractTestResultType.test_name = test
             failure.crash_log = crash_log
             failure.has_log = self._port.output_contains_sanitizer_messages(
                 failure.crash_log)
@@ -483,7 +489,7 @@ class Manager(object):
                 test_result.artifacts, force_overwrite=True)
 
     def _clobber_old_results(self):
-        dir_above_results_path = self._filesystem.dirname(self._results_directory)
+        dir_above_results_path = self._filesystem.dirname(self._artifacts_directory)
         self._printer.write_update('Clobbering old results in %s.' % dir_above_results_path)
         if not self._filesystem.exists(dir_above_results_path):
             return
@@ -491,7 +497,7 @@ class Manager(object):
         results_directories = []
         for name in file_list:
             file_path = self._filesystem.join(dir_above_results_path, name)
-            if self._filesystem.isdir(file_path) and self._results_directory in file_path:
+            if self._filesystem.isdir(file_path) and self._artifacts_directory in file_path:
                 results_directories.append(file_path)
         self._delete_dirs(results_directories)
 
@@ -503,14 +509,14 @@ class Manager(object):
         # since retrying missing expectations is silly. But that's a bit tricky since we
         # only consider the last retry attempt for the count of unexpected regressions.
         return [result.test_name for result in run_results.unexpected_results_by_name.values(
-        ) if result.type != test_expectations.PASS]
+        ) if result.type != ResultType.Pass]
 
     def _write_json_files(self, summarized_full_results, summarized_failing_results, initial_results, running_all_tests):
-        _log.debug("Writing JSON files in %s.", self._results_directory)
+        _log.debug("Writing JSON files in %s.", self._artifacts_directory)
 
         # FIXME: Upload stats.json to the server and delete times_ms.
         times_trie = json_results_generator.test_timings_trie(initial_results.results_by_name.values())
-        times_json_path = self._filesystem.join(self._results_directory, 'times_ms.json')
+        times_json_path = self._filesystem.join(self._artifacts_directory, 'times_ms.json')
         json_results_generator.write_json(self._filesystem, times_trie, times_json_path)
 
         # Save out the times data so we can use it for --fastest in the future.
@@ -520,18 +526,18 @@ class Manager(object):
             json_results_generator.write_json(self._filesystem, times_trie, bot_test_times_path)
 
         stats_trie = self._stats_trie(initial_results)
-        stats_path = self._filesystem.join(self._results_directory, 'stats.json')
+        stats_path = self._filesystem.join(self._artifacts_directory, 'stats.json')
         self._filesystem.write_text_file(stats_path, json.dumps(stats_trie))
 
-        full_results_path = self._filesystem.join(self._results_directory, 'full_results.json')
+        full_results_path = self._filesystem.join(self._artifacts_directory, 'full_results.json')
         json_results_generator.write_json(self._filesystem, summarized_full_results, full_results_path)
 
-        full_results_jsonp_path = self._filesystem.join(self._results_directory, 'full_results_jsonp.js')
+        full_results_jsonp_path = self._filesystem.join(self._artifacts_directory, 'full_results_jsonp.js')
         json_results_generator.write_json(self._filesystem,
                                           summarized_full_results,
                                           full_results_jsonp_path,
                                           callback='ADD_FULL_RESULTS')
-        full_results_path = self._filesystem.join(self._results_directory, 'failing_results.json')
+        full_results_path = self._filesystem.join(self._artifacts_directory, 'failing_results.json')
         # We write failing_results.json out as jsonp because we need to load it
         # from a file url for results.html and Chromium doesn't allow that.
         json_results_generator.write_json(self._filesystem, summarized_failing_results, full_results_path, callback='ADD_RESULTS')
@@ -561,7 +567,7 @@ class Manager(object):
                  ('testtype', self._options.step_name),
                  ('master', self._options.master_name)]
 
-        files = [(name, self._filesystem.join(self._results_directory, name))
+        files = [(name, self._filesystem.join(self._artifacts_directory, name))
                  for name in ['failing_results.json', 'full_results.json', 'times_ms.json']]
 
         url = 'https://%s/testfile/upload' % self._options.test_results_server
@@ -597,7 +603,7 @@ class Manager(object):
 
         stats = {}
         for result in initial_results.results_by_name.values():
-            if result.type != test_expectations.SKIP:
+            if result.type != ResultType.Skip:
                 stats[result.test_name] = {'results': (_worker_number(result.worker_name), result.test_number, result.pid, int(
                     result.test_run_time * 1000), int(result.total_run_time * 1000))}
         stats_trie = {}

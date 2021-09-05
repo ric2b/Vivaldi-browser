@@ -1,16 +1,39 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="de-CH">
+<translation id="1397811292916898096">Met <ph name="PRODUCT_NAME" /> sueche</translation>
+<translation id="1644574205037202324">Verlouf</translation>
+<translation id="17513872634828108">Offeni Riter</translation>
+<translation id="1829244130665387512">Uf Site sueche</translation>
+<translation id="2038563949887743358">"Desktopversion ahzeige" ihschalte</translation>
+<translation id="2433507940547922241">Darstellig</translation>
+<translation id="2633278372998075009">Privati Riter</translation>
 <translation id="3076631378407175873">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. Alli Recht vorbehalte.</translation>
+<translation id="3234355010754616171">Neue private Riter</translation>
+<translation id="3518985090088779359">Akzeptiere &amp; witer</translation>
 <translation id="3700829948786686853">Willkomme bi Vivaldi</translation>
 <translation id="4121750346708795461">Dörr d'Verwendig vo dere Applikation stimmet Sie dä <ph name="BEGIN_LINK1" />Notzigsbedingige<ph name="END_LINK1" /> ond <ph name="BEGIN_LINK2" />Dateschotzerklärig<ph name="END_LINK2" /> vo Vivaldi zue.</translation>
+<translation id="4243710787042215766">Im private Riter öffne</translation>
+<translation id="4526803704855831732">Privati Riter</translation>
+<translation id="4883379392681899581">Private Modus verloh</translation>
+<translation id="4943872375798546930">Kei Resultat</translation>
 <translation id="5118676864324397542"><ph name="APP_NAME" />-Speicher</translation>
+<translation id="5233638681132016545">Neue Riter</translation>
+<translation id="5495228542153126976">Du besch im Privatmodus</translation>
+<translation id="572328651809341494">Zletscht göffneti Riter</translation>
 <translation id="5840488417521835756">Erfahret Sie meh öber dä Inhalt vo Internetsite, ohni d'Site z'verloh. “Zom Sueche dröcke” esch en Fonktion, wo nume verfüegbar esch, wenn Google als Standard-Suechmaschine in Vivaldi ihgstellt esch. S'Wort ond sine Kontext werdet ah d'Google Suechi gschickt ond Sie bechömet Definitione, Belder, Suechergebnis ond anderi Details zrug.
 
 Ehre Suechbegriff chönd Sie ahpasse, wenn Sie d'Suechi erwiteret. Om en Suechvorschlag uszwähle, schiebet Sie s'Ergebnisfeld ufe ond dröcket Sie druf.</translation>
+<translation id="6336451774241870485">Neue private Riter</translation>
+<translation id="6593061639179217415">Desktop-Site</translation>
+<translation id="6610147964972079463">Privati Riter zue tue</translation>
 <translation id="706339621163631076">Vivaldi-Dateschotzerklärig</translation>
 <translation id="7427132068601343474">Öber Vivaldi</translation>
+<translation id="7465104139234185284">Alli private Riter zue tue</translation>
 <translation id="7519434535192513364">D'Fonktion “Zom Sueche dröcke” esch nume verfüegbar, wenn Google als Standard-Suechmaschine in Vivaldi ihgstellt esch. S'usgwählte Wort ond sine Kontext werdet ah d'Google Suechi gschickt. Sie chönd die Fonktion ih dä <ph name="BEGIN_LINK" />Ihstellige<ph name="END_LINK" /> usschalte.</translation>
 <translation id="7649070708921625228">Helf</translation>
 <translation id="804786196054284061">Endbenotzer-Lizenzverihbarig</translation>
+<translation id="8820817407110198400">Läsezeiche</translation>
+<translation id="9063523880881406963">"Desktopversion ahzeige" usschalte</translation>
+<translation id="9080642952018487277">Zum private Modus wechsle</translation>
 </translationbundle>

@@ -81,8 +81,7 @@ class MetricsServiceClient {
   // Called prior to a metrics log being closed, allowing the client to collect
   // extra histograms that will go in that log. Asynchronous API - the client
   // implementation should call |done_callback| when complete.
-  virtual void CollectFinalMetricsForLog(
-      const base::Closure& done_callback) = 0;
+  virtual void CollectFinalMetricsForLog(base::OnceClosure done_callback) = 0;
 
   // Get the URL of the metrics server.
   virtual GURL GetMetricsServerUrl();
@@ -106,6 +105,13 @@ class MetricsServiceClient {
   // Returns the standard interval between upload attempts.
   virtual base::TimeDelta GetStandardUploadInterval() = 0;
 
+  // Whether or not the MetricsService should start up quickly and upload the
+  // initial report quickly. By default, this work may be delayed by some
+  // amount. Only the default behavior should be used in production, but clients
+  // can override this in tests if tests need to make assertions on the log
+  // data.
+  virtual bool ShouldStartUpFastForTesting() const;
+
   // Called on plugin loading errors.
   virtual void OnPluginLoadingError(const base::FilePath& plugin_path) {}
 
@@ -124,27 +130,33 @@ class MetricsServiceClient {
   // Returns whether cellular logic is enabled for metrics reporting.
   virtual bool IsUMACellularUploadLogicEnabled();
 
-  // Returns true iff sync is in a state that allows UKM to be enabled.
-  // See //components/ukm/observers/sync_disable_observer.h for details.
-  virtual bool SyncStateAllowsUkm();
+  // Returns true iff UKM is allowed for all profiles.
+  // See //components/ukm/observers/ukm_consent_state_observer.h for details.
+  virtual bool IsUkmAllowedForAllProfiles();
 
-  // Returns true iff sync is in a state that allows UKM to capture extensions.
-  // See //components/ukm/observers/sync_disable_observer.h for details.
-  virtual bool SyncStateAllowsExtensionUkm();
+  // Returns true iff UKM is allowed to capture extensions for all profiles.
+  // See //components/ukm/observers/ukm_consent_state_observer.h for details.
+  virtual bool IsUkmAllowedWithExtensionsForAllProfiles();
 
   // Returns whether UKM notification listeners were attached to all profiles.
   virtual bool AreNotificationListenersEnabledOnAllProfiles();
 
-  // Gets Chrome's package name in Android Chrome, or the host app's package
-  // name in Android WebView, or an empty string on other platforms.
+  // Gets the app package name (as defined by the embedder). Since package name
+  // is only meaningful for Android, other platforms should return the empty
+  // string (this is the same as the default behavior). If the package name
+  // should not be logged for privacy/fingerprintability reasons, the embedder
+  // should return the empty string.
   virtual std::string GetAppPackageName();
 
   // Gets the key used to sign metrics uploads. This will be used to compute an
   // HMAC-SHA256 signature of an uploaded log.
   virtual std::string GetUploadSigningKey();
 
+  // Checks if the cloned install detector says that client ids should be reset.
+  virtual bool ShouldResetClientIdsOnClonedInstall();
+
   // Sets the callback to run MetricsServiceManager::UpdateRunningServices.
-  void SetUpdateRunningServicesCallback(const base::Closure& callback);
+  void SetUpdateRunningServicesCallback(const base::RepeatingClosure& callback);
 
   // Notify MetricsServiceManager to UpdateRunningServices using callback.
   void UpdateRunningServices();
@@ -153,7 +165,7 @@ class MetricsServiceClient {
   bool IsMetricsReportingForceEnabled() const;
 
  private:
-  base::Closure update_running_services_;
+  base::RepeatingClosure update_running_services_;
 
   DISALLOW_COPY_AND_ASSIGN(MetricsServiceClient);
 };

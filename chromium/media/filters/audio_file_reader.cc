@@ -46,10 +46,10 @@ bool AudioFileReader::Open() {
 
   if (!open) {
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-    if (!media::IPCFactory::IsAvailable())
+    if (!media::IPCAudioDecoder::IsAvailable())
       return false;
 
-    ipc_audio_decoder_.reset(new IPCAudioDecoder(protocol_));
+    ipc_audio_decoder_ = std::make_unique<IPCAudioDecoder>(protocol_);
     if (!ipc_audio_decoder_->Initialize()) {
       ipc_audio_decoder_.reset();
       return false;
@@ -76,7 +76,15 @@ bool AudioFileReader::OpenDemuxer() {
     return false;
   }
 
-  // Find the first audio stream, if any.
+  const int result = avformat_find_stream_info(format_context, NULL);
+  if (result < 0) {
+    DLOG(WARNING)
+        << "AudioFileReader::Open() : error in avformat_find_stream_info()";
+    return false;
+  }
+
+  // Calling avformat_find_stream_info can uncover new streams. We wait till now
+  // to find the first audio stream, if any.
   codec_context_.reset();
   bool found_stream = false;
   for (size_t i = 0; i < format_context->nb_streams; ++i) {
@@ -90,13 +98,6 @@ bool AudioFileReader::OpenDemuxer() {
 
   if (!found_stream)
     return false;
-
-  const int result = avformat_find_stream_info(format_context, NULL);
-  if (result < 0) {
-    DLOG(WARNING)
-        << "AudioFileReader::Open() : error in avformat_find_stream_info()";
-    return false;
-  }
 
   // Get the codec context.
   codec_context_ =

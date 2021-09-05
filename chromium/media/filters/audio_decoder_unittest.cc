@@ -209,7 +209,8 @@ class AudioDecoderTest
 
     AudioDecoderConfig config;
     ASSERT_TRUE(AVCodecContextToAudioDecoderConfig(
-        reader_->codec_context_for_testing(), Unencrypted(), &config));
+        reader_->codec_context_for_testing(), EncryptionScheme::kUnencrypted,
+        &config));
 
 #if defined(OS_ANDROID) && BUILDFLAG(USE_PROPRIETARY_CODECS)
     // MEDIA_CODEC type requires config->extra_data() for AAC codec. For ADTS
@@ -224,7 +225,7 @@ class AudioDecoderTest
                     &channel_layout, nullptr, nullptr, &extra_data),
                 0);
       config.Initialize(kCodecAAC, kSampleFormatS16, channel_layout,
-                        sample_rate, extra_data, Unencrypted(),
+                        sample_rate, extra_data, EncryptionScheme::kUnencrypted,
                         base::TimeDelta(), 0);
       ASSERT_FALSE(config.extra_data().empty());
     }
@@ -246,7 +247,12 @@ class AudioDecoderTest
   void InitializeDecoderWithResult(const AudioDecoderConfig& config,
                                    bool success) {
     decoder_->Initialize(
-        config, nullptr, NewExpectedBoolCB(success),
+        config, nullptr,
+        base::BindOnce(
+            [](bool success, Status status) {
+              EXPECT_EQ(status.is_ok(), success);
+            },
+            success),
         base::Bind(&AudioDecoderTest::OnDecoderOutput, base::Unretained(this)),
         base::DoNothing());
     base::RunLoop().RunUntilIdle();
@@ -278,8 +284,8 @@ class AudioDecoderTest
   void Reset() {
     ASSERT_FALSE(pending_reset_);
     pending_reset_ = true;
-    decoder_->Reset(
-        base::Bind(&AudioDecoderTest::ResetFinished, base::Unretained(this)));
+    decoder_->Reset(base::BindOnce(&AudioDecoderTest::ResetFinished,
+                                   base::Unretained(this)));
     base::RunLoop().RunUntilIdle();
     ASSERT_FALSE(pending_reset_);
   }

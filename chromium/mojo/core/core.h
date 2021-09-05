@@ -12,9 +12,8 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/shared_memory_handle.h"
+#include "base/single_thread_task_runner.h"
 #include "base/synchronization/lock.h"
-#include "base/task_runner.h"
 #include "build/build_config.h"
 #include "mojo/core/dispatcher.h"
 #include "mojo/core/handle_signals_state.h"
@@ -46,7 +45,8 @@ class MOJO_SYSTEM_IMPL_EXPORT Core {
 
   // Called exactly once, shortly after construction, and before any other
   // methods are called on this object.
-  void SetIOTaskRunner(scoped_refptr<base::TaskRunner> io_task_runner);
+  void SetIOTaskRunner(
+      scoped_refptr<base::SingleThreadTaskRunner> io_task_runner);
 
   // Retrieves the NodeController for the current process.
   NodeController* GetNodeController();
@@ -54,7 +54,7 @@ class MOJO_SYSTEM_IMPL_EXPORT Core {
   scoped_refptr<Dispatcher> GetDispatcher(MojoHandle handle);
   scoped_refptr<Dispatcher> GetAndRemoveDispatcher(MojoHandle handle);
 
-  void SetDefaultProcessErrorCallback(const ProcessErrorCallback& callback);
+  void SetDefaultProcessErrorCallback(ProcessErrorCallback callback);
 
   // Creates a message pipe endpoint with an unbound peer port returned in
   // |*peer|. Useful for setting up cross-process bootstrap message pipes. The
@@ -136,7 +136,7 @@ class MOJO_SYSTEM_IMPL_EXPORT Core {
   // loop, and the calling thread must continue running a MessageLoop at least
   // until the callback is called. If there is no running loop, the |callback|
   // may be called from any thread. Beware!
-  void RequestShutdown(const base::Closure& callback);
+  void RequestShutdown(base::OnceClosure callback);
 
   // ---------------------------------------------------------------------------
 

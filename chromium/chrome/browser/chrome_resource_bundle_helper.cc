@@ -32,6 +32,9 @@
 #include "chromeos/constants/chromeos_switches.h"
 #endif
 
+#include "app/vivaldi_apptools.h"
+#include "ui/base/l10n/l10n_util.h"
+
 namespace {
 
 extern void InitializeLocalState(

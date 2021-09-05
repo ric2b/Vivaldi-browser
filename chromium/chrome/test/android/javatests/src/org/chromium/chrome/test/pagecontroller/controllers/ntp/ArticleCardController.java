@@ -33,7 +33,9 @@ public class ArticleCardController extends ElementController {
      * to perform actions.
      */
     public static class Info {
-        private final String mHeadline, mPublisher, mAge;
+        private final String mHeadline;
+        private final String mPublisher;
+        private final String mAge;
         private final ImplementationType mImplType;
 
         public Info(String headline, String publisher, String age,
@@ -124,10 +126,9 @@ public class ArticleCardController extends ElementController {
         private static final IUi2Locator LOCATOR_NON_EMPTY_STRING = withTextRegex(".+");
         private static final IUi2Locator LOCATOR_CARDS = Ui2Locators.withPath(
                 Ui2Locators.withAnyResEntry(R.id.content),
-                Ui2Locators.withAnyResEntry(com.google.android.libraries.feed.basicstream.R.id
-                                                    .feed_stream_recycler_view),
-                Ui2Locators.withAnyResEntry(com.google.android.libraries.feed.basicstream.internal
-                                                    .viewholders.R.id.feed_content_card));
+                Ui2Locators.withAnyResEntry(
+                        org.chromium.chrome.feed.R.id.feed_stream_recycler_view),
+                Ui2Locators.withAnyResEntry(org.chromium.chrome.feed.R.id.feed_content_card));
         private static final IUi2Locator LOCATOR_HEADLINE =
                 Ui2Locators.withPath(Ui2Locators.withChildIndex(0, 6), LOCATOR_NON_EMPTY_STRING);
         private static final IUi2Locator LOCATOR_PUBLISHER =
@@ -169,7 +170,8 @@ public class ArticleCardController extends ElementController {
     }
 
     private static ArticleCardController sInstance = new ArticleCardController();
-    private ArticleImpl mFeedImpl, mZineImpl;
+    private ArticleImpl mFeedImpl;
+    private ArticleImpl mZineImpl;
     private ArticleCardController() {
         mFeedImpl = new FeedArticleImpl();
         mZineImpl = new ZineArticleImpl();

@@ -17,6 +17,7 @@
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/views/bubble/bubble_border.h"
 #include "ui/views/bubble/bubble_frame_view.h"
+#include "ui/views/buildflags.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/layout/layout_provider.h"
 #include "ui/views/style/platform_style.h"
@@ -58,15 +59,17 @@ Widget* DialogDelegate::CreateDialogWidget(WidgetDelegate* delegate,
 
 // static
 bool DialogDelegate::CanSupportCustomFrame(gfx::NativeView parent) {
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+#if defined(OS_LINUX) && BUILDFLAG(ENABLE_DESKTOP_AURA)
   // The new style doesn't support unparented dialogs on Linux desktop.
   return parent != nullptr;
-#elif defined(OS_WIN)
+#else
+#if defined(OS_WIN)
   // The new style doesn't support unparented dialogs on Windows Classic themes.
   if (!ui::win::IsAeroGlassEnabled())
     return parent != nullptr;
 #endif
   return true;
+#endif
 }
 
 // static
@@ -84,12 +87,12 @@ Widget::InitParams DialogDelegate::GetDialogWidgetInitParams(
     dialog->params_.custom_frame &= CanSupportCustomFrame(parent);
 
   if (!dialog || dialog->use_custom_frame()) {
-    params.opacity = Widget::InitParams::TRANSLUCENT_WINDOW;
+    params.opacity = Widget::InitParams::WindowOpacity::kTranslucent;
     params.remove_standard_frame = true;
 #if !defined(OS_MACOSX)
     // Except on Mac, the bubble frame includes its own shadow; remove any
     // native shadowing. On Mac, the window server provides the shadow.
-    params.shadow_type = views::Widget::InitParams::SHADOW_TYPE_NONE;
+    params.shadow_type = views::Widget::InitParams::ShadowType::kNone;
 #endif
   }
   params.context = context;
@@ -103,10 +106,6 @@ Widget::InitParams DialogDelegate::GetDialogWidgetInitParams(
   params.child = parent && (delegate->GetModalType() == ui::MODAL_TYPE_CHILD);
 #endif
   return params;
-}
-
-int DialogDelegate::GetDialogButtons() const {
-  return ui::DIALOG_BUTTON_OK | ui::DIALOG_BUTTON_CANCEL;
 }
 
 int DialogDelegate::GetDefaultDialogButton() const {
@@ -139,29 +138,24 @@ bool DialogDelegate::IsDialogButtonEnabled(ui::DialogButton button) const {
   return true;
 }
 
-std::unique_ptr<View> DialogDelegate::CreateExtraView() {
-  return std::move(extra_view_);
-}
-
-std::unique_ptr<View> DialogDelegate::CreateFootnoteView() {
-  return nullptr;
-}
-
 bool DialogDelegate::Cancel() {
+  DCHECK(!already_started_close_);
+  if (cancel_callback_)
+    RunCloseCallback(std::move(cancel_callback_));
   return true;
 }
 
 bool DialogDelegate::Accept() {
+  DCHECK(!already_started_close_);
+  if (accept_callback_)
+    RunCloseCallback(std::move(accept_callback_));
   return true;
 }
 
-bool DialogDelegate::Close() {
-  int buttons = GetDialogButtons();
-  if ((buttons & ui::DIALOG_BUTTON_CANCEL) ||
-      (buttons == ui::DIALOG_BUTTON_NONE)) {
-    return Cancel();
-  }
-  return Accept();
+void DialogDelegate::RunCloseCallback(base::OnceClosure callback) {
+  DCHECK(!already_started_close_);
+  already_started_close_ = true;
+  std::move(callback).Run();
 }
 
 View* DialogDelegate::GetInitiallyFocusedView() {
@@ -201,6 +195,36 @@ NonClientFrameView* DialogDelegate::CreateNonClientFrameView(Widget* widget) {
   return WidgetDelegate::CreateNonClientFrameView(widget);
 }
 
+void DialogDelegate::WindowWillClose() {
+  if (already_started_close_)
+    return;
+
+  bool new_callback_present =
+      close_callback_ || cancel_callback_ || accept_callback_;
+
+  if (close_callback_)
+    RunCloseCallback(std::move(close_callback_));
+
+  if (new_callback_present)
+    return;
+
+  // Old-style close behavior: if the only button was Ok, call Accept();
+  // otherwise call Cancel(). Note that in this case the window is already going
+  // to close, so the return values of Accept()/Cancel(), which normally say
+  // whether the window should close, are ignored.
+  int buttons = GetDialogButtons();
+  if (buttons == ui::DIALOG_BUTTON_OK)
+    Accept();
+  else
+    Cancel();
+
+  // This is set here instead of before the invocations of Accept()/Cancel() so
+  // that those methods can DCHECK that !already_started_close_. Otherwise,
+  // client code could (eg) call Accept() from inside the cancel callback, which
+  // could lead to multiple callbacks being delivered from this class.
+  already_started_close_ = true;
+}
+
 // static
 NonClientFrameView* DialogDelegate::CreateDialogFrameView(Widget* widget) {
   LayoutProvider* provider = LayoutProvider::Get();
@@ -220,7 +244,7 @@ NonClientFrameView* DialogDelegate::CreateDialogFrameView(Widget* widget) {
               ? provider->GetCornerRadiusMetric(views::EMPHASIS_HIGH)
               : 2);
     }
-    frame->SetFootnoteView(delegate->CreateFootnoteView());
+    frame->SetFootnoteView(delegate->DisownFootnoteView());
   }
   frame->SetBubbleBorder(std::move(border));
   return frame;
@@ -229,13 +253,19 @@ NonClientFrameView* DialogDelegate::CreateDialogFrameView(Widget* widget) {
 const DialogClientView* DialogDelegate::GetDialogClientView() const {
   if (!GetWidget())
     return nullptr;
-  return GetWidget()->client_view()->AsDialogClientView();
+  const views::View* client_view = GetWidget()->client_view();
+  return client_view->GetClassName() == DialogClientView::kViewClassName
+             ? static_cast<const DialogClientView*>(client_view)
+             : nullptr;
 }
 
 DialogClientView* DialogDelegate::GetDialogClientView() {
   if (!GetWidget())
     return nullptr;
-  return GetWidget()->client_view()->AsDialogClientView();
+  views::View* client_view = GetWidget()->client_view();
+  return client_view->GetClassName() == DialogClientView::kViewClassName
+             ? static_cast<DialogClientView*>(client_view)
+             : nullptr;
 }
 
 BubbleFrameView* DialogDelegate::GetBubbleFrameView() const {
@@ -247,16 +277,37 @@ BubbleFrameView* DialogDelegate::GetBubbleFrameView() const {
   return view ? static_cast<BubbleFrameView*>(view->frame_view()) : nullptr;
 }
 
-views::LabelButton* DialogDelegate::GetOkButton() {
+views::LabelButton* DialogDelegate::GetOkButton() const {
   DCHECK(GetWidget()) << "Don't call this before OnDialogInitialized";
   auto* client = GetDialogClientView();
   return client ? client->ok_button() : nullptr;
 }
 
-views::LabelButton* DialogDelegate::GetCancelButton() {
+views::LabelButton* DialogDelegate::GetCancelButton() const {
   DCHECK(GetWidget()) << "Don't call this before OnDialogInitialized";
   auto* client = GetDialogClientView();
   return client ? client->cancel_button() : nullptr;
+}
+
+views::View* DialogDelegate::GetExtraView() const {
+  DCHECK(GetWidget()) << "Don't call this before OnDialogInitialized";
+  auto* client = GetDialogClientView();
+  return client ? client->extra_view() : nullptr;
+}
+
+views::View* DialogDelegate::GetFootnoteViewForTesting() const {
+  if (!GetWidget())
+    return footnote_view_.get();
+
+  NonClientFrameView* frame = GetWidget()->non_client_view()->frame_view();
+
+  // CreateDialogFrameView above always uses BubbleFrameView. There are
+  // subclasses that override CreateDialogFrameView, but none of them override
+  // it to create anything other than a BubbleFrameView.
+  // TODO(https://crbug.com/1011446): Make CreateDialogFrameView final, then
+  // remove this DCHECK.
+  DCHECK_EQ(frame->GetClassName(), BubbleFrameView::kViewClassName);
+  return static_cast<BubbleFrameView*>(frame)->GetFootnoteView();
 }
 
 void DialogDelegate::AddObserver(DialogObserver* observer) {
@@ -272,6 +323,66 @@ void DialogDelegate::DialogModelChanged() {
     observer.OnDialogChanged();
 }
 
+void DialogDelegate::SetDefaultButton(int button) {
+  params_.default_button = button;
+}
+
+void DialogDelegate::SetButtons(int buttons) {
+  params_.buttons = buttons;
+}
+
+void DialogDelegate::SetButtonLabel(ui::DialogButton button,
+    base::string16 label) {
+  params_.button_labels[button] = label;
+}
+
+void DialogDelegate::SetAcceptCallback(base::OnceClosure callback) {
+  accept_callback_ = std::move(callback);
+}
+
+void DialogDelegate::SetCancelCallback(base::OnceClosure callback) {
+  cancel_callback_ = std::move(callback);
+}
+
+void DialogDelegate::SetCloseCallback(base::OnceClosure callback) {
+  close_callback_ = std::move(callback);
+}
+
+std::unique_ptr<View> DialogDelegate::DisownExtraView() {
+  return std::move(extra_view_);
+}
+
+bool DialogDelegate::Close() {
+  WindowWillClose();
+  return true;
+}
+
+void DialogDelegate::ResetViewShownTimeStampForTesting() {
+  GetDialogClientView()->ResetViewShownTimeStampForTesting();
+}
+
+void DialogDelegate::SetButtonRowInsets(const gfx::Insets& insets) {
+  GetDialogClientView()->SetButtonRowInsets(insets);
+}
+
+void DialogDelegate::AcceptDialog() {
+  if (already_started_close_ || !Accept())
+    return;
+
+  already_started_close_ = true;
+  GetWidget()->CloseWithReason(
+      views::Widget::ClosedReason::kAcceptButtonClicked);
+}
+
+void DialogDelegate::CancelDialog() {
+  if (already_started_close_ || !Cancel())
+    return;
+
+  already_started_close_ = true;
+  GetWidget()->CloseWithReason(
+      views::Widget::ClosedReason::kCancelButtonClicked);
+}
+
 DialogDelegate::~DialogDelegate() {
   UMA_HISTOGRAM_LONG_TIMES("Dialog.DialogDelegate.Duration",
                            base::TimeTicks::Now() - creation_time_);
@@ -279,6 +390,10 @@ DialogDelegate::~DialogDelegate() {
 
 ax::mojom::Role DialogDelegate::GetAccessibleWindowRole() {
   return ax::mojom::Role::kDialog;
+}
+
+std::unique_ptr<View> DialogDelegate::DisownFootnoteView() {
+  return std::move(footnote_view_);
 }
 
 void DialogDelegate::OnWidgetInitialized() {

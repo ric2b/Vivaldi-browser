@@ -8,14 +8,19 @@
 #include "base/macros.h"
 #include "ui/base/x/x11_window.h"
 #include "ui/events/platform/platform_event_dispatcher.h"
+#include "ui/events/platform/x11/x11_event_source.h"
+#include "ui/platform_window/extensions/workspace_extension.h"
+#include "ui/platform_window/extensions/x11_extension.h"
+#include "ui/platform_window/platform_window.h"
 #include "ui/platform_window/platform_window_handler/wm_move_resize_handler.h"
 #include "ui/platform_window/platform_window_init_properties.h"
-#include "ui/platform_window/platform_window_linux.h"
 #include "ui/platform_window/x11/x11_window_export.h"
 
 namespace ui {
 
+class X11ExtensionDelegate;
 class LocatedEvent;
+class WorkspaceExtensionDelegate;
 
 // Delegate interface used to communicate the X11PlatformWindow API client about
 // XEvents of interest.
@@ -27,20 +32,18 @@ class X11_WINDOW_EXPORT XEventDelegate {
   // these.
   virtual void OnXWindowSelectionEvent(XEvent* xev) = 0;
   virtual void OnXWindowDragDropEvent(XEvent* xev) = 0;
-
-  // TODO(crbug.com/981606): DesktopWindowTreeHostX11 forward raw |XEvent|s to
-  // ATK components that currently live in views layer.  Remove once ATK code
-  // is reworked to be reusable.
-  virtual void OnXWindowRawKeyEvent(XEvent* xev) = 0;
 };
 
 // PlatformWindow implementation for X11. PlatformEvents are XEvents.
-class X11_WINDOW_EXPORT X11Window : public PlatformWindowLinux,
+class X11_WINDOW_EXPORT X11Window : public PlatformWindow,
                                     public WmMoveResizeHandler,
                                     public XWindow,
-                                    public PlatformEventDispatcher {
+                                    public PlatformEventDispatcher,
+                                    public XEventDispatcher,
+                                    public WorkspaceExtension,
+                                    public X11Extension {
  public:
-  explicit X11Window(PlatformWindowDelegateLinux* platform_window_delegate);
+  explicit X11Window(PlatformWindowDelegate* platform_window_delegate);
   ~X11Window() override;
 
   void Initialize(PlatformWindowInitProperties properties);
@@ -74,8 +77,6 @@ class X11_WINDOW_EXPORT X11Window : public PlatformWindowLinux,
   PlatformWindowState GetPlatformWindowState() const override;
   void Activate() override;
   void Deactivate() override;
-  bool IsSyncExtensionAvailable() const override;
-  void OnCompleteSwapAfterResize() override;
   void SetUseNativeFrame(bool use_native_frame) override;
   bool ShouldUseNativeFrame() const override;
   void SetCursor(PlatformCursor cursor) override;
@@ -88,24 +89,41 @@ class X11_WINDOW_EXPORT X11Window : public PlatformWindowLinux,
   ZOrderLevel GetZOrderLevel() const override;
   void StackAbove(gfx::AcceleratedWidget widget) override;
   void StackAtTop() override;
-  base::Optional<int> GetWorkspace() const override;
-  void SetVisibleOnAllWorkspaces(bool always_visible) override;
-  bool IsVisibleOnAllWorkspaces() const override;
   void FlashFrame(bool flash_frame) override;
-  gfx::Rect GetXRootWindowOuterBounds() const override;
-  bool ContainsPointInXRegion(const gfx::Point& point) const override;
   void SetShape(std::unique_ptr<ShapeRects> native_shape,
                 const gfx::Transform& transform) override;
-  void SetOpacityForXWindow(float opacity) override;
   void SetAspectRatio(const gfx::SizeF& aspect_ratio) override;
   void SetWindowIcons(const gfx::ImageSkia& window_icon,
                       const gfx::ImageSkia& app_icon) override;
   void SizeConstraintsChanged() override;
   bool IsTranslucentWindowOpacitySupported() const override;
+  void SetOpacity(float opacity) override;
+
+  // WorkspaceExtension:
+  std::string GetWorkspace() const override;
+  void SetVisibleOnAllWorkspaces(bool always_visible) override;
+  bool IsVisibleOnAllWorkspaces() const override;
+  void SetWorkspaceExtensionDelegate(
+      WorkspaceExtensionDelegate* delegate) override;
+
+  // X11Extension:
+  bool IsSyncExtensionAvailable() const override;
+  bool IsWmTiling() const override;
+  void OnCompleteSwapAfterResize() override;
+  gfx::Rect GetXRootWindowOuterBounds() const override;
+  bool ContainsPointInXRegion(const gfx::Point& point) const override;
   void LowerXWindow() override;
+  void SetOverrideRedirect(bool override_redirect) override;
+  void SetX11ExtensionDelegate(X11ExtensionDelegate* delegate) override;
+
+  // Overridden from ui::XEventDispatcher:
+  void CheckCanDispatchNextPlatformEvent(XEvent* xev) override;
+  void PlatformEventDispatchFinished() override;
+  PlatformEventDispatcher* GetPlatformEventDispatcher() override;
+  bool DispatchXEvent(XEvent* event) override;
 
  protected:
-  PlatformWindowDelegateLinux* platform_window_delegate() const {
+  PlatformWindowDelegate* platform_window_delegate() const {
     return platform_window_delegate_;
   }
 
@@ -115,8 +133,6 @@ class X11_WINDOW_EXPORT X11Window : public PlatformWindowLinux,
   void OnXWindowCreated() override;
 
  private:
-  void ProcessXInput2Event(XEvent* xev);
-
   // PlatformEventDispatcher:
   bool CanDispatchEvent(const PlatformEvent& event) override;
   uint32_t DispatchEvent(const PlatformEvent& event) override;
@@ -127,26 +143,24 @@ class X11_WINDOW_EXPORT X11Window : public PlatformWindowLinux,
   void OnXWindowBoundsChanged(const gfx::Rect& size) override;
   void OnXWindowCloseRequested() override;
   void OnXWindowIsActiveChanged(bool active) override;
-  void OnXWindowMapped() override;
-  void OnXWindowUnmapped() override;
   void OnXWindowWorkspaceChanged() override;
   void OnXWindowLostPointerGrab() override;
-  void OnXWindowEvent(ui::Event* event) override;
   void OnXWindowSelectionEvent(XEvent* xev) override;
   void OnXWindowDragDropEvent(XEvent* xev) override;
-  void OnXWindowRawKeyEvent(XEvent* xev) override;
   base::Optional<gfx::Size> GetMinimumSizeForXWindow() override;
   base::Optional<gfx::Size> GetMaximumSizeForXWindow() override;
   void GetWindowMaskForXWindow(const gfx::Size& size,
                                SkPath* window_mask) override;
+
+  void DispatchUiEvent(ui::Event* event, XEvent* xev);
 
   // WmMoveResizeHandler
   void DispatchHostWindowDragMovement(
       int hittest,
       const gfx::Point& pointer_location_in_px) override;
 
-  // X11WindowOzone sets own event dispatcher now.
-  virtual void SetPlatformEventDispatcher();
+  // Handles |xevent| as a Atk Key Event
+  bool HandleAsAtkEvent(XEvent* xevent);
 
   // Adjusts |requested_size_in_pixels| to avoid the WM "feature" where setting
   // the window size to the monitor size causes the WM to set the EWMH for
@@ -163,9 +177,13 @@ class X11_WINDOW_EXPORT X11Window : public PlatformWindowLinux,
   // Stores current state of this window.
   PlatformWindowState state_ = PlatformWindowState::kUnknown;
 
-  PlatformWindowDelegateLinux* const platform_window_delegate_;
+  PlatformWindowDelegate* const platform_window_delegate_;
 
   XEventDelegate* x_event_delegate_ = nullptr;
+
+  WorkspaceExtensionDelegate* workspace_extension_delegate_ = nullptr;
+
+  X11ExtensionDelegate* x11_extension_delegate_ = nullptr;
 
   // Tells if the window got a ::Close call.
   bool is_shutting_down_ = false;
@@ -176,6 +194,11 @@ class X11_WINDOW_EXPORT X11Window : public PlatformWindowLinux,
 
   // The bounds of our window before the window was maximized.
   gfx::Rect restored_bounds_in_pixels_;
+
+  // Tells if this dispatcher can process next translated event based on a
+  // previous check in ::CheckCanDispatchNextPlatformEvent based on a XID
+  // target.
+  XEvent* current_xevent_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(X11Window);
 };

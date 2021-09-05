@@ -12,12 +12,10 @@
 #include "build/build_config.h"
 #include "chrome/browser/chrome_browser_field_trials.h"
 #include "chrome/browser/first_run/first_run.h"
-#include "chrome/browser/metrics/field_trial_synchronizer.h"
 #include "chrome/browser/policy/chrome_browser_policy_connector.h"
 #include "chrome/installer/util/master_preferences.h"
 #include "components/metrics_services_manager/metrics_services_manager.h"
 #include "components/prefs/pref_service.h"
-#include "services/preferences/public/cpp/in_process_service_factory.h"
 
 class ChromeMetricsServicesManagerClient;
 
@@ -63,9 +61,6 @@ class ChromeFeatureListCreator {
   std::unique_ptr<installer::MasterPreferences> TakeMasterPrefs();
 #endif
 
-  // Passes ownership of the |pref_service_factory_| to the caller.
-  std::unique_ptr<prefs::InProcessPrefServiceFactory> TakePrefServiceFactory();
-
   PrefService* local_state() { return local_state_.get(); }
   policy::ChromeBrowserPolicyConnector* browser_policy_connector() {
     return browser_policy_connector_.get();
@@ -87,6 +82,10 @@ class ChromeFeatureListCreator {
   // first-run.
   void SetupMasterPrefs();
 
+  // Must be destroyed after |local_state_|.
+  std::unique_ptr<policy::ChromeBrowserPolicyConnector>
+      browser_policy_connector_;
+
   // If TakePrefService() is called, the caller will take the ownership
   // of this variable. Stop using this variable afterwards.
   std::unique_ptr<PrefService> local_state_;
@@ -101,14 +100,7 @@ class ChromeFeatureListCreator {
   std::unique_ptr<metrics_services_manager::MetricsServicesManager>
       metrics_services_manager_;
 
-  scoped_refptr<FieldTrialSynchronizer> field_trial_synchronizer_;
-
   std::unique_ptr<ChromeBrowserFieldTrials> browser_field_trials_;
-
-  std::unique_ptr<policy::ChromeBrowserPolicyConnector>
-      browser_policy_connector_;
-
-  std::unique_ptr<prefs::InProcessPrefServiceFactory> pref_service_factory_;
 
 #if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
   std::unique_ptr<installer::MasterPreferences> installer_master_prefs_;

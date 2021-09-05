@@ -2,7 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-(function() {
+import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
+import 'chrome://resources/cr_elements/icons.m.js';
+import 'chrome://resources/cr_elements/shared_vars_css.m.js';
+import 'chrome://resources/polymer/v3_0/paper-styles/shadow.js';
+
+import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
 /**
  * Size of additional padding in the inner scrollable section of the dropdown.
  */
@@ -16,6 +22,8 @@ const MIN_DROPDOWN_HEIGHT = 200;
 
 Polymer({
   is: 'viewer-toolbar-dropdown',
+
+  _template: html`{__html_template__}`,
 
   properties: {
     /** Icon to display when the dropdown is closed. */
@@ -100,19 +108,19 @@ Polymer({
    * @return {string} Current icon for the dropdown.
    * @private
    */
-  computeIcon_: function(dropdownOpen, closedIcon, openIcon) {
+  computeIcon_(dropdownOpen, closedIcon, openIcon) {
     return dropdownOpen ? openIcon : closedIcon;
   },
 
   /** @private */
-  lowerBoundChanged_: function() {
+  lowerBoundChanged_() {
     this.maxHeightValid_ = false;
     if (this.dropdownOpen) {
       this.updateMaxHeight();
     }
   },
 
-  toggleDropdown: function() {
+  toggleDropdown() {
     if (!this.dropdownOpen && this.openAfterSelect && !this.selected) {
       // The dropdown has `openAfterSelect` set, but is not yet selected.
       return;
@@ -144,7 +152,7 @@ Polymer({
     this.playAnimation_(this.dropdownOpen);
   },
 
-  updateMaxHeight: function() {
+  updateMaxHeight() {
     const scrollContainer = this.$['scroll-container'];
     let height = this.lowerBound - scrollContainer.getBoundingClientRect().top -
         DROPDOWN_INNER_PADDING;
@@ -159,7 +167,7 @@ Polymer({
    * exit.
    * @private
    */
-  playAnimation_: function(isEntry) {
+  playAnimation_(isEntry) {
     this.animation_ = isEntry ? this.animateEntry_() : this.animateExit_();
     this.animation_.onfinish = () => {
       this.animation_ = null;
@@ -173,7 +181,7 @@ Polymer({
    * @return {!Object} Animation
    * @private
    */
-  animateEntry_: function() {
+  animateEntry_() {
     let maxHeight =
         this.$.dropdown.getBoundingClientRect().height - DROPDOWN_OUTER_PADDING;
 
@@ -182,9 +190,7 @@ Polymer({
     }
 
     this.$.dropdown.animate(
-        {
-          opacity: [0, 1],
-        },
+        [{opacity: 0}, {opacity: 1}],
         {
           duration: 150,
           easing: 'cubic-bezier(0, 0, 0.2, 1)',
@@ -204,7 +210,7 @@ Polymer({
    * @return {!Object} Animation
    * @private
    */
-  animateExit_: function() {
+  animateExit_() {
     return this.$.dropdown.animate(
         [
           {transform: 'translateY(0)', opacity: 1},
@@ -216,4 +222,3 @@ Polymer({
         });
   }
 });
-})();

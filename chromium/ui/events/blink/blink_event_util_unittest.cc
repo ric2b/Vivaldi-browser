@@ -7,10 +7,10 @@
 #include "base/stl_util.h"
 #include "base/time/time.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/public/platform/web_gesture_event.h"
-#include "third_party/blink/public/platform/web_input_event.h"
-#include "third_party/blink/public/platform/web_mouse_wheel_event.h"
-#include "third_party/blink/public/platform/web_pointer_event.h"
+#include "third_party/blink/public/common/input/web_gesture_event.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
+#include "third_party/blink/public/common/input/web_mouse_wheel_event.h"
+#include "third_party/blink/public/common/input/web_pointer_event.h"
 #include "ui/events/gesture_event_details.h"
 
 namespace ui {
@@ -67,7 +67,7 @@ TEST(BlinkEventUtilTest, NonPaginatedWebMouseWheelEvent) {
   blink::WebMouseWheelEvent event(
       blink::WebInputEvent::kMouseWheel, blink::WebInputEvent::kNoModifiers,
       blink::WebInputEvent::GetStaticTimeStampForTests());
-  event.delta_units = ui::input_types::ScrollGranularity::kScrollByPixel;
+  event.delta_units = ui::ScrollGranularity::kScrollByPixel;
   event.delta_x = 1.f;
   event.delta_y = 1.f;
   event.wheel_ticks_x = 1.f;
@@ -87,7 +87,7 @@ TEST(BlinkEventUtilTest, PaginatedWebMouseWheelEvent) {
   blink::WebMouseWheelEvent event(
       blink::WebInputEvent::kMouseWheel, blink::WebInputEvent::kNoModifiers,
       blink::WebInputEvent::GetStaticTimeStampForTests());
-  event.delta_units = ui::input_types::ScrollGranularity::kScrollByPage;
+  event.delta_units = ui::ScrollGranularity::kScrollByPage;
   event.delta_x = 1.f;
   event.delta_y = 1.f;
   event.wheel_ticks_x = 1.f;
@@ -119,9 +119,8 @@ TEST(BlinkEventUtilTest, NonPaginatedScrollBeginEvent) {
 }
 
 TEST(BlinkEventUtilTest, PaginatedScrollBeginEvent) {
-  ui::GestureEventDetails details(
-      ui::ET_GESTURE_SCROLL_BEGIN, 1, 1,
-      ui::input_types::ScrollGranularity::kScrollByPage);
+  ui::GestureEventDetails details(ui::ET_GESTURE_SCROLL_BEGIN, 1, 1,
+                                  ui::ScrollGranularity::kScrollByPage);
   details.set_device_type(ui::GestureDeviceType::DEVICE_TOUCHSCREEN);
   auto event =
       CreateWebGestureEvent(details, base::TimeTicks(), gfx::PointF(1.f, 1.f),
@@ -151,9 +150,8 @@ TEST(BlinkEventUtilTest, NonPaginatedScrollUpdateEvent) {
 }
 
 TEST(BlinkEventUtilTest, PaginatedScrollUpdateEvent) {
-  ui::GestureEventDetails details(
-      ui::ET_GESTURE_SCROLL_UPDATE, 1, 1,
-      ui::input_types::ScrollGranularity::kScrollByPage);
+  ui::GestureEventDetails details(ui::ET_GESTURE_SCROLL_UPDATE, 1, 1,
+                                  ui::ScrollGranularity::kScrollByPage);
   details.set_device_type(ui::GestureDeviceType::DEVICE_TOUCHSCREEN);
   auto event =
       CreateWebGestureEvent(details, base::TimeTicks(), gfx::PointF(1.f, 1.f),
@@ -173,15 +171,15 @@ TEST(BlinkEventUtilTest, LineAndDocumentScrollEvents) {
       ui::ET_GESTURE_SCROLL_UPDATE,
   };
 
-  static const ui::input_types::ScrollGranularity units[] = {
-      ui::input_types::ScrollGranularity::kScrollByLine,
-      ui::input_types::ScrollGranularity::kScrollByDocument,
+  static const ui::ScrollGranularity units[] = {
+      ui::ScrollGranularity::kScrollByLine,
+      ui::ScrollGranularity::kScrollByDocument,
   };
 
   for (size_t i = 0; i < base::size(types); i++) {
     ui::EventType type = types[i];
     for (size_t j = 0; j < base::size(units); j++) {
-      ui::input_types::ScrollGranularity unit = units[j];
+      ui::ScrollGranularity unit = units[j];
       ui::GestureEventDetails details(type, 1, 1, unit);
       details.set_device_type(ui::GestureDeviceType::DEVICE_TOUCHSCREEN);
       auto event = CreateWebGestureEvent(details, base::TimeTicks(),
@@ -270,9 +268,6 @@ TEST(BlinkEventUtilTest, WebMouseWheelEventCoalescing) {
   EXPECT_EQ(blink::WebMouseWheelEvent::kPhaseBegan, coalesced_event.phase);
   EXPECT_EQ(7, coalesced_event.delta_x);
   EXPECT_EQ(9, coalesced_event.delta_y);
-
-  event_to_be_coalesced.resending_plugin_id = 3;
-  EXPECT_FALSE(CanCoalesce(event_to_be_coalesced, coalesced_event));
 }
 
 TEST(BlinkEventUtilTest, WebGestureEventCoalescing) {
@@ -294,9 +289,6 @@ TEST(BlinkEventUtilTest, WebGestureEventCoalescing) {
   Coalesce(event_to_be_coalesced, &coalesced_event);
   EXPECT_EQ(4, coalesced_event.data.scroll_update.delta_x);
   EXPECT_EQ(5, coalesced_event.data.scroll_update.delta_y);
-
-  event_to_be_coalesced.resending_plugin_id = 3;
-  EXPECT_FALSE(CanCoalesce(event_to_be_coalesced, coalesced_event));
 }
 
 TEST(BlinkEventUtilTest, GesturePinchUpdateCoalescing) {

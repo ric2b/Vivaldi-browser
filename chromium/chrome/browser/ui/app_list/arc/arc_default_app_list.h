@@ -17,6 +17,7 @@
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "chrome/browser/chromeos/arc/session/arc_session_manager.h"
 
 class Profile;
 
@@ -25,7 +26,7 @@ class PrefRegistrySyncable;
 }  // namespace user_prefs
 
 // Contains map of default pre-installed apps and packages.
-class ArcDefaultAppList {
+class ArcDefaultAppList : public arc::ArcSessionManager::Observer {
  public:
   struct AppInfo {
     AppInfo(const std::string& name,
@@ -57,10 +58,12 @@ class ArcDefaultAppList {
   using AppInfoMap = std::map<std::string, std::unique_ptr<AppInfo>>;
 
   ArcDefaultAppList(Profile* profile, base::OnceClosure ready_callback);
-  ~ArcDefaultAppList();
+  ~ArcDefaultAppList() override;
 
   static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
   static void UseTestAppsDirectory();
+  static std::string GetBoardNameForTesting(
+      const base::FilePath& build_prop_path);
 
   // Returns default app info if it is found in defaults and its package is not
   // marked as uninstalled.
@@ -71,6 +74,8 @@ class ArcDefaultAppList {
   // Returns true if package exists in default packages list. Note it may be
   // marked as uninstalled.
   bool HasPackage(const std::string& package_name) const;
+  // Returns true if a uninstalled package exists in default packages list.
+  bool HasHiddenPackage(const std::string& package_name) const;
   // Marks default app |app_id| as hidden in case |hidden| is true.
   void SetAppHidden(const std::string& app_id, bool hidden);
   // Marks all default apps from the package |package_name| as hidden.
@@ -86,6 +91,18 @@ class ArcDefaultAppList {
   }
 
  private:
+  // arc::ArcSessionManager::Observer:
+  void OnPropertyFilesExpanded(bool result) override;
+
+  // Loads default apps from two sources:
+  //
+  // /usr/share/google-chrome/extensions/arc - contains default apps for all
+  //     boards that share the same image.
+  // /usr/share/google-chrome/extensions/arc/<BOARD_NAME> - contains default
+  //     apps for particular current board.
+  //
+  void LoadDefaultApps(std::string board_name);
+
   // Called when default apps are read from the provided source.
   void OnAppsRead(std::unique_ptr<AppInfoMap> apps);
   // Called when default apps from all sources are read.

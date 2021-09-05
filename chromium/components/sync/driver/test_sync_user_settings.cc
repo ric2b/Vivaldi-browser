@@ -6,6 +6,7 @@
 
 #include "components/sync/base/passphrase_enums.h"
 #include "components/sync/base/sync_prefs.h"
+#include "components/sync/base/user_selectable_type.h"
 #include "components/sync/driver/sync_service.h"
 #include "components/sync/driver/sync_user_settings_impl.h"
 #include "components/sync/driver/test_sync_service.h"
@@ -22,11 +23,11 @@ bool TestSyncUserSettings::IsSyncRequested() const {
 }
 
 void TestSyncUserSettings::SetSyncRequested(bool requested) {
-  int disable_reasons = service_->GetDisableReasons();
+  SyncService::DisableReasonSet disable_reasons = service_->GetDisableReasons();
   if (requested) {
-    disable_reasons &= ~SyncService::DISABLE_REASON_USER_CHOICE;
+    disable_reasons.Remove(SyncService::DISABLE_REASON_USER_CHOICE);
   } else {
-    disable_reasons |= SyncService::DISABLE_REASON_USER_CHOICE;
+    disable_reasons.Put(SyncService::DISABLE_REASON_USER_CHOICE);
   }
   service_->SetDisableReasons(disable_reasons);
 }
@@ -37,11 +38,11 @@ bool TestSyncUserSettings::IsSyncAllowedByPlatform() const {
 }
 
 void TestSyncUserSettings::SetSyncAllowedByPlatform(bool allowed) {
-  int disable_reasons = service_->GetDisableReasons();
+  SyncService::DisableReasonSet disable_reasons = service_->GetDisableReasons();
   if (allowed) {
-    disable_reasons &= ~SyncService::DISABLE_REASON_PLATFORM_OVERRIDE;
+    disable_reasons.Remove(SyncService::DISABLE_REASON_PLATFORM_OVERRIDE);
   } else {
-    disable_reasons |= SyncService::DISABLE_REASON_PLATFORM_OVERRIDE;
+    disable_reasons.Put(SyncService::DISABLE_REASON_PLATFORM_OVERRIDE);
   }
   service_->SetDisableReasons(disable_reasons);
 }
@@ -91,9 +92,52 @@ UserSelectableTypeSet TestSyncUserSettings::GetRegisteredSelectableTypes()
   return UserSelectableTypeSet::All();
 }
 
-UserSelectableTypeSet TestSyncUserSettings::GetForcedTypes() const {
-  return {};
+#if defined(OS_CHROMEOS)
+bool TestSyncUserSettings::IsSyncAllOsTypesEnabled() const {
+  return sync_all_os_types_enabled_;
 }
+
+UserSelectableOsTypeSet TestSyncUserSettings::GetSelectedOsTypes() const {
+  ModelTypeSet preferred_types = service_->GetPreferredDataTypes();
+  UserSelectableOsTypeSet selected_types;
+  for (UserSelectableOsType type : UserSelectableOsTypeSet::All()) {
+    if (preferred_types.Has(UserSelectableOsTypeToCanonicalModelType(type))) {
+      selected_types.Put(type);
+    }
+  }
+  return selected_types;
+}
+
+void TestSyncUserSettings::SetSelectedOsTypes(bool sync_all_os_types,
+                                              UserSelectableOsTypeSet types) {
+  sync_all_os_types_enabled_ = sync_all_os_types;
+
+  syncer::ModelTypeSet preferred_types;
+  if (sync_all_os_types_enabled_) {
+    for (UserSelectableOsType type : UserSelectableOsTypeSet::All()) {
+      preferred_types.PutAll(UserSelectableOsTypeToAllModelTypes(type));
+    }
+  } else {
+    for (UserSelectableOsType type : types) {
+      preferred_types.PutAll(UserSelectableOsTypeToAllModelTypes(type));
+    }
+  }
+  service_->SetPreferredDataTypes(preferred_types);
+}
+
+UserSelectableOsTypeSet TestSyncUserSettings::GetRegisteredSelectableOsTypes()
+    const {
+  return UserSelectableOsTypeSet::All();
+}
+
+bool TestSyncUserSettings::IsOsSyncFeatureEnabled() const {
+  return os_sync_feature_enabled_;
+}
+
+void TestSyncUserSettings::SetOsSyncFeatureEnabled(bool enabled) {
+  os_sync_feature_enabled_ = enabled;
+}
+#endif
 
 bool TestSyncUserSettings::IsEncryptEverythingAllowed() const {
   return true;
@@ -126,6 +170,10 @@ bool TestSyncUserSettings::IsPassphraseRequiredForPreferredDataTypes() const {
   return passphrase_required_for_preferred_data_types_;
 }
 
+bool TestSyncUserSettings::IsTrustedVaultKeyRequired() const {
+  return trusted_vault_key_required_;
+}
+
 bool TestSyncUserSettings::IsTrustedVaultKeyRequiredForPreferredDataTypes()
     const {
   return trusted_vault_key_required_for_preferred_data_types_;
@@ -152,10 +200,6 @@ bool TestSyncUserSettings::SetDecryptionPassphrase(
   return false;
 }
 
-void TestSyncUserSettings::AddTrustedVaultDecryptionKeys(
-    const std::string& gaia_id,
-    const std::vector<std::string>& keys) {}
-
 void TestSyncUserSettings::SetFirstSetupComplete() {
   first_setup_complete_ = true;
 }
@@ -171,6 +215,10 @@ void TestSyncUserSettings::SetPassphraseRequired(bool required) {
 void TestSyncUserSettings::SetPassphraseRequiredForPreferredDataTypes(
     bool required) {
   passphrase_required_for_preferred_data_types_ = required;
+}
+
+void TestSyncUserSettings::SetTrustedVaultKeyRequired(bool required) {
+  trusted_vault_key_required_ = required;
 }
 
 void TestSyncUserSettings::SetTrustedVaultKeyRequiredForPreferredDataTypes(

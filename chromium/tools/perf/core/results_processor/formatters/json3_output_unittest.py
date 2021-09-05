@@ -12,14 +12,14 @@ from core.results_processor import testing
 class Json3OutputTest(unittest.TestCase):
   def setUp(self):
     self.base_dir = 'base_dir'
+    self.test_path_format = 'telemetry'
 
-  def Convert(self, test_results, **kwargs):
-    base_dir = kwargs.pop('base_dir', self.base_dir)
-    original_results = testing.IntermediateResults(test_results, **kwargs)
-    intermediate_results = copy.deepcopy(original_results)
-    results = json3_output.Convert(intermediate_results, base_dir)
+  def Convert(self, test_results):
+    test_results_copy = copy.deepcopy(test_results)
+    results = json3_output.Convert(
+        test_results_copy, self.base_dir, self.test_path_format)
     # Convert should not modify the original intermediate results.
-    self.assertEqual(intermediate_results, original_results)
+    self.assertEqual(test_results_copy, test_results)
     return results
 
   def FindTestResult(self, results, benchmark, story):
@@ -29,15 +29,15 @@ class Json3OutputTest(unittest.TestCase):
       node = node[key]
     return node
 
-  def testEmptyResults(self):
-    results = self.Convert(
-        [], start_time='2009-02-13T23:31:30.987000Z', interrupted=False)
+  def testStartTime(self):
+    results = self.Convert([
+        testing.TestResult('benchmark/story',
+                           start_time='2009-02-13T23:31:30.987000Z')
+    ])
 
     self.assertFalse(results['interrupted'])
-    self.assertEqual(results['num_failures_by_type'], {})
     self.assertEqual(results['path_delimiter'], '/')
     self.assertEqual(results['seconds_since_epoch'], 1234567890.987)
-    self.assertEqual(results['tests'], {})
     self.assertEqual(results['version'], 3)
 
   def testSingleTestCase(self):
@@ -53,9 +53,11 @@ class Json3OutputTest(unittest.TestCase):
     self.assertNotIn('shard', test_result)
     self.assertEqual(results['num_failures_by_type'], {'PASS': 1})
 
+  # TODO(crbug.com/983993): Remove this test when all stories have
+  # url-friendly names without special characters.
   def testUrlAsStoryName(self):
     results = self.Convert([
-        testing.TestResult('benchmark/http%3A%2F%2Fexample.com')
+        testing.TestResult('benchmark/http://example.com')
     ])
 
     test_result = self.FindTestResult(
@@ -108,7 +110,7 @@ class Json3OutputTest(unittest.TestCase):
         testing.TestResult('benchmark/story2', status='PASS'),
         testing.TestResult('benchmark/story1', status='FAIL'),
         testing.TestResult('benchmark/story2', status='SKIP',
-                           is_expected=False),
+                           expected=False),
     ])
 
     test_result = self.FindTestResult(results, 'benchmark', 'story1')
@@ -177,15 +179,15 @@ class Json3OutputTest(unittest.TestCase):
         testing.TestResult('benchmark/story1', output_artifacts={
             'logs.txt': testing.Artifact(
                 'base/artifacts/logs1.txt',
-                'https://example.org/artifacts/logs1.txt')
+                fetch_url='gs://artifacts/logs1.txt')
         }),
         testing.TestResult('benchmark/story1', output_artifacts={
             'logs.txt': testing.Artifact(
                 'base/artifacts/logs2.txt',
-                'https://example.org/artifacts/logs2.txt'),
+                fetch_url='gs://artifacts/logs2.txt'),
             'trace.json': testing.Artifact(
                 'base/artifacts/trace2.json',
-                'https://example.org/artifacts/trace2.json')
+                fetch_url='gs://artifacts/trace2.json')
         }),
     ])
 
@@ -194,10 +196,10 @@ class Json3OutputTest(unittest.TestCase):
     self.assertEqual(test_result['expected'], 'PASS')
     self.assertEqual(test_result['artifacts'], {
         'logs.txt': [
-            'https://example.org/artifacts/logs1.txt',
-            'https://example.org/artifacts/logs2.txt'
+            'gs://artifacts/logs1.txt',
+            'gs://artifacts/logs2.txt'
         ],
         'trace.json': [
-            'https://example.org/artifacts/trace2.json'
+            'gs://artifacts/trace2.json'
         ]
     })

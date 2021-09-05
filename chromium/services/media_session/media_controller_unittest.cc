@@ -13,12 +13,14 @@
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
 #include "base/unguessable_token.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "services/media_session/media_session_service.h"
 #include "services/media_session/public/cpp/media_metadata.h"
 #include "services/media_session/public/cpp/test/mock_media_session.h"
 #include "services/media_session/public/cpp/test/test_media_controller.h"
 #include "services/media_session/public/mojom/constants.mojom.h"
-#include "services/service_manager/public/cpp/test/test_connector_factory.h"
+#include "services/media_session/public/mojom/media_session.mojom.h"
+#include "services/media_session/public/mojom/media_session_service.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace media_session {
@@ -30,11 +32,10 @@ class MediaControllerTest : public testing::Test {
   void SetUp() override {
     // Create an instance of the MediaSessionService and bind some interfaces.
     service_ = std::make_unique<MediaSessionService>(
-        connector_factory_.RegisterInstance(mojom::kServiceName));
-    connector_factory_.GetDefaultConnector()->Connect(
-        mojom::kServiceName, audio_focus_remote_.BindNewPipeAndPassReceiver());
-    connector_factory_.GetDefaultConnector()->Connect(
-        mojom::kServiceName,
+        service_remote_.BindNewPipeAndPassReceiver());
+    service_remote_->BindAudioFocusManager(
+        audio_focus_remote_.BindNewPipeAndPassReceiver());
+    service_remote_->BindMediaControllerManager(
         controller_manager_remote_.BindNewPipeAndPassReceiver());
 
     controller_manager_remote_->CreateActiveMediaController(
@@ -70,8 +71,8 @@ class MediaControllerTest : public testing::Test {
 
  private:
   base::test::TaskEnvironment task_environment_;
-  service_manager::TestConnectorFactory connector_factory_;
   std::unique_ptr<MediaSessionService> service_;
+  mojo::Remote<mojom::MediaSessionService> service_remote_;
   mojo::Remote<mojom::AudioFocusManager> audio_focus_remote_;
   mojo::Remote<mojom::MediaController> media_controller_remote_;
   mojo::Remote<mojom::MediaControllerManager> controller_manager_remote_;
@@ -1091,9 +1092,7 @@ TEST_F(MediaControllerTest, ActiveController_SimulateImagesChanged) {
   {
     test::TestMediaControllerImageObserver observer(controller(), 0, 0);
 
-    // By default, we should receive an empty image.
-    observer.WaitForExpectedImageOfType(mojom::MediaSessionImageType::kArtwork,
-                                        true);
+    // By default, the image is empty but no notification should be received.
     EXPECT_TRUE(media_session.last_image_src().is_empty());
 
     // Check that we receive the correct image and that it was requested from
@@ -1201,31 +1200,37 @@ TEST_F(MediaControllerTest,
   MediaImage image1;
   image1.src = GURL("https://www.google.com");
   image1.sizes.push_back(gfx::Size(1, 1));
-  images.push_back(image1);
-  media_session.SetImagesOfType(mojom::MediaSessionImageType::kArtwork, images);
+
+  media_session.SetImagesOfType(mojom::MediaSessionImageType::kArtwork,
+                                {image1});
 
   {
     test::TestMediaControllerImageObserver observer(controller(), 5, 10);
 
     // The observer requires an image that is at least 5px but the only image
-    // we have is 1px so the observer will receive a null image.
-    observer.WaitForExpectedImageOfType(mojom::MediaSessionImageType::kArtwork,
-                                        true);
+    // we have is 1px so the observer will not be notified.
     EXPECT_TRUE(media_session.last_image_src().is_empty());
 
     MediaImage image2;
     image2.src = GURL("https://www.example.com");
     image2.sizes.push_back(gfx::Size(10, 10));
-    images.push_back(image2);
 
     // Update the media session with two images, one that is too small and one
     // that is the right size. We should receive the second image through the
     // observer.
     media_session.SetImagesOfType(mojom::MediaSessionImageType::kArtwork,
-                                  images);
+                                  {image1, image2});
     observer.WaitForExpectedImageOfType(mojom::MediaSessionImageType::kArtwork,
                                         false);
     EXPECT_EQ(image2.src, media_session.last_image_src());
+
+    // Use the first set of images again.
+    media_session.SetImagesOfType(mojom::MediaSessionImageType::kArtwork,
+                                  {image1});
+    // The observer requires as image that is at least 5px and should now be
+    // notified that the image was cleared.
+    observer.WaitForExpectedImageOfType(mojom::MediaSessionImageType::kArtwork,
+                                        true);
   }
 }
 

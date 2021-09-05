@@ -20,7 +20,6 @@
 
 #if defined(OS_CHROMEOS)
 #include "chrome/renderer/chromeos_delayed_callback_group.h"
-#include "mojo/public/cpp/bindings/binding.h"
 #endif  // defined(OS_CHROMEOS)
 
 namespace content {
@@ -28,7 +27,7 @@ class ResourceDispatcherDelegate;
 }
 
 namespace visitedlink {
-class VisitedLinkSlave;
+class VisitedLinkReader;
 }
 
 // This class filters the incoming control messages (i.e. ones not destined for
@@ -91,8 +90,8 @@ class ChromeRenderThreadObserver : public content::RenderThreadObserver,
   // |ChromeRenderThreadObserver|.
   const RendererContentSettingRules* content_setting_rules() const;
 
-  visitedlink::VisitedLinkSlave* visited_link_slave() {
-    return visited_link_slave_.get();
+  visitedlink::VisitedLinkReader* visited_link_reader() {
+    return visited_link_reader_.get();
   }
 
 #if defined(OS_CHROMEOS)
@@ -116,9 +115,6 @@ class ChromeRenderThreadObserver : public content::RenderThreadObserver,
   void SetConfiguration(chrome::mojom::DynamicParamsPtr params) override;
   void SetContentSettingRules(
       const RendererContentSettingRules& rules) override;
-  void SetFieldTrialGroup(const std::string& trial_name,
-                          const std::string& group_name) override;
-
   void OnRendererConfigurationAssociatedRequest(
       mojo::PendingAssociatedReceiver<chrome::mojom::RendererConfiguration>
           receiver);
@@ -127,7 +123,7 @@ class ChromeRenderThreadObserver : public content::RenderThreadObserver,
   std::unique_ptr<content::ResourceDispatcherDelegate> resource_delegate_;
   RendererContentSettingRules content_setting_rules_;
 
-  std::unique_ptr<visitedlink::VisitedLinkSlave> visited_link_slave_;
+  std::unique_ptr<visitedlink::VisitedLinkReader> visited_link_reader_;
 
   mojo::AssociatedReceiverSet<chrome::mojom::RendererConfiguration>
       renderer_configuration_receivers_;

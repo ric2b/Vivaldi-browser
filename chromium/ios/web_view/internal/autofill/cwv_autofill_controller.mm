@@ -118,7 +118,8 @@ fetchNonPasswordSuggestionsForFormWithName:(NSString*)formName
 - (instancetype)initWithWebState:(web::WebState*)webState
                    autofillAgent:(AutofillAgent*)autofillAgent
                JSAutofillManager:(JsAutofillManager*)JSAutofillManager
-             JSSuggestionManager:(JsSuggestionManager*)JSSuggestionManager {
+             JSSuggestionManager:(JsSuggestionManager*)JSSuggestionManager
+              passwordController:(CWVPasswordController*)passwordController {
   self = [super init];
   if (self) {
     DCHECK(webState);
@@ -161,9 +162,8 @@ fetchNonPasswordSuggestionsForFormWithName:(NSString*)formName
 
     _JSSuggestionManager = JSSuggestionManager;
 
-    _passwordController =
-        [[CWVPasswordController alloc] initWithWebState:webState
-                                            andDelegate:self];
+    _passwordController = passwordController;
+    _passwordController.delegate = self;
   }
   return self;
 }
@@ -279,13 +279,16 @@ fetchNonPasswordSuggestionsForFormWithName:(NSString*)formName
   // It is necessary to call |checkIfSuggestionsAvailableForForm| before
   // |retrieveSuggestionsForForm| because the former actually queries the db,
   // while the latter merely returns them.
+  NSString* mainFrameID =
+      base::SysUTF8ToNSString(web::GetMainWebFrameId(_webState));
+  BOOL isMainFrame = [frameID isEqualToString:mainFrameID];
   [_autofillAgent checkIfSuggestionsAvailableForForm:formName
                                      fieldIdentifier:fieldIdentifier
                                            fieldType:fieldType
                                                 type:nil
                                           typedValue:nil
                                              frameID:frameID
-                                         isMainFrame:YES
+                                         isMainFrame:isMainFrame
                                       hasUserGesture:YES
                                             webState:_webState
                                    completionHandler:availableHandler];
@@ -345,46 +348,6 @@ fetchNonPasswordSuggestionsForFormWithName:(NSString*)formName
                                       completionHandler:completionHandler];
 }
 
-- (void)findAllFormsWithCompletionHandler:
-    (void (^)(NSArray<CWVAutofillForm*>*))completionHandler {
-  web::WebFramesManager* framesManager = _webState->GetWebFramesManager();
-  DCHECK(framesManager);
-  web::WebFrame* webFrame = framesManager->GetMainWebFrame();
-  if (!webFrame) {
-    completionHandler(nil);
-    return;
-  }
-
-  GURL pageURL = _webState->GetLastCommittedURL();
-  GURL frameOrigin = webFrame->GetSecurityOrigin();
-  id fetchCompletionHandler = ^(NSString* formJSON) {
-    std::vector<autofill::FormData> formDataVector;
-    bool success = autofill::ExtractFormsData(
-        formJSON, /*filtered=*/NO, /*form_name=*/base::string16(), pageURL,
-        frameOrigin, &formDataVector);
-    if (!success) {
-      completionHandler(nil);
-      return;
-    }
-    NSMutableArray<CWVAutofillForm*>* autofillForms = [NSMutableArray array];
-    for (const autofill::FormData& formData : formDataVector) {
-      autofill::FormStructure formStructure(formData);
-      formStructure.DetermineHeuristicTypes();
-      CWVAutofillForm* autofillForm =
-          [[CWVAutofillForm alloc] initWithFormStructure:formStructure];
-      [autofillForms addObject:autofillForm];
-    }
-    completionHandler([autofillForms copy]);
-  };
-
-  // Ignore empty forms.
-  NSUInteger minRequiredFieldsCount = 1;
-  [_JSAutofillManager
-      fetchFormsWithMinimumRequiredFieldsCount:minRequiredFieldsCount
-                                       inFrame:webFrame
-                             completionHandler:fetchCompletionHandler];
-}
-
 #pragma mark - Utility Methods
 
 - (autofill::AutofillManager*)autofillManagerForFrame:(web::WebFrame*)frame {
@@ -403,15 +366,12 @@ fetchNonPasswordSuggestionsForFormWithName:(NSString*)formName
                     delegate {
   // frontend_id is > 0 for Autofill suggestions, == 0 for Autocomplete
   // suggestions, and < 0 for special suggestions such as clear form.
+  // We only want Autofill suggestions.
   std::vector<autofill::Suggestion> filtered_suggestions;
   std::copy_if(suggestions.begin(), suggestions.end(),
                std::back_inserter(filtered_suggestions),
                [](autofill::Suggestion suggestion) {
-                 return suggestion.frontend_id > 0 ||
-                        suggestion.frontend_id ==
-                            autofill::POPUP_ITEM_ID_SHOW_ACCOUNT_CARDS ||
-                        suggestion.frontend_id ==
-                            autofill::POPUP_ITEM_ID_CLEAR_FORM;
+                 return suggestion.frontend_id > 0;
                });
   [_autofillAgent showAutofillPopup:filtered_suggestions
                       popupDelegate:delegate];
@@ -539,6 +499,24 @@ showUnmaskPromptForCard:(const autofill::CreditCard&)creditCard
   [_autofillAgent fillFormData:form inFrame:frame];
 }
 
+- (void)handleParsedForms:(const std::vector<autofill::FormStructure*>&)forms
+                  inFrame:(web::WebFrame*)frame {
+  if (![_delegate respondsToSelector:@selector(autofillController:
+                                                     didFindForms:frameID:)]) {
+    return;
+  }
+
+  NSMutableArray<CWVAutofillForm*>* autofillForms = [NSMutableArray array];
+  for (autofill::FormStructure* form : forms) {
+    CWVAutofillForm* autofillForm =
+        [[CWVAutofillForm alloc] initWithFormStructure:*form];
+    [autofillForms addObject:autofillForm];
+  }
+  [_delegate autofillController:self
+                   didFindForms:autofillForms
+                        frameID:base::SysUTF8ToNSString(frame->GetFrameId())];
+}
+
 - (void)fillFormDataPredictions:
             (const std::vector<autofill::FormDataPredictions>&)forms
                         inFrame:(web::WebFrame*)frame {
@@ -546,22 +524,6 @@ showUnmaskPromptForCard:(const autofill::CreditCard&)creditCard
 }
 
 #pragma mark - CRWWebStateObserver
-
-- (void)webState:(web::WebState*)webState didLoadPageWithSuccess:(BOOL)success {
-  if (!success) {
-    return;
-  }
-
-  web::WebFramesManager* framesManager = _webState->GetWebFramesManager();
-  DCHECK(framesManager);
-  web::WebFrame* webFrame = framesManager->GetMainWebFrame();
-  if (!webFrame) {
-    return;
-  }
-
-  // Start listening for any form mutations.
-  [_JSAutofillManager toggleTrackingFormMutations:YES inFrame:webFrame];
-}
 
 - (void)webState:(web::WebState*)webState
     didRegisterFormActivity:(const autofill::FormActivityParams&)params
@@ -574,45 +536,47 @@ showUnmaskPromptForCard:(const autofill::CreditCard&)creditCard
   NSString* nsFieldType = base::SysUTF8ToNSString(params.field_type);
   NSString* nsFrameID = base::SysUTF8ToNSString(GetWebFrameId(frame));
   NSString* nsValue = base::SysUTF8ToNSString(params.value);
+  BOOL userInitiated = params.has_user_gesture;
   if (params.type == "focus") {
     _lastFocusFormActivityWebFrameID = nsFrameID;
     if ([_delegate respondsToSelector:@selector
-                   (autofillController:didFocusOnFieldWithIdentifier:fieldType
-                                         :formName:frameID:value:)]) {
+                   (autofillController:
+                       didFocusOnFieldWithIdentifier:fieldType:formName:frameID
+                                                    :value:userInitiated:)]) {
       [_delegate autofillController:self
           didFocusOnFieldWithIdentifier:nsFieldIdentifier
                               fieldType:nsFieldType
                                formName:nsFormName
                                 frameID:nsFrameID
-                                  value:nsValue];
+                                  value:nsValue
+                          userInitiated:userInitiated];
     }
   } else if (params.type == "input") {
     _lastFocusFormActivityWebFrameID = nsFrameID;
     if ([_delegate respondsToSelector:@selector
-                   (autofillController:didInputInFieldWithIdentifier:fieldType
-                                         :formName:frameID:value:)]) {
+                   (autofillController:
+                       didInputInFieldWithIdentifier:fieldType:formName:frameID
+                                                    :value:userInitiated:)]) {
       [_delegate autofillController:self
           didInputInFieldWithIdentifier:nsFieldIdentifier
                               fieldType:nsFieldType
                                formName:nsFormName
                                 frameID:nsFrameID
-                                  value:nsValue];
+                                  value:nsValue
+                          userInitiated:userInitiated];
     }
   } else if (params.type == "blur") {
     if ([_delegate respondsToSelector:@selector
-                   (autofillController:didBlurOnFieldWithIdentifier:fieldType
-                                         :formName:frameID:value:)]) {
+                   (autofillController:
+                       didBlurOnFieldWithIdentifier:fieldType:formName:frameID
+                                                   :value:userInitiated:)]) {
       [_delegate autofillController:self
           didBlurOnFieldWithIdentifier:nsFieldIdentifier
                              fieldType:nsFieldType
                               formName:nsFormName
                                frameID:nsFrameID
-                                 value:nsValue];
-    }
-  } else if (params.type == "form_changed") {
-    if ([_delegate respondsToSelector:@selector
-                   (autofillControllerDidInsertFormElements:)]) {
-      [_delegate autofillControllerDidInsertFormElements:self];
+                                 value:nsValue
+                         userInitiated:userInitiated];
     }
   }
 }
@@ -624,12 +588,12 @@ showUnmaskPromptForCard:(const autofill::CreditCard&)creditCard
                    formInMainFrame:(BOOL)isMainFrame
                            inFrame:(web::WebFrame*)frame {
   if ([_delegate respondsToSelector:@selector
-                 (autofillController:didSubmitFormWithName:userInitiated
-                                       :isMainFrame:)]) {
+                 (autofillController:
+                     didSubmitFormWithName:frameID:userInitiated:)]) {
     [_delegate autofillController:self
             didSubmitFormWithName:base::SysUTF8ToNSString(formName)
-                    userInitiated:userInitiated
-                      isMainFrame:isMainFrame];
+                          frameID:base::SysUTF8ToNSString(frame->GetFrameId())
+                    userInitiated:userInitiated];
   }
 }
 

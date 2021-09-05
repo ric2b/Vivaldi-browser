@@ -11,7 +11,7 @@
 
 #if defined(OS_ANDROID)
 #include "base/android/jni_string.h"
-#include "components/signin/internal/identity_manager/android/jni_headers/IdentityMutator_jni.h"
+#include "components/signin/public/android/jni_headers/IdentityMutator_jni.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #endif
 
@@ -46,12 +46,17 @@ bool JniIdentityMutator::ClearPrimaryAccount(JNIEnv* env,
 
 void JniIdentityMutator::ReloadAllAccountsFromSystemWithPrimaryAccount(
     JNIEnv* env,
-    const base::android::JavaParamRef<jobject>& primary_account_id) {
+    const base::android::JavaParamRef<jobject>& j_primary_account_id) {
   DeviceAccountsSynchronizer* device_accounts_synchronizer =
       identity_mutator_->GetDeviceAccountsSynchronizer();
   DCHECK(device_accounts_synchronizer);
+  base::Optional<CoreAccountId> primary_account_id;
+  if (j_primary_account_id) {
+    primary_account_id =
+        ConvertFromJavaCoreAccountId(env, j_primary_account_id);
+  }
   device_accounts_synchronizer->ReloadAllAccountsFromSystemWithPrimaryAccount(
-      ConvertFromJavaCoreAccountId(env, primary_account_id));
+      primary_account_id);
 }
 #endif  // defined(OS_ANDROID)
 

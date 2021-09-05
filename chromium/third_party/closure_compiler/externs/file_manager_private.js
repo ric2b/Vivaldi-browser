@@ -22,6 +22,7 @@ chrome.fileManagerPrivate.VolumeType = {
   ANDROID_FILES: 'android_files',
   DOCUMENTS_PROVIDER: 'documents_provider',
   TESTING: 'testing',
+  SMB: 'smb',
 };
 
 /** @enum {string} */
@@ -31,6 +32,24 @@ chrome.fileManagerPrivate.DeviceType = {
   OPTICAL: 'optical',
   MOBILE: 'mobile',
   UNKNOWN: 'unknown',
+};
+
+/**
+ * @enum {string}
+ */
+chrome.fileManagerPrivate.DriveConnectionStateType = {
+  OFFLINE: 'OFFLINE',
+  METERED: 'METERED',
+  ONLINE: 'ONLINE',
+};
+
+/**
+ * @enum {string}
+ */
+chrome.fileManagerPrivate.DriveOfflineReason = {
+  NOT_READY: 'NOT_READY',
+  NO_NETWORK: 'NO_NETWORK',
+  NO_SERVICE: 'NO_SERVICE',
 };
 
 /** @enum {string} */
@@ -220,7 +239,14 @@ chrome.fileManagerPrivate.Verb = {
 chrome.fileManagerPrivate.SourceRestriction = {
   ANY_SOURCE: 'any_source',
   NATIVE_SOURCE: 'native_source',
-  NATIVE_OR_DRIVE_SOURCE: 'native_or_drive_source',
+};
+
+/** @enum {string} */
+chrome.fileManagerPrivate.RecentFileType = {
+  ALL: 'all',
+  AUDIO: 'audio',
+  IMAGE: 'image',
+  VIDEO: 'video',
 };
 
 /** @enum {string} */
@@ -429,7 +455,7 @@ chrome.fileManagerPrivate.SearchParams;
 /**
  * @typedef {{
  *   query: string,
- *   types: string,
+ *   types: !chrome.fileManagerPrivate.SearchType,
  *   maxResults: number
  * }}
  */
@@ -442,12 +468,12 @@ chrome.fileManagerPrivate.SearchMetadataParams;
  *   availableOffline: (boolean|undefined)
  * }}
  */
-chrome.fileManagerPrivate.SearchResult;
+chrome.fileManagerPrivate.DriveMetadataSearchResult;
 
 /**
  * @typedef {{
- *   type: string,
- *   reason: (string|undefined),
+ *   type: !chrome.fileManagerPrivate.DriveConnectionStateType,
+ *   reason: (!chrome.fileManagerPrivate.DriveOfflineReason|undefined),
  *   hasCellularNetworkAccess: boolean
  * }}
  */
@@ -456,7 +482,8 @@ chrome.fileManagerPrivate.DriveConnectionState;
 /**
  * @typedef {{
  *   type: !chrome.fileManagerPrivate.DeviceEventType,
- *   devicePath: string
+ *   devicePath: string,
+ *   deviceLabel: string
  * }}
  */
 chrome.fileManagerPrivate.DeviceEvent;
@@ -748,12 +775,11 @@ chrome.fileManagerPrivate.searchDrive = function(searchParams, callback) {};
 
 /**
  * Performs drive metadata search. |searchParams| |callback|
- * @param {chrome.fileManagerPrivate.SearchMetadataParams} searchParams
- * @param {function((!Array<!chrome.fileManagerPrivate.SearchResult>|undefined))}
+ * @param {!chrome.fileManagerPrivate.SearchMetadataParams} searchParams
+ * @param {function(!Array<!chrome.fileManagerPrivate.DriveMetadataSearchResult>):void}
  *     callback
  */
-chrome.fileManagerPrivate.searchDriveMetadata = function(searchParams,
-    callback) {};
+chrome.fileManagerPrivate.searchDriveMetadata = function(searchParams, callback) {};
 
 /**
  * Search for files in the given volume, whose content hash matches the list of
@@ -856,12 +882,6 @@ chrome.fileManagerPrivate.openSettingsSubpage = function(sub_page) {};
 chrome.fileManagerPrivate.computeChecksum = function(entry, callback) {};
 
 /**
- * Gets a flag indicating whether PiexLoader is enabled.
- * @param {function((boolean|undefined))} callback
- */
-chrome.fileManagerPrivate.isPiexLoaderEnabled = function(callback) {};
-
-/**
  * Returns list of available providers.
  * @param {function((!Array<!chrome.fileManagerPrivate.Provider>|undefined))}
  *     callback
@@ -915,9 +935,10 @@ chrome.fileManagerPrivate.getDirectorySize = function(entry, callback) {};
 /**
  * Gets recently modified files across file systems.
  * @param {string} restriction
+ * @param {string} fileType
  * @param {function((!Array<!FileEntry>))} callback
  */
-chrome.fileManagerPrivate.getRecentFiles = function(restriction, callback) {};
+chrome.fileManagerPrivate.getRecentFiles = function(restriction, fileType, callback) {};
 
 /**
  * Starts and mounts crostini container.

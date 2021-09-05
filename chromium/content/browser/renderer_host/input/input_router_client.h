@@ -8,10 +8,11 @@
 #include "cc/input/touch_action.h"
 #include "content/browser/renderer_host/event_with_latency_info.h"
 #include "content/common/content_export.h"
+#include "content/common/input/input_handler.mojom.h"
 #include "content/public/browser/native_web_keyboard_event.h"
 #include "content/public/common/input_event_ack_source.h"
 #include "content/public/common/input_event_ack_state.h"
-#include "third_party/blink/public/platform/web_input_event.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
 
 namespace ui {
 class LatencyInfo;
@@ -77,12 +78,26 @@ class CONTENT_EXPORT InputRouterClient {
   // Called to toggle whether the RenderWidgetHost should capture all mouse
   // input.
   virtual void SetMouseCapture(bool capture) = 0;
+  virtual void RequestMouseLock(
+      bool from_user_gesture,
+      bool privileged,
+      bool unadjusted_movement,
+      mojom::WidgetInputHandlerHost::RequestMouseLockCallback response) = 0;
+
+  virtual void RequestMouseLockChange(
+      bool unadjusted_movement,
+      mojom::WidgetInputHandlerHost::RequestMouseLockCallback response) = 0;
+
+  virtual void UnlockMouse() = 0;
 
   virtual void FallbackCursorModeLockCursor(bool left,
                                             bool right,
                                             bool up,
                                             bool down) = 0;
   virtual void FallbackCursorModeSetCursorVisibility(bool visible) = 0;
+
+  // Returns the size of visible viewport in screen space, in DIPs.
+  virtual gfx::Size GetRootWidgetViewportSize() = 0;
 };
 
 } // namespace content

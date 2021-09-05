@@ -12,6 +12,7 @@
 #include "content/public/browser/child_process_launcher_utils.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/common/content_client.h"
+#include "content/public/common/content_constants.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/result_codes.h"
 #include "content/public/common/sandboxed_process_launcher_delegate.h"
@@ -37,10 +38,9 @@ void ChildProcessLauncherHelper::BeforeLaunchOnClientThread() {
 std::unique_ptr<FileMappedForLaunch>
 ChildProcessLauncherHelper::GetFilesToMap() {
   DCHECK(CurrentlyOnProcessLauncherTaskRunner());
-  return CreateDefaultPosixFilesToMap(child_process_id(),
-                                      mojo_channel_->remote_endpoint(),
-                                      true /* include_service_required_files */,
-                                      GetProcessType(), command_line());
+  return CreateDefaultPosixFilesToMap(
+      child_process_id(), mojo_channel_->remote_endpoint(), files_to_preload_,
+      GetProcessType(), command_line());
 }
 
 bool ChildProcessLauncherHelper::BeforeLaunchOnLauncherThread(
@@ -84,14 +84,13 @@ ChildProcessLauncherHelper::LaunchProcessOnLauncherThread(
 
 #if !defined(OS_OPENBSD)
     if (handle) {
-      // This is just a starting score for a renderer or extension (the
-      // only types of processes that will be started this way).  It will
-      // get adjusted as time goes on.  (This is the same value as
-      // chrome::kLowestRendererOomScore in chrome/chrome_constants.h, but
-      // that's not something we can include here.)
-      const int kLowestRendererOomScore = 300;
+      // It could be a renderer process or an utility process.
+      int oom_score = content::kMiscOomScore;
+      if (command_line()->GetSwitchValueASCII(switches::kProcessType) ==
+          switches::kRendererProcess)
+        oom_score = content::kLowestRendererOomScore;
       service_manager::ZygoteHostImpl::GetInstance()->AdjustRendererOOMScore(
-          handle, kLowestRendererOomScore);
+          handle, oom_score);
     }
 #endif
 
@@ -159,18 +158,6 @@ void ChildProcessLauncherHelper::SetProcessPriorityOnLauncherThread(
   DCHECK(CurrentlyOnProcessLauncherTaskRunner());
   if (process.CanBackgroundProcesses())
     process.SetProcessBackgrounded(priority.is_background());
-}
-
-// static
-void ChildProcessLauncherHelper::SetRegisteredFilesForService(
-    const std::string& service_name,
-    std::map<std::string, base::FilePath> required_files) {
-  SetFilesToShareForServicePosix(service_name, std::move(required_files));
-}
-
-// static
-void ChildProcessLauncherHelper::ResetRegisteredFilesForTesting() {
-  ResetFilesToShareForTestingPosix();
 }
 
 // static

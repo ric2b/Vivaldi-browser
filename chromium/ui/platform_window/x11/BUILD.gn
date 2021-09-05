@@ -23,6 +23,8 @@ jumbo_component("x11") {
     "//ui/events/platform/x11",
     "//ui/gfx/x",
     "//ui/platform_window",
+    "//ui/platform_window/common",
+    "//ui/platform_window/extensions",
     "//ui/platform_window/platform_window_handler",
   ]
 
@@ -37,4 +39,13 @@ jumbo_component("x11") {
     "x11_window_manager.cc",
     "x11_window_manager.h",
   ]
+
+  if (use_atk) {
+    sources += [
+      "atk_event_conversion.cc",
+      "atk_event_conversion.h",
+    ]
+    configs += [ "//build/config/linux/atk" ]
+    deps += [ "//ui/events/x" ]
+  }
 }

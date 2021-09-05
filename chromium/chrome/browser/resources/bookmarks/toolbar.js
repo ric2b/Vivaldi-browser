@@ -2,11 +2,30 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
+import 'chrome://resources/cr_elements/cr_toolbar/cr_toolbar.m.js';
+import 'chrome://resources/cr_elements/cr_toolbar/cr_toolbar_search_field.m.js';
+import 'chrome://resources/cr_elements/cr_toolbar/cr_toolbar_selection_overlay.m.js';
+import 'chrome://resources/cr_elements/icons.m.js';
+import './shared_style.js';
+import './strings.m.js';
+
+import {assert} from 'chrome://resources/js/assert.m.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
+import {deselectItems, setSearchTerm} from './actions.js';
+import {CommandManager} from './command_manager.js';
+import {Command, MenuSource} from './constants.js';
+import {StoreClient} from './store_client.js';
+
 Polymer({
   is: 'bookmarks-toolbar',
 
+  _template: html`{__html_template__}`,
+
   behaviors: [
-    bookmarks.StoreClient,
+    StoreClient,
   ],
 
   properties: {
@@ -40,7 +59,7 @@ Polymer({
     globalCanEdit_: Boolean,
   },
 
-  attached: function() {
+  attached() {
     this.watch('searchTerm_', function(state) {
       return state.search.term;
     });
@@ -63,7 +82,7 @@ Polymer({
    * @param {Event} e
    * @private
    */
-  onMenuButtonOpenTap_: function(e) {
+  onMenuButtonOpenTap_(e) {
     this.fire('open-command-menu', {
       targetElement: e.target,
       source: MenuSource.TOOLBAR,
@@ -71,35 +90,35 @@ Polymer({
   },
 
   /** @private */
-  onDeleteSelectionTap_: function() {
+  onDeleteSelectionTap_() {
     const selection = this.selectedItems_;
-    const commandManager = bookmarks.CommandManager.getInstance();
+    const commandManager = CommandManager.getInstance();
     assert(commandManager.canExecute(Command.DELETE, selection));
     commandManager.handle(Command.DELETE, selection);
   },
 
   /** @private */
-  onClearSelectionTap_: function() {
-    this.dispatch(bookmarks.actions.deselectItems());
+  onClearSelectionTap_() {
+    this.dispatch(deselectItems());
   },
 
   /**
    * @param {!CustomEvent<string>} e
    * @private
    */
-  onSearchChanged_: function(e) {
-    if (e.detail != this.searchTerm_) {
-      this.dispatch(bookmarks.actions.setSearchTerm(e.detail));
+  onSearchChanged_(e) {
+    if (e.detail !== this.searchTerm_) {
+      this.dispatch(setSearchTerm(e.detail));
     }
   },
 
   /** @private */
-  onSidebarWidthChanged_: function() {
+  onSidebarWidthChanged_() {
     this.style.setProperty('--sidebar-width', this.sidebarWidth);
   },
 
   /** @private */
-  onSearchTermChanged_: function() {
+  onSearchTermChanged_() {
     this.searchField.setValue(this.searchTerm_ || '');
   },
 
@@ -107,7 +126,7 @@ Polymer({
    * @return {boolean}
    * @private
    */
-  shouldShowSelectionOverlay_: function() {
+  shouldShowSelectionOverlay_() {
     return this.selectedItems_.size > 1 && this.globalCanEdit_;
   },
 
@@ -115,9 +134,9 @@ Polymer({
    * @return {boolean}
    * @private
    */
-  canDeleteSelection_: function() {
+  canDeleteSelection_() {
     return this.showSelectionOverlay &&
-        bookmarks.CommandManager.getInstance().canExecute(
+        CommandManager.getInstance().canExecute(
             Command.DELETE, this.selectedItems_);
   },
 
@@ -125,7 +144,7 @@ Polymer({
    * @return {string}
    * @private
    */
-  getItemsSelectedString_: function() {
+  getItemsSelectedString_() {
     return loadTimeData.getStringF('itemsSelected', this.selectedItems_.size);
   },
 });

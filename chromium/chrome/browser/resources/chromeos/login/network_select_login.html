@@ -1,23 +1,21 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
-<link rel="import" href="chrome://resources/cr_elements/chromeos/network/cr_network_select.html">
-<link rel="import" href="chrome://resources/cr_elements/chromeos/network/cr_onc_strings.html">
-<link rel="import" href="chrome://resources/html/chromeos/onc_mojo.html">
+<link rel="import" href="chrome://resources/cr_components/chromeos/network/network_select.html">
+<link rel="import" href="chrome://resources/cr_components/chromeos/network/onc_mojo.html">
 
 <dom-module id="network-select-login">
-  <style>
-    :host {
-      display: inline-flex;
-      min-height: 0;
-    }
-
-    #networkSelect {
-      flex: 1;
-    }
-  </style>
   <template>
-    <cr-network-select id="networkSelect" class="focus-on-show"
+    <style>
+      :host {
+        display: inline-flex;
+      }
+
+      #networkSelect {
+        flex: 1;
+      }
+    </style>
+    <network-select id="networkSelect" class="focus-on-show"
         show-scan-progress
-        custom-items="[[getNetworkCustomItems_(isConnected)]]"
+        custom-items="[[getNetworkCustomItems_(isNetworkConnected)]]"
         on-default-network-changed="onDefaultNetworkChanged_"
         on-network-connect-changed="onNetworkConnectChanged_"
         on-network-list-changed="onNetworkListChanged_"
@@ -25,6 +23,6 @@
         on-custom-item-selected="onNetworkListCustomItemSelected_"
         no-bottom-scroll-border="[[noBottomScrollBorder]]"
         show-technology-badge="[[showTechnologyBadge_]]">
-    </cr-network-select>
+    </network-select>
   </template>
 </dom-module>

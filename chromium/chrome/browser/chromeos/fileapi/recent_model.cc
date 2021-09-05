@@ -22,7 +22,7 @@
 #include "chrome/browser/chromeos/fileapi/recent_file.h"
 #include "chrome/browser/chromeos/fileapi/recent_model_factory.h"
 #include "content/public/browser/browser_thread.h"
-#include "storage/browser/fileapi/file_system_context.h"
+#include "storage/browser/file_system/file_system_context.h"
 
 using content::BrowserThread;
 
@@ -87,13 +87,17 @@ RecentModel::~RecentModel() {
 void RecentModel::GetRecentFiles(
     storage::FileSystemContext* file_system_context,
     const GURL& origin,
+    FileType file_type,
     GetRecentFilesCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   // Use cache if available.
   if (cached_files_.has_value()) {
-    std::move(callback).Run(cached_files_.value());
-    return;
+    if (cached_files_type_ == file_type) {
+      std::move(callback).Run(cached_files_.value());
+      return;
+    }
+    cached_files_.reset();
   }
 
   bool builder_already_running = !pending_callbacks_.empty();
@@ -112,7 +116,7 @@ void RecentModel::GetRecentFiles(
 
   num_inflight_sources_ = sources_.size();
   if (sources_.empty()) {
-    OnGetRecentFilesCompleted();
+    OnGetRecentFilesCompleted(file_type);
     return;
   }
 
@@ -122,10 +126,10 @@ void RecentModel::GetRecentFiles(
 
   for (const auto& source : sources_) {
     source->GetRecentFiles(RecentSource::Params(
-        file_system_context, origin, max_files_, cutoff_time,
+        file_system_context, origin, max_files_, cutoff_time, file_type,
         base::BindOnce(&RecentModel::OnGetRecentFiles,
-                       weak_ptr_factory_.GetWeakPtr(), max_files_,
-                       cutoff_time)));
+                       weak_ptr_factory_.GetWeakPtr(), max_files_, cutoff_time,
+                       file_type)));
   }
 }
 
@@ -139,6 +143,7 @@ void RecentModel::Shutdown() {
 
 void RecentModel::OnGetRecentFiles(size_t max_files,
                                    const base::Time& cutoff_time,
+                                   FileType file_type,
                                    std::vector<RecentFile> files) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
@@ -154,10 +159,10 @@ void RecentModel::OnGetRecentFiles(size_t max_files,
 
   --num_inflight_sources_;
   if (num_inflight_sources_ == 0)
-    OnGetRecentFilesCompleted();
+    OnGetRecentFilesCompleted(file_type);
 }
 
-void RecentModel::OnGetRecentFilesCompleted() {
+void RecentModel::OnGetRecentFilesCompleted(FileType file_type) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   DCHECK_EQ(0, num_inflight_sources_);
@@ -171,6 +176,7 @@ void RecentModel::OnGetRecentFilesCompleted() {
   }
   std::reverse(files.begin(), files.end());
   cached_files_ = std::move(files);
+  cached_files_type_ = file_type;
 
   DCHECK(cached_files_.has_value());
   DCHECK(intermediate_files_.empty());

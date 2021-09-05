@@ -1,21 +1,19 @@
 import("//build/config/jumbo.gni")
 import("//tools/grit/grit_rule.gni")
 
-jumbo_static_library("extensions") {
+static_library("extensions") {
   public_deps = [
     ":resources",
     "api:apis",
     "schema",
+    "tools",
+    "//extensions/browser:browser",
   ]
   deps = [
-    ":resources",
     "helper",
     "permissions",
-    "schema",
-    "tools",
     "//base:base",
     "//chrome/browser/extensions:extensions",
-    "//extensions/browser:browser",
     "//skia",
   ]
   sources = [
@@ -24,16 +22,19 @@ jumbo_static_library("extensions") {
   ]
 }
 
-jumbo_static_library("extensions_client") {
+static_library("extensions_client") {
   public_deps = [
     "permissions",
 
-    #"api:apis",
     "schema",
     "//chrome/common",
+    "//chrome/common/apps/platform_apps",
   ]
   deps = [
     ":resources",
+  ]
+  allow_circular_includes_from = [
+    "//chrome/common",
   ]
   sources = [
     "vivaldi_extensions_client.cpp",

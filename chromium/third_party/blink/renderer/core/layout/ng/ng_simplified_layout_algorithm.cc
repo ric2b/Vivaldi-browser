@@ -36,9 +36,11 @@ NGSimplifiedLayoutAlgorithm::NGSimplifiedLayoutAlgorithm(
   const NGPhysicalBoxFragment& physical_fragment =
       To<NGPhysicalBoxFragment>(result.PhysicalFragment());
 
+  container_builder_.SetIsInlineFormattingContext(
+      Node().IsInlineFormattingContextRoot());
   container_builder_.SetStyleVariant(physical_fragment.StyleVariant());
   container_builder_.SetIsNewFormattingContext(
-      physical_fragment.IsBlockFormattingContextRoot());
+      physical_fragment.IsFormattingContextRoot());
   container_builder_.SetInitialFragmentGeometry(params.fragment_geometry);
 
   NGExclusionSpace exclusion_space = result.ExclusionSpace();
@@ -65,11 +67,10 @@ NGSimplifiedLayoutAlgorithm::NGSimplifiedLayoutAlgorithm(
     container_builder_.SetIsPushedByFloats();
   container_builder_.SetAdjoiningObjectTypes(result.AdjoiningObjectTypes());
 
-  for (const auto& request : ConstraintSpace().BaselineRequests()) {
-    base::Optional<LayoutUnit> baseline = physical_fragment.Baseline(request);
-    if (baseline)
-      container_builder_.AddBaseline(request, *baseline);
-  }
+  if (physical_fragment.Baseline())
+    container_builder_.SetBaseline(*physical_fragment.Baseline());
+  if (physical_fragment.LastBaseline())
+    container_builder_.SetLastBaseline(*physical_fragment.LastBaseline());
 
   container_builder_.SetBlockSize(ComputeBlockSizeForFragment(
       ConstraintSpace(), Style(),
@@ -171,7 +172,7 @@ scoped_refptr<const NGLayoutResult> NGSimplifiedLayoutAlgorithm::Layout() {
 
     // Only take exclusion spaces from children which don't establish their own
     // formatting context.
-    if (!fragment.IsBlockFormattingContextRoot())
+    if (!fragment.IsFormattingContextRoot())
       exclusion_space_ = result->ExclusionSpace();
     ++it;
   }

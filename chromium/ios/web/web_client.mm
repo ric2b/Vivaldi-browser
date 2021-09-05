@@ -96,15 +96,13 @@ void WebClient::AllowCertificateError(
   callback.Run(false);
 }
 
-bool WebClient::IsSlimNavigationManagerEnabled() const {
-  return base::FeatureList::IsEnabled(web::features::kSlimNavigationManager);
-}
-
 void WebClient::PrepareErrorPage(WebState* web_state,
                                  const GURL& url,
                                  NSError* error,
                                  bool is_post,
                                  bool is_off_the_record,
+                                 const base::Optional<net::SSLInfo>& info,
+                                 int64_t navigation_id,
                                  base::OnceCallback<void(NSString*)> callback) {
   DCHECK(error);
   std::move(callback).Run(error.localizedDescription);
@@ -112,6 +110,19 @@ void WebClient::PrepareErrorPage(WebState* web_state,
 
 UIView* WebClient::GetWindowedContainer() {
   return nullptr;
+}
+
+bool WebClient::EnableLongPressAndForceTouchHandling() const {
+  return true;
+}
+
+bool WebClient::ForceMobileVersionByDefault(const GURL&) {
+  return false;
+}
+
+UserAgentType WebClient::GetDefaultUserAgent(UIView* web_view,
+                                             const GURL& url) {
+  return UserAgentType::MOBILE;
 }
 
 }  // namespace web

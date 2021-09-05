@@ -12,10 +12,11 @@
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/logging.h"
+#include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/base/time.h"
-#include "components/sync/engine/net/network_resources.h"
+#include "components/sync/driver/profile_sync_service.h"
 #include "components/sync/protocol/sync.pb.h"
 #include "components/sync/test/fake_server/bookmark_entity_builder.h"
 #include "components/sync/test/fake_server/fake_server.h"
@@ -40,25 +41,25 @@ static jlong JNI_FakeServerHelper_Init(JNIEnv* env,
 
 jlong FakeServerHelperAndroid::CreateFakeServer(
     JNIEnv* env,
-    const JavaParamRef<jobject>& obj) {
-  fake_server::FakeServer* fake_server = new fake_server::FakeServer();
-  return reinterpret_cast<intptr_t>(fake_server);
-}
-
-jlong FakeServerHelperAndroid::CreateNetworkResources(
-    JNIEnv* env,
     const JavaParamRef<jobject>& obj,
-    jlong fake_server) {
-  fake_server::FakeServer* fake_server_ptr =
-      reinterpret_cast<fake_server::FakeServer*>(fake_server);
-  syncer::NetworkResources* resources =
-      new fake_server::FakeServerNetworkResources(fake_server_ptr->AsWeakPtr());
-  return reinterpret_cast<intptr_t>(resources);
+    jlong profile_sync_service) {
+  fake_server::FakeServer* fake_server = new fake_server::FakeServer();
+  syncer::ProfileSyncService* sync_service =
+      reinterpret_cast<syncer::ProfileSyncService*>(profile_sync_service);
+  sync_service->OverrideNetworkForTest(
+      fake_server::CreateFakeServerHttpPostProviderFactory(
+          fake_server->AsWeakPtr()));
+  return reinterpret_cast<intptr_t>(fake_server);
 }
 
 void FakeServerHelperAndroid::DeleteFakeServer(JNIEnv* env,
                                                const JavaParamRef<jobject>& obj,
-                                               jlong fake_server) {
+                                               jlong fake_server,
+                                               jlong profile_sync_service) {
+  base::ScopedAllowBlockingForTesting scoped_allow;
+  syncer::ProfileSyncService* sync_service =
+      reinterpret_cast<syncer::ProfileSyncService*>(profile_sync_service);
+  sync_service->OverrideNetworkForTest(syncer::CreateHttpPostProviderFactory());
   fake_server::FakeServer* fake_server_ptr =
       reinterpret_cast<fake_server::FakeServer*>(fake_server);
   delete fake_server_ptr;
@@ -254,6 +255,10 @@ void FakeServerHelperAndroid::ModifyBookmarkEntity(
       CreateBookmarkEntity(env, title, url, parent_id);
   sync_pb::SyncEntity proto;
   bookmark->SerializeAsProto(&proto);
+  // The GUID has just been regenerated in CreateBookmarkEntity(). To avoid
+  // running into a GUID mismatch, let's clear it here since it can be auto-
+  // populated by ModelTypeWorker.
+  proto.mutable_specifics()->mutable_bookmark()->clear_guid();
   fake_server_ptr->ModifyBookmarkEntity(
       base::android::ConvertJavaStringToUTF8(env, entity_id),
       base::android::ConvertJavaStringToUTF8(env, parent_id),
@@ -279,6 +284,10 @@ void FakeServerHelperAndroid::ModifyBookmarkFolderEntity(
 
   sync_pb::SyncEntity proto;
   bookmark_builder.BuildFolder()->SerializeAsProto(&proto);
+  // The GUID has just been regenerated in CreateBookmarkEntity(). To avoid
+  // running into a GUID mismatch, let's clear it here since it can be auto-
+  // populated by ModelTypeWorker.
+  proto.mutable_specifics()->mutable_bookmark()->clear_guid();
   fake_server_ptr->ModifyBookmarkEntity(
       base::android::ConvertJavaStringToUTF8(env, entity_id),
       base::android::ConvertJavaStringToUTF8(env, parent_id),

@@ -7,7 +7,7 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
-#include "media/base/decrypt_config.h"
+#include "media/base/encryption_scheme.h"
 #include "media/formats/mp2t/ts_section_psi.h"
 
 namespace media {
@@ -15,13 +15,13 @@ namespace mp2t {
 
 class TsSectionCat : public TsSectionPsi {
  public:
-  // RegisterCencPidsCb::Run(int ca_pid, int pssh_pid);
-  using RegisterCencPidsCb = base::RepeatingCallback<void(int, int)>;
-  // RegisterEncryptionMode::Run(EncryptionMode mode);
-  using RegisterEncryptionModeCb =
-      base::RepeatingCallback<void(EncryptionMode)>;
-  TsSectionCat(const RegisterCencPidsCb& register_cenc_ids_cb,
-               const RegisterEncryptionModeCb& register_encryption_mode_cb);
+  // RegisterCencPidsCB::Run(int ca_pid, int pssh_pid);
+  using RegisterCencPidsCB = base::RepeatingCallback<void(int, int)>;
+  // RegisterEncryptionScheme::Run(EncryptionScheme scheme);
+  using RegisterEncryptionSchemeCB =
+      base::RepeatingCallback<void(EncryptionScheme)>;
+  TsSectionCat(const RegisterCencPidsCB& register_cenc_ids_cb,
+               const RegisterEncryptionSchemeCB& register_encryption_scheme_cb);
   ~TsSectionCat() override;
 
   // TsSectionPsi implementation.
@@ -29,8 +29,8 @@ class TsSectionCat : public TsSectionPsi {
   void ResetPsiSection() override;
 
  private:
-  RegisterCencPidsCb register_cenc_ids_cb_;
-  RegisterEncryptionModeCb register_encryption_mode_cb_;
+  RegisterCencPidsCB register_cenc_ids_cb_;
+  RegisterEncryptionSchemeCB register_encryption_scheme_cb_;
 
   // Parameters from the CAT.
   int version_number_;

@@ -27,8 +27,11 @@ namespace {
 class DisplayCutoutMockChromeClient : public EmptyChromeClient {
  public:
   // ChromeClient overrides:
-  void EnterFullscreen(LocalFrame& frame, const FullscreenOptions*) override {
-    Fullscreen::DidEnterFullscreen(*frame.GetDocument());
+  void EnterFullscreen(LocalFrame& frame,
+                       const FullscreenOptions*,
+                       bool for_cross_process_descendant) override {
+    Fullscreen::DidResolveEnterFullscreenRequest(*frame.GetDocument(),
+                                                 true /* granted */);
   }
   void ExitFullscreen(LocalFrame& frame) override {
     Fullscreen::DidExitFullscreen(*frame.GetDocument());
@@ -58,8 +61,7 @@ class MediaControlsDisplayCutoutDelegateTest
 
   void SimulateEnterFullscreen() {
     {
-      std::unique_ptr<UserGestureIndicator> gesture =
-          LocalFrame::NotifyUserActivation(GetDocument().GetFrame());
+      LocalFrame::NotifyUserActivation(GetDocument().GetFrame());
       Fullscreen::RequestFullscreen(GetVideoElement());
     }
 
@@ -169,7 +171,7 @@ class MediaControlsDisplayCutoutDelegateTest
   }
 
   HTMLVideoElement& GetVideoElement() {
-    return *ToHTMLVideoElement(GetDocument().getElementById("video"));
+    return *To<HTMLVideoElement>(GetDocument().getElementById("video"));
   }
 
   Persistent<DisplayCutoutMockChromeClient> chrome_client_;

@@ -6,15 +6,17 @@
 #define UI_VIEWS_CONTROLS_LINK_H_
 
 #include <string>
+#include <utility>
 
+#include "base/callback.h"
 #include "base/macros.h"
+#include "base/optional.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/gfx/color_palette.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/style/typography.h"
 
 namespace views {
-
-class LinkListener;
 
 ////////////////////////////////////////////////////////////////////////////////
 //
@@ -27,6 +29,11 @@ class LinkListener;
 class VIEWS_EXPORT Link : public Label {
  public:
   METADATA_HEADER(Link);
+
+  // A callback to be called when the link is clicked.  Closures are also
+  // accepted; see below.
+  using ClickedCallback =
+      base::RepeatingCallback<void(Link* source, int event_flags)>;
 
   // The padding for the focus ring border when rendering a focused Link with
   // FocusStyle::kRing.
@@ -43,15 +50,21 @@ class VIEWS_EXPORT Link : public Label {
                 int text_style = style::STYLE_LINK);
   ~Link() override;
 
-  // Returns the default FocusStyle for a views::Link. Calling SetUnderline()
-  // may change it: E.g. SetUnderline(true) forces FocusStyle::kRing.
-  static FocusStyle GetDefaultFocusStyle();
-
   // Returns the current FocusStyle of this Link.
   FocusStyle GetFocusStyle() const;
 
-  const LinkListener* listener() { return listener_; }
-  void set_listener(LinkListener* listener) { listener_ = listener; }
+  // Allow providing callbacks that expect either zero or two args, since many
+  // callers don't care about the arguments and can avoid adapter functions this
+  // way.
+  void set_callback(base::RepeatingClosure callback) {
+    // Adapt this closure to a ClickedCallback by discarding the extra args.
+    callback_ = base::BindRepeating(
+        [](base::RepeatingClosure closure, Link*, int) { closure.Run(); },
+        std::move(callback));
+  }
+  void set_callback(ClickedCallback callback) {
+    callback_ = std::move(callback);
+  }
 
   SkColor GetColor() const;
 
@@ -84,25 +97,22 @@ class VIEWS_EXPORT Link : public Label {
   void SetUnderline(bool underline);
 
  private:
-  void Init();
-
   void SetPressed(bool pressed);
 
   void RecalculateFont();
 
   void ConfigureFocus();
 
-  LinkListener* listener_;
+  ClickedCallback callback_;
 
   // Whether the link should be underlined when enabled.
-  bool underline_;
+  bool underline_ = false;
 
   // Whether the link is currently pressed.
-  bool pressed_;
+  bool pressed_ = false;
 
   // The color when the link is neither pressed nor disabled.
-  SkColor requested_enabled_color_;
-  bool requested_enabled_color_set_;
+  base::Optional<SkColor> requested_enabled_color_;
 
   PropertyChangedSubscription enabled_changed_subscription_;
 

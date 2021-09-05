@@ -1,24 +1,33 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="sv">
+<translation id="1169602411434249000">Blockera spårare</translation>
 <translation id="1397811292916898096">Sök med <ph name="PRODUCT_NAME" /></translation>
+<translation id="1598449788754183301">Växla vanliga/privata flikar</translation>
+<translation id="1644574205037202324">Historik</translation>
 <translation id="17513872634828108">Öppna flikar</translation>
+<translation id="1829244130665387512">Hitta på sida</translation>
+<translation id="2038563949887743358">Aktivera begäran av datoranpassad webbsida</translation>
 <translation id="2433507940547922241">Utseende</translation>
 <translation id="2633278372998075009">Privata flikar</translation>
 <translation id="3076631378407175873">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. Med ensamrätt.</translation>
 <translation id="3234355010754616171">Ny privat flik</translation>
+<translation id="3518985090088779359">Godkänn och fortsätt</translation>
 <translation id="3700829948786686853">Välkommen till Vivaldi</translation>
 <translation id="4121750346708795461">Genom att använda det här programmet godkänner du Vivaldis <ph name="BEGIN_LINK1" />användarvillkor<ph name="END_LINK1" /> och <ph name="BEGIN_LINK2" />sekretesspolicy<ph name="END_LINK2" />.</translation>
 <translation id="4243710787042215766">Öppna i privat flik</translation>
+<translation id="4526803704855831732">Privata flikar</translation>
 <translation id="4883379392681899581">Lämna privat läge</translation>
 <translation id="4943872375798546930">Inga resultat</translation>
 <translation id="5118676864324397542">Lagring för <ph name="APP_NAME" /></translation>
 <translation id="5233638681132016545">Ny flik</translation>
 <translation id="5495228542153126976">Du har aktiverat det privata läget</translation>
+<translation id="572328651809341494">Nyligen stängda flikar</translation>
 <translation id="5840488417521835756">Lär dig om olika ämnen på webbplatser utan att lämna sidan. Tryck för att söka är en funktion som endast är tillgänglig när Google är inställd som standardsökmotor i Vivaldi. Den skickar ett ord och dess kontext till Google Sök, och får tillbaka definitioner, bilder, sökresultat och andra detaljer.
 
 För att justera söktermen, tryck länge för att välja. Om du vill finjustera sökningen drar du panelen ända upp och trycker på sökrutan.</translation>
 <translation id="6336451774241870485">Ny privat flik</translation>
+<translation id="6593061639179217415">Datoranpassad webbsida</translation>
 <translation id="6610147964972079463">Stäng privata flikar</translation>
 <translation id="706339621163631076">Webbläsarens sekretesspolicy</translation>
 <translation id="7427132068601343474">Om Vivaldi</translation>
@@ -26,6 +35,7 @@ För att justera söktermen, tryck länge för att välja. Om du vill finjustera
 <translation id="7519434535192513364">Tryck för att söka är en funktion som endast är tillgänglig när Google är inställd som standardsökmotor i Vivaldi. Den skickar det markerade ordet och den nuvarande sidan som kontext till Google Search. Du kan stänga av funktionen i <ph name="BEGIN_LINK" />Inställningar<ph name="END_LINK" />.</translation>
 <translation id="7649070708921625228">Hjälp</translation>
 <translation id="804786196054284061">Användarvillkor</translation>
-<translation id="8428213095426709021">Inställningar</translation>
 <translation id="8820817407110198400">Bokmärken</translation>
+<translation id="9063523880881406963">Inaktivera begäran av datoranpassad webbsida</translation>
+<translation id="9080642952018487277">Gå in i privat läge</translation>
 </translationbundle>

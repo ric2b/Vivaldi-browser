@@ -5,15 +5,7 @@ WebArea
 {
   "nodeId": "<string>",
   "ignored": true,
-  "ignoredReasons": [
-    {
-      "name": "uninteresting",
-      "value": {
-        "type": "boolean",
-        "value": true
-      }
-    }
-  ],
+  "ignoredReasons": [],
   "role": {
     "type": "internalRole",
     "value": "Ignored"
@@ -45,32 +37,6 @@ WebArea
     "value": "Ignored"
   },
   "domNode": "svg"
-}
-
-WebArea
-  button "Buttons are leaf nodes"
-    *Ignored
-{
-  "nodeId": "<string>",
-  "ignored": true,
-  "ignoredReasons": [
-    {
-      "name": "ancestorIsLeafNode",
-      "value": {
-        "type": "idref",
-        "relatedNodes": [
-          {
-            "nodeResult": "button"
-          }
-        ]
-      }
-    }
-  ],
-  "role": {
-    "type": "internalRole",
-    "value": "Ignored"
-  },
-  "domNode": "span"
 }
 
 WebArea
@@ -166,14 +132,14 @@ WebArea
 }
 
 WebArea
-  *GenericContainer
+  *generic
     text "Div in list isn't presentational"
 {
   "nodeId": "<string>",
   "ignored": false,
   "role": {
-    "type": "internalRole",
-    "value": "GenericContainer"
+    "type": "role",
+    "value": "generic"
   },
   "name": {
     "type": "computedString",
@@ -508,14 +474,14 @@ WebArea
 }
 
 WebArea
-  *GenericContainer "span with ARIA label"
+  *generic "span with ARIA label"
     text "should not be ignored"
 {
   "nodeId": "<string>",
   "ignored": false,
   "role": {
-    "type": "internalRole",
-    "value": "GenericContainer"
+    "type": "role",
+    "value": "generic"
   },
   "name": {
     "type": "computedString",
@@ -570,14 +536,14 @@ WebArea
 }
 
 WebArea
-  *GenericContainer
+  *generic
     text "summary element without details parent is ignored"
 {
   "nodeId": "<string>",
   "ignored": false,
   "role": {
-    "type": "internalRole",
-    "value": "GenericContainer"
+    "type": "role",
+    "value": "generic"
   },
   "name": {
     "type": "computedString",
@@ -607,6 +573,7 @@ WebArea
 
 WebArea
   *button "Ignored parent shouldn't cause descendant to be missing from the tree"
+    text "Ignored parent shouldn't cause descendant to be missing from the tree"
 {
   "nodeId": "<string>",
   "ignored": false,

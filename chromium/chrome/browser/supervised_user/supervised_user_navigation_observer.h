@@ -5,7 +5,9 @@
 #ifndef CHROME_BROWSER_SUPERVISED_USER_SUPERVISED_USER_NAVIGATION_OBSERVER_H_
 #define CHROME_BROWSER_SUPERVISED_USER_SUPERVISED_USER_NAVIGATION_OBSERVER_H_
 
+#include <map>
 #include <memory>
+#include <set>
 #include <vector>
 
 #include "base/macros.h"
@@ -16,8 +18,8 @@
 #include "chrome/browser/supervised_user/supervised_users.h"
 #include "chrome/common/supervised_user_commands.mojom.h"
 #include "components/sessions/core/serialized_navigation_entry.h"
-#include "content/public/browser/web_contents_binding_set.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "content/public/browser/web_contents_receiver_set.h"
 #include "content/public/browser/web_contents_user_data.h"
 
 class SupervisedUserService;
@@ -28,6 +30,9 @@ class NavigationHandle;
 class RenderFrameHost;
 class WebContents;
 }  // namespace content
+
+using OnInterstitialResultCallback = base::RepeatingCallback<
+    void(SupervisedUserNavigationThrottle::CallbackActions, bool, bool)>;
 
 class SupervisedUserNavigationObserver
     : public content::WebContentsUserData<SupervisedUserNavigationObserver>,
@@ -49,8 +54,7 @@ class SupervisedUserNavigationObserver
       supervised_user_error_page::FilteringBehaviorReason reason,
       int64_t navigation_id,
       int frame_id,
-      const base::Callback<
-          void(SupervisedUserNavigationThrottle::CallbackActions)>& callback);
+      const OnInterstitialResultCallback& callback);
 
   void UpdateMainFrameFilteringStatus(
       SupervisedUserURLFilter::FilteringBehavior behavior,
@@ -81,8 +85,12 @@ class SupervisedUserNavigationObserver
   void OnInterstitialDone(int frame_id);
 
   const std::map<int, std::unique_ptr<SupervisedUserInterstitial>>&
-  interstitials_for_test() {
+  interstitials_for_test() const {
     return supervised_user_interstitials_;
+  }
+
+  const std::set<std::string>& requested_hosts_for_test() const {
+    return requested_hosts_;
   }
 
  private:
@@ -95,8 +103,7 @@ class SupervisedUserNavigationObserver
       supervised_user_error_page::FilteringBehaviorReason reason,
       int64_t navigation_id,
       int frame_id,
-      const base::Callback<
-          void(SupervisedUserNavigationThrottle::CallbackActions)>& callback);
+      const OnInterstitialResultCallback& callback);
 
   void URLFilterCheckCallback(
       const GURL& url,
@@ -112,8 +119,7 @@ class SupervisedUserNavigationObserver
       bool initial_page_load,
       int64_t navigation_id,
       int frame_id,
-      const base::Callback<
-          void(SupervisedUserNavigationThrottle::CallbackActions)>& callback);
+      const OnInterstitialResultCallback& callback);
 
   // Filters the render frame host if render frame is live.
   void FilterRenderFrame(content::RenderFrameHost* render_frame_host);
@@ -124,6 +130,16 @@ class SupervisedUserNavigationObserver
   void GoBack() override;
   void RequestPermission(RequestPermissionCallback callback) override;
   void Feedback() override;
+
+  // When a request is successfully created, this method is called
+  // asynchronously.
+  void RequestCreated(RequestPermissionCallback callback,
+                      const std::string& host,
+                      bool successfully_created_request);
+
+  // Called when the url filter changes i.e. whitelist or blacklist change to
+  // clear up  entries in |requested_hosts_| which have been whitelisted.
+  void MaybeUpdateRequestedHosts();
 
   // Owned by SupervisedUserService.
   const SupervisedUserURLFilter* url_filter_;
@@ -136,6 +152,8 @@ class SupervisedUserNavigationObserver
   std::map<int, std::unique_ptr<SupervisedUserInterstitial>>
       supervised_user_interstitials_;
 
+  std::set<std::string> requested_hosts_;
+
   SupervisedUserURLFilter::FilteringBehavior main_frame_filtering_behavior_ =
       SupervisedUserURLFilter::FilteringBehavior::ALLOW;
   supervised_user_error_page::FilteringBehaviorReason
@@ -145,9 +163,9 @@ class SupervisedUserNavigationObserver
   std::vector<std::unique_ptr<const sessions::SerializedNavigationEntry>>
       blocked_navigations_;
 
-  content::WebContentsFrameBindingSet<
+  content::WebContentsFrameReceiverSet<
       supervised_user::mojom::SupervisedUserCommands>
-      binding_;
+      receiver_;
 
   base::WeakPtrFactory<SupervisedUserNavigationObserver> weak_ptr_factory_{
       this};

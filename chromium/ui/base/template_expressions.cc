@@ -12,55 +12,26 @@
 #include "base/values.h"
 #include "net/base/escape.h"
 
+#if DCHECK_IS_ON()
+#include "third_party/re2/src/re2/re2.h"  // nogncheck
+#endif
+
 namespace {
 const char kLeader[] = "$i18n";
 const size_t kLeaderSize = base::size(kLeader) - 1;
 const char kKeyOpen = '{';
 const char kKeyClose = '}';
-const char kHtmlTemplateStart[] = "_template: html`";
+const char kHtmlTemplateEnd[] = "<!--_html_template_end_-->";
+const char kHtmlTemplateStart[] = "<!--_html_template_start_-->";
 const size_t kHtmlTemplateStartSize = base::size(kHtmlTemplateStart) - 1;
 
-// Currently only legacy _template: html`...`, syntax is supported.
-enum HtmlTemplateType { INVALID = 0, NONE = 1, LEGACY = 2 };
-
-struct TemplatePosition {
-  HtmlTemplateType type;
-  base::StringPiece::size_type position;
-};
+enum HtmlTemplateType { INVALID = 0, NONE = 1, VALID = 2 };
 
 struct HtmlTemplate {
   base::StringPiece::size_type start;
   base::StringPiece::size_type length;
   HtmlTemplateType type;
 };
-
-TemplatePosition FindHtmlTemplateEnd(const base::StringPiece& source) {
-  enum State { OPEN, IN_ESCAPE, IN_TICK };
-  State state = OPEN;
-
-  for (base::StringPiece::size_type i = 0; i < source.length(); i++) {
-    if (state == IN_ESCAPE) {
-      state = OPEN;  // Consume
-      continue;
-    }
-
-    switch (source[i]) {
-      case '\\':
-        state = IN_ESCAPE;
-        break;
-      case '`':
-        state = IN_TICK;
-        break;
-      case ',':
-        if (state == IN_TICK)
-          return {LEGACY, i - 1};
-        FALLTHROUGH;
-      default:
-        state = OPEN;
-    }
-  }
-  return {NONE, base::StringPiece::npos};
-}
 
 HtmlTemplate FindHtmlTemplate(const base::StringPiece& source) {
   HtmlTemplate out;
@@ -73,14 +44,15 @@ HtmlTemplate FindHtmlTemplate(const base::StringPiece& source) {
   }
 
   out.start = found + kHtmlTemplateStartSize;
-  TemplatePosition end = FindHtmlTemplateEnd(source.substr(out.start));
+  base::StringPiece::size_type found_end =
+      source.find(kHtmlTemplateEnd, out.start);
   // Template is not terminated.
-  if (end.type == NONE) {
+  if (found_end == base::StringPiece::npos) {
     out.type = INVALID;
     return out;
   }
 
-  out.length = end.position;
+  out.length = found_end - out.start;
   // Check for a nested template
   if (source.substr(out.start, out.length).find(kHtmlTemplateStart) !=
       base::StringPiece::npos) {
@@ -88,7 +60,7 @@ HtmlTemplate FindHtmlTemplate(const base::StringPiece& source) {
     return out;
   }
 
-  out.type = LEGACY;
+  out.type = VALID;
   return out;
 }
 
@@ -141,6 +113,19 @@ bool EscapeForJS(const std::string& in_string,
   return true;
 }
 
+#if DCHECK_IS_ON()
+// Checks whether the replacement has an unsubstituted placeholder, e.g. "$1".
+bool HasUnexpectedPlaceholder(const std::string& key,
+                              const std::string& replacement) {
+  // TODO(crbug.com/988031): Fix display aria labels.
+#if defined(OS_CHROMEOS)
+  if (key == "displayResolutionText")
+    return false;
+#endif
+  return re2::RE2::PartialMatch(replacement, re2::RE2(R"(\$\d)"));
+}
+#endif  // DCHECK_IS_ON()
+
 bool ReplaceTemplateExpressionsInternal(
     base::StringPiece source,
     const ui::TemplateReplacements& replacements,
@@ -155,19 +140,16 @@ bool ReplaceTemplateExpressionsInternal(
     size_t next_pos = source.find(kLeader, current_pos);
 
     if (next_pos == std::string::npos) {
-      source.substr(current_pos).AppendToString(formatted);
+      formatted->append(source.begin() + current_pos, source.end());
       break;
     }
 
-    source.substr(current_pos, next_pos - current_pos)
-        .AppendToString(formatted);
+    formatted->append(source.data() + current_pos, next_pos - current_pos);
     current_pos = next_pos + kLeaderSize;
 
     size_t context_end = source.find(kKeyOpen, current_pos);
     CHECK_NE(context_end, std::string::npos);
-    std::string context;
-    source.substr(current_pos, context_end - current_pos)
-        .AppendToString(&context);
+    std::string context(source.substr(current_pos, context_end - current_pos));
     current_pos = context_end + sizeof(kKeyOpen);
 
     size_t key_end = source.find(kKeyClose, current_pos);
@@ -204,6 +186,15 @@ bool ReplaceTemplateExpressionsInternal(
     } else {
       CHECK(false) << "Unknown context " << context;
     }
+
+#if DCHECK_IS_ON()
+    // Replacements in Polymer WebUI may invoke JavaScript to replace string
+    // placeholders. In other contexts, placeholders should already be replaced.
+    if (context != "Polymer") {
+      DCHECK(!HasUnexpectedPlaceholder(key, replacement))
+          << "Dangling placeholder found in " << key;
+    }
+#endif
 
     formatted->append(replacement);
 

@@ -17,12 +17,15 @@ namespace gpu {
 #if defined(CYGPROFILE_INSTRUMENTATION)
 constexpr base::TimeDelta kGpuWatchdogTimeout =
     base::TimeDelta::FromSeconds(30);
-#elif defined(OS_WIN) || defined(OS_MACOSX)
+#elif defined(OS_MACOSX)
 constexpr base::TimeDelta kGpuWatchdogTimeout =
-    base::TimeDelta::FromSeconds(15);
+    base::TimeDelta::FromSeconds(25);
+#elif defined(OS_WIN)
+constexpr base::TimeDelta kGpuWatchdogTimeout =
+    base::TimeDelta::FromSeconds(30);
 #else
 constexpr base::TimeDelta kGpuWatchdogTimeout =
-    base::TimeDelta::FromSeconds(10);
+    base::TimeDelta::FromSeconds(15);
 #endif
 
 // It usually takes longer to finish a GPU task when the system just resumes
@@ -33,7 +36,7 @@ constexpr int kRestartFactor = 2;
 // It takes longer to initialize GPU process in Windows. See
 // https://crbug.com/949839 for details.
 #if defined(OS_WIN)
-constexpr int kInitFactor = 4;
+constexpr int kInitFactor = 2;
 #else
 constexpr int kInitFactor = 1;
 #endif

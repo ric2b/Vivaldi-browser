@@ -20,13 +20,14 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.Callback;
-import org.chromium.base.ContextUtils;
 import org.chromium.base.test.util.AdvancedMockContext;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.browser.download.DownloadManagerBridge.DownloadQueryResult;
 import org.chromium.chrome.browser.download.OMADownloadHandler.OMAInfo;
+import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
+import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.test.ChromeBrowserTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.components.offline_items_collection.OfflineItem;
@@ -50,7 +51,6 @@ public class OMADownloadHandlerTest {
     @Rule
     public final ChromeBrowserTestRule mBrowserTestRule = new ChromeBrowserTestRule();
 
-    private static final String PENDING_OMA_DOWNLOADS = "PendingOMADownloads";
     private static final String INSTALL_NOTIFY_URI = "http://test/test";
 
     private TestInfoBarController mTestInfoBarController;
@@ -170,12 +170,12 @@ public class OMADownloadHandlerTest {
         info.addAttributeValue("type", "text/html");
         Assert.assertEquals(info.getDrmType(), null);
 
-        info.addAttributeValue("type", OMADownloadHandler.OMA_DRM_MESSAGE_MIME);
-        Assert.assertEquals(info.getDrmType(), OMADownloadHandler.OMA_DRM_MESSAGE_MIME);
+        info.addAttributeValue("type", MimeUtils.OMA_DRM_MESSAGE_MIME);
+        Assert.assertEquals(info.getDrmType(), MimeUtils.OMA_DRM_MESSAGE_MIME);
 
         // Test that only the first DRM MIME type is returned.
-        info.addAttributeValue("type", OMADownloadHandler.OMA_DRM_CONTENT_MIME);
-        Assert.assertEquals(info.getDrmType(), OMADownloadHandler.OMA_DRM_MESSAGE_MIME);
+        info.addAttributeValue("type", MimeUtils.OMA_DRM_CONTENT_MIME);
+        Assert.assertEquals(info.getDrmType(), MimeUtils.OMA_DRM_MESSAGE_MIME);
     }
 
     /**
@@ -189,8 +189,7 @@ public class OMADownloadHandlerTest {
         Assert.assertEquals(OMADownloadHandler.getOpennableType(info), null);
 
         info.addAttributeValue(OMADownloadHandler.OMA_TYPE, "application/octet-stream");
-        info.addAttributeValue(OMADownloadHandler.OMA_TYPE,
-                OMADownloadHandler.OMA_DRM_MESSAGE_MIME);
+        info.addAttributeValue(OMADownloadHandler.OMA_TYPE, MimeUtils.OMA_DRM_MESSAGE_MIME);
         info.addAttributeValue(OMADownloadHandler.OMA_TYPE, "text/html");
         Assert.assertEquals(OMADownloadHandler.getOpennableType(info), null);
 
@@ -235,8 +234,8 @@ public class OMADownloadHandlerTest {
         Assert.assertEquals(info.getValue(OMADownloadHandler.OMA_DESCRIPTION), "testjpg");
         Assert.assertEquals(info.getValue(OMADownloadHandler.OMA_NEXT_URL), "http://nexturl.html");
         List<String> types = info.getTypes();
-        Assert.assertThat(types,
-                Matchers.containsInAnyOrder("image/jpeg", OMADownloadHandler.OMA_DRM_MESSAGE_MIME));
+        Assert.assertThat(
+                types, Matchers.containsInAnyOrder("image/jpeg", MimeUtils.OMA_DRM_MESSAGE_MIME));
     }
 
     /**
@@ -292,12 +291,12 @@ public class OMADownloadHandlerTest {
                 4, true);
 
         DownloadQueryResultVerifier verifier =
-                new DownloadQueryResultVerifier(DownloadManagerService.DownloadStatus.COMPLETE);
+                new DownloadQueryResultVerifier(DownloadStatus.COMPLETE);
         DownloadManagerBridge.queryDownloadResult(downloadId1, verifier);
         waitForQueryCompletion(verifier);
 
         manager.remove(downloadId1);
-        verifier = new DownloadQueryResultVerifier(DownloadManagerService.DownloadStatus.CANCELLED);
+        verifier = new DownloadQueryResultVerifier(DownloadStatus.CANCELLED);
         DownloadManagerBridge.queryDownloadResult(downloadId1, verifier);
         waitForQueryCompletion(verifier);
     }
@@ -323,11 +322,13 @@ public class OMADownloadHandlerTest {
         // Write a few pending downloads into shared preferences.
         Set<String> pendingOmaDownloads = new HashSet<>();
         pendingOmaDownloads.add(String.valueOf(downloadId1) + "," + INSTALL_NOTIFY_URI);
-        DownloadManagerService.storeDownloadInfo(ContextUtils.getAppSharedPreferences(),
-                PENDING_OMA_DOWNLOADS, pendingOmaDownloads, false /* forceCommit */);
+        DownloadManagerService.storeDownloadInfo(SharedPreferencesManager.getInstance(),
+                ChromePreferenceKeys.DOWNLOAD_PENDING_OMA_DOWNLOADS, pendingOmaDownloads,
+                false /* forceCommit */);
 
-        pendingOmaDownloads = DownloadManagerService.getStoredDownloadInfo(
-                ContextUtils.getAppSharedPreferences(), PENDING_OMA_DOWNLOADS);
+        pendingOmaDownloads =
+                DownloadManagerService.getStoredDownloadInfo(SharedPreferencesManager.getInstance(),
+                        ChromePreferenceKeys.DOWNLOAD_PENDING_OMA_DOWNLOADS);
         Assert.assertEquals(1, pendingOmaDownloads.size());
 
         omaHandler.clearPendingOMADownloads();
@@ -342,8 +343,9 @@ public class OMADownloadHandlerTest {
         });
 
         // The pending downloads set in the shared prefs should be empty now.
-        pendingOmaDownloads = DownloadManagerService.getStoredDownloadInfo(
-                ContextUtils.getAppSharedPreferences(), PENDING_OMA_DOWNLOADS);
+        pendingOmaDownloads =
+                DownloadManagerService.getStoredDownloadInfo(SharedPreferencesManager.getInstance(),
+                        ChromePreferenceKeys.DOWNLOAD_PENDING_OMA_DOWNLOADS);
         Assert.assertEquals(0, pendingOmaDownloads.size());
         Assert.assertEquals(omaHandler.mNofityURI, INSTALL_NOTIFY_URI);
 
@@ -388,7 +390,8 @@ public class OMADownloadHandlerTest {
             });
 
             Set<String> downloads = DownloadManagerService.getStoredDownloadInfo(
-                    ContextUtils.getAppSharedPreferences(), PENDING_OMA_DOWNLOADS);
+                    SharedPreferencesManager.getInstance(),
+                    ChromePreferenceKeys.DOWNLOAD_PENDING_OMA_DOWNLOADS);
             Assert.assertEquals(1, downloads.size());
             OMADownloadHandler.OMAEntry entry =
                     OMADownloadHandler.OMAEntry.parseOMAEntry((String) (downloads.toArray()[0]));

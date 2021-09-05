@@ -16,11 +16,11 @@
 #include "base/values.h"
 #include "base/win/registry.h"
 #include "base/path_service.h"
-#include "chrome/common/ini_parser.h"
+#include "chrome/browser/shell_integration.h"
 #include "chrome/common/importer/imported_bookmark_entry.h"
 #include "chrome/common/importer/importer_bridge.h"
 #include "chrome/common/importer/importer_data_types.h"
-#include "chrome/browser/shell_integration.h"
+#include "chrome/common/ini_parser.h"
 #include "importer/chromium_profile_importer.h"
 #include "ui/base/l10n/l10n_util.h"
 

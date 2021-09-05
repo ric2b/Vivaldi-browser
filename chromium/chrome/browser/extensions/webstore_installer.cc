@@ -391,7 +391,7 @@ void WebstoreInstaller::OnExtensionInstalled(
     download_item_->Remove();
     download_item_ = NULL;
   }
-  crx_installer_ = NULL;
+  crx_installer_.reset();
 
   if (pending_modules_.empty()) {
     CHECK_EQ(extension->id(), id_);
@@ -678,9 +678,8 @@ void WebstoreInstaller::StartDownload(const std::string& extension_id,
     params->set_referrer_policy(
         content::Referrer::ReferrerPolicyForUrlRequest(referrer.policy));
   }
-  params->set_callback(base::Bind(&WebstoreInstaller::OnDownloadStarted,
-                                  this,
-                                  extension_id));
+  params->set_callback(base::BindOnce(&WebstoreInstaller::OnDownloadStarted,
+                                      this, extension_id));
   params->set_download_source(download::DownloadSource::EXTENSION_INSTALLER);
   download_manager->DownloadUrl(std::move(params));
 }

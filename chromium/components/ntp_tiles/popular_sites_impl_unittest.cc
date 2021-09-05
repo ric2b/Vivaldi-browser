@@ -29,7 +29,7 @@
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "net/http/http_status_code.h"
-#include "services/data_decoder/public/cpp/testing_json_parser.h"
+#include "services/data_decoder/public/cpp/test_support/in_process_data_decoder.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 #include "services/network/test/test_url_loader_factory.h"
@@ -117,7 +117,7 @@ class PopularSitesTest : public ::testing::Test {
     auto sites_value = std::make_unique<base::ListValue>();
     for (const TestPopularSite& site : sites) {
       auto site_value = std::make_unique<base::DictionaryValue>();
-      for (const std::pair<std::string, std::string>& kv : site) {
+      for (const std::pair<const std::string, std::string>& kv : site) {
         if (kv.first == kTitleSource) {
           int source;
           bool convert_success = base::StringToInt(kv.second, &source);
@@ -187,7 +187,7 @@ class PopularSitesTest : public ::testing::Test {
     base::RunLoop loop;
     base::Optional<bool> save_success;
     if (popular_sites->MaybeStartFetch(
-            force_download, base::Bind(
+            force_download, base::BindOnce(
                                 [](base::Optional<bool>* save_success,
                                    base::RunLoop* loop, bool success) {
                                   save_success->emplace(success);
@@ -201,11 +201,10 @@ class PopularSitesTest : public ::testing::Test {
   }
 
   std::unique_ptr<PopularSites> CreatePopularSites() {
-    return std::make_unique<PopularSitesImpl>(
-        prefs_.get(),
-        /*template_url_service=*/nullptr,
-        /*variations_service=*/nullptr, test_shared_loader_factory_,
-        base::Bind(&data_decoder::SafeJsonParser::Parse, nullptr));
+    return std::make_unique<PopularSitesImpl>(prefs_.get(),
+                                              /*template_url_service=*/nullptr,
+                                              /*variations_service=*/nullptr,
+                                              test_shared_loader_factory_);
   }
 
   const TestPopularSite kWikipedia;
@@ -214,7 +213,7 @@ class PopularSitesTest : public ::testing::Test {
 
   base::test::SingleThreadTaskEnvironment task_environment_{
       base::test::SingleThreadTaskEnvironment::MainThreadType::UI};
-  data_decoder::TestingJsonParser::ScopedFactoryOverride factory_override_;
+  data_decoder::test::InProcessDataDecoder in_process_data_decoder_;
   std::unique_ptr<sync_preferences::TestingPrefServiceSyncable> prefs_;
   network::TestURLLoaderFactory test_url_loader_factory_;
   scoped_refptr<network::SharedURLLoaderFactory> test_shared_loader_factory_;
@@ -327,7 +326,7 @@ TEST_F(PopularSitesTest, ProvidesDefaultSitesUntilCallbackReturns) {
   base::Optional<bool> save_success = false;
 
   bool callback_was_scheduled = popular_sites->MaybeStartFetch(
-      /*force_download=*/true, base::Bind(
+      /*force_download=*/true, base::BindOnce(
                                    [](base::Optional<bool>* save_success,
                                       base::RunLoop* loop, bool success) {
                                      save_success->emplace(success);

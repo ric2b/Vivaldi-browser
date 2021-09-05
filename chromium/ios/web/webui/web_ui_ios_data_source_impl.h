@@ -29,6 +29,8 @@ class WebUIIOSDataSourceImpl : public URLDataSourceIOSImpl,
   void AddLocalizedString(const std::string& name, int ids) override;
   void AddLocalizedStrings(
       const base::DictionaryValue& localized_strings) override;
+  void AddLocalizedStrings(
+      base::span<const webui::LocalizedString> strings) override;
   void AddBoolean(const std::string& name, bool value) override;
   void UseStringsJs() override;
   void AddResourcePath(const std::string& path, int resource_id) override;
@@ -40,9 +42,8 @@ class WebUIIOSDataSourceImpl : public URLDataSourceIOSImpl,
   ~WebUIIOSDataSourceImpl() override;
 
   // Completes a request by sending our dictionary of localized strings.
-  void SendLocalizedStringsAsJSON(
-      const URLDataSourceIOS::GotDataCallback& callback,
-      bool from_js_module);
+  void SendLocalizedStringsAsJSON(URLDataSourceIOS::GotDataCallback callback,
+                                  bool from_js_module);
 
  private:
   class InternalDataSource;
@@ -60,7 +61,7 @@ class WebUIIOSDataSourceImpl : public URLDataSourceIOSImpl,
   std::string GetSource() const;
   std::string GetMimeType(const std::string& path) const;
   void StartDataRequest(const std::string& path,
-                        const URLDataSourceIOS::GotDataCallback& callback);
+                        URLDataSourceIOS::GotDataCallback callback);
 
   int PathToIdrOrDefault(const std::string& path) const;
 

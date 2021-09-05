@@ -7,10 +7,7 @@ source_set("image_util") {
     "image_util.h",
     "image_util.mm",
   ]
-  deps = [
-    "//third_party/google_toolbox_for_mac",
-    "//ui/base",
-  ]
+  deps = [ "//ui/base" ]
   configs += [ "//build/config/compiler:enable_arc" ]
 }
 

@@ -8,11 +8,12 @@
 
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
-#include "services/service_manager/public/cpp/interface_provider.h"
+#include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/common/cache_storage/cache_storage_utils.h"
 #include "third_party/blink/public/mojom/cache_storage/cache_storage.mojom-blink.h"
 #include "third_party/blink/public/platform/web_content_settings_client.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_multi_cache_query_options.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
@@ -64,14 +65,13 @@ namespace {
 bool IsCacheStorageAllowed(ScriptState* script_state) {
   ExecutionContext* context = ExecutionContext::From(script_state);
 
-  if (auto* document = DynamicTo<Document>(context)) {
+  if (auto* document = Document::DynamicFrom(context)) {
     LocalFrame* frame = document->GetFrame();
     if (!frame)
       return false;
     if (auto* settings_client = frame->GetContentSettingsClient()) {
       // This triggers a sync IPC.
-      return settings_client->AllowCacheStorage(
-          WebSecurityOrigin(context->GetSecurityOrigin()));
+      return settings_client->AllowCacheStorage();
     }
     return true;
   }
@@ -81,7 +81,7 @@ bool IsCacheStorageAllowed(ScriptState* script_state) {
   if (!content_settings_client)
     return true;
   // This triggers a sync IPC.
-  return content_settings_client->AllowCacheStorage(WebSecurityOrigin());
+  return content_settings_client->AllowCacheStorage();
 }
 
 }  // namespace
@@ -138,8 +138,7 @@ ScriptPromise CacheStorage::open(ScriptState* script_state,
                   resolver->Resolve();
                   break;
                 default:
-                  resolver->Reject(
-                      CacheStorageError::CreateException(result->get_status()));
+                  RejectCacheStorageWithError(resolver, result->get_status());
                   break;
               }
             } else {
@@ -211,7 +210,7 @@ ScriptPromise CacheStorage::has(ScriptState* script_state,
                 resolver->Resolve(false);
                 break;
               default:
-                resolver->Reject(CacheStorageError::CreateException(result));
+                RejectCacheStorageWithError(resolver, result);
                 break;
             }
           },
@@ -273,7 +272,7 @@ ScriptPromise CacheStorage::Delete(ScriptState* script_state,
                 resolver->Resolve(false);
                 break;
               default:
-                resolver->Reject(CacheStorageError::CreateException(result));
+                RejectCacheStorageWithError(resolver, result);
                 break;
             }
           },
@@ -423,8 +422,7 @@ ScriptPromise CacheStorage::MatchImpl(ScriptState* script_state,
                   resolver->Resolve();
                   break;
                 default:
-                  resolver->Reject(
-                      CacheStorageError::CreateException(result->get_status()));
+                  RejectCacheStorageWithError(resolver, result->get_status());
                   break;
               }
             } else {
@@ -459,7 +457,7 @@ ScriptPromise CacheStorage::MatchImpl(ScriptState* script_state,
 
 CacheStorage::CacheStorage(ExecutionContext* context,
                            GlobalFetch::ScopedFetcher* fetcher)
-    : ContextLifecycleObserver(context),
+    : ExecutionContextLifecycleObserver(context),
       scoped_fetcher_(fetcher),
       blob_client_list_(MakeGarbageCollected<CacheStorageBlobClientList>()),
       ever_used_(false) {
@@ -479,7 +477,7 @@ CacheStorage::CacheStorage(ExecutionContext* context,
     }
   }
 
-  context->GetInterfaceProvider()->GetInterface(
+  context->GetBrowserInterfaceBroker().GetInterface(
       cache_storage_remote_.BindNewPipeAndPassReceiver(task_runner));
 }
 
@@ -496,11 +494,11 @@ bool CacheStorage::HasPendingActivity() const {
   return ever_used_;
 }
 
-void CacheStorage::Trace(blink::Visitor* visitor) {
+void CacheStorage::Trace(Visitor* visitor) {
   visitor->Trace(scoped_fetcher_);
   visitor->Trace(blob_client_list_);
   ScriptWrappable::Trace(visitor);
-  ContextLifecycleObserver::Trace(visitor);
+  ExecutionContextLifecycleObserver::Trace(visitor);
 }
 
 bool CacheStorage::IsAllowed(ScriptState* script_state) {
@@ -511,7 +509,7 @@ bool CacheStorage::IsAllowed(ScriptState* script_state) {
   return allowed_.value();
 }
 
-void CacheStorage::ContextDestroyed(ExecutionContext*) {
+void CacheStorage::ContextDestroyed() {
   cache_storage_remote_.reset();
 }
 

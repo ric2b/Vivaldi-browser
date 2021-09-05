@@ -11,45 +11,21 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import org.chromium.base.test.BaseJUnit4ClassRunner;
-import org.chromium.base.test.util.CallbackHelper;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
-import org.chromium.weblayer.NewTabCallback;
 import org.chromium.weblayer.Tab;
 import org.chromium.weblayer.shell.InstrumentationActivity;
 
 /**
  * Tests that NewTabCallback methods are invoked as expected.
  */
-@RunWith(BaseJUnit4ClassRunner.class)
+@RunWith(WebLayerJUnit4ClassRunner.class)
 public class NewTabCallbackTest {
     @Rule
     public InstrumentationActivityTestRule mActivityTestRule =
             new InstrumentationActivityTestRule();
 
     private InstrumentationActivity mActivity;
-
-    private static final class CloseTabNewTabCallbackImpl extends NewTabCallback {
-        private final CallbackHelper mCallbackHelper = new CallbackHelper();
-
-        @Override
-        public void onNewTab(Tab tab, int mode) {}
-
-        @Override
-        public void onCloseTab() {
-            mCallbackHelper.notifyCalled();
-        }
-
-        public void waitForCloseTab() {
-            try {
-                // waitForFirst() only handles a single call. If you need more convert from
-                // waitForFirst().
-                mCallbackHelper.waitForFirst();
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
-        }
-    }
 
     @Test
     @SmallTest
@@ -102,5 +78,22 @@ public class NewTabCallbackTest {
         // Clicking on the tab again to callback to close the tab.
         EventUtils.simulateTouchCenterOfView(mActivity.getWindow().getDecorView());
         closeTabImpl.waitForCloseTab();
+    }
+
+    @Test
+    @SmallTest
+    public void testNewTabHasFocus() {
+        String url = mActivityTestRule.getTestDataURL("new_browser.html");
+        mActivity = mActivityTestRule.launchShellWithUrl(url);
+        Assert.assertNotNull(mActivity);
+        NewTabCallbackImpl callback = new NewTabCallbackImpl();
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> { mActivity.getBrowser().getActiveTab().setNewTabCallback(callback); });
+
+        EventUtils.simulateTouchCenterOfView(mActivity.getWindow().getDecorView());
+        callback.waitForNewTab();
+        CriteriaHelper.pollInstrumentationThread(() -> {
+            return mActivityTestRule.executeScriptAndExtractBoolean("document.hasFocus()");
+        });
     }
 }

@@ -29,7 +29,7 @@ using OfflineContentProvider = offline_items_collection::OfflineContentProvider;
 using OfflineContentAggregator =
     offline_items_collection::OfflineContentAggregator;
 using UpdateDelta = offline_items_collection::UpdateDelta;
-using LaunchLocation = offline_items_collection::LaunchLocation;
+using OpenParams = offline_items_collection::OpenParams;
 
 class Profile;
 class SkBitmap;
@@ -59,7 +59,7 @@ class DownloadOfflineContentProvider
   // full browser process to be started as mentioned below.
 
   // Methods that require full browser process.
-  void OpenItem(LaunchLocation location, const ContentId& id) override;
+  void OpenItem(const OpenParams& open_params, const ContentId& id) override;
   void RemoveItem(const ContentId& id) override;
   void GetItemById(
       const ContentId& id,
@@ -116,9 +116,8 @@ class DownloadOfflineContentProvider
                             VisualsCallback callback,
                             const SkBitmap& bitmap);
   void AddCompletedDownload(DownloadItem* item);
-  void AddCompletedDownloadDone(DownloadItem* item,
-                                int64_t system_download_id,
-                                bool can_resolve);
+  void AddCompletedDownloadDone(const std::string& download_guid,
+                                int64_t system_download_id);
   void OnRenameDownloadCallbackDone(RenameCallback callback,
                                     DownloadItem* item,
                                     DownloadItem::DownloadRenameResult result);

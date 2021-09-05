@@ -7,6 +7,7 @@ module media.mojom;
 import "media/mojo/mojom/media_types.mojom";
 import "mojo/public/mojom/base/time.mojom";
 import "ui/gfx/geometry/mojom/geometry.mojom";
+import "media/mojo/mojom/video_encoder_info.mojom";
 
 // This file is the Mojo version of the media::VideoEncodeAccelerator interface
 // and describes the communication between a Client and a remote "service"
@@ -32,10 +33,25 @@ import "ui/gfx/geometry/mojom/geometry.mojom";
 // time the Client can send a RequestEncodingParametersChange() to the VEA. None
 // of these messages are acknowledged.
 
+
+struct VideoEncodeAcceleratorSupportedProfile {
+  VideoCodecProfile profile;
+  gfx.mojom.Size min_resolution;
+  gfx.mojom.Size max_resolution;
+  uint32 max_framerate_numerator;
+  uint32 max_framerate_denominator;
+};
+
+// A renderer process calls this interface's functions. GPU process implements
+// this interface.
 interface VideoEncodeAcceleratorProvider {
   // Creates a VideoEncodeAccelerator bound to |receiver|.
   CreateVideoEncodeAccelerator(
         pending_receiver<VideoEncodeAccelerator> receiver);
+
+  // Get a VideoEncodeAccelerator supported profiles.
+  GetVideoEncodeAcceleratorSupportedProfiles()
+      => (array<VideoEncodeAcceleratorSupportedProfile> profiles);
 };
 
 // Class that describes how video bitrate, in bps, is allocated across temporal
@@ -83,10 +99,9 @@ interface VideoEncodeAccelerator {
   };
 
   // Responded by VideoEncodeAcceleratorClient.RequireBitstreamBuffers().
-  // TODO(mcasas): Update to asynchronous, https://crbug.com/744210.
   [Sync]
   Initialize(VideoEncodeAcceleratorConfig config,
-             VideoEncodeAcceleratorClient client)
+             pending_remote<VideoEncodeAcceleratorClient> client)
       => (bool result);
 
   // Encodes a |frame|, being completely done with it after its callback.
@@ -123,4 +138,8 @@ interface VideoEncodeAcceleratorClient {
                        BitstreamBufferMetadata metadata);
 
   NotifyError(VideoEncodeAccelerator.Error error);
+
+  // VideoEncodeAccelerator calls this when its VideoEncoderInfo is changed.
+  // |info| is the updated VideoEncoderInfo.
+  NotifyEncoderInfoChange(VideoEncoderInfo info);
 };

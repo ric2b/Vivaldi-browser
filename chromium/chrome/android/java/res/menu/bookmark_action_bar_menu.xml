@@ -21,10 +21,11 @@
             android:visible="false"
             app:showAsAction="ifRoom"
             app:iconTint="?attr/vivaldiIconTint" />
+        <!-- Vivaldi -->
         <item
             android:id="@+id/close_menu_id"
-            android:icon="@drawable/btn_close"
-            android:title="@string/bookmark_action_bar_close"
+            android:icon="@drawable/vivaldi_close_mobile_24dp"
+            android:title="@string/panel_close"
             app:showAsAction="ifRoom"
             app:iconTint="?attr/vivaldiIconTint" />
     </group>
@@ -56,6 +57,12 @@
         <item
             android:id="@+id/selection_open_in_incognito_tab_id"
             android:title="@string/contextmenu_open_in_incognito_tab"
+            app:showAsAction="never" />
+        <!-- Vivaldi -->
+        <item
+            android:id="@+id/select_all_menu_id"
+            android:title="@string/panel_select_all"
+            android:visible="false"
             app:showAsAction="never" />
     </group>
 

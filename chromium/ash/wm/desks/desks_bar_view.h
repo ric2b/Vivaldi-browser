@@ -18,6 +18,7 @@ namespace ash {
 class DeskMiniView;
 class NewDeskButton;
 class DeskBarHoverObserver;
+class OverviewGrid;
 
 // A bar that resides at the top portion of the overview mode's ShieldView,
 // which contains the virtual desks mini_views, as well as the new desk button.
@@ -25,13 +26,18 @@ class ASH_EXPORT DesksBarView : public views::View,
                                 public views::ButtonListener,
                                 public DesksController::Observer {
  public:
-  DesksBarView();
+  explicit DesksBarView(OverviewGrid* overview_grid);
   ~DesksBarView() override;
 
-  // The height of the desk bar view based on the width of desks bar widget
-  // which will determine whether or not the compact small screens layout will
-  // be used.
-  static int GetBarHeight(int desks_bar_view_width);
+  // Returns the height of the desk bar view which is based on the given |width|
+  // of the overview grid that exists on |root| (which is the same as the width
+  // of the bar) and |desks_bar_view|'s content (since they may not fit the
+  // given |width| forcing us to use the compact layout).
+  // If |desks_bar_view| is nullptr, the height returned will be solely based on
+  // the |width|.
+  static int GetBarHeightForWidth(aura::Window* root,
+                                  const DesksBarView* desks_bar_view,
+                                  int width);
 
   // Creates and returns the widget that contains the DeskBarView in overview
   // mode. The returned widget has no content view yet, and hasn't been shown
@@ -60,6 +66,14 @@ class ASH_EXPORT DesksBarView : public views::View,
   // layout.
   void Init();
 
+  // Returns true if a desk name is being modified using its mini view's
+  // DeskNameView on this bar.
+  bool IsDeskNameBeingModified() const;
+
+  // Returns the scale factor by which a window's size will be scaled down when
+  // it is dragged and hovered on this desks bar.
+  float GetOnHoverWindowSizeScaleFactor() const;
+
   // Updates the visibility state of the close buttons on all the mini_views as
   // a result of mouse and gesture events.
   void OnHoverStateMayHaveChanged();
@@ -74,11 +88,14 @@ class ASH_EXPORT DesksBarView : public views::View,
   // views::View:
   const char* GetClassName() const override;
   void Layout() override;
+  bool OnMousePressed(const ui::MouseEvent& event) override;
+  void OnGestureEvent(ui::GestureEvent* event) override;
 
   // Returns true if the width of the DesksBarView is below a defined
-  // threshold, suggesting a compact small screens layout should be used for
+  // threshold or the contents no longer fit within this object's bounds in
+  // default mode, suggesting a compact small screens layout should be used for
   // both itself and its children.
-  bool UsesSmallScreenLayout() const;
+  bool UsesCompactLayout() const;
 
   // views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
@@ -101,15 +118,14 @@ class ASH_EXPORT DesksBarView : public views::View,
   // has been created for it yet.
   DeskMiniView* FindMiniViewForDesk(const Desk* desk) const;
 
-  // Updates the text labels of the existing mini_views. This is called after a
-  // mini_view has been removed.
-  void UpdateMiniViewsLabels();
-
   // Returns the X offset of the first mini_view on the left (if there's one),
   // or the X offset of this view's center point when there are no mini_views.
   // This offset is used to calculate the amount by which the mini_views should
   // be moved when performing the mini_view creation or deletion animations.
   int GetFirstMiniViewXOffset() const;
+
+  // Updates the cached minimum width required to fit all contents.
+  void UpdateMinimumWidthToFitContents();
 
   // A view that shows a dark gary transparent background that can be animated
   // when the very first mini_views are created.
@@ -132,6 +148,12 @@ class ASH_EXPORT DesksBarView : public views::View,
   // True when the drag location of the overview item is intersecting with this
   // view.
   bool dragged_item_over_bar_ = false;
+
+  // The OverviewGrid that contains this object.
+  OverviewGrid* overview_grid_;
+
+  // Caches the calculated minimum width to fit contents.
+  int min_width_to_fit_contents_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(DesksBarView);
 };

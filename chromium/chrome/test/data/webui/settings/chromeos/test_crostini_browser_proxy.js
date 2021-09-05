@@ -6,16 +6,33 @@
 class TestCrostiniBrowserProxy extends TestBrowserProxy {
   constructor() {
     super([
-      'requestCrostiniInstallerView',
-      'requestRemoveCrostini',
-      'getCrostiniSharedPathsDisplayText',
-      'getCrostiniSharedUsbDevices',
-      'setCrostiniUsbDeviceShared',
-      'removeCrostiniSharedPath',
-      'exportCrostiniContainer',
-      'importCrostiniContainer',
+      'requestCrostiniInstallerView', 'requestRemoveCrostini',
+      'getCrostiniSharedPathsDisplayText', 'getCrostiniSharedUsbDevices',
+      'setCrostiniUsbDeviceShared', 'removeCrostiniSharedPath',
+      'exportCrostiniContainer', 'importCrostiniContainer',
+      'requestCrostiniContainerUpgradeView',
+      'requestCrostiniUpgraderDialogStatus',
+      'requestCrostiniContainerUpgradeAvailable', 'addCrostiniPortForward',
+      'getCrostiniDiskInfo', 'resizeCrostiniDisk',
+      'checkCrostiniMicSharingStatus'
     ]);
     this.sharedUsbDevices = [];
+    this.removeSharedPathResult = true;
+    this.methodCalls_ = {};
+  }
+
+  getNewPromiseFor(name) {
+    return new Promise((resolve, reject) => {
+      this.methodCalls_[name] = {name, resolve, reject};
+    });
+  }
+
+  async resolvePromise(name, ...args) {
+    await this.methodCalls_[name].resolve(...args);
+  }
+
+  async rejectPromise(name, ...args) {
+    await this.methodCalls_[name].reject(...args);
   }
 
   /** @override */
@@ -48,6 +65,7 @@ class TestCrostiniBrowserProxy extends TestBrowserProxy {
   /** override */
   removeCrostiniSharedPath(vmName, path) {
     this.methodCalled('removeCrostiniSharedPath', [vmName, path]);
+    return Promise.resolve(this.removeSharedPathResult);
   }
 
   /** @override */
@@ -69,5 +87,48 @@ class TestCrostiniBrowserProxy extends TestBrowserProxy {
   /** override */
   importCrostiniContainer() {
     this.methodCalled('importCrostiniContainer');
+  }
+
+  /** @override */
+  requestCrostiniContainerUpgradeView() {
+    this.methodCalled('requestCrostiniContainerUpgradeView');
+  }
+
+  /** @override */
+  requestCrostiniUpgraderDialogStatus() {
+    cr.webUIListenerCallback('crostini-upgrader-status-changed', false);
+  }
+
+  /** @override */
+  requestCrostiniContainerUpgradeAvailable() {
+    cr.webUIListenerCallback(
+        'crostini-container-upgrade-available-changed', true);
+  }
+
+  /** @override */
+  addCrostiniPortForward(
+      vmName, containerName, portNumber, protocolIndex, label) {
+    this.methodCalled(
+        'addCrostiniPortForward', vmName, containerName, portNumber,
+        protocolIndex, label);
+    return Promise.resolve(true);
+  }
+
+  /** @override */
+  getCrostiniDiskInfo(vmName) {
+    this.methodCalled('getCrostiniDiskInfo', vmName);
+    return this.getNewPromiseFor('getCrostiniDiskInfo');
+  }
+
+  /** @override */
+  resizeCrostiniDisk(vmName, newSizeBytes) {
+    this.methodCalled('resizeCrostiniDisk', vmName, newSizeBytes);
+    return this.getNewPromiseFor('resizeCrostiniDisk');
+  }
+
+  /** @override */
+  checkCrostiniMicSharingStatus(proposedValue) {
+    this.methodCalled('checkCrostiniMicSharingStatus', proposedValue);
+    return Promise.resolve(!proposedValue);
   }
 }

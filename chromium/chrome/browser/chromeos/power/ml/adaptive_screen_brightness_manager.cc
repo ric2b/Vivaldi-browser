@@ -19,6 +19,7 @@
 #include "chrome/browser/chromeos/power/ml/adaptive_screen_brightness_ukm_logger_impl.h"
 #include "chrome/browser/chromeos/power/ml/recent_events_counter.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/tab_contents/form_interaction_tab_helper.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -30,7 +31,7 @@
 #include "components/ukm/content/source_url_recorder.h"
 #include "components/viz/host/host_frame_sink_manager.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/page_importance_signals.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/viz/public/mojom/compositing/video_detector_observer.mojom.h"
 #include "ui/aura/env.h"
@@ -89,8 +90,8 @@ const std::pair<ukm::SourceId, bool> GetActiveTabData() {
     content::WebContents* contents = tab_strip_model->GetActiveWebContents();
     if (contents) {
       tab_id = ukm::GetSourceIdForWebContentsDocument(contents);
-      has_form_entry =
-          contents->GetPageImportanceSignals().had_form_interaction;
+      has_form_entry = FormInteractionTabHelper::FromWebContents(contents)
+                           ->had_form_interaction();
     }
   }
   return std::pair<ukm::SourceId, bool>(tab_id, has_form_entry);
@@ -107,13 +108,13 @@ AdaptiveScreenBrightnessManager::AdaptiveScreenBrightnessManager(
     chromeos::PowerManagerClient* power_manager_client,
     AccessibilityManager* accessibility_manager,
     MagnificationManager* magnification_manager,
-    viz::mojom::VideoDetectorObserverRequest request,
+    mojo::PendingReceiver<viz::mojom::VideoDetectorObserver> receiver,
     std::unique_ptr<base::RepeatingTimer> periodic_timer)
     : periodic_timer_(std::move(periodic_timer)),
       ukm_logger_(std::move(ukm_logger)),
       accessibility_manager_(accessibility_manager),
       magnification_manager_(magnification_manager),
-      binding_(this, std::move(request)),
+      receiver_(this, std::move(receiver)),
       mouse_counter_(
           std::make_unique<RecentEventsCounter>(kUserInputEventsDuration,
                                                 kNumUserInputEventsBuckets)),
@@ -162,16 +163,18 @@ AdaptiveScreenBrightnessManager::CreateInstance() {
   MagnificationManager* const magnification_manager =
       MagnificationManager::Get();
   DCHECK(magnification_manager);
-  viz::mojom::VideoDetectorObserverPtr video_observer_screen_brightness_logger;
+  mojo::PendingRemote<viz::mojom::VideoDetectorObserver>
+      video_observer_screen_brightness_logger;
 
   std::unique_ptr<AdaptiveScreenBrightnessManager> screen_brightness_manager =
       std::make_unique<AdaptiveScreenBrightnessManager>(
           std::make_unique<AdaptiveScreenBrightnessUkmLoggerImpl>(), detector,
           power_manager_client, accessibility_manager, magnification_manager,
-          mojo::MakeRequest(&video_observer_screen_brightness_logger),
+          video_observer_screen_brightness_logger
+              .InitWithNewPipeAndPassReceiver(),
           std::make_unique<base::RepeatingTimer>());
   aura::Env::GetInstance()
-      ->context_factory_private()
+      ->context_factory()
       ->GetHostFrameSinkManager()
       ->AddVideoDetectorObserver(
           std::move(video_observer_screen_brightness_logger));

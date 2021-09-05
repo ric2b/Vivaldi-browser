@@ -8,10 +8,12 @@
 #include "base/memory/scoped_refptr.h"
 #include "media/base/decode_status.h"
 #include "media/base/video_decoder.h"
+#include "media/gpu/chromeos/dmabuf_video_frame_pool.h"
 #include "ui/gfx/geometry/rect.h"
 
 namespace media {
 
+class DmabufVideoFramePool;
 class V4L2Device;
 class V4L2Queue;
 class V4L2ReadableBuffer;
@@ -48,16 +50,15 @@ class V4L2VideoDecoderBackend {
     virtual void CompleteFlush() = 0;
     // Stop the stream to reallocate the CAPTURE buffers. Can only be done
     // between calls to |InitiateFlush| and |CompleteFlush|.
-    virtual bool ChangeResolution(gfx::Size pic_size,
+    virtual void ChangeResolution(gfx::Size pic_size,
                                   gfx::Rect visible_rect,
                                   size_t num_output_frames) = 0;
-    // Call the decode callback and count the number of pending callbacks.
-    virtual void RunDecodeCB(VideoDecoder::DecodeCB cb,
-                             DecodeStatus status) = 0;
     // Convert the frame and call the output callback.
     virtual void OutputFrame(scoped_refptr<VideoFrame> frame,
                              const gfx::Rect& visible_rect,
                              base::TimeDelta timestamp) = 0;
+    // Get the video frame pool without passing the ownership.
+    virtual DmabufVideoFramePool* GetVideoFramePool() const = 0;
   };
 
   virtual ~V4L2VideoDecoderBackend();
@@ -65,8 +66,7 @@ class V4L2VideoDecoderBackend {
   virtual bool Initialize() = 0;
 
   // Schedule |buffer| to be processed, with bitstream ID |bitstream_id|.
-  // The backend must call V4L2SliceVideoDecoder::RunDecodeCB() with |decode_cb|
-  // as argument once the buffer is not used anymore.
+  // The backend must call |decode_cb| once the buffer is not used anymore.
   virtual void EnqueueDecodeTask(scoped_refptr<DecoderBuffer> buffer,
                                  VideoDecoder::DecodeCB decode_cb,
                                  int32_t bitstream_id) = 0;
@@ -75,6 +75,15 @@ class V4L2VideoDecoderBackend {
   // Called whenever the V4L2 stream is stopped (|Streamoff| called on both
   // |V4L2Queue|s).
   virtual void OnStreamStopped() = 0;
+  // Called when the resolution has been decided, in case the backend needs
+  // to do something specific beyond applying these parameters to the CAPTURE
+  // queue.
+  virtual bool ApplyResolution(const gfx::Size& pic_size,
+                               const gfx::Rect& visible_rect,
+                               const size_t num_output_frames) = 0;
+  // Called when ChangeResolution is done. |success| indicates whether there is
+  // any error occurs during the resolution change.
+  virtual void OnChangeResolutionDone(bool success) = 0;
   // Clear all pending decoding tasks and call all pending decode callbacks
   // with |status| as argument.
   virtual void ClearPendingRequests(DecodeStatus status) = 0;

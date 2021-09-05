@@ -29,9 +29,6 @@ class CORE_EXPORT NGConstraintSpaceBuilder final {
       : NGConstraintSpaceBuilder(parent_space.GetWritingMode(),
                                  out_writing_mode,
                                  is_new_fc) {
-    // Propagate the intermediate layout bit to the child constraint space.
-    space_.bitfields_.is_intermediate_layout =
-        parent_space.IsIntermediateLayout();
     if (parent_space.IsInsideBalancedColumns())
       space_.EnsureRareData()->is_inside_balanced_columns = true;
   }
@@ -148,8 +145,8 @@ class CORE_EXPORT NGConstraintSpaceBuilder final {
 
   void SetIsShrinkToFit(bool b) { space_.bitfields_.is_shrink_to_fit = b; }
 
-  void SetIsIntermediateLayout(bool b) {
-    space_.bitfields_.is_intermediate_layout = b;
+  void SetIsPaintedAtomically(bool b) {
+    space_.bitfields_.is_painted_atomically = b;
   }
 
   void SetFragmentationType(NGFragmentationType fragmentation_type) {
@@ -179,7 +176,16 @@ class CORE_EXPORT NGConstraintSpaceBuilder final {
 
   void SetIsRestrictedBlockSizeTableCell(bool b) {
     DCHECK(space_.bitfields_.is_table_cell);
-    space_.bitfields_.is_restricted_block_size_table_cell = b;
+    if (!b && !space_.rare_data_)
+      return;
+    space_.EnsureRareData()->is_restricted_block_size_table_cell = b;
+  }
+
+  void SetHideTableCellIfEmpty(bool b) {
+    DCHECK(space_.bitfields_.is_table_cell);
+    if (!b && !space_.rare_data_)
+      return;
+    space_.EnsureRareData()->hide_table_cell_if_empty = b;
   }
 
   void SetIsAnonymous(bool b) { space_.bitfields_.is_anonymous = b; }
@@ -188,15 +194,25 @@ class CORE_EXPORT NGConstraintSpaceBuilder final {
     space_.bitfields_.use_first_line_style = b;
   }
 
-  void SetAncestorHasClearancePastAdjoiningFloats() {
-    space_.bitfields_.ancestor_has_clearance_past_adjoining_floats = true;
-  }
-
   void SetAdjoiningObjectTypes(NGAdjoiningObjectTypes adjoining_object_types) {
     if (!is_new_fc_) {
       space_.bitfields_.adjoining_object_types =
           static_cast<unsigned>(adjoining_object_types);
     }
+  }
+
+  void SetAncestorHasClearancePastAdjoiningFloats() {
+    space_.bitfields_.ancestor_has_clearance_past_adjoining_floats = true;
+  }
+
+  void SetNeedsBaseline(bool b) { space_.bitfields_.needs_baseline = b; }
+
+  void SetBaselineAlgorithmType(NGBaselineAlgorithmType type) {
+    space_.bitfields_.baseline_algorithm_type = static_cast<unsigned>(type);
+  }
+
+  void SetCacheSlot(NGCacheSlot slot) {
+    space_.bitfields_.cache_slot = static_cast<unsigned>(slot);
   }
 
   void SetMarginStrut(const NGMarginStrut& margin_strut) {
@@ -245,8 +261,8 @@ class CORE_EXPORT NGConstraintSpaceBuilder final {
     DCHECK(!is_forced_bfc_block_offset_set_);
     is_forced_bfc_block_offset_set_ = true;
 #endif
-    if (LIKELY(!is_new_fc_))
-      space_.EnsureRareData()->SetForcedBfcBlockOffset(forced_bfc_block_offset);
+    DCHECK(!is_new_fc_);
+    space_.EnsureRareData()->SetForcedBfcBlockOffset(forced_bfc_block_offset);
   }
 
   void SetClearanceOffset(LayoutUnit clearance_offset) {
@@ -302,12 +318,41 @@ class CORE_EXPORT NGConstraintSpaceBuilder final {
     }
   }
 
-  void AddBaselineRequests(const NGBaselineRequestList requests) {
-    DCHECK(baseline_requests_.IsEmpty());
-    baseline_requests_.AppendVector(requests);
+  void SetForceTruncateAtLineClamp(bool value) {
+#if DCHECK_IS_ON()
+    DCHECK(!is_force_truncate_at_line_clamp_set_);
+    is_force_truncate_at_line_clamp_set_ = true;
+#endif
+    if (!value)
+      space_.EnsureRareData()->SetForceTruncateAtLineClamp(value);
   }
-  void AddBaselineRequest(const NGBaselineRequest request) {
-    baseline_requests_.push_back(request);
+
+  void SetLinesUntilClamp(const base::Optional<int>& clamp) {
+#if DCHECK_IS_ON()
+    DCHECK(!is_lines_until_clamp_set_);
+    is_lines_until_clamp_set_ = true;
+#endif
+    DCHECK(!is_new_fc_);
+    if (clamp)
+      space_.EnsureRareData()->SetLinesUntilClamp(*clamp);
+  }
+
+  void SetTargetStretchInlineSize(LayoutUnit target_stretch_inline_size) {
+    DCHECK_GE(target_stretch_inline_size, LayoutUnit());
+    space_.EnsureRareData()->SetTargetStretchInlineSize(
+        target_stretch_inline_size);
+  }
+
+  void SetTargetStretchAscentSize(LayoutUnit target_stretch_ascent_size) {
+    DCHECK_GE(target_stretch_ascent_size, LayoutUnit());
+    space_.EnsureRareData()->SetTargetStretchAscentSize(
+        target_stretch_ascent_size);
+  }
+
+  void SetTargetStretchDescentSize(LayoutUnit target_stretch_descent_size) {
+    DCHECK_GE(target_stretch_descent_size, LayoutUnit());
+    space_.EnsureRareData()->SetTargetStretchDescentSize(
+        target_stretch_descent_size);
   }
 
   // Creates a new constraint space.
@@ -327,7 +372,6 @@ class CORE_EXPORT NGConstraintSpaceBuilder final {
            "simultaneously. Inferred means the constraints are in parent "
            "writing mode, forced means they are in child writing mode.";
 
-    space_.bitfields_.baseline_requests = baseline_requests_.Serialize();
     return std::move(space_);
   }
 
@@ -356,11 +400,11 @@ class CORE_EXPORT NGConstraintSpaceBuilder final {
   bool is_table_cell_borders_set_ = false;
   bool is_table_cell_intrinsic_padding_set_ = false;
   bool is_custom_layout_data_set_ = false;
+  bool is_lines_until_clamp_set_ = false;
+  bool is_force_truncate_at_line_clamp_set_ = false;
 
   bool to_constraint_space_called_ = false;
 #endif
-
-  NGBaselineRequestList baseline_requests_;
 };
 
 }  // namespace blink

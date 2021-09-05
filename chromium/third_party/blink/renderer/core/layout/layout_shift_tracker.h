@@ -10,6 +10,7 @@
 #include "third_party/blink/renderer/core/layout/layout_shift_region.h"
 #include "third_party/blink/renderer/core/scroll/scroll_types.h"
 #include "third_party/blink/renderer/platform/geometry/region.h"
+#include "third_party/blink/renderer/platform/graphics/dom_node_id.h"
 #include "third_party/blink/renderer/platform/timer.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 
@@ -48,7 +49,7 @@ class CORE_EXPORT LayoutShiftTracker {
                             FloatSize paint_offset_delta);
   void NotifyPrePaintFinished();
   void NotifyInput(const WebInputEvent&);
-  void NotifyScroll(ScrollType, ScrollOffset delta);
+  void NotifyScroll(mojom::blink::ScrollType, ScrollOffset delta);
   void NotifyViewportSizeChanged();
   bool IsActive();
   double Score() const { return score_; }
@@ -60,6 +61,31 @@ class CORE_EXPORT LayoutShiftTracker {
     return most_recent_input_timestamp_;
   }
 
+  // Saves and restores visual rects on layout objects when a layout tree is
+  // rebuilt by Node::ReattachLayoutTree.
+  class ReattachHook : public GarbageCollected<ReattachHook> {
+   public:
+    ReattachHook() : scope_(nullptr) {}
+    void Trace(Visitor*);
+
+    class Scope {
+     public:
+      Scope(const Node&);
+      ~Scope();
+
+     private:
+      bool active_;
+      Scope* outer_;
+    };
+
+    static void NotifyDetach(const Node&);
+    static void NotifyAttach(const Node&);
+
+   private:
+    Scope* scope_;
+    HeapHashMap<Member<const Node>, IntRect> visual_rects_;
+  };
+
  private:
   void ObjectShifted(const LayoutObject&,
                      const PropertyTreeState&,
@@ -70,6 +96,7 @@ class CORE_EXPORT LayoutShiftTracker {
   void TimerFired(TimerBase*) {}
   std::unique_ptr<TracedValue> PerFrameTraceData(double score_delta,
                                                  bool input_detected) const;
+  void AttributionsToTracedValue(TracedValue&) const;
   double SubframeWeightingFactor() const;
   void SetLayoutShiftRects(const Vector<IntRect>& int_rects);
   void UpdateInputTimestamp(base::TimeTicks timestamp);
@@ -132,6 +159,29 @@ class CORE_EXPORT LayoutShiftTracker {
   // User input includes window resizing but not scrolling.
   base::TimeTicks most_recent_input_timestamp_;
   bool most_recent_input_timestamp_initialized_;
+
+  struct Attribution {
+    DOMNodeId node_id;
+    IntRect old_visual_rect;
+    IntRect new_visual_rect;
+
+    Attribution();
+    Attribution(DOMNodeId node_id,
+                IntRect old_visual_rect,
+                IntRect new_visual_rect);
+
+    explicit operator bool() const;
+    bool Encloses(const Attribution&) const;
+    bool MoreImpactfulThan(const Attribution&) const;
+    int Area() const;
+  };
+  static constexpr int kMaxAttributions = 5;
+
+  void MaybeRecordAttribution(const Attribution&);
+
+  // Nodes that have contributed to the impact region for the current frame, for
+  // use in trace event. Only populated while tracing.
+  std::array<Attribution, kMaxAttributions> attributions_;
 };
 
 }  // namespace blink

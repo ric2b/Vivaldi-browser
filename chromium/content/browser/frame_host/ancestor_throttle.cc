@@ -11,13 +11,17 @@
 #include "content/browser/frame_host/frame_tree.h"
 #include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/frame_host/navigation_request.h"
-#include "content/common/content_security_policy/csp_context.h"
-#include "content/common/content_security_policy/csp_source_list.h"
+#include "content/browser/frame_host/navigator.h"
+#include "content/browser/frame_host/render_frame_host_impl.h"
+#include "content/browser/renderer_host/render_view_host_delegate.h"
+#include "content/browser/renderer_host/render_view_host_impl.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/navigation_throttle.h"
+#include "content/public/browser/storage_partition.h"
 #include "net/http/http_response_headers.h"
-#include "services/network/public/cpp/content_security_policy.h"
+#include "services/network/public/cpp/content_security_policy/csp_context.h"
 #include "services/network/public/cpp/features.h"
 #include "third_party/blink/public/mojom/devtools/console_message.mojom.h"
 #include "url/origin.h"
@@ -76,21 +80,69 @@ void RecordXFrameOptionsUsage(XFrameOptionsHistogram usage) {
       XFrameOptionsHistogram::XFRAMEOPTIONS_HISTOGRAM_MAX);
 }
 
-bool HeadersContainFrameAncestorsCSP(const net::HttpResponseHeaders* headers) {
-  size_t iter = 0;
-  std::string value;
-  while (headers->EnumerateHeader(&iter, "content-security-policy", &value)) {
-    // A content-security-policy is a semicolon-separated list of directives.
-    for (const auto& directive : base::SplitStringPiece(
-             value, ";", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY)) {
-      // The trailing " " is intentional; we'd otherwise match
-      // "frame-ancestors-is-not-this-directive".
-      if (base::StartsWith(directive, "frame-ancestors ",
-                           base::CompareCase::INSENSITIVE_ASCII))
-        return true;
+bool HeadersContainFrameAncestorsCSP(const net::HttpResponseHeaders* headers,
+                                     bool include_report_only) {
+  std::vector<std::string> header_names = {"content-security-policy"};
+  if (include_report_only)
+    header_names.push_back("content-security-policy-report-only");
+  for (const auto& header : header_names) {
+    size_t iter = 0;
+    std::string value;
+    while (headers->EnumerateHeader(&iter, header, &value)) {
+      // A content-security-policy is a semicolon-separated list of directives.
+      for (const auto& directive : base::SplitStringPiece(
+               value, ";", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY)) {
+        // The trailing " " is intentional; we'd otherwise match
+        // "frame-ancestors-is-not-this-directive".
+        if (base::StartsWith(directive, "frame-ancestors ",
+                             base::CompareCase::INSENSITIVE_ASCII))
+          return true;
+      }
     }
   }
   return false;
+}
+
+class FrameAncestorCSPContext : public network::CSPContext {
+ public:
+  FrameAncestorCSPContext(
+      RenderFrameHostImpl* navigated_frame,
+      std::vector<network::mojom::ContentSecurityPolicyPtr> policies)
+      : navigated_frame_(navigated_frame) {
+    // TODO(arthursonzogni): Refactor CSPContext to its original state, it
+    // shouldn't own any ContentSecurityPolicies on its own. This should be
+    // defined by the implementation instead. Copies could be avoided here.
+    for (auto& policy : policies)
+      AddContentSecurityPolicy(std::move(policy));
+  }
+
+ private:
+  void ReportContentSecurityPolicyViolation(
+      network::mojom::CSPViolationPtr violation_params) override {
+    return navigated_frame_->ReportContentSecurityPolicyViolation(
+        std::move(violation_params));
+  }
+
+  bool SchemeShouldBypassCSP(const base::StringPiece& scheme) override {
+    return navigated_frame_->SchemeShouldBypassCSP(scheme);
+  }
+
+  void SanitizeDataForUseInCspViolation(
+      bool is_redirect,
+      network::mojom::CSPDirectiveName directive,
+      GURL* blocked_url,
+      network::mojom::SourceLocation* source_location) const override {
+    return navigated_frame_->SanitizeDataForUseInCspViolation(
+        is_redirect, directive, blocked_url, source_location);
+  }
+
+  RenderFrameHostImpl* navigated_frame_;
+};
+
+// Returns the parent, including outer delegates in the case of portals.
+RenderFrameHostImpl* ParentForAncestorThrottle(RenderFrameHostImpl* frame) {
+  return frame->InsidePortal() ? frame->ParentOrOuterDelegateFrame()
+                               : frame->GetParent();
 }
 
 }  // namespace
@@ -99,9 +151,6 @@ bool HeadersContainFrameAncestorsCSP(const net::HttpResponseHeaders* headers) {
 std::unique_ptr<NavigationThrottle> AncestorThrottle::MaybeCreateThrottleFor(
     NavigationHandle* handle) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-
-  if (handle->IsInMainFrame())
-    return nullptr;
 
   return std::unique_ptr<NavigationThrottle>(new AncestorThrottle(handle));
 }
@@ -114,8 +163,8 @@ AncestorThrottle::WillRedirectRequest() {
   // so we can't log reliably to the console. We should be able to work around
   // this iff we decide to ship the redirect-blocking behavior, but for now
   // we'll just skip the console-logging bits to collect metrics.
-  NavigationThrottle::ThrottleCheckResult result =
-      ProcessResponseImpl(LoggingDisposition::DO_NOT_LOG_TO_CONSOLE);
+  NavigationThrottle::ThrottleCheckResult result = ProcessResponseImpl(
+      LoggingDisposition::DO_NOT_LOG_TO_CONSOLE, false /* is_response_check */);
 
   if (result.action() == NavigationThrottle::BLOCK_RESPONSE)
     RecordXFrameOptionsUsage(XFrameOptionsHistogram::REDIRECT_WOULD_BE_BLOCKED);
@@ -129,50 +178,26 @@ AncestorThrottle::WillRedirectRequest() {
 
 NavigationThrottle::ThrottleCheckResult
 AncestorThrottle::WillProcessResponse() {
-  return ProcessResponseImpl(LoggingDisposition::LOG_TO_CONSOLE);
+  return ProcessResponseImpl(LoggingDisposition::LOG_TO_CONSOLE,
+                             true /* is_response_check */);
 }
 
 NavigationThrottle::ThrottleCheckResult AncestorThrottle::ProcessResponseImpl(
-    LoggingDisposition logging) {
-  DCHECK(!navigation_handle()->IsInMainFrame());
-
+    LoggingDisposition logging,
+    bool is_response_check) {
   NavigationRequest* request = NavigationRequest::From(navigation_handle());
 
-  // Downloads should be exempt from checking for X-Frame-Options, so
-  // proceed if this is a download.
-  if (request->IsDownload())
+  bool is_portal =
+      request->frame_tree_node()->current_frame_host()->InsidePortal();
+  if (request->IsInMainFrame() && !is_portal) {
+    // Allow main frame navigations.
     return NavigationThrottle::PROCEED;
+  }
 
-  // Evaluate whether the navigation should be allowed or blocked based on
-  // existing content-security-policy on the response.
-  if (base::FeatureList::IsEnabled(
-          network::features::kOutOfBlinkFrameAncestors)) {
-    if (network::mojom::ContentSecurityPolicyPtr policy =
-            request->response()->head.content_security_policy) {
-      if (auto& frame_ancestors = policy->frame_ancestors) {
-        CSPSourceList frame_ancestors_list(*frame_ancestors);
-        frame_ancestors_list.allow_response_redirects = true;
-        FrameTreeNode* parent = request->frame_tree_node()->parent();
-        // Since the navigation hasn't committed yet, we need to create a
-        // CSPContext for the navigation handle.
-        CSPContext csp_context;
-        csp_context.SetSelf(url::Origin::Create(navigation_handle()->GetURL()));
-        while (parent) {
-          if (CSPSourceList::Allow(frame_ancestors_list,
-                                   parent->current_frame_host()
-                                       ->GetLastCommittedOrigin()
-                                       .GetURL(),
-                                   &csp_context,
-                                   false /* has_followed_redirect */,
-                                   true /* is_response_check) */)) {
-            parent = parent->parent();
-            continue;
-          }
-          return NavigationThrottle::BLOCK_RESPONSE;
-        }
-        return NavigationThrottle::PROCEED;
-      }
-    }
+  // 204/205 responses and downloads are not sent to the renderer and don't need
+  // to be checked.
+  if (is_response_check && !request->response_should_be_rendered()) {
+    return NavigationThrottle::PROCEED;
   }
 
   std::string header_value;
@@ -191,7 +216,7 @@ NavigationThrottle::ThrottleCheckResult AncestorThrottle::ProcessResponseImpl(
         ParseError(header_value, disposition);
       RecordXFrameOptionsUsage(XFrameOptionsHistogram::INVALID);
       // TODO(mkwst): Consider failing here.
-      return NavigationThrottle::PROCEED;
+      break;
 
     case HeaderDisposition::DENY:
       if (logging == LoggingDisposition::LOG_TO_CONSOLE)
@@ -225,21 +250,56 @@ NavigationThrottle::ThrottleCheckResult AncestorThrottle::ProcessResponseImpl(
         parent = parent->parent();
       }
       RecordXFrameOptionsUsage(XFrameOptionsHistogram::SAMEORIGIN);
-      return NavigationThrottle::PROCEED;
+      break;
     }
 
     case HeaderDisposition::NONE:
       RecordXFrameOptionsUsage(XFrameOptionsHistogram::NONE);
-      return NavigationThrottle::PROCEED;
+      break;
     case HeaderDisposition::BYPASS:
       RecordXFrameOptionsUsage(XFrameOptionsHistogram::BYPASS);
-      return NavigationThrottle::PROCEED;
+      break;
     case HeaderDisposition::ALLOWALL:
       RecordXFrameOptionsUsage(XFrameOptionsHistogram::ALLOWALL);
-      return NavigationThrottle::PROCEED;
+      break;
   }
-  NOTREACHED();
-  return NavigationThrottle::BLOCK_RESPONSE;
+
+  // Evaluate whether the navigation should be allowed or blocked based on
+  // existing content-security-policy on the response.
+  if (is_response_check && request->GetResponseHeaders() &&
+      HeadersContainFrameAncestorsCSP(request->GetResponseHeaders(), true) &&
+      base::FeatureList::IsEnabled(
+          network::features::kOutOfBlinkFrameAncestors)) {
+    if (!request->response()->content_security_policy.empty()) {
+      return EvaluateContentSecurityPolicy(
+          mojo::Clone(request->response()->content_security_policy));
+    }
+
+    BrowserContext* browser_context = request->frame_tree_node()
+                                          ->navigator()
+                                          ->GetController()
+                                          ->GetBrowserContext();
+    StoragePartition* partition = BrowserContext::GetStoragePartition(
+        browser_context, request->GetRenderFrameHost()->GetSiteInstance());
+    partition->GetNetworkContext()->ParseContentSecurityPolicy(
+        request->GetURL(), request->response()->headers,
+        base::BindOnce(
+            [](AncestorThrottle* ancestor_throttle, NavigationRequest* request,
+               std::vector<network::mojom::ContentSecurityPolicyPtr>
+                   content_security_policy) {
+              auto result = ancestor_throttle->EvaluateContentSecurityPolicy(
+                  mojo::Clone(content_security_policy));
+              if (result == NavigationThrottle::PROCEED) {
+                ancestor_throttle->Resume();
+              } else {
+                ancestor_throttle->CancelDeferredNavigation(result);
+              }
+            },
+            this, request));
+    return NavigationThrottle::DEFER;
+  }
+
+  return NavigationThrottle::PROCEED;
 }
 
 const char* AncestorThrottle::GetNameForLogging() {
@@ -272,7 +332,9 @@ void AncestorThrottle::ParseError(const std::string& value,
 
   // Log a console error in the parent of the current RenderFrameHost (as
   // the current RenderFrameHost itself doesn't yet have a document).
-  navigation_handle()->GetRenderFrameHost()->GetParent()->AddMessageToConsole(
+  auto* frame = static_cast<RenderFrameHostImpl*>(
+      navigation_handle()->GetRenderFrameHost());
+  ParentForAncestorThrottle(frame)->AddMessageToConsole(
       blink::mojom::ConsoleMessageLevel::kError, message);
 }
 
@@ -290,8 +352,48 @@ void AncestorThrottle::ConsoleError(HeaderDisposition disposition) {
 
   // Log a console error in the parent of the current RenderFrameHost (as
   // the current RenderFrameHost itself doesn't yet have a document).
-  navigation_handle()->GetRenderFrameHost()->GetParent()->AddMessageToConsole(
+  auto* frame = static_cast<RenderFrameHostImpl*>(
+      navigation_handle()->GetRenderFrameHost());
+  ParentForAncestorThrottle(frame)->AddMessageToConsole(
       blink::mojom::ConsoleMessageLevel::kError, message);
+}
+
+NavigationThrottle::ThrottleAction
+AncestorThrottle::EvaluateContentSecurityPolicy(
+    std::vector<network::mojom::ContentSecurityPolicyPtr>
+        content_security_policy) {
+  // TODO(lfg): If the initiating document is known and correspond to the
+  // navigating frame's current document, consider using:
+  // navigation_request().common_params().source_location here instead.
+  auto empty_source_location = network::mojom::SourceLocation::New();
+
+  // CSP frame-ancestors are checked against the URL of every parent and are
+  // reported to the navigating frame.
+  FrameAncestorCSPContext csp_context(
+      NavigationRequest::From(navigation_handle())->GetRenderFrameHost(),
+      std::move(content_security_policy));
+  csp_context.SetSelf(url::Origin::Create(navigation_handle()->GetURL()));
+
+  // Check CSP frame-ancestors against every parent.
+  // We enforce frame-ancestors in the outer delegate for portals, but not
+  // for other uses of inner/outer WebContents (GuestViews).
+  RenderFrameHostImpl* parent =
+      ParentForAncestorThrottle(static_cast<RenderFrameHostImpl*>(
+          navigation_handle()->GetRenderFrameHost()));
+  while (parent) {
+    if (!csp_context.IsAllowedByCsp(
+            network::mojom::CSPDirectiveName::FrameAncestors,
+            parent->GetLastCommittedOrigin().GetURL(),
+            navigation_handle()->WasServerRedirect(),
+            true /* is_response_check */, empty_source_location,
+            network::CSPContext::CheckCSPDisposition::CHECK_ALL_CSP,
+            navigation_handle()->IsFormSubmission())) {
+      return NavigationThrottle::BLOCK_RESPONSE;
+    }
+    parent = ParentForAncestorThrottle(parent);
+  }
+
+  return NavigationThrottle::PROCEED;
 }
 
 AncestorThrottle::HeaderDisposition AncestorThrottle::ParseHeader(
@@ -338,9 +440,7 @@ AncestorThrottle::HeaderDisposition AncestorThrottle::ParseHeader(
   // https://www.w3.org/TR/CSP/#frame-ancestors-and-frame-options
   if (result != HeaderDisposition::NONE &&
       result != HeaderDisposition::ALLOWALL &&
-      HeadersContainFrameAncestorsCSP(headers)) {
-    DCHECK(!base::FeatureList::IsEnabled(
-        network::features::kOutOfBlinkFrameAncestors));
+      HeadersContainFrameAncestorsCSP(headers, false)) {
     // TODO(mkwst): 'frame-ancestors' is currently handled in Blink. We should
     // handle it here instead. Until then, don't block the request, and let
     // Blink handle it. https://crbug.com/555418

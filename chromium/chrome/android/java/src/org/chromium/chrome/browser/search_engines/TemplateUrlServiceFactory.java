@@ -4,8 +4,9 @@
 
 package org.chromium.chrome.browser.search_engines;
 
+import androidx.annotation.VisibleForTesting;
+
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.components.search_engines.TemplateUrlService;
 
@@ -41,8 +42,10 @@ public class TemplateUrlServiceFactory {
         return TemplateUrlServiceFactoryJni.get().doesDefaultSearchEngineHaveLogo();
     }
 
+    // Natives interface is public to allow mocking in tests outside of
+    // org.chromium.chrome.browser.search_engines package.
     @NativeMethods
-    interface Natives {
+    public interface Natives {
         TemplateUrlService getTemplateUrlService();
         boolean doesDefaultSearchEngineHaveLogo();
     }

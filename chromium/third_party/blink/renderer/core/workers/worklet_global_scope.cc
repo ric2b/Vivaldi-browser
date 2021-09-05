@@ -71,7 +71,6 @@ WorkletGlobalScope::WorkletGlobalScope(
           // TODO(tzik): Assign an Agent for Worklets after
           // NonMainThreadScheduler gets ready to run microtasks.
           agent,
-          creation_params->off_main_thread_fetch_option,
           creation_params->global_scope_name,
           creation_params->parent_devtools_token,
           creation_params->v8_cache_options,
@@ -132,16 +131,6 @@ bool WorkletGlobalScope::IsThreadedWorkletGlobalScope() const {
 
 ExecutionContext* WorkletGlobalScope::GetExecutionContext() const {
   return const_cast<WorkletGlobalScope*>(this);
-}
-
-bool WorkletGlobalScope::IsSecureContext(String& error_message) const {
-  // Until there are APIs that are available in worklets and that
-  // require a privileged context test that checks ancestors, just do
-  // a simple check here.
-  if (GetSecurityOrigin()->IsPotentiallyTrustworthy())
-    return true;
-  error_message = GetSecurityOrigin()->IsPotentiallyTrustworthyErrorMessage();
-  return false;
 }
 
 bool WorkletGlobalScope::IsContextThread() const {
@@ -240,6 +229,7 @@ void WorkletGlobalScope::FetchAndInvokeScript(
   auto destination = mojom::RequestContextType::SCRIPT;
   FetchModuleScript(module_url_record, outside_settings_object,
                     outside_resource_timing_notifier, destination,
+                    network::mojom::RequestDestination::kScript,
                     credentials_mode,
                     ModuleScriptCustomFetchType::kWorkletAddModule, client);
 }
@@ -268,7 +258,7 @@ void WorkletGlobalScope::BindContentSecurityPolicyToExecutionContext() {
   GetContentSecurityPolicy()->SetupSelf(*document_security_origin_);
 }
 
-void WorkletGlobalScope::Trace(blink::Visitor* visitor) {
+void WorkletGlobalScope::Trace(Visitor* visitor) {
   visitor->Trace(frame_);
   WorkerOrWorkletGlobalScope::Trace(visitor);
 }

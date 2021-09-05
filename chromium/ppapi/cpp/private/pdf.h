@@ -22,11 +22,37 @@ class Var;
 
 class PDF {
  public:
+  // C++ version of PP_PrivateAccessibilityTextStyleInfo.
+  // Needs to stay in sync with the C version.
+  struct PrivateAccessibilityTextStyleInfo {
+    std::string font_name;
+    int font_weight;
+    PP_TextRenderingMode render_mode;
+    float font_size;
+    // Colors are ARGB.
+    uint32_t fill_color;
+    uint32_t stroke_color;
+    bool is_italic;
+    bool is_bold;
+  };
+
+  // C++ version of PP_PrivateAccessibilityTextRunInfo.
+  // Needs to stay in sync with the C version.
+  struct PrivateAccessibilityTextRunInfo {
+    uint32_t len;
+    struct PP_FloatRect bounds;
+    PP_PrivateDirection direction;
+    PrivateAccessibilityTextStyleInfo style;
+  };
+
   // C++ version of PP_PrivateAccessibilityLinkInfo.
   // Needs to stay in sync with the C version.
   struct PrivateAccessibilityLinkInfo {
     std::string url;
+    // Index of this link in the collection of links in the page.
     uint32_t index_in_page;
+    // Index of the starting text run of this link in the collection of all
+    // text runs in the page.
     uint32_t text_run_index;
     uint32_t text_run_count;
     FloatRect bounds;
@@ -40,11 +66,45 @@ class PDF {
     FloatRect bounds;
   };
 
+  // C++ version of PP_PrivateAccessibilityHighlightInfo.
+  // Needs to stay in sync with the C version.
+  struct PrivateAccessibilityHighlightInfo {
+    std::string note_text;
+    // Index of this highlight in the collection of highlights in the page.
+    uint32_t index_in_page;
+    // Index of the starting text run of this highlight in the collection of all
+    // text runs in the page.
+    uint32_t text_run_index;
+    uint32_t text_run_count;
+    FloatRect bounds;
+    // Color of the highlight in ARGB. Alpha is stored in the first 8 MSBs. RGB
+    // follows after it with each using 8 bytes.
+    uint32_t color;
+  };
+
+  // C++ version of PP_PrivateAccessibilityTextFieldInfo.
+  // Needs to stay in sync with the C version.
+  struct PrivateAccessibilityTextFieldInfo {
+    std::string name;
+    std::string value;
+    bool is_read_only;
+    bool is_required;
+    bool is_password;
+    // Index of this text field in the collection of text fields in the page.
+    uint32_t index_in_page;
+    // We anchor the text field to a text run index, this denotes the text run
+    // before which the text field should be inserted in the accessibility tree.
+    uint32_t text_run_index;
+    FloatRect bounds;
+  };
+
   // C++ version of PP_PrivateAccessibilityPageObjects.
   // Needs to stay in sync with the C version.
   struct PrivateAccessibilityPageObjects {
     std::vector<PrivateAccessibilityLinkInfo> links;
     std::vector<PrivateAccessibilityImageInfo> images;
+    std::vector<PrivateAccessibilityHighlightInfo> highlights;
+    std::vector<PrivateAccessibilityTextFieldInfo> text_fields;
   };
 
   // Returns true if the required interface is available.
@@ -87,8 +147,6 @@ class PDF {
   static void SetLinkUnderCursor(const InstanceHandle& instance,
                                  const char* url);
   static void GetV8ExternalSnapshotData(const InstanceHandle& instance,
-                                        const char** natives_data_out,
-                                        int* natives_size_out,
                                         const char** snapshot_data_out,
                                         int* snapshot_size_out);
   static void SetAccessibilityViewportInfo(
@@ -100,7 +158,7 @@ class PDF {
   static void SetAccessibilityPageInfo(
       const InstanceHandle& instance,
       const PP_PrivateAccessibilityPageInfo* page_info,
-      const std::vector<PP_PrivateAccessibilityTextRunInfo>& text_runs,
+      const std::vector<PrivateAccessibilityTextRunInfo>& text_runs,
       const std::vector<PP_PrivateAccessibilityCharInfo>& chars,
       const PrivateAccessibilityPageObjects& page_objects);
   static void SetCrashData(const InstanceHandle& instance,

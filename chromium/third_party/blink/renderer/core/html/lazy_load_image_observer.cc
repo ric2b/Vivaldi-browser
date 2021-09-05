@@ -18,10 +18,12 @@
 #include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/html/html_image_element.h"
 #include "third_party/blink/renderer/core/html_element_type_helpers.h"
+#include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/intersection_observer/intersection_observer.h"
 #include "third_party/blink/renderer/core/intersection_observer/intersection_observer_entry.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/network/network_state_notifier.h"
 
@@ -187,7 +189,7 @@ void LazyLoadImageObserver::StartMonitoringNearViewport(
   if (deferral_message == DeferralMessage::kLoadEventsDeferred &&
       !is_load_event_deferred_intervention_shown_) {
     is_load_event_deferred_intervention_shown_ = true;
-    root_document->AddConsoleMessage(ConsoleMessage::Create(
+    root_document->AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
         mojom::ConsoleMessageSource::kIntervention,
         mojom::ConsoleMessageLevel::kInfo,
         "Images loaded lazily and replaced with placeholders. Load events are "
@@ -196,7 +198,7 @@ void LazyLoadImageObserver::StartMonitoringNearViewport(
   if (deferral_message == DeferralMessage::kMissingDimensionForLazy &&
       !is_missing_dimension_intervention_shown_) {
     is_missing_dimension_intervention_shown_ = true;
-    root_document->AddConsoleMessage(ConsoleMessage::Create(
+    root_document->AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
         mojom::ConsoleMessageSource::kIntervention,
         mojom::ConsoleMessageLevel::kInfo,
         "An <img> element was lazyloaded with loading=lazy, but had no "
@@ -217,8 +219,11 @@ void LazyLoadImageObserver::LoadIfNearViewport(
 
   for (auto entry : entries) {
     Element* element = entry->target();
-    HTMLImageElement* image_element = ToHTMLImageElementOrNull(element);
-    if (!entry->isIntersecting() && image_element) {
+    auto* image_element = DynamicTo<HTMLImageElement>(element);
+    // If the loading_attr is 'lazy' explicitly, we'd better to wait for
+    // intersection.
+    if (!entry->isIntersecting() && image_element &&
+        !EqualIgnoringASCIICase(image_element->FastGetAttribute(html_names::kLoadingAttr), "lazy")) {
       // Fully load the invisible image elements. The elements can be invisible
       // by style such as display:none, visibility: hidden, or hidden via
       // attribute, etc. Style might also not be calculated if the ancestors
@@ -288,7 +293,7 @@ void LazyLoadImageObserver::OnVisibilityChanged(
   DCHECK(!entries.IsEmpty());
 
   for (auto entry : entries) {
-    auto* image_element = ToHTMLImageElementOrNull(entry->target());
+    auto* image_element = DynamicTo<HTMLImageElement>(entry->target());
     if (!image_element)
       continue;
 

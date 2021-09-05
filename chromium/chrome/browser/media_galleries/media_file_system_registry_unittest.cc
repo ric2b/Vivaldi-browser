@@ -45,7 +45,6 @@
 #include "content/public/browser/render_process_host_factory.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/mock_render_process_host.h"
-#include "content/public/test/test_browser_thread.h"
 #include "content/public/test/test_utils.h"
 #include "content/public/test/web_contents_tester.h"
 #include "extensions/browser/extension_system.h"
@@ -424,7 +423,7 @@ MockProfileSharedRenderProcessHostFactory::ReleaseRPH(
     content::BrowserContext* browser_context) {
   auto existing = rph_map_.find(browser_context);
   if (existing == rph_map_.end())
-    return NULL;
+    return nullptr;
   std::unique_ptr<content::MockRenderProcessHost> result =
       std::move(existing->second);
   rph_map_.erase(existing);
@@ -469,14 +468,14 @@ ProfileState::ProfileState(
   no_permissions_extension_ =
       AddMediaGalleriesApp("no", read_permissions, profile_.get());
 
-  single_web_contents_ =
-      content::WebContentsTester::CreateTestWebContents(profile_.get(), NULL);
+  single_web_contents_ = content::WebContentsTester::CreateTestWebContents(
+      profile_.get(), nullptr);
   single_rph_ = rph_factory->ReleaseRPH(profile_.get());
 
-  shared_web_contents1_ =
-      content::WebContentsTester::CreateTestWebContents(profile_.get(), NULL);
-  shared_web_contents2_ =
-      content::WebContentsTester::CreateTestWebContents(profile_.get(), NULL);
+  shared_web_contents1_ = content::WebContentsTester::CreateTestWebContents(
+      profile_.get(), nullptr);
+  shared_web_contents2_ = content::WebContentsTester::CreateTestWebContents(
+      profile_.get(), nullptr);
   shared_rph_ = rph_factory->ReleaseRPH(profile_.get());
 }
 

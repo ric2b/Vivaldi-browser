@@ -36,6 +36,9 @@ class COMPONENT_EXPORT(DEBUG_DAEMON) FakeDebugDaemonClient
                     VoidDBusMethodCallback callback) override;
   std::string GetTracingAgentName() override;
   std::string GetTraceEventLabel() override;
+  void SetSwapParameter(const std::string& parameter,
+                        int32_t value,
+                        DBusMethodCallback<std::string> callback) override;
   void StartAgentTracing(const base::trace_event::TraceConfig& trace_config,
                          StartAgentTracingCallback callback) override;
   void StopAgentTracing(StopAgentTracingCallback callback) override;
@@ -45,6 +48,7 @@ class COMPONENT_EXPORT(DEBUG_DAEMON) FakeDebugDaemonClient
       bool numeric,
       bool ipv6,
       DBusMethodCallback<std::vector<std::string>> callback) override;
+  void SetKstaledRatio(uint8_t val, KstaledRatioCallback callback) override;
   void GetNetworkStatus(DBusMethodCallback<std::string> callback) override;
   void GetNetworkInterfaces(DBusMethodCallback<std::string> callback) override;
   void GetPerfOutput(base::TimeDelta duration,
@@ -62,17 +66,14 @@ class COMPONENT_EXPORT(DEBUG_DAEMON) FakeDebugDaemonClient
                            const std::map<std::string, std::string>& options,
                            TestICMPCallback callback) override;
   void UploadCrashes() override;
-  void EnableDebuggingFeatures(
-      const std::string& password,
-      const EnableDebuggingCallback& callback) override;
-  void QueryDebuggingFeatures(
-      const QueryDevFeaturesCallback& callback) override;
-  void RemoveRootfsVerification(
-      const EnableDebuggingCallback& callback) override;
+  void EnableDebuggingFeatures(const std::string& password,
+                               EnableDebuggingCallback callback) override;
+  void QueryDebuggingFeatures(QueryDevFeaturesCallback callback) override;
+  void RemoveRootfsVerification(EnableDebuggingCallback callback) override;
   void WaitForServiceToBeAvailable(
       WaitForServiceToBeAvailableCallback callback) override;
   void SetOomScoreAdj(const std::map<pid_t, int32_t>& pid_to_oom_score_adj,
-                      const SetOomScoreAdjCallback& callback) override;
+                      SetOomScoreAdjCallback callback) override;
   void CupsAddManuallyConfiguredPrinter(
       const std::string& name,
       const std::string& uri,
@@ -83,10 +84,11 @@ class COMPONENT_EXPORT(DEBUG_DAEMON) FakeDebugDaemonClient
                                     CupsAddPrinterCallback callback) override;
   void CupsRemovePrinter(const std::string& name,
                          CupsRemovePrinterCallback callback,
-                         const base::Closure& error_callback) override;
+                         base::OnceClosure error_callback) override;
   void StartConcierge(ConciergeCallback callback) override;
   void StopConcierge(ConciergeCallback callback) override;
-  void StartPluginVmDispatcher(PluginVmDispatcherCallback callback) override;
+  void StartPluginVmDispatcher(const std::string& owner_id,
+                               PluginVmDispatcherCallback callback) override;
   void StopPluginVmDispatcher(PluginVmDispatcherCallback callback) override;
   void SetRlzPingSent(SetRlzPingSentCallback callback) override;
   void SetSchedulerConfigurationV2(

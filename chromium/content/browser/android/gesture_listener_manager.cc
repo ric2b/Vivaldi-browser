@@ -10,7 +10,7 @@
 #include "content/public/android/content_jni_headers/GestureListenerManagerImpl_jni.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "third_party/blink/public/platform/web_input_event.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
 #include "ui/events/android/gesture_event_type.h"
 #include "ui/gfx/geometry/size_f.h"
 
@@ -182,8 +182,8 @@ bool GestureListenerManager::FilterInputEvent(const WebInputEvent& event) {
   int gesture_type = ToGestureEventType(event.GetType());
   float dip_scale = web_contents_->GetNativeView()->GetDipScale();
   return Java_GestureListenerManagerImpl_filterTapOrPressEvent(
-      env, j_obj, gesture_type, gesture.PositionInWidget().x * dip_scale,
-      gesture.PositionInWidget().y * dip_scale);
+      env, j_obj, gesture_type, gesture.PositionInWidget().x() * dip_scale,
+      gesture.PositionInWidget().y() * dip_scale);
 }
 
 // All positions and sizes (except |top_shown_pix|) are in CSS pixels.
@@ -240,6 +240,15 @@ void GestureListenerManager::OnNavigationFinished(
 
 void GestureListenerManager::OnRenderProcessGone() {
   ResetPopupsAndInput(true);
+}
+
+bool GestureListenerManager::IsScrollInProgressForTesting() {
+  JNIEnv* env = AttachCurrentThread();
+  ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
+  if (obj.is_null())
+    return false;
+
+  return Java_GestureListenerManagerImpl_isScrollInProgress(env, obj);
 }
 
 void GestureListenerManager::ResetPopupsAndInput(bool render_process_gone) {

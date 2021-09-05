@@ -5,7 +5,7 @@
 #include "third_party/blink/renderer/core/editing/spellcheck/idle_spell_check_controller.h"
 
 #include "third_party/blink/public/platform/task_type.h"
-#include "third_party/blink/renderer/core/dom/idle_request_options.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_idle_request_options.h"
 #include "third_party/blink/renderer/core/editing/commands/undo_stack.h"
 #include "third_party/blink/renderer/core/editing/commands/undo_step.h"
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
@@ -63,11 +63,7 @@ IdleSpellCheckController::~IdleSpellCheckController() = default;
 void IdleSpellCheckController::Trace(Visitor* visitor) {
   visitor->Trace(frame_);
   visitor->Trace(cold_mode_requester_);
-  DocumentShutdownObserver::Trace(visitor);
-}
-
-IdleSpellCheckController* IdleSpellCheckController::Create(LocalFrame& frame) {
-  return MakeGarbageCollected<IdleSpellCheckController>(frame);
+  ExecutionContextLifecycleObserver::Trace(visitor);
 }
 
 IdleSpellCheckController::IdleSpellCheckController(LocalFrame& frame)
@@ -165,7 +161,7 @@ void IdleSpellCheckController::HotModeInvocation(IdleDeadline* deadline) {
   TRACE_EVENT0("blink", "IdleSpellCheckController::hotModeInvocation");
 
   // TODO(xiaochengh): Figure out if this has any performance impact.
-  GetDocument().UpdateStyleAndLayout();
+  GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
 
   HotModeSpellCheckRequester requester(GetSpellCheckRequester());
 
@@ -216,10 +212,10 @@ void IdleSpellCheckController::Invoke(IdleDeadline* deadline) {
 }
 
 void IdleSpellCheckController::DidAttachDocument(Document* document) {
-  SetContext(document);
+  SetExecutionContext(document->ToExecutionContext());
 }
 
-void IdleSpellCheckController::ContextDestroyed(Document*) {
+void IdleSpellCheckController::ContextDestroyed() {
   Deactivate();
 }
 

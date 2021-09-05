@@ -18,7 +18,7 @@
 #import "ios/chrome/browser/ui/bookmarks/cells/bookmark_folder_item.h"
 #import "ios/chrome/browser/ui/icons/chrome_icon.h"
 #import "ios/chrome/browser/ui/material_components/utils.h"
-#import "ios/chrome/common/colors/UIColor+cr_semantic_colors.h"
+#import "ios/chrome/common/ui/colors/UIColor+cr_semantic_colors.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 
@@ -119,8 +119,7 @@ using bookmarks::BookmarkNode;
   DCHECK(bookmarkModel);
   DCHECK(bookmarkModel->loaded());
   DCHECK(selectedFolder == NULL || selectedFolder->is_folder());
-  self = [super initWithTableViewStyle:UITableViewStylePlain
-                           appBarStyle:ChromeTableViewControllerStyleNoAppBar];
+  self = [super initWithStyle:UITableViewStylePlain];
   if (self) {
     _allowsCancel = allowsCancel;
     _allowsNewFolders = allowsNewFolders;
@@ -178,9 +177,6 @@ using bookmarks::BookmarkNode;
   // Configure the table view.
   self.tableView.autoresizingMask =
       UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-  // Add a tableFooterView in order to disable separators at the bottom of the
-  // tableView.
-  self.tableView.tableFooterView = [[UIView alloc] init];
 
   self.tableView.estimatedRowHeight = kEstimatedFolderCellHeight;
   self.tableView.rowHeight = UITableViewAutomaticDimension;

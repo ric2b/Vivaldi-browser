@@ -11,10 +11,10 @@
 #include "chrome/browser/sync_file_system/local/sync_file_system_backend.h"
 #include "chrome/browser/sync_file_system/logger.h"
 #include "chrome/browser/sync_file_system/sync_callbacks.h"
-#include "storage/browser/fileapi/file_system_context.h"
-#include "storage/browser/fileapi/file_system_url.h"
-#include "storage/browser/fileapi/sandbox_file_system_backend_delegate.h"
-#include "storage/common/fileapi/file_system_util.h"
+#include "storage/browser/file_system/file_system_context.h"
+#include "storage/browser/file_system/file_system_url.h"
+#include "storage/browser/file_system/sandbox_file_system_backend_delegate.h"
+#include "storage/common/file_system/file_system_util.h"
 
 namespace sync_file_system {
 
@@ -61,7 +61,7 @@ void RootDeleteHelper::Run() {
             "%s", url_.DebugString().c_str());
 
   file_system_context_->DeleteFileSystem(
-      url_.origin().GetURL(), url_.type(),
+      url_.origin(), url_.type(),
       base::Bind(&RootDeleteHelper::DidDeleteFileSystem,
                  weak_factory_.GetWeakPtr()));
 }
@@ -90,7 +90,7 @@ void RootDeleteHelper::DidResetFileChangeTracker() {
 
   // Reopening the filesystem.
   file_system_context_->sandbox_delegate()->OpenFileSystem(
-      url_.origin().GetURL(), url_.type(),
+      url_.origin(), url_.type(),
       storage::OPEN_FILE_SYSTEM_CREATE_IF_NONEXISTENT,
       base::Bind(&RootDeleteHelper::DidOpenFileSystem,
                  weak_factory_.GetWeakPtr()),

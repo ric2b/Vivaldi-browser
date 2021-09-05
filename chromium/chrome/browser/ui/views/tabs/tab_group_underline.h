@@ -5,10 +5,10 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_TABS_TAB_GROUP_UNDERLINE_H_
 #define CHROME_BROWSER_UI_VIEWS_TABS_TAB_GROUP_UNDERLINE_H_
 
-#include "chrome/browser/ui/tabs/tab_group_id.h"
+#include "components/tab_groups/tab_group_id.h"
 #include "ui/views/view.h"
 
-class TabStrip;
+class TabGroupViews;
 
 // View for tab group underlines in the tab strip, which are markers of group
 // members. There is one underline for each group, which is included in the tab
@@ -16,10 +16,12 @@ class TabStrip;
 class TabGroupUnderline : public views::View {
  public:
   static constexpr int kStrokeThickness = 3;
+  static int GetStrokeInset();
 
-  TabGroupUnderline(TabStrip* tab_strip, TabGroupId group);
+  TabGroupUnderline(TabGroupViews* tab_group_views,
+                    const tab_groups::TabGroupId& group);
 
-  TabGroupId group() const { return group_; }
+  const tab_groups::TabGroupId& group() const { return group_; }
 
   // Updates the bounds of the underline for painting.
   void UpdateBounds();
@@ -41,11 +43,8 @@ class TabGroupUnderline : public views::View {
   // represented using a fill path.
   SkPath GetPath() const;
 
-  // The underline color is the group color.
-  SkColor GetColor() const;
-
-  TabStrip* const tab_strip_;
-  const TabGroupId group_;
+  TabGroupViews* const tab_group_views_;
+  const tab_groups::TabGroupId group_;
 
   DISALLOW_COPY_AND_ASSIGN(TabGroupUnderline);
 };

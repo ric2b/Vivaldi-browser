@@ -51,8 +51,6 @@ class VivaldiQuitConfirmationDialog : public views::DialogDelegateView {
   // views::DialogDelegateView:
   bool Accept() override;
   bool Cancel() override;
-  base::string16 GetDialogButtonLabel(ui::DialogButton button) const override;
-  std::unique_ptr<View> CreateExtraView() override;
 
   // views::WidgetDelegate:
   ui::ModalType GetModalType() const override;
@@ -67,10 +65,12 @@ class VivaldiQuitConfirmationDialog : public views::DialogDelegateView {
   bool IsChecked();
 
  private:
+  std::unique_ptr<views::Checkbox> CreateExtraView();
+
   QuitCallback quit_callback_;
 
   views::Label* label_;
-  views::Checkbox* checkbox_;
+  views::Checkbox* checkbox_ = nullptr;
 
   // The dialog takes ownership of the delegate
   std::unique_ptr<VivaldiDialogDelegate> delegate_;

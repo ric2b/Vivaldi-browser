@@ -30,6 +30,7 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/referrer.h"
 #include "net/base/net_errors.h"
+#include "services/data_decoder/public/mojom/web_bundler.mojom.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "url/gurl.h"
 
@@ -97,7 +98,7 @@ class CONTENT_EXPORT SavePackage
   // g_browser_process on a non-UI thread can cause crashes during shutdown.
   // |cb| will be called when the download::DownloadItem is created, before data
   // is written to disk.
-  bool Init(const SavePackageDownloadCreatedCallback& cb);
+  bool Init(SavePackageDownloadCreatedCallback cb);
 
   // Cancel all in progress request, might be called by user or internal error.
   void Cancel(bool user_action, bool cancel_download_item = true);
@@ -159,11 +160,16 @@ class CONTENT_EXPORT SavePackage
   ~SavePackage() override;
 
   void InitWithDownloadItem(
-      const SavePackageDownloadCreatedCallback& download_created_callback,
+      SavePackageDownloadCreatedCallback download_created_callback,
       download::DownloadItemImpl* item);
 
-  // Callback for WebContents::GenerateMHTML().
-  void OnMHTMLGenerated(int64_t size);
+  // Callback for WebContents::GenerateMHTML() and
+  // WebContents::GenerateWebBundle().
+  void OnMHTMLOrWebBundleGenerated(int64_t size);
+
+  // Callback for WebContents::GenerateWebBundle().
+  void OnWebBundleGenerated(uint64_t size,
+                            data_decoder::mojom::WebBundlerError error);
 
   // Notes from Init() above applies here as well.
   void InternalInit();
@@ -308,10 +314,9 @@ class CONTENT_EXPORT SavePackage
       const base::FilePath& download_save_dir);
   void ContinueGetSaveInfo(bool can_save_as_complete,
                            const base::FilePath& suggested_path);
-  void OnPathPicked(
-      const base::FilePath& final_name,
-      SavePageType type,
-      const SavePackageDownloadCreatedCallback& cb);
+  void OnPathPicked(const base::FilePath& final_name,
+                    SavePageType type,
+                    SavePackageDownloadCreatedCallback cb);
 
   // The number of in process SaveItems.
   int in_process_count() const {

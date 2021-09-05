@@ -16,7 +16,7 @@
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
-#include "components/safe_browsing/password_protection/metrics_util.h"
+#include "components/safe_browsing/content/password_protection/metrics_util.h"
 #include "components/signin/public/base/signin_pref_names.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
@@ -35,7 +35,7 @@
 #include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/events/event_constants.h"
+#include "ui/events/types/event_type.h"
 #include "ui/views/test/widget_test.h"
 
 namespace {
@@ -92,19 +92,12 @@ class PageInfoBubbleViewSyncBrowserTest : public SyncTest {
     syncer::ProfileSyncService* sync_service =
         ProfileSyncServiceFactory::GetAsProfileSyncServiceForProfile(profile);
 
-    sync_service->OverrideNetworkResourcesForTest(
-        std::make_unique<fake_server::FakeServerNetworkResources>(
+    sync_service->OverrideNetworkForTest(
+        fake_server::CreateFakeServerHttpPostProviderFactory(
             GetFakeServer()->AsWeakPtr()));
 
     std::string username;
-#if defined(OS_CHROMEOS)
-    // In browser tests, the profile may already by authenticated with stub
-    // account |user_manager::kStubUserEmail|.
-    CoreAccountInfo info =
-        IdentityManagerFactory::GetForProfile(browser()->profile())
-            ->GetPrimaryAccountInfo();
-    username = info.email;
-#endif
+
     if (username.empty()) {
       username = "user@gmail.com";
     }
@@ -114,10 +107,8 @@ class PageInfoBubbleViewSyncBrowserTest : public SyncTest {
             browser()->profile(), username, "password",
             ProfileSyncServiceHarness::SigninType::FAKE_SIGNIN);
 
-#if !defined(OS_CHROMEOS)
     // Sign the profile in.
     ASSERT_TRUE(harness->SignInPrimaryAccount());
-#endif
 
     CoreAccountInfo current_info =
         IdentityManagerFactory::GetForProfile(browser()->profile())

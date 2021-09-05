@@ -9,15 +9,6 @@
 
 /**
  * @typedef {{
- *   site: string,
- *   id: string,
- *   localData: string,
- * }}
- */
-let CookieDataSummaryItem;
-
-/**
- * @typedef {{
  *   id: string,
  *   start: number,
  *   count: number,
@@ -40,7 +31,7 @@ Polymer({
      * The current filter applied to the cookie data list.
      */
     filter: {
-      observer: 'updateSiteList_',
+      observer: 'onFilterChanged_',
       notify: true,
       type: String,
     },
@@ -56,7 +47,7 @@ Polymer({
     /** @type {!Array<!CookieDataSummaryItem>} */
     sites: {
       type: Array,
-      value: function() {
+      value() {
         return [];
       },
     },
@@ -89,8 +80,12 @@ Polymer({
   lastSelected_: null,
 
   /** @override */
-  ready: function() {
+  created() {
     this.browserProxy_ = settings.LocalDataBrowserProxyImpl.getInstance();
+  },
+
+  /** @override */
+  ready() {
     this.addWebUIListener(
         'on-tree-item-removed', this.updateSiteList_.bind(this));
   },
@@ -102,7 +97,7 @@ Polymer({
    * @param {!settings.Route} currentRoute
    * @protected
    */
-  currentRouteChanged: function(currentRoute) {
+  currentRouteChanged(currentRoute) {
     settings.GlobalScrollTargetBehaviorImpl.currentRouteChanged.call(
         this, currentRoute);
     if (currentRoute == settings.routes.SITE_SETTINGS_SITE_DATA) {
@@ -121,7 +116,7 @@ Polymer({
    * @param {?Map<string, (string|Function)>} oldConfig
    * @private
    */
-  focusConfigChanged_: function(newConfig, oldConfig) {
+  focusConfigChanged_(newConfig, oldConfig) {
     // focusConfig is set only once on the parent, so this observer should only
     // fire once.
     assert(!oldConfig);
@@ -160,7 +155,7 @@ Polymer({
    * @param {number} index
    * @private
    */
-  focusOnSiteSelectButton_: function(index) {
+  focusOnSiteSelectButton_(index) {
     const ironList =
         /** @type {!IronListElement} */ (this.$$('iron-list'));
     ironList.focusItem(index);
@@ -170,10 +165,22 @@ Polymer({
   },
 
   /**
+   * @param {string} current
+   * @param {string|undefined} previous
+   * @private
+   */
+  onFilterChanged_(current, previous) {
+    if (previous === undefined) {
+      return;
+    }
+    this.updateSiteList_();
+  },
+
+  /**
    * Gather all the site data.
    * @private
    */
-  updateSiteList_: function() {
+  updateSiteList_() {
     this.isLoading_ = true;
     this.browserProxy_.getDisplayList(this.filter).then(listInfo => {
       this.updateList('sites', item => item.site, listInfo.items);
@@ -188,7 +195,7 @@ Polymer({
    * @return {string}
    * @private
    */
-  computeRemoveLabel_: function(filter) {
+  computeRemoveLabel_(filter) {
     if (filter.length == 0) {
       return loadTimeData.getString('siteSettingsCookieRemoveAll');
     }
@@ -196,22 +203,22 @@ Polymer({
   },
 
   /** @private */
-  onCloseDialog_: function() {
+  onCloseDialog_() {
     this.$.confirmDeleteDialog.close();
   },
 
   /** @private */
-  onCloseThirdPartyDialog_: function() {
+  onCloseThirdPartyDialog_() {
     this.$.confirmDeleteThirdPartyDialog.close();
   },
 
   /** @private */
-  onConfirmDeleteDialogClosed_: function() {
+  onConfirmDeleteDialogClosed_() {
     cr.ui.focusWithoutInk(assert(this.$.removeShowingSites));
   },
 
   /** @private */
-  onConfirmDeleteThirdPartyDialogClosed_: function() {
+  onConfirmDeleteThirdPartyDialogClosed_() {
     cr.ui.focusWithoutInk(assert(this.$.removeAllThirdPartyCookies));
   },
 
@@ -220,7 +227,7 @@ Polymer({
    * @param {!Event} e
    * @private
    */
-  onRemoveShowingSitesTap_: function(e) {
+  onRemoveShowingSitesTap_(e) {
     e.preventDefault();
     this.$.confirmDeleteDialog.showModal();
   },
@@ -230,7 +237,7 @@ Polymer({
    * in third-party contexts and associated site data.
    * @private
    */
-  onRemoveThirdPartyCookiesTap_: function(e) {
+  onRemoveThirdPartyCookiesTap_(e) {
     e.preventDefault();
     this.$.confirmDeleteThirdPartyDialog.showModal();
   },
@@ -239,7 +246,7 @@ Polymer({
    * Called when deletion for all showing sites has been confirmed.
    * @private
    */
-  onConfirmDelete_: function() {
+  onConfirmDelete_() {
     this.$.confirmDeleteDialog.close();
     if (this.filter.length == 0) {
       this.browserProxy_.removeAll().then(() => {
@@ -257,7 +264,7 @@ Polymer({
    * confirmed.
    * @private
    */
-  onConfirmThirdPartyDelete_: function() {
+  onConfirmThirdPartyDelete_() {
     this.$.confirmDeleteThirdPartyDialog.close();
     this.browserProxy_.removeAllThirdPartyCookies().then(() => {
       this.updateSiteList_();
@@ -268,12 +275,12 @@ Polymer({
    * @param {!{model: !{item: CookieDataSummaryItem, index: number}}} event
    * @private
    */
-  onSiteClick_: function(event) {
+  onSiteClick_(event) {
     // If any delete button is selected, the focus will be in a bad state when
     // returning to this page. To avoid this, the site select button is given
     // focus. See https://crbug.com/872197.
     this.focusOnSiteSelectButton_(event.model.index);
-    settings.navigateTo(
+    settings.Router.getInstance().navigateTo(
         settings.routes.SITE_SETTINGS_DATA_DETAILS,
         new URLSearchParams('site=' + event.model.item.site));
     this.lastSelected_ = event.model;
@@ -283,7 +290,7 @@ Polymer({
    * @private
    * @return {boolean}
    */
-  showRemoveThirdPartyCookies_: function() {
+  showRemoveThirdPartyCookies_() {
     return loadTimeData.getBoolean('enableRemovingAllThirdPartyCookies') &&
         this.sites.length > 0 && this.filter.length == 0;
   },

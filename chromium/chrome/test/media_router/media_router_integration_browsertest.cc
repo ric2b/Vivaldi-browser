@@ -207,7 +207,7 @@ void MediaRouterIntegrationBrowserTest::OpenTestPageInNewTab(
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), GetTestPageUrl(full_path),
       WindowOpenDisposition::NEW_FOREGROUND_TAB,
-      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
   // Opening a new tab creates new WebContents, so we must re-configure the
   // test UI for it.
   test_ui_ =
@@ -477,7 +477,7 @@ IN_PROC_BROWSER_TEST_F(MediaRouterIntegrationBrowserTest,
   // Increment web contents capturer count so it thinks capture has started.
   // This will allow the file tab to go fullscreen.
   content::WebContents* web_contents = GetActiveWebContents();
-  web_contents->IncrementCapturerCount(gfx::Size());
+  web_contents->IncrementCapturerCount(gfx::Size(), /* stay_hidden */ false);
 
   // Wait for capture poll timer to pick up change.
   Wait(base::TimeDelta::FromSeconds(3));

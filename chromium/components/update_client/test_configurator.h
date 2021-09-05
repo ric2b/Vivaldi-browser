@@ -13,7 +13,6 @@
 #include <vector>
 
 #include "base/containers/flat_map.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "components/update_client/configurator.h"
 #include "services/network/test/test_url_loader_factory.h"
@@ -69,9 +68,11 @@ const uint8_t gjpm_hash[] = {0x69, 0xfc, 0x41, 0xf6, 0x17, 0x20, 0xc6, 0x36,
 
 class TestConfigurator : public Configurator {
  public:
-  TestConfigurator();
+  explicit TestConfigurator(PrefService* pref_service = nullptr);
+  TestConfigurator(const TestConfigurator&) = delete;
+  TestConfigurator& operator=(const TestConfigurator&) = delete;
 
-  // Overrrides for Configurator.
+  // Overrides for Configurator.
   int InitialDelay() const override;
   int NextCheckDelay() const override;
   int OnDemandDelay() const override;
@@ -96,11 +97,8 @@ class TestConfigurator : public Configurator {
   PrefService* GetPrefService() const override;
   ActivityDataService* GetActivityDataService() const override;
   bool IsPerUserInstall() const override;
-  std::vector<uint8_t> GetRunActionKeyHash() const override;
-  std::string GetAppGuid() const override;
   std::unique_ptr<ProtocolHandlerFactory> GetProtocolHandlerFactory()
       const override;
-  RecoveryCRXElevator GetRecoveryCRXElevator() const override;
 
   void SetBrand(const std::string& brand);
   void SetOnDemandTime(int seconds);
@@ -110,7 +108,6 @@ class TestConfigurator : public Configurator {
   void SetEnabledComponentUpdates(bool enabled_component_updates);
   void SetUpdateCheckUrl(const GURL& url);
   void SetPingUrl(const GURL& url);
-  void SetAppGuid(const std::string& app_guid);
   network::TestURLLoaderFactory* test_url_loader_factory() {
     return &test_url_loader_factory_;
   }
@@ -127,9 +124,9 @@ class TestConfigurator : public Configurator {
   std::string download_preference_;
   bool enabled_cup_signing_;
   bool enabled_component_updates_;
+  PrefService* pref_service_;  // Not owned by this class.
   GURL update_check_url_;
   GURL ping_url_;
-  std::string app_guid_;
 
   scoped_refptr<update_client::UnzipChromiumFactory> unzip_factory_;
   scoped_refptr<update_client::PatchChromiumFactory> patch_factory_;
@@ -137,8 +134,6 @@ class TestConfigurator : public Configurator {
   scoped_refptr<network::SharedURLLoaderFactory> test_shared_loader_factory_;
   network::TestURLLoaderFactory test_url_loader_factory_;
   scoped_refptr<NetworkFetcherFactory> network_fetcher_factory_;
-
-  DISALLOW_COPY_AND_ASSIGN(TestConfigurator);
 };
 
 }  // namespace update_client

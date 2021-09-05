@@ -4,28 +4,32 @@
 
 import unittest
 
+from .code_node import ListNode
 from .code_node import LiteralNode
-from .code_node import SequenceNode
 from .code_node import SymbolNode
 from .code_node import SymbolScopeNode
 from .code_node import TextNode
+from .code_node import render_code_node
+from .codegen_accumulator import CodeGenAccumulator
 from .mako_renderer import MakoRenderer
 
 
 class CodeNodeTest(unittest.TestCase):
-    def render(self, node):
-        prev = ""
-        current = str(node)
-        while current != prev:
-            prev = current
-            current = str(node)
-        return current
+    def setUp(self):
+        super(CodeNodeTest, self).setUp()
+        self.addTypeEqualityFunc(str, self.assertMultiLineEqual)
 
     def assertRenderResult(self, node, expected):
-        def simplify(s):
-            return " ".join(s.split())
+        if node.renderer is None:
+            node.set_renderer(MakoRenderer())
+        if node.accumulator is None:
+            node.set_accumulator(CodeGenAccumulator())
 
-        actual = simplify(self.render(node))
+        def simplify(text):
+            return "\n".join(
+                [" ".join(line.split()) for line in text.split("\n")])
+
+        actual = simplify(render_code_node(node))
         expected = simplify(expected)
 
         self.assertEqual(actual, expected)
@@ -35,33 +39,28 @@ class CodeNodeTest(unittest.TestCase):
         Tests that, in LiteralNode, the special characters of template (%, ${},
         etc) are not processed.
         """
-        renderer = MakoRenderer()
-        root = LiteralNode("<% x = 42 %>${x}", renderer=renderer)
+        root = LiteralNode("<% x = 42 %>${x}")
         self.assertRenderResult(root, "<% x = 42 %>${x}")
 
     def test_empty_literal_node(self):
-        renderer = MakoRenderer()
-        root = LiteralNode("", renderer=renderer)
+        root = LiteralNode("")
         self.assertRenderResult(root, "")
 
     def test_text_node(self):
         """Tests that the template language works in TextNode."""
-        renderer = MakoRenderer()
-        root = TextNode("<% x = 42 %>${x}", renderer=renderer)
+        root = TextNode("<% x = 42 %>${x}")
         self.assertRenderResult(root, "42")
 
     def test_empty_text_node(self):
-        renderer = MakoRenderer()
-        root = TextNode("", renderer=renderer)
+        root = TextNode("")
         self.assertRenderResult(root, "")
 
     def test_list_operations_of_sequence_node(self):
         """
-        Tests that list operations (insert, append, and extend) of SequenceNode
+        Tests that list operations (insert, append, and extend) of ListNode
         work just same as Python built-in list.
         """
-        renderer = MakoRenderer()
-        root = SequenceNode(renderer=renderer)
+        root = ListNode(separator=",")
         root.extend([
             LiteralNode("2"),
             LiteralNode("4"),
@@ -70,13 +69,24 @@ class CodeNodeTest(unittest.TestCase):
         root.insert(0, LiteralNode("1"))
         root.insert(100, LiteralNode("5"))
         root.append(LiteralNode("6"))
-        self.assertRenderResult(root, "1 2 3 4 5 6")
+        self.assertRenderResult(root, "1,2,3,4,5,6")
+        root.remove(root[0])
+        root.remove(root[2])
+        root.remove(root[-1])
+        self.assertRenderResult(root, "2,3,5")
+
+    def test_list_node_head_and_tail(self):
+        self.assertRenderResult(ListNode(), "")
+        self.assertRenderResult(ListNode(head="head"), "")
+        self.assertRenderResult(ListNode(tail="tail"), "")
+        self.assertRenderResult(
+            ListNode([TextNode("-content-")], head="head", tail="tail"),
+            "head-content-tail")
 
     def test_nested_sequence(self):
-        """Tests nested SequenceNodes."""
-        renderer = MakoRenderer()
-        root = SequenceNode(renderer=renderer)
-        nested = SequenceNode()
+        """Tests nested ListNodes."""
+        root = ListNode(separator=",")
+        nested = ListNode(separator=",")
         nested.extend([
             LiteralNode("2"),
             LiteralNode("3"),
@@ -87,15 +97,14 @@ class CodeNodeTest(unittest.TestCase):
             nested,
             LiteralNode("5"),
         ])
-        self.assertRenderResult(root, "1 2 3 4 5")
+        self.assertRenderResult(root, "1,2,3,4,5")
 
     def test_symbol_definition_chains(self):
         """
         Tests that use of SymbolNode inserts necessary SymbolDefinitionNode
         appropriately.
         """
-        renderer = MakoRenderer()
-        root = SymbolScopeNode(renderer=renderer)
+        root = SymbolScopeNode(tail="\n")
 
         root.register_code_symbols([
             SymbolNode("var1", "int ${var1} = ${var2} + ${var3};"),
@@ -108,11 +117,33 @@ class CodeNodeTest(unittest.TestCase):
         root.append(TextNode("(void)${var1};"))
 
         self.assertRenderResult(
-            root, """
+            root, """\
 int var5 = 2;
+int var2 = var5;
 int var4 = 1;
 int var3 = var4;
-int var2 = var5;
 int var1 = var2 + var3;
 (void)var1;
-        """)
+""")
+
+    def test_template_error_handling(self):
+        renderer = MakoRenderer()
+        root = SymbolScopeNode()
+        root.set_renderer(renderer)
+
+        root.append(
+            SymbolScopeNode([
+                # Have Mako raise a NameError.
+                TextNode("${unbound_symbol}"),
+            ]))
+
+        with self.assertRaises(NameError):
+            renderer.reset()
+            root.render(renderer)
+
+        callers_on_error = list(renderer.callers_on_error)
+        self.assertEqual(len(callers_on_error), 3)
+        self.assertEqual(callers_on_error[0], root[0][0])
+        self.assertEqual(callers_on_error[1], root[0])
+        self.assertEqual(callers_on_error[2], root)
+        self.assertEqual(renderer.last_caller_on_error, root[0][0])

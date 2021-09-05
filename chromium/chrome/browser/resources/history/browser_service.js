@@ -2,57 +2,36 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {addSingletonGetter, sendWithPromise} from 'chrome://resources/js/cr.m.js';
+import {RESULTS_PER_PAGE} from './constants.js';
+import {ForeignSession, HistoryEntry, HistoryQuery} from './externs.js';
+
 /**
  * @fileoverview Defines a singleton object, history.BrowserService, which
  * provides access to chrome.send APIs.
  */
 
-cr.define('history', function() {
-  class BrowserService {
-    constructor() {
-      /** @private {Array<!HistoryEntry>} */
-      this.pendingDeleteItems_ = null;
-      /** @private {PromiseResolver} */
-      this.pendingDeletePromise_ = null;
+  export class BrowserService {
+    /** @return {!Promise<!Array<!ForeignSession>>} */
+    getForeignSessions() {
+      return sendWithPromise('getForeignSessions');
     }
 
-    /**
-     * @param {!Array<!HistoryEntry>} items
-     * @return {Promise<!Array<!HistoryEntry>>}
-     */
-    deleteItems(items) {
-      if (this.pendingDeleteItems_ != null) {
-        // There's already a deletion in progress, reject immediately.
-        return new Promise(function(resolve, reject) {
-          reject(items);
-        });
-      }
-
-      const removalList = items.map(function(item) {
-        return {
-          url: item.url,
-          timestamps: item.allTimestamps,
-        };
-      });
-
-      this.pendingDeleteItems_ = items;
-      this.pendingDeletePromise_ = new PromiseResolver();
-
-      chrome.send('removeVisits', removalList);
-
-      return this.pendingDeletePromise_.promise;
-    }
-
-    /**
-     * @param {!string} url
-     */
+    /** @param {!string} url */
     removeBookmark(url) {
       chrome.send('removeBookmark', [url]);
     }
 
     /**
-     * @param {string} sessionTag
+     * @param {!Array<!HistoryEntry>} removalList
+     * @return {!Promise} Promise that is resolved when items are deleted
+     *     successfully or rejected when deletion fails.
      */
+    removeVisits(removalList) {
+      return sendWithPromise('removeVisits', removalList);
+    }
+
+    /** @param {string} sessionTag */
     openForeignSessionAllTabs(sessionTag) {
       chrome.send('openForeignSession', [sessionTag]);
     }
@@ -70,9 +49,7 @@ cr.define('history', function() {
       ]);
     }
 
-    /**
-     * @param {string} sessionTag
-     */
+    /** @param {string} sessionTag */
     deleteForeignSession(sessionTag) {
       chrome.send('deleteForeignSession', [sessionTag]);
     }
@@ -95,52 +72,58 @@ cr.define('history', function() {
      * @param {string} action The name of the action to be logged.
      */
     recordAction(action) {
-      if (action.indexOf('_') == -1) {
+      if (action.indexOf('_') === -1) {
         action = `HistoryPage_${action}`;
       }
       chrome.send('metricsHandler:recordAction', [action]);
     }
 
     /**
-     * @param {boolean} successful
-     * @private
+     * @param {string} histogram
+     * @param {number} time
      */
-    resolveDelete_(successful) {
-      if (this.pendingDeleteItems_ == null ||
-          this.pendingDeletePromise_ == null) {
-        return;
-      }
-
-      if (successful) {
-        this.pendingDeletePromise_.resolve(this.pendingDeleteItems_);
-      } else {
-        this.pendingDeletePromise_.reject(this.pendingDeleteItems_);
-      }
-
-      this.pendingDeleteItems_ = null;
-      this.pendingDeletePromise_ = null;
+    recordTime(histogram, time) {
+      chrome.send('metricsHandler:recordTime', [histogram, time]);
     }
 
     menuPromoShown() {
       chrome.send('menuPromoShown');
     }
+
+    /**
+     * @param {string} url
+     * @param {string} target
+     * @param {!MouseEvent} e
+     */
+    navigateToUrl(url, target, e) {
+      chrome.send(
+          'navigateToUrl',
+          [url, target, e.button, e.altKey, e.ctrlKey, e.metaKey, e.shiftKey]);
+    }
+
+    otherDevicesInitialized() {
+      chrome.send('otherDevicesInitialized');
+    }
+
+    /**
+     * @return {!Promise<{info: !HistoryQuery, value: !Array<!HistoryEntry>}>}
+     */
+    queryHistoryContinuation() {
+      return sendWithPromise('queryHistoryContinuation');
+    }
+
+    /**
+     * @param {string} searchTerm
+     * @return {!Promise<{info: !HistoryQuery, value: !Array<!HistoryEntry>}>}
+     */
+    queryHistory(searchTerm) {
+      return sendWithPromise('queryHistory', searchTerm, RESULTS_PER_PAGE);
+    }
+
+    startSignInFlow() {
+      chrome.send('startSignInFlow');
+    }
   }
 
-  cr.addSingletonGetter(BrowserService);
+  addSingletonGetter(BrowserService);
 
-  return {BrowserService: BrowserService};
-});
-
-/**
- * Called by the history backend when deletion was succesful.
- */
-function deleteComplete() {
-  history.BrowserService.getInstance().resolveDelete_(true);
-}
-
-/**
- * Called by the history backend when the deletion failed.
- */
-function deleteFailed() {
-  history.BrowserService.getInstance().resolveDelete_(false);
-}

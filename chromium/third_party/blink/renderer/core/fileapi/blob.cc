@@ -33,10 +33,10 @@
 #include <memory>
 #include <utility>
 
+#include "third_party/blink/renderer/bindings/core/v8/v8_blob_property_bag.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/fetch/blob_bytes_consumer.h"
 #include "third_party/blink/renderer/core/fetch/body_stream_buffer.h"
-#include "third_party/blink/renderer/core/fileapi/blob_property_bag.h"
 #include "third_party/blink/renderer/core/fileapi/file_reader_loader.h"
 #include "third_party/blink/renderer/core/fileapi/file_reader_loader_client.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
@@ -157,12 +157,13 @@ void Blob::PopulateBlobData(
   for (const auto& item : parts) {
     if (item.IsArrayBuffer()) {
       DOMArrayBuffer* array_buffer = item.GetAsArrayBuffer();
-      blob_data->AppendBytes(array_buffer->Data(), array_buffer->ByteLength());
+      blob_data->AppendBytes(array_buffer->Data(),
+                             array_buffer->ByteLengthAsSizeT());
     } else if (item.IsArrayBufferView()) {
       DOMArrayBufferView* array_buffer_view =
           item.GetAsArrayBufferView().View();
       blob_data->AppendBytes(array_buffer_view->BaseAddress(),
-                             array_buffer_view->byteLength());
+                             array_buffer_view->byteLengthAsSizeT());
     } else if (item.IsBlob()) {
       item.GetAsBlob()->AppendTo(*blob_data);
     } else if (item.IsUSVString()) {
@@ -210,11 +211,12 @@ Blob* Blob::slice(int64_t start,
   auto blob_data = std::make_unique<BlobData>();
   blob_data->SetContentType(NormalizeType(content_type));
   blob_data->AppendBlob(blob_data_handle_, start, length);
-  return Blob::Create(BlobDataHandle::Create(std::move(blob_data), length));
+  return MakeGarbageCollected<Blob>(
+      BlobDataHandle::Create(std::move(blob_data), length));
 }
 
 ReadableStream* Blob::stream(ScriptState* script_state) const {
-  BodyStreamBuffer* body_buffer = MakeGarbageCollected<BodyStreamBuffer>(
+  BodyStreamBuffer* body_buffer = BodyStreamBuffer::Create(
       script_state,
       MakeGarbageCollected<BlobBytesConsumer>(
           ExecutionContext::From(script_state), blob_data_handle_),

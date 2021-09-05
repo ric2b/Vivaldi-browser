@@ -480,9 +480,7 @@ void WebRtcTextLogHandler::OnGetNetworkInterfaceList(
     return value ? "enabled" : "disabled";
   };
   LogToCircularBuffer(base::StrCat(
-      {"AudioService: AudioStreams=",
-       enabled_or_disabled_feature_string(features::kAudioServiceAudioStreams),
-       ", OutOfProcess=",
+      {"AudioService: OutOfProcess=",
        enabled_or_disabled_feature_string(features::kAudioServiceOutOfProcess),
        ", LaunchOnStartup=",
        enabled_or_disabled_feature_string(
@@ -528,7 +526,7 @@ void WebRtcTextLogHandler::OnGetNetworkInterfaceList(
 
   // TODO(darin): Change SetLogMessageCallback to run on the UI thread.
 
-  auto log_message_callback = base::Bind(
+  auto log_message_callback = base::BindRepeating(
       &ForwardMessageViaTaskRunner, base::SequencedTaskRunnerHandle::Get(),
       base::Bind(&WebRtcTextLogHandler::LogMessage,
                  weak_factory_.GetWeakPtr()));

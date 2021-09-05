@@ -9,12 +9,16 @@
 #include "content/public/browser/navigation_throttle.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
+#include "net/base/auth.h"
+#include "net/base/network_isolation_key.h"
+#include "url/gurl.h"
 
 namespace content {
-class LoginDelegate;
 class NavigationHandle;
 class WebContents;
 }  // namespace content
+
+class LoginHandler;
 
 // LoginTabHelper is responsible for observing navigations that need to trigger
 // authentication prompts, showing the login prompt, and handling user-entered
@@ -67,10 +71,11 @@ class LoginTabHelper : public content::WebContentsObserver,
   // places the credentials into the cache.
   void Reload();
 
-  std::unique_ptr<content::LoginDelegate> delegate_;
-  GURL url_for_delegate_;
+  std::unique_ptr<LoginHandler> login_handler_;
+  GURL url_for_login_handler_;
 
   net::AuthChallengeInfo challenge_;
+  net::NetworkIsolationKey network_isolation_key_;
 
   // Stores the navigation entry ID for a pending refresh due to a user
   // cancelling a login prompt. This is set to the visible navigation entry ID

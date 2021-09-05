@@ -15,13 +15,13 @@
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/navigation_throttle.h"
 #include "content/public/browser/notification_service.h"
-#include "content/public/common/resource_type.h"
+#include "extensions/browser/extension_system.h"
+#include "extensions/browser/shared_user_script_master.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/manifest_handlers/content_scripts_handler.h"
 #include "extensions/common/url_pattern.h"
 
 using content::NavigationThrottle;
-using content::ResourceType;
 
 namespace extensions {
 
@@ -86,10 +86,6 @@ UserScriptListener::UserScriptListener() {
 
   registrar_.Add(this, chrome::NOTIFICATION_PROFILE_ADDED,
                  content::NotificationService::AllSources());
-
-  registrar_.Add(this,
-                 extensions::NOTIFICATION_USER_SCRIPTS_UPDATED,
-                 content::NotificationService::AllSources());
 }
 
 std::unique_ptr<NavigationThrottle>
@@ -107,6 +103,11 @@ void UserScriptListener::SetUserScriptsNotReadyForTesting(
     content::BrowserContext* context) {
   AppendNewURLPatterns(context, {URLPattern(URLPattern::SCHEME_ALL,
                                             URLPattern::kAllUrlsPattern)});
+}
+
+void UserScriptListener::TriggerUserScriptsReadyForTesting(
+    content::BrowserContext* context) {
+  UserScriptsReady(context);
 }
 
 UserScriptListener::~UserScriptListener() {}
@@ -179,9 +180,7 @@ void UserScriptListener::AppendNewURLPatterns(content::BrowserContext* context,
 
 void UserScriptListener::ReplaceURLPatterns(content::BrowserContext* context,
                                             const URLPatterns& patterns) {
-  // TODO(estade): enable this check once it no longer fails.
-  // DCHECK_EQ(1U, profile_data_.count(context));
-
+  DCHECK_EQ(1U, profile_data_.count(context));
   profile_data_[context].url_patterns = patterns;
 }
 
@@ -199,15 +198,19 @@ void UserScriptListener::Observe(int type,
                                  const content::NotificationDetails& details) {
   switch (type) {
     case chrome::NOTIFICATION_PROFILE_ADDED: {
-      auto* registry =
-          ExtensionRegistry::Get(content::Source<Profile>(source).ptr());
+      Profile* profile = content::Source<Profile>(source).ptr();
+      auto* registry = ExtensionRegistry::Get(profile);
       DCHECK(!extension_registry_observer_.IsObserving(registry));
       extension_registry_observer_.Add(registry);
-      break;
-    }
-    case extensions::NOTIFICATION_USER_SCRIPTS_UPDATED: {
-      Profile* profile = content::Source<Profile>(source).ptr();
-      UserScriptsReady(profile);
+
+      SharedUserScriptMaster* user_script_master =
+          ExtensionSystem::Get(profile)->shared_user_script_master();
+      // Note: |user_script_master| can be null in some tests.
+      if (user_script_master) {
+        UserScriptLoader* loader = user_script_master->script_loader();
+        DCHECK(!user_script_loader_observer_.IsObserving(loader));
+        user_script_loader_observer_.Add(loader);
+      }
       break;
     }
     default:
@@ -223,9 +226,8 @@ void UserScriptListener::OnExtensionLoaded(
 
   URLPatterns new_patterns;
   CollectURLPatterns(extension, &new_patterns);
-  if (!new_patterns.empty()) {
-    AppendNewURLPatterns(browser_context, new_patterns);
-  }
+  DCHECK(!new_patterns.empty());
+  AppendNewURLPatterns(browser_context, new_patterns);
 }
 
 void UserScriptListener::OnExtensionUnloaded(
@@ -234,6 +236,12 @@ void UserScriptListener::OnExtensionUnloaded(
     UnloadedExtensionReason reason) {
   if (ContentScriptsInfo::GetContentScripts(extension).empty())
     return;  // No patterns to delete for this extension.
+
+  // It's possible to unload extensions before loading extensions when the
+  // ExtensionService uninstalls an orphaned extension. In this case we don't
+  // need to update |profile_data_|. See crbug.com/1036028
+  if (profile_data_.count(browser_context) == 0)
+    return;
 
   // Clear all our patterns and reregister all the still-loaded extensions.
   const ExtensionSet& extensions =
@@ -249,6 +257,16 @@ void UserScriptListener::OnExtensionUnloaded(
 
 void UserScriptListener::OnShutdown(ExtensionRegistry* registry) {
   extension_registry_observer_.Remove(registry);
+}
+
+void UserScriptListener::OnScriptsLoaded(
+    UserScriptLoader* loader,
+    content::BrowserContext* browser_context) {
+  UserScriptsReady(browser_context);
+}
+
+void UserScriptListener::OnUserScriptLoaderDestroyed(UserScriptLoader* loader) {
+  user_script_loader_observer_.Remove(loader);
 }
 
 }  // namespace extensions

@@ -36,25 +36,26 @@ void FindCellsInRow(AXNode* node, std::vector<AXNode*>* cell_nodes) {
 }
 
 // Given a node representing a table/grid, search its children
-// recursively to find any rows and append them to |row_nodes|, then
+// recursively to find any rows and append them to |row_node_list|, then
 // for each row find its cells and add them to |cell_nodes_per_row| as a
 // 2-dimensional array.
 //
 // We only recursively check for the following roles in between a table and
 // its rows: generic containers like <div>, any nodes that are ignored, and
-// table sections (which have Role::kGroup).
+// table sections (which have Role::kRowGroup).
 void FindRowsAndThenCells(AXNode* node,
-                          std::vector<AXNode*>* row_nodes,
+                          std::vector<AXNode*>* row_node_list,
                           std::vector<std::vector<AXNode*>>* cell_nodes_per_row,
                           int32_t& caption_node_id) {
   for (AXNode* child : node->children()) {
     if (child->IsIgnored() ||
         child->data().role == ax::mojom::Role::kGenericContainer ||
-        child->data().role == ax::mojom::Role::kGroup) {
-      FindRowsAndThenCells(child, row_nodes, cell_nodes_per_row,
+        child->data().role == ax::mojom::Role::kGroup ||
+        child->data().role == ax::mojom::Role::kRowGroup) {
+      FindRowsAndThenCells(child, row_node_list, cell_nodes_per_row,
                            caption_node_id);
     } else if (IsTableRow(child->data().role)) {
-      row_nodes->push_back(child);
+      row_node_list->push_back(child);
       cell_nodes_per_row->push_back(std::vector<AXNode*>());
       FindCellsInRow(child, &cell_nodes_per_row->back());
     } else if (child->data().role == ax::mojom::Role::kCaption)
@@ -97,7 +98,6 @@ bool AXTableInfo::Update() {
 
   ClearVectors();
 
-  std::vector<AXNode*> row_nodes;
   std::vector<std::vector<AXNode*>> cell_nodes_per_row;
   caption_id = 0;
   FindRowsAndThenCells(table_node_, &row_nodes, &cell_nodes_per_row,
@@ -156,10 +156,11 @@ void AXTableInfo::ClearVectors() {
   cell_ids.clear();
   unique_cell_ids.clear();
   cell_data_vector.clear();
+  row_nodes.clear();
 }
 
 void AXTableInfo::BuildCellDataVectorFromRowAndCellNodes(
-    const std::vector<AXNode*>& row_nodes,
+    const std::vector<AXNode*>& row_node_list,
     const std::vector<std::vector<AXNode*>>& cell_nodes_per_row) {
   // Iterate over the cells and build up an array of CellData
   // entries, one for each cell. Compute the actual row and column
@@ -171,7 +172,7 @@ void AXTableInfo::BuildCellDataVectorFromRowAndCellNodes(
   size_t next_row_index = 0;
   for (size_t i = 0; i < cell_nodes_per_row.size(); i++) {
     auto& cell_nodes_in_this_row = cell_nodes_per_row[i];
-    AXNode* row_node = row_nodes[i];
+    AXNode* row_node = row_node_list[i];
     bool is_first_cell_in_row = true;
     size_t current_col_index = 0;
     size_t current_aria_col_index = 1;
@@ -352,12 +353,21 @@ void AXTableInfo::UpdateExtraMacNodes() {
   // Resize.
   extra_mac_nodes.resize(extra_node_count);
 
+  std::vector<AXTreeObserver::Change> changes;
+  changes.reserve(extra_node_count +
+                  1);  // Room for extra nodes + table itself.
+
   // Create column nodes.
-  for (size_t i = 0; i < col_count; i++)
+  for (size_t i = 0; i < col_count; i++) {
     extra_mac_nodes[i] = CreateExtraMacColumnNode(i);
+    changes.push_back(AXTreeObserver::Change(
+        extra_mac_nodes[i], AXTreeObserver::ChangeType::NODE_CREATED));
+  }
 
   // Create table header container node.
   extra_mac_nodes[col_count] = CreateExtraMacTableHeaderNode();
+  changes.push_back(AXTreeObserver::Change(
+      extra_mac_nodes[col_count], AXTreeObserver::ChangeType::NODE_CREATED));
 
   // Update the columns to reflect current state of the table.
   for (size_t i = 0; i < col_count; i++)
@@ -369,6 +379,12 @@ void AXTableInfo::UpdateExtraMacNodes() {
   data.AddIntListAttribute(ax::mojom::IntListAttribute::kIndirectChildIds,
                            all_headers);
   extra_mac_nodes[col_count]->SetData(data);
+
+  changes.push_back(AXTreeObserver::Change(
+      table_node_, AXTreeObserver::ChangeType::NODE_CHANGED));
+  for (AXTreeObserver& observer : tree_->observers()) {
+    observer.OnAtomicUpdateFinished(tree_, false, changes);
+  }
 }
 
 AXNode* AXTableInfo::CreateExtraMacColumnNode(size_t col_index) {
@@ -382,13 +398,8 @@ AXNode* AXTableInfo::CreateExtraMacColumnNode(size_t col_index) {
   data.id = id;
   data.role = ax::mojom::Role::kColumn;
   node->SetData(data);
-  for (AXTreeObserver& observer : tree_->observers()) {
+  for (AXTreeObserver& observer : tree_->observers())
     observer.OnNodeCreated(tree_, node);
-    observer.OnAtomicUpdateFinished(
-        tree_, false,
-        {AXTreeObserver::Change(node,
-                                AXTreeObserver::ChangeType::NODE_CREATED)});
-  }
   return node;
 }
 
@@ -404,13 +415,8 @@ AXNode* AXTableInfo::CreateExtraMacTableHeaderNode() {
   data.role = ax::mojom::Role::kTableHeaderContainer;
   node->SetData(data);
 
-  for (AXTreeObserver& observer : tree_->observers()) {
+  for (AXTreeObserver& observer : tree_->observers())
     observer.OnNodeCreated(tree_, node);
-    observer.OnAtomicUpdateFinished(
-        tree_, false,
-        {AXTreeObserver::Change(node,
-                                AXTreeObserver::ChangeType::NODE_CREATED)});
-  }
 
   return node;
 }
@@ -444,18 +450,29 @@ void AXTableInfo::UpdateExtraMacColumnNodeAttributes(size_t col_index) {
 }
 
 void AXTableInfo::ClearExtraMacNodes() {
-  for (size_t i = 0; i < extra_mac_nodes.size(); i++) {
+  for (AXNode* extra_mac_node : extra_mac_nodes) {
     for (AXTreeObserver& observer : tree_->observers())
-      observer.OnNodeWillBeDeleted(tree_, extra_mac_nodes[i]);
-    delete extra_mac_nodes[i];
+      observer.OnNodeWillBeDeleted(tree_, extra_mac_node);
+    AXNode::AXID deleted_id = extra_mac_node->id();
+    delete extra_mac_node;
+    for (AXTreeObserver& observer : tree_->observers())
+      observer.OnNodeDeleted(tree_, deleted_id);
   }
+  extra_mac_nodes.clear();
 }
 
 AXTableInfo::AXTableInfo(AXTree* tree, AXNode* table_node)
     : tree_(tree), table_node_(table_node) {}
 
 AXTableInfo::~AXTableInfo() {
-  ClearExtraMacNodes();
+  if (!extra_mac_nodes.empty()) {
+    ClearExtraMacNodes();
+    for (AXTreeObserver& observer : tree_->observers()) {
+      observer.OnAtomicUpdateFinished(
+          tree_, false,
+          {{table_node_, AXTreeObserver::ChangeType::NODE_CHANGED}});
+    }
+  }
 }
 
 }  // namespace ui

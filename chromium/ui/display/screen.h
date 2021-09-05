@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "ui/display/display.h"
 #include "ui/display/display_export.h"
 #include "ui/gfx/native_widget_types.h"
 
@@ -17,11 +18,13 @@ class Rect;
 }
 
 namespace display {
-class Display;
 class DisplayObserver;
 
 // A utility class for getting various info about screen size, displays,
 // cursor position, etc.
+//
+// Also, can notify DisplayObservers about global workspace changes. The
+// availability of that functionality depends on a platform.
 //
 // Note that this class does not represent an individual display connected to a
 // computer -- see the Display class for that. A single Screen object exists
@@ -103,6 +106,14 @@ class DISPLAY_EXPORT Screen {
   // display in |display|. Otherwise returns false and |display| remains
   // untouched.
   bool GetDisplayWithDisplayId(int64_t display_id, Display* display) const;
+
+  virtual void SetPanelRotationForTesting(int64_t display_id,
+                                          Display::Rotation rotation);
+
+  // Depending on a platform, a client can listen to global workspace changes
+  // by implementing and setting self as a DisplayObserver. It is also possible
+  // to get current workspace through the GetCurrentWorkspace method.
+  virtual std::string GetCurrentWorkspace();
 
  private:
   static gfx::NativeWindow GetWindowForView(gfx::NativeView view);

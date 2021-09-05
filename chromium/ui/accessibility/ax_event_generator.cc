@@ -28,6 +28,25 @@ bool IsContainedInLiveRegion(const AXTreeObserver::Change& change) {
              ax::mojom::StringAttribute::kName);
 }
 
+bool HasEvent(const std::set<AXEventGenerator::EventParams>& node_events,
+              AXEventGenerator::Event event) {
+  for (auto& iter : node_events) {
+    if (iter.event == event)
+      return true;
+  }
+  return false;
+}
+
+void RemoveEvent(std::set<AXEventGenerator::EventParams>* node_events,
+                 AXEventGenerator::Event event) {
+  for (auto& iter : *node_events) {
+    if (iter.event == event) {
+      node_events->erase(iter);
+      return;
+    }
+  }
+}
+
 bool HasOtherLiveRegionEvent(
     const std::set<AXEventGenerator::EventParams>& events) {
   auto is_live_region_event = [](const AXEventGenerator::EventParams& params) {
@@ -101,23 +120,21 @@ AXEventGenerator::AXEventGenerator() = default;
 
 AXEventGenerator::AXEventGenerator(AXTree* tree) : tree_(tree) {
   if (tree_)
-    tree_->AddObserver(this);
+    tree_event_observer_.Add(tree_);
 }
 
-AXEventGenerator::~AXEventGenerator() {
-  if (tree_)
-    tree_->RemoveObserver(this);
-}
+AXEventGenerator::~AXEventGenerator() = default;
 
 void AXEventGenerator::SetTree(AXTree* new_tree) {
   if (tree_)
-    tree_->RemoveObserver(this);
+    tree_event_observer_.Remove(tree_);
   tree_ = new_tree;
   if (tree_)
-    tree_->AddObserver(this);
+    tree_event_observer_.Add(tree_);
 }
 
 void AXEventGenerator::ReleaseTree() {
+  tree_event_observer_.RemoveAll();
   tree_ = nullptr;
 }
 
@@ -138,6 +155,23 @@ void AXEventGenerator::AddEvent(AXNode* node, AXEventGenerator::Event event) {
   if (event == Event::LIVE_REGION_CHANGED &&
       HasOtherLiveRegionEvent(node_events)) {
     return;
+  }
+
+  // We shouldn't fire children changed events on nodes that become
+  // ignored or unignored.
+  if (event == Event::IGNORED_CHANGED) {
+    for (auto& iter : node_events) {
+      if (iter.event == Event::CHILDREN_CHANGED) {
+        node_events.erase(iter);
+        break;
+      }
+    }
+  }
+  if (event == Event::CHILDREN_CHANGED) {
+    for (auto& iter : node_events) {
+      if (iter.event == Event::IGNORED_CHANGED)
+        return;
+    }
   }
 
   node_events.emplace(event, ax::mojom::EventFrom::kNone);
@@ -174,7 +208,9 @@ void AXEventGenerator::OnStateChanged(AXTree* tree,
                                       bool new_value) {
   DCHECK_EQ(tree_, tree);
 
-  AddEvent(node, Event::STATE_CHANGED);
+  if (state != ax::mojom::State::kIgnored)
+    AddEvent(node, Event::STATE_CHANGED);
+
   switch (state) {
     case ax::mojom::State::kExpanded:
       AddEvent(node, new_value ? Event::EXPANDED : Event::COLLAPSED);
@@ -193,6 +229,8 @@ void AXEventGenerator::OnStateChanged(AXTree* tree,
       if (unignored_parent)
         AddEvent(unignored_parent, Event::CHILDREN_CHANGED);
       AddEvent(node, Event::IGNORED_CHANGED);
+      if (!new_value)
+        AddEvent(node, Event::SUBTREE_CREATED);
       break;
     }
     case ax::mojom::State::kMultiline:
@@ -522,6 +560,8 @@ void AXEventGenerator::OnAtomicUpdateFinished(
   }
 
   FireActiveDescendantEvents();
+
+  PostprocessEvents();
 }
 
 void AXEventGenerator::FireLiveRegionEvents(AXNode* node) {
@@ -539,7 +579,7 @@ void AXEventGenerator::FireLiveRegionEvents(AXNode* node) {
              .GetStringAttribute(ax::mojom::StringAttribute::kName)
              .empty())
       AddEvent(node, Event::LIVE_REGION_NODE_CHANGED);
-    // Fire LIVE_REGION_NODE_CHANGED on the root of the live region.
+    // Fire LIVE_REGION_CHANGED on the root of the live region.
     AddEvent(live_root, Event::LIVE_REGION_CHANGED);
   }
 }
@@ -609,6 +649,49 @@ bool AXEventGenerator::ShouldFireLoadEvents(AXNode* node) {
   const AXNodeData& data = node->data();
   return data.relative_bounds.bounds.width() ||
          data.relative_bounds.bounds.height();
+}
+
+void AXEventGenerator::PostprocessEvents() {
+  std::vector<AXNode*> nodes_to_remove_subtree_created;
+
+  for (auto& iter : tree_events_) {
+    AXNode* node = iter.first;
+    std::set<EventParams>& node_events = iter.second;
+
+    // A newly created live region or alert should not *also* fire a
+    // live region changed event.
+    if (HasEvent(node_events, Event::ALERT) ||
+        HasEvent(node_events, Event::LIVE_REGION_CREATED)) {
+      RemoveEvent(&node_events, Event::LIVE_REGION_CHANGED);
+    }
+
+    // If a node toggled its ignored state, we shouldn't also fire
+    // children changed events on it.
+    if (HasEvent(node_events, Event::IGNORED_CHANGED))
+      RemoveEvent(&node_events, Event::CHILDREN_CHANGED);
+
+    // We shouldn't fire subtree created if the parent also has subtree
+    // created on it.
+    AXNode* parent = node->GetUnignoredParent();
+    if (parent && HasEvent(node_events, Event::SUBTREE_CREATED)) {
+      if (tree_events_.find(parent) != tree_events_.end()) {
+        std::set<EventParams>& parent_events = tree_events_[parent];
+        if (HasEvent(parent_events, Event::SUBTREE_CREATED))
+          nodes_to_remove_subtree_created.push_back(node);
+      }
+    }
+  }
+
+  for (AXNode* node : nodes_to_remove_subtree_created) {
+    std::set<EventParams>& node_events = tree_events_[node];
+    RemoveEvent(&node_events, Event::SUBTREE_CREATED);
+    // If this was the only event, remove the node entirely from the
+    // tree events. Note that this can't happen with any of the other logic
+    // above since it's all dealing with one event superseding another in
+    // the same node.
+    if (node_events.size() == 0)
+      tree_events_.erase(node);
+  }
 }
 
 // static
@@ -735,6 +818,8 @@ const char* ToString(AXEventGenerator::Event event) {
       return "OTHER_ATTRIBUTE_CHANGED";
     case AXEventGenerator::Event::PLACEHOLDER_CHANGED:
       return "PLACEHOLDER_CHANGED";
+    case AXEventGenerator::Event::PORTAL_ACTIVATED:
+      return "PORTAL_ACTIVATED";
     case AXEventGenerator::Event::POSITION_IN_SET_CHANGED:
       return "POSITION_IN_SET_CHANGED";
     case AXEventGenerator::Event::READONLY_CHANGED:

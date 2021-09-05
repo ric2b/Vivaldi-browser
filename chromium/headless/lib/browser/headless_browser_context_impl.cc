@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/guid.h"
+#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/task/post_task.h"
 #include "components/keyed_service/core/simple_key_map.h"
@@ -54,8 +55,8 @@ HeadlessBrowserContextImpl::~HeadlessBrowserContextImpl() {
   web_contents_map_.clear();
 
   if (request_context_manager_) {
-    content::BrowserThread::DeleteSoon(content::BrowserThread::IO, FROM_HERE,
-                                       request_context_manager_.release());
+    base::DeleteSoon(FROM_HERE, {content::BrowserThread::IO},
+                     request_context_manager_.release());
   }
 
   ShutdownStoragePartitions();

@@ -38,7 +38,7 @@ class VivaldiDataClassHandler {
   // condition.
   virtual bool GetData(
       const std::string& data_id,
-      const content::URLDataSource::GotDataCallback& callback) = 0;
+      content::URLDataSource::GotDataCallback callback) = 0;
 };
 
 class VivaldiDataSource : public content::URLDataSource {
@@ -49,9 +49,9 @@ class VivaldiDataSource : public content::URLDataSource {
   // content::URLDataSource implementation.
   std::string GetSource() override;
   void StartDataRequest(
-      const std::string& path,
+      const GURL& path,
       const content::WebContents::Getter& wc_getter,
-      const content::URLDataSource::GotDataCallback& callback) override;
+      content::URLDataSource::GotDataCallback callback) override;
   std::string GetMimeType(const std::string& path) override;
   bool AllowCaching() override;
   bool ShouldServiceRequest(const GURL& url,

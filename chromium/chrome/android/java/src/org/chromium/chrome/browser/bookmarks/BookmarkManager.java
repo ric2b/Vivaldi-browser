@@ -7,34 +7,36 @@ package org.chromium.chrome.browser.bookmarks;
 import android.app.Activity;
 import android.app.ActivityManager;
 import android.content.Context;
-import android.support.v7.widget.RecyclerView;
-import android.support.v7.widget.RecyclerView.AdapterDataObserver;
 import android.text.TextUtils;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.accessibility.AccessibilityManager;
 import android.widget.TextView;
 
+import androidx.annotation.VisibleForTesting;
+import androidx.recyclerview.widget.RecyclerView;
+import androidx.recyclerview.widget.RecyclerView.AdapterDataObserver;
+
 import org.chromium.base.ContextUtils;
 import org.chromium.base.ObserverList;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkItem;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkModelObserver;
-import org.chromium.chrome.browser.favicon.LargeIconBridge;
-import org.chromium.chrome.browser.gesturenav.HistoryNavigationDelegate;
-import org.chromium.chrome.browser.native_page.BasicNativePage;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.partnerbookmarks.PartnerBookmarksReader;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.snackbar.SnackbarManager;
-import org.chromium.chrome.browser.ui.widget.dragreorder.DragStateDelegate;
+import org.chromium.chrome.browser.ui.favicon.LargeIconBridge;
+import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
+import org.chromium.chrome.browser.ui.native_page.BasicNativePage;
 import org.chromium.chrome.browser.util.ConversionUtils;
-import org.chromium.chrome.browser.widget.selection.SelectableListLayout;
-import org.chromium.chrome.browser.widget.selection.SelectableListToolbar.SearchDelegate;
-import org.chromium.chrome.browser.widget.selection.SelectionDelegate;
+import org.chromium.chrome.browser.vr.VrModeProviderImpl;
 import org.chromium.components.bookmarks.BookmarkId;
+import org.chromium.components.browser_ui.widget.dragreorder.DragStateDelegate;
+import org.chromium.components.browser_ui.widget.selectable_list.SelectableListLayout;
+import org.chromium.components.browser_ui.widget.selectable_list.SelectableListToolbar.SearchDelegate;
+import org.chromium.components.browser_ui.widget.selectable_list.SelectionDelegate;
+import org.chromium.url.GURL;
 
 import java.util.Stack;
 
@@ -52,12 +54,6 @@ public class BookmarkManager
         implements BookmarkDelegate, SearchDelegate, PartnerBookmarksReader.FaviconUpdateObserver {
     private static final int FAVICON_MAX_CACHE_SIZE_BYTES =
             10 * ConversionUtils.BYTES_PER_MEGABYTE; // 10MB
-
-    /**
-     * This shared preference used to be used to save a list of recent searches. That feature
-     * has been removed, so this string is now used solely to clear the shared preference.
-     */
-    private static final String PREF_SEARCH_HISTORY = "bookmark_search_history";
 
     private static boolean sPreventLoadingForTesting;
 
@@ -206,8 +202,6 @@ public class BookmarkManager
         boolean reorderBookmarksEnabled =
                 ChromeFeatureList.isEnabled(ChromeFeatureList.REORDER_BOOKMARKS);
 
-        PartnerBookmarksReader.addFaviconUpdateObserver(this);
-
         mSelectionDelegate = new SelectionDelegate<BookmarkId>() {
             @Override
             public boolean toggleSelectionForItem(BookmarkId bookmark) {
@@ -259,7 +253,7 @@ public class BookmarkManager
 
         mToolbar = (BookmarkActionBar) mSelectableListLayout.initializeToolbar(
                 R.layout.bookmark_action_bar, mSelectionDelegate, 0, R.id.normal_menu_group,
-                R.id.selection_mode_menu_group, null, true, isDialogUi);
+                R.id.selection_mode_menu_group, null, true, isDialogUi, new VrModeProviderImpl());
         mToolbar.initializeSearchView(
                 this, R.string.bookmark_action_bar_search, R.id.search_menu_id);
         if (ChromeApplication.isVivaldi())
@@ -285,11 +279,12 @@ public class BookmarkManager
                 if (!TextUtils.isEmpty(mInitialUrl)) {
                     setState(BookmarkUIState.createStateFromUrl(mInitialUrl, mBookmarkModel));
                 }
+                PartnerBookmarksReader.addFaviconUpdateObserver(this);
             };
             mBookmarkModel.finishLoadingBookmarkModel(modelLoadedRunnable);
         }
 
-        mLargeIconBridge = new LargeIconBridge(Profile.getLastUsedProfile().getOriginalProfile());
+        mLargeIconBridge = new LargeIconBridge(Profile.getLastUsedRegularProfile());
         ActivityManager activityManager = ((ActivityManager) ContextUtils
                 .getApplicationContext().getSystemService(Context.ACTIVITY_SERVICE));
         int maxSize =
@@ -301,15 +296,11 @@ public class BookmarkManager
         if (!isDialogUi) {
             RecordUserAction.record("MobileBookmarkManagerPageOpen");
         }
-
-        // TODO(twellington): Remove this when Chrome version 59 is a distant memory and users
-        // are unlikely to have the old PREF_SEARCH_HISTORY in shared preferences.
-        ContextUtils.getAppSharedPreferences().edit().remove(PREF_SEARCH_HISTORY).apply();
     }
 
     @Override
     public void onUpdateFavicon(String url) {
-        mLargeIconBridge.clearFavicon(url);
+        mLargeIconBridge.clearFavicon(new GURL(url));
         mFaviconsNeedRefresh = true;
     }
 
@@ -381,14 +372,6 @@ public class BookmarkManager
      */
     public void setBasicNativePage(BasicNativePage nativePage) {
         mNativePage = nativePage;
-    }
-
-    /**
-     * Sets the delegate object needed for history navigation logic.
-     * @param delegate {@link HistoryNavigationDelegate} object.
-     */
-    public void setHistoryNavigationDelegate(HistoryNavigationDelegate delegate) {
-        mSelectableListLayout.setHistoryNavigationDelegate(delegate);
     }
 
     /**
@@ -559,9 +542,8 @@ public class BookmarkManager
     }
 
     @Override
-    public void openBookmark(BookmarkId bookmark, int launchLocation) {
-        if (BookmarkUtils.openBookmark(
-                    mBookmarkModel, mActivity, bookmark, launchLocation)) {
+    public void openBookmark(BookmarkId bookmark) {
+        if (BookmarkUtils.openBookmark(mBookmarkModel, mActivity, bookmark)) {
             BookmarkUtils.finishActivityOnPhone(mActivity);
         }
     }

@@ -2,13 +2,31 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import 'chrome://resources/cr_elements/hidden_style_css.m.js';
+import 'chrome://resources/cr_elements/cr_checkbox/cr_checkbox.m.js';
+import 'chrome://resources/cr_elements/cr_input/cr_input.m.js';
+import 'chrome://resources/cr_elements/search_highlight_style_css.m.js';
+import 'chrome://resources/cr_elements/shared_vars_css.m.js';
+import 'chrome://resources/cr_elements/md_select_css.m.js';
+import './print_preview_shared_css.js';
+
+import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
+import {Destination, VendorCapability, VendorCapabilitySelectOption} from '../data/destination.js';
+import {getStringForCurrentLocale} from '../print_preview_utils.js';
+
+import {updateHighlights} from './highlight_utils.js';
+import {SettingsBehavior} from './settings_behavior.js';
+
 Polymer({
   is: 'print-preview-advanced-settings-item',
+
+  _template: html`{__html_template__}`,
 
   behaviors: [SettingsBehavior],
 
   properties: {
-    /** @type {!print_preview.VendorCapability} */
+    /** @type {!VendorCapability} */
     capability: Object,
 
     /** @private {string} */
@@ -20,7 +38,7 @@ Polymer({
   ],
 
   /** @private */
-  updateFromSettings_: function() {
+  updateFromSettings_() {
     const settings = this.getSetting('vendorItems').value;
 
     // The settings may not have a property with the id if they were populated
@@ -44,12 +62,12 @@ Polymer({
   },
 
   /**
-   * @param {!print_preview.VendorCapability |
-   *         !print_preview.VendorCapabilitySelectOption} item
+   * @param {!VendorCapability |
+   *         !VendorCapabilitySelectOption} item
    * @return {string} The display name for the setting.
    * @private
    */
-  getDisplayName_: function(item) {
+  getDisplayName_(item) {
     let displayName = item.display_name;
     if (!displayName && item.display_name_localized) {
       displayName = getStringForCurrentLocale(item.display_name_localized);
@@ -62,8 +80,8 @@ Polymer({
    *     of type select.
    * @private
    */
-  isCapabilityTypeSelect_: function() {
-    return this.capability.type == 'SELECT';
+  isCapabilityTypeSelect_() {
+    return this.capability.type === 'SELECT';
   },
 
   /**
@@ -71,9 +89,9 @@ Polymer({
    *     of type checkbox.
    * @private
    */
-  isCapabilityTypeCheckbox_: function() {
-    return this.capability.type == 'TYPED_VALUE' &&
-        this.capability.typed_value_cap.value_type == 'BOOLEAN';
+  isCapabilityTypeCheckbox_() {
+    return this.capability.type === 'TYPED_VALUE' &&
+        this.capability.typed_value_cap.value_type === 'BOOLEAN';
   },
 
   /**
@@ -81,7 +99,7 @@ Polymer({
    *     of type input.
    * @private
    */
-  isCapabilityTypeInput_: function() {
+  isCapabilityTypeInput_() {
     return !this.isCapabilityTypeSelect_() && !this.isCapabilityTypeCheckbox_();
   },
 
@@ -89,17 +107,17 @@ Polymer({
    * @return {boolean} Whether the checkbox setting is checked.
    * @private
    */
-  isChecked_: function() {
-    return this.currentValue_ == 'true';
+  isChecked_() {
+    return this.currentValue_ === 'true';
   },
 
   /**
-   * @param {!print_preview.VendorCapabilitySelectOption} option The option
+   * @param {!VendorCapabilitySelectOption} option The option
    *     for a select capability.
    * @return {boolean} Whether the option is selected.
    * @private
    */
-  isOptionSelected_: function(option) {
+  isOptionSelected_(option) {
     return this.currentValue_ === undefined ?
         !!option.is_default :
         option.value === this.currentValue_;
@@ -109,14 +127,14 @@ Polymer({
    * @return {string} The placeholder value for the capability's text input.
    * @private
    */
-  getCapabilityPlaceholder_: function() {
-    if (this.capability.type == 'TYPED_VALUE' &&
+  getCapabilityPlaceholder_() {
+    if (this.capability.type === 'TYPED_VALUE' &&
         this.capability.typed_value_cap &&
-        this.capability.typed_value_cap.default != undefined) {
+        this.capability.typed_value_cap.default !== undefined) {
       return this.capability.typed_value_cap.default.toString() || '';
     }
-    if (this.capability.type == 'RANGE' && this.capability.range_cap &&
-        this.capability.range_cap.default != undefined) {
+    if (this.capability.type === 'RANGE' && this.capability.range_cap &&
+        this.capability.range_cap.default !== undefined) {
       return this.capability.range_cap.default.toString() || '';
     }
     return '';
@@ -126,17 +144,18 @@ Polymer({
    * @return {boolean}
    * @private
    */
-  hasOptionWithValue_: function(value) {
+  hasOptionWithValue_(value) {
     return !!this.capability.select_cap &&
         !!this.capability.select_cap.option &&
-        this.capability.select_cap.option.some(option => option.value == value);
+        this.capability.select_cap.option.some(
+            option => option.value === value);
   },
 
   /**
    * @param {?RegExp} query The current search query.
    * @return {boolean} Whether the item has a match for the query.
    */
-  hasMatch: function(query) {
+  hasMatch(query) {
     if (!query || this.getDisplayName_(this.capability).match(query)) {
       return true;
     }
@@ -146,7 +165,7 @@ Polymer({
     }
 
     for (const option of
-         /** @type {!Array<!print_preview.VendorCapabilitySelectOption>} */ (
+         /** @type {!Array<!VendorCapabilitySelectOption>} */ (
              this.capability.select_cap.option)) {
       if (this.getDisplayName_(option).match(query)) {
         return true;
@@ -159,7 +178,7 @@ Polymer({
    * @param {!Event} e Event containing the new value.
    * @private
    */
-  onUserInput_: function(e) {
+  onUserInput_(e) {
     this.currentValue_ = e.target.value;
   },
 
@@ -167,7 +186,7 @@ Polymer({
    * @param {!Event} e Event containing the new value.
    * @private
    */
-  onCheckboxInput_: function(e) {
+  onCheckboxInput_(e) {
     this.currentValue_ = e.target.checked ? 'true' : 'false';
   },
 
@@ -175,7 +194,7 @@ Polymer({
    * @return {string} The current value of the setting, or the empty string if
    *     it is not set.
    */
-  getCurrentValue: function() {
+  getCurrentValue() {
     return this.currentValue_ || '';
   },
 
@@ -183,16 +202,16 @@ Polymer({
    * Only used in tests.
    * @param {string} value A value to set the setting to.
    */
-  setCurrentValueForTest: function(value) {
+  setCurrentValueForTest(value) {
     this.currentValue_ = value;
   },
 
   /**
    * @param {?RegExp} query The current search query.
-   * @return {!print_preview.HighlightResults} The highlight wrappers and
-   *     search bubbles that were created.
+   * @param {!Map<!Node, number>} bubbles
+   * @return {!Array<!Node>} The highlight wrappers and that were created.
    */
-  updateHighlighting: function(query) {
-    return print_preview.updateHighlights(this, query);
+  updateHighlighting(query, bubbles) {
+    return updateHighlights(this, query, bubbles);
   },
 });

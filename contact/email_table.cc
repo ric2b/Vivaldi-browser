@@ -177,4 +177,12 @@ bool EmailTable::DoesEmailAddressIdExist(EmailAddressID email_address_id,
   return statement.ColumnInt(0) == 1;
 }
 
+bool EmailTable::DeleteEmailsForContact(ContactID contact_id) {
+  sql::Statement statement(GetDB().GetCachedStatement(
+      SQL_FROM_HERE, "DELETE from email_addresses WHERE contact_id=?"));
+  statement.BindInt64(0, contact_id);
+
+  return statement.Run();
+}
+
 }  // namespace contact

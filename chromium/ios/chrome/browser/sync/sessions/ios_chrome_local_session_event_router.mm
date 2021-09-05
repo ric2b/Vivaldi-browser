@@ -37,7 +37,7 @@ sync_sessions::SyncedTabDelegate* GetSyncedTabDelegateFromWebState(
 }  // namespace
 
 IOSChromeLocalSessionEventRouter::IOSChromeLocalSessionEventRouter(
-    ios::ChromeBrowserState* browser_state,
+    ChromeBrowserState* browser_state,
     sync_sessions::SyncSessionsClient* sessions_client,
     const syncer::SyncableService::StartSyncFlare& flare)
     : handler_(NULL),
@@ -76,13 +76,13 @@ IOSChromeLocalSessionEventRouter::~IOSChromeLocalSessionEventRouter() {
 
 void IOSChromeLocalSessionEventRouter::TabModelRegisteredWithBrowserState(
     TabModel* tab_model,
-    ios::ChromeBrowserState* browser_state) {
+    ChromeBrowserState* browser_state) {
   StartObservingWebStateList(tab_model.webStateList);
 }
 
 void IOSChromeLocalSessionEventRouter::TabModelUnregisteredFromBrowserState(
     TabModel* tab_model,
-    ios::ChromeBrowserState* browser_state) {
+    ChromeBrowserState* browser_state) {
   StopObservingWebStateList(tab_model.webStateList);
 }
 
@@ -99,22 +99,15 @@ void IOSChromeLocalSessionEventRouter::WebStateReplacedAt(
     web::WebState* old_web_state,
     web::WebState* new_web_state,
     int index) {
-  old_web_state->RemoveObserver(this);
-
-  if (new_web_state)
-    new_web_state->AddObserver(this);
+  OnWebStateChange(old_web_state);
+  DCHECK(new_web_state);
+  new_web_state->AddObserver(this);
 }
 
 void IOSChromeLocalSessionEventRouter::WebStateDetachedAt(
     WebStateList* web_state_list,
     web::WebState* web_state,
     int index) {
-  web_state->RemoveObserver(this);
-}
-
-void IOSChromeLocalSessionEventRouter::NavigationItemsPruned(
-    web::WebState* web_state,
-    size_t pruned_item_count) {
   OnWebStateChange(web_state);
 }
 
@@ -142,6 +135,7 @@ void IOSChromeLocalSessionEventRouter::DidChangeBackForwardState(
 void IOSChromeLocalSessionEventRouter::WebStateDestroyed(
     web::WebState* web_state) {
   OnWebStateChange(web_state);
+  web_state->RemoveObserver(this);
 }
 
 void IOSChromeLocalSessionEventRouter::StartObservingWebStateList(
@@ -166,8 +160,31 @@ void IOSChromeLocalSessionEventRouter::OnTabParented(web::WebState* web_state) {
   OnWebStateChange(web_state);
 }
 
+void IOSChromeLocalSessionEventRouter::WillBeginBatchOperation(
+    WebStateList* web_state_list) {
+  batch_in_progress_++;
+}
+
+void IOSChromeLocalSessionEventRouter::BatchOperationEnded(
+    WebStateList* web_state_list) {
+  DCHECK(batch_in_progress_ > 0);
+  batch_in_progress_--;
+  if (batch_in_progress_)
+    return;
+  // Batch operations are only used for restoration, close all tabs or undo
+  // close all tabs. In any case, a full sync is necessary after this.
+  if (handler_)
+    handler_->OnSessionRestoreComplete();
+  if (!flare_.is_null()) {
+    flare_.Run(syncer::SESSIONS);
+    flare_.Reset();
+  }
+}
+
 void IOSChromeLocalSessionEventRouter::OnWebStateChange(
     web::WebState* web_state) {
+  if (batch_in_progress_)
+    return;
   sync_sessions::SyncedTabDelegate* tab =
       GetSyncedTabDelegateFromWebState(web_state);
   if (!tab)

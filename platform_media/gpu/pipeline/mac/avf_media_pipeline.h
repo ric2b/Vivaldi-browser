@@ -24,16 +24,16 @@ class AVFMediaDecoder;
 
 class AVFMediaPipeline : public PlatformMediaPipeline {
  public:
-  explicit AVFMediaPipeline(IPCDataSource* data_source_);
+  AVFMediaPipeline();
   ~AVFMediaPipeline() override;
 
   // PlatformMediaPipeline implementation.
-  void Initialize(const std::string& mime_type,
-                  const InitializeCB& initialize_cb) override;
-  void ReadAudioData(const ReadDataCB& read_audio_data_cb) override;
-  void ReadVideoData(const ReadDataCB& read_video_data_cb) override;
+  void Initialize(ipc_data_source::Reader source_reader,
+                  ipc_data_source::Info source_info,
+                  InitializeCB initialize_cb) override;
+  void ReadMediaData(IPCDecodingBuffer buffer) override;
   void WillSeek() override {}
-  void Seek(base::TimeDelta time, const SeekCB& seek_cb) override;
+  void Seek(base::TimeDelta time, SeekCB seek_cb) override;
 
  private:
   class MediaDecoderClient;
@@ -44,20 +44,13 @@ class AVFMediaPipeline : public PlatformMediaPipeline {
   void DataBufferCapacityAvailable();
   void DataBufferCapacityDepleted();
 
-  void AudioBufferReady(const ReadDataCB& read_audio_data_cb,
-                        const scoped_refptr<DataBuffer>& buffer);
-  void VideoBufferReady(const ReadDataCB& read_video_data_cb,
-                        const scoped_refptr<DataBuffer>& buffer);
-
-  void SeekDone(const SeekCB& seek_cb, bool success);
+  void SeekDone(SeekCB seek_cb, bool success);
 
   std::unique_ptr<MediaDecoderClient> media_decoder_client_;
   std::unique_ptr<AVFMediaDecoder> media_decoder_;
 
-  std::unique_ptr<AVFDataBufferQueue> audio_queue_;
-  std::unique_ptr<AVFDataBufferQueue> video_queue_;
-
-  DataSource* data_source_;
+  std::unique_ptr<AVFDataBufferQueue>
+      media_queues_[kPlatformMediaDataTypeCount];
 
   base::ThreadChecker thread_checker_;
   base::WeakPtrFactory<AVFMediaPipeline> weak_ptr_factory_;

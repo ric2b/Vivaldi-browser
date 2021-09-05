@@ -17,8 +17,8 @@ import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.RetryOnFailure;
-import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.ShortcutHelper;
+import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
@@ -74,7 +74,7 @@ public class WebApkUpdateDataFetcherTest {
 
         @Override
         public void onGotManifestData(
-                WebApkInfo fetchedInfo, String primaryIconUrl, String badgeIconUrl) {
+                WebApkInfo fetchedInfo, String primaryIconUrl, String splashIconUrl) {
             Assert.assertNull(mName);
             mWebApkCompatible = true;
             mName = fetchedInfo.name();

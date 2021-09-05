@@ -41,6 +41,7 @@ enum Event {
   kEndOfTest,        // Sentinel value indicating the end of a test
   kExpandedChanged,  // Web
   kFocus,
+  kFocusAfterMenuClose,
   kFocusContext,  // Contextual focus event that must delay the next focus event
   kHide,          // Remove: http://crbug.com/392502
   kHitTestResult,
@@ -67,9 +68,9 @@ enum Event {
   kMouseMoved,
   kMousePressed,
   kMouseReleased,
-  kRowCollapsed,             // Web / Mac
-  kRowCountChanged,          // Web / Mac
-  kRowExpanded,              // Web / Mac
+  kRowCollapsed,
+  kRowCountChanged,
+  kRowExpanded,
   kScrollPositionChanged,    // Web
   kScrolledToAnchor,         // Web
   kSelectedChildrenChanged,  // Web
@@ -109,11 +110,6 @@ enum Role {
   kAlert,
   kAlertDialog,
   kAnchor,
-  kAnnotationAttribution,
-  kAnnotationCommentary,
-  kAnnotationPresence,
-  kAnnotationRevision,
-  kAnnotationSuggestion,
   kApplication,
   kArticle,
   kAudio,
@@ -126,12 +122,14 @@ enum Role {
   kCell,
   kCheckBox,
   kClient,
+  kCode,
   kColorWell,
   kColumn,
   kColumnHeader,
   kComboBoxGrouping,
   kComboBoxMenuButton,
   kComplementary,
+  kComment,
   kContentDeletion,
   kContentInsertion,
   kContentInfo,
@@ -192,6 +190,7 @@ enum Role {
   // --------------------------------------------------------------
   kDocument,
   kEmbeddedObject,
+  kEmphasis,
   kFeed,
   kFigcaption,
   kFigure,
@@ -223,7 +222,6 @@ enum Role {
   kLabelText,
   kLayoutTable,
   kLayoutTableCell,
-  kLayoutTableColumn,
   kLayoutTableRow,
   kLegend,
   kLineBreak,
@@ -255,7 +253,10 @@ enum Role {
   kNote,
   kPane,
   kParagraph,
+  kPdfActionableHighlight, // PDF specific highlight role.
+  kPluginObject,
   kPopUpButton,
+  kPortal,
   kPre,
   kPresentational,
   kProgressIndicator,
@@ -264,6 +265,7 @@ enum Role {
   kRegion,
   kRootWebArea,
   kRow,
+  kRowGroup,
   kRowHeader,
   kRuby,
   kRubyAnnotation,
@@ -278,6 +280,8 @@ enum Role {
   kSplitter,
   kStaticText,
   kStatus,
+  kStrong,
+  kSuggestion,
   kSvgRoot,
   kSwitch,
   kTab,
@@ -345,6 +349,9 @@ enum Action {
   // exposed to the open web. See kSetAccessibilityFocus, below.
   kClearAccessibilityFocus,
 
+  // Collapse the collapsible node.
+  kCollapse,
+
   kCustomAction,
 
   // Decrement a slider or range control by one step value.
@@ -352,6 +359,9 @@ enum Action {
 
   // Do the default action for an object, typically this means "click".
   kDoDefault,
+
+  // Expand the expandable node.
+  kExpand,
 
   kFocus,
 
@@ -441,6 +451,15 @@ enum ScrollAlignment {
   kScrollAlignmentLeft,
   kScrollAlignmentRight,
   kScrollAlignmentClosestEdge
+};
+
+// A list of valid values for the scroll behavior argument to argument in
+// |AXActionData|. These values control whether a node is scrolled in the
+// viewport if it is already visible.
+enum ScrollBehavior {
+  kNone,
+  kDoNotScrollIfVisible,
+  kScrollIfVisible,
 };
 
 // A list of valid values for the |AXIntAttribute| |default_action_verb|.
@@ -570,7 +589,6 @@ enum IntAttribute {
 
   // Relationships between this element and other elements.
   kActivedescendantId,
-  kDetailsId,
   kErrormessageId,
   kInPageLinkTargetId,
   kMemberOfId,
@@ -641,6 +659,12 @@ enum IntAttribute {
   // is released on the drop target.
   // Note: aria-dropeffect is deprecated in WAI-ARIA 1.1.
   kDropeffect,
+
+  // The DOMNodeID from Blink. Currently only populated when using
+  // the accessibility tree for PDF exporting. Warning, this is totally
+  // unrelated to the accessibility node ID, or the ID attribute for an
+  // HTML element - it's an ID used to uniquely identify nodes in Blink.
+  kDOMNodeId,
 };
 
 enum FloatAttribute {
@@ -694,7 +718,9 @@ enum BoolAttribute {
   // Set on a canvas element if it has fallback content.
   kCanvasHasFallback,
 
-  // Indicates this node is scrollable (Android only).
+  // Indicates this node is user-scrollable, e.g. overflow:scroll|auto, as
+  // opposed to only programmatically scrollable, like overflow:hidden, or
+  // not scrollable at all, e.g. overflow:visible.
   kScrollable,
 
   // A hint to clients that the node is clickable.
@@ -720,6 +746,9 @@ enum BoolAttribute {
 
   // Indicates whether this node causes a page break
   kIsPageBreakingObject,
+
+  // True if the node has any ARIA attributes set.
+  kHasAriaAttribute,
 };
 
 enum IntListAttribute {
@@ -732,6 +761,7 @@ enum IntListAttribute {
 
   // Relationships between this element and other elements.
   kControlsIds,
+  kDetailsIds,
   kDescribedbyIds,
   kFlowtoIds,
   kLabelledbyIds,
@@ -777,47 +807,6 @@ enum StringListAttribute {
   kCustomActionDescriptions,
 };
 
-// TODO(dmazzoni, nektar): make this list not grow exponentially as new
-// MarkerTypes are added
-enum MarkerType {
-  kNone,
-  // Assignments are ignored by the parser, but are kept here for clarity.
-  kSpelling = 1,
-  kGrammar = 2,
-  kSpellingGrammar = 3,
-  kTextMatch = 4,
-  kSpellingTextMatch = 5,
-  kGrammarTextMatch = 6,
-  kSpellingGrammarTextMatch = 7,
-  // DocumentMarker::MarkerType::Composition = 8 is ignored for accessibility
-  // purposes
-  kActiveSuggestion = 16,
-  kSpellingActiveSuggestion = 17,
-  kGrammarActiveSuggestion = 18,
-  kSpellingGrammarActiveSuggestion = 19,
-  kTextMatchActiveSuggestion = 20,
-  kSpellingTextMatchActiveSuggestion = 21,
-  kGrammarTextMatchActiveSuggestion = 22,
-  kSpellingGrammarTextMatchActiveSuggestion = 23,
-  kSuggestion = 32,
-  kSpellingSuggestion = 33,
-  kGrammarSuggestion = 34,
-  kSpellingGrammarSuggestion = 35,
-  kTextMatchSuggestion = 36,
-  kSpellingTextMatchSuggestion = 37,
-  kGrammarTextMatchSuggestion = 38,
-  kSpellingGrammarTextMatchSuggestion = 39,
-  // We again skip over DocumentMarker::MarkerType::Composition = 8 here
-  kActiveSuggestionSuggestion = 48,
-  kSpellingActiveSuggestionSuggestion = 49,
-  kGrammarActiveSuggestionSuggestion = 50,
-  kSpellingGrammarActiveSuggestionSuggestion = 51,
-  kTextMatchActiveSuggestionSuggestion = 52,
-  kSpellingTextMatchActiveSuggestionSuggestion = 53,
-  kGrammarTextMatchActiveSuggestionSuggestion = 54,
-  kSpellingGrammarTextMatchActiveSuggestionSuggestion = 55,
-};
-
 enum ListStyle {
   kNone,
   kCircle,
@@ -826,6 +815,84 @@ enum ListStyle {
   kNumeric,
   kSquare,
   kOther, // Language specific ordering (alpha, roman, cjk-ideographic, etc...)
+};
+
+enum MarkerType {
+  kNone = 0,
+  kSpelling = 1,
+  kGrammar = 2,
+  kTextMatch = 4,
+  // DocumentMarker::MarkerType::Composition = 8 is ignored for accessibility
+  // purposes
+  kActiveSuggestion = 16,
+  kSuggestion = 32,
+};
+
+// Describes a move direction in the accessibility tree that is independent of
+// the left-to-right or right-to-left direction of the text. For example, a
+// forward movement will always move to the next node in depth-first pre-order
+// traversal.
+enum MoveDirection {
+  kForward,
+  kBackward,
+  kNone = kForward
+};
+
+// Describes the edit command that resulted in a text changed event.
+enum EditCommand {
+  kCut,
+  kDelete,
+  kDictate,
+  kFormat,  // Only the text attributes, such as font size, have changed.
+  kInsert,
+  kMarker,  // Only a document marker has been added or removed.
+  kPaste,
+  kReplace,
+  kType,
+  kNone = kType
+};
+
+// Describes the selection command that resulted in a selection changed event.
+enum SelectionCommand {
+  kClear,
+  kShrink,
+  kExtend,
+  kSet,  // Sets a completely new selection.
+  kNone = kSet
+};
+
+// Defines a set of text boundaries in the accessibility tree.
+//
+// Most boundaries come in three flavors: A "WordStartOrEnd" boundary for
+// example differs from a "WordStart" or a "WordEnd" boundary in that the first
+// would consider both the start and the end of the word to be boundaries, while
+// the other two would consider only the start or the end respectively.
+//
+// An "Object" boundary is found at the start or end of a node's entire text,
+// e.g. at the start or end of a text field.
+//
+// TODO(nektar): Split TextBoundary into TextUnit and TextBoundary.
+enum TextBoundary {
+  kCharacter,
+  kFormat,
+  kLineEnd,
+  kLineStart,
+  kLineStartOrEnd,
+  kObject,
+  kPageEnd,
+  kPageStart,
+  kPageStartOrEnd,
+  kParagraphEnd,
+  kParagraphStart,
+  kParagraphStartOrEnd,
+  kSentenceEnd,
+  kSentenceStart,
+  kSentenceStartOrEnd,
+  kWebPage,
+  kWordEnd,
+  kWordStart,
+  kWordStartOrEnd,
+  kNone = kObject
 };
 
 enum TextDirection {
@@ -850,7 +917,7 @@ enum TextStyle {
   kUnderline,
   kLineThrough,
   kOverline,
-  kNone,
+  kNone
 };
 
 enum TextDecorationStyle {
@@ -936,6 +1003,7 @@ enum DescriptionFrom {
   kAttribute,
   kContents,
   kRelatedElement,
+  kTitle,
 };
 
 enum EventFrom {

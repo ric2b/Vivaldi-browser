@@ -33,7 +33,7 @@ import java.util.Queue;
  */
 @JNINamespace("media")
 class MediaCodecBridge {
-    private static final String TAG = "cr_MediaCodecBridge";
+    private static final String TAG = "MediaCodecBridge";
 
     // After a flush(), dequeueOutputBuffer() can often produce empty presentation timestamps
     // for several frames. As a result, the player may find that the time does not increase
@@ -559,13 +559,13 @@ class MediaCodecBridge {
     // Incoming |native| values are as defined in media/base/encryption_scheme.h. Translated values
     // are from MediaCodec. At present, these values are in sync. Returns
     // MEDIA_CODEC_UNKNOWN_CIPHER_MODE in the case of unknown incoming value.
-    private int translateCipherModeValue(int nativeValue) {
+    private int translateEncryptionSchemeValue(int nativeValue) {
         switch (nativeValue) {
-            case CipherMode.UNENCRYPTED:
+            case EncryptionScheme.UNENCRYPTED:
                 return MediaCodec.CRYPTO_MODE_UNENCRYPTED;
-            case CipherMode.AES_CTR:
+            case EncryptionScheme.CENC:
                 return MediaCodec.CRYPTO_MODE_AES_CTR;
-            case CipherMode.AES_CBC:
+            case EncryptionScheme.CBCS:
                 return MediaCodec.CRYPTO_MODE_AES_CBC;
             default:
                 Log.e(TAG, "Unsupported cipher mode: " + nativeValue);
@@ -579,7 +579,7 @@ class MediaCodecBridge {
             int[] numBytesOfClearData, int[] numBytesOfEncryptedData, int numSubSamples,
             int cipherMode, int patternEncrypt, int patternSkip, long presentationTimeUs) {
         try {
-            cipherMode = translateCipherModeValue(cipherMode);
+            cipherMode = translateEncryptionSchemeValue(cipherMode);
             if (cipherMode == MEDIA_CODEC_UNKNOWN_CIPHER_MODE) {
                 return MediaCodecStatus.ERROR;
             }

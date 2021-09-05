@@ -63,68 +63,45 @@ function skipAnimation() {
 }
 
 function hoverOverDayCellAt(column, row) {
-    skipAnimation();
-    var offset = cumulativeOffset(popupWindow.global.picker.calendarTableView.element);
-    var x = offset[0];
-    var y = offset[1];
-    if (popupWindow.global.picker.calendarTableView.hasWeekNumberColumn)
-        x += popupWindow.WeekNumberCell.Width;
-    x += (column + 0.5) * popupWindow.DayCell.GetWidth();
-    y += (row + 0.5) * popupWindow.DayCell.GetHeight() + popupWindow.CalendarTableHeaderView.GetHeight();
-    eventSender.mouseMoveTo(x, y);
+  skipAnimation();
+  const calendarTableView = popupWindow.global.picker.datePicker ?
+      popupWindow.global.picker.datePicker.calendarTableView :
+      popupWindow.global.picker.calendarTableView;
+  var offset = cumulativeOffset(calendarTableView.element);
+  var x = offset[0];
+  var y = offset[1];
+  if (calendarTableView.hasWeekNumberColumn)
+    x += popupWindow.WeekNumberCell.Width;
+  x += (column + 0.5) * popupWindow.DayCell.GetWidth();
+  y += (row + 0.5) * popupWindow.DayCell.GetHeight() +
+      popupWindow.CalendarTableHeaderView.GetHeight();
+  eventSender.mouseMoveTo(x, y);
 };
 
 function clickDayCellAt(column, row) {
-    hoverOverDayCellAt(column, row);
-    eventSender.mouseDown();
-    eventSender.mouseUp();
+  hoverOverDayCellAt(column, row);
+  eventSender.mouseDown();
+  eventSender.mouseUp();
 }
 
 function hoverOverTimeCellAt(column, row) {
-    const timeCellWidth = 52;
-    const timeCellHeight = 32;
+  const timeCellWidth = 56;
+  const timeCellHeight = 36;
 
-    skipAnimation();
-    var offset = cumulativeOffset(popupWindow.global.picker.timeColumns);
-    var x = offset[0];
-    var y = offset[1];
-    x += (column + 0.5) * timeCellWidth;
-    y += (row + 0.5) * timeCellHeight;
-    eventSender.mouseMoveTo(x, y);
+  skipAnimation();
+  const timeColumns = popupWindow.global.picker.timePicker ?
+      popupWindow.global.picker.timePicker.timeColumns :
+      popupWindow.global.picker.timeColumns;
+  var offset = cumulativeOffset(timeColumns);
+  var x = offset[0];
+  var y = offset[1];
+  x += (column + 0.5) * timeCellWidth;
+  y += (row + 0.5) * timeCellHeight;
+  eventSender.mouseMoveTo(x, y);
 }
 
 function clickTimeCellAt(column, row) {
   hoverOverTimeCellAt(column, row);
-  eventSender.mouseDown();
-  eventSender.mouseUp();
-}
-
-function hoverOverSubmitTimeButton() {
-  skipAnimation();
-  var submitButton = popupWindow.global.picker.submissionControls.submitButton;
-  var offset = cumulativeOffset(submitButton);
-  var x = offset[0] + submitButton.offsetWidth / 2;
-  var y = offset[1] + submitButton.offsetHeight / 2;
-  eventSender.mouseMoveTo(x, y);
-}
-
-function clickSubmitTimeButton() {
-  hoverOverSubmitTimeButton();
-  eventSender.mouseDown();
-  eventSender.mouseUp();
-}
-
-function hoverOverCancelTimeButton() {
-  skipAnimation();
-  var cancelButton = popupWindow.global.picker.submissionControls.cancelButton;
-  var offset = cumulativeOffset(cancelButton);
-  var x = offset[0] + cancelButton.offsetWidth / 2;
-  var y = offset[1] + cancelButton.offsetHeight / 2;
-  eventSender.mouseMoveTo(x, y);
-}
-
-function clickCancelTimeButton() {
-  hoverOverCancelTimeButton();
   eventSender.mouseDown();
   eventSender.mouseUp();
 }
@@ -139,7 +116,10 @@ function highlightedMonthButton() {
 
 function skipAnimationAndGetPositionOfMonthPopupButton() {
     skipAnimation();
-    var buttonElement = popupWindow.global.picker.calendarHeaderView.monthPopupButton.element;
+    const calendarHeaderView = popupWindow.global.picker.datePicker ?
+        popupWindow.global.picker.datePicker.calendarHeaderView :
+        popupWindow.global.picker.calendarHeaderView;
+    var buttonElement = calendarHeaderView.monthPopupButton.element;
     var offset = cumulativeOffset(buttonElement);
     return {x: offset[0] + buttonElement.offsetWidth / 2, y: offset[1] + buttonElement.offsetHeight / 2};
 }
@@ -153,6 +133,85 @@ function clickMonthPopupButton() {
     hoverOverMonthPopupButton();
     eventSender.mouseDown();
     eventSender.mouseUp();
+}
+
+function skipAnimationAndGetPositionOfPrevNextMonthButton(buttonIndex) {
+  skipAnimation();
+  var prevNextMonthButton = popupWindow.global.picker.element ?
+      popupWindow.global.picker.element.querySelectorAll(
+          '.calendar-navigation-button')[buttonIndex] :
+      popupWindow.global.picker.querySelectorAll(
+          '.calendar-navigation-button')[buttonIndex];
+  prevNextMonthButton.foo;
+  var offset = cumulativeOffset(prevNextMonthButton);
+  return {
+    x: offset[0] + prevNextMonthButton.offsetWidth / 2,
+    y: offset[1] + prevNextMonthButton.offsetHeight / 2
+  };
+}
+
+function hoverOverPrevNextMonthButton(buttonIndex) {
+  var position = skipAnimationAndGetPositionOfPrevNextMonthButton(buttonIndex);
+  eventSender.mouseMoveTo(position.x, position.y);
+}
+
+function clickPrevMonthButton() {
+  hoverOverPrevNextMonthButton(/*buttonIndex*/ 0);
+  eventSender.mouseDown();
+  eventSender.mouseUp();
+}
+
+function clickNextMonthButton() {
+  hoverOverPrevNextMonthButton(/*buttonIndex*/ 1);
+  eventSender.mouseDown();
+  eventSender.mouseUp();
+}
+
+function skipAnimationAndGetPositionOfTodayButton() {
+  skipAnimation();
+  const calendarTableView = popupWindow.global.picker.datePicker ?
+      popupWindow.global.picker.datePicker.calendarTableView :
+      popupWindow.global.picker.calendarTableView;
+  var buttonElement =
+      calendarTableView.element.querySelector('.today-button-refresh');
+  var offset = cumulativeOffset(buttonElement);
+  return {
+    x: offset[0] + buttonElement.offsetWidth / 2,
+    y: offset[1] + buttonElement.offsetHeight / 2
+  };
+}
+
+function hoverOverTodayButton() {
+  var position = skipAnimationAndGetPositionOfTodayButton();
+  eventSender.mouseMoveTo(position.x, position.y);
+}
+
+function clickTodayButton() {
+  hoverOverTodayButton();
+  eventSender.mouseDown();
+  eventSender.mouseUp();
+}
+
+function skipAnimationAndGetPositionOfThisMonthButton() {
+  skipAnimation();
+  const button =
+      popupWindow.global.picker.querySelector('.today-button-refresh');
+  var offset = cumulativeOffset(button);
+  return {
+    x: offset[0] + button.offsetWidth / 2,
+    y: offset[1] + button.offsetHeight / 2
+  };
+}
+
+function hoverOverThisMonthButton() {
+  var position = skipAnimationAndGetPositionOfThisMonthButton();
+  eventSender.mouseMoveTo(position.x, position.y);
+}
+
+function clickThisMonthButton() {
+  hoverOverThisMonthButton();
+  eventSender.mouseDown();
+  eventSender.mouseUp();
 }
 
 function clickYearListCell(year) {

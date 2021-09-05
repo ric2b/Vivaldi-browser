@@ -9,7 +9,7 @@
 #include "third_party/blink/public/mojom/permissions/permission.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
-#include "third_party/blink/renderer/core/execution_context/context_lifecycle_state_observer.h"
+#include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_state_observer.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
@@ -23,7 +23,7 @@ class ScriptPromiseResolver;
 // ExecutionContext.
 class PermissionStatus final : public EventTargetWithInlineData,
                                public ActiveScriptWrappable<PermissionStatus>,
-                               public ContextLifecycleStateObserver,
+                               public ExecutionContextLifecycleStateObserver,
                                public mojom::blink::PermissionObserver {
   USING_GARBAGE_COLLECTED_MIXIN(PermissionStatus);
   DEFINE_WRAPPERTYPEINFO();
@@ -54,15 +54,15 @@ class PermissionStatus final : public EventTargetWithInlineData,
   // ScriptWrappable implementation.
   bool HasPendingActivity() const final;
 
-  // ContextLifecycleStateObserver implementation.
+  // ExecutionContextLifecycleStateObserver implementation.
   void ContextLifecycleStateChanged(mojom::FrameLifecycleState) override;
-  void ContextDestroyed(ExecutionContext*) override;
+  void ContextDestroyed() override;
 
   String state() const;
 
   DEFINE_ATTRIBUTE_EVENT_LISTENER(change, kChange)
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  private:
   void StartListening();

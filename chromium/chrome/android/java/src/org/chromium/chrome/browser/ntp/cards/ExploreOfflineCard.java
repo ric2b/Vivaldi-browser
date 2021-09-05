@@ -4,24 +4,38 @@
 
 package org.chromium.chrome.browser.ntp.cards;
 
-import android.text.style.ForegroundColorSpan;
 import android.view.View;
 import android.view.ViewStub;
-import android.widget.TextView;
+import android.widget.Button;
 
-import org.chromium.base.ApiCompatibilityUtils;
+import androidx.annotation.IntDef;
+
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeFeatureList;
-import org.chromium.chrome.browser.download.DownloadUtils;
-import org.chromium.chrome.browser.feed.FeedConfiguration;
+import org.chromium.chrome.browser.download.ExploreOfflineStatusProvider;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.net.NetworkChangeNotifier;
-import org.chromium.ui.text.SpanApplier;
+
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 
 /**
  * Shows a card prompting the user to view offline content when they are offline. This class is
  * responsible for inflating the card layout and displaying the card based on network connectivity.
  */
 public class ExploreOfflineCard {
+    // Please treat this list as append only and keep it in sync with
+    // NewTabPage.ExploreOffline.Action in enums.xml.
+    @IntDef({Action.SHOWN, Action.CONFIRM, Action.CANCEL})
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface Action {
+        int SHOWN = 0;
+        int CONFIRM = 1;
+        int CANCEL = 2;
+        int NUM_ENTRIES = 3;
+    }
+
+    private static boolean sCardDismissed;
     private final View mRootView;
     private final Runnable mOpenDownloadHomeCallback;
     private NetworkChangeNotifier.ConnectionTypeObserver mConnectionTypeObserver;
@@ -35,7 +49,7 @@ public class ExploreOfflineCard {
         mRootView = rootView;
         mOpenDownloadHomeCallback = openDownloadHomeCallback;
 
-        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.OFFLINE_HOME)) return;
+        if (!isFeatureEnabled()) return;
         setCardViewVisibility();
         mConnectionTypeObserver = connectionType -> {
             setCardViewVisibility();
@@ -50,34 +64,50 @@ public class ExploreOfflineCard {
     }
 
     private void setCardViewVisibility() {
-        boolean isVisible = DownloadUtils.shouldShowOfflineHome();
+        boolean isVisible = !sCardDismissed && shouldShowExploreOfflineMessage();
         View cardView = mRootView.findViewById(R.id.explore_offline_card);
 
         if (cardView == null) {
             if (!isVisible) return;
             cardView = inflateCardLayout();
         }
-        cardView.setVisibility(DownloadUtils.shouldShowOfflineHome() ? View.VISIBLE : View.GONE);
+        cardView.setVisibility(isVisible ? View.VISIBLE : View.GONE);
     }
 
     private View inflateCardLayout() {
         View cardView =
                 ((ViewStub) mRootView.findViewById(R.id.explore_offline_card_stub)).inflate();
-        TextView messageView = cardView.findViewById(R.id.explore_offline_text);
-        messageView.setText(SpanApplier.applySpans(cardView.getContext().getResources().getString(
-                                                           R.string.explore_offline_card_message),
-                new SpanApplier.SpanInfo("<link>", "</link>",
-                        new ForegroundColorSpan(
-                                ApiCompatibilityUtils.getColor(cardView.getContext().getResources(),
-                                        R.color.blue_when_enabled)))));
+        Button confirmButton = cardView.findViewById(R.id.button_primary);
+        Button cancelButton = cardView.findViewById(R.id.button_secondary);
 
-        View imageView = cardView.findViewById(R.id.explore_offline_image);
-        imageView.setBackground(imageView.getContext().getResources().getDrawable(
-                FeedConfiguration.getFeedUiEnabled()
-                        ? R.drawable.card_background_rounded_right_half_with_border
-                        : R.drawable.card_background_rounded_right_half_no_border));
+        confirmButton.setOnClickListener(v -> {
+            sCardDismissed = true;
+            setCardViewVisibility();
+            mOpenDownloadHomeCallback.run();
+            recordStats(Action.CONFIRM);
+        });
+        cancelButton.setOnClickListener(v -> {
+            sCardDismissed = true;
+            setCardViewVisibility();
+            recordStats(Action.CANCEL);
+        });
 
-        cardView.setOnClickListener(v -> mOpenDownloadHomeCallback.run());
+        recordStats(Action.SHOWN);
         return cardView;
+    }
+
+    private void recordStats(@Action int action) {
+        RecordHistogram.recordEnumeratedHistogram(
+                "NewTabPage.ExploreOffline.Action", action, Action.NUM_ENTRIES);
+    }
+
+    private static boolean shouldShowExploreOfflineMessage() {
+        return isFeatureEnabled() && NetworkChangeNotifier.isInitialized()
+                && !NetworkChangeNotifier.isOnline()
+                && ExploreOfflineStatusProvider.getInstance().isPrefetchContentAvailable();
+    }
+
+    private static boolean isFeatureEnabled() {
+        return ChromeFeatureList.isEnabled(ChromeFeatureList.CONTENT_INDEXING_NTP);
     }
 }

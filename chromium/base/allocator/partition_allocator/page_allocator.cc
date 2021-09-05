@@ -23,8 +23,10 @@
 
 #if defined(OS_WIN)
 #include "base/allocator/partition_allocator/page_allocator_internals_win.h"
-#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
+#elif defined(OS_POSIX)
 #include "base/allocator/partition_allocator/page_allocator_internals_posix.h"
+#elif defined(OS_FUCHSIA)
+#include "base/allocator/partition_allocator/page_allocator_internals_fuchsia.h"
 #else
 #error Platform not supported.
 #endif
@@ -237,14 +239,21 @@ bool ReserveAddressSpace(size_t size) {
   return false;
 }
 
-void ReleaseReservation() {
+bool ReleaseReservation() {
   // To avoid deadlock, call only FreePages.
   subtle::SpinLock::Guard guard(GetReserveLock());
-  if (s_reservation_address != nullptr) {
-    FreePages(s_reservation_address, s_reservation_size);
-    s_reservation_address = nullptr;
-    s_reservation_size = 0;
-  }
+  if (!s_reservation_address)
+    return false;
+
+  FreePages(s_reservation_address, s_reservation_size);
+  s_reservation_address = nullptr;
+  s_reservation_size = 0;
+  return true;
+}
+
+bool HasReservationForTesting() {
+  subtle::SpinLock::Guard guard(GetReserveLock());
+  return s_reservation_address != nullptr;
 }
 
 uint32_t GetAllocPageErrorCode() {

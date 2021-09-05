@@ -6,24 +6,25 @@
 
 #include "content/browser/blob_storage/blob_internals_url_loader.h"
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
-#include "services/network/public/cpp/resource_response.h"
+#include "mojo/public/cpp/bindings/remote.h"
+#include "services/network/public/mojom/url_response_head.mojom.h"
 #include "storage/browser/blob/view_blob_internals_job.h"
 
 namespace content {
 
 void StartBlobInternalsURLLoader(
     const network::ResourceRequest& request,
-    network::mojom::URLLoaderClientPtrInfo client_info,
+    mojo::PendingRemote<network::mojom::URLLoaderClient> client_remote,
     ChromeBlobStorageContext* blob_storage_context) {
   scoped_refptr<net::HttpResponseHeaders> headers(
       new net::HttpResponseHeaders("HTTP/1.1 200 OK"));
-  network::ResourceResponseHead resource_response;
-  resource_response.headers = headers;
-  resource_response.mime_type = "text/html";
+  auto resource_response = network::mojom::URLResponseHead::New();
+  resource_response->headers = headers;
+  resource_response->mime_type = "text/html";
 
-  network::mojom::URLLoaderClientPtr client;
-  client.Bind(std::move(client_info));
-  client->OnReceiveResponse(resource_response);
+  mojo::Remote<network::mojom::URLLoaderClient> client(
+      std::move(client_remote));
+  client->OnReceiveResponse(std::move(resource_response));
 
   std::string output = storage::ViewBlobInternalsJob::GenerateHTML(
       blob_storage_context->context());

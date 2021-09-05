@@ -107,10 +107,6 @@ namespace media {
 
 class MEDIA_EXPORT MediaCodecLoop {
  public:
-  // TODO(liberato): this exists in video_decoder.h and audio_decoder.h too.
-  using InitCB = base::Callback<void(bool success)>;
-  using DecodeCB = base::Callback<void(DecodeStatus status)>;
-
   // Data that the client wants to put into an input buffer.
   struct InputData {
     InputData();
@@ -127,7 +123,8 @@ class MEDIA_EXPORT MediaCodecLoop {
     base::TimeDelta presentation_time;
 
     bool is_eos = false;
-    EncryptionScheme encryption_scheme;
+    EncryptionScheme encryption_scheme = EncryptionScheme::kUnencrypted;
+    base::Optional<EncryptionPattern> encryption_pattern;
   };
 
   // Handy enum for "no buffer".

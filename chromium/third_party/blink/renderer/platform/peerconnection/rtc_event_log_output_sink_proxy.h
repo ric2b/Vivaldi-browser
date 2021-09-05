@@ -5,13 +5,22 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_PLATFORM_PEERCONNECTION_RTC_EVENT_LOG_OUTPUT_SINK_PROXY_H_
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_PEERCONNECTION_RTC_EVENT_LOG_OUTPUT_SINK_PROXY_H_
 
+#include <memory>
+
+#include "third_party/blink/renderer/platform/heap/persistent.h"
+#include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/webrtc/api/rtc_event_log_output.h"
+
+namespace webrtc {
+class RtcEventLogOutput;
+}
 
 namespace blink {
 
 class RtcEventLogOutputSink;
 
-class RtcEventLogOutputSinkProxy final : public webrtc::RtcEventLogOutput {
+class PLATFORM_EXPORT RtcEventLogOutputSinkProxy final
+    : public webrtc::RtcEventLogOutput {
  public:
   RtcEventLogOutputSinkProxy(RtcEventLogOutputSink* sink);
   ~RtcEventLogOutputSinkProxy() override;
@@ -21,7 +30,7 @@ class RtcEventLogOutputSinkProxy final : public webrtc::RtcEventLogOutput {
   bool Write(const std::string& output) override;
 
  private:
-  RtcEventLogOutputSink* const sink_;
+  CrossThreadWeakPersistent<RtcEventLogOutputSink> sink_;
 };
 
 }  // namespace blink

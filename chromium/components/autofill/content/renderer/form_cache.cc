@@ -41,8 +41,8 @@ using blink::WebDocument;
 using blink::WebElement;
 using blink::WebFormControlElement;
 using blink::WebFormElement;
-using blink::WebLocalFrame;
 using blink::WebInputElement;
+using blink::WebLocalFrame;
 using blink::WebNode;
 using blink::WebSelectElement;
 using blink::WebString;
@@ -120,9 +120,9 @@ const char* MapTypePredictionToAutocomplete(base::StringPiece type) {
     return kSupportedAutocompleteTypes[14];
   if (type == "ADDRESS_HOME_LINE3")
     return kSupportedAutocompleteTypes[15];
-  if (type == "ADDRESS_HOME_CITY")
-    return kSupportedAutocompleteTypes[16];
   if (type == "ADDRESS_HOME_STATE")
+    return kSupportedAutocompleteTypes[16];
+  if (type == "ADDRESS_HOME_CITY")
     return kSupportedAutocompleteTypes[17];
   if (type == "ADDRESS_HOME_DEPENDENT_LOCALITY")
     return kSupportedAutocompleteTypes[18];
@@ -159,7 +159,7 @@ void LogDeprecationMessages(const WebFormControlElement& element) {
   std::string autocomplete_attribute =
       element.GetAttribute("autocomplete").Utf8();
 
-  static const char* const deprecated[] = { "region", "locality" };
+  static const char* const deprecated[] = {"region", "locality"};
   for (const char* str : deprecated) {
     if (autocomplete_attribute.find(str) == std::string::npos)
       continue;
@@ -204,7 +204,8 @@ bool IsFormInteresting(const FormData& form, size_t num_editable_elements) {
 FormCache::FormCache(WebLocalFrame* frame) : frame_(frame) {}
 FormCache::~FormCache() = default;
 
-std::vector<FormData> FormCache::ExtractNewForms() {
+std::vector<FormData> FormCache::ExtractNewForms(
+    const FieldDataManager* field_data_manager) {
   std::vector<FormData> forms;
   WebDocument document = frame_->GetDocument();
   if (document.IsNull())
@@ -237,7 +238,8 @@ std::vector<FormData> FormCache::ExtractNewForms() {
 
     FormData form;
     if (!WebFormElementToFormData(form_element, WebFormControlElement(),
-                                  nullptr, extract_mask, &form, nullptr)) {
+                                  field_data_manager, extract_mask, &form,
+                                  nullptr)) {
       continue;
     }
 
@@ -280,8 +282,8 @@ std::vector<FormData> FormCache::ExtractNewForms() {
 
   FormData synthetic_form;
   if (!UnownedCheckoutFormElementsAndFieldSetsToFormData(
-          fieldsets, control_elements, nullptr, document, extract_mask,
-          &synthetic_form, nullptr)) {
+          fieldsets, control_elements, nullptr, document, field_data_manager,
+          extract_mask, &synthetic_form, nullptr)) {
     PruneInitialValueCaches(observed_unique_renderer_ids);
     return forms;
   }
@@ -315,7 +317,61 @@ void FormCache::Reset() {
   initial_checked_state_.clear();
 }
 
+void FormCache::ClearElement(WebFormControlElement& control_element,
+                             const WebFormControlElement& element) {
+  // Don't modify the value of disabled fields.
+  if (!control_element.IsEnabled())
+    return;
+
+  // Don't clear the fields that were not autofilled.
+  if (!control_element.IsAutofilled())
+    return;
+
+  if (control_element.AutofillSection() != element.AutofillSection())
+    return;
+
+  control_element.SetAutofillState(WebAutofillState::kNotFilled);
+
+  WebInputElement* input_element = ToWebInputElement(&control_element);
+  if (form_util::IsTextInput(input_element) ||
+      form_util::IsMonthInput(input_element)) {
+    input_element->SetAutofillValue(blink::WebString());
+
+    // Clearing the value in the focused node (above) can cause the selection
+    // to be lost. We force the selection range to restore the text cursor.
+    if (element == *input_element) {
+      size_t length = input_element->Value().length();
+      input_element->SetSelectionRange(length, length);
+    }
+  } else if (form_util::IsTextAreaElement(control_element)) {
+    control_element.SetAutofillValue(blink::WebString());
+  } else if (form_util::IsSelectElement(control_element)) {
+    WebSelectElement select_element = control_element.To<WebSelectElement>();
+    auto initial_value_iter = initial_select_values_.find(
+        select_element.UniqueRendererFormControlId());
+    if (initial_value_iter != initial_select_values_.end() &&
+        select_element.Value().Utf16() != initial_value_iter->second) {
+      select_element.SetAutofillValue(
+          blink::WebString::FromUTF16(initial_value_iter->second));
+    }
+  } else {
+    WebInputElement input_element = control_element.To<WebInputElement>();
+    DCHECK(form_util::IsCheckableElement(&input_element));
+    auto checkable_element_it = initial_checked_state_.find(
+        input_element.UniqueRendererFormControlId());
+    if (checkable_element_it != initial_checked_state_.end() &&
+        input_element.IsChecked() != checkable_element_it->second) {
+      input_element.SetChecked(checkable_element_it->second, true);
+    }
+  }
+}
+
 bool FormCache::ClearSectionWithElement(const WebFormControlElement& element) {
+  // The intended behaviour is:
+  // * Clear the currently focused element.
+  // * Send the blur event.
+  // * For each other element, focus -> clear -> blur.
+  // * Send the focus event.
   WebFormElement form_element = element.Form();
   std::vector<WebFormControlElement> control_elements =
       form_element.IsNull()
@@ -323,54 +379,38 @@ bool FormCache::ClearSectionWithElement(const WebFormControlElement& element) {
                 element.GetDocument().All(), nullptr)
           : form_util::ExtractAutofillableElementsInForm(form_element);
 
+  if (control_elements.empty())
+    return true;
+
+  if (control_elements.size() < 2 && control_elements[0].Focused()) {
+    // If there is no other field to be cleared, sending the blur event and then
+    // the focus event for the currently focused element does not make sense.
+    ClearElement(control_elements[0], element);
+    return true;
+  }
+
+  WebFormControlElement* initially_focused_element = nullptr;
   for (WebFormControlElement& control_element : control_elements) {
-    // Don't modify the value of disabled fields.
-    if (!control_element.IsEnabled())
-      continue;
-
-    // Don't clear field that was not autofilled
-    if (!control_element.IsAutofilled())
-      continue;
-
-    if (control_element.AutofillSection() != element.AutofillSection())
-      continue;
-
-    control_element.SetAutofillState(WebAutofillState::kNotFilled);
-
-    WebInputElement* input_element = ToWebInputElement(&control_element);
-    if (form_util::IsTextInput(input_element) ||
-        form_util::IsMonthInput(input_element)) {
-      input_element->SetAutofillValue(blink::WebString());
-
-      // Clearing the value in the focused node (above) can cause selection
-      // to be lost. We force selection range to restore the text cursor.
-      if (element == *input_element) {
-        int length = input_element->Value().length();
-        input_element->SetSelectionRange(length, length);
-      }
-    } else if (form_util::IsTextAreaElement(control_element)) {
-      control_element.SetAutofillValue(blink::WebString());
-    } else if (form_util::IsSelectElement(control_element)) {
-      WebSelectElement select_element = control_element.To<WebSelectElement>();
-
-      auto initial_value_iter = initial_select_values_.find(
-          select_element.UniqueRendererFormControlId());
-      if (initial_value_iter != initial_select_values_.end() &&
-          select_element.Value().Utf16() != initial_value_iter->second) {
-        select_element.SetAutofillValue(
-            blink::WebString::FromUTF16(initial_value_iter->second));
-      }
-    } else {
-      WebInputElement input_element = control_element.To<WebInputElement>();
-      DCHECK(form_util::IsCheckableElement(&input_element));
-      auto checkable_element_it = initial_checked_state_.find(
-          input_element.UniqueRendererFormControlId());
-      if (checkable_element_it != initial_checked_state_.end() &&
-          input_element.IsChecked() != checkable_element_it->second) {
-        input_element.SetChecked(checkable_element_it->second, true);
-      }
+    if (control_element.Focused()) {
+      initially_focused_element = &control_element;
+      ClearElement(control_element, element);
+      // A blur event is emitted for the focused element if it is an initiating
+      // element before the clearing happens.
+      initially_focused_element->DispatchBlurEvent();
+      break;
     }
   }
+
+  for (WebFormControlElement& control_element : control_elements) {
+    if (control_element.Focused())
+      continue;
+    ClearElement(control_element, element);
+  }
+
+  // A focus event is emitted for the initiating element after clearing is
+  // completed.
+  if (initially_focused_element)
+    initially_focused_element->DispatchFocusEvent();
 
   return true;
 }
@@ -558,24 +598,12 @@ bool FormCache::ShouldShowAutocompleteConsoleWarnings(
 }
 
 void FormCache::PruneInitialValueCaches(
-    const std::set<uint32_t> ids_to_retain) {
-  // Prune initial_select_values_.
-  for (auto iter = initial_select_values_.begin();
-       iter != initial_select_values_.end();) {
-    if (!base::Contains(ids_to_retain, iter->first))
-      iter = initial_select_values_.erase(iter);
-    else
-      ++iter;
-  }
-
-  // Prune initial_checked_state_.
-  for (auto iter = initial_checked_state_.begin();
-       iter != initial_checked_state_.end();) {
-    if (!base::Contains(ids_to_retain, iter->first))
-      iter = initial_checked_state_.erase(iter);
-    else
-      ++iter;
-  }
+    const std::set<uint32_t>& ids_to_retain) {
+  auto should_not_retain = [&ids_to_retain](const auto& p) {
+    return !base::Contains(ids_to_retain, p.first);
+  };
+  base::EraseIf(initial_select_values_, should_not_retain);
+  base::EraseIf(initial_checked_state_, should_not_retain);
 }
 
 }  // namespace autofill

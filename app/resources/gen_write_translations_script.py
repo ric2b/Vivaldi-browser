@@ -49,7 +49,7 @@ for locale in LOCALES:
 <!DOCTYPE translationbundle>
 <translationbundle lang="%%s">
 </translationbundle>\"\"\" %% spec_locale, file=f)
-  print('  <file path="%%(path)s_%%(locale)s.xtb" lang="%%(spec_locale)s" />' %% params)
+    print('  <file path="%%(path)s_%%(locale)s.xtb" lang="%%(spec_locale)s" />' %% params)
 
 print("</translations>")
 print("-"*40)

@@ -25,16 +25,17 @@ class ColorSpace;
 
 namespace blink {
 
-enum CanvasColorSpace {
-  kSRGBCanvasColorSpace,
-  kLinearRGBCanvasColorSpace,
-  kRec2020CanvasColorSpace,
-  kP3CanvasColorSpace,
+enum class CanvasColorSpace {
+  kSRGB,
+  kLinearRGB,
+  kRec2020,
+  kP3,
 };
 
-enum CanvasPixelFormat {
-  kRGBA8CanvasPixelFormat,
-  kF16CanvasPixelFormat,
+enum class CanvasPixelFormat {
+  kRGBA8,
+  kBGRA8,
+  kF16,
 };
 
 class PLATFORM_EXPORT CanvasColorParams {
@@ -44,8 +45,14 @@ class PLATFORM_EXPORT CanvasColorParams {
   // The default constructor will create an output-blended 8-bit surface.
   CanvasColorParams();
   CanvasColorParams(CanvasColorSpace, CanvasPixelFormat, OpacityMode);
-  CanvasColorParams(const CanvasColorParams& params, bool force_rgba);
   explicit CanvasColorParams(const SkImageInfo&);
+
+  static CanvasPixelFormat GetNativeCanvasPixelFormat() {
+    if (kN32_SkColorType == kRGBA_8888_SkColorType)
+      return CanvasPixelFormat::kRGBA8;
+    else if (kN32_SkColorType == kBGRA_8888_SkColorType)
+      return CanvasPixelFormat::kBGRA8;
+  }
 
   CanvasColorSpace ColorSpace() const { return color_space_; }
   CanvasPixelFormat PixelFormat() const { return pixel_format_; }
@@ -92,10 +99,9 @@ class PLATFORM_EXPORT CanvasColorParams {
   CanvasColorParams(const sk_sp<SkColorSpace> color_space,
                     SkColorType color_type);
 
-  CanvasColorSpace color_space_ = kSRGBCanvasColorSpace;
-  CanvasPixelFormat pixel_format_ = kRGBA8CanvasPixelFormat;
+  CanvasColorSpace color_space_ = CanvasColorSpace::kSRGB;
+  CanvasPixelFormat pixel_format_ = GetNativeCanvasPixelFormat();
   OpacityMode opacity_mode_ = kNonOpaque;
-  bool force_rgba_ = false;
 };
 
 }  // namespace blink

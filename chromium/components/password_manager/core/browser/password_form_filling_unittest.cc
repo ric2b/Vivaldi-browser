@@ -78,7 +78,6 @@ class PasswordFormFillingTest : public testing::Test {
     saved_match_.origin =
         GURL("https://accounts.google.com/a/ServiceLoginAuth");
     saved_match_.action = GURL("https://accounts.google.com/a/ServiceLogin");
-    saved_match_.preferred = true;
     saved_match_.username_value = ASCIIToUTF16("test@gmail.com");
     saved_match_.password_value = ASCIIToUTF16("test1");
 
@@ -188,7 +187,7 @@ TEST_F(PasswordFormFillingTest, TestFillOnLoadSuggestion) {
     if (!test_case.current_password_present) {
       observed_form.password_element.clear();
       observed_form.password_element_renderer_id =
-          autofill::FormFieldData::kNotSetFormControlRendererId;
+          autofill::FormData::kNotSetRendererId;
     }
 
     PasswordFormFillData fill_data;

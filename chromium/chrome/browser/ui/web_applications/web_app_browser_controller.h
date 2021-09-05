@@ -11,9 +11,12 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
+#include "base/scoped_observer.h"
 #include "base/strings/string16.h"
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
-#include "chrome/browser/web_applications/components/web_app_helpers.h"
+#include "chrome/browser/web_applications/components/app_registrar.h"
+#include "chrome/browser/web_applications/components/app_registrar_observer.h"
+#include "chrome/browser/web_applications/components/web_app_id.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/image/image_skia.h"
 
@@ -31,18 +34,18 @@ class WebAppProvider;
 // Icon information is obtained from the AppIconManager.
 // Note: Much of the functionality in HostedAppBrowserController
 // will move to this class.
-class WebAppBrowserController : public AppBrowserController {
+class WebAppBrowserController : public AppBrowserController,
+                                public AppRegistrarObserver {
  public:
   explicit WebAppBrowserController(Browser* browser);
   ~WebAppBrowserController() override;
 
   // AppBrowserController:
-  base::Optional<AppId> GetAppId() const override;
-  bool CreatedForInstalledPwa() const override;
-  bool ShouldShowCustomTabBar() const override;
+  bool HasMinimalUiButtons() const override;
   gfx::ImageSkia GetWindowAppIcon() const override;
   gfx::ImageSkia GetWindowIcon() const override;
   base::Optional<SkColor> GetThemeColor() const override;
+  base::string16 GetTitle() const override;
   std::string GetAppShortName() const override;
   base::string16 GetFormattedUrlOrigin() const override;
   GURL GetAppLaunchURL() const override;
@@ -53,16 +56,26 @@ class WebAppBrowserController : public AppBrowserController {
   bool IsInstalled() const override;
   bool IsHostedApp() const override;
 
+  // AppRegistrarObserver:
+  void OnWebAppWillBeUninstalled(const AppId& app_id) override;
+  void OnAppRegistrarDestroyed() override;
+
   void SetReadIconCallbackForTesting(base::OnceClosure callback);
+
+ protected:
+  // web_app::AppBrowserController:
+  void OnTabInserted(content::WebContents* contents) override;
+  void OnTabRemoved(content::WebContents* contents) override;
 
  private:
   const AppRegistrar& registrar() const;
 
-  void OnReadIcon(SkBitmap bitmap);
+  void OnReadIcon(const SkBitmap& bitmap);
 
   WebAppProvider& provider_;
-  const AppId app_id_;
   mutable base::Optional<gfx::ImageSkia> app_icon_;
+
+  ScopedObserver<AppRegistrar, AppRegistrarObserver> registrar_observer_{this};
 
   base::OnceClosure callback_for_testing_;
   mutable base::WeakPtrFactory<WebAppBrowserController> weak_ptr_factory_{this};

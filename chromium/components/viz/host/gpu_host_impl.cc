@@ -209,6 +209,8 @@ void GpuHostImpl::EstablishGpuChannel(int client_id,
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   TRACE_EVENT0("gpu", "GpuHostImpl::EstablishGpuChannel");
 
+  shutdown_timeout_.Stop();
+
   // If GPU features are already blacklisted, no need to establish the channel.
   // FEATURE_FORCE_ACCESS_TO_GPU
   if (!(force_allow_access_to_gpu_ || delegate_->GpuAccessAllowed())) {
@@ -421,14 +423,8 @@ void GpuHostImpl::DidInitialize(
                            gpu_info_for_hardware_gpu,
                            gpu_feature_info_for_hardware_gpu, gpu_extra_info);
 
-  // Remove entries so that GPU process shader caches get populated on any
-  // GPU process start.
-  client_id_to_shader_cache_.clear();
-
   if (!params_.disable_gpu_shader_disk_cache) {
-    bool oopd_enabled = features::IsVizDisplayCompositorEnabled();
-    if (oopd_enabled)
-      CreateChannelCache(gpu::kInProcessCommandBufferClientId);
+    CreateChannelCache(gpu::kInProcessCommandBufferClientId);
 
     bool use_gr_shader_cache = base::FeatureList::IsEnabled(
                                    features::kDefaultEnableOopRasterization) ||
@@ -462,6 +458,22 @@ void GpuHostImpl::DidDestroyOffscreenContext(const GURL& url) {
 void GpuHostImpl::DidDestroyChannel(int32_t client_id) {
   TRACE_EVENT0("gpu", "GpuHostImpl::DidDestroyChannel");
   client_id_to_shader_cache_.erase(client_id);
+}
+
+void GpuHostImpl::DidDestroyAllChannels() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  if (!channel_requests_.empty())
+    return;
+  constexpr base::TimeDelta kShutDownTimeout = base::TimeDelta::FromSeconds(10);
+  shutdown_timeout_.Start(FROM_HERE, kShutDownTimeout,
+                          base::BindOnce(&GpuHostImpl::MaybeShutdownGpuProcess,
+                                         base::Unretained(this)));
+}
+
+void GpuHostImpl::MaybeShutdownGpuProcess() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(channel_requests_.empty());
+  delegate_->MaybeShutdownGpuProcess();
 }
 
 void GpuHostImpl::DidLoseContext(bool offscreen,
@@ -512,6 +524,10 @@ void GpuHostImpl::DisableGpuCompositing() {
 }
 
 #if defined(OS_WIN)
+void GpuHostImpl::DidUpdateOverlayInfo(const gpu::OverlayInfo& overlay_info) {
+  delegate_->DidUpdateOverlayInfo(overlay_info);
+}
+
 void GpuHostImpl::SetChildSurface(gpu::SurfaceHandle parent,
                                   gpu::SurfaceHandle child) {
   if (pid_ != base::kNullProcessId) {

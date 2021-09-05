@@ -44,13 +44,9 @@ ResourceCoordinatorTabHelper::ResourceCoordinatorTabHelper(
   }
 
 #if !defined(OS_ANDROID)
-  // Don't create the LocalSiteCharacteristicsWebContentsObserver for this tab
-  // if the feature is disabled.
-  if (base::FeatureList::IsEnabled(features::kSiteCharacteristicsDatabase)) {
-    local_site_characteristics_wc_observer_ =
-        std::make_unique<LocalSiteCharacteristicsWebContentsObserver>(
-            web_contents);
-  }
+  local_site_characteristics_wc_observer_ =
+      std::make_unique<LocalSiteCharacteristicsWebContentsObserver>(
+          web_contents);
 #endif
 }
 
@@ -78,20 +74,12 @@ bool ResourceCoordinatorTabHelper::IsFrozen(content::WebContents* contents) {
   return false;
 }
 
-void ResourceCoordinatorTabHelper::DidStartLoading() {
-  TabLoadTracker::Get()->DidStartLoading(web_contents());
-}
-
 void ResourceCoordinatorTabHelper::DidReceiveResponse() {
   TabLoadTracker::Get()->DidReceiveResponse(web_contents());
 }
 
-void ResourceCoordinatorTabHelper::DidFailLoad(
-    content::RenderFrameHost* render_frame_host,
-    const GURL& validated_url,
-    int error_code,
-    const base::string16& error_description) {
-  TabLoadTracker::Get()->DidFailLoad(web_contents());
+void ResourceCoordinatorTabHelper::DidStopLoading() {
+  TabLoadTracker::Get()->DidStopLoading(web_contents());
 }
 
 void ResourceCoordinatorTabHelper::RenderProcessGone(

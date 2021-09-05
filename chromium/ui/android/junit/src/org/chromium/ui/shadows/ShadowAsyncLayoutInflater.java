@@ -4,7 +4,7 @@
 
 package org.chromium.ui.shadows;
 
-import android.support.v4.view.AsyncLayoutInflater;
+import android.content.Context;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -12,10 +12,12 @@ import android.view.ViewGroup;
 import androidx.annotation.LayoutRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.asynclayoutinflater.view.AsyncLayoutInflater;
 
 import org.robolectric.annotation.Implementation;
 import org.robolectric.annotation.Implements;
 
+import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
 
 /**
@@ -27,7 +29,9 @@ public class ShadowAsyncLayoutInflater {
     @Implementation
     public void inflate(@LayoutRes int resid, @Nullable ViewGroup parent,
             @NonNull AsyncLayoutInflater.OnInflateFinishedListener callback) {
-        View inflatedView = LayoutInflater.from(parent.getContext()).inflate(resid, parent, false);
+        Context context =
+                parent != null ? parent.getContext() : ContextUtils.getApplicationContext();
+        View inflatedView = LayoutInflater.from(context).inflate(resid, parent, false);
         ThreadUtils.postOnUiThreadDelayed(
                 () -> callback.onInflateFinished(inflatedView, inflatedView.getId(), parent), 500);
     }

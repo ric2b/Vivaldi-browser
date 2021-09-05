@@ -6,6 +6,7 @@
 
 #include "base/macros.h"
 #include "base/message_loop/message_pump_type.h"
+#include "base/single_thread_task_runner.h"
 #include "base/task_runner.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -57,7 +58,7 @@ class PluginGlobals::BrowserSender : public IPC::Sender {
 PluginGlobals* PluginGlobals::plugin_globals_ = NULL;
 
 PluginGlobals::PluginGlobals(
-    const scoped_refptr<base::TaskRunner>& ipc_task_runner)
+    const scoped_refptr<base::SingleThreadTaskRunner>& ipc_task_runner)
     : ppapi::PpapiGlobals(),
       plugin_proxy_delegate_(NULL),
       callback_tracker_(new CallbackTracker),
@@ -78,7 +79,7 @@ PluginGlobals::PluginGlobals(
 
 PluginGlobals::PluginGlobals(
     PerThreadForTest per_thread_for_test,
-    const scoped_refptr<base::TaskRunner>& ipc_task_runner)
+    const scoped_refptr<base::SingleThreadTaskRunner>& ipc_task_runner)
     : ppapi::PpapiGlobals(per_thread_for_test),
       plugin_proxy_delegate_(NULL),
       callback_tracker_(new CallbackTracker),
@@ -97,7 +98,7 @@ PluginGlobals::~PluginGlobals() {
     // we clear plugin_globals_, because the Resource destructor tries to access
     // this PluginGlobals.
     DCHECK(!loop_for_main_thread_.get() || loop_for_main_thread_->HasOneRef());
-    loop_for_main_thread_ = NULL;
+    loop_for_main_thread_.reset();
   }
   plugin_globals_ = NULL;
 }

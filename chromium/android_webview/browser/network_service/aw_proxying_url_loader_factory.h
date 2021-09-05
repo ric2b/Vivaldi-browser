@@ -8,10 +8,12 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
-#include "services/network/public/cpp/resource_response.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "services/network/public/mojom/url_loader.mojom.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
+#include "services/network/public/mojom/url_response_head.mojom.h"
 
 namespace net {
 struct MutableNetworkTrafficAnnotationTag;
@@ -59,7 +61,8 @@ class AwProxyingURLLoaderFactory : public network::mojom::URLLoaderFactory {
   AwProxyingURLLoaderFactory(
       int process_id,
       mojo::PendingReceiver<network::mojom::URLLoaderFactory> loader_receiver,
-      network::mojom::URLLoaderFactoryPtrInfo target_factory_info,
+      mojo::PendingRemote<network::mojom::URLLoaderFactory>
+          target_factory_remote,
       bool intercept_only);
 
   ~AwProxyingURLLoaderFactory() override;
@@ -68,16 +71,18 @@ class AwProxyingURLLoaderFactory : public network::mojom::URLLoaderFactory {
   static void CreateProxy(
       int process_id,
       mojo::PendingReceiver<network::mojom::URLLoaderFactory> loader,
-      network::mojom::URLLoaderFactoryPtrInfo target_factory_info);
+      mojo::PendingRemote<network::mojom::URLLoaderFactory>
+          target_factory_remote);
 
-  void CreateLoaderAndStart(network::mojom::URLLoaderRequest loader,
-                            int32_t routing_id,
-                            int32_t request_id,
-                            uint32_t options,
-                            const network::ResourceRequest& request,
-                            network::mojom::URLLoaderClientPtr client,
-                            const net::MutableNetworkTrafficAnnotationTag&
-                                traffic_annotation) override;
+  void CreateLoaderAndStart(
+      mojo::PendingReceiver<network::mojom::URLLoader> loader,
+      int32_t routing_id,
+      int32_t request_id,
+      uint32_t options,
+      const network::ResourceRequest& request,
+      mojo::PendingRemote<network::mojom::URLLoaderClient> client,
+      const net::MutableNetworkTrafficAnnotationTag& traffic_annotation)
+      override;
 
   void Clone(mojo::PendingReceiver<network::mojom::URLLoaderFactory>
                  loader_receiver) override;
@@ -88,7 +93,7 @@ class AwProxyingURLLoaderFactory : public network::mojom::URLLoaderFactory {
 
   const int process_id_;
   mojo::ReceiverSet<network::mojom::URLLoaderFactory> proxy_receivers_;
-  network::mojom::URLLoaderFactoryPtr target_factory_;
+  mojo::Remote<network::mojom::URLLoaderFactory> target_factory_;
 
   // When true the loader resulting from this factory will only execute
   // intercept callback (shouldInterceptRequest). If that returns without

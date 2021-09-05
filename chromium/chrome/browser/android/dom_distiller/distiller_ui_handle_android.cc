@@ -4,26 +4,12 @@
 
 #include "chrome/browser/android/dom_distiller/distiller_ui_handle_android.h"
 
-#include "base/android/jni_string.h"
-#include "chrome/android/chrome_jni_headers/DomDistillerUIUtils_jni.h"
-#include "chrome/browser/ui/android/view_android_helper.h"
-#include "components/dom_distiller/core/url_utils.h"
-#include "content/public/browser/web_contents.h"
-#include "ui/android/window_android.h"
-#include "url/gurl.h"
-
-using base::android::ScopedJavaLocalRef;
-
 namespace dom_distiller {
 
 namespace android {
 
-// static
-void DistillerUIHandleAndroid::OpenSettings(
-    content::WebContents* web_contents) {
-  JNIEnv* env = base::android::AttachCurrentThread();
-  Java_DomDistillerUIUtils_openSettings(env,
-                                        web_contents->GetJavaWebContents());
+void DistillerUIHandleAndroid::OpenSettings() {
+  // TODO(1073015) Clean up this UI handle system since it is no longer used.
 }
 
 }  // namespace android

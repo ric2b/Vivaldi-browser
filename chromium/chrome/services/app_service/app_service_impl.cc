@@ -7,9 +7,14 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/token.h"
 #include "chrome/services/app_service/public/mojom/types.mojom.h"
+#include "components/prefs/pref_registry_simple.h"
+#include "components/prefs/pref_service.h"
 
 namespace {
+
+const char kAppServicePreferredApps[] = "app_service.preferred_apps";
 
 void Connect(apps::mojom::Publisher* publisher,
              apps::mojom::Subscriber* subscriber) {
@@ -23,9 +28,18 @@ void Connect(apps::mojom::Publisher* publisher,
 
 namespace apps {
 
-AppServiceImpl::AppServiceImpl() = default;
+AppServiceImpl::AppServiceImpl(PrefService* profile_prefs)
+    : pref_service_(profile_prefs) {
+  DCHECK(pref_service_);
+  InitializePreferredApps();
+}
 
 AppServiceImpl::~AppServiceImpl() = default;
+
+// static
+void AppServiceImpl::RegisterProfilePrefs(PrefRegistrySimple* registry) {
+  registry->RegisterDictionaryPref(kAppServicePreferredApps);
+}
 
 void AppServiceImpl::BindReceiver(
     mojo::PendingReceiver<apps::mojom::AppService> receiver) {
@@ -69,6 +83,11 @@ void AppServiceImpl::RegisterSubscriber(
 
   // TODO: store the opts somewhere.
 
+  // Initialise the Preferred Apps in the Subscribers on register.
+  if (preferred_apps_.IsInitialized()) {
+    subscriber->InitializePreferredApps(preferred_apps_.GetValue());
+  }
+
   // Add the new subscriber to the set.
   subscribers_.Add(std::move(subscriber));
 }
@@ -101,6 +120,19 @@ void AppServiceImpl::Launch(apps::mojom::AppType app_type,
   }
   iter->second->Launch(app_id, event_flags, launch_source, display_id);
 }
+void AppServiceImpl::LaunchAppWithFiles(apps::mojom::AppType app_type,
+                                        const std::string& app_id,
+                                        apps::mojom::LaunchContainer container,
+                                        int32_t event_flags,
+                                        apps::mojom::LaunchSource launch_source,
+                                        apps::mojom::FilePathsPtr file_paths) {
+  auto iter = publishers_.find(app_type);
+  if (iter == publishers_.end()) {
+    return;
+  }
+  iter->second->LaunchAppWithFiles(app_id, container, event_flags,
+                                   launch_source, std::move(file_paths));
+}
 
 void AppServiceImpl::LaunchAppWithIntent(
     apps::mojom::AppType app_type,
@@ -126,15 +158,6 @@ void AppServiceImpl::SetPermission(apps::mojom::AppType app_type,
   iter->second->SetPermission(app_id, std::move(permission));
 }
 
-void AppServiceImpl::PromptUninstall(apps::mojom::AppType app_type,
-                                     const std::string& app_id) {
-  auto iter = publishers_.find(app_type);
-  if (iter == publishers_.end()) {
-    return;
-  }
-  iter->second->PromptUninstall(app_id);
-}
-
 void AppServiceImpl::Uninstall(apps::mojom::AppType app_type,
                                const std::string& app_id,
                                bool clear_site_data,
@@ -146,6 +169,39 @@ void AppServiceImpl::Uninstall(apps::mojom::AppType app_type,
   iter->second->Uninstall(app_id, clear_site_data, report_abuse);
 }
 
+void AppServiceImpl::PauseApp(apps::mojom::AppType app_type,
+                              const std::string& app_id) {
+  auto iter = publishers_.find(app_type);
+  if (iter == publishers_.end()) {
+    return;
+  }
+  iter->second->PauseApp(app_id);
+}
+
+void AppServiceImpl::UnpauseApps(apps::mojom::AppType app_type,
+                                 const std::string& app_id) {
+  auto iter = publishers_.find(app_type);
+  if (iter == publishers_.end()) {
+    return;
+  }
+  iter->second->UnpauseApps(app_id);
+}
+
+void AppServiceImpl::GetMenuModel(apps::mojom::AppType app_type,
+                                  const std::string& app_id,
+                                  apps::mojom::MenuType menu_type,
+                                  int64_t display_id,
+                                  GetMenuModelCallback callback) {
+  auto iter = publishers_.find(app_type);
+  if (iter == publishers_.end()) {
+    std::move(callback).Run(apps::mojom::MenuItems::New());
+    return;
+  }
+
+  iter->second->GetMenuModel(app_id, menu_type, display_id,
+                             std::move(callback));
+}
+
 void AppServiceImpl::OpenNativeSettings(apps::mojom::AppType app_type,
                                         const std::string& app_id) {
   auto iter = publishers_.find(app_type);
@@ -155,8 +211,77 @@ void AppServiceImpl::OpenNativeSettings(apps::mojom::AppType app_type,
   iter->second->OpenNativeSettings(app_id);
 }
 
+void AppServiceImpl::AddPreferredApp(apps::mojom::AppType app_type,
+                                     const std::string& app_id,
+                                     apps::mojom::IntentFilterPtr intent_filter,
+                                     apps::mojom::IntentPtr intent,
+                                     bool from_publisher) {
+  DCHECK(preferred_apps_.IsInitialized());
+
+  apps::mojom::ReplacedAppPreferencesPtr replaced_app_preferences =
+      preferred_apps_.AddPreferredApp(app_id, intent_filter);
+
+  // TODO(crbug.com/853604): Write the data to the disk.
+
+  for (auto& subscriber : subscribers_) {
+    subscriber->OnPreferredAppSet(app_id, intent_filter->Clone());
+  }
+
+  if (from_publisher || !intent) {
+    return;
+  }
+
+  // Sync the change to publishers. Because |replaced_app_preference| can
+  // be any app type, we should run this for all publishers. Currently
+  // only implemented in ARC publisher.
+  // TODO(crbug.com/853604): The |replaced_app_preference| can be really big,
+  // update this logic to only call the relevant publisher for each app after
+  // updating the storage structure.
+  for (const auto& iter : publishers_) {
+    iter.second->OnPreferredAppSet(app_id, std::move(intent_filter),
+                                   std::move(intent),
+                                   replaced_app_preferences->Clone());
+  }
+}
+
+void AppServiceImpl::RemovePreferredApp(apps::mojom::AppType app_type,
+                                        const std::string& app_id) {
+  DCHECK(preferred_apps_.IsInitialized());
+
+  preferred_apps_.DeleteAppId(app_id);
+
+  // TODO(crbug.com/853604): Write the data to the disk.
+}
+
+void AppServiceImpl::RemovePreferredAppForFilter(
+    apps::mojom::AppType app_type,
+    const std::string& app_id,
+    apps::mojom::IntentFilterPtr intent_filter) {
+  DCHECK(preferred_apps_.IsInitialized());
+
+  preferred_apps_.DeletePreferredApp(app_id, intent_filter);
+
+  // TODO(crbug.com/853604): Write the data to the disk.
+
+  for (auto& subscriber : subscribers_) {
+    subscriber->OnPreferredAppRemoved(app_id, intent_filter->Clone());
+  }
+}
+
+PreferredAppsList& AppServiceImpl::GetPreferredAppsForTesting() {
+  return preferred_apps_;
+}
+
 void AppServiceImpl::OnPublisherDisconnected(apps::mojom::AppType app_type) {
   publishers_.erase(app_type);
+}
+
+void AppServiceImpl::InitializePreferredApps() {
+  // TODO(crbug.com/853604): Read the data from the disk.
+  preferred_apps_.Init();
+  for (auto& subscriber : subscribers_) {
+    subscriber->InitializePreferredApps(preferred_apps_.GetValue());
+  }
 }
 
 }  // namespace apps

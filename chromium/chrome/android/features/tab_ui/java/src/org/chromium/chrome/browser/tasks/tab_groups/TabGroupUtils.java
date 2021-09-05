@@ -11,20 +11,21 @@ import android.view.View;
 
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
+import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ContextUtils;
-import org.chromium.base.VisibleForTesting;
-import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabObserver;
-import org.chromium.chrome.browser.ui.widget.textbubble.TextBubble;
+import org.chromium.chrome.browser.util.AccessibilityUtil;
 import org.chromium.chrome.tab_ui.R;
+import org.chromium.components.browser_ui.widget.textbubble.TextBubble;
 import org.chromium.components.feature_engagement.FeatureConstants;
 import org.chromium.components.feature_engagement.Tracker;
 import org.chromium.content_public.browser.NavigationHandle;
@@ -66,14 +67,14 @@ public class TabGroupUtils {
                 return;
         }
 
-        final Tracker tracker = TrackerFactory.getTrackerForProfile(
-                Profile.getLastUsedProfile().getOriginalProfile());
+        final Tracker tracker =
+                TrackerFactory.getTrackerForProfile(Profile.getLastUsedRegularProfile());
         if (!tracker.shouldTriggerHelpUI(featureName)) return;
 
         ViewRectProvider rectProvider = new ViewRectProvider(view);
 
-        TextBubble textBubble = new TextBubble(
-                view.getContext(), view, textId, accessibilityTextId, true, rectProvider);
+        TextBubble textBubble = new TextBubble(view.getContext(), view, textId, accessibilityTextId,
+                true, rectProvider, AccessibilityUtil.isAccessibilityEnabled());
         textBubble.setDismissOnTouchInteraction(true);
         textBubble.addOnDismissListener(() -> tracker.dismissed(featureName));
         textBubble.show();

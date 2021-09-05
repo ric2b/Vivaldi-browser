@@ -79,6 +79,9 @@ class BrowserCommandController : public CommandUpdater,
   void RemoveCommandObserver(CommandObserver* observer) override;
   bool UpdateCommandEnabled(int id, bool state) override;
 
+  // Added by vivaldi to init menu support after JS has set up menus.
+  void InitVivaldiCommandState();
+
   // Shared state updating: these functions are static and public to share with
   // outside code.
 

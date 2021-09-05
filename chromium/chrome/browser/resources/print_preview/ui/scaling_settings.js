@@ -2,7 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-cr.exportPath('print_preview');
+import 'chrome://resources/cr_elements/md_select_css.m.js';
+import 'chrome://resources/polymer/v3_0/iron-collapse/iron-collapse.js';
+import './number_settings_section.js';
+import './print_preview_shared_css.js';
+import './settings_section.js';
+
+import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
+import {ScalingType} from '../data/scaling.js';
+
+import {SelectBehavior} from './select_behavior.js';
+import {SettingsBehavior} from './settings_behavior.js';
 
 /*
  * Fit to page and fit to paper options will only be displayed for PDF
@@ -12,7 +23,9 @@ cr.exportPath('print_preview');
 Polymer({
   is: 'print-preview-scaling-settings',
 
-  behaviors: [SettingsBehavior, print_preview.SelectBehavior],
+  _template: html`{__html_template__}`,
+
+  behaviors: [SettingsBehavior, SelectBehavior],
 
   properties: {
     disabled: {
@@ -53,7 +66,7 @@ Polymer({
     /** Mirroring the enum so that it can be used from HTML bindings. */
     ScalingValue: {
       type: Object,
-      value: print_preview.ScalingType,
+      value: ScalingType,
     },
   },
 
@@ -82,8 +95,8 @@ Polymer({
    */
   userSelectedCustomScaling_: false,
 
-  onProcessSelectChange: function(value) {
-    const isCustom = value === print_preview.ScalingType.CUSTOM.toString();
+  onProcessSelectChange(value) {
+    const isCustom = value === ScalingType.CUSTOM.toString();
     if (isCustom && !this.customScalingSettingSet_) {
       this.userSelectedCustomScaling_ = true;
     } else {
@@ -91,14 +104,12 @@ Polymer({
     }
 
     const valueAsNumber = parseInt(value, 10);
-    if (isCustom || value === print_preview.ScalingType.DEFAULT.toString()) {
+    if (isCustom || value === ScalingType.DEFAULT.toString()) {
       this.setSetting('scalingType', valueAsNumber);
     }
     if (this.isPdf ||
-        this.getSetting('scalingTypePdf').value ===
-            print_preview.ScalingType.DEFAULT ||
-        this.getSetting('scalingTypePdf').value ===
-            print_preview.ScalingType.CUSTOM) {
+        this.getSetting('scalingTypePdf').value === ScalingType.DEFAULT ||
+        this.getSetting('scalingTypePdf').value === ScalingType.CUSTOM) {
       this.setSetting('scalingTypePdf', valueAsNumber);
     }
 
@@ -108,7 +119,7 @@ Polymer({
   },
 
   /** @private */
-  updateScalingToValid_: function() {
+  updateScalingToValid_() {
     if (!this.getSetting('scaling').valid) {
       this.currentValue_ = this.lastValidScaling_;
     } else {
@@ -120,21 +131,21 @@ Polymer({
    * Updates the input string when scaling setting is set.
    * @private
    */
-  onScalingSettingChanged_: function() {
+  onScalingSettingChanged_() {
     const value = /** @type {string} */ (this.getSetting('scaling').value);
     this.lastValidScaling_ = value;
     this.currentValue_ = value;
   },
 
   /** @private */
-  onScalingTypeSettingChanged_: function() {
+  onScalingTypeSettingChanged_() {
     if (!this.settingKey_) {
       return;
     }
 
-    const value = /** @type {!print_preview.ScalingType} */
+    const value = /** @type {!ScalingType} */
         (this.getSettingValue(this.settingKey_));
-    if (value !== print_preview.ScalingType.CUSTOM) {
+    if (value !== ScalingType.CUSTOM) {
       this.updateScalingToValid_();
     } else {
       this.customScalingSettingSet_ = true;
@@ -147,7 +158,7 @@ Polymer({
    * scaling input.
    * @private
    */
-  onInputChanged_: function() {
+  onInputChanged_() {
     this.setSettingValid('scaling', this.inputValid_);
 
     if (this.currentValue_ !== '' && this.inputValid_ &&
@@ -157,7 +168,7 @@ Polymer({
   },
 
   /** @private */
-  onDisabledChanged_: function() {
+  onDisabledChanged_() {
     this.dropdownDisabled_ = this.disabled && this.inputValid_;
   },
 
@@ -165,7 +176,7 @@ Polymer({
    * @return {boolean} Whether the input should be disabled.
    * @private
    */
-  inputDisabled_: function() {
+  inputDisabled_() {
     return !this.customSelected_ || this.dropdownDisabled_;
   },
 
@@ -173,22 +184,21 @@ Polymer({
    * @return {boolean} Whether the custom scaling option is selected.
    * @private
    */
-  computeCustomSelected_: function() {
+  computeCustomSelected_() {
     return !!this.settingKey_ &&
-        this.getSettingValue(this.settingKey_) ===
-        print_preview.ScalingType.CUSTOM;
+        this.getSettingValue(this.settingKey_) === ScalingType.CUSTOM;
   },
 
   /**
    * @return {string} The key of the appropriate scaling setting.
    * @private
    */
-  computeSettingKey_: function() {
+  computeSettingKey_() {
     return this.isPdf ? 'scalingTypePdf' : 'scalingType';
   },
 
   /** @private */
-  onCollapseChanged_: function() {
+  onCollapseChanged_() {
     if (this.customSelected_ && this.userSelectedCustomScaling_) {
       this.$$('print-preview-number-settings-section').getInput().focus();
     }

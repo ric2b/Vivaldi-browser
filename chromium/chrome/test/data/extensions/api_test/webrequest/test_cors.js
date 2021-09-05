@@ -4,15 +4,19 @@
 
 const callbackPass = chrome.test.callbackPass;
 const listeningUrlPattern = '*://cors.example.com/*';
+const params = (new URL(location.href)).searchParams;
 const BASE = 'extensions/api_test/webrequest/cors/';
 
 function getCorsMode() {
-  const query = location.search;
-  const prefix = '?cors_mode=';
-  chrome.test.assertTrue(query.startsWith(prefix));
-  const mode = query.substr(prefix.length);
+  const name = 'cors_mode';
+  chrome.test.assertTrue(params.has(name));
+  const mode = params.get(name);
   chrome.test.assertTrue(mode == 'blink' || mode == 'network_service');
   return mode;
+}
+
+function isExtraHeadersForced() {
+  return params.has('with_force_extra_headers');
 }
 
 function setExpectationsForNonObservablePreflight() {
@@ -136,24 +140,15 @@ function setExpectationsForObservablePreflight(extraInfoSpec) {
         type,
       },
     },
-    { label: 'onCompleted-P',
-      event: 'onCompleted',
-      details: {
-        url,
-        method: 'OPTIONS',
-        ip: '127.0.0.1',
-        fromCache: false,
-        statusCode: 200,
-        statusLine: 'HTTP/1.1 200 OK',
-        initiator,
-        type,
-      },
-    },
   ];
   const eventOrderForPreflight = [
     'onBeforeRequest-P', 'onBeforeSendHeaders-P', 'onSendHeaders-P',
-    'onHeadersReceived-P', 'onResponseStarted-P', 'onCompleted-P',
+    'onHeadersReceived-P', 'onResponseStarted-P',
   ];
+  // The completion event of the preflight request coming from the network OR
+  // The cancellation event of the preflight request coming from the CORS module
+  // should arrive, but we are not sure which comes first - that is essentially
+  // racy, so we cannot have an expecation here.
 
   let events;
   let eventsOrder;
@@ -174,21 +169,12 @@ function setExpectationsForObservablePreflight(extraInfoSpec) {
           frameUrl: 'unknown frame URL',
         },
       },
-    ].concat(eventsForPreflight, [
-      { label: 'onErrorOccurred',
-        event: 'onErrorOccurred',
-        details: {
-          url: url,
-          method: 'GET',
-          error: 'net::ERR_FAILED',
-          initiator: initiator,
-          type: 'xmlhttprequest',
-          fromCache: false,
-        }
-      },
-    ]);
-    eventOrder = ['onBeforeRequest'].concat(
-        eventOrderForPreflight, ['onErrorOccurred']);
+    ].concat(eventsForPreflight);
+    eventOrder = ['onBeforeRequest'].concat(eventOrderForPreflight);
+
+    // We should see the cancellation of the actual request, but we cannot
+    // have that expecation here because we don't have an expecation on
+    // the completion of the preflight request. See above.
   } else {
     // In this case, the preflight request is made first, and blink will not
     // make the actual request because of the lack of an
@@ -243,7 +229,7 @@ function registerRequestHeaderInjectionListeners(extraInfoSpec) {
   // Otherwises, modified headers are not observed by CORS implementations, and
   // do not trigger the CORS preflight.
   const triggerPreflight = !extraInfoSpec.includes('extraHeaders') &&
-      getCorsMode() == 'network_service';
+      !isExtraHeadersForced() && getCorsMode() == 'network_service';
 
   const event = triggerPreflight ? chrome.webRequest.onErrorOccurred :
                                    chrome.webRequest.onCompleted;
@@ -269,8 +255,8 @@ function registerResponseHeaderInjectionListeners(extraInfoSpec) {
   // If the 'extraHeaders' is not specified and OOR-CORS is enabled, Chrome
   // detects CORS failures before |headerReceivedListener| is called and injects
   // fake headers to deceive the CORS checks.
-  const canInjectFakeCorsResponse =
-      extraInfoSpec.includes('extraHeaders') || getCorsMode() == 'blink';
+  const canInjectFakeCorsResponse = extraInfoSpec.includes('extraHeaders') ||
+      isExtraHeadersForced() || getCorsMode() == 'blink';
 
   const event = canInjectFakeCorsResponse ? chrome.webRequest.onCompleted :
                                             chrome.webRequest.onErrorOccurred;
@@ -578,7 +564,7 @@ runTests([
     // without it.
     // If OOR-CORS is enabled, the Origin header is invisible if the
     // extraHeaders is not specified.
-    if (getCorsMode() == 'network_service')
+    if (getCorsMode() == 'network_service' && !isExtraHeadersForced())
       registerOriginListeners([], ['origin'], ['requestHeaders']);
     else
       registerOriginListeners(['origin'], [], ['requestHeaders']);
@@ -620,7 +606,7 @@ runTests([
         'extensions/api_test/webrequest/cors/fetch.html?path=reject'));
   },
   function testCorsPreflightWithoutExtraHeaders() {
-    if (getCorsMode() == 'network_service') {
+    if (getCorsMode() == 'network_service' && !isExtraHeadersForced()) {
       setExpectationsForNonObservablePreflight();
     } else {
       setExpectationsForObservablePreflight([]);
@@ -652,5 +638,20 @@ runTests([
     registerOnBeforeRequestAndOnErrorOcurredListeners();
     navigateAndWait(getServerURL(
         BASE + 'fetch.html?path=accept&with-preflight'));
-  }
+  },
+  function testCorsServerRedirect() {
+    const url = getServerURL('server-redirect?whatever', 'cors.example.com');
+
+    const callback = callbackPass(() => {});
+    chrome.webRequest.onHeadersReceived.addListener((details) => {
+      if (details.url === url && details.method === 'GET') {
+        callback();
+      }
+    }, {urls: ["http://*/*"]}, ['extraHeaders']);
+
+    const absPath =
+          encodeURIComponent(`/server-redirect?${encodeURIComponent(url)}`);
+    navigateAndWait(getServerURL(
+        BASE + `fetch.html?abspath=${absPath}&with-preflight`));
+  },
 ]);

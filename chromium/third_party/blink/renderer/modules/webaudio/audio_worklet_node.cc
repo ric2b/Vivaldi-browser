@@ -6,13 +6,13 @@
 
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/bindings/core/v8/serialization/serialized_script_value.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_audio_param_descriptor.h"
 #include "third_party/blink/renderer/core/messaging/message_channel.h"
 #include "third_party/blink/renderer/core/messaging/message_port.h"
 #include "third_party/blink/renderer/modules/event_modules.h"
 #include "third_party/blink/renderer/modules/webaudio/audio_buffer.h"
 #include "third_party/blink/renderer/modules/webaudio/audio_node_input.h"
 #include "third_party/blink/renderer/modules/webaudio/audio_node_output.h"
-#include "third_party/blink/renderer/modules/webaudio/audio_param_descriptor.h"
 #include "third_party/blink/renderer/modules/webaudio/audio_worklet.h"
 #include "third_party/blink/renderer/modules/webaudio/audio_worklet_processor.h"
 #include "third_party/blink/renderer/modules/webaudio/audio_worklet_processor_definition.h"
@@ -21,6 +21,7 @@
 #include "third_party/blink/renderer/platform/audio/audio_utilities.h"
 #include "third_party/blink/renderer/platform/bindings/exception_messages.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
+#include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
 #include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
 
@@ -85,16 +86,20 @@ scoped_refptr<AudioWorkletHandler> AudioWorkletHandler::Create(
 void AudioWorkletHandler::Process(uint32_t frames_to_process) {
   DCHECK(Context()->IsAudioThread());
 
+  TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("webaudio.audionode"),
+               "AudioWorkletHandler::Process");
+
   // Render and update the node state when the processor is ready with no error.
   // We also need to check if the global scope is valid before we request
   // the rendering in the AudioWorkletGlobalScope.
   if (processor_ && !processor_->hasErrorOccured()) {
-    Vector<AudioBus*> input_buses;
+    Vector<scoped_refptr<AudioBus>> input_buses;
     Vector<AudioBus*> output_buses;
     for (unsigned i = 0; i < NumberOfInputs(); ++i) {
       // If the input is not connected, inform the processor of that
       // fact by setting the bus to null.
-      AudioBus* bus = Input(i).IsConnected() ? Input(i).Bus() : nullptr;
+      scoped_refptr<AudioBus> bus =
+          Input(i).IsConnected() ? Input(i).Bus() : nullptr;
       input_buses.push_back(bus);
     }
     for (unsigned i = 0; i < NumberOfOutputs(); ++i)
@@ -177,7 +182,7 @@ void AudioWorkletHandler::SetProcessorOnRenderThread(
     PostCrossThreadTask(
         *main_thread_task_runner_, FROM_HERE,
         CrossThreadBindOnce(
-            &AudioWorkletHandler::NotifyProcessorError, WrapRefCounted(this),
+            &AudioWorkletHandler::NotifyProcessorError, AsWeakPtr(),
             AudioWorkletProcessorErrorState::kConstructionError));
   }
 }
@@ -192,7 +197,7 @@ void AudioWorkletHandler::FinishProcessorOnRenderThread() {
     PostCrossThreadTask(
         *main_thread_task_runner_, FROM_HERE,
         CrossThreadBindOnce(&AudioWorkletHandler::NotifyProcessorError,
-                            WrapRefCounted(this), error_state));
+                            AsWeakPtr(), error_state));
   }
 
   // TODO(hongchan): After this point, The handler has no more pending activity
@@ -310,6 +315,13 @@ AudioWorkletNode* AudioWorkletNode::Create(
     return nullptr;
   }
 
+  if (context->IsContextClosed()) {
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kInvalidStateError,
+        "AudioWorkletNode cannot be created: No execution context available.");
+    return nullptr;
+  }
+
   auto* channel =
       MakeGarbageCollected<MessageChannel>(context->GetExecutionContext());
   MessagePortChannel processor_port_channel = channel->port2()->Disentangle();
@@ -383,7 +395,7 @@ scoped_refptr<AudioWorkletHandler> AudioWorkletNode::GetWorkletHandler() const {
   return WrapRefCounted(&static_cast<AudioWorkletHandler&>(Handler()));
 }
 
-void AudioWorkletNode::Trace(blink::Visitor* visitor) {
+void AudioWorkletNode::Trace(Visitor* visitor) {
   visitor->Trace(parameter_map_);
   visitor->Trace(node_port_);
   AudioNode::Trace(visitor);

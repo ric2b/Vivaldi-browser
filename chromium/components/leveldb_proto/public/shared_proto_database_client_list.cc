@@ -77,6 +77,10 @@ std::string SharedProtoDatabaseClientList::ProtoDbTypeToString(
       return "Metadata";
     case ProtoDbType::PRINT_JOB_DATABASE:
       return "PrintJobDatabase";
+    case ProtoDbType::FEED_STREAM_DATABASE:
+      return "FeedStreamDatabase";
+    case ProtoDbType::TAB_STATE_DATABASE:
+      return "TabStateDatabase";
     case ProtoDbType::LAST:
       NOTREACHED();
       return std::string();

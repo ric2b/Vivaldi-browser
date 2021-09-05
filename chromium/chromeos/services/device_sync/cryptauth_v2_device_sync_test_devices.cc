@@ -18,8 +18,8 @@ namespace chromeos {
 namespace device_sync {
 
 const char kGroupPublicKey[] = "group_key";
+const int64_t kGroupPublicKeyHash = 0xf3666041a2db06e4;
 
-// TODO(nohle): Add last update time when relevant.
 const CryptAuthDevice& GetLocalDeviceForTest() {
   static const base::NoDestructor<CryptAuthDevice> device([] {
     // Note: The local device's (Instance) ID and PII-free device name are not
@@ -38,7 +38,7 @@ const CryptAuthDevice& GetLocalDeviceForTest() {
     return CryptAuthDevice(
         cryptauthv2::GetClientAppMetadataForTest().instance_id(),
         kLocalDeviceDeviceName, kLocalDeviceDeviceSyncBetterTogetherPublicKey,
-        base::Time(), bt_metadata,
+        base::Time::FromJsTime(100), bt_metadata,
         {
             {multidevice::SoftwareFeature::kBetterTogetherHost,
              multidevice::SoftwareFeatureState::kNotSupported},
@@ -61,7 +61,6 @@ const CryptAuthDevice& GetLocalDeviceForTest() {
   return *device;
 }
 
-// TODO(nohle): Add last update time when relevant.
 const CryptAuthDevice& GetRemoteDeviceNeedsGroupPrivateKeyForTest() {
   static const base::NoDestructor<CryptAuthDevice> device([] {
     const char kRemoteDeviceNeedsGroupPrivateKeyId[] =
@@ -85,7 +84,7 @@ const CryptAuthDevice& GetRemoteDeviceNeedsGroupPrivateKeyForTest() {
         kRemoteDeviceNeedsGroupPrivateKeyId,
         kRemoteDeviceNeedsGroupPrivateKeyDeviceName,
         kRemoteDeviceNeedsGroupPrivateKeyDeviceSyncBetterTogetherPublicKey,
-        base::Time(), bt_metadata,
+        base::Time::FromJsTime(200), bt_metadata,
         {
             {multidevice::SoftwareFeature::kBetterTogetherHost,
              multidevice::SoftwareFeatureState::kEnabled},
@@ -108,7 +107,6 @@ const CryptAuthDevice& GetRemoteDeviceNeedsGroupPrivateKeyForTest() {
   return *device;
 }
 
-// TODO(nohle): Add last update time when relevant.
 const CryptAuthDevice& GetRemoteDeviceHasGroupPrivateKeyForTest() {
   static const base::NoDestructor<CryptAuthDevice> device([] {
     const char kRemoteDeviceHasGroupPrivateKeyId[] =
@@ -132,7 +130,7 @@ const CryptAuthDevice& GetRemoteDeviceHasGroupPrivateKeyForTest() {
         kRemoteDeviceHasGroupPrivateKeyId,
         kRemoteDeviceHasGroupPrivateKeyDeviceName,
         kRemoteDeviceHasGroupPrivateKeyDeviceSyncBetterTogetherPublicKey,
-        base::Time(), bt_metadata,
+        base::Time::FromJsTime(300), bt_metadata,
         {
             {multidevice::SoftwareFeature::kBetterTogetherHost,
              multidevice::SoftwareFeatureState::kNotSupported},

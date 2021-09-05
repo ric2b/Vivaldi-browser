@@ -10,7 +10,10 @@
 Polymer({
   is: 'settings-autofill-page',
 
-  behaviors: [PrefsBehavior],
+  behaviors: [
+    PrefsBehavior,
+    PasswordCheckBehavior,
+  ],
 
   properties: {
     /** @private Filter applied to passwords and password exceptions. */
@@ -19,7 +22,7 @@ Polymer({
     /** @private {!Map<string, string>} */
     focusConfig_: {
       type: Object,
-      value: function() {
+      value() {
         const map = new Map();
         if (settings.routes.PASSWORDS) {
           map.set(settings.routes.PASSWORDS.path, '#passwordManagerButton');
@@ -34,6 +37,12 @@ Polymer({
         return map;
       },
     },
+
+    /** @private */
+    passwordManagerSubLabel_: {
+      type: String,
+      computed: 'computePasswordManagerSubLabel_(compromisedPasswordsCount)',
+    }
   },
 
   /**
@@ -41,16 +50,16 @@ Polymer({
    * @param {!Event} event
    * @private
    */
-  onAddressesClick_: function(event) {
-    settings.navigateTo(settings.routes.ADDRESSES);
+  onAddressesClick_(event) {
+    settings.Router.getInstance().navigateTo(settings.routes.ADDRESSES);
   },
 
   /**
    * Shows the manage payment methods sub page.
    * @private
    */
-  onPaymentsClick_: function() {
-    settings.navigateTo(settings.routes.PAYMENTS);
+  onPaymentsClick_() {
+    settings.Router.getInstance().navigateTo(settings.routes.PAYMENTS);
   },
 
   /**
@@ -58,11 +67,25 @@ Polymer({
    * the Google Password Manager page.
    * @private
    */
-  onPasswordsClick_: function() {
+  onPasswordsClick_() {
     PasswordManagerImpl.getInstance().recordPasswordsPageAccessInSettings();
     loadTimeData.getBoolean('navigateToGooglePasswordManager') ?
         settings.OpenWindowProxyImpl.getInstance().openURL(
             loadTimeData.getString('googlePasswordManagerUrl')) :
-        settings.navigateTo(settings.routes.PASSWORDS);
+        settings.Router.getInstance().navigateTo(settings.routes.PASSWORDS);
+  },
+
+  /**
+   * @return {string} The sub-title message indicating the result of password
+   * check.
+   * @private
+   */
+  computePasswordManagerSubLabel_() {
+    if (!loadTimeData.getBoolean('enablePasswordCheck')) {
+      return '';
+    }
+
+    return this.leakedPasswords.length > 0 ? this.compromisedPasswordsCount :
+                                             '';
   },
 });

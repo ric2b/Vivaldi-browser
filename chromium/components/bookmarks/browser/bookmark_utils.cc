@@ -34,6 +34,8 @@
 #include "ui/base/models/tree_node_iterator.h"
 #include "url/gurl.h"
 
+#include "components/bookmarks/vivaldi_bookmark_kit.h"
+
 using base::Time;
 
 namespace bookmarks {
@@ -182,9 +184,12 @@ void GetBookmarksMatchingPropertiesImpl(
     if ((!query_words.empty() &&
          !DoesBookmarkContainWords(node->GetTitle(), node->url(),
                                    query_words) &&
-         !DoesBookmarkTextContainWords(node->GetNickName(), query_words) &&
-         !DoesBookmarkTextContainWords(node->GetDescription(), query_words)
-         ) ||
+         !DoesBookmarkTextContainWords(
+             base::UTF8ToUTF16(vivaldi_bookmark_kit::GetNickname(node)),
+             query_words) &&
+         !DoesBookmarkTextContainWords(
+             base::UTF8ToUTF16(vivaldi_bookmark_kit::GetDescription(node)),
+             query_words)) ||
         model->is_permanent_node(node)) {
       continue;
     }
@@ -326,7 +331,7 @@ std::vector<const BookmarkNode*> GetMostRecentlyModifiedUserFolders(
     size_t max_count) {
   std::vector<const BookmarkNode*> nodes;
   ui::TreeNodeIterator<const BookmarkNode> iterator(
-      model->root_node(), base::Bind(&PruneInvisibleFolders));
+      model->root_node(), base::BindRepeating(&PruneInvisibleFolders));
 
   while (iterator.has_next()) {
     const BookmarkNode* parent = iterator.Next();

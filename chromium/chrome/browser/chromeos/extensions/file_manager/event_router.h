@@ -31,7 +31,7 @@
 #include "components/arc/intent_helper/arc_intent_helper_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "services/network/public/cpp/network_connection_tracker.h"
-#include "storage/browser/fileapi/file_system_operation.h"
+#include "storage/browser/file_system/file_system_operation.h"
 
 class PrefChangeRegistrar;
 class Profile;
@@ -121,10 +121,18 @@ class EventRouter
                        const Volume& volume) override;
   void OnVolumeUnmounted(chromeos::MountError error_code,
                          const Volume& volume) override;
-  void OnFormatStarted(const std::string& device_path, bool success) override;
-  void OnFormatCompleted(const std::string& device_path, bool success) override;
-  void OnRenameStarted(const std::string& device_path, bool success) override;
-  void OnRenameCompleted(const std::string& device_path, bool success) override;
+  void OnFormatStarted(const std::string& device_path,
+                       const std::string& device_label,
+                       bool success) override;
+  void OnFormatCompleted(const std::string& device_path,
+                         const std::string& device_label,
+                         bool success) override;
+  void OnRenameStarted(const std::string& device_path,
+                       const std::string& device_label,
+                       bool success) override;
+  void OnRenameCompleted(const std::string& device_path,
+                         const std::string& device_label,
+                         bool success) override;
   // Set custom dispatch directory change event implementation for testing.
   void SetDispatchDirectoryChangeEventImplForTesting(
       const DispatchDirectoryChangeEventImplCallback& callback);

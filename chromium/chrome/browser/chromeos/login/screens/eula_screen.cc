@@ -29,8 +29,20 @@ bool g_usage_statistics_reporting_enabled = true;
 
 }  // namespace
 
+// static
+std::string EulaScreen::GetResultString(Result result) {
+  switch (result) {
+    case Result::ACCEPTED_WITH_USAGE_STATS_REPORTING:
+      return "AcceptedWithStats";
+    case Result::ACCEPTED_WITHOUT_USAGE_STATS_REPORTING:
+      return "AcceptedWithoutStats";
+    case Result::BACK:
+      return "Back";
+  }
+}
+
 EulaScreen::EulaScreen(EulaView* view, const ScreenExitCallback& exit_callback)
-    : BaseScreen(EulaView::kScreenId),
+    : BaseScreen(EulaView::kScreenId, OobeScreenPriority::DEFAULT),
       view_(view),
       exit_callback_(exit_callback),
       password_fetcher_(this) {
@@ -66,17 +78,16 @@ void EulaScreen::OnViewDestroyed(EulaView* view) {
     view_ = NULL;
 }
 
-void EulaScreen::Show() {
+void EulaScreen::ShowImpl() {
   // Command to own the TPM.
-  CryptohomeClient::Get()->TpmCanAttemptOwnership(
-      EmptyVoidDBusMethodCallback());
+  CryptohomeClient::Get()->TpmCanAttemptOwnership(base::DoNothing());
   if (WizardController::UsingHandsOffEnrollment())
     OnUserAction(kUserActionAcceptButtonClicked);
   else if (view_)
     view_->Show();
 }
 
-void EulaScreen::Hide() {
+void EulaScreen::HideImpl() {
   if (view_)
     view_->Hide();
 }

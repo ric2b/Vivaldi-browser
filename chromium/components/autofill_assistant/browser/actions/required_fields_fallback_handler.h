@@ -18,10 +18,6 @@
 #include "components/autofill_assistant/browser/actions/action.h"
 #include "components/autofill_assistant/browser/batch_element_checker.h"
 
-namespace autofill {
-class AutofillProfile;
-}  // namespace autofill
-
 namespace autofill_assistant {
 class ClientStatus;
 
@@ -31,18 +27,17 @@ class RequiredFieldsFallbackHandler {
  public:
   enum FieldValueStatus { UNKNOWN, EMPTY, NOT_EMPTY };
   struct RequiredField {
+    RequiredField();
+    ~RequiredField();
+    RequiredField(const RequiredField& copy);
+
     Selector selector;
-    bool simulate_key_presses = false;
+    KeyboardValueFillStrategy fill_strategy;
+    DropdownSelectStrategy select_strategy;
     int delay_in_millisecond = 0;
     bool forced = false;
     FieldValueStatus status = UNKNOWN;
-
-    // When filling in credit card, card_field must be set. When filling in
-    // address, address_field must be set.
-    UseAddressProto::RequiredField::AddressField address_field =
-        UseAddressProto::RequiredField::UNDEFINED;
-    UseCreditCardProto::RequiredField::CardField card_field =
-        UseCreditCardProto::RequiredField::UNDEFINED;
+    std::string value_expression;
 
     // Returns true if fallback is required for this field.
     bool ShouldFallback(bool has_fallback_data) const {
@@ -56,17 +51,18 @@ class RequiredFieldsFallbackHandler {
   // TODO(marianfe): Refactor this to use a map instead.
   struct FallbackData {
     FallbackData();
-    ~FallbackData() = default;
+    ~FallbackData();
 
-    // autofill profile.
-    const autofill::AutofillProfile* profile;
+    // The key of the map. Should be either an entry of  field_types.h or an
+    // enum of Use*Action::AutofillAssistantCustomField.
+    std::map<int, std::string> field_values;
 
-    // Card information for UseCreditCard fallback.
-    std::string cvc;
-    std::string card_holder_name;
-    std::string card_number;
-    int expiration_year = 0;
-    int expiration_month = 0;
+    void AddFormGroup(const autofill::FormGroup& form_group);
+
+    base::Optional<std::string> GetValue(int key);
+
+    base::Optional<std::string> EvaluateExpression(
+        const std::string& value_expression);
 
    private:
     DISALLOW_COPY_AND_ASSIGN(FallbackData);
@@ -74,12 +70,6 @@ class RequiredFieldsFallbackHandler {
 
   explicit RequiredFieldsFallbackHandler(
       const std::vector<RequiredField>& required_fields,
-      base::RepeatingCallback<std::string(const RequiredField&,
-                                          const FallbackData&)>
-          field_value_getter,
-      base::OnceCallback<void(const ClientStatus&,
-                              const base::Optional<ClientStatus>&)>
-          status_update_callback,
       ActionDelegate* delegate);
   ~RequiredFieldsFallbackHandler();
 
@@ -88,7 +78,10 @@ class RequiredFieldsFallbackHandler {
   // action.
   void CheckAndFallbackRequiredFields(
       const ClientStatus& initial_autofill_status,
-      std::unique_ptr<FallbackData> fallback_data);
+      std::unique_ptr<FallbackData> fallback_data,
+      base::OnceCallback<void(const ClientStatus&,
+                              const base::Optional<ClientStatus>&)>
+          status_update_callback);
 
  private:
   // Check whether all required fields have a non-empty value. If it is the
@@ -116,18 +109,21 @@ class RequiredFieldsFallbackHandler {
       size_t required_fields_index,
       std::unique_ptr<FallbackData> fallback_data);
 
+  // Called after retrieving tag name from a field.
+  void OnGetFallbackFieldTag(size_t required_fields_index,
+                             std::unique_ptr<FallbackData> fallback_data,
+                             const ClientStatus& element_tag_status,
+                             const std::string& element_tag);
+
   // Called after trying to set form values without Autofill in case of fallback
   // after failed validation.
   void OnSetFallbackFieldValue(size_t required_fields_index,
                                std::unique_ptr<FallbackData> fallback_data,
                                const ClientStatus& status);
 
-  ClientStatus initial_autofill_status_;
+  ClientStatus client_status_;
 
   std::vector<RequiredField> required_fields_;
-  base::RepeatingCallback<std::string(const RequiredField&,
-                                      const FallbackData&)>
-      field_value_getter_;
   base::OnceCallback<void(const ClientStatus&,
                           const base::Optional<ClientStatus>&)>
       status_update_callback_;

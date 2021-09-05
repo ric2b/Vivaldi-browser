@@ -175,6 +175,13 @@ class AutomationInternalCustomBindings : public ObjectBackedNativeHandler {
                        int end,
                        int width,
                        int height));
+  void RouteNodeIDPlusEventFunction(
+      const std::string& name,
+      void (*callback)(v8::Isolate* isolate,
+                       v8::ReturnValue<v8::Value> result,
+                       AutomationAXTreeWrapper* tree_wrapper,
+                       ui::AXNode* node,
+                       ax::mojom::Event event_type));
 
   //
   // Access the cached accessibility trees and properties of their nodes.
@@ -190,6 +197,13 @@ class AutomationInternalCustomBindings : public ObjectBackedNativeHandler {
   // Args: string ax_tree_id, int node_id
   // Returns: JS object with a string key for each state flag that's set.
   void GetState(const v8::FunctionCallbackInfo<v8::Value>& args);
+
+  // Creates the backing AutomationPosition native object given a request from
+  // javascript.
+  // Args: string ax_tree_id, int node_id, int offset, bool is_downstream
+  // Returns: JS object with bindings back to the native AutomationPosition.
+  void CreateAutomationPosition(
+      const v8::FunctionCallbackInfo<v8::Value>& args);
 
   //
   // Helper functions.

@@ -77,8 +77,8 @@ class MODULES_EXPORT WebSocketChannel
   virtual SendResult Send(const std::string&,
                           base::OnceClosure completion_callback) = 0;
   virtual SendResult Send(const DOMArrayBuffer&,
-                          unsigned byte_offset,
-                          unsigned byte_length,
+                          size_t byte_offset,
+                          size_t byte_length,
                           base::OnceClosure completion_callback) = 0;
 
   // Blobs are always sent asynchronously. No callers currently need completion
@@ -115,7 +115,7 @@ class MODULES_EXPORT WebSocketChannel
   // to indicate that they are ready to receive new messages.
   virtual void RemoveBackpressure() = 0;
 
-  virtual void Trace(blink::Visitor* visitor) {}
+  virtual void Trace(Visitor* visitor) {}
 
  private:
   DISALLOW_COPY_AND_ASSIGN(WebSocketChannel);

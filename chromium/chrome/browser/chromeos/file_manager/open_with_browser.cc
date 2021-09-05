@@ -13,6 +13,7 @@
 #include "base/path_service.h"
 #include "base/stl_util.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/drive/drive_integration_service.h"
 #include "chrome/browser/chromeos/file_manager/filesystem_api_util.h"
@@ -106,7 +107,7 @@ void OpenNewTab(Profile* profile, const GURL& url) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   // Check the validity of the pointer so that the closure from
-  // base::Bind(&OpenNewTab, profile) can be passed between threads.
+  // base::BindOnce(&OpenNewTab, profile) can be passed between threads.
   if (!g_browser_process->profile_manager()->IsValidProfile(profile))
     return;
 
@@ -132,8 +133,8 @@ GURL ReadUrlFromGDocAsync(const base::FilePath& file_path) {
 
 // Parse a local file to extract the Docs url and open this url.
 void OpenGDocUrlFromFile(const base::FilePath& file_path, Profile* profile) {
-  base::PostTaskAndReplyWithResult(
-      FROM_HERE, {base::ThreadPool(), base::MayBlock()},
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock()},
       base::BindOnce(&ReadUrlFromGDocAsync, file_path),
       base::BindOnce(&OpenNewTab, profile));
 }

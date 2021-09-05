@@ -37,6 +37,7 @@
 #include "extensions/browser/extension_host.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
+#include "extensions/browser/extension_util.h"
 #include "extensions/browser/extensions_browser_client.h"
 #include "extensions/browser/lazy_context_id.h"
 #include "extensions/browser/lazy_context_task_queue.h"
@@ -265,12 +266,13 @@ ProcessManager::ProcessManager(BrowserContext* context,
   DCHECK_EQ(original_context, extension_registry_->browser_context());
   extension_registry_->AddObserver(this);
 
+  // Only the original profile needs to listen for ready to create background
+  // pages for all spanning extensions.
   if (!context->IsOffTheRecord()) {
-    // Only the original profile needs to listen for ready to create background
-    // pages for all spanning extensions.
-    registrar_.Add(this,
-                 extensions::NOTIFICATION_EXTENSIONS_READY_DEPRECATED,
-                 content::Source<BrowserContext>(original_context));
+    ExtensionSystem::Get(context)->ready().Post(
+        FROM_HERE,
+        base::Bind(&ProcessManager::MaybeCreateStartupBackgroundHosts,
+                   weak_ptr_factory_.GetWeakPtr()));
   }
   registrar_.Add(this,
                  extensions::NOTIFICATION_EXTENSION_HOST_DESTROYED,
@@ -291,6 +293,9 @@ void ProcessManager::Shutdown() {
   DCHECK(background_hosts_.empty());
   content::DevToolsAgentHost::RemoveObserver(this);
   site_instance_ = nullptr;
+
+  for (auto& observer : observer_list_)
+    observer.OnProcessManagerShutdown(this);
 }
 
 void ProcessManager::RegisterRenderFrameHost(
@@ -395,6 +400,9 @@ void ProcessManager::MaybeCreateStartupBackgroundHosts() {
   if (startup_background_hosts_created_)
     return;
 
+  if (!ExtensionSystem::Get(browser_context_)->ready().is_signaled())
+    return;
+
   // The embedder might disallow background pages entirely.
   ProcessManagerDelegate* delegate =
       ExtensionsBrowserClient::Get()->GetProcessManagerDelegate();
@@ -411,19 +419,6 @@ void ProcessManager::MaybeCreateStartupBackgroundHosts() {
 
   CreateStartupBackgroundHosts();
   startup_background_hosts_created_ = true;
-
-  // Background pages should only be loaded once. To prevent any further loads
-  // occurring, we remove the notification listeners.
-  BrowserContext* original_context =
-      ExtensionsBrowserClient::Get()->GetOriginalContext(browser_context_);
-  if (registrar_.IsRegistered(
-          this,
-          extensions::NOTIFICATION_EXTENSIONS_READY_DEPRECATED,
-          content::Source<BrowserContext>(original_context))) {
-    registrar_.Remove(this,
-                      extensions::NOTIFICATION_EXTENSIONS_READY_DEPRECATED,
-                      content::Source<BrowserContext>(original_context));
-  }
 }
 
 ExtensionHost* ProcessManager::GetBackgroundHostForExtension(
@@ -651,13 +646,6 @@ void ProcessManager::Observe(int type,
                              const content::NotificationDetails& details) {
   TRACE_EVENT0("browser,startup", "ProcessManager::Observe");
   switch (type) {
-    case extensions::NOTIFICATION_EXTENSIONS_READY_DEPRECATED: {
-      // TODO(jamescook): Convert this to use ExtensionSystem::ready() instead
-      // of a notification.
-      SCOPED_UMA_HISTOGRAM_TIMER("Extensions.ProcessManagerStartupHostsTime");
-      MaybeCreateStartupBackgroundHosts();
-      break;
-    }
     case extensions::NOTIFICATION_EXTENSION_HOST_DESTROYED: {
       ExtensionHost* host = content::Details<ExtensionHost>(details).ptr();
       if (background_hosts_.erase(host)) {
@@ -698,6 +686,7 @@ void ProcessManager::OnExtensionUnloaded(BrowserContext* browser_context,
 }
 
 void ProcessManager::CreateStartupBackgroundHosts() {
+  SCOPED_UMA_HISTOGRAM_TIMER("Extensions.ProcessManagerStartupHostsTime2");
   DCHECK(!startup_background_hosts_created_);
   for (const scoped_refptr<const Extension>& extension :
            extension_registry_->enabled_extensions()) {
@@ -785,8 +774,7 @@ std::string ProcessManager::IncrementServiceWorkerKeepaliveCount(
 
   std::string request_uuid = base::GenerateGUID();
   content::ServiceWorkerContext* service_worker_context =
-      content::BrowserContext::GetStoragePartitionForSite(browser_context_,
-                                                          extension->url())
+      util::GetStoragePartitionForExtensionId(extension->id(), browser_context_)
           ->GetServiceWorkerContext();
 
   if (content::ServiceWorkerContext::IsServiceWorkerOnUIEnabled()) {
@@ -851,8 +839,7 @@ void ProcessManager::DecrementServiceWorkerKeepaliveCount(
 
   int64_t service_worker_version_id = worker_id.version_id;
   content::ServiceWorkerContext* service_worker_context =
-      content::BrowserContext::GetStoragePartitionForSite(browser_context_,
-                                                          extension->url())
+      util::GetStoragePartitionForExtensionId(extension->id(), browser_context_)
           ->GetServiceWorkerContext();
 
   if (content::ServiceWorkerContext::IsServiceWorkerOnUIEnabled()) {
@@ -1027,6 +1014,8 @@ void ProcessManager::RenderProcessExited(
 void ProcessManager::UnregisterServiceWorker(const WorkerId& worker_id) {
   // TODO(lazyboy): DCHECK that |worker_id| exists in |all_extension_workers_|.
   all_extension_workers_.Remove(worker_id);
+  for (auto& observer : observer_list_)
+    observer.OnServiceWorkerUnregistered(worker_id);
 }
 
 bool ProcessManager::HasServiceWorker(const WorkerId& worker_id) const {

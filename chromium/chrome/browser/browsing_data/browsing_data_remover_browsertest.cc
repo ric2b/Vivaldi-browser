@@ -37,7 +37,6 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/signin/account_reconcilor_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
-#include "chrome/browser/signin/scoped_account_consistency.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/pref_names.h"
@@ -522,8 +521,6 @@ class BrowsingDataRemoverBrowserTest : public InProcessBrowserTest {
     Profile* profile = GetBrowser()->profile();
     content::StoragePartition* storage_partition =
         content::BrowserContext::GetDefaultStoragePartition(profile);
-    content::IndexedDBContext* indexed_db_context =
-        storage_partition->GetIndexedDBContext();
     content::ServiceWorkerContext* service_worker_context =
         storage_partition->GetServiceWorkerContext();
     content::CacheStorageContext* cache_storage_context =
@@ -533,10 +530,10 @@ class BrowsingDataRemoverBrowserTest : public InProcessBrowserTest {
     auto container = std::make_unique<LocalDataContainer>(
         new BrowsingDataCookieHelper(storage_partition),
         new BrowsingDataDatabaseHelper(profile),
-        new BrowsingDataLocalStorageHelper(profile),
+        new browsing_data::LocalStorageHelper(profile),
         /*session_storage_helper=*/nullptr,
         new BrowsingDataAppCacheHelper(storage_partition->GetAppCacheService()),
-        new BrowsingDataIndexedDBHelper(indexed_db_context),
+        new BrowsingDataIndexedDBHelper(storage_partition),
         BrowsingDataFileSystemHelper::Create(file_system_context),
         BrowsingDataQuotaHelper::Create(profile),
         new BrowsingDataServiceWorkerHelper(service_worker_context),
@@ -587,9 +584,6 @@ class DiceBrowsingDataRemoverBrowserTest
         identity_manager->HasAccountWithRefreshToken(account_info.account_id));
     return account_info;
   }
-
- private:
-  ScopedAccountConsistencyDice dice_;
 };
 #endif
 
@@ -953,7 +947,7 @@ IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest, HistoryDeletion) {
   // Create a new tab to avoid confusion from having a NTP navigation entry.
   ui_test_utils::NavigateToURLWithDisposition(
       GetBrowser(), url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
-      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
   EXPECT_FALSE(HasDataForType(kType));
   SetDataForType(kType);
   EXPECT_TRUE(HasDataForType(kType));
@@ -1308,10 +1302,18 @@ IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest,
   // payment handler, content settings, autofill, ...?
 }
 
+// PRE_StorageRemovedFromDisk fails on Chrome OS. http://crbug.com/1035156.
+#if defined(OS_CHROMEOS)
+#define MAYBE_PRE_StorageRemovedFromDisk DISABLED_PRE_StorageRemovedFromDisk
+#define MAYBE_StorageRemovedFromDisk DISABLED_StorageRemovedFromDisk
+#else
+#define MAYBE_PRE_StorageRemovedFromDisk PRE_StorageRemovedFromDisk
+#define MAYBE_StorageRemovedFromDisk StorageRemovedFromDisk
+#endif
 // Restart after creating the data to ensure that everything was written to
 // disk.
 IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest,
-                       PRE_StorageRemovedFromDisk) {
+                       MAYBE_PRE_StorageRemovedFromDisk) {
   EXPECT_EQ(1, GetSiteDataCount());
   // Expect all datatypes from above except SessionStorage. SessionStorage is
   // not supported by the CookieTreeModel yet.
@@ -1326,7 +1328,8 @@ IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest,
 
 // Check if any data remains after a deletion and a Chrome restart to force
 // all writes to be finished.
-IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest, StorageRemovedFromDisk) {
+IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest,
+                       MAYBE_StorageRemovedFromDisk) {
   // Deletions should remove all traces of browsing data from disk
   // but there are a few bugs that need to be fixed.
   // Any addition to this list must have an associated TODO().
@@ -1371,7 +1374,7 @@ IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest,
   // not supported by the CookieTreeModel yet.
   ExpectCookieTreeModelCount(kSessionOnlyStorageTestTypes.size() - 1);
   HostContentSettingsMapFactory::GetForProfile(GetBrowser()->profile())
-      ->SetDefaultContentSetting(CONTENT_SETTINGS_TYPE_COOKIES,
+      ->SetDefaultContentSetting(ContentSettingsType::COOKIES,
                                  CONTENT_SETTING_SESSION_ONLY);
 }
 
@@ -1389,6 +1392,6 @@ IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest,
 
 // Some storage backend use a different code path for full deletions and
 // partial deletions, so we need to test both.
-INSTANTIATE_TEST_SUITE_P(/* no prefix */,
+INSTANTIATE_TEST_SUITE_P(All,
                          BrowsingDataRemoverBrowserTestP,
                          ::testing::Values(base::Time(), kLastHour));

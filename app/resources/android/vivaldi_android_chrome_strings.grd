@@ -3,25 +3,16 @@
 <grit base_dir="." latest_public_release="0" current_release="1"
       source_lang_id="en" enc_check="möl">
   <outputs>
-    <output filename="values-af/android_chrome_strings.xml" lang="af" type="android" />
-    <output filename="values-be/android_chrome_strings.xml" lang="be" type="android" />
     <output filename="values-eo/android_chrome_strings.xml" lang="eo" type="android" />
     <output filename="values-de-rCH/android_chrome_strings.xml" lang="de-CH" type="android" />
     <output filename="values-es-rPE/android_chrome_strings.xml" lang="es-PE" type="android" />
-    <output filename="values-eu/android_chrome_strings.xml" lang="eu" type="android" />
     <output filename="values-fy/android_chrome_strings.xml" lang="fy" type="android" />
     <output filename="values-gd/android_chrome_strings.xml" lang="gl" type="android" />
-    <output filename="values-gl/android_chrome_strings.xml" lang="gl" type="android" />
-    <output filename="values-hy/android_chrome_strings.xml" lang="hy" type="android" />
     <output filename="values-io/android_chrome_strings.xml" lang="io" type="android" />
-    <output filename="values-is/android_chrome_strings.xml" lang="is" type="android" />
     <output filename="values-ja-rKS/android_chrome_strings.xml" lang="ja-KS" type="android" />
     <output filename="values-jbo/android_chrome_strings.xml" lang="jbo" type="android" />
-    <output filename="values-ka/android_chrome_strings.xml" lang="ka" type="android" />
     <output filename="values-ku/android_chrome_strings.xml" lang="ku" type="android" />
-    <output filename="values-mk/android_chrome_strings.xml" lang="mk" type="android" />
     <output filename="values-sc/android_chrome_strings.xml" lang="sc" type="android" />
-    <output filename="values-sq/android_chrome_strings.xml" lang="sq" type="android" />
     <output filename="values-nn/android_chrome_strings.xml" lang="nn" type="android" />
   </outputs>
   <translations>
@@ -97,6 +88,24 @@
     <file path="strings/vivaldi_android_chrome_strings_sc.xtb" lang="sc" />
     <file path="strings/vivaldi_android_chrome_strings_sq.xtb" lang="sq" />
     <file path="strings/vivaldi_android_chrome_strings_nn.xtb" lang="nn" />
+    <file path="strings/vivaldi_android_chrome_strings_as.xtb" lang="as" />
+    <file path="strings/vivaldi_android_chrome_strings_az.xtb" lang="az" />
+    <file path="strings/vivaldi_android_chrome_strings_bs.xtb" lang="bs" />
+    <file path="strings/vivaldi_android_chrome_strings_fr-CA.xtb" lang="fr-CA" />
+    <file path="strings/vivaldi_android_chrome_strings_kk.xtb" lang="kk" />
+    <file path="strings/vivaldi_android_chrome_strings_km.xtb" lang="km" />
+    <file path="strings/vivaldi_android_chrome_strings_ky.xtb" lang="ky" />
+    <file path="strings/vivaldi_android_chrome_strings_lo.xtb" lang="lo" />
+    <file path="strings/vivaldi_android_chrome_strings_mn.xtb" lang="mn" />
+    <file path="strings/vivaldi_android_chrome_strings_my.xtb" lang="my" />
+    <file path="strings/vivaldi_android_chrome_strings_ne.xtb" lang="ne" />
+    <file path="strings/vivaldi_android_chrome_strings_or.xtb" lang="or" />
+    <file path="strings/vivaldi_android_chrome_strings_pa.xtb" lang="pa" />
+    <file path="strings/vivaldi_android_chrome_strings_si.xtb" lang="si" />
+    <file path="strings/vivaldi_android_chrome_strings_ur.xtb" lang="ur" />
+    <file path="strings/vivaldi_android_chrome_strings_uz.xtb" lang="uz" />
+    <file path="strings/vivaldi_android_chrome_strings_zh-HK.xtb" lang="zh-HK" />
+    <file path="strings/vivaldi_android_chrome_strings_zu.xtb" lang="zu" />
   </translations>
   <release seq="1" allow_pseudo="false">
     <messages fallback_to_english="true">
@@ -111,7 +120,7 @@
       <message name="IDS_FRE_WELCOME" desc="Text for greeting the user on Vivaldi first-run">
         Welcome to Vivaldi
       </message>
-      <message name="IDS_FRE_TOS_AND_PRIVACY" desc="Message explaining that use of Vivaldi is governed by Vivaldi's EULA and privacy policy.">
+      <message name="IDS_FRE_TOS" desc="Message explaining that use of Vivaldi is governed by Vivaldi's EULA and privacy policy.">
         By using this application, you agree to Vivaldi’s <ph name="BEGIN_LINK1">&lt;LINK1&gt;</ph>End User License Agreement<ph name="END_LINK1">&lt;/LINK1&gt;</ph> and <ph name="BEGIN_LINK2">&lt;LINK2&gt;</ph>Privacy Policy<ph name="END_LINK2">&lt;/LINK2&gt;</ph>.
       </message>
       <message name="IDS_TERMS_OF_SERVICE_TITLE" desc="Title for the Vivaldi EULA">
@@ -120,10 +129,10 @@
       <message name="IDS_PRIVACY_NOTICE_TITLE" desc="Title for the Vivaldi Browser Privacy Policy">
         Browser Privacy Policy
       </message>
-      <message name="IDS_CHROME_PRIVACY_NOTICE_URL" desc="URL for the Vivaldi privacy notice" translateable="false">
+      <message name="IDS_CHROME_ADDITIONAL_TERMS_OF_SERVICE_URL" desc="URL for the Vivaldi privacy notice" translateable="false">
         https://vivaldi.com/privacy/browser/
       </message>
-      <message name="IDS_CHROME_TERMS_OF_SERVICE_URL" desc="URL for the Vivaldi EULA" translateable="false">
+      <message name="IDS_GOOGLE_TERMS_OF_SERVICE_URL" desc="URL for the Vivaldi EULA" translateable="false">
         https://vivaldi.com/privacy/vivaldi-end-user-license-agreement/
       </message>
       <message name="IDS_PREFS_ABOUT_CHROME" desc="Title for the About Vivaldi page in Settings. [CHAR-LIMIT=32]">
@@ -149,6 +158,12 @@ To adjust your search term, long press to select. To refine your search, slide t
       </message>
       <message name="IDS_ACCESSIBILITY_TOOLBAR_BTN_CLOSE_ALL_INCOGNITO_TABS" desc="Content description for the close all private tabs button.">
         Close all private tabs
+      </message>
+      <message name="IDS_ACCESSIBILITY_TOOLBAR_BTN_TRACKER_SHIELD" desc="Content description for the tracker shield button.">
+        Block trackers
+      </message>
+      <message name="IDS_ACCESSIBILITY_TOOLBAR_BTN_MODEL_SELECTOR" desc="Content description for the model selector button.">
+        Toggle normal/private tabs
       </message>
       <message name="IDS_CLOSE_ALL_INCOGNITO_NOTIFICATION_TITLE" desc="Title on the notification that closes all private tabs on Android N+.">
         Private Tabs

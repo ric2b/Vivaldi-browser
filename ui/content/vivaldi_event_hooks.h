@@ -4,7 +4,7 @@
 #define UI_CONTENT_VIVALDI_EVENT_HOOKS_H_
 
 #include "base/supports_user_data.h"
-#include "chromium/content/common/content_export.h"
+#include "chromium/content/common/content_export.h" // nogncheck
 #include "third_party/blink/public/platform/web_drag_operation.h"
 
 namespace blink {

@@ -21,14 +21,17 @@ enum MetricsNameIndex {
   UMA_UNSUPPORTED_LANGUAGE_AT_INITIATION,
   UMA_TRANSLATE_SOURCE_LANGUAGE,
   UMA_TRANSLATE_TARGET_LANGUAGE,
+  UMA_TRANSLATE_HREF_HINT_STATUS,
+  UMA_TRANSLATE_TARGET_LANGUAGE_ORIGIN,
   UMA_MAX,
 };
 
-// When Chrome Translate is ready to translate a page, one of following reason
-// decide the next browser action.
-// Note: Don't insert any item. It will change reporting UMA value, and break
+// When Chrome Translate is ready to translate a page, one of following reasons
+// decides the next browser action.
+// Note: Don't insert items. It will change the reporting UMA value and break
 // the UMA dashboard page. Instead, append it at the end of enum as suggested
-// below.
+// below. Added items also need to be added to TranslateInitiationStatus in
+// enums.xml.
 enum InitiationStatusType {
   INITIATION_STATUS_DISABLED_BY_PREFS,
   INITIATION_STATUS_DISABLED_BY_SWITCH,
@@ -52,8 +55,29 @@ enum InitiationStatusType {
   INITIATION_STATUS_SHOW_UI_PREDEFINED_TARGET_LANGUAGE,
   INITIATION_STATUS_NO_NETWORK,
   INITIATION_STATUS_DOESNT_NEED_TRANSLATION,
+  INITIATION_STATUS_IDENTICAL_LANGUAGE_USE_SOURCE_LANGUAGE_UNKNOWN,
   // Insert new items here.
   INITIATION_STATUS_MAX,
+};
+
+enum class HrefTranslateStatus {
+  kAutoTranslated,
+  kAutoTranslatedDifferentTargetLanguage,
+  kNotAutoTranslated,
+  // Insert new items here. Keep in sync with HrefTranslateStatus in enums.xml
+  // when adding values.
+  kMaxValue = kNotAutoTranslated
+};
+
+enum class TargetLanguageOrigin {
+  kRecentTarget,
+  kLanguageModel,
+  kApplicationUI,
+  kAcceptLanguages,
+  kDefaultEnglish,
+  // Insert new items here. Keep in sync with TranslateTargetLanguageOrigin in
+  // enums.xml when adding values.
+  kMaxValue = kDefaultEnglish
 };
 
 // Called when Chrome Translate is initiated to report a reason of the next
@@ -80,6 +104,13 @@ void ReportTranslateSourceLanguage(const std::string& language);
 // language for the translated page. Buckets are labelled with CLD3LanguageCode
 // values.
 void ReportTranslateTargetLanguage(const std::string& language);
+
+// Called when Chrome Translate is initiated, the navigation is from Google, and
+// a href translate target is present.
+void ReportTranslateHrefHintStatus(HrefTranslateStatus status);
+
+// Called when Chrome Translate target language is determined.
+void ReportTranslateTargetLanguageOrigin(TargetLanguageOrigin origin);
 
 // Provides UMA entry names for unit tests.
 const char* GetMetricsName(MetricsNameIndex index);

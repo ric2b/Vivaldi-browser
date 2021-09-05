@@ -33,6 +33,7 @@ in the web test infrastructure.
 """
 
 import collections
+import itertools
 import json
 import logging
 import optparse
@@ -43,14 +44,14 @@ import tempfile
 from blinkpy.common import exit_codes
 from blinkpy.common import find_files
 from blinkpy.common import read_checksum_from_png
+from blinkpy.common import path_finder
 from blinkpy.common.memoized import memoized
-from blinkpy.common.path_finder import PathFinder
 from blinkpy.common.system.path import abspath_to_uri
 from blinkpy.w3c.wpt_manifest import WPTManifest, MANIFEST_NAME
 from blinkpy.web_tests.layout_package.bot_test_expectations import BotTestExpectationsFactory
 from blinkpy.web_tests.models.test_configuration import TestConfiguration
-from blinkpy.web_tests.models.test_expectations import TestExpectationParser
 from blinkpy.web_tests.models.test_run_results import TestRunException
+from blinkpy.web_tests.models.typ_types import TestExpectations, ResultType
 from blinkpy.web_tests.port import driver
 from blinkpy.web_tests.port import server_process
 from blinkpy.web_tests.port.factory import PortFactory
@@ -102,6 +103,12 @@ SXG_FINGERPRINT = '55qC1nKu2A88ESbFmk5sTPQS/ScG+8DD7P+2bgFA9iM='
 # And one for external/wpt/signed-exchange/resources/127.0.0.1.sxg.pem
 SXG_WPT_FINGERPRINT = '0Rt4mT6SJXojEMHTnKnlJ/hBKMBcI4kteBlhR1eTTdk='
 
+# A convervative rule for names that are valid for file or directory names.
+VALID_FILE_NAME_REGEX = re.compile(r'^[\w\-=]+$')
+
+# This sub directory will be inside the results directory and it will
+# contain all the disc artifacts created by web tests
+ARTIFACTS_SUB_DIR = 'layout-test-results'
 
 class Port(object):
     """Abstract class for Port-specific hooks for the web_test package."""
@@ -143,11 +150,12 @@ class Port(object):
     )
 
     CONFIGURATION_SPECIFIER_MACROS = {
-        # NOTE: We don't support specifiers for mac10.14 or mac10.15 because
-        # we don't have separate baselines for them (they share the mac10.13
+        # NOTE: We don't support specifiers for mac10.15 because
+        # we don't have separate baselines for it (it shares the mac10.14
         # results in the platform/mac directory). This list will need to be
         # updated if/when we actually have separate baselines.
-        'mac': ['retina', 'mac10.10', 'mac10.11', 'mac10.12', 'mac10.13'],
+        'mac': ['retina', 'mac10.10', 'mac10.11', 'mac10.12', 'mac10.13',
+                'mac10.14'],
         'win': ['win7', 'win10'],
         'linux': ['trusty'],
         'fuschia': ['fuchsia'],
@@ -181,6 +189,9 @@ class Port(object):
 
     # The following is used for concetenating WebDriver test names.
     WEBDRIVER_SUBTEST_SEPARATOR = '>>'
+
+    # The following is used for concetenating WebDriver test names in pytest format.
+    WEBDRIVER_SUBTEST_PYTEST_SEPARATOR = '::'
 
     # The following two constants must match. When adding a new WPT root, also
     # remember to add an alias rule to third_party/wpt/wpt.config.json.
@@ -226,7 +237,7 @@ class Port(object):
         self.host = host
         self._executive = host.executive
         self._filesystem = host.filesystem
-        self._path_finder = PathFinder(host.filesystem)
+        self._path_finder = path_finder.PathFinder(host.filesystem)
 
         self._http_server = None
         self._websocket_server = None
@@ -248,26 +259,86 @@ class Port(object):
         return 'Port{name=%s, version=%s, architecture=%s, test_configuration=%s}' % (
             self._name, self._version, self._architecture, self._test_configuration)
 
-    def primary_driver_flag(self):
-        """Returns the driver flag that is used for flag-specific expectations and baselines. This
-           is the flag in web_tests/additional-driver-flag.setting, if present, otherwise the
-           first flag passed by --additional-driver-flag.
+    def get_platform_tags(self):
+        """Returns system condition tags that are used to find active expectations
+           for a test run on a specific system"""
+        return frozenset([self._options.configuration.lower(), self._version,
+                          self.port_name, self._architecture])
+
+    @memoized
+    def _flag_specific_config_name(self):
+        """Returns the name of the flag-specific configuration which best matches
+           self._specified_additional_driver_flags(), or the first specified flag
+           with leading '-'s stripped if no match in the configuration is found.
         """
+        specified_flags = self._specified_additional_driver_flags()
+        if not specified_flags:
+            return None
+
+        best_match = None
+        configs = self._flag_specific_configs()
+        for name in configs:
+            # To match the specified flags must start with all config args.
+            args = configs[name]
+            if specified_flags[:len(args)] != args:
+                continue
+            # The first config matching the highest number of specified flags wins.
+            if not best_match or len(configs[best_match]) < len(args):
+                best_match = name
+
+        if best_match:
+            return best_match
+        # If no match, fallback to the old mode: using the name of the first specified flag.
+        return specified_flags[0].lstrip('-')
+
+    @memoized
+    def _flag_specific_configs(self):
+        """Reads configuration from FlagSpecificConfig and returns a dictionary from name to args."""
+        config_file = self._filesystem.join(self.web_tests_dir(), 'FlagSpecificConfig')
+        if not self._filesystem.exists(config_file):
+            return {}
+
+        try:
+            json_configs = json.loads(self._filesystem.read_text_file(config_file))
+        except ValueError as error:
+            raise ValueError('{} is not a valid JSON file: {}'.format(config_file, error))
+
+        configs = {}
+        for config in json_configs:
+            name = config['name']
+            args = config['args']
+            if not VALID_FILE_NAME_REGEX.match(name):
+                raise ValueError('{}: name "{}" contains invalid characters'.format(config_file, name))
+            if name in configs:
+                raise ValueError('{} contains duplicated name {}.'.format(config_file, name))
+            if args in configs.itervalues():
+                raise ValueError('{}: name "{}" has the same args as another entry.'.format(config_file, name))
+            configs[name] = args
+        return configs
+
+    def _specified_additional_driver_flags(self):
+        """Returns the list of additional driver flags specified by the user in
+           the following ways, concatenated:
+           1. Flags in web_tests/additional-driver-flag.setting.
+           2. flags expanded from --flag-specific=<name> based on flag-specific config.
+           3. Zero or more flags passed by --additional-driver-flag.
+        """
+        flags = []
         flag_file = self._filesystem.join(self.web_tests_dir(), 'additional-driver-flag.setting')
         if self._filesystem.exists(flag_file):
-            flag = self._filesystem.read_text_file(flag_file).strip()
-            if flag:
-                return flag
-        flags = self.get_option('additional_driver_flag', [])
-        if flags:
-            return flags[0]
+            flags = self._filesystem.read_text_file(flag_file).split()
+
+        flag_specific_option = self.get_option('flag_specific')
+        if flag_specific_option:
+            configs = self._flag_specific_configs()
+            assert flag_specific_option in configs, '{} is not defined in FlagSpecificConfig'.format(flag_specific_option)
+            flags += configs[flag_specific_option]
+
+        flags += self.get_option('additional_driver_flag', [])
+        return flags
 
     def additional_driver_flags(self):
-        # Clone list to avoid mutating option state.
-        flags = list(self.get_option('additional_driver_flag', []))
-
-        if flags and flags[0] == self.primary_driver_flag():
-            flags = flags[1:]
+        flags = self._specified_additional_driver_flags()
         if self.driver_name() == self.CONTENT_SHELL_NAME:
             flags += [
                 '--run-web-tests',
@@ -317,10 +388,6 @@ class Port(object):
     def default_child_processes(self):
         """Returns the number of child processes to use for this port."""
         return self._executive.cpu_count()
-
-    def max_drivers_per_process(self):
-        """Returns the maximum number of drivers a child process can use for this port."""
-        return 2
 
     def default_max_locked_shards(self):
         """Returns the number of "locked" shards to run in parallel (like the http tests)."""
@@ -720,7 +787,7 @@ class Port(object):
             return []
         wpt_path = match.group(1)
         path_in_wpt = match.group(2)
-        for expectation, ref_path_in_wpt in self._wpt_manifest(wpt_path).extract_reference_list(path_in_wpt):
+        for expectation, ref_path_in_wpt in self.wpt_manifest(wpt_path).extract_reference_list(path_in_wpt):
             ref_absolute_path = self._filesystem.join(self.web_tests_dir(), wpt_path + ref_path_in_wpt)
             reftest_list.append((expectation, ref_absolute_path))
         return reftest_list
@@ -740,18 +807,18 @@ class Port(object):
         """
         tests = self.real_tests(paths)
 
-        suites = self.virtual_test_suites()
         if paths:
-            tests.extend(self._virtual_tests_matching_paths(paths, suites))
+            tests.extend(self._virtual_tests_matching_paths(paths))
             if (any(wpt_path in path for wpt_path in self.WPT_DIRS for path in paths)
                     # TODO(robertma): Remove this special case when external/wpt is moved to wpt.
                     or any('external' in path for path in paths)):
                 tests.extend(self._wpt_test_urls_matching_paths(paths))
         else:
-            tests.extend(self._all_virtual_tests(suites))
-            tests.extend([wpt_path + self.TEST_PATH_SEPARATOR + test for wpt_path in self.WPT_DIRS
-                          for test in self._wpt_manifest(wpt_path).all_urls()])
-
+            tests.extend(self._all_virtual_tests())
+            # '/' is used instead of filesystem.sep as the WPT manifest always
+            # uses '/' for paths (it is not OS dependent).
+            tests.extend([wpt_path + '/' + test for wpt_path in self.WPT_DIRS
+                          for test in self.wpt_manifest(wpt_path).all_urls()])
         return tests
 
     def real_tests(self, paths):
@@ -807,7 +874,7 @@ class Port(object):
                 not Port.is_reference_html_file(self._filesystem, dirname, filename))
 
     @memoized
-    def _wpt_manifest(self, path):
+    def wpt_manifest(self, path):
         assert path in self.WPT_DIRS
         # Convert '/' to the platform-specific separator.
         path = self._filesystem.normpath(path)
@@ -823,7 +890,7 @@ class Port(object):
             return False
         wpt_path = match.group(1)
         path_in_wpt = match.group(2)
-        return self._wpt_manifest(wpt_path).is_slow_test(path_in_wpt)
+        return self.wpt_manifest(wpt_path).is_slow_test(path_in_wpt)
 
     def test_key(self, test_name):
         """Turns a test name into a pair of sublists: the natural sort key of the
@@ -884,7 +951,14 @@ class Port(object):
         """Returns True if the test name refers to an existing test or baseline."""
         # Used by test_expectations.py to determine if an entry refers to a
         # valid test and by printing.py to determine if baselines exist.
-        return self.is_wpt_test(test_name) or self.test_isfile(test_name) or self.test_isdir(test_name)
+        if self.is_wpt_test(test_name):
+            # A virtual WPT test must have valid virtual prefix and base.
+            if test_name.startswith('virtual/'):
+                return bool(self.lookup_virtual_test_base(test_name))
+            # Otherwise treat any WPT test as existing regardless of their real
+            # existence on the file system.
+            return True
+        return self.test_isfile(test_name) or self.test_isdir(test_name)
 
     def split_test(self, test_name):
         """Splits a test name into the 'directory' part and the 'basename' part."""
@@ -925,7 +999,7 @@ class Port(object):
     def web_tests_dir(self):
         custom_web_tests_dir = self.get_option('layout_tests_directory')
         if custom_web_tests_dir:
-            return custom_web_tests_dir
+            return  self._filesystem.abspath(custom_web_tests_dir)
         return self._path_finder.web_tests_dir()
 
     def skips_test(self, test):
@@ -979,12 +1053,9 @@ class Port(object):
         # parser, etc.) is very similar to blinkpy/w3c/test_copier.py.
         path = self.path_to_never_fix_tests_file()
         contents = self._filesystem.read_text_file(path)
-        parser = TestExpectationParser(self, all_tests=(), is_lint_mode=False)
-        expectation_lines = parser.parse(path, contents)
-        for line in expectation_lines:
-            if line.name == test and self.test_configuration() in line.matching_configurations:
-                return True
-        return False
+        test_expectations = TestExpectations(tags=self.get_platform_tags())
+        test_expectations.parse_tagged_list(contents)
+        return ResultType.Skip in test_expectations.expectations_for(test).results
 
     def path_to_never_fix_tests_file(self):
         return self._filesystem.join(self.web_tests_dir(), 'NeverFixTests')
@@ -998,8 +1069,7 @@ class Port(object):
         return self._name
 
     def operating_system(self):
-        # Subclasses should override this default implementation.
-        return 'mac'
+        raise NotImplementedError
 
     def version(self):
         """Returns a string indicating the version of a given platform
@@ -1042,10 +1112,7 @@ class Port(object):
 
     @memoized
     def args_for_test(self, test_name):
-        test_base = self.lookup_virtual_test_base(test_name)
-        if test_base:
-            return self.lookup_virtual_test_args(test_name)
-        return self.lookup_physical_test_args(test_name)
+        return self._lookup_virtual_test_args(test_name)
 
     @memoized
     def name_for_test(self, test_name):
@@ -1054,18 +1121,39 @@ class Port(object):
             return test_base
         return test_name
 
+    def bot_test_times_path(self):
+        # TODO(crbug.com/1030434): For the not_site_per_process_blink_web_tests step on linux,
+        # an exception is raised when merging the bot times json files. This happens  whenever they
+        # are outputted into the results directory. Temporarily we will return the bot times json
+        # file relative to the target directory.
+        return self._build_path('webkit_test_times', 'bot_times_ms.json')
+
     def results_directory(self):
-        """Returns the absolute path to the place to store the test results."""
+        """Returns the absolute path directory which will store all web tests outputted
+        files. It may include a sub directory for artifacts and it may store performance test results."""
         if not self._results_directory:
             option_val = self.get_option('results_directory') or self.default_results_directory()
+            # TODO(crbug.com/1027708): There are several blink tests step
+            # configuration files in the infra repository which append the
+            # layout-test-results to the value passed in for the
+            # --results-directory command line argument value. We need to
+            # remove the layout-test-results suffix for each blink tests step
+            # configuration file in the infra repository. Then we can stop
+            # removing the layout-test-results sub directory from the
+            # --results-directory command line argument value.
+            if self._filesystem.basename(option_val) == 'layout-test-results':
+                option_val = self.host.filesystem.dirname(option_val)
             self._results_directory = self._filesystem.abspath(option_val)
         return self._results_directory
 
-    def bot_test_times_path(self):
-        return self._build_path('webkit_test_times', 'bot_times_ms.json')
+    def artifacts_directory(self):
+        """Returns path to artifacts sub directory of the results directory. This
+        directory will store test artifacts, which may include actual and expected
+        output from web tests."""
+        return self._filesystem.join(self.results_directory(), ARTIFACTS_SUB_DIR)
 
     def perf_results_directory(self):
-        return self._build_path()
+        return self.results_directory()
 
     def inspector_build_directory(self):
         return self._build_path('resources', 'inspector')
@@ -1077,8 +1165,8 @@ class Port(object):
         return self._path_finder.path_from_blink_tools('apache_config')
 
     def default_results_directory(self):
-        """Returns the absolute path to the default place to store the test results."""
-        return self._build_path('layout-test-results')
+        """Returns the absolute path to the build directory."""
+        return self._build_path()
 
     def setup_test_run(self):
         """Performs port-specific work at the beginning of a test run."""
@@ -1168,27 +1256,27 @@ class Port(object):
         # be the case when the tests aren't run on the host platform.
         return False
 
-    def start_http_server(self, additional_dirs, number_of_drivers):
+    def start_http_server(self, additional_dirs, number_of_drivers, output_dir=''):
         """Start a web server. Raise an error if it can't start or is already running.
 
         Ports can stub this out if they don't need a web server to be running.
         """
         assert not self._http_server, 'Already running an http server.'
-
-        server = apache_http.ApacheHTTP(self, self.results_directory(),
+        output_dir = output_dir or self.artifacts_directory()
+        server = apache_http.ApacheHTTP(self, output_dir,
                                         additional_dirs=additional_dirs,
                                         number_of_servers=(number_of_drivers * 4))
         server.start()
         self._http_server = server
 
-    def start_websocket_server(self):
+    def start_websocket_server(self, output_dir=''):
         """Start a web server. Raise an error if it can't start or is already running.
 
         Ports can stub this out if they don't need a websocket server to be running.
         """
         assert not self._websocket_server, 'Already running a websocket server.'
-
-        server = pywebsocket.PyWebSocket(self, self.results_directory())
+        output_dir = output_dir or self.artifacts_directory()
+        server = pywebsocket.PyWebSocket(self, output_dir, python_executable=self._options.python_executable)
         server.start()
         self._websocket_server = server
 
@@ -1201,15 +1289,15 @@ class Port(object):
     def should_use_wptserve(test):
         return Port.is_wpt_test(test)
 
-    def start_wptserve(self):
+    def start_wptserve(self, output_dir=''):
         """Starts a WPT web server.
 
         Raises an error if it can't start or is already running.
         """
         assert not self._wpt_server, 'Already running a WPT server.'
-
+        output_dir = output_dir or self.artifacts_directory()
         # We currently don't support any output mechanism for the WPT server.
-        server = wptserve.WPTServe(self, self.results_directory())
+        server = wptserve.WPTServe(self, output_dir)
         server.start()
         self._wpt_server = server
 
@@ -1296,17 +1384,17 @@ class Port(object):
         return test_configurations
 
     def _flag_specific_expectations_path(self):
-        flag = self.primary_driver_flag()
-        if flag:
+        config_name = self._flag_specific_config_name()
+        if config_name:
             return self._filesystem.join(
-                self.web_tests_dir(), self.FLAG_EXPECTATIONS_PREFIX, flag.lstrip('-'))
+                self.web_tests_dir(), self.FLAG_EXPECTATIONS_PREFIX, config_name)
 
     def _flag_specific_baseline_search_path(self):
-        flag = self.primary_driver_flag()
-        if not flag:
+        config_name = self._flag_specific_config_name()
+        if not config_name:
             return []
         flag_dir = self._filesystem.join(
-            self.web_tests_dir(), 'flag-specific', flag.lstrip('-'))
+            self.web_tests_dir(), 'flag-specific', config_name)
         platform_dirs = [
             self._filesystem.join(flag_dir, 'platform', platform_dir)
             for platform_dir in self.FALLBACK_PATHS[self.version()]]
@@ -1340,6 +1428,9 @@ class Port(object):
                 _log.debug("reading additional_expectations from path '%s'", path)
                 expectations[path] = self._filesystem.read_text_file(expanded_path)
             else:
+                # TODO(rmhasan): Fix additional expectation paths for
+                # not_site_per_process_blink_web_tests, then change this back
+                # to raising exceptions for incorrect expectation paths.
                 _log.warning("additional_expectations path '%s' does not exist", path)
         return expectations
 
@@ -1347,7 +1438,7 @@ class Port(object):
         """Returns an OrderedDict of name -> expectations strings."""
         expectations = self.expectations_dict()
 
-        flag_path = self._filesystem.join(self.web_tests_dir(), 'FlagExpectations')
+        flag_path = self._filesystem.join(self.web_tests_dir(), self.FLAG_EXPECTATIONS_PREFIX)
         if not self._filesystem.exists(flag_path):
             return expectations
 
@@ -1581,14 +1672,6 @@ class Port(object):
     def sample_process(self, name, pid):
         pass
 
-    def physical_test_suites(self):
-        return [
-            # For example, to turn on force-compositing-mode in the svg/ directory:
-            # PhysicalTestSuite('svg', ['--force-compositing-mode']),
-            PhysicalTestSuite('fast/text', ['--enable-direct-write', '--enable-font-antialiasing']),
-            PhysicalTestSuite('hdr', ['--force-color-profile=scrgb-linear']),
-        ]
-
     def virtual_test_suites(self):
         if self._virtual_test_suites is None:
             path_to_virtual_test_suites = self._filesystem.join(self.web_tests_dir(), 'VirtualTestSuites')
@@ -1598,31 +1681,54 @@ class Port(object):
                 self._virtual_test_suites = []
                 for json_config in test_suite_json:
                     vts = VirtualTestSuite(**json_config)
-                    if vts in self._virtual_test_suites:
-                        raise ValueError('{} contains duplicate definition: {!r}'.format(
-                            path_to_virtual_test_suites, json_config))
+                    if any(vts.full_prefix == s.full_prefix for s in self._virtual_test_suites):
+                        raise ValueError('{} contains entries with the same prefix: {!r}. Please combine them'
+                                         .format(path_to_virtual_test_suites, json_config))
                     self._virtual_test_suites.append(vts)
             except ValueError as error:
                 raise ValueError('{} is not a valid JSON file: {}'.format(
                     path_to_virtual_test_suites, error))
         return self._virtual_test_suites
 
-    def _all_virtual_tests(self, suites):
+    def _all_virtual_tests(self):
         tests = []
-        for suite in suites:
-            self._populate_virtual_suite(suite)
-            tests.extend(suite.tests.keys())
+
+        # The set of paths to find tests for each virtual test suite.
+        suite_paths = []
+        # For each path, a map functor that converts the test path to be under
+        # the virtual test suite.
+        suite_prefixes = []
+        for suite in self.virtual_test_suites():
+            for b in suite.bases:
+                suite_paths.append(b)
+                suite_prefixes.append(suite.full_prefix)
+
+            # TODO(crbug.com/982208): If we can pass in the set of paths and
+            # maps then this could be more efficient.
+            if suite.bases:
+                tests.extend(map(lambda x : suite.full_prefix + x, self.real_tests(suite.bases)))
+
+        if suite_paths:
+            tests.extend(self._wpt_test_urls_matching_paths(suite_paths, suite_prefixes))
         return tests
 
-    def _virtual_tests_matching_paths(self, paths, suites):
+    def _all_virtual_tests_for_suite(self, suite):
+        if not suite.bases:
+            return []
         tests = []
-        paths_with_trailing_slash = [p.rstrip(self.TEST_PATH_SEPARATOR) + self.TEST_PATH_SEPARATOR for p in paths]
-        for suite in suites:
-            if (any(p.startswith(suite.name) for p in paths) or
-                    any(suite.name.startswith(p) for p in paths_with_trailing_slash)):
-                self._populate_virtual_suite(suite)
-            for test in suite.tests:
-                if any(test.startswith(p) for p in paths):
+        tests.extend(map(lambda x : suite.full_prefix + x, self.real_tests(suite.bases)))
+        tests.extend(self._wpt_test_urls_matching_paths(suite.bases,
+                                                        [suite.full_prefix] * len(suite.bases)))
+        return tests
+
+    def _virtual_tests_matching_paths(self, paths):
+        tests = []
+        normalized_paths = [self.normalize_test_name(p) for p in paths]
+        for suite in self.virtual_test_suites():
+            if not any(p.startswith(suite.full_prefix) for p in normalized_paths):
+                continue
+            for test in self._all_virtual_tests_for_suite(suite):
+                if any(test.startswith(p) for p in normalized_paths):
                     tests.append(test)
 
         if any(self._path_has_wildcard(path) for path in paths):
@@ -1633,95 +1739,112 @@ class Port(object):
     def _path_has_wildcard(self, path):
         return '*' in path
 
-    def _wpt_test_urls_matching_paths(self, paths):
-        # This is to make sure "external[\\/]?" can also match to external/wpt.
-        # TODO(robertma): Remove this special case when external/wpt is moved to wpt.
-        paths = [self._filesystem.join(path, 'wpt') if path.rstrip('\\/').endswith('external')
-                 else path for path in paths]
-        # '/' is used throughout this function instead of filesystem.sep as the WPT manifest always
-        # uses '/' for paths (it is not OS dependent).
-        if self._filesystem.sep != '/':
-            paths = [path.replace(self._filesystem.sep, '/') for path in paths]
+    def _wpt_test_urls_matching_paths(self, filter_paths, virtual_prefixes=[]):
+        """Returns a set of paths that are tests to be run from the
+        web-platform-test manifest files.
+
+        filter_paths: A list of strings that are prefix matched against the
+            list of tests in the WPT manifests. Only tests that match are returned.
+        virtual_prefixes: A list of prefixes corresponding to paths in |filter_paths|.
+            If present, each test path output should have its virtual prefix
+            prepended to the resulting path to the test.
+        """
+        # Generate the manifest files if needed and then read them. Do this once
+        # for this whole method as the file is large and generation/loading is
+        # slow.
+        wpts = [(wpt_path, self.wpt_manifest(wpt_path)) for wpt_path in self.WPT_DIRS]
+
+        _log.debug("Finding WPT tests that match %d path prefixes", len(filter_paths));
 
         tests = []
-        for wpt_path in self.WPT_DIRS:
-            tests += self._wpt_test_urls(wpt_path, paths)
-        return tests
+        # This walks through the set of paths where we should look for tests.
+        # For each path, a map can be provided that we replace 'path' with in
+        # the result.
+        for filter_path, virtual_prefix in itertools.izip_longest(filter_paths, virtual_prefixes):
+            # This is to make sure "external[\\/]?" can also match to
+            # external/wpt.
+            # TODO(robertma): Remove this special case when external/wpt is
+            # moved to wpt.
+            if filter_path.rstrip('\\/').endswith('external'):
+                filter_path = self._filesystem.join(filter_path, 'wpt')
+            # '/' is used throughout this function instead of filesystem.sep as
+            # the WPT manifest always uses '/' for paths (it is not OS
+            # dependent).
+            if self._filesystem.sep != '/':
+                filter_path = filter_path.replace(self._filesystem.sep, '/')
 
-    def _wpt_test_urls(self, wpt_path, paths):
-        tests = []
-        for test_url_path in self._wpt_manifest(wpt_path).all_urls():
-            assert not test_url_path.startswith('/')
-            full_test_url_path = wpt_path + '/' + test_url_path
+            # Drop empty path components.
+            filter_path = filter_path.replace('//', '/')
 
-            for path in paths:
-                if not path.startswith(wpt_path):
+            # We now have in |filter_path| a path to an actual test directory or file
+            # on disk, in unix format, relative to the root of the web_tests
+            # directory.
+
+            for wpt_path, wpt_manifest in wpts:
+                # If the |filter_path| is not inside a WPT dir, then we will
+                # match no tests in the manifest.
+                if not filter_path.startswith(wpt_path):
                     continue
+                # Drop the WPT prefix (including the joining '/') from |path|.
+                filter_path_from_wpt = filter_path[len(wpt_path) + 1:]
 
-                # Also remove the slash after wpt_path, if any.
-                path_in_wpt = path[len(wpt_path) + 1:]
+                # An empty filter matches everything.
+                if filter_path_from_wpt:
+                    # If the filter is to a specific test file that ends with .js,
+                    # we match that against tests with any extension by dropping
+                    # the extension from the filter.
+                    #
+                    # Else, when matching a directory, ensure the filter ends in '/'
+                    # to only match the exact directory name and not directories
+                    # with the filter as a prefix.
+                    if wpt_manifest.is_test_file(filter_path_from_wpt):
+                        filter_path_from_wpt = re.sub(r'\.js$', '.', filter_path_from_wpt)
+                    elif not wpt_manifest.is_test_url(filter_path_from_wpt):
+                        filter_path_from_wpt = filter_path_from_wpt.rstrip('/') + '/'
 
-                # When `test_url_path` is test.any.html etc., and `path_in_wpt` is test.any.js:
-                matches_any_js_test = (
-                    self._wpt_manifest(wpt_path).is_test_file(path_in_wpt)
-                    and test_url_path.startswith(re.sub(r'\.js$', '', path_in_wpt))
-                )
+                # We now have a path to an actual test directory or file on
+                # disk, in unix format, relative to the WPT directory.
+                #
+                # Look for all tests in the manifest that are under the relative
+                # |filter_path_from_wpt|.
+                for test_path_from_wpt in wpt_manifest.all_urls():
+                    assert not test_path_from_wpt.startswith('/')
+                    assert not test_path_from_wpt.endswith('/')
 
-                # For all other path matches within WPT:
-                # Get a list of directories for both paths, filter empty strings.
-                full_test_url_directories = filter(None, full_test_url_path.split('/'))
-                path_directories = filter(None, path.split('/'))
-                test_is_in_path = path_directories == full_test_url_directories[0:len(path_directories)]
+                    # Drop empty path components.
+                    test_path_from_wpt = test_path_from_wpt.replace('//', '/')
 
-                if matches_any_js_test or test_is_in_path:
-                    tests.append(full_test_url_path)
+                    if test_path_from_wpt.startswith(filter_path_from_wpt):
+                        # The result is a test path from the root web test
+                        # directory. If a |virtual_prefix| was given, we prepend
+                        # that to the result.
+                        prefix = virtual_prefix if virtual_prefix else ''
+                        tests.append(prefix + wpt_path + '/' + test_path_from_wpt)
         return tests
 
-    def _populate_virtual_suite(self, suite):
-        if not suite.tests:
-            base_tests = self.real_tests([suite.base])
-            base_tests.extend(self._wpt_test_urls_matching_paths([suite.base]))
-            suite.tests = {}
-            for test in base_tests:
-                suite.tests[test.replace(suite.base, suite.name, 1)] = test
-
-    def is_virtual_test(self, test_name):
-        return bool(self.lookup_virtual_suite(test_name))
-
-    def lookup_virtual_suite(self, test_name):
+    def _lookup_virtual_suite(self, test_name):
         for suite in self.virtual_test_suites():
-            if test_name.startswith(suite.name):
+            if test_name.startswith(suite.full_prefix):
                 return suite
         return None
 
     def lookup_virtual_test_base(self, test_name):
-        suite = self.lookup_virtual_suite(test_name)
+        suite = self._lookup_virtual_suite(test_name)
         if not suite:
             return None
-        return test_name.replace(suite.name, suite.base, 1)
+        assert test_name.startswith(suite.full_prefix)
+        maybe_base = self.normalize_test_name(test_name[len(suite.full_prefix):])
+        for base in suite.bases:
+            normalized_base = self.normalize_test_name(base)
+            if normalized_base.startswith(maybe_base) or maybe_base.startswith(normalized_base):
+                return maybe_base
+        return None
 
-    def lookup_virtual_test_args(self, test_name):
+    def _lookup_virtual_test_args(self, test_name):
+        normalized_test_name = self.normalize_test_name(test_name)
         for suite in self.virtual_test_suites():
-            if test_name.startswith(suite.name):
+            if normalized_test_name.startswith(suite.full_prefix):
                 return suite.args
-        return []
-
-    def lookup_virtual_reference_args(self, test_name):
-        for suite in self.virtual_test_suites():
-            if test_name.startswith(suite.name):
-                return suite.reference_args
-        return []
-
-    def lookup_physical_test_args(self, test_name):
-        for suite in self.physical_test_suites():
-            if test_name.startswith(suite.name):
-                return suite.args
-        return []
-
-    def lookup_physical_reference_args(self, test_name):
-        for suite in self.physical_test_suites():
-            if test_name.startswith(suite.name):
-                return suite.reference_args
         return []
 
     def _build_path(self, *comps):
@@ -1814,38 +1937,41 @@ class Port(object):
             return test_name + Port.WEBDRIVER_SUBTEST_SEPARATOR + subtest_name
         return test_name
 
+    @staticmethod
+    def split_webdriver_subtest_pytest_name(test_name):
+        """Splits a WebDriver test name in pytest format into a filename and a subtest name and
+        returns both of them. E.g.
+
+        test.py::foo.html -> (test.py, foo.html)
+        test.py           -> (test.py, None)
+        """
+        names_after_split = test_name.split(
+            Port.WEBDRIVER_SUBTEST_PYTEST_SEPARATOR)
+
+        assert len(names_after_split) <= 2, "%s has a length greater than 2 after split by ::" % (
+            test_name)
+        if len(names_after_split) == 1:
+            return (names_after_split[0], None)
+
+        return (names_after_split[0], names_after_split[1])
+
+    @staticmethod
+    def add_webdriver_subtest_pytest_suffix(test_name, subtest_name):
+        if subtest_name is None:
+            return test_name
+        return test_name + Port.WEBDRIVER_SUBTEST_PYTEST_SEPARATOR + subtest_name
+
 
 class VirtualTestSuite(object):
 
-    def __init__(self, prefix=None, base=None, args=None, references_use_default_args=False):
-        assert base
+    def __init__(self, prefix=None, bases=None, args=None):
+        assert VALID_FILE_NAME_REGEX.match(prefix), "Virtual test suite prefix '{}' contains invalid characters".format(prefix)
+        assert isinstance(bases, list)
         assert args
-        assert '/' not in prefix, "Virtual test suites prefixes cannot contain /'s: %s" % prefix
-        self.name = 'virtual/' + prefix + '/' + base
-        self.base = base
+        assert isinstance(args, list)
+        self.full_prefix = 'virtual/' + prefix + '/'
+        self.bases = bases
         self.args = args
-        self.reference_args = [] if references_use_default_args else args
-        self.tests = {}
 
     def __repr__(self):
-        return "VirtualTestSuite('%s', '%s', %s, %s)" % (self.name, self.base, self.args, self.reference_args)
-
-    def __eq__(self, other):
-        return (
-            self.name == other.name and
-            self.base == other.base and
-            self.args == other.args and
-            self.reference_args == other.reference_args)
-
-
-class PhysicalTestSuite(object):
-
-    def __init__(self, base, args, reference_args=None):
-        self.name = base
-        self.base = base
-        self.args = args
-        self.reference_args = args if reference_args is None else reference_args
-        self.tests = set()
-
-    def __repr__(self):
-        return "PhysicalTestSuite('%s', '%s', %s, %s)" % (self.name, self.base, self.args, self.reference_args)
+        return "VirtualTestSuite('%s', %s, %s)" % (self.full_prefix, self.bases, self.args)

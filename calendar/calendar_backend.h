@@ -25,6 +25,7 @@
 #include "calendar/calendar_backend_notifier.h"
 #include "calendar/calendar_database.h"
 #include "calendar/event_type.h"
+#include "calendar/notification_type.h"
 #include "calendar/recurrence_exception_type.h"
 #include "sql/init_status.h"
 
@@ -70,6 +71,9 @@ class CalendarBackend
     virtual void NotifyEventTypeCreated(const EventTypeRow& row) = 0;
     virtual void NotifyEventTypeModified(const EventTypeRow& row) = 0;
     virtual void NotifyEventTypeDeleted(const EventTypeRow& row) = 0;
+
+    virtual void NotifyNotificationChanged(const NotificationRow& row) = 0;
+    virtual void NotifyCalendarChanged() = 0;
 
     // Invoked when the backend has finished loading the db.
     virtual void DBLoaded() = 0;
@@ -136,6 +140,33 @@ class CalendarBackend
   void CreateRecurrenceException(
       RecurrenceExceptionRow row,
       std::shared_ptr<CreateRecurrenceExceptionResult> result);
+  void GetAllNotifications(std::shared_ptr<GetAllNotificationResult> results);
+
+  void CreateNotification(calendar::NotificationRow row,
+                          std::shared_ptr<CreateNotificationResult> result);
+  void DeleteNotification(NotificationID notification_id,
+                          std::shared_ptr<DeleteNotificationResult> result);
+
+  void CreateInvite(calendar::InviteRow row,
+                    std::shared_ptr<InviteResult> result);
+
+  void DeleteInvite(InviteID invite_id,
+                    std::shared_ptr<DeleteInviteResult> result);
+
+  void UpdateInvite(calendar::UpdateInviteRow row,
+                    std::shared_ptr<InviteResult> result);
+
+  void CreateAccount(AccountRow account_row,
+                     std::shared_ptr<CreateAccountResult> result);
+
+  void DeleteAccount(calendar::AccountID id,
+                     std::shared_ptr<DeleteAccountResult> result);
+
+  void UpdateAccount(calendar::AccountRow account_row,
+                     std::shared_ptr<calendar::UpdateAccountResult> result);
+
+  void GetAllAccounts(std::shared_ptr<AccountRows> results);
+
   EventResult FillEvent(EventID id);
 
   void NotifyEventCreated(const EventResult& event) override;
@@ -149,6 +180,9 @@ class CalendarBackend
   void NotifyEventTypeCreated(const EventTypeRow& row) override;
   void NotifyEventTypeModified(const EventTypeRow& row) override;
   void NotifyEventTypeDeleted(const EventTypeRow& row) override;
+
+  void NotifyNotificationChanged(const NotificationRow& row) override;
+  void NotifyCalendarChanged() override;
 
  protected:
   ~CalendarBackend() override;

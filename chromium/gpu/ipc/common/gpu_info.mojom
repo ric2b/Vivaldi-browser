@@ -9,6 +9,9 @@ import "gpu/ipc/common/dx_diag_node.mojom";
 import "mojo/public/mojom/base/time.mojom";
 import "ui/gfx/geometry/mojom/geometry.mojom";
 
+[EnableIf=supports_vulkan]
+import "gpu/ipc/common/vulkan_info.mojom";
+
 // gpu::GPUInfo::GPUDevice
 struct GpuDevice {
   uint32 vendor_id;
@@ -121,6 +124,15 @@ struct Dx12VulkanVersionInfo {
   uint32 vulkan_version;
 };
 
+// gpu::OverlayInfo
+[EnableIf=is_win]
+struct OverlayInfo {
+  bool direct_composition;
+  bool supports_overlays;
+  OverlaySupport yuy2_overlay_support;
+  OverlaySupport nv12_overlay_support;
+};
+
 // Corresponds to |gpu::GPUInfo| in gpu/config/gpu_info.h
 struct GpuInfo {
   mojo_base.mojom.TimeDelta initialization_time;
@@ -148,18 +160,15 @@ struct GpuInfo {
   bool passthrough_cmd_decoder;
   bool can_support_threaded_texture_mailbox;
 
-  [EnableIf=is_win]
-  bool direct_composition;
-  [EnableIf=is_win]
-  bool supports_overlays;
-  [EnableIf=is_win]
-  OverlaySupport yuy2_overlay_support;
-  [EnableIf=is_win]
-  OverlaySupport nv12_overlay_support;
+  [EnableIf=is_mac]
+  uint32 macos_specific_texture_target;
+
   [EnableIf=is_win]
   DxDiagNode dx_diagnostics;
   [EnableIf=is_win]
   Dx12VulkanVersionInfo dx12_vulkan_version_info;
+  [EnableIf=is_win]
+  OverlayInfo overlay_info;
 
   VideoDecodeAcceleratorCapabilities video_decode_accelerator_capabilities;
   array<VideoEncodeAcceleratorSupportedProfile>
@@ -169,7 +178,9 @@ struct GpuInfo {
   array<ImageDecodeAcceleratorSupportedProfile>
     image_decode_accelerator_supported_profiles;
 
-  uint64 system_visual;
-  uint64 rgba_visual;
   bool oop_rasterization_supported;
+  bool subpixel_font_rendering;
+
+  [EnableIf=supports_vulkan]
+  VulkanInfo? vulkan_info;
 };

@@ -55,6 +55,7 @@
 #include "third_party/blink/renderer/core/layout/layout_text_control.h"
 #include "third_party/blink/renderer/core/loader/empty_clients.h"
 #include "third_party/blink/renderer/core/page/page.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/text/text_break_iterator.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 
@@ -102,7 +103,8 @@ WebTextCheckClient* SpellChecker::GetTextCheckerClient() const {
 SpellChecker::SpellChecker(LocalFrame& frame)
     : frame_(&frame),
       spell_check_requester_(MakeGarbageCollected<SpellCheckRequester>(frame)),
-      idle_spell_check_controller_(IdleSpellCheckController::Create(frame)) {}
+      idle_spell_check_controller_(
+          MakeGarbageCollected<IdleSpellCheckController>(frame)) {}
 
 bool SpellChecker::IsSpellCheckingEnabled() const {
   if (WebTextCheckClient* client = GetTextCheckerClient())
@@ -219,7 +221,9 @@ void SpellChecker::AdvanceToNextMisspelling(bool start_before_selection) {
         FindFirstMisspelling(spelling_search_start, spelling_search_end);
   }
 
-  if (!misspelled_word.IsEmpty()) {
+  if (misspelled_word.IsEmpty()) {
+    SpellCheckPanelHostClient().UpdateSpellingUIWithMisspelledWord({});
+  } else {
     // We found a misspelling. Select the misspelling, update the spelling
     // panel, and store a marker so we draw the red squiggle later.
 
@@ -301,10 +305,8 @@ void SpellChecker::MarkAndReplaceFor(
 
   // TODO(editing-dev): The use of UpdateStyleAndLayout
   // needs to be audited.  See http://crbug.com/590369 for more details.
-  GetFrame().GetDocument()->UpdateStyleAndLayout();
-
-  DocumentLifecycle::DisallowTransitionScope disallow_transition(
-      GetFrame().GetDocument()->Lifecycle());
+  GetFrame().GetDocument()->UpdateStyleAndLayout(
+      DocumentUpdateReason::kSpellCheck);
 
   EphemeralRange checking_range(request->CheckingRange());
 
@@ -488,7 +490,7 @@ void SpellChecker::ReplaceMisspelledRange(const String& text) {
 
   // TODO(editing-dev): The use of UpdateStyleAndLayout
   // needs to be audited.  See http://crbug.com/590369 for more details.
-  current_document.UpdateStyleAndLayout();
+  current_document.UpdateStyleAndLayout(DocumentUpdateReason::kSpellCheck);
 
   // Dispatch 'beforeinput'.
   Element* const target = FindEventTargetFrom(
@@ -508,7 +510,8 @@ void SpellChecker::ReplaceMisspelledRange(const String& text) {
 
   // TODO(editing-dev): The use of UpdateStyleAndLayout
   // needs to be audited.  See http://crbug.com/590369 for more details.
-  GetFrame().GetDocument()->UpdateStyleAndLayout();
+  GetFrame().GetDocument()->UpdateStyleAndLayout(
+      DocumentUpdateReason::kSpellCheck);
 
   if (cancel)
     return;
@@ -543,9 +546,9 @@ static Node* FindFirstMarkable(Node* node) {
       return nullptr;
     if (node->GetLayoutObject()->IsText())
       return node;
-    if (node->GetLayoutObject()->IsTextControl())
-      node = ToLayoutTextControl(node->GetLayoutObject())
-                 ->GetTextControlElement()
+    if (auto* text_control =
+            DynamicTo<LayoutTextControl>(node->GetLayoutObject()))
+      node = text_control->GetTextControlElement()
                  ->VisiblePositionForIndex(1)
                  .DeepEquivalent()
                  .AnchorNode();
@@ -742,7 +745,7 @@ bool SpellChecker::IsSpellCheckingEnabledAt(const Position& position) {
   if (position.IsNull())
     return false;
   if (TextControlElement* text_control = EnclosingTextControl(position)) {
-    if (auto* input = ToHTMLInputElementOrNull(text_control)) {
+    if (auto* input = DynamicTo<HTMLInputElement>(text_control)) {
       // TODO(tkent): The following password type check should be done in
       // HTMLElement::spellcheck(). crbug.com/371567
       if (input->type() == input_type_names::kPassword)

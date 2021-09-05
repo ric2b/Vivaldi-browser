@@ -14,7 +14,7 @@
 #include "chrome/browser/extensions/extension_install_prompt.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
 #include "ui/views/controls/button/button.h"
-#include "ui/views/controls/link_listener.h"
+#include "ui/views/controls/button/checkbox.h"
 #include "ui/views/view.h"
 
 class Profile;
@@ -23,15 +23,10 @@ namespace content {
 class PageNavigator;
 }
 
-namespace views {
-class Link;
-}
-
 // Modal dialog that shows when the user attempts to install an extension. Also
 // shown if the extension is already installed but needs additional permissions.
 // Not a normal "bubble" despite being a subclass of BubbleDialogDelegateView.
-class ExtensionInstallDialogView : public views::BubbleDialogDelegateView,
-                                   public views::LinkListener {
+class ExtensionInstallDialogView : public views::BubbleDialogDelegateView {
  public:
   // The views::View::id of the ratings section in the dialog.
   static const int kRatingsViewId = 1;
@@ -57,11 +52,8 @@ class ExtensionInstallDialogView : public views::BubbleDialogDelegateView,
   gfx::Size CalculatePreferredSize() const override;
   void VisibilityChanged(views::View* starting_from, bool is_visible) override;
   void AddedToWidget() override;
-  std::unique_ptr<views::View> CreateExtraView() override;
   bool Cancel() override;
   bool Accept() override;
-  int GetDialogButtons() const override;
-  base::string16 GetDialogButtonLabel(ui::DialogButton button) const override;
   bool IsDialogButtonEnabled(ui::DialogButton button) const override;
   bool ShouldShowCloseButton() const override;
 
@@ -70,8 +62,7 @@ class ExtensionInstallDialogView : public views::BubbleDialogDelegateView,
   base::string16 GetAccessibleWindowTitle() const override;
   ui::ModalType GetModalType() const override;
 
-  // views::LinkListener:
-  void LinkClicked(views::Link* source, int event_flags) override;
+  void LinkClicked();
 
   // Creates the contents area that contains permissions and other extension
   // info.
@@ -111,56 +102,10 @@ class ExtensionInstallDialogView : public views::BubbleDialogDelegateView,
   // Used to determine whether the install button should be enabled.
   bool install_button_enabled_;
 
+  // Checkbox used to indicate if permissions should be withheld on install.
+  views::Checkbox* withhold_permissions_checkbox_;
+
   DISALLOW_COPY_AND_ASSIGN(ExtensionInstallDialogView);
-};
-
-// A view that displays a list of details, along with a link that expands and
-// collapses those details.
-class ExpandableContainerView : public views::View, public views::LinkListener {
- public:
-  ExpandableContainerView(const std::vector<base::string16>& details,
-                          int available_width);
-  ~ExpandableContainerView() override;
-
-  // views::View:
-  void ChildPreferredSizeChanged(views::View* child) override;
-
-  // views::LinkListener:
-  void LinkClicked(views::Link* source, int event_flags) override;
-
- private:
-  // Helper class representing the list of details, that can hide itself.
-  class DetailsView : public views::View {
-   public:
-    explicit DetailsView(const std::vector<base::string16>& details);
-    ~DetailsView() override {}
-
-    // views::View:
-    gfx::Size CalculatePreferredSize() const override;
-
-    // Expands or collapses this view.
-    void ToggleExpanded();
-
-    bool expanded() { return expanded_; }
-
-   private:
-    // Whether this details section is expanded.
-    bool expanded_ = false;
-
-    DISALLOW_COPY_AND_ASSIGN(DetailsView);
-  };
-
-  // Expands or collapses |details_view_|.
-  void ToggleDetailLevel();
-
-  // The view that expands or collapses when |details_link_| is clicked.
-  DetailsView* details_view_;
-
-  // The 'Show Details' link, which changes to 'Hide Details' when the details
-  // section is expanded.
-  views::Link* details_link_;
-
-  DISALLOW_COPY_AND_ASSIGN(ExpandableContainerView);
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_EXTENSIONS_EXTENSION_INSTALL_DIALOG_VIEW_H_

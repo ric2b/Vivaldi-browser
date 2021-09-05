@@ -19,6 +19,7 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/socket_permission_request.h"
@@ -29,6 +30,8 @@
 #include "net/base/io_buffer.h"
 #include "net/base/ip_address.h"
 #include "net/base/net_errors.h"
+#include "net/base/network_isolation_key.h"
+#include "net/dns/public/resolve_error_info.h"
 #include "net/log/net_log_source.h"
 #include "net/log/net_log_with_source.h"
 #include "net/ssl/ssl_info.h"
@@ -126,8 +129,7 @@ PepperTCPSocketMessageFilter::~PepperTCPSocketMessageFilter() {
 #if defined(OS_CHROMEOS)
   // Close the firewall hole on UI thread if there is one.
   if (firewall_hole_) {
-    BrowserThread::DeleteSoon(BrowserThread::UI, FROM_HERE,
-                              std::move(firewall_hole_));
+    base::DeleteSoon(FROM_HERE, {BrowserThread::UI}, std::move(firewall_hole_));
   }
 #endif  // defined(OS_CHROMEOS)
   --g_num_tcp_filter_instances;
@@ -173,7 +175,7 @@ void PepperTCPSocketMessageFilter::OnFilterDestroyed() {
                  base::BindOnce(&PepperTCPSocketMessageFilter::Close, this));
 }
 
-scoped_refptr<base::TaskRunner>
+scoped_refptr<base::SequencedTaskRunner>
 PepperTCPSocketMessageFilter::OverrideTaskRunnerForMessage(
     const IPC::Message& message) {
   switch (message.type()) {
@@ -246,6 +248,7 @@ void PepperTCPSocketMessageFilter::ThrottleStateChangedOnUIThread(
 
 void PepperTCPSocketMessageFilter::OnComplete(
     int result,
+    const net::ResolveErrorInfo& resolve_error_info,
     const base::Optional<net::AddressList>& resolved_addresses) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   receiver_.reset();
@@ -263,7 +266,7 @@ void PepperTCPSocketMessageFilter::OnComplete(
   }
 
   if (result != net::OK) {
-    SendConnectError(context, NetErrorToPepperError(result));
+    SendConnectError(context, NetErrorToPepperError(resolve_error_info.error));
     state_.CompletePendingTransition(false);
     return;
   }
@@ -403,11 +406,19 @@ int32_t PepperTCPSocketMessageFilter::OnMsgConnect(
   if (!network_context)
     return PP_ERROR_FAILED;
 
-  network_context->ResolveHost(net::HostPortPair(host, port), nullptr,
-                               receiver_.BindNewPipeAndPassRemote());
+  RenderFrameHost* render_frame_host =
+      RenderFrameHost::FromID(render_process_id_, render_frame_id_);
+  if (!render_frame_host)
+    return PP_ERROR_FAILED;
+
+  // TODO(mmenke): Pass in correct NetworkIsolationKey.
+  network_context->ResolveHost(net::HostPortPair(host, port),
+                               render_frame_host->GetNetworkIsolationKey(),
+                               nullptr, receiver_.BindNewPipeAndPassRemote());
   receiver_.set_disconnect_handler(
       base::BindOnce(&PepperTCPSocketMessageFilter::OnComplete,
-                     base::Unretained(this), net::ERR_FAILED, base::nullopt));
+                     base::Unretained(this), net::ERR_NAME_NOT_RESOLVED,
+                     net::ResolveErrorInfo(net::ERR_FAILED), base::nullopt));
 
   state_.SetPendingTransition(TCPSocketState::CONNECT);
   host_resolve_context_ = context->MakeReplyMessageContext();
@@ -1202,9 +1213,10 @@ void PepperTCPSocketMessageFilter::SetStreams(
 void PepperTCPSocketMessageFilter::OpenFirewallHole(
     const ppapi::host::ReplyMessageContext& context) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  pepper_socket_utils::FirewallHoleOpenCallback callback = base::BindRepeating(
-      &PepperTCPSocketMessageFilter::OnFirewallHoleOpened, this, context);
-  pepper_socket_utils::OpenTCPFirewallHole(bind_output_ip_endpoint_, callback);
+  pepper_socket_utils::OpenTCPFirewallHole(
+      bind_output_ip_endpoint_,
+      base::BindOnce(&PepperTCPSocketMessageFilter::OnFirewallHoleOpened, this,
+                     context));
 }
 
 void PepperTCPSocketMessageFilter::OnFirewallHoleOpened(

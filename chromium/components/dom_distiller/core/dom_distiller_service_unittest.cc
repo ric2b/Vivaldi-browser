@@ -35,11 +35,6 @@ class FakeViewRequestDelegate : public ViewRequestDelegate {
                void(ArticleDistillationUpdate article_update));
 };
 
-class MockArticleAvailableCallback {
- public:
-  MOCK_METHOD1(DistillationCompleted, void(bool));
-};
-
 void RunDistillerCallback(FakeDistiller* distiller,
                           std::unique_ptr<DistilledArticleProto> proto) {
   distiller->RunDistillerCallback(std::move(proto));
@@ -68,7 +63,8 @@ class DomDistillerServiceTest : public testing::Test {
     service_.reset(new DomDistillerService(
         std::unique_ptr<DistillerFactory>(distiller_factory_),
         std::unique_ptr<DistillerPageFactory>(distiller_page_factory_),
-        std::unique_ptr<DistilledPagePrefs>()));
+        /* distilled_page_prefs */ nullptr,
+        /* distiller_ui_handle */ nullptr));
   }
 
   void TearDown() override {

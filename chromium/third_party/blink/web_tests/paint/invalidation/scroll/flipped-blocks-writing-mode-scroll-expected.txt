@@ -14,13 +14,15 @@
     {
       "name": "Scrolling Contents Layer",
       "bounds": [10000, 385],
-      "paintInvalidations": [
-        {
-          "object": "LayoutNGBlockFlow DIV id='target'",
-          "rect": [0, 0, 10000, 200],
-          "reason": "background"
-        }
+      "invalidations": [
+        [0, 0, 10000, 200]
       ],
+      "transform": 1
+    },
+    {
+      "name": "ContentsLayer for Horizontal Scrollbar Layer",
+      "position": [0, 385],
+      "bounds": [400, 15],
       "transform": 1
     }
   ],

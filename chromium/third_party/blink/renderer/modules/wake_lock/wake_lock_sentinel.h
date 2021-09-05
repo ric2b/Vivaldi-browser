@@ -9,7 +9,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
-#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
+#include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/modules/wake_lock/wake_lock_type.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
@@ -19,19 +19,19 @@ namespace blink {
 
 class ExecutionContext;
 class ScriptState;
-class WakeLockStateRecord;
+class WakeLockManager;
 
 class MODULES_EXPORT WakeLockSentinel final
     : public EventTargetWithInlineData,
       public ActiveScriptWrappable<WakeLockSentinel>,
-      public ContextLifecycleObserver {
+      public ExecutionContextLifecycleObserver {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(WakeLockSentinel);
 
  public:
   WakeLockSentinel(ScriptState* script_state,
                    WakeLockType type,
-                   WakeLockStateRecord* manager);
+                   WakeLockManager* manager);
   ~WakeLockSentinel() override;
 
   // Web-exposed interfaces
@@ -42,16 +42,16 @@ class MODULES_EXPORT WakeLockSentinel final
   // EventTarget overrides.
   ExecutionContext* GetExecutionContext() const override;
   const AtomicString& InterfaceName() const override;
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
   // ActiveScriptWrappable overrides.
   bool HasPendingActivity() const override;
 
-  // ContextLifecycleObserver overrides.
-  void ContextDestroyed(ExecutionContext*) override;
+  // ExecutionContextLifecycleObserver overrides.
+  void ContextDestroyed() override;
 
  private:
-  friend class WakeLockStateRecord;
+  friend class WakeLockManager;
 
   // This function, which only has any effect once, detaches this sentinel from
   // its |manager_|, and fires a "release" event.
@@ -61,7 +61,7 @@ class MODULES_EXPORT WakeLockSentinel final
   // where |script_state_|'s context is no longer valid.
   void DoRelease();
 
-  Member<WakeLockStateRecord> manager_;
+  Member<WakeLockManager> manager_;
   const WakeLockType type_;
 
   FRIEND_TEST_ALL_PREFIXES(WakeLockSentinelTest, MultipleReleaseCalls);

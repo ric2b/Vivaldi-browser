@@ -8,15 +8,15 @@ import("//tools/grit/grit_rule.gni")
 
 group("resources") {
   if (!is_android) {
-    public_deps = [
-      ":devtools_resources",
-    ]
+    public_deps = [ ":devtools_resources" ]
   }
 }
 
 grit("devtools_resources") {
   source = "$root_gen_dir/devtools/devtools_resources.grd"
-  source_is_generated = true
+
+  # Required because the .grd is generated.
+  enable_input_discovery_for_gn_analyze = false
   use_brotli = true
 
   outputs = [
@@ -29,7 +29,7 @@ grit("devtools_resources") {
   grit_flags = [
     "-E",
     "protocol_file=" + rebase_path(
-            "$root_gen_dir/third_party/blink/renderer/core/inspector/protocol.json",
+            "$root_gen_dir/third_party/blink/public/devtools_protocol/protocol.json",
             root_build_dir),
   ]
 
@@ -37,7 +37,7 @@ grit("devtools_resources") {
       [ "SHARED_INTERMEDIATE_DIR=" + rebase_path(root_gen_dir, root_build_dir) ]
 
   deps = [
-    "//third_party/blink/renderer/core/inspector:protocol_version",
+    "//third_party/blink/public/devtools_protocol:protocol_version",
 
     # This is the action that generates out .grd input file.
     "//third_party/blink/public:blink_generate_devtools_grd",
@@ -46,11 +46,9 @@ grit("devtools_resources") {
 
 inspector_protocol_generate("protocol_sources") {
   visibility = [ "//content/browser" ]
-  deps = [
-    "//third_party/blink/renderer/core/inspector:protocol_version",
-  ]
+  deps = [ "//third_party/blink/public/devtools_protocol:protocol_version" ]
   _blink_protocol_path = rebase_path(
-          "$root_gen_dir/third_party/blink/renderer/core/inspector/protocol.json",
+          "$root_gen_dir/third_party/blink/public/devtools_protocol/protocol.json",
           root_build_dir)
 
   inspector_protocol_dir = "//third_party/inspector_protocol"
@@ -59,7 +57,7 @@ inspector_protocol_generate("protocol_sources") {
   config_values = [ "protocol.path=$_blink_protocol_path" ]
 
   inputs = [
-    "$root_gen_dir/third_party/blink/renderer/core/inspector/protocol.json",
+    "$root_gen_dir/third_party/blink/public/devtools_protocol/protocol.json",
     config_file,
   ]
 
@@ -118,33 +116,5 @@ inspector_protocol_generate("protocol_sources") {
 }
 
 proto_library("devtools_background_services_proto") {
-  sources = [
-    "devtools_background_services.proto",
-  ]
-}
-
-source_set("inspector_protocol_encoding_test") {
-  testonly = true
-  sources = [
-    "../../../third_party/inspector_protocol/encoding/encoding_test.cc",
-  ]
-  deps = [
-    "//base",
-    "//testing/gmock",
-    "//testing/gtest",
-    "//third_party/inspector_protocol:encoding",
-  ]
-}
-
-source_set("inspector_protocol_bindings_test") {
-  testonly = true
-  sources = [
-    "../../../third_party/inspector_protocol/bindings/bindings_test.cc",
-  ]
-  deps = [
-    "//base",
-    "//testing/gmock",
-    "//testing/gtest",
-    "//third_party/inspector_protocol:bindings",
-  ]
+  sources = [ "devtools_background_services.proto" ]
 }

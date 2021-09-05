@@ -36,11 +36,11 @@ constexpr CompositingReasonStringMap kCompositingReasonsStringMap[] = {
     {CompositingReason::kActiveBackdropFilterAnimation,
      "activeBackdropFilterAnimation",
      "Has an active accelerated backdrop filter animation or transition"},
-    {CompositingReason::kImmersiveArOverlay, "immersiveArOverlay",
+    {CompositingReason::kXrOverlay, "xrOverlay",
      "Is DOM overlay for WebXR immersive-ar mode"},
     {CompositingReason::kScrollDependentPosition, "scrollDependentPosition",
      "Is fixed or sticky position"},
-    {CompositingReason::kOverflowScrollingTouch, "overflowScrollingTouch",
+    {CompositingReason::kOverflowScrolling, "overflowScrolling",
      "Is a scrollable overflow element"},
     {CompositingReason::kOverflowScrollingParent, "overflowScrollingParent",
      "Scroll parent is not an ancestor"},
@@ -98,8 +98,6 @@ constexpr CompositingReasonStringMap kCompositingReasonsStringMap[] = {
      "preserve3DWith3DDescendants",
      "Has a preserves-3d property that needs to be known by compositor because "
      "of 3d descendants"},
-    {CompositingReason::kReflectionOfCompositedParent,
-     "reflectionOfCompositedParent", "Is a reflection of a composited layer"},
     {CompositingReason::kIsolateCompositedDescendants,
      "isolateCompositedDescendants",
      "Should isolate descendants to apply a blend effect"},
@@ -107,11 +105,6 @@ constexpr CompositingReasonStringMap kCompositingReasonsStringMap[] = {
      "positionFixedWithCompositedDescendants"
      "Is a position:fixed element with composited descendants"},
     {CompositingReason::kRoot, "root", "Is the root layer"},
-    {CompositingReason::kLayerForAncestorClip, "layerForAncestorClip",
-     "Secondary layer, applies a clip due to a sibling in the compositing "
-     "tree"},
-    {CompositingReason::kLayerForDescendantClip, "layerForDescendantClip",
-     "Secondary layer, to clip descendants of the owning layer"},
     {CompositingReason::kLayerForHorizontalScrollbar,
      "layerForHorizontalScrollbar",
      "Secondary layer, the horizontal scrollbar layer"},
@@ -137,28 +130,18 @@ constexpr CompositingReasonStringMap kCompositingReasonsStringMap[] = {
     {CompositingReason::kLayerForForeground, "layerForForeground",
      "Secondary layer, to contain any normal flow and positive z-index "
      "contents on top of a negative z-index layer"},
-    {CompositingReason::kLayerForBackground, "layerForBackground",
-     "Secondary layer, to contain acceleratable background content"},
     {CompositingReason::kLayerForMask, "layerForMask",
      "Secondary layer, to contain the mask contents"},
-    {CompositingReason::kLayerForClippingMask, "layerForClippingMask",
-     "Secondary layer, for clipping mask"},
-    {CompositingReason::kLayerForAncestorClippingMask,
-     "layerForAncestorClippingMask",
-     "Secondary layer, applies a clipping mask due to a sibling in the "
-     "composited layer tree"},
-    {CompositingReason::kLayerForScrollingBlockSelection,
-     "layerForScrollingBlockSelection",
-     "Secondary layer, to house block selection gaps for composited scrolling "
-     "with no scrolling contents"},
     {CompositingReason::kLayerForDecoration, "layerForDecoration",
      "Layer painted on top of other layers as decoration"},
-
+    {CompositingReason::kLayerForOther, "layerForOther",
+     "Layer for link highlight, frame overlay, etc."},
 };
 
 }  // anonymous namespace
 
-Vector<const char*> CompositingReason::ShortNames(CompositingReasons reasons) {
+std::vector<const char*> CompositingReason::ShortNames(
+    CompositingReasons reasons) {
 #define V(name)                                                             \
   static_assert(                                                            \
       CompositingReason::k##name ==                                         \
@@ -168,7 +151,7 @@ Vector<const char*> CompositingReason::ShortNames(CompositingReasons reasons) {
   FOR_EACH_COMPOSITING_REASON(V)
 #undef V
 
-  Vector<const char*> result;
+  std::vector<const char*> result;
   if (reasons == kNone)
     return result;
   for (auto& map : kCompositingReasonsStringMap) {
@@ -178,9 +161,9 @@ Vector<const char*> CompositingReason::ShortNames(CompositingReasons reasons) {
   return result;
 }
 
-Vector<const char*> CompositingReason::Descriptions(
+std::vector<const char*> CompositingReason::Descriptions(
     CompositingReasons reasons) {
-  Vector<const char*> result;
+  std::vector<const char*> result;
   if (reasons == kNone)
     return result;
   for (auto& map : kCompositingReasonsStringMap) {

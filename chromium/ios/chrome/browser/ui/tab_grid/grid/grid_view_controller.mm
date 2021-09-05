@@ -19,7 +19,7 @@
 #import "ios/chrome/browser/ui/tab_grid/grid/grid_layout.h"
 #import "ios/chrome/browser/ui/tab_grid/transitions/grid_transition_layout.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
-#import "ios/chrome/common/ui_util/constraints_ui_util.h"
+#import "ios/chrome/common/ui/util/constraints_ui_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -127,25 +127,11 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 
 - (void)viewWillAppear:(BOOL)animated {
   [super viewWillAppear:animated];
-  self.updatesCollectionView = YES;
-  self.defaultLayout.animatesItemUpdates = YES;
-  [self.collectionView reloadData];
-  // Selection is invalid if there are no items.
-  if (self.items.count == 0) {
-    [self animateEmptyStateIn];
-    return;
-  }
-  [self.collectionView selectItemAtIndexPath:CreateIndexPath(self.selectedIndex)
-                                    animated:animated
-                              scrollPosition:UICollectionViewScrollPositionTop];
-  // Update the delegate, in case it wasn't set when |items| was populated.
-  [self.delegate gridViewController:self didChangeItemCount:self.items.count];
-  [self removeEmptyStateAnimated:NO];
-  self.lastInsertedItemID = nil;
+  [self contentWillAppearAnimated:animated];
 }
 
 - (void)viewWillDisappear:(BOOL)animated {
-  self.updatesCollectionView = NO;
+  [self contentWillDisappear];
   [super viewWillDisappear:animated];
 }
 
@@ -247,6 +233,28 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
   self.defaultLayout.animatesItemUpdates = NO;
 }
 
+- (void)contentWillAppearAnimated:(BOOL)animated {
+  self.updatesCollectionView = YES;
+  self.defaultLayout.animatesItemUpdates = YES;
+  [self.collectionView reloadData];
+  // Selection is invalid if there are no items.
+  if (self.items.count == 0) {
+    [self animateEmptyStateIn];
+    return;
+  }
+  [self.collectionView selectItemAtIndexPath:CreateIndexPath(self.selectedIndex)
+                                    animated:NO
+                              scrollPosition:UICollectionViewScrollPositionTop];
+  // Update the delegate, in case it wasn't set when |items| was populated.
+  [self.delegate gridViewController:self didChangeItemCount:self.items.count];
+  [self removeEmptyStateAnimated:NO];
+  self.lastInsertedItemID = nil;
+}
+
+- (void)contentWillDisappear {
+  self.updatesCollectionView = NO;
+}
+
 #pragma mark - UICollectionViewDataSource
 
 - (NSInteger)collectionView:(UICollectionView*)collectionView
@@ -262,7 +270,21 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
   cell.accessibilityIdentifier =
       [NSString stringWithFormat:@"%@%ld", kGridCellIdentifierPrefix,
                                  base::checked_cast<long>(indexPath.item)];
-  GridItem* item = self.items[indexPath.item];
+
+  // In some cases this is called with an indexPath.item that's beyond (by 1)
+  // the bounds of self.items -- see crbug.com/1068136. Presumably this is a
+  // race condition where an item has been deleted at the same time as the
+  // collection is doing layout (potentially during rotation?). DCHECK to
+  // catch this in debug, and then in production fudge by duplicating the last
+  // cell. The assumption is that there will be another, correct layout shortly
+  // after the incorrect one.
+  NSUInteger itemIndex = indexPath.item;
+  DCHECK(itemIndex < self.items.count);
+  // Outside of debug builds, keep array bounds valid.
+  if (itemIndex >= self.items.count)
+    itemIndex = self.items.count - 1;
+
+  GridItem* item = self.items[itemIndex];
   [self configureCell:cell withItem:item];
   return cell;
 }

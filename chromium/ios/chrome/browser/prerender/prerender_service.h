@@ -11,16 +11,15 @@
 #include "ui/base/page_transition_types.h"
 #include "url/gurl.h"
 
+class ChromeBrowserState;
 @class PreloadController;
 @protocol PreloadControllerDelegate;
-@protocol SessionWindowRestoring;
-namespace ios {
-class ChromeBrowserState;
-}
+
 namespace web {
 class WebState;
 }
 class WebStateList;
+class Browser;
 
 // PrerenderService manages a prerendered WebState.
 class PrerenderService : public KeyedService {
@@ -28,7 +27,7 @@ class PrerenderService : public KeyedService {
   // TODO(crbug.com/754050): Convert this constructor to take lower-level
   // objects instead of the entire ChromeBrowserState.  This will make unit
   // testing much simpler.
-  PrerenderService(ios::ChromeBrowserState* browser_state);
+  PrerenderService(ChromeBrowserState* browser_state);
   ~PrerenderService() override;
 
   // Sets the delegate that will provide information to this service.
@@ -51,15 +50,14 @@ class PrerenderService : public KeyedService {
                       bool immediately);
 
   // If |url| is prerendered, loads the prerendered web state into
-  // |web_state_list| at the active index, replacing the existing active web
-  // state and saving the session (via |restorer|). If not, or if it isn't
-  // possible to replace the active web state, cancels the active preload.
-  // Metrics and snapshots are appropriately updated. Returns true if the active
-  // webstate was replaced, false otherwise.
+  // |browser|'s WebStateList at the active index, replacing the existing active
+  // WebState and saving the session. If not, or if it isn't possible to replace
+  // the active web state, cancels the active preload. Metrics and snapshots are
+  // appropriately updated. Returns true if the active webstate was replaced,
+  // false otherwise.
   bool MaybeLoadPrerenderedURL(const GURL& url,
                                ui::PageTransition transition,
-                               WebStateList* web_state_list,
-                               id<SessionWindowRestoring> restorer);
+                               Browser* browser);
 
   // |true| while a prerendered webstate is being inserted into a webStateList.
   bool IsLoadingPrerender() { return loading_prerender_; }

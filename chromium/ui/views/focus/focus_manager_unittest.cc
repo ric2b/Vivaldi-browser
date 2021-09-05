@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -19,6 +20,7 @@
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/views/accessible_pane_view.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
+#include "ui/views/buildflags.h"
 #include "ui/views/focus/focus_manager_delegate.h"
 #include "ui/views/focus/focus_manager_factory.h"
 #include "ui/views/focus/widget_focus_manager.h"
@@ -572,44 +574,44 @@ TEST_F(FocusManagerTest, RotatePaneFocus) {
   FocusManager* focus_manager = GetWidget()->GetFocusManager();
 
   // Advance forwards. Focus should stay trapped within each pane.
-  EXPECT_TRUE(focus_manager->RotatePaneFocus(FocusManager::kForward,
-                                             FocusManager::kWrap));
+  EXPECT_TRUE(focus_manager->RotatePaneFocus(
+      FocusManager::kForward, FocusManager::FocusCycleWrapping::kEnabled));
   EXPECT_EQ(v1, focus_manager->GetFocusedView());
   focus_manager->AdvanceFocus(false);
   EXPECT_EQ(v2, focus_manager->GetFocusedView());
   focus_manager->AdvanceFocus(false);
   EXPECT_EQ(v1, focus_manager->GetFocusedView());
 
-  EXPECT_TRUE(focus_manager->RotatePaneFocus(FocusManager::kForward,
-                                             FocusManager::kWrap));
+  EXPECT_TRUE(focus_manager->RotatePaneFocus(
+      FocusManager::kForward, FocusManager::FocusCycleWrapping::kEnabled));
   EXPECT_EQ(v3, focus_manager->GetFocusedView());
   focus_manager->AdvanceFocus(false);
   EXPECT_EQ(v4, focus_manager->GetFocusedView());
   focus_manager->AdvanceFocus(false);
   EXPECT_EQ(v3, focus_manager->GetFocusedView());
 
-  EXPECT_TRUE(focus_manager->RotatePaneFocus(FocusManager::kForward,
-                                             FocusManager::kWrap));
+  EXPECT_TRUE(focus_manager->RotatePaneFocus(
+      FocusManager::kForward, FocusManager::FocusCycleWrapping::kEnabled));
   EXPECT_EQ(v1, focus_manager->GetFocusedView());
 
   // Advance backwards.
-  EXPECT_TRUE(focus_manager->RotatePaneFocus(FocusManager::kBackward,
-                                             FocusManager::kWrap));
+  EXPECT_TRUE(focus_manager->RotatePaneFocus(
+      FocusManager::kBackward, FocusManager::FocusCycleWrapping::kEnabled));
   EXPECT_EQ(v3, focus_manager->GetFocusedView());
 
-  EXPECT_TRUE(focus_manager->RotatePaneFocus(FocusManager::kBackward,
-                                             FocusManager::kWrap));
+  EXPECT_TRUE(focus_manager->RotatePaneFocus(
+      FocusManager::kBackward, FocusManager::FocusCycleWrapping::kEnabled));
   EXPECT_EQ(v1, focus_manager->GetFocusedView());
 
   // Advance without wrap. When it gets to the end of the list of
   // panes, RotatePaneFocus should return false but the current
   // focused view shouldn't change.
-  EXPECT_TRUE(focus_manager->RotatePaneFocus(FocusManager::kForward,
-                                             FocusManager::kNoWrap));
+  EXPECT_TRUE(focus_manager->RotatePaneFocus(
+      FocusManager::kForward, FocusManager::FocusCycleWrapping::kDisabled));
   EXPECT_EQ(v3, focus_manager->GetFocusedView());
 
-  EXPECT_FALSE(focus_manager->RotatePaneFocus(FocusManager::kForward,
-                                              FocusManager::kNoWrap));
+  EXPECT_FALSE(focus_manager->RotatePaneFocus(
+      FocusManager::kForward, FocusManager::FocusCycleWrapping::kDisabled));
   EXPECT_EQ(v3, focus_manager->GetFocusedView());
 }
 
@@ -675,7 +677,9 @@ class FocusManagerArrowKeyTraversalTest
 
 // Instantiate the Boolean which is used to toggle RTL in
 // the parameterized tests.
-INSTANTIATE_TEST_SUITE_P(, FocusManagerArrowKeyTraversalTest, testing::Bool());
+INSTANTIATE_TEST_SUITE_P(All,
+                         FocusManagerArrowKeyTraversalTest,
+                         testing::Bool());
 
 }  // namespace
 
@@ -855,7 +859,7 @@ class AdvanceFocusWidgetDelegate : public WidgetDelegate {
     should_advance_focus_to_parent_ = value;
   }
 
-  // WidgetDelegate overrides:
+  // WidgetDelegate:
   bool ShouldAdvanceFocusToTopLevelWidget() const override {
     return should_advance_focus_to_parent_;
   }
@@ -872,16 +876,15 @@ class AdvanceFocusWidgetDelegate : public WidgetDelegate {
 class TestBubbleDialogDelegateView : public BubbleDialogDelegateView {
  public:
   explicit TestBubbleDialogDelegateView(View* anchor)
-      : BubbleDialogDelegateView(anchor, BubbleBorder::NONE) {}
+      : BubbleDialogDelegateView(anchor, BubbleBorder::NONE) {
+    DialogDelegate::SetButtons(ui::DIALOG_BUTTON_NONE);
+  }
   ~TestBubbleDialogDelegateView() override = default;
 
   // If this is called, the bubble will be forced to use a NativeWidgetAura.
   // If not set, it might get a DesktopNativeWidgetAura depending on the
   // platform and other factors.
   void UseNativeWidgetAura() { use_native_widget_aura_ = true; }
-
-  // BubbleDialogDelegateView:
-  int GetDialogButtons() const override { return 0; }
 
   void OnBeforeBubbleWidgetInit(Widget::InitParams* params,
                                 Widget* widget) const override {
@@ -1116,7 +1119,7 @@ TEST_F(FocusManagerTest, AnchoredDialogInPane) {
   EXPECT_TRUE(bubble_child->HasFocus());
 }
 
-#if defined(USE_AURA) && !defined(OS_CHROMEOS)
+#if BUILDFLAG(ENABLE_DESKTOP_AURA)
 // This test is specifically for the permutation where the main widget is a
 // DesktopNativeWidgetAura and the bubble is a NativeWidgetAura. When focus
 // moves back from the bubble to the parent widget, ensure that the DNWA's aura

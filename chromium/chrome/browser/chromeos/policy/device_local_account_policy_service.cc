@@ -20,6 +20,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
+#include "base/task/thread_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/chromeos/policy/affiliated_cloud_policy_invalidator.h"
 #include "chrome/browser/chromeos/policy/device_local_account.h"
@@ -112,7 +113,7 @@ void DeleteOrphanedCaches(
        path = enumerator.Next()) {
     const std::string subdirectory(path.BaseName().MaybeAsASCII());
     if (!base::Contains(subdirectories_to_keep, subdirectory))
-      base::DeleteFile(path, true);
+      base::DeleteFileRecursively(path);
   }
 }
 
@@ -126,7 +127,7 @@ void DeleteObsoleteExtensionCache(const std::string& account_id_to_delete) {
   const base::FilePath path = cache_root_dir.Append(
       GetCacheSubdirectoryForAccountID(account_id_to_delete));
   if (base::DirectoryExists(path))
-    base::DeleteFile(path, true);
+    base::DeleteFileRecursively(path);
 }
 
 }  // namespace
@@ -153,7 +154,8 @@ DeviceLocalAccountPolicyBroker::DeviceLocalAccountPolicyBroker(
             base::BindRepeating(&content::GetNetworkConnectionTracker)),
       policy_update_callback_(policy_update_callback),
       resource_cache_task_runner_(resource_cache_task_runner) {
-  if (account.type != DeviceLocalAccount::TYPE_ARC_KIOSK_APP) {
+  if (account.type != DeviceLocalAccount::TYPE_ARC_KIOSK_APP &&
+      account.type != DeviceLocalAccount::TYPE_WEB_KIOSK_APP) {
     extension_tracker_.reset(new DeviceLocalAccountExtensionTracker(
         account, store_.get(), &schema_registry_));
   }
@@ -210,7 +212,7 @@ void DeviceLocalAccountPolicyBroker::ConnectIfPossible(
   core_.StartRefreshScheduler();
   UpdateRefreshDelay();
   invalidator_.reset(new AffiliatedCloudPolicyInvalidator(
-      em::DeviceRegisterRequest::DEVICE, &core_,
+      PolicyInvalidationScope::kDeviceLocalAccount, &core_,
       invalidation_service_provider_));
 }
 
@@ -283,9 +285,8 @@ DeviceLocalAccountPolicyService::DeviceLocalAccountPolicyService(
       orphan_extension_cache_deletion_state_(NOT_STARTED),
       store_background_task_runner_(store_background_task_runner),
       extension_cache_task_runner_(extension_cache_task_runner),
-      resource_cache_task_runner_(
-          base::CreateSequencedTaskRunner({base::ThreadPool(), base::MayBlock(),
-                                           base::TaskPriority::BEST_EFFORT})),
+      resource_cache_task_runner_(base::ThreadPool::CreateSequencedTaskRunner(
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT})),
       url_loader_factory_(url_loader_factory),
       local_accounts_subscription_(cros_settings_->AddSettingsObserver(
           chromeos::kAccountsPrefDeviceLocalAccounts,

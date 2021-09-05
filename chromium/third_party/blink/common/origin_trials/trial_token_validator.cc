@@ -23,7 +23,7 @@ static base::RepeatingCallback<blink::OriginTrialPolicy*()>& PolicyGetter() {
           []() -> blink::OriginTrialPolicy* { return nullptr; }));
   return *policy;
 }
-}
+}  // namespace
 
 namespace blink {
 
@@ -48,20 +48,26 @@ OriginTrialPolicy* TrialTokenValidator::Policy() {
 OriginTrialTokenStatus TrialTokenValidator::ValidateToken(
     base::StringPiece token,
     const url::Origin& origin,
+    base::Time current_time,
     std::string* feature_name,
-    base::Time current_time) const {
+    base::Time* expiry_time) const {
   OriginTrialPolicy* policy = Policy();
 
   if (!policy->IsOriginTrialsSupported())
     return OriginTrialTokenStatus::kNotSupported;
 
-  // TODO(iclelland): Allow for multiple signing keys, and iterate over all
-  // active keys here. https://crbug.com/543220
-  base::StringPiece public_key = policy->GetPublicKey();
+  std::vector<base::StringPiece> public_keys = policy->GetPublicKeys();
+  if (public_keys.size() == 0)
+    return OriginTrialTokenStatus::kNotSupported;
 
   OriginTrialTokenStatus status;
-  std::unique_ptr<TrialToken> trial_token =
-      TrialToken::From(token, public_key, &status);
+  std::unique_ptr<TrialToken> trial_token;
+  for (auto& key : public_keys) {
+    trial_token = TrialToken::From(token, key, &status);
+    if (status == OriginTrialTokenStatus::kSuccess)
+      break;
+  }
+
   if (status != OriginTrialTokenStatus::kSuccess)
     return status;
 
@@ -76,6 +82,7 @@ OriginTrialTokenStatus TrialTokenValidator::ValidateToken(
     return OriginTrialTokenStatus::kTokenDisabled;
 
   *feature_name = trial_token->feature_name();
+  *expiry_time = trial_token->expiry_time();
   return OriginTrialTokenStatus::kSuccess;
 }
 
@@ -101,9 +108,10 @@ bool TrialTokenValidator::RequestEnablesFeature(
   std::string token;
   while (response_headers->EnumerateHeader(&iter, "Origin-Trial", &token)) {
     std::string token_feature;
+    base::Time expiry_time;
     // TODO(mek): Log the validation errors to histograms?
-    if (ValidateToken(token, origin, &token_feature, current_time) ==
-        OriginTrialTokenStatus::kSuccess)
+    if (ValidateToken(token, origin, current_time, &token_feature,
+                      &expiry_time) == OriginTrialTokenStatus::kSuccess)
       if (token_feature == feature_name)
         return true;
   }
@@ -117,15 +125,16 @@ TrialTokenValidator::GetValidTokensFromHeaders(
     base::Time current_time) const {
   std::unique_ptr<FeatureToTokensMap> tokens(
       std::make_unique<FeatureToTokensMap>());
-  if (!IsTrialPossibleOnOrigin(origin))
+  if (!IsTrialPossibleOnOrigin(origin.GetURL()))
     return tokens;
 
   size_t iter = 0;
   std::string token;
   while (headers->EnumerateHeader(&iter, "Origin-Trial", &token)) {
     std::string token_feature;
-    if (TrialTokenValidator::ValidateToken(token, origin, &token_feature,
-                                           current_time) ==
+    base::Time expiry_time;
+    if (TrialTokenValidator::ValidateToken(token, origin, current_time,
+                                           &token_feature, &expiry_time) ==
         OriginTrialTokenStatus::kSuccess) {
       (*tokens)[token_feature].push_back(token);
     }
@@ -139,14 +148,15 @@ TrialTokenValidator::GetValidTokens(const url::Origin& origin,
                                     base::Time current_time) const {
   std::unique_ptr<FeatureToTokensMap> out_tokens(
       std::make_unique<FeatureToTokensMap>());
-  if (!IsTrialPossibleOnOrigin(origin))
+  if (!IsTrialPossibleOnOrigin(origin.GetURL()))
     return out_tokens;
 
   for (const auto& feature : tokens) {
     for (const std::string& token : feature.second) {
       std::string token_feature;
-      if (TrialTokenValidator::ValidateToken(token, origin, &token_feature,
-                                             current_time) ==
+      base::Time expiry_time;
+      if (TrialTokenValidator::ValidateToken(token, origin, current_time,
+                                             &token_feature, &expiry_time) ==
           OriginTrialTokenStatus::kSuccess) {
         DCHECK_EQ(token_feature, feature.first);
         (*out_tokens)[feature.first].push_back(token);
@@ -156,15 +166,11 @@ TrialTokenValidator::GetValidTokens(const url::Origin& origin,
   return out_tokens;
 }
 
-bool TrialTokenValidator::IsTrialPossibleOnOrigin(const GURL& url) const {
+// static
+bool TrialTokenValidator::IsTrialPossibleOnOrigin(const GURL& url) {
   OriginTrialPolicy* policy = Policy();
   return policy && policy->IsOriginTrialsSupported() &&
          policy->IsOriginSecure(url);
-}
-
-bool TrialTokenValidator::IsTrialPossibleOnOrigin(
-    const url::Origin& origin) const {
-  return IsTrialPossibleOnOrigin(origin.GetURL());
 }
 
 }  // namespace blink

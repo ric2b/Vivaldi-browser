@@ -1,44 +1,5 @@
 # These tests currently fail when run with --enable-features=BackForwardCache
 
-# FrameService expects the old document to be deleted, but it isn't, because of
-# the BackForwardCache.
--FrameServiceBaseTest.DidFinishNavigation
-
-# Expects the process used by the previous document to exit.
--RenderFrameHostManagerTest.DeleteFrameAfterSwapOutACK
-
-# Check failed: is_waiting_for_swapout_ack_.
-# The swap out mechanism isn't used with the BackForwardCache.
--RenderFrameHostManagerTest.CommitNewNavigationBeforeSendingSwapOut
--RenderFrameHostManagerTest.SwapOutFrameAfterSwapOutACK
-
-# Test:
-# 1) Normal navigation to a non-webui URL.
-# 2) Add the webui capability to the RenderFrameHost.
-# 3) Navigate away.
-# 4) Navigate back. Hit a CHECK. RenderFrameHost with the webui capability can't
-#    have non-webUI URL.
--NavigationControllerTest.LoadURL_PrivilegedPending
-
-# navigation_simulator_impl.cc(581)] Check failed: state_ <= READY_TO_COMMIT
--RenderFrameHostManagerTest.NavigateAfterMissingSwapOutACK
-
-# NavigationSimulator.CommitErrorPage() is not supported.
--RenderProcessHostUnitTest.DoNotReuseError
-
-# Test expect a proxy for the old RFH's SiteInstance after a normal navigation
-# to exist.
--WebContentsImplTest.CrossSiteBoundaries
--WebContentsImplTest.NavigateFromSitelessUrl
-
-# Tests below are failing on android only.
-# Need to be triaged, see https://crbug.com/1007276.
-
-# Numerous tests from these suites are crashing with:
-# [FATAL:deferred_sequenced_task_runner.cc(83)] Check failed: !target_task_runner_
--AudibleMetricsTest.*
--GeolocationServiceTest.*
--MediaInternalsAudioLogTest/MediaInternalsAudioLogTest.*
--MediaInternalsVideoCaptureDeviceTest.NotifyVideoCaptureDeviceCapabilitiesEnumerated
--MediaStreamManagerTest.*
--RenderFrameAudioOutputStreamFactoryTest.*
+# https://crbug.com/1062923
+# Need investigation.
+-RenderFrameHostImplBrowserTest.CheckIsCurrentBeforeAndAfterUnload

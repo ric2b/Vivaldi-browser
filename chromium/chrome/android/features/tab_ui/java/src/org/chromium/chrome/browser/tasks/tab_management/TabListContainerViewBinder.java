@@ -13,10 +13,11 @@ import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerP
 import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerProperties.TOP_CONTROLS_HEIGHT;
 import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerProperties.VISIBILITY_LISTENER;
 
-import android.support.v7.widget.LinearLayoutManager;
 import android.widget.FrameLayout;
 
-import org.chromium.chrome.browser.util.ColorUtils;
+import androidx.recyclerview.widget.LinearLayoutManager;
+
+import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel;
 
@@ -42,7 +43,7 @@ class TabListContainerViewBinder {
             }
         } else if (IS_INCOGNITO == propertyKey) {
             if (!ChromeApplication.isVivaldi())
-            view.setBackgroundColor(ColorUtils.getPrimaryBackgroundColor(
+            view.setBackgroundColor(ChromeColors.getPrimaryBackgroundColor(
                     view.getResources(), model.get(IS_INCOGNITO)));
         } else if (VISIBILITY_LISTENER == propertyKey) {
             view.setVisibilityListener(model.get(VISIBILITY_LISTENER));

@@ -24,8 +24,13 @@ class URL_MATCHER_EXPORT StringPattern {
  public:
   typedef int ID;
 
-  StringPattern(const std::string& pattern, ID id);
+  // An invalid ID value. Clients must not use this as the id.
+  static constexpr ID kInvalidId = -1;
+
+  StringPattern(std::string pattern, ID id);
   ~StringPattern();
+  StringPattern(StringPattern&&);
+  StringPattern& operator=(StringPattern&&);
   const std::string& pattern() const { return pattern_; }
   ID id() const { return id_; }
 

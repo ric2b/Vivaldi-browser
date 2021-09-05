@@ -16,28 +16,19 @@ source_set("cpp") {
     "//chromeos/components/multidevice/logging",
     "//chromeos/services/multidevice_setup/public/mojom",
     "//mojo/public/cpp/bindings",
-    "//services/service_manager/public/cpp",
   ]
 }
 
 source_set("auth_token_validator") {
-  sources = [
-    "auth_token_validator.h",
-  ]
+  sources = [ "auth_token_validator.h" ]
 
-  deps = [
-    "//base",
-  ]
+  deps = [ "//base" ]
 }
 
 source_set("android_sms_app_helper_delegate") {
-  sources = [
-    "android_sms_app_helper_delegate.h",
-  ]
+  sources = [ "android_sms_app_helper_delegate.h" ]
 
-  deps = [
-    "//base",
-  ]
+  deps = [ "//base" ]
 }
 
 source_set("android_sms_pairing_state_tracker") {
@@ -46,9 +37,7 @@ source_set("android_sms_pairing_state_tracker") {
     "android_sms_pairing_state_tracker.h",
   ]
 
-  deps = [
-    "//base",
-  ]
+  deps = [ "//base" ]
 }
 
 source_set("prefs") {
@@ -127,19 +116,16 @@ static_library("test_support") {
     ":cpp",
     "//chromeos/services/multidevice_setup",
     "//chromeos/services/multidevice_setup/public/mojom",
+    "//url",
   ]
 
-  deps = [
-    "//base",
-  ]
+  deps = [ "//base" ]
 }
 
 source_set("unit_tests") {
   testonly = true
 
-  sources = [
-    "multidevice_setup_client_impl_unittest.cc",
-  ]
+  sources = [ "multidevice_setup_client_impl_unittest.cc" ]
 
   deps = [
     ":cpp",
@@ -151,20 +137,6 @@ source_set("unit_tests") {
     "//chromeos/services/multidevice_setup",
     "//chromeos/services/multidevice_setup:test_support",
     "//chromeos/services/multidevice_setup/public/mojom",
-    "//services/service_manager/public/cpp/test:test_support",
     "//testing/gtest",
-  ]
-}
-
-source_set("manifest") {
-  sources = [
-    "manifest.cc",
-    "manifest.h",
-  ]
-
-  deps = [
-    "//base",
-    "//chromeos/services/multidevice_setup/public/mojom",
-    "//services/service_manager/public/cpp",
   ]
 }

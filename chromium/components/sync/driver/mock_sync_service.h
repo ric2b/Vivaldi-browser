@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "base/values.h"
 #include "components/signin/public/identity_manager/account_info.h"
@@ -33,7 +34,7 @@ class MockSyncService : public SyncService {
   // SyncService implementation.
   syncer::SyncUserSettings* GetUserSettings() override;
   const syncer::SyncUserSettings* GetUserSettings() const override;
-  MOCK_CONST_METHOD0(GetDisableReasons, int());
+  MOCK_CONST_METHOD0(GetDisableReasons, DisableReasonSet());
   MOCK_CONST_METHOD0(GetTransportState, TransportState());
   MOCK_CONST_METHOD0(IsLocalSyncEnabled, bool());
   MOCK_CONST_METHOD0(GetAuthenticatedAccountInfo, CoreAccountInfo());
@@ -43,7 +44,6 @@ class MockSyncService : public SyncService {
   MOCK_CONST_METHOD0(RequiresClientUpgrade, bool());
   MOCK_CONST_METHOD0(GetExperimentalAuthenticationKey,
                      std::unique_ptr<crypto::ECPrivateKey>());
-
   MOCK_METHOD0(GetSetupInProgressHandle,
                std::unique_ptr<SyncSetupInProgressHandle>());
   MOCK_CONST_METHOD0(IsSetupInProgress, bool());
@@ -51,12 +51,17 @@ class MockSyncService : public SyncService {
   MOCK_CONST_METHOD0(GetRegisteredDataTypes, ModelTypeSet());
   MOCK_CONST_METHOD0(GetPreferredDataTypes, ModelTypeSet());
   MOCK_CONST_METHOD0(GetActiveDataTypes, ModelTypeSet());
+  MOCK_CONST_METHOD0(GetBackedOffDataTypes, ModelTypeSet());
 
   MOCK_METHOD0(StopAndClear, void());
   MOCK_METHOD1(OnDataTypeRequestsSyncStartup, void(ModelType type));
   MOCK_METHOD1(TriggerRefresh, void(const ModelTypeSet& types));
   MOCK_METHOD1(DataTypePreconditionChanged, void(syncer::ModelType type));
   MOCK_METHOD1(SetInvalidationsForSessionsEnabled, void(bool enabled));
+  MOCK_METHOD3(AddTrustedVaultDecryptionKeysFromWeb,
+               void(const std::string& gaia_id,
+                    const std::vector<std::vector<uint8_t>>& keys,
+                    int last_key_version));
   MOCK_METHOD1(GetUserNoisedBirthYearAndGender,
                UserDemographicsResult(base::Time now));
 
@@ -84,8 +89,8 @@ class MockSyncService : public SyncService {
                void(TypeDebugInfoObserver* observer));
   MOCK_METHOD0(GetJsController, base::WeakPtr<JsController>());
   MOCK_METHOD1(GetAllNodesForDebugging,
-               void(const base::Callback<
-                    void(std::unique_ptr<base::ListValue>)>& callback));
+               void(base::OnceCallback<void(std::unique_ptr<base::ListValue>)>
+                        callback));
 
   // KeyedService implementation.
   MOCK_METHOD0(Shutdown, void());

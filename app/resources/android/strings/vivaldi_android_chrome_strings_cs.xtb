@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="cs">
+<translation id="1169602411434249000">Blokovat sledovače</translation>
 <translation id="1397811292916898096">Hledat pomocí vyhledávače <ph name="PRODUCT_NAME" /></translation>
+<translation id="1598449788754183301">Přepnout normální/soukromé listy</translation>
 <translation id="1644574205037202324">Historie</translation>
 <translation id="17513872634828108">Otevřené listy</translation>
 <translation id="1829244130665387512">Najít na stránce</translation>
@@ -10,9 +12,11 @@
 <translation id="2633278372998075009">Soukromé listy</translation>
 <translation id="3076631378407175873">Copyright <ph name="YEAR" /> Vivaldi a.s. Všechna práva vyhrazena.</translation>
 <translation id="3234355010754616171">Nový soukromý list</translation>
+<translation id="3518985090088779359">Přijmout a pokračovat</translation>
 <translation id="3700829948786686853">Vítá vás Vivaldi</translation>
 <translation id="4121750346708795461">Používáním této aplikace vyjadřujete souhlas se <ph name="BEGIN_LINK1" />smluvními podmínkami<ph name="END_LINK1" /> a <ph name="BEGIN_LINK2" />zásadami ochrany soukromí<ph name="END_LINK2" /> prohlížeče Vivaldi.</translation>
 <translation id="4243710787042215766">Otevřít v soukromém listu</translation>
+<translation id="4526803704855831732">Soukromé listy</translation>
 <translation id="4883379392681899581">Opustit soukromý režim</translation>
 <translation id="4943872375798546930">Žádné výsledky</translation>
 <translation id="5118676864324397542">Úložiště aplikace <ph name="APP_NAME" /></translation>
@@ -31,7 +35,6 @@ Chcete-li vyhledávací dotaz upravit, proveďte výběr dlouhým stisknutím. C
 <translation id="7519434535192513364">Vyhledání klepnutím odešle vybrané slovo a aktuální stránku jako kontext do Googlu. Funkce je k dispozici pouze, je-li jako hlavní vyhledávač použit Google, vypnout ji může v <ph name="BEGIN_LINK" />Nastavení<ph name="END_LINK" />.</translation>
 <translation id="7649070708921625228">Nápověda a zpětná vazba</translation>
 <translation id="804786196054284061">Smluvní podmínky Vivaldi</translation>
-<translation id="8428213095426709021">Nastavení</translation>
 <translation id="8820817407110198400">Záložky</translation>
 <translation id="9063523880881406963">Vypnout funkci Stránky pro počítač</translation>
 <translation id="9080642952018487277">Zahájit soukromé prohlížení</translation>

@@ -57,66 +57,69 @@ TEST_F(ImageDataTest,
     u16_pixels[i] = f32_pixels[i] * 65535.0;
 
   // Creating ArrayBufferContents objects. We need two buffers for RGBA32 data
-  // because kRGBA8CanvasPixelFormat->kUint8ClampedArrayStorageFormat consumes
-  // the input data parameter.
-  WTF::ArrayBufferContents contents_rgba32(
-      kNumColorComponents, 1, WTF::ArrayBufferContents::kNotShared,
-      WTF::ArrayBufferContents::kDontInitialize);
+  // because
+  // CanvasPixelFormat::kRGBA8->kUint8ClampedArrayStorageFormat
+  // consumes the input data parameter.
+  ArrayBufferContents contents_rgba32(kNumColorComponents, 1,
+                                      ArrayBufferContents::kNotShared,
+                                      ArrayBufferContents::kDontInitialize);
   std::memcpy(contents_rgba32.Data(), rgba32_pixels, kNumColorComponents);
 
-  WTF::ArrayBufferContents contents_rgba32_2;
+  ArrayBufferContents contents_rgba32_2;
   contents_rgba32.CopyTo(contents_rgba32_2);
 
-  WTF::ArrayBufferContents contents_f16(
-      kNumColorComponents * 2, 1, WTF::ArrayBufferContents::kNotShared,
-      WTF::ArrayBufferContents::kDontInitialize);
+  ArrayBufferContents contents_f16(kNumColorComponents * 2, 1,
+                                   ArrayBufferContents::kNotShared,
+                                   ArrayBufferContents::kDontInitialize);
   std::memcpy(contents_f16.Data(), f16_pixels, kNumColorComponents * 2);
 
-  // Testing kRGBA8CanvasPixelFormat -> kUint8ClampedArrayStorageFormat
-  DOMArrayBufferView* data =
+  // Testing CanvasPixelFormat::kRGBA8->
+  // kUint8ClampedArrayStorageFormat
+  NotShared<DOMArrayBufferView> data(
       ImageData::ConvertPixelsFromCanvasPixelFormatToImageDataStorageFormat(
-          contents_rgba32, kRGBA8CanvasPixelFormat,
-          kUint8ClampedArrayStorageFormat);
+          contents_rgba32, CanvasPixelFormat::kRGBA8,
+          kUint8ClampedArrayStorageFormat));
   DCHECK(data->GetType() == DOMArrayBufferView::ViewType::kTypeUint8Clamped);
   ColorCorrectionTestUtils::CompareColorCorrectedPixels(
       data->BaseAddress(), rgba32_pixels, kNumPixels, kPixelFormat_8888,
       kAlphaUnmultiplied, kNoUnpremulRoundTripTolerance);
 
-  // Testing kRGBA8CanvasPixelFormat -> kUint16ArrayStorageFormat
+  // Testing CanvasPixelFormat::kRGBA8->
+  // kUint16ArrayStorageFormat
   data = ImageData::ConvertPixelsFromCanvasPixelFormatToImageDataStorageFormat(
-      contents_rgba32_2, kRGBA8CanvasPixelFormat, kUint16ArrayStorageFormat);
+      contents_rgba32_2, CanvasPixelFormat::kRGBA8, kUint16ArrayStorageFormat);
   DCHECK(data->GetType() == DOMArrayBufferView::ViewType::kTypeUint16);
   ColorCorrectionTestUtils::CompareColorCorrectedPixels(
       data->BaseAddress(), u16_pixels, kNumPixels, kPixelFormat_16161616,
       kAlphaUnmultiplied, kUnpremulRoundTripTolerance);
-
-  // Testing kRGBA8CanvasPixelFormat -> kFloat32ArrayStorageFormat
+  // Testing CanvasPixelFormat::kRGBA8 ->
+  // kFloat32ArrayStorageFormat
   data = ImageData::ConvertPixelsFromCanvasPixelFormatToImageDataStorageFormat(
-      contents_rgba32_2, kRGBA8CanvasPixelFormat, kFloat32ArrayStorageFormat);
+      contents_rgba32_2, CanvasPixelFormat::kRGBA8, kFloat32ArrayStorageFormat);
   DCHECK(data->GetType() == DOMArrayBufferView::ViewType::kTypeFloat32);
   ColorCorrectionTestUtils::CompareColorCorrectedPixels(
       data->BaseAddress(), f32_pixels, kNumPixels, kPixelFormat_ffff,
       kAlphaUnmultiplied, kUnpremulRoundTripTolerance);
 
-  // Testing kF16CanvasPixelFormat -> kUint8ClampedArrayStorageFormat
+  // Testing CanvasPixelFormat::kF16 -> kUint8ClampedArrayStorageFormat
   data = ImageData::ConvertPixelsFromCanvasPixelFormatToImageDataStorageFormat(
-      contents_f16, kF16CanvasPixelFormat, kUint8ClampedArrayStorageFormat);
+      contents_f16, CanvasPixelFormat::kF16, kUint8ClampedArrayStorageFormat);
   DCHECK(data->GetType() == DOMArrayBufferView::ViewType::kTypeUint8Clamped);
   ColorCorrectionTestUtils::CompareColorCorrectedPixels(
       data->BaseAddress(), rgba32_pixels, kNumPixels, kPixelFormat_8888,
       kAlphaUnmultiplied, kNoUnpremulRoundTripTolerance);
 
-  // Testing kF16CanvasPixelFormat -> kUint16ArrayStorageFormat
+  // Testing CanvasPixelFormat::kF16 -> kUint16ArrayStorageFormat
   data = ImageData::ConvertPixelsFromCanvasPixelFormatToImageDataStorageFormat(
-      contents_f16, kF16CanvasPixelFormat, kUint16ArrayStorageFormat);
+      contents_f16, CanvasPixelFormat::kF16, kUint16ArrayStorageFormat);
   DCHECK(data->GetType() == DOMArrayBufferView::ViewType::kTypeUint16);
   ColorCorrectionTestUtils::CompareColorCorrectedPixels(
       data->BaseAddress(), u16_pixels, kNumPixels, kPixelFormat_16161616,
       kAlphaUnmultiplied, kUnpremulRoundTripTolerance);
 
-  // Testing kF16CanvasPixelFormat -> kFloat32ArrayStorageFormat
+  // Testing CanvasPixelFormat::kF16 -> kFloat32ArrayStorageFormat
   data = ImageData::ConvertPixelsFromCanvasPixelFormatToImageDataStorageFormat(
-      contents_f16, kF16CanvasPixelFormat, kFloat32ArrayStorageFormat);
+      contents_f16, CanvasPixelFormat::kF16, kFloat32ArrayStorageFormat);
   DCHECK(data->GetType() == DOMArrayBufferView::ViewType::kTypeFloat32);
   ColorCorrectionTestUtils::CompareColorCorrectedPixels(
       data->BaseAddress(), f32_pixels, kNumPixels, kPixelFormat_ffff,
@@ -129,8 +132,10 @@ TEST_F(ImageDataTest,
 TEST_F(ImageDataTest, TestGetImageDataInCanvasColorSettings) {
   unsigned num_image_data_color_spaces = 3;
   CanvasColorSpace image_data_color_spaces[] = {
-      kSRGBCanvasColorSpace, kLinearRGBCanvasColorSpace,
-      kRec2020CanvasColorSpace, kP3CanvasColorSpace,
+      CanvasColorSpace::kSRGB,
+      CanvasColorSpace::kLinearRGB,
+      CanvasColorSpace::kRec2020,
+      CanvasColorSpace::kP3,
   };
 
   unsigned num_image_data_storage_formats = 3;
@@ -141,14 +146,15 @@ TEST_F(ImageDataTest, TestGetImageDataInCanvasColorSettings) {
 
   unsigned num_canvas_color_settings = 4;
   CanvasColorSpace canvas_color_spaces[] = {
-      kSRGBCanvasColorSpace,      kSRGBCanvasColorSpace,
-      kLinearRGBCanvasColorSpace, kRec2020CanvasColorSpace,
-      kP3CanvasColorSpace,
+      CanvasColorSpace::kSRGB,      CanvasColorSpace::kSRGB,
+      CanvasColorSpace::kLinearRGB, CanvasColorSpace::kRec2020,
+      CanvasColorSpace::kP3,
   };
 
   CanvasPixelFormat canvas_pixel_formats[] = {
-      kRGBA8CanvasPixelFormat, kF16CanvasPixelFormat, kF16CanvasPixelFormat,
-      kF16CanvasPixelFormat,   kF16CanvasPixelFormat,
+      CanvasPixelFormat::kRGBA8, CanvasPixelFormat::kF16,
+      CanvasPixelFormat::kF16,   CanvasPixelFormat::kF16,
+      CanvasPixelFormat::kF16,
   };
 
   // As cross checking the output of Skia color space covnersion API is not in
@@ -165,28 +171,28 @@ TEST_F(ImageDataTest, TestGetImageDataInCanvasColorSettings) {
                          0,   0,   0,   0,    // Transparent
                          255, 192, 128, 64,   // Decreasing values
                          93,  117, 205, 11};  // Random values
-  unsigned data_length = 16;
+  size_t data_length = 16;
 
   uint16_t* u16_pixels = new uint16_t[data_length];
-  for (unsigned i = 0; i < data_length; i++)
+  for (size_t i = 0; i < data_length; i++)
     u16_pixels[i] = u8_pixels[i] * 257;
 
   float* f32_pixels = new float[data_length];
-  for (unsigned i = 0; i < data_length; i++)
+  for (size_t i = 0; i < data_length; i++)
     f32_pixels[i] = u8_pixels[i] / 255.0;
 
-  DOMArrayBufferView* data_array = nullptr;
-
-  DOMUint8ClampedArray* data_u8 =
-      DOMUint8ClampedArray::Create(u8_pixels, data_length);
+  NotShared<DOMUint8ClampedArray> data_u8(
+      DOMUint8ClampedArray::Create(u8_pixels, data_length));
   DCHECK(data_u8);
-  EXPECT_EQ(data_length, data_u8->length());
-  DOMUint16Array* data_u16 = DOMUint16Array::Create(u16_pixels, data_length);
+  EXPECT_EQ(data_length, data_u8->lengthAsSizeT());
+  NotShared<DOMUint16Array> data_u16(
+      DOMUint16Array::Create(u16_pixels, data_length));
   DCHECK(data_u16);
-  EXPECT_EQ(data_length, data_u16->length());
-  DOMFloat32Array* data_f32 = DOMFloat32Array::Create(f32_pixels, data_length);
+  EXPECT_EQ(data_length, data_u16->lengthAsSizeT());
+  NotShared<DOMFloat32Array> data_f32(
+      DOMFloat32Array::Create(f32_pixels, data_length));
   DCHECK(data_f32);
-  EXPECT_EQ(data_length, data_f32->length());
+  EXPECT_EQ(data_length, data_f32->lengthAsSizeT());
 
   ImageData* image_data = nullptr;
   ImageDataColorSettings* color_settings = ImageDataColorSettings::Create();
@@ -204,17 +210,18 @@ TEST_F(ImageDataTest, TestGetImageDataInCanvasColorSettings) {
         ImageData::CanvasColorSpaceName(image_data_color_spaces[i]));
 
     for (unsigned j = 0; j < num_image_data_storage_formats; j++) {
+      NotShared<DOMArrayBufferView> data_array;
       switch (image_data_storage_formats[j]) {
         case kUint8ClampedArrayStorageFormat:
-          data_array = static_cast<DOMArrayBufferView*>(data_u8);
+          data_array = data_u8;
           color_settings->setStorageFormat(kUint8ClampedArrayStorageFormatName);
           break;
         case kUint16ArrayStorageFormat:
-          data_array = static_cast<DOMArrayBufferView*>(data_u16);
+          data_array = data_u16;
           color_settings->setStorageFormat(kUint16ArrayStorageFormatName);
           break;
         case kFloat32ArrayStorageFormat:
-          data_array = static_cast<DOMArrayBufferView*>(data_f32);
+          data_array = data_f32;
           color_settings->setStorageFormat(kFloat32ArrayStorageFormatName);
           break;
         default:
@@ -245,7 +252,7 @@ TEST_F(ImageDataTest, TestGetImageDataInCanvasColorSettings) {
             pixels_converted_manually.get(),
             pixels_converted_in_image_data.get(),
             static_cast<int>(image_data->Size().Area()),
-            (canvas_pixel_formats[k] == kRGBA8CanvasPixelFormat)
+            (canvas_pixel_formats[k] == CanvasPixelFormat::kRGBA8)
                 ? kPixelFormat_8888
                 : kPixelFormat_hhhh,
             kAlphaUnmultiplied, kUnpremulRoundTripTolerance);
@@ -388,7 +395,7 @@ TEST_F(ImageDataTest, TestCropRect) {
   // Source pixels
   unsigned width = 20;
   unsigned height = 20;
-  unsigned data_length = width * height * 4;
+  size_t data_length = width * height * 4;
   uint8_t* u8_pixels = new uint8_t[data_length];
   uint16_t* u16_pixels = new uint16_t[data_length];
   float* f32_pixels = new float[data_length];
@@ -420,30 +427,32 @@ TEST_F(ImageDataTest, TestCropRect) {
       }
 
   // Create ImageData objects
-  DOMArrayBufferView* data_array = nullptr;
 
-  DOMUint8ClampedArray* data_u8 =
-      DOMUint8ClampedArray::Create(u8_pixels, data_length);
+  NotShared<DOMUint8ClampedArray> data_u8(
+      DOMUint8ClampedArray::Create(u8_pixels, data_length));
   DCHECK(data_u8);
-  EXPECT_EQ(data_length, data_u8->length());
-  DOMUint16Array* data_u16 = DOMUint16Array::Create(u16_pixels, data_length);
+  EXPECT_EQ(data_length, data_u8->lengthAsSizeT());
+  NotShared<DOMUint16Array> data_u16(
+      DOMUint16Array::Create(u16_pixels, data_length));
   DCHECK(data_u16);
-  EXPECT_EQ(data_length, data_u16->length());
-  DOMFloat32Array* data_f32 = DOMFloat32Array::Create(f32_pixels, data_length);
+  EXPECT_EQ(data_length, data_u16->lengthAsSizeT());
+  NotShared<DOMFloat32Array> data_f32(
+      DOMFloat32Array::Create(f32_pixels, data_length));
   DCHECK(data_f32);
-  EXPECT_EQ(data_length, data_f32->length());
+  EXPECT_EQ(data_length, data_f32->lengthAsSizeT());
 
   ImageData* image_data = nullptr;
   ImageData* cropped_image_data = nullptr;
 
   bool test_passed = true;
   for (int i = 0; i < num_image_data_storage_formats; i++) {
+    NotShared<DOMArrayBufferView> data_array;
     if (image_data_storage_formats[i] == kUint8ClampedArrayStorageFormat)
-      data_array = static_cast<DOMArrayBufferView*>(data_u8);
+      data_array = data_u8;
     else if (image_data_storage_formats[i] == kUint16ArrayStorageFormat)
-      data_array = static_cast<DOMArrayBufferView*>(data_u16);
+      data_array = data_u16;
     else
-      data_array = static_cast<DOMArrayBufferView*>(data_f32);
+      data_array = data_f32;
 
     ImageDataColorSettings* color_settings = ImageDataColorSettings::Create();
     color_settings->setStorageFormat(image_data_storage_format_names[i]);

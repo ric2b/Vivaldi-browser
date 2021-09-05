@@ -8,7 +8,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/modern_primary_color">
+    android:background="@color/default_bg_color">
     <LinearLayout
         android:id="@+id/main_content"
         android:layout_width="match_parent"
@@ -19,7 +19,7 @@
             android:id="@+id/toolbar_left_button"
             style="@style/BottomToolbarButton"
             android:src="@drawable/ic_expand_less_black_24dp"
-            app:tint="@color/standard_mode_tint"
+            app:tint="@color/default_icon_color_tint_list"
             android:contentDescription="@string/accessibility_bottom_tab_strip_expand_tab_sheet" />
         <FrameLayout
             android:id="@+id/toolbar_container_view"
@@ -29,7 +29,7 @@
         <org.chromium.ui.widget.ChromeImageView
             android:id="@+id/toolbar_right_button"
             style="@style/BottomToolbarButton"
-            app:tint="@color/standard_mode_tint"
+            app:tint="@color/default_icon_color_tint_list"
             android:src="@drawable/plus"
             android:contentDescription="@string/bottom_tab_grid_new_tab" />
    </LinearLayout>

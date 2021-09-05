@@ -118,7 +118,7 @@ class MEDIA_EXPORT ChunkDemuxerStream : public DemuxerStream {
   void UnmarkEndOfStream();
 
   // DemuxerStream methods.
-  void Read(const ReadCB& read_cb) override;
+  void Read(ReadCB read_cb) override;
   bool IsReadPending() const override;
   Type type() const override;
   Liveness liveness() const override;
@@ -205,9 +205,9 @@ class MEDIA_EXPORT ChunkDemuxer : public Demuxer {
   // |encrypted_media_init_data_cb| Run when the demuxer determines that an
   //   encryption key is needed to decrypt the content.
   // |media_log| Used to report content and engine debug messages.
-  ChunkDemuxer(const base::Closure& open_cb,
-               const base::Closure& progress_cb,
-               const EncryptedMediaInitDataCB& encrypted_media_init_data_cb,
+  ChunkDemuxer(base::OnceClosure open_cb,
+               base::RepeatingClosure progress_cb,
+               EncryptedMediaInitDataCB encrypted_media_init_data_cb,
                MediaLog* media_log);
   ~ChunkDemuxer() override;
 
@@ -216,9 +216,9 @@ class MEDIA_EXPORT ChunkDemuxer : public Demuxer {
 
   // |enable_text| Process inband text tracks in the normal way when true,
   //   otherwise ignore them.
-  void Initialize(DemuxerHost* host, const PipelineStatusCB& init_cb) override;
+  void Initialize(DemuxerHost* host, PipelineStatusCallback init_cb) override;
   void Stop() override;
-  void Seek(base::TimeDelta time, const PipelineStatusCB& cb) override;
+  void Seek(base::TimeDelta time, PipelineStatusCallback cb) override;
   base::Time GetTimelineOffset() const override;
   std::vector<DemuxerStream*> GetAllStreams() override;
   base::TimeDelta GetStartTime() const override;
@@ -250,9 +250,8 @@ class MEDIA_EXPORT ChunkDemuxer : public Demuxer {
                         const MediaTracksUpdatedCB& tracks_updated_cb);
 
   // Notifies a caller via |parse_warning_cb| of a parse warning.
-  void SetParseWarningCallback(
-      const std::string& id,
-      const SourceBufferParseWarningCB& parse_warning_cb);
+  void SetParseWarningCallback(const std::string& id,
+                               SourceBufferParseWarningCB parse_warning_cb);
 
   // Removed an ID & associated resources that were previously added with
   // AddId().
@@ -272,12 +271,6 @@ class MEDIA_EXPORT ChunkDemuxer : public Demuxer {
   void OnSelectedVideoTrackChanged(const std::vector<MediaTrack::Id>& track_ids,
                                    base::TimeDelta curr_time,
                                    TrackChangeCB change_completed_cb) override;
-
-  // Callback for reporting bytes appended to a SourceBuffer.
-  using BytesReceivedCB = base::RepeatingCallback<void(uint64_t)>;
-
-  // Register a BytesReceivedCB.
-  void AddBytesReceivedCallback(BytesReceivedCB bytes_received_cb);
 
   // Appends media data to the source buffer associated with |id|, applying
   // and possibly updating |*timestamp_offset| during coded frame processing.
@@ -478,19 +471,19 @@ class MEDIA_EXPORT ChunkDemuxer : public Demuxer {
   bool cancel_next_seek_;
 
   DemuxerHost* host_;
-  base::Closure open_cb_;
-  base::Closure progress_cb_;
+  base::OnceClosure open_cb_;
+  const base::RepeatingClosure progress_cb_;
   EncryptedMediaInitDataCB encrypted_media_init_data_cb_;
 
   // MediaLog for reporting messages and properties to debug content and engine.
   MediaLog* media_log_;
 
-  PipelineStatusCB init_cb_;
+  PipelineStatusCallback init_cb_;
   // Callback to execute upon seek completion.
   // TODO(wolenetz/acolwell): Protect against possible double-locking by first
   // releasing |lock_| before executing this callback. See
   // http://crbug.com/308226
-  PipelineStatusCB seek_cb_;
+  PipelineStatusCallback seek_cb_;
 
   using OwnedChunkDemuxerStreamVector =
       std::vector<std::unique_ptr<ChunkDemuxerStream>>;
@@ -522,9 +515,6 @@ class MEDIA_EXPORT ChunkDemuxer : public Demuxer {
   // references to these streams, so we need to keep them alive. But they'll be
   // in a shut down state, so reading from them will return EOS.
   std::vector<std::unique_ptr<ChunkDemuxerStream>> removed_streams_;
-
-  // Callback for reporting the number of bytes appended to this ChunkDemuxer.
-  BytesReceivedCB bytes_received_cb_;
 
   std::map<MediaTrack::Id, ChunkDemuxerStream*> track_id_to_demux_stream_map_;
 

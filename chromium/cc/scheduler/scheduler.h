@@ -7,12 +7,15 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "base/cancelable_callback.h"
 #include "base/time/time.h"
 #include "cc/cc_export.h"
+#include "cc/metrics/event_metrics.h"
 #include "cc/scheduler/begin_frame_tracker.h"
 #include "cc/scheduler/draw_result.h"
+#include "cc/scheduler/scheduler.h"
 #include "cc/scheduler/scheduler_settings.h"
 #include "cc/scheduler/scheduler_state_machine.h"
 #include "cc/tiles/tile_priority.h"
@@ -20,10 +23,14 @@
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/common/frame_sinks/delay_based_time_source.h"
 
-namespace base {
-namespace trace_event {
-class ConvertableToTraceFormat;
+namespace perfetto {
+namespace protos {
+namespace pbzero {
+class ChromeCompositorSchedulerState;
 }
+}  // namespace protos
+}  // namespace perfetto
+namespace base {
 class SingleThreadTaskRunner;
 }
 
@@ -32,8 +39,14 @@ struct FrameTimingDetails;
 }
 
 namespace cc {
-
+struct BeginMainFrameMetrics;
 class CompositorTimingHistory;
+
+enum class FrameSkippedReason {
+  kRecoverLatency,
+  kNoDamage,
+  kWaitingOnMain,
+};
 
 class SchedulerClient {
  public:
@@ -57,7 +70,8 @@ class SchedulerClient {
       bool needs_redraw) = 0;
   virtual void ScheduledActionPerformImplSideInvalidation() = 0;
   virtual void DidFinishImplFrame() = 0;
-  virtual void DidNotProduceFrame(const viz::BeginFrameAck& ack) = 0;
+  virtual void DidNotProduceFrame(const viz::BeginFrameAck& ack,
+                                  FrameSkippedReason reason) = 0;
   virtual void WillNotReceiveBeginFrame() = 0;
   virtual void SendBeginMainFrameNotExpectedSoon() = 0;
   virtual void ScheduledActionBeginMainFrameNotExpectedUntil(
@@ -158,7 +172,8 @@ class CC_EXPORT Scheduler : public viz::BeginFrameObserverBase {
 
   // Drawing should result in submitting a CompositorFrame to the
   // LayerTreeFrameSink and then calling this.
-  void DidSubmitCompositorFrame(uint32_t frame_token);
+  void DidSubmitCompositorFrame(uint32_t frame_token,
+                                EventMetricsSet events_metrics);
   // The LayerTreeFrameSink acks when it is ready for a new frame which
   // should result in this getting called to unblock the next draw.
   void DidReceiveCompositorFrameAck();
@@ -170,7 +185,7 @@ class CC_EXPORT Scheduler : public viz::BeginFrameObserverBase {
   // BeginMainFrame request from the compositor, and blocks the main thread
   // to copy the layer tree to the compositor thread. Call this method when the
   // main thread updates are completed to signal it is ready for the commmit.
-  void NotifyReadyToCommit();
+  void NotifyReadyToCommit(std::unique_ptr<BeginMainFrameMetrics> details);
   void BeginMainFrameAborted(CommitEarlyOutReason reason);
   void DidCommit();
 
@@ -224,9 +239,8 @@ class CC_EXPORT Scheduler : public viz::BeginFrameObserverBase {
   // the main thread by the cc scheduler.
   void SetMainThreadWantsBeginMainFrameNotExpected(bool new_state);
 
-  std::unique_ptr<base::trace_event::ConvertableToTraceFormat> AsValue() const;
-
-  void AsValueInto(base::trace_event::TracedValue* state) const;
+  void AsProtozeroInto(
+      perfetto::protos::pbzero::ChromeCompositorSchedulerState* state) const;
 
   void SetVideoNeedsBeginFrames(bool video_needs_begin_frames);
 
@@ -354,7 +368,8 @@ class CC_EXPORT Scheduler : public viz::BeginFrameObserverBase {
   void BeginImplFrameSynchronous(const viz::BeginFrameArgs& args);
   void BeginImplFrame(const viz::BeginFrameArgs& args, base::TimeTicks now);
   void FinishImplFrame();
-  void SendDidNotProduceFrame(const viz::BeginFrameArgs& args);
+  void SendDidNotProduceFrame(const viz::BeginFrameArgs& args,
+                              FrameSkippedReason reason);
   void OnBeginImplFrameDeadline();
   void PollToAdvanceCommitState();
   void BeginMainFrameAnimateAndLayoutOnly(const viz::BeginFrameArgs& args);

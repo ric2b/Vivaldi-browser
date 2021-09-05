@@ -6,6 +6,8 @@ import("//third_party/blink/renderer/modules/modules.gni")
 
 blink_modules_sources("service_worker") {
   sources = [
+    "cross_origin_resource_policy_checker.cc",
+    "cross_origin_resource_policy_checker.h",
     "extendable_event.cc",
     "extendable_event.h",
     "extendable_message_event.cc",
@@ -36,6 +38,8 @@ blink_modules_sources("service_worker") {
     "service_worker_content_settings_proxy.h",
     "service_worker_error.cc",
     "service_worker_error.h",
+    "service_worker_event_queue.cc",
+    "service_worker_event_queue.h",
     "service_worker_global_scope.cc",
     "service_worker_global_scope.h",
     "service_worker_global_scope_proxy.cc",
@@ -50,8 +54,6 @@ blink_modules_sources("service_worker") {
     "service_worker_script_cached_metadata_handler.h",
     "service_worker_thread.cc",
     "service_worker_thread.h",
-    "service_worker_timeout_timer.cc",
-    "service_worker_timeout_timer.h",
     "service_worker_window_client.cc",
     "service_worker_window_client.h",
     "thread_safe_script_container.cc",
@@ -60,11 +62,7 @@ blink_modules_sources("service_worker") {
     "wait_until_observer.h",
   ]
 
-  public_deps = [
-    "//third_party/blink/renderer/platform",
-  ]
+  public_deps = [ "//third_party/blink/renderer/platform" ]
 
-  deps = [
-    "//base",
-  ]
+  deps = [ "//base" ]
 }

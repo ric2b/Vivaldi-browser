@@ -20,18 +20,19 @@
 #include "ui/views/controls/link.h"
 #include "ui/views/view_class_properties.h"
 
-#include "app/vivaldi_apptools.h"
+#include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_finder.h"
 #include "ui/infobar_container_web_proxy.h"
 
 // InfoBarService -------------------------------------------------------------
 
 std::unique_ptr<infobars::InfoBar> InfoBarService::CreateConfirmInfoBar(
     std::unique_ptr<ConfirmInfoBarDelegate> delegate) {
-  if (vivaldi::IsVivaldiRunning()) {
+  Browser* browser = chrome::FindBrowserWithWebContents(web_contents());
+  if (browser && browser->is_vivaldi()) {
     return std::make_unique<vivaldi::ConfirmInfoBarWebProxy>(
         std::move(delegate), web_contents());
   }
-
   return std::make_unique<ConfirmInfoBar>(std::move(delegate));
 }
 
@@ -62,7 +63,7 @@ ConfirmInfoBar::ConfirmInfoBar(std::unique_ptr<ConfirmInfoBarDelegate> delegate)
       cancel_button_->SetProminent(true);
   }
 
-  link_ = CreateLink(delegate_ptr->GetLinkText(), this);
+  link_ = CreateLink(delegate_ptr->GetLinkText());
   AddChildView(link_);
 }
 
@@ -115,14 +116,6 @@ void ConfirmInfoBar::ButtonPressed(views::Button* sender,
   } else {
     InfoBarView::ButtonPressed(sender, event);
   }
-}
-
-void ConfirmInfoBar::LinkClicked(views::Link* source, int event_flags) {
-  if (!owner())
-    return;  // We're closing; don't call anything, it might access the owner.
-  DCHECK_EQ(link_, source);
-  if (GetDelegate()->LinkClicked(ui::DispositionFromEventFlags(event_flags)))
-    RemoveSelf();
 }
 
 int ConfirmInfoBar::ContentMinimumWidth() const {

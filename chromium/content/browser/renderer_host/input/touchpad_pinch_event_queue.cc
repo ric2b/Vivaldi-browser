@@ -4,9 +4,10 @@
 
 #include "content/browser/renderer_host/input/touchpad_pinch_event_queue.h"
 
+#include "base/bind.h"
 #include "base/trace_event/trace_event.h"
 #include "content/public/common/content_features.h"
-#include "third_party/blink/public/platform/web_mouse_wheel_event.h"
+#include "third_party/blink/public/common/input/web_mouse_wheel_event.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/blink/blink_event_util.h"
 #include "ui/latency/latency_info.h"
@@ -51,8 +52,7 @@ blink::WebMouseWheelEvent CreateSyntheticWheelFromTouchpadPinchEvent(
       pinch_event.TimeStamp());
   wheel_event.SetPositionInWidget(pinch_event.PositionInWidget());
   wheel_event.SetPositionInScreen(pinch_event.PositionInScreen());
-  wheel_event.delta_units =
-      ui::input_types::ScrollGranularity::kScrollByPrecisePixel;
+  wheel_event.delta_units = ui::ScrollGranularity::kScrollByPrecisePixel;
   wheel_event.delta_x = 0;
   wheel_event.delta_y = delta_y;
 
@@ -124,19 +124,11 @@ void TouchpadPinchEventQueue::QueueEvent(
 }
 
 void TouchpadPinchEventQueue::ProcessMouseWheelAck(
+    const MouseWheelEventWithLatencyInfo& ack_event,
     InputEventAckSource ack_source,
-    InputEventAckState ack_result,
-    const MouseWheelEventWithLatencyInfo& ack_event) {
+    InputEventAckState ack_result) {
   TRACE_EVENT0("input", "TouchpadPinchEventQueue::ProcessMouseWheelAck");
   if (!pinch_event_awaiting_ack_)
-    return;
-
-  // |ack_event.event| should be the same as the wheel_event_awaiting_ack_. If
-  // they aren't, then don't continue processing the ack. The two events can
-  // potentially be different because MouseWheelEventQueue also dispatches wheel
-  // events, and any wheel event ack that is received is sent to both
-  // *EventQueue::ProcessMouseWheelAck methods.
-  if (wheel_event_awaiting_ack_ != ack_event.event)
     return;
 
   if (pinch_event_awaiting_ack_->event.GetType() ==
@@ -149,7 +141,6 @@ void TouchpadPinchEventQueue::ProcessMouseWheelAck(
                                      ack_result);
 
   pinch_event_awaiting_ack_.reset();
-  wheel_event_awaiting_ack_.reset();
   TryForwardNextEventToRenderer();
 }
 
@@ -201,12 +192,16 @@ void TouchpadPinchEventQueue::TryForwardNextEventToRenderer() {
     }
   }
 
-  wheel_event_awaiting_ack_ = CreateSyntheticWheelFromTouchpadPinchEvent(
-      pinch_event_awaiting_ack_->event, phase, cancelable);
+  blink::WebMouseWheelEvent wheel_event_awaiting_ack =
+      CreateSyntheticWheelFromTouchpadPinchEvent(
+          pinch_event_awaiting_ack_->event, phase, cancelable);
   const MouseWheelEventWithLatencyInfo synthetic_wheel(
-      wheel_event_awaiting_ack_.value(), pinch_event_awaiting_ack_->latency);
+      wheel_event_awaiting_ack, pinch_event_awaiting_ack_->latency);
 
-  client_->SendMouseWheelEventForPinchImmediately(synthetic_wheel);
+  client_->SendMouseWheelEventForPinchImmediately(
+      synthetic_wheel,
+      base::BindOnce(&TouchpadPinchEventQueue::ProcessMouseWheelAck,
+                     base::Unretained(this)));
 }
 
 bool TouchpadPinchEventQueue::has_pending() const {

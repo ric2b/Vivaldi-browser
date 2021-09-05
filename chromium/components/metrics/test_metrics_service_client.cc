@@ -55,8 +55,8 @@ std::string TestMetricsServiceClient::GetVersionString() {
 }
 
 void TestMetricsServiceClient::CollectFinalMetricsForLog(
-    const base::Closure& done_callback) {
-  done_callback.Run();
+    base::OnceClosure done_callback) {
+  std::move(done_callback).Run();
 }
 
 std::unique_ptr<MetricsLogUploader> TestMetricsServiceClient::CreateUploader(
@@ -84,6 +84,10 @@ TestMetricsServiceClient::GetMetricsReportingDefaultState() {
 
 std::string TestMetricsServiceClient::GetAppPackageName() {
   return "test app";
+}
+
+bool TestMetricsServiceClient::ShouldResetClientIdsOnClonedInstall() {
+  return should_reset_client_ids_on_cloned_install_;
 }
 
 }  // namespace metrics

@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="pl">
 <translation id="1017280919048282932">&amp;Dodaj do słownika</translation>
+<translation id="1029317248976101138">Zoom</translation>
 <translation id="1031362278801463162">Wczytywanie podglądu</translation>
 <translation id="1047431265488717055">Kopiuj te&amp;kst linku</translation>
 <translation id="1049795001945932310">&amp;Ustawienia języka</translation>
@@ -54,6 +55,7 @@
 <translation id="1886996562706621347">Zezwalaj stronom na wyświetlanie monitu o skonfigurowanie ich jako domyślnego modułu obsługi protokołu (zalecane)</translation>
 <translation id="1901303067676059328">Zaznacz &amp;wszystko</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
+<translation id="1936931585862840749">Wpisz wartość numeryczną, by określić liczbę kopii do wydrukowania (od 1 do <ph name="MAX_COPIES" />).</translation>
 <translation id="1963227389609234879">Usuń wszystkie</translation>
 <translation id="1994173015038366702">URL strony</translation>
 <translation id="2019718679933488176">&amp;Otwórz dźwięk w nowej karcie</translation>
@@ -66,7 +68,6 @@
 <translation id="2150139952286079145">Szukaj drukarek</translation>
 <translation id="215753907730220065">Zamknij pełny ekran</translation>
 <translation id="2177950615300672361">Karta prywatna: <ph name="TAB_NAME" /></translation>
-<translation id="218070003709087997">Wpisz wartość numeryczną, by określić liczbę kopii do wydrukowania (od 1 do 999).</translation>
 <translation id="219008588003277019">Moduł klienta natywnego: <ph name="NEXE_NAME" /></translation>
 <translation id="220138918934036434">Ukryj przycisk</translation>
 <translation id="2218515861914035131">Wklej jako zwykły tekst</translation>
@@ -78,11 +79,9 @@
 <translation id="2282146716419988068">Proces GPU</translation>
 <translation id="2301382460326681002">Katalog główny rozszerzenia jest nieprawidłowy.</translation>
 <translation id="2318143611928805047">Rozmiar papieru</translation>
-<translation id="2318923050469484167">Bieżąca sesja prywatna (<ph name="EMBEDDING" />)</translation>
 <translation id="2322193970951063277">Nagłówki i stopki</translation>
 <translation id="2326931316514688470">P&amp;rzeładuj aplikację</translation>
 <translation id="2327492829706409234">Włącz aplikację</translation>
-<translation id="2344028582131185878">Pobieranie automatyczne</translation>
 <translation id="2348176352564285430">Aplikacja: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">Wybierz katalog rozszerzenia.</translation>
 <translation id="2379281330731083556">Drukuj w oknie systemowym <ph name="SHORTCUT_KEY" /></translation>
@@ -95,12 +94,12 @@
 <translation id="2470702053775288986">Wyłączono nieobsługiwane rozszerzenia</translation>
 <translation id="2476578072172137802">Ustawienia strony</translation>
 <translation id="2482878487686419369">Powiadomienia</translation>
+<translation id="2498539833203011245">Minimalizuj</translation>
 <translation id="2509495747794740764">Współczynnik skalowania musi być liczbą z przedziału od 10 do 200.</translation>
 <translation id="253557089021624350">Liczba sygnałów utrzymania aktywności</translation>
 <translation id="2546283357679194313">Ciasteczka i dane stron</translation>
 <translation id="2550212893339833758">Pamięć stronicowana</translation>
 <translation id="2553440850688409052">Ukryj wtyczkę</translation>
-<translation id="2580924999637585241">Łącznie: <ph name="SHEETS_LABEL" /> – <ph name="NUMBER_OF_SHEETS" /></translation>
 <translation id="26224892172169984">Nie zezwalaj żadnej stronie na obsługę protokołów</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Włącz ponownie</translation>
@@ -120,7 +119,6 @@
 <translation id="2932883381142163287">Zgłoś nadużycie</translation>
 <translation id="2941112035454246133">Niski</translation>
 <translation id="2972581237482394796">&amp;Ponów</translation>
-<translation id="299483336428448530">Zainstalowane przez twojego rodzica.</translation>
 <translation id="3003623123441819449">Pamięć podręczna CSS</translation>
 <translation id="3008272652534848354">Zresetuj uprawnienia</translation>
 <translation id="3012631534724231212">(iframe)</translation>
@@ -274,7 +272,6 @@
 <translation id="5425042808445046667">Kontynuuj pobieranie</translation>
 <translation id="5427459444770871191">Obróć w &amp;prawo</translation>
 <translation id="5431318178759467895">Kolor</translation>
-<translation id="5472133193607270166">Gdy to ustawienie jest włączone, strony nie mogą wykorzystywać twojej aktywności związanej z przeglądaniem różnych stron do personalizowania reklam. Niektóre strony mogą nie działać prawidłowo.</translation>
 <translation id="5483785310822538350">Cofnij dostęp do plików i urządzeń</translation>
 <translation id="5485102783864353244">Dodaj aplikację</translation>
 <translation id="5486561344817861625">Symuluj ponowne uruchomienie przeglądarki</translation>
@@ -302,7 +299,6 @@
 <translation id="5804241973901381774">Uprawnienia</translation>
 <translation id="5828633471261496623">Drukowanie…</translation>
 <translation id="583281660410589416">Nieznany</translation>
-<translation id="5838456317242088717">Bieżąca sesja prywatna</translation>
 <translation id="5860491529813859533">Włącz</translation>
 <translation id="5867841422488265304">Wyszukaj lub wpisz adres internetowy</translation>
 <translation id="5908769186679515905">Zablokuj uruchamianie Flasha na stronach</translation>
@@ -322,7 +318,6 @@
 <translation id="6147020289383635445">Wyświetlenie podglądu wydruku nie powiodło się.</translation>
 <translation id="6156863943908443225">Pamięć podręczna skryptów</translation>
 <translation id="6169666352732958425">Nie można przesłać pulpitu.</translation>
-<translation id="6196640612572343990">Blokuj ciasteczka firm trzecich</translation>
 <translation id="6196854373336333322">Rozszerzenie "<ph name="EXTENSION_NAME" />" przejęło kontrolę nad ustawieniami serwera proxy, co oznacza, że może zmieniać, przerywać lub podglądać wszystko, co robisz online. Jeśli nie masz pewności skąd wzięła się ta zmiana, prawdopodobnie jej nie chcesz.</translation>
 <translation id="6206311232642889873">Kop&amp;iuj obraz</translation>
 <translation id="6239558157302047471">Załaduj &amp;ramkę ponownie</translation>
@@ -335,6 +330,7 @@
 <translation id="6295158916970320988">Wszystkie strony</translation>
 <translation id="6295855836753816081">Zapisywanie…</translation>
 <translation id="6308937455967653460">Zapisz link ja&amp;ko...</translation>
+<translation id="6315493146179903667">Umieść wszystko na wierzchu</translation>
 <translation id="6326855256003666642">Liczba sygnałów utrzymania aktywności</translation>
 <translation id="6374469231428023295">Spróbuj ponownie</translation>
 <translation id="6385543213911723544">Strony mogą zapisywać dane w ciasteczkach i je odczytywać</translation>
@@ -380,6 +376,7 @@
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">Pokaż elementy sterują&amp;ce</translation>
 <translation id="7311079019872751559">Dostęp przez wtyczkę spoza piaskownicy</translation>
+<translation id="73174032666024687"><ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="7385854874724088939">Wystąpił błąd przy próbie drukowania. Sprawdź drukarkę i spróbuj ponownie.</translation>
 <translation id="7412226954991670867">Pamięć GPU</translation>
 <translation id="7421925624202799674">&amp;Wyświetl źródło strony</translation>

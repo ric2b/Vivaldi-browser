@@ -59,6 +59,8 @@ DevtoolsConnectorItem* DevtoolsConnectorAPI::GetOrCreateDevtoolsConnectorItem(
 }
 
 void DevtoolsConnectorAPI::RemoveDevtoolsConnectorItem(int tab_id) {
+  DevtoolsConnectorAPI::SendClosed(browser_context_, tab_id);
+
   for (std::vector<DevtoolsConnectorItem*>::iterator it =
            connector_items_.begin();
        it != connector_items_.end(); it++) {
@@ -239,11 +241,12 @@ void DevtoolsConnectorItem::WebContentsCreated(
 }
 
 void DevtoolsConnectorItem::CloseContents(content::WebContents* source) {
-  if (devtools_delegate_) {
-    devtools_delegate_->CloseContents(source);
-  }
   if (guest_delegate_) {
     guest_delegate_->CloseContents(source);
+  }
+  if (devtools_delegate_) {
+    devtools_delegate_->CloseContents(source);
+    // at this point, |this| is not longer valid.
   }
 }
 
@@ -307,8 +310,19 @@ bool DevtoolsConnectorItem::HandleContextMenu(
 }
 
 bool DevtoolsConnectorItem::HandleKeyboardEvent(
-  content::WebContents* source,
-  const content::NativeWebKeyboardEvent& event) {
+    content::WebContents* source,
+    const content::NativeWebKeyboardEvent& event) {
+  // NOTE(david@vivaldi.com): With SHIFT+CTRL+I we are now able to debug dev
+  // tools in undocked state.
+  const int modifier_mask =
+      blink::WebInputEvent::kShiftKey | blink::WebInputEvent::kControlKey;
+  if (devtools_docking_state_ == "undocked" &&
+      (event.GetType() == blink::WebInputEvent::kRawKeyDown) &&
+      ((event.GetModifiers() & modifier_mask) == modifier_mask)) {
+    if (event.windows_key_code == ui::VKEY_I) {
+      DevToolsWindow::OpenDevToolsWindow(source);
+    }
+  }
   if (devtools_delegate_) {
     return devtools_delegate_->HandleKeyboardEvent(source, event);
   }

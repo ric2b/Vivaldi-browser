@@ -6,7 +6,6 @@
 
 #include "base/bind.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "chrome/browser/autofill/autofill_uitest.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
@@ -92,7 +91,8 @@ void AutofillUiTest::TearDownOnMainThread() {
   // Make sure to close any showing popups prior to tearing down the UI.
   AutofillManager* autofill_manager = GetAutofillManager();
   if (autofill_manager)
-    autofill_manager->client()->HideAutofillPopup();
+    autofill_manager->client()->HideAutofillPopup(
+        autofill::PopupHidingReason::kTabGone);
   test::ReenableSystemServices();
 }
 

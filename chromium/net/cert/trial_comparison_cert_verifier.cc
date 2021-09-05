@@ -242,11 +242,12 @@ class TrialComparisonCertVerifier::Job::Request : public CertVerifier::Request {
 
   // Called when the Job has completed, and used to invoke the client
   // callback.
-  // Note: |this| may be deleted after calling this.
+  // Note: |this| may be deleted after calling this method.
   void OnJobComplete(int result, const CertVerifyResult& verify_result);
 
   // Called when the Job is aborted (e.g. the underlying
   // TrialComparisonCertVerifier is being deleted).
+  // Note: |this| may be deleted after calling this method.
   void OnJobAborted();
 
  private:
@@ -275,7 +276,9 @@ TrialComparisonCertVerifier::Job::Job(const CertVerifier::Config& config,
 
 TrialComparisonCertVerifier::Job::~Job() {
   if (request_) {
+    // Note: May delete |request_|.
     request_->OnJobAborted();
+    request_ = nullptr;
   }
 
   if (parent_) {
@@ -297,7 +300,7 @@ int TrialComparisonCertVerifier::Job::Start(
   // callback on destruction.
   primary_error_ = parent_->primary_verifier()->Verify(
       params_, &primary_result_,
-      base::Bind(&Job::OnPrimaryJobCompleted, base::Unretained(this)),
+      base::BindOnce(&Job::OnPrimaryJobCompleted, base::Unretained(this)),
       &primary_request_, net_log_);
 
   if (primary_error_ != ERR_IO_PENDING) {
@@ -359,7 +362,8 @@ void TrialComparisonCertVerifier::Job::Finish(
         params_.hostname(), params_.certificate(), config_.enable_rev_checking,
         config_.require_rev_checking_local_anchors,
         config_.enable_sha1_local_anchors, config_.disable_symantec_enforcement,
-        primary_result_, trial_result_);
+        params_.ocsp_response(), params_.sct_list(), primary_result_,
+        trial_result_);
   }
 
   if (weak_this) {
@@ -628,6 +632,9 @@ void TrialComparisonCertVerifier::Job::Request::OnJobComplete(
 void TrialComparisonCertVerifier::Job::Request::OnJobAborted() {
   DCHECK(parent_);
   parent_ = nullptr;
+
+  // DANGER: |this| may be deleted when this callback is destroyed.
+  client_callback_.Reset();
 }
 
 TrialComparisonCertVerifier::TrialComparisonCertVerifier(

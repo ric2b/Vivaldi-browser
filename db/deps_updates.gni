@@ -1,4 +1,5 @@
 
 update_target("//components/history/core/browser:browser") {
   public_deps += [ "//vivaldi/db" ]
+  allow_circular_includes_from = [ "//vivaldi/db" ]
 }

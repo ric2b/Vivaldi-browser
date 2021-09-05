@@ -73,8 +73,8 @@
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/http_raw_request_response_info.h"
 #include "services/network/public/cpp/resource_request.h"
-#include "services/network/public/cpp/resource_response.h"
 #include "services/network/public/cpp/url_loader_completion_status.h"
+#include "services/network/public/mojom/url_response_head.mojom.h"
 #include "third_party/blink/public/platform/resource_request_blocked_reason.h"
 #include "third_party/boringssl/src/include/openssl/ssl.h"
 
@@ -83,7 +83,6 @@ namespace protocol {
 
 namespace {
 
-using ProtocolCookieArray = Array<Network::Cookie>;
 using GetCookiesCallback = Network::Backend::GetCookiesCallback;
 using GetAllCookiesCallback = Network::Backend::GetAllCookiesCallback;
 using SetCookieCallback = Network::Backend::SetCookieCallback;
@@ -114,6 +113,19 @@ Network::CertificateTransparencyCompliance SerializeCTPolicyCompliance(
 
 std::unique_ptr<Network::Cookie> BuildCookie(
     const net::CanonicalCookie& cookie) {
+  String cp;
+  switch (cookie.Priority()) {
+    case net::CookiePriority::COOKIE_PRIORITY_HIGH:
+      cp = Network::CookiePriorityEnum::High;
+      break;
+    case net::CookiePriority::COOKIE_PRIORITY_MEDIUM:
+      cp = Network::CookiePriorityEnum::Medium;
+      break;
+    case net::CookiePriority::COOKIE_PRIORITY_LOW:
+      cp = Network::CookiePriorityEnum::Low;
+      break;
+  }
+
   std::unique_ptr<Network::Cookie> devtools_cookie =
       Network::Cookie::Create()
           .SetName(cookie.Name())
@@ -127,6 +139,7 @@ std::unique_ptr<Network::Cookie> BuildCookie(
           .SetHttpOnly(cookie.IsHttpOnly())
           .SetSecure(cookie.IsSecure())
           .SetSession(!cookie.IsPersistent())
+          .SetPriority(cp)
           .Build();
 
   switch (cookie.SameSite()) {
@@ -136,9 +149,6 @@ std::unique_ptr<Network::Cookie> BuildCookie(
     case net::CookieSameSite::LAX_MODE:
       devtools_cookie->SetSameSite(Network::CookieSameSiteEnum::Lax);
       break;
-    case net::CookieSameSite::EXTENDED_MODE:
-      devtools_cookie->SetSameSite(Network::CookieSameSiteEnum::Extended);
-      break;
     case net::CookieSameSite::NO_RESTRICTION:
       devtools_cookie->SetSameSite(Network::CookieSameSiteEnum::None);
       break;
@@ -146,16 +156,6 @@ std::unique_ptr<Network::Cookie> BuildCookie(
       break;
   }
   return devtools_cookie;
-}
-
-std::unique_ptr<ProtocolCookieArray> BuildCookieArray(
-    const std::vector<net::CanonicalCookie>& cookie_list) {
-  auto cookies = std::make_unique<ProtocolCookieArray>();
-
-  for (const net::CanonicalCookie& cookie : cookie_list)
-    cookies->emplace_back(BuildCookie(cookie));
-
-  return cookies;
 }
 
 class CookieRetrieverNetworkService
@@ -192,7 +192,7 @@ class CookieRetrieverNetworkService
   }
 
   ~CookieRetrieverNetworkService() {
-    auto cookies = std::make_unique<ProtocolCookieArray>();
+    auto cookies = std::make_unique<Array<Network::Cookie>>();
     for (const auto& entry : all_cookies_)
       cookies->emplace_back(BuildCookie(entry.second));
     callback_->sendSuccess(std::move(cookies));
@@ -252,7 +252,8 @@ std::unique_ptr<net::CanonicalCookie> MakeCookieFromProtocolValues(
     bool secure,
     bool http_only,
     const std::string& same_site,
-    double expires) {
+    double expires,
+    const std::string& priority) {
   std::string normalized_domain = domain;
 
   if (url_spec.empty() && domain.empty())
@@ -294,14 +295,20 @@ std::unique_ptr<net::CanonicalCookie> MakeCookieFromProtocolValues(
     css = net::CookieSameSite::LAX_MODE;
   if (same_site == Network::CookieSameSiteEnum::Strict)
     css = net::CookieSameSite::STRICT_MODE;
-  if (same_site == Network::CookieSameSiteEnum::Extended)
-    css = net::CookieSameSite::EXTENDED_MODE;
   if (same_site == Network::CookieSameSiteEnum::None)
     css = net::CookieSameSite::NO_RESTRICTION;
 
+  net::CookiePriority cp = net::CookiePriority::COOKIE_PRIORITY_MEDIUM;
+  if (priority == Network::CookiePriorityEnum::High)
+    cp = net::CookiePriority::COOKIE_PRIORITY_HIGH;
+  else if (priority == Network::CookiePriorityEnum::Medium)
+    cp = net::CookiePriority::COOKIE_PRIORITY_MEDIUM;
+  else if (priority == Network::CookiePriorityEnum::Low)
+    cp = net::CookiePriority::COOKIE_PRIORITY_LOW;
+
   return net::CanonicalCookie::CreateSanitizedCookie(
       url, name, value, normalized_domain, path, base::Time(), expiration_date,
-      base::Time(), secure, http_only, css, net::COOKIE_PRIORITY_DEFAULT);
+      base::Time(), secure, http_only, css, cp);
 }
 
 std::vector<GURL> ComputeCookieURLs(RenderFrameHostImpl* frame_host,
@@ -345,37 +352,6 @@ String resourcePriority(net::RequestPriority priority) {
   return Network::ResourcePriorityEnum::Medium;
 }
 
-String referrerPolicy(network::mojom::ReferrerPolicy referrer_policy) {
-  switch (referrer_policy) {
-    case network::mojom::ReferrerPolicy::kAlways:
-      return Network::Request::ReferrerPolicyEnum::UnsafeUrl;
-    case network::mojom::ReferrerPolicy::kDefault:
-      if (base::FeatureList::IsEnabled(features::kReducedReferrerGranularity)) {
-        return Network::Request::ReferrerPolicyEnum::
-            StrictOriginWhenCrossOrigin;
-      } else {
-        return Network::Request::ReferrerPolicyEnum::NoReferrerWhenDowngrade;
-      }
-    case network::mojom::ReferrerPolicy::kNoReferrerWhenDowngrade:
-      return Network::Request::ReferrerPolicyEnum::NoReferrerWhenDowngrade;
-    case network::mojom::ReferrerPolicy::kNever:
-      return Network::Request::ReferrerPolicyEnum::NoReferrer;
-    case network::mojom::ReferrerPolicy::kOrigin:
-      return Network::Request::ReferrerPolicyEnum::Origin;
-    case network::mojom::ReferrerPolicy::kOriginWhenCrossOrigin:
-      return Network::Request::ReferrerPolicyEnum::OriginWhenCrossOrigin;
-    case network::mojom::ReferrerPolicy::kSameOrigin:
-      return Network::Request::ReferrerPolicyEnum::SameOrigin;
-    case network::mojom::ReferrerPolicy::kStrictOrigin:
-      return Network::Request::ReferrerPolicyEnum::StrictOrigin;
-    case network::mojom::ReferrerPolicy::
-        kNoReferrerWhenDowngradeOriginWhenCrossOrigin:
-      return Network::Request::ReferrerPolicyEnum::StrictOriginWhenCrossOrigin;
-  }
-  NOTREACHED();
-  return Network::Request::ReferrerPolicyEnum::NoReferrerWhenDowngrade;
-}
-
 String referrerPolicy(net::URLRequest::ReferrerPolicy referrer_policy) {
   switch (referrer_policy) {
     case net::URLRequest::CLEAR_REFERRER_ON_TRANSITION_FROM_SECURE_TO_INSECURE:
@@ -393,6 +369,31 @@ String referrerPolicy(net::URLRequest::ReferrerPolicy referrer_policy) {
       return Network::Request::ReferrerPolicyEnum::NoReferrer;
     default:
       break;
+  }
+  NOTREACHED();
+  return Network::Request::ReferrerPolicyEnum::NoReferrerWhenDowngrade;
+}
+
+String referrerPolicy(network::mojom::ReferrerPolicy referrer_policy) {
+  switch (referrer_policy) {
+    case network::mojom::ReferrerPolicy::kAlways:
+      return Network::Request::ReferrerPolicyEnum::UnsafeUrl;
+    case network::mojom::ReferrerPolicy::kDefault:
+      return referrerPolicy(content::Referrer::GetDefaultReferrerPolicy());
+    case network::mojom::ReferrerPolicy::kNoReferrerWhenDowngrade:
+      return Network::Request::ReferrerPolicyEnum::NoReferrerWhenDowngrade;
+    case network::mojom::ReferrerPolicy::kNever:
+      return Network::Request::ReferrerPolicyEnum::NoReferrer;
+    case network::mojom::ReferrerPolicy::kOrigin:
+      return Network::Request::ReferrerPolicyEnum::Origin;
+    case network::mojom::ReferrerPolicy::kOriginWhenCrossOrigin:
+      return Network::Request::ReferrerPolicyEnum::OriginWhenCrossOrigin;
+    case network::mojom::ReferrerPolicy::kSameOrigin:
+      return Network::Request::ReferrerPolicyEnum::SameOrigin;
+    case network::mojom::ReferrerPolicy::kStrictOrigin:
+      return Network::Request::ReferrerPolicyEnum::StrictOrigin;
+    case network::mojom::ReferrerPolicy::kStrictOriginWhenCrossOrigin:
+      return Network::Request::ReferrerPolicyEnum::StrictOriginWhenCrossOrigin;
   }
   NOTREACHED();
   return Network::Request::ReferrerPolicyEnum::NoReferrerWhenDowngrade;
@@ -465,18 +466,6 @@ std::unique_ptr<Network::ResourceTiming> GetTiming(
       .Build();
 }
 
-std::unique_ptr<Object> GetHeaders(const base::StringPairs& pairs) {
-  std::unique_ptr<DictionaryValue> headers_dict(DictionaryValue::create());
-  for (const auto& pair : pairs) {
-    std::string value;
-    bool merge_with_another = headers_dict->getString(pair.first, &value);
-    headers_dict->setString(pair.first, merge_with_another
-                                            ? value + '\n' + pair.second
-                                            : pair.second);
-  }
-  return Object::fromValue(headers_dict.get(), nullptr);
-}
-
 std::unique_ptr<Object> GetRawHeaders(
     const std::vector<network::mojom::HttpRawHeaderPairPtr>& headers) {
   std::unique_ptr<DictionaryValue> headers_dict(DictionaryValue::create());
@@ -490,7 +479,8 @@ std::unique_ptr<Object> GetRawHeaders(
   return Object::fromValue(headers_dict.get(), nullptr);
 }
 
-String GetProtocol(const GURL& url, const network::ResourceResponseInfo& info) {
+String GetProtocol(const GURL& url,
+                   const network::mojom::URLResponseHead& info) {
   std::string protocol = info.alpn_negotiated_protocol;
   if (protocol.empty() || protocol == "unknown") {
     if (info.was_fetched_via_spdy) {
@@ -585,11 +575,6 @@ GetProtocolBlockedSetCookieReason(
           net::CanonicalCookie::CookieInclusionStatus::EXCLUDE_SAMESITE_LAX)) {
     blockedReasons->push_back(Network::SetCookieBlockedReasonEnum::SameSiteLax);
   }
-  if (status.HasExclusionReason(net::CanonicalCookie::CookieInclusionStatus::
-                                    EXCLUDE_SAMESITE_EXTENDED)) {
-    blockedReasons->push_back(
-        Network::SetCookieBlockedReasonEnum::SameSiteExtended);
-  }
   if (status.HasExclusionReason(
           net::CanonicalCookie::CookieInclusionStatus::
               EXCLUDE_SAMESITE_UNSPECIFIED_TREATED_AS_LAX)) {
@@ -664,11 +649,6 @@ GetProtocolBlockedCookieReason(
   if (status.HasExclusionReason(
           net::CanonicalCookie::CookieInclusionStatus::EXCLUDE_SAMESITE_LAX)) {
     blockedReasons->push_back(Network::CookieBlockedReasonEnum::SameSiteLax);
-  }
-  if (status.HasExclusionReason(net::CanonicalCookie::CookieInclusionStatus::
-                                    EXCLUDE_SAMESITE_EXTENDED)) {
-    blockedReasons->push_back(
-        Network::CookieBlockedReasonEnum::SameSiteExtended);
   }
   if (status.HasExclusionReason(
           net::CanonicalCookie::CookieInclusionStatus::
@@ -770,27 +750,28 @@ class BackgroundSyncRestorer {
         static_cast<StoragePartitionImpl*>(storage_partition_)
             ->GetBackgroundSyncContext();
     if (offline) {
-      base::PostTask(
-          FROM_HERE, {BrowserThread::IO},
+      RunOrPostTaskOnThread(
+          FROM_HERE, ServiceWorkerContext::GetCoreThreadId(),
           base::BindOnce(
-              &SetServiceWorkerOfflineOnIO, sync_context,
-              base::RetainedRef(static_cast<ServiceWorkerContextWrapper*>(
+              &SetServiceWorkerOfflineOnServiceWorkerCoreThread, sync_context,
+              base::WrapRefCounted(static_cast<ServiceWorkerContextWrapper*>(
                   storage_partition_->GetServiceWorkerContext())),
               service_worker_host->version_id(),
               offline_sw_registration_id_.get()));
     } else {
-      base::PostTask(FROM_HERE, {BrowserThread::IO},
-                     base::BindOnce(&SetServiceWorkerOnlineOnIO, sync_context,
-                                    offline_sw_registration_id_.get()));
+      RunOrPostTaskOnThread(
+          FROM_HERE, ServiceWorkerContext::GetCoreThreadId(),
+          base::BindOnce(&SetServiceWorkerOnlineOnServiceWorkerCoreThread,
+                         sync_context, offline_sw_registration_id_.get()));
     }
   }
 
-  static void SetServiceWorkerOfflineOnIO(
+  static void SetServiceWorkerOfflineOnServiceWorkerCoreThread(
       scoped_refptr<BackgroundSyncContextImpl> sync_context,
       scoped_refptr<ServiceWorkerContextWrapper> swcontext,
       int64_t version_id,
       int64_t* offline_sw_registration_id) {
-    DCHECK_CURRENTLY_ON(BrowserThread::IO);
+    DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
     ServiceWorkerVersion* version = swcontext.get()->GetLiveVersion(version_id);
     if (!version)
       return;
@@ -802,10 +783,10 @@ class BackgroundSyncRestorer {
         registration_id, true);
   }
 
-  static void SetServiceWorkerOnlineOnIO(
+  static void SetServiceWorkerOnlineOnServiceWorkerCoreThread(
       scoped_refptr<BackgroundSyncContextImpl> sync_context,
       int64_t* offline_sw_registration_id) {
-    DCHECK_CURRENTLY_ON(BrowserThread::IO);
+    DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
     if (*offline_sw_registration_id ==
         blink::mojom::kInvalidServiceWorkerRegistrationId) {
       return;
@@ -847,6 +828,17 @@ NetworkHandler::NetworkHandler(
 }
 
 NetworkHandler::~NetworkHandler() {
+}
+
+// static
+std::unique_ptr<Array<Network::Cookie>> NetworkHandler::BuildCookieArray(
+    const std::vector<net::CanonicalCookie>& cookie_list) {
+  auto cookies = std::make_unique<Array<Network::Cookie>>();
+
+  for (const net::CanonicalCookie& cookie : cookie_list)
+    cookies->emplace_back(BuildCookie(cookie));
+
+  return cookies;
 }
 
 // static
@@ -922,100 +914,106 @@ String NetworkHandler::NetErrorToString(int net_error) {
 // static
 bool NetworkHandler::AddInterceptedResourceType(
     const std::string& resource_type,
-    base::flat_set<ResourceType>* intercepted_resource_types) {
+    base::flat_set<blink::mojom::ResourceType>* intercepted_resource_types) {
   if (resource_type == protocol::Network::ResourceTypeEnum::Document) {
-    intercepted_resource_types->insert(ResourceType::kMainFrame);
-    intercepted_resource_types->insert(ResourceType::kSubFrame);
+    intercepted_resource_types->insert(blink::mojom::ResourceType::kMainFrame);
+    intercepted_resource_types->insert(blink::mojom::ResourceType::kSubFrame);
     return true;
   }
   if (resource_type == protocol::Network::ResourceTypeEnum::Stylesheet) {
-    intercepted_resource_types->insert(ResourceType::kStylesheet);
+    intercepted_resource_types->insert(blink::mojom::ResourceType::kStylesheet);
     return true;
   }
   if (resource_type == protocol::Network::ResourceTypeEnum::Image) {
-    intercepted_resource_types->insert(ResourceType::kImage);
+    intercepted_resource_types->insert(blink::mojom::ResourceType::kImage);
     return true;
   }
   if (resource_type == protocol::Network::ResourceTypeEnum::Media) {
-    intercepted_resource_types->insert(ResourceType::kMedia);
+    intercepted_resource_types->insert(blink::mojom::ResourceType::kMedia);
     return true;
   }
   if (resource_type == protocol::Network::ResourceTypeEnum::Font) {
-    intercepted_resource_types->insert(ResourceType::kFontResource);
+    intercepted_resource_types->insert(
+        blink::mojom::ResourceType::kFontResource);
     return true;
   }
   if (resource_type == protocol::Network::ResourceTypeEnum::Script) {
-    intercepted_resource_types->insert(ResourceType::kScript);
+    intercepted_resource_types->insert(blink::mojom::ResourceType::kScript);
     return true;
   }
   if (resource_type == protocol::Network::ResourceTypeEnum::XHR) {
-    intercepted_resource_types->insert(ResourceType::kXhr);
+    intercepted_resource_types->insert(blink::mojom::ResourceType::kXhr);
     return true;
   }
   if (resource_type == protocol::Network::ResourceTypeEnum::Fetch) {
-    intercepted_resource_types->insert(ResourceType::kPrefetch);
+    intercepted_resource_types->insert(blink::mojom::ResourceType::kPrefetch);
     return true;
   }
   if (resource_type ==
       protocol::Network::ResourceTypeEnum::CSPViolationReport) {
-    intercepted_resource_types->insert(ResourceType::kCspReport);
+    intercepted_resource_types->insert(blink::mojom::ResourceType::kCspReport);
     return true;
   }
   if (resource_type == protocol::Network::ResourceTypeEnum::Ping) {
-    intercepted_resource_types->insert(ResourceType::kPing);
+    intercepted_resource_types->insert(blink::mojom::ResourceType::kPing);
     return true;
   }
   if (resource_type == protocol::Network::ResourceTypeEnum::Other) {
-    intercepted_resource_types->insert(ResourceType::kSubResource);
-    intercepted_resource_types->insert(ResourceType::kObject);
-    intercepted_resource_types->insert(ResourceType::kWorker);
-    intercepted_resource_types->insert(ResourceType::kSharedWorker);
-    intercepted_resource_types->insert(ResourceType::kFavicon);
-    intercepted_resource_types->insert(ResourceType::kServiceWorker);
-    intercepted_resource_types->insert(ResourceType::kPluginResource);
+    intercepted_resource_types->insert(
+        blink::mojom::ResourceType::kSubResource);
+    intercepted_resource_types->insert(blink::mojom::ResourceType::kObject);
+    intercepted_resource_types->insert(blink::mojom::ResourceType::kWorker);
+    intercepted_resource_types->insert(
+        blink::mojom::ResourceType::kSharedWorker);
+    intercepted_resource_types->insert(blink::mojom::ResourceType::kFavicon);
+    intercepted_resource_types->insert(
+        blink::mojom::ResourceType::kServiceWorker);
+    intercepted_resource_types->insert(
+        blink::mojom::ResourceType::kPluginResource);
     return true;
   }
   return false;
 }
 
 // static
-const char* NetworkHandler::ResourceTypeToString(ResourceType resource_type) {
+const char* NetworkHandler::ResourceTypeToString(
+    blink::mojom::ResourceType resource_type) {
   switch (resource_type) {
-    case ResourceType::kMainFrame:
+    case blink::mojom::ResourceType::kMainFrame:
       return protocol::Network::ResourceTypeEnum::Document;
-    case ResourceType::kSubFrame:
+    case blink::mojom::ResourceType::kSubFrame:
       return protocol::Network::ResourceTypeEnum::Document;
-    case ResourceType::kStylesheet:
+    case blink::mojom::ResourceType::kStylesheet:
       return protocol::Network::ResourceTypeEnum::Stylesheet;
-    case ResourceType::kScript:
+    case blink::mojom::ResourceType::kScript:
       return protocol::Network::ResourceTypeEnum::Script;
-    case ResourceType::kImage:
+    case blink::mojom::ResourceType::kImage:
       return protocol::Network::ResourceTypeEnum::Image;
-    case ResourceType::kFontResource:
+    case blink::mojom::ResourceType::kFontResource:
       return protocol::Network::ResourceTypeEnum::Font;
-    case ResourceType::kSubResource:
+    case blink::mojom::ResourceType::kSubResource:
       return protocol::Network::ResourceTypeEnum::Other;
-    case ResourceType::kObject:
+    case blink::mojom::ResourceType::kObject:
       return protocol::Network::ResourceTypeEnum::Other;
-    case ResourceType::kMedia:
+    case blink::mojom::ResourceType::kMedia:
       return protocol::Network::ResourceTypeEnum::Media;
-    case ResourceType::kWorker:
+    case blink::mojom::ResourceType::kWorker:
       return protocol::Network::ResourceTypeEnum::Other;
-    case ResourceType::kSharedWorker:
+    case blink::mojom::ResourceType::kSharedWorker:
       return protocol::Network::ResourceTypeEnum::Other;
-    case ResourceType::kPrefetch:
+    case blink::mojom::ResourceType::kPrefetch:
       return protocol::Network::ResourceTypeEnum::Fetch;
-    case ResourceType::kFavicon:
+    case blink::mojom::ResourceType::kFavicon:
       return protocol::Network::ResourceTypeEnum::Other;
-    case ResourceType::kXhr:
+    case blink::mojom::ResourceType::kXhr:
       return protocol::Network::ResourceTypeEnum::XHR;
-    case ResourceType::kPing:
+    case blink::mojom::ResourceType::kPing:
       return protocol::Network::ResourceTypeEnum::Ping;
-    case ResourceType::kServiceWorker:
+    case blink::mojom::ResourceType::kServiceWorker:
       return protocol::Network::ResourceTypeEnum::Other;
-    case ResourceType::kCspReport:
+    case blink::mojom::ResourceType::kCspReport:
       return protocol::Network::ResourceTypeEnum::CSPViolationReport;
-    case ResourceType::kPluginResource:
+    case blink::mojom::ResourceType::kPluginResource:
       return protocol::Network::ResourceTypeEnum::Other;
     default:
       return protocol::Network::ResourceTypeEnum::Other;
@@ -1143,7 +1141,7 @@ void NetworkHandler::GetAllCookies(
       base::BindOnce(
           [](std::unique_ptr<GetAllCookiesCallback> callback,
              const std::vector<net::CanonicalCookie>& cookies) {
-            callback->sendSuccess(BuildCookieArray(cookies));
+            callback->sendSuccess(NetworkHandler::BuildCookieArray(cookies));
           },
           std::move(callback)));
 }
@@ -1157,6 +1155,7 @@ void NetworkHandler::SetCookie(const std::string& name,
                                Maybe<bool> http_only,
                                Maybe<std::string> same_site,
                                Maybe<double> expires,
+                               Maybe<std::string> priority,
                                std::unique_ptr<SetCookieCallback> callback) {
   if (!storage_partition_) {
     callback->sendFailure(Response::InternalError());
@@ -1171,7 +1170,7 @@ void NetworkHandler::SetCookie(const std::string& name,
   std::unique_ptr<net::CanonicalCookie> cookie = MakeCookieFromProtocolValues(
       name, value, url.fromMaybe(""), domain.fromMaybe(""), path.fromMaybe(""),
       secure.fromMaybe(false), http_only.fromMaybe(false),
-      same_site.fromMaybe(""), expires.fromMaybe(-1));
+      same_site.fromMaybe(""), expires.fromMaybe(-1), priority.fromMaybe(""));
 
   if (!cookie) {
     // TODO(caseq): Current logic is for compatability only.
@@ -1183,12 +1182,52 @@ void NetworkHandler::SetCookie(const std::string& name,
   net::CookieOptions options;
   // Permit it to set a SameSite cookie if it wants to.
   options.set_same_site_cookie_context(
-      net::CookieOptions::SameSiteCookieContext::SAME_SITE_STRICT);
+      net::CookieOptions::SameSiteCookieContext::MakeInclusive());
   options.set_include_httponly();
   storage_partition_->GetCookieManagerForBrowserProcess()->SetCanonicalCookie(
       *cookie, "https", options,
       net::cookie_util::AdaptCookieInclusionStatusToBool(base::BindOnce(
           &SetCookieCallback::sendSuccess, std::move(callback))));
+}
+
+// static
+void NetworkHandler::SetCookies(
+    StoragePartition* storage_partition,
+    std::unique_ptr<protocol::Array<Network::CookieParam>> cookies,
+    base::OnceCallback<void(bool)> callback) {
+  std::vector<std::unique_ptr<net::CanonicalCookie>> net_cookies;
+  for (const std::unique_ptr<Network::CookieParam>& cookie : *cookies) {
+    std::unique_ptr<net::CanonicalCookie> net_cookie =
+        MakeCookieFromProtocolValues(
+            cookie->GetName(), cookie->GetValue(), cookie->GetUrl(""),
+            cookie->GetDomain(""), cookie->GetPath(""),
+            cookie->GetSecure(false), cookie->GetHttpOnly(false),
+            cookie->GetSameSite(""), cookie->GetExpires(-1),
+            cookie->GetPriority(""));
+    if (!net_cookie) {
+      std::move(callback).Run(false);
+      return;
+    }
+    net_cookies.push_back(std::move(net_cookie));
+  }
+
+  base::RepeatingClosure barrier_closure = base::BarrierClosure(
+      net_cookies.size(), base::BindOnce(std::move(callback), true));
+
+  auto* cookie_manager = storage_partition->GetCookieManagerForBrowserProcess();
+  net::CookieOptions options;
+  options.set_include_httponly();
+  // Permit it to set a SameSite cookie if it wants to.
+  options.set_same_site_cookie_context(
+      net::CookieOptions::SameSiteCookieContext::MakeInclusive());
+  for (const auto& cookie : net_cookies) {
+    cookie_manager->SetCanonicalCookie(
+        *cookie, "https", options,
+        base::BindOnce(
+            [](base::RepeatingClosure callback,
+               net::CanonicalCookie::CookieInclusionStatus) { callback.Run(); },
+            barrier_closure));
+  }
 }
 
 void NetworkHandler::SetCookies(
@@ -1199,40 +1238,18 @@ void NetworkHandler::SetCookies(
     return;
   }
 
-  std::vector<std::unique_ptr<net::CanonicalCookie>> net_cookies;
-  for (const std::unique_ptr<Network::CookieParam>& cookie : *cookies) {
-    std::unique_ptr<net::CanonicalCookie> net_cookie =
-        MakeCookieFromProtocolValues(
-            cookie->GetName(), cookie->GetValue(), cookie->GetUrl(""),
-            cookie->GetDomain(""), cookie->GetPath(""),
-            cookie->GetSecure(false), cookie->GetHttpOnly(false),
-            cookie->GetSameSite(""), cookie->GetExpires(-1));
-    if (!net_cookie) {
-      callback->sendFailure(Response::InvalidParams("Invalid cookie fields"));
-      return;
-    }
-    net_cookies.push_back(std::move(net_cookie));
-  }
-
-  base::RepeatingClosure barrier_closure = base::BarrierClosure(
-      net_cookies.size(),
-      base::BindOnce(&SetCookiesCallback::sendSuccess, std::move(callback)));
-
-  auto* cookie_manager =
-      storage_partition_->GetCookieManagerForBrowserProcess();
-  net::CookieOptions options;
-  options.set_include_httponly();
-  // Permit it to set a SameSite cookie if it wants to.
-  options.set_same_site_cookie_context(
-      net::CookieOptions::SameSiteCookieContext::SAME_SITE_STRICT);
-  for (const auto& cookie : net_cookies) {
-    cookie_manager->SetCanonicalCookie(
-        *cookie, "https", options,
-        base::BindOnce(
-            [](base::RepeatingClosure callback,
-               net::CanonicalCookie::CookieInclusionStatus) { callback.Run(); },
-            barrier_closure));
-  }
+  NetworkHandler::SetCookies(
+      storage_partition_, std::move(cookies),
+      base::BindOnce(
+          [](std::unique_ptr<SetCookiesCallback> callback, bool success) {
+            if (success) {
+              callback->sendSuccess();
+            } else {
+              callback->sendFailure(
+                  Response::InvalidParams("Invalid cookie fields"));
+            }
+          },
+          std::move(callback)));
 }
 
 void NetworkHandler::DeleteCookies(
@@ -1290,7 +1307,7 @@ Response NetworkHandler::SetExtraHTTPHeaders(
 
 Response NetworkHandler::CanEmulateNetworkConditions(bool* result) {
   *result = true;
-  return Response::OK();
+  return Response::Success();
 }
 
 Response NetworkHandler::EmulateNetworkConditions(
@@ -1429,7 +1446,7 @@ std::unique_ptr<protocol::Object> BuildResponseHeaders(
 
 std::unique_ptr<Network::Response> BuildResponse(
     const GURL& url,
-    const network::ResourceResponseHead& info) {
+    const network::mojom::URLResponseHead& info) {
   int status = 0;
   std::string status_text;
   if (info.headers) {
@@ -1459,21 +1476,20 @@ std::unique_ptr<Network::Response> BuildResponse(
           .Build();
   response->SetFromServiceWorker(info.was_fetched_via_service_worker);
   response->SetFromPrefetchCache(info.was_in_prefetch_cache);
-  network::HttpRawRequestResponseInfo* raw_info =
-      info.raw_request_response_info.get();
+  auto* raw_info = info.raw_request_response_info.get();
   if (raw_info) {
     if (raw_info->http_status_code) {
       response->SetStatus(raw_info->http_status_code);
       response->SetStatusText(raw_info->http_status_text);
     }
     if (raw_info->request_headers.size()) {
-      response->SetRequestHeaders(GetHeaders(raw_info->request_headers));
+      response->SetRequestHeaders(GetRawHeaders(raw_info->request_headers));
     }
     if (!raw_info->request_headers_text.empty()) {
       response->SetRequestHeadersText(raw_info->request_headers_text);
     }
     if (raw_info->response_headers.size())
-      response->SetHeaders(GetHeaders(raw_info->response_headers));
+      response->SetHeaders(GetRawHeaders(raw_info->response_headers));
     if (!raw_info->response_headers_text.empty())
       response->SetHeadersText(raw_info->response_headers_text);
   }
@@ -1505,6 +1521,21 @@ String blockedReason(blink::ResourceRequestBlockedReason reason) {
       return protocol::Network::BlockedReasonEnum::Other;
     case blink::ResourceRequestBlockedReason::kCollapsedByClient:
       return protocol::Network::BlockedReasonEnum::CollapsedByClient;
+    case blink::ResourceRequestBlockedReason::kCoepFrameResourceNeedsCoepHeader:
+      return protocol::Network::BlockedReasonEnum::
+          CoepFrameResourceNeedsCoepHeader;
+    case blink::ResourceRequestBlockedReason::
+        kCoopSandboxedIFrameCannotNavigateToCoopPage:
+      return protocol::Network::BlockedReasonEnum::
+          CoopSandboxedIframeCannotNavigateToCoopPage;
+    case blink::ResourceRequestBlockedReason::kCorpNotSameOrigin:
+      return protocol::Network::BlockedReasonEnum::CorpNotSameOrigin;
+    case blink::ResourceRequestBlockedReason::
+        kCorpNotSameOriginAfterDefaultedToSameOriginByCoep:
+      return protocol::Network::BlockedReasonEnum::
+          CorpNotSameOriginAfterDefaultedToSameOriginByCoep;
+    case blink::ResourceRequestBlockedReason::kCorpNotSameSite:
+      return protocol::Network::BlockedReasonEnum::CorpNotSameSite;
   }
   NOTREACHED();
   return protocol::Network::BlockedReasonEnum::Other;
@@ -1512,6 +1543,28 @@ String blockedReason(blink::ResourceRequestBlockedReason reason) {
 
 Maybe<String> GetBlockedReasonFor(
     const network::URLLoaderCompletionStatus& status) {
+  if (status.blocked_by_response_reason) {
+    switch (*status.blocked_by_response_reason) {
+      case network::BlockedByResponseReason::kCoepFrameResourceNeedsCoepHeader:
+        return {protocol::Network::BlockedReasonEnum::
+                    CoepFrameResourceNeedsCoepHeader};
+      case network::BlockedByResponseReason::
+          kCoopSandboxedIFrameCannotNavigateToCoopPage:
+        return {protocol::Network::BlockedReasonEnum::
+                    CoopSandboxedIframeCannotNavigateToCoopPage};
+      case network::BlockedByResponseReason::
+          kCorpNotSameOriginAfterDefaultedToSameOriginByCoep:
+        return {protocol::Network::BlockedReasonEnum::
+                    CorpNotSameOriginAfterDefaultedToSameOriginByCoep};
+      case network::BlockedByResponseReason::kCorpNotSameOrigin:
+        return {protocol::Network::BlockedReasonEnum::CorpNotSameOrigin};
+        break;
+      case network::BlockedByResponseReason::kCorpNotSameSite:
+        return {protocol::Network::BlockedReasonEnum::CorpNotSameSite};
+        break;
+    }
+    NOTREACHED();
+  }
   if (status.error_code != net::ERR_BLOCKED_BY_CLIENT &&
       status.error_code != net::ERR_BLOCKED_BY_RESPONSE)
     return Maybe<String>();
@@ -1544,7 +1597,7 @@ void NetworkHandler::NavigationRequestWillBeSent(
       nav_request.commit_params();
   if (!commit_params.redirect_response.empty()) {
     redirect_response = BuildResponse(commit_params.redirects.back(),
-                                      commit_params.redirect_response.back());
+                                      *commit_params.redirect_response.back());
   }
   std::string url_fragment;
   std::string url_without_fragment =
@@ -1630,12 +1683,13 @@ void NetworkHandler::RequestSent(const std::string& request_id,
       Maybe<std::string>() /* frame_id */, request.has_user_gesture);
 }
 
-void NetworkHandler::ResponseReceived(const std::string& request_id,
-                                      const std::string& loader_id,
-                                      const GURL& url,
-                                      const char* resource_type,
-                                      const network::ResourceResponseHead& head,
-                                      Maybe<std::string> frame_id) {
+void NetworkHandler::ResponseReceived(
+    const std::string& request_id,
+    const std::string& loader_id,
+    const GURL& url,
+    const char* resource_type,
+    const network::mojom::URLResponseHead& head,
+    Maybe<std::string> frame_id) {
   if (!enabled_)
     return;
   std::unique_ptr<Network::Response> response(BuildResponse(url, head));
@@ -1673,7 +1727,7 @@ void NetworkHandler::LoadingComplete(
 void NetworkHandler::OnSignedExchangeReceived(
     base::Optional<const base::UnguessableToken> devtools_navigation_token,
     const GURL& outer_request_url,
-    const network::ResourceResponseHead& outer_response,
+    const network::mojom::URLResponseHead& outer_response,
     const base::Optional<SignedExchangeEnvelope>& envelope,
     const scoped_refptr<net::X509Certificate>& certificate,
     const base::Optional<net::SSLInfo>& ssl_info,
@@ -1687,7 +1741,7 @@ void NetworkHandler::OnSignedExchangeReceived(
 
   if (envelope) {
     std::unique_ptr<DictionaryValue> headers_dict(DictionaryValue::create());
-    for (const auto it : envelope->response_headers())
+    for (const auto& it : envelope->response_headers())
       headers_dict->setString(it.first, it.second);
 
     const SignedExchangeSignatureHeaderField::Signature& sig =
@@ -1753,13 +1807,13 @@ DispatchResponse NetworkHandler::SetRequestInterception(
       url_loader_interceptor_.reset();
       update_loader_factories_callback_.Run();
     }
-    return Response::OK();
+    return Response::Success();
   }
 
   std::vector<DevToolsURLLoaderInterceptor::Pattern> interceptor_patterns;
   for (const std::unique_ptr<protocol::Network::RequestPattern>& pattern :
        *patterns) {
-    base::flat_set<ResourceType> resource_types;
+    base::flat_set<blink::mojom::ResourceType> resource_types;
     std::string resource_type = pattern->GetResourceType("");
     if (!resource_type.empty()) {
       if (!AddInterceptedResourceType(resource_type, &resource_types)) {
@@ -1785,7 +1839,7 @@ DispatchResponse NetworkHandler::SetRequestInterception(
   } else {
     url_loader_interceptor_->SetPatterns(interceptor_patterns, true);
   }
-  return Response::OK();
+  return Response::Success();
 }
 
 void NetworkHandler::ContinueInterceptedRequest(
@@ -1909,7 +1963,7 @@ void NetworkHandler::TakeResponseBodyForInterceptionAsStream(
                        weak_factory_.GetWeakPtr(), std::move(callback)));
     return;
   }
-  callback->sendFailure(Response::Error(
+  callback->sendFailure(Response::ServerError(
       "Network.takeResponseBodyForInterceptionAsStream is only "
       "currently supported with --enable-features=NetworkService"));
 }
@@ -1920,8 +1974,8 @@ void NetworkHandler::OnResponseBodyPipeTaken(
     mojo::ScopedDataPipeConsumerHandle pipe,
     const std::string& mime_type) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  DCHECK_EQ(response.isSuccess(), pipe.is_valid());
-  if (!response.isSuccess()) {
+  DCHECK_EQ(response.IsSuccess(), pipe.is_valid());
+  if (!response.IsSuccess()) {
     callback->sendFailure(std::move(response));
     return;
   }
@@ -1982,12 +2036,11 @@ bool NetworkHandler::MaybeCreateProxyForInterception(
     const base::UnguessableToken& frame_token,
     bool is_navigation,
     bool is_download,
-    mojo::PendingReceiver<network::mojom::URLLoaderFactory>*
-        target_factory_receiver) {
+    network::mojom::URLLoaderFactoryOverride* intercepting_factory) {
   return url_loader_interceptor_ &&
          url_loader_interceptor_->CreateProxyForInterception(
              rph, frame_token, is_navigation, is_download,
-             target_factory_receiver);
+             intercepting_factory);
 }
 
 void NetworkHandler::ApplyOverrides(net::HttpRequestHeaders* headers,

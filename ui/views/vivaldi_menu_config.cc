@@ -1,5 +1,6 @@
-#include "ui/views/vivaldi_menu_config.h"
+// Copyright (c) 2020 Vivaldi Technologies AS. All rights reserved
 
+#include "ui/views/vivaldi_menu_config.h"
 #include "ui/views/controls/menu/menu_config.h"
 
 namespace vivaldi {

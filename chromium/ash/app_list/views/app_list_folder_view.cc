@@ -56,10 +56,6 @@ constexpr int kIndexChildItems = 2;
 constexpr int kIndexFolderHeader = 3;
 constexpr int kIndexPageSwitcher = 4;
 
-int GetCompositorActivatedFrameCount(ui::Compositor* compositor) {
-  return compositor ? compositor->activated_frame_count() : 0;
-}
-
 // Transit from the background of the folder item's icon to the opened
 // folder's background when opening the folder. Transit the other way when
 // closing the folder.
@@ -476,6 +472,12 @@ AppListFolderView::AppListFolderView(AppsContainerView* container_view,
           contents_view_->app_list_view()->is_tablet_mode()));
   view_model_->Add(page_switcher_, kIndexPageSwitcher);
 
+  show_hide_metrics_reporter_ =
+      std::make_unique<FolderShowHideAnimationReporter>();
+  show_hide_metrics_recorder_ =
+      std::make_unique<AppListAnimationMetricsRecorder>(
+          show_hide_metrics_reporter_.get());
+
   model_->AddObserver(this);
 }
 
@@ -502,8 +504,9 @@ void AppListFolderView::SetAppListFolderItem(AppListFolderItem* folder) {
 void AppListFolderView::ScheduleShowHideAnimation(bool show,
                                                   bool hide_for_reparent) {
   CreateOpenOrCloseFolderAccessibilityEvent(show);
-  animation_start_frame_number_ =
-      GetCompositorActivatedFrameCount(GetCompositor());
+  show_hide_metrics_recorder_->OnAnimationStart(
+      GetAppListConfig().folder_transition_in_duration(),
+      GetWidget()->GetCompositor());
 
   hide_for_reparent_ = hide_for_reparent;
 
@@ -600,7 +603,7 @@ void AppListFolderView::UpdatePreferredBounds() {
 
   gfx::Rect container_bounds = container_view_->GetContentsBounds();
   const gfx::Size search_box_size =
-      contents_view_->GetSearchBoxSize(ash::AppListState::kStateApps);
+      contents_view_->GetSearchBoxSize(AppListState::kStateApps);
   // Adjust for apps container margins.
   if (app_list_features::IsScalableAppListEnabled()) {
     container_bounds.Inset(container_view_->CalculateMarginsForAvailableBounds(
@@ -617,6 +620,14 @@ void AppListFolderView::UpdatePreferredBounds() {
   // Calculate the folder icon's bounds relative to this view.
   folder_item_icon_bounds_ =
       icon_bounds_in_container - preferred_bounds_.OffsetFromOrigin();
+
+  // Adjust folder item icon bounds for RTL (cannot use GetMirroredRect(), as
+  // the current view bounds might not match the preferred bounds).
+  if (base::i18n::IsRTL()) {
+    folder_item_icon_bounds_.set_x(preferred_bounds_.width() -
+                                   folder_item_icon_bounds_.x() -
+                                   folder_item_icon_bounds_.width());
+  }
 }
 
 int AppListFolderView::GetYOffsetForFolder() {
@@ -658,25 +669,7 @@ AppListItemView* AppListFolderView::GetActivatedFolderItemView() {
 }
 
 void AppListFolderView::RecordAnimationSmoothness() {
-  ui::Compositor* compositor = GetCompositor();
-  // Do not record animation smoothness if |compositor| is nullptr.
-  if (!compositor)
-    return;
-  // Do not record if the start frame number doesn't exist; either animation is
-  // not scheduled or the record happens.
-  if (!animation_start_frame_number_.has_value())
-    return;
-
-  const int end_frame_number = GetCompositorActivatedFrameCount(compositor);
-  if (end_frame_number > *animation_start_frame_number_) {
-    RecordFolderShowHideAnimationSmoothness(
-        end_frame_number - *animation_start_frame_number_,
-        GetAppListConfig().folder_transition_in_duration(),
-        compositor->refresh_rate());
-  }
-  // Resets the frame number so that further invocation won't record the
-  // metrics.
-  animation_start_frame_number_.reset();
+  show_hide_metrics_recorder_->OnAnimationEnd(GetWidget()->GetCompositor());
 }
 
 void AppListFolderView::OnTabletModeChanged(bool started) {
@@ -785,7 +778,9 @@ void AppListFolderView::DispatchDragEventForReparent(
     AppsGridView::Pointer pointer,
     const gfx::Point& drag_point_in_folder_grid) {
   AppsGridView* root_grid = container_view_->apps_grid_view();
-  gfx::Point drag_point_in_root_grid = drag_point_in_folder_grid;
+  gfx::Point drag_point_in_root_grid(
+      GetMirroredXInView(drag_point_in_folder_grid.x()),
+      drag_point_in_folder_grid.y());
 
   // Temporarily reset the transform of the contents container so that the point
   // can be correctly converted to the root grid's coordinates.
@@ -794,6 +789,8 @@ void AppListFolderView::DispatchDragEventForReparent(
   ConvertPointToTarget(items_grid_view_, root_grid, &drag_point_in_root_grid);
   contents_container_->SetTransform(original_transform);
 
+  drag_point_in_root_grid.set_x(
+      root_grid->GetMirroredXInView(drag_point_in_root_grid.x()));
   root_grid->UpdateDragFromReparentItem(pointer, drag_point_in_root_grid);
 }
 
@@ -824,14 +821,18 @@ void AppListFolderView::HideViewImmediately() {
   }
 }
 
-void AppListFolderView::CloseFolderPage() {
+void AppListFolderView::ResetItemsGridForClose() {
   if (items_grid_view()->dragging())
     items_grid_view()->EndDrag(true);
+  items_grid_view()->ClearAnySelectedView();
+}
+
+void AppListFolderView::CloseFolderPage() {
   // When a folder is closed focus |activated_folder_item_view_| but only show
   // the selection highlight if there is already one showing.
   const bool should_show_focus_ring_on_hide =
       items_grid_view()->has_selected_view();
-  items_grid_view()->ClearAnySelectedView();
+  ResetItemsGridForClose();
   container_view_->ShowApps(folder_item_);
   if (should_show_focus_ring_on_hide) {
     GetActivatedFolderItemView()->RequestFocus();

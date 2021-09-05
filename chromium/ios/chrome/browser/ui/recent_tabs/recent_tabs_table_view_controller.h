@@ -9,11 +9,8 @@
 #import "ios/chrome/browser/ui/table_view/chrome_table_view_controller.h"
 #include "ui/base/window_open_disposition.h"
 
-namespace ios {
-class ChromeBrowserState;
-}
+class Browser;
 enum class UrlLoadStrategy;
-class WebStateList;
 
 @protocol ApplicationCommands;
 @protocol RecentTabsTableViewControllerDelegate;
@@ -23,18 +20,20 @@ class WebStateList;
 @interface RecentTabsTableViewController
     : ChromeTableViewController <RecentTabsConsumer,
                                  UIAdaptivePresentationControllerDelegate>
-// The coordinator's BrowserState.
-@property(nonatomic, assign) ios::ChromeBrowserState* browserState;
-// The dispatcher used by this ViewController.
-@property(nonatomic, weak) id<ApplicationCommands> dispatcher;
+// The Browser for the tabs being restored. It's an error to pass a nullptr
+// Browser.
+@property(nonatomic, assign) Browser* browser;
+// The command handler used by this ViewController.
+@property(nonatomic, weak) id<ApplicationCommands> handler;
 // Opaque instructions on how to open urls.
 @property(nonatomic) UrlLoadStrategy loadStrategy;
 // Disposition for tabs restored by this object. Defaults to CURRENT_TAB.
 @property(nonatomic, assign) WindowOpenDisposition restoredTabDisposition;
 // RecentTabsTableViewControllerDelegate delegate.
 @property(nonatomic, weak) id<RecentTabsTableViewControllerDelegate> delegate;
-// WebStateList for tabs restored by this object.
-@property(nonatomic, assign) WebStateList* webStateList;
+// Whether the updates of the RecentTabs should be ignored. Setting this to NO
+// would trigger a reload of the TableView.
+@property(nonatomic, assign) BOOL preventUpdates;
 
 // Delegate to present the tab UI.
 @property(nonatomic, weak) id<RecentTabsPresentationDelegate>
@@ -45,10 +44,7 @@ class WebStateList;
 
 // Initializers.
 - (instancetype)init NS_DESIGNATED_INITIALIZER;
-- (instancetype)initWithTableViewStyle:(UITableViewStyle)style
-                           appBarStyle:
-                               (ChromeTableViewControllerStyle)appBarStyle
-    NS_UNAVAILABLE;
+- (instancetype)initWithStyle:(UITableViewStyle)style NS_UNAVAILABLE;
 
 @end
 

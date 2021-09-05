@@ -15,17 +15,18 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "printing/backend/cups_connection.h"
-#include "printing/backend/cups_ipp_util.h"
+#include "printing/backend/cups_ipp_helper.h"
 #include "printing/backend/print_backend_consts.h"
 #include "printing/units.h"
 
 namespace printing {
 
 PrintBackendCupsIpp::PrintBackendCupsIpp(
-    std::unique_ptr<CupsConnection> cups_connection)
-    : cups_connection_(std::move(cups_connection)) {}
+    std::unique_ptr<CupsConnection> cups_connection,
+    const std::string& locale)
+    : PrintBackend(locale), cups_connection_(std::move(cups_connection)) {}
 
-PrintBackendCupsIpp::~PrintBackendCupsIpp() {}
+PrintBackendCupsIpp::~PrintBackendCupsIpp() = default;
 
 bool PrintBackendCupsIpp::EnumeratePrinters(PrinterList* printer_list) {
   DCHECK(printer_list);
@@ -72,6 +73,13 @@ bool PrintBackendCupsIpp::GetPrinterBasicInfo(const std::string& printer_name,
   DCHECK_EQ(printer_name, printer->GetName());
 
   return printer->ToPrinterInfo(printer_info);
+}
+
+bool PrintBackendCupsIpp::GetPrinterCapsAndDefaults(
+    const std::string& printer_name,
+    PrinterCapsAndDefaults* printer_info) {
+  NOTREACHED();
+  return false;
 }
 
 bool PrintBackendCupsIpp::GetPrinterSemanticCapsAndDefaults(

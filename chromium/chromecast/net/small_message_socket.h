@@ -29,7 +29,37 @@ class IOBufferPool;
 // desired.
 class SmallMessageSocket {
  public:
-  explicit SmallMessageSocket(std::unique_ptr<net::Socket> socket);
+  class Delegate {
+   public:
+    // Called when sending becomes possible again, if a previous attempt to send
+    // was rejected.
+    virtual void OnSendUnblocked() {}
+
+    // Called when an unrecoverable error occurs while sending or receiving. Is
+    // only called asynchronously.
+    virtual void OnError(int error) {}
+
+    // Called when the end of stream has been read. No more data will be
+    // received.
+    virtual void OnEndOfStream() {}
+
+    // Called when a message has been received and there is no buffer pool. The
+    // |data| buffer contains |size| bytes of data. Return |true| to continue
+    // reading messages after OnMessage() returns.
+    virtual bool OnMessage(char* data, size_t size) = 0;
+
+    // Called when a message has been received. The |buffer| contains |size|
+    // bytes of data, which includes the first 2 bytes which are the size in
+    // network byte order. Note that these 2 bytes are not included in
+    // OnMessage()! Return |true| to continue receiving messages.
+    virtual bool OnMessageBuffer(scoped_refptr<net::IOBuffer> buffer,
+                                 size_t size);
+
+   protected:
+    virtual ~Delegate() = default;
+  };
+
+  SmallMessageSocket(Delegate* delegate, std::unique_ptr<net::Socket> socket);
   virtual ~SmallMessageSocket();
 
   net::Socket* socket() const { return socket_.get(); }
@@ -53,7 +83,7 @@ class SmallMessageSocket {
   // then call Send() to send the finished message.
   // If nullptr is returned, then OnSendUnblocked() will be called once sending
   // is possible again.
-  void* PrepareSend(int message_size);
+  void* PrepareSend(size_t message_size);
   void Send();
 
   // Sends an already-prepared buffer of data, if possible. The first 2 bytes of
@@ -62,7 +92,7 @@ class SmallMessageSocket {
   // sent; returns false if sending is not allowed right now (ie, another send
   // is currently in progress). If false is returned, then OnSendUnblocked()
   // will be called once sending is possible again.
-  bool SendBuffer(scoped_refptr<net::IOBuffer> data, int size);
+  bool SendBuffer(scoped_refptr<net::IOBuffer> data, size_t size);
 
   // Enables receiving messages from the stream. Messages will be received and
   // passed to OnMessage() until either an error occurs, the end of stream is
@@ -76,35 +106,12 @@ class SmallMessageSocket {
   // asynchronous reads.
   void ReceiveMessagesSynchronously();
 
- protected:
+ private:
   class BufferWrapper;
 
-  // Called when sending becomes possible again, if a previous attempt to send
-  // was rejected.
-  virtual void OnSendUnblocked() {}
-
-  // Called when an unrecoverable error occurs while sending or receiving. Is
-  // only called asynchronously.
-  virtual void OnError(int error) {}
-
-  // Called when the end of stream has been read. No more data will be received.
-  virtual void OnEndOfStream() {}
-
-  // Called when a message has been received and there is no buffer pool. The
-  // |data| buffer contains |size| bytes of data. Return |true| to continue
-  // reading messages after OnMessage() returns.
-  virtual bool OnMessage(char* data, int size) = 0;
-
-  // Called when a message has been received. The |buffer| contains |size| bytes
-  // of data, which includes the first 2 bytes which are the size in network
-  // byte order. Note that these 2 bytes are not included in OnMessage()!
-  // Return |true| to continue receiving messages.
-  virtual bool OnMessageBuffer(scoped_refptr<net::IOBuffer> buffer, int size);
-
- private:
   void OnWriteComplete(int result);
   bool HandleWriteResult(int result);
-  void PostError(int error);
+  void OnError(int error);
 
   void Read();
   void OnReadComplete(int result);
@@ -113,6 +120,7 @@ class SmallMessageSocket {
   bool HandleCompletedMessageBuffers();
   void ActivateBufferPool(char* current_data, size_t current_size);
 
+  Delegate* const delegate_;
   const std::unique_ptr<net::Socket> socket_;
   const scoped_refptr<base::SequencedTaskRunner> task_runner_;
 

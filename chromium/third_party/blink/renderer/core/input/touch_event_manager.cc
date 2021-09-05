@@ -5,8 +5,8 @@
 #include "third_party/blink/renderer/core/input/touch_event_manager.h"
 
 #include <memory>
+#include "third_party/blink/public/common/input/web_touch_event.h"
 #include "third_party/blink/public/platform/web_coalesced_input_event.h"
-#include "third_party/blink/public/platform/web_touch_event.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/flat_tree_traversal.h"
 #include "third_party/blink/renderer/core/events/touch_event.h"
@@ -138,7 +138,7 @@ class ChangedTouches final {
  public:
   // The touches corresponding to the particular change state this struct
   // instance represents.
-  Member<TouchList> touches_;
+  TouchList* touches_ = nullptr;
 
   using EventTargetSet = HeapHashSet<Member<EventTarget>>;
   // Set of targets involved in m_touches.
@@ -156,10 +156,10 @@ void TouchEventManager::Clear() {
   touch_attribute_map_.clear();
   last_coalesced_touch_event_ = WebTouchEvent();
   suppressing_touchmoves_within_slop_ = false;
-  current_touch_action_ = TouchAction::kTouchActionAuto;
+  current_touch_action_ = TouchAction::kAuto;
 }
 
-void TouchEventManager::Trace(blink::Visitor* visitor) {
+void TouchEventManager::Trace(Visitor* visitor) {
   visitor->Trace(frame_);
   visitor->Trace(touch_sequence_document_);
   visitor->Trace(touch_attribute_map_);
@@ -206,18 +206,19 @@ Touch* TouchEventManager::CreateDomTouch(
       point_attr->event_.WebPointerEventInRootFrame();
   float scale_factor = 1.0f / target_frame->PageZoomFactor();
 
-  FloatPoint document_point =
-      target_frame->View()
-          ->RootFrameToDocument(transformed_event.PositionInWidget())
-          .ScaledBy(scale_factor);
+  FloatPoint document_point = target_frame->View()
+                                  ->RootFrameToDocument(FloatPoint(
+                                      transformed_event.PositionInWidget()))
+                                  .ScaledBy(scale_factor);
   FloatSize adjusted_radius =
       FloatSize(transformed_event.width / 2.f, transformed_event.height / 2.f)
           .ScaledBy(scale_factor);
 
   return MakeGarbageCollected<Touch>(
       target_frame, touch_node, point_attr->event_.id,
-      transformed_event.PositionInScreen(), document_point, adjusted_radius,
-      transformed_event.rotation_angle, transformed_event.force, region_id);
+      FloatPoint(transformed_event.PositionInScreen()), document_point,
+      adjusted_radius, transformed_event.rotation_angle,
+      transformed_event.force, region_id);
 }
 
 WebCoalescedInputEvent TouchEventManager::GenerateWebCoalescedInputEvent() {
@@ -471,7 +472,7 @@ TouchEventManager::DispatchTouchEventFromAccumulatdTouchPoints() {
       EventTarget* touch_event_target = event_target;
       TouchEvent* touch_event = TouchEvent::Create(
           coalesced_event, touches, touches_by_target.at(touch_event_target),
-          changed_touches[action_idx].touches_.Get(), event_name,
+          changed_touches[action_idx].touches_, event_name,
           touch_event_target->ToNode()->GetDocument().domWindow(),
           current_touch_action_);
 
@@ -533,13 +534,13 @@ void TouchEventManager::UpdateTouchAttributeMapsForPointerDown(
     if (touch_sequence_document_->GetFrame()) {
       HitTestLocation location(PhysicalOffset::FromFloatPointRound(
           touch_sequence_document_->GetFrame()->View()->ConvertFromRootFrame(
-              event.PositionInWidget())));
+              FloatPoint(event.PositionInWidget()))));
       result = event_handling_util::HitTestResultInFrame(
           touch_sequence_document_->GetFrame(), location, hit_type);
       Node* node = result.InnerNode();
       if (!node)
         return;
-      if (auto* canvas = ToHTMLCanvasElementOrNull(node)) {
+      if (auto* canvas = DynamicTo<HTMLCanvasElement>(node)) {
         HitTestCanvasResult* hit_test_canvas_result =
             canvas->GetControlAndIdIfHitRegionExists(
                 result.PointInInnerNodeFrame());
@@ -577,9 +578,9 @@ void TouchEventManager::UpdateTouchAttributeMapsForPointerDown(
   if (should_enforce_vertical_scroll_ &&
       HasEventHandlerInAncestorPath(
           touch_node, EventHandlerRegistry::kTouchStartOrMoveEventBlocking)) {
-    delayed_effective_touch_action_ = delayed_effective_touch_action_.value_or(
-                                          TouchAction::kTouchActionAuto) &
-                                      effective_touch_action;
+    delayed_effective_touch_action_ =
+        delayed_effective_touch_action_.value_or(TouchAction::kAuto) &
+        effective_touch_action;
   }
   if (!delayed_effective_touch_action_) {
     frame_->GetPage()->GetChromeClient().SetTouchAction(frame_,
@@ -680,7 +681,7 @@ WebInputEventResult TouchEventManager::FlushEvents() {
 
 void TouchEventManager::AllTouchesReleasedCleanup() {
   touch_sequence_document_.Clear();
-  current_touch_action_ = TouchAction::kTouchActionAuto;
+  current_touch_action_ = TouchAction::kAuto;
   last_coalesced_touch_event_ = WebTouchEvent();
   // Ideally, we should have DCHECK(!delayed_effective_touch_action_) but we do
   // we do actually get here from HandleTouchPoint(). Supposedly, if there has
@@ -702,7 +703,7 @@ WebInputEventResult TouchEventManager::EnsureVerticalScrollIsPossible(
       event_result == WebInputEventResult::kHandledApplication;
   if (prevent_defaulted && delayed_effective_touch_action_) {
     // Make sure that only vertical scrolling is permitted.
-    *delayed_effective_touch_action_ &= TouchAction::kTouchActionPanY;
+    *delayed_effective_touch_action_ &= TouchAction::kPanY;
   }
 
   if (delayed_effective_touch_action_) {

@@ -10,12 +10,12 @@
 #include "base/macros.h"
 #include "build/build_config.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
-#include "chrome/browser/permissions/permission_request_id.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
+#include "components/permissions/permission_request_id.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/web_contents_tester.h"
@@ -24,7 +24,7 @@
 #if defined(OS_ANDROID)
 #include "chrome/browser/infobars/infobar_service.h"
 #else
-#include "chrome/browser/permissions/permission_request_manager.h"
+#include "components/permissions/permission_request_manager.h"
 #endif
 
 namespace {
@@ -66,7 +66,7 @@ class PaymentHandlerPermissionContextTests
 #if defined(OS_ANDROID)
     InfoBarService::CreateForWebContents(web_contents());
 #else
-    PermissionRequestManager::CreateForWebContents(web_contents());
+    permissions::PermissionRequestManager::CreateForWebContents(web_contents());
 #endif
   }
 
@@ -79,7 +79,7 @@ TEST_F(PaymentHandlerPermissionContextTests, TestInsecureRequestingUrl) {
   GURL url("http://www.example.com");
   content::WebContentsTester::For(web_contents())->NavigateAndCommit(url);
 
-  const PermissionRequestID id(
+  const permissions::PermissionRequestID id(
       web_contents()->GetMainFrame()->GetProcess()->GetID(),
       web_contents()->GetMainFrame()->GetRoutingID(), -1);
   permission_context.RequestPermission(
@@ -93,7 +93,7 @@ TEST_F(PaymentHandlerPermissionContextTests, TestInsecureRequestingUrl) {
   ContentSetting setting =
       HostContentSettingsMapFactory::GetForProfile(profile())
           ->GetContentSetting(url.GetOrigin(), url.GetOrigin(),
-                              CONTENT_SETTINGS_TYPE_PAYMENT_HANDLER,
+                              ContentSettingsType::PAYMENT_HANDLER,
                               std::string());
   EXPECT_EQ(CONTENT_SETTING_ALLOW, setting);
 }
@@ -109,17 +109,17 @@ TEST_F(PaymentHandlerPermissionContextTests, TestInsecureQueryingUrl) {
             HostContentSettingsMapFactory::GetForProfile(profile())
                 ->GetContentSetting(
                     insecure_url.GetOrigin(), insecure_url.GetOrigin(),
-                    CONTENT_SETTINGS_TYPE_PAYMENT_HANDLER, std::string()));
+                    ContentSettingsType::PAYMENT_HANDLER, std::string()));
   EXPECT_EQ(CONTENT_SETTING_ALLOW,
             HostContentSettingsMapFactory::GetForProfile(profile())
                 ->GetContentSetting(
                     secure_url.GetOrigin(), insecure_url.GetOrigin(),
-                    CONTENT_SETTINGS_TYPE_PAYMENT_HANDLER, std::string()));
+                    ContentSettingsType::PAYMENT_HANDLER, std::string()));
   EXPECT_EQ(CONTENT_SETTING_ALLOW,
             HostContentSettingsMapFactory::GetForProfile(profile())
                 ->GetContentSetting(
                     insecure_url.GetOrigin(), secure_url.GetOrigin(),
-                    CONTENT_SETTINGS_TYPE_PAYMENT_HANDLER, std::string()));
+                    ContentSettingsType::PAYMENT_HANDLER, std::string()));
 
   EXPECT_EQ(CONTENT_SETTING_BLOCK,
             permission_context

@@ -4,18 +4,28 @@
 
 ## Running GN
 
-You just run `gn` from the command line. There is a script in
-`depot_tools`, which is presumably in your PATH, with this name. The
-script will find the binary in the source tree containing the current
-directory and run it.
+You just run `gn` from the command line. For large projects, GN is versioned
+and distributed with the source checkout.
+
+  * For Chromium and Chromium-based projects, there is a script in
+    `depot_tools`, which is presumably in your PATH, with this name. The script
+    will find the binary in the source tree containing the current directory and
+    run it.
+
+  * For Fuchsia in-tree development, run `fx gn ...` which will find the right
+    GN binary and run it with the given arguments.
+
+  * For other projects, see your project's documentation.
 
 ## Setting up a build
 
-In GYP, the system would generate `Debug` and `Release` build
-directories for you and configure them accordingly. GN doesn't do this.
-Instead, you set up whatever build directory you want with whatever
-configuration you want. The Ninja files will be automatically
-regenerated if they're out of date when you build in that directory.
+Unlike some other build systems, with GN you set up your own build directories
+with the settings you want. This lets you maintain as many different builds in
+parallel as you need.
+
+Once you set up a build directory, the Ninja files will be automatically
+regenerated if they're out of date when you build in that directory so you
+should not have to re-run GN.
 
 To make a build directory:
 
@@ -38,8 +48,9 @@ is_component_build = true
 is_debug = false
 ```
 
-You can see the list of available arguments and their default values by
-typing
+The available variables will depend on your build (this example is from
+Chromium). You can see the list of available arguments and their default values
+by typing
 
 ```
 gn args --list out/my_build
@@ -47,7 +58,7 @@ gn args --list out/my_build
 
 on the command line. Note that you have to specify the build directory
 for this command because the available arguments can change according
-to what's set.
+to the build.
 
 Chrome developers can also read the [Chrome-specific build
 configuration](http://www.chromium.org/developers/gn-build-configuration)
@@ -67,122 +78,132 @@ target_cpu = "x86"
 target_cpu = "x64"
 ```
 
-See [GNCrossCompiles](cross_compiles.md) for more info.
-
-## Configuring goma
-
-Run `gn args out/Default` (substituting your build directory as needed).
-Add:
-
-```
-use_goma = true
-goma_dir = "~/foo/bar/goma"
-```
-
-If your goma is in the default location (`~/goma`) then you can omit the
-`goma_dir` line.
-
-## Configuring component mode
-
-This is a build arg like the goma flags. run `gn args out/Default` and add:
-
-```
-is_component_build = true
-```
+See [GN cross compiles](cross_compiles.md) for more info.
 
 ## Step-by-step
 
 ### Adding a build file
 
-Create a `tools/gn/tutorial/BUILD.gn` file and enter the following:
+Go to the directory `examples/simple_build`. This is the root of a minimal GN
+repository.
+
+In that directory there is a `tutorial` directory. There is already a
+`tutorial.cc` file that's not hooked up to the build. Create a new `BUILD.gn`
+file in that directory for our new target.
 
 ```
-executable("hello_world") {
+executable("tutorial") {
   sources = [
-    "hello_world.cc",
+    "tutorial.cc",
   ]
 }
 ```
 
-There should already be a `hello_world.cc` file in that directory,
-containing what you expect. That's it! Now we just need to tell the
-build about this file. Open the `BUILD.gn` file in the root directory
-and add the label of this target to the dependencies of one of the root
-groups (a "group" target is a meta-target that is just a collection of
-other targets):
+Now we just need to tell the build about this new target. Open the `BUILD.gn`
+file in the parent (`simple_build`) directory. GN starts by loading this root
+file, and then loads all dependencies ourward from here, so we just need to add
+a reference to our new target from this file.
+
+You could add our new target as a dependency from one of the existing targets in
+the `simple_build/BUILD.gn` file, but it usually doesn't make a lot of sense to
+have an executable as a depdency of another executable (they can't be linked).
+So let's make a "tools" group. In GN, a "group" is just a collection of
+dependencies that's not complied or linked:
 
 ```
-group("root") {
+group("tools") {
   deps = [
-    ...
-    "//url",
-    "//tools/gn/tutorial:hello_world",
+    # This will expand to the name "//tutorial:tutorial" which is the full name
+    # of our new target. Run "gn help labels" for more.
+    "//tutorial",
   ]
 }
 ```
-
-You can see the label of your target is "//" (indicating the source
-root), followed by the directory name, a colon, and the target name.
 
 ### Testing your addition
 
-From the command line in the source root directory:
+From the command line in the `simple_build` directory:
 
 ```
-gn gen out/Default
-ninja -C out/Default hello_world
-out/Default/hello_world
+gn gen out
+ninja -C out tutorial
+out/tutorial
 ```
 
-GN encourages target names for static libraries that aren't globally
-unique. To build one of these, you can pass the label with no leading
-"//" to ninja:
+You should see "Hello, world." output to the console.
+
+Side note: GN encourages target names for static libraries that aren't globally
+unique. To build one of these, you can pass the label with its path (but no leading
+"//") to ninja:
 
 ```
-ninja -C out/Default tools/gn/tutorial:hello_world
+ninja -C out some/path/to/target:my_target
 ```
 
 ### Declaring dependencies
 
-Let's make a static library that has a function to say hello to random
-people. There is a source file `hello.cc` in that directory which has a
-function to do this. Open the `tools/gn/tutorial/BUILD.gn` file and add
-the static library to the bottom of the existing file:
+Let's look at the targets defined in
+[examples/simple_build/BUILD.gn](../examples/simple_build/BUILD.gn). There is a
+static library that defines one function, `GetStaticText()`:
 
 ```
-static_library("hello") {
+static_library("hello_static") {
   sources = [
-    "hello.cc",
+    "hello_static.cc",
+    "hello_static.h",
   ]
 }
 ```
 
-Now let's add an executable that depends on this library:
+There is also a shared library that defines one function `GetSharedText()`:
 
 ```
-executable("say_hello") {
+shared_library("hello_shared") {
   sources = [
-    "say_hello.cc",
+    "hello_shared.cc",
+    "hello_shared.h",
   ]
+
+  defines = [ "HELLO_SHARED_IMPLEMENTATION" ]
+}
+```
+
+This also illustrates how to set preprocessor defines for a target. To set more
+than one or to assign values, use this form:
+
+```
+defines = [
+  "HELLO_SHARED_IMPLEMENTATION",
+  "ENABLE_DOOM_MELON=0",
+]
+```
+
+Now let's look at the executable that depends on these two libraries:
+
+```
+executable("hello") {
+  sources = [
+    "hello.cc",
+  ]
+
   deps = [
-    ":hello",
+    ":hello_shared",
+    ":hello_static",
   ]
 }
 ```
 
 This executable includes one source file and depends on the previous
-static library. The static library is referenced by its label in the
-`deps`. You could have used the full label `//tools/gn/tutorial:hello`
-but if you're referencing a target in the same build file, you can use
-the shortcut `:hello`.
+two libraries. Labels starting with a colon refer to a target with that name in
+the current BUILD.gn file.
 
-### Test the static library version
+### Test the binary
 
-From the command line in the source root directory:
+From the command line in the `simple_build` directory:
 
 ```
-ninja -C out/Default say_hello
-out/Default/say_hello
+ninja -C out hello
+out/hello
 ```
 
 Note that you **didn't** need to re-run GN. GN will automatically rebuild
@@ -190,94 +211,84 @@ the ninja files when any build file has changed. You know this happens
 when ninja prints `[1/1] Regenerating ninja files` at the beginning of
 execution.
 
-### Compiler settings
-
-Our hello library has a new feature, the ability to say hello to two
-people at once. This feature is controlled by defining `TWO_PEOPLE`. We
-can add defines like so:
-
-```
-static_library("hello") {
-  sources = [
-    "hello.cc",
-  ]
-  defines = [
-    "TWO_PEOPLE",
-  ]
-}
-```
-
 ### Putting settings in a config
 
-However, users of the library also need to know about this define, and
-putting it in the static library target defines it only for the files
-there. If somebody else includes `hello.h`, they won't see the new
-definition. To see the new definition, everybody will have to define
-`TWO_PEOPLE`.
-
-GN has a concept called a "config" which encapsulates settings. Let's
-create one that defines our preprocessor define:
+Users of a library often need compiler flags, defines, and include directories
+applied to them. To do this, put all such settings into a "config" which is a
+named collection of settings (but not sources or dependencies):
 
 ```
-config("hello_config") {
-  defines = [
-    "TWO_PEOPLE",
-  ]
+config("my_lib_config") {
+  defines = [ "ENABLE_DOOM_MELON" ]
+  include_dirs = [ "//third_party/something" ]
 }
 ```
 
-To apply these settings to your target, you only need to add the
-config's label to the list of configs in the target:
+To apply a config's settings to a target, add it to the `configs` list:
 
 ```
-static_library("hello") {
+static_library("hello_shared") {
   ...
+  # Note "+=" here is usually required, see "default configs" below.
   configs += [
-    ":hello_config",
+    ":my_lib_config",
   ]
 }
 ```
 
-Note that you need "+=" here instead of "=" since the build
-configuration has a default set of configs applied to each target that
-set up the default build stuff. You want to add to this list rather than
-overwrite it. To see the default configs, you can use the `print`
-function in the build file or the `desc` command-line subcommand (see
-below for examples of both).
-
-### Dependent configs
-
-This nicely encapsulates our settings, but still requires everybody that
-uses our library to set the config on themselves. It would be nice if
-everybody that depends on our `hello` library can get this
-automatically. Change your library definition to:
+A config can be applied to all targets that depend on the current one by putting
+its label in the `public_configs` list:
 
 ```
-static_library("hello") {
-  sources = [
-    "hello.cc",
-  ]
-  all_dependent_configs = [
-    ":hello_config"
+static_library("hello_shared") {
+  ...
+  public_configs = [
+    ":my_lib_config",
   ]
 }
 ```
 
-This applies the `hello_config` to the `hello` target itself, plus all
-targets that transitively depend on the current one. Now everybody that
-depends on us will get our settings. You can also set `public_configs`
-which applies only to targets that directly depend on your target (not
-transitively).
+The `public_configs` also applies to the current target, so there's no need to
+list a config in both places.
 
-Now if you compile and run, you'll see the new version with two people:
+### Default configs
+
+The build configuration will set up some settings that apply to every target by
+default. These will normally be set as a default list of configs. You can see
+this using the "print" command which is useful for debugging:
 
 ```
-> ninja -C out/Default say_hello
-ninja: Entering directory 'out/Default'
-[1/1] Regenerating ninja files
-[4/4] LINK say_hello
-> out/Default/say_hello
-Hello, Bill and Joy.
+executable("hello") {
+  print(configs)
+}
+```
+
+Running GN will print something like:
+
+```
+$ gn gen out
+["//build:compiler_defaults", "//build:executable_ldconfig"]
+Done. Made 5 targets from 5 files in 9ms
+```
+
+Targets can modify this list to change their defaults. For example, the build
+setup might turn off exceptions by default by adding a `no_exceptions` config,
+but a target might re-enable them by replacing it with a different one:
+
+```
+executable("hello") {
+  ...
+  configs -= [ "//build:no_exceptions" ]  # Remove global default.
+  configs += [ "//build:exceptions" ]  # Replace with a different one.
+}
+```
+
+Our print command from above could also be expressed using string interpolation.
+This is a way to convert values to strings. It uses the symbol "$" to refer to a
+variable:
+
+```
+print("The configs for the target $target_name are $configs")
 ```
 
 ## Add a new build argument
@@ -303,27 +314,13 @@ care should be used in scoping and naming arguments.
 You can run GN in verbose mode to see lots of messages about what it's
 doing. Use `-v` for this.
 
-### Print debugging
-
-There is a `print` command which just writes to stdout:
-
-```
-static_library("hello") {
-  ...
-  print(configs)
-}
-```
-
-This will print all of the configs applying to your target (including
-the default ones).
-
 ### The "desc" command
 
 You can run `gn desc <build_dir> <targetname>` to get information about
 a given target:
 
 ```
-gn desc out/Default //tools/gn/tutorial:say_hello
+gn desc out/Default //foo/bar:say_hello
 ```
 
 will print out lots of exciting information. You can also print just one
@@ -331,16 +328,12 @@ section. Lets say you wanted to know where your `TWO_PEOPLE` define
 came from on the `say_hello` target:
 
 ```
-> gn desc out/Default //tools/gn/tutorial:say_hello defines --blame
+> gn desc out/Default //foo/bar:say_hello defines --blame
 ...lots of other stuff omitted...
-  From //tools/gn/tutorial:hello_config
-       (Added by //tools/gn/tutorial/BUILD.gn:12)
+  From //foo/bar:hello_config
+       (Added by //foo/bar/BUILD.gn:12)
     TWO_PEOPLE
 ```
-
-You can see that `TWO_PEOPLE` was defined by a config, and you can also
-see the which line caused that config to be applied to your target (in
-this case, the `all_dependent_configs` line).
 
 Another particularly interesting variation:
 
@@ -349,17 +342,3 @@ gn desc out/Default //base:base_i18n deps --tree
 ```
 
 See `gn help desc` for more.
-
-### Performance
-
-You can see what took a long time by running it with the --time command
-line flag. This will output a summary of timings for various things.
-
-You can also make a trace of how the build files were executed:
-
-```
-gn --tracelog=mylog.trace
-```
-
-and you can load the resulting file in Chrome's `about:tracing` page to
-look at everything.

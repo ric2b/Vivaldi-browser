@@ -2491,73 +2491,6 @@ TEST_F(LegacySWPictureLayerImplTest, RecreateInvalidPendingTreeTiles) {
   EXPECT_NE(active_tiling->TileAt(0, 0), pending_tiling->TileAt(0, 0));
 }
 
-class MSAAEnabledPictureLayerImplTest : public PictureLayerImplTest {
- public:
-  LayerTreeSettings CreateSettings() override {
-    LayerTreeSettings settings = PictureLayerImplTest::CreateSettings();
-    settings.gpu_rasterization_msaa_sample_count = 1;
-    return settings;
-  }
-};
-
-TEST_F(MSAAEnabledPictureLayerImplTest, SyncTilingAfterMSAAToggles) {
-  host_impl()->AdvanceToNextFrame(base::TimeDelta::FromMilliseconds(1));
-
-  gfx::Size layer_bounds(10, 10);
-
-  scoped_refptr<FakeRasterSource> pending_raster_source =
-      FakeRasterSource::CreateFilled(layer_bounds);
-  scoped_refptr<FakeRasterSource> active_raster_source =
-      FakeRasterSource::CreateFilled(layer_bounds);
-
-  SetupTrees(pending_raster_source, active_raster_source);
-
-  EXPECT_TRUE(pending_layer()->tilings()->FindTilingWithScaleKey(1.f));
-  EXPECT_TRUE(active_layer()->tilings()->FindTilingWithScaleKey(1.f));
-
-  // MSAA is disabled by default.
-  EXPECT_FALSE(host_impl()->use_msaa());
-  EXPECT_EQ(0u, pending_layer()->release_tile_resources_count());
-  EXPECT_EQ(0u, active_layer()->release_tile_resources_count());
-  EXPECT_EQ(0u, pending_layer()->release_resources_count());
-  EXPECT_EQ(0u, active_layer()->release_resources_count());
-  // Toggling MSAA clears all tilings on both trees.
-  host_impl()->SetContentHasSlowPaths(true);
-  host_impl()->CommitComplete();
-  EXPECT_TRUE(host_impl()->use_msaa());
-  EXPECT_EQ(1u, pending_layer()->release_tile_resources_count());
-  EXPECT_EQ(1u, active_layer()->release_tile_resources_count());
-  EXPECT_EQ(1u, pending_layer()->release_resources_count());
-  EXPECT_EQ(1u, active_layer()->release_resources_count());
-
-  // But the pending layer gets a tiling back, and can activate it.
-  EXPECT_TRUE(pending_layer()->tilings()->FindTilingWithScaleKey(1.f));
-  EXPECT_EQ(0u, active_layer()->tilings()->num_tilings());
-
-  host_impl()->NotifyReadyToActivate();
-  ActivateTree();
-  EXPECT_TRUE(active_layer()->tilings()->FindTilingWithScaleKey(1.f));
-
-  SetupPendingTree(pending_raster_source);
-  EXPECT_TRUE(pending_layer()->tilings()->FindTilingWithScaleKey(1.f));
-
-  // Toggling msaa clears all tilings on both trees.
-  host_impl()->SetContentHasSlowPaths(false);
-  EXPECT_TRUE(host_impl()->use_msaa());
-  host_impl()->CommitComplete();
-  EXPECT_EQ(GpuRasterizationStatus::ON,
-            host_impl()->gpu_rasterization_status());
-  EXPECT_EQ(2u, pending_layer()->release_tile_resources_count());
-  EXPECT_EQ(2u, active_layer()->release_tile_resources_count());
-  EXPECT_EQ(2u, pending_layer()->release_resources_count());
-  EXPECT_EQ(2u, active_layer()->release_resources_count());
-  host_impl()->NotifyReadyToActivate();
-
-  host_impl()->CommitComplete();
-  EXPECT_EQ(GpuRasterizationStatus::ON,
-            host_impl()->gpu_rasterization_status());
-}
-
 TEST_F(LegacySWPictureLayerImplTest, HighResCreatedWhenBoundsShrink) {
   // Put 0.5 as high res.
   SetInitialDeviceScaleFactor(0.5f);
@@ -3901,8 +3834,8 @@ TEST_F(LegacySWPictureLayerImplTest, SharedQuadStateContainsMaxTilingScale) {
   EXPECT_EQ(2.5f, max_contents_scale);
 
   gfx::Transform scaled_draw_transform = active_layer()->DrawTransform();
-  scaled_draw_transform.Scale(SK_MScalar1 / max_contents_scale,
-                              SK_MScalar1 / max_contents_scale);
+  scaled_draw_transform.Scale(SK_Scalar1 / max_contents_scale,
+                              SK_Scalar1 / max_contents_scale);
 
   AppendQuadsData data;
   active_layer()->AppendQuads(render_pass.get(), &data);
@@ -4949,7 +4882,7 @@ TEST_F(LegacySWPictureLayerImplTest, ScrollPropagatesToPending) {
                                .ToString());
   // Scroll offset in property trees is not propagated from the active tree to
   // the pending tree.
-  SetScrollOffset(pending_layer(), active_layer()->CurrentScrollOffset());
+  SetScrollOffset(pending_layer(), CurrentScrollOffset(active_layer()));
   UpdateDrawProperties(host_impl()->pending_tree());
   EXPECT_EQ("0,50 100x100", pending_layer()
                                 ->HighResTiling()
@@ -5261,7 +5194,7 @@ TEST_F(LegacySWPictureLayerImplTest, CompositedImageCalculateContentsScale) {
   std::unique_ptr<FakePictureLayerImpl> pending_layer =
       FakePictureLayerImpl::Create(pending_tree, root_id(),
                                    pending_raster_source);
-  pending_layer->set_is_directly_composited_image(true);
+  pending_layer->SetDirectlyCompositedImageSize(layer_bounds);
   pending_layer->SetDrawsContent(true);
   FakePictureLayerImpl* pending_layer_ptr = pending_layer.get();
   pending_tree->SetRootLayerForTesting(std::move(pending_layer));
@@ -5286,7 +5219,7 @@ TEST_F(LegacySWPictureLayerImplTest, CompositedImageIgnoreIdealContentsScale) {
   std::unique_ptr<FakePictureLayerImpl> pending_layer =
       FakePictureLayerImpl::Create(pending_tree, root_id(),
                                    pending_raster_source);
-  pending_layer->set_is_directly_composited_image(true);
+  pending_layer->SetDirectlyCompositedImageSize(layer_bounds);
   pending_layer->SetDrawsContent(true);
   FakePictureLayerImpl* pending_layer_ptr = pending_layer.get();
   pending_tree->SetRootLayerForTesting(std::move(pending_layer));
@@ -5344,7 +5277,7 @@ TEST_F(LegacySWPictureLayerImplTest, CompositedImageRasterScaleChanges) {
       FakeRasterSource::CreateFilled(layer_bounds);
 
   SetupPendingTree(pending_raster_source);
-  pending_layer()->set_is_directly_composited_image(true);
+  pending_layer()->SetDirectlyCompositedImageSize(layer_bounds);
 
   float expected_contents_scale = 0.25f;
   for (int i = 1; i < 30; ++i) {

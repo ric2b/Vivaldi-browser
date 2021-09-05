@@ -12,6 +12,7 @@
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/command_line.h"
+#include "base/containers/span.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
@@ -37,6 +38,7 @@
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_sync_util.h"
 #include "components/password_manager/core/browser/password_ui_utils.h"
+#include "components/password_manager/core/browser/ui/plaintext_reason.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/sync/driver/sync_service.h"
@@ -55,22 +57,35 @@ namespace {
 // Convenience typedef for the commonly used vector of PasswordForm pointers.
 using FormVector = std::vector<std::unique_ptr<autofill::PasswordForm>>;
 
-const autofill::PasswordForm* TryGetPasswordForm(
-    const std::map<std::string, FormVector>& map,
+base::span<const std::unique_ptr<autofill::PasswordForm>> TryGetPasswordForms(
+    const std::map<std::string, FormVector>& password_form_map,
     size_t index) {
   // |index| out of bounds might come from a compromised renderer
   // (http://crbug.com/362054), or the user removed a password while a request
   // to the store is in progress (i.e. |forms| is empty). Don't let it crash
   // the browser.
-  if (map.size() <= index)
-    return nullptr;
+  if (password_form_map.size() <= index)
+    return {};
 
   // Android tries to obtain a PasswordForm corresponding to a specific index,
   // and does not know about sort keys. In order to efficiently obtain the n'th
   // element in the map we make use of std::next() here.
-  const auto& forms = std::next(map.begin(), index)->second;
+  const auto& forms = std::next(password_form_map.begin(), index)->second;
   DCHECK(!forms.empty());
-  return forms[0].get();
+  return base::make_span(forms);
+}
+
+const autofill::PasswordForm* TryGetPasswordForm(
+    const std::map<std::string, FormVector>& password_form_map,
+    size_t index) {
+  // |index| out of bounds might come from a compromised renderer
+  // (http://crbug.com/362054), or the user removed a password while a request
+  // to the store is in progress (i.e. |forms| is empty). Don't let it crash
+  // the browser.
+  if (password_form_map.size() <= index)
+    return nullptr;
+
+  return TryGetPasswordForms(password_form_map, index)[0].get();
 }
 
 // Processes |map| and returns a FormVector where each equivalence class in
@@ -85,6 +100,20 @@ FormVector GetEntryList(const std::map<std::string, FormVector>& map) {
 
   return result;
 }
+
+#if !defined(OS_ANDROID)
+password_manager::metrics_util::AccessPasswordInSettingsEvent
+ConvertPlaintextReason(password_manager::PlaintextReason reason) {
+  switch (reason) {
+    case password_manager::PlaintextReason::kCopy:
+      return password_manager::metrics_util::ACCESS_PASSWORD_COPIED;
+    case password_manager::PlaintextReason::kView:
+      return password_manager::metrics_util::ACCESS_PASSWORD_VIEWED;
+    case password_manager::PlaintextReason::kEdit:
+      return password_manager::metrics_util::ACCESS_PASSWORD_EDITED;
+  }
+}
+#endif
 
 class RemovePasswordOperation : public UndoOperation {
  public:
@@ -169,7 +198,8 @@ PasswordManagerPresenter::PasswordManagerPresenter(
 
 PasswordManagerPresenter::~PasswordManagerPresenter() {
   for (bool use_account_store : {false, true}) {
-    PasswordStore* store = GetPasswordStore(use_account_store);
+    PasswordStore* store =
+        GetPasswordStore(password_view_->GetProfile(), use_account_store).get();
     if (store) {
       store->RemoveObserver(this);
     }
@@ -178,7 +208,8 @@ PasswordManagerPresenter::~PasswordManagerPresenter() {
 
 void PasswordManagerPresenter::Initialize() {
   for (bool use_account_store : {false, true}) {
-    PasswordStore* store = GetPasswordStore(use_account_store);
+    PasswordStore* store =
+        GetPasswordStore(password_view_->GetProfile(), use_account_store).get();
     if (store) {
       store->AddObserver(this);
     }
@@ -201,7 +232,8 @@ void PasswordManagerPresenter::UpdatePasswordLists() {
   // Request an update from both stores (if they exist). This will send out two
   // updates to |password_view_| as the two result sets come in.
   for (bool use_account_store : {false, true}) {
-    PasswordStore* store = GetPasswordStore(use_account_store);
+    PasswordStore* store =
+        GetPasswordStore(password_view_->GetProfile(), use_account_store).get();
     if (store) {
       store->GetAllLoginsWithAffiliationAndBrandingInformation(this);
     }
@@ -211,6 +243,24 @@ void PasswordManagerPresenter::UpdatePasswordLists() {
 const autofill::PasswordForm* PasswordManagerPresenter::GetPassword(
     size_t index) const {
   return TryGetPasswordForm(password_map_, index);
+}
+
+base::span<const std::unique_ptr<autofill::PasswordForm>>
+PasswordManagerPresenter::GetPasswords(size_t index) const {
+  return TryGetPasswordForms(password_map_, index);
+}
+
+std::vector<base::string16> PasswordManagerPresenter::GetUsernamesForRealm(
+    size_t index) {
+  const autofill::PasswordForm* current_form =
+      TryGetPasswordForm(password_map_, index);
+  FormVector password_forms = GetAllPasswords();
+  std::vector<base::string16> usernames;
+  for (auto& password_form : password_forms) {
+    if (current_form->signon_realm == password_form->signon_realm)
+      usernames.push_back(password_form->username_value);
+  }
+  return usernames;
 }
 
 FormVector PasswordManagerPresenter::GetAllPasswords() {
@@ -269,9 +319,8 @@ void PasswordManagerPresenter::ChangeSavedPassword(
     }
   }
 
-  EditSavedPasswords(password_view_->GetProfile(), old_forms, old_username,
-                     signon_realm, new_username,
-                     base::OptionalOrNullptr(new_password));
+  EditSavedPasswords(password_view_->GetProfile(), old_forms, new_username,
+                     new_password);
 }
 
 void PasswordManagerPresenter::RemoveSavedPassword(size_t index) {
@@ -309,8 +358,9 @@ void PasswordManagerPresenter::UndoRemoveSavedPasswordOrException() {
 }
 
 #if !defined(OS_ANDROID)  // This is never called on Android.
-void PasswordManagerPresenter::RequestShowPassword(
+void PasswordManagerPresenter::RequestPlaintextPassword(
     const std::string& sort_key,
+    password_manager::PlaintextReason reason,
     base::OnceCallback<void(base::Optional<base::string16>)> callback) const {
   auto it = password_map_.find(sort_key);
   if (it == password_map_.end()) {
@@ -337,13 +387,15 @@ void PasswordManagerPresenter::RequestShowPassword(
   std::move(callback).Run(form.password_value);
   UMA_HISTOGRAM_ENUMERATION(
       "PasswordManager.AccessPasswordInSettings",
-      password_manager::metrics_util::ACCESS_PASSWORD_VIEWED,
+      ConvertPlaintextReason(reason),
       password_manager::metrics_util::ACCESS_PASSWORD_COUNT);
 }
 #endif
 
 void PasswordManagerPresenter::AddLogin(const autofill::PasswordForm& form) {
-  PasswordStore* store = GetPasswordStore(form.IsUsingAccountStore());
+  PasswordStore* store =
+      GetPasswordStore(password_view_->GetProfile(), form.IsUsingAccountStore())
+          .get();
   if (!store)
     return;
 
@@ -353,7 +405,9 @@ void PasswordManagerPresenter::AddLogin(const autofill::PasswordForm& form) {
 }
 
 void PasswordManagerPresenter::RemoveLogin(const autofill::PasswordForm& form) {
-  PasswordStore* store = GetPasswordStore(form.IsUsingAccountStore());
+  PasswordStore* store =
+      GetPasswordStore(password_view_->GetProfile(), form.IsUsingAccountStore())
+          .get();
   if (!store)
     return;
 
@@ -392,7 +446,8 @@ bool PasswordManagerPresenter::TryRemovePasswordEntries(
   DCHECK(!forms.empty());
 
   bool use_account_store = forms[0]->IsUsingAccountStore();
-  PasswordStore* store = GetPasswordStore(use_account_store);
+  PasswordStore* store =
+      GetPasswordStore(password_view_->GetProfile(), use_account_store).get();
   if (!store)
     return false;
 
@@ -440,16 +495,4 @@ void PasswordManagerPresenter::SetPasswordExceptionList() {
   // wasteful. Consider updating PasswordUIView to take a PasswordFormMap
   // instead.
   password_view_->SetPasswordExceptionList(GetEntryList(exception_map_));
-}
-
-PasswordStore* PasswordManagerPresenter::GetPasswordStore(
-    bool use_account_store) {
-  if (use_account_store) {
-    return AccountPasswordStoreFactory::GetForProfile(
-               password_view_->GetProfile(), ServiceAccessType::EXPLICIT_ACCESS)
-        .get();
-  }
-  return PasswordStoreFactory::GetForProfile(password_view_->GetProfile(),
-                                             ServiceAccessType::EXPLICIT_ACCESS)
-      .get();
 }

@@ -1,4 +1,4 @@
-// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
+// Copyright (c) 2020 Vivaldi Technologies AS. All rights reserved.
 //
 
 #include "installer/util/vivaldi_install_dialog.h"
@@ -6,7 +6,6 @@
 #include "installer/win/setup/setup_resource.h"
 
 #include <Shellapi.h>
-#include <Shlwapi.h>
 #include <shlobj.h>
 #include <windowsx.h>
 
@@ -14,18 +13,20 @@
 #include <map>
 #include <memory>
 #include <vector>
-
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/path_service.h"
 #include "base/strings/stringprintf.h"
+#include "base/win/atl.h"
+#include "base/win/embedded_i18n/language_selector.h"
 #include "base/win/registry.h"
 #include "base/win/windows_version.h"
+
 #include "chrome/installer/setup/setup_constants.h"
 #include "chrome/installer/util/google_update_constants.h"
 #include "chrome/installer/util/html_dialog.h"
 #include "chrome/installer/util/install_util.h"
-#include "chrome/installer/util/l10n_string_util.h"
+#include "chrome/installer/util/installer_util_strings.h"
 
 using base::PathService;
 
@@ -39,53 +40,53 @@ static const std::vector<std::wstring> kExtraLanguages = {
   {L"en-IN"} };
 
 std::map<const std::wstring, const std::wstring> kLanguages = {
-  // please keep this map alphabetically sorted by language name!
-  {L"af", L"Afrikaans"},
-  {L"sq", L"Albanian"},
-  {L"hy", L"Armenian"},
-  {L"be", L"Belarusian"},
-  {L"bg", L"Bulgarian"},
-  {L"zh_CN", L"Chinese (Simplified)"},
-  {L"zh_TW", L"Chinese (Traditional)"},
-  {L"hr", L"Croatian"},
-  {L"cs", L"Czech"},
-  {L"da", L"Danish"},
-  {L"nl", L"Dutch"},
-  {L"en-us", L"English"},
-  {L"en-AU", L"English (Australia)"},
-  {L"en-IN", L"English (India)"},
-  {L"et", L"Estonian"},
-  {L"fi", L"Finnish"},
-  {L"fr", L"French"},
-  {L"fy", L"Frisian"},
-  {L"de", L"German"},
-  {L"el", L"Greek"},
-  {L"hu", L"Hungarian"},
-  {L"is", L"Icelandic"},
-  {L"id", L"Indonesian"},
-  {L"it", L"Italian"},
-  {L"ja", L"Japanese"},
-  {L"ja_KS", L"Japanese (Kansai)"},
-  {L"ko", L"Korean"},
-  {L"lt", L"Lithuanian"},
-  {L"no", L"Norwegian (Bokm\U000000E5l)"},
-  {L"nn", L"Norwegian (Nynorsk)"},
-  {L"fa", L"Persian"},
-  {L"pl", L"Polish"},
-  {L"pt_BR", L"Portuguese (Brazil)"},
-  {L"pt_PT", L"Portuguese (Portugal)"},
-  {L"ro", L"Romanian"},
-  {L"ru", L"Russian"},
-  {L"gd", L"Scots Gaelic"},
-  {L"sr", L"Serbian"},
-  {L"sk", L"Slovak"},
-  {L"sl", L"Slovenian"},
-  {L"es", L"Spanish"},
-  {L"sv", L"Swedish"},
-  {L"de_CH", L"Swiss German"},
-  {L"tr", L"Turkish"},
-  {L"uk", L"Ukrainian"},
-  {L"vi", L"Vietnamese"} };
+  { L"af", L"Afrikaans" },
+  { L"be", L"Беларуская - Belarusian" },
+  { L"bg", L"български - Bulgarian" },
+  { L"cs", L"Čeština - Czech" },
+  { L"da", L"Dansk - Danish" },
+  { L"de", L"Deutsch - German" },
+  { L"de_CH", L"Schweizerdeutsch - Swiss German" },
+  { L"el", L"Ελληνικά - Greek" },
+  { L"en-us", L"English (US)" },
+  { L"en-GB", L"English (UK)" },
+  { L"en-AU", L"English (Australia)"},
+  { L"en-IN", L"English (India)"},
+  { L"es", L"Español - Spanish" },
+  { L"et", L"Eesti keel - Estonian" },
+  { L"fa", L"فارسی - Persian" },
+  { L"fi", L"Suomi - Finnish" },
+  { L"fr", L"Français - French" },
+  { L"fy", L"Frysk - Frisian" },
+  { L"gd", L"Gàidhlig - Scots Gaelic" },
+  { L"hu", L"Magyar - Hungarian" },
+  { L"hr", L"Hrvatski - Croatian" },
+  { L"hy", L"Հայերեն - Armenian" },
+  { L"id", L"Bahasa Indonesia - Indonesian" },
+  { L"is", L"Íslenska - Icelandic" },
+  { L"it", L"Italiano - Italian" },
+  { L"ja", L"日本語 - Japanese" },
+  { L"ko", L"한국어 - Korean" },
+  { L"lt", L"Lietuvių - Lithuanian" },
+  { L"no", L"Norsk (bokm\U000000E5l) - Norwegian (Bokm\U000000E5l))" },
+  { L"nn", L"Norsk (nynorsk) - Norwegian (Nynorsk)" },
+  { L"nl", L"Nederlands - Dutch" },
+  { L"pl", L"Polski - Polish" },
+  { L"pt_BR", L"Português (Brasil) - Portuguese (Brazil)" },
+  { L"pt_PT", L"Português (Europeu) - Portuguese (Portugal)" },
+  { L"ro", L"Română - Romanian" },
+  { L"ru", L"Русский - Russian" },
+  { L"sk", L"Slovenčina - Slovak" },
+  { L"sl", L"Slovenščina - Slovenian" },
+  { L"sq", L"Shqip- Albanian" },
+  { L"sr", L"Српски - Serbian" },
+  { L"sv", L"Svenska - Swedish" },
+  { L"tr", L"Türkçe - Turkish" },
+  { L"uk", L"Українська - Ukrainian" },
+  { L"vi", L"Tiếng Việt - Vietnamese" },
+  { L"zh_CN", L"简体中文 - Chinese (Simplified)" },
+  { L"zh_TW", L"正體中文 - Chinese (Traditional)" }
+};
 } //namespace
 
 void GetDPI(int* dpi_x, int* dpi_y) {
@@ -154,6 +155,8 @@ VivaldiInstallDialog::DlgResult VivaldiInstallDialog::ShowModal() {
 
   DoDialog();  // main message loop
 
+  installer::SetTranslationDelegate(nullptr);
+
   if (dlg_result_ == INSTALL_DLG_INSTALL)
     SaveInstallValues();
 
@@ -206,6 +209,7 @@ bool VivaldiInstallDialog::GetLastInstallValues() {
                     reinterpret_cast<DWORD*>(&set_as_default_browser_));
     key.ReadValueDW(vivaldi::constants::kVivaldiInstallerAdvancedMode,
                     reinterpret_cast<DWORD*>(&advanced_mode_));
+    key.ReadValue(google_update::kRegLangField, &language_code_);
 
     if (install_type_ == INSTALL_STANDALONE)
       last_standalone_folder_ = destination_folder_;
@@ -233,7 +237,6 @@ void VivaldiInstallDialog::SaveInstallValues() {
 }
 
 bool VivaldiInstallDialog::InternalSelectLanguage(const std::wstring& code) {
-  LOG(INFO) << "InternalSelectLanguage: code: " << code;
   bool found = false;
   std::map<const std::wstring, const std::wstring>::iterator it;
   for (it = kLanguages.begin(); it != kLanguages.end(); it++) {
@@ -244,8 +247,6 @@ bool VivaldiInstallDialog::InternalSelectLanguage(const std::wstring& code) {
       break;
     }
   }
-  if (!found)
-    LOG(WARNING) << "InternalSelectLanguage: language code undefined";
   return found;
 }
 
@@ -264,23 +265,21 @@ std::wstring VivaldiInstallDialog::GetCurrentTranslation() {
 
 void VivaldiInstallDialog::InitDialog() {
   dialog_ended_ = false;
+  is_upgrade_ = IsVivaldiInstalled(destination_folder_, nullptr);
+
+  installer::SetTranslationDelegate(&translation_delegate_);
 
   std::map<const std::wstring, const std::wstring>::iterator it;
   for (it = kLanguages.begin(); it != kLanguages.end(); it++) {
     ComboBox_AddString(GetDlgItem(hdlg_, IDC_COMBO_LANGUAGE),
                        it->second.c_str());
   }
-  if (!InternalSelectLanguage(language_code_))
-    InternalSelectLanguage(L"en-us");
+  if (!InternalSelectLanguage(language_code_)) {
+    language_code_ = L"en-us";
+    InternalSelectLanguage(language_code_);
+  }
 
-  ComboBox_AddString(GetDlgItem(hdlg_, IDC_COMBO_INSTALLTYPES),
-                     L"Install for all users");  // TODO(jarle) localize
-  ComboBox_AddString(GetDlgItem(hdlg_, IDC_COMBO_INSTALLTYPES),
-                     L"Install per user");  // TODO(jarle) localize
-  ComboBox_AddString(GetDlgItem(hdlg_, IDC_COMBO_INSTALLTYPES),
-                     L"Install standalone");  // TODO(jarle) localize
-
-  ComboBox_SetCurSel(GetDlgItem(hdlg_, IDC_COMBO_INSTALLTYPES), install_type_);
+  TranslateDialog();
 
   SetDlgItemText(hdlg_, IDC_EDIT_DEST_FOLDER,
                  destination_folder_.value().c_str());
@@ -290,6 +289,115 @@ void VivaldiInstallDialog::InitDialog() {
 
   SendMessage(GetDlgItem(hdlg_, IDC_CHECK_REGISTER), BM_SETCHECK,
               register_browser_ ? BST_CHECKED : BST_UNCHECKED, 0);
+}
+
+constexpr base::win::i18n::LanguageSelector::LangToOffset
+    kLanguageOffsetPairs[] = {
+#define HANDLE_LANGUAGE(l_, o_) {L## #l_, o_},
+        DO_LANGUAGES
+#undef HANDLE_LANGUAGE
+};
+
+base::string16 VivaldiInstallDialog::VivaldiTranslationDelegate::
+    GetLocalizedString(int installer_string_id) {
+  std::wstring localized_string;
+  int message_id = installer_string_id + offset_;
+
+  const ATLSTRINGRESOURCEIMAGE* image = AtlGetStringResourceImage(
+      _AtlBaseModule.GetModuleInstance(), message_id);
+  if (image)
+    localized_string = std::wstring(image->achString, image->nLength);
+  else
+    NOTREACHED() << __func__ << ": Unable to find resource id " << message_id;
+
+  return localized_string;
+}
+
+void VivaldiInstallDialog::VivaldiTranslationDelegate::SetLanguage(
+    const std::wstring& language_code) {
+  std::vector<std::wstring> candidates;
+  candidates.emplace_back(language_code);
+  base::win::i18n::LanguageSelector selector(candidates, kLanguageOffsetPairs);
+  offset_ = selector.offset();
+}
+
+void VivaldiInstallDialog::TranslateDialog() {
+  translation_delegate_.SetLanguage(language_code_);
+
+  txt_tos_accept_update_str_ =
+      GetLocalizedString(IDS_INSTALL_TXT_TOS_ACCEPT_AND_UPDATE_BASE);
+  btn_tos_accept_update_str_ =
+      GetLocalizedString(IDS_INSTALL_TOS_ACCEPT_AND_UPDATE_BASE);
+  txt_tos_accept_install_str_ =
+      GetLocalizedString(IDS_INSTALL_TXT_TOS_ACCEPT_AND_INSTALL_BASE);
+  btn_tos_accept_install_str_ =
+      GetLocalizedString(IDS_INSTALL_TOS_ACCEPT_AND_INSTALL_BASE);
+  btn_simple_mode_str_ =
+      GetLocalizedString(IDS_INSTALL_MODE_SIMPLE_BASE);
+  btn_advanced_mode_str_ =
+      GetLocalizedString(IDS_INSTALL_MODE_ADVANCED_BASE);
+
+  auto caption_string = GetLocalizedString(IDS_INSTALL_INSTALL_CAPTION_BASE);
+  #if !defined(NDEBUG)
+  caption_string += L" [" + language_code_ + L"]";
+  #endif // NDEBUG
+  SetWindowText(hdlg_, caption_string.c_str());
+  SetDlgItemText(hdlg_, IDC_STATIC_LANGUAGE,
+      GetLocalizedString(IDS_INSTALL_LANGUAGE_BASE).c_str());
+  SetDlgItemText(hdlg_, IDC_STATIC_INSTALLTYPES,
+      GetLocalizedString(IDS_INSTALL_INSTALLATION_TYPE_BASE).c_str());
+  SetDlgItemText(hdlg_, IDC_STATIC_DEST_FOLDER,
+      GetLocalizedString(IDS_INSTALL_DEST_FOLDER_BASE).c_str());
+  SetDlgItemText(hdlg_, IDC_BTN_BROWSE,
+      GetLocalizedString(IDS_INSTALL_BROWSE_BASE).c_str());
+  SetDlgItemText(hdlg_, IDC_CHECK_DEFAULT,
+      GetLocalizedString(IDS_INSTALL_SET_AS_DEFAULT_BASE).c_str());
+  SetDlgItemText(hdlg_, IDC_CHECK_REGISTER,
+      GetLocalizedString(IDS_INSTALL_MAKE_STANDALONE_AVAIL_BASE).c_str());
+  SetDlgItemText(hdlg_, IDC_STATIC_WARN,
+      GetLocalizedString(IDS_INSTALL_RELAUNCH_WARNING_BASE).c_str());
+  SetDlgItemText(hdlg_, IDCANCEL,
+      GetLocalizedString(IDS_INSTALL_CANCEL_BASE).c_str());
+  SetDlgItemText(hdlg_, IDC_BTN_CANCEL_SIMPLE,
+      GetLocalizedString(IDS_INSTALL_CANCEL_BASE).c_str());
+  SetDlgItemText(hdlg_, IDC_SYSLINK_TOS,
+      is_upgrade_ ? txt_tos_accept_update_str_.c_str()
+                  : txt_tos_accept_install_str_.c_str());
+  SetDlgItemText(hdlg_, IDC_SYSLINK_TOS_SIMPLE,
+      is_upgrade_ ? txt_tos_accept_update_str_.c_str()
+                  : txt_tos_accept_install_str_.c_str());
+  SetDlgItemText(hdlg_, IDOK,
+      is_upgrade_ ? btn_tos_accept_update_str_.c_str()
+                  : btn_tos_accept_install_str_.c_str());
+  SetDlgItemText(hdlg_, IDC_BTN_OK_SIMPLE,
+      is_upgrade_ ? btn_tos_accept_update_str_.c_str()
+                  : btn_tos_accept_install_str_.c_str());
+  SetDlgItemText(hdlg_, IDC_BTN_MODE,
+      advanced_mode_ ? btn_simple_mode_str_.c_str()
+                     : btn_advanced_mode_str_.c_str());
+
+  base::Time::Exploded time_exploded;
+  base::Time::Now().LocalExplode(&time_exploded);
+  auto copyright_year = std::to_wstring(time_exploded.year);
+
+  SetDlgItemText(hdlg_, IDC_SYSLINK_PRIVACY_POLICY_SIMPLE,
+      GetLocalizedStringF(IDS_INSTALL_COPYRIGHT_AND_POLICY_BASE,
+          copyright_year).c_str());
+  SetDlgItemText(hdlg_, IDC_SYSLINK_PRIVACY_POLICY,
+      GetLocalizedStringF(IDS_INSTALL_COPYRIGHT_AND_POLICY_BASE,
+          copyright_year).c_str());
+
+  ComboBox_ResetContent(GetDlgItem(hdlg_, IDC_COMBO_INSTALLTYPES));
+  ComboBox_AddString(GetDlgItem(hdlg_, IDC_COMBO_INSTALLTYPES),
+      GetLocalizedString(IDS_INSTALL_INSTALL_FOR_ALL_USERS_BASE).c_str());
+  ComboBox_AddString(GetDlgItem(hdlg_, IDC_COMBO_INSTALLTYPES),
+      GetLocalizedString(IDS_INSTALL_INSTALL_PER_USER_BASE).c_str());
+  ComboBox_AddString(GetDlgItem(hdlg_, IDC_COMBO_INSTALLTYPES),
+      GetLocalizedString(IDS_INSTALL_INSTALL_STANDALONE_BASE).c_str());
+  ComboBox_SetCurSel(GetDlgItem(hdlg_, IDC_COMBO_INSTALLTYPES), install_type_);
+
+  // Reset background image after string changes
+  InitBkgnd(hdlg_);
 }
 
 // Finds the tree view of the SHBrowseForFolder dialog
@@ -338,7 +446,7 @@ void VivaldiInstallDialog::ShowBrowseFolderDialog() {
   memset(&bi, 0, sizeof(bi));
 
   bi.hwndOwner = hdlg_;
-  bi.lpszTitle = L"Select a folder";  // TODO(jarle) localize
+  bi.lpszTitle = GetLocalizedString(IDS_INSTALL_SELECT_A_FOLDER_BASE).c_str();
   bi.ulFlags = BIF_USENEWUI | BIF_RETURNONLYFSDIRS;
   bi.lpfn = BrowseCallbackProc;
   bi.lParam = (LPARAM)destination_folder_.value().c_str();
@@ -400,6 +508,7 @@ void VivaldiInstallDialog::OnLanguageSelection() {
     for (it = kLanguages.begin(); it != kLanguages.end(); it++) {
       if (it->second == buf.get()) {
         language_code_ = it->first;
+        TranslateDialog();
         break;
       }
     }
@@ -415,14 +524,14 @@ bool VivaldiInstallDialog::GetRegisterBrowser() const {
 /* static */
 bool VivaldiInstallDialog::IsVivaldiInstalled(const base::FilePath& path,
                                               InstallType* installed_type) {
-  *installed_type = INSTALL_FOR_CURRENT_USER;
-
   base::FilePath vivaldi_exe_path(path);
   vivaldi_exe_path =
       vivaldi_exe_path.Append(kInstallBinaryDir).Append(kChromeExe);
 
   bool is_installed = base::PathExists(vivaldi_exe_path);
-  if (is_installed) {
+
+  if (installed_type != nullptr && is_installed) {
+    *installed_type = INSTALL_FOR_CURRENT_USER;
     base::FilePath vivaldi_sa_file_path(path);
     vivaldi_sa_file_path = vivaldi_sa_file_path.Append(kInstallBinaryDir)
                                .Append(kStandaloneProfileHelper);
@@ -453,38 +562,37 @@ bool VivaldiInstallDialog::IsInstallPathValid(const base::FilePath& path) {
   bool path_is_valid = base::PathIsWritable(path);
   if (!path_is_valid)
     MessageBox(hdlg_,
-               L"The destination folder is invalid. Please choose another.",
-               NULL, MB_ICONERROR);  // TODO(jarle) localize
-
+        GetLocalizedString(IDS_INSTALL_DEST_FOLDER_INVALID_BASE).c_str(),
+        NULL, MB_ICONERROR);
   return path_is_valid;
 }
 
-installer::InstallStatus VivaldiInstallDialog::ShowEULADialog() {
+InstallStatus VivaldiInstallDialog::ShowEULADialog() {
   VLOG(1) << "About to show EULA";
-  base::string16 eula_path = installer::GetLocalizedEulaResource();
+  base::string16 eula_path = GetLocalizedEulaResource();
   if (eula_path.empty()) {
     LOG(ERROR) << "No EULA path available";
-    return installer::EULA_REJECTED;
+    return EULA_REJECTED;
   }
   base::string16 inner_frame_path = GetInnerFrameEULAResource();
   if (inner_frame_path.empty()) {
     LOG(ERROR) << "No EULA inner frame path available";
-    return installer::EULA_REJECTED;
+    return EULA_REJECTED;
   }
   // Newer versions of the caller pass an inner frame parameter that must
   // be given to the html page being launched.
-  installer::EulaHTMLDialog dlg(eula_path, inner_frame_path);
-  installer::EulaHTMLDialog::Outcome outcome = dlg.ShowModal();
-  if (installer::EulaHTMLDialog::REJECTED == outcome) {
+  EulaHTMLDialog dlg(eula_path, inner_frame_path);
+  EulaHTMLDialog::Outcome outcome = dlg.ShowModal();
+  if (EulaHTMLDialog::REJECTED == outcome) {
     LOG(ERROR) << "EULA rejected or EULA failure";
-    return installer::EULA_REJECTED;
+    return EULA_REJECTED;
   }
-  if (installer::EulaHTMLDialog::ACCEPTED_OPT_IN == outcome) {
+  if (EulaHTMLDialog::ACCEPTED_OPT_IN == outcome) {
     VLOG(1) << "EULA accepted (opt-in)";
-    return installer::EULA_ACCEPTED_OPT_IN;
+    return EULA_ACCEPTED_OPT_IN;
   }
   VLOG(1) << "EULA accepted (no opt-in)";
-  return installer::EULA_ACCEPTED;
+  return EULA_ACCEPTED;
 }
 
 std::wstring VivaldiInstallDialog::GetInnerFrameEULAResource() {
@@ -513,8 +621,9 @@ std::wstring VivaldiInstallDialog::GetInnerFrameEULAResource() {
 }
 
 void VivaldiInstallDialog::ShowOptions(HWND hdlg, bool show) {
-  // TODO(jarle) localize
-  SetDlgItemText(hdlg, IDC_BTN_MODE, (show) ? L"Simple" : L"Advanced");
+  SetDlgItemText(hdlg, IDC_BTN_MODE,
+      (show) ? btn_simple_mode_str_.c_str()
+             : btn_advanced_mode_str_.c_str());
 
   EnableWindow(GetDlgItem(hdlg, IDC_COMBO_INSTALLTYPES), show ? TRUE : FALSE);
   EnableWindow(GetDlgItem(hdlg, IDC_EDIT_DEST_FOLDER), show ? TRUE : FALSE);
@@ -541,8 +650,6 @@ void VivaldiInstallDialog::ShowOptions(HWND hdlg, bool show) {
 
   ShowWindow(GetDlgItem(hdlg, IDC_SYSLINK_TOS),
              show ? SW_SHOW : SW_HIDE);
-  ShowWindow(GetDlgItem(hdlg, IDC_STATIC_WARN),
-             show ? SW_SHOW : SW_HIDE);
   ShowWindow(GetDlgItem(hdlg, IDC_SYSLINK_PRIVACY_POLICY),
              show ? SW_SHOW : SW_HIDE);
   ShowWindow(GetDlgItem(hdlg, IDOK),
@@ -558,8 +665,8 @@ void VivaldiInstallDialog::ShowOptions(HWND hdlg, bool show) {
   ShowWindow(GetDlgItem(hdlg, IDC_BTN_CANCEL_SIMPLE),
              show ? SW_HIDE : SW_SHOW);
 
-  if (is_upgrade_ && show)
-    EnableWindow(GetDlgItem(hdlg, IDC_COMBO_INSTALLTYPES), FALSE);
+  ShowWindow(GetDlgItem(hdlg, IDC_STATIC_WARN),
+             (is_upgrade_ && show) ? SW_SHOW : SW_HIDE);
 }
 
 void VivaldiInstallDialog::UpdateRegisterCheckboxVisibility() {
@@ -856,15 +963,6 @@ HBRUSH VivaldiInstallDialog::OnCtlColor(HWND hwnd_ctl, HDC hdc) {
   return (HBRUSH)GetStockObject(NULL_BRUSH);
 }
 
-const WCHAR TXT_TOS_ACCEPT_AND_INSTALL[] =
-    L"By clicking on the 'Accept and Install' button you are agreeing to "
-    L"Vivaldi's <a>Terms of Service</a>";
-const WCHAR TXT_TOS_ACCEPT_AND_UPDATE[] =
-    L"By clicking on the 'Accept and Update' button you are agreeing to "
-    L"Vivaldi's <a>Terms of Service</a>";
-const WCHAR TXT_BTN_ACCEPT_AND_INSTALL[] = L"Accept and Install";
-const WCHAR TXT_BTN_ACCEPT_AND_UPDATE[] = L"Accept and Update";
-
 /*static*/
 INT_PTR CALLBACK VivaldiInstallDialog::DlgProc(HWND hdlg,
                                                UINT msg,
@@ -898,7 +996,7 @@ INT_PTR CALLBACK VivaldiInstallDialog::DlgProc(HWND hdlg,
     case WM_CTLCOLORSTATIC:
       if ((HWND)lparam == GetDlgItem(hdlg, IDC_SYSLINK_PRIVACY_POLICY) ||
           (HWND)lparam == GetDlgItem(hdlg, IDC_SYSLINK_PRIVACY_POLICY_SIMPLE))
-        SetTextColor((HDC)wparam, RGB(0xff, 0xff, 0xff)); // White
+        SetTextColor((HDC)wparam, RGB(0x0e, 0x0e, 0x0e)); // dark gray
     FALLTHROUGH;
     case WM_CTLCOLORBTN:
      if (this_)
@@ -910,8 +1008,7 @@ INT_PTR CALLBACK VivaldiInstallDialog::DlgProc(HWND hdlg,
       if (pnmh->idFrom == IDC_SYSLINK_TOS ||
           pnmh->idFrom == IDC_SYSLINK_TOS_SIMPLE) {
         if ((pnmh->code == NM_CLICK) || (pnmh->code == NM_RETURN)) {
-          // TODO(jarle): check the return code and act upon it
-          /*int exit_code =*/this_->ShowEULADialog();
+          this_->ShowEULADialog();
         }
       } else if (pnmh->idFrom == IDC_SYSLINK_PRIVACY_POLICY ||
                  pnmh->idFrom == IDC_SYSLINK_PRIVACY_POLICY_SIMPLE) {
@@ -949,12 +1046,11 @@ INT_PTR CALLBACK VivaldiInstallDialog::DlgProc(HWND hdlg,
           break;
         case IDCANCEL:
         case IDC_BTN_CANCEL_SIMPLE:
-          // TODO(jarle) localize
           if (MessageBox(
-                  hdlg,
-                  L"The Vivaldi Installer is not finished installing "
-                  L"the Vivaldi Browser. Are you sure you want to exit now?",
-                  L"Vivaldi Installer", MB_YESNO | MB_ICONQUESTION) == IDYES) {
+              hdlg,
+              GetLocalizedString(IDS_INSTALL_NOT_FINISHED_PROMPT_BASE).c_str(),
+              GetLocalizedString(IDS_INSTALL_INSTALLER_NAME_BASE).c_str(),
+              MB_YESNO | MB_ICONQUESTION) == IDYES) {
             this_->dlg_result_ = INSTALL_DLG_CANCEL;
             EndDialog(hdlg, 0);
             this_->dialog_ended_ = true;
@@ -1000,38 +1096,31 @@ INT_PTR CALLBACK VivaldiInstallDialog::DlgProc(HWND hdlg,
                 EnableWindow(GetDlgItem(hdlg, IDOK), TRUE);
 
               InstallType installed_type;
-              if (IsVivaldiInstalled(new_path, &installed_type)) {
-                SetDlgItemText(
-                    hdlg, IDC_SYSLINK_TOS, TXT_TOS_ACCEPT_AND_UPDATE);
-                SetDlgItemText(
-                    hdlg, IDC_SYSLINK_TOS_SIMPLE, TXT_TOS_ACCEPT_AND_UPDATE);
-                SetDlgItemText(
-                    hdlg, IDOK, TXT_BTN_ACCEPT_AND_UPDATE);
-                SetDlgItemText(
-                    hdlg, IDC_BTN_OK_SIMPLE, TXT_BTN_ACCEPT_AND_UPDATE);
-
+              this_->is_upgrade_ = IsVivaldiInstalled(new_path, &installed_type);
+              SetDlgItemText(hdlg, IDC_SYSLINK_TOS, this_->is_upgrade_
+                  ? this_->txt_tos_accept_update_str_.c_str()
+                  : this_->txt_tos_accept_install_str_.c_str());
+              SetDlgItemText(hdlg, IDC_SYSLINK_TOS_SIMPLE, this_->is_upgrade_
+                  ? this_->txt_tos_accept_update_str_.c_str()
+                  : this_->txt_tos_accept_install_str_.c_str());
+              SetDlgItemText(hdlg, IDOK, this_->is_upgrade_
+                  ? this_->btn_tos_accept_update_str_.c_str()
+                  : this_->btn_tos_accept_install_str_.c_str());
+              SetDlgItemText(hdlg, IDC_BTN_OK_SIMPLE, this_->is_upgrade_
+                  ? this_->btn_tos_accept_update_str_.c_str()
+                  : this_->btn_tos_accept_install_str_.c_str());
+              if (this_->is_upgrade_) {
                 ShowWindow(GetDlgItem(hdlg, IDC_STATIC_WARN), SW_SHOW);
 
                 // If not standalone install selected, override current.
                 if (this_->install_type_ != INSTALL_STANDALONE) {
                   this_->install_type_ = installed_type;
-                  ComboBox_SetCurSel(GetDlgItem(hdlg, IDC_COMBO_INSTALLTYPES),
-                                        this_->install_type_);
+                  ComboBox_SetCurSel(
+                      GetDlgItem(hdlg, IDC_COMBO_INSTALLTYPES),
+                          this_->install_type_);
                 }
-
                 this_->UpdateRegisterCheckboxVisibility();
               } else {
-                this_->is_upgrade_ = false;
-                SetDlgItemText(
-                    hdlg, IDC_SYSLINK_TOS, TXT_TOS_ACCEPT_AND_INSTALL);
-                SetDlgItemText(
-                    hdlg, IDC_SYSLINK_TOS_SIMPLE, TXT_TOS_ACCEPT_AND_INSTALL);
-                SetDlgItemText(
-                    hdlg, IDOK, TXT_BTN_ACCEPT_AND_INSTALL);
-                SetDlgItemText(
-                    hdlg, IDC_BTN_OK_SIMPLE, TXT_BTN_ACCEPT_AND_INSTALL);
-
-                EnableWindow(GetDlgItem(hdlg, IDC_COMBO_INSTALLTYPES), TRUE);
                 ShowWindow(GetDlgItem(hdlg, IDC_STATIC_WARN), SW_HIDE);
               }
             }

@@ -27,10 +27,6 @@ class AutoSigninFirstRunDialogView : public views::DialogDelegateView,
   bool ShouldShowCloseButton() const override;
   gfx::Size CalculatePreferredSize() const override;
   void WindowClosing() override;
-  bool Cancel() override;
-  bool Accept() override;
-  bool Close() override;
-  base::string16 GetDialogButtonLabel(ui::DialogButton button) const override;
 
   // Sets up the child views.
   void InitWindow();

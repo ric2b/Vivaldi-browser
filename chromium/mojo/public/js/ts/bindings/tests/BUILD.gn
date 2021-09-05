@@ -10,6 +10,7 @@ mojom("test_interfaces") {
   testonly = true
   sources = [
     "constants.test-mojom",
+    "enums.test-mojom",
     "module.test-mojom",
   ]
   use_typescript_sources = true
@@ -17,7 +18,5 @@ mojom("test_interfaces") {
 
 source_set("tests") {
   testonly = true
-  deps = [
-    ":test_interfaces_js",
-  ]
+  deps = [ ":test_interfaces_js" ]
 }

@@ -5,6 +5,7 @@
 #include "chrome/browser/chromeos/night_light/night_light_client.h"
 
 #include "ash/public/cpp/night_light_controller.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/task_environment.h"
 #include "base/time/clock.h"
@@ -269,7 +270,7 @@ TEST_P(NightLightClientTest, TestTimezoneChanges) {
   EXPECT_EQ(GetTimezoneId(*timezone), client_.current_timezone_id());
 }
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          NightLightClientTest,
                          ::testing::Values(ScheduleType::kSunsetToSunrise,
                                            ScheduleType::kCustom));

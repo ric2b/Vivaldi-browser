@@ -47,8 +47,6 @@ const char kGenerateAppForLinkInstallError[] =
 const char kNotAllowedInKioskError[] = "Not allowed in kiosk.";
 const char kCannotChangePrimaryKioskAppError[] =
     "Cannot change the primary kiosk app state.";
-const char kInstallReplacementWebAppAlreadyInstalledError[] =
-    "Web app is already installed.";
 const char kInstallReplacementWebAppInvalidWebAppError[] =
     "Web app is not a valid installable web app.";
 const char kInstallReplacementWebAppInvalidContextError[] =
@@ -65,5 +63,8 @@ const char kInstallReplacementAndroidAppNotFromWebstoreError[] =
     "Only extensions from the web store can install replacement Android apps.";
 const char kInstallReplacementAndroidAppCannotInstallApp[] =
     "Could not install Android App.";
+const char kWebContentsDisappearedError[] =
+    "Web contents disappeared while attempting to enable extension.";
+const char kParentPermissionFailedError[] = "Parent Permission Request Failed.";
 
 }  // namespace extension_management_api_constants

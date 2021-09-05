@@ -52,28 +52,11 @@ foreach (_target, _targets) {
   }
 }
 
-update_target("//components/sessions:shared") {
-  sources += [
-    "//vivaldi/components/sessions/vivaldi_session_service_commands.cc",
-    "//vivaldi/components/sessions/vivaldi_session_service_commands.h",
-  ]
-}
-
-
 if (is_win) {
   update_target("//rlz:rlz_lib") {
     sources -= [
         "lib/financial_ping.cc",
         "lib/rlz_lib.cc",
-    ]
-  }
-
-  update_template_instance("//gpu/command_buffer/service:gles2_sources") {
-    if (!defined(jumbo_excluded_sources)) {
-      jumbo_excluded_sources = []
-    }
-    jumbo_excluded_sources += [
-      "shared_context_state.cc",
     ]
   }
 
@@ -83,16 +66,5 @@ if (is_win) {
 
   update_template_instance("//chrome/app/version_assembly:version_assembly_manifest") {
     template_file = "//vivaldi/app/version_assembly/vivaldi_version_assembly_manifest.template"
-  }
-}
-
-if (is_android) {
-  update_template_instance("//chrome/browser:browser") {
-    if (!defined(jumbo_excluded_sources)) {
-      jumbo_excluded_sources = []
-    }
-    jumbo_excluded_sources += [
-      "android/webapk/webapk_update_data_fetcher.cc",
-    ]
   }
 }

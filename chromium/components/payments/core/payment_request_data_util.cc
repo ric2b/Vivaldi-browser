@@ -17,6 +17,7 @@
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/browser/validation.h"
 #include "components/payments/core/basic_card_response.h"
+#include "components/payments/core/method_strings.h"
 #include "components/payments/core/payment_method_data.h"
 #include "components/payments/core/payments_validators.h"
 #include "components/payments/core/url_util.h"
@@ -96,7 +97,6 @@ void ParseSupportedMethods(
   DCHECK(out_url_payment_method_identifiers->empty());
   DCHECK(out_payment_method_identifiers->empty());
 
-  const char kBasicCardMethodName[] = "basic-card";
   const std::set<std::string> kBasicCardNetworks{
       "amex",       "diners", "discover", "jcb",
       "mastercard", "mir",    "unionpay", "visa"};
@@ -109,7 +109,7 @@ void ParseSupportedMethods(
 
     out_payment_method_identifiers->insert(method_data_entry.supported_method);
 
-    if (method_data_entry.supported_method == kBasicCardMethodName) {
+    if (method_data_entry.supported_method == methods::kBasicCard) {
       if (method_data_entry.supported_networks.empty()) {
         // Empty |supported_networks| means all networks are supported.
         out_supported_networks->insert(out_supported_networks->end(),
@@ -144,35 +144,6 @@ void ParseSupportedMethods(
       }
     }
   }
-}
-
-void ParseSupportedCardTypes(
-    const std::vector<PaymentMethodData>& method_data,
-    std::set<autofill::CreditCard::CardType>* out_supported_card_types_set) {
-  DCHECK(out_supported_card_types_set->empty());
-
-  for (const PaymentMethodData& method_data_entry : method_data) {
-    // Ignore |supported_types| if |supported_method| is not "basic-card".
-    if (method_data_entry.supported_method != "basic-card")
-      continue;
-
-    for (const autofill::CreditCard::CardType& card_type :
-         method_data_entry.supported_types) {
-      out_supported_card_types_set->insert(card_type);
-    }
-  }
-
-  // Omitting the card types means all 3 card types are supported.
-  if (out_supported_card_types_set->empty()) {
-    out_supported_card_types_set->insert(
-        autofill::CreditCard::CARD_TYPE_CREDIT);
-    out_supported_card_types_set->insert(autofill::CreditCard::CARD_TYPE_DEBIT);
-    out_supported_card_types_set->insert(
-        autofill::CreditCard::CARD_TYPE_PREPAID);
-  }
-
-  // Let the user decide whether an unknown card type should be used.
-  out_supported_card_types_set->insert(autofill::CreditCard::CARD_TYPE_UNKNOWN);
 }
 
 base::string16 FormatCardNumberForDisplay(const base::string16& card_number) {

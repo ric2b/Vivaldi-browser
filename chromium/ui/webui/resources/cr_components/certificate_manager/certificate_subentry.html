@@ -4,6 +4,7 @@
 <link rel="import" href="chrome://resources/cr_elements/cr_icon_button/cr_icon_button.html">
 <link rel="import" href="chrome://resources/cr_elements/cr_lazy_render/cr_lazy_render.html">
 <link rel="import" href="chrome://resources/cr_elements/policy/cr_policy_indicator.html">
+<link rel="import" href="chrome://resources/cr_elements/policy/cr_policy_indicator_behavior.html">
 <link rel="import" href="chrome://resources/cr_elements/icons.html">
 <link rel="import" href="chrome://resources/html/i18n_behavior.html">
 <link rel="import" href="certificate_manager_types.html">
@@ -40,7 +41,7 @@
       </cr-icon-button>
       <cr-lazy-render id="menu">
         <template>
-          <cr-action-menu>
+          <cr-action-menu role-description="[[i18n('menu')]]">
             <button class="dropdown-item" id="view"
                 on-tap="onViewTap_">
               [[i18n('certificateManagerView')]]

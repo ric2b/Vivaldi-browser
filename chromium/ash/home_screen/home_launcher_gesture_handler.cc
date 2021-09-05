@@ -9,7 +9,6 @@
 #include "ash/app_list/app_list_controller_impl.h"
 #include "ash/display/screen_orientation_controller.h"
 #include "ash/home_screen/drag_window_from_shelf_controller.h"
-#include "ash/home_screen/home_launcher_gesture_handler_observer.h"
 #include "ash/home_screen/home_screen_controller.h"
 #include "ash/home_screen/swipe_home_to_overview_controller.h"
 #include "ash/root_window_controller.h"
@@ -62,22 +61,17 @@ constexpr int kScrollVelocityThreshold = 6;
 // this ratio.
 constexpr float kWidthRatio = 0.8f;
 
-bool IsTabletMode() {
-  return Shell::Get()->tablet_mode_controller()->InTabletMode();
-}
-
 // Checks if |window| can be hidden or shown with a gesture.
 bool CanProcessWindow(aura::Window* window,
                       HomeLauncherGestureHandler::Mode mode) {
   if (!window)
     return false;
 
-  if (!IsTabletMode())
+  if (!Shell::Get()->IsInTabletMode())
     return false;
 
   if (!window->IsVisible() &&
-      (mode == HomeLauncherGestureHandler::Mode::kSlideUpToShow ||
-       mode == HomeLauncherGestureHandler::Mode::kDragWindowToHomeOrOverview)) {
+      mode == HomeLauncherGestureHandler::Mode::kSlideUpToShow) {
     return false;
   }
 
@@ -125,16 +119,15 @@ gfx::RectF GetOffscreenWindowBounds(aura::Window* window,
 
 // Given a |location_in_screen|, find out where it lies as a ratio in the
 // work area, where the top of the work area is 0.f and the bottom is 1.f.
-double GetHeightInWorkAreaAsRatio(const gfx::Point& location_in_screen,
+double GetHeightInWorkAreaAsRatio(const gfx::PointF& location_in_screen,
                                   const gfx::Rect& work_area) {
-  int clamped_y = base::ClampToRange(location_in_screen.y(), work_area.y(),
-                                     work_area.bottom());
-  double ratio =
-      static_cast<double>(clamped_y) / static_cast<double>(work_area.height());
+  float clamped_y = base::ClampToRange(
+      location_in_screen.y(), float{work_area.y()}, float{work_area.bottom()});
+  double ratio = clamped_y / double{work_area.height()};
   return 1.0 - ratio;
 }
 
-bool IsLastEventInTopHalf(const gfx::Point& location_in_screen,
+bool IsLastEventInTopHalf(const gfx::PointF& location_in_screen,
                           const gfx::Rect& work_area) {
   return GetHeightInWorkAreaAsRatio(location_in_screen, work_area) > 0.5;
 }
@@ -170,55 +163,20 @@ HomeScreenDelegate* GetHomeScreenDelegate() {
   return Shell::Get()->home_screen_controller()->delegate();
 }
 
-// Returns the window to be dragged into home screen or overview. Only used in
-// HomeLauncherGestureHandler::Mode::kDragWindowToHomeOrOverview mode.
-aura::Window* GetWindowForDragToHomeOrOverview(
-    const gfx::Point& location_in_screen,
-    const std::vector<aura::Window*>& mru_windows) {
-  if (!IsTabletMode())
-    return nullptr;
+void StartTrackingAnimationSmoothness(int64_t display_id) {
+  Shell::Get()->home_screen_controller()->StartTrackingAnimationSmoothness(
+      display_id);
+}
 
-  if (mru_windows.empty())
-    return nullptr;
-
-  aura::Window* window = nullptr;
-  SplitViewController* split_view_controller =
-      SplitViewController::Get(Shell::GetPrimaryRootWindow());
-  const bool is_in_splitview = split_view_controller->InSplitViewMode();
-  const bool is_in_overview =
-      Shell::Get()->overview_controller()->InOverviewSession();
-  if (!is_in_splitview && !is_in_overview) {
-    // If split view mode is not active, use the first MRU window.
-    window = mru_windows[0];
-  } else if (is_in_splitview) {
-    // If split view mode is active, use the event location to decide which
-    // window should be the dragged window.
-    aura::Window* left_window = split_view_controller->left_window();
-    aura::Window* right_window = split_view_controller->right_window();
-    const int divider_position = split_view_controller->divider_position();
-    const bool is_landscape = IsCurrentScreenOrientationLandscape();
-    const bool is_primary = IsCurrentScreenOrientationPrimary();
-    const gfx::Rect work_area =
-        screen_util::GetDisplayWorkAreaBoundsInScreenForActiveDeskContainer(
-            split_view_controller->GetDefaultSnappedWindow());
-    if (is_landscape) {
-      if (location_in_screen.x() < work_area.x() + divider_position)
-        window = is_primary ? left_window : right_window;
-      else
-        window = is_primary ? right_window : left_window;
-    } else {
-      window = is_primary ? right_window : left_window;
-    }
-  }
-  return window;
+void RecordAnimationSmoothness() {
+  Shell::Get()->home_screen_controller()->RecordAnimationSmoothness();
 }
 
 }  // namespace
 
 // Class which allows us to make modifications to a window, and removes those
 // modifications on destruction.
-// TODO(sammiequon): Move to separate file and add test for
-// ComputeWindowValues.
+// TODO(sammiequon): Move to separate file and add test for ComputeWindowValues.
 class HomeLauncherGestureHandler::ScopedWindowModifier
     : public aura::WindowObserver {
  public:
@@ -253,10 +211,8 @@ class HomeLauncherGestureHandler::ScopedWindowModifier
   }
 
   void ResetOpacityAndTransform() {
-    if (!window_values_.has_value())
-      return;
-    window_->SetTransform(window_values_->initial_transform);
-    window_->layer()->SetOpacity(window_values_->initial_opacity);
+    window_->SetTransform(window_values_.initial_transform);
+    window_->layer()->SetOpacity(window_values_.initial_opacity);
     for (const auto& descendant : transient_descendants_values_) {
       descendant.first->SetTransform(descendant.second.initial_transform);
       descendant.first->layer()->SetOpacity(descendant.second.initial_opacity);
@@ -276,7 +232,7 @@ class HomeLauncherGestureHandler::ScopedWindowModifier
           gfx::RectF(window->GetTargetBounds()),
           GetOffscreenWindowBounds(window, work_area, target_work_area));
       if (window == window_) {
-        window_values_ = base::make_optional(values);
+        window_values_ = values;
         continue;
       }
 
@@ -295,9 +251,7 @@ class HomeLauncherGestureHandler::ScopedWindowModifier
   }
 
   aura::Window* window() { return window_; }
-  const base::Optional<WindowValues>& window_values() const {
-    return window_values_;
-  }
+  const WindowValues& window_values() const { return window_values_; }
   const std::map<aura::Window*, WindowValues>& transient_descendants_values()
       const {
     return transient_descendants_values_;
@@ -306,14 +260,11 @@ class HomeLauncherGestureHandler::ScopedWindowModifier
  private:
   aura::Window* window_;
 
-  // Original and target transform and opacity of |window_|. It will be empty
-  // if the drag mode is kDragWindowToHomeOrOverview since we don't need the
-  // pre-calculated opacity and transform for |window_| and its transient
-  // descendants.
-  base::Optional<WindowValues> window_values_;
+  // Original and target transform and opacity of |window_|.
+  WindowValues window_values_;
 
   // Tracks the transient descendants of |window_| and their initial and
-  // target opacities and transforms. Empty if |window_values_| is empty.
+  // target opacities and transforms.
   std::map<aura::Window*, WindowValues> transient_descendants_values_;
 
   // For the duration of this object |window_| event targeting policy will be
@@ -334,26 +285,28 @@ HomeLauncherGestureHandler::~HomeLauncherGestureHandler() {
 }
 
 bool HomeLauncherGestureHandler::OnPressEvent(Mode mode,
-                                              const gfx::Point& location) {
+                                              const gfx::PointF& location) {
   // Do not start a new session if a window is currently being processed.
   if (!IsIdle())
     return false;
 
-  display_ = display::Screen::GetScreen()->GetDisplayNearestPoint(location);
+  display_ = display::Screen::GetScreen()->GetDisplayNearestPoint(
+      gfx::ToRoundedPoint(location));
   if (!display_.is_valid())
     return false;
 
-  if (!SetUpWindows(mode, /*window=*/nullptr, location))
+  if (!SetUpWindows(mode, /*window=*/nullptr))
     return false;
 
   mode_ = mode;
-  last_event_location_ = base::make_optional(location);
+  if (mode_ != Mode::kSwipeHomeToOverview)
+    last_event_location_ = base::make_optional(location);
 
   OnDragStarted(location);
   return true;
 }
 
-bool HomeLauncherGestureHandler::OnScrollEvent(const gfx::Point& location,
+bool HomeLauncherGestureHandler::OnScrollEvent(const gfx::PointF& location,
                                                float scroll_x,
                                                float scroll_y) {
   if (IsAnimating())
@@ -362,8 +315,10 @@ bool HomeLauncherGestureHandler::OnScrollEvent(const gfx::Point& location,
   if (!IsDragInProgress())
     return false;
 
-  last_event_location_ = base::make_optional(location);
-  last_scroll_y_ = scroll_y;
+  if (mode_ != Mode::kSwipeHomeToOverview) {
+    last_event_location_ = base::make_optional(location);
+    last_scroll_y_ = scroll_y;
+  }
 
   DCHECK(display_.is_valid());
 
@@ -372,9 +327,9 @@ bool HomeLauncherGestureHandler::OnScrollEvent(const gfx::Point& location,
 }
 
 bool HomeLauncherGestureHandler::OnReleaseEvent(
-    const gfx::Point& location,
+    const gfx::PointF& location,
     base::Optional<float> velocity_y) {
-  if (IsAnimating())
+  if (mode_ != Mode::kSwipeHomeToOverview && IsAnimating())
     return false;
 
   return OnDragEnded(location, velocity_y);
@@ -395,38 +350,17 @@ bool HomeLauncherGestureHandler::ShowHomeLauncher(
   if (!display.is_valid())
     return false;
 
-  if (!SetUpWindows(Mode::kSlideUpToShow, /*window=*/nullptr,
-                    /*location_in_screen=*/base::nullopt)) {
+  if (!SetUpWindows(Mode::kSlideUpToShow, /*window=*/nullptr))
     return false;
-  }
 
   display_ = display;
   mode_ = Mode::kSlideUpToShow;
 
-  UpdateWindowsForSlideUpOrDown(0.0, /*animate=*/false);
+  StartTrackingAnimationSmoothness(display.id());
+  PauseBackdropUpdatesForActiveWindow();
+  UpdateWindowsForSlideUpOrDown(0.0 /*progress*/,
+                                base::nullopt /*animation_trigger*/);
   AnimateToFinalState(AnimationTrigger::kLauncherButton);
-  return true;
-}
-
-bool HomeLauncherGestureHandler::HideHomeLauncherForWindow(
-    const display::Display& display,
-    aura::Window* window) {
-  if (!IsIdle())
-    return false;
-
-  if (!display.is_valid())
-    return false;
-
-  if (!SetUpWindows(Mode::kSlideDownToHide, window,
-                    /*location_in_screen=*/base::nullopt)) {
-    return false;
-  }
-
-  display_ = display;
-  mode_ = Mode::kSlideDownToHide;
-
-  UpdateWindowsForSlideUpOrDown(1.0, /*animate=*/false);
-  AnimateToFinalState(AnimationTrigger::kHideForWindow);
   return true;
 }
 
@@ -442,28 +376,22 @@ aura::Window* HomeLauncherGestureHandler::GetSecondaryWindow() {
   return secondary_window_->window();
 }
 
-void HomeLauncherGestureHandler::AddObserver(
-    HomeLauncherGestureHandlerObserver* observer) {
-  observers_.AddObserver(observer);
+bool HomeLauncherGestureHandler::IsDragInProgress() const {
+  return mode_ != Mode::kNone;
 }
 
-void HomeLauncherGestureHandler::RemoveObserver(
-    HomeLauncherGestureHandlerObserver* observer) {
-  observers_.RemoveObserver(observer);
-}
-
-void HomeLauncherGestureHandler::NotifyHomeLauncherTargetPositionChanged(
-    bool showing,
+void HomeLauncherGestureHandler::NotifyHomeLauncherPositionChanged(
+    int percent_shown,
     int64_t display_id) {
-  for (auto& observer : observers_)
-    observer.OnHomeLauncherTargetPositionChanged(showing, display_id);
+  GetHomeScreenDelegate()->OnHomeLauncherPositionChanged(percent_shown,
+                                                         display_id);
 }
 
 void HomeLauncherGestureHandler::NotifyHomeLauncherAnimationComplete(
     bool shown,
     int64_t display_id) {
-  for (auto& observer : observers_)
-    observer.OnHomeLauncherAnimationComplete(shown, display_id);
+  RecordAnimationSmoothness();
+  GetHomeScreenDelegate()->OnHomeLauncherAnimationComplete(shown, display_id);
 }
 
 void HomeLauncherGestureHandler::OnWindowDestroying(aura::Window* window) {
@@ -472,7 +400,6 @@ void HomeLauncherGestureHandler::OnWindowDestroying(aura::Window* window) {
       hidden_window->Show();
 
     RemoveObserversAndStopTracking();
-    window_drag_controller_.reset();
     return;
   }
 
@@ -496,13 +423,20 @@ void HomeLauncherGestureHandler::OnTabletModeEnded() {
   // When leaving tablet mode advance to the end of the in progress scroll
   // session or animation.
   StopObservingImplicitAnimations();
-  if (active_window_)
-    active_window_->StopAnimating();
-  if (secondary_window_)
-    secondary_window_->StopAnimating();
-  UpdateWindowsForSlideUpOrDown(IsFinalStateShow() ? 1.0 : 0.0,
-                                /*animate=*/false);
-  OnImplicitAnimationsCompleted();
+
+  if (mode_ == Mode::kSwipeHomeToOverview) {
+    swipe_home_to_overview_controller_->CancelDrag();
+    RemoveObserversAndStopTracking();
+  } else {
+    if (active_window_)
+      active_window_->StopAnimating();
+    if (secondary_window_)
+      secondary_window_->StopAnimating();
+
+    UpdateWindowsForSlideUpOrDown(IsFinalStateShow() ? 1.0 : 0.0 /*progress*/,
+                                  base::nullopt /*animation_trigger*/);
+    OnImplicitAnimationsCompleted();
+  }
 }
 
 void HomeLauncherGestureHandler::OnImplicitAnimationsCompleted() {
@@ -517,7 +451,7 @@ void HomeLauncherGestureHandler::OnImplicitAnimationsCompleted() {
       // end splitview if it is active as SplitViewController observes
       // overview mode ends.
       Shell::Get()->overview_controller()->EndOverview(
-          OverviewSession::EnterExitOverviewType::kSwipeFromShelf);
+          OverviewEnterExitType::kSwipeFromShelf);
     } else {
       home_launcher_opacity = 0.f;
     }
@@ -530,7 +464,8 @@ void HomeLauncherGestureHandler::OnImplicitAnimationsCompleted() {
   // animation.
   DCHECK(display_.is_valid());
   home_screen_delegate->UpdateYPositionAndOpacityForHomeLauncher(
-      display_.work_area().y(), home_launcher_opacity, base::NullCallback());
+      display_.work_area().y(), home_launcher_opacity,
+      base::nullopt /*metrics_reporter_info*/, base::NullCallback());
 
   if (!active_window_) {
     RemoveObserversAndStopTracking();
@@ -546,22 +481,19 @@ void HomeLauncherGestureHandler::OnImplicitAnimationsCompleted() {
   }
 
   if (is_final_state_show) {
-    home_screen_delegate->UpdateAfterHomeLauncherShown();
-
-    std::vector<aura::Window*> windows_to_hide_minimize;
-    windows_to_hide_minimize.push_back(GetActiveWindow());
+    std::vector<aura::Window*> windows_to_minimize;
+    windows_to_minimize.push_back(GetActiveWindow());
 
     if (secondary_window_)
-      windows_to_hide_minimize.push_back(GetSecondaryWindow());
+      windows_to_minimize.push_back(GetSecondaryWindow());
 
     // Minimize the hidden windows so they can be used normally with alt+tab
     // and overview. Minimize in reverse order to preserve mru ordering.
-    windows_to_hide_minimize.resize(windows_to_hide_minimize.size() +
-                                    hidden_windows_.size());
+    windows_to_minimize.resize(windows_to_minimize.size() +
+                               hidden_windows_.size());
     std::copy(hidden_windows_.rbegin(), hidden_windows_.rend(),
-              windows_to_hide_minimize.end() - hidden_windows_.size());
-    window_util::HideAndMaybeMinimizeWithoutAnimation(windows_to_hide_minimize,
-                                                      /*minimize=*/true);
+              windows_to_minimize.end() - hidden_windows_.size());
+    window_util::MinimizeAndHideWithoutAnimation(windows_to_minimize);
   } else {
     // Reshow all windows previously hidden.
     for (auto* window : hidden_windows_) {
@@ -585,19 +517,34 @@ void HomeLauncherGestureHandler::OnImplicitAnimationsCompleted() {
   RemoveObserversAndStopTracking();
 }
 
+bool HomeLauncherGestureHandler::IsAnimating() {
+  if (active_window_ && active_window_->IsAnimating())
+    return true;
+
+  if (secondary_window_ && secondary_window_->IsAnimating())
+    return true;
+
+  if (overview_active_on_gesture_start_ &&
+      Shell::Get()->overview_controller()->InOverviewSession() &&
+      (Shell::Get()->overview_controller()->IsInStartAnimation() ||
+       animating_to_close_overview_)) {
+    return true;
+  }
+
+  return false;
+}
+
 void HomeLauncherGestureHandler::AnimateToFinalState(AnimationTrigger trigger) {
   const bool is_final_state_show = IsFinalStateShow();
-  GetHomeScreenDelegate()->NotifyHomeLauncherAnimationTransition(
-      trigger, is_final_state_show);
   UpdateWindowsForSlideUpOrDown(is_final_state_show ? 1.0 : 0.0,
-                                /*animate=*/true);
+                                trigger /**animation_trigger*/);
 
   if (!is_final_state_show && mode_ == Mode::kSlideDownToHide) {
-    NotifyHomeLauncherTargetPositionChanged(false /*showing*/, display_.id());
+    if (GetActiveWindow())
+      wm::ActivateWindow(GetActiveWindow());
     base::RecordAction(
         base::UserMetricsAction("AppList_HomeLauncherToMRUWindow"));
   } else if (is_final_state_show && mode_ == Mode::kSlideUpToShow) {
-    NotifyHomeLauncherTargetPositionChanged(true /*showing*/, display_.id());
     base::RecordAction(
         base::UserMetricsAction("AppList_CurrentWindowToHomeLauncher"));
   }
@@ -620,8 +567,9 @@ void HomeLauncherGestureHandler::UpdateSettings(
       ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET);
 }
 
-void HomeLauncherGestureHandler::UpdateWindowsForSlideUpOrDown(double progress,
-                                                               bool animate) {
+void HomeLauncherGestureHandler::UpdateWindowsForSlideUpOrDown(
+    double progress,
+    base::Optional<AnimationTrigger> animation_trigger) {
   // Update full screen applist.
   DCHECK(display_.is_valid());
   const gfx::Rect work_area = display_.work_area();
@@ -632,20 +580,28 @@ void HomeLauncherGestureHandler::UpdateWindowsForSlideUpOrDown(double progress,
   DCHECK(home_screen_delegate);
 
   // Before updating position and opacity for home launcher, make sure its
-  // window is visible. This handles the case that HomeScreenController::Show()
-  // put launcher window hidden when it is called within an overview session.
-  // See https://crbug.com/996384
+  // window is visible. This handles the case that
+  // HomeScreenController::Show() put launcher window hidden when it is called
+  // within an overview session. See https://crbug.com/996384
   aura::Window* home_screen_window =
       home_screen_delegate->GetHomeScreenWindow();
   DCHECK(home_screen_window);
   if (!home_screen_window->TargetVisibility())
     home_screen_delegate->GetHomeScreenWindow()->Show();
 
-  home_screen_delegate->UpdateYPositionAndOpacityForHomeLauncher(
-      y_position, opacity,
-      animate ? base::BindRepeating(&HomeLauncherGestureHandler::UpdateSettings,
-                                    base::Unretained(this))
-              : base::NullCallback());
+  const bool animate = animation_trigger.has_value();
+  if (animate) {
+    home_screen_delegate->UpdateYPositionAndOpacityForHomeLauncher(
+        y_position, opacity,
+        HomeScreenDelegate::AnimationInfo(*animation_trigger,
+                                          progress == 1.0 /*showing*/),
+        base::BindRepeating(&HomeLauncherGestureHandler::UpdateSettings,
+                            base::Unretained(this)));
+  } else {
+    home_screen_delegate->UpdateYPositionAndOpacityForHomeLauncher(
+        y_position, opacity, base::nullopt /*animation_info*/,
+        base::NullCallback());
+  }
 
   // Update the overview grid if needed. If |active_window_| is null, then
   // observe the animation of a window in overview.
@@ -672,7 +628,7 @@ void HomeLauncherGestureHandler::UpdateWindowsForSlideUpOrDown(double progress,
     return;
   }
 
-  // Helper to update a single windows opacity and transform based on by
+  // Helper to update a single window's opacity and transform based on by
   // calculating the in between values using |value| and |values|.
   auto update_windows_helper = [this](double progress, bool animate,
                                       aura::Window* window,
@@ -709,30 +665,31 @@ void HomeLauncherGestureHandler::UpdateWindowsForSlideUpOrDown(double progress,
     update_windows_helper(progress, animate, divider_window, *divider_values_);
   }
 
-  if (secondary_window_ && secondary_window_->window_values().has_value()) {
+  if (secondary_window_) {
     for (const auto& descendant :
          secondary_window_->transient_descendants_values()) {
       update_windows_helper(progress, animate, descendant.first,
                             descendant.second);
     }
     update_windows_helper(progress, animate, GetSecondaryWindow(),
-                          *(secondary_window_->window_values()));
+                          secondary_window_->window_values());
   }
 
-  if (active_window_ && active_window_->window_values().has_value()) {
+  if (active_window_) {
     for (const auto& descendant :
          active_window_->transient_descendants_values()) {
       update_windows_helper(progress, animate, descendant.first,
                             descendant.second);
     }
     update_windows_helper(progress, animate, GetActiveWindow(),
-                          *(active_window_->window_values()));
+                          active_window_->window_values());
   }
 }
 
 void HomeLauncherGestureHandler::RemoveObserversAndStopTracking() {
   display_.set_id(display::kInvalidDisplayId);
   backdrop_values_ = base::nullopt;
+  scoped_backdrop_update_pause_ = base::nullopt;
   divider_values_ = base::nullopt;
   last_event_location_ = base::nullopt;
   last_scroll_y_ = 0.f;
@@ -756,29 +713,12 @@ bool HomeLauncherGestureHandler::IsIdle() {
   return !IsDragInProgress() && !IsAnimating();
 }
 
-bool HomeLauncherGestureHandler::IsAnimating() {
-  if (active_window_ && active_window_->IsAnimating())
-    return true;
-
-  if (secondary_window_ && secondary_window_->IsAnimating())
-    return true;
-
-  if (overview_active_on_gesture_start_ &&
-      Shell::Get()->overview_controller()->InOverviewSession() &&
-      (Shell::Get()->overview_controller()->IsInStartAnimation() ||
-       animating_to_close_overview_)) {
-    return true;
-  }
-
-  return false;
-}
-
 bool HomeLauncherGestureHandler::IsFinalStateShow() {
   DCHECK_NE(Mode::kNone, mode_);
   DCHECK(display_.is_valid());
 
   // If fling velocity is greater than the threshold, show the launcher if
-  // sliding up, or hide the launcher if sliding down, irregardless of
+  // sliding up, or hide the launcher if sliding down, regardless of
   // |last_event_location_|.
   if (mode_ == Mode::kSlideUpToShow &&
       last_scroll_y_ < -kScrollVelocityThreshold) {
@@ -795,10 +735,7 @@ bool HomeLauncherGestureHandler::IsFinalStateShow() {
              : mode_ == Mode::kSlideUpToShow;
 }
 
-bool HomeLauncherGestureHandler::SetUpWindows(
-    Mode mode,
-    aura::Window* window,
-    base::Optional<gfx::Point> location_in_screen) {
+bool HomeLauncherGestureHandler::SetUpWindows(Mode mode, aura::Window* window) {
   if (mode == Mode::kSwipeHomeToOverview) {
     active_window_.reset();
     return Shell::Get()->home_screen_controller()->IsHomeScreenVisible();
@@ -828,26 +765,19 @@ bool HomeLauncherGestureHandler::SetUpWindows(
     return false;
   }
 
-  if (IsTabletMode() && overview_active_on_gesture_start_ &&
+  if (Shell::Get()->IsInTabletMode() && overview_active_on_gesture_start_ &&
       !split_view_active && mode == Mode::kSlideUpToShow) {
     active_window_.reset();
     return true;
   }
 
-  aura::Window* first_window = nullptr;
-  if (mode == HomeLauncherGestureHandler::Mode::kDragWindowToHomeOrOverview) {
-    DCHECK(location_in_screen.has_value());
-    first_window =
-        GetWindowForDragToHomeOrOverview(*location_in_screen, windows);
-  } else {
-    // Always hide split view windows if they exist. Otherwise, hide the
-    // specified window if it is not null. If none of above is true, we want
-    // the first window in the mru list, if it exists and is usable.
-    first_window =
-        split_view_active
-            ? split_view_controller->GetDefaultSnappedWindow()
-            : (window ? window : (windows.empty() ? nullptr : windows[0]));
-  }
+  // Always hide split view windows if they exist. Otherwise, hide the
+  // specified window if it is not null. If none of above is true, we want
+  // the first window in the mru list, if it exists and is usable.
+  aura::Window* first_window =
+      split_view_active
+          ? split_view_controller->GetDefaultSnappedWindow()
+          : (window ? window : (windows.empty() ? nullptr : windows[0]));
   if (!CanProcessWindow(first_window, mode)) {
     active_window_.reset();
     return false;
@@ -855,10 +785,11 @@ bool HomeLauncherGestureHandler::SetUpWindows(
 
   DCHECK(base::Contains(windows, first_window));
   DCHECK_NE(Mode::kNone, mode);
-  base::RecordAction(base::UserMetricsAction(
+  base::RecordAction(
       mode == Mode::kSlideDownToHide
-          ? "AppList_HomeLauncherToMRUWindowAttempt"
-          : "AppList_CurrentWindowToHomeLauncherAttempt"));
+          ? base::UserMetricsAction("AppList_HomeLauncherToMRUWindowAttempt")
+          : base::UserMetricsAction(
+                "AppList_CurrentWindowToHomeLauncherAttempt"));
   active_window_ = std::make_unique<ScopedWindowModifier>(first_window);
   GetActiveWindow()->AddObserver(this);
   base::EraseIf(windows, [this](aura::Window* elem) {
@@ -885,34 +816,20 @@ bool HomeLauncherGestureHandler::SetUpWindows(
   }
 
   // Hide all visible windows which are behind our window so that when we
-  // scroll, the home launcher will be visible in kSlideUpToShow case and
-  // wallpaper will be visible in kDragWindowToHomeOrOverview case. This is only
-  // needed when swiping up, and not when overview mode is active.
+  // scroll, the home launcher will be visible in kSlideUpToShow case. This is
+  // only needed when swiping up, and not when overview mode is active.
   hidden_windows_.clear();
-  if ((mode == Mode::kSlideUpToShow ||
-       mode == Mode::kDragWindowToHomeOrOverview) &&
-      !overview_active_on_gesture_start_) {
+  if (mode == Mode::kSlideUpToShow && !overview_active_on_gesture_start_) {
     for (auto* window : windows) {
-      if (window->IsVisible() &&
-          (mode == Mode::kSlideUpToShow ||
-           (mode == Mode::kDragWindowToHomeOrOverview &&
-            !split_view_controller->IsWindowInSplitView(window)))) {
+      if (window->IsVisible()) {
         hidden_windows_.push_back(window);
         window->AddObserver(this);
+
+        ScopedAnimationDisabler disable(window);
+        window->Hide();
       }
     }
-    // Minimize the hidden windows instead of hiding so that they can show up
-    // in overview later.
-    window_util::HideAndMaybeMinimizeWithoutAnimation(
-        hidden_windows_,
-        /*minimize=*/(mode == Mode::kDragWindowToHomeOrOverview));
   }
-
-  // In kDragWindowToHomeOrOverview mode, no need to calculate the desired
-  // opacity and transform for the dragged window and its transient descendants
-  // and backdrop window and the divider window.
-  if (mode == Mode::kDragWindowToHomeOrOverview)
-    return true;
 
   // Show |active_window_| if we are swiping down to hide.
   if (mode == Mode::kSlideDownToHide) {
@@ -925,7 +842,6 @@ bool HomeLauncherGestureHandler::SetUpWindows(
     if (!active_window_ || !GetActiveWindow())
       return false;
 
-    wm::ActivateWindow(GetActiveWindow());
     GetActiveWindow()->layer()->SetOpacity(1.f);
   }
 
@@ -943,9 +859,9 @@ bool HomeLauncherGestureHandler::SetUpWindows(
     // actually covers the area behind the shelf as well, so initially
     // transform it to be sized to the work area. Without the transform
     // tweak, there is an extra shelf sized black area under |active_window_|.
-    // Go to 0.01 opacity instead of 0 opacity otherwise animation end code will
-    // attempt to update the backdrop which will try to show a 0 opacity window
-    // which causes a crash.
+    // Go to 0.01 opacity instead of 0 opacity otherwise animation end code
+    // will attempt to update the backdrop which will try to show a 0 opacity
+    // window which causes a crash.
     backdrop_values_ = base::make_optional(WindowValues());
     backdrop_values_->initial_opacity = 1.f;
     backdrop_values_->initial_transform = gfx::Transform(
@@ -973,57 +889,51 @@ bool HomeLauncherGestureHandler::SetUpWindows(
   return true;
 }
 
-void HomeLauncherGestureHandler::OnDragStarted(const gfx::Point& location) {
-  if (mode_ == Mode::kDragWindowToHomeOrOverview) {
-    window_drag_controller_ = std::make_unique<DragWindowFromShelfController>(
-        GetActiveWindow(), hidden_windows_);
-  } else if (mode_ == Mode::kSwipeHomeToOverview) {
+void HomeLauncherGestureHandler::OnDragStarted(const gfx::PointF& location) {
+  if (mode_ == Mode::kSwipeHomeToOverview) {
     swipe_home_to_overview_controller_ =
-        std::make_unique<SwipeHomeToOverviewController>();
+        std::make_unique<SwipeHomeToOverviewController>(display_.id());
   } else {
-    NotifyHomeLauncherTargetPositionChanged(
-        mode_ == Mode::kSlideUpToShow /*showing*/, display_.id());
-
+    const double progress = mode_ == Mode::kSlideUpToShow ? 0 : 1;
+    NotifyHomeLauncherPositionChanged(100 * progress, display_.id());
     HomeScreenDelegate* home_screen_delegate = GetHomeScreenDelegate();
     DCHECK(home_screen_delegate);
     home_screen_delegate->OnHomeLauncherDragStart();
 
-    UpdateWindowsForSlideUpOrDown(/*progress=*/0.0, /*animate=*/false);
+    PauseBackdropUpdatesForActiveWindow();
+    UpdateWindowsForSlideUpOrDown(progress,
+                                  base::nullopt /*animation_trigger*/);
   }
 }
 
-void HomeLauncherGestureHandler::OnDragContinued(const gfx::Point& location,
+void HomeLauncherGestureHandler::OnDragContinued(const gfx::PointF& location,
                                                  float scroll_x,
                                                  float scroll_y) {
-  if (mode_ == Mode::kDragWindowToHomeOrOverview) {
-    window_drag_controller_->Drag(location, scroll_x, scroll_y);
-  } else if (mode_ == Mode::kSwipeHomeToOverview) {
+  if (mode_ == Mode::kSwipeHomeToOverview) {
     swipe_home_to_overview_controller_->Drag(location, scroll_x, scroll_y);
   } else {
+    const double progress =
+        GetHeightInWorkAreaAsRatio(location, display_.work_area());
     HomeScreenDelegate* home_screen_delegate = GetHomeScreenDelegate();
     DCHECK(home_screen_delegate);
     home_screen_delegate->OnHomeLauncherDragInProgress();
 
-    UpdateWindowsForSlideUpOrDown(
-        GetHeightInWorkAreaAsRatio(location, display_.work_area()),
-        /*animate=*/false);
+    UpdateWindowsForSlideUpOrDown(progress,
+                                  base::nullopt /*animation_trigger*/);
+    const int percent_shown = static_cast<int>(progress * 100);
+    NotifyHomeLauncherPositionChanged(percent_shown, display_.id());
   }
 }
 
-bool HomeLauncherGestureHandler::OnDragEnded(const gfx::Point& location,
+bool HomeLauncherGestureHandler::OnDragEnded(const gfx::PointF& location,
                                              base::Optional<float> velocity_y) {
-  if (mode_ == Mode::kDragWindowToHomeOrOverview) {
-    last_event_location_ = base::make_optional(location);
-
-    window_drag_controller_->EndDrag(location, velocity_y);
-    RemoveObserversAndStopTracking();
-  } else if (mode_ == Mode::kSwipeHomeToOverview) {
+  if (mode_ == Mode::kSwipeHomeToOverview) {
     swipe_home_to_overview_controller_->EndDrag(location, velocity_y);
     RemoveObserversAndStopTracking();
   } else {
     // In clamshell mode, AppListView::SetIsInDrag is called explicitly so it
     // does not need the notification from HomeLauncherGestureHandler.
-    if (IsTabletMode()) {
+    if (Shell::Get()->IsInTabletMode()) {
       HomeScreenDelegate* home_screen_delegate = GetHomeScreenDelegate();
       DCHECK(home_screen_delegate);
       home_screen_delegate->OnHomeLauncherDragEnd();
@@ -1042,6 +952,7 @@ bool HomeLauncherGestureHandler::OnDragEnded(const gfx::Point& location,
       return false;
     }
 
+    StartTrackingAnimationSmoothness(display_.id());
     last_event_location_ = base::make_optional(location);
     AnimateToFinalState(AnimationTrigger::kDragRelease);
   }
@@ -1050,10 +961,7 @@ bool HomeLauncherGestureHandler::OnDragEnded(const gfx::Point& location,
 }
 
 void HomeLauncherGestureHandler::OnDragCancelled() {
-  if (mode_ == Mode::kDragWindowToHomeOrOverview) {
-    window_drag_controller_->CancelDrag();
-    RemoveObserversAndStopTracking();
-  } else if (mode_ == Mode::kSwipeHomeToOverview) {
+  if (mode_ == Mode::kSwipeHomeToOverview) {
     swipe_home_to_overview_controller_->CancelDrag();
     RemoveObserversAndStopTracking();
   } else {
@@ -1063,6 +971,19 @@ void HomeLauncherGestureHandler::OnDragCancelled() {
 
     AnimateToFinalState(AnimationTrigger::kDragRelease);
   }
+}
+
+void HomeLauncherGestureHandler::PauseBackdropUpdatesForActiveWindow() {
+  if (scoped_backdrop_update_pause_.has_value())
+    return;
+  aura::Window* active_window = GetActiveWindow();
+  if (!active_window)
+    return;
+  scoped_backdrop_update_pause_ =
+      GetWorkspaceControllerForContext(active_window)
+          ->layout_manager()
+          ->backdrop_controller()
+          ->PauseUpdates();
 }
 
 }  // namespace ash

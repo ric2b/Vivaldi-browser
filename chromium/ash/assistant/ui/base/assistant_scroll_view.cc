@@ -7,6 +7,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/optional.h"
 #include "ui/views/controls/scrollbar/overlay_scroll_bar.h"
 
 namespace ash {
@@ -47,15 +48,32 @@ class ContentView : public views::View, views::ViewObserver {
 
 class InvisibleScrollBar : public views::OverlayScrollBar {
  public:
-  explicit InvisibleScrollBar(bool horizontal)
-      : views::OverlayScrollBar(horizontal) {}
+  InvisibleScrollBar(AssistantScrollView* parent, bool horizontal)
+      : views::OverlayScrollBar(horizontal), parent_(parent) {}
 
   ~InvisibleScrollBar() override = default;
 
   // views::OverlayScrollBar:
   int GetThickness() const override { return 0; }
 
+  void Update(int viewport_size,
+              int content_size,
+              int content_scroll_offset) override {
+    views::OverlayScrollBar::Update(viewport_size, content_size,
+                                    content_scroll_offset);
+
+    parent_->OnScrollBarUpdated(this, viewport_size, content_size,
+                                content_scroll_offset);
+  }
+
+  void VisibilityChanged(views::View* starting_from, bool is_visible) override {
+    if (starting_from == this)
+      parent_->OnScrollBarVisibilityChanged(this, is_visible);
+  }
+
  private:
+  AssistantScrollView* const parent_;  // Owned by view hierarchy, owns |this|.
+
   DISALLOW_COPY_AND_ASSIGN(InvisibleScrollBar);
 };
 
@@ -79,7 +97,7 @@ void AssistantScrollView::OnViewPreferredSizeChanged(views::View* view) {
 }
 
 void AssistantScrollView::InitLayout() {
-  SetBackgroundColor(SK_ColorTRANSPARENT);
+  SetBackgroundColor(base::nullopt);
   SetDrawOverflowIndicator(false);
 
   // Content view.
@@ -89,10 +107,10 @@ void AssistantScrollView::InitLayout() {
 
   // Scroll bars.
   horizontal_scroll_bar_ = SetHorizontalScrollBar(
-      std::make_unique<InvisibleScrollBar>(/*horizontal=*/true));
+      std::make_unique<InvisibleScrollBar>(this, /*horizontal=*/true));
 
   vertical_scroll_bar_ = SetVerticalScrollBar(
-      std::make_unique<InvisibleScrollBar>(/*horizontal=*/false));
+      std::make_unique<InvisibleScrollBar>(this, /*horizontal=*/false));
 }
 
 }  // namespace ash

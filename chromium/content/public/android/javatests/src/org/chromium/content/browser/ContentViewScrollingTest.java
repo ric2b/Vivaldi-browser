@@ -18,6 +18,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.BaseJUnit4ClassRunner;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.base.test.util.UrlUtils;
@@ -187,6 +188,7 @@ public class ContentViewScrollingTest {
     @SmallTest
     @Feature({"Main"})
     @RetryOnFailure
+    @DisabledTest(message = "Test is flaky. crbug.com/1058233")
     public void testFling() {
         // Scaling the initial velocity by the device scale factor ensures that
         // it's of sufficient magnitude for all displays densities.
@@ -233,7 +235,7 @@ public class ContentViewScrollingTest {
         int velocity = (int) (1000 * deviceScaleFactor);
         // Expected total fling distance calculated by FlingCurve with initial
         // velocity 1000.
-        int expected_dist = (int) (180 * deviceScaleFactor);
+        int expected_dist = (int) (194 * deviceScaleFactor);
 
         // Vertical fling to lower-left.
         fling(0, -velocity);

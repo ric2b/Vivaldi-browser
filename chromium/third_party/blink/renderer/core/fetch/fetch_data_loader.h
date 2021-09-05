@@ -17,6 +17,7 @@ namespace blink {
 
 class BytesConsumer;
 class FormData;
+class TextResourceDecoderOptions;
 
 // FetchDataLoader subclasses
 // 1. take a BytesConsumer,
@@ -65,7 +66,7 @@ class CORE_EXPORT FetchDataLoader : public GarbageCollected<FetchDataLoader> {
     // This function is called when an abort has been signalled.
     virtual void Abort() = 0;
 
-    void Trace(blink::Visitor* visitor) override {}
+    void Trace(Visitor* visitor) override {}
   };
 
   static FetchDataLoader* CreateLoaderAsBlobHandle(const String& mime_type);
@@ -73,7 +74,11 @@ class CORE_EXPORT FetchDataLoader : public GarbageCollected<FetchDataLoader> {
   static FetchDataLoader* CreateLoaderAsFailure();
   static FetchDataLoader* CreateLoaderAsFormData(
       const String& multipart_boundary);
-  static FetchDataLoader* CreateLoaderAsString();
+  // The text resource decoder options should be created either by
+  // TextResourceDecoderOptions::CreateUTF8Decode() or
+  // TextResourceDecoderOptions::CreateUTF8DecodeWithoutBOM().
+  static FetchDataLoader* CreateLoaderAsString(
+      const TextResourceDecoderOptions&);
   // The mojo::DataPipe consumer handle is provided via the
   // Client::DidFetchStartedDataPipe() callback.
   static FetchDataLoader* CreateLoaderAsDataPipe(
@@ -86,7 +91,7 @@ class CORE_EXPORT FetchDataLoader : public GarbageCollected<FetchDataLoader> {
 
   virtual void Cancel() = 0;
 
-  virtual void Trace(blink::Visitor* visitor) {}
+  virtual void Trace(Visitor* visitor) {}
 };
 
 }  // namespace blink

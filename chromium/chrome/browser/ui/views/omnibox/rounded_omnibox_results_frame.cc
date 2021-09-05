@@ -9,12 +9,12 @@
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/omnibox/omnibox_theme.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
-#include "ui/base/material_design/material_design_controller.h"
+#include "ui/base/pointer/touch_ui_controller.h"
 #include "ui/compositor/layer.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/color_utils.h"
+#include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/views/bubble/bubble_border.h"
-#include "ui/views/painter.h"
 
 #if defined(USE_AURA)
 #include "ui/aura/window.h"
@@ -59,17 +59,38 @@ WidgetEventPair GetParentWidgetAndEvent(views::View* this_view,
 
 #endif  // !USE_AURA
 
+// Subclass for results view which sets the correct background color on
+// theme changes.
+class OmniboxResultsContentsView : public views::View {
+ public:
+  OmniboxResultsContentsView() = default;
+  ~OmniboxResultsContentsView() override = default;
+
+  void OnThemeChanged() override {
+    views::View::OnThemeChanged();
+    const SkColor background_color =
+        GetOmniboxColor(GetThemeProvider(), OmniboxPart::RESULTS_BACKGROUND);
+    SetBackground(views::CreateSolidBackground(background_color));
+  }
+};
+
 // View at the top of the frame which paints transparent pixels to make a hole
 // so that the location bar shows through.
 class TopBackgroundView : public views::View {
  public:
-  TopBackgroundView(const LocationBarView* location_bar,
-                    SkColor background_color) {
+  explicit TopBackgroundView(const LocationBarView* location_bar)
+      : location_bar_(location_bar) {}
+
+  void OnThemeChanged() override {
+    views::View::OnThemeChanged();
+    const SkColor background_color =
+        GetOmniboxColor(GetThemeProvider(), OmniboxPart::RESULTS_BACKGROUND);
+
     // Paint a stroke of the background color as a 1 px border to hide the
     // underlying antialiased location bar/toolbar edge.  The round rect here is
     // not antialiased, since the goal is to completely cover the underlying
     // pixels, and AA would let those on the edge partly bleed through.
-    SetBackground(location_bar->CreateRoundRectBackground(
+    SetBackground(location_bar_->CreateRoundRectBackground(
         SK_ColorTRANSPARENT, background_color, SkBlendMode::kSrc, false));
   }
 
@@ -110,6 +131,9 @@ class TopBackgroundView : public views::View {
     return nullptr;
   }
 #endif  // !USE_AURA
+
+ private:
+  const LocationBarView* location_bar_;
 };
 
 // Insets used to position |contents_| within |contents_host_|.
@@ -124,31 +148,19 @@ RoundedOmniboxResultsFrame::RoundedOmniboxResultsFrame(
     views::View* contents,
     LocationBarView* location_bar)
     : contents_(contents) {
-  // Host the contents in its own View to simplify layout and clipping.
-  contents_host_ = new views::View();
+  // Host the contents in its own View to simplify layout and customization.
+  contents_host_ = new OmniboxResultsContentsView();
   contents_host_->SetPaintToLayer();
   contents_host_->layer()->SetFillsBoundsOpaquely(false);
 
-  // Use a solid background. Note this is clipped to get rounded corners.
-  const SkColor background_color = GetOmniboxColor(
-      &ThemeService::GetThemeProviderForProfile(location_bar->profile()),
-      OmniboxPart::RESULTS_BACKGROUND);
-  contents_host_->SetBackground(views::CreateSolidBackground(background_color));
-
-  // Use a textured mask to clip contents. This doesn't work on Windows
-  // (https://crbug.com/713359), and can't be animated, but it simplifies
-  // selection highlights.
-  // TODO(tapted): Remove this and have the contents paint a half-rounded rect
-  // for the background, and when selecting the bottom row.
+  // Use rounded corners.
   int corner_radius =
       views::LayoutProvider::Get()->GetCornerRadiusMetric(views::EMPHASIS_HIGH);
-  contents_mask_ = views::Painter::CreatePaintedLayer(
-      views::Painter::CreateSolidRoundRectPainter(SK_ColorBLACK,
-                                                  corner_radius));
-  contents_mask_->layer()->SetFillsBoundsOpaquely(false);
-  contents_host_->layer()->SetMaskLayer(contents_mask_->layer());
+  contents_host_->layer()->SetRoundedCornerRadius(
+      gfx::RoundedCornersF(corner_radius));
+  contents_host_->layer()->SetIsFastRoundedCorner(true);
 
-  top_background_ = new TopBackgroundView(location_bar, background_color);
+  top_background_ = new TopBackgroundView(location_bar);
   contents_host_->AddChildView(top_background_);
   contents_host_->AddChildView(contents_);
 
@@ -158,11 +170,6 @@ RoundedOmniboxResultsFrame::RoundedOmniboxResultsFrame(
       gfx::kPlaceholderColor);
   border->SetCornerRadius(corner_radius);
   border->set_md_shadow_elevation(kElevation);
-  // Use a darker shadow that's more visible on darker tints.
-  border->set_md_shadow_color(color_utils::IsDark(background_color)
-                                  ? SK_ColorBLACK
-                                  : gfx::kGoogleGrey800);
-
   SetBorder(std::move(border));
 
   AddChildView(contents_host_);
@@ -188,7 +195,7 @@ void RoundedOmniboxResultsFrame::OnBeforeWidgetInit(
 
   // Since we are drawing the shadow in Views via the BubbleBorder, we never
   // want our widget to have its own window-manager drawn shadow.
-  params->shadow_type = views::Widget::InitParams::ShadowType::SHADOW_TYPE_NONE;
+  params->shadow_type = views::Widget::InitParams::ShadowType::kNone;
 }
 
 // static
@@ -199,7 +206,7 @@ int RoundedOmniboxResultsFrame::GetNonResultSectionHeight() {
 
 // static
 gfx::Insets RoundedOmniboxResultsFrame::GetLocationBarAlignmentInsets() {
-  return ui::MaterialDesignController::touch_ui() ? gfx::Insets(6, 1, 5, 1)
+  return ui::TouchUiController::Get()->touch_ui() ? gfx::Insets(6, 1, 5, 1)
                                                   : gfx::Insets(4, 6);
 }
 
@@ -219,7 +226,6 @@ void RoundedOmniboxResultsFrame::Layout() {
   // TODO(tapted): Investigate using a static Widget size.
   const gfx::Rect bounds = GetContentsBounds();
   contents_host_->SetBoundsRect(bounds);
-  contents_mask_->layer()->SetBounds(bounds);
 
   gfx::Rect top_bounds(contents_host_->GetContentsBounds());
   top_bounds.set_height(GetNonResultSectionHeight());
@@ -264,3 +270,17 @@ void RoundedOmniboxResultsFrame::OnMouseEvent(ui::MouseEvent* event) {
 }
 
 #endif  // !USE_AURA
+
+void RoundedOmniboxResultsFrame::OnThemeChanged() {
+  views::View::OnThemeChanged();
+  const SkColor background_color =
+      GetOmniboxColor(GetThemeProvider(), OmniboxPart::RESULTS_BACKGROUND);
+
+  // Use a darker shadow that's more visible on darker tints.
+  views::BubbleBorder* border =
+      static_cast<views::BubbleBorder*>(this->border());
+  border->set_md_shadow_color(color_utils::IsDark(background_color)
+                                  ? SK_ColorBLACK
+                                  : gfx::kGoogleGrey800);
+  SchedulePaint();
+}

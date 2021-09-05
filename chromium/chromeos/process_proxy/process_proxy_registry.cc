@@ -8,7 +8,7 @@
 #include "base/command_line.h"
 #include "base/message_loop/message_pump_type.h"
 #include "base/sequenced_task_runner.h"
-#include "base/task/lazy_task_runner.h"
+#include "base/task/lazy_thread_pool_task_runner.h"
 
 namespace chromeos {
 
@@ -74,10 +74,9 @@ ProcessProxyRegistry* ProcessProxyRegistry::Get() {
 
 // static
 scoped_refptr<base::SequencedTaskRunner> ProcessProxyRegistry::GetTaskRunner() {
-  static base::LazySequencedTaskRunner task_runner =
-      LAZY_SEQUENCED_TASK_RUNNER_INITIALIZER(
-          base::TaskTraits(base::ThreadPool(), base::MayBlock(),
-                           base::TaskPriority::BEST_EFFORT));
+  static base::LazyThreadPoolSequencedTaskRunner task_runner =
+      LAZY_THREAD_POOL_SEQUENCED_TASK_RUNNER_INITIALIZER(
+          base::TaskTraits(base::MayBlock(), base::TaskPriority::BEST_EFFORT));
   return task_runner.Get();
 }
 
@@ -100,8 +99,8 @@ bool ProcessProxyRegistry::OpenProcess(const base::CommandLine& cmdline,
   // closed, which is done before this object goes away.
   if (!proxy->StartWatchingOutput(
           watcher_thread_->task_runner(), GetTaskRunner(),
-          base::Bind(&ProcessProxyRegistry::OnProcessOutput,
-                     base::Unretained(this), *id))) {
+          base::BindRepeating(&ProcessProxyRegistry::OnProcessOutput,
+                              base::Unretained(this), *id))) {
     proxy->Close();
     return false;
   }

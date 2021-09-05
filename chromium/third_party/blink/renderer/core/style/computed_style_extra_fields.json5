@@ -72,7 +72,7 @@
         "table-row", "table-column-group", "table-column", "table-cell",
         "table-caption", "-webkit-box", "-webkit-inline-box", "flex",
         "inline-flex", "grid", "inline-grid", "contents", "flow-root", "none",
-        "layout-custom", "inline-layout-custom",
+        "layout-custom", "inline-layout-custom", "math", "inline-math"
       ],
       default_value: "inline",
     },
@@ -102,7 +102,7 @@
         "table-row", "table-column-group", "table-column", "table-cell",
         "table-caption", "-webkit-box", "-webkit-inline-box", "flex",
         "inline-flex", "grid", "inline-grid", "contents", "flow-root", "none",
-        "layout-custom", "inline-layout-custom",
+        "layout-custom", "inline-layout-custom", "math", "inline-math"
       ],
       default_value: "inline",
     },
@@ -190,6 +190,20 @@
       default_value: "false",
       custom_compare: true,
     },
+    {
+      name: "HasEmUnits",
+      field_template: "monotonic_flag",
+      default_value: "false",
+      custom_compare: true,
+    },
+    // Whether we used a length unit that must be resolved against the measure
+    // of a certain glyph in some font.
+    {
+      name: "HasGlyphRelativeUnits",
+      field_template: "monotonic_flag",
+      default_value: "false",
+      custom_compare: true,
+    },
     // These properties only have generated storage, and their methods are handwritten in ComputedStyle.
     {
       name: "StyleType",
@@ -204,7 +218,7 @@
     {
       name: "PseudoBits",
       field_template: "primitive",
-      field_size: 7,
+      field_size: 8,
       default_value: "kPseudoIdNone",
       type_name: "unsigned",
       custom_copy: true,
@@ -493,7 +507,7 @@
       include_paths: ["third_party/blink/renderer/platform/graphics/touch_action.h"],
       type_name: "TouchAction",
       field_size: 6,
-      default_value: "TouchAction::kTouchActionAuto",
+      default_value: "TouchAction::kAuto",
       field_group: "*",
       computed_style_custom_functions: ["getter", "setter"],
     },
@@ -649,10 +663,12 @@
     },
     {
       name: "PageSizeType",
-      field_template: "keyword",
-      keywords: ["auto", "landscape", "portrait", "resolved"],
+      field_template: "primitive",
       field_group: "*",
-      default_value: "auto",
+      type_name: "PageSizeType",
+      field_size: 2,
+      default_value: "PageSizeType::kAuto",
+      include_paths: ["third_party/blink/public/common/css/page_size_type.h"],
     },
     {
       name: "HasCurrentOpacityAnimation",
@@ -871,6 +887,22 @@
       include_paths: ["third_party/blink/renderer/core/style/ordered_named_grid_lines.h"],
     },
     {
+      name: "ImplicitNamedGridColumnLines",
+      field_template: "external",
+      type_name: "NamedGridLinesMap",
+      field_group: "*->grid",
+      default_value: "NamedGridLinesMap()",
+      include_paths: ["third_party/blink/renderer/core/style/named_grid_lines_map.h"],
+    },
+    {
+      name: "ImplicitNamedGridRowLines",
+      field_template: "external",
+      type_name: "NamedGridLinesMap",
+      field_group: "*->grid",
+      default_value: "NamedGridLinesMap()",
+      include_paths: ["third_party/blink/renderer/core/style/named_grid_lines_map.h"],
+    },
+    {
       name: "NamedGridArea",
       field_template: "external",
       type_name: "NamedGridAreaMap",
@@ -970,14 +1002,6 @@
       inherited: true,
     },
     {
-      name: "IsColorInternalText",
-      inherited: true,
-      field_template: "primitive",
-      type_name: "bool",
-      field_group: "inherited",
-      default_value: "false",
-    },
-    {
       name: "IsInBlockifyingDisplay",
       field_template: "monotonic_flag",
       default_value: "false",
@@ -1020,6 +1044,49 @@
       type_name: "AtomicString",
       include_paths: ["third_party/blink/renderer/platform/wtf/text/atomic_string.h"],
       default_value: "g_null_atom",
+    },
+    {
+      name: "IsEnsuredOutsideFlatTree",
+      field_template: "monotonic_flag",
+      default_value: "false",
+      custom_compare: true,
+      inherited: true,
+    },
+    {
+      name: "IsInsideListElement",
+      field_template: "monotonic_flag",
+      default_value: "false",
+      custom_compare: true,
+      inherited: true,
+    },
+
+    // This field disables the 'overflow' check in |LayoutBlock::
+    // InlineBlockBaseline()|. For 'inline-block', CSS says that the baseline
+    // is the bottom margin edge if 'overflow' is not visible. But some
+    // elements want to ignore this condition.
+    {
+      name: "ShouldIgnoreOverflowPropertyForInlineBlockBaseline",
+      field_template: "monotonic_flag",
+      default_value: "false",
+      inherited: false,
+    },
+    {
+      name: "MathBaseline",
+      field_template: "external",
+      default_value: "Length()",
+      include_paths: ["third_party/blink/renderer/platform/geometry/length.h"],
+      type_name: "Length",
+      field_group: "*",
+      getter: "GetMathBaseline",
+    },
+    {
+      name: "MathFractionBarThickness",
+      field_template: "external",
+      default_value: "Length()",
+      include_paths: ["third_party/blink/renderer/platform/geometry/length.h"],
+      type_name: "Length",
+      field_group: "*",
+      getter: "GetMathFractionBarThickness",
     },
   ],
 }

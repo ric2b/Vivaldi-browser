@@ -43,7 +43,6 @@
 #include "components/constrained_window/constrained_window_views.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/page_navigator.h"
-#include "content/public/test/test_browser_thread.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/clipboard/test/test_clipboard.h"
 #include "ui/base/test/ui_controls.h"
@@ -325,8 +324,7 @@ class BookmarkBarViewEventTestBase : public ViewEventTestBase {
     // On desktop Linux, the bookmark bar context menu blocks on retrieving the
     // clipboard selection from the X server (for the 'paste' item), so mock it
     // out.
-    ui::Clipboard::SetClipboardForCurrentThread(
-        std::make_unique<ui::TestClipboard>());
+    ui::TestClipboard::CreateForCurrentThread();
     GetWidget()->Activate();
 #endif
   }

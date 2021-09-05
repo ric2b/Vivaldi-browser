@@ -43,7 +43,7 @@ class NoteAttachment {
   DISALLOW_COPY_AND_ASSIGN(NoteAttachment);
 };
 
-typedef std::unordered_map<std::string, NoteAttachment> NoteAttachments;
+typedef std::map<std::string, NoteAttachment> NoteAttachments;
 
 }  // namespace vivaldi
 

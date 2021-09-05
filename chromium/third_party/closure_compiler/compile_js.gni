@@ -60,16 +60,13 @@ template("js_library") {
                              "testonly",
                              "visibility",
                            ])
+    inputs = [ "$script_path/compiler.py" ]
     output_file = "$target_gen_dir/$target_name.js_library"
-    outputs = [
-      output_file,
-    ]
+    outputs = [ output_file ]
     args = [ "--output" ] + [ rebase_path(output_file, root_build_dir) ]
 
     if (!defined(sources)) {
-      sources = [
-        target_name + ".js",
-      ]
+      sources = [ target_name + ".js" ]
     }
 
     args += [ "--sources" ] + rebase_path(sources, root_build_dir)
@@ -161,10 +158,11 @@ template("js_binary") {
                              "deps",
                              "externs_list",
                              "extra_deps",
-                             "outputs",
                              "is_polymer3",
+                             "outputs",
                              "sources",
                              "testonly",
+                             "uses_js_modules",
                            ])
     args = [
       "--compiler",
@@ -172,16 +170,12 @@ template("js_binary") {
     ]
 
     if (!defined(outputs)) {
-      outputs = [
-        "$target_gen_dir/$target_name.js",
-      ]
+      outputs = [ "$target_gen_dir/$target_name.js" ]
     }
     args += [ "--output" ] + rebase_path(outputs, root_build_dir)
 
     if (!defined(sources)) {
-      sources = [
-        "$target_name.js",
-      ]
+      sources = [ "$target_name.js" ]
     }
 
     if (defined(deps)) {
@@ -224,6 +218,8 @@ template("js_binary") {
     }
     if (is_polymer3) {
       closure_flags += polymer3_args
+    } else if (defined(uses_js_modules) && uses_js_modules) {
+      closure_flags += js_modules_args
     }
 
     args += [ "--flags" ] + closure_flags
@@ -270,6 +266,7 @@ template("js_type_check") {
                                "deps",
                                "is_polymer3",
                                "testonly",
+                               "uses_js_modules",
                              ])
     }
   } else {

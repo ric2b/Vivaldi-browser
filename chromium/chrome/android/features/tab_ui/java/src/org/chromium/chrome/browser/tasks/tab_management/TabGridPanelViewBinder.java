@@ -28,22 +28,22 @@ import static org.chromium.chrome.browser.tasks.tab_management.TabGridPanelPrope
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridPanelProperties.TITLE_TEXT_WATCHER;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridPanelProperties.UNGROUP_BAR_STATUS;
 
-import android.support.v7.widget.LinearLayoutManager;
-import android.support.v7.widget.RecyclerView;
 import android.view.View;
 import android.widget.FrameLayout;
 
 import androidx.annotation.Nullable;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
 import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel;
 
 /**
- * ViewBinder for TabGridSheet and TabGridDialog.
+ * ViewBinder for TabGridDialog.
  */
 class TabGridPanelViewBinder {
     /**
-     * ViewHolder class to get access to all {@link View}s inside the TabGridSheet or TabGridDialog.
+     * ViewHolder class to get access to all {@link View}s inside the TabGridDialog.
      */
     public static class ViewHolder {
         public final TabGroupUiToolbarView toolbarView;

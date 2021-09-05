@@ -39,11 +39,12 @@
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/dom/events/event_listener.h"
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
-#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
+#include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
 namespace blink {
 
+struct BlinkTransferableMessage;
 class ExceptionState;
 class ExecutionContext;
 class PostMessageOptions;
@@ -52,7 +53,7 @@ class ScriptState;
 class CORE_EXPORT MessagePort : public EventTargetWithInlineData,
                                 public mojo::MessageReceiver,
                                 public ActiveScriptWrappable<MessagePort>,
-                                public ContextLifecycleObserver {
+                                public ExecutionContextLifecycleObserver {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(MessagePort);
 
@@ -92,15 +93,15 @@ class CORE_EXPORT MessagePort : public EventTargetWithInlineData,
 
   const AtomicString& InterfaceName() const override;
   ExecutionContext* GetExecutionContext() const override {
-    return ContextLifecycleObserver::GetExecutionContext();
+    return ExecutionContextLifecycleObserver::GetExecutionContext();
   }
   MessagePort* ToMessagePort() override { return this; }
 
   // ScriptWrappable implementation.
   bool HasPendingActivity() const final;
 
-  // ContextLifecycleObserver implementation.
-  void ContextDestroyed(ExecutionContext*) override { close(); }
+  // ExecutionContextLifecycleObserver implementation.
+  void ContextDestroyed() override { close(); }
 
   void setOnmessage(EventListener* listener) {
     SetAttributeEventListener(event_type_names::kMessage, listener);
@@ -129,21 +130,17 @@ class CORE_EXPORT MessagePort : public EventTargetWithInlineData,
   // For testing only: allows inspection of the entangled channel.
   ::MojoHandle EntangledHandleForTesting() const;
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  private:
   // mojo::MessageReceiver implementation.
   bool Accept(mojo::Message*) override;
-  void ResetMessageCount();
-  bool ShouldYieldAfterNewMessage();
+  Event* CreateMessageEvent(BlinkTransferableMessage& message);
 
   std::unique_ptr<mojo::Connector> connector_;
-  int messages_in_current_task_ = 0;
 
   bool started_ = false;
   bool closed_ = false;
-
-  base::Optional<base::TimeTicks> task_start_time_;
 
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 };

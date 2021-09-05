@@ -99,10 +99,7 @@
     "contexts": ["webui"],
     "matches": [
       "chrome://bluetooth-pairing/*",
-      // TODO(maybelle): Audit and remove chrome://settings or
-      // chrome://os-settings as appropriate
-      "chrome://os-settings/*",
-      "chrome://settings/*"
+      "chrome://os-settings/*"
     ]
   }],
   "bluetoothLowEnergy": {
@@ -118,10 +115,7 @@
     "contexts": ["webui"],
     "matches": [
       "chrome://bluetooth-pairing/*",
-      // TODO(maybelle): Audit and remove chrome://settings or
-      // chrome://os-settings as appropriate
-      "chrome://os-settings/*",
-      "chrome://settings/*"
+      "chrome://os-settings/*"
     ]
   }],
   "bluetoothSocket": {
@@ -142,19 +136,19 @@
   "clipboard.setImageData": {
     "dependencies": ["permission:clipboardWrite"]
   },
+  "crashReportPrivate": {
+    "dependencies": ["permission:crashReportPrivate"],
+    "contexts": ["blessed_extension"]
+  },
   "declarativeNetRequest": {
     "dependencies": ["permission:declarativeNetRequest"],
     "contexts": ["blessed_extension"]
   },
-  "declarativeNetRequest.getMatchedRules": {
-    "dependencies": ["permission:declarativeNetRequest"],
+  "declarativeNetRequest.onRuleMatchedDebug": {
+    "dependencies": ["permission:declarativeNetRequest", "permission:declarativeNetRequestFeedback"],
     "contexts": ["blessed_extension"],
-    "channel": "trunk"
-  },
-  "declarativeNetRequest.setActionCountAsBadgeText": {
-    "dependencies": ["permission:declarativeNetRequest"],
-    "contexts": ["blessed_extension"],
-    "channel": "trunk"
+    "channel": "beta",
+    "location": "unpacked"
   },
   "declarativeWebRequest": {
     "dependencies": ["permission:declarativeWebRequest"],
@@ -220,7 +214,6 @@
         "chrome://cast/*",
         "chrome://cellular-setup/*",
         "chrome://discards/*",
-        "chrome://extensions-frame/*",  // TODO(dbeam): still needed?
         "chrome://extensions/*",
         "chrome://home/*",
         "chrome://chrome-signin/*",
@@ -263,10 +256,6 @@
     "contexts": ["webui"],
     "matches": [
       "chrome://extensions/*",
-      "chrome://extensions-frame/*",  // TODO(dbeam): still needed?
-      // TODO(maybelle): Audit and remove chrome://settings or
-      // chrome://os-settings as appropriate
-      "chrome://os-settings/*",
       "chrome://settings/*"
     ]
   }],
@@ -315,12 +304,18 @@
     "matches": [
       "chrome://bookmarks/*",
       "chrome://extensions/*",
-      // TODO(maybelle): Audit and remove chrome://settings or
-      // chrome://os-settings as appropriate
       "chrome://os-settings/*",
       "chrome://settings/*",
       "chrome://sync-confirmation/*",
+      "chrome://tab-strip/*",
       "chrome://welcome/*"
+    ]
+  }, {
+    "channel": "stable",
+    "contexts": ["webui_untrusted"],
+    "matches": [
+      "chrome-untrusted://help-app/*",
+      "chrome-untrusted://media-app/*"
     ]
   }],
   "metricsPrivate.getIsCrashReportingEnabled": {
@@ -398,10 +393,7 @@
       "chrome://oobe/*",
       "chrome://internet-config-dialog/*",
       "chrome://internet-detail-dialog/*",
-      // TODO(maybelle): Audit and remove chrome://settings or
-      // chrome://os-settings as appropriate
-      "chrome://os-settings/*",
-      "chrome://settings/*"
+      "chrome://os-settings/*"
     ]
   }],
   "power": {
@@ -552,10 +544,7 @@
     "channel": "stable",
     "contexts": ["webui"],
     "matches": [
-      // TODO(maybelle): Audit and remove chrome://settings or
-      // chrome://os-settings as appropriate
-      "chrome://os-settings/*",
-      "chrome://settings/*"
+      "chrome://os-settings/*"
     ]
   }],
   "system.memory": {
@@ -592,10 +581,11 @@
   }, {
     "channel": "stable",
     "contexts": ["webui"],
-    "matches": [
-      "chrome://extensions/*",
-      "chrome://extensions-frame/*"  // TODO(dbeam): still needed?
-    ]
+    "matches": ["chrome://extensions/*"]
+  }, {
+    "channel": "stable",
+    "contexts": [ "webui_untrusted" ],
+    "matches": [ "chrome-untrusted://api-test/*" ]
   }],
   "types": {
     "internal": true,

@@ -73,10 +73,10 @@ Note that you must set `enable_mojo_media` first.
 `CreateCdm()` etc. It is used to request media player mojo interfaces.
 
 In the render process, each `RenderFrameImpl` has a
-`media::mojom::InterfaceFactoryPtr` which is used to request all media player
-mojo interfaces for that frame from the browser process. In the browser process,
-each `RenderFrameHostImpl` owns a `MediaInterfaceProxy`, which implements
-`media::mojom::InterfaceFactory`.
+`mojo::PendingRemote<media::mojom::InterfaceFactory>` which is used to request
+ all media player mojo interfaces for that frame from the browser process. In
+the browser process, each `RenderFrameHostImpl` owns a `MediaInterfaceProxy`,
+which implements `media::mojom::InterfaceFactory`.
 
 `MediaInterfaceProxy` is a central hub for handling media player mojo interface
 requests. By default it will forward all the requests to the
@@ -335,7 +335,7 @@ these services (e.g. to handle navigation).
 In `MediaInterfaceProxy`, when we request `media::mojom::InterfaceFactory` in
 the `MediaService` or `CdmService`, we call `GetFrameServices()` to configure
 which secure auxiliary services are exposed to the remote components over the
-separate `service_manager::mojom::InterfaceProvider`.
+separate `blink::mojom::BrowserInterfaceBroker`.
 
 Currently only the remote CDM needs secure auxiliary services. This is a list of
 currently supported services:

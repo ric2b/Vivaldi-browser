@@ -7,28 +7,29 @@
 
 #include "base/macros.h"
 #include "content/public/renderer/render_frame_observer.h"
-#include "content/shell/common/web_test.mojom.h"
+#include "content/shell/common/blink_test.mojom.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
 
 namespace content {
 
 class WebTestRenderFrameObserver : public RenderFrameObserver,
-                                   public mojom::WebTestControl {
+                                   public mojom::BlinkTestControl {
  public:
   explicit WebTestRenderFrameObserver(RenderFrame* render_frame);
   ~WebTestRenderFrameObserver() override;
 
+  WebTestRenderFrameObserver(const WebTestRenderFrameObserver&) = delete;
+  WebTestRenderFrameObserver& operator=(const WebTestRenderFrameObserver&) =
+      delete;
+
  private:
   // RenderFrameObserver implementation.
-  void ReadyToCommitNavigation(
-      blink::WebDocumentLoader* document_loader) override;
   void DidCommitProvisionalLoad(bool is_same_document_navigation,
                                 ui::PageTransition transition) override;
-  void DidFailProvisionalLoad() override;
   void OnDestruct() override;
 
-  // mojom::WebTestControl implementation.
+  // mojom::BlinkTestControl implementation.
   void CaptureDump(CaptureDumpCallback callback) override;
   void CompositeWithRaster(CompositeWithRasterCallback callback) override;
   void DumpFrameLayout(DumpFrameLayoutCallback callback) override;
@@ -36,12 +37,16 @@ class WebTestRenderFrameObserver : public RenderFrameObserver,
   void ReplicateTestConfiguration(
       mojom::ShellTestConfigurationPtr config) override;
   void SetupSecondaryRenderer() override;
-  void BindReceiver(
-      mojo::PendingAssociatedReceiver<mojom::WebTestControl> receiver);
+  void Reset() override;
+  void TestFinishedInSecondaryRenderer() override;
+  void LayoutDumpCompleted(const std::string& completed_layout_dump) override;
+  void ReplyBluetoothManualChooserEvents(
+      const std::vector<std::string>& events) override;
 
-  mojo::AssociatedReceiver<mojom::WebTestControl> receiver_{this};
-  bool focus_on_next_commit_ = false;
-  DISALLOW_COPY_AND_ASSIGN(WebTestRenderFrameObserver);
+  void BindReceiver(
+      mojo::PendingAssociatedReceiver<mojom::BlinkTestControl> receiver);
+
+  mojo::AssociatedReceiver<mojom::BlinkTestControl> receiver_{this};
 };
 
 }  // namespace content

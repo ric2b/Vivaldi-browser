@@ -9,18 +9,18 @@
 #include "mojo/public/cpp/bindings/message.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 #include "third_party/blink/renderer/bindings/core/v8/array_buffer_or_array_buffer_view.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_mojo_create_shared_buffer_result.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_mojo_discard_data_options.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_mojo_duplicate_buffer_handle_options.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_mojo_map_buffer_result.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_mojo_read_data_options.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_mojo_read_data_result.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_mojo_read_message_flags.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_mojo_read_message_result.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_mojo_write_data_options.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_mojo_write_data_result.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
-#include "third_party/blink/renderer/core/mojo/mojo_create_shared_buffer_result.h"
-#include "third_party/blink/renderer/core/mojo/mojo_discard_data_options.h"
-#include "third_party/blink/renderer/core/mojo/mojo_duplicate_buffer_handle_options.h"
-#include "third_party/blink/renderer/core/mojo/mojo_map_buffer_result.h"
-#include "third_party/blink/renderer/core/mojo/mojo_read_data_options.h"
-#include "third_party/blink/renderer/core/mojo/mojo_read_data_result.h"
-#include "third_party/blink/renderer/core/mojo/mojo_read_message_flags.h"
-#include "third_party/blink/renderer/core/mojo/mojo_read_message_result.h"
 #include "third_party/blink/renderer/core/mojo/mojo_watcher.h"
-#include "third_party/blink/renderer/core/mojo/mojo_write_data_options.h"
-#include "third_party/blink/renderer/core/mojo/mojo_write_data_result.h"
 #include "third_party/blink/renderer/core/typed_arrays/dom_array_buffer.h"
 #include "third_party/blink/renderer/core/typed_arrays/dom_array_buffer_view.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
@@ -70,11 +70,11 @@ MojoResult MojoHandle::writeMessage(
   if (buffer.IsArrayBuffer()) {
     DOMArrayBuffer* array = buffer.GetAsArrayBuffer();
     bytes = array->Data();
-    num_bytes = array->ByteLength();
+    num_bytes = array->ByteLengthAsSizeT();
   } else {
     DOMArrayBufferView* view = buffer.GetAsArrayBufferView().View();
     bytes = view->BaseAddress();
-    num_bytes = view->byteLength();
+    num_bytes = view->byteLengthAsSizeT();
   }
 
   auto message = mojo::Message(
@@ -150,22 +150,25 @@ MojoWriteDataResult* MojoHandle::writeData(
     flags |= MOJO_WRITE_DATA_FLAG_ALL_OR_NONE;
 
   const void* elements = nullptr;
-  uint32_t num_bytes = 0;
+  base::CheckedNumeric<uint32_t> checked_num_bytes;
   if (buffer.IsArrayBuffer()) {
     DOMArrayBuffer* array = buffer.GetAsArrayBuffer();
     elements = array->Data();
-    num_bytes = array->ByteLength();
+    checked_num_bytes = array->ByteLengthAsSizeT();
   } else {
     DOMArrayBufferView* view = buffer.GetAsArrayBufferView().View();
     elements = view->BaseAddress();
-    num_bytes = view->byteLength();
+    checked_num_bytes = view->byteLengthAsSizeT();
   }
 
   ::MojoWriteDataOptions options;
   options.struct_size = sizeof(options);
   options.flags = flags;
+  uint32_t num_bytes = 0;
   MojoResult result =
-      MojoWriteData(handle_.get().value(), elements, &num_bytes, &options);
+      checked_num_bytes.AssignIfValid(&num_bytes)
+          ? MojoWriteData(handle_.get().value(), elements, &num_bytes, &options)
+          : MOJO_RESULT_INVALID_ARGUMENT;
   result_dict->setResult(result);
   result_dict->setNumBytes(result == MOJO_RESULT_OK ? num_bytes : 0);
   return result_dict;
@@ -213,22 +216,26 @@ MojoReadDataResult* MojoHandle::readData(
     flags |= MOJO_READ_DATA_FLAG_PEEK;
 
   void* elements = nullptr;
-  unsigned num_bytes = 0;
+  base::CheckedNumeric<uint32_t> checked_num_bytes;
   if (buffer.IsArrayBuffer()) {
     DOMArrayBuffer* array = buffer.GetAsArrayBuffer();
     elements = array->Data();
-    num_bytes = array->ByteLength();
+    checked_num_bytes = array->ByteLengthAsSizeT();
   } else {
     DOMArrayBufferView* view = buffer.GetAsArrayBufferView().View();
     elements = view->BaseAddress();
-    num_bytes = view->byteLength();
+    checked_num_bytes = view->byteLengthAsSizeT();
   }
 
   ::MojoReadDataOptions options;
   options.struct_size = sizeof(options);
   options.flags = flags;
+
+  uint32_t num_bytes;
   MojoResult result =
-      MojoReadData(handle_.get().value(), &options, elements, &num_bytes);
+      checked_num_bytes.AssignIfValid(&num_bytes)
+          ? MojoReadData(handle_.get().value(), &options, elements, &num_bytes)
+          : MOJO_RESULT_INVALID_ARGUMENT;
   result_dict->setResult(result);
   result_dict->setNumBytes(result == MOJO_RESULT_OK ? num_bytes : 0);
   return result_dict;
@@ -242,15 +249,11 @@ MojoMapBufferResult* MojoHandle::mapBuffer(unsigned offset,
       MojoMapBuffer(handle_.get().value(), offset, num_bytes, nullptr, &data);
   result_dict->setResult(result);
   if (result == MOJO_RESULT_OK) {
-    WTF::ArrayBufferContents::DataHandle data_handle(
-        data, num_bytes,
-        [](void* buffer, size_t length, void* alloc_data) {
+    ArrayBufferContents contents(
+        data, num_bytes, [](void* buffer, size_t length, void* alloc_data) {
           MojoResult result = MojoUnmapBuffer(buffer);
           DCHECK_EQ(result, MOJO_RESULT_OK);
-        },
-        nullptr);
-    WTF::ArrayBufferContents contents(std::move(data_handle),
-                                      WTF::ArrayBufferContents::kNotShared);
+        });
     result_dict->setBuffer(DOMArrayBuffer::Create(contents));
   }
   return result_dict;

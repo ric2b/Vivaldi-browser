@@ -15,7 +15,7 @@
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/resource_load_info.mojom.h"
+#include "third_party/blink/public/mojom/loader/resource_load_info.mojom.h"
 #include "ui/events/event.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/views/controls/webview/webview.h"
@@ -40,7 +40,7 @@ ObservableWebView::ObservableWebView(content::BrowserContext* browser_context,
                                      WebDialogDelegate* delegate)
     : WebView(browser_context), delegate_(delegate) {}
 
-ObservableWebView::~ObservableWebView() {}
+ObservableWebView::~ObservableWebView() = default;
 
 void ObservableWebView::DidFinishLoad(
     content::RenderFrameHost* render_frame_host,
@@ -56,13 +56,17 @@ void ObservableWebView::DidFinishLoad(
 void ObservableWebView::ResourceLoadComplete(
     content::RenderFrameHost* render_frame_host,
     const content::GlobalRequestID& request_id,
-    const content::mojom::ResourceLoadInfo& resource_load_info) {
+    const blink::mojom::ResourceLoadInfo& resource_load_info) {
   // Only listen to the main frame.
   if (render_frame_host->GetParent())
     return;
 
   if (delegate_)
     delegate_->OnMainFrameResourceLoadComplete(resource_load_info);
+}
+
+void ObservableWebView::ResetDelegate() {
+  delegate_ = nullptr;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -81,7 +85,7 @@ WebDialogView::WebDialogView(content::BrowserContext* context,
   AddChildView(web_view_);
   set_contents_view(web_view_);
   SetLayoutManager(std::make_unique<views::FillLayout>());
-  // Pressing the ESC key will close the dialog.
+  // Pressing the Escape key will close the dialog.
   AddAccelerator(ui::Accelerator(ui::VKEY_ESCAPE, ui::EF_NONE));
 
   if (delegate_) {
@@ -117,10 +121,16 @@ bool WebDialogView::AcceleratorPressed(const ui::Accelerator& accelerator) {
   if (delegate_ && delegate_->AcceleratorPressed(accelerator))
     return true;
 
-  // Pressing ESC closes the dialog.
   DCHECK_EQ(ui::VKEY_ESCAPE, accelerator.key_code());
-  if (GetWidget())
-    GetWidget()->Close();
+  if (delegate_ && !delegate_->ShouldCloseDialogOnEscape())
+    return false;
+
+  // Pressing Escape closes the dialog.
+  if (GetWidget()) {
+    // Contents must be closed first, or the dialog will not close.
+    CloseContents(web_view_->web_contents());
+    GetWidget()->CloseWithReason(views::Widget::ClosedReason::kEscKeyPressed);
+  }
   return true;
 }
 
@@ -132,7 +142,8 @@ void WebDialogView::ViewHierarchyChanged(
 
 bool WebDialogView::CanClose() {
   // Don't close UI if |delegate_| does not allow users to close it by
-  // clicking on "x" button or pressing Esc shortcut key on hosting dialog.
+  // clicking on "x" button or pressing Escape shortcut key on hosting
+  // dialog.
   if (!delegate_->CanCloseDialog() && !close_contents_called_)
     return false;
 
@@ -268,10 +279,9 @@ std::string WebDialogView::GetDialogArgs() const {
   return std::string();
 }
 
-void WebDialogView::OnDialogShown(content::WebUI* webui,
-                                  content::RenderViewHost* render_view_host) {
+void WebDialogView::OnDialogShown(content::WebUI* webui) {
   if (delegate_)
-    delegate_->OnDialogShown(webui, render_view_host);
+    delegate_->OnDialogShown(webui);
 }
 
 void WebDialogView::OnDialogClosed(const std::string& json_retval) {
@@ -287,6 +297,8 @@ void WebDialogView::OnDialogClosed(const std::string& json_retval) {
   if (delegate_) {
     delegate_->OnDialogClosed(json_retval);
     delegate_ = nullptr;  // We will not communicate further with the delegate.
+    // Clear the copy of the delegate in |web_view_| too.
+    web_view_->ResetDelegate();
   }
 }
 
@@ -308,6 +320,12 @@ bool WebDialogView::ShouldShowDialogTitle() const {
   if (delegate_)
     return delegate_->ShouldShowDialogTitle();
   return true;
+}
+
+bool WebDialogView::ShouldCenterDialogTitleText() const {
+  if (delegate_)
+    return delegate_->ShouldCenterDialogTitleText();
+  return false;
 }
 
 bool WebDialogView::ShouldShowCloseButton() const {
@@ -379,7 +397,7 @@ void WebDialogView::AddNewContents(
 }
 
 void WebDialogView::LoadingStateChanged(content::WebContents* source,
-    bool to_different_document) {
+                                        bool to_different_document) {
   if (delegate_)
     delegate_->OnLoadingStateChanged(source);
 }
@@ -416,7 +434,8 @@ void WebDialogView::InitDialog() {
   // the comment above WebDialogUI in its header file for why.
   WebDialogUIBase::SetDelegate(web_contents, this);
 
-  web_view_->LoadInitialURL(GetDialogContentURL());
+  if (!disable_url_load_for_test_)
+    web_view_->LoadInitialURL(GetDialogContentURL());
 }
 
 }  // namespace views

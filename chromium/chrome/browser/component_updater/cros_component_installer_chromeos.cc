@@ -13,6 +13,7 @@
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/component_updater/component_installer_errors.h"
@@ -34,13 +35,13 @@ constexpr char kComponentsRootPath[] = "cros-components";
 
 // All downloadable Chrome OS components.
 const ComponentConfig kConfigs[] = {
-    {"epson-inkjet-printer-escpr", "4.0",
+    {"epson-inkjet-printer-escpr", "5.0",
      "1913a5e0a6cad30b6f03e176177e0d7ed62c5d6700a9c66da556d7c3f5d6a47e"},
-    {"cros-termina", "790.1",
+    {"cros-termina", "830.1",
      "e9d960f84f628e1f42d05de4046bb5b3154b6f1f65c08412c6af57a29aecaffb"},
-    {"rtanalytics-light", "15.0",
+    {"rtanalytics-light", "17.0",
      "69f09d33c439c2ab55bbbe24b47ab55cb3f6c0bd1f1ef46eefea3216ec925038"},
-    {"rtanalytics-full", "15.0",
+    {"rtanalytics-full", "17.0",
      "c93c3e1013c52100a20038b405ac854d69fa889f6dc4fa6f188267051e05e444"},
     {"star-cups-driver", "1.1",
      "6d24de30f671da5aee6d463d9e446cafe9ddac672800a9defe86877dcde6c466"},
@@ -204,7 +205,7 @@ CrOSComponentInstaller::CrOSComponentInstaller(
     : metadata_table_(std::move(metadata_table)),
       component_updater_(component_updater) {}
 
-CrOSComponentInstaller::~CrOSComponentInstaller() {}
+CrOSComponentInstaller::~CrOSComponentInstaller() = default;
 
 void CrOSComponentInstaller::SetDelegate(Delegate* delegate) {
   delegate_ = delegate;
@@ -242,9 +243,8 @@ bool CrOSComponentInstaller::Unload(const std::string& name) {
 }
 
 void CrOSComponentInstaller::RegisterInstalled() {
-  base::PostTaskAndReplyWithResult(
-      FROM_HERE, {base::ThreadPool(), base::MayBlock()},
-      base::BindOnce(GetInstalled),
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock()}, base::BindOnce(GetInstalled),
       base::BindOnce(&CrOSComponentInstaller::RegisterN,
                      base::Unretained(this)));
 }
@@ -336,10 +336,13 @@ void CrOSComponentInstaller::FinishInstall(const std::string& name,
                                            LoadCallback load_callback,
                                            update_client::Error error) {
   if (error != update_client::Error::NONE) {
+    Error err = Error::INSTALL_FAILURE;
+    if (error == update_client::Error::UPDATE_IN_PROGRESS) {
+      err = Error::UPDATE_IN_PROGRESS;
+    }
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE,
-        base::BindOnce(std::move(load_callback),
-                       ReportError(Error::INSTALL_FAILURE), base::FilePath()));
+        FROM_HERE, base::BindOnce(std::move(load_callback), ReportError(err),
+                                  base::FilePath()));
   } else if (!IsCompatible(name)) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,

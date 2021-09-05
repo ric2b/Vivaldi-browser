@@ -27,7 +27,6 @@
 
 #include "third_party/blink/renderer/core/dom/attribute.h"
 #include "third_party/blink/renderer/core/events/keyboard_event.h"
-#include "third_party/blink/renderer/core/events/mouse_event.h"
 #include "third_party/blink/renderer/core/html/forms/form_data.h"
 #include "third_party/blink/renderer/core/html/forms/html_form_element.h"
 #include "third_party/blink/renderer/core/html_names.h"
@@ -36,26 +35,24 @@
 
 namespace blink {
 
-using namespace html_names;
-
 HTMLButtonElement::HTMLButtonElement(Document& document)
-    : HTMLFormControlElement(kButtonTag, document),
+    : HTMLFormControlElement(html_names::kButtonTag, document),
       type_(SUBMIT),
       is_activated_submit_(false) {}
 
-const AttrNameToTrustedType& HTMLButtonElement::GetCheckedAttributeTypes()
-    const {
-  DEFINE_STATIC_LOCAL(AttrNameToTrustedType, attribute_map,
-                      ({{"formaction", SpecificTrustedType::kTrustedURL}}));
-  return attribute_map;
-}
-
 void HTMLButtonElement::setType(const AtomicString& type) {
-  setAttribute(kTypeAttr, type);
+  setAttribute(html_names::kTypeAttr, type);
 }
 
-LayoutObject* HTMLButtonElement::CreateLayoutObject(const ComputedStyle&,
-                                                    LegacyLayout) {
+LayoutObject* HTMLButtonElement::CreateLayoutObject(const ComputedStyle& style,
+                                                    LegacyLayout legacy) {
+  // https://html.spec.whatwg.org/C/#button-layout
+  EDisplay display = style.Display();
+  if (display == EDisplay::kInlineGrid || display == EDisplay::kGrid ||
+      display == EDisplay::kInlineFlex || display == EDisplay::kFlex ||
+      display == EDisplay::kInlineLayoutCustom ||
+      display == EDisplay::kLayoutCustom)
+    return HTMLFormControlElement::CreateLayoutObject(style, legacy);
   return new LayoutButton(this);
 }
 
@@ -81,7 +78,7 @@ const AtomicString& HTMLButtonElement::FormControlType() const {
 
 bool HTMLButtonElement::IsPresentationAttribute(
     const QualifiedName& name) const {
-  if (name == kAlignAttr) {
+  if (name == html_names::kAlignAttr) {
     // Don't map 'align' attribute.  This matches what Firefox and IE do, but
     // not Opera.  See http://bugs.webkit.org/show_bug.cgi?id=12071
     return false;
@@ -92,10 +89,10 @@ bool HTMLButtonElement::IsPresentationAttribute(
 
 void HTMLButtonElement::ParseAttribute(
     const AttributeModificationParams& params) {
-  if (params.name == kTypeAttr) {
-    if (DeprecatedEqualIgnoringCase(params.new_value, "reset"))
+  if (params.name == html_names::kTypeAttr) {
+    if (EqualIgnoringASCIICase(params.new_value, "reset"))
       type_ = RESET;
-    else if (DeprecatedEqualIgnoringCase(params.new_value, "button"))
+    else if (EqualIgnoringASCIICase(params.new_value, "button"))
       type_ = BUTTON;
     else
       type_ = SUBMIT;
@@ -103,20 +100,13 @@ void HTMLButtonElement::ParseAttribute(
     if (formOwner() && isConnected())
       formOwner()->InvalidateDefaultButtonStyle();
   } else {
-    if (params.name == kFormactionAttr)
+    if (params.name == html_names::kFormactionAttr)
       LogUpdateAttributeIfIsolatedWorldAndInDocument("button", params);
     HTMLFormControlElement::ParseAttribute(params);
   }
 }
 
 void HTMLButtonElement::DefaultEventHandler(Event& event) {
-  DefaultEventHandlerInternal(event);
-
-  if (event.type() == event_type_names::kDOMActivate && formOwner())
-    formOwner()->DidActivateSubmitButton(this);
-}
-
-void HTMLButtonElement::DefaultEventHandlerInternal(Event& event) {
   if (event.type() == event_type_names::kDOMActivate &&
       !IsDisabledFormControl()) {
     if (Form() && type_ == SUBMIT) {
@@ -129,33 +119,8 @@ void HTMLButtonElement::DefaultEventHandlerInternal(Event& event) {
     }
   }
 
-  if (event.IsKeyboardEvent()) {
-    if (event.type() == event_type_names::kKeydown &&
-        ToKeyboardEvent(event).key() == " ") {
-      SetActive(true);
-      // No setDefaultHandled() - IE dispatches a keypress in this case.
-      return;
-    }
-    if (event.type() == event_type_names::kKeypress) {
-      switch (ToKeyboardEvent(event).charCode()) {
-        case '\r':
-          DispatchSimulatedClick(&event);
-          event.SetDefaultHandled();
-          return;
-        case ' ':
-          // Prevent scrolling down the page.
-          event.SetDefaultHandled();
-          return;
-      }
-    }
-    if (event.type() == event_type_names::kKeyup &&
-        ToKeyboardEvent(event).key() == " ") {
-      if (IsActive())
-        DispatchSimulatedClick(&event);
-      event.SetDefaultHandled();
-      return;
-    }
-  }
+  if (HandleKeyboardActivation(event))
+    return;
 
   HTMLFormControlElement::DefaultEventHandler(event);
 }
@@ -195,16 +160,20 @@ void HTMLButtonElement::AccessKeyAction(bool send_mouse_events) {
 }
 
 bool HTMLButtonElement::IsURLAttribute(const Attribute& attribute) const {
-  return attribute.GetName() == kFormactionAttr ||
+  return attribute.GetName() == html_names::kFormactionAttr ||
          HTMLFormControlElement::IsURLAttribute(attribute);
 }
 
 const AtomicString& HTMLButtonElement::Value() const {
-  return getAttribute(kValueAttr);
+  return FastGetAttribute(html_names::kValueAttr);
 }
 
 bool HTMLButtonElement::RecalcWillValidate() const {
   return type_ == SUBMIT && HTMLFormControlElement::RecalcWillValidate();
+}
+
+int HTMLButtonElement::DefaultTabIndex() const {
+  return 0;
 }
 
 bool HTMLButtonElement::IsInteractiveContent() const {
@@ -222,21 +191,10 @@ Node::InsertionNotificationRequest HTMLButtonElement::InsertedInto(
     ContainerNode& insertion_point) {
   InsertionNotificationRequest request =
       HTMLFormControlElement::InsertedInto(insertion_point);
-  LogAddElementIfIsolatedWorldAndInDocument("button", kTypeAttr,
-                                            kFormmethodAttr, kFormactionAttr);
+  LogAddElementIfIsolatedWorldAndInDocument("button", html_names::kTypeAttr,
+                                            html_names::kFormmethodAttr,
+                                            html_names::kFormactionAttr);
   return request;
-}
-
-EventDispatchHandlingState* HTMLButtonElement::PreDispatchEventHandler(
-    Event& event) {
-  if (Form() && CanBeSuccessfulSubmitButton())
-    Form()->WillActivateSubmitButton(this);
-  return nullptr;
-}
-
-void HTMLButtonElement::DidPreventDefault(const Event& event) {
-  if (auto* form = formOwner())
-    form->DidActivateSubmitButton(this);
 }
 
 }  // namespace blink

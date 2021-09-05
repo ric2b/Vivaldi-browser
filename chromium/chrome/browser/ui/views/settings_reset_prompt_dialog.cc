@@ -39,9 +39,18 @@ SettingsResetPromptDialog::SettingsResetPromptDialog(
     : browser_(nullptr), controller_(controller) {
   DCHECK(controller_);
 
-  DialogDelegate::set_button_label(
+  DialogDelegate::SetButtonLabel(
       ui::DIALOG_BUTTON_OK,
       l10n_util::GetStringUTF16(IDS_SETTINGS_RESET_PROMPT_ACCEPT_BUTTON_LABEL));
+  DialogDelegate::SetAcceptCallback(
+      base::BindOnce(&safe_browsing::SettingsResetPromptController::Accept,
+                     base::Unretained(controller_)));
+  DialogDelegate::SetCancelCallback(
+      base::BindOnce(&safe_browsing::SettingsResetPromptController::Cancel,
+                     base::Unretained(controller_)));
+  DialogDelegate::SetCloseCallback(
+      base::BindOnce(&safe_browsing::SettingsResetPromptController::Close,
+                     base::Unretained(controller_)));
 
   set_margins(ChromeLayoutProvider::Get()->GetDialogInsetsForContentType(
       views::TEXT, views::TEXT));
@@ -93,32 +102,6 @@ bool SettingsResetPromptDialog::ShouldShowCloseButton() const {
 base::string16 SettingsResetPromptDialog::GetWindowTitle() const {
   DCHECK(controller_);
   return controller_->GetWindowTitle();
-}
-
-// DialogDelegate overrides.
-
-bool SettingsResetPromptDialog::Accept() {
-  if (controller_) {
-    controller_->Accept();
-    controller_ = nullptr;
-  }
-  return true;
-}
-
-bool SettingsResetPromptDialog::Cancel() {
-  if (controller_) {
-    controller_->Cancel();
-    controller_ = nullptr;
-  }
-  return true;
-}
-
-bool SettingsResetPromptDialog::Close() {
-  if (controller_) {
-    controller_->Close();
-    controller_ = nullptr;
-  }
-  return true;
 }
 
 // View overrides.

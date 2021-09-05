@@ -42,11 +42,11 @@
 #include "ui/base/ime/init/input_method_factory.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/ui_base_features.h"
-#include "ui/base/ui_base_switches_util.h"
 #include "ui/compositor/compositor.h"
 #include "ui/compositor/compositor_switches.h"
 #include "ui/display/display.h"
 #include "ui/display/display_layout.h"
+#include "ui/display/display_transform.h"
 #include "ui/display/manager/display_configurator.h"
 #include "ui/display/manager/display_layout_store.h"
 #include "ui/display/manager/display_manager.h"
@@ -74,13 +74,16 @@ display::DisplayManager* GetDisplayManager() {
 
 void SetDisplayPropertiesOnHost(AshWindowTreeHost* ash_host,
                                 const display::Display& display) {
-  display::ManagedDisplayInfo info =
-      GetDisplayManager()->GetDisplayInfo(display.id());
+  const display::Display::Rotation effective_rotation =
+      display.panel_rotation();
   aura::WindowTreeHost* host = ash_host->AsWindowTreeHost();
-  ash_host->SetCursorConfig(display, info.GetLogicalActiveRotation());
+  ash_host->SetCursorConfig(display, effective_rotation);
   std::unique_ptr<RootWindowTransformer> transformer(
-      CreateRootWindowTransformerForDisplay(host->window(), display));
+      CreateRootWindowTransformerForDisplay(display));
   ash_host->SetRootWindowTransformer(std::move(transformer));
+
+  host->SetDisplayTransformHint(
+      display::DisplayRotationToOverlayTransform(effective_rotation));
 
   // Just moving the display requires the full redraw.
   // chrome-os-partner:33558.
@@ -494,7 +497,7 @@ void WindowTreeHostManager::OnDisplayAdded(const display::Display& display) {
         new_root_window_controller->GetStatusAreaWidget()
             ->unified_system_tray();
     if (old_tray->GetWidget()->IsVisible()) {
-      new_tray->SetVisible(true);
+      new_tray->SetVisiblePreferred(true);
       new_tray->GetWidget()->Show();
     }
 
@@ -767,7 +770,7 @@ void WindowTreeHostManager::PostDisplayConfigurationChange() {
   UpdateMouseLocationAfterDisplayChange();
 
   // Enable cursor compositing, so that cursor could be mirrored to destination
-  // displays along with other display content through reflector.
+  // displays along with other display content.
   Shell::Get()->UpdateCursorCompositingEnabled();
 }
 

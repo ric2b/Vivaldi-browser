@@ -8,8 +8,9 @@ import android.content.Context;
 import android.view.View;
 import android.view.ViewGroup;
 
+import androidx.annotation.VisibleForTesting;
+
 import org.chromium.base.UserData;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
@@ -152,11 +153,11 @@ public class SelectPopup implements HideablePopup, ViewAndroidDelegate.Container
         WebContentsAccessibilityImpl wcax =
                 WebContentsAccessibilityImpl.fromWebContents(mWebContents);
         if (DeviceFormFactor.isTablet() && !multiple && !wcax.isTouchExplorationEnabled()) {
-            mPopupView = new SelectPopupDropdown(this, context, anchorView, popupItems,
-                    selectedIndices, rightAligned, mWebContents);
+            mPopupView = new SelectPopupDropdown(context, this::selectMenuItems, anchorView,
+                    popupItems, selectedIndices, rightAligned, mWebContents);
         } else {
-            mPopupView =
-                    new SelectPopupDialog(this, context, popupItems, multiple, selectedIndices);
+            mPopupView = new SelectPopupDialog(
+                    context, this::selectMenuItems, popupItems, multiple, selectedIndices);
         }
         mNativeSelectPopupSourceFrame = nativeSelectPopupSourceFrame;
         mPopupView.show();

@@ -4,16 +4,20 @@
 
 package org.chromium.chrome.browser.tab;
 
+import android.os.Handler;
 import android.view.View;
 
 import androidx.annotation.IntDef;
+import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationState;
 import org.chromium.base.ApplicationStatus;
+import org.chromium.base.Callback;
+import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
+import org.chromium.base.ObserverList;
 import org.chromium.base.ObserverList.RewindableIterator;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.SwipeRefreshHandler;
@@ -25,6 +29,7 @@ import org.chromium.chrome.browser.policy.PolicyAuditor.AuditEvent;
 import org.chromium.chrome.browser.policy.PolicyAuditorJni;
 import org.chromium.content_public.browser.NavigationHandle;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.content_public.browser.WebContentsAccessibility;
 import org.chromium.content_public.browser.WebContentsObserver;
 
 import java.lang.annotation.Retention;
@@ -67,14 +72,18 @@ public class TabWebContentsObserver extends TabWebContentsUserData {
         int NUM_ENTRIES = 6;
     }
 
-    private final Tab mTab;
+    private final TabImpl mTab;
+    private final ObserverList<Callback<WebContents>> mInitObservers = new ObserverList<>();
+    private final Handler mHandler = new Handler();
     private WebContentsObserver mObserver;
 
-    public static void from(Tab tab) {
+    public static TabWebContentsObserver from(Tab tab) {
         TabWebContentsObserver observer = get(tab);
         if (observer == null) {
-            tab.getUserDataHost().setUserData(USER_DATA_KEY, new TabWebContentsObserver(tab));
+            observer = new TabWebContentsObserver(tab);
+            tab.getUserDataHost().setUserData(USER_DATA_KEY, observer);
         }
+        return observer;
     }
 
     @VisibleForTesting
@@ -84,18 +93,51 @@ public class TabWebContentsObserver extends TabWebContentsUserData {
 
     private TabWebContentsObserver(Tab tab) {
         super(tab);
-        mTab = tab;
+        mTab = (TabImpl) tab;
+    }
+
+    /**
+     * Adds an observer triggered when |initWebContents| is invoked.
+     * <p>A newly created tab adding this observer misses the event because
+     * |TabObserver.onContentChanged| -&gt; |TabWebContentsObserver.initWebContents|
+     * occurs before the observer is added. Manually trigger it here.
+     * @param observer Observer to add.
+     */
+    public void addInitWebContentsObserver(Callback<WebContents> observer) {
+        if (mInitObservers.addObserver(observer) && mTab.getWebContents() != null) {
+            observer.onResult(mTab.getWebContents());
+        }
+    }
+
+    /**
+     * Remove the InitWebContents observer from the list.
+     */
+    public void removeInitWebContentsObserver(Callback<WebContents> observer) {
+        mInitObservers.removeObserver(observer);
+    }
+
+    @Override
+    public void destroyInternal() {
+        mInitObservers.clear();
     }
 
     @Override
     public void initWebContents(WebContents webContents) {
         mObserver = new Observer(webContents);
+
+        // For browser tabs, we want to set accessibility focus to the page when it loads. This
+        // is not the default behavior for embedded web views.
+        WebContentsAccessibility.fromWebContents(webContents).setShouldFocusOnPageLoad(true);
+
+        for (Callback<WebContents> callback : mInitObservers) callback.onResult(webContents);
     }
 
     @Override
     public void cleanupWebContents(WebContents webContents) {
-        mObserver.destroy();
-        mObserver = null;
+        if (mObserver != null) {
+            mObserver.destroy();
+            mObserver = null;
+        }
     }
 
     @VisibleForTesting
@@ -181,22 +223,20 @@ public class TabWebContentsObserver extends TabWebContentsUserData {
             }
             if (isMainFrame) mTab.didFinishPageLoad(validatedUrl);
             PolicyAuditor auditor = AppHooks.get().getPolicyAuditor();
-            auditor.notifyAuditEvent(
-                    mTab.getApplicationContext(), AuditEvent.OPEN_URL_SUCCESS, validatedUrl, "");
+            auditor.notifyAuditEvent(ContextUtils.getApplicationContext(),
+                    AuditEvent.OPEN_URL_SUCCESS, validatedUrl, "");
         }
 
         @Override
-        public void didFailLoad(
-                boolean isMainFrame, int errorCode, String description, String failingUrl) {
+        public void didFailLoad(boolean isMainFrame, int errorCode, String failingUrl) {
             RewindableIterator<TabObserver> observers = mTab.getTabObservers();
             while (observers.hasNext()) {
-                observers.next().onDidFailLoad(
-                        mTab, isMainFrame, errorCode, description, failingUrl);
+                observers.next().onDidFailLoad(mTab, isMainFrame, errorCode, failingUrl);
             }
 
             if (isMainFrame) mTab.didFailPageLoad(errorCode);
 
-            recordErrorInPolicyAuditor(failingUrl, description, errorCode);
+            recordErrorInPolicyAuditor(failingUrl, "net error: " + errorCode, errorCode);
         }
 
         private void recordErrorInPolicyAuditor(
@@ -204,11 +244,11 @@ public class TabWebContentsObserver extends TabWebContentsUserData {
             assert description != null;
 
             PolicyAuditor auditor = AppHooks.get().getPolicyAuditor();
-            auditor.notifyAuditEvent(mTab.getApplicationContext(), AuditEvent.OPEN_URL_FAILURE,
-                    failingUrl, description);
+            auditor.notifyAuditEvent(ContextUtils.getApplicationContext(),
+                    AuditEvent.OPEN_URL_FAILURE, failingUrl, description);
             if (errorCode == BLOCKED_BY_ADMINISTRATOR) {
-                auditor.notifyAuditEvent(
-                        mTab.getApplicationContext(), AuditEvent.OPEN_URL_BLOCKED, failingUrl, "");
+                auditor.notifyAuditEvent(ContextUtils.getApplicationContext(),
+                        AuditEvent.OPEN_URL_BLOCKED, failingUrl, "");
             }
         }
 
@@ -273,6 +313,12 @@ public class TabWebContentsObserver extends TabWebContentsUserData {
         }
 
         @Override
+        public void loadProgressChanged(float progress) {
+            if (!mTab.isLoading()) return;
+            mTab.notifyLoadProgress(progress);
+        }
+
+        @Override
         public void didFirstVisuallyNonEmptyPaint() {
             RewindableIterator<TabObserver> observers = mTab.getTabObservers();
             while (observers.hasNext()) {
@@ -281,7 +327,7 @@ public class TabWebContentsObserver extends TabWebContentsUserData {
         }
 
         @Override
-        public void didChangeThemeColor(int color) {
+        public void didChangeThemeColor() {
             TabThemeColorHelper.get(mTab).updateIfNeeded(true);
         }
 
@@ -297,11 +343,10 @@ public class TabWebContentsObserver extends TabWebContentsUserData {
                 observers.next().onDidAttachInterstitialPage(mTab);
             }
             mTab.notifyLoadProgress(mTab.getProgress());
-            TabBrowserControlsState.updateEnabledState(mTab);
             PolicyAuditor auditor = AppHooks.get().getPolicyAuditor();
             auditor.notifyCertificateFailure(
                     PolicyAuditorJni.get().getCertificateFailure(mTab.getWebContents()),
-                    mTab.getApplicationContext());
+                    ContextUtils.getApplicationContext());
         }
 
         @Override
@@ -313,8 +358,7 @@ public class TabWebContentsObserver extends TabWebContentsUserData {
                 observers.next().onDidDetachInterstitialPage(mTab);
             }
             mTab.notifyLoadProgress(mTab.getProgress());
-            TabBrowserControlsState.updateEnabledState(mTab);
-            if (!mTab.maybeShowNativePage(mTab.getUrl(), false)) {
+            if (!mTab.maybeShowNativePage(mTab.getUrlString(), false)) {
                 mTab.showRenderedPage();
             }
         }
@@ -337,7 +381,7 @@ public class TabWebContentsObserver extends TabWebContentsUserData {
         @Override
         public void destroy() {
             MediaCaptureNotificationService.updateMediaNotificationForTab(
-                    mTab.getApplicationContext(), mTab.getId(), null, mTab.getUrl());
+                    ContextUtils.getApplicationContext(), mTab.getId(), null, mTab.getUrlString());
             super.destroy();
         }
     }

@@ -78,7 +78,7 @@ bool ProofSourceChromium::GetProofInner(
     const string& hostname,
     const string& server_config,
     quic::QuicTransportVersion quic_version,
-    quic::QuicStringPiece chlo_hash,
+    quiche::QuicheStringPiece chlo_hash,
     quic::QuicReferenceCountedPointer<quic::ProofSource::Chain>* out_chain,
     quic::QuicCryptoProof* proof) {
   DCHECK(proof != nullptr);
@@ -133,7 +133,7 @@ void ProofSourceChromium::GetProof(const quic::QuicSocketAddress& server_addr,
                                    const std::string& hostname,
                                    const std::string& server_config,
                                    quic::QuicTransportVersion quic_version,
-                                   quic::QuicStringPiece chlo_hash,
+                                   quiche::QuicheStringPiece chlo_hash,
                                    std::unique_ptr<Callback> callback) {
   // As a transitional implementation, just call the synchronous version of
   // GetProof, then invoke the callback with the results and destroy it.
@@ -157,7 +157,7 @@ void ProofSourceChromium::ComputeTlsSignature(
     const quic::QuicSocketAddress& server_address,
     const std::string& hostname,
     uint16_t signature_algorithm,
-    quic::QuicStringPiece in,
+    quiche::QuicheStringPiece in,
     std::unique_ptr<SignatureCallback> callback) {
   crypto::OpenSSLErrStackTracer err_tracer(FROM_HERE);
   bssl::ScopedEVP_MD_CTX sign_context;
@@ -173,19 +173,19 @@ void ProofSourceChromium::ComputeTlsSignature(
                             reinterpret_cast<const uint8_t*>(in.data()),
                             in.size()) ||
       !EVP_DigestSignFinal(sign_context.get(), nullptr, &siglen)) {
-    callback->Run(false, sig);
+    callback->Run(false, sig, nullptr);
     return;
   }
   sig.resize(siglen);
   if (!EVP_DigestSignFinal(
           sign_context.get(),
           reinterpret_cast<uint8_t*>(const_cast<char*>(sig.data())), &siglen)) {
-    callback->Run(false, sig);
+    callback->Run(false, sig, nullptr);
     return;
   }
   sig.resize(siglen);
 
-  callback->Run(true, sig);
+  callback->Run(true, sig, nullptr);
 }
 
 }  // namespace net

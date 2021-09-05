@@ -74,6 +74,12 @@ interface SpellCheckHost {
   [EnableIf=USE_BROWSER_SPELLCHECKER, Sync]
   FillSuggestionList(mojo_base.mojom.String16 word) =>
       (array<mojo_base.mojom.String16> suggestions);
+
+  // Returns a list of suggestions for each spellcheck language for a given word
+  // with a platform-specific spell checker.
+  [EnableIf=USE_WIN_HYBRID_SPELLCHECKER, Sync]
+  GetPerLanguageSuggestions(mojo_base.mojom.String16 word) =>
+      (array<array<mojo_base.mojom.String16>> suggestions);
 };
 
 enum Decoration {

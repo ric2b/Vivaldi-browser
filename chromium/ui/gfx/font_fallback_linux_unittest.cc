@@ -4,6 +4,7 @@
 
 #include "ui/gfx/font_fallback_linux.h"
 
+#include "base/files/file_path.h"
 #include "base/strings/utf_string_conversions.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/font.h"
@@ -28,14 +29,11 @@ class FontFallbackLinuxTest : public testing::Test {
 // for the PUA character 0xf6db. This test ensures we're not returning Type 1
 // fonts as fallback.
 TEST_F(FontFallbackLinuxTest, NoType1InFallbackFonts) {
-  FallbackFontData font_fallback_data =
-      GetFallbackFontForChar(0xf6db, std::string());
-  if (font_fallback_data.filename.length() >= 3u) {
-    std::string extension = font_fallback_data.filename.substr(
-        font_fallback_data.filename.length() - 3);
-    EXPECT_NE(extension, "pfb");
-  } else {
-    EXPECT_EQ(font_fallback_data.filename.length(), 0u);
+  FallbackFontData font_fallback_data;
+  if (GetFallbackFontForChar(0xf6db, std::string(), &font_fallback_data)) {
+    std::string extension = font_fallback_data.filepath.Extension();
+    if (!extension.empty())
+      EXPECT_NE(extension, ".pfb");
   }
 }
 

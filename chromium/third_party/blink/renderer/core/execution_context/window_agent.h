@@ -13,8 +13,6 @@ class Isolate;
 
 namespace blink {
 
-class MutationObserverNotifier;
-
 // This corresponds to similar-origin window agent, that is shared by a group
 // of Documents that are mutually reachable and have the same-site origins.
 // https://html.spec.whatwg.org/C#similar-origin-window-agent
@@ -29,26 +27,18 @@ class WindowAgent final : public Agent {
   //
   // This constructor creates a unique agent that won't be shared with any
   // other frames. Use this constructor only if:
-  //   - You want your agent NOT shared with other (possibly same-site) frames
-  //     (i.e. document-access feature policy is disabled), or
   //   - An appropriate instance of WindowAgentFactory is not available
   //     (this should only happen in tests).
   explicit WindowAgent(v8::Isolate* isolate);
 
   ~WindowAgent() override;
 
-  void Trace(blink::Visitor*) override;
-
-  MutationObserverNotifier& GetMutationObserverNotifier() {
-    return *mutation_observer_notifier_;
-  }
+  void Trace(Visitor*) override;
 
  private:
-  // For MutationObserver.
-  Member<MutationObserverNotifier> mutation_observer_notifier_;
-
-  // TODO(tzik): Move per-agent data here with the correct granularity.
-  // E.g. CustomElementReactionStack should move here.
+  // TODO(keishi): Move per-agent data here with the correct granularity.
+  // E.g. ActiveMutationObservers and CustomElementReactionStack should move
+  // here.
 };
 
 }  // namespace blink

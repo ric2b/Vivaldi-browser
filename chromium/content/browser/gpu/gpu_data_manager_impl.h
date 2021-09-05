@@ -23,12 +23,14 @@
 #include "build/build_config.h"
 #include "content/public/browser/gpu_data_manager.h"
 #include "content/public/common/three_d_api_types.h"
+#include "gpu/config/device_perf_info.h"
 #include "gpu/config/gpu_control_list.h"
 #include "gpu/config/gpu_domain_guilt.h"
 #include "gpu/config/gpu_extra_info.h"
 #include "gpu/config/gpu_feature_info.h"
 #include "gpu/config/gpu_info.h"
 #include "gpu/config/gpu_mode.h"
+#include "ui/display/display_observer.h"
 
 class GURL;
 
@@ -40,14 +42,19 @@ namespace content {
 
 class GpuDataManagerImplPrivate;
 
-class CONTENT_EXPORT GpuDataManagerImpl : public GpuDataManager {
+class CONTENT_EXPORT GpuDataManagerImpl : public GpuDataManager,
+                                          public display::DisplayObserver {
  public:
   // Getter for the singleton. This will return NULL on failure.
   static GpuDataManagerImpl* GetInstance();
 
+  // This returns true after the first call of GetInstance().
+  static bool Initialized();
+
   // GpuDataManager implementation.
   void BlacklistWebGLForTesting() override;
   gpu::GPUInfo GetGPUInfo() override;
+  gpu::GpuFeatureStatus GetFeatureStatus(gpu::GpuFeatureType feature) override;
   bool GpuAccessAllowed(std::string* reason) override;
   void RequestDxdiagDx12VulkanGpuInfoIfNeeded(GpuInfoRequest request,
                                               bool delayed) override;
@@ -70,7 +77,6 @@ class CONTENT_EXPORT GpuDataManagerImpl : public GpuDataManager {
 
   bool IsDx12VulkanVersionAvailable() const;
   bool IsGpuFeatureInfoAvailable() const;
-  gpu::GpuFeatureStatus GetFeatureStatus(gpu::GpuFeatureType feature) const;
 
   void UpdateGpuInfo(
       const gpu::GPUInfo& gpu_info,
@@ -79,9 +85,14 @@ class CONTENT_EXPORT GpuDataManagerImpl : public GpuDataManager {
   void UpdateDxDiagNode(const gpu::DxDiagNode& dx_diagnostics);
   void UpdateDx12VulkanInfo(
       const gpu::Dx12VulkanVersionInfo& dx12_vulkan_version_info);
+  void UpdateDevicePerfInfo(const gpu::DevicePerfInfo& device_perf_info);
+  void UpdateOverlayInfo(const gpu::OverlayInfo& overlay_info);
   void UpdateDxDiagNodeRequestStatus(bool request_continues);
   void UpdateDx12VulkanRequestStatus(bool request_continues);
   bool Dx12VulkanRequested() const;
+  // Called from BrowserMainLoop::BrowserThreadsStarted().
+  void OnBrowserThreadsStarted();
+  void TerminateInfoCollectionGpuProcess();
 #endif
   // Update the GPU feature info. This updates the blacklist and enabled status
   // of GPU rasterization. In the future this will be used for more features.
@@ -117,7 +128,7 @@ class CONTENT_EXPORT GpuDataManagerImpl : public GpuDataManager {
   // Returns a new copy of the ListValue.
   std::unique_ptr<base::ListValue> GetLogMessages() const;
 
-  // Called when switching gpu.
+  // Called when switching GPUs.
   void HandleGpuSwitch();
 
   // Maintenance of domains requiring explicit user permission before
@@ -158,6 +169,10 @@ class CONTENT_EXPORT GpuDataManagerImpl : public GpuDataManager {
   // State tracking allows us to customize GPU process launch depending on
   // whether we are in the foreground or background.
   void SetApplicationVisible(bool is_visible);
+
+  // DisplayObserver overrides.
+  void OnDisplayAdded(const display::Display& new_display) override;
+  void OnDisplayRemoved(const display::Display& old_display) override;
 
  private:
   friend class GpuDataManagerImplPrivate;

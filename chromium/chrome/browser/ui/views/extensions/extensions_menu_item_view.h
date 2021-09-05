@@ -8,7 +8,6 @@
 #include <memory>
 
 #include "ui/views/controls/button/button.h"
-#include "ui/views/controls/button/menu_button_listener.h"
 #include "ui/views/view.h"
 
 class Browser;
@@ -26,10 +25,10 @@ class ImageButton;
 // a button to pin the extension to the toolbar and a button for accessing the
 // associated context menu.
 class ExtensionsMenuItemView : public views::View,
-                               public views::ButtonListener,
-                               public views::MenuButtonListener {
+                               public views::ButtonListener {
  public:
-  static constexpr int kSecondaryIconSizeDp = 16;
+  static constexpr int kMenuItemHeightDp = 40;
+  static constexpr const char kClassName[] = "ExtensionsMenuItemView";
 
   ExtensionsMenuItemView(
       Browser* browser,
@@ -39,10 +38,9 @@ class ExtensionsMenuItemView : public views::View,
   // views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
-  // views::MenuButtonListener:
-  void OnMenuButtonClicked(views::Button* source,
-                           const gfx::Point& point,
-                           const ui::Event* event) override;
+  // views::View:
+  const char* GetClassName() const override;
+  void OnThemeChanged() override;
 
   void UpdatePinButton();
 
@@ -50,7 +48,16 @@ class ExtensionsMenuItemView : public views::View,
 
   bool IsPinned();
 
+  ToolbarActionViewController* view_controller() { return controller_.get(); }
+  const ToolbarActionViewController* view_controller() const {
+    return controller_.get();
+  }
+
   ExtensionsMenuButton* primary_action_button_for_testing();
+  views::ImageButton* context_menu_button_for_testing() {
+    return context_menu_button_;
+  }
+  views::ImageButton* pin_button_for_testing() { return pin_button_; }
 
  private:
   ExtensionsMenuButton* const primary_action_button_;

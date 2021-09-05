@@ -8,6 +8,8 @@ import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 
+import androidx.annotation.VisibleForTesting;
+
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
@@ -27,8 +29,6 @@ public class AwMetricsServiceClient {
     // reporting. See https://developer.android.com/reference/android/webkit/WebView.html
     private static final String OPT_OUT_META_DATA_STR = "android.webkit.WebView.MetricsOptOut";
 
-    private static final String PLAY_STORE_PACKAGE_NAME = "com.android.vending";
-
     private static boolean isAppOptedOut(Context ctx) {
         try {
             ApplicationInfo info = ctx.getPackageManager().getApplicationInfo(
@@ -47,23 +47,19 @@ public class AwMetricsServiceClient {
         }
     }
 
-    private static boolean shouldRecordPackageName(Context ctx) {
-        // Only record if it's a system app or it was installed from Play Store.
-        String packageName = ctx.getPackageName();
-        String installerPackageName = ctx.getPackageManager().getInstallerPackageName(packageName);
-        return (ctx.getApplicationInfo().flags & ApplicationInfo.FLAG_SYSTEM) != 0
-                || (PLAY_STORE_PACKAGE_NAME.equals(installerPackageName));
-    }
-
     public static void setConsentSetting(Context ctx, boolean userConsent) {
         ThreadUtils.assertOnUiThread();
         AwMetricsServiceClientJni.get().setHaveMetricsConsent(userConsent, !isAppOptedOut(ctx));
     }
 
-    @CalledByNative
-    private static String getAppPackageName() {
-        Context ctx = ContextUtils.getApplicationContext();
-        return shouldRecordPackageName(ctx) ? ctx.getPackageName() : null;
+    @VisibleForTesting
+    public static void setFastStartupForTesting(boolean fastStartupForTesting) {
+        AwMetricsServiceClientJni.get().setFastStartupForTesting(fastStartupForTesting);
+    }
+
+    @VisibleForTesting
+    public static void setUploadIntervalForTesting(long uploadIntervalMs) {
+        AwMetricsServiceClientJni.get().setUploadIntervalForTesting(uploadIntervalMs);
     }
 
     /**
@@ -91,5 +87,7 @@ public class AwMetricsServiceClient {
     @NativeMethods
     interface Natives {
         void setHaveMetricsConsent(boolean userConsent, boolean appConsent);
+        void setFastStartupForTesting(boolean fastStartupForTesting);
+        void setUploadIntervalForTesting(long uploadIntervalMs);
     }
 }

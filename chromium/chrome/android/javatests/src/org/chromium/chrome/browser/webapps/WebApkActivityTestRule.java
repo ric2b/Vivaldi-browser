@@ -8,6 +8,8 @@ import android.content.Intent;
 import android.support.test.InstrumentationRegistry;
 
 import org.junit.Assert;
+import org.junit.runner.Description;
+import org.junit.runners.model.Statement;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.test.util.ScalableTimeout;
@@ -18,25 +20,40 @@ import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.webapk.lib.common.WebApkConstants;
 
-/** Custom {@link ChromeActivityTestRule} for tests using {@link WebApkActivity}. */
-public class WebApkActivityTestRule extends ChromeActivityTestRule<WebApkActivity> {
+/** Custom {@link ChromeActivityTestRule} for tests using a WebAPK {@link WebappActivity}. */
+public class WebApkActivityTestRule extends ChromeActivityTestRule<WebappActivity> {
     /** Time in milliseconds to wait for page to be loaded. */
     private static final long STARTUP_TIMEOUT = ScalableTimeout.scaleTimeout(10000);
 
     public WebApkActivityTestRule() {
-        super(WebApkActivity.class);
+        super(WebappActivity.class);
+    }
+
+    @Override
+    public Statement apply(final Statement base, Description description) {
+        Statement webApkUpdateManagerStatement = new Statement() {
+            @Override
+            public void evaluate() throws Throwable {
+                WebApkUpdateManager.setUpdatesEnabledForTesting(false);
+
+                base.evaluate();
+
+                WebApkUpdateManager.setUpdatesEnabledForTesting(true);
+            }
+        };
+        return super.apply(webApkUpdateManagerStatement, description);
     }
 
     /**
-     * Launches WebApkActivity and waits for the page to have finished loading and for the splash
+     * Launches a WebAPK Activity and waits for the page to have finished loading and for the splash
      * screen to be hidden.
      */
-    public WebApkActivity startWebApkActivity(WebApkInfo webApkInfo) {
+    public WebappActivity startWebApkActivity(WebApkInfo webApkInfo) {
         Intent intent = createIntent(webApkInfo);
 
         WebappActivity.addWebappInfo(webApkInfo.id(), webApkInfo);
-        final WebApkActivity webApkActivity =
-                (WebApkActivity) InstrumentationRegistry.getInstrumentation().startActivitySync(
+        final WebappActivity webApkActivity =
+                (WebappActivity) InstrumentationRegistry.getInstrumentation().startActivitySync(
                         intent);
         setActivity(webApkActivity);
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();

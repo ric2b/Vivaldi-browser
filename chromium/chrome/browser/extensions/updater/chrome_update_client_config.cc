@@ -47,7 +47,7 @@ class ExtensionActivityDataService final
     : public update_client::ActivityDataService {
  public:
   explicit ExtensionActivityDataService(ExtensionPrefs* extension_prefs);
-  ~ExtensionActivityDataService() override {}
+  ~ExtensionActivityDataService() override = default;
 
   // update_client::ActivityDataService:
   bool GetActiveBit(const std::string& id) const override;
@@ -236,25 +236,12 @@ bool ChromeUpdateClientConfig::IsPerUserInstall() const {
   return component_updater::IsPerUserInstall();
 }
 
-std::vector<uint8_t> ChromeUpdateClientConfig::GetRunActionKeyHash() const {
-  return impl_.GetRunActionKeyHash();
-}
-
-std::string ChromeUpdateClientConfig::GetAppGuid() const {
-  return impl_.GetAppGuid();
-}
-
 std::unique_ptr<update_client::ProtocolHandlerFactory>
 ChromeUpdateClientConfig::GetProtocolHandlerFactory() const {
   return impl_.GetProtocolHandlerFactory();
 }
 
-update_client::RecoveryCRXElevator
-ChromeUpdateClientConfig::GetRecoveryCRXElevator() const {
-  return impl_.GetRecoveryCRXElevator();
-}
-
-ChromeUpdateClientConfig::~ChromeUpdateClientConfig() {}
+ChromeUpdateClientConfig::~ChromeUpdateClientConfig() = default;
 
 // static
 scoped_refptr<ChromeUpdateClientConfig> ChromeUpdateClientConfig::Create(

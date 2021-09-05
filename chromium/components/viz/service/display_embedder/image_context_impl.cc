@@ -42,22 +42,32 @@ ImageContextImpl::ImageContextImpl(RenderPassId render_pass_id,
       render_pass_id_(render_pass_id),
       mipmap_(mipmap ? GrMipMapped::kYes : GrMipMapped::kNo) {}
 
-void ImageContextImpl::OnContextLost() {
-  if (representation_) {
-    representation_->OnContextLost();
-    representation_ = nullptr;
-  }
-}
-
 ImageContextImpl::~ImageContextImpl() {
-  DCHECK(!representation_scoped_read_access_);
-
   if (fallback_context_state_)
     gpu::DeleteGrBackendTexture(fallback_context_state_, &fallback_texture_);
 }
 
+void ImageContextImpl::OnContextLost() {
+  if (representation_) {
+    representation_->OnContextLost();
+    representation_scoped_read_access_.reset();
+    representation_.reset();
+  }
+
+  if (fallback_context_state_) {
+    fallback_context_state_ = nullptr;
+    fallback_texture_ = {};
+  }
+}
+
 void ImageContextImpl::CreateFallbackImage(
     gpu::SharedContextState* context_state) {
+  // We can't allocate a fallback texture as the original texture was externally
+  // allocated. Skia will skip drawing a null SkPromiseImageTexture, do nothing
+  // and leave it null.
+  if (backend_format().textureType() == GrTextureType::kExternal)
+    return;
+
   DCHECK(!fallback_context_state_);
   fallback_context_state_ = context_state;
 
@@ -72,6 +82,7 @@ void ImageContextImpl::CreateFallbackImage(
           GrMipMapped::kNo, GrRenderable::kYes);
 
   if (!fallback_texture_.isValid()) {
+    fallback_context_state_ = nullptr;
     DLOG(ERROR) << "Could not create backend texture.";
     return;
   }
@@ -178,10 +189,9 @@ bool ImageContextImpl::BeginAccessIfNecessaryForSharedImage(
     representation_ = std::move(representation);
   }
 
-  representation_scoped_read_access_.emplace(representation_.get(),
-                                             begin_semaphores, end_semaphores);
-  if (!representation_scoped_read_access_->success()) {
-    representation_scoped_read_access_.reset();
+  representation_scoped_read_access_ =
+      representation_->BeginScopedReadAccess(begin_semaphores, end_semaphores);
+  if (!representation_scoped_read_access_) {
     representation_ = nullptr;
     DLOG(ERROR) << "Failed to fulfill the promise texture - SharedImage "
                    "begin read access failed..";
@@ -231,6 +241,12 @@ bool ImageContextImpl::BindOrCopyTextureIfNecessary(
 void ImageContextImpl::EndAccessIfNecessary() {
   if (!representation_scoped_read_access_)
     return;
+
+  // Avoid unnecessary read access churn for representations that
+  // support multiple readers.
+  if (representation_->SupportsMultipleConcurrentReadAccess())
+    return;
+
   representation_scoped_read_access_.reset();
   promise_image_texture_ = nullptr;
 }

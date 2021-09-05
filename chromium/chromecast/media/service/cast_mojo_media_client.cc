@@ -4,7 +4,7 @@
 
 #include "chromecast/media/service/cast_mojo_media_client.h"
 
-#include "chromecast/media/cma/backend/cma_backend_factory.h"
+#include "chromecast/media/api/cma_backend_factory.h"
 #include "chromecast/media/service/cast_renderer.h"
 #include "chromecast/public/media/media_pipeline_backend.h"
 #include "media/base/cdm_factory.h"
@@ -18,40 +18,33 @@ CastMojoMediaClient::CastMojoMediaClient(
     CmaBackendFactory* backend_factory,
     const CreateCdmFactoryCB& create_cdm_factory_cb,
     VideoModeSwitcher* video_mode_switcher,
-    VideoResolutionPolicy* video_resolution_policy,
-    MediaResourceTracker* media_resource_tracker)
-    : connector_(nullptr),
-      backend_factory_(backend_factory),
+    VideoResolutionPolicy* video_resolution_policy)
+    : backend_factory_(backend_factory),
       create_cdm_factory_cb_(create_cdm_factory_cb),
       video_mode_switcher_(video_mode_switcher),
-      video_resolution_policy_(video_resolution_policy),
-      media_resource_tracker_(media_resource_tracker) {
+      video_resolution_policy_(video_resolution_policy) {
   DCHECK(backend_factory_);
 }
 
-CastMojoMediaClient::~CastMojoMediaClient() {}
-
-void CastMojoMediaClient::Initialize(service_manager::Connector* connector) {
-  DCHECK(!connector_);
-  DCHECK(connector);
-  connector_ = connector;
-}
+CastMojoMediaClient::~CastMojoMediaClient() = default;
 
 #if BUILDFLAG(ENABLE_CAST_RENDERER)
+void CastMojoMediaClient::SetVideoGeometrySetterService(
+    VideoGeometrySetterService* video_geometry_setter) {
+  video_geometry_setter_ = video_geometry_setter;
+}
+
 std::unique_ptr<::media::Renderer> CastMojoMediaClient::CreateCastRenderer(
     service_manager::mojom::InterfaceProvider* host_interfaces,
     scoped_refptr<base::SingleThreadTaskRunner> task_runner,
     ::media::MediaLog* /* media_log */,
-    const base::UnguessableToken& /* overlay_plane_id */) {
-  // TODO(crbug.com/925450): 1) Make a VideoGeometrySetter within
-  // CastMojoMediaClient. 2) Before return the created CastRenderer, pass the
-  // CastRenderer and the |overlay_plane_id| to VideoGeometrySetter so it can
-  // maintain a map between the CastRenderers and their associated
-  // |overlay_plane_id|s.
-  return std::make_unique<CastRenderer>(
+    const base::UnguessableToken& overlay_plane_id) {
+  DCHECK(video_geometry_setter_);
+  auto cast_renderer = std::make_unique<CastRenderer>(
       backend_factory_, task_runner, video_mode_switcher_,
-      video_resolution_policy_, media_resource_tracker_, connector_,
-      host_interfaces);
+      video_resolution_policy_, overlay_plane_id, host_interfaces);
+  cast_renderer->SetVideoGeometrySetterService(video_geometry_setter_);
+  return cast_renderer;
 }
 #endif
 
@@ -60,10 +53,13 @@ std::unique_ptr<::media::Renderer> CastMojoMediaClient::CreateRenderer(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner,
     ::media::MediaLog* /* media_log */,
     const std::string& audio_device_id) {
-  return std::make_unique<CastRenderer>(
-      backend_factory_, task_runner, video_mode_switcher_,
-      video_resolution_policy_, media_resource_tracker_, connector_,
-      host_interfaces);
+  // TODO(guohuideng): CastMojoMediaClient is used only when build flag
+  // ENABLE_CAST_RENDERER is set. We can get rid of a number of related macros
+  // And the ANALYZER_ALLOW_UNUSED below.
+  ANALYZER_ALLOW_UNUSED(video_mode_switcher_);
+  ANALYZER_ALLOW_UNUSED(video_resolution_policy_);
+  NOTREACHED();
+  return nullptr;
 }
 
 std::unique_ptr<::media::CdmFactory> CastMojoMediaClient::CreateCdmFactory(

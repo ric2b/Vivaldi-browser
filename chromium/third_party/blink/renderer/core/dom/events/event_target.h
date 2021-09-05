@@ -37,7 +37,6 @@
 #include "base/macros.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/core/core_export.h"
-#include "third_party/blink/renderer/core/dom/events/add_event_listener_options_resolved.h"
 #include "third_party/blink/renderer/core/dom/events/event_dispatch_result.h"
 #include "third_party/blink/renderer/core/dom/events/event_listener_map.h"
 #include "third_party/blink/renderer/core/event_target_names.h"
@@ -50,6 +49,7 @@
 namespace blink {
 
 class AddEventListenerOptionsOrBoolean;
+class AddEventListenerOptionsResolved;
 class DOMWindow;
 class Event;
 class EventListenerOptionsOrBoolean;
@@ -58,10 +58,10 @@ class ExecutionContext;
 class LocalDOMWindow;
 class MessagePort;
 class Node;
+class PortalHost;
 class ScriptState;
 class ServiceWorker;
 class V8EventListener;
-class PortalHost;
 
 struct FiringEventIterator {
   DISALLOW_NEW();
@@ -109,8 +109,8 @@ class CORE_EXPORT EventTargetData final
 //   file.
 // - Override EventTarget::interfaceName() and getExecutionContext(). The former
 //   will typically return EventTargetNames::YourClassName. The latter will
-//   return ContextLifecycleObserver::executionContext (if you are an
-//   ContextLifecycleObserver)
+//   return ExecutionContextLifecycleObserver::executionContext (if you are an
+//   ExecutionContextLifecycleObserver)
 //   or the document you're in.
 // - Your trace() method will need to call EventTargetWithInlineData::trace
 //   depending on the base class of your class.
@@ -173,6 +173,7 @@ class CORE_EXPORT EventTarget : public ScriptWrappable {
   bool HasEventListeners() const override;
   bool HasEventListeners(const AtomicString& event_type) const;
   bool HasCapturingEventListeners(const AtomicString& event_type);
+  bool HasJSBasedEventListeners(const AtomicString& event_type) const;
   EventListenerVector* GetEventListeners(const AtomicString& event_type);
   Vector<AtomicString> EventTypes();
 
@@ -336,6 +337,15 @@ inline bool EventTarget::HasCapturingEventListeners(
   if (!d)
     return false;
   return d->event_listener_map.ContainsCapturing(event_type);
+}
+
+inline bool EventTarget::HasJSBasedEventListeners(
+    const AtomicString& event_type) const {
+  // TODO(rogerj): We should have const version of eventTargetData.
+  if (const EventTargetData* d =
+          const_cast<EventTarget*>(this)->GetEventTargetData())
+    return d->event_listener_map.ContainsJSBasedEventListeners(event_type);
+  return false;
 }
 
 }  // namespace blink

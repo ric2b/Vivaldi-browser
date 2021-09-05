@@ -22,9 +22,10 @@
 #include "media/capture/video/video_capture_device.h"
 #include "media/capture/video/video_frame_receiver.h"
 #include "media/capture/video_capture_types.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/device/public/mojom/wake_lock.mojom.h"
-#include "services/service_manager/public/cpp/connector.h"
 
 namespace content {
 
@@ -78,8 +79,10 @@ class CONTENT_EXPORT FrameSinkVideoCaptureDevice
       base::ReadOnlySharedMemoryRegion data,
       media::mojom::VideoFrameInfoPtr info,
       const gfx::Rect& content_rect,
-      viz::mojom::FrameSinkVideoConsumerFrameCallbacksPtr callbacks) final;
+      mojo::PendingRemote<viz::mojom::FrameSinkVideoConsumerFrameCallbacks>
+          callbacks) final;
   void OnStopped() final;
+  void OnLog(const std::string& message) final;
 
   // These are called to notify when the capture target has changed or was
   // permanently lost.
@@ -99,12 +102,12 @@ class CONTENT_EXPORT FrameSinkVideoCaptureDevice
   // implementation calls CreateCapturerViaGlobalManager(), but subclasses
   // and/or tests may provide alternatives.
   virtual void CreateCapturer(
-      viz::mojom::FrameSinkVideoCapturerRequest request);
+      mojo::PendingReceiver<viz::mojom::FrameSinkVideoCapturer> receiver);
 
   // Establishes connection to FrameSinkVideoCapturer using the global
   // viz::HostFrameSinkManager.
   static void CreateCapturerViaGlobalManager(
-      viz::mojom::FrameSinkVideoCapturerRequest request);
+      mojo::PendingReceiver<viz::mojom::FrameSinkVideoCapturer> receiver);
 
  private:
   using BufferId = decltype(media::VideoCaptureDevice::Client::Buffer::id);
@@ -124,7 +127,7 @@ class CONTENT_EXPORT FrameSinkVideoCaptureDevice
 
   // Helper that requests wake lock to prevent the display from sleeping while
   // capturing is going on.
-  void RequestWakeLock(std::unique_ptr<service_manager::Connector> connector);
+  void RequestWakeLock();
 
   // Current capture target. This is cached to resolve a race where
   // OnTargetChanged() can be called before the |capturer_| is created in
@@ -145,12 +148,12 @@ class CONTENT_EXPORT FrameSinkVideoCaptureDevice
 
   std::unique_ptr<viz::ClientFrameSinkVideoCapturer> capturer_;
 
-  // A vector that holds the "callbacks" mojo InterfacePtr for each frame while
-  // the frame is being processed by VideoFrameReceiver. The index corresponding
-  // to a particular frame is used as the BufferId passed to VideoFrameReceiver.
+  // A vector that holds the "callbacks" mojo::Remote for each frame while the
+  // frame is being processed by VideoFrameReceiver. The index corresponding to
+  // a particular frame is used as the BufferId passed to VideoFrameReceiver.
   // Therefore, non-null pointers in this vector must never move to a different
   // position.
-  std::vector<viz::mojom::FrameSinkVideoConsumerFrameCallbacksPtr>
+  std::vector<mojo::Remote<viz::mojom::FrameSinkVideoConsumerFrameCallbacks>>
       frame_callbacks_;
 
   // Set when OnFatalError() is called. This prevents any future

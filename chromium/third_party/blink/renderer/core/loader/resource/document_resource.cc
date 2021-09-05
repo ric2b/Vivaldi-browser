@@ -34,14 +34,20 @@
 
 namespace blink {
 
-DocumentResource* DocumentResource::FetchSVGDocument(FetchParameters& params,
-                                                     ResourceFetcher* fetcher,
-                                                     ResourceClient* client) {
+DocumentResource* DocumentResource::FetchSVGDocument(
+    FetchParameters& params,
+    const Document& context_document,
+    ResourceClient* client) {
   DCHECK_EQ(params.GetResourceRequest().GetMode(),
             network::mojom::RequestMode::kSameOrigin);
   params.SetRequestContext(mojom::RequestContextType::IMAGE);
-  return ToDocumentResource(
-      fetcher->RequestResource(params, SVGDocumentResourceFactory(), client));
+  params.SetRequestDestination(network::mojom::RequestDestination::kImage);
+  auto* resource =
+      To<DocumentResource>(context_document.Fetcher()->RequestResource(
+          params, SVGDocumentResourceFactory(), client));
+  if (!resource->document_ && !resource->context_document_)
+    resource->context_document_ = const_cast<Document*>(&context_document);
+  return resource;
 }
 
 DocumentResource::DocumentResource(
@@ -56,8 +62,9 @@ DocumentResource::DocumentResource(
 
 DocumentResource::~DocumentResource() = default;
 
-void DocumentResource::Trace(blink::Visitor* visitor) {
+void DocumentResource::Trace(Visitor* visitor) {
   visitor->Trace(document_);
+  visitor->Trace(context_document_);
   Resource::Trace(visitor);
 }
 
@@ -83,7 +90,9 @@ bool DocumentResource::MimeTypeAllowed() const {
 Document* DocumentResource::CreateDocument(const KURL& url) {
   switch (GetType()) {
     case ResourceType::kSVGDocument:
-      return XMLDocument::CreateSVG(DocumentInit::Create().WithURL(url));
+      return XMLDocument::CreateSVG(
+          DocumentInit::Create().WithURL(url).WithContextDocument(
+              context_document_));
     default:
       // FIXME: We'll add more types to support HTMLImports.
       NOTREACHED();

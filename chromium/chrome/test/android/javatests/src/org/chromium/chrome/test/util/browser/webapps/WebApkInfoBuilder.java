@@ -13,6 +13,7 @@ import org.chromium.chrome.browser.webapps.WebApkInfo;
 import org.chromium.chrome.browser.webapps.WebDisplayMode;
 import org.chromium.content_public.common.ScreenOrientationValues;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 
 /** Builder class for {@link WebApkInfo} objects. */
@@ -49,7 +50,7 @@ public class WebApkInfoBuilder {
      * Builds {@link WebApkInfo} object using options that have been set.
      */
     public WebApkInfo build() {
-        return WebApkInfo.create(mUrl, mScope, null, null, null, null, null, mDisplayMode,
+        return WebApkInfo.create(mUrl, mScope, null, null, null, null, mDisplayMode,
                 ScreenOrientationValues.DEFAULT, ShortcutSource.UNKNOWN,
                 ShortcutHelper.MANIFEST_COLOR_INVALID_OR_MISSING,
                 ShortcutHelper.MANIFEST_COLOR_INVALID_OR_MISSING, Color.WHITE,
@@ -58,6 +59,6 @@ public class WebApkInfoBuilder {
                 WebApkDistributor.BROWSER,
                 new HashMap<String, String>() /* iconUrlToMurmur2HashMap */, null,
                 false /* forceNavigation */, false /* isSplashProvidedByWebApk */, null,
-                mWebApkVersionCode);
+                new ArrayList<>() /* shortcutItems */, mWebApkVersionCode);
     }
 }

@@ -109,6 +109,7 @@ PolicyBase::PolicyBase()
       policy_(nullptr),
       lowbox_sid_(nullptr),
       lockdown_default_dacl_(false),
+      add_restricting_random_sid_(false),
       enable_opm_redirection_(false),
       effective_token_(nullptr) {
   ::InitializeCriticalSection(&lock_);
@@ -180,10 +181,10 @@ ResultCode PolicyBase::SetAlternateDesktop(bool alternate_winstation) {
   return CreateAlternateDesktop(alternate_winstation);
 }
 
-base::string16 PolicyBase::GetAlternateDesktop() const {
+std::wstring PolicyBase::GetAlternateDesktop() const {
   // No alternate desktop or winstation. Return an empty string.
   if (!use_alternate_desktop_ && !use_alternate_winstation_) {
-    return base::string16();
+    return std::wstring();
   }
 
   if (use_alternate_winstation_) {
@@ -191,14 +192,14 @@ base::string16 PolicyBase::GetAlternateDesktop() const {
     // If we hit this scenario, it means that the user ignored the failure
     // during SetAlternateDesktop, so we ignore it here too.
     if (!alternate_desktop_handle_ || !alternate_winstation_handle_)
-      return base::string16();
+      return std::wstring();
 
     return GetFullDesktopName(alternate_winstation_handle_,
                               alternate_desktop_handle_);
   }
 
   if (!alternate_desktop_local_winstation_handle_)
-    return base::string16();
+    return std::wstring();
 
   return GetFullDesktopName(nullptr,
                             alternate_desktop_local_winstation_handle_);
@@ -368,8 +369,8 @@ ResultCode PolicyBase::AddDllToUnload(const wchar_t* dll_name) {
   return SBOX_ALL_OK;
 }
 
-ResultCode PolicyBase::AddKernelObjectToClose(const base::char16* handle_type,
-                                              const base::char16* handle_name) {
+ResultCode PolicyBase::AddKernelObjectToClose(const wchar_t* handle_type,
+                                              const wchar_t* handle_name) {
   return handle_closer_.AddHandle(handle_type, handle_name);
 }
 
@@ -387,6 +388,10 @@ void PolicyBase::AddHandleToShare(HANDLE handle) {
 
 void PolicyBase::SetLockdownDefaultDacl() {
   lockdown_default_dacl_ = true;
+}
+
+void PolicyBase::AddRestrictingRandomSid() {
+  add_restricting_random_sid_ = true;
 }
 
 const base::HandlesToInheritVector& PolicyBase::GetHandlesBeingShared() {
@@ -413,11 +418,16 @@ ResultCode PolicyBase::MakeJobObject(base::win::ScopedHandle* job) {
 ResultCode PolicyBase::MakeTokens(base::win::ScopedHandle* initial,
                                   base::win::ScopedHandle* lockdown,
                                   base::win::ScopedHandle* lowbox) {
+  Sid random_sid = Sid::GenerateRandomSid();
+  PSID random_sid_ptr = nullptr;
+  if (add_restricting_random_sid_)
+    random_sid_ptr = random_sid.GetPSID();
+
   // Create the 'naked' token. This will be the permanent token associated
   // with the process and therefore with any thread that is not impersonating.
-  DWORD result =
-      CreateRestrictedToken(effective_token_, lockdown_level_, integrity_level_,
-                            PRIMARY, lockdown_default_dacl_, lockdown);
+  DWORD result = CreateRestrictedToken(
+      effective_token_, lockdown_level_, integrity_level_, PRIMARY,
+      lockdown_default_dacl_, random_sid_ptr, lockdown);
   if (ERROR_SUCCESS != result)
     return SBOX_ERROR_CANNOT_CREATE_RESTRICTED_TOKEN;
 
@@ -484,9 +494,9 @@ ResultCode PolicyBase::MakeTokens(base::win::ScopedHandle* initial,
   // Create the 'better' token. We use this token as the one that the main
   // thread uses when booting up the process. It should contain most of
   // what we need (before reaching main( ))
-  result =
-      CreateRestrictedToken(effective_token_, initial_level_, integrity_level_,
-                            IMPERSONATION, lockdown_default_dacl_, initial);
+  result = CreateRestrictedToken(
+      effective_token_, initial_level_, integrity_level_, IMPERSONATION,
+      lockdown_default_dacl_, random_sid_ptr, initial);
   if (ERROR_SUCCESS != result)
     return SBOX_ERROR_CANNOT_CREATE_RESTRICTED_IMP_TOKEN;
 
@@ -497,9 +507,18 @@ PSID PolicyBase::GetLowBoxSid() const {
   return lowbox_sid_;
 }
 
+size_t PolicyBase::GetPolicyGlobalSize() const {
+  // TODO(1059129) remove when Process.Sandbox.PolicyGlobalSize expires.
+  if (policy_maker_)
+    return policy_maker_->GetPolicyGlobalSize();
+  return 0;
+}
+
 ResultCode PolicyBase::AddTarget(TargetProcess* target) {
-  if (policy_)
-    policy_maker_->Done();
+  if (policy_) {
+    if (!policy_maker_->Done())
+      return SBOX_ERROR_NO_SPACE;
+  }
 
   if (!ApplyProcessMitigationsToSuspendedProcess(target->Process(),
                                                  mitigations_)) {
@@ -578,10 +597,10 @@ ResultCode PolicyBase::SetDisconnectCsrss() {
   return SBOX_ALL_OK;
 }
 
-EvalResult PolicyBase::EvalPolicy(int service,
+EvalResult PolicyBase::EvalPolicy(IpcTag service,
                                   CountedParameterSetBase* params) {
   if (policy_) {
-    if (!policy_->entry[service]) {
+    if (!policy_->entry[static_cast<size_t>(service)]) {
       // There is no policy for this particular service. This is not a big
       // deal.
       return DENY_ACCESS;
@@ -592,7 +611,7 @@ EvalResult PolicyBase::EvalPolicy(int service,
         return SIGNAL_ALARM;
       }
     }
-    PolicyProcessor pol_evaluator(policy_->entry[service]);
+    PolicyProcessor pol_evaluator(policy_->entry[static_cast<size_t>(service)]);
     PolicyResult result =
         pol_evaluator.Evaluate(kShortEval, params->parameters, params->count);
     if (POLICY_MATCH == result)
@@ -674,13 +693,14 @@ ResultCode PolicyBase::SetupAllInterceptions(TargetProcess* target) {
   InterceptionManager manager(target, relaxed_interceptions_);
 
   if (policy_) {
-    for (int i = 0; i < IPC_LAST_TAG; i++) {
-      if (policy_->entry[i] && !dispatcher_->SetupService(&manager, i))
+    for (size_t i = 0; i < kMaxIpcTag; i++) {
+      if (policy_->entry[i] &&
+          !dispatcher_->SetupService(&manager, static_cast<IpcTag>(i)))
         return SBOX_ERROR_SETUP_INTERCEPTION_SERVICE;
     }
   }
 
-  for (const base::string16& dll : blocklisted_dlls_)
+  for (const std::wstring& dll : blocklisted_dlls_)
     manager.AddToUnloadModules(dll.c_str());
 
   if (!SetupBasicInterceptions(&manager, is_csrss_connected_))

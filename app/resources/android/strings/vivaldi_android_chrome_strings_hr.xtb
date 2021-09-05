@@ -1,16 +1,41 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="hr">
+<translation id="1169602411434249000">Blokirajte praćenje</translation>
+<translation id="1397811292916898096">Pretraživanje pomoću usluge <ph name="PRODUCT_NAME" /></translation>
+<translation id="1598449788754183301">Prebacivanje između normalnih/privatnih kartica</translation>
+<translation id="1644574205037202324">Povijest</translation>
+<translation id="17513872634828108">Otvorene kartice</translation>
+<translation id="1829244130665387512">Traži na stranici</translation>
+<translation id="2038563949887743358">Uključivanje zahtjeva za prikaz klasične web-lokacije</translation>
+<translation id="2433507940547922241">Izgled</translation>
+<translation id="2633278372998075009">Privatne kartice</translation>
 <translation id="3076631378407175873">Autorska prava <ph name="YEAR" /> Vivaldi Technologies AS. Sva prava pridržana.</translation>
+<translation id="3234355010754616171">Nova privatna kartica</translation>
+<translation id="3518985090088779359">Prihvati i nastavi</translation>
 <translation id="3700829948786686853">Dobrodošli u Vivaldi</translation>
 <translation id="4121750346708795461">Upotrebom te aplikacije prihvaćate Vivaldi <ph name="BEGIN_LINK1" />Uvjete pružanja usluge<ph name="END_LINK1" /> i <ph name="BEGIN_LINK2" />Obavijest o privatnosti<ph name="END_LINK2" />.</translation>
+<translation id="4243710787042215766">Otvori u privatnoj kartici</translation>
+<translation id="4526803704855831732">Privatne kartice</translation>
+<translation id="4883379392681899581">Izađite iz privatnog načina rada</translation>
+<translation id="4943872375798546930">Nema rezultata</translation>
 <translation id="5118676864324397542"><ph name="APP_NAME" /> pohrana</translation>
+<translation id="5233638681132016545">Nova kartica</translation>
+<translation id="5495228542153126976">Prešli ste u privatni način rada</translation>
+<translation id="572328651809341494">Nedavne kartice</translation>
 <translation id="5840488417521835756">Saznajte više o temama na web-lokacijama izravno na stranici. Značajka Dodirnite za pretraživanje Vivaldi pretraživanju šalje riječ i njezin kontekst, a vraća definicije, slike, rezultate pretraživanja i druge pojedinosti.
 
 Da biste prilagodili pojam za pretraživanje, odaberite ga tako što ćete ga dugo pritisnuti. Da biste precizirali pretraživanje, kliznite ploču prema gore do vrha i dodirnite okvir za pretraživanje.</translation>
+<translation id="6336451774241870485">Nova privatna kartica</translation>
+<translation id="6593061639179217415">Klasični prikaz</translation>
+<translation id="6610147964972079463">Zatvorite privatne kartice</translation>
 <translation id="706339621163631076">Pravila o privatnosti preglednika</translation>
 <translation id="7427132068601343474">O Vivaldi pregledniku</translation>
+<translation id="7465104139234185284">Zatvorite sve privatne kartice</translation>
 <translation id="7519434535192513364">Značajka Dodirnite za pretraživanje Vivaldi pretraživanju šalje odabranu riječ i trenutačnu stranicu kao kontekst. Možete je isključiti u <ph name="BEGIN_LINK" />Postavkama<ph name="END_LINK" />.</translation>
 <translation id="7649070708921625228">Pomoć</translation>
 <translation id="804786196054284061">Uvjeti pružanja usluge</translation>
+<translation id="8820817407110198400">Oznake</translation>
+<translation id="9063523880881406963">Isključivanje zahtjeva za prikaz klasične web-lokacije</translation>
+<translation id="9080642952018487277">Uđite u privatni način rada</translation>
 </translationbundle>

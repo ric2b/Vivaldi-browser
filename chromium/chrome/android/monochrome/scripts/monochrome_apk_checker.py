@@ -40,8 +40,9 @@ CHROME_SPECIFIC = BuildFileMatchRegex(
 # WebView specific files which are not in Monochrome.apk
 WEBVIEW_SPECIFIC = BuildFileMatchRegex(
     r'lib/.*/libwebviewchromium\.so',
+    r'lib/.*/libchromium_android_linker\.so',
     r'assets/webview_licenses.notice',
-    r'res/.*/icon_webview.webp',
+    r'res/.*/icon_webview(.webp)?',
     r'META-INF/.*',
      # Monochrome doesn't have any res directories
      # whose api level is less than v24.

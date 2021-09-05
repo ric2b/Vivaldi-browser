@@ -26,6 +26,7 @@
 <translation id="2848085334714181751">Գազան 3</translation>
 <translation id="2873951654529031587">Աղբաման</translation>
 <translation id="292258461174562431">Հրեշ 4</translation>
+<translation id="2923448633003185837">Փակցնել ու բացել</translation>
 <translation id="2977472760057091832">Բացել հղումը գաղտնի պատուհանում</translation>
 <translation id="2989805286512600854">Բացել նոր ներդիրում</translation>
 <translation id="3027988479108856431">Ցավոք՝ Ձեր Yandex-ի կարգավորումները հասանելի չեն, քանի դեռ այդ բրաուզերն աշխատում է։ Այդ կարգավորումները Vivaldi ներկրելու համար պահպանեք Ձեր գործն ու փակեք Yandex-ի բոլոր պատուհանները։ Հետո սեղմեք «Շարունակել»։</translation>
@@ -44,7 +45,6 @@
 <translation id="3542768452570884558">Բացել հղումը նոր պատուհանում</translation>
 <translation id="3588820906588687999">Բացել պատկերը նոր ներդիրում</translation>
 <translation id="3601066750251199488">Հրեշ 3</translation>
-<translation id="366643050267431920">Ավելացնել որպես իրադարձություն</translation>
 <translation id="3732157130969736834">Հղումը հավելել էջանիշերին</translation>
 <translation id="3732388226447288666">Գազան 2</translation>
 <translation id="3732439195215136813">Գազան 5</translation>
@@ -67,7 +67,6 @@
 <translation id="4636708767492582204">Ուղարկել փոստով</translation>
 <translation id="4677434526832593569">Գազան 8</translation>
 <translation id="4881695831933465202">Բացել</translation>
-<translation id="4973311370126107785">AppleScript-ի միջոցով JavaScript-ի կատարումն անջատված է։ Միացնելու համար մենյուի երիզից բացեք Գործիքներ &gt; Թույլատրել JavaScript-ն Apple Events-ից (Tools &gt; Allow JavaScript from Apple Events)։</translation>
 <translation id="5014281392052865061">Ներկրված Արագ կանչ</translation>
 <translation id="5092656712000637858">Էջը հավելել վեբ վահանակին</translation>
 <translation id="5177818338935286353">Հրեշ 7</translation>
@@ -99,6 +98,7 @@
 <translation id="7086554968911045110">Բնապատկեր 7</translation>
 <translation id="7111492742514999492">Բնապատկեր 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
+<translation id="7496505986576158197">Vivaldi-ն ստեղծվել է՝ օգտագործելով <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> բաց կոդով նախագիծն ու այլ <ph name="BEGIN_LINK_OSS" />բաց կոդով ծրագրեր<ph name="END_LINK_OSS" />։</translation>
 <translation id="7715497554424665066">Ա&amp;նտեսել թարմացումը</translation>
 <translation id="7724603315864178912">Կտրել</translation>
 <translation id="7865983598101744945">Հաստատեք ելքը</translation>

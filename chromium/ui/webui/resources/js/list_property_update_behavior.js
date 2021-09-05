@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// #import {calculateSplices} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
 /**
  * @fileoverview |ListPropertyUpdateBehavior| is used to update an existing
  * polymer list property given the list after all the edits were made while
@@ -16,7 +18,7 @@
  */
 
 /** @polymerBehavior */
-const ListPropertyUpdateBehavior = {
+/* #export */ const ListPropertyUpdateBehavior = {
   /**
    * @param {string} propertyPath
    * @param {function(!Object): string} itemUidGetter
@@ -24,8 +26,7 @@ const ListPropertyUpdateBehavior = {
    * @param {boolean} uidBasedUpdate
    * @returns {boolean} True if notifySplices was called.
    */
-  updateList: function(
-      propertyPath, itemUidGetter, updatedList, uidBasedUpdate = false) {
+  updateList(propertyPath, itemUidGetter, updatedList, uidBasedUpdate = false) {
     const list = this.get(propertyPath);
     const splices = Polymer.ArraySplice.calculateSplices(
         updatedList.map(itemUidGetter), list.map(itemUidGetter));
@@ -48,7 +49,7 @@ const ListPropertyUpdateBehavior = {
     if (!uidBasedUpdate) {
       list.forEach((item, index) => {
         const updatedItem = updatedList[index];
-        if (JSON.stringify(item) != JSON.stringify(updatedItem)) {
+        if (JSON.stringify(item) !== JSON.stringify(updatedItem)) {
           this.set([propertyPath, index], updatedItem);
           updated = true;
         }

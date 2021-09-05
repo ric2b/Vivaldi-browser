@@ -157,6 +157,17 @@ class ArcNotificationContentView::EventForwarder : public ui::EventHandler {
             "Arc.UserInteraction",
             arc::UserInteractionType::NOTIFICATION_INTERACTION);
       }
+
+      // When the ARC notification is slid out, all mouse presses and taps
+      // should go to underlying widget so the swipe control buttons can
+      // pressed. See crbug.com/965603.
+      if (owner_->slide_in_progress()) {
+        if (event->type() == ui::ET_MOUSE_RELEASED ||
+            event->type() == ui::ET_MOUSE_PRESSED)
+          widget->OnMouseEvent(event->AsMouseEvent());
+        else if (event->type() == ui::ET_GESTURE_TAP)
+          widget->OnGestureEvent(event->AsGestureEvent());
+      }
     }
 
     // If AXTree is attached to notification content view, notification surface
@@ -306,6 +317,15 @@ ArcNotificationContentView::GetControlButtonsView() {
   return floating_control_buttons_widget_ ? &control_buttons_view_ : nullptr;
 }
 
+void ArcNotificationContentView::VisibilityChanged(View* starting_from,
+                                                   bool is_visible) {
+  // Need to explicitly set visibility for control_buttons_view_ to
+  // make sure they don't capture focus when the notification is not
+  // visible due to the message center being collapsed.
+  control_buttons_view_.SetVisible(is_visible);
+  UpdateControlButtonsVisibility();
+}
+
 void ArcNotificationContentView::UpdateControlButtonsVisibility() {
   if (!control_buttons_view_.parent())
     return;
@@ -318,9 +338,10 @@ void ArcNotificationContentView::UpdateControlButtonsVisibility() {
   DCHECK(floating_control_buttons_widget_);
 
   const bool target_visibility =
-      control_buttons_view_.IsAnyButtonFocused() ||
-      (message_view_->GetMode() != message_center::MessageView::Mode::SETTING &&
-       IsMouseHovered());
+      GetVisible() && (control_buttons_view_.IsAnyButtonFocused() ||
+                       (message_view_->GetMode() !=
+                            message_center::MessageView::Mode::SETTING &&
+                        IsMouseHovered()));
 
   if (target_visibility == floating_control_buttons_widget_->IsVisible())
     return;
@@ -373,7 +394,7 @@ void ArcNotificationContentView::MaybeCreateFloatingControlButtons() {
   DCHECK(!floating_control_buttons_widget_);
 
   views::Widget::InitParams params(views::Widget::InitParams::TYPE_CONTROL);
-  params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
+  params.opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;
   params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   params.parent = surface_->GetWindow();
 
@@ -651,7 +672,7 @@ void ArcNotificationContentView::OnPaint(gfx::Canvas* canvas) {
 
   SkPath path;
   path.addRoundRect(gfx::RectToSkRect(GetLocalBounds()), radii,
-                    SkPath::kCCW_Direction);
+                    SkPathDirection::kCCW);
   canvas->ClipPath(path, false);
 
   if (!surface_ && item_ && !item_->GetSnapshot().isNull()) {

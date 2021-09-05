@@ -2,12 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {PDFScriptingAPI} from 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/pdf_scripting_api.js';
+
 // Tests common to all PDFs.
 const tests = [
   function testLayoutOptions() {
     chrome.test.assertEq(
         {
           defaultPageOrientation: 0,
+          twoUpViewEnabled: false,
         },
         viewer.viewport.getLayoutOptions());
     chrome.test.succeed();
@@ -42,7 +45,7 @@ const perLayoutTests = {
 };
 
 const scriptingAPI = new PDFScriptingAPI(window, window);
-scriptingAPI.setLoadCallback((success) => {
+scriptingAPI.setLoadCompleteCallback((success) => {
   if (success && document.title in perLayoutTests) {
     chrome.test.runTests(tests.concat(perLayoutTests[document.title]));
   } else {

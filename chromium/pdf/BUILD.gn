@@ -4,7 +4,6 @@
 
 import("//build/buildflag_header.gni")
 import("//build/config/features.gni")
-import("//build/config/jumbo.gni")
 import("//pdf/features.gni")
 import("//testing/test.gni")
 import("//third_party/pdfium/pdfium.gni")
@@ -20,12 +19,14 @@ if (enable_pdf) {
   pdf_engine = 0  # 0 PDFium
 
   config("pdf_common_config") {
+    configs = [ "//build/config/compiler:noshadowing" ]
+
     if (pdf_engine == 0) {
       include_dirs = [ "//third_party/pdfium" ]
     }
   }
 
-  jumbo_static_library("pdf") {
+  static_library("pdf") {
     configs += [ ":pdf_common_config" ]
     deps = [
       ":features",
@@ -37,9 +38,7 @@ if (enable_pdf) {
       "//ui/gfx/range",
     ]
 
-    public_deps = [
-      "//gin",
-    ]
+    public_deps = [ "//gin" ]
 
     public = [
       "pdf.h",
@@ -55,10 +54,14 @@ if (enable_pdf) {
       "document_loader.h",
       "document_loader_impl.cc",
       "document_loader_impl.h",
+      "document_metadata.cc",
+      "document_metadata.h",
       "draw_utils/coordinates.cc",
       "draw_utils/coordinates.h",
       "draw_utils/shadow.cc",
       "draw_utils/shadow.h",
+      "geometry_conversions.cc",
+      "geometry_conversions.h",
       "out_of_process_instance.cc",
       "out_of_process_instance.h",
       "page_orientation.cc",
@@ -68,11 +71,8 @@ if (enable_pdf) {
       "paint_manager.cc",
       "paint_manager.h",
       "pdf.cc",
-      "pdf.h",
-      "pdf_engine.cc",
       "pdf_engine.h",
       "pdf_ppapi.cc",
-      "pdf_ppapi.h",
       "pdf_transform.cc",
       "pdf_transform.h",
       "preview_mode_client.cc",
@@ -130,13 +130,9 @@ if (enable_pdf) {
 
   source_set("features") {
     configs += [ ":pdf_common_config" ]
-    deps = [
-      "//base",
-    ]
+    deps = [ "//base" ]
 
-    public = [
-      "pdf_features.h",
-    ]
+    public = [ "pdf_features.h" ]
 
     sources = [
       "pdf_features.cc",
@@ -154,6 +150,8 @@ if (enable_pdf) {
       "test/test_utils.cc",
       "test/test_utils.h",
     ]
+
+    configs += [ "//build/config/compiler:noshadowing" ]
 
     deps = [
       ":pdf",
@@ -188,9 +186,7 @@ if (enable_pdf) {
       "//ui/gfx/range",
     ]
 
-    data = [
-      "test/data/",
-    ]
+    data = [ "test/data/" ]
 
     if (pdf_engine == 0) {
       configs += [ "//v8:external_startup_data" ]
@@ -204,6 +200,7 @@ if (enable_pdf) {
         "pdfium/findtext_unittest.cc",
         "pdfium/pdfium_engine_exports_unittest.cc",
         "pdfium/pdfium_engine_unittest.cc",
+        "pdfium/pdfium_form_filler_unittest.cc",
         "pdfium/pdfium_page_unittest.cc",
         "pdfium/pdfium_permissions_unittest.cc",
         "pdfium/pdfium_print_unittest.cc",
@@ -212,10 +209,7 @@ if (enable_pdf) {
       ]
 
       if (v8_use_external_startup_data) {
-        data += [
-          "$root_out_dir/natives_blob.bin",
-          "$root_out_dir/snapshot_blob.bin",
-        ]
+        data += [ "$root_out_dir/snapshot_blob.bin" ]
       }
     }
   }

@@ -22,7 +22,6 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "components/feedback/feedback_report.h"
-#include "components/feedback/feedback_util.h"
 #include "components/feedback/system_logs/system_logs_fetcher.h"
 #include "components/feedback/tracing_manager.h"
 #include "extensions/browser/api/extensions_api_client.h"
@@ -31,6 +30,7 @@
 #include "extensions/browser/event_router.h"
 #include "extensions/common/api/feedback_private.h"
 #include "extensions/common/constants.h"
+#include "google_apis/gaia/gaia_auth_util.h"
 
 #if defined(OS_CHROMEOS)
 #include "extensions/browser/api/feedback_private/log_source_access_manager.h"
@@ -58,8 +58,11 @@ namespace {
 
 constexpr base::FilePath::CharType kBluetoothLogsFilePath[] =
     FILE_PATH_LITERAL("/var/log/bluetooth/log.bz2");
+constexpr base::FilePath::CharType kBluetoothLogsFilePathOld[] =
+    FILE_PATH_LITERAL("/var/log/bluetooth/log.bz2.old");
 
 constexpr char kBluetoothLogsAttachmentName[] = "bluetooth_logs.bz2";
+constexpr char kBluetoothLogsAttachmentNameOld[] = "bluetooth_logs.old.bz2";
 
 // Getting the filename of a blob prepends a "C:\fakepath" to the filename.
 // This is undesirable, strip it if it exists.
@@ -221,7 +224,7 @@ void FeedbackPrivateGetSystemInformationFunction::OnCompleted(
   SystemInformationList sys_info_list;
   if (sys_info) {
     sys_info_list.reserve(sys_info->size());
-    const bool google_email = feedback_util::IsGoogleEmail(
+    const bool google_email = gaia::IsGoogleInternalAccountEmail(
         ExtensionsAPIClient::Get()
             ->GetFeedbackPrivateDelegate()
             ->GetSignedInUserEmail(browser_context()));
@@ -369,6 +372,11 @@ void FeedbackPrivateSendFeedbackFunction::OnAllLogsFetched(
     if (base::ReadFileToString(base::FilePath(kBluetoothLogsFilePath),
                                &bluetooth_logs)) {
       feedback_data->AddFile(kBluetoothLogsAttachmentName,
+                             std::move(bluetooth_logs));
+    }
+    if (base::ReadFileToString(base::FilePath(kBluetoothLogsFilePathOld),
+                               &bluetooth_logs)) {
+      feedback_data->AddFile(kBluetoothLogsAttachmentNameOld,
                              std::move(bluetooth_logs));
     }
   }

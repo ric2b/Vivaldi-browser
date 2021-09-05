@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "ash/public/cpp/app_types.h"
+#include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
 #include "ash/screen_util.h"
@@ -23,14 +24,13 @@
 #include "ash/wm/pip/pip_window_resizer.h"
 #include "ash/wm/tablet_mode/tablet_mode_browser_window_drag_delegate.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
-#include "ash/wm/tablet_mode/tablet_mode_window_drag_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_window_drag_delegate.h"
+#include "ash/wm/tablet_mode/tablet_mode_window_resizer.h"
 #include "ash/wm/window_positioning_utils.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
 #include "ash/wm/workspace/phantom_window_controller.h"
-#include "ash/wm/workspace/two_step_edge_cycler.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/user_metrics.h"
 #include "ui/aura/client/aura_constants.h"
@@ -57,9 +57,15 @@ constexpr double kMinVertVelocityForWindowMinimize = 1000;
 // mode.
 std::unique_ptr<WindowResizer> CreateWindowResizerForTabletMode(
     aura::Window* window,
-    const gfx::Point& point_in_parent,
+    const gfx::PointF& point_in_parent,
     int window_component,
     ::wm::WindowMoveSource source) {
+  // Window dragging from top and tab dragging are disabled if "WebUITabStrip"
+  // feature is enabled. "WebUITabStrip" will be enabled on 81 for Krane and on
+  // 82 for all other boards.
+  if (features::IsWebUITabStripEnabled())
+    return nullptr;
+
   WindowState* window_state = WindowState::Get(window);
   // Only maximized/fullscreen/snapped window can be dragged from the top of
   // the screen.
@@ -77,7 +83,7 @@ std::unique_ptr<WindowResizer> CreateWindowResizerForTabletMode(
     window_state->CreateDragDetails(point_in_parent, HTCLIENT,
                                     ::wm::WINDOW_MOVE_SOURCE_TOUCH);
     std::unique_ptr<WindowResizer> window_resizer =
-        std::make_unique<TabletModeWindowDragController>(
+        std::make_unique<TabletModeWindowResizer>(
             window_state, std::make_unique<TabletModeWindowDragDelegate>());
     return std::make_unique<DragWindowResizer>(std::move(window_resizer),
                                                window_state);
@@ -103,7 +109,7 @@ std::unique_ptr<WindowResizer> CreateWindowResizerForTabletMode(
 
   window_state->CreateDragDetails(point_in_parent, window_component, source);
   std::unique_ptr<WindowResizer> window_resizer =
-      std::make_unique<TabletModeWindowDragController>(
+      std::make_unique<TabletModeWindowResizer>(
           window_state,
           std::make_unique<TabletModeBrowserWindowDragDelegate>());
   return std::make_unique<DragWindowResizer>(std::move(window_resizer),
@@ -114,7 +120,7 @@ std::unique_ptr<WindowResizer> CreateWindowResizerForTabletMode(
 
 std::unique_ptr<WindowResizer> CreateWindowResizer(
     aura::Window* window,
-    const gfx::Point& point_in_parent,
+    const gfx::PointF& point_in_parent,
     int window_component,
     ::wm::WindowMoveSource source) {
   DCHECK(window);
@@ -125,9 +131,15 @@ std::unique_ptr<WindowResizer> CreateWindowResizer(
   if (window_state->drag_details())
     return nullptr;
 
-  // When running in single app mode, we should not create window resizer.
-  if (Shell::Get()->session_controller()->IsRunningInAppMode())
+  // When running in single app mode or not in an active user session, we
+  // should not create window resizer.
+  SessionControllerImpl* session_controller =
+      Shell::Get()->session_controller();
+  if (session_controller->IsRunningInAppMode() ||
+      session_controller->GetSessionState() !=
+          session_manager::SessionState::ACTIVE) {
     return nullptr;
+  }
 
   if (window_state->IsPip()) {
     window_state->CreateDragDetails(point_in_parent, window_component, source);
@@ -182,6 +194,15 @@ namespace {
 // Snapping distance used instead of WorkspaceWindowResizer::kScreenEdgeInset
 // when resizing a window using touchscreen.
 const int kScreenEdgeInsetForTouchDrag = 32;
+
+// If an edge of the work area is at an edge of the display, then you can snap a
+// window by dragging to a point within this far inward from that edge. This
+// tolerance is helpful in cases where you can drag out of the display. For
+// mouse dragging, you may be able to drag out of the display because there is a
+// neighboring display. For touch dragging, you may be able to drag out of the
+// display because the physical device has a border around the display. Either
+// case makes it difficult to drag to the edge without this tolerance.
+const int kScreenEdgeInsetForSnapping = 32;
 
 // Current instance for use by the WorkspaceWindowResizerTest.
 WorkspaceWindowResizer* instance = NULL;
@@ -405,7 +426,7 @@ WorkspaceWindowResizer* WorkspaceWindowResizer::Create(
   return new WorkspaceWindowResizer(window_state, attached_windows);
 }
 
-void WorkspaceWindowResizer::Drag(const gfx::Point& location_in_parent,
+void WorkspaceWindowResizer::Drag(const gfx::PointF& location_in_parent,
                                   int event_flags) {
   last_mouse_location_ = location_in_parent;
 
@@ -431,18 +452,6 @@ void WorkspaceWindowResizer::Drag(const gfx::Point& location_in_parent,
     did_move_or_resize_ = true;
   }
 
-  gfx::Point location_in_screen = location_in_parent;
-  ::wm::ConvertPointToScreen(GetTarget()->parent(), &location_in_screen);
-
-  aura::Window* root = nullptr;
-  display::Display display =
-      display::Screen::GetScreen()->GetDisplayNearestPoint(location_in_screen);
-  // Track the last screen that the pointer was on to keep the snap phantom
-  // window there.
-  if (display.bounds().Contains(location_in_screen)) {
-    root = Shell::GetRootWindowControllerWithDisplayId(display.id())
-               ->GetRootWindow();
-  }
   if (!attached_windows_.empty())
     LayoutAttachedWindows(&bounds);
   if (bounds != GetTarget()->bounds()) {
@@ -455,19 +464,13 @@ void WorkspaceWindowResizer::Drag(const gfx::Point& location_in_parent,
     if (!resizer)
       return;
   }
-  const bool in_original_root = !root || root == GetTarget()->GetRootWindow();
-  // Hide a phantom window for snapping if the cursor is in another root window.
-  if (in_original_root) {
-    UpdateSnapPhantomWindow(location_in_parent, bounds);
-  } else {
-    snap_type_ = SNAP_NONE;
-    snap_phantom_window_controller_.reset();
-    edge_cycler_.reset();
-  }
+  gfx::PointF location_in_screen = location_in_parent;
+  ::wm::ConvertPointToScreen(GetTarget()->parent(), &location_in_screen);
+  UpdateSnapPhantomWindow(location_in_screen, bounds);
 }
 
 void WorkspaceWindowResizer::CompleteDrag() {
-  gfx::Point last_mouse_location_in_screen = last_mouse_location_;
+  gfx::PointF last_mouse_location_in_screen = last_mouse_location_;
   ::wm::ConvertPointToScreen(GetTarget()->parent(),
                              &last_mouse_location_in_screen);
   window_state()->OnCompleteDrag(last_mouse_location_in_screen);
@@ -531,7 +534,7 @@ void WorkspaceWindowResizer::CompleteDrag() {
 }
 
 void WorkspaceWindowResizer::RevertDrag() {
-  gfx::Point last_mouse_location_in_screen = last_mouse_location_;
+  gfx::PointF last_mouse_location_in_screen = last_mouse_location_;
   ::wm::ConvertPointToScreen(GetTarget()->parent(),
                              &last_mouse_location_in_screen);
   window_state()->OnRevertDrag(last_mouse_location_in_screen);
@@ -906,7 +909,8 @@ bool WorkspaceWindowResizer::UpdateMagnetismWindow(
 
 void WorkspaceWindowResizer::AdjustBoundsForMainWindow(int sticky_size,
                                                        gfx::Rect* bounds) {
-  gfx::Point last_mouse_location_in_screen = last_mouse_location_;
+  gfx::Point last_mouse_location_in_screen =
+      gfx::ToRoundedPoint(last_mouse_location_);
   ::wm::ConvertPointToScreen(GetTarget()->parent(),
                              &last_mouse_location_in_screen);
   display::Display display =
@@ -1028,16 +1032,28 @@ int WorkspaceWindowResizer::PrimaryAxisCoordinate(int x, int y) const {
   return 0;
 }
 
-void WorkspaceWindowResizer::UpdateSnapPhantomWindow(const gfx::Point& location,
-                                                     const gfx::Rect& bounds) {
+void WorkspaceWindowResizer::UpdateSnapPhantomWindow(
+    const gfx::PointF& location_in_screen,
+    const gfx::Rect& bounds) {
   if (!did_move_or_resize_ || details().window_component != HTCAPTION)
     return;
 
+  display::Screen* screen = display::Screen::GetScreen();
+  display::Display display;
+  if (details().source == ::wm::WINDOW_MOVE_SOURCE_TOUCH) {
+    display = screen->GetDisplayNearestWindow(GetTarget());
+  } else {
+    // The |Display| object returned by |CursorManager::GetDisplay| may be
+    // stale, but will have the correct id.
+    // TODO(oshima): Change the API so |GetDisplay| just returns a display id.
+    screen->GetDisplayWithDisplayId(
+        Shell::Get()->cursor_manager()->GetDisplay().id(), &display);
+  }
   SnapType last_type = snap_type_;
-  snap_type_ = GetSnapType(location);
+  DCHECK(display.is_valid());
+  snap_type_ = GetSnapType(display, location_in_screen);
   if (snap_type_ == SNAP_NONE || snap_type_ != last_type) {
     snap_phantom_window_controller_.reset();
-    edge_cycler_.reset();
     if (snap_type_ == SNAP_NONE)
       return;
   }
@@ -1047,31 +1063,19 @@ void WorkspaceWindowResizer::UpdateSnapPhantomWindow(const gfx::Point& location,
   if (!can_snap) {
     snap_type_ = SNAP_NONE;
     snap_phantom_window_controller_.reset();
-    edge_cycler_.reset();
     return;
-  }
-  if (!edge_cycler_) {
-    edge_cycler_.reset(new TwoStepEdgeCycler(
-        location, snap_type_ == SNAP_LEFT
-                      ? TwoStepEdgeCycler::DIRECTION_LEFT
-                      : TwoStepEdgeCycler::DIRECTION_RIGHT));
-  } else {
-    edge_cycler_->OnMove(location);
   }
 
   // Update phantom window with snapped guide bounds.
-  const gfx::Rect phantom_bounds =
-      (snap_type_ == SNAP_LEFT)
-          ? GetDefaultLeftSnappedWindowBoundsInParent(GetTarget())
-          : GetDefaultRightSnappedWindowBoundsInParent(GetTarget());
-
   if (!snap_phantom_window_controller_) {
     snap_phantom_window_controller_ =
         std::make_unique<PhantomWindowController>(GetTarget());
   }
-  gfx::Rect phantom_bounds_in_screen(phantom_bounds);
-  ::wm::ConvertRectToScreen(GetTarget()->parent(), &phantom_bounds_in_screen);
-  snap_phantom_window_controller_->Show(phantom_bounds_in_screen);
+  snap_phantom_window_controller_->Show(
+      snap_type_ == SNAP_LEFT
+          ? GetDefaultLeftSnappedWindowBounds(display.work_area(), GetTarget())
+          : GetDefaultRightSnappedWindowBounds(display.work_area(),
+                                               GetTarget()));
 }
 
 void WorkspaceWindowResizer::RestackWindows() {
@@ -1104,26 +1108,22 @@ void WorkspaceWindowResizer::RestackWindows() {
 }
 
 WorkspaceWindowResizer::SnapType WorkspaceWindowResizer::GetSnapType(
-    const gfx::Point& location) const {
-  // TODO: this likely only wants total display area, not the area of a single
-  // display.
-  gfx::Rect area(screen_util::GetDisplayWorkAreaBoundsInParent(GetTarget()));
-  if (details().source == ::wm::WINDOW_MOVE_SOURCE_TOUCH) {
-    // Increase tolerance for touch-snapping near the screen edges. This is only
-    // necessary when the work area left or right edge is same as screen edge.
-    gfx::Rect display_bounds(
-        screen_util::GetDisplayBoundsInParent(GetTarget()));
-    int inset_left = 0;
-    if (area.x() == display_bounds.x())
-      inset_left = kScreenEdgeInsetForTouchDrag;
-    int inset_right = 0;
-    if (area.right() == display_bounds.right())
-      inset_right = kScreenEdgeInsetForTouchDrag;
-    area.Inset(inset_left, 0, inset_right, 0);
-  }
-  if (location.x() <= area.x())
+    const display::Display& display,
+    const gfx::PointF& location_in_screen) const {
+  gfx::Rect area = display.work_area();
+  // Add tolerance for snapping near each display edge that is the same as the
+  // corresponding work area edge.
+  int inset_left = 0;
+  if (area.x() == display.bounds().x())
+    inset_left = kScreenEdgeInsetForSnapping;
+  int inset_right = 0;
+  if (area.right() == display.bounds().right())
+    inset_right = kScreenEdgeInsetForSnapping;
+  area.Inset(inset_left, 0, inset_right, 0);
+
+  if (location_in_screen.x() <= area.x())
     return SNAP_LEFT;
-  if (location.x() >= area.right() - 1)
+  if (location_in_screen.x() >= area.right() - 1)
     return SNAP_RIGHT;
   return SNAP_NONE;
 }

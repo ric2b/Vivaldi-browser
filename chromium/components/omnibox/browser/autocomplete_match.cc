@@ -79,7 +79,7 @@ bool WordMatchesURLContent(
 // static
 const char* const AutocompleteMatch::kDocumentTypeStrings[]{
     "none",        "drive_docs", "drive_forms", "drive_sheets", "drive_slides",
-    "drive_image", "drive_pdf",  "drive_video", "drive_other"};
+    "drive_image", "drive_pdf",  "drive_video", "drive_folder", "drive_other"};
 
 static_assert(
     base::size(AutocompleteMatch::kDocumentTypeStrings) ==
@@ -141,6 +141,9 @@ AutocompleteMatch::AutocompleteMatch(const AutocompleteMatch& match)
       contents_class(match.contents_class),
       description(match.description),
       description_class(match.description_class),
+      description_for_shortcuts(match.description_for_shortcuts),
+      description_class_for_shortcuts(match.description_class_for_shortcuts),
+      suggestion_group_id(match.suggestion_group_id),
       swap_contents_and_description(match.swap_contents_and_description),
       answer(match.answer),
       transition(match.transition),
@@ -195,6 +198,9 @@ AutocompleteMatch& AutocompleteMatch::operator=(
   contents_class = match.contents_class;
   description = match.description;
   description_class = match.description_class;
+  description_for_shortcuts = match.description_for_shortcuts;
+  description_class_for_shortcuts = match.description_class_for_shortcuts;
+  suggestion_group_id = match.suggestion_group_id;
   swap_contents_and_description = match.swap_contents_and_description;
   answer = match.answer;
   transition = match.transition;
@@ -254,8 +260,10 @@ const gfx::VectorIcon& AutocompleteMatch::GetVectorIcon(
       return vector_icons::kSearchIcon;
 
     case Type::SEARCH_HISTORY:
-    case Type::SEARCH_SUGGEST_PERSONALIZED:
+    case Type::SEARCH_SUGGEST_PERSONALIZED: {
+      DCHECK(IsSearchHistoryType(type));
       return omnibox::kClockIcon;
+    }
 
     case Type::EXTENSION_APP_DEPRECATED:
       return omnibox::kExtensionAppIcon;
@@ -282,6 +290,8 @@ const gfx::VectorIcon& AutocompleteMatch::GetVectorIcon(
           return omnibox::kDrivePdfIcon;
         case DocumentType::DRIVE_VIDEO:
           return omnibox::kDriveVideoIcon;
+        case DocumentType::DRIVE_FOLDER:
+          return omnibox::kDriveFolderIcon;
         case DocumentType::DRIVE_OTHER:
           return omnibox::kDriveLogoIcon;
         default:
@@ -419,13 +429,16 @@ bool AutocompleteMatch::BetterDuplicate(const AutocompleteMatch& match1,
   if (!match1.allowed_to_be_default_match && match2.allowed_to_be_default_match)
     return false;
 
-  // Prefer document suggestions.
-  if (match1.type == AutocompleteMatchType::DOCUMENT_SUGGESTION &&
-      match2.type != AutocompleteMatchType::DOCUMENT_SUGGESTION) {
+  // Prefer live document suggestions. We check provider type instead of match
+  // type in order to distinguish live suggestions from the document provider
+  // from stale suggestions from the shortcuts providers, because the latter
+  // omits changing metadata such as last access date.
+  if (match1.provider->type() == AutocompleteProvider::TYPE_DOCUMENT &&
+      match2.provider->type() != AutocompleteProvider::TYPE_DOCUMENT) {
     return true;
   }
-  if (match1.type != AutocompleteMatchType::DOCUMENT_SUGGESTION &&
-      match2.type == AutocompleteMatchType::DOCUMENT_SUGGESTION) {
+  if (match1.provider->type() != AutocompleteProvider::TYPE_DOCUMENT &&
+      match2.provider->type() == AutocompleteProvider::TYPE_DOCUMENT) {
     return false;
   }
 
@@ -606,6 +619,12 @@ bool AutocompleteMatch::IsSpecializedSearchType(Type type) {
          type == AutocompleteMatchType::SEARCH_SUGGEST_PROFILE;
 }
 
+// static
+bool AutocompleteMatch::IsSearchHistoryType(Type type) {
+  return type == AutocompleteMatchType::SEARCH_HISTORY ||
+         type == AutocompleteMatchType::SEARCH_SUGGEST_PERSONALIZED;
+}
+
 AutocompleteMatch::Type AutocompleteMatch::GetDemotionType() const {
   if (!IsSubMatch())
     return type;
@@ -773,34 +792,6 @@ url_formatter::FormatUrlTypes AutocompleteMatch::GetFormatTypes(
 }
 
 // static
-bool AutocompleteMatch::AllowedToBeDefault(const AutocompleteInput& input,
-                                           AutocompleteMatch& match) {
-  if (match.inline_autocompletion.empty())
-    return true;
-  if (input.prevent_inline_autocomplete())
-    return false;
-  if (input.text().empty() || !base::IsUnicodeWhitespace(input.text().back()))
-    return true;
-
-  // If we've reached here, the input ends in trailing whitespace. If the
-  // trailing whitespace prefixes |match.inline_autocompletion|, then allow the
-  // match to be default and remove the whitespace from
-  // |match.inline_autocompletion|.
-  size_t last_non_whitespace_pos =
-      input.text().find_last_not_of(base::kWhitespaceUTF16);
-  DCHECK_NE(last_non_whitespace_pos, std::string::npos);
-  auto whitespace_suffix = input.text().substr(last_non_whitespace_pos + 1);
-  if (base::StartsWith(match.inline_autocompletion, whitespace_suffix,
-                       base::CompareCase::SENSITIVE)) {
-    match.inline_autocompletion =
-        match.inline_autocompletion.substr(whitespace_suffix.size());
-    return true;
-  }
-
-  return false;
-}
-
-// static
 void AutocompleteMatch::LogSearchEngineUsed(
     const AutocompleteMatch& match,
     TemplateURLService* template_url_service) {
@@ -888,7 +879,7 @@ TemplateURL* AutocompleteMatch::GetTemplateURL(
 }
 
 GURL AutocompleteMatch::ImageUrl() const {
-  return answer ? answer->image_url() : GURL(image_url);
+  return answer ? answer->image_url() : image_url;
 }
 
 AutocompleteMatch AutocompleteMatch::DerivePedalSuggestion(
@@ -1062,10 +1053,39 @@ AutocompleteMatch::GetMatchWithContentsAndDescriptionPossiblySwapped() const {
   if (copy.swap_contents_and_description) {
     std::swap(copy.contents, copy.description);
     std::swap(copy.contents_class, copy.description_class);
+    copy.description_for_shortcuts.clear();
+    copy.description_class_for_shortcuts.clear();
     // Clear bit to prevent accidentally performing the swap again.
     copy.swap_contents_and_description = false;
   }
   return copy;
+}
+
+void AutocompleteMatch::SetAllowedToBeDefault(const AutocompleteInput& input) {
+  if (inline_autocompletion.empty())
+    allowed_to_be_default_match = true;
+  else if (input.prevent_inline_autocomplete())
+    allowed_to_be_default_match = false;
+  else if (input.text().empty() ||
+           !base::IsUnicodeWhitespace(input.text().back()))
+    allowed_to_be_default_match = true;
+  else {
+    // If we've reached here, the input ends in trailing whitespace. If the
+    // trailing whitespace prefixes |inline_autocompletion|, then allow the
+    // match to be default and remove the whitespace from
+    // |inline_autocompletion|.
+    size_t last_non_whitespace_pos =
+        input.text().find_last_not_of(base::kWhitespaceUTF16);
+    DCHECK_NE(last_non_whitespace_pos, std::string::npos);
+    auto whitespace_suffix = input.text().substr(last_non_whitespace_pos + 1);
+    if (base::StartsWith(inline_autocompletion, whitespace_suffix,
+                         base::CompareCase::SENSITIVE)) {
+      inline_autocompletion =
+          inline_autocompletion.substr(whitespace_suffix.size());
+      allowed_to_be_default_match = true;
+    } else
+      allowed_to_be_default_match = false;
+  }
 }
 
 void AutocompleteMatch::InlineTailPrefix(const base::string16& common_prefix) {
@@ -1078,8 +1098,9 @@ void AutocompleteMatch::InlineTailPrefix(const base::string16& common_prefix) {
     contents = ellipsis + contents;
     // If the first class is not already NONE, prepend a NONE class for the new
     // ellipsis.
-    if (contents_class[0].offset == 0 &&
-        contents_class[0].style != ACMatchClassification::NONE) {
+    if (contents_class.empty() ||
+        (contents_class[0].offset == 0 &&
+         contents_class[0].style != ACMatchClassification::NONE)) {
       contents_class.insert(contents_class.begin(),
                             {0, ACMatchClassification::NONE});
     }
@@ -1103,6 +1124,9 @@ size_t AutocompleteMatch::EstimateMemoryUsage() const {
   res += base::trace_event::EstimateMemoryUsage(contents_class);
   res += base::trace_event::EstimateMemoryUsage(description);
   res += base::trace_event::EstimateMemoryUsage(description_class);
+  res += base::trace_event::EstimateMemoryUsage(description_for_shortcuts);
+  res +=
+      base::trace_event::EstimateMemoryUsage(description_class_for_shortcuts);
   if (answer)
     res += base::trace_event::EstimateMemoryUsage(answer.value());
   else
@@ -1141,6 +1165,15 @@ void AutocompleteMatch::UpgradeMatchWithPropertiesFrom(
       inline_autocompletion = duplicate_match.inline_autocompletion;
       is_navigational_title_match = duplicate_match.is_navigational_title_match;
     }
+  }
+
+  // For Search Suggest and Search What-You-Typed matches, absorb any
+  // Search History type.
+  if ((type == AutocompleteMatchType::SEARCH_WHAT_YOU_TYPED ||
+       type == AutocompleteMatchType::SEARCH_SUGGEST) &&
+      fill_into_edit == duplicate_match.fill_into_edit &&
+      IsSearchHistoryType(duplicate_match.type)) {
+    type = duplicate_match.type;
   }
 
   // And always absorb the higher relevance score of duplicates.
@@ -1182,13 +1215,19 @@ void AutocompleteMatch::TryAutocompleteWithTitle(
 
 #if DCHECK_IS_ON()
 void AutocompleteMatch::Validate() const {
-  ValidateClassifications(contents, contents_class);
-  ValidateClassifications(description, description_class);
+  std::string provider_name = provider ? provider->GetName() : "None";
+  ValidateClassifications(contents, contents_class, provider_name);
+  ValidateClassifications(description, description_class, provider_name);
+  ValidateClassifications(description_for_shortcuts,
+                          description_class_for_shortcuts, provider_name);
 }
+#endif  // DCHECK_IS_ON()
 
+// static
 void AutocompleteMatch::ValidateClassifications(
     const base::string16& text,
-    const ACMatchClassifications& classifications) const {
+    const ACMatchClassifications& classifications,
+    const std::string& provider_name) {
   if (text.empty()) {
     DCHECK(classifications.empty());
     return;
@@ -1204,7 +1243,6 @@ void AutocompleteMatch::ValidateClassifications(
   // The classifications should always be sorted.
   size_t last_offset = classifications[0].offset;
   for (auto i(classifications.begin() + 1); i != classifications.end(); ++i) {
-    const char* provider_name = provider ? provider->GetName() : "None";
     DCHECK_GT(i->offset, last_offset)
         << " Classification for \"" << text << "\" with offset of " << i->offset
         << " is unsorted in relation to last offset of " << last_offset
@@ -1216,4 +1254,3 @@ void AutocompleteMatch::ValidateClassifications(
     last_offset = i->offset;
   }
 }
-#endif  // DCHECK_IS_ON()

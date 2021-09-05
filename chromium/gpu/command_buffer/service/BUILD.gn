@@ -5,30 +5,23 @@
 import("//build/config/jumbo.gni")
 import("//build/config/ui.gni")
 import("//gpu/vulkan/features.gni")
+import("//skia/features.gni")
 import("//third_party/protobuf/proto_library.gni")
 import("//ui/gl/features.gni")
 
 group("service") {
   if (is_component_build) {
-    public_deps = [
-      "//gpu",
-    ]
+    public_deps = [ "//gpu" ]
   } else {
-    public_deps = [
-      ":service_sources",
-    ]
+    public_deps = [ ":service_sources" ]
   }
 }
 
 group("gles2") {
   if (is_component_build) {
-    public_deps = [
-      "//gpu:gles2",
-    ]
+    public_deps = [ "//gpu:gles2" ]
   } else {
-    public_deps = [
-      ":gles2_sources",
-    ]
+    public_deps = [ ":gles2_sources" ]
   }
 }
 
@@ -88,9 +81,11 @@ target(link_target_type, "service_sources") {
     "//base/third_party/dynamic_annotations",
     "//gpu/command_buffer/client:client_sources",
     "//gpu/config:config_sources",
+    "//gpu/ipc/common:ipc_common_sources",
     "//gpu/ipc/common:surface_handle_type",
     "//ui/gfx",
     "//ui/gfx/geometry",
+    "//ui/gfx/ipc/color",
     "//ui/gl",
   ]
 
@@ -136,8 +131,6 @@ target(link_target_type, "gles2_sources") {
     "gl_state_restorer_impl.h",
     "gl_utils.cc",
     "gl_utils.h",
-    "gles2_cmd_apply_framebuffer_attachment_cmaa_intel.cc",
-    "gles2_cmd_apply_framebuffer_attachment_cmaa_intel.h",
     "gles2_cmd_clear_framebuffer.cc",
     "gles2_cmd_clear_framebuffer.h",
     "gles2_cmd_copy_tex_image.cc",
@@ -179,6 +172,8 @@ target(link_target_type, "gles2_sources") {
     "indexed_buffer_binding_host.h",
     "logger.cc",
     "logger.h",
+    "mailbox_manager_dummy.cc",
+    "mailbox_manager_dummy.h",
     "mailbox_manager_factory.cc",
     "mailbox_manager_factory.h",
     "mailbox_manager_impl.cc",
@@ -195,8 +190,6 @@ target(link_target_type, "gles2_sources") {
     "passthrough_discardable_manager.h",
     "passthrough_program_cache.cc",
     "passthrough_program_cache.h",
-    "path_manager.cc",
-    "path_manager.h",
     "program_cache.cc",
     "program_cache.h",
     "program_manager.cc",
@@ -311,20 +304,23 @@ target(link_target_type, "gles2_sources") {
     "//gpu/config",
     "//gpu/ipc/common",
     "//gpu/vulkan:buildflags",
+    "//skia:buildflags",
     "//third_party/angle:angle_image_util",
     "//third_party/angle:commit_id",
     "//third_party/angle:translator",
     "//third_party/protobuf:protobuf_lite",
     "//third_party/re2",
-    "//third_party/smhasher:cityhash",
     "//third_party/zlib",
     "//ui/gfx",
     "//ui/gfx/geometry",
-    "//ui/gfx/ipc/color",
     "//ui/gl",
     "//ui/gl:buildflags",
     "//ui/gl/init",
   ]
+
+  if (use_ozone) {
+    deps += [ "//ui/ozone" ]
+  }
 
   if (enable_vulkan) {
     deps += [
@@ -332,7 +328,7 @@ target(link_target_type, "gles2_sources") {
       "//gpu/vulkan",
     ]
 
-    if (is_linux || is_fuchsia) {
+    if (is_linux || is_fuchsia || is_android || is_win) {
       sources += [
         "external_vk_image_backing.cc",
         "external_vk_image_backing.h",
@@ -345,10 +341,28 @@ target(link_target_type, "gles2_sources") {
       ]
     }
 
+    if (use_ozone) {
+      sources += [
+        "shared_image_backing_factory_ozone.cc",
+        "shared_image_backing_factory_ozone.h",
+        "shared_image_backing_ozone.cc",
+        "shared_image_backing_ozone.h",
+        "shared_image_representation_gl_ozone.cc",
+        "shared_image_representation_gl_ozone.h",
+      ]
+    }
+
     if (is_linux && use_dawn) {
       sources += [
         "external_vk_image_dawn_representation.cc",
         "external_vk_image_dawn_representation.h",
+      ]
+    }
+
+    if (use_ozone && use_dawn) {
+      sources += [
+        "shared_image_representation_dawn_ozone.cc",
+        "shared_image_representation_dawn_ozone.h",
       ]
     }
   }
@@ -373,6 +387,13 @@ target(link_target_type, "gles2_sources") {
     ]
   }
 
+  if (skia_use_dawn) {
+    deps += [
+      "//components/viz/common:dawn_context_provider",
+      "//third_party/dawn/src/dawn:libdawn",
+    ]
+  }
+
   if (is_android) {
     if (!is_debug) {
       # On Android optimize more since this component can be a bottleneck.
@@ -384,8 +405,12 @@ target(link_target_type, "gles2_sources") {
       "ahardwarebuffer_utils.h",
       "image_reader_gl_owner.cc",
       "image_reader_gl_owner.h",
+      "shared_image_backing_egl_image.cc",
+      "shared_image_backing_egl_image.h",
       "shared_image_backing_factory_ahardwarebuffer.cc",
       "shared_image_backing_factory_ahardwarebuffer.h",
+      "shared_image_batch_access_manager.cc",
+      "shared_image_batch_access_manager.h",
       "shared_image_video.cc",
       "shared_image_video.h",
       "stream_texture_shared_image_interface.h",
@@ -411,16 +436,18 @@ target(link_target_type, "gles2_sources") {
 
   if (is_win) {
     sources += [
+      "shared_image_backing_d3d.cc",
+      "shared_image_backing_d3d.h",
       "shared_image_backing_factory_d3d.cc",
       "shared_image_backing_factory_d3d.h",
+      "shared_image_representation_d3d.cc",
+      "shared_image_representation_d3d.h",
     ]
   }
 }
 
 proto_library("disk_cache_proto") {
-  sources = [
-    "disk_cache_proto.proto",
-  ]
+  sources = [ "disk_cache_proto.proto" ]
 }
 
 if (is_android) {

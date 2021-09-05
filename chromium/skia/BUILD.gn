@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/buildflag_header.gni")
 import("//build/config/compiler/compiler.gni")
 import("//build/config/features.gni")
 import("//build/config/freetype/freetype.gni")
@@ -9,8 +10,10 @@ import("//build/config/sanitizers/sanitizers.gni")
 import("//gpu/vulkan/features.gni")
 import("//printing/buildflags/buildflags.gni")
 import("//testing/test.gni")
+import("//third_party/libgifcodec/libgifcodec.gni")
 import("//third_party/skia/gn/shared_sources.gni")
 import("//third_party/skia/third_party/skcms/skcms.gni")
+import("features.gni")
 
 if (current_cpu == "arm") {
   import("//build/config/arm.gni")
@@ -24,12 +27,27 @@ skia_support_pdf = !is_ios && enable_basic_printing
 skia_support_skottie = true
 
 declare_args() {
+  enable_skia_wuffs_gif = false
   skia_whitelist_serialized_typefaces = false
+}
+
+# Generate a buildflag header for compile-time checking of Dawn support.
+buildflag_header("buildflags") {
+  header = "buildflags.h"
+  flags = [ "SKIA_USE_DAWN=$skia_use_dawn" ]
 }
 
 # External-facing config for dependent code.
 config("skia_config") {
   include_dirs = [ "//third_party/skia" ]
+
+  if (!is_ios) {
+    if (enable_skia_wuffs_gif) {
+      include_dirs += [ "//third_party/wuffs/src/release/c" ]
+    } else {
+      include_dirs += [ "//third_party/libgifcodec" ]
+    }
+  }
   if (enable_vulkan) {
     include_dirs += [
       "//third_party/vulkan/include",
@@ -39,20 +57,36 @@ config("skia_config") {
   }
 
   defines = [
-    "SK_GL",
-    "SK_HAS_PNG_LIBRARY",
-    "SK_HAS_WEBP_LIBRARY",
+    "SK_CODEC_DECODES_PNG",
+    "SK_CODEC_DECODES_WEBP",
+    "SK_ENCODE_PNG",
+    "SK_ENCODE_WEBP",
     "SK_USER_CONFIG_HEADER=\"../../skia/config/SkUserConfig.h\"",
   ]
 
+  if (skia_use_gl) {
+    defines += [ "SK_GL" ]
+  }
+
   if (!is_ios) {
-    defines += [ "SK_HAS_JPEG_LIBRARY" ]
+    defines += [
+      "SK_CODEC_DECODES_JPEG",
+      "SK_ENCODE_JPEG",
+    ]
+    if (enable_skia_wuffs_gif) {
+      defines += [ "SK_HAS_WUFFS_LIBRARY" ]
+    } else {
+      defines += [ "SK_USE_LIBGIFCODEC" ]
+    }
   }
   if (enable_vulkan) {
     defines += [
       "SK_VULKAN_HEADER=\"../../skia/config/SkVulkanConfig.h\"",
       "SK_VULKAN=1",
     ]
+  }
+  if (skia_use_dawn) {
+    defines += [ "SK_DAWN" ]
   }
 
   if (is_component_build) {
@@ -169,7 +203,13 @@ config("skia_library_config") {
                   # assembly code contains flow control(jmp or jcc) statements.
 
       "/wd4800",  # forcing value to bool 'true/false'(assigning int to bool).
+      "/wd5041",  # out-of-line definition for constexpr static data member is
+                  # not needed and is deprecated in C++17
     ]
+    cflags_cc = [ "/std:c++17" ]
+  } else {
+    cflags_cc = [ "-std=c++17" ]
+    cflags_objcc = [ "-std=c++17" ]
   }
 }
 
@@ -189,9 +229,7 @@ source_set("skcms") {
     cflags += [ "-mfp16-format=ieee" ]
   }
 
-  public = [
-    "//third_party/skia/include/third_party/skcms/skcms.h",
-  ]
+  public = [ "//third_party/skia/include/third_party/skcms/skcms.h" ]
   include_dirs = [ "//third_party/skia/include/third_party/skcms" ]
   sources =
       rebase_path(skcms_sources, ".", "//third_party/skia/third_party/skcms")
@@ -307,7 +345,6 @@ component("skia") {
       "//third_party/skia/src/codec/SkCodecImageGenerator.cpp",
       "//third_party/skia/src/codec/SkColorTable.cpp",
       "//third_party/skia/src/codec/SkEncodedInfo.cpp",
-      "//third_party/skia/src/codec/SkGifCodec.cpp",
       "//third_party/skia/src/codec/SkIcoCodec.cpp",
       "//third_party/skia/src/codec/SkJpegCodec.cpp",
       "//third_party/skia/src/codec/SkJpegDecoderMgr.cpp",
@@ -324,8 +361,16 @@ component("skia") {
       "//third_party/skia/src/images/SkJPEGWriteUtility.cpp",
       "//third_party/skia/src/images/SkJpegEncoder.cpp",
       "//third_party/skia/src/ports/SkImageGenerator_skia.cpp",
-      "//third_party/skia/third_party/gif/SkGifImageReader.cpp",
     ]
+
+    if (enable_skia_wuffs_gif) {
+      deps += [ "//third_party/wuffs" ]
+      sources += [ "//third_party/skia/src/codec/SkWuffsCodec.cpp" ]
+    } else {
+      sources += rebase_path(libgifcodec_sources + libgifcodec_public,
+                             ".",
+                             "//third_party/libgifcodec")
+    }
   }
 
   if (current_cpu == "arm") {
@@ -433,12 +478,11 @@ component("skia") {
       "ext/fontmgr_default_fuchsia.cc",
     ]
     deps += [
-      "//third_party/fuchsia-sdk/sdk:fonts",
-      "//third_party/fuchsia-sdk/sdk:fonts",
-      "//third_party/fuchsia-sdk/sdk:io",
-      "//third_party/fuchsia-sdk/sdk:sys",
-      "//third_party/fuchsia-sdk/sdk:sys_cpp",
-      "//third_party/fuchsia-sdk/sdk:zx",
+      "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.fonts",
+      "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.io",
+      "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.sys",
+      "//third_party/fuchsia-sdk/sdk/pkg/sys_cpp",
+      "//third_party/fuchsia-sdk/sdk/pkg/zx",
       "//third_party/icu:icuuc",
     ]
   }
@@ -468,8 +512,16 @@ component("skia") {
     "//third_party/libwebp:libwebp_webp",
   ]
   public_deps = [
+    ":buildflags",
     ":skia_core_and_effects",
   ]
+  if (skia_use_dawn) {
+    public_deps += [ "//third_party/dawn/src/dawn:dawncpp_headers" ]
+    deps += [
+      "//third_party/dawn:libdawn_native",
+      "//third_party/dawn/src/dawn:libdawn",
+    ]
+  }
 
   if (!is_ios) {
     deps += [
@@ -510,7 +562,9 @@ component("skia") {
       "Foundation.framework",
     ]
   }
-
+  if (skia_use_dawn) {
+    sources += skia_dawn_sources
+  }
   if (is_ios) {
     libs = [ "ImageIO.framework" ]
     set_sources_assignment_filter([])
@@ -526,6 +580,9 @@ component("skia") {
     sources += skia_gpu_sources
     sources += skia_null_gpu_sources
     sources += skia_sksl_gpu_sources
+    if (skia_use_gl) {
+      sources += skia_gl_gpu_sources
+    }
     if (enable_vulkan) {
       sources += skia_vk_sources
       sources += [
@@ -539,8 +596,6 @@ component("skia") {
   if (skia_support_pdf) {
     deps += [
       "//third_party:freetype_harfbuzz",
-      "//third_party/sfntly",
-      "//third_party/sfntly:sfntly_chromium",
       "//third_party/zlib",
     ]
     sources += skia_pdf_sources
@@ -550,9 +605,11 @@ component("skia") {
 
   if (skia_support_skottie) {
     import("//third_party/skia/modules/skottie/skottie.gni")
+    import("//third_party/skia/modules/skresources/skresources.gni")
     import("//third_party/skia/modules/sksg/sksg.gni")
     import("//third_party/skia/modules/skshaper/skshaper.gni")
     sources += skia_skottie_sources + skia_skottie_public
+    sources += skia_skresources_sources
     sources += skia_sksg_sources
     sources += skia_shaper_primitive_sources
   }
@@ -589,6 +646,15 @@ template("skia_source_set") {
     if (using_mismatched_sample_profile) {
       configs -= [ "//build/config/compiler:afdo_optimize_size" ]
     }
+    if (is_win) {
+      cflags_cc = [
+        "/std:c++17",
+        "/wd5041",  # out-of-line definition for constexpr static data member is
+                    # not needed and is deprecated in C++17
+      ]
+    } else {
+      cflags_cc = [ "-std=c++17" ]
+    }
   }
 }
 
@@ -599,9 +665,10 @@ skia_source_set("skia_core_and_effects") {
   sources += skia_effects_sources
   sources += skia_effects_imagefilter_sources
   if (skia_support_gpu) {
-    deps = [
-      "//gpu/config:workaround_list",
-    ]
+    deps = [ "//gpu/config:workaround_list" ]
+  }
+  if (skia_use_dawn) {
+    deps += [ "//third_party/dawn/src/dawn:dawncpp_headers" ]
   }
 
   visibility = [ ":skia" ]
@@ -678,9 +745,7 @@ skia_source_set("skia_opts") {
   cflags = []
   defines = []
 
-  deps = [
-    "//base",
-  ]
+  deps = [ "//base" ]
 
   if (current_cpu == "x86" || current_cpu == "x64") {
     sources = skia_opts.sse2_sources
@@ -747,48 +812,30 @@ if (is_mac) {
       "-Wno-unguarded-availability",
       "-fobjc-arc",
     ]
-    deps = [
-      "//gpu/config:workaround_list",
-    ]
+    deps = [ "//gpu/config:workaround_list" ]
+    if (skia_use_dawn) {
+      deps += [ "//third_party/dawn/src/dawn:dawncpp_headers" ]
+    }
   }
 }
 
 # Font copies.
-if (is_android) {
-  copy("copy_android_fonts_config") {
-    sources = [
-      "ext/data/test_fonts/android_fallback_fonts.xml",
-      "ext/data/test_fonts/android_main_fonts.xml",
-    ]
-    outputs = [
-      "$root_out_dir/test_fonts/{{source_file_part}}",
-    ]
-  }
-}
 if (is_fuchsia) {
   copy("copy_fuchsia_fonts_manifest") {
-    sources = [
-      "ext/data/test_fonts/fuchsia_test_fonts_manifest.json",
-    ]
-    outputs = [
-      "$root_out_dir/test_fonts/{{source_file_part}}",
-    ]
+    sources = [ "ext/data/test_fonts/fuchsia_test_fonts_manifest.json" ]
+    outputs = [ "$root_out_dir/test_fonts/{{source_file_part}}" ]
   }
 }
-if (is_mac) {
+if (is_mac || is_ios) {
   bundle_data("test_fonts_bundle_data") {
-    public_deps = [
-      "//third_party/test_fonts",
-    ]
+    public_deps = [ "//third_party/test_fonts" ]
 
     sources = [
       "$root_out_dir/test_fonts/Ahem.ttf",
       "ext/data/test_fonts/ChromiumAATTest.ttf",
     ]
 
-    outputs = [
-      "{{bundle_resources_dir}}/{{source_file_part}}",
-    ]
+    outputs = [ "{{bundle_resources_dir}}/{{source_file_part}}" ]
   }
 }
 
@@ -796,7 +843,7 @@ group("test_fonts_resources") {
   deps = []
   data_deps = []
 
-  if (is_mac) {
+  if (is_mac || is_ios) {
     deps += [ ":test_fonts_bundle_data" ]
     data_deps += [ ":test_fonts_bundle_data" ]
   } else {
@@ -804,10 +851,6 @@ group("test_fonts_resources") {
     data_deps += [ "//third_party/test_fonts" ]
   }
 
-  if (is_android) {
-    deps += [ ":copy_android_fonts_config" ]
-    data_deps += [ ":copy_android_fonts_config" ]
-  }
   if (is_fuchsia) {
     deps += [ ":copy_fuchsia_fonts_manifest" ]
     data_deps += [ ":copy_fuchsia_fonts_manifest" ]
@@ -817,32 +860,24 @@ group("test_fonts_resources") {
 source_set("test_fonts") {
   testonly = true
 
-  sources = [
-    "ext/test_fonts.h",
-  ]
+  sources = [ "ext/test_fonts.h" ]
   deps = [
     ":test_fonts_resources",
     "//base/test:test_support",
     "//skia",
   ]
 
-  if (is_android) {
-    sources += [ "ext/test_fonts_android.cc" ]
-  }
   if (is_fuchsia) {
     sources += [
       "ext/test_fonts_fuchsia.cc",
       "ext/test_fonts_fuchsia.h",
     ]
     deps += [
-      "//third_party/fuchsia-sdk/sdk:fonts",
-      "//third_party/fuchsia-sdk/sdk:io",
-      "//third_party/fuchsia-sdk/sdk:sys",
-      "//third_party/fuchsia-sdk/sdk:sys_cpp",
+      "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.fonts",
+      "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.io",
+      "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.sys",
+      "//third_party/fuchsia-sdk/sdk/pkg/sys_cpp",
     ]
-  }
-  if (is_linux) {
-    sources += [ "ext/test_fonts_linux.cc" ]
   }
   if (is_mac) {
     sources += [ "ext/test_fonts_mac.mm" ]
@@ -888,12 +923,10 @@ test("skia_unittests") {
   if (is_fuchsia) {
     sources += [ "ext/fontmgr_fuchsia_unittest.cc" ]
     deps += [
-      "//third_party/fuchsia-sdk/sdk:fonts",
+      "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.fonts",
       "//third_party/test_fonts",
     ]
-    data_deps = [
-      "//third_party/test_fonts",
-    ]
+    data_deps = [ "//third_party/test_fonts" ]
   }
 
   if (skia_support_skottie) {
@@ -903,9 +936,7 @@ test("skia_unittests") {
 
 if (!is_ios) {
   executable("image_operations_bench") {
-    sources = [
-      "ext/image_operations_bench.cc",
-    ]
+    sources = [ "ext/image_operations_bench.cc" ]
 
     deps = [
       ":skia",
@@ -916,9 +947,7 @@ if (!is_ios) {
 
   executable("filter_fuzz_stub") {
     testonly = true
-    sources = [
-      "tools/filter_fuzz_stub/filter_fuzz_stub.cc",
-    ]
+    sources = [ "tools/filter_fuzz_stub/filter_fuzz_stub.cc" ]
 
     deps = [
       ":skia",
@@ -930,7 +959,5 @@ if (!is_ios) {
 }
 
 group("fuzzers") {
-  deps = [
-    "//skia/tools/fuzzers",
-  ]
+  deps = [ "//skia/tools/fuzzers" ]
 }

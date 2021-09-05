@@ -6,15 +6,11 @@
 <script>
   "use strict";
 
-  const relative_path = "/feature-policy/resources/feature-policy-wakelock.html";
+  const relative_path = "/feature-policy/resources/feature-policy-screen-wakelock.html";
   const base_src = "/feature-policy/resources/redirect-on-load.html#";
   const same_origin_src = base_src + relative_path;
   const cross_origin_src =
     base_src + "https://{{domains[www]}}:{{ports[https][0]}}" + relative_path;
-
-  // request() checks for both Feature Policy and permission, so the tests below
-  // can have inconsistent results due to the default permission a wake lock
-  // request might return.
 
   async_test(t => {
     test_feature_availability(
@@ -22,9 +18,9 @@
       t,
       same_origin_src,
       expect_feature_available_default,
-      "wake-lock"
+      "screen-wake-lock"
     );
-  }, 'Feature-Policy allow="wake-lock" allows same-origin relocation');
+  }, 'Feature-Policy allow="screen-wake-lock" allows same-origin relocation');
 
   async_test(t => {
     test_feature_availability(
@@ -32,9 +28,9 @@
       t,
       cross_origin_src,
       expect_feature_unavailable_default,
-      "wake-lock"
+      "screen-wake-lock"
     );
-  }, 'Feature-Policy allow="wake-lock" disallows cross-origin relocation');
+  }, 'Feature-Policy allow="screen-wake-lock" disallows cross-origin relocation');
 
 </script>
 </body>

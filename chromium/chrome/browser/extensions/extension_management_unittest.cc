@@ -11,13 +11,17 @@
 #include "base/json/json_parser.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/values.h"
 #include "chrome/browser/extensions/extension_management_internal.h"
 #include "chrome/browser/extensions/extension_management_test_util.h"
 #include "chrome/browser/extensions/external_policy_loader.h"
 #include "chrome/browser/extensions/standard_management_policy_provider.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/pref_names.h"
+#include "chrome/test/base/scoped_testing_local_state.h"
+#include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/test/browser_task_environment.h"
@@ -31,6 +35,13 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
+#if defined(OS_CHROMEOS)
+#include "chrome/browser/chromeos/extensions/default_web_app_ids.h"
+#include "chrome/browser/chromeos/policy/system_features_disable_list_policy_handler.h"
+#include "components/policy/core/common/policy_pref_names.h"
+#include "extensions/common/constants.h"
+#endif
+
 namespace extensions {
 
 namespace {
@@ -43,6 +54,7 @@ const char kTargetExtension5[] = "efghijklmnopabcdefghijklmnopabcd";
 const char kTargetExtension6[] = "fghijklmnopabcdefghijklmnopabcde";
 const char kTargetExtension7[] = "ghijklmnopabcdefghijklmnopabcdef";
 const char kTargetExtension8[] = "hijklmnopabcdefghijklmnopabcdefg";
+const char kTargetExtension9[] = "ijklmnopabcdefghijklmnopabcdefgh";
 const char kExampleUpdateUrl[] = "http://example.com/update_url";
 
 const char kNonExistingExtension[] = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -78,6 +90,9 @@ const char kExampleDictPreference[] =
   "ghijklmnopabcdefghijklmnopabcdef,hijklmnopabcdefghijklmnopabcdefg,": {
     "installation_mode": "allowed",
   },
+  "ijklmnopabcdefghijklmnopabcdefgh": {
+    "installation_mode": "removed",
+  },
   "update_url:http://example.com/update_url": {
     "installation_mode": "allowed",
     "blocked_permissions": ["fileSystem", "bookmarks"],
@@ -107,8 +122,9 @@ class ExtensionManagementServiceTest : public testing::Test {
       sync_preferences::TestingPrefServiceSyncable>
       PrefUpdater;
 
-  ExtensionManagementServiceTest() {}
-  ~ExtensionManagementServiceTest() override {}
+  ExtensionManagementServiceTest()
+      : scoped_local_state_(TestingBrowserProcess::GetGlobal()) {}
+  ~ExtensionManagementServiceTest() override = default;
 
   // testing::Test:
   void SetUp() override { InitPrefService(); }
@@ -135,6 +151,10 @@ class ExtensionManagementServiceTest : public testing::Test {
       pref_service_->RemoveManagedPref(path);
     else
       pref_service_->RemoveUserPref(path);
+  }
+
+  void SetPrefLocalState(const char* path, base::Value value) {
+    scoped_local_state_.Get()->Set(path, std::move(value));
   }
 
   const internal::GlobalSettings* ReadGlobalSettings() {
@@ -261,7 +281,7 @@ class ExtensionManagementServiceTest : public testing::Test {
   }
 
   content::BrowserTaskEnvironment task_environment_;
-
+  ScopedTestingLocalState scoped_local_state_;
   std::unique_ptr<TestingProfile> profile_;
   sync_preferences::TestingPrefServiceSyncable* pref_service_;
   std::unique_ptr<ExtensionManagement> extension_management_;
@@ -820,6 +840,7 @@ TEST_F(ExtensionManagementServiceTest, IsInstallationExplicitlyAllowed) {
   const char* forced  = kTargetExtension2;
   const char* recommended = kTargetExtension3;
   const char* blocked = kTargetExtension4;
+  const char* removed = kTargetExtension9;
   const char* not_specified = kNonExistingExtension;
 
   // BlacklistedByDefault() is true in example preference.
@@ -828,14 +849,13 @@ TEST_F(ExtensionManagementServiceTest, IsInstallationExplicitlyAllowed) {
   EXPECT_TRUE(
       extension_management_->IsInstallationExplicitlyAllowed(recommended));
   EXPECT_FALSE(extension_management_->IsInstallationExplicitlyAllowed(blocked));
+  EXPECT_FALSE(extension_management_->IsInstallationExplicitlyAllowed(removed));
   EXPECT_FALSE(
       extension_management_->IsInstallationExplicitlyAllowed(not_specified));
 
-  {
-    // Set BlacklistedByDefault() to false.
-    PrefUpdater pref(pref_service_);
-    pref.SetBlacklistedByDefault(false);
-  }
+  // Set BlacklistedByDefault() to false.
+  PrefUpdater pref(pref_service_);
+  pref.SetBlacklistedByDefault(false);
 
   // The result should remain the same.
   EXPECT_TRUE(extension_management_->IsInstallationExplicitlyAllowed(allowed));
@@ -843,127 +863,79 @@ TEST_F(ExtensionManagementServiceTest, IsInstallationExplicitlyAllowed) {
   EXPECT_TRUE(
       extension_management_->IsInstallationExplicitlyAllowed(recommended));
   EXPECT_FALSE(extension_management_->IsInstallationExplicitlyAllowed(blocked));
+  EXPECT_FALSE(extension_management_->IsInstallationExplicitlyAllowed(removed));
   EXPECT_FALSE(
       extension_management_->IsInstallationExplicitlyAllowed(not_specified));
 }
 
-#if !defined(OS_CHROMEOS)
-TEST_F(ExtensionManagementServiceTest, CloudReportingEnabledPolicy) {
-  // Enables the policy put the extension into forced list.
-  SetPref(true, prefs::kCloudReportingEnabled,
-          std::make_unique<base::Value>(true));
-  CheckAutomaticallyInstalledUpdateUrl(
-      extension_misc::kCloudReportingExtensionId,
-      extension_urls::kChromeWebstoreUpdateURL);
-  EXPECT_EQ(
-      ExtensionManagement::INSTALLATION_FORCED,
-      GetInstallationModeById(extension_misc::kCloudReportingExtensionId));
+TEST_F(ExtensionManagementServiceTest, IsInstallationExplicitlyBlocked) {
+  SetExampleDictPref(kExampleDictPreference);
 
-  // Disabling the policy should remove the extension from the forced list.
-  RemovePref(true, prefs::kCloudReportingEnabled);
-  EXPECT_EQ(
-      ExtensionManagement::INSTALLATION_ALLOWED,
-      GetInstallationModeById(extension_misc::kCloudReportingExtensionId));
+  // Constant name indicates the installation_mode of extensions in example
+  // preference.
+  const char* allowed = kTargetExtension;
+  const char* forced = kTargetExtension2;
+  const char* recommended = kTargetExtension3;
+  const char* blocked = kTargetExtension4;
+  const char* removed = kTargetExtension9;
+  const char* not_specified = kNonExistingExtension;
 
-  // Recommended policy does not force install the policy.
-  pref_service_->SetRecommendedPref(prefs::kCloudReportingEnabled,
-                                    std::make_unique<base::Value>(true));
-  EXPECT_EQ(
-      ExtensionManagement::INSTALLATION_ALLOWED,
-      GetInstallationModeById(extension_misc::kCloudReportingExtensionId));
+  // BlacklistedByDefault() is true in example preference.
+  EXPECT_FALSE(extension_management_->IsInstallationExplicitlyBlocked(allowed));
+  EXPECT_FALSE(extension_management_->IsInstallationExplicitlyBlocked(forced));
+  EXPECT_FALSE(
+      extension_management_->IsInstallationExplicitlyBlocked(recommended));
+  EXPECT_TRUE(extension_management_->IsInstallationExplicitlyBlocked(blocked));
+  EXPECT_TRUE(extension_management_->IsInstallationExplicitlyBlocked(removed));
+  EXPECT_FALSE(
+      extension_management_->IsInstallationExplicitlyBlocked(not_specified));
+
+  PrefUpdater pref(pref_service_);
+  pref.SetBlacklistedByDefault(false);
+
+  EXPECT_FALSE(extension_management_->IsInstallationExplicitlyBlocked(allowed));
+  EXPECT_FALSE(extension_management_->IsInstallationExplicitlyBlocked(forced));
+  EXPECT_FALSE(
+      extension_management_->IsInstallationExplicitlyBlocked(recommended));
+  EXPECT_TRUE(extension_management_->IsInstallationExplicitlyBlocked(blocked));
+  EXPECT_TRUE(extension_management_->IsInstallationExplicitlyBlocked(removed));
+  EXPECT_FALSE(
+      extension_management_->IsInstallationExplicitlyBlocked(not_specified));
 }
 
-TEST_F(ExtensionManagementServiceTest,
-       CloudReportingEnabledPolicyOverridesBlacklist) {
-  base::ListValue denied_list_pref;
-  denied_list_pref.AppendString(extension_misc::kCloudReportingExtensionId);
-  SetPref(true, pref_names::kInstallDenyList,
-          denied_list_pref.CreateDeepCopy());
+#if defined(OS_CHROMEOS)
+TEST_F(ExtensionManagementServiceTest, SystemFeaturesDisableList) {
+  base::Value system_features_list = base::Value(base::Value::Type::LIST);
+  system_features_list.Append(policy::SystemFeature::CAMERA);
+  system_features_list.Append(policy::SystemFeature::SETTINGS);
+  SetPrefLocalState(policy::policy_prefs::kSystemFeaturesDisableList,
+                    std::move(system_features_list));
+  EXPECT_EQ(ExtensionManagement::INSTALLATION_BLOCKED,
+            GetInstallationModeById(extension_misc::kCameraAppId));
   EXPECT_EQ(
       ExtensionManagement::INSTALLATION_BLOCKED,
-      GetInstallationModeById(extension_misc::kCloudReportingExtensionId));
-  SetPref(true, prefs::kCloudReportingEnabled,
-          std::make_unique<base::Value>(true));
-  EXPECT_EQ(
-      ExtensionManagement::INSTALLATION_FORCED,
-      GetInstallationModeById(extension_misc::kCloudReportingExtensionId));
+      GetInstallationModeById(chromeos::default_web_apps::kOsSettingsAppId));
 }
+#endif  // !defined(OS_CHROMEOS)
 
 TEST_F(ExtensionManagementServiceTest,
-       CloudReportingEnabledPolicyOverridesAllowedTypes) {
-  scoped_refptr<const Extension> extension =
-      CreateExtension(Manifest::EXTERNAL_POLICY, "1.0",
-                      extension_misc::kCloudReportingExtensionId,
-                      extension_urls::kChromeWebstoreUpdateURL);
-  StandardManagementPolicyProvider provider(extension_management_.get());
-
-  base::ListValue allowed_type_pref;
-  base::string16 error;
-  allowed_type_pref.AppendInteger(Manifest::TYPE_THEME);
-  SetPref(true, pref_names::kAllowedTypes, allowed_type_pref.CreateDeepCopy());
-  EXPECT_FALSE(provider.UserMayLoad(extension.get(), &error));
-
-  SetPref(true, prefs::kCloudReportingEnabled,
+       ExtensionsAreBlockedByDefaultForExtensionRequest) {
+  // When extension request policy is set to true, all extensions are blocked by
+  // default.
+  SetPref(true, prefs::kCloudExtensionRequestEnabled,
           std::make_unique<base::Value>(true));
-
-  EXPECT_TRUE(provider.UserMayLoad(extension.get(), nullptr));
-}
-
-TEST_F(ExtensionManagementServiceTest,
-       CloudReportingenabledOverridesExtensionSettings) {
+  EXPECT_TRUE(extension_management_->BlacklistedByDefault());
+  EXPECT_EQ(ExtensionManagement::INSTALLATION_BLOCKED,
+            GetInstallationModeById(kTargetExtension));
+  // However, it will be overridden by ExtensionSettings
   SetExampleDictPref(R"({
-        "oempjldejiginopiohodkdoklcjklbaa": {
-          "installation_mode": "allowed",
-          "blocked_permissions": ["bookmarks"],
-          "minimum_version_required": "100.0",
-          "runtime_blocked_hosts": ["https://a.com"],
-          "runtime_allowed_hosts": ["https://b.com"],
-          "update_url": "http://example.com/update_url",
-        },
-        "update_url:https://clients2.google.com/service/update2/crx": {
-          "blocked_permissions": ["downloads"],
-        },
-        "update_url:http://example.com/update_url": {
-          "blocked_permissions": ["downloads"],
-        }
-      })");
-
-  EXPECT_EQ(
-      ExtensionManagement::INSTALLATION_ALLOWED,
-      GetInstallationModeById(extension_misc::kCloudReportingExtensionId));
-  EXPECT_EQ(2u,
-            GetBlockedAPIPermissions(extension_misc::kCloudReportingExtensionId,
-                                     extension_urls::kChromeWebstoreUpdateURL)
-                .size());
-  EXPECT_FALSE(
-      CheckMinimumVersion(extension_misc::kCloudReportingExtensionId, "99.0"));
-  EXPECT_EQ(
-      1u,
-      GetPolicyBlockedHosts(extension_misc::kCloudReportingExtensionId).size());
-  EXPECT_EQ(
-      1u,
-      GetPolicyAllowedHosts(extension_misc::kCloudReportingExtensionId).size());
-
-  SetPref(true, prefs::kCloudReportingEnabled,
-          std::make_unique<base::Value>(true));
-  CheckAutomaticallyInstalledUpdateUrl(
-      extension_misc::kCloudReportingExtensionId,
-      extension_urls::kChromeWebstoreUpdateURL);
-  EXPECT_EQ(
-      ExtensionManagement::INSTALLATION_FORCED,
-      GetInstallationModeById(extension_misc::kCloudReportingExtensionId));
-  EXPECT_TRUE(
-      GetBlockedAPIPermissions(extension_misc::kCloudReportingExtensionId,
-                               extension_urls::kChromeWebstoreUpdateURL)
-          .empty());
-  EXPECT_TRUE(
-      CheckMinimumVersion(extension_misc::kCloudReportingExtensionId, "99.0"));
-  EXPECT_TRUE(GetPolicyBlockedHosts(extension_misc::kCloudReportingExtensionId)
-                  .is_empty());
-  EXPECT_TRUE(GetPolicyAllowedHosts(extension_misc::kCloudReportingExtensionId)
-                  .is_empty());
+    "*": {
+      "installation_mode": "removed",
+    }
+  })");
+  EXPECT_EQ(ExtensionManagement::INSTALLATION_REMOVED,
+            GetInstallationModeById(kTargetExtension));
 }
-#endif
 
 // Tests the flag value indicating that extensions are blacklisted by default.
 TEST_F(ExtensionAdminPolicyTest, BlacklistedByDefault) {

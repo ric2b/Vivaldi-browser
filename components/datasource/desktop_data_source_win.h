@@ -13,7 +13,7 @@ class DesktopWallpaperDataClassHandlerWin : public VivaldiDataClassHandler {
 
   bool GetData(
       const std::string& data_id,
-      const content::URLDataSource::GotDataCallback& callback) override;
+      content::URLDataSource::GotDataCallback callback) override;
 
  private:
    // Path to the previously served wallpaper

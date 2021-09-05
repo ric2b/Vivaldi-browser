@@ -17,6 +17,7 @@
 #include "chrome/browser/devtools/devtools_window_testing.h"
 #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
 #include "chrome/browser/media/webrtc/media_stream_capture_indicator.h"
+#include "chrome/browser/performance_manager/graph/policies/policy_features.h"
 #include "chrome/browser/resource_coordinator/local_site_characteristics_data_unittest_utils.h"
 #include "chrome/browser/resource_coordinator/tab_lifecycle_observer.h"
 #include "chrome/browser/resource_coordinator/tab_lifecycle_unit.h"
@@ -153,8 +154,6 @@ class TabManagerTest : public InProcessBrowserTest {
     // Start with a non-null TimeTicks, as there is no discard protection for
     // a tab with a null focused timestamp.
     test_clock_.Advance(kShortDelay);
-    scoped_feature_list_.InitAndEnableFeature(
-        features::kSiteCharacteristicsDatabase);
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -294,16 +293,6 @@ class TabManagerTest : public InProcessBrowserTest {
     EXPECT_EQ(1, freeze_count_result);
   }
 
-  // Gets the TabLifecycleUnit from |contents| and sends the signal that
-  // indicates that the page is frozen. In production, this is sent by the
-  // renderer process. This is done to finish a proactive tab discard.
-  void SimulateFreezeSignal(content::WebContents* contents) {
-    GetTabLifecycleUnitSource()
-        ->GetTabLifecycleUnit(contents)
-        ->UpdateLifecycleState(
-            performance_manager::mojom::LifecycleState::kFrozen);
-  }
-
   TabManager* tab_manager() { return g_browser_process->GetTabManager(); }
   TabStripModel* tsm() { return browser()->tab_strip_model(); }
 
@@ -319,7 +308,6 @@ class TabManagerTest : public InProcessBrowserTest {
   util::test::FakeMemoryPressureMonitor fake_memory_pressure_monitor_;
   base::SimpleTestTickClock test_clock_;
   ScopedSetTickClockForTesting scoped_set_tick_clock_for_testing_;
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 class TabManagerTestWithTwoTabs : public TabManagerTest {
@@ -329,23 +317,21 @@ class TabManagerTestWithTwoTabs : public TabManagerTest {
   void SetUpOnMainThread() override {
     TabManagerTest::SetUpOnMainThread();
 
+    ASSERT_TRUE(embedded_test_server()->Start());
+
     // Open 2 tabs with default URLs in a focused tab strip.
     GetTabLifecycleUnitSource()->SetFocusedTabStripModelForTesting(tsm());
-    OpenTwoTabs(GURL(chrome::kChromeUIAboutURL),
-                GURL(chrome::kChromeUICreditsURL));
+    OpenTwoTabs(embedded_test_server()->GetURL("/title2.html"),
+                embedded_test_server()->GetURL("/title3.html"));
   }
 
  private:
   DISALLOW_COPY_AND_ASSIGN(TabManagerTestWithTwoTabs);
 };
 
-// Flaky on Linux/ChromeOS only. http://crbug.com/997719
-#if defined(OS_LINUX) || defined(OS_CHROMEOS)
-#define MAYBE_TabManagerBasics DISABLED_TabManagerBasics
-#else
-#define MAYBE_TabManagerBasics TabManagerBasics
-#endif
-IN_PROC_BROWSER_TEST_F(TabManagerTest, MAYBE_TabManagerBasics) {
+IN_PROC_BROWSER_TEST_F(TabManagerTest, TabManagerBasics) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+
   using content::WindowedNotificationObserver;
 
   // Get three tabs open.
@@ -354,8 +340,8 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest, MAYBE_TabManagerBasics) {
   WindowedNotificationObserver load1(
       content::NOTIFICATION_NAV_ENTRY_COMMITTED,
       content::NotificationService::AllSources());
-  OpenURLParams open1(GURL(chrome::kChromeUIAboutURL), content::Referrer(),
-                      WindowOpenDisposition::CURRENT_TAB,
+  OpenURLParams open1(embedded_test_server()->GetURL("a.com", "/title1.html"),
+                      content::Referrer(), WindowOpenDisposition::CURRENT_TAB,
                       ui::PAGE_TRANSITION_TYPED, false);
   browser()->OpenURL(open1);
   load1.Wait();
@@ -364,7 +350,8 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest, MAYBE_TabManagerBasics) {
   WindowedNotificationObserver load2(
       content::NOTIFICATION_NAV_ENTRY_COMMITTED,
       content::NotificationService::AllSources());
-  OpenURLParams open2(GURL(chrome::kChromeUICreditsURL), content::Referrer(),
+  OpenURLParams open2(embedded_test_server()->GetURL("a.com", "/title1.html"),
+                      content::Referrer(),
                       WindowOpenDisposition::NEW_FOREGROUND_TAB,
                       ui::PAGE_TRANSITION_TYPED, false);
   browser()->OpenURL(open2);
@@ -374,7 +361,8 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest, MAYBE_TabManagerBasics) {
   WindowedNotificationObserver load3(
       content::NOTIFICATION_NAV_ENTRY_COMMITTED,
       content::NotificationService::AllSources());
-  OpenURLParams open3(GURL(chrome::kChromeUITermsURL), content::Referrer(),
+  OpenURLParams open3(embedded_test_server()->GetURL("a.com", "/title1.html"),
+                      content::Referrer(),
                       WindowOpenDisposition::NEW_FOREGROUND_TAB,
                       ui::PAGE_TRANSITION_TYPED, false);
   browser()->OpenURL(open3);
@@ -386,8 +374,8 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest, MAYBE_TabManagerBasics) {
   WindowedNotificationObserver load4(
       content::NOTIFICATION_NAV_ENTRY_COMMITTED,
       content::NotificationService::AllSources());
-  OpenURLParams open4(GURL(chrome::kChromeUIVersionURL), content::Referrer(),
-                      WindowOpenDisposition::CURRENT_TAB,
+  OpenURLParams open4(embedded_test_server()->GetURL("a.com", "/title2.html"),
+                      content::Referrer(), WindowOpenDisposition::CURRENT_TAB,
                       ui::PAGE_TRANSITION_TYPED, false);
   browser()->OpenURL(open4);
   load4.Wait();
@@ -396,8 +384,8 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest, MAYBE_TabManagerBasics) {
   WindowedNotificationObserver load5(
       content::NOTIFICATION_NAV_ENTRY_COMMITTED,
       content::NotificationService::AllSources());
-  OpenURLParams open5(content::GetWebUIURL("dns"), content::Referrer(),
-                      WindowOpenDisposition::CURRENT_TAB,
+  OpenURLParams open5(embedded_test_server()->GetURL("a.com", "/title3.html"),
+                      content::Referrer(), WindowOpenDisposition::CURRENT_TAB,
                       ui::PAGE_TRANSITION_TYPED, false);
   browser()->OpenURL(open5);
   load5.Wait();
@@ -456,7 +444,7 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest, MAYBE_TabManagerBasics) {
   WindowedNotificationObserver reload1(
       content::NOTIFICATION_NAV_ENTRY_COMMITTED,
       base::Bind(&ObserveNavEntryCommitted,
-                 GURL(chrome::kChromeUIChromeURLsURL)));
+                 embedded_test_server()->GetURL("a.com", "/title1.html")));
   chrome::SelectNumberedTab(browser(), 0);
   reload1.Wait();
   // Make sure the FindBarController gets the right WebContents.
@@ -470,7 +458,8 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest, MAYBE_TabManagerBasics) {
   // Select the third tab. It should reload.
   WindowedNotificationObserver reload2(
       content::NOTIFICATION_NAV_ENTRY_COMMITTED,
-      base::Bind(&ObserveNavEntryCommitted, content::GetWebUIURL("dns")));
+      base::Bind(&ObserveNavEntryCommitted,
+                 embedded_test_server()->GetURL("a.com", "/title3.html")));
   chrome::SelectNumberedTab(browser(), 2);
   reload2.Wait();
   EXPECT_EQ(2, tsm()->active_index());
@@ -484,79 +473,21 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest, MAYBE_TabManagerBasics) {
   EXPECT_FALSE(chrome::CanGoForward(browser()));
   WindowedNotificationObserver back1(
       content::NOTIFICATION_NAV_ENTRY_COMMITTED,
-      base::Bind(&ObserveNavEntryCommitted, GURL(chrome::kChromeUIVersionURL)));
+      base::Bind(&ObserveNavEntryCommitted,
+                 embedded_test_server()->GetURL("a.com", "/title2.html")));
   chrome::GoBack(browser(), WindowOpenDisposition::CURRENT_TAB);
   back1.Wait();
   EXPECT_TRUE(chrome::CanGoBack(browser()));
   EXPECT_TRUE(chrome::CanGoForward(browser()));
   WindowedNotificationObserver back2(
       content::NOTIFICATION_NAV_ENTRY_COMMITTED,
-      base::Bind(&ObserveNavEntryCommitted, GURL(chrome::kChromeUITermsURL)));
+      base::Bind(&ObserveNavEntryCommitted,
+                 embedded_test_server()->GetURL("a.com", "/title1.html")));
   chrome::GoBack(browser(), WindowOpenDisposition::CURRENT_TAB);
   back2.Wait();
   EXPECT_FALSE(chrome::CanGoBack(browser()));
   EXPECT_TRUE(chrome::CanGoForward(browser()));
 }
-
-// On Linux, memory pressure listener is not implemented yet.
-#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_CHROMEOS)
-
-// Test that the MemoryPressureListener event is properly triggering a tab
-// discard upon |MEMORY_PRESSURE_LEVEL_CRITICAL| event.
-IN_PROC_BROWSER_TEST_F(TabManagerTest, OomPressureListener) {
-  // Get two tabs open.
-  content::WindowedNotificationObserver load1(
-      content::NOTIFICATION_NAV_ENTRY_COMMITTED,
-      content::NotificationService::AllSources());
-  OpenURLParams open1(GURL(chrome::kChromeUIAboutURL), content::Referrer(),
-                      WindowOpenDisposition::CURRENT_TAB,
-                      ui::PAGE_TRANSITION_TYPED, false);
-  browser()->OpenURL(open1);
-  load1.Wait();
-
-  content::WindowedNotificationObserver load2(
-      content::NOTIFICATION_NAV_ENTRY_COMMITTED,
-      content::NotificationService::AllSources());
-  OpenURLParams open2(GURL(chrome::kChromeUICreditsURL), content::Referrer(),
-                      WindowOpenDisposition::NEW_FOREGROUND_TAB,
-                      ui::PAGE_TRANSITION_TYPED, false);
-  browser()->OpenURL(open2);
-  load2.Wait();
-
-  ASSERT_EQ(tsm()->count(), 2);
-
-  EXPECT_FALSE(IsTabDiscarded(GetWebContentsAt(0)));
-  EXPECT_FALSE(IsTabDiscarded(GetWebContentsAt(1)));
-
-  // Advance time so everything is urgent discardable.
-  test_clock_.Advance(kBackgroundUrgentProtectionTime);
-
-  // Nothing should happen with a moderate memory pressure event.
-  fake_memory_pressure_monitor_.SetAndNotifyMemoryPressure(
-      base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_MODERATE);
-  EXPECT_FALSE(IsTabDiscarded(GetWebContentsAt(0)));
-  EXPECT_FALSE(IsTabDiscarded(GetWebContentsAt(1)));
-
-  // A critical memory pressure event should discard a tab.
-  fake_memory_pressure_monitor_.SetAndNotifyMemoryPressure(
-      base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL);
-  // Coming here, an asynchronous operation will collect system stats. Once in,
-  // a tab should get discarded. As such we need to give it 10s time to discard.
-  const int kTimeoutTimeInMS = 10000;
-  const int kIntervalTimeInMS = 5;
-  int timeout = kTimeoutTimeInMS / kIntervalTimeInMS;
-  while (--timeout) {
-    base::PlatformThread::Sleep(
-        base::TimeDelta::FromMilliseconds(kIntervalTimeInMS));
-    base::RunLoop().RunUntilIdle();
-    if (IsTabDiscarded(GetWebContentsAt(0)))
-      break;
-  }
-  EXPECT_TRUE(IsTabDiscarded(GetWebContentsAt(0)));
-  EXPECT_FALSE(IsTabDiscarded(GetWebContentsAt(1)));
-}
-
-#endif
 
 IN_PROC_BROWSER_TEST_F(TabManagerTest, InvalidOrEmptyURL) {
   // Open two tabs. Wait for the foreground one to load but do not wait for the
@@ -583,12 +514,12 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest, InvalidOrEmptyURL) {
   // This shouldn't be able to discard a tab as the background tab has not yet
   // started loading (its URL is not committed).
   EXPECT_FALSE(
-      tab_manager()->DiscardTabImpl(LifecycleUnitDiscardReason::PROACTIVE));
+      tab_manager()->DiscardTabImpl(LifecycleUnitDiscardReason::EXTERNAL));
 
   // Wait for the background tab to load which then allows it to be discarded.
   load2.Wait();
   EXPECT_TRUE(
-      tab_manager()->DiscardTabImpl(LifecycleUnitDiscardReason::PROACTIVE));
+      tab_manager()->DiscardTabImpl(LifecycleUnitDiscardReason::EXTERNAL));
 }
 
 // Makes sure that the TabDiscardDoneCB callback is called after
@@ -624,86 +555,9 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest, TabDiscardDoneCallback) {
   TabManager::TabDiscardDoneCB callback{
       base::BindOnce(&CallbackState::Run, base::Unretained(&callback_state))};
   EXPECT_TRUE(tab_manager()->DiscardTabImpl(
-      LifecycleUnitDiscardReason::PROACTIVE, std::move(callback)));
+      LifecycleUnitDiscardReason::EXTERNAL, std::move(callback)));
   EXPECT_TRUE(callback_state.called_);
 }
-
-// On Linux, memory pressure listener is not implemented yet.
-#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_CHROMEOS)
-
-IN_PROC_BROWSER_TEST_F(TabManagerTest, RegisterMemoryPressureListener) {
-  // Open two tabs. Wait for the foreground one to load but do not wait for the
-  // background one.
-  content::WindowedNotificationObserver load1(
-      content::NOTIFICATION_NAV_ENTRY_COMMITTED,
-      content::NotificationService::AllSources());
-  OpenURLParams open1(GURL(chrome::kChromeUIAboutURL), content::Referrer(),
-                      WindowOpenDisposition::CURRENT_TAB,
-                      ui::PAGE_TRANSITION_TYPED, false);
-  browser()->OpenURL(open1);
-  load1.Wait();
-
-  content::WindowedNotificationObserver load2(
-      content::NOTIFICATION_NAV_ENTRY_COMMITTED,
-      content::NotificationService::AllSources());
-  OpenURLParams open2(GURL(chrome::kChromeUICreditsURL), content::Referrer(),
-                      WindowOpenDisposition::NEW_BACKGROUND_TAB,
-                      ui::PAGE_TRANSITION_TYPED, false);
-  browser()->OpenURL(open2);
-  load2.Wait();
-
-  ASSERT_EQ(2, tsm()->count());
-  EXPECT_FALSE(IsTabDiscarded(GetWebContentsAt(0)));
-  EXPECT_FALSE(IsTabDiscarded(GetWebContentsAt(1)));
-
-  // Advance time so everything is urgent discardable.
-  test_clock_.Advance(kBackgroundUrgentProtectionTime);
-
-  // After receiving memory pressure, the background tab should be discarded.
-  // A critical memory pressure event should discard a tab.
-  fake_memory_pressure_monitor_.SetAndNotifyMemoryPressure(
-      base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL);
-  if (!IsTabDiscarded(GetWebContentsAt(1))) {
-    DiscardWaiter discard_waiter;
-    discard_waiter.Wait();
-  }
-
-  // Critical memory pressure should make the background tab discarded.
-  EXPECT_FALSE(IsTabDiscarded(GetWebContentsAt(0)));
-  EXPECT_TRUE(IsTabDiscarded(GetWebContentsAt(1)));
-
-  // Open another background tab.
-  content::WindowedNotificationObserver load3(
-      content::NOTIFICATION_NAV_ENTRY_COMMITTED,
-      content::NotificationService::AllSources());
-  OpenURLParams open3(GURL(chrome::kChromeUICreditsURL), content::Referrer(),
-                      WindowOpenDisposition::NEW_BACKGROUND_TAB,
-                      ui::PAGE_TRANSITION_TYPED, false);
-  browser()->OpenURL(open3);
-  load3.Wait();
-
-  ASSERT_EQ(3, tsm()->count());
-
-  // Advance time again so the new background tab is discardable.
-  test_clock_.Advance(kBackgroundUrgentProtectionTime);
-
-  // After receiving another critical memory pressure, the new background tab
-  // should be discarded. This verifies that the memory pressure listener is
-  // registered back when the previous dicard finished.
-  fake_memory_pressure_monitor_.SetAndNotifyMemoryPressure(
-      base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL);
-  if (!IsTabDiscarded(GetWebContentsAt(2))) {
-    DiscardWaiter discard_waiter;
-    discard_waiter.Wait();
-  }
-
-  // Critical memory pressure should make the background tab discarded.
-  EXPECT_FALSE(IsTabDiscarded(GetWebContentsAt(0)));
-  EXPECT_TRUE(IsTabDiscarded(GetWebContentsAt(1)));
-  EXPECT_TRUE(IsTabDiscarded(GetWebContentsAt(2)));
-}
-
-#endif
 
 // Makes sure that PDF pages are protected.
 IN_PROC_BROWSER_TEST_F(TabManagerTest, ProtectPDFPages) {
@@ -719,12 +573,12 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest, ProtectPDFPages) {
   GURL url2(chrome::kChromeUIAboutURL);
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), url2, WindowOpenDisposition::NEW_FOREGROUND_TAB,
-      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
 
   // No discarding should be possible as the only background tab is displaying a
   // PDF page, hence protected.
   EXPECT_FALSE(
-      tab_manager()->DiscardTabImpl(LifecycleUnitDiscardReason::PROACTIVE));
+      tab_manager()->DiscardTabImpl(LifecycleUnitDiscardReason::EXTERNAL));
 }
 
 #if !defined(OS_CHROMEOS)
@@ -740,7 +594,7 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest,
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), GURL(chrome::kChromeUIAboutURL),
       WindowOpenDisposition::NEW_BACKGROUND_TAB,
-      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
   EXPECT_EQ(2, tsm->count());
 
   // Advance the clock for less than the protection time.
@@ -766,9 +620,9 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest,
   // Should not be able to urgent discard the tab.
   ASSERT_FALSE(tab_manager->DiscardTabImpl(LifecycleUnitDiscardReason::URGENT));
 
-  // But should be able to proactive discard the tab.
+  // But should be able to externally discard the tab.
   EXPECT_TRUE(
-      tab_manager->DiscardTabImpl(LifecycleUnitDiscardReason::PROACTIVE));
+      tab_manager->DiscardTabImpl(LifecycleUnitDiscardReason::EXTERNAL));
 
   // This is necessary otherwise the test crashes in
   // WebContentsData::WebContentsDestroyed.
@@ -783,7 +637,7 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest, ProtectVideoTabs) {
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), GURL(chrome::kChromeUIAboutURL),
       WindowOpenDisposition::NEW_BACKGROUND_TAB,
-      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
 
   auto* tab = GetWebContentsAt(1);
 
@@ -803,14 +657,14 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest, ProtectVideoTabs) {
 
   // Should not be able to discard a tab.
   ASSERT_FALSE(
-      tab_manager()->DiscardTabImpl(LifecycleUnitDiscardReason::PROACTIVE));
+      tab_manager()->DiscardTabImpl(LifecycleUnitDiscardReason::EXTERNAL));
 
   // Remove the video stream.
   video_stream_ui.reset();
 
   // Should be able to discard the background tab now.
   EXPECT_TRUE(
-      tab_manager()->DiscardTabImpl(LifecycleUnitDiscardReason::PROACTIVE));
+      tab_manager()->DiscardTabImpl(LifecycleUnitDiscardReason::EXTERNAL));
 }
 
 // Makes sure that tabs using DevTools are protected from discarding.
@@ -828,12 +682,12 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest, ProtectDevToolsTabsFromDiscarding) {
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), GURL(chrome::kChromeUIAboutURL),
       WindowOpenDisposition::NEW_FOREGROUND_TAB,
-      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
 
   // No discarding should be possible as the only background tab is currently
   // using DevTools.
   EXPECT_FALSE(
-      tab_manager()->DiscardTabImpl(LifecycleUnitDiscardReason::PROACTIVE));
+      tab_manager()->DiscardTabImpl(LifecycleUnitDiscardReason::EXTERNAL));
 
   // Close the DevTools window and repeat the test, this time use a non-docked
   // window.
@@ -842,14 +696,14 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest, ProtectDevToolsTabsFromDiscarding) {
       GetWebContentsAt(0), false /* is_docked */);
   EXPECT_TRUE(devtool);
   EXPECT_FALSE(
-      tab_manager()->DiscardTabImpl(LifecycleUnitDiscardReason::PROACTIVE));
+      tab_manager()->DiscardTabImpl(LifecycleUnitDiscardReason::EXTERNAL));
 
   // TODO(sebmarchand): Also ensure that the tab can't be frozen.
 
   // Close the DevTools window, ensure that the tab can be discarded.
   DevToolsWindowTesting::CloseDevToolsWindowSync(devtool);
   EXPECT_TRUE(
-      tab_manager()->DiscardTabImpl(LifecycleUnitDiscardReason::PROACTIVE));
+      tab_manager()->DiscardTabImpl(LifecycleUnitDiscardReason::EXTERNAL));
 }
 
 IN_PROC_BROWSER_TEST_F(TabManagerTest, AutoDiscardable) {
@@ -881,7 +735,7 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest, AutoDiscardable) {
 
   // Shouldn't discard the tab, since auto-discardable is deactivated.
   EXPECT_FALSE(
-      tab_manager()->DiscardTabImpl(LifecycleUnitDiscardReason::PROACTIVE));
+      tab_manager()->DiscardTabImpl(LifecycleUnitDiscardReason::EXTERNAL));
 
   // Reset auto-discardable state to true.
   TabLifecycleUnitExternal::FromWebContents(GetWebContentsAt(0))
@@ -889,26 +743,8 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest, AutoDiscardable) {
 
   // Now it should be able to discard the tab.
   EXPECT_TRUE(
-      tab_manager()->DiscardTabImpl(LifecycleUnitDiscardReason::PROACTIVE));
+      tab_manager()->DiscardTabImpl(LifecycleUnitDiscardReason::EXTERNAL));
   EXPECT_TRUE(IsTabDiscarded(GetWebContentsAt(0)));
-}
-
-IN_PROC_BROWSER_TEST_F(TabManagerTestWithTwoTabs,
-                       ProactiveFastShutdownSingleTabProcess) {
-  // The Tab Manager should be able to fast-kill a process for the discarded tab
-  // on all platforms, as each tab will be running in a separate process by
-  // itself regardless of the discard reason.
-  content::WindowedNotificationObserver observer(
-      content::NOTIFICATION_RENDERER_PROCESS_CLOSED,
-      content::NotificationService::AllSources());
-  base::HistogramTester tester;
-  EXPECT_TRUE(
-      tab_manager()->DiscardTabImpl(LifecycleUnitDiscardReason::PROACTIVE));
-  SimulateFreezeSignal(GetWebContentsAt(1));
-
-  tester.ExpectUniqueSample(
-      "TabManager.Discarding.DiscardedTabCouldFastShutdown", true, 1);
-  observer.Wait();
 }
 
 IN_PROC_BROWSER_TEST_F(TabManagerTestWithTwoTabs,
@@ -927,29 +763,6 @@ IN_PROC_BROWSER_TEST_F(TabManagerTestWithTwoTabs,
   tester.ExpectUniqueSample(
       "TabManager.Discarding.DiscardedTabCouldFastShutdown", true, 1);
   observer.Wait();
-}
-
-IN_PROC_BROWSER_TEST_F(TabManagerTest, ProactiveFastShutdownSharedTabProcess) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-
-  // Set max renderers to 1 before opening tabs to force running out of
-  // processes and for both these tabs to share a renderer.
-  content::RenderProcessHost::SetMaxRendererProcessCount(1);
-  OpenTwoTabs(embedded_test_server()->GetURL("a.com", "/title1.html"),
-              embedded_test_server()->GetURL("a.com", "/title2.html"));
-  EXPECT_EQ(tsm()->GetWebContentsAt(0)->GetMainFrame()->GetProcess(),
-            tsm()->GetWebContentsAt(1)->GetMainFrame()->GetProcess());
-
-  // The Tab Manager will not be able to fast-kill either of the tabs since they
-  // share the same process regardless of the discard reason. No unsafe attempts
-  // will be made.
-  base::HistogramTester tester;
-  EXPECT_TRUE(
-      tab_manager()->DiscardTabImpl(LifecycleUnitDiscardReason::PROACTIVE));
-  SimulateFreezeSignal(GetWebContentsAt(1));
-
-  tester.ExpectUniqueSample(
-      "TabManager.Discarding.DiscardedTabCouldFastShutdown", false, 1);
 }
 
 IN_PROC_BROWSER_TEST_F(TabManagerTest, UrgentFastShutdownSharedTabProcess) {
@@ -981,33 +794,11 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest, UrgentFastShutdownSharedTabProcess) {
       "TabManager.Discarding.DiscardedTabCouldFastShutdown", false, 1);
 }
 
-IN_PROC_BROWSER_TEST_F(TabManagerTest,
-                       DISABLED_ProactiveFastShutdownWithUnloadHandler) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-  // Disable the protection of recent tabs.
-  OpenTwoTabs(GURL(chrome::kChromeUIAboutURL),
-              GURL(embedded_test_server()->GetURL("/unload.html")));
-
-  // Advance time so everything is urgent discardable.
-  test_clock_.Advance(kBackgroundUrgentProtectionTime);
-
-  base::HistogramTester tester;
-  // The Tab Manager will not be able to safely fast-kill either of the tabs as
-  // one of them is current, and the other has an unload handler. No unsafe
-  // attempts will be made.
-  EXPECT_TRUE(
-      tab_manager()->DiscardTabImpl(LifecycleUnitDiscardReason::PROACTIVE));
-  SimulateFreezeSignal(GetWebContentsAt(1));
-
-  tester.ExpectUniqueSample(
-      "TabManager.Discarding.DiscardedTabCouldFastShutdown", false, 1);
-}
-
 IN_PROC_BROWSER_TEST_F(TabManagerTest, UrgentFastShutdownWithUnloadHandler) {
   ASSERT_TRUE(embedded_test_server()->Start());
   // Disable the protection of recent tabs.
-  OpenTwoTabs(GURL(chrome::kChromeUIAboutURL),
-              GURL(embedded_test_server()->GetURL("/unload.html")));
+  OpenTwoTabs(embedded_test_server()->GetURL("a.com", "/title1.html"),
+              embedded_test_server()->GetURL("/unload.html"));
 
   // Advance time so everything is urgent discardable.
   test_clock_.Advance(kBackgroundUrgentProtectionTime);
@@ -1037,35 +828,12 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest, UrgentFastShutdownWithUnloadHandler) {
 #endif  // OS_CHROMEOS
 }
 
-// https://crbug.com/874915, flaky on all platform
-IN_PROC_BROWSER_TEST_F(TabManagerTest,
-                       DISABLED_ProactiveFastShutdownWithBeforeunloadHandler) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-  // Disable the protection of recent tabs.
-  OpenTwoTabs(GURL(chrome::kChromeUIAboutURL),
-              GURL(embedded_test_server()->GetURL("/beforeunload.html")));
-
-  // Advance time so everything is urgent discardable.
-  test_clock_.Advance(kBackgroundUrgentProtectionTime);
-
-  // The Tab Manager will not be able to safely fast-kill either of the tabs as
-  // one of them is current, and the other has a beforeunload handler. No unsafe
-  // attempts will be made.
-  base::HistogramTester tester;
-  EXPECT_TRUE(
-      tab_manager()->DiscardTabImpl(LifecycleUnitDiscardReason::PROACTIVE));
-  SimulateFreezeSignal(GetWebContentsAt(1));
-
-  tester.ExpectUniqueSample(
-      "TabManager.Discarding.DiscardedTabCouldFastShutdown", false, 1);
-}
-
 IN_PROC_BROWSER_TEST_F(TabManagerTest,
                        UrgentFastShutdownWithBeforeunloadHandler) {
   ASSERT_TRUE(embedded_test_server()->Start());
   // Disable the protection of recent tabs.
-  OpenTwoTabs(GURL(chrome::kChromeUIAboutURL),
-              GURL(embedded_test_server()->GetURL("/beforeunload.html")));
+  OpenTwoTabs(embedded_test_server()->GetURL("a.com", "/title1.html"),
+              embedded_test_server()->GetURL("/beforeunload.html"));
 
   // Advance time so everything is urgent discardable.
   test_clock_.Advance(kBackgroundUrgentProtectionTime);
@@ -1144,27 +912,6 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest, TabPendingFreezeAndUnfreeze) {
 // Verifies the following state transitions for a tab:
 // - Initial state: ACTIVE
 // - Freeze(): ACTIVE->PENDING_FREEZE
-// - Discard(kProactive): PENDING_FREEZE->PENDING_DISCARD
-// - Freeze happens in renderer: PENDING_DISCARD->DISCARDED
-IN_PROC_BROWSER_TEST_F(TabManagerTest,
-                       TabFreezeAndProactiveDiscardBeforeFreezeCompletes) {
-  TestTransitionFromActiveToPendingFreeze();
-
-  // Proactively discard the background tab.
-  EXPECT_TRUE(
-      GetLifecycleUnitAt(1)->Discard(LifecycleUnitDiscardReason::PROACTIVE));
-  EXPECT_EQ(LifecycleUnitState::PENDING_DISCARD,
-            GetLifecycleUnitAt(1)->GetState());
-
-  // The tab should transition to DISCARDED after the renderer freezes the page.
-  ExpectStateTransitionObserver expect_state_transition(
-      GetLifecycleUnitAt(1), LifecycleUnitState::DISCARDED);
-  expect_state_transition.Wait();
-}
-
-// Verifies the following state transitions for a tab:
-// - Initial state: ACTIVE
-// - Freeze(): ACTIVE->PENDING_FREEZE
 // - Discard(kUrgent): PENDING_FREEZE->DISCARDED
 IN_PROC_BROWSER_TEST_F(TabManagerTestWithTwoTabs,
                        TabFreezeAndUrgentDiscardBeforeFreezeCompletes) {
@@ -1198,100 +945,6 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest, TabFreezeAndUrgentDiscard) {
   EXPECT_TRUE(
       GetLifecycleUnitAt(1)->Discard(LifecycleUnitDiscardReason::URGENT));
   EXPECT_EQ(LifecycleUnitState::DISCARDED, GetLifecycleUnitAt(1)->GetState());
-}
-
-// Verifies the following state transitions for a tab:
-// - Initial state: ACTIVE
-// - Discard(kProactive): ACTIVE->PENDING_DISCARD
-// - Focus: PENDING_DISCARD->PENDING_FREEZE
-// - (optional) Freeze happens in renderer: PENDING_FREEZE->FROZEN
-// - Renderer is notified of new visibility: PENDING_FREEZE->ACTIVE or
-//   FROZEN->ACTIVE.
-IN_PROC_BROWSER_TEST_F(TabManagerTestWithTwoTabs,
-                       TabProactiveDiscardAndFocusBeforeFreezeCompletes) {
-  // Proactively discard the background tab.
-  EXPECT_EQ(LifecycleUnitState::ACTIVE, GetLifecycleUnitAt(1)->GetState());
-  EXPECT_TRUE(
-      GetLifecycleUnitAt(1)->Discard(LifecycleUnitDiscardReason::PROACTIVE));
-  EXPECT_EQ(LifecycleUnitState::PENDING_DISCARD,
-            GetLifecycleUnitAt(1)->GetState());
-
-  // Focus and make visible the background tab. It should transition to
-  // PENDING_FREEZE, to indicate that there is a freeze on its way to the
-  // renderer but that no discard should happen if the renderer freezes the page
-  // before being notified that it became visible.
-  tsm()->ActivateTabAt(1, {TabStripModel::GestureType::kOther});
-  GetWebContentsAt(1)->WasShown();
-  EXPECT_EQ(LifecycleUnitState::PENDING_FREEZE,
-            GetLifecycleUnitAt(1)->GetState());
-
-  // The tab should eventually transition to ACTIVE. If the renderer freezes the
-  // page before being notified that the tab became visible, there could be an
-  // intermediate transition to FROZEN.
-  ExpectStateTransitionObserver expect_state_transition(
-      GetLifecycleUnitAt(1), LifecycleUnitState::ACTIVE);
-  expect_state_transition.AllowState(LifecycleUnitState::FROZEN);
-  expect_state_transition.Wait();
-}
-
-// Verifies the following state transitions for a tab:
-// - Initial state: ACTIVE
-// - Discard(kProactive): ACTIVE->PENDING_DISCARD
-// - Freeze happens in renderer: PENDING_DISCARD->DISCARDED
-// - Focus: DISCARDED->ACTIVE
-IN_PROC_BROWSER_TEST_F(TabManagerTestWithTwoTabs,
-                       TabProactiveDiscardAndFocusToReload) {
-  // Proactively discard the background tab.
-  EXPECT_EQ(LifecycleUnitState::ACTIVE, GetLifecycleUnitAt(1)->GetState());
-  EXPECT_TRUE(
-      GetLifecycleUnitAt(1)->Discard(LifecycleUnitDiscardReason::PROACTIVE));
-  EXPECT_EQ(LifecycleUnitState::PENDING_DISCARD,
-            GetLifecycleUnitAt(1)->GetState());
-
-  // After the freeze happens in the renderer, the tab is discarded.
-  {
-    ExpectStateTransitionObserver expect_state_transition(
-        GetLifecycleUnitAt(1), LifecycleUnitState::DISCARDED);
-    expect_state_transition.Wait();
-  }
-
-  // When the tab is focused and made visible, it transitions to ACTIVE.
-  tsm()->ActivateTabAt(1, {TabStripModel::GestureType::kOther});
-  GetWebContentsAt(1)->WasShown();
-  EXPECT_EQ(LifecycleUnitState::ACTIVE, GetLifecycleUnitAt(1)->GetState());
-}
-
-// Verifies the following state transitions for a tab:
-// - Initial state: ACTIVE
-// - Discard(kProactive): ACTIVE->PENDING_DISCARD
-// - Freeze(): Disallowed
-// - Freeze happens in renderer: PENDING_DISCARD->DISCARDED
-IN_PROC_BROWSER_TEST_F(TabManagerTestWithTwoTabs,
-                       TabFreezeDisallowedWhenProactivelyDiscarding) {
-  // Pretend that the background tab reported its origin trial freeze policy, to
-  // prevent CanFreeze() from returning false.
-  TabLifecycleUnitSource::OnOriginTrialFreezePolicyChanged(
-      GetWebContentsAt(1),
-      performance_manager::mojom::InterventionPolicy::kDefault);
-
-  // Proactively discard the background tab.
-  EXPECT_EQ(LifecycleUnitState::ACTIVE, GetLifecycleUnitAt(1)->GetState());
-  EXPECT_TRUE(
-      GetLifecycleUnitAt(1)->Discard(LifecycleUnitDiscardReason::PROACTIVE));
-  EXPECT_EQ(LifecycleUnitState::PENDING_DISCARD,
-            GetLifecycleUnitAt(1)->GetState());
-
-  // Freezing the tab should be disallowed.
-  DecisionDetails decision_details;
-  EXPECT_FALSE(GetLifecycleUnitAt(1)->CanFreeze(&decision_details));
-  EXPECT_FALSE(GetLifecycleUnitAt(1)->Freeze());
-  EXPECT_EQ(LifecycleUnitState::PENDING_DISCARD,
-            GetLifecycleUnitAt(1)->GetState());
-
-  // The tab should eventually transition to DISCARDED.
-  ExpectStateTransitionObserver expect_state_transition(
-      GetLifecycleUnitAt(1), LifecycleUnitState::DISCARDED);
-  expect_state_transition.Wait();
 }
 
 // Verifies the following state transitions for a tab:
@@ -1349,7 +1002,8 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest, DiscardedTabHasNoProcess) {
   int renderer_id = process->GetID();
 
   // Discard the tab. This simulates a tab discard.
-  TabLifecycleUnitExternal::FromWebContents(web_contents)->DiscardTab();
+  TabLifecycleUnitExternal::FromWebContents(web_contents)
+      ->DiscardTab(LifecycleUnitDiscardReason::URGENT);
   content::WebContents* new_web_contents = tsm()->GetActiveWebContents();
   EXPECT_NE(new_web_contents, web_contents);
   web_contents = new_web_contents;
@@ -1415,7 +1069,8 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest,
   EXPECT_FALSE(before_discard_childframe_result);
 
   // Discard the tab. This simulates a tab discard.
-  TabLifecycleUnitExternal::FromWebContents(contents)->DiscardTab();
+  TabLifecycleUnitExternal::FromWebContents(contents)->DiscardTab(
+      LifecycleUnitDiscardReason::URGENT);
 
   // Here we simulate re-focussing the tab causing reload with navigation,
   // the navigation will reload the tab.
@@ -1480,7 +1135,7 @@ void EnsureTabsInBrowser(Browser* browser, int num_tabs) {
         browser, GURL(chrome::kChromeUICreditsURL),
         i == 0 ? WindowOpenDisposition::CURRENT_TAB
                : WindowOpenDisposition::NEW_BACKGROUND_TAB,
-        ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+        ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
   }
 
   EXPECT_EQ(num_tabs, browser->tab_strip_model()->count());
@@ -1498,71 +1153,80 @@ Browser* CreateBrowserWithTabs(int num_tabs) {
 
 }  // namespace
 
-// Flaky on Linux.  Times out on Windows and Mac debug builds.
-// http://crbug.com/772839.
-#if defined(OS_LINUX) || \
-    ((defined(OS_WIN) || defined(OS_MACOSX)) && !defined(NDEBUG))
-#define MAYBE_DiscardTabsWithMinimizedAndOccludedWindows \
-  DISABLED_DiscardTabsWithMinimizedAndOccludedWindows
+// Do not run in debug builds to avoid timeouts due to multiple navigations.
+#if !defined(NDEBUG)
+#define MAYBE_DiscardTabsWithMinimizedWindow \
+  DISABLED_DiscardTabsWithMinimizedWindow
 #else
-#define MAYBE_DiscardTabsWithMinimizedAndOccludedWindows \
-  DiscardTabsWithMinimizedAndOccludedWindows
+#define MAYBE_DiscardTabsWithMinimizedWindow DiscardTabsWithMinimizedWindow
 #endif
-IN_PROC_BROWSER_TEST_F(TabManagerTest,
-                       MAYBE_DiscardTabsWithMinimizedAndOccludedWindows) {
-  // Covered by |browser2|.
-  Browser* browser1 = browser();
-  EnsureTabsInBrowser(browser1, 2);
-  browser1->window()->SetBounds(gfx::Rect(10, 10, 10, 10));
-  // Covers |browser1|.
-  Browser* browser2 = CreateBrowserWithTabs(2);
-  EXPECT_NE(browser1, browser2);
-  browser2->window()->SetBounds(gfx::Rect(0, 0, 100, 100));
-  // Active browser.
-  Browser* browser3 = CreateBrowserWithTabs(2);
-  EXPECT_NE(browser1, browser3);
-  EXPECT_NE(browser2, browser3);
-  browser3->window()->SetBounds(gfx::Rect(110, 0, 100, 100));
+IN_PROC_BROWSER_TEST_F(TabManagerTest, MAYBE_DiscardTabsWithMinimizedWindow) {
   // Minimized browser.
-  Browser* browser4 = CreateBrowserWithTabs(2);
-  browser4->window()->Minimize();
-  EXPECT_NE(browser1, browser4);
-  EXPECT_NE(browser2, browser4);
-  EXPECT_NE(browser3, browser4);
+  EnsureTabsInBrowser(browser(), 2);
+  browser()->window()->Minimize();
+  // Other browser that will be last active. This browser exists because the
+  // last active tab cannot be discarded on
 
   // Advance time so everything is urgent discardable.
   test_clock_.Advance(kBackgroundUrgentProtectionTime);
 
   for (int i = 0; i < 8; ++i)
-    tab_manager()->DiscardTab(LifecycleUnitDiscardReason::PROACTIVE);
+    tab_manager()->DiscardTab(LifecycleUnitDiscardReason::EXTERNAL);
 
   base::RunLoop().RunUntilIdle();
 
 // On ChromeOS, active tabs are discarded if their window is non-visible. On
 // other platforms, they are never discarded.
 #if defined(OS_CHROMEOS)
-  EXPECT_TRUE(IsTabDiscarded(browser1->tab_strip_model()->GetWebContentsAt(0)));
-  EXPECT_FALSE(
-      IsTabDiscarded(browser2->tab_strip_model()->GetWebContentsAt(0)));
-  EXPECT_FALSE(
-      IsTabDiscarded(browser3->tab_strip_model()->GetWebContentsAt(0)));
-  EXPECT_TRUE(IsTabDiscarded(browser4->tab_strip_model()->GetWebContentsAt(0)));
+  EXPECT_TRUE(
+      IsTabDiscarded(browser()->tab_strip_model()->GetWebContentsAt(0)));
 #else
   EXPECT_FALSE(
-      IsTabDiscarded(browser1->tab_strip_model()->GetWebContentsAt(0)));
-  EXPECT_FALSE(
-      IsTabDiscarded(browser2->tab_strip_model()->GetWebContentsAt(0)));
-  EXPECT_FALSE(
-      IsTabDiscarded(browser3->tab_strip_model()->GetWebContentsAt(0)));
-  EXPECT_FALSE(
-      IsTabDiscarded(browser4->tab_strip_model()->GetWebContentsAt(0)));
+      IsTabDiscarded(browser()->tab_strip_model()->GetWebContentsAt(0)));
 #endif
 
   // Non-active tabs can be discarded on all platforms.
-  EXPECT_TRUE(IsTabDiscarded(browser1->tab_strip_model()->GetWebContentsAt(1)));
-  EXPECT_TRUE(IsTabDiscarded(browser2->tab_strip_model()->GetWebContentsAt(1)));
-  EXPECT_TRUE(IsTabDiscarded(browser3->tab_strip_model()->GetWebContentsAt(1)));
-  EXPECT_TRUE(IsTabDiscarded(browser4->tab_strip_model()->GetWebContentsAt(1)));
+  EXPECT_TRUE(
+      IsTabDiscarded(browser()->tab_strip_model()->GetWebContentsAt(1)));
+}
+
+// Do not run in debug builds to avoid timeouts due to multiple navigations.
+#if !defined(NDEBUG)
+#define MAYBE_DiscardTabsWithOccludedWindow \
+  DISABLED_DiscardTabsWithOccludedWindow
+#else
+#define MAYBE_DiscardTabsWithOccludedWindow DiscardTabsWithOccludedWindow
+#endif
+IN_PROC_BROWSER_TEST_F(TabManagerTest, MAYBE_DiscardTabsWithOccludedWindow) {
+  // Occluded browser.
+  EnsureTabsInBrowser(browser(), 2);
+  browser()->window()->SetBounds(gfx::Rect(10, 10, 10, 10));
+  // Other browser that covers the occluded browser.
+  Browser* other_browser = CreateBrowserWithTabs(1);
+  EXPECT_NE(other_browser, browser());
+  other_browser->window()->SetBounds(gfx::Rect(0, 0, 100, 100));
+
+  // Advance time so everything is urgent discardable.
+  test_clock_.Advance(kBackgroundUrgentProtectionTime);
+
+  for (int i = 0; i < 3; ++i)
+    tab_manager()->DiscardTab(LifecycleUnitDiscardReason::URGENT);
+
+  base::RunLoop().RunUntilIdle();
+
+// On ChromeOS, active tabs are discarded if their window is non-visible. On
+// other platforms, they are never discarded.
+#if defined(OS_CHROMEOS)
+  EXPECT_TRUE(
+      IsTabDiscarded(browser()->tab_strip_model()->GetWebContentsAt(0)));
+#else
+  EXPECT_FALSE(
+      IsTabDiscarded(browser()->tab_strip_model()->GetWebContentsAt(0)));
+#endif
+
+  // Non-active tabs can be discarded on all platforms.
+  EXPECT_TRUE(
+      IsTabDiscarded(browser()->tab_strip_model()->GetWebContentsAt(1)));
 }
 
 IN_PROC_BROWSER_TEST_F(TabManagerTest, UnfreezeTabOnNavigationEvent) {
@@ -1577,6 +1241,155 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest, UnfreezeTabOnNavigationEvent) {
   expect_state_transition.AllowState(LifecycleUnitState::FROZEN);
   expect_state_transition.Wait();
 }
+
+// On Linux, memory pressure listener is not implemented yet.
+#if !defined(OS_LINUX)
+
+class TabManagerMemoryPressureTest : public TabManagerTest {
+ public:
+  TabManagerMemoryPressureTest() {
+    scoped_feature_list_.InitAndDisableFeature(
+        performance_manager::features::kUrgentDiscardingFromPerformanceManager);
+  }
+  ~TabManagerMemoryPressureTest() override = default;
+  TabManagerMemoryPressureTest(const TabManagerMemoryPressureTest& other) =
+      delete;
+  TabManagerMemoryPressureTest& operator=(const TabManagerMemoryPressureTest&) =
+      delete;
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+// Test that the MemoryPressureListener event is properly triggering a tab
+// discard upon |MEMORY_PRESSURE_LEVEL_CRITICAL| event.
+IN_PROC_BROWSER_TEST_F(TabManagerMemoryPressureTest, OomPressureListener) {
+  // Get two tabs open.
+  content::WindowedNotificationObserver load1(
+      content::NOTIFICATION_NAV_ENTRY_COMMITTED,
+      content::NotificationService::AllSources());
+  OpenURLParams open1(GURL(chrome::kChromeUIAboutURL), content::Referrer(),
+                      WindowOpenDisposition::CURRENT_TAB,
+                      ui::PAGE_TRANSITION_TYPED, false);
+  browser()->OpenURL(open1);
+  load1.Wait();
+
+  content::WindowedNotificationObserver load2(
+      content::NOTIFICATION_NAV_ENTRY_COMMITTED,
+      content::NotificationService::AllSources());
+  OpenURLParams open2(GURL(chrome::kChromeUICreditsURL), content::Referrer(),
+                      WindowOpenDisposition::NEW_FOREGROUND_TAB,
+                      ui::PAGE_TRANSITION_TYPED, false);
+  browser()->OpenURL(open2);
+  load2.Wait();
+
+  ASSERT_EQ(tsm()->count(), 2);
+
+  EXPECT_FALSE(IsTabDiscarded(GetWebContentsAt(0)));
+  EXPECT_FALSE(IsTabDiscarded(GetWebContentsAt(1)));
+
+  // Advance time so everything is urgent discardable.
+  test_clock_.Advance(kBackgroundUrgentProtectionTime);
+
+  // Nothing should happen with a moderate memory pressure event.
+  fake_memory_pressure_monitor_.SetAndNotifyMemoryPressure(
+      base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_MODERATE);
+  EXPECT_FALSE(IsTabDiscarded(GetWebContentsAt(0)));
+  EXPECT_FALSE(IsTabDiscarded(GetWebContentsAt(1)));
+
+  // A critical memory pressure event should discard a tab.
+  fake_memory_pressure_monitor_.SetAndNotifyMemoryPressure(
+      base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL);
+  // Coming here, an asynchronous operation will collect system stats. Once in,
+  // a tab should get discarded. As such we need to give it 10s time to discard.
+  const int kTimeoutTimeInMS = 10000;
+  const int kIntervalTimeInMS = 5;
+  int timeout = kTimeoutTimeInMS / kIntervalTimeInMS;
+  while (--timeout) {
+    base::PlatformThread::Sleep(
+        base::TimeDelta::FromMilliseconds(kIntervalTimeInMS));
+    base::RunLoop().RunUntilIdle();
+    if (IsTabDiscarded(GetWebContentsAt(0)))
+      break;
+  }
+  EXPECT_TRUE(IsTabDiscarded(GetWebContentsAt(0)));
+  EXPECT_FALSE(IsTabDiscarded(GetWebContentsAt(1)));
+}
+
+IN_PROC_BROWSER_TEST_F(TabManagerMemoryPressureTest,
+                       RegisterMemoryPressureListener) {
+  // Open two tabs. Wait for the foreground one to load but do not wait for the
+  // background one.
+  content::WindowedNotificationObserver load1(
+      content::NOTIFICATION_NAV_ENTRY_COMMITTED,
+      content::NotificationService::AllSources());
+  OpenURLParams open1(GURL(chrome::kChromeUIAboutURL), content::Referrer(),
+                      WindowOpenDisposition::CURRENT_TAB,
+                      ui::PAGE_TRANSITION_TYPED, false);
+  browser()->OpenURL(open1);
+  load1.Wait();
+
+  content::WindowedNotificationObserver load2(
+      content::NOTIFICATION_NAV_ENTRY_COMMITTED,
+      content::NotificationService::AllSources());
+  OpenURLParams open2(GURL(chrome::kChromeUICreditsURL), content::Referrer(),
+                      WindowOpenDisposition::NEW_BACKGROUND_TAB,
+                      ui::PAGE_TRANSITION_TYPED, false);
+  browser()->OpenURL(open2);
+  load2.Wait();
+
+  ASSERT_EQ(2, tsm()->count());
+  EXPECT_FALSE(IsTabDiscarded(GetWebContentsAt(0)));
+  EXPECT_FALSE(IsTabDiscarded(GetWebContentsAt(1)));
+
+  // Advance time so everything is urgent discardable.
+  test_clock_.Advance(kBackgroundUrgentProtectionTime);
+
+  // After receiving memory pressure, the background tab should be discarded.
+  // A critical memory pressure event should discard a tab.
+  fake_memory_pressure_monitor_.SetAndNotifyMemoryPressure(
+      base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL);
+  if (!IsTabDiscarded(GetWebContentsAt(1))) {
+    DiscardWaiter discard_waiter;
+    discard_waiter.Wait();
+  }
+
+  // Critical memory pressure should make the background tab discarded.
+  EXPECT_FALSE(IsTabDiscarded(GetWebContentsAt(0)));
+  EXPECT_TRUE(IsTabDiscarded(GetWebContentsAt(1)));
+
+  // Open another background tab.
+  content::WindowedNotificationObserver load3(
+      content::NOTIFICATION_NAV_ENTRY_COMMITTED,
+      content::NotificationService::AllSources());
+  OpenURLParams open3(GURL(chrome::kChromeUICreditsURL), content::Referrer(),
+                      WindowOpenDisposition::NEW_BACKGROUND_TAB,
+                      ui::PAGE_TRANSITION_TYPED, false);
+  browser()->OpenURL(open3);
+  load3.Wait();
+
+  ASSERT_EQ(3, tsm()->count());
+
+  // Advance time again so the new background tab is discardable.
+  test_clock_.Advance(kBackgroundUrgentProtectionTime);
+
+  // After receiving another critical memory pressure, the new background tab
+  // should be discarded. This verifies that the memory pressure listener is
+  // registered back when the previous discard finished.
+  fake_memory_pressure_monitor_.SetAndNotifyMemoryPressure(
+      base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL);
+  if (!IsTabDiscarded(GetWebContentsAt(2))) {
+    DiscardWaiter discard_waiter;
+    discard_waiter.Wait();
+  }
+
+  // Critical memory pressure should make the background tab discarded.
+  EXPECT_FALSE(IsTabDiscarded(GetWebContentsAt(0)));
+  EXPECT_TRUE(IsTabDiscarded(GetWebContentsAt(1)));
+  EXPECT_TRUE(IsTabDiscarded(GetWebContentsAt(2)));
+}
+
+#endif  // !OS_LINUX
 
 }  // namespace resource_coordinator
 

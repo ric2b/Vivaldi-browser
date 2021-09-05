@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_UI_NAVIGATION_CORRECTION_TAB_OBSERVER_H_
 
 #include "base/macros.h"
+#include "components/embedder_support/pref_names.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
@@ -22,6 +23,12 @@ class NavigationCorrectionTabObserver
       public content::WebContentsUserData<NavigationCorrectionTabObserver> {
  public:
   ~NavigationCorrectionTabObserver() override;
+
+  // Sets whether navigation corrections can be enable via
+  // embedder_support::kAlternateErrorPagesEnabled. Currently, this is false in
+  // production, due to a server issue.
+  static void SetAllowEnableCorrectionsForTesting(
+      bool allow_enable_corrections_for_testing);
 
   static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 

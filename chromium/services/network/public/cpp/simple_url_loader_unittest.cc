@@ -29,13 +29,13 @@
 #include "base/strings/stringprintf.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/task_environment.h"
+#include "base/test/test_timeouts.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "mojo/public/c/system/types.h"
-#include "mojo/public/cpp/bindings/binding.h"
-#include "mojo/public/cpp/bindings/binding_set.h"
-#include "mojo/public/cpp/bindings/interface_request.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/system/data_pipe.h"
 #include "net/http/http_response_headers.h"
@@ -136,6 +136,12 @@ class SimpleLoaderTestHelper : public SimpleURLLoaderStreamConsumer {
       std::move(on_destruction_callback_).Run();
   }
 
+  // Returns true if the DownloadType indicates the response body is being saved
+  // to disk. Writing to disk can sometimes be slow on the bots.
+  static bool IsDownloadTypeToFile(DownloadType type) {
+    return type == DownloadType::TO_FILE || type == DownloadType::TO_TEMP_FILE;
+  }
+
   // File path that will be written to.
   const base::FilePath& dest_path() const {
     DCHECK_EQ(DownloadType::TO_FILE, download_type_);
@@ -219,7 +225,14 @@ class SimpleLoaderTestHelper : public SimpleURLLoaderStreamConsumer {
   // Waits until the request is completed. Automatically called by
   // StartSimpleLoaderAndWait, but exposed so some tests can start the
   // SimpleURLLoader directly.
-  void Wait() { run_loop_.Run(); }
+  void Wait() {
+    const base::test::ScopedRunLoopTimeout run_timeout(
+        // Some of the bots run tests quite slowly, and the default timeout is
+        // too short for them for some of the heavier weight tests.
+        // See https://crbug.com/1046745 and https://crbug.com/1035127.
+        FROM_HERE, TestTimeouts::action_max_timeout());
+    run_loop_.Run();
+  }
 
   // Sets whether a file should still exists on download-to-file errors.
   // Defaults to false.
@@ -1712,6 +1725,9 @@ enum class TestLoaderEvent {
   // kReadLongUploadBody.
   kReadFirstByteOfLongUploadBody,
 
+  // DNS resolution error.
+  kNameNotResolved,
+
   kReceivedRedirect,
   // Receive a response with a 200 status code.
   kReceivedResponse,
@@ -1744,13 +1760,14 @@ enum class TestLoaderEvent {
 // unexpected order, to test handling of events from less trusted processes.
 class MockURLLoader : public network::mojom::URLLoader {
  public:
-  MockURLLoader(base::test::TaskEnvironment* task_environment,
-                network::mojom::URLLoaderRequest url_loader_request,
-                network::mojom::URLLoaderClientPtr client,
-                std::vector<TestLoaderEvent> test_events,
-                scoped_refptr<network::ResourceRequestBody> request_body)
+  MockURLLoader(
+      base::test::TaskEnvironment* task_environment,
+      mojo::PendingReceiver<network::mojom::URLLoader> url_loader_receiver,
+      mojo::PendingRemote<network::mojom::URLLoaderClient> client,
+      std::vector<TestLoaderEvent> test_events,
+      scoped_refptr<network::ResourceRequestBody> request_body)
       : task_environment_(task_environment),
-        binding_(this, std::move(url_loader_request)),
+        receiver_(this, std::move(url_loader_receiver)),
         client_(std::move(client)),
         test_events_(std::move(test_events)) {
     if (request_body && request_body->elements()->size() == 1 &&
@@ -1827,6 +1844,13 @@ class MockURLLoader : public network::mojom::URLLoader {
           }
           EXPECT_EQ(1u, read_size);
           EXPECT_EQ(GetLongUploadBody()[0], byte);
+          break;
+        }
+        case TestLoaderEvent::kNameNotResolved: {
+          network::URLLoaderCompletionStatus status;
+          status.error_code = net::ERR_NAME_NOT_RESOLVED;
+          status.decoded_body_length = CountBytesToSend();
+          client_->OnComplete(status);
           break;
         }
         case TestLoaderEvent::kReceivedRedirect: {
@@ -1930,7 +1954,7 @@ class MockURLLoader : public network::mojom::URLLoader {
         }
         case TestLoaderEvent::kClientPipeClosed: {
           DCHECK(client_);
-          EXPECT_TRUE(binding_.is_bound());
+          EXPECT_TRUE(receiver_.is_bound());
           client_.reset();
           break;
         }
@@ -1984,8 +2008,8 @@ class MockURLLoader : public network::mojom::URLLoader {
   base::test::TaskEnvironment* task_environment_;
 
   std::unique_ptr<net::URLRequest> url_request_;
-  mojo::Binding<network::mojom::URLLoader> binding_;
-  network::mojom::URLLoaderClientPtr client_;
+  mojo::Receiver<network::mojom::URLLoader> receiver_;
+  mojo::Remote<network::mojom::URLLoaderClient> client_;
 
   std::vector<TestLoaderEvent> test_events_;
 
@@ -2010,18 +2034,19 @@ class MockURLLoaderFactory : public network::mojom::URLLoaderFactory {
 
   // network::mojom::URLLoaderFactory implementation:
 
-  void CreateLoaderAndStart(network::mojom::URLLoaderRequest url_loader_request,
-                            int32_t routing_id,
-                            int32_t request_id,
-                            uint32_t options,
-                            const network::ResourceRequest& url_request,
-                            network::mojom::URLLoaderClientPtr client,
-                            const net::MutableNetworkTrafficAnnotationTag&
-                                traffic_annotation) override {
+  void CreateLoaderAndStart(
+      mojo::PendingReceiver<network::mojom::URLLoader> url_loader_receiver,
+      int32_t routing_id,
+      int32_t request_id,
+      uint32_t options,
+      const network::ResourceRequest& url_request,
+      mojo::PendingRemote<network::mojom::URLLoaderClient> client,
+      const net::MutableNetworkTrafficAnnotationTag& traffic_annotation)
+      override {
     ASSERT_FALSE(test_events_.empty());
     requested_urls_.push_back(url_request.url);
     url_loaders_.push_back(std::make_unique<MockURLLoader>(
-        task_environment_, std::move(url_loader_request), std::move(client),
+        task_environment_, std::move(url_loader_receiver), std::move(client),
         test_events_.front(), url_request.request_body));
     test_events_.pop_front();
 
@@ -2150,8 +2175,10 @@ TEST_P(SimpleURLLoaderTest, CloseClientPipeOrder) {
   // Order of other main events can't vary, relative to each other (Getting body
   // pipe, reading body bytes, closing body pipe).
   const ClientCloseOrder kClientCloseOrder[] = {
-      ClientCloseOrder::kBeforeData, ClientCloseOrder::kDuringData,
-      ClientCloseOrder::kAfterData, ClientCloseOrder::kAfterBufferClosed,
+      ClientCloseOrder::kBeforeData,
+      ClientCloseOrder::kDuringData,
+      ClientCloseOrder::kAfterData,
+      ClientCloseOrder::kAfterBufferClosed,
   };
 
   const TestLoaderEvent kClientCloseEvents[] = {
@@ -2510,6 +2537,90 @@ TEST_P(SimpleURLLoaderTest, RetryOn5xx) {
   }
 }
 
+TEST_P(SimpleURLLoaderTest, RetryOnNameNotResolved) {
+  const GURL kInitialURL("foo://bar/initial");
+  struct TestCase {
+    // Parameters passed to SetRetryOptions.
+    int max_retries;
+    int retry_mode;
+
+    // Number of resolution errors before a successful response.
+    int num_name_not_resolved;
+
+    // Whether the request is expected to succeed in the end.
+    bool expect_success;
+
+    // Expected times the url should be requested.
+    int expected_num_requests;
+  } const kTestCases[] = {
+      // No retry when retries disabled.
+      {0, SimpleURLLoader::RETRY_NEVER, 1, false, 1},
+
+      // No retry on name resolution when retries enabled on network change.
+      {1, SimpleURLLoader::RETRY_ON_NETWORK_CHANGE, 1, false, 1},
+
+      // As many retries allowed as resolution errors.
+      {1, SimpleURLLoader::RETRY_ON_NAME_NOT_RESOLVED, 1, true, 2},
+      {1,
+       SimpleURLLoader::RETRY_ON_NAME_NOT_RESOLVED |
+           SimpleURLLoader::RETRY_ON_NETWORK_CHANGE,
+       1, true, 2},
+      {2, SimpleURLLoader::RETRY_ON_NAME_NOT_RESOLVED, 2, true, 3},
+
+      // More retries than resolution errors.
+      {2, SimpleURLLoader::RETRY_ON_NAME_NOT_RESOLVED, 1, true, 2},
+
+      // Fewer retries than resolution errors.
+      {1, SimpleURLLoader::RETRY_ON_NAME_NOT_RESOLVED, 2, false, 2},
+  };
+
+  for (const auto& test_case : kTestCases) {
+    MockURLLoaderFactory loader_factory(&task_environment_);
+    for (int i = 0; i < test_case.num_name_not_resolved; i++) {
+      loader_factory.AddEvents({TestLoaderEvent::kNameNotResolved});
+    }
+
+    if (test_case.expect_success) {
+      // Valid response with a 1-byte body.
+      loader_factory.AddEvents({TestLoaderEvent::kReceivedResponse,
+                                TestLoaderEvent::kBodyBufferReceived,
+                                TestLoaderEvent::kBodyDataRead,
+                                TestLoaderEvent::kBodyBufferClosed,
+                                TestLoaderEvent::kResponseComplete});
+    }
+
+    std::unique_ptr<SimpleLoaderTestHelper> test_helper =
+        CreateHelperForURL(GURL(kInitialURL));
+    test_helper->simple_url_loader()->SetRetryOptions(test_case.max_retries,
+                                                      test_case.retry_mode);
+    loader_factory.RunTest(test_helper.get());
+
+    if (test_case.expect_success) {
+      EXPECT_EQ(net::OK, test_helper->simple_url_loader()->NetError());
+      EXPECT_EQ(200, test_helper->GetResponseCode());
+
+      if (GetParam() != SimpleLoaderTestHelper::DownloadType::HEADERS_ONLY) {
+        ASSERT_TRUE(test_helper->response_body());
+        EXPECT_EQ(1u, test_helper->response_body()->size());
+      }
+    } else {
+      EXPECT_EQ(net::ERR_NAME_NOT_RESOLVED,
+                test_helper->simple_url_loader()->NetError());
+    }
+
+    EXPECT_EQ(static_cast<size_t>(test_case.expected_num_requests),
+              loader_factory.requested_urls().size());
+    for (const auto& url : loader_factory.requested_urls()) {
+      EXPECT_EQ(kInitialURL, url);
+    }
+
+    if (GetParam() == SimpleLoaderTestHelper::DownloadType::AS_STREAM) {
+      EXPECT_EQ(test_case.expected_num_requests - 1,
+                test_helper->download_as_stream_retries());
+    }
+  }
+}
+
 // Test that when retrying on 5xx is enabled, there's no retry on a 4xx error.
 TEST_P(SimpleURLLoaderTest, NoRetryOn4xx) {
   MockURLLoaderFactory loader_factory(&task_environment_);
@@ -2812,7 +2923,7 @@ TEST_P(SimpleURLLoaderTest, GetFinalURLAfterRedirect) {
 }
 
 INSTANTIATE_TEST_SUITE_P(
-    /* No prefix */,
+    All,
     SimpleURLLoaderTest,
     testing::Values(SimpleLoaderTestHelper::DownloadType::TO_STRING,
                     SimpleLoaderTestHelper::DownloadType::TO_FILE,
@@ -3155,11 +3266,19 @@ TEST_F(SimpleURLLoaderMockTimeTest, TimeoutAfterRetryTriggered) {
 }
 
 TEST_P(SimpleURLLoaderTest, OnUploadProgressCallback) {
-  // The size of the payload cannot be bigger than
-  // net::test_server::<anonymous>::kRequestSizeLimit which is
-  // 64Mb. We set a pretty large value in order to ensure multiple
-  // progress update calls even on fast machines.
-  std::string long_string = GetLongUploadBody(63 * 1024 * 1024);
+  std::string long_string;
+  if (SimpleLoaderTestHelper::IsDownloadTypeToFile(GetParam())) {
+    // Use a smaller upload body when writing to disk - sometimes creating a
+    // large file takes a while on the bots (and, strangely, sometimes it
+    // performs fine on the exact same bot).
+    long_string = GetLongUploadBody();
+  } else {
+    // The size of the payload cannot be bigger than
+    // net::test_server::<anonymous>::kRequestSizeLimit which is
+    // 64Mb. We set a pretty large value in order to ensure multiple
+    // progress update calls even on fast machines.
+    long_string = GetLongUploadBody(31 * 1024 * 1024);
+  }
   std::unique_ptr<SimpleLoaderTestHelper> test_helper =
       CreateHelperForURL(test_server_.GetURL("/echo"), "POST");
   test_helper->simple_url_loader()->AttachStringForUpload(long_string,
@@ -3167,14 +3286,11 @@ TEST_P(SimpleURLLoaderTest, OnUploadProgressCallback) {
 
   uint64_t progress = 0;
   test_helper->simple_url_loader()->SetOnUploadProgressCallback(
-      base::BindRepeating(
-          [](uint64_t* progress, uint64_t current, uint64_t total) {
-            EXPECT_GT(current, *progress);
-            EXPECT_GE(total, current);
-            *progress = current;
-          },
-          base::Unretained(&progress)));
-
+      base::BindLambdaForTesting([&](uint64_t current, uint64_t total) {
+        EXPECT_GT(current, progress);
+        EXPECT_GE(total, current);
+        progress = current;
+      }));
   test_helper->StartSimpleLoaderAndWait(url_loader_factory_.get());
   EXPECT_EQ(net::OK, test_helper->simple_url_loader()->NetError());
   EXPECT_EQ(long_string.size(), progress);

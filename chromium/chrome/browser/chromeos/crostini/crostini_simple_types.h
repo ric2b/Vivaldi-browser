@@ -8,7 +8,7 @@
 #include <string>
 
 #include "base/files/file_path.h"
-#include "chromeos/dbus/concierge/service.pb.h"
+#include "chromeos/dbus/concierge/concierge_service.pb.h"
 
 // This file contains simple C++ types (enums and Plain-Old-Data structs).
 // Importantly, #include'ing this file will not depend on eventually executing
@@ -69,7 +69,12 @@ enum class CrostiniResult {
   UPGRADE_CONTAINER_ALREADY_UPGRADED = 43,
   UPGRADE_CONTAINER_FAILED = 44,
   CANCEL_UPGRADE_CONTAINER_FAILED = 45,
-  kMaxValue = CANCEL_UPGRADE_CONTAINER_FAILED,
+  CONCIERGE_START_FAILED = 46,
+  CONTAINER_CONFIGURATION_FAILED = 47,
+  LOAD_COMPONENT_UPDATE_IN_PROGRESS = 48,
+  NEVER_FINISHED = 49,
+  CONTAINER_SETUP_FAILED = 50,
+  kMaxValue = CONTAINER_SETUP_FAILED,
 };
 
 enum class InstallLinuxPackageProgressStatus {
@@ -133,14 +138,21 @@ struct StreamingExportStatus {
 };
 
 struct ContainerInfo {
-  ContainerInfo(std::string name, std::string username, std::string homedir);
+  ContainerInfo(std::string name,
+                std::string username,
+                std::string homedir,
+                std::string ipv4_address);
   ~ContainerInfo();
+  ContainerInfo(ContainerInfo&&);
   ContainerInfo(const ContainerInfo&);
+  ContainerInfo& operator=(ContainerInfo&&);
+  ContainerInfo& operator=(const ContainerInfo&);
 
   std::string name;
   std::string username;
   base::FilePath homedir;
   bool sshfs_mounted = false;
+  std::string ipv4_address;
 };
 
 // Return type when getting app icons from within a container.
@@ -153,7 +165,10 @@ struct Icon {
 
 struct LinuxPackageInfo {
   LinuxPackageInfo();
+  LinuxPackageInfo(LinuxPackageInfo&&);
   LinuxPackageInfo(const LinuxPackageInfo&);
+  LinuxPackageInfo& operator=(LinuxPackageInfo&&);
+  LinuxPackageInfo& operator=(const LinuxPackageInfo&);
   ~LinuxPackageInfo();
 
   bool success;
@@ -170,6 +185,50 @@ struct LinuxPackageInfo {
   std::string description;
 };
 
+constexpr char kCrostiniCorruptionHistogram[] = "Crostini.FilesystemCorruption";
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class CorruptionStates {
+  MOUNT_FAILED = 0,
+  MOUNT_ROLLED_BACK = 1,
+  OTHER_CORRUPTION = 2,
+  kMaxValue = OTHER_CORRUPTION,
+};
+
+// Dialog types used by CrostiniDialogStatusObserver.
+enum class DialogType {
+  INSTALLER,
+  UPGRADER,
+  REMOVER,
+};
+
+constexpr char kUpgradeDialogEventHistogram[] = "Crostini.UpgradeDialogEvent";
+
+enum class UpgradeDialogEvent {
+  kDialogShown = 0,
+  kUpgradeSuccess = 1,
+  kUpgradeCanceled = 2,
+  kUpgradeFailed = 3,
+  kNotStarted = 4,
+  kDidBackup = 5,
+  kBackupSucceeded = 6,
+  kBackupFailed = 7,
+  kDidRestore = 8,
+  kRestoreSucceeded = 9,
+  kRestoreFailed = 10,
+  kMaxValue = kRestoreFailed,
+};
+
 }  // namespace crostini
+
+enum class ContainerOsVersion {
+  kUnknown = 0,
+  kDebianStretch = 1,
+  kDebianBuster = 2,
+  kDebianOther = 3,
+  kOtherOs = 4,
+  kMaxValue = kOtherOs,
+};
 
 #endif  // CHROME_BROWSER_CHROMEOS_CROSTINI_CROSTINI_SIMPLE_TYPES_H_

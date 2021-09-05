@@ -15,6 +15,7 @@ animationIterationCount
 animationName
 animationPlayState
 animationTimingFunction
+aspectRatio
 backdropFilter
 backfaceVisibility
 background
@@ -107,6 +108,7 @@ color
 colorInterpolation
 colorInterpolationFilters
 colorRendering
+colorScheme
 columnCount
 columnFill
 columnGap
@@ -118,8 +120,8 @@ columnSpan
 columnWidth
 columns
 contain
+containIntrinsicSize
 content
-contentSize
 counterIncrement
 counterReset
 cssFloat
@@ -230,6 +232,7 @@ markerStart
 mask
 maskSourceType
 maskType
+mathStyle
 maxBlockSize
 maxHeight
 maxInlineSize
@@ -348,6 +351,7 @@ strokeLinejoin
 strokeMiterlimit
 strokeOpacity
 strokeWidth
+subtreeVisibility
 tabSize
 tableLayout
 textAlign
@@ -472,14 +476,9 @@ webkitLocale
 webkitLogicalHeight
 webkitLogicalWidth
 webkitMarginAfter
-webkitMarginAfterCollapse
 webkitMarginBefore
-webkitMarginBeforeCollapse
-webkitMarginBottomCollapse
-webkitMarginCollapse
 webkitMarginEnd
 webkitMarginStart
-webkitMarginTopCollapse
 webkitMask
 webkitMaskBoxImage
 webkitMaskBoxImageOutset

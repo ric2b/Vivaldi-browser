@@ -61,16 +61,17 @@ NotShared<DOMArrayBufferView> Crypto::getRandomValues(
                        array.View()->TypeName()));
     return NotShared<DOMArrayBufferView>(nullptr);
   }
-  if (array.View()->byteLength() > 65536) {
+  if (array.View()->byteLengthAsSizeT() > 65536) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kQuotaExceededError,
-        String::Format("The ArrayBufferView's byte length (%u) exceeds the "
+        String::Format("The ArrayBufferView's byte length (%zu) exceeds the "
                        "number of bytes of entropy available via this API "
                        "(65536).",
-                       array.View()->byteLength()));
+                       array.View()->byteLengthAsSizeT()));
     return NotShared<DOMArrayBufferView>(nullptr);
   }
-  crypto::RandBytes(array.View()->BaseAddress(), array.View()->byteLength());
+  crypto::RandBytes(array.View()->BaseAddress(),
+                    array.View()->byteLengthAsSizeT());
   return array;
 }
 
@@ -80,7 +81,7 @@ SubtleCrypto* Crypto::subtle() {
   return subtle_crypto_.Get();
 }
 
-void Crypto::Trace(blink::Visitor* visitor) {
+void Crypto::Trace(Visitor* visitor) {
   visitor->Trace(subtle_crypto_);
   ScriptWrappable::Trace(visitor);
 }

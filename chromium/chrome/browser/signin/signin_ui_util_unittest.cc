@@ -9,11 +9,11 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/metrics/user_action_tester.h"
 #include "base/test/task_environment.h"
+#include "build/build_config.h"
 #include "build/buildflag.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/signin/identity_test_environment_profile_adaptor.h"
-#include "chrome/browser/signin/scoped_account_consistency.h"
 #include "chrome/browser/signin/signin_promo.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
@@ -76,8 +76,7 @@ class SigninUiUtilTestBrowserWindow : public TestBrowserWindow {
     ASSERT_TRUE(browser_);
     // Simulate what |BrowserView| does for a regular Chrome sign-in flow.
     browser_->signin_view_controller()->ShowSignin(
-        profiles::BubbleViewMode::BUBBLE_VIEW_MODE_GAIA_SIGNIN, browser_,
-        access_point);
+        profiles::BubbleViewMode::BUBBLE_VIEW_MODE_GAIA_SIGNIN, access_point);
   }
 
  private:
@@ -170,8 +169,6 @@ class DiceSigninUiUtilTest : public BrowserWithTestWindowTest {
     histogram_tester.ExpectTotalCount(
         "Signin.SigninStartedAccessPoint.NotDefault", 0);
     histogram_tester.ExpectTotalCount(
-        "Signin.SigninStartedAccessPoint.NewAccountPreDice", 0);
-    histogram_tester.ExpectTotalCount(
         "Signin.SigninStartedAccessPoint.NewAccountNoExistingAccount", 0);
     histogram_tester.ExpectTotalCount(
         "Signin.SigninStartedAccessPoint.NewAccountExistingAccount", 0);
@@ -189,8 +186,6 @@ class DiceSigninUiUtilTest : public BrowserWithTestWindowTest {
         histogram_tester.ExpectTotalCount(
             "Signin.SigninStartedAccessPoint.WithDefault", 0);
         histogram_tester.ExpectTotalCount(
-            "Signin.SigninStartedAccessPoint.NewAccountPreDice", 0);
-        histogram_tester.ExpectTotalCount(
             "Signin.SigninStartedAccessPoint.NewAccountNoExistingAccount", 0);
         histogram_tester.ExpectTotalCount(
             "Signin.SigninStartedAccessPoint.NewAccountExistingAccount", 0);
@@ -200,8 +195,6 @@ class DiceSigninUiUtilTest : public BrowserWithTestWindowTest {
             "Signin.SigninStartedAccessPoint.NotDefault", 0);
         histogram_tester.ExpectUniqueSample(
             "Signin.SigninStartedAccessPoint.WithDefault", access_point_, 1);
-        histogram_tester.ExpectTotalCount(
-            "Signin.SigninStartedAccessPoint.NewAccountPreDice", 0);
         histogram_tester.ExpectTotalCount(
             "Signin.SigninStartedAccessPoint.NewAccountNoExistingAccount", 0);
         histogram_tester.ExpectTotalCount(
@@ -213,21 +206,6 @@ class DiceSigninUiUtilTest : public BrowserWithTestWindowTest {
         histogram_tester.ExpectUniqueSample(
             "Signin.SigninStartedAccessPoint.NotDefault", access_point_, 1);
         histogram_tester.ExpectTotalCount(
-            "Signin.SigninStartedAccessPoint.NewAccountPreDice", 0);
-        histogram_tester.ExpectTotalCount(
-            "Signin.SigninStartedAccessPoint.NewAccountNoExistingAccount", 0);
-        histogram_tester.ExpectTotalCount(
-            "Signin.SigninStartedAccessPoint.NewAccountExistingAccount", 0);
-        break;
-      case signin_metrics::PromoAction::PROMO_ACTION_NEW_ACCOUNT_PRE_DICE:
-        histogram_tester.ExpectTotalCount(
-            "Signin.SigninStartedAccessPoint.WithDefault", 0);
-        histogram_tester.ExpectTotalCount(
-            "Signin.SigninStartedAccessPoint.NotDefault", 0);
-        histogram_tester.ExpectUniqueSample(
-            "Signin.SigninStartedAccessPoint.NewAccountPreDice", access_point_,
-            1);
-        histogram_tester.ExpectTotalCount(
             "Signin.SigninStartedAccessPoint.NewAccountNoExistingAccount", 0);
         histogram_tester.ExpectTotalCount(
             "Signin.SigninStartedAccessPoint.NewAccountExistingAccount", 0);
@@ -238,8 +216,6 @@ class DiceSigninUiUtilTest : public BrowserWithTestWindowTest {
             "Signin.SigninStartedAccessPoint.WithDefault", 0);
         histogram_tester.ExpectTotalCount(
             "Signin.SigninStartedAccessPoint.NotDefault", 0);
-        histogram_tester.ExpectTotalCount(
-            "Signin.SigninStartedAccessPoint.NewAccountPreDice", 0);
         histogram_tester.ExpectUniqueSample(
             "Signin.SigninStartedAccessPoint.NewAccountNoExistingAccount",
             access_point_, 1);
@@ -253,8 +229,6 @@ class DiceSigninUiUtilTest : public BrowserWithTestWindowTest {
         histogram_tester.ExpectTotalCount(
             "Signin.SigninStartedAccessPoint.NotDefault", 0);
         histogram_tester.ExpectTotalCount(
-            "Signin.SigninStartedAccessPoint.NewAccountPreDice", 0);
-        histogram_tester.ExpectTotalCount(
             "Signin.SigninStartedAccessPoint.NewAccountNoExistingAccount", 0);
         histogram_tester.ExpectUniqueSample(
             "Signin.SigninStartedAccessPoint.NewAccountExistingAccount",
@@ -263,7 +237,6 @@ class DiceSigninUiUtilTest : public BrowserWithTestWindowTest {
     }
   }
 
-  const ScopedAccountConsistencyDice scoped_account_consistency_;
   signin_metrics::AccessPoint access_point_ =
       signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_BUBBLE;
 
@@ -271,8 +244,15 @@ class DiceSigninUiUtilTest : public BrowserWithTestWindowTest {
   CreateDiceTurnSyncOnHelperParams create_dice_turn_sync_on_helper_params_;
 };
 
-TEST_F(DiceSigninUiUtilTest, EnableSyncWithExistingAccount) {
-  std::string account_id =
+// TODO(https://crbug.com/1014790): Timeout on Mac10.12 and Win10.
+#if defined(OS_MACOSX) || defined(OS_WIN)
+#define MAYBE_EnableSyncWithExistingAccount \
+  DISABLED_EnableSyncWithExistingAccount
+#else
+#define MAYBE_EnableSyncWithExistingAccount EnableSyncWithExistingAccount
+#endif
+TEST_F(DiceSigninUiUtilTest, MAYBE_EnableSyncWithExistingAccount) {
+  CoreAccountId account_id =
       GetIdentityManager()->GetAccountsMutator()->AddOrUpdateAccount(
           kMainGaiaID, kMainEmail, "refresh_token", false,
           signin_metrics::SourceForRefreshTokenOperation::kUnknown);
@@ -326,7 +306,7 @@ TEST_F(DiceSigninUiUtilTest, EnableSyncWithExistingAccount) {
 
 TEST_F(DiceSigninUiUtilTest, EnableSyncWithAccountThatNeedsReauth) {
   AddTab(browser(), GURL("http://example.com"));
-  std::string account_id =
+  CoreAccountId account_id =
       GetIdentityManager()->GetAccountsMutator()->AddOrUpdateAccount(
           kMainGaiaID, kMainEmail, "refresh_token", false,
           signin_metrics::SourceForRefreshTokenOperation::kUnknown);
@@ -382,7 +362,14 @@ TEST_F(DiceSigninUiUtilTest, EnableSyncWithAccountThatNeedsReauth) {
   }
 }
 
-TEST_F(DiceSigninUiUtilTest, EnableSyncForNewAccountWithNoTab) {
+// TODO(https://crbug.com/1014790): Timeout on Mac10.12, Win7 and Win10.
+#if defined(OS_MACOSX) || defined(OS_WIN)
+#define MAYBE_EnableSyncForNewAccountWithNoTab \
+  DISABLED_EnableSyncForNewAccountWithNoTab
+#else
+#define MAYBE_EnableSyncForNewAccountWithNoTab EnableSyncForNewAccountWithNoTab
+#endif
+TEST_F(DiceSigninUiUtilTest, MAYBE_EnableSyncForNewAccountWithNoTab) {
   base::HistogramTester histogram_tester;
   base::UserActionTester user_action_tester;
 
@@ -411,9 +398,16 @@ TEST_F(DiceSigninUiUtilTest, EnableSyncForNewAccountWithNoTab) {
       active_contents->GetVisibleURL());
 }
 
-// TODO(https://crbug.com/1014790): This is flaky on several bots.
+// TODO(https://crbug.com/1014790): Timeout on Mac10.12.
+#if defined(OS_MACOSX)
+#define MAYBE_EnableSyncForNewAccountWithNoTabWithExisting \
+  DISABLED_EnableSyncForNewAccountWithNoTabWithExisting
+#else
+#define MAYBE_EnableSyncForNewAccountWithNoTabWithExisting \
+  EnableSyncForNewAccountWithNoTabWithExisting
+#endif
 TEST_F(DiceSigninUiUtilTest,
-       DISABLED_EnableSyncForNewAccountWithNoTabWithExisting) {
+       MAYBE_EnableSyncForNewAccountWithNoTabWithExisting) {
   base::HistogramTester histogram_tester;
   base::UserActionTester user_action_tester;
 
@@ -438,7 +432,15 @@ TEST_F(DiceSigninUiUtilTest,
                 "Signin_SigninNewAccountExistingAccount_FromBookmarkBubble"));
 }
 
-TEST_F(DiceSigninUiUtilTest, EnableSyncForNewAccountWithOneTab) {
+// TODO(https://crbug.com/1014790): Timeout on Mac10.12 and Win7.
+#if defined(OS_MACOSX) || defined(OS_WIN)
+#define MAYBE_EnableSyncForNewAccountWithOneTab \
+  DISABLED_EnableSyncForNewAccountWithOneTab
+#else
+#define MAYBE_EnableSyncForNewAccountWithOneTab \
+  EnableSyncForNewAccountWithOneTab
+#endif
+TEST_F(DiceSigninUiUtilTest, MAYBE_EnableSyncForNewAccountWithOneTab) {
   base::HistogramTester histogram_tester;
   base::UserActionTester user_action_tester;
   AddTab(browser(), GURL("http://foo/1"));
@@ -468,7 +470,13 @@ TEST_F(DiceSigninUiUtilTest, EnableSyncForNewAccountWithOneTab) {
       active_contents->GetVisibleURL());
 }
 
-TEST_F(DiceSigninUiUtilTest, GetAccountsForDicePromos) {
+// TODO(https://crbug.com/1014790): Timeout on Mac10.12 and Win7 x64.
+#if defined(OS_MACOSX) || defined(OS_WIN)
+#define MAYBE_GetAccountsForDicePromos DISABLED_GetAccountsForDicePromos
+#else
+#define MAYBE_GetAccountsForDicePromos GetAccountsForDicePromos
+#endif
+TEST_F(DiceSigninUiUtilTest, MAYBE_GetAccountsForDicePromos) {
   // Should start off with no accounts.
   std::vector<AccountInfo> accounts = GetAccountsForDicePromos(profile());
   EXPECT_TRUE(accounts.empty());
@@ -476,7 +484,13 @@ TEST_F(DiceSigninUiUtilTest, GetAccountsForDicePromos) {
   // TODO(tangltom): Flesh out this test.
 }
 
-TEST_F(DiceSigninUiUtilTest, MergeDiceSigninTab) {
+// TODO(https://crbug.com/1014790): Timeout on Mac10.12 and Win7.
+#if defined(OS_MACOSX) || defined(OS_WIN)
+#define MAYBE_MergeDiceSigninTab DISABLED_MergeDiceSigninTab
+#else
+#define MAYBE_MergeDiceSigninTab MergeDiceSigninTab
+#endif
+TEST_F(DiceSigninUiUtilTest, MAYBE_MergeDiceSigninTab) {
   base::UserActionTester user_action_tester;
   EnableSync(AccountInfo(), false);
   EXPECT_EQ(
@@ -525,13 +539,22 @@ TEST_F(DiceSigninUiUtilTest,
       *profile_manager()->profile_attributes_storage(), profile()));
 }
 
-TEST_F(DiceSigninUiUtilTest,
-       ShouldShowAnimatedIdentityOnOpeningWindow_ReturnsTrueForMultiSignin) {
+// TODO(https://crbug.com/1014790): Timeout on Mac10.12 and Win7.
+#if defined(OS_MACOSX) || defined(OS_WIN)
+#define MAYBE_ShouldShowAnimatedIdentityOnOpeningWindow_ReturnsTrueForMultiSignin \
+  DISABLED_ShouldShowAnimatedIdentityOnOpeningWindow_ReturnsTrueForMultiSignin
+#else
+#define MAYBE_ShouldShowAnimatedIdentityOnOpeningWindow_ReturnsTrueForMultiSignin \
+  ShouldShowAnimatedIdentityOnOpeningWindow_ReturnsTrueForMultiSignin
+#endif
+TEST_F(
+    DiceSigninUiUtilTest,
+    MAYBE_ShouldShowAnimatedIdentityOnOpeningWindow_ReturnsTrueForMultiSignin) {
   GetIdentityManager()->GetAccountsMutator()->AddOrUpdateAccount(
       kMainGaiaID, kMainEmail, "refresh_token", false,
       signin_metrics::SourceForRefreshTokenOperation::kUnknown);
   GetIdentityManager()->GetAccountsMutator()->AddOrUpdateAccount(
-      kSecondaryEmail, kSecondaryGaiaID, "refresh_token", false,
+      kSecondaryGaiaID, kSecondaryEmail, "refresh_token", false,
       signin_metrics::SourceForRefreshTokenOperation::kUnknown);
 
   EXPECT_TRUE(ShouldShowAnimatedIdentityOnOpeningWindow(
@@ -544,9 +567,17 @@ TEST_F(DiceSigninUiUtilTest,
       *profile_manager()->profile_attributes_storage(), profile()));
 }
 
+// TODO(https://crbug.com/1014790): Timeout on Mac10.12 and Win7 x64.
+#if defined(OS_MACOSX) || defined(OS_WIN)
+#define MAYBE_ShouldShowAnimatedIdentityOnOpeningWindow_ReturnsFalseForSingleProfileSingleSignin \
+  DISABLED_ShouldShowAnimatedIdentityOnOpeningWindow_ReturnsFalseForSingleProfileSingleSignin
+#else
+#define MAYBE_ShouldShowAnimatedIdentityOnOpeningWindow_ReturnsFalseForSingleProfileSingleSignin \
+  ShouldShowAnimatedIdentityOnOpeningWindow_ReturnsFalseForSingleProfileSingleSignin
+#endif
 TEST_F(
     DiceSigninUiUtilTest,
-    ShouldShowAnimatedIdentityOnOpeningWindow_ReturnsFalseForSingleProfileSingleSignin) {
+    MAYBE_ShouldShowAnimatedIdentityOnOpeningWindow_ReturnsFalseForSingleProfileSingleSignin) {
   GetIdentityManager()->GetAccountsMutator()->AddOrUpdateAccount(
       kMainGaiaID, kMainEmail, "refresh_token", false,
       signin_metrics::SourceForRefreshTokenOperation::kUnknown);
@@ -561,7 +592,7 @@ TEST_F(DiceSigninUiUtilTest,
       kMainGaiaID, kMainEmail, "refresh_token", false,
       signin_metrics::SourceForRefreshTokenOperation::kUnknown);
   GetIdentityManager()->GetAccountsMutator()->AddOrUpdateAccount(
-      kSecondaryEmail, kSecondaryGaiaID, "refresh_token", false,
+      kSecondaryGaiaID, kSecondaryEmail, "refresh_token", false,
       signin_metrics::SourceForRefreshTokenOperation::kUnknown);
   EXPECT_TRUE(ShouldShowAnimatedIdentityOnOpeningWindow(
       *profile_manager()->profile_attributes_storage(), profile()));

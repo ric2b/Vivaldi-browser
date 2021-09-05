@@ -10,11 +10,11 @@
 #include "base/base_export.h"
 #include "base/profiler/frame.h"
 #include "base/profiler/register_context.h"
+#include "base/profiler/stack_copier.h"
 #include "base/profiler/stack_sampler.h"
 
 namespace base {
 
-class StackCopier;
 class Unwinder;
 
 // Cross-platform stack sampler implementation. Delegates to StackCopier for the

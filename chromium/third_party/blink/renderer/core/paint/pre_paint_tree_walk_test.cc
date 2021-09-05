@@ -160,13 +160,14 @@ TEST_P(PrePaintTreeWalkTest, ClearSubsequenceCachingClipChange) {
   auto* child = GetDocument().getElementById("child");
   auto* child_paint_layer =
       ToLayoutBoxModelObject(child->GetLayoutObject())->Layer();
-  EXPECT_FALSE(child_paint_layer->NeedsRepaint());
+  EXPECT_FALSE(child_paint_layer->SelfNeedsRepaint());
   EXPECT_FALSE(child_paint_layer->NeedsPaintPhaseFloat());
 
   parent->setAttribute(html_names::kClassAttr, "clip");
-  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint();
+  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint(
+      DocumentUpdateReason::kTest);
 
-  EXPECT_TRUE(child_paint_layer->NeedsRepaint());
+  EXPECT_TRUE(child_paint_layer->SelfNeedsRepaint());
 }
 
 TEST_P(PrePaintTreeWalkTest, ClearSubsequenceCachingClipChange2DTransform) {
@@ -186,13 +187,14 @@ TEST_P(PrePaintTreeWalkTest, ClearSubsequenceCachingClipChange2DTransform) {
   auto* child = GetDocument().getElementById("child");
   auto* child_paint_layer =
       ToLayoutBoxModelObject(child->GetLayoutObject())->Layer();
-  EXPECT_FALSE(child_paint_layer->NeedsRepaint());
+  EXPECT_FALSE(child_paint_layer->SelfNeedsRepaint());
   EXPECT_FALSE(child_paint_layer->NeedsPaintPhaseFloat());
 
   parent->setAttribute(html_names::kClassAttr, "clip");
-  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint();
+  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint(
+      DocumentUpdateReason::kTest);
 
-  EXPECT_TRUE(child_paint_layer->NeedsRepaint());
+  EXPECT_TRUE(child_paint_layer->SelfNeedsRepaint());
 }
 
 TEST_P(PrePaintTreeWalkTest, ClearSubsequenceCachingClipChangePosAbs) {
@@ -213,15 +215,16 @@ TEST_P(PrePaintTreeWalkTest, ClearSubsequenceCachingClipChangePosAbs) {
   auto* child = GetDocument().getElementById("child");
   auto* child_paint_layer =
       ToLayoutBoxModelObject(child->GetLayoutObject())->Layer();
-  EXPECT_FALSE(child_paint_layer->NeedsRepaint());
+  EXPECT_FALSE(child_paint_layer->SelfNeedsRepaint());
   EXPECT_FALSE(child_paint_layer->NeedsPaintPhaseFloat());
 
   // This changes clips for absolute-positioned descendants of "child" but not
   // normal-position ones, which are already clipped to 50x50.
   parent->setAttribute(html_names::kClassAttr, "clip");
-  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint();
+  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint(
+      DocumentUpdateReason::kTest);
 
-  EXPECT_TRUE(child_paint_layer->NeedsRepaint());
+  EXPECT_TRUE(child_paint_layer->SelfNeedsRepaint());
 }
 
 TEST_P(PrePaintTreeWalkTest, ClearSubsequenceCachingClipChangePosFixed) {
@@ -242,15 +245,16 @@ TEST_P(PrePaintTreeWalkTest, ClearSubsequenceCachingClipChangePosFixed) {
   auto* child = GetDocument().getElementById("child");
   auto* child_paint_layer =
       ToLayoutBoxModelObject(child->GetLayoutObject())->Layer();
-  EXPECT_FALSE(child_paint_layer->NeedsRepaint());
+  EXPECT_FALSE(child_paint_layer->SelfNeedsRepaint());
   EXPECT_FALSE(child_paint_layer->NeedsPaintPhaseFloat());
 
   // This changes clips for absolute-positioned descendants of "child" but not
   // normal-position ones, which are already clipped to 50x50.
   parent->setAttribute(html_names::kClassAttr, "clip");
-  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint();
+  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint(
+      DocumentUpdateReason::kTest);
 
-  EXPECT_TRUE(child_paint_layer->NeedsRepaint());
+  EXPECT_TRUE(child_paint_layer->SelfNeedsRepaint());
 }
 
 TEST_P(PrePaintTreeWalkTest, ClipChangeRepaintsDescendants) {
@@ -272,11 +276,12 @@ TEST_P(PrePaintTreeWalkTest, ClipChangeRepaintsDescendants) {
   )HTML");
 
   GetDocument().getElementById("parent")->removeAttribute("style");
-  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint();
+  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint(
+      DocumentUpdateReason::kTest);
 
   auto* greatgrandchild = GetLayoutObjectByElementId("greatgrandchild");
   auto* paint_layer = ToLayoutBoxModelObject(greatgrandchild)->Layer();
-  EXPECT_TRUE(paint_layer->NeedsRepaint());
+  EXPECT_TRUE(paint_layer->SelfNeedsRepaint());
 }
 
 TEST_P(PrePaintTreeWalkTest, VisualRectClipForceSubtree) {
@@ -320,8 +325,9 @@ TEST_P(PrePaintTreeWalkTest, ClipChangeHasRadius) {
   auto* target = GetDocument().getElementById("target");
   auto* target_object = ToLayoutBoxModelObject(target->GetLayoutObject());
   target->setAttribute(html_names::kStyleAttr, "border-radius: 5px");
-  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint();
-  EXPECT_TRUE(target_object->Layer()->NeedsRepaint());
+  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint(
+      DocumentUpdateReason::kTest);
+  EXPECT_TRUE(target_object->Layer()->SelfNeedsRepaint());
   // And should not trigger any assert failure.
   UpdateAllLifecyclePhasesForTest();
 }
@@ -413,7 +419,8 @@ TEST_P(PrePaintTreeWalkTest, EffectiveTouchActionStyleUpdate) {
   GetDocument()
       .getElementById("touchaction")
       ->setAttribute(html_names::kClassAttr, "touchaction");
-  GetDocument().View()->UpdateLifecycleToLayoutClean();
+  GetDocument().View()->UpdateLifecycleToLayoutClean(
+      DocumentUpdateReason::kTest);
   EXPECT_FALSE(ancestor.EffectiveAllowedTouchActionChanged());
   EXPECT_TRUE(touchaction.EffectiveAllowedTouchActionChanged());
   EXPECT_FALSE(descendant.EffectiveAllowedTouchActionChanged());

@@ -11,18 +11,6 @@
 
 namespace ui {
 
-namespace {
-
-// Tells us if WebKit was the last to write to the pasteboard. There's no
-// actual data associated with this type.
-NSString* const kWebSmartPastePboardType = @"NeXT smart paste pasteboard type";
-
-// Pepper custom data format type.
-NSString* const kPepperCustomDataPboardType =
-    @"org.chromium.pepper-custom-data";
-
-}  // namespace
-
 // ClipboardFormatType implementation.
 ClipboardFormatType::ClipboardFormatType() : data_(nil) {}
 
@@ -59,6 +47,10 @@ ClipboardFormatType ClipboardFormatType::Deserialize(
   return ClipboardFormatType(base::SysUTF8ToNSString(serialization));
 }
 
+std::string ClipboardFormatType::GetName() const {
+  return Serialize();
+}
+
 bool ClipboardFormatType::operator<(const ClipboardFormatType& other) const {
   return [data_ compare:other.data_] == NSOrderedAscending;
 }
@@ -78,30 +70,15 @@ const ClipboardFormatType& ClipboardFormatType::GetUrlType() {
 }
 
 // static
-const ClipboardFormatType& ClipboardFormatType::GetUrlWType() {
-  return ClipboardFormatType::GetUrlType();
-}
-
-// static
 const ClipboardFormatType& ClipboardFormatType::GetPlainTextType() {
   static base::NoDestructor<ClipboardFormatType> type(NSPasteboardTypeString);
   return *type;
 }
 
 // static
-const ClipboardFormatType& ClipboardFormatType::GetPlainTextWType() {
-  return ClipboardFormatType::GetPlainTextType();
-}
-
-// static
 const ClipboardFormatType& ClipboardFormatType::GetFilenameType() {
   static base::NoDestructor<ClipboardFormatType> type(NSFilenamesPboardType);
   return *type;
-}
-
-// static
-const ClipboardFormatType& ClipboardFormatType::GetFilenameWType() {
-  return ClipboardFormatType::GetFilenameType();
 }
 
 // static

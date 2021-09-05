@@ -13,7 +13,6 @@
 #include "ios/chrome/browser/signin/gaia_auth_fetcher_ios_wk_webview_bridge.h"
 #include "ios/web/common/features.h"
 #include "ios/web/public/browser_state.h"
-#include "net/base/load_flags.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -46,17 +45,19 @@ GaiaAuthFetcherIOS::~GaiaAuthFetcherIOS() {}
 
 void GaiaAuthFetcherIOS::CreateAndStartGaiaFetcher(
     const std::string& body,
+    const std::string& body_content_type,
     const std::string& headers,
     const GURL& gaia_gurl,
-    int load_flags,
+    network::mojom::CredentialsMode credentials_mode,
     const net::NetworkTrafficAnnotationTag& traffic_annotation) {
   DCHECK(!HasPendingFetch()) << "Tried to fetch two things at once!";
 
-  bool cookies_required = !(load_flags & (net::LOAD_DO_NOT_SEND_COOKIES |
-                                          net::LOAD_DO_NOT_SAVE_COOKIES));
+  bool cookies_required =
+      credentials_mode != network::mojom::CredentialsMode::kOmit;
   if (!ShouldUseGaiaAuthFetcherIOS() || !cookies_required) {
-    GaiaAuthFetcher::CreateAndStartGaiaFetcher(body, headers, gaia_gurl,
-                                               load_flags, traffic_annotation);
+    GaiaAuthFetcher::CreateAndStartGaiaFetcher(body, body_content_type, headers,
+                                               gaia_gurl, credentials_mode,
+                                               traffic_annotation);
     return;
   }
 
@@ -82,13 +83,12 @@ void GaiaAuthFetcherIOS::CancelRequest() {
 
 void GaiaAuthFetcherIOS::OnFetchComplete(const GURL& url,
                                          const std::string& data,
-                                         const net::URLRequestStatus& status,
+                                         net::Error net_error,
                                          int response_code) {
   DVLOG(2) << "Response " << url.spec() << ", code = " << response_code << "\n";
   DVLOG(2) << "data: " << data << "\n";
   SetPendingFetch(false);
-  DispatchFetchedRequest(url, data, static_cast<net::Error>(status.error()),
-                         response_code);
+  DispatchFetchedRequest(url, data, net_error, response_code);
 }
 
 void GaiaAuthFetcherIOS::SetShouldUseGaiaAuthFetcherIOSForTesting(

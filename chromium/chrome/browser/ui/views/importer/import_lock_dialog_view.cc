@@ -49,7 +49,7 @@ ImportLockDialogView::ImportLockDialogView(
     const base::Callback<void(bool)>& callback,
     base::string16 importer_locktext)
     : callback_(callback) {
-  DialogDelegate::set_button_label(
+  DialogDelegate::SetButtonLabel(
       ui::DIALOG_BUTTON_OK, l10n_util::GetStringUTF16(IDS_IMPORTER_LOCK_OK));
 
   SetLayoutManager(std::make_unique<views::FillLayout>());

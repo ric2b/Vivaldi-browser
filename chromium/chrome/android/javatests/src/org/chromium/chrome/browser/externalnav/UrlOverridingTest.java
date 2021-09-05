@@ -29,16 +29,16 @@ import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
-import org.chromium.chrome.browser.externalnav.ExternalNavigationHandler.OverrideUrlLoadingResult;
+import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.InterceptNavigationDelegateImpl;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabCreationState;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelSelectorObserver;
-import org.chromium.chrome.browser.tabmodel.SingleTabModel;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.components.external_intents.ExternalNavigationHandler.OverrideUrlLoadingResult;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.NavigationHandle;
 import org.chromium.content_public.browser.test.util.Criteria;
@@ -129,7 +129,6 @@ public class UrlOverridingTest {
 
     @Before
     public void setUp() throws Exception {
-        mActivityTestRule.startMainActivityOnBlankPage();
         IntentFilter filter = new IntentFilter(Intent.ACTION_VIEW);
         filter.addCategory(Intent.CATEGORY_BROWSABLE);
         filter.addDataScheme("market");
@@ -175,7 +174,8 @@ public class UrlOverridingTest {
             mActivityTestRule.getActivity().getTabModelSelector().addObserver(
                     new EmptyTabModelSelectorObserver() {
                         @Override
-                        public void onNewTabCreated(Tab newTab) {
+                        public void onNewTabCreated(
+                                Tab newTab, @TabCreationState int creationState) {
                             newTabCallback.notifyCalled();
                             newTab.addObserver(new TestTabObserver(
                                     finishCallback, failCallback, destroyedCallback));
@@ -224,7 +224,9 @@ public class UrlOverridingTest {
                 Assert.fail("Haven't received navigation failure of intents.");
                 return;
             }
-        } else if (createsNewTab) {
+        }
+
+        if (createsNewTab) {
             try {
                 destroyedCallback.waitForCallback(0, 1, 20, TimeUnit.SECONDS);
             } catch (TimeoutException ex) {
@@ -266,10 +268,10 @@ public class UrlOverridingTest {
                                         == delegate.getLastOverrideUrlLoadingResultForTests())) {
                             return false;
                         }
-                        updateFailureReason("Expected: " + expectedFinalUrl + " actual: "
-                                + tab.getUrl());
+                        updateFailureReason(
+                                "Expected: " + expectedFinalUrl + " actual: " + tab.getUrlString());
                         return expectedFinalUrl == null
-                                || TextUtils.equals(expectedFinalUrl, tab.getUrl());
+                                || TextUtils.equals(expectedFinalUrl, tab.getUrlString());
                     }
                 });
 
@@ -294,6 +296,7 @@ public class UrlOverridingTest {
     @SmallTest
     @RetryOnFailure
     public void testNavigationFromTimer() {
+        mActivityTestRule.startMainActivityOnBlankPage();
         loadUrlAndWaitForIntentUrl(mTestServer.getURL(NAVIGATION_FROM_TIMEOUT_PAGE), false, false);
     }
 
@@ -301,6 +304,7 @@ public class UrlOverridingTest {
     @SmallTest
     @RetryOnFailure
     public void testNavigationFromTimerInSubFrame() {
+        mActivityTestRule.startMainActivityOnBlankPage();
         loadUrlAndWaitForIntentUrl(
                 mTestServer.getURL(NAVIGATION_FROM_TIMEOUT_PARENT_FRAME_PAGE), false, false);
     }
@@ -309,6 +313,7 @@ public class UrlOverridingTest {
     @SmallTest
     @RetryOnFailure
     public void testNavigationFromUserGesture() {
+        mActivityTestRule.startMainActivityOnBlankPage();
         loadUrlAndWaitForIntentUrl(
                 mTestServer.getURL(NAVIGATION_FROM_USER_GESTURE_PAGE), true, true);
     }
@@ -316,6 +321,7 @@ public class UrlOverridingTest {
     @Test
     @SmallTest
     public void testNavigationFromUserGestureInSubFrame() {
+        mActivityTestRule.startMainActivityOnBlankPage();
         loadUrlAndWaitForIntentUrl(
                 mTestServer.getURL(NAVIGATION_FROM_USER_GESTURE_PARENT_FRAME_PAGE), true, true);
     }
@@ -324,6 +330,7 @@ public class UrlOverridingTest {
     @SmallTest
     @RetryOnFailure
     public void testNavigationFromXHRCallback() {
+        mActivityTestRule.startMainActivityOnBlankPage();
         loadUrlAndWaitForIntentUrl(
                 mTestServer.getURL(NAVIGATION_FROM_XHR_CALLBACK_PAGE), true, true);
     }
@@ -332,6 +339,7 @@ public class UrlOverridingTest {
     @SmallTest
     @RetryOnFailure
     public void testNavigationFromXHRCallbackInSubFrame() {
+        mActivityTestRule.startMainActivityOnBlankPage();
         loadUrlAndWaitForIntentUrl(
                 mTestServer.getURL(NAVIGATION_FROM_XHR_CALLBACK_PARENT_FRAME_PAGE), true, true);
     }
@@ -340,6 +348,7 @@ public class UrlOverridingTest {
     @SmallTest
     @RetryOnFailure
     public void testNavigationFromXHRCallbackAndShortTimeout() {
+        mActivityTestRule.startMainActivityOnBlankPage();
         loadUrlAndWaitForIntentUrl(
                 mTestServer.getURL(NAVIGATION_FROM_XHR_CALLBACK_AND_SHORT_TIMEOUT_PAGE), true,
                 true);
@@ -349,6 +358,7 @@ public class UrlOverridingTest {
     @SmallTest
     @RetryOnFailure
     public void testNavigationFromXHRCallbackAndLongTimeout() {
+        mActivityTestRule.startMainActivityOnBlankPage();
         loadUrlAndWaitForIntentUrl(
                 mTestServer.getURL(NAVIGATION_FROM_XHR_CALLBACK_AND_LONG_TIMEOUT_PAGE), true,
                 false);
@@ -358,6 +368,7 @@ public class UrlOverridingTest {
     @SmallTest
     @RetryOnFailure
     public void testNavigationWithFallbackURL() {
+        mActivityTestRule.startMainActivityOnBlankPage();
         String fallbackUrl = mTestServer.getURL(FALLBACK_LANDING_PATH);
         String originalUrl = mTestServer.getURL(NAVIGATION_WITH_FALLBACK_URL_PAGE + "?replace_text="
                 + Base64.encodeToString(
@@ -372,6 +383,7 @@ public class UrlOverridingTest {
     @SmallTest
     @RetryOnFailure
     public void testNavigationWithFallbackURLInSubFrame() {
+        mActivityTestRule.startMainActivityOnBlankPage();
         // The replace_text parameters for NAVIGATION_WITH_FALLBACK_URL_PAGE, which is loaded in
         // the iframe in NAVIGATION_WITH_FALLBACK_URL_PARENT_FRAME_PAGE, have to go through the
         // embedded test server twice and, as such, have to be base64-encoded twice.
@@ -400,44 +412,53 @@ public class UrlOverridingTest {
     @SmallTest
     @RetryOnFailure
     public void testOpenWindowFromUserGesture() {
-        boolean opensNewTab =
-                !(mActivityTestRule.getActivity().getCurrentTabModel() instanceof SingleTabModel);
+        mActivityTestRule.startMainActivityOnBlankPage();
         loadUrlAndWaitForIntentUrl(mTestServer.getURL(OPEN_WINDOW_FROM_USER_GESTURE_PAGE), true,
-                opensNewTab, true, null, false);
+                true, true, null, true);
     }
 
     @Test
     @SmallTest
     @RetryOnFailure
     public void testOpenWindowFromLinkUserGesture() {
-        boolean opensNewTab =
-                !(mActivityTestRule.getActivity().getCurrentTabModel() instanceof SingleTabModel);
+        mActivityTestRule.startMainActivityOnBlankPage();
         loadUrlAndWaitForIntentUrl(mTestServer.getURL(OPEN_WINDOW_FROM_LINK_USER_GESTURE_PAGE),
-                true, opensNewTab, true, null, false, "link");
+                true, true, true, null, true, "link");
     }
 
     @Test
     @SmallTest
     @RetryOnFailure
     public void testOpenWindowFromSvgUserGesture() {
-        boolean opensNewTab =
-                !(mActivityTestRule.getActivity().getCurrentTabModel() instanceof SingleTabModel);
+        mActivityTestRule.startMainActivityOnBlankPage();
         loadUrlAndWaitForIntentUrl(mTestServer.getURL(OPEN_WINDOW_FROM_SVG_USER_GESTURE_PAGE), true,
-                opensNewTab, true, null, false, "link");
+                true, true, null, true, "link");
     }
 
     @Test
     @SmallTest
     @RetryOnFailure
     public void testRedirectionFromIntent() {
+        // Test cold-start.
         Intent intent = new Intent(Intent.ACTION_VIEW,
                 Uri.parse(mTestServer.getURL(NAVIGATION_FROM_JAVA_REDIRECTION_PAGE)));
         Context targetContext = InstrumentationRegistry.getTargetContext();
         intent.setClassName(targetContext, ChromeLauncherActivity.class.getName());
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        targetContext.startActivity(intent);
+        InstrumentationRegistry.getInstrumentation().startActivitySync(intent);
 
         CriteriaHelper.pollUiThread(Criteria.equals(1, new Callable<Integer>() {
+            @Override
+            public Integer call() {
+                return mActivityMonitor.getHits();
+            }
+        }));
+
+        // Test warm start.
+        mActivityTestRule.startMainActivityOnBlankPage();
+        targetContext.startActivity(intent);
+
+        CriteriaHelper.pollUiThread(Criteria.equals(2, new Callable<Integer>() {
             @Override
             public Integer call() {
                 return mActivityMonitor.getHits();

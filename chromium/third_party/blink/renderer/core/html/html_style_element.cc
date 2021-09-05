@@ -34,26 +34,23 @@
 
 namespace blink {
 
-using namespace html_names;
-
 HTMLStyleElement::HTMLStyleElement(Document& document,
                                    const CreateElementFlags flags)
-    : HTMLElement(kStyleTag, document),
-      StyleElement(&document, flags.IsCreatedByParser()),
-      fired_load_(false),
-      loaded_sheet_(false) {}
+    : HTMLElement(html_names::kStyleTag, document),
+      StyleElement(&document, flags.IsCreatedByParser()) {}
 
 HTMLStyleElement::~HTMLStyleElement() = default;
 
 void HTMLStyleElement::ParseAttribute(
     const AttributeModificationParams& params) {
-  if (params.name == kTitleAttr && sheet_ && IsInDocumentTree()) {
+  if (params.name == html_names::kTitleAttr && sheet_ && IsInDocumentTree()) {
     sheet_->SetTitle(params.new_value);
-  } else if (params.name == kMediaAttr && isConnected() &&
+  } else if (params.name == html_names::kMediaAttr && isConnected() &&
              GetDocument().IsActive() && sheet_) {
-    sheet_->SetMediaQueries(MediaQuerySet::Create(params.new_value));
+    sheet_->SetMediaQueries(
+        MediaQuerySet::Create(params.new_value, GetExecutionContext()));
     GetDocument().GetStyleEngine().MediaQueriesChangedInScope(GetTreeScope());
-  } else if (params.name == kTypeAttr) {
+  } else if (params.name == html_names::kTypeAttr) {
     HTMLElement::ParseAttribute(params);
     StyleElement::ChildrenChanged(*this);
   } else {
@@ -97,16 +94,17 @@ void HTMLStyleElement::ChildrenChanged(const ChildrenChange& change) {
 }
 
 const AtomicString& HTMLStyleElement::media() const {
-  return getAttribute(kMediaAttr);
+  return FastGetAttribute(html_names::kMediaAttr);
 }
 
 const AtomicString& HTMLStyleElement::type() const {
-  return getAttribute(kTypeAttr);
+  return FastGetAttribute(html_names::kTypeAttr);
 }
 
 void HTMLStyleElement::DispatchPendingEvent(
-    std::unique_ptr<IncrementLoadEventDelayCount> count) {
-  if (loaded_sheet_) {
+    std::unique_ptr<IncrementLoadEventDelayCount> count,
+    bool is_load_event) {
+  if (is_load_event) {
     if (GetDocument().HasListenerType(
             Document::kLoadListenerAtCapturePhaseOrAtStyleElement))
       DispatchEvent(*Event::Create(event_type_names::kLoad));
@@ -121,9 +119,6 @@ void HTMLStyleElement::DispatchPendingEvent(
 void HTMLStyleElement::NotifyLoadedSheetAndAllCriticalSubresources(
     LoadedSheetErrorStatus error_status) {
   bool is_load_event = error_status == kNoErrorLoadingSubresource;
-  if (fired_load_ && is_load_event)
-    return;
-  loaded_sheet_ = is_load_event;
   // Per the spec this should post on the network task source.
   // https://html.spec.whatwg.org/multipage/semantics.html#the-style-element
   // This guarantees that the <style> will be applied before the next <script>
@@ -137,8 +132,8 @@ void HTMLStyleElement::NotifyLoadedSheetAndAllCriticalSubresources(
           WTF::Bind(&HTMLStyleElement::DispatchPendingEvent,
                     WrapPersistent(this),
                     WTF::Passed(std::make_unique<IncrementLoadEventDelayCount>(
-                        GetDocument()))));
-  fired_load_ = true;
+                        GetDocument())),
+                    is_load_event));
 }
 
 bool HTMLStyleElement::disabled() const {

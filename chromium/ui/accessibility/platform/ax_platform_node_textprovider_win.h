@@ -5,6 +5,8 @@
 #ifndef UI_ACCESSIBILITY_PLATFORM_AX_PLATFORM_NODE_TEXTPROVIDER_WIN_H_
 #define UI_ACCESSIBILITY_PLATFORM_AX_PLATFORM_NODE_TEXTPROVIDER_WIN_H_
 
+#include <wrl/client.h>
+
 #include <string>
 
 #include "ui/accessibility/platform/ax_platform_node_win.h"
@@ -31,28 +33,28 @@ class __declspec(uuid("3e1c192b-4348-45ac-8eb6-4b58eeb3dcca"))
   // ITextProvider methods.
   //
 
-  STDMETHOD(GetSelection)(SAFEARRAY** selection) override;
+  IFACEMETHODIMP GetSelection(SAFEARRAY** selection) override;
 
-  STDMETHOD(GetVisibleRanges)(SAFEARRAY** visible_ranges) override;
+  IFACEMETHODIMP GetVisibleRanges(SAFEARRAY** visible_ranges) override;
 
-  STDMETHOD(RangeFromChild)
-  (IRawElementProviderSimple* child, ITextRangeProvider** range) override;
+  IFACEMETHODIMP RangeFromChild(IRawElementProviderSimple* child,
+                                ITextRangeProvider** range) override;
 
-  STDMETHOD(RangeFromPoint)
-  (UiaPoint point, ITextRangeProvider** range) override;
+  IFACEMETHODIMP RangeFromPoint(UiaPoint point,
+                                ITextRangeProvider** range) override;
 
-  STDMETHOD(get_DocumentRange)(ITextRangeProvider** range) override;
+  IFACEMETHODIMP get_DocumentRange(ITextRangeProvider** range) override;
 
-  STDMETHOD(get_SupportedTextSelection)
-  (enum SupportedTextSelection* text_selection) override;
+  IFACEMETHODIMP get_SupportedTextSelection(
+      enum SupportedTextSelection* text_selection) override;
 
   //
   // ITextEditProvider methods.
   //
 
-  STDMETHOD(GetActiveComposition)(ITextRangeProvider** range) override;
+  IFACEMETHODIMP GetActiveComposition(ITextRangeProvider** range) override;
 
-  STDMETHOD(GetConversionTarget)(ITextRangeProvider** range) override;
+  IFACEMETHODIMP GetConversionTarget(ITextRangeProvider** range) override;
 
   // ITextProvider supporting methods.
 
@@ -65,7 +67,7 @@ class __declspec(uuid("3e1c192b-4348-45ac-8eb6-4b58eeb3dcca"))
   ui::AXPlatformNodeWin* owner() const;
   HRESULT GetTextRangeProviderFromActiveComposition(ITextRangeProvider** range);
 
-  CComPtr<ui::AXPlatformNodeWin> owner_;
+  Microsoft::WRL::ComPtr<ui::AXPlatformNodeWin> owner_;
 };
 
 }  // namespace ui

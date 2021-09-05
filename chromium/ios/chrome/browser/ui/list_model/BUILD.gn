@@ -11,9 +11,7 @@ source_set("list_model") {
     "list_model.h",
     "list_model.mm",
   ]
-  deps = [
-    "//base",
-  ]
+  deps = [ "//base" ]
 }
 
 source_set("unit_tests") {
@@ -28,7 +26,6 @@ source_set("unit_tests") {
     ":list_model",
     "//base",
     "//ios/chrome/test:test_support",
-    "//ios/chrome/test/base",
     "//testing/gtest",
   ]
 }

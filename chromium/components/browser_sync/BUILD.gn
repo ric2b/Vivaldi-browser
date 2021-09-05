@@ -16,9 +16,7 @@ static_library("browser_sync") {
     "signin_confirmation_helper.h",
   ]
 
-  public_deps = [
-    "//components/sync",
-  ]
+  public_deps = [ "//components/sync" ]
 
   deps = [
     "//base",
@@ -44,9 +42,7 @@ static_library("browser_sync") {
 source_set("unit_tests") {
   testonly = true
 
-  sources = [
-    "profile_sync_service_bookmark_unittest.cc",
-  ]
+  sources = []
 
   deps = [
     ":browser_sync",

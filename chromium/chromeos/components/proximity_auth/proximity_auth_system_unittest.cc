@@ -16,7 +16,6 @@
 #include "chromeos/components/proximity_auth/fake_remote_device_life_cycle.h"
 #include "chromeos/components/proximity_auth/mock_proximity_auth_client.h"
 #include "chromeos/components/proximity_auth/proximity_auth_profile_pref_manager.h"
-#include "chromeos/components/proximity_auth/switches.h"
 #include "chromeos/components/proximity_auth/unlock_manager.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/services/multidevice_setup/public/cpp/fake_multidevice_setup_client.h"
@@ -53,10 +52,10 @@ void CompareRemoteDeviceRefLists(
 
 // Creates a RemoteDeviceRef object for |user_id| with |name|.
 chromeos::multidevice::RemoteDeviceRef CreateRemoteDevice(
-    const std::string& user_id,
+    const std::string& user_email,
     const std::string& name) {
   return chromeos::multidevice::RemoteDeviceRefBuilder()
-      .SetUserId(user_id)
+      .SetUserEmail(user_email)
       .SetName(name)
       .Build();
 }
@@ -175,8 +174,9 @@ class ProximityAuthSystemTest : public testing::Test {
     ScreenlockBridge::Get()->SetLockHandler(&lock_handler_);
   }
 
-  void FocusUser(const std::string& user_id) {
-    ScreenlockBridge::Get()->SetFocusedUser(AccountId::FromUserEmail(user_id));
+  void FocusUser(const std::string& user_email) {
+    ScreenlockBridge::Get()->SetFocusedUser(
+        AccountId::FromUserEmail(user_email));
   }
 
   void UnlockScreen() { ScreenlockBridge::Get()->SetLockHandler(nullptr); }
@@ -270,7 +270,7 @@ TEST_F(ProximityAuthSystemTest, FocusRegisteredUser) {
   EXPECT_EQ(life_cycle(), unlock_manager_life_cycle);
   EXPECT_TRUE(life_cycle());
   EXPECT_FALSE(life_cycle()->started());
-  EXPECT_EQ(kUser1, life_cycle()->GetRemoteDevice().user_id());
+  EXPECT_EQ(kUser1, life_cycle()->GetRemoteDevice().user_email());
 
   EXPECT_CALL(*unlock_manager_, SetRemoteDeviceLifeCycle(nullptr))
       .Times(AtLeast(1));
@@ -298,7 +298,7 @@ TEST_F(ProximityAuthSystemTest, ToggleFocus_RegisteredUsers) {
   EXPECT_CALL(*unlock_manager_, SetRemoteDeviceLifeCycle(_))
       .WillOnce(SaveArg<0>(&life_cycle1));
   FocusUser(kUser1);
-  EXPECT_EQ(kUser1, life_cycle1->GetRemoteDevice().user_id());
+  EXPECT_EQ(kUser1, life_cycle1->GetRemoteDevice().user_email());
   EXPECT_EQ(user1_local_device_, life_cycle()->local_device());
 
   RemoteDeviceLifeCycle* life_cycle2 = nullptr;
@@ -310,7 +310,7 @@ TEST_F(ProximityAuthSystemTest, ToggleFocus_RegisteredUsers) {
         .WillOnce(SaveArg<0>(&life_cycle2));
   }
   FocusUser(kUser2);
-  EXPECT_EQ(kUser2, life_cycle2->GetRemoteDevice().user_id());
+  EXPECT_EQ(kUser2, life_cycle2->GetRemoteDevice().user_email());
   EXPECT_EQ(user2_local_device_, life_cycle()->local_device());
 
   EXPECT_CALL(*unlock_manager_, SetRemoteDeviceLifeCycle(nullptr))
@@ -334,7 +334,7 @@ TEST_F(ProximityAuthSystemTest, ToggleFocus_RegisteredAndUnregisteredUsers) {
   EXPECT_CALL(*unlock_manager_, SetRemoteDeviceLifeCycle(_))
       .WillOnce(SaveArg<0>(&life_cycle));
   FocusUser(kUser1);
-  EXPECT_EQ(kUser1, life_cycle->GetRemoteDevice().user_id());
+  EXPECT_EQ(kUser1, life_cycle->GetRemoteDevice().user_email());
 
   // User 2 has not been registered yet, so focusing them should not create a
   // new life cycle.
@@ -348,7 +348,7 @@ TEST_F(ProximityAuthSystemTest, ToggleFocus_RegisteredAndUnregisteredUsers) {
   EXPECT_CALL(*unlock_manager_, SetRemoteDeviceLifeCycle(_))
       .WillOnce(SaveArg<0>(&life_cycle));
   FocusUser(kUser1);
-  EXPECT_EQ(kUser1, life_cycle->GetRemoteDevice().user_id());
+  EXPECT_EQ(kUser1, life_cycle->GetRemoteDevice().user_email());
 
   EXPECT_CALL(*unlock_manager_, SetRemoteDeviceLifeCycle(nullptr))
       .Times(AtLeast(1));
@@ -359,7 +359,7 @@ TEST_F(ProximityAuthSystemTest, ToggleFocus_SameUserRefocused) {
   EXPECT_CALL(*unlock_manager_, SetRemoteDeviceLifeCycle(_))
       .WillOnce(SaveArg<0>(&life_cycle));
   FocusUser(kUser1);
-  EXPECT_EQ(kUser1, life_cycle->GetRemoteDevice().user_id());
+  EXPECT_EQ(kUser1, life_cycle->GetRemoteDevice().user_email());
 
   // Focusing the user again should be idempotent. The screenlock UI may call
   // focus on the same user multiple times.
@@ -391,13 +391,13 @@ TEST_F(ProximityAuthSystemTest, StopSystem_RegisteredUserFocused) {
 
   EXPECT_CALL(*unlock_manager_, SetRemoteDeviceLifeCycle(NotNull()));
   proximity_auth_system_->Start();
-  EXPECT_EQ(kUser1, life_cycle()->GetRemoteDevice().user_id());
+  EXPECT_EQ(kUser1, life_cycle()->GetRemoteDevice().user_email());
 }
 
 TEST_F(ProximityAuthSystemTest, OnAuthAttempted) {
   FocusUser(kUser1);
   EXPECT_CALL(*unlock_manager_, OnAuthAttempted(_));
-  proximity_auth_system_->OnAuthAttempted(AccountId::FromUserEmail(kUser1));
+  proximity_auth_system_->OnAuthAttempted();
 }
 
 TEST_F(ProximityAuthSystemTest, Suspend_ScreenUnlocked) {
@@ -423,7 +423,7 @@ TEST_F(ProximityAuthSystemTest, Suspend_RegisteredUserFocused) {
     SimulateSuspend();
   }
 
-  EXPECT_EQ(kUser1, life_cycle()->GetRemoteDevice().user_id());
+  EXPECT_EQ(kUser1, life_cycle()->GetRemoteDevice().user_email());
 
   EXPECT_CALL(*unlock_manager_, SetRemoteDeviceLifeCycle(nullptr))
       .Times(AtLeast(1));

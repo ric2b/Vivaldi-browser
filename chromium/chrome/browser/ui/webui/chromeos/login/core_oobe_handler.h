@@ -73,6 +73,7 @@ class CoreOobeView {
   virtual void SetShelfHeight(int height) = 0;
   virtual void SetDialogPaddingMode(DialogPaddingMode mode) = 0;
   virtual void ShowDeviceResetScreen() = 0;
+  virtual void ShowEnableAdbSideloadingScreen() = 0;
   virtual void ShowEnableDebuggingScreen() = 0;
   virtual void InitDemoModeDetection() = 0;
   virtual void StopDemoModeDetection() = 0;
@@ -109,6 +110,7 @@ class CoreOobeHandler : public BaseWebUIHandler,
   void OnEnterpriseInfoUpdated(const std::string& message_text,
                                const std::string& asset_id) override;
   void OnDeviceInfoUpdated(const std::string& bluetooth_name) override;
+  void OnAdbSideloadStatusUpdated(bool enabled) override {}
 
   // ui::EventSource implementation:
   ui::EventSink* GetEventSink() override;
@@ -154,6 +156,7 @@ class CoreOobeHandler : public BaseWebUIHandler,
   void SetShelfHeight(int height) override;
   void SetDialogPaddingMode(CoreOobeView::DialogPaddingMode mode) override;
   void ShowDeviceResetScreen() override;
+  void ShowEnableAdbSideloadingScreen() override;
   void ShowEnableDebuggingScreen() override;
   void ShowActiveDirectoryPasswordChangeScreen(
       const std::string& username) override;
@@ -177,11 +180,12 @@ class CoreOobeHandler : public BaseWebUIHandler,
   void HandleEnableSpokenFeedback(bool /* enabled */);
   void HandleEnableSelectToSpeak(bool /* enabled */);
   void HandleEnableDockedMagnifier(bool /* enabled */);
+  void HandleHideOobeDialog();
   void HandleInitialized();
   void HandleSkipUpdateEnrollAfterEula();
   void HandleUpdateCurrentScreen(const std::string& screen);
   void HandleSetDeviceRequisition(const std::string& requisition);
-  void HandleSkipToLoginForTesting(const base::ListValue* args);
+  void HandleSkipToLoginForTesting();
   void HandleSkipToUpdateForTesting();
   void HandleLaunchHelpApp(double help_topic_id);
   void HandleToggleResetScreen();
@@ -195,6 +199,7 @@ class CoreOobeHandler : public BaseWebUIHandler,
   // Handles demo mode setup for tests. Accepts 'online' and 'offline' as
   // |demo_config|.
   void HandleStartDemoModeSetupForTesting(const std::string& demo_config);
+  void HandleUpdateOobeUIState(int state);
 
   // Shows the reset screen if |is_reset_allowed| and updates the
   // tpm_firmware_update in settings.

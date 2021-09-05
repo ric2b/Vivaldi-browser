@@ -24,6 +24,8 @@
 #include "base/time/time.h"
 #include "calendar/calendar_typedefs.h"
 #include "calendar/event_exception_type.h"
+#include "calendar/invite_type.h"
+#include "calendar/notification_type.h"
 #include "calendar/recurrence_exception_type.h"
 #include "calendar_type.h"
 #include "url/gurl.h"
@@ -55,6 +57,8 @@ enum UpdateEventFields {
   SEQUENCE = 1 << 19,
   ICAL = 1 << 20,
   RRULE = 1 << 21,
+  ORGANIZER = 1 << 22,
+  TIMEZONE = 1 << 23,
 };
 
 // Represents a simplified version of a event.
@@ -85,6 +89,8 @@ struct CalendarEvent {
   int sequence;
   base::string16 ical;
   std::string rrule;
+  std::string organizer;
+  std::string timezone;
   int updateFields;
 };
 
@@ -117,7 +123,11 @@ class EventRow {
            base::Time trash_time,
            int sequence,
            base::string16 ical,
-           std::string rrule);
+           std::string rrule,
+           std::string organizer,
+           NotificationsToCreate notifications_to_create,
+           InvitesToCreate invites_to_create,
+           std::string timezone);
   ~EventRow();
 
   EventRow(const EventRow& row);
@@ -219,6 +229,34 @@ class EventRow {
   std::string rrule() const { return rrule_; }
   void set_rrule(std::string rrule) { rrule_ = rrule; }
 
+  NotificationRows notifications() const { return notifications_; }
+  void set_notifications(NotificationRows notifications) {
+    notifications_ = notifications;
+  }
+
+  InviteRows invites() const { return invites_; }
+  void set_invites(InviteRows invites) { invites_ = invites; }
+
+  std::string organizer() const { return organizer_; }
+  void set_organizer(std::string organizer) { organizer_ = organizer; }
+
+  NotificationsToCreate notifications_to_create() const {
+    return notifications_to_create_;
+  }
+  void set_notifications_to_create(
+      NotificationsToCreate notifications_to_create) {
+    notifications_to_create_ = notifications_to_create;
+  }
+
+  InvitesToCreate invites_to_create() const { return invites_to_create_; }
+
+  void set_invites_to_create(InvitesToCreate invites_to_create) {
+    invites_to_create_ = invites_to_create;
+  }
+
+  std::string timezone() const { return timezone_; }
+  void set_timezone(std::string timezone) { timezone_ = timezone; }
+
   EventID id_;
   CalendarID calendar_id_;
   AlarmID alarm_id_ = 0;
@@ -245,6 +283,12 @@ class EventRow {
   base::string16 ical_;
   EventExceptions event_exceptions_;
   std::string rrule_;
+  NotificationRows notifications_;
+  InviteRows invites_;
+  std::string organizer_;
+  NotificationsToCreate notifications_to_create_;
+  InvitesToCreate invites_to_create_;
+  std::string timezone_;
 
  protected:
   void Swap(EventRow* other);

@@ -9,8 +9,8 @@
 
 #include "base/bind.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/test/task_environment.h"
 #include "services/device/battery/battery_status_manager.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -62,10 +62,10 @@ class BatteryStatusServiceTest : public testing::Test {
   typedef BatteryStatusService::BatteryUpdateSubscription BatterySubscription;
 
   void SetUp() override {
-    callback1_ = base::Bind(&BatteryStatusServiceTest::Callback1,
-                            base::Unretained(this));
-    callback2_ = base::Bind(&BatteryStatusServiceTest::Callback2,
-                            base::Unretained(this));
+    callback1_ = base::BindRepeating(&BatteryStatusServiceTest::Callback1,
+                                     base::Unretained(this));
+    callback2_ = base::BindRepeating(&BatteryStatusServiceTest::Callback2,
+                                     base::Unretained(this));
 
     // We keep a raw pointer to the FakeBatteryManager, which we expect to
     // remain valid for the lifetime of the BatteryStatusService.
@@ -110,7 +110,7 @@ class BatteryStatusServiceTest : public testing::Test {
     battery_status_ = status;
   }
 
-  base::MessageLoop message_loop_;
+  base::test::SingleThreadTaskEnvironment task_environment_;
   BatteryStatusService battery_service_;
   FakeBatteryManager* battery_manager_;
   BatteryStatusService::BatteryUpdateCallback callback1_;

@@ -22,7 +22,7 @@ namespace {
 // state.
 class PrefsInternalsSource : public web::URLDataSourceIOS {
  public:
-  explicit PrefsInternalsSource(ios::ChromeBrowserState* browser_state)
+  explicit PrefsInternalsSource(ChromeBrowserState* browser_state)
       : browser_state_(browser_state) {}
   ~PrefsInternalsSource() override = default;
 
@@ -35,11 +35,11 @@ class PrefsInternalsSource : public web::URLDataSourceIOS {
 
   void StartDataRequest(
       const std::string& path,
-      const web::URLDataSourceIOS::GotDataCallback& callback) override {
+      web::URLDataSourceIOS::GotDataCallback callback) override {
     // TODO(crbug.com/1006711): Properly disable this webui provider for
     // incognito browser states.
     if (browser_state_->IsOffTheRecord()) {
-      callback.Run(nullptr);
+      std::move(callback).Run(nullptr);
       return;
     }
 
@@ -51,11 +51,11 @@ class PrefsInternalsSource : public web::URLDataSourceIOS {
     DCHECK(prefs);
     CHECK(base::JSONWriter::WriteWithOptions(
         *prefs, base::JSONWriter::OPTIONS_PRETTY_PRINT, &json));
-    callback.Run(base::RefCountedString::TakeString(&json));
+    std::move(callback).Run(base::RefCountedString::TakeString(&json));
   }
 
  private:
-  ios::ChromeBrowserState* browser_state_;
+  ChromeBrowserState* browser_state_;
 
   DISALLOW_COPY_AND_ASSIGN(PrefsInternalsSource);
 };
@@ -64,8 +64,7 @@ class PrefsInternalsSource : public web::URLDataSourceIOS {
 
 PrefsInternalsUI::PrefsInternalsUI(web::WebUIIOS* web_ui)
     : web::WebUIIOSController(web_ui) {
-  ios::ChromeBrowserState* browser_state =
-      ios::ChromeBrowserState::FromWebUIIOS(web_ui);
+  ChromeBrowserState* browser_state = ChromeBrowserState::FromWebUIIOS(web_ui);
   web::URLDataSourceIOS::Add(browser_state,
                              new PrefsInternalsSource(browser_state));
 }

@@ -26,6 +26,7 @@ namespace bluez {
 // Style Note: Clients are sorted by names.
 class BluetoothAdapterClient;
 class BluetoothAgentManagerClient;
+class BluetoothDebugManagerClient;
 class BluetoothDeviceClient;
 class BluetoothGattCharacteristicClient;
 class BluetoothGattDescriptorClient;
@@ -118,6 +119,7 @@ class DEVICE_BLUETOOTH_EXPORT BluezDBusManager {
   BluetoothAdapterClient* GetBluetoothAdapterClient();
   BluetoothLEAdvertisingManagerClient* GetBluetoothLEAdvertisingManagerClient();
   BluetoothAgentManagerClient* GetBluetoothAgentManagerClient();
+  BluetoothDebugManagerClient* GetBluetoothDebugManagerClient();
   BluetoothDeviceClient* GetBluetoothDeviceClient();
   BluetoothGattCharacteristicClient* GetBluetoothGattCharacteristicClient();
   BluetoothGattDescriptorClient* GetBluetoothGattDescriptorClient();
@@ -156,9 +158,6 @@ class DEVICE_BLUETOOTH_EXPORT BluezDBusManager {
   // performs additional setup.
   void InitializeClients();
 
-  // Returns either BlueZ or newblue dispatcher depending on feature.
-  std::string GetBluetoothServiceName();
-
   dbus::Bus* bus_;
   // Separate D-Bus connection used by the "Alternate" set of D-Bus clients. See
   // "Alternate D-Bus Client" note above.
@@ -188,6 +187,8 @@ class DEVICE_BLUETOOTH_EXPORT BluezDBusManagerSetter {
       std::unique_ptr<BluetoothLEAdvertisingManagerClient> client);
   void SetBluetoothAgentManagerClient(
       std::unique_ptr<BluetoothAgentManagerClient> client);
+  void SetBluetoothDebugManagerClient(
+      std::unique_ptr<BluetoothDebugManagerClient> client);
   void SetBluetoothDeviceClient(std::unique_ptr<BluetoothDeviceClient> client);
   void SetBluetoothGattCharacteristicClient(
       std::unique_ptr<BluetoothGattCharacteristicClient> client);

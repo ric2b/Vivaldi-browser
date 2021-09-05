@@ -15,8 +15,10 @@
 #include "content/public/browser/ssl_status.h"
 #include "content/public/common/previews_state.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "services/network/public/mojom/url_loader.mojom.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
+#include "services/network/public/mojom/url_response_head.mojom.h"
 
 namespace net {
 struct RedirectInfo;
@@ -40,7 +42,7 @@ class CONTENT_EXPORT NavigationURLLoaderImpl : public NavigationURLLoader {
       StoragePartition* storage_partition,
       std::unique_ptr<NavigationRequestInfo> request_info,
       std::unique_ptr<NavigationUIData> navigation_ui_data,
-      ServiceWorkerNavigationHandle* service_worker_handle,
+      ServiceWorkerMainResourceHandle* service_worker_handle,
       AppCacheNavigationHandle* appcache_handle,
       scoped_refptr<PrefetchedSignedExchangeCache>
           prefetched_signed_exchange_cache,
@@ -55,7 +57,7 @@ class CONTENT_EXPORT NavigationURLLoaderImpl : public NavigationURLLoader {
                       PreviewsState new_previews_state) override;
 
   void OnReceiveResponse(
-      scoped_refptr<network::ResourceResponse> response_head,
+      network::mojom::URLResponseHeadPtr response_head,
       network::mojom::URLLoaderClientEndpointsPtr url_loader_client_endpoints,
       mojo::ScopedDataPipeConsumerHandle response_body,
       const GlobalRequestID& global_request_id,
@@ -63,7 +65,7 @@ class CONTENT_EXPORT NavigationURLLoaderImpl : public NavigationURLLoader {
       base::TimeDelta total_ui_to_io_time,
       base::Time io_post_time);
   void OnReceiveRedirect(const net::RedirectInfo& redirect_info,
-                         scoped_refptr<network::ResourceResponse> response,
+                         network::mojom::URLResponseHeadPtr response,
                          base::Time io_post_time);
   void OnComplete(const network::URLLoaderCompletionStatus& status);
 
@@ -84,10 +86,6 @@ class CONTENT_EXPORT NavigationURLLoaderImpl : public NavigationURLLoader {
           header_client,
       mojo::PendingReceiver<network::mojom::URLLoaderFactory> factory_receiver,
       StoragePartitionImpl* partition);
-
-  // Returns a Request ID for browser-initiated navigation requests. Called on
-  // the IO thread.
-  static GlobalRequestID MakeGlobalRequestID();
 
  private:
   class URLLoaderRequestController;

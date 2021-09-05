@@ -8,7 +8,7 @@
 #include "components/adverse_adblocking/adverse_ad_filter_list.h"
 #include "components/adverse_adblocking/adverse_ad_filter_list_factory.h"
 #include "components/adverse_adblocking/vivaldi_subresource_filter_client.h"
-#include "components/safe_browsing/db/v4_protocol_manager_util.h"
+#include "components/safe_browsing/core/db/v4_protocol_manager_util.h"
 #include "components/subresource_filter/content/browser/content_activation_list_utils.h"
 #include "components/subresource_filter/content/browser/navigation_console_logger.h"
 #include "components/subresource_filter/content/browser/subresource_filter_client.h"
@@ -18,7 +18,6 @@
 
 using subresource_filter::kActivationWarningConsoleMessage;
 using subresource_filter::kFilterAdsOnAbusiveSites;
-using subresource_filter::kSafeBrowsingSubresourceFilterConsiderRedirects;
 using subresource_filter::NavigationConsoleLogger;
 using subresource_filter::SubresourceFilterObserverManager;
 using subresource_filter::ActivationScope;
@@ -114,32 +113,21 @@ void VivaldiSubresourceFilterAdblockingThrottle::NotifyResult() {
   DCHECK(!check_results_.empty());
 
   // Determine which results to consider for safebrowsing/abusive.
-  std::vector<SubresourceFilterSafeBrowsingClient::CheckResult>
-      check_results_to_consider = {check_results_.back()};
-  if (check_results_.size() >= 2 &&
-      base::FeatureList::IsEnabled(
-          kSafeBrowsingSubresourceFilterConsiderRedirects)) {
-    check_results_to_consider = {check_results_[0], check_results_.back()};
-  }
+  SubresourceFilterSafeBrowsingClient::CheckResult check_result =
+      check_results_.back();
 
   // Find the ConfigResult for each safe browsing check.
-  std::vector<ConfigResult> matched_configurations;
-  for (const auto& current_result : check_results_to_consider) {
-    matched_configurations.push_back(
-        GetHighestPriorityConfiguration(current_result));
-  }
+  ConfigResult selection = GetHighestPriorityConfiguration(check_result);
 
   // Get the activation decision with the associated ConfigResult.
-  ConfigResult selection;
-  ActivationDecision activation_decision =
-      GetActivationDecision(matched_configurations, &selection);
+  ActivationDecision activation_decision = GetActivationDecision(selection);
   DCHECK_NE(activation_decision, ActivationDecision::UNKNOWN);
 
   // Notify the observers of the check results.
   SubresourceFilterObserverManager::FromWebContents(
       navigation_handle()->GetWebContents())
       ->NotifySafeBrowsingChecksComplete(navigation_handle(),
-                                         check_results_to_consider);
+                                         check_result);
 
   // Compute the activation level.
   subresource_filter::mojom::ActivationLevel activation_level =
@@ -207,53 +195,21 @@ VivaldiSubresourceFilterAdblockingThrottle::GetHighestPriorityConfiguration(
 
 ActivationDecision
 VivaldiSubresourceFilterAdblockingThrottle::GetActivationDecision(
-    const std::vector<ConfigResult>& configs,
-    ConfigResult* selected_config) {
-  size_t selected_index = 0;
-  for (size_t current_index = 0; current_index < configs.size();
-       current_index++) {
-    // Prefer later configs when there's a tie.
-    // Rank no matching config slightly below priority zero.
-    const int selected_priority =
-        configs[selected_index].matched_valid_configuration
-            ? configs[selected_index].config.activation_conditions.priority
-            : -1;
-    const int current_priority =
-        configs[current_index].matched_valid_configuration
-            ? configs[current_index].config.activation_conditions.priority
-            : -1;
-    if (current_priority >= selected_priority) {
-      selected_index = current_index;
-    }
-  }
-  // Ensure that the list was not empty, and assign the configuration.
-  DCHECK(selected_index != configs.size());
-  *selected_config = configs[selected_index];
-
-  if (!selected_config->matched_valid_configuration) {
+    const ConfigResult& selected_config) {
+  if (!selected_config.matched_valid_configuration) {
     return ActivationDecision::ACTIVATION_CONDITIONS_NOT_MET;
   }
 
   // Get the activation level for the matching configuration.
   auto activation_level =
-      selected_config->config.activation_options.activation_level;
+      selected_config.config.activation_options.activation_level;
 
   // If there is an activation triggered by the activation list (not a dry run),
   // report where in the redirect chain it was triggered.
-  if (selected_config->config.activation_conditions.activation_scope ==
+  if (selected_config.config.activation_conditions.activation_scope ==
           ActivationScope::ACTIVATION_LIST &&
       activation_level ==
           subresource_filter::mojom::ActivationLevel::kEnabled) {
-    ActivationPosition position;
-    if (configs.size() == 1) {
-      position = ActivationPosition::kOnly;
-    } else if (selected_index == 0) {
-      position = ActivationPosition::kFirst;
-    } else if (selected_index == configs.size() - 1) {
-      position = ActivationPosition::kLast;
-    } else {
-      position = ActivationPosition::kMiddle;
-    }
   }
 
   // Compute and return the activation decision.

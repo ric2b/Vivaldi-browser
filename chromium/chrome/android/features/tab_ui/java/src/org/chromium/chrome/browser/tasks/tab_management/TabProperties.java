@@ -4,12 +4,16 @@
 
 package org.chromium.chrome.browser.tasks.tab_management;
 
+import static org.chromium.chrome.browser.tasks.tab_management.TabListModel.CardProperties.CARD_ALPHA;
+import static org.chromium.chrome.browser.tasks.tab_management.TabListModel.CardProperties.CARD_TYPE;
+
 import android.content.res.ColorStateList;
 import android.graphics.drawable.Drawable;
+import android.view.View.AccessibilityDelegate;
 
 import androidx.annotation.IntDef;
 
-import org.chromium.chrome.browser.widget.selection.SelectionDelegate;
+import org.chromium.components.browser_ui.widget.selectable_list.SelectionDelegate;
 import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModel.WritableBooleanPropertyKey;
@@ -23,13 +27,16 @@ import java.lang.annotation.RetentionPolicy;
  */
 public class TabProperties {
     /** IDs for possible types of UI in the tab list. */
-    @IntDef({UiType.SELECTABLE, UiType.CLOSABLE, UiType.STRIP, UiType.SUGGESTION})
+    @IntDef({UiType.SELECTABLE, UiType.CLOSABLE, UiType.STRIP, UiType.MESSAGE, UiType.DIVIDER,
+            UiType.NEW_TAB_TILE})
     @Retention(RetentionPolicy.SOURCE)
     public @interface UiType {
         int SELECTABLE = 0;
         int CLOSABLE = 1;
         int STRIP = 2;
-        int SUGGESTION = 3;
+        int MESSAGE = 3;
+        int DIVIDER = 4;
+        int NEW_TAB_TILE = 5;
     }
 
     public static final PropertyModel.WritableIntPropertyKey TAB_ID =
@@ -60,9 +67,6 @@ public class TabProperties {
     public static final WritableObjectPropertyKey<TabListMediator.TabActionListener>
             CREATE_GROUP_LISTENER = new WritableObjectPropertyKey<>();
 
-    public static final PropertyModel.WritableFloatPropertyKey ALPHA =
-            new PropertyModel.WritableFloatPropertyKey();
-
     public static final PropertyModel.WritableIntPropertyKey CARD_ANIMATION_STATUS =
             new PropertyModel.WritableIntPropertyKey();
 
@@ -89,13 +93,29 @@ public class TabProperties {
             SELECTABLE_TAB_ACTION_BUTTON_SELECTED_BACKGROUND =
             new PropertyModel.WritableObjectPropertyKey<>();
 
+    public static final WritableObjectPropertyKey<String> URL = new WritableObjectPropertyKey<>();
+
+    public static final PropertyModel
+            .WritableObjectPropertyKey<AccessibilityDelegate> ACCESSIBILITY_DELEGATE =
+            new PropertyModel.WritableObjectPropertyKey<>();
+
+    public static final WritableObjectPropertyKey<String> SEARCH_QUERY =
+            new WritableObjectPropertyKey<>();
+
+    public static final WritableObjectPropertyKey<TabListMediator.TabActionListener>
+            SEARCH_LISTENER = new WritableObjectPropertyKey<>();
+
+    public static final PropertyModel.WritableIntPropertyKey SEARCH_CHIP_ICON_DRAWABLE_ID =
+            new PropertyModel.WritableIntPropertyKey();
+
     public static final PropertyKey[] ALL_KEYS_TAB_GRID = new PropertyKey[] {TAB_ID,
             TAB_SELECTED_LISTENER, TAB_CLOSED_LISTENER, FAVICON, THUMBNAIL_FETCHER, IPH_PROVIDER,
-            TITLE, IS_SELECTED, CHECKED_DRAWABLE_STATE_LIST, CREATE_GROUP_LISTENER, ALPHA,
+            TITLE, IS_SELECTED, CHECKED_DRAWABLE_STATE_LIST, CREATE_GROUP_LISTENER, CARD_ALPHA,
             CARD_ANIMATION_STATUS, SELECTABLE_TAB_CLICKED_LISTENER, TAB_SELECTION_DELEGATE,
             IS_INCOGNITO, SELECTED_TAB_BACKGROUND_DRAWABLE_ID, TABSTRIP_FAVICON_BACKGROUND_COLOR_ID,
             SELECTABLE_TAB_ACTION_BUTTON_BACKGROUND,
-            SELECTABLE_TAB_ACTION_BUTTON_SELECTED_BACKGROUND};
+            SELECTABLE_TAB_ACTION_BUTTON_SELECTED_BACKGROUND, URL, ACCESSIBILITY_DELEGATE,
+            SEARCH_QUERY, SEARCH_LISTENER, SEARCH_CHIP_ICON_DRAWABLE_ID, CARD_TYPE};
 
     public static final PropertyKey[] ALL_KEYS_TAB_STRIP =
             new PropertyKey[] {TAB_ID, TAB_SELECTED_LISTENER, TAB_CLOSED_LISTENER, FAVICON,

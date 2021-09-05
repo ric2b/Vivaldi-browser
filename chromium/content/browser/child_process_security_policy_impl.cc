@@ -11,6 +11,7 @@
 #include "base/command_line.h"
 #include "base/debug/crash_logging.h"
 #include "base/debug/dump_without_crashing.h"
+#include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/macros.h"
@@ -33,17 +34,19 @@
 #include "content/public/browser/site_isolation_policy.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/bindings_policy.h"
+#include "content/public/common/child_process_host.h"
 #include "content/public/common/content_client.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/url_constants.h"
 #include "net/base/filename_util.h"
 #include "net/base/url_util.h"
-#include "net/url_request/url_request.h"
+#include "net/net_buildflags.h"
 #include "services/network/public/cpp/resource_request_body.h"
-#include "storage/browser/fileapi/file_permission_policy.h"
-#include "storage/browser/fileapi/file_system_context.h"
-#include "storage/browser/fileapi/file_system_url.h"
-#include "storage/browser/fileapi/isolated_context.h"
-#include "storage/common/fileapi/file_system_util.h"
+#include "storage/browser/file_system/file_permission_policy.h"
+#include "storage/browser/file_system/file_system_context.h"
+#include "storage/browser/file_system/file_system_url.h"
+#include "storage/browser/file_system/isolated_context.h"
+#include "storage/common/file_system/file_system_util.h"
 #include "url/gurl.h"
 #include "url/url_canon.h"
 #include "url/url_constants.h"
@@ -132,20 +135,121 @@ base::debug::CrashKeyString* GetRequestedOriginCrashKey() {
   return requested_origin_key;
 }
 
+base::debug::CrashKeyString* GetKilledProcessOriginLockKey() {
+  static auto* crash_key = base::debug::AllocateCrashKeyString(
+      "killed_process_origin_lock", base::debug::CrashKeySize::Size64);
+  return crash_key;
+}
+
+base::debug::CrashKeyString* GetCanAccessDataFailureReasonKey() {
+  static auto* crash_key = base::debug::AllocateCrashKeyString(
+      "can_access_data_failure_reason", base::debug::CrashKeySize::Size64);
+  return crash_key;
+}
+
 void LogCanAccessDataForOriginCrashKeys(
     const std::string& expected_process_lock,
     const std::string& killed_process_origin_lock,
-    const std::string& requested_origin) {
+    const std::string& requested_origin,
+    const std::string& failure_reason) {
   base::debug::SetCrashKeyString(bad_message::GetRequestedSiteURLKey(),
                                  expected_process_lock);
-  base::debug::SetCrashKeyString(bad_message::GetKilledProcessOriginLockKey(),
+  base::debug::SetCrashKeyString(GetKilledProcessOriginLockKey(),
                                  killed_process_origin_lock);
-
-  auto* requested_origin_key = GetRequestedOriginCrashKey();
-  base::debug::SetCrashKeyString(requested_origin_key, requested_origin);
+  base::debug::SetCrashKeyString(GetRequestedOriginCrashKey(),
+                                 requested_origin);
+  base::debug::SetCrashKeyString(GetCanAccessDataFailureReasonKey(),
+                                 failure_reason);
 }
 
 }  // namespace
+
+ChildProcessSecurityPolicyImpl::Handle::Handle()
+    : child_id_(ChildProcessHost::kInvalidUniqueID) {}
+
+ChildProcessSecurityPolicyImpl::Handle::Handle(int child_id)
+    : child_id_(child_id) {
+  auto* policy = ChildProcessSecurityPolicyImpl::GetInstance();
+  if (!policy->AddProcessReference(child_id_))
+    child_id_ = ChildProcessHost::kInvalidUniqueID;
+}
+
+ChildProcessSecurityPolicyImpl::Handle::Handle(Handle&& rhs)
+    : child_id_(rhs.child_id_) {
+  rhs.child_id_ = ChildProcessHost::kInvalidUniqueID;
+}
+
+ChildProcessSecurityPolicyImpl::Handle
+ChildProcessSecurityPolicyImpl::Handle::Duplicate() {
+  return Handle(child_id_);
+}
+
+ChildProcessSecurityPolicyImpl::Handle::~Handle() {
+  if (child_id_ != ChildProcessHost::kInvalidUniqueID) {
+    auto* policy = ChildProcessSecurityPolicyImpl::GetInstance();
+    policy->RemoveProcessReference(child_id_);
+  }
+}
+
+ChildProcessSecurityPolicyImpl::Handle& ChildProcessSecurityPolicyImpl::Handle::
+operator=(Handle&& rhs) {
+  if (child_id_ != ChildProcessHost::kInvalidUniqueID &&
+      child_id_ != rhs.child_id_) {
+    auto* policy = ChildProcessSecurityPolicyImpl::GetInstance();
+    policy->RemoveProcessReference(child_id_);
+  }
+  child_id_ = rhs.child_id_;
+  rhs.child_id_ = ChildProcessHost::kInvalidUniqueID;
+  return *this;
+}
+
+bool ChildProcessSecurityPolicyImpl::Handle::is_valid() const {
+  return child_id_ != ChildProcessHost::kInvalidUniqueID;
+}
+
+bool ChildProcessSecurityPolicyImpl::Handle::CanCommitURL(const GURL& url) {
+  if (child_id_ == ChildProcessHost::kInvalidUniqueID)
+    return false;
+
+  auto* policy = ChildProcessSecurityPolicyImpl::GetInstance();
+  return policy->CanCommitURL(child_id_, url);
+}
+
+bool ChildProcessSecurityPolicyImpl::Handle::CanReadFile(
+    const base::FilePath& file) {
+  if (child_id_ == ChildProcessHost::kInvalidUniqueID)
+    return false;
+
+  auto* policy = ChildProcessSecurityPolicyImpl::GetInstance();
+  return policy->CanReadFile(child_id_, file);
+}
+
+bool ChildProcessSecurityPolicyImpl::Handle::CanReadFileSystemFile(
+    const storage::FileSystemURL& url) {
+  if (child_id_ == ChildProcessHost::kInvalidUniqueID)
+    return false;
+
+  auto* policy = ChildProcessSecurityPolicyImpl::GetInstance();
+  return policy->CanReadFileSystemFile(child_id_, url);
+}
+
+bool ChildProcessSecurityPolicyImpl::Handle::CanAccessDataForOrigin(
+    const GURL& url) {
+  if (child_id_ == ChildProcessHost::kInvalidUniqueID)
+    return false;
+
+  auto* policy = ChildProcessSecurityPolicyImpl::GetInstance();
+  return policy->CanAccessDataForOrigin(child_id_, url);
+}
+
+bool ChildProcessSecurityPolicyImpl::Handle::CanAccessDataForOrigin(
+    const url::Origin& origin) {
+  if (child_id_ == ChildProcessHost::kInvalidUniqueID)
+    return false;
+
+  auto* policy = ChildProcessSecurityPolicyImpl::GetInstance();
+  return policy->CanAccessDataForOrigin(child_id_, origin);
+}
 
 // The SecurityState class is used to maintain per-child process security state
 // information.
@@ -349,7 +453,7 @@ class ChildProcessSecurityPolicyImpl::SecurityState {
     }
   }
 
-  const GURL& origin_lock() { return origin_lock_; }
+  const GURL& origin_lock() const { return origin_lock_; }
 
   BrowsingInstanceId lowest_browsing_instance_id() {
     return lowest_browsing_instance_id_;
@@ -377,7 +481,10 @@ class ChildProcessSecurityPolicyImpl::SecurityState {
     return BrowserOrResourceContext();
   }
 
-  void ClearBrowserContext() { browser_context_ = nullptr; }
+  void ClearBrowserContextIfMatches(const BrowserContext* browser_context) {
+    if (browser_context == browser_context_)
+      browser_context_ = nullptr;
+  }
 
  private:
   enum class CommitRequestPolicy {
@@ -451,6 +558,7 @@ class ChildProcessSecurityPolicyImpl::SecurityState {
   DISALLOW_COPY_AND_ASSIGN(SecurityState);
 };
 
+// IsolatedOriginEntry implementation.
 ChildProcessSecurityPolicyImpl::IsolatedOriginEntry::IsolatedOriginEntry(
     const url::Origin& origin,
     BrowsingInstanceId min_browsing_instance_id,
@@ -513,6 +621,10 @@ ChildProcessSecurityPolicyImpl::ChildProcessSecurityPolicyImpl() {
   // We know about these schemes and believe them to be safe.
   RegisterWebSafeScheme(url::kHttpScheme);
   RegisterWebSafeScheme(url::kHttpsScheme);
+#if BUILDFLAG(ENABLE_WEBSOCKETS)
+  RegisterWebSafeScheme(url::kWsScheme);
+  RegisterWebSafeScheme(url::kWssScheme);
+#endif  // BUILDFLAG(ENABLE_WEBSOCKETS)
   RegisterWebSafeScheme(url::kFtpScheme);
   RegisterWebSafeScheme(url::kDataScheme);
   RegisterWebSafeScheme("feed");
@@ -553,12 +665,13 @@ void ChildProcessSecurityPolicyImpl::Add(int child_id,
   DCHECK(browser_context);
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   base::AutoLock lock(lock_);
-  if (security_state_.count(child_id) != 0) {
+  if (security_state_.find(child_id) != security_state_.end()) {
     NOTREACHED() << "Add child process at most once.";
     return;
   }
 
   security_state_[child_id] = std::make_unique<SecurityState>(browser_context);
+  CHECK(AddProcessReferenceLocked(child_id));
 }
 
 void ChildProcessSecurityPolicyImpl::Remove(int child_id) {
@@ -569,27 +682,13 @@ void ChildProcessSecurityPolicyImpl::Remove(int child_id) {
   if (state == security_state_.end())
     return;
 
-  state->second->ClearBrowserContext();
-
   // Moving the existing SecurityState object into a pending map so
   // that we can preserve permission state and avoid mutations to this
   // state after Remove() has been called.
   pending_remove_state_[child_id] = std::move(state->second);
   security_state_.erase(child_id);
 
-  // |child_id| could be inside tasks that are on the IO thread task queues. We
-  // need to keep the |pending_remove_state_| entry around until we have
-  // successfully executed a task on the IO thread. This should ensure that any
-  // pending tasks on the IO thread will have completed before we remove the
-  // entry.
-  base::PostTask(FROM_HERE, {BrowserThread::IO},
-                 base::BindOnce(
-                     [](ChildProcessSecurityPolicyImpl* policy, int child_id) {
-                       DCHECK_CURRENTLY_ON(BrowserThread::IO);
-                       base::AutoLock lock(policy->lock_);
-                       policy->pending_remove_state_.erase(child_id);
-                     },
-                     base::Unretained(this), child_id));
+  RemoveProcessReferenceLocked(child_id);
 }
 
 void ChildProcessSecurityPolicyImpl::RegisterWebSafeScheme(
@@ -851,11 +950,6 @@ void ChildProcessSecurityPolicyImpl::GrantWebUIBindings(int child_id,
 
   state->second->GrantBindings(bindings);
 
-  // Web UI bindings need the ability to request chrome: URLs.
-  state->second->GrantRequestScheme(kChromeUIScheme);
-
-  // Web UI pages can contain links to file:// URLs.
-  state->second->GrantRequestScheme(url::kFileScheme);
 }
 
 void ChildProcessSecurityPolicyImpl::GrantReadRawCookies(int child_id) {
@@ -924,8 +1018,7 @@ bool ChildProcessSecurityPolicyImpl::CanRequestURL(
   }
 
   // Also allow URLs destined for ShellExecute and not the browser itself.
-  return !GetContentClient()->browser()->IsHandledURL(url) &&
-         !net::URLRequest::IsHandledURL(url);
+  return !GetContentClient()->browser()->IsHandledURL(url);
 }
 
 bool ChildProcessSecurityPolicyImpl::CanRedirectToURL(const GURL& url) {
@@ -996,13 +1089,13 @@ bool ChildProcessSecurityPolicyImpl::CanCommitURL(int child_id,
     if (base::Contains(schemes_okay_to_commit_in_any_process_, scheme))
       return true;
 
-    auto state = security_state_.find(child_id);
-    if (state == security_state_.end())
+    auto* state = GetSecurityState(child_id);
+    if (!state)
       return false;
 
     // Otherwise, we consult the child process's security state to see if it is
     // allowed to commit the URL.
-    return state->second->CanCommitURL(url);
+    return state->CanCommitURL(url);
   }
 }
 
@@ -1230,10 +1323,10 @@ bool ChildProcessSecurityPolicyImpl::CanReadRawCookies(int child_id) {
 
 bool ChildProcessSecurityPolicyImpl::ChildProcessHasPermissionsForFile(
     int child_id, const base::FilePath& file, int permissions) {
-  auto state = security_state_.find(child_id);
-  if (state == security_state_.end())
+  auto* state = GetSecurityState(child_id);
+  if (!state)
     return false;
-  return state->second->HasPermissionsForFile(file, permissions);
+  return state->HasPermissionsForFile(file, permissions);
 }
 
 CanCommitStatus ChildProcessSecurityPolicyImpl::CanCommitOriginAndUrl(
@@ -1243,15 +1336,6 @@ CanCommitStatus ChildProcessSecurityPolicyImpl::CanCommitOriginAndUrl(
     const GURL& url) {
   const url::Origin url_origin = url::Origin::Resolve(url, origin);
   if (!CanAccessDataForOrigin(child_id, url_origin)) {
-    // Allow opaque origins w/o precursors to commit.
-    // TODO(acolwell): Investigate all cases that trigger this path and fix
-    // them so we have precursor information. Remove this logic once that has
-    // been completed.
-    if (url_origin.opaque() &&
-        url_origin.GetTupleOrPrecursorTupleIfOpaque().IsInvalid()) {
-      return CanCommitStatus::CAN_COMMIT_ORIGIN_AND_URL;
-    }
-
     // Check for special cases, like blob:null/ and data: URLs, where the
     // origin does not contain information to match against the process lock,
     // but using the whole URL can result in a process lock match.
@@ -1261,28 +1345,11 @@ CanCommitStatus ChildProcessSecurityPolicyImpl::CanCommitOriginAndUrl(
     if (actual_origin_lock == expected_origin_lock)
       return CanCommitStatus::CAN_COMMIT_ORIGIN_AND_URL;
 
-    // Allow about: pages to commit in a process that does not match the opaque
-    // origin's precursor information.
-    // TODO(acolwell): Remove this once process selection for about: URLs has
-    // been fixed to always match the precursor info.
-    if (url_origin.opaque() && (url.IsAboutBlank() || url.IsAboutSrcdoc()) &&
-        !actual_origin_lock.is_empty()) {
-      return CanCommitStatus::CAN_COMMIT_ORIGIN_AND_URL;
-    }
     return CanCommitStatus::CANNOT_COMMIT_URL;
   }
 
-  if (!CanAccessDataForOrigin(child_id, origin)) {
-    // Allow opaque origins w/o precursors to commit.
-    // TODO(acolwell): Investigate all cases that trigger this path and fix
-    // them so we have precursor information. Remove this logic once that has
-    // been completed.
-    if (origin.opaque() &&
-        origin.GetTupleOrPrecursorTupleIfOpaque().IsInvalid()) {
-      return CanCommitStatus::CAN_COMMIT_ORIGIN_AND_URL;
-    }
+  if (!CanAccessDataForOrigin(child_id, origin))
     return CanCommitStatus::CANNOT_COMMIT_ORIGIN;
-  }
 
   // Ensure that the origin derived from |url| is consistent with |origin|.
   // Note: We can't use origin.IsSameOriginWith() here because opaque origins
@@ -1292,8 +1359,8 @@ CanCommitStatus ChildProcessSecurityPolicyImpl::CanCommitOriginAndUrl(
   const auto origin_tuple_or_precursor_tuple =
       origin.GetTupleOrPrecursorTupleIfOpaque();
 
-  if (!url_tuple_or_precursor_tuple.IsInvalid() &&
-      !origin_tuple_or_precursor_tuple.IsInvalid() &&
+  if (url_tuple_or_precursor_tuple.IsValid() &&
+      origin_tuple_or_precursor_tuple.IsValid() &&
       origin_tuple_or_precursor_tuple != url_tuple_or_precursor_tuple) {
     // Allow a WebView specific exception for origins that have a data scheme.
     // WebView converts data: URLs into non-opaque data:// origins which is
@@ -1330,33 +1397,23 @@ bool ChildProcessSecurityPolicyImpl::CanAccessDataForOrigin(
   GURL url_to_check;
   if (origin.opaque()) {
     auto precursor_tuple = origin.GetTupleOrPrecursorTupleIfOpaque();
-    if (precursor_tuple.IsInvalid()) {
-      // We don't have precursor information so we only allow access if
-      // the process lock isn't set yet.
+    if (!precursor_tuple.IsValid()) {
+      // Allow opaque origins w/o precursors (if the security state exists).
+      // TODO(acolwell): Investigate all cases that trigger this path (e.g.,
+      // browser-initiated navigations to data: URLs) and fix them so we have
+      // precursor information (or the process lock is compatible with a missing
+      // precursor). Remove this logic once that has been completed.
       base::AutoLock lock(lock_);
       SecurityState* security_state = GetSecurityState(child_id);
-
-      if (security_state && security_state->origin_lock().is_empty())
-        return true;
-
-      std::string killed_process_origin_lock;
-      if (!security_state) {
-        killed_process_origin_lock = "(child id not found)";
-      } else {
-        killed_process_origin_lock = security_state->origin_lock().spec();
-      }
-      LogCanAccessDataForOriginCrashKeys("(empty)" /* expected_process_lock */,
-                                         killed_process_origin_lock,
-                                         origin.GetDebugString());
-
-      return false;
+      return !!security_state;
     } else {
       url_to_check = precursor_tuple.GetURL();
     }
   } else {
     url_to_check = origin.GetURL();
   }
-  bool success = CanAccessDataForOrigin(child_id, url_to_check);
+  bool success =
+      CanAccessDataForOrigin(child_id, url_to_check, origin.opaque());
   if (success)
     return true;
 
@@ -1371,6 +1428,14 @@ bool ChildProcessSecurityPolicyImpl::CanAccessDataForOrigin(
 
 bool ChildProcessSecurityPolicyImpl::CanAccessDataForOrigin(int child_id,
                                                             const GURL& url) {
+  constexpr bool kUrlIsPrecursorOfOpaqueOrigin = false;
+  return CanAccessDataForOrigin(child_id, url, kUrlIsPrecursorOfOpaqueOrigin);
+}
+
+bool ChildProcessSecurityPolicyImpl::CanAccessDataForOrigin(
+    int child_id,
+    const GURL& url,
+    bool url_is_precursor_of_opaque_origin) {
   DCHECK(IsRunningOnExpectedThread());
   base::AutoLock lock(lock_);
 
@@ -1380,7 +1445,13 @@ bool ChildProcessSecurityPolicyImpl::CanAccessDataForOrigin(int child_id,
     browser_or_resource_context = security_state->GetBrowserOrResourceContext();
 
   GURL expected_process_lock;
-  if (security_state && browser_or_resource_context) {
+  std::string failure_reason;
+
+  if (!security_state) {
+    failure_reason = "no_security_state";
+  } else if (!browser_or_resource_context) {
+    failure_reason = "no_browser_or_resource_context";
+  } else {
     IsolationContext isolation_context(
         security_state->lowest_browsing_instance_id(),
         browser_or_resource_context);
@@ -1393,6 +1464,22 @@ bool ChildProcessSecurityPolicyImpl::CanAccessDataForOrigin(int child_id,
       // from origins that require exactly the same lock.
       if (actual_process_lock == expected_process_lock)
         return true;
+
+      // TODO(acolwell, nasko): https://crbug.com/1029092: Ensure the precursor
+      // of opaque origins matches the renderer's origin lock.
+      if (url_is_precursor_of_opaque_origin) {
+        // SitePerProcessBrowserTest.TwoBlobURLsWithNullOriginDontShareProcess.
+        if (actual_process_lock.SchemeIsBlob() &&
+            actual_process_lock.path_piece().starts_with("null/")) {
+          return true;
+        }
+
+        // DeclarativeApiTest.PersistRules.
+        if (actual_process_lock.SchemeIs(url::kDataScheme))
+          return true;
+      }
+
+      failure_reason = "lock_mismatch";
     } else {
       // Citadel-style enforcement - an unlocked process should not be able to
       // access data from origins that require a lock.
@@ -1432,28 +1519,21 @@ bool ChildProcessSecurityPolicyImpl::CanAccessDataForOrigin(int child_id,
       // A process with no lock can only access data from origins that do not
       // require a locked process.
       bool should_lock_target =
-          SiteInstanceImpl::ShouldLockToOrigin(isolation_context, site_url);
+          SiteInstanceImpl::ShouldLockToOrigin(isolation_context, site_url,
+                                               /* is_guest= */ false);
       if (!should_lock_target)
         return true;
+      failure_reason = " citadel_enforcement";
 #endif
     }
   }
 
   // Returning false here will result in a renderer kill.  Set some crash
   // keys that will help understand the circumstances of that kill.
-  std::string killed_process_origin_lock;
-  if (!security_state) {
-    killed_process_origin_lock = "(child id not found)";
-  } else if (!browser_or_resource_context) {
-    killed_process_origin_lock = "(context is null)";
-  } else if (security_state->origin_lock().is_empty()) {
-    killed_process_origin_lock = "(no lock - citadel-enforcement)";
-  } else {
-    killed_process_origin_lock = security_state->origin_lock().spec();
-  }
-  LogCanAccessDataForOriginCrashKeys(expected_process_lock.spec(),
-                                     killed_process_origin_lock,
-                                     url.GetOrigin().spec());
+  LogCanAccessDataForOriginCrashKeys(
+      expected_process_lock.possibly_invalid_spec(),
+      GetKilledProcessOriginLock(security_state), url.GetOrigin().spec(),
+      failure_reason);
   return false;
 }
 
@@ -1514,10 +1594,10 @@ bool ChildProcessSecurityPolicyImpl::HasPermissionsForFileSystem(
     int permission) {
   base::AutoLock lock(lock_);
 
-  auto state = security_state_.find(child_id);
-  if (state == security_state_.end())
+  auto* state = GetSecurityState(child_id);
+  if (!state)
     return false;
-  return state->second->HasPermissionsForFileSystem(filesystem_id, permission);
+  return state->HasPermissionsForFileSystem(filesystem_id, permission);
 }
 
 void ChildProcessSecurityPolicyImpl::RegisterFileSystemPermissionPolicy(
@@ -1568,14 +1648,6 @@ void ChildProcessSecurityPolicyImpl::AddIsolatedOrigins(
   // available (and is only safe to be retrieved) on the UI thread, such as
   // BrowsingInstance IDs.
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-
-  if (IsolatedOriginSource::COMMAND_LINE == source) {
-    size_t number_of_origins = std::count_if(
-        patterns.cbegin(), patterns.cend(),
-        [](const IsolatedOriginPattern& p) { return p.is_valid(); });
-    UMA_HISTOGRAM_COUNTS_1000("SiteIsolation.IsolateOrigins.Size",
-                              number_of_origins);
-  }
 
   base::AutoLock isolated_origins_lock(isolated_origins_lock_);
 
@@ -1639,22 +1711,33 @@ void ChildProcessSecurityPolicyImpl::AddIsolatedOrigins(
   }
 }
 
-void ChildProcessSecurityPolicyImpl::RemoveIsolatedOriginsForBrowserContext(
+void ChildProcessSecurityPolicyImpl::RemoveStateForBrowserContext(
     const BrowserContext& browser_context) {
-  base::AutoLock isolated_origins_lock(isolated_origins_lock_);
+  {
+    base::AutoLock isolated_origins_lock(isolated_origins_lock_);
 
-  for (auto& iter : isolated_origins_) {
-    base::EraseIf(iter.second,
-                  [&browser_context](const IsolatedOriginEntry& entry) {
-                    // Remove if BrowserContext matches.
-                    return (entry.browser_context() == &browser_context);
-                  });
+    for (auto& iter : isolated_origins_) {
+      base::EraseIf(iter.second,
+                    [&browser_context](const IsolatedOriginEntry& entry) {
+                      // Remove if BrowserContext matches.
+                      return (entry.browser_context() == &browser_context);
+                    });
+    }
+
+    // Also remove map entries for site URLs which no longer have any
+    // IsolatedOriginEntries remaining.
+    base::EraseIf(isolated_origins_,
+                  [](const auto& pair) { return pair.second.empty(); });
   }
 
-  // Also remove map entries for site URLs which no longer have any
-  // IsolatedOriginEntries remaining.
-  base::EraseIf(isolated_origins_,
-                [](const auto& pair) { return pair.second.empty(); });
+  {
+    base::AutoLock lock(lock_);
+    for (auto& pair : security_state_)
+      pair.second->ClearBrowserContextIfMatches(&browser_context);
+
+    for (auto& pair : pending_remove_state_)
+      pair.second->ClearBrowserContextIfMatches(&browser_context);
+  }
 }
 
 bool ChildProcessSecurityPolicyImpl::IsIsolatedOrigin(
@@ -1800,7 +1883,109 @@ bool ChildProcessSecurityPolicyImpl::GetMatchingIsolatedOrigin(
     }
   }
 
+  // If no match was found via IsolatedOrigins, then check the opt-in
+  // isolation status of |origin| in |isolation_context|. Note that while
+  // IsolatedOrigins considers any sub-origin of an isolated origin as also
+  // being isolated, with opt-in we will always either return false, or true
+  // with result set to |origin|.
+  if (!found && DoesOriginRequestOptInIsolation(isolation_context, origin)) {
+    *result = origin;
+    found = true;
+  }
+
   return found;
+}
+
+bool ChildProcessSecurityPolicyImpl::DoesOriginRequestOptInIsolation(
+    const IsolationContext& isolation_context,
+    const url::Origin& origin) {
+  // IsolationOptIn is only available when OriginPolicy is enabled.
+  // We only isolate HTTPS, so early-out if we see other schemes.
+  if (!base::FeatureList::IsEnabled(features::kOriginPolicy) ||
+      !origin.GetURL().SchemeIs(url::kHttpsScheme)) {
+    return false;
+  }
+
+  base::AutoLock origins_isolation_opt_in_lock(origins_isolation_opt_in_lock_);
+  // See if the same origin exists in the BrowsingInstance already, and if so
+  // return its isolation status.
+  // There are two cases we're worried about here: (i) we've previously seen the
+  // origin and isolated it, but it's no longer in the global map, in which case
+  // we should continue to isolate it, and TODO(wjmaclean): (ii) we've
+  // previously seen the origin and *not* isolated it, in which case we should
+  // continue to not isolate it.
+  BrowsingInstanceId browsing_instance_id(
+      isolation_context.browsing_instance_id());
+  if (!browsing_instance_id.is_null()) {
+    auto it = origin_isolation_by_browsing_instance_.find(browsing_instance_id);
+    if (it != origin_isolation_by_browsing_instance_.end()) {
+      if (std::find(it->second.begin(), it->second.end(), origin) !=
+          it->second.end()) {
+        return true;
+      }
+    }
+  }
+
+  // If |origin| isn't already in BrowserInstance, check the master opt_ins set.
+  return origin_isolation_opt_ins_.contains(origin);
+}
+
+void ChildProcessSecurityPolicyImpl::
+    RemoveOptInIsolatedOriginsForBrowsingInstance(
+        const IsolationContext& isolation_context) {
+  BrowsingInstanceId browsing_instance_id(
+      isolation_context.browsing_instance_id());
+  // If a BrowsingInstance is destructing, we should always have an id for it.
+  CHECK(!browsing_instance_id.is_null());
+
+  base::AutoLock origins_isolation_opt_in_lock(origins_isolation_opt_in_lock_);
+  origin_isolation_by_browsing_instance_.erase(browsing_instance_id);
+}
+
+void ChildProcessSecurityPolicyImpl::AddOptInIsolatedOriginForBrowsingInstance(
+    const IsolationContext& isolation_context,
+    const url::Origin& origin) {
+  // Origin Policy only exists for HTTPS, so nothing we isolate will be HTTP.
+  if (!origin.GetURL().SchemeIs(url::kHttpsScheme))
+    return;
+
+  BrowsingInstanceId browsing_instance_id(
+      isolation_context.browsing_instance_id());
+  // This function should only be called when a BrowsingInstance is registering
+  // a new SiteInstance, so |browsing_instance_id| should always be defined.
+  CHECK(!browsing_instance_id.is_null());
+
+  base::AutoLock origins_isolation_opt_in_lock(origins_isolation_opt_in_lock_);
+  auto it = origin_isolation_by_browsing_instance_.find(browsing_instance_id);
+  if (it == origin_isolation_by_browsing_instance_.end()) {
+    origin_isolation_by_browsing_instance_.try_emplace(
+        browsing_instance_id, std::vector<url::Origin>());
+    it = origin_isolation_by_browsing_instance_.find(browsing_instance_id);
+  }
+  // We only support adding new entries, not modifying existing ones. If at
+  // some point in the future we allow isolation status to change during the
+  // lifetime of a BrowsingInstance, then this will need to be updated.
+  if (std::find(it->second.begin(), it->second.end(), origin) ==
+      it->second.end()) {
+    it->second.push_back(origin);
+  }
+}
+
+void ChildProcessSecurityPolicyImpl::UpdateOriginIsolationOptInListIfNecessary(
+    const url::Origin& origin,
+    bool requests_isolation) {
+  // Avoid dealing with non-HTTP/HTTPS and other non-valid-for-isolation
+  // origins.
+  if (!origin.GetURL().SchemeIs(url::kHttpsScheme) ||
+      !IsolatedOriginUtil::IsValidIsolatedOrigin(origin)) {
+    return;
+  }
+
+  base::AutoLock origins_isolation_opt_in_lock(origins_isolation_opt_in_lock_);
+  if (requests_isolation)
+    origin_isolation_opt_ins_.insert(origin);
+  else
+    origin_isolation_opt_ins_.erase(origin);
 }
 
 void ChildProcessSecurityPolicyImpl::RemoveIsolatedOriginForTesting(
@@ -1816,25 +2001,34 @@ void ChildProcessSecurityPolicyImpl::RemoveIsolatedOriginForTesting(
     isolated_origins_.erase(key);
 }
 
-bool ChildProcessSecurityPolicyImpl::HasSecurityState(int child_id) {
-  base::AutoLock lock(lock_);
-  return GetSecurityState(child_id) != nullptr;
-}
-
 ChildProcessSecurityPolicyImpl::SecurityState*
 ChildProcessSecurityPolicyImpl::GetSecurityState(int child_id) {
   auto itr = security_state_.find(child_id);
   if (itr != security_state_.end())
     return itr->second.get();
 
-  // Check to see if |child_id| is in the pending removal map since this
-  // may be a call that was already on the IO thread's task queue when the
-  // Remove() call occurred.
-  if (BrowserThread::CurrentlyOn(BrowserThread::IO)) {
-    itr = pending_remove_state_.find(child_id);
-    if (itr != pending_remove_state_.end())
-      return itr->second.get();
+  auto pending_itr = pending_remove_state_.find(child_id);
+  if (pending_itr == pending_remove_state_.end())
+    return nullptr;
+
+  // At this point the SecurityState in the map is being kept alive
+  // by a Handle object or we are waiting for the deletion task to be run on
+  // the IO thread.
+  SecurityState* pending_security_state = pending_itr->second.get();
+
+  auto count_itr = process_reference_counts_.find(child_id);
+  if (count_itr != process_reference_counts_.end()) {
+    // There must be a Handle that still holds a reference to this
+    // pending state so it is safe to return. The assumption is that the
+    // owner of this Handle is making a security check.
+    return pending_security_state;
   }
+
+  // Since we don't have an entry in |process_reference_counts_| it means
+  // that we are waiting for the deletion task posted to the IO thread to run.
+  // Only allow the state to be accessed by the IO thread in this situation.
+  if (BrowserThread::CurrentlyOn(BrowserThread::IO))
+    return pending_security_state;
 
   return nullptr;
 }
@@ -1852,6 +2046,87 @@ ChildProcessSecurityPolicyImpl::ParseIsolatedOrigins(
     patterns.emplace_back(origin_string);
 
   return patterns;
+}
+
+// static
+std::string ChildProcessSecurityPolicyImpl::GetKilledProcessOriginLock(
+    const SecurityState* security_state) {
+  std::string killed_process_origin_lock;
+  if (!security_state)
+    return "(child id not found)";
+
+  if (!security_state->GetBrowserOrResourceContext())
+    return "(context is null)";
+
+  if (security_state->origin_lock().is_empty())
+    return "(none)";
+
+  return security_state->origin_lock().possibly_invalid_spec();
+}
+
+void ChildProcessSecurityPolicyImpl::LogKilledProcessOriginLock(int child_id) {
+  base::AutoLock lock(lock_);
+  const auto itr = security_state_.find(child_id);
+  const SecurityState* security_state =
+      itr != security_state_.end() ? itr->second.get() : nullptr;
+
+  base::debug::SetCrashKeyString(GetKilledProcessOriginLockKey(),
+                                 GetKilledProcessOriginLock(security_state));
+}
+
+ChildProcessSecurityPolicyImpl::Handle
+ChildProcessSecurityPolicyImpl::CreateHandle(int child_id) {
+  return Handle(child_id);
+}
+
+bool ChildProcessSecurityPolicyImpl::AddProcessReference(int child_id) {
+  base::AutoLock lock(lock_);
+  return AddProcessReferenceLocked(child_id);
+}
+
+bool ChildProcessSecurityPolicyImpl::AddProcessReferenceLocked(int child_id) {
+  // Make sure that we aren't trying to add references after the process has
+  // been destroyed.
+  if (security_state_.find(child_id) == security_state_.end())
+    return false;
+
+  ++process_reference_counts_[child_id];
+  return true;
+}
+
+void ChildProcessSecurityPolicyImpl::RemoveProcessReference(int child_id) {
+  base::AutoLock lock(lock_);
+  RemoveProcessReferenceLocked(child_id);
+}
+
+void ChildProcessSecurityPolicyImpl::RemoveProcessReferenceLocked(
+    int child_id) {
+  auto itr = process_reference_counts_.find(child_id);
+  CHECK(itr != process_reference_counts_.end());
+
+  if (itr->second > 1) {
+    itr->second--;
+    return;
+  }
+
+  DCHECK_EQ(itr->second, 1);
+  process_reference_counts_.erase(itr);
+
+  // |child_id| could be inside tasks that are on the IO thread task queues. We
+  // need to keep the |pending_remove_state_| entry around until we have
+  // successfully executed a task on the IO thread. This should ensure that any
+  // pending tasks on the IO thread will have completed before we remove the
+  // entry.
+  // TODO(acolwell): Remove this call once all objects on the IO thread have
+  // been converted to use Handles.
+  base::PostTask(FROM_HERE, {BrowserThread::IO},
+                 base::BindOnce(
+                     [](ChildProcessSecurityPolicyImpl* policy, int child_id) {
+                       DCHECK_CURRENTLY_ON(BrowserThread::IO);
+                       base::AutoLock lock(policy->lock_);
+                       policy->pending_remove_state_.erase(child_id);
+                     },
+                     base::Unretained(this), child_id));
 }
 
 }  // namespace content

@@ -5,16 +5,24 @@
 #ifndef CHROME_BROWSER_SAFE_BROWSING_CLOUD_CONTENT_SCANNING_DEEP_SCANNING_DIALOG_DELEGATE_H_
 #define CHROME_BROWSER_SAFE_BROWSING_CLOUD_CONTENT_SCANNING_DEEP_SCANNING_DIALOG_DELEGATE_H_
 
+#include <memory>
+#include <string>
+#include <utility>
 #include <vector>
 
 #include "base/feature_list.h"
+#include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
-#include "chrome/browser/safe_browsing/download_protection/binary_upload_service.h"
+#include "base/time/time.h"
+#include "chrome/browser/enterprise/connectors/enterprise_connectors_policy_handler.h"
+#include "chrome/browser/safe_browsing/cloud_content_scanning/binary_upload_service.h"
+#include "chrome/browser/safe_browsing/cloud_content_scanning/deep_scanning_utils.h"
 #include "chrome/browser/ui/tab_modal_confirm_dialog.h"
 #include "chrome/browser/ui/tab_modal_confirm_dialog_delegate.h"
-#include "components/safe_browsing/proto/webprotect.pb.h"
+#include "chrome/common/safe_browsing/archive_analyzer_results.h"
+#include "components/safe_browsing/core/proto/webprotect.pb.h"
 #include "content/public/browser/web_contents_view_delegate.h"
 #include "url/gurl.h"
 
@@ -22,8 +30,8 @@ class Profile;
 
 namespace safe_browsing {
 
-extern const base::Feature kDeepScanningOfUploads;
-extern const base::Feature kDeepScanningOfUploadsUI;
+class BinaryUploadService;
+class DeepScanningDialogViews;
 
 // A tab modal dialog delegate that informs the user of a background deep
 // scan happening in the given tab with an option to cancel the operation.
@@ -51,7 +59,7 @@ extern const base::Feature kDeepScanningOfUploadsUI;
 //     safe_browsing::DeepScanningDialogDelegate::ShowForWebContents(
 //         contents, std::move(data), base::BindOnce(...));
 //   }
-class DeepScanningDialogDelegate : public TabModalConfirmDialogDelegate {
+class DeepScanningDialogDelegate {
  public:
   // Used as an input to ShowForWebContents() to describe what data needs
   // deeper scanning.  Any members can be empty.
@@ -67,6 +75,9 @@ class DeepScanningDialogDelegate : public TabModalConfirmDialogDelegate {
     // strings are not scanned for malware.
     bool do_dlp_scan = false;
     bool do_malware_scan = false;
+
+    // URL of the page that is to receive sensitive data.
+    std::string url;
 
     // Text data to scan, such as plain text, URLs, HTML content, etc.
     std::vector<base::string16> text;
@@ -101,11 +112,50 @@ class DeepScanningDialogDelegate : public TabModalConfirmDialogDelegate {
     FileInfo(FileInfo&& other);
     ~FileInfo();
 
-    // SHA256 hash for the given file.
+    // Hex-encoded SHA256 hash for the given file.
     std::string sha256;
 
     // File size in bytes. -1 represents an unknown size.
-    uint64_t size;
+    uint64_t size = 0;
+
+    // File mime type.
+    std::string mime_type;
+  };
+
+  // File contents used as input for |file_info_| and the BinaryUploadService.
+  struct FileContents {
+    FileContents();
+    explicit FileContents(BinaryUploadService::Result result);
+    FileContents(FileContents&&);
+    FileContents& operator=(FileContents&&);
+
+    BinaryUploadService::Result result = BinaryUploadService::Result::UNKNOWN;
+    BinaryUploadService::Request::Data data;
+
+    // Store the file size separately instead of using data.contents.size() to
+    // keep track of size for large files.
+    int64_t size = 0;
+    std::string sha256;
+  };
+
+  // Enum to identify which message to show once scanning is complete. Ordered
+  // by precedence for when multiple files have conflicting results.
+  // TODO(crbug.com/1055785): Refactor this to whatever solution is chosen.
+  enum class DeepScanningFinalResult {
+    // Show that an issue was found and that the upload is blocked.
+    FAILURE = 0,
+
+    // Show that files were not uploaded since they were too large.
+    LARGE_FILES = 1,
+
+    // Show that files were not uploaded since they were encrypted.
+    ENCRYPTED_FILES = 2,
+
+    // Show that DLP checks failed, but that the user can proceed if they want.
+    WARNING = 3,
+
+    // Show that no issue was found and that the user may proceed.
+    SUCCESS = 4,
   };
 
   // Callback used with ShowForWebContents() that informs caller of verdict
@@ -121,16 +171,23 @@ class DeepScanningDialogDelegate : public TabModalConfirmDialogDelegate {
           Data,
           CompletionCallback)>;
 
+  using AnalyzeCallback = base::OnceCallback<void(
+      const safe_browsing::ArchiveAnalyzerResults& results)>;
+
   DeepScanningDialogDelegate(const DeepScanningDialogDelegate&) = delete;
   DeepScanningDialogDelegate& operator=(const DeepScanningDialogDelegate&) =
       delete;
-  ~DeepScanningDialogDelegate() override;
+  virtual ~DeepScanningDialogDelegate();
 
-  // TabModelConfirmDialogDelegate implementation.
-  base::string16 GetTitle() override;
-  base::string16 GetDialogMessage() override;
-  int GetDialogButtons() const override;
-  void OnCanceled() override;
+  // Called when the user decides to bypass the verdict they obtained from DLP.
+  // This will allow the upload of files marked as DLP warnings.
+  void BypassWarnings();
+
+  // Called when the user decides to cancel the file upload. This will stop the
+  // upload to Chrome since the scan wasn't allowed to complete. If |warning| is
+  // true, it means the user clicked Cancel after getting a warning, meaning the
+  // "CancelledByUser" metrics should not be recorded.
+  void Cancel(bool warning);
 
   // Returns true if the deep scanning feature is enabled in the upload
   // direction via enterprise policies.  If the appropriate enterprise policies
@@ -151,19 +208,26 @@ class DeepScanningDialogDelegate : public TabModalConfirmDialogDelegate {
   // Whether the UI is enabled or not, verdicts of the scan will be reported.
   static void ShowForWebContents(content::WebContents* web_contents,
                                  Data data,
-                                 CompletionCallback callback);
+                                 CompletionCallback callback,
+                                 DeepScanAccessPoint access_point);
 
   // In tests, sets a factory function for creating fake
   // DeepScanningDialogDelegates.
   static void SetFactoryForTesting(Factory factory);
+  static void ResetFactoryForTesting();
 
-  // Overrides the DM token used for testing purposes.
-  static void SetDMTokenForTesting(const char* dm_token);
+  // Showing the UI is not possible in unit tests, call this to disable it.
+  static void DisableUIForTesting();
+
+  // Determines if a request result should be used to allow a data use or to
+  // block it.
+  static bool ResultShouldAllowDataUse(BinaryUploadService::Result result);
 
  protected:
   DeepScanningDialogDelegate(content::WebContents* web_contents,
                              Data data,
-                             CompletionCallback callback);
+                             CompletionCallback callback,
+                             DeepScanAccessPoint access_point);
 
   // Callbacks from uploading data.  Protected so they can be called from
   // testing derived classes.
@@ -178,14 +242,19 @@ class DeepScanningDialogDelegate : public TabModalConfirmDialogDelegate {
   }
 
  private:
-  class FileSourceRequest;
-
-  // Gets the device level DM token to use with deep scans.
-  static std::string GetDMToken();
-
   // Uploads data for deep scanning.  Returns true if uploading is occurring in
   // the background and false if there is nothing to do.
   bool UploadData();
+
+  // Prepares an upload request for the file at |path|.  If the file
+  // cannot be uploaded it will have a failure verdict added to |result_|.
+  // Virtual so that it can be overridden in tests.
+  virtual void PrepareFileRequest(base::FilePath path,
+                                  AnalyzeCallback callback);
+
+  // Prepares an upload request for the given file.
+  void AnalyzerCallback(int index,
+                        const safe_browsing::ArchiveAnalyzerResults& results);
 
   // Adds required fields to |request| before sending it to the binary upload
   // service.
@@ -197,16 +266,19 @@ class DeepScanningDialogDelegate : public TabModalConfirmDialogDelegate {
 
   // Upload the request for deep scanning using the binary upload service.
   // These methods exist so they can be overridden in tests as needed.
+  // The |result| argument exists as an optimization to finish the request early
+  // when the result is known in advance to avoid using the upload service.
   virtual void UploadTextForDeepScanning(
       std::unique_ptr<BinaryUploadService::Request> request);
   virtual void UploadFileForDeepScanning(
+      BinaryUploadService::Result result,
       const base::FilePath& path,
       std::unique_ptr<BinaryUploadService::Request> request);
 
-  // Closes the tab modal dialog.  Returns false if the UI was not enabled to
-  // indicate no action was taken.  Otherwise returns true.
-  // Virtual to override in tests.
-  virtual bool CloseTabModalDialog();
+  // Updates the tab modal dialog to show the scanning results. Returns false if
+  // the UI was not enabled to indicate no action was taken. Virtual to override
+  // in tests.
+  virtual bool UpdateDialog();
 
   // Calls the CompletionCallback |callback_| if all requests associated with
   // scans of |data_| are finished.  This function may delete |this| so no
@@ -217,10 +289,28 @@ class DeepScanningDialogDelegate : public TabModalConfirmDialogDelegate {
   // |callback_| is cleared after being run.
   void RunCallback();
 
-  // Sets the FileInfo the given file.
-  void SetFileInfo(const base::FilePath& path,
-                   std::string sha256,
-                   int64_t size);
+  // Called when the file info for |path| has been fetched. Also begins the
+  // upload process.
+  void OnGotFileInfo(std::unique_ptr<BinaryUploadService::Request> request,
+                     const base::FilePath& path,
+                     BinaryUploadService::Result result,
+                     const BinaryUploadService::Request::Data& data);
+
+  // Completion of |FileRequestCallback| once the mime type is obtained
+  // asynchronously.
+  void CompleteFileRequestCallback(size_t index,
+                                   base::FilePath path,
+                                   BinaryUploadService::Result result,
+                                   DeepScanningClientResponse response,
+                                   std::string mime_type);
+
+  // Updates |final_result_| following the precedence established by the
+  // DeepScanningFinalResult enum.
+  void UpdateFinalResult(DeepScanningFinalResult message);
+
+  // Returns the BinaryUploadService used to upload content for deep scanning.
+  // Virtual to override in tests.
+  virtual BinaryUploadService* GetBinaryUploadService();
 
   // The web contents that is attempting to access the data.
   content::WebContents* web_contents_ = nullptr;
@@ -231,6 +321,12 @@ class DeepScanningDialogDelegate : public TabModalConfirmDialogDelegate {
   const Data data_;
   Result result_;
   std::vector<FileInfo> file_info_;
+
+  // Set to true if the full text got a DLP warning verdict.
+  bool text_warning_ = false;
+
+  // Indexes of files that got DLP warning verdicts.
+  std::set<size_t> file_warnings_;
 
   // Set to true once the scan of text has completed.  If the scan request has
   // no text requiring deep scanning, this is set to true immediately.
@@ -245,7 +341,21 @@ class DeepScanningDialogDelegate : public TabModalConfirmDialogDelegate {
   CompletionCallback callback_;
 
   // Pointer to UI when enabled.
-  TabModalConfirmDialog* dialog_ = nullptr;
+  DeepScanningDialogViews* dialog_ = nullptr;
+
+  // Access point to use to record UMA metrics.
+  DeepScanAccessPoint access_point_;
+
+  // Scanning result to be shown to the user once every request is done.
+  DeepScanningFinalResult final_result_ = DeepScanningFinalResult::SUCCESS;
+
+  base::TimeTicks upload_start_time_;
+
+  // TODO(domfc): This is added here so EnterpriseConnectorsPolicyHandler's
+  // tests work. The issue is that a new string used by the handler is being
+  // removed from certain tests because it's unused in prod code for now, so
+  // |handler_| can be removed once that's no longer the case.
+  enterprise_connectors::EnterpriseConnectorsPolicyHandler handler_;
 
   base::WeakPtrFactory<DeepScanningDialogDelegate> weak_ptr_factory_{this};
 };

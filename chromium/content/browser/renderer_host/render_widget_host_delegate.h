@@ -12,15 +12,16 @@
 
 #include "base/callback.h"
 #include "build/build_config.h"
+#include "components/viz/common/vertical_scroll_direction.h"
 #include "content/browser/renderer_host/input_event_shim.h"
 #include "content/common/content_export.h"
 #include "content/common/drag_event_source_info.h"
 #include "content/public/common/drop_data.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/mojom/frame/lifecycle.mojom.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
 #include "third_party/blink/public/platform/web_drag_operation.h"
-#include "third_party/blink/public/platform/web_input_event.h"
 #include "ui/gfx/native_widget_types.h"
 
 namespace blink {
@@ -212,6 +213,8 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
                                   bool last_unlocked_by_target,
                                   bool privileged) {}
 
+  virtual void UnlockMouse(RenderWidgetHostImpl* render_widget_host) {}
+
   // Returns whether the associated tab is in fullscreen mode.
   virtual bool IsFullscreenForCurrentTab();
 
@@ -311,35 +314,30 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
   // Note: This is also exposed by the RenderFrameHostDelegate.
   virtual ukm::SourceId GetUkmSourceIdForLastCommittedSource() const;
 
-  // Notifies the delegate that a focused editable element has been touched
-  // inside this RenderWidgetHost. If |editable| is true then the focused
-  // element accepts text input.
-  virtual void FocusedNodeTouched(bool editable) {}
-
   // Return this object cast to a WebContents, if it is one. If the object is
   // not a WebContents, returns nullptr.
   virtual WebContents* GetAsWebContents();
 
-  // Gets the size set by a top-level frame with auto-resize enabled.
-  virtual gfx::Size GetAutoResizeSize();
-
-  // Reset the auto-size value, to indicate that auto-size is no longer active.
-  virtual void ResetAutoResizeSize() {}
-
   // Returns true if there is context menu shown on page.
   virtual bool IsShowingContextMenuOnPage() const;
 
-  // Returns an object that will override handling of Text Input and Mouse
-  // Lock events from the renderer.
-  virtual InputEventShim* GetInputEventShim() const;
-
-  // Notifies all renderers in a page about changes to the size of the visible
-  // viewport.
-  virtual void NotifyVisibleViewportSizeChanged(
-      const gfx::Size& visible_viewport_size) {}
-
   // Returns the focused frame across all delegates, or nullptr if none.
   virtual RenderFrameHostImpl* GetFocusedFrameFromFocusedDelegate();
+
+  // Invoked when the vertical scroll direction of the root layer changes. Note
+  // that if a scroll in a given direction occurs, the scroll is completed, and
+  // then another scroll in the *same* direction occurs, we will not consider
+  // the second scroll event to have caused a change in direction. Also note
+  // note that this API will *never* be called with |kNull| which only exists to
+  // indicate the absence of a vertical scroll direction.
+  virtual void OnVerticalScrollDirectionChanged(
+      viz::VerticalScrollDirection scroll_direction) {}
+
+  // Returns true if the delegate is a portal.
+  virtual bool IsPortal() const;
+
+  // Notify the delegate that the screen orientation has been changed.
+  virtual void DidChangeScreenOrientation() {}
 
  protected:
   virtual ~RenderWidgetHostDelegate() {}

@@ -13,7 +13,9 @@
 #include "base/macros.h"
 #include "components/page_load_metrics/common/page_load_timing.h"
 #include "components/page_load_metrics/renderer/page_resource_data_use.h"
+#include "components/page_load_metrics/renderer/page_timing_metadata_recorder.h"
 #include "content/public/common/previews_state.h"
+#include "services/network/public/mojom/url_response_head.mojom-forward.h"
 #include "third_party/blink/public/common/loader/loading_behavior_flag.h"
 #include "third_party/blink/public/mojom/use_counter/css_property_id.mojom-shared.h"
 #include "third_party/blink/public/mojom/web_feature/web_feature.mojom-shared.h"
@@ -26,7 +28,6 @@ class OneShotTimer;
 }  // namespace base
 
 namespace network {
-struct ResourceResponseHead;
 struct URLLoaderCompletionStatus;
 }  // namespace network
 
@@ -42,6 +43,8 @@ class PageTimingMetricsSender {
   PageTimingMetricsSender(std::unique_ptr<PageTimingSender> sender,
                           std::unique_ptr<base::OneShotTimer> timer,
                           mojom::PageLoadTimingPtr initial_timing,
+                          const PageTimingMetadataRecorder::MonotonicTiming&
+                              initial_monotonic_timing,
                           std::unique_ptr<PageResourceDataUse> initial_request);
   ~PageTimingMetricsSender();
 
@@ -55,8 +58,8 @@ class PageTimingMetricsSender {
 
   void DidStartResponse(const GURL& response_url,
                         int resource_id,
-                        const network::ResourceResponseHead& response_head,
-                        content::ResourceType resource_type,
+                        const network::mojom::URLResponseHead& response_head,
+                        network::mojom::RequestDestination request_destination,
                         content::PreviewsState previews_state);
   void DidReceiveTransferSizeUpdate(int resource_id, int received_data_length);
   void DidCompleteResponse(int resource_id,
@@ -66,12 +69,20 @@ class PageTimingMetricsSender {
                                       int request_id,
                                       int64_t encoded_body_length,
                                       const std::string& mime_type);
+  void OnMainFrameDocumentIntersectionChanged(
+      const blink::WebRect& intersect_rect);
 
-  // TODO(ericrobinson): There should probably be a name change here:
-  // * Send: Sends immediately, functions as SendNow.
-  // * QueueSend: Queues the send by starting the timer, functions as Send.
-  void Send(mojom::PageLoadTimingPtr timing);
-  // Updates the PageLoadMetrics::CpuTiming data and starts the Send timer.
+  void DidObserveInputDelay(base::TimeDelta input_delay);
+  // Updates the timing information. Buffers |timing| to be sent over mojo
+  // sometime 'soon'.
+  void Update(
+      mojom::PageLoadTimingPtr timing,
+      const PageTimingMetadataRecorder::MonotonicTiming& monotonic_timing);
+
+  // Sends any queued timing data immediately and stops the send timer.
+  void SendLatest();
+
+  // Updates the PageLoadMetrics::CpuTiming data and starts the send timer.
   void UpdateCpuTiming(base::TimeDelta task_time);
 
   void UpdateResourceMetadata(int resource_id,
@@ -91,10 +102,11 @@ class PageTimingMetricsSender {
   std::unique_ptr<base::OneShotTimer> timer_;
   mojom::PageLoadTimingPtr last_timing_;
   mojom::CpuTimingPtr last_cpu_timing_;
+  mojom::InputTimingPtr input_timing_delta_;
 
   // The the sender keep track of metadata as it comes in, because the sender is
   // scoped to a single committed load.
-  mojom::PageLoadMetadataPtr metadata_;
+  mojom::FrameMetadataPtr metadata_;
   // A list of newly observed features during page load, to be sent to the
   // browser.
   mojom::PageLoadFeaturesPtr new_features_;
@@ -122,6 +134,10 @@ class PageTimingMetricsSender {
   // Field trial for alternating page timing metrics sender buffer timer delay.
   // https://crbug.com/847269.
   int buffer_timer_delay_ms_;
+
+  // Responsible for recording sampling profiler metadata corresponding to page
+  // timing.
+  PageTimingMetadataRecorder metadata_recorder_;
 
   DISALLOW_COPY_AND_ASSIGN(PageTimingMetricsSender);
 };

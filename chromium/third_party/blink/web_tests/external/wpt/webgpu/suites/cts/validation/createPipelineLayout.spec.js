@@ -5,7 +5,8 @@
 export const description = `
 createPipelineLayout validation tests.
 `;
-import { TestGroup, poptions } from '../../../framework/index.js';
+import { TestGroup, pbool, pcombine, poptions } from '../../../framework/index.js';
+import { kBindingTypeInfo, kBindingTypes, kShaderStageCombinations } from '../capability_info.js';
 import { ValidationTest } from './validation_test.js';
 
 function clone(descriptor) {
@@ -16,14 +17,15 @@ export const g = new TestGroup(ValidationTest);
 g.test('number of dynamic buffers exceeds the maximum value', async t => {
   const {
     type,
-    maxDynamicBufferCount
+    visibility
   } = t.params;
+  const maxDynamicCount = kBindingTypeInfo[type].maxDynamicCount;
   const maxDynamicBufferBindings = [];
 
-  for (let i = 0; i < maxDynamicBufferCount; i++) {
+  for (let binding = 0; binding < maxDynamicCount; binding++) {
     maxDynamicBufferBindings.push({
-      binding: i,
-      visibility: GPUShaderStage.COMPUTE,
+      binding,
+      visibility,
       type,
       hasDynamicOffset: true
     });
@@ -35,7 +37,7 @@ g.test('number of dynamic buffers exceeds the maximum value', async t => {
   const goodDescriptor = {
     bindings: [{
       binding: 0,
-      visibility: GPUShaderStage.COMPUTE,
+      visibility,
       type,
       hasDynamicOffset: false
     }]
@@ -51,26 +53,37 @@ g.test('number of dynamic buffers exceeds the maximum value', async t => {
   const badPipelineLayoutDescriptor = {
     bindGroupLayouts: [maxDynamicBufferBindGroupLayout, t.device.createBindGroupLayout(badDescriptor)]
   };
-  await t.expectValidationError(() => {
+  t.expectValidationError(() => {
     t.device.createPipelineLayout(badPipelineLayoutDescriptor);
   });
-}).params([{
-  type: 'storage-buffer',
-  maxDynamicBufferCount: 4
-}, {
-  type: 'uniform-buffer',
-  maxDynamicBufferCount: 8
-}]);
-g.test('number of bind group layouts exceeds the maximum value', async t => {
-  const {
-    type
-  } = t.params;
-  const bindGroupLayoutDescriptor = {
+}).params(pcombine(poptions('visibility', [0, 2, 4, 6]), //
+poptions('type', ['uniform-buffer', 'storage-buffer', 'readonly-storage-buffer'])));
+g.test('visibility and dynamic offsets', t => {
+  const hasDynamicOffset = t.params.hasDynamicOffset;
+  const type = t.params.type;
+  const visibility = t.params.visibility;
+  const info = kBindingTypeInfo[type];
+  const descriptor = {
     bindings: [{
       binding: 0,
-      visibility: GPUShaderStage.COMPUTE,
-      type
+      visibility,
+      type,
+      hasDynamicOffset
     }]
+  };
+  let success = true;
+  if (info.type !== 'buffer' && hasDynamicOffset) success = false;
+  if ((visibility & ~info.validStages) !== 0) success = false;
+  t.expectValidationError(() => {
+    t.device.createPipelineLayout({
+      bindGroupLayouts: [t.device.createBindGroupLayout(descriptor)]
+    });
+  }, !success);
+}).params(pcombine(poptions('type', kBindingTypes), //
+pbool('hasDynamicOffset'), poptions('visibility', kShaderStageCombinations)));
+g.test('number of bind group layouts exceeds the maximum value', async t => {
+  const bindGroupLayoutDescriptor = {
+    bindings: []
   }; // 4 is the maximum number of bind group layouts.
 
   const maxBindGroupLayouts = [1, 2, 3, 4].map(() => t.device.createBindGroupLayout(bindGroupLayoutDescriptor));
@@ -83,8 +96,8 @@ g.test('number of bind group layouts exceeds the maximum value', async t => {
   const badPipelineLayoutDescriptor = {
     bindGroupLayouts: [...maxBindGroupLayouts, t.device.createBindGroupLayout(bindGroupLayoutDescriptor)]
   };
-  await t.expectValidationError(() => {
+  t.expectValidationError(() => {
     t.device.createPipelineLayout(badPipelineLayoutDescriptor);
   });
-}).params(poptions('type', ['storage-buffer', 'uniform-buffer']));
+});
 //# sourceMappingURL=createPipelineLayout.spec.js.map

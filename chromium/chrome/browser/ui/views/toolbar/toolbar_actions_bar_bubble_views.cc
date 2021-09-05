@@ -33,11 +33,31 @@ ToolbarActionsBarBubbleViews::ToolbarActionsBarBubbleViews(
                                       views::BubbleBorder::TOP_RIGHT),
       delegate_(std::move(delegate)),
       anchored_to_action_(anchored_to_action) {
-  DialogDelegate::set_default_button(delegate_->GetDefaultDialogButton());
-  DialogDelegate::set_button_label(ui::DIALOG_BUTTON_OK,
-                                   delegate_->GetActionButtonText());
-  DialogDelegate::set_button_label(ui::DIALOG_BUTTON_CANCEL,
-                                   delegate_->GetDismissButtonText());
+  base::string16 ok_text = delegate_->GetActionButtonText();
+  base::string16 cancel_text = delegate_->GetDismissButtonText();
+
+  int buttons = ui::DIALOG_BUTTON_NONE;
+  if (!ok_text.empty())
+    buttons |= ui::DIALOG_BUTTON_OK;
+  if (!cancel_text.empty())
+    buttons |= ui::DIALOG_BUTTON_CANCEL;
+  DialogDelegate::SetButtons(buttons);
+  DialogDelegate::SetDefaultButton(delegate_->GetDefaultDialogButton());
+  DialogDelegate::SetButtonLabel(ui::DIALOG_BUTTON_OK, ok_text);
+  DialogDelegate::SetButtonLabel(ui::DIALOG_BUTTON_CANCEL, cancel_text);
+  DialogDelegate::SetExtraView(CreateExtraInfoView());
+
+  DialogDelegate::SetAcceptCallback(base::BindOnce(
+      &ToolbarActionsBarBubbleViews::NotifyDelegateOfClose,
+      base::Unretained(this), ToolbarActionsBarBubbleDelegate::CLOSE_EXECUTE));
+  DialogDelegate::SetCancelCallback(base::BindOnce(
+      &ToolbarActionsBarBubbleViews::NotifyDelegateOfClose,
+      base::Unretained(this),
+      ToolbarActionsBarBubbleDelegate::CLOSE_DISMISS_USER_ACTION));
+  DialogDelegate::SetCloseCallback(base::BindOnce(
+      &ToolbarActionsBarBubbleViews::NotifyDelegateOfClose,
+      base::Unretained(this),
+      ToolbarActionsBarBubbleDelegate::CLOSE_DISMISS_DEACTIVATION));
 
   DCHECK(anchor_view);
   set_close_on_deactivate(delegate_->ShouldCloseOnDeactivate());
@@ -62,7 +82,8 @@ std::string ToolbarActionsBarBubbleViews::GetAnchorActionId() {
   return delegate_->GetAnchorActionId();
 }
 
-std::unique_ptr<views::View> ToolbarActionsBarBubbleViews::CreateExtraView() {
+std::unique_ptr<views::View>
+ToolbarActionsBarBubbleViews::CreateExtraInfoView() {
   std::unique_ptr<ToolbarActionsBarBubbleDelegate::ExtraViewInfo>
       extra_view_info = delegate_->GetExtraViewInfo();
 
@@ -81,13 +102,12 @@ std::unique_ptr<views::View> ToolbarActionsBarBubbleViews::CreateExtraView() {
   const base::string16& text = extra_view_info->text;
   if (!text.empty()) {
     if (extra_view_info->is_learn_more) {
-      auto image_button = views::CreateVectorImageButton(this);
+      auto image_button = views::CreateVectorImageButtonWithNativeTheme(
+          this, vector_icons::kHelpOutlineIcon);
       image_button->SetFocusForPlatform();
       image_button->SetTooltipText(text);
-      views::SetImageFromVectorIcon(image_button.get(),
-                                    vector_icons::kHelpOutlineIcon);
-      image_button_ = image_button.release();
-      extra_view.reset(image_button_);
+      learn_more_button_ = image_button.get();
+      extra_view = std::move(image_button);
     } else {
       extra_view = std::make_unique<views::Label>(text);
     }
@@ -106,37 +126,19 @@ std::unique_ptr<views::View> ToolbarActionsBarBubbleViews::CreateExtraView() {
   return icon ? std::move(icon) : std::move(extra_view);
 }
 
+void ToolbarActionsBarBubbleViews::NotifyDelegateOfClose(
+    ToolbarActionsBarBubbleDelegate::CloseAction action) {
+  if (delegate_notified_of_close_)
+    return;
+  delegate_notified_of_close_ = true;
+  delegate_->OnBubbleClosed(action);
+}
+
 base::string16 ToolbarActionsBarBubbleViews::GetWindowTitle() const {
   return delegate_->GetHeadingText();
 }
 
 bool ToolbarActionsBarBubbleViews::ShouldShowCloseButton() const {
-  return true;
-}
-
-bool ToolbarActionsBarBubbleViews::Cancel() {
-  DCHECK(!delegate_notified_of_close_);
-  delegate_notified_of_close_ = true;
-  delegate_->OnBubbleClosed(
-      ToolbarActionsBarBubbleDelegate::CLOSE_DISMISS_USER_ACTION);
-  return true;
-}
-
-bool ToolbarActionsBarBubbleViews::Accept() {
-  DCHECK(!delegate_notified_of_close_);
-  delegate_notified_of_close_ = true;
-  delegate_->OnBubbleClosed(ToolbarActionsBarBubbleDelegate::CLOSE_EXECUTE);
-  return true;
-}
-
-bool ToolbarActionsBarBubbleViews::Close() {
-  // If the user took any action, the delegate will have been notified already.
-  // Otherwise, this was dismissal due to deactivation.
-  if (!delegate_notified_of_close_) {
-    delegate_notified_of_close_ = true;
-    delegate_->OnBubbleClosed(
-        ToolbarActionsBarBubbleDelegate::CLOSE_DISMISS_DEACTIVATION);
-  }
   return true;
 }
 
@@ -176,20 +178,9 @@ void ToolbarActionsBarBubbleViews::Init() {
   }
 }
 
-int ToolbarActionsBarBubbleViews::GetDialogButtons() const {
-  int buttons = ui::DIALOG_BUTTON_NONE;
-  if (!delegate_->GetActionButtonText().empty())
-    buttons |= ui::DIALOG_BUTTON_OK;
-  if (!delegate_->GetDismissButtonText().empty())
-    buttons |= ui::DIALOG_BUTTON_CANCEL;
-  return buttons;
-}
-
 void ToolbarActionsBarBubbleViews::ButtonPressed(views::Button* sender,
                                                  const ui::Event& event) {
-  DCHECK(!delegate_notified_of_close_);
-  delegate_notified_of_close_ = true;
-  delegate_->OnBubbleClosed(ToolbarActionsBarBubbleDelegate::CLOSE_LEARN_MORE);
+  NotifyDelegateOfClose(ToolbarActionsBarBubbleDelegate::CLOSE_LEARN_MORE);
   // Note that the Widget may or may not already be closed at this point,
   // depending on delegate_->ShouldCloseOnDeactivate(). Widget::Close() protects
   // against multiple calls (so long as they are not nested), and Widget

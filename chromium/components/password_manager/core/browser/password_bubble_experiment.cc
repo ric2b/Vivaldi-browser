@@ -6,23 +6,23 @@
 
 #include <string>
 
+#include "base/feature_list.h"
 #include "base/metrics/field_trial.h"
 #include "base/strings/string_number_conversions.h"
+#include "build/build_config.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
+#include "components/password_manager/core/common/password_manager_features.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
+#include "components/signin/public/base/signin_pref_names.h"
 #include "components/sync/driver/sync_service.h"
 #include "components/sync/driver/sync_user_settings.h"
-#include "components/variations/variations_associated_data.h"
 
 #include "app/vivaldi_apptools.h"
 
 namespace password_bubble_experiment {
-
-const char kSmartBubbleExperimentName[] = "PasswordSmartBubble";
-const char kSmartBubbleThresholdParam[] = "dismissal_count";
 
 void RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(
@@ -36,11 +36,7 @@ void RegisterPrefs(PrefRegistrySimple* registry) {
 }
 
 int GetSmartBubbleDismissalThreshold() {
-  std::string param = variations::GetVariationParamValue(
-      kSmartBubbleExperimentName, kSmartBubbleThresholdParam);
-  int threshold = 0;
-  // 3 is the default magic number that proved to show the best result.
-  return base::StringToInt(param, &threshold) ? threshold : 3;
+  return 3;
 }
 
 bool IsSmartLockUser(const syncer::SyncService* sync_service) {
@@ -66,8 +62,23 @@ void TurnOffAutoSignin(PrefService* prefs) {
 bool ShouldShowChromeSignInPasswordPromo(
     PrefService* prefs,
     const syncer::SyncService* sync_service) {
+#if defined(OS_CHROMEOS)
+  return false;
+#else
   if (vivaldi::IsVivaldiRunning())
     return false;
+
+  // If the account-scoped storage for passwords is enabled, then the user
+  // doesn't need to enable the full Sync feature to get their account
+  // passwords, so suppress the promo in this case.
+  if (base::FeatureList::IsEnabled(
+          password_manager::features::kEnablePasswordsAccountStorage)) {
+    return false;
+  }
+
+  if (!prefs->GetBoolean(prefs::kSigninAllowed))
+    return false;
+
   if (!sync_service ||
       sync_service->HasDisableReason(
           syncer::SyncService::DISABLE_REASON_PLATFORM_OVERRIDE) ||
@@ -90,6 +101,7 @@ bool ShouldShowChromeSignInPasswordPromo(
          prefs->GetInteger(
              password_manager::prefs::kNumberSignInPasswordPromoShown) <
              kThreshold;
+#endif  // defined(OS_CHROMEOS)
 }
 
 }  // namespace password_bubble_experiment

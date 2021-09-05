@@ -13,8 +13,6 @@
 #include <string>
 
 #include "base/callback.h"
-#include "base/memory/weak_ptr.h"
-#include "base/threading/thread_checker.h"
 #include "media/base/media_export.h"
 
 namespace media {
@@ -28,24 +26,11 @@ class MEDIA_EXPORT ProtocolSniffer {
  public:
   // Called when sniffing is complete.  |mime_type| contains the media type
   // detected, or is empty on failure to detect.
-  using Callback = base::Callback<void(const std::string& mime_type)>;
-
-  ProtocolSniffer();
-  ~ProtocolSniffer();
+  using Callback = base::OnceCallback<void(std::string mime_type)>;
 
   static bool ShouldSniffProtocol(const std::string& content_type);
 
-  void SniffProtocol(DataSource* data_source, const Callback& callback);
-
- private:
-  void ReadDone(std::unique_ptr<uint8_t[]> data,
-                const Callback& callback,
-                int size_read);
-
-  base::ThreadChecker thread_checker_;
-  base::WeakPtrFactory<ProtocolSniffer> weak_ptr_factory_;
-
-  DISALLOW_COPY_AND_ASSIGN(ProtocolSniffer);
+  static void SniffProtocol(DataSource* data_source, Callback callback);
 };
 
 }  // namespace media

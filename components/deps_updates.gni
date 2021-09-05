@@ -1,0 +1,37 @@
+# Copyright (c) 2015-2017 Vivaldi Technologies AS. All rights reserved
+
+update_template_instance("//chrome/browser:browser") {
+  public_deps += [
+    "//vivaldi/components:adverse_adblocking",
+    "//vivaldi/components:content_adverse_adblocking",
+    "//vivaldi/components/request_filter",
+    "//vivaldi/components/request_filter/adblock_filter",
+  ]
+  allow_circular_includes_from += [
+    "//vivaldi/components:adverse_adblocking",
+    "//vivaldi/components:content_adverse_adblocking",
+    "//vivaldi/components/request_filter",
+    "//vivaldi/components/request_filter/adblock_filter",
+  ]
+  if (!is_android) {
+    public_deps += [
+      "//vivaldi/components/datasource",
+    ]
+    allow_circular_includes_from += [
+      "//vivaldi/components/datasource",
+    ]
+  }
+}
+
+update_template_instance("//chrome/renderer:renderer") {
+  deps += [
+    "//vivaldi/components/request_filter/adblock_filter/renderer",
+  ]
+}
+
+update_template_instance("//chrome/browser:browser") {
+  deps += [
+    "//vivaldi/components/request_filter/adblock_filter",
+    "//vivaldi_mojom/components/request_filter/adblock_filter/mojom"
+  ]
+}

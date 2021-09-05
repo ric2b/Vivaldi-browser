@@ -10,6 +10,7 @@
 #include "base/logging.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/limits.h"
+#include "media/mojo/mojom/video_encoder_info.mojom.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "mojo/public/cpp/system/platform_handle.h"
 
@@ -18,20 +19,18 @@ namespace media {
 // static
 void MojoVideoEncodeAcceleratorService::Create(
     mojo::PendingReceiver<mojom::VideoEncodeAccelerator> receiver,
-    const CreateAndInitializeVideoEncodeAcceleratorCallback&
-        create_vea_callback,
+    CreateAndInitializeVideoEncodeAcceleratorCallback create_vea_callback,
     const gpu::GpuPreferences& gpu_preferences) {
   mojo::MakeSelfOwnedReceiver(
-      std::make_unique<MojoVideoEncodeAcceleratorService>(create_vea_callback,
-                                                          gpu_preferences),
+      std::make_unique<MojoVideoEncodeAcceleratorService>(
+          std::move(create_vea_callback), gpu_preferences),
       std::move(receiver));
 }
 
 MojoVideoEncodeAcceleratorService::MojoVideoEncodeAcceleratorService(
-    const CreateAndInitializeVideoEncodeAcceleratorCallback&
-        create_vea_callback,
+    CreateAndInitializeVideoEncodeAcceleratorCallback create_vea_callback,
     const gpu::GpuPreferences& gpu_preferences)
-    : create_vea_callback_(create_vea_callback),
+    : create_vea_callback_(std::move(create_vea_callback)),
       gpu_preferences_(gpu_preferences),
       output_buffer_size_(0) {
   DVLOG(1) << __func__;
@@ -45,21 +44,26 @@ MojoVideoEncodeAcceleratorService::~MojoVideoEncodeAcceleratorService() {
 
 void MojoVideoEncodeAcceleratorService::Initialize(
     const media::VideoEncodeAccelerator::Config& config,
-    mojom::VideoEncodeAcceleratorClientPtr client,
+    mojo::PendingRemote<mojom::VideoEncodeAcceleratorClient> client,
     InitializeCallback success_callback) {
   DVLOG(1) << __func__ << " " << config.AsHumanReadableString();
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(!encoder_);
   DCHECK(config.input_format == PIXEL_FORMAT_I420 ||
          config.input_format == PIXEL_FORMAT_NV12)
       << "Only I420 or NV12 format supported";
+
+  if (encoder_) {
+    DLOG(ERROR) << __func__ << " VEA is already initialized";
+    std::move(success_callback).Run(false);
+    return;
+  }
 
   if (!client) {
     DLOG(ERROR) << __func__ << "null |client|";
     std::move(success_callback).Run(false);
     return;
   }
-  vea_client_ = std::move(client);
+  vea_client_.Bind(std::move(client));
 
   if (config.input_visible_size.width() > limits::kMaxDimension ||
       config.input_visible_size.height() > limits::kMaxDimension ||
@@ -70,7 +74,8 @@ void MojoVideoEncodeAcceleratorService::Initialize(
     return;
   }
 
-  encoder_ = create_vea_callback_.Run(config, this, gpu_preferences_);
+  encoder_ =
+      std::move(create_vea_callback_).Run(config, this, gpu_preferences_);
   if (!encoder_) {
     DLOG(ERROR) << __func__ << " Error creating or initializing VEA";
     std::move(success_callback).Run(false);
@@ -193,6 +198,16 @@ void MojoVideoEncodeAcceleratorService::NotifyError(
     return;
 
   vea_client_->NotifyError(error);
+}
+
+void MojoVideoEncodeAcceleratorService::NotifyEncoderInfoChange(
+    const ::media::VideoEncoderInfo& info) {
+  DVLOG(4) << __func__;
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  if (!vea_client_)
+    return;
+
+  vea_client_->NotifyEncoderInfoChange(info);
 }
 
 }  // namespace media

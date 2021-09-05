@@ -1,4 +1,15 @@
 
+update_template_instance("//chrome/browser:browser") {
+  public_deps += [
+    "//vivaldi/prefs",
+    "//vivaldi/prefs:browser_prefs",
+  ]
+  allow_circular_includes_from += [
+    "//vivaldi/prefs",
+    "//vivaldi/prefs:browser_prefs",
+  ]
+}
+
 update_target("//components/history/core/browser:browser") {
   deps += [ "//vivaldi/prefs:prefs_strings" ]
 }

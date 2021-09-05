@@ -13,7 +13,7 @@
 #include "browser/vivaldi_webcontents_util.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
-#include "chrome/browser/renderer_context_menu/render_view_context_menu.h"
+#include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/renderer_context_menu/render_view_context_menu_views.h"
@@ -26,6 +26,7 @@
 #include "extensions/browser/guest_view/mime_handler_view/mime_handler_view_guest.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "net/base/escape.h"
+#include "third_party/blink/public/common/context_menu_data/edit_flags.h"
 #include "third_party/blink/public/web/web_context_menu_data.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/clipboard/clipboard.h"
@@ -75,8 +76,21 @@ void SendSimpleAction(WebContents* web_contents,
   // embedder WebContents.
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   auto* guest_view = extensions::MimeHandlerViewGuest::FromWebContents(wc);
-  if (guest_view)
+  if (guest_view) {
     wc = guest_view->embedder_web_contents();
+  }
+  DevToolsWindow* win = DevToolsWindow::AsDevToolsWindow(wc);
+  if (win && win->GetInspectedWebContents() != wc) {
+    // We're inspecting a page, make sure to direct the event to the
+    // inspected web contents.
+    wc = win->GetInspectedWebContents();
+    // Action was triggered from devtools, change the url to point to
+    // the inspected page instead.
+    GURL gurl = wc ? wc->GetURL() : GURL();
+    if (gurl.is_valid()) {
+      url = gurl.spec();
+    }
+  }
 #endif
   WebViewGuest* guestView = WebViewGuest::FromWebContents(wc);
   if (!guestView)
@@ -267,9 +281,9 @@ void VivaldiAddEditableItems(SimpleMenuModel* menu,
   if (IsVivaldiRunning()) {
     const bool use_paste_and_match_style =
         params.input_field_type !=
-            blink::WebContextMenuData::kInputFieldTypePlainText &&
+            blink::ContextMenuDataInputFieldType::kPlainText &&
         params.input_field_type !=
-            blink::WebContextMenuData::kInputFieldTypePassword;
+            blink::ContextMenuDataInputFieldType::kPassword;
 
     int index = menu->GetIndexOfCommandId(IDC_CONTENT_CONTEXT_PASTE);
     DCHECK_GE(index, 0);
@@ -358,11 +372,11 @@ bool IsVivaldiCommandIdEnabled(const SimpleMenuModel& menu,
     case IDC_VIV_OPEN_IMAGE_NEW_BACKGROUND_TAB:
     case IDC_VIV_OPEN_IMAGE_NEW_WINDOW:
     case IDC_VIV_OPEN_IMAGE_NEW_PRIVATE_WINDOW:
-      *enabled =
-          params.has_image_contents == WebContextMenuData::kMediaTypeImage;
+      *enabled = params.media_type ==
+                 blink::ContextMenuDataMediaType::kImage;
       break;
     case IDC_CONTENT_CONTEXT_PASTE_AND_GO: {
-      if (!(params.edit_flags & WebContextMenuData::kCanPaste)) {
+      if (!(params.edit_flags & blink::ContextMenuDataEditFlags::kCanPaste)) {
         *enabled = false;
         break;
       }
@@ -634,6 +648,18 @@ bool VivaldiExecuteCommand(RenderViewContextMenu* context_menu,
 
     case IDC_VIV_FULLSCREEN:
       SendSimpleAction(source_web_contents, event_flags, "fullscreen");
+      break;
+
+    case IDC_RELOAD:
+      if (IsVivaldiRunning()) {
+        extensions::WebViewGuest* web_view_guest =
+          extensions::WebViewGuest::FromWebContents(source_web_contents);
+        if (web_view_guest && web_view_guest->IsVivaldiWebPanel()) {
+           web_view_guest->Reload();
+           break;
+        }
+      }
+      return false;
       break;
   }
   return true;

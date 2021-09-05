@@ -9,6 +9,8 @@
 #define PLATFORM_MEDIA_GPU_DECODERS_MAC_AVF_DATA_BUFFER_QUEUE_H_
 
 #include "platform_media/common/feature_toggles.h"
+#include "platform_media/common/platform_media_pipeline_types.h"
+#include "platform_media/gpu/pipeline/ipc_decoding_buffer.h"
 
 #include <string>
 
@@ -25,18 +27,13 @@ namespace media {
 
 class MEDIA_EXPORT AVFDataBufferQueue {
  public:
-  // Used for debugging only.
-  enum Type { AUDIO, VIDEO };
-
-  using ReadCB = base::Callback<void(const scoped_refptr<DataBuffer>&)>;
-
-  AVFDataBufferQueue(Type type,
+  AVFDataBufferQueue(PlatformMediaDataType type,
                      const base::TimeDelta& capacity,
                      const base::Closure& capacity_available_cb,
                      const base::Closure& capacity_depleted_cb);
   ~AVFDataBufferQueue();
 
-  void Read(const ReadCB& read_cb);
+  void Read(IPCDecodingBuffer decoding_buffer);
 
   void BufferReady(const scoped_refptr<DataBuffer>& buffer);
 
@@ -54,11 +51,11 @@ class MEDIA_EXPORT AVFDataBufferQueue {
   std::string DescribeBufferSize() const;
   void SatisfyPendingRead();
 
-  const Type type_;
+  const PlatformMediaDataType type_;
   const base::TimeDelta capacity_;
   base::Closure capacity_available_cb_;
   base::Closure capacity_depleted_cb_;
-  ReadCB read_cb_;
+  IPCDecodingBuffer ipc_decoding_buffer_;
   std::unique_ptr<Queue> buffer_queue_;
 
   // We are "catching up" if the stream associated with this queue lags behind

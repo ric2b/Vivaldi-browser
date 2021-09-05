@@ -4,16 +4,21 @@
 
 package org.chromium.chrome.browser.tasks.tab_management;
 
+import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Rect;
 import android.graphics.RectF;
+import android.os.SystemClock;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Callback;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.browser.compositor.layouts.Layout;
+import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
+import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
 import org.chromium.ui.resources.dynamics.ViewResourceAdapter;
 
 /**
@@ -38,6 +43,13 @@ public interface TabSwitcher {
      * @param listener The {@link OnTabSelectingListener} to use.
      */
     void setOnTabSelectingListener(OnTabSelectingListener listener);
+
+    /**
+     * Called when the native initialization is completed.
+     */
+    void initWithNative(Context context, TabContentManager tabContentManager,
+            DynamicResourceLoader dynamicResourceLoader,
+            SnackbarManager.SnackbarManageable snackbarManageable);
 
     // TODO(960196): Remove the following interfaces when the associated bug is resolved.
     /**
@@ -101,6 +113,12 @@ public interface TabSwitcher {
          * @return Whether or not the TabSwitcher consumed the event.
          */
         boolean onBackPressed();
+
+        /**
+         * Enable recording the first meaningful paint event of the Grid Tab Switcher.
+         * @param activityCreateTimeMs {@link SystemClock#elapsedRealtime} at activity creation.
+         */
+        void enableRecordingFirstMeaningfulPaint(long activityCreateTimeMs);
     }
 
     /**
@@ -179,6 +197,12 @@ public interface TabSwitcher {
          *         tab switcher.
          */
         int getTabListTopOffset();
+
+        /**
+         * @return The mode of the list of Tabs.
+         */
+        @VisibleForTesting
+        int getListModeForTesting();
     }
 
     /**

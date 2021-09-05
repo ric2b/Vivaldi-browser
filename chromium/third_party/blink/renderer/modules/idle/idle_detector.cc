@@ -10,9 +10,10 @@
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom-blink.h"
 #include "third_party/blink/public/mojom/idle/idle_manager.mojom-blink.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_idle_options.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
+#include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/execution_context/security_context.h"
-#include "third_party/blink/renderer/modules/idle/idle_options.h"
 #include "third_party/blink/renderer/modules/idle/idle_state.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/name_client.h"
@@ -56,7 +57,7 @@ IdleDetector* IdleDetector::Create(ScriptState* script_state,
 }
 
 IdleDetector::IdleDetector(ExecutionContext* context, base::TimeDelta threshold)
-    : ContextClient(context), threshold_(threshold), receiver_(this) {}
+    : ExecutionContextClient(context), threshold_(threshold), receiver_(this) {}
 
 IdleDetector::~IdleDetector() = default;
 
@@ -69,7 +70,7 @@ const AtomicString& IdleDetector::InterfaceName() const {
 }
 
 ExecutionContext* IdleDetector::GetExecutionContext() const {
-  return ContextClient::GetExecutionContext();
+  return ExecutionContextClient::GetExecutionContext();
 }
 
 bool IdleDetector::HasPendingActivity() const {
@@ -78,18 +79,17 @@ bool IdleDetector::HasPendingActivity() const {
   return GetExecutionContext() && HasEventListeners();
 }
 
-ScriptPromise IdleDetector::start(ScriptState* script_state) {
+ScriptPromise IdleDetector::start(ScriptState* script_state,
+                                  ExceptionState& exception_state) {
   // Validate options.
   ExecutionContext* context = ExecutionContext::From(script_state);
   DCHECK(context->IsContextThread());
 
-  if (!context->GetSecurityContext().IsFeatureEnabled(
-          mojom::FeaturePolicyFeature::kIdleDetection,
+  if (!context->IsFeatureEnabled(
+          mojom::blink::FeaturePolicyFeature::kIdleDetection,
           ReportOptions::kReportOnFailure)) {
-    return ScriptPromise::RejectWithDOMException(
-        script_state,
-        MakeGarbageCollected<DOMException>(DOMExceptionCode::kSecurityError,
-                                           kFeaturePolicyBlocked));
+    exception_state.ThrowSecurityError(kFeaturePolicyBlocked);
+    return ScriptPromise();
   }
 
   StartMonitoring();
@@ -149,10 +149,10 @@ void IdleDetector::Update(mojom::blink::IdleStatePtr state) {
   DispatchEvent(*Event::Create(event_type_names::kChange));
 }
 
-void IdleDetector::Trace(blink::Visitor* visitor) {
+void IdleDetector::Trace(Visitor* visitor) {
   visitor->Trace(state_);
   EventTargetWithInlineData::Trace(visitor);
-  ContextClient::Trace(visitor);
+  ExecutionContextClient::Trace(visitor);
   ActiveScriptWrappable::Trace(visitor);
 }
 

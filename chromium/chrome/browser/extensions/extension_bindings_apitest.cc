@@ -8,12 +8,12 @@
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/extensions/api/permissions/permissions_api.h"
 #include "chrome/browser/extensions/extension_apitest.h"
-#include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/embedder_support/switches.h"
+#include "components/sessions/content/session_tab_helper.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_view_host.h"
@@ -28,7 +28,7 @@
 #include "extensions/test/test_extension_dir.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
-#include "third_party/blink/public/platform/web_mouse_event.h"
+#include "third_party/blink/public/common/input/web_mouse_event.h"
 
 namespace extensions {
 namespace {
@@ -88,13 +88,16 @@ IN_PROC_BROWSER_TEST_F(ExtensionBindingsApiTest,
 // Tests that an error raised during an async function still fires
 // the callback, but sets chrome.runtime.lastError.
 IN_PROC_BROWSER_TEST_F(ExtensionBindingsApiTest, LastError) {
+  ExtensionTestMessageListener ready_listener("ready", /*will_reply=*/false);
   ASSERT_TRUE(LoadExtension(
       test_data_dir_.AppendASCII("bindings").AppendASCII("last_error")));
+  ASSERT_TRUE(ready_listener.WaitUntilSatisfied());
 
   // Get the ExtensionHost that is hosting our background page.
   extensions::ProcessManager* manager =
       extensions::ProcessManager::Get(browser()->profile());
   extensions::ExtensionHost* host = FindHostWithPath(manager, "/bg.html", 1);
+  ASSERT_TRUE(host);
 
   bool result = false;
   ASSERT_TRUE(content::ExecuteScriptAndExtractBool(host->host_contents(),
@@ -253,7 +256,7 @@ class FramesExtensionBindingsApiTest : public ExtensionBindingsApiTest {
  public:
   void SetUpCommandLine(base::CommandLine* command_line) override {
     ExtensionBindingsApiTest::SetUpCommandLine(command_line);
-    command_line->AppendSwitch(::switches::kDisablePopupBlocking);
+    command_line->AppendSwitch(embedder_support::kDisablePopupBlocking);
   }
 };
 
@@ -534,12 +537,12 @@ IN_PROC_BROWSER_TEST_F(
   const GURL page_url = extension->GetResourceURL("page.html");
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), page_url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
-      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
   content::WebContents* first_tab =
       browser()->tab_strip_model()->GetActiveWebContents();
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), page_url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
-      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
   content::WebContents* second_tab =
       browser()->tab_strip_model()->GetActiveWebContents();
 
@@ -571,7 +574,7 @@ IN_PROC_BROWSER_TEST_F(
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), GURL("chrome://newtab"),
       WindowOpenDisposition::NEW_FOREGROUND_TAB,
-      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
   content::WebContents* new_tab =
       browser()->tab_strip_model()->GetActiveWebContents();
 
@@ -581,41 +584,11 @@ IN_PROC_BROWSER_TEST_F(
   EXPECT_TRUE(content::ExecuteScriptAndExtractInt(
       first_tab, "domAutomationController.send(window.tabEventId)",
       &result_tab_id));
-  EXPECT_EQ(SessionTabHelper::IdForTab(new_tab).id(), result_tab_id);
+  EXPECT_EQ(sessions::SessionTabHelper::IdForTab(new_tab).id(), result_tab_id);
 }
 
-enum UserActivationType {
-  kUserActivationV1,
-  kUserActivationV2,
-};
-
-class ExtensionBindingsUserGestureTest
-    : public ExtensionBindingsApiTest,
-      public ::testing::WithParamInterface<UserActivationType> {
- public:
-  ExtensionBindingsUserGestureTest() {}
-  ~ExtensionBindingsUserGestureTest() override {}
-
-  void SetUp() override {
-    UserActivationType user_activation_type = GetParam();
-    if (user_activation_type == kUserActivationV2) {
-      scoped_feature_list_.InitAndEnableFeature(features::kUserActivationV2);
-    } else {
-      DCHECK_EQ(kUserActivationV1, user_activation_type);
-      scoped_feature_list_.InitAndDisableFeature(features::kUserActivationV2);
-    }
-
-    ExtensionBindingsApiTest::SetUp();
-  }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-
-  DISALLOW_COPY_AND_ASSIGN(ExtensionBindingsUserGestureTest);
-};
-
 // Verifies that user gestures are carried through extension messages.
-IN_PROC_BROWSER_TEST_P(ExtensionBindingsUserGestureTest,
+IN_PROC_BROWSER_TEST_F(ExtensionBindingsApiTest,
                        UserGestureFromExtensionMessageTest) {
   TestExtensionDir test_dir;
   test_dir.WriteManifest(
@@ -680,7 +653,7 @@ IN_PROC_BROWSER_TEST_P(ExtensionBindingsUserGestureTest,
 
 // Verifies that user gestures from API calls are active when the callback is
 // triggered.
-IN_PROC_BROWSER_TEST_P(ExtensionBindingsUserGestureTest,
+IN_PROC_BROWSER_TEST_F(ExtensionBindingsApiTest,
                        UserGestureInExtensionAPICallback) {
   TestExtensionDir test_dir;
   test_dir.WriteManifest(
@@ -730,7 +703,7 @@ IN_PROC_BROWSER_TEST_P(ExtensionBindingsUserGestureTest,
 // Tests that a web page can consume a user gesture after an extension sends and
 // receives a reply during the same user gesture.
 // Regression test for https://crbug.com/921141.
-IN_PROC_BROWSER_TEST_P(ExtensionBindingsUserGestureTest,
+IN_PROC_BROWSER_TEST_F(ExtensionBindingsApiTest,
                        WebUserGestureAfterMessagingCallback) {
   TestExtensionDir test_dir;
   test_dir.WriteManifest(
@@ -794,7 +767,7 @@ IN_PROC_BROWSER_TEST_P(ExtensionBindingsUserGestureTest,
 // Tests that a web page can consume a user gesture after an extension calls a
 // method and receives the response in the callback.
 // Regression test for https://crbug.com/921141.
-IN_PROC_BROWSER_TEST_P(ExtensionBindingsUserGestureTest,
+IN_PROC_BROWSER_TEST_F(ExtensionBindingsApiTest,
                        WebUserGestureAfterApiCallback) {
   TestExtensionDir test_dir;
   test_dir.WriteManifest(
@@ -964,11 +937,6 @@ IN_PROC_BROWSER_TEST_F(ExtensionBindingsApiTest,
   ASSERT_TRUE(LoadExtension(extension_dir.UnpackedPath()));
   EXPECT_TRUE(catcher.GetNextResult()) << catcher.message();
 }
-
-INSTANTIATE_TEST_SUITE_P(,
-                         ExtensionBindingsUserGestureTest,
-                         ::testing::Values(kUserActivationV1,
-                                           kUserActivationV2));
 
 }  // namespace
 }  // namespace extensions

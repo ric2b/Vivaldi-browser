@@ -20,6 +20,8 @@
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/chrome_typography.h"
+#include "chrome/browser/ui/views/extensions/expandable_container_view.h"
+#include "chrome/browser/ui/views/extensions/extension_permissions_view.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/constrained_window/constrained_window_views.h"
@@ -35,6 +37,7 @@
 #include "ui/gfx/geometry/insets.h"
 #include "ui/views/border.h"
 #include "ui/views/bubble/bubble_frame_view.h"
+#include "ui/views/controls/button/checkbox.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/link.h"
@@ -120,48 +123,6 @@ class RatingLabel : public views::Label {
   DISALLOW_COPY_AND_ASSIGN(RatingLabel);
 };
 
-// A custom view for the permissions section of the extension info. It contains
-// the labels for each permission and the views for their associated details, if
-// there are any.
-class PermissionsView : public views::View {
- public:
-  explicit PermissionsView(int available_width)
-      : available_width_(available_width) {
-    SetLayoutManager(std::make_unique<views::BoxLayout>(
-        views::BoxLayout::Orientation::kVertical, gfx::Insets(),
-        ChromeLayoutProvider::Get()->GetDistanceMetric(
-            views::DISTANCE_RELATED_CONTROL_VERTICAL)));
-  }
-
-  void AddItem(const base::string16& permission_text,
-               const base::string16& permission_details) {
-    auto permission_label =
-        std::make_unique<views::Label>(permission_text, CONTEXT_BODY_TEXT_LARGE,
-                                       views::style::STYLE_SECONDARY);
-    permission_label->SetMultiLine(true);
-    permission_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-    permission_label->SizeToFit(available_width_);
-    AddChildView(permission_label.release());
-    if (!permission_details.empty()) {
-      // If we have more details to provide, show them in collapsed form.
-      std::vector<base::string16> details_container;
-      details_container.push_back(permission_details);
-      AddChildView(
-          new ExpandableContainerView(details_container, available_width_));
-    }
-  }
-
-  // views::View:
-  void ChildPreferredSizeChanged(views::View* child) override {
-    PreferredSizeChanged();
-  }
-
- private:
-  int available_width_;
-
-  DISALLOW_COPY_AND_ASSIGN(PermissionsView);
-};
-
 void AddResourceIcon(const gfx::ImageSkia* skia_image, void* data) {
   views::View* parent = static_cast<views::View*>(data);
   parent->AddChildView(new RatingStar(*skia_image));
@@ -214,7 +175,8 @@ void AddPermissions(ExtensionInstallPrompt::Prompt* prompt,
                     int available_width) {
   DCHECK_GT(prompt->GetPermissionCount(), 0u);
 
-  auto permissions_view = std::make_unique<PermissionsView>(available_width);
+  auto permissions_view =
+      std::make_unique<ExtensionPermissionsView>(available_width);
 
   for (size_t i = 0; i < prompt->GetPermissionCount(); ++i) {
     permissions_view->AddItem(prompt->GetPermission(i),
@@ -239,9 +201,41 @@ ExtensionInstallDialogView::ExtensionInstallDialogView(
       title_(prompt_->GetDialogTitle()),
       scroll_view_(nullptr),
       handled_result_(false),
-      install_button_enabled_(false) {
-  DialogDelegate::set_default_button(ui::DIALOG_BUTTON_CANCEL);
+      install_button_enabled_(false),
+      withhold_permissions_checkbox_(nullptr) {
+  DCHECK(prompt_->extension());
+
+  int buttons = prompt_->GetDialogButtons();
+  DCHECK(buttons & ui::DIALOG_BUTTON_CANCEL);
+
+  int default_button = ui::DIALOG_BUTTON_CANCEL;
+
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
+  // When we require parent permission next, we
+  // set the default button to OK.
+  if (prompt_->requires_parent_permission())
+    default_button = ui::DIALOG_BUTTON_OK;
+#endif
+
+  DialogDelegate::SetDefaultButton(default_button);
+  DialogDelegate::SetButtons(buttons);
   DialogDelegate::set_draggable(true);
+  if (prompt_->has_webstore_data()) {
+    auto store_link = std::make_unique<views::Link>(
+        l10n_util::GetStringUTF16(IDS_EXTENSION_PROMPT_STORE_LINK));
+    store_link->set_callback(base::BindRepeating(
+        &ExtensionInstallDialogView::LinkClicked, base::Unretained(this)));
+    DialogDelegate::SetExtraView(std::move(store_link));
+  } else if (prompt_->ShouldDisplayWithholdingUI()) {
+    withhold_permissions_checkbox_ =
+        DialogDelegate::SetExtraView(std::make_unique<views::Checkbox>(
+            l10n_util::GetStringUTF16(IDS_EXTENSION_WITHHOLD_PERMISSIONS)));
+  }
+
+  DialogDelegate::SetButtonLabel(ui::DIALOG_BUTTON_OK,
+                                   prompt_->GetAcceptButtonLabel());
+  DialogDelegate::SetButtonLabel(ui::DIALOG_BUTTON_CANCEL,
+                                   prompt_->GetAbortButtonLabel());
   set_close_on_deactivate(false);
   CreateContents();
 
@@ -368,16 +362,6 @@ void ExtensionInstallDialogView::AddedToWidget() {
   GetBubbleFrameView()->SetTitleView(std::move(title_container));
 }
 
-std::unique_ptr<views::View> ExtensionInstallDialogView::CreateExtraView() {
-  if (!prompt_->has_webstore_data())
-    return nullptr;
-
-  auto store_link = std::make_unique<views::Link>(
-      l10n_util::GetStringUTF16(IDS_EXTENSION_PROMPT_STORE_LINK));
-  store_link->set_listener(this);
-  return store_link;
-}
-
 bool ExtensionInstallDialogView::Cancel() {
   if (handled_result_)
     return true;
@@ -393,29 +377,15 @@ bool ExtensionInstallDialogView::Accept() {
 
   handled_result_ = true;
   UpdateInstallResultHistogram(true);
-  std::move(done_callback_).Run(ExtensionInstallPrompt::Result::ACCEPTED);
+  // If the prompt had a checkbox element and it was checked we send that along
+  // as the result, otherwise we just send a normal accepted result.
+  auto result =
+      withhold_permissions_checkbox_ &&
+              withhold_permissions_checkbox_->GetChecked()
+          ? ExtensionInstallPrompt::Result::ACCEPTED_AND_OPTION_CHECKED
+          : ExtensionInstallPrompt::Result::ACCEPTED;
+  std::move(done_callback_).Run(result);
   return true;
-}
-
-int ExtensionInstallDialogView::GetDialogButtons() const {
-  int buttons = prompt_->GetDialogButtons();
-  // Simply having just an OK button is *not* supported. See comment on function
-  // GetDialogButtons in dialog_delegate.h for reasons.
-  DCHECK_GT(buttons & ui::DIALOG_BUTTON_CANCEL, 0);
-  return buttons;
-}
-
-base::string16 ExtensionInstallDialogView::GetDialogButtonLabel(
-    ui::DialogButton button) const {
-  switch (button) {
-    case ui::DIALOG_BUTTON_OK:
-      return prompt_->GetAcceptButtonLabel();
-    case ui::DIALOG_BUTTON_CANCEL:
-      return prompt_->GetAbortButtonLabel();
-    default:
-      NOTREACHED();
-      return base::string16();
-  }
 }
 
 bool ExtensionInstallDialogView::IsDialogButtonEnabled(
@@ -441,8 +411,7 @@ ui::ModalType ExtensionInstallDialogView::GetModalType() const {
   return ui::MODAL_TYPE_WINDOW;
 }
 
-void ExtensionInstallDialogView::LinkClicked(views::Link* source,
-                                             int event_flags) {
+void ExtensionInstallDialogView::LinkClicked() {
   GURL store_url(extension_urls::GetWebstoreItemDetailURLPrefix() +
                  prompt_->extension()->id());
   OpenURLParams params(store_url, Referrer(),
@@ -556,87 +525,6 @@ void ExtensionInstallDialogView::UpdateInstallResultHistogram(bool accepted)
                               install_result_timer_->Elapsed());
     }
   }
-}
-
-
-// ExpandableContainerView::DetailsView ----------------------------------------
-
-ExpandableContainerView::DetailsView::DetailsView(
-    const std::vector<base::string16>& details) {
-  // Spacing between this and the "Hide Details" link.
-  const int bottom_padding = ChromeLayoutProvider::Get()->GetDistanceMetric(
-      views::DISTANCE_RELATED_CONTROL_VERTICAL);
-  SetLayoutManager(std::make_unique<views::BoxLayout>(
-      views::BoxLayout::Orientation::kVertical,
-      gfx::Insets(0, 0, bottom_padding, 0),
-      ChromeLayoutProvider::Get()->GetDistanceMetric(
-          DISTANCE_RELATED_CONTROL_VERTICAL_SMALL)));
-
-  for (auto& detail : details) {
-    auto detail_label = std::make_unique<views::Label>(
-        detail, CONTEXT_BODY_TEXT_LARGE, views::style::STYLE_SECONDARY);
-    detail_label->SetMultiLine(true);
-    detail_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-    AddChildView(detail_label.release());
-  }
-}
-
-gfx::Size ExpandableContainerView::DetailsView::CalculatePreferredSize() const {
-  return expanded_ ? views::View::CalculatePreferredSize() : gfx::Size();
-}
-
-void ExpandableContainerView::DetailsView::ToggleExpanded() {
-  expanded_ = !expanded_;
-  PreferredSizeChanged();
-}
-
-// ExpandableContainerView -----------------------------------------------------
-
-ExpandableContainerView::ExpandableContainerView(
-    const std::vector<base::string16>& details,
-    int available_width)
-    : details_view_(nullptr), details_link_(nullptr) {
-  DCHECK(!details.empty());
-
-  views::GridLayout* layout =
-      SetLayoutManager(std::make_unique<views::GridLayout>());
-  constexpr int kColumnSetId = 0;
-  views::ColumnSet* column_set = layout->AddColumnSet(kColumnSetId);
-
-  // Even though we only have one column, using a GridLayout here will
-  // properly handle a 0 height row when |details_view_| is collapsed.
-  column_set->AddColumn(views::GridLayout::LEADING, views::GridLayout::LEADING,
-                        views::GridLayout::kFixedSize, views::GridLayout::FIXED,
-                        available_width, 0);
-
-  layout->StartRow(views::GridLayout::kFixedSize, kColumnSetId);
-  details_view_ = layout->AddView(std::make_unique<DetailsView>(details));
-
-  layout->StartRow(views::GridLayout::kFixedSize, kColumnSetId);
-  auto details_link = std::make_unique<views::Link>(
-      l10n_util::GetStringUTF16(IDS_EXTENSIONS_SHOW_DETAILS));
-  details_link->set_listener(this);
-  details_link->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  details_link_ = layout->AddView(std::move(details_link));
-}
-
-ExpandableContainerView::~ExpandableContainerView() {
-}
-
-void ExpandableContainerView::LinkClicked(
-    views::Link* source, int event_flags) {
-  ToggleDetailLevel();
-}
-
-void ExpandableContainerView::ChildPreferredSizeChanged(views::View* child) {
-  PreferredSizeChanged();
-}
-
-void ExpandableContainerView::ToggleDetailLevel() {
-  details_view_->ToggleExpanded();
-  details_link_->SetText(l10n_util::GetStringUTF16(
-      details_view_->expanded() ? IDS_EXTENSIONS_HIDE_DETAILS
-                                : IDS_EXTENSIONS_SHOW_DETAILS));
 }
 
 // static

@@ -13,7 +13,7 @@
 <script>
 // Until themes can clear the cache, force-reload the theme stylesheet.
 document.write('<link id="incognitothemecss" rel="stylesheet" ' +
-               'href="chrome://theme/css/incognito_new_tab_theme.css?' +
+               'href="chrome://theme/css/incognito_tab_theme.css?' +
                Date.now() + '">');
 </script>
 </head>
@@ -35,6 +35,12 @@ document.write('<link id="incognitothemecss" rel="stylesheet" ' +
       <em>$i18n{cookieControlsTitle}</em>
       $i18n{cookieControlsDescription}
     </div>
+    <cr-tooltip-icon id="cookie-controls-tooltip-icon"
+        icon-aria-label="$i18n{cookieControlsTitle}"
+        icon-class="$i18n{cookieControlsToolTipIcon}"
+        tooltip-text="$i18n{cookieControlsTooltipText}"
+        role="link" style="cursor: pointer;" $i18n{hideTooltipIcon}>
+    </cr-tooltip-icon>
     <cr-toggle id="cookie-controls-toggle"
                aria-label="$i18n{cookieControlsTitle}"
                $i18n{cookieControlsToggleChecked} dark></cr-toggle>
@@ -44,7 +50,8 @@ document.write('<link id="incognitothemecss" rel="stylesheet" ' +
 <script src="chrome://resources/js/cr.js"></script>
 <script src="chrome://resources/js/util.js"></script>
 <script src="incognito_tab.js"></script>
-<!-- Lazy-load cr_toggle to avoid performance penalty introduced by loading Polymer -->
+<!-- Lazy-load cr_elements to avoid performance penalty introduced by loading Polymer -->
 <script type="module" src="chrome://resources/cr_elements/cr_toggle/cr_toggle.m.js" async></script>
+<script type="module" src="chrome://resources/cr_elements/policy/cr_tooltip_icon.m.js" async></script>
 </body>
 </html>

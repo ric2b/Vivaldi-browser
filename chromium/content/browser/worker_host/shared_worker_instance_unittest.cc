@@ -9,6 +9,7 @@
 #include "base/macros.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
+#include "services/network/public/mojom/content_security_policy.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace content {
@@ -21,8 +22,9 @@ class SharedWorkerInstanceTest : public testing::Test {
                                       const std::string& name,
                                       const url::Origin& constructor_origin) {
     return SharedWorkerInstance(
-        script_url, name, constructor_origin, std::string(),
-        blink::mojom::ContentSecurityPolicyType::kReport,
+        script_url, blink::mojom::ScriptType::kClassic,
+        network::mojom::CredentialsMode::kSameOrigin, name, constructor_origin,
+        std::string(), network::mojom::ContentSecurityPolicyType::kReport,
         network::mojom::IPAddressSpace::kPublic,
         blink::mojom::SharedWorkerCreationContextType::kNonsecure);
   }
@@ -268,9 +270,10 @@ TEST_F(SharedWorkerInstanceTest, AddressSpace) {
       network::mojom::IPAddressSpace::kPublic};
   for (auto address_space : kAddressSpaces) {
     SharedWorkerInstance instance(
-        GURL("http://example.com/w.js"), "name",
+        GURL("http://example.com/w.js"), blink::mojom::ScriptType::kClassic,
+        network::mojom::CredentialsMode::kSameOrigin, "name",
         url::Origin::Create(GURL("http://example.com/")), std::string(),
-        blink::mojom::ContentSecurityPolicyType::kReport, address_space,
+        network::mojom::ContentSecurityPolicyType::kReport, address_space,
         blink::mojom::SharedWorkerCreationContextType::kNonsecure);
     EXPECT_EQ(address_space, instance.creation_address_space());
   }

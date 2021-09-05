@@ -34,20 +34,19 @@ RTCLegacyStatsReport* RTCStatsResponse::namedItem(const AtomicString& name) {
   return nullptr;
 }
 
-void RTCStatsResponse::AddStats(const WebRTCLegacyStats& stats) {
+void RTCStatsResponse::AddStats(const RTCLegacyStats& stats) {
   result_.push_back(MakeGarbageCollected<RTCLegacyStatsReport>(
       stats.Id(), stats.GetType(), stats.Timestamp()));
   idmap_.insert(stats.Id(), result_.size() - 1);
   RTCLegacyStatsReport* report = result_[result_.size() - 1].Get();
 
-  for (std::unique_ptr<WebRTCLegacyStatsMemberIterator> member(
-           stats.Iterator());
+  for (std::unique_ptr<RTCLegacyStatsMemberIterator> member(stats.Iterator());
        !member->IsEnd(); member->Next()) {
     report->AddStatistic(member->GetName(), member->ValueToString());
   }
 }
 
-void RTCStatsResponse::Trace(blink::Visitor* visitor) {
+void RTCStatsResponse::Trace(Visitor* visitor) {
   visitor->Trace(result_);
   RTCStatsResponseBase::Trace(visitor);
 }

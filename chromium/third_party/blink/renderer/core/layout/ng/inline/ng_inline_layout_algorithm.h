@@ -52,6 +52,19 @@ class CORE_EXPORT NGInlineLayoutAlgorithm final
   scoped_refptr<const NGLayoutResult> Layout() override;
 
  private:
+  enum class TruncateType {
+    // Indicates default behavior. The default truncates if the text doesn't
+    // fit and ShouldTruncateOverflowingText() returns true.
+    kDefault,
+
+    // Truncate if NGLineInfo has more lines.
+    kIfNotLastLine,
+
+    // Forces truncation. This is used when line-clamp is set and there are
+    // blocks after this.
+    kAlways,
+  };
+
   unsigned PositionLeadingFloats(NGExclusionSpace*, NGPositionedFloatVector*);
   NGPositionedFloat PositionFloat(LayoutUnit origin_block_bfc_offset,
                                   LayoutObject* floating_object,
@@ -69,6 +82,7 @@ class CORE_EXPORT NGInlineLayoutAlgorithm final
 
   NGInlineBoxState* HandleOpenTag(const NGInlineItem&,
                                   const NGInlineItemResult&,
+                                  NGLineBoxFragmentBuilder::ChildList*,
                                   NGInlineLayoutStateStack*) const;
   NGInlineBoxState* HandleCloseTag(const NGInlineItem&,
                                    const NGInlineItemResult&,
@@ -80,9 +94,9 @@ class CORE_EXPORT NGInlineLayoutAlgorithm final
                         const NGLineInfo&,
                         NGInlineItemResult*,
                         NGInlineBoxState*);
-  void PlaceGeneratedContent(scoped_refptr<const NGPhysicalTextFragment>,
-                             UBiDiLevel,
-                             NGInlineBoxState*);
+  void PlaceHyphen(const NGInlineItemResult&,
+                   LayoutUnit hyphen_inline_size,
+                   NGInlineBoxState*);
   NGInlineBoxState* PlaceAtomicInline(const NGInlineItem&,
                                       const NGLineInfo&,
                                       NGInlineItemResult*);
@@ -105,6 +119,13 @@ class CORE_EXPORT NGInlineLayoutAlgorithm final
                                 const NGExclusionSpace&,
                                 LayoutUnit line_height);
 
+  static TruncateType TruncateTypeFromConstraintSpace(
+      const NGConstraintSpace& space);
+
+  // Returns true if truncuation should happen as a result of line-clamp for
+  // |line_info|.
+  bool ShouldTruncateForLineClamp(const NGLineInfo& line_info) const;
+
   NGLineBoxFragmentBuilder::ChildList line_box_;
   NGInlineLayoutStateStack* box_states_;
   NGInlineChildLayoutContext* context_;
@@ -113,6 +134,7 @@ class CORE_EXPORT NGInlineLayoutAlgorithm final
 
   unsigned is_horizontal_writing_mode_ : 1;
   unsigned quirks_mode_ : 1;
+  unsigned truncate_type_ : 2;
 
 #if DCHECK_IS_ON()
   // True if |box_states_| is taken from |context_|, to check the |box_states_|

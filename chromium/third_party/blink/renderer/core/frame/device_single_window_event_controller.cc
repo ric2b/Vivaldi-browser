@@ -92,16 +92,16 @@ bool DeviceSingleWindowEventController::IsSameSecurityOriginAsMainFrame()
 }
 
 bool DeviceSingleWindowEventController::CheckPolicyFeatures(
-    const Vector<mojom::FeaturePolicyFeature>& features) const {
+    const Vector<mojom::blink::FeaturePolicyFeature>& features) const {
   const Document& document = GetDocument();
   return std::all_of(features.begin(), features.end(),
-                     [&document](mojom::FeaturePolicyFeature feature) {
+                     [&document](mojom::blink::FeaturePolicyFeature feature) {
                        return document.IsFeatureEnabled(
                            feature, ReportOptions::kReportOnFailure);
                      });
 }
 
-void DeviceSingleWindowEventController::Trace(blink::Visitor* visitor) {
+void DeviceSingleWindowEventController::Trace(Visitor* visitor) {
   visitor->Trace(document_);
   PlatformEventController::Trace(visitor);
 }

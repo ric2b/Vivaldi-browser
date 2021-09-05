@@ -5,6 +5,8 @@
 
 #include <vector>
 
+#include "base/strings/string16.h"
+
 namespace bookmarks {
 class BookmarkNode;
 }

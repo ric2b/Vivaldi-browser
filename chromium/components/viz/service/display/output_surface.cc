@@ -27,16 +27,16 @@ OutputSurface::Capabilities::Capabilities() = default;
 OutputSurface::Capabilities::Capabilities(const Capabilities& capabilities) =
     default;
 
-OutputSurface::OutputSurface() = default;
+OutputSurface::OutputSurface(Type type) : type_(type) {}
 
 OutputSurface::OutputSurface(scoped_refptr<ContextProvider> context_provider)
-    : context_provider_(std::move(context_provider)) {
+    : context_provider_(std::move(context_provider)), type_(Type::kOpenGL) {
   DCHECK(context_provider_);
 }
 
 OutputSurface::OutputSurface(
     std::unique_ptr<SoftwareOutputDevice> software_device)
-    : software_device_(std::move(software_device)) {
+    : software_device_(std::move(software_device)), type_(Type::kSoftware) {
   DCHECK(software_device_);
 }
 
@@ -83,8 +83,8 @@ void OutputSurface::SetGpuVSyncEnabled(bool enabled) {
   NOTREACHED();
 }
 
-// Only needs implementation for BrowserCompositorOutputSurface.
-bool OutputSurface::IsSoftwareMirrorMode() const {
-  return false;
+gpu::Mailbox OutputSurface::GetOverlayMailbox() const {
+  return gpu::Mailbox();
 }
+
 }  // namespace viz

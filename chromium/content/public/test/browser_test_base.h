@@ -16,6 +16,7 @@
 #include "content/public/test/test_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/spawned_test_server/spawned_test_server.h"
+#include "storage/browser/quota/quota_settings.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace base {
@@ -57,6 +58,11 @@ class BrowserTestBase : public testing::Test {
 
   // Override this to disallow accesses to be production-compatible.
   virtual bool AllowFileAccessFromFiles();
+
+  // By default browser tests use hardcoded quota settings for consistency,
+  // instead of dynamically based on available disk space. Tests can override
+  // this if they want to use the production path.
+  virtual bool UseProductionQuotaSettings();
 
   // Crash the Network Service process. Should only be called when
   // out-of-process Network Service is enabled. Re-applies any added host
@@ -101,13 +107,6 @@ class BrowserTestBase : public testing::Test {
   // harness a chance for post-test cleanup.
   // This is meant to be inherited only by the test harness.
   virtual void PostRunTestOnMainThread() = 0;
-
-  // Returns true if this test should be skipped. Tests starting with 'MANUAL_'
-  // are skipped unless the command line flag "--run-manual" is supplied.
-  // In case overriding SetUp() breaks, add:
-  // if (ShouldSkipManualTest())
-  //    GTEST_SKIP();
-  bool ShouldSkipManualTests();
 
   // Sets expected browser exit code, in case it's different than 0 (success).
   void set_expected_exit_code(int code) { expected_exit_code_ = code; }
@@ -207,6 +206,8 @@ class BrowserTestBase : public testing::Test {
   // class to ensure that SetUp was called. If it's not called, the test will
   // not run and report a false positive result.
   bool set_up_called_;
+
+  std::unique_ptr<storage::QuotaSettings> quota_settings_;
 
   std::unique_ptr<NoRendererCrashesAssertion> no_renderer_crashes_assertion_;
 

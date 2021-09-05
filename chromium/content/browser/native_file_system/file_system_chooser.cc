@@ -18,7 +18,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_client.h"
 #include "net/base/mime_util.h"
-#include "storage/browser/fileapi/isolated_context.h"
+#include "storage/browser/file_system/isolated_context.h"
 #include "ui/shell_dialogs/select_file_policy.h"
 
 namespace content {
@@ -119,10 +119,10 @@ void FileSystemChooser::CreateAndShow(
     WebContents* web_contents,
     const Options& options,
     ResultCallback callback,
-    scoped_refptr<base::TaskRunner> callback_runner) {
+    base::ScopedClosureRunner fullscreen_block) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   auto* listener = new FileSystemChooser(options.type(), std::move(callback),
-                                         std::move(callback_runner));
+                                         std::move(fullscreen_block));
   listener->dialog_ = ui::SelectFileDialog::Create(
       listener,
       GetContentClient()->browser()->CreateSelectFilePolicy(web_contents));
@@ -158,10 +158,10 @@ void FileSystemChooser::CreateAndShow(
 FileSystemChooser::FileSystemChooser(
     blink::mojom::ChooseFileSystemEntryType type,
     ResultCallback callback,
-    scoped_refptr<base::TaskRunner> callback_runner)
+    base::ScopedClosureRunner fullscreen_block)
     : callback_(std::move(callback)),
-      callback_runner_(std::move(callback_runner)),
-      type_(type) {}
+      type_(type),
+      fullscreen_block_(std::move(fullscreen_block)) {}
 
 FileSystemChooser::~FileSystemChooser() {
   if (dialog_)
@@ -181,22 +181,16 @@ void FileSystemChooser::MultiFilesSelected(
   DCHECK(isolated_context);
 
   RecordFileSelectionResult(type_, files.size());
-  callback_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(std::move(callback_), native_file_system_error::Ok(),
-                     std::move(files)));
+  std::move(callback_).Run(native_file_system_error::Ok(), std::move(files));
   delete this;
 }
 
 void FileSystemChooser::FileSelectionCanceled(void* params) {
   RecordFileSelectionResult(type_, 0);
-  callback_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(
-          std::move(callback_),
-          native_file_system_error::FromStatus(
-              blink::mojom::NativeFileSystemStatus::kOperationAborted),
-          std::vector<base::FilePath>()));
+  std::move(callback_).Run(
+      native_file_system_error::FromStatus(
+          blink::mojom::NativeFileSystemStatus::kOperationAborted),
+      std::vector<base::FilePath>());
   delete this;
 }
 

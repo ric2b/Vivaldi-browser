@@ -181,7 +181,7 @@ const FindInPageEntry kFindInPageEntryZero = {{0.0, 0.0}, 0};
   if (!root.value().is_list())
     return YES;
 
-  base::Value::ListStorage& listValues = root.value().GetList();
+  base::Value::ConstListView listValues = root.value().GetList();
   if (listValues.size() == 2) {
     if (listValues[0].is_int()) {
       int numHighlighted = listValues[0].GetInt();
@@ -232,7 +232,7 @@ const FindInPageEntry kFindInPageEntryZero = {{0.0, 0.0}, 0};
   DCHECK(position.is_list());
 
   // Position should always be of length 3, from [index,x,y].
-  base::span<const base::Value> positionList = position.GetList();
+  base::Value::ConstListView positionList = position.GetList();
   if (positionList.size() != 3)
     return kFindInPageEntryZero;
 

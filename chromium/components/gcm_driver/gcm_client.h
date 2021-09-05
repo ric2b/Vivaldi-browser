@@ -17,6 +17,7 @@
 #include "components/gcm_driver/gcm_activity.h"
 #include "components/gcm_driver/registration_info.h"
 #include "google_apis/gaia/core_account_id.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "services/network/public/mojom/proxy_resolving_socket.mojom-forward.h"
 
 namespace base {
@@ -75,8 +76,8 @@ class GCMClient {
     // Other errors.
     UNKNOWN_ERROR,
 
-    // Used for UMA. Keep LAST_RESULT up to date and sync with histograms.xml.
-    LAST_RESULT = UNKNOWN_ERROR
+    // Used for UMA. Keep kMaxValue up to date and sync with histograms.xml.
+    kMaxValue = UNKNOWN_ERROR
   };
 
   enum ChromePlatform {
@@ -234,23 +235,27 @@ class GCMClient {
   // connection. Must be called on |io_task_runner|.
   // |chrome_build_info|: chrome info, i.e., version, channel and etc.
   // |store_path|: path to the GCM store.
+  // |remove_account_mappings_with_email_key|: Whether account mappings having
+  //     email as account key should be removed while loading. Required
+  //     during the migration of account identifier from email to Gaia ID.
   // |blocking_task_runner|: for running blocking file tasks.
   // |io_task_runner|: for running IO tasks. When provided, it could be a
   //     wrapper on top of base::ThreadTaskRunnerHandle::Get() to provide power
   //     management featueres so that a delayed task posted to it can wake the
   //     system up from sleep to perform the task.
-  // |get_socket_factory_callback|: a callback that can accept a request for a
-  //     network::mojom::ProxyResolvingSocketFactoryPtr. It needs to be safe to
+  // |get_socket_factory_callback|: a callback that can accept a receiver for a
+  //     network::mojom::ProxyResolvingSocketFactory. It needs to be safe to
   //     run on any thread.
   // |delegate|: the delegate whose methods will be called asynchronously in
   //     response to events and messages.
   virtual void Initialize(
       const ChromeBuildInfo& chrome_build_info,
       const base::FilePath& store_path,
+      bool remove_account_mappings_with_email_key,
       const scoped_refptr<base::SequencedTaskRunner>& blocking_task_runner,
       scoped_refptr<base::SequencedTaskRunner> io_task_runner,
-      base::RepeatingCallback<
-          void(network::mojom::ProxyResolvingSocketFactoryRequest)>
+      base::RepeatingCallback<void(
+          mojo::PendingReceiver<network::mojom::ProxyResolvingSocketFactory>)>
           get_socket_factory_callback,
       const scoped_refptr<network::SharedURLLoaderFactory>& url_loader_factory,
       network::NetworkConnectionTracker* network_connection_tracker_,

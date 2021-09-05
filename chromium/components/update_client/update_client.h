@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -176,6 +177,12 @@ class CrxInstaller : public base::RefCountedThreadSafe<CrxInstaller> {
     int extended_error = 0;
   };
 
+  struct InstallParams {
+    InstallParams(const std::string& run, const std::string& arguments);
+    std::string run;
+    std::string arguments;
+  };
+
   using Callback = base::OnceCallback<void(const Result& result)>;
 
   // Called on the main thread when there was a problem unpacking or
@@ -187,10 +194,15 @@ class CrxInstaller : public base::RefCountedThreadSafe<CrxInstaller> {
   // and it is ready to be installed. |unpack_path| contains the
   // temporary directory with all the unpacked CRX files. |pubkey| contains the
   // public key of the CRX in the PEM format, without the header and the footer.
+  // |install_params| is an optional parameter which provides the name and
+  // the arguments for a binary program which is invoked as part of the
+  // install or update flows. To avoid forcing the callers to depend on
+  // base::Optional, an std::unique_ptr type is used.
   // The caller must invoke the |callback| when the install flow has completed.
   // This method may be called from a thread other than the main thread.
   virtual void Install(const base::FilePath& unpack_path,
                        const std::string& public_key,
+                       std::unique_ptr<InstallParams> install_params,
                        Callback callback) = 0;
 
   // Sets |installed_file| to the full path to the installed |file|. |file| is
@@ -208,7 +220,26 @@ class CrxInstaller : public base::RefCountedThreadSafe<CrxInstaller> {
  protected:
   friend class base::RefCountedThreadSafe<CrxInstaller>;
 
-  virtual ~CrxInstaller() {}
+  virtual ~CrxInstaller() = default;
+};
+
+// Defines an interface to handle |action| elements in the update response.
+// The current implementation only handles run actions bound to a CRX, meaning
+// that such CRX is unpacked and an executable file, contained inside the CRX,
+// is run, then the results of the invocation are collected by the callback.
+class ActionHandler : public base::RefCountedThreadSafe<ActionHandler> {
+ public:
+  using Callback =
+      base::OnceCallback<void(bool succeeded, int error_code, int extra_code1)>;
+
+  virtual void Handle(const base::FilePath& action,
+                      const std::string& session_id,
+                      Callback callback) = 0;
+
+ protected:
+  friend class base::RefCountedThreadSafe<ActionHandler>;
+
+  virtual ~ActionHandler() = default;
 };
 
 // A dictionary of installer-specific, arbitrary name-value pairs, which
@@ -228,6 +259,8 @@ struct CrxComponent {
   std::vector<uint8_t> pk_hash;
 
   scoped_refptr<CrxInstaller> installer;
+  scoped_refptr<ActionHandler> action_handler;
+
   std::string app_id;
 
   // The current version if the CRX is updated. Otherwise, "0" or "0.0" if
@@ -241,7 +274,7 @@ struct CrxComponent {
   // Optional.
   // Valid values for the name part of an attribute match
   // ^[-_a-zA-Z0-9]{1,256}$ and valid values the value part of an attribute
-  // match ^[-.,;+_=a-zA-Z0-9]{0,256}$ .
+  // match ^[-.,;+_=$a-zA-Z0-9]{0,256}$ .
   InstallerAttributes installer_attributes;
 
   // Specifies that the CRX can be background-downloaded in some cases.
@@ -290,6 +323,10 @@ class UpdateClient : public base::RefCounted<UpdateClient> {
       base::OnceCallback<std::vector<base::Optional<CrxComponent>>(
           const std::vector<std::string>& ids)>;
 
+  // Called when state changes occur during an Install or Update call.
+  using CrxStateChangeCallback =
+      base::RepeatingCallback<void(CrxUpdateItem item)>;
+
   // Defines an interface to observe the UpdateClient. It provides
   // notifications when state changes occur for the service itself or for the
   // registered CRXs.
@@ -299,9 +336,9 @@ class UpdateClient : public base::RefCounted<UpdateClient> {
       // Sent before the update client does an update check.
       COMPONENT_CHECKING_FOR_UPDATES = 1,
 
-      // Sent when there is a new version of a registered CRX. After
-      // the notification is sent the CRX will be downloaded unless the
-      // update client inserts a
+      // Sent when there is a new version of a registered CRX. The CRX will be
+      // downloaded after the notification unless the update client inserts
+      // a wait because of a throttling policy.
       COMPONENT_UPDATE_FOUND,
 
       // Sent when a CRX is in the update queue but it can't be acted on
@@ -329,7 +366,7 @@ class UpdateClient : public base::RefCounted<UpdateClient> {
       COMPONENT_UPDATE_DOWNLOADING,
     };
 
-    virtual ~Observer() {}
+    virtual ~Observer() = default;
 
     // Called by the update client when a state change happens.
     // If an |id| is specified, then the event is fired on behalf of the
@@ -347,29 +384,36 @@ class UpdateClient : public base::RefCounted<UpdateClient> {
   virtual void RemoveObserver(Observer* observer) = 0;
 
   // Installs the specified CRX. Calls back on |callback| after the
-  // update has been handled. The |error| parameter of the |callback|
-  // contains an error code in the case of a run-time error, or 0 if the
-  // install has been handled successfully. Overlapping calls of this function
-  // are executed concurrently, as long as the id parameter is different,
-  // meaning that installs of different components are parallelized.
+  // update has been handled. Provides state change notifications through
+  // invocations of the optional |crx_state_change_callback| callback.
+  // The |error| parameter of the |callback| contains an error code in the case
+  // of a run-time error, or 0 if the install has been handled successfully.
+  // Overlapping calls of this function are executed concurrently, as long as
+  // the id parameter is different, meaning that installs of different
+  // components are parallelized.
   // The |Install| function is intended to be used for foreground installs of
   // one CRX. These cases are usually associated with on-demand install
   // scenarios, which are triggered by user actions. Installs are never
   // queued up.
   virtual void Install(const std::string& id,
                        CrxDataCallback crx_data_callback,
+                       CrxStateChangeCallback crx_state_change_callback,
                        Callback callback) = 0;
 
   // Updates the specified CRXs. Calls back on |crx_data_callback| before the
   // update is attempted to give the caller the opportunity to provide the
-  // instances of CrxComponent to be used for this update. The |Update| function
-  // is intended to be used for background updates of several CRXs. Overlapping
-  // calls to this function result in a queuing behavior, and the execution
-  // of each call is serialized. In addition, updates are always queued up when
-  // installs are running. The |is_foreground| parameter must be set to true if
-  // the invocation of this function is a result of a user initiated update.
+  // instances of CrxComponent to be used for this update. Provides state change
+  // notifications through invocations of the optional
+  // |crx_state_change_callback| callback.
+  // The |Update| function is intended to be used for background updates of
+  // several CRXs. Overlapping calls to this function result in a queuing
+  // behavior, and the execution of each call is serialized. In addition,
+  // updates are always queued up when installs are running. The |is_foreground|
+  // parameter must be set to true if the invocation of this function is a
+  // result of a user initiated update.
   virtual void Update(const std::vector<std::string>& ids,
                       CrxDataCallback crx_data_callback,
+                      CrxStateChangeCallback crx_state_change_callback,
                       bool is_foreground,
                       Callback callback) = 0;
 
@@ -401,7 +445,7 @@ class UpdateClient : public base::RefCounted<UpdateClient> {
  protected:
   friend class base::RefCounted<UpdateClient>;
 
-  virtual ~UpdateClient() {}
+  virtual ~UpdateClient() = default;
 };
 
 // Creates an instance of the update client.

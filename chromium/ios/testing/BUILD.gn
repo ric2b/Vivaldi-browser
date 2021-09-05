@@ -7,9 +7,7 @@ import("//testing/test.gni")
 
 group("all_tests") {
   testonly = true
-  deps = [
-    ":ocmock_support_unittests",
-  ]
+  deps = [ ":ios_testing_unittests" ]
 }
 
 source_set("verify_custom_webkit") {
@@ -19,9 +17,29 @@ source_set("verify_custom_webkit") {
     "verify_custom_webkit.h",
     "verify_custom_webkit.mm",
   ]
-  deps = [
-    "//base",
+  deps = [ "//base" ]
+}
+
+source_set("hardware_keyboarr_support") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  testonly = true
+  sources = [
+    "hardware_keyboard_util.h",
+    "hardware_keyboard_util.mm",
   ]
+  deps = [ "//base/test:test_support" ]
+}
+
+source_set("block_swizzler") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  testonly = true
+  sources = [
+    "scoped_block_swizzler.h",
+    "scoped_block_swizzler.mm",
+    "scoped_method_swizzler.h",
+    "scoped_method_swizzler.mm",
+  ]
+  deps = [ "//base" ]
 }
 
 source_set("nserror_support") {
@@ -37,9 +55,7 @@ source_set("embedded_test_server_support") {
   configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
 
-  deps = [
-    "//net:test_support",
-  ]
+  deps = [ "//net:test_support" ]
   sources = [
     "embedded_test_server_handlers.cc",
     "embedded_test_server_handlers.h",
@@ -50,14 +66,9 @@ source_set("ocmock_support") {
   configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
 
-  deps = [
-    "//base",
-  ]
+  deps = [ "//base" ]
 
-  public_deps = [
-    "//third_party/google_toolbox_for_mac",
-    "//third_party/ocmock",
-  ]
+  public_deps = [ "//third_party/ocmock" ]
 
   sources = [
     "ocmock_complex_type_helper.h",
@@ -65,9 +76,10 @@ source_set("ocmock_support") {
   ]
 }
 
-test("ocmock_support_unittests") {
+test("ios_testing_unittests") {
   configs += [ "//build/config/compiler:enable_arc" ]
   deps = [
+    ":block_swizzler",
     ":ocmock_support",
     "//base/test:run_all_unittests",
     "//base/test:test_support",
@@ -78,6 +90,8 @@ test("ocmock_support_unittests") {
 
   sources = [
     "ocmock_complex_type_helper_unittest.mm",
+    "scoped_block_swizzler_unittest.mm",
+    "scoped_method_swizzler_unittest.mm",
   ]
 
   assert_no_deps = ios_assert_no_deps
@@ -129,8 +143,6 @@ bundle_data("http_server_bundle_data") {
     "data/http_server_files/window_open.html",
     "data/http_server_files/window_proxy.html",
   ]
-  outputs = [
-    "{{bundle_resources_dir}}/" +
-        "{{source_root_relative_dir}}/{{source_file_part}}",
-  ]
+  outputs = [ "{{bundle_resources_dir}}/" +
+              "{{source_root_relative_dir}}/{{source_file_part}}" ]
 }

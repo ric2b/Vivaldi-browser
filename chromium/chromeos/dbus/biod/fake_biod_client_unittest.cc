@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "base/test/test_simple_task_runner.h"
@@ -42,7 +43,7 @@ class FakeBiodClientTest : public testing::Test {
     std::vector<dbus::ObjectPath> enrollment_paths;
     fake_biod_client_.GetRecordsForUser(
         user_id,
-        base::Bind(&test_utils::CopyObjectPathArray, &enrollment_paths));
+        base::BindOnce(&test_utils::CopyObjectPathArray, &enrollment_paths));
     task_runner_->RunUntilIdle();
     return enrollment_paths;
   }
@@ -56,7 +57,7 @@ class FakeBiodClientTest : public testing::Test {
 
     dbus::ObjectPath returned_path;
     fake_biod_client_.StartEnrollSession(
-        id, label, base::Bind(&test_utils::CopyObjectPath, &returned_path));
+        id, label, base::BindOnce(&test_utils::CopyObjectPath, &returned_path));
     task_runner_->RunUntilIdle();
     EXPECT_NE(dbus::ObjectPath(), returned_path);
 
@@ -153,7 +154,7 @@ TEST_F(FakeBiodClientTest, TestAuthSessionWorkflowSingleUser) {
   EnrollFingerprint(kTestUserId, kTestLabel, kTestFingerprint2);
   dbus::ObjectPath returned_path;
   fake_biod_client_.StartAuthSession(
-      base::Bind(&test_utils::CopyObjectPath, &returned_path));
+      base::BindOnce(&test_utils::CopyObjectPath, &returned_path));
   task_runner_->RunUntilIdle();
   EXPECT_NE(returned_path, dbus::ObjectPath());
 
@@ -208,7 +209,7 @@ TEST_F(FakeBiodClientTest, TestAuthenticateWorkflowMultipleUsers) {
 
   dbus::ObjectPath returned_path;
   fake_biod_client_.StartAuthSession(
-      base::Bind(&test_utils::CopyObjectPath, &returned_path));
+      base::BindOnce(&test_utils::CopyObjectPath, &returned_path));
   task_runner_->RunUntilIdle();
   EXPECT_NE(returned_path, dbus::ObjectPath());
 
@@ -270,7 +271,7 @@ TEST_F(FakeBiodClientTest, TestDestroyingRecords) {
   EnrollNTestFingerprints(kTestUserId, kTestLabel, GenerateTestFingerprint(2),
                           2);
   EXPECT_EQ(2u, GetRecordsForUser(kTestUserId).size());
-  fake_biod_client_.DestroyAllRecords(EmptyVoidDBusMethodCallback());
+  fake_biod_client_.DestroyAllRecords(base::DoNothing());
   EXPECT_EQ(0u, GetRecordsForUser(kTestUserId).size());
 }
 
@@ -284,7 +285,7 @@ TEST_F(FakeBiodClientTest, TestGetAndSetRecordLabels) {
   std::vector<dbus::ObjectPath> enrollment_paths;
   fake_biod_client_.GetRecordsForUser(
       kTestUserId,
-      base::Bind(&test_utils::CopyObjectPathArray, &enrollment_paths));
+      base::BindOnce(&test_utils::CopyObjectPathArray, &enrollment_paths));
   task_runner_->RunUntilIdle();
   EXPECT_EQ(2u, enrollment_paths.size());
 
@@ -292,13 +293,15 @@ TEST_F(FakeBiodClientTest, TestGetAndSetRecordLabels) {
   // originally set.
   std::string returned_str;
   fake_biod_client_.RequestRecordLabel(
-      enrollment_paths[0], base::Bind(&test_utils::CopyString, &returned_str));
+      enrollment_paths[0],
+      base::BindOnce(&test_utils::CopyString, &returned_str));
   task_runner_->RunUntilIdle();
   EXPECT_EQ(kLabelOne, returned_str);
 
   returned_str = "";
   fake_biod_client_.RequestRecordLabel(
-      enrollment_paths[1], base::Bind(&test_utils::CopyString, &returned_str));
+      enrollment_paths[1],
+      base::BindOnce(&test_utils::CopyString, &returned_str));
   task_runner_->RunUntilIdle();
   EXPECT_EQ(kLabelTwo, returned_str);
 
@@ -306,9 +309,10 @@ TEST_F(FakeBiodClientTest, TestGetAndSetRecordLabels) {
   // of the new label.
   const std::string kNewLabelTwo = "Finger 2 New";
   fake_biod_client_.SetRecordLabel(enrollment_paths[1], kNewLabelTwo,
-                                   EmptyVoidDBusMethodCallback());
+                                   base::DoNothing());
   fake_biod_client_.RequestRecordLabel(
-      enrollment_paths[1], base::Bind(&test_utils::CopyString, &returned_str));
+      enrollment_paths[1],
+      base::BindOnce(&test_utils::CopyString, &returned_str));
   task_runner_->RunUntilIdle();
   EXPECT_EQ(kNewLabelTwo, returned_str);
 }

@@ -110,6 +110,13 @@ class CONTENT_EXPORT InputRouterImpl : public InputRouter,
       const gfx::Range& range,
       const std::vector<gfx::Rect>& bounds) override;
   void SetMouseCapture(bool capture) override;
+  void RequestMouseLock(bool from_user_gesture,
+                        bool privileged,
+                        bool unadjusted_movement,
+                        RequestMouseLockCallback response) override;
+  void RequestMouseLockChange(bool unadjusted_movement,
+                              RequestMouseLockCallback response) override;
+  void UnlockMouse() override;
   void OnHasTouchEventHandlers(bool has_handlers) override;
   void WaitForInputProcessed(base::OnceClosure callback) override;
   void FlushTouchEventQueue() override;
@@ -121,6 +128,8 @@ class CONTENT_EXPORT InputRouterImpl : public InputRouter,
   }
 
   void ForceResetTouchActionForTest();
+
+  bool IsFlingActiveForTest();
 
  private:
   friend class InputRouterImplTest;
@@ -156,10 +165,13 @@ class CONTENT_EXPORT InputRouterImpl : public InputRouter,
       const MouseWheelEventWithLatencyInfo& wheel_event) override;
   void SendGeneratedGestureScrollEvents(
       const GestureEventWithLatencyInfo& gesture_event) override;
+  gfx::Size GetRootWidgetViewportSize() override;
 
   // MouseWheelEventQueueClient
   void SendMouseWheelEventImmediately(
-      const MouseWheelEventWithLatencyInfo& touch_event) override;
+      const MouseWheelEventWithLatencyInfo& touch_event,
+      MouseWheelEventQueueClient::MouseWheelEventHandledCallback callback)
+      override;
   void OnMouseWheelEventAck(const MouseWheelEventWithLatencyInfo& event,
                             InputEventAckSource ack_source,
                             InputEventAckState ack_result) override;
@@ -171,7 +183,9 @@ class CONTENT_EXPORT InputRouterImpl : public InputRouter,
 
   // TouchpadPinchEventQueueClient
   void SendMouseWheelEventForPinchImmediately(
-      const MouseWheelEventWithLatencyInfo& event) override;
+      const MouseWheelEventWithLatencyInfo& event,
+      TouchpadPinchEventQueueClient::MouseWheelEventHandledCallback callback)
+      override;
   void OnGestureEventForPinchAck(const GestureEventWithLatencyInfo& event,
                                  InputEventAckSource ack_source,
                                  InputEventAckState ack_result) override;
@@ -213,6 +227,7 @@ class CONTENT_EXPORT InputRouterImpl : public InputRouter,
       const base::Optional<cc::TouchAction>& touch_action);
   void MouseWheelEventHandled(
       const MouseWheelEventWithLatencyInfo& event,
+      MouseWheelEventQueueClient::MouseWheelEventHandledCallback callback,
       InputEventAckSource source,
       const ui::LatencyInfo& latency,
       InputEventAckState state,

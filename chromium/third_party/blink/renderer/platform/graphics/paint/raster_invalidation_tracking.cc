@@ -4,7 +4,7 @@
 
 #include "third_party/blink/renderer/platform/graphics/paint/raster_invalidation_tracking.h"
 
-#include "base/trace_event/traced_value.h"
+#include "cc/layers/layer.h"
 #include "third_party/blink/renderer/platform/geometry/geometry_as_json.h"
 #include "third_party/blink/renderer/platform/geometry/layout_rect.h"
 #include "third_party/blink/renderer/platform/graphics/color.h"
@@ -24,9 +24,11 @@ void RasterInvalidationTracking::SimulateRasterUnderInvalidations(bool enable) {
 }
 
 bool RasterInvalidationTracking::ShouldAlwaysTrack() {
-  if (RuntimeEnabledFeatures::PaintUnderInvalidationCheckingEnabled())
-    return true;
+  return RuntimeEnabledFeatures::PaintUnderInvalidationCheckingEnabled() ||
+         IsTracingRasterInvalidations();
+}
 
+bool RasterInvalidationTracking::IsTracingRasterInvalidations() {
   bool tracing_enabled;
   TRACE_EVENT_CATEGORY_GROUP_ENABLED(
       TRACE_DISABLED_BY_DEFAULT("blink.invalidation"), &tracing_enabled);
@@ -76,77 +78,62 @@ static bool CompareRasterInvalidationInfo(const RasterInvalidationInfo& a,
   return a.reason < b.reason;
 }
 
-void RasterInvalidationTracking::AsJSON(JSONObject* json) {
+void RasterInvalidationTracking::AsJSON(JSONObject* json, bool detailed) const {
   if (!invalidations_.IsEmpty()) {
-    std::sort(invalidations_.begin(), invalidations_.end(),
-              &CompareRasterInvalidationInfo);
-    auto paint_invalidations_json = std::make_unique<JSONArray>();
-    for (auto& info : invalidations_) {
-      auto info_json = std::make_unique<JSONObject>();
-      info_json->SetString("object", info.client_debug_name);
-      if (!info.rect.IsEmpty()) {
-        if (info.rect == LayoutRect::InfiniteIntRect())
-          info_json->SetString("rect", "infinite");
-        else
-          info_json->SetArray("rect", RectAsJSONArray(info.rect));
+    // Sort to make the output more readable and easier to see the differences
+    // by a human.
+    auto sorted = invalidations_;
+    std::sort(sorted.begin(), sorted.end(), &CompareRasterInvalidationInfo);
+    auto invalidations_json = std::make_unique<JSONArray>();
+    IntRect last_rect;
+    for (auto* it = sorted.begin(); it != sorted.end(); it++) {
+      const auto& info = *it;
+      if (detailed) {
+        auto info_json = std::make_unique<JSONObject>();
+        info_json->SetArray("rect", RectAsJSONArray(info.rect));
+        info_json->SetString("object", info.client_debug_name);
+        info_json->SetString("reason",
+                             PaintInvalidationReasonToString(info.reason));
+        invalidations_json->PushObject(std::move(info_json));
+      } else if (std::none_of(sorted.begin(), it, [&info](auto& previous) {
+                   return previous.rect.Contains(info.rect);
+                 })) {
+        invalidations_json->PushArray(RectAsJSONArray(info.rect));
+        last_rect = info.rect;
       }
-      info_json->SetString("reason",
-                           PaintInvalidationReasonToString(info.reason));
-      paint_invalidations_json->PushObject(std::move(info_json));
     }
-    json->SetArray("paintInvalidations", std::move(paint_invalidations_json));
+    json->SetArray("invalidations", std::move(invalidations_json));
   }
 
   if (!under_invalidations_.IsEmpty()) {
-    auto under_paint_invalidations_json = std::make_unique<JSONArray>();
-    for (auto& under_paint_invalidation : under_invalidations_) {
-      auto under_paint_invalidation_json = std::make_unique<JSONObject>();
-      under_paint_invalidation_json->SetDouble("x", under_paint_invalidation.x);
-      under_paint_invalidation_json->SetDouble("y", under_paint_invalidation.y);
-      under_paint_invalidation_json->SetString(
+    auto under_invalidations_json = std::make_unique<JSONArray>();
+    for (auto& under_invalidation : under_invalidations_) {
+      auto under_invalidation_json = std::make_unique<JSONObject>();
+      under_invalidation_json->SetDouble("x", under_invalidation.x);
+      under_invalidation_json->SetDouble("y", under_invalidation.y);
+      under_invalidation_json->SetString(
           "oldPixel",
-          Color(under_paint_invalidation.old_pixel).NameForLayoutTreeAsText());
-      under_paint_invalidation_json->SetString(
+          Color(under_invalidation.old_pixel).NameForLayoutTreeAsText());
+      under_invalidation_json->SetString(
           "newPixel",
-          Color(under_paint_invalidation.new_pixel).NameForLayoutTreeAsText());
-      under_paint_invalidations_json->PushObject(
-          std::move(under_paint_invalidation_json));
+          Color(under_invalidation.new_pixel).NameForLayoutTreeAsText());
+      under_invalidations_json->PushObject(std::move(under_invalidation_json));
     }
-    json->SetArray("underPaintInvalidations",
-                   std::move(under_paint_invalidations_json));
+    json->SetArray("underInvalidations", std::move(under_invalidations_json));
   }
 }
 
-void RasterInvalidationTracking::AddToTracedValue(
-    base::trace_event::TracedValue& traced_value) {
-  if (!ShouldAlwaysTrack())
-    return;
-
-  // The names should be kept consistent with (except the intentional naming
-  // style difference: 'naming_style' here vs 'namingStyle' in trace viewer)
-  // third_party/catapult/tracing/tracing/extras/chrome/cc/layer_impl.html.
-  // Note that the difference between naming style is intentional.
-  traced_value.BeginArray("annotated_invalidation_rects");
-  std::sort(invalidations_.begin(), invalidations_.end(),
-            &CompareRasterInvalidationInfo);
+void RasterInvalidationTracking::AddToLayerDebugInfo(
+    cc::LayerDebugInfo& debug_info) const {
+  // This is not sorted because the output is for client programs, and the
+  // invalidations may be accumulated in debug_info.
   for (auto& info : invalidations_) {
     if (info.rect.IsEmpty())
       continue;
-    traced_value.BeginDictionary();
-    traced_value.BeginArray("geometry_rect");
-    traced_value.AppendInteger(info.rect.X());
-    traced_value.AppendInteger(info.rect.Y());
-    traced_value.AppendInteger(info.rect.Width());
-    traced_value.AppendInteger(info.rect.Height());
-    traced_value.EndArray();
-    traced_value.SetString("reason",
-                           PaintInvalidationReasonToString(info.reason));
-    traced_value.SetString(
-        "client",
-        WTF::StringUTF8Adaptor(info.client_debug_name).AsStringPiece());
-    traced_value.EndDictionary();
+    debug_info.invalidations.push_back(
+        {gfx::Rect(info.rect), PaintInvalidationReasonToString(info.reason),
+         info.client_debug_name.Utf8()});
   }
-  traced_value.EndArray();
 }
 
 static bool PixelComponentsDiffer(int c1, int c2) {

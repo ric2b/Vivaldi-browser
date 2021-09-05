@@ -9,12 +9,18 @@
 #ifndef CALENDAR_CALENDAR_TYPEDEFS_H_
 #define CALENDAR_CALENDAR_TYPEDEFS_H_
 
+#include <stdint.h>
+
 namespace calendar {
 
 typedef int64_t EventID;
+typedef int64_t CalendarID;
+typedef int64_t AccountID;
 typedef int64_t AlarmID;
 typedef int64_t EventTypeID;
 typedef int64_t RecurrenceExceptionID;
+typedef int64_t NotificationID;
+typedef int64_t InviteID;
 
 }  // namespace calendar
 

@@ -136,7 +136,7 @@ bool JobTaskSource::JoinFlag::ShouldWorkerSignal() {
 JobTaskSource::JobTaskSource(
     const Location& from_here,
     const TaskTraits& traits,
-    RepeatingCallback<void(experimental::JobDelegate*)> worker_task,
+    RepeatingCallback<void(JobDelegate*)> worker_task,
     RepeatingCallback<size_t()> max_concurrency_callback,
     PooledTaskRunnerDelegate* delegate)
     : TaskSource(traits, nullptr, TaskSourceExecutionMode::kJob),
@@ -146,7 +146,7 @@ JobTaskSource::JobTaskSource(
       primary_task_(base::BindRepeating(
           [](JobTaskSource* self) {
             // Each worker task has its own delegate with associated state.
-            experimental::JobDelegate job_delegate{self, self->delegate_};
+            JobDelegate job_delegate{self, self->delegate_};
             self->worker_task_.Run(&job_delegate);
           },
           base::Unretained(this))),
@@ -183,7 +183,7 @@ bool JobTaskSource::WillJoin() {
 }
 
 bool JobTaskSource::RunJoinTask() {
-  experimental::JobDelegate job_delegate{this, nullptr};
+  JobDelegate job_delegate{this, nullptr};
   worker_task_.Run(&job_delegate);
 
   // std::memory_order_relaxed on |worker_count_| is sufficient because the call
@@ -201,6 +201,14 @@ void JobTaskSource::Cancel(TaskSource::Transaction* transaction) {
   // WillRunTask() never succeed. std::memory_order_relaxed is sufficient
   // because this task source never needs to be re-enqueued after Cancel().
   state_.Cancel();
+
+#if DCHECK_IS_ON()
+  {
+    AutoLock auto_lock(version_lock_);
+    ++increase_version_;
+    version_condition_.Broadcast();
+  }
+#endif  // DCHECK_IS_ON()
 }
 
 bool JobTaskSource::WaitForParticipationOpportunity() {
@@ -277,6 +285,19 @@ size_t JobTaskSource::GetRemainingConcurrency() const {
 }
 
 void JobTaskSource::NotifyConcurrencyIncrease() {
+#if DCHECK_IS_ON()
+  {
+    AutoLock auto_lock(version_lock_);
+    ++increase_version_;
+    version_condition_.Broadcast();
+  }
+#endif  // DCHECK_IS_ON()
+
+  // Avoid unnecessary locks when NotifyConcurrencyIncrease() is spuriously
+  // called.
+  if (GetRemainingConcurrency() == 0)
+    return;
+
   {
     // Lock is taken to access |join_flag_| below and signal
     // |worker_released_condition_|.
@@ -285,13 +306,6 @@ void JobTaskSource::NotifyConcurrencyIncrease() {
       worker_released_condition_->Signal();
   }
 
-#if DCHECK_IS_ON()
-  {
-    AutoLock auto_lock(version_lock_);
-    ++increase_version_;
-    version_condition_.Broadcast();
-  }
-#endif  // DCHECK_IS_ON()
   // Make sure the task source is in the queue if not already.
   // Caveat: it's possible but unlikely that the task source has already reached
   // its intended concurrency and doesn't need to be enqueued if there
@@ -326,7 +340,8 @@ bool JobTaskSource::WaitForConcurrencyIncreaseUpdate(size_t recorded_version) {
   const base::TimeTicks start_time = subtle::TimeTicksNowIgnoringOverride();
   do {
     DCHECK_LE(recorded_version, increase_version_);
-    if (recorded_version != increase_version_)
+    const auto state = state_.Load();
+    if (recorded_version != increase_version_ || state.is_canceled())
       return true;
     // Waiting is acceptable because it is in DCHECK-only code.
     ScopedAllowBaseSyncPrimitivesOutsideBlockingScope
@@ -338,12 +353,12 @@ bool JobTaskSource::WaitForConcurrencyIncreaseUpdate(size_t recorded_version) {
 
 #endif  // DCHECK_IS_ON()
 
-Optional<Task> JobTaskSource::TakeTask(TaskSource::Transaction* transaction) {
+Task JobTaskSource::TakeTask(TaskSource::Transaction* transaction) {
   // JobTaskSource members are not lock-protected so no need to acquire a lock
   // if |transaction| is nullptr.
   DCHECK_GT(state_.Load().worker_count(), 0U);
   DCHECK(primary_task_);
-  return base::make_optional<Task>(from_here_, primary_task_, TimeDelta());
+  return Task(from_here_, primary_task_, TimeDelta());
 }
 
 bool JobTaskSource::DidProcessTask(TaskSource::Transaction* transaction) {
@@ -375,12 +390,12 @@ SequenceSortKey JobTaskSource::GetSortKey() const {
   return SequenceSortKey(traits_.priority(), queue_time_);
 }
 
-Optional<Task> JobTaskSource::Clear(TaskSource::Transaction* transaction) {
+Task JobTaskSource::Clear(TaskSource::Transaction* transaction) {
   Cancel();
   // Nothing is cleared since other workers might still racily run tasks. For
   // simplicity, the destructor will take care of it once all references are
   // released.
-  return base::make_optional<Task>(from_here_, DoNothing(), TimeDelta());
+  return Task(from_here_, DoNothing(), TimeDelta());
 }
 
 }  // namespace internal

@@ -4,7 +4,7 @@
 <translation id="1127811143501539442">{DAYS, plural, =1 {1 روز قبل} other {# روز قبل}}</translation>
 <translation id="1156623771253174079">{SECONDS, plural, =1 {1 دقیقه قبل} other {# دقیقه قبل}}</translation>
 <translation id="1368832886055348810">چپ به راست</translation>
-<translation id="1591184457164800433">{MINUTES, plural, =1 {1 دقیقه و  } other {# دقیقه و  }}</translation>
+<translation id="1591184457164800433">{MINUTES, plural, =1 {1 دقیقه و } other {# دقیقه و }}</translation>
 <translation id="1752946267035950200">{MINUTES, plural, =1 {1 دقیقه} other {# دقیقه}}</translation>
 <translation id="1761785978543082658"><ph name="QUANTITY" /> بایت</translation>
 <translation id="1801827354178857021">دوره زمانی</translation>

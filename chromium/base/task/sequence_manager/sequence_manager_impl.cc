@@ -44,13 +44,6 @@ GetTLSSequenceManagerImpl() {
 
 }  // namespace
 
-// This controls how big the the initial for
-// |MainThreadOnly::task_execution_stack| should be. We don't expect to see
-// depths of more than 2 unless cooperative scheduling is used on Blink, where
-// we might get up to 6. Anyway 10 was chosen because it's a round number
-// greater than current anticipated usage.
-static constexpr const size_t kInitialTaskExecutionStackReserveCount = 10;
-
 std::unique_ptr<SequenceManager> CreateSequenceManagerOnCurrentThread(
     SequenceManager::Settings settings) {
   return internal::SequenceManagerImpl::CreateOnCurrentThread(
@@ -69,16 +62,6 @@ std::unique_ptr<SequenceManager> CreateSequenceManagerOnCurrentThreadWithPump(
 std::unique_ptr<SequenceManager> CreateUnboundSequenceManager(
     SequenceManager::Settings settings) {
   return internal::SequenceManagerImpl::CreateUnbound(std::move(settings));
-}
-
-BASE_EXPORT std::unique_ptr<SequenceManager> CreateFunneledSequenceManager(
-    scoped_refptr<SingleThreadTaskRunner> task_runner,
-    SequenceManager::Settings settings) {
-  std::unique_ptr<SequenceManager> sequence_manager =
-      internal::SequenceManagerImpl::CreateSequenceFunneled(
-          std::move(task_runner), std::move(settings));
-  sequence_manager->BindToCurrentThread();
-  return sequence_manager;
 }
 
 namespace internal {
@@ -145,13 +128,14 @@ class SequenceManagerImpl::NativeWorkHandleImpl : public NativeWorkHandle {
   NativeWorkHandleImpl(SequenceManagerImpl* sequence_manager,
                        TaskQueue::QueuePriority priority)
       : sequence_manager_(sequence_manager->GetWeakPtr()), priority_(priority) {
-    TRACE_EVENT_ASYNC_BEGIN1("sequence_manager", "NativeWork", this, "priority",
-                             TaskQueue::PriorityToString(priority_));
+    TRACE_EVENT_NESTABLE_ASYNC_BEGIN1("sequence_manager", "NativeWork", this,
+                                      "priority",
+                                      TaskQueue::PriorityToString(priority_));
     sequence_manager_->main_thread_only().pending_native_work.insert(priority_);
   }
 
   ~NativeWorkHandleImpl() final {
-    TRACE_EVENT_ASYNC_END0("sequence_manager", "NativeWork", this);
+    TRACE_EVENT_NESTABLE_ASYNC_END0("sequence_manager", "NativeWork", this);
     if (!sequence_manager_)
       return;
     TaskQueue::QueuePriority prev_priority = effective_priority();
@@ -209,6 +193,13 @@ SequenceManagerImpl::~SequenceManagerImpl() {
   TRACE_EVENT_OBJECT_DELETED_WITH_ID(
       TRACE_DISABLED_BY_DEFAULT("sequence_manager"), "SequenceManager", this);
 
+#if defined(OS_IOS)
+  if (settings_.message_loop_type == MessagePumpType::UI &&
+      associated_thread_->IsBound()) {
+    controller_->DetachFromMessagePump();
+  }
+#endif
+
   // Make sure no Task is running as given that RunLoop does not support the
   // Delegate being destroyed from a Task and
   // ThreadControllerWithMessagePumpImpl does not support being destroyed from a
@@ -254,7 +245,6 @@ SequenceManagerImpl::MainThreadOnly::MainThreadOnly(
     random_generator = std::mt19937_64(RandUint64());
     uniform_distribution = std::uniform_real_distribution<double>(0.0, 1.0);
   }
-  task_execution_stack.reserve(kInitialTaskExecutionStackReserveCount);
 }
 
 SequenceManagerImpl::MainThreadOnly::~MainThreadOnly() = default;
@@ -285,17 +275,6 @@ std::unique_ptr<SequenceManagerImpl> SequenceManagerImpl::CreateUnbound(
       std::move(settings)));
 }
 
-// static
-std::unique_ptr<SequenceManagerImpl>
-SequenceManagerImpl::CreateSequenceFunneled(
-    scoped_refptr<SingleThreadTaskRunner> task_runner,
-    SequenceManager::Settings settings) {
-  return WrapUnique(
-      new SequenceManagerImpl(ThreadControllerImpl::CreateSequenceFunneled(
-                                  std::move(task_runner), settings.clock),
-                              std::move(settings)));
-}
-
 void SequenceManagerImpl::BindToMessagePump(std::unique_ptr<MessagePump> pump) {
   controller_->BindToCurrentThread(std::move(pump));
   CompleteInitializationOnBoundThread();
@@ -304,6 +283,13 @@ void SequenceManagerImpl::BindToMessagePump(std::unique_ptr<MessagePump> pump) {
 #if defined(OS_ANDROID)
   if (settings_.message_loop_type == MessagePumpType::UI ||
       settings_.message_loop_type == MessagePumpType::JAVA) {
+    controller_->AttachToMessagePump();
+  }
+#endif
+
+  // On iOS attach to the native loop when there is one.
+#if defined(OS_IOS)
+  if (settings_.message_loop_type == MessagePumpType::UI) {
     controller_->AttachToMessagePump();
   }
 #endif
@@ -770,18 +756,24 @@ void SequenceManagerImpl::NotifyWillProcessTask(ExecutingTask* executing_task,
   if (!executing_task->task_queue->GetShouldNotifyObservers())
     return;
 
+  const bool was_blocked_or_low_priority =
+      executing_task->task_queue->WasBlockedOrLowPriority(
+          executing_task->pending_task.enqueue_order());
+
   {
     TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("sequence_manager"),
                  "SequenceManager.WillProcessTaskObservers");
-    for (auto& observer : main_thread_only().task_observers)
-      observer.WillProcessTask(executing_task->pending_task);
+    for (auto& observer : main_thread_only().task_observers) {
+      observer.WillProcessTask(executing_task->pending_task,
+                               was_blocked_or_low_priority);
+    }
   }
 
   {
     TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("sequence_manager"),
                  "SequenceManager.QueueNotifyWillProcessTask");
     executing_task->task_queue->NotifyWillProcessTask(
-        executing_task->pending_task);
+        executing_task->pending_task, was_blocked_or_low_priority);
   }
 
   if (recording_policy != TimeRecordingPolicy::DoRecord)
@@ -906,24 +898,32 @@ std::unique_ptr<trace_event::ConvertableToTraceFormat>
 SequenceManagerImpl::AsValueWithSelectorResult(
     internal::WorkQueue* selected_work_queue,
     bool force_verbose) const {
+  auto state = std::make_unique<trace_event::TracedValue>();
+  AsValueWithSelectorResultInto(state.get(), selected_work_queue,
+                                force_verbose);
+  return std::move(state);
+}
+
+void SequenceManagerImpl::AsValueWithSelectorResultInto(
+    trace_event::TracedValue* state,
+    internal::WorkQueue* selected_work_queue,
+    bool force_verbose) const {
   DCHECK_CALLED_ON_VALID_THREAD(associated_thread_->thread_checker);
-  std::unique_ptr<trace_event::TracedValue> state(
-      new trace_event::TracedValue());
   TimeTicks now = NowTicks();
   state->BeginArray("active_queues");
   for (auto* const queue : main_thread_only().active_queues)
-    queue->AsValueInto(now, state.get(), force_verbose);
+    queue->AsValueInto(now, state, force_verbose);
   state->EndArray();
   state->BeginArray("queues_to_gracefully_shutdown");
   for (const auto& pair : main_thread_only().queues_to_gracefully_shutdown)
-    pair.first->AsValueInto(now, state.get(), force_verbose);
+    pair.first->AsValueInto(now, state, force_verbose);
   state->EndArray();
   state->BeginArray("queues_to_delete");
   for (const auto& pair : main_thread_only().queues_to_delete)
-    pair.first->AsValueInto(now, state.get(), force_verbose);
+    pair.first->AsValueInto(now, state, force_verbose);
   state->EndArray();
   state->BeginDictionary("selector");
-  main_thread_only().selector.AsValueInto(state.get());
+  main_thread_only().selector.AsValueInto(state);
   state->EndDictionary();
   if (selected_work_queue) {
     state->SetString("selected_queue",
@@ -936,9 +936,8 @@ SequenceManagerImpl::AsValueWithSelectorResult(
 
   state->BeginArray("time_domains");
   for (auto* time_domain : main_thread_only().time_domains)
-    time_domain->AsValueInto(state.get());
+    time_domain->AsValueInto(state);
   state->EndArray();
-  return std::move(state);
 }
 
 void SequenceManagerImpl::OnTaskQueueEnabled(internal::TaskQueueImpl* queue) {
@@ -1093,8 +1092,9 @@ scoped_refptr<TaskQueue> SequenceManagerImpl::CreateTaskQueue(
 }
 
 std::string SequenceManagerImpl::DescribeAllPendingTasks() const {
-  return AsValueWithSelectorResult(nullptr, /* force_verbose */ true)
-      ->ToString();
+  trace_event::TracedValueJSON value;
+  AsValueWithSelectorResultInto(&value, nullptr, /* force_verbose */ true);
+  return value.ToJSON();
 }
 
 std::unique_ptr<NativeWorkHandle> SequenceManagerImpl::OnNativeWorkPending(

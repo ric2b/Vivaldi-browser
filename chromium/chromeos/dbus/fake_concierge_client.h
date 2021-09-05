@@ -9,6 +9,7 @@
 
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "base/optional.h"
 #include "chromeos/dbus/cicerone_client.h"
 #include "chromeos/dbus/concierge_client.h"
 
@@ -36,6 +37,11 @@ class COMPONENT_EXPORT(CHROMEOS_DBUS) FakeConciergeClient
   bool IsContainerStartupFailedSignalConnected() override;
   bool IsDiskImageProgressSignalConnected() override;
   void CreateDiskImage(
+      const vm_tools::concierge::CreateDiskImageRequest& request,
+      DBusMethodCallback<vm_tools::concierge::CreateDiskImageResponse> callback)
+      override;
+  void CreateDiskImageWithFd(
+      base::ScopedFD fd,
       const vm_tools::concierge::CreateDiskImageRequest& request,
       DBusMethodCallback<vm_tools::concierge::CreateDiskImageResponse> callback)
       override;
@@ -69,6 +75,12 @@ class COMPONENT_EXPORT(CHROMEOS_DBUS) FakeConciergeClient
   void StopVm(const vm_tools::concierge::StopVmRequest& request,
               DBusMethodCallback<vm_tools::concierge::StopVmResponse> callback)
       override;
+  void SuspendVm(const vm_tools::concierge::SuspendVmRequest& request,
+                 DBusMethodCallback<vm_tools::concierge::SuspendVmResponse>
+                     callback) override;
+  void ResumeVm(const vm_tools::concierge::ResumeVmRequest& request,
+                DBusMethodCallback<vm_tools::concierge::ResumeVmResponse>
+                    callback) override;
   void GetVmInfo(const vm_tools::concierge::GetVmInfoRequest& request,
                  DBusMethodCallback<vm_tools::concierge::GetVmInfoResponse>
                      callback) override;
@@ -87,7 +99,8 @@ class COMPONENT_EXPORT(CHROMEOS_DBUS) FakeConciergeClient
       const vm_tools::concierge::ContainerSshKeysRequest& request,
       DBusMethodCallback<vm_tools::concierge::ContainerSshKeysResponse>
           callback) override;
-  void AttachUsbDevice(base::ScopedFD fd,
+  void AttachUsbDevice(
+      base::ScopedFD fd,
       const vm_tools::concierge::AttachUsbDeviceRequest& request,
       DBusMethodCallback<vm_tools::concierge::AttachUsbDeviceResponse> callback)
       override;
@@ -95,13 +108,13 @@ class COMPONENT_EXPORT(CHROMEOS_DBUS) FakeConciergeClient
       const vm_tools::concierge::DetachUsbDeviceRequest& request,
       DBusMethodCallback<vm_tools::concierge::DetachUsbDeviceResponse> callback)
       override;
-  void ListUsbDevices(
-      const vm_tools::concierge::ListUsbDeviceRequest& request,
-      DBusMethodCallback<vm_tools::concierge::ListUsbDeviceResponse> callback)
-      override;
   void StartArcVm(const vm_tools::concierge::StartArcVmRequest& request,
                   DBusMethodCallback<vm_tools::concierge::StartVmResponse>
                       callback) override;
+  void ResizeDiskImage(
+      const vm_tools::concierge::ResizeDiskImageRequest& request,
+      DBusMethodCallback<vm_tools::concierge::ResizeDiskImageResponse> callback)
+      override;
 
   const base::ObserverList<Observer>& observer_list() const {
     return observer_list_;
@@ -136,8 +149,8 @@ class COMPONENT_EXPORT(CHROMEOS_DBUS) FakeConciergeClient
   }
   bool attach_usb_device_called() const { return attach_usb_device_called_; }
   bool detach_usb_device_called() const { return detach_usb_device_called_; }
-  bool list_usb_devices_called() const { return list_usb_devices_called_; }
   bool start_arc_vm_called() const { return start_arc_vm_called_; }
+  bool resize_disk_image_called() const { return resize_disk_image_called_; }
   void set_vm_started_signal_connected(bool connected) {
     is_vm_started_signal_connected_ = connected;
   }
@@ -156,82 +169,87 @@ class COMPONENT_EXPORT(CHROMEOS_DBUS) FakeConciergeClient
         wait_for_service_to_be_available_response;
   }
   void set_create_disk_image_response(
-      const vm_tools::concierge::CreateDiskImageResponse&
+      base::Optional<vm_tools::concierge::CreateDiskImageResponse>
           create_disk_image_response) {
     create_disk_image_response_ = create_disk_image_response;
   }
   void set_destroy_disk_image_response(
-      const vm_tools::concierge::DestroyDiskImageResponse&
+      base::Optional<vm_tools::concierge::DestroyDiskImageResponse>
           destroy_disk_image_response) {
     destroy_disk_image_response_ = destroy_disk_image_response;
   }
   void set_import_disk_image_response(
-      const vm_tools::concierge::ImportDiskImageResponse&
+      base::Optional<vm_tools::concierge::ImportDiskImageResponse>
           import_disk_image_response) {
     import_disk_image_response_ = import_disk_image_response;
   }
   void set_cancel_disk_image_response(
-      const vm_tools::concierge::CancelDiskImageResponse&
+      base::Optional<vm_tools::concierge::CancelDiskImageResponse>
           cancel_disk_image_response) {
     cancel_disk_image_response_ = cancel_disk_image_response;
   }
   void set_disk_image_status_response(
-      const vm_tools::concierge::DiskImageStatusResponse&
+      base::Optional<vm_tools::concierge::DiskImageStatusResponse>
           disk_image_status_response) {
     disk_image_status_response_ = disk_image_status_response;
   }
   void set_list_vm_disks_response(
-      const vm_tools::concierge::ListVmDisksResponse& list_vm_disks_response) {
+      base::Optional<vm_tools::concierge::ListVmDisksResponse>
+          list_vm_disks_response) {
     list_vm_disks_response_ = list_vm_disks_response;
   }
   void set_start_vm_response(
-      const vm_tools::concierge::StartVmResponse& start_vm_response) {
+      base::Optional<vm_tools::concierge::StartVmResponse> start_vm_response) {
     start_vm_response_ = start_vm_response;
   }
   void set_stop_vm_response(
-      const vm_tools::concierge::StopVmResponse& stop_vm_response) {
+      base::Optional<vm_tools::concierge::StopVmResponse> stop_vm_response) {
     stop_vm_response_ = stop_vm_response;
   }
   void set_get_vm_info_response(
-      const vm_tools::concierge::GetVmInfoResponse& get_vm_info_response) {
+      base::Optional<vm_tools::concierge::GetVmInfoResponse>
+          get_vm_info_response) {
     get_vm_info_response_ = get_vm_info_response;
   }
   void set_get_vm_enterprise_reporting_info_response(
-      const vm_tools::concierge::GetVmEnterpriseReportingInfoResponse&
+      base::Optional<vm_tools::concierge::GetVmEnterpriseReportingInfoResponse>
           get_vm_enterprise_reporting_info_response) {
     get_vm_enterprise_reporting_info_response_ =
         get_vm_enterprise_reporting_info_response;
   }
   void set_set_vm_cpu_restriction_response(
-      const vm_tools::concierge::SetVmCpuRestrictionResponse&
+      base::Optional<vm_tools::concierge::SetVmCpuRestrictionResponse>
           set_vm_cpu_restriction_response) {
     set_vm_cpu_restriction_response_ = set_vm_cpu_restriction_response;
   }
   void set_container_ssh_keys_response(
-      const vm_tools::concierge::ContainerSshKeysResponse&
+      base::Optional<vm_tools::concierge::ContainerSshKeysResponse>
           container_ssh_keys_response) {
     container_ssh_keys_response_ = container_ssh_keys_response;
   }
   void set_attach_usb_device_response(
-      const vm_tools::concierge::AttachUsbDeviceResponse&
+      base::Optional<vm_tools::concierge::AttachUsbDeviceResponse>
           attach_usb_device_response) {
     attach_usb_device_response_ = attach_usb_device_response;
   }
   void set_detach_usb_device_response(
-      const vm_tools::concierge::DetachUsbDeviceResponse&
-      detach_usb_device_response) {
+      base::Optional<vm_tools::concierge::DetachUsbDeviceResponse>
+          detach_usb_device_response) {
     detach_usb_device_response_ = detach_usb_device_response;
-  }
-  void set_list_usb_devices_response(
-      const vm_tools::concierge::ListUsbDeviceResponse&
-      list_usb_devices_response) {
-    list_usb_devices_response_ = list_usb_devices_response;
   }
   void set_disk_image_status_signals(
       const std::vector<vm_tools::concierge::DiskImageStatusResponse>&
           disk_image_status_signals) {
     disk_image_status_signals_ = disk_image_status_signals;
   }
+  void set_resize_disk_image_response(
+      const vm_tools::concierge::ResizeDiskImageResponse&
+          resize_disk_image_response) {
+    resize_disk_image_response_ = resize_disk_image_response;
+  }
+
+  void NotifyVmStarted(const vm_tools::concierge::VmStartedSignal& signal);
+  bool HasVmObservers() const;
 
  protected:
   void Init(dbus::Bus* bus) override {}
@@ -242,10 +260,8 @@ class COMPONENT_EXPORT(CHROMEOS_DBUS) FakeConciergeClient
   void NotifyTremplinStarted(
       const vm_tools::cicerone::TremplinStartedSignal& signal);
 
-  // Fakes a sequence of progress callbacks.
-  void FakeImportCallbacks(
-      DBusMethodCallback<vm_tools::concierge::ImportDiskImageResponse>
-          callback);
+  // Notifies observers with a sequence of DiskImageStatus signals.
+  void NotifyDiskImageProgress();
   // Notifies observers with a DiskImageStatus signal.
   void OnDiskImageProgress(
       const vm_tools::concierge::DiskImageStatusResponse& signal);
@@ -264,31 +280,43 @@ class COMPONENT_EXPORT(CHROMEOS_DBUS) FakeConciergeClient
   bool get_container_ssh_keys_called_ = false;
   bool attach_usb_device_called_ = false;
   bool detach_usb_device_called_ = false;
-  bool list_usb_devices_called_ = false;
   bool start_arc_vm_called_ = false;
+  bool resize_disk_image_called_ = false;
   bool is_vm_started_signal_connected_ = true;
   bool is_vm_stopped_signal_connected_ = true;
   bool is_container_startup_failed_signal_connected_ = true;
   bool is_disk_image_progress_signal_connected_ = true;
 
   bool wait_for_service_to_be_available_response_ = true;
-  vm_tools::concierge::CreateDiskImageResponse create_disk_image_response_;
-  vm_tools::concierge::DestroyDiskImageResponse destroy_disk_image_response_;
-  vm_tools::concierge::ImportDiskImageResponse import_disk_image_response_;
-  vm_tools::concierge::CancelDiskImageResponse cancel_disk_image_response_;
-  vm_tools::concierge::DiskImageStatusResponse disk_image_status_response_;
-  vm_tools::concierge::ListVmDisksResponse list_vm_disks_response_;
-  vm_tools::concierge::StartVmResponse start_vm_response_;
-  vm_tools::concierge::StopVmResponse stop_vm_response_;
-  vm_tools::concierge::GetVmInfoResponse get_vm_info_response_;
-  vm_tools::concierge::GetVmEnterpriseReportingInfoResponse
+  base::Optional<vm_tools::concierge::CreateDiskImageResponse>
+      create_disk_image_response_;
+  base::Optional<vm_tools::concierge::DestroyDiskImageResponse>
+      destroy_disk_image_response_;
+  base::Optional<vm_tools::concierge::ImportDiskImageResponse>
+      import_disk_image_response_;
+  base::Optional<vm_tools::concierge::CancelDiskImageResponse>
+      cancel_disk_image_response_;
+  base::Optional<vm_tools::concierge::DiskImageStatusResponse>
+      disk_image_status_response_;
+  base::Optional<vm_tools::concierge::ListVmDisksResponse>
+      list_vm_disks_response_;
+  base::Optional<vm_tools::concierge::StartVmResponse> start_vm_response_;
+  base::Optional<vm_tools::concierge::StopVmResponse> stop_vm_response_;
+  base::Optional<vm_tools::concierge::SuspendVmResponse> suspend_vm_response_;
+  base::Optional<vm_tools::concierge::ResumeVmResponse> resume_vm_response_;
+  base::Optional<vm_tools::concierge::GetVmInfoResponse> get_vm_info_response_;
+  base::Optional<vm_tools::concierge::GetVmEnterpriseReportingInfoResponse>
       get_vm_enterprise_reporting_info_response_;
-  vm_tools::concierge::SetVmCpuRestrictionResponse
+  base::Optional<vm_tools::concierge::SetVmCpuRestrictionResponse>
       set_vm_cpu_restriction_response_;
-  vm_tools::concierge::ContainerSshKeysResponse container_ssh_keys_response_;
-  vm_tools::concierge::AttachUsbDeviceResponse attach_usb_device_response_;
-  vm_tools::concierge::DetachUsbDeviceResponse detach_usb_device_response_;
-  vm_tools::concierge::ListUsbDeviceResponse list_usb_devices_response_;
+  base::Optional<vm_tools::concierge::ContainerSshKeysResponse>
+      container_ssh_keys_response_;
+  base::Optional<vm_tools::concierge::AttachUsbDeviceResponse>
+      attach_usb_device_response_;
+  base::Optional<vm_tools::concierge::DetachUsbDeviceResponse>
+      detach_usb_device_response_;
+  base::Optional<vm_tools::concierge::ResizeDiskImageResponse>
+      resize_disk_image_response_;
 
   // Can be set to fake a series of disk image status signals.
   std::vector<vm_tools::concierge::DiskImageStatusResponse>

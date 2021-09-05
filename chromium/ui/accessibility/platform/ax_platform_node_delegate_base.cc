@@ -13,6 +13,7 @@
 #include "ui/accessibility/ax_role_properties.h"
 #include "ui/accessibility/ax_tree_data.h"
 #include "ui/accessibility/platform/ax_platform_node.h"
+#include "ui/accessibility/platform/ax_platform_node_base.h"
 
 namespace ui {
 
@@ -53,7 +54,7 @@ gfx::NativeViewAccessible AXPlatformNodeDelegateBase::GetParent() {
   return nullptr;
 }
 
-int AXPlatformNodeDelegateBase::GetChildCount() {
+int AXPlatformNodeDelegateBase::GetChildCount() const {
   return 0;
 }
 
@@ -90,6 +91,15 @@ gfx::NativeViewAccessible AXPlatformNodeDelegateBase::GetPreviousSibling() {
     if (next_index >= 0 && next_index < parent->GetChildCount())
       return parent->ChildAtIndex(next_index);
   }
+  return nullptr;
+}
+
+bool AXPlatformNodeDelegateBase::IsChildOfLeaf() const {
+  return false;
+}
+
+gfx::NativeViewAccessible AXPlatformNodeDelegateBase::GetClosestPlatformObject()
+    const {
   return nullptr;
 }
 
@@ -147,6 +157,21 @@ int AXPlatformNodeDelegateBase::ChildIteratorBase::GetIndexInParent() const {
   return index_;
 }
 
+AXPlatformNodeDelegate& AXPlatformNodeDelegateBase::ChildIteratorBase::
+operator*() const {
+  AXPlatformNode* platform_node =
+      AXPlatformNode::FromNativeViewAccessible(GetNativeViewAccessible());
+  DCHECK(platform_node && platform_node->GetDelegate());
+  return *(platform_node->GetDelegate());
+}
+
+AXPlatformNodeDelegate* AXPlatformNodeDelegateBase::ChildIteratorBase::
+operator->() const {
+  AXPlatformNode* platform_node =
+      AXPlatformNode::FromNativeViewAccessible(GetNativeViewAccessible());
+  return platform_node ? platform_node->GetDelegate() : nullptr;
+}
+
 std::unique_ptr<AXPlatformNodeDelegate::ChildIterator>
 AXPlatformNodeDelegateBase::ChildrenBegin() {
   return std::make_unique<ChildIteratorBase>(this, 0);
@@ -155,6 +180,10 @@ AXPlatformNodeDelegateBase::ChildrenBegin() {
 std::unique_ptr<AXPlatformNodeDelegate::ChildIterator>
 AXPlatformNodeDelegateBase::ChildrenEnd() {
   return std::make_unique<ChildIteratorBase>(this, GetChildCount());
+}
+
+std::string AXPlatformNodeDelegateBase::GetName() const {
+  return GetData().GetStringAttribute(ax::mojom::StringAttribute::kName);
 }
 
 base::string16 AXPlatformNodeDelegateBase::GetHypertext() const {
@@ -202,18 +231,19 @@ gfx::Rect AXPlatformNodeDelegateBase::GetInnerTextRangeBoundsRect(
 
 gfx::Rect AXPlatformNodeDelegateBase::GetClippedScreenBoundsRect(
     AXOffscreenResult* offscreen_result) const {
-  return GetBoundsRect(AXCoordinateSystem::kScreen,
+  return GetBoundsRect(AXCoordinateSystem::kScreenDIPs,
                        AXClippingBehavior::kClipped, offscreen_result);
 }
 
 gfx::Rect AXPlatformNodeDelegateBase::GetUnclippedScreenBoundsRect(
     AXOffscreenResult* offscreen_result) const {
-  return GetBoundsRect(AXCoordinateSystem::kScreen,
+  return GetBoundsRect(AXCoordinateSystem::kScreenDIPs,
                        AXClippingBehavior::kUnclipped, offscreen_result);
 }
 
-gfx::NativeViewAccessible AXPlatformNodeDelegateBase::HitTestSync(int x,
-                                                                  int y) {
+gfx::NativeViewAccessible AXPlatformNodeDelegateBase::HitTestSync(
+    int screen_physical_pixel_x,
+    int screen_physical_pixel_y) const {
   return nullptr;
 }
 
@@ -279,6 +309,11 @@ base::Optional<int> AXPlatformNodeDelegateBase::GetTableAriaRowCount() const {
 }
 
 base::Optional<int> AXPlatformNodeDelegateBase::GetTableCellCount() const {
+  return base::nullopt;
+}
+
+base::Optional<bool>
+AXPlatformNodeDelegateBase::GetTableHasColumnOrRowHeaderNode() const {
   return base::nullopt;
 }
 
@@ -445,6 +480,10 @@ bool AXPlatformNodeDelegateBase::IsWebContent() const {
   return false;
 }
 
+bool AXPlatformNodeDelegateBase::HasVisibleCaretOrSelection() const {
+  return false;
+}
+
 AXPlatformNode* AXPlatformNodeDelegateBase::GetTargetNodeForRelation(
     ax::mojom::IntAttribute attr) {
   DCHECK(IsNodeIdIntAttribute(attr));
@@ -467,15 +506,27 @@ std::set<AXPlatformNode*> AXPlatformNodeDelegateBase::GetNodesForNodeIds(
   return nodes;
 }
 
-std::set<AXPlatformNode*> AXPlatformNodeDelegateBase::GetTargetNodesForRelation(
+std::vector<AXPlatformNode*>
+AXPlatformNodeDelegateBase::GetTargetNodesForRelation(
     ax::mojom::IntListAttribute attr) {
   DCHECK(IsNodeIdIntListAttribute(attr));
   std::vector<int32_t> target_ids;
   if (!GetData().GetIntListAttribute(attr, &target_ids))
-    return std::set<AXPlatformNode*>();
+    return std::vector<AXPlatformNode*>();
 
-  std::set<int32_t> target_id_set(target_ids.begin(), target_ids.end());
-  return GetNodesForNodeIds(target_id_set);
+  // If we use std::set to eliminate duplicates, the resulting set will be
+  // sorted by the id and we will lose the original order which may be of
+  // interest to ATs. The number of ids should be small.
+
+  std::vector<ui::AXPlatformNode*> nodes;
+  for (int32_t target_id : target_ids) {
+    if (ui::AXPlatformNode* node = GetFromNodeID(target_id)) {
+      if (std::find(nodes.begin(), nodes.end(), node) == nodes.end())
+        nodes.push_back(node);
+    }
+  }
+
+  return nodes;
 }
 
 std::set<AXPlatformNode*> AXPlatformNodeDelegateBase::GetReverseRelations(
@@ -498,15 +549,15 @@ const AXUniqueId& AXPlatformNodeDelegateBase::GetUniqueId() const {
 }
 
 base::Optional<int> AXPlatformNodeDelegateBase::FindTextBoundary(
-    AXTextBoundary boundary,
+    ax::mojom::TextBoundary boundary,
     int offset,
-    AXTextBoundaryDirection direction,
+    ax::mojom::MoveDirection direction,
     ax::mojom::TextAffinity affinity) const {
   return base::nullopt;
 }
 
 const std::vector<gfx::NativeViewAccessible>
-AXPlatformNodeDelegateBase::GetDescendants() const {
+AXPlatformNodeDelegateBase::GetUIADescendants() const {
   return {};
 }
 
@@ -521,6 +572,27 @@ AXPlatformNodeDelegate* AXPlatformNodeDelegateBase::GetParentDelegate() {
     return parent_node->GetDelegate();
 
   return nullptr;
+}
+
+std::string AXPlatformNodeDelegateBase::SubtreeToStringHelper(size_t level) {
+  std::string result(level * 2, '+');
+  result += ToString();
+  result += '\n';
+
+  // We can't use ChildrenBegin() and ChildrenEnd() here, because they both
+  // return an std::unique_ptr<ChildIterator> which is an abstract class.
+  //
+  // TODO(accessibility): Refactor ChildIterator into a separate base
+  // (non-abstract) class.
+  auto iter_start = ChildIteratorBase(this, 0);
+  auto iter_end = ChildIteratorBase(this, GetChildCount());
+  for (auto iter = iter_start; iter != iter_end; ++iter) {
+    AXPlatformNodeDelegateBase& child =
+        static_cast<AXPlatformNodeDelegateBase&>(*iter);
+    result += child.SubtreeToStringHelper(level + 1);
+  }
+
+  return result;
 }
 
 }  // namespace ui

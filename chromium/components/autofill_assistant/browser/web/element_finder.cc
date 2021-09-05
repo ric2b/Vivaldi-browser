@@ -116,6 +116,12 @@ bool ConvertPseudoType(const PseudoType pseudo_type,
 }
 }  // namespace
 
+ElementFinder::Result::Result() = default;
+
+ElementFinder::Result::~Result() = default;
+
+ElementFinder::Result::Result(const Result& to_copy) = default;
+
 ElementFinder::ElementFinder(content::WebContents* web_contents,
                              DevtoolsClient* devtools_client,
                              const Selector& selector,
@@ -136,6 +142,8 @@ void ElementFinder::Start(Callback callback) {
     return;
   }
 
+  element_result_->container_frame_selector_index = 0;
+  element_result_->container_frame_host = web_contents_->GetMainFrame();
   devtools_client_->GetRuntime()->Evaluate(
       std::string(kGetDocumentElement), /* node_frame_id= */ std::string(),
       base::BindOnce(&ElementFinder::OnGetDocumentElement,
@@ -155,60 +163,39 @@ void ElementFinder::OnGetDocumentElement(
   ClientStatus status =
       CheckJavaScriptResult(reply_status, result.get(), __FILE__, __LINE__);
   if (!status.ok()) {
-    DVLOG(1) << __func__ << " Failed to get document root element.";
+    VLOG(1) << __func__ << " Failed to get document root element.";
     SendResult(status);
     return;
   }
   std::string object_id;
   if (!SafeGetObjectId(result->GetResult(), &object_id)) {
-    DVLOG(1) << __func__ << " Failed to get document root element.";
+    VLOG(1) << __func__ << " Failed to get document root element.";
     SendResult(ClientStatus(ELEMENT_RESOLUTION_FAILED));
     return;
   }
 
-  element_result_->container_frame_selector_index = index;
-  if (element_result_->container_frame_host == nullptr) {
-    // Don't overwrite results from previous OOPIF passes.
-    element_result_->container_frame_host = web_contents_->GetMainFrame();
-  }
-  element_result_->object_id = std::string();
   RecursiveFindElement(object_id, index);
 }
 
 void ElementFinder::RecursiveFindElement(const std::string& object_id,
                                          size_t index) {
-  std::vector<std::unique_ptr<runtime::CallArgument>> argument;
-  argument.emplace_back(runtime::CallArgument::Builder()
-                            .SetValue(base::Value::ToUniquePtrValue(
-                                base::Value(selector_.selectors[index])))
-                            .Build());
+  std::vector<std::unique_ptr<runtime::CallArgument>> arguments;
+  AddRuntimeCallArgument(selector_.selectors[index], &arguments);
   // For finding intermediate elements, strict mode would be more appropriate,
   // as long as the logic does not support more than one intermediate match.
   //
   // TODO(b/129387787): first, add logging to figure out whether it matters and
   // decide between strict mode and full support for multiple matching
   // intermeditate elements.
-  argument.emplace_back(
-      runtime::CallArgument::Builder()
-          .SetValue(base::Value::ToUniquePtrValue(base::Value(strict_)))
-          .Build());
+  AddRuntimeCallArgument(strict_, &arguments);
   std::string function;
   if (index == (selector_.selectors.size() - 1)) {
     if (selector_.must_be_visible || !selector_.inner_text_pattern.empty() ||
         !selector_.value_pattern.empty()) {
       function.assign(kQuerySelectorWithConditions);
-      argument.emplace_back(runtime::CallArgument::Builder()
-                                .SetValue(base::Value::ToUniquePtrValue(
-                                    base::Value(selector_.must_be_visible)))
-                                .Build());
-      argument.emplace_back(runtime::CallArgument::Builder()
-                                .SetValue(base::Value::ToUniquePtrValue(
-                                    base::Value(selector_.inner_text_pattern)))
-                                .Build());
-      argument.emplace_back(runtime::CallArgument::Builder()
-                                .SetValue(base::Value::ToUniquePtrValue(
-                                    base::Value(selector_.value_pattern)))
-                                .Build());
+      AddRuntimeCallArgument(selector_.must_be_visible, &arguments);
+      AddRuntimeCallArgument(selector_.inner_text_pattern, &arguments);
+      AddRuntimeCallArgument(selector_.value_pattern, &arguments);
     }
   }
   if (function.empty()) {
@@ -217,7 +204,7 @@ void ElementFinder::RecursiveFindElement(const std::string& object_id,
   devtools_client_->GetRuntime()->CallFunctionOn(
       runtime::CallFunctionOnParams::Builder()
           .SetObjectId(object_id)
-          .SetArguments(std::move(argument))
+          .SetArguments(std::move(arguments))
           .SetFunctionDeclaration(function)
           .Build(),
       element_result_->node_frame_id,
@@ -234,16 +221,16 @@ void ElementFinder::OnQuerySelectorAll(
     // available yet to query because the document hasn't been loaded. This
     // results in OnQuerySelectorAll getting a nullptr result. For this specific
     // call, it is expected.
-    DVLOG(1) << __func__ << ": Context doesn't exist yet to query selector "
-             << index << " of " << selector_;
+    VLOG(1) << __func__ << ": Context doesn't exist yet to query selector "
+            << index << " of " << selector_;
     SendResult(ClientStatus(ELEMENT_RESOLUTION_FAILED));
     return;
   }
   ClientStatus status =
       CheckJavaScriptResult(reply_status, result.get(), __FILE__, __LINE__);
   if (!status.ok()) {
-    DVLOG(1) << __func__ << ": Failed to query selector " << index << " of "
-             << selector_;
+    VLOG(1) << __func__ << ": Failed to query selector " << index << " of "
+            << selector_;
     SendResult(status);
     return;
   }
@@ -298,7 +285,7 @@ void ElementFinder::OnDescribeNodeForPseudoElement(
     const DevtoolsClient::ReplyStatus& reply_status,
     std::unique_ptr<dom::DescribeNodeResult> result) {
   if (!result || !result->GetNode()) {
-    DVLOG(1) << __func__ << " Failed to describe the node for pseudo element.";
+    VLOG(1) << __func__ << " Failed to describe the node for pseudo element.";
     SendResult(UnexpectedDevtoolsErrorStatus(reply_status, __FILE__, __LINE__));
     return;
   }
@@ -339,7 +326,7 @@ void ElementFinder::OnDescribeNode(
     const DevtoolsClient::ReplyStatus& reply_status,
     std::unique_ptr<dom::DescribeNodeResult> result) {
   if (!result || !result->GetNode()) {
-    DVLOG(1) << __func__ << " Failed to describe the node.";
+    VLOG(1) << __func__ << " Failed to describe the node.";
     SendResult(UnexpectedDevtoolsErrorStatus(reply_status, __FILE__, __LINE__));
     return;
   }
@@ -347,67 +334,49 @@ void ElementFinder::OnDescribeNode(
   auto* node = result->GetNode();
   std::vector<int> backend_ids;
 
-  if (node->HasContentDocument()) {
-    // If the frame has a ContentDocument, it's considered a local frame.
-    // We need to resolve the RenderFrameHost for autofill.
+  if (node->GetNodeName() == "IFRAME") {
+    DCHECK(node->HasFrameId());  // Ensure all frames have an id.
 
-    backend_ids.emplace_back(node->GetContentDocument()->GetBackendNodeId());
-
-    element_result_->container_frame_selector_index = index;
-
-    if (node->HasFrameId()) {
-      element_result_->container_frame_host =
-          FindCorrespondingRenderFrameHost(node->GetFrameId());
-    } else {
-      // TODO(b/143318024): Remove the fallback.
-      std::string frame_name;
-      if (node->HasAttributes()) {
-        const std::vector<std::string>* attributes = node->GetAttributes();
-        for (size_t i = 0; i < attributes->size();) {
-          if ((*attributes)[i] == "name") {
-            frame_name = (*attributes)[i + 1];
-            break;
-          }
-          // Jump two positions since attribute name and value are always
-          // paired.
-          i = i + 2;
-        }
-      }
-      element_result_->container_frame_host = FindCorrespondingRenderFrameHost(
-          frame_name, node->GetContentDocument()->GetDocumentURL());
-    }
-
-    if (!element_result_->container_frame_host) {
-      DVLOG(1) << __func__ << " Failed to find corresponding owner frame.";
-      SendResult(ClientStatus(FRAME_HOST_NOT_FOUND));
-      return;
-    }
-  } else if (node->HasFrameId()) {
-    // If the frame has no ContentDocument, it's considered an
-    // OutOfProcessIFrame.
-    // See https://www.chromium.org/developers/design-documents/oop-iframes for
-    // full documentation.
-    // We need to assign the frame id, such that devtools can resolve the
-    // session calls should be executed on. We also need to resolve the
-    // RenderFrameHost for autofill.
-
-    element_result_->node_frame_id = node->GetFrameId();
     element_result_->container_frame_selector_index = index;
     element_result_->container_frame_host =
         FindCorrespondingRenderFrameHost(node->GetFrameId());
 
+    Result result_frame;
+    result_frame.container_frame_selector_index =
+        element_result_->container_frame_selector_index;
+    result_frame.container_frame_host = element_result_->container_frame_host;
+    result_frame.object_id = object_id;
+    element_result_->frame_stack.emplace_back(result_frame);
+
     if (!element_result_->container_frame_host) {
-      DVLOG(1) << __func__ << " Failed to find corresponding owner frame.";
+      VLOG(1) << __func__ << " Failed to find corresponding owner frame.";
       SendResult(ClientStatus(FRAME_HOST_NOT_FOUND));
       return;
     }
 
-    // Kick off another find element chain to walk down the OOP iFrame.
-    devtools_client_->GetRuntime()->Evaluate(
-        std::string(kGetDocumentElement), element_result_->node_frame_id,
-        base::BindOnce(&ElementFinder::OnGetDocumentElement,
-                       weak_ptr_factory_.GetWeakPtr(), index + 1));
-    return;
+    if (node->HasContentDocument()) {
+      // If the frame has a ContentDocument it's considered a local frame. We
+      // don't need to assign the frame id, since devtools can just send the
+      // commands to the main session.
+
+      backend_ids.emplace_back(node->GetContentDocument()->GetBackendNodeId());
+    } else {
+      // If the frame has no ContentDocument, it's considered an
+      // OutOfProcessIFrame.
+      // See https://www.chromium.org/developers/design-documents/oop-iframes
+      // for full documentation.
+      // With the iFrame running in a different process it is necessary to pass
+      // the correct session id from devtools. We need to set the frame id,
+      // such that devtools can resolve the corresponding session id.
+      element_result_->node_frame_id = node->GetFrameId();
+
+      // Kick off another find element chain to walk down the OOP iFrame.
+      devtools_client_->GetRuntime()->Evaluate(
+          std::string(kGetDocumentElement), element_result_->node_frame_id,
+          base::BindOnce(&ElementFinder::OnGetDocumentElement,
+                         weak_ptr_factory_.GetWeakPtr(), index + 1));
+      return;
+    }
   }
 
   if (node->HasShadowRoots()) {
@@ -427,7 +396,7 @@ void ElementFinder::OnDescribeNode(
     return;
   }
 
-  RecursiveFindElement(object_id, ++index);
+  RecursiveFindElement(object_id, index + 1);
 }
 
 void ElementFinder::OnResolveNode(
@@ -435,7 +404,7 @@ void ElementFinder::OnResolveNode(
     const DevtoolsClient::ReplyStatus& reply_status,
     std::unique_ptr<dom::ResolveNodeResult> result) {
   if (!result || !result->GetObject() || !result->GetObject()->HasObjectId()) {
-    DVLOG(1) << __func__ << " Failed to resolve object id from backend id.";
+    VLOG(1) << __func__ << " Failed to resolve object id from backend id.";
     SendResult(UnexpectedDevtoolsErrorStatus(reply_status, __FILE__, __LINE__));
     return;
   }
@@ -452,21 +421,6 @@ content::RenderFrameHost* ElementFinder::FindCorrespondingRenderFrameHost(
   }
 
   return nullptr;
-}
-
-content::RenderFrameHost* ElementFinder::FindCorrespondingRenderFrameHost(
-    std::string name,
-    std::string document_url) {
-  content::RenderFrameHost* ret_frame = nullptr;
-  for (auto* frame : web_contents_->GetAllFrames()) {
-    if (frame->GetFrameName() == name &&
-        frame->GetLastCommittedURL().spec() == document_url) {
-      DCHECK(!ret_frame);
-      ret_frame = frame;
-    }
-  }
-
-  return ret_frame;
 }
 
 }  // namespace autofill_assistant

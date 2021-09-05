@@ -17,6 +17,15 @@
 
 namespace concierge = vm_tools::concierge;
 
+namespace {
+
+// TODO(nverne): revert to TIMEOUT_USE_DEFAULT when StartVm no longer requires
+// unnecessary long running crypto calculations _and_ b/143499148 is fixed.
+// TODO(yusukes): Fix b/143499148.
+constexpr int kConciergeDBusTimeoutMs = 160 * 1000;
+
+}  // namespace
+
 namespace chromeos {
 
 class ConciergeClientImpl : public ConciergeClient {
@@ -79,6 +88,15 @@ class ConciergeClientImpl : public ConciergeClient {
     CallMethod(concierge::kCreateDiskImageMethod, request, std::move(callback));
   }
 
+  void CreateDiskImageWithFd(
+      base::ScopedFD fd,
+      const concierge::CreateDiskImageRequest& request,
+      DBusMethodCallback<concierge::CreateDiskImageResponse> callback)
+      override {
+    CallMethodWithFd(concierge::kCreateDiskImageMethod, request, std::move(fd),
+                     std::move(callback));
+  }
+
   void DestroyDiskImage(const concierge::DestroyDiskImageRequest& request,
                         DBusMethodCallback<concierge::DestroyDiskImageResponse>
                             callback) override {
@@ -90,24 +108,8 @@ class ConciergeClientImpl : public ConciergeClient {
                        const concierge::ImportDiskImageRequest& request,
                        DBusMethodCallback<concierge::ImportDiskImageResponse>
                            callback) override {
-    dbus::MethodCall method_call(concierge::kVmConciergeInterface,
-                                 concierge::kImportDiskImageMethod);
-    dbus::MessageWriter writer(&method_call);
-
-    if (!writer.AppendProtoAsArrayOfBytes(request)) {
-      LOG(ERROR) << "Failed to encode ImportDiskImageRequest protobuf";
-      base::ThreadTaskRunnerHandle::Get()->PostTask(
-          FROM_HERE, base::BindOnce(std::move(callback), base::nullopt));
-      return;
-    }
-
-    writer.AppendFileDescriptor(fd.get());
-
-    concierge_proxy_->CallMethod(
-        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-        base::BindOnce(&ConciergeClientImpl::OnDBusProtoResponse<
-                           concierge::ImportDiskImageResponse>,
-                       weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+    CallMethodWithFd(concierge::kImportDiskImageMethod, request, std::move(fd),
+                     std::move(callback));
   }
 
   void CancelDiskImageOperation(
@@ -132,16 +134,24 @@ class ConciergeClientImpl : public ConciergeClient {
   void StartTerminaVm(
       const concierge::StartVmRequest& request,
       DBusMethodCallback<concierge::StartVmResponse> callback) override {
-    // TODO(nverne): revert to TIMEOUT_USE_DEFAULT when StartVm no longer
-    // requires unnecessary long running crypto calculations.
-    constexpr int kStartVmTimeoutMs = 160 * 1000;
-    CallMethod(concierge::kStartVmMethod, request, std::move(callback),
-               kStartVmTimeoutMs);
+    CallMethod(concierge::kStartVmMethod, request, std::move(callback));
   }
 
   void StopVm(const concierge::StopVmRequest& request,
               DBusMethodCallback<concierge::StopVmResponse> callback) override {
     CallMethod(concierge::kStopVmMethod, request, std::move(callback));
+  }
+
+  void SuspendVm(
+      const concierge::SuspendVmRequest& request,
+      DBusMethodCallback<concierge::SuspendVmResponse> callback) override {
+    CallMethod(concierge::kSuspendVmMethod, request, std::move(callback));
+  }
+
+  void ResumeVm(
+      const concierge::ResumeVmRequest& request,
+      DBusMethodCallback<concierge::ResumeVmResponse> callback) override {
+    CallMethod(concierge::kResumeVmMethod, request, std::move(callback));
   }
 
   void GetVmInfo(
@@ -198,7 +208,7 @@ class ConciergeClientImpl : public ConciergeClient {
     writer.AppendFileDescriptor(fd.get());
 
     concierge_proxy_->CallMethod(
-        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+        &method_call, kConciergeDBusTimeoutMs,
         base::BindOnce(&ConciergeClientImpl::OnDBusProtoResponse<
                            concierge::AttachUsbDeviceResponse>,
                        weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
@@ -210,16 +220,16 @@ class ConciergeClientImpl : public ConciergeClient {
     CallMethod(concierge::kDetachUsbDeviceMethod, request, std::move(callback));
   }
 
-  void ListUsbDevices(
-      const concierge::ListUsbDeviceRequest& request,
-      DBusMethodCallback<concierge::ListUsbDeviceResponse> callback) override {
-    CallMethod(concierge::kListUsbDeviceMethod, request, std::move(callback));
-  }
-
   void StartArcVm(
       const concierge::StartArcVmRequest& request,
       DBusMethodCallback<concierge::StartVmResponse> callback) override {
     CallMethod(concierge::kStartArcVmMethod, request, std::move(callback));
+  }
+
+  void ResizeDiskImage(const concierge::ResizeDiskImageRequest& request,
+                       DBusMethodCallback<concierge::ResizeDiskImageResponse>
+                           callback) override {
+    CallMethod(concierge::kResizeDiskImageMethod, request, std::move(callback));
   }
 
  protected:
@@ -264,10 +274,10 @@ class ConciergeClientImpl : public ConciergeClient {
 
  private:
   template <typename RequestProto, typename ResponseProto>
-  void CallMethod(const std::string& method_name,
-                  const RequestProto& request,
-                  DBusMethodCallback<ResponseProto> callback,
-                  int timeout_ms = dbus::ObjectProxy::TIMEOUT_USE_DEFAULT) {
+  void CallMethodWithFd(const std::string& method_name,
+                        const RequestProto& request,
+                        base::ScopedFD fd,
+                        DBusMethodCallback<ResponseProto> callback) {
     dbus::MethodCall method_call(concierge::kVmConciergeInterface, method_name);
     dbus::MessageWriter writer(&method_call);
 
@@ -278,10 +288,21 @@ class ConciergeClientImpl : public ConciergeClient {
       return;
     }
 
+    if (fd.is_valid())
+      writer.AppendFileDescriptor(fd.get());
+
     concierge_proxy_->CallMethod(
-        &method_call, timeout_ms,
+        &method_call, kConciergeDBusTimeoutMs,
         base::BindOnce(&ConciergeClientImpl::OnDBusProtoResponse<ResponseProto>,
                        weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+  }
+
+  template <typename RequestProto, typename ResponseProto>
+  void CallMethod(const std::string& method_name,
+                  const RequestProto& request,
+                  DBusMethodCallback<ResponseProto> callback) {
+    CallMethodWithFd(method_name, request, base::ScopedFD(),
+                     std::move(callback));
   }
 
   template <typename ResponseProto>

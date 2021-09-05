@@ -15,6 +15,7 @@
 #include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/autofill/personal_data_manager_factory.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/ui/settings/autofill/autofill_constants.h"
 #import "ios/chrome/browser/ui/settings/autofill/autofill_profile_edit_table_view_controller.h"
 #import "ios/chrome/browser/ui/settings/autofill/cells/autofill_data_item.h"
 #import "ios/chrome/browser/ui/settings/cells/settings_switch_cell.h"
@@ -26,15 +27,13 @@
 #import "ios/chrome/browser/ui/table_view/table_view_model.h"
 #include "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
-#import "ios/chrome/common/colors/semantic_color_names.h"
+#import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
-
-NSString* const kAutofillProfileTableViewID = @"kAutofillProfileTableViewID";
 
 namespace {
 
@@ -57,7 +56,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
 @interface AutofillProfileTableViewController () <PersonalDataManagerObserver> {
   autofill::PersonalDataManager* _personalDataManager;
 
-  ios::ChromeBrowserState* _browserState;
+  ChromeBrowserState* _browserState;
   std::unique_ptr<autofill::PersonalDataManagerObserverBridge> _observer;
 
   // Deleting profiles updates PersonalDataManager resulting in an observer
@@ -75,13 +74,12 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
 @implementation AutofillProfileTableViewController
 
-- (instancetype)initWithBrowserState:(ios::ChromeBrowserState*)browserState {
+- (instancetype)initWithBrowserState:(ChromeBrowserState*)browserState {
   DCHECK(browserState);
   UITableViewStyle style = base::FeatureList::IsEnabled(kSettingsRefresh)
                                ? UITableViewStylePlain
                                : UITableViewStyleGrouped;
-  self = [super initWithTableViewStyle:style
-                           appBarStyle:ChromeTableViewControllerStyleNoAppBar];
+  self = [super initWithStyle:style];
   if (self) {
     self.title = l10n_util::GetNSString(IDS_AUTOFILL_ADDRESSES_SETTINGS_TITLE);
     self.shouldHideDoneButton = YES;
@@ -356,11 +354,11 @@ typedef NS_ENUM(NSInteger, ItemType) {
 #pragma mark - Getters and Setter
 
 - (BOOL)isAutofillProfileEnabled {
-  return autofill::prefs::IsProfileAutofillEnabled(_browserState->GetPrefs());
+  return autofill::prefs::IsAutofillProfileEnabled(_browserState->GetPrefs());
 }
 
 - (void)setAutofillProfileEnabled:(BOOL)isEnabled {
-  return autofill::prefs::SetProfileAutofillEnabled(_browserState->GetPrefs(),
+  return autofill::prefs::SetAutofillProfileEnabled(_browserState->GetPrefs(),
                                                     isEnabled);
 }
 

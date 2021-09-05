@@ -10,9 +10,8 @@
 namespace {
 class TestFrameTokenMessageQueue : public content::FrameTokenMessageQueue {
  public:
-  explicit TestFrameTokenMessageQueue(FrameTokenMessageQueue::Client* client)
-      : FrameTokenMessageQueue(client) {}
-  ~TestFrameTokenMessageQueue() override {}
+  TestFrameTokenMessageQueue() = default;
+  ~TestFrameTokenMessageQueue() override = default;
 
   uint32_t processed_frame_messages_count() {
     return processed_frame_messages_count_;
@@ -54,16 +53,6 @@ void MockRenderWidgetHost::ExpectForceEnableZoom(bool enable) {
   InputRouterImpl* input_router =
       static_cast<InputRouterImpl*>(input_router_.get());
   EXPECT_EQ(enable, input_router->touch_action_filter_.force_enable_zoom_);
-}
-
-// Mocks out |renderer_compositor_frame_sink_| with a
-// CompositorFrameSinkClientPtr bound to
-// |mock_renderer_compositor_frame_sink|.
-void MockRenderWidgetHost::SetMockRendererCompositorFrameSink(
-    viz::MockCompositorFrameSinkClient* mock_renderer_compositor_frame_sink) {
-  renderer_compositor_frame_sink_.reset();
-  renderer_compositor_frame_sink_.Bind(
-      mock_renderer_compositor_frame_sink->BindInterfaceRemote());
 }
 
 void MockRenderWidgetHost::SetupForInputRouterTest() {
@@ -108,12 +97,12 @@ MockRenderWidgetHost::MockRenderWidgetHost(
                            process,
                            routing_id,
                            std::move(widget),
-                           false),
+                           /*hidden=*/false,
+                           std::make_unique<TestFrameTokenMessageQueue>()),
       new_content_rendering_timeout_fired_(false),
       widget_impl_(std::move(widget_impl)),
       fling_scheduler_(std::make_unique<FlingScheduler>(this)) {
   acked_touch_event_type_ = blink::WebInputEvent::kUndefined;
-  frame_token_message_queue_.reset(new TestFrameTokenMessageQueue(this));
 }
 
 }  // namespace content

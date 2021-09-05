@@ -12,10 +12,11 @@
 #include "base/macros.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gfx/native_widget_types.h"
 #include "ui/views/layout/layout_manager.h"
 
 class BookmarkBarView;
-class Browser;
+class BrowserView;
 class BrowserViewLayoutDelegate;
 class ImmersiveModeController;
 class InfoBarContainerView;
@@ -26,7 +27,6 @@ class Point;
 }  // namespace gfx
 
 namespace views {
-class ClientView;
 class View;
 class Widget;
 }  // namespace views
@@ -49,12 +49,11 @@ class BrowserViewLayout : public views::LayoutManager {
 
   // |browser_view| may be null in tests.
   BrowserViewLayout(std::unique_ptr<BrowserViewLayoutDelegate> delegate,
-                    Browser* browser,
-                    views::ClientView* browser_view,
+                    gfx::NativeView host_view,
+                    BrowserView* browser_view,
                     views::View* top_container,
                     views::View* tab_strip_region_view,
                     TabStrip* tab_strip,
-                    views::View* webui_tab_strip,
                     views::View* toolbar,
                     InfoBarContainerView* infobar_container,
                     views::View* contents_container,
@@ -65,6 +64,10 @@ class BrowserViewLayout : public views::LayoutManager {
 
   // Sets or updates views that are not available when |this| is initialized.
   void set_tab_strip(TabStrip* tab_strip) { tab_strip_ = tab_strip; }
+  void set_webui_tab_strip(views::View* webui_tab_strip) {
+    webui_tab_strip_ = webui_tab_strip;
+  }
+  void set_loading_bar(views::View* loading_bar) { loading_bar_ = loading_bar; }
   void set_bookmark_bar(BookmarkBarView* bookmark_bar) {
     bookmark_bar_ = bookmark_bar;
   }
@@ -78,8 +81,8 @@ class BrowserViewLayout : public views::LayoutManager {
 
   web_modal::WebContentsModalDialogHost* GetWebContentsModalDialogHost();
 
-  // Returns the bounding box, in widget coordinates,  for the find bar.
-  gfx::Rect GetFindBarBoundingBox() const;
+  // Returns the view against which the dialog is positioned and parented.
+  gfx::NativeView GetHostView();
 
   // Tests to see if the specified |point| (in nonclient view's coordinates)
   // is within the views managed by the laymanager. Returns one of
@@ -100,9 +103,6 @@ class BrowserViewLayout : public views::LayoutManager {
   FRIEND_TEST_ALL_PREFIXES(BrowserViewLayoutTest, Layout);
   FRIEND_TEST_ALL_PREFIXES(BrowserViewLayoutTest, LayoutDownloadShelf);
   class WebContentsModalDialogHostViews;
-
-  Browser* browser() { return browser_; }
-  const Browser* browser() const { return browser_; }
 
   // Layout the following controls, starting at |top|, returns the coordinate
   // of the bottom of the control, for laying out the next control.
@@ -136,18 +136,17 @@ class BrowserViewLayout : public views::LayoutManager {
   // The delegate interface. May be a mock in tests.
   const std::unique_ptr<BrowserViewLayoutDelegate> delegate_;
 
-  // The browser from the owning BrowserView.
-  Browser* const browser_;
+  // The view against which the web dialog is positioned and parented.
+  gfx::NativeView const host_view_;
 
   // The owning browser view.
-  views::ClientView* const browser_view_;
+  BrowserView* const browser_view_;
 
   // Child views that the layout manager manages.
   // NOTE: If you add a view, try to add it as a views::View, which makes
   // testing much easier.
   views::View* const top_container_;
   views::View* const tab_strip_region_view_;
-  views::View* const webui_tab_strip_;
   views::View* const toolbar_;
   InfoBarContainerView* const infobar_container_;
   views::View* const contents_container_;
@@ -155,6 +154,8 @@ class BrowserViewLayout : public views::LayoutManager {
   views::View* const web_footer_experiment_;
   views::View* const contents_separator_;
 
+  views::View* webui_tab_strip_ = nullptr;
+  views::View* loading_bar_ = nullptr;
   TabStrip* tab_strip_ = nullptr;
   BookmarkBarView* bookmark_bar_ = nullptr;
   views::View* download_shelf_ = nullptr;

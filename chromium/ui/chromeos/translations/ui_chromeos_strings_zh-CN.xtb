@@ -29,6 +29,7 @@
 <translation id="1243314992276662751">上传</translation>
 <translation id="1249250836236328755">流派</translation>
 <translation id="1278813325885878377">匈牙利语 QWERTY 键盘</translation>
+<translation id="1293556467332435079">文件</translation>
 <translation id="1297922636971898492">Google云端硬盘暂时无法使用。Google云端硬盘恢复正常后，系统将自动重新开始上传。</translation>
 <translation id="1307931752636661898">无法查看 Linux 文件</translation>
 <translation id="1310751437842832374">音译(mausam → ନମସ୍ତେ)</translation>
@@ -80,6 +81,7 @@
 <translation id="1847880352285315359">已保存</translation>
 <translation id="1864756863218646478">找不到该文件。</translation>
 <translation id="1921986354447415460">土耳其语 F 键盘</translation>
+<translation id="1924372192547904021">已将“<ph name="DRIVE_NAME" />”格式化</translation>
 <translation id="1931134289871235022">斯洛伐克语</translation>
 <translation id="1933345018156373194">移动失败，出现了意外的错误：<ph name="ERROR_MESSAGE" /></translation>
 <translation id="1936717151811561466">芬兰语</translation>
@@ -163,6 +165,7 @@
 <translation id="2942290791863759244">德语Neo 2键盘</translation>
 <translation id="2943400156390503548">幻灯片</translation>
 <translation id="2943503720238418293">请使用一个较短的名称</translation>
+<translation id="2949781154072577687">正在将“<ph name="DRIVE_NAME" />”格式化…</translation>
 <translation id="2951236788251446349">海蜇</translation>
 <translation id="2963783323012015985">土耳其语键盘</translation>
 <translation id="2966459079597787514">瑞典语键盘</translation>
@@ -275,6 +278,7 @@
 <translation id="4336032328163998280">复制操作失败。<ph name="ERROR_MESSAGE" /></translation>
 <translation id="4364327530094270451">甜瓜</translation>
 <translation id="4372884569765913867">1x1</translation>
+<translation id="4394214039309501350">外部链接</translation>
 <translation id="4425149324548788773">我的云端硬盘</translation>
 <translation id="4465830120256509958">葡萄牙语（巴西）键盘</translation>
 <translation id="4470564870223067757">韩语(2 Set)</translation>
@@ -500,6 +504,7 @@
 <translation id="6878261347041253038">梵语键盘（注音）</translation>
 <translation id="6885780034956018177">蜗牛</translation>
 <translation id="6896758677409633944">复制</translation>
+<translation id="6898028766943174120">更多子文件夹…</translation>
 <translation id="691516599546977041">无法保存到 <ph name="FOLDER_NAME" />。经过修改的图片将保存在“下载内容”文件夹中。</translation>
 <translation id="6915678159055240887">Chromebox</translation>
 <translation id="6918340160281024199">美式 Workman</translation>
@@ -512,6 +517,7 @@
 <translation id="696203921837389374">在移动数据网络中启用同步功能</translation>
 <translation id="6965382102122355670">确定</translation>
 <translation id="6970230597523682626">保加利亚语</translation>
+<translation id="6973630695168034713">文件夹</translation>
 <translation id="6978611942794658017">此文件适用于采用 Windows 软件的 PC，不适用于运行 Chrome 操作系统的设备。请在 Chrome 网上应用店中搜索合适的替代应用。</translation>
 <translation id="6979158407327259162">Google 云端硬盘</translation>
 <translation id="6990081529015358884">空间不足</translation>
@@ -559,9 +565,11 @@
 <translation id="7589661784326793847">请稍候</translation>
 <translation id="7603724359189955920">网格</translation>
 <translation id="7627790789328695202">糟糕，<ph name="FILE_NAME" />已存在。请改用其他名称并重试。</translation>
+<translation id="7628656427739290098">已完成 <ph name="PERCENT" />%。</translation>
 <translation id="7649070708921625228">帮助</translation>
 <translation id="7654209398114106148">正在移动 <ph name="NUMBER_OF_ITEMS" /> 项内容…</translation>
 <translation id="7658239707568436148">取消</translation>
+<translation id="7695430100978772476">无法将“<ph name="DRIVE_NAME" />”格式化</translation>
 <translation id="770015031906360009">希腊语</translation>
 <translation id="7706319470528945664">葡萄牙语键盘</translation>
 <translation id="7711920809702896782">图片信息</translation>

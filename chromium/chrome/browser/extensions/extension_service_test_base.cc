@@ -26,6 +26,7 @@
 #include "chrome/browser/prefs/browser_prefs.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/signin/identity_test_environment_profile_adaptor.h"
+#include "chrome/common/buildflags.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/testing_browser_process.h"
@@ -43,6 +44,10 @@
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/extensions/install_limiter.h"
+#endif
+
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
+#include "chrome/browser/supervised_user/supervised_user_constants.h"
 #endif
 
 namespace extensions {
@@ -68,8 +73,13 @@ std::unique_ptr<TestingProfile> BuildTestingProfile(
     profile_builder.SetPrefService(std::move(prefs));
   }
 
-  if (params.profile_is_supervised)
+  if (params.profile_is_supervised) {
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
+    profile_builder.SetSupervisedUserId(supervised_users::kChildAccountSUID);
+#else
     profile_builder.SetSupervisedUserId("asdf");
+#endif
+  }
 
   profile_builder.AddTestingFactories(
       IdentityTestEnvironmentProfileAdaptor::
@@ -114,14 +124,14 @@ ExtensionServiceTestBase::CreateDefaultInitParams() {
   EXPECT_TRUE(temp_dir_.CreateUniqueTempDir());
   base::FilePath path = temp_dir_.GetPath();
   path = path.Append(FILE_PATH_LITERAL("TestingExtensionsPath"));
-  EXPECT_TRUE(base::DeleteFile(path, true));
+  EXPECT_TRUE(base::DeleteFileRecursively(path));
   base::File::Error error = base::File::FILE_OK;
   EXPECT_TRUE(base::CreateDirectoryAndGetError(path, &error)) << error;
   base::FilePath prefs_filename =
       path.Append(FILE_PATH_LITERAL("TestPreferences"));
   base::FilePath extensions_install_dir =
       path.Append(FILE_PATH_LITERAL("Extensions"));
-  EXPECT_TRUE(base::DeleteFile(extensions_install_dir, true));
+  EXPECT_TRUE(base::DeleteFileRecursively(extensions_install_dir));
   EXPECT_TRUE(base::CreateDirectoryAndGetError(extensions_install_dir, &error))
       << error;
 
@@ -156,7 +166,7 @@ void ExtensionServiceTestBase::InitializeInstalledExtensionService(
   base::FilePath path = temp_dir_.GetPath();
 
   path = path.Append(FILE_PATH_LITERAL("TestingExtensionsPath"));
-  ASSERT_TRUE(base::DeleteFile(path, true));
+  ASSERT_TRUE(base::DeleteFileRecursively(path));
 
   base::File::Error error = base::File::FILE_OK;
   ASSERT_TRUE(base::CreateDirectoryAndGetError(path, &error)) << error;
@@ -166,7 +176,7 @@ void ExtensionServiceTestBase::InitializeInstalledExtensionService(
 
   base::FilePath extensions_install_dir =
       path.Append(FILE_PATH_LITERAL("Extensions"));
-  ASSERT_TRUE(base::DeleteFile(extensions_install_dir, true));
+  ASSERT_TRUE(base::DeleteFileRecursively(extensions_install_dir));
   ASSERT_TRUE(
       base::CopyDirectory(source_install_dir, extensions_install_dir, true));
 

@@ -28,8 +28,18 @@ TracedProcessImpl::TracedProcessImpl() {
 
 TracedProcessImpl::~TracedProcessImpl() = default;
 
-// OnTracedProcessRequest can be called concurrently from
-// multiple threads, as we get one call per service.
+void TracedProcessImpl::ResetTracedProcessReceiver() {
+  if (task_runner_ && !task_runner_->RunsTasksInCurrentSequence()) {
+    task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(&TracedProcessImpl::ResetTracedProcessReceiver,
+                       base::Unretained(this)));
+    return;
+  }
+
+  receiver_.reset();
+}
+
 void TracedProcessImpl::OnTracedProcessRequest(
     mojo::PendingReceiver<mojom::TracedProcess> receiver) {
   if (task_runner_ && !task_runner_->RunsTasksInCurrentSequence()) {
@@ -39,13 +49,11 @@ void TracedProcessImpl::OnTracedProcessRequest(
     return;
   }
 
-  // We only need one binding per process.
-  base::AutoLock lock(lock_);
-  if (receiver_.is_bound()) {
+  // We only need one binding per process. If a new binding request is made,
+  // ignore it.
+  if (receiver_.is_bound())
     return;
-  }
 
-  DETACH_FROM_SEQUENCE(sequence_checker_);
   receiver_.Bind(std::move(receiver));
 }
 
@@ -60,10 +68,6 @@ void TracedProcessImpl::SetTaskRunner(
 
 void TracedProcessImpl::RegisterAgent(BaseAgent* agent) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-  if (agent_registry_) {
-    agent->Connect(agent_registry_.get());
-  }
 
   agents_.insert(agent);
 }
@@ -91,26 +95,8 @@ void TracedProcessImpl::ConnectToTracingService(
   // Ensure the TraceEventAgent has been created.
   TraceEventAgent::GetInstance();
 
-  agent_registry_ = mojo::Remote<tracing::mojom::AgentRegistry>(
-      std::move(request->agent_registry));
-  agent_registry_.set_disconnect_handler(base::BindRepeating(
-      [](TracedProcessImpl* traced_process) {
-        // If the AgentRegistry connection closes, the tracing service
-        // has gone down and we'll start accepting new connections from it
-        // again.
-        base::AutoLock lock(traced_process->lock_);
-        traced_process->agent_registry_.reset();
-        traced_process->receiver_.reset();
-      },
-      base::Unretained(this)));
-
-  for (auto* agent : agents_) {
-    agent->Connect(agent_registry_.get());
-  }
-
   PerfettoTracedProcess::Get()->producer_client()->Connect(
-      mojo::PendingRemote<tracing::mojom::PerfettoService>(
-          std::move(request->perfetto_service)));
+      std::move(request->perfetto_service));
 }
 
 void TracedProcessImpl::GetCategories(std::set<std::string>* category_set) {

@@ -7,9 +7,11 @@
 #include "base/i18n/rtl.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "chrome/browser/download/download_commands.h"
 #include "chrome/browser/download/offline_item_utils.h"
 #include "chrome/browser/safe_browsing/advanced_protection_status_manager.h"
 #include "chrome/browser/safe_browsing/advanced_protection_status_manager_factory.h"
+#include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/download/public/common/download_danger_type.h"
@@ -237,25 +239,24 @@ base::string16 DownloadUIModel::GetStatusText() const {
 
 base::string16 DownloadUIModel::GetTooltipText(const gfx::FontList& font_list,
                                                int max_width) const {
-  base::string16 tooltip = gfx::ElideFilename(
-      GetFileNameToReportUser(), font_list, max_width, gfx::Typesetter::NATIVE);
+  base::string16 tooltip =
+      gfx::ElideFilename(GetFileNameToReportUser(), font_list, max_width);
   if (GetState() == DownloadItem::INTERRUPTED &&
       GetLastFailState() != FailState::USER_CANCELED) {
     tooltip += base::ASCIIToUTF16("\n");
     tooltip += gfx::ElideText(
         OfflineItemUtils::GetFailStateMessage(GetLastFailState()), font_list,
-        max_width, gfx::ELIDE_TAIL, gfx::Typesetter::NATIVE);
+        max_width, gfx::ELIDE_TAIL);
   }
   return tooltip;
 }
 
 base::string16 DownloadUIModel::GetWarningText(const gfx::FontList& font_list,
                                                int base_width) const {
-  // Should only be called if IsDangerous().
-  DCHECK(IsDangerous());
+  // Should only be called if IsDangerous() or IsMixedContent().
+  DCHECK(IsDangerous() || IsMixedContent());
   base::string16 elided_filename =
-      gfx::ElideFilename(GetFileNameToReportUser(), font_list, base_width,
-                         gfx::Typesetter::BROWSER);
+      gfx::ElideFilename(GetFileNameToReportUser(), font_list, base_width);
 
   switch (GetDangerType()) {
     case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL: {
@@ -281,7 +282,7 @@ base::string16 DownloadUIModel::GetWarningText(const gfx::FontList& font_list,
       request_ap_verdicts =
           safe_browsing::AdvancedProtectionStatusManagerFactory::GetForProfile(
               profile())
-              ->RequestsAdvancedProtectionVerdicts();
+              ->IsUnderAdvancedProtection();
 #endif
       return l10n_util::GetStringFUTF16(
           request_ap_verdicts
@@ -301,8 +302,19 @@ base::string16 DownloadUIModel::GetWarningText(const gfx::FontList& font_list,
       return l10n_util::GetStringFUTF16(
           IDS_PROMPT_DOWNLOAD_BLOCKED_PASSWORD_PROTECTED, elided_filename);
     }
-    case download::DOWNLOAD_DANGER_TYPE_SENSITIVE_CONTENT_WARNING:
-    case download::DOWNLOAD_DANGER_TYPE_SENSITIVE_CONTENT_BLOCK:
+    case download::DOWNLOAD_DANGER_TYPE_SENSITIVE_CONTENT_WARNING: {
+      return l10n_util::GetStringFUTF16(
+          IDS_PROMPT_DOWNLOAD_SENSITIVE_CONTENT_WARNING, elided_filename);
+    }
+    case download::DOWNLOAD_DANGER_TYPE_SENSITIVE_CONTENT_BLOCK: {
+      return l10n_util::GetStringFUTF16(
+          IDS_PROMPT_DOWNLOAD_SENSITIVE_CONTENT_BLOCKED, elided_filename);
+    }
+    case download::DOWNLOAD_DANGER_TYPE_PROMPT_FOR_SCANNING: {
+      return l10n_util::GetStringFUTF16(IDS_PROMPT_APP_DEEP_SCANNING,
+                                        elided_filename);
+    }
+    case download::DOWNLOAD_DANGER_TYPE_BLOCKED_UNSUPPORTED_FILETYPE:
     case download::DOWNLOAD_DANGER_TYPE_DEEP_SCANNED_SAFE:
     case download::DOWNLOAD_DANGER_TYPE_DEEP_SCANNED_OPENED_DANGEROUS:
     case download::DOWNLOAD_DANGER_TYPE_ASYNC_SCANNING:
@@ -314,13 +326,29 @@ base::string16 DownloadUIModel::GetWarningText(const gfx::FontList& font_list,
       break;
     }
   }
+
+  switch (GetMixedContentStatus()) {
+    case download::DownloadItem::MixedContentStatus::BLOCK:
+      return l10n_util::GetStringFUTF16(
+          IDS_PROMPT_DOWNLOAD_MIXED_CONTENT_BLOCKED, elided_filename);
+    case download::DownloadItem::MixedContentStatus::WARN:
+      return l10n_util::GetStringFUTF16(
+          IDS_PROMPT_DOWNLOAD_MIXED_CONTENT_WARNING, elided_filename);
+    case download::DownloadItem::MixedContentStatus::UNKNOWN:
+    case download::DownloadItem::MixedContentStatus::SAFE:
+    case download::DownloadItem::MixedContentStatus::VALIDATED:
+    case download::DownloadItem::MixedContentStatus::SILENT_BLOCK:
+      NOTREACHED();
+      break;
+  }
+
   NOTREACHED();
   return base::string16();
 }
 
 base::string16 DownloadUIModel::GetWarningConfirmButtonText() const {
-  // Should only be called if IsDangerous()
-  DCHECK(IsDangerous());
+  // Should only be called if IsDangerous() or IsMixedContent().
+  DCHECK(IsDangerous() || IsMixedContent());
   if (GetDangerType() == download::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE &&
       IsExtensionDownload()) {
     return l10n_util::GetStringUTF16(IDS_CONTINUE_EXTENSION_DOWNLOAD);
@@ -367,6 +395,10 @@ bool DownloadUIModel::IsMalicious() const {
   return false;
 }
 
+bool DownloadUIModel::IsMixedContent() const {
+  return false;
+}
+
 bool DownloadUIModel::ShouldAllowDownloadFeedback() const {
   return false;
 }
@@ -407,6 +439,11 @@ DownloadFileType::DangerLevel DownloadUIModel::GetDangerLevel() const {
 
 void DownloadUIModel::SetDangerLevel(
     DownloadFileType::DangerLevel danger_level) {}
+
+download::DownloadItem::MixedContentStatus
+DownloadUIModel::GetMixedContentStatus() const {
+  return download::DownloadItem::MixedContentStatus::UNKNOWN;
+}
 
 void DownloadUIModel::OpenUsingPlatformHandler() {}
 
@@ -529,6 +566,9 @@ bool DownloadUIModel::IsCommandEnabled(
     case DownloadCommands::KEEP:
     case DownloadCommands::LEARN_MORE_SCANNING:
     case DownloadCommands::LEARN_MORE_INTERRUPTED:
+    case DownloadCommands::LEARN_MORE_MIXED_CONTENT:
+    case DownloadCommands::DEEP_SCAN:
+    case DownloadCommands::BYPASS_DEEP_SCANNING:
       return true;
   }
   NOTREACHED();
@@ -553,8 +593,11 @@ bool DownloadUIModel::IsCommandChecked(
     case DownloadCommands::KEEP:
     case DownloadCommands::LEARN_MORE_SCANNING:
     case DownloadCommands::LEARN_MORE_INTERRUPTED:
+    case DownloadCommands::LEARN_MORE_MIXED_CONTENT:
     case DownloadCommands::COPY_TO_CLIPBOARD:
     case DownloadCommands::ANNOTATE:
+    case DownloadCommands::DEEP_SCAN:
+    case DownloadCommands::BYPASS_DEEP_SCANNING:
       return false;
   }
   return false;
@@ -587,6 +630,12 @@ void DownloadUIModel::ExecuteCommand(DownloadCommands* download_commands,
           content::Referrer(), WindowOpenDisposition::NEW_FOREGROUND_TAB,
           ui::PAGE_TRANSITION_LINK, false));
       break;
+    case DownloadCommands::LEARN_MORE_MIXED_CONTENT:
+      download_commands->GetBrowser()->OpenURL(content::OpenURLParams(
+          GURL(chrome::kMixedContentDownloadBlockingLearnMoreUrl),
+          content::Referrer(), WindowOpenDisposition::NEW_FOREGROUND_TAB,
+          ui::PAGE_TRANSITION_LINK, false));
+      break;
     case DownloadCommands::PAUSE:
       Pause();
       break;
@@ -603,6 +652,10 @@ void DownloadUIModel::ExecuteCommand(DownloadCommands* download_commands,
             profile(), GetTargetFilePath());
       }
 #endif  // defined(OS_CHROMEOS)
+      break;
+    case DownloadCommands::DEEP_SCAN:
+      break;
+    case DownloadCommands::BYPASS_DEEP_SCANNING:
       break;
   }
 }

@@ -40,7 +40,6 @@
 <translation id="2148892889047469596">Cast tab</translation>
 <translation id="2150139952286079145">Search destinations</translation>
 <translation id="2177950615300672361">Incognito Tab: <ph name="TAB_NAME" /></translation>
-<translation id="218070003709087997">Use a number to indicate how many copies to print (1 to 999).</translation>
 <translation id="219008588003277019">Native Client module: <ph name="NEXE_NAME" /></translation>
 <translation id="2249605167705922988">e.g. 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Allow identifiers for protected content (computer restart may be required)</translation>
@@ -50,10 +49,8 @@
 <translation id="2282146716419988068">GPU Process</translation>
 <translation id="2301382460326681002">Extension root directory is invalid.</translation>
 <translation id="2318143611928805047">Paper size</translation>
-<translation id="2318923050469484167">Current incognito session (<ph name="EMBEDDING" />)</translation>
 <translation id="2322193970951063277">Headers and footers</translation>
 <translation id="2327492829706409234">Enable app</translation>
-<translation id="2344028582131185878">Automatic downloads</translation>
 <translation id="2348176352564285430">App: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">Select the extension directory.</translation>
 <translation id="2379281330731083556">Print using system dialogue... <ph name="SHORTCUT_KEY" /></translation>
@@ -66,7 +63,6 @@
 <translation id="2476578072172137802">Site Settings</translation>
 <translation id="2482878487686419369">Notifications</translation>
 <translation id="2509495747794740764">Scale amount must be a number between 10 and 200.</translation>
-<translation id="2580924999637585241">Total: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="26224892172169984">Do not allow any site to handle protocols</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Re-enable</translation>
@@ -80,7 +76,6 @@
 <translation id="2932883381142163287">Report abuse</translation>
 <translation id="2941112035454246133">Low</translation>
 <translation id="2972581237482394796">&amp;Redo</translation>
-<translation id="299483336428448530">Installed by your parent.</translation>
 <translation id="3012631534724231212">(iframe)</translation>
 <translation id="3013291976881901233">MIDI devices</translation>
 <translation id="3036546437875325427">Enable Flash</translation>
@@ -205,7 +200,6 @@
 <translation id="5804241973901381774">Permissions</translation>
 <translation id="5828633471261496623">Printing...</translation>
 <translation id="583281660410589416">Unknown</translation>
-<translation id="5838456317242088717">Current incognito session</translation>
 <translation id="5908769186679515905">Block sites from running Flash</translation>
 <translation id="5956585768868398362">Is this the search page that you were expecting?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> peak)</translation>
@@ -218,7 +212,6 @@
 <translation id="6122081475643980456">Your Internet connection is being controlled</translation>
 <translation id="6147020289383635445">Print preview failed.</translation>
 <translation id="6169666352732958425">Unable to cast desktop.</translation>
-<translation id="6196640612572343990">Block third-party cookies</translation>
 <translation id="6196854373336333322">The extension "<ph name="EXTENSION_NAME" />" has taken control of your proxy settings, which means it can change, break or eavesdrop on anything you do online. If you aren't sure why this change happened, you probably don't want it.</translation>
 <translation id="6247802389331535091">System: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="6248988683584659830">Search settings</translation>

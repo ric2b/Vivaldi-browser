@@ -215,6 +215,10 @@ TEST_F(NotificationPlatformBridgeMacTest, TestNotificationVerifyOrigin) {
   // If however the origin is not present the response should be fine.
   [response removeObjectForKey:notification_constants::kNotificationOrigin];
   EXPECT_TRUE(NotificationPlatformBridgeMac::VerifyNotificationData(response));
+
+  // Empty origin should be fine.
+  [response setValue:@"" forKey:notification_constants::kNotificationOrigin];
+  EXPECT_TRUE(NotificationPlatformBridgeMac::VerifyNotificationData(response));
 }
 
 TEST_F(NotificationPlatformBridgeMacTest, TestDisplayNoButtons) {
@@ -281,8 +285,7 @@ TEST_F(NotificationPlatformBridgeMacTest, TestDisplayOneButton) {
 }
 
 TEST_F(NotificationPlatformBridgeMacTest, TestDisplayProgress) {
-  // TODO(crbug.com/1007418): Enable this when we support alerts on 10.15 again.
-  if (base::mac::IsAtLeastOS10_15())
+  if (!NotificationPlatformBridgeMac::SupportsAlerts())
     return;
 
   std::unique_ptr<Notification> notification =
@@ -362,8 +365,7 @@ TEST_F(NotificationPlatformBridgeMacTest, TestQuitRemovesNotifications) {
 }
 
 TEST_F(NotificationPlatformBridgeMacTest, TestDisplayAlert) {
-  // TODO(crbug.com/1007418): Enable this when we support alerts on 10.15 again.
-  if (base::mac::IsAtLeastOS10_15())
+  if (!NotificationPlatformBridgeMac::SupportsAlerts())
     return;
 
   std::unique_ptr<Notification> alert =
@@ -378,8 +380,7 @@ TEST_F(NotificationPlatformBridgeMacTest, TestDisplayAlert) {
 }
 
 TEST_F(NotificationPlatformBridgeMacTest, TestDisplayBannerAndAlert) {
-  // TODO(crbug.com/1007418): Enable this when we support alerts on 10.15 again.
-  if (base::mac::IsAtLeastOS10_15())
+  if (!NotificationPlatformBridgeMac::SupportsAlerts())
     return;
 
   std::unique_ptr<Notification> alert =
@@ -398,8 +399,7 @@ TEST_F(NotificationPlatformBridgeMacTest, TestDisplayBannerAndAlert) {
 }
 
 TEST_F(NotificationPlatformBridgeMacTest, TestCloseAlert) {
-  // TODO(crbug.com/1007418): Enable this when we support alerts on 10.15 again.
-  if (base::mac::IsAtLeastOS10_15())
+  if (!NotificationPlatformBridgeMac::SupportsAlerts())
     return;
 
   std::unique_ptr<Notification> alert =
@@ -417,8 +417,7 @@ TEST_F(NotificationPlatformBridgeMacTest, TestCloseAlert) {
 }
 
 TEST_F(NotificationPlatformBridgeMacTest, TestQuitRemovesBannersAndAlerts) {
-  // TODO(crbug.com/1007418): Enable this when we support alerts on 10.15 again.
-  if (base::mac::IsAtLeastOS10_15())
+  if (!NotificationPlatformBridgeMac::SupportsAlerts())
     return;
 
   std::unique_ptr<Notification> notification = CreateBanner(

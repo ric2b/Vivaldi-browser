@@ -6,6 +6,7 @@
 
 #include "base/stl_util.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/test/task_environment.h"
 #include "base/threading/simple_thread.h"
 #include "base/values.h"
 #include "net/log/net_log_event_type.h"
@@ -35,21 +36,117 @@ base::Value NetCaptureModeParams(NetLogCaptureMode capture_mode) {
   return std::move(dict);
 }
 
-TEST(NetLogTest, Basic) {
-  TestNetLog net_log;
+TEST(NetLogTest, BasicGlobalEvents) {
+  base::test::TaskEnvironment task_environment{
+      base::test::TaskEnvironment::TimeSource::MOCK_TIME};
+  RecordingTestNetLog net_log;
   auto entries = net_log.GetEntries();
   EXPECT_EQ(0u, entries.size());
 
+  task_environment.FastForwardBy(base::TimeDelta::FromSeconds(1234));
+  base::TimeTicks ticks0 = base::TimeTicks::Now();
+
   net_log.AddGlobalEntry(NetLogEventType::CANCELLED);
 
+  task_environment.FastForwardBy(base::TimeDelta::FromSeconds(5678));
+  base::TimeTicks ticks1 = base::TimeTicks::Now();
+  EXPECT_LE(ticks0, ticks1);
+
+  net_log.AddGlobalEntry(NetLogEventType::FAILED);
+
+  task_environment.FastForwardBy(base::TimeDelta::FromSeconds(91011));
+  EXPECT_LE(ticks1, base::TimeTicks::Now());
+
   entries = net_log.GetEntries();
-  ASSERT_EQ(1u, entries.size());
+  ASSERT_EQ(2u, entries.size());
+
   EXPECT_EQ(NetLogEventType::CANCELLED, entries[0].type);
   EXPECT_EQ(NetLogSourceType::NONE, entries[0].source.type);
   EXPECT_NE(NetLogSource::kInvalidId, entries[0].source.id);
+  EXPECT_EQ(ticks0, entries[0].source.start_time);
   EXPECT_EQ(NetLogEventPhase::NONE, entries[0].phase);
-  EXPECT_GE(base::TimeTicks::Now(), entries[0].time);
+  EXPECT_EQ(ticks0, entries[0].time);
   EXPECT_FALSE(entries[0].HasParams());
+
+  EXPECT_EQ(NetLogEventType::FAILED, entries[1].type);
+  EXPECT_EQ(NetLogSourceType::NONE, entries[1].source.type);
+  EXPECT_NE(NetLogSource::kInvalidId, entries[1].source.id);
+  EXPECT_LT(entries[0].source.id, entries[1].source.id);
+  EXPECT_EQ(ticks1, entries[1].source.start_time);
+  EXPECT_EQ(NetLogEventPhase::NONE, entries[1].phase);
+  EXPECT_EQ(ticks1, entries[1].time);
+  EXPECT_FALSE(entries[1].HasParams());
+}
+
+TEST(NetLogTest, BasicEventsWithSource) {
+  base::test::TaskEnvironment task_environment{
+      base::test::TaskEnvironment::TimeSource::MOCK_TIME};
+  RecordingTestNetLog net_log;
+  auto entries = net_log.GetEntries();
+  EXPECT_EQ(0u, entries.size());
+
+  task_environment.FastForwardBy(base::TimeDelta::FromSeconds(9876));
+  base::TimeTicks source0_start_ticks = base::TimeTicks::Now();
+
+  NetLogWithSource source0 =
+      NetLogWithSource::Make(&net_log, NetLogSourceType::URL_REQUEST);
+  task_environment.FastForwardBy(base::TimeDelta::FromSeconds(1));
+  base::TimeTicks source0_event0_ticks = base::TimeTicks::Now();
+  source0.BeginEvent(NetLogEventType::REQUEST_ALIVE);
+
+  task_environment.FastForwardBy(base::TimeDelta::FromSeconds(5432));
+  base::TimeTicks source1_start_ticks = base::TimeTicks::Now();
+
+  NetLogWithSource source1 =
+      NetLogWithSource::Make(&net_log, NetLogSourceType::SOCKET);
+  task_environment.FastForwardBy(base::TimeDelta::FromSeconds(1));
+  base::TimeTicks source1_event0_ticks = base::TimeTicks::Now();
+  source1.BeginEvent(NetLogEventType::SOCKET_ALIVE);
+  task_environment.FastForwardBy(base::TimeDelta::FromSeconds(10));
+  base::TimeTicks source1_event1_ticks = base::TimeTicks::Now();
+  source1.EndEvent(NetLogEventType::SOCKET_ALIVE);
+
+  task_environment.FastForwardBy(base::TimeDelta::FromSeconds(1));
+  base::TimeTicks source0_event1_ticks = base::TimeTicks::Now();
+  source0.EndEvent(NetLogEventType::REQUEST_ALIVE);
+
+  task_environment.FastForwardBy(base::TimeDelta::FromSeconds(123));
+
+  entries = net_log.GetEntries();
+  ASSERT_EQ(4u, entries.size());
+
+  EXPECT_EQ(NetLogEventType::REQUEST_ALIVE, entries[0].type);
+  EXPECT_EQ(NetLogSourceType::URL_REQUEST, entries[0].source.type);
+  EXPECT_NE(NetLogSource::kInvalidId, entries[0].source.id);
+  EXPECT_EQ(source0_start_ticks, entries[0].source.start_time);
+  EXPECT_EQ(NetLogEventPhase::BEGIN, entries[0].phase);
+  EXPECT_EQ(source0_event0_ticks, entries[0].time);
+  EXPECT_FALSE(entries[0].HasParams());
+
+  EXPECT_EQ(NetLogEventType::SOCKET_ALIVE, entries[1].type);
+  EXPECT_EQ(NetLogSourceType::SOCKET, entries[1].source.type);
+  EXPECT_NE(NetLogSource::kInvalidId, entries[1].source.id);
+  EXPECT_LT(entries[0].source.id, entries[1].source.id);
+  EXPECT_EQ(source1_start_ticks, entries[1].source.start_time);
+  EXPECT_EQ(NetLogEventPhase::BEGIN, entries[1].phase);
+  EXPECT_EQ(source1_event0_ticks, entries[1].time);
+  EXPECT_FALSE(entries[1].HasParams());
+
+  EXPECT_EQ(NetLogEventType::SOCKET_ALIVE, entries[2].type);
+  EXPECT_EQ(NetLogSourceType::SOCKET, entries[2].source.type);
+  EXPECT_EQ(entries[1].source.id, entries[2].source.id);
+  EXPECT_EQ(source1_start_ticks, entries[2].source.start_time);
+  EXPECT_EQ(NetLogEventPhase::END, entries[2].phase);
+  EXPECT_EQ(source1_event1_ticks, entries[2].time);
+  EXPECT_FALSE(entries[2].HasParams());
+
+  EXPECT_EQ(NetLogEventType::REQUEST_ALIVE, entries[3].type);
+  EXPECT_EQ(NetLogSourceType::URL_REQUEST, entries[3].source.type);
+  EXPECT_EQ(entries[0].source.id, entries[3].source.id);
+  EXPECT_EQ(source0_start_ticks, entries[3].source.start_time);
+  EXPECT_EQ(NetLogEventPhase::END, entries[3].phase);
+  EXPECT_EQ(source0_event1_ticks, entries[3].time);
+  EXPECT_FALSE(entries[3].HasParams());
 }
 
 // Check that the correct CaptureMode is sent to NetLog Value callbacks.
@@ -60,7 +157,7 @@ TEST(NetLogTest, CaptureModes) {
       NetLogCaptureMode::kEverything,
   };
 
-  TestNetLog net_log;
+  RecordingTestNetLog net_log;
 
   for (NetLogCaptureMode mode : kModes) {
     net_log.SetObserverCaptureMode(mode);
@@ -77,6 +174,7 @@ TEST(NetLogTest, CaptureModes) {
     EXPECT_EQ(NetLogEventType::SOCKET_ALIVE, entries[0].type);
     EXPECT_EQ(NetLogSourceType::NONE, entries[0].source.type);
     EXPECT_NE(NetLogSource::kInvalidId, entries[0].source.id);
+    EXPECT_GE(base::TimeTicks::Now(), entries[0].source.start_time);
     EXPECT_EQ(NetLogEventPhase::NONE, entries[0].phase);
     EXPECT_GE(base::TimeTicks::Now(), entries[0].time);
 
@@ -235,7 +333,7 @@ void RunTestThreads(NetLog* net_log) {
 
 // Makes sure that events on multiple threads are dispatched to all observers.
 TEST(NetLogTest, NetLogEventThreads) {
-  NetLog net_log;
+  TestNetLog net_log;
 
   // Attach some observers.  Since they're created after |net_log|, they'll
   // safely detach themselves on destruction.
@@ -256,7 +354,7 @@ TEST(NetLogTest, NetLogEventThreads) {
 
 // Test adding and removing a single observer.
 TEST(NetLogTest, NetLogAddRemoveObserver) {
-  NetLog net_log;
+  TestNetLog net_log;
   CountingObserver observer;
 
   AddEvent(&net_log);
@@ -298,7 +396,7 @@ TEST(NetLogTest, NetLogAddRemoveObserver) {
 
 // Test adding and removing two observers at different log levels.
 TEST(NetLogTest, NetLogTwoObservers) {
-  NetLog net_log;
+  TestNetLog net_log;
   LoggingObserver observer[2];
 
   // Add first observer.
@@ -354,7 +452,7 @@ TEST(NetLogTest, NetLogTwoObservers) {
 // Makes sure that adding and removing observers simultaneously on different
 // threads works.
 TEST(NetLogTest, NetLogAddRemoveObserverThreads) {
-  NetLog net_log;
+  TestNetLog net_log;
 
   // Run a bunch of threads to completion, each of which will repeatedly add
   // and remove an observer, and set its logging level.

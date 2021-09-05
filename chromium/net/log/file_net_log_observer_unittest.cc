@@ -15,6 +15,7 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
@@ -28,6 +29,7 @@
 #include "net/log/net_log_source_type.h"
 #include "net/log/net_log_util.h"
 #include "net/log/net_log_values.h"
+#include "net/log/test_net_log.h"
 #include "net/test/test_with_task_environment.h"
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_context.h"
@@ -66,20 +68,20 @@ void AddEntries(FileNetLogObserver* logger,
 
   // The maximum value of base::TimeTicks::Now() will be the maximum value of
   // int64_t, and if the maximum number of digits are included, the
-  // |base_entry_size| could be up to 101 characters. Check that the event
+  // |base_entry_size| could be up to 136 characters. Check that the event
   // format does not include additional padding.
-  DCHECK_LE(base_entry_size, 101u);
+  DCHECK_LE(base_entry_size, 136u);
 
   // |entry_size| should be at least as big as the largest possible base
   // entry.
-  EXPECT_GE(entry_size, 101u);
+  EXPECT_GE(entry_size, 136u);
 
   // |entry_size| cannot be smaller than the minimum event size.
   EXPECT_GE(entry_size, base_entry_size);
 
   for (int i = 0; i < num_entries; i++) {
     source = NetLogSource(NetLogSourceType::HTTP2_SESSION, i);
-    std::string id = std::to_string(i);
+    std::string id = base::NumberToString(i);
 
     // String size accounts for the number of digits in id so that all events
     // are the same size.
@@ -281,7 +283,7 @@ class FileNetLogObserverTest : public ::testing::TestWithParam<bool>,
   }
 
  protected:
-  NetLog net_log_;
+  TestNetLog net_log_;
   std::unique_ptr<FileNetLogObserver> logger_;
   base::ScopedTempDir temp_dir_;
   base::ScopedTempDir scratch_dir_;  // used for bounded + preexisting
@@ -319,7 +321,7 @@ class FileNetLogObserverBoundedTest : public ::testing::Test,
 
   base::FilePath GetEventFilePath(int index) const {
     return GetInprogressDirectory().AppendASCII(
-        "event_file_" + std::to_string(index) + ".json");
+        "event_file_" + base::NumberToString(index) + ".json");
   }
 
   base::FilePath GetEndNetlogPath() const {
@@ -332,7 +334,7 @@ class FileNetLogObserverBoundedTest : public ::testing::Test,
 
 
  protected:
-  NetLog net_log_;
+  TestNetLog net_log_;
   std::unique_ptr<FileNetLogObserver> logger_;
   base::FilePath log_path_;
 
@@ -341,7 +343,7 @@ class FileNetLogObserverBoundedTest : public ::testing::Test,
 };
 
 // Instantiates each FileNetLogObserverTest to use bounded and unbounded modes.
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          FileNetLogObserverTest,
                          ::testing::Values(true, false));
 

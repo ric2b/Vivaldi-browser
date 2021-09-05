@@ -58,7 +58,7 @@ WebMouseWheelEvent SyntheticWebMouseWheelEventBuilder::Build(
     float dx,
     float dy,
     int modifiers,
-    ui::input_types::ScrollGranularity delta_units) {
+    ui::ScrollGranularity delta_units) {
   return Build(x, y, 0, 0, dx, dy, modifiers, delta_units);
 }
 
@@ -70,7 +70,7 @@ WebMouseWheelEvent SyntheticWebMouseWheelEventBuilder::Build(
     float dx,
     float dy,
     int modifiers,
-    ui::input_types::ScrollGranularity delta_units) {
+    ui::ScrollGranularity delta_units) {
   WebMouseWheelEvent result(WebInputEvent::kMouseWheel, modifiers,
                             ui::EventTimeForNow());
   result.SetPositionInScreen(global_x, global_y);
@@ -149,8 +149,8 @@ WebGestureEvent SyntheticWebGestureEventBuilder::BuildPinchUpdate(
   WebGestureEvent result =
       Build(WebInputEvent::kGesturePinchUpdate, source_device, modifiers);
   result.data.pinch_update.scale = scale;
-  result.SetPositionInWidget(blink::WebFloatPoint(anchor_x, anchor_y));
-  result.SetPositionInScreen(blink::WebFloatPoint(anchor_x, anchor_y));
+  result.SetPositionInWidget(gfx::PointF(anchor_x, anchor_y));
+  result.SetPositionInScreen(gfx::PointF(anchor_x, anchor_y));
   return result;
 }
 

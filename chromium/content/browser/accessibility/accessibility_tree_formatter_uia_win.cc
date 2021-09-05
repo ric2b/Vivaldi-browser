@@ -42,6 +42,10 @@ base::string16 UiaIdentifierToCondensedString16(int32_t id) {
     // remove leading 'UIA_' and trailing 'PropertyId'
     return identifier.substr(4, identifier.size() - 14);
   }
+  if (id >= UIA_ButtonControlTypeId && id <= UIA_AppBarControlTypeId) {
+    // remove leading 'UIA_' and trailing 'ControlTypeId'
+    return identifier.substr(4, identifier.size() - 17);
+  }
   return identifier;
 }
 
@@ -766,7 +770,7 @@ void AccessibilityTreeFormatterUia::AddValueProperties(
 
     base::win::ScopedBstr value;
     if (SUCCEEDED(value_pattern->get_CachedValue(value.Receive())))
-      dict->SetString("Value.Value", BstrToUTF8(value));
+      dict->SetString("Value.Value", BstrToUTF8(value.Get()));
   }
 }
 
@@ -936,7 +940,7 @@ void AccessibilityTreeFormatterUia::WriteElementArray(
       if (name.empty()) {
         base::win::ScopedBstr role;
         element->get_CurrentAriaRole(role.Receive());
-        name = L"{" + base::string16(role) + L"}";
+        name = L"{" + base::string16(role.Get()) + L"}";
       }
       element_list += name;
     }
@@ -970,6 +974,12 @@ void AccessibilityTreeFormatterUia::BuildCacheRequests() {
   CHECK(children_cache_request_.Get());
   children_cache_request_->put_TreeScope(TreeScope_Children);
 
+  // Set filter to include all nodes in the raw view.
+  Microsoft::WRL::ComPtr<IUIAutomationCondition> raw_view_condition;
+  uia_->get_RawViewCondition(&raw_view_condition);
+  CHECK(raw_view_condition.Get());
+  children_cache_request_->put_TreeFilter(raw_view_condition.Get());
+
   // Create cache request for requesting information about a node.
   uia_->CreateCacheRequest(&element_cache_request_);
   CHECK(element_cache_request_.Get());
@@ -999,14 +1009,15 @@ base::string16 AccessibilityTreeFormatterUia::ProcessTreeForOutput(
   std::unique_ptr<base::DictionaryValue> tree;
   base::string16 line;
 
-  // Always show role, and show it first.
-  base::string16 role_value;
-  dict.GetString(UiaIdentifierToCondensedString(UIA_AriaRolePropertyId),
-                 &role_value);
-  WriteAttribute(true, role_value, &line);
+  // Always show control type, and show it first.
+  base::string16 control_type_value;
+  dict.GetString(UiaIdentifierToCondensedString(UIA_ControlTypePropertyId),
+                 &control_type_value);
+  WriteAttribute(true, control_type_value, &line);
   if (filtered_result) {
     filtered_result->SetString(
-        UiaIdentifierToStringUTF8(UIA_AriaRolePropertyId), role_value);
+        UiaIdentifierToStringUTF8(UIA_ControlTypePropertyId),
+        control_type_value);
   }
 
   // properties

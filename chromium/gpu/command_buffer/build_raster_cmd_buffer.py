@@ -131,8 +131,8 @@ _NAMED_TYPE_INFO = {
       'viz::ResourceFormat::R16_EXT',
       'viz::ResourceFormat::RGBX_8888',
       'viz::ResourceFormat::BGRX_8888',
-      'viz::ResourceFormat::RGBX_1010102',
-      'viz::ResourceFormat::BGRX_1010102',
+      'viz::ResourceFormat::RGBA_1010102',
+      'viz::ResourceFormat::BGRA_1010102',
       'viz::ResourceFormat::YVU_420',
       'viz::ResourceFormat::YUV_420_BIPLANAR',
 

@@ -57,7 +57,7 @@ decltype(auto) CoerceFunctorForCrossThreadBind(T&& functor) {
 template <typename Signature>
 base::RepeatingCallback<Signature> CoerceFunctorForCrossThreadBind(
     CrossThreadFunction<Signature>&& functor) {
-  return ConvertToBaseCallback(std::move(functor));
+  return ConvertToBaseRepeatingCallback(std::move(functor));
 }
 
 template <typename Signature>
@@ -75,10 +75,10 @@ auto CrossThreadBindRepeating(FunctionType&& function, Ps&&... parameters) {
                                           std::decay_t<Ps>...>::ok,
       "A bound argument uses a bad pattern.");
   return internal::MakeCrossThreadFunction(
-      base::Bind(internal::CoerceFunctorForCrossThreadBind(
-                     std::forward<FunctionType>(function)),
-                 CrossThreadCopier<std::decay_t<Ps>>::Copy(
-                     std::forward<Ps>(parameters))...));
+      base::BindRepeating(internal::CoerceFunctorForCrossThreadBind(
+                              std::forward<FunctionType>(function)),
+                          CrossThreadCopier<std::decay_t<Ps>>::Copy(
+                              std::forward<Ps>(parameters))...));
 }
 
 template <typename FunctionType, typename... Ps>

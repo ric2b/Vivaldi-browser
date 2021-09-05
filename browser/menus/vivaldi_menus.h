@@ -4,9 +4,23 @@
 #define BROWSER_MENUS_VIVALDI_MENUS_H_
 
 #include "base/callback.h"
-#include "chrome/browser/renderer_context_menu/render_view_context_menu.h"
+#include "ui/base/window_open_disposition.h"
+#include "ui/base/page_transition_types.h"
 
 class RenderViewContextMenuViews;
+class RenderViewContextMenu;
+class GURL;
+
+namespace content {
+struct ContextMenuParams;
+class WebContents;
+}  // namespace content
+
+namespace ui {
+class SimpleMenuModel;
+class Accelerator;
+} // namespace ui
+
 using ui::SimpleMenuModel;
 using content::ContextMenuParams;
 using content::WebContents;

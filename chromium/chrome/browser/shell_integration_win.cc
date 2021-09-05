@@ -31,8 +31,9 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
+#include "base/threading/platform_thread.h"
 #include "base/threading/scoped_blocking_call.h"
-#include "base/threading/scoped_thread_priority.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "base/win/registry.h"
@@ -77,14 +78,22 @@ base::string16 GetProfileIdFromPath(const base::FilePath& profile_path) {
 
   base::string16 profile_id;
 
-  bool is_standalone = vivaldi::IsStandalone();
-  if (is_standalone) {
+  if (vivaldi::IsStandalone()) {
     base::MD5Digest md5_digest;
     std::string profile_path_ascii(base::UTF16ToASCII(profile_path.value()));
     base::MD5Sum(profile_path_ascii.c_str(), profile_path_ascii.length(),
         &md5_digest);
     profile_id = base::ASCIIToUTF16(base::MD5DigestToBase16(md5_digest));
   } else {
+  base::FilePath default_user_data_dir;
+  // Return empty string if profile_path is in default user data
+  // dir and is the default profile.
+  if (chrome::GetDefaultUserDataDirectory(&default_user_data_dir) &&
+      profile_path.DirName() == default_user_data_dir &&
+      profile_path.BaseName().value() ==
+          base::ASCIIToUTF16(chrome::kInitialProfile)) {
+    return base::string16();
+  }
 
   // Get joined basenames of user data dir and profile.
   base::string16 basenames = profile_path.DirName().BaseName().value() +
@@ -118,10 +127,10 @@ base::string16 GetExpectedAppId(const base::CommandLine& command_line,
   base::FilePath user_data_dir;
   if (command_line.HasSwitch(switches::kUserDataDir))
     user_data_dir = command_line.GetSwitchValuePath(switches::kUserDataDir);
-  else
-    chrome::GetDefaultUserDataDirectory(&user_data_dir);
   // Adjust with any policy that overrides any other way to set the path.
   policy::path_parser::CheckUserDataDirPolicy(&user_data_dir);
+  if (user_data_dir.empty())
+    chrome::GetDefaultUserDataDirectory(&user_data_dir);
   DCHECK(!user_data_dir.empty());
 
   base::FilePath profile_subdir;
@@ -524,6 +533,15 @@ void MigrateChromeAndChromeProxyShortcuts(
   win::MigrateShortcutsInPathInternal(chrome_proxy_path, shortcut_path);
 }
 
+base::string16 GetHttpProtocolUserChoiceProgId() {
+  base::string16 prog_id;
+  base::win::RegKey key(HKEY_CURRENT_USER, ShellUtil::kRegVistaUrlPrefs,
+                        KEY_QUERY_VALUE);
+  if (key.Valid())
+    key.ReadValue(L"ProgId", &prog_id);
+  return prog_id;
+}
+
 }  // namespace
 
 bool SetAsDefaultBrowser() {
@@ -601,31 +619,28 @@ DefaultWebClientState GetDefaultBrowser() {
       ShellUtil::GetChromeDefaultState());
 }
 
-// There is no reliable way to say which browser is default on a machine (each
-// browser can have some of the protocols/shortcuts). So we look for only HTTP
-// protocol handler. Even this handler is located at different places in
-// registry on XP and Vista:
-// - HKCR\http\shell\open\command (XP)
-// - HKCU\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\
-//   http\UserChoice (Vista)
-// This method checks if Firefox is default browser by checking these
-// locations and returns true if Firefox traces are found there. In case of
-// error (or if Firefox is not found)it returns the default value which
-// is false.
+// This method checks if Firefox is default browser by checking for the default
+// HTTP protocol handler. Returns false in case of error or if Firefox is not
+// the user's default http protocol client.
 bool IsFirefoxDefaultBrowser() {
-  base::string16 app_cmd;
-  base::win::RegKey key(HKEY_CURRENT_USER, ShellUtil::kRegVistaUrlPrefs,
-                        KEY_READ);
-  return key.Valid() && key.ReadValue(L"Progid", &app_cmd) == ERROR_SUCCESS &&
-         app_cmd == L"FirefoxURL";
+  return base::StartsWith(GetHttpProtocolUserChoiceProgId(), L"FirefoxURL",
+                          base::CompareCase::SENSITIVE);
+}
+
+std::string GetFirefoxProgIdSuffix() {
+  const base::string16 app_cmd = GetHttpProtocolUserChoiceProgId();
+  static constexpr base::StringPiece16 kFirefoxProgIdPrefix(L"FirefoxURL-");
+  if (base::StartsWith(app_cmd, kFirefoxProgIdPrefix,
+                       base::CompareCase::SENSITIVE)) {
+    // Returns the id that appears after the prefix "FirefoxURL-".
+    return std::string(app_cmd.begin() + kFirefoxProgIdPrefix.size(),
+                       app_cmd.end());
+  }
+  return std::string();
 }
 
 bool IsIEDefaultBrowser() {
-  base::string16 app_cmd;
-  base::win::RegKey key(HKEY_CURRENT_USER, ShellUtil::kRegVistaUrlPrefs,
-                        KEY_READ);
-  return key.Valid() && key.ReadValue(L"Progid", &app_cmd) == ERROR_SUCCESS &&
-         app_cmd == L"IE.HTTP";
+  return GetHttpProtocolUserChoiceProgId() == L"IE.HTTP";
 }
 
 DefaultWebClientState IsDefaultProtocolClient(const std::string& protocol) {
@@ -736,28 +751,32 @@ base::string16 GetChromiumModelIdForProfile(
       profile_path);
 }
 
-void MigrateTaskbarPins() {
+void MigrateTaskbarPins(base::OnceClosure completion_callback) {
   // This needs to happen (e.g. so that the appid is fixed and the
   // run-time Chrome icon is merged with the taskbar shortcut), but it is not an
   // urgent task.
-  base::FilePath taskbar_path;
-  if (!base::PathService::Get(base::DIR_TASKBAR_PINS, &taskbar_path)) {
-    NOTREACHED();
-    return;
-  }
-
-  // Migrate any pinned shortcuts in ImplicitApps sub-directories.
-  base::FilePath implicit_apps_path;
-  if (!base::PathService::Get(base::DIR_IMPLICIT_APP_SHORTCUTS,
-                              &implicit_apps_path)) {
-    NOTREACHED();
-    return;
-  }
-
-  base::CreateCOMSTATaskRunner(
-      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::BEST_EFFORT})
-      ->PostTask(FROM_HERE, base::BindOnce(&MigrateTaskbarPinsCallback,
-                                           taskbar_path, implicit_apps_path));
+  // MigrateTaskbarPinsCallback just calls MigrateShortcutsInPathInternal
+  // several times with different parameters.  Each call may or may not load
+  // DLL's. Since the callback may take the loader lock several times, and this
+  // is the bulk of the callback's work, run the whole thing on a foreground
+  // thread.
+  //
+  // BEST_EFFORT means it will be scheduled after higher-priority tasks, but
+  // MUST_USE_FOREGROUND means that when it is scheduled it will run in the
+  // foregound.
+  base::ThreadPool::CreateCOMSTATaskRunner(
+      {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
+       base::ThreadPolicy::MUST_USE_FOREGROUND})
+      ->PostTaskAndReply(
+          FROM_HERE, base::BindOnce([]() {
+            base::FilePath taskbar_path;
+            base::FilePath implicit_apps_path;
+            base::PathService::Get(base::DIR_TASKBAR_PINS, &taskbar_path);
+            base::PathService::Get(base::DIR_IMPLICIT_APP_SHORTCUTS,
+                                   &implicit_apps_path);
+            MigrateTaskbarPinsCallback(taskbar_path, implicit_apps_path);
+          }),
+          std::move(completion_callback));
 }
 
 void MigrateTaskbarPinsCallback(const base::FilePath& taskbar_path,
@@ -768,8 +787,12 @@ void MigrateTaskbarPinsCallback(const base::FilePath& taskbar_path,
     return;
   base::FilePath chrome_proxy_path(web_app::GetChromeProxyPath());
 
-  MigrateChromeAndChromeProxyShortcuts(chrome_exe, chrome_proxy_path,
-                                       taskbar_path);
+  if (!taskbar_path.empty()) {
+    MigrateChromeAndChromeProxyShortcuts(chrome_exe, chrome_proxy_path,
+                                         taskbar_path);
+  }
+  if (implicit_apps_path.empty())
+    return;
   base::FileEnumerator directory_enum(implicit_apps_path, /*recursive=*/false,
                                       base::FileEnumerator::DIRECTORIES);
   for (base::FilePath implicit_app_sub_directory = directory_enum.Next();
@@ -788,9 +811,10 @@ void GetIsPinnedToTaskbarState(
 
 int MigrateShortcutsInPathInternal(const base::FilePath& chrome_exe,
                                    const base::FilePath& path) {
-  // Mitigate the issues caused by loading DLLs on a background thread
-  // (http://crbug/973868).
-  base::ScopedThreadMayLoadLibraryOnBackgroundThread priority_boost(FROM_HERE);
+  // This function may load DLL's so ensure it is running in a foreground
+  // thread.
+  DCHECK_GT(base::PlatformThread::GetCurrentThreadPriority(),
+            base::ThreadPriority::BACKGROUND);
 
   // Enumerate all pinned shortcuts in the given path directly.
   base::FileEnumerator shortcuts_enum(
@@ -836,8 +860,6 @@ int MigrateShortcutsInPathInternal(const base::FilePath& chrome_exe,
     // |updated_properties|.
     base::win::ShortcutProperties updated_properties;
 
-    base::string16 current_app_id;
-
     // Validate the existing app id for the shortcut.
     Microsoft::WRL::ComPtr<IPropertyStore> property_store;
     propvariant.Reset();
@@ -855,8 +877,7 @@ int MigrateShortcutsInPathInternal(const base::FilePath& chrome_exe,
             updated_properties.set_app_id(expected_app_id);
           break;
         case VT_LPWSTR:
-          current_app_id = base::string16(propvariant.get().pwszVal);
-          if (expected_app_id != current_app_id)
+          if (expected_app_id != base::string16(propvariant.get().pwszVal))
             updated_properties.set_app_id(expected_app_id);
           break;
         default:
@@ -870,7 +891,7 @@ int MigrateShortcutsInPathInternal(const base::FilePath& chrome_exe,
     // |default_chromium_model_id|).
     base::string16 default_chromium_model_id(
         ShellUtil::GetBrowserModelId(is_per_user_install));
-    if (current_app_id == default_chromium_model_id) {
+    if (expected_app_id == default_chromium_model_id) {
       propvariant.Reset();
       if (property_store->GetValue(PKEY_AppUserModel_IsDualMode,
                                    propvariant.Receive()) != S_OK) {

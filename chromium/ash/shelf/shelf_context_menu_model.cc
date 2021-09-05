@@ -64,13 +64,13 @@ bool ShelfContextMenuModel::IsCommandIdChecked(int command_id) const {
         Shell::Get()->session_controller()->GetLastActiveUserPrefService();
     const ShelfAlignment alignment = GetShelfAlignmentPref(prefs, display_id_);
     if (command_id == MENU_ALIGNMENT_LEFT)
-      return alignment == SHELF_ALIGNMENT_LEFT;
+      return alignment == ShelfAlignment::kLeft;
     if (command_id == MENU_ALIGNMENT_BOTTOM) {
-      return alignment == SHELF_ALIGNMENT_BOTTOM ||
-             alignment == SHELF_ALIGNMENT_BOTTOM_LOCKED;
+      return alignment == ShelfAlignment::kBottom ||
+             alignment == ShelfAlignment::kBottomLocked;
     }
     if (command_id == MENU_ALIGNMENT_RIGHT)
-      return alignment == SHELF_ALIGNMENT_RIGHT;
+      return alignment == ShelfAlignment::kRight;
   }
 
   return SimpleMenuModel::Delegate::IsCommandIdChecked(command_id);
@@ -92,24 +92,24 @@ void ShelfContextMenuModel::ExecuteCommand(int command_id, int event_flags) {
       SetShelfAutoHideBehaviorPref(
           prefs, display_id_,
           GetShelfAutoHideBehaviorPref(prefs, display_id_) ==
-                  SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS
-              ? SHELF_AUTO_HIDE_BEHAVIOR_NEVER
-              : SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
+                  ShelfAutoHideBehavior::kAlways
+              ? ShelfAutoHideBehavior::kNever
+              : ShelfAutoHideBehavior::kAlways);
       break;
     case MENU_ALIGNMENT_LEFT:
       DCHECK(!is_tablet_mode);
       metrics->RecordUserMetricsAction(UMA_SHELF_ALIGNMENT_SET_LEFT);
-      SetShelfAlignmentPref(prefs, display_id_, SHELF_ALIGNMENT_LEFT);
+      SetShelfAlignmentPref(prefs, display_id_, ShelfAlignment::kLeft);
       break;
     case MENU_ALIGNMENT_RIGHT:
       DCHECK(!is_tablet_mode);
       metrics->RecordUserMetricsAction(UMA_SHELF_ALIGNMENT_SET_RIGHT);
-      SetShelfAlignmentPref(prefs, display_id_, SHELF_ALIGNMENT_RIGHT);
+      SetShelfAlignmentPref(prefs, display_id_, ShelfAlignment::kRight);
       break;
     case MENU_ALIGNMENT_BOTTOM:
       DCHECK(!is_tablet_mode);
       metrics->RecordUserMetricsAction(UMA_SHELF_ALIGNMENT_SET_BOTTOM);
-      SetShelfAlignmentPref(prefs, display_id_, SHELF_ALIGNMENT_BOTTOM);
+      SetShelfAlignmentPref(prefs, display_id_, ShelfAlignment::kBottom);
       break;
     case MENU_CHANGE_WALLPAPER:
       shell->wallpaper_controller()->OpenWallpaperPickerIfAllowed();
@@ -117,9 +117,7 @@ void ShelfContextMenuModel::ExecuteCommand(int command_id, int event_flags) {
     default:
       if (delegate_) {
         if (IsCommandIdAnAppLaunch(command_id)) {
-          shell->app_list_controller()->RecordShelfAppLaunched(
-              base::nullopt /* recorded_app_list_view_state */,
-              base::nullopt /* recorded_home_launcher_shown */);
+          shell->app_list_controller()->RecordShelfAppLaunched();
         }
 
         delegate_->ExecuteCommand(true, command_id, event_flags, display_id_);
@@ -140,7 +138,7 @@ void ShelfContextMenuModel::AddShelfAndWallpaperItems() {
   if (CanUserModifyShelfAutoHide(prefs) && !IsFullScreenMode(display_id_)) {
     const bool is_autohide_set =
         GetShelfAutoHideBehaviorPref(prefs, display_id_) ==
-        SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS;
+        ShelfAutoHideBehavior::kAlways;
     auto string_id = is_autohide_set
                          ? IDS_ASH_SHELF_CONTEXT_MENU_ALWAYS_SHOW_SHELF
                          : IDS_ASH_SHELF_CONTEXT_MENU_AUTO_HIDE;

@@ -60,6 +60,10 @@ const std::vector<base::string16> kAllowedLogStringsForSanitizationCheck = {
 
     // IsFilePresentLocally in file_path_sanitization.cc fits Case 1.
     L"isfilepresentlocally failed to get attributes: ",
+
+    // The cleaner/reporter process spawned by this test spawns a sandbox with
+    // the test-logging-path flag pointing to a temporary directory.
+    L"--test-logging-path=",
 };
 
 // Parse to |report| the serialized report dumped by |executable_name|. Return
@@ -338,7 +342,7 @@ class CleanerTest
       chrome_cleaner::ExecutionMode execution_mode =
           chrome_cleaner::ExecutionMode::kNone) {
     base::CommandLine command_line(executable_path);
-    chrome_cleaner::AppendTestSwitches(&command_line);
+    chrome_cleaner::AppendTestSwitches(temp_dir_, &command_line);
     command_line.AppendSwitchASCII(
         chrome_cleaner::kEngineSwitch,
         base::NumberToString(static_cast<int>(engine_)));
@@ -354,6 +358,14 @@ class CleanerTest
       command_line.AppendSwitch(
           chrome_cleaner::kRunWithoutSandboxForTestingSwitch);
     }
+
+    // Scan only the SHELL location, where test UwS are created. This has little
+    // impact on the TestOnly engine (which is very fast) but a large impact
+    // with the real engine. Official cleaner builds still scan all locations
+    // in case there's an issue with the other scan locations.
+    command_line.AppendSwitchASCII(
+        chrome_cleaner::kScanLocationsSwitch,
+        base::NumberToString(chrome_cleaner::UwS::FOUND_IN_SHELL));
 #endif  // BUILDFLAG(IS_OFFICIAL_CHROME_CLEANER_BUILD)
 
     return command_line;
@@ -500,22 +512,22 @@ TEST_P(CleanerTest, NoUnsanitizedPaths) {
 }
 
 // Test all features with the TestOnly engine, which is quick.
-INSTANTIATE_TEST_CASE_P(AllFeatures,
-                        CleanerTest,
-                        Combine(ValuesIn(kAllTestFeatures),
-                                Values(Engine::TEST_ONLY)),
-                        chrome_cleaner::GetParamNameForTest());
+INSTANTIATE_TEST_SUITE_P(AllFeatures,
+                         CleanerTest,
+                         Combine(ValuesIn(kAllTestFeatures),
+                                 Values(Engine::TEST_ONLY)),
+                         chrome_cleaner::GetParamNameForTest());
 
 #if BUILDFLAG(IS_INTERNAL_CHROME_CLEANER_BUILD)
 // The full scan with the ESET engine takes too long to test more than once so
 // don't enable any test features. In fact, don't test it in debug builds since
 // they are slower.
 #ifdef NDEBUG
-INSTANTIATE_TEST_CASE_P(EsetFeatures,
-                        CleanerTest,
-                        Combine(Values(TestFeatures::kNone),
-                                Values(Engine::ESET)),
-                        chrome_cleaner::GetParamNameForTest());
+INSTANTIATE_TEST_SUITE_P(EsetFeatures,
+                         CleanerTest,
+                         Combine(Values(TestFeatures::kNone),
+                                 Values(Engine::ESET)),
+                         chrome_cleaner::GetParamNameForTest());
 #endif  // NDEBUG
 #endif  // BUILDFLAG(IS_INTERNAL_CHROME_CLEANER_BUILD)
 

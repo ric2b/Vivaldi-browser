@@ -6,7 +6,7 @@
 
 #include "base/android/jni_android.h"
 #include "base/memory/ptr_util.h"
-#include "chrome/android/public/profiles/jni_headers/Profile_jni.h"
+#include "chrome/browser/profiles/android/jni_headers/Profile_jni.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_destroyer.h"
 #include "chrome/browser/profiles/profile_key.h"
@@ -50,7 +50,8 @@ Profile* ProfileAndroid::FromProfileAndroid(const JavaRef<jobject>& obj) {
 }
 
 // static
-ScopedJavaLocalRef<jobject> ProfileAndroid::GetLastUsedProfile(JNIEnv* env) {
+ScopedJavaLocalRef<jobject> ProfileAndroid::GetLastUsedRegularProfile(
+    JNIEnv* env) {
   Profile* profile = ProfileManager::GetLastUsedProfile();
   if (profile == NULL) {
     NOTREACHED() << "Profile not found.";
@@ -122,8 +123,8 @@ void ProfileAndroid::Wipe(JNIEnv* env, const JavaParamRef<jobject>& obj) {
 }
 
 // static
-ScopedJavaLocalRef<jobject> JNI_Profile_GetLastUsedProfile(JNIEnv* env) {
-  return ProfileAndroid::GetLastUsedProfile(env);
+ScopedJavaLocalRef<jobject> JNI_Profile_GetLastUsedRegularProfile(JNIEnv* env) {
+  return ProfileAndroid::GetLastUsedRegularProfile(env);
 }
 
 // static

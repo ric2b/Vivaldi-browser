@@ -8,17 +8,20 @@
 
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/command_updater.h"
 #include "chrome/browser/themes/theme_properties.h"
+#include "chrome/browser/ui/views/toolbar/button_utils.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/vector_icons/vector_icons.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/models/simple_menu_model.h"
+#include "ui/base/pointer/touch_ui_controller.h"
 #include "ui/base/theme_provider.h"
 #include "ui/base/window_open_disposition.h"
+#include "ui/gfx/color_palette.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/metrics.h"
 #include "ui/views/widget/widget.h"
@@ -32,8 +35,23 @@ const int kReloadMenuItems[]  = {
   IDS_RELOAD_MENU_EMPTY_AND_HARD_RELOAD_ITEM,
 };
 
-const gfx::VectorIcon& GetIconForMode(bool is_reload) {
-  if (ui::MaterialDesignController::touch_ui())
+const gfx::VectorIcon& GetIconForMode(ReloadButton::IconStyle icon_style,
+                                      bool is_reload) {
+  const bool touch_ui = ui::TouchUiController::Get()->touch_ui();
+
+#if defined(OS_WIN)
+  if (icon_style == ReloadButton::IconStyle::kMinimalUi &&
+      UseWindowsIconsForMinimalUI()) {
+    if (touch_ui) {
+      return is_reload ? kReloadWindowsTouchIcon
+                       : kNavigateStopWindowsTouchIcon;
+    }
+
+    return is_reload ? kReloadWindowsIcon : kNavigateStopWindowsIcon;
+  }
+#endif
+
+  if (touch_ui)
     return is_reload ? kReloadTouchIcon : kNavigateStopTouchIcon;
 
   return is_reload ? vector_icons::kReloadIcon : kNavigateStopIcon;
@@ -46,9 +64,11 @@ const gfx::VectorIcon& GetIconForMode(bool is_reload) {
 // static
 const char ReloadButton::kViewClassName[] = "ReloadButton";
 
-ReloadButton::ReloadButton(CommandUpdater* command_updater)
+ReloadButton::ReloadButton(CommandUpdater* command_updater,
+                           IconStyle icon_style)
     : ToolbarButton(this, CreateMenuModel(), nullptr),
       command_updater_(command_updater),
+      icon_style_(icon_style),
       double_click_timer_delay_(
           base::TimeDelta::FromMilliseconds(views::GetDoubleClickInterval())),
       mode_switch_timer_delay_(base::TimeDelta::FromMilliseconds(1350)) {}
@@ -66,8 +86,8 @@ void ReloadButton::ChangeMode(Mode mode, bool force) {
                              : (visible_mode_ != Mode::kStop))) {
     double_click_timer_.Stop();
     mode_switch_timer_.Stop();
-    if (mode != visible_mode_)
-      ChangeModeInternal(mode);
+    visible_mode_ = mode;
+    UpdateIcon();
     SetEnabled(true);
 
     // We want to disable the button if we're preventing a change from stop to
@@ -87,8 +107,32 @@ void ReloadButton::ChangeMode(Mode mode, bool force) {
   }
 }
 
-void ReloadButton::LoadImages() {
-  ChangeModeInternal(visible_mode_);
+void ReloadButton::SetColors(SkColor normal_color, SkColor disabled_color) {
+  normal_color_ = normal_color;
+  disabled_color_ = disabled_color;
+  UpdateIcon();
+}
+
+void ReloadButton::OnThemeChanged() {
+  ToolbarButton::OnThemeChanged();
+  UpdateIcon();
+}
+
+void ReloadButton::UpdateIcon() {
+  // There's no reason to make graphical changes when we're not yet in a
+  // Widget.  This function will be called again after widget addition.
+  if (!GetWidget())
+    return;
+
+  const gfx::VectorIcon& icon =
+      GetIconForMode(icon_style_, visible_mode_ == Mode::kReload);
+  DCHECK_EQ(normal_color_.has_value(), disabled_color_.has_value());
+  if (normal_color_.has_value()) {
+    UpdateIconsWithColors(icon, normal_color_.value(), normal_color_.value(),
+                          normal_color_.value(), disabled_color_.value());
+  } else {
+    UpdateIconsWithStandardColors(icon);
+  }
 }
 
 void ReloadButton::OnMouseExited(const ui::MouseEvent& event) {
@@ -221,25 +265,6 @@ void ReloadButton::ExecuteBrowserCommand(int command, int event_flags) {
     return;
   command_updater_->ExecuteCommandWithDisposition(
       command, ui::DispositionFromEventFlags(event_flags));
-}
-
-void ReloadButton::ChangeModeInternal(Mode mode) {
-  const ui::ThemeProvider* tp = GetThemeProvider();
-  // |tp| can be NULL in unit tests.
-  if (tp) {
-    const gfx::VectorIcon& icon = GetIconForMode(mode == Mode::kReload);
-    const SkColor normal_color =
-        tp->GetColor(ThemeProperties::COLOR_TOOLBAR_BUTTON_ICON);
-    const SkColor disabled_color =
-        tp->GetColor(ThemeProperties::COLOR_TOOLBAR_BUTTON_ICON_INACTIVE);
-    SetImage(views::Button::STATE_NORMAL,
-             gfx::CreateVectorIcon(icon, normal_color));
-    SetImage(views::Button::STATE_DISABLED,
-             gfx::CreateVectorIcon(icon, disabled_color));
-  }
-
-  visible_mode_ = mode;
-  SchedulePaint();
 }
 
 void ReloadButton::OnDoubleClickTimer() {

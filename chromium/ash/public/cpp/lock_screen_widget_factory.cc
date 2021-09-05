@@ -42,8 +42,9 @@ std::unique_ptr<views::Widget> CreateLockScreenWidget(aura::Window* parent) {
   // Owned by Widget.
   params.delegate = new LockScreenWidgetDelegate(widget.get());
   params.show_state = ui::SHOW_STATE_FULLSCREEN;
-  params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
+  params.opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;
   params.parent = parent;
+  params.name = "LockScreenWidget";
   widget->Init(std::move(params));
   widget->SetVisibilityAnimationTransition(views::Widget::ANIMATE_NONE);
   return widget;

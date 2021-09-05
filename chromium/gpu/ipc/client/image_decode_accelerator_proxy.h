@@ -9,6 +9,7 @@
 #include "base/synchronization/lock.h"
 #include "base/thread_annotations.h"
 #include "gpu/command_buffer/client/image_decode_accelerator_interface.h"
+#include "gpu/gpu_export.h"
 
 namespace gpu {
 class GpuChannelHost;
@@ -45,7 +46,8 @@ class GpuChannelHost;
 // Objects of this class are thread-safe.
 //
 // TODO(andrescj): actually put the decoder's capabilities in GpuInfo.
-class ImageDecodeAcceleratorProxy : public ImageDecodeAcceleratorInterface {
+class GPU_EXPORT ImageDecodeAcceleratorProxy
+    : public ImageDecodeAcceleratorInterface {
  public:
   ImageDecodeAcceleratorProxy(GpuChannelHost* host, int32_t route_id);
   ~ImageDecodeAcceleratorProxy() override;
@@ -53,7 +55,6 @@ class ImageDecodeAcceleratorProxy : public ImageDecodeAcceleratorInterface {
   // Determines if |image_metadata| corresponds to an image that can be decoded
   // using hardware decode acceleration. The ScheduleImageDecode() method should
   // only be called for images for which IsImageSupported() returns true.
-  // Otherwise, the client faces a GPU channel teardown if the decode fails.
   bool IsImageSupported(
       const cc::ImageHeaderMetadata* image_metadata) const override;
 

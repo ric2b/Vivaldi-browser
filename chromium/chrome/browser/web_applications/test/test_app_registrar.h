@@ -10,7 +10,7 @@
 #include "base/optional.h"
 #include "chrome/browser/web_applications/components/app_registrar.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
-#include "chrome/browser/web_applications/components/web_app_helpers.h"
+#include "chrome/browser/web_applications/components/web_app_id.h"
 #include "url/gurl.h"
 
 namespace web_app {
@@ -33,15 +33,9 @@ class TestAppRegistrar : public AppRegistrar {
   void RemoveExternalApp(const AppId& app_id);
   void RemoveExternalAppByInstallUrl(const GURL& install_url);
 
-  // Uninstall the app and add |app_id| to the map of external extensions
-  // uninstalled by the user. May be called on an app that isn't installed to
-  // simulate that the app was uninstalled previously.
-  void SimulateExternalAppUninstalledByUser(const AppId& app_id);
-
   // AppRegistrar
   bool IsInstalled(const AppId& app_id) const override;
   bool IsLocallyInstalled(const AppId& app_id) const override;
-  bool WasExternalAppUninstalledByUser(const AppId& app_id) const override;
   bool WasInstalledByUser(const AppId& app_id) const override;
   std::map<AppId, GURL> GetExternallyInstalledApps(
       ExternalInstallSource install_source) const override;
@@ -50,20 +44,23 @@ class TestAppRegistrar : public AppRegistrar {
   bool HasExternalAppWithInstallSource(
       const AppId& app_id,
       ExternalInstallSource install_source) const override;
-  base::Optional<AppId> FindAppWithUrlInScope(const GURL& url) const override;
   int CountUserInstalledApps() const override;
   std::string GetAppShortName(const AppId& app_id) const override;
   std::string GetAppDescription(const AppId& app_id) const override;
   base::Optional<SkColor> GetAppThemeColor(const AppId& app_id) const override;
   const GURL& GetAppLaunchURL(const AppId& app_id) const override;
-  base::Optional<GURL> GetAppScope(const AppId& app_id) const override;
-  blink::mojom::DisplayMode GetAppDisplayMode(
-      const web_app::AppId& app_id) const override;
+  base::Optional<GURL> GetAppScopeInternal(const AppId& app_id) const override;
+  DisplayMode GetAppDisplayMode(const AppId& app_id) const override;
+  DisplayMode GetAppUserDisplayMode(const AppId& app_id) const override;
+  std::vector<WebApplicationIconInfo> GetAppIconInfos(
+      const AppId& app_id) const override;
+  std::vector<SquareSizePx> GetAppDownloadedIconSizes(
+      const AppId& app_id) const override;
   std::vector<AppId> GetAppIds() const override;
+  WebAppRegistrar* AsWebAppRegistrar() override;
 
  private:
   std::map<AppId, AppInfo> installed_apps_;
-  std::set<AppId> user_uninstalled_external_apps_;
 };
 
 }  // namespace web_app

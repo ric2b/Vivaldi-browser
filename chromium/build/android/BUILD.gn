@@ -8,8 +8,6 @@ import("//build/config/python.gni")
 import("//build_overrides/build.gni")
 
 if (enable_java_templates) {
-  sun_tools_jar_path = "$root_gen_dir/sun_tools_jar/tools.jar"
-
   # Create or update the API versions cache if necessary by running a
   # functionally empty lint task. This prevents racy creation of the
   # cache while linting java targets in android_lint.
@@ -18,47 +16,24 @@ if (enable_java_templates) {
     create_cache = true
   }
 
-  action("find_sun_tools_jar") {
-    script = "//build/android/gyp/find_sun_tools_jar.py"
-    depfile = "$target_gen_dir/$target_name.d"
-    outputs = [
-      sun_tools_jar_path,
-    ]
-    args = [
-      "--depfile",
-      rebase_path(depfile, root_build_dir),
-      "--output",
-      rebase_path(sun_tools_jar_path, root_build_dir),
-    ]
-  }
-
-  java_prebuilt("sun_tools_java") {
-    jar_path = sun_tools_jar_path
-    deps = [
-      ":find_sun_tools_jar",
-    ]
-  }
-
   # Write to a file some GN vars that are useful to scripts that use the output
   # directory. Format is chosen as easliy importable by both python and bash.
   _lines = [
     "android_sdk_build_tools=" +
         rebase_path(android_sdk_build_tools, root_build_dir),
     "android_sdk_build_tools_version=$android_sdk_build_tools_version",
-    "android_sdk_tools_version_suffix=$android_sdk_tools_version_suffix",
     "android_sdk_root=" + rebase_path(android_sdk_root, root_build_dir),
     "android_sdk_version=$android_sdk_version",
     "android_ndk_root=" + rebase_path(android_ndk_root, root_build_dir),
     "android_tool_prefix=" + rebase_path(android_tool_prefix, root_build_dir),
+    "android_configuration_failure_dir=" +
+        rebase_path(android_configuration_failure_dir, root_build_dir),
   ]
   if (defined(android_secondary_abi_cpu)) {
     _secondary_label_info =
         get_label_info(":foo($android_secondary_abi_toolchain)", "root_out_dir")
     _lines += [ "android_secondary_abi_toolchain=" +
                 rebase_path(_secondary_label_info, root_build_dir) ]
-  }
-  if (defined(build_apk_secondary_abi)) {
-    _lines += [ "build_apk_secondary_abi=$build_apk_secondary_abi" ]
   }
   write_file(android_build_vars, _lines)
 }
@@ -86,12 +61,10 @@ python_library("test_runner_py") {
     "${android_sdk_build_tools}/split-select",
     "${android_sdk_root}/platform-tools/adb",
   ]
-  data_deps = [
-    ":devil_chromium_py",
-  ]
+  data_deps = [ ":devil_chromium_py" ]
   if (build_with_chromium) {
     data += [
-      "//third_party/android_build_tools/bundletool/bundletool-all-0.10.3.jar",
+      "//third_party/android_build_tools/bundletool/bundletool-all-0.13.3.jar",
       "//tools/android/avd/proto/",
     ]
     data_deps +=
@@ -103,9 +76,7 @@ python_library("test_runner_py") {
 
   # Proguard is needed only when using apks (rather than native executables).
   if (enable_java_templates) {
-    deps = [
-      "//third_party/proguard:proguard603_java",
-    ]
+    deps = [ "//build/android/stacktrace:java_deobfuscate" ]
   }
 }
 
@@ -128,26 +99,23 @@ python_library("resource_sizes_py") {
 python_library("bundle_wrapper_script_py") {
   pydeps_file = "gyp/create_bundle_wrapper_script.pydeps"
   data = [
-    "//third_party/android_build_tools/bundletool/bundletool-all-0.10.3.jar",
+    "//third_party/android_build_tools/bundletool/bundletool-all-0.13.3.jar",
   ]
 }
 
-# Create wrapper scripts in out/bin that takes care of setting the
-# --output-directory.
-_scripts_to_wrap = [
-  "asan_symbolize.py",
-  "tombstones.py",
-]
+# Tools necessary for symbolizing tombstones or stack traces that are output to
+# logcat.
+# Hidden behind build_with_chromium because some third party repos that use
+# //build don't pull in //third_party/android_platform.
+if (build_with_chromium) {
+  group("stack_tools") {
+    data = [
+      "tombstones.py",
+      "pylib/symbols/",
+      "stacktrace/",
+    ]
 
-_wrapper_targets = []
-foreach(script, _scripts_to_wrap) {
-  _target_name = get_path_info(script, "name") + "_wrapper"
-  _wrapper_targets += [ ":$_target_name" ]
-  wrapper_script(_target_name) {
-    target = script
+    data_deps =
+        [ "//third_party/android_platform/development/scripts:stack_py" ]
   }
-}
-
-group("wrapper_scripts") {
-  deps = _wrapper_targets
 }

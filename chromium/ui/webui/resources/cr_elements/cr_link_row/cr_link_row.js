@@ -44,6 +44,8 @@ Polymer({
       value: false,
     },
 
+    roleDescription: String,
+
     /** @private */
     hideLabelWrapper_: {
       type: Boolean,
@@ -61,7 +63,7 @@ Polymer({
     this.$.icon.noink = value;
   },
 
-  focus: function() {
+  focus() {
     this.$.icon.focus();
   },
 
@@ -69,7 +71,7 @@ Polymer({
    * @return {boolean}
    * @private
    */
-  computeHideLabelWrapper_: function() {
+  computeHideLabelWrapper_() {
     return !(this.label || this.usingSlottedLabel);
   },
 
@@ -77,7 +79,7 @@ Polymer({
    * @return {string}
    * @private
    */
-  getIcon_: function() {
+  getIcon_() {
     return this.external ? 'cr:open-in-new' : 'cr:arrow-right';
   },
 });

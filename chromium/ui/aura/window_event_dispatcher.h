@@ -27,6 +27,7 @@
 #include "ui/events/fraction_of_time_without_user_input_recorder.h"
 #include "ui/events/gestures/gesture_recognizer.h"
 #include "ui/events/gestures/gesture_types.h"
+#include "ui/events/types/event_type.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/native_widget_types.h"
 
@@ -57,13 +58,8 @@ class AURA_EXPORT WindowEventDispatcher : public ui::EventProcessor,
                                           public WindowObserver,
                                           public EnvObserver {
  public:
-  // |are_events_in_pixels| indicates if events are
-  // received in pixels. If |are_events_in_pixels| is false, events are
-  // received in DIPs.
-  WindowEventDispatcher(WindowTreeHost* host, bool are_events_in_pixels);
+  explicit WindowEventDispatcher(WindowTreeHost* host);
   ~WindowEventDispatcher() override;
-
-  bool are_events_in_pixels() const { return are_events_in_pixels_; }
 
   // Stops dispatching/synthesizing mouse events.
   void Shutdown();
@@ -288,8 +284,6 @@ class AURA_EXPORT WindowEventDispatcher : public ui::EventProcessor,
   ui::EventDispatchDetails PreDispatchKeyEvent(ui::KeyEvent* event);
 
   WindowTreeHost* host_;
-
-  const bool are_events_in_pixels_;
 
   Window* mouse_pressed_handler_ = nullptr;
   Window* mouse_moved_handler_ = nullptr;

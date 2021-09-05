@@ -8,15 +8,21 @@ import android.net.Uri;
 import android.text.TextUtils;
 import android.util.Pair;
 
+import androidx.annotation.Nullable;
+import androidx.browser.trusted.sharing.ShareData;
+import androidx.browser.trusted.sharing.ShareTarget;
+
+import org.chromium.base.Function;
 import org.chromium.base.Promise;
+import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider;
 import org.chromium.chrome.browser.browserservices.TrustedWebActivityUmaRecorder;
 import org.chromium.chrome.browser.browserservices.TrustedWebActivityUmaRecorder.ShareRequestMethod;
-import org.chromium.chrome.browser.browserservices.trustedwebactivityui.controller.TrustedWebActivityVerifier;
-import org.chromium.chrome.browser.customtabs.CustomTabIntentDataProvider;
+import org.chromium.chrome.browser.browserservices.trustedwebactivityui.controller.Verifier;
 import org.chromium.chrome.browser.customtabs.content.CustomTabActivityNavigationController;
 import org.chromium.chrome.browser.customtabs.content.CustomTabActivityTabProvider;
 import org.chromium.chrome.browser.dependency_injection.ActivityScope;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.webapps.WebApkExtras;
 import org.chromium.chrome.browser.webapps.WebApkInfo;
 import org.chromium.chrome.browser.webapps.WebApkPostShareTargetNavigator;
 
@@ -24,9 +30,6 @@ import java.util.ArrayList;
 import java.util.Locale;
 
 import javax.inject.Inject;
-
-import androidx.browser.trusted.sharing.ShareData;
-import androidx.browser.trusted.sharing.ShareTarget;
 
 /**
  * Handles sharing intents coming to Trusted Web Activities.
@@ -36,53 +39,57 @@ public class TwaSharingController {
     private final CustomTabActivityTabProvider mTabProvider;
     private final CustomTabActivityNavigationController mNavigationController;
     private final WebApkPostShareTargetNavigator mPostNavigator;
-    private final TrustedWebActivityVerifier mVerifier;
+    private final Verifier mVerifierDelegate;
     private final TrustedWebActivityUmaRecorder mUmaRecorder;
 
     @Inject
     public TwaSharingController(CustomTabActivityTabProvider tabProvider,
             CustomTabActivityNavigationController navigationController,
-            WebApkPostShareTargetNavigator postNavigator,
-            TrustedWebActivityVerifier verifier,
+            WebApkPostShareTargetNavigator postNavigator, Verifier verifierDelegate,
             TrustedWebActivityUmaRecorder umaRecorder) {
         mTabProvider = tabProvider;
         mNavigationController = navigationController;
         mPostNavigator = postNavigator;
-        mVerifier = verifier;
+        mVerifierDelegate = verifierDelegate;
         mUmaRecorder = umaRecorder;
     }
 
     /**
-     * Checks whether the incoming intent (represented by a {@link CustomTabIntentDataProvider})
-     * is a sharing intent and attempts to perform the sharing.
+     * Checks whether the incoming intent (represented by a
+     * {@link BrowserServicesIntentDataProvider}) is a sharing intent and attempts to perform the
+     * sharing.
      *
      * Returns a {@link Promise<Boolean>} with a boolean telling whether sharing was successful.
      */
-    public Promise<Boolean> deliverToShareTarget(CustomTabIntentDataProvider intentDataProvider) {
+    public Promise<Boolean> deliverToShareTarget(
+            BrowserServicesIntentDataProvider intentDataProvider) {
         ShareData shareData = intentDataProvider.getShareData();
-        ShareTarget shareTarget = intentDataProvider.getShareTarget();
+        WebApkExtras webApkExtras = intentDataProvider.getWebApkExtras();
+        WebApkInfo.ShareTarget shareTarget = (webApkExtras != null)
+                ? webApkExtras.shareTarget
+                : toShareTargetInternal(intentDataProvider.getShareTarget());
         if (shareTarget == null || shareData == null) {
             return Promise.fulfilled(false);
         }
 
-        return mVerifier.verifyOrigin(shareTarget.action).then(
-                (Promise.Function<Boolean, Boolean>) (verified) -> {
-            if (!verified) {
-                return false;
-            }
-            WebApkInfo.ShareTarget target = toShareTargetInternal(shareTarget);
-            if (target.isShareMethodPost()) {
-                boolean success = sendPost(shareData, target);
-                if (success) {
-                    mUmaRecorder.recordShareTargetRequest(ShareRequestMethod.POST);
-                }
-                return success;
-            }
+        return mVerifierDelegate.verify(shareTarget.getAction())
+                .then((Function<Boolean, Boolean>) (verified) -> {
+                    if (!verified) {
+                        return false;
+                    }
+                    if (shareTarget.isShareMethodPost()) {
+                        boolean success = sendPost(shareData, shareTarget);
+                        if (success) {
+                            mUmaRecorder.recordShareTargetRequest(ShareRequestMethod.POST);
+                        }
+                        return success;
+                    }
 
-            mNavigationController.navigate(computeStartUrlForGETShareTarget(shareData, target));
-            mUmaRecorder.recordShareTargetRequest(ShareRequestMethod.GET);
-            return true;
-        });
+                    mNavigationController.navigate(
+                            computeStartUrlForGETShareTarget(shareData, shareTarget));
+                    mUmaRecorder.recordShareTargetRequest(ShareRequestMethod.GET);
+                    return true;
+                });
     }
 
     /**
@@ -90,12 +97,13 @@ public class TwaSharingController {
      * TODO(pshmakov): pull WebApkInfo.ShareTarget out of WebApkInfo and rename to
      * ShareTargetInternal. Also, replace WebApkInfo.ShareData with ShareData from TWA API.
      */
-    private WebApkInfo.ShareTarget toShareTargetInternal(ShareTarget shareTarget) {
+    private WebApkInfo.ShareTarget toShareTargetInternal(@Nullable ShareTarget shareTarget) {
+        if (shareTarget == null) return null;
+
         ShareTarget.Params params = shareTarget.params;
         String action = shareTarget.action;
         String paramTitle = params.title;
         String paramText = params.text;
-        String paramUrl = ""; // Not supported on Android
         String method = shareTarget.method;
         boolean isPost = method != null && "POST".equals(method.toUpperCase(Locale.ENGLISH));
         String encodingType = shareTarget.encodingType;
@@ -110,25 +118,18 @@ public class TwaSharingController {
             filesArray[i] = file.name;
             acceptsArray[i] =  file.acceptedTypes.toArray(new String[file.acceptedTypes.size()]);
         }
-        return new WebApkInfo.ShareTarget(action, paramTitle, paramText, paramUrl, isPost,
-                isMultipart, filesArray, acceptsArray);
+        return new WebApkInfo.ShareTarget(
+                action, paramTitle, paramText, isPost, isMultipart, filesArray, acceptsArray);
     }
 
     private boolean sendPost(ShareData shareData, WebApkInfo.ShareTarget target) {
-        WebApkInfo.ShareData webApkData = new WebApkInfo.ShareData();
-        if (shareData.uris != null) {
-            webApkData.files = new ArrayList<>(shareData.uris);
-        }
-        webApkData.subject = shareData.title;
-        webApkData.text = shareData.text;
-
         Tab tab = mTabProvider.getTab();
         if (tab == null) {
             assert false : "Null tab when sharing";
             return false;
         }
-        return mPostNavigator.navigateIfPostShareTarget(target.getAction(), target, webApkData,
-                tab.getWebContents());
+        return mPostNavigator.navigateIfPostShareTarget(
+                target.getAction(), target, shareData, tab.getWebContents());
     }
 
 
@@ -136,7 +137,6 @@ public class TwaSharingController {
     // Since the latter is in the WebAPK client code, we can't reuse it.
     private static String computeStartUrlForGETShareTarget(
             ShareData data, WebApkInfo.ShareTarget target) {
-
         // These can be null, they are checked downstream.
         ArrayList<Pair<String, String>> entryList = new ArrayList<>();
         entryList.add(new Pair<>(target.getParamTitle(), data.title));

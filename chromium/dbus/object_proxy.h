@@ -16,14 +16,11 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/sequenced_task_runner.h"
 #include "base/strings/string_piece.h"
 #include "base/time/time.h"
 #include "dbus/dbus_export.h"
 #include "dbus/object_path.h"
-
-namespace base {
-class TaskRunner;
-}  // namespace base
 
 namespace dbus {
 
@@ -86,12 +83,12 @@ class CHROME_DBUS_EXPORT ObjectProxy
       base::OnceCallback<void(Response*, ErrorResponse*)>;
 
   // Called when a signal is received. Signal* is the incoming signal.
-  using SignalCallback = base::Callback<void(Signal*)>;
+  using SignalCallback = base::RepeatingCallback<void(Signal*)>;
 
   // Called when NameOwnerChanged signal is received.
   using NameOwnerChangedCallback =
-      base::Callback<void(const std::string& old_owner,
-                          const std::string& new_owner)>;
+      base::RepeatingCallback<void(const std::string& old_owner,
+                                   const std::string& new_owner)>;
 
   // Called when the service becomes available.
   using WaitForServiceToBeAvailableCallback =
@@ -225,8 +222,9 @@ class CHROME_DBUS_EXPORT ObjectProxy
    public:
     // Designed to be created on the origin thread.
     // Both |origin_task_runner| and |callback| must not be null.
-    ReplyCallbackHolder(scoped_refptr<base::TaskRunner> origin_task_runner,
-                        ResponseOrErrorCallback callback);
+    ReplyCallbackHolder(
+        scoped_refptr<base::SequencedTaskRunner> origin_task_runner,
+        ResponseOrErrorCallback callback);
 
     // This is movable to be bound to an OnceCallback.
     ReplyCallbackHolder(ReplyCallbackHolder&& other);
@@ -241,7 +239,7 @@ class CHROME_DBUS_EXPORT ObjectProxy
     ResponseOrErrorCallback ReleaseCallback();
 
    private:
-    scoped_refptr<base::TaskRunner> origin_task_runner_;
+    scoped_refptr<base::SequencedTaskRunner> origin_task_runner_;
     ResponseOrErrorCallback callback_;
     DISALLOW_COPY_AND_ASSIGN(ReplyCallbackHolder);
   };

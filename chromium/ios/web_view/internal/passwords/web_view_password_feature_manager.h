@@ -18,7 +18,15 @@ class WebViewPasswordFeatureManager
 
   bool IsGenerationEnabled() const override;
 
-  bool ShouldCheckReuseOnLeakDetection() const override;
+  bool IsOptedInForAccountStorage() const override;
+  bool ShouldShowAccountStorageOptIn() const override;
+  void SetAccountStorageOptIn(bool opt_in) override;
+
+  bool ShouldShowPasswordStorePicker() const override;
+
+  void SetDefaultPasswordStore(
+      const autofill::PasswordForm::Store& store) override;
+  autofill::PasswordForm::Store GetDefaultPasswordStore() const override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(WebViewPasswordFeatureManager);

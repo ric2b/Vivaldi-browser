@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="fy">
+<translation id="1169602411434249000">Folgers tsjinkeare</translation>
 <translation id="1397811292916898096">Sykje mei <ph name="PRODUCT_NAME" /></translation>
+<translation id="1598449788754183301">Normale/Privee ljeppers wikselje</translation>
 <translation id="1644574205037202324">Skiednis</translation>
 <translation id="17513872634828108">Ljeppers iepenje</translation>
 <translation id="1829244130665387512">Sykje yn side</translation>
@@ -10,9 +12,11 @@
 <translation id="2633278372998075009">Privee ljeppers</translation>
 <translation id="3076631378407175873">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. Alle rjochten foarbehâlden.</translation>
 <translation id="3234355010754616171">Nije privee ljepper</translation>
+<translation id="3518985090088779359">Akseptearje en trochgean</translation>
 <translation id="3700829948786686853">Welkom by Vivaldi</translation>
 <translation id="4121750346708795461">Troch it brûken fan dit programma, geane jo akkoard mei Vivaldi's <ph name="BEGIN_LINK1" />Lisinsjeoerienkomst foar einbrûkers<ph name="END_LINK1" /> en <ph name="BEGIN_LINK2" />Privacy belied<ph name="END_LINK2" />.</translation>
 <translation id="4243710787042215766">Yn privee ljepper iepenje</translation>
+<translation id="4526803704855831732">Privee ljeppers</translation>
 <translation id="4883379392681899581">Privee modus ferlitte</translation>
 <translation id="4943872375798546930">Gjin resultaat</translation>
 <translation id="5118676864324397542"><ph name="APP_NAME" /> bewarring</translation>
@@ -31,7 +35,6 @@ Om jo syk opdracht oan te passen, druk lang om te selektearjen. Om jo sykjen te 
 <translation id="7519434535192513364">Druk op sykje is in funksje dat allinne beskikber is as Google as standert syk motor setten is yn Vivaldi. It stjoerd it selektearre wurd en de aktive side as kontekst nei Google Sykjen. Jo kinne it útskeakelje yn <ph name="BEGIN_LINK" />Ynstellingen<ph name="END_LINK" />.</translation>
 <translation id="7649070708921625228">Help</translation>
 <translation id="804786196054284061">Lisinsjeoerienkomst foar einbrûkers</translation>
-<translation id="8428213095426709021">Ynstellingen</translation>
 <translation id="8820817407110198400">Blêdwizers</translation>
 <translation id="9063523880881406963">Buroblêd webstee opfreegje útskeakelje</translation>
 <translation id="9080642952018487277">Privee modus yngean</translation>

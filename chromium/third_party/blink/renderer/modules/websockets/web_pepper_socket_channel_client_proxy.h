@@ -26,10 +26,6 @@ class WebPepperSocketChannelClientProxy final
   USING_GARBAGE_COLLECTED_MIXIN(WebPepperSocketChannelClientProxy);
 
  public:
-  static WebPepperSocketChannelClientProxy* Create(WebPepperSocketImpl* impl) {
-    return MakeGarbageCollected<WebPepperSocketChannelClientProxy>(impl);
-  }
-
   explicit WebPepperSocketChannelClientProxy(WebPepperSocketImpl* impl)
       : impl_(impl) {}
 
@@ -64,7 +60,7 @@ class WebPepperSocketChannelClientProxy final
     impl->DidClose(status, code, reason);
   }
 
-  void Trace(blink::Visitor* visitor) override {
+  void Trace(Visitor* visitor) override {
     WebSocketChannelClient::Trace(visitor);
   }
 

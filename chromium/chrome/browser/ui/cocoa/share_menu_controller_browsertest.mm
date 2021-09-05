@@ -11,7 +11,6 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/cocoa/test/cocoa_profile_test.h"
 #import "chrome/browser/ui/cocoa/test/cocoa_test_helper.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_paths.h"
@@ -36,7 +35,7 @@
 // don't appear to be present when inheriting from vanilla
 // |NSSharingService|.
 @synthesize subject;
-@synthesize sharedItem = sharedItem_;
+@synthesize sharedItem = _sharedItem;
 
 - (void)performWithItems:(NSArray*)items {
   [self setSharedItem:[items firstObject]];

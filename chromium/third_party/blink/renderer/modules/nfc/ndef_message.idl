@@ -7,10 +7,8 @@
 [
     RuntimeEnabled=WebNFC,
     SecureContext,
-    Constructor(NDEFMessageInit messageInit),
-    RaisesException=Constructor,
     Exposed=Window
 ] interface NDEFMessage {
-    readonly attribute USVString url;
+    [CallWith=ExecutionContext, RaisesException] constructor(NDEFMessageInit messageInit);
     readonly attribute FrozenArray<NDEFRecord> records;
 };

@@ -75,7 +75,7 @@ syncer::SyncDataList ToSyncerSyncDataList(
   return result;
 }
 
-static_assert(extensions::disable_reason::DISABLE_REASON_LAST == (1LL << 17),
+static_assert(extensions::disable_reason::DISABLE_REASON_LAST == (1LL << 18),
               "Please consider whether your new disable reason should be"
               " syncable, and if so update this bitmask accordingly!");
 const int kKnownSyncableDisableReasons =
@@ -203,7 +203,7 @@ void ExtensionSyncService::StopSyncing(syncer::ModelType type) {
   GetSyncBundle(type)->Reset();
 }
 
-syncer::SyncDataList ExtensionSyncService::GetAllSyncData(
+syncer::SyncDataList ExtensionSyncService::GetAllSyncDataForTesting(
     syncer::ModelType type) const {
   const SyncBundle* bundle = GetSyncBundle(type);
   if (!bundle->IsSyncing())
@@ -255,21 +255,17 @@ ExtensionSyncData ExtensionSyncService::CreateSyncData(
   bool incognito_enabled = extensions::util::IsIncognitoEnabled(id, profile_);
   bool remote_install = extension_prefs->HasDisableReason(
       id, extensions::disable_reason::DISABLE_REMOTE_INSTALL);
-  bool installed_by_custodian =
-      extensions::util::WasInstalledByCustodian(id, profile_);
   AppSorting* app_sorting = ExtensionSystem::Get(profile_)->app_sorting();
 
   ExtensionSyncData result =
       extension.is_app()
           ? ExtensionSyncData(
                 extension, enabled, disable_reasons, incognito_enabled,
-                remote_install, installed_by_custodian,
-                app_sorting->GetAppLaunchOrdinal(id),
+                remote_install, app_sorting->GetAppLaunchOrdinal(id),
                 app_sorting->GetPageOrdinal(id),
                 extensions::GetLaunchTypePrefValue(extension_prefs, id))
           : ExtensionSyncData(extension, enabled, disable_reasons,
-                              incognito_enabled, remote_install,
-                              installed_by_custodian);
+                              incognito_enabled, remote_install);
 
   // If there's a pending update, send the new version to sync instead of the
   // installed one.
@@ -305,11 +301,6 @@ void ExtensionSyncService::ApplySyncData(
   // Ignore any pref change notifications etc. while we're applying incoming
   // sync data, so that we don't end up notifying ourselves.
   base::AutoReset<bool> ignore_updates(&ignore_updates_, true);
-
-  // Note: this may cause an existing version of the extension to be reloaded.
-  extensions::util::SetWasInstalledByCustodian(
-      extension_sync_data.id(), profile_,
-      extension_sync_data.installed_by_custodian());
 
   syncer::ModelType type = extension_sync_data.is_app() ? syncer::APPS
                                                         : syncer::EXTENSIONS;
@@ -539,16 +530,17 @@ void ExtensionSyncService::ApplyBookmarkAppSyncData(
   for (const auto& icon : extension_sync_data.linked_icons()) {
     WebApplicationIconInfo icon_info;
     icon_info.url = icon.url;
-    icon_info.width = icon.size;
-    icon_info.height = icon.size;
-    web_app_info->icons.push_back(icon_info);
+    icon_info.square_size_px = icon.size;
+    web_app_info->icon_infos.push_back(icon_info);
   }
 
   auto* provider = web_app::WebAppProviderBase::GetProviderBase(profile_);
-  DCHECK(provider);
-
-  provider->install_manager().InstallWebAppFromSync(
-      extension_sync_data.id(), std::move(web_app_info), base::DoNothing());
+  // Legacy profiles containing server-side bookmark apps data must be excluded
+  // from sync if the web apps system is disabled for such a profile.
+  if (provider) {
+    provider->install_manager().InstallBookmarkAppFromSync(
+        extension_sync_data.id(), std::move(web_app_info), base::DoNothing());
+  }
 }
 
 void ExtensionSyncService::SetSyncStartFlareForTesting(

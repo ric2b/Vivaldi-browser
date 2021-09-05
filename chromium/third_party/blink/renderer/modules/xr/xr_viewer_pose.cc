@@ -13,7 +13,9 @@ namespace blink {
 XRViewerPose::XRViewerPose(XRSession* session,
                            const TransformationMatrix& pose_model_matrix)
     : XRPose(pose_model_matrix, session->EmulatedPosition()) {
-  WTF::Vector<XRViewData>& view_data = session->views();
+  DVLOG(3) << __func__ << ": emulatedPosition()=" << emulatedPosition();
+
+  Vector<XRViewData>& view_data = session->views();
 
   // Snapshot the session's current views.
   for (XRViewData& view : view_data) {
@@ -22,7 +24,7 @@ XRViewerPose::XRViewerPose(XRSession* session,
   }
 }
 
-void XRViewerPose::Trace(blink::Visitor* visitor) {
+void XRViewerPose::Trace(Visitor* visitor) {
   visitor->Trace(views_);
   XRPose::Trace(visitor);
 }

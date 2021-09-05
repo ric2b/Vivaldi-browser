@@ -6,9 +6,8 @@ package org.chromium.chrome.browser.widget.bottomsheet;
 
 import androidx.annotation.Nullable;
 
-import org.chromium.chrome.browser.widget.bottomsheet.BottomSheet.BottomSheetContent;
-import org.chromium.chrome.browser.widget.bottomsheet.BottomSheet.SheetState;
-import org.chromium.chrome.browser.widget.bottomsheet.BottomSheet.StateChangeReason;
+import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetController.SheetState;
+import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetController.StateChangeReason;
 
 /**
  * An interface for notifications about the state of the bottom sheet.
@@ -26,13 +25,6 @@ public interface BottomSheetObserver {
      * @param reason The {@link StateChangeReason} that the sheet was closed.
      */
     void onSheetClosed(@StateChangeReason int reason);
-
-    /**
-     * A notification that the sheet has begun loading a URL.
-     *
-     * @param url The URL being loaded.
-     */
-    void onLoadUrl(String url);
 
     /**
      * An event for when the sheet's offset from the bottom of the screen changes.

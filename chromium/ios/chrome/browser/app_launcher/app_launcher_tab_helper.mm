@@ -11,7 +11,6 @@
 #import "base/strings/sys_string_conversions.h"
 #include "components/reading_list/core/reading_list_model.h"
 #import "ios/chrome/browser/app_launcher/app_launcher_abuse_detector.h"
-#include "ios/chrome/browser/app_launcher/app_launcher_flags.h"
 #import "ios/chrome/browser/app_launcher/app_launcher_tab_helper_delegate.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/chrome_url_util.h"
@@ -216,42 +215,26 @@ bool AppLauncherTabHelper::ShouldAllowRequest(
       web_state_->GetNavigationManager()->GetPendingItem();
   GURL original_pending_url =
       pending_item ? pending_item->GetOriginalRequestURL() : GURL::EmptyGURL();
-  bool is_link_transition = ui::PageTransitionTypeIncludingQualifiersIs(
+  bool is_link_transition = ui::PageTransitionCoreTypeIs(
       request_info.transition_type, ui::PAGE_TRANSITION_LINK);
 
-  ios::ChromeBrowserState* browser_state =
-      ios::ChromeBrowserState::FromBrowserState(web_state_->GetBrowserState());
+  ChromeBrowserState* browser_state =
+      ChromeBrowserState::FromBrowserState(web_state_->GetBrowserState());
 
-  if (base::FeatureList::IsEnabled(kAppLauncherRefresh)) {
-    if (!is_link_transition && original_pending_url.is_valid()) {
-      // At this stage the navigation will be canceled in all cases. If this
-      // was a redirection, the |source_url| may not have been reported to
-      // ReadingListWebStateObserver. Report it to mark as read if needed.
-      ReadingListModel* model =
-          ReadingListModelFactory::GetForBrowserState(browser_state);
-      if (model && model->loaded())
-        model->SetReadStatus(original_pending_url, true);
-    }
-    if (last_committed_url.is_valid()) {
-      RequestToLaunchApp(request_url, last_committed_url, is_link_transition);
-    }
-    return false;
+  if (!is_link_transition && original_pending_url.is_valid()) {
+    // At this stage the navigation will be canceled in all cases. If this
+    // was a redirection, the |source_url| may not have been reported to
+    // ReadingListWebStateObserver. Report it to mark as read if needed.
+    ReadingListModel* model =
+        ReadingListModelFactory::GetForBrowserState(browser_state);
+    if (model && model->loaded())
+      model->SetReadStatus(original_pending_url, true);
   }
-
-  if (RequestToLaunchApp(request_url, last_committed_url, is_link_transition)) {
-    // Clears pending navigation history after successfully launching the
-    // external app.
-    web_state_->GetNavigationManager()->DiscardNonCommittedItems();
-
-    // When opening applications, the navigation is cancelled. Report the
-    // opening of the application to the ReadingListWebStateObserver to mark the
-    // entry as read if needed.
-    if (original_pending_url.is_valid()) {
-      ReadingListModel* model =
-          ReadingListModelFactory::GetForBrowserState(browser_state);
-      if (model && model->loaded())
-        model->SetReadStatus(original_pending_url, true);
-    }
+  if (last_committed_url.is_valid() ||
+      !web_state_->GetNavigationManager()->GetLastCommittedItem()) {
+    // Launch the app if the URL is valid or if it is the first page of the
+    // tab.
+    RequestToLaunchApp(request_url, last_committed_url, is_link_transition);
   }
   return false;
 }

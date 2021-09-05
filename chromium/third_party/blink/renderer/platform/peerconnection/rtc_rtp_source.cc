@@ -9,27 +9,23 @@
 #include "base/logging.h"
 #include "base/time/time.h"
 #include "third_party/webrtc/api/scoped_refptr.h"
+#include "third_party/webrtc/system_wrappers/include/ntp_time.h"
 
 namespace blink {
-
-std::unique_ptr<WebRTCRtpSource> CreateRTCRtpSource(
-    const webrtc::RtpSource& source) {
-  return std::make_unique<RTCRtpSource>(source);
-}
 
 RTCRtpSource::RTCRtpSource(const webrtc::RtpSource& source) : source_(source) {}
 
 RTCRtpSource::~RTCRtpSource() {}
 
-WebRTCRtpSource::Type RTCRtpSource::SourceType() const {
+RTCRtpSource::Type RTCRtpSource::SourceType() const {
   switch (source_.source_type()) {
     case webrtc::RtpSourceType::SSRC:
-      return WebRTCRtpSource::Type::kSSRC;
+      return RTCRtpSource::Type::kSSRC;
     case webrtc::RtpSourceType::CSRC:
-      return WebRTCRtpSource::Type::kCSRC;
+      return RTCRtpSource::Type::kCSRC;
     default:
       NOTREACHED();
-      return WebRTCRtpSource::Type::kSSRC;
+      return RTCRtpSource::Type::kSSRC;
   }
 }
 
@@ -57,6 +53,13 @@ base::Optional<double> RTCRtpSource::AudioLevel() const {
 
 uint32_t RTCRtpSource::RtpTimestamp() const {
   return source_.rtp_timestamp();
+}
+
+base::Optional<int64_t> RTCRtpSource::CaptureTimestamp() const {
+  if (!source_.absolute_capture_time())
+    return base::nullopt;
+  return webrtc::UQ32x32ToInt64Ms(
+      source_.absolute_capture_time()->absolute_capture_timestamp);
 }
 
 }  // namespace blink

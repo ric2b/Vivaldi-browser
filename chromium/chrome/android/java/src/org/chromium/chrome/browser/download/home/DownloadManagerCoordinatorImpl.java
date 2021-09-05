@@ -5,13 +5,19 @@
 package org.chromium.chrome.browser.download.home;
 
 import android.app.Activity;
+import android.content.Context;
 import android.view.Gravity;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
 import org.chromium.base.ApiCompatibilityUtils;
+import org.chromium.base.Callback;
+import org.chromium.base.DiscardableReferencePool;
 import org.chromium.base.ObserverList;
 import org.chromium.base.metrics.RecordUserAction;
+import org.chromium.base.supplier.ObservableSupplier;
+import org.chromium.chrome.R;
 import org.chromium.chrome.browser.download.home.filter.Filters;
 import org.chromium.chrome.browser.download.home.filter.Filters.FilterType;
 import org.chromium.chrome.browser.download.home.list.DateOrderedListCoordinator;
@@ -19,20 +25,14 @@ import org.chromium.chrome.browser.download.home.list.DateOrderedListCoordinator
 import org.chromium.chrome.browser.download.home.list.ListItem;
 import org.chromium.chrome.browser.download.home.snackbars.DeleteUndoCoordinator;
 import org.chromium.chrome.browser.download.home.toolbar.ToolbarCoordinator;
-import org.chromium.chrome.browser.download.items.OfflineContentAggregatorFactory;
-import org.chromium.chrome.browser.gesturenav.HistoryNavigationDelegate;
-import org.chromium.chrome.browser.gesturenav.HistoryNavigationLayout;
-import org.chromium.chrome.browser.preferences.PreferencesLauncher;
-import org.chromium.chrome.browser.preferences.download.DownloadPreferences;
-import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.snackbar.SnackbarManager;
-import org.chromium.chrome.browser.widget.selection.SelectionDelegate;
-import org.chromium.chrome.download.R;
+import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
+import org.chromium.components.browser_ui.widget.selectable_list.SelectionDelegate;
+import org.chromium.components.feature_engagement.Tracker;
+import org.chromium.components.offline_items_collection.OfflineContentProvider;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 
 import java.io.Closeable;
 
-import org.chromium.base.Log;
 import org.chromium.chrome.browser.ChromeApplication;
 
 /**
@@ -47,27 +47,36 @@ class DownloadManagerCoordinatorImpl
 
     private final ToolbarCoordinator mToolbarCoordinator;
     private final SelectionDelegate<ListItem> mSelectionDelegate;
-    private SelectionDelegate.SelectionObserver<ListItem> mNavigationCanceller;
 
     private final Activity mActivity;
+    private final Callback<Context> mSettingsLauncher;
 
-    private HistoryNavigationLayout mMainView;
+    private ViewGroup mMainView;
 
     private boolean mMuteFilterChanges;
 
     /** Builds a {@link DownloadManagerCoordinatorImpl} instance. */
-    public DownloadManagerCoordinatorImpl(Profile profile, Activity activity,
-            DownloadManagerUiConfig config, SnackbarManager snackbarManager,
-            ModalDialogManager modalDialogManager) {
+    public DownloadManagerCoordinatorImpl(Activity activity, DownloadManagerUiConfig config,
+            ObservableSupplier<Boolean> isPrefetchEnabledSupplier,
+            Callback<Context> settingsLauncher, SnackbarManager snackbarManager,
+            ModalDialogManager modalDialogManager, Tracker tracker, FaviconProvider faviconProvider,
+            OfflineContentProvider provider, LegacyDownloadProvider legacyProvider,
+            DiscardableReferencePool discardableReferencePool) {
         mActivity = activity;
+        mSettingsLauncher = settingsLauncher;
         mDeleteCoordinator = new DeleteUndoCoordinator(snackbarManager);
         mSelectionDelegate = new SelectionDelegate<ListItem>();
         mListCoordinator = new DateOrderedListCoordinator(mActivity, config,
-                OfflineContentAggregatorFactory.get(), mDeleteCoordinator::showSnackbar,
-                mSelectionDelegate, this::notifyFilterChanged, createDateOrderedListObserver(),
-                modalDialogManager);
+                isPrefetchEnabledSupplier, provider, legacyProvider,
+                mDeleteCoordinator::showSnackbar, mSelectionDelegate, this::notifyFilterChanged,
+                createDateOrderedListObserver(), modalDialogManager, faviconProvider,
+                discardableReferencePool);
+        if (ChromeApplication.isVivaldi())
+            mToolbarCoordinator = new ToolbarCoordinator(mActivity, this, mListCoordinator,
+                    mSelectionDelegate, true, tracker);
+        else
         mToolbarCoordinator = new ToolbarCoordinator(mActivity, this, mListCoordinator,
-                mSelectionDelegate, config.showOfflineHome, config.isSeparateActivity, profile);
+                mSelectionDelegate, config.isSeparateActivity, tracker);
 
         initializeView();
         RecordUserAction.record("Android.DownloadManager.Open");
@@ -78,10 +87,10 @@ class DownloadManagerCoordinatorImpl
      * TODO(crbug.com/880468) : Investigate if it is better to do in XML.
      */
     private void initializeView() {
-        mMainView = new HistoryNavigationLayout(mActivity);
+        mMainView = new FrameLayout(mActivity);
         if (!ChromeApplication.isVivaldi())
-        mMainView.setBackgroundColor(ApiCompatibilityUtils.getColor(
-                mActivity.getResources(), R.color.modern_primary_color));
+        mMainView.setBackgroundColor(
+                ApiCompatibilityUtils.getColor(mActivity.getResources(), R.color.default_bg_color));
 
         FrameLayout.LayoutParams listParams = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT);
@@ -89,10 +98,6 @@ class DownloadManagerCoordinatorImpl
                 mActivity.getResources().getDimensionPixelOffset(R.dimen.toolbar_height_no_shadow),
                 0, 0);
         mMainView.addView(mListCoordinator.getView(), listParams);
-        mNavigationCanceller = (selectedItems) -> {
-            if (!selectedItems.isEmpty()) mMainView.release();
-        };
-        mSelectionDelegate.addObserver(mNavigationCanceller);
 
         FrameLayout.LayoutParams toolbarParams = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT);
@@ -122,7 +127,6 @@ class DownloadManagerCoordinatorImpl
         mDeleteCoordinator.destroy();
         mListCoordinator.destroy();
         mToolbarCoordinator.destroy();
-        mSelectionDelegate.removeObserver(mNavigationCanceller);
     }
 
     @Override
@@ -154,11 +158,6 @@ class DownloadManagerCoordinatorImpl
         mObservers.removeObserver(observer);
     }
 
-    @Override
-    public void setHistoryNavigationDelegate(HistoryNavigationDelegate delegate) {
-        mMainView.setNavigationDelegate(delegate);
-    }
-
     // ToolbarActionDelegate implementation.
     @Override
     public void close() {
@@ -168,7 +167,7 @@ class DownloadManagerCoordinatorImpl
     @Override
     public void openSettings() {
         RecordUserAction.record("Android.DownloadManager.Settings");
-        PreferencesLauncher.launchSettingsPage(mActivity, DownloadPreferences.class);
+        mSettingsLauncher.onResult(mActivity);
     }
 
     private void notifyFilterChanged(@FilterType int filter) {

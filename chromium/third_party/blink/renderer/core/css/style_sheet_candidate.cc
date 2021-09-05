@@ -29,6 +29,7 @@
 #include "third_party/blink/renderer/core/css/style_engine.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/processing_instruction.h"
+#include "third_party/blink/renderer/core/html/html_document.h"
 #include "third_party/blink/renderer/core/html/html_link_element.h"
 #include "third_party/blink/renderer/core/html/html_style_element.h"
 #include "third_party/blink/renderer/core/html/imports/html_import.h"
@@ -37,20 +38,19 @@
 
 namespace blink {
 
-using namespace html_names;
-
 AtomicString StyleSheetCandidate::Title() const {
-  return IsElement() ? To<Element>(GetNode()).FastGetAttribute(kTitleAttr)
-                     : g_null_atom;
+  return IsElement()
+             ? To<Element>(GetNode()).FastGetAttribute(html_names::kTitleAttr)
+             : g_null_atom;
 }
 
 bool StyleSheetCandidate::IsXSL() const {
-  return !GetNode().GetDocument().IsHTMLDocument() && type_ == kPi &&
+  return !IsA<HTMLDocument>(GetNode().GetDocument()) && type_ == kPi &&
          To<ProcessingInstruction>(GetNode()).IsXSL();
 }
 
 bool StyleSheetCandidate::IsImport() const {
-  return type_ == kHTMLLink && ToHTMLLinkElement(GetNode()).IsImport();
+  return type_ == kHTMLLink && To<HTMLLinkElement>(GetNode()).IsImport();
 }
 
 bool StyleSheetCandidate::IsCSSStyle() const {
@@ -59,16 +59,18 @@ bool StyleSheetCandidate::IsCSSStyle() const {
 
 Document* StyleSheetCandidate::ImportedDocument() const {
   DCHECK(IsImport());
-  return ToHTMLLinkElement(GetNode()).import();
+  return To<HTMLLinkElement>(GetNode()).import();
 }
 
 bool StyleSheetCandidate::IsEnabledViaScript() const {
-  return IsHTMLLink() && ToHTMLLinkElement(GetNode()).IsEnabledViaScript();
+  auto* html_link_element = DynamicTo<HTMLLinkElement>(GetNode());
+  return html_link_element && html_link_element->IsEnabledViaScript();
 }
 
 bool StyleSheetCandidate::IsEnabledAndLoading() const {
-  return IsHTMLLink() && !ToHTMLLinkElement(GetNode()).IsDisabled() &&
-         ToHTMLLinkElement(GetNode()).StyleSheetIsLoading();
+  auto* html_link_element = DynamicTo<HTMLLinkElement>(GetNode());
+  return html_link_element && !html_link_element->IsDisabled() &&
+         html_link_element->StyleSheetIsLoading();
 }
 
 bool StyleSheetCandidate::CanBeActivated(
@@ -85,16 +87,16 @@ StyleSheetCandidate::Type StyleSheetCandidate::TypeOf(Node& node) {
     return kPi;
 
   if (node.IsHTMLElement()) {
-    if (IsHTMLLinkElement(node))
+    if (IsA<HTMLLinkElement>(node))
       return kHTMLLink;
-    if (IsHTMLStyleElement(node))
+    if (IsA<HTMLStyleElement>(node))
       return kHTMLStyle;
 
     NOTREACHED();
     return kInvalid;
   }
 
-  if (IsSVGStyleElement(node))
+  if (IsA<SVGStyleElement>(node))
     return kSVGStyle;
 
   NOTREACHED();
@@ -104,11 +106,11 @@ StyleSheetCandidate::Type StyleSheetCandidate::TypeOf(Node& node) {
 StyleSheet* StyleSheetCandidate::Sheet() const {
   switch (type_) {
     case kHTMLLink:
-      return ToHTMLLinkElement(GetNode()).sheet();
+      return To<HTMLLinkElement>(GetNode()).sheet();
     case kHTMLStyle:
-      return ToHTMLStyleElement(GetNode()).sheet();
+      return To<HTMLStyleElement>(GetNode()).sheet();
     case kSVGStyle:
-      return ToSVGStyleElement(GetNode()).sheet();
+      return To<SVGStyleElement>(GetNode()).sheet();
     case kPi:
       return To<ProcessingInstruction>(GetNode()).sheet();
     default:

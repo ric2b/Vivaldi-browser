@@ -12,8 +12,8 @@
 #include "base/bind.h"
 #include "base/feature_list.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/chromeos/crostini/crostini_features.h"
 #include "chrome/browser/chromeos/crostini/crostini_pref_names.h"
-#include "chrome/browser/chromeos/crostini/crostini_util.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_util.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -34,19 +34,21 @@ void SendResponse(dbus::MethodCall* method_call,
       dbus::Response::FromMethodCall(method_call);
   dbus::MessageWriter writer(response.get());
   writer.AppendBool(answer);
-  response_sender.Run(std::move(response));
+  std::move(response_sender).Run(std::move(response));
 }
 
 Profile* GetSenderProfile(
     dbus::MethodCall* method_call,
-    dbus::ExportedObject::ResponseSender response_sender) {
+    dbus::ExportedObject::ResponseSender* response_sender) {
   dbus::MessageReader reader(method_call);
   std::string user_id_hash;
 
   if (!reader.PopString(&user_id_hash)) {
     LOG(ERROR) << "Failed to pop user_id_hash from incoming message.";
-    response_sender.Run(dbus::ErrorResponse::FromMethodCall(
-        method_call, DBUS_ERROR_INVALID_ARGS, "No user_id_hash string arg"));
+    std::move(*response_sender)
+        .Run(dbus::ErrorResponse::FromMethodCall(method_call,
+                                                 DBUS_ERROR_INVALID_ARGS,
+                                                 "No user_id_hash string arg"));
     return nullptr;
   }
 
@@ -131,9 +133,10 @@ void ChromeFeaturesServiceProvider::IsFeatureEnabled(
   std::string feature_name;
   if (!reader.PopString(&feature_name)) {
     LOG(ERROR) << "Failed to pop feature_name from incoming message.";
-    response_sender.Run(dbus::ErrorResponse::FromMethodCall(
-        method_call, DBUS_ERROR_INVALID_ARGS,
-        "Missing or invalid feature_name string arg."));
+    std::move(response_sender)
+        .Run(dbus::ErrorResponse::FromMethodCall(
+            method_call, DBUS_ERROR_INVALID_ARGS,
+            "Missing or invalid feature_name string arg."));
     return;
   }
 
@@ -144,54 +147,57 @@ void ChromeFeaturesServiceProvider::IsFeatureEnabled(
                    });
   if (it == std::end(kFeatureLookup)) {
     LOG(ERROR) << "Unexpected feature name.";
-    response_sender.Run(dbus::ErrorResponse::FromMethodCall(
-        method_call, DBUS_ERROR_INVALID_ARGS, "Unexpected feature name."));
+    std::move(response_sender)
+        .Run(dbus::ErrorResponse::FromMethodCall(
+            method_call, DBUS_ERROR_INVALID_ARGS, "Unexpected feature name."));
     return;
   }
 
-  SendResponse(method_call, response_sender,
+  SendResponse(method_call, std::move(response_sender),
                base::FeatureList::IsEnabled(**it));
 }
 
 void ChromeFeaturesServiceProvider::IsCrostiniEnabled(
     dbus::MethodCall* method_call,
     dbus::ExportedObject::ResponseSender response_sender) {
-  Profile* profile = GetSenderProfile(method_call, response_sender);
+  Profile* profile = GetSenderProfile(method_call, &response_sender);
+  if (!profile)
+    return;
+
   SendResponse(
-      method_call, response_sender,
-      profile ? crostini::IsCrostiniAllowedForProfile(profile) : false);
+      method_call, std::move(response_sender),
+      profile ? crostini::CrostiniFeatures::Get()->IsAllowed(profile) : false);
 }
 
 void ChromeFeaturesServiceProvider::IsPluginVmEnabled(
     dbus::MethodCall* method_call,
     dbus::ExportedObject::ResponseSender response_sender) {
-  Profile* profile = GetSenderProfile(method_call, response_sender);
+  Profile* profile = GetSenderProfile(method_call, &response_sender);
+  if (!profile)
+    return;
+
   SendResponse(
-      method_call, response_sender,
+      method_call, std::move(response_sender),
       profile ? plugin_vm::IsPluginVmAllowedForProfile(profile) : false);
 }
 
 void ChromeFeaturesServiceProvider::IsUsbguardEnabled(
     dbus::MethodCall* method_call,
     dbus::ExportedObject::ResponseSender response_sender) {
-  SendResponse(method_call, response_sender,
+  SendResponse(method_call, std::move(response_sender),
                base::FeatureList::IsEnabled(::features::kUsbguard));
 }
 
 void ChromeFeaturesServiceProvider::IsVmManagementCliAllowed(
     dbus::MethodCall* method_call,
     dbus::ExportedObject::ResponseSender response_sender) {
-  bool is_allowed = true;
-  // The policy is experimental; check that the corresponding feature flag
-  // is enabled.
-  if (base::FeatureList::IsEnabled(
-          ::features::kCrostiniAdvancedAccessControls)) {
-    Profile* profile = GetSenderProfile(method_call, response_sender);
-    is_allowed = profile->GetPrefs()->GetBoolean(
-        crostini::prefs::kVmManagementCliAllowedByPolicy);
-  }
+  Profile* profile = GetSenderProfile(method_call, &response_sender);
+  if (!profile)
+    return;
 
-  SendResponse(method_call, response_sender, is_allowed);
+  SendResponse(method_call, std::move(response_sender),
+               profile->GetPrefs()->GetBoolean(
+                   crostini::prefs::kVmManagementCliAllowedByPolicy));
 }
 
 }  // namespace chromeos

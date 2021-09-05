@@ -7,13 +7,9 @@ package org.chromium.chrome.browser.toolbar;
 import android.content.Context;
 import android.content.res.ColorStateList;
 import android.util.AttributeSet;
-import android.view.View;
-import android.view.ViewGroup;
-import android.widget.ImageView;
-import android.widget.TextView;
 
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.util.FeatureUtilities;
+import org.chromium.components.browser_ui.widget.listmenu.ListMenuButton;
 
 import org.chromium.chrome.browser.ChromeApplication;
 
@@ -21,38 +17,14 @@ import org.chromium.chrome.browser.ChromeApplication;
  * The Button used for switching tabs. Currently this class is only being used for the bottom
  * toolbar tab switcher button.
  */
-public class TabSwitcherButtonView extends ImageView {
+public class TabSwitcherButtonView extends ListMenuButton {
     /**
      * A drawable for the tab switcher icon.
      */
     private TabSwitcherDrawable mTabSwitcherButtonDrawable;
 
-    /** The tab switcher button text label. */
-    private TextView mLabel;
-
-    /** The wrapper View that contains the tab switcher button and the label. */
-    private View mWrapper;
-
     public TabSwitcherButtonView(Context context, AttributeSet attrs) {
         super(context, attrs);
-    }
-
-    /**
-     * @param wrapper The wrapping View of this button.
-     */
-    public void setWrapperView(ViewGroup wrapper) {
-        mWrapper = wrapper;
-        mLabel = mWrapper.findViewById(R.id.tab_switcher_button_label);
-        if (FeatureUtilities.isLabeledBottomToolbarEnabled()) mLabel.setVisibility(View.VISIBLE);
-    }
-
-    @Override
-    public void setOnClickListener(OnClickListener listener) {
-        if (mWrapper != null) {
-            mWrapper.setOnClickListener(listener);
-            setClickable(false);
-        }
-        super.setOnClickListener(listener);
     }
 
     @Override
@@ -61,7 +33,8 @@ public class TabSwitcherButtonView extends ImageView {
 
         if (ChromeApplication.isVivaldi()) {
             mTabSwitcherButtonDrawable =
-                    TabSwitcherDrawable.createTabSwitcherDrawableFromSVG(getContext(), true, false);
+                    TabSwitcherDrawable.createTabSwitcherDrawableForBottomBar(getContext(),
+                            false);
         } else
         mTabSwitcherButtonDrawable =
                 TabSwitcherDrawable.createTabSwitcherDrawable(getContext(), false);
@@ -72,7 +45,6 @@ public class TabSwitcherButtonView extends ImageView {
      * @param numberOfTabs The number of open tabs.
      */
     public void updateTabCountVisuals(int numberOfTabs) {
-        setEnabled(numberOfTabs >= 1);
         setContentDescription(getResources().getQuantityString(
                 R.plurals.accessibility_toolbar_btn_tabswitcher_toggle, numberOfTabs,
                 numberOfTabs));
@@ -84,6 +56,5 @@ public class TabSwitcherButtonView extends ImageView {
      */
     public void setTint(ColorStateList tint) {
         mTabSwitcherButtonDrawable.setTint(tint);
-        if (mLabel != null) mLabel.setTextColor(tint);
     }
 }

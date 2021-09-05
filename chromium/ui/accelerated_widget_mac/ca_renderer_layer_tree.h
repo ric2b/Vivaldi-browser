@@ -27,6 +27,15 @@ namespace ui {
 
 struct CARendererLayerParams;
 
+enum class CALayerType {
+  // A CALayer with contents set to an IOSurface by setContents.
+  kDefault,
+  // An AVSampleBufferDisplayLayer.
+  kVideo,
+  // A CAMetalLayer that copies half-float or 10-bit IOSurfaces.
+  kHDRCopier,
+};
+
 // The CARendererLayerTree will construct a hierarchy of CALayers from a linear
 // list provided by the CoreAnimation renderer using the algorithm and structure
 // referenced described in
@@ -160,6 +169,7 @@ class ACCELERATED_WIDGET_MAC_EXPORT CARendererLayerTree {
                  const gfx::RectF& contents_rect,
                  const gfx::Rect& rect,
                  unsigned background_color,
+                 bool has_hdr_color_space,
                  unsigned edge_aa_mask,
                  float opacity,
                  unsigned filter);
@@ -186,12 +196,13 @@ class ACCELERATED_WIDGET_MAC_EXPORT CARendererLayerTree {
     CAEdgeAntialiasingMask ca_edge_aa_mask = 0;
     float opacity = 1;
     NSString* const ca_filter = nil;
+
+    CALayerType type = CALayerType::kDefault;
     base::scoped_nsobject<CALayer> ca_layer;
 
     // If this layer's contents can be represented as an
     // AVSampleBufferDisplayLayer, then |ca_layer| will point to |av_layer|.
     base::scoped_nsobject<AVSampleBufferDisplayLayer> av_layer;
-    bool use_av_layer = false;
 
    private:
     DISALLOW_COPY_AND_ASSIGN(ContentLayer);

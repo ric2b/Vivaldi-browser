@@ -5,7 +5,9 @@
 #ifndef UI_VIEWS_COCOA_NATIVE_WIDGET_MAC_NS_WINDOW_HOST_H_
 #define UI_VIEWS_COCOA_NATIVE_WIDGET_MAC_NS_WINDOW_HOST_H_
 
+#include <map>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "base/mac/scoped_nsobject.h"
@@ -15,14 +17,13 @@
 #include "components/remote_cocoa/browser/application_host.h"
 #include "components/remote_cocoa/common/native_widget_ns_window.mojom.h"
 #include "components/remote_cocoa/common/native_widget_ns_window_host.mojom.h"
-#include "mojo/public/cpp/bindings/associated_binding.h"
+#include "mojo/public/cpp/bindings/associated_receiver.h"
+#include "mojo/public/cpp/bindings/associated_remote.h"
 #include "ui/accelerated_widget_mac/accelerated_widget_mac.h"
 #include "ui/base/cocoa/accessibility_focus_overrider.h"
-#include "ui/base/ime/input_method_delegate.h"
 #include "ui/compositor/layer_owner.h"
 #include "ui/display/mac/display_link_mac.h"
 #include "ui/views/cocoa/drag_drop_client_mac.h"
-#include "ui/views/focus/focus_manager.h"
 #include "ui/views/views_export.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/window/dialog_observer.h"
@@ -53,8 +54,6 @@ class VIEWS_EXPORT NativeWidgetMacNSWindowHost
       public remote_cocoa::ApplicationHost::Observer,
       public remote_cocoa::mojom::NativeWidgetNSWindowHost,
       public DialogObserver,
-      public FocusChangeListener,
-      public ui::internal::InputMethodDelegate,
       public ui::AccessibilityFocusOverrider::Client,
       public ui::LayerDelegate,
       public ui::LayerOwner,
@@ -106,7 +105,7 @@ class VIEWS_EXPORT NativeWidgetMacNSWindowHost
   gfx::NativeViewAccessible GetNativeViewAccessibleForNSWindow() const;
 
   // The mojo interface through which to communicate with the underlying
-  // NSWindow and NSView. This points to either |remote_ns_window_ptr_| or
+  // NSWindow and NSView. This points to either |remote_ns_window_remote_| or
   // |in_process_ns_window_bridge_|.
   remote_cocoa::mojom::NativeWidgetNSWindow* GetNSWindowMojo() const;
 
@@ -132,19 +131,18 @@ class VIEWS_EXPORT NativeWidgetMacNSWindowHost
       remote_cocoa::ApplicationHost* application_host,
       remote_cocoa::mojom::CreateWindowParamsPtr window_create_params);
 
-  void InitWindow(const Widget::InitParams& params);
+  void InitWindow(const Widget::InitParams& params,
+                  const gfx::Rect& initial_bounds_in_screen);
 
   // Close the window immediately. This function may result in |this| being
   // deleted.
   void CloseWindowNow();
 
   // Changes the bounds of the window and the hosted layer if present. The
-  // origin is a location in screen coordinates except for "child" windows,
-  // which are positioned relative to their parent. SetBounds() considers a
-  // "child" window to be one initialized with InitParams specifying all of:
-  // a |parent| NSWindow, the |child| attribute, and a |type| that
-  // views::GetAuraWindowTypeForWidgetType does not consider a "popup" type.
-  void SetBounds(const gfx::Rect& bounds);
+  // argument is always a location in screen coordinates (in contrast to the
+  // views::Widget::SetBounds method, when the argument is only sometimes in
+  // screen coordinates).
+  void SetBoundsInScreen(const gfx::Rect& bounds);
 
   // Tell the window to transition to being fullscreen or not-fullscreen.
   void SetFullscreen(bool fullscreen);
@@ -162,10 +160,6 @@ class VIEWS_EXPORT NativeWidgetMacNSWindowHost
   // Initialize the ui::Compositor and ui::Layer.
   void CreateCompositor(const Widget::InitParams& params);
 
-  // Sets or clears the focus manager to use for tracking focused views.
-  // This does NOT take ownership of |focus_manager|.
-  void SetFocusManager(FocusManager* focus_manager);
-
   // Set the window's title, returning true if the title has changed.
   bool SetWindowTitle(const base::string16& title);
 
@@ -175,9 +169,6 @@ class VIEWS_EXPORT NativeWidgetMacNSWindowHost
   // Redispatch a keyboard event using the widget's window's CommandDispatcher.
   // Return true if the event is handled.
   bool RedispatchKeyEvent(NSEvent* event);
-
-  // See widget.h for documentation.
-  ui::InputMethod* GetInputMethod();
 
   // Geometry of the window, in DIPs.
   const gfx::Rect& GetWindowBoundsInScreen() const {
@@ -210,9 +201,10 @@ class VIEWS_EXPORT NativeWidgetMacNSWindowHost
   void SetNativeWindowProperty(const char* name, void* value);
   void* GetNativeWindowProperty(const char* name) const;
 
-  // Updates |associated_views_| on NativeViewHost::Attach()/Detach().
-  void SetAssociationForView(const views::View* view, NSView* native_view);
-  void ClearAssociationForView(const views::View* view);
+  // Updates |attached_native_view_host_views_| on
+  // NativeViewHost::Attach()/Detach().
+  void OnNativeViewHostAttach(const views::View* view, NSView* native_view);
+  void OnNativeViewHostDetach(const views::View* view);
 
   // Sorts child NSViews according to NativeViewHosts order in views hierarchy.
   void ReorderChildViews();
@@ -230,7 +222,13 @@ class VIEWS_EXPORT NativeWidgetMacNSWindowHost
 
   void UpdateCompositorProperties();
   void DestroyCompositor();
-  void RankNSViewsRecursive(View* view, std::map<NSView*, int>* rank) const;
+
+  // Sort |attached_native_view_host_views_| by the order in which their
+  // NSViews should appear as subviews. This does a recursive pre-order
+  // traversal of the views::View tree starting at |view|.
+  void GetAttachedNativeViewHostViewsRecursive(
+      View* view,
+      std::vector<NSView*>* attached_native_view_host_views_ordered) const;
 
   // If we are accessing the BridgedNativeWidget through mojo, then
   // |in_process_ns_window_| is not the true window that is resized. This
@@ -366,13 +364,6 @@ class VIEWS_EXPORT NativeWidgetMacNSWindowHost
   // DialogObserver:
   void OnDialogChanged() override;
 
-  // FocusChangeListener:
-  void OnWillChangeFocus(View* focused_before, View* focused_now) override;
-  void OnDidChangeFocus(View* focused_before, View* focused_now) override;
-
-  // ui::internal::InputMethodDelegate:
-  ui::EventDispatchDetails DispatchKeyEventPostIME(ui::KeyEvent* key) override;
-
   // ui::AccessibilityFocusOverrider::Client:
   id GetAccessibilityFocusedUIElement() override;
 
@@ -398,8 +389,8 @@ class VIEWS_EXPORT NativeWidgetMacNSWindowHost
   NativeWidgetMacNSWindowHost* parent_ = nullptr;
   std::vector<NativeWidgetMacNSWindowHost*> children_;
 
-  // The factory that was used to create |remote_ns_window_ptr_|. This must be
-  // the same as |parent_->application_host_|.
+  // The factory that was used to create |remote_ns_window_remote_|. This must
+  // be the same as |parent_->application_host_|.
   remote_cocoa::ApplicationHost* application_host_ = nullptr;
 
   Widget::InitParams::Type widget_type_ = Widget::InitParams::TYPE_WINDOW;
@@ -412,9 +403,10 @@ class VIEWS_EXPORT NativeWidgetMacNSWindowHost
 
   std::unique_ptr<DragDropClientMac> drag_drop_client_;
 
-  // The mojo pointer to a BridgedNativeWidget, which may exist in another
+  // The mojo remote for a BridgedNativeWidget, which may exist in another
   // process.
-  remote_cocoa::mojom::NativeWidgetNSWindowAssociatedPtr remote_ns_window_ptr_;
+  mojo::AssociatedRemote<remote_cocoa::mojom::NativeWidgetNSWindow>
+      remote_ns_window_remote_;
 
   // Remote accessibility objects corresponding to the NSWindow and its root
   // NSView.
@@ -441,9 +433,7 @@ class VIEWS_EXPORT NativeWidgetMacNSWindowHost
       in_process_view_id_mapping_;
 
   std::unique_ptr<TooltipManager> tooltip_manager_;
-  std::unique_ptr<ui::InputMethod> input_method_;
   std::unique_ptr<TextInputHost> text_input_host_;
-  FocusManager* focus_manager_ = nullptr;  // Weak. Owned by our Widget.
 
   base::string16 window_title_;
 
@@ -470,11 +460,12 @@ class VIEWS_EXPORT NativeWidgetMacNSWindowHost
   // Properties used by Set/GetNativeWindowProperty.
   std::map<std::string, void*> native_window_properties_;
 
-  // Contains NativeViewHost->gfx::NativeView associations.
-  std::map<const views::View*, NSView*> associated_views_;
+  // Contains NativeViewHost->gfx::NativeView associations for NativeViewHosts
+  // attached to |this|.
+  std::map<const views::View*, NSView*> attached_native_view_host_views_;
 
-  mojo::AssociatedBinding<remote_cocoa::mojom::NativeWidgetNSWindowHost>
-      remote_ns_window_host_binding_;
+  mojo::AssociatedReceiver<remote_cocoa::mojom::NativeWidgetNSWindowHost>
+      remote_ns_window_host_receiver_{this};
   DISALLOW_COPY_AND_ASSIGN(NativeWidgetMacNSWindowHost);
 };
 

@@ -76,15 +76,14 @@ XrResult XRAPI_PTR GetInstanceProcAddress(XrInstance instance,
     *function = reinterpret_cast<PFN_xrVoidFunction>(xrGetActionStateVector2f);
   } else if (strcmp(name, "xrGetActionStatePose") == 0) {
     *function = reinterpret_cast<PFN_xrVoidFunction>(xrGetActionStatePose);
-  } else if (strcmp(name, "xrGetInstanceProperties") == 0) {
-    *function = reinterpret_cast<PFN_xrVoidFunction>(xrGetInstanceProperties);
+  } else if (strcmp(name, "xrGetCurrentInteractionProfile") == 0) {
+    *function =
+        reinterpret_cast<PFN_xrVoidFunction>(xrGetCurrentInteractionProfile);
   } else if (strcmp(name, "xrGetReferenceSpaceBoundsRect") == 0) {
     *function =
         reinterpret_cast<PFN_xrVoidFunction>(xrGetReferenceSpaceBoundsRect);
   } else if (strcmp(name, "xrGetSystem") == 0) {
     *function = reinterpret_cast<PFN_xrVoidFunction>(xrGetSystem);
-  } else if (strcmp(name, "xrGetSystemProperties") == 0) {
-    *function = reinterpret_cast<PFN_xrVoidFunction>(xrGetSystemProperties);
   } else if (strcmp(name, "xrLocateSpace") == 0) {
     *function = reinterpret_cast<PFN_xrVoidFunction>(xrLocateSpace);
   } else if (strcmp(name, "xrLocateViews") == 0) {
@@ -98,6 +97,8 @@ XrResult XRAPI_PTR GetInstanceProcAddress(XrInstance instance,
         xrSuggestInteractionProfileBindings);
   } else if (strcmp(name, "xrStringToPath") == 0) {
     *function = reinterpret_cast<PFN_xrVoidFunction>(xrStringToPath);
+  } else if (strcmp(name, "xrPathToString") == 0) {
+    *function = reinterpret_cast<PFN_xrVoidFunction>(xrPathToString);
   } else if (strcmp(name, "xrSyncActions") == 0) {
     *function = reinterpret_cast<PFN_xrVoidFunction>(xrSyncActions);
   } else if (strcmp(name, "xrWaitFrame") == 0) {

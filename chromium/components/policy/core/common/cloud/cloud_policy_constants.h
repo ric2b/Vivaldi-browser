@@ -51,13 +51,14 @@ POLICY_EXPORT extern const char kValueRequestCheckAndroidManagement[];
 POLICY_EXPORT extern const char kValueRequestCertBasedRegister[];
 POLICY_EXPORT extern const char kValueRequestActiveDirectoryEnrollPlayUser[];
 POLICY_EXPORT extern const char kValueRequestActiveDirectoryPlayActivity[];
-POLICY_EXPORT extern const char kValueRequestCheckDeviceLicense[];
 POLICY_EXPORT extern const char kValueRequestAppInstallReport[];
 POLICY_EXPORT extern const char kValueRequestTokenEnrollment[];
 POLICY_EXPORT extern const char kValueRequestChromeDesktopReport[];
 POLICY_EXPORT extern const char kValueRequestInitialEnrollmentStateRetrieval[];
 POLICY_EXPORT extern const char kValueRequestUploadPolicyValidationReport[];
 POLICY_EXPORT extern const char kValueRequestPublicSamlUser[];
+POLICY_EXPORT extern const char kValueRequestChromeOsUserReport[];
+POLICY_EXPORT extern const char kValueRequestCertProvisioningRequest[];
 
 // Policy type strings for the policy_type field in PolicyFetchRequest.
 POLICY_EXPORT extern const char kChromeDevicePolicyType[];
@@ -159,14 +160,6 @@ enum DeviceMode {
 
 // Domain that demo mode devices are enrolled into: cros-demo-mode.com
 POLICY_EXPORT extern const char kDemoModeDomain[];
-
-// License types available for enrollment.
-enum class LicenseType {
-  UNKNOWN,    // Included for compatibility.
-  PERPETUAL,  // Perpetual license
-  ANNUAL,     // Annual license
-  KIOSK       // Single App Kiosk license
-};
 
 // Indicate this device's market segment. go/cros-rlz-segments
 enum class MarketSegment {

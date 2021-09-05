@@ -24,7 +24,7 @@ DesktopWallpaperDataClassHandlerWin::~DesktopWallpaperDataClassHandlerWin() {
 
 bool DesktopWallpaperDataClassHandlerWin::GetData(
     const std::string& data_id,
-    const content::URLDataSource::GotDataCallback& callback) {
+    content::URLDataSource::GotDataCallback callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
 
   Microsoft::WRL::ComPtr<IDesktopWallpaper> desktop_w;
@@ -57,7 +57,7 @@ bool DesktopWallpaperDataClassHandlerWin::GetData(
       if (SUCCEEDED(hr)) {
         if (file_path.get() == previous_path_) {
           // Path has not changed, serve cached data
-          callback.Run(cached_image_data_);
+          std::move(callback).Run(cached_image_data_);
           return true;
         } else {
           // TODO(pettern): Offload to FILE thread.
@@ -74,7 +74,7 @@ bool DesktopWallpaperDataClassHandlerWin::GetData(
                 base::RefCountedBytes::TakeVector(&buffer));
               cached_image_data_ = image_data;
               previous_path_ = file_path.get();
-              callback.Run(image_data);
+              std::move(callback).Run(image_data);
               return true;
             }
           }

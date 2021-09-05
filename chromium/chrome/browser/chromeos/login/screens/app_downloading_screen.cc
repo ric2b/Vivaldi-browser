@@ -19,7 +19,8 @@ constexpr const char kUserActionButtonContinueSetup[] =
 AppDownloadingScreen::AppDownloadingScreen(
     AppDownloadingScreenView* view,
     const base::RepeatingClosure& exit_callback)
-    : BaseScreen(AppDownloadingScreenView::kScreenId),
+    : BaseScreen(AppDownloadingScreenView::kScreenId,
+                 OobeScreenPriority::DEFAULT),
       view_(view),
       exit_callback_(exit_callback) {
   DCHECK(view_);
@@ -30,12 +31,12 @@ AppDownloadingScreen::~AppDownloadingScreen() {
   view_->Bind(nullptr);
 }
 
-void AppDownloadingScreen::Show() {
+void AppDownloadingScreen::ShowImpl() {
   // Show the screen.
   view_->Show();
 }
 
-void AppDownloadingScreen::Hide() {
+void AppDownloadingScreen::HideImpl() {
   view_->Hide();
 }
 

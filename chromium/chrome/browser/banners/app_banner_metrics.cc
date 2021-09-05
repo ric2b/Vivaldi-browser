@@ -7,6 +7,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "chrome/browser/installable/installable_logging.h"
+#include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
 
 namespace banners {
 
@@ -19,7 +20,7 @@ const char kUserResponseHistogram[] = "AppBanners.UserResponse";
 const char kBeforeInstallEventHistogram[] = "AppBanners.BeforeInstallEvent";
 const char kInstallableStatusCodeHistogram[] =
     "AppBanners.InstallableStatusCode";
-const char kInstallDisplayModeHistogram[] = "Webapp.Install.DisplayMode";
+const char kInstallDisplayModeHistogram[] = "Webapp.Install.DisplayMode2";
 
 void TrackDismissEvent(int event) {
   DCHECK_LT(DISMISS_EVENT_MIN, event);

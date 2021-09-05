@@ -119,7 +119,8 @@
             "properties": {
               "items": { "type": "array", "items": {"$ref": "MenuItem"}, "description": "List of menu entries."},
               "rect": {"$ref": "Rect"},
-              "origin": {"$ref": "Origin"}
+              "origin": {"$ref": "Origin"},
+              "windowId": {"type": "integer"}
             }
           },
           {

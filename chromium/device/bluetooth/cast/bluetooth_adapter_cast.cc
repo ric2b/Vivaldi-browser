@@ -111,7 +111,7 @@ void BluetoothAdapterCast::SetPowered(bool powered,
 }
 
 bool BluetoothAdapterCast::IsDiscoverable() const {
-  VLOG(2) << __func__ << " GATT server mode not supported";
+  DVLOG(2) << __func__ << " GATT server mode not supported";
   return false;
 }
 
@@ -181,6 +181,11 @@ BluetoothLocalGattService* BluetoothAdapterCast::GetGattService(
 }
 
 base::WeakPtr<BluetoothAdapter> BluetoothAdapterCast::GetWeakPtr() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  return weak_factory_.GetWeakPtr();
+}
+
+base::WeakPtr<BluetoothAdapterCast> BluetoothAdapterCast::GetCastWeakPtr() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return weak_factory_.GetWeakPtr();
 }

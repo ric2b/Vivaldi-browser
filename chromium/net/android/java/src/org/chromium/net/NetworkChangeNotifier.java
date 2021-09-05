@@ -9,9 +9,10 @@ import android.content.Context;
 import android.net.ConnectivityManager;
 import android.os.Build;
 
+import androidx.annotation.VisibleForTesting;
+
 import org.chromium.base.ContextUtils;
 import org.chromium.base.ObserverList;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeClassQualifiedName;
@@ -74,7 +75,8 @@ public class NetworkChangeNotifier {
         return sInstance != null;
     }
 
-    static void resetInstanceForTests(NetworkChangeNotifier notifier) {
+    @VisibleForTesting
+    public static void resetInstanceForTests(NetworkChangeNotifier notifier) {
         sInstance = notifier;
     }
 

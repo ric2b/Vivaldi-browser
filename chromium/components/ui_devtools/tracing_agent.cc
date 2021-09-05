@@ -16,7 +16,6 @@
 #include "base/trace_event/traced_value.h"
 #include "components/ui_devtools/connector_delegate.h"
 #include "components/ui_devtools/devtools_base_agent.h"
-#include "components/ui_devtools/devtools_protocol_encoding.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/system/data_pipe_drainer.h"
@@ -24,6 +23,7 @@
 #include "services/tracing/public/cpp/tracing_features.h"
 #include "services/tracing/public/mojom/constants.mojom.h"
 #include "services/tracing/public/mojom/perfetto_service.mojom.h"
+#include "third_party/inspector_protocol/crdtp/json.h"
 
 namespace ui_devtools {
 
@@ -293,6 +293,22 @@ TracingAgent::TracingAgent(std::unique_ptr<ConnectorDelegate> connector)
 
 TracingAgent::~TracingAgent() = default;
 
+namespace {
+class TracingNotification : public crdtp::Serializable {
+ public:
+  explicit TracingNotification(std::string json) : json_(std::move(json)) {}
+
+  void AppendSerialized(std::vector<uint8_t>* out) const override {
+    crdtp::Status status =
+        crdtp::json::ConvertJSONToCBOR(crdtp::SpanFrom(json_), out);
+    DCHECK(status.ok()) << status.ToASCIIString();
+  }
+
+ private:
+  std::string json_;
+};
+}  // namespace
+
 void TracingAgent::OnTraceDataCollected(
     std::unique_ptr<std::string> trace_fragment) {
   const std::string valid_trace_fragment =
@@ -310,12 +326,8 @@ void TracingAgent::OnTraceDataCollected(
   message.append(valid_trace_fragment.c_str() +
                  trace_data_buffer_state_.offset);
   message += "] } }";
-  std::vector<uint8_t> cbor;
-  ::inspector_protocol_encoding::Status status = ConvertJSONToCBOR(
-      ::inspector_protocol_encoding::SpanFrom(message), &cbor);
-  LOG_IF(ERROR, !status.ok()) << status.ToASCIIString();
-
-  frontend()->sendRawCBORNotification(std::move(cbor));
+  frontend()->sendRawNotification(
+      std::make_unique<TracingNotification>(std::move(message)));
 }
 
 void TracingAgent::OnTraceComplete() {
@@ -339,7 +351,7 @@ void TracingAgent::start(
     protocol::Maybe<double> buffer_usage_reporting_interval,
     std::unique_ptr<StartCallback> callback) {
   if (g_any_agent_tracing) {
-    callback->sendFailure(Response::Error("Tracing is already started"));
+    callback->sendFailure(Response::ServerError("Tracing is already started"));
     return;
   }
 
@@ -366,10 +378,10 @@ void TracingAgent::start(
 
 Response TracingAgent::end() {
   if (!perfetto_session_)
-    return Response::Error("Tracing is not started");
+    return Response::ServerError("Tracing is not started");
 
   if (perfetto_session_->HasTracingFailed())
-    return Response::Error("Tracing failed");
+    return Response::ServerError("Tracing failed");
 
   scoped_refptr<DevToolsTraceEndpointProxy> endpoint;
   // Reset the trace data buffer state.
@@ -377,7 +389,7 @@ Response TracingAgent::end() {
   endpoint = new DevToolsTraceEndpointProxy(weak_factory_.GetWeakPtr());
   StopTracing(endpoint, tracing::mojom::kChromeTraceEventLabel);
 
-  return Response::OK();
+  return Response::Success();
 }
 
 void TracingAgent::StartTracing(std::unique_ptr<StartCallback> callback) {

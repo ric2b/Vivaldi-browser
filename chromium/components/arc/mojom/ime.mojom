@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Next MinVersion: 12
+// Next MinVersion: 13
 
 module arc.mojom;
 
@@ -90,13 +90,11 @@ interface ImeHost {
       );
 
   // Requests Chrome to hide the virtual keyboard.
-  // Howver, hiding can be canceled if a text field gets focus.
-  // TODO(yhanada): We might be able to remove this method by adding an argument
-  //                to OnTextInputTypeChanged().
-  [MinVersion=9] RequestHideIme@5();
+  // However, hiding can be canceled if a text field gets focus.
+  [MinVersion=9] RequestHideImeDeprecated@5();
 };
 
-// Next method ID: 7
+// Next method ID: 8
 interface ImeInstance {
   // DEPRECATED: Please use Init@6 instead.
   InitDeprecated@0(ImeHost host_ptr);
@@ -106,6 +104,9 @@ interface ImeInstance {
 
   // Sets composition text and attributes requested by the host IME.
   SetCompositionText@1(string text, array<CompositionSegment> segments);
+
+  // Sets selection text and attributes requested by the host IME.
+  [MinVersion=12] SetSelectionText@7(Range selection);
 
   // Commits the last set composition text and clears the composition.
   ConfirmCompositionText@2();

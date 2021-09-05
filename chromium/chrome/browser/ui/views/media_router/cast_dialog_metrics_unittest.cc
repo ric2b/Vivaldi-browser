@@ -6,6 +6,10 @@
 
 #include "base/test/metrics/histogram_tester.h"
 #include "base/time/time.h"
+#include "chrome/common/pref_names.h"
+#include "chrome/test/base/testing_profile.h"
+#include "components/prefs/pref_service.h"
+#include "content/public/test/browser_task_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -29,12 +33,15 @@ const base::Time close_dialog_time =
 
 class CastDialogMetricsTest : public testing::Test {
  public:
-  CastDialogMetricsTest() : metrics_(init_time) {}
+  CastDialogMetricsTest() = default;
   ~CastDialogMetricsTest() override = default;
 
  protected:
-  CastDialogMetrics metrics_;
+  content::BrowserTaskEnvironment task_environment_;
+  TestingProfile profile_;
   base::HistogramTester tester_;
+  CastDialogMetrics metrics_{init_time, MediaRouterDialogOpenOrigin::TOOLBAR,
+                             &profile_};
 };
 
 TEST_F(CastDialogMetricsTest, OnSinksLoaded) {
@@ -53,7 +60,7 @@ TEST_F(CastDialogMetricsTest, OnPaint) {
 TEST_F(CastDialogMetricsTest, OnStartCasting) {
   constexpr int kSinkIndex = 4;
   metrics_.OnSinksLoaded(sink_load_time);
-  metrics_.OnStartCasting(start_casting_time, kSinkIndex);
+  metrics_.OnStartCasting(start_casting_time, kSinkIndex, TAB_MIRROR);
   tester_.ExpectUniqueSample(
       MediaRouterMetrics::kHistogramStartLocalLatency,
       (start_casting_time - sink_load_time).InMilliseconds(), 1);
@@ -87,6 +94,57 @@ TEST_F(CastDialogMetricsTest, RecordFirstAction) {
   // Only the first action should be recorded for the first action metric.
   tester_.ExpectUniqueSample(MediaRouterMetrics::kHistogramUiFirstAction,
                              MediaRouterUserAction::STOP_LOCAL, 1);
+}
+
+TEST_F(CastDialogMetricsTest, RecordIconState) {
+  tester_.ExpectUniqueSample(
+      MediaRouterMetrics::kHistogramUiDialogIconStateAtOpen,
+      /* is_pinned */ false, 1);
+
+  profile_.GetPrefs()->SetBoolean(prefs::kShowCastIconInToolbar, true);
+  CastDialogMetrics metrics_with_pinned_icon{
+      init_time, MediaRouterDialogOpenOrigin::PAGE, &profile_};
+  tester_.ExpectBucketCount(
+      MediaRouterMetrics::kHistogramUiDialogIconStateAtOpen,
+      /* is_pinned */ true, 1);
+}
+
+TEST_F(CastDialogMetricsTest, RecordCloudPref) {
+  // When a dialog is opened after enabling the cloud services, that should be
+  // recorded.
+  profile_.GetPrefs()->SetBoolean(prefs::kMediaRouterEnableCloudServices, true);
+  CastDialogMetrics metrics_with_cloud_pref_enabled{
+      init_time, MediaRouterDialogOpenOrigin::PAGE, &profile_};
+  tester_.ExpectBucketCount(MediaRouterMetrics::kHistogramCloudPrefAtDialogOpen,
+                            /* enabled */ true, 1);
+}
+
+TEST_F(CastDialogMetricsTest, RecordDialogActivationLocationAndCastMode) {
+  constexpr int kSinkIndex = 4;
+  metrics_.OnSinksLoaded(sink_load_time);
+  metrics_.OnStartCasting(start_casting_time, kSinkIndex, TAB_MIRROR);
+  tester_.ExpectUniqueSample(
+      MediaRouterMetrics::kHistogramUiDialogActivationLocationAndCastMode,
+      DialogActivationLocationAndCastMode::kEphemeralIconAndTabMirror, 1);
+
+  CastDialogMetrics metrics_opened_from_page{
+      init_time, MediaRouterDialogOpenOrigin::PAGE, &profile_};
+  metrics_opened_from_page.OnSinksLoaded(sink_load_time);
+  metrics_opened_from_page.OnStartCasting(start_casting_time, kSinkIndex,
+                                          PRESENTATION);
+  tester_.ExpectBucketCount(
+      MediaRouterMetrics::kHistogramUiDialogActivationLocationAndCastMode,
+      DialogActivationLocationAndCastMode::kPageAndPresentation, 1);
+
+  profile_.GetPrefs()->SetBoolean(prefs::kShowCastIconInToolbar, true);
+  CastDialogMetrics metrics_with_pinned_icon{
+      init_time, MediaRouterDialogOpenOrigin::TOOLBAR, &profile_};
+  metrics_with_pinned_icon.OnSinksLoaded(sink_load_time);
+  metrics_with_pinned_icon.OnStartCasting(start_casting_time, kSinkIndex,
+                                          DESKTOP_MIRROR);
+  tester_.ExpectBucketCount(
+      MediaRouterMetrics::kHistogramUiDialogActivationLocationAndCastMode,
+      DialogActivationLocationAndCastMode::kPinnedIconAndDesktopMirror, 1);
 }
 
 }  // namespace media_router

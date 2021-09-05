@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 // Bookmark Manager API test for Chrome.
+import {simulateChromeExtensionAPITest} from 'chrome://test/bookmarks/test_util.js';
 
 test('bookmarkManagerPrivate', async () => {
   const bookmarkManager = chrome.bookmarkManagerPrivate;
@@ -84,7 +85,7 @@ test('bookmarkManagerPrivate', async () => {
 
     function getSubtree() {
       bookmarkManager.getSubtree(childFolder.id, false, pass(function(result) {
-                                   let children = result[0].children;
+                                   const children = result[0].children;
                                    assertEquals(3, children.length);
                                    assertEquals(childNodeA.id, children[0].id);
                                    assertEquals(childNodeB.id, children[1].id);
@@ -95,7 +96,7 @@ test('bookmarkManagerPrivate', async () => {
 
     function getSubtreeFoldersOnly() {
       bookmarkManager.getSubtree(childFolder.id, true, pass(function(result) {
-                                   let children = result[0].children;
+                                   const children = result[0].children;
                                    assertEquals(1, children.length);
                                    assertEquals(
                                        grandChildFolder.id, children[0].id);
@@ -208,15 +209,16 @@ test('bookmarkManagerPrivate', async () => {
             assertEquals(count, result.length);
 
             // Look for barNode's index.
-            for (let barIndex = 0; barIndex < result.length; barIndex++) {
+            let barIndex;
+            for (barIndex = 0; barIndex < result.length; barIndex++) {
               if (result[barIndex].id == barNode.id) {
                 break;
               }
             }
             assertTrue(barIndex + 2 < result.length);
 
-            let last = result[barIndex + 1];
-            let last2 = result[barIndex + 2];
+            const last = result[barIndex + 1];
+            const last2 = result[barIndex + 2];
             assertEquals(fooNode.title, last.title);
             assertEquals(fooNode.url, last.url);
             assertEquals(fooNode.parentId, last.parentId);
@@ -250,7 +252,8 @@ test('bookmarkManagerPrivate', async () => {
             assertEquals(count, result.length);
 
             // Look for fooNode2's index.
-            for (let foo2Index = 0; foo2Index < result.length; foo2Index++) {
+            let foo2Index;
+            for (foo2Index = 0; foo2Index < result.length; foo2Index++) {
               if (result[foo2Index].id == fooNode2.id) {
                 break;
               }

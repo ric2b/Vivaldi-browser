@@ -7,38 +7,42 @@
 
 #include <string>
 
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/optional.h"
 #include "components/dom_distiller/content/browser/distillable_page_utils.h"
+#include "components/dom_distiller/content/browser/uma_helper.h"
 #include "components/dom_distiller/content/common/mojom/distillability_service.mojom.h"
-#include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
-#include "services/service_manager/public/cpp/binder_registry.h"
 
 namespace dom_distiller {
 
 // This is an IPC helper for determining whether a page should be distilled.
 class DistillabilityDriver
-    : public content::WebContentsObserver,
-      public content::WebContentsUserData<DistillabilityDriver> {
+    : public content::WebContentsUserData<DistillabilityDriver> {
  public:
   ~DistillabilityDriver() override;
   void CreateDistillabilityService(
       mojo::PendingReceiver<mojom::DistillabilityService> receiver);
 
-  void AddObserver(DistillabilityObserver* observer);
+  base::ObserverList<DistillabilityObserver>* GetObserverList() {
+    return &observers_;
+  }
   base::Optional<DistillabilityResult> GetLatestResult() const {
     return latest_result_;
   }
 
-  // content::WebContentsObserver implementation.
-  void OnInterfaceRequestFromFrame(
-      content::RenderFrameHost* render_frame_host,
-      const std::string& interface_name,
-      mojo::ScopedMessagePipeHandle* interface_pipe) override;
+  // Sets a callback which can be used to determine the security of a page,
+  // to decide whether it can be distilled. DANGEROUS pages are never
+  // distillable.
+  void SetIsDangerousCallback(
+      base::RepeatingCallback<bool(content::WebContents*)> is_dangerous_check);
+
+  UMAHelper::DistillabilityDriverTimer& GetTimer() { return timer_; }
+
+  DistillabilityDriver(const DistillabilityDriver&) = delete;
+  DistillabilityDriver& operator=(const DistillabilityDriver&) = delete;
 
  private:
   explicit DistillabilityDriver(content::WebContents* web_contents);
@@ -55,13 +59,19 @@ class DistillabilityDriver
   // new page, accounting for same-document navigation.
   base::Optional<DistillabilityResult> latest_result_;
 
-  service_manager::BinderRegistry frame_interfaces_;
+  // For UMA metrics on durations spent in distilled or distillable pages.
+  // Because each DistillabilityDriver is associated with just one WebContents,
+  // it can be used to track the amount of time spent actively viewing that
+  // WebContents when the page is distillable or distilled, creating useful
+  // metrics for the ReaderMode experiment.
+  UMAHelper::DistillabilityDriverTimer timer_;
+
+  content::WebContents* web_contents_;
+  base::RepeatingCallback<bool(content::WebContents*)> is_dangerous_check_;
 
   base::WeakPtrFactory<DistillabilityDriver> weak_factory_{this};
 
   WEB_CONTENTS_USER_DATA_KEY_DECL();
-
-  DISALLOW_COPY_AND_ASSIGN(DistillabilityDriver);
 };
 
 }  // namespace dom_distiller

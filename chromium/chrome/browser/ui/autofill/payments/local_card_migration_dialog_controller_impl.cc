@@ -154,6 +154,16 @@ const std::string& LocalCardMigrationDialogControllerImpl::GetUserEmail()
 
 void LocalCardMigrationDialogControllerImpl::OnSaveButtonClicked(
     const std::vector<std::string>& selected_cards_guids) {
+  // Add maximum strikes for local card migration due to user closing the main
+  // dialog. Even though the user accepted, we should not prompt migration again
+  // if there are other eligible cards, since they would have been intentionally
+  // deselected in this round.
+  LocalCardMigrationStrikeDatabase local_card_migration_strike_database(
+      StrikeDatabaseFactory::GetForProfile(
+          Profile::FromBrowserContext(web_contents()->GetBrowserContext())));
+  local_card_migration_strike_database.AddStrikes(
+      LocalCardMigrationStrikeDatabase::kStrikesToAddWhenDialogClosed);
+
   AutofillMetrics::LogLocalCardMigrationDialogUserSelectionPercentageMetric(
       selected_cards_guids.size(), migratable_credit_cards_.size());
   AutofillMetrics::LogLocalCardMigrationDialogUserInteractionMetric(
@@ -165,17 +175,13 @@ void LocalCardMigrationDialogControllerImpl::OnSaveButtonClicked(
 }
 
 void LocalCardMigrationDialogControllerImpl::OnCancelButtonClicked() {
-  // Add strikes for local card migration due to user closing the main dialog.
-  if (base::FeatureList::IsEnabled(
-          features::kAutofillLocalCardMigrationUsesStrikeSystemV2)) {
-    LocalCardMigrationStrikeDatabase local_card_migration_strike_database(
-        StrikeDatabaseFactory::GetForProfile(
-            Profile::FromBrowserContext(web_contents()->GetBrowserContext())));
-    local_card_migration_strike_database.AddStrikes(
-        LocalCardMigrationStrikeDatabase::kStrikesToAddWhenDialogClosed);
-  } else {
-    prefs::SetLocalCardMigrationPromptPreviouslyCancelled(pref_service_, true);
-  }
+  // Add maximum strikes for local card migration due to user closing the main
+  // dialog.
+  LocalCardMigrationStrikeDatabase local_card_migration_strike_database(
+      StrikeDatabaseFactory::GetForProfile(
+          Profile::FromBrowserContext(web_contents()->GetBrowserContext())));
+  local_card_migration_strike_database.AddStrikes(
+      LocalCardMigrationStrikeDatabase::kStrikesToAddWhenDialogClosed);
 
   AutofillMetrics::LogLocalCardMigrationDialogUserInteractionMetric(
       dialog_is_visible_duration_timer_.Elapsed(),

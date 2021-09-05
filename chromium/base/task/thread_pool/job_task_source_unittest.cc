@@ -47,8 +47,8 @@ class ThreadPoolJobTaskSourceTest : public testing::Test {
 TEST_F(ThreadPoolJobTaskSourceTest, RunTasks) {
   auto job_task = base::MakeRefCounted<test::MockJobTask>(
       DoNothing(), /* num_tasks_to_run */ 2);
-  scoped_refptr<JobTaskSource> task_source = job_task->GetJobTaskSource(
-      FROM_HERE, ThreadPool(), &pooled_task_runner_delegate_);
+  scoped_refptr<JobTaskSource> task_source =
+      job_task->GetJobTaskSource(FROM_HERE, {}, &pooled_task_runner_delegate_);
   auto registered_task_source =
       RegisteredTaskSource::CreateForTesting(task_source);
 
@@ -58,7 +58,7 @@ TEST_F(ThreadPoolJobTaskSourceTest, RunTasks) {
               TaskSource::RunStatus::kAllowedNotSaturated);
 
     auto task = registered_task_source.TakeTask();
-    std::move(task->task).Run();
+    std::move(task.task).Run();
     EXPECT_TRUE(registered_task_source.DidProcessTask());
   }
   {
@@ -73,7 +73,7 @@ TEST_F(ThreadPoolJobTaskSourceTest, RunTasks) {
     EXPECT_EQ(RegisteredTaskSource::CreateForTesting(task_source).WillRunTask(),
               TaskSource::RunStatus::kDisallowed);
 
-    std::move(task->task).Run();
+    std::move(task.task).Run();
     EXPECT_EQ(0U, task_source->GetRemainingConcurrency());
     // Returns false because the task source is out of tasks.
     EXPECT_FALSE(registered_task_source.DidProcessTask());
@@ -85,8 +85,8 @@ TEST_F(ThreadPoolJobTaskSourceTest, RunTasks) {
 TEST_F(ThreadPoolJobTaskSourceTest, Clear) {
   auto job_task = base::MakeRefCounted<test::MockJobTask>(
       DoNothing(), /* num_tasks_to_run */ 5);
-  scoped_refptr<JobTaskSource> task_source = job_task->GetJobTaskSource(
-      FROM_HERE, ThreadPool(), &pooled_task_runner_delegate_);
+  scoped_refptr<JobTaskSource> task_source =
+      job_task->GetJobTaskSource(FROM_HERE, {}, &pooled_task_runner_delegate_);
 
   EXPECT_EQ(5U, task_source->GetRemainingConcurrency());
   auto registered_task_source_a =
@@ -115,7 +115,7 @@ TEST_F(ThreadPoolJobTaskSourceTest, Clear) {
   {
     EXPECT_EQ(1U, task_source->GetRemainingConcurrency());
     auto task = registered_task_source_c.Clear();
-    std::move(task->task).Run();
+    std::move(task.task).Run();
     registered_task_source_c.DidProcessTask();
     EXPECT_EQ(0U, task_source->GetRemainingConcurrency());
   }
@@ -127,19 +127,19 @@ TEST_F(ThreadPoolJobTaskSourceTest, Clear) {
   // Another outstanding RunStatus can still call Clear.
   {
     auto task = registered_task_source_d.Clear();
-    std::move(task->task).Run();
+    std::move(task.task).Run();
     registered_task_source_d.DidProcessTask();
     EXPECT_EQ(0U, task_source->GetRemainingConcurrency());
   }
 
   // A task that was already acquired can still run.
-  std::move(task_a->task).Run();
+  std::move(task_a.task).Run();
   registered_task_source_a.DidProcessTask();
 
   // A valid outstanding RunStatus can also take and run a task.
   {
     auto task = registered_task_source_b.TakeTask();
-    std::move(task->task).Run();
+    std::move(task.task).Run();
     registered_task_source_b.DidProcessTask();
   }
 }
@@ -150,8 +150,7 @@ TEST_F(ThreadPoolJobTaskSourceTest, Cancel) {
   auto job_task = base::MakeRefCounted<test::MockJobTask>(
       DoNothing(), /* num_tasks_to_run */ 3);
   scoped_refptr<JobTaskSource> task_source = job_task->GetJobTaskSource(
-      FROM_HERE, {ThreadPool(), TaskPriority::BEST_EFFORT},
-      &pooled_task_runner_delegate_);
+      FROM_HERE, {TaskPriority::BEST_EFFORT}, &pooled_task_runner_delegate_);
 
   auto registered_task_source_a =
       RegisteredTaskSource::CreateForTesting(task_source);
@@ -174,13 +173,13 @@ TEST_F(ThreadPoolJobTaskSourceTest, Cancel) {
             TaskSource::RunStatus::kDisallowed);
 
   // A task that was already acquired can still run.
-  std::move(task_a->task).Run();
+  std::move(task_a.task).Run();
   registered_task_source_a.DidProcessTask();
 
   // A RegisteredTaskSource that's ready can also take and run a task.
   {
     auto task = registered_task_source_b.TakeTask();
-    std::move(task->task).Run();
+    std::move(task.task).Run();
     registered_task_source_b.DidProcessTask();
   }
 }
@@ -189,8 +188,8 @@ TEST_F(ThreadPoolJobTaskSourceTest, Cancel) {
 TEST_F(ThreadPoolJobTaskSourceTest, RunTasksInParallel) {
   auto job_task = base::MakeRefCounted<test::MockJobTask>(
       DoNothing(), /* num_tasks_to_run */ 2);
-  scoped_refptr<JobTaskSource> task_source = job_task->GetJobTaskSource(
-      FROM_HERE, ThreadPool(), &pooled_task_runner_delegate_);
+  scoped_refptr<JobTaskSource> task_source =
+      job_task->GetJobTaskSource(FROM_HERE, {}, &pooled_task_runner_delegate_);
 
   auto registered_task_source_a =
       RegisteredTaskSource::CreateForTesting(task_source);
@@ -209,13 +208,13 @@ TEST_F(ThreadPoolJobTaskSourceTest, RunTasksInParallel) {
   EXPECT_EQ(RegisteredTaskSource::CreateForTesting(task_source).WillRunTask(),
             TaskSource::RunStatus::kDisallowed);
 
-  std::move(task_a->task).Run();
+  std::move(task_a.task).Run();
   // Adding a task before closing the first run operation should cause the task
   // source to re-enqueue.
   job_task->SetNumTasksToRun(2);
   EXPECT_TRUE(registered_task_source_a.DidProcessTask());
 
-  std::move(task_b->task).Run();
+  std::move(task_b.task).Run();
   EXPECT_TRUE(registered_task_source_b.DidProcessTask());
 
   auto registered_task_source_c =
@@ -224,7 +223,7 @@ TEST_F(ThreadPoolJobTaskSourceTest, RunTasksInParallel) {
             TaskSource::RunStatus::kAllowedSaturated);
   auto task_c = registered_task_source_c.TakeTask();
 
-  std::move(task_c->task).Run();
+  std::move(task_c.task).Run();
   EXPECT_FALSE(registered_task_source_c.DidProcessTask());
 }
 
@@ -232,8 +231,8 @@ TEST_F(ThreadPoolJobTaskSourceTest, RunTasksInParallel) {
 TEST_F(ThreadPoolJobTaskSourceTest, RunJoinTask) {
   auto job_task = base::MakeRefCounted<test::MockJobTask>(
       DoNothing(), /* num_tasks_to_run */ 2);
-  scoped_refptr<JobTaskSource> task_source = job_task->GetJobTaskSource(
-      FROM_HERE, ThreadPool(), &pooled_task_runner_delegate_);
+  scoped_refptr<JobTaskSource> task_source =
+      job_task->GetJobTaskSource(FROM_HERE, {}, &pooled_task_runner_delegate_);
 
   EXPECT_TRUE(task_source->WillJoin());
   // Intentionally run |worker_task| twice to make sure RunJoinTask() calls
@@ -248,8 +247,8 @@ TEST_F(ThreadPoolJobTaskSourceTest, RunJoinTask) {
 TEST_F(ThreadPoolJobTaskSourceTest, CancelJoinTask) {
   auto job_task = base::MakeRefCounted<test::MockJobTask>(
       DoNothing(), /* num_tasks_to_run */ 2);
-  scoped_refptr<JobTaskSource> task_source = job_task->GetJobTaskSource(
-      FROM_HERE, ThreadPool(), &pooled_task_runner_delegate_);
+  scoped_refptr<JobTaskSource> task_source =
+      job_task->GetJobTaskSource(FROM_HERE, {}, &pooled_task_runner_delegate_);
 
   task_source->Cancel();
   EXPECT_FALSE(task_source->WillJoin());
@@ -260,8 +259,8 @@ TEST_F(ThreadPoolJobTaskSourceTest, CancelJoinTask) {
 TEST_F(ThreadPoolJobTaskSourceTest, JoinCancelTask) {
   auto job_task = base::MakeRefCounted<test::MockJobTask>(
       DoNothing(), /* num_tasks_to_run */ 2);
-  scoped_refptr<JobTaskSource> task_source = job_task->GetJobTaskSource(
-      FROM_HERE, ThreadPool(), &pooled_task_runner_delegate_);
+  scoped_refptr<JobTaskSource> task_source =
+      job_task->GetJobTaskSource(FROM_HERE, {}, &pooled_task_runner_delegate_);
 
   EXPECT_TRUE(task_source->WillJoin());
   task_source->Cancel();
@@ -273,8 +272,8 @@ TEST_F(ThreadPoolJobTaskSourceTest, JoinCancelTask) {
 TEST_F(ThreadPoolJobTaskSourceTest, RunJoinTaskInParallel) {
   auto job_task = base::MakeRefCounted<test::MockJobTask>(
       DoNothing(), /* num_tasks_to_run */ 2);
-  scoped_refptr<JobTaskSource> task_source = job_task->GetJobTaskSource(
-      FROM_HERE, ThreadPool(), &pooled_task_runner_delegate_);
+  scoped_refptr<JobTaskSource> task_source =
+      job_task->GetJobTaskSource(FROM_HERE, {}, &pooled_task_runner_delegate_);
 
   auto registered_task_source =
       RegisteredTaskSource::CreateForTesting(task_source);
@@ -284,7 +283,7 @@ TEST_F(ThreadPoolJobTaskSourceTest, RunJoinTaskInParallel) {
 
   EXPECT_TRUE(task_source->WillJoin());
 
-  std::move(worker_task->task).Run();
+  std::move(worker_task.task).Run();
   EXPECT_FALSE(registered_task_source.DidProcessTask());
 
   EXPECT_FALSE(task_source->RunJoinTask());
@@ -295,8 +294,8 @@ TEST_F(ThreadPoolJobTaskSourceTest, RunJoinTaskInParallel) {
 TEST_F(ThreadPoolJobTaskSourceTest, NotifyConcurrencyIncrease) {
   auto job_task = base::MakeRefCounted<test::MockJobTask>(
       DoNothing(), /* num_tasks_to_run */ 1);
-  scoped_refptr<JobTaskSource> task_source = job_task->GetJobTaskSource(
-      FROM_HERE, ThreadPool(), &pooled_task_runner_delegate_);
+  scoped_refptr<JobTaskSource> task_source =
+      job_task->GetJobTaskSource(FROM_HERE, {}, &pooled_task_runner_delegate_);
 
   auto registered_task_source_a =
       RegisteredTaskSource::CreateForTesting(task_source);
@@ -320,25 +319,25 @@ TEST_F(ThreadPoolJobTaskSourceTest, NotifyConcurrencyIncrease) {
   EXPECT_EQ(RegisteredTaskSource::CreateForTesting(task_source).WillRunTask(),
             TaskSource::RunStatus::kDisallowed);
 
-  std::move(task_a->task).Run();
+  std::move(task_a.task).Run();
   EXPECT_FALSE(registered_task_source_a.DidProcessTask());
 
-  std::move(task_b->task).Run();
+  std::move(task_b.task).Run();
   EXPECT_FALSE(registered_task_source_b.DidProcessTask());
 }
 
 // Verifies that ShouldYield() calls the delegate.
 TEST_F(ThreadPoolJobTaskSourceTest, ShouldYield) {
   auto job_task = base::MakeRefCounted<test::MockJobTask>(
-      BindLambdaForTesting([](experimental::JobDelegate* delegate) {
+      BindLambdaForTesting([](JobDelegate* delegate) {
         // As set up below, the mock will return false once and true the second
         // time.
         EXPECT_FALSE(delegate->ShouldYield());
         EXPECT_TRUE(delegate->ShouldYield());
       }),
       /* num_tasks_to_run */ 1);
-  scoped_refptr<JobTaskSource> task_source = job_task->GetJobTaskSource(
-      FROM_HERE, ThreadPool(), &pooled_task_runner_delegate_);
+  scoped_refptr<JobTaskSource> task_source =
+      job_task->GetJobTaskSource(FROM_HERE, {}, &pooled_task_runner_delegate_);
 
   auto registered_task_source =
       RegisteredTaskSource::CreateForTesting(task_source);
@@ -352,7 +351,7 @@ TEST_F(ThreadPoolJobTaskSourceTest, ShouldYield) {
       .WillOnce(Return(false))
       .WillOnce(Return(true));
 
-  std::move(task->task).Run();
+  std::move(task.task).Run();
   EXPECT_FALSE(registered_task_source.DidProcessTask());
 }
 
@@ -361,8 +360,7 @@ TEST_F(ThreadPoolJobTaskSourceTest, ShouldYield) {
 TEST_F(ThreadPoolJobTaskSourceTest, MaxConcurrencyStagnateIfShouldYield) {
   scoped_refptr<JobTaskSource> task_source =
       base::MakeRefCounted<JobTaskSource>(
-          FROM_HERE, ThreadPool(),
-          BindRepeating([](experimental::JobDelegate* delegate) {
+          FROM_HERE, TaskTraits(), BindRepeating([](JobDelegate* delegate) {
             // As set up below, the mock will return true once.
             ASSERT_TRUE(delegate->ShouldYield());
           }),
@@ -382,7 +380,7 @@ TEST_F(ThreadPoolJobTaskSourceTest, MaxConcurrencyStagnateIfShouldYield) {
 
   // Running the task should not fail even though max concurrency remained at 1,
   // since ShouldYield() returned true.
-  std::move(task->task).Run();
+  std::move(task.task).Run();
   registered_task_source.DidProcessTask();
 }
 
@@ -393,7 +391,7 @@ TEST_F(ThreadPoolJobTaskSourceTest, InvalidConcurrency) {
 
   scoped_refptr<test::MockJobTask> job_task;
   job_task = base::MakeRefCounted<test::MockJobTask>(
-      BindLambdaForTesting([&](experimental::JobDelegate* delegate) {
+      BindLambdaForTesting([&](JobDelegate* delegate) {
         EXPECT_FALSE(delegate->ShouldYield());
         job_task->SetNumTasksToRun(2);
         EXPECT_FALSE(delegate->ShouldYield());
@@ -402,8 +400,8 @@ TEST_F(ThreadPoolJobTaskSourceTest, InvalidConcurrency) {
         // NotifyConcurrencyIncrease().
       }),
       /* num_tasks_to_run */ 1);
-  scoped_refptr<JobTaskSource> task_source = job_task->GetJobTaskSource(
-      FROM_HERE, ThreadPool(), &pooled_task_runner_delegate_);
+  scoped_refptr<JobTaskSource> task_source =
+      job_task->GetJobTaskSource(FROM_HERE, {}, &pooled_task_runner_delegate_);
 
   auto registered_task_source =
       RegisteredTaskSource::CreateForTesting(task_source);
@@ -411,7 +409,30 @@ TEST_F(ThreadPoolJobTaskSourceTest, InvalidConcurrency) {
             TaskSource::RunStatus::kAllowedSaturated);
   auto task = registered_task_source.TakeTask();
 
-  EXPECT_DCHECK_DEATH(std::move(task->task).Run());
+  EXPECT_DCHECK_DEATH(std::move(task.task).Run());
+
+  registered_task_source.DidProcessTask();
+}
+
+// Verifies that a stale concurrency with no call to NotifyConcurrencyIncrease()
+// causes a DCHECK death after a timeout.
+TEST_F(ThreadPoolJobTaskSourceTest, StaleConcurrency) {
+  testing::FLAGS_gtest_death_test_style = "threadsafe";
+
+  auto task_source = MakeRefCounted<JobTaskSource>(
+      FROM_HERE, TaskTraits{}, BindRepeating([](JobDelegate*) {}),
+      BindRepeating([]() -> size_t { return 1; }),
+      &pooled_task_runner_delegate_);
+
+  auto registered_task_source =
+      RegisteredTaskSource::CreateForTesting(task_source);
+  ASSERT_EQ(registered_task_source.WillRunTask(),
+            TaskSource::RunStatus::kAllowedSaturated);
+  auto task = registered_task_source.TakeTask();
+
+  // A DCHECK should trigger when |JobTaskSource::primary_task_| returns and
+  // ~JobDelegate() invokes AssertExpectedConcurrency(0)
+  EXPECT_DCHECK_DEATH(std::move(task.task).Run());
 
   registered_task_source.DidProcessTask();
 }
@@ -420,8 +441,8 @@ TEST_F(ThreadPoolJobTaskSourceTest, InvalidTakeTask) {
   auto job_task =
       base::MakeRefCounted<test::MockJobTask>(DoNothing(),
                                               /* num_tasks_to_run */ 1);
-  scoped_refptr<JobTaskSource> task_source = job_task->GetJobTaskSource(
-      FROM_HERE, ThreadPool(), &pooled_task_runner_delegate_);
+  scoped_refptr<JobTaskSource> task_source =
+      job_task->GetJobTaskSource(FROM_HERE, {}, &pooled_task_runner_delegate_);
 
   auto registered_task_source_a =
       RegisteredTaskSource::CreateForTesting(task_source);
@@ -444,8 +465,8 @@ TEST_F(ThreadPoolJobTaskSourceTest, InvalidDidProcessTask) {
   auto job_task =
       base::MakeRefCounted<test::MockJobTask>(DoNothing(),
                                               /* num_tasks_to_run */ 1);
-  scoped_refptr<JobTaskSource> task_source = job_task->GetJobTaskSource(
-      FROM_HERE, ThreadPool(), &pooled_task_runner_delegate_);
+  scoped_refptr<JobTaskSource> task_source =
+      job_task->GetJobTaskSource(FROM_HERE, {}, &pooled_task_runner_delegate_);
 
   auto registered_task_source =
       RegisteredTaskSource::CreateForTesting(task_source);

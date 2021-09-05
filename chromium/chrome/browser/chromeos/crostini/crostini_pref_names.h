@@ -12,22 +12,28 @@ namespace prefs {
 
 extern const char kCrostiniEnabled[];
 extern const char kCrostiniMimeTypes[];
-extern const char kCrostiniRegistry[];
 extern const char kCrostiniSharedUsbDevices[];
 extern const char kCrostiniContainers[];
+extern const char kCrostiniTerminalSettings[];
 extern const char kVmKey[];
 extern const char kContainerKey[];
+extern const char kContainerOsVersionKey[];
 
 extern const char kUserCrostiniAllowedByPolicy[];
 extern const char kUserCrostiniExportImportUIAllowedByPolicy[];
 extern const char kVmManagementCliAllowedByPolicy[];
 extern const char kUserCrostiniRootAccessAllowedByPolicy[];
+extern const char kCrostiniAnsiblePlaybookFilePath[];
+extern const char kCrostiniDefaultContainerConfigured[];
 
 extern const char kReportCrostiniUsageEnabled[];
 extern const char kCrostiniLastLaunchTerminaComponentVersion[];
 extern const char kCrostiniLastLaunchTerminaKernelVersion[];
 extern const char kCrostiniLastLaunchTimeWindowStart[];
 extern const char kCrostiniLastDiskSize[];
+extern const char kCrostiniPortForwarding[];
+extern const char kCrostiniMicSharing[];
+extern const char kCrostiniMicSharingAtLastLaunch[];
 
 void RegisterProfilePrefs(PrefRegistrySimple* registry);
 

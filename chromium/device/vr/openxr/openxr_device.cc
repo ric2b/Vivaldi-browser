@@ -16,20 +16,11 @@ namespace device {
 
 namespace {
 
-constexpr char kDisplayName[] = "OpenXR";
-
-constexpr bool kHasPosition = true;
-constexpr bool kHasExternalDisplay = true;
-constexpr bool kCanPresent = true;
-
-constexpr float kFramebufferScale = 1.0f;
 constexpr float kFov = 45.0f;
 
 constexpr unsigned int kRenderWidth = 1024;
 constexpr unsigned int kRenderHeight = 1024;
 
-constexpr float kStageSizeX = 0.0f;
-constexpr float kStageSizeZ = 0.0f;
 // OpenXR doesn't give out display info until you start a session.
 // However our mojo interface expects display info right away to support WebVR.
 // We create a fake display info to use, then notify the client that the display
@@ -38,15 +29,6 @@ mojom::VRDisplayInfoPtr CreateFakeVRDisplayInfo(device::mojom::XRDeviceId id) {
   mojom::VRDisplayInfoPtr display_info = mojom::VRDisplayInfo::New();
 
   display_info->id = id;
-  display_info->display_name = kDisplayName;
-
-  display_info->capabilities = mojom::VRDisplayCapabilities::New();
-  display_info->capabilities->has_position = kHasPosition;
-  display_info->capabilities->has_external_display = kHasExternalDisplay;
-  display_info->capabilities->can_present = kCanPresent;
-
-  display_info->webvr_default_framebuffer_scale = kFramebufferScale;
-  display_info->webxr_default_framebuffer_scale = kFramebufferScale;
 
   display_info->left_eye = mojom::VREyeParameters::New();
   display_info->right_eye = mojom::VREyeParameters::New();
@@ -66,23 +48,10 @@ mojom::VRDisplayInfoPtr CreateFakeVRDisplayInfo(device::mojom::XRDeviceId id) {
   display_info->right_eye->render_width = kRenderWidth;
   display_info->right_eye->render_height = kRenderHeight;
 
-  display_info->stage_parameters = mojom::VRStageParameters::New();
-  display_info->stage_parameters->standing_transform = gfx::Transform();
-  display_info->stage_parameters->size_x = kStageSizeX;
-  display_info->stage_parameters->size_z = kStageSizeZ;
-
   return display_info;
 }
 
 }  // namespace
-
-bool OpenXrDevice::IsHardwareAvailable() {
-  return OpenXrApiWrapper::IsHardwareAvailable();
-}
-
-bool OpenXrDevice::IsApiAvailable() {
-  return OpenXrApiWrapper::IsApiAvailable();
-}
 
 OpenXrDevice::OpenXrDevice()
     : VRDeviceBase(device::mojom::XRDeviceId::OPENXR_DEVICE_ID),
@@ -97,11 +66,6 @@ OpenXrDevice::~OpenXrDevice() {
   if (render_loop_ && render_loop_->IsRunning()) {
     render_loop_->Stop();
   }
-}
-
-mojo::PendingRemote<mojom::IsolatedXRGamepadProviderFactory>
-OpenXrDevice::BindGamepadFactory() {
-  return gamepad_provider_factory_receiver_.BindNewPipeAndPassRemote();
 }
 
 mojo::PendingRemote<mojom::XRCompositorHost>
@@ -121,7 +85,7 @@ void OpenXrDevice::EnsureRenderLoop() {
 void OpenXrDevice::RequestSession(
     mojom::XRRuntimeSessionOptionsPtr options,
     mojom::XRRuntime::RequestSessionCallback callback) {
-  DCHECK(options->immersive);
+  DCHECK_EQ(options->mode, mojom::XRSessionMode::kImmersiveVr);
   EnsureRenderLoop();
 
   if (!render_loop_->IsRunning()) {
@@ -130,13 +94,6 @@ void OpenXrDevice::RequestSession(
     if (!render_loop_->IsRunning()) {
       std::move(callback).Run(nullptr, mojo::NullRemote());
       return;
-    }
-
-    if (provider_receiver_) {
-      render_loop_->task_runner()->PostTask(
-          FROM_HERE, base::BindOnce(&XRCompositorCommon::RequestGamepadProvider,
-                                    base::Unretained(render_loop_.get()),
-                                    std::move(provider_receiver_)));
     }
 
     if (overlay_receiver_) {
@@ -151,17 +108,19 @@ void OpenXrDevice::RequestSession(
       base::BindOnce(&OpenXrDevice::OnRequestSessionResult,
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback));
 
+  auto on_visibility_state_changed = base::BindRepeating(
+      &OpenXrDevice::OnVisibilityStateChanged, weak_ptr_factory_.GetWeakPtr());
+
   // OpenXr doesn't need to handle anything when presentation has ended, but
   // the mojo interface to call to XRCompositorCommon::RequestSession requires
   // a method and cannot take nullptr, so passing in base::DoNothing::Once()
   // for on_presentation_ended
   render_loop_->task_runner()->PostTask(
-      FROM_HERE,
-      base::BindOnce(&XRCompositorCommon::RequestSession,
-                     base::Unretained(render_loop_.get()),
-                     base::DoNothing::Once(),
-                     base::DoNothing::Repeatedly<mojom::XRVisibilityState>(),
-                     std::move(options), std::move(my_callback)));
+      FROM_HERE, base::BindOnce(&XRCompositorCommon::RequestSession,
+                                base::Unretained(render_loop_.get()),
+                                base::DoNothing::Once(),
+                                std::move(on_visibility_state_changed),
+                                std::move(options), std::move(my_callback)));
 }
 
 void OpenXrDevice::OnRequestSessionResult(
@@ -175,12 +134,6 @@ void OpenXrDevice::OnRequestSessionResult(
 
   OnStartPresenting();
 
-  EnsureRenderLoop();
-  gfx::Size view_size = render_loop_->GetViewSize();
-  display_info_->left_eye->render_width = view_size.width();
-  display_info_->right_eye->render_width = view_size.width();
-  display_info_->left_eye->render_height = view_size.height();
-  display_info_->right_eye->render_height = view_size.height();
   session->display_info = display_info_.Clone();
 
   std::move(callback).Run(
@@ -209,19 +162,6 @@ void OpenXrDevice::OnPresentingControllerMojoConnectionError() {
 void OpenXrDevice::SetFrameDataRestricted(bool restricted) {
   // Presentation sessions can not currently be restricted.
   NOTREACHED();
-}
-
-void OpenXrDevice::GetIsolatedXRGamepadProvider(
-    mojo::PendingReceiver<mojom::IsolatedXRGamepadProvider> provider_receiver) {
-  EnsureRenderLoop();
-  if (render_loop_->IsRunning()) {
-    render_loop_->task_runner()->PostTask(
-        FROM_HERE, base::BindOnce(&XRCompositorCommon::RequestGamepadProvider,
-                                  base::Unretained(render_loop_.get()),
-                                  std::move(provider_receiver)));
-  } else {
-    provider_receiver_ = std::move(provider_receiver);
-  }
 }
 
 void OpenXrDevice::CreateImmersiveOverlay(

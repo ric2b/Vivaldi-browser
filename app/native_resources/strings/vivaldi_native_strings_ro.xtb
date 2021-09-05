@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="ro">
+<translation id="1158503667684816647">Nu mai arăta din nou confirmarea</translation>
 <translation id="1411638389238344450">Trimite linkul prin e-mail</translation>
+<translation id="1454726940098520109">Nu mai arăta din nou confirmarea</translation>
 <translation id="1756026472674246267">Deschide linkul într-o filă nouă</translation>
 <translation id="1759842336958782510">Chrome</translation>
 <translation id="1769904678986817931">Proprietăți imagine...</translation>
@@ -12,6 +14,7 @@
 <translation id="3027988479108856431">Din păcate, setările Yandex nu sunt disponibile în timp ce acel browser încă rulează. Pentru a importa acele setări în Vivaldi, salvați la ceea ce lucrați și închideți toate ferestrele Yandex. Apoi dați clic pe Continuă.</translation>
 <translation id="3259769196742189631">Validează această pagină (W3C)</translation>
 <translation id="3402602684546832928">Selectează fișierul cu semnele de carte Opera</translation>
+<translation id="3457498675806041407">Confirmare ieșire</translation>
 <translation id="3542768452570884558">Deschide linkul într-o fereastră nouă</translation>
 <translation id="3588820906588687999">Deschide imaginea într-o filă nouă</translation>
 <translation id="3732157130969736834">Adaugă linkul la semne de carte</translation>
@@ -19,6 +22,7 @@
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4073157431025461511">Nu mai arăta &amp;din nou</translation>
 <translation id="4074744496918018786">Deschide imaginea într-o fereastră privată</translation>
+<translation id="4420816922321010053">Sigur vreți să închideți Vivaldi ?</translation>
 <translation id="4512900838580567989">Deschide linkul într-o filă nouă în fundal</translation>
 <translation id="4515472507709384008">Opera versiunea 15+</translation>
 <translation id="4548358047305717967">Deschide imaginea într-o filă nouă în fundal</translation>
@@ -42,6 +46,7 @@
 <translation id="6804831687363620480">Din păcate, setările Opera 15+ nu sunt disponibile în timp ce acel browser încă rulează. Pentru a importa acele setări în Vivaldi, salvați la ceea ce lucrați și închideți toate ferestrele Opera 15+. Apoi dați clic pe Continuă.</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7715497554424665066">&amp;Ignoră actualizarea</translation>
+<translation id="7865983598101744945">Confirmare ieșire</translation>
 <translation id="8099620695029051217">Copiază adresa paginii</translation>
 <translation id="8197810018650377191">Adaugă pagina la semnele de carte</translation>
 <translation id="864444594187862076">Opera versiunea 15+ (de dezvoltare)</translation>
@@ -49,6 +54,7 @@
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8773635261052182196">Nu veți mai vedea aceste notificări. Le puteți activa din nou din setările Vivaldi.</translation>
 <translation id="8894900864683381599">Adaugă linkul la panoul web</translation>
+<translation id="8912720443398351457">Sigur vreți să închideți Vivaldi ?</translation>
 <translation id="8947109330183116400">Selectați fișierul cu semnele de carte HTML</translation>
 <translation id="9017566390391482291">Selectați dosarul profilului Vivaldi de importat</translation>
 <translation id="9157539936604258187">Deschide linkul</translation>

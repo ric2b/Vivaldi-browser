@@ -8,7 +8,9 @@
 #include "base/component_export.h"
 #include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/sequenced_task_runner.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
+#include "third_party/skia/include/core/SkSurface.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/native_widget_types.h"
@@ -16,31 +18,26 @@
 #include "ui/gfx/x/x11_types.h"
 
 class SkCanvas;
-class SkSurface;
-
-namespace base {
-class TaskRunner;
-}
 
 namespace ui {
 
-class XShmImagePoolBase;
+class XShmImagePool;
 
 class COMPONENT_EXPORT(UI_BASE_X) X11SoftwareBitmapPresenter {
  public:
   // Corresponds to SwapBuffersCallback alias in SoftwareOutputDevice.
   using SwapBuffersCallback = base::OnceCallback<void(const gfx::Size&)>;
 
-  X11SoftwareBitmapPresenter(gfx::AcceleratedWidget widget,
-                             base::TaskRunner* host_task_runner,
-                             base::TaskRunner* event_task_runner);
+  X11SoftwareBitmapPresenter(
+      gfx::AcceleratedWidget widget,
+      scoped_refptr<base::SequencedTaskRunner> host_task_runner,
+      scoped_refptr<base::SequencedTaskRunner> event_task_runner);
 
   ~X11SoftwareBitmapPresenter();
 
-  bool ShmPoolReady() const;
-  bool Resize(const gfx::Size& pixel_size);
+  void Resize(const gfx::Size& pixel_size);
   SkCanvas* GetSkCanvas();
-  void EndPaint(sk_sp<SkSurface> sk_surface, const gfx::Rect& damage_rect);
+  void EndPaint(const gfx::Rect& damage_rect);
   void OnSwapBuffers(SwapBuffersCallback swap_ack_callback);
   int MaxFramesPending() const;
 
@@ -57,6 +54,10 @@ class COMPONENT_EXPORT(UI_BASE_X) X11SoftwareBitmapPresenter {
                               GC gc,
                               const void* data);
 
+  bool ShmPoolReady() const;
+
+  void FlushAfterPutImage();
+
   gfx::AcceleratedWidget widget_;
   XDisplay* display_;
   GC gc_;
@@ -66,8 +67,12 @@ class COMPONENT_EXPORT(UI_BASE_X) X11SoftwareBitmapPresenter {
   // parent-relative background.
   int composite_ = 0;
 
-  scoped_refptr<ui::XShmImagePoolBase> shm_pool_;
+  scoped_refptr<ui::XShmImagePool> shm_pool_;
   bool needs_swap_ = false;
+
+  scoped_refptr<base::SequencedTaskRunner> host_task_runner_;
+  scoped_refptr<base::SequencedTaskRunner> event_task_runner_;
+  sk_sp<SkSurface> surface_;
 
   gfx::Size viewport_pixel_size_;
 

@@ -213,7 +213,8 @@ class CORE_EXPORT ImagePaintTimingDetector final
                    const IntSize& intrinsic_size,
                    const ImageResourceContent&,
                    const PropertyTreeState& current_paint_chunk_properties,
-                   const StyleFetchedImage*);
+                   const StyleFetchedImage*,
+                   const IntRect* image_border);
   void NotifyImageFinished(const LayoutObject&, const ImageResourceContent*);
   void OnPaintFinished();
   void LayoutObjectWillBeDestroyed(const LayoutObject&);
@@ -236,7 +237,7 @@ class CORE_EXPORT ImagePaintTimingDetector final
   // Return the candidate.
   ImageRecord* UpdateCandidate();
 
-  void Trace(blink::Visitor*);
+  void Trace(Visitor*);
 
  private:
   friend class LargestContentfulPaintCalculatorTest;

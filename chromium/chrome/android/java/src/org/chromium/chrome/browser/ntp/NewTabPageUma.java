@@ -17,11 +17,11 @@ import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
-import org.chromium.chrome.browser.rappor.RapporServiceBridge;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabCreationState;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
-import org.chromium.chrome.browser.util.UrlUtilitiesJni;
+import org.chromium.components.embedder_support.util.UrlUtilitiesJni;
 import org.chromium.net.NetworkChangeNotifier;
 import org.chromium.ui.base.PageTransition;
 
@@ -75,14 +75,11 @@ public final class NewTabPageUma {
     /** User opened an explore sites tile. */
     public static final int ACTION_OPENED_EXPLORE_SITES_TILE = 11;
 
+    /** User clicked on the "Manage Interests" item in the snippet card menu. */
+    public static final int ACTION_CLICKED_MANAGE_INTERESTS = 12;
+
     /** The number of possible actions. */
-    private static final int NUM_ACTIONS = 12;
-
-    /** User navigated to a page using the omnibox. */
-    private static final int RAPPOR_ACTION_NAVIGATED_USING_OMNIBOX = 0;
-
-    /** User navigated to a page using one of the suggested tiles. */
-    public static final int RAPPOR_ACTION_VISITED_SUGGESTED_TILE = 1;
+    private static final int NUM_ACTIONS = 13;
 
     /** Regular NTP impression (usually when a new tab is opened). */
     public static final int NTP_IMPRESSION_REGULAR = 0;
@@ -181,25 +178,6 @@ public final class NewTabPageUma {
             } else {
                 recordAction(ACTION_NAVIGATED_USING_OMNIBOX);
             }
-            recordExplicitUserNavigation(destinationUrl, RAPPOR_ACTION_NAVIGATED_USING_OMNIBOX);
-        }
-    }
-
-    /**
-     * Record the eTLD+1 for a website explicitly visited by the user, using Rappor.
-     */
-    public static void recordExplicitUserNavigation(String destinationUrl, int rapporMetric) {
-        switch (rapporMetric) {
-            case RAPPOR_ACTION_NAVIGATED_USING_OMNIBOX:
-                RapporServiceBridge.sampleDomainAndRegistryFromURL(
-                        "NTP.ExplicitUserAction.PageNavigation.OmniboxNonSearch", destinationUrl);
-                return;
-            case RAPPOR_ACTION_VISITED_SUGGESTED_TILE:
-                RapporServiceBridge.sampleDomainAndRegistryFromURL(
-                        "NTP.ExplicitUserAction.PageNavigation.NTPTileClick", destinationUrl);
-                return;
-            default:
-                return;
         }
     }
 
@@ -349,8 +327,8 @@ public final class NewTabPageUma {
      */
     private static class TabCreationRecorder extends EmptyTabModelSelectorObserver {
         @Override
-        public void onNewTabCreated(Tab tab) {
-            if (!NewTabPage.isNTPUrl(tab.getUrl())) return;
+        public void onNewTabCreated(Tab tab, @TabCreationState int creationState) {
+            if (!NewTabPage.isNTPUrl(tab.getUrlString())) return;
             RecordUserAction.record("MobileNTPOpenedInNewTab");
         }
     }

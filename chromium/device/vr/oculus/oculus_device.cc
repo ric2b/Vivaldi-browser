@@ -10,11 +10,13 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/memory/ptr_util.h"
 #include "base/numerics/math_constants.h"
 #include "build/build_config.h"
 #include "device/vr/oculus/oculus_render_loop.h"
 #include "device/vr/oculus/oculus_type_converters.h"
+#include "device/vr/util/stage_utils.h"
 #include "device/vr/util/transform_utils.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "third_party/libovr/src/Include/OVR_CAPI.h"
@@ -61,13 +63,6 @@ mojom::VRDisplayInfoPtr CreateVRDisplayInfo(mojom::XRDeviceId id,
                                             ovrSession session) {
   mojom::VRDisplayInfoPtr display_info = mojom::VRDisplayInfo::New();
   display_info->id = id;
-  display_info->display_name = std::string("Oculus");
-  display_info->capabilities = mojom::VRDisplayCapabilities::New();
-  display_info->capabilities->has_position = true;
-  display_info->capabilities->has_external_display = true;
-  display_info->capabilities->can_present = true;
-  display_info->webvr_default_framebuffer_scale = 1.0;
-  display_info->webxr_default_framebuffer_scale = 1.0;
 
   ovrHmdDesc hmdDesc = ovr_GetHmdDesc(session);
   display_info->left_eye = GetEyeDetails(session, hmdDesc, ovrEye_Left);
@@ -85,8 +80,8 @@ mojom::VRDisplayInfoPtr CreateVRDisplayInfo(mojom::XRDeviceId id,
 
   ovrVector3f boundary_size;
   ovr_GetBoundaryDimensions(session, ovrBoundary_PlayArea, &boundary_size);
-  display_info->stage_parameters->size_x = boundary_size.x;
-  display_info->stage_parameters->size_z = boundary_size.z;
+  display_info->stage_parameters->bounds =
+      vr_utils::GetStageBoundsFromSize(boundary_size.x, boundary_size.z);
 
   return display_info;
 }
@@ -108,11 +103,6 @@ bool OculusDevice::IsHwAvailable() {
 bool OculusDevice::IsApiAvailable() {
   auto result = ovr_Detect(0);
   return result.IsOculusServiceRunning;
-}
-
-mojo::PendingRemote<mojom::IsolatedXRGamepadProviderFactory>
-OculusDevice::BindGamepadFactory() {
-  return gamepad_provider_factory_receiver_.BindNewPipeAndPassRemote();
 }
 
 mojo::PendingRemote<mojom::XRCompositorHost>
@@ -137,7 +127,7 @@ void OculusDevice::RequestSession(
     return;
   }
 
-  DCHECK(options->immersive);
+  DCHECK_EQ(options->mode, mojom::XRSessionMode::kImmersiveVr);
 
   StopOvrSession();
 
@@ -148,15 +138,6 @@ void OculusDevice::RequestSession(
       std::move(callback).Run(nullptr, mojo::NullRemote());
       StartOvrSession();
       return;
-    }
-
-    // If we have a pending gamepad provider receiver when starting the render
-    // loop, post the receiver over to the render loop to be bound.
-    if (provider_receiver_) {
-      render_loop_->task_runner()->PostTask(
-          FROM_HERE, base::BindOnce(&XRCompositorCommon::RequestGamepadProvider,
-                                    base::Unretained(render_loop_.get()),
-                                    std::move(provider_receiver_)));
     }
 
     if (overlay_receiver_) {
@@ -182,11 +163,6 @@ void OculusDevice::RequestSession(
                      base::DoNothing::Repeatedly<mojom::XRVisibilityState>(),
                      std::move(options), std::move(on_request_present_result)));
   outstanding_session_requests_count_++;
-}
-
-void OculusDevice::EnsureInitialized(EnsureInitializedCallback callback) {
-  EnsureValidDisplayInfo();
-  std::move(callback).Run();
 }
 
 bool OculusDevice::EnsureValidDisplayInfo() {
@@ -281,22 +257,6 @@ void OculusDevice::StopOvrSession() {
     ovr_Destroy(session_);
     session_ = nullptr;
     ovr_Shutdown();
-  }
-}
-
-void OculusDevice::GetIsolatedXRGamepadProvider(
-    mojo::PendingReceiver<mojom::IsolatedXRGamepadProvider> provider_receiver) {
-  // We bind the provider_receiver on the render loop thread, so gamepad data is
-  // updated at the rendering rate.
-  // If we haven't started the render loop yet, postpone binding the receiver
-  // until we do.
-  if (render_loop_->IsRunning()) {
-    render_loop_->task_runner()->PostTask(
-        FROM_HERE, base::BindOnce(&XRCompositorCommon::RequestGamepadProvider,
-                                  base::Unretained(render_loop_.get()),
-                                  std::move(provider_receiver)));
-  } else {
-    provider_receiver_ = std::move(provider_receiver);
   }
 }
 

@@ -5,13 +5,19 @@
 [
   {
     "namespace": "menubar",
-    "description": "Use the <code>vivaldi.menubar</code> API to set up and manage main menu bar",
+    "description": "Use the <code>vivaldi.menubar</code> API to set up and manage main menu bar.",
     "types": [
       {
         "id": "Mode",
         "type": "string",
         "description": "What part menubar to manipulate",
         "enum": ["all", "update", "tabs"]
+      },
+      {
+        "id": "Edge",
+        "type": "string",
+        "description": "Defines position of menu items added in chrome code wrt container items.",
+        "enum": [ "above", "below", "off" ]
       },
       {
         "id": "MenuItem",
@@ -21,6 +27,10 @@
           "name": {
             "type": "string",
             "description": "Text in item."
+          },
+          "action": {
+            "type": "string",
+            "description": "Action to execute."
           },
           "id": {
             "type": "integer",
@@ -52,6 +62,10 @@
             "optional": true,
             "description": "true if the item should appear as grayed out."
           },
+          "withNoWindow": {
+            "type": "boolean",
+            "description": "true if the item should remain normal when no windows are open. If false the item will be grayed out."
+          },
           "emphasized": {
             "type": "boolean",
             "optional": true,
@@ -75,7 +89,12 @@
           "index": {
             "type": "integer",
             "optional": true,
-            "description": "Index in menu list. Can only be used insert into an existing list"
+            "description": "Index in menu list. Can only be used insert into an existing list."
+          },
+          "edge": {
+            "$ref": "Edge",
+            "optional": true,
+            "description": "Where to place extra menu items"
           },
           "icon": {
             "type": "string",
@@ -89,7 +108,7 @@
         {
         "name": "setup",
         "type": "function",
-        "description": "Setup application's main menu",
+        "description": "Setup application's main menu.",
         "parameters": [
           {
             "name": "items",
@@ -100,7 +119,7 @@
           {
             "name": "mode",
             "$ref": "Mode",
-            "description": "What part of menu to set up"
+            "description": "What part of menu to set up."
           }
         ]
       }
@@ -109,24 +128,23 @@
       {
         "name": "onActivated",
         "type": "function",
-        "description": "Fired when a main menu item is activated",
+        "description": "Fired when a main menu item is activated.",
         "parameters": [
            {
             "type": "integer",
             "name": "window",
             "minimum": 0,
-            "description": "id of window where command occurred"
+            "description": "id of window where command occurred."
           },
           {
-            "type": "integer",
-            "name": "command",
-            "minimum": 0,
-            "description": "id of the command selected."
+            "type": "string",
+            "name": "action",
+            "description": "Action to execute."
           },
           {
             "type": "string",
             "name": "parameter",
-            "description": "Free format parameter to 'command'. Can be empty"
+            "description": "Free format parameter to 'command'. Can be empty."
           }
         ]
       }

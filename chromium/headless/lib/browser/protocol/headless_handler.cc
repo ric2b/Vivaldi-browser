@@ -58,7 +58,7 @@ void OnBeginFrameFinished(
     std::unique_ptr<SkBitmap> bitmap,
     std::string error_message) {
   if (!error_message.empty()) {
-    callback->sendFailure(Response::Error(std::move(error_message)));
+    callback->sendFailure(Response::ServerError(std::move(error_message)));
     return;
   }
   if (!bitmap || bitmap->drawsNothing()) {
@@ -70,13 +70,11 @@ void OnBeginFrameFinished(
 
 }  // namespace
 
-HeadlessHandler::HeadlessHandler(base::WeakPtr<HeadlessBrowserImpl> browser,
+HeadlessHandler::HeadlessHandler(HeadlessBrowserImpl* browser,
                                  content::WebContents* web_contents)
-    : DomainHandler(HeadlessExperimental::Metainfo::domainName, browser),
-      web_contents_(web_contents) {}
+    : browser_(browser), web_contents_(web_contents) {}
 
-HeadlessHandler::~HeadlessHandler() {
-}
+HeadlessHandler::~HeadlessHandler() {}
 
 void HeadlessHandler::Wire(UberDispatcher* dispatcher) {
   frontend_.reset(new HeadlessExperimental::Frontend(dispatcher->channel()));
@@ -86,11 +84,11 @@ void HeadlessHandler::Wire(UberDispatcher* dispatcher) {
 Response HeadlessHandler::Enable() {
   if (frontend_)
     frontend_->NeedsBeginFramesChanged(true);
-  return Response::OK();
+  return Response::Success();
 }
 
 Response HeadlessHandler::Disable() {
-  return Response::OK();
+  return Response::Success();
 }
 
 void HeadlessHandler::BeginFrame(Maybe<double> in_frame_time_ticks,
@@ -99,9 +97,9 @@ void HeadlessHandler::BeginFrame(Maybe<double> in_frame_time_ticks,
                                  Maybe<ScreenshotParams> screenshot,
                                  std::unique_ptr<BeginFrameCallback> callback) {
   HeadlessWebContentsImpl* headless_contents =
-      HeadlessWebContentsImpl::From(browser().get(), web_contents_);
+      HeadlessWebContentsImpl::From(browser_, web_contents_);
   if (!headless_contents->begin_frame_control_enabled()) {
-    callback->sendFailure(Response::Error(
+    callback->sendFailure(Response::ServerError(
         "Command is only supported if BeginFrameControl is enabled."));
     return;
   }
@@ -109,9 +107,9 @@ void HeadlessHandler::BeginFrame(Maybe<double> in_frame_time_ticks,
   if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
           ::switches::kRunAllCompositorStagesBeforeDraw)) {
     callback->sendFailure(
-        Response::Error("Command is only supported with "
-                        "--run-all-compositor-stages-before-draw, see "
-                        "https://goo.gl/3zHXhB for more info."));
+        Response::ServerError("Command is only supported with "
+                              "--run-all-compositor-stages-before-draw, see "
+                              "https://goo.gl/3zHXhB for more info."));
     return;
   }
 

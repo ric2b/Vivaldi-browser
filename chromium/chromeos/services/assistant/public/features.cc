@@ -4,6 +4,7 @@
 
 #include "chromeos/services/assistant/public/features.h"
 
+#include "ash/public/cpp/app_list/app_list_features.h"
 #include "base/feature_list.h"
 
 namespace chromeos {
@@ -22,6 +23,9 @@ const base::Feature kAssistantWarmerWelcomeFeature{
 const base::Feature kAssistantAppSupport{"AssistantAppSupport",
                                          base::FEATURE_DISABLED_BY_DEFAULT};
 
+const base::Feature kAssistantConversationStartersV2{
+    "AssistantConversationStartersV2", base::FEATURE_DISABLED_BY_DEFAULT};
+
 const base::Feature kAssistantProactiveSuggestions{
     "AssistantProactiveSuggestions", base::FEATURE_DISABLED_BY_DEFAULT};
 
@@ -29,18 +33,53 @@ const base::Feature kAssistantProactiveSuggestions{
 const base::FeatureParam<int> kAssistantProactiveSuggestionsMaxWidth{
     &kAssistantProactiveSuggestions, "max-width", 280};
 
+// The desired background blur radius (in dip) for the rich proactive
+// suggestions entry point. Amount of blur may need to be dynamically modified
+// later or disabled which may be accomplished by setting to zero.
+const base::FeatureParam<int>
+    kAssistantProactiveSuggestionsRichEntryPointBackgroundBlurRadius{
+        &kAssistantProactiveSuggestions,
+        "rich-entry-point-background-blur-radius", 30};
+
+// The desired corner radius (in dip) for the rich proactive suggestions entry
+// point. As the rich UI has yet to be defined, corner radius may need to be
+// dynamically modified later.
+const base::FeatureParam<int>
+    kAssistantProactiveSuggestionsRichEntryPointCornerRadius{
+        &kAssistantProactiveSuggestions, "rich-entry-point-corner-radius", 12};
+
 const base::FeatureParam<std::string>
     kAssistantProactiveSuggestionsServerExperimentIds{
         &kAssistantProactiveSuggestions, "server-experiment-ids", ""};
 
+// When enabled, the proactive suggestions view will show only after the user
+// scrolls up in the source web contents. When disabled, the view will be shown
+// immediately once the set of proactive suggestions are available.
+const base::FeatureParam<bool> kAssistantProactiveSuggestionsShowOnScroll{
+    &kAssistantProactiveSuggestions, "show-on-scroll", true};
+
+// When enabled, we will use the rich, content-forward entry point for the
+// proactive suggestions feature in lieu of the simple entry point affordance.
+const base::FeatureParam<bool> kAssistantProactiveSuggestionsShowRichEntryPoint{
+    &kAssistantProactiveSuggestions, "show-rich-entry-point", false};
+
 const base::FeatureParam<bool> kAssistantProactiveSuggestionsSuppressDuplicates{
-    &kAssistantProactiveSuggestions, "suppress-duplicates", true};
+    &kAssistantProactiveSuggestions, "suppress-duplicates", false};
 
 const base::FeatureParam<int>
     kAssistantProactiveSuggestionsTimeoutThresholdMillis{
         &kAssistantProactiveSuggestions, "timeout-threshold-millis", 15 * 1000};
 
+// When enabled, Assistant will use response processing V2. This is a set of
+// synced client and server changes which will turn on default parallel client
+// op processing and eager (streaming) UI element rendering.
+const base::Feature kAssistantResponseProcessingV2{
+    "AssistantResponseProcessingV2", base::FEATURE_DISABLED_BY_DEFAULT};
+
 const base::Feature kAssistantRoutines{"AssistantRoutines",
+                                       base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kAssistantTimersV2{"AssistantTimersV2",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kInAssistantNotifications{
@@ -55,17 +94,7 @@ const base::Feature kEnableDspHotword{"EnableDspHotword",
 const base::Feature kEnableStereoAudioInput{"AssistantEnableStereoAudioInput",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kEnableTextQueriesWithClientDiscourseContext{
-    "AssistantEnableTextQueriesWithClientDiscourseContext",
-    base::FEATURE_DISABLED_BY_DEFAULT};
-
 const base::Feature kEnablePowerManager{"ChromeOSAssistantEnablePowerManager",
-                                        base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Enables sending a screen context request ("What's on my screen?" and
-// metalayer selection) as a text query. This is as opposed to sending
-// the request as a contextual cards request.
-const base::Feature kScreenContextQuery{"ChromeOSAssistantScreenContextQuery",
                                         base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kEnableMediaSessionIntegration{
@@ -78,6 +107,14 @@ const base::Feature kDisableVoiceMatch{"DisableVoiceMatch",
 
 int GetProactiveSuggestionsMaxWidth() {
   return kAssistantProactiveSuggestionsMaxWidth.Get();
+}
+
+int GetProactiveSuggestionsRichEntryPointBackgroundBlurRadius() {
+  return kAssistantProactiveSuggestionsRichEntryPointBackgroundBlurRadius.Get();
+}
+
+int GetProactiveSuggestionsRichEntryPointCornerRadius() {
+  return kAssistantProactiveSuggestionsRichEntryPointCornerRadius.Get();
 }
 
 std::string GetProactiveSuggestionsServerExperimentIds() {
@@ -100,6 +137,10 @@ bool IsAudioEraserEnabled() {
 
 bool IsClearCutLogEnabled() {
   return base::FeatureList::IsEnabled(kEnableClearCutLog);
+}
+
+bool IsConversationStartersV2Enabled() {
+  return base::FeatureList::IsEnabled(kAssistantConversationStartersV2);
 }
 
 bool IsDspHotwordEnabled() {
@@ -126,22 +167,34 @@ bool IsProactiveSuggestionsEnabled() {
   return base::FeatureList::IsEnabled(kAssistantProactiveSuggestions);
 }
 
+bool IsProactiveSuggestionsShowOnScrollEnabled() {
+  return kAssistantProactiveSuggestionsShowOnScroll.Get();
+}
+
+bool IsProactiveSuggestionsShowRichEntryPointEnabled() {
+  return kAssistantProactiveSuggestionsShowRichEntryPoint.Get();
+}
+
 bool IsProactiveSuggestionsSuppressDuplicatesEnabled() {
   return kAssistantProactiveSuggestionsSuppressDuplicates.Get();
+}
+
+bool IsResponseProcessingV2Enabled() {
+  return base::FeatureList::IsEnabled(kAssistantResponseProcessingV2);
 }
 
 bool IsRoutinesEnabled() {
   return base::FeatureList::IsEnabled(kAssistantRoutines);
 }
 
-bool IsScreenContextQueryEnabled() {
-  return base::FeatureList::IsEnabled(kScreenContextQuery);
-}
-
 bool IsStereoAudioInputEnabled() {
   return base::FeatureList::IsEnabled(kEnableStereoAudioInput) ||
          // Audio eraser requires 2 channel input.
          base::FeatureList::IsEnabled(kAssistantAudioEraser);
+}
+
+bool IsTimersV2Enabled() {
+  return base::FeatureList::IsEnabled(kAssistantTimersV2);
 }
 
 bool IsWarmerWelcomeEnabled() {

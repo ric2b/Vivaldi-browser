@@ -6,6 +6,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_FRAME_BROWSER_CONTROLS_H_
 
 #include "cc/input/browser_controls_state.h"
+#include "cc/trees/browser_controls_params.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 
@@ -26,26 +27,36 @@ class CORE_EXPORT BrowserControls final
  public:
   explicit BrowserControls(const Page&);
 
-  void Trace(blink::Visitor*);
+  void Trace(Visitor*);
 
   // The height the top controls are hidden; used for viewport adjustments
   // while the controls are resizing.
   float UnreportedSizeAdjustment();
   // The amount that browser controls are currently shown.
   float ContentOffset();
+  float BottomContentOffset();
 
-  float TopHeight() const { return top_height_; }
-  float BottomHeight() const { return bottom_height_; }
-  float TotalHeight() const { return top_height_ + bottom_height_; }
-  bool ShrinkViewport() const { return shrink_viewport_; }
-  void SetHeight(float top_height, float bottom_height, bool shrink_viewport);
+  float TopHeight() const { return params_.top_controls_height; }
+  float TopMinHeight() const { return params_.top_controls_min_height; }
+  float BottomHeight() const { return params_.bottom_controls_height; }
+  float BottomMinHeight() const { return params_.bottom_controls_min_height; }
+  float TotalHeight() const { return TopHeight() + BottomHeight(); }
+  float TotalMinHeight() const { return TopMinHeight() + BottomMinHeight(); }
+  bool ShrinkViewport() const {
+    return params_.browser_controls_shrink_blink_size;
+  }
+  bool AnimateHeightChanges() const {
+    return params_.animate_browser_controls_height_changes;
+  }
+  void SetParams(cc::BrowserControlsParams);
+  cc::BrowserControlsParams Params() const { return params_; }
 
-  float ShownRatio() const { return shown_ratio_; }
-  void SetShownRatio(float);
+  float TopShownRatio() const { return top_shown_ratio_; }
+  float BottomShownRatio() const { return bottom_shown_ratio_; }
+  void SetShownRatio(float top_ratio, float bottom_ratio);
 
   void UpdateConstraintsAndState(cc::BrowserControlsState constraints,
-                                 cc::BrowserControlsState current,
-                                 bool animate);
+                                 cc::BrowserControlsState current);
 
   void ScrollBegin();
 
@@ -53,17 +64,19 @@ class CORE_EXPORT BrowserControls final
   // scroll amount.
   FloatSize ScrollBy(FloatSize scroll_delta);
 
+  void ScrollEnd();
+
   cc::BrowserControlsState PermittedState() const { return permitted_state_; }
 
  private:
   void ResetBaseline();
-  float BottomContentOffset();
+  float TopMinShownRatio();
+  float BottomMinShownRatio();
 
   Member<const Page> page_;
 
-  // The browser controls height regardless of whether it is visible or not.
-  float top_height_;
-  float bottom_height_;
+  // The browser controls params such as heights, min-height etc.
+  cc::BrowserControlsParams params_;
 
   // The browser controls shown amount (normalized from 0 to 1) since the last
   // compositor commit. This value is updated from two sources:
@@ -73,17 +86,15 @@ class CORE_EXPORT BrowserControls final
   //     when responding to gesture scroll events.
   // This value is reflected in web layer tree and is synced with compositor
   // during the commit.
-  float shown_ratio_;
+  float top_shown_ratio_;
+  float bottom_shown_ratio_;
 
   // Content offset when last re-baseline occurred.
-  float baseline_content_offset_;
+  float baseline_top_content_offset_;
+  float baseline_bottom_content_offset_;
 
   // Accumulated scroll delta since last re-baseline.
   float accumulated_scroll_delta_;
-
-  // If this is true, then the embedder shrunk the WebView size by the top
-  // controls height.
-  bool shrink_viewport_;
 
   // Constraints on the browser controls state
   cc::BrowserControlsState permitted_state_;

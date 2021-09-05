@@ -7,6 +7,13 @@
       "backgroundColor": "#FFFFFF"
     },
     {
+      "name": "LayoutNGBlockFlow DIV class='composited'",
+      "bounds": [30, 30],
+      "contentsOpaque": true,
+      "backgroundColor": "#808080",
+      "transform": 1
+    },
+    {
       "name": "Squashing Layer (first squashed layer: LayoutNGBlockFlow (positioned) DIV id='scroller' class='overflow')",
       "position": [12, 12],
       "bounds": [306, 206],
@@ -14,16 +21,17 @@
     },
     {
       "name": "LayoutNGBlockFlow (relative positioned) DIV class='box'",
+      "position": [23, 58],
       "bounds": [200, 100],
       "contentsOpaque": true,
       "backgroundColor": "#0000FF",
-      "transform": 4
+      "transform": 3
     },
     {
       "name": "Squashing Layer (first squashed layer: LayoutNGBlockFlow (relative positioned) DIV class='box')",
-      "position": [0, 155],
+      "position": [23, 213],
       "bounds": [210, 100],
-      "transform": 4
+      "transform": 3
     }
   ],
   "transforms": [
@@ -53,16 +61,6 @@
         [0, 1, 0, 0],
         [0, 0, 1, 0],
         [0, -49, 0, 1]
-      ]
-    },
-    {
-      "id": 4,
-      "parent": 3,
-      "transform": [
-        [1, 0, 0, 0],
-        [0, 1, 0, 0],
-        [0, 0, 1, 0],
-        [23, 58, 0, 1]
       ]
     }
   ]

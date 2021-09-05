@@ -51,31 +51,16 @@ NamedMessagePortConnector::NamedMessagePortConnector(fuchsia::web::Frame* frame)
 }
 
 NamedMessagePortConnector::~NamedMessagePortConnector() {
-  frame_->RemoveBeforeLoadJavaScript(static_cast<uint64_t>(
-      CastPlatformBindingsId::NAMED_MESSAGE_PORT_CONNECTOR));
-
-  // All handlers must be unregistered prior to deletion.
-  DCHECK(port_connected_handlers_.empty());
+  if (frame_) {
+    // Don't attempt to remove before-load JavaScript when being deleted because
+    // the Frame has disconnected.
+    frame_->RemoveBeforeLoadJavaScript(static_cast<uint64_t>(
+        CastPlatformBindingsId::NAMED_MESSAGE_PORT_CONNECTOR));
+  }
 }
 
-void NamedMessagePortConnector::RegisterDefaultHandler(
-    DefaultPortConnectedCallback handler) {
+void NamedMessagePortConnector::Register(DefaultPortConnectedCallback handler) {
   default_handler_ = std::move(handler);
-}
-
-void NamedMessagePortConnector::Register(const std::string& port_name,
-                                         PortConnectedCallback handler) {
-  DCHECK(handler);
-  DCHECK(!port_name.empty());
-  DCHECK(port_connected_handlers_.find(port_name) ==
-         port_connected_handlers_.end());
-
-  port_connected_handlers_[port_name] = handler;
-}
-
-void NamedMessagePortConnector::Unregister(const std::string& port_name) {
-  size_t removed = port_connected_handlers_.erase(port_name);
-  DCHECK_EQ(removed, 1U);
 }
 
 void NamedMessagePortConnector::OnPageLoad() {
@@ -113,9 +98,11 @@ void NamedMessagePortConnector::OnConnectRequest(
     return;
   }
 
-  if (message.incoming_transfer().size() != 1) {
-    LOG(ERROR) << "Expected one Transferable, got "
-               << message.incoming_transfer().size() << " instead.";
+  size_t num_transfers = message.has_incoming_transfer() ?
+    message.incoming_transfer().size() : 0U;
+  if (num_transfers != 1) {
+    LOG(ERROR) << "Expected one Transferable, got " << num_transfers
+               << " instead.";
     control_port_.Unbind();
     return;
   }
@@ -128,22 +115,8 @@ void NamedMessagePortConnector::OnConnectRequest(
     return;
   }
 
-  if (default_handler_ && port_connected_handlers_.find(port_name) ==
-                              port_connected_handlers_.end()) {
-    default_handler_.Run(port_name, std::move(transferable.message_port()));
-  } else {
-    // TODO(crbug.com/953958): Deprecated, remove this once all APIs are
-    // migrated.
+  DCHECK(default_handler_);
+  default_handler_.Run(port_name, std::move(transferable.message_port()));
 
-    if (port_connected_handlers_.find(port_name) ==
-        port_connected_handlers_.end()) {
-      LOG(ERROR) << "No registration for port: " << port_name;
-      control_port_.Unbind();
-      return;
-    }
-
-    port_connected_handlers_[port_name].Run(
-        std::move(transferable.message_port()));
-  }
   ReceiveNextConnectRequest();
 }

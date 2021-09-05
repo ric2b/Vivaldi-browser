@@ -32,7 +32,6 @@ import logging
 import re
 
 from blinkpy.web_tests.port.driver import DeviceFailure, DriverInput, DriverOutput
-from blinkpy.web_tests.models import test_expectations
 from blinkpy.web_tests.models import test_failures
 from blinkpy.web_tests.models.test_results import TestResult, build_test_result
 from blinkpy.web_tests.models import testharness_results
@@ -41,15 +40,12 @@ from blinkpy.web_tests.models import testharness_results
 _log = logging.getLogger(__name__)
 
 
-def run_single_test(
-        port, options, results_directory, worker_name, primary_driver,
-        secondary_driver, test_input):
-    runner = SingleTestRunner(
-        port, options, results_directory, worker_name, primary_driver,
-        secondary_driver, test_input)
+def run_single_test(port, options, results_directory, worker_name, driver, test_input):
+    runner = SingleTestRunner(port, options, results_directory, worker_name, driver, test_input)
     try:
-        test_result =  runner.run()
-        test_result.create_artifacts()
+        test_result = runner.run()
+        if not options.no_expectations:
+            test_result.create_artifacts()
         return test_result
     except DeviceFailure as error:
         _log.error('device failed: %s', error)
@@ -57,36 +53,26 @@ def run_single_test(
 
 
 class SingleTestRunner(object):
-    def __init__(self, port, options, results_directory, worker_name,
-                 primary_driver, secondary_driver, test_input):
+    def __init__(self, port, options, results_directory, worker_name, driver, test_input):
         self._port = port
         self._filesystem = port.host.filesystem
         self._options = options
         self._results_directory = results_directory
-        self._driver = primary_driver
-        self._reference_driver = primary_driver
+        self._driver = driver
         self._timeout_ms = test_input.timeout_ms
         self._worker_name = worker_name
         self._test_name = test_input.test_name
         self._reference_files = test_input.reference_files
         self._retry_attempt = test_input.retry_attempt
 
-        test_failures.TestFailure.port = port
-        test_failures.TestFailure.test_name = test_input.test_name
-        test_failures.TestFailure.result_directory = results_directory
-        test_failures.TestFailure.filesystem = self._filesystem
+        test_failures.AbstractTestResultType.port = port
+        test_failures.AbstractTestResultType.test_name = test_input.test_name
+        test_failures.AbstractTestResultType.result_directory = results_directory
+        test_failures.AbstractTestResultType.filesystem = self._filesystem
         TestResult.repeat_tests = (
             self._options.watch or self._options.repeat_each > 1 or self._options.iterations > 1)
         TestResult.results_directory = self._results_directory
         TestResult.filesystem = port.host.filesystem
-
-        # If this is a virtual test that uses the default flags instead of the
-        # virtual flags for it's references, run it on the secondary driver so
-        # that the primary driver does not need to be restarted.
-        if (secondary_driver and
-                self._port.is_virtual_test(self._test_name) and
-                not self._port.lookup_virtual_reference_args(self._test_name)):
-            self._reference_driver = secondary_driver
 
     def _expected_driver_output(self):
         return DriverOutput(self._port.expected_text(self._test_name),
@@ -441,15 +427,14 @@ class SingleTestRunner(object):
             return text
 
         def remove_ng_text(results):
-            processed = re.sub(
-                r'LayoutNG(BlockFlow|ListItem|TableCell)', r'Layout\1', results)
+            processed = re.sub(r'LayoutNG(BlockFlow|ListItem|TableCell|FlexibleBox)', r'Layout\1', results)
             # LayoutTableCaption doesn't override LayoutBlockFlow::GetName, so
             # render tree dumps have "LayoutBlockFlow" for captions.
             processed = re.sub('LayoutNGTableCaption', 'LayoutBlockFlow', processed)
             return processed
 
         def is_ng_name_mismatch(expected, actual):
-            if not re.search("LayoutNG(BlockFlow|ListItem|TableCaption|TableCell)", actual):
+            if not re.search("LayoutNG(BlockFlow|ListItem|TableCaption|TableCell|FlexibleBox)", actual):
                 return False
             if not self._is_render_tree(actual) and not self._is_layer_tree(actual):
                 return False
@@ -553,9 +538,10 @@ class SingleTestRunner(object):
         compare_text_failures = self._compare_output(
             expected_text_output, test_output)
 
-        # If the test crashed, or timed out, there's no point in running the reference at all.
-        # This can save a lot of execution time if we have a lot of crashes or timeouts.
-        if test_output.crash or test_output.timeout:
+        # If the test crashed, or timed out,  or a leak was detected, there's no point
+        # in running the reference at all. This can save a lot of execution time if we
+        # have a lot of crashes or timeouts.
+        if test_output.crash or test_output.timeout or test_output.leak:
             return build_test_result(
                 test_output, self._test_name, retry_attempt=self._retry_attempt,
                 failures=compare_text_failures, test_run_time=test_output.test_time,
@@ -570,10 +556,7 @@ class SingleTestRunner(object):
         expected_output = None
         reference_test_names = []
         reftest_failures = []
-        if self._port.lookup_virtual_test_base(self._test_name):
-            args = self._port.lookup_virtual_reference_args(self._test_name)
-        else:
-            args = self._port.lookup_physical_reference_args(self._test_name)
+        args = self._port.args_for_test(self._test_name)
 
         # sort self._reference_files to put mismatch tests first
         for expectation, reference_filename in sorted(self._reference_files):
@@ -581,7 +564,7 @@ class SingleTestRunner(object):
             reference_test_names.append(reference_test_name)
             driver_input = DriverInput(reference_test_name, self._timeout_ms,
                                        image_hash=test_output.image_hash, args=args)
-            expected_output = self._reference_driver.run_test(driver_input)
+            expected_output = self._driver.run_test(driver_input)
             total_test_time += expected_output.test_time
             reftest_failures = self._compare_output_with_reference(
                 expected_output, test_output, reference_filename, expectation == '!=')

@@ -11,6 +11,7 @@
 #include <string>
 #include <unordered_set>
 
+#include "base/files/file_path.h"
 #include "build/build_config.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/image/image_skia.h"
@@ -39,8 +40,8 @@ const int kProfileAvatarBadgeSizeWin = kShortcutIconSizeWin / 2;
 #endif  // OS_WIN
 
 // Avatar access.
-extern const char kGAIAPictureFileName[];
-extern const char kHighResAvatarFolderName[];
+extern const base::FilePath::CharType kGAIAPictureFileName[];
+extern const base::FilePath::CharType kHighResAvatarFolderName[];
 
 // Avatar formatting.
 extern const int kAvatarIconSize;
@@ -83,6 +84,12 @@ gfx::Image GetAvatarIconForTitleBar(const gfx::Image& image,
                                     bool is_rectangle,
                                     int dst_width,
                                     int dst_height);
+
+#if defined(OS_MACOSX)
+// Returns the image for the profile at |profile_path| that is suitable for use
+// in the macOS menu bar.
+gfx::Image GetAvatarIconForNSMenu(const base::FilePath& profile_path);
+#endif
 
 // Returns a bitmap with a couple of columns shaved off so it is more square,
 // so that when resized to a square aspect ratio it looks pretty.

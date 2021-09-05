@@ -11,6 +11,7 @@
 #include <limits>
 #include <memory>
 #include <string>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/files/file_path.h"
@@ -26,6 +27,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/sequenced_task_runner_handle.h"
@@ -39,6 +41,7 @@
 #include "net/base/upload_file_element_reader.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/http/http_response_headers.h"
+#include "net/proxy_resolution/configured_proxy_resolution_service.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/gtest_util.h"
 #include "net/test/test_with_task_environment.h"
@@ -506,7 +509,7 @@ TEST_F(URLFetcherTest, FetchedUsingProxy) {
                                       test_server_->host_port_pair());
 
   std::unique_ptr<ProxyResolutionService> proxy_resolution_service =
-      ProxyResolutionService::CreateFixedFromPacResult(
+      ConfiguredProxyResolutionService::CreateFixedFromPacResult(
           proxy_server.ToPacString(), TRAFFIC_ANNOTATION_FOR_TESTS);
   context_getter->set_proxy_resolution_service(
       std::move(proxy_resolution_service));
@@ -569,8 +572,7 @@ TEST_F(URLFetcherTest, DifferentThreadsTest) {
 
 // Verifies that a URLFetcher works correctly on a ThreadPool Sequence.
 TEST_F(URLFetcherTest, SequencedTaskTest) {
-  auto sequenced_task_runner =
-      base::CreateSequencedTaskRunner({base::ThreadPool()});
+  auto sequenced_task_runner = base::ThreadPool::CreateSequencedTaskRunner({});
 
   // Since we cannot use StartFetchAndWait(), which runs a nested RunLoop owned
   // by the Delegate, in the ThreadPool, this test is split into two Callbacks,
@@ -600,7 +602,7 @@ TEST_F(URLFetcherTest, SequencedTaskTest) {
                   EXPECT_EQ(kDefaultResponseBody, data);
                   std::move(quit_closure).Run();
                 },
-                std::move(quit_closure), base::Passed(&delegate)));
+                std::move(quit_closure), std::move(delegate)));
 
             raw_delegate->CreateFetcher(response_path, URLFetcher::GET,
                                         context_getter);
@@ -852,8 +854,8 @@ TEST_F(URLFetcherTest, PostWithUploadStreamFactory) {
   delegate.CreateFetcher(test_server_->GetURL("/echo"), URLFetcher::POST,
                          CreateSameThreadContextGetter());
   delegate.fetcher()->SetUploadStreamFactory(
-      "text/plain",
-      base::Bind(&URLFetcherTest::CreateUploadStream, base::Unretained(this)));
+      "text/plain", base::BindRepeating(&URLFetcherTest::CreateUploadStream,
+                                        base::Unretained(this)));
   delegate.StartFetcherAndWait();
 
   EXPECT_TRUE(delegate.fetcher()->GetStatus().is_success());
@@ -871,8 +873,8 @@ TEST_F(URLFetcherTest, PostWithUploadStreamFactoryAndRetries) {
   delegate.fetcher()->SetAutomaticallyRetryOn5xx(true);
   delegate.fetcher()->SetMaxRetriesOn5xx(1);
   delegate.fetcher()->SetUploadStreamFactory(
-      "text/plain",
-      base::Bind(&URLFetcherTest::CreateUploadStream, base::Unretained(this)));
+      "text/plain", base::BindRepeating(&URLFetcherTest::CreateUploadStream,
+                                        base::Unretained(this)));
   delegate.StartFetcherAndWait();
 
   EXPECT_TRUE(delegate.fetcher()->GetStatus().is_success());

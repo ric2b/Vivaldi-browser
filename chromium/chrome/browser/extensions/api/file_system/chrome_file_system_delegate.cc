@@ -36,10 +36,10 @@
 #include "extensions/browser/extension_util.h"
 #include "extensions/common/api/file_system.h"
 #include "extensions/common/extension.h"
-#include "storage/browser/fileapi/external_mount_points.h"
-#include "storage/browser/fileapi/isolated_context.h"
-#include "storage/common/fileapi/file_system_types.h"
-#include "storage/common/fileapi/file_system_util.h"
+#include "storage/browser/file_system/external_mount_points.h"
+#include "storage/browser/file_system/isolated_context.h"
+#include "storage/common/file_system/file_system_types.h"
+#include "storage/common/file_system/file_system_util.h"
 #include "ui/shell_dialogs/select_file_dialog.h"
 
 #include "app/vivaldi_apptools.h"
@@ -56,6 +56,8 @@
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/constants.h"
+#include "url/gurl.h"
+#include "url/origin.h"
 #include "url/url_constants.h"
 #endif
 
@@ -143,9 +145,8 @@ void OnConsentReceived(
     return;
   }
 
-  const GURL site = util::GetSiteForExtensionId(extension_id, browser_context);
   scoped_refptr<storage::FileSystemContext> file_system_context =
-      content::BrowserContext::GetStoragePartitionForSite(browser_context, site)
+      util::GetStoragePartitionForExtensionId(extension_id, browser_context)
           ->GetFileSystemContext();
   storage::ExternalFileSystemBackend* const backend =
       file_system_context->external_backend();
@@ -163,8 +164,9 @@ void OnConsentReceived(
 
   const storage::FileSystemURL original_url =
       file_system_context->CreateCrackedFileSystemURL(
-          GURL(std::string(kExtensionScheme) + url::kStandardSchemeSeparator +
-               extension_id),
+          url::Origin::Create(GURL(std::string(kExtensionScheme) +
+                                   url::kStandardSchemeSeparator +
+                                   extension_id)),
           storage::kFileSystemTypeExternal, virtual_path);
 
   // Set a fixed register name, as the automatic one would leak the mount point
@@ -307,10 +309,11 @@ void ChromeFileSystemDelegate::ConfirmSensitiveDirectoryAccess(
     bool has_write_permission,
     const base::string16& app_name,
     content::WebContents* web_contents,
-    const base::Closure& on_accept,
-    const base::Closure& on_cancel) {
+    base::OnceClosure on_accept,
+    base::OnceClosure on_cancel) {
   CreateDirectoryAccessConfirmationDialog(has_write_permission, app_name,
-                                          web_contents, on_accept, on_cancel);
+                                          web_contents, std::move(on_accept),
+                                          std::move(on_cancel));
 }
 
 int ChromeFileSystemDelegate::GetDescriptionIdForAcceptType(
@@ -375,10 +378,8 @@ void ChromeFileSystemDelegate::RequestFileSystem(
     return;
   }
 
-  const GURL site =
-      util::GetSiteForExtensionId(extension.id(), browser_context);
   scoped_refptr<storage::FileSystemContext> file_system_context =
-      content::BrowserContext::GetStoragePartitionForSite(browser_context, site)
+      util::GetStoragePartitionForExtensionId(extension.id(), browser_context)
           ->GetFileSystemContext();
   storage::ExternalFileSystemBackend* const backend =
       file_system_context->external_backend();

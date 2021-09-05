@@ -6,6 +6,7 @@
 
 #include "ash/public/cpp/ash_features.h"
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/json/json_file_value_serializer.h"
@@ -66,7 +67,7 @@ constexpr int kAppInstallSplashScreenMinTimeMS = 10000;
 // Parameters for test:
 bool skip_splash_wait = false;
 int network_wait_time_in_seconds = 10;
-base::Closure* network_timeout_callback = nullptr;
+base::OnceClosure* network_timeout_callback = nullptr;
 AppLaunchController::ReturnBoolCallback* can_configure_network_callback =
     nullptr;
 AppLaunchController::ReturnBoolCallback*
@@ -183,7 +184,7 @@ void AppLaunchController::StartAppLaunch(bool is_auto_launch) {
 
   // TODO(tengs): Add a loading profile app launch state.
   app_launch_splash_screen_view_->SetDelegate(this);
-  app_launch_splash_screen_view_->Show(app_id_);
+  app_launch_splash_screen_view_->Show();
 
   KioskAppManager::App app;
   CHECK(KioskAppManager::Get());
@@ -226,7 +227,7 @@ void AppLaunchController::SetNetworkWaitForTesting(int wait_time_secs) {
 
 // static
 void AppLaunchController::SetNetworkTimeoutCallbackForTesting(
-    base::Closure* callback) {
+    base::OnceClosure* callback) {
   network_timeout_callback = callback;
 }
 
@@ -288,29 +289,42 @@ void AppLaunchController::OnCancelAppLaunch() {
   OnLaunchFailed(KioskAppLaunchError::USER_CANCEL);
 }
 
-void AppLaunchController::OnNetworkConfigRequested(bool requested) {
-  network_config_requested_ = requested;
-  if (requested) {
-    MaybeShowNetworkConfigureUI();
-  } else {
-    app_launch_splash_screen_view_->UpdateAppLaunchState(
-        AppLaunchSplashScreenView::APP_LAUNCH_STATE_PREPARING_NETWORK);
-    startup_app_launcher_->RestartLauncher();
-  }
+void AppLaunchController::OnNetworkConfigRequested() {
+  DCHECK(!network_config_requested_);
+  network_config_requested_ = true;
+  MaybeShowNetworkConfigureUI();
+}
+
+void AppLaunchController::OnNetworkConfigFinished() {
+  DCHECK(network_config_requested_);
+  network_config_requested_ = false;
+  showing_network_dialog_ = false;
+  app_launch_splash_screen_view_->UpdateAppLaunchState(
+      AppLaunchSplashScreenView::APP_LAUNCH_STATE_PREPARING_PROFILE);
+  startup_app_launcher_->RestartLauncher();
 }
 
 void AppLaunchController::OnNetworkStateChanged(bool online) {
   if (!waiting_for_network_)
     return;
 
-  if (online && !network_config_requested_)
+  // If the network timed out, we should exit network config dialog as soon as
+  // we are back online.
+  if (online && (network_wait_timedout_ || !showing_network_dialog_)) {
+    ClearNetworkWaitTimer();
     startup_app_launcher_->ContinueWithNetworkReady();
-  else if (network_wait_timedout_)
-    MaybeShowNetworkConfigureUI();
+  }
 }
 
 void AppLaunchController::OnDeletingSplashScreenView() {
   app_launch_splash_screen_view_ = nullptr;
+}
+
+KioskAppManagerBase::App AppLaunchController::GetAppData() {
+  KioskAppManagerBase::App app;
+  bool app_found = KioskAppManager::Get()->GetApp(app_id_, &app);
+  DCHECK(app_found);
+  return app;
 }
 
 void AppLaunchController::OnProfileLoaded(Profile* profile) {
@@ -369,8 +383,10 @@ void AppLaunchController::OnNetworkWaitTimedout() {
 
   MaybeShowNetworkConfigureUI();
 
-  if (network_timeout_callback)
-    network_timeout_callback->Run();
+  if (network_timeout_callback) {
+    std::move(*network_timeout_callback).Run();
+    network_timeout_callback = nullptr;
+  }
 }
 
 void AppLaunchController::OnAppWindowCreated() {
@@ -454,10 +470,18 @@ void AppLaunchController::InitializeNetwork() {
       FROM_HERE, base::TimeDelta::FromSeconds(network_wait_time_in_seconds),
       this, &AppLaunchController::OnNetworkWaitTimedout);
 
+  // Regardless of the network state, we should notify the view that network
+  // connection is required.
   app_launch_splash_screen_view_->UpdateAppLaunchState(
       AppLaunchSplashScreenView::APP_LAUNCH_STATE_PREPARING_NETWORK);
-}
 
+  // If network configure ui was scheduled to be shown, we should display it
+  // before starting to install the app.
+  if (app_launch_splash_screen_view_->IsNetworkReady() &&
+      !show_network_config_ui_after_profile_load_) {
+    OnNetworkStateChanged(/*online*/ true);
+  }
+}
 bool AppLaunchController::IsNetworkReady() {
   return app_launch_splash_screen_view_ &&
          app_launch_splash_screen_view_->IsNetworkReady();
@@ -480,7 +504,7 @@ void AppLaunchController::OnInstallingApp() {
   // We have connectivity at this point, so we can skip the network
   // configuration dialog if it is being shown and not explicitly requested.
   if (showing_network_dialog_ && !network_config_requested_) {
-    app_launch_splash_screen_view_->Show(app_id_);
+    app_launch_splash_screen_view_->Show();
     showing_network_dialog_ = false;
     launch_splash_start_time_ = base::TimeTicks::Now().ToInternalValue();
   }

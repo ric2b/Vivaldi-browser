@@ -24,8 +24,9 @@
 #include "net/url_request/url_request_context_getter.h"
 #include "ppapi/buildflags/buildflags.h"
 #include "services/network/public/mojom/cookie_manager.mojom.h"
-#include "storage/browser/fileapi/file_system_context.h"
+#include "storage/browser/file_system/file_system_context.h"
 #include "storage/browser/quota/quota_manager.h"
+#include "third_party/blink/public/mojom/quota/quota_types.mojom.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -127,7 +128,12 @@ void SiteDataCountingHelper::CountAndDestroySelfWhenFinished() {
   // Counting site usage data and durable permissions.
   auto* hcsm = HostContentSettingsMapFactory::GetForProfile(profile_);
   const ContentSettingsType content_settings[] = {
-      CONTENT_SETTINGS_TYPE_DURABLE_STORAGE, CONTENT_SETTINGS_TYPE_APP_BANNER};
+    ContentSettingsType::DURABLE_STORAGE,
+    ContentSettingsType::APP_BANNER,
+#if !defined(OS_ANDROID)
+    ContentSettingsType::INSTALLED_WEB_APP_METADATA,
+#endif
+  };
   for (auto type : content_settings) {
     tasks_ += 1;
     GetOriginsFromHostContentSettignsMap(hcsm, type);
@@ -185,19 +191,6 @@ void SiteDataCountingHelper::GetLocalStorageUsageInfoCallback(
     if (info.last_modified >= begin_ &&
         (!policy || !policy->IsStorageProtected(info.origin.GetURL()))) {
       origins.push_back(info.origin.GetURL());
-    }
-  }
-  Done(origins);
-}
-
-void SiteDataCountingHelper::GetSessionStorageUsageInfoCallback(
-    const scoped_refptr<storage::SpecialStoragePolicy>& policy,
-    const std::vector<content::SessionStorageUsageInfo>& infos) {
-  std::vector<GURL> origins;
-  for (const auto& info : infos) {
-    // Session storage doesn't know about creation time.
-    if (!policy || !policy->IsStorageProtected(info.origin)) {
-      origins.push_back(info.origin);
     }
   }
   Done(origins);

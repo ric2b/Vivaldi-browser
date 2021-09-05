@@ -118,7 +118,8 @@ class RTCVideoDecoderAdapterTest : public ::testing::Test {
     EXPECT_CALL(gpu_factories_, GetTaskRunner()).Times(AtLeast(0));
 
     ON_CALL(gpu_factories_, IsDecoderConfigSupported(_, _))
-        .WillByDefault(Return(true));
+        .WillByDefault(
+            Return(media::GpuVideoAcceleratorFactories::Supported::kTrue));
     EXPECT_CALL(gpu_factories_, IsDecoderConfigSupported(_, _))
         .Times(AtLeast(0));
 
@@ -161,8 +162,12 @@ class RTCVideoDecoderAdapterTest : public ::testing::Test {
 
   bool CreateAndInitialize(bool init_cb_result = true) {
     EXPECT_CALL(*video_decoder_, Initialize_(_, _, _, _, _, _))
-        .WillOnce(DoAll(SaveArg<0>(&vda_config_), SaveArg<4>(&output_cb_),
-                        base::test::RunOnceCallback<3>(init_cb_result)));
+        .WillOnce(DoAll(
+            SaveArg<0>(&vda_config_), SaveArg<4>(&output_cb_),
+            base::test::RunOnceCallback<3>(
+                init_cb_result
+                    ? media::OkStatus()
+                    : media::Status(media::StatusCode::kCodeOnlyForTesting))));
     rtc_video_decoder_adapter_ =
         RTCVideoDecoderAdapter::Create(&gpu_factories_, sdp_format_);
     return !!rtc_video_decoder_adapter_;
@@ -181,9 +186,9 @@ class RTCVideoDecoderAdapterTest : public ::testing::Test {
 
   int32_t Decode(uint32_t timestamp) {
     webrtc::EncodedImage input_image;
-    input_image.Allocate(1);
-    input_image.set_size(1);
-    input_image.data()[0] = 0;
+    static const uint8_t data[1] = {0};
+    input_image.SetEncodedData(
+        webrtc::EncodedImageBuffer::Create(data, sizeof(data)));
     input_image._frameType = webrtc::VideoFrameType::kVideoFrameKey;
     input_image._completeFrame = true;
     input_image.SetTimestamp(timestamp);
@@ -214,7 +219,9 @@ class RTCVideoDecoderAdapterTest : public ::testing::Test {
 
   webrtc::EncodedImage GetEncodedImageWithColorSpace(uint32_t timestamp) {
     webrtc::EncodedImage input_image;
-    input_image.Allocate(1);
+    static const uint8_t data[1] = {0};
+    input_image.SetEncodedData(
+        webrtc::EncodedImageBuffer::Create(data, sizeof(data)));
     input_image.set_size(1);
     input_image.data()[0] = 0;
     input_image._completeFrame = true;
@@ -265,7 +272,7 @@ TEST_F(RTCVideoDecoderAdapterTest, Create_UnknownFormat) {
 
 TEST_F(RTCVideoDecoderAdapterTest, Create_UnsupportedFormat) {
   EXPECT_CALL(gpu_factories_, IsDecoderConfigSupported(_, _))
-      .WillOnce(Return(false));
+      .WillOnce(Return(media::GpuVideoAcceleratorFactories::Supported::kFalse));
   rtc_video_decoder_adapter_ = RTCVideoDecoderAdapter::Create(
       &gpu_factories_, webrtc::SdpVideoFormat(webrtc::CodecTypeToPayloadString(
                            webrtc::kVideoCodecVP9)));
@@ -360,7 +367,7 @@ TEST_F(RTCVideoDecoderAdapterTest, ReinitializesForHDRColorSpaceInitially) {
   // First Decode() should cause a reinitialize as new color space is given.
   EXPECT_CALL(*video_decoder_, Initialize_(_, _, _, _, _, _))
       .WillOnce(DoAll(SaveArg<0>(&vda_config_),
-                      base::test::RunOnceCallback<3>(true)));
+                      base::test::RunOnceCallback<3>(media::OkStatus())));
   webrtc::EncodedImage first_input_image = GetEncodedImageWithColorSpace(0);
   ASSERT_EQ(rtc_video_decoder_adapter_->Decode(first_input_image, false, 0),
             WEBRTC_VIDEO_CODEC_OK);
@@ -392,7 +399,8 @@ TEST_F(RTCVideoDecoderAdapterTest, HandlesReinitializeFailure) {
 
   // Set Initialize() to fail.
   EXPECT_CALL(*video_decoder_, Initialize_(_, _, _, _, _, _))
-      .WillOnce(base::test::RunOnceCallback<3>(false));
+      .WillOnce(base::test::RunOnceCallback<3>(
+          media::Status(media::StatusCode::kCodeOnlyForTesting)));
   ASSERT_EQ(rtc_video_decoder_adapter_->Decode(input_image, false, 0),
             WEBRTC_VIDEO_CODEC_FALLBACK_SOFTWARE);
 }

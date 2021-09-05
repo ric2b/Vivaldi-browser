@@ -30,8 +30,6 @@ enum class DecisionFailureReason : int32_t {
   LIFECYCLES_ENTERPRISE_POLICY_OPT_OUT,
   // A frame on the page opted itself out of the intervention via origin trial.
   ORIGIN_TRIAL_OPT_OUT,
-  // A frame on the page did not report its origin trial opt-in/opt-out yet.
-  ORIGIN_TRIAL_UNKNOWN,
   // The origin was opted out of the intervention in the global blacklist.
   GLOBAL_BLACKLIST,
   // The local heuristic opted the origin out of the intervention due to its use
@@ -43,9 +41,6 @@ enum class DecisionFailureReason : int32_t {
   // The local heuristic is temporarily opting the origin out of the
   // intervention due to a lack of sufficient observation time.
   HEURISTIC_INSUFFICIENT_OBSERVATION,
-  // The local heuristic opted the origin out of the intervention due to its use
-  // of notifications while in the background.
-  HEURISTIC_NOTIFICATIONS,
   // The local heuristic opted the origin out of the intervention due to its use
   // of title updates while in the background.
   HEURISTIC_TITLE,
@@ -88,6 +83,11 @@ enum class DecisionFailureReason : int32_t {
   // The tab is opted out of the intervention as it's currently holding at least
   // one IndexedDB lock.
   LIVE_STATE_USING_INDEXEDDB_LOCK,
+  // The tab is opted out of the intervention as it has the permission to use
+  // notifications.
+  LIVE_STATE_HAS_NOTIFICATIONS_PERMISSION,
+  // The tab is a standalone desktop PWA window.
+  LIVE_WEB_APP,
   // This must remain last.
   MAX,
 };

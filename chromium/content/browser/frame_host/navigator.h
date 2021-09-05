@@ -31,11 +31,11 @@ class ResourceRequestBody;
 
 namespace content {
 
-class BundledExchangesHandleTracker;
 class FrameNavigationEntry;
 class FrameTreeNode;
 class PrefetchedSignedExchangeCache;
 class RenderFrameHostImpl;
+class WebBundleHandleTracker;
 
 // Implementations of this interface are responsible for performing navigations
 // in a node of the FrameTree. Its lifetime is bound to all FrameTreeNode
@@ -54,19 +54,10 @@ class CONTENT_EXPORT Navigator : public base::RefCounted<Navigator> {
 
   // Notifications coming from the RenderFrameHosts ----------------------------
 
-  // The RenderFrameHostImpl has failed a provisional load.
-  virtual void DidFailProvisionalLoadWithError(
-      RenderFrameHostImpl* render_frame_host,
-      const GURL& url,
-      int error_code,
-      const base::string16& error_description,
-      bool showing_repost_interstitial) {}
-
   // The RenderFrameHostImpl has failed to load the document.
   virtual void DidFailLoadWithError(RenderFrameHostImpl* render_frame_host,
                                     const GURL& url,
-                                    int error_code,
-                                    const base::string16& error_description) {}
+                                    int error_code) {}
 
   // The RenderFrameHostImpl has committed a navigation. The Navigator is
   // responsible for resetting |navigation_request| at the end of this method
@@ -109,8 +100,7 @@ class CONTENT_EXPORT Navigator : public base::RefCounted<Navigator> {
       RenderFrameHostImpl* render_frame_host,
       const GURL& url,
       const base::Optional<url::Origin>& initiator_origin,
-      bool uses_post,
-      const scoped_refptr<network::ResourceRequestBody>& body,
+      const scoped_refptr<network::ResourceRequestBody>& post_body,
       const std::string& extra_headers,
       const Referrer& referrer,
       WindowOpenDisposition disposition,
@@ -138,13 +128,13 @@ class CONTENT_EXPORT Navigator : public base::RefCounted<Navigator> {
       scoped_refptr<network::SharedURLLoaderFactory> blob_url_loader_factory,
       bool has_user_gesture) {}
 
-  // Called after receiving a BeforeUnloadACK IPC from the renderer. If
-  // |frame_tree_node| has a NavigationRequest waiting for the renderer
+  // Called after BeforeUnloadCompleted callback is invoked from the renderer.
+  // If |frame_tree_node| has a NavigationRequest waiting for the renderer
   // response, then the request is either started or canceled, depending on the
   // value of |proceed|.
-  virtual void OnBeforeUnloadACK(FrameTreeNode* frame_tree_node,
-                                 bool proceed,
-                                 const base::TimeTicks& proceed_time) {}
+  virtual void BeforeUnloadCompleted(FrameTreeNode* frame_tree_node,
+                                     bool proceed,
+                                     const base::TimeTicks& proceed_time) {}
 
   // Used to start a new renderer-initiated navigation, following a
   // BeginNavigation IPC from the renderer.
@@ -158,24 +148,15 @@ class CONTENT_EXPORT Navigator : public base::RefCounted<Navigator> {
           navigation_initiator,
       scoped_refptr<PrefetchedSignedExchangeCache>
           prefetched_signed_exchange_cache,
-      std::unique_ptr<BundledExchangesHandleTracker>
-          bundled_exchanges_handle_tracker);
+      std::unique_ptr<WebBundleHandleTracker> web_bundle_handle_tracker);
 
   // Used to restart a navigation that was thought to be same-document in
   // cross-document mode.
   virtual void RestartNavigationAsCrossDocument(
       std::unique_ptr<NavigationRequest> navigation_request) {}
 
-  // Used to abort an ongoing renderer-initiated navigation.
-  // Only used with PerNavigationMojoInterface disabled.
-  virtual void OnAbortNavigation(FrameTreeNode* frame_tree_node) {}
-
-  // Cancel a NavigationRequest for |frame_tree_node|. If the request is
-  // renderer-initiated and |inform_renderer| is true, an IPC will be sent to
-  // the renderer process to inform it that the navigation it requested was
-  // cancelled.
-  virtual void CancelNavigation(FrameTreeNode* frame_tree_node,
-                                bool inform_renderer) {}
+  // Cancel a NavigationRequest for |frame_tree_node|.
+  virtual void CancelNavigation(FrameTreeNode* frame_tree_node) {}
 
   // Called when the network stack started handling the navigation request
   // so that the |timestamp| when it happened can be recorded into an histogram.

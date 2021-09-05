@@ -14,10 +14,10 @@ import android.graphics.Rect;
 import android.graphics.Typeface;
 import android.text.TextPaint;
 
-import org.chromium.base.VisibleForTesting;
+import androidx.annotation.VisibleForTesting;
+
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ui.widget.TintedDrawable;
-import org.chromium.chrome.browser.util.ColorUtils;
+import org.chromium.components.browser_ui.widget.TintedDrawable;
 
 import java.util.Locale;
 
@@ -54,7 +54,7 @@ public class TabSwitcherDrawable extends TintedDrawable {
 
     private TabSwitcherDrawable(Context context, boolean useLight, Bitmap bitmap) {
         super(context, bitmap);
-        setTint(ColorUtils.getThemedToolbarIconTint(context, useLight));
+        setTint(ToolbarColors.getThemedToolbarIconTint(context, useLight));
         mSingleDigitTextSize =
                 context.getResources().getDimension(R.dimen.toolbar_tab_count_text_size_1_digit);
         mDoubleDigitTextSize =
@@ -132,6 +132,31 @@ public class TabSwitcherDrawable extends TintedDrawable {
         if (mTextPaint != null) mTextPaint.setColor(getColorForState());
     }
 
+    /** Vivaldi
+     *
+     */
+    public static TabSwitcherDrawable createTabSwitcherDrawableForBottomBar(Context context,
+                                                                            boolean useLight) {
+        Drawable drawable = ContextCompat.getDrawable(context,
+                R.drawable.vivaldi_bottom_nav_tab_counter_56dp);
+        return createTabSwitcherDrawableFromSVG(context, drawable, useLight);
+    }
+
+    public static TabSwitcherDrawable createTabSwitcherDrawableForTopToolBar(Context context,
+                                                                            boolean useLight) {
+        Drawable drawable = ContextCompat.getDrawable(context,
+                R.drawable.vivaldi_bottom_nav_tab_counter_56dp_v2);
+        return createTabSwitcherDrawableFromSVG(context, drawable, useLight);
+
+    }
+
+    public static TabSwitcherDrawable createTabSwitcherDrawableFromSVG(Context context,
+                                                                boolean useLight) {
+        Drawable drawable = ContextCompat.getDrawable(context,
+                        R.drawable.vivaldi_tab_switch_tab_counter_small);
+        return createTabSwitcherDrawableFromSVG(context, drawable, useLight);
+    }
+
     /**
      * TODO(Vivaldi)
      * Creates a {@link TabSwitcherDrawable}.
@@ -140,11 +165,8 @@ public class TabSwitcherDrawable extends TintedDrawable {
      * @return          A {@link TabSwitcherDrawable} instance.
      */
     public static TabSwitcherDrawable createTabSwitcherDrawableFromSVG(Context context,
-                                                                       boolean onBottomToolbar,
+                                                                       Drawable drawable,
                                                                        boolean useLight) {
-        Drawable drawable = ContextCompat.getDrawable(context,
-                onBottomToolbar ? R.drawable.vivaldi_bottom_nav_tab_counter_56dp
-                        : R.drawable.vivaldi_tab_switch_tab_counter_small);
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
             drawable = (DrawableCompat.wrap(drawable)).mutate();
         }

@@ -155,6 +155,7 @@ FEATURE_GRAMMAR = (
           'lock_screen_extension': 'Feature::LOCK_SCREEN_EXTENSION_CONTEXT',
           'web_page': 'Feature::WEB_PAGE_CONTEXT',
           'webui': 'Feature::WEBUI_CONTEXT',
+          'webui_untrusted': 'Feature::WEBUI_UNTRUSTED_CONTEXT',
           'unblessed_extension': 'Feature::UNBLESSED_EXTENSION_CONTEXT',
         },
         'allow_all': True
@@ -194,6 +195,7 @@ FEATURE_GRAMMAR = (
           'component': 'SimpleFeature::COMPONENT_LOCATION',
           'external_component': 'SimpleFeature::EXTERNAL_COMPONENT_LOCATION',
           'policy': 'SimpleFeature::POLICY_LOCATION',
+          'unpacked': 'SimpleFeature::UNPACKED_LOCATION',
         }
       }
     },

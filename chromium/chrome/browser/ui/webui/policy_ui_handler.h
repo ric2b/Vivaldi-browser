@@ -13,6 +13,9 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/values.h"
+#include "build/branding_buildflags.h"
+#include "build/build_config.h"
 #include "components/policy/core/browser/policy_error_map.h"
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/core/common/policy_namespace.h"
@@ -29,6 +32,10 @@
 #endif
 
 class PolicyStatusProvider;
+
+namespace policy {
+class PolicyMap;
+}
 
 // The JavaScript message handler for the chrome://policy page.
 class PolicyUIHandler : public content::WebUIMessageHandler,
@@ -55,7 +62,7 @@ class PolicyUIHandler : public content::WebUIMessageHandler,
   void OnExtensionUnloaded(content::BrowserContext* browser_context,
                            const extensions::Extension* extension,
                            extensions::UnloadedExtensionReason reason) override;
-#endif
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
   // policy::PolicyService::Observer implementation.
   void OnPolicyUpdated(const policy::PolicyNamespace& ns,
@@ -76,6 +83,9 @@ class PolicyUIHandler : public content::WebUIMessageHandler,
   base::Value GetPolicyNames() const;
   base::Value GetPolicyValues() const;
 
+  void AddExtensionPolicyNames(base::Value* names,
+                               policy::PolicyDomain policy_domain) const;
+
   void HandleExportPoliciesJson(const base::ListValue* args);
   void HandleListenPoliciesUpdates(const base::ListValue* args);
   void HandleReloadPolicies(const base::ListValue* args);
@@ -84,6 +94,12 @@ class PolicyUIHandler : public content::WebUIMessageHandler,
   // whose value has been set, a dictionary containing the value and additional
   // metadata is sent.
   void SendPolicies();
+
+#if defined(OS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  // Sets |updater_policies_| in this instance and refreshes the UI via
+  // SendPolicies.
+  void SetUpdaterPolicies(std::unique_ptr<policy::PolicyMap> updater_policies);
+#endif  // defined(OS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
   // Send the status of cloud policy to the UI. For each scope that has cloud
   // policy enabled (device and/or user), a dictionary containing status
@@ -106,6 +122,10 @@ class PolicyUIHandler : public content::WebUIMessageHandler,
   std::unique_ptr<PolicyStatusProvider> user_status_provider_;
   std::unique_ptr<PolicyStatusProvider> device_status_provider_;
   std::unique_ptr<PolicyStatusProvider> machine_status_provider_;
+
+#if defined(OS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  std::unique_ptr<policy::PolicyMap> updater_policies_;
+#endif  // defined(OS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
   base::WeakPtrFactory<PolicyUIHandler> weak_factory_{this};
 

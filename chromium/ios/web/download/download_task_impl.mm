@@ -8,9 +8,11 @@
 #import <WebKit/WebKit.h>
 
 #include "base/bind.h"
+#include "base/feature_list.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/task/post_task.h"
 #import "ios/net/cookies/system_cookie_util.h"
+#include "ios/web/common/features.h"
 #import "ios/web/net/cookies/wk_cookie_util.h"
 #include "ios/web/public/browser_state.h"
 #import "ios/web/public/download/download_task_observer.h"
@@ -173,6 +175,7 @@ namespace web {
 
 DownloadTaskImpl::DownloadTaskImpl(const WebState* web_state,
                                    const GURL& original_url,
+                                   NSString* http_method,
                                    const std::string& content_disposition,
                                    int64_t total_bytes,
                                    const std::string& mime_type,
@@ -180,6 +183,7 @@ DownloadTaskImpl::DownloadTaskImpl(const WebState* web_state,
                                    NSString* identifier,
                                    Delegate* delegate)
     : original_url_(original_url),
+      http_method_(http_method),
       total_bytes_(total_bytes),
       content_disposition_(content_disposition),
       original_mime_type_(mime_type),
@@ -266,6 +270,11 @@ NSString* DownloadTaskImpl::GetIndentifier() const {
 const GURL& DownloadTaskImpl::GetOriginalUrl() const {
   DCHECK_CURRENTLY_ON(web::WebThread::UI);
   return original_url_;
+}
+
+NSString* DownloadTaskImpl::GetHttpMethod() const {
+  DCHECK_CURRENTLY_ON(web::WebThread::UI);
+  return http_method_;
 }
 
 bool DownloadTaskImpl::IsDone() const {
@@ -446,7 +455,9 @@ void DownloadTaskImpl::StartWithCookies(NSArray<NSHTTPCookie*>* cookies) {
       UIApplicationStateActive;
 
   NSURL* url = net::NSURLWithGURL(GetOriginalUrl());
-  session_task_ = [session_ dataTaskWithURL:url];
+  NSMutableURLRequest* request = [[NSMutableURLRequest alloc] initWithURL:url];
+  request.HTTPMethod = GetHttpMethod();
+  session_task_ = [session_ dataTaskWithRequest:request];
   [session_task_ resume];
   OnDownloadUpdated();
 }
@@ -475,6 +486,11 @@ void DownloadTaskImpl::OnDownloadUpdated() {
 }
 
 void DownloadTaskImpl::OnDownloadFinished(int error_code) {
+  // If downloads manager's flag is enabled, keeps the downloaded file. The
+  // writer deletes it if it owns it, that's why it shouldn't owns it anymore
+  // when the current download is finished.
+  if (base::FeatureList::IsEnabled(web::features::kEnablePersistentDownloads))
+    writer_->AsFileWriter()->DisownFile();
   error_code_ = error_code;
   state_ = State::kComplete;
   session_task_ = nil;

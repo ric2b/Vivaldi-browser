@@ -5,53 +5,63 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_TOOLBAR_TOOLBAR_ACCOUNT_ICON_CONTAINER_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_TOOLBAR_TOOLBAR_ACCOUNT_ICON_CONTAINER_VIEW_H_
 
-#include "base/macros.h"
 #include "chrome/browser/ui/page_action/page_action_icon_type.h"
+#include "chrome/browser/ui/views/page_action/page_action_icon_container.h"
 #include "chrome/browser/ui/views/page_action/page_action_icon_view.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_icon_container_view.h"
 
 class AvatarToolbarButton;
 class Browser;
-class PageActionIconContainerView;
+class PageActionIconController;
 
 // A container view for user-account-related PageActionIconViews and the profile
 // avatar icon.
 class ToolbarAccountIconContainerView : public ToolbarIconContainerView,
+                                        public IconLabelBubbleView::Delegate,
+                                        public PageActionIconContainer,
                                         public PageActionIconView::Delegate {
  public:
   explicit ToolbarAccountIconContainerView(Browser* browser);
+  ToolbarAccountIconContainerView(const ToolbarAccountIconContainerView&) =
+      delete;
+  ToolbarAccountIconContainerView& operator=(
+      const ToolbarAccountIconContainerView&) = delete;
   ~ToolbarAccountIconContainerView() override;
 
   // ToolbarIconContainerView:
   void UpdateAllIcons() override;
 
+  // IconLabelBubbleView::Delegate:
+  SkColor GetIconLabelBubbleSurroundingForegroundColor() const override;
+  SkColor GetIconLabelBubbleInkDropColor() const override;
+  SkColor GetIconLabelBubbleBackgroundColor() const override;
+
   // PageActionIconView::Delegate:
-  SkColor GetPageActionInkDropColor() const override;
   float GetPageActionInkDropVisibleOpacity() const override;
   content::WebContents* GetWebContentsForPageActionIconView() override;
-  std::unique_ptr<views::Border> CreatePageActionIconBorder() const override;
+  gfx::Insets GetPageActionIconInsets(
+      const PageActionIconView* icon_view) const override;
 
   // views::View:
   void OnThemeChanged() override;
+  const char* GetClassName() const override;
 
-  PageActionIconContainerView* page_action_icon_container() {
-    return page_action_icon_container_view_;
+  PageActionIconController* page_action_icon_controller() {
+    return page_action_icon_controller_.get();
   }
   AvatarToolbarButton* avatar_button() { return avatar_; }
 
+  static const char kToolbarAccountIconContainerViewClassName[];
+
  private:
-  // ToolbarIconContainerView:
-  const views::View::Views& GetChildren() const override;
+  // PageActionIconContainer:
+  void AddPageActionIcon(views::View* icon) override;
 
-  SkColor GetIconColor() const;
-
-  PageActionIconContainerView* page_action_icon_container_view_ = nullptr;
+  std::unique_ptr<PageActionIconController> page_action_icon_controller_;
 
   AvatarToolbarButton* const avatar_ = nullptr;
 
   Browser* const browser_;
-
-  DISALLOW_COPY_AND_ASSIGN(ToolbarAccountIconContainerView);
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_TOOLBAR_TOOLBAR_ACCOUNT_ICON_CONTAINER_VIEW_H_

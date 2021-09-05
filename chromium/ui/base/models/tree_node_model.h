@@ -22,7 +22,7 @@ class BookmarkModel;
 }
 
 namespace vivaldi {
-class Notes_Model;
+class NotesModel;
 }
 
 namespace ui {
@@ -165,7 +165,7 @@ class TreeNode : public TreeModelNode {
  private:
   // TODO(https://crbug.com/956314): Remove this.
   friend class bookmarks::BookmarkModel;
-  friend class vivaldi::Notes_Model;
+  friend class vivaldi::NotesModel;
 
   // Title displayed in the tree.
   base::string16 title_;

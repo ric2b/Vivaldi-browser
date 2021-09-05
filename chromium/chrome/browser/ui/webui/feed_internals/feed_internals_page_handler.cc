@@ -15,9 +15,10 @@
 #include "chrome/browser/ui/webui/feed_internals/feed_internals.mojom.h"
 #include "components/feed/content/feed_host_service.h"
 #include "components/feed/content/feed_offline_host.h"
+#include "components/feed/core/common/pref_names.h"
+#include "components/feed/core/common/user_classifier.h"
 #include "components/feed/core/feed_scheduler_host.h"
-#include "components/feed/core/pref_names.h"
-#include "components/feed/core/user_classifier.h"
+#include "components/feed/core/shared_prefs/pref_names.h"
 #include "components/feed/feed_feature_list.h"
 #include "components/offline_pages/core/prefetch/prefetch_prefs.h"
 #include "components/offline_pages/core/prefetch/suggestions_provider.h"
@@ -34,15 +35,15 @@ feed_internals::mojom::TimePtr ToMojoTime(base::Time time) {
                         : feed_internals::mojom::Time::New(time.ToJsTime());
 }
 
-std::string TriggerTypeToString(feed::FeedSchedulerHost::TriggerType* trigger) {
+std::string TriggerTypeToString(feed::TriggerType* trigger) {
   if (trigger == nullptr)
     return "Not set";
   switch (*trigger) {
-    case feed::FeedSchedulerHost::TriggerType::kNtpShown:
+    case feed::TriggerType::kNtpShown:
       return "NTP Shown";
-    case feed::FeedSchedulerHost::TriggerType::kForegrounded:
+    case feed::TriggerType::kForegrounded:
       return "Foregrounded";
-    case feed::FeedSchedulerHost::TriggerType::kFixedTimer:
+    case feed::TriggerType::kFixedTimer:
       return "Fixed Timer";
   }
 }
@@ -105,6 +106,8 @@ void FeedInternalsPageHandler::GetLastFetchProperties(
       ToMojoTime(pref_service_->GetTime(feed::prefs::kLastFetchAttemptTime));
   properties->refresh_suppress_time =
       ToMojoTime(feed_scheduler_host_->GetSuppressRefreshesUntilForDebugging());
+  properties->last_bless_nonce =
+      pref_service_->GetString(feed::prefs::kHostOverrideBlessNonce);
 
   std::move(callback).Run(std::move(properties));
 }
@@ -168,4 +171,8 @@ void FeedInternalsPageHandler::GetFeedHistograms(
   std::string log;
   base::StatisticsRecorder::WriteGraph(kFeedHistogramPrefix, &log);
   std::move(callback).Run(log);
+}
+
+void FeedInternalsPageHandler::OverrideFeedHost(const std::string& host) {
+  return pref_service_->SetString(feed::prefs::kHostOverrideHost, host);
 }

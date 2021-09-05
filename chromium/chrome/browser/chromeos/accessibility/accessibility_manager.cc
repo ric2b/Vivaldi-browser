@@ -17,11 +17,11 @@
 #include "ash/public/cpp/accessibility_focus_ring_controller.h"
 #include "ash/public/cpp/accessibility_focus_ring_info.h"
 #include "ash/public/cpp/ash_pref_names.h"
-#include "ash/public/mojom/constants.mojom.h"
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
 #include "ash/sticky_keys/sticky_keys_controller.h"
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
@@ -48,7 +48,6 @@
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/extensions/api/braille_display_private/stub_braille_controller.h"
 #include "chrome/browser/extensions/extension_service.h"
-#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/browser/ui/singleton_tabs.h"
@@ -70,10 +69,10 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/focused_node_details.h"
+#include "content/public/browser/media_session_service.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_source.h"
-#include "content/public/browser/system_connector.h"
 #include "content/public/browser/tts_controller.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/common/content_switches.h"
@@ -82,10 +81,7 @@
 #include "extensions/common/extension_messages.h"
 #include "extensions/common/extension_resource.h"
 #include "extensions/common/host_id.h"
-#include "mojo/public/cpp/bindings/binding.h"
 #include "services/audio/public/cpp/sounds/sounds_manager.h"
-#include "services/media_session/public/mojom/constants.mojom.h"
-#include "services/service_manager/public/cpp/connector.h"
 #include "ui/accessibility/accessibility_switches.h"
 #include "ui/accessibility/ax_enum_util.h"
 #include "ui/accessibility/ax_enums.mojom.h"
@@ -153,14 +149,14 @@ void EnableSwitchAccessAfterChromeVoxMetric(bool val) {
 // brltty.
 void RestartBrltty(const std::string& address) {
   chromeos::UpstartClient* client = chromeos::UpstartClient::Get();
-  client->StopJob(kBrlttyUpstartJobName, {}, EmptyVoidDBusMethodCallback());
+  client->StopJob(kBrlttyUpstartJobName, {}, base::DoNothing());
 
   std::vector<std::string> args;
   if (address.empty())
     return;
 
   args.push_back(base::StringPrintf("ADDRESS=%s", address.c_str()));
-  client->StartJob(kBrlttyUpstartJobName, args, EmptyVoidDBusMethodCallback());
+  client->StartJob(kBrlttyUpstartJobName, args, base::DoNothing());
 }
 
 bool VolumeAdjustSoundEnabled() {
@@ -241,8 +237,6 @@ AccessibilityManager::AccessibilityManager() {
   notification_registrar_.Add(this,
                               chrome::NOTIFICATION_LOGIN_OR_LOCK_WEBUI_VISIBLE,
                               content::NotificationService::AllSources());
-  notification_registrar_.Add(this, chrome::NOTIFICATION_PROFILE_DESTROYED,
-                              content::NotificationService::AllSources());
   notification_registrar_.Add(this, chrome::NOTIFICATION_APP_TERMINATING,
                               content::NotificationService::AllSources());
   notification_registrar_.Add(this, content::NOTIFICATION_FOCUS_CHANGED_IN_PAGE,
@@ -301,22 +295,27 @@ AccessibilityManager::AccessibilityManager() {
   chromevox_loader_ = base::WrapUnique(new AccessibilityExtensionLoader(
       extension_misc::kChromeVoxExtensionId,
       resources_path.Append(extension_misc::kChromeVoxExtensionPath),
+      extension_misc::kChromeVoxManifestFilename,
+      extension_misc::kChromeVoxGuestManifestFilename,
       base::BindRepeating(&AccessibilityManager::PostUnloadChromeVox,
                           weak_ptr_factory_.GetWeakPtr())));
   select_to_speak_loader_ = base::WrapUnique(new AccessibilityExtensionLoader(
       extension_misc::kSelectToSpeakExtensionId,
       resources_path.Append(extension_misc::kSelectToSpeakExtensionPath),
+      extension_misc::kSelectToSpeakManifestFilename,
+      extension_misc::kSelectToSpeakGuestManifestFilename,
       base::BindRepeating(&AccessibilityManager::PostUnloadSelectToSpeak,
                           weak_ptr_factory_.GetWeakPtr())));
   switch_access_loader_ = base::WrapUnique(new AccessibilityExtensionLoader(
       extension_misc::kSwitchAccessExtensionId,
       resources_path.Append(extension_misc::kSwitchAccessExtensionPath),
+      extension_misc::kSwitchAccessManifestFilename,
+      extension_misc::kSwitchAccessGuestManifestFilename,
       base::BindRepeating(&AccessibilityManager::PostUnloadSwitchAccess,
                           weak_ptr_factory_.GetWeakPtr())));
 
   // Connect to the media session service.
-  content::GetSystemConnector()->Connect(
-      media_session::mojom::kServiceName,
+  content::GetMediaSessionService().BindAudioFocusManager(
       audio_focus_manager_.BindNewPipeAndPassReceiver());
 
   ash::AcceleratorController::SetVolumeAdjustmentSoundCallback(
@@ -916,18 +915,6 @@ void AccessibilityManager::OnSwitchAccessChanged() {
   const bool enabled = profile_->GetPrefs()->GetBoolean(
       ash::prefs::kAccessibilitySwitchAccessEnabled);
 
-  // The Switch Access setting is behind a flag. Don't enable the feature
-  // even if the preference is enabled, if the flag isn't also set.
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (!command_line->HasSwitch(
-          ::switches::kEnableExperimentalAccessibilitySwitchAccess)) {
-    if (enabled) {
-      LOG(WARNING) << "Switch access enabled but experimental accessibility "
-                   << "switch access flag is not set.";
-    }
-    return;
-  }
-
   if (enabled) {
     if (IsSpokenFeedbackEnabled()) {
       LOG(ERROR) << "Enabling Switch Access with ChromeVox is not supported.";
@@ -973,10 +960,10 @@ void AccessibilityManager::CheckBrailleState() {
     scoped_braille_observer_.Add(braille_controller);
   base::PostTaskAndReplyWithResult(
       FROM_HERE, {BrowserThread::IO},
-      base::Bind(&BrailleController::GetDisplayState,
-                 base::Unretained(braille_controller)),
-      base::Bind(&AccessibilityManager::ReceiveBrailleDisplayState,
-                 weak_ptr_factory_.GetWeakPtr()));
+      base::BindOnce(&BrailleController::GetDisplayState,
+                     base::Unretained(braille_controller)),
+      base::BindOnce(&AccessibilityManager::ReceiveBrailleDisplayState,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 void AccessibilityManager::ReceiveBrailleDisplayState(
@@ -1052,9 +1039,18 @@ void AccessibilityManager::OnActiveOutputNodeChanged() {
   }
 }
 
+void AccessibilityManager::OnProfileWillBeDestroyed(Profile* profile) {
+  DCHECK_EQ(profile_, profile);
+  SetProfile(nullptr);
+}
+
 void AccessibilityManager::SetProfile(Profile* profile) {
   if (profile_ == profile)
     return;
+
+  if (profile_)
+    profile_observer_.Remove(profile_);
+  DCHECK(!profile_observer_.IsObservingSources());
 
   pref_change_registrar_.reset();
   local_state_pref_change_registrar_.reset();
@@ -1141,6 +1137,8 @@ void AccessibilityManager::SetProfile(Profile* profile) {
         extensions::ExtensionRegistry::Get(profile);
     if (!extension_registry_observer_.IsObserving(registry))
       extension_registry_observer_.Add(registry);
+
+    profile_observer_.Add(profile);
   }
 
   bool had_profile = (profile_ != NULL);
@@ -1278,13 +1276,6 @@ void AccessibilityManager::Observe(
         SetProfile(profile);
       break;
     }
-    case chrome::NOTIFICATION_PROFILE_DESTROYED: {
-      // Update |profile_| when exiting a session or shutting down.
-      Profile* profile = content::Source<Profile>(source).ptr();
-      if (profile_ == profile)
-        SetProfile(nullptr);
-      break;
-    }
     case chrome::NOTIFICATION_APP_TERMINATING: {
       app_terminating_ = true;
       break;
@@ -1342,10 +1333,18 @@ void AccessibilityManager::PostLoadChromeVox() {
     return;
 
   // Do any setup work needed immediately after ChromeVox actually loads.
-  // Maybe start brltty, if we have a bluetooth device stored for connection.
   const std::string& address = GetBluetoothBrailleDisplayAddress();
-  if (!address.empty())
+  if (!address.empty()) {
+    // Maybe start brltty, when we have a bluetooth device stored for
+    // connection.
     RestartBrltty(address);
+  } else {
+    // Otherwise, start brltty without an address. This covers cases when
+    // ChromeVox is toggled off then back on all while a usb braille display is
+    // connected.
+    chromeos::UpstartClient::Get()->StartJob(kBrlttyUpstartJobName, {},
+                                             base::DoNothing());
+  }
 
   PlayEarcon(SOUND_SPOKEN_FEEDBACK_ENABLED, PlaySoundOption::ALWAYS);
 
@@ -1380,7 +1379,7 @@ void AccessibilityManager::PostUnloadChromeVox() {
   // Do any teardown work needed immediately after ChromeVox actually unloads.
   // Stop brltty.
   chromeos::UpstartClient::Get()->StopJob(kBrlttyUpstartJobName, {},
-                                          EmptyVoidDBusMethodCallback());
+                                          base::DoNothing());
 
   PlayEarcon(SOUND_SPOKEN_FEEDBACK_DISABLED, PlaySoundOption::ALWAYS);
 

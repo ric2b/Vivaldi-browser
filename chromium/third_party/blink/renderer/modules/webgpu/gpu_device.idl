@@ -5,14 +5,15 @@
 // https://gpuweb.github.io/gpuweb/
 
 [
-    RuntimeEnabled=WebGPU
+    Exposed(Window WebGPU, Worker WebGPU)
 ] interface GPUDevice : EventTarget {
-    readonly attribute GPUAdapter adapter;
+    [SameObject] readonly attribute GPUAdapter adapter;
     [CallWith=ScriptState] readonly attribute Promise<GPUDeviceLostInfo> lost;
 
+    [SameObject] readonly attribute GPUQueue defaultQueue;
+
     GPUBuffer createBuffer(GPUBufferDescriptor descriptor);
-    [CallWith=ScriptState, RaisesException] GPUMappedBuffer createBufferMapped(GPUBufferDescriptor descriptor);
-    [CallWith=ScriptState, RaisesException] Promise<GPUMappedBuffer> createBufferMappedAsync(GPUBufferDescriptor descriptor);
+    [RaisesException] GPUMappedBuffer createBufferMapped(GPUBufferDescriptor descriptor);
     [RaisesException] GPUTexture createTexture(GPUTextureDescriptor descriptor);
     GPUSampler createSampler(optional GPUSamplerDescriptor descriptor = {});
 
@@ -20,13 +21,12 @@
     GPUBindGroupLayout createBindGroupLayout(GPUBindGroupLayoutDescriptor descriptor);
     GPUPipelineLayout createPipelineLayout(GPUPipelineLayoutDescriptor descriptor);
 
-    GPUShaderModule createShaderModule(GPUShaderModuleDescriptor descriptor);
+    [RaisesException] GPUShaderModule createShaderModule(GPUShaderModuleDescriptor descriptor);
     [CallWith=ScriptState] GPURenderPipeline createRenderPipeline(GPURenderPipelineDescriptor descriptor);
     GPUComputePipeline createComputePipeline(GPUComputePipelineDescriptor descriptor);
 
     GPUCommandEncoder createCommandEncoder(optional GPUCommandEncoderDescriptor descriptor = {});
     GPURenderBundleEncoder createRenderBundleEncoder(GPURenderBundleEncoderDescriptor descriptor);
-    GPUQueue getQueue();
 
     void pushErrorScope(GPUErrorFilter filter);
     [CallWith=ScriptState] Promise<GPUError?> popErrorScope();
@@ -40,5 +40,5 @@ enum GPUErrorFilter {
     "validation"
 };
 
-typedef sequence<any> GPUMappedBuffer;  // [GPUBuffer, ArrayBuffer]
+typedef sequence<(GPUBuffer or ArrayBuffer)> GPUMappedBuffer;
 typedef (GPUOutOfMemoryError or GPUValidationError) GPUError;

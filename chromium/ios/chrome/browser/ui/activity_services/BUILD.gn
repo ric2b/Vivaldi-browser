@@ -38,6 +38,7 @@ source_set("activity_services") {
     "//ios/chrome/browser/snapshots",
     "//ios/chrome/browser/sync",
     "//ios/chrome/browser/tabs",
+    "//ios/chrome/browser/ui:feature_flags",
     "//ios/chrome/browser/ui/activity_services/activities",
     "//ios/chrome/browser/ui/activity_services/requirements",
     "//ios/chrome/browser/ui/commands",
@@ -48,9 +49,7 @@ source_set("activity_services") {
     "//ui/base",
     "//url",
   ]
-  public_deps = [
-    "//ios/third_party/material_components_ios",
-  ]
+  public_deps = [ "//ios/third_party/material_components_ios" ]
   libs = [
     "MobileCoreServices.framework",
     "UIKit.framework",
@@ -68,6 +67,7 @@ source_set("coordinator") {
     "//base",
     "//ios/chrome/browser",
     "//ios/chrome/browser/browser_state",
+    "//ios/chrome/browser/main:public",
     "//ios/chrome/browser/passwords",
     "//ios/chrome/browser/tabs",
     "//ios/chrome/browser/ui/activity_services/requirements",
@@ -127,9 +127,7 @@ source_set("eg_tests") {
   configs += [ "//build/config/compiler:enable_arc" ]
   defines = [ "CHROME_EARL_GREY_1" ]
   testonly = true
-  sources = [
-    "activity_service_controller_egtest.mm",
-  ]
+  sources = [ "activity_service_controller_egtest.mm" ]
   deps = [
     "//base",
     "//components/strings",
@@ -155,9 +153,7 @@ source_set("eg2_tests") {
   ]
   testonly = true
 
-  sources = [
-    "activity_service_controller_egtest.mm",
-  ]
+  sources = [ "activity_service_controller_egtest.mm" ]
 
   deps = [
     "//components/strings",

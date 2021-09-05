@@ -19,7 +19,6 @@
 #include "base/i18n/icu_util.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/message_loop/message_loop_current.h"
 #include "base/rand_util.h"
 #include "base/run_loop.h"
@@ -29,8 +28,10 @@
 #include "base/task/post_task.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/test/bind_test_util.h"
+#include "base/test/scoped_run_loop_timeout.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/thread_restrictions.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "content/browser/browser_main_loop.h"
 #include "content/browser/browser_thread_impl.h"
@@ -39,6 +40,7 @@
 #include "content/browser/scheduler/browser_task_executor.h"
 #include "content/browser/startup_data_impl.h"
 #include "content/browser/startup_helper.h"
+#include "content/browser/storage_partition_impl.h"
 #include "content/browser/tracing/memory_instrumentation_util.h"
 #include "content/browser/tracing/tracing_controller_impl.h"
 #include "content/public/app/content_main.h"
@@ -57,6 +59,7 @@
 #include "content/test/content_browser_sanity_checker.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "gpu/config/gpu_switches.h"
+#include "media/base/media_switches.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/bindings/sync_call_restrictions.h"
 #include "net/dns/mock_host_resolver.h"
@@ -79,7 +82,6 @@
 #include "components/discardable_memory/service/discardable_shared_memory_manager.h"  // nogncheck
 #include "content/app/mojo/mojo_init.h"
 #include "content/app/service_manager_environment.h"
-#include "content/common/url_schemes.h"
 #include "content/public/app/content_main_delegate.h"
 #include "content/public/common/content_paths.h"
 #include "testing/android/native_test/native_browser_test_support.h"
@@ -106,14 +108,12 @@
 #include "ui/aura/test/event_generator_delegate_aura.h"  // nogncheck
 #endif
 
-#include "app/vivaldi_apptools.h"
-#include "base/vivaldi_switches.h"
-
 namespace content {
 namespace {
 
-// See kRunManualTestsFlag in "content_switches.cc".
-const char kManualTestPrefix[] = "MANUAL_";
+// Whether an instance of BrowserTestBase has already been created in this
+// process. Browser tests should each be run in a new process.
+bool g_instance_already_created = false;
 
 #if defined(OS_POSIX)
 // On SIGSEGV or SIGTERM (sent by the runner on timeouts), dump a stack trace
@@ -149,10 +149,10 @@ void RunTaskOnRendererThread(base::OnceClosure task,
   base::PostTask(FROM_HERE, {BrowserThread::UI}, std::move(quit_task));
 }
 
-void TraceStopTracingComplete(const base::Closure& quit,
-                                   const base::FilePath& file_path) {
+void TraceStopTracingComplete(base::OnceClosure quit,
+                              const base::FilePath& file_path) {
   LOG(ERROR) << "Tracing written to: " << file_path.value();
-  quit.Run();
+  std::move(quit).Run();
 }
 
 // See SetInitialWebContents comment for more information.
@@ -180,6 +180,11 @@ BrowserTestBase::BrowserTestBase()
       enable_pixel_output_(false),
       use_software_compositing_(false),
       set_up_called_(false) {
+  CHECK(!g_instance_already_created)
+      << "Each browser test should be run in a new process. If you are adding "
+         "a new browser test suite that runs on Android, please add it to "
+         "//build/android/pylib/gtest/gtest_test_instance.py.";
+  g_instance_already_created = true;
 #if defined(OS_LINUX)
   ui::test::EnableTestConfigForPlatformWindows();
 #endif
@@ -215,10 +220,20 @@ BrowserTestBase::~BrowserTestBase() {
 void BrowserTestBase::SetUp() {
   set_up_called_ = true;
 
-  if (BrowserTestBase::ShouldSkipManualTests())
-    GTEST_SKIP();
+  if (!UseProductionQuotaSettings()) {
+    // By default use hardcoded quota settings to have a consistent testing
+    // environment.
+    const int kQuota = 5 * 1024 * 1024;
+    quota_settings_ =
+        std::make_unique<storage::QuotaSettings>(kQuota * 5, kQuota, 0, 0);
+    StoragePartitionImpl::SetDefaultQuotaSettingsForTesting(
+        quota_settings_.get());
+  }
 
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+
+  if (!command_line->HasSwitch(switches::kUseFakeDeviceForMediaStream))
+    command_line->AppendSwitch(switches::kUseFakeDeviceForMediaStream);
 
   // Features that depend on external factors (e.g. memory pressure monitor) can
   // disable themselves based on the switch below (to ensure that browser tests
@@ -247,21 +262,11 @@ void BrowserTestBase::SetUp() {
   if (use_software_compositing_) {
     command_line->AppendSwitch(switches::kDisableGpu);
     command_line->RemoveSwitch(switches::kDisableSoftwareCompositingFallback);
-#if defined(USE_X11)
-    // If Vulkan is enabled, make sure it uses SwiftShader instead of native,
-    // though only on platforms where it is supported.
-    // TODO(samans): Support Swiftshader on more platforms.
-    // https://crbug.com/963988
-    if (command_line->HasSwitch(switches::kUseVulkan)) {
-      command_line->AppendSwitchASCII(
-          switches::kUseVulkan, switches::kVulkanImplementationNameSwiftshader);
-    }
-#endif
   }
 
   // The layout of windows on screen is unpredictable during tests, so disable
   // occlusion when running browser tests.
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+  command_line->AppendSwitch(
       switches::kDisableBackgroundingOccludedWindowsForTesting);
 
 #if defined(USE_AURA)
@@ -376,7 +381,7 @@ void BrowserTestBase::SetUp() {
   base::FeatureList::ClearInstanceForTesting();
 
   auto created_main_parts_closure =
-      std::make_unique<CreatedMainPartsClosure>(base::Bind(
+      std::make_unique<CreatedMainPartsClosure>(base::BindOnce(
           &BrowserTestBase::CreatedBrowserMainParts, base::Unretained(this)));
 
 #if defined(OS_ANDROID)
@@ -390,7 +395,6 @@ void BrowserTestBase::SetUp() {
 
 #ifdef V8_USE_EXTERNAL_STARTUP_DATA
   gin::V8Initializer::LoadV8Snapshot();
-  gin::V8Initializer::LoadV8Natives();
 #endif
 
   ContentMainDelegate* delegate = GetContentMainDelegateForTesting();
@@ -402,13 +406,15 @@ void BrowserTestBase::SetUp() {
 
   InitializeMojo();
 
+  // We can only setup startup tracing after mojo is initialized above.
+  tracing::EnableStartupTracingIfNeeded();
+
   {
     SetBrowserClientForTesting(delegate->CreateContentBrowserClient());
     if (command_line->HasSwitch(switches::kSingleProcess))
       SetRendererClientForTesting(delegate->CreateContentRendererClient());
 
     content::RegisterPathProvider();
-    content::RegisterContentSchemes(false);
     ui::RegisterPathProvider();
 
     delegate->PreSandboxStartup();
@@ -455,9 +461,9 @@ void BrowserTestBase::SetUp() {
     // run.
     base::RunLoop loop{base::RunLoop::Type::kNestableTasksAllowed};
 
-    auto ui_task = std::make_unique<base::Closure>(
-        base::Bind(&BrowserTestBase::WaitUntilJavaIsReady,
-                   base::Unretained(this), loop.QuitClosure()));
+    auto ui_task = std::make_unique<base::OnceClosure>(
+        base::BindOnce(&BrowserTestBase::WaitUntilJavaIsReady,
+                       base::Unretained(this), loop.QuitClosure()));
 
     // The MainFunctionParams must out-live all the startup tasks running.
     MainFunctionParams params(*command_line);
@@ -491,7 +497,7 @@ void BrowserTestBase::SetUp() {
     spawned_test_server_.reset();
   }
 
-  base::PostTaskAndroid::SignalNativeSchedulerShutdown();
+  base::PostTaskAndroid::SignalNativeSchedulerShutdownForTesting();
   BrowserTaskExecutor::Shutdown();
 
   // Normally the BrowserMainLoop does this during shutdown but on Android we
@@ -499,7 +505,7 @@ void BrowserTestBase::SetUp() {
   // for the test harness to be able to delete temp dirs.
   base::ThreadRestrictions::SetIOAllowed(true);
 #else   // defined(OS_ANDROID)
-  auto ui_task = std::make_unique<base::Closure>(base::Bind(
+  auto ui_task = std::make_unique<base::OnceClosure>(base::BindOnce(
       &BrowserTestBase::ProxyRunTestOnMainThreadLoop, base::Unretained(this)));
   GetContentMainParams()->ui_task = ui_task.release();
   GetContentMainParams()->created_main_parts_closure =
@@ -514,10 +520,16 @@ void BrowserTestBase::TearDown() {
   ui::test::EventGeneratorDelegate::SetFactoryFunction(
       ui::test::EventGeneratorDelegate::FactoryFunction());
 #endif
+
+  StoragePartitionImpl::SetDefaultQuotaSettingsForTesting(nullptr);
 }
 
 bool BrowserTestBase::AllowFileAccessFromFiles() {
   return true;
+}
+
+bool BrowserTestBase::UseProductionQuotaSettings() {
+  return false;
 }
 
 void BrowserTestBase::SimulateNetworkServiceCrash() {
@@ -542,14 +554,6 @@ void BrowserTestBase::SimulateNetworkServiceCrash() {
   InitializeNetworkProcess();
 }
 
-bool BrowserTestBase::ShouldSkipManualTests() {
-  return (base::StartsWith(
-              ::testing::UnitTest::GetInstance()->current_test_info()->name(),
-              kManualTestPrefix, base::CompareCase::SENSITIVE) &&
-          !base::CommandLine::ForCurrentProcess()->HasSwitch(
-              switches::kRunManualTestsFlag));
-}
-
 #if defined(OS_ANDROID)
 void BrowserTestBase::WaitUntilJavaIsReady(base::OnceClosure quit_closure) {
   if (testing::android::JavaAsyncStartupTasksCompleteForBrowserTests()) {
@@ -557,7 +561,7 @@ void BrowserTestBase::WaitUntilJavaIsReady(base::OnceClosure quit_closure) {
     return;
   }
 
-  base::PostDelayedTask(
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(&BrowserTestBase::WaitUntilJavaIsReady,
                      base::Unretained(this), std::move(quit_closure)),
@@ -601,16 +605,14 @@ void BrowserTestBase::ProxyRunTestOnMainThreadLoop() {
 #endif
 
   // Install a RunLoop timeout if none is present but do not override tests that
-  // set a ScopedRunTimeoutForTest from their fixture's constructor (which
+  // set a ScopedLoopRunTimeout from their fixture's constructor (which
   // happens as part of setting up the test factory in gtest while
   // ProxyRunTestOnMainThreadLoop() happens later as part of SetUp()).
-  base::Optional<base::RunLoop::ScopedRunTimeoutForTest> scoped_run_timeout;
-  if (!base::RunLoop::ScopedRunTimeoutForTest::Current()) {
+  base::Optional<base::test::ScopedRunLoopTimeout> scoped_run_timeout;
+  if (!base::test::ScopedRunLoopTimeout::ExistsForCurrentThread()) {
     // TODO(https://crbug.com/918724): determine whether the timeout can be
     // reduced from action_max_timeout() to action_timeout().
-    scoped_run_timeout.emplace(TestTimeouts::action_max_timeout(),
-                               base::MakeExpectedNotRunClosure(
-                                   FROM_HERE, "RunLoop::Run() timed out."));
+    scoped_run_timeout.emplace(FROM_HERE, TestTimeouts::action_max_timeout());
   }
 
 #if defined(OS_POSIX)
@@ -689,8 +691,8 @@ void BrowserTestBase::ProxyRunTestOnMainThreadLoop() {
     base::RunLoop run_loop;
     TracingController::GetInstance()->StopTracing(
         TracingControllerImpl::CreateFileEndpoint(
-            trace_file, base::Bind(&TraceStopTracingComplete,
-                                   run_loop.QuitClosure(), trace_file)));
+            trace_file, base::BindOnce(&TraceStopTracingComplete,
+                                       run_loop.QuitClosure(), trace_file)));
     run_loop.Run();
   }
 
@@ -756,13 +758,18 @@ void BrowserTestBase::InitializeNetworkProcess() {
     // TODO(jam: expand this when we try to make browser_tests and
     // components_browsertests work.
     if (rule.resolver_type ==
-        net::RuleBasedHostResolverProc::Rule::kResolverTypeFail) {
+            net::RuleBasedHostResolverProc::Rule::kResolverTypeFail ||
+        rule.resolver_type ==
+            net::RuleBasedHostResolverProc::Rule::kResolverTypeFailTimeout) {
       // The host "wpad" is added automatically in TestHostResolver, so we don't
       // need to send it to NetworkServiceTest.
       if (rule.host_pattern != "wpad") {
         network::mojom::RulePtr mojo_rule = network::mojom::Rule::New();
         mojo_rule->resolver_type =
-            network::mojom::ResolverType::kResolverTypeFail;
+            (rule.resolver_type ==
+             net::RuleBasedHostResolverProc::Rule::kResolverTypeFail)
+                ? network::mojom::ResolverType::kResolverTypeFail
+                : network::mojom::ResolverType::kResolverTypeFailTimeout;
         mojo_rule->host_pattern = rule.host_pattern;
         mojo_rules.push_back(std::move(mojo_rule));
       }
@@ -774,8 +781,9 @@ void BrowserTestBase::InitializeNetworkProcess() {
          rule.resolver_type !=
              net::RuleBasedHostResolverProc::Rule::kResolverTypeIPLiteral) ||
         rule.address_family != net::AddressFamily::ADDRESS_FAMILY_UNSPECIFIED ||
-        !!rule.latency_ms)
+        !!rule.latency_ms) {
       continue;
+    }
     network::mojom::RulePtr mojo_rule = network::mojom::Rule::New();
     if (rule.resolver_type ==
         net::RuleBasedHostResolverProc::Rule::kResolverTypeSystem) {
@@ -789,6 +797,8 @@ void BrowserTestBase::InitializeNetworkProcess() {
     }
     mojo_rule->host_pattern = rule.host_pattern;
     mojo_rule->replacement = rule.replacement;
+    mojo_rule->host_resolver_flags = rule.host_resolver_flags;
+    mojo_rule->canonical_name = rule.canonical_name;
     mojo_rules.push_back(std::move(mojo_rule));
   }
 

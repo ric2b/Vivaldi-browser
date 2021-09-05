@@ -1,0 +1,156 @@
+// Copyright (c) 2013-2015 Vivaldi Technologies AS. All rights reserved
+
+#ifndef NOTES_NOTE_NODE_H_
+#define NOTES_NOTE_NODE_H_
+
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "base/strings/string16.h"
+#include "base/synchronization/waitable_event.h"
+#include "base/time/time.h"
+#include "content/public/browser/notification_observer.h"
+#include "ui/base/models/tree_node_model.h"
+#include "url/gurl.h"
+
+#include "notes/note_attachment.h"
+
+class Profile;
+
+namespace base {
+class Value;
+class DictionaryValue;
+class SequencedTaskRunner;
+}  // namespace base
+
+namespace vivaldi {
+class NotesStorage;
+class NotesLoadDetails;
+
+class NoteNode : public ui::TreeNode<NoteNode> {
+ public:
+  enum Type { NOTE, FOLDER, MAIN, OTHER, TRASH, SEPARATOR };
+
+  static const int64_t kInvalidSyncTransactionVersion;
+  static const char kRootNodeGuid[];
+  static const char kMainNodeGuid[];
+  static const char kOtherNotesNodeGuid[];
+  static const char kTrashNodeGuid[];
+
+  NoteNode(int64_t id, const std::string& guid, Type type);
+  ~NoteNode() override;
+
+  static std::string RootNodeGuid();
+
+  // Returns true if the node is a NotePermanentNode (which does not include
+  // the root).
+  bool is_permanent_node() const { return is_permanent_node_; }
+
+  Type type() const { return type_; }
+  bool is_folder() const { return type_ == FOLDER || is_permanent_node_; }
+  bool is_note() const { return type_ == NOTE; }
+  bool is_main() const { return type_ == MAIN; }
+  bool is_other() const { return type_ == OTHER; }
+  bool is_trash() const { return type_ == TRASH; }
+  bool is_separator() const { return type_ == SEPARATOR; }
+
+  // Returns an unique id for this node.
+  // For notes nodes that are managed by the notes model, the IDs are
+  // persisted across sessions.
+  int64_t id() const { return id_; }
+  void set_id(int64_t id) { id_ = id; }
+
+  // Returns the GUID for this node.
+  // For note nodes that are managed by the notes model, the GUIDs are
+  // persisted across sessions and stable throughout the lifetime of the
+  // note.
+  const std::string& guid() const { return guid_; }
+
+  // Get the creation time for the node.
+  base::Time GetCreationTime() const { return creation_time_; }
+
+  const base::string16& GetContent() const { return content_; }
+
+  const GURL& GetURL() const { return url_; }
+
+  const NoteAttachment* GetAttachment(const std::string& checksum) const {
+    auto attachment = attachments_.find(checksum);
+    return (attachment != attachments_.end()) ? &(attachment->second) : nullptr;
+  }
+  const NoteAttachments& GetAttachments() const { return attachments_; }
+  void SetContent(const base::string16& content) { content_ = content; }
+  void SetURL(const GURL& url) { url_ = url; }
+  void SetCreationTime(const base::Time creation_time) {
+    creation_time_ = creation_time;
+  }
+
+  void AddAttachment(NoteAttachment&& attachment) {
+    attachments_.insert(std::make_pair(
+        attachment.checksum(), std::forward<NoteAttachment>(attachment)));
+  }
+
+  void DeleteAttachment(const std::string& checksum) {
+    attachments_.erase(checksum);
+  }
+
+  void ClearAttachments() { attachments_.clear(); }
+  void SwapAttachments(NoteNode* node) {
+    attachments_.swap(node->attachments_);
+  }
+
+  void set_sync_transaction_version(int64_t sync_transaction_version) {
+    sync_transaction_version_ = sync_transaction_version;
+  }
+  int64_t sync_transaction_version() const { return sync_transaction_version_; }
+
+ protected:
+  NoteNode(int64_t id,
+           const std::string& guid,
+           Type type,
+           bool is_permanent_node);
+
+ private:
+  friend class NotesModel;
+
+  // Type of node. See enum above.
+  const Type type_;
+  // Time of creation.
+  base::Time creation_time_;
+  // Actual note text.
+  base::string16 content_;
+  // Attached URL.
+  GURL url_;
+  // List of attached data.
+  NoteAttachments attachments_;
+
+  // The GUID for this node. A NoteNode GUID is immutable and differs from
+  // the |id_| in that it is consistent across different clients and
+  // stable throughout the lifetime of the bookmark.
+  const std::string guid_;
+
+  // The unique identifier for this node.
+  int64_t id_;
+
+  // The sync transaction version. Defaults to kInvalidSyncTransactionVersion.
+  int64_t sync_transaction_version_;
+
+  const bool is_permanent_node_;
+
+  DISALLOW_COPY_AND_ASSIGN(NoteNode);
+};
+
+// Node used for the permanent folders (excluding the root).
+class PermanentNoteNode : public NoteNode {
+ public:
+  PermanentNoteNode(int64_t id, Type type);
+  ~PermanentNoteNode() override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(PermanentNoteNode);
+};
+
+}  // namespace vivaldi
+
+#endif  // NOTES_NOTE_NODE_H_

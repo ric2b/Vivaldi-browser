@@ -4,10 +4,14 @@
 
 #include "third_party/blink/renderer/modules/cookie_store/cookie_change_event.h"
 
+#include <utility>
+
+#include "services/network/public/mojom/cookie_manager.mojom-blink.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_cookie_change_event_init.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_cookie_list_item.h"
 #include "third_party/blink/renderer/core/dom/dom_time_stamp.h"
-#include "third_party/blink/renderer/modules/cookie_store/cookie_change_event_init.h"
-#include "third_party/blink/renderer/modules/cookie_store/cookie_list_item.h"
 #include "third_party/blink/renderer/modules/event_modules.h"
+#include "third_party/blink/renderer/platform/cookie/canonical_cookie.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
@@ -19,7 +23,7 @@ const AtomicString& CookieChangeEvent::InterfaceName() const {
   return event_interface_names::kCookieChangeEvent;
 }
 
-void CookieChangeEvent::Trace(blink::Visitor* visitor) {
+void CookieChangeEvent::Trace(Visitor* visitor) {
   Event::Trace(visitor);
   visitor->Trace(changed_);
   visitor->Trace(deleted_);
@@ -50,10 +54,9 @@ String ToCookieListItemSameSite(network::mojom::CookieSameSite same_site) {
     case network::mojom::CookieSameSite::STRICT_MODE:
       return "strict";
     case network::mojom::CookieSameSite::LAX_MODE:
-    case network::mojom::CookieSameSite::EXTENDED_MODE:
       return "lax";
     case network::mojom::CookieSameSite::NO_RESTRICTION:
-      return "unrestricted";
+      return "none";
     case network::mojom::CookieSameSite::UNSPECIFIED:
       return "unspecified";
   }
@@ -65,7 +68,7 @@ String ToCookieListItemSameSite(network::mojom::CookieSameSite same_site) {
 
 // static
 CookieListItem* CookieChangeEvent::ToCookieListItem(
-    const WebCanonicalCookie& canonical_cookie,
+    const CanonicalCookie& canonical_cookie,
     bool is_deleted) {
   CookieListItem* list_item = CookieListItem::Create();
 
@@ -91,7 +94,7 @@ CookieListItem* CookieChangeEvent::ToCookieListItem(
 
 // static
 void CookieChangeEvent::ToEventInfo(
-    const WebCanonicalCookie& backend_cookie,
+    const CanonicalCookie& backend_cookie,
     ::network::mojom::CookieChangeCause change_cause,
     HeapVector<Member<CookieListItem>>& changed,
     HeapVector<Member<CookieListItem>>& deleted) {

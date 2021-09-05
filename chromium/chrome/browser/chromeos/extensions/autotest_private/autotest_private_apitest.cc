@@ -2,8 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "ash/public/cpp/overview_test_api.h"
+#include "ash/public/cpp/test/shell_test_api.h"
 #include "base/callback_forward.h"
 #include "base/macros.h"
+#include "base/test/bind_test_util.h"
 #include "build/build_config.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/arc/session/arc_session_manager.h"
@@ -13,6 +16,7 @@
 #include "chrome/browser/chromeos/extensions/autotest_private/autotest_private_api.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
+#include "chrome/browser/ui/browser_window.h"
 #include "components/arc/arc_prefs.h"
 #include "components/arc/arc_util.h"
 #include "components/arc/session/connection_holder.h"
@@ -28,6 +32,10 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
+#include "services/tracing/public/cpp/perfetto/perfetto_traced_process.h"
+#include "ui/aura/window.h"
+#include "ui/events/event_utils.h"
+#include "ui/events/test/event_generator.h"
 #include "ui/views/widget/widget.h"
 
 using testing::_;
@@ -105,6 +113,108 @@ IN_PROC_BROWSER_TEST_F(AutotestPrivateApiTest, AutotestPrivateArcEnabled) {
       << message_;
 
   arc::SetArcPlayStoreEnabledForProfile(profile(), false);
+}
+
+IN_PROC_BROWSER_TEST_F(AutotestPrivateApiTest, ScrollableShelfAPITest) {
+  ASSERT_TRUE(
+      RunComponentExtensionTestWithArg("autotest_private", "scrollableShelf"))
+      << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(AutotestPrivateApiTest, ShelfAPITest) {
+  ASSERT_TRUE(RunComponentExtensionTestWithArg("autotest_private", "shelf"))
+      << message_;
+}
+
+class AutotestPrivateApiOverviewTest : public AutotestPrivateApiTest {
+ public:
+  AutotestPrivateApiOverviewTest() = default;
+
+  // AutotestPrivateApiTest:
+  void SetUpOnMainThread() override {
+    AutotestPrivateApiTest::SetUpOnMainThread();
+
+    // Create one additional browser window to make total of 2 windows.
+    CreateBrowser(browser()->profile());
+
+    // Enters tablet overview mode.
+    ash::ShellTestApi().SetTabletModeEnabledForTest(true);
+    base::RunLoop run_loop;
+    ash::OverviewTestApi().SetOverviewMode(
+        /*start=*/true, base::BindLambdaForTesting([&run_loop](bool finished) {
+          if (!finished)
+            ADD_FAILURE() << "Failed to enter overview.";
+          run_loop.Quit();
+        }));
+    run_loop.Run();
+
+    // We should get 2 overview items from the 2 browser windows.
+    ASSERT_EQ(2u, ash::OverviewTestApi().GetOverviewInfo()->size());
+  }
+
+  gfx::NativeWindow GetRootWindow() const {
+    return browser()->window()->GetNativeWindow()->GetRootWindow();
+  }
+};
+
+IN_PROC_BROWSER_TEST_F(AutotestPrivateApiOverviewTest, Default) {
+  ASSERT_TRUE(
+      RunComponentExtensionTestWithArg("autotest_private", "overviewDefault"))
+      << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(AutotestPrivateApiOverviewTest, Drag) {
+  const ash::OverviewInfo info =
+      ash::OverviewTestApi().GetOverviewInfo().value();
+  const gfx::Point start_point =
+      info.begin()->second.bounds_in_screen.CenterPoint();
+
+  // Long press to pick up an overview item and drag it a bit.
+  ui::test::EventGenerator generator(GetRootWindow());
+
+  generator.set_current_screen_location(start_point);
+  generator.PressTouch();
+
+  ui::GestureEvent long_press(
+      start_point.x(), start_point.y(), 0, ui::EventTimeForNow(),
+      ui::GestureEventDetails(ui::ET_GESTURE_LONG_PRESS));
+  generator.Dispatch(&long_press);
+
+  // 50 is arbitrary number of dip to move a bit to ensure the item is being
+  // dragged.
+  const gfx::Point end_point(start_point.x() + 50, start_point.y());
+  generator.MoveTouch(end_point);
+
+  ASSERT_TRUE(
+      RunComponentExtensionTestWithArg("autotest_private", "overviewDrag"))
+      << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(AutotestPrivateApiOverviewTest, LeftSnapped) {
+  const ash::OverviewInfo info =
+      ash::OverviewTestApi().GetOverviewInfo().value();
+  const gfx::Point start_point =
+      info.begin()->second.bounds_in_screen.CenterPoint();
+  const gfx::Point end_point(0, start_point.y());
+
+  // Long press to pick up an overview item, drag all the way to the left
+  // to snap it on left.
+  ui::test::EventGenerator generator(GetRootWindow());
+
+  generator.set_current_screen_location(start_point);
+  generator.PressTouch();
+
+  ui::GestureEvent long_press(
+      start_point.x(), start_point.y(), 0, ui::EventTimeForNow(),
+      ui::GestureEventDetails(ui::ET_GESTURE_LONG_PRESS));
+  generator.Dispatch(&long_press);
+
+  generator.MoveTouch(end_point);
+  generator.ReleaseTouch();
+
+  ASSERT_TRUE(RunComponentExtensionTestWithArg("autotest_private",
+                                               "splitviewLeftSnapped"))
+      << message_;
 }
 
 class AutotestPrivateWithPolicyApiTest : public AutotestPrivateApiTest {
@@ -191,6 +301,29 @@ IN_PROC_BROWSER_TEST_F(AutotestPrivateArcPerformanceTracing, Basic) {
 
   ASSERT_TRUE(RunComponentExtensionTestWithArg("autotest_private",
                                                "arcPerformanceTracing"))
+      << message_;
+}
+
+class AutotestPrivateStartStopTracing : public AutotestPrivateApiTest {
+ public:
+  AutotestPrivateStartStopTracing() = default;
+  ~AutotestPrivateStartStopTracing() override = default;
+  AutotestPrivateStartStopTracing(const AutotestPrivateStartStopTracing&) =
+      delete;
+  AutotestPrivateStartStopTracing& operator=(
+      const AutotestPrivateStartStopTracing&) = delete;
+
+ protected:
+  // AutotestPrivateApiTest:
+  void SetUpOnMainThread() override {
+    AutotestPrivateApiTest::SetUpOnMainThread();
+    tracing::PerfettoTracedProcess::Get()->ClearDataSourcesForTesting();
+  }
+};
+
+IN_PROC_BROWSER_TEST_F(AutotestPrivateStartStopTracing, StartStopTracing) {
+  ASSERT_TRUE(
+      RunComponentExtensionTestWithArg("autotest_private", "startStopTracing"))
       << message_;
 }
 

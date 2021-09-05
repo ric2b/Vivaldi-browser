@@ -136,9 +136,6 @@ class ArcSessionImpl
     STOPPED,
   };
 
-  static const char kPackagesCacheModeCopy[];
-  static const char kPackagesCacheModeSkipCopy[];
-
   // Delegate interface to emulate ArcBridgeHost mojo connection establishment.
   class Delegate {
    public:
@@ -172,11 +169,14 @@ class ArcSessionImpl
 
     // Returns the channel for the installation.
     virtual version_info::Channel GetChannel() = 0;
+
+    // Creates and returns a client adapter.
+    virtual std::unique_ptr<ArcClientAdapter> CreateClient() = 0;
   };
 
   ArcSessionImpl(std::unique_ptr<Delegate> delegate,
                  chromeos::SchedulerConfigurationManagerBase*
-                     scheduler_configuration_manager_);
+                     scheduler_configuration_manager);
   ~ArcSessionImpl() override;
 
   // Returns default delegate implementation used for the production.
@@ -186,6 +186,7 @@ class ArcSessionImpl
       version_info::Channel channel);
 
   State GetStateForTesting() { return state_; }
+  ArcClientAdapter* GetClientForTesting() { return client_.get(); }
 
   // ArcSession overrides:
   void StartMiniInstance() override;
@@ -193,7 +194,8 @@ class ArcSessionImpl
   void Stop() override;
   bool IsStopRequested() override;
   void OnShutdown() override;
-  void SetUserIdHashForProfile(const std::string& hash) override;
+  void SetUserInfo(const std::string& hash,
+                   const std::string& serial_number) override;
 
   // chromeos::SchedulerConfigurationManagerBase::Observer overrides:
   void OnConfigurationSet(bool success, size_t num_cores_disabled) override;
@@ -222,7 +224,7 @@ class ArcSessionImpl
   void OnMojoConnected(std::unique_ptr<mojom::ArcBridgeHost> arc_bridge_host);
 
   // Request to stop ARC instance via DBus.
-  void StopArcInstance();
+  void StopArcInstance(bool on_shutdown);
 
   // ArcClientAdapter::Observer:
   void ArcInstanceStopped() override;

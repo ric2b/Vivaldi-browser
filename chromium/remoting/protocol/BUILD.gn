@@ -94,6 +94,7 @@ static_library("protocol") {
     "jingle_session.h",
     "jingle_session_manager.cc",
     "jingle_session_manager.h",
+    "keyboard_layout_stub.h",
     "me2me_host_authenticator_factory.cc",
     "me2me_host_authenticator_factory.h",
     "message_decoder.cc",
@@ -189,7 +190,7 @@ static_library("protocol") {
 
   public_deps = [
     "//remoting/proto",
-    "//third_party/webrtc_overrides",
+    "//third_party/webrtc_overrides:webrtc_component",
   ]
   deps = [
     "//base",
@@ -258,16 +259,7 @@ static_library("protocol") {
 
     deps += [
       "//remoting/proto/remoting/v1:network_traversal_grpc_library",
-      "//third_party/webrtc/api:callfactory_api",
-      "//third_party/webrtc/api:packet_socket_factory",
-      "//third_party/webrtc/api/audio_codecs:audio_codecs_api",
-      "//third_party/webrtc/api/audio_codecs/opus:audio_decoder_opus",
-      "//third_party/webrtc/api/audio_codecs/opus:audio_encoder_opus",
-      "//third_party/webrtc/api/rtc_event_log:rtc_event_log_factory",
-      "//third_party/webrtc/api/video_codecs:builtin_video_decoder_factory",
-      "//third_party/webrtc/media:rtc_audio_video",
-      "//third_party/webrtc_overrides:init_webrtc",
-      "//third_party/webrtc_overrides:task_queue_factory",
+      "//third_party/webrtc_overrides:webrtc_component",
     ]
   }
 

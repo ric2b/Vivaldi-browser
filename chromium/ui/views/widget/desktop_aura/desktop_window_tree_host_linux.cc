@@ -4,6 +4,12 @@
 
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host_linux.h"
 
+#include <algorithm>
+#include <list>
+#include <memory>
+#include <string>
+#include <vector>
+
 #include "ui/aura/null_window_targeter.h"
 #include "ui/aura/scoped_window_targeter.h"
 #include "ui/aura/window.h"
@@ -11,13 +17,17 @@
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/events/event.h"
+#include "ui/platform_window/extensions/x11_extension.h"
 #include "ui/platform_window/platform_window_handler/wm_move_resize_handler.h"
 #include "ui/platform_window/platform_window_init_properties.h"
-#include "ui/platform_window/platform_window_linux.h"
 #include "ui/views/linux_ui/linux_ui.h"
 #include "ui/views/views_delegate.h"
 #include "ui/views/widget/desktop_aura/window_event_filter_linux.h"
 #include "ui/views/widget/widget.h"
+
+#if BUILDFLAG(USE_ATK)
+#include "ui/accessibility/platform/atk_util_auralinux.h"
+#endif
 
 #include "app/vivaldi_apptools.h"
 #include "ui/views/widget/widget_delegate.h"
@@ -118,21 +128,26 @@ void DesktopWindowTreeHostLinux::CleanUpWindowList(
   open_windows_ = nullptr;
 }
 
-void DesktopWindowTreeHostLinux::SetPendingXVisualId(int x_visual_id) {
-  pending_x_visual_id_ = x_visual_id;
-}
-
 gfx::Rect DesktopWindowTreeHostLinux::GetXRootWindowOuterBounds() const {
-  return GetPlatformWindowLinux()->GetXRootWindowOuterBounds();
+  // TODO(msisov): must be removed as soon as all X11 low-level bits are moved
+  // to Ozone.
+  DCHECK(GetX11Extension());
+  return GetX11Extension()->GetXRootWindowOuterBounds();
 }
 
 bool DesktopWindowTreeHostLinux::ContainsPointInXRegion(
     const gfx::Point& point) const {
-  return GetPlatformWindowLinux()->ContainsPointInXRegion(point);
+  // TODO(msisov): must be removed as soon as all X11 low-level bits are moved
+  // to Ozone.
+  DCHECK(GetX11Extension());
+  return GetX11Extension()->ContainsPointInXRegion(point);
 }
 
 void DesktopWindowTreeHostLinux::LowerXWindow() {
-  GetPlatformWindowLinux()->LowerXWindow();
+  // TODO(msisov): must be removed as soon as all X11 low-level bits are moved
+  // to Ozone.
+  DCHECK(GetX11Extension());
+  GetX11Extension()->LowerXWindow();
 }
 
 base::OnceClosure DesktopWindowTreeHostLinux::DisableEventListening() {
@@ -152,7 +167,7 @@ base::OnceClosure DesktopWindowTreeHostLinux::DisableEventListening() {
 void DesktopWindowTreeHostLinux::Init(const Widget::InitParams& params) {
   DesktopWindowTreeHostPlatform::Init(params);
 
-  if (GetPlatformWindowLinux()->IsSyncExtensionAvailable()) {
+  if (GetX11Extension() && GetX11Extension()->IsSyncExtensionAvailable()) {
     compositor_observer_ = std::make_unique<SwapWithNewSizeObserverHelper>(
         compositor(),
         base::BindRepeating(
@@ -167,26 +182,6 @@ void DesktopWindowTreeHostLinux::OnNativeWidgetCreated(
 
   CreateNonClientEventFilter();
   DesktopWindowTreeHostPlatform::OnNativeWidgetCreated(params);
-}
-
-std::string DesktopWindowTreeHostLinux::GetWorkspace() const {
-  base::Optional<int> workspace = GetPlatformWindowLinux()->GetWorkspace();
-  return workspace ? base::NumberToString(workspace.value()) : std::string();
-}
-
-void DesktopWindowTreeHostLinux::SetVisibleOnAllWorkspaces(
-    bool always_visible) {
-  GetPlatformWindowLinux()->SetVisibleOnAllWorkspaces(always_visible);
-}
-
-bool DesktopWindowTreeHostLinux::IsVisibleOnAllWorkspaces() const {
-  return GetPlatformWindowLinux()->IsVisibleOnAllWorkspaces();
-}
-
-void DesktopWindowTreeHostLinux::SetOpacity(float opacity) {
-  DesktopWindowTreeHostPlatform::SetOpacity(opacity);
-  // Note that this is no-op for Wayland.
-  GetPlatformWindowLinux()->SetOpacityForXWindow(opacity);
 }
 
 base::flat_map<std::string, std::string>
@@ -288,24 +283,17 @@ void DesktopWindowTreeHostLinux::DispatchEvent(ui::Event* event) {
     }
   }
 
-  // Store the location in px to restore it later.
-  gfx::Point previous_mouse_location_in_px;
-  if (event->IsMouseEvent())
-    previous_mouse_location_in_px = event->AsMouseEvent()->location();
-
-  WindowTreeHostPlatform::DispatchEvent(event);
-
-  // Posthandle the event if it has not been consumed.
-  if (!event->handled() && event->IsMouseEvent() &&
-      non_client_window_event_filter_) {
-    auto* mouse_event = event->AsMouseEvent();
-    // Location is set in dip after the event is dispatched to the event sink.
-    // Restore it back to be in px that WindowEventFilterLinux requires.
-    mouse_event->set_location(previous_mouse_location_in_px);
-    mouse_event->set_root_location(previous_mouse_location_in_px);
-    non_client_window_event_filter_->HandleMouseEventWithHitTest(hit_test_code,
-                                                                 mouse_event);
+  // Prehandle the event as long as as we are not able to track if it is handled
+  // or not as SendEventToSink results in copying the event and our copy of the
+  // event will not set to handled unless a dispatcher or a target are
+  // destroyed.
+  if (event->IsMouseEvent() && non_client_window_event_filter_) {
+    non_client_window_event_filter_->HandleMouseEventWithHitTest(
+        hit_test_code, event->AsMouseEvent());
   }
+
+  if (!event->handled())
+    WindowTreeHostPlatform::DispatchEvent(event);
 }
 
 void DesktopWindowTreeHostLinux::OnClosed() {
@@ -327,6 +315,28 @@ void DesktopWindowTreeHostLinux::OnActivationChanged(bool active) {
     open_windows().insert(open_windows().begin(), widget);
   }
   DesktopWindowTreeHostPlatform::OnActivationChanged(active);
+}
+
+ui::X11Extension* DesktopWindowTreeHostLinux::GetX11Extension() {
+  return ui::GetX11Extension(*(platform_window()));
+}
+
+const ui::X11Extension* DesktopWindowTreeHostLinux::GetX11Extension() const {
+  return ui::GetX11Extension(*(platform_window()));
+}
+
+#if BUILDFLAG(USE_ATK)
+bool DesktopWindowTreeHostLinux::OnAtkKeyEvent(AtkKeyEventStruct* atk_event) {
+  if (!IsActive() && !HasCapture())
+    return false;
+  return ui::AtkUtilAuraLinux::HandleAtkKeyEvent(atk_event) ==
+         ui::DiscardAtkKeyEvent::Discard;
+}
+#endif
+
+bool DesktopWindowTreeHostLinux::IsOverrideRedirect() const {
+  // BrowserDesktopWindowTreeHostLinux implements this for browser windows.
+  return false;
 }
 
 void DesktopWindowTreeHostLinux::AddAdditionalInitProperties(
@@ -362,26 +372,24 @@ void DesktopWindowTreeHostLinux::AddAdditionalInitProperties(
   properties->wm_class_class = params.wm_class_class;
   properties->wm_role_name = params.wm_role_name;
 
-  properties->x_visual_id = pending_x_visual_id_;
+  DCHECK(!properties->x11_extension_delegate);
+  properties->x11_extension_delegate = this;
 }
 
 void DesktopWindowTreeHostLinux::OnCompleteSwapWithNewSize(
     const gfx::Size& size) {
-  GetPlatformWindowLinux()->OnCompleteSwapAfterResize();
+  if (GetX11Extension())
+    GetX11Extension()->OnCompleteSwapAfterResize();
 }
 
 void DesktopWindowTreeHostLinux::CreateNonClientEventFilter() {
   DCHECK(!non_client_window_event_filter_);
   non_client_window_event_filter_ = std::make_unique<WindowEventFilterLinux>(
-      this, GetWmMoveResizeHandler(*GetPlatformWindowLinux()));
+      this, GetWmMoveResizeHandler(*platform_window()));
 }
 
 void DesktopWindowTreeHostLinux::DestroyNonClientEventFilter() {
   non_client_window_event_filter_.reset();
-}
-
-void DesktopWindowTreeHostLinux::OnWorkspaceChanged() {
-  OnHostWorkspaceChanged();
 }
 
 void DesktopWindowTreeHostLinux::GetWindowMask(const gfx::Size& size,
@@ -403,15 +411,6 @@ void DesktopWindowTreeHostLinux::EnableEventListening() {
   DCHECK_GT(modal_dialog_counter_, 0UL);
   if (!--modal_dialog_counter_)
     targeter_for_modal_.reset();
-}
-
-const ui::PlatformWindowLinux*
-DesktopWindowTreeHostLinux::GetPlatformWindowLinux() const {
-  return static_cast<const ui::PlatformWindowLinux*>(platform_window());
-}
-
-ui::PlatformWindowLinux* DesktopWindowTreeHostLinux::GetPlatformWindowLinux() {
-  return static_cast<ui::PlatformWindowLinux*>(platform_window());
 }
 
 std::list<gfx::AcceleratedWidget>& DesktopWindowTreeHostLinux::open_windows() {

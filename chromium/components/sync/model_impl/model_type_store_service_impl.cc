@@ -8,12 +8,15 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/feature_list.h"
 #include "base/memory/ptr_util.h"
 #include "base/optional.h"
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
+#include "base/task/thread_pool.h"
 #include "base/task_runner_util.h"
 #include "base/threading/sequenced_task_runner_handle.h"
+#include "components/sync/base/sync_base_switches.h"
 #include "components/sync/model_impl/blocking_model_type_store_impl.h"
 #include "components/sync/model_impl/model_type_store_backend.h"
 #include "components/sync/model_impl/model_type_store_impl.h"
@@ -34,6 +37,13 @@ void InitOnBackendSequence(const base::FilePath& level_db_path,
   if (error) {
     LOG(ERROR) << "Failed to initialize ModelTypeStore backend: "
                << error->ToString();
+    return;
+  }
+
+  // TODO(crbug.com/978775): Remove the cleanup logic after a year.
+  // Clean up local data from deprecated datatypes.
+  for (ModelType type : {FAVICON_IMAGES, FAVICON_TRACKING}) {
+    BlockingModelTypeStoreImpl(type, store_backend).DeleteAllDataAndMetadata();
   }
 }
 
@@ -94,14 +104,13 @@ ModelTypeStoreServiceImpl::ModelTypeStoreServiceImpl(
     const base::FilePath& base_path)
     : sync_path_(base_path.Append(base::FilePath(kSyncDataFolderName))),
       leveldb_path_(sync_path_.Append(base::FilePath(kLevelDBFolderName))),
-      backend_task_runner_(base::CreateSequencedTaskRunner(
-          {base::ThreadPool(), base::MayBlock(),
-           base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})),
+      backend_task_runner_(base::ThreadPool::CreateSequencedTaskRunner(
+          {base::MayBlock(), base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})),
       store_backend_(ModelTypeStoreBackend::CreateUninitialized()) {
   DCHECK(backend_task_runner_);
   backend_task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(&InitOnBackendSequence, leveldb_path_, store_backend_));
+      FROM_HERE, base::BindOnce(&InitOnBackendSequence, leveldb_path_,
+                                store_backend_));
 }
 
 ModelTypeStoreServiceImpl::~ModelTypeStoreServiceImpl() {

@@ -23,7 +23,7 @@
 class AppShimHostBootstrap : public chrome::mojom::AppShimHostBootstrap {
  public:
   // The interface through which the AppShimHostBootstrap registers itself
-  // with the ExtensionAppShimHandler.
+  // with the AppShimManager.
   class Client {
    public:
     // Invoked by the AppShimHostBootstrap when a shim process has connected to
@@ -50,7 +50,7 @@ class AppShimHostBootstrap : public chrome::mojom::AppShimHostBootstrap {
   // AppShimHost.
   void OnConnectedToHost(
       mojo::PendingReceiver<chrome::mojom::AppShim> app_shim_receiver);
-  void OnFailedToConnectToHost(apps::AppShimLaunchResult result);
+  void OnFailedToConnectToHost(chrome::mojom::AppShimLaunchResult result);
 
   base::ProcessId GetAppShimPid() const { return pid_; }
 
@@ -60,7 +60,7 @@ class AppShimHostBootstrap : public chrome::mojom::AppShimHostBootstrap {
   const base::FilePath& GetProfilePath();
 
   // Indicates the type of launch (by Chrome or from the app).
-  apps::AppShimLaunchType GetLaunchType() const;
+  chrome::mojom::AppShimLaunchType GetLaunchType() const;
 
   // If non-empty, holds an array of file paths given as arguments, or dragged
   // onto the app bundle or dock icon.

@@ -296,7 +296,10 @@ void ContactBackend::DeleteContact(ContactID contact_id,
 
   ContactRow contact_row;
   if (db_->GetRowForContact(contact_id, &contact_row)) {
-    result->success = db_->DeleteContact(contact_id);
+    result->success = db_->DeletePostalAddressesForContact(contact_id) &&
+                      db_->DeleteEmailsForContact(contact_id) &&
+                      db_->DeletePhoneNumbersForContact(contact_id) &&
+                      db_->DeleteContact(contact_id);
     NotifyContactDeleted(contact_row);
   } else {
     result->success = false;

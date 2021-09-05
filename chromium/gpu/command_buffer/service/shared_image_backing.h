@@ -5,7 +5,7 @@
 #ifndef GPU_COMMAND_BUFFER_SERVICE_SHARED_IMAGE_BACKING_H_
 #define GPU_COMMAND_BUFFER_SERVICE_SHARED_IMAGE_BACKING_H_
 
-#include <dawn/dawn.h>
+#include <dawn/webgpu.h>
 
 #include <memory>
 
@@ -18,7 +18,9 @@
 #include "gpu/command_buffer/common/mailbox.h"
 #include "gpu/gpu_gles2_export.h"
 #include "ui/gfx/color_space.h"
+#include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gfx/native_pixmap.h"
 
 namespace base {
 namespace trace_event {
@@ -64,6 +66,7 @@ class GPU_GLES2_EXPORT SharedImageBacking {
   uint32_t usage() const { return usage_; }
   const Mailbox& mailbox() const { return mailbox_; }
   size_t estimated_size() const { return estimated_size_; }
+  bool is_thread_safe() const { return !!lock_; }
   void OnContextLost();
 
   // Concrete functions to manage a ref count.
@@ -76,20 +79,17 @@ class GPU_GLES2_EXPORT SharedImageBacking {
   // Notify backing a write access is succeeded.
   void OnWriteSucceeded();
 
-  // Tracks whether the backing has ever been cleared, or whether it may contain
-  // uninitialized pixels.
-  virtual bool IsCleared() const = 0;
+  // Returns the initialized / cleared region of the SharedImage.
+  virtual gfx::Rect ClearedRect() const = 0;
 
-  // Marks the backing as cleared, after which point it is assumed to contain no
-  // unintiailized pixels.
-  virtual void SetCleared() = 0;
+  // Marks the provided rect as cleared.
+  virtual void SetClearedRect(const gfx::Rect& cleared_rect) = 0;
 
   virtual void Update(std::unique_ptr<gfx::GpuFence> in_fence) = 0;
 
-  // Destroys the underlying backing. Must be called before destruction.
-  virtual void Destroy() = 0;
-
   virtual bool PresentSwapChain();
+
+  virtual void MarkForDestruction() {}
 
   // Allows the backing to attach additional data to the dump or dump
   // additional sub paths.
@@ -105,6 +105,16 @@ class GPU_GLES2_EXPORT SharedImageBacking {
   // Reports the estimated size of the backing for the purpose of memory
   // tracking.
   virtual size_t EstimatedSizeForMemTracking() const;
+
+  // Returns the NativePixmap backing the SharedImageBacking. Returns null if
+  // the SharedImage is not backed by a NativePixmap.
+  virtual scoped_refptr<gfx::NativePixmap> GetNativePixmap();
+
+  // Helper to determine if the entire SharedImage is cleared.
+  bool IsCleared() const { return ClearedRect() == gfx::Rect(size()); }
+
+  // Helper function which clears the entire image.
+  void SetCleared() { SetClearedRect(gfx::Rect(size())); }
 
  protected:
   // Used by SharedImageManager.
@@ -125,20 +135,20 @@ class GPU_GLES2_EXPORT SharedImageBacking {
   virtual std::unique_ptr<SharedImageRepresentationDawn> ProduceDawn(
       SharedImageManager* manager,
       MemoryTypeTracker* tracker,
-      DawnDevice device);
+      WGPUDevice device);
   virtual std::unique_ptr<SharedImageRepresentationOverlay> ProduceOverlay(
       SharedImageManager* manager,
       MemoryTypeTracker* tracker);
 
-  // Used by subclasses in Destroy.
-  bool have_context() const;
+  // Used by subclasses during destruction.
+  bool have_context() const EXCLUSIVE_LOCKS_REQUIRED(lock_);
 
-  void AssertLockedIfNecessary() const;
-
-  class GPU_GLES2_EXPORT AutoLock {
+  // Helper class used by subclasses to acquire |lock_| if it exists.
+  class SCOPED_LOCKABLE GPU_GLES2_EXPORT AutoLock {
    public:
-    explicit AutoLock(const SharedImageBacking* shared_image_backing);
-    ~AutoLock();
+    explicit AutoLock(const SharedImageBacking* shared_image_backing)
+        EXCLUSIVE_LOCK_FUNCTION(shared_image_backing->lock_);
+    ~AutoLock() UNLOCK_FUNCTION();
 
     AutoLock(const AutoLock&) = delete;
     AutoLock& operator=(const AutoLock&) = delete;
@@ -149,6 +159,11 @@ class GPU_GLES2_EXPORT SharedImageBacking {
    private:
     base::AutoLockMaybe auto_lock_;
   };
+
+  // Protects non-const members here and in derived classes. Protected access
+  // to allow GUARDED_BY macros in derived classes. Should not be used
+  // directly. Use AutoLock instead.
+  mutable base::Optional<base::Lock> lock_;
 
  private:
   class ScopedWriteUMA {
@@ -174,18 +189,41 @@ class GPU_GLES2_EXPORT SharedImageBacking {
   const uint32_t usage_;
   const size_t estimated_size_;
 
-  // Protects non-const members here and in derived classes.
-  mutable base::Optional<base::Lock> lock_;
-
-  bool have_context_ = true;
+  bool have_context_ GUARDED_BY(lock_) = true;
 
   // A scoped object for recording write UMA.
-  base::Optional<ScopedWriteUMA> scoped_write_uma_;
+  base::Optional<ScopedWriteUMA> scoped_write_uma_ GUARDED_BY(lock_);
 
   // A vector of SharedImageRepresentations which hold references to this
   // backing. The first reference is considered the owner, and the vector is
   // ordered by the order in which references were taken.
-  std::vector<SharedImageRepresentation*> refs_;
+  std::vector<SharedImageRepresentation*> refs_ GUARDED_BY(lock_);
+};
+
+// Helper implementation of SharedImageBacking which tracks a simple
+// rectangular clear region. Classes which do not need more complex
+// implementations of SetClearedRect and ClearedRect can inherit from this.
+class GPU_GLES2_EXPORT ClearTrackingSharedImageBacking
+    : public SharedImageBacking {
+ public:
+  ClearTrackingSharedImageBacking(const Mailbox& mailbox,
+                                  viz::ResourceFormat format,
+                                  const gfx::Size& size,
+                                  const gfx::ColorSpace& color_space,
+                                  uint32_t usage,
+                                  size_t estimated_size,
+                                  bool is_thread_safe);
+
+  gfx::Rect ClearedRect() const override;
+  void SetClearedRect(const gfx::Rect& cleared_rect) override;
+
+ protected:
+  gfx::Rect ClearedRectInternal() const EXCLUSIVE_LOCKS_REQUIRED(lock_);
+  void SetClearedRectInternal(const gfx::Rect& cleared_rect)
+      EXCLUSIVE_LOCKS_REQUIRED(lock_);
+
+ private:
+  gfx::Rect cleared_rect_ GUARDED_BY(lock_);
 };
 
 }  // namespace gpu

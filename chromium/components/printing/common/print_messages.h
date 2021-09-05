@@ -22,6 +22,7 @@
 #include "printing/page_size_margins.h"
 #include "printing/print_job_constants.h"
 #include "third_party/blink/public/web/web_print_scaling_option.h"
+#include "ui/accessibility/ax_param_traits.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/ipc/geometry/gfx_param_traits.h"
@@ -77,18 +78,11 @@ struct PrintMsg_PrintPages_Params {
   std::vector<int> pages;
 };
 
-struct PrintMsg_PrintFrame_Params {
-  PrintMsg_PrintFrame_Params();
-  ~PrintMsg_PrintFrame_Params();
-
-  gfx::Rect printable_area;
-  int document_cookie;
-};
-
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
 struct PrintHostMsg_RequestPrintPreview_Params {
   PrintHostMsg_RequestPrintPreview_Params();
   ~PrintHostMsg_RequestPrintPreview_Params();
+  bool is_from_arc;
   bool is_modifiable;
   bool is_pdf;
   bool webnode_only;
@@ -214,6 +208,7 @@ IPC_STRUCT_TRAITS_END()
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
 IPC_STRUCT_TRAITS_BEGIN(PrintHostMsg_RequestPrintPreview_Params)
+  IPC_STRUCT_TRAITS_MEMBER(is_from_arc)
   IPC_STRUCT_TRAITS_MEMBER(is_modifiable)
   IPC_STRUCT_TRAITS_MEMBER(is_pdf)
   IPC_STRUCT_TRAITS_MEMBER(webnode_only)
@@ -257,15 +252,6 @@ IPC_STRUCT_TRAITS_BEGIN(PrintMsg_PrintPages_Params)
 
   // If empty, this means a request to render all the printed pages.
   IPC_STRUCT_TRAITS_MEMBER(pages)
-IPC_STRUCT_TRAITS_END()
-
-IPC_STRUCT_TRAITS_BEGIN(PrintMsg_PrintFrame_Params)
-  // Physical printable area of the page in pixels according to dpi.
-  IPC_STRUCT_TRAITS_MEMBER(printable_area)
-
-  // Cookie that is unique for each print request.
-  // It is used to associate the printed frame with its original print request.
-  IPC_STRUCT_TRAITS_MEMBER(document_cookie)
 IPC_STRUCT_TRAITS_END()
 
 // Holds the printed content information.
@@ -356,36 +342,6 @@ IPC_STRUCT_BEGIN(PrintHostMsg_ScriptedPrint_Params)
 IPC_STRUCT_END()
 
 
-// Messages sent from the browser to the renderer.
-
-// Tells the RenderFrame to initiate printing or print preview for a particular
-// node, depending on which mode the RenderFrame is in.
-IPC_MESSAGE_ROUTED0(PrintMsg_PrintNodeUnderContextMenu)
-
-#if BUILDFLAG(ENABLE_PRINTING)
-// Tells the RenderFrame to switch the CSS to print media type, renders every
-// requested pages and switch back the CSS to display media type.
-IPC_MESSAGE_ROUTED0(PrintMsg_PrintPages)
-#endif
-
-// Print content of an out-of-process subframe.
-IPC_MESSAGE_ROUTED1(PrintMsg_PrintFrameContent, PrintMsg_PrintFrame_Params)
-
-// Tells the RenderFrame that printing is done so it can clean up.
-IPC_MESSAGE_ROUTED1(PrintMsg_PrintingDone,
-                    bool /* success */)
-
-// Tells the RenderFrame whether printing is enabled or not.
-IPC_MESSAGE_ROUTED1(PrintMsg_SetPrintingEnabled, bool /* enabled */)
-
-#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
-// Tells the RenderFrame to switch the CSS to print media type, renders every
-// requested pages for print preview using the given |settings|. This gets
-// called multiple times as the user updates settings.
-IPC_MESSAGE_ROUTED1(PrintMsg_PrintPreview,
-                    base::DictionaryValue /* settings */)
-#endif
-
 // Messages sent from the renderer to the browser.
 
 // Tells the browser that the renderer is done calculating the number of
@@ -416,6 +372,14 @@ IPC_MESSAGE_ROUTED2(PrintHostMsg_DidPrintFrameContent,
                     int /* rendered document cookie */,
                     PrintHostMsg_DidPrintContent_Params)
 
+#if BUILDFLAG(ENABLE_TAGGED_PDF)
+// Sends the accessibility tree corresponding to a document being
+// printed, needed for a tagged (accessible) PDF.
+IPC_MESSAGE_ROUTED2(PrintHostMsg_AccessibilityTree,
+                    int /* rendered document cookie */,
+                    ui::AXTreeUpdate)
+#endif
+
 // The renderer wants to know the default print settings.
 IPC_SYNC_MESSAGE_ROUTED0_1(PrintHostMsg_GetDefaultPrintSettings,
                            PrintMsg_Print_Params /* default_settings */)
@@ -445,6 +409,13 @@ IPC_MESSAGE_ROUTED1(PrintHostMsg_RequestPrintPreview,
 // Notify the browser the about the to-be-rendered print preview document.
 IPC_MESSAGE_ROUTED2(PrintHostMsg_DidStartPreview,
                     PrintHostMsg_DidStartPreview_Params /* params */,
+                    PrintHostMsg_PreviewIds /* ids */)
+
+// Notify the browser of preparing to print the document, for cases where
+// the document will be collected from the individual pages instead of being
+// provided by an extra metafile at end containing all pages.
+IPC_MESSAGE_ROUTED2(PrintHostMsg_DidPrepareDocumentForPreview,
+                    int /* document_cookie */,
                     PrintHostMsg_PreviewIds /* ids */)
 
 // Notify the browser of the default page layout according to the currently

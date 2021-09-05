@@ -15,7 +15,6 @@
 #include "build/build_config.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/common/frame_messages.h"
-#include "content/common/frame_owner_properties.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/common/content_client.h"
@@ -31,6 +30,7 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/blink/public/common/frame/frame_owner_element_type.h"
 #include "third_party/blink/public/common/frame/frame_policy.h"
+#include "third_party/blink/public/mojom/frame/frame_owner_properties.mojom.h"
 
 namespace content {
 
@@ -47,11 +47,13 @@ TEST_F(RenderProcessHostUnitTest, GuestsAreNotSuitableHosts) {
   scoped_refptr<SiteInstanceImpl> site_instance =
       SiteInstanceImpl::CreateForURL(browser_context(), test_url);
   EXPECT_FALSE(RenderProcessHostImpl::IsSuitableHost(
-      &guest_host, browser_context(), site_instance->GetIsolationContext(),
-      site_instance->GetSiteURL(), site_instance->lock_url()));
+      &guest_host, site_instance->GetIsolationContext(),
+      site_instance->GetSiteURL(), site_instance->lock_url(),
+      site_instance->IsGuest()));
   EXPECT_TRUE(RenderProcessHostImpl::IsSuitableHost(
-      process(), browser_context(), site_instance->GetIsolationContext(),
-      site_instance->GetSiteURL(), site_instance->lock_url()));
+      process(), site_instance->GetIsolationContext(),
+      site_instance->GetSiteURL(), site_instance->lock_url(),
+      site_instance->IsGuest()));
   EXPECT_EQ(process(),
             RenderProcessHostImpl::GetExistingProcessHost(site_instance.get()));
 }
@@ -133,13 +135,12 @@ TEST_F(RenderProcessHostUnitTest, ReuseCommittedSite) {
   std::string unique_name("uniqueName0");
   main_test_rfh()->OnCreateChildFrame(
       process()->GetNextRoutingID(),
-      TestRenderFrameHost::CreateStubInterfaceProviderRequest(),
-      TestRenderFrameHost::CreateStubDocumentInterfaceBrokerReceiver(),
-      TestRenderFrameHost::CreateStubDocumentInterfaceBrokerReceiver(),
+      TestRenderFrameHost::CreateStubInterfaceProviderReceiver(),
       TestRenderFrameHost::CreateStubBrowserInterfaceBrokerReceiver(),
       blink::WebTreeScopeType::kDocument, std::string(), unique_name, false,
       base::UnguessableToken::Create(), blink::FramePolicy(),
-      FrameOwnerProperties(), blink::FrameOwnerElementType::kIframe);
+      blink::mojom::FrameOwnerProperties(),
+      blink::FrameOwnerElementType::kIframe);
   TestRenderFrameHost* subframe = static_cast<TestRenderFrameHost*>(
       contents()->GetFrameTree()->root()->child_at(0)->current_frame_host());
   subframe = static_cast<TestRenderFrameHost*>(
@@ -369,6 +370,11 @@ TEST_F(RenderProcessHostUnitTest, DoNotReuseOtherSiteServiceWorkerProcess) {
 // Tests that RenderProcessHost will not consider reusing a process that has
 // committed an error page.
 TEST_F(RenderProcessHostUnitTest, DoNotReuseError) {
+  // This test depends on a network error occurring on back navigation.
+  // This cannot happen if the page is restored from the back-forward
+  // cache, because no network requests would be made.
+  contents()->GetController().GetBackForwardCache().DisableForTesting(
+      BackForwardCache::TEST_ASSUMES_NO_CACHING);
   const GURL kUrl1("http://foo.com");
   const GURL kUrl2("http://bar.com");
 
@@ -552,7 +558,7 @@ TEST_F(RenderProcessHostUnitTest,
   // process.
   contents()->GetController().LoadURL(kUrl, Referrer(),
                                       ui::PAGE_TRANSITION_TYPED, std::string());
-  main_test_rfh()->SendBeforeUnloadACK(true);
+  main_test_rfh()->SimulateBeforeUnloadCompleted(true);
   int speculative_process_host_id =
       contents()->GetPendingMainFrame()->GetProcess()->GetID();
   bool speculative_is_default_site_instance = contents()

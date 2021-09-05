@@ -6,8 +6,8 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_FRAME_REMOTE_FRAME_VIEW_H_
 
 #include "cc/paint/paint_canvas.h"
-#include "third_party/blink/public/common/frame/occlusion_state.h"
 #include "third_party/blink/public/mojom/frame/lifecycle.mojom-blink-forward.h"
+#include "third_party/blink/public/platform/viewport_intersection_state.h"
 #include "third_party/blink/renderer/core/dom/document_lifecycle.h"
 #include "third_party/blink/renderer/core/frame/frame_view.h"
 #include "third_party/blink/renderer/core/layout/intrinsic_sizing_info.h"
@@ -43,6 +43,7 @@ class RemoteFrameView final : public GarbageCollected<RemoteFrameView>,
   }
 
   void Dispose() override;
+  void SetFrameRect(const IntRect&) override;
   void PropagateFrameRects() override;
   // Override to notify remote frame that its viewport size has changed.
   void InvalidateRect(const IntRect&);
@@ -65,20 +66,25 @@ class RemoteFrameView final : public GarbageCollected<RemoteFrameView>,
 
   bool CanThrottleRendering() const override;
   void VisibilityForThrottlingChanged() override;
+  void VisibilityChanged(blink::mojom::FrameVisibility visibility) override;
 
   // Compute the interest rect of this frame in its unscrolled space. This may
   // be used by the OOPIF's compositor to limit the amount of rastered tiles,
-  // and reduce the number of paint-ops generated.
-  IntRect GetCompositingRect();
+  // and reduce the number of paint-ops generated. UpdateCompositingRect must be
+  // called before the parent frame commits a compositor frame.
+  void UpdateCompositingRect();
+  IntRect GetCompositingRect() const { return compositing_rect_; }
 
   uint32_t Print(const IntRect&, cc::PaintCanvas*) const;
+  uint32_t CapturePaintPreview(const IntRect&, cc::PaintCanvas*) const;
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  protected:
+  bool NeedsViewportOffset() const override { return true; }
   // This is used to service IntersectionObservers in an OOPIF child document.
-  void SetViewportIntersection(const IntRect& viewport_intersection,
-                               FrameOcclusionState occlusion_state) override;
+  void SetViewportIntersection(
+      const ViewportIntersectionState& intersection_state) override;
   void ParentVisibleChanged() override;
 
  private:
@@ -93,12 +99,13 @@ class RemoteFrameView final : public GarbageCollected<RemoteFrameView>,
   // and LocalFrameView. Please see the LocalFrameView::frame_ comment for
   // details.
   Member<RemoteFrame> remote_frame_;
-  IntRect last_viewport_intersection_;
-  FrameOcclusionState last_occlusion_state_ = FrameOcclusionState::kUnknown;
+  ViewportIntersectionState last_intersection_state_;
+  IntRect compositing_rect_;
 
   IntrinsicSizingInfo intrinsic_sizing_info_;
   bool has_intrinsic_sizing_info_ = false;
   bool needs_occlusion_tracking_ = false;
+  bool needs_frame_rect_propagation_ = false;
 };
 
 template <>

@@ -22,3 +22,4 @@ WebArea
   },
   "domNode": "div#hidden"
 }
+

@@ -11,7 +11,6 @@
 #include "device/vr/public/mojom/vr_service.mojom.h"
 #include "device/vr/vr_device.h"
 #include "device/vr/windows/compositor_base.h"
-#include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/system/platform_handle.h"
 #include "third_party/libovr/src/Include/OVR_CAPI.h"
 #include "ui/gfx/geometry/rect_f.h"
@@ -32,7 +31,6 @@ class OculusRenderLoop : public XRCompositorCommon {
  private:
   // XRDeviceAbstraction:
   mojom::XRFrameDataPtr GetNextFrameData() override;
-  mojom::XRGamepadDataPtr GetNextGamepadData() override;
   bool StartRuntime() override;
   void StopRuntime() override;
   void OnSessionStart() override;
@@ -61,6 +59,7 @@ class OculusRenderLoop : public XRCompositorCommon {
   gfx::Size swap_chain_size_;
   double sensor_time_;
   bool primary_input_pressed[kMaxOculusRenderLoopInputId];
+  bool primary_squeeze_pressed[kMaxOculusRenderLoopInputId];
 
   DISALLOW_COPY_AND_ASSIGN(OculusRenderLoop);
 };

@@ -12,7 +12,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/lazy_task_runner.h"
+#include "base/task/lazy_thread_pool_task_runner.h"
 #include "base/task/post_task.h"
 #include "base/task/single_thread_task_runner_thread_mode.h"
 #include "base/task/task_traits.h"
@@ -42,6 +42,8 @@
 #include "ui/base/l10n/l10n_util.h"
 #endif
 
+#include "app/vivaldi_apptools.h"
+
 using content::BrowserThread;
 
 namespace shell_integration {
@@ -53,14 +55,14 @@ const struct AppModeInfo* gAppModeInfo = nullptr;
 // TODO(crbug.com/773563): Remove |g_sequenced_task_runner| and use an instance
 // field / singleton instead.
 #if defined(OS_WIN)
-base::LazyCOMSTATaskRunner g_sequenced_task_runner =
+base::LazyThreadPoolCOMSTATaskRunner g_sequenced_task_runner =
     LAZY_COM_STA_TASK_RUNNER_INITIALIZER(
-        base::TaskTraits(base::ThreadPool(), base::MayBlock()),
+        base::TaskTraits(base::MayBlock()),
         base::SingleThreadTaskRunnerThreadMode::SHARED);
 #else
-base::LazySequencedTaskRunner g_sequenced_task_runner =
-    LAZY_SEQUENCED_TASK_RUNNER_INITIALIZER(
-        base::TaskTraits(base::ThreadPool(), base::MayBlock()));
+base::LazyThreadPoolSequencedTaskRunner g_sequenced_task_runner =
+    LAZY_THREAD_POOL_SEQUENCED_TASK_RUNNER_INITIALIZER(
+        base::TaskTraits(base::MayBlock()));
 #endif
 
 }  // namespace
@@ -103,6 +105,7 @@ base::CommandLine CommandLineArgsForLauncher(
   // the kApp switch (the launch url will be read from the extension app
   // during launch.
   if (!extension_app_id.empty()) {
+    if (!vivaldi::IsVivaldiApp(extension_app_id))
     new_cmd_line.AppendSwitchASCII(switches::kAppId, extension_app_id);
   } else {
     // Use '--app=url' instead of just 'url' to launch the browser with minimal

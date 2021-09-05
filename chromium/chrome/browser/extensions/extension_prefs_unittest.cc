@@ -27,8 +27,10 @@
 #include "extensions/browser/extension_pref_value_map.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/install_flag.h"
+#include "extensions/browser/pref_names.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_builder.h"
+#include "extensions/common/extension_id.h"
 #include "extensions/common/manifest_constants.h"
 #include "extensions/common/permissions/permission_set.h"
 #include "extensions/common/permissions/permissions_info.h"
@@ -1106,5 +1108,198 @@ class ExtensionPrefsObsoletePrefRemoval : public ExtensionPrefsTest {
 };
 
 TEST_F(ExtensionPrefsObsoletePrefRemoval, ExtensionPrefsObsoletePrefRemoval) {}
+
+// Tests the removal of obsolete keys from extension pref entries.
+class ExtensionPrefsIsExternalExtensionUninstalled : public ExtensionPrefsTest {
+ public:
+  ExtensionPrefsIsExternalExtensionUninstalled() = default;
+  ExtensionPrefsIsExternalExtensionUninstalled(
+      const ExtensionPrefsIsExternalExtensionUninstalled& other) = delete;
+  ExtensionPrefsIsExternalExtensionUninstalled& operator=(
+      const ExtensionPrefsIsExternalExtensionUninstalled& other) = delete;
+  ~ExtensionPrefsIsExternalExtensionUninstalled() override = default;
+
+  void Initialize() override {
+    uninstalled_external_id_ =
+        prefs_
+            .AddExtensionWithLocation("external uninstall",
+                                      Manifest::EXTERNAL_PREF)
+            ->id();
+    uninstalled_by_program_external_id_ =
+        prefs_
+            .AddExtensionWithLocation("external uninstall by program",
+                                      Manifest::EXTERNAL_PREF)
+            ->id();
+    installed_external_id_ =
+        prefs_
+            .AddExtensionWithLocation("external install",
+                                      Manifest::EXTERNAL_PREF)
+            ->id();
+    uninstalled_internal_id_ =
+        prefs_
+            .AddExtensionWithLocation("internal uninstall", Manifest::INTERNAL)
+            ->id();
+    installed_internal_id_ =
+        prefs_.AddExtensionWithLocation("internal install", Manifest::INTERNAL)
+            ->id();
+
+    prefs()->OnExtensionUninstalled(uninstalled_external_id_,
+                                    Manifest::EXTERNAL_PREF, false);
+    prefs()->OnExtensionUninstalled(uninstalled_by_program_external_id_,
+                                    Manifest::EXTERNAL_PREF, true);
+    prefs()->OnExtensionUninstalled(uninstalled_internal_id_,
+                                    Manifest::INTERNAL, false);
+  }
+
+  void Verify() override {
+    EXPECT_TRUE(
+        prefs()->IsExternalExtensionUninstalled(uninstalled_external_id_));
+    EXPECT_FALSE(prefs()->IsExternalExtensionUninstalled(
+        uninstalled_by_program_external_id_));
+    EXPECT_FALSE(
+        prefs()->IsExternalExtensionUninstalled(installed_external_id_));
+    EXPECT_FALSE(
+        prefs()->IsExternalExtensionUninstalled(uninstalled_internal_id_));
+    EXPECT_FALSE(
+        prefs()->IsExternalExtensionUninstalled(installed_internal_id_));
+  }
+
+ private:
+  std::string uninstalled_external_id_;
+  std::string uninstalled_by_program_external_id_;
+  std::string installed_external_id_;
+  std::string uninstalled_internal_id_;
+  std::string installed_internal_id_;
+};
+
+TEST_F(ExtensionPrefsIsExternalExtensionUninstalled,
+       ExtensionPrefsIsExternalExtensionUninstalled) {}
+
+////////////////////////////////////////////////////////////////////////////////
+// The following are ExtensionPrefs tests that don't use the same
+// Initialize(), Verify(), <recreate>, Verify() flow that the others do, and
+// instead just use a normal testing::Test setup.
+
+using ExtensionPrefsSimpleTest = testing::Test;
+
+// Tests the migration from the old withholding pref key to the new one.
+TEST_F(ExtensionPrefsSimpleTest, OldWithholdingPrefMigration) {
+  constexpr char kOldPrefKey[] = "extension_can_script_all_urls";
+  constexpr char kNewPrefKey[] = "withholding_permissions";
+
+  content::BrowserTaskEnvironment task_environment_;
+  TestExtensionPrefs prefs(base::ThreadTaskRunnerHandle::Get());
+
+  std::string previous_false_id = prefs.AddExtensionAndReturnId("Old false");
+  std::string previous_true_id = prefs.AddExtensionAndReturnId("Old true");
+  std::string previous_empty_id = prefs.AddExtensionAndReturnId("Old empty");
+  std::string force_installed_id =
+      prefs
+          .AddExtensionWithLocation("Force installed",
+                                    Manifest::EXTERNAL_POLICY)
+          ->id();
+
+  // We need to explicitly remove the default value for the new pref as it is
+  // added on install by default.
+  prefs.prefs()->UpdateExtensionPref(previous_false_id, kNewPrefKey, nullptr);
+  prefs.prefs()->UpdateExtensionPref(previous_true_id, kNewPrefKey, nullptr);
+  prefs.prefs()->UpdateExtensionPref(previous_empty_id, kNewPrefKey, nullptr);
+
+  prefs.prefs()->UpdateExtensionPref(previous_false_id, kOldPrefKey,
+                                     std::make_unique<base::Value>(false));
+  prefs.prefs()->UpdateExtensionPref(previous_true_id, kOldPrefKey,
+                                     std::make_unique<base::Value>(true));
+
+  // First make sure that all prefs start out as we expect them to be.
+  bool bool_value = false;
+  EXPECT_TRUE(prefs.prefs()->ReadPrefAsBoolean(previous_false_id, kOldPrefKey,
+                                               &bool_value));
+  EXPECT_FALSE(bool_value);
+
+  EXPECT_TRUE(prefs.prefs()->ReadPrefAsBoolean(previous_true_id, kOldPrefKey,
+                                               &bool_value));
+  EXPECT_TRUE(bool_value);
+
+  EXPECT_FALSE(prefs.prefs()->ReadPrefAsBoolean(previous_empty_id, kOldPrefKey,
+                                                &bool_value));
+  EXPECT_FALSE(prefs.prefs()->ReadPrefAsBoolean(force_installed_id, kOldPrefKey,
+                                                &bool_value));
+
+  EXPECT_FALSE(prefs.prefs()->ReadPrefAsBoolean(previous_false_id, kNewPrefKey,
+                                                &bool_value));
+  EXPECT_FALSE(prefs.prefs()->ReadPrefAsBoolean(previous_true_id, kNewPrefKey,
+                                                &bool_value));
+  EXPECT_FALSE(prefs.prefs()->ReadPrefAsBoolean(previous_empty_id, kNewPrefKey,
+                                                &bool_value));
+  EXPECT_FALSE(prefs.prefs()->ReadPrefAsBoolean(force_installed_id, kNewPrefKey,
+                                                &bool_value));
+
+  // Now we reload the prefs and verify the migration happens.
+  prefs.RecreateExtensionPrefs();
+
+  EXPECT_TRUE(prefs.prefs()->ReadPrefAsBoolean(previous_false_id, kNewPrefKey,
+                                               &bool_value));
+  EXPECT_TRUE(bool_value);
+
+  EXPECT_TRUE(prefs.prefs()->ReadPrefAsBoolean(previous_true_id, kNewPrefKey,
+                                               &bool_value));
+  EXPECT_FALSE(bool_value);
+
+  EXPECT_TRUE(prefs.prefs()->ReadPrefAsBoolean(previous_empty_id, kNewPrefKey,
+                                               &bool_value));
+  EXPECT_FALSE(bool_value);
+
+  EXPECT_FALSE(prefs.prefs()->ReadPrefAsBoolean(force_installed_id, kNewPrefKey,
+                                                &bool_value));
+}
+
+// TODO(devlin): Remove this when we remove the migration code, circa M84.
+TEST_F(ExtensionPrefsSimpleTest, MigrateToNewExternalUninstallBits) {
+  content::BrowserTaskEnvironment task_environment;
+  TestExtensionPrefs prefs(base::ThreadTaskRunnerHandle::Get());
+
+  auto has_extension_pref_entry = [&prefs](const std::string& id) {
+    const base::DictionaryValue* extensions_dictionary =
+        prefs.pref_service()->GetDictionary(pref_names::kExtensions);
+    if (!extensions_dictionary) {
+      ADD_FAILURE() << "Extensions dictionary is missing!";
+      return false;
+    }
+    return extensions_dictionary->FindDictKey(id) != nullptr;
+  };
+
+  std::string external_extension =
+      prefs
+          .AddExtensionWithLocation("external uninstall",
+                                    Manifest::EXTERNAL_PREF)
+          ->id();
+  std::string internal_extension =
+      prefs.AddExtensionWithLocation("internal", Manifest::INTERNAL)->id();
+
+  EXPECT_TRUE(has_extension_pref_entry(external_extension));
+  EXPECT_TRUE(has_extension_pref_entry(internal_extension));
+  EXPECT_FALSE(
+      prefs.prefs()->IsExternalExtensionUninstalled(external_extension));
+  EXPECT_FALSE(
+      prefs.prefs()->IsExternalExtensionUninstalled(internal_extension));
+
+  // Cheat, and hardcode the old bit for external uninstall state for the
+  // external extension. This is by setting the "state" pref in the extension
+  // dictionary.
+  prefs.prefs()->UpdateExtensionPref(
+      external_extension, "state",
+      std::make_unique<base::Value>(
+          Extension::DEPRECATED_EXTERNAL_EXTENSION_UNINSTALLED));
+
+  // Cause the migration.
+  prefs.RecreateExtensionPrefs();
+
+  EXPECT_FALSE(has_extension_pref_entry(external_extension));
+  EXPECT_TRUE(has_extension_pref_entry(internal_extension));
+  EXPECT_TRUE(
+      prefs.prefs()->IsExternalExtensionUninstalled(external_extension));
+  EXPECT_FALSE(
+      prefs.prefs()->IsExternalExtensionUninstalled(internal_extension));
+}
 
 }  // namespace extensions

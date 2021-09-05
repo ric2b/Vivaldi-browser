@@ -48,25 +48,34 @@ class InspectorMediaEventHandlerTest : public testing::Test {
   std::unique_ptr<InspectorMediaEventHandler> handler_;
   std::unique_ptr<MockMediaInspectorContext> mock_context_;
 
-  media::MediaLogEvent CreateEvent(media::MediaLogEvent::Type type) {
-    media::MediaLogEvent event;
+  template <media::MediaLogEvent T>
+  media::MediaLogRecord CreateEvent() {
+    media::MediaLogRecord event;
     event.id = 0;
-    event.type = type;
+    event.type = media::MediaLogRecord::Type::kMediaEventTriggered;
     event.time = base::TimeTicks();
+    event.params.SetString("event",
+                           media::MediaLogEventTypeSupport<T>::TypeName());
     return event;
   }
 
-  media::MediaLogEvent CreatePropChangeEvent(
+  media::MediaLogRecord CreatePropChangeEvent(
       std::vector<std::pair<std::string, std::string>> props) {
-    auto event = CreateEvent(media::MediaLogEvent::PROPERTY_CHANGE);
+    media::MediaLogRecord event;
+    event.id = 0;
+    event.type = media::MediaLogRecord::Type::kMediaPropertyChange;
+    event.time = base::TimeTicks();
     for (auto p : props) {
       event.params.SetString(std::get<0>(p), std::get<1>(p));
     }
     return event;
   }
 
-  media::MediaLogEvent CreateLogEvent(std::string msg) {
-    auto event = CreateEvent(media::MediaLogEvent::MEDIA_WARNING_LOG_ENTRY);
+  media::MediaLogRecord CreateLogEvent(std::string msg) {
+    media::MediaLogRecord event;
+    event.id = 0;
+    event.type = media::MediaLogRecord::Type::kMessage;
+    event.time = base::TimeTicks();
     event.params.SetString("warning", msg);
     return event;
   }
@@ -114,7 +123,7 @@ MATCHER_P(EventsEqualTo, events, "") {
 }
 
 TEST_F(InspectorMediaEventHandlerTest, ConvertsProperties) {
-  std::vector<media::MediaLogEvent> events = {
+  std::vector<media::MediaLogRecord> events = {
       CreatePropChangeEvent({{"test_key", "test_value"}})};
 
   blink::InspectorPlayerProperties expected;
@@ -131,7 +140,7 @@ TEST_F(InspectorMediaEventHandlerTest, ConvertsProperties) {
 }
 
 TEST_F(InspectorMediaEventHandlerTest, SplitsDoubleProperties) {
-  std::vector<media::MediaLogEvent> events = {
+  std::vector<media::MediaLogRecord> events = {
       CreatePropChangeEvent({{"test_key", "test_value"}, {"foo", "bar"}})};
 
   blink::InspectorPlayerProperties expected;
@@ -151,7 +160,7 @@ TEST_F(InspectorMediaEventHandlerTest, SplitsDoubleProperties) {
 }
 
 TEST_F(InspectorMediaEventHandlerTest, ConvertsMessageEvent) {
-  std::vector<media::MediaLogEvent> events = {
+  std::vector<media::MediaLogRecord> events = {
       CreateLogEvent("Has Anyone Really Been Far Even as Decided to Use Even "
                      "Go Want to do Look More Like?")};
 
@@ -171,7 +180,7 @@ TEST_F(InspectorMediaEventHandlerTest, ConvertsMessageEvent) {
 }
 
 TEST_F(InspectorMediaEventHandlerTest, ConvertsEventsAndProperties) {
-  std::vector<media::MediaLogEvent> events = {
+  std::vector<media::MediaLogRecord> events = {
       CreateLogEvent("100% medically accurate"),
       CreatePropChangeEvent(
           {{"free_puppies", "all_taken"}, {"illuminati", "confirmed"}})};
@@ -204,17 +213,19 @@ TEST_F(InspectorMediaEventHandlerTest, ConvertsEventsAndProperties) {
 }
 
 TEST_F(InspectorMediaEventHandlerTest, PassesPlayAndPauseEvents) {
-  std::vector<media::MediaLogEvent> events = {
-      CreateEvent(media::MediaLogEvent::PLAY),
-      CreateEvent(media::MediaLogEvent::PAUSE)};
+  std::vector<media::MediaLogRecord> events = {
+      CreateEvent<media::MediaLogEvent::kPlay>(),
+      CreateEvent<media::MediaLogEvent::kPause>()};
 
   blink::InspectorPlayerEvents expected_events;
   blink::InspectorPlayerEvent play = {
-      blink::InspectorPlayerEvent::PLAYBACK_EVENT, base::TimeTicks(),
-      blink::WebString::FromUTF8("Event"), blink::WebString::FromUTF8("PLAY")};
+      blink::InspectorPlayerEvent::TRIGGERED_EVENT, base::TimeTicks(),
+      blink::WebString::FromUTF8("event"),
+      blink::WebString::FromUTF8("{\"event\":\"kPlay\"}")};
   blink::InspectorPlayerEvent pause = {
-      blink::InspectorPlayerEvent::PLAYBACK_EVENT, base::TimeTicks(),
-      blink::WebString::FromUTF8("Event"), blink::WebString::FromUTF8("PAUSE")};
+      blink::InspectorPlayerEvent::TRIGGERED_EVENT, base::TimeTicks(),
+      blink::WebString::FromUTF8("event"),
+      blink::WebString::FromUTF8("{\"event\":\"kPause\"}")};
   expected_events.emplace_back(play);
   expected_events.emplace_back(pause);
 

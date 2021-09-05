@@ -4,7 +4,6 @@
 
 #include "chrome/browser/chromeos/login/screens/recommend_apps/recommend_apps_fetcher_impl.h"
 
-#include "ash/public/mojom/constants.mojom.h"
 #include "ash/public/mojom/cros_display_config.mojom.h"
 #include "base/base64url.h"
 #include "base/bind.h"
@@ -15,6 +14,7 @@
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "chrome/browser/chromeos/login/screens/recommend_apps/recommend_apps_fetcher_delegate.h"
 #include "content/public/browser/gpu_data_manager.h"
 #include "extensions/common/api/system_display.h"
@@ -23,9 +23,7 @@
 #include "net/http/http_status_code.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "services/network/public/cpp/resource_request.h"
-#include "services/network/public/cpp/resource_response.h"
 #include "services/network/public/cpp/simple_url_loader.h"
-#include "services/service_manager/public/cpp/connector.h"
 #include "third_party/zlib/google/compression_utils.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
@@ -268,16 +266,13 @@ void RecordUmaResponseSize(unsigned long responseSize) {
 
 RecommendAppsFetcherImpl::RecommendAppsFetcherImpl(
     RecommendAppsFetcherDelegate* delegate,
-    service_manager::Connector* connector,
+    mojo::PendingRemote<ash::mojom::CrosDisplayConfigController> display_config,
     network::mojom::URLLoaderFactory* url_loader_factory)
     : delegate_(delegate),
-      connector_(connector),
       url_loader_factory_(url_loader_factory),
       arc_features_getter_(
-          base::BindRepeating(&arc::ArcFeaturesParser::GetArcFeatures)) {
-  connector_->Connect(ash::mojom::kServiceName,
-                      cros_display_config_.BindNewPipeAndPassReceiver());
-}
+          base::BindRepeating(&arc::ArcFeaturesParser::GetArcFeatures)),
+      cros_display_config_(std::move(display_config)) {}
 
 RecommendAppsFetcherImpl::~RecommendAppsFetcherImpl() = default;
 
@@ -336,9 +331,8 @@ void RecommendAppsFetcherImpl::MaybeStartCompressAndEncodeProtoMessage() {
   if (!ash_ready_ || !arc_features_ready_ || has_started_proto_processing_)
     return;
 
-  base::PostTaskAndReplyWithResult(
-      FROM_HERE,
-      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::BEST_EFFORT},
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::BindOnce(&CompressAndEncodeProtoMessageOnBlockingThread,
                      std::move(device_config_)),
       base::BindOnce(
@@ -577,7 +571,7 @@ base::Optional<base::Value> RecommendAppsFetcherImpl::ParseResponse(
   }
 
   // Otherwise, the response should return a list of apps.
-  base::span<const base::Value> app_list = json_value->GetList();
+  base::Value::ConstListView app_list = json_value->GetList();
   if (app_list.empty()) {
     DVLOG(1) << "No app in the response.";
     RecordUmaResponseParseResult(RECOMMEND_APPS_RESPONSE_PARSE_RESULT_NO_APP);

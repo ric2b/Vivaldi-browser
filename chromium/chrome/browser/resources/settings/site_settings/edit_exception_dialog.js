@@ -37,11 +37,11 @@ Polymer({
     },
   },
 
-  /** @private {!settings.SiteSettingsPrefsBrowserProxy} */
+  /** @private {?settings.SiteSettingsPrefsBrowserProxy} */
   browserProxy_: null,
 
   /** @override */
-  attached: function() {
+  attached() {
     this.browserProxy_ =
         settings.SiteSettingsPrefsBrowserProxyImpl.getInstance();
     this.origin_ = this.model.origin;
@@ -50,12 +50,12 @@ Polymer({
   },
 
   /** @private */
-  onCancelTap_: function() {
+  onCancelTap_() {
     this.$.dialog.close();
   },
 
   /** @private */
-  onActionButtonTap_: function() {
+  onActionButtonTap_() {
     if (this.model.origin != this.origin_) {
       // The way to "edit" an exception is to remove it and and a new one.
       this.browserProxy_.resetCategoryPermissionForPattern(
@@ -63,15 +63,15 @@ Polymer({
           this.model.incognito);
 
       this.browserProxy_.setCategoryPermissionForPattern(
-          this.origin_, this.origin_, this.model.category, this.model.setting,
-          this.model.incognito);
+          this.origin_, settings.SITE_EXCEPTION_WILDCARD, this.model.category,
+          this.model.setting, this.model.incognito);
     }
 
     this.$.dialog.close();
   },
 
   /** @private */
-  validate_: function() {
+  validate_() {
     if (this.$$('cr-input').value.trim() == '') {
       this.invalid_ = true;
       return;
@@ -85,7 +85,7 @@ Polymer({
   },
 
   /** @private */
-  modelChanged_: function() {
+  modelChanged_() {
     if (!this.model) {
       this.$.dialog.cancel();
     }

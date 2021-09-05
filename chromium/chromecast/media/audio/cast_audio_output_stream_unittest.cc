@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
@@ -17,21 +18,22 @@
 #include "base/time/time.h"
 #include "chromecast/common/mojom/constants.mojom.h"
 #include "chromecast/common/mojom/multiroom.mojom.h"
+#include "chromecast/common/mojom/service_connector.mojom.h"
+#include "chromecast/media/api/cma_backend.h"
+#include "chromecast/media/api/decoder_buffer_base.h"
 #include "chromecast/media/audio/cast_audio_manager.h"
 #include "chromecast/media/audio/cast_audio_mixer.h"
-#include "chromecast/media/base/monotonic_clock.h"
-#include "chromecast/media/cma/backend/cma_backend.h"
-#include "chromecast/media/cma/base/decoder_buffer_base.h"
+#include "chromecast/media/base/default_monotonic_clock.h"
 #include "chromecast/media/cma/test/mock_cma_backend_factory.h"
 #include "chromecast/media/cma/test/mock_multiroom_manager.h"
 #include "chromecast/public/task_runner.h"
 #include "chromecast/public/volume_control.h"
 #include "content/public/test/browser_task_environment.h"
-#include "content/public/test/test_browser_thread.h"
 #include "media/audio/mock_audio_source_callback.h"
 #include "media/audio/test_audio_thread.h"
-#include "mojo/public/cpp/bindings/binding.h"
-#include "services/service_manager/public/cpp/connector.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/receiver_set.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -40,11 +42,6 @@ using testing::Invoke;
 using testing::NiceMock;
 
 namespace {
-
-std::unique_ptr<service_manager::Connector> CreateConnector() {
-  service_manager::mojom::ConnectorRequest request;
-  return service_manager::Connector::Create(&request);
-}
 
 std::string DummyGetSessionId(std::string /* audio_group_id */) {
   return "AABBCCDDEE";
@@ -223,7 +220,8 @@ class FakeCmaBackend : public CmaBackend {
   std::unique_ptr<FakeAudioDecoder> audio_decoder_;
 };
 
-class CastAudioOutputStreamTest : public ::testing::Test {
+class CastAudioOutputStreamTest : public ::testing::Test,
+                                  public chromecast::mojom::ServiceConnector {
  public:
   CastAudioOutputStreamTest()
       : audio_thread_("CastAudioThread"),
@@ -244,10 +242,14 @@ class CastAudioOutputStreamTest : public ::testing::Test {
     audio_thread_.Stop();
   }
 
-  // Binds |multiroom_manager_| to the interface requested through the test
-  // connector.
-  void BindMultiroomManager(mojo::ScopedMessagePipeHandle handle) {
-    multiroom_manager_.Bind(std::move(handle));
+  // chromecast::mojom::ServiceConnector:
+  void Connect(const std::string& service_name,
+               mojo::GenericPendingReceiver receiver) override {
+    if (service_name != chromecast::mojom::kChromecastServiceName)
+      return;
+
+    if (auto r = receiver.As<mojom::MultiroomManager>())
+      multiroom_manager_.Bind(r.PassPipe());
   }
 
  protected:
@@ -255,21 +257,13 @@ class CastAudioOutputStreamTest : public ::testing::Test {
     return mock_backend_factory_.get();
   }
 
-  void CreateConnectorForTesting() {
-    connector_ = CreateConnector();
-    // Override the MultiroomManager interface for testing.
-    connector_->OverrideBinderForTesting(
-        service_manager::ServiceFilter::ByName(
-            chromecast::mojom::kChromecastServiceName),
-        mojom::MultiroomManager::Name_,
-        base::BindRepeating(&CastAudioOutputStreamTest::BindMultiroomManager,
-                            base::Unretained(this)));
+  mojo::PendingRemote<chromecast::mojom::ServiceConnector> CreateConnector() {
+    mojo::PendingRemote<chromecast::mojom::ServiceConnector> connector;
+    connector_receivers_.Add(this, connector.InitWithNewPipeAndPassReceiver());
+    return connector;
   }
 
   void CreateAudioManagerForTesting(bool use_mixer = false) {
-    if (!connector_)
-      CreateConnectorForTesting();
-
     // Only one AudioManager may exist at a time, so destroy the one we're
     // currently holding before creating a new one.
     // Flush the message loop to run any shutdown tasks posted by AudioManager.
@@ -288,10 +282,8 @@ class CastAudioOutputStreamTest : public ::testing::Test {
                             base::Unretained(this)),
         base::BindRepeating(&DummyGetSessionId),
         task_environment_.GetMainThreadTaskRunner(),
-        audio_thread_.task_runner(), connector_.get(), use_mixer,
+        audio_thread_.task_runner(), CreateConnector(), use_mixer,
         true /* force_use_cma_backend_for_output*/));
-    audio_manager_->SetConnectorForTesting(std::move(connector_));
-
     // A few AudioManager implementations post initialization tasks to
     // audio thread. Flush the thread to ensure that |audio_manager_| is
     // initialized and ready to use before returning from this function.
@@ -366,7 +358,7 @@ class CastAudioOutputStreamTest : public ::testing::Test {
 
   FakeCmaBackend* cma_backend_ = nullptr;
   std::unique_ptr<CastAudioManager> audio_manager_;
-  std::unique_ptr<service_manager::Connector> connector_;
+  mojo::ReceiverSet<chromecast::mojom::ServiceConnector> connector_receivers_;
   MockMultiroomManager multiroom_manager_;
 
   // AudioParameters used to create AudioOutputStream.
@@ -519,11 +511,8 @@ TEST_F(CastAudioOutputStreamTest, StartStopStart) {
   ASSERT_TRUE(stream->Open());
   RunThreadsUntilIdle();
 
-  // Set to busy, so that the OnPushBufferComplete callback is not called after
-  // the backend is stopped.
   FakeAudioDecoder* audio_decoder = GetAudioDecoder();
   ASSERT_TRUE(audio_decoder);
-  audio_decoder->set_pipeline_status(FakeAudioDecoder::PIPELINE_STATUS_BUSY);
 
   ::media::MockAudioSourceCallback source_callback;
   EXPECT_CALL(source_callback, OnMoreData(_, _, _, _))
@@ -531,8 +520,13 @@ TEST_F(CastAudioOutputStreamTest, StartStopStart) {
   stream->Start(&source_callback);
   RunThreadsUntilIdle();
   stream->Stop();
+  EXPECT_CALL(source_callback, OnMoreData(_, _, _, _)).Times(0);
+  RunThreadsUntilIdle();
+  testing::Mock::VerifyAndClearExpectations(&source_callback);
 
   // Ensure we fetch new data when restarting.
+  EXPECT_CALL(source_callback, OnMoreData(_, _, _, _))
+      .WillRepeatedly(Invoke(OnMoreData));
   int last_on_more_data_call_count = on_more_data_call_count_;
   stream->Start(&source_callback);
   RunThreadsUntilIdle();
@@ -551,8 +545,6 @@ TEST_F(CastAudioOutputStreamTest, StopPreventsCallbacks) {
   ASSERT_TRUE(stream->Open());
   RunThreadsUntilIdle();
 
-  // Set to busy, so that the OnPushBufferComplete callback is not called after
-  // the backend is stopped.
   FakeAudioDecoder* audio_decoder = GetAudioDecoder();
   ASSERT_TRUE(audio_decoder);
 
@@ -698,7 +690,7 @@ TEST_F(CastAudioOutputStreamTest, PushFrame) {
   EXPECT_CALL(source_callback, OnMoreData(_, _, _, _))
       .WillRepeatedly(Invoke(OnMoreData));
   // No error must be reported to source callback.
-  EXPECT_CALL(source_callback, OnError()).Times(0);
+  EXPECT_CALL(source_callback, OnError(_)).Times(0);
   stream->Start(&source_callback);
   RunThreadsUntilIdle();
   stream->Stop();
@@ -733,7 +725,7 @@ TEST_F(CastAudioOutputStreamTest, PushFrameAfterStop) {
   EXPECT_CALL(source_callback, OnMoreData(_, _, _, _))
       .WillRepeatedly(Invoke(OnMoreData));
   // No error must be reported to source callback.
-  EXPECT_CALL(source_callback, OnError()).Times(0);
+  EXPECT_CALL(source_callback, OnError(_)).Times(0);
   stream->Start(&source_callback);
   RunThreadsUntilIdle();
 
@@ -764,7 +756,7 @@ TEST_F(CastAudioOutputStreamTest, PushFrameAfterClose) {
   EXPECT_CALL(source_callback, OnMoreData(_, _, _, _))
       .WillRepeatedly(Invoke(OnMoreData));
   // No error must be reported to source callback.
-  EXPECT_CALL(source_callback, OnError()).Times(0);
+  EXPECT_CALL(source_callback, OnError(_)).Times(0);
   stream->Start(&source_callback);
   RunThreadsUntilIdle();
 
@@ -795,7 +787,7 @@ TEST_F(CastAudioOutputStreamTest, DISABLED_DeviceBusy) {
   EXPECT_CALL(source_callback, OnMoreData(_, _, _, _))
       .WillRepeatedly(Invoke(OnMoreData));
   // No error must be reported to source callback.
-  EXPECT_CALL(source_callback, OnError()).Times(0);
+  EXPECT_CALL(source_callback, OnError(_)).Times(0);
   stream->Start(&source_callback);
   RunThreadsUntilIdle();
   // Make sure that one frame was pushed.
@@ -830,7 +822,7 @@ TEST_F(CastAudioOutputStreamTest, DeviceError) {
   EXPECT_CALL(source_callback, OnMoreData(_, _, _, _))
       .WillRepeatedly(Invoke(OnMoreData));
   // AudioOutputStream must report error to source callback.
-  EXPECT_CALL(source_callback, OnError());
+  EXPECT_CALL(source_callback, OnError(_));
   stream->Start(&source_callback);
   RunThreadsUntilIdle();
   // Make sure that AudioOutputStream attempted to push the initial frame.
@@ -855,7 +847,7 @@ TEST_F(CastAudioOutputStreamTest, DeviceAsyncError) {
   EXPECT_CALL(source_callback, OnMoreData(_, _, _, _))
       .WillRepeatedly(Invoke(OnMoreData));
   // AudioOutputStream must report error to source callback.
-  EXPECT_CALL(source_callback, OnError()).Times(testing::AtLeast(1));
+  EXPECT_CALL(source_callback, OnError(_)).Times(testing::AtLeast(1));
   stream->Start(&source_callback);
   RunThreadsUntilIdle();
 

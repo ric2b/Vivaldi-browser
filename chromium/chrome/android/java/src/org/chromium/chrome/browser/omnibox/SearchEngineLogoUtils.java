@@ -12,21 +12,21 @@ import android.text.TextUtils;
 
 import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Callback;
-import org.chromium.base.VisibleForTesting;
-import org.chromium.base.library_loader.LibraryProcessType;
+import org.chromium.base.Log;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeFeatureList;
-import org.chromium.chrome.browser.favicon.FaviconHelper;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.locale.LocaleManager;
 import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.browser.toolbar.ToolbarCommonPropertiesModel;
-import org.chromium.chrome.browser.ui.widget.RoundedIconGenerator;
-import org.chromium.chrome.browser.util.UrlUtilities;
+import org.chromium.chrome.browser.ui.favicon.FaviconHelper;
+import org.chromium.chrome.browser.ui.favicon.RoundedIconGenerator;
+import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.content_public.browser.BrowserStartupController;
 
 import java.lang.annotation.Retention;
@@ -34,12 +34,15 @@ import java.lang.annotation.RetentionPolicy;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.chromium.chrome.browser.ChromeApplication;
 import org.vivaldi.browser.omnibox.status.SearchEngineIconHandler;
 
 /**
  * Collection of shared code for displaying search engine logos.
  */
 public class SearchEngineLogoUtils {
+    // Note: shortened to account for the 20 character limit.
+    private static final String TAG = "SearchLogoUtils";
     private static final String ROUNDED_EDGES_VARIANT = "rounded_edges";
     private static final String LOUPE_EVERYWHERE_VARIANT = "loupe_everywhere";
     private static final String DUMMY_URL_QUERY = "replace_me";
@@ -58,18 +61,28 @@ public class SearchEngineLogoUtils {
     static class Delegate {
         /** @see SearchEngineLogoUtils#isSearchEngineLogoEnabled */
         public boolean isSearchEngineLogoEnabled() {
-            return !LocaleManager.getInstance().needToCheckForSearchEnginePromo()
-                    && ChromeFeatureList.isInitialized()
-                    && ChromeFeatureList.isEnabled(ChromeFeatureList.OMNIBOX_SEARCH_ENGINE_LOGO);
+            // Note: LocaleManager#needToCheckForSearchEnginePromo() checks several system features
+            // which risk throwing a security exception. Catching that here to prevent it from
+            // crashing the app.
+            try {
+                return !LocaleManager.getInstance().needToCheckForSearchEnginePromo()
+                        && ChromeFeatureList.isInitialized()
+                        && ChromeFeatureList.isEnabled(
+                                ChromeFeatureList.OMNIBOX_SEARCH_ENGINE_LOGO);
+            } catch (SecurityException e) {
+                Log.e(TAG, "Security exception thrown by failed IPC, see crbug.com/1027709");
+                return false;
+            }
         }
 
         /** @see SearchEngineLogoUtils#shouldShowSearchEngineLogo */
         public boolean shouldShowSearchEngineLogo(boolean isOffTheRecord) {
+            // Vivaldi: Should always show dse icon.
+            if (ChromeApplication.isVivaldi()) return true;
             return !isOffTheRecord
                     && isSearchEngineLogoEnabled()
                     // Using the profile now, so we need to pay attention to browser initialization.
-                    && BrowserStartupController.get(LibraryProcessType.PROCESS_BROWSER)
-                               .isFullBrowserStarted();
+                    && BrowserStartupController.getInstance().isFullBrowserStarted();
         }
 
         /** @see SearchEngineLogoUtils#shouldShowRoundedSearchEngineLogo */
@@ -161,7 +174,8 @@ public class SearchEngineLogoUtils {
     /** @return Whether the status icon should be hidden when the LocationBar is unfocused. */
     public static boolean currentlyOnNTP(
             ToolbarCommonPropertiesModel toolbarCommonPropertiesModel) {
-        return toolbarCommonPropertiesModel.getNewTabPageForCurrentTab() != null
+        if (ChromeApplication.isVivaldi()) return false; // Vivaldi should always display DSE logo.
+        return toolbarCommonPropertiesModel != null
                 && NewTabPage.isNTPUrl(toolbarCommonPropertiesModel.getCurrentUrl());
     }
 
@@ -229,7 +243,15 @@ public class SearchEngineLogoUtils {
             recordEvent(Events.FETCH_FAILED_NULL_URL);
             return;
         }
-
+        // For Vivaldi, bypassing the cache in an attempt to fix VB-62775.
+        if (ChromeApplication.isVivaldi()) {
+            Bitmap image =
+                    SearchEngineIconHandler.get().getSearchEngineLogoImage(logoUrl, resources);
+            if (image != null) {
+                processReturnedLogo(logoUrl, image, resources, callback);
+                return;
+            }
+        }
         // Return a cached copy if it's available.
         if (sCachedComposedBackground != null
                 && sCachedComposedBackgroundLogoUrl.equals(getSearchLogoUrl())) {
@@ -241,11 +263,6 @@ public class SearchEngineLogoUtils {
         final int logoSizePixels = SearchEngineLogoUtils.getSearchEngineLogoSizePixels(resources);
         boolean willCallbackBeCalled = sFaviconHelper.getLocalFaviconImageForURL(
                 profile, logoUrl, logoSizePixels, (image, iconUrl) -> {
-                    // Vivaldi
-                    if (image == null) {
-                        image = SearchEngineIconHandler.get().getSearchEngineLogoImage(
-                                logoUrl, resources);
-                    }
                     if (image == null) {
                         callback.onResult(image);
                         recordEvent(Events.FETCH_FAILED_RETURNED_BITMAP_NULL);

@@ -178,7 +178,7 @@ IN_PROC_BROWSER_TEST_F(ChromeServiceWorkerTest,
   InitializeServer();
 
   HostContentSettingsMapFactory::GetForProfile(browser()->profile())
-      ->SetDefaultContentSetting(CONTENT_SETTINGS_TYPE_JAVASCRIPT,
+      ->SetDefaultContentSetting(ContentSettingsType::JAVASCRIPT,
                                  CONTENT_SETTING_BLOCK);
 
   base::RunLoop run_loop;
@@ -207,7 +207,7 @@ IN_PROC_BROWSER_TEST_F(ChromeServiceWorkerTest,
   GetServiceWorkerContext()->StopAllServiceWorkersForOrigin(
       embedded_test_server()->base_url());
   HostContentSettingsMapFactory::GetForProfile(browser()->profile())
-      ->SetDefaultContentSetting(CONTENT_SETTINGS_TYPE_JAVASCRIPT,
+      ->SetDefaultContentSetting(ContentSettingsType::JAVASCRIPT,
                                  CONTENT_SETTING_BLOCK);
 
   const base::string16 expected_title2 = base::ASCIIToUTF16("Done");
@@ -220,8 +220,8 @@ IN_PROC_BROWSER_TEST_F(ChromeServiceWorkerTest,
 
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
-  EXPECT_TRUE(TabSpecificContentSettings::FromWebContents(web_contents)->
-              IsContentBlocked(CONTENT_SETTINGS_TYPE_JAVASCRIPT));
+  EXPECT_TRUE(TabSpecificContentSettings::FromWebContents(web_contents)
+                  ->IsContentBlocked(ContentSettingsType::JAVASCRIPT));
 }
 
 IN_PROC_BROWSER_TEST_F(ChromeServiceWorkerTest,
@@ -697,11 +697,11 @@ class StaticURLDataSource : public content::URLDataSource {
 
   // content::URLDataSource:
   std::string GetSource() override { return source_; }
-  void StartDataRequest(const std::string& path,
+  void StartDataRequest(const GURL& url,
                         const content::WebContents::Getter& wc_getter,
-                        const GotDataCallback& callback) override {
+                        GotDataCallback callback) override {
     std::string data(content_);
-    callback.Run(base::RefCountedString::TakeString(&data));
+    std::move(callback).Run(base::RefCountedString::TakeString(&data));
   }
   std::string GetMimeType(const std::string& path) override {
     return "application/javascript";

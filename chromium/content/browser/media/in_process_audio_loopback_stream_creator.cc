@@ -17,12 +17,10 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
-#include "content/public/browser/system_connector.h"
 #include "media/audio/audio_device_description.h"
 #include "media/base/user_input_monitor.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
-#include "services/service_manager/public/cpp/connector.h"
 
 namespace content {
 
@@ -44,13 +42,14 @@ class StreamCreatedCallbackAdapter final
 
   // mojom::RendererAudioInputStreamFactoryClient implementation.
   void StreamCreated(
-      media::mojom::AudioInputStreamPtr stream,
-      media::mojom::AudioInputStreamClientRequest client_request,
+      mojo::PendingRemote<media::mojom::AudioInputStream> stream,
+      mojo::PendingReceiver<media::mojom::AudioInputStreamClient>
+          client_receiver,
       media::mojom::ReadOnlyAudioDataPipePtr data_pipe,
       bool initially_muted,
       const base::Optional<base::UnguessableToken>& stream_id) override {
     DCHECK(!initially_muted);  // Loopback streams shouldn't be started muted.
-    callback_.Run(std::move(stream), std::move(client_request),
+    callback_.Run(std::move(stream), std::move(client_receiver),
                   std::move(data_pipe));
   }
 
@@ -97,7 +96,6 @@ InProcessAudioLoopbackStreamCreator::InProcessAudioLoopbackStreamCreator()
                    ? static_cast<media::UserInputMonitorBase*>(
                          BrowserMainLoop::GetInstance()->user_input_monitor())
                    : nullptr,
-               content::GetSystemConnector()->Clone(),
                AudioStreamBrokerFactory::CreateImpl()) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 }

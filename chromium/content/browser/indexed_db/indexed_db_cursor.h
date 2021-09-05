@@ -17,7 +17,7 @@
 #include "content/browser/indexed_db/indexed_db_database.h"
 #include "content/browser/indexed_db/indexed_db_transaction.h"
 #include "third_party/blink/public/common/indexeddb/web_idb_types.h"
-#include "third_party/blink/public/mojom/indexeddb/indexeddb.mojom.h"
+#include "third_party/blink/public/mojom/indexeddb/indexeddb.mojom-forward.h"
 
 namespace content {
 
@@ -48,7 +48,7 @@ class CONTENT_EXPORT IndexedDBCursor {
     return cursor_->primary_key();
   }
   IndexedDBValue* Value() const {
-    return (cursor_type_ == indexed_db::CURSOR_KEY_ONLY) ? NULL
+    return (cursor_type_ == indexed_db::CURSOR_KEY_ONLY) ? nullptr
                                                          : cursor_->value();
   }
 
@@ -75,6 +75,7 @@ class CONTENT_EXPORT IndexedDBCursor {
       IndexedDBTransaction* transaction);
 
  private:
+  const url::Origin origin_;
   blink::mojom::IDBTaskType task_type_;
   indexed_db::CursorType cursor_type_;
 

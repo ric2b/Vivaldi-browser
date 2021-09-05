@@ -2,22 +2,12 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//components/nacl/features.gni")
 import("//remoting/build/config/remoting_build.gni")
 
 group("remoting_all") {
   testonly = true
 
-  deps = [
-    ":remoting_unittests",
-    "//remoting/test:chromoting_test_driver",
-    "//remoting/webapp:browser_test_resources",
-    "//remoting/webapp:unit_tests",
-  ]
-
-  if ((is_linux && !is_chromeos) || is_win || is_mac) {
-    deps += [ "//remoting/webapp" ]
-  }
+  deps = [ ":remoting_unittests" ]
 
   if (is_win) {
     deps += [
@@ -80,10 +70,6 @@ group("remoting_all") {
       deps += [ "//remoting/host:remoting_me2me_host_archive" ]
     }
   }
-
-  if (enable_nacl) {
-    deps += [ "//remoting/tools/javascript_key_tester" ]
-  }
 }
 
 if (is_win) {
@@ -98,9 +84,7 @@ if (is_win) {
 
     configs += [ "//build/config/compiler:wexit_time_destructors" ]
 
-    sources = [
-      "tools/breakpad_tester_win.cc",
-    ]
+    sources = [ "tools/breakpad_tester_win.cc" ]
 
     if (is_win) {
       libs += [
@@ -162,7 +146,6 @@ test("remoting_unittests") {
     "//remoting/client/ui:unit_tests",
     "//remoting/protocol:unit_tests",
     "//remoting/signaling:unit_tests",
-    "//remoting/test:unit_tests",
     "//testing/gmock",
     "//testing/gtest",
   ]
@@ -175,7 +158,7 @@ test("remoting_unittests") {
     ]
   }
 
-  deps += [ "//third_party/webrtc_overrides:init_webrtc" ]
+  deps += [ "//third_party/webrtc_overrides:webrtc_component" ]
 
   if (is_android) {
     deps += [ "//net/android:net_java" ]
@@ -218,11 +201,8 @@ if (enable_remoting_host) {
       "//net:test_support",
       "//remoting/base",
       "//testing/gtest",
-      "//third_party/webrtc/modules/desktop_capture",
-      "//third_party/webrtc_overrides",
+      "//third_party/webrtc_overrides:webrtc_component",
     ]
-
-    deps += [ "//third_party/webrtc_overrides:init_webrtc" ]
 
     if (is_win) {
       defines += [ "_ALT_NO_EXCEPTIONS" ]

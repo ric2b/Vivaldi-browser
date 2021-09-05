@@ -29,8 +29,13 @@ class LoggedInSpokenFeedbackTest : public InProcessBrowserTest {
   // Simulate key press event.
   void SendKeyPress(ui::KeyboardCode key);
   void SendKeyPressWithControl(ui::KeyboardCode key);
+  void SendKeyPressWithShift(ui::KeyboardCode key);
   void SendKeyPressWithSearchAndShift(ui::KeyboardCode key);
   void SendKeyPressWithSearch(ui::KeyboardCode key);
+  void SendKeyPressWithSearchAndControl(ui::KeyboardCode key);
+  void SendKeyPressWithSearchAndControlAndShift(ui::KeyboardCode key);
+
+  void SendStickyKeyCommand();
 
   void SendMouseMoveTo(const gfx::Point& location);
 
@@ -47,7 +52,7 @@ class LoggedInSpokenFeedbackTest : public InProcessBrowserTest {
   void PressRepeatedlyUntilUtterance(ui::KeyboardCode key,
                                      const std::string& expected_utterance);
 
-  SpeechMonitor speech_monitor_;
+  SpeechMonitor sm_;
 
  private:
   StubBrailleController braille_controller_;

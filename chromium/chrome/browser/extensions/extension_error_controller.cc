@@ -4,6 +4,7 @@
 
 #include "chrome/browser/extensions/extension_error_controller.h"
 
+#include "chrome/browser/extensions/extension_error_ui_default.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/pending_extension_manager.h"
 #include "extensions/browser/extension_prefs.h"
@@ -17,10 +18,14 @@ namespace extensions {
 
 namespace {
 
-ExtensionErrorController::UICreateMethod g_create_ui =
-    ExtensionErrorUI::Create;
-
+ExtensionErrorUI* CreateDefaultExtensionErrorUI(
+    ExtensionErrorUI::Delegate* delegate) {
+  return new ExtensionErrorUIDefault(delegate);
 }
+
+ExtensionErrorController::UICreateMethod g_create_ui =
+    CreateDefaultExtensionErrorUI;
+}  // namespace
 
 ExtensionErrorController::ExtensionErrorController(
     content::BrowserContext* context,
@@ -68,10 +73,6 @@ void ExtensionErrorController::SetUICreateMethodForTesting(
 
 content::BrowserContext* ExtensionErrorController::GetContext() {
   return browser_context_;
-}
-
-const ExtensionSet& ExtensionErrorController::GetExternalExtensions() {
-  return external_extensions_;
 }
 
 const ExtensionSet& ExtensionErrorController::GetBlacklistedExtensions() {

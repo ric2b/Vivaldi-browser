@@ -6,8 +6,7 @@
 
 #include "base/bind.h"
 #include "build/build_config.h"
-#include "mojo/public/cpp/bindings/strong_binding.h"
-#include "mojo/public/cpp/system/platform_handle.h"
+#include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "services/video_capture/public/mojom/scoped_access_permission.mojom.h"
 
 namespace video_capture {
@@ -49,7 +48,7 @@ void CloneSharedBufferToRawFileDescriptorHandle(
   auto sub_struct = media::mojom::SharedMemoryViaRawFileDescriptor::New();
   sub_struct->shared_memory_size_in_bytes = platform_region.GetSize();
   base::subtle::ScopedFDPair fds = platform_region.PassPlatformHandle();
-  sub_struct->file_descriptor_handle = mojo::WrapPlatformFile(fds.fd.release());
+  sub_struct->file_descriptor_handle = mojo::PlatformHandle(std::move(fds.fd));
   (*target)->set_shared_memory_via_raw_file_descriptor(std::move(sub_struct));
 #else
   NOTREACHED() << "Cannot convert buffer handle to "
@@ -65,7 +64,7 @@ void CloneGpuMemoryBufferHandle(const gfx::GpuMemoryBufferHandle& source,
 }  // anonymous namespace
 
 BroadcastingReceiver::ClientContext::ClientContext(
-    mojo::PendingRemote<mojom::Receiver> client,
+    mojo::PendingRemote<mojom::VideoFrameHandler> client,
     media::VideoCaptureBufferType target_buffer_type)
     : client_(std::move(client)),
       target_buffer_type_(target_buffer_type),
@@ -191,16 +190,9 @@ void BroadcastingReceiver::BufferContext::
   const size_t handle_size =
       buffer_handle_->get_shared_memory_via_raw_file_descriptor()
           ->shared_memory_size_in_bytes;
-  base::PlatformFile raw_platform_file;
-  MojoResult result = mojo::UnwrapPlatformFile(
-      std::move(buffer_handle_->get_shared_memory_via_raw_file_descriptor()
-                    ->file_descriptor_handle),
-      &raw_platform_file);
-  if (result != MOJO_RESULT_OK) {
-    NOTREACHED();
-    return;
-  }
-  base::ScopedFD platform_file(raw_platform_file);
+  base::ScopedFD platform_file =
+      buffer_handle_->get_shared_memory_via_raw_file_descriptor()
+          ->file_descriptor_handle.TakeFD();
   base::UnguessableToken guid = base::UnguessableToken::Create();
   base::subtle::PlatformSharedMemoryRegion platform_region =
       base::subtle::PlatformSharedMemoryRegion::Take(
@@ -242,7 +234,7 @@ void BroadcastingReceiver::SetOnStoppedHandler(
 }
 
 int32_t BroadcastingReceiver::AddClient(
-    mojo::PendingRemote<mojom::Receiver> client,
+    mojo::PendingRemote<mojom::VideoFrameHandler> client,
     media::VideoCaptureBufferType target_buffer_type) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   auto client_id = next_client_id_++;
@@ -284,7 +276,7 @@ void BroadcastingReceiver::ResumeClient(int32_t client_id) {
   clients_.at(client_id).set_is_suspended(false);
 }
 
-mojo::Remote<mojom::Receiver> BroadcastingReceiver::RemoveClient(
+mojo::Remote<mojom::VideoFrameHandler> BroadcastingReceiver::RemoveClient(
     int32_t client_id) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   auto client = std::move(clients_.at(client_id));
@@ -310,7 +302,7 @@ void BroadcastingReceiver::OnNewBuffer(
 void BroadcastingReceiver::OnFrameReadyInBuffer(
     int32_t buffer_id,
     int32_t frame_feedback_id,
-    mojom::ScopedAccessPermissionPtr access_permission,
+    mojo::PendingRemote<mojom::ScopedAccessPermission> access_permission,
     media::mojom::VideoFrameInfoPtr frame_info) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (clients_.empty())
@@ -323,12 +315,13 @@ void BroadcastingReceiver::OnFrameReadyInBuffer(
       continue;
     if (access_permission)
       buffer_context.set_access_permission(std::move(access_permission));
-    mojom::ScopedAccessPermissionPtr consumer_access_permission;
-    mojo::MakeStrongBinding(
+    mojo::PendingRemote<mojom::ScopedAccessPermission>
+        consumer_access_permission;
+    mojo::MakeSelfOwnedReceiver(
         std::make_unique<ConsumerAccessPermission>(base::BindOnce(
             &BroadcastingReceiver::OnClientFinishedConsumingFrame,
             weak_factory_.GetWeakPtr(), buffer_context.buffer_context_id())),
-        mojo::MakeRequest(&consumer_access_permission));
+        consumer_access_permission.InitWithNewPipeAndPassReceiver());
     client.second.client()->OnFrameReadyInBuffer(
         buffer_context.buffer_context_id(), frame_feedback_id,
         std::move(consumer_access_permission), frame_info.Clone());

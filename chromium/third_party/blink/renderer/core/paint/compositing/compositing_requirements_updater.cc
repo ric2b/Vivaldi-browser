@@ -27,6 +27,7 @@
 #include "third_party/blink/renderer/core/paint/compositing/compositing_requirements_updater.h"
 
 #include "base/macros.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/renderer/core/layout/layout_embedded_content.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/paint/compositing/paint_layer_compositor.h"
@@ -34,6 +35,8 @@
 #include "third_party/blink/renderer/core/paint/paint_layer_paint_order_iterator.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
+
+#include "app/vivaldi_apptools.h"
 
 namespace blink {
 
@@ -209,8 +212,6 @@ CompositingRequirementsUpdater::CompositingRequirementsUpdater(
     LayoutView& layout_view)
     : layout_view_(layout_view) {}
 
-CompositingRequirementsUpdater::~CompositingRequirementsUpdater() = default;
-
 void CompositingRequirementsUpdater::Update(
     PaintLayer* root,
     CompositingReasonsStats& compositing_reasons_stats) {
@@ -297,7 +298,7 @@ void CompositingRequirementsUpdater::UpdateRecursive(
 
   if (layer->GetScrollableArea() &&
       layer->GetScrollableArea()->NeedsCompositedScrolling())
-    direct_reasons |= CompositingReason::kOverflowScrollingTouch;
+    direct_reasons |= CompositingReason::kOverflowScrolling;
 
   bool can_be_composited = compositor->CanBeComposited(layer);
   if (can_be_composited)
@@ -417,13 +418,17 @@ void CompositingRequirementsUpdater::UpdateRecursive(
   //  * may escape |layer|'s clip.
   //  * may need compositing requirements update for another reason (
   //    e.g. change of stacking order)
-  bool skip_children = false && ( // TODO: Make this IsVivaldi.
-      !layer->DescendantHasDirectOrScrollingCompositingReason() &&
-      !needs_recursion_for_composited_scrolling_plus_fixed_or_sticky &&
-      !needs_recursion_for_out_of_flow_descendant &&
-      layer->GetLayoutObject().ShouldClipOverflow() &&
-      !layer->HasCompositingDescendant() &&
-      !layer->DescendantMayNeedCompositingRequirementsUpdate());
+  bool recursion_blocked_by_display_lock =
+      layer->GetLayoutObject().PrePaintBlockedByDisplayLock(
+          DisplayLockLifecycleTarget::kChildren);
+  bool skip_children = !vivaldi::IsVivaldiRunning() && (
+      recursion_blocked_by_display_lock ||
+      (!layer->DescendantHasDirectOrScrollingCompositingReason() &&
+       !needs_recursion_for_composited_scrolling_plus_fixed_or_sticky &&
+       !needs_recursion_for_out_of_flow_descendant &&
+       layer->GetLayoutObject().ShouldClipOverflow() &&
+       !layer->HasCompositingDescendant() &&
+       !layer->DescendantMayNeedCompositingRequirementsUpdate()));
 
   if (!skip_children) {
     PaintLayerPaintOrderIterator iterator(*layer, kNegativeZOrderChildren);
@@ -490,7 +495,7 @@ void CompositingRequirementsUpdater::UpdateRecursive(
   }
 
 #if DCHECK_IS_ON()
-  if (skip_children)
+  if (skip_children && !recursion_blocked_by_display_lock)
     CheckSubtreeHasNoCompositing(layer);
 #endif
 
@@ -593,7 +598,10 @@ void CompositingRequirementsUpdater::UpdateRecursive(
                               CompositingReason::kClipsCompositingDescendants);
     if ((!child_recursion_data.testing_overlap_ &&
          !is_composited_clipping_layer) ||
-        layer->GetLayoutObject().StyleRef().HasCurrentTransformAnimation())
+        layer->GetLayoutObject().StyleRef().HasCurrentTransformAnimation() ||
+        ((direct_reasons & CompositingReason::kScrollDependentPosition) &&
+         base::FeatureList::IsEnabled(
+             features::kAssumeOverlapAfterFixedOrStickyPosition)))
       current_recursion_data.testing_overlap_ = false;
 
     if (child_recursion_data.compositing_ancestor_ == layer)
@@ -612,6 +620,18 @@ void CompositingRequirementsUpdater::UpdateRecursive(
   // At this point we have finished collecting all reasons to composite this
   // layer.
   layer->SetCompositingReasons(reasons_to_composite);
+
+  // If we've skipped recursing down to children but children needed an
+  // update, remember this on the display lock context, so that we can restore
+  // the dirty bit when the lock is unlocked.
+  if (layer->DescendantMayNeedCompositingRequirementsUpdate() &&
+      skip_children) {
+    auto* context = layer->GetLayoutObject().GetDisplayLockContext();
+    DCHECK(recursion_blocked_by_display_lock);
+    DCHECK(context);
+    context->NotifyCompositingRequirementsUpdateWasBlocked();
+  }
+
   layer->ClearNeedsCompositingRequirementsUpdate();
   if (reasons_to_composite & CompositingReason::kOverlap)
     compositing_reasons_stats.overlap_layers++;

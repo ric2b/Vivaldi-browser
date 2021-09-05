@@ -14,6 +14,21 @@
 
 namespace android_webview {
 
+namespace {
+
+void AddLatencyInfoSwapTimes(std::vector<ui::LatencyInfo>* latency_info,
+                             base::TimeTicks swap_start,
+                             base::TimeTicks swap_end) {
+  for (auto& latency : *latency_info) {
+    latency.AddLatencyNumberWithTimestamp(
+        ui::INPUT_EVENT_GPU_SWAP_BUFFER_COMPONENT, swap_start);
+    latency.AddLatencyNumberWithTimestamp(
+        ui::INPUT_EVENT_LATENCY_FRAME_SWAP_COMPONENT, swap_end);
+  }
+}
+
+}  // namespace
+
 ParentOutputSurface::ParentOutputSurface(
     scoped_refptr<AwGLSurface> gl_surface,
     scoped_refptr<AwRenderThreadContextProvider> context_provider)
@@ -44,18 +59,25 @@ void ParentOutputSurface::SetDrawRectangle(const gfx::Rect& rect) {}
 void ParentOutputSurface::Reshape(const gfx::Size& size,
                                   float scale_factor,
                                   const gfx::ColorSpace& color_space,
-                                  bool has_alpha,
+                                  gfx::BufferFormat format,
                                   bool use_stencil) {}
 
 void ParentOutputSurface::SwapBuffers(viz::OutputSurfaceFrame frame) {
   context_provider_->ContextGL()->ShallowFlushCHROMIUM();
-  gl_surface_->SwapBuffers(base::BindOnce(&ParentOutputSurface::OnPresentation,
-                                          weak_ptr_factory_.GetWeakPtr()));
+  gl_surface_->SwapBuffers(base::BindOnce(
+      &ParentOutputSurface::OnPresentation, weak_ptr_factory_.GetWeakPtr(),
+      /*swap_start=*/base::TimeTicks::Now(), std::move(frame.latency_info)));
 }
 
 void ParentOutputSurface::OnPresentation(
+    base::TimeTicks swap_start,
+    std::vector<ui::LatencyInfo> latency_info,
     const gfx::PresentationFeedback& feedback) {
   DCHECK(client_);
+  // The start/end swap times are only best-effort. It is not possible to get
+  // the real swap times for WebView.
+  AddLatencyInfoSwapTimes(&latency_info, swap_start, base::TimeTicks::Now());
+  latency_tracker_.OnGpuSwapBuffersCompleted(latency_info);
   client_->DidReceivePresentationFeedback(feedback);
 }
 
@@ -99,10 +121,6 @@ unsigned ParentOutputSurface::GetOverlayTextureId() const {
   return 0;
 }
 
-gfx::BufferFormat ParentOutputSurface::GetOverlayBufferFormat() const {
-  return gfx::BufferFormat::RGBX_8888;
-}
-
 unsigned ParentOutputSurface::UpdateGpuFence() {
   return 0;
 }
@@ -112,6 +130,15 @@ void ParentOutputSurface::SetUpdateVSyncParametersCallback(
 
 gfx::OverlayTransform ParentOutputSurface::GetDisplayTransform() {
   return gfx::OVERLAY_TRANSFORM_NONE;
+}
+
+scoped_refptr<gpu::GpuTaskSchedulerHelper>
+ParentOutputSurface::GetGpuTaskSchedulerHelper() {
+  return nullptr;
+}
+
+gpu::MemoryTracker* ParentOutputSurface::GetMemoryTracker() {
+  return nullptr;
 }
 
 }  // namespace android_webview

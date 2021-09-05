@@ -208,7 +208,7 @@ class DevToolsBackgroundServicesContextTest
       options.scope = origin_.GetURL();
       base::RunLoop run_loop;
       embedded_worker_test_helper_.context()->RegisterServiceWorker(
-          script_url, options,
+          script_url, options, blink::mojom::FetchClientSettingsObject::New(),
           base::BindOnce(&DidRegisterServiceWorker,
                          &service_worker_registration_id,
                          run_loop.QuitClosure()));
@@ -224,7 +224,7 @@ class DevToolsBackgroundServicesContextTest
 
     {
       base::RunLoop run_loop;
-      embedded_worker_test_helper_.context()->storage()->FindRegistrationForId(
+      embedded_worker_test_helper_.context()->registry()->FindRegistrationForId(
           service_worker_registration_id, origin_.GetURL(),
           base::BindOnce(&DidFindServiceWorkerRegistration,
                          &service_worker_registration_,

@@ -110,6 +110,18 @@ void TestBluetoothAdapterObserver::AdapterDiscoveringChanged(
 
   ++discovering_changed_count_;
   last_discovering_ = discovering;
+  if (discovering_changed_callback_)
+    discovering_changed_callback_.Run();
+}
+
+void TestBluetoothAdapterObserver::RegisterDiscoveringChangedWatcher(
+    base::RepeatingClosure callback) {
+  discovering_changed_callback_ = callback;
+}
+
+void TestBluetoothAdapterObserver::RegisterDiscoveryChangeCompletedWatcher(
+    base::RepeatingClosure callback) {
+  discovery_change_completed_callback_ = callback;
 }
 
 void TestBluetoothAdapterObserver::DeviceAdded(BluetoothAdapter* adapter,
@@ -121,6 +133,11 @@ void TestBluetoothAdapterObserver::DeviceAdded(BluetoothAdapter* adapter,
   last_device_address_ = device->GetAddress();
 
   QuitMessageLoop();
+}
+
+void TestBluetoothAdapterObserver::DiscoveryChangeCompletedForTesting() {
+  if (discovery_change_completed_callback_)
+    discovery_change_completed_callback_.Run();
 }
 
 void TestBluetoothAdapterObserver::DeviceChanged(BluetoothAdapter* adapter,

@@ -19,6 +19,7 @@
 #include "extensions/shell/test/shell_apitest.h"
 #include "extensions/test/extension_test_message_listener.h"
 #include "extensions/test/result_catcher.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 
 namespace extensions {
 
@@ -60,9 +61,10 @@ class TestMediaPerceptionAPIDelegate : public MediaPerceptionAPIDelegate {
     NOTIMPLEMENTED();
   }
 
-  void ForwardMediaPerceptionRequest(
-      chromeos::media_perception::mojom::MediaPerceptionRequest request,
-      content::RenderFrameHost* render_frame_host) override {
+  void ForwardMediaPerceptionReceiver(
+      content::RenderFrameHost* render_frame_host,
+      mojo::PendingReceiver<chromeos::media_perception::mojom::MediaPerception>
+          receiver) override {
     NOTIMPLEMENTED();
   }
 };

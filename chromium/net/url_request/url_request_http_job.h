@@ -13,8 +13,10 @@
 #include <vector>
 
 #include "base/compiler_specific.h"
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "base/time/time.h"
 #include "net/base/auth.h"
 #include "net/base/ip_endpoint.h"
@@ -32,7 +34,6 @@ class HttpResponseHeaders;
 class HttpResponseInfo;
 class HttpTransaction;
 class HttpUserAgentSettings;
-class ProxyInfo;
 class SSLPrivateKey;
 class UploadDataStream;
 
@@ -66,9 +67,31 @@ class NET_EXPORT_PRIVATE URLRequestHttpJob : public URLRequestJob {
   }
 
  private:
+  // For CookieRequestScheme histogram enum.
+  FRIEND_TEST_ALL_PREFIXES(URLRequestHttpJobTest,
+                           CookieSchemeRequestSchemeHistogram);
+
   enum CompletionCause {
     ABORTED,
     FINISHED
+  };
+
+  // Used to indicate which kind of cookies are sent on which kind of requests,
+  // for use in histograms. A (non)secure set cookie means that the cookie was
+  // originally set by a (non)secure url. A (non)secure request means that the
+  // request url is (non)secure. An unset cookie scheme means that the cookie's
+  // source scheme was marked as "Unset" and thus cannot be compared  with the
+  // request.
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused.
+  enum class CookieRequestScheme {
+    kUnsetCookieScheme = 0,
+    kNonsecureSetNonsecureRequest,
+    kSecureSetSecureRequest,
+    kNonsecureSetSecureRequest,
+    kSecureSetNonsecureRequest,
+
+    kMaxValue = kSecureSetNonsecureRequest  // Keep as the last value.
   };
 
   typedef base::RefCountedData<bool> SharedBoolean;
@@ -95,8 +118,6 @@ class NET_EXPORT_PRIVATE URLRequestHttpJob : public URLRequestJob {
   void OnStartCompleted(int result);
   void OnReadCompleted(int result);
   void NotifyBeforeStartTransactionCallback(int result);
-  void NotifyBeforeSendHeadersCallback(const ProxyInfo& proxy_info,
-                                       HttpRequestHeaders* request_headers);
 
   void RestartTransactionWithAuth(const AuthCredentials& credentials);
 
@@ -202,10 +223,15 @@ class NET_EXPORT_PRIVATE URLRequestHttpJob : public URLRequestJob {
   // layers of the network stack.
   scoped_refptr<HttpResponseHeaders> override_response_headers_;
 
-  // The network delegate can mark a URL as safe for redirection.
-  // The reference fragment of the original URL is not appended to the redirect
-  // URL when the redirect URL is equal to |allowed_unsafe_redirect_url_|.
-  GURL allowed_unsafe_redirect_url_;
+  // Ordinarily the original URL's fragment is copied during redirects, unless
+  // the destination URL already has one. However, the NetworkDelegate can
+  // override this behavior by setting |preserve_fragment_on_redirect_url_|:
+  // * If set to base::nullopt, the default behavior is used.
+  // * If the final URL in the redirect chain matches
+  //     |preserve_fragment_on_redirect_url_|, its fragment unchanged. So this
+  //     is basically a way for the embedder to force a redirect not to copy the
+  //     original URL's fragment when the original URL had one.
+  base::Optional<GURL> preserve_fragment_on_redirect_url_;
 
   // Flag used to verify that |this| is not deleted while we are awaiting
   // a callback from the NetworkDelegate. Used as a fail-fast mechanism.

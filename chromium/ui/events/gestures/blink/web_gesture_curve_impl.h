@@ -11,8 +11,10 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
+#include "third_party/blink/public/common/input/web_gesture_device.h"
 #include "third_party/blink/public/platform/web_gesture_curve.h"
-#include "third_party/blink/public/platform/web_gesture_device.h"
+#include "ui/gfx/geometry/point_f.h"
+#include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/vector2d_f.h"
 
 namespace ui {
@@ -25,7 +27,9 @@ class WebGestureCurveImpl : public blink::WebGestureCurve {
       const gfx::Vector2dF& initial_velocity,
       const gfx::Vector2dF& initial_offset,
       bool on_main_thread,
-      bool use_mobile_fling_curve);
+      bool use_mobile_fling_curve,
+      const gfx::PointF& position_in_screen,
+      const gfx::Size& viewport_szie);
   static std::unique_ptr<blink::WebGestureCurve> CreateFromUICurveForTesting(
       std::unique_ptr<GestureCurve> curve,
       const gfx::Vector2dF& initial_offset);

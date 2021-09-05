@@ -241,13 +241,6 @@ std::unique_ptr<base::Value> AsValue(const SkRegion& region) {
   return std::move(val);
 }
 
-std::unique_ptr<base::Value> AsValue(const SkBitmap& bitmap) {
-  std::unique_ptr<base::DictionaryValue> val(new base::DictionaryValue());
-  val->Set("size", AsValue(SkSize::Make(bitmap.width(), bitmap.height())));
-
-  return std::move(val);
-}
-
 std::unique_ptr<base::Value> AsValue(const SkImage& image) {
   std::unique_ptr<base::DictionaryValue> val(new base::DictionaryValue());
   val->Set("size", AsValue(SkSize::Make(image.width(), image.height())));
@@ -267,14 +260,16 @@ std::unique_ptr<base::Value> AsValue(const SkPath& path) {
 
   static const char* gFillStrings[] =
       { "winding", "even-odd", "inverse-winding", "inverse-even-odd" };
-  DCHECK_LT(static_cast<size_t>(path.getFillType()),
-      SK_ARRAY_COUNT(gFillStrings));
-  val->SetString("fill-type", gFillStrings[path.getFillType()]);
+  size_t index = static_cast<size_t>(path.getFillType());
+  DCHECK_LT(index, SK_ARRAY_COUNT(gFillStrings));
+  val->SetString("fill-type", gFillStrings[index]);
 
   static const char* gConvexityStrings[] = { "Unknown", "Convex", "Concave" };
-  DCHECK_LT(static_cast<size_t>(path.getConvexity()),
-      SK_ARRAY_COUNT(gConvexityStrings));
-  val->SetString("convexity", gConvexityStrings[path.getConvexity()]);
+  DCHECK_LT(static_cast<size_t>(path.getConvexityType()),
+            SK_ARRAY_COUNT(gConvexityStrings));
+  val->SetString(
+      "convexity",
+      gConvexityStrings[static_cast<size_t>(path.getConvexityType())]);
 
   val->SetBoolean("is-rect", path.isRect(nullptr));
   val->Set("bounds", AsValue(path.getBounds()));
@@ -297,23 +292,23 @@ std::unique_ptr<base::Value> AsValue(const SkPath& path) {
   SkPath::Iter iter(const_cast<SkPath&>(path), false);
   SkPoint points[4];
 
-  for(SkPath::Verb verb = iter.next(points, false);
-      verb != SkPath::kDone_Verb; verb = iter.next(points, false)) {
-      DCHECK_LT(static_cast<size_t>(verb), SK_ARRAY_COUNT(gVerbStrings));
+  for (SkPath::Verb verb = iter.next(points); verb != SkPath::kDone_Verb;
+       verb = iter.next(points)) {
+    DCHECK_LT(static_cast<size_t>(verb), SK_ARRAY_COUNT(gVerbStrings));
 
-      std::unique_ptr<base::DictionaryValue> verb_val(
-          new base::DictionaryValue());
-      std::unique_ptr<base::ListValue> pts_val(new base::ListValue());
+    std::unique_ptr<base::DictionaryValue> verb_val(
+        new base::DictionaryValue());
+    std::unique_ptr<base::ListValue> pts_val(new base::ListValue());
 
-      for (int i = 0; i < gPtsPerVerb[verb]; ++i)
-        pts_val->Append(AsValue(points[i + gPtOffsetPerVerb[verb]]));
+    for (int i = 0; i < gPtsPerVerb[verb]; ++i)
+      pts_val->Append(AsValue(points[i + gPtOffsetPerVerb[verb]]));
 
-      verb_val->Set(gVerbStrings[verb], std::move(pts_val));
+    verb_val->Set(gVerbStrings[verb], std::move(pts_val));
 
-      if (SkPath::kConic_Verb == verb)
-        verb_val->Set("weight", AsValue(iter.conicWeight()));
+    if (SkPath::kConic_Verb == verb)
+      verb_val->Set("weight", AsValue(iter.conicWeight()));
 
-      verbs_val->Append(std::move(verb_val));
+    verbs_val->Append(std::move(verb_val));
   }
   val->Set("verbs", std::move(verbs_val));
 
@@ -433,11 +428,34 @@ void BenchmarkingCanvas::willRestore() {
   INHERITED::willRestore();
 }
 
+void BenchmarkingCanvas::didConcat44(const SkScalar m[16]) {
+  AutoOp op(this, "Concat44");
+  op.addParam("column-major", AsListValue(m, 16));
+
+  INHERITED::didConcat44(m);
+}
+
 void BenchmarkingCanvas::didConcat(const SkMatrix& m) {
   AutoOp op(this, "Concat");
   op.addParam("matrix", AsValue(m));
 
   INHERITED::didConcat(m);
+}
+
+void BenchmarkingCanvas::didScale(SkScalar x, SkScalar y) {
+  AutoOp op(this, "Scale");
+  op.addParam("scale-x", AsValue(x));
+  op.addParam("scale-y", AsValue(y));
+
+  INHERITED::didScale(x, y);
+}
+
+void BenchmarkingCanvas::didTranslate(SkScalar x, SkScalar y) {
+  AutoOp op(this, "Translate");
+  op.addParam("translate-x", AsValue(x));
+  op.addParam("translate-y", AsValue(y));
+
+  INHERITED::didTranslate(x, y);
 }
 
 void BenchmarkingCanvas::didSetMatrix(const SkMatrix& m) {
@@ -553,32 +571,6 @@ void BenchmarkingCanvas::onDrawPicture(const SkPicture* picture,
   INHERITED::onDrawPicture(picture, matrix, op.paint());
 }
 
-void BenchmarkingCanvas::onDrawBitmap(const SkBitmap& bitmap,
-                                      SkScalar left,
-                                      SkScalar top,
-                                      const SkPaint* paint) {
-  AutoOp op(this, "DrawBitmap", paint);
-  op.addParam("bitmap", AsValue(bitmap));
-  op.addParam("left", AsValue(left));
-  op.addParam("top", AsValue(top));
-
-  INHERITED::onDrawBitmap(bitmap, left, top, op.paint());
-}
-
-void BenchmarkingCanvas::onDrawBitmapRect(const SkBitmap& bitmap,
-                                          const SkRect* src,
-                                          const SkRect& dst,
-                                          const SkPaint* paint,
-                                          SrcRectConstraint constraint) {
-  AutoOp op(this, "DrawBitmapRect", paint);
-  op.addParam("bitmap", AsValue(bitmap));
-  if (src)
-    op.addParam("src", AsValue(*src));
-  op.addParam("dst", AsValue(dst));
-
-  INHERITED::onDrawBitmapRect(bitmap, src, dst, op.paint(), constraint);
-}
-
 void BenchmarkingCanvas::onDrawImage(const SkImage* image,
                                      SkScalar left,
                                      SkScalar top,
@@ -603,18 +595,6 @@ void BenchmarkingCanvas::onDrawImageRect(const SkImage* image, const SkRect* src
   op.addParam("dst", AsValue(dst));
 
   INHERITED::onDrawImageRect(image, src, dst, op.paint(), constraint);
-}
-
-void BenchmarkingCanvas::onDrawBitmapNine(const SkBitmap& bitmap,
-                                          const SkIRect& center,
-                                          const SkRect& dst,
-                                          const SkPaint* paint) {
-  AutoOp op(this, "DrawBitmapNine", paint);
-  op.addParam("bitmap", AsValue(bitmap));
-  op.addParam("center", AsValue(SkRect::Make(center)));
-  op.addParam("dst", AsValue(dst));
-
-  INHERITED::onDrawBitmapNine(bitmap, center, dst, op.paint());
 }
 
 void BenchmarkingCanvas::onDrawTextBlob(const SkTextBlob* blob, SkScalar x, SkScalar y,

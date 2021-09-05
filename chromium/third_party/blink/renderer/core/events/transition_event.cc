@@ -26,15 +26,16 @@
 
 #include "third_party/blink/renderer/core/events/transition_event.h"
 
+#include "third_party/blink/renderer/bindings/core/v8/v8_transition_event_init.h"
 #include "third_party/blink/renderer/core/event_interface_names.h"
 
 namespace blink {
 
-TransitionEvent::TransitionEvent() : elapsed_time_(0) {}
+TransitionEvent::TransitionEvent() = default;
 
 TransitionEvent::TransitionEvent(const AtomicString& type,
                                  const String& property_name,
-                                 double elapsed_time,
+                                 const AnimationTimeDelta& elapsed_time,
                                  const String& pseudo_element)
     : Event(type, Bubbles::kYes, Cancelable::kYes),
       property_name_(property_name),
@@ -43,11 +44,13 @@ TransitionEvent::TransitionEvent(const AtomicString& type,
 
 TransitionEvent::TransitionEvent(const AtomicString& type,
                                  const TransitionEventInit* initializer)
-    : Event(type, initializer), elapsed_time_(0) {
+    : Event(type, initializer) {
   if (initializer->hasPropertyName())
     property_name_ = initializer->propertyName();
-  if (initializer->hasElapsedTime())
-    elapsed_time_ = initializer->elapsedTime();
+  if (initializer->hasElapsedTime()) {
+    elapsed_time_ =
+        AnimationTimeDelta::FromSecondsD(initializer->elapsedTime());
+  }
   if (initializer->hasPseudoElement())
     pseudo_element_ = initializer->pseudoElement();
 }
@@ -59,7 +62,7 @@ const String& TransitionEvent::propertyName() const {
 }
 
 double TransitionEvent::elapsedTime() const {
-  return elapsed_time_;
+  return elapsed_time_.InSecondsF();
 }
 
 const String& TransitionEvent::pseudoElement() const {
@@ -70,7 +73,7 @@ const AtomicString& TransitionEvent::InterfaceName() const {
   return event_interface_names::kTransitionEvent;
 }
 
-void TransitionEvent::Trace(blink::Visitor* visitor) {
+void TransitionEvent::Trace(Visitor* visitor) {
   Event::Trace(visitor);
 }
 

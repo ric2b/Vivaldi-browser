@@ -11,10 +11,11 @@
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/process/process_metrics.h"
+#include "base/profiler/module_cache.h"
 #include "base/rand_util.h"
-#include "base/sampling_heap_profiler/module_cache.h"
 #include "base/sampling_heap_profiler/sampling_heap_profiler.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "components/metrics/call_stack_profile_builder.h"
 #include "components/metrics/call_stack_profile_metrics_provider.h"
@@ -59,8 +60,8 @@ void HeapProfilerController::Start() {
 // static
 void HeapProfilerController::ScheduleNextSnapshot(
     scoped_refptr<StoppedFlag> stopped) {
-  base::PostDelayedTask(
-      FROM_HERE, {base::ThreadPool(), base::TaskPriority::BEST_EFFORT},
+  base::ThreadPool::PostDelayedTask(
+      FROM_HERE, {base::TaskPriority::BEST_EFFORT},
       base::BindOnce(&HeapProfilerController::TakeSnapshot, std::move(stopped)),
       RandomInterval(kHeapCollectionInterval));
 }
@@ -107,7 +108,10 @@ void HeapProfilerController::RetrieveAndSendSnapshot() {
         static_cast<size_t>(
             std::llround(static_cast<double>(sample.total) / sample.size)),
         1);
-    profile_builder.OnSampleCompleted(std::move(frames), sample.total, count);
+    // Heap "samples" represent allocation stacks aggregated over time so do not
+    // have a meaningful timestamp.
+    profile_builder.OnSampleCompleted(std::move(frames), base::TimeTicks(),
+                                      sample.total, count);
   }
 
   profile_builder.OnProfileCompleted(base::TimeDelta(), base::TimeDelta());

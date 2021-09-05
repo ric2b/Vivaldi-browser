@@ -1,4 +1,36 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="sq">
+<translation id="3830627370375585318">Autorizoni Vivaldin të hapë parametrat e sistemit mbrojtës të rrjetit
+          apo të antivirusit.</translation>
+<translation id="4200102020577305737">Shkoni te
+          menuja e Vivaldit &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          Parametrat e LAN-it
+          dhe çaktivizoni opsionin "Përdor server proxy për LAN-in".</translation>
+<translation id="4932161901409251843">Shkoni te
+          menuja Vivaldi &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          dhe sigurohuni që parametri të jetë "jo proxy" ose "direkt."</translation>
+<translation id="5248344925342018662">Po shihni një faqe të sigurt të Vivaldit</translation>
+<translation id="7023871570427738255">Shkoni te
+          menuja Vivaldi &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          dhe çaktivizoni "<ph name="NO_PREFETCH_DESCRIPTION" />."
+          Nëse nuk problemi nuk zgjidhet, rekomandojmë që opsionin ta
+          riaktivizoni për arsye performance.</translation>
+<translation id="8187289872471304532">Shkoni te
+          Aplikacionet &gt; Preferencat e Sistemit &gt; Rrjeti kompjuterik &gt; Avancuar &gt; Proxy-t
+          dhe çaktivizoni të gjitha proxy-t e përzgjedhura.</translation>
 </translationbundle>

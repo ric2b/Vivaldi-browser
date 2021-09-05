@@ -155,4 +155,12 @@ bool PhonenumberTable::DoesPhonumberIdExist(PhonenumberID phonenumber_id,
   return statement.ColumnInt(0) == 1;
 }
 
+bool PhonenumberTable::DeletePhoneNumbersForContact(ContactID contact_id) {
+  sql::Statement statement(GetDB().GetCachedStatement(
+      SQL_FROM_HERE, "DELETE from phonenumbers WHERE contact_id=?"));
+  statement.BindInt64(0, contact_id);
+
+  return statement.Run();
+}
+
 }  // namespace contact

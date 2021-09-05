@@ -19,11 +19,12 @@
 #include "base/optional.h"
 #include "base/supports_user_data.h"
 #include "content/common/content_export.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/url_request/url_request_interceptor.h"
 #include "net/url_request/url_request_job_factory.h"
+#include "services/content/public/mojom/navigable_contents_factory.mojom-forward.h"
 #include "services/network/public/mojom/cors_origin_pattern.mojom-forward.h"
-#include "services/service_manager/public/mojom/service.mojom-forward.h"
 #include "third_party/blink/public/mojom/blob/blob.mojom-forward.h"
 #include "third_party/blink/public/mojom/push_messaging/push_messaging_status.mojom-forward.h"
 
@@ -36,7 +37,7 @@ class GURL;
 namespace base {
 class FilePath;
 class Token;
-}
+}  // namespace base
 
 namespace download {
 class InProgressDownloadManager;
@@ -44,8 +45,7 @@ class InProgressDownloadManager;
 
 namespace service_manager {
 class Connector;
-class Service;
-}
+}  // namespace service_manager
 
 namespace storage {
 class ExternalMountPoints;
@@ -60,12 +60,16 @@ class VideoDecodePerfHistory;
 namespace learning {
 class LearningSession;
 }
-}
+}  // namespace media
 
 namespace storage {
 class BlobStorageContext;
 class SpecialStoragePolicy;
-}
+}  // namespace storage
+
+namespace variations {
+class VariationsClient;
+}  // namespace variations
 
 namespace content {
 
@@ -137,20 +141,22 @@ class CONTENT_EXPORT BrowserContext : public base::SupportsUserData {
       bool can_create = true);
   using StoragePartitionCallback =
       base::RepeatingCallback<void(StoragePartition*)>;
-  static void ForEachStoragePartition(
-      BrowserContext* browser_context,
-      const StoragePartitionCallback& callback);
+  static void ForEachStoragePartition(BrowserContext* browser_context,
+                                      StoragePartitionCallback callback);
+  // Returns the number of StoragePartitions that exist for the given
+  // |browser_context|.
+  static size_t GetStoragePartitionCount(BrowserContext* browser_context);
   static void AsyncObliterateStoragePartition(
       BrowserContext* browser_context,
-      const GURL& site,
-      const base::Closure& on_gc_required);
+      const std::string& partition_domain,
+      base::OnceClosure on_gc_required);
 
   // This function clears the contents of |active_paths| but does not take
   // ownership of the pointer.
   static void GarbageCollectStoragePartitions(
       BrowserContext* browser_context,
       std::unique_ptr<std::unordered_set<base::FilePath>> active_paths,
-      const base::Closure& done);
+      base::OnceClosure done);
 
   static StoragePartition* GetDefaultStoragePartition(
       BrowserContext* browser_context);
@@ -163,8 +169,7 @@ class CONTENT_EXPORT BrowserContext : public base::SupportsUserData {
   // as well. Note that retrieving a blob ptr out of BlobHandle can only be
   // done on IO. |callback| returns a nullptr on failure.
   static void CreateMemoryBackedBlob(BrowserContext* browser_context,
-                                     const char* data,
-                                     size_t length,
+                                     base::span<const uint8_t> data,
                                      const std::string& content_type,
                                      BlobCallback callback);
 
@@ -191,7 +196,7 @@ class CONTENT_EXPORT BrowserContext : public base::SupportsUserData {
       int64_t service_worker_registration_id,
       const std::string& message_id,
       base::Optional<std::string> payload,
-      const base::Callback<void(blink::mojom::PushDeliveryStatus)>& callback);
+      base::OnceCallback<void(blink::mojom::PushDeliveryStatus)> callback);
 
   static void NotifyWillBeDestroyed(BrowserContext* browser_context);
 
@@ -209,6 +214,10 @@ class CONTENT_EXPORT BrowserContext : public base::SupportsUserData {
   static void SetDownloadManagerForTesting(
       BrowserContext* browser_context,
       std::unique_ptr<content::DownloadManager> download_manager);
+
+  static void SetPermissionControllerForTesting(
+      BrowserContext* browser_context,
+      std::unique_ptr<PermissionController> permission_controller);
 
   // Makes the Service Manager aware of this BrowserContext, and assigns a
   // instance group ID to it. Should be called for each BrowserContext created.
@@ -329,11 +338,10 @@ class CONTENT_EXPORT BrowserContext : public base::SupportsUserData {
   // Returns true if OOR-CORS should be enabled.
   virtual bool ShouldEnableOutOfBlinkCors();
 
-  // Handles a service request for a service expected to run an instance per
-  // BrowserContext.
-  virtual std::unique_ptr<service_manager::Service> HandleServiceRequest(
-      const std::string& service_name,
-      service_manager::mojom::ServiceRequest request);
+  // Binds a NavigableContentsFactory interface receiver to this browser
+  // context.
+  virtual void BindNavigableContentsFactory(
+      mojo::PendingReceiver<content::mojom::NavigableContentsFactory> receiver);
 
   // Returns a unique string associated with this browser context.
   virtual const std::string& UniqueId();
@@ -374,6 +382,19 @@ class CONTENT_EXPORT BrowserContext : public base::SupportsUserData {
   // Returns the ContentIndexProvider associated with that context if any,
   // nullptr otherwise.
   virtual ContentIndexProvider* GetContentIndexProvider();
+
+  // Returns true iff the sandboxed file system implementation should be disk
+  // backed, even if this browser context is off the record. By default this
+  // returns false, an embedded could override this to return true if for
+  // example the off-the-record browser context is stored in a in-memory file
+  // system anyway, in which case using the disk backed sandboxed file system
+  // API implementation can give some benefits over the in-memory
+  // implementation.
+  virtual bool CanUseDiskWhenOffTheRecord();
+
+  // Returns the VariationsClient associated with the context if any, or
+  // nullptr if there isn't one.
+  virtual variations::VariationsClient* GetVariationsClient();
 
  private:
   const std::string unique_id_;

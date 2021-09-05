@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="pt-PT">
-<translation id="3830627370375585318">Permita que o Vivaldi aceda à rede nas definições da sua firewall ou do antívirus.</translation>
+<translation id="3830627370375585318">Permitir que o Vivaldi aceda à rede na sua firewall ou definições
+          de antivírus.</translation>
 <translation id="4200102020577305737">Aceda ao
           menu Vivaldi &gt;
           <ph name="SETTINGS_TITLE" />
@@ -19,7 +20,7 @@
           <ph name="ADVANCED_TITLE" />
           &gt;
           <ph name="PROXIES_TITLE" />
-          e certifique-se de que a sua configuração está definida como "sem proxy" ou "direta".</translation>
+          e certifique-se de que a sua configuração está definida como "sem proxy" ou "direta."</translation>
 <translation id="5248344925342018662">Está a ver uma página segura do Vivaldi</translation>
 <translation id="7023871570427738255">Aceda ao
         menu Vivaldi &gt;

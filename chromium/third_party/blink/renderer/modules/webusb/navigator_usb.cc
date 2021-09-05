@@ -8,6 +8,7 @@
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/navigator.h"
 #include "third_party/blink/renderer/modules/webusb/usb.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 
 namespace blink {
 
@@ -29,7 +30,7 @@ USB* NavigatorUSB::usb() {
   return usb_;
 }
 
-void NavigatorUSB::Trace(blink::Visitor* visitor) {
+void NavigatorUSB::Trace(Visitor* visitor) {
   visitor->Trace(usb_);
   Supplement<Navigator>::Trace(visitor);
 }
@@ -37,7 +38,8 @@ void NavigatorUSB::Trace(blink::Visitor* visitor) {
 NavigatorUSB::NavigatorUSB(Navigator& navigator) {
   if (navigator.GetFrame()) {
     DCHECK(navigator.GetFrame()->GetDocument());
-    usb_ = USB::Create(*navigator.GetFrame()->GetDocument());
+    usb_ = MakeGarbageCollected<USB>(
+        *navigator.GetFrame()->GetDocument()->ToExecutionContext());
   }
 }
 

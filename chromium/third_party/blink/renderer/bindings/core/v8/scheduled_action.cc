@@ -51,55 +51,39 @@
 
 namespace blink {
 
-ScheduledAction* ScheduledAction::Create(
-    ScriptState* script_state,
-    ExecutionContext* target,
-    V8Function* handler,
-    const HeapVector<ScriptValue>& arguments) {
-  if (!script_state->World().IsWorkerWorld()) {
-    if (!BindingSecurity::ShouldAllowAccessToFrame(
-            EnteredDOMWindow(script_state->GetIsolate()),
-            To<Document>(target)->GetFrame(),
-            BindingSecurity::ErrorReportOption::kDoNotReport)) {
-      UseCounter::Count(target, WebFeature::kScheduledActionIgnored);
-      return MakeGarbageCollected<ScheduledAction>(script_state);
-    }
+ScheduledAction::ScheduledAction(ScriptState* script_state,
+                                 ExecutionContext* target,
+                                 V8Function* handler,
+                                 const HeapVector<ScriptValue>& arguments)
+    : script_state_(
+          MakeGarbageCollected<ScriptStateProtectingContext>(script_state)) {
+  if (script_state->World().IsWorkerWorld() ||
+      BindingSecurity::ShouldAllowAccessToFrame(
+          EnteredDOMWindow(script_state->GetIsolate()),
+          Document::From(target)->GetFrame(),
+          BindingSecurity::ErrorReportOption::kDoNotReport)) {
+    function_ = handler;
+    arguments_ = arguments;
+  } else {
+    UseCounter::Count(target, WebFeature::kScheduledActionIgnored);
   }
-  return MakeGarbageCollected<ScheduledAction>(script_state, handler,
-                                               arguments);
-}
-
-ScheduledAction* ScheduledAction::Create(ScriptState* script_state,
-                                         ExecutionContext* target,
-                                         const String& handler) {
-  if (!script_state->World().IsWorkerWorld()) {
-    if (!BindingSecurity::ShouldAllowAccessToFrame(
-            EnteredDOMWindow(script_state->GetIsolate()),
-            To<Document>(target)->GetFrame(),
-            BindingSecurity::ErrorReportOption::kDoNotReport)) {
-      UseCounter::Count(target, WebFeature::kScheduledActionIgnored);
-      return MakeGarbageCollected<ScheduledAction>(script_state);
-    }
-  }
-  return MakeGarbageCollected<ScheduledAction>(script_state, handler);
 }
 
 ScheduledAction::ScheduledAction(ScriptState* script_state,
-                                 V8Function* function,
-                                 const HeapVector<ScriptValue>& arguments)
+                                 ExecutionContext* target,
+                                 const String& handler)
     : script_state_(
-          MakeGarbageCollected<ScriptStateProtectingContext>(script_state)),
-      function_(function),
-      arguments_(arguments) {}
-
-ScheduledAction::ScheduledAction(ScriptState* script_state, const String& code)
-    : script_state_(
-          MakeGarbageCollected<ScriptStateProtectingContext>(script_state)),
-      code_(code) {}
-
-ScheduledAction::ScheduledAction(ScriptState* script_state)
-    : script_state_(
-          MakeGarbageCollected<ScriptStateProtectingContext>(script_state)) {}
+          MakeGarbageCollected<ScriptStateProtectingContext>(script_state)) {
+  if (script_state->World().IsWorkerWorld() ||
+      BindingSecurity::ShouldAllowAccessToFrame(
+          EnteredDOMWindow(script_state->GetIsolate()),
+          Document::From(target)->GetFrame(),
+          BindingSecurity::ErrorReportOption::kDoNotReport)) {
+    code_ = handler;
+  } else {
+    UseCounter::Count(target, WebFeature::kScheduledActionIgnored);
+  }
+}
 
 ScheduledAction::~ScheduledAction() {
   // Verify that owning DOMTimer has eagerly disposed.
@@ -137,7 +121,7 @@ void ScheduledAction::Execute(ExecutionContext* context) {
   // determine if it is allowed. Enter the scope here.
   ScriptState::Scope scope(script_state_->Get());
 
-  if (auto* document = DynamicTo<Document>(context)) {
+  if (auto* document = Document::DynamicFrom(context)) {
     LocalFrame* frame = document->GetFrame();
     if (!frame) {
       DVLOG(1) << "ScheduledAction::execute " << this << ": no frame";
@@ -155,7 +139,7 @@ void ScheduledAction::Execute(ExecutionContext* context) {
   }
 }
 
-void ScheduledAction::Trace(blink::Visitor* visitor) {
+void ScheduledAction::Trace(Visitor* visitor) {
   visitor->Trace(script_state_);
   visitor->Trace(function_);
   visitor->Trace(arguments_);

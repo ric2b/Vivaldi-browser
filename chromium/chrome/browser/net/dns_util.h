@@ -5,27 +5,49 @@
 #ifndef CHROME_BROWSER_NET_DNS_UTIL_H_
 #define CHROME_BROWSER_NET_DNS_UTIL_H_
 
-#include <string>
+#include <vector>
+
+#include "base/strings/string_piece.h"
+
+class PrefRegistrySimple;
+class PrefService;
 
 namespace chrome_browser_net {
 
-// Returns true if the URI template is acceptable for sending requests. If so,
-// the |server_method| is set to "GET" if the template contains a "dns" variable
-// and to "POST" otherwise. Any "dns" variable may not be part of the hostname,
-// and the expanded template must parse to a valid HTTPS URL.
-bool IsValidDohTemplate(const std::string& server_template,
-                        std::string* server_method);
+// Implements the whitespace-delimited group syntax for DoH templates.
+std::vector<base::StringPiece> SplitDohTemplateGroup(base::StringPiece group);
 
-// Returns true if there are any active machine level policies or if the machine
-// is domain joined. This special logic is used to disable DoH by default for
-// Desktop platforms (the enterprise policy field default_for_enterprise_users
-// only applies to ChromeOS). We don't attempt enterprise detection on Android
-// at this time.
-bool ShouldDisableDohForManaged();
+// Returns true if a group of templates are all valid per
+// net::dns_util::IsValidDohTemplate().  This should be checked before updating
+// stored preferences.
+bool IsValidDohTemplateGroup(base::StringPiece group);
 
 const char kDnsOverHttpsModeOff[] = "off";
 const char kDnsOverHttpsModeAutomatic[] = "automatic";
 const char kDnsOverHttpsModeSecure[] = "secure";
+
+// Forced management description types. We will check for the override cases in
+// the order they are listed in the enum.
+enum class SecureDnsUiManagementMode {
+  // Chrome did not override the secure DNS settings.
+  kNoOverride,
+  // Secure DNS was disabled due to detection of a managed environment.
+  kDisabledManaged,
+  // Secure DNS was disabled due to detection of OS-level parental controls.
+  kDisabledParentalControls,
+};
+
+// Registers the backup preference required for the DNS probes setting reset.
+// TODO(crbug.com/1062698): Remove this once the privacy settings redesign
+// is fully launched.
+void RegisterDNSProbesSettingBackupPref(PrefRegistrySimple* registry);
+
+// Backs up the unneeded preference controlling DNS and captive portal probes
+// once the privacy settings redesign is enabled, or restores the backup
+// in case the feature is rolled back.
+// TODO(crbug.com/1062698): Remove this once the privacy settings redesign
+// is fully launched.
+void MigrateDNSProbesSettingToOrFromBackup(PrefService* prefs);
 
 }  // namespace chrome_browser_net
 

@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "components/password_manager/core/browser/compromised_credentials_table.h"
 #include "components/password_manager/core/browser/login_database.h"
 #include "components/password_manager/core/browser/password_store.h"
 
@@ -32,12 +33,12 @@ class PasswordStoreDefault : public PasswordStore {
   ~PasswordStoreDefault() override;
 
   // Opens |login_db_| on the background sequence.
-  bool InitOnBackgroundSequence(
-      const syncer::SyncableService::StartSyncFlare& flare) override;
+  bool InitOnBackgroundSequence() override;
 
   // Implements PasswordStore interface.
   void ReportMetricsImpl(const std::string& sync_username,
-                         bool custom_passphrase_sync_enabled) override;
+                         bool custom_passphrase_sync_enabled,
+                         BulkCheckDone bulk_check_done) override;
   PasswordStoreChangeList AddLoginImpl(const autofill::PasswordForm& form,
                                        AddLoginError* error) override;
   PasswordStoreChangeList UpdateLoginImpl(const autofill::PasswordForm& form,
@@ -45,16 +46,16 @@ class PasswordStoreDefault : public PasswordStore {
   PasswordStoreChangeList RemoveLoginImpl(
       const autofill::PasswordForm& form) override;
   PasswordStoreChangeList RemoveLoginsByURLAndTimeImpl(
-      const base::Callback<bool(const GURL&)>& url_filter,
+      const base::RepeatingCallback<bool(const GURL&)>& url_filter,
       base::Time delete_begin,
       base::Time delete_end) override;
   PasswordStoreChangeList RemoveLoginsCreatedBetweenImpl(
       base::Time delete_begin,
       base::Time delete_end) override;
   PasswordStoreChangeList DisableAutoSignInForOriginsImpl(
-      const base::Callback<bool(const GURL&)>& origin_filter) override;
+      const base::RepeatingCallback<bool(const GURL&)>& origin_filter) override;
   bool RemoveStatisticsByOriginAndTimeImpl(
-      const base::Callback<bool(const GURL&)>& origin_filter,
+      const base::RepeatingCallback<bool(const GURL&)>& origin_filter,
       base::Time delete_begin,
       base::Time delete_end) override;
   std::vector<std::unique_ptr<autofill::PasswordForm>> FillMatchingLogins(
@@ -72,15 +73,23 @@ class PasswordStoreDefault : public PasswordStore {
   std::vector<InteractionsStats> GetAllSiteStatsImpl() override;
   std::vector<InteractionsStats> GetSiteStatsImpl(
       const GURL& origin_domain) override;
-  void AddLeakedCredentialsImpl(
-      const LeakedCredentials& leaked_credentials) override;
-  void RemoveLeakedCredentialsImpl(const GURL& url,
-                                   const base::string16& username) override;
-  std::vector<LeakedCredentials> GetAllLeakedCredentialsImpl() override;
-  void RemoveLeakedCredentialsByUrlAndTimeImpl(
+  bool AddCompromisedCredentialsImpl(
+      const CompromisedCredentials& compromised_credentials) override;
+  bool RemoveCompromisedCredentialsImpl(
+      const std::string& signon_realm,
+      const base::string16& username,
+      RemoveCompromisedCredentialsReason reason) override;
+  std::vector<CompromisedCredentials> GetAllCompromisedCredentialsImpl()
+      override;
+  bool RemoveCompromisedCredentialsByUrlAndTimeImpl(
       const base::RepeatingCallback<bool(const GURL&)>& url_filter,
       base::Time remove_begin,
       base::Time remove_end) override;
+
+  void AddFieldInfoImpl(const FieldInfo& field_info) override;
+  std::vector<FieldInfo> GetAllFieldInfoImpl() override;
+  void RemoveFieldInfoByTimeImpl(base::Time remove_begin,
+                                 base::Time remove_end) override;
 
   // Implements PasswordStoreSync interface.
   bool BeginTransaction() override;

@@ -5,58 +5,36 @@
 #ifndef CHROME_BROWSER_EXTENSIONS_EXTENSION_ERROR_UI_DEFAULT_H_
 #define CHROME_BROWSER_EXTENSIONS_EXTENSION_ERROR_UI_DEFAULT_H_
 
-#include "base/compiler_specific.h"
+#include <memory>
+
 #include "base/macros.h"
 #include "chrome/browser/extensions/extension_error_ui.h"
 #include "chrome/browser/ui/global_error/global_error.h"
-#include "extensions/common/extension.h"
 
 class Browser;
 class Profile;
 
 namespace extensions {
 
+class ExtensionGlobalError;
+
 class ExtensionErrorUIDefault : public ExtensionErrorUI {
  public:
   explicit ExtensionErrorUIDefault(ExtensionErrorUI::Delegate* delegate);
   ~ExtensionErrorUIDefault() override;
 
-  // ExtensionErrorUI implementation:
   bool ShowErrorInBubbleView() override;
   void ShowExtensions() override;
   void Close() override;
 
+  GlobalErrorWithStandardBubble* GetErrorForTesting();
+
  private:
-  class ExtensionGlobalError : public GlobalErrorWithStandardBubble {
-   public:
-    explicit ExtensionGlobalError(ExtensionErrorUIDefault* error_ui);
-
-   private:
-    // GlobalError methods.
-    bool HasMenuItem() override;
-    int MenuItemCommandID() override;
-    base::string16 MenuItemLabel() override;
-    void ExecuteMenuItem(Browser* browser) override;
-    base::string16 GetBubbleViewTitle() override;
-    std::vector<base::string16> GetBubbleViewMessages() override;
-    base::string16 GetBubbleViewAcceptButtonLabel() override;
-    base::string16 GetBubbleViewCancelButtonLabel() override;
-    void OnBubbleViewDidClose(Browser* browser) override;
-    void BubbleViewAcceptButtonPressed(Browser* browser) override;
-    void BubbleViewCancelButtonPressed(Browser* browser) override;
-    bool ShouldUseExtraView() const override;
-
-    // The ExtensionErrorUIDefault who owns us.
-    ExtensionErrorUIDefault* error_ui_;
-
-    DISALLOW_COPY_AND_ASSIGN(ExtensionGlobalError);
-  };
-
   // The profile associated with this error.
-  Profile* profile_;
+  Profile* profile_ = nullptr;
 
   // The browser the bubble view was shown into.
-  Browser* browser_;
+  Browser* browser_ = nullptr;
 
   std::unique_ptr<ExtensionGlobalError> global_error_;
 

@@ -3,6 +3,10 @@
 // found in the LICENSE file.
 
 #include "components/signin/core/browser/cookie_reminter.h"
+
+#include "base/bind_helpers.h"
+#include "base/metrics/histogram_macros.h"
+#include "base/syslog_logging.h"
 #include "components/signin/public/identity_manager/accounts_cookie_mutator.h"
 
 namespace {
@@ -38,18 +42,8 @@ void CookieReminter::ForceCookieRemintingOnNextTokenUpdate(
     return;
   }
 
+  UMA_HISTOGRAM_BOOLEAN("AccountManager.MirrorReauthenticationRequest", true);
   accounts_requiring_cookie_remint_.emplace_back(account_info);
-}
-
-bool CookieReminter::RemintCookieIfRequired() {
-  if (!is_forced_cookie_reminting_required_)
-    return false;
-
-  identity_manager_->GetAccountsCookieMutator()->LogOutAllAccounts(
-      gaia::GaiaSource::kChromeOS);
-  accounts_requiring_cookie_remint_.clear();
-  is_forced_cookie_reminting_required_ = false;
-  return true;
 }
 
 void CookieReminter::OnRefreshTokenUpdatedForAccount(
@@ -58,6 +52,8 @@ void CookieReminter::OnRefreshTokenUpdatedForAccount(
                                         account_info)) {
     // Cookies are going to be reminted for all accounts.
     accounts_requiring_cookie_remint_.clear();
-    is_forced_cookie_reminting_required_ = true;
+    identity_manager_->GetAccountsCookieMutator()->LogOutAllAccounts(
+        gaia::GaiaSource::kChromeOS,
+        signin::AccountsCookieMutator::LogOutFromCookieCompletedCallback());
   }
 }

@@ -20,6 +20,8 @@
 #include "media/base/media_util.h"
 #include "third_party/blink/public/platform/web_media_player.h"
 #include "third_party/blink/public/platform/web_video_frame_submitter.h"
+#include "third_party/blink/renderer/modules/modules_export.h"
+#include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
 #include "third_party/blink/renderer/platform/wtf/thread_safe_ref_counted.h"
 
 namespace base {
@@ -52,11 +54,13 @@ struct WebMediaPlayerMSCompositorTraits;
 // smoothness, if REFERENCE_TIMEs are populated for incoming VideoFrames.
 // Otherwise, WebMediaPlayerMSCompositor will simply store the most recent
 // frame, and submit it whenever asked by the compositor.
-class BLINK_MODULES_EXPORT WebMediaPlayerMSCompositor
+class MODULES_EXPORT WebMediaPlayerMSCompositor
     : public cc::VideoFrameProvider,
       public WTF::ThreadSafeRefCounted<WebMediaPlayerMSCompositor,
                                        WebMediaPlayerMSCompositorTraits> {
  public:
+  using OnNewFramePresentedCB = base::OnceClosure;
+
   WebMediaPlayerMSCompositor(
       scoped_refptr<base::SingleThreadTaskRunner> task_runner,
       scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
@@ -110,6 +114,18 @@ class BLINK_MODULES_EXPORT WebMediaPlayerMSCompositor
   // preparation for dtor.
   void StopUsingProvider();
 
+  // Sets a hook to be notified when a new frame is presented, to fulfill a
+  // prending video.requestAnimationFrame() request.
+  // Can be called from any thread.
+  void SetOnFramePresentedCallback(OnNewFramePresentedCB presented_cb);
+
+  // Gets the metadata for the last frame that was presented to the compositor.
+  // Used to populate the VideoFrameMetadata of video.requestAnimationFrame()
+  // callbacks. See https://wicg.github.io/video-raf/.
+  // Can be called on any thread.
+  std::unique_ptr<WebMediaPlayer::VideoFramePresentationMetadata>
+  GetLastPresentedFrameMetadata();
+
  private:
   friend class WTF::ThreadSafeRefCounted<WebMediaPlayerMSCompositor,
                                          WebMediaPlayerMSCompositorTraits>;
@@ -147,7 +163,9 @@ class BLINK_MODULES_EXPORT WebMediaPlayerMSCompositor
       scoped_refptr<media::VideoFrame> frame);
 
   // Update |current_frame_| and |dropped_frame_count_|
-  void SetCurrentFrame(scoped_refptr<media::VideoFrame> frame);
+  void SetCurrentFrame(
+      scoped_refptr<media::VideoFrame> frame,
+      base::Optional<base::TimeTicks> expected_presentation_time);
   // Following the update to |current_frame_|, this will check for changes that
   // require updating video layer.
   void CheckForFrameChanges(
@@ -213,8 +231,22 @@ class BLINK_MODULES_EXPORT WebMediaPlayerMSCompositor
   size_t total_frame_count_;
   size_t dropped_frame_count_;
 
+  // Used to complete video.requestAnimationFrame() calls. Reported up via
+  // GetLastPresentedFrameMetadata().
+  // TODO(https://crbug.com/1050755): Improve the accuracy of these fields for
+  // cases where we only use RenderWithoutAlgorithm().
+  base::TimeTicks last_presentation_time_ GUARDED_BY(current_frame_lock_);
+  base::TimeTicks last_expected_display_time_ GUARDED_BY(current_frame_lock_);
+  size_t presented_frames_ GUARDED_BY(current_frame_lock_) = 0u;
+
   bool stopped_;
   bool render_started_;
+
+  // Called when a new frame is enqueued, either in RenderWithoutAlgorithm() or
+  // in RenderUsingAlgorithm(). Used to fulfill video.requestAnimationFrame()
+  // requests.
+  base::Lock new_frame_presented_cb_lock_;
+  OnNewFramePresentedCB new_frame_presented_cb_;
 
   std::unique_ptr<WebVideoFrameSubmitter> submitter_;
 

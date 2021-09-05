@@ -17,12 +17,15 @@ namespace {
 constexpr double kAnimationTextFullLengthShownProgressState = 0.5;
 }  // namespace
 
-SharingIconView::SharingIconView(PageActionIconView::Delegate* delegate,
-                                 GetControllerCallback get_controller_callback,
-                                 GetBubbleCallback get_bubble_callback)
+SharingIconView::SharingIconView(
+    IconLabelBubbleView::Delegate* icon_label_bubble_delegate,
+    PageActionIconView::Delegate* page_action_icon_delegate,
+    GetControllerCallback get_controller_callback,
+    GetBubbleCallback get_bubble_callback)
     : PageActionIconView(/*command_updater=*/nullptr,
                          /*command_id=*/0,
-                         delegate),
+                         icon_label_bubble_delegate,
+                         page_action_icon_delegate),
       get_controller_callback_(std::move(get_controller_callback)),
       get_bubble_callback_(std::move(get_bubble_callback)) {
   SetVisible(false);
@@ -57,10 +60,10 @@ void SharingIconView::StopLoadingAnimation() {
 // TODO(knollr): Introduce IconState / ControllerState {eg, Hidden, Success,
 // Sending} to define the various cases instead of a number of if else
 // statements.
-bool SharingIconView::Update() {
+void SharingIconView::UpdateImpl() {
   auto* controller = GetController();
   if (!controller)
-    return false;
+    return;
 
   // To ensure that we reset error icon badge.
   if (!GetVisible()) {
@@ -82,11 +85,9 @@ bool SharingIconView::Update() {
   const bool is_bubble_showing = IsBubbleShowing();
   const bool is_visible =
       is_bubble_showing || IsLoadingAnimationVisible() || label()->GetVisible();
-  const bool visibility_changed = GetVisible() != is_visible;
 
   SetVisible(is_visible);
   UpdateInkDrop(is_bubble_showing);
-  return visibility_changed;
 }
 
 void SharingIconView::AnimationProgressed(const gfx::Animation* animation) {
@@ -125,7 +126,9 @@ void SharingIconView::UpdateOpacity() {
     layer()->SetFillsBoundsOpaquely(false);
   }
 
-  layer()->SetOpacity(PageActionIconView::WidthMultiplier());
+  int kLargeNumber = 100;
+  layer()->SetOpacity(GetWidthBetween(0, kLargeNumber) /
+                      static_cast<float>(kLargeNumber));
 }
 
 void SharingIconView::UpdateInkDrop(bool activate) {
@@ -141,7 +144,7 @@ bool SharingIconView::IsTriggerableEvent(const ui::Event& event) {
 }
 
 const gfx::VectorIcon& SharingIconView::GetVectorIconBadge() const {
-  return should_show_error_ ? kBlockedBadgeIcon : gfx::kNoneIcon;
+  return should_show_error_ ? vector_icons::kBlockedBadgeIcon : gfx::kNoneIcon;
 }
 
 void SharingIconView::OnExecuting(
@@ -165,4 +168,8 @@ base::string16 SharingIconView::GetTextForTooltipAndAccessibleName() const {
   auto* controller = GetController();
   return controller ? controller->GetTextForTooltipAndAccessibleName()
                     : base::string16();
+}
+
+const char* SharingIconView::GetClassName() const {
+  return "SharingIconView";
 }

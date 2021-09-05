@@ -4,16 +4,16 @@
 
 package org.chromium.chrome.browser.feed;
 
-import com.google.android.libraries.feed.api.host.storage.JournalMutation;
-import com.google.android.libraries.feed.api.host.storage.JournalOperation;
-import com.google.android.libraries.feed.api.host.storage.JournalOperation.Append;
-import com.google.android.libraries.feed.api.host.storage.JournalOperation.Copy;
-import com.google.android.libraries.feed.api.host.storage.JournalOperation.Type;
+import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Callback;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
+import org.chromium.chrome.browser.feed.library.api.host.storage.JournalMutation;
+import org.chromium.chrome.browser.feed.library.api.host.storage.JournalOperation;
+import org.chromium.chrome.browser.feed.library.api.host.storage.JournalOperation.Append;
+import org.chromium.chrome.browser.feed.library.api.host.storage.JournalOperation.Copy;
+import org.chromium.chrome.browser.feed.library.api.host.storage.JournalOperation.Type;
 import org.chromium.chrome.browser.profiles.Profile;
 
 /**

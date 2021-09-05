@@ -17,10 +17,6 @@ extern const base::Feature kClickToCallReceiver;
 #if BUILDFLAG(ENABLE_CLICK_TO_CALL)
 // Feature to allow click to call gets processed on desktop.
 extern const base::Feature kClickToCallUI;
-
-// Feature to show click to call in context menu when selected text is a phone
-// number.
-extern const base::Feature kClickToCallContextMenuForSelectedText;
 #endif  // BUILDFLAG(ENABLE_CLICK_TO_CALL)
 
 #endif  // CHROME_BROWSER_SHARING_CLICK_TO_CALL_FEATURE_H_

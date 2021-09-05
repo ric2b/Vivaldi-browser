@@ -4,19 +4,22 @@
 
 #include "third_party/blink/renderer/modules/payments/payment_request_respond_with_observer.h"
 
+#include "third_party/blink/renderer/bindings/core/v8/native_value_traits_impl.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_value.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_address_init.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_payment_address.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_payment_handler_response.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
+#include "third_party/blink/renderer/modules/payments/address_init_type_converter.h"
 #include "third_party/blink/renderer/modules/payments/payment_address.h"
-#include "third_party/blink/renderer/modules/payments/payment_handler_response.h"
 #include "third_party/blink/renderer/modules/payments/payment_handler_utils.h"
 #include "third_party/blink/renderer/modules/payments/payments_validators.h"
 #include "third_party/blink/renderer/modules/service_worker/service_worker_global_scope.h"
 #include "third_party/blink/renderer/modules/service_worker/wait_until_observer.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 #include "v8/include/v8.h"
 
 namespace blink {
@@ -67,11 +70,12 @@ void PaymentRequestRespondWithObserver::OnResponseFulfilled(
       !response->hasDetails() || response->details().IsNull() ||
       !response->details().IsObject()) {
     GetExecutionContext()->AddConsoleMessage(
-        ConsoleMessage::Create(mojom::ConsoleMessageSource::kJavaScript,
-                               mojom::ConsoleMessageLevel::kError,
-                               "'PaymentHandlerResponse.methodName' and "
-                               "'PaymentHandlerResponse.details' must not "
-                               "be empty in payment response."));
+        MakeGarbageCollected<ConsoleMessage>(
+            mojom::ConsoleMessageSource::kJavaScript,
+            mojom::ConsoleMessageLevel::kError,
+            "'PaymentHandlerResponse.methodName' and "
+            "'PaymentHandlerResponse.details' must not "
+            "be empty in payment response."));
   }
 
   if (!response->hasMethodName() || response->methodName().IsEmpty()) {
@@ -95,11 +99,12 @@ void PaymentRequestRespondWithObserver::OnResponseFulfilled(
   if (!v8::JSON::Stringify(script_state->GetContext(),
                            response->details().V8Value().As<v8::Object>())
            .ToLocal(&details_value)) {
-    GetExecutionContext()->AddConsoleMessage(ConsoleMessage::Create(
-        mojom::ConsoleMessageSource::kJavaScript,
-        mojom::ConsoleMessageLevel::kError,
-        "Failed to stringify PaymentHandlerResponse.details in payment "
-        "response."));
+    GetExecutionContext()->AddConsoleMessage(
+        MakeGarbageCollected<ConsoleMessage>(
+            mojom::ConsoleMessageSource::kJavaScript,
+            mojom::ConsoleMessageLevel::kError,
+            "Failed to stringify PaymentHandlerResponse.details in payment "
+            "response."));
     BlankResponseWithError(
         PaymentEventResponseType::PAYMENT_DETAILS_STRINGIFY_ERROR);
     return;
@@ -132,21 +137,10 @@ void PaymentRequestRespondWithObserver::OnResponseFulfilled(
   }
 
   payments::mojom::blink::PaymentAddressPtr shipping_address_ptr =
-      should_have_shipping_info_ ? payments::mojom::blink::PaymentAddress::New()
+      should_have_shipping_info_ ? payments::mojom::blink::PaymentAddress::From(
+                                       response->shippingAddress())
                                  : nullptr;
   if (should_have_shipping_info_) {
-    auto* shipping_address = response->shippingAddress();
-    shipping_address_ptr->country = shipping_address->country();
-    shipping_address_ptr->address_line = shipping_address->addressLine();
-    shipping_address_ptr->region = shipping_address->region();
-    shipping_address_ptr->city = shipping_address->city();
-    shipping_address_ptr->dependent_locality =
-        shipping_address->dependentLocality();
-    shipping_address_ptr->postal_code = shipping_address->postalCode();
-    shipping_address_ptr->sorting_code = shipping_address->sortingCode();
-    shipping_address_ptr->organization = shipping_address->organization();
-    shipping_address_ptr->recipient = shipping_address->recipient();
-    shipping_address_ptr->phone = shipping_address->phone();
     if (!PaymentsValidators::IsValidShippingAddress(
             shipping_address_ptr, nullptr /* = optional_error_message */)) {
       BlankResponseWithError(
@@ -178,7 +172,7 @@ PaymentRequestRespondWithObserver::PaymentRequestRespondWithObserver(
     WaitUntilObserver* observer)
     : RespondWithObserver(context, event_id, observer) {}
 
-void PaymentRequestRespondWithObserver::Trace(blink::Visitor* visitor) {
+void PaymentRequestRespondWithObserver::Trace(Visitor* visitor) {
   RespondWithObserver::Trace(visitor);
 }
 

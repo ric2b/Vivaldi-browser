@@ -15,10 +15,6 @@
 #include "chromecast/media/audio/mixer_service/mixer_socket.h"
 #include "chromecast/public/volume_control.h"
 
-namespace net {
-class StreamSocket;
-}  // namespace net
-
 namespace chromecast {
 namespace media {
 namespace mixer_service {
@@ -41,7 +37,7 @@ class ControlConnection : public MixerConnection, public MixerSocket::Delegate {
   // Connects to the mixer. If the mixer connection is lost, this will
   // automatically reconnect. If |callback| is nonempty, it will be called each
   // time a connection is (re)established with the mixer. This can be used to
-  // re-send preprocessor configuration, since it is not persisted across
+  // re-send postprocessor messages, since they are not persisted across
   // disconnects.
   void Connect(ConnectedCallback callback = ConnectedCallback());
 
@@ -54,13 +50,19 @@ class ControlConnection : public MixerConnection, public MixerSocket::Delegate {
   // Sets the maximum effective volume multiplier for a given content type.
   void SetVolumeLimit(AudioContentType type, float max_volume_multiplier);
 
-  // Sends arbitrary config data to a specific postprocessor. Note that the
-  // config is not persisted across disconnects, and is not saved if
-  // ConfigurePostprocessor() is called when not connected to the mixer, so
-  // use the Connect() callback to determine when to (re)send config, if needed.
-  void ConfigurePostprocessor(const std::string& name,
-                              const void* config,
-                              int size_bytes);
+  // Sends arbitrary config data to a specific postprocessor. Config is saved
+  // for each unique |name| and will be resent if the mixer disconnects and then
+  // reconnects. If the |postprocessor_name| contains a '?', that character and
+  // the remainder of the name string will not be sent to the mixer; this is
+  // useful for configuring multiple subprocessors (eg for the dynamic range
+  // processor).
+  void ConfigurePostprocessor(std::string postprocessor_name,
+                              std::string config);
+
+  // Sends a message a specific postprocessor. Messages are not saved and will
+  // not be resent if the mixer disconnects and then reconnects.
+  void SendPostprocessorMessage(std::string postprocessor_name,
+                                std::string message);
 
   // Instructs the mixer to reload postprocessors based on the config file.
   void ReloadPostprocessors();
@@ -69,9 +71,15 @@ class ControlConnection : public MixerConnection, public MixerSocket::Delegate {
   // empty callback to remove it.
   void SetStreamCountCallback(StreamCountCallback callback);
 
+  // Sets the desired number of output channels used by the mixer. This will
+  // cause an audio interruption on any currently active streams. The actual
+  // output channel count is determined by the output implementation and may not
+  // match |num_channels|.
+  void SetNumOutputChannels(int num_channels);
+
  private:
   // MixerConnection implementation:
-  void OnConnected(std::unique_ptr<net::StreamSocket> socket) override;
+  void OnConnected(std::unique_ptr<MixerSocket> socket) override;
   void OnConnectionError() override;
 
   // MixerSocket::Delegate implementation:
@@ -85,7 +93,10 @@ class ControlConnection : public MixerConnection, public MixerSocket::Delegate {
   base::flat_map<AudioContentType, bool> muted_;
   base::flat_map<AudioContentType, float> volume_limit_;
 
+  base::flat_map<std::string, std::string> postprocessor_config_;
+
   StreamCountCallback stream_count_callback_;
+  int num_output_channels_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(ControlConnection);
 };

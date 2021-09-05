@@ -53,7 +53,7 @@ enum class KeepaliveBlockStatus {
 }  // namespace
 
 constexpr int URLLoaderFactory::kMaxKeepaliveConnections;
-constexpr int URLLoaderFactory::kMaxKeepaliveConnectionsPerProcess;
+constexpr int URLLoaderFactory::kMaxKeepaliveConnectionsPerTopLevelFrame;
 constexpr int URLLoaderFactory::kMaxTotalKeepaliveRequestSize;
 
 URLLoaderFactory::URLLoaderFactory(
@@ -65,39 +65,36 @@ URLLoaderFactory::URLLoaderFactory(
       params_(std::move(params)),
       resource_scheduler_client_(std::move(resource_scheduler_client)),
       header_client_(std::move(params_->header_client)),
+      coep_reporter_(std::move(params_->coep_reporter)),
       cors_url_loader_factory_(cors_url_loader_factory) {
   DCHECK(context);
   DCHECK_NE(mojom::kInvalidProcessId, params_->process_id);
+  DCHECK(!params_->factory_override);
+
+  if (!params_->top_frame_id) {
+    params_->top_frame_id = base::UnguessableToken::Create();
+  }
 
   if (context_->network_service()) {
     context_->network_service()->keepalive_statistics_recorder()->Register(
-        params_->process_id);
+        *params_->top_frame_id);
   }
 }
 
 URLLoaderFactory::~URLLoaderFactory() {
   if (context_->network_service()) {
     context_->network_service()->keepalive_statistics_recorder()->Unregister(
-        params_->process_id);
-    // Reset bytes transferred for the process if this is the last
-    // |URLLoaderFactory|.
-    if (!context_->network_service()
-             ->keepalive_statistics_recorder()
-             ->HasRecordForProcess(params_->process_id)) {
-      context_->network_service()
-          ->network_usage_accumulator()
-          ->ClearBytesTransferredForProcess(params_->process_id);
-    }
+        *params_->top_frame_id);
   }
 }
 
 void URLLoaderFactory::CreateLoaderAndStart(
-    mojom::URLLoaderRequest request,
+    mojo::PendingReceiver<mojom::URLLoader> receiver,
     int32_t routing_id,
     int32_t request_id,
     uint32_t options,
     const ResourceRequest& url_request,
-    mojom::URLLoaderClientPtr client,
+    mojo::PendingRemote<mojom::URLLoaderClient> client,
     const net::MutableNetworkTrafficAnnotationTag& traffic_annotation) {
   // Requests with |trusted_params| when params_->is_trusted is not set should
   // have been rejected at the CorsURLLoader layer.
@@ -154,7 +151,9 @@ void URLLoaderFactory::CreateLoaderAndStart(
     keepalive_request_size = url_size + headers_size;
 
     KeepaliveBlockStatus block_status = KeepaliveBlockStatus::kNotBlocked;
+    const auto& top_frame_id = *params_->top_frame_id;
     const auto& recorder = *keepalive_statistics_recorder;
+
     if (!context_->CanCreateLoader(params_->process_id)) {
       // We already checked this, but we have this here for histogram.
       DCHECK(exhausted);
@@ -162,23 +161,23 @@ void URLLoaderFactory::CreateLoaderAndStart(
     } else if (recorder.num_inflight_requests() >= kMaxKeepaliveConnections) {
       exhausted = true;
       block_status = KeepaliveBlockStatus::kBlockedDueToNumberOfRequests;
-    } else if (recorder.NumInflightRequestsPerProcess(params_->process_id) >=
-               kMaxKeepaliveConnectionsPerProcess) {
+    } else if (recorder.NumInflightRequestsPerTopLevelFrame(top_frame_id) >=
+               kMaxKeepaliveConnectionsPerTopLevelFrame) {
       exhausted = true;
       block_status =
-          KeepaliveBlockStatus::kBlockedDueToNumberOfRequestsPerProcess;
-    } else if (recorder.GetTotalRequestSizePerProcess(params_->process_id) +
+          KeepaliveBlockStatus::kBlockedDueToNumberOfRequestsPerTopLevelFrame;
+    } else if (recorder.GetTotalRequestSizePerTopLevelFrame(top_frame_id) +
                    keepalive_request_size >
                kMaxTotalKeepaliveRequestSize) {
       exhausted = true;
       block_status =
           KeepaliveBlockStatus::kBlockedDueToTotalSizeOfUrlAndHeaders;
-    } else if (recorder.GetTotalRequestSizePerProcess(params_->process_id) +
+    } else if (recorder.GetTotalRequestSizePerTopLevelFrame(top_frame_id) +
                    keepalive_request_size >
                384 * 1024) {
       block_status =
           KeepaliveBlockStatus::kNotBlockedButUrlAndHeadersExceeds384kb;
-    } else if (recorder.GetTotalRequestSizePerProcess(params_->process_id) +
+    } else if (recorder.GetTotalRequestSizePerTopLevelFrame(top_frame_id) +
                    keepalive_request_size >
                256 * 1024) {
       block_status =
@@ -194,7 +193,7 @@ void URLLoaderFactory::CreateLoaderAndStart(
     status.error_code = net::ERR_INSUFFICIENT_RESOURCES;
     status.exists_in_cache = false;
     status.completion_time = base::TimeTicks::Now();
-    client->OnComplete(status);
+    mojo::Remote<mojom::URLLoaderClient>(std::move(client))->OnComplete(status);
     return;
   }
 
@@ -203,13 +202,14 @@ void URLLoaderFactory::CreateLoaderAndStart(
       context_->client(),
       base::BindOnce(&cors::CorsURLLoaderFactory::DestroyURLLoader,
                      base::Unretained(cors_url_loader_factory_)),
-      std::move(request), options, url_request, std::move(client),
+      std::move(receiver), options, url_request, std::move(client),
       static_cast<net::NetworkTrafficAnnotationTag>(traffic_annotation),
-      params_.get(), request_id, keepalive_request_size,
-      resource_scheduler_client_, std::move(keepalive_statistics_recorder),
+      params_.get(), coep_reporter_ ? coep_reporter_.get() : nullptr,
+      request_id, keepalive_request_size, resource_scheduler_client_,
+      std::move(keepalive_statistics_recorder),
       std::move(network_usage_accumulator),
       header_client_.is_bound() ? header_client_.get() : nullptr,
-      context_->origin_policy_manager());
+      context_->origin_policy_manager(), nullptr /* trust_token_helper */);
   cors_url_loader_factory_->OnLoaderCreated(std::move(loader));
 }
 

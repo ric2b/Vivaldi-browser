@@ -32,13 +32,13 @@
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/renderer/bindings/core/v8/serialization/post_message_helper.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_post_message_options.h"
 #include "third_party/blink/renderer/core/events/message_event.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/user_activation.h"
 #include "third_party/blink/renderer/core/inspector/thread_debugger.h"
 #include "third_party/blink/renderer/core/messaging/blink_transferable_message_mojom_traits.h"
-#include "third_party/blink/renderer/core/messaging/post_message_options.h"
 #include "third_party/blink/renderer/core/workers/worker_global_scope.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
@@ -48,15 +48,8 @@
 
 namespace blink {
 
-// TODO(altimin): Remove these after per-task mojo dispatching.
-// The maximum number of MessageEvents to dispatch from one task.
-constexpr int kMaximumMessagesPerTask = 200;
-// The threshold to stop processing new tasks.
-constexpr base::TimeDelta kYieldThreshold =
-    base::TimeDelta::FromMilliseconds(50);
-
 MessagePort::MessagePort(ExecutionContext& execution_context)
-    : ContextLifecycleObserver(&execution_context),
+    : ExecutionContextLifecycleObserver(&execution_context),
       task_runner_(execution_context.GetTaskRunner(TaskType::kPostedMessage)) {}
 
 MessagePort::~MessagePort() {
@@ -107,6 +100,9 @@ void MessagePort::postMessage(ScriptState* script_state,
     return;
   msg.user_activation = PostMessageHelper::CreateUserActivationSnapshot(
       GetExecutionContext(), options);
+
+  msg.sender_origin =
+      GetExecutionContext()->GetSecurityOrigin()->IsolatedCopy();
 
   ThreadDebugger* debugger = ThreadDebugger::From(script_state->GetIsolate());
   if (debugger)
@@ -255,28 +251,13 @@ MessagePortArray* MessagePort::EntanglePorts(
   return connector_->handle().value();
 }
 
-void MessagePort::Trace(blink::Visitor* visitor) {
-  ContextLifecycleObserver::Trace(visitor);
+void MessagePort::Trace(Visitor* visitor) {
+  ExecutionContextLifecycleObserver::Trace(visitor);
   EventTargetWithInlineData::Trace(visitor);
 }
 
 bool MessagePort::Accept(mojo::Message* mojo_message) {
   TRACE_EVENT0("blink", "MessagePort::Accept");
-
-  // Connector repeatedly calls Accept as long as any messages are available. To
-  // avoid completely starving the event loop and give some time for other tasks
-  // the connector is temporarily paused after |kMaximumMessagesPerTask| have
-  // been received without other tasks having had a chance to run (in particular
-  // the ResetMessageCount task posted here).
-  // TODO(altimin): Remove this after per-task mojo dispatching lands[1].
-  // [1] https://chromium-review.googlesource.com/c/chromium/src/+/1145692
-  if (messages_in_current_task_ == 0) {
-    task_runner_->PostTask(FROM_HERE, WTF::Bind(&MessagePort::ResetMessageCount,
-                                                WrapWeakPersistent(this)));
-  }
-  if (ShouldYieldAfterNewMessage()) {
-    connector_->PauseIncomingMethodCallProcessing();
-  }
 
   BlinkTransferableMessage message;
   if (!mojom::blink::TransferableMessage::DeserializeFromMessage(
@@ -291,23 +272,7 @@ bool MessagePort::Accept(mojo::Message* mojo_message) {
       return true;
   }
 
-  Event* evt;
-  if (!message.locked_agent_cluster_id ||
-      GetExecutionContext()->IsSameAgentCluster(
-          *message.locked_agent_cluster_id)) {
-    MessagePortArray* ports = MessagePort::EntanglePorts(
-        *GetExecutionContext(), std::move(message.ports));
-    UserActivation* user_activation = nullptr;
-    if (message.user_activation) {
-      user_activation = MakeGarbageCollected<UserActivation>(
-          message.user_activation->has_been_active,
-          message.user_activation->was_active);
-    }
-    evt = MessageEvent::Create(ports, std::move(message.message),
-                               user_activation);
-  } else {
-    evt = MessageEvent::CreateError();
-  }
+  Event* evt = CreateMessageEvent(message);
 
   v8::Isolate* isolate = GetExecutionContext()->GetIsolate();
   ThreadDebugger* debugger = ThreadDebugger::From(isolate);
@@ -319,23 +284,46 @@ bool MessagePort::Accept(mojo::Message* mojo_message) {
   return true;
 }
 
-void MessagePort::ResetMessageCount() {
-  DCHECK_GT(messages_in_current_task_, 0);
-  messages_in_current_task_ = 0;
-  task_start_time_ = base::nullopt;
-  // No-op if not paused already.
-  if (connector_)
-    connector_->ResumeIncomingMethodCallProcessing();
-}
+Event* MessagePort::CreateMessageEvent(BlinkTransferableMessage& message) {
+  ExecutionContext* context = GetExecutionContext();
+  // Dispatch a messageerror event when the target is a remote origin that is
+  // not allowed to access the message's data.
+  if (message.message->IsOriginCheckRequired()) {
+    const SecurityOrigin* target_origin = context->GetSecurityOrigin();
+    if (!message.sender_origin ||
+        !message.sender_origin->IsSameOriginWith(target_origin)) {
+      return MessageEvent::CreateError();
+    }
+  }
 
-bool MessagePort::ShouldYieldAfterNewMessage() {
-  ++messages_in_current_task_;
-  if (messages_in_current_task_ > kMaximumMessagesPerTask)
-    return true;
-  base::TimeTicks now = base::TimeTicks::Now();
-  if (!task_start_time_)
-    task_start_time_ = now;
-  return now - task_start_time_.value() > kYieldThreshold;
+  if (message.locked_agent_cluster_id) {
+    if (!context->IsSameAgentCluster(*message.locked_agent_cluster_id)) {
+      UseCounter::Count(
+          context,
+          WebFeature::kMessageEventSharedArrayBufferDifferentAgentCluster);
+      return MessageEvent::CreateError();
+    }
+    const SecurityOrigin* target_origin = context->GetSecurityOrigin();
+    if (!message.sender_origin ||
+        !message.sender_origin->IsSameOriginWith(target_origin)) {
+      UseCounter::Count(
+          context, WebFeature::kMessageEventSharedArrayBufferSameAgentCluster);
+    } else {
+      UseCounter::Count(context,
+                        WebFeature::kMessageEventSharedArrayBufferSameOrigin);
+    }
+  }
+
+  MessagePortArray* ports = MessagePort::EntanglePorts(
+      *GetExecutionContext(), std::move(message.ports));
+  UserActivation* user_activation = nullptr;
+  if (message.user_activation) {
+    user_activation = MakeGarbageCollected<UserActivation>(
+        message.user_activation->has_been_active,
+        message.user_activation->was_active);
+  }
+  return MessageEvent::Create(ports, std::move(message.message),
+                              user_activation);
 }
 
 }  // namespace blink

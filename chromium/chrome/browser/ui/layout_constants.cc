@@ -5,7 +5,7 @@
 #include "chrome/browser/ui/layout_constants.h"
 
 #include "base/logging.h"
-#include "ui/base/material_design/material_design_controller.h"
+#include "ui/base/pointer/touch_ui_controller.h"
 
 #if defined(OS_MACOSX)
 int GetCocoaLayoutConstant(LayoutConstant constant) {
@@ -27,7 +27,7 @@ int GetCocoaLayoutConstant(LayoutConstant constant) {
 #endif
 
 int GetLayoutConstant(LayoutConstant constant) {
-  const bool touch_ui = ui::MaterialDesignController::touch_ui();
+  const bool touch_ui = ui::TouchUiController::Get()->touch_ui();
   switch (constant) {
     case BOOKMARK_BAR_HEIGHT:
       // The fixed margin ensures the bookmark buttons appear centered relative
@@ -71,6 +71,8 @@ int GetLayoutConstant(LayoutConstant constant) {
       return touch_ui ? 4 : 6;
     case TABSTRIP_TOOLBAR_OVERLAP:
       return 1;
+    case TOOLBAR_BUTTON_HEIGHT:
+      return touch_ui ? 48 : 28;
     case TOOLBAR_ELEMENT_PADDING:
       return touch_ui ? 0 : 4;
     case TOOLBAR_STANDARD_SPACING:
@@ -83,7 +85,7 @@ int GetLayoutConstant(LayoutConstant constant) {
 }
 
 gfx::Insets GetLayoutInsets(LayoutInset inset) {
-  const bool touch_ui = ui::MaterialDesignController::touch_ui();
+  const bool touch_ui = ui::TouchUiController::Get()->touch_ui();
   switch (inset) {
     case LOCATION_BAR_ICON_INTERIOR_PADDING:
       return touch_ui ? gfx::Insets(5, 10) : gfx::Insets(4, 8);

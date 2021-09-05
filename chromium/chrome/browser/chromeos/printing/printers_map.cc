@@ -9,11 +9,6 @@
 namespace chromeos {
 namespace {
 
-bool IsProtocolSecure(const Printer& printer) {
-  return !printer.HasNetworkProtocol() ||
-         printer.GetProtocol() == Printer::kIpps;
-}
-
 }  // namespace
 
 PrintersMap::PrintersMap() = default;
@@ -106,9 +101,8 @@ std::vector<Printer> PrintersMap::GetSecurePrinters(
   result.reserve(printers_.at(printer_class).size());
   for (const auto& kv : printers_.at(printer_class)) {
     const Printer& printer = kv.second;
-    if (IsProtocolSecure(printer)) {
+    if (printer.HasSecureProtocol())
       result.push_back(printer);
-    }
   }
 
   return result;

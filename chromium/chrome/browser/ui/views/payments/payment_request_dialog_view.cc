@@ -57,11 +57,21 @@ std::unique_ptr<views::View> CreateViewAndInstallController(
 
 }  // namespace
 
+// static
+base::WeakPtr<PaymentRequestDialogView> PaymentRequestDialogView::Create(
+    PaymentRequest* request,
+    PaymentRequestDialogView::ObserverForTest* observer) {
+  return (new PaymentRequestDialogView(request, observer))
+      ->weak_ptr_factory_.GetWeakPtr();
+}
+
 PaymentRequestDialogView::PaymentRequestDialogView(
     PaymentRequest* request,
     PaymentRequestDialogView::ObserverForTest* observer)
     : request_(request), observer_for_testing_(observer) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  DialogDelegate::SetButtons(ui::DIALOG_BUTTON_NONE);
 
   request->spec()->AddObserver(this);
   SetLayoutManager(std::make_unique<views::FillLayout>());
@@ -96,7 +106,7 @@ PaymentRequestDialogView::PaymentRequestDialogView(
   chrome::RecordDialogCreation(chrome::DialogIdentifier::PAYMENT_REQUEST);
 }
 
-PaymentRequestDialogView::~PaymentRequestDialogView() {}
+PaymentRequestDialogView::~PaymentRequestDialogView() = default;
 
 void PaymentRequestDialogView::RequestFocus() {
   view_stack_->RequestFocus();
@@ -137,13 +147,6 @@ bool PaymentRequestDialogView::ShouldShowCloseButton() const {
   // Moreover, the title (and back arrow) should animate with the view they're
   // attached to.
   return false;
-}
-
-int PaymentRequestDialogView::GetDialogButtons() const {
-  // The buttons should animate along with the different dialog sheets since
-  // each sheet presents a different set of buttons. Because of this, hide the
-  // usual dialog buttons.
-  return ui::DIALOG_BUTTON_NONE;
 }
 
 void PaymentRequestDialogView::ShowDialog() {
@@ -189,6 +192,7 @@ void PaymentRequestDialogView::ShowPaymentHandlerScreen(
               request_->web_contents(), GetProfile(), url, std::move(callback)),
           &controller_map_),
       /* animate = */ !request_->skipped_payment_request_ui());
+  request_->OnPaymentHandlerOpenWindowCalled();
   HideProcessingSpinner();
 }
 

@@ -24,6 +24,8 @@
 #include "chrome/browser/ui/webui/signin/signin_utils.h"
 #include "chrome/common/chrome_switches.h"
 #include "chromeos/constants/chromeos_switches.h"
+#include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/dbus/fake_update_engine_client.h"
 #include "chromeos/dbus/shill/fake_shill_manager_client.h"
 #include "components/policy/core/common/policy_switches.h"
 #include "components/user_manager/fake_user_manager.h"
@@ -34,8 +36,6 @@
 #include "content/public/test/test_utils.h"
 #include "google_apis/gaia/gaia_switches.h"
 #include "net/dns/mock_host_resolver.h"
-#include "net/test/embedded_test_server/http_request.h"
-#include "net/test/embedded_test_server/http_response.h"
 
 namespace chromeos {
 
@@ -73,7 +73,23 @@ void OobeBaseTest::CreatedBrowserMainParts(
   MixinBasedInProcessBrowserTest::CreatedBrowserMainParts(browser_main_parts);
 }
 
+void OobeBaseTest::SetUpInProcessBrowserTestFixture() {
+  MixinBasedInProcessBrowserTest::SetUpInProcessBrowserTestFixture();
+
+  // UpdateEngineClientStubImpl have logic that simulates state changes
+  // based on timer. It is nice simulation for chromeos-on-linux, but
+  // may lead to flakiness in debug/*SAN tests.
+  // Set up FakeUpdateEngineClient that does not have any timer-based logic.
+  std::unique_ptr<DBusThreadManagerSetter> dbus_setter =
+      chromeos::DBusThreadManager::GetSetterForTesting();
+  update_engine_client_ = new FakeUpdateEngineClient;
+  dbus_setter->SetUpdateEngineClient(
+      std::unique_ptr<UpdateEngineClient>(update_engine_client_));
+}
+
 void OobeBaseTest::SetUpOnMainThread() {
+  ShillManagerClient::Get()->GetTestInterface()->SetupDefaultEnvironment();
+
   host_resolver()->AddRule("*", "127.0.0.1");
 
   test::UserSessionManagerTestApi session_manager_test_api(
@@ -103,6 +119,7 @@ void OobeBaseTest::WaitForOobeUI() {
           run_loop.QuitClosure())) {
     run_loop.Run();
   }
+  MaybeWaitForLoginScreenLoad();
 }
 
 void OobeBaseTest::WaitForGaiaPageLoad() {
@@ -155,11 +172,14 @@ void OobeBaseTest::WaitForGaiaPageEvent(const std::string& event) {
 void OobeBaseTest::WaitForSigninScreen() {
   WizardController* wizard_controller = WizardController::default_controller();
   if (wizard_controller)
-    wizard_controller->SkipToLoginForTesting(LoginScreenContext());
+    wizard_controller->SkipToLoginForTesting();
 
   WizardController::SkipPostLoginScreensForTesting();
 
-  login_screen_load_observer_->Wait();
+  MaybeWaitForLoginScreenLoad();
+}
+void OobeBaseTest::CheckJsExceptionErrors(int number) {
+  test::OobeJS().ExpectEQ("cr.ErrorStore.getInstance().length", number);
 }
 
 test::JSChecker OobeBaseTest::SigninFrameJS() {
@@ -170,6 +190,13 @@ test::JSChecker OobeBaseTest::SigninFrameJS() {
   // Fake GAIA / fake SAML pages do not use polymer-based UI.
   result.set_polymer_ui(false);
   return result;
+}
+
+void OobeBaseTest::MaybeWaitForLoginScreenLoad() {
+  if (!login_screen_load_observer_)
+    return;
+  login_screen_load_observer_->Wait();
+  login_screen_load_observer_.reset();
 }
 
 }  // namespace chromeos

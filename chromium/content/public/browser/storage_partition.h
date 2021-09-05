@@ -13,6 +13,7 @@
 #include "base/callback_forward.h"
 #include "base/files/file_path.h"
 #include "base/time/time.h"
+#include "components/services/storage/public/mojom/indexed_db_control.mojom-forward.h"
 #include "content/common/content_export.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/mojom/cookie_manager.mojom-forward.h"
@@ -42,6 +43,7 @@ class NetworkContext;
 namespace storage {
 class QuotaManager;
 class SpecialStoragePolicy;
+struct QuotaSettings;
 }
 
 namespace storage {
@@ -55,9 +57,9 @@ class BackgroundSyncContext;
 class BrowserContext;
 class CacheStorageContext;
 class ContentIndexContext;
-class DOMStorageContext;
+class DedicatedWorkerService;
 class DevToolsBackgroundServicesContext;
-class IndexedDBContext;
+class DOMStorageContext;
 class GeneratedCodeCacheContext;
 class NativeFileSystemEntryFactory;
 class PlatformNotificationContext;
@@ -98,7 +100,7 @@ class CONTENT_EXPORT StoragePartition {
   GetURLLoaderFactoryForBrowserProcess() = 0;
   virtual scoped_refptr<network::SharedURLLoaderFactory>
   GetURLLoaderFactoryForBrowserProcessWithCORBEnabled() = 0;
-  virtual std::unique_ptr<network::SharedURLLoaderFactoryInfo>
+  virtual std::unique_ptr<network::PendingSharedURLLoaderFactory>
   GetURLLoaderFactoryForBrowserProcessIOThread() = 0;
   virtual network::mojom::CookieManager*
   GetCookieManagerForBrowserProcess() = 0;
@@ -110,7 +112,7 @@ class CONTENT_EXPORT StoragePartition {
   virtual void CreateRestrictedCookieManager(
       network::mojom::RestrictedCookieManagerRole role,
       const url::Origin& origin,
-      const GURL& site_for_cookies,
+      const net::SiteForCookies& site_for_cookies,
       const url::Origin& top_frame_origin,
       bool is_service_worker,
       int process_id,
@@ -124,9 +126,10 @@ class CONTENT_EXPORT StoragePartition {
   virtual storage::FileSystemContext* GetFileSystemContext() = 0;
   virtual storage::DatabaseTracker* GetDatabaseTracker() = 0;
   virtual DOMStorageContext* GetDOMStorageContext() = 0;
-  virtual IndexedDBContext* GetIndexedDBContext() = 0;
+  virtual storage::mojom::IndexedDBControl& GetIndexedDBControl() = 0;
   virtual NativeFileSystemEntryFactory* GetNativeFileSystemEntryFactory() = 0;
   virtual ServiceWorkerContext* GetServiceWorkerContext() = 0;
+  virtual DedicatedWorkerService* GetDedicatedWorkerService() = 0;
   virtual SharedWorkerService* GetSharedWorkerService() = 0;
   virtual CacheStorageContext* GetCacheStorageContext() = 0;
   virtual GeneratedCodeCacheContext* GetGeneratedCodeCacheContext() = 0;
@@ -190,7 +193,8 @@ class CONTENT_EXPORT StoragePartition {
   // Can be passed empty/null where used, which means the origin will always
   // match.
   using OriginMatcherFunction =
-      base::Callback<bool(const url::Origin&, storage::SpecialStoragePolicy*)>;
+      base::RepeatingCallback<bool(const url::Origin&,
+                                   storage::SpecialStoragePolicy*)>;
 
   // Similar to ClearDataForOrigin().
   // Deletes all data out for the StoragePartition if |storage_origin| is empty.
@@ -225,7 +229,7 @@ class CONTENT_EXPORT StoragePartition {
   virtual void ClearData(
       uint32_t remove_mask,
       uint32_t quota_storage_remove_mask,
-      const OriginMatcherFunction& origin_matcher,
+      OriginMatcherFunction origin_matcher,
       network::mojom::CookieDeletionFilterPtr cookie_deletion_filter,
       bool perform_storage_cleanup,
       const base::Time begin,
@@ -262,6 +266,13 @@ class CONTENT_EXPORT StoragePartition {
 
   // Wait until code cache's shutdown is complete. For test use only.
   virtual void WaitForCodeCacheShutdownForTesting() = 0;
+
+  // The value pointed to by |settings| should remain valid until the
+  // the function is called again with a new value or a nullptr.
+  static void SetDefaultQuotaSettingsForTesting(
+      const storage::QuotaSettings* settings);
+
+  static bool IsAppCacheEnabled();
 
  protected:
   virtual ~StoragePartition() {}

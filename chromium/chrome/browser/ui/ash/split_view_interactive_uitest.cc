@@ -8,8 +8,8 @@
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/system/sys_info.h"
-#include "base/task/post_task.h"
 #include "base/test/bind_test_util.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/ui/ash/ash_test_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -72,7 +72,8 @@ class SplitViewTest
 
     if (!warmup.is_zero()) {
       base::RunLoop run_loop;
-      base::PostDelayedTask(FROM_HERE, run_loop.QuitClosure(), warmup);
+      base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+          FROM_HERE, run_loop.QuitClosure(), warmup);
       run_loop.Run();
     }
   }
@@ -115,7 +116,7 @@ IN_PROC_BROWSER_TEST_P(SplitViewTest, ResizeTwoWindows) {
   const gfx::Size display_size =
       display::Screen::GetScreen()->GetPrimaryDisplay().bounds().size();
   const gfx::Point start_position(gfx::Rect(display_size).CenterPoint());
-  TRACE_EVENT_ASYNC_BEGIN0("ui", "Interaction.ui_WindowResize", this);
+  TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("ui", "Interaction.ui_WindowResize", this);
   gfx::Point end_position(start_position);
   end_position.set_x(end_position.x() - 60);
   auto generator =
@@ -128,7 +129,7 @@ IN_PROC_BROWSER_TEST_P(SplitViewTest, ResizeTwoWindows) {
                             start_position, end_position,
                             base::TimeDelta::FromMilliseconds(1000)));
   generator->Wait();
-  TRACE_EVENT_ASYNC_END0("ui", "Interaction.ui_WindowResize", this);
+  TRACE_EVENT_NESTABLE_ASYNC_END0("ui", "Interaction.ui_WindowResize", this);
 
   ash::ShellTestApi().SetTabletModeEnabledForTest(false);
 }
@@ -151,7 +152,7 @@ IN_PROC_BROWSER_TEST_P(SplitViewTest, ResizeWithOverview) {
 
   const gfx::Point start_position =
       display::Screen::GetScreen()->GetPrimaryDisplay().bounds().CenterPoint();
-  TRACE_EVENT_ASYNC_BEGIN0("ui", "Interaction.ui_WindowResize", this);
+  TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("ui", "Interaction.ui_WindowResize", this);
   gfx::Point end_position(start_position);
   end_position.set_x(end_position.x() - 60);
   auto generator =
@@ -164,12 +165,12 @@ IN_PROC_BROWSER_TEST_P(SplitViewTest, ResizeWithOverview) {
                             start_position, end_position,
                             base::TimeDelta::FromMilliseconds(1000)));
   generator->Wait();
-  TRACE_EVENT_ASYNC_END0("ui", "Interaction.ui_WindowResize", this);
+  TRACE_EVENT_NESTABLE_ASYNC_END0("ui", "Interaction.ui_WindowResize", this);
 
   ash::ShellTestApi().SetTabletModeEnabledForTest(false);
 }
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          SplitViewTest,
                          ::testing::Combine(/*ntp=*/testing::Bool(),
                                             /*touch=*/testing::Bool()));

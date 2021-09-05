@@ -22,6 +22,7 @@
 #include "media/base/limits.h"
 #include "media/base/video_util.h"
 #include "media/capture/mojom/video_capture_types.mojom.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "services/viz/privileged/mojom/compositing/frame_sink_video_capture.mojom.h"
@@ -123,6 +124,7 @@ class MockConsumer : public mojom::FrameSinkVideoConsumer {
 
   MOCK_METHOD0(OnFrameCapturedMock, void());
   MOCK_METHOD0(OnStopped, void());
+  MOCK_METHOD1(OnLog, void(const std::string&));
 
   int num_frames_received() const { return frames_.size(); }
 
@@ -142,13 +144,17 @@ class MockConsumer : public mojom::FrameSinkVideoConsumer {
       base::ReadOnlySharedMemoryRegion data,
       media::mojom::VideoFrameInfoPtr info,
       const gfx::Rect& expected_content_rect,
-      mojom::FrameSinkVideoConsumerFrameCallbacksPtr callbacks) final {
+      mojo::PendingRemote<mojom::FrameSinkVideoConsumerFrameCallbacks>
+          callbacks) final {
     ASSERT_TRUE(data.IsValid());
     const auto required_bytes_to_hold_planes =
         static_cast<uint32_t>(info->coded_size.GetArea() * 3 / 2);
     ASSERT_LE(required_bytes_to_hold_planes, data.GetSize());
     ASSERT_TRUE(info);
-    ASSERT_TRUE(callbacks.get());
+
+    mojo::Remote<mojom::FrameSinkVideoConsumerFrameCallbacks> callbacks_remote(
+        std::move(callbacks));
+    ASSERT_TRUE(callbacks_remote.get());
 
     // Map the shared memory buffer and re-constitute a VideoFrame instance
     // around it for analysis via TakeFrame().
@@ -175,7 +181,7 @@ class MockConsumer : public mojom::FrameSinkVideoConsumer {
     frames_.push_back(std::move(frame));
     done_callbacks_.push_back(
         base::BindOnce(&mojom::FrameSinkVideoConsumerFrameCallbacks::Done,
-                       std::move(callbacks)));
+                       std::move(callbacks_remote)));
   }
 
   mojo::Receiver<mojom::FrameSinkVideoConsumer> receiver_{this};
@@ -374,8 +380,7 @@ class FrameSinkVideoCapturerTest : public testing::Test {
         true /* enable_auto_throttling */);
     oracle_ = oracle.get();
     capturer_ = std::make_unique<FrameSinkVideoCapturerImpl>(
-        &frame_sink_manager_, mojom::FrameSinkVideoCapturerRequest(),
-        std::move(oracle));
+        &frame_sink_manager_, mojo::NullReceiver(), std::move(oracle), false);
   }
 
   void SetUp() override {

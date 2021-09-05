@@ -13,7 +13,6 @@
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case_app_interface.h"
 #import "ios/testing/earl_grey/app_launch_manager.h"
-#import "ios/testing/earl_grey/coverage_utils.h"
 #import "ios/testing/earl_grey/earl_grey_test.h"
 #import "ios/web/public/test/http_server/http_server.h"
 #include "net/test/embedded_test_server/default_handlers.h"
@@ -31,7 +30,7 @@ bool gExecutedSetUpForTestCase = false;
 NSString* const kFlakyEarlGreyTestTargetSuffix = @"_flaky_egtests";
 
 // Contains a list of test names that run in multitasking test suite.
-NSArray* whiteListedMultitaskingTests = @[
+NSArray* multitaskingTests = @[
   // Integration tests
   @"testContextMenuOpenInNewTab",        // ContextMenuTestCase
   @"testSwitchToMain",                   // CookiesTestCase
@@ -50,13 +49,13 @@ NSArray* whiteListedMultitaskingTests = @[
   // UI tests
   @"testActivityServiceControllerPrintAfterRedirectionToUnprintablePage",
   // ActivityServiceControllerTestCase
-  @"testDismissOnDestroy",                      // AlertCoordinatorTestCase
-  @"testAddRemoveBookmark",                     // BookmarksTestCase
-  @"testJavaScriptInOmnibox",                   // BrowserViewControllerTestCase
-  @"testChooseCastReceiverChooser",             // CastReceiverTestCase
-  @"testErrorPage",                             // ErrorPageTestCase
-  @"testFindInPage",                            // FindInPageTestCase
-  @"testDismissFirstRun",                       // FirstRunTestCase
+  @"testDismissOnDestroy",           // AlertCoordinatorTestCase
+  @"testAddRemoveBookmark",          // BookmarksTestCase
+  @"testJavaScriptInOmnibox",        // BrowserViewControllerTestCase
+  @"testChooseCastReceiverChooser",  // CastReceiverTestCase
+  @"testErrorPage",                  // ErrorPageTestCase
+  @"testFindInPage",                 // FindInPageTestCase
+  @"testDismissFirstRun",            // FirstRunTestCase
   // TODO(crbug.com/872788) Failing after move to Xcode 10.
   // @"testLongPDFScroll",                         // FullscreenTestCase
   @"testDeleteHistory",                         // HistoryUITestCase
@@ -107,12 +106,6 @@ UIDeviceOrientation GetCurrentDeviceOrientation() {
 }
 
 }  // namespace
-
-// Category for overriding private methods on XCTestCase. See crbug.com/991338
-// for more information.
-@interface XCTestCase (Private)
-- (void)_recordFailure:(id)arg1;
-@end
 
 #if defined(CHROME_EARL_GREY_2)
 GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeTestCaseAppInterface)
@@ -194,16 +187,6 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeTestCaseAppInterface)
   }
 }
 
-- (void)_recordFailure:(id)arg1 {
-  if (@available(iOS 13, *)) {
-    // _recordFailure internally spends a very long time symbolicating
-    // on iOS13. Skipping this seems to be safe. See crbug.com/991338
-    // for more information.
-  } else {
-    [super _recordFailure:arg1];
-  }
-}
-
 #if defined(CHROME_EARL_GREY_1)
 + (void)setUp {
   [super setUp];
@@ -250,7 +233,7 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeTestCaseAppInterface)
   ResetAuthentication();
 
   // Reset any remaining sign-in state from previous tests.
-  [ChromeEarlGrey signOutAndClearAccounts];
+  [ChromeEarlGrey signOutAndClearIdentities];
   [ChromeEarlGrey openNewTab];
   _executedTestMethodSetUp = YES;
 }
@@ -266,7 +249,7 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeTestCaseAppInterface)
   }
 
   // Clear any remaining test accounts and signed in users.
-  [ChromeEarlGrey signOutAndClearAccounts];
+  [ChromeEarlGrey signOutAndClearIdentities];
 
   // Re-start anything that was disabled this test, so it is running when the
   // next test starts.
@@ -287,13 +270,7 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeTestCaseAppInterface)
   if (GetCurrentDeviceOrientation() != _originalOrientation) {
     // Rotate the device back to the original orientation, since some tests
     // attempt to run in other orientations.
-#if defined(CHROME_EARL_GREY_1)
-    [EarlGrey rotateDeviceToOrientation:_originalOrientation errorOrNil:nil];
-#elif defined(CHROME_EARL_GREY_2)
-    [EarlGrey rotateDeviceToOrientation:_originalOrientation error:nil];
-#else
-#error Neither CHROME_EARL_GREY_1 nor CHROME_EARL_GREY_2 are defined
-#endif
+    [ChromeEarlGrey rotateDeviceToOrientation:_originalOrientation error:nil];
   }
   [super tearDown];
   _executedTestMethodSetUp = NO;
@@ -329,6 +306,13 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeTestCaseAppInterface)
   _isMockAuthenticationDisabled = YES;
 }
 
+- (void)enableMockAuthentication {
+  // Enforce that enableMockAuthentication can only be called once.
+  DCHECK(_isMockAuthenticationDisabled);
+  [[self class] enableMockAuthentication];
+  _isMockAuthenticationDisabled = NO;
+}
+
 - (void)stopHTTPServer {
   // Enforce that the HTTP server can only be stopped once per test. It should
   // not be stopped if it is not running.
@@ -342,7 +326,7 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeTestCaseAppInterface)
 + (void)disableMockAuthentication {
   // Make sure local data is cleared, before disabling mock authentication,
   // where data may be sent to real servers.
-  [ChromeEarlGrey signOutAndClearAccounts];
+  [ChromeEarlGrey signOutAndClearIdentities];
   [ChromeEarlGrey tearDownFakeSyncServer];
   TearDownMockAuthentication();
 }
@@ -390,7 +374,7 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeTestCaseAppInterface)
   NSMutableArray* multitaskingTestNames = [NSMutableArray array];
   for (unsigned int i = 0; i < count; i++) {
     SEL selector = method_getName(methods[i]);
-    if ([whiteListedMultitaskingTests
+    if ([multitaskingTests
             containsObject:base::SysUTF8ToNSString(sel_getName(selector))]) {
       NSMethodSignature* methodSignature =
           [self instanceMethodSignatureForSelector:selector];
@@ -408,9 +392,8 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeTestCaseAppInterface)
 // Dismisses and revert browser settings to default.
 // It also starts the HTTP server and enables mock authentication.
 + (void)setUpHelper {
-  XCTAssertTrue([ChromeEarlGrey isCustomWebKitLoadedIfRequested]);
-
-  [CoverageUtils configureCoverageReportPath];
+  GREYAssertTrue([ChromeEarlGrey isCustomWebKitLoadedIfRequested],
+                 @"Unable to load custom WebKit");
 
   [[self class] startHTTPServer];
   [[self class] enableMockAuthentication];
@@ -421,7 +404,9 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeTestCaseAppInterface)
   [self closeAllTabs];
   [ChromeEarlGrey setContentSettings:CONTENT_SETTING_DEFAULT];
 
-  [CoverageUtils configureCoverageReportPath];
+  // Enforce the assumption that the tests are runing in portrait.
+  [ChromeEarlGrey rotateDeviceToOrientation:UIDeviceOrientationPortrait
+                                      error:nil];
 }
 
 // Resets the variables tracking app state.
@@ -441,9 +426,20 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeTestCaseAppInterface)
 
 #pragma mark AppLaunchManagerObserver method
 
-- (void)appLaunchManagerDidRelaunchApp:(AppLaunchManager*)appLaunchManager {
-  // Do not call +[ChromeTestCase setUpHelper] if the app was relaunched before
-  // +setUpForTestCase. +setUpForTestCase will call +setUpHelper, and
+- (void)appLaunchManagerDidRelaunchApp:(AppLaunchManager*)appLaunchManager
+                             runResets:(BOOL)runResets {
+  if (!runResets) {
+    // Check stored flags and restore to app status before relaunch.
+    if (!_isHTTPServerStopped) {
+      [[self class] startHTTPServer];
+    }
+    if (!_isMockAuthenticationDisabled) {
+      [[self class] enableMockAuthentication];
+    }
+    return;
+  }
+  // Do not call +[ChromeTestCase setUpHelper] if the app was relaunched
+  // before +setUpForTestCase. +setUpForTestCase will call +setUpHelper, and
   // +setUpHelper can not be called twice during setup process.
   if (gExecutedSetUpForTestCase) {
     [ChromeTestCase setUpHelper];
@@ -457,7 +453,7 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeTestCaseAppInterface)
       ResetAuthentication();
 
       // Reset any remaining sign-in state from previous tests.
-      [ChromeEarlGrey signOutAndClearAccounts];
+      [ChromeEarlGrey signOutAndClearIdentities];
       [ChromeEarlGrey openNewTab];
     }
   }

@@ -42,19 +42,14 @@ using DBusMethodCallback =
 // false.
 using VoidDBusMethodCallback = base::OnceCallback<void(bool result)>;
 
-// TODO(crbug.com/739622): Use OnceCallback in following definition, too.
-
 // A callback to handle responses of methods returning a ObjectPath value that
 // doesn't get call status.
-typedef base::Callback<void(const dbus::ObjectPath& result)> ObjectPathCallback;
+using ObjectPathCallback =
+    base::OnceCallback<void(const dbus::ObjectPath& result)>;
 
 // Called when service becomes available.
 using WaitForServiceToBeAvailableCallback =
     base::OnceCallback<void(bool service_is_available)>;
-
-// Returns an empty callback that does nothing.
-COMPONENT_EXPORT(CHROMEOS_DBUS)
-VoidDBusMethodCallback EmptyVoidDBusMethodCallback();
 
 }  // namespace chromeos
 

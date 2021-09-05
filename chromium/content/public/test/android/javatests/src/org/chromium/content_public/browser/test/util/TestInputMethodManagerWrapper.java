@@ -17,6 +17,7 @@ import org.chromium.content.browser.input.ImeAdapterImpl;
 import org.chromium.content.browser.input.Range;
 import org.chromium.content_public.browser.ImeAdapter;
 import org.chromium.content_public.browser.InputMethodManagerWrapper;
+import org.chromium.ui.base.WindowAndroid;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -25,7 +26,7 @@ import java.util.List;
  * Overrides InputMethodManagerWrapper for testing purposes.
  */
 public class TestInputMethodManagerWrapper implements InputMethodManagerWrapper {
-    private static final String TAG = "cr_Ime";
+    private static final String TAG = "Ime";
 
     private final InputConnectionProvider mInputConnectionProvider;
     private InputConnection mInputConnection;
@@ -215,4 +216,10 @@ public class TestInputMethodManagerWrapper implements InputMethodManagerWrapper 
     public void onUpdateSelection(Range oldSel, Range oldComp, Range newSel, Range newComp) {}
 
     public void expectsSelectionOutsideComposition() {}
+
+    @Override
+    public void onWindowAndroidChanged(WindowAndroid windowAndroid) {}
+
+    @Override
+    public void onInputConnectionCreated() {}
 }

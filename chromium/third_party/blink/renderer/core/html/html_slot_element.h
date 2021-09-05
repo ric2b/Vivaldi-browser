@@ -83,7 +83,6 @@ class CORE_EXPORT HTMLSlotElement final : public HTMLElement {
 
   void AttributeChanged(const AttributeModificationParams&) final;
 
-  int tabIndex() const override;
   AtomicString GetName() const;
 
   // This method can be slow because this has to traverse the children of a
@@ -111,7 +110,7 @@ class CORE_EXPORT HTMLSlotElement final : public HTMLElement {
   static const AtomicString& UserAgentDefaultSlotName();
 
   // For imperative Shadow DOM distribution APIs
-  void assign(HeapVector<Member<Node>> nodes);
+  void assign(HeapVector<Member<Node>> nodes, ExceptionState&);
   const HeapHashSet<Member<Node>>& AssignedNodesCandidate() const {
     return assigned_nodes_candidates_;
   }

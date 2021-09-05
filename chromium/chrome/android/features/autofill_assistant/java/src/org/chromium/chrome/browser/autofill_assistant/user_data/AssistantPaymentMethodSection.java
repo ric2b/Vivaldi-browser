@@ -17,6 +17,8 @@ import androidx.annotation.Nullable;
 
 import org.chromium.chrome.autofill_assistant.R;
 import org.chromium.chrome.browser.autofill.PersonalDataManager;
+import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
+import org.chromium.chrome.browser.autofill.PersonalDataManager.CreditCard;
 import org.chromium.chrome.browser.payments.AutofillAddress;
 import org.chromium.chrome.browser.payments.AutofillPaymentInstrument;
 import org.chromium.chrome.browser.payments.CardEditor;
@@ -32,6 +34,7 @@ public class AssistantPaymentMethodSection
     private boolean mIgnorePaymentMethodsChangeNotifications;
     private boolean mRequiresBillingPostalCode;
     private String mBillingPostalCodeMissingText;
+    private String mCreditCardExpiredText;
 
     AssistantPaymentMethodSection(Context context, ViewGroup parent) {
         super(context, parent, R.layout.autofill_assistant_payment_method_summary,
@@ -54,7 +57,7 @@ public class AssistantPaymentMethodSection
             String guid = method.getCard().getBillingAddressId();
             PersonalDataManager.AutofillProfile profile = personalDataManager.getProfile(guid);
             if (profile != null) {
-                addAutocompleteInformationToEditor(profile);
+                addAutocompleteInformationToEditor(new AutofillAddress(mContext, profile));
             }
         }
     }
@@ -116,9 +119,9 @@ public class AssistantPaymentMethodSection
                 method.getCard().getFormattedExpirationDate(summaryView.getContext()));
         hideIfEmpty(cardExpirationView);
 
-        TextView methodIncompleteView = summaryView.findViewById(R.id.incomplete_error);
-        setIncompleteErrorMessage(methodIncompleteView, method);
-        hideIfEmpty(methodIncompleteView);
+        TextView errorMessageView = summaryView.findViewById(R.id.incomplete_error);
+        setErrorMessage(errorMessageView, method);
+        hideIfEmpty(errorMessageView);
     }
 
     @Override
@@ -136,10 +139,38 @@ public class AssistantPaymentMethodSection
         return mContext.getString(R.string.autofill_edit_credit_card);
     }
 
-    void onProfilesChanged(List<PersonalDataManager.AutofillProfile> profiles) {
+    @Override
+    protected boolean areEqual(@Nullable AutofillPaymentInstrument optionA,
+            @Nullable AutofillPaymentInstrument optionB) {
+        if (optionA == null || optionB == null) {
+            return optionA == optionB;
+        }
+        if (TextUtils.equals(optionA.getIdentifier(), optionB.getIdentifier())) {
+            return true;
+        }
+        return areEqualCards(optionA.getCard(), optionB.getCard())
+                && areEqualBillingProfiles(
+                        optionA.getBillingProfile(), optionB.getBillingProfile());
+    }
+    private boolean areEqualCards(CreditCard cardA, CreditCard cardB) {
+        // TODO(crbug.com/806868): Implement better check for the case where PDM is disabled, we
+        //  won't have IDs.
+        return TextUtils.equals(cardA.getGUID(), cardB.getGUID());
+    }
+    private boolean areEqualBillingProfiles(
+            @Nullable AutofillProfile profileA, @Nullable AutofillProfile profileB) {
+        if (profileA == null || profileB == null) {
+            return profileA == profileB;
+        }
+        // TODO(crbug.com/806868): Implement better check for the case where PDM is disabled, we
+        //  won't have IDs.
+        return TextUtils.equals(profileA.getGUID(), profileB.getGUID());
+    }
+
+    void onAddressesChanged(List<AutofillAddress> addresses) {
         // TODO(crbug.com/806868): replace suggested billing addresses (remove if necessary).
-        for (PersonalDataManager.AutofillProfile profile : profiles) {
-            addAutocompleteInformationToEditor(profile);
+        for (AutofillAddress address : addresses) {
+            addAutocompleteInformationToEditor(address);
         }
     }
 
@@ -151,13 +182,14 @@ public class AssistantPaymentMethodSection
         if (mIgnorePaymentMethodsChangeNotifications) {
             return;
         }
-        AutofillPaymentInstrument previouslySelectedMethod = mSelectedOption;
+
         int selectedMethodIndex = -1;
-        for (int i = 0; i < paymentMethods.size(); i++) {
-            if (previouslySelectedMethod != null
-                    && TextUtils.equals(paymentMethods.get(i).getIdentifier(),
-                            previouslySelectedMethod.getIdentifier())) {
-                selectedMethodIndex = i;
+        if (mSelectedOption != null) {
+            for (int i = 0; i < paymentMethods.size(); ++i) {
+                if (areEqual(mSelectedOption, paymentMethods.get(i))) {
+                    selectedMethodIndex = i;
+                    break;
+                }
             }
         }
 
@@ -173,45 +205,45 @@ public class AssistantPaymentMethodSection
         mBillingPostalCodeMissingText = text;
     }
 
-    private void addAutocompleteInformationToEditor(PersonalDataManager.AutofillProfile profile) {
+    void setCreditCardExpiredText(String text) {
+        mCreditCardExpiredText = text;
+    }
+
+    private void addAutocompleteInformationToEditor(AutofillAddress address) {
         // The check for non-null label is necessary to prevent crash in editor when opening.
-        if (mEditor == null || profile.getLabel() == null) {
+        if (mEditor == null || address.getProfile().getLabel() == null) {
             return;
         }
-        mEditor.updateBillingAddressIfComplete(new AutofillAddress(mContext, profile));
+        mEditor.updateBillingAddressIfComplete(address);
     }
 
-    private boolean hasAllRequiredFields(AutofillPaymentInstrument method) {
+    private void setErrorMessage(TextView errorMessageView, AutofillPaymentInstrument method) {
         if (!method.isComplete()) {
-            return false;
+            errorMessageView.setText(R.string.autofill_assistant_payment_information_missing);
+            return;
         }
-
-        if (!mRequiresBillingPostalCode) {
-            return true;
-        }
-
-        if (method.getBillingProfile() == null
-                || TextUtils.isEmpty(method.getBillingProfile().getPostalCode())) {
-            return false;
-        }
-
-        return true;
-    }
-
-    private void setIncompleteErrorMessage(
-            TextView methodIncompleteView, AutofillPaymentInstrument method) {
-        if (hasAllRequiredFields(method)) {
-            methodIncompleteView.setText("");
+        if (method.getBillingProfile() != null
+                && AutofillAddress.checkAddressCompletionStatus(method.getBillingProfile(),
+                           AutofillAddress.CompletenessCheckType.IGNORE_PHONE)
+                        != AutofillAddress.CompletionStatus.COMPLETE) {
+            errorMessageView.setText(R.string.autofill_assistant_payment_information_missing);
             return;
         }
 
-        // we have to show an error message either because the payment method is incomplete (missing
-        // information), or because a postcode is required and the billing address does not have
-        // one.
-        if (method.isComplete()) {
-            methodIncompleteView.setText(mBillingPostalCodeMissingText);
-        } else {
-            methodIncompleteView.setText(R.string.autofill_assistant_payment_information_missing);
+        if (mRequiresBillingPostalCode
+                && (method.getBillingProfile() == null
+                        || TextUtils.isEmpty(method.getBillingProfile().getPostalCode()))) {
+            errorMessageView.setText(mBillingPostalCodeMissingText);
+            return;
         }
+
+        if ((method.getMissingFields()
+                    & AutofillPaymentInstrument.CompletionStatus.CREDIT_CARD_EXPIRED)
+                == 1) {
+            errorMessageView.setText(mCreditCardExpiredText);
+            return;
+        }
+
+        errorMessageView.setText("");
     }
 }

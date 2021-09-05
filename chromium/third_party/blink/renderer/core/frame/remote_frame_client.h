@@ -6,9 +6,8 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_FRAME_REMOTE_FRAME_CLIENT_H_
 
 #include "cc/paint/paint_canvas.h"
-#include "third_party/blink/public/common/frame/occlusion_state.h"
 #include "third_party/blink/public/mojom/blob/blob_url_store.mojom-blink-forward.h"
-#include "third_party/blink/public/platform/web_focus_type.h"
+#include "third_party/blink/public/platform/viewport_intersection_state.h"
 #include "third_party/blink/public/web/web_frame_load_type.h"
 #include "third_party/blink/renderer/core/frame/frame_client.h"
 #include "third_party/blink/renderer/core/frame/frame_types.h"
@@ -32,19 +31,17 @@ class RemoteFrameClient : public FrameClient {
   virtual void Navigate(const ResourceRequest&,
                         bool should_replace_current_entry,
                         bool is_opener_navigation,
-                        bool has_download_sandbox_flag,
+                        bool initiator_frame_has_download_sandbox_flag,
                         bool initiator_frame_is_ad,
                         mojo::PendingRemote<mojom::blink::BlobURLToken>) = 0;
   unsigned BackForwardLength() override = 0;
 
-  // Notifies the remote frame to check whether it is done loading, after one
-  // of its children finishes loading.
-  virtual void CheckCompleted() = 0;
-
   // Forwards a postMessage for a remote frame.
-  virtual void ForwardPostMessage(MessageEvent*,
-                                  scoped_refptr<const SecurityOrigin> target,
-                                  LocalFrame* source_frame) const = 0;
+  virtual void ForwardPostMessage(
+      MessageEvent*,
+      scoped_refptr<const SecurityOrigin> target,
+      base::Optional<base::UnguessableToken> cluster_id,
+      LocalFrame* source_frame) const = 0;
 
   // Forwards a change to the rects of a remote frame. |local_frame_rect| is the
   // size of the frame in its parent's coordinate space prior to applying CSS
@@ -54,17 +51,9 @@ class RemoteFrameClient : public FrameClient {
                                  const IntRect& screen_space_rect) = 0;
 
   virtual void UpdateRemoteViewportIntersection(
-      const IntRect& viewport_intersection,
-      FrameOcclusionState occlusion_state) = 0;
+      const ViewportIntersectionState& intersection_state) = 0;
 
-  virtual void AdvanceFocus(WebFocusType, LocalFrame* source) = 0;
-
-  virtual void SetIsInert(bool) = 0;
-
-  virtual void SetInheritedEffectiveTouchAction(TouchAction) = 0;
-
-  virtual void UpdateRenderThrottlingStatus(bool isThrottled,
-                                            bool subtreeThrottled) = 0;
+  virtual void AdvanceFocus(mojom::blink::FocusType, LocalFrame* source) = 0;
 
   virtual uint32_t Print(const IntRect&, cc::PaintCanvas*) const = 0;
 };

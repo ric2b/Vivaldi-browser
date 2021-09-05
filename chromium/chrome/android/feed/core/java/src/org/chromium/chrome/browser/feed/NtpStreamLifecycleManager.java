@@ -7,18 +7,17 @@ package org.chromium.chrome.browser.feed;
 import android.app.Activity;
 
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
-import com.google.android.libraries.feed.api.client.stream.Stream;
-
-import org.chromium.base.VisibleForTesting;
+import org.chromium.chrome.browser.feed.library.api.client.stream.Stream;
 import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tab.Tab.TabHidingType;
+import org.chromium.chrome.browser.tab.TabHidingType;
 import org.chromium.chrome.browser.tab.TabObserver;
-import org.chromium.chrome.browser.tabmodel.TabSelectionType;
+import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.content_public.browser.NavigationController;
 import org.chromium.content_public.browser.NavigationEntry;
 
@@ -54,7 +53,7 @@ final class NtpStreamLifecycleManager extends StreamLifecycleManager {
         // the associated FeedNewTabPage is destroyed.
         mTabObserver = new EmptyTabObserver() {
             @Override
-            public void onInteractabilityChanged(boolean isInteractable) {
+            public void onInteractabilityChanged(Tab tab, boolean isInteractable) {
                 if (isInteractable) {
                     activate();
                 } else {

@@ -78,7 +78,7 @@ class CONTENT_EXPORT UtilityProcessHost
   base::WeakPtr<UtilityProcessHost> AsWeakPtr();
 
   // Makes the process run with a specific sandbox type, or unsandboxed if
-  // SANDBOX_TYPE_NO_SANDBOX is specified.
+  // SandboxType::kNoSandbox is specified.
   void SetSandboxType(service_manager::SandboxType sandbox_type);
 
   service_manager::SandboxType sandbox_type() const { return sandbox_type_; }
@@ -91,10 +91,6 @@ class CONTENT_EXPORT UtilityProcessHost
 
   // Starts the utility process.
   bool Start();
-
-  // Binds an interface exposed by the utility process.
-  void BindInterface(const std::string& interface_name,
-                     mojo::ScopedMessagePipeHandle interface_pipe);
 
   // Instructs the utility process to run an instance of the named service,
   // bound to |receiver|.

@@ -15,6 +15,7 @@
 #include "third_party/blink/renderer/core/loader/private/frame_client_hints_preferences_context.h"
 #include "third_party/blink/renderer/core/loader/subresource_filter.h"
 #include "third_party/blink/renderer/platform/exported/wrapped_resource_request.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/loader/cors/cors.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_initiator_type_names.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource.h"
@@ -33,13 +34,13 @@ base::Optional<ResourceRequestBlockedReason> BaseFetchContext::CanRequest(
     const ResourceRequest& resource_request,
     const KURL& url,
     const ResourceLoaderOptions& options,
-    SecurityViolationReportingPolicy reporting_policy,
+    ReportingDisposition reporting_disposition,
     ResourceRequest::RedirectStatus redirect_status) const {
   base::Optional<ResourceRequestBlockedReason> blocked_reason =
-      CanRequestInternal(type, resource_request, url, options, reporting_policy,
-                         redirect_status);
+      CanRequestInternal(type, resource_request, url, options,
+                         reporting_disposition, redirect_status);
   if (blocked_reason &&
-      reporting_policy == SecurityViolationReportingPolicy::kReport) {
+      reporting_disposition == ReportingDisposition::kReport) {
     DispatchDidBlockRequest(resource_request, options.initiator_info,
                             blocked_reason.value(), type);
   }
@@ -55,6 +56,13 @@ bool BaseFetchContext::CalculateIfAdSubresource(const ResourceRequest& request,
   return request.IsAdResource() ||
          (filter &&
           filter->IsAdResource(request.Url(), request.GetRequestContext()));
+}
+
+bool BaseFetchContext::SendConversionRequestInsteadOfRedirecting(
+    const KURL& url,
+    ResourceRequest::RedirectStatus redirect_status,
+    ReportingDisposition reporting_disposition) const {
+  return false;
 }
 
 void BaseFetchContext::PrintAccessDeniedMessage(const KURL& url) const {
@@ -74,9 +82,9 @@ void BaseFetchContext::PrintAccessDeniedMessage(const KURL& url) const {
               ". Domains, protocols and ports must match.\n";
   }
 
-  AddConsoleMessage(
-      ConsoleMessage::Create(mojom::ConsoleMessageSource::kSecurity,
-                             mojom::ConsoleMessageLevel::kError, message));
+  AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
+      mojom::ConsoleMessageSource::kSecurity,
+      mojom::ConsoleMessageLevel::kError, message));
 }
 
 base::Optional<ResourceRequestBlockedReason>
@@ -84,10 +92,10 @@ BaseFetchContext::CheckCSPForRequest(
     mojom::RequestContextType request_context,
     const KURL& url,
     const ResourceLoaderOptions& options,
-    SecurityViolationReportingPolicy reporting_policy,
+    ReportingDisposition reporting_disposition,
     ResourceRequest::RedirectStatus redirect_status) const {
   return CheckCSPForRequestInternal(
-      request_context, url, options, reporting_policy, redirect_status,
+      request_context, url, options, reporting_disposition, redirect_status,
       ContentSecurityPolicy::CheckHeaderType::kCheckReportOnly);
 }
 
@@ -96,11 +104,12 @@ BaseFetchContext::CheckCSPForRequestInternal(
     mojom::RequestContextType request_context,
     const KURL& url,
     const ResourceLoaderOptions& options,
-    SecurityViolationReportingPolicy reporting_policy,
+    ReportingDisposition reporting_disposition,
     ResourceRequest::RedirectStatus redirect_status,
     ContentSecurityPolicy::CheckHeaderType check_header_type) const {
-  if (ShouldBypassMainWorldCSP() || options.content_security_policy_option ==
-                                        kDoNotCheckContentSecurityPolicy) {
+  if (ShouldBypassMainWorldCSP() ||
+      options.content_security_policy_option ==
+          network::mojom::CSPDisposition::DO_NOT_CHECK) {
     return base::nullopt;
   }
 
@@ -108,7 +117,7 @@ BaseFetchContext::CheckCSPForRequestInternal(
   if (csp && !csp->AllowRequest(
                  request_context, url, options.content_security_policy_nonce,
                  options.integrity_metadata, options.parser_disposition,
-                 redirect_status, reporting_policy, check_header_type)) {
+                 redirect_status, reporting_disposition, check_header_type)) {
     return ResourceRequestBlockedReason::kCSP;
   }
   return base::nullopt;
@@ -120,7 +129,7 @@ BaseFetchContext::CanRequestInternal(
     const ResourceRequest& resource_request,
     const KURL& url,
     const ResourceLoaderOptions& options,
-    SecurityViolationReportingPolicy reporting_policy,
+    ReportingDisposition reporting_disposition,
     ResourceRequest::RedirectStatus redirect_status) const {
   if (GetResourceFetcherProperties().IsDetached()) {
     if (!resource_request.GetKeepalive() ||
@@ -139,17 +148,17 @@ BaseFetchContext::CanRequestInternal(
   // On navigation cases, Context().GetSecurityOrigin() may return nullptr, so
   // the request's origin may be nullptr.
   // TODO(yhirano): Figure out if it's actually fine.
-  DCHECK(network::IsNavigationRequestMode(request_mode) || origin);
+  DCHECK(request_mode == network::mojom::RequestMode::kNavigate || origin);
 #if !defined(OFFICIAL_BUILD)
   // VB-24745 VB-44251 Render Mail in Webview: Allow HTML messages to request
   // inline attachments as blob-URL. TODO: remove this when the webview will be
   // "self-contained" and the blobs will be created within the webview.
   if (!url.GetString().StartsWith("blob:chrome-extension://" VIVALDI_APP_ID "/"))
 #endif
-  if (!network::IsNavigationRequestMode(request_mode) &&
+  if (request_mode != network::mojom::RequestMode::kNavigate &&
       !resource_request.CanDisplay(url)) {
-    if (reporting_policy == SecurityViolationReportingPolicy::kReport) {
-      AddConsoleMessage(ConsoleMessage::Create(
+    if (reporting_disposition == ReportingDisposition::kReport) {
+      AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
           mojom::ConsoleMessageSource::kJavaScript,
           mojom::ConsoleMessageLevel::kError,
           "Not allowed to load local resource: " + url.GetString()));
@@ -183,7 +192,7 @@ BaseFetchContext::CanRequestInternal(
   // populateResourceRequest). We check the enforced headers here to ensure we
   // block things we ought to block.
   if (CheckCSPForRequestInternal(
-          request_context, url, options, reporting_policy, redirect_status,
+          request_context, url, options, reporting_disposition, redirect_status,
           ContentSecurityPolicy::CheckHeaderType::kCheckEnforce) ==
       ResourceRequestBlockedReason::kCSP) {
     return ResourceRequestBlockedReason::kCSP;
@@ -226,7 +235,7 @@ BaseFetchContext::CanRequestInternal(
   // warning instead.
   if (ShouldBlockFetchByMixedContentCheck(request_context,
                                           resource_request.GetRedirectStatus(),
-                                          url, reporting_policy))
+                                          url, reporting_disposition))
     return ResourceRequestBlockedReason::kMixedContent;
 
   if (url.PotentiallyDanglingMarkup() && url.ProtocolIsInHTTPFamily()) {
@@ -241,11 +250,16 @@ BaseFetchContext::CanRequestInternal(
     return ResourceRequestBlockedReason::kOther;
   }
 
+  if (SendConversionRequestInsteadOfRedirecting(url, redirect_status,
+                                                reporting_disposition)) {
+    return ResourceRequestBlockedReason::kOther;
+  }
+
   // Let the client have the final say into whether or not the load should
   // proceed.
   if (GetSubresourceFilter() && type != ResourceType::kImportResource) {
     if (!GetSubresourceFilter()->AllowLoad(url, request_context,
-                                           reporting_policy)) {
+                                           reporting_disposition)) {
       return ResourceRequestBlockedReason::kSubresourceFilter;
     }
   }
@@ -253,7 +267,7 @@ BaseFetchContext::CanRequestInternal(
   return base::nullopt;
 }
 
-void BaseFetchContext::Trace(blink::Visitor* visitor) {
+void BaseFetchContext::Trace(Visitor* visitor) {
   visitor->Trace(fetcher_properties_);
   FetchContext::Trace(visitor);
 }

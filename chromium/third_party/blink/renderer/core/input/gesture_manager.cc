@@ -9,7 +9,6 @@
 #include "third_party/blink/public/public_buildflags.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
-#include "third_party/blink/renderer/core/dom/user_gesture_indicator.h"
 #include "third_party/blink/renderer/core/editing/selection_controller.h"
 #include "third_party/blink/renderer/core/events/gesture_event.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
@@ -26,7 +25,7 @@
 #include "third_party/blink/renderer/core/scroll/scroll_animator_base.h"
 
 #if BUILDFLAG(ENABLE_UNHANDLED_TAP)
-#include "services/service_manager/public/cpp/interface_provider.h"
+#include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/mojom/unhandled_tap_notifier/unhandled_tap_notifier.mojom-blink.h"
 #include "third_party/blink/public/web/web_node.h"
 #include "third_party/blink/renderer/core/editing/frame_selection.h"
@@ -56,7 +55,7 @@ void GestureManager::Clear() {
   long_tap_should_invoke_context_menu_ = false;
 }
 
-void GestureManager::Trace(blink::Visitor* visitor) {
+void GestureManager::Trace(Visitor* visitor) {
   visitor->Trace(frame_);
   visitor->Trace(scroll_manager_);
   visitor->Trace(mouse_event_manager_);
@@ -197,7 +196,8 @@ WebInputEventResult GestureManager::HandleGestureTap(
   if (current_hit_test.InnerNode()) {
     LocalFrame& main_frame = frame_->LocalFrameRoot();
     if (!main_frame.View() ||
-        !main_frame.View()->UpdateAllLifecyclePhasesExceptPaint())
+        !main_frame.View()->UpdateAllLifecyclePhasesExceptPaint(
+            DocumentUpdateReason::kHitTest))
       return WebInputEventResult::kNotHandled;
     adjusted_point = frame_view->ConvertFromRootFrame(
         FlooredIntPoint(gesture_event.PositionInRootFrame()));
@@ -210,9 +210,8 @@ WebInputEventResult GestureManager::HandleGestureTap(
       FlooredIntPoint(gesture_event.PositionInRootFrame());
   Node* tapped_node = current_hit_test.InnerNode();
   Element* tapped_element = current_hit_test.InnerElement();
-  std::unique_ptr<UserGestureIndicator> gesture_indicator =
-      LocalFrame::NotifyUserActivation(
-          tapped_node ? tapped_node->GetDocument().GetFrame() : nullptr);
+  LocalFrame::NotifyUserActivation(
+      tapped_node ? tapped_node->GetDocument().GetFrame() : nullptr);
 
   mouse_event_manager_->SetClickElement(tapped_element);
 
@@ -261,7 +260,7 @@ WebInputEventResult GestureManager::HandleGestureTap(
     LocalFrame& main_frame = frame_->LocalFrameRoot();
     if (main_frame.View()) {
       main_frame.View()->UpdateAllLifecyclePhases(
-          DocumentLifecycle::LifecycleUpdateReason::kOther);
+          DocumentUpdateReason::kHitTest);
     }
     adjusted_point = frame_view->ConvertFromRootFrame(tapped_position);
     current_hit_test = event_handling_util::HitTestResultInFrame(
@@ -368,9 +367,8 @@ WebInputEventResult GestureManager::HandleGestureLongPress(
     return WebInputEventResult::kNotHandled;
   }
 
-  std::unique_ptr<UserGestureIndicator> gesture_indicator =
-      LocalFrame::NotifyUserActivation(
-          inner_node ? inner_node->GetDocument().GetFrame() : nullptr);
+  LocalFrame::NotifyUserActivation(
+      inner_node ? inner_node->GetDocument().GetFrame() : nullptr);
   return SendContextMenuEventForGesture(targeted_event);
 }
 
@@ -448,7 +446,7 @@ WebInputEventResult GestureManager::HandleGestureShowPress() {
     return WebInputEventResult::kNotHandled;
   for (const PaintLayerScrollableArea* scrollable_area : *areas) {
     ScrollAnimatorBase* animator = scrollable_area->ExistingScrollAnimator();
-    if (animator)
+    if (scrollable_area->ScrollsOverflow() && animator)
       animator->CancelAnimation();
   }
   return WebInputEventResult::kNotHandled;
@@ -472,7 +470,7 @@ void GestureManager::ShowUnhandledTapUIIfNeeded(
   if (should_trigger) {
     // Start setting up the Mojo interface connection.
     mojo::Remote<mojom::blink::UnhandledTapNotifier> provider;
-    frame_->Client()->GetInterfaceProvider()->GetInterface(
+    frame_->GetBrowserInterfaceBroker().GetInterface(
         provider.BindNewPipeAndPassReceiver());
 
     // Extract text run-length.
@@ -489,10 +487,8 @@ void GestureManager::ShowUnhandledTapUIIfNeeded(
     // e.g. style->GetFontWeight() to return bold.  Need italic, color, etc.
 
     // Notify the Browser.
-    WebPoint point(tapped_position_in_viewport.X(),
-                   tapped_position_in_viewport.Y());
-    auto tapped_info =
-        mojom::blink::UnhandledTapInfo::New(point, font_size, text_run_length);
+    auto tapped_info = mojom::blink::UnhandledTapInfo::New(
+        tapped_position_in_viewport, font_size, text_run_length);
     provider->ShowUnhandledTapUIIfNeeded(std::move(tapped_info));
   }
 #endif  // BUILDFLAG(ENABLE_UNHANDLED_TAP)

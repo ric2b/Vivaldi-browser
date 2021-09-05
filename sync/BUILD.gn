@@ -1,25 +1,10 @@
 # Copyright (c) 2015-2017 Vivaldi Technologies AS. All rights reserved
 import("//build/config/jumbo.gni")
 
-source_set("sync") {
+source_set("browser") {
   sources = [
-    "internal_api/notes_delete_journal.cpp",
-    "internal_api/notes_delete_journal.h",
-  ]
-  deps = [
-    "//components/keyed_service/core",
-    "//components/sync",
-    "//components/sync/protocol",
-    "//components/translate/content/common",
-    "//crypto:crypto",
-    "//skia",
-    "//third_party/icu",
-    "//third_party/cacheinvalidation",
-  ]
-}
-
-jumbo_source_set("browser") {
-  sources = [
+    "note_sync_service_factory.cc",
+    "note_sync_service_factory.h",
     "vivaldi_device_info_utils.cc",
     "vivaldi_device_info_utils.h",
     "vivaldi_invalidation_service.cc",
@@ -37,7 +22,8 @@ jumbo_source_set("browser") {
   ]
   deps = [
     "//chrome/browser/ui",
-    "//components/browser_sync",
+    "//chrome/common:buildflags",
+    "//chrome/common:channel_info",
     "//components/content_settings/core/browser",
     "//components/invalidation/impl",
     "//components/keyed_service/content",
@@ -46,18 +32,21 @@ jumbo_source_set("browser") {
     "//components/signin/core/browser",
     "//components/sync/protocol",
     "//components/translate/content/common",
+    "//extensions/buildflags",
     "//skia",
     "//third_party/icu",
     "//third_party/cacheinvalidation",
     "//third_party/libaddressinput",
+    "//vivaldi/notes:browser",
     "//vivaldi/prefs:prefs_files_generator",
+    "//vivaldi/sync/notes:sync_notes",
     "//vivaldi/vivaldi_account",
   ]
   public_deps = [
-    ":sync",
-    "//vivaldi/sync/glue",
-    #"//chrome/browser",
     "//components/sync/protocol",
+    "//content/public/common",
+  ]
+  allow_circular_includes_from = [
     "//vivaldi/notes:browser",
   ]
 
@@ -75,6 +64,10 @@ jumbo_source_set("browser") {
   if (!is_android) {
     public_deps += [
       "//vivaldi/extensions",
+      "//vivaldi/extensions/api:apis",
+    ]
+    allow_circular_includes_from += [
+      "//vivaldi/extensions/api:apis",
     ]
   }
 }

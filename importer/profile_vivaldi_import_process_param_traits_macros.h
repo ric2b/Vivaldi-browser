@@ -13,7 +13,6 @@
 
 #include "base/strings/string16.h"
 #include "base/values.h"
-#include "chrome/common/common_param_traits_macros.h"
 #include "chrome/common/importer/importer_data_types.h"
 #include "content/public/common/common_param_traits.h"
 #include "ipc/ipc_message_macros.h"

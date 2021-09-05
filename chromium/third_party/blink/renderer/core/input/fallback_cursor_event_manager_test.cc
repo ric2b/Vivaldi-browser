@@ -5,7 +5,7 @@
 #include "third_party/blink/renderer/core/input/fallback_cursor_event_manager.h"
 
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/public/platform/web_mouse_event.h"
+#include "third_party/blink/public/common/input/web_mouse_event.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/visual_viewport.h"
@@ -82,8 +82,8 @@ class FallbackCursorEventManagerTest : public RenderingTest,
   }
 
   void MouseMove(int x, int y, float scale = 1.0f) {
-    WebMouseEvent event(WebInputEvent::kMouseMove, WebFloatPoint(x, y),
-                        WebFloatPoint(x, y),
+    WebMouseEvent event(WebInputEvent::kMouseMove, gfx::PointF(x, y),
+                        gfx::PointF(x, y),
                         WebPointerProperties::Button::kNoButton, 0,
                         WebInputEvent::kNoModifiers, base::TimeTicks::Now());
     event.SetFrameScale(scale);
@@ -110,10 +110,10 @@ class FallbackCursorEventManagerTest : public RenderingTest,
   }
 
   void MouseDown(int x, int y) {
-    WebMouseEvent event(
-        WebInputEvent::kMouseDown, WebFloatPoint(x, y), WebFloatPoint(x, y),
-        WebPointerProperties::Button::kLeft, 0,
-        WebInputEvent::Modifiers::kLeftButtonDown, base::TimeTicks::Now());
+    WebMouseEvent event(WebInputEvent::kMouseDown, gfx::PointF(x, y),
+                        gfx::PointF(x, y), WebPointerProperties::Button::kLeft,
+                        0, WebInputEvent::Modifiers::kLeftButtonDown,
+                        base::TimeTicks::Now());
     event.SetFrameScale(1);
     GetDocument().GetFrame()->GetEventHandler().HandleMousePressEvent(event);
   }
@@ -581,7 +581,7 @@ TEST_F(FallbackCursorEventManagerTest, AccountsForOverflowHidden) {
 
   // Fully scroll the layout viewport to the bottom.
   GetDocument().View()->LayoutViewport()->SetScrollOffset(
-      ScrollOffset(0, 100000), kProgrammaticScroll);
+      ScrollOffset(0, 100000), mojom::blink::ScrollType::kProgrammatic);
 
   // Move the mouse to the bottom of the viewport, we shouldn't lock because
   // both layout and visual are at the extent.

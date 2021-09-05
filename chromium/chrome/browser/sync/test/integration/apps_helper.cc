@@ -15,7 +15,6 @@
 #include "chrome/browser/sync/test/integration/sync_datatype_helper.h"
 #include "chrome/browser/sync/test/integration/sync_extension_helper.h"
 #include "chrome/browser/sync/test/integration/sync_extension_installer.h"
-#include "chrome/common/chrome_features.h"
 #include "content/public/browser/notification_service.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
@@ -49,7 +48,7 @@ bool AllProfilesHaveSameApps() {
   return true;
 }
 
-std::string InstallApp(Profile* profile, int index) {
+std::string InstallHostedApp(Profile* profile, int index) {
   return SyncExtensionHelper::GetInstance()->InstallExtension(
       profile,
       CreateFakeAppName(index),
@@ -63,10 +62,10 @@ std::string InstallPlatformApp(Profile* profile, int index) {
       extensions::Manifest::TYPE_PLATFORM_APP);
 }
 
-std::string InstallAppForAllProfiles(int index) {
+std::string InstallHostedAppForAllProfiles(int index) {
   std::string extension_id;
   for (auto* profile : test()->GetAllProfiles()) {
-    extension_id = InstallApp(profile, index);
+    extension_id = InstallHostedApp(profile, index);
   }
   return extension_id;
 }
@@ -116,9 +115,6 @@ void WaitForAppService(Profile* profile) {
   // (because they are potentially IPC calls). When the tests install and
   // uninstall apps, they may need to pump the run loop so that those async
   // calls settle.
-  if (!base::FeatureList::IsEnabled(features::kAppServiceAsh))
-    return;
-
   apps::AppServiceProxyFactory::GetForProfile(profile)
       ->FlushMojoCallsForTesting();
 }
@@ -202,11 +198,9 @@ AppsMatchChecker::~AppsMatchChecker() {
                     content::NotificationService::AllSources());
 }
 
-std::string AppsMatchChecker::GetDebugMessage() const {
-  return "Waiting for apps to match";
-}
+bool AppsMatchChecker::IsExitConditionSatisfied(std::ostream* os) {
+  *os << "Waiting for apps to match";
 
-bool AppsMatchChecker::IsExitConditionSatisfied() {
   auto it = profiles_.begin();
   Profile* profile0 = *it;
   ++it;
@@ -279,4 +273,3 @@ void AppsMatchChecker::Observe(int type,
   DCHECK_EQ(chrome::NOTIFICATION_APP_LAUNCHER_REORDERED, type);
   CheckExitCondition();
 }
-

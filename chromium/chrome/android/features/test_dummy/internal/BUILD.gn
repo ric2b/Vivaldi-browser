@@ -8,7 +8,7 @@ import("//chrome/android/modules/buildflags.gni")
 import("//tools/grit/grit_rule.gni")
 
 android_resources("java_resources") {
-  resource_dirs = [ "java/res" ]
+  sources = [ "java/res/raw/dummy_resource" ]
   custom_package = "org.chromium.chrome.features.test_dummy"
 }
 
@@ -21,7 +21,7 @@ android_library("java") {
     "//third_party/android_deps:android_support_v7_appcompat_java",
     "//third_party/android_deps:androidx_annotation_annotation_java",
   ]
-  java_files =
+  sources =
       [ "java/src/org/chromium/chrome/features/test_dummy/TestDummyImpl.java" ]
 
   annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
@@ -29,9 +29,7 @@ android_library("java") {
 }
 
 source_set("native") {
-  sources = [
-    "test_dummy_impl.cc",
-  ]
+  sources = [ "test_dummy_impl.cc" ]
 
   deps = [
     ":jni_headers",
@@ -53,16 +51,16 @@ android_library("base_module_java") {
     "//chrome/android/modules/test_dummy/provider:java",
     "//chrome/android/modules/test_dummy/public:java",
     "//third_party/android_deps:android_support_v7_appcompat_java",
+    "//third_party/android_deps:androidx_annotation_annotation_java",
   ]
-  java_files = [
+  sources = [
     "java/src/org/chromium/chrome/features/test_dummy/TestDummyActivity.java",
   ]
 }
 
 generate_jni("jni_headers") {
-  sources = [
-    "java/src/org/chromium/chrome/features/test_dummy/TestDummyImpl.java",
-  ]
+  sources =
+      [ "java/src/org/chromium/chrome/features/test_dummy/TestDummyImpl.java" ]
 }
 
 # Cannot call this just "resources" since all targets with that name in
@@ -74,5 +72,4 @@ grit("resources_native") {
     "test_dummy_resources.pak",
   ]
   output_dir = "$root_gen_dir/chrome"
-  depfile_dir = target_gen_dir
 }

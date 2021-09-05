@@ -18,6 +18,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
+#include "base/task/thread_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "base/version.h"
@@ -43,7 +44,7 @@ using InstallError = update_client::InstallError;
 
 }  // namespace
 
-ComponentInstallerPolicy::~ComponentInstallerPolicy() {}
+ComponentInstallerPolicy::~ComponentInstallerPolicy() = default;
 
 ComponentInstaller::RegistrationInfo::RegistrationInfo()
     : version(kNullVersion) {}
@@ -51,21 +52,22 @@ ComponentInstaller::RegistrationInfo::RegistrationInfo()
 ComponentInstaller::RegistrationInfo::~RegistrationInfo() = default;
 
 ComponentInstaller::ComponentInstaller(
-    std::unique_ptr<ComponentInstallerPolicy> installer_policy)
+    std::unique_ptr<ComponentInstallerPolicy> installer_policy,
+    scoped_refptr<update_client::ActionHandler> action_handler)
     : current_version_(kNullVersion),
-      main_task_runner_(base::ThreadTaskRunnerHandle::Get()) {
-  installer_policy_ = std::move(installer_policy);
-}
+      installer_policy_(std::move(installer_policy)),
+      action_handler_(action_handler),
+      main_task_runner_(base::ThreadTaskRunnerHandle::Get()) {}
 
-ComponentInstaller::~ComponentInstaller() {}
+ComponentInstaller::~ComponentInstaller() = default;
 
 void ComponentInstaller::Register(ComponentUpdateService* cus,
                                   base::OnceClosure callback) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   // Some components may affect user visible features, hence USER_VISIBLE.
-  task_runner_ = base::CreateSequencedTaskRunner(
-      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE,
+  task_runner_ = base::ThreadPool::CreateSequencedTaskRunner(
+      {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
        base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
 
   if (!installer_policy_) {
@@ -158,9 +160,11 @@ Result ComponentInstaller::InstallHelper(
   return Result(InstallError::NONE);
 }
 
-void ComponentInstaller::Install(const base::FilePath& unpack_path,
-                                 const std::string& /*public_key*/,
-                                 Callback callback) {
+void ComponentInstaller::Install(
+    const base::FilePath& unpack_path,
+    const std::string& /*public_key*/,
+    std::unique_ptr<InstallParams> /*install_params*/,
+    Callback callback) {
   std::unique_ptr<base::DictionaryValue> manifest;
   base::Version version;
   base::FilePath install_path;
@@ -286,7 +290,7 @@ void ComponentInstaller::StartRegistration(
   base::FilePath base_dir_ = base_component_dir;
   std::vector<base::FilePath::StringType> components;
   installer_policy_->GetRelativeInstallDir().GetComponents(&components);
-  for (const base::FilePath::StringType component : components) {
+  for (const base::FilePath::StringType& component : components) {
     base_dir_ = base_dir_.Append(component);
     if (!base::SetPosixFilePermissions(base_dir_, 0755)) {
       PLOG(ERROR) << "SetPosixFilePermissions failed: " << base_dir.value();
@@ -400,6 +404,7 @@ void ComponentInstaller::FinishRegistration(
   installer_policy_->GetHash(&crx.pk_hash);
   crx.app_id = update_client::GetCrxIdFromPublicKeyHash(crx.pk_hash);
   crx.installer = this;
+  crx.action_handler = action_handler_;
   crx.version = current_version_;
   crx.fingerprint = current_fingerprint_;
   crx.name = installer_policy_->GetName();

@@ -2,20 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// This is only used when the new C++ implementation is enabled.
-
 // https://streams.spec.whatwg.org/#default-reader-class-definition
 [
     Exposed=(Window,Worker,Worklet),
-    RaisesException=Constructor,
-    ConstructorCallWith=ScriptState,
-    Constructor(ReadableStream stream)
+    ImplementedAs=ReadableStreamReader
 ] interface ReadableStreamDefaultReader {
+    [CallWith=ScriptState, RaisesException] constructor(ReadableStream stream);
     [CallWith=ScriptState, NotEnumerable] readonly attribute Promise<void>
         closed;
 
-    [CallWith=ScriptState, NotEnumerable] Promise<void> cancel(
+    [CallWith=ScriptState, RaisesException, NotEnumerable] Promise<void> cancel(
         optional any reason);
-    [CallWith=ScriptState, NotEnumerable] Promise<void> read();
+    [CallWith=ScriptState, RaisesException, NotEnumerable] Promise<void> read();
     [CallWith=ScriptState, NotEnumerable, RaisesException] void releaseLock();
 };

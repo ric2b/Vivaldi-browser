@@ -5,10 +5,17 @@
 #ifndef UI_VIEWS_WIDGET_DESKTOP_AURA_DESKTOP_WINDOW_TREE_HOST_LINUX_H_
 #define UI_VIEWS_WIDGET_DESKTOP_AURA_DESKTOP_WINDOW_TREE_HOST_LINUX_H_
 
+#include <list>
+#include <memory>
+#include <string>
+#include <vector>
+
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "ui/aura/scoped_window_targeter.h"
+#include "ui/base/buildflags.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/platform_window/extensions/x11_extension_delegate.h"
 #include "ui/views/views_export.h"
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host_platform.h"
 
@@ -19,7 +26,7 @@ class ScopedWindowTargeter;
 }  // namespace aura
 
 namespace ui {
-class PlatformWindowLinux;
+class X11Extension;
 }  // namespace ui
 
 namespace views {
@@ -28,7 +35,8 @@ class WindowEventFilterLinux;
 
 // Contains Linux specific implementation.
 class VIEWS_EXPORT DesktopWindowTreeHostLinux
-    : public DesktopWindowTreeHostPlatform {
+    : public DesktopWindowTreeHostPlatform,
+      public ui::X11ExtensionDelegate {
  public:
   DesktopWindowTreeHostLinux(
       internal::NativeWidgetDelegate* native_widget_delegate,
@@ -52,10 +60,6 @@ class VIEWS_EXPORT DesktopWindowTreeHostLinux
   // internal list of open windows.
   static void CleanUpWindowList(void (*func)(aura::Window* window));
 
-  // This must be called before the window is created, because the visual cannot
-  // be changed after. Useful for X11. Not in use for Wayland.
-  void SetPendingXVisualId(int x_visual_id);
-
   // Returns the current bounds in terms of the X11 Root Window including the
   // borders provided by the window manager (if any). Not in use for Wayland.
   gfx::Rect GetXRootWindowOuterBounds() const;
@@ -76,20 +80,20 @@ class VIEWS_EXPORT DesktopWindowTreeHostLinux
   // Overridden from DesktopWindowTreeHost:
   void Init(const Widget::InitParams& params) override;
   void OnNativeWidgetCreated(const Widget::InitParams& params) override;
-  std::string GetWorkspace() const override;
-  void SetVisibleOnAllWorkspaces(bool always_visible) override;
-  bool IsVisibleOnAllWorkspaces() const override;
-  void SetOpacity(float opacity) override;
   base::flat_map<std::string, std::string> GetKeyboardLayoutMap() override;
   void InitModalType(ui::ModalType modal_type) override;
 
-  // PlatformWindowDelegateBase:
+  // PlatformWindowDelegate:
   void DispatchEvent(ui::Event* event) override;
   void OnClosed() override;
   void OnAcceleratedWidgetAvailable(gfx::AcceleratedWidget widget) override;
   void OnActivationChanged(bool active) override;
 
+  ui::X11Extension* GetX11Extension();
+  const ui::X11Extension* GetX11Extension() const;
+
  private:
+  friend class DesktopWindowTreeHostX11Test;
   FRIEND_TEST_ALL_PREFIXES(DesktopWindowTreeHostLinuxTest, HitTest);
 
   // Overridden from display::DisplayObserver via aura::WindowTreeHost:
@@ -107,16 +111,16 @@ class VIEWS_EXPORT DesktopWindowTreeHostLinux
   void CreateNonClientEventFilter();
   void DestroyNonClientEventFilter();
 
-  // PlatformWindowDelegateLinux overrides:
-  void OnWorkspaceChanged() override;
+  // X11ExtensionDelegate overrides:
   void GetWindowMask(const gfx::Size& size, SkPath* window_mask) override;
   void OnLostMouseGrab() override;
+#if BUILDFLAG(USE_ATK)
+  bool OnAtkKeyEvent(AtkKeyEventStruct* atk_key_event) override;
+#endif
+  bool IsOverrideRedirect() const override;
 
   // Enables event listening after closing |dialog|.
   void EnableEventListening();
-
-  const ui::PlatformWindowLinux* GetPlatformWindowLinux() const;
-  ui::PlatformWindowLinux* GetPlatformWindowLinux();
 
   // See comment for variable open_windows_.
   static std::list<gfx::AcceleratedWidget>& open_windows();
@@ -125,11 +129,6 @@ class VIEWS_EXPORT DesktopWindowTreeHostLinux
   // A posthandler for events intended for non client area. Handles events if no
   // other consumer handled them.
   std::unique_ptr<WindowEventFilterLinux> non_client_window_event_filter_;
-
-  // X11 may set set a visual id for the system tray icon before the host is
-  // initialized. This value will be passed down to PlatformWindow during
-  // initialization of the host.
-  base::Optional<int> pending_x_visual_id_;
 
   std::unique_ptr<CompositorObserver> compositor_observer_;
 

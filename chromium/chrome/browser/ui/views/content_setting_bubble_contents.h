@@ -19,12 +19,12 @@
 #include "ui/views/controls/button/checkbox.h"
 #include "ui/views/controls/button/radio_button.h"
 #include "ui/views/controls/combobox/combobox_listener.h"
-#include "ui/views/controls/link_listener.h"
 
 namespace views {
 class ImageButton;
 class RadioButton;
 class LabelButton;
+class Link;
 }
 
 // ContentSettingBubbleContents is used when the user turns on different kinds
@@ -39,7 +39,6 @@ class LabelButton;
 class ContentSettingBubbleContents : public content::WebContentsObserver,
                                      public views::BubbleDialogDelegateView,
                                      public views::ButtonListener,
-                                     public views::LinkListener,
                                      public views::ComboboxListener,
                                      public ContentSettingBubbleModel::Owner {
  public:
@@ -67,10 +66,6 @@ class ContentSettingBubbleContents : public content::WebContentsObserver,
 
   // views::BubbleDialogDelegateView:
   void Init() override;
-  std::unique_ptr<View> CreateExtraView() override;
-  bool Accept() override;
-  bool Close() override;
-  int GetDialogButtons() const override;
   void OnThemeChanged() override;
 
  private:
@@ -78,6 +73,13 @@ class ContentSettingBubbleContents : public content::WebContentsObserver,
 
   // Applies coloring to the learn more button.
   void StyleLearnMoreButton();
+
+  // Create the extra view for this dialog, which contains any subset of: a
+  // "learn more" button and a "manage" button.
+  std::unique_ptr<View> CreateHelpAndManageView();
+
+  void LinkClicked(views::Link* source, int event_flags);
+  void CustomLinkClicked();
 
   // content::WebContentsObserver:
   void DidFinishNavigation(
@@ -87,9 +89,6 @@ class ContentSettingBubbleContents : public content::WebContentsObserver,
 
   // views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
-
-  // views::LinkListener:
-  void LinkClicked(views::Link* source, int event_flags) override;
 
   // views::ComboboxListener:
   void OnPerformAction(views::Combobox* combobox) override;
@@ -101,7 +100,6 @@ class ContentSettingBubbleContents : public content::WebContentsObserver,
 
   typedef std::vector<views::RadioButton*> RadioGroup;
   RadioGroup radio_group_;
-  views::Link* custom_link_ = nullptr;
   views::LabelButton* manage_button_ = nullptr;
   views::Checkbox* manage_checkbox_ = nullptr;
   views::ImageButton* learn_more_button_ = nullptr;

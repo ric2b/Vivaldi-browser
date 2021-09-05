@@ -5,21 +5,5 @@
 import("//mojo/public/tools/bindings/mojom.gni")
 
 mojom("mojom") {
-  sources = [
-    "image_annotation.mojom",
-  ]
-
-  public_deps = [
-    ":constants",
-  ]
-
-  deps = [
-    "//mojo/public/mojom/base",
-  ]
-}
-
-mojom("constants") {
-  sources = [
-    "constants.mojom",
-  ]
+  sources = [ "image_annotation.mojom" ]
 }

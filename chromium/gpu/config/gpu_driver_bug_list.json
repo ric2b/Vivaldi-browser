@@ -682,8 +682,8 @@
       },
       "vendor_id": "0x8086",
       "driver_version": {
-        "op": "<=",
-        "value": "9.18.0.0"
+        "op": "<",
+        "value": "0.0.0.3000"
       },
       "features": [
         "disable_d3d11"
@@ -904,7 +904,10 @@
     {
       "id": 108,
       "cr_bugs": [449150],
-      "description": "Mali-4xx does not support GL_RGB format",
+      "description": "Mali-4xx on Linux does not support GL_RGB format",
+      "os": {
+        "type": "linux"
+      },
       "gl_vendor": "ARM.*",
       "gl_renderer": ".*Mali-4.*",
       "features": [
@@ -1596,25 +1599,6 @@
       ]
     },
     {
-      "id": 172,
-      "description": "Use GL_INTEL_framebuffer_CMAA on ChromeOS",
-      "cr_bugs": [535198],
-      "os": {
-        "type" : "chromeos"
-      },
-      "vendor_id": "0x8086",
-      "driver_vendor": "Mesa",
-      "gl_vendor": "Intel.*",
-      "gl_type": "gles",
-      "gl_version": {
-        "op": ">=",
-        "value": "3.1"
-      },
-      "features": [
-        "use_framebuffer_cmaa"
-      ]
-    },
-    {
       "id": 174,
       "description": "Adreno 4xx support for EXT_multisampled_render_to_texture is buggy on Android 7.0",
       "cr_bugs": [612474],
@@ -1867,8 +1851,8 @@
           "value": "10.13.2"
         }
       },
-      "gpu_series" : [
-        "intel_skylake"
+      "intel_gpu_series" : [
+        "skylake"
       ],
       "features" : [
         "emulate_isnan_on_float"
@@ -2211,12 +2195,16 @@
     },
     {
       "id": 219,
-      "description": "Zero-copy DXGI video hangs or displays incorrect colors on AMD drivers",
-      "cr_bugs": [623029],
+      "description": "Zero-copy DXGI video hangs or displays incorrect colors on older AMD drivers",
+      "cr_bugs": [623029, 1025427],
       "os": {
         "type": "win"
       },
       "vendor_id": "0x1002",
+      "driver_version": {
+        "op": "<",
+        "value": "23.20.826.5120"
+      },
       "features": [
         "disable_dxgi_zero_copy_video"
       ]
@@ -2295,10 +2283,10 @@
       "os": {
         "type": "win"
       },
-      "gpu_series": [
-        "intel_broadwell",
-        "intel_skylake",
-        "intel_cherrytrail"
+      "intel_gpu_series": [
+        "broadwell",
+        "skylake",
+        "cherrytrail"
       ],
       "features": [
         "disable_accelerated_vpx_decode"
@@ -2530,10 +2518,10 @@
       "os": {
         "type": "macosx"
       },
-      "gpu_series": [
-        "intel_skylake",
-        "intel_kabylake",
-        "intel_coffeelake"
+      "intel_gpu_series": [
+        "skylake",
+        "kabylake",
+        "coffeelake"
       ],
       "multi_gpu_category": "any",
       "features": [
@@ -2904,18 +2892,6 @@
       ]
     },
     {
-      "id":275,
-      "cr_bugs": [838725],
-      "description": "Disable AImageReader on ARM GPUs as its buggy.",
-      "os": {
-        "type": "android"
-      },
-      "gl_vendor": "ARM.*",
-      "features": [
-        "disable_aimagereader"
-      ]
-    },
-    {
       "id": 277,
       "description": "Direct composition path is buggy on certain AMD devices/drivers",
       "cr_bugs": [800950],
@@ -2974,30 +2950,6 @@
       ]
     },
     {
-      "id":281,
-      "cr_bugs": [838725],
-      "description": "Disable AImageReader on Imagination Technologies GPU as its buggy.",
-      "os": {
-        "type": "android"
-      },
-      "gl_vendor": "Imagination Technologies.*",
-      "features": [
-        "disable_aimagereader"
-      ]
-    },
-    {
-      "id":282,
-      "cr_bugs": [838725],
-      "description": "Disable AImageReader on NVIDIA GPU for as its buggy.",
-      "os": {
-        "type": "android"
-      },
-      "gl_vendor": "NVIDIA.*",
-      "features": [
-        "disable_aimagereader"
-      ]
-    },
-    {
       "id": 283,
       "cr_bugs": [893177],
       "description": "Some drivers can't recover after OUT_OF_MEM and context lost",
@@ -3050,8 +3002,8 @@
         "type": "win"
       },
       "driver_version": {
-        "op": ">=",
-        "value": "24"
+        "op": ">",
+        "value": "0.0.100.0"
       },
       "hardware_overlay": "unsupported",
       "features": [
@@ -3124,14 +3076,17 @@
     },
     {
       "id": 294,
-      "cr_bugs": [932879],
-      "description": "Hardware overlays result in black videos on non-Intel GPUs",
+      "cr_bugs": [932879, 1025427],
+      "description": "Hardware overlays are only supported on certain Intel/AMD gpus",
       "os": {
         "type": "win"
       },
       "exceptions": [
         {
           "vendor_id": "0x8086"
+        },
+        {
+          "vendor_id": "0x1002"
         }
       ],
       "features": [
@@ -3194,9 +3149,9 @@
       "os": {
         "type" : "win"
       },
-      "gpu_series": [
-        "intel_sandybridge",
-        "intel_ivybridge"
+      "intel_gpu_series": [
+        "sandybridge",
+        "ivybridge"
       ],
       "features": [
         "disable_direct_composition"
@@ -3229,10 +3184,10 @@
       "vendor_id": "0x8086",
       "driver_version": {
         "op": "<",
-        "value": "24.0.0.0"
+        "value": "0.0.0.9999"
       },
       "features": [
-          "disable_nv12_dynamic_textures"
+        "disable_nv12_dynamic_textures"
       ]
     },
     {
@@ -3373,6 +3328,280 @@
       "gl_type": "gl",
       "disabled_extensions": [
         "GL_MESA_framebuffer_flip_y"
+      ]
+    },
+    {
+      "id": 316,
+      "cr_bugs": [1003860],
+      "description": "Limit MSAA to 4x on ChromeOS for Intel",
+      "os": {
+        "type": "chromeos"
+      },
+      "intel_gpu_generation": {
+        "op": ">=",
+        "value": "9"
+      },
+      "driver_vendor": "Mesa",
+      "gl_vendor": "Intel.*",
+      "features": [
+        "max_msaa_sample_count_4"
+      ]
+    },
+    {
+      "id": 317,
+      "cr_bugs": [1003860],
+      "description": "Limit MSAA to 2x on older Intel GPU generations on ChromeOS",
+      "os": {
+        "type": "chromeos"
+      },
+      "intel_gpu_generation": {
+        "op": "<",
+        "value": "9"
+      },
+      "driver_vendor": "Mesa",
+      "gl_vendor": "Intel.*",
+      "features": [
+        "max_msaa_sample_count_2"
+      ]
+    },
+    {
+      "id": 318,
+      "cr_bugs": [995396],
+      "description": "Direct composition caused performance issues on AMD GPUs",
+      "os": {
+        "type": "win"
+      },
+      "vendor_id": "0x1002",
+      "device_id": ["0x694c"],
+      "features": [
+        "disable_direct_composition"
+      ]
+    },
+    {
+      "id": 319,
+      "cr_bugs": [709351],
+      "description": "Remove dynamic indexing for swizzled vectors on Mac",
+      "os": {
+        "type": "macosx"
+      },
+      "features": [
+        "remove_dynamic_indexing_of_swizzled_vector"
+      ]
+    },
+    {
+      "id": 320,
+      "cr_bugs": [709351],
+      "description": "Remove dynamic indexing for swizzled vectors on Android",
+      "os": {
+        "type": "android"
+      },
+      "features": [
+        "remove_dynamic_indexing_of_swizzled_vector"
+      ]
+    },
+    {
+      "id": 321,
+      "description": "Zero-copy DXGI video hangs or displays incorrect colors on older AMD drivers",
+      "cr_bugs": [623029, 1025427],
+      "os": {
+        "type": "win"
+      },
+      "vendor_id": "0x1002",
+      "device_id": ["0x9870", "0x9874", "0x98E4"],
+      "driver_version": {
+        "op": "<",
+        "value": "26.20.15000.37"
+      },
+      "features": [
+        "disable_dxgi_zero_copy_video"
+      ]
+    },
+    {
+      "id": 322,
+      "cr_bugs": [932879, 1025427],
+      "description": "Hardware overlays fail to work on older AMD drivers",
+      "os": {
+        "type": "win"
+      },
+      "vendor_id": "0x1002",
+      "driver_version": {
+        "op": "<",
+        "value": "23.20.826.5120"
+      },
+      "features": [
+        "disable_direct_composition_video_overlays"
+      ]
+    },
+    {
+      "id": 323,
+      "cr_bugs": [932879, 1025427],
+      "description": "Hardware overlays fail to work on older AMD drivers",
+      "os": {
+        "type": "win"
+      },
+      "vendor_id": "0x1002",
+      "device_id": ["0x9870", "0x9874", "0x98E4"],
+      "driver_version": {
+        "op": "<",
+        "value": "26.20.15000.37"
+      },
+      "features": [
+        "disable_direct_composition_video_overlays"
+      ]
+    },
+    {
+      "id": 324,
+      "cr_bugs": [1029855, 1050666],
+      "description": "dynamic textures fail to work on AMD GPUs",
+      "os": {
+        "type": "win"
+      },
+      "vendor_id": "0x1002",
+      "features": [
+        "disable_nv12_dynamic_textures"
+      ]
+    },
+    {
+      "id": 326,
+      "description": "Migrating OpenGL contexts between low- and high-power GPUs is unreliable on Mac NVIDIA laptops",
+      "cr_bugs": [681341],
+      "os": {
+        "type": "macosx"
+      },
+      "vendor_id": "0x10de",
+      "multi_gpu_category": "any",
+      "features": [
+        "force_low_power_gpu"
+      ]
+    },
+    {
+      "id": 327,
+      "cr_bugs": [1027981],
+      "description": "Disable dual source blending support",
+      "os": {
+        "type": "macosx",
+        "version": {
+          "op": "<",
+          "value": "10.14"
+        }
+      },
+      "gl_vendor": "Intel.*",
+      "features": [
+        "disable_dual_source_blending_support"
+      ]
+    },
+    {
+      "id": 328,
+      "cr_bugs": [1041166],
+      "description": "Disable D3D11VideoDecoder due to crashes on NVIDIA",
+      "os": {
+        "type": "win"
+      },
+      "vendor_id": "0x10de",
+      "features": [
+        "disable_d3d11_video_decoder"
+      ]
+    },
+    {
+      "id": 329,
+      "cr_bugs": [1012464],
+      "description": "Limit D3D11VideoDecoder to 11.0 due to crashes on AMD",
+      "os": {
+        "type": "win"
+      },
+      "vendor_id": "0x1002",
+      "features": [
+        "limit_d3d11_video_decoder_to_11_0"
+      ]
+    },
+    {
+      "id": 331,
+      "cr_bugs": [1046462],
+      "description": "GL and Vulkan interop doesn't work with AMD GPU properly",
+      "os": {
+        "type": "linux"
+      },
+      "driver_vendor": "Mesa",
+      "driver_version": {
+        "op": "<",
+        "value": "19.3.5"
+      },
+      "vendor_id": "0x1002",
+      "disabled_extensions": [
+        "GL_EXT_memory_object_fd",
+        "GL_EXT_semaphore_fd"
+      ]
+    },
+    {
+      "id": 332,
+      "cr_bugs": [1045586],
+      "description": "Send empty video hdr metadata due to crashes on AMD",
+      "os": {
+        "type": "win"
+      },
+      "vendor_id": "0x1002",
+      "features": [
+        "use_empty_video_hdr_metadata"
+      ]
+    },
+    {
+      "id": 333,
+      "cr_bugs": [1042615],
+      "description": "Disable Qcomm_tiled_rendering extension for webview",
+      "os": {
+        "type": "android"
+      },
+      "gl_vendor": "Qualcomm.*",
+      "features": [
+        "disable_qcomm_tiled_rendering"
+      ]
+    },
+    {
+      "id": 334,
+      "description": "NVidia drivers seem corrupt memory when all siblings of eglImage are destroyed",
+      "cr_bugs": [1052114],
+      "os": {
+        "type": "android"
+      },
+      "gl_vendor": "NVIDIA.*",
+      "features": [
+        "dont_delete_source_texture_for_egl_image"
+      ]
+    },
+    {
+      "id": 336,
+      "cr_bugs": [625785],
+      "description": "DXVA video decoder crashes on some AMD GPUs",
+      "os": {
+        "type": "win"
+      },
+      "vendor_id": "0x1002",
+      "device_id": ["0x15d8", "0x15dd"],
+      "exceptions": [
+        {
+          "driver_version": {
+            "op": "between",
+            "value": "26.20.11030.2",
+            "value2": "26.20.11999.99999"
+          },
+          "driver_version": {
+            "op": "between",
+            "value": "26.20.12020.15",
+            "value2": "26.20.12999.99999"
+          },
+          "driver_version": {
+            "op": "between",
+            "value": "26.20.13001.27002",
+            "value2": "26.20.13999.99999"
+          },
+          "driver_version": {
+            "op": ">=",
+            "value": "26.20.14001.7001"
+          }
+        }
+      ],
+      "features": [
+        "disable_dxva_video_decoder"
       ]
     }
   ]

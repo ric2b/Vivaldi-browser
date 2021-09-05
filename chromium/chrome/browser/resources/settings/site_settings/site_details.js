@@ -57,7 +57,7 @@ Polymer({
     /** @private */
     enableExperimentalWebPlatformFeatures_: {
       type: Boolean,
-      value: function() {
+      value() {
         return loadTimeData.getBoolean('enableExperimentalWebPlatformFeatures');
       },
     },
@@ -65,7 +65,7 @@ Polymer({
     /** @private */
     enableNativeFileSystemWriteContentSetting_: {
       type: Boolean,
-      value: function() {
+      value() {
         return loadTimeData.getBoolean(
             'enableNativeFileSystemWriteContentSetting');
       }
@@ -74,18 +74,45 @@ Polymer({
     /** @private */
     enableInsecureContentContentSetting_: {
       type: Boolean,
-      value: function() {
+      value() {
         return loadTimeData.getBoolean('enableInsecureContentContentSetting');
       }
     },
+
+    /** @private */
+    storagePressureFlagEnabled_: {
+      type: Boolean,
+      value: () => loadTimeData.getBoolean('enableStoragePressureUI'),
+    },
+
+    /** @private */
+    enableWebBluetoothNewPermissionsBackend_: {
+      type: Boolean,
+      value: () =>
+          loadTimeData.getBoolean('enableWebBluetoothNewPermissionsBackend'),
+    },
   },
 
-  listeners: {
-    'usage-deleted': 'onUsageDeleted_',
+  /** @private */
+  enableWebXrContentSetting_: {
+    type: Boolean,
+    value: () => loadTimeData.getBoolean('enableWebXrContentSetting'),
   },
+
+  /** @private {string} */
+  fetchingForHost_: '',
+
+  /** @private {?settings.WebsiteUsageBrowserProxy} */
+  websiteUsageProxy_: null,
 
   /** @override */
-  attached: function() {
+  attached() {
+    this.websiteUsageProxy_ =
+        settings.WebsiteUsageBrowserProxyImpl.getInstance();
+    this.addWebUIListener('usage-total-changed', (host, data, cookies) => {
+      this.onUsageTotalChanged_(host, data, cookies);
+    });
+
     this.addWebUIListener(
         'contentSettingSitePermissionChanged',
         this.onPermissionChanged_.bind(this));
@@ -100,7 +127,7 @@ Polymer({
   },
 
   /** @override */
-  ready: function() {
+  ready() {
     this.ContentSettingsTypes = settings.ContentSettingsTypes;
   },
 
@@ -109,20 +136,22 @@ Polymer({
    * @param {!settings.Route} route
    * @protected
    */
-  currentRouteChanged: function(route) {
+  currentRouteChanged(route) {
     if (route != settings.routes.SITE_SETTINGS_SITE_DETAILS) {
       return;
     }
-    const site = settings.getQueryParameters().get('site');
+    const site = settings.Router.getInstance().getQueryParameters().get('site');
     if (!site) {
       return;
     }
     this.origin_ = site;
     this.browserProxy.isOriginValid(this.origin_).then((valid) => {
       if (!valid) {
-        settings.navigateToPreviousRoute();
+        settings.Router.getInstance().navigateToPreviousRoute();
       } else {
-        this.$.usageApi.fetchUsageTotal(this.toUrl(this.origin_).hostname);
+        this.fetchingForHost_ = this.toUrl(this.origin_).hostname;
+        this.storedData_ = '';
+        this.websiteUsageProxy_.fetchUsageTotal(this.fetchingForHost_);
         this.updatePermissions_(this.getCategoryList());
       }
     });
@@ -137,7 +166,7 @@ Polymer({
    *     changed.
    * @private
    */
-  onPermissionChanged_: function(category, origin, embeddingOrigin) {
+  onPermissionChanged_(category, origin, embeddingOrigin) {
     if (this.origin_ === undefined || this.origin_ == '' ||
         origin === undefined || origin == '') {
       return;
@@ -151,8 +180,24 @@ Polymer({
     this.updatePermissions_([category]);
   },
 
+  /**
+   * Callback for when the usage total is known.
+   * @param {string} host The host that the usage was fetched for.
+   * @param {string} usage The string showing how much data the given host
+   *     is using.
+   * @param {string} cookies The string showing how many cookies the given host
+   *     is using.
+   * @private
+   */
+  onUsageTotalChanged_(host, usage, cookies) {
+    if (this.fetchingForHost_ === host) {
+      this.storedData_ = usage;
+      this.numCookies_ = cookies;
+    }
+  },
+
   // <if expr="chromeos">
-  prefEnableDrmChanged_: function() {
+  prefEnableDrmChanged_() {
     this.updatePermissions_([settings.ContentSettingsTypes.PROTECTED_CONTENT]);
   },
   // </if>
@@ -164,7 +209,7 @@ Polymer({
    *     of categories to update permissions for.
    * @private
    */
-  updatePermissions_: function(categoryList) {
+  updatePermissions_(categoryList) {
     const permissionsMap =
         /**
          * @type {!Object<!settings.ContentSettingsTypes,
@@ -193,12 +238,13 @@ Polymer({
           // The displayName won't change, so just use the first
           // exception.
           assert(exceptionList.length > 0);
-          this.pageTitle = exceptionList[0].displayName;
+          this.pageTitle =
+              this.originRepresentation(exceptionList[0].displayName);
         });
   },
 
   /** @private */
-  onCloseDialog_: function(e) {
+  onCloseDialog_(e) {
     e.target.closest('cr-dialog').close();
   },
 
@@ -207,7 +253,7 @@ Polymer({
    * @param {!Event} e
    * @private
    */
-  onConfirmClearSettings_: function(e) {
+  onConfirmClearSettings_(e) {
     e.preventDefault();
     this.$.confirmResetSettings.showModal();
   },
@@ -217,16 +263,20 @@ Polymer({
    * @param {!Event} e
    * @private
    */
-  onConfirmClearStorage_: function(e) {
+  onConfirmClearStorage_(e) {
     e.preventDefault();
-    this.$.confirmClearStorage.showModal();
+    if (this.storagePressureFlagEnabled_) {
+      this.$.confirmClearStorageNew.showModal();
+    } else {
+      this.$.confirmClearStorage.showModal();
+    }
   },
 
   /**
    * Resets all permissions for the current origin.
    * @private
    */
-  onResetSettings_: function(e) {
+  onResetSettings_(e) {
     this.browserProxy.setOriginPermissions(
         this.origin_, this.getCategoryList(), settings.ContentSetting.DEFAULT);
     if (this.getCategoryList().includes(
@@ -241,25 +291,14 @@ Polymer({
    * Clears all data stored, except cookies, for the current origin.
    * @private
    */
-  onClearStorage_: function(e) {
+  onClearStorage_(e) {
     if (this.hasUsage_(this.storedData_, this.numCookies_)) {
-      this.$.usageApi.clearUsage(this.toUrl(this.origin_).href);
-    }
-
-    this.onCloseDialog_(e);
-  },
-
-  /**
-   * Called when usage has been deleted for an origin via a non-Site Details
-   * source, e.g. clear browsing data.
-   * @param {!CustomEvent<!{origin: string}>} event
-   * @private
-   */
-  onUsageDeleted_: function(event) {
-    if (event.detail.origin == this.toUrl(this.origin_).href) {
+      this.websiteUsageProxy_.clearUsage(this.toUrl(this.origin_).href);
       this.storedData_ = '';
       this.numCookies_ = '';
     }
+
+    this.onCloseDialog_(e);
   },
 
   /**
@@ -268,7 +307,7 @@ Polymer({
    *     disk or battery).
    * @private
    */
-  hasUsage_: function(storage, cookies) {
+  hasUsage_(storage, cookies) {
     return storage != '' || cookies != '';
   },
 
@@ -278,17 +317,17 @@ Polymer({
    *     show.
    * @private
    */
-  hasDataAndCookies_: function(storage, cookies) {
+  hasDataAndCookies_(storage, cookies) {
     return storage != '' && cookies != '';
   },
 
   /** @private */
-  onResetSettingsDialogClosed_: function() {
+  onResetSettingsDialogClosed_() {
     cr.ui.focusWithoutInk(assert(this.$$('#resetSettingsButton')));
   },
 
   /** @private */
-  onClearStorageDialogClosed_: function() {
+  onClearStorageDialogClosed_() {
     cr.ui.focusWithoutInk(assert(this.$$('#clearStorage')));
   },
 });

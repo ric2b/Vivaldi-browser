@@ -28,14 +28,15 @@ CreateAnimationAndPaintWorkletThread(
     std::unique_ptr<AnimationAndPaintWorkletThread> thread) {
   thread->Start(
       std::make_unique<GlobalScopeCreationParams>(
-          document->Url(), mojom::ScriptType::kModule,
-          OffMainThreadWorkerScriptFetchOption::kEnabled, "Worklet",
-          document->UserAgent(), nullptr /* web_worker_fetch_context */,
-          Vector<CSPHeaderAndType>(), document->GetReferrerPolicy(),
-          document->GetSecurityOrigin(), document->IsSecureContext(),
-          document->GetHttpsState(), clients,
-          nullptr /* content_settings_client */, document->AddressSpace(),
-          OriginTrialContext::GetTokens(document).get(),
+          document->Url(), mojom::blink::ScriptType::kModule, "Worklet",
+          document->UserAgent(),
+          document->GetFrame()->Loader().UserAgentMetadata(),
+          nullptr /* web_worker_fetch_context */, Vector<CSPHeaderAndType>(),
+          document->GetReferrerPolicy(), document->GetSecurityOrigin(),
+          document->IsSecureContext(), document->GetHttpsState(), clients,
+          nullptr /* content_settings_client */,
+          document->GetSecurityContext().AddressSpace(),
+          OriginTrialContext::GetTokens(document->ToExecutionContext()).get(),
           base::UnguessableToken::Create(), nullptr /* worker_settings */,
           kV8CacheOptionsDefault,
           MakeGarbageCollected<WorkletModuleResponsesMap>()),

@@ -27,12 +27,12 @@
 #include "ios/chrome/browser/ui/util/rtl_geometry.h"
 #include "ios/chrome/browser/ui/util/ui_util.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
-#import "ios/chrome/common/colors/semantic_color_names.h"
 #import "ios/chrome/common/material_timing.h"
+#import "ios/chrome/common/ui/colors/semantic_color_names.h"
+#include "ios/chrome/common/ui/util/dynamic_type_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ios/chrome/grit/ios_theme_resources.h"
 #include "skia/ext/skia_utils_ios.h"
-#include "third_party/google_toolbox_for_mac/src/iPhone/GTMFadeTruncatingLabel.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/image/image.h"
@@ -79,11 +79,6 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
 - (void)deleteBackward;
 // Returns the layers affected by animations added by |-animateFadeWithStyle:|.
 - (NSArray*)fadeAnimationLayers;
-// Returns the text that is displayed in the field, including any inline
-// autocomplete text that may be present as an NSString. Returns the same
-// value as -|displayedText| but prefer to use this to avoid unnecessary
-// conversion from NSString to base::string16 if possible.
-- (NSString*)nsDisplayedText;
 // Font that should be used in current size class.
 - (UIFont*)currentFont;
 
@@ -101,9 +96,7 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
 #pragma mark - Public methods
 // Overload to allow for code-based initialization.
 - (instancetype)initWithFrame:(CGRect)frame {
-  return [self initWithFrame:frame
-                   textColor:TextColor()
-                   tintColor:nil];
+  return [self initWithFrame:frame textColor:TextColor() tintColor:nil];
 }
 
 - (instancetype)initWithFrame:(CGRect)frame
@@ -118,17 +111,16 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
     } else {
       _displayedTintColor = self.tintColor;
     }
-    [self setTextColor:_displayedTextColor];
-    [self setAutocorrectionType:UITextAutocorrectionTypeNo];
-    [self setAutocapitalizationType:UITextAutocapitalizationTypeNone];
-    [self setEnablesReturnKeyAutomatically:YES];
-    [self setReturnKeyType:UIReturnKeyGo];
-    [self setContentVerticalAlignment:UIControlContentVerticalAlignmentCenter];
-    [self setSpellCheckingType:UITextSpellCheckingTypeNo];
-    [self setTextAlignment:NSTextAlignmentNatural];
-    [self setKeyboardType:(UIKeyboardType)UIKeyboardTypeWebSearch];
-
-    [self setSmartQuotesType:UITextSmartQuotesTypeNo];
+    self.textColor = _displayedTextColor;
+    self.autocorrectionType = UITextAutocorrectionTypeNo;
+    self.autocapitalizationType = UITextAutocapitalizationTypeNone;
+    self.enablesReturnKeyAutomatically = YES;
+    self.returnKeyType = UIReturnKeyGo;
+    self.contentVerticalAlignment = UIControlContentVerticalAlignmentCenter;
+    self.spellCheckingType = UITextSpellCheckingTypeNo;
+    self.textAlignment = NSTextAlignmentNatural;
+    self.keyboardType = UIKeyboardTypeWebSearch;
+    self.smartQuotesType = UITextSmartQuotesTypeNo;
 
     // Disable drag on iPhone because there's nowhere to drag to
     if (!IsIPadIdiom()) {
@@ -152,9 +144,12 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
 
 - (void)setText:(NSAttributedString*)text
     userTextLength:(size_t)userTextLength {
-  DCHECK_LE(userTextLength, [text length]);
+  DCHECK_LE(userTextLength, text.length);
+  if (userTextLength > 0) {
+    [self exitPreEditState];
+  }
 
-  NSUInteger autocompleteLength = [text length] - userTextLength;
+  NSUInteger autocompleteLength = text.length - userTextLength;
   [self setTextInternal:text autocompleteLength:autocompleteLength];
 }
 
@@ -166,26 +161,21 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
     [self unmarkText];
 
   NSRange selectedNSRange = [self selectedNSRange];
-  if (![self delegate] || [[self delegate] textField:self
-                              shouldChangeCharactersInRange:selectedNSRange
-                                          replacementString:text]) {
+  if (!self.delegate || [self.delegate textField:self
+                            shouldChangeCharactersInRange:selectedNSRange
+                                        replacementString:text]) {
     [self replaceRange:[self selectedTextRange] withText:text];
   }
 }
 
-- (base::string16)displayedText {
-  return base::SysNSStringToUTF16([self nsDisplayedText]);
-}
-
-- (base::string16)autocompleteText {
-  DCHECK_LT([[self text] length], [[_selection text] length])
-      << "[_selection text] and [self text] are out of sync. "
+- (NSString*)autocompleteText {
+  DCHECK_LT(self.text.length, _selection.text.length)
+      << "[_selection text] and self.text are out of sync. "
       << "Please email justincohen@ and rohitrao@ if you see this.";
-  if (_selection && [[_selection text] length] > [[self text] length]) {
-    return base::SysNSStringToUTF16(
-        [[_selection text] substringFromIndex:[[self text] length]]);
+  if (_selection && _selection.text.length > self.text.length) {
+    return [_selection.text substringFromIndex:self.text.length];
   }
-  return base::string16();
+  return @"";
 }
 
 - (BOOL)hasAutocompleteText {
@@ -209,8 +199,8 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
   DCHECK([self isFirstResponder]);
   UITextPosition* beginning = [self beginningOfDocument];
   UITextRange* selectedRange = [self selectedTextRange];
-  NSInteger start =
-      [self offsetFromPosition:beginning toPosition:[selectedRange start]];
+  NSInteger start = [self offsetFromPosition:beginning
+                                  toPosition:[selectedRange start]];
   NSInteger length = [self offsetFromPosition:[selectedRange start]
                                    toPosition:[selectedRange end]];
   return NSMakeRange(start, length);
@@ -218,7 +208,7 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
 
 - (NSTextAlignment)bestTextAlignment {
   if ([self isFirstResponder]) {
-    return [self bestAlignmentForText:[self text]];
+    return [self bestAlignmentForText:self.text];
   }
   return NSTextAlignmentNatural;
 }
@@ -261,32 +251,19 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
 // but there are numerous edge case issues with it, so it's simpler to just
 // manually update the text alignment and writing direction of the UITextField.
 - (void)updateTextDirection {
-  // If the flag is enabled, we want to use the default text alignment.
-  if (base::FeatureList::IsEnabled(kNewOmniboxPopupLayout)) {
-    // If the keyboard language direction does not match the device
-    // language direction, the alignment of the placeholder text will be off.
-    if (self.text.length == 0) {
-      NSLocaleLanguageDirection direction = [NSLocale
-          characterDirectionForLanguage:self.textInputMode.primaryLanguage];
-      if (direction == NSLocaleLanguageDirectionRightToLeft) {
-        [self setTextAlignment:NSTextAlignmentRight];
-      } else {
-        [self setTextAlignment:NSTextAlignmentLeft];
-      }
+  // If the keyboard language direction does not match the device
+  // language direction, the alignment of the placeholder text will be off.
+  if (self.text.length == 0) {
+    NSLocaleLanguageDirection direction = [NSLocale
+        characterDirectionForLanguage:self.textInputMode.primaryLanguage];
+    if (direction == NSLocaleLanguageDirectionRightToLeft) {
+      [self setTextAlignment:NSTextAlignmentRight];
     } else {
-      [self setTextAlignment:NSTextAlignmentNatural];
+      [self setTextAlignment:NSTextAlignmentLeft];
     }
-    return;
-  }
-  // Setting the empty field to Natural seems to let iOS update the cursor
-  // position when the keyboard language is changed.
-  if (![self text].length) {
+  } else {
     [self setTextAlignment:NSTextAlignmentNatural];
-    return;
   }
-
-  NSTextAlignment alignment = [self bestTextAlignment];
-  [self setTextAlignment:alignment];
 }
 
 - (UIColor*)displayedTextColor {
@@ -591,7 +568,7 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
     return;
 
   // Accept selection.
-  NSString* newText = [[self nsDisplayedText] copy];
+  NSString* newText = [[self displayedText] copy];
   [self clearAutocompleteText];
   [self setText:newText];
 }
@@ -608,7 +585,7 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
     [self exitPreEditState];
   }
   if (_selection) {
-    NSString* newText = [[self nsDisplayedText] copy];
+    NSString* newText = [[self displayedText] copy];
     [self clearAutocompleteText];
     [self setText:newText];
   }
@@ -667,17 +644,14 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
 // Overridden to allow for custom omnibox copy behavior.  This includes
 // preprending http:// to the copied URL if needed.
 - (void)copy:(id)sender {
-  id<OmniboxTextFieldDelegate> delegate = [self delegate];
-  BOOL handled = NO;
+  id<OmniboxTextFieldDelegate> delegate = self.delegate;
 
   // Must test for the onCopy method, since it's optional.
-  if ([delegate respondsToSelector:@selector(onCopy)])
-    handled = [delegate onCopy];
-
-  // iOS 4 doesn't expose an API that allows the delegate to handle the copy
-  // operation, so let the superclass perform the copy if the delegate couldn't.
-  if (!handled)
+  if ([delegate respondsToSelector:@selector(onCopy)]) {
+    [delegate onCopy];
+  } else {
     [super copy:sender];
+  }
 }
 
 - (void)cut:(id)sender {
@@ -693,7 +667,7 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
 
 // Overridden to notify the delegate that a paste is in progress.
 - (void)paste:(id)sender {
-  id delegate = [self delegate];
+  id delegate = self.delegate;
   if ([delegate respondsToSelector:@selector(willPaste)])
     [delegate willPaste];
   [super paste:sender];
@@ -703,8 +677,8 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
 
 - (void)deleteBackward {
   // Must test for the onDeleteBackward method, since it's optional.
-  if ([[self delegate] respondsToSelector:@selector(onDeleteBackward)])
-    [[self delegate] onDeleteBackward];
+  if ([self.delegate respondsToSelector:@selector(onDeleteBackward)])
+    [self.delegate onDeleteBackward];
   [super deleteBackward];
 }
 
@@ -780,10 +754,10 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
   }
 
   UITextPosition* beginning = self.beginningOfDocument;
-  UITextPosition* cursorPosition =
-      [self positionFromPosition:beginning offset:offset];
-  UITextRange* textRange =
-      [self textRangeFromPosition:cursorPosition toPosition:cursorPosition];
+  UITextPosition* cursorPosition = [self positionFromPosition:beginning
+                                                       offset:offset];
+  UITextRange* textRange = [self textRangeFromPosition:cursorPosition
+                                            toPosition:cursorPosition];
   self.selectedTextRange = textRange;
 }
 
@@ -845,10 +819,10 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
              : NSTextAlignmentRight;
 }
 
-- (NSString*)nsDisplayedText {
+- (NSString*)displayedText {
   if (_selection)
     return [_selection text];
-  return [self text];
+  return self.text;
 }
 
 // Creates the SelectedTextLabel if it doesn't already exist and adds it as a
@@ -929,7 +903,7 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
 }
 
 - (UIColor*)selectedTextBackgroundColor {
-    return [_displayedTintColor colorWithAlphaComponent:0.2];
+  return [_displayedTintColor colorWithAlphaComponent:0.2];
 }
 
 - (BOOL)isColorHidden:(UIColor*)color {

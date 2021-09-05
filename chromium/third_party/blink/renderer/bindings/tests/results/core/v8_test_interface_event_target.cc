@@ -13,6 +13,7 @@
 #include <algorithm>
 
 #include "base/memory/scoped_refptr.h"
+#include "third_party/blink/renderer/bindings/core/v8/native_value_traits_impl.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_dom_configuration.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
@@ -102,7 +103,7 @@ static void V8TestInterfaceEventTargetConstructorCallback(const v8::FunctionCall
     return;
   }
 
-  Document& document = *To<Document>(ToExecutionContext(
+  Document& document = *Document::From(ToExecutionContext(
       info.NewTarget().As<v8::Object>()->CreationContext()));
   TestInterfaceEventTarget* impl = TestInterfaceEventTarget::CreateForJSConstructor(document);
   v8::Local<v8::Object> wrapper = info.Holder();
@@ -142,8 +143,10 @@ void V8TestInterfaceEventTargetConstructor::NamedConstructorAttributeGetter(
       per_context_data->ConstructorForType(V8TestInterfaceEventTargetConstructor::GetWrapperTypeInfo());
 
   // Set the prototype of named constructors to the regular constructor.
+  static const V8PrivateProperty::SymbolKey kPrivatePropertyInitialized;
   auto private_property =
-      V8PrivateProperty::GetNamedConstructorInitialized(info.GetIsolate());
+      V8PrivateProperty::GetSymbol(
+          info.GetIsolate(), kPrivatePropertyInitialized);
   v8::Local<v8::Context> current_context = info.GetIsolate()->GetCurrentContext();
   v8::Local<v8::Value> private_value;
 
@@ -229,16 +232,6 @@ v8::Local<v8::Object> V8TestInterfaceEventTarget::FindInstanceInPrototypeChain(
 TestInterfaceEventTarget* V8TestInterfaceEventTarget::ToImplWithTypeCheck(
     v8::Isolate* isolate, v8::Local<v8::Value> value) {
   return HasInstance(value, isolate) ? ToImpl(v8::Local<v8::Object>::Cast(value)) : nullptr;
-}
-
-TestInterfaceEventTarget* NativeValueTraits<TestInterfaceEventTarget>::NativeValue(
-    v8::Isolate* isolate, v8::Local<v8::Value> value, ExceptionState& exception_state) {
-  TestInterfaceEventTarget* native_value = V8TestInterfaceEventTarget::ToImplWithTypeCheck(isolate, value);
-  if (!native_value) {
-    exception_state.ThrowTypeError(ExceptionMessages::FailedToConvertJSValue(
-        "TestInterfaceEventTarget"));
-  }
-  return native_value;
 }
 
 }  // namespace blink

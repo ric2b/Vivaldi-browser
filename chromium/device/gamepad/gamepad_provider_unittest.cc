@@ -15,7 +15,6 @@
 #include "build/build_config.h"
 #include "device/gamepad/gamepad_data_fetcher.h"
 #include "device/gamepad/gamepad_test_helpers.h"
-#include "services/service_manager/public/cpp/connector.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace device {
@@ -27,9 +26,9 @@ class UserGestureListener {
  public:
   UserGestureListener() : has_user_gesture_(false) {}
 
-  base::Closure GetClosure() {
-    return base::Bind(&UserGestureListener::GotUserGesture,
-                      weak_factory_.GetWeakPtr());
+  base::OnceClosure GetClosure() {
+    return base::BindOnce(&UserGestureListener::GotUserGesture,
+                          weak_factory_.GetWeakPtr());
   }
 
   bool has_user_gesture() const { return has_user_gesture_; }
@@ -48,8 +47,7 @@ class GamepadProviderTest : public testing::Test, public GamepadTestHelper {
     auto fetcher = std::make_unique<MockGamepadDataFetcher>(test_data);
     mock_data_fetcher_ = fetcher.get();
     provider_ = std::make_unique<GamepadProvider>(
-        /*connection_change_client=*/nullptr,
-        /*service_manager_connector=*/nullptr, std::move(fetcher),
+        /*connection_change_client=*/nullptr, std::move(fetcher),
         /*polling_thread=*/nullptr);
     return provider_.get();
   }

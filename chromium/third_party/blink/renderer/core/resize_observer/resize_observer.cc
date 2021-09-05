@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/core/resize_observer/resize_observer.h"
 
 #include "third_party/blink/renderer/bindings/core/v8/v8_resize_observer_callback.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_resize_observer_options.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/layout/adjust_for_absolute_zoom.h"
@@ -14,6 +15,11 @@
 #include "third_party/blink/renderer/core/resize_observer/resize_observer_entry.h"
 
 namespace blink {
+
+constexpr const char* kBoxOptionBorderBox = "border-box";
+constexpr const char* kBoxOptionContentBox = "content-box";
+constexpr const char* kBoxOptionDevicePixelContentBox =
+    "device-pixel-content-box";
 
 ResizeObserver* ResizeObserver::Create(Document& document,
                                        V8ResizeObserverCallback* callback) {
@@ -26,36 +32,72 @@ ResizeObserver* ResizeObserver::Create(Document& document, Delegate* delegate) {
 
 ResizeObserver::ResizeObserver(V8ResizeObserverCallback* callback,
                                Document& document)
-    : ContextClient(&document),
+    : ExecutionContextClient(document.ToExecutionContext()),
       callback_(callback),
-      skipped_observations_(false),
-      element_size_changed_(false) {
+      skipped_observations_(false) {
   DCHECK(callback_);
   controller_ = &document.EnsureResizeObserverController();
   controller_->AddObserver(*this);
 }
 
 ResizeObserver::ResizeObserver(Delegate* delegate, Document& document)
-    : ContextClient(&document),
+    : ExecutionContextClient(document.ToExecutionContext()),
       delegate_(delegate),
-      skipped_observations_(false),
-      element_size_changed_(false) {
+      skipped_observations_(false) {
   DCHECK(delegate_);
   controller_ = &document.EnsureResizeObserverController();
   controller_->AddObserver(*this);
 }
 
-void ResizeObserver::observe(Element* target) {
-  auto& observer_map = target->EnsureResizeObserverData();
-  if (observer_map.Contains(this))
-    return;  // Already registered.
+ResizeObserverBoxOptions ResizeObserver::ParseBoxOptions(
+    const String& box_options) {
+  if (box_options == kBoxOptionBorderBox)
+    return ResizeObserverBoxOptions::BorderBox;
+  if (box_options == kBoxOptionContentBox)
+    return ResizeObserverBoxOptions::ContentBox;
+  if (box_options == kBoxOptionDevicePixelContentBox)
+    return ResizeObserverBoxOptions::DevicePixelContentBox;
+  return ResizeObserverBoxOptions::ContentBox;
+}
 
-  auto* observation = MakeGarbageCollected<ResizeObservation>(target, this);
+void ResizeObserver::observeInternal(Element* target,
+                                     ResizeObserverBoxOptions box_option) {
+  auto& observer_map = target->EnsureResizeObserverData();
+
+  if (observer_map.Contains(this)) {
+    auto observation = observer_map.find(this);
+    if ((*observation).value->observedBox() == box_option)
+      return;
+
+    // Unobserve target if box_option has changed and target already existed. If
+    // there is an existing observation of a different box, this new observation
+    // takes precedence. See:
+    // https://drafts.csswg.org/resize-observer/#processing-model
+    observations_.erase((*observation).value);
+    auto index = active_observations_.Find((*observation).value);
+    if (index != kNotFound) {
+      active_observations_.EraseAt(index);
+    }
+    observer_map.erase(observation);
+  }
+
+  auto* observation =
+      MakeGarbageCollected<ResizeObservation>(target, this, box_option);
   observations_.insert(observation);
   observer_map.Set(this, observation);
 
   if (LocalFrameView* frame_view = target->GetDocument().View())
     frame_view->ScheduleAnimation();
+}
+
+void ResizeObserver::observe(Element* target,
+                             const ResizeObserverOptions* options) {
+  ResizeObserverBoxOptions box_option = ParseBoxOptions(options->box());
+  observeInternal(target, box_option);
+}
+
+void ResizeObserver::observe(Element* target) {
+  observeInternal(target, ResizeObserverBoxOptions::ContentBox);
 }
 
 void ResizeObserver::unobserve(Element* target) {
@@ -89,8 +131,6 @@ size_t ResizeObserver::GatherObservations(size_t deeper_than) {
   DCHECK(active_observations_.IsEmpty());
 
   size_t min_observed_depth = ResizeObserverController::kDepthBottom;
-  if (!element_size_changed_)
-    return min_observed_depth;
   for (auto& observation : observations_) {
     if (!observation->ObservationSizeOutOfSync())
       continue;
@@ -106,9 +146,6 @@ size_t ResizeObserver::GatherObservations(size_t deeper_than) {
 }
 
 void ResizeObserver::DeliverObservations() {
-  // We can only clear this flag after all observations have been
-  // broadcast.
-  element_size_changed_ = skipped_observations_;
   if (active_observations_.IsEmpty())
     return;
 
@@ -123,26 +160,9 @@ void ResizeObserver::DeliverObservations() {
     if (!execution_context || execution_context->IsContextDestroyed())
       continue;
 
-    LayoutPoint location = observation->ComputeTargetLocation();
-    LayoutSize size = observation->ComputeTargetSize();
-    observation->SetObservationSize(size);
-
-    LayoutRect content_rect(location, size);
-    if (observation->Target()->GetLayoutObject()) {
-      // Must adjust for zoom in order to report non-zoomed size.
-      const ComputedStyle& style =
-          observation->Target()->GetLayoutObject()->StyleRef();
-      content_rect.SetX(
-          AdjustForAbsoluteZoom::AdjustLayoutUnit(content_rect.X(), style));
-      content_rect.SetY(
-          AdjustForAbsoluteZoom::AdjustLayoutUnit(content_rect.Y(), style));
-      content_rect.SetWidth(
-          AdjustForAbsoluteZoom::AdjustLayoutUnit(content_rect.Width(), style));
-      content_rect.SetHeight(AdjustForAbsoluteZoom::AdjustLayoutUnit(
-          content_rect.Height(), style));
-    }
-    auto* entry = MakeGarbageCollected<ResizeObserverEntry>(
-        observation->Target(), content_rect);
+    observation->SetObservationSize(observation->ComputeTargetSize());
+    auto* entry =
+        MakeGarbageCollected<ResizeObserverEntry>(observation->Target());
     entries.push_back(entry);
   }
 
@@ -168,24 +188,18 @@ void ResizeObserver::ClearObservations() {
   skipped_observations_ = false;
 }
 
-void ResizeObserver::ElementSizeChanged() {
-  element_size_changed_ = true;
-  if (controller_)
-    controller_->ObserverChanged();
-}
-
 bool ResizeObserver::HasPendingActivity() const {
   return !observations_.IsEmpty();
 }
 
-void ResizeObserver::Trace(blink::Visitor* visitor) {
+void ResizeObserver::Trace(Visitor* visitor) {
   visitor->Trace(callback_);
   visitor->Trace(delegate_);
   visitor->Trace(observations_);
   visitor->Trace(active_observations_);
   visitor->Trace(controller_);
   ScriptWrappable::Trace(visitor);
-  ContextClient::Trace(visitor);
+  ExecutionContextClient::Trace(visitor);
 }
 
 }  // namespace blink

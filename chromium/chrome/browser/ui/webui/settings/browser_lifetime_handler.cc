@@ -19,10 +19,6 @@
 #include "components/user_manager/user_manager.h"
 #endif  // defined(OS_CHROMEOS)
 
-#if defined(OS_MACOSX)
-#include "chrome/browser/first_run/upgrade_util_mac.h"
-#endif
-
 namespace settings {
 
 namespace {
@@ -86,11 +82,6 @@ void BrowserLifetimeHandler::HandleRestart(
 
 void BrowserLifetimeHandler::HandleRelaunch(
     const base::ListValue* args) {
-#if defined(OS_MACOSX)
-  if (!upgrade_util::ShouldContinueToRelaunchForUpgrade())
-    return;
-#endif  // OS_MACOSX
-
   chrome::AttemptRelaunch();
 }
 
@@ -102,7 +93,7 @@ void BrowserLifetimeHandler::HandleSignOutAndRestart(
 
 void BrowserLifetimeHandler::HandleFactoryReset(
     const base::ListValue* args) {
-  base::span<const base::Value> args_list = args->GetList();
+  base::Value::ConstListView args_list = args->GetList();
   CHECK_EQ(1U, args_list.size());
   bool tpm_firmware_update_requested = args_list[0].GetBool();
 

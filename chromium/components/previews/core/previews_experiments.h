@@ -221,10 +221,6 @@ int ResourceLoadingHintsPreviewsInflationPercent();
 // bytes to for inflating the original_bytes count.
 int ResourceLoadingHintsPreviewsInflationBytes();
 
-// The maximum number of pref entries that should be kept by
-// PreviewsOfflineHelper.
-size_t OfflinePreviewsHelperMaxPrefSize();
-
 // Forces the coin flip holdback, if enabled, to always come up "holdback".
 bool ShouldOverrideNavigationCoinFlipToHoldback();
 
@@ -237,6 +233,15 @@ bool ShouldExcludeMediaSuffix(const GURL& url);
 // Returns true if the logic to detect redirect loops with defer all script
 // preview using a cache is enabled.
 bool DetectDeferRedirectLoopsUsingCache();
+
+// Returns true if the checks to show a preview for the navigation should be
+// overridden.
+bool OverrideShouldShowPreviewCheck();
+
+// Returns true if DeferAllScript should be applied even if the optimization
+// guide decision is unknown. This allows DeferAllScript to be applied if the
+// optimization guide does not yet know if it can be or not.
+bool ApplyDeferWhenOptimizationGuideDecisionUnknown();
 
 }  // namespace params
 

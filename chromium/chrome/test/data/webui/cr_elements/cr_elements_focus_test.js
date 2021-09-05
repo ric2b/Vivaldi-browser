@@ -32,9 +32,9 @@ TEST_F('CrElementsActionMenuTest', 'All', function() {
   mocha.run();
 });
 
-function CrElementsProfileAvatarSelectorFocusTest() {}
+function CrElementsProfileAvatarSelectorTest() {}
 
-CrElementsProfileAvatarSelectorFocusTest.prototype = {
+CrElementsProfileAvatarSelectorTest.prototype = {
   __proto__: CrElementsFocusTest.prototype,
 
   /** @override */
@@ -46,9 +46,8 @@ CrElementsProfileAvatarSelectorFocusTest.prototype = {
   ]),
 };
 
-TEST_F('CrElementsProfileAvatarSelectorFocusTest', 'All', function() {
-  cr_profile_avatar_selector.registerTests();
-  mocha.grep(cr_profile_avatar_selector.TestNames.Focus).run();
+TEST_F('CrElementsProfileAvatarSelectorTest', 'All', function() {
+  mocha.run();
 });
 
 /**
@@ -199,5 +198,26 @@ CrElementsTabsTest.prototype = {
 };
 
 TEST_F('CrElementsTabsTest', 'All', function() {
+  mocha.run();
+});
+
+// eslint-disable-next-line no-var
+var IronListFocusTest = class extends CrElementsFocusTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://resources/polymer/v1_0/iron-list/iron-list.html';
+  }
+
+  /** @override */
+  get extraLibraries() {
+    return [
+      ...PolymerTest.prototype.extraLibraries,
+      '../test_util.js',
+      'iron_list_focus_test.js',
+    ];
+  }
+};
+
+TEST_F('IronListFocusTest', 'All', function() {
   mocha.run();
 });

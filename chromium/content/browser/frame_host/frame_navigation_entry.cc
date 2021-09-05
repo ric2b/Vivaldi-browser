@@ -8,6 +8,7 @@
 
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "content/browser/web_package/web_bundle_navigation_info.h"
 #include "content/common/page_state_serialization.h"
 
 namespace content {
@@ -40,6 +41,7 @@ FrameNavigationEntry::FrameNavigationEntry(
       initiator_origin_(initiator_origin),
       redirect_chain_(redirect_chain),
       page_state_(page_state),
+      bindings_(kInvalidBindings),
       method_(method),
       post_id_(post_id),
       blob_url_loader_factory_(std::move(blob_url_loader_factory)) {
@@ -58,6 +60,9 @@ scoped_refptr<FrameNavigationEntry> FrameNavigationEntry::Clone() const {
                     url_, committed_origin_, referrer_, initiator_origin_,
                     redirect_chain_, page_state_, method_, post_id_,
                     nullptr /* blob_url_loader_factory */);
+  // |bindings_| gets only updated through the SetBindings API, not through
+  // UpdateEntry, so make a copy of it explicitly here as part of cloning.
+  copy->bindings_ = bindings_;
   return copy;
 }
 
@@ -119,6 +124,13 @@ void FrameNavigationEntry::SetPageState(const PageState& page_state) {
   document_sequence_number_ = exploded_state.top.document_sequence_number;
 }
 
+void FrameNavigationEntry::SetBindings(int bindings) {
+  // Ensure this is set to a valid value, and that it stays the same once set.
+  CHECK_NE(bindings, kInvalidBindings);
+  CHECK(bindings_ == kInvalidBindings || bindings_ == bindings);
+  bindings_ = bindings;
+}
+
 scoped_refptr<network::ResourceRequestBody> FrameNavigationEntry::GetPostData(
     std::string* content_type) const {
   if (method_ != "POST")
@@ -133,6 +145,16 @@ scoped_refptr<network::ResourceRequestBody> FrameNavigationEntry::GetPostData(
       exploded_state.top.http_body.http_content_type.value_or(
           base::string16()));
   return exploded_state.top.http_body.request_body;
+}
+
+void FrameNavigationEntry::set_web_bundle_navigation_info(
+    std::unique_ptr<WebBundleNavigationInfo> web_bundle_navigation_info) {
+  web_bundle_navigation_info_ = std::move(web_bundle_navigation_info);
+}
+
+WebBundleNavigationInfo* FrameNavigationEntry::web_bundle_navigation_info()
+    const {
+  return web_bundle_navigation_info_.get();
 }
 
 }  // namespace content

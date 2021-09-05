@@ -8,7 +8,6 @@
 
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "chrome/browser/android/vr/arcore_device/ar_image_transport.h"
 #include "chrome/browser/android/vr/arcore_device/arcore_gl.h"
@@ -166,8 +165,7 @@ class ArCoreDeviceTest : public testing::Test {
   void CreateSession() {
     mojom::XRRuntimeSessionOptionsPtr options =
         mojom::XRRuntimeSessionOptions::New();
-    options->environment_integration = true;
-    options->immersive = true;
+    options->mode = mojom::XRSessionMode::kImmersiveAr;
     device()->RequestSession(std::move(options),
                              base::BindOnce(&ArCoreDeviceTest::OnSessionCreated,
                                             base::Unretained(this)));
@@ -222,24 +220,6 @@ TEST_F(ArCoreDeviceTest, RequestSession) {
 TEST_F(ArCoreDeviceTest, GetFrameData) {
   CreateSession();
   GetFrameData();
-}
-
-TEST_F(ArCoreDeviceTest, RequestHitTest) {
-  CreateSession();
-
-  mojom::XRRayPtr ray = mojom::XRRay::New();
-  std::vector<mojom::XRHitResultPtr> hit_results;
-  auto callback =
-      [](std::vector<mojom::XRHitResultPtr>* hit_results,
-         base::Optional<std::vector<mojom::XRHitResultPtr>> results) {
-        *hit_results = std::move(results.value());
-      };
-
-  environment_provider->RequestHitTest(std::move(ray),
-                                       base::BindOnce(callback, &hit_results));
-  // Have to get frame data to trigger the hit-test calculation.
-  GetFrameData();
-  EXPECT_FALSE(hit_results.empty());
 }
 
 }  // namespace device

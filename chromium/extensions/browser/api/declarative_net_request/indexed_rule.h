@@ -51,23 +51,38 @@ struct IndexedRule {
   url_pattern_index::flat::AnchorType anchor_right =
       url_pattern_index::flat::AnchorType_NONE;
   std::string url_pattern;
+
   // Lower-cased and sorted as required by the url_pattern_index component.
   std::vector<std::string> domains;
   std::vector<std::string> excluded_domains;
 
-  // The redirect url for the rule. For redirect rules, exactly one of
-  // |redirect_url| or |url_transform| will be valid.
+  // Note: For redirect rules, exactly one of |redirect_url|,
+  // |regex_substitution| or |url_transform|  will be set.
+  // The redirect url for the rule.
   base::Optional<std::string> redirect_url;
-
-  // UrlTransform for this rule. For redirect rules, exactly one of
-  // |redirect_url| or |url_transform| will be valid.
+  // The regex substitution for this rule.
+  base::Optional<std::string> regex_substitution;
+  // UrlTransform for this rule.
   std::unique_ptr<api::declarative_net_request::URLTransform> url_transform;
 
   // List of headers to remove, valid iff this is a remove headers rule.
   std::set<api::declarative_net_request::RemoveHeaderType> remove_headers_set;
 
+  // List of request headers to modify. Valid iff this is a modify headers rule.
+  std::vector<api::declarative_net_request::ModifyHeaderInfo> request_headers;
+
+  // List of response headers to modify. Valid iff this is a modify headers
+  // rule.
+  std::vector<api::declarative_net_request::ModifyHeaderInfo> response_headers;
+
   DISALLOW_COPY_AND_ASSIGN(IndexedRule);
 };
+
+// Compute the rule priority for indexing, by combining the priority from
+// the JSON rule and the priority of the action type. Exposed for testing.
+uint64_t ComputeIndexedRulePriority(
+    int parsed_rule_priority,
+    api::declarative_net_request::RuleActionType action_type);
 
 }  // namespace declarative_net_request
 }  // namespace extensions

@@ -13,6 +13,8 @@
 #include "base/test/bind_test_util.h"
 #include "base/test/task_environment.h"
 #include "jingle/glue/fake_ssl_client_socket.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/socket/socket_test_util.h"
 #include "net/socket/stream_socket.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
@@ -34,25 +36,23 @@ class P2PSocketTcpTestBase : public testing::Test {
   explicit P2PSocketTcpTestBase(P2PSocketType type) : socket_type_(type) {}
 
   void SetUp() override {
-    mojom::P2PSocketClientPtr socket_client;
-    auto socket_client_request = mojo::MakeRequest(&socket_client);
+    mojo::PendingRemote<mojom::P2PSocketClient> socket_client;
+    mojo::PendingRemote<mojom::P2PSocket> socket;
+    auto socket_receiver = socket.InitWithNewPipeAndPassReceiver();
 
-    mojom::P2PSocketPtr socket;
-    auto socket_request = mojo::MakeRequest(&socket);
-
-    fake_client_.reset(new FakeSocketClient(std::move(socket),
-                                            std::move(socket_client_request)));
+    fake_client_.reset(new FakeSocketClient(
+        std::move(socket), socket_client.InitWithNewPipeAndPassReceiver()));
 
     EXPECT_CALL(*fake_client_.get(), SocketCreated(_, _)).Times(1);
 
     if (socket_type_ == P2P_SOCKET_TCP_CLIENT) {
       socket_impl_ = std::make_unique<P2PSocketTcp>(
           &socket_delegate_, std::move(socket_client),
-          std::move(socket_request), P2P_SOCKET_TCP_CLIENT, nullptr);
+          std::move(socket_receiver), P2P_SOCKET_TCP_CLIENT, nullptr);
     } else {
       socket_impl_ = std::make_unique<P2PSocketStunTcp>(
           &socket_delegate_, std::move(socket_client),
-          std::move(socket_request), P2P_SOCKET_STUN_TCP_CLIENT, nullptr);
+          std::move(socket_receiver), P2P_SOCKET_STUN_TCP_CLIENT, nullptr);
     }
 
     socket_ = new FakeSocket(&sent_data_);
@@ -332,6 +332,24 @@ TEST_F(P2PSocketTcpTest, SendDataWithPacketOptions) {
   base::RunLoop().RunUntilIdle();
 }
 
+// Verify that we ignore an empty frame.
+TEST_F(P2PSocketTcpTest, IgnoreEmptyFrame) {
+  std::vector<int8_t> response_packet;
+  CreateStunResponse(&response_packet);
+
+  std::string received_data;
+  received_data.append(IntToSize(response_packet.size()));
+  received_data.append(response_packet.begin(), response_packet.end());
+  socket_->AppendInputData(&received_data[0], received_data.size());
+
+  std::vector<int8_t> empty_packet;
+  received_data.resize(0);
+  received_data.append(IntToSize(empty_packet.size()));
+  received_data.append(empty_packet.begin(), empty_packet.end());
+  socket_->AppendInputData(&received_data[0], received_data.size());
+  EXPECT_CALL(*fake_client_.get(), DataReceived(_, _, _)).Times(0);
+}
+
 // Verify that we can send STUN message and that they are formatted
 // properly.
 TEST_F(P2PSocketStunTcpTest, SendStunNoAuth) {
@@ -468,13 +486,12 @@ TEST(P2PSocketTcpWithPseudoTlsTest, Basic) {
   base::test::TaskEnvironment task_environment(
       base::test::TaskEnvironment::MainThreadType::IO);
 
-  mojom::P2PSocketClientPtr socket_client;
-  auto socket_client_request = mojo::MakeRequest(&socket_client);
-  mojom::P2PSocketPtr socket;
-  auto socket_request = mojo::MakeRequest(&socket);
+  mojo::PendingRemote<mojom::P2PSocketClient> socket_client;
+  mojo::PendingRemote<mojom::P2PSocket> socket;
+  auto socket_receiver = socket.InitWithNewPipeAndPassReceiver();
 
   FakeSocketClient fake_client2(std::move(socket),
-                                std::move(socket_client_request));
+                                socket_client.InitWithNewPipeAndPassReceiver());
   EXPECT_CALL(fake_client2, SocketCreated(_, _)).Times(1);
 
   net::TestURLRequestContext context(true);
@@ -501,7 +518,7 @@ TEST(P2PSocketTcpWithPseudoTlsTest, Basic) {
 
   FakeP2PSocketDelegate socket_delegate;
   P2PSocketTcp host(&socket_delegate, std::move(socket_client),
-                    std::move(socket_request), P2P_SOCKET_SSLTCP_CLIENT,
+                    std::move(socket_receiver), P2P_SOCKET_SSLTCP_CLIENT,
                     &factory);
   P2PHostAndIPEndPoint dest;
   dest.ip_address = server_addr;
@@ -528,13 +545,12 @@ TEST_P(P2PSocketTcpWithTlsTest, Basic) {
   base::test::TaskEnvironment task_environment(
       base::test::TaskEnvironment::MainThreadType::IO);
 
-  mojom::P2PSocketClientPtr socket_client;
-  auto socket_client_request = mojo::MakeRequest(&socket_client);
-  mojom::P2PSocketPtr socket;
-  auto socket_request = mojo::MakeRequest(&socket);
+  mojo::PendingRemote<mojom::P2PSocketClient> socket_client;
+  mojo::PendingRemote<mojom::P2PSocket> socket;
+  auto socket_receiver = socket.InitWithNewPipeAndPassReceiver();
 
   FakeSocketClient fake_client2(std::move(socket),
-                                std::move(socket_client_request));
+                                socket_client.InitWithNewPipeAndPassReceiver());
   EXPECT_CALL(fake_client2, SocketCreated(_, _)).Times(1);
 
   net::TestURLRequestContext context(true);
@@ -560,11 +576,11 @@ TEST_P(P2PSocketTcpWithTlsTest, Basic) {
   std::unique_ptr<P2PSocketTcpBase> host;
   if (socket_type == P2P_SOCKET_STUN_TLS_CLIENT) {
     host = std::make_unique<P2PSocketStunTcp>(
-        &socket_delegate, std::move(socket_client), std::move(socket_request),
+        &socket_delegate, std::move(socket_client), std::move(socket_receiver),
         socket_type, &factory);
   } else {
     host = std::make_unique<P2PSocketTcp>(
-        &socket_delegate, std::move(socket_client), std::move(socket_request),
+        &socket_delegate, std::move(socket_client), std::move(socket_receiver),
         socket_type, &factory);
   }
   P2PHostAndIPEndPoint dest;

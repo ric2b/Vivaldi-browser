@@ -5,6 +5,7 @@
 #include "chromecast/net/small_message_socket.h"
 
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "base/big_endian.h"
@@ -43,18 +44,28 @@ void CheckData(char* buffer, int size) {
   }
 }
 
-class TestSocket : public SmallMessageSocket {
+class TestSocket : public SmallMessageSocket::Delegate {
  public:
   explicit TestSocket(std::unique_ptr<net::Socket> socket)
-      : SmallMessageSocket(std::move(socket)) {}
+      : socket_(this, std::move(socket)) {}
 
   ~TestSocket() override = default;
 
   void UseBufferPool() {
-    SmallMessageSocket::UseBufferPool(base::MakeRefCounted<IOBufferPool>(
-        kDefaultMessageSize + sizeof(uint16_t)));
+    buffer_pool_ = base::MakeRefCounted<IOBufferPool>(kDefaultMessageSize +
+                                                      sizeof(uint16_t));
+    socket_.UseBufferPool(buffer_pool_);
   }
   void SwapPoolUse(bool swap) { swap_pool_use_ = swap; }
+
+  void* PrepareSend(int message_size) {
+    return socket_.PrepareSend(message_size);
+  }
+  void Send() { socket_.Send(); }
+  bool SendBuffer(scoped_refptr<net::IOBuffer> data, int size) {
+    return socket_.SendBuffer(std::move(data), size);
+  }
+  void ReceiveMessages() { socket_.ReceiveMessages(); }
 
   size_t last_message_size() const {
     DCHECK(!message_history_.empty());
@@ -65,10 +76,12 @@ class TestSocket : public SmallMessageSocket {
     return message_history_;
   }
 
+  IOBufferPool* buffer_pool() const { return buffer_pool_.get(); }
+
  private:
   void OnError(int error) override { NOTREACHED(); }
 
-  bool OnMessage(char* data, int size) override {
+  bool OnMessage(char* data, size_t size) override {
     message_history_.push_back(size);
     CheckData(data, size);
     if (swap_pool_use_) {
@@ -77,19 +90,23 @@ class TestSocket : public SmallMessageSocket {
     return true;
   }
 
-  bool OnMessageBuffer(scoped_refptr<net::IOBuffer> buffer, int size) override {
+  bool OnMessageBuffer(scoped_refptr<net::IOBuffer> buffer,
+                       size_t size) override {
     uint16_t message_size;
     base::ReadBigEndian(buffer->data(), &message_size);
     DCHECK_EQ(message_size, size - sizeof(uint16_t));
     message_history_.push_back(message_size);
     CheckData(buffer->data() + sizeof(uint16_t), message_size);
     if (swap_pool_use_) {
-      RemoveBufferPool();
+      socket_.RemoveBufferPool();
+      buffer_pool_ = nullptr;
     }
     return true;
   }
 
+  SmallMessageSocket socket_;
   std::vector<size_t> message_history_;
+  scoped_refptr<IOBufferPool> buffer_pool_;
   bool swap_pool_use_ = false;
 };
 

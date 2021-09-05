@@ -20,7 +20,9 @@
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
-#include "chrome/browser/apps/launch_service/launch_service.h"
+#include "chrome/browser/apps/app_service/app_service_proxy.h"
+#include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
+#include "chrome/browser/apps/app_service/launch_utils.h"
 #include "chrome/browser/apps/platform_apps/app_browsertest_util.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/login/demo_mode/demo_session.h"
@@ -54,6 +56,8 @@
 #include "extensions/common/constants.h"
 #include "ui/aura/window.h"
 #include "ui/base/models/simple_menu_model.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/wm/core/window_util.h"
 
 // Browser Test for AppListClientImpl.
@@ -72,11 +76,15 @@ IN_PROC_BROWSER_TEST_F(AppListClientImplBrowserTest, IsExtensionAppOpen) {
     content::WindowedNotificationObserver app_loaded_observer(
         content::NOTIFICATION_LOAD_COMPLETED_MAIN_FRAME,
         content::NotificationService::AllSources());
-    apps::LaunchService::Get(profile())->OpenApplication(apps::AppLaunchParams(
-        extension_app->id(),
-        apps::mojom::LaunchContainer::kLaunchContainerWindow,
-        WindowOpenDisposition::NEW_WINDOW,
-        apps::mojom::AppLaunchSource::kSourceTest));
+    apps::AppServiceProxy* proxy =
+        apps::AppServiceProxyFactory::GetForProfile(profile());
+    proxy->Launch(extension_app->id(),
+                  apps::GetEventFlags(
+                      apps::mojom::LaunchContainer::kLaunchContainerWindow,
+                      WindowOpenDisposition::NEW_WINDOW,
+                      false /* preferred_containner */),
+                  apps::mojom::LaunchSource::kFromTest,
+                  display::Screen::GetScreen()->GetPrimaryDisplay().id());
     app_loaded_observer.Wait();
   }
   EXPECT_TRUE(delegate->IsAppOpen(extension_app->id()));
@@ -114,6 +122,12 @@ IN_PROC_BROWSER_TEST_F(AppListClientImplBrowserTest, UninstallApp) {
   // Open the uninstall dialog.
   base::RunLoop run_loop;
   client->UninstallApp(profile(), app->id());
+
+  apps::AppServiceProxy* app_service_proxy_ =
+      apps::AppServiceProxyFactory::GetForProfile(profile());
+  DCHECK(app_service_proxy_);
+  app_service_proxy_->FlushMojoCallsForTesting();
+
   run_loop.RunUntilIdle();
   EXPECT_FALSE(wm::GetTransientChildren(client->GetAppListWindow()).empty());
 
@@ -276,7 +290,8 @@ IN_PROC_BROWSER_TEST_F(AppListClientImplBrowserTest, OpenSearchResult) {
   // Open the app result.
   client->OpenSearchResult(app_result_id, ui::EF_NONE,
                            ash::AppListLaunchedFrom::kLaunchedFromSearchBox,
-                           ash::AppListLaunchType::kAppSearchResult, 0);
+                           ash::AppListLaunchType::kAppSearchResult, 0,
+                           false /* launch_as_default */);
 
   // App list should be dismissed.
   EXPECT_FALSE(client->app_list_target_visibility());

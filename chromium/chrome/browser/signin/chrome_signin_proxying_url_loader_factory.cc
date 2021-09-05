@@ -6,6 +6,7 @@
 
 #include "base/barrier_closure.h"
 #include "base/bind.h"
+#include "base/memory/ptr_util.h"
 #include "base/supports_user_data.h"
 #include "build/buildflag.h"
 #include "chrome/browser/profiles/profile.h"
@@ -19,7 +20,7 @@
 #include "extensions/browser/guest_view/web_view/web_view_renderer_state.h"
 #include "extensions/buildflags/buildflags.h"
 #include "google_apis/gaia/gaia_auth_util.h"
-#include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/receiver.h"
 #include "net/base/net_errors.h"
 #include "services/network/public/mojom/url_loader.mojom.h"
 
@@ -39,7 +40,7 @@ class BrowserContextData : public base::SupportsUserData::Data {
       Profile* profile,
       content::WebContents::Getter web_contents_getter,
       mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver,
-      network::mojom::URLLoaderFactoryPtrInfo target_factory) {
+      mojo::PendingRemote<network::mojom::URLLoaderFactory> target_factory) {
     auto* self = static_cast<BrowserContextData*>(
         profile->GetUserData(kBrowserContextUserDataKey));
     if (!self) {
@@ -82,12 +83,12 @@ class ProxyingURLLoaderFactory::InProgressRequest
  public:
   InProgressRequest(
       ProxyingURLLoaderFactory* factory,
-      network::mojom::URLLoaderRequest loader_request,
+      mojo::PendingReceiver<network::mojom::URLLoader> loader_receiver,
       int32_t routing_id,
       int32_t request_id,
       uint32_t options,
       const network::ResourceRequest& request,
-      network::mojom::URLLoaderClientPtr client,
+      mojo::PendingRemote<network::mojom::URLLoaderClient> client,
       const net::MutableNetworkTrafficAnnotationTag& traffic_annotation);
 
   ~InProgressRequest() override {
@@ -160,18 +161,18 @@ class ProxyingURLLoaderFactory::InProgressRequest
   GURL referrer_origin_;
   net::HttpRequestHeaders headers_;
   net::RedirectInfo redirect_info_;
-  const content::ResourceType resource_type_;
+  const blink::mojom::ResourceType resource_type_;
   const bool is_main_frame_;
 
   base::OnceClosure destruction_callback_;
 
-  // Messages received by |client_binding_| are forwarded to |target_client_|.
-  mojo::Binding<network::mojom::URLLoaderClient> client_binding_;
-  network::mojom::URLLoaderClientPtr target_client_;
+  // Messages received by |client_receiver_| are forwarded to |target_client_|.
+  mojo::Receiver<network::mojom::URLLoaderClient> client_receiver_{this};
+  mojo::Remote<network::mojom::URLLoaderClient> target_client_;
 
-  // Messages received by |loader_binding_| are forwarded to |target_loader_|.
-  mojo::Binding<network::mojom::URLLoader> loader_binding_;
-  network::mojom::URLLoaderPtr target_loader_;
+  // Messages received by |loader_receiver_| are forwarded to |target_loader_|.
+  mojo::Receiver<network::mojom::URLLoader> loader_receiver_;
+  mojo::Remote<network::mojom::URLLoader> target_loader_;
 
   DISALLOW_COPY_AND_ASSIGN(InProgressRequest);
 };
@@ -198,7 +199,7 @@ class ProxyingURLLoaderFactory::InProgressRequest::ProxyRequestAdapter
     return in_progress_request_->factory_->web_contents_getter_;
   }
 
-  content::ResourceType GetResourceType() const override {
+  blink::mojom::ResourceType GetResourceType() const override {
     return in_progress_request_->resource_type_;
   }
 
@@ -296,24 +297,24 @@ class ProxyingURLLoaderFactory::InProgressRequest::ProxyResponseAdapter
 
 ProxyingURLLoaderFactory::InProgressRequest::InProgressRequest(
     ProxyingURLLoaderFactory* factory,
-    network::mojom::URLLoaderRequest loader_request,
+    mojo::PendingReceiver<network::mojom::URLLoader> loader_receiver,
     int32_t routing_id,
     int32_t request_id,
     uint32_t options,
     const network::ResourceRequest& request,
-    network::mojom::URLLoaderClientPtr client,
+    mojo::PendingRemote<network::mojom::URLLoaderClient> client,
     const net::MutableNetworkTrafficAnnotationTag& traffic_annotation)
     : factory_(factory),
       request_url_(request.url),
       response_url_(request.url),
       referrer_origin_(request.referrer.GetOrigin()),
-      resource_type_(static_cast<content::ResourceType>(request.resource_type)),
+      resource_type_(
+          static_cast<blink::mojom::ResourceType>(request.resource_type)),
       is_main_frame_(request.is_main_frame),
-      client_binding_(this),
       target_client_(std::move(client)),
-      loader_binding_(this, std::move(loader_request)) {
-  network::mojom::URLLoaderClientPtr proxy_client;
-  client_binding_.Bind(mojo::MakeRequest(&proxy_client));
+      loader_receiver_(this, std::move(loader_receiver)) {
+  mojo::PendingRemote<network::mojom::URLLoaderClient> proxy_client =
+      client_receiver_.BindNewPipeAndPassRemote();
 
   net::HttpRequestHeaders modified_headers;
   std::vector<std::string> removed_headers;
@@ -323,8 +324,8 @@ ProxyingURLLoaderFactory::InProgressRequest::InProgressRequest(
 
   if (modified_headers.IsEmpty() && removed_headers.empty()) {
     factory_->target_factory_->CreateLoaderAndStart(
-        mojo::MakeRequest(&target_loader_), routing_id, request_id, options,
-        request, std::move(proxy_client), traffic_annotation);
+        target_loader_.BindNewPipeAndPassReceiver(), routing_id, request_id,
+        options, request, std::move(proxy_client), traffic_annotation);
 
     // We need to keep a full copy of the request headers in case there is a
     // redirect and the request headers need to be modified again.
@@ -336,8 +337,8 @@ ProxyingURLLoaderFactory::InProgressRequest::InProgressRequest(
       request_copy.headers.RemoveHeader(name);
 
     factory_->target_factory_->CreateLoaderAndStart(
-        mojo::MakeRequest(&target_loader_), routing_id, request_id, options,
-        request_copy, std::move(proxy_client), traffic_annotation);
+        target_loader_.BindNewPipeAndPassReceiver(), routing_id, request_id,
+        options, request_copy, std::move(proxy_client), traffic_annotation);
 
     headers_.Swap(&request_copy.headers);
   }
@@ -345,8 +346,8 @@ ProxyingURLLoaderFactory::InProgressRequest::InProgressRequest(
   base::RepeatingClosure closure = base::BarrierClosure(
       2, base::BindOnce(&InProgressRequest::OnBindingsClosed,
                         base::Unretained(this)));
-  loader_binding_.set_connection_error_handler(closure);
-  client_binding_.set_connection_error_handler(closure);
+  loader_receiver_.set_disconnect_handler(closure);
+  client_receiver_.set_disconnect_handler(closure);
 }
 
 void ProxyingURLLoaderFactory::InProgressRequest::FollowRedirect(
@@ -398,7 +399,7 @@ ProxyingURLLoaderFactory::ProxyingURLLoaderFactory(
     std::unique_ptr<HeaderModificationDelegate> delegate,
     content::WebContents::Getter web_contents_getter,
     mojo::PendingReceiver<network::mojom::URLLoaderFactory> loader_receiver,
-    network::mojom::URLLoaderFactoryPtrInfo target_factory,
+    mojo::PendingRemote<network::mojom::URLLoaderFactory> target_factory,
     DisconnectCallback on_disconnect) {
   DCHECK(proxy_receivers_.empty());
   DCHECK(!target_factory_.is_bound());
@@ -411,7 +412,7 @@ ProxyingURLLoaderFactory::ProxyingURLLoaderFactory(
   on_disconnect_ = std::move(on_disconnect);
 
   target_factory_.Bind(std::move(target_factory));
-  target_factory_.set_connection_error_handler(base::BindOnce(
+  target_factory_.set_disconnect_handler(base::BindOnce(
       &ProxyingURLLoaderFactory::OnTargetFactoryError, base::Unretained(this)));
 
   proxy_receivers_.Add(this, std::move(loader_receiver));
@@ -449,20 +450,17 @@ bool ProxyingURLLoaderFactory::MaybeProxyRequest(
     return false;
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  // Account consistency requires the AccountReconcilor, which is only
-  // attached to the main request context.
-  // Note: InlineLoginUI uses an isolated request context and thus bypasses
-  // the account consistency flow here. See http://crbug.com/428396
-  if (extensions::WebViewRendererState::GetInstance()->IsGuest(
-          render_frame_host->GetProcess()->GetID())) {
+  // Most requests from guest web views are ignored.
+  if (HeaderModificationDelegateImpl::ShouldIgnoreGuestWebViewRequest(
+          web_contents)) {
     return false;
   }
 #endif
 
   auto proxied_receiver = std::move(*factory_receiver);
   // TODO(crbug.com/955171): Replace this with PendingRemote.
-  network::mojom::URLLoaderFactoryPtrInfo target_factory_info;
-  *factory_receiver = mojo::MakeRequest(&target_factory_info);
+  mojo::PendingRemote<network::mojom::URLLoaderFactory> target_factory_remote;
+  *factory_receiver = target_factory_remote.InitWithNewPipeAndPassReceiver();
 
   auto web_contents_getter =
       base::BindRepeating(&content::WebContents::FromFrameTreeNodeId,
@@ -470,21 +468,21 @@ bool ProxyingURLLoaderFactory::MaybeProxyRequest(
 
   BrowserContextData::StartProxying(profile, std::move(web_contents_getter),
                                     std::move(proxied_receiver),
-                                    std::move(target_factory_info));
+                                    std::move(target_factory_remote));
   return true;
 }
 
 void ProxyingURLLoaderFactory::CreateLoaderAndStart(
-    network::mojom::URLLoaderRequest loader_request,
+    mojo::PendingReceiver<network::mojom::URLLoader> loader_receiver,
     int32_t routing_id,
     int32_t request_id,
     uint32_t options,
     const network::ResourceRequest& request,
-    network::mojom::URLLoaderClientPtr client,
+    mojo::PendingRemote<network::mojom::URLLoaderClient> client,
     const net::MutableNetworkTrafficAnnotationTag& traffic_annotation) {
   requests_.insert(std::make_unique<InProgressRequest>(
-      this, std::move(loader_request), routing_id, request_id, options, request,
-      std::move(client), traffic_annotation));
+      this, std::move(loader_receiver), routing_id, request_id, options,
+      request, std::move(client), traffic_annotation));
 }
 
 void ProxyingURLLoaderFactory::Clone(

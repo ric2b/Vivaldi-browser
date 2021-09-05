@@ -14,6 +14,7 @@
 #include "base/component_export.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "ui/ozone/public/mojom/gesture_properties_service.mojom.h"
 
 namespace base {
@@ -58,17 +59,21 @@ class COMPONENT_EXPORT(OZONE_BASE) InputController {
 
   // Touchpad settings.
   virtual void SetTouchpadSensitivity(int value) = 0;
+  virtual void SetTouchpadScrollSensitivity(int value) = 0;
   virtual void SetTapToClick(bool enabled) = 0;
   virtual void SetThreeFingerClick(bool enabled) = 0;
   virtual void SetTapDragging(bool enabled) = 0;
   virtual void SetNaturalScroll(bool enabled) = 0;
   virtual void SetTouchpadAcceleration(bool enabled) = 0;
+  virtual void SetTouchpadScrollAcceleration(bool enabled) = 0;
 
   // Mouse settings.
   virtual void SetMouseSensitivity(int value) = 0;
+  virtual void SetMouseScrollSensitivity(int value) = 0;
   virtual void SetPrimaryButtonRight(bool right) = 0;
   virtual void SetMouseReverseScroll(bool enabled) = 0;
   virtual void SetMouseAcceleration(bool enabled) = 0;
+  virtual void SetMouseScrollAcceleration(bool enabled) = 0;
 
   // Touch log collection.
   virtual void GetTouchDeviceStatus(GetTouchDeviceStatusReply reply) = 0;
@@ -92,7 +97,8 @@ class COMPONENT_EXPORT(OZONE_BASE) InputController {
                                          std::vector<DomCode> allowed_keys) = 0;
 
   virtual void GetGesturePropertiesService(
-      ui::ozone::mojom::GesturePropertiesServiceRequest request) = 0;
+      mojo::PendingReceiver<ui::ozone::mojom::GesturePropertiesService>
+          receiver) = 0;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(InputController);

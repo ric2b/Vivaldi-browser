@@ -39,13 +39,13 @@ ASH_PUBLIC_EXPORT extern const base::Feature kEnableAppListSearchAutocomplete;
 // Enable app ranking models.
 ASH_PUBLIC_EXPORT extern const base::Feature kEnableAppRanker;
 
-// Enable an model that ranks zero-state apps search result.
+// Enable a model that ranks zero-state apps search result.
 // TODO(crbug.com/989350): This flag can be removed once the
 // AppSearchResultRanker is removed. Same with the
 // AppSearchResultRankerPredictorName.
 ASH_PUBLIC_EXPORT extern const base::Feature kEnableZeroStateAppsRanker;
 
-// Enable an model that ranks query based non-apps result.
+// Enable a model that ranks query based non-apps result.
 ASH_PUBLIC_EXPORT extern const base::Feature kEnableQueryBasedMixedTypesRanker;
 
 // Enable a model that ranks zero-state files and recent queries.
@@ -55,8 +55,11 @@ ASH_PUBLIC_EXPORT extern const base::Feature kEnableZeroStateMixedTypesRanker;
 // zero-state.
 ASH_PUBLIC_EXPORT extern const base::Feature kEnableAppReinstallZeroState;
 
-// Enables the embedded Assistant UI in the app list.
-ASH_PUBLIC_EXPORT extern const base::Feature kEnableEmbeddedAssistantUI;
+// Enables file suggestions in the suggestion chips.
+ASH_PUBLIC_EXPORT extern const base::Feature kEnableSuggestedFiles;
+
+// Enables the Assistant search redirection in the app list.
+ASH_PUBLIC_EXPORT extern const base::Feature kEnableAssistantSearch;
 
 // Enables ghosting in any AppsGridView (folder or root) when dragging an item.
 ASH_PUBLIC_EXPORT extern const base::Feature kEnableAppGridGhost;
@@ -71,6 +74,9 @@ ASH_PUBLIC_EXPORT extern const base::Feature kEnableAggregatedMlAppRanking;
 
 // Enables using the fuzzy search algorithm for app search provider.
 ASH_PUBLIC_EXPORT extern const base::Feature kEnableFuzzyAppSearch;
+
+// Enables using exact string search for non latin locales.
+ASH_PUBLIC_EXPORT extern const base::Feature kEnableExactMatchForNonLatinLocale;
 
 // If enabled, app list will support separate configurations (for app list items
 // sizing and spacing) for smaller screens (instead of a single configuration
@@ -92,13 +98,15 @@ bool ASH_PUBLIC_EXPORT IsZeroStateAppsRankerEnabled();
 bool ASH_PUBLIC_EXPORT IsQueryBasedMixedTypesRankerEnabled();
 bool ASH_PUBLIC_EXPORT IsZeroStateMixedTypesRankerEnabled();
 bool ASH_PUBLIC_EXPORT IsAppReinstallZeroStateEnabled();
-bool ASH_PUBLIC_EXPORT IsEmbeddedAssistantUIEnabled();
+bool ASH_PUBLIC_EXPORT IsSuggestedFilesEnabled();
+bool ASH_PUBLIC_EXPORT IsAssistantSearchEnabled();
 bool ASH_PUBLIC_EXPORT IsAppGridGhostEnabled();
 bool ASH_PUBLIC_EXPORT IsAppListLaunchRecordingEnabled();
 bool ASH_PUBLIC_EXPORT IsSearchBoxSelectionEnabled();
 bool ASH_PUBLIC_EXPORT IsAggregatedMlAppRankingEnabled();
 bool ASH_PUBLIC_EXPORT IsScalableAppListEnabled();
 bool ASH_PUBLIC_EXPORT IsFuzzyAppSearchEnabled();
+bool ASH_PUBLIC_EXPORT IsExactMatchForNonLatinLocaleEnabled();
 bool ASH_PUBLIC_EXPORT IsAggregatedMlSearchRankingEnabled();
 
 std::string ASH_PUBLIC_EXPORT AnswerServerUrl();

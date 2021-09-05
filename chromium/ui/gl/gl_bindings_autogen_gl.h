@@ -20,7 +20,6 @@ class GLContext;
 typedef void(GL_BINDING_CALL* glActiveShaderProgramProc)(GLuint pipeline,
                                                          GLuint program);
 typedef void(GL_BINDING_CALL* glActiveTextureProc)(GLenum texture);
-typedef void(GL_BINDING_CALL* glApplyFramebufferAttachmentCMAAINTELProc)(void);
 typedef void(GL_BINDING_CALL* glAttachShaderProc)(GLuint program,
                                                   GLuint shader);
 typedef void(GL_BINDING_CALL* glBeginQueryProc)(GLenum target, GLuint id);
@@ -348,6 +347,9 @@ typedef void(GL_BINDING_CALL* glDeleteFencesNVProc)(GLsizei n,
 typedef void(GL_BINDING_CALL* glDeleteFramebuffersEXTProc)(
     GLsizei n,
     const GLuint* framebuffers);
+typedef void(GL_BINDING_CALL* glDeleteMemoryObjectsEXTProc)(
+    GLsizei n,
+    const GLuint* memoryObjects);
 typedef void(GL_BINDING_CALL* glDeletePathsNVProc)(GLuint path, GLsizei range);
 typedef void(GL_BINDING_CALL* glDeleteProgramProc)(GLuint program);
 typedef void(GL_BINDING_CALL* glDeleteProgramPipelinesProc)(
@@ -401,6 +403,12 @@ typedef void(GL_BINDING_CALL* glDrawArraysInstancedANGLEProc)(
     GLint first,
     GLsizei count,
     GLsizei primcount);
+typedef void(GL_BINDING_CALL* glDrawArraysInstancedBaseInstanceANGLEProc)(
+    GLenum mode,
+    GLint first,
+    GLsizei count,
+    GLsizei primcount,
+    GLuint baseinstance);
 typedef void(GL_BINDING_CALL* glDrawBufferProc)(GLenum mode);
 typedef void(GL_BINDING_CALL* glDrawBuffersARBProc)(GLsizei n,
                                                     const GLenum* bufs);
@@ -417,6 +425,15 @@ typedef void(GL_BINDING_CALL* glDrawElementsInstancedANGLEProc)(
     GLenum type,
     const void* indices,
     GLsizei primcount);
+typedef void(
+    GL_BINDING_CALL* glDrawElementsInstancedBaseVertexBaseInstanceANGLEProc)(
+    GLenum mode,
+    GLsizei count,
+    GLenum type,
+    const void* indices,
+    GLsizei primcount,
+    GLint baseVertex,
+    GLuint baseInstance);
 typedef void(GL_BINDING_CALL* glDrawRangeElementsProc)(GLenum mode,
                                                        GLuint start,
                                                        GLuint end,
@@ -1022,9 +1039,18 @@ typedef void(GL_BINDING_CALL* glImportMemoryFdEXTProc)(GLuint memory,
                                                        GLuint64 size,
                                                        GLenum handleType,
                                                        GLint fd);
+typedef void(GL_BINDING_CALL* glImportMemoryZirconHandleANGLEProc)(
+    GLuint memory,
+    GLuint64 size,
+    GLenum handleType,
+    GLuint handle);
 typedef void(GL_BINDING_CALL* glImportSemaphoreFdEXTProc)(GLuint semaphore,
                                                           GLenum handleType,
                                                           GLint fd);
+typedef void(GL_BINDING_CALL* glImportSemaphoreZirconHandleANGLEProc)(
+    GLuint semaphore,
+    GLenum handleType,
+    GLuint handle);
 typedef void(GL_BINDING_CALL* glInsertEventMarkerEXTProc)(GLsizei length,
                                                           const char* marker);
 typedef void(GL_BINDING_CALL* glInvalidateFramebufferProc)(
@@ -1071,6 +1097,10 @@ typedef void(GL_BINDING_CALL* glMatrixLoadIdentityEXTProc)(GLenum matrixMode);
 typedef void(GL_BINDING_CALL* glMaxShaderCompilerThreadsKHRProc)(GLuint count);
 typedef void(GL_BINDING_CALL* glMemoryBarrierByRegionProc)(GLbitfield barriers);
 typedef void(GL_BINDING_CALL* glMemoryBarrierEXTProc)(GLbitfield barriers);
+typedef void(GL_BINDING_CALL* glMemoryObjectParameterivEXTProc)(
+    GLuint memoryObject,
+    GLenum pname,
+    const GLint* param);
 typedef void(GL_BINDING_CALL* glMinSampleShadingProc)(GLfloat value);
 typedef void(GL_BINDING_CALL* glMultiDrawArraysANGLEProc)(GLenum mode,
                                                           const GLint* firsts,
@@ -1081,6 +1111,13 @@ typedef void(GL_BINDING_CALL* glMultiDrawArraysInstancedANGLEProc)(
     const GLint* firsts,
     const GLsizei* counts,
     const GLsizei* instanceCounts,
+    GLsizei drawcount);
+typedef void(GL_BINDING_CALL* glMultiDrawArraysInstancedBaseInstanceANGLEProc)(
+    GLenum mode,
+    const GLint* firsts,
+    const GLsizei* counts,
+    const GLsizei* instanceCounts,
+    const GLuint* baseInstances,
     GLsizei drawcount);
 typedef void(GL_BINDING_CALL* glMultiDrawElementsANGLEProc)(
     GLenum mode,
@@ -1094,6 +1131,16 @@ typedef void(GL_BINDING_CALL* glMultiDrawElementsInstancedANGLEProc)(
     GLenum type,
     const GLvoid* const* indices,
     const GLsizei* instanceCounts,
+    GLsizei drawcount);
+typedef void(GL_BINDING_CALL*
+                 glMultiDrawElementsInstancedBaseVertexBaseInstanceANGLEProc)(
+    GLenum mode,
+    const GLsizei* counts,
+    GLenum type,
+    const GLvoid* const* indices,
+    const GLsizei* instanceCounts,
+    const GLint* baseVertices,
+    const GLuint* baseInstances,
     GLsizei drawcount);
 typedef void(GL_BINDING_CALL* glObjectLabelProc)(GLenum identifier,
                                                  GLuint name,
@@ -1863,12 +1910,15 @@ typedef void(GL_BINDING_CALL* glWindowRectanglesEXTProc)(GLenum mode,
 
 struct ExtensionsGL {
   bool b_GL_AMD_framebuffer_multisample_advanced;
+  bool b_GL_ANGLE_base_vertex_base_instance;
   bool b_GL_ANGLE_framebuffer_blit;
   bool b_GL_ANGLE_framebuffer_multisample;
   bool b_GL_ANGLE_instanced_arrays;
+  bool b_GL_ANGLE_memory_object_fuchsia;
   bool b_GL_ANGLE_multi_draw;
   bool b_GL_ANGLE_request_extension;
   bool b_GL_ANGLE_robust_client_memory;
+  bool b_GL_ANGLE_semaphore_fuchsia;
   bool b_GL_ANGLE_texture_external_update;
   bool b_GL_ANGLE_translated_shader_source;
   bool b_GL_APPLE_fence;
@@ -1901,6 +1951,7 @@ struct ExtensionsGL {
   bool b_GL_CHROMIUM_gles_depth_binding_hack;
   bool b_GL_CHROMIUM_glgetstringi_hack;
   bool b_GL_CHROMIUM_path_rendering;
+  bool b_GL_EXT_base_instance;
   bool b_GL_EXT_blend_func_extended;
   bool b_GL_EXT_clear_texture;
   bool b_GL_EXT_debug_marker;
@@ -1930,7 +1981,6 @@ struct ExtensionsGL {
   bool b_GL_EXT_unpack_subimage;
   bool b_GL_EXT_window_rectangles;
   bool b_GL_IMG_multisampled_render_to_texture;
-  bool b_GL_INTEL_framebuffer_CMAA;
   bool b_GL_KHR_blend_equation_advanced;
   bool b_GL_KHR_debug;
   bool b_GL_KHR_parallel_shader_compile;
@@ -1954,8 +2004,6 @@ struct ExtensionsGL {
 struct ProcsGL {
   glActiveShaderProgramProc glActiveShaderProgramFn;
   glActiveTextureProc glActiveTextureFn;
-  glApplyFramebufferAttachmentCMAAINTELProc
-      glApplyFramebufferAttachmentCMAAINTELFn;
   glAttachShaderProc glAttachShaderFn;
   glBeginQueryProc glBeginQueryFn;
   glBeginTransformFeedbackProc glBeginTransformFeedbackFn;
@@ -2034,6 +2082,7 @@ struct ProcsGL {
   glDeleteFencesAPPLEProc glDeleteFencesAPPLEFn;
   glDeleteFencesNVProc glDeleteFencesNVFn;
   glDeleteFramebuffersEXTProc glDeleteFramebuffersEXTFn;
+  glDeleteMemoryObjectsEXTProc glDeleteMemoryObjectsEXTFn;
   glDeletePathsNVProc glDeletePathsNVFn;
   glDeleteProgramProc glDeleteProgramFn;
   glDeleteProgramPipelinesProc glDeleteProgramPipelinesFn;
@@ -2061,11 +2110,15 @@ struct ProcsGL {
   glDrawArraysProc glDrawArraysFn;
   glDrawArraysIndirectProc glDrawArraysIndirectFn;
   glDrawArraysInstancedANGLEProc glDrawArraysInstancedANGLEFn;
+  glDrawArraysInstancedBaseInstanceANGLEProc
+      glDrawArraysInstancedBaseInstanceANGLEFn;
   glDrawBufferProc glDrawBufferFn;
   glDrawBuffersARBProc glDrawBuffersARBFn;
   glDrawElementsProc glDrawElementsFn;
   glDrawElementsIndirectProc glDrawElementsIndirectFn;
   glDrawElementsInstancedANGLEProc glDrawElementsInstancedANGLEFn;
+  glDrawElementsInstancedBaseVertexBaseInstanceANGLEProc
+      glDrawElementsInstancedBaseVertexBaseInstanceANGLEFn;
   glDrawRangeElementsProc glDrawRangeElementsFn;
   glEGLImageTargetRenderbufferStorageOESProc
       glEGLImageTargetRenderbufferStorageOESFn;
@@ -2228,7 +2281,9 @@ struct ProcsGL {
       glGetVertexAttribPointervRobustANGLEFn;
   glHintProc glHintFn;
   glImportMemoryFdEXTProc glImportMemoryFdEXTFn;
+  glImportMemoryZirconHandleANGLEProc glImportMemoryZirconHandleANGLEFn;
   glImportSemaphoreFdEXTProc glImportSemaphoreFdEXTFn;
+  glImportSemaphoreZirconHandleANGLEProc glImportSemaphoreZirconHandleANGLEFn;
   glInsertEventMarkerEXTProc glInsertEventMarkerEXTFn;
   glInvalidateFramebufferProc glInvalidateFramebufferFn;
   glInvalidateSubFramebufferProc glInvalidateSubFramebufferFn;
@@ -2259,11 +2314,16 @@ struct ProcsGL {
   glMaxShaderCompilerThreadsKHRProc glMaxShaderCompilerThreadsKHRFn;
   glMemoryBarrierByRegionProc glMemoryBarrierByRegionFn;
   glMemoryBarrierEXTProc glMemoryBarrierEXTFn;
+  glMemoryObjectParameterivEXTProc glMemoryObjectParameterivEXTFn;
   glMinSampleShadingProc glMinSampleShadingFn;
   glMultiDrawArraysANGLEProc glMultiDrawArraysANGLEFn;
   glMultiDrawArraysInstancedANGLEProc glMultiDrawArraysInstancedANGLEFn;
+  glMultiDrawArraysInstancedBaseInstanceANGLEProc
+      glMultiDrawArraysInstancedBaseInstanceANGLEFn;
   glMultiDrawElementsANGLEProc glMultiDrawElementsANGLEFn;
   glMultiDrawElementsInstancedANGLEProc glMultiDrawElementsInstancedANGLEFn;
+  glMultiDrawElementsInstancedBaseVertexBaseInstanceANGLEProc
+      glMultiDrawElementsInstancedBaseVertexBaseInstanceANGLEFn;
   glObjectLabelProc glObjectLabelFn;
   glObjectPtrLabelProc glObjectPtrLabelFn;
   glPathCommandsNVProc glPathCommandsNVFn;
@@ -2462,7 +2522,6 @@ class GL_EXPORT GLApi {
 
   virtual void glActiveShaderProgramFn(GLuint pipeline, GLuint program) = 0;
   virtual void glActiveTextureFn(GLenum texture) = 0;
-  virtual void glApplyFramebufferAttachmentCMAAINTELFn(void) = 0;
   virtual void glAttachShaderFn(GLuint program, GLuint shader) = 0;
   virtual void glBeginQueryFn(GLenum target, GLuint id) = 0;
   virtual void glBeginTransformFeedbackFn(GLenum primitiveMode) = 0;
@@ -2764,6 +2823,8 @@ class GL_EXPORT GLApi {
   virtual void glDeleteFencesNVFn(GLsizei n, const GLuint* fences) = 0;
   virtual void glDeleteFramebuffersEXTFn(GLsizei n,
                                          const GLuint* framebuffers) = 0;
+  virtual void glDeleteMemoryObjectsEXTFn(GLsizei n,
+                                          const GLuint* memoryObjects) = 0;
   virtual void glDeletePathsNVFn(GLuint path, GLsizei range) = 0;
   virtual void glDeleteProgramFn(GLuint program) = 0;
   virtual void glDeleteProgramPipelinesFn(GLsizei n,
@@ -2800,6 +2861,12 @@ class GL_EXPORT GLApi {
                                             GLint first,
                                             GLsizei count,
                                             GLsizei primcount) = 0;
+  virtual void glDrawArraysInstancedBaseInstanceANGLEFn(
+      GLenum mode,
+      GLint first,
+      GLsizei count,
+      GLsizei primcount,
+      GLuint baseinstance) = 0;
   virtual void glDrawBufferFn(GLenum mode) = 0;
   virtual void glDrawBuffersARBFn(GLsizei n, const GLenum* bufs) = 0;
   virtual void glDrawElementsFn(GLenum mode,
@@ -2814,6 +2881,14 @@ class GL_EXPORT GLApi {
                                               GLenum type,
                                               const void* indices,
                                               GLsizei primcount) = 0;
+  virtual void glDrawElementsInstancedBaseVertexBaseInstanceANGLEFn(
+      GLenum mode,
+      GLsizei count,
+      GLenum type,
+      const void* indices,
+      GLsizei primcount,
+      GLint baseVertex,
+      GLuint baseInstance) = 0;
   virtual void glDrawRangeElementsFn(GLenum mode,
                                      GLuint start,
                                      GLuint end,
@@ -3344,9 +3419,16 @@ class GL_EXPORT GLApi {
                                      GLuint64 size,
                                      GLenum handleType,
                                      GLint fd) = 0;
+  virtual void glImportMemoryZirconHandleANGLEFn(GLuint memory,
+                                                 GLuint64 size,
+                                                 GLenum handleType,
+                                                 GLuint handle) = 0;
   virtual void glImportSemaphoreFdEXTFn(GLuint semaphore,
                                         GLenum handleType,
                                         GLint fd) = 0;
+  virtual void glImportSemaphoreZirconHandleANGLEFn(GLuint semaphore,
+                                                    GLenum handleType,
+                                                    GLuint handle) = 0;
   virtual void glInsertEventMarkerEXTFn(GLsizei length, const char* marker) = 0;
   virtual void glInvalidateFramebufferFn(GLenum target,
                                          GLsizei numAttachments,
@@ -3388,6 +3470,9 @@ class GL_EXPORT GLApi {
   virtual void glMaxShaderCompilerThreadsKHRFn(GLuint count) = 0;
   virtual void glMemoryBarrierByRegionFn(GLbitfield barriers) = 0;
   virtual void glMemoryBarrierEXTFn(GLbitfield barriers) = 0;
+  virtual void glMemoryObjectParameterivEXTFn(GLuint memoryObject,
+                                              GLenum pname,
+                                              const GLint* param) = 0;
   virtual void glMinSampleShadingFn(GLfloat value) = 0;
   virtual void glMultiDrawArraysANGLEFn(GLenum mode,
                                         const GLint* firsts,
@@ -3398,6 +3483,13 @@ class GL_EXPORT GLApi {
                                                  const GLsizei* counts,
                                                  const GLsizei* instanceCounts,
                                                  GLsizei drawcount) = 0;
+  virtual void glMultiDrawArraysInstancedBaseInstanceANGLEFn(
+      GLenum mode,
+      const GLint* firsts,
+      const GLsizei* counts,
+      const GLsizei* instanceCounts,
+      const GLuint* baseInstances,
+      GLsizei drawcount) = 0;
   virtual void glMultiDrawElementsANGLEFn(GLenum mode,
                                           const GLsizei* counts,
                                           GLenum type,
@@ -3409,6 +3501,15 @@ class GL_EXPORT GLApi {
       GLenum type,
       const GLvoid* const* indices,
       const GLsizei* instanceCounts,
+      GLsizei drawcount) = 0;
+  virtual void glMultiDrawElementsInstancedBaseVertexBaseInstanceANGLEFn(
+      GLenum mode,
+      const GLsizei* counts,
+      GLenum type,
+      const GLvoid* const* indices,
+      const GLsizei* instanceCounts,
+      const GLint* baseVertices,
+      const GLuint* baseInstances,
       GLsizei drawcount) = 0;
   virtual void glObjectLabelFn(GLenum identifier,
                                GLuint name,
@@ -4116,8 +4217,6 @@ class GL_EXPORT GLApi {
 #define glActiveShaderProgram \
   ::gl::g_current_gl_context->glActiveShaderProgramFn
 #define glActiveTexture ::gl::g_current_gl_context->glActiveTextureFn
-#define glApplyFramebufferAttachmentCMAAINTEL \
-  ::gl::g_current_gl_context->glApplyFramebufferAttachmentCMAAINTELFn
 #define glAttachShader ::gl::g_current_gl_context->glAttachShaderFn
 #define glBeginQuery ::gl::g_current_gl_context->glBeginQueryFn
 #define glBeginTransformFeedback \
@@ -4224,6 +4323,8 @@ class GL_EXPORT GLApi {
 #define glDeleteFencesNV ::gl::g_current_gl_context->glDeleteFencesNVFn
 #define glDeleteFramebuffersEXT \
   ::gl::g_current_gl_context->glDeleteFramebuffersEXTFn
+#define glDeleteMemoryObjectsEXT \
+  ::gl::g_current_gl_context->glDeleteMemoryObjectsEXTFn
 #define glDeletePathsNV ::gl::g_current_gl_context->glDeletePathsNVFn
 #define glDeleteProgram ::gl::g_current_gl_context->glDeleteProgramFn
 #define glDeleteProgramPipelines \
@@ -4261,6 +4362,8 @@ class GL_EXPORT GLApi {
 #define glDrawArraysIndirect ::gl::g_current_gl_context->glDrawArraysIndirectFn
 #define glDrawArraysInstancedANGLE \
   ::gl::g_current_gl_context->glDrawArraysInstancedANGLEFn
+#define glDrawArraysInstancedBaseInstanceANGLE \
+  ::gl::g_current_gl_context->glDrawArraysInstancedBaseInstanceANGLEFn
 #define glDrawBuffer ::gl::g_current_gl_context->glDrawBufferFn
 #define glDrawBuffersARB ::gl::g_current_gl_context->glDrawBuffersARBFn
 #define glDrawElements ::gl::g_current_gl_context->glDrawElementsFn
@@ -4268,6 +4371,9 @@ class GL_EXPORT GLApi {
   ::gl::g_current_gl_context->glDrawElementsIndirectFn
 #define glDrawElementsInstancedANGLE \
   ::gl::g_current_gl_context->glDrawElementsInstancedANGLEFn
+#define glDrawElementsInstancedBaseVertexBaseInstanceANGLE \
+  ::gl::g_current_gl_context                               \
+      ->glDrawElementsInstancedBaseVertexBaseInstanceANGLEFn
 #define glDrawRangeElements ::gl::g_current_gl_context->glDrawRangeElementsFn
 #define glEGLImageTargetRenderbufferStorageOES \
   ::gl::g_current_gl_context->glEGLImageTargetRenderbufferStorageOESFn
@@ -4509,8 +4615,12 @@ class GL_EXPORT GLApi {
   ::gl::g_current_gl_context->glGetVertexAttribPointervRobustANGLEFn
 #define glHint ::gl::g_current_gl_context->glHintFn
 #define glImportMemoryFdEXT ::gl::g_current_gl_context->glImportMemoryFdEXTFn
+#define glImportMemoryZirconHandleANGLE \
+  ::gl::g_current_gl_context->glImportMemoryZirconHandleANGLEFn
 #define glImportSemaphoreFdEXT \
   ::gl::g_current_gl_context->glImportSemaphoreFdEXTFn
+#define glImportSemaphoreZirconHandleANGLE \
+  ::gl::g_current_gl_context->glImportSemaphoreZirconHandleANGLEFn
 #define glInsertEventMarkerEXT \
   ::gl::g_current_gl_context->glInsertEventMarkerEXTFn
 #define glInvalidateFramebuffer \
@@ -4549,15 +4659,22 @@ class GL_EXPORT GLApi {
 #define glMemoryBarrierByRegion \
   ::gl::g_current_gl_context->glMemoryBarrierByRegionFn
 #define glMemoryBarrierEXT ::gl::g_current_gl_context->glMemoryBarrierEXTFn
+#define glMemoryObjectParameterivEXT \
+  ::gl::g_current_gl_context->glMemoryObjectParameterivEXTFn
 #define glMinSampleShading ::gl::g_current_gl_context->glMinSampleShadingFn
 #define glMultiDrawArraysANGLE \
   ::gl::g_current_gl_context->glMultiDrawArraysANGLEFn
 #define glMultiDrawArraysInstancedANGLE \
   ::gl::g_current_gl_context->glMultiDrawArraysInstancedANGLEFn
+#define glMultiDrawArraysInstancedBaseInstanceANGLE \
+  ::gl::g_current_gl_context->glMultiDrawArraysInstancedBaseInstanceANGLEFn
 #define glMultiDrawElementsANGLE \
   ::gl::g_current_gl_context->glMultiDrawElementsANGLEFn
 #define glMultiDrawElementsInstancedANGLE \
   ::gl::g_current_gl_context->glMultiDrawElementsInstancedANGLEFn
+#define glMultiDrawElementsInstancedBaseVertexBaseInstanceANGLE \
+  ::gl::g_current_gl_context                                    \
+      ->glMultiDrawElementsInstancedBaseVertexBaseInstanceANGLEFn
 #define glObjectLabel ::gl::g_current_gl_context->glObjectLabelFn
 #define glObjectPtrLabel ::gl::g_current_gl_context->glObjectPtrLabelFn
 #define glPathCommandsNV ::gl::g_current_gl_context->glPathCommandsNVFn

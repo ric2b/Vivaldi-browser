@@ -10,13 +10,15 @@
 
 #include "platform_media/common/feature_toggles.h"
 
-#include "base/memory/shared_memory.h"
-#include "base/synchronization/lock.h"
 #include "platform_media/gpu/data_source/ipc_data_source.h"
 
-#ifndef NDEBUG
-#include "base/files/memory_mapped_file.h"
-#endif //NDEBUG
+#include "base/callback.h"
+#include "base/memory/read_only_shared_memory_region.h"
+#include "base/threading/thread_checker.h"
+
+namespace base {
+class SingleThreadTaskRunner;
+}
 
 namespace IPC {
 class Sender;
@@ -26,62 +28,39 @@ namespace media {
 
 // An IPCDataSource that satisfies read requests with data obtained via IPC
 // from the render process.
-class IPCDataSourceImpl : public IPCDataSource {
+class IPCDataSourceImpl {
  public:
-  // Passing a value <0 for |size| indicates the size is unknown (|GetSize()|
-  // will return false).
-  IPCDataSourceImpl(IPC::Sender* channel,
-                    int32_t routing_id,
-                    int64_t size,
-                    bool streaming);
-  ~IPCDataSourceImpl() override;
+  IPCDataSourceImpl(IPC::Sender* channel, int32_t routing_id);
+  ~IPCDataSourceImpl();
 
-  // IPCDataSource implementation.
-  void Suspend() override;
-  void Resume() override;
-
-  // DataSource implementation.
   void Read(int64_t position,
-            int size,
-            uint8_t* data,
-            const ReadCB& read_cb) override;
-  void Stop() override;
-  void Abort() override;
-  bool GetSize(int64_t* size_out) override;
-  bool IsStreaming() override;
-  void SetBitrate(int bitrate) override;
+            int read_size,
+            ipc_data_source::ReadCB read_cb);
 
-  void OnBufferForRawDataReady(size_t buffer_size,
-                               base::SharedMemoryHandle handle);
-  void OnRawDataReady(int size);
+  void Stop();
+
+  void OnRawDataReady(int64_t tag,
+                      int size,
+                      base::ReadOnlySharedMemoryRegion raw_region);
 
  private:
-  IPC::Sender* const channel_;
+  void FinishRead();
+
+  IPC::Sender* channel_;
   const int32_t routing_id_;
 
-  const int64_t size_;
-  const bool streaming_;
+  int64_t last_read_position_ = -1;
+  int last_requested_size_ = -1;
+  int last_read_size_ = -1;
+  ipc_data_source::ReadCB read_callback_;
 
-  class ReadOperation;
-  std::unique_ptr<ReadOperation> read_operation_;
-
-  bool stopped_;
-  bool suspended_;
-  bool should_discard_next_buffer_;
-
-  // Used to protect access to |read_operation_|, |stopped_|, |suspended_|, and
-  // |should_discard_next_buffer_|.
-  base::Lock lock_;
+  int64_t last_message_tag_ = 0;
 
   // A buffer for raw media data, shared with the render process.  Filled in the
   // render process, consumed in the GPU process.
-  std::unique_ptr<base::SharedMemory> shared_data_;
+  base::ReadOnlySharedMemoryMapping raw_mapping_;
 
-#ifndef NDEBUG
-  int64_t content_log_size_;
-  base::FilePath content_log_path_;
-  std::unique_ptr<base::MemoryMappedFile> content_log_;
-#endif //NDEBUG
+  THREAD_CHECKER(thread_checker_);
 
   DISALLOW_COPY_AND_ASSIGN(IPCDataSourceImpl);
 };

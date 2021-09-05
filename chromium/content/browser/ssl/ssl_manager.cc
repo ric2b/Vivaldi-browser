@@ -49,14 +49,6 @@ enum class MixedContentType {
   kMaxValue = kScriptingWithCertErrors,
 };
 
-void OnAllowCertificateWithRecordDecision(
-    bool record_decision,
-    const base::Callback<void(bool, content::CertificateRequestResultType)>&
-        callback,
-    CertificateRequestResultType decision) {
-  callback.Run(record_decision, decision);
-}
-
 void OnAllowCertificate(SSLErrorHandler* handler,
                         SSLHostStateDelegate* state_delegate,
                         bool record_decision,
@@ -75,9 +67,9 @@ void OnAllowCertificate(SSLErrorHandler* handler,
       // ContinueRequest() gets posted to a different thread. Calling
       // AllowCert() first ensures deterministic ordering.
       if (record_decision && state_delegate) {
-        state_delegate->AllowCert(handler->request_url().host(),
-                                  *handler->ssl_info().cert.get(),
-                                  handler->cert_error());
+        state_delegate->AllowCert(
+            handler->request_url().host(), *handler->ssl_info().cert.get(),
+            handler->cert_error(), handler->web_contents());
       }
       handler->ContinueRequest();
       return;
@@ -103,36 +95,6 @@ class SSLManagerSet : public base::SupportsUserData::Data {
   DISALLOW_COPY_AND_ASSIGN(SSLManagerSet);
 };
 
-void HandleSSLErrorOnUI(
-    const base::Callback<WebContents*(void)>& web_contents_getter,
-    const base::WeakPtr<SSLErrorHandler::Delegate>& delegate,
-    BrowserThread::ID delegate_thread,
-    bool is_main_frame_request,
-    const GURL& url,
-    int net_error,
-    const net::SSLInfo& ssl_info,
-    bool fatal) {
-  content::WebContents* web_contents = web_contents_getter.Run();
-  std::unique_ptr<SSLErrorHandler> handler(new SSLErrorHandler(
-      web_contents, delegate, delegate_thread, is_main_frame_request, url,
-      net_error, ssl_info, fatal));
-
-  if (!web_contents) {
-    // Requests can fail to dispatch because they don't have a WebContents. See
-    // https://crbug.com/86537. In this case we have to make a decision in this
-    // function.
-    handler->CancelRequest();
-    return;
-  }
-
-  NavigationControllerImpl* controller =
-      static_cast<NavigationControllerImpl*>(&web_contents->GetController());
-  controller->SetPendingNavigationSSLError(true);
-
-  SSLManager* manager = controller->ssl_manager();
-  manager->OnCertError(std::move(handler));
-}
-
 void LogMixedContentMetrics(MixedContentType type,
                             ukm::SourceId source_id,
                             ukm::UkmRecorder* recorder) {
@@ -149,7 +111,7 @@ void SSLManager::OnSSLCertificateError(
     const base::WeakPtr<SSLErrorHandler::Delegate>& delegate,
     bool is_main_frame_request,
     const GURL& url,
-    const base::Callback<WebContents*(void)>& web_contents_getter,
+    WebContents* web_contents,
     int net_error,
     const net::SSLInfo& ssl_info,
     bool fatal) {
@@ -157,35 +119,26 @@ void SSLManager::OnSSLCertificateError(
   DVLOG(1) << "OnSSLCertificateError() cert_error: " << net_error
            << " url: " << url.spec() << " cert_status: " << std::hex
            << ssl_info.cert_status;
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  if (BrowserThread::CurrentlyOn(BrowserThread::UI)) {
-    HandleSSLErrorOnUI(web_contents_getter, delegate, BrowserThread::UI,
-                       is_main_frame_request, url, net_error, ssl_info, fatal);
+  std::unique_ptr<SSLErrorHandler> handler(
+      new SSLErrorHandler(web_contents, delegate, is_main_frame_request, url,
+                          net_error, ssl_info, fatal));
+
+  if (!web_contents) {
+    // Requests can fail to dispatch because they don't have a WebContents. See
+    // https://crbug.com/86537. In this case we have to make a decision in this
+    // function.
+    handler->DenyRequest();
     return;
   }
 
-  // TODO(jam): remove the logic to call this from IO thread once the
-  // network service code path is the only one.
-  base::PostTask(
-      FROM_HERE, {BrowserThread::UI},
-      base::BindOnce(&HandleSSLErrorOnUI, web_contents_getter, delegate,
-                     BrowserThread::IO, is_main_frame_request, url, net_error,
-                     ssl_info, fatal));
-}
+  NavigationControllerImpl* controller =
+      static_cast<NavigationControllerImpl*>(&web_contents->GetController());
+  controller->SetPendingNavigationSSLError(true);
 
-// static
-void SSLManager::OnSSLCertificateSubresourceError(
-    const base::WeakPtr<SSLErrorHandler::Delegate>& delegate,
-    const GURL& url,
-    int render_process_id,
-    int render_frame_id,
-    int net_error,
-    const net::SSLInfo& ssl_info,
-    bool fatal) {
-  OnSSLCertificateError(delegate, false, url,
-                        base::Bind(&WebContentsImpl::FromRenderFrameHostID,
-                                   render_process_id, render_frame_id),
-                        net_error, ssl_info, fatal);
+  SSLManager* manager = controller->ssl_manager();
+  manager->OnCertError(std::move(handler));
 }
 
 SSLManager::SSLManager(NavigationControllerImpl* controller)
@@ -216,16 +169,18 @@ void SSLManager::DidCommitProvisionalLoad(const LoadCommittedDetails& details) {
   int add_content_status_flags = 0;
   int remove_content_status_flags = 0;
 
-  if (!details.is_main_frame) {
-    // If it wasn't a main-frame navigation, then carry over content
-    // status flags. (For example, the mixed content flag shouldn't
-    // clear because of a frame navigation.)
+  if (!details.is_main_frame || details.is_same_document) {
+    // For subframe navigations, and for same-document main-frame navigations,
+    // carry over content status flags from the previously committed entry. For
+    // example, the mixed content flag shouldn't clear because of a subframe
+    // navigation, or because of a back/forward navigation that doesn't leave
+    // the current document. (See https://crbug.com/959571.)
     NavigationEntryImpl* previous_entry =
         controller_->GetEntryAtIndex(details.previous_entry_index);
     if (previous_entry) {
       add_content_status_flags = previous_entry->GetSSL().content_status;
     }
-  } else if (!details.is_same_document) {
+  } else {
     // For main-frame non-same-page navigations, clear content status
     // flags. These flags are set based on the content on the page, and thus
     // should reflect the current content, even if the navigation was to an
@@ -345,7 +300,7 @@ void SSLManager::OnCertError(std::unique_ptr<SSLErrorHandler> handler) {
       ssl_host_state_delegate_
           ? ssl_host_state_delegate_->QueryPolicy(
                 handler->request_url().host(), *handler->ssl_info().cert.get(),
-                handler->cert_error())
+                handler->cert_error(), handler->web_contents())
           : SSLHostStateDelegate::DENIED;
 
   if (judgment == SSLHostStateDelegate::ALLOWED) {
@@ -365,7 +320,8 @@ void SSLManager::DidStartResourceResponse(const GURL& url,
   // If the scheme is https: or wss and the cert did not have any errors, revoke
   // any previous decisions that have occurred.
   if (!ssl_host_state_delegate_ ||
-      !ssl_host_state_delegate_->HasAllowException(url.host())) {
+      !ssl_host_state_delegate_->HasAllowException(
+          url.host(), controller_->GetWebContents())) {
     return;
   }
 
@@ -384,22 +340,20 @@ void SSLManager::OnCertErrorInternal(std::unique_ptr<SSLErrorHandler> handler) {
   bool is_main_frame_request = handler->is_main_frame_request();
   bool fatal = handler->fatal();
 
-  base::Callback<void(bool, content::CertificateRequestResultType)> callback =
-      base::Bind(&OnAllowCertificate, base::Owned(handler.release()),
-                 ssl_host_state_delegate_);
+  base::RepeatingCallback<void(bool, content::CertificateRequestResultType)>
+      callback = base::BindRepeating(&OnAllowCertificate,
+                                     base::Owned(handler.release()),
+                                     ssl_host_state_delegate_);
 
   if (devtools_instrumentation::HandleCertificateError(
           web_contents, cert_error, request_url,
-          base::BindRepeating(&OnAllowCertificateWithRecordDecision, false,
-                              callback))) {
+          base::BindRepeating(callback, false))) {
     return;
   }
 
   GetContentClient()->browser()->AllowCertificateError(
       web_contents, cert_error, ssl_info, request_url, is_main_frame_request,
-      fatal,
-      base::Bind(&OnAllowCertificateWithRecordDecision, true,
-                 std::move(callback)));
+      fatal, base::BindOnce(std::move(callback), true));
 }
 
 bool SSLManager::UpdateEntry(NavigationEntryImpl* entry,
@@ -420,20 +374,28 @@ bool SSLManager::UpdateEntry(NavigationEntryImpl* entry,
   // necessarily have site instances.  Without a process, the entry can't
   // possibly have insecure content.  See bug https://crbug.com/12423.
   if (site_instance && ssl_host_state_delegate_) {
-    std::string host = entry->GetURL().host();
-    int process_id = site_instance->GetProcess()->GetID();
-    if (ssl_host_state_delegate_->DidHostRunInsecureContent(
-            host, process_id, SSLHostStateDelegate::MIXED_CONTENT)) {
-      entry->GetSSL().content_status |= SSLStatus::RAN_INSECURE_CONTENT;
-    }
+    const base::Optional<url::Origin>& entry_origin =
+        entry->root_node()->frame_entry->committed_origin();
+    // In some cases (e.g., unreachable URLs), navigation entries might not have
+    // origins attached to them. We don't care about tracking mixed content for
+    // those cases.
+    if (entry_origin.has_value()) {
+      const std::string& host = entry_origin->host();
+      int process_id = site_instance->GetProcess()->GetID();
+      if (ssl_host_state_delegate_->DidHostRunInsecureContent(
+              host, process_id, SSLHostStateDelegate::MIXED_CONTENT)) {
+        entry->GetSSL().content_status |= SSLStatus::RAN_INSECURE_CONTENT;
+      }
 
-    // Only record information about subresources with cert errors if the
-    // main page is HTTPS with a certificate.
-    if (entry->GetURL().SchemeIsCryptographic() &&
-        entry->GetSSL().certificate &&
-        ssl_host_state_delegate_->DidHostRunInsecureContent(
-            host, process_id, SSLHostStateDelegate::CERT_ERRORS_CONTENT)) {
-      entry->GetSSL().content_status |= SSLStatus::RAN_CONTENT_WITH_CERT_ERRORS;
+      // Only record information about subresources with cert errors if the
+      // main page is HTTPS with a certificate.
+      if (entry->GetURL().SchemeIsCryptographic() &&
+          entry->GetSSL().certificate &&
+          ssl_host_state_delegate_->DidHostRunInsecureContent(
+              host, process_id, SSLHostStateDelegate::CERT_ERRORS_CONTENT)) {
+        entry->GetSSL().content_status |=
+            SSLStatus::RAN_CONTENT_WITH_CERT_ERRORS;
+      }
     }
   }
 

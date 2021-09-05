@@ -24,7 +24,7 @@ Polymer({
      */
     chooserExceptions: {
       type: Array,
-      value: function() {
+      value() {
         return [];
       },
     },
@@ -55,13 +55,7 @@ Polymer({
   },
 
   /** @override */
-  created: function() {
-    this.browserProxy_ =
-        settings.SiteSettingsPrefsBrowserProxyImpl.getInstance();
-  },
-
-  /** @override */
-  attached: function() {
+  attached() {
     this.addWebUIListener(
         'contentSettingChooserPermissionChanged',
         this.objectWithinChooserTypeChanged_.bind(this));
@@ -79,7 +73,7 @@ Polymer({
    *     represents the chooser data for this permission.
    * @private
    */
-  objectWithinChooserTypeChanged_: function(category, chooserType) {
+  objectWithinChooserTypeChanged_(category, chooserType) {
     if (category === this.category && chooserType === this.chooserType) {
       this.chooserTypeChanged_();
     }
@@ -91,7 +85,7 @@ Polymer({
    * message). Another message is sent when the *last* incognito window closes.
    * @private
    */
-  onIncognitoStatusChanged_: function(hasIncognito) {
+  onIncognitoStatusChanged_(hasIncognito) {
     this.hasIncognito_ = hasIncognito;
     this.populateList_();
   },
@@ -100,7 +94,7 @@ Polymer({
    * Configures the visibility of the widget and shows the list.
    * @private
    */
-  chooserTypeChanged_: function() {
+  chooserTypeChanged_() {
     if (this.chooserType == settings.ChooserType.NONE) {
       return;
     }
@@ -112,6 +106,12 @@ Polymer({
         break;
       case settings.ChooserType.SERIAL_PORTS:
         this.emptyListMessage_ = this.i18n('noSerialPortsFound');
+        break;
+      case settings.ChooserType.HID_DEVICES:
+        this.emptyListMessage_ = this.i18n('noHidDevicesFound');
+        break;
+      case settings.ChooserType.BLUETOOTH_DEVICES:
+        this.emptyListMessage_ = this.i18n('noBluetoothDevicesFound');
         break;
       default:
         this.emptyListMessage_ = '';
@@ -125,7 +125,7 @@ Polymer({
    * @return {boolean}
    * @private
    */
-  hasExceptions_: function() {
+  hasExceptions_() {
     return this.chooserExceptions.length > 0;
   },
 
@@ -135,7 +135,7 @@ Polymer({
    * @param{!CustomEvent<!{target: HTMLElement, text: string}>} e
    * @private
    */
-  onShowTooltip_: function(e) {
+  onShowTooltip_(e) {
     this.tooltipText_ = e.detail.text;
     const target = e.detail.target;
     // paper-tooltip normally determines the target from the |for| property,
@@ -160,8 +160,8 @@ Polymer({
    * Populate the chooser exception list for display.
    * @private
    */
-  populateList_: function() {
-    this.browserProxy_.getChooserExceptionList(this.chooserType)
+  populateList_() {
+    this.browserProxy.getChooserExceptionList(this.chooserType)
         .then(exceptionList => this.processExceptions_(exceptionList));
   },
 
@@ -170,9 +170,10 @@ Polymer({
    * @param {!Array<RawChooserException>} exceptionList
    * @private
    */
-  processExceptions_: function(exceptionList) {
+  processExceptions_(exceptionList) {
     const exceptions = exceptionList.map(exception => {
-      const sites = exception.sites.map(this.expandSiteException);
+      const sites = exception.sites.map(
+          site => this.expandSiteException(site));
       return Object.assign(exception, {sites});
     });
 

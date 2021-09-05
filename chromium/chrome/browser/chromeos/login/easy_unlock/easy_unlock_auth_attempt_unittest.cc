@@ -11,7 +11,6 @@
 #include "build/build_config.h"
 #include "chrome/browser/chromeos/login/easy_unlock/easy_unlock_key_manager.h"
 #include "chromeos/components/proximity_auth/screenlock_bridge.h"
-#include "chromeos/components/proximity_auth/switches.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace chromeos {
@@ -100,8 +99,6 @@ class TestLockHandler : public proximity_auth::ScreenlockBridge::LockHandler {
     ADD_FAILURE() << "Should not be reached.";
   }
 
-  // TODO(crbug.com/927498): This tests is the only dependency on
-  // ScreenlockBridge::EnableInput. It should be removed.
   void EnableInput() override {
     ASSERT_EQ(STATE_ATTEMPTING_UNLOCK, state_);
     state_ = STATE_UNLOCK_CANCELED;

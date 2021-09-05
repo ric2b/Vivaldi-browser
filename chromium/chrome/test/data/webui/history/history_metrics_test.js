@@ -2,71 +2,58 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-/**
- * @constructor
- * @extends {history.BrowserService}
- */
-const TestMetricsBrowserService = function() {
-  this.histogramMap = {};
-  this.actionMap = {};
-};
+import {BrowserService, ensureLazyLoaded, HistoryPageViewHistogram, SyncedTabsHistogram, SYNCED_TABS_HISTOGRAM_NAME} from 'chrome://history/history.js';
+import {TestBrowserService} from 'chrome://test/history/test_browser_service.js';
+import {createHistoryEntry, createHistoryInfo, createSession, createWindow, disableLinkClicks, polymerSelectAll} from 'chrome://test/history/test_util.js';
+import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {flushTasks, waitAfterNextRender} from 'chrome://test/test_util.m.js';
 
 suite('Metrics', function() {
-  let service;
+  let testService;
   let app;
   let histogramMap;
   let actionMap;
 
   suiteSetup(function() {
     disableLinkClicks();
-
-    TestMetricsBrowserService.prototype = {
-      __proto__: history.BrowserService.prototype,
-
-      /** @override */
-      recordHistogram: function(histogram, value, max) {
-        assertTrue(value < max);
-
-        if (!(histogram in this.histogramMap)) {
-          this.histogramMap[histogram] = {};
-        }
-
-        if (!(value in this.histogramMap[histogram])) {
-          this.histogramMap[histogram][value] = 0;
-        }
-
-        this.histogramMap[histogram][value]++;
-      },
-
-      /** @override */
-      recordAction: function(action) {
-        if (!(action in this.actionMap)) {
-          this.actionMap[action] = 0;
-        }
-
-        this.actionMap[action]++;
-      },
-
-      /** @override */
-      deleteItems: function() {
-        return test_util.flushTasks();
-      }
-    };
   });
 
-  setup(function() {
-    history.BrowserService.instance_ = new TestMetricsBrowserService();
-    service = history.BrowserService.getInstance();
+  setup(async () => {
+    PolymerTest.clearBody();
 
-    actionMap = service.actionMap;
-    histogramMap = service.histogramMap;
+    BrowserService.instance_ = new TestBrowserService();
+    testService = BrowserService.getInstance();
 
-    app = replaceApp();
-    updateSignInState(false);
-    return test_util.flushTasks();
+    actionMap = testService.actionMap;
+    histogramMap = testService.histogramMap;
+
+    app = document.createElement('history-app');
   });
 
-  test('History.HistoryPageView', function() {
+  /**
+   * @param {!Array<!HistoryEntry>} queryResults The query results to initialize
+   *     the page with.
+   * @param {string=} query The query to use in the QueryInfo.
+   * @return {!Promise} Promise that resolves when initialization is complete.
+   */
+  function finishSetup(queryResults, query) {
+    testService.setQueryResult(
+        {info: createHistoryInfo(query), value: queryResults});
+    document.body.appendChild(app);
+    return Promise
+        .all([
+          testService.whenCalled('queryHistory'),
+          ensureLazyLoaded(),
+        ])
+        .then(function() {
+          cr.webUIListenerCallback('sign-in-state-changed', false);
+          return flushTasks();
+        });
+  }
+
+
+  test('History.HistoryPageView', async () => {
+    await finishSetup([]);
     app.grouped_ = true;
 
     const histogram = histogramMap['History.HistoryPageView'];
@@ -74,15 +61,18 @@ suite('Metrics', function() {
 
     app.selectedPage_ = 'syncedTabs';
     assertEquals(1, histogram[HistoryPageViewHistogram.SIGNIN_PROMO]);
-    updateSignInState(true);
-    return test_util.flushTasks().then(() => {
-      assertEquals(1, histogram[HistoryPageViewHistogram.SYNCED_TABS]);
-      app.selectedPage_ = 'history';
-      assertEquals(2, histogram[HistoryPageViewHistogram.HISTORY]);
-    });
+    await testService.whenCalled('otherDevicesInitialized');
+
+    testService.resetResolver('recordHistogram');
+    cr.webUIListenerCallback('sign-in-state-changed', true);
+    await testService.whenCalled('recordHistogram');
+
+    assertEquals(1, histogram[HistoryPageViewHistogram.SYNCED_TABS]);
+    app.selectedPage_ = 'history';
+    assertEquals(2, histogram[HistoryPageViewHistogram.HISTORY]);
   });
 
-  test('history-list', function() {
+  test('history-list', async () => {
     // Create a history entry that is between 7 and 8 days in the past. For the
     // purposes of the tested functionality, we consider a day to be a 24 hour
     // period, with no regard to DST shifts.
@@ -91,134 +81,132 @@ suite('Metrics', function() {
 
     const historyEntry = createHistoryEntry(weekAgo, 'http://www.google.com');
     historyEntry.starred = true;
-    app.historyResult(
-        createHistoryInfo(),
+    await finishSetup(
         [createHistoryEntry(weekAgo, 'http://www.example.com'), historyEntry]);
+    await flushTasks();
 
-    return test_util.flushTasks()
-        .then(() => {
-          const items = polymerSelectAll(app.$.history, 'history-item');
-          MockInteractions.tap(items[1].$$('#bookmark-star'));
-          assertEquals(1, actionMap['BookmarkStarClicked']);
-          MockInteractions.tap(items[1].$.link);
-          assertEquals(1, actionMap['EntryLinkClick']);
-          assertEquals(1, histogramMap['HistoryPage.ClickPosition'][1]);
-          assertEquals(1, histogramMap['HistoryPage.ClickPositionSubset'][1]);
+    let items = polymerSelectAll(app.$.history, 'history-item');
+    items[1].$$('#bookmark-star').click();
+    assertEquals(1, actionMap['BookmarkStarClicked']);
+    items[1].$.link.click();
+    assertEquals(1, actionMap['EntryLinkClick']);
+    assertEquals(1, histogramMap['HistoryPage.ClickPosition'][1]);
+    assertEquals(1, histogramMap['HistoryPage.ClickPositionSubset'][1]);
 
-          // TODO(https://crbug.com/1000573): Log the contents of this histogram
-          // for debugging in case the flakiness reoccurs.
-          console.log(Object.keys(histogramMap['HistoryPage.ClickAgeInDays']));
+    // TODO(https://crbug.com/1000573): Log the contents of this histogram
+    // for debugging in case the flakiness reoccurs.
+    console.log(Object.keys(histogramMap['HistoryPage.ClickAgeInDays']));
 
-          // The "age in days" histogram should record 8 days, since the history
-          // entry was created between 7 and 8 days ago and we round the
-          // recorded value up.
-          assertEquals(1, histogramMap['HistoryPage.ClickAgeInDays'][8]);
-          assertEquals(1, histogramMap['HistoryPage.ClickAgeInDaysSubset'][8]);
+    // The "age in days" histogram should record 8 days, since the history
+    // entry was created between 7 and 8 days ago and we round the
+    // recorded value up.
+    assertEquals(1, histogramMap['HistoryPage.ClickAgeInDays'][8]);
+    assertEquals(1, histogramMap['HistoryPage.ClickAgeInDaysSubset'][8]);
 
-          app.fire('change-query', {search: 'goog'});
-          assertEquals(1, actionMap['Search']);
-          app.set('queryState_.incremental', true);
-          app.historyResult(createHistoryInfo('goog'), [
-            createHistoryEntry(weekAgo, 'http://www.google.com'),
-            createHistoryEntry(weekAgo, 'http://www.google.com'),
-            createHistoryEntry(weekAgo, 'http://www.google.com')
-          ]);
-          return test_util.flushTasks();
-        })
-        .then(() => {
-          items = polymerSelectAll(app.$.history, 'history-item');
-          MockInteractions.tap(items[0].$.link);
-          assertEquals(1, actionMap['SearchResultClick']);
-          assertEquals(1, histogramMap['HistoryPage.ClickPosition'][0]);
-          assertEquals(1, histogramMap['HistoryPage.ClickPositionSubset'][0]);
-          MockInteractions.tap(items[0].$.checkbox);
-          MockInteractions.tap(items[4].$.checkbox);
-          return test_util.flushTasks();
-        })
-        .then(() => {
-          app.$.toolbar.deleteSelectedItems();
-          assertEquals(1, actionMap['RemoveSelected']);
-          return test_util.flushTasks();
-        })
-        .then(() => {
-          MockInteractions.tap(app.$.history.$$('.cancel-button'));
-          assertEquals(1, actionMap['CancelRemoveSelected']);
-          app.$.toolbar.deleteSelectedItems();
-          return test_util.flushTasks();
-        })
-        .then(() => {
-          MockInteractions.tap(app.$.history.$$('.action-button'));
-          assertEquals(1, actionMap['ConfirmRemoveSelected']);
-          return test_util.flushTasks();
-        })
-        .then(() => {
-          items = polymerSelectAll(app.$.history, 'history-item');
-          MockInteractions.tap(items[0].$['menu-button']);
-          return test_util.flushTasks();
-        })
-        .then(() => {
-          MockInteractions.tap(app.$.history.$$('#menuRemoveButton'));
-          return test_util.flushTasks();
-        })
-        .then(() => {
-          assertEquals(1, histogramMap['HistoryPage.RemoveEntryPosition'][0]);
-          assertEquals(
-              1, histogramMap['HistoryPage.RemoveEntryPositionSubset'][0]);
-        });
+    testService.resetResolver('queryHistory');
+    testService.setQueryResult({
+      info: createHistoryInfo('goog'),
+      value: [
+        createHistoryEntry(weekAgo, 'http://www.google.com'),
+        createHistoryEntry(weekAgo, 'http://www.google.com'),
+        createHistoryEntry(weekAgo, 'http://www.google.com'),
+      ],
+    });
+    app.fire('change-query', {search: 'goog'});
+    assertEquals(1, actionMap['Search']);
+    app.set('queryState_.incremental', true);
+    await Promise.all([
+      testService.whenCalled('queryHistory'),
+      flushTasks(),
+    ]);
+
+    app.$.history.$$('iron-list').fire('iron-resize');
+    await waitAfterNextRender(app.$.history);
+    flush();
+
+    items = polymerSelectAll(app.$.history, 'history-item');
+    items[0].$.link.click();
+    assertEquals(1, actionMap['SearchResultClick']);
+    assertEquals(1, histogramMap['HistoryPage.ClickPosition'][0]);
+    assertEquals(1, histogramMap['HistoryPage.ClickPositionSubset'][0]);
+    items[0].$.checkbox.click();
+    items[4].$.checkbox.click();
+    await flushTasks();
+
+    app.$.toolbar.deleteSelectedItems();
+    assertEquals(1, actionMap['RemoveSelected']);
+    await flushTasks();
+
+    app.$.history.$$('.cancel-button').click();
+    assertEquals(1, actionMap['CancelRemoveSelected']);
+    app.$.toolbar.deleteSelectedItems();
+    await flushTasks();
+
+    app.$.history.$$('.action-button').click();
+    assertEquals(1, actionMap['ConfirmRemoveSelected']);
+    await flushTasks();
+
+    items = polymerSelectAll(app.$.history, 'history-item');
+    items[0].$['menu-button'].click();
+    await flushTasks();
+
+    app.$.history.$$('#menuRemoveButton').click();
+    await Promise.all([
+      testService.whenCalled('removeVisits'),
+      flushTasks(),
+    ]);
+
+    assertEquals(1, histogramMap['HistoryPage.RemoveEntryPosition'][0]);
+    assertEquals(1, histogramMap['HistoryPage.RemoveEntryPositionSubset'][0]);
   });
 
-  test('synced-device-manager', function() {
+  test('synced-device-manager', async () => {
+    const sessionList = [
+      createSession(
+          'Nexus 5',
+          [createWindow(['http://www.google.com', 'http://example.com'])]),
+      createSession(
+          'Nexus 6',
+          [
+            createWindow(['http://test.com']),
+            createWindow(['http://www.gmail.com', 'http://badssl.com'])
+          ]),
+    ];
+    testService.setForeignSessions(sessionList);
+    await finishSetup([]);
+
     app.selectedPage_ = 'syncedTabs';
-    let histogram;
-    let menuButton;
-    return test_util.flushTasks()
-        .then(() => {
-          histogram = histogramMap[SYNCED_TABS_HISTOGRAM_NAME];
-          assertEquals(1, histogram[SyncedTabsHistogram.INITIALIZED]);
+    await flushTasks();
 
-          const sessionList = [
-            createSession('Nexus 5', [createWindow([
-                            'http://www.google.com', 'http://example.com'
-                          ])]),
-            createSession(
-                'Nexus 6',
-                [
-                  createWindow(['http://test.com']),
-                  createWindow(['http://www.gmail.com', 'http://badssl.com'])
-                ]),
-          ];
-          setForeignSessions(sessionList);
-          return test_util.flushTasks();
-        })
-        .then(() => {
-          assertEquals(1, histogram[SyncedTabsHistogram.HAS_FOREIGN_DATA]);
-          return test_util.flushTasks();
-        })
-        .then(() => {
-          cards = polymerSelectAll(
-              app.$$('#synced-devices'), 'history-synced-device-card');
-          MockInteractions.tap(cards[0].$['card-heading']);
-          assertEquals(1, histogram[SyncedTabsHistogram.COLLAPSE_SESSION]);
-          MockInteractions.tap(cards[0].$['card-heading']);
-          assertEquals(1, histogram[SyncedTabsHistogram.EXPAND_SESSION]);
-          MockInteractions.tap(polymerSelectAll(cards[0], '.website-link')[0]);
-          assertEquals(1, histogram[SyncedTabsHistogram.LINK_CLICKED]);
+    const histogram = histogramMap[SYNCED_TABS_HISTOGRAM_NAME];
+    assertEquals(1, histogram[SyncedTabsHistogram.INITIALIZED]);
 
-          menuButton = cards[0].$['menu-button'];
-          MockInteractions.tap(menuButton);
-          return test_util.flushTasks();
-        })
-        .then(() => {
-          MockInteractions.tap(app.$$('#synced-devices').$$('#menuOpenButton'));
-          assertEquals(1, histogram[SyncedTabsHistogram.OPEN_ALL]);
+    await testService.whenCalled('getForeignSessions');
+    await flushTasks();
 
-          MockInteractions.tap(menuButton);
-          return test_util.flushTasks();
-        })
-        .then(() => {
-          MockInteractions.tap(
-              app.$$('#synced-devices').$$('#menuDeleteButton'));
-          assertEquals(1, histogram[SyncedTabsHistogram.HIDE_FOR_NOW]);
-        });
+    assertEquals(1, histogram[SyncedTabsHistogram.HAS_FOREIGN_DATA]);
+    await flushTasks();
+
+    const cards = polymerSelectAll(
+        app.$$('#synced-devices'), 'history-synced-device-card');
+    cards[0].$['card-heading'].click();
+    assertEquals(1, histogram[SyncedTabsHistogram.COLLAPSE_SESSION]);
+    cards[0].$['card-heading'].click();
+    assertEquals(1, histogram[SyncedTabsHistogram.EXPAND_SESSION]);
+    polymerSelectAll(cards[0], '.website-link')[0].click();
+    assertEquals(1, histogram[SyncedTabsHistogram.LINK_CLICKED]);
+
+    const menuButton = cards[0].$['menu-button'];
+    menuButton.click();
+    await flushTasks();
+
+    app.$$('#synced-devices').$$('#menuOpenButton').click();
+    assertEquals(1, histogram[SyncedTabsHistogram.OPEN_ALL]);
+
+    menuButton.click();
+    await flushTasks();
+
+    app.$$('#synced-devices').$$('#menuDeleteButton').click();
+    assertEquals(1, histogram[SyncedTabsHistogram.HIDE_FOR_NOW]);
   });
 });

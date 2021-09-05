@@ -6,6 +6,7 @@
 
 from __future__ import print_function
 
+import amber_repo
 import boot_data
 import filecmp
 import logging
@@ -18,7 +19,7 @@ import tempfile
 import time
 import uuid
 
-from common import SDK_ROOT, EnsurePathExists
+from common import SDK_ROOT, EnsurePathExists, GetHostToolPathFromPlatform
 
 # The maximum times to attempt mDNS resolution when connecting to a freshly
 # booted Fuchsia instance before aborting.
@@ -85,21 +86,22 @@ class DeviceTarget(target.Target):
     self._system_log_file = system_log_file
     self._loglistener = None
     self._host = host
-    self._fuchsia_out_dir = fuchsia_out_dir
+    self._fuchsia_out_dir = os.path.expanduser(fuchsia_out_dir)
     self._node_name = node_name
-    self._os_check = os_check,
+    self._os_check = os_check
+    self._amber_repo = None
 
     if self._host and self._node_name:
       raise Exception('Only one of "--host" or "--name" can be specified.')
 
-    if fuchsia_out_dir:
+    if self._fuchsia_out_dir:
       if ssh_config:
         raise Exception('Only one of "--fuchsia-out-dir" or "--ssh_config" can '
                         'be specified.')
 
       # Use SSH keys from the Fuchsia output directory.
-      self._ssh_config_path = os.path.join(os.path.expanduser(fuchsia_out_dir),
-                                           'ssh-keys', 'ssh_config')
+      self._ssh_config_path = os.path.join(self._fuchsia_out_dir, 'ssh-keys',
+                                           'ssh_config')
       self._os_check = 'ignore'
 
     elif ssh_config:
@@ -139,15 +141,17 @@ class DeviceTarget(target.Target):
     or waits up to |timeout| seconds and returns False if the device couldn't
     be found."""
 
-    dev_finder_path = os.path.join(SDK_ROOT, 'tools', 'dev_finder')
+    dev_finder_path = GetHostToolPathFromPlatform('dev_finder')
 
     if self._node_name:
       command = [dev_finder_path, 'resolve',
                  '-device-limit', '1',  # Exit early as soon as a host is found.
                  self._node_name]
     else:
-      command = [dev_finder_path, 'list', '-full',
-                 '-timeout', str(_LIST_DEVICES_TIMEOUT_SECS * 1000)]
+      command = [
+          dev_finder_path, 'list', '-full', '-timeout',
+          "%ds" % _LIST_DEVICES_TIMEOUT_SECS
+      ]
 
     proc = subprocess.Popen(command,
                             stdout=subprocess.PIPE,
@@ -213,6 +217,20 @@ class DeviceTarget(target.Target):
       assert self._host
 
 
+  def GetAmberRepo(self):
+    if not self._amber_repo:
+      if self._fuchsia_out_dir:
+        # Deploy to an already-booted device running a local Fuchsia build.
+        self._amber_repo = amber_repo.ExternalAmberRepo(
+            os.path.join(self._fuchsia_out_dir, 'amber-files'))
+      else:
+        # Create an ephemeral Amber repo, then start both "pm serve" as well as
+        # the bootserver.
+        self._amber_repo = amber_repo.ManagedAmberRepo(self)
+
+    return self._amber_repo
+
+
   def __ProvisionDevice(self):
     """Netboots a device with Fuchsia. If |_node_name| is set, then only a
     device with a matching node name is used.
@@ -220,7 +238,7 @@ class DeviceTarget(target.Target):
     The device is up and reachable via SSH when the function is successfully
     completes."""
 
-    bootserver_path = os.path.join(SDK_ROOT, 'tools', 'bootserver')
+    bootserver_path = GetHostToolPathFromPlatform('bootserver')
     bootserver_command = [
         bootserver_path,
         '-1',
@@ -253,7 +271,7 @@ class DeviceTarget(target.Target):
 
     # Start loglistener to save system logs.
     if self._system_log_file:
-      loglistener_path = os.path.join(SDK_ROOT, 'tools', 'loglistener')
+      loglistener_path = GetHostToolPathFromPlatform('loglistener')
       self._loglistener = subprocess.Popen(
           [loglistener_path, self._node_name],
           stdout=self._system_log_file,

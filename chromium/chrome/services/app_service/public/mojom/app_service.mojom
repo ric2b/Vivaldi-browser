@@ -5,6 +5,7 @@
 module apps.mojom;
 
 import "chrome/services/app_service/public/mojom/types.mojom";
+import "components/services/app_service/public/mojom/types.mojom";
 
 // An intermediary between M app consumers (e.g. app launcher UI, intent
 // pickers) and N app providers (also known as app platforms, e.g. Android
@@ -39,6 +40,15 @@ interface AppService {
       LaunchSource launch_source,
       int64 display_id);
 
+  // Launches an app with |app_id| and |file_path|
+  LaunchAppWithFiles(
+      AppType app_type,
+      string app_id,
+      LaunchContainer container,
+      int32 event_flags,
+      LaunchSource launch_source,
+      FilePaths file_paths);
+
   // Launches an app with |app_id| and Chrome OS generic |intent| irrespective
   // of app platform.
   LaunchAppWithIntent(
@@ -53,12 +63,6 @@ interface AppService {
       string app_id,
       Permission permission);
 
-  // Uninstall which invokes a specific dialog per app type. When the unified
-  // uninstall dialog is done, this interface will be removed.
-  PromptUninstall(
-      AppType app_type,
-      string app_id);
-
   // Directly uninstalls |app_id| without prompting the user.
   // |clear_site_data| is available for bookmark apps only. If true, any site
   // data associated with the app will be removed..
@@ -70,9 +74,47 @@ interface AppService {
       bool clear_site_data,
       bool report_abuse);
 
+  // Pauses an app to stop the current running app, and apply the icon effect.
+  PauseApp(
+      AppType app_type,
+      string app_id);
+
+  // Unpauses an app, and recover the icon effect for the app.
+  UnpauseApps(
+      AppType app_type,
+      string app_id);
+
+  // Returns the menu items for an app with |app_id|.
+  GetMenuModel(
+      AppType app_type,
+      string app_id,
+      MenuType menu_type,
+      int64 display_id) => (MenuItems menu_items);
+
+  // Opens native settings for the app with |app_id|.
   OpenNativeSettings(
       AppType app_type,
       string app_id);
+
+  // Sets app identified by |app_id| as preferred app for |intent_filter|.
+  // |intent| is needed to set the preferred app in ARC.
+  // If the request is |from_publisher|, we would not sync the preferred
+  // app back to the publisher.
+  AddPreferredApp(
+      AppType app_type,
+      string app_id,
+      IntentFilter intent_filter,
+      Intent? intent,
+      bool from_publisher);
+
+  // Removes all preferred app setting for an |app_id|.
+  RemovePreferredApp(AppType app_type, string app_id);
+
+  // Resets app identified by |app_id| as preferred app for |intent_filter|.
+  RemovePreferredAppForFilter(
+      AppType app_type,
+      string app_id,
+      IntentFilter intent_filter);
 };
 
 interface Publisher {
@@ -94,6 +136,14 @@ interface Publisher {
       LaunchSource launch_source,
       int64 display_id);
 
+  // Launches an app with |app_id| and |file_path|
+  LaunchAppWithFiles(
+      string app_id,
+      LaunchContainer container,
+      int32 event_flags,
+      LaunchSource launch_source,
+      FilePaths file_paths);
+
   // Launches an app with |app_id| and Chrome OS generic |intent| irrespective
   // of app platform.
   LaunchAppWithIntent(
@@ -106,11 +156,6 @@ interface Publisher {
       string app_id,
       Permission permission);
 
-  // Uninstall which invokes a specific dialog per app type. When the unified
-  // uninstall dialog is done, this interface will be removed.
-  PromptUninstall(
-      string app_id);
-
   // Directly uninstalls |app_id| without prompting the user.
   // |clear_site_data| is available for bookmark apps only. If true, any site
   // data associated with the app will be removed..
@@ -121,8 +166,34 @@ interface Publisher {
       bool clear_site_data,
       bool report_abuse);
 
+  // Pauses an app to stop the current running app, and apply the icon effect.
+  PauseApp(
+      string app_id);
+
+  // Unpauses an app, and recover the icon effect for the app.
+  UnpauseApps(
+      string app_id);
+
+  // Returns the menu items for an app with |app_id|.
+  GetMenuModel(
+      string app_id,
+      MenuType menu_type,
+      int64 display_id) => (MenuItems menu_items);
+
+  // Opens native settings for the app with |app_id|.
   OpenNativeSettings(
       string app_id);
+
+  // Indicates that the app identified by |app_id| has been set as a preferred
+  // app for |intent_filter|, and the |replaced_app_preferences| is the apps
+  // that are no longer preferred apps for their corresponding |intent_filters|.
+  // This method is used by the App Service to sync the change to publishers.
+  // |intent| is needed to set the preferred app in ARC.
+  OnPreferredAppSet(
+      string app_id,
+      IntentFilter intent_filter,
+      Intent intent,
+      ReplacedAppPreferences replaced_app_preferences);
 };
 
 interface Subscriber {
@@ -133,6 +204,20 @@ interface Subscriber {
   //
   // See https://groups.google.com/a/chromium.org/d/msg/chromium-mojo/nFhBzGsb5Pg/V7t_8kNRAgAJ
   Clone(pending_receiver<Subscriber> receiver);
+
+  // Indicates that the app identified by |app_id| has been set as a preferred
+  // app for |intent_fitler|. This method is used by the App Service to sync
+  // the change from one subscriber to the others.
+  OnPreferredAppSet(string app_id,
+                    IntentFilter intent_filter);
+
+  // Indicates that the app identified by |app_id| is no longer a preferred
+  // app for |intent_filter|. This method is used by the App Service to sync
+  // the change to all subscribers.
+  OnPreferredAppRemoved(string app_id, IntentFilter intent_filter);
+
+  // Initialize the |preferred_apps| in the subscribers from the app service.
+  InitializePreferredApps(array<PreferredApp> preferred_apps);
 };
 
 struct ConnectOptions {

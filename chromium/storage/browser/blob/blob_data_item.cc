@@ -7,10 +7,13 @@
 #include <algorithm>
 #include <memory>
 #include <utility>
+#include <vector>
 
 #include "base/strings/string_number_conversions.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/net_errors.h"
-#include "storage/browser/fileapi/file_system_context.h"
+#include "services/network/public/cpp/data_pipe_to_source_stream.h"
+#include "storage/browser/file_system/file_system_context.h"
 #include "third_party/blink/public/common/blob/blob_utils.h"
 
 namespace storage {
@@ -20,40 +23,60 @@ const base::FilePath::CharType kFutureFileName[] =
     FILE_PATH_LITERAL("_future_name_");
 }
 
-uint64_t BlobDataItem::DataHandle::GetSize() const {
-  return 0;
-}
+class MojoDataItem : public BlobDataItem::DataHandle {
+ public:
+  explicit MojoDataItem(mojom::BlobDataItemPtr element)
+      : item_(std::move(element)) {
+    reader_.Bind(std::move(item_->reader));
+  }
 
-int BlobDataItem::DataHandle::Read(scoped_refptr<net::IOBuffer> dst_buffer,
-                                   uint64_t src_offset,
-                                   int bytes_to_read,
-                                   base::OnceCallback<void(int)> callback) {
-  return net::ERR_FILE_NOT_FOUND;
-}
+  // BlobDataItem::DataHandle implementation.
+  uint64_t GetSize() const override { return item_->size; }
 
-uint64_t BlobDataItem::DataHandle::GetSideDataSize() const {
-  return 0;
-}
+  void Read(mojo::ScopedDataPipeProducerHandle producer,
+            uint64_t src_offset,
+            uint64_t bytes_to_read,
+            base::OnceCallback<void(int)> callback) override {
+    reader_->Read(src_offset, bytes_to_read, std::move(producer),
+                  std::move(callback));
+  }
 
-int BlobDataItem::DataHandle::ReadSideData(
-    scoped_refptr<net::IOBuffer> dst_buffer,
-    base::OnceCallback<void(int)> callback) {
-  return net::ERR_FILE_NOT_FOUND;
-}
+  uint64_t GetSideDataSize() const override { return item_->side_data_size; }
 
-void BlobDataItem::DataHandle::PrintTo(::std::ostream* os) const {
-  *os << "<unknown>";
-}
+  void ReadSideData(
+      base::OnceCallback<void(int, mojo_base::BigBuffer)> callback) override {
+    reader_->ReadSideData(std::move(callback));
+  }
 
-const char* BlobDataItem::DataHandle::BytesReadHistogramLabel() const {
-  return nullptr;
-}
+  void PrintTo(::std::ostream* os) const override {
+    // TODO(enne): this is tricky to implement, as it's synchronous.
+    // PrintTo should ideally be asynchronous.  See: http://crbug.com/809821
+    *os << "<MojoDataItem>";
+  }
+
+  const char* BytesReadHistogramLabel() const override {
+    switch (item_->type) {
+      case mojom::BlobDataItemType::kUnknown:
+        return nullptr;
+      case mojom::BlobDataItemType::kCacheStorage:
+        return "DiskCache.CacheStorage";
+      case mojom::BlobDataItemType::kIndexedDB:
+        return "IndexedDB";
+    }
+  }
+
+ protected:
+  ~MojoDataItem() override = default;
+
+  mojom::BlobDataItemPtr item_;
+  mojo::Remote<mojom::BlobDataItemReader> reader_;
+};
 
 BlobDataItem::DataHandle::~DataHandle() = default;
 
 // static
 scoped_refptr<BlobDataItem> BlobDataItem::CreateBytes(
-    base::span<const char> bytes) {
+    base::span<const uint8_t> bytes) {
   auto item =
       base::WrapRefCounted(new BlobDataItem(Type::kBytes, 0, bytes.size()));
   item->bytes_.assign(bytes.begin(), bytes.end());
@@ -122,12 +145,24 @@ scoped_refptr<BlobDataItem> BlobDataItem::CreateReadableDataHandle(
     scoped_refptr<DataHandle> data_handle,
     uint64_t offset,
     uint64_t length) {
+  DCHECK(data_handle);
   DCHECK_LE(offset, data_handle->GetSize());
   DCHECK_LE(length, (data_handle->GetSize() - offset));
   auto item = base::WrapRefCounted(
       new BlobDataItem(Type::kReadableDataHandle, offset, length));
   item->data_handle_ = std::move(data_handle);
   return item;
+}
+
+// static
+scoped_refptr<BlobDataItem> BlobDataItem::CreateMojoDataItem(
+    mojom::BlobDataItemPtr item) {
+  auto handle = base::MakeRefCounted<MojoDataItem>(std::move(item));
+  auto data_item = base::WrapRefCounted(
+      new BlobDataItem(Type::kReadableDataHandle, 0, handle->GetSize()));
+  DCHECK_GT(handle->GetSize(), 0u);
+  data_item->data_handle_ = std::move(handle);
+  return data_item;
 }
 
 bool BlobDataItem::IsFutureFileItem() const {
@@ -158,7 +193,7 @@ void BlobDataItem::AllocateBytes() {
   type_ = Type::kBytes;
 }
 
-void BlobDataItem::PopulateBytes(base::span<const char> data) {
+void BlobDataItem::PopulateBytes(base::span<const uint8_t> data) {
   DCHECK_EQ(type_, Type::kBytesDescription);
   DCHECK_EQ(length_, data.size());
   type_ = Type::kBytes;
@@ -192,6 +227,16 @@ void BlobDataItem::GrowFile(uint64_t new_length) {
   DCHECK_EQ(type_, Type::kFile);
   DCHECK_GE(new_length, length_);
   length_ = new_length;
+}
+
+// static
+void BlobDataItem::SetFileModificationTimes(
+    std::vector<scoped_refptr<BlobDataItem>> items,
+    std::vector<base::Time> times) {
+  DCHECK_EQ(items.size(), times.size());
+  for (size_t i = 0; i < items.size(); ++i) {
+    items[i]->expected_modification_time_ = times[i];
+  }
 }
 
 void PrintTo(const BlobDataItem& x, ::std::ostream* os) {

@@ -96,8 +96,8 @@ PictureLayerImpl::PictureLayerImpl(LayerTreeImpl* tree_impl, int id)
       only_used_low_res_last_append_quads_(false),
       nearest_neighbor_(false),
       use_transformed_rasterization_(false),
-      is_directly_composited_image_(false),
       can_use_lcd_text_(true),
+      directly_composited_image_size_(base::nullopt),
       tile_size_calculator_(this) {
   layer_tree_impl()->RegisterPictureLayerImpl(this);
 }
@@ -152,6 +152,7 @@ void PictureLayerImpl::PushPropertiesTo(LayerImpl* base_layer) {
 
   layer_impl->SetNearestNeighbor(nearest_neighbor_);
   layer_impl->SetUseTransformedRasterization(use_transformed_rasterization_);
+  layer_impl->SetDirectlyCompositedImageSize(directly_composited_image_size_);
   layer_impl->SetIsBackdropFilterMask(is_backdrop_filter_mask_);
 
   // Solid color layers have no tilings.
@@ -174,7 +175,6 @@ void PictureLayerImpl::PushPropertiesTo(LayerImpl* base_layer) {
   layer_impl->raster_source_scale_ = raster_source_scale_;
   layer_impl->raster_contents_scale_ = raster_contents_scale_;
   layer_impl->low_res_raster_contents_scale_ = low_res_raster_contents_scale_;
-  layer_impl->is_directly_composited_image_ = is_directly_composited_image_;
   // Simply push the value to the active tree without any extra invalidations,
   // since the pending tree tiles would have this handled. This is here to
   // ensure the state is consistent for future raster.
@@ -680,6 +680,28 @@ void PictureLayerImpl::UpdateRasterSource(
         SetPaintWorkletInputs({});
       }
     }
+
+    // If the MSAA sample count has changed, we need to re-raster the complete
+    // layer.
+    if (raster_source_) {
+      const auto& current_display_item_list =
+          raster_source_->GetDisplayItemList();
+      const auto& new_display_item_list = raster_source->GetDisplayItemList();
+      if (current_display_item_list && new_display_item_list) {
+        bool needs_full_invalidation =
+            layer_tree_impl()->GetMSAASampleCountForRaster(
+                current_display_item_list) !=
+            layer_tree_impl()->GetMSAASampleCountForRaster(
+                new_display_item_list);
+        needs_full_invalidation |=
+            current_display_item_list->discardable_image_map()
+                .contains_only_srgb_images() !=
+            new_display_item_list->discardable_image_map()
+                .contains_only_srgb_images();
+        if (needs_full_invalidation)
+          new_invalidation->Union(gfx::Rect(raster_source->GetSize()));
+      }
+    }
   }
 
   // The |raster_source_| is initially null, so have to check for that for the
@@ -747,7 +769,7 @@ bool PictureLayerImpl::UpdateCanUseLCDTextAfterCommit() {
   gfx::Rect bounds_rect(bounds());
   invalidation_ = Region(bounds_rect);
   tilings_->Invalidate(invalidation_);
-  SetUpdateRect(bounds_rect);
+  UnionUpdateRect(bounds_rect);
   return true;
 }
 
@@ -965,6 +987,25 @@ void PictureLayerImpl::SetUseTransformedRasterization(bool use) {
   NoteLayerPropertyChanged();
 }
 
+void PictureLayerImpl::SetDirectlyCompositedImageSize(
+    base::Optional<gfx::Size> size) {
+  if (directly_composited_image_size_ == size)
+    return;
+
+  directly_composited_image_size_ = size;
+  NoteLayerPropertyChanged();
+}
+
+float PictureLayerImpl::GetDirectlyCompositedImageRasterScale() const {
+  float x = static_cast<float>(directly_composited_image_size_->width()) /
+            bounds().width();
+  float y = static_cast<float>(directly_composited_image_size_->height()) /
+            bounds().height();
+  DCHECK_EQ(x, 1.f);
+  DCHECK_EQ(y, 1.f);
+  return GetPreferredRasterScale(gfx::Vector2dF(x, y));
+}
+
 PictureLayerTiling* PictureLayerImpl::AddTiling(
     const gfx::AxisTransform2d& contents_transform) {
   DCHECK(CanHaveTilings());
@@ -1022,8 +1063,9 @@ void PictureLayerImpl::AddTilingsForRasterScale() {
 }
 
 bool PictureLayerImpl::ShouldAdjustRasterScale() const {
-  if (is_directly_composited_image_) {
-    float max_scale = std::max(1.f, MinimumContentsScale());
+  if (directly_composited_image_size_) {
+    float desired_raster_scale = GetDirectlyCompositedImageRasterScale();
+    float max_scale = std::max(desired_raster_scale, MinimumContentsScale());
     if (raster_source_scale_ < std::min(ideal_source_scale_, max_scale))
       return true;
     if (raster_source_scale_ > 4 * ideal_source_scale_)
@@ -1110,18 +1152,19 @@ void PictureLayerImpl::AddLowResolutionTilingIfNeeded() {
 }
 
 void PictureLayerImpl::RecalculateRasterScales() {
-  if (is_directly_composited_image_) {
+  if (directly_composited_image_size_) {
     if (!raster_source_scale_)
-      raster_source_scale_ = 1.f;
+      raster_source_scale_ = GetDirectlyCompositedImageRasterScale();
 
     float min_scale = MinimumContentsScale();
-    float max_scale = std::max(1.f, MinimumContentsScale());
-    float clamped_ideal_source_scale_ =
+    float desired_raster_scale = GetDirectlyCompositedImageRasterScale();
+    float max_scale = std::max(desired_raster_scale, MinimumContentsScale());
+    float clamped_ideal_source_scale =
         base::ClampToRange(ideal_source_scale_, min_scale, max_scale);
 
-    while (raster_source_scale_ < clamped_ideal_source_scale_)
+    while (raster_source_scale_ < clamped_ideal_source_scale)
       raster_source_scale_ *= 2.f;
-    while (raster_source_scale_ > 4 * clamped_ideal_source_scale_)
+    while (raster_source_scale_ > 4 * clamped_ideal_source_scale)
       raster_source_scale_ /= 2.f;
 
     raster_source_scale_ =
@@ -1453,7 +1496,7 @@ void PictureLayerImpl::GetDebugBorderProperties(
   float device_scale_factor =
       layer_tree_impl() ? layer_tree_impl()->device_scale_factor() : 1;
 
-  if (is_directly_composited_image_) {
+  if (directly_composited_image_size_) {
     *color = DebugColors::ImageLayerBorderColor();
     *width = DebugColors::ImageLayerBorderWidth(device_scale_factor);
   } else {
@@ -1573,14 +1616,9 @@ PictureLayerImpl::InvalidateRegionForImages(
   if (invalidation.IsEmpty())
     return ImageInvalidationResult::kNoInvalidation;
 
-  // Make sure to union the rect from this invalidation with the update_rect
-  // instead of over-writing it. We don't want to reset the update that came
-  // from the main thread.
   // Note: We can use a rect here since this is only used to track damage for a
   // frame and not raster invalidation.
-  gfx::Rect new_update_rect = invalidation.bounds();
-  new_update_rect.Union(update_rect());
-  SetUpdateRect(new_update_rect);
+  UnionUpdateRect(invalidation.bounds());
 
   invalidation_.Union(invalidation);
   tilings_->Invalidate(invalidation);
@@ -1675,25 +1713,19 @@ void PictureLayerImpl::InvalidatePaintWorklets(
   }
 }
 
-std::unique_ptr<base::DictionaryValue> PictureLayerImpl::LayerAsJson() const {
-  auto result = LayerImpl::LayerAsJson();
-  auto dictionary = std::make_unique<base::DictionaryValue>();
-  if (raster_source_) {
-    dictionary->SetBoolean("IsSolidColor", raster_source_->IsSolidColor());
-    auto list = std::make_unique<base::ListValue>();
-    list->AppendInteger(raster_source_->GetSize().width());
-    list->AppendInteger(raster_source_->GetSize().height());
-    dictionary->Set("Size", std::move(list));
-    dictionary->SetBoolean("HasRecordings", raster_source_->HasRecordings());
-
-    const auto& display_list = raster_source_->GetDisplayItemList();
-    size_t op_count = display_list ? display_list->TotalOpCount() : 0;
-    size_t bytes_used = display_list ? display_list->BytesUsed() : 0;
-    dictionary->SetInteger("OpCount", op_count);
-    dictionary->SetInteger("BytesUsed", bytes_used);
+gfx::ContentColorUsage PictureLayerImpl::GetContentColorUsage() const {
+  auto display_item_list = raster_source_->GetDisplayItemList();
+  bool contains_only_srgb_images = true;
+  if (display_item_list) {
+    contains_only_srgb_images =
+        display_item_list->discardable_image_map().contains_only_srgb_images();
   }
-  result->Set("RasterSource", std::move(dictionary));
-  return result;
+
+  if (contains_only_srgb_images)
+    return gfx::ContentColorUsage::kSRGB;
+
+  // TODO(cblume) This assumes only wide color gamut and not HDR
+  return gfx::ContentColorUsage::kWideColorGamut;
 }
 
 }  // namespace cc

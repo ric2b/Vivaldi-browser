@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "base/bind.h"
+#include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
 #include "base/numerics/safe_conversions.h"
@@ -10,6 +11,10 @@
 #include "base/strings/string_util.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/values_test_util.h"
+#include "content/browser/service_worker/service_worker_context_wrapper.h"
+#include "content/browser/web_contents/web_contents_impl.h"
+#include "content/public/browser/browser_context.h"
+#include "content/public/browser/storage_partition.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
@@ -64,7 +69,8 @@ const size_t kFileSize = base::size(kFileContent) - 1;
 // URLs while serving http resources from the http server, but this trick can
 // break the test when Site Isolation is enabled and content from different
 // origins end up in different processes.
-class ServiceWorkerFileUploadTest : public ContentBrowserTest {
+class ServiceWorkerFileUploadTest : public testing::WithParamInterface<bool>,
+                                    public ContentBrowserTest {
  public:
   ServiceWorkerFileUploadTest() = default;
 
@@ -79,7 +85,13 @@ class ServiceWorkerFileUploadTest : public ContentBrowserTest {
     // be used for cross-origin URLs.
     host_resolver()->AddRule("*", "127.0.0.1");
     embedded_test_server()->StartAcceptingConnections();
+    StoragePartition* partition = BrowserContext::GetDefaultStoragePartition(
+        shell()->web_contents()->GetBrowserContext());
+    wrapper_ = static_cast<ServiceWorkerContextWrapper*>(
+        partition->GetServiceWorkerContext());
   }
+
+  ServiceWorkerContextWrapper* wrapper() { return wrapper_.get(); }
 
   enum class TargetOrigin { kSameOrigin, kCrossOrigin };
 
@@ -190,6 +202,74 @@ class ServiceWorkerFileUploadTest : public ContentBrowserTest {
     EXPECT_THAT(result, ::testing::HasSubstr("form-data; name=\"file\""));
   }
 
+  WebContentsImpl* web_contents() {
+    return static_cast<WebContentsImpl*>(shell()->web_contents());
+  }
+
+  RenderFrameHostImpl* current_frame_host() {
+    return web_contents()->GetFrameTree()->root()->current_frame_host();
+  }
+
+  int GetServiceWorkerProcessId() {
+    const base::flat_map<int64_t, ServiceWorkerRunningInfo>& infos =
+        wrapper()->GetRunningServiceWorkerInfos();
+    EXPECT_EQ(1u, infos.size());
+    const ServiceWorkerRunningInfo& info = infos.begin()->second;
+    return info.render_process_id;
+  }
+
+  bool IsDifferentProcessForced() { return GetParam(); }
+
+  void RunSubresourceTest(const base::FilePath& file_path,
+                          std::string* out_result) {
+    // Install the service worker.
+    EXPECT_TRUE(NavigateToURL(
+        shell(), embedded_test_server()->GetURL(
+                     "/service_worker/create_service_worker.html")));
+    EXPECT_EQ("DONE", EvalJs(shell(), "register('file_upload_worker.js');"));
+
+    if (IsDifferentProcessForced()) {
+      // Stop the service worker.
+      base::RunLoop run_loop;
+      wrapper()->StopAllServiceWorkers(run_loop.QuitClosure());
+      run_loop.Run();
+
+      // Ensure that service worker will re-boot in a different process from the
+      // page.
+      ServiceWorkerProcessManager* process_manager =
+          wrapper()->process_manager();
+      process_manager->ForceNewProcessForTest(true);
+    }
+
+    // Generate the URL for the page with the file upload form. It will upload
+    // to |target_url|.
+    GURL page_url = embedded_test_server()->GetURL("/service_worker/form.html");
+    GURL target_url = BuildTargetUrl("/service_worker/upload", "getAs=text");
+    page_url = net::AppendQueryParameter(page_url, "target", target_url.spec());
+
+    // Navigate to the page with a file upload form.
+    EXPECT_TRUE(NavigateToURL(shell(), page_url));
+
+    if (IsDifferentProcessForced()) {
+      int page_process_id = current_frame_host()->GetProcess()->GetID();
+      int worker_process_id = GetServiceWorkerProcessId();
+      ASSERT_NE(page_process_id, worker_process_id);
+    }
+
+    // Fill out the form to refer to the test file.
+    base::RunLoop run_loop;
+    auto delegate = std::make_unique<FileChooserDelegate>(
+        file_path, run_loop.QuitClosure());
+    shell()->web_contents()->SetDelegate(delegate.get());
+    EXPECT_TRUE(ExecJs(shell(), "fileInput.click();"));
+    run_loop.Run();
+
+    // Submit the form using XHR.
+    EvalJsResult result = EvalJs(shell(), "submitXhr()");
+    ASSERT_TRUE(result.error.empty());
+    *out_result = result.ExtractString();
+  }
+
   std::string BuildExpectedBodyAsText(const std::string& boundary,
                                       const std::string& filename) {
     return "--" + boundary + "\r\n" +
@@ -241,6 +321,7 @@ class ServiceWorkerFileUploadTest : public ContentBrowserTest {
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
+  scoped_refptr<ServiceWorkerContextWrapper> wrapper_;
 
   DISALLOW_COPY_AND_ASSIGN(ServiceWorkerFileUploadTest);
 };
@@ -304,5 +385,52 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerFileUploadTest,
                        NetworkFallback_CrossOrigin) {
   RunNetworkFallbackTest(TargetOrigin::kCrossOrigin);
 }
+
+// Tests a subresource request.
+IN_PROC_BROWSER_TEST_P(ServiceWorkerFileUploadTest, Subresource) {
+  // Prepare a file for the upload form.
+  base::ScopedAllowBlockingForTesting allow_blocking;
+  base::ScopedTempDir temp_dir;
+  base::FilePath file_path;
+  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
+  ASSERT_TRUE(base::CreateTemporaryFileInDir(temp_dir.GetPath(), &file_path));
+  ASSERT_EQ(static_cast<int>(kFileSize),
+            base::WriteFile(file_path, kFileContent, kFileSize));
+
+  std::string result;
+  RunSubresourceTest(file_path, &result);
+
+  // Test that the file name and contents are present.
+  EXPECT_THAT(result,
+              ::testing::HasSubstr(file_path.BaseName().MaybeAsASCII()));
+  EXPECT_THAT(result, ::testing::HasSubstr(kFileContent));
+}
+
+// Tests a subresource request where the filename is non-ascii. Regression test
+// for https://crbug.com/1017184.
+IN_PROC_BROWSER_TEST_P(ServiceWorkerFileUploadTest,
+                       Subresource_NonAsciiFilename) {
+  // "こんにちは"
+  const base::FilePath::CharType nonAsciiFilename[] =
+      FILE_PATH_LITERAL("\u3053\u3093\u306B\u3061\u306F");
+
+  // Prepare a file for the upload form.
+  base::ScopedAllowBlockingForTesting allow_blocking;
+  base::ScopedTempDir temp_dir;
+  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
+  base::FilePath file_path = temp_dir.GetPath().Append(nonAsciiFilename);
+  ASSERT_EQ(static_cast<int>(kFileSize),
+            base::WriteFile(file_path, kFileContent, kFileSize));
+
+  std::string result;
+  RunSubresourceTest(file_path, &result);
+
+  // Test that the file name and contents are present. Repeat "こんにちは" here
+  // since HasSubstr() doesn't work with FilePath::CharType on Windows.
+  EXPECT_THAT(result, ::testing::HasSubstr("\u3053\u3093\u306B\u3061\u306F"));
+  EXPECT_THAT(result, ::testing::HasSubstr(kFileContent));
+}
+
+INSTANTIATE_TEST_SUITE_P(All, ServiceWorkerFileUploadTest, ::testing::Bool());
 
 }  // namespace content

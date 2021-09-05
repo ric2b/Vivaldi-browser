@@ -18,7 +18,6 @@
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/content_browser_client.h"
 #include "content/public/common/content_client.h"
 #include "net/url_request/url_request.h"
 #include "third_party/blink/public/common/service_worker/service_worker_utils.h"
@@ -98,12 +97,8 @@ const char* EventTypeToSuffix(ServiceWorkerMetrics::EventType event_type) {
       return "_FETCH_SUB_RESOURCE";
     case ServiceWorkerMetrics::EventType::UNKNOWN:
       return "_UNKNOWN";
-    case ServiceWorkerMetrics::EventType::FOREIGN_FETCH:
-      return "_FOREIGN_FETCH";
     case ServiceWorkerMetrics::EventType::FETCH_WAITUNTIL:
       return "_FETCH_WAITUNTIL";
-    case ServiceWorkerMetrics::EventType::FOREIGN_FETCH_WAITUNTIL:
-      return "_FOREIGN_FETCH_WAITUNTIL";
     case ServiceWorkerMetrics::EventType::EXTERNAL_REQUEST:
       return "_EXTERNAL_REQUEST";
     case ServiceWorkerMetrics::EventType::PAYMENT_REQUEST:
@@ -130,11 +125,6 @@ const char* EventTypeToSuffix(ServiceWorkerMetrics::EventType event_type) {
       return "_CONTENT_DELETE";
   }
   return "_UNKNOWN";
-}
-
-void RecordURLMetricOnUI(const std::string& metric_name, const GURL& url) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  GetContentClient()->browser()->RecordURLMetric(metric_name, url);
 }
 
 }  // namespace
@@ -165,12 +155,8 @@ const char* ServiceWorkerMetrics::EventTypeToString(EventType event_type) {
       return "Fetch Subresource";
     case EventType::UNKNOWN:
       return "Unknown";
-    case EventType::FOREIGN_FETCH:
-      return "Foreign Fetch";
     case EventType::FETCH_WAITUNTIL:
       return "Fetch WaitUntil";
-    case EventType::FOREIGN_FETCH_WAITUNTIL:
-      return "Foreign Fetch WaitUntil";
     case EventType::EXTERNAL_REQUEST:
       return "External Request";
     case EventType::PAYMENT_REQUEST:
@@ -250,10 +236,6 @@ ServiceWorkerMetrics::Site ServiceWorkerMetrics::SiteFromURL(const GURL& url) {
   return ServiceWorkerMetrics::Site::OTHER;
 }
 
-bool ServiceWorkerMetrics::ShouldExcludeSiteFromHistogram(Site site) {
-  return site == ServiceWorkerMetrics::Site::NEW_TAB_PAGE;
-}
-
 void ServiceWorkerMetrics::CountInitDiskCacheResult(bool result) {
   UMA_HISTOGRAM_BOOLEAN("ServiceWorker.DiskCache.InitResult", result);
 }
@@ -270,30 +252,6 @@ void ServiceWorkerMetrics::CountWriteResponseResult(
                             result, NUM_WRITE_RESPONSE_RESULT_TYPES);
 }
 
-void ServiceWorkerMetrics::CountOpenDatabaseResult(
-    ServiceWorkerDatabase::Status status) {
-  UMA_HISTOGRAM_ENUMERATION("ServiceWorker.Database.OpenResult",
-                            status, ServiceWorkerDatabase::STATUS_ERROR_MAX);
-}
-
-void ServiceWorkerMetrics::CountReadDatabaseResult(
-    ServiceWorkerDatabase::Status status) {
-  UMA_HISTOGRAM_ENUMERATION("ServiceWorker.Database.ReadResult",
-                            status, ServiceWorkerDatabase::STATUS_ERROR_MAX);
-}
-
-void ServiceWorkerMetrics::CountWriteDatabaseResult(
-    ServiceWorkerDatabase::Status status) {
-  UMA_HISTOGRAM_ENUMERATION("ServiceWorker.Database.WriteResult",
-                            status, ServiceWorkerDatabase::STATUS_ERROR_MAX);
-}
-
-void ServiceWorkerMetrics::RecordDestroyDatabaseResult(
-    ServiceWorkerDatabase::Status status) {
-  UMA_HISTOGRAM_ENUMERATION("ServiceWorker.Database.DestroyDatabaseResult",
-                            status, ServiceWorkerDatabase::STATUS_ERROR_MAX);
-}
-
 void ServiceWorkerMetrics::RecordPurgeResourceResult(int net_error) {
   base::UmaHistogramSparse("ServiceWorker.Storage.PurgeResourceResult",
                            std::abs(net_error));
@@ -306,19 +264,12 @@ void ServiceWorkerMetrics::RecordDeleteAndStartOverResult(
 }
 
 void ServiceWorkerMetrics::CountControlledPageLoad(Site site,
-                                                   const GURL& url,
                                                    bool is_main_frame_load) {
   DCHECK_NE(site, Site::OTHER);
   UMA_HISTOGRAM_ENUMERATION("ServiceWorker.PageLoad", site);
   if (is_main_frame_load) {
     UMA_HISTOGRAM_ENUMERATION("ServiceWorker.MainFramePageLoad", site);
   }
-  if (ShouldExcludeSiteFromHistogram(site))
-    return;
-
-  base::PostTask(FROM_HERE, {BrowserThread::UI},
-                 base::BindOnce(&RecordURLMetricOnUI,
-                                "ServiceWorker.ControlledPageUrl", url));
 }
 
 void ServiceWorkerMetrics::RecordStartInstalledWorkerStatus(
@@ -407,19 +358,6 @@ void ServiceWorkerMetrics::RecordEventDuration(EventType event,
     case EventType::FETCH_WAITUNTIL:
       UMA_HISTOGRAM_MEDIUM_TIMES("ServiceWorker.FetchEvent.WaitUntil.Time",
                                  time);
-      break;
-    case EventType::FOREIGN_FETCH:
-      if (was_handled) {
-        UMA_HISTOGRAM_MEDIUM_TIMES(
-            "ServiceWorker.ForeignFetchEvent.HasResponse.Time", time);
-      } else {
-        UMA_HISTOGRAM_MEDIUM_TIMES(
-            "ServiceWorker.ForeignFetchEvent.Fallback.Time", time);
-      }
-      break;
-    case EventType::FOREIGN_FETCH_WAITUNTIL:
-      UMA_HISTOGRAM_MEDIUM_TIMES(
-          "ServiceWorker.ForeignFetchEvent.WaitUntil.Time", time);
       break;
     case EventType::SYNC:
       UMA_HISTOGRAM_MEDIUM_TIMES("ServiceWorker.BackgroundSyncEvent.Time",

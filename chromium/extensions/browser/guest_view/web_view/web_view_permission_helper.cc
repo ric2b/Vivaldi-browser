@@ -241,10 +241,13 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
     return;
   }
 
+  extensions::VivaldiPrivateTabObserver* private_tab =
+    extensions::VivaldiPrivateTabObserver::FromWebContents(source);
+
   // The block below will allow or deny access when the permission has been set.
-  extensions::VivaldiAppHelper* helper =
-      extensions::VivaldiAppHelper::FromWebContents(
-          web_view_guest()->embedder_web_contents());
+  extensions::VivaldiAppHelper* helper = web_view_guest()->attached() ?
+    extensions::VivaldiAppHelper::FromWebContents(
+      web_view_guest()->embedder_web_contents()) : nullptr;
   if (helper)
     do {
       Profile* profile =
@@ -257,21 +260,36 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
         audio_setting =
             HostContentSettingsMapFactory::GetForProfile(profile)
                 ->GetContentSetting(request.security_origin, GURL(),
-                                    CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC,
+                                    ContentSettingsType::MEDIASTREAM_MIC,
                                     std::string());
+
         if (audio_setting != CONTENT_SETTING_ALLOW &&
             audio_setting != CONTENT_SETTING_BLOCK)
           break;
+
+        if (private_tab) {
+          private_tab->OnPermissionAccessed(
+            ContentSettingsType::MEDIASTREAM_MIC, request.security_origin.spec(),
+            audio_setting);
+        }
+
       }
       if (request.video_type != blink::mojom::MediaStreamType::NO_SERVICE) {
         camera_setting =
             HostContentSettingsMapFactory::GetForProfile(profile)
                 ->GetContentSetting(request.security_origin, GURL(),
-                                    CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA,
+                                    ContentSettingsType::MEDIASTREAM_CAMERA,
                                     std::string());
         if (camera_setting != CONTENT_SETTING_ALLOW &&
             camera_setting != CONTENT_SETTING_BLOCK)
           break;
+
+        if (private_tab) {
+          private_tab->OnPermissionAccessed(
+            ContentSettingsType::MEDIASTREAM_CAMERA, request.security_origin.spec(),
+            camera_setting);
+        }
+
       }
 
       // Only default (not requested), allow and block allowed.
@@ -284,6 +302,7 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
             std::unique_ptr<content::MediaStreamUI>());
         return;
       }
+
       if (audio_setting == CONTENT_SETTING_ALLOW ||
           camera_setting == CONTENT_SETTING_ALLOW) {
         web_view_guest()
@@ -297,7 +316,6 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
     } while (false);
 
   WebViewPermissionType request_type = WEB_VIEW_PERMISSION_TYPE_MEDIA;
-
   if (::vivaldi::IsVivaldiRunning()) {
     // camera , microphone and microphone_and_camera
     if (request.audio_type ==
@@ -315,7 +333,7 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
   }
 
   base::DictionaryValue request_info;
-  request_info.SetString(guest_view::kUrl, request.security_origin.spec());
+  request_info.SetString(guest_view::kUrl, web_contents()->GetURL().spec());
   RequestPermission(
       request_type, request_info,
       base::BindOnce(&WebViewPermissionHelper::OnMediaPermissionResponse,
@@ -355,14 +373,14 @@ void WebViewPermissionHelper::OnMediaPermissionResponse(
       HostContentSettingsMapFactory::GetForProfile(profile)
           ->SetContentSettingCustomScope(
               primary_pattern, ContentSettingsPattern::Wildcard(),
-              CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC, std::string(),
+              ContentSettingsType::MEDIASTREAM_MIC, std::string(),
               allow ? CONTENT_SETTING_ALLOW : CONTENT_SETTING_BLOCK);
     }
     if (request.video_type  != blink::mojom::MediaStreamType::NO_SERVICE) {
       HostContentSettingsMapFactory::GetForProfile(profile)
           ->SetContentSettingCustomScope(
               primary_pattern, ContentSettingsPattern::Wildcard(),
-              CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA, std::string(),
+              ContentSettingsType::MEDIASTREAM_CAMERA, std::string(),
               allow ? CONTENT_SETTING_ALLOW : CONTENT_SETTING_BLOCK);
     }
   }
@@ -402,9 +420,9 @@ void WebViewPermissionHelper::CanDownload(
 void WebViewPermissionHelper::RequestPointerLockPermission(
     bool user_gesture,
     bool last_unlocked_by_target,
-    const base::Callback<void(bool)>& callback) {
+    base::OnceCallback<void(bool)> callback) {
   web_view_permission_helper_delegate_->RequestPointerLockPermission(
-      user_gesture, last_unlocked_by_target, callback);
+      user_gesture, last_unlocked_by_target, std::move(callback));
 }
 
 void WebViewPermissionHelper::RequestGeolocationPermission(
@@ -428,15 +446,6 @@ void WebViewPermissionHelper::RequestFileSystemPermission(
     base::OnceCallback<void(bool)> callback) {
   web_view_permission_helper_delegate_->RequestFileSystemPermission(
       url, allowed_by_default, std::move(callback));
-}
-
-void WebViewPermissionHelper::FileSystemAccessedAsync(int render_process_id,
-                                                      int render_frame_id,
-                                                      int request_id,
-                                                      const GURL& url,
-                                                      bool blocked_by_policy) {
-  web_view_permission_helper_delegate_->FileSystemAccessedAsync(
-      render_process_id, render_frame_id, request_id, url, blocked_by_policy);
 }
 
 int WebViewPermissionHelper::RequestPermission(

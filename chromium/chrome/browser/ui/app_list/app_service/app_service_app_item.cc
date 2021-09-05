@@ -6,14 +6,20 @@
 
 #include "ash/public/cpp/app_list/app_list_config.h"
 #include "base/bind.h"
+#include "base/compiler_specific.h"
+#include "base/feature_list.h"
+#include "base/logging.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/chromeos/crostini/crostini_util.h"
 #include "chrome/browser/ui/app_list/app_list_controller_delegate.h"
+#include "chrome/browser/ui/app_list/app_service/app_service_context_menu.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_context_menu.h"
 #include "chrome/browser/ui/app_list/crostini/crostini_app_context_menu.h"
 #include "chrome/browser/ui/app_list/extension_app_context_menu.h"
+#include "chrome/browser/ui/app_list/web_app_context_menu.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
+#include "chrome/common/chrome_features.h"
 
 // static
 const char AppServiceAppItem::kItemType[] = "AppServiceAppItem";
@@ -26,6 +32,12 @@ std::unique_ptr<app_list::AppContextMenu> AppServiceAppItem::MakeAppContextMenu(
     const std::string& app_id,
     AppListControllerDelegate* controller,
     bool is_platform_app) {
+  // Terminal System App uses CrostiniAppContextMenu.
+  if (app_id == crostini::kCrostiniTerminalSystemAppId) {
+    return std::make_unique<CrostiniAppContextMenu>(profile, app_id,
+                                                    controller);
+  }
+
   switch (app_type) {
     case apps::mojom::AppType::kUnknown:
     case apps::mojom::AppType::kBuiltIn:
@@ -40,10 +52,22 @@ std::unique_ptr<app_list::AppContextMenu> AppServiceAppItem::MakeAppContextMenu(
       return std::make_unique<CrostiniAppContextMenu>(profile, app_id,
                                                       controller);
 
-    case apps::mojom::AppType::kExtension:
     case apps::mojom::AppType::kWeb:
+      if (base::FeatureList::IsEnabled(
+              features::kDesktopPWAsWithoutExtensions)) {
+        return std::make_unique<app_list::WebAppContextMenu>(
+            delegate, profile, app_id, controller);
+      }
+      // Otherwise deliberately fall through to fallback on Bookmark Apps.
+      FALLTHROUGH;
+
+    case apps::mojom::AppType::kExtension:
       return std::make_unique<app_list::ExtensionAppContextMenu>(
           delegate, profile, app_id, controller, is_platform_app);
+
+    case apps::mojom::AppType::kMacNative:
+      NOTREACHED() << "Should not be trying to make a menu for a native app";
+      return nullptr;
   }
 
   return nullptr;
@@ -63,9 +87,9 @@ AppServiceAppItem::AppServiceAppItem(
   } else {
     SetDefaultPositionIfApplicable(model_updater);
 
-    // Crostini hard-codes its own folder. As Crostini apps are created from
-    // scratch, we move them to a default folder.
-    if (app_type_ == apps::mojom::AppType::kCrostini) {
+    // Crostini apps and the Terminal System App start in the crostini folder.
+    if (app_type_ == apps::mojom::AppType::kCrostini ||
+        id() == crostini::kCrostiniTerminalSystemAppId) {
       DCHECK(folder_id().empty());
       SetChromeFolderId(crostini::kCrostiniFolderId);
     }
@@ -99,7 +123,7 @@ void AppServiceAppItem::OnAppUpdate(const apps::AppUpdate& app_update,
 }
 
 void AppServiceAppItem::Activate(int event_flags) {
-  // For Chrome apps or Web apps, if it is non-platform app, it could be
+  // For Crostini apps, non-platform Chrome apps, Web apps, it could be
   // selecting an existing delegate for the app, so call
   // ChromeLauncherController's ActivateApp interface. Platform apps or ARC
   // apps, Crostini apps treat activations as a launch. The app can decide
@@ -114,9 +138,10 @@ void AppServiceAppItem::Activate(int event_flags) {
   bool is_active_app = false;
   proxy->AppRegistryCache().ForOneApp(
       id(), [&is_active_app](const apps::AppUpdate& update) {
-        if ((update.AppType() == apps::mojom::AppType::kExtension ||
-             update.AppType() == apps::mojom::AppType::kWeb) &&
-            update.IsPlatformApp() == apps::mojom::OptionalBool::kFalse) {
+        if (update.AppType() == apps::mojom::AppType::kCrostini ||
+            ((update.AppType() == apps::mojom::AppType::kExtension ||
+              update.AppType() == apps::mojom::AppType::kWeb) &&
+             update.IsPlatformApp() == apps::mojom::OptionalBool::kFalse)) {
           is_active_app = true;
         }
       });
@@ -134,8 +159,14 @@ const char* AppServiceAppItem::GetItemType() const {
 }
 
 void AppServiceAppItem::GetContextMenuModel(GetMenuModelCallback callback) {
-  context_menu_ = MakeAppContextMenu(app_type_, this, profile(), id(),
-                                     GetController(), is_platform_app_);
+  if (base::FeatureList::IsEnabled(features::kAppServiceContextMenu)) {
+    context_menu_ = std::make_unique<AppServiceContextMenu>(
+        this, profile(), id(), GetController());
+  } else {
+    context_menu_ = MakeAppContextMenu(app_type_, this, profile(), id(),
+                                       GetController(), is_platform_app_);
+  }
+
   context_menu_->GetMenuModel(std::move(callback));
 }
 

@@ -4,6 +4,7 @@
 
 #include "ios/chrome/browser/interstitials/ios_security_interstitial_page.h"
 
+#include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
@@ -13,7 +14,8 @@
 #include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/pref_names.h"
-#include "ios/chrome/browser/ui/util/dynamic_type_util.h"
+#include "ios/components/ui_util/dynamic_type_util.h"
+#include "ios/web/common/features.h"
 #include "ios/web/public/security/web_interstitial.h"
 #import "ios/web/public/web_state.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -37,7 +39,7 @@ void AdjustFontSize(base::DictionaryValue& load_time_data) {
   bool converted =
       base::StringToDouble(old_size.substr(0, old_size.size() - 1), &new_size);
   DCHECK(converted);
-  new_size *= SystemSuggestedFontSizeMultiplier();
+  new_size *= ui_util::SystemSuggestedFontSizeMultiplier();
   load_time_data.SetString("fontsize", base::StringPrintf("%.0lf%%", new_size));
 }
 }
@@ -65,12 +67,15 @@ void IOSSecurityInterstitialPage::Show() {
 
 std::string IOSSecurityInterstitialPage::GetHtmlContents() const {
   base::DictionaryValue load_time_data;
+  load_time_data.SetBoolean(
+      "committed_interstitials_enabled",
+      base::FeatureList::IsEnabled(web::features::kSSLCommittedInterstitials));
   PopulateInterstitialStrings(&load_time_data);
   webui::SetLoadTimeDataDefaults(
       GetApplicationContext()->GetApplicationLocale(), &load_time_data);
   AdjustFontSize(load_time_data);
   std::string html =
-      ui::ResourceBundle::GetSharedInstance().DecompressDataResource(
+      ui::ResourceBundle::GetSharedInstance().LoadDataResourceString(
           IDR_SECURITY_INTERSTITIAL_HTML);
   webui::AppendWebUiCssTextDefaults(&html);
   return webui::GetI18nTemplateHtml(html, &load_time_data);
@@ -82,7 +87,7 @@ base::string16 IOSSecurityInterstitialPage::GetFormattedHostName() const {
 }
 
 bool IOSSecurityInterstitialPage::IsPrefEnabled(const char* pref_name) const {
-  ios::ChromeBrowserState* browser_state =
-      ios::ChromeBrowserState::FromBrowserState(web_state_->GetBrowserState());
+  ChromeBrowserState* browser_state =
+      ChromeBrowserState::FromBrowserState(web_state_->GetBrowserState());
   return browser_state->GetPrefs()->GetBoolean(pref_name);
 }

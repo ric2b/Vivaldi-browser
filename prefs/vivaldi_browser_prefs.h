@@ -8,9 +8,10 @@
 #include <unordered_map>
 #include <vector>
 
-#include "chrome/browser/prefs/browser_prefs.h"
+#include "base/optional.h"
 
 class PrefRegistrySimple;
+class PrefService;
 
 namespace user_prefs {
 class PrefRegistrySyncable;
@@ -18,33 +19,53 @@ class PrefRegistrySyncable;
 
 namespace vivaldi {
 
-struct PrefProperties {
+struct EnumPrefProperties {
+  EnumPrefProperties();
+  ~EnumPrefProperties();
+  EnumPrefProperties(EnumPrefProperties&&);
+
+  base::Optional<int> FindValue(base::StringPiece name) const;
+  const std::string* FindName(int value) const;
+
+  std::vector<std::pair<std::string, int>> name_value_pairs;
+  DISALLOW_COPY_AND_ASSIGN(EnumPrefProperties);
+};
+
+bool IsMergeableListPreference(base::StringPiece name);
+
+// Preference properties to use in our JS bindings
+#if !defined(OS_ANDROID)
+
+class PrefProperties {
  public:
-  struct EnumProperties {
-   public:
-    EnumProperties();
-    ~EnumProperties();
-    EnumProperties(EnumProperties&&);
-    std::unordered_map<int, std::string> value_to_string;
-    std::unordered_map<std::string, int> string_to_value;
-  };
-  explicit PrefProperties(bool local_pref);
-  PrefProperties(bool local_pref,
-                 std::unordered_map<std::string, int> string_to_value,
-                 std::unordered_map<int, std::string> value_to_string);
+  PrefProperties();
   PrefProperties(PrefProperties&&);
   ~PrefProperties();
-  std::unique_ptr<EnumProperties> enum_properties;
-  bool local_pref;
-};
-typedef std::unordered_map<std::string, PrefProperties> PrefsProperties;
 
-PrefsProperties RegisterBrowserPrefs(
-    user_prefs::PrefRegistrySyncable* registry);
+  bool is_local() const { return local_pref_; }
+  const EnumPrefProperties* enum_properties() const {
+    return enum_properties_.get();
+  }
+
+  void SetLocal(bool local_pref);
+  void SetEnumProperties(EnumPrefProperties enum_properties);
+
+ private:
+  std::unique_ptr<EnumPrefProperties> enum_properties_;
+  bool local_pref_ = false;
+  DISALLOW_COPY_AND_ASSIGN(PrefProperties);
+};
+
+using PrefsProperties = std::unordered_map<std::string, PrefProperties>;
+
+// Workaround to pass to our extension API registered preference properties
+// for a new profile. Chromium does not provide a way to access just created
+// profile from RegisterProfilePrefs.
+PrefsProperties ExtractLastRegisteredPrefsPropertes();
+
+#endif  // !defined(OS_ANDROID)
 
 void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
-
-void RegisterOldPrefs(user_prefs::PrefRegistrySyncable* registry);
 
 void MigrateOldPrefs(PrefService* prefs);
 

@@ -24,6 +24,7 @@
 #include "third_party/blink/renderer/modules/presentation/presentation_controller.h"
 #include "third_party/blink/renderer/modules/presentation/presentation_receiver.h"
 #include "third_party/blink/renderer/modules/presentation/presentation_request.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/wtf/assertions.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
@@ -42,7 +43,7 @@ mojom::blink::PresentationConnectionMessagePtr MakeBinaryMessage(
       WTF::Vector<uint8_t>());
   WTF::Vector<uint8_t>& data = message->get_data();
   data.Append(static_cast<const uint8_t*>(buffer->Data()),
-              buffer->ByteLength());
+              base::checked_cast<wtf_size_t>(buffer->ByteLengthAsSizeT()));
   return message;
 }
 
@@ -110,7 +111,7 @@ class PresentationConnection::Message final
   Message(scoped_refptr<BlobDataHandle> blob_data_handle)
       : type(kMessageTypeBlob), blob_data_handle(std::move(blob_data_handle)) {}
 
-  void Trace(blink::Visitor* visitor) { visitor->Trace(array_buffer); }
+  void Trace(Visitor* visitor) { visitor->Trace(array_buffer); }
 
   MessageType type;
   String text;
@@ -147,9 +148,7 @@ class PresentationConnection::BlobLoader final
 
   void Cancel() { loader_->Cancel(); }
 
-  void Trace(blink::Visitor* visitor) {
-    visitor->Trace(presentation_connection_);
-  }
+  void Trace(Visitor* visitor) { visitor->Trace(presentation_connection_); }
 
  private:
   Member<PresentationConnection> presentation_connection_;
@@ -159,12 +158,14 @@ class PresentationConnection::BlobLoader final
 PresentationConnection::PresentationConnection(LocalFrame& frame,
                                                const String& id,
                                                const KURL& url)
-    : ContextLifecycleObserver(frame.GetDocument()),
+    : ExecutionContextLifecycleStateObserver(frame.GetDocument()),
       id_(id),
       url_(url),
       state_(mojom::blink::PresentationConnectionState::CONNECTING),
       binary_type_(kBinaryTypeArrayBuffer),
-      file_reading_task_runner_(frame.GetTaskRunner(TaskType::kFileReading)) {}
+      file_reading_task_runner_(frame.GetTaskRunner(TaskType::kFileReading)) {
+  UpdateStateIfNeeded();
+}
 
 PresentationConnection::~PresentationConnection() {
   DCHECK(!blob_loader_);
@@ -218,7 +219,7 @@ ControllerPresentationConnection* ControllerPresentationConnection::Take(
   DCHECK(resolver);
   DCHECK(request);
 
-  Document* document = To<Document>(resolver->GetExecutionContext());
+  Document* document = Document::From(resolver->GetExecutionContext());
   if (!document->GetFrame())
     return nullptr;
 
@@ -264,7 +265,7 @@ ControllerPresentationConnection::ControllerPresentationConnection(
 
 ControllerPresentationConnection::~ControllerPresentationConnection() {}
 
-void ControllerPresentationConnection::Trace(blink::Visitor* visitor) {
+void ControllerPresentationConnection::Trace(Visitor* visitor) {
   visitor->Trace(controller_);
   PresentationConnection::Trace(visitor);
 }
@@ -319,7 +320,6 @@ ReceiverPresentationConnection* ReceiverPresentationConnection::Take(
                    std::move(receiver_connection_receiver));
 
   receiver->RegisterConnection(connection);
-
   return connection;
 }
 
@@ -375,7 +375,7 @@ void ReceiverPresentationConnection::TerminateInternal() {
     target_connection_->DidChangeState(state_);
 }
 
-void ReceiverPresentationConnection::Trace(blink::Visitor* visitor) {
+void ReceiverPresentationConnection::Trace(Visitor* visitor) {
   visitor->Trace(receiver_);
   PresentationConnection::Trace(visitor);
 }
@@ -385,9 +385,7 @@ const AtomicString& PresentationConnection::InterfaceName() const {
 }
 
 ExecutionContext* PresentationConnection::GetExecutionContext() const {
-  if (!GetFrame())
-    return nullptr;
-  return GetFrame()->GetDocument();
+  return ExecutionContextLifecycleObserver::GetExecutionContext();
 }
 
 void PresentationConnection::AddedEventListener(
@@ -411,17 +409,29 @@ void PresentationConnection::AddedEventListener(
   }
 }
 
-void PresentationConnection::ContextDestroyed(ExecutionContext*) {
+void PresentationConnection::ContextDestroyed() {
+  CloseConnection();
+}
+
+void PresentationConnection::ContextLifecycleStateChanged(
+    mojom::FrameLifecycleState state) {
+  if (state == mojom::FrameLifecycleState::kFrozen ||
+      state == mojom::FrameLifecycleState::kFrozenAutoResumeMedia) {
+    CloseConnection();
+  }
+}
+
+void PresentationConnection::CloseConnection() {
   DoClose(mojom::blink::PresentationConnectionCloseReason::WENT_AWAY);
   target_connection_.reset();
   connection_receiver_.reset();
 }
 
-void PresentationConnection::Trace(blink::Visitor* visitor) {
+void PresentationConnection::Trace(Visitor* visitor) {
   visitor->Trace(blob_loader_);
   visitor->Trace(messages_);
   EventTargetWithInlineData::Trace(visitor);
-  ContextLifecycleObserver::Trace(visitor);
+  ExecutionContextLifecycleStateObserver::Trace(visitor);
 }
 
 const AtomicString& PresentationConnection::state() const {
@@ -440,9 +450,17 @@ void PresentationConnection::send(const String& message,
 void PresentationConnection::send(DOMArrayBuffer* array_buffer,
                                   ExceptionState& exception_state) {
   DCHECK(array_buffer);
-  DCHECK(array_buffer->Buffer());
   if (!CanSendMessage(exception_state))
     return;
+  if (!base::CheckedNumeric<wtf_size_t>(array_buffer->ByteLengthAsSizeT())
+           .IsValid()) {
+    static_assert(
+        4294967295 == std::numeric_limits<wtf_size_t>::max(),
+        "Change the error message below if this static_assert fails.");
+    exception_state.ThrowRangeError(
+        "ArrayBuffer size exceeds the maximum supported size (4294967295)");
+    return;
+  }
 
   messages_.push_back(MakeGarbageCollected<Message>(array_buffer));
   HandleMessageQueue();
@@ -454,6 +472,16 @@ void PresentationConnection::send(
   DCHECK(array_buffer_view);
   if (!CanSendMessage(exception_state))
     return;
+  if (!base::CheckedNumeric<wtf_size_t>(
+           array_buffer_view.View()->byteLengthAsSizeT())
+           .IsValid()) {
+    static_assert(
+        4294967295 == std::numeric_limits<wtf_size_t>::max(),
+        "Change the error message below if this static_assert fails.");
+    exception_state.ThrowRangeError(
+        "ArrayBuffer size exceeds the maximum supported size (4294967295)");
+    return;
+  }
 
   messages_.push_back(
       MakeGarbageCollected<Message>(array_buffer_view.View()->buffer()));
@@ -562,8 +590,8 @@ void PresentationConnection::DidReceiveBinaryMessage(const uint8_t* data,
     case kBinaryTypeBlob: {
       auto blob_data = std::make_unique<BlobData>();
       blob_data->AppendBytes(data, length);
-      Blob* blob =
-          Blob::Create(BlobDataHandle::Create(std::move(blob_data), length));
+      auto* blob = MakeGarbageCollected<Blob>(
+          BlobDataHandle::Create(std::move(blob_data), length));
       DispatchEvent(*MessageEvent::Create(blob));
       return;
     }
@@ -614,8 +642,16 @@ void PresentationConnection::DidFinishLoadingBlob(DOMArrayBuffer* buffer) {
   DCHECK(!messages_.IsEmpty());
   DCHECK_EQ(messages_.front()->type, kMessageTypeBlob);
   DCHECK(buffer);
-  DCHECK(buffer->Buffer());
-
+  if (!base::CheckedNumeric<wtf_size_t>(buffer->ByteLengthAsSizeT())
+           .IsValid()) {
+    // TODO(crbug.com/1036565): generate error message? The problem is that the
+    // content of {buffer} is copied into a WTF::Vector, but a DOMArrayBuffer
+    // has a bigger maximum size than a WTF::Vector. Ignore the current failed
+    // blob item and continue with next items.
+    messages_.pop_front();
+    blob_loader_.Clear();
+    HandleMessageQueue();
+  }
   // Send the loaded blob immediately here and continue processing the queue.
   SendMessageToTargetConnection(MakeBinaryMessage(buffer));
 
@@ -627,7 +663,7 @@ void PresentationConnection::DidFinishLoadingBlob(DOMArrayBuffer* buffer) {
 void PresentationConnection::DidFailLoadingBlob(FileErrorCode error_code) {
   DCHECK(!messages_.IsEmpty());
   DCHECK_EQ(messages_.front()->type, kMessageTypeBlob);
-  // FIXME: generate error message?
+  // TODO(crbug.com/1036565): generate error message?
   // Ignore the current failed blob item and continue with next items.
   messages_.pop_front();
   blob_loader_.Clear();

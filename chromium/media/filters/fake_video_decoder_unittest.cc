@@ -54,7 +54,12 @@ class FakeVideoDecoderTest
   void InitializeWithConfigAndExpectResult(const VideoDecoderConfig& config,
                                            bool success) {
     decoder_->Initialize(
-        config, false, nullptr, NewExpectedBoolCB(success),
+        config, false, nullptr,
+        base::BindOnce(
+            [](bool success, Status status) {
+              EXPECT_EQ(status.is_ok(), success);
+            },
+            success),
         base::Bind(&FakeVideoDecoderTest::FrameReady, base::Unretained(this)),
         base::NullCallback());
     base::RunLoop().RunUntilIdle();
@@ -138,14 +143,13 @@ class FakeVideoDecoderTest
     ++num_input_buffers_;
     ++pending_decode_requests_;
 
-    decoder_->Decode(
-        buffer,
-        base::Bind(&FakeVideoDecoderTest::DecodeDone, base::Unretained(this)));
+    decoder_->Decode(buffer, base::BindOnce(&FakeVideoDecoderTest::DecodeDone,
+                                            base::Unretained(this)));
     base::RunLoop().RunUntilIdle();
   }
 
   void ReadOneFrame() {
-    last_decoded_frame_ = NULL;
+    last_decoded_frame_.reset();
     do {
       Decode();
     } while (!last_decoded_frame_.get() && pending_decode_requests_ == 0);
@@ -196,8 +200,8 @@ class FakeVideoDecoderTest
 
   void ResetAndExpect(CallbackResult result) {
     is_reset_pending_ = true;
-    decoder_->Reset(base::Bind(&FakeVideoDecoderTest::OnDecoderReset,
-                               base::Unretained(this)));
+    decoder_->Reset(base::BindOnce(&FakeVideoDecoderTest::OnDecoderReset,
+                                   base::Unretained(this)));
     base::RunLoop().RunUntilIdle();
     ExpectResetResult(result);
   }

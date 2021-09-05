@@ -21,22 +21,24 @@ update_template_instance("//chrome/browser:browser") {
   if (!is_android) {
     sources += [
       "//vivaldi/browser/history/top_sites_convert.cc",
-      "//vivaldi/browser/history/top_sites_convert.h",
       "//vivaldi/browser/menus/bookmark_sorter.cc",
       "//vivaldi/browser/menus/bookmark_sorter.h",
       "//vivaldi/browser/menus/bookmark_support.cc",
       "//vivaldi/browser/menus/bookmark_support.h",
-      "//vivaldi/browser/vivaldi_session_service.cc",
       "//vivaldi/browser/vivaldi_render_view_context_menu.cc",
+      "//vivaldi/ui/vivaldi_session_service.cc",
+      "//vivaldi/ui/vivaldi_session_service.h",
     ]
   }
   if (is_android) {
     sources += [
       "//vivaldi/browser/android/first_run_android.cc",
+      "//vivaldi/browser/android/adblock/adblock_manager.h",
+      "//vivaldi/browser/android/adblock/adblock_manager.cc",
       "//vivaldi/browser/android/capture/capture_handler.cpp",
       "//vivaldi/browser/android/capture/capture_handler.h",
-      "//vivaldi/browser/android/bookmarks/bookmark_bridge.cc",
-      "//vivaldi/components/bookmarks/browser/bookmark_model.cc",
+      "//vivaldi/browser/android/prefs/vivaldi_preferences_bridge.h",
+      "//vivaldi/browser/android/prefs/vivaldi_preferences_bridge.cc",
     ]
   }
 }
@@ -72,17 +74,6 @@ update_template_instance("//chrome/browser/ui:ui") {
       "//vivaldi/browser/ui/viv_page_info_bubble_view.cc",
     ]
   }
-  if (!defined(jumbo_excluded_sources)) {
-    jumbo_excluded_sources = []
-  }
-  jumbo_excluded_sources += [
-    "//vivaldi/browser/ui/vivaldi_browser_navigator.cc",
-  ]
-  if (!is_android) {
-    jumbo_excluded_sources += [
-      "views/accessibility/invert_bubble_view.cc",
-    ]
-  }
 }
 
 update_target("//chrome/common:constants") {
@@ -91,6 +82,9 @@ update_target("//chrome/common:constants") {
       "//vivaldi/browser/win/vivaldi_utils.cc",
       "//vivaldi/browser/win/vivaldi_utils.h",
     ]
+    deps += [
+      "//chrome/installer/util:constants",
+    ]
   }
 }
 
@@ -98,4 +92,12 @@ update_template_instance("//content/public/browser:browser_sources") {
   sources += [
     "//vivaldi/browser/renderer_host/devtools/protocol/vivaldi_emulation_handler.cc",
   ]
+}
+
+if (!is_android) {
+  update_target("//components/history/core/browser:browser") {
+    sources += [
+      "//vivaldi/browser/history/top_sites_convert.h",
+    ]
+  }
 }

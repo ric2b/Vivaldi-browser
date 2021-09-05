@@ -36,13 +36,13 @@ import sys
 
 sys.path.append(os.path.join(
     os.path.dirname(__file__), os.pardir, os.pardir, 'build', 'android'))
-import devil_chromium  # pylint: disable=import-error
-from devil.android import device_errors  # pylint: disable=import-error
-from devil.android import device_utils  # pylint: disable=import-error
-from devil.android.sdk import keyevent  # pylint: disable=import-error
-from devil.android.tools import script_common  # pylint: disable=import-error
-from devil.android.tools import system_app  # pylint: disable=import-error
-from devil.utils import logging_common  # pylint: disable=import-error
+import devil_chromium
+from devil.android import device_errors
+from devil.android import device_utils
+from devil.android.sdk import keyevent
+from devil.android.tools import script_common
+from devil.android.tools import system_app
+from devil.utils import logging_common
 
 WEBVIEW_PACKAGES = ['com.android.webview', 'com.google.android.webview']
 
@@ -86,7 +86,7 @@ def RemovePreinstalledWebViews(device):
   try:
     UninstallWebViewSystemImages(device)
     CheckWebViewIsUninstalled(device)
-  except device_errors.CommandFailedError as e:
+  except device_errors.CommandFailedError:
     if device.adb.is_emulator:
       # Point the user to documentation, since there's a good chance they can
       # workaround this. Use lots of newlines to make sure this message doesn't
@@ -95,7 +95,7 @@ def RemovePreinstalledWebViews(device):
                     'See https://chromium.googlesource.com/chromium/src/+/'
                     'master/docs/android_emulator.md#writable-system-partition'
                     '\n')
-    raise e
+    raise
   device.SetWebViewFallbackLogic(False)  # Allow standalone WebView on N+
 
 

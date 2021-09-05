@@ -37,6 +37,8 @@ ReopenTabPromoController::ReopenTabPromoController(BrowserView* browser_view)
       browser_view_(browser_view) {
 }
 
+ReopenTabPromoController::~ReopenTabPromoController() = default;
+
 void ReopenTabPromoController::ShowPromo() {
   // This shouldn't be called more than once. Check that state is fresh.
   DCHECK(!show_promo_called_);
@@ -65,15 +67,16 @@ void ReopenTabPromoController::ShowPromo() {
           ? FeaturePromoBubbleView::CreateOwned(
                 app_menu_button, views::BubbleBorder::Arrow::TOP_RIGHT,
                 FeaturePromoBubbleView::ActivationAction::DO_NOT_ACTIVATE,
-                IDS_REOPEN_TAB_PROMO, IDS_REOPEN_TAB_PROMO_SCREENREADER,
-                accelerator, std::move(feature_promo_bubble_timeout))
+                IDS_REOPEN_TAB_PROMO, base::nullopt,
+                IDS_REOPEN_TAB_PROMO_SCREENREADER, accelerator,
+                std::move(feature_promo_bubble_timeout))
           : FeaturePromoBubbleView::CreateOwned(
                 app_menu_button, views::BubbleBorder::Arrow::TOP_RIGHT,
                 FeaturePromoBubbleView::ActivationAction::DO_NOT_ACTIVATE,
-                IDS_REOPEN_TAB_PROMO, IDS_REOPEN_TAB_PROMO_SCREENREADER,
-                accelerator);
+                IDS_REOPEN_TAB_PROMO, base::nullopt,
+                IDS_REOPEN_TAB_PROMO_SCREENREADER, accelerator);
   promo_bubble_->set_close_on_deactivate(false);
-  promo_bubble_->GetWidget()->AddObserver(this);
+  observer_.Add(promo_bubble_->GetWidget());
 }
 
 void ReopenTabPromoController::OnTabReopened(int command_id) {
@@ -103,6 +106,8 @@ void ReopenTabPromoController::OnWidgetDestroying(views::Widget* widget) {
   // timed out without the user following our IPH. End it.
   if (promo_step_ == StepAtDismissal::kBubbleShown)
     PromoEnded();
+
+  observer_.Remove(widget);
 }
 
 void ReopenTabPromoController::AppMenuShown() {

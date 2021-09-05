@@ -142,28 +142,9 @@ TEST_F(SigninHeaderHelperTest, TestMirrorRequestNoAccountIdChromeOS) {
 // Tests that no Mirror request is returned when the user is not signed in (no
 // account id), for non Chrome OS platforms.
 TEST_F(SigninHeaderHelperTest, TestNoMirrorRequestNoAccountId) {
-#if defined(OS_ANDROID)
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndDisableFeature(kMiceFeature);
-#endif
   account_consistency_ = AccountConsistencyMethod::kMirror;
   CheckMirrorHeaderRequest(GURL("https://docs.google.com"), "", "");
   CheckMirrorCookieRequest(GURL("https://docs.google.com"), "", "");
-}
-#endif
-
-#if defined(OS_ANDROID)
-// Tests that Mirror request is returned on Android with Mice.
-TEST_F(SigninHeaderHelperTest, TestMirrorRequestNoAccountIdMice) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(kMiceFeature);
-  account_consistency_ = AccountConsistencyMethod::kMirror;
-  CheckMirrorHeaderRequest(GURL("https://docs.google.com"), "",
-                           "mode=0,enable_account_consistency=true,"
-                           "consistency_enabled_by_default=true");
-  CheckMirrorCookieRequest(GURL("https://docs.google.com"), "",
-                           "mode=0:enable_account_consistency=true:"
-                           "consistency_enabled_by_default=true");
 }
 #endif
 
@@ -319,7 +300,7 @@ TEST_F(SigninHeaderHelperTest, TestNoDiceRequestWhenDisabled) {
 }
 
 TEST_F(SigninHeaderHelperTest, TestDiceEmptyDeviceID) {
-  account_consistency_ = AccountConsistencyMethod::kDiceMigration;
+  account_consistency_ = AccountConsistencyMethod::kDice;
   std::string client_id = GaiaUrls::GetInstance()->oauth2_chrome_client_id();
   ASSERT_FALSE(client_id.empty());
 
@@ -330,29 +311,16 @@ TEST_F(SigninHeaderHelperTest, TestDiceEmptyDeviceID) {
       "mode=0,enable_account_consistency=false,"
       "consistency_enabled_by_default=false",
       base::StringPrintf("version=%s,client_id=%s,signin_mode=all_accounts,"
-                         "signout_mode=no_confirmation",
+                         "signout_mode=show_confirmation",
                          kDiceProtocolVersion, client_id.c_str()));
 }
 
-// Tests that the signout confirmation is requested iff the Dice migration is
-// complete.
-TEST_F(SigninHeaderHelperTest, TestDiceMigration) {
-  account_consistency_ = AccountConsistencyMethod::kDiceMigration;
+// Tests that the signout confirmation is requested.
+TEST_F(SigninHeaderHelperTest, TestSignoutConfirmation) {
+  account_consistency_ = AccountConsistencyMethod::kDice;
   std::string client_id = GaiaUrls::GetInstance()->oauth2_chrome_client_id();
   ASSERT_FALSE(client_id.empty());
 
-  // No signout confirmation by default.
-  CheckDiceHeaderRequest(
-      GURL("https://accounts.google.com"), "0123456789",
-      "mode=0,enable_account_consistency=false,"
-      "consistency_enabled_by_default=false",
-      base::StringPrintf(
-          "version=%s,client_id=%s,device_id=DeviceID,signin_mode=all_accounts,"
-          "signout_mode=no_confirmation",
-          kDiceProtocolVersion, client_id.c_str()));
-
-  // Signout confirmation after the migration is complete.
-  account_consistency_ = AccountConsistencyMethod::kDice;
   CheckDiceHeaderRequest(
       GURL("https://accounts.google.com"), "0123456789",
       "mode=0,enable_account_consistency=false,"

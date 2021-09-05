@@ -1,0 +1,26 @@
+{
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAopqQwcxxNnqd3iNJ8np6Je7vuMqp/B1alJ+OfrzFgasMfv8v7GXmSjl/z+rFmAlHt5bmLfFrCAmginGwHPOm7R7nSIocseGU7TdWXt9QRF9blsrozSNTdUTGTgdw4z2g6ghvDBcJQIkcf8CdsEvLjJCvG7gQ3XXSuujJBzGm2jVHW+eXmAtMOoWlqTn293DJOHz2ZbpGXGKBYt6+qP7312XEKlXb152GG6oVX9qxkZA4Q364gfILJ3om4j3111WhJzCQ4MR6K3F/4Lx5ZhLSa48N1QYG/odh4XuqiEa0ZMQFCwnODhJW9thwcxLHjZMBRgr5nQScn/U+N3C/XeJW2QIDAQAB",
+  "name": "Vivaldi Picture-In-Picture",
+  "version": "1.0",
+  "manifest_version": 2,
+  "incognito": "split",
+  "permissions": [
+    "pipPrivate"
+  ],
+  "background": {
+    "scripts": ["background.js"],
+    "persistent": false
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*", "file://*/*"],
+      "js": ["picture-in-picture.js"],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ],
+  "web_accessible_resources":  [
+    "config.json",
+    "picture-in-picture.css"
+  ]
+}

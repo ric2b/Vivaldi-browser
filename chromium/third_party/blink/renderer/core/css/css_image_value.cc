@@ -20,6 +20,7 @@
 
 #include "third_party/blink/renderer/core/css/css_image_value.h"
 
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/web/web_local_frame_client.h"
 #include "third_party/blink/renderer/core/css/css_markup.h"
 #include "third_party/blink/renderer/core/dom/document.h"
@@ -32,6 +33,7 @@
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_parameters.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_loader_options.h"
+#include "third_party/blink/renderer/platform/network/network_state_notifier.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/weborigin/security_policy.h"
 
@@ -40,8 +42,8 @@ namespace blink {
 CSSImageValue::CSSImageValue(const AtomicString& raw_value,
                              const KURL& url,
                              const Referrer& referrer,
-                             StyleImage* image,
-                             OriginClean origin_clean)
+                             OriginClean origin_clean,
+                             StyleImage* image)
     : CSSValue(kImageClass),
       relative_url_(raw_value),
       referrer_(referrer),
@@ -73,7 +75,7 @@ StyleImage* CSSImageValue::CacheImage(
     options.initiator_info.name = initiator_name_.IsEmpty()
                                       ? fetch_initiator_type_names::kCSS
                                       : initiator_name_;
-    FetchParameters params(resource_request, options);
+    FetchParameters params(std::move(resource_request), options);
 
     if (cross_origin != kCrossOriginAttributeNotSet) {
       params.SetCrossOriginAccessControl(document.GetSecurityOrigin(),
@@ -90,6 +92,14 @@ StyleImage* CSSImageValue::CacheImage(
             WebLocalFrameClient::LazyLoadBehavior::kDeferredImage);
       }
       params.SetLazyImageDeferred();
+    }
+
+    if (base::FeatureList::IsEnabled(blink::features::kSubresourceRedirect) &&
+        params.Url().ProtocolIsInHTTPFamily() &&
+        GetNetworkStateNotifier().SaveDataEnabled()) {
+      auto& resource_request = params.MutableResourceRequest();
+      resource_request.SetPreviewsState(resource_request.GetPreviewsState() |
+                                        WebURLRequest::kSubresourceRedirectOn);
     }
 
     if (origin_clean_ != OriginClean::kTrue)
@@ -140,7 +150,7 @@ bool CSSImageValue::KnownToBeOpaque(const Document& document,
                        : false;
 }
 
-void CSSImageValue::TraceAfterDispatch(blink::Visitor* visitor) {
+void CSSImageValue::TraceAfterDispatch(blink::Visitor* visitor) const {
   visitor->Trace(cached_image_);
   CSSValue::TraceAfterDispatch(visitor);
 }

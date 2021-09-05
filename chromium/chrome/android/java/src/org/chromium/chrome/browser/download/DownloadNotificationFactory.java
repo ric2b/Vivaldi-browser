@@ -26,14 +26,15 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
 import android.os.Bundle;
-import android.support.v4.app.NotificationCompat;
 import android.text.TextUtils;
+
+import androidx.core.app.NotificationCompat;
 
 import com.google.ipc.invalidation.util.Preconditions;
 
 import org.chromium.base.ContentUriUtils;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeFeatureList;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.media.MediaViewerUtils;
 import org.chromium.chrome.browser.notifications.ChromeNotificationBuilder;
 import org.chromium.chrome.browser.notifications.NotificationBuilderFactory;
@@ -42,11 +43,12 @@ import org.chromium.chrome.browser.notifications.NotificationMetadata;
 import org.chromium.chrome.browser.notifications.NotificationUmaTracker;
 import org.chromium.chrome.browser.notifications.PendingIntentProvider;
 import org.chromium.chrome.browser.notifications.channels.ChannelDefinitions;
-import org.chromium.chrome.browser.util.UrlUtilities;
+import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.components.offline_items_collection.ContentId;
 import org.chromium.components.offline_items_collection.LegacyHelpers;
 import org.chromium.components.offline_items_collection.OfflineItem;
 import org.chromium.components.offline_items_collection.PendingState;
+import org.chromium.components.url_formatter.SchemeDisplay;
 import org.chromium.components.url_formatter.UrlFormatter;
 
 /**
@@ -99,8 +101,11 @@ public final class DownloadNotificationFactory {
         String contentText;
         int iconId;
         @NotificationUmaTracker.ActionType
-        int cancelActionType,
-                pauseActionType, resumeActionType;
+        int cancelActionType;
+        @NotificationUmaTracker.ActionType
+        int pauseActionType;
+        @NotificationUmaTracker.ActionType
+        int resumeActionType;
         if (LegacyHelpers.isLegacyDownload(downloadUpdate.getContentId())) {
             cancelActionType = NotificationUmaTracker.ActionType.DOWNLOAD_CANCEL;
             pauseActionType = NotificationUmaTracker.ActionType.DOWNLOAD_PAUSE;
@@ -338,8 +343,8 @@ public final class DownloadNotificationFactory {
         } else if (downloadUpdate.getShouldPromoteOrigin()
                 && !TextUtils.isEmpty(downloadUpdate.getOriginalUrl())) {
             // Always show the origin URL if available (for normal profiles).
-            String formattedUrl = UrlFormatter.formatUrlForSecurityDisplayOmitScheme(
-                    downloadUpdate.getOriginalUrl());
+            String formattedUrl = UrlFormatter.formatUrlForSecurityDisplay(
+                    downloadUpdate.getOriginalUrl(), SchemeDisplay.OMIT_HTTP_AND_HTTPS);
 
             if (formattedUrl.length() > MAX_ORIGIN_LENGTH) {
                 // The origin is too long. Strip down to eTLD+1.

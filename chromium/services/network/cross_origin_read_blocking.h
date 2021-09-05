@@ -14,8 +14,8 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/string_piece_forward.h"
-#include "services/network/initiator_lock_compatibility.h"
 #include "services/network/public/mojom/fetch_api.mojom.h"
+#include "services/network/public/mojom/url_response_head.mojom-forward.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -27,7 +27,9 @@ FORWARD_DECLARE_TEST(CrossSiteDocumentResourceHandlerTest,
 
 namespace network {
 
-struct ResourceResponseInfo;
+namespace mojom {
+class NetworkServiceClient;
+}  // namespace mojom
 
 // CrossOriginReadBlocking (CORB) implements response blocking
 // policy for Site Isolation.  CORB will monitor network responses to a
@@ -105,11 +107,18 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) CrossOriginReadBlocking {
     // Creates a ResponseAnalyzer for the request (|request_url| and
     // |request_initiator|), |response| pair.  The ResponseAnalyzer will decide
     // whether |response| needs to be blocked.
-    ResponseAnalyzer(const GURL& request_url,
-                     const base::Optional<url::Origin>& request_initiator,
-                     const ResourceResponseInfo& response,
-                     base::Optional<url::Origin> request_initiator_site_lock,
-                     mojom::RequestMode request_mode);
+    //
+    // TODO(lukasza): https://crbug.com/920638: Remove
+    // |isolated_world_origin| and |network_service_client| once we gather
+    // enough UMA and Rappor data.
+    ResponseAnalyzer(
+        const GURL& request_url,
+        const base::Optional<url::Origin>& request_initiator,
+        const network::mojom::URLResponseHead& response,
+        const base::Optional<url::Origin>& request_initiator_site_lock,
+        mojom::RequestMode request_mode,
+        const base::Optional<url::Origin>& isolated_world_origin,
+        mojom::NetworkServiceClient* network_service_client);
 
     ~ResponseAnalyzer();
 
@@ -177,38 +186,45 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) CrossOriginReadBlocking {
     };
     // Static because this method is called both during the actual decision, and
     // for the CORB protection logging decision.
+    //
+    // |is_cors_blocking_expected| returns whether the response is 1)
+    // cross-origin, 2) made in CORS mode and 3) doesn't have the right ACAO
+    // response header.
+    // TODO(lukasza): https://crbug.com/920638: Remove
+    // |is_cors_blocking_expected| once we gather enough UMA data.
     static BlockingDecision ShouldBlockBasedOnHeaders(
         mojom::RequestMode request_mode,
         const GURL& request_url,
         const base::Optional<url::Origin>& request_initiator,
-        const ResourceResponseInfo& response,
+        const network::mojom::URLResponseHead& response,
         const base::Optional<url::Origin>& request_initiator_site_lock,
-        MimeType canonical_mime_type);
+        MimeType canonical_mime_type,
+        bool* is_cors_blocking_expected);
 
     // Returns true if the response has a nosniff header.
-    static bool HasNoSniff(const ResourceResponseInfo& response);
+    static bool HasNoSniff(const network::mojom::URLResponseHead& response);
 
     // Checks if the response seems sensitive for CORB protection logging.
     // Returns true if the Access-Control-Allow-Origin header has a value other
     // than *.
     static bool SeemsSensitiveFromCORSHeuristic(
-        const ResourceResponseInfo& response);
+        const network::mojom::URLResponseHead& response);
 
     // Checks if the response seems sensitive for CORB protection logging.
     // Returns true if the response has Vary: Origin and Cache-Control: Private
     // headers.
     static bool SeemsSensitiveFromCacheHeuristic(
-        const ResourceResponseInfo& response);
+        const network::mojom::URLResponseHead& response);
 
     // Checks if a response has an Accept-Ranges header. This indicates the
     // server supports range requests which may allow bypassing CORB due to
     // their multipart content type.
     static bool SupportsRangeRequests(
-        const ResourceResponseInfo& response_headers);
+        const network::mojom::URLResponseHead& response_headers);
 
     // Determines the MIME type bucket for CORB protection logging.
     static MimeTypeBucket GetMimeTypeBucket(
-        const ResourceResponseInfo& response);
+        const network::mojom::URLResponseHead& response);
 
     // Translates a blocking decision into a protection decision for use by
     // LogSensitiveResponseProtection.
@@ -265,11 +281,22 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) CrossOriginReadBlocking {
     // Sniffing results.
     bool found_blockable_content_ = false;
 
+    // State used for calculating the
+    // SiteIsolation.XSD.Browser.AllowedByCorbButNotCors.ContentScript UMA
+    // and Extensions.CrossOriginFetchFromContentScript3 Rappor data.
+    //
+    // TODO(lukasza): https://crbug.com/920638: Remove the fields below once we
+    // gather enough UMA data.
+    const base::Optional<url::Origin> isolated_world_origin_;
+    bool is_cors_blocking_expected_ = false;
+    mojom::NetworkServiceClient* const network_service_client_;
+
     DISALLOW_COPY_AND_ASSIGN(ResponseAnalyzer);
   };
 
   // Used to strip response headers if a decision to block has been made.
-  static void SanitizeBlockedResponse(ResourceResponseInfo* response);
+  static void SanitizeBlockedResponse(
+      network::mojom::URLResponseHead* response);
 
   // This enum backs a histogram, so do not change the order of entries or
   // remove entries. When adding new entries update |kMaxValue| and enums.xml
@@ -323,14 +350,6 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) CrossOriginReadBlocking {
 
   // Reverts AddExceptionForPlugin.
   static void RemoveExceptionForPlugin(int process_id);
-
-  // Registers additional MIME types that can be protected by CORB (without any
-  // confirmation sniffing).
-  //
-  // TODO(lukasza): https://crbug.com/944162: Remove the method below once
-  // kMimeHandlerViewInCrossProcessFrame feature ships.
-  static void AddExtraMimeTypesForCorb(
-      const std::vector<std::string>& mime_types);
 
  private:
   CrossOriginReadBlocking();  // Not instantiable.

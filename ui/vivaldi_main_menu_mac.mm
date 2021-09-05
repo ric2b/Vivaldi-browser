@@ -7,12 +7,17 @@
 #include "base/base64.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "base/strings/sys_string_conversions.h"
+#include "chrome/app/chrome_command_ids.h"  // For IDC_WINDOW_MENU
 #include "chrome/browser/favicon/favicon_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/app/chrome_command_ids.h"  // For IDC_WINDOW_MENU
+#include "chrome/grit/generated_resources.h"
 #import "chrome/browser/app_controller_mac.h"
 #include "components/favicon/core/favicon_service.h"
+#include "extensions/schema/menubar.h"
+#import "ui/base/l10n/l10n_util_mac.h"
+#include "ui/vivaldi_bookmark_menu_mac.h"
 #include "ui/vivaldi_main_menu.h"
+
 
 // This tag value must be used in the js code setting up the menus.
 const int kSeparatorTag = 55555;
@@ -21,7 +26,7 @@ namespace menubar = extensions::vivaldi::menubar;
 
 namespace vivaldi {
 void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
-    long index, FaviconLoaderMac* faviconLoader);
+    long index, FaviconLoaderMac* faviconLoader, int min_tag, int max_tag);
 }
 
 // Menu delegate that supports replacing items with the specified tag that
@@ -32,10 +37,14 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
   std::vector<menubar::MenuItem> items_;
   bool has_new_content_;
   int tag_;
+  int min_tag_;
+  int max_tag_;
   std::unique_ptr<vivaldi::FaviconLoaderMac> favicon_loader_;
 }
 
-- (id)initWithProfile:(Profile*)profile tag:(int)tag;
+- (id)initWithProfile:(Profile*)profile tag:(int)tag
+                                    min_tag:(int)min_tag
+                                    max_tag:(int)max_tag;
 - (void)setMenuItems:(std::vector<menubar::MenuItem>*)items;
 - (void)menuNeedsUpdate:(NSMenu *)menu;
 - (vivaldi::FaviconLoaderMac*)faviconLoader;
@@ -44,11 +53,15 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
 
 @implementation MainMenuDelegate
 
-- (id)initWithProfile:(Profile*)profile tag:(int)tag {
+- (id)initWithProfile:(Profile*)profile tag:(int)tag
+                                    min_tag:(int)min_tag
+                                    max_tag:(int)max_tag {
   self = [super init];
   if (self) {
     has_new_content_ = false;
     tag_ = tag;
+    min_tag_ = min_tag;
+    max_tag_ = max_tag;
     favicon_loader_.reset(new vivaldi::FaviconLoaderMac(profile));
   }
   return self;
@@ -104,7 +117,7 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
           items_.begin(); it != items_.end(); ++it) {
       const menubar::MenuItem& item = *it;
       vivaldi::PopulateMenu(item, menu, false, ++startIndex,
-        favicon_loader_.get());
+        favicon_loader_.get(), min_tag_, max_tag_);
     }
   }
 }
@@ -342,15 +355,39 @@ void setMenuItemBold(NSMenuItem* item, bool bold) {
   [newTitle release];
 }
 
+NSMenuItem* MakeMenuItem(NSString* title, const std::string* shortcut, int tag) {
+  std::string shortcut_copy;
+  if (shortcut) {
+    shortcut_copy = *shortcut;
+  }
+  NSEventModifierFlags modifiers = modifierMaskFromString(shortcut_copy);
+  NSString* keyEquivalent = acceleratorFromString(shortcut_copy);
+  NSMenuItem* menuItem = [[NSMenuItem alloc]
+          initWithTitle:title
+                 action:nil
+          keyEquivalent:modifiers & NSShiftKeyMask ?
+              keyEquivalent.uppercaseString : keyEquivalent.lowercaseString];
+  [menuItem setKeyEquivalentModifierMask:modifiers];
+  [menuItem setTag:tag];
+  return menuItem;
+}
+
 // Adds item and any subitems to the given menu at the given index. Adds at end
 // if index is negative. If the item has a url and the faviconLoader is defined
 // a favicon will be assigned to the item if available.
 void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
-    long index, FaviconLoaderMac* faviconLoader) {
-  // Reuse existing toplevel menu item (if any). Assumes the string will
-  // never change.
+    long index, FaviconLoaderMac* faviconLoader, int min_tag, int max_tag) {
+  // Reuse existing toplevel menu item (if any).
   NSMenuItem* menuItem = topLevel ? [menu itemWithTag:item.id] : nullptr;
-  if (!menuItem) {
+  if (menuItem) {
+    // Top level order may have changed.
+    int item_index = [menu indexOfItem:menuItem];
+    if (index != item_index) {
+      [menu removeItemAtIndex:item_index];
+      [menu insertItem:menuItem atIndex:index];
+    }
+  } else {
+    // Either a sub menu item or a new top level item.
     if (item.name == "---") {
       NSMenuItem* menuItem = [NSMenuItem separatorItem];
       [menuItem setTag:item.id];
@@ -360,21 +397,10 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
         [menu insertItem:menuItem atIndex:index];
       }
     } else {
+      menuItem = MakeMenuItem(base::SysUTF8ToNSString(item.name),
+          item.shortcut.get(), item.id);
       bool visible = item.visible ? *item.visible : true;
-      std::string shortcut;
-      if (item.shortcut) {
-        shortcut = *item.shortcut.get();
-      }
-      NSEventModifierFlags modifiers = modifierMaskFromString(shortcut);
-      NSString* keyEquivalent = acceleratorFromString(shortcut);
-      menuItem = [[NSMenuItem alloc]
-          initWithTitle:base::SysUTF8ToNSString(item.name)
-                 action:nil
-          keyEquivalent:modifiers & NSShiftKeyMask ?
-              keyEquivalent.uppercaseString : keyEquivalent.lowercaseString];
-      [menuItem setKeyEquivalentModifierMask:modifiers];
       [menuItem setHidden:!visible];
-      [menuItem setTag:item.id];
       if (item.parameter) {
         // This is used by the tab items (and other types if needed later) that
         // all share the same mac menu id. Information of what to do (like what
@@ -391,23 +417,38 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
 
       AppController* appController =
           static_cast<AppController*>([NSApp delegate]);
-      if (item.id != IDC_EXIT) {
-        if (
-            item.id != IDC_CONTENT_CONTEXT_UNDO &&
-            item.id != IDC_CONTENT_CONTEXT_REDO &&
-            item.id != IDC_CONTENT_CONTEXT_CUT &&
-            item.id != IDC_CONTENT_CONTEXT_COPY &&
-            item.id != IDC_CONTENT_CONTEXT_PASTE &&
-            item.id != IDC_CONTENT_CONTEXT_PASTE_AND_MATCH_STYLE &&
-            item.id != IDC_CONTENT_CONTEXT_DELETE &&
-            item.id != IDC_CONTENT_CONTEXT_SELECTALL &&
-            item.id != IDC_HIDE_APP &&
-            item.id != IDC_VIV_HIDE_OTHERS
-        ) {
+
+      switch (item.id) {
+        case IDC_CONTENT_CONTEXT_UNDO:
+        case IDC_CONTENT_CONTEXT_REDO:
+        case IDC_CONTENT_CONTEXT_CUT:
+        case IDC_CONTENT_CONTEXT_COPY:
+        case IDC_CONTENT_CONTEXT_PASTE:
+        case IDC_CONTENT_CONTEXT_PASTE_AND_MATCH_STYLE:
+        case IDC_CONTENT_CONTEXT_DELETE:
+        case IDC_CONTENT_CONTEXT_SELECTALL:
+        case IDC_HIDE_APP:
+        case IDC_VIV_HIDE_OTHERS:
+        case IDC_VIV_SHOW_ALL:
+        case IDC_VIV_MAC_ZOOM:
+        case IDC_VIV_MAC_ALL_WINDOWS_TO_FRONT:
+          // Do nothing (which basically means std. behavior).
+          break;
+        case IDC_VIV_MAC_SERVICES:
+          [menuItem setTag:0];
+          [menuItem setSubmenu:[[[NSMenu alloc] initWithTitle:
+              base::SysUTF8ToNSString(item.name)] autorelease]];
+          [NSApp setServicesMenu:[menuItem submenu]];
+          // Otherwise, as above, do nothing.
+          break;
+        case IDC_VIV_BOOKMARK_CONTAINER:
+          // The container element is used to hand over information to chrome
+          // bookmark generation code. So we hide the element itself.
+          [menuItem setHidden:true];
+          break;
+        default:
           [menuItem setTarget:appController];
-        }
-      } else {
-        [menuItem setTarget:NSApp];
+          break;
       }
       [appController setVivaldiMenuItemAction:menuItem];
 
@@ -432,123 +473,124 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
   }
 
   if (menuItem && item.items) {
-    NSString* title = base::SysUTF8ToNSString(item.name);
+    long index = -1;
     NSMenu* subMenu;
-
-    // We want to keep the service sub menu of the original menu.
-    bool isAppMenu = topLevel && item.id == IDC_CHROME_MENU;
-
-    // This menu has issues on macOS 10.15+ (VB-58755)
-    bool isWindowMenu = topLevel && item.id == IDC_WINDOW_MENU;
-
-    // Special care for the bookmarks menu as we manage it two places.
-    // Here and in bookmark_menu_bridge.mm. We never clear its content
-    // and we replace menu items if they already exists.
-    bool isBookmarkMenu = topLevel && item.id == IDC_BOOKMARKS_MENU;
-
-    // Removing all items from the edit menu also removes special menu items
-    // that are added by the OS. Avoid that.
-    bool isEditMenu = topLevel && item.id == IDC_EDIT_MENU;
-    long editMenuLength = 0;
-    long appIndex = 0;
-
     if ([menuItem hasSubmenu]) {
       subMenu = [menuItem submenu];
-      if (!isAppMenu && !isBookmarkMenu && !isEditMenu && !isWindowMenu) {
-        [subMenu removeAllItems];
-      }
-      if (isEditMenu) {
-        for (NSMenuItem* item in [subMenu itemArray]) {
-          if ([item action] !=
-                  NSSelectorFromString(@"orderFrontCharacterPalette:")) {
-            [subMenu removeItem:item];
+      // We may change the string on each update.
+      [subMenu setTitle:base::SysUTF8ToNSString(item.name)];
+      switch (item.id) {
+        case IDC_EDIT_MENU:
+          // Some (one) item is added by AppKit at end of the menu and we leave
+          // that alone.
+          for (NSMenuItem* item in [subMenu itemArray]) {
+            if ([item action] !=
+                    NSSelectorFromString(@"orderFrontCharacterPalette:")) {
+              [subMenu removeItem:item];
+            }
           }
-        }
-        [subMenu insertItem:[NSMenuItem separatorItem] atIndex:0];
-        editMenuLength = [subMenu numberOfItems];
-      }
-      if (isAppMenu) {
-        // Remove all but the Service menu and the 'Show All' entry. The service
-        // menu is the only sub menu.
-        for (NSMenuItem* item in [subMenu itemArray]) {
-          if (!item.hasSubmenu &&
-              [item action] !=
-                  NSSelectorFromString(@"unhideAllApplications:")) {
-            [subMenu removeItem:item];
+          index = 0; // Our items always start from the top of the menu.
+          break;
+        case IDC_BOOKMARKS_MENU:
+          // Special care for the bookmarks menu as we manage it two places.
+          // Here and in bookmark_menu_bridge.mm. Remove all items that have
+          // been created earlier by this function.
+          {
+            for (auto id: GetBookmarkMenuIds()) {
+              NSMenuItem* item = [subMenu itemWithTag:id];
+              if (item) {
+                long index = [subMenu indexOfItem:item];
+                [subMenu removeItemAtIndex:index];
+              }
+            }
+            GetBookmarkMenuIds().clear();
           }
-        }
-      }
-      if (isWindowMenu) {
-        // Remove tab entries & kSeparatorTag, those are dynamically added when
-        // there are changes.
-        for (NSMenuItem* item in [subMenu itemArray]) {
-          if (item.tag == IDC_VIV_ACTIVATE_TAB) {
-            [subMenu removeItem:item];
+          break;
+        case IDC_WINDOW_MENU:
+          // Special hardcoding for COMMAND_WINDOW_MINIMIZE which is mapped to
+          // IDC_VIV_MAC_MINIMIZE in menubar_api.cc due to random multiple
+          // minimize calls on some systems. Hardcoding here avoids a dummy
+          // element in mainmenu.json which would show up alongside in all the
+          // other element in Settings UI that can be configured which
+          // this one can not (adding it in vivaldi_main_menu_builder.mm fails
+          // as well).
+          {
+            NSMenuItem* item = [subMenu numberOfItems] > 0
+              ? [subMenu itemAtIndex:0] : nullptr;
+            if (!item || item.tag != IDC_VIV_MAC_MINIMIZE) {
+              std::string shortcut = "meta+m";
+              item = MakeMenuItem(
+                l10n_util::GetNSStringWithFixup(IDS_MINIMIZE_WINDOW_MAC),
+                &shortcut,
+                IDC_VIV_MAC_MINIMIZE);
+              AppController* appController =
+                  static_cast<AppController*>([NSApp delegate]);
+              [item setTarget:appController];
+              [subMenu insertItem:item atIndex:0];
+              [appController setVivaldiMenuItemAction:item];
+            }
           }
-        }
+
+          // This menu has issues on macOS 10.15+ (VB-58755)
+          // We remove all items we have added ourself and start adding after
+          // the "magic" separator with the kSeparatorTag value
+          // (see vivaldi_main_menu_builder.mm). This means we can not configure
+          // all of this menu.
+          index = [subMenu indexOfItem:[subMenu itemWithTag:kSeparatorTag]];
+          for (NSMenuItem* item in [subMenu itemArray]) {
+            // MacOS adds a window list at bottom. Items are tagged with 0.
+            if ([subMenu indexOfItem:item] > index && item.tag != 0) {
+              [subMenu removeItem:item];
+            }
+          }
+          index ++; // Start after the separator
+          break;
+        default:
+          [subMenu removeAllItems];
+          break;
       }
-      subMenu.title = title;
     } else {
+      NSString* title = base::SysUTF8ToNSString(item.name);
       subMenu = [[[NSMenu alloc] initWithTitle:title] autorelease];
       [menuItem setSubmenu:subMenu];
     }
 
-    for (std::vector<menubar::MenuItem>::const_iterator it =
-            item.items->begin();
-        it != item.items->end(); ++it) {
-      const menubar::MenuItem& child = *it;
-      long index = -1;
-      if (isAppMenu) {
-        // Add all our menu items before the service menu until we are about
-        // to add the 'hide vivaldi' entry. There we start to add after leaving
-        // the service menu in front.
-        // Next step one more to make room for the "Show All" entry that is to
-        // be shown after "hide others".
-        if (child.id == IDC_HIDE_APP) {
-          NSMenuItem* menuItem = [NSMenuItem separatorItem];
-          [subMenu insertItem:menuItem atIndex:appIndex + 1];
-          appIndex += 2;
-        }
-        PopulateMenu(child, subMenu, false, appIndex, faviconLoader);
-        if (child.id == IDC_VIV_HIDE_OTHERS) {
-          appIndex ++;
-        }
-        appIndex ++;
-        continue;
-      }
-      else if (isBookmarkMenu) {
-        NSMenuItem* item = [subMenu itemWithTag:child.id];
-        if (item) {
-          // Just update the item (we may have a new shortcut etc).
-          long index = [subMenu indexOfItem:item];
-          [subMenu removeItemAtIndex:index];
-          PopulateMenu(child, subMenu, false, index, faviconLoader);
-          continue;
-        } else {
-          // The bookmark content can already be populated. Test for menu
-          // size and insert item at given index if needed.
-          if (child.index && subMenu.numberOfItems > *child.index) {
-            index = *child.index;
-          }
+    if (item.id == IDC_BOOKMARKS_MENU) {
+      // Special care for the bookmarks menu as we manage it two places. Here
+      // and in bookmark_menu_bridge.mm. We only add UI menu items below.
+
+      // The menu currently only holds elements added in bookmark_menu_bridge.mm
+      int num_installed_bookmarks = subMenu.numberOfItems;
+      // Due to existing bookmark items in the menu.
+      int extra_index = 0;
+      // In the first pass we add all UI items to the menu.
+      for (const menubar::MenuItem& child: *item.items) {
+        GetBookmarkMenuIds().push_back(child.id);
+        index = *child.index + extra_index;
+        PopulateMenu(child, subMenu, false, index, faviconLoader, 0, 0);
+        if (child.id == IDC_VIV_BOOKMARK_CONTAINER) {
+          extra_index = num_installed_bookmarks;
         }
       }
-      else if (isEditMenu) {
-        // insert our menuitems between the top of the menu and the
-        // system menuitems that we left in the menu above.
-        index = [subMenu numberOfItems] - editMenuLength;
-        PopulateMenu(child, subMenu, false, index, faviconLoader);
-        continue;
+      // The second pass hands over information to chrome now that the items
+      // are in place.
+      for (const menubar::MenuItem& child: *item.items) {
+        if (child.id == IDC_VIV_BOOKMARK_CONTAINER) {
+          SetContainerState(extensions::vivaldi::menubar::ToString(child.edge),
+              *child.index);
+          break;
+        }
       }
-      else if (isWindowMenu) {
-        // Insert our open tab menuitems after the kSeparatorTag item,
-        // before the list of open windows.
-        NSMenuItem* item = [subMenu itemWithTag:kSeparatorTag];
-        long index = [subMenu indexOfItem:item] + 1;
-        PopulateMenu(child, subMenu, false, index, faviconLoader);
-        continue;
+    } else {
+      for (const menubar::MenuItem& child: *item.items) {
+        PopulateMenu(child, subMenu, false, index, faviconLoader, min_tag,
+                    max_tag);
+        if (index != -1) {
+          index ++;
+        }
       }
-      PopulateMenu(child, subMenu, false, index, faviconLoader);
     }
+
   }
 }
 
@@ -579,7 +621,9 @@ NSMenuItem* GetMenuItemByTag(NSMenu* menu, int tag) {
 void CreateVivaldiMainMenu(
     Profile* profile,
     std::vector<menubar::MenuItem>* items,
-    menubar::Mode mode) {
+    menubar::Mode mode,
+    int min_id,
+    int max_id) {
 
   NSMenu* mainMenu = [NSApp mainMenu];
   NSMenuItem* windowMenuItem = GetMenuItemByTag(mainMenu, IDC_WINDOW_MENU);
@@ -588,7 +632,9 @@ void CreateVivaldiMainMenu(
     if ([windowMenuItem hasSubmenu]) {
       g_window_menu_delegate =
         [[MainMenuDelegate alloc] initWithProfile:profile
-                                              tag:IDC_VIV_ACTIVATE_TAB];
+                                              tag:IDC_VIV_ACTIVATE_TAB
+                                              min_tag:min_id
+                                              max_tag:max_id];
       windowMenuItem.submenu.delegate = g_window_menu_delegate;
     }
   }
@@ -598,8 +644,27 @@ void CreateVivaldiMainMenu(
     [g_window_menu_delegate reset];
 
     FaviconLoaderMac* faviconLoader = [g_window_menu_delegate faviconLoader];
+    int index = 0;
     for (const menubar::MenuItem& item : *items) {
-      PopulateMenu(item, mainMenu, true, -1, faviconLoader);
+      PopulateMenu(item, mainMenu, true, index++, faviconLoader, min_id,
+                   max_id);
+    }
+    // In PopulateMenu we never remove any existing top level items so we do
+    // that here in case configuration has removed one or more.
+    for (int menubarIndex = 0; menubarIndex < [mainMenu numberOfItems]; ) {
+      NSMenuItem* menuItem = [mainMenu itemAtIndex:menubarIndex];
+      bool present = false;
+      for (const menubar::MenuItem& item : *items) {
+        if (item.id == menuItem.tag) {
+          present = true;
+          break;
+        }
+      }
+      if (!present) {
+        [mainMenu removeItem:menuItem];
+      } else {
+        menubarIndex ++;
+      }
     }
   } else if (mode == menubar::MODE_TABS) {
     [g_window_menu_delegate setMenuItems:items];

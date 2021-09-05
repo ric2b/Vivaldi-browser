@@ -19,30 +19,71 @@
 #include "ui/views/controls/styled_label.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/widget/widget.h"
-#include "ui/views/window/dialog_client_view.h"
+
+namespace {
+
+std::unique_ptr<views::ImageButton> CreateLearnMoreButton(
+    views::ButtonListener* listener) {
+  auto learn_more_button = views::CreateVectorImageButtonWithNativeTheme(
+      listener, vector_icons::kHelpOutlineIcon);
+  learn_more_button->SetAccessibleName(
+      l10n_util::GetStringUTF16(IDS_CHROMEOS_ACC_LEARN_MORE));
+  learn_more_button->SetFocusForPlatform();
+  return learn_more_button;
+}
+
+}  // namespace
 
 namespace chromeos {
 
-EchoDialogView::EchoDialogView(EchoDialogListener* listener)
-    : listener_(listener),
-      learn_more_button_(nullptr),
-      ok_button_label_id_(0),
-      cancel_button_label_id_(0) {
+EchoDialogView::EchoDialogView(EchoDialogListener* listener,
+                               const EchoDialogView::Params& params)
+    : listener_(listener) {
+  DCHECK(listener_);
+  learn_more_button_ =
+      DialogDelegate::SetExtraView(CreateLearnMoreButton(this));
   chrome::RecordDialogCreation(chrome::DialogIdentifier::ECHO);
+
+  if (params.echo_enabled) {
+    DialogDelegate::SetButtons(ui::DIALOG_BUTTON_OK |
+                                ui::DIALOG_BUTTON_CANCEL);
+    DialogDelegate::SetButtonLabel(
+        ui::DIALOG_BUTTON_OK,
+        l10n_util::GetStringUTF16(IDS_OFFERS_CONSENT_INFOBAR_ENABLE_BUTTON));
+    DialogDelegate::SetButtonLabel(
+        ui::DIALOG_BUTTON_CANCEL,
+        l10n_util::GetStringUTF16(IDS_OFFERS_CONSENT_INFOBAR_DISABLE_BUTTON));
+    InitForEnabledEcho(params.service_name, params.origin);
+  } else {
+    DialogDelegate::SetButtons(ui::DIALOG_BUTTON_CANCEL);
+    DialogDelegate::SetButtonLabel(
+        ui::DIALOG_BUTTON_CANCEL,
+        l10n_util::GetStringUTF16(IDS_ECHO_CONSENT_DISMISS_BUTTON));
+    InitForDisabledEcho();
+  }
+
+  DialogDelegate::SetAcceptCallback(base::BindOnce(
+      &EchoDialogListener::OnAccept, base::Unretained(listener_)));
+  DialogDelegate::SetCancelCallback(base::BindOnce(
+      &EchoDialogListener::OnCancel, base::Unretained(listener_)));
 }
 
 EchoDialogView::~EchoDialogView() = default;
 
+void EchoDialogView::Show(gfx::NativeWindow parent) {
+  views::DialogDelegate::CreateDialogWidget(this, parent, parent);
+  GetWidget()->SetSize(GetWidget()->GetRootView()->GetPreferredSize());
+  GetWidget()->Show();
+}
+
 void EchoDialogView::InitForEnabledEcho(const base::string16& service_name,
                                         const base::string16& origin) {
-  ok_button_label_id_ = IDS_OFFERS_CONSENT_INFOBAR_ENABLE_BUTTON;
-  cancel_button_label_id_ = IDS_OFFERS_CONSENT_INFOBAR_DISABLE_BUTTON;
 
   size_t offset;
   base::string16 text = l10n_util::GetStringFUTF16(IDS_ECHO_CONSENT_DIALOG_TEXT,
                                                    service_name, &offset);
 
-  views::StyledLabel* label = new views::StyledLabel(text, nullptr);
+  auto label = std::make_unique<views::StyledLabel>(text, nullptr);
 
   views::StyledLabel::RangeStyleInfo service_name_style;
   gfx::FontList font_list = label->GetDefaultFontList();
@@ -52,72 +93,18 @@ void EchoDialogView::InitForEnabledEcho(const base::string16& service_name,
   label->AddStyleRange(gfx::Range(offset, offset + service_name.length()),
                        service_name_style);
 
-  SetBorderAndLabel(label, font_list);
+  SetBorderAndLabel(std::move(label), font_list);
 }
 
 void EchoDialogView::InitForDisabledEcho() {
-  ok_button_label_id_ = 0;
-  cancel_button_label_id_ = IDS_ECHO_CONSENT_DISMISS_BUTTON;
-
-  views::Label* label = new views::Label(
+  auto label = std::make_unique<views::Label>(
       l10n_util::GetStringUTF16(IDS_ECHO_DISABLED_CONSENT_DIALOG_TEXT));
   label->SetMultiLine(true);
   label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
 
-  SetBorderAndLabel(label, label->font_list());
-}
-
-void EchoDialogView::Show(gfx::NativeWindow parent) {
-  DCHECK(cancel_button_label_id_);
-
-  views::DialogDelegate::CreateDialogWidget(this, parent, parent);
-  GetWidget()->SetSize(GetWidget()->GetRootView()->GetPreferredSize());
-  GetWidget()->Show();
-}
-
-std::unique_ptr<views::View> EchoDialogView::CreateExtraView() {
-  auto learn_more_button = views::CreateVectorImageButton(this);
-  views::SetImageFromVectorIcon(learn_more_button.get(),
-                                vector_icons::kHelpOutlineIcon);
-  learn_more_button->SetAccessibleName(
-      l10n_util::GetStringUTF16(IDS_CHROMEOS_ACC_LEARN_MORE));
-  learn_more_button->SetFocusForPlatform();
-  learn_more_button_ = learn_more_button.get();
-  return learn_more_button;
-}
-
-int EchoDialogView::GetDialogButtons() const {
-  int buttons = ui::DIALOG_BUTTON_NONE;
-  if (ok_button_label_id_)
-    buttons |= ui::DIALOG_BUTTON_OK;
-  if (cancel_button_label_id_)
-    buttons |= ui::DIALOG_BUTTON_CANCEL;
-  return buttons;
-}
-
-base::string16 EchoDialogView::GetDialogButtonLabel(
-    ui::DialogButton button) const {
-  if (button == ui::DIALOG_BUTTON_OK)
-    return l10n_util::GetStringUTF16(ok_button_label_id_);
-  if (button == ui::DIALOG_BUTTON_CANCEL)
-    return l10n_util::GetStringUTF16(cancel_button_label_id_);
-  return base::string16();
-}
-
-bool EchoDialogView::Cancel() {
-  if (listener_) {
-    listener_->OnCancel();
-    listener_ = nullptr;
-  }
-  return true;
-}
-
-bool EchoDialogView::Accept() {
-  if (listener_) {
-    listener_->OnAccept();
-    listener_ = nullptr;
-  }
-  return true;
+  // grab the font list before std::move(label) or it'll be nullptr
+  gfx::FontList font_list = label->font_list();
+  SetBorderAndLabel(std::move(label), font_list);
 }
 
 ui::ModalType EchoDialogView::GetModalType() const {
@@ -132,13 +119,6 @@ bool EchoDialogView::ShouldShowCloseButton() const {
   return false;
 }
 
-void EchoDialogView::ButtonPressed(views::Button* sender,
-                                   const ui::Event& event) {
-  if (!listener_ || sender != learn_more_button_)
-    return;
-  listener_->OnMoreInfoLinkClicked();
-}
-
 gfx::Size EchoDialogView::CalculatePreferredSize() const {
   const int default_width = views::LayoutProvider::Get()->GetDistanceMetric(
       DISTANCE_MODAL_DIALOG_PREFERRED_WIDTH);
@@ -147,7 +127,13 @@ gfx::Size EchoDialogView::CalculatePreferredSize() const {
       GetLayoutManager()->GetPreferredHeightForWidth(this, default_width));
 }
 
-void EchoDialogView::SetBorderAndLabel(views::View* label,
+void EchoDialogView::ButtonPressed(views::Button* sender,
+                                   const ui::Event& event) {
+  DCHECK(sender == learn_more_button_);
+  listener_->OnMoreInfoLinkClicked();
+}
+
+void EchoDialogView::SetBorderAndLabel(std::unique_ptr<views::View> label,
                                        const gfx::FontList& label_font_list) {
   SetLayoutManager(std::make_unique<views::FillLayout>());
 
@@ -163,7 +149,7 @@ void EchoDialogView::SetBorderAndLabel(views::View* label,
   insets += gfx::Insets(top_inset_padding, 0, 0, 0);
   SetBorder(views::CreateEmptyBorder(insets));
 
-  AddChildView(label);
+  AddChildView(std::move(label));
 }
 
 }  // namespace chromeos

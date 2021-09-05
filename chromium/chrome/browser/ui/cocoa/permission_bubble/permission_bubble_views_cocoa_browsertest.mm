@@ -4,9 +4,9 @@
 
 #include <memory>
 
-#include "chrome/browser/permissions/permission_request_manager_test_api.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands_mac.h"
+#include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_context.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
@@ -14,6 +14,7 @@
 #include "chrome/browser/ui/permission_bubble/permission_bubble_browser_test_util.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/permission_bubble/permission_prompt_impl.h"
+#include "chrome/test/permissions/permission_request_manager_test_api.h"
 #import "testing/gtest_mac.h"
 #include "ui/base/test/scoped_fake_nswindow_fullscreen.h"
 
@@ -28,7 +29,7 @@ void ShowBubble(Browser* browser) {
       std::make_unique<test::PermissionRequestManagerTestApi>(browser);
   EXPECT_TRUE(test_api->manager());
 
-  test_api->AddSimpleRequest(CONTENT_SETTINGS_TYPE_GEOLOCATION);
+  test_api->AddSimpleRequest(ContentSettingsType::GEOLOCATION);
 
   // The PermissionRequestManager displays prompts asynchronously.
   EXPECT_FALSE(test_api->GetPromptWindow());
@@ -74,11 +75,15 @@ IN_PROC_BROWSER_TEST_F(PermissionBubbleBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(PermissionBubbleBrowserTest, AppHasNoLocationBar) {
-  Browser* app_browser = OpenExtensionAppWindow();
+  content::WebContents* app_contents = OpenExtensionAppWindow();
+
+  Browser* app_browser = chrome::FindBrowserWithWebContents(app_contents);
+  ASSERT_TRUE(app_browser->is_type_app());
+
   // ShowBubble(app_browser) doesn't actually show a bubble for extension app
   // windows, so create one directly.
-  auto prompt =
-      std::make_unique<PermissionPromptImpl>(app_browser, test_delegate());
+  auto prompt = std::make_unique<PermissionPromptImpl>(
+      app_browser, app_contents, test_delegate());
   EXPECT_FALSE(HasVisibleLocationBarForBrowser(app_browser));
 }
 

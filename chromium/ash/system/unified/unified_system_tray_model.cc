@@ -72,9 +72,9 @@ void UnifiedSystemTrayModel::DBusObserver::KeyboardBrightnessChanged(
           power_manager::BacklightBrightnessChange_Cause_USER_REQUEST);
 }
 
-UnifiedSystemTrayModel::UnifiedSystemTrayModel()
+UnifiedSystemTrayModel::UnifiedSystemTrayModel(views::View* owner_view)
     : dbus_observer_(std::make_unique<DBusObserver>(this)),
-      pagination_model_(std::make_unique<PaginationModel>(nullptr)) {}
+      pagination_model_(std::make_unique<PaginationModel>(owner_view)) {}
 
 UnifiedSystemTrayModel::~UnifiedSystemTrayModel() = default;
 
@@ -87,8 +87,12 @@ void UnifiedSystemTrayModel::RemoveObserver(Observer* observer) {
 }
 
 bool UnifiedSystemTrayModel::IsExpandedOnOpen() const {
-  return expanded_on_open_ ||
+  return expanded_on_open_ != StateOnOpen::COLLAPSED ||
          Shell::Get()->accessibility_controller()->spoken_feedback_enabled();
+}
+
+bool UnifiedSystemTrayModel::IsExplicitlyExpanded() const {
+  return expanded_on_open_ == StateOnOpen::EXPANDED;
 }
 
 base::Optional<bool> UnifiedSystemTrayModel::GetNotificationExpanded(

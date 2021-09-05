@@ -20,8 +20,8 @@
 #include "media/mojo/mojom/content_decryption_module.mojom.h"
 #include "media/mojo/services/mojo_cdm_service.h"
 #include "media/mojo/services/mojo_cdm_service_context.h"
-#include "mojo/public/cpp/bindings/interface_request.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/receiver.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -73,17 +73,13 @@ class MojoCdmTest : public ::testing::Test {
       : mojo_cdm_service_(
             std::make_unique<MojoCdmService>(&cdm_factory_,
                                              &mojo_cdm_service_context_)),
-        cdm_binding_(mojo_cdm_service_.get()) {}
+        cdm_receiver_(mojo_cdm_service_.get()) {}
 
   ~MojoCdmTest() override = default;
 
   void Initialize(ExpectedResult expected_result) {
     // TODO(xhwang): Add pending init support.
     DCHECK_NE(PENDING, expected_result);
-
-    mojo::PendingRemote<mojom::ContentDecryptionModule> remote_cdm;
-
-    cdm_binding_.Bind(remote_cdm.InitWithNewPipeAndPassReceiver());
 
     std::string key_system;
     if (expected_result == CONNECTION_ERROR_BEFORE) {
@@ -96,13 +92,14 @@ class MojoCdmTest : public ::testing::Test {
       if (expected_result == CONNECTION_ERROR_DURING) {
         // Create() will be successful, so provide a callback that will break
         // the connection before returning the CDM.
-        cdm_factory_.SetBeforeCreationCB(base::Bind(
+        cdm_factory_.SetBeforeCreationCB(base::BindRepeating(
             &MojoCdmTest::ForceConnectionError, base::Unretained(this)));
       }
     }
 
     MojoCdm::Create(key_system, url::Origin::Create(GURL(kTestSecurityOrigin)),
-                    CdmConfig(), std::move(remote_cdm), nullptr,
+                    CdmConfig(), cdm_receiver_.BindNewPipeAndPassRemote(),
+                    nullptr,
                     base::Bind(&MockCdmClient::OnSessionMessage,
                                base::Unretained(&cdm_client_)),
                     base::Bind(&MockCdmClient::OnSessionClosed,
@@ -111,8 +108,8 @@ class MojoCdmTest : public ::testing::Test {
                                base::Unretained(&cdm_client_)),
                     base::Bind(&MockCdmClient::OnSessionExpirationUpdate,
                                base::Unretained(&cdm_client_)),
-                    base::Bind(&MojoCdmTest::OnCdmCreated,
-                               base::Unretained(this), expected_result));
+                    base::BindOnce(&MojoCdmTest::OnCdmCreated,
+                                   base::Unretained(this), expected_result));
     base::RunLoop().RunUntilIdle();
   }
 
@@ -134,7 +131,7 @@ class MojoCdmTest : public ::testing::Test {
   }
 
   void ForceConnectionError() {
-    cdm_binding_.CloseWithReason(2, "Test closed connection.");
+    cdm_receiver_.ResetWithReason(2, "Test closed connection.");
     base::RunLoop().RunUntilIdle();
   }
 
@@ -375,7 +372,7 @@ class MojoCdmTest : public ::testing::Test {
   std::unique_ptr<NewSessionCdmPromise> pending_new_session_cdm_promise_;
 
   std::unique_ptr<MojoCdmService> mojo_cdm_service_;
-  mojo::Binding<mojom::ContentDecryptionModule> cdm_binding_;
+  mojo::Receiver<mojom::ContentDecryptionModule> cdm_receiver_;
   scoped_refptr<ContentDecryptionModule> mojo_cdm_;
 
  private:
@@ -613,6 +610,17 @@ TEST_F(MojoCdmTest, SessionKeysChangeCB_Success) {
   remote_cdm_->CallSessionKeysChangeCB(session_id, has_additional_usable_key,
                                        std::move(keys_info));
   base::RunLoop().RunUntilIdle();
+}
+
+// TODO(xhwang): Refactor MockCdmFactory to mock CdmFactory::Create() so that we
+// can set expectations and default actions on the created MockCdm, e.g. return
+// a non-null Decryptor to test the HasDecryptor case.
+TEST_F(MojoCdmTest, NoDecryptor) {
+  Initialize(SUCCESS);
+  auto* cdm_context = mojo_cdm_->GetCdmContext();
+  EXPECT_TRUE(cdm_context) << "All CDMs should support CdmContext";
+  auto* decryptor = cdm_context->GetDecryptor();
+  EXPECT_FALSE(decryptor);
 }
 
 }  // namespace media

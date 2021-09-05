@@ -16,12 +16,11 @@ namespace {
 class SchemeHostPortTest : public testing::Test {
  public:
   SchemeHostPortTest() = default;
-  ~SchemeHostPortTest() override {
-    // Reset any added schemes.
-    url::ResetForTests();
-  }
+  ~SchemeHostPortTest() override = default;
 
  private:
+  url::ScopedSchemeRegistryForTests scoped_registry_;
+
   DISALLOW_COPY_AND_ASSIGN(SchemeHostPortTest);
 };
 
@@ -52,7 +51,7 @@ TEST_F(SchemeHostPortTest, Invalid) {
   EXPECT_EQ("", invalid.scheme());
   EXPECT_EQ("", invalid.host());
   EXPECT_EQ(0, invalid.port());
-  EXPECT_TRUE(invalid.IsInvalid());
+  EXPECT_FALSE(invalid.IsValid());
   EXPECT_EQ(invalid, invalid);
 
   const char* urls[] = {
@@ -76,7 +75,7 @@ TEST_F(SchemeHostPortTest, Invalid) {
     EXPECT_EQ("", tuple.scheme());
     EXPECT_EQ("", tuple.host());
     EXPECT_EQ(0, tuple.port());
-    EXPECT_TRUE(tuple.IsInvalid());
+    EXPECT_FALSE(tuple.IsValid());
     EXPECT_EQ(tuple, tuple);
     EXPECT_EQ(tuple, invalid);
     EXPECT_EQ(invalid, tuple);
@@ -105,7 +104,7 @@ TEST_F(SchemeHostPortTest, ExplicitConstruction) {
     EXPECT_EQ(test.scheme, tuple.scheme());
     EXPECT_EQ(test.host, tuple.host());
     EXPECT_EQ(test.port, tuple.port());
-    EXPECT_FALSE(tuple.IsInvalid());
+    EXPECT_TRUE(tuple.IsValid());
     EXPECT_EQ(tuple, tuple);
     ExpectParsedUrlsEqual(GURL(tuple.Serialize()), tuple.GetURL());
   }
@@ -141,7 +140,7 @@ TEST_F(SchemeHostPortTest, InvalidConstruction) {
     EXPECT_EQ("", tuple.scheme());
     EXPECT_EQ("", tuple.host());
     EXPECT_EQ(0, tuple.port());
-    EXPECT_TRUE(tuple.IsInvalid());
+    EXPECT_FALSE(tuple.IsValid());
     EXPECT_EQ(tuple, tuple);
     ExpectParsedUrlsEqual(GURL(tuple.Serialize()), tuple.GetURL());
   }
@@ -170,7 +169,7 @@ TEST_F(SchemeHostPortTest, InvalidConstructionWithEmbeddedNulls) {
     EXPECT_EQ("", tuple.scheme());
     EXPECT_EQ("", tuple.host());
     EXPECT_EQ(0, tuple.port());
-    EXPECT_TRUE(tuple.IsInvalid());
+    EXPECT_FALSE(tuple.IsValid());
     ExpectParsedUrlsEqual(GURL(tuple.Serialize()), tuple.GetURL());
   }
 }
@@ -205,7 +204,7 @@ TEST_F(SchemeHostPortTest, GURLConstruction) {
     EXPECT_EQ(test.scheme, tuple.scheme());
     EXPECT_EQ(test.host, tuple.host());
     EXPECT_EQ(test.port, tuple.port());
-    EXPECT_FALSE(tuple.IsInvalid());
+    EXPECT_TRUE(tuple.IsValid());
     EXPECT_EQ(tuple, tuple);
     ExpectParsedUrlsEqual(GURL(tuple.Serialize()), tuple.GetURL());
   }

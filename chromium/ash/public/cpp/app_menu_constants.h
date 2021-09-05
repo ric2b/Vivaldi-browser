@@ -16,7 +16,7 @@ namespace ash {
 // Context Menu launch. Delay deprecating these because it will disrupt
 // histograms. https://crbug.com/854433
 enum CommandId {
-  // Used by LauncherContextMenu.
+  // Used by ShelfContextMenu.
   MENU_OPEN_NEW = 0,
   MENU_CLOSE = 1,
   MENU_PIN = 2,
@@ -34,7 +34,14 @@ enum CommandId {
   CROSTINI_USE_LOW_DENSITY = 10,
   CROSTINI_USE_HIGH_DENSITY = 11,
 
-  // Used by AppContextMenu.
+  // Allow reordering of shelf items with the keyboard. Only used for shelf.
+  SWAP_WITH_NEXT = 12,
+  SWAP_WITH_PREVIOUS = 13,
+
+  // Used by ShelfContextMenu.
+  LAUNCH_TYPE_TABBED_WINDOW = 20,
+
+  // Used by AppContextMenu and/or ShelfContextMenu.
   LAUNCH_NEW = 100,
   TOGGLE_PIN = 101,
   SHOW_APP_INFO = 102,
@@ -44,20 +51,22 @@ enum CommandId {
   APP_CONTEXT_MENU_NEW_WINDOW = 106,
   APP_CONTEXT_MENU_NEW_INCOGNITO_WINDOW = 107,
   INSTALL = 108,
+  SETTINGS = 109,
   USE_LAUNCH_TYPE_COMMAND_START = 200,
   USE_LAUNCH_TYPE_PINNED = USE_LAUNCH_TYPE_COMMAND_START,
   USE_LAUNCH_TYPE_REGULAR = 201,
   USE_LAUNCH_TYPE_FULLSCREEN = 202,
   USE_LAUNCH_TYPE_WINDOW = 203,
+  USE_LAUNCH_TYPE_TABBED_WINDOW = 204,
   USE_LAUNCH_TYPE_COMMAND_END,
 
   // Range of command ids reserved for launching app shortcuts from context
-  // menu for Android app. Used by AppContextMenu and LauncherContextMenu.
+  // menu for Android app. Used by AppContextMenu and ShelfContextMenu.
   LAUNCH_APP_SHORTCUT_FIRST = 1000,
   LAUNCH_APP_SHORTCUT_LAST = 1999,
 
   // Command for stopping an app, or stopping a VM via an associated app. Used
-  // by AppContextMenu and LauncherContextMenu.
+  // by AppContextMenu and ShelfContextMenu.
   STOP_APP = 2000,
 
   // Reserved range for extension/app custom menus as defined by

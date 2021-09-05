@@ -29,8 +29,8 @@ class NotesAPI : public BrowserContextKeyedAPI,
   // vivaldi::NotesModelObserver:
   // TODO(pettern): Wire up the other notifications to send events
   // instead of sending them explicitly.
-  void ExtensiveNotesChangesBeginning(::vivaldi::Notes_Model* model) override;
-  void ExtensiveNotesChangesEnded(::vivaldi::Notes_Model* model) override;
+  void ExtensiveNotesChangesBeginning(::vivaldi::NotesModel* model) override;
+  void ExtensiveNotesChangesEnded(::vivaldi::NotesModel* model) override;
 
  private:
   friend class BrowserContextKeyedAPIFactory<NotesAPI>;
@@ -38,7 +38,7 @@ class NotesAPI : public BrowserContextKeyedAPI,
   content::BrowserContext* browser_context_;
 
   // Initialized lazily upon the first OnListenerAdded.
-  ::vivaldi::Notes_Model* model_ = nullptr;
+  ::vivaldi::NotesModel* model_ = nullptr;
 
   // BrowserContextKeyedAPI implementation.
   static const char* service_name() { return "NotesAPI"; }
@@ -69,11 +69,11 @@ class NotesGetTreeFunction : public ExtensionFunction,
   ExtensionFunction::ResponseAction Run() override;
 
  private:
-  void NotesModelLoaded(::vivaldi::Notes_Model* model,
+  void NotesModelLoaded(::vivaldi::NotesModel* model,
                         bool ids_reassigned) override;
-  void NotesModelBeingDeleted(::vivaldi::Notes_Model* model) override;
+  void NotesModelBeingDeleted(::vivaldi::NotesModel* model) override;
 
-  void SendGetTreeResponse(::vivaldi::Notes_Model* model);
+  void SendGetTreeResponse(::vivaldi::NotesModel* model);
 };
 
 class NotesMoveFunction : public ExtensionFunction {

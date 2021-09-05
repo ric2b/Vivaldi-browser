@@ -7,7 +7,7 @@ package org.chromium.chrome.browser.translate;
 import android.text.TextUtils;
 
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.util.UrlConstants;
+import org.chromium.components.embedder_support.util.UrlConstants;
 
 import org.chromium.chrome.browser.ChromeApplication;
 
@@ -21,7 +21,7 @@ public class TranslateUtils {
      */
     public static boolean canTranslateCurrentTab(Tab tab) {
         if (ChromeApplication.isVivaldi()) return false;
-        String url = tab.getUrl();
+        String url = tab.getUrlString();
         boolean isChromeScheme = url.startsWith(UrlConstants.CHROME_URL_PREFIX)
                 || url.startsWith(UrlConstants.CHROME_NATIVE_URL_PREFIX);
         boolean isFileScheme = url.startsWith(UrlConstants.FILE_URL_PREFIX);

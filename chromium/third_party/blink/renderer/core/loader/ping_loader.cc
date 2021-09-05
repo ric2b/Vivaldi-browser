@@ -31,6 +31,8 @@
 
 #include "third_party/blink/renderer/core/loader/ping_loader.h"
 
+#include "base/feature_list.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/fileapi/file.h"
@@ -39,6 +41,7 @@
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/html/forms/form_data.h"
 #include "third_party/blink/renderer/core/typed_arrays/dom_array_buffer_view.h"
+#include "third_party/blink/renderer/platform/loader/cors/cors.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_context.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_initiator_type_names.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_utils.h"
@@ -101,46 +104,59 @@ class BeaconBlob final : public Beacon {
     DCHECK(data_);
 
     scoped_refptr<EncodedFormData> entity_body = EncodedFormData::Create();
-    if (data_->HasBackingFile())
-      entity_body->AppendFile(To<File>(data_.Get())->GetPath());
-    else
+    if (data_->HasBackingFile()) {
+      entity_body->AppendFile(To<File>(data_)->GetPath(),
+                              To<File>(data_)->LastModifiedTime());
+    } else {
       entity_body->AppendBlob(data_->Uuid(), data_->GetBlobDataHandle());
+    }
 
     request.SetHttpBody(std::move(entity_body));
 
-    if (!content_type_.IsEmpty())
+    if (!content_type_.IsEmpty()) {
+      if (!cors::IsCorsSafelistedContentType(content_type_)) {
+        request.SetMode(network::mojom::blink::RequestMode::kCors);
+      }
       request.SetHTTPContentType(content_type_);
+    }
   }
 
   const AtomicString GetContentType() const override { return content_type_; }
 
  private:
-  const Member<Blob> data_;
+  Blob* const data_;
   AtomicString content_type_;
 };
 
 class BeaconDOMArrayBufferView final : public Beacon {
  public:
-  explicit BeaconDOMArrayBufferView(DOMArrayBufferView* data) : data_(data) {}
+  explicit BeaconDOMArrayBufferView(DOMArrayBufferView* data) : data_(data) {
+    CHECK(base::CheckedNumeric<wtf_size_t>(data->byteLengthAsSizeT()).IsValid())
+        << "EncodedFormData::Create cannot deal with huge ArrayBuffers.";
+  }
 
-  uint64_t size() const override { return data_->byteLength(); }
+  uint64_t size() const override { return data_->byteLengthAsSizeT(); }
 
   void Serialize(ResourceRequest& request) const override {
     DCHECK(data_);
 
-    scoped_refptr<EncodedFormData> entity_body =
-        EncodedFormData::Create(data_->BaseAddress(), data_->byteLength());
+    scoped_refptr<EncodedFormData> entity_body = EncodedFormData::Create(
+        data_->BaseAddress(),
+        base::checked_cast<wtf_size_t>(data_->byteLengthAsSizeT()));
     request.SetHttpBody(std::move(entity_body));
 
-    // FIXME: a reasonable choice, but not in the spec; should it give a
-    // default?
-    request.SetHTTPContentType(AtomicString("application/octet-stream"));
+    if (!base::FeatureList::IsEnabled(
+            features::kSuppressContentTypeForBeaconMadeWithArrayBufferView)) {
+      // FIXME: a reasonable choice, but not in the spec; should it give a
+      // default?
+      request.SetHTTPContentType(AtomicString("application/octet-stream"));
+    }
   }
 
   const AtomicString GetContentType() const override { return g_null_atom; }
 
  private:
-  const Member<DOMArrayBufferView> data_;
+  DOMArrayBufferView* const data_;
 };
 
 class BeaconFormData final : public Beacon {
@@ -161,7 +177,7 @@ class BeaconFormData final : public Beacon {
   const AtomicString GetContentType() const override { return content_type_; }
 
  private:
-  const Member<FormData> data_;
+  FormData* const data_;
   scoped_refptr<EncodedFormData> entity_body_;
   AtomicString content_type_;
 };
@@ -184,7 +200,7 @@ bool SendBeaconCommon(LocalFrame* frame,
   request.SetKeepalive(true);
   request.SetRequestContext(mojom::RequestContextType::BEACON);
   beacon.Serialize(request);
-  FetchParameters params(request);
+  FetchParameters params(std::move(request));
   // The spec says:
   //  - If mimeType is not null:
   //   - If mimeType value is a CORS-safelisted request-header value for the
@@ -226,16 +242,14 @@ void PingLoader::SendLinkAuditPing(LocalFrame* frame,
   }
 
   request.SetKeepalive(true);
-  // TODO(domfarolino): Add WPTs ensuring that pings do not have a referrer
-  // header.
   request.SetReferrerString(Referrer::NoReferrer());
   request.SetReferrerPolicy(network::mojom::ReferrerPolicy::kNever);
   request.SetRequestContext(mojom::RequestContextType::PING);
-  FetchParameters params(request);
+  FetchParameters params(std::move(request));
   params.MutableOptions().initiator_info.name =
       fetch_initiator_type_names::kPing;
 
-  frame->Client()->DidDispatchPingLoader(request.Url());
+  frame->Client()->DidDispatchPingLoader(ping_url);
   RawResource::Fetch(params, frame->GetDocument()->Fetcher(), nullptr);
 }
 
@@ -249,13 +263,14 @@ void PingLoader::SendViolationReport(LocalFrame* frame,
   request.SetHttpBody(std::move(report));
   request.SetCredentialsMode(network::mojom::CredentialsMode::kSameOrigin);
   request.SetRequestContext(mojom::RequestContextType::CSP_REPORT);
+  request.SetRequestDestination(network::mojom::RequestDestination::kReport);
   request.SetRequestorOrigin(frame->GetDocument()->GetSecurityOrigin());
   request.SetRedirectMode(network::mojom::RedirectMode::kError);
-  FetchParameters params(request);
+  FetchParameters params(std::move(request));
   params.MutableOptions().initiator_info.name =
       fetch_initiator_type_names::kViolationreport;
 
-  frame->Client()->DidDispatchPingLoader(request.Url());
+  frame->Client()->DidDispatchPingLoader(report_url);
   RawResource::Fetch(params, frame->GetDocument()->Fetcher(), nullptr);
 }
 

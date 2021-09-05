@@ -294,7 +294,7 @@ bool AccessibilityFocusablePredicate(BrowserAccessibility* start,
 
 bool AccessibilityGraphicPredicate(BrowserAccessibility* start,
                                    BrowserAccessibility* node) {
-  return ui::IsImage(node->GetRole());
+  return ui::IsImageOrVideo(node->GetRole());
 }
 
 bool AccessibilityHeadingPredicate(BrowserAccessibility* start,
@@ -412,6 +412,11 @@ bool AccessibilityMediaPredicate(BrowserAccessibility* start,
   const std::string& tag =
       node->GetStringAttribute(ax::mojom::StringAttribute::kHtmlTag);
   return tag == "audio" || tag == "video";
+}
+
+bool AccessibilityPopupButtonPredicate(BrowserAccessibility* start,
+                                       BrowserAccessibility* node) {
+  return (node->GetRole() == ax::mojom::Role::kPopUpButton);
 }
 
 bool AccessibilityRadioButtonPredicate(BrowserAccessibility* start,

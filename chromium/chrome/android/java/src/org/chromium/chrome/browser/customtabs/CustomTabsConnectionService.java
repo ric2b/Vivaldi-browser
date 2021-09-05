@@ -14,9 +14,9 @@ import androidx.annotation.Nullable;
 import androidx.browser.customtabs.CustomTabsService;
 import androidx.browser.customtabs.CustomTabsSessionToken;
 
-import org.chromium.chrome.browser.browserservices.Origin;
 import org.chromium.chrome.browser.firstrun.FirstRunFlowSequencer;
 import org.chromium.chrome.browser.init.ProcessInitializationHandler;
+import org.chromium.components.embedder_support.util.Origin;
 
 import java.util.List;
 
@@ -82,7 +82,9 @@ public class CustomTabsConnectionService extends CustomTabsService {
     @Override
     protected boolean requestPostMessageChannel(CustomTabsSessionToken sessionToken,
             Uri postMessageOrigin) {
-        return mConnection.requestPostMessageChannel(sessionToken, new Origin(postMessageOrigin));
+        Origin origin = Origin.create(postMessageOrigin);
+        if (origin == null) return false;
+        return mConnection.requestPostMessageChannel(sessionToken, origin);
     }
 
     @Override
@@ -94,8 +96,10 @@ public class CustomTabsConnectionService extends CustomTabsService {
 
     @Override
     protected boolean validateRelationship(
-            CustomTabsSessionToken sessionToken, int relation, Uri origin, Bundle extras) {
-        return mConnection.validateRelationship(sessionToken, relation, new Origin(origin), extras);
+            CustomTabsSessionToken sessionToken, int relation, Uri originAsUri, Bundle extras) {
+        Origin origin = Origin.create(originAsUri);
+        if (origin == null) return false;
+        return mConnection.validateRelationship(sessionToken, relation, origin, extras);
     }
 
     @Override

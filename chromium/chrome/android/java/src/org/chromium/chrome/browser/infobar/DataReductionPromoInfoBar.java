@@ -14,10 +14,12 @@ import androidx.annotation.DrawableRes;
 import org.chromium.base.CommandLine;
 import org.chromium.base.ThreadUtils;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.about_settings.AboutSettingsBridge;
 import org.chromium.chrome.browser.datareduction.DataReductionPromoUtils;
 import org.chromium.chrome.browser.omaha.VersionNumberGetter;
-import org.chromium.chrome.browser.preferences.PrefServiceBridge;
-import org.chromium.chrome.browser.util.UrlConstants;
+import org.chromium.chrome.browser.ui.messages.infobar.InfoBarControlLayout;
+import org.chromium.chrome.browser.ui.messages.infobar.InfoBarLayout;
+import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.net.GURLUtils;
 
@@ -25,6 +27,8 @@ import java.net.HttpURLConnection;
 import java.sql.Date;
 import java.util.Calendar;
 import java.util.TimeZone;
+
+import org.chromium.chrome.browser.ChromeApplication;
 
 /**
  * Generates an infobar to promote the data reduction proxy to non-users of it. The infobar contains
@@ -48,6 +52,8 @@ public class DataReductionPromoInfoBar extends ConfirmInfoBar {
         // This switch is only used for testing so let it override every other check.
         if (CommandLine.getInstance().hasSwitch(FORCE_INFOBAR_SWITCH)) return true;
 
+        if (ChromeApplication.isVivaldi()) return false;
+
         if (webContents.isIncognito()) return false;
         if (isErrorPage) return false;
         if (isFragmentNavigation) return false;
@@ -68,7 +74,7 @@ public class DataReductionPromoInfoBar extends ConfirmInfoBar {
         if (!GURLUtils.getScheme(url).equals(UrlConstants.HTTP_SCHEME)) return false;
 
         int currentMilestone = VersionNumberGetter.getMilestoneFromVersionNumber(
-                PrefServiceBridge.getInstance().getAboutVersionStrings().getApplicationVersion());
+                AboutSettingsBridge.getApplicationVersion());
         String freOrSecondRunVersion =
                 DataReductionPromoUtils.getDisplayedFreOrSecondRunPromoVersion();
 
@@ -120,6 +126,8 @@ public class DataReductionPromoInfoBar extends ConfirmInfoBar {
     public static boolean maybeLaunchPromoInfoBar(Context context, WebContents webContents,
             String url, boolean isErrorPage, boolean isFragmentNavigation, int statusCode) {
         ThreadUtils.assertOnUiThread();
+
+        if (ChromeApplication.isVivaldi()) return false;
 
         if (!shouldLaunchPromoInfoBar(
                     context, webContents, url, isErrorPage, isFragmentNavigation, statusCode)) {

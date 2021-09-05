@@ -55,6 +55,16 @@ Time GetLastUpdateTime(const DeviceInfoSpecifics& specifics) {
   }
 }
 
+TimeDelta GetPulseIntervalFromSpecifics(const DeviceInfoSpecifics& specifics) {
+  if (specifics.has_pulse_interval_in_minutes()) {
+    return TimeDelta::FromMinutes(specifics.pulse_interval_in_minutes());
+  }
+  // If the interval is not set on the specifics it must be an old device, so we
+  // fall back to the value used by old devices. We really do not want to use
+  // the default int value of 0.
+  return TimeDelta::FromDays(1);
+}
+
 base::Optional<DeviceInfo::SharingInfo> SpecificsToSharingInfo(
     const DeviceInfoSpecifics& specifics) {
   if (!specifics.has_sharing_fields()) {
@@ -65,10 +75,14 @@ base::Optional<DeviceInfo::SharingInfo> SpecificsToSharingInfo(
   for (int i = 0; i < specifics.sharing_fields().enabled_features_size(); ++i) {
     enabled_features.insert(specifics.sharing_fields().enabled_features(i));
   }
-  return DeviceInfo::SharingInfo(specifics.sharing_fields().fcm_token(),
-                                 specifics.sharing_fields().p256dh(),
-                                 specifics.sharing_fields().auth_secret(),
-                                 std::move(enabled_features));
+  return DeviceInfo::SharingInfo(
+      {specifics.sharing_fields().vapid_fcm_token(),
+       specifics.sharing_fields().vapid_p256dh(),
+       specifics.sharing_fields().vapid_auth_secret()},
+      {specifics.sharing_fields().sender_id_fcm_token_v2(),
+       specifics.sharing_fields().sender_id_p256dh_v2(),
+       specifics.sharing_fields().sender_id_auth_secret_v2()},
+      std::move(enabled_features));
 }
 
 // Converts DeviceInfoSpecifics into a freshly allocated DeviceInfo.
@@ -83,6 +97,7 @@ std::unique_ptr<DeviceInfo> SpecificsToModel(
       specifics.chrome_version(), specifics.sync_user_agent(),
       specifics.device_type(), specifics.signin_scoped_device_id(),
       hardware_info, ProtoTimeToTime(specifics.last_updated_timestamp()),
+      GetPulseIntervalFromSpecifics(specifics),
       specifics.feature_fields().send_tab_to_self_receiving_enabled(),
       SpecificsToSharingInfo(specifics));
 }
@@ -113,6 +128,7 @@ std::unique_ptr<DeviceInfoSpecifics> MakeLocalDeviceSpecifics(
   // timestamp to now.
   DCHECK(info.last_updated_timestamp() == base::Time());
   specifics->set_last_updated_timestamp(TimeToProtoTime(Time::Now()));
+  specifics->set_pulse_interval_in_minutes(info.pulse_interval().InMinutes());
 
   FeatureSpecificFields* feature_fields = specifics->mutable_feature_fields();
   feature_fields->set_send_tab_to_self_receiving_enabled(
@@ -122,9 +138,17 @@ std::unique_ptr<DeviceInfoSpecifics> MakeLocalDeviceSpecifics(
       info.sharing_info();
   if (sharing_info) {
     SharingSpecificFields* sharing_fields = specifics->mutable_sharing_fields();
-    sharing_fields->set_fcm_token(sharing_info->fcm_token);
-    sharing_fields->set_p256dh(sharing_info->p256dh);
-    sharing_fields->set_auth_secret(sharing_info->auth_secret);
+    sharing_fields->set_vapid_fcm_token(
+        sharing_info->vapid_target_info.fcm_token);
+    sharing_fields->set_vapid_p256dh(sharing_info->vapid_target_info.p256dh);
+    sharing_fields->set_vapid_auth_secret(
+        sharing_info->vapid_target_info.auth_secret);
+    sharing_fields->set_sender_id_fcm_token_v2(
+        sharing_info->sender_id_target_info.fcm_token);
+    sharing_fields->set_sender_id_p256dh_v2(
+        sharing_info->sender_id_target_info.p256dh);
+    sharing_fields->set_sender_id_auth_secret_v2(
+        sharing_info->sender_id_target_info.auth_secret);
     for (sync_pb::SharingSpecificFields::EnabledFeatures feature :
          sharing_info->enabled_features) {
       sharing_fields->add_enabled_features(feature);
@@ -528,6 +552,10 @@ void DeviceInfoSyncBridge::OnReadAllMetadata(
     return;
   }
 
+  // If OnSyncStarting() was already called then cache GUID must be the same.
+  // Otherwise IsTrackingMetadata would return false due to cache GUID mismatch.
+  DCHECK(local_cache_guid_.empty() ||
+         local_cache_guid_ == local_cache_guid_in_metadata);
   // If sync already enabled (usual case without data corruption), we can
   // initialize the provider immediately.
   local_cache_guid_ = local_cache_guid_in_metadata;
@@ -587,7 +615,7 @@ void DeviceInfoSyncBridge::SendLocalDataWithBatch(
   StoreSpecifics(std::move(specifics), batch.get());
   CommitAndNotify(std::move(batch), /*should_notify=*/true);
 
-  pulse_timer_.Start(FROM_HERE, DeviceInfoUtil::kPulseInterval,
+  pulse_timer_.Start(FROM_HERE, DeviceInfoUtil::GetPulseInterval(),
                      base::BindOnce(&DeviceInfoSyncBridge::SendLocalData,
                                     base::Unretained(this)));
 }

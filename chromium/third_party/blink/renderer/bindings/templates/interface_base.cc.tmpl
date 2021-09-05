@@ -86,15 +86,19 @@ static void (*{{method.name}}MethodForPartialInterface)(const v8::FunctionCallba
 
 {##############################################################################}
 {# Attributes #}
-{% from 'attributes.cc.tmpl' import attribute_getter,
-       attribute_setter,
+{% from 'attributes.cc.tmpl' import attribute_getter, attribute_setter,
        with context %}
 {% for attribute in attributes %}
 {% for world_suffix in attribute.world_suffixes %}
-{% if not attribute.has_custom_getter and not attribute.constructor_type %}
+{% if attribute.private_property_is_shared_between_getter_and_setter %}
+// Define a private property key shared between getter and setter.
+static const V8PrivateProperty::SymbolKey kPrivateProperty{{attribute.camel_case_name}};
+{% endif %}
+
+{% if attribute.does_generate_getter %}
 {{attribute_getter(attribute, world_suffix)}}
 {% endif %}
-{% if attribute.has_setter and not (attribute.has_custom_setter or attribute.is_lenient_setter) %}
+{% if attribute.does_generate_setter %}
 {{attribute_setter(attribute, world_suffix)}}
 {% endif %}
 {% endfor %}
@@ -890,7 +894,6 @@ void {{v8_class_or_partial}}::Install{{feature.name}}(ScriptState* script_state)
 {% block has_instance %}{% endblock %}
 {% block to_impl %}{% endblock %}
 {% block to_impl_with_type_check %}{% endblock %}
-{% block native_value_traits %}{% endblock %}
 {##############################################################################}
 {% block install_conditional_features %}
 {% from 'attributes.cc.tmpl' import install_conditional_attributes,

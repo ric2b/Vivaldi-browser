@@ -26,7 +26,9 @@
       }
 
       :host([elide-label]) .label {
-        @apply --cr-text-elide;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
 
       #outerRow {
@@ -55,8 +57,19 @@
     </style>
     <div id="outerRow" noSubLabel$="[[!subLabel]]">
       <div class="flex" id="labelWrapper" hidden$="[[!label]]">
-        <div class="label"  aria-hidden="true">[[label]]</div>
-        <div class="secondary label">[[subLabel]]</div>
+        <div class="label" aria-hidden="true">[[label]]</div>
+        <div class="secondary label" id="sub-label">
+          <span id="sub-label-text" aria-hidden="true">
+            [[subLabel]]
+          </span>
+          <template is="dom-if" if="[[learnMoreUrl]]">
+            <a id="learn-more" href="[[learnMoreUrl]]" target="_blank"
+                aria-labeledby="sub-label-text learn-more"
+                on-click="onLearnMoreClicked_">
+              $i18n{learnMore}
+            </a>
+          </template>
+        </div>
       </div>
       <slot name="more-actions"></slot>
       <template is="dom-if" if="[[hasPrefPolicyIndicator(pref.*)]]">
@@ -66,6 +79,7 @@
       <cr-toggle id="control" checked="{{checked}}"
           on-change="onChange_"
           aria-label$="[[getAriaLabel_(label, ariaLabel)]]"
+          aria-describedby="sub-label-text"
           disabled="[[controlDisabled(disabled, pref)]]">
       </cr-toggle>
     </div>

@@ -302,7 +302,7 @@ void DataTypeManagerImpl::Restart() {
   }
 
   // Check for new or resolved data type crypto errors.
-  if (encryption_handler_->IsPassphraseRequired()) {
+  if (encryption_handler_->HasCryptoError()) {
     ModelTypeSet encrypted_types = encryption_handler_->GetEncryptedDataTypes();
     encrypted_types.RetainAll(last_requested_types_);
     encrypted_types.RemoveAll(data_type_status_table_.GetCryptoErrorTypes());
@@ -344,8 +344,6 @@ void DataTypeManagerImpl::Restart() {
 void DataTypeManagerImpl::OnAllDataTypesReadyForConfigure() {
   DCHECK(!download_started_);
   download_started_ = true;
-  UMA_HISTOGRAM_LONG_TIMES("Sync.USSLoadModelsTime",
-                           base::Time::Now() - last_restart_time_);
   // TODO(pavely): By now some of datatypes in |download_types_queue_| could
   // have failed loading and should be excluded from configuration. I need to
   // adjust |download_types_queue_| for such types.
@@ -658,9 +656,9 @@ ModelTypeSet DataTypeManagerImpl::PrepareConfigureParams(
   params->to_purge = types_to_purge;
   params->to_journal = types_to_journal;
   params->to_unapply = unapply_types;
-  params->ready_task =
-      base::Bind(&DataTypeManagerImpl::DownloadReady,
-                 weak_ptr_factory_.GetWeakPtr(), download_types_queue_.front());
+  params->ready_task = base::BindOnce(&DataTypeManagerImpl::DownloadReady,
+                                      weak_ptr_factory_.GetWeakPtr(),
+                                      download_types_queue_.front());
   params->is_sync_feature_enabled =
       last_requested_context_.sync_mode == SyncMode::kFull;
 

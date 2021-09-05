@@ -39,15 +39,29 @@ Polymer({
       type: Boolean,
       reflectToAttribute: true,
     },
+
+    /** @private */
+    newOsSettingsSearch_: {
+      type: Boolean,
+      value() {
+        return loadTimeData.getBoolean('newOsSettingsSearch');
+      },
+      readOnly: true,
+    },
   },
 
-  /** @return {!CrToolbarSearchFieldElement} */
-  getSearchField: function() {
-    return this.$.search;
+  /** @return {?CrToolbarSearchFieldElement} */
+  getSearchField() {
+    if (this.newOsSettingsSearch_) {
+      assertNotReached(
+          'New OS Search should not be using OsToolbar.getSearchField()');
+    }
+    return /** @type {?CrToolbarSearchFieldElement} */ (
+        this.$$('cr-toolbar-search-field'));
   },
 
   /** @private */
-  onMenuTap_: function() {
+  onMenuTap_() {
     this.fire('os-toolbar-menu-tap');
   },
 });

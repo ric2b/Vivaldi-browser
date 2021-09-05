@@ -17,6 +17,7 @@
 <translation id="1710259589646384581">Sistema Operacional</translation>
 <translation id="1728677426644403582">Você está vendo o código-fonte de uma página da Web.</translation>
 <translation id="1734878702283171397">Tente entrar em contato com o administrador do sistema.</translation>
+<translation id="1768211456781949159"><ph name="BEGIN_LINK" />Tente Executar o Diagnóstico de Rede do Windows<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Este site contém programas perigosos</translation>
 <translation id="1916770123977586577">Para aplicar as configurações atualizadas a este site, recarregue a página</translation>
 <translation id="1919345977826869612">Anúncios</translation>
@@ -34,9 +35,11 @@
 <translation id="2292556288342944218">O seu acesso à Internet está bloqueado</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> exige um nome de usuário e uma senha.</translation>
 <translation id="2337852623177822836">Configuração controlada pelo administrador</translation>
+<translation id="2344028582131185878">Downloads automáticos</translation>
 <translation id="2355395290879513365">É possível que invasores consigam ver as imagens que você está olhando nesse site e as modifiquem para enganar você.</translation>
 <translation id="2356070529366658676">Perguntar</translation>
 <translation id="2359808026110333948">Continuar</translation>
+<translation id="2467694685043708798"><ph name="BEGIN_LINK" />Executar o Diagnóstico de Rede<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">Notificações</translation>
 <translation id="2539524384386349900">Detectar</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> enviou uma resposta inválida.</translation>
@@ -46,6 +49,7 @@
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
 <translation id="2650446666397867134">O acesso ao arquivo foi negado</translation>
 <translation id="2705137772291741111">Não foi possível ler a cópia armazenada em cache deste site.</translation>
+<translation id="2730326759066348565"><ph name="BEGIN_LINK" />Executar o Diagnóstico de Conectividade<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">A conexão foi redefinida.</translation>
 <translation id="2856444702002559011">Invasores podem estar tentando roubar suas informações do site <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (por exemplo, senhas, mensagens ou cartões de crédito). <ph name="BEGIN_LEARN_MORE_LINK" />Saiba mais<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">Foi detectada uma alteração na rede.</translation>
@@ -54,6 +58,7 @@
 <translation id="3005723025932146533">Mostrar cópia salva</translation>
 <translation id="301521992641321250">Bloqueada automaticamente</translation>
 <translation id="3109728660330352905">Você não tem autorização para ver esta página.</translation>
+<translation id="31207688938192855"><ph name="BEGIN_LINK" />Tente executar o Diagnóstico de Conectividade<ph name="END_LINK" />.</translation>
 <translation id="3154506275960390542">Essa página inclui um formulário que pode não ser enviado de forma segura. Os dados que você envia podem ser vistos por outras pessoas enquanto elas navegam ou ser interceptado e modificado por um invasor para alterar o que o servidor recebe ou para roubar essas informações.</translation>
 <translation id="3176929007561373547">Verifique suas configurações de proxy ou entre em contato com o administrador de rede para verificar se o servidor proxy está funcionando. Se você acredita que não deveria estar usando um servidor proxy: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Atualize a página para reenviar os dados necessários para carregar a página.</translation>
@@ -74,12 +79,12 @@
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> está bloqueado</translation>
 <translation id="3987940399970879459">Menos de 1 MB</translation>
 <translation id="4075732493274867456">O cliente e o servidor não são compatíveis com uma versão do protocolo SSL comum ou com o pacote de criptografia.</translation>
-<translation id="410351446219883937">Reprodução automática</translation>
 <translation id="4116663294526079822">Sempre permitir neste site</translation>
 <translation id="4130226655945681476">Verificar o modem, o roteador e os cabos da rede</translation>
 <translation id="4151403195736952345">Usar padrão global (Detectar)</translation>
 <translation id="4165986682804962316">Configurações do site</translation>
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />Verificar as configurações do antivírus e do firewall<ph name="END_LINK" /></translation>
+<translation id="4226937834893929579"><ph name="BEGIN_LINK" />Tente executar o Diagnóstico de Rede<ph name="END_LINK" />.</translation>
 <translation id="4235360514405112390">Válido</translation>
 <translation id="4250431568374086873">Sua conexão com esse site não é completamente segura</translation>
 <translation id="4265872034478892965">Permitido pelo administrador</translation>
@@ -94,6 +99,7 @@
 <translation id="4592951414987517459">Sua conexão com <ph name="DOMAIN" /> foi criptografada usando um pacote de criptografia moderno.</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">A conexão foi interrompida</translation>
+<translation id="4722547256916164131"><ph name="BEGIN_LINK" />Executar o Diagnóstico de Rede do Windows<ph name="END_LINK" /></translation>
 <translation id="4744603770635761495">Caminho do Executável</translation>
 <translation id="4750917950439032686">Suas informações pessoais (como senhas ou números de cartão de crédito) não podem ser obtidas por terceiros que possam interceptar os dados entre você e o site.</translation>
 <translation id="4764776831041365478">A página em <ph name="URL" /> pode estar temporariamente indisponível ou pode ter sido movida permanentemente para um novo endereço.</translation>
@@ -171,6 +177,7 @@ incomuns e incorretas. Isso pode acontecer quando um invasor está fingindo ser 
 <translation id="7878562273885520351">Sua senha pode estar comprometida</translation>
 <translation id="7951415247503192394">(32 bits)</translation>
 <translation id="8025119109950072390">Este site foi denunciado por tentar induzir os usuários a fazer algo perigoso, como instalar um software ou revelar suas informações pessoais (como senhas e números de telefone ou cartão de crédito).</translation>
+<translation id="8037357227543935929">Perguntar (padrão)</translation>
 <translation id="8041940743680923270">Usar padrão global (Perguntar)</translation>
 <translation id="8142868475871995937">Acesse &lt;strong&gt;vivaldi://policy&lt;/strong&gt; para ver a lista de URLs adicionados à lista negra e outras políticas aplicadas pelo administrador do seu sistema.</translation>
 <translation id="8150722005171944719">O arquivo em <ph name="URL" /> não pode ser lido. Ele pode ter sido removido, movido, ou as permissões do arquivo podem estar impedindo o acesso.</translation>
@@ -186,6 +193,7 @@ incomuns e incorretas. Isso pode acontecer quando um invasor está fingindo ser 
 <translation id="8503813439785031346">Nome de usuário</translation>
 <translation id="8703575177326907206">Sua conexão com <ph name="DOMAIN" /> não está criptografada.</translation>
 <translation id="8740359287975076522">Não foi possível encontrar um &lt;abbr id="dnsDefinition"&gt;endereço DNS&lt;/abbr&gt; para <ph name="HOST_NAME" />. Diagnosticando o problema...</translation>
+<translation id="8820817407110198400">Marcadores</translation>
 <translation id="9001074447101275817">O proxy <ph name="DOMAIN" /> exige um nome de usuário e uma senha.</translation>
 <translation id="9008201768610948239">Ignorar</translation>
 <translation id="9011424611726486705">Abra as configurações do site</translation>

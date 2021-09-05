@@ -24,14 +24,13 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "services/data_decoder/public/cpp/data_decoder.h"
 
 namespace url {
 class Origin;
 }
 
 namespace media_router {
-
-class DataDecoder;
 
 // MediaRouteProvider for DIAL sinks.
 // DialMediaRouteProvider supports custom DIAL launch, which is a
@@ -54,14 +53,12 @@ class DialMediaRouteProvider : public mojom::MediaRouteProvider,
   // |receiver|: Mojo receiver to bind to |this|.
   // |media_router|: Pending remote to MediaRouter.
   // |media_sink_service|: DIAL MediaSinkService providing information on sinks.
-  // |connector|: Connector object for accessing data_decoder services.
   // |hash_token|: A per-profile value used to hash sink IDs.
   // |task_runner|: The task runner on which |this| runs.
   DialMediaRouteProvider(
       mojo::PendingReceiver<mojom::MediaRouteProvider> receiver,
       mojo::PendingRemote<mojom::MediaRouter> media_router,
       DialMediaSinkServiceImpl* media_sink_service,
-      service_manager::Connector* connector,
       const std::string& hash_token,
       const scoped_refptr<base::SequencedTaskRunner>& task_runner);
   ~DialMediaRouteProvider() override;
@@ -105,10 +102,6 @@ class DialMediaRouteProvider : public mojom::MediaRouteProvider,
   void DetachRoute(const std::string& route_id) override;
   void EnableMdnsDiscovery() override;
   void UpdateMediaSinks(const std::string& media_source) override;
-  void SearchSinks(const std::string& sink_id,
-                   const std::string& media_source,
-                   mojom::SinkSearchCriteriaPtr search_criteria,
-                   SearchSinksCallback callback) override;
   void ProvideSinks(
       const std::string& provider_name,
       const std::vector<media_router::MediaSinkInternal>& sinks) override;
@@ -117,6 +110,7 @@ class DialMediaRouteProvider : public mojom::MediaRouteProvider,
       mojo::PendingReceiver<mojom::MediaController> media_controller,
       mojo::PendingRemote<mojom::MediaStatusObserver> observer,
       CreateMediaRouteControllerCallback callback) override;
+  void GetState(GetStateCallback callback) override;
 
   void SetActivityManagerForTest(
       std::unique_ptr<DialActivityManager> activity_manager);
@@ -156,7 +150,7 @@ class DialMediaRouteProvider : public mojom::MediaRouteProvider,
                              const std::vector<url::Origin>& origins);
 
   void HandleParsedRouteMessage(const MediaRoute::Id& route_id,
-                                base::Value message);
+                                data_decoder::DataDecoder::ValueOrError result);
   void HandleClientConnect(const DialActivity& activity,
                            const MediaSinkInternal& sink);
   void SendCustomDialLaunchMessage(const MediaRoute::Id& route_id,
@@ -203,9 +197,6 @@ class DialMediaRouteProvider : public mojom::MediaRouteProvider,
 
   std::unique_ptr<DialActivityManager> activity_manager_;
   std::unique_ptr<BufferedMessageSender> message_sender_;
-
-  // Used for parsing Custom DIAL launch JSON messages.
-  std::unique_ptr<DataDecoder> data_decoder_;
 
   DialInternalMessageUtil internal_message_util_;
 

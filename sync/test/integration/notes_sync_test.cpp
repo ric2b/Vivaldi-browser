@@ -2,6 +2,7 @@
 
 #include "sync/test/integration/notes_sync_test.h"
 
+#include "app/vivaldi_apptools.h"
 #include "base/message_loop/message_loop_current.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/sync/test/fake_server/fake_server_verifier.h"
@@ -11,12 +12,12 @@
 #include "sync/test/integration/notes_helper.h"
 
 using notes_helper::GetNotesModel;
-using vivaldi::Notes_Model;
+using vivaldi::NotesModel;
 using vivaldi::NotesModelObserver;
 using vivaldi::NotesModelFactory;
 
-// NotesLoadObserver is used when blocking until the Notes_Model finishes
-// loading. As soon as the Notes_Model finishes loading the message loop is
+// NotesLoadObserver is used when blocking until the NotesModel finishes
+// loading. As soon as the NotesModel finishes loading the message loop is
 // quit.
 class NotesLoadObserver : public NotesModelObserver {
  public:
@@ -25,7 +26,7 @@ class NotesLoadObserver : public NotesModelObserver {
 
  private:
   // NotesBaseModelObserver:
-  void NotesModelLoaded(Notes_Model* model, bool ids_reassigned) override;
+  void NotesModelLoaded(NotesModel* model, bool ids_reassigned) override;
 
   base::Closure quit_task_;
 
@@ -37,12 +38,12 @@ NotesLoadObserver::NotesLoadObserver(const base::Closure& quit_task)
 
 NotesLoadObserver::~NotesLoadObserver() {}
 
-void NotesLoadObserver::NotesModelLoaded(Notes_Model* model,
+void NotesLoadObserver::NotesModelLoaded(NotesModel* model,
                                          bool ids_reassigned) {
   quit_task_.Run();
 }
 
-void WaitForNotesModelToLoad(Notes_Model* model) {
+void WaitForNotesModelToLoad(NotesModel* model) {
   if (model->loaded())
     return;
   base::RunLoop run_loop;
@@ -58,6 +59,16 @@ void WaitForNotesModelToLoad(Notes_Model* model) {
 NotesSyncTest::NotesSyncTest(TestType test_type) : SyncTest(test_type) {}
 
 NotesSyncTest::~NotesSyncTest() {}
+
+void NotesSyncTest::SetUp() {
+  vivaldi::ForceVivaldiRunning(true);
+  SyncTest::SetUp();
+}
+
+void NotesSyncTest::TearDown() {
+  SyncTest::TearDown();
+  vivaldi::ForceVivaldiRunning(false);
+}
 
 bool NotesSyncTest::SetupClients() {
   if (!SyncTest::SetupClients())
@@ -76,11 +87,11 @@ void NotesSyncTest::WaitForDataModels(Profile* profile) {
 
 void NotesSyncTest::VerifyNotesModelMatchesFakeServer(int index) {
   fake_server::FakeServerVerifier fake_server_verifier(GetFakeServer());
-  std::vector<Notes_Model::URLAndTitle> local_notes;
+  std::vector<NotesModel::URLAndTitle> local_notes;
   GetNotesModel(index)->GetNotes(&local_notes);
 
   // Verify that all local notes titles exist once on the server.
-  std::vector<Notes_Model::URLAndTitle>::const_iterator it;
+  std::vector<NotesModel::URLAndTitle>::const_iterator it;
   for (it = local_notes.begin(); it != local_notes.end(); ++it) {
     if (it->title.empty())
       continue;

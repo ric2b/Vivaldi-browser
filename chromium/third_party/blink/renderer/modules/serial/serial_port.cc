@@ -7,13 +7,13 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_function.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_serial_input_signals.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_serial_options.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_serial_output_signals.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/streams/readable_stream.h"
 #include "third_party/blink/renderer/core/streams/writable_stream.h"
 #include "third_party/blink/renderer/modules/serial/serial.h"
-#include "third_party/blink/renderer/modules/serial/serial_input_signals.h"
-#include "third_party/blink/renderer/modules/serial/serial_options.h"
-#include "third_party/blink/renderer/modules/serial/serial_output_signals.h"
 #include "third_party/blink/renderer/modules/serial/serial_port_underlying_sink.h"
 #include "third_party/blink/renderer/modules/serial/serial_port_underlying_source.h"
 #include "third_party/blink/renderer/platform/bindings/v8_throw_exception.h"
@@ -35,6 +35,18 @@ const char kDeviceLostError[] = "The device has been lost.";
 const char kSystemError[] = "An unknown system error has occurred.";
 const int kMaxBufferSize = 16 * 1024 * 1024; /* 16 MiB */
 
+bool SendErrorIsFatal(SerialSendError error) {
+  switch (error) {
+    case SerialSendError::NONE:
+      NOTREACHED();
+      return false;
+    case SerialSendError::SYSTEM_ERROR:
+      return false;
+    case SerialSendError::DISCONNECTED:
+      return true;
+  }
+}
+
 DOMException* DOMExceptionFromSendError(SerialSendError error) {
   switch (error) {
     case SerialSendError::NONE:
@@ -46,6 +58,24 @@ DOMException* DOMExceptionFromSendError(SerialSendError error) {
     case SerialSendError::SYSTEM_ERROR:
       return MakeGarbageCollected<DOMException>(DOMExceptionCode::kUnknownError,
                                                 kSystemError);
+  }
+}
+
+bool ReceiveErrorIsFatal(SerialReceiveError error) {
+  switch (error) {
+    case SerialReceiveError::NONE:
+      NOTREACHED();
+      return false;
+    case SerialReceiveError::BREAK:
+    case SerialReceiveError::FRAME_ERROR:
+    case SerialReceiveError::OVERRUN:
+    case SerialReceiveError::BUFFER_OVERFLOW:
+    case SerialReceiveError::PARITY_ERROR:
+    case SerialReceiveError::SYSTEM_ERROR:
+      return false;
+    case SerialReceiveError::DISCONNECTED:
+    case SerialReceiveError::DEVICE_LOST:
+      return true;
   }
 }
 
@@ -252,7 +282,7 @@ ReadableStream* SerialPort::readable(ScriptState* script_state,
   if (readable_)
     return readable_;
 
-  if (!port_ || open_resolver_ || closing_)
+  if (!port_ || open_resolver_ || closing_ || read_fatal_)
     return nullptr;
 
   mojo::ScopedDataPipeConsumerHandle readable_pipe;
@@ -273,7 +303,7 @@ WritableStream* SerialPort::writable(ScriptState* script_state,
   if (writable_)
     return writable_;
 
-  if (!port_ || open_resolver_ || closing_)
+  if (!port_ || open_resolver_ || closing_ || write_fatal_)
     return nullptr;
 
   mojo::ScopedDataPipeProducerHandle writable_pipe;
@@ -431,16 +461,31 @@ void SerialPort::Dispose() {
   client_receiver_.reset();
 }
 
+ExecutionContext* SerialPort::GetExecutionContext() const {
+  return parent_->GetExecutionContext();
+}
+
+bool SerialPort::HasPendingActivity() const {
+  // There is no need to check if the execution context has been destroyed, this
+  // is handled by the common tracing logic.
+  //
+  // This object should be considered active as long as it is open so that any
+  // chain of streams originating from this port are not closed prematurely.
+  return port_.is_bound();
+}
+
 void SerialPort::OnReadError(device::mojom::blink::SerialReceiveError error) {
-  if (underlying_source_) {
+  if (ReceiveErrorIsFatal(error))
+    read_fatal_ = true;
+  if (underlying_source_)
     underlying_source_->SignalErrorOnClose(DOMExceptionFromReceiveError(error));
-  }
 }
 
 void SerialPort::OnSendError(device::mojom::blink::SerialSendError error) {
-  if (underlying_sink_) {
+  if (SendErrorIsFatal(error))
+    write_fatal_ = true;
+  if (underlying_sink_)
     underlying_sink_->SignalErrorOnClose(DOMExceptionFromSendError(error));
-  }
 }
 
 bool SerialPort::CreateDataPipe(mojo::ScopedDataPipeProducerHandle* producer,
@@ -461,6 +506,8 @@ bool SerialPort::CreateDataPipe(mojo::ScopedDataPipeProducerHandle* producer,
 
 void SerialPort::OnConnectionError() {
   closing_ = false;
+  read_fatal_ = false;
+  write_fatal_ = false;
   port_.reset();
   client_receiver_.reset();
 
@@ -589,6 +636,8 @@ void SerialPort::OnSetSignals(ScriptPromiseResolver* resolver, bool success) {
 void SerialPort::OnClose() {
   DCHECK(close_resolver_);
   closing_ = false;
+  read_fatal_ = false;
+  write_fatal_ = false;
   port_.reset();
   client_receiver_.reset();
 

@@ -8,8 +8,10 @@
 #include <utility>
 
 #include "base/logging.h"
+#include "base/memory/aligned_memory.h"
 #include "chromecast/media/audio/mixer_service/conversions.h"
-#include "net/socket/stream_socket.h"
+#include "chromecast/media/audio/mixer_service/mixer_service.pb.h"
+#include "chromecast/net/io_buffer_pool.h"
 
 namespace chromecast {
 namespace media {
@@ -34,16 +36,19 @@ int GetFillSizeFrames(const OutputStreamParams& params) {
 OutputStreamConnection::OutputStreamConnection(Delegate* delegate,
                                                const OutputStreamParams& params)
     : delegate_(delegate),
-      params_(params),
+      params_(std::make_unique<OutputStreamParams>(params)),
       frame_size_(GetFrameSize(params)),
       fill_size_frames_(GetFillSizeFrames(params)),
-      audio_buffer_(base::MakeRefCounted<net::IOBuffer>(
+      buffer_pool_(base::MakeRefCounted<IOBufferPool>(
           MixerSocket::kAudioMessageHeaderSize +
-          fill_size_frames_ * frame_size_)) {
+              fill_size_frames_ * frame_size_,
+          std::numeric_limits<size_t>::max(),
+          true /* threadsafe */)),
+      audio_buffer_(buffer_pool_->GetBuffer()) {
   DCHECK(delegate_);
-  DCHECK_GT(params_.sample_rate(), 0);
-  DCHECK_GT(params_.num_channels(), 0);
-  params_.set_fill_size_frames(fill_size_frames_);
+  DCHECK_GT(params_->sample_rate(), 0);
+  DCHECK_GT(params_->num_channels(), 0);
+  params_->set_fill_size_frames(fill_size_frames_);
 }
 
 OutputStreamConnection::~OutputStreamConnection() = default;
@@ -53,7 +58,8 @@ void OutputStreamConnection::Connect() {
 }
 
 void OutputStreamConnection::SendNextBuffer(int filled_frames, int64_t pts) {
-  SendAudioBuffer(audio_buffer_, filled_frames, pts);
+  SendAudioBuffer(std::move(audio_buffer_), filled_frames, pts);
+  audio_buffer_ = buffer_pool_->GetBuffer();
 }
 
 void OutputStreamConnection::SendAudioBuffer(
@@ -107,6 +113,15 @@ void OutputStreamConnection::SetPlaybackRate(float playback_rate) {
   }
 }
 
+void OutputStreamConnection::SetAudioClockRate(double rate) {
+  audio_clock_rate_ = rate;
+  if (socket_) {
+    Generic message;
+    message.mutable_set_audio_clock_rate()->set_rate(rate);
+    socket_->SendProto(message);
+  }
+}
+
 void OutputStreamConnection::Pause() {
   paused_ = true;
   if (socket_) {
@@ -125,13 +140,12 @@ void OutputStreamConnection::Resume() {
   }
 }
 
-void OutputStreamConnection::OnConnected(
-    std::unique_ptr<net::StreamSocket> socket) {
-  socket_ = std::make_unique<MixerSocket>(std::move(socket), this);
-  socket_->ReceiveMessages();
+void OutputStreamConnection::OnConnected(std::unique_ptr<MixerSocket> socket) {
+  socket_ = std::move(socket);
+  socket_->SetDelegate(this);
 
   Generic message;
-  *(message.mutable_output_stream_params()) = params_;
+  *(message.mutable_output_stream_params()) = *params_;
   if (start_timestamp_ != INT64_MIN) {
     message.mutable_set_start_timestamp()->set_start_timestamp(
         start_timestamp_);
@@ -139,6 +153,9 @@ void OutputStreamConnection::OnConnected(
   }
   if (playback_rate_ != 1.0f) {
     message.mutable_set_playback_rate()->set_playback_rate(playback_rate_);
+  }
+  if (audio_clock_rate_ != 1.0) {
+    message.mutable_set_audio_clock_rate()->set_rate(audio_clock_rate_);
   }
   if (volume_multiplier_ != 1.0f) {
     message.mutable_set_stream_volume()->set_volume(volume_multiplier_);
@@ -154,6 +171,10 @@ void OutputStreamConnection::OnConnected(
 
 void OutputStreamConnection::OnConnectionError() {
   socket_.reset();
+  if (sent_eos_) {
+    delegate_->OnEosPlayed();
+    return;
+  }
   MixerConnection::Connect();
 }
 
@@ -163,10 +184,24 @@ bool OutputStreamConnection::HandleMetadata(const Generic& message) {
     return true;
   }
 
-  if (message.has_push_result()) {
+  if (message.has_push_result() && !sent_eos_) {
     delegate_->FillNextBuffer(
         audio_buffer_->data() + MixerSocket::kAudioMessageHeaderSize,
         fill_size_frames_, message.push_result().next_playback_timestamp());
+  }
+
+  if (message.has_ready_for_playback()) {
+    delegate_->OnAudioReadyForPlayback(
+        message.ready_for_playback().delay_microseconds());
+  }
+
+  if (message.has_error()) {
+    delegate_->OnMixerError();
+  }
+
+  if (message.has_mixer_underrun()) {
+    delegate_->OnMixerUnderrun(static_cast<Delegate::MixerUnderrunType>(
+        message.mixer_underrun().type()));
   }
   return true;
 }

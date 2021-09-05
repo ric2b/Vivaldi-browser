@@ -29,6 +29,7 @@
 <translation id="1243314992276662751">Subir</translation>
 <translation id="1249250836236328755">Género</translation>
 <translation id="1278813325885878377">Teclado QWERTY húngaro</translation>
+<translation id="1293556467332435079">Archivos</translation>
 <translation id="1297922636971898492">Google Drive no está disponible en estos momentos. La subida se reiniciará automáticamente cuando vuelva a estar disponible.</translation>
 <translation id="1307931752636661898">No se pueden ver archivos de Linux</translation>
 <translation id="1310751437842832374">Transliteración (mausam → ନମସ୍ତେ)</translation>
@@ -77,14 +78,15 @@
 <translation id="1838709767668011582">Sitio de Google</translation>
 <translation id="1844692022597038441">Este archivo no está disponible sin conexión.</translation>
 <translation id="184633654410729720">Teclado tailandés (kedmanee)</translation>
-<translation id="1847880352285315359">Guardados</translation>
+<translation id="1847880352285315359">Guardado</translation>
 <translation id="1864756863218646478">No se ha podido encontrar el archivo.</translation>
 <translation id="1921986354447415460">Teclado turco-F</translation>
+<translation id="1924372192547904021">Se ha formateado <ph name="DRIVE_NAME" /></translation>
 <translation id="1931134289871235022">Eslovaco</translation>
 <translation id="1933345018156373194">No se ha podido mover el archivo porque se ha producido un error inesperado: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="1936717151811561466">Finlandés</translation>
 <translation id="1942765061641586207">Resolución de imagen</translation>
-<translation id="1943097386230153518">Instala más servicios</translation>
+<translation id="1943097386230153518">Instalar más servicios</translation>
 <translation id="1947424002851288782">Teclado alemán</translation>
 <translation id="1972984168337863910">Ampliar paneles de comentarios de archivos</translation>
 <translation id="1984603991036629094">Teclado fonético armenio</translation>
@@ -163,6 +165,7 @@
 <translation id="2942290791863759244">Teclado alemán Neo 2</translation>
 <translation id="2943400156390503548">Presentaciones</translation>
 <translation id="2943503720238418293">Utiliza un nombre más corto</translation>
+<translation id="2949781154072577687">Formateando <ph name="DRIVE_NAME" />...</translation>
 <translation id="2951236788251446349">Medusa</translation>
 <translation id="2963783323012015985">Teclado turco</translation>
 <translation id="2966459079597787514">Teclado sueco</translation>
@@ -272,9 +275,10 @@
 <translation id="4299729908419173967">brasileño</translation>
 <translation id="4309915981827077375">Información general</translation>
 <translation id="4326192123064055915">Café</translation>
-<translation id="4336032328163998280">No se ha podido realizar la operación de copia (<ph name="ERROR_MESSAGE" />).</translation>
+<translation id="4336032328163998280">No se ha podido copiar (<ph name="ERROR_MESSAGE" />).</translation>
 <translation id="4364327530094270451">Melón</translation>
 <translation id="4372884569765913867">1x1</translation>
+<translation id="4394214039309501350">Enlace externo</translation>
 <translation id="4425149324548788773">Mi unidad</translation>
 <translation id="4465830120256509958">Teclado brasileño</translation>
 <translation id="4470564870223067757">Hangul de doble alternancia</translation>
@@ -428,7 +432,7 @@
 <translation id="5892290200158927959">Teclado francés (BÉPO)</translation>
 <translation id="5911887972742538906">No se ha podido instalar la aplicación de Linux.</translation>
 <translation id="5912396950572065471">Formato</translation>
-<translation id="5913638992615760742">No se ha podido realizar la operación de copia porque se ha producido un error inesperado: <ph name="ERROR_MESSAGE" /></translation>
+<translation id="5913638992615760742">No se ha podido copiar debido a un error inesperado: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="5923484009666796948">Introducción de japonés (para teclado japonés)</translation>
 <translation id="5932901536148835538">Chromebit</translation>
 <translation id="5949281959820712067">Da permiso a las aplicaciones de Linux para modificar archivos en tu cuenta de Google Drive. Los cambios realizados se sincronizarán con tus otros dispositivos.</translation>
@@ -505,6 +509,7 @@
 <translation id="6878261347041253038">Teclado devanagari (fonético)</translation>
 <translation id="6885780034956018177">Caracol</translation>
 <translation id="6896758677409633944">Copiar</translation>
+<translation id="6898028766943174120">Más subcarpetas…</translation>
 <translation id="691516599546977041">No se puede guardar en <ph name="FOLDER_NAME" />. Las imágenes editadas se guardarán en la carpeta Descargas.</translation>
 <translation id="6915678159055240887">Chromebox</translation>
 <translation id="6918340160281024199">Estilo Workman (EE. UU.)</translation>
@@ -517,6 +522,7 @@
 <translation id="696203921837389374">Habilitar sincronización a través de redes de datos móviles</translation>
 <translation id="6965382102122355670">Aceptar</translation>
 <translation id="6970230597523682626">Búlgaro</translation>
+<translation id="6973630695168034713">Carpetas</translation>
 <translation id="6978611942794658017">Este archivo está diseñado para un PC que utilice software de Windows, por lo que no es compatible con tu dispositivo, que utiliza Chrome OS. Puedes buscar una aplicación equivalente adecuada en Chrome Web Store.</translation>
 <translation id="6979158407327259162">Google Drive</translation>
 <translation id="6990081529015358884">Te has quedado sin espacio.</translation>
@@ -564,9 +570,11 @@
 <translation id="7589661784326793847">Espera un segundo</translation>
 <translation id="7603724359189955920">Cuadrículas</translation>
 <translation id="7627790789328695202">¡Vaya! <ph name="FILE_NAME" /> ya existe. Elige otro nombre y vuelve a intentarlo.</translation>
+<translation id="7628656427739290098"><ph name="PERCENT" /> % completado.</translation>
 <translation id="7649070708921625228">Ayuda</translation>
 <translation id="7654209398114106148">Se están moviendo <ph name="NUMBER_OF_ITEMS" /> elementos...</translation>
 <translation id="7658239707568436148">Cancelar</translation>
+<translation id="7695430100978772476">No se ha podido formatear <ph name="DRIVE_NAME" /></translation>
 <translation id="770015031906360009">Griego</translation>
 <translation id="7706319470528945664">Teclado portugués</translation>
 <translation id="7711920809702896782">Información de la imagen</translation>

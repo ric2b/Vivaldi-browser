@@ -45,12 +45,12 @@ target(link_target_type, "renderer") {
     "accessibility/blink_ax_tree_source.h",
     "accessibility/render_accessibility_impl.cc",
     "accessibility/render_accessibility_impl.h",
+    "accessibility/render_accessibility_manager.cc",
+    "accessibility/render_accessibility_manager.h",
     "android/synchronous_layer_tree_frame_sink.cc",
     "android/synchronous_layer_tree_frame_sink.h",
-    "browser_plugin/browser_plugin.cc",
-    "browser_plugin/browser_plugin.h",
-    "browser_plugin/browser_plugin_manager.cc",
-    "browser_plugin/browser_plugin_manager.h",
+    "browser_exposed_renderer_interfaces.cc",
+    "browser_exposed_renderer_interfaces.h",
     "categorized_worker_pool.cc",
     "categorized_worker_pool.h",
     "child_frame_compositing_helper.cc",
@@ -66,6 +66,8 @@ target(link_target_type, "renderer") {
     "context_menu_params_builder.h",
     "crash_helpers.cc",
     "crash_helpers.h",
+    "discardable_memory_utils.cc",
+    "discardable_memory_utils.h",
     "dom_automation_controller.cc",
     "dom_automation_controller.h",
     "drop_data_builder.cc",
@@ -74,8 +76,8 @@ target(link_target_type, "renderer") {
     "effective_connection_type_helper.h",
     "frame_blame_context.cc",
     "frame_blame_context.h",
-    "frame_owner_properties.cc",
-    "frame_owner_properties.h",
+    "frame_owner_properties_converter.cc",
+    "frame_owner_properties_converter.h",
     "frame_swap_message_queue.cc",
     "frame_swap_message_queue.h",
     "gpu_benchmarking_extension.cc",
@@ -124,6 +126,8 @@ target(link_target_type, "renderer") {
     "loader/code_cache_loader_impl.h",
     "loader/frame_request_blocker.cc",
     "loader/frame_request_blocker.h",
+    "loader/internet_disconnected_web_url_loader.cc",
+    "loader/internet_disconnected_web_url_loader.h",
     "loader/navigation_body_loader.cc",
     "loader/navigation_body_loader.h",
     "loader/navigation_response_override_parameters.cc",
@@ -189,6 +193,8 @@ target(link_target_type, "renderer") {
     "media/media_factory.h",
     "media/media_permission_dispatcher.cc",
     "media/media_permission_dispatcher.h",
+    "media/power_status_helper_impl.cc",
+    "media/power_status_helper_impl.h",
     "media/render_media_client.cc",
     "media/render_media_client.h",
     "media/render_media_event_handler.cc",
@@ -197,14 +203,6 @@ target(link_target_type, "renderer") {
     "media/renderer_webaudiodevice_impl.h",
     "media/renderer_webmediaplayer_delegate.cc",
     "media/renderer_webmediaplayer_delegate.h",
-    "media/webrtc/media_stream_track_metrics.cc",
-    "media/webrtc/media_stream_track_metrics.h",
-    "media/webrtc/peer_connection_tracker.cc",
-    "media/webrtc/peer_connection_tracker.h",
-    "media/webrtc/rtc_peer_connection_handler.cc",
-    "media/webrtc/rtc_peer_connection_handler.h",
-    "media/webrtc/webrtc_set_description_observer.cc",
-    "media/webrtc/webrtc_set_description_observer.h",
     "menu_item_builder.cc",
     "menu_item_builder.h",
     "mhtml_handle_writer.cc",
@@ -255,8 +253,6 @@ target(link_target_type, "renderer") {
     "renderer_main_platform_delegate_linux.cc",
     "renderer_main_platform_delegate_mac.mm",
     "renderer_main_platform_delegate_win.cc",
-    "resource_timing_info_conversions.cc",
-    "resource_timing_info_conversions.h",
     "sad_plugin.cc",
     "sad_plugin.h",
     "savable_resources.cc",
@@ -297,6 +293,8 @@ target(link_target_type, "renderer") {
     "top_level_blame_context.h",
     "v8_value_converter_impl.cc",
     "v8_value_converter_impl.h",
+    "variations_render_thread_observer.cc",
+    "variations_render_thread_observer.h",
     "web_ui_extension.cc",
     "web_ui_extension.h",
     "web_ui_extension_data.cc",
@@ -344,12 +342,12 @@ target(link_target_type, "renderer") {
     "//components/discardable_memory/client",
     "//components/metrics",
     "//components/metrics:single_sample_metrics",
-    "//components/services/leveldb/public/cpp",
     "//components/url_formatter",
+    "//components/variations/net",
     "//components/viz/client",
     "//components/viz/common",
-    "//components/viz/service",
-    "//content:resources",
+    "//content:content_resources",
+    "//content:dev_ui_content_resources",
     "//content/child",
     "//content/common",
     "//content/common:buildflags",
@@ -388,7 +386,6 @@ target(link_target_type, "renderer") {
     "//services/audio/public/mojom",
     "//services/device/public/cpp/generic_sensor",
     "//services/device/public/mojom",
-    "//services/device/public/mojom:constants",
     "//services/device/public/mojom:usb",
     "//services/image_annotation/public/cpp:cpp",
     "//services/image_annotation/public/mojom:mojom",
@@ -408,51 +405,6 @@ target(link_target_type, "renderer") {
     "//third_party/icu",
     "//third_party/libyuv",
     "//third_party/sqlite",
-    "//third_party/webrtc/api:callfactory_api",
-    "//third_party/webrtc/api:libjingle_logging_api",
-    "//third_party/webrtc/api:libjingle_peerconnection_api",
-    "//third_party/webrtc/api:media_stream_interface",
-    "//third_party/webrtc/api:packet_socket_factory",
-    "//third_party/webrtc/api:rtc_error",
-    "//third_party/webrtc/api:rtc_stats_api",
-    "//third_party/webrtc/api:scoped_refptr",
-    "//third_party/webrtc/api/audio:aec3_config",
-    "//third_party/webrtc/api/audio:aec3_config_json",
-    "//third_party/webrtc/api/audio:aec3_factory",
-    "//third_party/webrtc/api/audio_codecs:audio_codecs_api",
-    "//third_party/webrtc/api/video:video_bitrate_allocation",
-    "//third_party/webrtc/api/video:video_frame",
-    "//third_party/webrtc/api/video:video_frame_i420",
-    "//third_party/webrtc/api/video:video_rtp_headers",
-    "//third_party/webrtc/api/video_codecs:rtc_software_fallback_wrappers",
-    "//third_party/webrtc/api/video_codecs:video_codecs_api",
-    "//third_party/webrtc/common_video:common_video",
-    "//third_party/webrtc/media:rtc_audio_video",
-    "//third_party/webrtc/media:rtc_media",
-    "//third_party/webrtc/media:rtc_media_base",
-    "//third_party/webrtc/media:rtc_simulcast_encoder_adapter",
-    "//third_party/webrtc/media:rtc_vp9_profile",
-    "//third_party/webrtc/modules/audio_device",
-    "//third_party/webrtc/modules/audio_processing",
-    "//third_party/webrtc/modules/audio_processing:api",
-    "//third_party/webrtc/modules/audio_processing:audio_processing_statistics",
-    "//third_party/webrtc/modules/audio_processing/aec_dump",
-    "//third_party/webrtc/p2p:libstunprober",
-    "//third_party/webrtc/p2p:rtc_p2p",
-    "//third_party/webrtc/pc:libjingle_peerconnection",
-    "//third_party/webrtc/pc:rtc_pc",
-    "//third_party/webrtc/pc:rtc_pc_base",
-    "//third_party/webrtc/rtc_base:async_resolver_interface",
-    "//third_party/webrtc/rtc_base:ip_address",
-    "//third_party/webrtc/rtc_base:rtc_base",
-    "//third_party/webrtc/rtc_base:rtc_task_queue",
-    "//third_party/webrtc/rtc_base:socket_address",
-    "//third_party/webrtc/rtc_base:threading",
-    "//third_party/webrtc/rtc_base:timeutils",
-    "//third_party/webrtc/rtc_base/third_party/sigslot:sigslot",
-    "//third_party/webrtc/stats",
-    "//third_party/webrtc/system_wrappers",
-    "//third_party/webrtc_overrides:init_webrtc",
     "//third_party/widevine/cdm:headers",
     "//ui/accessibility",
     "//ui/base",
@@ -491,7 +443,10 @@ target(link_target_type, "renderer") {
     set_sources_assignment_filter(sources_assignment_filter)
 
     deps += [
+      # Used by Android WebView only.
+      "//components/viz/service",
       "//third_party/android_ndk:cpu_features",
+      "//third_party/ashmem",
       "//third_party/libphonenumber",
     ]
   } else {
@@ -523,11 +478,19 @@ target(link_target_type, "renderer") {
 
   if (is_fuchsia) {
     sources += [
+      "media/audio/fuchsia_audio_device_factory.cc",
+      "media/audio/fuchsia_audio_device_factory.h",
+      "media/fuchsia_renderer_factory.cc",
+      "media/fuchsia_renderer_factory.h",
       "render_view_fuchsia.cc",
       "renderer_main_platform_delegate_fuchsia.cc",
     ]
 
-    deps += [ "//media/fuchsia/cdm/client" ]
+    deps += [
+      "//media/fuchsia/audio",
+      "//media/fuchsia/cdm/client",
+      "//media/fuchsia/mojom",
+    ]
   }
 
   if (enable_media_remoting) {
@@ -687,6 +650,8 @@ target(link_target_type, "renderer") {
       "//ppapi/shared_impl",
       "//third_party/libvpx",
       "//third_party/opus",
+      "//ui/base/cursor",
+      "//ui/base/mojom:cursor_type",
     ]
   }
 
@@ -712,10 +677,6 @@ target(link_target_type, "renderer") {
   if (enable_ipc_fuzzer) {
     configs += [ "//tools/ipc_fuzzer:ipc_fuzzer_config" ]
   }
-
-  if (is_chromecast) {
-    defines += [ "IS_CHROMECAST" ]
-  }
 }
 
 # See comment at the top of //content/BUILD.gn for how this works.
@@ -726,16 +687,12 @@ group("for_content_tests") {
   ]
 
   if (!is_component_build) {
-    public_deps = [
-      ":renderer",
-    ]
+    public_deps = [ ":renderer" ]
   }
 }
 
 fuzzer_test("audio_decoder_fuzzer") {
-  sources = [
-    "media/audio_decoder_fuzzer.cpp",
-  ]
+  sources = [ "media/audio_decoder_fuzzer.cpp" ]
   deps = [
     "//content/public/renderer:renderer_sources",
     "//content/renderer:renderer",

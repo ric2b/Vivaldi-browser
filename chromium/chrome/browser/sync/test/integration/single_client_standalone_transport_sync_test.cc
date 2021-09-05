@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/feature_list.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
 #include "base/path_service.h"
@@ -18,15 +19,39 @@
 #include "components/sync/driver/profile_sync_service.h"
 #include "components/sync/driver/sync_driver_switches.h"
 
+#if defined(OS_CHROMEOS)
+#include "chrome/browser/sync/test/integration/os_sync_test.h"
+#include "chrome/common/chrome_features.h"
+#include "chromeos/constants/chromeos_features.h"
+#include "components/browser_sync/browser_sync_switches.h"
+#endif
+
 namespace {
 
 syncer::ModelTypeSet AllowedTypesInStandaloneTransportMode() {
+  static_assert(41 + 1 /* notes */ == syncer::ModelType::NUM_ENTRIES,
+                "Add new types below if they run in transport mode");
   // Only some special whitelisted types (and control types) are allowed in
   // standalone transport mode.
-  syncer::ModelTypeSet allowed_types(syncer::USER_CONSENTS,
-                                     syncer::SECURITY_EVENTS,
-                                     syncer::AUTOFILL_WALLET_DATA);
+  syncer::ModelTypeSet allowed_types(
+      syncer::USER_CONSENTS, syncer::SECURITY_EVENTS,
+      syncer::AUTOFILL_WALLET_DATA, syncer::SHARING_MESSAGE);
   allowed_types.PutAll(syncer::ControlTypes());
+  if (base::FeatureList::IsEnabled(switches::kSyncDeviceInfoInTransportMode)) {
+    allowed_types.Put(syncer::DEVICE_INFO);
+  }
+#if defined(OS_CHROMEOS)
+  // OS sync types run in transport mode.
+  if (chromeos::features::IsSplitSettingsSyncEnabled()) {
+    allowed_types.PutAll({syncer::APPS, syncer::APP_SETTINGS, syncer::APP_LIST,
+                          syncer::APP_SETTINGS, syncer::ARC_PACKAGE,
+                          syncer::PRINTERS, syncer::OS_PREFERENCES,
+                          syncer::OS_PRIORITY_PREFERENCES});
+  }
+  if (base::FeatureList::IsEnabled(switches::kSyncWifiConfigurations)) {
+    allowed_types.Put(syncer::WIFI_CONFIGURATIONS);
+  }
+#endif  // defined(OS_CHROMEOS)
   return allowed_types;
 }
 
@@ -41,13 +66,10 @@ class SyncDisabledByUserChecker : public SingleClientStatusChangeChecker {
   explicit SyncDisabledByUserChecker(syncer::ProfileSyncService* service)
       : SingleClientStatusChangeChecker(service) {}
 
-  bool IsExitConditionSatisfied() override {
+  bool IsExitConditionSatisfied(std::ostream* os) override {
+    *os << "Waiting for sync disabled by user";
     return service()->HasDisableReason(
         syncer::SyncService::DISABLE_REASON_USER_CHOICE);
-  }
-
-  std::string GetDebugMessage() const override {
-    return "Sync Disabled by User";
   }
 };
 
@@ -202,7 +224,9 @@ IN_PROC_BROWSER_TEST_F(SingleClientStandaloneTransportSyncTest,
       syncer::SyncService::DISABLE_REASON_USER_CHOICE));
 
 #if defined(OS_CHROMEOS)
-  // On ChromeOS, Sync should start up again in standalone transport mode.
+  // On ChromeOS, the primary account should remain, and Sync should start up
+  // again in standalone transport mode.
+  EXPECT_TRUE(GetSyncService(0)->IsAuthenticatedAccountPrimary());
   EXPECT_FALSE(GetSyncService(0)->HasDisableReason(
       syncer::SyncService::DISABLE_REASON_NOT_SIGNED_IN));
   EXPECT_NE(syncer::SyncService::TransportState::DISABLED,
@@ -213,13 +237,14 @@ IN_PROC_BROWSER_TEST_F(SingleClientStandaloneTransportSyncTest,
             GetSyncService(0)->GetTransportState());
   EXPECT_FALSE(GetSyncService(0)->IsSyncFeatureEnabled());
 #else
-  // On non-ChromeOS platforms, the "Reset Sync" operation also signs the user
-  // out, so Sync should now be fully disabled. Note that this behavior may
-  // change in the future, see crbug.com/246839.
-  EXPECT_TRUE(GetSyncService(0)->HasDisableReason(
-      syncer::SyncService::DISABLE_REASON_NOT_SIGNED_IN));
-  EXPECT_EQ(syncer::SyncService::TransportState::DISABLED,
-            GetSyncService(0)->GetTransportState());
+  // On non-ChromeOS platforms, the "Reset Sync" operation should also remove
+  // the primary account. Note that this behavior may change in the future, see
+  // crbug.com/246839.
+  EXPECT_FALSE(GetSyncService(0)->IsAuthenticatedAccountPrimary());
+  // Note: In real life, the account would remain as an *unconsented* primary
+  // account, and so Sync would start up again in standalone transport mode.
+  // However, since we haven't set up cookies in this test, the account is *not*
+  // considered primary anymore (not even "unconsented").
 #endif  // defined(OS_CHROMEOS)
 }
 
@@ -282,5 +307,93 @@ IN_PROC_BROWSER_TEST_F(SingleClientStandaloneTransportSyncTest,
 
   EXPECT_EQ(old_cache_guid, prefs.GetCacheGuid());
 }
+
+#if defined(OS_CHROMEOS)
+class SingleClientStandaloneTransportOsSyncTest : public OsSyncTest {
+ public:
+  SingleClientStandaloneTransportOsSyncTest() : OsSyncTest(SINGLE_CLIENT) {
+    // Enable in-development types.
+    scoped_features_.InitWithFeatures({features::kDesktopPWAsWithoutExtensions,
+                                       switches::kSyncWifiConfigurations},
+                                      {});
+  }
+  ~SingleClientStandaloneTransportOsSyncTest() override = default;
+
+ private:
+  base::test::ScopedFeatureList scoped_features_;
+};
+
+IN_PROC_BROWSER_TEST_F(SingleClientStandaloneTransportOsSyncTest,
+                       OsTypesAreActiveWhenBrowserSyncIsOff) {
+  ASSERT_TRUE(chromeos::features::IsSplitSettingsSyncEnabled());
+
+  // Setup clients but don't start syncing yet.
+  ASSERT_TRUE(SetupClients());
+  syncer::SyncService* service = GetSyncService(0);
+  syncer::SyncUserSettings* settings = service->GetUserSettings();
+
+  // Simulate a signed-in user with browser sync off and OS sync on.
+  settings->SetSyncRequested(false);
+  settings->SetOsSyncFeatureEnabled(true);
+  ASSERT_TRUE(GetClient(0)->SignInPrimaryAccount());
+  ASSERT_TRUE(GetClient(0)->AwaitSyncTransportActive());
+  ASSERT_EQ(syncer::SyncService::TransportState::ACTIVE,
+            GetSyncService(0)->GetTransportState());
+  ASSERT_FALSE(service->IsSyncFeatureActive());
+
+  // OS data types synced by the transport layer are active.
+  syncer::ModelTypeSet active_types = service->GetActiveDataTypes();
+  EXPECT_TRUE(active_types.Has(syncer::APP_LIST));
+  EXPECT_TRUE(active_types.Has(syncer::APP_SETTINGS));
+  EXPECT_TRUE(active_types.Has(syncer::APPS));
+  EXPECT_TRUE(active_types.Has(syncer::ARC_PACKAGE));
+  EXPECT_TRUE(active_types.Has(syncer::OS_PREFERENCES));
+  EXPECT_TRUE(active_types.Has(syncer::OS_PRIORITY_PREFERENCES));
+  EXPECT_TRUE(active_types.Has(syncer::PRINTERS));
+  EXPECT_TRUE(active_types.Has(syncer::WEB_APPS));
+  EXPECT_TRUE(active_types.Has(syncer::WIFI_CONFIGURATIONS));
+
+  // Verify that a few browser non-transport-mode types are not active.
+  EXPECT_FALSE(active_types.Has(syncer::BOOKMARKS));
+  EXPECT_FALSE(active_types.Has(syncer::SESSIONS));
+  EXPECT_FALSE(active_types.Has(syncer::TYPED_URLS));
+}
+
+IN_PROC_BROWSER_TEST_F(SingleClientStandaloneTransportOsSyncTest,
+                       OsTypesAreNotActiveWhenOsSyncIsOff) {
+  ASSERT_TRUE(chromeos::features::IsSplitSettingsSyncEnabled());
+
+  // Setup clients but don't start syncing yet.
+  ASSERT_TRUE(SetupClients());
+  syncer::SyncService* service = GetSyncService(0);
+  syncer::SyncUserSettings* settings = service->GetUserSettings();
+
+  // Simulate a user who leaves OS sync disabled but starts browser sync.
+  settings->SetOsSyncFeatureEnabled(false);
+  ASSERT_TRUE(GetClient(0)->SetupSync());
+  ASSERT_TRUE(GetClient(0)->AwaitSyncTransportActive());
+  ASSERT_EQ(syncer::SyncService::TransportState::ACTIVE,
+            GetSyncService(0)->GetTransportState());
+  ASSERT_TRUE(service->IsSyncFeatureActive());
+  ASSERT_FALSE(settings->IsOsSyncFeatureEnabled());
+
+  // OS data types synced by the transport layer are not active.
+  syncer::ModelTypeSet active_types = service->GetActiveDataTypes();
+  EXPECT_FALSE(active_types.Has(syncer::APP_LIST));
+  EXPECT_FALSE(active_types.Has(syncer::APP_SETTINGS));
+  EXPECT_FALSE(active_types.Has(syncer::APPS));
+  EXPECT_FALSE(active_types.Has(syncer::ARC_PACKAGE));
+  EXPECT_FALSE(active_types.Has(syncer::OS_PREFERENCES));
+  EXPECT_FALSE(active_types.Has(syncer::OS_PRIORITY_PREFERENCES));
+  EXPECT_FALSE(active_types.Has(syncer::PRINTERS));
+  EXPECT_FALSE(active_types.Has(syncer::WEB_APPS));
+  EXPECT_FALSE(active_types.Has(syncer::WIFI_CONFIGURATIONS));
+
+  // Browser non-transport-mode types are active.
+  EXPECT_TRUE(active_types.Has(syncer::BOOKMARKS));
+  EXPECT_TRUE(active_types.Has(syncer::SESSIONS));
+  EXPECT_TRUE(active_types.Has(syncer::TYPED_URLS));
+}
+#endif  // defined(OS_CHROMEOS)
 
 }  // namespace

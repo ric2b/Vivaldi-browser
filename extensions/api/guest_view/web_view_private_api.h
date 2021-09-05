@@ -29,19 +29,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(VivaldiWebViewWithGuestFunction);
 };
 
-class WebViewPrivateSetVisibleFunction
-    : public VivaldiWebViewWithGuestFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("webViewPrivate.setVisible",
-                             WEBVIEWINTERNAL_SETVISIBLE)
-  WebViewPrivateSetVisibleFunction() = default;
-
- private:
-  ~WebViewPrivateSetVisibleFunction() override = default;
-  ResponseAction Run() override;
-  DISALLOW_COPY_AND_ASSIGN(WebViewPrivateSetVisibleFunction);
-};
-
 class WebViewPrivateGetThumbnailFunction
     : public VivaldiWebViewWithGuestFunction {
  public:

@@ -11,9 +11,12 @@
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_focus_cycler.h"
+#include "ash/shelf/shelf_navigation_widget.h"
 #include "ash/shell.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/logging.h"
+#include "base/metrics/user_metrics.h"
+#include "base/metrics/user_metrics_action.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
 #include "ui/aura/window.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -22,7 +25,6 @@
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/scoped_canvas.h"
 #include "ui/views/animation/flood_fill_ink_drop_ripple.h"
-#include "ui/views/animation/ink_drop_impl.h"
 #include "ui/views/controls/button/button_controller.h"
 
 namespace ash {
@@ -45,6 +47,7 @@ HomeButton::HomeButton(Shelf* shelf)
   set_has_ink_drop_action_on_click(false);
 
   SetEventTargeter(std::make_unique<views::ViewTargeter>(this));
+  layer()->SetName("shelf/Homebutton");
 }
 
 HomeButton::~HomeButton() = default;
@@ -66,17 +69,14 @@ const char* HomeButton::GetClassName() const {
 void HomeButton::OnShelfButtonAboutToRequestFocusFromTabTraversal(
     ShelfButton* button,
     bool reverse) {
-  const bool tablet_mode =
-      Shell::Get()->tablet_mode_controller() &&
-      Shell::Get()->tablet_mode_controller()->InTabletMode();
   DCHECK_EQ(button, this);
-  // If the currently focused view is already this button, and we are not
-  // in tablet mode (meaning this is the only button in this widget), then we
-  // always want to focus out. We also want to focus out if we are in tablet
-  // mode and going in reverse (which means we're trying to loop back from
-  // the back button.
-  if ((!tablet_mode && GetFocusManager()->GetFocusedView() == this) ||
-      (reverse && tablet_mode)) {
+  // Focus out if:
+  // *   The currently focused view is already this button, which implies that
+  //     this is the only button in this widget.
+  // *   Going in reverse when the shelf has a back button, which implies that
+  //     the widget is trying to loop back from the back button.
+  if (GetFocusManager()->GetFocusedView() == this ||
+      (reverse && shelf()->navigation_widget()->GetBackButton())) {
     shelf()->shelf_focus_cycler()->FocusOut(reverse,
                                             SourceView::kShelfNavigationView);
   }
@@ -85,11 +85,18 @@ void HomeButton::OnShelfButtonAboutToRequestFocusFromTabTraversal(
 void HomeButton::ButtonPressed(views::Button* sender,
                                const ui::Event& event,
                                views::InkDrop* ink_drop) {
-  Shell::Get()->metrics()->RecordUserMetricsAction(
-      UMA_LAUNCHER_CLICK_ON_APPLIST_BUTTON);
+  if (Shell::Get()->tablet_mode_controller()->InTabletMode()) {
+    base::RecordAction(
+        base::UserMetricsAction("AppList_HomeButtonPressedTablet"));
+  } else {
+    base::RecordAction(
+        base::UserMetricsAction("AppList_HomeButtonPressedClamshell"));
+  }
+
   const AppListShowSource show_source =
       event.IsShiftDown() ? kShelfButtonFullscreen : kShelfButton;
-  OnPressed(show_source, event.time_stamp());
+  Shell::Get()->app_list_controller()->ToggleAppList(
+      GetDisplayId(), show_source, event.time_stamp());
 }
 
 void HomeButton::OnAssistantAvailabilityChanged() {
@@ -98,17 +105,6 @@ void HomeButton::OnAssistantAvailabilityChanged() {
 
 bool HomeButton::IsShowingAppList() const {
   return controller_.is_showing_app_list();
-}
-
-void HomeButton::OnPressed(AppListShowSource show_source,
-                           base::TimeTicks time_stamp) {
-  ShelfAction shelf_action =
-      Shell::Get()->app_list_controller()->OnHomeButtonPressed(
-          GetDisplayId(), show_source, time_stamp);
-  if (shelf_action == SHELF_ACTION_APP_LIST_DISMISSED) {
-    GetInkDrop()->SnapToActivated();
-    GetInkDrop()->AnimateToState(views::InkDropState::HIDDEN);
-  }
 }
 
 int64_t HomeButton::GetDisplayId() const {
@@ -164,13 +160,12 @@ bool HomeButton::DoesIntersectRect(const views::View* target,
                                    const gfx::Rect& rect) const {
   DCHECK_EQ(target, this);
   gfx::Rect button_bounds = target->GetLocalBounds();
-  // Increase clickable area for the button from
-  // (kShelfControlSize x kShelfButtonSize) to
-  // (kShelfButtonSize x kShelfButtonSize).
-  int left_offset = button_bounds.width() - ShelfConfig::Get()->button_size();
-  int bottom_offset =
-      button_bounds.height() - ShelfConfig::Get()->button_size();
-  button_bounds.Inset(gfx::Insets(0, left_offset, bottom_offset, 0));
+  // Increase clickable area for the button to account for clicks around the
+  // spacing. This will not intercept events outside of the parent widget.
+  button_bounds.Inset(-ShelfConfig::Get()->control_button_edge_spacing(
+                          shelf()->IsHorizontalAlignment()),
+                      -ShelfConfig::Get()->control_button_edge_spacing(
+                          !shelf()->IsHorizontalAlignment()));
   return button_bounds.Intersects(rect);
 }
 

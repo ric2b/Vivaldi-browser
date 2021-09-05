@@ -21,32 +21,21 @@ class OpenXrRenderLoop;
 class DEVICE_VR_EXPORT OpenXrDevice
     : public VRDeviceBase,
       public mojom::XRSessionController,
-      public mojom::IsolatedXRGamepadProviderFactory,
       public mojom::XRCompositorHost {
  public:
   OpenXrDevice();
   ~OpenXrDevice() override;
-
-  static bool IsHardwareAvailable();
-  static bool IsApiAvailable();
 
   // VRDeviceBase
   void RequestSession(
       mojom::XRRuntimeSessionOptionsPtr options,
       mojom::XRRuntime::RequestSessionCallback callback) override;
 
-  mojo::PendingRemote<mojom::IsolatedXRGamepadProviderFactory>
-  BindGamepadFactory();
   mojo::PendingRemote<mojom::XRCompositorHost> BindCompositorHost();
 
  private:
   // XRSessionController
   void SetFrameDataRestricted(bool restricted) override;
-
-  // mojom::IsolatedXRGamepadProviderFactory
-  void GetIsolatedXRGamepadProvider(
-      mojo::PendingReceiver<mojom::IsolatedXRGamepadProvider> provider_receiver)
-      override;
 
   // XRCompositorHost
   void CreateImmersiveOverlay(
@@ -63,10 +52,6 @@ class DEVICE_VR_EXPORT OpenXrDevice
 
   mojo::Receiver<mojom::XRSessionController> exclusive_controller_receiver_{
       this};
-
-  mojo::Receiver<mojom::IsolatedXRGamepadProviderFactory>
-      gamepad_provider_factory_receiver_{this};
-  mojo::PendingReceiver<mojom::IsolatedXRGamepadProvider> provider_receiver_;
 
   mojo::Receiver<mojom::XRCompositorHost> compositor_host_receiver_{this};
   mojo::PendingReceiver<mojom::ImmersiveOverlay> overlay_receiver_;

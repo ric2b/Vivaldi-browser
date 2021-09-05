@@ -3,26 +3,28 @@
 <grit base_dir="." latest_public_release="0" current_release="1"
       source_lang_id="en" enc_check="möl">
   <outputs>
-    <output filename="generated_resources_be.pak" type="data_package" lang="be" />
     <output filename="generated_resources_eo.pak" type="data_package" lang="eo" />
     <output filename="generated_resources_es-PE.pak" type="data_package" lang="es-PE" />
-    <output filename="generated_resources_eu.pak" type="data_package" lang="eu" />
     <output filename="generated_resources_fy.pak" type="data_package" lang="fy" />
-    <output filename="generated_resources_gl.pak" type="data_package" lang="gl" />
-    <output filename="generated_resources_hy.pak" type="data_package" lang="hy" />
     <output filename="generated_resources_io.pak" type="data_package" lang="io" />
-    <output filename="generated_resources_is.pak" type="data_package" lang="is" />
     <output filename="generated_resources_ja-KS.pak" type="data_package" lang="ja-KS" />
     <output filename="generated_resources_jbo.pak" type="data_package" lang="jbo" />
-    <output filename="generated_resources_ka.pak" type="data_package" lang="ka" />
     <output filename="generated_resources_ku.pak" type="data_package" lang="ku" />
-    <output filename="generated_resources_mk.pak" type="data_package" lang="mk" />
     <output filename="generated_resources_sc.pak" type="data_package" lang="sc" />
-    <output filename="generated_resources_sq.pak" type="data_package" lang="sq" />
     <output filename="generated_resources_nn.pak" type="data_package" lang="nn" />
     <output filename="generated_resources_de-CH.pak" type="data_package" lang="de-CH" />
     <output filename="generated_resources_gd.pak" type="data_package" lang="gd" />
-    <output filename="generated_resources_af.pak" type="data_package" lang="af" />
+    <if expr="not is_android">
+      <output filename="generated_resources_af.pak" type="data_package" lang="af" />
+      <output filename="generated_resources_be.pak" type="data_package" lang="be" />
+      <output filename="generated_resources_eu.pak" type="data_package" lang="eu" />
+      <output filename="generated_resources_gl.pak" type="data_package" lang="gl" />
+      <output filename="generated_resources_hy.pak" type="data_package" lang="hy" />
+      <output filename="generated_resources_is.pak" type="data_package" lang="is" />
+      <output filename="generated_resources_ka.pak" type="data_package" lang="ka" />
+      <output filename="generated_resources_mk.pak" type="data_package" lang="mk" />
+      <output filename="generated_resources_sq.pak" type="data_package" lang="sq" />
+    </if>
   </outputs>
   <translations>
     <file path="strings/vivaldi_generated_resources_am.xtb" lang="am" />
@@ -97,6 +99,24 @@
     <file path="strings/vivaldi_generated_resources_de-CH.xtb" lang="de-CH" />
     <file path="strings/vivaldi_generated_resources_gd.xtb" lang="gd" />
     <file path="strings/vivaldi_generated_resources_af.xtb" lang="af" />
+    <file path="strings/vivaldi_generated_resources_as.xtb" lang="as" />
+    <file path="strings/vivaldi_generated_resources_az.xtb" lang="az" />
+    <file path="strings/vivaldi_generated_resources_bs.xtb" lang="bs" />
+    <file path="strings/vivaldi_generated_resources_fr-CA.xtb" lang="fr-CA" />
+    <file path="strings/vivaldi_generated_resources_kk.xtb" lang="kk" />
+    <file path="strings/vivaldi_generated_resources_km.xtb" lang="km" />
+    <file path="strings/vivaldi_generated_resources_ky.xtb" lang="ky" />
+    <file path="strings/vivaldi_generated_resources_lo.xtb" lang="lo" />
+    <file path="strings/vivaldi_generated_resources_mn.xtb" lang="mn" />
+    <file path="strings/vivaldi_generated_resources_my.xtb" lang="my" />
+    <file path="strings/vivaldi_generated_resources_ne.xtb" lang="ne" />
+    <file path="strings/vivaldi_generated_resources_or.xtb" lang="or" />
+    <file path="strings/vivaldi_generated_resources_pa.xtb" lang="pa" />
+    <file path="strings/vivaldi_generated_resources_si.xtb" lang="si" />
+    <file path="strings/vivaldi_generated_resources_ur.xtb" lang="ur" />
+    <file path="strings/vivaldi_generated_resources_uz.xtb" lang="uz" />
+    <file path="strings/vivaldi_generated_resources_zh-HK.xtb" lang="zh-HK" />
+    <file path="strings/vivaldi_generated_resources_zu.xtb" lang="zu" />
   </translations>
   <release seq="1" allow_pseudo="false">
     <messages fallback_to_english="true">

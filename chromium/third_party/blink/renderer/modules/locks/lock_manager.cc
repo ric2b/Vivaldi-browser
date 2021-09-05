@@ -9,14 +9,19 @@
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/platform/task_type.h"
+#include "third_party/blink/public/platform/web_content_settings_client.h"
+#include "third_party/blink/public/platform/web_security_origin.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_lock_granted_callback.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_lock_info.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_lock_manager_snapshot.h"
 #include "third_party/blink/renderer/core/dom/abort_signal.h"
+#include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
+#include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
+#include "third_party/blink/renderer/core/workers/worker_global_scope.h"
 #include "third_party/blink/renderer/modules/locks/lock.h"
-#include "third_party/blink/renderer/modules/locks/lock_info.h"
-#include "third_party/blink/renderer/modules/locks/lock_manager_snapshot.h"
 #include "third_party/blink/renderer/platform/bindings/microtask.h"
 #include "third_party/blink/renderer/platform/bindings/name_client.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
@@ -26,6 +31,7 @@
 #include "third_party/blink/renderer/platform/scheduler/public/frame_scheduler.h"
 #include "third_party/blink/renderer/platform/scheduler/public/scheduling_policy.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
+#include "third_party/blink/renderer/platform/wtf/casting.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
@@ -37,7 +43,6 @@ constexpr char kRequestAbortedMessage[] = "The request was aborted.";
 
 LockInfo* ToLockInfo(const mojom::blink::LockInfoPtr& record) {
   LockInfo* info = LockInfo::Create();
-  ;
   info->setMode(Lock::ModeToString(record->mode));
   info->setName(record->name);
   info->setClientId(record->client_id);
@@ -68,6 +73,7 @@ class LockManager::LockRequestImpl final
       const String& name,
       mojom::blink::LockMode mode,
       mojo::PendingAssociatedReceiver<mojom::blink::LockRequest> receiver,
+      mojo::PendingRemote<mojom::blink::ObservedFeature> lock_lifetime,
       LockManager* manager)
       : callback_(callback),
         resolver_(resolver),
@@ -77,6 +83,7 @@ class LockManager::LockRequestImpl final
             this,
             std::move(receiver),
             manager->GetExecutionContext()->GetTaskRunner(TaskType::kWebLocks)),
+        lock_lifetime_(std::move(lock_lifetime)),
         manager_(manager) {}
 
   ~LockRequestImpl() override = default;
@@ -87,7 +94,7 @@ class LockManager::LockRequestImpl final
     receiver_.reset();
   }
 
-  void Trace(blink::Visitor* visitor) {
+  void Trace(Visitor* visitor) {
     visitor->Trace(resolver_);
     visitor->Trace(manager_);
     visitor->Trace(callback_);
@@ -153,8 +160,9 @@ class LockManager::LockRequestImpl final
       return;
     }
 
-    Lock* lock = Lock::Create(script_state, name_, mode_,
-                              std::move(handle_remote), manager_);
+    Lock* lock = MakeGarbageCollected<Lock>(
+        script_state, name_, mode_, std::move(handle_remote),
+        std::move(lock_lifetime_), manager_);
     manager_->held_locks_.insert(lock);
 
     ScriptState::Scope scope(script_state);
@@ -186,6 +194,10 @@ class LockManager::LockRequestImpl final
 
   mojo::AssociatedReceiver<mojom::blink::LockRequest> receiver_;
 
+  // Held to pass into the Lock if granted, to inform the browser that
+  // WebLocks are being used by this frame.
+  mojo::PendingRemote<mojom::blink::ObservedFeature> lock_lifetime_;
+
   // The |manager_| keeps |this| alive until a response comes in and this is
   // registered. If the context is destroyed then |manager_| will dispose of
   // |this| which terminates the request on the service side.
@@ -195,7 +207,9 @@ class LockManager::LockRequestImpl final
 };
 
 LockManager::LockManager(ExecutionContext* context)
-    : ContextLifecycleObserver(context) {}
+    : ExecutionContextLifecycleObserver(context),
+      service_(context),
+      observer_(context) {}
 
 ScriptPromise LockManager::request(ScriptState* script_state,
                                    const String& name,
@@ -223,7 +237,8 @@ ScriptPromise LockManager::request(ScriptState* script_state,
 
   // 5. If origin is an opaque origin, then reject promise with a
   // "SecurityError" DOMException.
-  if (!context->GetSecurityOrigin()->CanAccessLocks()) {
+  if (!context->GetSecurityOrigin()->CanAccessLocks() ||
+      !AllowLocks(script_state)) {
     exception_state.ThrowSecurityError(
         "Access to the Locks API is denied in this context.");
     return ScriptPromise();
@@ -241,6 +256,11 @@ ScriptPromise LockManager::request(ScriptState* script_state,
       exception_state.ThrowTypeError("Service not available.");
       return ScriptPromise();
     }
+  }
+  if (!observer_.is_bound()) {
+    context->GetBrowserInterfaceBroker().GetInterface(
+        observer_.BindNewPipeAndPassReceiver(
+            context->GetTaskRunner(TaskType::kMiscPlatformAPI)));
   }
 
   mojom::blink::LockMode mode = Lock::StringToMode(options->mode());
@@ -307,6 +327,10 @@ ScriptPromise LockManager::request(ScriptState* script_state,
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
   ScriptPromise promise = resolver->Promise();
 
+  mojo::PendingRemote<mojom::blink::ObservedFeature> lock_lifetime;
+  observer_->Register(lock_lifetime.InitWithNewPipeAndPassReceiver(),
+                      mojom::blink::ObservedFeatureType::kWebLock);
+
   mojo::PendingAssociatedRemote<mojom::blink::LockRequest> request_remote;
   // 11.1. Let request be the result of running the steps to request a lock with
   // promise, the current agent, environment’s id, origin, callback, name,
@@ -314,7 +338,8 @@ ScriptPromise LockManager::request(ScriptState* script_state,
   // and options’ steal dictionary member.
   LockRequestImpl* request = MakeGarbageCollected<LockRequestImpl>(
       callback, resolver, name, mode,
-      request_remote.InitWithNewEndpointAndPassReceiver(), this);
+      request_remote.InitWithNewEndpointAndPassReceiver(),
+      std::move(lock_lifetime), this);
   AddPendingRequest(request);
 
   // 11.2. If options’ signal dictionary member is present, then add the
@@ -343,7 +368,8 @@ ScriptPromise LockManager::query(ScriptState* script_state,
   ExecutionContext* context = ExecutionContext::From(script_state);
   DCHECK(context->IsContextThread());
 
-  if (!context->GetSecurityOrigin()->CanAccessLocks()) {
+  if (!context->GetSecurityOrigin()->CanAccessLocks() ||
+      !AllowLocks(script_state)) {
     exception_state.ThrowSecurityError(
         "Access to the Locks API is denied in this context.");
     return ScriptPromise();
@@ -392,14 +418,16 @@ bool LockManager::IsPendingRequest(LockRequestImpl* request) {
   return pending_requests_.Contains(request);
 }
 
-void LockManager::Trace(blink::Visitor* visitor) {
+void LockManager::Trace(Visitor* visitor) {
   ScriptWrappable::Trace(visitor);
-  ContextLifecycleObserver::Trace(visitor);
+  ExecutionContextLifecycleObserver::Trace(visitor);
   visitor->Trace(pending_requests_);
   visitor->Trace(held_locks_);
+  visitor->Trace(service_);
+  visitor->Trace(observer_);
 }
 
-void LockManager::ContextDestroyed(ExecutionContext*) {
+void LockManager::ContextDestroyed() {
   for (auto request : pending_requests_)
     request->Cancel();
   pending_requests_.clear();
@@ -410,6 +438,36 @@ void LockManager::OnLockReleased(Lock* lock) {
   // Lock may be removed by an explicit call and/or when the context is
   // destroyed, so this must be idempotent.
   held_locks_.erase(lock);
+}
+
+bool LockManager::AllowLocks(ScriptState* script_state) {
+  if (!cached_allowed_.has_value()) {
+    ExecutionContext* execution_context = ExecutionContext::From(script_state);
+    DCHECK(execution_context->IsContextThread());
+    SECURITY_DCHECK(execution_context->IsDocument() ||
+                    execution_context->IsWorkerGlobalScope());
+    if (auto* document = Document::DynamicFrom(execution_context)) {
+      LocalFrame* frame = document->GetFrame();
+      if (!frame) {
+        cached_allowed_ = false;
+      } else if (auto* settings_client = frame->GetContentSettingsClient()) {
+        // This triggers a sync IPC.
+        cached_allowed_ = settings_client->AllowWebLocks();
+      } else {
+        cached_allowed_ = true;
+      }
+    } else {
+      WebContentSettingsClient* content_settings_client =
+          To<WorkerGlobalScope>(execution_context)->ContentSettingsClient();
+      if (!content_settings_client) {
+        cached_allowed_ = true;
+      } else {
+        // This triggers a sync IPC.
+        cached_allowed_ = content_settings_client->AllowWebLocks();
+      }
+    }
+  }
+  return cached_allowed_.value();
 }
 
 }  // namespace blink

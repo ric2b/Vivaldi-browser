@@ -18,11 +18,13 @@
 #include "base/lazy_instance.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/scoped_observer.h"
 #include "base/strings/string16.h"
 #include "base/win/scoped_gdi_object.h"
 #include "base/win/win_util.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/platform/ax_fragment_root_delegate_win.h"
+#include "ui/base/ime/input_method.h"
 #include "ui/base/ime/input_method_observer.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/base/win/window_event_target.h"
@@ -41,10 +43,9 @@ class ImageSkia;
 class Insets;
 }  // namespace gfx
 
-namespace ui  {
+namespace ui {
 class AXFragmentRootWin;
 class AXSystemCaretWin;
-class InputMethod;
 class TextInputClient;
 class ViewProp;
 class SessionChangeObserver;
@@ -280,10 +281,9 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
 
   // Called after the WM_ACTIVATE message has been processed by the default
   // windows procedure.
-  void PostProcessActivateMessage(
-      int activation_state,
-      bool minimized,
-      HWND window_gaining_or_losing_activation);
+  void PostProcessActivateMessage(int activation_state,
+                                  bool minimized,
+                                  HWND window_gaining_or_losing_activation);
 
   // Enables disabled owner windows that may have been disabled due to this
   // window's modality.
@@ -466,7 +466,7 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
   void OnActivateApp(BOOL active, DWORD thread_id);
   // TODO(beng): return BOOL is temporary until this object becomes a
   //             WindowImpl.
-  BOOL OnAppCommand(HWND window, short command, WORD device, int keystate);
+  BOOL OnAppCommand(HWND window, int command, WORD device, WORD keystate);
   void OnCancelMode();
   void OnCaptureChanged(HWND window);
   void OnClose();
@@ -522,7 +522,7 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
   LRESULT OnWindowSizingFinished(UINT message, WPARAM w_param, LPARAM l_param);
 
   // Receives Windows Session Change notifications.
-  void OnSessionChange(WPARAM status_code);
+  void OnSessionChange(WPARAM status_code, const bool* is_current_session);
 
   using TouchEvents = std::vector<ui::TouchEvent>;
   // Helper to handle the list of touch events passed in. We need this because
@@ -713,11 +713,11 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
   // messages synthesized by Windows for touch which are not flagged by the OS
   // as synthesized mouse messages. For more information please refer to the
   // IsMouseEventFromTouch function.
-  static long last_touch_or_pen_message_time_;
+  static LONG last_touch_or_pen_message_time_;
 
   // Time the last WM_MOUSEHWHEEL message is received. Please refer to the
   // HandleMouseEventInternal function as to why this is needed.
-  long last_mouse_hwheel_time_;
+  LONG last_mouse_hwheel_time_;
 
   // On Windows Vista and beyond, if we are transitioning from custom frame
   // to Aero(glass) we delay setting the DWM related properties in full
@@ -772,10 +772,6 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
   // not WM_TOUCH events.
   bool pointer_events_for_touch_;
 
-  // True if we enable feature kPrecisionTouchpadScrollPhase. Indicate we will
-  // report the scroll phase information or not.
-  bool precision_touchpad_scroll_phase_enabled_;
-
   // True if DWM frame should be cleared on next WM_ERASEBKGND message.  This is
   // necessary to avoid white flashing in the titlebar area around the
   // minimize/maximize/close buttons.  Clearing the frame on every WM_ERASEBKGND
@@ -783,11 +779,17 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
   // the first message after frame type changes.
   bool needs_dwm_frame_clear_ = true;
 
-  // True if user is in remote session.
-  bool is_remote_session_;
-
   // True if is handling mouse WM_INPUT messages.
   bool using_wm_input_ = false;
+
+  // True if we're displaying the system menu on the title bar. If we are,
+  // then we want to ignore right mouse clicks instead of bringing up a
+  // context menu.
+  bool handling_mouse_menu_ = false;
+
+  // This is set to true when we call ShowWindow(SC_RESTORE), in order to
+  // call HandleWindowMinimizedOrRestored() when we get a WM_ACTIVATE message.
+  bool notify_restore_on_activate_ = false;
 
   // This is a map of the HMONITOR to full screeen window instance. It is safe
   // to keep a raw pointer to the HWNDMessageHandler instance as we track the
@@ -798,6 +800,8 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
 
   // Populated if the cursor position is being mocked for testing purposes.
   base::Optional<gfx::Point> mock_cursor_position_;
+
+  ScopedObserver<ui::InputMethod, ui::InputMethodObserver> observer_{this};
 
   // The WeakPtrFactories below (one inside the
   // CR_MSG_MAP_CLASS_DECLARATIONS macro and autohide_factory_) must

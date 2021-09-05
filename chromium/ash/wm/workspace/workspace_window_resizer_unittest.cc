@@ -20,6 +20,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/time/time.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/test/test_window_delegate.h"
 #include "ui/aura/test/test_windows.h"
@@ -40,10 +41,10 @@ namespace {
 
 const int kRootHeight = 600;
 
-gfx::Point CalculateDragPoint(const WindowResizer& resizer,
-                              int delta_x,
-                              int delta_y) {
-  gfx::Point location = resizer.GetInitialLocation();
+gfx::PointF CalculateDragPoint(const WindowResizer& resizer,
+                               int delta_x,
+                               int delta_y) {
+  gfx::PointF location = resizer.GetInitialLocation();
   location.set_x(location.x() + delta_x);
   location.set_y(location.y() + delta_y);
   return location;
@@ -176,8 +177,8 @@ class WorkspaceWindowResizerTest : public AshTestBase {
                                       const gfx::Point& point_in_parent,
                                       int window_component) {
     WindowResizer* resizer =
-        CreateWindowResizer(window, point_in_parent, window_component,
-                            ::wm::WINDOW_MOVE_SOURCE_MOUSE)
+        CreateWindowResizer(window, gfx::PointF(point_in_parent),
+                            window_component, ::wm::WINDOW_MOVE_SOURCE_MOUSE)
             .release();
     workspace_resizer_ = WorkspaceWindowResizer::GetInstanceForTest();
     return resizer;
@@ -189,7 +190,8 @@ class WorkspaceWindowResizerTest : public AshTestBase {
       ::wm::WindowMoveSource source,
       const std::vector<aura::Window*>& attached_windows) {
     WindowState* window_state = WindowState::Get(window);
-    window_state->CreateDragDetails(point_in_parent, window_component, source);
+    window_state->CreateDragDetails(gfx::PointF(point_in_parent),
+                                    window_component, source);
     return WorkspaceWindowResizer::Create(window_state, attached_windows);
   }
 
@@ -562,7 +564,7 @@ TEST_F(WorkspaceWindowResizerTest, MouseMoveWithTouchDrag) {
   resizer->RevertDrag();
 }
 
-// Assertions around dragging to the left/right edge of the screen.
+// Assertions around dragging near the left/right edge of the display.
 TEST_F(WorkspaceWindowResizerTest, Edge) {
   // Resize host window to force insets update.
   UpdateDisplay("800x700");
@@ -581,7 +583,8 @@ TEST_F(WorkspaceWindowResizerTest, Edge) {
     std::unique_ptr<WindowResizer> resizer(
         CreateResizerForTest(window_.get(), gfx::Point(), HTCAPTION));
     ASSERT_TRUE(resizer.get());
-    resizer->Drag(CalculateDragPoint(*resizer, 0, 10), 0);
+    // Test tolerance of 32px for snapping.
+    resizer->Drag(CalculateDragPoint(*resizer, 32, 10), 0);
     resizer->CompleteDrag();
 
     EXPECT_EQ(expected_bounds_in_parent.ToString(),
@@ -598,7 +601,8 @@ TEST_F(WorkspaceWindowResizerTest, Edge) {
     std::unique_ptr<WindowResizer> resizer(
         CreateResizerForTest(window_.get(), gfx::Point(), HTCAPTION));
     ASSERT_TRUE(resizer.get());
-    resizer->Drag(CalculateDragPoint(*resizer, 800, 10), 0);
+    // Test tolerance of 32px for snapping (measured from 799, not from 800).
+    resizer->Drag(CalculateDragPoint(*resizer, 767, 10), 0);
     resizer->CompleteDrag();
     EXPECT_EQ(expected_bounds_in_parent.ToString(),
               window_->bounds().ToString());
@@ -610,15 +614,37 @@ TEST_F(WorkspaceWindowResizerTest, Edge) {
   // Restore the window to clear snapped state.
   window_state->Restore();
 
-  // Test if the restore bounds is correct in multiple displays.
+  // Test dragging to another display and snapping there.
   UpdateDisplay("800x600,500x600");
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
-  EXPECT_EQ(root_windows[0], window_->GetRootWindow());
-  window_->SetBoundsInScreen(gfx::Rect(800, 10, 400, 60),
-                             GetSecondaryDisplay());
-  EXPECT_EQ(root_windows[1], window_->GetRootWindow());
   {
-    EXPECT_EQ("800,10 400x60", window_->GetBoundsInScreen().ToString());
+    EXPECT_EQ("20,30 400x60", window_->GetBoundsInScreen().ToString());
+
+    std::unique_ptr<WindowResizer> resizer(
+        CreateResizerForTest(window_.get(), gfx::Point(), HTCAPTION));
+    ASSERT_TRUE(resizer.get());
+    // TODO(crbug.com/990589): Unit tests should be able to simulate mouse input
+    // without having to call |CursorManager::SetDisplay|.
+    Shell::Get()->cursor_manager()->SetDisplay(
+        display::Screen::GetScreen()->GetDisplayNearestWindow(root_windows[1]));
+    resizer->Drag(CalculateDragPoint(*resizer, 499, 0), 0);
+    int bottom =
+        screen_util::GetDisplayWorkAreaBoundsInParent(window_.get()).bottom();
+    EXPECT_EQ(root_windows[0], window_->GetRootWindow());
+    resizer->CompleteDrag();
+    EXPECT_EQ(root_windows[1], window_->GetRootWindow());
+    EXPECT_EQ("0,0 250x" + base::NumberToString(bottom),
+              window_->bounds().ToString());
+    EXPECT_EQ("820,30 400x60",
+              window_state->GetRestoreBoundsInScreen().ToString());
+  }
+
+  // Restore the window to clear snapped state.
+  window_state->Restore();
+
+  // Test dragging from a secondary display and snapping on the same display.
+  {
+    EXPECT_EQ("820,30 400x60", window_->GetBoundsInScreen().ToString());
 
     std::unique_ptr<WindowResizer> resizer(
         CreateResizerForTest(window_.get(), gfx::Point(), HTCAPTION));
@@ -631,12 +657,10 @@ TEST_F(WorkspaceWindowResizerTest, Edge) {
     int bottom =
         screen_util::GetDisplayWorkAreaBoundsInParent(window_.get()).bottom();
     resizer->CompleteDrag();
-    // With the resolution of 500x600 we will hit in this case the 50% screen
-    // size setting.
     // TODO(varkha): Insets are updated because of http://crbug.com/292238
     EXPECT_EQ("250,0 250x" + base::NumberToString(bottom),
               window_->bounds().ToString());
-    EXPECT_EQ("800,10 400x60",
+    EXPECT_EQ("820,30 400x60",
               window_state->GetRestoreBoundsInScreen().ToString());
   }
 }
@@ -655,7 +679,7 @@ TEST_F(WorkspaceWindowResizerTest, NonResizableWindows) {
   EXPECT_EQ("0,30 50x60", window_->bounds().ToString());
 }
 
-TEST_F(WorkspaceWindowResizerTest, CancelSnapPhantom) {
+TEST_F(WorkspaceWindowResizerTest, MultiDisplaySnapPhantom) {
   UpdateDisplay("800x600,800x600");
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
   ASSERT_EQ(2U, root_windows.size());
@@ -681,9 +705,9 @@ TEST_F(WorkspaceWindowResizerTest, CancelSnapPhantom) {
     EXPECT_TRUE(snap_phantom_window_controller());
 
     // Move the cursor across the edge. Now the snap phantom window controller
-    // should be canceled.
+    // should still be non-null.
     resizer->Drag(CalculateDragPoint(*resizer, 800, 0), 0);
-    EXPECT_FALSE(snap_phantom_window_controller());
+    EXPECT_TRUE(snap_phantom_window_controller());
   }
 }
 
@@ -705,10 +729,10 @@ TEST_F(WorkspaceWindowResizerTest, DragSnapped) {
   // Dragging a side snapped window should unsnap it.
   std::unique_ptr<WindowResizer> resizer(
       CreateResizerForTest(window_.get(), gfx::Point(), HTCAPTION));
-  resizer->Drag(CalculateDragPoint(*resizer, 10, 0), 0);
+  resizer->Drag(CalculateDragPoint(*resizer, 33, 0), 0);
   resizer->CompleteDrag();
   EXPECT_EQ(WindowStateType::kNormal, window_state->GetStateType());
-  EXPECT_EQ("10,0 100x100", window_->bounds().ToString());
+  EXPECT_EQ("33,0 100x100", window_->bounds().ToString());
   EXPECT_FALSE(window_state->HasRestoreBounds());
 }
 
@@ -1004,7 +1028,7 @@ TEST_F(WorkspaceWindowResizerTest, DragWindowOutsideRightToSecondaryDisplay) {
 
 // Verifies snapping to edges works.
 TEST_F(WorkspaceWindowResizerTest, SnapToEdge) {
-  GetPrimaryShelf()->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
+  GetPrimaryShelf()->SetAutoHideBehavior(ShelfAutoHideBehavior::kAlways);
   window_->SetBounds(gfx::Rect(96, 112, 320, 160));
   // Click 50px to the right so that the mouse pointer does not leave the
   // workspace ensuring sticky behavior.
@@ -1232,11 +1256,11 @@ TEST_F(WorkspaceWindowResizerTest, RestoreToPreMaximizeCoordinates) {
   std::unique_ptr<WindowResizer> resizer(
       CreateResizerForTest(window_.get(), gfx::Point(), HTCAPTION));
   ASSERT_TRUE(resizer.get());
-  // Drag the window to new position by adding (10, 10) to original point,
+  // Drag the window to new position by adding (33, 33) to original point,
   // the window should get restored.
-  resizer->Drag(CalculateDragPoint(*resizer, 10, 10), 0);
+  resizer->Drag(CalculateDragPoint(*resizer, 33, 33), 0);
   resizer->CompleteDrag();
-  EXPECT_EQ("10,10 320x160", window_->bounds().ToString());
+  EXPECT_EQ("33,33 320x160", window_->bounds().ToString());
   // The restore rectangle should get cleared as well.
   EXPECT_FALSE(window_state->HasRestoreBounds());
 }
@@ -1762,7 +1786,7 @@ TEST_F(WorkspaceWindowResizerTest, MainWindowHonoursMinWidth) {
 // The following variants test that windows are resized correctly to the edges
 // of the screen using touch, when touch point is off of the window border.
 TEST_F(WorkspaceWindowResizerTest, TouchResizeToEdge_RIGHT) {
-  GetPrimaryShelf()->SetAutoHideBehavior(SHELF_AUTO_HIDE_ALWAYS_HIDDEN);
+  GetPrimaryShelf()->SetAutoHideBehavior(ShelfAutoHideBehavior::kAlwaysHidden);
 
   InitTouchResizeWindow(gfx::Rect(100, 100, 600, kRootHeight - 200), HTRIGHT);
   EXPECT_EQ(gfx::Rect(100, 100, 600, kRootHeight - 200).ToString(),
@@ -1793,7 +1817,7 @@ TEST_F(WorkspaceWindowResizerTest, TouchResizeToEdge_RIGHT) {
 }
 
 TEST_F(WorkspaceWindowResizerTest, TouchResizeToEdge_LEFT) {
-  GetPrimaryShelf()->SetAutoHideBehavior(SHELF_AUTO_HIDE_ALWAYS_HIDDEN);
+  GetPrimaryShelf()->SetAutoHideBehavior(ShelfAutoHideBehavior::kAlwaysHidden);
 
   InitTouchResizeWindow(gfx::Rect(100, 100, 600, kRootHeight - 200), HTLEFT);
   EXPECT_EQ(gfx::Rect(100, 100, 600, kRootHeight - 200).ToString(),
@@ -1824,7 +1848,7 @@ TEST_F(WorkspaceWindowResizerTest, TouchResizeToEdge_LEFT) {
 }
 
 TEST_F(WorkspaceWindowResizerTest, TouchResizeToEdge_TOP) {
-  GetPrimaryShelf()->SetAutoHideBehavior(SHELF_AUTO_HIDE_ALWAYS_HIDDEN);
+  GetPrimaryShelf()->SetAutoHideBehavior(ShelfAutoHideBehavior::kAlwaysHidden);
 
   InitTouchResizeWindow(gfx::Rect(100, 100, 600, kRootHeight - 200), HTTOP);
   EXPECT_EQ(gfx::Rect(100, 100, 600, kRootHeight - 200).ToString(),
@@ -1852,7 +1876,7 @@ TEST_F(WorkspaceWindowResizerTest, TouchResizeToEdge_TOP) {
 }
 
 TEST_F(WorkspaceWindowResizerTest, TouchResizeToEdge_BOTTOM) {
-  GetPrimaryShelf()->SetAutoHideBehavior(SHELF_AUTO_HIDE_ALWAYS_HIDDEN);
+  GetPrimaryShelf()->SetAutoHideBehavior(ShelfAutoHideBehavior::kAlwaysHidden);
 
   InitTouchResizeWindow(gfx::Rect(100, 100, 600, kRootHeight - 200), HTBOTTOM);
   EXPECT_EQ(gfx::Rect(100, 100, 600, kRootHeight - 200).ToString(),
@@ -1888,16 +1912,22 @@ TEST_F(WorkspaceWindowResizerTest, ResizeHistogram) {
   std::unique_ptr<WindowResizer> resizer(
       CreateResizerForTest(window_.get(), gfx::Point(), HTRIGHT));
   ASSERT_TRUE(resizer.get());
-  resizer->Drag(gfx::Point(50, 50), 0);
+  resizer->Drag(gfx::PointF(50, 50), 0);
 
   // A resize should generate a histogram.
   EXPECT_NE(gfx::Size(400, 60), window_->bounds().size());
-  ui::WaitForNextFrameToBePresented(window_->GetHost()->compositor());
+  EXPECT_TRUE(
+      ui::WaitForNextFrameToBePresented(window_->GetHost()->compositor()));
   histograms.ExpectTotalCount("Ash.InteractiveWindowResize.TimeToPresent", 1);
 
   // Completing the drag should not generate another histogram.
   resizer->CompleteDrag();
-  ui::WaitForNextFrameToBePresented(window_->GetHost()->compositor());
+
+  // Flush pending draws until there is no frame presented for 100ms (6 frames
+  // worth time) and check that histogram is not updated.
+  while (ui::WaitForNextFrameToBePresented(
+      window_->GetHost()->compositor(), base::TimeDelta::FromMilliseconds(100)))
+    ;
   histograms.ExpectTotalCount("Ash.InteractiveWindowResize.TimeToPresent", 1);
 }
 
@@ -1917,7 +1947,7 @@ TEST_F(MultiDisplayWorkspaceWindowResizerTest, Magnetism) {
   EXPECT_EQ(win2->GetRootWindow(), roots[1]);
 
   std::unique_ptr<WindowResizer> resizer = CreateWindowResizer(
-      win1.get(), gfx::Point(), HTCAPTION, ::wm::WINDOW_MOVE_SOURCE_MOUSE);
+      win1.get(), gfx::PointF(), HTCAPTION, ::wm::WINDOW_MOVE_SOURCE_MOUSE);
   ASSERT_TRUE(resizer.get());
 
   // Drag `win1` such that its right edge is 5 pixels from the left edge of
@@ -1930,6 +1960,24 @@ TEST_F(MultiDisplayWorkspaceWindowResizerTest, Magnetism) {
 TEST_F(WorkspaceWindowResizerTest, DoesNotWorkInAppMode) {
   GetSessionControllerClient()->SetIsRunningInAppMode(true);
   EXPECT_FALSE(CreateResizerForTest(window_.get(), gfx::Point(), HTCAPTION));
+}
+
+TEST_F(WorkspaceWindowResizerTest, DoNotCreateResizerIfNotActiveSession) {
+  GetSessionControllerClient()->SetSessionState(
+      session_manager::SessionState::OOBE);
+  EXPECT_FALSE(CreateResizerForTest(window_.get(), gfx::Point(), HTCAPTION));
+
+  GetSessionControllerClient()->SetSessionState(
+      session_manager::SessionState::LOCKED);
+  EXPECT_FALSE(CreateResizerForTest(window_.get(), gfx::Point(), HTCAPTION));
+
+  GetSessionControllerClient()->SetSessionState(
+      session_manager::SessionState::LOGIN_PRIMARY);
+  EXPECT_FALSE(CreateResizerForTest(window_.get(), gfx::Point(), HTCAPTION));
+
+  GetSessionControllerClient()->SetSessionState(
+      session_manager::SessionState::ACTIVE);
+  EXPECT_TRUE(CreateResizerForTest(window_.get(), gfx::Point(), HTCAPTION));
 }
 
 }  // namespace ash

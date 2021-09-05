@@ -28,6 +28,9 @@ ActionableView::ActionableView(TrayPopupInkDropStyle ink_drop_style)
   SetFocusBehavior(FocusBehavior::ALWAYS);
   set_has_ink_drop_action_on_click(false);
   set_notify_enter_exit_on_child(true);
+  // TODO(pbos): Replace the use of FocusPainter with the FocusRing (using the
+  // below HighlightPathGenerator).
+  SetInstallFocusRingOnFocus(false);
   SetFocusPainter(TrayPopupUtils::CreateFocusPainter());
   TrayPopupUtils::InstallHighlightPathGenerator(this, ink_drop_style_);
 }
@@ -90,16 +93,6 @@ void ActionableView::ButtonPressed(Button* sender, const ui::Event& event) {
   destroyed_ = nullptr;
 
   HandlePerformActionResult(action_performed, event);
-}
-
-ButtonListenerActionableView::ButtonListenerActionableView(
-    TrayPopupInkDropStyle ink_drop_style,
-    views::ButtonListener* listener)
-    : ActionableView(ink_drop_style), listener_(listener) {}
-
-bool ButtonListenerActionableView::PerformAction(const ui::Event& event) {
-  listener_->ButtonPressed(this, event);
-  return true;
 }
 
 }  // namespace ash

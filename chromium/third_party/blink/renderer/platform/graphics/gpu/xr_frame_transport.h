@@ -52,21 +52,18 @@ class PLATFORM_EXPORT XRFrameTransport final
                    gpu::gles2::GLES2Interface*,
                    DrawingBuffer::Client*,
                    scoped_refptr<Image> image_ref,
-                   std::unique_ptr<viz::SingleReleaseCallback>,
-                   int16_t vr_frame_id,
-                   bool needs_copy);
+                   int16_t vr_frame_id);
 
   void FrameSubmitMissing(device::mojom::blink::XRPresentationProvider*,
                           gpu::gles2::GLES2Interface*,
                           int16_t vr_frame_id);
 
-  virtual void Trace(blink::Visitor*);
+  virtual void Trace(Visitor*);
 
  private:
   void WaitForPreviousTransfer();
   base::TimeDelta WaitForPreviousRenderToFinish();
   base::TimeDelta WaitForGpuFenceReceived();
-  void CallPreviousFrameCallback();
 
   // XRPresentationClient
   void OnSubmitFrameTransferred(bool success) override;
@@ -79,7 +76,6 @@ class PLATFORM_EXPORT XRFrameTransport final
   // Used to keep the image alive until the next frame if using
   // waitForPreviousTransferToFinish.
   scoped_refptr<Image> previous_image_;
-  std::unique_ptr<viz::SingleReleaseCallback> previous_image_release_callback_;
 
   bool waiting_for_previous_frame_transfer_ = false;
   bool last_transfer_succeeded_ = false;

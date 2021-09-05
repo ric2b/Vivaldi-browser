@@ -9,5 +9,9 @@ import("//build/config/sanitizers/sanitizers.gni")
 # Chromium linker doesn't reliably support loading multiple libraries;
 # disable for component builds, see crbug.com/657093.
 # Chromium linker causes instrumentation to return incorrect results.
+# NOTE(jarle@vivaldi.com): Chromium linker causes runtime crash on certain
+# Samsung devices (Galaxy Note8/S9 etc.). WE NEED THIS PATCH.
+# Ref. https://bugs.vivaldi.com/browse/VB-53379 and https://bugs.vivaldi.com/browse/VB-60796
 chromium_linker_supported =
     !is_component_build && !enable_profiling && !use_order_profiling && !is_asan
+    && !is_vivaldi

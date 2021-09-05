@@ -2,8 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {assert} from 'chrome://resources/js/assert.m.js';
+import {isRTL} from 'chrome://resources/js/util.m.js';
+import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
 Polymer({
   is: 'viewer-page-indicator',
+
+  _template: html`{__html_template__}`,
 
   properties: {
     label: {type: String, value: '1'},
@@ -17,7 +23,7 @@ Polymer({
   timerId: undefined,
 
   /** @override */
-  ready: function() {
+  ready() {
     const callback = this.fadeIn_.bind(this);
     window.addEventListener('scroll', function() {
       requestAnimationFrame(callback);
@@ -25,7 +31,7 @@ Polymer({
   },
 
   /** @private */
-  fadeIn_: function() {
+  fadeIn_() {
     const percent = window.scrollY /
         (document.scrollingElement.scrollHeight -
          document.documentElement.clientHeight);
@@ -39,7 +45,7 @@ Polymer({
     // those platforms, though.
     assert(document.documentElement.dir);
     const endEdge = isRTL() ? 'left' : 'right';
-    if (window.innerWidth == document.scrollingElement.scrollWidth) {
+    if (window.innerWidth === document.scrollingElement.scrollWidth) {
       this.style[endEdge] = '16px';
     } else {
       this.style[endEdge] = '0px';
@@ -54,11 +60,11 @@ Polymer({
     }, 2000);
   },
 
-  pageLabelsChanged: function() {
+  pageLabelsChanged() {
     this.indexChanged();
   },
 
-  indexChanged: function() {
+  indexChanged() {
     if (this.pageLabels) {
       this.label = this.pageLabels[this.index];
     } else {

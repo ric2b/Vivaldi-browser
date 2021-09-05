@@ -13,24 +13,23 @@ import androidx.annotation.NonNull;
 import androidx.browser.customtabs.CustomTabsIntent;
 
 import org.chromium.base.CommandLine;
+import org.chromium.base.IntentUtils;
 import org.chromium.base.SysUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel.StateChangeReason;
 import org.chromium.chrome.browser.customtabs.CustomTabActivity;
 import org.chromium.chrome.browser.customtabs.CustomTabIntentDataProvider;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
+import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
-import org.chromium.chrome.browser.fullscreen.FullscreenManager;
 import org.chromium.chrome.browser.infobar.ReaderModeInfoBar;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tab.Tab.TabHidingType;
+import org.chromium.chrome.browser.tab.TabHidingType;
+import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabObserver;
-import org.chromium.chrome.browser.tabmodel.TabSelectionType;
-import org.chromium.chrome.browser.util.IntentUtils;
 import org.chromium.components.dom_distiller.core.DomDistillerUrlUtils;
 import org.chromium.components.navigation_interception.InterceptNavigationDelegate;
 import org.chromium.components.navigation_interception.NavigationParams;
@@ -174,13 +173,13 @@ public class ReaderModeManager extends TabModelSelectorTabObserver {
         if (tabInfo == null) {
             tabInfo = new ReaderModeTabInfo();
             tabInfo.status = NOT_POSSIBLE;
-            tabInfo.url = shownTab.getUrl();
+            tabInfo.url = shownTab.getUrlString();
             mTabStatusMap.put(shownTabId, tabInfo);
         }
 
         if (tabInfo.distillabilityObserver == null) setDistillabilityObserver(shownTab);
 
-        if (DomDistillerUrlUtils.isDistilledPage(shownTab.getUrl())
+        if (DomDistillerUrlUtils.isDistilledPage(shownTab.getUrlString())
                 && !tabInfo.isViewingReaderModePage) {
             tabInfo.onStartedReaderMode();
         }
@@ -240,7 +239,7 @@ public class ReaderModeManager extends TabModelSelectorTabObserver {
         // If the content change was because of distiller switching web contents or Reader Mode has
         // already been dismissed for this tab do nothing.
         if (mTabStatusMap.containsKey(tab.getId()) && mTabStatusMap.get(tab.getId()).isDismissed
-                && !DomDistillerUrlUtils.isDistilledPage(tab.getUrl())) {
+                && !DomDistillerUrlUtils.isDistilledPage(tab.getUrlString())) {
             return;
         }
 
@@ -252,13 +251,13 @@ public class ReaderModeManager extends TabModelSelectorTabObserver {
         // If the tab state already existed, only reset the relevant data. Things like view duration
         // need to be preserved.
         tabInfo.status = NOT_POSSIBLE;
-        tabInfo.url = tab.getUrl();
+        tabInfo.url = tab.getUrlString();
 
         if (tab.getWebContents() != null) {
             tabInfo.webContentsObserver = createWebContentsObserver(tab.getWebContents());
-            if (DomDistillerUrlUtils.isDistilledPage(tab.getUrl())) {
+            if (DomDistillerUrlUtils.isDistilledPage(tab.getUrlString())) {
                 tabInfo.status = STARTED;
-                mReaderModePageUrl = tab.getUrl();
+                mReaderModePageUrl = tab.getUrlString();
             }
         }
     }
@@ -347,8 +346,9 @@ public class ReaderModeManager extends TabModelSelectorTabObserver {
                 // TODO(cjhopman): This should possibly ignore navigations that replace the entry
                 // (like those from history.replaceState()).
                 if (!navigation.hasCommitted() || !navigation.isInMainFrame()
-                        || navigation.isSameDocument())
+                        || navigation.isSameDocument()) {
                     return;
+                }
 
                 if (mShouldRemovePreviousNavigation) {
                     mShouldRemovePreviousNavigation = false;
@@ -390,7 +390,7 @@ public class ReaderModeManager extends TabModelSelectorTabObserver {
                 }
                 tabInfo.showInfoBarRecorded = false;
 
-                if (curTab != null && !DomDistillerUrlUtils.isDistilledPage(curTab.getUrl())
+                if (curTab != null && !DomDistillerUrlUtils.isDistilledPage(curTab.getUrlString())
                         && tabInfo.isViewingReaderModePage) {
                     long timeMs = tabInfo.onExitReaderMode();
                     recordReaderModeViewDuration(timeMs);
@@ -456,7 +456,7 @@ public class ReaderModeManager extends TabModelSelectorTabObserver {
 
         // Make sure to exit fullscreen mode before navigating.
         Tab currentTab = mTabModelSelector.getCurrentTab();
-        currentTab.exitFullscreenMode();
+        mChromeActivity.getFullscreenManager().onExitFullscreen(currentTab);
 
         // RenderWidgetHostViewAndroid hides the controls after transitioning to reader mode.
         // See the long history of the issue in https://crbug.com/825765, https://crbug.com/853686,
@@ -469,10 +469,8 @@ public class ReaderModeManager extends TabModelSelectorTabObserver {
 
     private void showControlsTransient(Tab tab) {
         assert mChromeActivity != null;
-        FullscreenManager fullscreenManager = mChromeActivity.getFullscreenManager();
-        if (!(fullscreenManager instanceof ChromeFullscreenManager)) return;
-        ((ChromeFullscreenManager) fullscreenManager).getBrowserVisibilityDelegate()
-                .showControlsTransient();
+        ChromeFullscreenManager fullscreenManager = mChromeActivity.getFullscreenManager();
+        fullscreenManager.getBrowserVisibilityDelegate().showControlsTransient();
     }
 
     private void distillInCustomTab() {
@@ -526,7 +524,7 @@ public class ReaderModeManager extends TabModelSelectorTabObserver {
             if (tabInfo == null) return;
 
             // Make sure the page didn't navigate while waiting for a response.
-            if (!tab.getUrl().equals(tabInfo.url)) return;
+            if (!tab.getUrlString().equals(tabInfo.url)) return;
 
             boolean excludedMobileFriendly =
                     DomDistillerTabUtils.shouldExcludeMobileFriendly() && isMobileOptimized;

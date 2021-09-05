@@ -12,6 +12,8 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
+#include "base/values.h"
+#include "fuchsia/base/scoped_pseudo_file_publisher.h"
 #include "fuchsia/engine/web_engine_export.h"
 
 namespace base {
@@ -43,7 +45,15 @@ class WEB_ENGINE_EXPORT ContextProviderImpl
   // create Context processes.
   void SetLaunchCallbackForTest(LaunchCallbackForTest launch);
 
+  // Sets a config to use for the test, instead of looking for the config file.
+  void set_config_override_for_test(base::Value config) {
+    config_override_ = std::move(config);
+  }
+
  private:
+  // Load the appropriate configuration.
+  base::Value LoadConfig();
+
   // fuchsia::web::Debug implementation.
   void EnableDevTools(
       fidl::InterfaceHandle<fuchsia::web::DevToolsListener> listener,
@@ -52,6 +62,15 @@ class WEB_ENGINE_EXPORT ContextProviderImpl
   // Set by tests to use to launch Context child processes, e.g. to allow a
   // fake Context process to be launched.
   LaunchCallbackForTest launch_for_test_;
+
+  // Default configuration value.
+  base::Value config_default_;
+  cr_fuchsia::ScopedPseudoFilePublisher config_default_file_;
+
+  // Configuration override to replace the default configuration, if non-empty.
+  // Setting this value affects all subsequently created Contexts.
+  base::Value config_override_;
+  cr_fuchsia::ScopedPseudoFilePublisher config_override_file_;
 
   // The DevToolsListeners registered via the Debug interface.
   fidl::InterfacePtrSet<fuchsia::web::DevToolsListener> devtools_listeners_;

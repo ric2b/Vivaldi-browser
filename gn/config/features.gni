@@ -8,27 +8,32 @@ declare_args() {
 
 # Locales about to be added, but not ready
 vivaldi_pending_locales = [
-  "af",
-  "be",
   "de-CH",
   "eo",
   "es-PE",
-  "eu",
   "fy",
   "gd",
-  "gl",
-  "hy",
   "io",
-  "is",
   "ja-KS",
   "jbo",
-  "ka",
   "ku",
-  "mk",
   "sc",
-  "sq",
   "nn",
 ]
+
+if (!is_android) {
+  vivaldi_pending_locales += [
+    "af",
+    "be",
+    "eu",
+    "gl",
+    "hy",
+    "is",
+    "ka",
+    "mk",
+    "sq",
+  ]
+}
 
 if (is_mac && is_official_build) {
   mac_strip_release = true

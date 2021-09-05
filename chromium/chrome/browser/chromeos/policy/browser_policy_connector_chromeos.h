@@ -50,11 +50,13 @@ class DeviceWiFiAllowedHandler;
 struct EnrollmentConfig;
 class HostnameHandler;
 class MinimumVersionPolicyHandler;
+class MinimumVersionPolicyHandlerDelegateImpl;
 class ProxyPolicyProvider;
 class ServerBackedStateKeysBroker;
 class TPMAutoUpdateModePolicyHandler;
 class DeviceScheduledUpdateChecker;
 class DeviceCloudExternalDataPolicyHandler;
+class SystemProxySettingsPolicyHandler;
 
 // Extends ChromeBrowserPolicyConnector with the setup specific to Chrome OS.
 class BrowserPolicyConnectorChromeOS
@@ -169,6 +171,15 @@ class BrowserPolicyConnectorChromeOS
     return tpm_auto_update_mode_policy_handler_.get();
   }
 
+  SystemProxySettingsPolicyHandler* GetSystemProxySettingsPolicyHandler()
+      const {
+    return system_proxy_settings_policy_handler_.get();
+  }
+
+  HostnameHandler* GetHostnameHandler() const {
+    return hostname_handler_.get();
+  }
+
   // Returns device's market segment.
   MarketSegment GetEnterpriseMarketSegment() const;
 
@@ -244,6 +255,8 @@ class BrowserPolicyConnectorChromeOS
   std::unique_ptr<BluetoothPolicyHandler> bluetooth_policy_handler_;
   std::unique_ptr<HostnameHandler> hostname_handler_;
   std::unique_ptr<MinimumVersionPolicyHandler> minimum_version_policy_handler_;
+  std::unique_ptr<MinimumVersionPolicyHandlerDelegateImpl>
+      minimum_version_policy_handler_delegate_;
   std::unique_ptr<DeviceDockMacAddressHandler>
       device_dock_mac_address_source_handler_;
   std::unique_ptr<DeviceWiFiAllowedHandler> device_wifi_allowed_handler_;
@@ -253,6 +266,8 @@ class BrowserPolicyConnectorChromeOS
       device_scheduled_update_checker_;
   std::vector<std::unique_ptr<policy::DeviceCloudExternalDataPolicyHandler>>
       device_cloud_external_data_policy_handlers_;
+  std::unique_ptr<SystemProxySettingsPolicyHandler>
+      system_proxy_settings_policy_handler_;
 
   // This policy provider is used on Chrome OS to feed user policy into the
   // global PolicyService instance. This works by installing the cloud policy

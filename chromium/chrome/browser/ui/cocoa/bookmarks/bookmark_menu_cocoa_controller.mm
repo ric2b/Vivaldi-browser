@@ -22,6 +22,10 @@
 #import "ui/base/cocoa/cocoa_base_utils.h"
 #import "ui/base/cocoa/menu_controller.h"
 
+#include "app/vivaldi_apptools.h"
+#include "components/prefs/pref_service.h"
+#include "ui/vivaldi_bookmark_menu_mac.h"
+
 using base::UserMetricsAction;
 using bookmarks::BookmarkNode;
 using content::OpenURLParams;
@@ -43,7 +47,7 @@ NSMenuItem* GetItemWithSubmenu(NSMenu* submenu) {
 
 @implementation BookmarkMenuCocoaController {
  @private
-  BookmarkMenuBridge* bridge_;  // Weak. Owns |self|.
+  BookmarkMenuBridge* _bridge;  // Weak. Owns |self|.
 }
 
 + (NSString*)tooltipForNode:(const BookmarkNode*)node {
@@ -57,8 +61,8 @@ NSMenuItem* GetItemWithSubmenu(NSMenu* submenu) {
 
 - (id)initWithBridge:(BookmarkMenuBridge*)bridge {
   if ((self = [super init])) {
-    bridge_ = bridge;
-    DCHECK(bridge_);
+    _bridge = bridge;
+    DCHECK(_bridge);
   }
   return self;
 }
@@ -73,7 +77,7 @@ NSMenuItem* GetItemWithSubmenu(NSMenu* submenu) {
 - (void)menuNeedsUpdate:(NSMenu*)menu {
   NSMenuItem* item = GetItemWithSubmenu(menu);
   const BookmarkNode* node = [self nodeForIdentifier:[item tag]];
-  bridge_->UpdateMenu(menu, node);
+  _bridge->UpdateMenu(menu, node);
 }
 
 - (BOOL)menuHasKeyEquivalent:(NSMenu*)menu
@@ -88,25 +92,31 @@ NSMenuItem* GetItemWithSubmenu(NSMenu* submenu) {
 // Return the a BookmarkNode that has the given id (called
 // "identifier" here to avoid conflict with objc's concept of "id").
 - (const BookmarkNode*)nodeForIdentifier:(int)identifier {
-  return bookmarks::GetBookmarkNodeByID(bridge_->GetBookmarkModel(),
+  return bookmarks::GetBookmarkNodeByID(_bridge->GetBookmarkModel(),
                                         identifier);
 }
 
 // Open the URL of the given BookmarkNode in the current tab.
 - (void)openURLForNode:(const BookmarkNode*)node {
-  Browser* browser = chrome::FindTabbedBrowser(bridge_->GetProfile(), true);
+  Browser* browser = chrome::FindTabbedBrowser(_bridge->GetProfile(), true);
   if (!browser) {
-    browser = new Browser(Browser::CreateParams(bridge_->GetProfile(), true));
+    browser = new Browser(Browser::CreateParams(_bridge->GetProfile(), true));
   }
+
   WindowOpenDisposition disposition =
       ui::WindowOpenDispositionFromNSEvent([NSApp currentEvent]);
+  if (vivaldi::IsVivaldiRunning()) {
+    disposition = vivaldi::WindowOpenDispositionFromNSEvent(
+        [NSApp currentEvent], _bridge->GetProfile()->GetPrefs());
+  }
+
   OpenURLParams params(
       node->url(), Referrer(), disposition,
       ui::PAGE_TRANSITION_AUTO_BOOKMARK, false);
   browser->OpenURL(params);
   RecordBookmarkLaunch(
       BOOKMARK_LAUNCH_LOCATION_TOP_MENU,
-      ProfileMetrics::GetBrowserProfileType(bridge_->GetProfile()));
+      ProfileMetrics::GetBrowserProfileType(_bridge->GetProfile()));
 }
 
 - (IBAction)openBookmarkMenuItem:(id)sender {

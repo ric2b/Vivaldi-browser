@@ -9,10 +9,21 @@
 
 namespace chromeos {
 
+// static
+std::string RecommendAppsScreen::GetResultString(Result result) {
+  switch (result) {
+    case Result::SELECTED:
+      return "Selected";
+    case Result::SKIPPED:
+      return "Skipped";
+  }
+}
+
 RecommendAppsScreen::RecommendAppsScreen(
     RecommendAppsScreenView* view,
     const ScreenExitCallback& exit_callback)
-    : BaseScreen(RecommendAppsScreenView::kScreenId),
+    : BaseScreen(RecommendAppsScreenView::kScreenId,
+                 OobeScreenPriority::DEFAULT),
       view_(view),
       exit_callback_(exit_callback) {
   DCHECK(view_);
@@ -42,14 +53,14 @@ void RecommendAppsScreen::OnViewDestroyed(RecommendAppsScreenView* view) {
   view_ = nullptr;
 }
 
-void RecommendAppsScreen::Show() {
+void RecommendAppsScreen::ShowImpl() {
   view_->Show();
 
   recommend_apps_fetcher_ = RecommendAppsFetcher::Create(this);
   recommend_apps_fetcher_->Start();
 }
 
-void RecommendAppsScreen::Hide() {
+void RecommendAppsScreen::HideImpl() {
   view_->Hide();
 }
 

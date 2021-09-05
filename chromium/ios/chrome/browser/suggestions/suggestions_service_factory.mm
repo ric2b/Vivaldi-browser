@@ -38,7 +38,7 @@ SuggestionsServiceFactory* SuggestionsServiceFactory::GetInstance() {
 
 // static
 SuggestionsService* SuggestionsServiceFactory::GetForBrowserState(
-    ios::ChromeBrowserState* browser_state) {
+    ChromeBrowserState* browser_state) {
   return static_cast<SuggestionsService*>(
       GetInstance()->GetServiceForBrowserState(browser_state, true));
 }
@@ -57,8 +57,8 @@ SuggestionsServiceFactory::~SuggestionsServiceFactory() {
 std::unique_ptr<KeyedService>
 SuggestionsServiceFactory::BuildServiceInstanceFor(
     web::BrowserState* context) const {
-  ios::ChromeBrowserState* browser_state =
-      ios::ChromeBrowserState::FromBrowserState(context);
+  ChromeBrowserState* browser_state =
+      ChromeBrowserState::FromBrowserState(context);
   signin::IdentityManager* identity_manager =
       IdentityManagerFactory::GetForBrowserState(browser_state);
   syncer::SyncService* sync_service =
@@ -66,13 +66,13 @@ SuggestionsServiceFactory::BuildServiceInstanceFor(
 
   std::unique_ptr<SuggestionsStore> suggestions_store(
       new SuggestionsStore(browser_state->GetPrefs()));
-  std::unique_ptr<BlacklistStore> blacklist_store(
+  std::unique_ptr<BlacklistStore> blocked_suggestions(
       new BlacklistStore(browser_state->GetPrefs()));
 
   return std::make_unique<SuggestionsServiceImpl>(
       identity_manager, sync_service,
       browser_state->GetSharedURLLoaderFactory(), std::move(suggestions_store),
-      std::move(blacklist_store), base::DefaultTickClock::GetInstance());
+      std::move(blocked_suggestions), base::DefaultTickClock::GetInstance());
 }
 
 void SuggestionsServiceFactory::RegisterBrowserStatePrefs(

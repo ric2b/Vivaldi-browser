@@ -72,17 +72,6 @@ public class CastWebContentsIntentUtilsTest {
     }
 
     @Test
-    public void testOnKeyDown() {
-        Intent in = CastWebContentsIntentUtils.onKeyDown(SESSION_ID, 32);
-        String uri = in.getDataString();
-        Assert.assertNotNull(uri);
-        Assert.assertEquals(EXPECTED_URI, uri);
-        int type = CastWebContentsIntentUtils.getKeyCode(in);
-        Assert.assertEquals(32, type);
-        Assert.assertTrue(CastWebContentsIntentUtils.isIntentOfKeyEvent(in));
-    }
-
-    @Test
     public void testOnVisibilityChange() {
         Intent in = CastWebContentsIntentUtils.onVisibilityChange(SESSION_ID, 3);
         String uri = in.getDataString();
@@ -265,5 +254,16 @@ public class CastWebContentsIntentUtilsTest {
         Intent in = CastWebContentsIntentUtils.requestStartCastFragment(
                 mWebContents, APP_ID, 3, false, SESSION_ID, false, true);
         Assert.assertFalse(CastWebContentsIntentUtils.isRemoteControlMode(in));
+    }
+
+    @Test
+    public void testSetHostContext() {
+        Intent in = CastWebContentsIntentUtils.setHostContext(SESSION_ID, 123, "foo");
+        String uri = CastWebContentsIntentUtils.getUriString(in);
+        Assert.assertNotNull(uri);
+        Assert.assertEquals(EXPECTED_URI, uri);
+        Assert.assertEquals(CastWebContentsIntentUtils.ACTION_SET_HOST_CONTEXT, in.getAction());
+        Assert.assertEquals(CastWebContentsIntentUtils.getInteractionId(in), 123);
+        Assert.assertEquals(CastWebContentsIntentUtils.getConversationId(in), "foo");
     }
 }

@@ -57,10 +57,10 @@ class CalendarTable {
   DISALLOW_COPY_AND_ASSIGN(CalendarTable);
 };
 
-#define CALENDAR_ROW_FIELDS                                         \
-  " id, name, description,  url, ctag, orderindex, color, hidden, " \
-  " active, iconindex, username, type, interval, last_checked ,"    \
-  " created, last_modified "
+#define CALENDAR_ROW_FIELDS                                               \
+  " id, account_id, name, description,  url, ctag, orderindex, color, "   \
+  " hidden, active, iconindex, username, type, interval, last_checked , " \
+  " timezone, created, last_modified "
 
 }  // namespace calendar
 

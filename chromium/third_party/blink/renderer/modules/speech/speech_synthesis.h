@@ -26,21 +26,22 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_SPEECH_SPEECH_SYNTHESIS_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_SPEECH_SPEECH_SYNTHESIS_H_
 
-#include "mojo/public/cpp/bindings/receiver.h"
-#include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/blink/public/mojom/speech/speech_synthesis.mojom-blink-forward.h"
-#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
+#include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
 #include "third_party/blink/renderer/modules/event_target_modules.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/modules/speech/speech_synthesis_utterance.h"
 #include "third_party/blink/renderer/modules/speech/speech_synthesis_voice.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
+#include "third_party/blink/renderer/platform/mojo/heap_mojo_receiver.h"
+#include "third_party/blink/renderer/platform/mojo/heap_mojo_remote.h"
+#include "third_party/blink/renderer/platform/mojo/heap_mojo_wrapper_mode.h"
 
 namespace blink {
 
 class MODULES_EXPORT SpeechSynthesis final
     : public EventTargetWithInlineData,
-      public ContextClient,
+      public ExecutionContextClient,
       public mojom::blink::SpeechSynthesisVoiceListObserver {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(SpeechSynthesis);
@@ -67,10 +68,11 @@ class MODULES_EXPORT SpeechSynthesis final
   DEFINE_ATTRIBUTE_EVENT_LISTENER(voiceschanged, kVoiceschanged)
 
   ExecutionContext* GetExecutionContext() const override {
-    return ContextClient::GetExecutionContext();
+    return ExecutionContextClient::GetExecutionContext();
   }
 
-  void Trace(blink::Visitor*) override;
+  // GarbageCollected
+  void Trace(Visitor*) override;
 
   // mojom::blink::SpeechSynthesisVoiceListObserver
   void OnSetVoiceList(
@@ -89,8 +91,8 @@ class MODULES_EXPORT SpeechSynthesis final
                                      unsigned char_index,
                                      unsigned char_length);
 
-  mojo::Remote<mojom::blink::SpeechSynthesis>& MojomSynthesis() {
-    return mojom_synthesis_;
+  mojom::blink::SpeechSynthesis* MojomSynthesis() {
+    return mojom_synthesis_.get();
   }
 
  private:
@@ -121,9 +123,12 @@ class MODULES_EXPORT SpeechSynthesis final
   void InitializeMojomSynthesis();
   void InitializeMojomSynthesisIfNeeded();
 
-  mojo::Receiver<mojom::blink::SpeechSynthesisVoiceListObserver> receiver_{
-      this};
-  mojo::Remote<mojom::blink::SpeechSynthesis> mojom_synthesis_;
+  HeapMojoReceiver<mojom::blink::SpeechSynthesisVoiceListObserver,
+                   HeapMojoWrapperMode::kWithoutContextObserver>
+      receiver_;
+  HeapMojoRemote<mojom::blink::SpeechSynthesis,
+                 HeapMojoWrapperMode::kWithoutContextObserver>
+      mojom_synthesis_;
   HeapVector<Member<SpeechSynthesisVoice>> voice_list_;
   HeapDeque<Member<SpeechSynthesisUtterance>> utterance_queue_;
   bool is_paused_ = false;

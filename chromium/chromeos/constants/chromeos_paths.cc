@@ -34,6 +34,9 @@ const base::FilePath::CharType kUptimeFileName[] =
 const base::FilePath::CharType kUpdateRebootNeededUptimeFile[] =
     FILE_PATH_LITERAL("/run/chrome/update_reboot_needed_uptime");
 
+const base::FilePath::CharType kStartupCustomizationManifestFile[] =
+    FILE_PATH_LITERAL("/opt/oem/etc/startup_manifest.json");
+
 const base::FilePath::CharType kDeviceLocalAccountExtensionDir[] =
     FILE_PATH_LITERAL("/var/cache/device_local_account_extensions");
 
@@ -51,6 +54,9 @@ const base::FilePath::CharType kDeviceExtensionLocalCache[] =
 
 const base::FilePath::CharType kSigninProfileComponentPolicy[] =
     FILE_PATH_LITERAL("/var/cache/signin_profile_component_policy");
+
+const base::FilePath::CharType kSigninProfileExtensionsDir[] =
+    FILE_PATH_LITERAL("/var/cache/signin_profile_extensions");
 
 const base::FilePath::CharType kPreinstalledComponents[] =
     FILE_PATH_LITERAL("/mnt/stateful_partition/unencrypted/");
@@ -75,6 +81,9 @@ bool PathProvider(int key, base::FilePath* result) {
     case FILE_UPDATE_REBOOT_NEEDED_UPTIME:
       *result = base::FilePath(kUpdateRebootNeededUptimeFile);
       break;
+    case FILE_STARTUP_CUSTOMIZATION_MANIFEST:
+      *result = base::FilePath(kStartupCustomizationManifestFile);
+      break;
     case DIR_DEVICE_LOCAL_ACCOUNT_EXTENSIONS:
       *result = base::FilePath(kDeviceLocalAccountExtensionDir);
       break;
@@ -92,6 +101,9 @@ bool PathProvider(int key, base::FilePath* result) {
       break;
     case DIR_SIGNIN_PROFILE_COMPONENT_POLICY:
       *result = base::FilePath(kSigninProfileComponentPolicy);
+      break;
+    case DIR_SIGNIN_PROFILE_EXTENSIONS:
+      *result = base::FilePath(kSigninProfileExtensionsDir);
       break;
     case DIR_PREINSTALLED_COMPONENTS:
       *result = base::FilePath(kPreinstalledComponents);
@@ -140,6 +152,9 @@ void RegisterStubPathOverrides(const base::FilePath& stubs_dir) {
   base::PathService::Override(
       DIR_SIGNIN_PROFILE_COMPONENT_POLICY,
       parent.AppendASCII("stub_signin_profile_component_policy"));
+  base::PathService::Override(
+      DIR_SIGNIN_PROFILE_EXTENSIONS,
+      parent.AppendASCII("stub_signin_profile_extensions"));
   base::PathService::Override(
       DIR_DEVICE_POLICY_EXTERNAL_DATA,
       parent.AppendASCII("stub_device_policy_external_data"));

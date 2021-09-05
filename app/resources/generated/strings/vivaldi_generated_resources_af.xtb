@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="af">
 <translation id="1017280919048282932">&amp;Voeg toe tot woordeboek</translation>
+<translation id="1029317248976101138">Zoem</translation>
 <translation id="1031362278801463162">Laai tans voorskou</translation>
 <translation id="1047431265488717055">Kopieer Skakelte&amp;ks</translation>
 <translation id="1049795001945932310">&amp;Taalinstellings</translation>
@@ -66,7 +67,6 @@
 <translation id="2150139952286079145">Soekbestemmings</translation>
 <translation id="215753907730220065">Verlaat Volskerm</translation>
 <translation id="2177950615300672361">Privaatmodusoortjie: <ph name="TAB_NAME" /></translation>
-<translation id="218070003709087997">Gebruik ’n syfer om aan te dui hoeveel eksemplare afgedruk moet word (1-999).</translation>
 <translation id="219008588003277019">Eie Kliënt-module: <ph name="NEXE_NAME" /></translation>
 <translation id="220138918934036434">Versteek knop</translation>
 <translation id="2218515861914035131">Plak as skoonteks</translation>
@@ -78,11 +78,9 @@
 <translation id="2282146716419988068">GVE-proses</translation>
 <translation id="2301382460326681002">Uitbreidingstamgids is ongeldig.</translation>
 <translation id="2318143611928805047">Papiergrootte</translation>
-<translation id="2318923050469484167">Huidige incognito-sessie (<ph name="EMBEDDING" />)</translation>
 <translation id="2322193970951063277">Kop- en Voetteks</translation>
 <translation id="2326931316514688470">&amp;Herlaai toep</translation>
 <translation id="2327492829706409234">Aktiveer toep</translation>
-<translation id="2344028582131185878">Outomatiese Aflaaie</translation>
 <translation id="2348176352564285430">Toep: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">Kies die uitbreidingsgids.</translation>
 <translation id="2379281330731083556">Druk af d.m.v. stelseldialoogvenster… <ph name="SHORTCUT_KEY" /></translation>
@@ -95,12 +93,12 @@
 <translation id="2470702053775288986">Onondersteunde uitbreidings gedeaktiveer</translation>
 <translation id="2476578072172137802">Werfinstellings</translation>
 <translation id="2482878487686419369">Kennisgewings</translation>
+<translation id="2498539833203011245">Maak kleiner</translation>
 <translation id="2509495747794740764">Die waarde van die skaal moet ’n getal tussen 10 en 200 wees.</translation>
 <translation id="253557089021624350">Keepalive-telling</translation>
 <translation id="2546283357679194313">Koekies en werfdata</translation>
 <translation id="2550212893339833758">Wisselgeheue</translation>
 <translation id="2553440850688409052">Versteek Hierdie Inprop</translation>
-<translation id="2580924999637585241">Totaal: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="26224892172169984">Laat geen werf toe om protokolle te hanteer nie</translation>
 <translation id="2662876636500006917">Chrome-webwinkel</translation>
 <translation id="2678063897982469759">Heraktiveer</translation>
@@ -120,7 +118,6 @@
 <translation id="2932883381142163287">Rapporteer misbruik</translation>
 <translation id="2941112035454246133">Laag</translation>
 <translation id="2972581237482394796">&amp;Herdoen</translation>
-<translation id="299483336428448530">Deur u ouer geïnstalleer.</translation>
 <translation id="3003623123441819449">CSS-kasgeheue</translation>
 <translation id="3008272652534848354">Stel toestemmings terug</translation>
 <translation id="3012631534724231212">(iframe)</translation>
@@ -274,7 +271,6 @@
 <translation id="5425042808445046667">Sit aflaai voort</translation>
 <translation id="5427459444770871191">Draai &amp;Kloksgewys</translation>
 <translation id="5431318178759467895">Kleur</translation>
-<translation id="5472133193607270166">Wanneer dit aan is kan werwe nie u blaaiaktiwiteit oor verskillende werwe gebruik om advertensies te verpersoonlik nie. Sommige werwe werk dalk nie reg nie.</translation>
 <translation id="5483785310822538350">Herroep lêer- en toesteltoegang</translation>
 <translation id="5485102783864353244">Voeg toep toe</translation>
 <translation id="5486561344817861625">Simuleer Blaaierherbegin</translation>
@@ -302,7 +298,6 @@
 <translation id="5804241973901381774">Toestemmings</translation>
 <translation id="5828633471261496623">Druk tans af…</translation>
 <translation id="583281660410589416">Onbekend</translation>
-<translation id="5838456317242088717">Huidige ingocnito-sessie</translation>
 <translation id="5860491529813859533">Aktiveer</translation>
 <translation id="5867841422488265304">Soek of tik webadres in</translation>
 <translation id="5908769186679515905">Versper Flash op werwe</translation>
@@ -322,7 +317,6 @@
 <translation id="6147020289383635445">Afdrukvoorskou het misluk.</translation>
 <translation id="6156863943908443225">Skripkasgeheue</translation>
 <translation id="6169666352732958425">Kan nie werkskerm send nie.</translation>
-<translation id="6196640612572343990">Versper derdepartykoekies</translation>
 <translation id="6196854373336333322">Die uitbreiding “<ph name="EXTENSION_NAME" />” het beheer oor u instaanbedienerinstellings oorgeneem, wat beteken dat dit enigiets wat u aanlyn doen kan verander, breek of afluister. Indien u onseker is oor waarom dit gebeur het, wil u dit waarskynlik nie hê nie.</translation>
 <translation id="6206311232642889873">Ko&amp;pieer Beeld</translation>
 <translation id="6239558157302047471">Herlaai &amp;raam</translation>
@@ -335,6 +329,7 @@
 <translation id="6295158916970320988">Alle werwe</translation>
 <translation id="6295855836753816081">Bewaar tans…</translation>
 <translation id="6308937455967653460">Bewaar &amp;skakel as…</translation>
+<translation id="6315493146179903667">Bring Alles Vorentoe</translation>
 <translation id="6326855256003666642">Keepalive-telling</translation>
 <translation id="6374469231428023295">Probeer Weer</translation>
 <translation id="6385543213911723544">Werwe kan koekiedata bewaar en lees</translation>

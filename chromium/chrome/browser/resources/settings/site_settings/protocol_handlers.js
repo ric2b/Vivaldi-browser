@@ -76,7 +76,7 @@ Polymer({
   },
 
   /** @override */
-  ready: function() {
+  ready() {
     this.addWebUIListener(
         'setHandlersEnabled', this.setHandlersEnabled_.bind(this));
     this.addWebUIListener(
@@ -89,13 +89,10 @@ Polymer({
 
   // <if expr="chromeos">
   /** @override */
-  attached: function() {
-    if (settings.AndroidAppsBrowserProxyImpl) {
-      cr.addWebUIListener(
-          'android-apps-info-update', this.androidAppsInfoUpdate_.bind(this));
-      settings.AndroidAppsBrowserProxyImpl.getInstance()
-          .requestAndroidAppsInfo();
-    }
+  attached() {
+    this.addWebUIListener(
+        'android-apps-info-update', this.androidAppsInfoUpdate_.bind(this));
+    settings.AndroidInfoBrowserProxyImpl.getInstance().requestAndroidAppsInfo();
   },
   // </if>
 
@@ -105,13 +102,13 @@ Polymer({
    * @param {AndroidAppsInfo} info
    * @private
    */
-  androidAppsInfoUpdate_: function(info) {
+  androidAppsInfoUpdate_(info) {
     this.settingsAppAvailable_ = info.settingsAppAvailable;
   },
   // </if>
 
   /** @private */
-  categoryLabelClicked_: function() {
+  categoryLabelClicked_() {
     this.$.toggle.click();
   },
 
@@ -120,7 +117,7 @@ Polymer({
    * @return {string} The description to use.
    * @private
    */
-  computeHandlersDescription_: function() {
+  computeHandlersDescription_() {
     return this.categoryEnabled ? this.toggleOnLabel : this.toggleOffLabel;
   },
 
@@ -129,7 +126,7 @@ Polymer({
    * @param {boolean} enabled The state to set.
    * @private
    */
-  setHandlersEnabled_: function(enabled) {
+  setHandlersEnabled_(enabled) {
     this.categoryEnabled = enabled;
   },
 
@@ -138,7 +135,7 @@ Polymer({
    * @param {!Array<!ProtocolEntry>} protocols The new protocol handler list.
    * @private
    */
-  setProtocolHandlers_: function(protocols) {
+  setProtocolHandlers_(protocols) {
     this.protocols = protocols;
   },
 
@@ -148,7 +145,7 @@ Polymer({
    *     handler list.
    * @private
    */
-  setIgnoredProtocolHandlers_: function(ignoredProtocols) {
+  setIgnoredProtocolHandlers_(ignoredProtocols) {
     this.ignoredProtocols = ignoredProtocols;
   },
 
@@ -156,7 +153,7 @@ Polymer({
    * Closes action menu and resets action menu model
    * @private
    */
-  closeActionMenu_: function() {
+  closeActionMenu_() {
     this.$$('cr-action-menu').close();
     this.actionMenuModel_ = null;
   },
@@ -165,7 +162,7 @@ Polymer({
    * A handler when the toggle is flipped.
    * @private
    */
-  onToggleChange_: function(event) {
+  onToggleChange_(event) {
     this.browserProxy.setProtocolHandlerDefault(this.categoryEnabled);
   },
 
@@ -173,7 +170,7 @@ Polymer({
    * The handler for when "Set Default" is selected in the action menu.
    * @private
    */
-  onDefaultClick_: function() {
+  onDefaultClick_() {
     const item = this.actionMenuModel_;
     this.browserProxy.setProtocolDefault(item.protocol, item.spec);
     this.closeActionMenu_();
@@ -183,7 +180,7 @@ Polymer({
    * The handler for when "Remove" is selected in the action menu.
    * @private
    */
-  onRemoveClick_: function() {
+  onRemoveClick_() {
     const item = this.actionMenuModel_;
     this.browserProxy.removeProtocolHandler(item.protocol, item.spec);
     this.closeActionMenu_();
@@ -193,7 +190,7 @@ Polymer({
    * Handler for removing handlers that were blocked
    * @private
    */
-  onRemoveIgnored_: function(event) {
+  onRemoveIgnored_(event) {
     const item = event.model.item;
     this.browserProxy.removeProtocolHandler(item.protocol, item.spec);
   },
@@ -203,7 +200,7 @@ Polymer({
    * @param {!{model: !{item: HandlerEntry}}} event
    * @private
    */
-  showMenu_: function(event) {
+  showMenu_(event) {
     this.actionMenuModel_ = event.model.item;
     /** @type {!CrActionMenuElement} */ (this.$$('cr-action-menu'))
         .showAt(
@@ -215,7 +212,7 @@ Polymer({
    * Opens an activity to handle App links (preferred apps).
    * @private
    */
-  onManageAndroidAppsClick_: function() {
+  onManageAndroidAppsClick_() {
     this.browserProxy.showAndroidManageAppLinks();
   },
   // </if>

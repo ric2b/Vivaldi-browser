@@ -2,10 +2,15 @@
 <!-- android_chrome_strings.grd contains strings for tab ui DFM of Chrome for Android. -->
 <grit current_release="1" latest_public_release="0" output_all_resource_defines="false">
   <outputs>
+    <output filename="values-af/android_chrome_tab_ui_strings.xml" lang="af" type="android" />
     <output filename="values-am/android_chrome_tab_ui_strings.xml" lang="am" type="android" />
     <output filename="values-ar/android_chrome_tab_ui_strings.xml" lang="ar" type="android" />
+    <output filename="values-as/android_chrome_tab_ui_strings.xml" lang="as" type="android" />
+    <output filename="values-az/android_chrome_tab_ui_strings.xml" lang="az" type="android" />
+    <output filename="values-be/android_chrome_tab_ui_strings.xml" lang="be" type="android" />
     <output filename="values-bg/android_chrome_tab_ui_strings.xml" lang="bg" type="android" />
     <output filename="values-bn/android_chrome_tab_ui_strings.xml" lang="bn" type="android" />
+    <output filename="values-bs/android_chrome_tab_ui_strings.xml" lang="bs" type="android" />
     <output filename="values-ca/android_chrome_tab_ui_strings.xml" lang="ca" type="android" />
     <output filename="values-cs/android_chrome_tab_ui_strings.xml" lang="cs" type="android" />
     <output filename="values-da/android_chrome_tab_ui_strings.xml" lang="da" type="android" />
@@ -16,34 +21,52 @@
     <output filename="values-es/android_chrome_tab_ui_strings.xml" lang="es" type="android" />
     <output filename="values-es-rUS/android_chrome_tab_ui_strings.xml" lang="es-419" type="android" />
     <output filename="values-et/android_chrome_tab_ui_strings.xml" lang="et" type="android" />
+    <output filename="values-eu/android_chrome_tab_ui_strings.xml" lang="eu" type="android" />
     <output filename="values-fa/android_chrome_tab_ui_strings.xml" lang="fa" type="android" />
     <output filename="values-fi/android_chrome_tab_ui_strings.xml" lang="fi" type="android" />
-    <output filename="values-gu/android_chrome_tab_ui_strings.xml" lang="fi" type="android" />
     <output filename="values-tl/android_chrome_tab_ui_strings.xml" lang="fil" type="android" />
     <output filename="values-fr/android_chrome_tab_ui_strings.xml" lang="fr" type="android" />
+    <output filename="values-fr-rCA/android_chrome_tab_ui_strings.xml" lang="fr-CA" type="android" />
+    <output filename="values-gl/android_chrome_tab_ui_strings.xml" lang="gl" type="android" />
+    <output filename="values-gu/android_chrome_tab_ui_strings.xml" lang="gu" type="android" />
     <output filename="values-hi/android_chrome_tab_ui_strings.xml" lang="hi" type="android" />
     <output filename="values-hr/android_chrome_tab_ui_strings.xml" lang="hr" type="android" />
     <output filename="values-hu/android_chrome_tab_ui_strings.xml" lang="hu" type="android" />
+    <output filename="values-hy/android_chrome_tab_ui_strings.xml" lang="hy" type="android" />
     <output filename="values-in/android_chrome_tab_ui_strings.xml" lang="id" type="android" />
+    <output filename="values-is/android_chrome_tab_ui_strings.xml" lang="is" type="android" />
     <output filename="values-it/android_chrome_tab_ui_strings.xml" lang="it" type="android" />
     <output filename="values-iw/android_chrome_tab_ui_strings.xml" lang="iw" type="android" />
     <output filename="values-ja/android_chrome_tab_ui_strings.xml" lang="ja" type="android" />
+    <output filename="values-ka/android_chrome_tab_ui_strings.xml" lang="ka" type="android" />
+    <output filename="values-kk/android_chrome_tab_ui_strings.xml" lang="kk" type="android" />
+    <output filename="values-km/android_chrome_tab_ui_strings.xml" lang="km" type="android" />
     <output filename="values-kn/android_chrome_tab_ui_strings.xml" lang="kn" type="android" />
     <output filename="values-ko/android_chrome_tab_ui_strings.xml" lang="ko" type="android" />
+    <output filename="values-ky/android_chrome_tab_ui_strings.xml" lang="ky" type="android" />
+    <output filename="values-lo/android_chrome_tab_ui_strings.xml" lang="lo" type="android" />
     <output filename="values-lt/android_chrome_tab_ui_strings.xml" lang="lt" type="android" />
     <output filename="values-lv/android_chrome_tab_ui_strings.xml" lang="lv" type="android" />
+    <output filename="values-mk/android_chrome_tab_ui_strings.xml" lang="mk" type="android" />
     <output filename="values-ml/android_chrome_tab_ui_strings.xml" lang="ml" type="android" />
+    <output filename="values-mn/android_chrome_tab_ui_strings.xml" lang="mn" type="android" />
     <output filename="values-mr/android_chrome_tab_ui_strings.xml" lang="mr" type="android" />
     <output filename="values-ms/android_chrome_tab_ui_strings.xml" lang="ms" type="android" />
+    <output filename="values-my/android_chrome_tab_ui_strings.xml" lang="my" type="android" />
+    <output filename="values-ne/android_chrome_tab_ui_strings.xml" lang="ne" type="android" />
     <output filename="values-nl/android_chrome_tab_ui_strings.xml" lang="nl" type="android" />
     <output filename="values-nb/android_chrome_tab_ui_strings.xml" lang="no" type="android" />
+    <output filename="values-or/android_chrome_tab_ui_strings.xml" lang="or" type="android" />
+    <output filename="values-pa/android_chrome_tab_ui_strings.xml" lang="pa" type="android" />
     <output filename="values-pl/android_chrome_tab_ui_strings.xml" lang="pl" type="android" />
     <output filename="values-pt-rBR/android_chrome_tab_ui_strings.xml" lang="pt-BR" type="android" />
     <output filename="values-pt-rPT/android_chrome_tab_ui_strings.xml" lang="pt-PT" type="android" />
     <output filename="values-ro/android_chrome_tab_ui_strings.xml" lang="ro" type="android" />
     <output filename="values-ru/android_chrome_tab_ui_strings.xml" lang="ru" type="android" />
+    <output filename="values-si/android_chrome_tab_ui_strings.xml" lang="si" type="android" />
     <output filename="values-sk/android_chrome_tab_ui_strings.xml" lang="sk" type="android" />
     <output filename="values-sl/android_chrome_tab_ui_strings.xml" lang="sl" type="android" />
+    <output filename="values-sq/android_chrome_tab_ui_strings.xml" lang="sq" type="android" />
     <output filename="values-sr/android_chrome_tab_ui_strings.xml" lang="sr" type="android" />
     <output filename="values-sv/android_chrome_tab_ui_strings.xml" lang="sv" type="android" />
     <output filename="values-sw/android_chrome_tab_ui_strings.xml" lang="sw" type="android" />
@@ -52,15 +75,24 @@
     <output filename="values-th/android_chrome_tab_ui_strings.xml" lang="th" type="android" />
     <output filename="values-tr/android_chrome_tab_ui_strings.xml" lang="tr" type="android" />
     <output filename="values-uk/android_chrome_tab_ui_strings.xml" lang="uk" type="android" />
+    <output filename="values-ur/android_chrome_tab_ui_strings.xml" lang="ur" type="android" />
+    <output filename="values-uz/android_chrome_tab_ui_strings.xml" lang="uz" type="android" />
     <output filename="values-vi/android_chrome_tab_ui_strings.xml" lang="vi" type="android" />
     <output filename="values-zh-rCN/android_chrome_tab_ui_strings.xml" lang="zh-CN" type="android" />
+    <output filename="values-zh-rHK/android_chrome_tab_ui_strings.xml" lang="zh-HK" type="android" />
     <output filename="values-zh-rTW/android_chrome_tab_ui_strings.xml" lang="zh-TW" type="android" />
+    <output filename="values-zu/android_chrome_tab_ui_strings.xml" lang="zu" type="android" />
   </outputs>
   <translations>
+    <file lang="af" path="translations/android_chrome_tab_ui_strings_af.xtb" />
     <file lang="am" path="translations/android_chrome_tab_ui_strings_am.xtb" />
     <file lang="ar" path="translations/android_chrome_tab_ui_strings_ar.xtb" />
+    <file lang="as" path="translations/android_chrome_tab_ui_strings_as.xtb" />
+    <file lang="az" path="translations/android_chrome_tab_ui_strings_az.xtb" />
+    <file lang="be" path="translations/android_chrome_tab_ui_strings_be.xtb" />
     <file lang="bg" path="translations/android_chrome_tab_ui_strings_bg.xtb" />
     <file lang="bn" path="translations/android_chrome_tab_ui_strings_bn.xtb" />
+    <file lang="bs" path="translations/android_chrome_tab_ui_strings_bs.xtb" />
     <file lang="ca" path="translations/android_chrome_tab_ui_strings_ca.xtb" />
     <file lang="cs" path="translations/android_chrome_tab_ui_strings_cs.xtb" />
     <file lang="da" path="translations/android_chrome_tab_ui_strings_da.xtb" />
@@ -70,35 +102,54 @@
     <file lang="es" path="translations/android_chrome_tab_ui_strings_es.xtb" />
     <file lang="es-419" path="translations/android_chrome_tab_ui_strings_es-419.xtb" />
     <file lang="et" path="translations/android_chrome_tab_ui_strings_et.xtb" />
+    <file lang="eu" path="translations/android_chrome_tab_ui_strings_eu.xtb" />
     <file lang="fa" path="translations/android_chrome_tab_ui_strings_fa.xtb" />
     <file lang="fi" path="translations/android_chrome_tab_ui_strings_fi.xtb" />
     <file lang="fil" path="translations/android_chrome_tab_ui_strings_fil.xtb" />
     <file lang="fr" path="translations/android_chrome_tab_ui_strings_fr.xtb" />
+    <file lang="fr-CA" path="translations/android_chrome_tab_ui_strings_fr-CA.xtb" />
+    <file lang="gl" path="translations/android_chrome_tab_ui_strings_gl.xtb" />
     <file lang="gu" path="translations/android_chrome_tab_ui_strings_gu.xtb" />
     <file lang="hi" path="translations/android_chrome_tab_ui_strings_hi.xtb" />
     <file lang="hr" path="translations/android_chrome_tab_ui_strings_hr.xtb" />
     <file lang="hu" path="translations/android_chrome_tab_ui_strings_hu.xtb" />
+    <file lang="hy" path="translations/android_chrome_tab_ui_strings_hy.xtb" />
     <file lang="id" path="translations/android_chrome_tab_ui_strings_id.xtb" />
+    <file lang="is" path="translations/android_chrome_tab_ui_strings_is.xtb" />
     <file lang="it" path="translations/android_chrome_tab_ui_strings_it.xtb" />
     <file lang="iw" path="translations/android_chrome_tab_ui_strings_iw.xtb" />
     <file lang="ja" path="translations/android_chrome_tab_ui_strings_ja.xtb" />
-    <file lang="ko" path="translations/android_chrome_tab_ui_strings_ko.xtb" />
+    <file lang="ka" path="translations/android_chrome_tab_ui_strings_ka.xtb" />
+    <file lang="kk" path="translations/android_chrome_tab_ui_strings_kk.xtb" />
+    <file lang="km" path="translations/android_chrome_tab_ui_strings_km.xtb" />
     <file lang="kn" path="translations/android_chrome_tab_ui_strings_kn.xtb" />
+    <file lang="ko" path="translations/android_chrome_tab_ui_strings_ko.xtb" />
+    <file lang="ky" path="translations/android_chrome_tab_ui_strings_ky.xtb" />
+    <file lang="lo" path="translations/android_chrome_tab_ui_strings_lo.xtb" />
     <file lang="lt" path="translations/android_chrome_tab_ui_strings_lt.xtb" />
     <file lang="lv" path="translations/android_chrome_tab_ui_strings_lv.xtb" />
+    <file lang="mk" path="translations/android_chrome_tab_ui_strings_mk.xtb" />
     <file lang="ml" path="translations/android_chrome_tab_ui_strings_ml.xtb" />
+    <file lang="mn" path="translations/android_chrome_tab_ui_strings_mn.xtb" />
     <file lang="mr" path="translations/android_chrome_tab_ui_strings_mr.xtb" />
     <file lang="ms" path="translations/android_chrome_tab_ui_strings_ms.xtb" />
+    <file lang="my" path="translations/android_chrome_tab_ui_strings_my.xtb" />
+    <file lang="ne" path="translations/android_chrome_tab_ui_strings_ne.xtb" />
     <file lang="nl" path="translations/android_chrome_tab_ui_strings_nl.xtb" />
     <file lang="no" path="translations/android_chrome_tab_ui_strings_no.xtb" />
+    <file lang="or" path="translations/android_chrome_tab_ui_strings_or.xtb" />
+    <file lang="pa" path="translations/android_chrome_tab_ui_strings_pa.xtb" />
     <file lang="pl" path="translations/android_chrome_tab_ui_strings_pl.xtb" />
     <file lang="pt-BR" path="translations/android_chrome_tab_ui_strings_pt-BR.xtb" />
     <file lang="pt-PT" path="translations/android_chrome_tab_ui_strings_pt-PT.xtb" />
     <file lang="ro" path="translations/android_chrome_tab_ui_strings_ro.xtb" />
     <file lang="ru" path="translations/android_chrome_tab_ui_strings_ru.xtb" />
+    <file lang="si" path="translations/android_chrome_tab_ui_strings_si.xtb" />
     <file lang="sk" path="translations/android_chrome_tab_ui_strings_sk.xtb" />
     <file lang="sl" path="translations/android_chrome_tab_ui_strings_sl.xtb" />
+    <file lang="sq" path="translations/android_chrome_tab_ui_strings_sq.xtb" />
     <file lang="sr" path="translations/android_chrome_tab_ui_strings_sr.xtb" />
+    <file lang="sr-Latn" path="translations/android_chrome_tab_ui_strings_sr-Latn.xtb" />
     <file lang="sv" path="translations/android_chrome_tab_ui_strings_sv.xtb" />
     <file lang="sw" path="translations/android_chrome_tab_ui_strings_sw.xtb" />
     <file lang="ta" path="translations/android_chrome_tab_ui_strings_ta.xtb" />
@@ -106,9 +157,13 @@
     <file lang="th" path="translations/android_chrome_tab_ui_strings_th.xtb" />
     <file lang="tr" path="translations/android_chrome_tab_ui_strings_tr.xtb" />
     <file lang="uk" path="translations/android_chrome_tab_ui_strings_uk.xtb" />
+    <file lang="ur" path="translations/android_chrome_tab_ui_strings_ur.xtb" />
+    <file lang="uz" path="translations/android_chrome_tab_ui_strings_uz.xtb" />
     <file lang="vi" path="translations/android_chrome_tab_ui_strings_vi.xtb" />
     <file lang="zh-CN" path="translations/android_chrome_tab_ui_strings_zh-CN.xtb" />
+    <file lang="zh-HK" path="translations/android_chrome_tab_ui_strings_zh-HK.xtb" />
     <file lang="zh-TW" path="translations/android_chrome_tab_ui_strings_zh-TW.xtb" />
+    <file lang="zu" path="translations/android_chrome_tab_ui_strings_zu.xtb" />
   </translations>
   <release allow_pseudo="false" seq="1">
     <messages fallback_to_english="true">
@@ -132,18 +187,6 @@
       </message>
 
       <!-- Bottom Tab Grid strings -->
-      <message name="IDS_BOTTOM_TAB_GRID_DESCRIPTION" desc="The content description of the 'opened tabs' bottom sheet.">
-        Opened tabs
-      </message>
-      <message name="IDS_BOTTOM_TAB_GRID_OPENED_HALF" desc="Accessibility string read when the 'opened tabs' sheet is opened at half height. The sheet will occupy the bottom half the screen. ">
-        Opened tabs at half height
-      </message>
-      <message name="IDS_BOTTOM_TAB_GRID_OPENED_FULL" desc="Accessibility string read when the 'opened tabs' bottom sheet is opened at full height. The sheet will occupy the entire screen.">
-        Opened tabs at full height
-      </message>
-      <message name="IDS_BOTTOM_TAB_GRID_CLOSED" desc="Accessibility string read when the 'opened tabs' bottom sheet is closed.">
-        Opened tabs closed
-      </message>
       <message name="IDS_BOTTOM_TAB_GRID_TITLE_PLACEHOLDER" desc="Placeholder string for the BottomTabGrid toolbar title.">
         <!-- <ph name="TABS_COUNT">%1$d<ex>5</ex></ph> tabs -->
         {TABS_COUNT, plural,
@@ -186,6 +229,9 @@
       <message name="IDS_TAB_GRID_DIALOG_SELECTION_MODE_REMOVE" desc="This texts shows on the action button of tab group selection mode. When user clicks this action button, all the tabs that are currently selected will be moved out of tab group. One thing worth mentioning here is that the remove here does not mean delete, it means move tab out of tab group and becomes a single tab.">
         Remove
       </message>
+      <message name="IDS_TAB_GRID_DIALOG_TOOLBAR_SHARE_GROUP" desc="This text shows in the TabGridDialog toolbar menu as one menu item. When user selects this item, the share sheet will show which allows user to share current tab group via Gmail, Messages or copy to clipboard etc, in the format of a list of URLs representing the current tab group.">
+        Share group
+      </message>
 
       <!-- Tab Grid Drag-and-drop IPH strings -->
       <message name="IDS_IPH_DRAG_AND_DROP_INTRODUCTION" desc="This text shows on the entry point for the in-product help for drag-and-drop. It introduces that this IPH is about how to use drag-and-drop.">
@@ -205,8 +251,49 @@
       <message name="IDS_TAB_SWITCHER_CAROUSEL_TITLE" desc="Title of the Tabs carousel section on the single pane start surface.">
           Continue browsing
       </message>
-      <message name="IDS_ACCESSIBILITY_TAB_SWITCHER_CAROUSEL_MORE_TABS" desc="Accessibility message of the more Tabs button on the single pane start surface.">
-          More tabs
+      <message name="IDS_TAB_SWITCHER_CAROUSEL_VIEW_ALL" desc="Title of the text view button in the Tabs carousel section on the single pane start surface. Click it to view all the existing Tabs.">
+          View all
+      </message>
+
+      <!-- Tab Suggestion strings -->
+      <message name="IDS_TAB_SUGGESTION_REVIEW_BUTTON" desc="This text button shows next the message 'X of your tabs haven't been used lately. Close them?'. When a user clicks this 'Review' text button, they will enter a selection mode where they can see the suggested tabs to close, see the rest of their open tabs, and choose what tabs to close.">
+          Review
+      </message>
+      <message name="IDS_TAB_SUGGESTION_CLOSE_TAB_ACTION_BUTTON" desc="When a user chooses to review suggested tabs to close, they enter a section mode to review and close the tabs. In that selection mode, this text button in the toolbar lets the user finalize their choices. When this button is tapped, all the selected tabs will be closed.">
+          Close
+      </message>
+      <message name="IDS_TAB_SUGGESTION_CLOSE_STALE_MESSAGE" desc="On Chrome mobile, this text shows as a suggestion under a user's tabs. The suggestion prompts the user to automatically close some tabs that haven't been used lately. The placeholder denotes the number of suggested tabs to close, which will always be 2 or more (so 'tabs' should be plural).">
+          <ph name="NUMBER_OF_TABS">%1$s<ex>2</ex></ph> of your tabs haven't been used lately. Close them?
+      </message>
+      <!-- Accessibility strings for Tab Suggestion -->
+      <message name="IDS_ACCESSIBILITY_TAB_SUGGESTION_REVIEW_BUTTON" desc="The accessibility text to read when the text button 'Review' is focused. The 'Review' button is shown next to the message 'X of your tabs haven't been used lately. Close them?'. User uses that text button to enter a selection mode where they can see the suggested tabs to close, see the rest of their open tabs, and choose what tabs to close.">
+        Review the suggestions.
+      </message>
+      <message name="IDS_ACCESSIBILITY_TAB_SUGGESTION_CLOSE_STALE_MESSAGE" desc="The accessibility text to read when the TAB_SUGGESTION card is focused">
+        Suggestion: <ph name="NUMBER_OF_TABS">%1$s<ex>2</ex></ph> of your tabs haven't been used lately. Close them?
+      </message>
+      <message name="IDS_ACCESSIBILITY_TAB_SUGGESTION_DISMISS_BUTTON" desc="The accessibility text to read when the 'X' button on the TAB_SUGGESTION card is focused">
+        Dismiss the suggestions.
+      </message>
+      <message name="IDS_ACCESSIBILITY_TAB_SUGGESTION_CLOSE_TAB_ACTION_BUTTON" desc="The accessibility text to read when the 'Close' text button in the selection mode toolbar is focused. When this button is tapped, all the selected tabs will be closed.">
+        {TABS_COUNT, plural,
+          =1 {Close <ph name="TABS_COUNT_ONE">%1$d<ex>1</ex></ph> selected tab}
+          other {Close <ph name="TABS_COUNT_MANY">%1$d<ex>8</ex></ph> selected tabs}
+        }
+      </message>
+
+      <!-- Accessibility strings for Tab Reordering -->
+      <message name="IDS_ACCESSIBILITY_TAB_MOVEMENT_LEFT" desc="This text button shows in the accessibility mode action menu. When user selects a tab, triggers action menu and clicks on this button, the current tab will switch position with the tab next to it on the left side in the grid to achieve reordering.">
+          Move tab left
+      </message>
+       <message name="IDS_ACCESSIBILITY_TAB_MOVEMENT_RIGHT" desc="This text button shows in the accessibility mode action menu. When user selects a tab, triggers action menu and clicks on this button, the current tab will switch position with the tab next to it on the right side in the grid to achieve reordering.">
+          Move tab right
+      </message>
+       <message name="IDS_ACCESSIBILITY_TAB_MOVEMENT_UP" desc="This text button shows in the accessibility mode action menu. When user selects a tab, triggers action menu and clicks on this button, the current tab will switch position with the tab above it in the grid to achieve reordering.">
+          Move tab up
+      </message>
+       <message name="IDS_ACCESSIBILITY_TAB_MOVEMENT_DOWN" desc="This text button shows in the accessibility mode action menu. When user selects a tab, triggers action menu and clicks on this button, the current tab will switch position with the tab below it in the grid to achieve reordering.">
+          Move tab down
       </message>
     </messages>
   </release>

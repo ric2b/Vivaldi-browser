@@ -95,7 +95,7 @@ bool CanShowAppInfoDialog(Profile* profile, const std::string& extension_id) {
   return CanPlatformShowAppInfoDialog();
 }
 
-#if BUILDFLAG(ENABLE_APP_LIST)
+#if defined(OS_CHROMEOS)
 void ShowAppInfoInAppList(gfx::NativeWindow parent,
                           const gfx::Rect& app_info_bounds,
                           Profile* profile,

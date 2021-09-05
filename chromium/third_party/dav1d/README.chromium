@@ -1,7 +1,7 @@
 Name: dav1d is an AV1 decoder :)
 Short Name: dav1d
 URL: https://code.videolan.org/videolan/dav1d
-Version: 62fcd0cb19d2fe46af7541d8185de86d45d58697
+Version: master
 License: 2-Clause BSD
 License File: LICENSE
 Security Critical: yes
@@ -30,5 +30,5 @@ all the updated configuration files. If not, you'll need to debug the bots :(
 
 
 -- [ OPEN ISSUES ] ------------------
-meson v0.51.1 (and possibly some earlier versions), have a bug with clang-cl on
+meson v0.53.1 (and at least earlier v0.51.1), have a bug with clang-cl on
 linux. See https://github.com/mesonbuild/meson/issues/5639 for issue and fix.

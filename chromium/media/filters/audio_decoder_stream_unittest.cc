@@ -98,8 +98,8 @@ class AudioDecoderStreamTest : public testing::Test {
   std::vector<std::unique_ptr<AudioDecoder>> CreateMockAudioDecoder() {
     auto decoder = std::make_unique<MockAudioDecoder>();
     EXPECT_CALL(*decoder, Initialize_(_, _, _, _, _))
-        .WillOnce(
-            DoAll(SaveArg<3>(&decoder_output_cb_), RunOnceCallback<2>(true)));
+        .WillOnce(DoAll(SaveArg<3>(&decoder_output_cb_),
+                        RunOnceCallback<2>(OkStatus())));
     decoder_ = decoder.get();
 
     std::vector<std::unique_ptr<AudioDecoder>> result;
@@ -108,7 +108,7 @@ class AudioDecoderStreamTest : public testing::Test {
   }
 
   void OnAudioBufferReadDone(base::OnceClosure closure,
-                             AudioDecoderStream::Status status,
+                             AudioDecoderStream::ReadStatus status,
                              scoped_refptr<AudioBuffer> audio_buffer) {
     std::move(closure).Run();
   }
@@ -130,8 +130,8 @@ TEST_F(AudioDecoderStreamTest, FlushOnConfigChange) {
   ASSERT_NE(first_decoder, nullptr);
 
   // Make a regular DemuxerStream::Read().
-  EXPECT_CALL(*demuxer_stream(), Read(_))
-      .WillOnce(RunCallback<0>(DemuxerStream::kOk, new DecoderBuffer(12)));
+  EXPECT_CALL(*demuxer_stream(), OnRead(_))
+      .WillOnce(RunOnceCallback<0>(DemuxerStream::kOk, new DecoderBuffer(12)));
   EXPECT_CALL(*decoder(), Decode(IsRegularDecoderBuffer(), _))
       .WillOnce(Invoke(this, &AudioDecoderStreamTest::ProduceDecoderOutput));
   base::RunLoop run_loop0;
@@ -141,8 +141,8 @@ TEST_F(AudioDecoderStreamTest, FlushOnConfigChange) {
   // Make a config-change DemuxerStream::Read().
   // Expect the decoder to be flushed.  Upon flushing, the decoder releases
   // internally buffered output.
-  EXPECT_CALL(*demuxer_stream(), Read(_))
-      .WillOnce(RunCallback<0>(DemuxerStream::kConfigChanged, nullptr));
+  EXPECT_CALL(*demuxer_stream(), OnRead(_))
+      .WillOnce(RunOnceCallback<0>(DemuxerStream::kConfigChanged, nullptr));
   EXPECT_CALL(*decoder(), Decode(IsEOSDecoderBuffer(), _))
       .WillOnce(Invoke(this, &AudioDecoderStreamTest::ProduceDecoderOutput));
   base::RunLoop run_loop1;

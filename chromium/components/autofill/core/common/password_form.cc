@@ -26,8 +26,8 @@ std::string ToString(const T& obj) {
   return ostream.str();
 }
 
-std::string StoreToString(PasswordForm::Store from_store) {
-  switch (from_store) {
+std::string StoreToString(PasswordForm::Store in_store) {
+  switch (in_store) {
     case PasswordForm::Store::kNotSet:
       return "Not Set";
     case PasswordForm::Store::kProfileStore:
@@ -73,7 +73,6 @@ void PasswordFormToJSON(const PasswordForm& form,
   target->SetString("all_possible_passwords",
                     ValueElementVectorToString(form.all_possible_passwords));
   target->SetBoolean("blacklisted", form.blacklisted_by_user);
-  target->SetBoolean("preferred", form.preferred);
   target->SetDouble("date_last_used", form.date_last_used.ToDoubleT());
   target->SetDouble("date_created", form.date_created.ToDoubleT());
   target->SetDouble("date_synced", form.date_synced.ToDoubleT());
@@ -96,7 +95,7 @@ void PasswordFormToJSON(const PasswordForm& form,
   target->SetBoolean("is_gaia_with_skip_save_password_form",
                      form.form_data.is_gaia_with_skip_save_password_form);
   target->SetBoolean("is_new_password_reliable", form.is_new_password_reliable);
-  target->SetString("from_store", StoreToString(form.from_store));
+  target->SetString("in_store", StoreToString(form.in_store));
 }
 
 }  // namespace
@@ -122,21 +121,21 @@ bool PasswordForm::IsPossibleChangePasswordFormWithoutUsername() const {
 }
 
 bool PasswordForm::HasUsernameElement() const {
-  return has_renderer_ids ? username_element_renderer_id !=
-                                FormFieldData::kNotSetFormControlRendererId
-                          : !username_element.empty();
+  return has_renderer_ids
+             ? username_element_renderer_id != FormData::kNotSetRendererId
+             : !username_element.empty();
 }
 
 bool PasswordForm::HasPasswordElement() const {
-  return has_renderer_ids ? password_element_renderer_id !=
-                                FormFieldData::kNotSetFormControlRendererId
-                          : !password_element.empty();
+  return has_renderer_ids
+             ? password_element_renderer_id != FormData::kNotSetRendererId
+             : !password_element.empty();
 }
 
 bool PasswordForm::HasNewPasswordElement() const {
-  return has_renderer_ids ? new_password_element_renderer_id !=
-                                FormFieldData::kNotSetFormControlRendererId
-                          : !new_password_element.empty();
+  return has_renderer_ids
+             ? new_password_element_renderer_id != FormData::kNotSetRendererId
+             : !new_password_element.empty();
 }
 
 bool PasswordForm::IsFederatedCredential() const {
@@ -149,7 +148,11 @@ bool PasswordForm::IsSingleUsername() const {
 }
 
 bool PasswordForm::IsUsingAccountStore() const {
-  return from_store == Store::kAccountStore;
+  return in_store == Store::kAccountStore;
+}
+
+bool PasswordForm::HasNonEmptyPasswordValue() const {
+  return !password_value.empty() || !new_password_value.empty();
 }
 
 bool PasswordForm::operator==(const PasswordForm& form) const {
@@ -175,8 +178,7 @@ bool PasswordForm::operator==(const PasswordForm& form) const {
          confirmation_password_element_renderer_id ==
              form.confirmation_password_element_renderer_id &&
          new_password_value == form.new_password_value &&
-         preferred == form.preferred && date_created == form.date_created &&
-         date_synced == form.date_synced &&
+         date_created == form.date_created && date_synced == form.date_synced &&
          date_last_used == form.date_last_used &&
          blacklisted_by_user == form.blacklisted_by_user && type == form.type &&
          times_used == form.times_used &&
@@ -197,7 +199,7 @@ bool PasswordForm::operator==(const PasswordForm& form) const {
          submission_event == form.submission_event &&
          only_for_fallback == form.only_for_fallback &&
          is_new_password_reliable == form.is_new_password_reliable &&
-         from_store == form.from_store;
+         in_store == form.in_store;
 }
 
 bool PasswordForm::operator!=(const PasswordForm& form) const {

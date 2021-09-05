@@ -10,6 +10,7 @@
 #include "third_party/blink/public/mojom/blob/blob.mojom-blink.h"
 #include "third_party/blink/renderer/core/imagebitmap/image_bitmap.h"
 #include "third_party/blink/renderer/platform/blob/blob_data.h"
+#include "third_party/blink/renderer/platform/graphics/unaccelerated_static_bitmap_image.h"
 
 namespace blink {
 
@@ -27,7 +28,7 @@ scoped_refptr<StaticBitmapImage> ToStaticBitmapImage(
   if (!image)
     return nullptr;
 
-  return StaticBitmapImage::Create(std::move(image));
+  return UnacceleratedStaticBitmapImage::Create(std::move(image));
 }
 
 base::Optional<SkBitmap> ToSkBitmap(
@@ -57,6 +58,10 @@ BlinkTransferableMessage ToBlinkTransferableMessage(
             mojo::PendingRemote<mojom::blink::Blob>(blob->blob.PassPipe(),
                                                     mojom::Blob::Version_)));
   }
+  if (message.sender_origin) {
+    result.sender_origin =
+        blink::SecurityOrigin::CreateFromUrlOrigin(*message.sender_origin);
+  }
   result.sender_stack_trace_id = v8_inspector::V8StackTraceId(
       static_cast<uintptr_t>(message.stack_trace_id),
       std::make_pair(message.stack_trace_debugger_id_first,
@@ -82,9 +87,9 @@ BlinkTransferableMessage ToBlinkTransferableMessage(
 
     for (auto& item : message.array_buffer_contents_array) {
       mojo_base::BigBuffer& big_buffer = item->contents;
-      WTF::ArrayBufferContents contents(
-          big_buffer.size(), 1, WTF::ArrayBufferContents::kNotShared,
-          WTF::ArrayBufferContents::kDontInitialize);
+      ArrayBufferContents contents(big_buffer.size(), 1,
+                                   ArrayBufferContents::kNotShared,
+                                   ArrayBufferContents::kDontInitialize);
       // Check if we allocated the backing store of the ArrayBufferContents
       // correctly.
       CHECK_EQ(contents.DataLength(), big_buffer.size());
@@ -112,6 +117,15 @@ BlinkTransferableMessage ToBlinkTransferableMessage(
         std::move(image_bitmap_contents_array));
   }
 
+  // Convert the PendingRemote<NativeFileSystemTransferToken> from the
+  // blink::mojom namespace to the blink::mojom::blink namespace.
+  for (auto& native_file_system_token : message.native_file_system_tokens) {
+    uint32_t token_version = native_file_system_token.version();
+    mojo::PendingRemote<mojom::blink::NativeFileSystemTransferToken>
+        converted_token(native_file_system_token.PassPipe(), token_version);
+    result.message->NativeFileSystemTokens().push_back(
+        std::move(converted_token));
+  }
   return result;
 }
 
@@ -125,6 +139,9 @@ TransferableMessage ToTransferableMessage(BlinkTransferableMessage message) {
         blob.value->size(),
         mojo::PendingRemote<mojom::Blob>(
             blob.value->CloneBlobRemote().PassPipe(), mojom::Blob::Version_)));
+  }
+  if (message.sender_origin) {
+    result.sender_origin = message.sender_origin->ToUrlOrigin();
   }
   result.stack_trace_id = message.sender_stack_trace_id.id;
   result.stack_trace_debugger_id_first =
@@ -167,6 +184,16 @@ TransferableMessage ToTransferableMessage(BlinkTransferableMessage message) {
     result.image_bitmap_contents_array.push_back(std::move(bitmap.value()));
   }
 
+  // Convert the PendingRemote<NativeFileSystemTransferToken> from the
+  // blink::mojom::blink namespace to the blink::mojom namespace.
+  result.native_file_system_tokens.reserve(
+      message.message->NativeFileSystemTokens().size());
+  for (auto& token : message.message->NativeFileSystemTokens()) {
+    uint32_t token_version = token.version();
+    mojo::PendingRemote<mojom::NativeFileSystemTransferToken> converted_token(
+        token.PassPipe(), token_version);
+    result.native_file_system_tokens.push_back(std::move(converted_token));
+  }
   return result;
 }
 

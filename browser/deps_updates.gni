@@ -2,7 +2,8 @@ import("//build/config/ui.gni")
 
 if (!is_android && !is_mac) {
   update_target("//chrome:chrome_initial") {
-    deps += [ "//vivaldi/browser:vivaldi_version_info" ]
+    deps += ["//vivaldi/browser:vivaldi_version_info"]
+
     if (is_linux && current_cpu == "x86") {
       ldflags += [
         "-z",
@@ -15,7 +16,7 @@ if (!is_android && !is_mac) {
 if (is_win) {
   update_target("//chrome:main_dll") {
     deps += [
-      "//vivaldi/browser:browser",
+      "//vivaldi/browser",
     ]
   }
   update_target("//chrome:chrome_initial") {
@@ -24,6 +25,9 @@ if (is_win) {
       "//chrome/elevation_service",
     ]
     data_deps += [ "//vivaldi/tools/vivaldi_proxy" ]
+    deps += [
+      "//chrome/installer/util:with_no_strings"
+    ]
   }
   update_target("//chrome/installer/mini_installer:chrome_runtime_deps") {
     data_deps -= [
@@ -35,25 +39,43 @@ if (is_win) {
 
 update_target("//chrome:browser_dependencies") {
   public_deps += [
-    "//vivaldi/browser:browser",
+    "//vivaldi/browser",
   ]
 }
 
 if (is_android) {
   update_target("//chrome:chrome_android_core") {
     deps += [
-      "//vivaldi/browser:browser",
+      "//vivaldi/browser",
     ]
   }
+}
+
+update_template_instance("//chrome/browser:browser") {
+  public_deps += [
+    "//vivaldi/browser",
+  ]
+  allow_circular_includes_from += [
+    "//vivaldi/browser",
+  ]
 }
 
 update_template_instance("//chrome/browser/ui:ui") {
   public_deps += [
     "//components/sessions:sessions",
-    "//vivaldi/browser:browser",
+    "//vivaldi/browser",
+    "//vivaldi/prefs:prefs_strings",
   ]
   if (is_mac) {
     public_deps += [ "//vivaldi/browser:init_sparkle" ]
+  }
+  allow_circular_includes_from += [
+    "//vivaldi/browser",
+  ]
+  if (enable_extensions) {
+    allow_circular_includes_from += [
+      "//components/guest_view/browser",
+    ]
   }
 }
 

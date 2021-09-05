@@ -21,37 +21,36 @@ import android.widget.ProgressBar;
 
 import androidx.annotation.ColorRes;
 import androidx.annotation.Nullable;
-import androidx.annotation.StringRes;
+import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ObserverList;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ThemeColorProvider;
 import org.chromium.chrome.browser.ThemeColorProvider.ThemeColorObserver;
 import org.chromium.chrome.browser.ThemeColorProvider.TintObserver;
-import org.chromium.chrome.browser.appmenu.AppMenuButtonHelper;
 import org.chromium.chrome.browser.compositor.Invalidator;
 import org.chromium.chrome.browser.compositor.layouts.LayoutUpdateHost;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
 import org.chromium.chrome.browser.findinpage.FindToolbar;
-import org.chromium.chrome.browser.fullscreen.BrowserStateBrowserControlsVisibilityDelegate;
 import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.omnibox.LocationBar;
 import org.chromium.chrome.browser.omnibox.UrlBarData;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
+import org.chromium.chrome.browser.toolbar.ButtonData;
+import org.chromium.chrome.browser.toolbar.HomeButton;
 import org.chromium.chrome.browser.toolbar.MenuButton;
 import org.chromium.chrome.browser.toolbar.TabCountProvider;
+import org.chromium.chrome.browser.toolbar.ToolbarColors;
 import org.chromium.chrome.browser.toolbar.ToolbarDataProvider;
 import org.chromium.chrome.browser.toolbar.ToolbarProgressBar;
 import org.chromium.chrome.browser.toolbar.ToolbarTabController;
 import org.chromium.chrome.browser.toolbar.top.TopToolbarCoordinator.UrlExpansionObserver;
-import org.chromium.chrome.browser.ui.widget.textbubble.TextBubble;
-import org.chromium.chrome.browser.util.ColorUtils;
-import org.chromium.chrome.browser.util.ViewUtils;
+import org.chromium.chrome.browser.ui.appmenu.AppMenuButtonHelper;
 import org.chromium.components.security_state.ConnectionSecurityLevel;
 import org.chromium.ui.UiUtils;
+import org.chromium.ui.base.ViewUtils;
 
 import org.chromium.chrome.browser.ChromeApplication;
 
@@ -95,7 +94,7 @@ public abstract class ToolbarLayout
      */
     public ToolbarLayout(Context context, AttributeSet attrs) {
         super(context, attrs);
-        mDefaultTint = ColorUtils.getThemedToolbarIconTint(getContext(), false);
+        mDefaultTint = ToolbarColors.getThemedToolbarIconTint(getContext(), false);
         mProgressBar = createProgressBar();
 
         addOnLayoutChangeListener(new OnLayoutChangeListener() {
@@ -351,7 +350,10 @@ public abstract class ToolbarLayout
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
-        addProgressBarToHierarchy();
+        // TODO(crbug.com/1021877): lazy initialize progress bar.
+        // Posting adding progress bar can prevent parent view group from using a stale children
+        // count, which can cause a crash in rare cases.
+        post(this::addProgressBarToHierarchy);
     }
 
     /**
@@ -459,12 +461,6 @@ public abstract class ToolbarLayout
     void handleFindLocationBarStateChange(boolean showing) {
         mFindInPageToolbarShowing = showing;
     }
-
-    /**
-     * Sets the delegate to handle visibility of browser controls.
-     */
-    void setBrowserControlsVisibilityDelegate(
-            BrowserStateBrowserControlsVisibilityDelegate controlsVisibilityDelegate) {}
 
     /**
      * Sets the OnClickListener that will be notified when the TabSwitcher button is pressed.
@@ -811,7 +807,7 @@ public abstract class ToolbarLayout
         if (getLocationBar() != null) {
             getLocationBar().setUrlBarFocus(false, null, LocationBar.OmniboxFocusReason.UNFOCUS);
         }
-        return mToolbarTabController != null && mToolbarTabController.back() != null;
+        return mToolbarTabController != null && mToolbarTabController.back();
     }
 
     /**
@@ -874,47 +870,22 @@ public abstract class ToolbarLayout
     }
 
     /**
-     * Enable the experimental toolbar button.
-     * @param onClickListener The {@link OnClickListener} to be called when the button is clicked.
-     * @param image The drawable to display for the button.
-     * @param contentDescriptionResId The resource id of the content description for the button.
+     * Update the optional toolbar button, showing it if currently hidden.
+     * @param buttonData Display data for the button, e.g. the Drawable and content description.
      */
-    void enableExperimentalButton(OnClickListener onClickListener, Drawable image,
-            @StringRes int contentDescriptionResId) {}
+    void updateOptionalButton(ButtonData buttonData) {}
 
     /**
-     * Updates image displayed on experimental button.
+     * Hide the optional toolbar button.
      */
-    void updateExperimentalButtonImage(Drawable image) {}
+    void hideOptionalButton() {}
 
     /**
-     * Disable the experimental toolbar button.
+     * @return Optional button view.
      */
-    void disableExperimentalButton() {}
-
-    /**
-     * @return Experimental button view.
-     */
-    View getExperimentalButtonView() {
+    @VisibleForTesting
+    public View getOptionalButtonView() {
         return null;
-    }
-
-    /**
-     * Displays in-product help for experimental button.
-     * @param stringId The id of the string resource for the text that should be shown.
-     * @param accessibilityStringId The id of the string resource of the accessibility text.
-     * @param dismissedCallback The callback that will be called when in-product help is dismissed.
-     */
-    void showIPHOnExperimentalButton(@StringRes int stringId, @StringRes int accessibilityStringId,
-            Runnable dismissedCallback) {
-        View experimentalButton = getExperimentalButtonView();
-        TextBubble textBubble = new TextBubble(getContext(), experimentalButton, stringId,
-                accessibilityStringId, experimentalButton);
-        textBubble.setDismissOnTouchInteraction(true);
-        textBubble.addOnDismissListener(() -> {
-            dismissedCallback.run();
-        });
-        textBubble.show();
     }
 
     /**
@@ -931,4 +902,12 @@ public abstract class ToolbarLayout
      * it.
      */
     void setTabModelSelector(TabModelSelector selector) {}
+
+    /**
+     * @return {@link HomeButton} this {@link ToolbarLayout} contains.
+     */
+    @VisibleForTesting
+    public HomeButton getHomeButtonForTesting() {
+        return null;
+    }
 }

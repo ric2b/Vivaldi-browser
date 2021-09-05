@@ -45,6 +45,24 @@ class COMPONENT_EXPORT(PERMISSION_BROKER) FakePermissionBrokerClient
   void ReleaseUdpPort(uint16_t port,
                       const std::string& interface,
                       ResultCallback callback) override;
+  void RequestTcpPortForward(uint16_t in_port,
+                             const std::string& in_interface,
+                             const std::string& dst_ip,
+                             uint16_t dst_port,
+                             int lifeline_fd,
+                             ResultCallback callback) override;
+  void RequestUdpPortForward(uint16_t in_port,
+                             const std::string& in_interface,
+                             const std::string& dst_ip,
+                             uint16_t dst_port,
+                             int lifeline_fd,
+                             ResultCallback callback) override;
+  void ReleaseTcpPortForward(uint16_t in_port,
+                             const std::string& in_interface,
+                             ResultCallback callback) override;
+  void ReleaseUdpPortForward(uint16_t in_port,
+                             const std::string& in_interface,
+                             ResultCallback callback) override;
 
   // Add a rule to have RequestTcpPortAccess fail.
   void AddTcpDenyRule(uint16_t port, const std::string& interface);
@@ -58,6 +76,12 @@ class COMPONENT_EXPORT(PERMISSION_BROKER) FakePermissionBrokerClient
   // Returns true if UDP port has a hole.
   bool HasUdpHole(uint16_t port, const std::string& interface);
 
+  // Returns true if TCP port is being forwarded.
+  bool HasTcpPortForward(uint16_t port, const std::string& interface);
+
+  // Returns true if UDP port is being forwarded.
+  bool HasUdpPortForward(uint16_t port, const std::string& interface);
+
  private:
   using RuleSet =
       std::set<std::pair<uint16_t /* port */, std::string /* interface */>>;
@@ -69,6 +93,9 @@ class COMPONENT_EXPORT(PERMISSION_BROKER) FakePermissionBrokerClient
 
   RuleSet tcp_hole_set_;
   RuleSet udp_hole_set_;
+
+  RuleSet tcp_forwarding_set_;
+  RuleSet udp_forwarding_set_;
 
   RuleSet tcp_deny_rule_set_;
   RuleSet udp_deny_rule_set_;

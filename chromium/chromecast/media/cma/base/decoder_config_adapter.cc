@@ -130,28 +130,13 @@ SampleFormat ToSampleFormat(const ::media::SampleFormat sample_format) {
   }
 }
 
-::media::EncryptionScheme::CipherMode ToMediaCipherMode(
-    EncryptionScheme scheme) {
+EncryptionScheme ToEncryptionScheme(::media::EncryptionScheme scheme) {
   switch (scheme) {
-    case EncryptionScheme::kUnencrypted:
-      return ::media::EncryptionScheme::CIPHER_MODE_UNENCRYPTED;
-    case EncryptionScheme::kAesCtr:
-      return ::media::EncryptionScheme::CIPHER_MODE_AES_CTR;
-    case EncryptionScheme::kAesCbc:
-      return ::media::EncryptionScheme::CIPHER_MODE_AES_CBC;
-    default:
-      NOTREACHED();
-      return ::media::EncryptionScheme::CIPHER_MODE_UNENCRYPTED;
-  }
-}
-
-EncryptionScheme ToEncryptionScheme(const ::media::EncryptionScheme& scheme) {
-  switch (scheme.mode()) {
-    case ::media::EncryptionScheme::CIPHER_MODE_UNENCRYPTED:
+    case ::media::EncryptionScheme::kUnencrypted:
       return EncryptionScheme::kUnencrypted;
-    case ::media::EncryptionScheme::CIPHER_MODE_AES_CTR:
+    case ::media::EncryptionScheme::kCenc:
       return EncryptionScheme::kAesCtr;
-    case ::media::EncryptionScheme::CIPHER_MODE_AES_CBC:
+    case ::media::EncryptionScheme::kCbcs:
       return EncryptionScheme::kAesCbc;
     default:
       NOTREACHED();
@@ -159,10 +144,18 @@ EncryptionScheme ToEncryptionScheme(const ::media::EncryptionScheme& scheme) {
   }
 }
 
-// TODO(yucliu): Remove pattern after update ::media::Audio/VideoDecoderConfig.
 ::media::EncryptionScheme ToMediaEncryptionScheme(EncryptionScheme scheme) {
-  return ::media::EncryptionScheme(ToMediaCipherMode(scheme),
-                                   ::media::EncryptionPattern());
+  switch (scheme) {
+    case EncryptionScheme::kUnencrypted:
+      return ::media::EncryptionScheme::kUnencrypted;
+    case EncryptionScheme::kAesCtr:
+      return ::media::EncryptionScheme::kCenc;
+    case EncryptionScheme::kAesCbc:
+      return ::media::EncryptionScheme::kCbcs;
+    default:
+      NOTREACHED();
+      return ::media::EncryptionScheme::kUnencrypted;
+  }
 }
 
 }  // namespace
@@ -182,6 +175,8 @@ ChannelLayout DecoderConfigAdapter::ToChannelLayout(
       return ChannelLayout::SURROUND_5_1;
     case ::media::ChannelLayout::CHANNEL_LAYOUT_BITSTREAM:
       return ChannelLayout::BITSTREAM;
+    case ::media::ChannelLayout::CHANNEL_LAYOUT_DISCRETE:
+      return ChannelLayout::DISCRETE;
 
     default:
       NOTREACHED();
@@ -203,6 +198,8 @@ ChannelLayout DecoderConfigAdapter::ToChannelLayout(
       return ::media::ChannelLayout::CHANNEL_LAYOUT_5_1;
     case ChannelLayout::BITSTREAM:
       return ::media::ChannelLayout::CHANNEL_LAYOUT_BITSTREAM;
+    case ChannelLayout::DISCRETE:
+      return ::media::ChannelLayout::CHANNEL_LAYOUT_DISCRETE;
 
     default:
       NOTREACHED();
@@ -223,8 +220,7 @@ AudioConfig DecoderConfigAdapter::ToCastAudioConfig(
   audio_config.sample_format = ToSampleFormat(config.sample_format());
   audio_config.bytes_per_channel = config.bytes_per_channel();
   audio_config.channel_layout = ToChannelLayout(config.channel_layout());
-  audio_config.channel_number =
-      ::media::ChannelLayoutToChannelCount(config.channel_layout()),
+  audio_config.channel_number = config.channels();
   audio_config.samples_per_second = config.samples_per_second();
   audio_config.extra_data = config.extra_data();
   audio_config.encryption_scheme =
@@ -243,11 +239,15 @@ AudioConfig DecoderConfigAdapter::ToCastAudioConfig(
 // static
 ::media::AudioDecoderConfig DecoderConfigAdapter::ToMediaAudioDecoderConfig(
     const AudioConfig& config) {
-  return ::media::AudioDecoderConfig(
+  ::media::AudioDecoderConfig audio_decoder_config(
       ToMediaAudioCodec(config.codec),
       ToMediaSampleFormat(config.sample_format),
       ToMediaChannelLayout(config.channel_layout), config.samples_per_second,
       config.extra_data, ToMediaEncryptionScheme(config.encryption_scheme));
+  if (config.channel_layout == ChannelLayout::DISCRETE) {
+    audio_decoder_config.SetChannelsForDiscrete(config.channel_number);
+  }
+  return audio_decoder_config;
 }
 
 // static

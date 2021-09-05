@@ -3,4 +3,32 @@
 <translationbundle lang="hu">
 <translation id="3830627370375585318">A hálózat elérésének engedélyezése a Vivaldi számára a tűzfal-
           vagy vírusirtó-beállításokban.</translation>
+<translation id="4200102020577305737">Lépj ide:
+          Vivaldi menü &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          A helyi hálózat (LAN) beállításai,
+          és töröld a jelet innen: "Proxykiszolgáló használata a helyi hálózaton”.</translation>
+<translation id="4932161901409251843">Lépj ide:
+          Vivaldi menü &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />,
+          és gondoskodj róla, hogy a konfiguráció beállítása „nincs proxy” vagy „közvetlen” legyen.</translation>
+<translation id="5248344925342018662">Jelenleg biztonságos Vivaldi oldalt tekintesz meg</translation>
+<translation id="7023871570427738255">Lépj ide:
+        Vivaldi menü &gt;
+        <ph name="SETTINGS_TITLE" />
+        &gt;
+        <ph name="ADVANCED_TITLE" />,
+        és töröld a jelet a(z) „<ph name="NO_PREFETCH_DESCRIPTION" />” jelölőnégyzetből.
+        Ha ettől nem szűnik meg a probléma, javasoljuk, hogy jelöld be ismét
+        ezt a lehetőséget a jobb teljesítmény érdekében.</translation>
+<translation id="8187289872471304532">Az Alkalmazások &gt; Rendszerbeállítások &gt; Hálózat &gt; Haladó &gt; Proxyk menüpont alatt töröld a jelet minden kijelölt proxy mellől.</translation>
 </translationbundle>

@@ -14,7 +14,6 @@
 #include "chromecast/browser/cast_browser_context.h"
 #include "chromecast/browser/cast_browser_process.h"
 #include "chromecast/browser/cast_http_user_agent_settings.h"
-#include "chromecast/browser/url_request_context_factory.h"
 #include "chromecast/common/cast_content_client.h"
 #include "components/proxy_config/pref_proxy_config_tracker_impl.h"
 #include "components/variations/net/variations_http_headers.h"
@@ -26,7 +25,7 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "services/network/network_context.h"
-#include "services/network/public/cpp/cross_thread_shared_url_loader_factory_info.h"
+#include "services/network/public/cpp/cross_thread_pending_shared_url_loader_factory.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace chromecast {
@@ -43,19 +42,20 @@ class CastNetworkContexts::URLLoaderFactoryForSystem
   }
 
   // mojom::URLLoaderFactory implementation:
-  void CreateLoaderAndStart(network::mojom::URLLoaderRequest request,
-                            int32_t routing_id,
-                            int32_t request_id,
-                            uint32_t options,
-                            const network::ResourceRequest& url_request,
-                            network::mojom::URLLoaderClientPtr client,
-                            const net::MutableNetworkTrafficAnnotationTag&
-                                traffic_annotation) override {
+  void CreateLoaderAndStart(
+      mojo::PendingReceiver<network::mojom::URLLoader> receiver,
+      int32_t routing_id,
+      int32_t request_id,
+      uint32_t options,
+      const network::ResourceRequest& url_request,
+      mojo::PendingRemote<network::mojom::URLLoaderClient> client,
+      const net::MutableNetworkTrafficAnnotationTag& traffic_annotation)
+      override {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     if (!network_context_)
       return;
     network_context_->GetSystemURLLoaderFactory()->CreateLoaderAndStart(
-        std::move(request), routing_id, request_id, options, url_request,
+        std::move(receiver), routing_id, request_id, options, url_request,
         std::move(client), traffic_annotation);
   }
 
@@ -67,9 +67,9 @@ class CastNetworkContexts::URLLoaderFactoryForSystem
   }
 
   // SharedURLLoaderFactory implementation:
-  std::unique_ptr<network::SharedURLLoaderFactoryInfo> Clone() override {
+  std::unique_ptr<network::PendingSharedURLLoaderFactory> Clone() override {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-    return std::make_unique<network::CrossThreadSharedURLLoaderFactoryInfo>(
+    return std::make_unique<network::CrossThreadPendingSharedURLLoaderFactory>(
         this);
   }
 
@@ -119,8 +119,7 @@ CastNetworkContexts::GetSystemURLLoaderFactory() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   // Create the URLLoaderFactory as needed.
-  if (system_url_loader_factory_ &&
-      !system_url_loader_factory_.encountered_error()) {
+  if (system_url_loader_factory_ && system_url_loader_factory_.is_connected()) {
     return system_url_loader_factory_.get();
   }
 
@@ -128,8 +127,10 @@ CastNetworkContexts::GetSystemURLLoaderFactory() {
       network::mojom::URLLoaderFactoryParams::New();
   params->process_id = network::mojom::kBrowserProcessId;
   params->is_corb_enabled = false;
+  params->is_trusted = true;
   GetSystemContext()->CreateURLLoaderFactory(
-      mojo::MakeRequest(&system_url_loader_factory_), std::move(params));
+      system_url_loader_factory_.BindNewPipeAndPassReceiver(),
+      std::move(params));
   return system_shared_url_loader_factory_.get();
 }
 
@@ -200,6 +201,7 @@ CastNetworkContexts::CreateDefaultNetworkContextParams() {
   network::mojom::NetworkContextParamsPtr network_context_params =
       network::mojom::NetworkContextParams::New();
 
+  network_context_params->http_cache_enabled = false;
   network_context_params->user_agent = GetUserAgent();
   network_context_params->accept_language =
       CastHttpUserAgentSettings::AcceptLanguage();

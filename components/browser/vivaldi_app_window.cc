@@ -4,7 +4,7 @@
 
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_constants.h"
-#include "content/public/common/context_menu_params.h"
+#include "content/public/browser/context_menu_params.h"
 #include "content/public/common/url_constants.h"
 #include "ui/vivaldi_ui_utils.h"
 

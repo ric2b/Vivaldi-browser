@@ -8,31 +8,22 @@
 
 namespace blink {
 
-ResizeObserverController::ResizeObserverController()
-    : observers_changed_(false) {}
+ResizeObserverController::ResizeObserverController() = default;
 
 void ResizeObserverController::AddObserver(ResizeObserver& observer) {
   observers_.insert(&observer);
 }
 
-size_t ResizeObserverController::GatherObservations(size_t deeper_than) {
+size_t ResizeObserverController::GatherObservations() {
   size_t shallowest = ResizeObserverController::kDepthBottom;
-  if (!observers_changed_)
-    return shallowest;
+
   for (auto& observer : observers_) {
-    size_t depth = observer->GatherObservations(deeper_than);
+    size_t depth = observer->GatherObservations(min_depth_);
     if (depth < shallowest)
       shallowest = depth;
   }
-  return shallowest;
-}
-
-void ResizeObserverController::SetNeedsForcedResizeObservations() {
-  for (auto& observer : observers_) {
-    // Set ElementSizeChanged as a way of forcing the observer to check all
-    // observations.
-    observer->ElementSizeChanged();
-  }
+  min_depth_ = shallowest;
+  return min_depth_;
 }
 
 bool ResizeObserverController::SkippedObservations() {
@@ -44,7 +35,6 @@ bool ResizeObserverController::SkippedObservations() {
 }
 
 void ResizeObserverController::DeliverObservations() {
-  observers_changed_ = false;
   // Copy is needed because m_observers might get modified during
   // deliverObservations.
   HeapVector<Member<ResizeObserver>> observers;
@@ -53,8 +43,6 @@ void ResizeObserverController::DeliverObservations() {
   for (auto& observer : observers) {
     if (observer) {
       observer->DeliverObservations();
-      observers_changed_ =
-          observers_changed_ || observer->HasElementSizeChanged();
     }
   }
 }
@@ -64,7 +52,7 @@ void ResizeObserverController::ClearObservations() {
     observer->ClearObservations();
 }
 
-void ResizeObserverController::Trace(blink::Visitor* visitor) {
+void ResizeObserverController::Trace(Visitor* visitor) {
   visitor->Trace(observers_);
 }
 

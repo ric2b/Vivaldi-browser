@@ -8,10 +8,11 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.text.TextUtils;
 
-import org.chromium.base.VisibleForTesting;
+import androidx.annotation.VisibleForTesting;
+
 import org.chromium.chrome.browser.SnackbarActivity;
-import org.chromium.chrome.browser.util.UrlConstants;
 import org.chromium.components.bookmarks.BookmarkId;
+import org.chromium.components.embedder_support.util.UrlConstants;
 
 /**
  * The activity that displays the bookmark UI on the phone. It keeps a {@link BookmarkManager}
@@ -51,7 +52,7 @@ public class BookmarkActivity extends SnackbarActivity {
         if (requestCode == EDIT_BOOKMARK_REQUEST_CODE && resultCode == RESULT_OK) {
             BookmarkId bookmarkId = BookmarkId.getBookmarkIdFromString(data.getStringExtra(
                     INTENT_VISIT_BOOKMARK_ID));
-            mBookmarkManager.openBookmark(bookmarkId, BookmarkLaunchLocation.BOOKMARK_EDITOR);
+            mBookmarkManager.openBookmark(bookmarkId);
         }
     }
 

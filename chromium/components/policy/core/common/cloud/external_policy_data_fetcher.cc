@@ -25,8 +25,8 @@ namespace policy {
 class ExternalPolicyDataFetcher::Job
     : public network::SimpleURLLoaderStreamConsumer {
  public:
-  Job(std::unique_ptr<network::SharedURLLoaderFactoryInfo>
-          url_loader_factory_info,
+  Job(std::unique_ptr<network::PendingSharedURLLoaderFactory>
+          pending_url_loader_factory,
       base::WeakPtr<ExternalPolicyDataFetcher> fetcher,
       scoped_refptr<base::SequencedTaskRunner> fetcher_task_runner,
       ExternalPolicyDataFetcher::FetchCallback callback);
@@ -47,7 +47,8 @@ class ExternalPolicyDataFetcher::Job
 
   SEQUENCE_CHECKER(sequence_checker_);
 
-  std::unique_ptr<network::SharedURLLoaderFactoryInfo> url_loader_factory_info_;
+  std::unique_ptr<network::PendingSharedURLLoaderFactory>
+      pending_url_loader_factory_;
   base::WeakPtr<ExternalPolicyDataFetcher> fetcher_;
   scoped_refptr<base::SequencedTaskRunner> fetcher_task_runner_;
   ExternalPolicyDataFetcher::FetchCallback callback_;
@@ -59,12 +60,12 @@ class ExternalPolicyDataFetcher::Job
 };
 
 ExternalPolicyDataFetcher::Job::Job(
-    std::unique_ptr<network::SharedURLLoaderFactoryInfo>
-        url_loader_factory_info,
+    std::unique_ptr<network::PendingSharedURLLoaderFactory>
+        pending_url_loader_factory,
     base::WeakPtr<ExternalPolicyDataFetcher> fetcher,
     scoped_refptr<base::SequencedTaskRunner> fetcher_task_runner,
     ExternalPolicyDataFetcher::FetchCallback callback)
-    : url_loader_factory_info_(std::move(url_loader_factory_info)),
+    : pending_url_loader_factory_(std::move(pending_url_loader_factory)),
       fetcher_(std::move(fetcher)),
       fetcher_task_runner_(std::move(fetcher_task_runner)),
       callback_(std::move(callback)) {
@@ -119,7 +120,7 @@ void ExternalPolicyDataFetcher::Job::Start(
       base::BindOnce(&ExternalPolicyDataFetcher::Job::OnResponseStarted,
                      base::Unretained(this)));
   url_loader_->DownloadAsStream(network::SharedURLLoaderFactory::Create(
-                                    std::move(url_loader_factory_info_))
+                                    std::move(pending_url_loader_factory_))
                                     .get(),
                                 this);
 }
@@ -223,11 +224,17 @@ ExternalPolicyDataFetcher::ExternalPolicyDataFetcher(
       job_task_runner_(base::ThreadTaskRunnerHandle::Get()) {
   // |url_loader_factory| is null in some tests.
   if (url_loader_factory)
-    url_loader_factory_info_ = url_loader_factory->Clone();
+    pending_url_loader_factory_ = url_loader_factory->Clone();
 }
 
 ExternalPolicyDataFetcher::~ExternalPolicyDataFetcher() {
-  DCHECK(task_runner_->RunsTasksInCurrentSequence());
+  // No RunsTasksInCurrentSequence() check to avoid unit tests failures.
+  // In unit tests the browser process instance is deleted only after test ends
+  // and test task scheduler is shutted down. Therefore we need to delete some
+  // components of BrowserPolicyConnector (ResourceCache and
+  // CloudExternalDataManagerBase::Backend) manually when task runner doesn't
+  // accept new tasks (DeleteSoon in this case). This leads to the situation
+  // when this destructor is called not on |task_runner|.
 
   for (auto it = jobs_.begin(); it != jobs_.end(); ++it)
     CancelJob(*it);
@@ -240,7 +247,7 @@ ExternalPolicyDataFetcher::Job* ExternalPolicyDataFetcher::StartJob(
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
   if (!cloned_url_loader_factory_) {
     cloned_url_loader_factory_ = network::SharedURLLoaderFactory::Create(
-        std::move(url_loader_factory_info_));
+        std::move(pending_url_loader_factory_));
   }
   Job* job =
       new Job(cloned_url_loader_factory_->Clone(), weak_factory_.GetWeakPtr(),

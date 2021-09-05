@@ -34,10 +34,6 @@ class LocalCardMigrationBubbleViews : public LocalCardMigrationBubble,
   void Hide() override;
 
   // LocationBarBubbleDelegateView:
-  bool Accept() override;
-  bool Cancel() override;
-  bool Close() override;
-  int GetDialogButtons() const override;
   gfx::Size CalculatePreferredSize() const override;
   void AddedToWidget() override;
   bool ShouldShowCloseButton() const override;
@@ -48,6 +44,9 @@ class LocalCardMigrationBubbleViews : public LocalCardMigrationBubble,
   friend class LocalCardMigrationBrowserTest;
 
   ~LocalCardMigrationBubbleViews() override;
+
+  void OnDialogAccepted();
+  void OnDialogCancelled();
 
   // views::BubbleDialogDelegateView:
   void Init() override;

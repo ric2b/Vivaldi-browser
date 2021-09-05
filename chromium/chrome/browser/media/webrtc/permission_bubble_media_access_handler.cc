@@ -8,16 +8,18 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/callback_helpers.h"
 #include "base/metrics/field_trial.h"
 #include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "chrome/browser/media/webrtc/media_stream_device_permissions.h"
 #include "chrome/browser/media/webrtc/media_stream_devices_controller.h"
-#include "chrome/browser/permissions/permission_manager.h"
-#include "chrome/browser/permissions/permission_result.h"
+#include "chrome/browser/permissions/permission_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/permissions/permission_manager.h"
+#include "components/permissions/permission_result.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
@@ -27,10 +29,10 @@
 #if defined(OS_ANDROID)
 #include <vector>
 
-#include "chrome/browser/android/chrome_feature_list.h"
+#include "chrome/browser/flags/android/chrome_feature_list.h"
 #include "chrome/browser/media/webrtc/screen_capture_infobar_delegate_android.h"
-#include "chrome/browser/permissions/permission_uma_util.h"
-#include "chrome/browser/permissions/permission_util.h"
+#include "components/permissions/permission_uma_util.h"
+#include "components/permissions/permission_util.h"
 #endif  // defined(OS_ANDROID)
 
 #if defined(OS_MACOSX)
@@ -102,12 +104,13 @@ bool PermissionBubbleMediaAccessHandler::CheckMediaAccessPermission(
       Profile::FromBrowserContext(web_contents->GetBrowserContext());
   ContentSettingsType content_settings_type =
       type == blink::mojom::MediaStreamType::DEVICE_AUDIO_CAPTURE
-          ? CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC
-          : CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA;
+          ? ContentSettingsType::MEDIASTREAM_MIC
+          : ContentSettingsType::MEDIASTREAM_CAMERA;
 
   DCHECK(!security_origin.is_empty());
   GURL embedding_origin = web_contents->GetLastCommittedURL().GetOrigin();
-  PermissionManager* permission_manager = PermissionManager::Get(profile);
+  permissions::PermissionManager* permission_manager =
+      PermissionManagerFactory::GetForProfile(profile);
   return permission_manager
              ->GetPermissionStatusForFrame(content_settings_type,
                                            render_frame_host, security_origin)
@@ -165,16 +168,17 @@ void PermissionBubbleMediaAccessHandler::ProcessQueuedAccessRequest(
   if (blink::IsScreenCaptureMediaType(request.video_type)) {
     ScreenCaptureInfoBarDelegateAndroid::Create(
         web_contents, request,
-        base::Bind(&PermissionBubbleMediaAccessHandler::OnAccessRequestResponse,
-                   base::Unretained(this), web_contents, request_id));
+        base::BindOnce(
+            &PermissionBubbleMediaAccessHandler::OnAccessRequestResponse,
+            base::Unretained(this), web_contents, request_id));
     return;
   }
 #endif
 
   MediaStreamDevicesController::RequestPermissions(
-      request,
-      base::Bind(&PermissionBubbleMediaAccessHandler::OnAccessRequestResponse,
-                 base::Unretained(this), web_contents, request_id));
+      request, base::BindOnce(
+                   &PermissionBubbleMediaAccessHandler::OnAccessRequestResponse,
+                   base::Unretained(this), web_contents, request_id));
 }
 
 void PermissionBubbleMediaAccessHandler::UpdateMediaRequestState(

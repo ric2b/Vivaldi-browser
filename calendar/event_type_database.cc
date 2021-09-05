@@ -104,7 +104,7 @@ bool EventTypeDatabase::UpdateEventTypeRow(const EventTypeRow& event) {
   statement.BindString16(0, event.name());
   statement.BindString(1, event.color());
   statement.BindInt(2, event.iconindex());
-  statement.BindInt(3, event.id());
+  statement.BindInt64(3, event.id());
 
   return statement.Run();
 }

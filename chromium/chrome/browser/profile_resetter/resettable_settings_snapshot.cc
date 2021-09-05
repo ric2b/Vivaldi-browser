@@ -15,6 +15,7 @@
 #include "base/synchronization/atomic_flag.h"
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
+#include "base/task/thread_pool.h"
 #include "base/task_runner_util.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
@@ -137,12 +138,12 @@ void ResettableSettingsSnapshot::RequestShortcuts(
   cancellation_flag_ = new SharedCancellationFlag;
 #if defined(OS_WIN)
   base::PostTaskAndReplyWithResult(
-      base::CreateCOMSTATaskRunner({base::ThreadPool(), base::MayBlock(),
-                                    base::TaskPriority::USER_VISIBLE})
+      base::ThreadPool::CreateCOMSTATaskRunner(
+          {base::MayBlock(), base::TaskPriority::USER_VISIBLE})
           .get(),
-      FROM_HERE, base::Bind(&GetChromeLaunchShortcuts, cancellation_flag_),
-      base::Bind(&ResettableSettingsSnapshot::SetShortcutsAndReport,
-                 weak_ptr_factory_.GetWeakPtr(), callback));
+      FROM_HERE, base::BindOnce(&GetChromeLaunchShortcuts, cancellation_flag_),
+      base::BindOnce(&ResettableSettingsSnapshot::SetShortcutsAndReport,
+                     weak_ptr_factory_.GetWeakPtr(), callback));
 #else   // defined(OS_WIN)
   // Shortcuts are only supported on Windows.
   std::vector<ShortcutCommand> no_shortcuts;
@@ -160,7 +161,7 @@ void ResettableSettingsSnapshot::SetShortcutsAndReport(
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   shortcuts_ = shortcuts;
   shortcuts_determined_ = true;
-  cancellation_flag_ = NULL;
+  cancellation_flag_.reset();
 
   if (!callback.is_null())
     callback.Run();

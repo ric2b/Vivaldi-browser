@@ -93,8 +93,8 @@ class PLATFORM_EXPORT FrameSchedulerImpl : public FrameScheduler,
   void SetPaused(bool frame_paused) override;
   void SetShouldReportPostedTasksWhenDisabled(bool should_report) override;
 
-  void SetCrossOrigin(bool cross_origin) override;
-  bool IsCrossOrigin() const override;
+  void SetCrossOriginToMainFrame(bool cross_origin) override;
+  bool IsCrossOriginToMainFrame() const override;
 
   void SetIsAdFrame() override;
   bool IsAdFrame() const override;
@@ -160,16 +160,6 @@ class PLATFORM_EXPORT FrameSchedulerImpl : public FrameScheduler,
       MainThreadTaskQueue*,
       base::sequence_manager::TaskQueue::QueueEnabledVoter*) override;
 
-  using FrameTaskTypeToQueueTraitsArray =
-      std::array<base::Optional<MainThreadTaskQueue::QueueTraits>,
-                 static_cast<size_t>(TaskType::kCount)>;
-
-  // Initializes the mapping from TaskType to QueueTraits for frame-level tasks.
-  // We control the policy and initialize this, but the map is stored with main
-  // thread scheduling settings to avoid redundancy.
-  static void InitializeTaskTypeQueueTraitsMap(
-      FrameTaskTypeToQueueTraitsArray&);
-
   // Returns the list of active features which currently tracked by the
   // scheduler for back-forward cache metrics.
   WTF::HashSet<SchedulingPolicy::Feature>
@@ -186,6 +176,9 @@ class PLATFORM_EXPORT FrameSchedulerImpl : public FrameScheduler,
 
   std::unique_ptr<WebSchedulingTaskQueue> CreateWebSchedulingTaskQueue(
       WebSchedulingPriority) override;
+  void OnWebSchedulingTaskQueuePriorityChanged(MainThreadTaskQueue*);
+
+  const base::UnguessableToken& GetAgentClusterId() const;
 
  protected:
   FrameSchedulerImpl(MainThreadSchedulerImpl* main_thread_scheduler,
@@ -266,8 +259,8 @@ class PLATFORM_EXPORT FrameSchedulerImpl : public FrameScheduler,
 
   // Create the QueueTraits for a specific TaskType. This returns base::nullopt
   // for loading tasks and non-frame-level tasks.
-  static base::Optional<MainThreadTaskQueue::QueueTraits>
-      CreateQueueTraitsForTaskType(TaskType);
+  static MainThreadTaskQueue::QueueTraits CreateQueueTraitsForTaskType(
+      TaskType);
 
   // Reset the state which should not persist across navigations.
   void ResetForNavigation();
@@ -291,6 +284,7 @@ class PLATFORM_EXPORT FrameSchedulerImpl : public FrameScheduler,
   DoesNotUseVirtualTimeTaskQueueTraits();
   static MainThreadTaskQueue::QueueTraits LoadingTaskQueueTraits();
   static MainThreadTaskQueue::QueueTraits LoadingControlTaskQueueTraits();
+  static MainThreadTaskQueue::QueueTraits FindInPageTaskQueueTraits();
 
   const FrameScheduler::FrameType frame_type_;
 

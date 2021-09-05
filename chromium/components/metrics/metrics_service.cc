@@ -242,16 +242,16 @@ void MetricsService::InitializeMetricsRecordingState() {
   reporting_service_.Initialize();
   InitializeMetricsState();
 
-  base::Closure upload_callback =
-      base::Bind(&MetricsService::StartScheduledUpload,
-                 self_ptr_factory_.GetWeakPtr());
+  base::RepeatingClosure upload_callback = base::BindRepeating(
+      &MetricsService::StartScheduledUpload, self_ptr_factory_.GetWeakPtr());
 
   rotation_scheduler_.reset(new MetricsRotationScheduler(
       upload_callback,
       // MetricsServiceClient outlives MetricsService, and
       // MetricsRotationScheduler is tied to the lifetime of |this|.
-      base::Bind(&MetricsServiceClient::GetUploadInterval,
-                 base::Unretained(client_))));
+      base::BindRepeating(&MetricsServiceClient::GetUploadInterval,
+                          base::Unretained(client_)),
+      client_->ShouldStartUpFastForTesting()));
 
   // Init() has to be called after LogCrash() in order for LogCrash() to work.
   delegating_provider_.Init();
@@ -328,8 +328,8 @@ void MetricsService::EnableRecording() {
   RecordCurrentEnvironment(log_manager_.current_log(), /*complete=*/false);
 
   base::RemoveActionCallback(action_callback_);
-  action_callback_ = base::Bind(&MetricsService::OnUserAction,
-                                base::Unretained(this));
+  action_callback_ = base::BindRepeating(&MetricsService::OnUserAction,
+                                         base::Unretained(this));
   base::AddActionCallback(action_callback_);
 }
 
@@ -453,6 +453,18 @@ void MetricsService::PushExternalLog(const std::string& log) {
   log_store()->StoreLog(log, MetricsLog::ONGOING_LOG);
 }
 
+bool MetricsService::StageCurrentLogForTest() {
+  CloseCurrentLog();
+
+  MetricsLogStore* const log_store = reporting_service_.metrics_log_store();
+  log_store->StageNextLog();
+  if (!log_store->has_staged_log())
+    return false;
+
+  OpenNewLog();
+  return true;
+}
+
 //------------------------------------------------------------------------------
 // private methods
 //------------------------------------------------------------------------------
@@ -541,8 +553,9 @@ void MetricsService::InitializeMetricsState() {
   IncrementLongPrefsValue(prefs::kUninstallLaunchCount);
 }
 
-void MetricsService::OnUserAction(const std::string& action) {
-  log_manager_.current_log()->RecordUserAction(action);
+void MetricsService::OnUserAction(const std::string& action,
+                                  base::TimeTicks action_time) {
+  log_manager_.current_log()->RecordUserAction(action, action_time);
   HandleIdleSinceLastTransmission(false);
 }
 
@@ -593,23 +606,26 @@ void MetricsService::OpenNewLog() {
     // We only need to schedule that run once.
     state_ = INIT_TASK_SCHEDULED;
 
+    base::TimeDelta initialization_delay = base::TimeDelta::FromSeconds(
+        client_->ShouldStartUpFastForTesting() ? 0
+                                               : kInitializationDelaySeconds);
     base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE,
         base::BindOnce(&MetricsService::StartInitTask,
                        self_ptr_factory_.GetWeakPtr()),
-        base::TimeDelta::FromSeconds(kInitializationDelaySeconds));
+        initialization_delay);
 
     base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE,
         base::BindOnce(&MetricsService::PrepareProviderMetricsTask,
                        self_ptr_factory_.GetWeakPtr()),
-        base::TimeDelta::FromSeconds(2 * kInitializationDelaySeconds));
+        2 * initialization_delay);
   }
 }
 
 void MetricsService::StartInitTask() {
-  delegating_provider_.AsyncInit(base::Bind(&MetricsService::FinishedInitTask,
-                                            self_ptr_factory_.GetWeakPtr()));
+  delegating_provider_.AsyncInit(base::BindOnce(
+      &MetricsService::FinishedInitTask, self_ptr_factory_.GetWeakPtr()));
 }
 
 void MetricsService::CloseCurrentLog() {
@@ -695,8 +711,8 @@ void MetricsService::StartScheduledUpload() {
   } else {
     // There are no logs left to send, so start creating a new one.
     client_->CollectFinalMetricsForLog(
-        base::Bind(&MetricsService::OnFinalLogInfoCollectionDone,
-                   self_ptr_factory_.GetWeakPtr()));
+        base::BindOnce(&MetricsService::OnFinalLogInfoCollectionDone,
+                       self_ptr_factory_.GetWeakPtr()));
   }
 }
 
@@ -807,6 +823,10 @@ void MetricsService::RegisterMetricsProvider(
 
 void MetricsService::CheckForClonedInstall() {
   state_manager_->CheckForClonedInstall();
+}
+
+bool MetricsService::ShouldResetClientIdsOnClonedInstall() {
+  return state_manager_->ShouldResetClientIdsOnClonedInstall();
 }
 
 std::unique_ptr<MetricsLog> MetricsService::CreateLog(

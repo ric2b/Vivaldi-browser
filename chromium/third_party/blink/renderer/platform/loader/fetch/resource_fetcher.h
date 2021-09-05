@@ -102,7 +102,7 @@ class PLATFORM_EXPORT ResourceFetcher
   // in ResourceFetcherInit to ensure correctness of this ResourceFetcher.
   explicit ResourceFetcher(const ResourceFetcherInit&);
   virtual ~ResourceFetcher();
-  virtual void Trace(blink::Visitor*);
+  virtual void Trace(Visitor*);
 
   // - This function returns the same object throughout this fetcher's
   //   entire life.
@@ -168,6 +168,7 @@ class PLATFORM_EXPORT ResourceFetcher
   // call this method explicitly on cases such as ResourceNeedsLoad() returning
   // false.
   bool StartLoad(Resource*);
+  bool StartLoad(Resource*, ResourceRequestBody);
 
   void SetAutoLoadImages(bool);
   void SetImagesEnabled(bool);
@@ -223,6 +224,9 @@ class PLATFORM_EXPORT ResourceFetcher
       ResourceType,
       IsImageSet);
 
+  static network::mojom::RequestDestination DetermineRequestDestination(
+      ResourceType);
+
   void UpdateAllImageResourcePriorities();
 
   // Returns whether the given resource is contained as a preloaded resource.
@@ -237,6 +241,7 @@ class PLATFORM_EXPORT ResourceFetcher
   void EmulateLoadStartedForInspector(Resource*,
                                       const KURL&,
                                       mojom::RequestContextType,
+                                      network::mojom::RequestDestination,
                                       const AtomicString& initiator_name);
 
   // This is called from leak detectors (Real-world leak detector & web test
@@ -253,7 +258,7 @@ class PLATFORM_EXPORT ResourceFetcher
 
   ResourceLoadPriority ComputeLoadPriorityForTesting(
       ResourceType type,
-      const ResourceRequest& request,
+      const ResourceRequestHead& request,
       ResourcePriority::VisibilityStatus visibility_statue,
       FetchParameters::DeferOption defer_option,
       FetchParameters::SpeculativePreloadType speculative_preload_type,
@@ -286,7 +291,7 @@ class PLATFORM_EXPORT ResourceFetcher
   void StorePerformanceTimingInitiatorInformation(Resource*);
   ResourceLoadPriority ComputeLoadPriority(
       ResourceType,
-      const ResourceRequest&,
+      const ResourceRequestHead&,
       ResourcePriority::VisibilityStatus,
       FetchParameters::DeferOption = FetchParameters::kNoDefer,
       FetchParameters::SpeculativePreloadType =
@@ -321,7 +326,13 @@ class PLATFORM_EXPORT ResourceFetcher
   void StopFetchingIncludingKeepaliveLoaders();
 
   // RevalidationPolicy enum values are used in UMAs https://crbug.com/579496.
-  enum RevalidationPolicy { kUse, kRevalidate, kReload, kLoad };
+  enum class RevalidationPolicy {
+    kUse,
+    kRevalidate,
+    kReload,
+    kLoad,
+    kMaxValue = kLoad
+  };
 
   // A wrapper just for placing a trace_event macro.
   RevalidationPolicy DetermineRevalidationPolicy(
@@ -449,7 +460,7 @@ class ResourceCacheValidationSuppressor {
   }
 
  private:
-  Member<ResourceFetcher> loader_;
+  ResourceFetcher* loader_;
   bool previous_state_;
 
   DISALLOW_COPY_AND_ASSIGN(ResourceCacheValidationSuppressor);
@@ -469,15 +480,15 @@ struct PLATFORM_EXPORT ResourceFetcherInit final {
                       scoped_refptr<base::SingleThreadTaskRunner> task_runner,
                       ResourceFetcher::LoaderFactory* loader_factory);
 
-  const Member<DetachableResourceFetcherProperties> properties;
-  const Member<FetchContext> context;
+  DetachableResourceFetcherProperties* const properties;
+  FetchContext* const context;
   const scoped_refptr<base::SingleThreadTaskRunner> task_runner;
-  const Member<ResourceFetcher::LoaderFactory> loader_factory;
-  Member<DetachableUseCounter> use_counter;
-  Member<DetachableConsoleLogger> console_logger;
+  ResourceFetcher::LoaderFactory* const loader_factory;
+  DetachableUseCounter* use_counter = nullptr;
+  DetachableConsoleLogger* console_logger = nullptr;
   ResourceLoadScheduler::ThrottlingPolicy initial_throttling_policy =
       ResourceLoadScheduler::ThrottlingPolicy::kNormal;
-  Member<MHTMLArchive> archive;
+  MHTMLArchive* archive = nullptr;
   FrameScheduler* frame_scheduler = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(ResourceFetcherInit);

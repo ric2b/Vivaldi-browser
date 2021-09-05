@@ -9,8 +9,6 @@ source_set("passwords") {
   sources = [
     "credential_manager.h",
     "credential_manager.mm",
-    "credential_manager_util.h",
-    "credential_manager_util.mm",
     "ios_chrome_password_manager_client.h",
     "ios_chrome_password_manager_client.mm",
     "ios_chrome_password_manager_driver.h",
@@ -64,13 +62,13 @@ source_set("passwords") {
     "//components/sync",
     "//components/translate/core/browser:browser",
     "//components/ukm",
+    "//components/ukm/ios:ukm_url_recorder",
     "//google_apis",
     "//ios/chrome/app/strings",
     "//ios/chrome/browser",
     "//ios/chrome/browser/browser_state",
     "//ios/chrome/browser/infobars",
     "//ios/chrome/browser/infobars:public",
-    "//ios/chrome/browser/metrics:ukm_url_recorder",
     "//ios/chrome/browser/signin",
     "//ios/chrome/browser/ssl",
     "//ios/chrome/browser/sync/glue",
@@ -78,16 +76,17 @@ source_set("passwords") {
     "//ios/chrome/browser/ui/alert_coordinator",
     "//ios/chrome/browser/ui/commands",
     "//ios/chrome/browser/ui/elements",
+    "//ios/chrome/browser/ui/elements:selector_coordinator",
     "//ios/chrome/browser/ui/infobars:feature_flags",
     "//ios/chrome/browser/ui/infobars:infobars_ui",
     "//ios/chrome/browser/ui/infobars/coordinators",
     "//ios/chrome/browser/ui/util",
     "//ios/chrome/browser/web",
     "//ios/chrome/browser/webdata_services",
-    "//ios/chrome/common/ui_util",
+    "//ios/chrome/common/ui/util",
     "//ios/public/provider/chrome/browser",
     "//ios/public/provider/chrome/browser/ui",
-    "//ios/third_party/material_components_ios:material_components_ios",
+    "//ios/third_party/material_components_ios",
     "//ios/web/common",
     "//ios/web/public/deprecated",
     "//ios/web/public/js_messaging",
@@ -131,9 +130,7 @@ source_set("public") {
     "ios_chrome_password_infobar_metrics_recorder.h",
     "ios_chrome_password_infobar_metrics_recorder.mm",
   ]
-  deps = [
-    "//base",
-  ]
+  deps = [ "//base" ]
 }
 
 source_set("feature_flags") {
@@ -142,9 +139,7 @@ source_set("feature_flags") {
     "password_manager_features.cc",
     "password_manager_features.h",
   ]
-  deps = [
-    "//base",
-  ]
+  deps = [ "//base" ]
 }
 
 source_set("passwords_generation_utils") {
@@ -153,9 +148,7 @@ source_set("passwords_generation_utils") {
     "password_generation_utils.h",
     "password_generation_utils.mm",
   ]
-  deps = [
-    "//base:i18n",
-  ]
+  deps = [ "//base:i18n" ]
   libs = [ "CoreGraphics.framework" ]
 }
 
@@ -164,7 +157,6 @@ source_set("unit_tests") {
   testonly = true
   sources = [
     "credential_manager_unittest.mm",
-    "credential_manager_util_unittest.cc",
     "js_credential_manager_unittest.mm",
     "password_controller_js_unittest.mm",
     "password_controller_unittest.mm",
@@ -175,9 +167,11 @@ source_set("unit_tests") {
     "//base/test:test_support",
     "//components/autofill/core/common",
     "//components/autofill/ios/browser",
+    "//components/autofill/ios/form_util",
     "//components/password_manager/core/browser",
     "//components/password_manager/core/browser:test_support",
     "//components/password_manager/core/browser/leak_detection:leak_detection_interface_headers",
+    "//components/password_manager/core/browser/leak_detection:test_support",
     "//components/password_manager/core/common",
     "//components/password_manager/ios",
     "//components/password_manager/ios:test_support",
@@ -207,32 +201,102 @@ source_set("unit_tests") {
 }
 
 source_set("eg_tests") {
+  defines = [ "CHROME_EARL_GREY_1" ]
   configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
-  sources = [
-    "credential_manager_egtest.mm",
-  ]
+  sources = [ "credential_manager_egtest.mm" ]
 
   deps = [
-    ":passwords",
+    ":feature_flags",
+    ":test_support",
     "//base",
     "//base/test:test_support",
-    "//components/autofill/core/common",
-    "//components/autofill/ios/browser",
-    "//components/keyed_service/core",
-    "//components/password_manager/core/browser",
-    "//components/password_manager/core/browser:test_support",
     "//components/password_manager/core/common",
-    "//components/password_manager/ios",
-    "//components/prefs",
-    "//components/prefs:test_support",
     "//ios/chrome/test/app:test_support",
     "//ios/chrome/test/earl_grey:test_support",
     "//ios/testing/earl_grey:earl_grey_support",
     "//ios/web/public/test/http_server",
+    "//net:test_support",
   ]
   libs = [
     "UIKit.framework",
     "XCTest.framework",
   ]
+}
+
+source_set("eg2_tests") {
+  defines = [ "CHROME_EARL_GREY_2" ]
+  configs += [
+    "//build/config/compiler:enable_arc",
+    "//build/config/ios:xctest_config",
+  ]
+  testonly = true
+  sources = [ "credential_manager_egtest.mm" ]
+  deps = [
+    ":eg_test_support+eg2",
+    ":feature_flags",
+    "//base",
+    "//base/test:test_support",
+    "//components/password_manager/core/common",
+    "//ios/chrome/test/earl_grey:eg_test_support+eg2",
+    "//ios/testing/earl_grey:eg_test_support+eg2",
+    "//ios/third_party/earl_grey2:test_lib",
+    "//ios/web/public/test/http_server",
+    "//net:test_support",
+  ]
+  libs = [ "UIKit.framework" ]
+}
+
+source_set("test_support") {
+  defines = [ "CHROME_EARL_GREY_1" ]
+  configs += [ "//build/config/compiler:enable_arc" ]
+  testonly = true
+  sources = [
+    "password_manager_app_interface.h",
+    "password_manager_app_interface.mm",
+  ]
+  deps = [
+    ":passwords",
+    "//base",
+    "//components/autofill/core/common",
+    "//components/keyed_service/core",
+    "//components/password_manager/core/browser",
+    "//ios/chrome/test/app:test_support",
+    "//ios/testing:nserror_support",
+    "//ios/web/public",
+  ]
+}
+
+source_set("eg_app_support+eg2") {
+  defines = [ "CHROME_EARL_GREY_2" ]
+  configs += [
+    "//build/config/compiler:enable_arc",
+    "//build/config/ios:xctest_config",
+  ]
+  testonly = true
+  sources = [
+    "password_manager_app_interface.h",
+    "password_manager_app_interface.mm",
+  ]
+  deps = [
+    ":passwords",
+    "//base",
+    "//components/autofill/core/common",
+    "//components/keyed_service/core",
+    "//components/password_manager/core/browser",
+    "//ios/chrome/test/app:test_support",
+    "//ios/testing:nserror_support",
+    "//ios/web/public",
+  ]
+}
+
+source_set("eg_test_support+eg2") {
+  defines = [ "CHROME_EARL_GREY_2" ]
+  configs += [
+    "//build/config/compiler:enable_arc",
+    "//build/config/ios:xctest_config",
+  ]
+  testonly = true
+
+  sources = [ "password_manager_app_interface.h" ]
 }

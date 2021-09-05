@@ -259,15 +259,13 @@ scoped_refptr<SerializedScriptValue> SerializedScriptValue::Create(
 }
 
 SerializedScriptValue::SerializedScriptValue()
-    : has_registered_external_allocation_(false),
-      transferables_need_external_allocation_registration_(false) {}
+    : has_registered_external_allocation_(false) {}
 
 SerializedScriptValue::SerializedScriptValue(DataBufferPtr data,
                                              size_t data_size)
     : data_buffer_(std::move(data)),
       data_buffer_size_(data_size),
-      has_registered_external_allocation_(false),
-      transferables_need_external_allocation_registration_(false) {}
+      has_registered_external_allocation_(false) {}
 
 void SerializedScriptValue::SetImageBitmapContentsArray(
     ImageBitmapContentsArray contents) {
@@ -534,6 +532,9 @@ bool SerializedScriptValue::ExtractTransferables(
     ExceptionState& exception_state) {
   // Validate the passed array of transferables.
   wtf_size_t i = 0;
+  bool transferable_streams_enabled =
+      RuntimeEnabledFeatures::TransferableStreamsEnabled(
+          CurrentExecutionContext(isolate));
   for (const auto& script_value : object_sequence) {
     v8::Local<v8::Value> transferable_object = script_value.V8Value();
     // Validation of non-null objects, per HTML5 spec 10.3.3.
@@ -613,7 +614,7 @@ bool SerializedScriptValue::ExtractTransferables(
         return false;
       }
       transferables.offscreen_canvases.push_back(offscreen_canvas);
-    } else if (RuntimeEnabledFeatures::TransferableStreamsEnabled() &&
+    } else if (transferable_streams_enabled &&
                V8ReadableStream::HasInstance(transferable_object, isolate)) {
       ReadableStream* stream = V8ReadableStream::ToImpl(
           v8::Local<v8::Object>::Cast(transferable_object));
@@ -625,7 +626,7 @@ bool SerializedScriptValue::ExtractTransferables(
         return false;
       }
       transferables.readable_streams.push_back(stream);
-    } else if (RuntimeEnabledFeatures::TransferableStreamsEnabled() &&
+    } else if (transferable_streams_enabled &&
                V8WritableStream::HasInstance(transferable_object, isolate)) {
       WritableStream* stream = V8WritableStream::ToImpl(
           v8::Local<v8::Object>::Cast(transferable_object));
@@ -637,7 +638,7 @@ bool SerializedScriptValue::ExtractTransferables(
         return false;
       }
       transferables.writable_streams.push_back(stream);
-    } else if (RuntimeEnabledFeatures::TransferableStreamsEnabled() &&
+    } else if (transferable_streams_enabled &&
                V8TransformStream::HasInstance(transferable_object, isolate)) {
       TransformStream* stream = V8TransformStream::ToImpl(
           v8::Local<v8::Object>::Cast(transferable_object));
@@ -751,16 +752,6 @@ void SerializedScriptValue::
         -static_cast<int64_t>(DataLengthInBytes()));
     has_registered_external_allocation_ = false;
   }
-
-  // TODO: if other transferables start accounting for their external
-  // allocations with V8, extend this with corresponding cases.
-  if (!transferables_need_external_allocation_registration_) {
-    for (auto& buffer : array_buffer_contents_array_)
-      buffer.UnregisterExternalAllocationWithCurrentContext();
-    for (auto& buffer : shared_array_buffers_contents_)
-      buffer.UnregisterExternalAllocationWithCurrentContext();
-    transferables_need_external_allocation_registration_ = true;
-  }
 }
 
 void SerializedScriptValue::RegisterMemoryAllocatedWithCurrentScriptContext() {
@@ -771,15 +762,6 @@ void SerializedScriptValue::RegisterMemoryAllocatedWithCurrentScriptContext() {
   int64_t diff = static_cast<int64_t>(DataLengthInBytes());
   DCHECK_GE(diff, 0);
   v8::Isolate::GetCurrent()->AdjustAmountOfExternalAllocatedMemory(diff);
-
-  // Only (re)register allocation cost for transferables if this
-  // SerializedScriptValue has explicitly unregistered them before.
-  if (transferables_need_external_allocation_registration_) {
-    for (auto& buffer : array_buffer_contents_array_)
-      buffer.RegisterExternalAllocationWithCurrentContext();
-    for (auto& buffer : shared_array_buffers_contents_)
-      buffer.RegisterExternalAllocationWithCurrentContext();
-  }
 }
 
 // This ensures that the version number published in
@@ -789,5 +771,9 @@ void SerializedScriptValue::RegisterMemoryAllocatedWithCurrentScriptContext() {
 static_assert(kSerializedScriptValueVersion ==
                   SerializedScriptValue::kWireFormatVersion,
               "Update WebSerializedScriptValueVersion.h.");
+
+bool SerializedScriptValue::IsOriginCheckRequired() const {
+  return native_file_system_tokens_.size() > 0;
+}
 
 }  // namespace blink

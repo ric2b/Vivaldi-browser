@@ -78,7 +78,10 @@ class TestAccessManager : public CreditCardAccessManager {
   TestAccessManager(AutofillDriver* driver,
                     AutofillClient* client,
                     PersonalDataManager* personal_data)
-      : CreditCardAccessManager(driver, client, personal_data) {
+      : CreditCardAccessManager(driver,
+                                client,
+                                personal_data,
+                                /*credit_card_form_event_logger=*/nullptr) {
     card_ = test::GetMaskedServerCard();
     card_.set_record_type(CreditCard::FULL_SERVER_CARD);
     card_.SetNumber(kFirstTwelveDigits + card_.number());
@@ -172,7 +175,7 @@ TEST_F(CreditCardAccessoryControllerTest, RefreshSuggestions) {
                        card.ObfuscatedLastFourDigits(), card.guid(),
                        /*is_obfuscated=*/false,
                        /*selectable=*/true)
-          .AppendSimpleField(card.ExpirationMonthAsString())
+          .AppendSimpleField(card.Expiration2DigitMonthAsString())
           .AppendSimpleField(card.Expiration4DigitYearAsString())
           .AppendSimpleField(card.GetRawInfo(autofill::CREDIT_CARD_NAME_FULL))
           .Build());
@@ -198,8 +201,8 @@ TEST_F(CreditCardAccessoryControllerTest, PreventsFillingInsecureContexts) {
                              card.ObfuscatedLastFourDigits(), card.guid(),
                              /*is_obfuscated=*/false,
                              /*selectable=*/false)
-                .AppendField(card.ExpirationMonthAsString(),
-                             card.ExpirationMonthAsString(),
+                .AppendField(card.Expiration2DigitMonthAsString(),
+                             card.Expiration2DigitMonthAsString(),
                              /*is_obfuscated=*/false,
                              /*selectable=*/false)
                 .AppendField(card.Expiration4DigitYearAsString(),

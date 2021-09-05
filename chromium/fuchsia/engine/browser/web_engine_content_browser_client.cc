@@ -15,13 +15,16 @@
 #include "content/public/browser/network_service_instance.h"
 #include "content/public/common/user_agent.h"
 #include "content/public/common/web_preferences.h"
+#include "fuchsia/base/fuchsia_dir_scheme.h"
 #include "fuchsia/engine/browser/url_request_rewrite_rules_manager.h"
 #include "fuchsia/engine/browser/web_engine_browser_context.h"
+#include "fuchsia/engine/browser/web_engine_browser_interface_binders.h"
 #include "fuchsia/engine/browser/web_engine_browser_main_parts.h"
 #include "fuchsia/engine/browser/web_engine_devtools_controller.h"
 #include "fuchsia/engine/common/web_engine_content_client.h"
 #include "fuchsia/engine/common/web_engine_url_loader_throttle.h"
 #include "fuchsia/engine/switches.h"
+#include "media/base/media_switches.h"
 #include "services/network/public/mojom/network_service.mojom.h"
 
 namespace {
@@ -55,7 +58,9 @@ class DevToolsManagerDelegate : public content::DevToolsManagerDelegate {
 
 WebEngineContentBrowserClient::WebEngineContentBrowserClient(
     fidl::InterfaceRequest<fuchsia::web::Context> request)
-    : request_(std::move(request)), cdm_service_(&mojo_service_registry_) {}
+    : request_(std::move(request)),
+      allow_insecure_content_(base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kAllowRunningInsecureContent)) {}
 
 WebEngineContentBrowserClient::~WebEngineContentBrowserClient() = default;
 
@@ -98,14 +103,19 @@ void WebEngineContentBrowserClient::OverrideWebkitPrefs(
     content::WebPreferences* web_prefs) {
   // Disable WebSQL support since it's being removed from the web platform.
   web_prefs->databases_enabled = false;
+
+  if (allow_insecure_content_)
+    web_prefs->allow_running_insecure_content = true;
+
+  // Allow media to autoplay.
+  // TODO(crbug.com/1067101): Provide a FIDL API to configure AutoplayPolicy.
+  web_prefs->autoplay_policy = content::AutoplayPolicy::kNoUserGestureRequired;
 }
 
-void WebEngineContentBrowserClient::BindInterfaceRequestFromFrame(
+void WebEngineContentBrowserClient::RegisterBrowserInterfaceBindersForFrame(
     content::RenderFrameHost* render_frame_host,
-    const std::string& interface_name,
-    mojo::ScopedMessagePipeHandle interface_pipe) {
-  mojo_service_registry_.BindInterface(
-      interface_name, std::move(interface_pipe), render_frame_host);
+    service_manager::BinderMapWithContext<content::RenderFrameHost*>* map) {
+  PopulateFuchsiaFrameBinders(map, &media_resource_provider_service_);
 }
 
 void WebEngineContentBrowserClient::
@@ -114,7 +124,7 @@ void WebEngineContentBrowserClient::
         NonNetworkURLLoaderFactoryMap* factories) {
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kContentDirectories)) {
-    (*factories)[WebEngineContentClient::kFuchsiaContentDirectoryScheme] =
+    (*factories)[cr_fuchsia::kFuchsiaDirScheme] =
         std::make_unique<ContentDirectoryLoaderFactory>();
   }
 }
@@ -126,7 +136,7 @@ void WebEngineContentBrowserClient::
         NonNetworkURLLoaderFactoryMap* factories) {
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kContentDirectories)) {
-    (*factories)[WebEngineContentClient::kFuchsiaContentDirectoryScheme] =
+    (*factories)[cr_fuchsia::kFuchsiaDirScheme] =
         std::make_unique<ContentDirectoryLoaderFactory>();
   }
 }
@@ -137,7 +147,10 @@ void WebEngineContentBrowserClient::AppendExtraCommandLineSwitches(
   constexpr char const* kSwitchesToCopy[] = {
       switches::kContentDirectories,
       switches::kDisableSoftwareVideoDecoders,
+      switches::kEnableFuchsiaAudioConsumer,
+      switches::kEnableProtectedVideoBuffers,
       switches::kEnableWidevine,
+      switches::kForceProtectedVideoOutputBuffers,
       switches::kPlayreadyKeySystem,
   };
 

@@ -27,6 +27,7 @@
     endOfTest,
     expandedChanged,
     focus,
+    focusAfterMenuClose,
     focusContext,
     hide,
     hitTestResult,
@@ -81,11 +82,6 @@
     alert,
     alertDialog,
     anchor,
-    annotationAttribution,
-    annotationCommentary,
-    annotationPresence,
-    annotationRevision,
-    annotationSuggestion,
     application,
     article,
     audio,
@@ -98,11 +94,13 @@
     cell,
     checkBox,
     client,
+    code,
     colorWell,
     column,
     columnHeader,
     comboBoxGrouping,
     comboBoxMenuButton,
+    comment,
     complementary,
     contentDeletion,
     contentInsertion,
@@ -164,6 +162,7 @@
     // --------------------------------------------------------------
     document,
     embeddedObject,
+    emphasis,
     feed,
     figcaption,
     figure,
@@ -195,7 +194,6 @@
     labelText,
     layoutTable,
     layoutTableCell,
-    layoutTableColumn,
     layoutTableRow,
     legend,
     lineBreak,
@@ -224,7 +222,10 @@
     note,
     pane,
     paragraph,
+    pdfActionableHighlight, // PDF specific highlight role.
+    pluginObject,
     popUpButton,
+    portal,
     pre,
     presentational,
     progressIndicator,
@@ -233,6 +234,7 @@
     region,
     rootWebArea,
     row,
+    rowGroup,
     rowHeader,
     ruby,
     rubyAnnotation,
@@ -247,6 +249,8 @@
     splitter,
     staticText,
     status,
+    strong,
+    suggestion,
     svgRoot,
     switch,
     tab,
@@ -302,9 +306,11 @@
     annotatePageImages,
     blur,
     clearAccessibilityFocus,
+    collapse,
     customAction,
     decrement,
     doDefault,
+    expand,
     focus,
     getImageData,
     getTextLocation,
@@ -386,6 +392,14 @@
     value
   };
 
+  enum DescriptionFromType {
+    uninitialized,
+    attribute,
+    contents,
+    relatedElement,
+    title
+  };
+
   // The input restriction for a object -- even non-controls can be disabled.
   enum Restriction {
     disabled,
@@ -413,6 +427,15 @@
     press,
     select,
     uncheck
+};
+
+  // Types of markers on text. See <code>AutomationNode.markerTypes</code>.
+enum MarkerType {
+  spelling,
+  grammar,
+  textMatch,
+  activeSuggestion,
+  suggestion
 };
 
   dictionary Rect {
@@ -512,8 +535,7 @@
   callback PerformActionCallbackWithNode = void(AutomationNode node);
   callback BoundsForRangeCallback = void(Rect bounds);
 
-
-  dictionary CustomAction {
+      [nocompile, noinline_doc] dictionary CustomAction {
     long id;
     DOMString description;
   };
@@ -523,7 +545,7 @@
   // for details on how to associate this object with a string.
   // Also, the start and end indices always point to the first code unit of a
   // valid code-point.
-  dictionary LanguageSpan {
+    [nocompile, noinline_doc] dictionary LanguageSpan {
     // Inclusive start index of substring that contains language.
     long startIndex;
     // Exclusive end index of substring that contains language.
@@ -532,6 +554,19 @@
     DOMString language;
     // Probability that language is correct.
     double probability;
+  };
+
+    // A marker associated with an AutomationNode.
+  [nocompile, noinline_doc] dictionary Marker {
+    // The start offset within the text of the associated node.
+    long startOffset;
+
+    // The end offset within the text of the associated node.
+    long endOffset;
+
+    // A mapping of MarkerType to true or undefined indicating the marker types
+    // for this marker.
+    object flags;
   };
 
   // A single node in an Automation tree.
@@ -575,7 +610,7 @@
     DOMString? roleDescription;
 
     // The accessible name for this node, via the
-    // <a href="http://www.w3.org/TR/wai-aria/roles#namecalculation">
+    // <a href="http://www.w3.org/TR/wai-aria/#namecalculation">
     // Accessible Name Calculation</a> process.
     DOMString? name;
 
@@ -615,7 +650,7 @@
     long[]? nonInlineTextWordEnds;
 
     // The nodes, if any, which this node is specified to control via
-    // <a href="http://www.w3.org/TR/wai-aria/states_and_properties#aria-controls">
+    // <a href="http://www.w3.org/TR/wai-aria/#aria-controls">
     // <code>aria-controls</code></a>.
     AutomationNode[]? controls;
 
@@ -624,7 +659,7 @@
 
     // The nodes, if any, which may optionally be navigated to after this
     // one. See
-    // <a href="http://www.w3.org/TR/wai-aria/states_and_properties#aria-flowto">
+    // <a href="http://www.w3.org/TR/wai-aria/#aria-flowto">
     // <code>aria-flowto</code></a>.
     AutomationNode[]? flowTo;
 
@@ -644,7 +679,7 @@
     AutomationNode? inPageLinkTarget;
 
     // A node that provides more details about the current node.
-    AutomationNode? details;
+    AutomationNode[]? details;
 
     // A node that provides an error message for a current node.
     AutomationNode? errorMessage;
@@ -734,15 +769,8 @@
     // The input type, like email or number.
     DOMString? textInputType;
 
-    // An array of indexes of the start position of each text marker.
-    long[] markerStarts;
-
-    // An array of indexes of the end position of each text marker.
-    long[] markerEnds;
-
-    // An array of numerical types indicating the type of each text marker,
-    // such as a spelling error.
-    long[] markerTypes;
+    // An array of Marker objects for this node.
+    Marker[]? markers;
 
     //
     // Tree selection attributes (available on root nodes only)

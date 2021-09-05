@@ -27,10 +27,10 @@
 #include "chrome/grit/browser_resources.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/network/device_state.h"
+#include "chromeos/network/network_event_log.h"
 #include "chromeos/network/network_state.h"
 #include "chromeos/network/network_state_handler.h"
 #include "chromeos/network/network_state_handler_observer.h"
-#include "components/device_event_log/device_event_log.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/url_data_source.h"
 #include "content/public/browser/web_contents.h"
@@ -112,12 +112,12 @@ base::string16 GetActivationErrorMessage(MobileActivator::ActivationError error,
       MobileActivator::ActivationError::kActivationFailed, carrier);
 }
 
-void DataRequestFailed(
-    const std::string& service_path,
-    const content::URLDataSource::GotDataCallback& callback) {
-  NET_LOG(ERROR) << "Data Request Failed for Mobile Setup: " << service_path;
+void DataRequestFailed(const std::string& service_path,
+                       content::URLDataSource::GotDataCallback callback) {
+  NET_LOG(ERROR) << "Data Request Failed for Mobile Setup: "
+                 << NetworkPathId(service_path);
   scoped_refptr<base::RefCountedBytes> html_bytes(new base::RefCountedBytes);
-  callback.Run(html_bytes.get());
+  std::move(callback).Run(html_bytes.get());
 }
 
 // Keys for the dictionary that is set to activation UI and that contains the
@@ -177,9 +177,9 @@ class MobileSetupUIHTMLSource : public content::URLDataSource {
   // content::URLDataSource implementation.
   std::string GetSource() override;
   void StartDataRequest(
-      const std::string& path,
+      const GURL& url,
       const content::WebContents::Getter& wc_getter,
-      const content::URLDataSource::GotDataCallback& callback) override;
+      content::URLDataSource::GotDataCallback callback) override;
   std::string GetMimeType(const std::string&) override { return "text/html"; }
   bool ShouldAddContentSecurityPolicy() override { return false; }
   bool AllowCaching() override {
@@ -269,31 +269,34 @@ std::string MobileSetupUIHTMLSource::GetSource() {
 }
 
 void MobileSetupUIHTMLSource::StartDataRequest(
-    const std::string& path,
+    const GURL& url,
     const content::WebContents::Getter& wc_getter,
-    const content::URLDataSource::GotDataCallback& callback) {
+    content::URLDataSource::GotDataCallback callback) {
+  const std::string path = content::URLDataSource::URLToRequestPath(url);
   // Sanity checks that activation was requested for an appropriate network.
   const NetworkState* network =
       NetworkHandler::Get()->network_state_handler()->GetNetworkState(path);
 
   if (!network) {
     NET_LOG(ERROR) << "Network for mobile setup not found: " << path;
-    DataRequestFailed(path, callback);
+    DataRequestFailed(path, std::move(callback));
     return;
   }
 
   if (!network->Matches(NetworkTypePattern::Cellular())) {
-    NET_LOG(ERROR) << "Mobile setup attempt for non cellular network: " << path;
-    DataRequestFailed(path, callback);
+    NET_LOG(ERROR) << "Mobile setup attempt for non cellular network: "
+                   << NetworkId(network);
+    DataRequestFailed(path, std::move(callback));
     return;
   }
 
   if (network->payment_url().empty() &&
       network->activation_state() != shill::kActivationStateActivated) {
-    NET_LOG(ERROR) << "Mobile setup network in unexpected state: " << path
+    NET_LOG(ERROR) << "Mobile setup network in unexpected state: "
+                   << NetworkId(network)
                    << " payment_url: " << network->payment_url()
                    << " activation_state: " << network->activation_state();
-    DataRequestFailed(path, callback);
+    DataRequestFailed(path, std::move(callback));
     return;
   }
 
@@ -303,11 +306,11 @@ void MobileSetupUIHTMLSource::StartDataRequest(
   if (!device) {
     NET_LOG(ERROR) << "Network device for mobile setup not found: "
                    << network->device_path();
-    DataRequestFailed(path, callback);
+    DataRequestFailed(path, std::move(callback));
     return;
   }
 
-  NET_LOG(EVENT) << "Starting mobile setup: " << path;
+  NET_LOG(EVENT) << "Starting mobile setup: " << NetworkId(network);
   base::DictionaryValue strings;
 
   strings.SetString(
@@ -353,7 +356,7 @@ void MobileSetupUIHTMLSource::StartDataRequest(
     full_html = webui::GetI18nTemplateHtml(html_for_non_activated, &strings);
   }
 
-  callback.Run(base::RefCountedString::TakeString(&full_html));
+  std::move(callback).Run(base::RefCountedString::TakeString(&full_html));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -441,7 +444,7 @@ void MobileSetupHandler::HandleStartActivation(const base::ListValue* args) {
   if (path.empty())
     return;
 
-  NET_LOG(EVENT) << "Starting activation for service: " << path;
+  NET_LOG(EVENT) << "Starting activation for service: " << NetworkPathId(path);
   active_ = true;
   AllowJavascript();
 

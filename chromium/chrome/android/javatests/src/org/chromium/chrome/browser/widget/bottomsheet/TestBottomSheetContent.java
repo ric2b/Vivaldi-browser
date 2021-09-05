@@ -12,12 +12,17 @@ import android.view.ViewGroup;
 
 import androidx.annotation.Nullable;
 
-import org.chromium.chrome.browser.widget.bottomsheet.BottomSheet.BottomSheetContent;
-import org.chromium.chrome.browser.widget.bottomsheet.BottomSheet.ContentPriority;
+import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 
 /** A simple sheet content to test with. This only displays two empty white views. */
 public class TestBottomSheetContent implements BottomSheetContent {
+    /** The height of the toolbar for this test content. */
+    public static final int TOOLBAR_HEIGHT = 100;
+
+    /** {@link CallbackHelper} to ensure the destroy method is called. */
+    public final CallbackHelper destroyCallbackHelper = new CallbackHelper();
+
     /** Empty view that represents the toolbar. */
     private View mToolbarView;
 
@@ -30,8 +35,23 @@ public class TestBottomSheetContent implements BottomSheetContent {
     /** Whether this content is browser specific. */
     private boolean mHasCustomLifecycle;
 
+    /** Whether this content has a custom scrim lifecycle. */
+    private boolean mHasCustomScrimLifecycle;
+
     /** The peek height of this content. */
     private int mPeekHeight;
+
+    /** The half height of this content. */
+    private float mHalfHeight;
+
+    /** The full height of this content. */
+    private float mFullHeight;
+
+    /** If set to true, the half state will be skipped when scrolling down the FULL sheet. */
+    private boolean mSkipHalfStateScrollingDown;
+
+    /** Whether this content intercepts back button presses. */
+    private boolean mHandleBackPress;
 
     /**
      * @param context A context to inflate views with.
@@ -40,13 +60,15 @@ public class TestBottomSheetContent implements BottomSheetContent {
      */
     public TestBottomSheetContent(
             Context context, @ContentPriority int priority, boolean hasCustomLifecycle) {
-        mPeekHeight = BottomSheet.HeightMode.DEFAULT;
+        mPeekHeight = BottomSheetContent.HeightMode.DEFAULT;
+        mHalfHeight = BottomSheetContent.HeightMode.DEFAULT;
+        mFullHeight = BottomSheetContent.HeightMode.DEFAULT;
         mPriority = priority;
         mHasCustomLifecycle = hasCustomLifecycle;
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             mToolbarView = new View(context);
             ViewGroup.LayoutParams params =
-                    new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 100);
+                    new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, TOOLBAR_HEIGHT);
             mToolbarView.setLayoutParams(params);
             mToolbarView.setBackground(new ColorDrawable(Color.WHITE));
 
@@ -82,7 +104,9 @@ public class TestBottomSheetContent implements BottomSheetContent {
     }
 
     @Override
-    public void destroy() {}
+    public void destroy() {
+        destroyCallbackHelper.notifyCalled();
+    }
 
     @Override
     public int getPriority() {
@@ -94,6 +118,15 @@ public class TestBottomSheetContent implements BottomSheetContent {
         return false;
     }
 
+    public void setSkipHalfStateScrollingDown(boolean skiphalfStateScrollingDown) {
+        mSkipHalfStateScrollingDown = skiphalfStateScrollingDown;
+    }
+
+    @Override
+    public boolean skipHalfStateOnScrollingDown() {
+        return mSkipHalfStateScrollingDown;
+    }
+
     public void setPeekHeight(int height) {
         mPeekHeight = height;
     }
@@ -103,14 +136,50 @@ public class TestBottomSheetContent implements BottomSheetContent {
         return mPeekHeight;
     }
 
+    public void setHalfHeightRatio(float ratio) {
+        mHalfHeight = ratio;
+    }
+
+    @Override
+    public float getHalfHeightRatio() {
+        return mHalfHeight;
+    }
+
+    public void setFullHeightRatio(float ratio) {
+        mFullHeight = ratio;
+    }
+
+    @Override
+    public float getFullHeightRatio() {
+        return mFullHeight;
+    }
+
+    public void setHasCustomScrimLifecycle(boolean hasCustomScrimLifecycle) {
+        mHasCustomScrimLifecycle = hasCustomScrimLifecycle;
+    }
+
+    @Override
+    public boolean hasCustomScrimLifecycle() {
+        return mHasCustomScrimLifecycle;
+    }
+
     @Override
     public boolean hasCustomLifecycle() {
         return mHasCustomLifecycle;
     }
 
     @Override
-    public boolean setContentSizeListener(@Nullable BottomSheet.ContentSizeListener listener) {
+    public boolean setContentSizeListener(@Nullable ContentSizeListener listener) {
         return false;
+    }
+
+    @Override
+    public boolean handleBackPress() {
+        return mHandleBackPress;
+    }
+
+    public void setHandleBackPress(boolean handleBackPress) {
+        mHandleBackPress = handleBackPress;
     }
 
     @Override

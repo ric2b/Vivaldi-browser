@@ -36,6 +36,7 @@ class HttpRequestHeaders;
 class IOBuffer;
 class IPEndPoint;
 class NetLogWithSource;
+class SiteForCookies;
 class URLRequest;
 class URLRequestContext;
 struct WebSocketHandshakeRequestInfo;
@@ -50,11 +51,12 @@ class NET_EXPORT WebSocketChannel {
  public:
   // The type of a WebSocketStream creator callback. Must match the signature of
   // WebSocketStream::CreateAndConnectStream().
-  typedef base::Callback<std::unique_ptr<WebSocketStreamRequest>(
+  typedef base::OnceCallback<std::unique_ptr<WebSocketStreamRequest>(
       const GURL&,
       const std::vector<std::string>&,
       const url::Origin&,
-      const GURL&,
+      const SiteForCookies&,
+      const NetworkIsolationKey&,
       const HttpRequestHeaders&,
       URLRequestContext*,
       const NetLogWithSource&,
@@ -78,7 +80,8 @@ class NET_EXPORT WebSocketChannel {
       const GURL& socket_url,
       const std::vector<std::string>& requested_protocols,
       const url::Origin& origin,
-      const GURL& site_for_cookies,
+      const SiteForCookies& site_for_cookies,
+      const net::NetworkIsolationKey& network_isolation_key,
       const HttpRequestHeaders& additional_headers);
 
   // Sends a data frame to the remote side. It is the responsibility of the
@@ -95,7 +98,7 @@ class NET_EXPORT WebSocketChannel {
   ChannelState SendFrame(bool fin,
                          WebSocketFrameHeader::OpCode op_code,
                          scoped_refptr<IOBuffer> buffer,
-                         size_t buffer_size);
+                         size_t buffer_size) WARN_UNUSED_RESULT;
 
   // Calls WebSocketStream::ReadFrames() with the appropriate arguments. Stops
   // calling ReadFrames if no writable buffer in dataframe or WebSocketStream
@@ -126,9 +129,10 @@ class NET_EXPORT WebSocketChannel {
       const GURL& socket_url,
       const std::vector<std::string>& requested_protocols,
       const url::Origin& origin,
-      const GURL& site_for_cookies,
+      const SiteForCookies& site_for_cookies,
+      const net::NetworkIsolationKey& network_isolation_key,
       const HttpRequestHeaders& additional_headers,
-      const WebSocketStreamRequestCreationCallback& callback);
+      WebSocketStreamRequestCreationCallback callback);
 
   // The default timout for the closing handshake is a sensible value (see
   // kClosingHandshakeTimeoutSeconds in websocket_channel.cc). However, we can
@@ -144,11 +148,6 @@ class NET_EXPORT WebSocketChannel {
   // This method is public for testing.
   void OnStartOpeningHandshake(
       std::unique_ptr<WebSocketHandshakeRequestInfo> request);
-
-  // Called when the stream ends the WebSocket Opening Handshake.
-  // This method is public for testing.
-  void OnFinishOpeningHandshake(
-      std::unique_ptr<WebSocketHandshakeResponseInfo> response);
 
   // The renderer calls AddReceiveFlowControlQuota() to the browser per
   // recerving this amount of data so that the browser can continue sending
@@ -192,16 +191,19 @@ class NET_EXPORT WebSocketChannel {
       const GURL& socket_url,
       const std::vector<std::string>& requested_protocols,
       const url::Origin& origin,
-      const GURL& site_for_cookies,
+      const SiteForCookies& site_for_cookies,
+      const net::NetworkIsolationKey& network_isolation_key,
       const HttpRequestHeaders& additional_headers,
-      const WebSocketStreamRequestCreationCallback& callback);
+      WebSocketStreamRequestCreationCallback callback);
 
   // Called when a URLRequest is created for handshaking.
   void OnCreateURLRequest(URLRequest* request);
 
   // Success callback from WebSocketStream::CreateAndConnectStream(). Reports
   // success to the event interface. May delete |this|.
-  void OnConnectSuccess(std::unique_ptr<WebSocketStream> stream);
+  void OnConnectSuccess(
+      std::unique_ptr<WebSocketStream> stream,
+      std::unique_ptr<WebSocketHandshakeResponseInfo> response);
 
   // Failure callback from WebSocketStream::CreateAndConnectStream(). Reports
   // failure to the event interface. May delete |this|.

@@ -86,13 +86,13 @@ const autofill::LogManager* StubPasswordManagerClient::GetLogManager() const {
   return &log_manager_;
 }
 
-const PasswordFeatureManager*
+const MockPasswordFeatureManager*
 StubPasswordManagerClient::GetPasswordFeatureManager() const {
   return &password_feature_manager_;
 }
 
-const MockPasswordFeatureManager*
-StubPasswordManagerClient::GetMockPasswordFeatureManager() const {
+MockPasswordFeatureManager*
+StubPasswordManagerClient::GetPasswordFeatureManager() {
   return &password_feature_manager_;
 }
 
@@ -114,7 +114,7 @@ void StubPasswordManagerClient::CheckSafeBrowsingReputation(
 void StubPasswordManagerClient::CheckProtectedPasswordEntry(
     metrics_util::PasswordType reused_password_type,
     const std::string& username,
-    const std::vector<std::string>& matching_domains,
+    const std::vector<MatchingReusedCredential>& matching_reused_credentials,
     bool password_field_exists) {}
 #endif
 
@@ -149,6 +149,10 @@ bool StubPasswordManagerClient::IsIsolationForPasswordSitesEnabled() const {
 
 bool StubPasswordManagerClient::IsNewTabPage() const {
   return false;
+}
+
+FieldInfoManager* StubPasswordManagerClient::GetFieldInfoManager() const {
+  return nullptr;
 }
 
 }  // namespace password_manager

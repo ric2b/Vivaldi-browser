@@ -22,19 +22,20 @@
 #include "ipc/ipc_listener.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/bindings/shared_associated_remote.h"
 #include "third_party/blink/public/common/service_worker/service_worker_status_code.h"
-#include "third_party/blink/public/mojom/background_fetch/background_fetch.mojom.h"
+#include "third_party/blink/public/mojom/background_fetch/background_fetch.mojom-forward.h"
 #include "third_party/blink/public/mojom/blob/blob_registry.mojom.h"
-#include "third_party/blink/public/mojom/payments/payment_app.mojom.h"
-#include "third_party/blink/public/mojom/service_worker/controller_service_worker.mojom.h"
+#include "third_party/blink/public/mojom/payments/payment_app.mojom-forward.h"
+#include "third_party/blink/public/mojom/service_worker/controller_service_worker.mojom-forward.h"
 #include "third_party/blink/public/mojom/service_worker/embedded_worker.mojom.h"
-#include "third_party/blink/public/mojom/service_worker/service_worker.mojom.h"
-#include "third_party/blink/public/mojom/service_worker/service_worker_client.mojom.h"
-#include "third_party/blink/public/mojom/service_worker/service_worker_event_status.mojom.h"
-#include "third_party/blink/public/mojom/service_worker/service_worker_provider.mojom.h"
-#include "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom.h"
-#include "third_party/blink/public/mojom/worker/subresource_loader_updater.mojom.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker.mojom-forward.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_client.mojom-forward.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_event_status.mojom-forward.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_provider.mojom-forward.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom-forward.h"
+#include "third_party/blink/public/mojom/worker/subresource_loader_updater.mojom-forward.h"
 #include "third_party/blink/public/platform/modules/service_worker/web_service_worker_error.h"
 #include "third_party/blink/public/web/modules/service_worker/web_service_worker_context_client.h"
 #include "third_party/blink/public/web/modules/service_worker/web_service_worker_context_proxy.h"
@@ -56,7 +57,7 @@ namespace content {
 
 class ChildURLLoaderFactoryBundle;
 class EmbeddedWorkerInstanceClientImpl;
-class WebWorkerFetchContext;
+class WebServiceWorkerFetchContext;
 
 // ServiceWorkerContextClient is a "client" of a service worker execution
 // context. It enables communication between the embedder and Blink's
@@ -104,7 +105,7 @@ class CONTENT_EXPORT ServiceWorkerContextClient
       blink::mojom::EmbeddedWorkerStartTimingPtr start_timing,
       mojo::PendingReceiver<blink::mojom::RendererPreferenceWatcher>
           preference_watcher_receiver,
-      std::unique_ptr<blink::URLLoaderFactoryBundleInfo> subresource_loaders,
+      std::unique_ptr<blink::PendingURLLoaderFactoryBundle> subresource_loaders,
       mojo::PendingReceiver<blink::mojom::SubresourceLoaderUpdater>
           subresource_loader_updater,
       const GURL& script_url_to_skip_throttling,
@@ -120,8 +121,8 @@ class CONTENT_EXPORT ServiceWorkerContextClient
       std::unique_ptr<blink::WebServiceWorkerInstalledScriptsManagerParams>,
       mojo::ScopedMessagePipeHandle content_settings_handle,
       mojo::ScopedMessagePipeHandle cache_storage,
-      mojo::ScopedMessagePipeHandle interface_provider,
       mojo::ScopedMessagePipeHandle browser_interface_broker);
+
   // Called on the initiator thread.
   blink::WebEmbeddedWorker& worker();
 
@@ -155,7 +156,7 @@ class CONTENT_EXPORT ServiceWorkerContextClient
                               std::unique_ptr<blink::WebFetchEventPreloadHandle>
                                   preload_handle) override;
   void RequestTermination(RequestTerminationCallback callback) override;
-  scoped_refptr<blink::WebWorkerFetchContext>
+  scoped_refptr<blink::WebServiceWorkerFetchContext>
   CreateWorkerFetchContextOnInitiatorThread() override;
 
   /////////////////////////////////////////////////////////////////////////////
@@ -239,7 +240,7 @@ class CONTENT_EXPORT ServiceWorkerContextClient
 
   // This holds blink.mojom.ServiceWorkerContainer(Host) connections to the
   // browser-side ServiceWorkerProviderHost to keep it alive there.
-  // Note: |service_worker_provider_info_->script_loader_factory_ptr_info| is
+  // Note: |service_worker_provider_info_->script_loader_factory_remote| is
   // moved to WebServiceWorkerNetworkProviderImpl when
   // CreateServiceWorkerNetworkProvider is called.
   blink::mojom::ServiceWorkerProviderInfoForStartWorkerPtr
@@ -271,9 +272,8 @@ class CONTENT_EXPORT ServiceWorkerContextClient
 
   // Out-of-process NetworkService:
   // Detects disconnection from the network service.
-  // TODO(crbug.com/955171): Replace this with Remote.
-  network::mojom::URLLoaderFactoryPtr
-      network_service_connection_error_handler_holder_;
+  mojo::Remote<network::mojom::URLLoaderFactory>
+      network_service_disconnect_handler_holder_;
 
   std::unique_ptr<blink::WebEmbeddedWorker> worker_;
 

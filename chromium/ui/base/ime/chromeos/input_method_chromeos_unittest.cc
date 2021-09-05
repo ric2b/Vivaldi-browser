@@ -31,6 +31,7 @@
 #include "ui/events/event_utils.h"
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
+#include "ui/events/test/keyboard_layout.h"
 #include "ui/gfx/geometry/rect.h"
 
 using base::UTF8ToUTF16;
@@ -204,7 +205,7 @@ class NiceMockIMEEngine : public chromeos::MockIMEEngineHandler {
   MOCK_METHOD1(FocusIn, void(const InputContext&));
   MOCK_METHOD0(FocusOut, void());
   MOCK_METHOD4(SetSurroundingText,
-               void(const std::string&, uint32_t, uint32_t, uint32_t));
+               void(const base::string16&, uint32_t, uint32_t, uint32_t));
 };
 
 class InputMethodChromeOSTest : public internal::InputMethodDelegate,
@@ -268,7 +269,12 @@ class InputMethodChromeOSTest : public internal::InputMethodDelegate,
   void SetCompositionText(const CompositionText& composition) override {
     composition_text_ = composition;
   }
-  void ConfirmCompositionText() override {
+  void ConfirmCompositionText(bool keep_selection) override {
+    // TODO(b/134473433) Modify this function so that when keep_selection is
+    // true, the selection is not changed when text committed
+    if (keep_selection) {
+      NOTIMPLEMENTED_LOG_ONCE();
+    }
     confirmed_text_ = composition_text_;
     composition_text_ = CompositionText();
   }
@@ -574,7 +580,9 @@ TEST_F(InputMethodChromeOSTest, ExtractCompositionTextTest_SingleUnderline) {
   CompositionText composition_text;
   composition_text.text = kSampleText;
   ImeTextSpan underline(ImeTextSpan::Type::kComposition, 1UL, 4UL,
-                        ui::ImeTextSpan::Thickness::kThin, SK_ColorTRANSPARENT);
+                        ui::ImeTextSpan::Thickness::kThin,
+                        ui::ImeTextSpan::UnderlineStyle::kSolid,
+                        SK_ColorTRANSPARENT);
   composition_text.ime_text_spans.push_back(underline);
 
   CompositionText composition_text2;
@@ -606,6 +614,7 @@ TEST_F(InputMethodChromeOSTest, ExtractCompositionTextTest_DoubleUnderline) {
   composition_text.text = kSampleText;
   ImeTextSpan underline(ImeTextSpan::Type::kComposition, 1UL, 4UL,
                         ui::ImeTextSpan::Thickness::kThick,
+                        ui::ImeTextSpan::UnderlineStyle::kSolid,
                         SK_ColorTRANSPARENT);
   composition_text.ime_text_spans.push_back(underline);
 
@@ -637,7 +646,9 @@ TEST_F(InputMethodChromeOSTest, ExtractCompositionTextTest_ErrorUnderline) {
   CompositionText composition_text;
   composition_text.text = kSampleText;
   ImeTextSpan underline(ImeTextSpan::Type::kComposition, 1UL, 4UL,
-                        ui::ImeTextSpan::Thickness::kThin, SK_ColorTRANSPARENT);
+                        ui::ImeTextSpan::Thickness::kThin,
+                        ui::ImeTextSpan::UnderlineStyle::kSolid,
+                        SK_ColorTRANSPARENT);
   underline.underline_color = SK_ColorRED;
   composition_text.ime_text_spans.push_back(underline);
 
@@ -771,7 +782,7 @@ TEST_F(InputMethodChromeOSTest, SurroundingText_NoSelectionTest) {
   // Check the call count.
   EXPECT_EQ(1,
             mock_ime_engine_handler_->set_surrounding_text_call_count());
-  EXPECT_EQ(UTF16ToUTF8(surrounding_text_),
+  EXPECT_EQ(surrounding_text_,
             mock_ime_engine_handler_->last_set_surrounding_text());
   EXPECT_EQ(3U,
             mock_ime_engine_handler_->last_set_surrounding_cursor_pos());
@@ -797,7 +808,7 @@ TEST_F(InputMethodChromeOSTest, SurroundingText_SelectionTest) {
   // Check the call count.
   EXPECT_EQ(1,
             mock_ime_engine_handler_->set_surrounding_text_call_count());
-  EXPECT_EQ(UTF16ToUTF8(surrounding_text_),
+  EXPECT_EQ(surrounding_text_,
             mock_ime_engine_handler_->last_set_surrounding_text());
   EXPECT_EQ(2U,
             mock_ime_engine_handler_->last_set_surrounding_cursor_pos());
@@ -822,7 +833,7 @@ TEST_F(InputMethodChromeOSTest, SurroundingText_PartialText) {
             mock_ime_engine_handler_->set_surrounding_text_call_count());
   // Set the verifier for SetSurroundingText mock call.
   // Here (2, 4) is selection range in expected surrounding text coordinates.
-  EXPECT_EQ("fghij",
+  EXPECT_EQ(base::UTF8ToUTF16("fghij"),
             mock_ime_engine_handler_->last_set_surrounding_text());
   EXPECT_EQ(2U,
             mock_ime_engine_handler_->last_set_surrounding_cursor_pos());
@@ -910,7 +921,8 @@ TEST_F(InputMethodChromeOSTest, ConfirmCompositionText_NoComposition) {
   input_type_ = TEXT_INPUT_TYPE_TEXT;
   ime_->OnTextInputTypeChanged(this);
 
-  ime_->ConfirmCompositionText(/* reset_engine */ true);
+  ime_->ConfirmCompositionText(/* reset_engine */ true,
+                               /* keep_selection */ false);
 
   EXPECT_TRUE(confirmed_text_.text.empty());
   EXPECT_TRUE(composition_text_.text.empty());
@@ -924,7 +936,8 @@ TEST_F(InputMethodChromeOSTest, ConfirmCompositionText_SetComposition) {
   CompositionText composition_text;
   composition_text.text = base::UTF8ToUTF16("hello");
   SetCompositionText(composition_text);
-  ime_->ConfirmCompositionText(/* reset_engine */ true);
+  ime_->ConfirmCompositionText(/* reset_engine */ true,
+                               /* keep_selection */ false);
 
   EXPECT_EQ(base::ASCIIToUTF16("hello"), confirmed_text_.text);
   EXPECT_TRUE(composition_text_.text.empty());
@@ -941,7 +954,8 @@ TEST_F(InputMethodChromeOSTest, ConfirmCompositionText_SetCompositionRange) {
 
   // "abc" is in composition. Put the two characters in composition.
   ime_->SetCompositionRange(0, 2, {});
-  ime_->ConfirmCompositionText(/* reset_engine */ true);
+  ime_->ConfirmCompositionText(/* reset_engine */ true,
+                               /* keep_selection */ false);
 
   EXPECT_EQ(base::ASCIIToUTF16("ab"), confirmed_text_.text);
   EXPECT_TRUE(composition_text_.text.empty());
@@ -991,6 +1005,8 @@ TEST_F(InputMethodChromeOSKeyEventTest, KeyEventDelayResponseTest) {
 }
 
 TEST_F(InputMethodChromeOSKeyEventTest, MultiKeyEventDelayResponseTest) {
+  ui::ScopedKeyboardLayout keyboard_layout(ui::KEYBOARD_LAYOUT_ENGLISH_US);
+
   // Preparation
   input_type_ = TEXT_INPUT_TYPE_TEXT;
   ime_->OnTextInputTypeChanged(this);

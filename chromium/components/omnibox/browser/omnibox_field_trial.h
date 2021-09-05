@@ -377,20 +377,25 @@ size_t GetMaxURLMatches();
 // ---------------------------------------------------------
 // For UI experiments.
 
-// Returns whether preserve default match score is enabled.
-bool IsPreserveDefaultMatchScoreEnabled();
-
 // Returns true if the reverse answers flag is enabled.
 bool IsReverseAnswersEnabled();
 
 // Returns true if the short bookmark suggestions flag is enabled.
 bool IsShortBookmarkSuggestionsEnabled();
 
+// Whether a single row of buttons is shown on suggestions with actionable
+// elements like keywords, tab-switch buttons, and Pedals.
+bool IsSuggestionButtonRowEnabled();
+
 // Returns true if either the tab switch suggestions flag is enabled.
 bool IsTabSwitchSuggestionsEnabled();
 
 // Returns true if dedicated rows for tab switch suggestions is enabled.
 bool IsTabSwitchSuggestionsDedicatedRowEnabled();
+
+// Returns true if feature is enabled to not count submatches towards the
+// max suggestion limit.
+bool IsLooseMaxLimitOnDedicatedRowsEnabled();
 
 // Returns true if the #omnibox-pedal-suggestions feature is enabled.
 bool IsPedalSuggestionsEnabled();
@@ -406,16 +411,16 @@ bool IsHideSteadyStateUrlTrivialSubdomainsEnabled();
 // assortment of keyword mode experiments.
 bool IsExperimentalKeywordModeEnabled();
 
-// Returns whether the group suggestions by type feature is enabled,
-// which "bunches" search suggestions (except for the default match).
-bool IsGroupSuggestionsBySearchVsUrlFeatureEnabled();
-
 // Returns whether the feature to limit the number of shown URL matches
 // is enabled.
 bool IsMaxURLMatchesFeatureEnabled();
 
-// Returns whether on device head provider is enabled for incognito mode.
-bool IsOnDeviceHeadProviderEnabledForIncognito();
+// Rich autocompletion.
+bool IsRichAutocompletionEnabled();
+bool RichAutocompletionAutocompleteTitles();
+bool RichAutocompletionTwoLineOmnibox();
+bool RichAutocompletionShowTitles();
+bool RichAutocompletionAutocompleteNonPrefix();
 
 // ---------------------------------------------------------
 // Clipboard URL suggestions:
@@ -480,10 +485,23 @@ extern const char kMaxNumHQPUrlsIndexedAtStartupOnNonLowEndDevicesParam[];
 extern const char kUIMaxAutocompleteMatchesParam[];
 extern const char kUIMaxAutocompleteMatchesByProviderParam[];
 
+// Parameter names used by on device head provider.
+extern const char kOnDeviceHeadSuggestIncognitoServeMode[];
+extern const char kOnDeviceHeadSuggestDelaySuggestRequestMs[];
+extern const char kOnDeviceHeadSuggestMaxScoreForNonUrlInput[];
+extern const char kOnDeviceHeadSuggestMaxScoreForNonUrlInputIncognito[];
+extern const char kOnDeviceHeadSuggestDemoteMode[];
+
 // The amount of time to wait before sending a new suggest request after the
 // previous one unless overridden by a field trial parameter.
 // Non-const because some unittests modify this value.
 extern int kDefaultMinimumTimeBetweenSuggestQueriesMs;
+
+// Parameter names used for rich autocompletion variations.
+extern const char kRichAutocompletionAutocompleteTitlesParam[];
+extern const char kRichAutocompletionTwoLineOmniboxParam[];
+extern const char kRichAutocompletionShowTitlesParam[];
+extern const char kRichAutocompletionAutocompleteNonPrefix[];
 
 namespace internal {
 // The bundled omnibox experiment comes with a set of parameters

@@ -159,8 +159,9 @@ bool IsURLAllowedForSupervisedUser(const GURL& url, Profile* profile) {
 bool ShouldShowLocalNewTab(Profile* profile) {
 #if !defined(OS_ANDROID)
   return DefaultSearchProviderIsGoogle(profile);
-#endif
+#else
   return false;
+#endif
 }
 
 // Used to look up the URL to use for the New Tab page. Also tracks how we
@@ -174,7 +175,13 @@ struct NewTabURLDetails {
     if (profile->IsOffTheRecord())
       return NewTabURLDetails(GURL(), NEW_TAB_URL_INCOGNITO);
 
+#if defined(OS_ANDROID)
     const GURL local_url(chrome::kChromeSearchLocalNtpUrl);
+#else
+    const GURL local_url(base::FeatureList::IsEnabled(ntp_features::kWebUI)
+                             ? chrome::kChromeUINewTabPageURL
+                             : chrome::kChromeSearchLocalNtpUrl);
+#endif
 
     if (ShouldShowLocalNewTab(profile))
       return NewTabURLDetails(local_url, NEW_TAB_URL_VALID);
@@ -286,6 +293,9 @@ bool NavEntryIsInstantNTP(content::WebContents* contents,
 }
 
 bool IsInstantNTPURL(const GURL& url, Profile* profile) {
+  if (MatchesOrigin(url, GURL(chrome::kChromeUINewTabPageURL)))
+    return true;
+
   if (!IsInstantExtendedAPIEnabled())
     return false;
 

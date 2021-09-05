@@ -22,6 +22,8 @@
 #include "third_party/blink/public/platform/web_media_stream.h"
 #include "third_party/blink/public/platform/web_surface_layer_bridge.h"
 
+class VivaldiMediaElementEventDelegate;
+
 namespace media {
 class GpuMemoryBufferVideoFramePool;
 class MediaLog;
@@ -110,7 +112,9 @@ class BLINK_MODULES_EXPORT WebMediaPlayerMS
   void Seek(double seconds) override;
   void SetRate(double rate) override;
   void SetVolume(double volume) override;
+  void SetLatencyHint(double seconds) override;
   void OnRequestPictureInPicture() override;
+  void OnPictureInPictureAvailabilityChanged(bool available) override;
   void SetSinkId(const WebString& sink_id,
                  WebSetSinkIdCompleteCallback completion_callback) override;
   void SetPreload(WebMediaPlayer::Preload preload) override;
@@ -134,15 +138,16 @@ class BLINK_MODULES_EXPORT WebMediaPlayerMS
   bool HasAudio() const override;
 
   // Dimensions of the video.
-  WebSize NaturalSize() const override;
+  gfx::Size NaturalSize() const override;
 
-  WebSize VisibleRect() const override;
+  gfx::Size VisibleSize() const override;
 
   // Getters of playback state.
   bool Paused() const override;
   bool Seeking() const override;
   double Duration() const override;
   double CurrentTime() const override;
+  bool IsEnded() const override;
 
   // Internal states of loading and network.
   WebMediaPlayer::NetworkState GetNetworkState() const override;
@@ -174,6 +179,8 @@ class BLINK_MODULES_EXPORT WebMediaPlayerMS
   void OnMuted(bool muted) override;
   void OnSeekForward(double seconds) override;
   void OnSeekBackward(double seconds) override;
+  void OnEnterPictureInPicture() override;
+  void OnExitPictureInPicture() override;
   void OnVolumeMultiplierUpdate(double multiplier) override;
   void OnBecamePersistentVideo(bool value) override;
 
@@ -233,6 +240,15 @@ class BLINK_MODULES_EXPORT WebMediaPlayerMS
 
   void OnDisplayTypeChanged(WebMediaPlayer::DisplayType) override;
 
+  void RequestVideoFrameCallback() override;
+  std::unique_ptr<WebMediaPlayer::VideoFramePresentationMetadata>
+  GetVideoFramePresentationMetadata() override;
+
+  // Vivaldi:
+  VivaldiMediaElementEventDelegate* GetMediaElementEventDelegate() override;
+  void SetMediaElementEventDelegate(
+      std::unique_ptr<VivaldiMediaElementEventDelegate> delegate);
+
  private:
   friend class WebMediaPlayerMSTest;
 
@@ -264,6 +280,11 @@ class BLINK_MODULES_EXPORT WebMediaPlayerMS
   // Helper method used for testing.
   void SetGpuMemoryBufferVideoForTesting(
       media::GpuMemoryBufferVideoFramePool* gpu_memory_buffer_pool);
+
+  // Callback used to fulfill video.requestAnimationFrame() requests.
+  void OnNewFramePresentedCallback();
+
+  void SendLogMessage(const WTF::String& message) const;
 
   std::unique_ptr<MediaStreamInternalFrameWrapper> internal_frame_;
 
@@ -299,6 +320,11 @@ class BLINK_MODULES_EXPORT WebMediaPlayerMS
 
   scoped_refptr<WebMediaStreamAudioRenderer> audio_renderer_;  // Weak
   media::PaintCanvasVideoRenderer video_renderer_;
+
+  // Indicated whether an outstanding VideoFrameCallback request needs to be
+  // forwarded to |compositor_|. Set when RequestVideoFrameCallback() is called
+  // before Load().
+  bool pending_rvfc_request_ = false;
 
   bool paused_;
   media::VideoTransformation video_transformation_;
@@ -354,6 +380,10 @@ class BLINK_MODULES_EXPORT WebMediaPlayerMS
   bool opaque_ = true;
 
   bool has_first_frame_ = false;
+
+  // Vivaldi:
+  std::unique_ptr<VivaldiMediaElementEventDelegate>
+      vivaldi_media_element_event_delegate_;
 
   base::WeakPtr<WebMediaPlayerMS> weak_this_;
   base::WeakPtrFactory<WebMediaPlayerMS> weak_factory_{this};

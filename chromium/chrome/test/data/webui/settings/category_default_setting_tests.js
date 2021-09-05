@@ -2,6 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// clang-format off
+// #import {ContentSetting,ContentSettingProvider,ContentSettingsTypes,SiteSettingsPrefsBrowserProxyImpl} from 'chrome://settings/lazy_load.js';
+// #import {createContentSettingTypeToValuePair,createDefaultContentSetting,createSiteSettingsPrefs} from 'chrome://test/settings/test_util.m.js';
+// #import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+// #import {TestSiteSettingsPrefsBrowserProxy} from 'chrome://test/settings/test_site_settings_prefs_browser_proxy.m.js';
+// clang-format on
+
 /** @fileoverview Suite of tests for category-default-setting. */
 suite('CategoryDefaultSetting', function() {
   /**
@@ -23,6 +30,7 @@ suite('CategoryDefaultSetting', function() {
     PolymerTest.clearBody();
     testElement = document.createElement('category-default-setting');
     testElement.subOptionLabel = 'test label';
+    testElement.subOptionMode = 'cookies-session-only';
     document.body.appendChild(testElement);
   });
 
@@ -311,6 +319,6 @@ suite('CategoryDefaultSetting', function() {
 
     return testTristateCategory(
         prefsCookiesSessionOnly, settings.ContentSettingsTypes.COOKIES,
-        settings.ContentSetting.SESSION_ONLY, '#subOptionToggle');
+        settings.ContentSetting.SESSION_ONLY, '#subOptionCookiesToggle');
   });
 });

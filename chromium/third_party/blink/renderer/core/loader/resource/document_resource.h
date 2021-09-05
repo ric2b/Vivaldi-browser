@@ -29,17 +29,17 @@
 #include "third_party/blink/renderer/platform/loader/fetch/resource.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_client.h"
 #include "third_party/blink/renderer/platform/loader/fetch/text_resource_decoder_options.h"
+#include "third_party/blink/renderer/platform/wtf/casting.h"
 
 namespace blink {
 
 class Document;
 class FetchParameters;
-class ResourceFetcher;
 
 class CORE_EXPORT DocumentResource final : public TextResource {
  public:
   static DocumentResource* FetchSVGDocument(FetchParameters&,
-                                            ResourceFetcher*,
+                                            const Document& context_document,
                                             ResourceClient*);
 
   DocumentResource(const ResourceRequest&,
@@ -47,7 +47,7 @@ class CORE_EXPORT DocumentResource final : public TextResource {
                    const ResourceLoaderOptions&,
                    const TextResourceDecoderOptions&);
   ~DocumentResource() override;
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
   Document* GetDocument() const { return document_.Get(); }
 
@@ -73,13 +73,15 @@ class CORE_EXPORT DocumentResource final : public TextResource {
   Document* CreateDocument(const KURL&);
 
   Member<Document> document_;
+  WeakMember<Document> context_document_;
 };
 
-DEFINE_TYPE_CASTS(DocumentResource,
-                  Resource,
-                  resource,
-                  resource->GetType() == ResourceType::kSVGDocument,
-                  resource.GetType() == ResourceType::kSVGDocument);
+template <>
+struct DowncastTraits<DocumentResource> {
+  static bool AllowFrom(const Resource& resource) {
+    return resource.GetType() == ResourceType::kSVGDocument;
+  }
+};
 
 }  // namespace blink
 

@@ -12,18 +12,19 @@ import android.os.Build;
 import android.os.SystemClock;
 import android.provider.Browser;
 
+import androidx.annotation.VisibleForTesting;
+
 import org.chromium.base.ContextUtils;
+import org.chromium.base.IntentUtils;
 import org.chromium.base.Log;
-import org.chromium.base.VisibleForTesting;
-import org.chromium.base.metrics.CachedMetrics.EnumeratedHistogramSample;
-import org.chromium.base.metrics.CachedMetrics.TimesHistogramSample;
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.ShortcutHelper;
 import org.chromium.chrome.browser.externalnav.ExternalNavigationDelegateImpl;
-import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
+import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
+import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.util.IntentUtils;
 import org.chromium.content_public.browser.WebContents;
 
 /** A launcher for Instant Apps. */
@@ -81,31 +82,8 @@ public class InstantAppsHandler {
     /** Finch experiment group which is disabled for instant apps. */
     private static final String INSTANT_APPS_DISABLED_ARM = "InstantAppsDisabled";
 
-    /** A histogram to record how long each handleIntent() call took. */
-    private static final TimesHistogramSample sHandleIntentDuration =
-            new TimesHistogramSample("Android.InstantApps.HandleIntentDuration");
-
-    /** A histogram to record how long the fallback intent roundtrip was. */
-    private static final TimesHistogramSample sFallbackIntentTimes =
-            new TimesHistogramSample("Android.InstantApps.FallbackDuration");
-
     // Only two possible call sources for fallback intents, set boundary at n+1.
     private static final int SOURCE_BOUNDARY = 3;
-
-    private static final EnumeratedHistogramSample sFallbackCallSource =
-            new EnumeratedHistogramSample("Android.InstantApps.CallSource", SOURCE_BOUNDARY);
-
-    /**
-     * A histogram to record how long the GMS Core API call took when the instant app was found.
-     */
-    private static final TimesHistogramSample sInstantAppsApiCallTimesHasApp =
-            new TimesHistogramSample("Android.InstantApps.ApiCallDurationWithApp");
-
-    /**
-     * A histogram to record how long the GMS Core API call took when the instant app was not found.
-     */
-    private static final TimesHistogramSample sInstantAppsApiCallTimesNoApp =
-            new TimesHistogramSample("Android.InstantApps.ApiCallDurationWithoutApp");
 
     /** @return The singleton instance of {@link InstantAppsHandler}. */
     public static InstantAppsHandler getInstance() {
@@ -139,7 +117,8 @@ public class InstantAppsHandler {
      * @param startTime The timestamp for handleIntent start time.
      */
     private void recordHandleIntentDuration(long startTime) {
-        sHandleIntentDuration.record(SystemClock.elapsedRealtime() - startTime);
+        RecordHistogram.recordTimesHistogram("Android.InstantApps.HandleIntentDuration",
+                SystemClock.elapsedRealtime() - startTime);
     }
 
     /**
@@ -149,9 +128,11 @@ public class InstantAppsHandler {
      */
     protected void recordInstantAppsApiCallTime(long startTime, boolean hasApp) {
         if (hasApp) {
-            sInstantAppsApiCallTimesHasApp.record(SystemClock.elapsedRealtime() - startTime);
+            RecordHistogram.recordTimesHistogram("Android.InstantApps.ApiCallDurationWithApp",
+                    SystemClock.elapsedRealtime() - startTime);
         } else {
-            sInstantAppsApiCallTimesNoApp.record(SystemClock.elapsedRealtime() - startTime);
+            RecordHistogram.recordTimesHistogram("Android.InstantApps.ApiCallDurationWithoutApp",
+                    SystemClock.elapsedRealtime() - startTime);
         }
     }
 
@@ -164,12 +145,14 @@ public class InstantAppsHandler {
     private void maybeRecordFallbackStats(Intent intent) {
         Long startTime = IntentUtils.safeGetLongExtra(intent, INSTANT_APP_START_TIME_EXTRA, 0);
         if (startTime > 0) {
-            sFallbackIntentTimes.record(SystemClock.elapsedRealtime() - startTime);
+            RecordHistogram.recordTimesHistogram("Android.InstantApps.FallbackDuration",
+                    SystemClock.elapsedRealtime() - startTime);
             intent.removeExtra(INSTANT_APP_START_TIME_EXTRA);
         }
         int callSource = IntentUtils.safeGetIntExtra(intent, BROWSER_LAUNCH_REASON, 0);
         if (callSource > 0 && callSource < SOURCE_BOUNDARY) {
-            sFallbackCallSource.record(callSource);
+            RecordHistogram.recordEnumeratedHistogram(
+                    "Android.InstantApps.CallSource", callSource, SOURCE_BOUNDARY);
             intent.removeExtra(BROWSER_LAUNCH_REASON);
         } else if (callSource >= SOURCE_BOUNDARY) {
             Log.e(TAG, "Unexpected call source constant for Instant Apps: " + callSource);
@@ -330,8 +313,8 @@ public class InstantAppsHandler {
 
     /** @return Whether Chrome is the default browser on the device. */
     private boolean isChromeDefaultHandler(Context context) {
-        return ChromePreferenceManager.getInstance().readBoolean(
-                ChromePreferenceManager.CHROME_DEFAULT_BROWSER, false);
+        return SharedPreferencesManager.getInstance().readBoolean(
+                ChromePreferenceKeys.CHROME_DEFAULT_BROWSER, false);
     }
 
     /**

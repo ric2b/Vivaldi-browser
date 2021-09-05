@@ -5,6 +5,7 @@
 #include "components/viz/service/display/dc_layer_overlay.h"
 
 #include "base/metrics/histogram_macros.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "cc/base/math_util.h"
 #include "components/viz/common/display/renderer_settings.h"
@@ -14,13 +15,15 @@
 #include "components/viz/common/quads/texture_draw_quad.h"
 #include "components/viz/common/quads/yuv_video_draw_quad.h"
 #include "components/viz/service/display/display_resource_provider.h"
-#include "components/viz/service/display/overlay_processor.h"
+#include "components/viz/service/display/overlay_processor_interface.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/config/gpu_finch_features.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gl/gl_switches.h"
+#include "ui/gl/gl_utils.h"
+#include "ui/gl/gpu_switching_manager.h"
 
 namespace viz {
 
@@ -300,7 +303,7 @@ void RecordOverlayHistograms(bool is_overlay,
   bool has_occluding_surface_damage = !occluding_damage_rect.IsEmpty();
   bool occluding_damage_equal_to_damage_rect =
       occluding_damage_rect == *damage_rect;
-  OverlayProcessor::RecordOverlayDamageRectHistograms(
+  OverlayProcessorInterface::RecordOverlayDamageRectHistograms(
       is_overlay, has_occluding_surface_damage, damage_rect->IsEmpty(),
       occluding_damage_equal_to_damage_rect);
 }
@@ -318,15 +321,41 @@ DCLayerOverlayProcessor::RenderPassData::RenderPassData(
 DCLayerOverlayProcessor::RenderPassData::~RenderPassData() = default;
 
 DCLayerOverlayProcessor::DCLayerOverlayProcessor(
-    const OutputSurface::Capabilities& capabilities,
     const RendererSettings& settings)
-    : has_hw_overlay_support_(capabilities.supports_dc_video_overlays),
-      show_debug_borders_(settings.show_dc_layer_debug_borders) {}
+    : show_debug_borders_(settings.show_dc_layer_debug_borders),
+      viz_task_runner_(base::ThreadTaskRunnerHandle::Get()) {
+  UpdateHasHwOverlaySupport();
+  ui::GpuSwitchingManager::GetInstance()->AddObserver(this);
+}
 
 DCLayerOverlayProcessor::DCLayerOverlayProcessor()
     : has_hw_overlay_support_(true), show_debug_borders_(false) {}
 
-DCLayerOverlayProcessor::~DCLayerOverlayProcessor() = default;
+DCLayerOverlayProcessor::~DCLayerOverlayProcessor() {
+  ui::GpuSwitchingManager::GetInstance()->RemoveObserver(this);
+}
+
+// Called on the Viz Compositor thread
+void DCLayerOverlayProcessor::UpdateHasHwOverlaySupport() {
+  DCHECK(viz_task_runner_->BelongsToCurrentThread());
+  has_hw_overlay_support_ = gl::AreOverlaysSupportedWin();
+}
+
+// Not on the Viz Compositor thread
+void DCLayerOverlayProcessor::OnDisplayAdded() {
+  viz_task_runner_->PostTask(
+      FROM_HERE,
+      base::BindOnce(&DCLayerOverlayProcessor::UpdateHasHwOverlaySupport,
+                     base::Unretained(this)));
+}
+
+// Not on the Viz Compositor thread
+void DCLayerOverlayProcessor::OnDisplayRemoved() {
+  viz_task_runner_->PostTask(
+      FROM_HERE,
+      base::BindOnce(&DCLayerOverlayProcessor::UpdateHasHwOverlaySupport,
+                     base::Unretained(this)));
+}
 
 void DCLayerOverlayProcessor::Process(
     DisplayResourceProvider* resource_provider,

@@ -21,10 +21,11 @@ import android.support.test.espresso.contrib.RecyclerViewActions;
 import android.support.test.filters.LargeTest;
 import android.support.test.filters.MediumTest;
 import android.support.test.filters.SmallTest;
-import android.support.v7.widget.RecyclerView;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
+
+import androidx.recyclerview.widget.RecyclerView;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -41,17 +42,16 @@ import org.chromium.base.test.params.ParameterSet;
 import org.chromium.base.test.params.ParameterizedRunner;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeFeatureList;
-import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.feed.FeedNewTabPage;
 import org.chromium.chrome.browser.feed.FeedProcessScopeFactory;
 import org.chromium.chrome.browser.feed.TestNetworkClient;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.native_page.ContextMenuManager;
 import org.chromium.chrome.browser.ntp.cards.NewTabPageAdapter;
 import org.chromium.chrome.browser.ntp.cards.NewTabPageRecyclerView;
@@ -66,18 +66,18 @@ import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.suggestions.SiteSuggestion;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.util.UrlConstants;
-import org.chromium.chrome.browser.widget.ScrimView;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
+import org.chromium.chrome.test.util.ChromeRenderTestRule;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.NewTabPageTestUtils;
 import org.chromium.chrome.test.util.OmniboxTestUtils;
-import org.chromium.chrome.test.util.RenderTestRule;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.chrome.test.util.browser.RecyclerViewTestUtils;
 import org.chromium.chrome.test.util.browser.suggestions.SuggestionsDependenciesRule;
 import org.chromium.chrome.test.util.browser.suggestions.mostvisited.FakeMostVisitedSites;
+import org.chromium.components.browser_ui.widget.scrim.ScrimCoordinator;
+import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
@@ -120,8 +120,7 @@ public class NewTabPageTest {
     public SuggestionsDependenciesRule mSuggestionsDeps = new SuggestionsDependenciesRule();
 
     @Rule
-    public RenderTestRule mRenderTestRule =
-            new RenderTestRule("chrome/test/data/android/render_tests");
+    public ChromeRenderTestRule mRenderTestRule = new ChromeRenderTestRule();
 
     /** Parameter provider for enabling/disabling "Interest Feed Content Suggestions". */
     public static class InterestFeedParams implements ParameterProvider {
@@ -202,7 +201,7 @@ public class NewTabPageTest {
     @Feature({"NewTabPage", "RenderTest"})
     public void testRender() throws IOException {
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();
-        RenderTestRule.sanitize(mNtp.getView());
+        ChromeRenderTestRule.sanitize(mNtp.getView());
         mRenderTestRule.render(mTileGridLayout, "most_visited");
         mRenderTestRule.render(mFakebox, "fakebox");
         mRenderTestRule.render(mNtp.getView().getRootView(), "new_tab_page");
@@ -217,12 +216,14 @@ public class NewTabPageTest {
     @Feature({"NewTabPage", "FeedNewTabPage", "RenderTest"})
     @ParameterAnnotations.UseMethodParameter(InterestFeedParams.class)
     public void testRender_FocusFakeBox(boolean interestFeedEnabled) throws Exception {
-        ScrimView scrimView = mActivityTestRule.getActivity().getScrim();
-        scrimView.disableAnimationForTesting(true);
+        ScrimCoordinator scrimCoordinator = mActivityTestRule.getActivity()
+                                                    .getRootUiCoordinatorForTesting()
+                                                    .getScrimCoordinatorForTesting();
+        scrimCoordinator.disableAnimationForTesting(true);
         onView(withId(R.id.search_box)).perform(click());
-        RenderTestRule.sanitize(mNtp.getView().getRootView());
+        ChromeRenderTestRule.sanitize(mNtp.getView().getRootView());
         mRenderTestRule.render(mNtp.getView().getRootView(), "focus_fake_box");
-        scrimView.disableAnimationForTesting(false);
+        scrimCoordinator.disableAnimationForTesting(false);
     }
 
     @DisabledTest(message = "https://crbug.com/898165")
@@ -330,10 +331,9 @@ public class NewTabPageTest {
     @Test
     @SmallTest
     @Feature({"NewTabPage", "FeedNewTabPage"})
-    @DisableIf
-            .Build(sdk_is_greater_than = 22, message = "crbug.com/593007")
-            @ParameterAnnotations.UseMethodParameter(InterestFeedParams.class)
-            public void testSearchFromFakebox(boolean interestFeedEnabled) {
+    @DisabledTest(message = "Test is flaky. crbug.com/593007, crbug.com/1033654")
+    @ParameterAnnotations.UseMethodParameter(InterestFeedParams.class)
+    public void testSearchFromFakebox(boolean interestFeedEnabled) {
         TouchCommon.singleClickView(mFakebox);
         waitForFakeboxFocusAnimationComplete(mNtp);
         final UrlBar urlBar = (UrlBar) mActivityTestRule.getActivity().findViewById(R.id.url_bar);
@@ -368,7 +368,7 @@ public class NewTabPageTest {
                 TouchCommon.singleClickView(mostVisitedItem);
             }
         });
-        Assert.assertEquals(mSiteSuggestions.get(0).url, mTab.getUrl());
+        Assert.assertEquals(mSiteSuggestions.get(0).url, mTab.getUrlString());
     }
 
     /**

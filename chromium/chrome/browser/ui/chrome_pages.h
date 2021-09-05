@@ -54,6 +54,9 @@ enum FeedbackSource {
   kFeedbackSourceSadTabPage,
   kFeedbackSourceSupervisedUserInterstitial,
   kFeedbackSourceAssistant,
+  kFeedbackSourceDesktopTabGroups,
+  kFeedbackSourceMediaApp,
+  kFeedbackSourceHelpApp,
 
   // Must be last.
   kFeedbackSourceCount,
@@ -68,7 +71,16 @@ void ShowExtensions(Browser* browser,
 
 // ShowFeedbackPage() uses |browser| to determine the URL of the current tab.
 // |browser| should be NULL if there are no currently open browser windows.
-void ShowFeedbackPage(Browser* browser,
+void ShowFeedbackPage(const Browser* browser,
+                      FeedbackSource source,
+                      const std::string& description_template,
+                      const std::string& description_placeholder_text,
+                      const std::string& category_tag,
+                      const std::string& extra_diagnostics);
+
+// Displays the Feedback ui.
+void ShowFeedbackPage(const GURL& page_url,
+                      Profile* profile,
                       FeedbackSource source,
                       const std::string& description_template,
                       const std::string& description_placeholder_text,
@@ -113,6 +125,7 @@ void ShowSettingsSubPageInTabbedBrowser(Browser* browser,
                                         const std::string& sub_page);
 void ShowClearBrowsingDataDialog(Browser* browser);
 void ShowPasswordManager(Browser* browser);
+void ShowPasswordCheck(Browser* browser);
 void ShowImportDialog(Browser* browser);
 void ShowAboutChrome(Browser* browser);
 void ShowSearchEngineSettings(Browser* browser);

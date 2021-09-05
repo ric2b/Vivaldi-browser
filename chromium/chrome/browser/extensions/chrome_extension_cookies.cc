@@ -36,7 +36,7 @@ ChromeExtensionCookies::ChromeExtensionCookies(Profile* profile)
     creation_config = std::make_unique<content::CookieStoreConfig>(
         profile_->GetPath().Append(chrome::kExtensionsCookieFilename),
         profile_->ShouldRestoreOldSessionCookies(),
-        profile_->ShouldPersistSessionCookies(), nullptr /* storage_policy */);
+        profile_->ShouldPersistSessionCookies());
     creation_config->crypto_delegate = cookie_config::GetCookieCryptoDelegate();
   }
   creation_config->cookieable_schemes.push_back(extensions::kExtensionScheme);
@@ -62,7 +62,7 @@ ChromeExtensionCookies* ChromeExtensionCookies::Get(
 
 void ChromeExtensionCookies::CreateRestrictedCookieManager(
     const url::Origin& origin,
-    const GURL& site_for_cookies,
+    const net::SiteForCookies& site_for_cookies,
     const url::Origin& top_frame_origin,
     mojo::PendingReceiver<network::mojom::RestrictedCookieManager> receiver) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -112,7 +112,7 @@ ChromeExtensionCookies::IOData::~IOData() {
 
 void ChromeExtensionCookies::IOData::CreateRestrictedCookieManager(
     const url::Origin& origin,
-    const GURL& site_for_cookies,
+    const net::SiteForCookies& site_for_cookies,
     const url::Origin& top_frame_origin,
     mojo::PendingReceiver<network::mojom::RestrictedCookieManager> receiver) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
@@ -172,14 +172,14 @@ void ChromeExtensionCookies::OnContentSettingChanged(
   if (!io_data_)  // null after shutdown.
     return;
 
-  if (content_type != CONTENT_SETTINGS_TYPE_COOKIES &&
-      content_type != CONTENT_SETTINGS_TYPE_DEFAULT) {
+  if (content_type != ContentSettingsType::COOKIES &&
+      content_type != ContentSettingsType::DEFAULT) {
     return;
   }
 
   ContentSettingsForOneType settings;
   HostContentSettingsMapFactory::GetForProfile(profile_)->GetSettingsForOneType(
-      CONTENT_SETTINGS_TYPE_COOKIES, std::string(), &settings);
+      ContentSettingsType::COOKIES, std::string(), &settings);
 
   // Safe since |io_data_| is non-null so no IOData deletion is queued.
   base::PostTask(
@@ -209,8 +209,8 @@ void ChromeExtensionCookies::Shutdown() {
   // Note: during tests this may be called with IO thread == UI thread. If this
   // were to use unique_ptr<.., DeleteOnIOThread> that case would result in
   // unwanted synchronous deletion; hence DeleteSoon is used by hand.
-  content::BrowserThread::DeleteSoon(content::BrowserThread::IO, FROM_HERE,
-                                     std::move(io_data_));
+  base::DeleteSoon(FROM_HERE, {content::BrowserThread::IO},
+                   std::move(io_data_));
   profile_ = nullptr;
 }
 

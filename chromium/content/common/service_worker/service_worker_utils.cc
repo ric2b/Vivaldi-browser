@@ -18,6 +18,7 @@
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/common/loader/resource_type_util.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom.h"
 
 namespace content {
@@ -44,12 +45,13 @@ bool PathContainsDisallowedCharacter(const GURL& url) {
 }  // namespace
 
 // static
-bool ServiceWorkerUtils::IsMainResourceType(ResourceType type) {
+bool ServiceWorkerUtils::IsMainResourceType(blink::mojom::ResourceType type) {
   // When PlzDedicatedWorker is enabled, a dedicated worker script is considered
   // to be a main resource.
-  if (type == ResourceType::kWorker)
+  if (type == blink::mojom::ResourceType::kWorker)
     return base::FeatureList::IsEnabled(blink::features::kPlzDedicatedWorker);
-  return IsResourceTypeFrame(type) || type == ResourceType::kSharedWorker;
+  return blink::IsResourceTypeFrame(type) ||
+         type == blink::mojom::ResourceType::kSharedWorker;
 }
 
 // static
@@ -101,6 +103,13 @@ bool ServiceWorkerUtils::IsPathRestrictionSatisfiedInternal(
     GURL max_scope = script_url.Resolve(*service_worker_allowed_header_value);
     if (!max_scope.is_valid()) {
       *error_message = "An invalid Service-Worker-Allowed header value ('";
+      error_message->append(*service_worker_allowed_header_value);
+      error_message->append("') was received when fetching the script.");
+      return false;
+    }
+
+    if (max_scope.GetOrigin() != script_url.GetOrigin()) {
+      *error_message = "A cross-origin Service-Worker-Allowed header value ('";
       error_message->append(*service_worker_allowed_header_value);
       error_message->append("') was received when fetching the script.");
       return false;
@@ -226,7 +235,7 @@ const char* ServiceWorkerUtils::FetchResponseSourceToSuffix(
 }
 
 ServiceWorkerUtils::ResourceResponseHeadAndMetadata::
-    ResourceResponseHeadAndMetadata(network::ResourceResponseHead head,
+    ResourceResponseHeadAndMetadata(network::mojom::URLResponseHeadPtr head,
                                     std::vector<uint8_t> metadata)
     : head(std::move(head)), metadata(std::move(metadata)) {}
 
@@ -246,24 +255,24 @@ ServiceWorkerUtils::CreateResourceResponseHeadAndMetadata(
     int response_data_size) {
   DCHECK(http_info);
 
-  network::ResourceResponseHead head;
-  head.request_start = request_start_time;
-  head.response_start = response_start_time;
-  head.request_time = http_info->request_time;
-  head.response_time = http_info->response_time;
-  head.headers = http_info->headers;
-  head.headers->GetMimeType(&head.mime_type);
-  head.headers->GetCharset(&head.charset);
-  head.content_length = response_data_size;
-  head.was_fetched_via_spdy = http_info->was_fetched_via_spdy;
-  head.was_alpn_negotiated = http_info->was_alpn_negotiated;
-  head.connection_info = http_info->connection_info;
-  head.alpn_negotiated_protocol = http_info->alpn_negotiated_protocol;
-  head.remote_endpoint = http_info->remote_endpoint;
-  head.cert_status = http_info->ssl_info.cert_status;
+  auto head = network::mojom::URLResponseHead::New();
+  head->request_start = request_start_time;
+  head->response_start = response_start_time;
+  head->request_time = http_info->request_time;
+  head->response_time = http_info->response_time;
+  head->headers = http_info->headers;
+  head->headers->GetMimeType(&head->mime_type);
+  head->headers->GetCharset(&head->charset);
+  head->content_length = response_data_size;
+  head->was_fetched_via_spdy = http_info->was_fetched_via_spdy;
+  head->was_alpn_negotiated = http_info->was_alpn_negotiated;
+  head->connection_info = http_info->connection_info;
+  head->alpn_negotiated_protocol = http_info->alpn_negotiated_protocol;
+  head->remote_endpoint = http_info->remote_endpoint;
+  head->cert_status = http_info->ssl_info.cert_status;
 
   if (options & network::mojom::kURLLoadOptionSendSSLInfoWithResponse)
-    head.ssl_info = http_info->ssl_info;
+    head->ssl_info = http_info->ssl_info;
 
   std::vector<uint8_t> metadata;
   if (http_info->metadata) {

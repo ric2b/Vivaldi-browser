@@ -26,7 +26,9 @@
 namespace blink {
 class TestPaintWorklet : public PaintWorklet {
  public:
-  explicit TestPaintWorklet(LocalFrame* frame) : PaintWorklet(frame) {}
+  explicit TestPaintWorklet(LocalFrame* frame) : PaintWorklet(frame) {
+    ResetIsPaintOffThreadForTesting();
+  }
 
   void SetPaintsToSwitch(int num) { paints_to_switch_ = num; }
 
@@ -75,7 +77,7 @@ class PaintWorkletTest : public PageTestBase {
                                size_t expected_num_paints_before_switch,
                                TestPaintWorklet* paint_worklet_to_test) {
     paint_worklet_to_test->GetFrame()->View()->UpdateAllLifecyclePhases(
-        DocumentLifecycle::LifecycleUpdateReason::kTest);
+        DocumentUpdateReason::kTest);
     paint_worklet_to_test->SetPaintsToSwitch(paint_cnt_to_switch);
     size_t previously_selected_global_scope =
         paint_worklet_to_test->GetActiveGlobalScope();
@@ -158,8 +160,14 @@ TEST_F(PaintWorkletTest, SinglyRegisteredDocumentDefinitionNotUsed) {
   EXPECT_TRUE(generator);
   EXPECT_EQ(generator->GetRegisteredDefinitionCountForTesting(), 1u);
   DocumentPaintDefinition* definition;
-  EXPECT_FALSE(generator->GetValidDocumentDefinitionForTesting(definition));
-  EXPECT_FALSE(definition);
+  // Please refer to CSSPaintImageGeneratorImpl::GetValidDocumentDefinition for
+  // the logic.
+  if (RuntimeEnabledFeatures::OffMainThreadCSSPaintEnabled()) {
+    EXPECT_TRUE(generator->GetValidDocumentDefinitionForTesting(definition));
+  } else {
+    EXPECT_FALSE(generator->GetValidDocumentDefinitionForTesting(definition));
+    EXPECT_FALSE(definition);
+  }
 }
 
 // In this test, we set a list of "paints_to_switch" numbers, and in each frame,
@@ -213,7 +221,9 @@ class MainOrOffThreadPaintWorkletTest
       : ScopedOffMainThreadCSSPaintForTest(GetParam()) {}
 };
 
-INSTANTIATE_TEST_SUITE_P(, MainOrOffThreadPaintWorkletTest, ::testing::Bool());
+INSTANTIATE_TEST_SUITE_P(All,
+                         MainOrOffThreadPaintWorkletTest,
+                         ::testing::Bool());
 
 class MockObserver final : public CSSPaintImageGenerator::Observer {
  public:
@@ -223,6 +233,7 @@ class MockObserver final : public CSSPaintImageGenerator::Observer {
 TEST_P(MainOrOffThreadPaintWorkletTest, ConsistentGlobalScopeOnMainThread) {
   PaintWorklet* paint_worklet_to_test =
       PaintWorklet::From(*GetFrame().GetDocument()->domWindow());
+  paint_worklet_to_test->ResetIsPaintOffThreadForTesting();
 
   MockObserver* observer = MakeGarbageCollected<MockObserver>();
   CSSPaintImageGeneratorImpl* generator_foo =
@@ -291,10 +302,38 @@ TEST_P(MainOrOffThreadPaintWorkletTest, ConsistentGlobalScopeOnMainThread) {
   EXPECT_TRUE(paint_worklet_to_test->GetDocumentDefinitionMap().at("bar"));
 }
 
+TEST_P(MainOrOffThreadPaintWorkletTest, AllGlobalScopesMustBeCreated) {
+  PaintWorklet* paint_worklet_to_test =
+      MakeGarbageCollected<PaintWorklet>(&GetFrame());
+  paint_worklet_to_test->ResetIsPaintOffThreadForTesting();
+
+  EXPECT_TRUE(paint_worklet_to_test->GetGlobalScopesForTesting().IsEmpty());
+
+  std::unique_ptr<PaintWorkletPaintDispatcher> dispatcher =
+      std::make_unique<PaintWorkletPaintDispatcher>();
+  Persistent<PaintWorkletProxyClient> proxy_client =
+      MakeGarbageCollected<PaintWorkletProxyClient>(
+          1, paint_worklet_to_test, dispatcher->GetWeakPtr(), nullptr);
+  paint_worklet_to_test->SetProxyClientForTesting(proxy_client);
+
+  while (paint_worklet_to_test->NeedsToCreateGlobalScopeForTesting()) {
+    paint_worklet_to_test->AddGlobalScopeForTesting();
+  }
+
+  if (RuntimeEnabledFeatures::OffMainThreadCSSPaintEnabled()) {
+    EXPECT_EQ(paint_worklet_to_test->GetGlobalScopesForTesting().size(),
+              2 * PaintWorklet::kNumGlobalScopesPerThread);
+  } else {
+    EXPECT_EQ(paint_worklet_to_test->GetGlobalScopesForTesting().size(),
+              PaintWorklet::kNumGlobalScopesPerThread);
+  }
+}
+
 TEST_F(PaintWorkletTest, ConsistentGlobalScopeCrossThread) {
   ScopedOffMainThreadCSSPaintForTest off_main_thread_css_paint(true);
   PaintWorklet* paint_worklet_to_test =
       PaintWorklet::From(*GetFrame().GetDocument()->domWindow());
+  paint_worklet_to_test->ResetIsPaintOffThreadForTesting();
 
   MockObserver* observer = MakeGarbageCollected<MockObserver>();
   CSSPaintImageGeneratorImpl* generator_foo =
@@ -464,6 +503,7 @@ TEST_F(PaintWorkletTest, GeneratorNotifiedAfterAllRegistrations) {
   ScopedOffMainThreadCSSPaintForTest off_main_thread_css_paint(true);
   PaintWorklet* paint_worklet_to_test =
       PaintWorklet::From(*GetFrame().GetDocument()->domWindow());
+  paint_worklet_to_test->ResetIsPaintOffThreadForTesting();
 
   MockObserver* observer = MakeGarbageCollected<MockObserver>();
   CSSPaintImageGeneratorImpl* generator =
@@ -514,32 +554,6 @@ TEST_F(PaintWorkletTest, GeneratorNotifiedAfterAllRegistrations) {
       definition->GetPaintRenderingContext2DSettings()->alpha());
 
   EXPECT_TRUE(paint_worklet_to_test->GetDocumentDefinitionMap().at("foo"));
-}
-
-TEST_P(MainOrOffThreadPaintWorkletTest, AllGlobalScopesMustBeCreated) {
-  PaintWorklet* paint_worklet_to_test =
-      MakeGarbageCollected<PaintWorklet>(&GetFrame());
-
-  EXPECT_TRUE(paint_worklet_to_test->GetGlobalScopesForTesting().IsEmpty());
-
-  std::unique_ptr<PaintWorkletPaintDispatcher> dispatcher =
-      std::make_unique<PaintWorkletPaintDispatcher>();
-  Persistent<PaintWorkletProxyClient> proxy_client =
-      MakeGarbageCollected<PaintWorkletProxyClient>(
-          1, paint_worklet_to_test, dispatcher->GetWeakPtr(), nullptr);
-  paint_worklet_to_test->SetProxyClientForTesting(proxy_client);
-
-  while (paint_worklet_to_test->NeedsToCreateGlobalScopeForTesting()) {
-    paint_worklet_to_test->AddGlobalScopeForTesting();
-  }
-
-  if (RuntimeEnabledFeatures::OffMainThreadCSSPaintEnabled()) {
-    EXPECT_EQ(paint_worklet_to_test->GetGlobalScopesForTesting().size(),
-              2 * PaintWorklet::kNumGlobalScopesPerThread);
-  } else {
-    EXPECT_EQ(paint_worklet_to_test->GetGlobalScopesForTesting().size(),
-              PaintWorklet::kNumGlobalScopesPerThread);
-  }
 }
 
 }  // namespace blink

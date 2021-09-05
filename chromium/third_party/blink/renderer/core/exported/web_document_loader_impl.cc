@@ -45,6 +45,7 @@
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/loader/subresource_filter.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
 #include "third_party/blink/renderer/platform/mhtml/archive_resource.h"
 #include "third_party/blink/renderer/platform/mhtml/mhtml_archive.h"
@@ -121,8 +122,12 @@ void WebDocumentLoaderImpl::SetExtraData(
 WebDocumentLoaderImpl::WebDocumentLoaderImpl(
     LocalFrame* frame,
     WebNavigationType navigation_type,
+    ContentSecurityPolicy* content_security_policy,
     std::unique_ptr<WebNavigationParams> navigation_params)
-    : DocumentLoader(frame, navigation_type, std::move(navigation_params)),
+    : DocumentLoader(frame,
+                     navigation_type,
+                     content_security_policy,
+                     std::move(navigation_params)),
       response_wrapper_(DocumentLoader::GetResponse()) {}
 
 WebDocumentLoaderImpl::~WebDocumentLoaderImpl() {
@@ -137,15 +142,17 @@ void WebDocumentLoaderImpl::DetachFromFrame(bool flush_microtask_queue) {
 
 void WebDocumentLoaderImpl::SetSubresourceFilter(
     WebDocumentSubresourceFilter* subresource_filter) {
-  DocumentLoader::SetSubresourceFilter(SubresourceFilter::Create(
-      *GetFrame()->GetDocument(), base::WrapUnique(subresource_filter)));
+  DocumentLoader::SetSubresourceFilter(MakeGarbageCollected<SubresourceFilter>(
+      GetFrame()->GetDocument()->ToExecutionContext(),
+      base::WrapUnique(subresource_filter)));
 }
 
 void WebDocumentLoaderImpl::SetLoadingHintsProvider(
     std::unique_ptr<blink::WebLoadingHintsProvider> loading_hints_provider) {
   DocumentLoader::SetPreviewsResourceLoadingHints(
       PreviewsResourceLoadingHints::CreateFromLoadingHintsProvider(
-          *GetFrame()->GetDocument(), std::move(loading_hints_provider)));
+          *GetFrame()->GetDocument()->ToExecutionContext(),
+          std::move(loading_hints_provider)));
 }
 
 void WebDocumentLoaderImpl::SetServiceWorkerNetworkProvider(
@@ -191,7 +198,7 @@ bool WebDocumentLoaderImpl::IsListingFtpDirectory() const {
   return DocumentLoader::IsListingFtpDirectory();
 }
 
-void WebDocumentLoaderImpl::Trace(blink::Visitor* visitor) {
+void WebDocumentLoaderImpl::Trace(Visitor* visitor) {
   DocumentLoader::Trace(visitor);
 }
 

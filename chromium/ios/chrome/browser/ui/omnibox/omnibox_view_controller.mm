@@ -4,21 +4,26 @@
 
 #import "ios/chrome/browser/ui/omnibox/omnibox_view_controller.h"
 
+#include "base/bind.h"
+#include "base/metrics/user_metrics.h"
+#include "base/metrics/user_metrics_action.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/open_from_clipboard/clipboard_recent_content.h"
 #include "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/commands/load_query_commands.h"
+#import "ios/chrome/browser/ui/commands/omnibox_commands.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_constants.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_container_view.h"
-#import "ios/chrome/browser/ui/toolbar/public/omnibox_focuser.h"
+#include "ios/chrome/browser/ui/omnibox/omnibox_text_change_delegate.h"
+#import "ios/chrome/browser/ui/omnibox/omnibox_text_field_delegate.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_constants.h"
 #include "ios/chrome/browser/ui/ui_feature_flags.h"
 #include "ios/chrome/browser/ui/util/ui_util.h"
 #include "ios/chrome/browser/ui/util/uikit_ui_util.h"
-#import "ios/chrome/common/colors/dynamic_color_util.h"
-#import "ios/chrome/common/colors/semantic_color_names.h"
+#import "ios/chrome/common/ui/colors/dynamic_color_util.h"
+#import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -26,13 +31,18 @@
 #error "This file requires ARC support."
 #endif
 
+using base::UserMetricsAction;
+
 namespace {
 
 const CGFloat kClearButtonSize = 28.0f;
 
 }  // namespace
 
-@interface OmniboxViewController ()
+@interface OmniboxViewController () <OmniboxTextFieldDelegate> {
+  // Weak, acts as a delegate
+  OmniboxTextChangeDelegate* _textChangeDelegate;
+}
 
 // Override of UIViewController's view with a different type.
 @property(nonatomic, strong) OmniboxContainerView* view;
@@ -42,6 +52,22 @@ const CGFloat kClearButtonSize = 28.0f;
 @property(nonatomic, assign) BOOL searchByImageEnabled;
 
 @property(nonatomic, assign) BOOL incognito;
+
+// YES if we are already forwarding an OnDidChange() message to the edit view.
+// Needed to prevent infinite recursion.
+// TODO(crbug.com/1015413): There must be a better way.
+@property(nonatomic, assign) BOOL forwardingOnDidChange;
+
+// YES if this text field is currently processing a user-initiated event,
+// such as typing in the omnibox or pressing the clear button.  Used to
+// distinguish between calls to textDidChange that are triggered by the user
+// typing vs by calls to setText.
+@property(nonatomic, assign) BOOL processingUserEvent;
+
+// A flag that is set whenever any input or copy/paste event happened in the
+// omnibox while it was focused. Used to count event "user focuses the omnibox
+// to view the complete URL and immediately defocuses it".
+@property(nonatomic, assign) BOOL omniboxInteractedWhileFocused;
 
 @end
 
@@ -66,22 +92,17 @@ const CGFloat kClearButtonSize = 28.0f;
       [UIColor colorNamed:kBlueColor], self.incognito,
       [UIColor colorNamed:kBlueDarkColor]);
   UIColor* iconTintColor;
-  if (base::FeatureList::IsEnabled(kNewOmniboxPopupLayout)) {
-    iconTintColor = color::DarkModeDynamicColor(
-        [UIColor colorNamed:kToolbarButtonColor], self.incognito,
-        [UIColor colorNamed:kToolbarButtonDarkColor]);
-  } else {
-    iconTintColor = color::DarkModeDynamicColor(
-        [UIColor colorNamed:kToolbarButtonColor], self.incognito,
-        [UIColor colorNamed:kToolbarButtonDarkColor]);
-  }
+  iconTintColor = color::DarkModeDynamicColor(
+      [UIColor colorNamed:kToolbarButtonColor], self.incognito,
+      [UIColor colorNamed:kToolbarButtonDarkColor]);
 
-  self.view = [[OmniboxContainerView alloc]
-      initWithFrame:CGRectZero
-          textColor:textColor
-      textFieldTint:textFieldTintColor
-           iconTint:iconTintColor];
+  self.view = [[OmniboxContainerView alloc] initWithFrame:CGRectZero
+                                                textColor:textColor
+                                            textFieldTint:textFieldTintColor
+                                                 iconTint:iconTintColor];
   self.view.incognito = self.incognito;
+
+  self.textField.delegate = self;
 
   SetA11yLabelAndUiAutomationName(self.textField, IDS_ACCNAME_LOCATION,
                                   @"Address");
@@ -112,15 +133,6 @@ const CGFloat kClearButtonSize = 28.0f;
          selector:@selector(textInputModeDidChange)
              name:UITextInputCurrentInputModeDidChangeNotification
            object:nil];
-
-  // TODO(crbug.com/866446): Use UITextFieldDelegate instead.
-  [[NSNotificationCenter defaultCenter]
-      addObserver:self
-         selector:@selector(textFieldDidBeginEditing)
-             name:UITextFieldTextDidBeginEditingNotification
-           object:self.textField];
-
-  [self updateLeadingImageVisibility];
 }
 
 - (void)viewDidAppear:(BOOL)animated {
@@ -136,15 +148,110 @@ const CGFloat kClearButtonSize = 28.0f;
                                  toPosition:self.textField.beginningOfDocument];
 }
 
-- (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
-  [super traitCollectionDidChange:previousTraitCollection];
-  [self updateLeadingImageVisibility];
+- (void)setTextChangeDelegate:(OmniboxTextChangeDelegate*)textChangeDelegate {
+  _textChangeDelegate = textChangeDelegate;
 }
 
 #pragma mark - public methods
 
 - (OmniboxTextFieldIOS*)textField {
   return self.view.textField;
+}
+
+#pragma mark - OmniboxTextFieldDelegate
+
+- (BOOL)textField:(UITextField*)textField
+    shouldChangeCharactersInRange:(NSRange)range
+                replacementString:(NSString*)newText {
+  DCHECK(_textChangeDelegate);
+  self.processingUserEvent = _textChangeDelegate->OnWillChange(range, newText);
+  return self.processingUserEvent;
+}
+
+- (void)textFieldDidChange:(id)sender {
+  // If the text is empty, update the leading image.
+  if (self.textField.text.length == 0) {
+    [self.view setLeadingImage:self.emptyTextLeadingImage];
+  }
+
+  [self updateClearButtonVisibility];
+  self.semanticContentAttribute = [self.textField bestSemanticContentAttribute];
+
+  if (self.forwardingOnDidChange)
+    return;
+
+  // Reset the changed flag.
+  self.omniboxInteractedWhileFocused = YES;
+
+  BOOL savedProcessingUserEvent = self.processingUserEvent;
+  self.processingUserEvent = NO;
+  self.forwardingOnDidChange = YES;
+  DCHECK(_textChangeDelegate);
+  _textChangeDelegate->OnDidChange(savedProcessingUserEvent);
+  self.forwardingOnDidChange = NO;
+}
+
+// Delegate method for UITextField, called when user presses the "go" button.
+- (BOOL)textFieldShouldReturn:(UITextField*)textField {
+  DCHECK(_textChangeDelegate);
+  _textChangeDelegate->OnAccept();
+  return NO;
+}
+
+// Always update the text field colors when we start editing.  It's possible
+// for this method to be called when we are already editing (popup focus
+// change).  In this case, OnDidBeginEditing will be called multiple times.
+// If that becomes an issue a boolean should be added to track editing state.
+- (void)textFieldDidBeginEditing:(UITextField*)textField {
+  // Update the clear button state.
+  [self updateClearButtonVisibility];
+  [self.view setLeadingImage:self.textField.text.length
+                                 ? self.defaultLeadingImage
+                                 : self.emptyTextLeadingImage];
+
+  self.semanticContentAttribute = [self.textField bestSemanticContentAttribute];
+
+  self.omniboxInteractedWhileFocused = NO;
+  DCHECK(_textChangeDelegate);
+  _textChangeDelegate->OnDidBeginEditing();
+}
+
+- (BOOL)textFieldShouldEndEditing:(UITextField*)textField {
+  DCHECK(_textChangeDelegate);
+  _textChangeDelegate->OnWillEndEditing();
+  return YES;
+}
+
+// Record the metrics as needed.
+- (void)textFieldDidEndEditing:(UITextField*)textField
+                        reason:(UITextFieldDidEndEditingReason)reason {
+  if (!self.omniboxInteractedWhileFocused) {
+    RecordAction(
+        UserMetricsAction("Mobile_FocusedDefocusedOmnibox_WithNoAction"));
+  }
+}
+
+- (BOOL)textFieldShouldClear:(UITextField*)textField {
+  DCHECK(_textChangeDelegate);
+  _textChangeDelegate->ClearText();
+  self.processingUserEvent = YES;
+  return YES;
+}
+
+- (void)onCopy {
+  self.omniboxInteractedWhileFocused = YES;
+  DCHECK(_textChangeDelegate);
+  _textChangeDelegate->OnCopy();
+}
+
+- (void)willPaste {
+  DCHECK(_textChangeDelegate);
+  _textChangeDelegate->WillPaste();
+}
+
+- (void)onDeleteBackward {
+  DCHECK(_textChangeDelegate);
+  _textChangeDelegate->OnDeleteBackward();
 }
 
 #pragma mark - OmniboxConsumer
@@ -175,13 +282,6 @@ const CGFloat kClearButtonSize = 28.0f;
 
 #pragma mark - private
 
-- (void)updateLeadingImageVisibility {
-  BOOL newOmniboxPopupLayout =
-      base::FeatureList::IsEnabled(kNewOmniboxPopupLayout);
-  [self.view setLeadingImageHidden:!newOmniboxPopupLayout &&
-                                   !IsRegularXRegularSizeClass(self)];
-}
-
 // Tint color for the textfield placeholder and the clear button.
 - (UIColor*)placeholderAndClearButtonColor {
   return color::DarkModeDynamicColor(
@@ -190,17 +290,6 @@ const CGFloat kClearButtonSize = 28.0f;
 }
 
 #pragma mark notification callbacks
-
-// Called on UITextFieldTextDidBeginEditingNotification for self.textField.
-- (void)textFieldDidBeginEditing {
-  // Update the clear button state.
-  [self updateClearButtonVisibility];
-  [self.view setLeadingImage:self.textField.text.length
-                                 ? self.defaultLeadingImage
-                                 : self.emptyTextLeadingImage];
-
-  self.semanticContentAttribute = [self.textField bestSemanticContentAttribute];
-}
 
 // Called on UITextInputCurrentInputModeDidChangeNotification for self.textField
 - (void)textInputModeDidChange {
@@ -266,17 +355,6 @@ const CGFloat kClearButtonSize = 28.0f;
   }
 }
 
-// Called on textField's UIControlEventEditingChanged.
-- (void)textFieldDidChange:(UITextField*)textField {
-  // If the text is empty, update the leading image.
-  if (self.textField.text.length == 0) {
-    [self.view setLeadingImage:self.emptyTextLeadingImage];
-  }
-
-  [self updateClearButtonVisibility];
-  self.semanticContentAttribute = [self.textField bestSemanticContentAttribute];
-}
-
 // Hides the clear button if the textfield is empty; shows it otherwise.
 - (void)updateClearButtonVisibility {
   BOOL hasText = self.textField.text.length > 0;
@@ -289,10 +367,6 @@ const CGFloat kClearButtonSize = 28.0f;
 - (void)setSemanticContentAttribute:
     (UISemanticContentAttribute)semanticContentAttribute {
   _semanticContentAttribute = semanticContentAttribute;
-
-  if (!base::FeatureList::IsEnabled(kNewOmniboxPopupLayout)) {
-    return;
-  }
 
   self.view.semanticContentAttribute = self.semanticContentAttribute;
   self.textField.semanticContentAttribute = self.semanticContentAttribute;
@@ -307,7 +381,7 @@ const CGFloat kClearButtonSize = 28.0f;
     ClipboardRecentContent* clipboardRecentContent =
         ClipboardRecentContent::GetInstance();
     if (self.searchByImageEnabled &&
-        clipboardRecentContent->GetRecentImageFromClipboard().has_value()) {
+        clipboardRecentContent->HasRecentImageFromClipboard()) {
       return action == @selector(searchCopiedImage:);
     }
     if (clipboardRecentContent->GetRecentURLFromClipboard().has_value()) {
@@ -322,20 +396,26 @@ const CGFloat kClearButtonSize = 28.0f;
 }
 
 - (void)searchCopiedImage:(id)sender {
-  if (base::Optional<gfx::Image> optionalImage =
-          ClipboardRecentContent::GetInstance()
-              ->GetRecentImageFromClipboard()) {
-    UIImage* image = optionalImage.value().ToUIImage();
-    [self.dispatcher searchByImage:image];
-    [self.dispatcher cancelOmniboxEdit];
+  RecordAction(
+      UserMetricsAction("Mobile.OmniboxContextMenu.SearchCopiedImage"));
+  self.omniboxInteractedWhileFocused = YES;
+  if (ClipboardRecentContent::GetInstance()->HasRecentImageFromClipboard()) {
+    ClipboardRecentContent::GetInstance()->GetRecentImageFromClipboard(
+        base::BindOnce(^(base::Optional<gfx::Image> optionalImage) {
+          UIImage* image = optionalImage.value().ToUIImage();
+          [self.dispatcher searchByImage:image];
+          [self.dispatcher cancelOmniboxEdit];
+        }));
   }
 }
 
 - (void)visitCopiedLink:(id)sender {
+  RecordAction(UserMetricsAction("Mobile.OmniboxContextMenu.VisitCopiedLink"));
   [self pasteAndGo:sender];
 }
 
 - (void)searchCopiedText:(id)sender {
+  RecordAction(UserMetricsAction("Mobile.OmniboxContextMenu.SearchCopiedText"));
   [self pasteAndGo:sender];
 }
 
@@ -352,6 +432,7 @@ const CGFloat kClearButtonSize = 28.0f;
                  clipboardRecentContent->GetRecentTextFromClipboard()) {
     query = base::SysUTF16ToNSString(optionalText.value());
   }
+  self.omniboxInteractedWhileFocused = YES;
   [self.dispatcher loadQuery:query immediately:YES];
   [self.dispatcher cancelOmniboxEdit];
 }

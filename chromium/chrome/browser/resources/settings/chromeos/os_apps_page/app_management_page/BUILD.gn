@@ -8,19 +8,19 @@ js_type_check("closure_compile") {
   deps = [
     ":actions",
     ":api_listener",
+    ":app_detail_view",
     ":app_item",
     ":app_management_page",
-    ":app_permission_view",
-    ":arc_permission_view",
+    ":arc_detail_view",
     ":browser_proxy",
-    ":chrome_app_permission_view",
+    ":chrome_app_detail_view",
     ":constants",
     ":dom_switch",
     ":fake_page_handler",
     ":main_view",
     ":permission_item",
     ":pin_to_shelf_item",
-    ":pwa_permission_view",
+    ":pwa_detail_view",
     ":reducers",
     ":store",
     ":store_client",
@@ -65,18 +65,19 @@ js_library("app_management_page") {
   ]
 }
 
-js_library("app_permission_view") {
+js_library("app_detail_view") {
   deps = [
-    ":arc_permission_view",
-    ":chrome_app_permission_view",
+    ":arc_detail_view",
+    ":chrome_app_detail_view",
     ":dom_switch",
-    ":pwa_permission_view",
+    ":pwa_detail_view",
     ":store_client",
-    "../../..:route",
+    "../..:os_route",
+    "../../..:router",
   ]
 }
 
-js_library("arc_permission_view") {
+js_library("arc_detail_view") {
   deps = [
     ":constants",
     ":fake_page_handler",
@@ -94,7 +95,7 @@ js_library("browser_proxy") {
   ]
 }
 
-js_library("chrome_app_permission_view") {
+js_library("chrome_app_detail_view") {
   deps = [
     ":fake_page_handler",
     ":pin_to_shelf_item",
@@ -134,6 +135,7 @@ js_library("permission_item") {
     ":store_client",
     ":toggle_row",
     ":util",
+    "../..:metrics_recorder",
   ]
 }
 
@@ -142,10 +144,11 @@ js_library("pin_to_shelf_item") {
     ":browser_proxy",
     ":toggle_row",
     ":types",
+    "../..:metrics_recorder",
   ]
 }
 
-js_library("pwa_permission_view") {
+js_library("pwa_detail_view") {
   deps = [
     ":constants",
     ":fake_page_handler",
@@ -191,15 +194,14 @@ js_library("toggle_row") {
 }
 
 js_library("types") {
-  deps = [
-    "//chrome/browser/ui/webui/app_management:mojo_bindings_js_library_for_compile",
-  ]
+  deps = [ "//chrome/browser/ui/webui/app_management:mojo_bindings_js_library_for_compile" ]
 }
 
 js_library("uninstall_button") {
   deps = [
     ":store_client",
     ":util",
+    "../..:metrics_recorder",
     "//ui/webui/resources/cr_elements/cr_button:cr_button",
     "//ui/webui/resources/cr_elements/policy:cr_tooltip_icon",
     "//ui/webui/resources/js:i18n_behavior",
@@ -210,6 +212,8 @@ js_library("util") {
   deps = [
     ":constants",
     ":types",
+    "../..:os_route",
+    "../../..:router",
     "//ui/webui/resources/js:cr",
   ]
 }

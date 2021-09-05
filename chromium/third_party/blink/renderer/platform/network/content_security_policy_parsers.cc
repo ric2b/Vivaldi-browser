@@ -4,8 +4,7 @@
 
 #include "third_party/blink/renderer/platform/network/content_security_policy_parsers.h"
 
-#include "third_party/blink/public/mojom/csp/content_security_policy.mojom-blink.h"
-#include "third_party/blink/public/platform/web_content_security_policy.h"
+#include "services/network/public/mojom/content_security_policy.mojom-blink.h"
 #include "third_party/blink/renderer/platform/wtf/assertions.h"
 #include "third_party/blink/renderer/platform/wtf/text/ascii_ctype.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_utf8_adaptor.h"
@@ -57,17 +56,5 @@ bool IsNotColonOrSlash(UChar c) {
 bool IsMediaTypeCharacter(UChar c) {
   return !IsASCIISpace(c) && c != '/';
 }
-
-STATIC_ASSERT_ENUM(mojom::ContentSecurityPolicyType::kReport,
-                   kContentSecurityPolicyHeaderTypeReport);
-STATIC_ASSERT_ENUM(mojom::ContentSecurityPolicyType::kEnforce,
-                   kContentSecurityPolicyHeaderTypeEnforce);
-
-STATIC_ASSERT_ENUM(kWebContentSecurityPolicySourceHTTP,
-                   kContentSecurityPolicyHeaderSourceHTTP);
-STATIC_ASSERT_ENUM(kWebContentSecurityPolicySourceMeta,
-                   kContentSecurityPolicyHeaderSourceMeta);
-STATIC_ASSERT_ENUM(kWebContentSecurityPolicySourceOriginPolicy,
-                   kContentSecurityPolicyHeaderSourceOriginPolicy);
 
 }  // namespace blink

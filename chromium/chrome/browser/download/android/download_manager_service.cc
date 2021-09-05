@@ -16,24 +16,24 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
-#include "chrome/android/chrome_jni_headers/DownloadInfo_jni.h"
 #include "chrome/android/chrome_jni_headers/DownloadItem_jni.h"
 #include "chrome/android/chrome_jni_headers/DownloadManagerService_jni.h"
-#include "chrome/browser/android/chrome_feature_list.h"
-#include "chrome/browser/android/feature_utilities.h"
 #include "chrome/browser/android/profile_key_startup_accessor.h"
-#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/download/android/download_controller.h"
 #include "chrome/browser/download/android/download_startup_utils.h"
 #include "chrome/browser/download/android/download_utils.h"
+#include "chrome/browser/download/android/jni_headers/DownloadInfo_jni.h"
 #include "chrome/browser/download/android/service/download_task_scheduler.h"
 #include "chrome/browser/download/offline_item_utils.h"
 #include "chrome/browser/download/simple_download_manager_coordinator_factory.h"
+#include "chrome/browser/flags/android/cached_feature_flags.h"
+#include "chrome/browser/flags/android/chrome_feature_list.h"
 #include "chrome/browser/profiles/profile_key.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/chrome_constants.h"
 #include "components/download/network/android/network_status_listener_android.h"
 #include "components/download/public/common/auto_resumption_handler.h"
+#include "components/download/public/common/download_features.h"
 #include "components/download/public/common/download_item.h"
 #include "components/download/public/common/download_item_impl.h"
 #include "components/download/public/common/download_stats.h"
@@ -43,7 +43,6 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/download_item_utils.h"
 #include "content/public/browser/download_request_utils.h"
-#include "content/public/browser/notification_service.h"
 #include "third_party/blink/public/common/mime_util/mime_util.h"
 #include "url/origin.h"
 
@@ -98,7 +97,8 @@ void DownloadManagerService::CreateAutoResumptionHandler() {
   config->auto_resumption_size_limit =
       DownloadUtils::GetAutoResumptionSizeLimit();
   config->is_auto_resumption_enabled_in_native =
-      chrome::android::IsDownloadAutoResumptionEnabledInNative();
+      chrome::android::IsJavaDrivenFeatureEnabled(
+          download::features::kDownloadAutoResumptionNative);
   download::AutoResumptionHandler::Create(
       std::move(network_listener), std::move(task_manager), std::move(config));
 }
@@ -130,20 +130,6 @@ DownloadManagerService* DownloadManagerService::GetInstance() {
 ScopedJavaLocalRef<jobject> DownloadManagerService::CreateJavaDownloadInfo(
     JNIEnv* env,
     download::DownloadItem* item) {
-  bool user_initiated =
-      (item->GetTransitionType() & ui::PAGE_TRANSITION_FROM_ADDRESS_BAR) ||
-      PageTransitionCoreTypeIs(item->GetTransitionType(),
-                               ui::PAGE_TRANSITION_TYPED) ||
-      PageTransitionCoreTypeIs(item->GetTransitionType(),
-                               ui::PAGE_TRANSITION_AUTO_BOOKMARK) ||
-      PageTransitionCoreTypeIs(item->GetTransitionType(),
-                               ui::PAGE_TRANSITION_GENERATED) ||
-      PageTransitionCoreTypeIs(item->GetTransitionType(),
-                               ui::PAGE_TRANSITION_RELOAD) ||
-      PageTransitionCoreTypeIs(item->GetTransitionType(),
-                               ui::PAGE_TRANSITION_KEYWORD);
-  bool has_user_gesture = item->HasUserGesture() || user_initiated;
-
   base::TimeDelta time_delta;
   bool time_remaining_known = item->TimeRemaining(&time_delta);
   std::string original_url = item->GetOriginalUrl().SchemeIs(url::kDataScheme)
@@ -160,8 +146,8 @@ ScopedJavaLocalRef<jobject> DownloadManagerService::CreateJavaDownloadInfo(
       item->GetReceivedBytes(), item->GetTotalBytes(),
       browser_context ? browser_context->IsOffTheRecord() : false,
       item->GetState(), item->PercentComplete(), item->IsPaused(),
-      has_user_gesture, item->CanResume(), item->IsParallelDownload(),
-      ConvertUTF8ToJavaString(env, original_url),
+      DownloadUtils::IsDownloadUserInitiated(item), item->CanResume(),
+      item->IsParallelDownload(), ConvertUTF8ToJavaString(env, original_url),
       ConvertUTF8ToJavaString(env, item->GetReferrerUrl().spec()),
       time_remaining_known ? time_delta.InMilliseconds()
                            : kUnknownRemainingTime,
@@ -203,50 +189,29 @@ DownloadManagerService::~DownloadManagerService() {}
 
 void DownloadManagerService::Init(JNIEnv* env,
                                   jobject obj,
-                                  bool is_profile_created) {
+                                  bool is_profile_added) {
   java_ref_.Reset(env, obj);
-  if (is_profile_created) {
-    OnProfileCreated(env, obj);
+  if (is_profile_added) {
+    OnProfileAdded(env, obj);
   } else {
     // In reduced mode, only non-incognito downloads should be loaded.
-    DownloadStartupUtils::EnsureDownloadSystemInitialized(
-        false /* is_full_browser_started */, false /* is_incognito */);
     ResetCoordinatorIfNeeded(
-        ProfileKeyStartupAccessor::GetInstance()->profile_key());
+        DownloadStartupUtils::EnsureDownloadSystemInitialized(nullptr));
   }
 }
 
-void DownloadManagerService::OnProfileCreated(JNIEnv* env, jobject obj) {
-  registrar_.Add(this, chrome::NOTIFICATION_PROFILE_CREATED,
-                 content::NotificationService::AllSources());
-  // Register coordinator for each available profile.
-  DownloadStartupUtils::EnsureDownloadSystemInitialized(
-      true /* is_full_browser_started */, false /* is_incognito */);
+void DownloadManagerService::OnProfileAdded(JNIEnv* env, jobject obj) {
   Profile* profile =
       ProfileManager::GetActiveUserProfile()->GetOriginalProfile();
-  ResetCoordinatorIfNeeded(profile->GetProfileKey());
-  if (profile->HasOffTheRecordProfile()) {
-    DownloadStartupUtils::EnsureDownloadSystemInitialized(
-        true /* is_full_browser_started */, true /* is_incognito */);
-    ResetCoordinatorIfNeeded(
-        profile->GetOffTheRecordProfile()->GetProfileKey());
-  }
+  InitializeForProfile(profile);
+  observed_profiles_.Add(profile);
+  if (profile->HasOffTheRecordProfile())
+    InitializeForProfile(profile->GetOffTheRecordProfile());
 }
 
-void DownloadManagerService::Observe(
-    int type,
-    const content::NotificationSource& source,
-    const content::NotificationDetails& details) {
-  switch (type) {
-    case chrome::NOTIFICATION_PROFILE_CREATED: {
-      Profile* profile = content::Source<Profile>(source).ptr();
-      DownloadStartupUtils::EnsureDownloadSystemInitialized(
-          true /* is_full_browser_started */, profile->IsOffTheRecord());
-      ResetCoordinatorIfNeeded(profile->GetProfileKey());
-    } break;
-    default:
-      NOTREACHED();
-  }
+void DownloadManagerService::OnOffTheRecordProfileCreated(
+    Profile* off_the_record) {
+  InitializeForProfile(off_the_record);
 }
 
 void DownloadManagerService::OpenDownload(download::DownloadItem* download,
@@ -661,19 +626,6 @@ download::DownloadItem* DownloadManagerService::GetDownload(
   return coordinator ? coordinator->GetDownloadByGuid(download_guid) : nullptr;
 }
 
-void DownloadManagerService::RecordFirstBackgroundInterruptReason(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& obj,
-    const JavaParamRef<jstring>& jdownload_guid,
-    jboolean download_started) {
-  std::string download_guid = ConvertJavaStringToUTF8(env, jdownload_guid);
-  download::DownloadItem* download = GetDownload(download_guid, false);
-  if (download) {
-    download::RecordFirstBackgroundDownloadInterruptReason(
-        download->GetLastReason(), download_started);
-  }
-}
-
 void DownloadManagerService::OnPendingDownloadsLoaded() {
   is_pending_downloads_loaded_ = true;
 
@@ -795,6 +747,11 @@ void DownloadManagerService::CreateInterruptedDownloadForTest(
           download::DOWNLOAD_INTERRUPT_REASON_CRASH, false, false, false,
           base::Time(), false,
           std::vector<download::DownloadItem::ReceivedSlice>(), nullptr));
+}
+
+void DownloadManagerService::InitializeForProfile(Profile* profile) {
+  ResetCoordinatorIfNeeded(
+      DownloadStartupUtils::EnsureDownloadSystemInitialized(profile));
 }
 
 // static

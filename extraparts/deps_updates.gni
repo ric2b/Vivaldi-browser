@@ -4,9 +4,9 @@ update_target("//chrome:browser_dependencies") {
   public_deps += [ "//vivaldi/extraparts" ]
 }
 
-
 update_target("//chrome/browser:browser") {
   public_deps += [ "//vivaldi/extraparts" ]
+  allow_circular_includes_from += [ "//vivaldi/extraparts" ]
 }
 
 if (is_android) {

@@ -44,19 +44,21 @@ class NET_EXPORT_PRIVATE QuicConnectionLogger
 
   // quic::QuicPacketCreator::DebugDelegateInterface
   void OnFrameAddedToPacket(const quic::QuicFrame& frame) override;
+  void OnStreamFrameCoalesced(const quic::QuicStreamFrame& frame) override;
 
   // QuicConnectionDebugVisitorInterface
   void OnPacketSent(const quic::SerializedPacket& serialized_packet,
-                    quic::QuicPacketNumber original_packet_number,
                     quic::TransmissionType transmission_type,
                     quic::QuicTime sent_time) override;
   void OnIncomingAck(quic::QuicPacketNumber ack_packet_number,
+                     quic::EncryptionLevel ack_decrypted_level,
                      const quic::QuicAckFrame& frame,
                      quic::QuicTime ack_receive_time,
                      quic::QuicPacketNumber largest_observed,
                      bool rtt_updated,
                      quic::QuicPacketNumber least_unacked_sent_packet) override;
   void OnPacketLoss(quic::QuicPacketNumber lost_packet_number,
+                    quic::EncryptionLevel encryption_level,
                     quic::TransmissionType transmission_type,
                     quic::QuicTime detection_time) override;
   void OnPingSent() override;
@@ -86,6 +88,16 @@ class NET_EXPORT_PRIVATE QuicConnectionLogger
   void OnBlockedFrame(const quic::QuicBlockedFrame& frame) override;
   void OnGoAwayFrame(const quic::QuicGoAwayFrame& frame) override;
   void OnPingFrame(const quic::QuicPingFrame& frame) override;
+  void OnPaddingFrame(const quic::QuicPaddingFrame& frame) override;
+  void OnNewConnectionIdFrame(
+      const quic::QuicNewConnectionIdFrame& frame) override;
+  void OnNewTokenFrame(const quic::QuicNewTokenFrame& frame) override;
+  void OnRetireConnectionIdFrame(
+      const quic::QuicRetireConnectionIdFrame& frame) override;
+  void OnMessageFrame(const quic::QuicMessageFrame& frame) override;
+  void OnHandshakeDoneFrame(const quic::QuicHandshakeDoneFrame& frame) override;
+  void OnCoalescedPacketSent(const quic::QuicCoalescedPacket& coalesced_packet,
+                             size_t length) override;
   void OnPublicResetPacket(const quic::QuicPublicResetPacket& packet) override;
   void OnVersionNegotiationPacket(
       const quic::QuicVersionNegotiationPacket& packet) override;

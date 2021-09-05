@@ -3,8 +3,6 @@
 //
 #include "ui/vivaldi_bookmark_menu_mac.h"
 
-#include "app/vivaldi_commands.h"
-#include "app/vivaldi_resources.h"
 #include "base/mac/scoped_nsobject.h"
 #include "base/strings/utf_string_conversions.h"
 #include "browser/menus/bookmark_sorter.h"
@@ -13,13 +11,23 @@
 #import "chrome/browser/ui/cocoa/bookmarks/bookmark_menu_bridge.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/prefs/pref_service.h"
-#include "prefs/vivaldi_gen_prefs.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/window_open_disposition.h"
+#include "ui/events/cocoa/cocoa_event_utils.h"
+
+#include "app/vivaldi_commands.h"
+#include "app/vivaldi_resources.h"
+#include "components/bookmarks/vivaldi_bookmark_kit.h"
+#include "prefs/vivaldi_gen_prefs.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 using bookmarks::BookmarkNode;
 
 static base::string16 Separator;
 static base::string16 SeparatorDescription;
+static std::vector<int> MenuIds;
+static std::string ContainerEdge = "below";
+static unsigned int ContainerIndex = 0;
 
 namespace vivaldi {
 
@@ -72,13 +80,29 @@ void SortFlags::InitFromPrefs() {
   }
 }
 
-bool IsBookmarkSeparator(const bookmarks::BookmarkNode* node) {
-  if (Separator.length() == 0) {
-    Separator = base::UTF8ToUTF16("---");
-    SeparatorDescription = base::UTF8ToUTF16("separator");
+std::vector<int>& GetBookmarkMenuIds() {
+  return MenuIds;
+}
+
+bool IsBookmarkMenuId(int candidate) {
+  for (auto id: GetBookmarkMenuIds()) {
+    if (candidate == id) {
+      return true;
+    }
   }
-  return node->GetTitle().compare(Separator) == 0  &&
-     node->GetDescription().compare(SeparatorDescription) == 0;
+  return false;
+}
+
+unsigned int GetMenuIndex() {
+  return ContainerIndex;
+}
+
+void SetContainerState(const std::string& edge, unsigned int index) {
+  if (ContainerEdge != edge || ContainerIndex != index) {
+    ContainerEdge = edge;
+    ContainerIndex = index;
+    ClearBookmarkMenu();
+  }
 }
 
 void ClearBookmarkMenu() {
@@ -98,7 +122,7 @@ void GetBookmarkNodes(const BookmarkNode* node,
     BookmarkNode* child =
         const_cast<bookmarks::BookmarkNode*>(it.get());
     if (flags.order_ == ::vivaldi::BookmarkSorter::ORDER_NONE ||
-        !IsBookmarkSeparator(child)) {
+        !::vivaldi_bookmark_kit::IsSeparator(child)) {
       nodes.push_back(child);
     }
   }
@@ -106,24 +130,50 @@ void GetBookmarkNodes(const BookmarkNode* node,
   sorter.sort(nodes);
 }
 
-void AddAddTabToBookmarksMenuItem(const BookmarkNode* node, NSMenu* menu) {
+void AddExtraBookmarkMenuItems(NSMenu* menu, unsigned int* menu_index,
+                               const BookmarkNode* node, bool on_top) {
+  std::string edge = on_top ? "above" : "below";
+  if (edge == ContainerEdge) {
+    if (edge == "below") {
+      [menu insertItem:[NSMenuItem separatorItem] atIndex:*menu_index];
+      *menu_index += 1;
+    }
 
-  base::scoped_nsobject<NSMenuItem> item([[NSMenuItem alloc]
-          initWithTitle:l10n_util::GetNSString(
-              IDS_VIV_ADD_ACTIVE_TAB_TO_BOOKMARKS)
-                 action:nil
-          keyEquivalent:@""]);
-  [item setTag:IDC_VIV_ADD_ACTIVE_TAB_TO_BOOKMARKS];
-  AppController* app_controller = static_cast<AppController*>([NSApp delegate]);
-  [item setTarget:app_controller];
-  [app_controller setVivaldiMenuItemAction:item];
-  [item setRepresentedObject:[NSString stringWithFormat:@"%lld", node->id()]];
-  [menu addItem:item];
+    base::scoped_nsobject<NSMenuItem> item([[NSMenuItem alloc]
+            initWithTitle:l10n_util::GetNSString(
+                IDS_VIV_ADD_ACTIVE_TAB_TO_BOOKMARKS)
+                   action:nil
+            keyEquivalent:@""]);
+    [item setTag:IDC_VIV_ADD_ACTIVE_TAB_TO_BOOKMARKS];
+    AppController* app_controller =
+      static_cast<AppController*>([NSApp delegate]);
+    [item setTarget:app_controller];
+    [app_controller setVivaldiMenuItemAction:item];
+    [item setRepresentedObject:[NSString stringWithFormat:@"%lld", node->id()]];
+    [menu insertItem:item atIndex:*menu_index];
+    *menu_index += 1;
+
+    if (edge == "above") {
+      [menu insertItem:[NSMenuItem separatorItem] atIndex:*menu_index];
+      *menu_index += 1;
+    }
+  }
 }
 
 void OnClearBookmarkMenu(NSMenu* menu, NSMenuItem* item) {
   if ([item tag] == IDC_VIV_ADD_ACTIVE_TAB_TO_BOOKMARKS)
     [menu removeItem:item];
+}
+
+WindowOpenDisposition WindowOpenDispositionFromNSEvent(NSEvent* event,
+                                                       PrefService* prefs) {
+  int event_flags = ui::EventFlagsFromNSEventWithModifiers(event,
+                                                       [event modifierFlags]);
+  WindowOpenDisposition default_disposition = prefs->GetBoolean(
+      vivaldiprefs::kBookmarksOpenInNewTab) ?
+    WindowOpenDisposition::NEW_FOREGROUND_TAB :
+    WindowOpenDisposition::CURRENT_TAB;
+  return ui::DispositionFromEventFlags(event_flags, default_disposition);
 }
 
 }  // namespace vivaldi

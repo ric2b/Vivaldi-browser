@@ -503,12 +503,12 @@ TEST_F(FormAutofillUtilsTest, FindFormControlByUniqueId) {
   auto input2 = doc.GetElementById("i2").To<WebInputElement>();
   uint32_t non_existing_id = input2.UniqueRendererFormControlId() + 1000;
 
-  EXPECT_EQ(input1, FindFormControlElementsByUniqueRendererId(
+  EXPECT_EQ(input1, FindFormControlElementByUniqueRendererId(
                         doc, input1.UniqueRendererFormControlId()));
-  EXPECT_EQ(input2, FindFormControlElementsByUniqueRendererId(
+  EXPECT_EQ(input2, FindFormControlElementByUniqueRendererId(
                         doc, input2.UniqueRendererFormControlId()));
   EXPECT_TRUE(
-      FindFormControlElementsByUniqueRendererId(doc, non_existing_id).IsNull());
+      FindFormControlElementByUniqueRendererId(doc, non_existing_id).IsNull());
 }
 
 TEST_F(FormAutofillUtilsTest, FindFormControlElementsByUniqueIdNoForm) {
@@ -738,6 +738,45 @@ TEST_F(FormAutofillUtilsTest, IsActionEmptyTrue) {
       EXTRACT_VALUE, &form_data, nullptr /* FormFieldData */));
 
   EXPECT_TRUE(form_data.is_action_empty);
+}
+
+TEST_F(FormAutofillUtilsTest, ExtractBounds) {
+  LoadHTML("<body><form id='form1'><input id='i1'></form></body>");
+  WebDocument doc = GetMainFrame()->GetDocument();
+  auto web_control = doc.GetElementById("i1").To<WebFormControlElement>();
+
+  FormData form_data;
+  ASSERT_TRUE(FindFormAndFieldForFormControlElement(
+      web_control, nullptr /*field_data_manager*/, EXTRACT_BOUNDS, &form_data,
+      nullptr /* FormFieldData */));
+
+  EXPECT_FALSE(form_data.fields.back().bounds.IsEmpty());
+}
+
+TEST_F(FormAutofillUtilsTest, NotExtractBounds) {
+  LoadHTML("<body><form id='form1'><input id='i1'></form></body>");
+  WebDocument doc = GetMainFrame()->GetDocument();
+  auto web_control = doc.GetElementById("i1").To<WebFormControlElement>();
+
+  FormData form_data;
+  ASSERT_TRUE(FindFormAndFieldForFormControlElement(
+      web_control, nullptr /*field_data_manager*/, &form_data,
+      nullptr /* FormFieldData */));
+
+  EXPECT_TRUE(form_data.fields.back().bounds.IsEmpty());
+}
+
+TEST_F(FormAutofillUtilsTest, ExtractUnownedBounds) {
+  LoadHTML("<body><input id='i1'></body>");
+  WebDocument doc = GetMainFrame()->GetDocument();
+  auto web_control = doc.GetElementById("i1").To<WebFormControlElement>();
+
+  FormData form_data;
+  ASSERT_TRUE(FindFormAndFieldForFormControlElement(
+      web_control, nullptr /*field_data_manager*/, EXTRACT_BOUNDS, &form_data,
+      nullptr /* FormFieldData */));
+
+  EXPECT_FALSE(form_data.fields.back().bounds.IsEmpty());
 }
 
 }  // namespace

@@ -11,15 +11,15 @@
 #include <vector>
 
 #include "base/containers/flat_map.h"
-#include "base/macros.h"
 #include "base/unguessable_token.h"
 #include "components/paint_preview/common/glyph_usage.h"
-#include "components/paint_preview/common/proto/paint_preview.pb.h"
+#include "components/paint_preview/common/mojom/paint_preview_recorder.mojom.h"
 #include "components/paint_preview/common/serial_utils.h"
 #include "third_party/skia/include/core/SkPicture.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 #include "third_party/skia/include/core/SkTextBlob.h"
 #include "ui/gfx/geometry/rect.h"
+#include "url/gurl.h"
 
 namespace paint_preview {
 
@@ -27,30 +27,35 @@ namespace paint_preview {
 // produce a PaintPreviewFrameProto.
 class PaintPreviewTracker {
  public:
-  PaintPreviewTracker(const base::UnguessableToken& guid,
-                      int routing_id,
-                      bool is_main_frame);
+  PaintPreviewTracker(
+      const base::UnguessableToken& guid,
+      const base::Optional<base::UnguessableToken>& embedding_token,
+      bool is_main_frame);
   ~PaintPreviewTracker();
 
   // Getters ------------------------------------------------------------------
 
-  base::UnguessableToken Guid() const { return guid_; }
-  int RoutingId() const { return routing_id_; }
+  const base::UnguessableToken& Guid() const { return guid_; }
+  const base::Optional<base::UnguessableToken>& EmbeddingToken() const {
+    return embedding_token_;
+  }
   bool IsMainFrame() const { return is_main_frame_; }
 
   // Data Collection ----------------------------------------------------------
 
   // Creates a placeholder SkPicture for an OOP subframe located at |rect|
-  // mapped to the |routing_id| of OOP RenderFrame. Returns the content id of
-  // the placeholder SkPicture.
-  uint32_t CreateContentForRemoteFrame(const gfx::Rect& rect, int routing_id);
+  // mapped to the |embedding_token| of OOP RenderFrame. Returns the content id
+  // of the placeholder SkPicture.
+  uint32_t CreateContentForRemoteFrame(
+      const gfx::Rect& rect,
+      const base::UnguessableToken& embedding_token);
 
   // Adds the glyphs in |blob| to the glyph usage tracker for the |blob|'s
   // associated typface.
   void AddGlyphs(const SkTextBlob* blob);
 
   // Adds |link| with bounding box |rect| to the list of links.
-  void AnnotateLink(const std::string& link, const gfx::Rect& rect);
+  void AnnotateLink(const GURL& link, const gfx::Rect& rect);
 
   // Data Serialization -------------------------------------------------------
   // NOTE: once any of these methods are called the PaintPreviewTracker should
@@ -63,24 +68,25 @@ class PaintPreviewTracker {
   // Expose internal maps for use in MakeSerialProcs().
   // NOTE: Cannot be const due to how SkPicture procs work.
   PictureSerializationContext* GetPictureSerializationContext() {
-    return &content_id_to_proxy_id_;
+    return &content_id_to_embedding_token_;
   }
   TypefaceUsageMap* GetTypefaceUsageMap() { return &typeface_glyph_usage_; }
 
   // Expose links for serialization to a PaintPreviewFrameProto.
-  const std::vector<LinkDataProto>& GetLinks() const { return links_; }
+  const std::vector<mojom::LinkData>& GetLinks() const { return links_; }
 
  private:
   const base::UnguessableToken guid_;
-  const int routing_id_;
+  const base::Optional<base::UnguessableToken> embedding_token_;
   const bool is_main_frame_;
 
-  std::vector<LinkDataProto> links_;
-  PictureSerializationContext content_id_to_proxy_id_;
+  std::vector<mojom::LinkData> links_;
+  PictureSerializationContext content_id_to_embedding_token_;
   TypefaceUsageMap typeface_glyph_usage_;
   base::flat_map<uint32_t, sk_sp<SkPicture>> subframe_pics_;
 
-  DISALLOW_COPY_AND_ASSIGN(PaintPreviewTracker);
+  PaintPreviewTracker(const PaintPreviewTracker&) = delete;
+  PaintPreviewTracker& operator=(const PaintPreviewTracker&) = delete;
 };
 
 }  // namespace paint_preview

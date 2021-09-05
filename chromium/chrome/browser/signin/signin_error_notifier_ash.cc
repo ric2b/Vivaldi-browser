@@ -38,6 +38,7 @@
 #include "chrome/grit/theme_resources.h"
 #include "chromeos/components/account_manager/account_manager_factory.h"
 #include "components/account_id/account_id.h"
+#include "components/signin/public/identity_manager/consent_level.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/user_manager/user_manager.h"
 #include "components/vector_icons/vector_icons.h"
@@ -142,9 +143,11 @@ void SigninErrorNotifier::OnErrorChanged() {
     return;
   }
 
-  const std::string error_account_id = error_controller_->error_account_id();
-  if (error_account_id ==
-      identity_manager_->GetPrimaryAccountInfo().account_id) {
+  const CoreAccountId error_account_id = error_controller_->error_account_id();
+  const CoreAccountId primary_account_id =
+      identity_manager_->GetPrimaryAccountId(
+          signin::ConsentLevel::kNotRequired);
+  if (error_account_id == primary_account_id) {
     HandleDeviceAccountError();
   } else {
     HandleSecondaryAccountError(error_account_id);
@@ -174,7 +177,7 @@ void SigninErrorNotifier::HandleDeviceAccountError() {
   // Add an accept button to sign the user out.
   message_center::RichNotificationData data;
   data.buttons.push_back(message_center::ButtonInfo(
-      l10n_util::GetStringUTF16(IDS_SYNC_RELOGIN_LINK_LABEL)));
+      l10n_util::GetStringUTF16(IDS_SYNC_RELOGIN_BUTTON)));
 
   message_center::NotifierId notifier_id(
       message_center::NotifierType::SYSTEM_COMPONENT,
@@ -205,7 +208,7 @@ void SigninErrorNotifier::HandleDeviceAccountError() {
 }
 
 void SigninErrorNotifier::HandleSecondaryAccountError(
-    const std::string& account_id) {
+    const CoreAccountId& account_id) {
   account_manager_->GetAccounts(base::BindOnce(
       &SigninErrorNotifier::OnGetAccounts, weak_factory_.GetWeakPtr()));
 }

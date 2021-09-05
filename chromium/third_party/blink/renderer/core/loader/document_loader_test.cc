@@ -8,11 +8,13 @@
 #include "base/auto_reset.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/frame/frame_owner_element_type.h"
+#include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom-shared.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_url_loader_client.h"
 #include "third_party/blink/public/platform/web_url_loader_mock_factory.h"
 #include "third_party/blink/renderer/core/frame/frame_test_helpers.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
+#include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/testing/scoped_fake_plugin_registry.h"
 #include "third_party/blink/renderer/core/testing/sim/sim_request.h"
@@ -105,7 +107,7 @@ TEST_F(DocumentLoaderTest, MultiChunkWithReentrancy) {
     // WebURLLoaderTestDelegate overrides:
     bool FillNavigationParamsResponse(WebNavigationParams* params) override {
       params->response = WebURLResponse(params->url);
-      params->response.SetMimeType("application/pdf");
+      params->response.SetMimeType("application/x-webkit-test-webplugin");
       params->response.SetHttpStatusCode(200);
 
       String data("<html><body>foo</body></html>");
@@ -166,9 +168,9 @@ TEST_F(DocumentLoaderTest, MultiChunkWithReentrancy) {
     StaticDataNavigationBodyLoader* body_loader_ = nullptr;
   };
 
-  // We use a plugin document triggered by "application/pdf" mime type,
-  // because that gives us reliable way to get a WebLocalFrameClient callback
-  // from inside BodyDataReceived() call.
+  // We use a plugin document triggered by "application/x-webkit-test-webplugin"
+  // mime type, because that gives us reliable way to get a WebLocalFrameClient
+  // callback from inside BodyDataReceived() call.
   ScopedFakePluginRegistry fake_plugins;
   MainFrameClient main_frame_client;
   web_view_helper_.Initialize(&main_frame_client);
@@ -197,33 +199,6 @@ TEST_F(DocumentLoaderTest, isCommittedButEmpty) {
                   ->Loader()
                   .GetDocumentLoader()
                   ->IsCommittedButEmpty());
-}
-
-TEST_F(DocumentLoaderTest, MixedContentOptOutSetIfHeaderReceived) {
-  WebURL url =
-      url_test_helpers::ToKURL("https://examplenoupgrade.com/foo.html");
-  WebURLResponse response(url);
-  response.SetHttpStatusCode(200);
-  response.SetHttpHeaderField("mixed-content", "noupgrade");
-  response.SetMimeType("text/html");
-  url_test_helpers::RegisterMockedURLLoadWithCustomResponse(
-      url, test::CoreTestDataPath("foo.html"), response);
-  WebViewImpl* web_view_impl = web_view_helper_.InitializeAndLoad(
-      "https://examplenoupgrade.com/foo.html");
-  EXPECT_TRUE(To<LocalFrame>(web_view_impl->GetPage()->MainFrame())
-                  ->GetDocument()
-                  ->GetMixedAutoUpgradeOptOut());
-}
-
-TEST_F(DocumentLoaderTest, MixedContentOptOutNotSetIfNoHeaderReceived) {
-  WebViewImpl* web_view_impl =
-      web_view_helper_.InitializeAndLoad("https://example.com/foo.html");
-  EXPECT_FALSE(To<LocalFrame>(web_view_impl->GetPage()->MainFrame())
-                   ->Loader()
-                   .GetDocumentLoader()
-                   ->GetFrame()
-                   ->GetDocument()
-                   ->GetMixedAutoUpgradeOptOut());
 }
 
 class DocumentLoaderSimTest : public SimTest {};
@@ -255,6 +230,87 @@ TEST_F(DocumentLoaderSimTest, DocumentOpenUpdatesUrl) {
   EXPECT_EQ(KURL("https://example.com"), child_document->Url());
   // Similarly, the URL of the DocumentLoader should also match.
   EXPECT_EQ(KURL("https://example.com"), child_document->Loader()->Url());
+}
+
+TEST_F(DocumentLoaderSimTest, FramePolicyIntegrityOnNavigationCommit) {
+  SimRequest main_resource("https://example.com", "text/html");
+  SimRequest iframe_resource("https://example.com/foo.html", "text/html");
+  LoadURL("https://example.com");
+
+  main_resource.Write(R"(
+    <iframe id='frame1'></iframe>
+    <script>
+      const iframe = document.getElementById('frame1');
+      iframe.src = 'https://example.com/foo.html'; // navigation triggered
+      iframe.allow = "payment 'none'"; // should not take effect until the
+                                       // next navigation on iframe
+    </script>
+  )");
+
+  main_resource.Finish();
+  iframe_resource.Finish();
+
+  auto* child_frame = To<WebLocalFrameImpl>(MainFrame().FirstChild());
+  auto* child_document = child_frame->GetFrame()->GetDocument();
+
+  EXPECT_TRUE(child_document->IsFeatureEnabled(
+      blink::mojom::blink::FeaturePolicyFeature::kPayment));
+}
+
+TEST_F(DocumentLoaderSimTest, ReportErrorWhenDocumentPolicyIncompatible) {
+  blink::ScopedDocumentPolicyForTest sdp(true);
+  SimRequest::Params params;
+  params.response_http_headers = {
+      {"Document-Policy", "unoptimized-lossless-images;bpp=1.1"}};
+
+  SimRequest main_resource("https://example.com", "text/html");
+  SimRequest iframe_resource("https://example.com/foo.html", "text/html",
+                             params);
+
+  LoadURL("https://example.com");
+  main_resource.Complete(R"(
+    <iframe
+      src="https://example.com/foo.html"
+      policy="unoptimized-lossless-images;bpp=1.0">
+    </iframe>
+  )");
+
+  // When blocked by document policy, the document should be filled in with an
+  // empty response, with Finish called on |navigation_body_loader| already.
+  // If Finish was not called on the loader, because the document was not
+  // blocked, this test will fail by crashing here.
+  iframe_resource.Finish(true /* body_loader_finished */);
+
+  auto* child_frame = To<WebLocalFrameImpl>(MainFrame().FirstChild());
+  auto* child_document = child_frame->GetFrame()->GetDocument();
+
+  // Should console log a error message.
+  auto& console_messages = static_cast<frame_test_helpers::TestWebFrameClient*>(
+                               child_frame->Client())
+                               ->ConsoleMessages();
+
+  ASSERT_EQ(console_messages.size(), 1u);
+  EXPECT_TRUE(console_messages.front().Contains("document policy"));
+
+  // Should replace the document's origin with an opaque origin.
+  EXPECT_EQ(child_document->Url(), SecurityOrigin::UrlWithUniqueOpaqueOrigin());
+}
+
+// HTTP header Require-Document-Policy should only take effect on subtree of
+// current document, but not on current document.
+TEST_F(DocumentLoaderSimTest,
+       RequireDocumentPolicyHeaderShouldNotAffectCurrentDocument) {
+  blink::ScopedDocumentPolicyForTest sdp(true);
+  SimRequest::Params params;
+  params.response_http_headers = {
+      {"Require-Document-Policy", "unoptimized-lossless-images;bpp=1.0"},
+      {"Document-Policy", "unoptimized-lossless-images;bpp=1.1"}};
+
+  SimRequest main_resource("https://example.com", "text/html", params);
+  LoadURL("https://example.com");
+  // If document is blocked by document policy because of incompatible document
+  // policy, this test will fail by crashing here.
+  main_resource.Finish();
 }
 
 TEST_F(DocumentLoaderTest, CommitsDeferredOnSameOriginNavigation) {
@@ -330,6 +386,46 @@ TEST_F(DocumentLoaderTest, CommitsNotDeferredOnDataURLNavigation) {
   local_frame->Loader().CommitNavigation(std::move(params), nullptr);
 
   EXPECT_FALSE(local_frame->GetDocument()->DeferredCompositorCommitIsAllowed());
+}
+
+TEST_F(DocumentLoaderTest, SameOriginNavigation) {
+  const KURL& requestor_url =
+      KURL(NullURL(), "https://www.example.com/foo.html");
+  WebViewImpl* web_view_impl =
+      web_view_helper_.InitializeAndLoad("https://example.com/foo.html");
+
+  const KURL& same_origin_url =
+      KURL(NullURL(), "https://www.example.com/bar.html");
+  std::unique_ptr<WebNavigationParams> params =
+      WebNavigationParams::CreateWithHTMLBuffer(SharedBuffer::Create(),
+                                                same_origin_url);
+  params->requestor_origin = WebSecurityOrigin::Create(WebURL(requestor_url));
+  LocalFrame* local_frame =
+      To<LocalFrame>(web_view_impl->GetPage()->MainFrame());
+  local_frame->Loader().CommitNavigation(std::move(params), nullptr);
+
+  EXPECT_TRUE(
+      local_frame->Loader().GetDocumentLoader()->IsSameOriginNavigation());
+}
+
+TEST_F(DocumentLoaderTest, CrossOriginNavigation) {
+  const KURL& requestor_url =
+      KURL(NullURL(), "https://www.example.com/foo.html");
+  WebViewImpl* web_view_impl =
+      web_view_helper_.InitializeAndLoad("https://example.com/foo.html");
+
+  const KURL& other_origin_url =
+      KURL(NullURL(), "https://www.another.com/bar.html");
+  std::unique_ptr<WebNavigationParams> params =
+      WebNavigationParams::CreateWithHTMLBuffer(SharedBuffer::Create(),
+                                                other_origin_url);
+  params->requestor_origin = WebSecurityOrigin::Create(WebURL(requestor_url));
+  LocalFrame* local_frame =
+      To<LocalFrame>(web_view_impl->GetPage()->MainFrame());
+  local_frame->Loader().CommitNavigation(std::move(params), nullptr);
+
+  EXPECT_FALSE(
+      local_frame->Loader().GetDocumentLoader()->IsSameOriginNavigation());
 }
 
 }  // namespace blink

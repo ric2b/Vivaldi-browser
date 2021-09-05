@@ -21,8 +21,11 @@
 #include "base/test/bind_test_util.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "net/base/auth.h"
+#include "net/base/isolation_info.h"
 #include "net/base/request_priority.h"
 #include "net/cert/ct_policy_status.h"
+#include "net/cookies/cookie_monster.h"
+#include "net/cookies/cookie_store_test_callbacks.h"
 #include "net/cookies/cookie_store_test_helpers.h"
 #include "net/http/http_transaction_factory.h"
 #include "net/http/http_transaction_test_util.h"
@@ -30,6 +33,7 @@
 #include "net/log/test_net_log.h"
 #include "net/log/test_net_log_util.h"
 #include "net/net_buildflags.h"
+#include "net/proxy_resolution/configured_proxy_resolution_service.h"
 #include "net/socket/next_proto.h"
 #include "net/socket/socket_test_util.h"
 #include "net/test/cert_test_util.h"
@@ -252,7 +256,7 @@ TEST(URLRequestHttpJobWithProxy, TestSuccessfulWithOneProxy) {
       ProxyServer::FromURI("http://origin.net:80", ProxyServer::SCHEME_HTTP);
 
   std::unique_ptr<ProxyResolutionService> proxy_resolution_service =
-      ProxyResolutionService::CreateFixedFromPacResult(
+      ConfiguredProxyResolutionService::CreateFixedFromPacResult(
           proxy_server.ToPacString(), TRAFFIC_ANNOTATION_FOR_TESTS);
 
   MockWrite writes[] = {MockWrite(kSimpleProxyGetMockWrite)};
@@ -293,7 +297,7 @@ TEST(URLRequestHttpJobWithProxy,
   // Connection to |proxy_server| would fail. Request should be fetched over
   // DIRECT.
   std::unique_ptr<ProxyResolutionService> proxy_resolution_service =
-      ProxyResolutionService::CreateFixedFromPacResult(
+      ConfiguredProxyResolutionService::CreateFixedFromPacResult(
           proxy_server.ToPacString() + "; " +
               ProxyServer::Direct().ToPacString(),
           TRAFFIC_ANNOTATION_FOR_TESTS);
@@ -357,7 +361,7 @@ class URLRequestHttpJobTest : public TestWithTaskEnvironment {
 
   TestURLRequestContext context_;
   TestDelegate delegate_;
-  TestNetLog net_log_;
+  RecordingTestNetLog net_log_;
   std::unique_ptr<URLRequest> req_;
 };
 
@@ -454,6 +458,11 @@ TEST_F(URLRequestHttpJobWithMockSocketsTest, TestSuccessfulHeadWithContent) {
 }
 
 TEST_F(URLRequestHttpJobWithMockSocketsTest, TestSuccessfulCachedHeadRequest) {
+  const url::Origin kOrigin1 =
+      url::Origin::Create(GURL("http://www.example.com"));
+  const IsolationInfo kTestIsolationInfo =
+      IsolationInfo::CreateForInternalRequest(kOrigin1);
+
   // Cache the response.
   {
     MockWrite writes[] = {MockWrite(kSimpleGetMockWrite)};
@@ -469,6 +478,7 @@ TEST_F(URLRequestHttpJobWithMockSocketsTest, TestSuccessfulCachedHeadRequest) {
         GURL("http://www.example.com"), DEFAULT_PRIORITY, &delegate,
         TRAFFIC_ANNOTATION_FOR_TESTS);
 
+    request->set_isolation_info(kTestIsolationInfo);
     request->Start();
     ASSERT_TRUE(request->is_pending());
     delegate.RunUntilComplete();
@@ -497,6 +507,7 @@ TEST_F(URLRequestHttpJobWithMockSocketsTest, TestSuccessfulCachedHeadRequest) {
     // Use the cached version.
     request->SetLoadFlags(LOAD_SKIP_CACHE_VALIDATION);
     request->set_method("HEAD");
+    request->set_isolation_info(kTestIsolationInfo);
     request->Start();
     ASSERT_TRUE(request->is_pending());
     delegate.RunUntilComplete();
@@ -608,7 +619,7 @@ TEST_F(URLRequestHttpJobWithMockSocketsTest,
   ASSERT_TRUE(request->is_pending());
   delegate.RunUntilComplete();
 
-  EXPECT_EQ(net::OK, request->status().error());
+  EXPECT_EQ(OK, delegate.request_status());
   EXPECT_EQ(static_cast<int>(content_data.size()),
             request->received_response_content_length());
   EXPECT_EQ(static_cast<int>(response_header.size()),
@@ -642,7 +653,7 @@ TEST_F(URLRequestHttpJobWithMockSocketsTest,
   ASSERT_TRUE(request->is_pending());
   delegate.RunUntilComplete();
 
-  EXPECT_EQ(net::OK, request->status().error());
+  EXPECT_EQ(OK, delegate.request_status());
   EXPECT_EQ(static_cast<int>(content_data.size()),
             request->received_response_content_length());
   EXPECT_EQ(static_cast<int>(continue_header.size() + response_header.size()),
@@ -669,7 +680,7 @@ TEST_F(URLRequestHttpJobWithMockSocketsTest,
   request->Start();
   base::RunLoop().RunUntilIdle();
 
-  EXPECT_EQ(ERR_ABORTED, request->status().error());
+  EXPECT_EQ(ERR_ABORTED, delegate.request_status());
   EXPECT_EQ(0, request->received_response_content_length());
   EXPECT_EQ(28, request->raw_header_size());
   EXPECT_EQ(CountReadBytes(reads), request->GetTotalReceivedBytes());
@@ -697,7 +708,7 @@ TEST_F(URLRequestHttpJobWithMockSocketsTest,
   request->Start();
   delegate.RunUntilComplete();
 
-  EXPECT_EQ(net::OK, request->status().error());
+  EXPECT_EQ(OK, delegate.request_status());
   EXPECT_EQ(static_cast<int>(content_data.size()),
             request->received_response_content_length());
   EXPECT_EQ(static_cast<int>(header_data.size()), request->raw_header_size());
@@ -1372,7 +1383,7 @@ TEST_F(URLRequestHttpJobTest, HSTSInternalRedirectCallback) {
     std::unique_ptr<URLRequest> r(context.CreateRequest(
         url, DEFAULT_PRIORITY, &delegate, TRAFFIC_ANNOTATION_FOR_TESTS));
     r->SetExtraRequestHeaders(extra_headers);
-    r->SetRequestHeadersCallback(base::Bind(
+    r->SetRequestHeadersCallback(base::BindRepeating(
         &HttpRawRequestHeaders::Assign, base::Unretained(&raw_req_headers)));
 
     r->Start();
@@ -1402,7 +1413,7 @@ TEST_F(URLRequestHttpJobTest, HSTSInternalRedirectCallback) {
 
     std::unique_ptr<URLRequest> r(context.CreateRequest(
         url, DEFAULT_PRIORITY, &delegate, TRAFFIC_ANNOTATION_FOR_TESTS));
-    r->SetRequestHeadersCallback(base::Bind(
+    r->SetRequestHeadersCallback(base::BindRepeating(
         &HttpRawRequestHeaders::Assign, base::Unretained(&raw_req_headers)));
 
     r->Start();
@@ -1421,7 +1432,7 @@ TEST_F(URLRequestHttpJobTest, HSTSInternalRedirectCallback) {
 
     std::unique_ptr<URLRequest> r(context.CreateRequest(
         url, DEFAULT_PRIORITY, &delegate, TRAFFIC_ANNOTATION_FOR_TESTS));
-    r->SetRequestHeadersCallback(base::Bind(
+    r->SetRequestHeadersCallback(base::BindRepeating(
         &HttpRawRequestHeaders::Assign, base::Unretained(&raw_req_headers)));
 
     r->Start();
@@ -1634,6 +1645,130 @@ TEST_F(URLRequestHttpJobWebSocketTest, CreateHelperPassedThrough) {
 
 #endif  // BUILDFLAG(ENABLE_WEBSOCKETS)
 
+bool SetAllCookies(CookieMonster* cm, const CookieList& list) {
+  DCHECK(cm);
+  ResultSavingCookieCallback<CanonicalCookie::CookieInclusionStatus> callback;
+  cm->SetAllCookiesAsync(list, callback.MakeCallback());
+  callback.WaitUntilDone();
+  return callback.result().IsInclude();
+}
+
+bool CreateAndSetCookie(CookieStore* cs,
+                        const GURL& url,
+                        const std::string& cookie_line) {
+  auto cookie = CanonicalCookie::Create(url, cookie_line, base::Time::Now(),
+                                        base::nullopt);
+  if (!cookie)
+    return false;
+  DCHECK(cs);
+  ResultSavingCookieCallback<CanonicalCookie::CookieInclusionStatus> callback;
+  cs->SetCanonicalCookieAsync(std::move(cookie), url.scheme(),
+                              CookieOptions::MakeAllInclusive(),
+                              callback.MakeCallback());
+  callback.WaitUntilDone();
+  return callback.result().IsInclude();
+}
+
+void RunRequest(TestURLRequestContext* context, const GURL& url) {
+  TestDelegate delegate;
+  std::unique_ptr<URLRequest> request = context->CreateRequest(
+      url, DEFAULT_PRIORITY, &delegate, TRAFFIC_ANNOTATION_FOR_TESTS);
+
+  // Make this a laxly same-site context to allow setting
+  // SameSite=Lax-by-default cookies.
+  request->set_site_for_cookies(SiteForCookies::FromUrl(url));
+  request->Start();
+  delegate.RunUntilComplete();
+}
+
 }  // namespace
+
+TEST_F(URLRequestHttpJobTest, CookieSchemeRequestSchemeHistogram) {
+  base::HistogramTester histograms;
+  const std::string test_histogram = "Cookie.CookieSchemeRequestScheme";
+
+  CookieMonster cm(nullptr, nullptr);
+  TestURLRequestContext context(true);
+  context.set_cookie_store(&cm);
+  context.Init();
+
+  // Secure set cookie marked as Unset source scheme.
+  // Using port 7 because it fails the transaction without sending a request and
+  // prevents a timeout due to the fake addresses. Because we only need the
+  // headers to be generated (and thus the histogram filled) and not actually
+  // sent this is acceptable.
+  GURL nonsecure_url_for_unset1("http://unset1.example:7");
+  GURL secure_url_for_unset1("https://unset1.example:7");
+
+  // Normally the source scheme would be set by
+  // CookieMonster::SetCanonicalCookie(), however we're using SetAllCookies() to
+  // bypass the source scheme check in order to test the kUnset state which
+  // would normally only happen during an existing cookie DB version upgrade.
+  std::unique_ptr<CanonicalCookie> unset_cookie1 = CanonicalCookie::Create(
+      secure_url_for_unset1, "NoSourceSchemeHttps=val", base::Time::Now(),
+      base::nullopt /* server_time */);
+  unset_cookie1->SetSourceScheme(net::CookieSourceScheme::kUnset);
+
+  CookieList list1 = {*unset_cookie1};
+  EXPECT_TRUE(SetAllCookies(&cm, list1));
+  RunRequest(&context, nonsecure_url_for_unset1);
+  histograms.ExpectBucketCount(
+      test_histogram,
+      URLRequestHttpJob::CookieRequestScheme::kUnsetCookieScheme, 1);
+  RunRequest(&context, secure_url_for_unset1);
+  histograms.ExpectBucketCount(
+      test_histogram,
+      URLRequestHttpJob::CookieRequestScheme::kUnsetCookieScheme, 2);
+
+  // Nonsecure set cookie marked as unset source scheme.
+  GURL nonsecure_url_for_unset2("http://unset2.example:7");
+  GURL secure_url_for_unset2("https://unset2.example:7");
+
+  std::unique_ptr<CanonicalCookie> unset_cookie2 = CanonicalCookie::Create(
+      nonsecure_url_for_unset2, "NoSourceSchemeHttp=val", base::Time::Now(),
+      base::nullopt /* server_time */);
+  unset_cookie2->SetSourceScheme(net::CookieSourceScheme::kUnset);
+
+  CookieList list2 = {*unset_cookie2};
+  EXPECT_TRUE(SetAllCookies(&cm, list2));
+  RunRequest(&context, nonsecure_url_for_unset2);
+  histograms.ExpectBucketCount(
+      test_histogram,
+      URLRequestHttpJob::CookieRequestScheme::kUnsetCookieScheme, 3);
+  RunRequest(&context, secure_url_for_unset2);
+  histograms.ExpectBucketCount(
+      test_histogram,
+      URLRequestHttpJob::CookieRequestScheme::kUnsetCookieScheme, 4);
+
+  // Secure set cookie with source scheme marked appropriately.
+  GURL nonsecure_url_for_secure_set("http://secureset.example:7");
+  GURL secure_url_for_secure_set("https://secureset.example:7");
+
+  EXPECT_TRUE(
+      CreateAndSetCookie(&cm, secure_url_for_secure_set, "SecureScheme=val"));
+  RunRequest(&context, nonsecure_url_for_secure_set);
+  histograms.ExpectBucketCount(
+      test_histogram,
+      URLRequestHttpJob::CookieRequestScheme::kSecureSetNonsecureRequest, 1);
+  RunRequest(&context, secure_url_for_secure_set);
+  histograms.ExpectBucketCount(
+      test_histogram,
+      URLRequestHttpJob::CookieRequestScheme::kSecureSetSecureRequest, 1);
+
+  // Nonsecure set cookie with source scheme marked appropriately.
+  GURL nonsecure_url_for_nonsecure_set("http://nonsecureset.example:7");
+  GURL secure_url_for_nonsecure_set("https://nonsecureset.example:7");
+
+  EXPECT_TRUE(CreateAndSetCookie(&cm, nonsecure_url_for_nonsecure_set,
+                                 "NonSecureScheme=val"));
+  RunRequest(&context, nonsecure_url_for_nonsecure_set);
+  histograms.ExpectBucketCount(
+      test_histogram,
+      URLRequestHttpJob::CookieRequestScheme::kNonsecureSetNonsecureRequest, 1);
+  RunRequest(&context, secure_url_for_nonsecure_set);
+  histograms.ExpectBucketCount(
+      test_histogram,
+      URLRequestHttpJob::CookieRequestScheme::kNonsecureSetSecureRequest, 1);
+}
 
 }  // namespace net

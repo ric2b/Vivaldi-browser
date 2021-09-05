@@ -1,4 +1,35 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="ja-KS">
+<translation id="3830627370375585318">ファイアウォールやウイルス対策の設定で、Vivaldi からネットワークにアクセスすんの
+        許可して。</translation>
+<translation id="4200102020577305737">このオプション無効にするんやったら:
+          Vivaldi メニュー &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          [LANの設定]
+          の順に移動して、[LANにプロキシサーバーを使用する] チェックボックスをオフにしてな。</translation>
+<translation id="4932161901409251843">このオプション無効にするには:
+          Vivaldi メニュー &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          の順に移動して、設定が [プロキシなし] または [直接] になってるか確認してな。</translation>
+<translation id="5248344925342018662">保護されたVivaldiページ表示中</translation>
+<translation id="7023871570427738255">Vivaldi メニュー &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          の順に移動して、[<ph name="NO_PREFETCH_DESCRIPTION" />] をオフにしてな。
+          それでも問題が解決せんかったら、パフォーマンス向上のために
+          このオプションもっかいオンにしてみて。</translation>
+<translation id="8187289872471304532">このオプション無効にするやったら:
+          [アプリケーション] &gt; [システム環境設定] &gt; [ネットワーク] &gt; [詳細] &gt; [プロキシー] の順に移動して、
+          選択されているプロキシーの選択を解除してな。</translation>
 </translationbundle>

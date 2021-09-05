@@ -36,21 +36,21 @@ class XRReferenceSpace : public XRSpace {
                    Type type);
   ~XRReferenceSpace() override;
 
-  XRPose* getPose(XRSpace* other_space,
-                  const TransformationMatrix* mojo_from_viewer) override;
-  std::unique_ptr<TransformationMatrix> DefaultViewerPose() override;
-  std::unique_ptr<TransformationMatrix> SpaceFromMojo(
-      const TransformationMatrix& mojo_from_viewer) override;
-  std::unique_ptr<TransformationMatrix> SpaceFromViewer(
-      const TransformationMatrix& mojo_from_viewer) override;
-  std::unique_ptr<TransformationMatrix> SpaceFromInputForViewer(
-      const TransformationMatrix& mojo_from_input,
-      const TransformationMatrix& mojo_from_viewer) override;
+  std::unique_ptr<TransformationMatrix> NativeFromMojo() override;
+  std::unique_ptr<TransformationMatrix> NativeFromViewer(
+      const TransformationMatrix* mojo_from_viewer) override;
 
-  std::unique_ptr<TransformationMatrix> MojoFromSpace() override;
+  // MojoFromNative is final to enforce that children should be returning
+  // NativeFromMojo, since this is simply written to always provide the inverse
+  // of NativeFromMojo
+  std::unique_ptr<TransformationMatrix> MojoFromNative() final;
 
-  TransformationMatrix OriginOffsetMatrix() override;
-  TransformationMatrix InverseOriginOffsetMatrix() override;
+  TransformationMatrix NativeFromOffsetMatrix() override;
+  TransformationMatrix OffsetFromNativeMatrix() override;
+
+  // We override getPose to ensure that the viewer pose in viewer space returns
+  // the identity pose instead of the result of multiplying inverse matrices.
+  XRPose* getPose(XRSpace* other_space) override;
 
   Type GetType() const;
 
@@ -60,7 +60,7 @@ class XRReferenceSpace : public XRSpace {
 
   base::Optional<XRNativeOriginInformation> NativeOrigin() const override;
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
   virtual void OnReset();
 

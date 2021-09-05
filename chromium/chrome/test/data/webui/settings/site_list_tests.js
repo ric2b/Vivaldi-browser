@@ -4,6 +4,15 @@
 
 /** @fileoverview Suite of tests for site-list. */
 
+// clang-format off
+// #import {ContentSetting,ContentSettingsTypes,kControlledByLookup,SiteSettingSource,SiteSettingsPrefsBrowserProxyImpl,SITE_EXCEPTION_WILDCARD} from 'chrome://settings/lazy_load.js';
+// #import {createContentSettingTypeToValuePair,createRawSiteException,createSiteSettingsPrefs} from 'chrome://test/settings/test_util.m.js';
+// #import {CrSettingsPrefs,Router} from 'chrome://settings/settings.js';
+// #import {eventToPromise,waitBeforeNextRender} from 'chrome://test/test_util.m.js';
+// #import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+// #import {TestSiteSettingsPrefsBrowserProxy} from 'chrome://test/settings/test_site_settings_prefs_browser_proxy.m.js';
+// clang-format on
+
 /**
  * An example pref with 2 blocked location items and 2 allowed. This pref
  * is also used for the All Sites category and therefore needs values for
@@ -11,6 +20,12 @@
  * @type {SiteSettingsPref}
  */
 let prefsGeolocation;
+
+/**
+ * An example pref that is empty.
+ * @type {SiteSettingsPref}
+ */
+let prefsGeolocationEmpty;
 
 /**
  * An example of prefs controlledBy policy.
@@ -36,6 +51,12 @@ let prefsMixedProvider;
  * @type {SiteSettingsPref}
  */
 let prefsMixedEmbeddingOrigin;
+
+/**
+ * An example pref with native file system write
+ * @type {SiteSettingsPref}
+ */
+let prefsNativeFileSystemWrite;
 
 /**
  * An example pref with multiple categories and multiple allow/block
@@ -73,12 +94,6 @@ let prefsIncognito;
  * @type {SiteSettingsPref}
  */
 let prefsChromeExtension;
-
-/**
- * An example Javascript pref for android_sms notification setting.
- * @type {SiteSettingsPref}
- */
-let prefsAndroidSms;
 
 /**
  * Creates all the test |SiteSettingsPref|s that are needed for the tests in
@@ -248,16 +263,6 @@ function populateTestExceptions() {
 
   prefsGeolocationEmpty = test_util.createSiteSettingsPrefs([], []);
 
-  prefsAndroidSms = test_util.createSiteSettingsPrefs(
-      [], [test_util.createContentSettingTypeToValuePair(
-              settings.ContentSettingsTypes.NOTIFICATIONS, [
-                // android sms setting.
-                test_util.createRawSiteException(
-                    multidevice.TEST_ANDROID_SMS_ORIGIN),
-                // Non android sms setting that should be handled as usual.
-                test_util.createRawSiteException('http://bar.com')
-              ])]);
-
   prefsNativeFileSystemWrite = test_util.createSiteSettingsPrefs(
       [], [test_util.createContentSettingTypeToValuePair(
               settings.ContentSettingsTypes.NATIVE_FILE_SYSTEM_WRITE,
@@ -279,14 +284,13 @@ suite('SiteList', function() {
    */
   let browserProxy = null;
 
-  /**
-   * Mock MultiDeviceBrowserProxy to use during test.
-   * @type {TestMultideviceBrowserProxy}
-   */
-  let multiDeviceBrowserProxy = null;
-
   suiteSetup(function() {
-    CrSettingsPrefs.setInitialized();
+    // clang-format off
+    /* #ignore */ PolymerTest.importHtml(
+        /* #ignore */ 'chrome://settings/prefs/prefs_types.html').then(() => {
+          CrSettingsPrefs.setInitialized();
+        /* #ignore */ });
+    // clang-format on
   });
 
   suiteTeardown(function() {
@@ -303,25 +307,13 @@ suite('SiteList', function() {
     testElement = document.createElement('site-list');
     testElement.searchFilter = '';
     document.body.appendChild(testElement);
-
-    if (cr.isChromeOS) {
-      multiDeviceBrowserProxy = new multidevice.TestMultideviceBrowserProxy();
-      settings.MultiDeviceBrowserProxyImpl.instance_ = multiDeviceBrowserProxy;
-    }
   });
 
   teardown(function() {
     closeActionMenu();
     // The code being tested changes the Route. Reset so that state is not
     // leaked across tests.
-    settings.resetRouteForTesting();
-
-    if (cr.isChromeOS) {
-      // Reset multidevice enabled flag.
-      loadTimeData.overrideValues({
-        multideviceAllowedByPolicy: false
-      });
-    }
+    settings.Router.getInstance().resetRouteForTesting();
   });
 
   /**
@@ -405,62 +397,6 @@ suite('SiteList', function() {
           assertFalse(dotsMenu.hidden);
         });
   });
-
-  if (cr.isChromeOS) {
-    test('update androidSmsInfo', function() {
-      setUpCategory(
-          settings.ContentSettingsTypes.NOTIFICATIONS,
-          settings.ContentSetting.ALLOW, prefsAndroidSms);
-      assertEquals(
-          0, multiDeviceBrowserProxy.getCallCount('getAndroidSmsInfo'));
-
-      loadTimeData.overrideValues({multideviceAllowedByPolicy: true});
-      setUpCategory(
-          settings.ContentSettingsTypes.NOTIFICATIONS,
-          settings.ContentSetting.ALLOW, prefsAndroidSms);
-      // Assert 2 calls since the observer observes 2 properties.
-      assertEquals(
-          2, multiDeviceBrowserProxy.getCallCount('getAndroidSmsInfo'));
-
-      return multiDeviceBrowserProxy.whenCalled('getAndroidSmsInfo')
-          .then(() => browserProxy.whenCalled('getExceptionList'))
-          .then((contentType) => {
-            assertEquals(
-                settings.ContentSettingsTypes.NOTIFICATIONS, contentType);
-            assertEquals(2, testElement.sites.length);
-
-            assertEquals(
-                prefsAndroidSms.exceptions[contentType][0].origin,
-                testElement.sites[0].origin);
-            assertTrue(testElement.sites[0].showAndroidSmsNote);
-
-            assertEquals(
-                prefsAndroidSms.exceptions[contentType][1].origin,
-                testElement.sites[1].origin);
-            assertEquals(undefined, testElement.sites[1].showAndroidSmsNote);
-
-            browserProxy.resetResolver('getExceptionList');
-            multiDeviceBrowserProxy.setFeatureEnabledState(
-                settings.MultiDeviceFeature.MESSAGES, false);
-            return browserProxy.whenCalled('getExceptionList');
-          })
-          .then((contentType) => {
-            assertEquals(
-                settings.ContentSettingsTypes.NOTIFICATIONS, contentType);
-            assertEquals(2, testElement.sites.length);
-
-            assertEquals(
-                prefsAndroidSms.exceptions[contentType][0].origin,
-                testElement.sites[0].origin);
-            assertEquals(undefined, testElement.sites[0].showAndroidSmsNote);
-
-            assertEquals(
-                prefsAndroidSms.exceptions[contentType][1].origin,
-                testElement.sites[1].origin);
-            assertEquals(undefined, testElement.sites[1].showAndroidSmsNote);
-          });
-    });
-  }
 
   test('getExceptionList API used', function() {
     setUpCategory(
@@ -624,10 +560,6 @@ suite('SiteList', function() {
           Polymer.dom.flush();
           assertEquals(2, list.querySelector('iron-list').items.length);
           assertTrue(hasAnIncognito(list));
-          assertTrue(Array.from(list.querySelectorAll('site-list-entry'))
-                         .some(
-                             entry => entry.$.siteDescription.textContent ==
-                                 'Current incognito session'));
           browserProxy.resetResolver('getExceptionList');
           browserProxy.setIncognito(false);
           return browserProxy.whenCalled('getExceptionList');
@@ -831,7 +763,7 @@ suite('SiteList', function() {
           clickable.click();
           assertEquals(
               prefsGeolocation.exceptions[contentType][0].origin,
-              settings.getQueryParameters().get('site'));
+              settings.Router.getInstance().getQueryParameters().get('site'));
         });
   });
 
@@ -1043,10 +975,13 @@ suite('EditExceptionDialog', function() {
    */
   let cookieException;
 
+  /** @type {SiteSettingsPrefsBrowserProxy} */
+  let browserProxy;
+
   setup(function() {
     cookieException = {
       category: settings.ContentSettingsTypes.COOKIES,
-      embeddingOrigin: 'http://foo.com',
+      embeddingOrigin: settings.SITE_EXCEPTION_WILDCARD,
       incognito: false,
       setting: settings.ContentSetting.BLOCK,
       enforcement: '',
@@ -1118,7 +1053,7 @@ suite('EditExceptionDialog', function() {
         })
         .then(function(args) {
           assertEquals(newValue, args[0]);
-          assertEquals(newValue, args[1]);
+          assertEquals(settings.SITE_EXCEPTION_WILDCARD, args[1]);
           assertEquals(settings.ContentSettingsTypes.COOKIES, args[2]);
           assertEquals(cookieException.setting, args[3]);
           assertEquals(cookieException.incognito, args[4]);
@@ -1130,6 +1065,9 @@ suite('EditExceptionDialog', function() {
 
 suite('AddExceptionDialog', function() {
   /** @type {AddSiteDialogElement} */ let dialog;
+
+  /** @type {SiteSettingsPrefsBrowserProxy} */
+  let browserProxy;
 
   setup(function() {
     populateTestExceptions();

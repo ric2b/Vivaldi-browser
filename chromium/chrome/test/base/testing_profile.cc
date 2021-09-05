@@ -94,11 +94,11 @@
 #include "components/policy/core/common/policy_service.h"
 #include "components/policy/core/common/policy_service_impl.h"
 #include "components/policy/core/common/schema.h"
+#include "components/prefs/pref_notifier_impl.h"
 #include "components/prefs/testing_pref_store.h"
 #include "components/signin/public/identity_manager/identity_test_utils.h"
 #include "components/sync/model/fake_sync_change_processor.h"
 #include "components/sync/model/sync_error_factory_mock.h"
-#include "components/sync_preferences/pref_service_mock_factory.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "components/user_prefs/user_prefs.h"
@@ -153,7 +153,6 @@
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
 #include "chrome/browser/supervised_user/supervised_user_constants.h"
-#include "chrome/browser/supervised_user/supervised_user_pref_store.h"
 #include "chrome/browser/supervised_user/supervised_user_settings_service.h"
 #include "chrome/browser/supervised_user/supervised_user_settings_service_factory.h"
 #endif
@@ -368,7 +367,7 @@ void TestingProfile::CreateTempProfileDir() {
 
     base::FilePath fallback_dir(
         system_tmp_dir.AppendASCII("TestingProfilePath"));
-    base::DeleteFile(fallback_dir, true);
+    base::DeleteFileRecursively(fallback_dir);
     base::CreateDirectory(fallback_dir);
     if (!temp_dir_.Set(fallback_dir)) {
       // That shouldn't happen, but if it does, try to recover.
@@ -417,8 +416,8 @@ void TestingProfile::Init() {
   if (!IsOffTheRecord()) {
     SupervisedUserSettingsService* settings_service =
         SupervisedUserSettingsServiceFactory::GetForKey(key_.get());
-    TestingPrefStore* store = new TestingPrefStore();
-    settings_service->Init(store);
+    supervised_user_pref_store_ = new TestingPrefStore();
+    settings_service->Init(supervised_user_pref_store_);
     settings_service->MergeDataAndStartSyncing(
         syncer::SUPERVISED_USER_SETTINGS, syncer::SyncDataList(),
         std::unique_ptr<syncer::SyncChangeProcessor>(
@@ -426,7 +425,7 @@ void TestingProfile::Init() {
         std::unique_ptr<syncer::SyncErrorFactory>(
             new syncer::SyncErrorFactoryMock));
 
-    store->SetInitializationCompleted();
+    supervised_user_pref_store_->SetInitializationCompleted();
   }
 #endif
 
@@ -545,6 +544,9 @@ void TestingProfile::FinishInit() {
     // must be initialized when the testing profile finishes its initialization.
     signin_util::EnsureUserSignoutAllowedIsInitializedForProfile(this);
   }
+
+  if (original_profile_)
+    original_profile_->NotifyOffTheRecordProfileCreated(this);
 }
 
 TestingProfile::~TestingProfile() {
@@ -651,6 +653,23 @@ void TestingProfile::CreateBookmarkModel(bool delete_file) {
 void TestingProfile::CreateWebDataService() {
   WebDataServiceFactory::GetInstance()->SetTestingFactory(
       this, base::BindRepeating(&BuildWebDataService));
+}
+
+void TestingProfile::BlockUntilHistoryBackendDestroyed() {
+  // Only get the history service if it actually exists since the caller of the
+  // test should explicitly call CreateHistoryService to build it.
+  history::HistoryService* history_service =
+      HistoryServiceFactory::GetForProfileWithoutCreating(this);
+
+  // Nothing to destroy
+  if (!history_service) {
+    return;
+  }
+
+  base::RunLoop run_loop;
+  history_service->SetOnBackendDestroyTask(run_loop.QuitClosure());
+  HistoryServiceFactory::ShutdownForProfile(this);
+  run_loop.Run();
 }
 
 void TestingProfile::BlockUntilHistoryIndexIsRefreshed() {
@@ -832,20 +851,17 @@ void TestingProfile::CreateTestingPrefService() {
 void TestingProfile::CreatePrefServiceForSupervisedUser() {
   DCHECK(!prefs_.get());
   DCHECK(!supervised_user_id_.empty());
-  sync_preferences::PrefServiceMockFactory factory;
-  SupervisedUserSettingsService* supervised_user_settings =
-      SupervisedUserSettingsServiceFactory::GetForKey(GetProfileKey());
-  scoped_refptr<PrefStore> supervised_user_prefs =
-      base::MakeRefCounted<SupervisedUserPrefStore>(supervised_user_settings);
 
-  factory.set_supervised_user_prefs(supervised_user_prefs);
-
-  scoped_refptr<user_prefs::PrefRegistrySyncable> registry(
-      new user_prefs::PrefRegistrySyncable);
-
-  prefs_ = factory.CreateSyncable(registry.get());
-  RegisterUserProfilePrefs(registry.get());
+  // Construct testing_prefs_ by hand to add the supervised user pref store.
+  testing_prefs_ = new sync_preferences::TestingPrefServiceSyncable(
+      /*managed_prefs=*/new TestingPrefStore, supervised_user_pref_store_,
+      /*extension_prefs=*/new TestingPrefStore,
+      /*user_prefs=*/new TestingPrefStore,
+      /*recommended_prefs=*/new TestingPrefStore,
+      new user_prefs::PrefRegistrySyncable, new PrefNotifierImpl);
+  prefs_.reset(testing_prefs_);
   user_prefs::UserPrefs::Set(this, prefs_.get());
+  RegisterUserProfilePrefs(testing_prefs_->registry());
 }
 #endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
 
@@ -855,7 +871,7 @@ void TestingProfile::CreateIncognitoPrefService() {
   // Simplified version of ProfileImpl::GetOffTheRecordPrefs(). Note this
   // leaves testing_prefs_ unset.
   prefs_ = CreateIncognitoPrefServiceSyncable(original_profile_->prefs_.get(),
-                                              nullptr, nullptr);
+                                              nullptr);
   user_prefs::UserPrefs::Set(this, prefs_.get());
 }
 
@@ -1099,7 +1115,7 @@ TestingProfile::CreateNetworkContext(
     const base::FilePath& relative_partition_path) {
   if (network_context_) {
     mojo::Remote<network::mojom::NetworkContext> network_context_remote;
-    network_context_bindings_.AddBinding(
+    network_context_receivers_.Add(
         network_context_.get(),
         network_context_remote.BindNewPipeAndPassReceiver());
     return network_context_remote;

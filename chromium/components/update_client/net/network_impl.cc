@@ -13,7 +13,6 @@
 #include "net/http/http_response_headers.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "services/network/public/cpp/is_potentially_trustworthy.h"
-#include "services/network/public/cpp/resource_response.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
@@ -175,7 +174,7 @@ void NetworkFetcherImpl::DownloadToFile(
              DownloadToFileCompleteCallback download_to_file_complete_callback,
              base::FilePath file_path) {
             std::move(download_to_file_complete_callback)
-                .Run(file_path, simple_url_loader->NetError(),
+                .Run(simple_url_loader->NetError(),
                      simple_url_loader->GetContentSize());
           },
           simple_url_loader_.get(),
@@ -188,8 +187,7 @@ void NetworkFetcherImpl::OnResponseStartedCallback(
     const GURL& final_url,
     const network::mojom::URLResponseHead& response_head) {
   std::move(response_started_callback)
-      .Run(final_url,
-           response_head.headers ? response_head.headers->response_code() : -1,
+      .Run(response_head.headers ? response_head.headers->response_code() : -1,
            response_head.content_length);
 }
 

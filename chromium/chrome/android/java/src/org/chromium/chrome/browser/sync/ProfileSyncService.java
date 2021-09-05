@@ -5,25 +5,21 @@
 package org.chromium.chrome.browser.sync;
 
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
 import org.json.JSONArray;
 import org.json.JSONException;
 
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.NativeMethods;
-import org.chromium.chrome.browser.ChromeFeatureList;
-import org.chromium.chrome.browser.SyncFirstSetupCompleteSource;
 import org.chromium.components.sync.ModelType;
-import org.chromium.components.sync.Passphrase;
+import org.chromium.components.sync.PassphraseType;
 
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
-
-import org.chromium.chrome.browser.ChromeApplication;
 
 /**
  * JNI wrapper for the native ProfileSyncService.
@@ -123,11 +119,6 @@ public class ProfileSyncService {
                 ProfileSyncServiceJni.get().init(ProfileSyncService.this);
     }
 
-    @CalledByNative
-    private static long getProfileSyncServiceAndroid() {
-        return get().mNativeProfileSyncServiceAndroid;
-    }
-
     /**
      * Checks if the sync engine is initialized.
      *
@@ -135,6 +126,17 @@ public class ProfileSyncService {
      */
     public boolean isEngineInitialized() {
         return ProfileSyncServiceJni.get().isEngineInitialized(
+                mNativeProfileSyncServiceAndroid, ProfileSyncService.this);
+    }
+
+    /**
+     * Checks whether sync machinery is active.
+     *
+     * @return true if the transport state is active.
+     */
+    @VisibleForTesting
+    public boolean isTransportStateActive() {
+        return ProfileSyncServiceJni.get().isTransportStateActive(
                 mNativeProfileSyncServiceAndroid, ProfileSyncService.this);
     }
 
@@ -306,11 +308,6 @@ public class ProfileSyncService {
             assert mSetupInProgressCounter > 0;
             if (--mSetupInProgressCounter == 0) {
                 setSetupInProgress(false);
-                if (!ChromeApplication.isVivaldi() && !ChromeFeatureList.isEnabled(ChromeFeatureList.SYNC_MANUAL_START_ANDROID)) {
-                    // The user has finished setting up sync at least once.
-                    setFirstSetupComplete(
-                            SyncFirstSetupCompleteSource.ENGINE_INITIALIZED_WITH_AUTO_START);
-                }
             }
         }
     }
@@ -348,8 +345,7 @@ public class ProfileSyncService {
      * UI elements can update themselves.
      */
     @CalledByNative
-    @VisibleForTesting
-    public void syncStateChanged() {
+    protected void syncStateChanged() {
         for (SyncStateChangedListener listener : mListeners) {
             listener.syncStateChanged();
         }
@@ -375,11 +371,11 @@ public class ProfileSyncService {
      * This method should only be used if you want to know the raw value. For checking whether
      * we should ask the user for a passphrase, use isPassphraseRequiredForPreferredDataTypes().
      */
-    public @Passphrase.Type int getPassphraseType() {
+    public @PassphraseType int getPassphraseType() {
         assert isEngineInitialized();
         int passphraseType = ProfileSyncServiceJni.get().getPassphraseType(
                 mNativeProfileSyncServiceAndroid, ProfileSyncService.this);
-        if (passphraseType < 0 || passphraseType >= Passphrase.Type.NUM_ENTRIES) {
+        if (passphraseType < 0 || passphraseType > PassphraseType.MAX_VALUE) {
             throw new IllegalArgumentException();
         }
         return passphraseType;
@@ -447,6 +443,29 @@ public class ProfileSyncService {
     public boolean isPassphraseRequiredForPreferredDataTypes() {
         assert isEngineInitialized();
         return ProfileSyncServiceJni.get().isPassphraseRequiredForPreferredDataTypes(
+                mNativeProfileSyncServiceAndroid, ProfileSyncService.this);
+    }
+
+    /**
+     * Checks if trusted vault encryption keys are needed, independently of the currently-enabled
+     * data types.
+     *
+     * @return true if we need an encryption key.
+     */
+    public boolean isTrustedVaultKeyRequired() {
+        assert isEngineInitialized();
+        return ProfileSyncServiceJni.get().isTrustedVaultKeyRequired(
+                mNativeProfileSyncServiceAndroid, ProfileSyncService.this);
+    }
+
+    /**
+     * Checks if trusted vault encryption keys are needed to decrypt a currently-enabled data type.
+     *
+     * @return true if we need an encryption key for a type that is currently enabled.
+     */
+    public boolean isTrustedVaultKeyRequiredForPreferredDataTypes() {
+        assert isEngineInitialized();
+        return ProfileSyncServiceJni.get().isTrustedVaultKeyRequiredForPreferredDataTypes(
                 mNativeProfileSyncServiceAndroid, ProfileSyncService.this);
     }
 
@@ -541,6 +560,12 @@ public class ProfileSyncService {
                 mNativeProfileSyncServiceAndroid, ProfileSyncService.this);
     }
 
+    @VisibleForTesting
+    public long getNativeProfileSyncServiceForTest() {
+        return ProfileSyncServiceJni.get().getProfileSyncServiceForTest(
+                mNativeProfileSyncServiceAndroid, ProfileSyncService.this);
+    }
+
     /**
      * Returns the time when the last sync cycle was completed.
      *
@@ -551,20 +576,6 @@ public class ProfileSyncService {
     public long getLastSyncedTimeForTest() {
         return ProfileSyncServiceJni.get().getLastSyncedTimeForTest(
                 mNativeProfileSyncServiceAndroid, ProfileSyncService.this);
-    }
-
-    /**
-     * Overrides the Sync engine's NetworkResources. This is used to set up the Sync FakeServer for
-     * testing.
-     *
-     * @param networkResources the pointer to the NetworkResources created by the native code. It
-     *                         is assumed that the Java caller has ownership of this pointer;
-     *                         ownership is transferred as part of this call.
-     */
-    @VisibleForTesting
-    public void overrideNetworkResourcesForTest(long networkResources) {
-        ProfileSyncServiceJni.get().overrideNetworkResourcesForTest(
-                mNativeProfileSyncServiceAndroid, ProfileSyncService.this, networkResources);
     }
 
     @VisibleForTesting
@@ -646,9 +657,15 @@ public class ProfileSyncService {
                 long nativeProfileSyncServiceAndroid, ProfileSyncService caller);
         boolean isEncryptEverythingEnabled(
                 long nativeProfileSyncServiceAndroid, ProfileSyncService caller);
+        boolean isTransportStateActive(
+                long nativeProfileSyncServiceAndroid, ProfileSyncService caller);
         void enableEncryptEverything(
                 long nativeProfileSyncServiceAndroid, ProfileSyncService caller);
         boolean isPassphraseRequiredForPreferredDataTypes(
+                long nativeProfileSyncServiceAndroid, ProfileSyncService caller);
+        boolean isTrustedVaultKeyRequired(
+                long nativeProfileSyncServiceAndroid, ProfileSyncService caller);
+        boolean isTrustedVaultKeyRequiredForPreferredDataTypes(
                 long nativeProfileSyncServiceAndroid, ProfileSyncService caller);
         boolean isUsingSecondaryPassphrase(
                 long nativeProfileSyncServiceAndroid, ProfileSyncService caller);
@@ -698,10 +715,10 @@ public class ProfileSyncService {
                 long nativeProfileSyncServiceAndroid, ProfileSyncService caller);
         void setPassphrasePrompted(
                 long nativeProfileSyncServiceAndroid, ProfileSyncService caller, boolean prompted);
+        long getProfileSyncServiceForTest(
+                long nativeProfileSyncServiceAndroid, ProfileSyncService caller);
         long getLastSyncedTimeForTest(
                 long nativeProfileSyncServiceAndroid, ProfileSyncService caller);
-        void overrideNetworkResourcesForTest(long nativeProfileSyncServiceAndroid,
-                ProfileSyncService caller, long networkResources);
         void getAllNodes(long nativeProfileSyncServiceAndroid, ProfileSyncService caller,
                 GetAllNodesCallback callback);
     }

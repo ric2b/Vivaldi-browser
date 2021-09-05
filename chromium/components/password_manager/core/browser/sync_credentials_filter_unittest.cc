@@ -21,6 +21,7 @@
 #include "components/password_manager/core/browser/mock_password_store.h"
 #include "components/password_manager/core/browser/password_form_manager.h"
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
+#include "components/password_manager/core/browser/password_save_manager_impl.h"
 #include "components/password_manager/core/browser/stub_form_saver.h"
 #include "components/password_manager/core/browser/stub_password_manager_client.h"
 #include "components/password_manager/core/browser/stub_password_manager_driver.h"
@@ -31,7 +32,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
-#include "components/safe_browsing/common/safe_browsing_prefs.h"  // nogncheck
+#include "components/safe_browsing/core/common/safe_browsing_prefs.h"  // nogncheck
 #endif  // SYNC_PASSWORD_REUSE_DETECTION_ENABLED
 
 using autofill::PasswordForm;
@@ -116,7 +117,8 @@ class CredentialsFilterTest : public SyncUsernameTestBase {
                       driver_.AsWeakPtr(),
                       pending_.form_data,
                       &fetcher_,
-                      std::make_unique<StubFormSaver>(),
+                      std::make_unique<PasswordSaveManagerImpl>(
+                          std::make_unique<StubFormSaver>()),
                       nullptr /* metrics_recorder */),
         filter_(&client_,
                 base::BindRepeating(&SyncUsernameTestBase::sync_service,

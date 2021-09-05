@@ -2,101 +2,107 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-cr.define('extensions', function() {
-  'use strict';
+import 'chrome://resources/cr_elements/shared_style_css.m.js';
+import 'chrome://resources/cr_elements/shared_vars_css.m.js';
+import 'chrome://resources/cr_elements/md_select_css.m.js';
+import 'chrome://resources/polymer/v3_0/paper-styles/color.js';
+import './shortcut_input.js';
 
-  // The UI to display and manage keyboard shortcuts set for extension commands.
-  const KeyboardShortcuts = Polymer({
-    is: 'extensions-keyboard-shortcuts',
+import {CrContainerShadowBehavior} from 'chrome://resources/cr_elements/cr_container_shadow_behavior.m.js';
+import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-    behaviors: [CrContainerShadowBehavior, extensions.ItemBehavior],
+import {ItemBehavior} from './item_behavior.js';
+import {KeyboardShortcutDelegate} from './keyboard_shortcut_delegate.js';
 
-    properties: {
-      /** @type {!extensions.KeyboardShortcutDelegate} */
-      delegate: Object,
+// The UI to display and manage keyboard shortcuts set for extension commands.
+Polymer({
+  is: 'extensions-keyboard-shortcuts',
 
-      /** @type {Array<!chrome.developerPrivate.ExtensionInfo>} */
-      items: Array,
+  _template: html`{__html_template__}`,
 
-      /**
-       * Proxying the enum to be used easily by the html template.
-       * @private
-       */
-      CommandScope_: {
-        type: Object,
-        value: chrome.developerPrivate.CommandScope,
-      },
-    },
+  behaviors: [CrContainerShadowBehavior, ItemBehavior],
 
-    listeners: {
-      'view-enter-start': 'onViewEnter_',
-    },
+  properties: {
+    /** @type {!KeyboardShortcutDelegate} */
+    delegate: Object,
 
-    /** @private */
-    onViewEnter_: function() {
-      chrome.metricsPrivate.recordUserAction('Options_ExtensionCommands');
-    },
+    /** @type {Array<!chrome.developerPrivate.ExtensionInfo>} */
+    items: Array,
 
     /**
-     * @return {!Array<!chrome.developerPrivate.ExtensionInfo>}
+     * Proxying the enum to be used easily by the html template.
      * @private
      */
-    calculateShownItems_: function() {
-      return this.items.filter(function(item) {
-        return item.commands.length > 0;
-      });
+    CommandScope_: {
+      type: Object,
+      value: chrome.developerPrivate.CommandScope,
     },
+  },
 
-    /**
-     * A polymer bug doesn't allow for databinding of a string property as a
-     * boolean, but it is correctly interpreted from a function.
-     * Bug: https://github.com/Polymer/polymer/issues/3669
-     * @param {string} keybinding
-     * @return {boolean}
-     * @private
-     */
-    hasKeybinding_: function(keybinding) {
-      return !!keybinding;
-    },
+  listeners: {
+    'view-enter-start': 'onViewEnter_',
+  },
 
-    /**
-     * Determines whether to disable the dropdown menu for the command's scope.
-     * @param {!chrome.developerPrivate.Command} command
-     * @return {boolean}
-     * @private
-     */
-    computeScopeDisabled_: function(command) {
-      return command.isExtensionAction || !command.isActive;
-    },
+  /** @private */
+  onViewEnter_() {
+    chrome.metricsPrivate.recordUserAction('Options_ExtensionCommands');
+  },
 
-    /**
-     * This function exists to force trigger an update when CommandScope_
-     * becomes available.
-     * @param {string} scope
-     * @return {string}
-     */
-    triggerScopeChange_: function(scope) {
-      return scope;
-    },
+  /**
+   * @return {!Array<!chrome.developerPrivate.ExtensionInfo>}
+   * @private
+   */
+  calculateShownItems_() {
+    return this.items.filter(function(item) {
+      return item.commands.length > 0;
+    });
+  },
 
-    /** @private */
-    onCloseButtonClick_: function() {
-      this.fire('close');
-    },
+  /**
+   * A polymer bug doesn't allow for databinding of a string property as a
+   * boolean, but it is correctly interpreted from a function.
+   * Bug: https://github.com/Polymer/polymer/issues/3669
+   * @param {string} keybinding
+   * @return {boolean}
+   * @private
+   */
+  hasKeybinding_(keybinding) {
+    return !!keybinding;
+  },
 
-    /**
-     * @param {!{target: HTMLSelectElement, model: Object}} event
-     * @private
-     */
-    onScopeChanged_: function(event) {
-      this.delegate.updateExtensionCommandScope(
-          event.model.get('item.id'), event.model.get('command.name'),
-          /** @type {chrome.developerPrivate.CommandScope} */
-          (event.target.value));
-    },
-  });
+  /**
+   * Determines whether to disable the dropdown menu for the command's scope.
+   * @param {!chrome.developerPrivate.Command} command
+   * @return {boolean}
+   * @private
+   */
+  computeScopeDisabled_(command) {
+    return command.isExtensionAction || !command.isActive;
+  },
 
-  return {
-    KeyboardShortcuts: KeyboardShortcuts,
-  };
+  /**
+   * This function exists to force trigger an update when CommandScope_
+   * becomes available.
+   * @param {string} scope
+   * @return {string}
+   */
+  triggerScopeChange_(scope) {
+    return scope;
+  },
+
+  /** @private */
+  onCloseButtonClick_() {
+    this.fire('close');
+  },
+
+  /**
+   * @param {!{target: HTMLSelectElement, model: Object}} event
+   * @private
+   */
+  onScopeChanged_(event) {
+    this.delegate.updateExtensionCommandScope(
+        event.model.get('item.id'), event.model.get('command.name'),
+        /** @type {chrome.developerPrivate.CommandScope} */
+        (event.target.value));
+  },
 });

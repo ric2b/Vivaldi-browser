@@ -216,7 +216,7 @@ class Banners extends cr.EventTarget {
     const close = util.createChild(wrapper, 'banner-close', 'button');
     close.setAttribute('aria-label', str('DRIVE_WELCOME_DISMISS'));
     close.id = 'welcome-dismiss';
-    close.tabIndex = 22;
+    close.tabIndex = 0;
     close.addEventListener('click', this.closeWelcomeBanner_.bind(this));
 
     const message = util.createChild(wrapper, 'drive-welcome-message');
@@ -232,7 +232,7 @@ class Banners extends cr.EventTarget {
     const more = util.createChild(links, 'plain-link', 'a');
     more.textContent = str('DRIVE_LEARN_MORE');
     more.href = str('GOOGLE_DRIVE_OVERVIEW_URL');
-    more.tabIndex = 21;  // See: go/filesapp-tabindex.
+    more.tabIndex = 0;
     more.id = 'drive-welcome-link';
     more.target = '_blank';
 
@@ -708,9 +708,10 @@ class Banners extends cr.EventTarget {
   maybeShowAuthFailBanner_() {
     const connection = this.volumeManager_.getDriveConnectionState();
     const showDriveNotReachedMessage = this.isOnCurrentProfileDrive() &&
-        connection.type == VolumeManagerCommon.DriveConnectionType.OFFLINE &&
+        connection.type ==
+            chrome.fileManagerPrivate.DriveConnectionStateType.OFFLINE &&
         connection.reason ==
-            VolumeManagerCommon.DriveConnectionReason.NOT_READY;
+            chrome.fileManagerPrivate.DriveOfflineReason.NOT_READY;
     this.authFailedBanner_.hidden = !showDriveNotReachedMessage;
   }
 }

@@ -2,7 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// clang-format off
+// #import {PrivacyPageBrowserProxyImpl, StatusAction, SyncBrowserProxyImpl} from 'chrome://settings/settings.js';
+// #import 'chrome://settings/lazy_load.js';
+// #import {TestSyncBrowserProxy} from 'chrome://test/settings/test_sync_browser_proxy.m.js';
+// #import {TestPrivacyPageBrowserProxy} from 'chrome://test/settings/test_privacy_page_browser_proxy.m.js';
+// #import {isChromeOS} from 'chrome://resources/js/cr.m.js';
+// #import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+// #import {isVisible, isChildVisible, eventToPromise} from 'chrome://test/test_util.m.js';
+// clang-format on
+
 cr.define('settings_personalization_options', function() {
+
   suite('PersonalizationOptionsTests_AllBuilds', function() {
     /** @type {settings.TestPrivacyPageBrowserProxy} */
     let testBrowserProxy;
@@ -16,6 +27,7 @@ cr.define('settings_personalization_options', function() {
     suiteSetup(function() {
       loadTimeData.overrideValues({
         driveSuggestAvailable: true,
+        privacySettingsRedesignEnabled: true,
       });
     });
 
@@ -27,6 +39,10 @@ cr.define('settings_personalization_options', function() {
       PolymerTest.clearBody();
       testElement = document.createElement('settings-personalization-options');
       testElement.prefs = {
+        signin: {
+          allowed_on_next_startup:
+              {type: chrome.settingsPrivate.PrefType.BOOLEAN, value: true},
+        },
         profile: {password_manager_leak_detection: {value: true}},
         safebrowsing:
             {enabled: {value: true}, scout_reporting_enabled: {value: true}},
@@ -42,7 +58,6 @@ cr.define('settings_personalization_options', function() {
     test('DriveSearchSuggestControl', function() {
       assertFalse(!!testElement.$$('#driveSuggestControl'));
 
-      testElement.unifiedConsentEnabled = true;
       testElement.syncStatus = {
         signedIn: true,
         statusAction: settings.StatusAction.NO_ACTION
@@ -58,84 +73,111 @@ cr.define('settings_personalization_options', function() {
       assertFalse(!!testElement.$$('#driveSuggestControl'));
     });
 
-    test('leakDetectionToggleSignedOutWithFalsePref', function() {
-      testElement.set(
-          'prefs.profile.password_manager_leak_detection.value', false);
-      testElement.syncStatus = {signedIn: false};
-      Polymer.dom.flush();
-
-      assertTrue(testElement.$.passwordsLeakDetectionCheckbox.disabled);
-      assertFalse(testElement.$.passwordsLeakDetectionCheckbox.checked);
-      assertEquals('', testElement.$.passwordsLeakDetectionCheckbox.subLabel);
-    });
-
-    test('leakDetectionToggleSignedOutWithTruePref', function() {
-      testElement.syncStatus = {signedIn: false};
-      Polymer.dom.flush();
-
-      assertTrue(testElement.$.passwordsLeakDetectionCheckbox.disabled);
-      assertFalse(testElement.$.passwordsLeakDetectionCheckbox.checked);
-      assertEquals(
-          loadTimeData.getString(
-              'passwordsLeakDetectionSignedOutEnabledDescription'),
-          testElement.$.passwordsLeakDetectionCheckbox.subLabel);
+    /**
+     *  TODO(crbug.com/1032584): This test verifies that the link doctor setting
+     * is removed as part of the privacy settings redesign. Consider removing
+     * the test once the redesign is fully launched.
+     */
+    test('LinkDoctor', function() {
+      assertFalse(!!testElement.$$('#linkDoctor'));
     });
 
     if (!cr.isChromeOS) {
-      test('leakDetectionToggleSignedInNotSyncingWithFalsePref', function() {
-        testElement.set(
-            'prefs.profile.password_manager_leak_detection.value', false);
+      test('signinAllowedToggle', function() {
+        const toggle = testElement.$.signinAllowedToggle;
+        assertTrue(test_util.isVisible(toggle));
+
         testElement.syncStatus = {signedIn: false};
-        sync_test_util.simulateStoredAccounts([
-          {
-            fullName: 'testName',
-            givenName: 'test',
-            email: 'test@test.com',
-          },
-        ]);
-        Polymer.dom.flush();
+        // Check initial setup.
+        assertTrue(toggle.checked);
+        assertTrue(testElement.prefs.signin.allowed_on_next_startup.value);
+        assertFalse(!!testElement.$.toast.open);
 
-        assertFalse(testElement.$.passwordsLeakDetectionCheckbox.disabled);
-        assertFalse(testElement.$.passwordsLeakDetectionCheckbox.checked);
-        assertEquals('', testElement.$.passwordsLeakDetectionCheckbox.subLabel);
-      });
+        // When the user is signed out, clicking the toggle should work
+        // normally and the restart toast should be opened.
+        toggle.click();
+        assertFalse(toggle.checked);
+        assertFalse(testElement.prefs.signin.allowed_on_next_startup.value);
+        assertTrue(testElement.$.toast.open);
 
-      test('leakDetectionToggleSignedInNotSyncingWithTruePref', function() {
-        testElement.syncStatus = {signedIn: false};
-        sync_test_util.simulateStoredAccounts([
-          {
-            fullName: 'testName',
-            givenName: 'test',
-            email: 'test@test.com',
-          },
-        ]);
-        Polymer.dom.flush();
+        // Clicking it again, turns the toggle back on. The toast remains
+        // open.
+        toggle.click();
+        assertTrue(toggle.checked);
+        assertTrue(testElement.prefs.signin.allowed_on_next_startup.value);
+        assertTrue(testElement.$.toast.open);
 
-        assertFalse(testElement.$.passwordsLeakDetectionCheckbox.disabled);
-        assertTrue(testElement.$.passwordsLeakDetectionCheckbox.checked);
-        assertEquals('', testElement.$.passwordsLeakDetectionCheckbox.subLabel);
+        // Reset toast.
+        testElement.showRestartToast_ = false;
+        assertFalse(testElement.$.toast.open);
+
+        // When the user is part way through sync setup, the toggle should be
+        // disabled in an on state.
+        testElement.syncStatus = {firstSetupInProgress: true};
+        assertTrue(toggle.disabled);
+        assertTrue(toggle.checked);
+
+        testElement.syncStatus = {signedIn: true};
+        // When the user is signed in, clicking the toggle should open the
+        // sign-out dialog.
+        assertFalse(!!testElement.$$('settings-signout-dialog'));
+        toggle.click();
+        return test_util.eventToPromise('cr-dialog-open', testElement)
+            .then(function() {
+              Polymer.dom.flush();
+              // The toggle remains on.
+              assertTrue(toggle.checked);
+              assertTrue(
+                  testElement.prefs.signin.allowed_on_next_startup.value);
+              assertFalse(testElement.$.toast.open);
+
+              const signoutDialog = testElement.$$('settings-signout-dialog');
+              assertTrue(!!signoutDialog);
+              assertTrue(signoutDialog.$$('#dialog').open);
+
+              // The user clicks cancel.
+              const cancel = signoutDialog.$$('#disconnectCancel');
+              cancel.click();
+
+              return test_util.eventToPromise('close', signoutDialog);
+            })
+            .then(function() {
+              Polymer.dom.flush();
+              assertFalse(!!testElement.$$('settings-signout-dialog'));
+
+              // After the dialog is closed, the toggle remains turned on.
+              assertTrue(toggle.checked);
+              assertTrue(
+                  testElement.prefs.signin.allowed_on_next_startup.value);
+              assertFalse(testElement.$.toast.open);
+
+              // The user clicks the toggle again.
+              toggle.click();
+              return test_util.eventToPromise('cr-dialog-open', testElement);
+            })
+            .then(function() {
+              Polymer.dom.flush();
+              const signoutDialog = testElement.$$('settings-signout-dialog');
+              assertTrue(!!signoutDialog);
+              assertTrue(signoutDialog.$$('#dialog').open);
+
+              // The user clicks confirm, which signs them out.
+              const disconnectConfirm = signoutDialog.$$('#disconnectConfirm');
+              disconnectConfirm.click();
+
+              return test_util.eventToPromise('close', signoutDialog);
+            })
+            .then(function() {
+              Polymer.dom.flush();
+              // After the dialog is closed, the toggle is turned off and the
+              // toast is shown.
+              assertFalse(toggle.checked);
+              assertFalse(
+                  testElement.prefs.signin.allowed_on_next_startup.value);
+              assertTrue(testElement.$.toast.open);
+            });
       });
     }
-
-    test('leakDetectionToggleSignedInAndSyncingWithFalsePref', function() {
-      testElement.set(
-          'prefs.profile.password_manager_leak_detection.value', false);
-      testElement.syncStatus = {signedIn: true};
-      Polymer.dom.flush();
-
-      assertFalse(testElement.$.passwordsLeakDetectionCheckbox.disabled);
-      assertFalse(testElement.$.passwordsLeakDetectionCheckbox.checked);
-      assertEquals('', testElement.$.passwordsLeakDetectionCheckbox.subLabel);
-    });
-
-    test('leakDetectionToggleSignedInAndSyncingWithTruePref', function() {
-      testElement.syncStatus = {signedIn: true};
-      Polymer.dom.flush();
-
-      assertFalse(testElement.$.passwordsLeakDetectionCheckbox.disabled);
-      assertTrue(testElement.$.passwordsLeakDetectionCheckbox.checked);
-      assertEquals('', testElement.$.passwordsLeakDetectionCheckbox.subLabel);
-    });
   });
 
   suite('PersonalizationOptionsTests_OfficialBuild', function() {
@@ -157,8 +199,7 @@ cr.define('settings_personalization_options', function() {
       testElement.remove();
     });
 
-    test('UnifiedConsent spellcheck toggle', function() {
-      testElement.unifiedConsentEnabled = true;
+    test('Spellcheck toggle', function() {
       testElement.prefs = {
         profile: {password_manager_leak_detection: {value: true}},
         safebrowsing:
@@ -191,37 +232,41 @@ cr.define('settings_personalization_options', function() {
       testElement.$.spellCheckControl.click();
       assertTrue(testElement.prefs.spellcheck.use_spelling_service.value);
     });
+  });
 
-    test('NoUnifiedConsent spellcheck toggle', function() {
-      testElement.unifiedConsentEnabled = false;
-      testElement.prefs = {
-        profile: {password_manager_leak_detection: {value: true}},
-        safebrowsing:
-            {enabled: {value: true}, scout_reporting_enabled: {value: true}},
-        spellcheck: {dictionaries: {value: ['en-US']}}
-      };
-      Polymer.dom.flush();
-      assertFalse(testElement.$.spellCheckControl.hidden);
+  suite('PersonalizationOptionsTests_AllBuilds_Old', function() {
+    /**
+     * Tests for changes in the personalization page when the
+     * |privacySettingsRedesignEnabled| flag is off.
+     * TODO(crbug.com/1032584): Remove this suite when the redesign is fully
+     * launched and the flag is removed.
+     */
 
-      testElement.prefs = {
-        profile: {password_manager_leak_detection: {value: true}},
-        safebrowsing:
-            {enabled: {value: true}, scout_reporting_enabled: {value: true}},
-        spellcheck: {dictionaries: {value: []}}
-      };
-      Polymer.dom.flush();
-      assertFalse(testElement.$.spellCheckControl.hidden);
+    /** @type {SettingsPersonalizationOptionsElement} */
+    let testElement;
 
-      testElement.prefs = {
-        profile: {password_manager_leak_detection: {value: true}},
-        safebrowsing:
-            {enabled: {value: true}, scout_reporting_enabled: {value: true}},
-        browser: {enable_spellchecking: {value: false}},
-        spellcheck: {use_spelling_service: {value: false}}
-      };
+    suiteSetup(function() {
+      loadTimeData.overrideValues({
+        privacySettingsRedesignEnabled: false,
+      });
+    });
+
+    setup(function() {
+      PolymerTest.clearBody();
+      testElement = document.createElement('settings-personalization-options');
+      document.body.appendChild(testElement);
       Polymer.dom.flush();
-      testElement.$.spellCheckControl.click();
-      assertTrue(testElement.prefs.spellcheck.use_spelling_service.value);
+    });
+
+    teardown(function() {
+      testElement.remove();
+    });
+
+    test('LinkDoctor', function() {
+      // The Link Doctor setting exists if the |privacySettingsRedesignEnabled|
+      // has not been turned on.
+      assertTrue(test_util.isChildVisible(testElement, '#linkDoctor'));
     });
   });
+  // #cr_define_end
 });

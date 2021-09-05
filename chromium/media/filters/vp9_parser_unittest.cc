@@ -648,7 +648,7 @@ TEST_F(Vp9ParserTest, StreamFileParsingWithContextUpdate) {
     } else {
       EXPECT_TRUE(should_update);
       ReadContext(&frame_context);
-      context_refresh_cb.Run(frame_context);
+      std::move(context_refresh_cb).Run(frame_context);
     }
 
     ++num_parsed_frames;
@@ -680,7 +680,7 @@ TEST_F(Vp9ParserTest, AwaitingContextUpdate) {
   // After update, parse should be ok.
   auto context_refresh_cb = GetContextRefreshCb(fhdr);
   EXPECT_FALSE(!context_refresh_cb);
-  context_refresh_cb.Run(frame_context);
+  std::move(context_refresh_cb).Run(frame_context);
   EXPECT_EQ(Vp9Parser::kOk, ParseNextFrame(&fhdr));
 
   // Make sure it parsed the 2nd frame.
@@ -764,7 +764,7 @@ TEST_P(Vp9ParserTest, VerifyFirstFrame) {
             fhdr.uncompressed_header_size);
 }
 
-INSTANTIATE_TEST_SUITE_P(, Vp9ParserTest, ::testing::ValuesIn(kTestParams));
+INSTANTIATE_TEST_SUITE_P(All, Vp9ParserTest, ::testing::ValuesIn(kTestParams));
 
 TEST_F(Vp9ParserTest, CheckColorSpace) {
   Vp9FrameHeader fhdr{};

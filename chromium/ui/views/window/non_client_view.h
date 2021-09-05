@@ -5,6 +5,8 @@
 #ifndef UI_VIEWS_WINDOW_NON_CLIENT_VIEW_H_
 #define UI_VIEWS_WINDOW_NON_CLIENT_VIEW_H_
 
+#include <memory>
+
 #include "base/macros.h"
 #include "build/build_config.h"
 #include "ui/views/view.h"
@@ -210,14 +212,7 @@ class VIEWS_EXPORT NonClientView : public View, public ViewTargeterDelegate {
 
   // Get/Set client_view property.
   ClientView* client_view() const { return client_view_; }
-  void set_client_view(ClientView* client_view) {
-    client_view_ = client_view;
-  }
-
-  // Layout just the frame view. This is necessary on Windows when non-client
-  // metrics such as the position of the window controls changes independently
-  // of a window resize message.
-  void LayoutFrameView();
+  void set_client_view(ClientView* client_view) { client_view_ = client_view; }
 
   // Set the accessible name of this view.
   void SetAccessibleName(const base::string16& name);
@@ -228,7 +223,6 @@ class VIEWS_EXPORT NonClientView : public View, public ViewTargeterDelegate {
   gfx::Size GetMaximumSize() const override;
   void Layout() override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
-
   views::View* GetTooltipHandlerForPoint(const gfx::Point& point) override;
 
  protected:

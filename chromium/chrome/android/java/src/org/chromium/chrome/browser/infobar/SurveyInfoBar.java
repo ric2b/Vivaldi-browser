@@ -17,7 +17,9 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.survey.SurveyController;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tab.Tab.TabHidingType;
+import org.chromium.chrome.browser.tab.TabHidingType;
+import org.chromium.chrome.browser.tab.TabUtils;
+import org.chromium.chrome.browser.ui.messages.infobar.InfoBarCompactLayout;
 import org.chromium.chrome.browser.util.AccessibilityUtil;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.text.NoUnderlineClickableSpan;
@@ -100,7 +102,7 @@ public class SurveyInfoBar extends InfoBar {
             }
 
             @Override
-            public void onInteractabilityChanged(boolean isInteractable) {
+            public void onInteractabilityChanged(Tab tab, boolean isInteractable) {
                 mDelegate.onSurveyInfoBarTabInteractabilityChanged(isInteractable);
             }
         });
@@ -120,7 +122,7 @@ public class SurveyInfoBar extends InfoBar {
         prompt.setText(infoBarText);
         prompt.setMovementMethod(LinkMovementMethod.getInstance());
         prompt.setGravity(Gravity.CENTER_VERTICAL);
-        ApiCompatibilityUtils.setTextAppearance(prompt, R.style.TextAppearance_BlackTitle1);
+        ApiCompatibilityUtils.setTextAppearance(prompt, R.style.TextAppearance_TextLarge_Primary);
         addAccessibilityClickListener(prompt, tab);
         layout.addContent(prompt, 1f);
     }
@@ -175,7 +177,7 @@ public class SurveyInfoBar extends InfoBar {
         mDelegate.onSurveyTriggered();
 
         SurveyController.getInstance().showSurveyIfAvailable(
-                tab.getActivity(), mSiteId, mShowAsBottomSheet, mDisplayLogoResId);
+                TabUtils.getActivity(tab), mSiteId, mShowAsBottomSheet, mDisplayLogoResId);
         super.onCloseButtonClicked();
     }
 

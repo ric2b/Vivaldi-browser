@@ -10,14 +10,13 @@
 #include "base/test/bind_test_util.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/mock_callback.h"
-#include "base/test/mock_entropy_provider.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_mock_time_task_runner.h"
-#include "chrome/browser/android/chrome_feature_list.h"
 #include "chrome/browser/android/explore_sites/catalog.pb.h"
 #include "chrome/browser/android/explore_sites/explore_sites_feature.h"
 #include "chrome/browser/android/explore_sites/explore_sites_types.h"
+#include "chrome/browser/flags/android/chrome_feature_list.h"
 #include "net/http/http_request_headers.h"
 #include "net/http/http_status_code.h"
 #include "net/url_request/url_request_status.h"
@@ -107,7 +106,6 @@ class ExploreSitesFetcherTest : public testing::Test {
   base::test::SingleThreadTaskEnvironment task_environment_{
       base::test::SingleThreadTaskEnvironment::MainThreadType::IO,
       base::test::SingleThreadTaskEnvironment::TimeSource::MOCK_TIME};
-  std::unique_ptr<base::FieldTrialList> field_trial_list_;
   base::test::ScopedFeatureList scoped_feature_list_;
   std::unique_ptr<base::HistogramTester> histogram_tester_;
 };
@@ -131,8 +129,6 @@ void ExploreSitesFetcherTest::SetUp() {
         EXPECT_TRUE(request.url.is_valid() && !request.url.is_empty());
         last_resource_request = request;
       }));
-  field_trial_list_ = std::make_unique<base::FieldTrialList>(
-      std::make_unique<base::MockEntropyProvider>());
 }
 
 ExploreSitesRequestStatus ExploreSitesFetcherTest::RunFetcherWithNetError(

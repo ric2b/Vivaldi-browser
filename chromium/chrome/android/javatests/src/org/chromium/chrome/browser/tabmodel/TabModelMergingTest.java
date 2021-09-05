@@ -23,19 +23,21 @@ import org.junit.runner.RunWith;
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ApplicationStatus.ActivityStateListener;
-import org.chromium.base.ContextUtils;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.base.test.util.UrlUtils;
-import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.ChromeTabbedActivity2;
+import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.multiwindow.MultiInstanceManager;
 import org.chromium.chrome.browser.multiwindow.MultiWindowTestHelper;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
+import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
+import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabPersistentStoreTest.MockTabPersistentStoreObserver;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
@@ -83,11 +85,10 @@ public class TabModelMergingTest {
     public void setUp() throws Exception {
         mActivityTestRule.startMainActivityOnBlankPage();
         // Make sure file migrations don't run as they are unnecessary since app data was cleared.
-        ContextUtils.getAppSharedPreferences().edit().putBoolean(
-                TabbedModeTabPersistencePolicy.PREF_HAS_RUN_FILE_MIGRATION, true).apply();
-        ContextUtils.getAppSharedPreferences().edit().putBoolean(
-                TabbedModeTabPersistencePolicy.PREF_HAS_RUN_MULTI_INSTANCE_FILE_MIGRATION, true)
-                        .apply();
+        SharedPreferencesManager prefs = SharedPreferencesManager.getInstance();
+        prefs.writeBoolean(ChromePreferenceKeys.TABMODEL_HAS_RUN_FILE_MIGRATION, true);
+        prefs.writeBoolean(
+                ChromePreferenceKeys.TABMODEL_HAS_RUN_MULTI_INSTANCE_FILE_MIGRATION, true);
 
         // Some of the logic for when to trigger a merge depends on whether the activity is in
         // multi-window mode. Set isInMultiWindowMode to true to avoid merging unexpectedly.
@@ -167,21 +168,21 @@ public class TabModelMergingTest {
         mMergeIntoActivity2ExpectedTabs = new String[7];
         for (int i = 0; i < 4; i++) {
             mMergeIntoActivity1ExpectedTabs[i] =
-                    mActivity1.getTabModelSelector().getModel(false).getTabAt(i).getUrl();
+                    mActivity1.getTabModelSelector().getModel(false).getTabAt(i).getUrlString();
             mMergeIntoActivity2ExpectedTabs[i + 3] =
-                    mActivity1.getTabModelSelector().getModel(false).getTabAt(i).getUrl();
+                    mActivity1.getTabModelSelector().getModel(false).getTabAt(i).getUrlString();
         }
         for (int i = 0; i < 3; i++) {
             mMergeIntoActivity2ExpectedTabs[i] =
-                    mActivity2.getTabModelSelector().getModel(false).getTabAt(i).getUrl();
+                    mActivity2.getTabModelSelector().getModel(false).getTabAt(i).getUrlString();
             mMergeIntoActivity1ExpectedTabs[i + 4] =
-                    mActivity2.getTabModelSelector().getModel(false).getTabAt(i).getUrl();
+                    mActivity2.getTabModelSelector().getModel(false).getTabAt(i).getUrlString();
         }
     }
 
     private void mergeTabsAndAssert(final ChromeTabbedActivity activity,
             final String[] expectedTabUrls) {
-        String selectedTabUrl = activity.getTabModelSelector().getCurrentTab().getUrl();
+        String selectedTabUrl = activity.getTabModelSelector().getCurrentTab().getUrlString();
         mergeTabsAndAssert(activity, expectedTabUrls, expectedTabUrls.length, selectedTabUrl);
     }
 
@@ -256,12 +257,12 @@ public class TabModelMergingTest {
 
         // Assert that the correct tab is selected.
         Assert.assertEquals("Wrong tab selected", expectedSelectedTabUrl,
-                activity.getTabModelSelector().getCurrentTab().getUrl());
+                activity.getTabModelSelector().getCurrentTab().getUrlString());
 
         // Assert that tabs are in the correct order.
         for (int i = 0; i < expectedTabUrls.length; i++) {
             Assert.assertEquals("Wrong tab at position " + i, expectedTabUrls[i],
-                    activity.getTabModelSelector().getModel(false).getTabAt(i).getUrl());
+                    activity.getTabModelSelector().getModel(false).getTabAt(i).getUrlString());
         }
     }
 
@@ -285,7 +286,8 @@ public class TabModelMergingTest {
     @LargeTest
     @Feature({"TabPersistentStore", "MultiWindow"})
     public void testMergeOnColdStart() {
-        String expectedSelectedUrl = mActivity1.getTabModelSelector().getCurrentTab().getUrl();
+        String expectedSelectedUrl =
+                mActivity1.getTabModelSelector().getCurrentTab().getUrlString();
 
         // Create an intent to launch a new ChromeTabbedActivity.
         Intent intent = createChromeTabbedActivityIntent(mActivity1);
@@ -327,7 +329,8 @@ public class TabModelMergingTest {
     @LargeTest
     @Feature({"TabPersistentStore", "MultiWindow"})
     public void testMergeOnColdStartFromChromeTabbedActivity2() throws Exception {
-        String expectedSelectedUrl = mActivity2.getTabModelSelector().getCurrentTab().getUrl();
+        String expectedSelectedUrl =
+                mActivity2.getTabModelSelector().getCurrentTab().getUrlString();
 
         MockTabPersistentStoreObserver mockObserver = new MockTabPersistentStoreObserver();
         TabModelSelectorImpl tabModelSelector =
@@ -391,6 +394,7 @@ public class TabModelMergingTest {
         // Send a main intent to restart ChromeTabbedActivity2.
         Intent CTA2MainIntent = new Intent(Intent.ACTION_MAIN);
         CTA2MainIntent.setClassName(CTA2PackageName, CTA2ClassName);
+        CTA2MainIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         InstrumentationRegistry.getInstrumentation().startActivitySync(CTA2MainIntent);
 
         mNewCTA2CallbackHelper.waitForCallback(0);
@@ -475,7 +479,7 @@ public class TabModelMergingTest {
         Assert.assertEquals("Wrong number of tabs in ChromeTabbedActivity2", 4,
                 mActivity2.getTabModelSelector().getTotalTabCount());
 
-        String selectedUrl = mActivity1.getTabModelSelector().getCurrentTab().getUrl();
+        String selectedUrl = mActivity1.getTabModelSelector().getCurrentTab().getUrlString();
         mergeTabsAndAssert(mActivity1, mMergeIntoActivity1ExpectedTabs, 9, selectedUrl);
     }
 }

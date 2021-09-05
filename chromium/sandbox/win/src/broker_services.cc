@@ -245,6 +245,16 @@ DWORD WINAPI BrokerServicesBase::TargetEventsThread(PVOID param) {
       // that jobs can send and some of them depend on the job attributes set.
       JobTracker* tracker = reinterpret_cast<JobTracker*>(key);
 
+      // Processes may be added to a job after the process count has
+      // reached zero, leading us to manipulate a freed JobTracker
+      // object or job handle (as the key is no longer valid). We
+      // therefore check if the tracker has already been deleted.
+      if (std::find_if(jobs.begin(), jobs.end(), [&](auto&& p) -> bool {
+            return p.get() == tracker;
+          }) == jobs.end()) {
+        CHECK(false);
+      }
+
       switch (events) {
         case JOB_OBJECT_MSG_ACTIVE_PROCESS_ZERO: {
           // The job object has signaled that the last process associated
@@ -254,9 +264,11 @@ DWORD WINAPI BrokerServicesBase::TargetEventsThread(PVOID param) {
           HANDLE job_handle = tracker->job.Get();
 
           // Erase by comparing with the job handle.
-          jobs.erase(std::remove_if(
-              jobs.begin(), jobs.end(),
-              [&](auto&& p) -> bool { return p->job.Get() == job_handle; }));
+          jobs.erase(std::remove_if(jobs.begin(), jobs.end(),
+                                    [&](auto&& p) -> bool {
+                                      return p->job.Get() == job_handle;
+                                    }),
+                     jobs.end());
           break;
         }
 
@@ -345,10 +357,12 @@ DWORD WINAPI BrokerServicesBase::TargetEventsThread(PVOID param) {
       tracker->wait_handle = INVALID_HANDLE_VALUE;
 
       // PID is unique until the process handle is closed in dtor.
-      processes.erase(std::remove_if(
-          processes.begin(), processes.end(), [&](auto&& p) -> bool {
-            return p->process_id == tracker->process_id;
-          }));
+      processes.erase(std::remove_if(processes.begin(), processes.end(),
+                                     [&](auto&& p) -> bool {
+                                       return p->process_id ==
+                                              tracker->process_id;
+                                     }),
+                      processes.end());
 
     } else if (THREAD_CTRL_GET_POLICY_INFO == key) {
       // Clone the policies for sandbox diagnostics.
@@ -465,7 +479,7 @@ ResultCode BrokerServicesBase::SpawnTarget(const wchar_t* exe_path,
   std::vector<HANDLE> inherited_handle_list;
   DWORD child_process_creation = PROCESS_CREATION_CHILD_PROCESS_RESTRICTED;
 
-  base::string16 desktop = policy_base->GetAlternateDesktop();
+  std::wstring desktop = policy_base->GetAlternateDesktop();
   if (!desktop.empty()) {
     startup_info.startup_info()->lpDesktop =
         const_cast<wchar_t*>(desktop.c_str());

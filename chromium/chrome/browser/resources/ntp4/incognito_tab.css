@@ -113,19 +113,28 @@ em {
 
 #cookie-controls-description {
   flex: 1;
-  padding-inline-end: 20px;
+  padding-inline-end: 12px;
 }
 
 #cookie-controls-description em {
   display: block;
 }
 
-#cookie-controls-toggle {
+#cookie-controls-toggle,
+#cookie-controls-tooltip-icon {
   flex: none;
 }
 
 #cookie-controls-toggle:not(:defined) {
   width: 34px;
+}
+
+#cookie-controls-tooltip-icon {
+  margin-inline-end: 24px; /* var(--cr-controlled-by-spacing) */
+}
+
+#cookie-controls-tooltip-icon:not(:defined) {
+  width: 20px; /* var(--cr-icon-size) */
 }
 
 /** Layout ------------------------------------------------------------------ */

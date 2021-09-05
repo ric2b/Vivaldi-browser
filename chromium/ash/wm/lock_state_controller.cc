@@ -12,11 +12,13 @@
 #include "ash/cancel_mode.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/cpp/shutdown_controller.h"
+#include "ash/root_window_controller.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "ash/shell_delegate.h"
 #include "ash/shutdown_reason.h"
 #include "ash/wallpaper/wallpaper_controller_impl.h"
+#include "ash/wallpaper/wallpaper_widget_controller.h"
 #include "ash/wm/session_state_animator.h"
 #include "ash/wm/session_state_animator_impl.h"
 #include "base/bind.h"
@@ -144,12 +146,13 @@ bool LockStateController::ShutdownRequested() {
 void LockStateController::CancelLockAnimation() {
   VLOG(1) << "CancelLockAnimation";
   animating_lock_ = false;
-  Shell::Get()->wallpaper_controller()->UpdateWallpaperBlur(false);
-  base::Closure next_animation_starter =
-      base::Bind(&LockStateController::LockAnimationCancelled,
-                 weak_ptr_factory_.GetWeakPtr());
+  Shell::Get()->wallpaper_controller()->RestoreWallpaperPropertyForLockState(
+      saved_property_);
+  base::OnceClosure next_animation_starter =
+      base::BindOnce(&LockStateController::LockAnimationCancelled,
+                     weak_ptr_factory_.GetWeakPtr());
   SessionStateAnimator::AnimationSequence* animation_sequence =
-      animator_->BeginAnimationSequence(next_animation_starter);
+      animator_->BeginAnimationSequence(std::move(next_animation_starter));
 
   animation_sequence->StartAnimation(
       SessionStateAnimator::NON_LOCK_SCREEN_CONTAINERS,
@@ -313,12 +316,15 @@ void LockStateController::OnRealPowerTimeout() {
 void LockStateController::PreLockAnimation(
     SessionStateAnimator::AnimationSpeed speed,
     bool request_lock_on_completion) {
-  Shell::Get()->wallpaper_controller()->UpdateWallpaperBlur(true);
-  base::Closure next_animation_starter =
-      base::Bind(&LockStateController::PreLockAnimationFinished,
-                 weak_ptr_factory_.GetWeakPtr(), request_lock_on_completion);
+  saved_property_ = Shell::GetPrimaryRootWindowController()
+                        ->wallpaper_widget_controller()
+                        ->GetWallpaperProperty();
+  Shell::Get()->wallpaper_controller()->UpdateWallpaperBlurForLockState(true);
+  base::OnceClosure next_animation_starter = base::BindOnce(
+      &LockStateController::PreLockAnimationFinished,
+      weak_ptr_factory_.GetWeakPtr(), request_lock_on_completion);
   SessionStateAnimator::AnimationSequence* animation_sequence =
-      animator_->BeginAnimationSequence(next_animation_starter);
+      animator_->BeginAnimationSequence(std::move(next_animation_starter));
 
   animation_sequence->StartAnimation(
       SessionStateAnimator::NON_LOCK_SCREEN_CONTAINERS,
@@ -337,11 +343,11 @@ void LockStateController::PreLockAnimation(
 
 void LockStateController::StartPostLockAnimation() {
   VLOG(1) << "StartPostLockAnimation";
-  base::Closure next_animation_starter =
-      base::Bind(&LockStateController::PostLockAnimationFinished,
-                 weak_ptr_factory_.GetWeakPtr());
+  base::OnceClosure next_animation_starter =
+      base::BindOnce(&LockStateController::PostLockAnimationFinished,
+                     weak_ptr_factory_.GetWeakPtr());
   SessionStateAnimator::AnimationSequence* animation_sequence =
-      animator_->BeginAnimationSequence(next_animation_starter);
+      animator_->BeginAnimationSequence(std::move(next_animation_starter));
 
   animation_sequence->StartAnimation(
       SessionStateAnimator::LOCK_SCREEN_CONTAINERS,
@@ -375,11 +381,11 @@ void LockStateController::StartUnlockAnimationBeforeUIDestroyed(
 
 void LockStateController::StartUnlockAnimationAfterUIDestroyed() {
   VLOG(1) << "StartUnlockAnimationAfterUIDestroyed";
-  base::Closure next_animation_starter =
-      base::Bind(&LockStateController::UnlockAnimationAfterUIDestroyedFinished,
-                 weak_ptr_factory_.GetWeakPtr());
+  base::OnceClosure next_animation_starter = base::BindOnce(
+      &LockStateController::UnlockAnimationAfterUIDestroyedFinished,
+      weak_ptr_factory_.GetWeakPtr());
   SessionStateAnimator::AnimationSequence* animation_sequence =
-      animator_->BeginAnimationSequence(next_animation_starter);
+      animator_->BeginAnimationSequence(std::move(next_animation_starter));
 
   animation_sequence->StartAnimation(
       SessionStateAnimator::NON_LOCK_SCREEN_CONTAINERS,
@@ -431,7 +437,7 @@ void LockStateController::PostLockAnimationFinished() {
 }
 
 void LockStateController::UnlockAnimationAfterUIDestroyedFinished() {
-  Shell::Get()->wallpaper_controller()->UpdateWallpaperBlur(false);
+  Shell::Get()->wallpaper_controller()->UpdateWallpaperBlurForLockState(false);
   RestoreUnlockedProperties();
 }
 

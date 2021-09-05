@@ -23,6 +23,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/user_manager/user_type.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/compositor/layer_animation_sequence.h"
 #include "ui/compositor/layer_animator.h"
@@ -65,16 +66,11 @@ constexpr float kOpaqueUserViewOpacity = 1.f;
 constexpr float kTransparentUserViewOpacity = 0.63f;
 constexpr float kUserFadeAnimationDurationMs = 180;
 
+constexpr char kAccountNameFontFamily[] = "Google Sans";
+
 constexpr char kUserViewClassName[] = "UserView";
 constexpr char kLoginUserImageClassName[] = "LoginUserImage";
 constexpr char kLoginUserLabelClassName[] = "LoginUserLabel";
-constexpr char kLoginUserDomainClassName[] = "LoginUserDomain";
-
-// Color of the user domain text.
-constexpr SkColor kDomainTextColor = SkColorSetARGB(0xAB, 0xFF, 0xFF, 0xFF);
-constexpr int kEnterpriseIconSizeDp = 12;
-constexpr int kBetweenEnterpriseIconAndDomainDp = 8;
-constexpr int kVerticalSpacingBetweenUserNameAndDomainDp = 14;
 
 int GetImageSize(LoginDisplayStyle style) {
   switch (style) {
@@ -132,8 +128,8 @@ class LoginUserView::UserImage : public NonAccessibleView {
     // which is the format used for the animated avators.
     if (!user.basic_user_info.avatar.bytes.empty()) {
       DecodeAnimation(user.basic_user_info.avatar.bytes,
-                      base::Bind(&LoginUserView::UserImage::OnImageDecoded,
-                                 weak_factory_.GetWeakPtr()));
+                      base::BindOnce(&LoginUserView::UserImage::OnImageDecoded,
+                                     weak_factory_.GetWeakPtr()));
     }
   }
 
@@ -181,22 +177,24 @@ class LoginUserView::UserLabel : public NonAccessibleView {
     user_name_->SetSubpixelRenderingEnabled(false);
     user_name_->SetAutoColorReadabilityEnabled(false);
 
-    // TODO(jdufault): Figure out the correct font.
     const gfx::FontList& base_font_list = views::Label::GetDefaultFontList();
+    const gfx::FontList font_list(
+        {kAccountNameFontFamily}, base_font_list.GetFontStyle(),
+        base_font_list.GetFontSize(), base_font_list.GetFontWeight());
 
     switch (style) {
       case LoginDisplayStyle::kLarge:
-        user_name_->SetFontList(base_font_list.Derive(
-            11, gfx::Font::FontStyle::NORMAL, gfx::Font::Weight::LIGHT));
+        user_name_->SetFontList(font_list.Derive(
+            12, gfx::Font::FontStyle::NORMAL, gfx::Font::Weight::NORMAL));
         break;
       case LoginDisplayStyle::kSmall:
-        user_name_->SetFontList(base_font_list.Derive(
-            8, gfx::Font::FontStyle::NORMAL, gfx::Font::Weight::LIGHT));
+        user_name_->SetFontList(font_list.Derive(
+            8, gfx::Font::FontStyle::NORMAL, gfx::Font::Weight::NORMAL));
         break;
       case LoginDisplayStyle::kExtraSmall:
         // TODO(jdufault): match font against spec.
-        user_name_->SetFontList(base_font_list.Derive(
-            6, gfx::Font::FontStyle::NORMAL, gfx::Font::Weight::LIGHT));
+        user_name_->SetFontList(font_list.Derive(
+            6, gfx::Font::FontStyle::NORMAL, gfx::Font::Weight::NORMAL));
         break;
     }
 
@@ -243,57 +241,16 @@ class LoginUserView::TapButton : public views::Button {
     views::Button::OnBlur();
     parent_->UpdateOpacity();
   }
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
+    // TODO(https://crbug.com/1065516): Define the button name.
+    node_data->SetNameExplicitlyEmpty();
+    Button::GetAccessibleNodeData(node_data);
+  }
 
  private:
   LoginUserView* const parent_;
 
   DISALLOW_COPY_AND_ASSIGN(TapButton);
-};
-
-class LoginUserView::UserDomainInfoView : public NonAccessibleView {
- public:
-  UserDomainInfoView() : NonAccessibleView(kLoginUserDomainClassName) {
-    auto layout = std::make_unique<views::BoxLayout>(
-        views::BoxLayout::Orientation::kHorizontal);
-    layout->set_main_axis_alignment(
-        views::BoxLayout::MainAxisAlignment::kCenter);
-    SetLayoutManager(std::move(layout));
-
-    views::ImageView* image = new views::ImageView();
-    image->SetImage(
-        gfx::CreateVectorIcon(kLoginScreenEnterpriseIcon, kDomainTextColor));
-    image->SetPreferredSize(
-        gfx::Size(kEnterpriseIconSizeDp, kEnterpriseIconSizeDp));
-    AddChildView(image);
-
-    auto* spacer = new NonAccessibleView();
-    spacer->SetPreferredSize(gfx::Size(kBetweenEnterpriseIconAndDomainDp, 0));
-    AddChildView(spacer);
-
-    label_ = new views::Label();
-    label_->SetEnabledColor(kDomainTextColor);
-    label_->SetSubpixelRenderingEnabled(false);
-    label_->SetAutoColorReadabilityEnabled(false);
-    label_->SetFontList(views::Label::GetDefaultFontList().Derive(
-        0, gfx::Font::FontStyle::NORMAL, gfx::Font::Weight::NORMAL));
-    AddChildView(label_);
-  }
-
-  ~UserDomainInfoView() override = default;
-
-  // views::View:
-  gfx::Size CalculatePreferredSize() const override {
-    gfx::Size size = views::View::CalculatePreferredSize();
-    size.set_width(kLargeUserViewWidthDp);
-    return size;
-  }
-
-  void SetText(const base::string16& text) { label_->SetText(text); }
-
- private:
-  views::Label* label_ = nullptr;
-
-  DISALLOW_COPY_AND_ASSIGN(UserDomainInfoView);
 };
 
 // LoginUserView is defined after LoginUserView::UserLabel so it can access the
@@ -327,8 +284,8 @@ LoginBaseBubbleView* LoginUserView::TestApi::menu() const {
   return view_->menu_;
 }
 
-views::View* LoginUserView::TestApi::user_domain() const {
-  return view_->user_domain_;
+void LoginUserView::TestApi::OnTap() const {
+  view_->on_tap_.Run();
 }
 
 bool LoginUserView::TestApi::is_opaque() const {
@@ -353,6 +310,10 @@ int LoginUserView::WidthForLayoutStyle(LoginDisplayStyle style) {
 LoginUserView::LoginUserView(
     LoginDisplayStyle style,
     bool show_dropdown,
+    // We keep show_domain variable - even if it useless for the moment -
+    // as it will be useful to implement account / profile level management.
+    // Note that it could be managed by a separate entity, different from
+    // device level management (indicated in the bottom).
     bool show_domain,
     const OnTap& on_tap,
     const OnRemoveWarningShown& on_remove_warning_shown,
@@ -382,11 +343,9 @@ LoginUserView::LoginUserView(
         gfx::Size(kDropdownIconSizeDp, kDropdownIconSizeDp));
     dropdown_->SetImage(
         views::Button::STATE_NORMAL,
-        gfx::CreateVectorIcon(kLockScreenDropdownIcon, SK_ColorWHITE));
+        gfx::CreateVectorIcon(kLockScreenDropdownIcon, gfx::kGoogleGrey200));
     dropdown_->SetFocusBehavior(FocusBehavior::ALWAYS);
   }
-  if (show_domain)
-    user_domain_ = new UserDomainInfoView();
   tap_button_ = new TapButton(this);
   SetTapEnabled(true);
 
@@ -415,11 +374,9 @@ LoginUserView::LoginUserView(
   if (dropdown_)
     setup_layer(dropdown_);
 
-  if (user_domain_)
-    setup_layer(user_domain_);
-
   hover_notifier_ = std::make_unique<HoverNotifier>(
-      this, base::Bind(&LoginUserView::OnHover, base::Unretained(this)));
+      this,
+      base::BindRepeating(&LoginUserView::OnHover, base::Unretained(this)));
 }
 
 LoginUserView::~LoginUserView() = default;
@@ -483,10 +440,6 @@ void LoginUserView::UpdateForUser(const LoginUserInfo& user, bool animate) {
         make_opacity_sequence());
     if (dropdown_) {
       dropdown_->layer()->GetAnimator()->StartAnimation(
-          make_opacity_sequence());
-    }
-    if (user_domain_) {
-      user_domain_->layer()->GetAnimator()->StartAnimation(
           make_opacity_sequence());
     }
   } else {
@@ -580,17 +533,6 @@ void LoginUserView::UpdateCurrentUserState() {
         IDS_ASH_LOGIN_POD_MENU_BUTTON_ACCESSIBLE_NAME, email));
   }
 
-  if (user_domain_) {
-    DCHECK(current_user_.public_account_info);
-    const base::Optional<std::string>& enterprise_domain =
-        current_user_.public_account_info->enterprise_domain;
-    if (enterprise_domain) {
-      user_domain_->SetText(l10n_util::GetStringFUTF16(
-          IDS_ASH_LOGIN_PUBLIC_ACCOUNT_INFO_FORMAT,
-          base::UTF8ToUTF16(enterprise_domain.value())));
-    }
-  }
-
   user_image_->UpdateForUser(current_user_);
   user_label_->UpdateForUser(current_user_);
   Layout();
@@ -627,12 +569,6 @@ void LoginUserView::UpdateOpacity() {
     dropdown_->layer()->SetOpacity(target_opacity);
   }
 
-  if (user_domain_) {
-    std::unique_ptr<ui::ScopedLayerAnimationSettings> user_domain_settings =
-        build_settings(user_domain_);
-    user_domain_->layer()->SetOpacity(target_opacity);
-  }
-
   // Animate avatar only if we are opaque.
   user_image_->SetAnimationEnabled(is_opaque_);
 }
@@ -644,9 +580,6 @@ void LoginUserView::SetLargeLayout() {
   AddChildView(tap_button_);
   if (dropdown_)
     AddChildView(dropdown_);
-
-  if (user_domain_)
-    AddChildView(user_domain_);
 
   // Use views::GridLayout instead of views::BoxLayout because views::BoxLayout
   // lays out children according to the view->children order.
@@ -712,12 +645,6 @@ void LoginUserView::SetLargeLayout() {
   layout->AddExistingView(user_label_);
   if (dropdown_)
     layout->AddExistingView(dropdown_);
-
-  if (user_domain_) {
-    add_padding(kVerticalSpacingBetweenUserNameAndDomainDp);
-    layout->StartRow(0 /*vertical_resize*/, kLabelDomainColumnId);
-    layout->AddExistingView(user_domain_);
-  }
 }
 
 void LoginUserView::SetSmallishLayout() {

@@ -41,12 +41,12 @@ private:
   bool fallbackToTitleSort(const icu::Collator* collator,
                            bookmarks::BookmarkNode *b1,
                            bookmarks::BookmarkNode *b2,
-                           int l1,
-                           int l2);
+                           size_t l1,
+                           size_t l2);
   bool fallbackToDateSort(bookmarks::BookmarkNode *b1,
                           bookmarks::BookmarkNode *b2,
-                          int l1,
-                          int l2);
+                          size_t l1,
+                          size_t l2);
 
   SortField sort_field_;
   SortOrder sort_order_;

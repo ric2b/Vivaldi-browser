@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
+#include "base/test/task_environment.h"
 #include "base/threading/thread.h"
 #include "platform_media/test/test_pipeline_host.h"
 #include "media/base/audio_bus.h"
@@ -16,6 +17,7 @@
 #include "media/base/test_data_util.h"
 #include "media/filters/in_memory_url_protocol.h"
 #include "platform_media/renderer/decoders/ipc_audio_decoder.h"
+#include "platform_media/renderer/decoders/ipc_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if defined(OS_MACOSX)
@@ -25,17 +27,15 @@
 namespace media {
 
 namespace {
-std::unique_ptr<IPCMediaPipelineHost> CreateIPCMediaPipelineHost(
-    const scoped_refptr<base::SequencedTaskRunner>& decode_task_runner,
-    DataSource* data_source) {
-  return base::WrapUnique(new TestPipelineHost(data_source));
+std::unique_ptr<IPCMediaPipelineHost> CreateIPCMediaPipelineHost() {
+  return std::make_unique<TestPipelineHost>();
 }
 }  // namespace
 
 class IPCAudioDecoderTest : public testing::Test {
  public:
   IPCAudioDecoderTest() : decode_thread_(__FUNCTION__) {
-    if (!IPCFactory::IsAvailable())
+    if (!IPCAudioDecoder::IsAvailable())
       return;
 
     CHECK(decode_thread_.Start());
@@ -46,7 +46,7 @@ class IPCAudioDecoderTest : public testing::Test {
   }
 
   bool Initialize(const std::string& filename) {
-    if (!IPCFactory::IsAvailable()) {
+    if (!IPCAudioDecoder::IsAvailable()) {
       LOG(INFO) << " PROPMEDIA(GPU) : " << __FUNCTION__
                 << " IPCAudioDecoder not available on this platform"
                 << " skipping test";
@@ -111,6 +111,9 @@ class IPCAudioDecoderTest : public testing::Test {
   }
 
  private:
+  base::test::TaskEnvironment task_environment_{
+      base::test::TaskEnvironment::TimeSource::MOCK_TIME};
+
   base::Thread decode_thread_;
   scoped_refptr<DecoderBuffer> data_;
   std::unique_ptr<InMemoryUrlProtocol> protocol_;

@@ -9,9 +9,11 @@
 #include <poll.h>
 #include <sys/uio.h>
 
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
+#include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/posix/eintr_wrapper.h"
@@ -22,6 +24,7 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/trace_event/trace_event.h"
 #include "media/capture/video/chromeos/mojom/camera_common.mojom.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/platform/named_platform_channel.h"
 #include "mojo/public/cpp/platform/platform_channel.h"
 #include "mojo/public/cpp/platform/socket_utils_posix.h"
@@ -66,17 +69,19 @@ bool WaitForSocketReadable(int raw_socket_fd, int raw_cancel_fd) {
 
 class MojoCameraClientObserver : public CameraClientObserver {
  public:
-  explicit MojoCameraClientObserver(cros::mojom::CameraHalClientPtr client)
+  explicit MojoCameraClientObserver(
+      mojo::PendingRemote<cros::mojom::CameraHalClient> client)
       : client_(std::move(client)) {}
 
-  void OnChannelCreated(cros::mojom::CameraModulePtr camera_module) override {
+  void OnChannelCreated(
+      mojo::PendingRemote<cros::mojom::CameraModule> camera_module) override {
     client_->SetUpChannel(std::move(camera_module));
   }
 
-  cros::mojom::CameraHalClientPtr& client() { return client_; }
+  mojo::Remote<cros::mojom::CameraHalClient>& client() { return client_; }
 
  private:
-  cros::mojom::CameraHalClientPtr client_;
+  mojo::Remote<cros::mojom::CameraHalClient> client_;
   DISALLOW_IMPLICIT_CONSTRUCTORS(MojoCameraClientObserver);
 };
 
@@ -134,7 +139,7 @@ void CameraHalDispatcherImpl::AddClientObserver(
   proxy_thread_.task_runner()->PostTask(
       FROM_HERE,
       base::BindOnce(&CameraHalDispatcherImpl::AddClientObserverOnProxyThread,
-                     base::Unretained(this), base::Passed(&observer)));
+                     base::Unretained(this), std::move(observer)));
 }
 
 bool CameraHalDispatcherImpl::IsStarted() {
@@ -164,17 +169,17 @@ CameraHalDispatcherImpl::~CameraHalDispatcherImpl() {
 }
 
 void CameraHalDispatcherImpl::RegisterServer(
-    cros::mojom::CameraHalServerPtr camera_hal_server) {
+    mojo::PendingRemote<cros::mojom::CameraHalServer> camera_hal_server) {
   DCHECK(proxy_task_runner_->BelongsToCurrentThread());
 
   if (camera_hal_server_) {
     LOG(ERROR) << "Camera HAL server is already registered";
     return;
   }
-  camera_hal_server.set_connection_error_handler(
+  camera_hal_server_.Bind(std::move(camera_hal_server));
+  camera_hal_server_.set_disconnect_handler(
       base::BindOnce(&CameraHalDispatcherImpl::OnCameraHalServerConnectionError,
                      base::Unretained(this)));
-  camera_hal_server_ = std::move(camera_hal_server);
   VLOG(1) << "Camera HAL server registered";
 
   // Set up the Mojo channels for clients which registered before the server
@@ -185,14 +190,14 @@ void CameraHalDispatcherImpl::RegisterServer(
 }
 
 void CameraHalDispatcherImpl::RegisterClient(
-    cros::mojom::CameraHalClientPtr client) {
+    mojo::PendingRemote<cros::mojom::CameraHalClient> client) {
   // RegisterClient can be called locally by ArcCameraBridge. Unretained
   // reference is safe here because CameraHalDispatcherImpl owns
   // |proxy_thread_|.
   proxy_task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(&CameraHalDispatcherImpl::RegisterClientOnProxyThread,
-                     base::Unretained(this), client.PassInterface()));
+                     base::Unretained(this), std::move(client)));
 }
 
 void CameraHalDispatcherImpl::GetJpegDecodeAccelerator(
@@ -232,6 +237,17 @@ void CameraHalDispatcherImpl::CreateSocket(base::WaitableEvent* started) {
     LOG(ERROR) << "Failed to create the socket file: " << kArcCamera3SocketPath;
     started->Signal();
     return;
+  }
+
+  // TODO(crbug.com/1053569): Remove these lines once the issue is solved.
+  base::File::Info info;
+  if (!base::GetFileInfo(socket_path, &info)) {
+    LOG(WARNING) << "Failed to get the socket info after building Mojo channel";
+  } else {
+    LOG(WARNING) << "Building Mojo channel. Socket info:"
+                 << " creation_time: " << info.creation_time
+                 << " last_accessed: " << info.last_accessed
+                 << " last_modified: " << info.last_modified;
   }
 
   // Change permissions on the socket.
@@ -324,21 +340,19 @@ void CameraHalDispatcherImpl::StartServiceLoop(base::ScopedFD socket_fd,
         PLOG(ERROR) << "sendmsg()";
       } else {
         proxy_task_runner_->PostTask(
-            FROM_HERE,
-            base::BindOnce(&CameraHalDispatcherImpl::OnPeerConnected,
-                           base::Unretained(this), base::Passed(&pipe)));
+            FROM_HERE, base::BindOnce(&CameraHalDispatcherImpl::OnPeerConnected,
+                                      base::Unretained(this), std::move(pipe)));
       }
     }
   }
 }
 
 void CameraHalDispatcherImpl::RegisterClientOnProxyThread(
-    mojo::InterfacePtrInfo<cros::mojom::CameraHalClient> client_ptr_info) {
+    mojo::PendingRemote<cros::mojom::CameraHalClient> client) {
   DCHECK(proxy_task_runner_->BelongsToCurrentThread());
-  cros::mojom::CameraHalClientPtr client_ptr(std::move(client_ptr_info));
   auto client_observer =
-      std::make_unique<MojoCameraClientObserver>(std::move(client_ptr));
-  client_observer->client().set_connection_error_handler(base::BindOnce(
+      std::make_unique<MojoCameraClientObserver>(std::move(client));
+  client_observer->client().set_disconnect_handler(base::BindOnce(
       &CameraHalDispatcherImpl::OnCameraHalClientConnectionError,
       base::Unretained(this), base::Unretained(client_observer.get())));
   AddClientObserver(std::move(client_observer));
@@ -357,18 +371,18 @@ void CameraHalDispatcherImpl::AddClientObserverOnProxyThread(
 void CameraHalDispatcherImpl::EstablishMojoChannel(
     CameraClientObserver* client_observer) {
   DCHECK(proxy_task_runner_->BelongsToCurrentThread());
-  cros::mojom::CameraModulePtr camera_module_ptr;
-  cros::mojom::CameraModuleRequest camera_module_request =
-      mojo::MakeRequest(&camera_module_ptr);
-  camera_hal_server_->CreateChannel(std::move(camera_module_request));
-  client_observer->OnChannelCreated(std::move(camera_module_ptr));
+  mojo::PendingRemote<cros::mojom::CameraModule> camera_module;
+  camera_hal_server_->CreateChannel(
+      camera_module.InitWithNewPipeAndPassReceiver());
+  client_observer->OnChannelCreated(std::move(camera_module));
 }
 
 void CameraHalDispatcherImpl::OnPeerConnected(
     mojo::ScopedMessagePipeHandle message_pipe) {
   DCHECK(proxy_task_runner_->BelongsToCurrentThread());
-  binding_set_.AddBinding(
-      this, cros::mojom::CameraHalDispatcherRequest(std::move(message_pipe)));
+  receiver_set_.Add(this,
+                    mojo::PendingReceiver<cros::mojom::CameraHalDispatcher>(
+                        std::move(message_pipe)));
   VLOG(1) << "New CameraHalDispatcher binding added";
 }
 
@@ -390,6 +404,18 @@ void CameraHalDispatcherImpl::OnCameraHalClientConnectionError(
 
 void CameraHalDispatcherImpl::StopOnProxyThread() {
   DCHECK(proxy_task_runner_->BelongsToCurrentThread());
+
+  // TODO(crbug.com/1053569): Remove these lines once the issue is solved.
+  base::File::Info info;
+  if (!base::GetFileInfo(base::FilePath(kArcCamera3SocketPath), &info)) {
+    LOG(WARNING) << "Failed to get socket info before deleting";
+  } else {
+    LOG(WARNING) << "Delete socket. Socket info:"
+                 << " creation_time: " << info.creation_time
+                 << " last_accessed: " << info.last_accessed
+                 << " last_modified: " << info.last_modified;
+  }
+
   if (!base::DeleteFile(base::FilePath(kArcCamera3SocketPath),
                         /* recursive */ false)) {
     LOG(ERROR) << "Failed to delete " << kArcCamera3SocketPath;
@@ -398,7 +424,7 @@ void CameraHalDispatcherImpl::StopOnProxyThread() {
   cancel_pipe_.reset();
   client_observers_.clear();
   camera_hal_server_.reset();
-  binding_set_.CloseAllBindings();
+  receiver_set_.Clear();
 }
 
 void CameraHalDispatcherImpl::OnTraceLogEnabledOnProxyThread() {

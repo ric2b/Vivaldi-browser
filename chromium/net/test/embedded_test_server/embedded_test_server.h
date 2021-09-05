@@ -38,6 +38,7 @@ class TCPServerSocket;
 namespace test_server {
 
 class EmbeddedTestServerConnectionListener;
+class EmbeddedTestServerHandle;
 class HttpConnection;
 class HttpResponse;
 struct HttpRequest;
@@ -52,8 +53,8 @@ struct HttpRequest;
 // void SetUp() {
 //   test_server_ = std::make_unique<EmbeddedTestServer>();
 //   test_server_->RegisterRequestHandler(
-//       base::Bind(&FooTest::HandleRequest, base::Unretained(this)));
-//   ASSERT_TRUE(test_server_.Start());
+//       base::BindRepeating(&FooTest::HandleRequest, base::Unretained(this)));
+//   ASSERT_TRUE((test_server_handle_ = test_server_.StartAndReturnHandle()));
 // }
 //
 // std::unique_ptr<HttpResponse> HandleRequest(const HttpRequest& request) {
@@ -100,6 +101,12 @@ class EmbeddedTestServer {
     CERT_MISMATCHED_NAME,
     CERT_EXPIRED,
 
+    // Cross-signed certificate to test PKIX path building. Contains an
+    // intermediate cross-signed by an unknown root, while the client (via
+    // TestRootStore) is expected to have a self-signed version of the
+    // intermediate.
+    CERT_CHAIN_WRONG_ROOT,
+
     // Causes the testserver to use a hostname that is a domain
     // instead of an IP.
     CERT_COMMON_NAME_IS_DOMAIN,
@@ -113,6 +120,22 @@ class EmbeddedTestServer {
 
     // A certificate that is signed by an intermediate certificate.
     CERT_OK_BY_INTERMEDIATE,
+
+    // A certificate with invalid notBefore and notAfter times. Windows'
+    // certificate library will not parse this certificate.
+    CERT_BAD_VALIDITY,
+
+    // A certificate that covers a number of test names. See [test_names] in
+    // net/data/ssl/scripts/ee.cnf. More may be added by editing this list and
+    // and rerunning net/data/ssl/scripts/generate-test-certs.sh.
+    CERT_TEST_NAMES,
+
+    // TODO(crbug.com/846909): handle CERT_AUTO and CERT_AUTO_WITH_INTERMEDIATE
+
+    // Generate an intermediate cert, and generate a test certificate issued by
+    // that intermediate with an AIA record for retrieving the intermediate.
+    // The intermediate is not included in the TLS handshake.
+    CERT_AUTO_AIA_INTERMEDIATE,
   };
 
   typedef base::RepeatingCallback<std::unique_ptr<HttpResponse>(
@@ -147,7 +170,12 @@ class EmbeddedTestServer {
   // Initializes and waits until the server is ready to accept requests.
   // This is the equivalent of calling InitializeAndListen() followed by
   // StartAcceptingConnections().
-  // Returns whether a listening socket has been successfully created.
+  // Returns a "handle" which will ShutdownAndWaitUntilComplete() when
+  // destroyed, or null if the listening socket could not be created.
+  EmbeddedTestServerHandle StartAndReturnHandle(int port = 0)
+      WARN_UNUSED_RESULT;
+
+  // Deprecated equivalent of StartAndReturnHandle().
   bool Start(int port = 0) WARN_UNUSED_RESULT;
 
   // Starts listening for incoming connections but will not yet accept them.
@@ -197,15 +225,14 @@ class EmbeddedTestServer {
   void SetSSLConfig(ServerCertificate cert, const SSLServerConfig& ssl_config);
   void SetSSLConfig(ServerCertificate cert);
 
+  // TODO(mattm): make this WARN_UNUSED_RESULT
   bool ResetSSLConfig(ServerCertificate cert,
                       const SSLServerConfig& ssl_config);
 
-  // Returns the file name of the certificate the server is using. The test
-  // certificates can be found in net/data/ssl/certificates/.
-  std::string GetCertificateName() const;
-
   // Returns the certificate that the server is using.
-  scoped_refptr<X509Certificate> GetCertificate() const;
+  // If using a generated ServerCertificate type, this must not be called before
+  // InitializeAndListen() has been called.
+  scoped_refptr<X509Certificate> GetCertificate();
 
   // Registers request handler which serves files from |directory|.
   // For instance, a request to "/foo.html" is served by "foo.html" under
@@ -246,11 +273,15 @@ class EmbeddedTestServer {
   void FlushAllSocketsAndConnections();
 
  private:
+  // Returns the file name of the certificate the server is using. The test
+  // certificates can be found in net/data/ssl/certificates/.
+  std::string GetCertificateName() const;
+
   // Shuts down the server.
   void ShutdownOnIOThread();
 
   // Resets the SSLServerConfig on the IO thread.
-  void ResetSSLConfigOnIOThread(ServerCertificate cert,
+  bool ResetSSLConfigOnIOThread(ServerCertificate cert,
                                 const SSLServerConfig& ssl_config);
 
   // Upgrade the TCP connection to one over SSL.
@@ -284,15 +315,31 @@ class EmbeddedTestServer {
   void HandleRequest(HttpConnection* connection,
                      std::unique_ptr<HttpRequest> request);
 
+  // Returns true if the current |cert_| configuration uses a static
+  // pre-generated cert loaded from the filesystem.
+  bool UsingStaticCert() const;
+
+  // Reads server certificate and private key from file. May only be called if
+  // |cert_| refers to a file-based cert & key.
+  bool InitializeCertAndKeyFromFile() WARN_UNUSED_RESULT;
+
+  // Generate server certificate and private key. May only be called if |cert_|
+  // refers to a generated cert & key.
+  bool GenerateCertAndKey() WARN_UNUSED_RESULT;
+
   // Initializes the SSLServerContext so that SSLServerSocket connections may
   // share the same cache
-  void InitializeSSLServerContext();
+  bool InitializeSSLServerContext() WARN_UNUSED_RESULT;
 
   HttpConnection* FindConnection(StreamSocket* socket);
 
   // Posts a task to the |io_thread_| and waits for a reply.
-  bool PostTaskToIOThreadAndWait(
-      const base::Closure& closure) WARN_UNUSED_RESULT;
+  bool PostTaskToIOThreadAndWait(base::OnceClosure closure) WARN_UNUSED_RESULT;
+
+  // Posts a task that returns a true/false success/fail value to the
+  // |io_thread_| and waits for a reply.
+  bool PostTaskToIOThreadAndWaitWithResult(base::OnceCallback<bool()> task)
+      WARN_UNUSED_RESULT;
 
   const bool is_using_ssl_;
 
@@ -317,11 +364,34 @@ class EmbeddedTestServer {
 
   net::SSLServerConfig ssl_config_;
   ServerCertificate cert_;
+  scoped_refptr<X509Certificate> x509_cert_;
+  bssl::UniquePtr<EVP_PKEY> private_key_;
   std::unique_ptr<SSLServerContext> context_;
+
+  // HTTP server that handles AIA URLs that are embedded in this test server's
+  // certificate when the server certificate is one of the CERT_AUTO variants.
+  std::unique_ptr<EmbeddedTestServer> aia_http_server_;
 
   base::WeakPtrFactory<EmbeddedTestServer> weak_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(EmbeddedTestServer);
+};
+
+class EmbeddedTestServerHandle {
+ public:
+  EmbeddedTestServerHandle() = default;
+  EmbeddedTestServerHandle(EmbeddedTestServerHandle&& other);
+  EmbeddedTestServerHandle& operator=(EmbeddedTestServerHandle&& other);
+
+  ~EmbeddedTestServerHandle();
+
+  explicit operator bool() const { return test_server_; }
+
+ private:
+  friend class EmbeddedTestServer;
+
+  explicit EmbeddedTestServerHandle(EmbeddedTestServer* test_server);
+  EmbeddedTestServer* test_server_ = nullptr;
 };
 
 }  // namespace test_server

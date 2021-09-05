@@ -40,6 +40,7 @@ class AutofillDriverIOS : public AutofillDriver {
   // AutofillDriver:
   bool IsIncognito() const override;
   bool IsInMainFrame() const override;
+  bool CanShowAutofillUi() const override;
   ui::AXTreeID GetAxTreeId() const override;
   scoped_refptr<network::SharedURLLoaderFactory> GetURLLoaderFactory() override;
   bool RendererIsAvailable() override;
@@ -48,6 +49,7 @@ class AutofillDriverIOS : public AutofillDriver {
                               const FormData& data) override;
   void PropagateAutofillPredictions(
       const std::vector<autofill::FormStructure*>& forms) override;
+  void HandleParsedForms(const std::vector<FormStructure*>& forms) override;
   void SendAutofillTypePredictionsToRenderer(
       const std::vector<FormStructure*>& forms) override;
   void RendererShouldClearFilledSection() override;
@@ -65,6 +67,7 @@ class AutofillDriverIOS : public AutofillDriver {
   void PopupHidden() override;
   gfx::RectF TransformBoundingBoxToViewportCoordinates(
       const gfx::RectF& bounding_box) override;
+  net::NetworkIsolationKey NetworkIsolationKey() override;
 
   bool is_processed() const { return processed_; }
   void set_processed(bool processed) { processed_ = processed; }

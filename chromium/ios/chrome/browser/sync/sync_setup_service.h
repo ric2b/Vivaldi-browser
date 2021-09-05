@@ -28,6 +28,7 @@ class SyncSetupService : public KeyedService {
     kSyncServiceCouldNotConnect,
     kSyncServiceServiceUnavailable,
     kSyncServiceNeedsPassphrase,
+    kSyncServiceNeedsTrustedVaultKey,
     kSyncServiceUnrecoverableError,
     kSyncSettingsNotConfirmed,
     kLastSyncServiceError = kSyncServiceUnrecoverableError
@@ -85,6 +86,9 @@ class SyncSetupService : public KeyedService {
   // Returns the current sync service state.
   virtual SyncServiceState GetSyncServiceState();
 
+  // Returns whether all sync data is being encrypted.
+  virtual bool IsEncryptEverythingEnabled() const;
+
   // Returns true if the user has gone through the initial sync configuration.
   // This method is guaranteed not to start the sync backend so it can be
   // called at start-up.
@@ -100,7 +104,8 @@ class SyncSetupService : public KeyedService {
   // changes. PrepareForFirstSyncSetup() needs to be called before. This flag is
   // not set if the user didn't turn on sync.
   // This method should only be used with UnifiedConsent flag.
-  void SetFirstSetupComplete(syncer::SyncFirstSetupCompleteSource source);
+  virtual void SetFirstSetupComplete(
+      syncer::SyncFirstSetupCompleteSource source);
 
   // Returns true if the user finished the Sync setup flow.
   bool IsFirstSetupComplete() const;

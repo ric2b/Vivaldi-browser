@@ -36,8 +36,6 @@
 
 namespace blink {
 
-using namespace xpath;
-
 XPathExpression::XPathExpression() = default;
 
 XPathExpression* XPathExpression::CreateExpression(
@@ -45,7 +43,7 @@ XPathExpression* XPathExpression::CreateExpression(
     XPathNSResolver* resolver,
     ExceptionState& exception_state) {
   auto* expr = MakeGarbageCollected<XPathExpression>();
-  Parser parser;
+  xpath::Parser parser;
 
   expr->top_expression_ =
       parser.ParseStatement(expression, resolver, exception_state);
@@ -55,7 +53,7 @@ XPathExpression* XPathExpression::CreateExpression(
   return expr;
 }
 
-void XPathExpression::Trace(blink::Visitor* visitor) {
+void XPathExpression::Trace(Visitor* visitor) {
   visitor->Trace(top_expression_);
   ScriptWrappable::Trace(visitor);
 }
@@ -64,7 +62,7 @@ XPathResult* XPathExpression::evaluate(Node* context_node,
                                        uint16_t type,
                                        const ScriptValue&,
                                        ExceptionState& exception_state) {
-  if (!IsValidContextNode(context_node)) {
+  if (!xpath::IsValidContextNode(context_node)) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kNotSupportedError,
         "The node provided is '" + context_node->nodeName() +
@@ -72,11 +70,13 @@ XPathResult* XPathExpression::evaluate(Node* context_node,
     return nullptr;
   }
 
-  EvaluationContext evaluation_context(*context_node);
+  bool had_type_conversion_error = false;
+  xpath::EvaluationContext evaluation_context(*context_node,
+                                              had_type_conversion_error);
   auto* result = MakeGarbageCollected<XPathResult>(
       evaluation_context, top_expression_->Evaluate(evaluation_context));
 
-  if (evaluation_context.had_type_conversion_error) {
+  if (had_type_conversion_error) {
     // It is not specified what to do if type conversion fails while evaluating
     // an expression.
     exception_state.ThrowDOMException(

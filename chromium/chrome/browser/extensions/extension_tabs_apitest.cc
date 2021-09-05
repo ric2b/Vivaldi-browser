@@ -308,12 +308,11 @@ IN_PROC_BROWSER_TEST_P(IncognitoExtensionApiTabTest, Tabs) {
 
   EXPECT_TRUE(RunExtensionSubtestWithArgAndFlags(
       "tabs/basics", "incognito.html", args.data(),
-      is_incognito_enabled ? extensions::ExtensionApiTest::kFlagEnableIncognito
-                           : extensions::ExtensionApiTest::kFlagNone))
+      is_incognito_enabled ? kFlagEnableIncognito : kFlagNone, kFlagNone))
       << message_;
 }
 
-INSTANTIATE_TEST_SUITE_P(, IncognitoExtensionApiTabTest, testing::Bool());
+INSTANTIATE_TEST_SUITE_P(All, IncognitoExtensionApiTabTest, testing::Bool());
 
 // Adding a new test? Awesome. But API tests are the old hotness. The new
 // hotness is extension_function_test_utils. See tabs_test.cc for an example.

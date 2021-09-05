@@ -33,7 +33,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
 #include "third_party/blink/renderer/core/dom/dom_string_list.h"
 #include "third_party/blink/renderer/core/dom/events/event_listener.h"
-#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
+#include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
 #include "third_party/blink/renderer/modules/event_modules.h"
 #include "third_party/blink/renderer/modules/event_target_modules.h"
 #include "third_party/blink/renderer/modules/indexeddb/idb_metadata.h"
@@ -64,7 +64,7 @@ class ScriptState;
 class MODULES_EXPORT IDBTransaction final
     : public EventTargetWithInlineData,
       public ActiveScriptWrappable<IDBTransaction>,
-      public ContextLifecycleObserver {
+      public ExecutionContextLifecycleObserver {
   USING_GARBAGE_COLLECTED_MIXIN(IDBTransaction);
   DEFINE_WRAPPERTYPEINFO();
 
@@ -102,7 +102,7 @@ class MODULES_EXPORT IDBTransaction final
                  const IDBDatabaseMetadata&);
   ~IDBTransaction() override;
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
   static mojom::IDBTransactionMode StringToMode(const String&);
 
@@ -155,7 +155,14 @@ class MODULES_EXPORT IDBTransaction final
   // Called when deleting an index whose IDBIndex had been created.
   void IndexDeleted(IDBIndex*);
 
-  void SetActive(bool);
+  // Called during event dispatch.
+  //
+  // This can trigger transaction auto-commit.
+  void SetActive(bool new_is_active);
+
+  // Called right before and after structured serialization.
+  void SetActiveDuringSerialization(bool new_is_active);
+
   void SetError(DOMException*);
 
   DEFINE_ATTRIBUTE_EVENT_LISTENER(abort, kAbort)
@@ -187,6 +194,8 @@ class MODULES_EXPORT IDBTransaction final
   WebIDBTransaction* transaction_backend() {
     return transaction_backend_.get();
   }
+
+  void ContextDestroyed() override {}
 
  protected:
   // EventTarget

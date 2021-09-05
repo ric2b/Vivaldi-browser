@@ -72,21 +72,21 @@ class APP_LIST_EXPORT SearchBoxView : public search_box::SearchBoxViewBase,
   // Updates the search box's background corner radius and color based on the
   // state of AppListModel.
   void UpdateBackground(double progress,
-                        ash::AppListState current_state,
-                        ash::AppListState target_state);
+                        AppListState current_state,
+                        AppListState target_state);
 
   // Updates the search box's layout based on the state of AppListModel.
   void UpdateLayout(double progress,
-                    ash::AppListState current_state,
+                    AppListState current_state,
                     int current_state_height,
-                    ash::AppListState target_state,
+                    AppListState target_state,
                     int target_state_height);
 
   // Returns background border corner radius in the given state.
-  int GetSearchBoxBorderCornerRadiusForState(ash::AppListState state) const;
+  int GetSearchBoxBorderCornerRadiusForState(AppListState state) const;
 
   // Returns background color for the given state.
-  SkColor GetBackgroundColorForState(ash::AppListState state) const;
+  SkColor GetBackgroundColorForState(AppListState state) const;
 
   // Updates the opacity of the searchbox.
   void UpdateOpacity();
@@ -142,7 +142,6 @@ class APP_LIST_EXPORT SearchBoxView : public search_box::SearchBoxViewBase,
 
   // Overridden from SearchBoxModelObserver:
   void HintTextChanged() override;
-  void SelectionModelChanged() override;
   void Update() override;
   void SearchEngineChanged() override;
   void ShowAssistantChanged() override;
@@ -162,6 +161,8 @@ class APP_LIST_EXPORT SearchBoxView : public search_box::SearchBoxViewBase,
   // flag is removed.
   bool HandleKeyEventForDisabledSearchBoxSelection(
       const ui::KeyEvent& key_event);
+
+  base::string16 current_query_;
 
   // The range of highlighted text for autocomplete.
   gfx::Range highlight_range_;

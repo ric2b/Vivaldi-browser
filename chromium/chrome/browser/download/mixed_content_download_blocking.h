@@ -4,7 +4,10 @@
 #ifndef CHROME_BROWSER_DOWNLOAD_MIXED_CONTENT_DOWNLOAD_BLOCKING_H_
 #define CHROME_BROWSER_DOWNLOAD_MIXED_CONTENT_DOWNLOAD_BLOCKING_H_
 
+#include <string>
+
 #include "base/files/file_path.h"
+#include "chrome/browser/profiles/profile.h"
 #include "components/download/public/common/download_item.h"
 
 // Each download is recorded with two histograms.
@@ -12,20 +15,25 @@
 // InsecureDownloadSecurityStatus.
 const char* const kInsecureDownloadHistogramName =
     "Download.InsecureBlocking.Totals";
-// These histograms record the extension of the download. Only one is used per
-// download. See InsecureDownloadExtensions.
-const char* const kInsecureDownloadHistogramInitiatorUnknownTargetSecure =
-    "Download.InsecureBlocking.Extensions.InitiatorUnknown.DownloadSecure";
-const char* const kInsecureDownloadHistogramInitiatorUnknownTargetInsecure =
-    "Download.InsecureBlocking.Extensions.InitiatorUnknown.DownloadInsecure";
-const char* const kInsecureDownloadHistogramInitiatorSecureTargetSecure =
-    "Download.InsecureBlocking.Extensions.InitiatorSecure.DownloadSecure";
-const char* const kInsecureDownloadHistogramInitiatorSecureTargetInsecure =
-    "Download.InsecureBlocking.Extensions.InitiatorSecure.DownloadInsecure";
-const char* const kInsecureDownloadHistogramInitiatorInsecureTargetSecure =
-    "Download.InsecureBlocking.Extensions.InitiatorInsecure.DownloadSecure";
-const char* const kInsecureDownloadHistogramInitiatorInsecureTargetInsecure =
-    "Download.InsecureBlocking.Extensions.InitiatorInsecure.DownloadInsecure";
+// Base name (prefix) for histogram recording the file extension of the
+// download. One histogram is recorded per download. See
+// InsecureDownloadExtensions for file extensions recorded.
+const char* const kInsecureDownloadExtensionHistogramBase =
+    "Download.InsecureBlocking.Extensions";
+// Interfixes for histogram names.
+const char* const kInsecureDownloadExtensionInitiatorUnknown =
+    "InitiatorUnknown";
+const char* const kInsecureDownloadExtensionInitiatorSecure =
+    "InitiatorKnownSecure";
+const char* const kInsecureDownloadExtensionInitiatorInsecure =
+    "InitiatorKnownInsecure";
+const char* const kInsecureDownloadExtensionInitiatorInferredSecure =
+    "InitiatorInferredSecure";
+const char* const kInsecureDownloadExtensionInitiatorInferredInsecure =
+    "InitiatorInferredInsecure";
+// Suffixes for histogram names.
+const char* const kInsecureDownloadHistogramTargetSecure = "DownloadSecure";
+const char* const kInsecureDownloadHistogramTargetInsecure = "DownloadInsecure";
 
 // These values are logged to UMA. Entries should not be renumbered and numeric
 // values should never be reused.  Please keep in sync with
@@ -37,7 +45,12 @@ enum class InsecureDownloadSecurityStatus {
   kInitiatorSecureFileInsecure = 3,
   kInitiatorInsecureFileSecure = 4,
   kInitiatorInsecureFileInsecure = 5,
-  kMaxValue = kInitiatorInsecureFileInsecure,
+  kInitiatorInferredSecureFileSecure = 6,
+  kInitiatorInferredSecureFileInsecure = 7,
+  kInitiatorInferredInsecureFileSecure = 8,
+  kInitiatorInferredInsecureFileInsecure = 9,
+  kDownloadIgnored = 10,
+  kMaxValue = kDownloadIgnored,
 };
 
 // These values are logged to UMA. Entries should not be renumbered and numeric
@@ -66,7 +79,8 @@ enum class InsecureDownloadExtensions {
   kEPUB = 19,
   kICS = 20,
   kSVG = 21,
-  kMaxValue = kSVG,
+  kTest = 22,  // Test extensions, e.g. .silently_blocked.
+  kMaxValue = kTest,
 };
 
 struct ExtensionMapping {
@@ -87,6 +101,7 @@ static const ExtensionMapping kExtensionsToEnum[] = {
     {"webp", InsecureDownloadExtensions::kImage},
 
     {"gz", InsecureDownloadExtensions::kArchive},
+    {"gzip", InsecureDownloadExtensions::kArchive},
     {"zip", InsecureDownloadExtensions::kArchive},
     {"bz2", InsecureDownloadExtensions::kArchive},
     {"7z", InsecureDownloadExtensions::kArchive},
@@ -172,11 +187,29 @@ static const ExtensionMapping kExtensionsToEnum[] = {
     {"epub", InsecureDownloadExtensions::kEPUB},
     {"ics", InsecureDownloadExtensions::kICS},
     {"svg", InsecureDownloadExtensions::kSVG},
+
+    {"silently_blocked_for_testing", InsecureDownloadExtensions::kTest},
+    {"warn_for_testing", InsecureDownloadExtensions::kTest},
+    {"dont_warn_for_testing", InsecureDownloadExtensions::kTest},
 };
 
-// When enabled (via kTreatUnsafeDownloadsAsActive), block unsafe downloads
-// that are requested by secure sources but are served insecurely.
-bool ShouldBlockFileAsMixedContent(const base::FilePath& path,
-                                   const download::DownloadItem& item);
+// Convenience function to assemble a histogram name for download blocking.
+// |initiator| is one of kInsecureDownloadExtensionInitiator* above.
+// |download| is one of kInsecureDownloadHistogramTarget* above.
+inline std::string GetDLBlockingHistogramName(const std::string& initiator,
+                                              const std::string& download) {
+  return std::string(kInsecureDownloadExtensionHistogramBase)
+      .append(".")
+      .append(initiator)
+      .append(".")
+      .append(download);
+}
+
+// Returns the correct mixed content download blocking behavior for the given
+// |item| saved to |path|.  Controlled by kTreatUnsafeDownloadsAsActive.
+download::DownloadItem::MixedContentStatus GetMixedContentStatusForDownload(
+    Profile* profile,
+    const base::FilePath& path,
+    const download::DownloadItem* item);
 
 #endif  // CHROME_BROWSER_DOWNLOAD_MIXED_CONTENT_DOWNLOAD_BLOCKING_H_

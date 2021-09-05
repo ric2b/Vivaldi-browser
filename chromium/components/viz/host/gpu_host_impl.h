@@ -18,6 +18,7 @@
 #include "base/optional.h"
 #include "base/process/process_handle.h"
 #include "base/sequence_checker.h"
+#include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "components/discardable_memory/public/mojom/discardable_shared_memory_manager.mojom.h"
 #include "components/ui_devtools/buildflags.h"
@@ -65,6 +66,10 @@ class VIZ_HOST_EXPORT GpuHostImpl : public mojom::GpuHost {
         const gpu::GpuExtraInfo& gpu_extra_info) = 0;
     virtual void DidFailInitialize() = 0;
     virtual void DidCreateContextSuccessfully() = 0;
+    virtual void MaybeShutdownGpuProcess() = 0;
+#if defined(OS_WIN)
+    virtual void DidUpdateOverlayInfo(const gpu::OverlayInfo& overlay_info) = 0;
+#endif
     virtual void BlockDomainFrom3DAPIs(const GURL& url,
                                        gpu::DomainGuilt guilt) = 0;
     virtual void DisableGpuCompositing() = 0;
@@ -200,6 +205,7 @@ class VIZ_HOST_EXPORT GpuHostImpl : public mojom::GpuHost {
 
   void OnChannelEstablished(int client_id,
                             mojo::ScopedMessagePipeHandle channel_handle);
+  void MaybeShutdownGpuProcess();
 
   // mojom::GpuHost:
   void DidInitialize(
@@ -214,11 +220,13 @@ class VIZ_HOST_EXPORT GpuHostImpl : public mojom::GpuHost {
   void DidCreateOffscreenContext(const GURL& url) override;
   void DidDestroyOffscreenContext(const GURL& url) override;
   void DidDestroyChannel(int32_t client_id) override;
+  void DidDestroyAllChannels() override;
   void DidLoseContext(bool offscreen,
                       gpu::error::ContextLostReason reason,
                       const GURL& active_url) override;
   void DisableGpuCompositing() override;
 #if defined(OS_WIN)
+  void DidUpdateOverlayInfo(const gpu::OverlayInfo& overlay_info) override;
   void SetChildSurface(gpu::SurfaceHandle parent,
                        gpu::SurfaceHandle child) override;
 #endif
@@ -264,6 +272,8 @@ class VIZ_HOST_EXPORT GpuHostImpl : public mojom::GpuHost {
   // These are the channel requests that we have already sent to the GPU
   // service, but haven't heard back about yet.
   base::queue<EstablishChannelCallback> channel_requests_;
+
+  base::OneShotTimer shutdown_timeout_;
 
   // FEATURE_FORCE_ACCESS_TO_GPU
   static bool force_allow_access_to_gpu_;

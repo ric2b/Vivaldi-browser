@@ -14,37 +14,28 @@
 namespace blink {
 
 class DisplayLockUtilitiesTest : public RenderingTest,
-                                 private ScopedDisplayLockingForTest {
+                                 private ScopedCSSSubtreeVisibilityHiddenMatchableForTest {
  public:
   DisplayLockUtilitiesTest()
       : RenderingTest(MakeGarbageCollected<SingleChildLocalFrameClient>()),
-        ScopedDisplayLockingForTest(true) {}
+        ScopedCSSSubtreeVisibilityHiddenMatchableForTest(true) {}
 
-  void LockElement(Element& element,
-                   bool activatable,
-                   bool update_lifecycle = true) {
+  void LockElement(Element& element, bool activatable) {
     StringBuilder value;
-    value.Append("invisible");
-    if (!activatable)
-      value.Append(" skip-activation");
-    element.setAttribute(html_names::kRendersubtreeAttr,
-                         value.ToAtomicString());
-    if (update_lifecycle)
-      UpdateAllLifecyclePhasesForTest();
+    value.Append("subtree-visibility: hidden");
+    if (activatable)
+      value.Append("-matchable");
+    element.setAttribute(html_names::kStyleAttr, value.ToAtomicString());
+    UpdateAllLifecyclePhasesForTest();
   }
 
-  void CommitElement(Element& element, bool update_lifecycle = true) {
-    element.setAttribute(html_names::kRendersubtreeAttr, "");
-    if (update_lifecycle)
-      UpdateAllLifecyclePhasesForTest();
+  void CommitElement(Element& element) {
+    element.setAttribute(html_names::kStyleAttr, "");
+    UpdateAllLifecyclePhasesForTest();
   }
 };
 
-TEST_F(DisplayLockUtilitiesTest, ActivatableLockedInclusiveAncestors) {
-  // TODO(vmpstr): Implement for layout ng.
-  if (RuntimeEnabledFeatures::LayoutNGEnabled())
-    return;
-
+TEST_F(DisplayLockUtilitiesTest, DISABLED_ActivatableLockedInclusiveAncestors) {
   SetBodyInnerHTML(R"HTML(
     <style>
       div {
@@ -65,12 +56,12 @@ TEST_F(DisplayLockUtilitiesTest, ActivatableLockedInclusiveAncestors) {
   Element& innermost = *GetDocument().getElementById("innermost");
   ShadowRoot& shadow_root =
       inner_b.AttachShadowRootInternal(ShadowRootType::kOpen);
-  shadow_root.SetInnerHTMLFromString("<div id='shadowDiv'>shadow!</div>");
+  shadow_root.setInnerHTML("<div id='shadowDiv'>shadow!</div>");
   Element& shadow_div = *shadow_root.getElementById("shadowDiv");
 
   LockElement(outer, true);
   EXPECT_EQ(GetDocument().LockedDisplayLockCount(), 1);
-  EXPECT_EQ(GetDocument().ActivationBlockingDisplayLockCount(), 0);
+  EXPECT_EQ(GetDocument().DisplayLockBlockingAllActivationCount(), 0);
   // Querying from every element gives |outer|.
   HeapVector<Member<Element>> result_for_outer =
       DisplayLockUtilities::ActivatableLockedInclusiveAncestors(
@@ -105,7 +96,7 @@ TEST_F(DisplayLockUtilitiesTest, ActivatableLockedInclusiveAncestors) {
   // Lock innermost with activatable flag.
   LockElement(innermost, true);
   EXPECT_EQ(GetDocument().LockedDisplayLockCount(), 2);
-  EXPECT_EQ(GetDocument().ActivationBlockingDisplayLockCount(), 0);
+  EXPECT_EQ(GetDocument().DisplayLockBlockingAllActivationCount(), 0);
 
   result_for_outer = DisplayLockUtilities::ActivatableLockedInclusiveAncestors(
       outer, DisplayLockActivationReason::kAny);
@@ -138,10 +129,10 @@ TEST_F(DisplayLockUtilitiesTest, ActivatableLockedInclusiveAncestors) {
   EXPECT_EQ(result_for_shadow_div.at(0), outer);
 
   // Unlock everything.
-  CommitElement(innermost, false);
+  CommitElement(innermost);
   CommitElement(outer);
   EXPECT_EQ(GetDocument().LockedDisplayLockCount(), 0);
-  EXPECT_EQ(GetDocument().ActivationBlockingDisplayLockCount(), 0);
+  EXPECT_EQ(GetDocument().DisplayLockBlockingAllActivationCount(), 0);
 
   EXPECT_EQ(DisplayLockUtilities::ActivatableLockedInclusiveAncestors(
                 outer, DisplayLockActivationReason::kAny)
@@ -233,5 +224,4 @@ TEST_F(DisplayLockUtilitiesTest, LockedSubtreeCrossingFrames) {
   EXPECT_FALSE(DisplayLockUtilities::IsInLockedSubtreeCrossingFrames(*parent));
   EXPECT_FALSE(DisplayLockUtilities::IsInLockedSubtreeCrossingFrames(*child));
 }
-
 }  // namespace blink

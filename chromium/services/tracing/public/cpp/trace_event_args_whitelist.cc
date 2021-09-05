@@ -42,6 +42,7 @@ const char* const kTopLevelIpcRunTaskAllowedArgs[] = {"ipc_hash", nullptr};
 const char* const kLifecyclesTaskPostedAllowedArgs[] = {
     "task_queue_name", "time_since_disabled_ms", "ipc_hash", "location",
     nullptr};
+const char* const kMemoryPressureEventsAllowedArgs[] = {"level", nullptr};
 
 const WhitelistEntry kEventArgsWhitelist[] = {
     {"__metadata", "thread_name", nullptr},
@@ -51,11 +52,21 @@ const WhitelistEntry kEventArgsWhitelist[] = {
     {"__metadata", "chrome_library_module", nullptr},
     {"__metadata", "stackFrames", nullptr},
     {"__metadata", "typeNames", nullptr},
+    {"base", "MultiSourceMemoryPressureMonitor::OnMemoryPressureLevelChanged",
+     kMemoryPressureEventsAllowedArgs},
+    {"base", "ScopedAllowBaseSyncPrimitivesOutsideBlockingScope",
+     kScopedBlockingCallAllowedArgs},
+    {"base", "ScopedAllowBlocking", kScopedBlockingCallAllowedArgs},
+    {"base", "ScopedAllowIO", kScopedBlockingCallAllowedArgs},
     {"base", "ScopedBlockingCall*", kScopedBlockingCallAllowedArgs},
-    {"base", "ScopedThreadMayLoadLibraryOnBackgroundThread",
+    {"base", "ScopedMayLoadLibraryAtBackgroundPriority",
      kScopedBlockingCallAllowedArgs},
     {"benchmark", "TestWhitelist*", nullptr},
+    {"blink", "MemoryPressureListenerRegistry::onMemoryPressure",
+     kMemoryPressureEventsAllowedArgs},
     {"browser", "KeyedServiceFactory::GetServiceForContext", nullptr},
+    {"browser", "TabLoader::OnMemoryPressure",
+     kMemoryPressureEventsAllowedArgs},
     {"fonts", "CachedFontLinkSettings::GetLinkedFonts", nullptr},
     {"fonts", "QueryLinkedFontsFromRegistry", nullptr},
     {"fonts", "RenderTextHarfBuzz::ItemizeTextToRuns::Runs", nullptr},
@@ -63,6 +74,8 @@ const WhitelistEntry kEventArgsWhitelist[] = {
     {"ipc", "GpuChannelHost::Send", nullptr},
     {"ipc", "SyncChannel::Send", nullptr},
     {"latencyInfo", "*", kInputLatencyAllowedArgs},
+    {"memory", "RenderThreadImpl::OnMemoryPressure",
+     kMemoryPressureEventsAllowedArgs},
     {"renderer_host", "*", kRendererHostAllowedArgs},
     {"shutdown", "*", nullptr},
     {"startup", "PrefProvider::PrefProvider", nullptr},
@@ -78,7 +91,7 @@ const WhitelistEntry kEventArgsWhitelist[] = {
     {"ui", "RenderTextHarfBuzz::FallbackFont", kFallbackFontAllowedArgs},
     {"ui", "RenderTextHarfBuzz::GetFallbackFonts",
      kGetFallbackFontsAllowedArgs},
-    {"ui", "UserEvent", nullptr},
+    {TRACE_DISABLED_BY_DEFAULT("user_action_samples"), "UserAction", nullptr},
     {TRACE_DISABLED_BY_DEFAULT("toplevel.flow"), "SequenceManager::PostTask",
      kTopLevelFlowAllowedArgs},
     {TRACE_DISABLED_BY_DEFAULT("lifecycles"), "task_posted_to_disabled_queue",

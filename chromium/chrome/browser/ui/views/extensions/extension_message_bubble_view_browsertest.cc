@@ -14,7 +14,6 @@
 #include "ui/events/base_event_utils.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
 #include "ui/views/controls/button/image_button.h"
-#include "ui/views/window/dialog_client_view.h"
 
 namespace {
 
@@ -131,13 +130,13 @@ void ExtensionMessageBubbleViewBrowserTest::ClickLearnMoreButton(
 void ExtensionMessageBubbleViewBrowserTest::ClickActionButton(
     Browser* browser) {
   ToolbarActionsBarBubbleViews* bubble = GetViewsBubbleForBrowser(browser);
-  bubble->GetDialogClientView()->AcceptWindow();
+  bubble->AcceptDialog();
 }
 
 void ExtensionMessageBubbleViewBrowserTest::ClickDismissButton(
     Browser* browser) {
   ToolbarActionsBarBubbleViews* bubble = GetViewsBubbleForBrowser(browser);
-  bubble->GetDialogClientView()->CancelWindow();
+  bubble->CancelDialog();
 }
 
 IN_PROC_BROWSER_TEST_F(ExtensionMessageBubbleViewBrowserTest,
@@ -177,6 +176,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionMessageBubbleViewBrowserTest,
 
 // Tests for the extension bubble and settings overrides. These bubbles are
 // currently only shown on Windows.
+// TODO(devlin): No they're not. We should enable all of these on Mac.
 #if defined(OS_WIN)
 IN_PROC_BROWSER_TEST_F(ExtensionMessageBubbleViewBrowserTest,
                        TestControlledNewTabPageMessageBubble) {
@@ -254,14 +254,14 @@ class NtpExtensionBubbleViewBrowserTest
  public:
   void SetUpCommandLine(base::CommandLine* command_line) override {
     ExtensionMessageBubbleViewBrowserTest::SetUpCommandLine(command_line);
-// The NTP bubble is disabled by default on non-windows platforms.
-#if !defined(OS_WIN)
+// The NTP bubble is only enabled by default on Mac, Windows, and CrOS.
+#if !defined(OS_WIN) && !defined(OS_MACOSX) && !defined(OS_CHROMEOS)
     extensions::SetNtpBubbleEnabledForTesting(true);
 #endif
   }
 
   void TearDownOnMainThread() override {
-#if !defined(OS_WIN)
+#if !defined(OS_WIN) && !defined(OS_MACOSX) && !defined(OS_CHROMEOS)
     extensions::SetNtpBubbleEnabledForTesting(false);
 #endif
     ExtensionMessageBubbleViewBrowserTest::TearDownOnMainThread();

@@ -23,6 +23,7 @@ namespace net {
 class HostCache;
 class HostResolverManager;
 struct ProcTaskParams;
+class ResolveContext;
 class URLRequestContext;
 
 // Wrapper for HostResolverManager, expected to be owned by a URLRequestContext,
@@ -34,21 +35,22 @@ class NET_EXPORT ContextHostResolver : public HostResolver {
  public:
   // Creates a ContextHostResolver that forwards all of its requests through
   // |manager|. Requests will be cached using |host_cache| if not null.
-  explicit ContextHostResolver(HostResolverManager* manager,
-                               std::unique_ptr<HostCache> host_cache);
+  ContextHostResolver(HostResolverManager* manager,
+                      std::unique_ptr<ResolveContext> resolve_context);
   // Same except the created resolver will own its own HostResolverManager.
-  explicit ContextHostResolver(
-      std::unique_ptr<HostResolverManager> owned_manager,
-      std::unique_ptr<HostCache> host_cache);
+  ContextHostResolver(std::unique_ptr<HostResolverManager> owned_manager,
+                      std::unique_ptr<ResolveContext> resolve_context);
   ~ContextHostResolver() override;
 
   // HostResolver methods:
   void OnShutdown() override;
   std::unique_ptr<ResolveHostRequest> CreateRequest(
       const HostPortPair& host,
+      const NetworkIsolationKey& network_isolation_key,
       const NetLogWithSource& net_log,
       const base::Optional<ResolveHostParameters>& optional_parameters)
       override;
+  std::unique_ptr<ProbeRequest> CreateDohProbeRequest() override;
   std::unique_ptr<MdnsListener> CreateMdnsListener(
       const HostPortPair& host,
       DnsQueryType query_type) override;
@@ -73,6 +75,8 @@ class NET_EXPORT ContextHostResolver : public HostResolver {
 
  private:
   class WrappedRequest;
+  class WrappedResolveHostRequest;
+  class WrappedProbeRequest;
 
   HostResolverManager* const manager_;
   std::unique_ptr<HostResolverManager> owned_manager_;
@@ -83,8 +87,7 @@ class NET_EXPORT ContextHostResolver : public HostResolver {
   // on resolver destruction.
   std::unordered_set<WrappedRequest*> handed_out_requests_;
 
-  URLRequestContext* context_ = nullptr;
-  std::unique_ptr<HostCache> host_cache_;
+  std::unique_ptr<ResolveContext> resolve_context_;
 
   // If true, the context is shutting down. Subsequent request Start() calls
   // will always fail immediately with ERR_CONTEXT_SHUT_DOWN.

@@ -26,11 +26,6 @@
 
 namespace blink {
 
-MediaStreamEvent* MediaStreamEvent::Create(const AtomicString& type,
-                                           MediaStream* stream) {
-  return MakeGarbageCollected<MediaStreamEvent>(type, stream);
-}
-
 MediaStreamEvent* MediaStreamEvent::Create(
     const AtomicString& type,
     const MediaStreamEventInit* initializer) {
@@ -63,7 +58,7 @@ const AtomicString& MediaStreamEvent::InterfaceName() const {
   return event_interface_names::kMediaStreamEvent;
 }
 
-void MediaStreamEvent::Trace(blink::Visitor* visitor) {
+void MediaStreamEvent::Trace(Visitor* visitor) {
   visitor->Trace(stream_);
   Event::Trace(visitor);
 }

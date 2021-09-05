@@ -57,6 +57,7 @@ struct SourceProfile {
   // The application locale. Stored because we can only access it from the UI
   // thread on the browser process. This is only used by the Firefox importer.
   std::string locale;
+  std::string profile;
 
   std::vector<ChromeProfileInfo> user_profile_names;
   std::string selected_profile_name;

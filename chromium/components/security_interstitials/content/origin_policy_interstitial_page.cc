@@ -30,7 +30,7 @@ OriginPolicyInterstitialPage::OriginPolicyInterstitialPage(
                                std::move(controller)),
       error_reason_(error_reason) {}
 
-OriginPolicyInterstitialPage::~OriginPolicyInterstitialPage() {}
+OriginPolicyInterstitialPage::~OriginPolicyInterstitialPage() = default;
 
 void OriginPolicyInterstitialPage::OnInterstitialClosing() {}
 
@@ -46,14 +46,14 @@ void OriginPolicyInterstitialPage::PopulateInterstitialStrings(
   load_time_data->SetBoolean("overridable", true);
 
   // Custom messages depending on the OriginPolicyState:
-  int explanation_paragraph_id = IDS_ORIGIN_POLICY_EXPLANATION_OTHER;
+  int explanation_paragraph_id = 0;
   switch (error_reason_) {
     case network::OriginPolicyState::kCannotLoadPolicy:
       explanation_paragraph_id = IDS_ORIGIN_POLICY_EXPLANATION_CANNOT_LOAD;
       break;
-    case network::OriginPolicyState::kInvalidRedirect:
+    case network::OriginPolicyState::kCannotParseHeader:
       explanation_paragraph_id =
-          IDS_ORIGIN_POLICY_EXPLANATION_SHOULD_NOT_REDIRECT;
+          IDS_ORIGIN_POLICY_EXPLANATION_CANNOT_PARSE_HEADER;
       break;
     default:
       NOTREACHED();

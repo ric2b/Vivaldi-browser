@@ -21,6 +21,7 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "services/service_manager/public/mojom/interface_provider.mojom.h"
 #include "third_party/blink/public/common/frame/frame_owner_element_type.h"
+#include "third_party/blink/public/mojom/frame/frame_owner_properties.mojom-forward.h"
 
 namespace blink {
 struct FramePolicy;
@@ -28,7 +29,6 @@ struct FramePolicy;
 
 namespace content {
 
-struct FrameOwnerProperties;
 class Navigator;
 class RenderFrameHostDelegate;
 class RenderViewHostDelegate;
@@ -146,7 +146,7 @@ class CONTENT_EXPORT FrameTree {
   // Adds a new child frame to the frame tree. |process_id| is required to
   // disambiguate |new_routing_id|, and it must match the process of the
   // |parent| node. Otherwise no child is added and this method returns false.
-  // |interface_provider_request| is the request end of the InterfaceProvider
+  // |interface_provider_receiver| is the receiver end of the InterfaceProvider
   // interface through which the child RenderFrame can access Mojo services
   // exposed by the corresponding RenderFrameHost. The caller takes care of
   // sending the client end of the interface down to the RenderFrame.
@@ -154,12 +154,8 @@ class CONTENT_EXPORT FrameTree {
       FrameTreeNode* parent,
       int process_id,
       int new_routing_id,
-      service_manager::mojom::InterfaceProviderRequest
-          interface_provider_request,
-      mojo::PendingReceiver<blink::mojom::DocumentInterfaceBroker>
-          document_interface_broker_content_receiver,
-      mojo::PendingReceiver<blink::mojom::DocumentInterfaceBroker>
-          document_interface_broker_blink_receiver,
+      mojo::PendingReceiver<service_manager::mojom::InterfaceProvider>
+          interface_provider_receiver,
       mojo::PendingReceiver<blink::mojom::BrowserInterfaceBroker>
           browser_interface_broker_receiver,
       blink::WebTreeScopeType scope,
@@ -168,7 +164,7 @@ class CONTENT_EXPORT FrameTree {
       bool is_created_by_script,
       const base::UnguessableToken& devtools_frame_token,
       const blink::FramePolicy& frame_policy,
-      const FrameOwnerProperties& frame_owner_properties,
+      const blink::mojom::FrameOwnerProperties& frame_owner_properties,
       bool was_discarded,
       blink::FrameOwnerElementType owner_type);
 
@@ -203,7 +199,7 @@ class CONTENT_EXPORT FrameTree {
   // to receive the RenderViewHostImpl containing the frame and the renderer-
   // specific frame routing ID of the removed frame.
   void SetFrameRemoveListener(
-      const base::Callback<void(RenderFrameHost*)>& on_frame_removed);
+      base::RepeatingCallback<void(RenderFrameHost*)> on_frame_removed);
 
   // Creates a RenderViewHostImpl for a given |site_instance| in the tree.
   //
@@ -211,9 +207,7 @@ class CONTENT_EXPORT FrameTree {
   // of this object.
   scoped_refptr<RenderViewHostImpl> CreateRenderViewHost(
       SiteInstance* site_instance,
-      int32_t routing_id,
       int32_t main_frame_routing_id,
-      int32_t widget_routing_id,
       bool swapped_out);
 
   // Returns the existing RenderViewHost for a new RenderFrameHost.
@@ -308,7 +302,7 @@ class CONTENT_EXPORT FrameTree {
 
   int focused_frame_tree_node_id_;
 
-  base::Callback<void(RenderFrameHost*)> on_frame_removed_;
+  base::RepeatingCallback<void(RenderFrameHost*)> on_frame_removed_;
 
   // Overall load progress.
   double load_progress_;

@@ -25,7 +25,7 @@
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
-#include "components/safe_browsing/common/safe_browsing_prefs.h"
+#include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "content/public/browser/web_ui.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_prefs.h"
@@ -65,19 +65,19 @@ ContentSettingsType ConvertToContentSettingsType(
     vivaldi::settings::ContentSettingsTypeEnum type) {
   switch (type) {
     case vivaldi::settings::CONTENT_SETTINGS_TYPE_ENUM_PLUGINS:
-      return CONTENT_SETTINGS_TYPE_PLUGINS;
+      return ContentSettingsType::PLUGINS;
     case vivaldi::settings::CONTENT_SETTINGS_TYPE_ENUM_POPUPS:
-      return CONTENT_SETTINGS_TYPE_POPUPS;
+      return ContentSettingsType::POPUPS;
     case vivaldi::settings::CONTENT_SETTINGS_TYPE_ENUM_GEOLOCATION:
-      return CONTENT_SETTINGS_TYPE_GEOLOCATION;
+      return ContentSettingsType::GEOLOCATION;
     case vivaldi::settings::CONTENT_SETTINGS_TYPE_ENUM_NOTIFICATIONS:
-      return CONTENT_SETTINGS_TYPE_NOTIFICATIONS;
+      return ContentSettingsType::NOTIFICATIONS;
     default: {
       NOTREACHED();
       break;
     }
   }
-  return CONTENT_SETTINGS_TYPE_DEFAULT;
+  return ContentSettingsType::DEFAULT;
 }
 
 ExtensionFunction::ResponseAction SettingsSetContentSettingFunction::Run() {

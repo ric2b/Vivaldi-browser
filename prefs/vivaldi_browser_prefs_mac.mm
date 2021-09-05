@@ -4,6 +4,7 @@
 
 #import <Cocoa/Cocoa.h>
 
+#include "base/values.h"
 #include "base/mac/mac_util.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "prefs/vivaldi_pref_names.h"
@@ -17,8 +18,7 @@ void RegisterOldPlatformPrefs(user_prefs::PrefRegistrySyncable* registry) {
 void MigrateOldPlatformPrefs(PrefService* prefs) {
 }
 
-std::unique_ptr<base::Value> GetPlatformComputedDefault(
-    const std::string& path) {
+base::Value GetPlatformComputedDefault(const std::string& path) {
   NSUserDefaults* userDefaults = [NSUserDefaults standardUserDefaults];
 
   if (path == vivaldiprefs::kSystemMacActionOnDoubleClick) {
@@ -28,32 +28,28 @@ std::unique_ptr<base::Value> GetPlatformComputedDefault(
     if (appleActionOnDoubleClick) {
       val = [appleActionOnDoubleClick UTF8String];
     }
-    return std::make_unique<base::Value>(val);
+    return base::Value(val);
   }
 
   if (path == vivaldiprefs::kSystemMacAquaColorVariant) {
     NSNumber* appleAquaColorVariant =
         [userDefaults objectForKey:@"AppleAquaColorVariant"];
-    return std::make_unique<base::Value>([appleAquaColorVariant intValue]);
+    return base::Value([appleAquaColorVariant intValue]);
   }
 
   if (path == vivaldiprefs::kSystemMacKeyboardUiMode) {
     NSNumber* appleKeyboardUIMode =
         [userDefaults objectForKey:@"AppleKeyboardUIMode"];
-    return std::make_unique<base::Value>([appleKeyboardUIMode intValue]);
+    return base::Value([appleKeyboardUIMode intValue]);
   }
 
   if (path == vivaldiprefs::kSystemMacSwipeScrollDirection) {
     bool appleSwipeScrollDirection =
         [[userDefaults objectForKey:@"com.apple.swipescrolldirection"] boolValue];
-    return std::make_unique<base::Value>(appleSwipeScrollDirection);
+    return base::Value(appleSwipeScrollDirection);
   }
 
-  return std::make_unique<base::Value>();
-}
-
-std::string GetPlatformDefaultKey() {
-  return "default_mac";
+  return base::Value();
 }
 
 }  // namespace vivaldi

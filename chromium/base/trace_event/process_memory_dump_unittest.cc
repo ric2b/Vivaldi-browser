@@ -9,9 +9,10 @@
 #include "base/memory/aligned_memory.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/shared_memory_tracker.h"
+#include "base/memory/writable_shared_memory_region.h"
 #include "base/process/process_metrics.h"
 #include "base/trace_event/memory_allocator_dump_guid.h"
-#include "base/trace_event/memory_infra_background_whitelist.h"
+#include "base/trace_event/memory_infra_background_allowlist.h"
 #include "base/trace_event/trace_log.h"
 #include "base/trace_event/traced_value.h"
 #include "build/build_config.h"
@@ -383,7 +384,7 @@ TEST(ProcessMemoryDumpTest, BackgroundModeTest) {
   std::unique_ptr<ProcessMemoryDump> pmd(
       new ProcessMemoryDump(background_args));
   ProcessMemoryDump::is_black_hole_non_fatal_for_testing_ = true;
-  SetAllocatorDumpNameWhitelistForTesting(kTestDumpNameWhitelist);
+  SetAllocatorDumpNameAllowlistForTesting(kTestDumpNameWhitelist);
   MemoryAllocatorDump* black_hole_mad = pmd->GetBlackHoleMad();
 
   // GetAllocatorDump works for uncreated dumps.
@@ -427,19 +428,19 @@ TEST(ProcessMemoryDumpTest, BackgroundModeTest) {
   EXPECT_NE(black_hole_mad, pmd->GetAllocatorDump("Whitelisted/TestName"));
 
   // Test whitelisted entries.
-  ASSERT_TRUE(IsMemoryAllocatorDumpNameWhitelisted("Whitelisted/TestName"));
+  ASSERT_TRUE(IsMemoryAllocatorDumpNameInAllowlist("Whitelisted/TestName"));
 
   // Global dumps should be whitelisted.
-  ASSERT_TRUE(IsMemoryAllocatorDumpNameWhitelisted("global/13456"));
+  ASSERT_TRUE(IsMemoryAllocatorDumpNameInAllowlist("global/13456"));
 
   // Global dumps with non-guids should not be.
-  ASSERT_FALSE(IsMemoryAllocatorDumpNameWhitelisted("global/random"));
+  ASSERT_FALSE(IsMemoryAllocatorDumpNameInAllowlist("global/random"));
 
   // Random names should not.
-  ASSERT_FALSE(IsMemoryAllocatorDumpNameWhitelisted("NotWhitelisted/TestName"));
+  ASSERT_FALSE(IsMemoryAllocatorDumpNameInAllowlist("NotWhitelisted/TestName"));
 
   // Check hex processing.
-  ASSERT_TRUE(IsMemoryAllocatorDumpNameWhitelisted("Whitelisted/0xA1b2"));
+  ASSERT_TRUE(IsMemoryAllocatorDumpNameInAllowlist("Whitelisted/0xA1b2"));
 }
 
 TEST(ProcessMemoryDumpTest, GuidsTest) {
@@ -521,43 +522,44 @@ TEST(ProcessMemoryDumpTest, MAYBE_CountResidentBytesInSharedMemory) {
   const size_t page_size = ProcessMemoryDump::GetSystemPageSize();
 
   // Allocate few page of dirty memory and check if it is resident.
-  const size_t size1 = 5 * page_size;
-  SharedMemory shared_memory1;
-  shared_memory1.CreateAndMapAnonymous(size1);
-  memset(shared_memory1.memory(), 0, size1);
-  base::Optional<size_t> res1 =
-      ProcessMemoryDump::CountResidentBytesInSharedMemory(
-          shared_memory1.memory(), shared_memory1.mapped_size());
-  ASSERT_TRUE(res1.has_value());
-  ASSERT_EQ(res1.value(), size1);
-  shared_memory1.Unmap();
-  shared_memory1.Close();
+  {
+    const size_t kDirtyMemorySize = 5 * page_size;
+    auto region = base::WritableSharedMemoryRegion::Create(kDirtyMemorySize);
+    base::WritableSharedMemoryMapping mapping = region.Map();
+    memset(mapping.memory(), 0, kDirtyMemorySize);
+    base::Optional<size_t> res1 =
+        ProcessMemoryDump::CountResidentBytesInSharedMemory(
+            mapping.memory(), mapping.mapped_size());
+    ASSERT_TRUE(res1.has_value());
+    ASSERT_EQ(res1.value(), kDirtyMemorySize);
+  }
 
   // Allocate a large memory segment (> 8Mib).
-  const size_t kVeryLargeMemorySize = 15 * 1024 * 1024;
-  SharedMemory shared_memory2;
-  shared_memory2.CreateAndMapAnonymous(kVeryLargeMemorySize);
-  memset(shared_memory2.memory(), 0, kVeryLargeMemorySize);
-  base::Optional<size_t> res2 =
-      ProcessMemoryDump::CountResidentBytesInSharedMemory(
-          shared_memory2.memory(), shared_memory2.mapped_size());
-  ASSERT_TRUE(res2.has_value());
-  ASSERT_EQ(res2.value(), kVeryLargeMemorySize);
-  shared_memory2.Unmap();
-  shared_memory2.Close();
+  {
+    const size_t kVeryLargeMemorySize = 15 * 1024 * 1024;
+    auto region =
+        base::WritableSharedMemoryRegion::Create(kVeryLargeMemorySize);
+    base::WritableSharedMemoryMapping mapping = region.Map();
+    memset(mapping.memory(), 0, kVeryLargeMemorySize);
+    base::Optional<size_t> res2 =
+        ProcessMemoryDump::CountResidentBytesInSharedMemory(
+            mapping.memory(), mapping.mapped_size());
+    ASSERT_TRUE(res2.has_value());
+    ASSERT_EQ(res2.value(), kVeryLargeMemorySize);
+  }
 
   // Allocate a large memory segment, but touch about half of all pages.
-  const size_t kTouchedMemorySize = 7 * 1024 * 1024;
-  SharedMemory shared_memory3;
-  shared_memory3.CreateAndMapAnonymous(kVeryLargeMemorySize);
-  memset(shared_memory3.memory(), 0, kTouchedMemorySize);
-  base::Optional<size_t> res3 =
-      ProcessMemoryDump::CountResidentBytesInSharedMemory(
-          shared_memory3.memory(), shared_memory3.mapped_size());
-  ASSERT_TRUE(res3.has_value());
-  ASSERT_EQ(res3.value(), kTouchedMemorySize);
-  shared_memory3.Unmap();
-  shared_memory3.Close();
+  {
+    const size_t kTouchedMemorySize = 7 * 1024 * 1024;
+    auto region = base::WritableSharedMemoryRegion::Create(kTouchedMemorySize);
+    base::WritableSharedMemoryMapping mapping = region.Map();
+    memset(mapping.memory(), 0, kTouchedMemorySize);
+    base::Optional<size_t> res3 =
+        ProcessMemoryDump::CountResidentBytesInSharedMemory(
+            mapping.memory(), mapping.mapped_size());
+    ASSERT_TRUE(res3.has_value());
+    ASSERT_EQ(res3.value(), kTouchedMemorySize);
+  }
 }
 #endif  // defined(COUNT_RESIDENT_BYTES_SUPPORTED)
 

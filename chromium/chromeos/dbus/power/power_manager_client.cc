@@ -166,8 +166,8 @@ class PowerManagerClientImpl : public PowerManagerClient {
         dbus::ObjectPath(power_manager::kPowerManagerServicePath));
 
     power_manager_proxy_->SetNameOwnerChangedCallback(
-        base::Bind(&PowerManagerClientImpl::NameOwnerChangedReceived,
-                   weak_ptr_factory_.GetWeakPtr()));
+        base::BindRepeating(&PowerManagerClientImpl::NameOwnerChangedReceived,
+                            weak_ptr_factory_.GetWeakPtr()));
 
     power_manager_proxy_->WaitForServiceToBeAvailable(
         base::BindOnce(&PowerManagerClientImpl::NotifyServiceBecameAvailable,
@@ -178,6 +178,8 @@ class PowerManagerClientImpl : public PowerManagerClient {
     const std::map<const char*, SignalMethod> kSignalMethods = {
         {power_manager::kScreenBrightnessChangedSignal,
          &PowerManagerClientImpl::ScreenBrightnessChangedReceived},
+        {power_manager::kAmbientColorTemperatureChangedSignal,
+         &PowerManagerClientImpl::AmbientColorTemperatureChangedReceived},
         {power_manager::kKeyboardBrightnessChangedSignal,
          &PowerManagerClientImpl::KeyboardBrightnessChangedReceived},
         {power_manager::kScreenIdleStateChangedSignal,
@@ -344,6 +346,8 @@ class PowerManagerClientImpl : public PowerManagerClient {
                        const std::string& description) override {
     POWER_LOG(USER) << "RequestShutdown: " << reason << " (" << description
                     << ")";
+    for (auto& observer : observers_)
+      observer.ShutdownRequested(reason);
     dbus::MethodCall method_call(power_manager::kPowerManagerInterface,
                                  power_manager::kRequestShutdownMethod);
     dbus::MessageWriter writer(&method_call);
@@ -615,6 +619,20 @@ class PowerManagerClientImpl : public PowerManagerClient {
                      << ": cause " << proto.cause();
     for (auto& observer : observers_)
       observer.ScreenBrightnessChanged(proto);
+  }
+
+  void AmbientColorTemperatureChangedReceived(dbus::Signal* signal) {
+    dbus::MessageReader reader(signal);
+    int32_t color_temperature = 0;
+    if (!reader.PopInt32(&color_temperature)) {
+      POWER_LOG(ERROR) << "Unable to decode read ambient color from "
+                       << power_manager::kAmbientColorTemperatureChangedSignal
+                       << " signal";
+      return;
+    }
+
+    for (auto& observer : observers_)
+      observer.AmbientColorChanged(color_temperature);
   }
 
   void KeyboardBrightnessChangedReceived(dbus::Signal* signal) {
@@ -959,7 +977,7 @@ class PowerManagerClientImpl : public PowerManagerClient {
 
     // powerd gives clients a limited amount of time to report suspend
     // readiness. Log the stragglers within Chrome to aid in debugging.
-    for (const auto it : suspend_readiness_registry_) {
+    for (const auto& it : suspend_readiness_registry_) {
       LOG(WARNING) << "Didn't report suspend readiness due to "
                    << it.second.debug_info;
     }
@@ -1039,6 +1057,9 @@ class PowerManagerClientImpl : public PowerManagerClient {
       case power_manager::InputEvent_Type_TABLET_MODE_OFF:
         for (auto& observer : observers_)
           observer.TabletModeEventReceived(TabletMode::OFF, timestamp);
+        break;
+      default:
+        // TODO(henryhsu): handle the missing cases.
         break;
     }
   }

@@ -34,12 +34,16 @@
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "components/viz/common/surfaces/surface_id.h"
+#include "media/base/video_frame_metadata.h"
 #include "third_party/blink/public/platform/web_content_decryption_module.h"
 #include "third_party/blink/public/platform/web_media_source.h"
 #include "third_party/blink/public/platform/web_set_sink_id_callbacks.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/webaudiosourceprovider_impl.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/size.h"
+
+#include "renderer/vivaldi_media_element_event_delegate.h"
 
 namespace cc {
 class PaintCanvas;
@@ -60,7 +64,6 @@ class WebString;
 class WebURL;
 enum class WebFullscreenVideoStatus;
 struct WebRect;
-struct WebSize;
 
 class WebMediaPlayer {
  public:
@@ -122,16 +125,28 @@ class WebMediaPlayer {
     int frame_id = -1;
     gfx::Rect visible_rect = {};
     base::TimeDelta timestamp = {};
+    base::TimeDelta expected_timestamp = {};
     bool skipped = false;
+  };
+
+  // TODO(crbug.com/639174): Attempt to merge this with VideoFrameUploadMetadata
+  // For video.requestVideoFrameCallback(). https://wicg.github.io/video-raf/
+  struct VideoFramePresentationMetadata {
+    uint32_t presented_frames;
+    base::TimeTicks presentation_time;
+    base::TimeTicks expected_display_time;
+    int width;
+    int height;
+    base::TimeDelta media_time;
+    media::VideoFrameMetadata metadata;
+    base::TimeDelta rendering_interval;
+    base::TimeDelta average_frame_duration;
   };
 
   // Describes when we use SurfaceLayer for video instead of VideoLayer.
   enum class SurfaceLayerMode {
     // Always use VideoLayer
     kNever,
-
-    // Use SurfaceLayer only when we switch to Picture-in-Picture.
-    kOnDemand,
 
     // Always use SurfaceLayer for video.
     kAlways,
@@ -148,10 +163,18 @@ class WebMediaPlayer {
   virtual void SetRate(double) = 0;
   virtual void SetVolume(double) = 0;
 
+  // Set a target value for media pipeline latency for post-decode buffering.
+  // |seconds| is a target value for post-decode buffering latency. As a default
+  // |seconds| may also be NaN, indicating no preference. NaN will also be the
+  // value if the hint is cleared.
+  virtual void SetLatencyHint(double seconds) = 0;
+
   // The associated media element is going to enter Picture-in-Picture. This
   // method should make sure the player is set up for this and has a SurfaceId
   // as it will be needed.
   virtual void OnRequestPictureInPicture() = 0;
+
+  virtual void OnPictureInPictureAvailabilityChanged(bool available) = 0;
 
   virtual void RequestRemotePlayback() {}
   virtual void RequestRemotePlaybackControl() {}
@@ -175,15 +198,16 @@ class WebMediaPlayer {
   virtual bool IsRemote() const { return false; }
 
   // Dimension of the video.
-  virtual WebSize NaturalSize() const = 0;
+  virtual gfx::Size NaturalSize() const = 0;
 
-  virtual WebSize VisibleRect() const = 0;
+  virtual gfx::Size VisibleSize() const = 0;
 
   // Getters of playback state.
   virtual bool Paused() const = 0;
   virtual bool Seeking() const = 0;
   virtual double Duration() const = 0;
   virtual double CurrentTime() const = 0;
+  virtual bool IsEnded() const = 0;
 
   virtual bool PausedWhenHidden() const { return false; }
 
@@ -428,6 +452,20 @@ class WebMediaPlayer {
   // Provide the media URL, after any redirects are applied.  May return an
   // empty GURL, which will be interpreted as "use the original URL".
   virtual GURL GetSrcAfterRedirects() { return GURL(); }
+
+  // Register a request to be notified the next time a video frame is presented
+  // to the compositor. The request will be completed via
+  // WebMediaPlayerClient::OnRequestVideoFrameCallback(). The frame info can be
+  // retrieved via GetVideoFramePresentationMetadata().
+  // See https://wicg.github.io/video-raf/.
+  virtual void RequestVideoFrameCallback() {}
+  virtual std::unique_ptr<VideoFramePresentationMetadata>
+  GetVideoFramePresentationMetadata() {
+    return nullptr;
+  }
+
+  // Vivaldi:
+  virtual VivaldiMediaElementEventDelegate* GetMediaElementEventDelegate() = 0;
 
   virtual base::WeakPtr<WebMediaPlayer> AsWeakPtr() = 0;
 };

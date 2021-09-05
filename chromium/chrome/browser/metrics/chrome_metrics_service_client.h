@@ -25,7 +25,7 @@
 #include "components/metrics/metrics_service_client.h"
 #include "components/omnibox/browser/omnibox_event_global_tracker.h"
 #include "components/ukm/observers/history_delete_observer.h"
-#include "components/ukm/observers/sync_disable_observer.h"
+#include "components/ukm/observers/ukm_consent_state_observer.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "ppapi/buildflags/buildflags.h"
@@ -46,7 +46,7 @@ class MetricsStateManager;
 class ChromeMetricsServiceClient : public metrics::MetricsServiceClient,
                                    public content::NotificationObserver,
                                    public ukm::HistoryDeleteObserver,
-                                   public ukm::SyncDisableObserver {
+                                   public ukm::UkmConsentStateObserver {
  public:
   ~ChromeMetricsServiceClient() override;
 
@@ -67,8 +67,7 @@ class ChromeMetricsServiceClient : public metrics::MetricsServiceClient,
   metrics::SystemProfileProto::Channel GetChannel() override;
   std::string GetVersionString() override;
   void OnEnvironmentUpdate(std::string* serialized_environment) override;
-  void OnLogCleanShutdown() override;
-  void CollectFinalMetricsForLog(const base::Closure& done_callback) override;
+  void CollectFinalMetricsForLog(base::OnceClosure done_callback) override;
   std::unique_ptr<metrics::MetricsLogUploader> CreateUploader(
       const GURL& server_url,
       const GURL& insecure_server_url,
@@ -81,19 +80,20 @@ class ChromeMetricsServiceClient : public metrics::MetricsServiceClient,
   bool IsReportingPolicyManaged() override;
   metrics::EnableMetricsDefault GetMetricsReportingDefaultState() override;
   bool IsUMACellularUploadLogicEnabled() override;
-  bool SyncStateAllowsUkm() override;
-  bool SyncStateAllowsExtensionUkm() override;
+  bool IsUkmAllowedForAllProfiles() override;
+  bool IsUkmAllowedWithExtensionsForAllProfiles() override;
   bool AreNotificationListenersEnabledOnAllProfiles() override;
   std::string GetAppPackageName() override;
   std::string GetUploadSigningKey() override;
   static void SetNotificationListenerSetupFailedForTesting(
       bool simulate_failure);
+  bool ShouldResetClientIdsOnClonedInstall() override;
 
   // ukm::HistoryDeleteObserver:
   void OnHistoryDeleted() override;
 
-  // ukm::SyncDisableObserver:
-  void OnSyncPrefsChanged(bool must_purge) override;
+  // ukm::UkmConsentStateObserver:
+  void OnUkmAllowedStateChanged(bool must_purge) override;
 
   // Determine what to do with a file based on filename. Visible for testing.
   using IsProcessRunningFunction = bool (*)(base::ProcessId);
@@ -180,7 +180,7 @@ class ChromeMetricsServiceClient : public metrics::MetricsServiceClient,
   bool notification_listeners_active_ = false;
 
   // Saved callback received from CollectFinalMetricsForLog().
-  base::Closure collect_final_metrics_done_callback_;
+  base::OnceClosure collect_final_metrics_done_callback_;
 
   // Indicates that collect final metrics step is running.
   bool waiting_for_collect_final_metrics_step_ = false;

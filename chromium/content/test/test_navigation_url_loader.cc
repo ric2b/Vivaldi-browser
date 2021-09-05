@@ -7,7 +7,6 @@
 #include <utility>
 
 #include "content/browser/loader/navigation_url_loader_delegate.h"
-#include "content/browser/loader/navigation_url_loader_impl.h"
 #include "content/browser/navigation_subresource_loader_params.h"
 #include "content/public/browser/global_request_id.h"
 #include "content/public/browser/render_frame_host.h"
@@ -15,9 +14,10 @@
 #include "content/public/browser/ssl_status.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/navigation_policy.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/url_request/redirect_info.h"
-#include "services/network/public/cpp/resource_response.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
+#include "services/network/public/mojom/url_response_head.mojom.h"
 
 namespace content {
 
@@ -44,10 +44,10 @@ void TestNavigationURLLoader::SimulateServerRedirect(const GURL& redirect_url) {
   redirect_info.status_code = 302;
   redirect_info.new_method = "GET";
   redirect_info.new_url = redirect_url;
-  redirect_info.new_site_for_cookies = redirect_url;
-  scoped_refptr<network::ResourceResponse> response_head(
-      new network::ResourceResponse);
-  CallOnRequestRedirected(redirect_info, response_head);
+  redirect_info.new_site_for_cookies =
+      net::SiteForCookies::FromUrl(redirect_url);
+  auto response_head = network::mojom::URLResponseHead::New();
+  CallOnRequestRedirected(redirect_info, std::move(response_head));
 }
 
 void TestNavigationURLLoader::SimulateError(int error_code) {
@@ -63,31 +63,29 @@ void TestNavigationURLLoader::SimulateErrorWithStatus(
 
 void TestNavigationURLLoader::CallOnRequestRedirected(
     const net::RedirectInfo& redirect_info,
-    const scoped_refptr<network::ResourceResponse>& response_head) {
+    network::mojom::URLResponseHeadPtr response_head) {
   DCHECK(!is_served_from_back_forward_cache_);
-  delegate_->OnRequestRedirected(redirect_info, response_head);
+  delegate_->OnRequestRedirected(redirect_info, std::move(response_head));
 }
 
 void TestNavigationURLLoader::CallOnResponseStarted(
-    const scoped_refptr<network::ResourceResponse>& response_head) {
+    network::mojom::URLResponseHeadPtr response_head) {
   // Create a bidirectionnal communication pipe between a URLLoader and a
   // URLLoaderClient. It will be closed at the end of this function. The sole
   // purpose of this is not to violate some DCHECKs when the navigation commits.
-  network::mojom::URLLoaderClientPtr url_loader_client_ptr;
-  network::mojom::URLLoaderClientRequest url_loader_client_request =
-      mojo::MakeRequest(&url_loader_client_ptr);
-  network::mojom::URLLoaderPtr url_loader_ptr;
-  network::mojom::URLLoaderRequest url_loader_request =
-      mojo::MakeRequest(&url_loader_ptr);
+  mojo::PendingRemote<network::mojom::URLLoaderClient> url_loader_client_remote;
+  mojo::PendingRemote<network::mojom::URLLoader> url_loader_remote;
+  ignore_result(url_loader_remote.InitWithNewPipeAndPassReceiver());
   auto url_loader_client_endpoints =
       network::mojom::URLLoaderClientEndpoints::New(
-          url_loader_ptr.PassInterface(), std::move(url_loader_client_request));
+          std::move(url_loader_remote),
+          url_loader_client_remote.InitWithNewPipeAndPassReceiver());
 
-  delegate_->OnResponseStarted(
-      std::move(url_loader_client_endpoints), response_head,
-      mojo::ScopedDataPipeConsumerHandle(),
-      NavigationURLLoaderImpl::MakeGlobalRequestID(), false,
-      NavigationDownloadPolicy(), base::nullopt);
+  delegate_->OnResponseStarted(std::move(url_loader_client_endpoints),
+                               std::move(response_head),
+                               mojo::ScopedDataPipeConsumerHandle(),
+                               GlobalRequestID::MakeBrowserInitiated(), false,
+                               NavigationDownloadPolicy(), base::nullopt);
 }
 
 TestNavigationURLLoader::~TestNavigationURLLoader() {}

@@ -1,29 +1,37 @@
 import("//build/config/jumbo.gni")
 
-jumbo_source_set("adverse_adblocking") {
+source_set("adverse_adblocking") {
   sources = [
     "adverse_adblocking/adverse_ad_filter_list.cc",
     "adverse_adblocking/adverse_ad_filter_list.h",
     "adverse_adblocking/vivaldi_subresource_filter_throttle.cc",
     "adverse_adblocking/vivaldi_subresource_filter_throttle.h",
+    "adverse_adblocking/vivaldi_subresource_filter_client.h",
+    "adverse_adblocking/adverse_ad_filter_list_factory.h",
   ]
   deps = [
+    "//build:branding_buildflags",
+    "//components/prefs",
+    "//components/keyed_service/content",
+    "//components/safe_browsing/core/db:v4_protocol_manager_util",
+    "//components/subresource_filter/core/browser",
+    "//components/subresource_filter/core/common",
     "//components/subresource_filter/content/browser",
     "//content/public/browser",
+    "//extensions/buildflags",
     "//vivaldi/prefs:prefs_files_generated",
   ]
 }
 
-jumbo_source_set("content_adverse_adblocking") {
+source_set("content_adverse_adblocking") {
   sources = [
-    "adverse_adblocking/vivaldi_content_browser_client.cc",
-    "adverse_adblocking/vivaldi_content_browser_client.h",
     "adverse_adblocking/vivaldi_subresource_filter_client.cc",
     "adverse_adblocking/vivaldi_subresource_filter_client.h",
   ]
 
   deps = [
     ":adverse_adblocking",
+    "//chrome/common:buildflags",
     "//components/subresource_filter/content/browser",
     "//content/public/browser",
     "//vivaldi/prefs:prefs_files_generated",

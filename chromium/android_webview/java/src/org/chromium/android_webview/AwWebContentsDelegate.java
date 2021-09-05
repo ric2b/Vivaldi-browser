@@ -4,7 +4,8 @@
 
 package org.chromium.android_webview;
 
-import org.chromium.base.VisibleForTesting;
+import androidx.annotation.VisibleForTesting;
+
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
@@ -24,6 +25,7 @@ public abstract class AwWebContentsDelegate extends WebContentsDelegateAndroid {
     public abstract void runFileChooser(int processId, int renderId, int modeFlags,
             String acceptTypes, String title, String defaultFilename,  boolean capture);
 
+    // See //android_webview/docs/how-does-on-create-window-work.md for more details.
     @CalledByNative
     public abstract boolean addNewContents(boolean isDialog, boolean isUserGesture);
 

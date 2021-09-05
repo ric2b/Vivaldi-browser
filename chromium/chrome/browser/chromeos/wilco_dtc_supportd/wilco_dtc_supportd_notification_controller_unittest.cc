@@ -9,6 +9,7 @@
 
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/chromeos/wilco_dtc_supportd/wilco_dtc_supportd_client.h"
 #include "chrome/browser/notifications/notification_display_service_tester.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/testing_browser_process.h"
@@ -52,7 +53,10 @@ struct WilcoDtcSupportdNotificationControllerTestParams {
     {&WilcoDtcSupportdNotificationController::ShowDockThunderboltNotification,
      IDS_WILCO_NOTIFICATION_DOCK_THUNDERBOLT_TITLE,
      IDS_WILCO_NOTIFICATION_DOCK_THUNDERBOLT_MESSAGE,
-     message_center::DEFAULT_PRIORITY}};
+     message_center::DEFAULT_PRIORITY},
+    {&WilcoDtcSupportdNotificationController::ShowLowPowerChargerNotification,
+     IDS_WILCO_LOW_POWER_CHARGER_TITLE, IDS_WILCO_LOW_POWER_CHARGER_MESSAGE,
+     message_center::SYSTEM_PRIORITY}};
 
 class WilcoDtcSupportdNotificationControllerTest
     : public testing::TestWithParam<

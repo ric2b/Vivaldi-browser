@@ -39,7 +39,7 @@ class CellularSetupServiceHolder : public base::SupportsUserData::Data {
   ~CellularSetupServiceHolder() override = default;
 
   void BindReceiver(mojo::PendingReceiver<mojom::CellularSetup> receiver) {
-    service_.BindRequest(std::move(receiver));
+    service_.BindReceiver(std::move(receiver));
   }
 
  private:
@@ -123,19 +123,17 @@ CellularSetupDialogUI::CellularSetupDialogUI(content::WebUI* web_ui)
   }
 
   content::WebUIDataSource::Add(Profile::FromWebUI(web_ui), source);
-
-  // Add Mojo bindings to this WebUI so that Mojo calls can occur in JavaScript.
-  AddHandlerToRegistry(base::BindRepeating(
-      &CellularSetupDialogUI::BindCellularSetup, base::Unretained(this)));
 }
 
 CellularSetupDialogUI::~CellularSetupDialogUI() = default;
 
-void CellularSetupDialogUI::BindCellularSetup(
-    mojom::CellularSetupRequest request) {
+void CellularSetupDialogUI::BindInterface(
+    mojo::PendingReceiver<mojom::CellularSetup> receiver) {
   GetOrCreateServiceHolder(web_ui()->GetWebContents()->GetBrowserContext())
-      ->BindReceiver(std::move(request));
+      ->BindReceiver(std::move(receiver));
 }
+
+WEB_UI_CONTROLLER_TYPE_IMPL(CellularSetupDialogUI)
 
 }  // namespace cellular_setup
 

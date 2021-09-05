@@ -5,10 +5,12 @@
 #include "chrome/browser/ui/views/native_file_system/native_file_system_directory_access_confirmation_view.h"
 
 #include "base/files/file_path.h"
+#include "base/memory/ptr_util.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/chrome_typography.h"
 #include "chrome/browser/ui/views/native_file_system/native_file_system_ui_helpers.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/constrained_window/constrained_window_views.h"
 #include "components/url_formatter/elide_url.h"
@@ -21,7 +23,6 @@
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/styled_label.h"
 #include "ui/views/layout/box_layout.h"
-#include "ui/views/window/dialog_client_view.h"
 
 NativeFileSystemDirectoryAccessConfirmationView::
     ~NativeFileSystemDirectoryAccessConfirmationView() {
@@ -34,11 +35,12 @@ NativeFileSystemDirectoryAccessConfirmationView::
 views::Widget* NativeFileSystemDirectoryAccessConfirmationView::ShowDialog(
     const url::Origin& origin,
     const base::FilePath& path,
-    base::OnceCallback<void(PermissionAction result)> callback,
-    content::WebContents* web_contents) {
+    base::OnceCallback<void(permissions::PermissionAction result)> callback,
+    content::WebContents* web_contents,
+    base::ScopedClosureRunner fullscreen_block) {
   auto delegate =
       base::WrapUnique(new NativeFileSystemDirectoryAccessConfirmationView(
-          origin, path, std::move(callback)));
+          origin, path, std::move(callback), std::move(fullscreen_block)));
   return constrained_window::ShowWebModalDialogViews(delegate.release(),
                                                      web_contents);
 }
@@ -52,16 +54,6 @@ base::string16 NativeFileSystemDirectoryAccessConfirmationView::GetWindowTitle()
 bool NativeFileSystemDirectoryAccessConfirmationView::ShouldShowCloseButton()
     const {
   return false;
-}
-
-bool NativeFileSystemDirectoryAccessConfirmationView::Accept() {
-  std::move(callback_).Run(PermissionAction::GRANTED);
-  return true;
-}
-
-bool NativeFileSystemDirectoryAccessConfirmationView::Cancel() {
-  std::move(callback_).Run(PermissionAction::DISMISSED);
-  return true;
 }
 
 gfx::Size
@@ -80,17 +72,18 @@ ui::ModalType NativeFileSystemDirectoryAccessConfirmationView::GetModalType()
 
 views::View*
 NativeFileSystemDirectoryAccessConfirmationView::GetInitiallyFocusedView() {
-  const views::DialogClientView* dcv = GetDialogClientView();
-  return dcv ? dcv->cancel_button() : nullptr;
+  return GetCancelButton();
 }
 
 NativeFileSystemDirectoryAccessConfirmationView::
     NativeFileSystemDirectoryAccessConfirmationView(
         const url::Origin& origin,
         const base::FilePath& path,
-        base::OnceCallback<void(PermissionAction result)> callback)
-    : callback_(std::move(callback)) {
-  DialogDelegate::set_button_label(
+        base::OnceCallback<void(permissions::PermissionAction result)> callback,
+        base::ScopedClosureRunner fullscreen_block)
+    : callback_(std::move(callback)),
+      fullscreen_block_(std::move(fullscreen_block)) {
+  DialogDelegate::SetButtonLabel(
       ui::DIALOG_BUTTON_OK,
       l10n_util::GetStringUTF16(
           IDS_NATIVE_FILE_SYSTEM_DIRECTORY_ACCESS_ALLOW_BUTTON));
@@ -100,16 +93,40 @@ NativeFileSystemDirectoryAccessConfirmationView::
       provider->GetDialogInsetsForContentType(views::TEXT, views::TEXT),
       provider->GetDistanceMetric(views::DISTANCE_RELATED_CONTROL_VERTICAL)));
 
-  AddChildView(native_file_system_ui_helper::CreateOriginPathLabel(
-      IDS_NATIVE_FILE_SYSTEM_DIRECTORY_ACCESS_CONFIRMATION_TEXT, origin, path,
-      CONTEXT_BODY_TEXT_SMALL, /*show_emphasis=*/true));
+  auto run_callback =
+      [](NativeFileSystemDirectoryAccessConfirmationView* dialog,
+         permissions::PermissionAction result) {
+        std::move(dialog->callback_).Run(result);
+      };
+  DialogDelegate::SetAcceptCallback(
+      base::BindOnce(run_callback, base::Unretained(this),
+                     permissions::PermissionAction::GRANTED));
+  DialogDelegate::SetCancelCallback(
+      base::BindOnce(run_callback, base::Unretained(this),
+                     permissions::PermissionAction::DISMISSED));
+  DialogDelegate::SetCloseCallback(
+      base::BindOnce(run_callback, base::Unretained(this),
+                     permissions::PermissionAction::DISMISSED));
+
+  if (base::FeatureList::IsEnabled(
+          features::kNativeFileSystemOriginScopedPermissions)) {
+    AddChildView(native_file_system_ui_helper::CreateOriginPathLabel(
+        IDS_NATIVE_FILE_SYSTEM_ORIGIN_SCOPED_READ_PERMISSION_DIRECTORY_TEXT,
+        origin, path, CONTEXT_BODY_TEXT_SMALL, /*show_emphasis=*/true));
+  } else {
+    AddChildView(native_file_system_ui_helper::CreateOriginPathLabel(
+        IDS_NATIVE_FILE_SYSTEM_DIRECTORY_ACCESS_CONFIRMATION_TEXT, origin, path,
+        CONTEXT_BODY_TEXT_SMALL, /*show_emphasis=*/true));
+  }
 }
 
 void ShowNativeFileSystemDirectoryAccessConfirmationDialog(
     const url::Origin& origin,
     const base::FilePath& path,
-    base::OnceCallback<void(PermissionAction result)> callback,
-    content::WebContents* web_contents) {
+    base::OnceCallback<void(permissions::PermissionAction result)> callback,
+    content::WebContents* web_contents,
+    base::ScopedClosureRunner fullscreen_block) {
   NativeFileSystemDirectoryAccessConfirmationView::ShowDialog(
-      origin, path, std::move(callback), web_contents);
+      origin, path, std::move(callback), web_contents,
+      std::move(fullscreen_block));
 }

@@ -49,8 +49,6 @@
 
 namespace blink {
 
-using namespace html_names;
-
 // FIXME: Share more code with MediaDocumentParser.
 class PluginDocumentParser : public RawDataDocumentParser {
  public:
@@ -107,7 +105,7 @@ void PluginDocumentParser::CreateDocumentStructure() {
     return;  // runScriptsAtDocumentElementAvailable can detach the frame.
 
   auto* body = MakeGarbageCollected<HTMLBodyElement>(*GetDocument());
-  body->setAttribute(kStyleAttr,
+  body->setAttribute(html_names::kStyleAttr,
                      "height: 100%; width: 100%; overflow: hidden; margin: 0");
   body->SetInlineStyleProperty(
       CSSPropertyID::kBackgroundColor,
@@ -120,13 +118,14 @@ void PluginDocumentParser::CreateDocumentStructure() {
   }
 
   embed_element_ = MakeGarbageCollected<HTMLEmbedElement>(*GetDocument());
-  embed_element_->setAttribute(kWidthAttr, "100%");
-  embed_element_->setAttribute(kHeightAttr, "100%");
-  embed_element_->setAttribute(kNameAttr, "plugin");
-  embed_element_->setAttribute(kIdAttr, "plugin");
-  embed_element_->setAttribute(kSrcAttr,
+  embed_element_->setAttribute(html_names::kWidthAttr, "100%");
+  embed_element_->setAttribute(html_names::kHeightAttr, "100%");
+  embed_element_->setAttribute(html_names::kNameAttr, "plugin");
+  embed_element_->setAttribute(html_names::kIdAttr, "plugin");
+  embed_element_->setAttribute(html_names::kSrcAttr,
                                AtomicString(GetDocument()->Url().GetString()));
-  embed_element_->setAttribute(kTypeAttr, GetDocument()->Loader()->MimeType());
+  embed_element_->setAttribute(html_names::kTypeAttr,
+                               GetDocument()->Loader()->MimeType());
   body->AppendChild(embed_element_);
   if (IsStopped()) {
     // Possibly detached by a mutation event listener installed in
@@ -134,9 +133,9 @@ void PluginDocumentParser::CreateDocumentStructure() {
     return;
   }
 
-  ToPluginDocument(GetDocument())->SetPluginNode(embed_element_);
+  To<PluginDocument>(GetDocument())->SetPluginNode(embed_element_);
 
-  GetDocument()->UpdateStyleAndLayout();
+  GetDocument()->UpdateStyleAndLayout(DocumentUpdateReason::kPlugin);
 
   // We need the plugin to load synchronously so we can get the
   // WebPluginContainerImpl below so flush the layout tasks now instead of
@@ -178,13 +177,12 @@ void PluginDocumentParser::StopParsing() {
 }
 
 WebPluginContainerImpl* PluginDocumentParser::GetPluginView() const {
-  return ToPluginDocument(GetDocument())->GetPluginView();
+  return To<PluginDocument>(GetDocument())->GetPluginView();
 }
 
-PluginDocument::PluginDocument(const DocumentInit& initializer,
-                               Color background_color)
+PluginDocument::PluginDocument(const DocumentInit& initializer)
     : HTMLDocument(initializer, kPluginDocumentClass),
-      background_color_(background_color) {
+      background_color_(initializer.GetPluginBackgroundColor()) {
   SetCompatibilityMode(kQuirksMode);
   LockCompatibilityMode();
   if (GetScheduler()) {

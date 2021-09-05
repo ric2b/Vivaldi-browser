@@ -84,8 +84,8 @@ CreateChromeContentSuggestionsServiceWithProviders(
 std::unique_ptr<KeyedService> CreateChromeContentSuggestionsService(
     web::BrowserState* browser_state) {
   using State = ContentSuggestionsService::State;
-  ios::ChromeBrowserState* chrome_browser_state =
-      ios::ChromeBrowserState::FromBrowserState(browser_state);
+  ChromeBrowserState* chrome_browser_state =
+      ChromeBrowserState::FromBrowserState(browser_state);
   DCHECK(!browser_state->IsOffTheRecord());
   PrefService* prefs = chrome_browser_state->GetPrefs();
 
@@ -118,8 +118,8 @@ std::unique_ptr<KeyedService> CreateChromeContentSuggestionsService(
 
 void RegisterRemoteSuggestionsProvider(ContentSuggestionsService* service,
                                        web::BrowserState* browser_state) {
-  ios::ChromeBrowserState* chrome_browser_state =
-      ios::ChromeBrowserState::FromBrowserState(browser_state);
+  ChromeBrowserState* chrome_browser_state =
+      ChromeBrowserState::FromBrowserState(browser_state);
   PrefService* prefs = chrome_browser_state->GetPrefs();
   signin::IdentityManager* identity_manager =
       IdentityManagerFactory::GetForBrowserState(chrome_browser_state);
@@ -132,7 +132,7 @@ void RegisterRemoteSuggestionsProvider(ContentSuggestionsService* service,
       browser_state->GetStatePath().Append(ntp_snippets::kDatabaseFolder));
 
   std::string api_key;
-  // This API needs whitelisted API keys. Get the key only if it is not a
+  // This API needs allow-listed API keys. Get the key only if it is not a
   // dummy key.
   if (google_apis::HasAPIKeyConfigured()) {
     bool is_stable_channel = GetChannel() == version_info::Channel::STABLE;

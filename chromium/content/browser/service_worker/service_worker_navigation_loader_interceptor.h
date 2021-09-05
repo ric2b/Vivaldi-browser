@@ -9,20 +9,24 @@
 
 #include "base/memory/weak_ptr.h"
 #include "content/browser/loader/navigation_loader_interceptor.h"
+#include "content/browser/loader/single_request_url_loader_factory.h"
 #include "content/browser/navigation_subresource_loader_params.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/common/child_process_host.h"
-#include "content/public/common/resource_type.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
+#include "third_party/blink/public/mojom/loader/resource_load_info.mojom-shared.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_provider.mojom.h"
 
 namespace content {
 
-class ServiceWorkerNavigationHandle;
+class ServiceWorkerMainResourceHandle;
 
 struct ServiceWorkerNavigationLoaderInterceptorParams {
   // For all clients:
-  ResourceType resource_type = ResourceType::kMainFrame;
+  blink::mojom::ResourceType resource_type =
+      blink::mojom::ResourceType::kMainFrame;
   bool skip_service_worker = false;
 
   // For windows:
@@ -47,7 +51,7 @@ class ServiceWorkerNavigationLoaderInterceptor final
  public:
   ServiceWorkerNavigationLoaderInterceptor(
       const ServiceWorkerNavigationLoaderInterceptorParams& params,
-      base::WeakPtr<ServiceWorkerNavigationHandle> handle);
+      base::WeakPtr<ServiceWorkerMainResourceHandle> handle);
   ~ServiceWorkerNavigationLoaderInterceptor() override;
 
   // NavigationLoaderInterceptor overrides:
@@ -80,8 +84,8 @@ class ServiceWorkerNavigationLoaderInterceptor final
   void RequestHandlerWrapper(
       SingleRequestURLLoaderFactory::RequestHandler handler_on_core_thread,
       const network::ResourceRequest& resource_request,
-      network::mojom::URLLoaderRequest request,
-      network::mojom::URLLoaderClientPtr client);
+      mojo::PendingReceiver<network::mojom::URLLoader> receiver,
+      mojo::PendingRemote<network::mojom::URLLoaderClient> client);
 
   // For navigations, |handle_| outlives |this|. It's owned by
   // NavigationRequest which outlives NavigationURLLoaderImpl which owns |this|.
@@ -89,7 +93,7 @@ class ServiceWorkerNavigationLoaderInterceptor final
   // DedicatedWorkerHost or SharedWorkerHost which may be destroyed before
   // WorkerScriptLoader which owns |this|.
   // TODO(falken): Arrange things so |handle_| outlives |this| for workers too.
-  const base::WeakPtr<ServiceWorkerNavigationHandle> handle_;
+  const base::WeakPtr<ServiceWorkerMainResourceHandle> handle_;
 
   const ServiceWorkerNavigationLoaderInterceptorParams params_;
 

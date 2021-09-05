@@ -46,7 +46,7 @@ static const ModelType kStartOrder[] = {
     BOOKMARKS, PREFERENCES, PRIORITY_PREFERENCES, EXTENSIONS, APPS, APP_LIST,
     ARC_PACKAGE, READING_LIST, THEMES, SEARCH_ENGINES, SESSIONS, DICTIONARY,
     FAVICON_IMAGES, FAVICON_TRACKING, PRINTERS, USER_CONSENTS, USER_EVENTS,
-    SUPERVISED_USER_SETTINGS, SUPERVISED_USER_WHITELISTS, MOUNTAIN_SHARES,
+    SHARING_MESSAGE, SUPERVISED_USER_SETTINGS, SUPERVISED_USER_WHITELISTS,
     NOTES,
     SEND_TAB_TO_SELF, SECURITY_EVENTS, WEB_APPS, WIFI_CONFIGURATIONS};
 
@@ -242,9 +242,10 @@ void ModelAssociationManager::LoadEnabledTypes() {
     if (dtc->state() == DataTypeController::NOT_RUNNING) {
       DCHECK(!loaded_types_.Has(dtc->type()));
       DCHECK(!associated_types_.Has(dtc->type()));
-      dtc->LoadModels(configure_context_,
-                      base::Bind(&ModelAssociationManager::ModelLoadCallback,
-                                 weak_ptr_factory_.GetWeakPtr()));
+      dtc->LoadModels(
+          configure_context_,
+          base::BindRepeating(&ModelAssociationManager::ModelLoadCallback,
+                              weak_ptr_factory_.GetWeakPtr()));
     }
   }
   NotifyDelegateIfReadyForConfigure();
@@ -292,7 +293,7 @@ void ModelAssociationManager::StartAssociationAsync(
       TRACE_EVENT_ASYNC_BEGIN1("sync", "ModelAssociation", dtc, "DataType",
                                ModelTypeToString(type));
 
-      dtc->StartAssociating(base::Bind(
+      dtc->StartAssociating(base::BindOnce(
           &ModelAssociationManager::TypeStartCallback,
           weak_ptr_factory_.GetWeakPtr(), type, base::TimeTicks::Now()));
     }
@@ -363,7 +364,7 @@ void ModelAssociationManager::ModelLoadCallback(ModelType type,
     // TODO(pavely): Add test for this scenario in DataTypeManagerImpl
     // unittests.
     if (dtc->state() == DataTypeController::MODEL_LOADED) {
-      dtc->StartAssociating(base::Bind(
+      dtc->StartAssociating(base::BindOnce(
           &ModelAssociationManager::TypeStartCallback,
           weak_ptr_factory_.GetWeakPtr(), type, base::TimeTicks::Now()));
     }

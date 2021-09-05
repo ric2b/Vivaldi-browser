@@ -266,8 +266,12 @@ void SyncPointClientState::ReleaseFenceSyncHelper(uint64_t release) {
   {
     base::AutoLock auto_lock(fence_sync_lock_);
 
-    DLOG_IF(ERROR, release <= fence_sync_release_)
-        << "Client submitted fence releases out of order.";
+    if (release <= fence_sync_release_) {
+      DLOG(ERROR) << "Client submitted fence releases out of order.";
+      DCHECK(release_callback_queue_.empty() ||
+             release_callback_queue_.top().release_count > release);
+      return;
+    }
     fence_sync_release_ = release;
 
     while (!release_callback_queue_.empty() &&
@@ -338,7 +342,7 @@ SyncPointManager::~SyncPointManager() {
 
 scoped_refptr<SyncPointOrderData> SyncPointManager::CreateSyncPointOrderData() {
   base::AutoLock auto_lock(lock_);
-  SequenceId sequence_id = SequenceId::FromUnsafeValue(next_sequence_id_++);
+  SequenceId sequence_id = sequence_id_generator_.GenerateNextId();
   scoped_refptr<SyncPointOrderData> order_data =
       new SyncPointOrderData(this, sequence_id);
   DCHECK(!order_data_map_.count(sequence_id));

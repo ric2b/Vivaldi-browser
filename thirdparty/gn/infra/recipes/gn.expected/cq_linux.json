@@ -21,7 +21,7 @@
       "fetch",
       "--tags",
       "https://gn.googlesource.com/gn",
-      "refs/heads/master"
+      ""
     ],
     "cwd": "[START_DIR]/gn",
     "infra_step": true,
@@ -48,11 +48,11 @@
       "git",
       "fetch",
       "https://gn.googlesource.com/gn",
-      "refs/changes/00/1000/1"
+      "refs/changes/56/123456/7"
     ],
     "cwd": "[START_DIR]/gn",
     "infra_step": true,
-    "name": "git.fetch 1000/1",
+    "name": "git.fetch 123456/7",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@1@@@"
     ]
@@ -65,7 +65,7 @@
     ],
     "cwd": "[START_DIR]/gn",
     "infra_step": true,
-    "name": "git.cherry-pick 1000/1",
+    "name": "git.cherry-pick 123456/7",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@1@@@"
     ]
@@ -77,7 +77,7 @@
       "-root",
       "[START_DIR]/cipd",
       "-ensure-file",
-      "infra/ninja/${platform} version:1.8.2\nfuchsia/clang/${platform} goma\n@Subdir sysroot\nfuchsia/sysroot/${platform} git_revision:a28dfa20af063e5ca00634024c85732e20220419",
+      "infra/ninja/${platform} version:1.8.2\nfuchsia/clang/${platform} git_revision:b920a7f65b13237dc4d5b2b836b29a954fff440a\n@Subdir sysroot\nfuchsia/sysroot/${platform} git_revision:a28dfa20af063e5ca00634024c85732e20220419",
       "-json-output",
       "/path/to/tmp/json"
     ],
@@ -88,18 +88,18 @@
       "@@@STEP_LOG_LINE@json.output@  \"result\": {@@@",
       "@@@STEP_LOG_LINE@json.output@    \"\": [@@@",
       "@@@STEP_LOG_LINE@json.output@      {@@@",
-      "@@@STEP_LOG_LINE@json.output@        \"instance_id\": \"resolved-instance_id-of-goma------------\", @@@",
-      "@@@STEP_LOG_LINE@json.output@        \"package\": \"fuchsia/clang/${platform}\"@@@",
+      "@@@STEP_LOG_LINE@json.output@        \"instance_id\": \"resolved-instance_id-of-git_revision:b92\", @@@",
+      "@@@STEP_LOG_LINE@json.output@        \"package\": \"fuchsia/clang/resolved-platform\"@@@",
       "@@@STEP_LOG_LINE@json.output@      }, @@@",
       "@@@STEP_LOG_LINE@json.output@      {@@@",
       "@@@STEP_LOG_LINE@json.output@        \"instance_id\": \"resolved-instance_id-of-version:1.8.2---\", @@@",
-      "@@@STEP_LOG_LINE@json.output@        \"package\": \"infra/ninja/${platform}\"@@@",
+      "@@@STEP_LOG_LINE@json.output@        \"package\": \"infra/ninja/resolved-platform\"@@@",
       "@@@STEP_LOG_LINE@json.output@      }@@@",
       "@@@STEP_LOG_LINE@json.output@    ], @@@",
       "@@@STEP_LOG_LINE@json.output@    \"sysroot\": [@@@",
       "@@@STEP_LOG_LINE@json.output@      {@@@",
       "@@@STEP_LOG_LINE@json.output@        \"instance_id\": \"resolved-instance_id-of-git_revision:a28\", @@@",
-      "@@@STEP_LOG_LINE@json.output@        \"package\": \"fuchsia/sysroot/${platform}\"@@@",
+      "@@@STEP_LOG_LINE@json.output@        \"package\": \"fuchsia/sysroot/resolved-platform\"@@@",
       "@@@STEP_LOG_LINE@json.output@      }@@@",
       "@@@STEP_LOG_LINE@json.output@    ]@@@",
       "@@@STEP_LOG_LINE@json.output@  }@@@",
@@ -227,8 +227,7 @@
     ]
   },
   {
-    "name": "$result",
-    "recipe_result": null,
-    "status_code": 0
+    "jsonResult": null,
+    "name": "$result"
   }
 ]

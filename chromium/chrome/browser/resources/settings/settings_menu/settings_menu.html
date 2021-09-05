@@ -1,32 +1,38 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
 
 <link rel="import" href="chrome://resources/cr_elements/cr_button/cr_button.html">
+<link rel="import" href="chrome://resources/cr_elements/cr_icons_css.html">
 <link rel="import" href="chrome://resources/cr_elements/icons.html">
 <link rel="import" href="chrome://resources/html/assert.html">
+<link rel="import" href="chrome://resources/html/load_time_data.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-collapse/iron-collapse.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-selector/iron-selector.html">
+<link rel="import" href="../i18n_setup.html">
 <link rel="import" href="../icons.html">
+<link rel="import" href="../page_visibility.html">
 <link rel="import" href="../route.html">
+<link rel="import" href="../router.html">
 <link rel="import" href="../settings_shared_css.html">
-
-<if expr="chromeos">
-<!-- TODO(crbug.com/986596): Remove OS icons when SplitSettings is complete. -->
-<link rel="import" href="../chromeos/os_icons.html">
-</if>
 
 <dom-module id="settings-menu">
   <template>
-    <style include="settings-shared">
+    <style include="settings-shared cr-icons">
       :host {
         box-sizing: border-box;
         display: block;
-        padding-bottom: 2px;
+        padding-bottom: 5px; /* Prevents focus outlines from being cropped. */
         padding-top: 8px;
       }
 
       :host * {
         -webkit-tap-highlight-color: transparent;
+      }
+
+      #topMenu {
+        display: flex;
+        flex-direction: column;
+        min-width: fit-content;
       }
 
       a[href],
@@ -89,9 +95,10 @@
       }
 
       #advancedButton > iron-icon,
-      #extensionsLink > iron-icon {
-        @apply --cr-icon-height-width;
+      #extensionsLink > .cr-icon {
+        height: var(--cr-icon-size);
         margin-inline-end: 14px;  /* 16px - 2px from margin for outline. */
+        width: var(--cr-icon-size);
       }
 
       #menuSeparator {
@@ -110,22 +117,6 @@
     <iron-selector id="topMenu" selectable="a:not(#extensionsLink)"
         attr-for-selected="href" on-iron-activate="onSelectorActivate_"
         role="navigation" on-click="onLinkClick_">
-<if expr="chromeos">
-      <a href="/internet" hidden="[[!pageVisibility.internet]]">
-        <iron-icon icon="os-settings:network-wifi"></iron-icon>
-        $i18n{internetPageTitle}
-      </a>
-      <a href="/bluetooth" hidden="[[!pageVisibility.bluetooth]]">
-        <iron-icon icon="cr:bluetooth"></iron-icon>
-        $i18n{bluetoothPageTitle}
-      </a>
-      <a id="multidevice" href="/multidevice"
-          hidden="[[!pageVisibility.multidevice]]">
-        <iron-icon icon="os-settings:multidevice-better-together-suite">
-        </iron-icon>
-        $i18n{multidevicePageTitle}
-      </a>
-</if>
       <a id="people" href="/people" hidden="[[!pageVisibility.people]]">
         <iron-icon icon="cr:person"></iron-icon>
         $i18n{peoplePageTitle}
@@ -135,35 +126,26 @@
         <iron-icon icon="settings:assignment"></iron-icon>
         $i18n{autofillPageTitle}
       </a>
+      <template is="dom-if" if="[[privacySettingsRedesignEnabled_]]" restamp>
+        <a href="/safetyCheck" hidden="[[!pageVisibility.safetyCheck]]"
+            id="safetyCheck">
+          <iron-icon icon="settings20:safety-check"></iron-icon>
+          $i18n{safetyCheckSectionTitle}
+        </a>
+      </template>
+      <a href="/privacy" hidden="[[!pageVisibility.privacy]]">
+        <iron-icon icon="cr:security"></iron-icon>
+        $i18n{privacyPageTitle}
+      </a>
       <a id="appearance" href="/appearance"
         hidden="[[!pageVisibility.appearance]]">
         <iron-icon icon="settings:palette"></iron-icon>
         $i18n{appearancePageTitle}
       </a>
-<if expr="chromeos">
-      <a href="/device" hidden="[[!pageVisibility.device]]">
-        <iron-icon icon="os-settings:laptop-chromebook"></iron-icon>
-        $i18n{devicePageTitle}
-      </a>
-</if>
       <a href="/search">
         <iron-icon icon="cr:search"></iron-icon>
         $i18n{searchPageTitle}
       </a>
-<if expr="chromeos">
-      <a href="/androidApps" hidden="[[!showAndroidApps]]">
-        <iron-icon icon="os-settings:play-prism"></iron-icon>
-        $i18n{androidAppsPageTitle}
-      </a>
-      <a href="/crostini" hidden="[[!showCrostini]]">
-        <iron-icon icon="os-settings:crostini-mascot"></iron-icon>
-        $i18n{crostiniPageTitle}
-      </a>
-      <a href="/pluginVm" hidden="[[!showPluginVm]]">
-        <iron-icon icon="os-settings:plugin-vm"></iron-icon>
-        $i18n{pluginVmPageTitle}
-      </a>
-</if>
 <if expr="not chromeos">
       <a id="defaultBrowser" href="/defaultBrowser"
         hidden="[[!pageVisibility.defaultBrowser]]">
@@ -187,16 +169,6 @@
           hidden="[[!pageVisibility.advancedSettings]]">
         <iron-selector id="subMenu" selectable="a" attr-for-selected="href"
             role="navigation" on-click="onLinkClick_">
-<if expr="chromeos">
-          <a href="/dateTime" hidden="[[!pageVisibility.dateTime]]">
-            <iron-icon icon="os-settings:access-time"></iron-icon>
-            $i18n{dateTimePageTitle}
-          </a>
-</if>
-          <a href="/privacy">
-            <iron-icon icon="cr:security"></iron-icon>
-            $i18n{privacyPageTitle}
-          </a>
           <a href="/languages">
             <iron-icon icon="settings:language"></iron-icon>
             $i18n{languagesPageTitle}
@@ -231,7 +203,7 @@
           on-click="onExtensionsLinkClick_"
           title="$i18n{extensionsLinkTooltip}">
         <span>$i18n{extensionsPageTitle}</span>
-        <iron-icon class="cr-icon icon-external" actionable></iron-icon>
+        <div class="cr-icon icon-external"></div>
       </a>
       <a id="about-menu" href="/help">$i18n{aboutPageTitle}</a>
     </iron-selector>

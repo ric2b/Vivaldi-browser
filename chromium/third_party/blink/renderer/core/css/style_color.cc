@@ -40,17 +40,15 @@ bool StyleColor::IsColorKeyword(CSSValueID id) {
   //   '-internal-inactive-list-box-selection-text'
   //   '-webkit-focus-ring-color'
   //   '-internal-quirk-inherit'
-  //   '-internal-root-color'
   //
-  return (id >= CSSValueID::kAqua && id <= CSSValueID::kInternalRootColor) ||
+  return (id >= CSSValueID::kAqua && id <= CSSValueID::kInternalQuirkInherit) ||
          (id >= CSSValueID::kAliceblue && id <= CSSValueID::kYellowgreen) ||
          id == CSSValueID::kMenu;
 }
 
 bool StyleColor::IsSystemColor(CSSValueID id) {
   return (id >= CSSValueID::kActiveborder && id <= CSSValueID::kWindowtext) ||
-         id == CSSValueID::kMenu || id == CSSValueID::kLinktext ||
-         id == CSSValueID::kVisitedtext;
+         id == CSSValueID::kMenu;
 }
 
 }  // namespace blink

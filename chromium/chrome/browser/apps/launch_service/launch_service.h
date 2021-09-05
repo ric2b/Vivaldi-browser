@@ -10,13 +10,9 @@
 
 #include "base/macros.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/services/app_service/public/mojom/types.mojom.h"
 
 class Profile;
-
-namespace base {
-class CommandLine;
-class FilePath;
-}  // namespace base
 
 namespace content {
 class WebContents;
@@ -43,14 +39,6 @@ class LaunchService : public KeyedService {
 
   // Open the application in a way specified by |params|.
   content::WebContents* OpenApplication(const AppLaunchParams& params);
-
-  // Attempt to open |app_id| in a new window.
-  bool OpenApplicationWindow(const std::string& app_id,
-                             const base::CommandLine& command_line,
-                             const base::FilePath& current_directory);
-
-  // Attempt to open |app_id| in a new tab.
-  bool OpenApplicationTab(const std::string& app_id);
 
  private:
   LaunchManager& GetLaunchManagerForApp(const std::string& app_id);

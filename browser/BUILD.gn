@@ -1,19 +1,22 @@
 import("//vivaldi/gn/config/version.gni")
 import("//build/config/jumbo.gni")
 import("//build/util/version.gni")
+import("//extensions/buildflags/buildflags.gni")
 
-jumbo_static_library("browser") {
+static_library("browser") {
   public_deps = [
     "//vivaldi/app",
     "//vivaldi/components:content_adverse_adblocking",
     "//vivaldi/clientparts",
     "//vivaldi/importer:browser",
+    "//vivaldi/prefs:prefs_files_generator",
     "//vivaldi/ui",
   ]
   if (!is_android) {
     public_deps += [
       "//vivaldi/components/datasource",
       "//vivaldi/extensions",
+      "//vivaldi/extensions/api:apis",
       "//vivaldi/extensions/schema",
       "//vivaldi/vivapp:vivaldi_app",
     ]
@@ -29,23 +32,56 @@ jumbo_static_library("browser") {
     "//chrome/app:generated_resources",
     "//chrome/app:google_chrome_strings",
     "//chrome/browser:resources",
+    "//chrome/browser:theme_properties",
+    "//chrome/browser/devtools",
+    "//chrome/common:non_code_constants",
 
-    #"//chrome/browser/extensions",
+    "//components/bookmarks/browser",
+    "//components/keyed_service/content",
+    "//components/metrics:metrics",
     "//components/os_crypt:os_crypt",
+    "//components/renderer_context_menu",
     "//components/search_engines",
     "//components/strings:components_chromium_strings",
     "//components/strings:components_google_chrome_strings",
     "//components/strings:components_strings",
+    "//components/version_info:generate_version_info",
+   # "//content/browser",
     "//crypto:crypto",
     "//skia:skia",
     "//third_party/blink/public:blink_headers",
     "//ui/events:events_base",
+    "//vivaldi/components:adverse_adblocking",
+    "//vivaldi/prefs:prefs_strings",
   ]
   if (is_win) {
     deps += [ "//vivaldi/third_party:sparkle" ]
   } else if (is_mac) {
     deps += [
       #"//vivaldi/third_party:copy_sparkle_framework",
+    ]
+  }
+  if (!is_android) {
+    deps += [
+      "//components/guest_view/browser",
+      "//ui/views",
+    ]
+  }
+  if (enable_extensions) {
+    deps += [
+      "//chrome/browser/web_applications:web_applications_on_extensions",
+      "//chrome/browser/web_applications/extensions",
+      "//chrome/browser/extensions",
+    ]
+  }
+  allow_circular_includes_from = [
+    "//components/renderer_context_menu",
+    "//vivaldi/app",
+  ]
+  if (enable_extensions) {
+    allow_circular_includes_from += [
+      "//chrome/browser/extensions",
+      "//vivaldi/extensions/api:apis",
     ]
   }
   sources = [
@@ -61,6 +97,8 @@ jumbo_static_library("browser") {
     "../components/adverse_adblocking/adverse_ad_filter_list_factory.h",
     "thumbnails/capture_page.cc",
     "thumbnails/capture_page.h",
+    "vivaldi_default_bookmarks.cc",
+    "vivaldi_default_bookmarks.h",
   ]
   if (!is_android) {
     sources += [
@@ -85,11 +123,6 @@ jumbo_static_library("browser") {
       "vivaldi_webcontents_util.h",
       "thumbnails/thumbnail_capture_contents.cc",
       "thumbnails/thumbnail_capture_contents.h",
-    ]
-  } else {
-    sources += [
-      "vivaldi_default_bookmarks_reader.cc",
-      "vivaldi_default_bookmarks_reader.h",
     ]
   }
   if (is_mac) {

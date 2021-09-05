@@ -21,9 +21,12 @@
 #include "net/base/privacy_mode.h"
 #include "net/http/http_auth_controller.h"
 #include "net/http/http_network_session.h"
+#include "net/http/http_request_headers.h"
 #include "net/http/proxy_client_socket.h"
 #include "net/http/proxy_fallback.h"
 #include "net/log/net_log_source_type.h"
+#include "net/proxy_resolution/configured_proxy_resolution_service.h"
+#include "net/proxy_resolution/proxy_resolution_request.h"
 #include "net/socket/socket_tag.h"
 #include "net/ssl/ssl_config.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
@@ -238,8 +241,11 @@ int ProxyResolvingClientSocket::DoProxyResolve() {
   next_state_ = STATE_PROXY_RESOLVE_COMPLETE;
   // base::Unretained(this) is safe because resolution request is canceled when
   // |proxy_resolve_request_| is destroyed.
+  //
+  // TODO(https://crbug.com/1023439): Pass along a NetworkIsolationKey.
   return network_session_->proxy_resolution_service()->ResolveProxy(
-      url_, "POST", &proxy_info_,
+      url_, net::HttpRequestHeaders::kPostMethod,
+      net::NetworkIsolationKey::Todo(), &proxy_info_,
       base::BindRepeating(&ProxyResolvingClientSocket::OnIOComplete,
                           base::Unretained(this)),
       &proxy_resolve_request_, net_log_);

@@ -37,14 +37,15 @@ const char* kSkiaGoldCtl = "tools/skia_goldctl/mac/goldctl";
 const char* kSkiaGoldCtl = "tools/skia_goldctl/linux/goldctl";
 #endif
 
-const char* kBuildRevisionKey = "build-revision";
+const char* kBuildRevisionKey = "git-revision";
 
 // The switch keys for tryjob.
-const char* kIssueKey = "issue";
-const char* kPatchSetKey = "patchset";
-const char* kJobIdKey = "jobid";
+const char* kIssueKey = "gerrit-issue";
+const char* kPatchSetKey = "gerrit-patchset";
+const char* kJobIdKey = "buildbucket-id";
 
 const char* kNoLuciAuth = "no-luci-auth";
+const char* kBypassSkiaGoldFunctionality = "bypass-skia-gold-functionality";
 
 SkiaGoldPixelDiff::SkiaGoldPixelDiff() = default;
 
@@ -134,6 +135,12 @@ int SkiaGoldPixelDiff::LaunchProcess(const base::CommandLine& cmdline) const {
 }
 
 void SkiaGoldPixelDiff::InitSkiaGold() {
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          kBypassSkiaGoldFunctionality)) {
+    LOG(WARNING) << "Bypassing Skia Gold initialization due to "
+                 << "--bypass-skia-gold-functionality being present.";
+    return;
+  }
   base::ScopedAllowBlockingForTesting allow_blocking;
   base::CommandLine cmd(GetAbsoluteSrcRelativePath(kSkiaGoldCtl));
   cmd.AppendSwitchPath("work-dir", working_dir_);
@@ -158,10 +165,13 @@ void SkiaGoldPixelDiff::InitSkiaGold() {
   cmd.AppendSwitchPath("failure-file", failure_temp_file);
   cmd.AppendSwitch("passfail");
   cmd.AppendSwitchASCII("commit", build_revision_);
+  // This handles the logic for tryjob.
   if (issue_.length()) {
     cmd.AppendSwitchASCII("issue", issue_);
     cmd.AppendSwitchASCII("patchset", patchset_);
     cmd.AppendSwitchASCII("jobid", job_id_);
+    cmd.AppendSwitchASCII("crs", "gerrit");
+    cmd.AppendSwitchASCII("cis", "buildbucket");
   }
   AppendArgsJustAfterProgram(
       cmd, {FILE_PATH_LITERAL("imgtest"), FILE_PATH_LITERAL("init")});
@@ -194,6 +204,7 @@ void SkiaGoldPixelDiff::Init(const std::string& screenshot_prefix) {
   }
   initialized_ = true;
   prefix_ = screenshot_prefix;
+  base::ScopedAllowBlockingForTesting allow_blocking;
   base::CreateNewTempDirectory(FILE_PATH_LITERAL("SkiaGoldTemp"),
                                &working_dir_);
 
@@ -203,6 +214,13 @@ void SkiaGoldPixelDiff::Init(const std::string& screenshot_prefix) {
 bool SkiaGoldPixelDiff::UploadToSkiaGoldServer(
     const base::FilePath& local_file_path,
     const std::string& remote_golden_image_name) const {
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          kBypassSkiaGoldFunctionality)) {
+    LOG(WARNING) << "Bypassing Skia Gold comparison due to "
+                 << "--bypass-skia-gold-functionality being present.";
+    return true;
+  }
+
   base::ScopedAllowBlockingForTesting allow_blocking;
   base::CommandLine cmd(GetAbsoluteSrcRelativePath(kSkiaGoldCtl));
   cmd.AppendSwitchASCII("test-name", remote_golden_image_name);

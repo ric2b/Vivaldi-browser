@@ -40,6 +40,7 @@
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/browser_task_environment.h"
+#include "extensions/browser/api/declarative_net_request/test_utils.h"
 #include "extensions/browser/api/web_request/upload_data_presenter.h"
 #include "extensions/browser/api/web_request/web_request_api.h"
 #include "extensions/browser/api/web_request/web_request_api_constants.h"
@@ -873,8 +874,8 @@ TEST(ExtensionWebRequestHelpersTest, TestMergeOnBeforeSendHeadersResponses) {
   net::HttpRequestHeaders headers4;
   headers4.MergeFrom(base_headers);
 
-  DNRRequestAction remove_headers_action(
-      DNRRequestAction::Type::REMOVE_HEADERS);
+  DNRRequestAction remove_headers_action =
+      CreateRequestActionForTesting(DNRRequestAction::Type::REMOVE_HEADERS);
   remove_headers_action.request_headers_to_remove = {"key5"};
   info.dnr_actions = std::vector<DNRRequestAction>();
   info.dnr_actions->push_back(std::move(remove_headers_action));
@@ -1263,18 +1264,18 @@ TEST(ExtensionWebRequestHelpersTest, TestMergeOnHeadersReceivedResponses) {
   }
   bool response_headers_modified0;
   scoped_refptr<net::HttpResponseHeaders> new_headers0;
-  GURL allowed_unsafe_redirect_url0;
+  GURL preserve_fragment_on_redirect_url0;
   WebRequestInfoInitParams info_params;
   info_params.url = GURL(kExampleUrl);
   WebRequestInfo info(std::move(info_params));
   info.dnr_actions = std::vector<DNRRequestAction>();
 
-  MergeOnHeadersReceivedResponses(info, deltas, base_headers.get(),
-                                  &new_headers0, &allowed_unsafe_redirect_url0,
-                                  &ignored_actions,
-                                  &response_headers_modified0);
+  MergeOnHeadersReceivedResponses(
+      info, deltas, base_headers.get(), &new_headers0,
+      &preserve_fragment_on_redirect_url0, &ignored_actions,
+      &response_headers_modified0);
   EXPECT_FALSE(new_headers0.get());
-  EXPECT_TRUE(allowed_unsafe_redirect_url0.is_empty());
+  EXPECT_TRUE(preserve_fragment_on_redirect_url0.is_empty());
   EXPECT_EQ(0u, ignored_actions.size());
   EXPECT_FALSE(response_headers_modified0);
 
@@ -1291,13 +1292,13 @@ TEST(ExtensionWebRequestHelpersTest, TestMergeOnHeadersReceivedResponses) {
   ignored_actions.clear();
   bool response_headers_modified1;
   scoped_refptr<net::HttpResponseHeaders> new_headers1;
-  GURL allowed_unsafe_redirect_url1;
-  MergeOnHeadersReceivedResponses(info, deltas, base_headers.get(),
-                                  &new_headers1, &allowed_unsafe_redirect_url1,
-                                  &ignored_actions,
-                                  &response_headers_modified1);
+  GURL preserve_fragment_on_redirect_url1;
+  MergeOnHeadersReceivedResponses(
+      info, deltas, base_headers.get(), &new_headers1,
+      &preserve_fragment_on_redirect_url1, &ignored_actions,
+      &response_headers_modified1);
   ASSERT_TRUE(new_headers1.get());
-  EXPECT_TRUE(allowed_unsafe_redirect_url1.is_empty());
+  EXPECT_TRUE(preserve_fragment_on_redirect_url1.is_empty());
   std::multimap<std::string, std::string> expected1;
   expected1.insert(std::pair<std::string, std::string>("Key2", "Value3"));
   expected1.insert(std::pair<std::string, std::string>("Key3", "Foo"));
@@ -1326,13 +1327,13 @@ TEST(ExtensionWebRequestHelpersTest, TestMergeOnHeadersReceivedResponses) {
   ignored_actions.clear();
   bool response_headers_modified2;
   scoped_refptr<net::HttpResponseHeaders> new_headers2;
-  GURL allowed_unsafe_redirect_url2;
-  MergeOnHeadersReceivedResponses(info, deltas, base_headers.get(),
-                                  &new_headers2, &allowed_unsafe_redirect_url2,
-                                  &ignored_actions,
-                                  &response_headers_modified2);
+  GURL preserve_fragment_on_redirect_url2;
+  MergeOnHeadersReceivedResponses(
+      info, deltas, base_headers.get(), &new_headers2,
+      &preserve_fragment_on_redirect_url2, &ignored_actions,
+      &response_headers_modified2);
   ASSERT_TRUE(new_headers2.get());
-  EXPECT_TRUE(allowed_unsafe_redirect_url2.is_empty());
+  EXPECT_TRUE(preserve_fragment_on_redirect_url2.is_empty());
   iter = 0;
   std::multimap<std::string, std::string> actual2;
   while (new_headers2->EnumerateHeaderLines(&iter, &name, &value)) {
@@ -1347,8 +1348,8 @@ TEST(ExtensionWebRequestHelpersTest, TestMergeOnHeadersReceivedResponses) {
 
   // Ensure headers removed by Declarative Net Request API can't be added by web
   // request extensions and result in a conflict.
-  DNRRequestAction remove_headers_action(
-      DNRRequestAction::Type::REMOVE_HEADERS);
+  DNRRequestAction remove_headers_action =
+      CreateRequestActionForTesting(DNRRequestAction::Type::REMOVE_HEADERS);
   remove_headers_action.response_headers_to_remove = {"key3"};
   info.dnr_actions = std::vector<DNRRequestAction>();
   info.dnr_actions->push_back(std::move(remove_headers_action));
@@ -1356,13 +1357,13 @@ TEST(ExtensionWebRequestHelpersTest, TestMergeOnHeadersReceivedResponses) {
   ignored_actions.clear();
   bool response_headers_modified3 = false;
   scoped_refptr<net::HttpResponseHeaders> new_headers3;
-  GURL allowed_unsafe_redirect_url3;
-  MergeOnHeadersReceivedResponses(info, deltas, base_headers.get(),
-                                  &new_headers3, &allowed_unsafe_redirect_url3,
-                                  &ignored_actions,
-                                  &response_headers_modified3);
+  GURL preserve_fragment_on_redirect_url3;
+  MergeOnHeadersReceivedResponses(
+      info, deltas, base_headers.get(), &new_headers3,
+      &preserve_fragment_on_redirect_url3, &ignored_actions,
+      &response_headers_modified3);
   ASSERT_TRUE(new_headers3.get());
-  EXPECT_TRUE(allowed_unsafe_redirect_url3.is_empty());
+  EXPECT_TRUE(preserve_fragment_on_redirect_url3.is_empty());
   iter = 0;
   std::multimap<std::string, std::string> actual3;
   while (new_headers3->EnumerateHeaderLines(&iter, &name, &value))
@@ -1402,19 +1403,19 @@ TEST(ExtensionWebRequestHelpersTest,
   }
   bool response_headers_modified1;
   scoped_refptr<net::HttpResponseHeaders> new_headers1;
-  GURL allowed_unsafe_redirect_url1;
+  GURL preserve_fragment_on_redirect_url1;
 
   WebRequestInfoInitParams info_params;
   info_params.url = GURL(kExampleUrl);
   WebRequestInfo info(std::move(info_params));
   info.dnr_actions = std::vector<DNRRequestAction>();
 
-  MergeOnHeadersReceivedResponses(info, deltas, base_headers.get(),
-                                  &new_headers1, &allowed_unsafe_redirect_url1,
-                                  &ignored_actions,
-                                  &response_headers_modified1);
+  MergeOnHeadersReceivedResponses(
+      info, deltas, base_headers.get(), &new_headers1,
+      &preserve_fragment_on_redirect_url1, &ignored_actions,
+      &response_headers_modified1);
   ASSERT_TRUE(new_headers1.get());
-  EXPECT_TRUE(allowed_unsafe_redirect_url1.is_empty());
+  EXPECT_TRUE(preserve_fragment_on_redirect_url1.is_empty());
   std::multimap<std::string, std::string> expected1;
   expected1.insert(std::pair<std::string, std::string>("Key1", "Value1"));
   expected1.insert(std::pair<std::string, std::string>("Key1", "Value3"));
@@ -1452,18 +1453,18 @@ TEST(ExtensionWebRequestHelpersTest,
   }
   bool response_headers_modified0;
   scoped_refptr<net::HttpResponseHeaders> new_headers0;
-  GURL allowed_unsafe_redirect_url0;
+  GURL preserve_fragment_on_redirect_url0;
 
   WebRequestInfoInitParams info_params;
   info_params.url = GURL(kExampleUrl);
   WebRequestInfo info(std::move(info_params));
 
-  MergeOnHeadersReceivedResponses(info, deltas, base_headers.get(),
-                                  &new_headers0, &allowed_unsafe_redirect_url0,
-                                  &ignored_actions,
-                                  &response_headers_modified0);
+  MergeOnHeadersReceivedResponses(
+      info, deltas, base_headers.get(), &new_headers0,
+      &preserve_fragment_on_redirect_url0, &ignored_actions,
+      &response_headers_modified0);
   EXPECT_FALSE(new_headers0.get());
-  EXPECT_TRUE(allowed_unsafe_redirect_url0.is_empty());
+  EXPECT_TRUE(preserve_fragment_on_redirect_url0.is_empty());
   EXPECT_EQ(0u, ignored_actions.size());
   EXPECT_FALSE(response_headers_modified0);
 
@@ -1478,15 +1479,15 @@ TEST(ExtensionWebRequestHelpersTest,
   bool response_headers_modified1;
 
   scoped_refptr<net::HttpResponseHeaders> new_headers1;
-  GURL allowed_unsafe_redirect_url1;
-  MergeOnHeadersReceivedResponses(info, deltas, base_headers.get(),
-                                  &new_headers1, &allowed_unsafe_redirect_url1,
-                                  &ignored_actions,
-                                  &response_headers_modified1);
+  GURL preserve_fragment_on_redirect_url1;
+  MergeOnHeadersReceivedResponses(
+      info, deltas, base_headers.get(), &new_headers1,
+      &preserve_fragment_on_redirect_url1, &ignored_actions,
+      &response_headers_modified1);
 
   EXPECT_TRUE(new_headers1.get());
   EXPECT_TRUE(new_headers1->HasHeaderValue("Location", new_url_1.spec()));
-  EXPECT_EQ(new_url_1, allowed_unsafe_redirect_url1);
+  EXPECT_EQ(new_url_1, preserve_fragment_on_redirect_url1);
   EXPECT_TRUE(ignored_actions.empty());
   EXPECT_FALSE(response_headers_modified1);
 }

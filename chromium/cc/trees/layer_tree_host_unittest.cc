@@ -11,6 +11,7 @@
 
 #include "base/auto_reset.h"
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
@@ -549,10 +550,6 @@ class LayerTreeHostContextCacheTest : public LayerTreeHostTest {
     return LayerTreeHostTest::CreateLayerTreeFrameSink(
         renderer_settings, refresh_rate, std::move(test_main_context_provider),
         std::move(test_worker_context_provider));
-  }
-
-  void InitializeSettings(LayerTreeSettings* settings) override {
-    settings->gpu_rasterization_forced = true;
   }
 
   void BeginTest() override {}
@@ -1139,7 +1136,6 @@ class LayerTreeHostTestSurfaceDamage : public LayerTreeHostTest {
       case 3:
         EXPECT_FALSE(GetRenderSurface(root_impl)->AncestorPropertyChanged());
         EXPECT_TRUE(GetRenderSurface(child_impl)->AncestorPropertyChanged());
-        EndTest();
         PostSetNeedsCommitToMainThread();
         break;
       case 4:
@@ -1158,8 +1154,7 @@ class LayerTreeHostTestSurfaceDamage : public LayerTreeHostTest {
   scoped_refptr<Layer> grand_child_;
 };
 
-// TODO(crbug.com/1014263): Disable because this test is flaky.
-// SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostTestSurfaceDamage);
+SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostTestSurfaceDamage);
 
 class LayerTreeHostTestLayerListSurfaceDamage : public LayerTreeHostTest {
  protected:
@@ -1373,30 +1368,31 @@ class LayerTreeHostTestNoDamageCausesNoInvalidate : public LayerTreeHostTest {
         break;
       case 2:
         EndTest();
+        break;
     }
   }
 
   void DidInvalidateLayerTreeFrameSink(LayerTreeHostImpl* impl) override {
-    switch (impl->active_tree()->source_frame_number()) {
+    int source_frame_number = impl->active_tree()->source_frame_number();
+    if (source_frame_number == 0) {
       // Be sure that invalidates happen before commits, so the below failure
       // works.
-      case 0:
-        first_frame_invalidate_before_commit_ = true;
-        break;
-      // Frame 1 will invalidate, even though it has no damage. The early
-      // damage check that prevents frame 2 from invalidating only runs if
-      // a previous frame did not have damage.
-
-      // This frame should not cause an invalidate, since there is no visible
-      // damage.
-      case 2:
-        ADD_FAILURE();
+      first_frame_invalidate_before_commit_ = true;
+    } else if (source_frame_number > 0) {
+      // The first frame (frame number 0) has damage because it's the first
+      // frame. All subsequent frames in this test are set up to have no damage.
+      // The early damage check will prevent further invalidates without damage
+      // after 2 consecutive invalidates without damage. So check there is no
+      // more than 2.
+      invalidate_without_damage_count_++;
+      EXPECT_LT(invalidate_without_damage_count_, 2);
     }
   }
 
  private:
   scoped_refptr<Layer> layer_;
   bool first_frame_invalidate_before_commit_ = false;
+  int invalidate_without_damage_count_ = 0;
 };
 
 // This behavior is specific to Android WebView, which only uses
@@ -1497,7 +1493,8 @@ class LayerTreeHostTestEarlyDamageCheckStops : public LayerTreeHostTest {
 
 // This behavior is specific to Android WebView, which only uses
 // multi-threaded compositor.
-MULTI_THREAD_TEST_F(LayerTreeHostTestEarlyDamageCheckStops);
+// TODO(crbug.com/1043900): Disabled because test is flaky on Mac10.13.
+// MULTI_THREAD_TEST_F(LayerTreeHostTestEarlyDamageCheckStops);
 
 // When settings->enable_early_damage_check is true, verifies that PrepareTiles
 // need not cause a draw when there is no visible damage. Here, a child layer is
@@ -1755,7 +1752,6 @@ class LayerTreeHostTestAnimationOpacityMutatedUsingLayerLists
  protected:
   void BeginTest() override {
     Layer* root = layer_tree_host()->root_layer();
-    EXPECT_EQ(1.0f, root->opacity());
     EXPECT_EQ(1.0f, layer_tree_host()
                         ->property_trees()
                         ->effect_tree.FindNodeFromElementId(root->element_id())
@@ -1764,8 +1760,6 @@ class LayerTreeHostTestAnimationOpacityMutatedUsingLayerLists
     layer_tree_host()->SetElementOpacityMutated(root->element_id(),
                                                 ElementListType::ACTIVE, 0.3f);
 
-    // When using layer lists, we don't have to store the opacity on the layer.
-    EXPECT_EQ(1.0f, root->opacity());
     // The opacity should have been set directly on the effect node instead.
     EXPECT_EQ(0.3f, layer_tree_host()
                         ->property_trees()
@@ -1817,7 +1811,6 @@ class LayerTreeHostTestAnimationTransformMutatedUsingLayerLists
  protected:
   void BeginTest() override {
     Layer* root = layer_tree_host()->root_layer();
-    EXPECT_EQ(gfx::Transform(), root->transform());
     EXPECT_EQ(gfx::Transform(),
               layer_tree_host()
                   ->property_trees()
@@ -1829,9 +1822,6 @@ class LayerTreeHostTestAnimationTransformMutatedUsingLayerLists
     layer_tree_host()->SetElementTransformMutated(
         root->element_id(), ElementListType::ACTIVE, expected_transform);
 
-    // When using layer lists, we don't have to store the transform on the
-    // layer.
-    EXPECT_EQ(gfx::Transform(), root->transform());
     // The transform should have been set directly on the transform node
     // instead.
     EXPECT_EQ(expected_transform,
@@ -1874,7 +1864,6 @@ class LayerTreeHostTestAnimationFilterMutatedUsingLayerLists
  protected:
   void BeginTest() override {
     Layer* root = layer_tree_host()->root_layer();
-    EXPECT_EQ(FilterOperations(), root->filters());
     EXPECT_EQ(FilterOperations(),
               layer_tree_host()
                   ->property_trees()
@@ -1886,8 +1875,6 @@ class LayerTreeHostTestAnimationFilterMutatedUsingLayerLists
     layer_tree_host()->SetElementFilterMutated(
         root->element_id(), ElementListType::ACTIVE, filters);
 
-    // When using layer lists, we don't have to store the filters on the layer.
-    EXPECT_EQ(FilterOperations(), root->filters());
     // The filter should have been set directly on the effect node instead.
     EXPECT_EQ(filters,
               layer_tree_host()
@@ -2371,8 +2358,11 @@ class LayerTreeHostTestGpuRasterDeviceSizeChanged : public LayerTreeHostTest {
     client_.set_bounds(layer_->bounds());
   }
 
-  void InitializeSettings(LayerTreeSettings* settings) override {
-    settings->gpu_rasterization_forced = true;
+  void SetUpUnboundContextProviders(
+      viz::TestContextProvider* context_provider,
+      viz::TestContextProvider* worker_provider) override {
+    context_provider->UnboundTestContextGL()->set_gpu_rasterization(true);
+    worker_provider->UnboundTestContextGL()->set_gpu_rasterization(true);
   }
 
   void CommitCompleteOnThread(LayerTreeHostImpl* host_impl) override {
@@ -3167,8 +3157,8 @@ class LayerTreeHostTestStartPageScaleAnimation : public LayerTreeHostTest {
   void BeginTest() override { PostSetNeedsCommitToMainThread(); }
 
   void ApplyViewportChanges(const ApplyViewportChangesArgs& args) override {
-    gfx::ScrollOffset offset = scroll_layer_->CurrentScrollOffset();
-    scroll_layer_->SetScrollOffset(offset + args.inner_delta);
+    gfx::ScrollOffset offset = CurrentScrollOffset(scroll_layer_.get());
+    SetScrollOffset(scroll_layer_.get(), offset + args.inner_delta);
     layer_tree_host()->SetPageScaleFactorAndLimits(args.page_scale_delta, 0.5f,
                                                    2.f);
   }
@@ -3212,7 +3202,8 @@ class LayerTreeHostTestStartPageScaleAnimation : public LayerTreeHostTest {
 // Single thread proxy does not support impl-side page scale changes.
 MULTI_THREAD_TEST_F(LayerTreeHostTestStartPageScaleAnimation);
 
-class ViewportDeltasAppliedDuringPinch : public LayerTreeHostTest {
+class ViewportDeltasAppliedDuringPinch : public LayerTreeHostTest,
+                                         public ScrollCallbacks {
  protected:
   ViewportDeltasAppliedDuringPinch() : sent_gesture_(false) {
     SetUseLayerLists();
@@ -3224,6 +3215,8 @@ class ViewportDeltasAppliedDuringPinch : public LayerTreeHostTest {
     Layer* root = layer_tree_host()->root_layer();
     SetupViewport(root, gfx::Size(500, 500), gfx::Size(500, 500));
     layer_tree_host()->SetPageScaleFactorAndLimits(1.f, 1.f, 4.f);
+    layer_tree_host()->property_trees()->scroll_tree.SetScrollCallbacks(
+        weak_ptr_factory_.GetWeakPtr());
   }
 
   void BeginTest() override { PostSetNeedsCommitToMainThread(); }
@@ -3244,13 +3237,32 @@ class ViewportDeltasAppliedDuringPinch : public LayerTreeHostTest {
 
     auto* scroll_layer =
         layer_tree_host()->InnerViewportScrollLayerForTesting();
-    EXPECT_EQ(gfx::ScrollOffset(50, 50), scroll_layer->CurrentScrollOffset());
+    EXPECT_EQ(scroll_layer->element_id(), last_scrolled_element_id_);
+    EXPECT_EQ(gfx::ScrollOffset(50, 50), last_scrolled_offset_);
+    // The scroll offset in scroll tree needs update from blink which doesn't
+    // exist in this test.
+    EXPECT_EQ(gfx::ScrollOffset(), CurrentScrollOffset(scroll_layer));
     EndTest();
   }
 
   void AfterTest() override { EXPECT_TRUE(sent_gesture_); }
 
+  // ScrollCallbacks
+  void DidScroll(ElementId element_id,
+                 const gfx::ScrollOffset& scroll_offset,
+                 const base::Optional<TargetSnapAreaElementIds>&
+                     snap_target_ids) override {
+    last_scrolled_element_id_ = element_id;
+    last_scrolled_offset_ = scroll_offset;
+  }
+  void DidChangeScrollbarsHidden(ElementId, bool) override {}
+
+ private:
   bool sent_gesture_;
+  ElementId last_scrolled_element_id_;
+  gfx::ScrollOffset last_scrolled_offset_;
+  base::WeakPtrFactory<ViewportDeltasAppliedDuringPinch> weak_ptr_factory_{
+      this};
 };
 
 MULTI_THREAD_TEST_F(ViewportDeltasAppliedDuringPinch);
@@ -4073,6 +4085,62 @@ class LayerTreeHostTestAbortedCommitDoesntStallSynchronousCompositor
 
 MULTI_THREAD_TEST_F(
     LayerTreeHostTestAbortedCommitDoesntStallSynchronousCompositor);
+
+class LayerTreeHostTestSynchronousCompositorActivateWithoutDraw
+    : public LayerTreeHostTest {
+ protected:
+  void InitializeSettings(LayerTreeSettings* settings) override {
+    settings->using_synchronous_renderer_compositor = true;
+  }
+
+  std::unique_ptr<TestLayerTreeFrameSink> CreateLayerTreeFrameSink(
+      const viz::RendererSettings& renderer_settings,
+      double refresh_rate,
+      scoped_refptr<viz::ContextProvider> compositor_context_provider,
+      scoped_refptr<viz::RasterContextProvider> worker_context_provider)
+      override {
+    // Make |invalidate_callback| do nothing so there is no draw.
+    auto frame_sink = std::make_unique<OnDrawLayerTreeFrameSink>(
+        compositor_context_provider, std::move(worker_context_provider),
+        gpu_memory_buffer_manager(), renderer_settings, ImplThreadTaskRunner(),
+        /*synchronous_composite=*/false, refresh_rate,
+        /*invalidate_callback=*/base::DoNothing());
+    return std::move(frame_sink);
+  }
+
+  void BeginTest() override { PostSetNeedsCommitToMainThread(); }
+
+  void DidCommit() override { commit_count_++; }
+
+  void DidActivateTreeOnThread(LayerTreeHostImpl* host_impl) override {
+    activate_count_++;
+    if (activate_count_ == 1) {
+      PostSetNeedsCommitToMainThread();
+    } else if (activate_count_ == 2) {
+      EndTest();
+    } else {
+      NOTREACHED();
+    }
+  }
+
+  void DrawLayersOnThread(LayerTreeHostImpl* host_impl) override {
+    // This test specifically tests that two commit-activate cycles without
+    // draw in between them.
+    ADD_FAILURE();
+  }
+
+  void AfterTest() override {
+    // There should be two commits and activations without any draw.
+    EXPECT_EQ(commit_count_, 2);
+    EXPECT_EQ(activate_count_, 2);
+  }
+
+ private:
+  int commit_count_ = 0;
+  int activate_count_ = 0;
+};
+
+MULTI_THREAD_TEST_F(LayerTreeHostTestSynchronousCompositorActivateWithoutDraw);
 
 class LayerTreeHostTestUninvertibleTransformDoesNotBlockActivation
     : public LayerTreeHostTest {
@@ -6133,10 +6201,18 @@ class LayerTreeHostTestHighResRequiredAfterEvictingUIResources
 
 MULTI_THREAD_TEST_F(LayerTreeHostTestHighResRequiredAfterEvictingUIResources);
 
-class LayerTreeHostTestGpuRasterizationDefault : public LayerTreeHostTest {
+class LayerTreeHostTestGpuRasterizationDisabled : public LayerTreeHostTest {
  protected:
-  void InitializeSettings(LayerTreeSettings* settings) override {
-    EXPECT_FALSE(settings->gpu_rasterization_forced);
+  void SetUpUnboundContextProviders(
+      viz::TestContextProvider* context_provider,
+      viz::TestContextProvider* worker_provider) override {
+    // The test contexts have gpu raster disabled by default.
+    gpu::Capabilities caps =
+        context_provider->UnboundTestContextGL()->test_capabilities();
+    EXPECT_FALSE(caps.gpu_rasterization);
+    gpu::Capabilities worker_caps =
+        context_provider->UnboundTestContextGL()->test_capabilities();
+    EXPECT_FALSE(worker_caps.gpu_rasterization);
   }
 
   void SetupTree() override {
@@ -6161,19 +6237,13 @@ class LayerTreeHostTestGpuRasterizationDefault : public LayerTreeHostTest {
   }
 
   void CommitCompleteOnThread(LayerTreeHostImpl* host_impl) override {
-    EXPECT_FALSE(layer_->HasSlowPaths());
-
     EXPECT_FALSE(host_impl->pending_tree()->use_gpu_rasterization());
     EXPECT_FALSE(host_impl->use_gpu_rasterization());
-    EXPECT_FALSE(host_impl->use_msaa());
   }
 
   void DidActivateTreeOnThread(LayerTreeHostImpl* host_impl) override {
-    EXPECT_FALSE(layer_->HasSlowPaths());
-
     EXPECT_FALSE(host_impl->active_tree()->use_gpu_rasterization());
     EXPECT_FALSE(host_impl->use_gpu_rasterization());
-    EXPECT_FALSE(host_impl->use_msaa());
     EndTest();
   }
 
@@ -6182,280 +6252,38 @@ class LayerTreeHostTestGpuRasterizationDefault : public LayerTreeHostTest {
   FakeRecordingSource* recording_source_;
 };
 
-MULTI_THREAD_TEST_F(LayerTreeHostTestGpuRasterizationDefault);
-
-class LayerTreeHostWithGpuRasterizationSupportedTest
-    : public LayerTreeHostTest {
- protected:
-  void InitializeSettings(LayerTreeSettings* settings) override {
-    settings->gpu_rasterization_msaa_sample_count = 4;
-  }
-  std::unique_ptr<TestLayerTreeFrameSink> CreateLayerTreeFrameSink(
-      const viz::RendererSettings& renderer_settings,
-      double refresh_rate,
-      scoped_refptr<viz::ContextProvider> ignored_compositor_context_provider,
-      scoped_refptr<viz::RasterContextProvider> ignored_worker_context_provider)
-      override {
-    auto context_provider = viz::TestContextProvider::Create();
-    viz::TestGLES2Interface* gl = context_provider->UnboundTestContextGL();
-    gl->SetMaxSamples(4);
-    gl->set_support_multisample_compatibility(false);
-    gl->set_gpu_rasterization(true);
-    auto worker_context_provider = viz::TestContextProvider::CreateWorker();
-    viz::TestGLES2Interface* worker_gl =
-        worker_context_provider->UnboundTestContextGL();
-    worker_gl->SetMaxSamples(4);
-    worker_gl->set_support_multisample_compatibility(false);
-    worker_gl->set_gpu_rasterization(true);
-    return LayerTreeHostTest::CreateLayerTreeFrameSink(
-        renderer_settings, refresh_rate, std::move(context_provider),
-        std::move(worker_context_provider));
-  }
-  void SetupTree() override {
-    LayerTreeHostTest::SetupTree();
-
-    std::unique_ptr<FakeRecordingSource> recording_source(
-        new FakeRecordingSource);
-    recording_source_ = recording_source.get();
-
-    scoped_refptr<FakePictureLayer> layer =
-        FakePictureLayer::CreateWithRecordingSource(
-            &layer_client_, std::move(recording_source));
-    layer_ = layer.get();
-    layer->SetBounds(gfx::Size(10, 10));
-    layer->SetIsDrawable(true);
-    layer_tree_host()->root_layer()->AddChild(layer);
-    layer_client_.set_bounds(layer_->bounds());
-  }
-
-  FakeContentLayerClient layer_client_;
-  FakePictureLayer* layer_;
-  FakeRecordingSource* recording_source_;
-};
-
-class LayerTreeHostTestGpuRasterizationEnabled
-    : public LayerTreeHostWithGpuRasterizationSupportedTest {
- protected:
-  void BeginTest() override { PostSetNeedsCommitToMainThread(); }
-
-  void CommitCompleteOnThread(LayerTreeHostImpl* host_impl) override {
-    EXPECT_FALSE(layer_->HasSlowPaths());
-    EXPECT_TRUE(host_impl->pending_tree()->use_gpu_rasterization());
-    EXPECT_TRUE(host_impl->use_gpu_rasterization());
-    EXPECT_FALSE(host_impl->use_msaa());
-  }
-
-  void DidActivateTreeOnThread(LayerTreeHostImpl* host_impl) override {
-    EXPECT_FALSE(layer_->HasSlowPaths());
-    EXPECT_TRUE(host_impl->active_tree()->use_gpu_rasterization());
-    EXPECT_TRUE(host_impl->use_gpu_rasterization());
-    EXPECT_FALSE(host_impl->use_msaa());
-    EndTest();
-  }
-};
-
-MULTI_THREAD_TEST_F(LayerTreeHostTestGpuRasterizationEnabled);
-
-class LayerTreeHostTestGpuRasterizationEnabledWithMSAA
-    : public LayerTreeHostWithGpuRasterizationSupportedTest {
- protected:
-  void BeginTest() override {
-    // Content-based MSAA trigger.
-    layer_->set_force_content_has_slow_paths(true);
-
-    // MSAA trigger will take effect when layers are updated.
-    // The results will be verified after commit is completed below.
-    // Since we are manually marking the source as containing slow paths,
-    // make sure that the layer gets a chance to update.
-    layer_->SetNeedsDisplay();
-    PostSetNeedsCommitToMainThread();
-  }
-
-  void CommitCompleteOnThread(LayerTreeHostImpl* host_impl) override {
-    // Ensure the slow path bit sticks.
-    EXPECT_TRUE(layer_->HasSlowPaths());
-
-    EXPECT_TRUE(host_impl->pending_tree()->use_gpu_rasterization());
-    EXPECT_TRUE(host_impl->use_gpu_rasterization());
-    EXPECT_TRUE(host_impl->use_msaa());
-  }
-
-  void DidActivateTreeOnThread(LayerTreeHostImpl* host_impl) override {
-    EXPECT_TRUE(layer_->HasSlowPaths());
-
-    EXPECT_TRUE(host_impl->active_tree()->use_gpu_rasterization());
-    EXPECT_TRUE(host_impl->use_gpu_rasterization());
-    EXPECT_TRUE(host_impl->use_msaa());
-    EndTest();
-  }
-};
-
-MULTI_THREAD_TEST_F(LayerTreeHostTestGpuRasterizationEnabledWithMSAA);
-
-class LayerTreeHostTestGpuRasterizationMSAAReenabled
-    : public LayerTreeHostWithGpuRasterizationSupportedTest {
- protected:
-  void InitializeSettings(LayerTreeSettings* settings) override {
-    settings->gpu_rasterization_msaa_sample_count = 4;
-  }
-
-  void BeginTest() override {
-    // Content-based MSAA trigger is relevant.
-    layer_->set_force_content_has_slow_paths(true);
-
-    // MSAA trigger will take effect when layers are updated.
-    // The results will be verified after commit is completed below.
-    // Since we are manually marking the source as containing slow paths,
-    // make sure that the layer gets a chance to update.
-    layer_->SetNeedsDisplay();
-    PostSetNeedsCommitToMainThread();
-  }
-
-  void CommitCompleteOnThread(LayerTreeHostImpl* host_impl) override {
-    SCOPED_TRACE(base::StringPrintf("commit %d", num_commits_));
-    if (expected_use_msaa_) {
-      EXPECT_TRUE(host_impl->use_msaa());
-    } else {
-      EXPECT_FALSE(host_impl->use_msaa());
-    }
-
-    ++num_commits_;
-    switch (num_commits_) {
-      case 1:
-        layer_->set_force_content_has_slow_paths(false);
-        break;
-      case 30:
-        layer_->set_force_content_has_slow_paths(true);
-        break;
-      case 31:
-        layer_->set_force_content_has_slow_paths(false);
-        break;
-      case 90:
-        expected_use_msaa_ = false;
-        break;
-    }
-    PostSetNeedsCommitToMainThread();
-    if (num_commits_ > 100)
-      EndTest();
-  }
-
-  int num_commits_ = 0;
-  bool expected_use_msaa_ = true;
-};
-
-MULTI_THREAD_TEST_F(LayerTreeHostTestGpuRasterizationMSAAReenabled);
-
-class LayerTreeHostTestGpuRasterizationNonAASticky
-    : public LayerTreeHostWithGpuRasterizationSupportedTest {
- protected:
-  void InitializeSettings(LayerTreeSettings* settings) override {
-    settings->gpu_rasterization_msaa_sample_count = 4;
-  }
-
-  void BeginTest() override {
-    // Start without slow paths, but no non-aa paint.
-    layer_->set_force_content_has_slow_paths(true);
-    layer_->set_force_content_has_non_aa_paint(false);
-
-    // The results will be verified after commit is completed below.
-    layer_->SetNeedsDisplay();
-    PostSetNeedsCommitToMainThread();
-  }
-
-  void CommitCompleteOnThread(LayerTreeHostImpl* host_impl) override {
-    SCOPED_TRACE(base::StringPrintf("commit %d", num_commits_));
-    if (expected_use_msaa_) {
-      EXPECT_TRUE(host_impl->use_msaa());
-    } else {
-      EXPECT_FALSE(host_impl->use_msaa());
-    }
-
-    ++num_commits_;
-    switch (num_commits_) {
-      case 30:
-        layer_->set_force_content_has_non_aa_paint(true);
-        expected_use_msaa_ = false;
-        break;
-      case 31:
-        layer_->set_force_content_has_non_aa_paint(false);
-        break;
-    }
-    PostSetNeedsCommitToMainThread();
-    if (num_commits_ > 100)
-      EndTest();
-  }
-
-  int num_commits_ = 0;
-  bool expected_use_msaa_ = true;
-};
-
-MULTI_THREAD_TEST_F(LayerTreeHostTestGpuRasterizationNonAASticky);
-
-class LayerTreeHostTestGpuRasterizationForced : public LayerTreeHostTest {
- protected:
-  void InitializeSettings(LayerTreeSettings* settings) override {
-    EXPECT_FALSE(settings->gpu_rasterization_forced);
-    settings->gpu_rasterization_forced = true;
-  }
-
-  void SetupTree() override {
-    LayerTreeHostTest::SetupTree();
-
-    std::unique_ptr<FakeRecordingSource> recording_source(
-        new FakeRecordingSource);
-    recording_source_ = recording_source.get();
-
-    scoped_refptr<FakePictureLayer> layer =
-        FakePictureLayer::CreateWithRecordingSource(
-            &layer_client_, std::move(recording_source));
-    layer_ = layer.get();
-
-    layer->SetBounds(gfx::Size(10, 10));
-    layer->SetIsDrawable(true);
-    layer_tree_host()->root_layer()->AddChild(layer);
-    layer_client_.set_bounds(layer_->bounds());
-  }
-
-  void BeginTest() override {
-    // Content-based MSAA trigger is irrelevant as well.
-    layer_->set_force_content_has_slow_paths(true);
-
-    // Veto will take effect when layers are updated.
-    // The results will be verified after commit is completed below.
-    // Since we are manually marking the source as containing slow paths,
-    // make sure that the layer gets a chance to update.
-    layer_->SetNeedsDisplay();
-    PostSetNeedsCommitToMainThread();
-  }
-
-  void CommitCompleteOnThread(LayerTreeHostImpl* host_impl) override {
-    // Ensure the slow-paths bit sticks.
-    EXPECT_TRUE(layer_->HasSlowPaths());
-
-    EXPECT_TRUE(host_impl->sync_tree()->use_gpu_rasterization());
-    EXPECT_TRUE(host_impl->use_gpu_rasterization());
-  }
-
-  void DidActivateTreeOnThread(LayerTreeHostImpl* host_impl) override {
-    EXPECT_TRUE(layer_->HasSlowPaths());
-
-    EXPECT_TRUE(host_impl->active_tree()->use_gpu_rasterization());
-    EXPECT_TRUE(host_impl->use_gpu_rasterization());
-    EndTest();
-  }
-
-  FakeContentLayerClient layer_client_;
-  FakePictureLayer* layer_;
-  FakeRecordingSource* recording_source_;
-};
-
-SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostTestGpuRasterizationForced);
+MULTI_THREAD_TEST_F(LayerTreeHostTestGpuRasterizationDisabled);
 
 class LayerTreeHostTestGpuRasterizationSupportedButDisabled
-    : public LayerTreeHostWithGpuRasterizationSupportedTest {
+    : public LayerTreeTest {
  protected:
+  void SetUpUnboundContextProviders(
+      viz::TestContextProvider* context_provider,
+      viz::TestContextProvider* worker_provider) override {
+    context_provider->UnboundTestContextGL()->set_gpu_rasterization(true);
+    worker_provider->UnboundTestContextGL()->set_gpu_rasterization(true);
+  }
+
   void InitializeSettings(LayerTreeSettings* settings) override {
     settings->gpu_rasterization_disabled = true;
+  }
+
+  void SetupTree() override {
+    LayerTreeHostTest::SetupTree();
+
+    std::unique_ptr<FakeRecordingSource> recording_source(
+        new FakeRecordingSource);
+    recording_source_ = recording_source.get();
+
+    scoped_refptr<FakePictureLayer> layer =
+        FakePictureLayer::CreateWithRecordingSource(
+            &layer_client_, std::move(recording_source));
+    layer_ = layer.get();
+
+    layer->SetBounds(gfx::Size(10, 10));
+    layer->SetIsDrawable(true);
+    layer_tree_host()->root_layer()->AddChild(layer);
+    layer_client_.set_bounds(layer_->bounds());
   }
 
   void BeginTest() override { PostSetNeedsCommitToMainThread(); }
@@ -6470,9 +6298,130 @@ class LayerTreeHostTestGpuRasterizationSupportedButDisabled
     EXPECT_FALSE(host_impl->use_gpu_rasterization());
     EndTest();
   }
+
+  FakeContentLayerClient layer_client_;
+  FakePictureLayer* layer_;
+  FakeRecordingSource* recording_source_;
 };
 
 MULTI_THREAD_TEST_F(LayerTreeHostTestGpuRasterizationSupportedButDisabled);
+
+class LayerTreeHostTestGpuRasterizationEnabled : public LayerTreeHostTest {
+ protected:
+  void SetUpUnboundContextProviders(
+      viz::TestContextProvider* context_provider,
+      viz::TestContextProvider* worker_provider) override {
+    context_provider->UnboundTestContextGL()->set_gpu_rasterization(true);
+    worker_provider->UnboundTestContextGL()->set_gpu_rasterization(true);
+  }
+
+  void SetupTree() override {
+    LayerTreeHostTest::SetupTree();
+
+    std::unique_ptr<FakeRecordingSource> recording_source(
+        new FakeRecordingSource);
+    recording_source_ = recording_source.get();
+
+    scoped_refptr<FakePictureLayer> layer =
+        FakePictureLayer::CreateWithRecordingSource(
+            &layer_client_, std::move(recording_source));
+    layer_ = layer.get();
+
+    layer->SetBounds(gfx::Size(10, 10));
+    layer->SetIsDrawable(true);
+    layer_tree_host()->root_layer()->AddChild(layer);
+    layer_client_.set_bounds(layer_->bounds());
+  }
+
+  void BeginTest() override {
+    PostSetNeedsCommitToMainThread();
+  }
+
+  void CommitCompleteOnThread(LayerTreeHostImpl* host_impl) override {
+    EXPECT_TRUE(host_impl->sync_tree()->use_gpu_rasterization());
+    EXPECT_TRUE(host_impl->use_gpu_rasterization());
+  }
+
+  void DidActivateTreeOnThread(LayerTreeHostImpl* host_impl) override {
+    EXPECT_TRUE(host_impl->active_tree()->use_gpu_rasterization());
+    EXPECT_TRUE(host_impl->use_gpu_rasterization());
+    EndTest();
+  }
+
+  FakeContentLayerClient layer_client_;
+  FakePictureLayer* layer_;
+  FakeRecordingSource* recording_source_;
+};
+
+SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostTestGpuRasterizationEnabled);
+
+class LayerTreeHostTestGpuRasterizationEnabledWithMSAA : public LayerTreeTest {
+ protected:
+  void SetUpUnboundContextProviders(
+      viz::TestContextProvider* context_provider,
+      viz::TestContextProvider* worker_provider) override {
+    viz::TestGLES2Interface* gl = context_provider->UnboundTestContextGL();
+    gl->set_gpu_rasterization(true);
+    gl->set_support_multisample_compatibility(false);
+    gl->SetMaxSamples(4);
+    viz::TestGLES2Interface* worker = worker_provider->UnboundTestContextGL();
+    worker->set_gpu_rasterization(true);
+    worker->set_support_multisample_compatibility(false);
+    worker->SetMaxSamples(4);
+  }
+
+  void InitializeSettings(LayerTreeSettings* settings) override {
+    // GetMSAASampleCountForRaster() will return this value if there are too
+    // many slow paths.
+    settings->gpu_rasterization_msaa_sample_count = 4;
+  }
+
+  void SetupTree() override {
+    LayerTreeHostTest::SetupTree();
+
+    auto recording_source = std::make_unique<FakeRecordingSource>();
+    recording_source_ = recording_source.get();
+
+    scoped_refptr<FakePictureLayer> layer =
+        FakePictureLayer::CreateWithRecordingSource(
+            &layer_client_, std::move(recording_source));
+    layer_ = layer.get();
+    layer->SetBounds(gfx::Size(10, 10));
+    layer->SetIsDrawable(true);
+    layer_tree_host()->root_layer()->AddChild(layer);
+    layer_client_.set_bounds(layer_->bounds());
+  }
+
+  void BeginTest() override {
+    // Content-based MSAA trigger.
+    layer_client_.set_contains_slow_paths(true);
+    // MSAA trigger will take effect when layers are updated.
+    // The results will be verified after commit is completed below.
+    // Since we are manually marking the source as containing slow paths,
+    // make sure that the layer gets a chance to update.
+    layer_->SetNeedsDisplay();
+
+    PostSetNeedsCommitToMainThread();
+  }
+
+  void CommitCompleteOnThread(LayerTreeHostImpl* host_impl) override {
+    auto* raster_source = static_cast<PictureLayerImpl*>(
+                              host_impl->sync_tree()->LayerById(layer_->id()))
+                              ->GetRasterSource();
+    EXPECT_GT(host_impl->GetMSAASampleCountForRaster(
+                  raster_source->GetDisplayItemList()),
+              0);
+    EXPECT_TRUE(host_impl->pending_tree()->use_gpu_rasterization());
+    EXPECT_TRUE(host_impl->use_gpu_rasterization());
+    EndTest();
+  }
+
+  FakeContentLayerClient layer_client_;
+  FakePictureLayer* layer_;
+  FakeRecordingSource* recording_source_;
+};
+
+MULTI_THREAD_TEST_F(LayerTreeHostTestGpuRasterizationEnabledWithMSAA);
 
 class LayerTreeHostTestWillBeginImplFrameHasDidFinishImplFrame
     : public LayerTreeHostTest {
@@ -6844,7 +6793,7 @@ class LayerTreeHostAcceptsDeltasFromImplWithoutRootLayer
 
   void ApplyViewportChanges(const ApplyViewportChangesArgs& args) override {
     EXPECT_EQ(info_.page_scale_delta, args.page_scale_delta);
-    EXPECT_EQ(info_.top_controls_delta, args.browser_controls_delta);
+    EXPECT_EQ(info_.top_controls_delta, args.top_controls_delta);
     EXPECT_EQ(info_.browser_controls_constraint,
               args.browser_controls_constraint);
     deltas_sent_to_client_ = true;
@@ -6908,7 +6857,7 @@ class LayerTreeHostTestCrispUpAfterPinchEnds : public LayerTreeHostTest {
           viz::TileDrawQuad::MaterialCast(draw_quad);
       float quad_scale =
           quad->tex_coord_rect.width() / static_cast<float>(quad->rect.width());
-      float transform_scale = SkMScalarToFloat(
+      float transform_scale = SkScalarToFloat(
           quad->shared_quad_state->quad_to_target_transform.matrix().get(0, 0));
       float scale = quad_scale / transform_scale;
       if (frame_scale != 0.f && frame_scale != scale)
@@ -7068,10 +7017,11 @@ MULTI_THREAD_TEST_F(LayerTreeHostTestCrispUpAfterPinchEndsWithOneCopy);
 
 class RasterizeWithGpuRasterizationCreatesResources : public LayerTreeHostTest {
  protected:
-  RasterizeWithGpuRasterizationCreatesResources() = default;
-
-  void InitializeSettings(LayerTreeSettings* settings) override {
-    settings->gpu_rasterization_forced = true;
+  void SetUpUnboundContextProviders(
+      viz::TestContextProvider* context_provider,
+      viz::TestContextProvider* worker_provider) override {
+    context_provider->UnboundTestContextGL()->set_gpu_rasterization(true);
+    worker_provider->UnboundTestContextGL()->set_gpu_rasterization(true);
   }
 
   void SetupTree() override {
@@ -7113,8 +7063,11 @@ class GpuRasterizationRasterizesBorderTiles : public LayerTreeHostTest {
  protected:
   GpuRasterizationRasterizesBorderTiles() : viewport_size_(1024, 2048) {}
 
-  void InitializeSettings(LayerTreeSettings* settings) override {
-    settings->gpu_rasterization_forced = true;
+  void SetUpUnboundContextProviders(
+      viz::TestContextProvider* context_provider,
+      viz::TestContextProvider* worker_provider) override {
+    context_provider->UnboundTestContextGL()->set_gpu_rasterization(true);
+    worker_provider->UnboundTestContextGL()->set_gpu_rasterization(true);
   }
 
   void SetupTree() override {
@@ -7199,7 +7152,7 @@ class LayerTreeHostTestContinuousDrawWhenCreatingVisibleTiles
           viz::TileDrawQuad::MaterialCast(draw_quad);
       float quad_scale =
           quad->tex_coord_rect.width() / static_cast<float>(quad->rect.width());
-      float transform_scale = SkMScalarToFloat(
+      float transform_scale = SkScalarToFloat(
           quad->shared_quad_state->quad_to_target_transform.matrix().get(0, 0));
       float scale = quad_scale / transform_scale;
       if (frame_scale != 0.f && frame_scale != scale)
@@ -7775,9 +7728,14 @@ class GpuRasterizationSucceedsWithLargeImage : public LayerTreeHostTest {
   GpuRasterizationSucceedsWithLargeImage()
       : viewport_size_(1024, 2048), large_image_size_(20000, 10) {}
 
-  void InitializeSettings(LayerTreeSettings* settings) override {
-    settings->gpu_rasterization_forced = true;
+  void SetUpUnboundContextProviders(
+      viz::TestContextProvider* context_provider,
+      viz::TestContextProvider* worker_provider) override {
+    context_provider->UnboundTestContextGL()->set_gpu_rasterization(true);
+    worker_provider->UnboundTestContextGL()->set_gpu_rasterization(true);
+  }
 
+  void InitializeSettings(LayerTreeSettings* settings) override {
     // Set to 0 to force at-raster GPU image decode.
     settings->decoded_image_working_set_budget_bytes = 0;
   }
@@ -7878,9 +7836,9 @@ class LayerTreeHostTestSubmitFrameResources : public LayerTreeHostTest {
       scoped_refptr<viz::ContextProvider> compositor_context_provider,
       scoped_refptr<viz::RasterContextProvider> worker_context_provider)
       override {
-    auto gl_owned = std::make_unique<viz::TestGLES2Interface>();
-    gl_owned->set_have_extension_egl_image(true);
-    auto provider = viz::TestContextProvider::Create(std::move(gl_owned));
+    auto gl = std::make_unique<viz::TestGLES2Interface>();
+    gl->set_have_extension_egl_image(true);
+    auto provider = viz::TestContextProvider::Create(std::move(gl));
     return LayerTreeTest::CreateLayerTreeFrameSink(
         renderer_settings, refresh_rate, std::move(provider),
         std::move(worker_context_provider));
@@ -8190,6 +8148,9 @@ SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostTestDiscardAckAfterRelease);
 
 class LayerTreeHostTestImageAnimation : public LayerTreeHostTest {
  public:
+  explicit LayerTreeHostTestImageAnimation(RendererType type = RENDERER_GL)
+      : LayerTreeHostTest(type) {}
+
   void BeginTest() override { PostSetNeedsCommitToMainThread(); }
 
   virtual void AddImageOp(const PaintImage& image) = 0;
@@ -8266,6 +8227,12 @@ class LayerTreeHostTestImageAnimation : public LayerTreeHostTest {
 
 class LayerTreeHostTestImageAnimationDrawImage
     : public LayerTreeHostTestImageAnimation {
+ public:
+  explicit LayerTreeHostTestImageAnimationDrawImage(
+      RendererType type = RENDERER_GL)
+      : LayerTreeHostTestImageAnimation(type) {}
+
+ private:
   void AddImageOp(const PaintImage& image) override {
     content_layer_client_.add_draw_image(image, gfx::Point(0, 0), PaintFlags());
   }
@@ -8317,6 +8284,10 @@ MULTI_THREAD_TEST_F(LayerTreeHostTestImageAnimationPaintFilter);
 class LayerTreeHostTestImageAnimationSynchronousScheduling
     : public LayerTreeHostTestImageAnimationDrawImage {
  public:
+  explicit LayerTreeHostTestImageAnimationSynchronousScheduling(
+      RendererType type = RENDERER_GL)
+      : LayerTreeHostTestImageAnimationDrawImage(type) {}
+
   void InitializeSettings(LayerTreeSettings* settings) override {
     LayerTreeHostTestImageAnimation::InitializeSettings(settings);
     settings->using_synchronous_renderer_compositor = true;
@@ -8328,11 +8299,9 @@ MULTI_THREAD_TEST_F(LayerTreeHostTestImageAnimationSynchronousScheduling);
 class LayerTreeHostTestImageAnimationSynchronousSchedulingSoftwareDraw
     : public LayerTreeHostTestImageAnimationSynchronousScheduling {
  public:
-  void InitializeSettings(LayerTreeSettings* settings) override {
-    LayerTreeHostTestImageAnimationSynchronousScheduling::InitializeSettings(
-        settings);
-    renderer_type_ = RENDERER_SOFTWARE;
-  }
+  LayerTreeHostTestImageAnimationSynchronousSchedulingSoftwareDraw()
+      : LayerTreeHostTestImageAnimationSynchronousScheduling(
+            RENDERER_SOFTWARE) {}
 
   void AfterTest() override {
     LayerTreeHostTestImageAnimationSynchronousScheduling::AfterTest();
@@ -8349,6 +8318,11 @@ MULTI_THREAD_TEST_F(
 
 class LayerTreeHostTestImageDecodingHints : public LayerTreeHostTest {
  public:
+  void InitializeSettings(LayerTreeSettings* settings) override {
+    LayerTreeHostTest::InitializeSettings(settings);
+    settings->enable_checker_imaging = true;
+  }
+
   void BeginTest() override { PostSetNeedsCommitToMainThread(); }
 
   void SetupTree() override {
@@ -8771,9 +8745,11 @@ class LayerTreeHostTopControlsDeltaTriggersViewportUpdate
     SetupViewport(root_layer, gfx::Size(50, 50), root_layer->bounds());
     layer_tree_host()->SetPageScaleFactorAndLimits(1.f, 1.f, 1.f);
     // Set browser controls to be partially shown.
-    layer_tree_host()->SetBrowserControlsHeight(kTopControlsHeight, 0.0f,
-                                                true /* shrink */);
-    layer_tree_host()->SetBrowserControlsShownRatio(kTopControlsShownRatio);
+    layer_tree_host()->SetBrowserControlsParams(
+        {kTopControlsHeight, 0, kBottomControlsHeight, 0, false /* animate */,
+         true /* shrink */});
+    layer_tree_host()->SetBrowserControlsShownRatio(kTopControlsShownRatio,
+                                                    kBottomControlsShownRatio);
   }
 
   void BeginCommitOnThread(LayerTreeHostImpl* impl) override {
@@ -8800,6 +8776,8 @@ class LayerTreeHostTopControlsDeltaTriggersViewportUpdate
 
   static constexpr float kTopControlsHeight = 10.0f;
   static constexpr float kTopControlsShownRatio = 0.3f;
+  static constexpr float kBottomControlsHeight = 10.0f;
+  static constexpr float kBottomControlsShownRatio = 1.f;
 };
 
 MULTI_THREAD_TEST_F(LayerTreeHostTopControlsDeltaTriggersViewportUpdate);

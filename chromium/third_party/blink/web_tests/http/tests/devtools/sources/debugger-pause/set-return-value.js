@@ -18,7 +18,7 @@
   let sidebarUpdated = TestRunner.addSnifferPromise(
         Sources.ScopeChainSidebarPane.prototype, '_sidebarPaneUpdatedForTest');
   await Promise.all([SourcesTestRunner.runTestFunctionAndWaitUntilPausedPromise(), sidebarUpdated]);
-  let localScope = SourcesTestRunner.scopeChainSections()[0].objectTreeElement();
+  let localScope = SourcesTestRunner.scopeChainSections()[0];
 
   TestRunner.addResult('Dump current');
   await new Promise(resolve => SourcesTestRunner.expandProperties([localScope, ['Return value']], resolve));
@@ -45,7 +45,7 @@
   SourcesTestRunner.resumeExecution();
   await ConsoleTestRunner.waitUntilMessageReceivedPromise();
   TestRunner.addResult('Actual return value:');
-  ConsoleTestRunner.dumpConsoleMessagesIgnoreErrorStackFrames();
+  await ConsoleTestRunner.dumpConsoleMessagesIgnoreErrorStackFrames();
 
   SourcesTestRunner.completeDebuggerTest();
 })();

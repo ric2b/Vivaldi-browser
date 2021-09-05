@@ -222,8 +222,8 @@ void FakePeripheral::SetConnectionLatency(ConnectionLatency connection_latency,
 }
 
 void FakePeripheral::Connect(PairingDelegate* pairing_delegate,
-                             const base::Closure& callback,
-                             const ConnectErrorCallback& error_callback) {
+                             base::OnceClosure callback,
+                             ConnectErrorCallback error_callback) {
   NOTREACHED();
 }
 
@@ -272,17 +272,18 @@ void FakePeripheral::ConnectToServiceInsecurely(
 }
 
 void FakePeripheral::CreateGattConnection(
-    const GattConnectionCallback& callback,
-    const ConnectErrorCallback& error_callback) {
-  create_gatt_connection_success_callbacks_.push_back(callback);
-  create_gatt_connection_error_callbacks_.push_back(error_callback);
+    GattConnectionCallback callback,
+    ConnectErrorCallback error_callback,
+    base::Optional<device::BluetoothUUID> service_uuid) {
+  create_gatt_connection_success_callbacks_.push_back(std::move(callback));
+  create_gatt_connection_error_callbacks_.push_back(std::move(error_callback));
 
   // TODO(crbug.com/728870): Stop overriding CreateGattConnection once
   // IsGattConnected() is fixed. See issue for more details.
   if (gatt_connected_)
     return DidConnectGatt();
 
-  CreateGattConnectionImpl();
+  CreateGattConnectionImpl(std::move(service_uuid));
 }
 
 bool FakePeripheral::IsGattServicesDiscoveryComplete() const {
@@ -310,7 +311,8 @@ bool FakePeripheral::IsGattServicesDiscoveryComplete() const {
   return discovery_complete;
 }
 
-void FakePeripheral::CreateGattConnectionImpl() {
+void FakePeripheral::CreateGattConnectionImpl(
+    base::Optional<device::BluetoothUUID>) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::BindOnce(&FakePeripheral::DispatchConnectionResponse,
                                 weak_ptr_factory_.GetWeakPtr()));

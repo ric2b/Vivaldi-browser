@@ -23,9 +23,6 @@ import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.SystemClock;
-import android.support.v4.graphics.drawable.DrawableCompat;
-import android.support.v4.view.ViewCompat;
-import android.support.v7.graphics.drawable.DrawableWrapper;
 import android.util.AttributeSet;
 import android.util.Property;
 import android.util.TypedValue;
@@ -44,40 +41,48 @@ import android.widget.TextView;
 
 import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
-import androidx.annotation.StringRes;
+import androidx.annotation.VisibleForTesting;
+import androidx.appcompat.graphics.drawable.DrawableWrapper;
+import androidx.core.graphics.drawable.DrawableCompat;
+import androidx.core.view.ViewCompat;
 
 import org.chromium.base.ApiCompatibilityUtils;
+import org.chromium.base.MathUtils;
 import org.chromium.base.TraceEvent;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.compositor.Invalidator;
 import org.chromium.chrome.browser.compositor.layouts.LayoutUpdateHost;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
+import org.chromium.chrome.browser.homepage.HomepageManager;
 import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.omnibox.LocationBar;
 import org.chromium.chrome.browser.omnibox.LocationBarPhone;
 import org.chromium.chrome.browser.omnibox.SearchEngineLogoUtils;
-import org.chromium.chrome.browser.partnercustomizations.HomepageManager;
 import org.chromium.chrome.browser.partnercustomizations.PartnerBrowserCustomizations;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabImpl;
+import org.chromium.chrome.browser.toolbar.ButtonData;
 import org.chromium.chrome.browser.toolbar.HomeButton;
 import org.chromium.chrome.browser.toolbar.KeyboardNavigationListener;
 import org.chromium.chrome.browser.toolbar.TabCountProvider;
 import org.chromium.chrome.browser.toolbar.TabCountProvider.TabCountObserver;
 import org.chromium.chrome.browser.toolbar.TabSwitcherDrawable;
+import org.chromium.chrome.browser.toolbar.ToolbarColors;
+import org.chromium.chrome.browser.toolbar.bottom.BottomToolbarConfiguration;
+import org.chromium.chrome.browser.toolbar.bottom.BottomToolbarVariationManager;
 import org.chromium.chrome.browser.toolbar.top.TopToolbarCoordinator.UrlExpansionObserver;
-import org.chromium.chrome.browser.ui.widget.animation.CancelAwareAnimatorListener;
-import org.chromium.chrome.browser.ui.widget.animation.Interpolators;
-import org.chromium.chrome.browser.util.ColorUtils;
-import org.chromium.chrome.browser.util.FeatureUtilities;
-import org.chromium.chrome.browser.util.MathUtils;
-import org.chromium.chrome.browser.util.ViewUtils;
+import org.chromium.chrome.features.start_surface.StartSurfaceConfiguration;
+import org.chromium.components.browser_ui.styles.ChromeColors;
+import org.chromium.components.browser_ui.widget.animation.CancelAwareAnimatorListener;
+import org.chromium.components.browser_ui.widget.animation.Interpolators;
 import org.chromium.components.feature_engagement.EventConstants;
 import org.chromium.ui.base.LocalizationUtils;
+import org.chromium.ui.base.ViewUtils;
 import org.chromium.ui.interpolators.BakedBezierInterpolator;
+import org.chromium.ui.util.ColorUtils;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -85,6 +90,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.NavigationPopup;
+import org.chromium.chrome.browser.ThemeColorProvider;
+
+import org.vivaldi.browser.panels.PanelUtils;
+import org.vivaldi.browser.toolbar.PanelButton;
+import org.vivaldi.browser.toolbar.TrackerShieldButton;
 
 /**
  * Phone specific toolbar implementation.
@@ -137,7 +148,8 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
     private TextView mUrlBar;
     protected View mUrlActionContainer;
     protected ImageView mToolbarShadow;
-    private @Nullable ImageButton mExperimentalButton;
+    private @Nullable ImageButton mOptionalButton;
+    private boolean mOptionalButtonUsesTint;
 
     private ObjectAnimator mTabSwitcherModeAnimation;
     private ObjectAnimator mDelayedTabSwitcherModeAnimation;
@@ -278,22 +290,33 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
     private int mPreTextureCaptureVisibility;
     private boolean mIsOverlayTabStackDrawableLight;
 
-    private AnimatorSet mExperimentalButtonAnimator;
-    private boolean mExperimentalButtonAnimationRunning;
-    private int mExperimentalButtonTranslation;
+    private AnimatorSet mOptionalButtonAnimator;
+    private boolean mOptionalButtonAnimationRunning;
+    private int mOptionalButtonTranslation;
     /**
      * The percent completion for the location bar width change animation that is run when the
-     * experimental button is shown/hidden. Animates from 1.f to 0.f when showing the button and
+     * optional button is shown/hidden. Animates from 1.f to 0.f when showing the button and
      * 0.f to 1.f when hiding the button, where 0.f indicates the location bar width is not offset
      * at all for the animation.
      */
     private float mLocBarWidthChangePercent;
 
     /**
+     * Vivaldi tracker shield button.
+     */
+    private TrackerShieldButton mShieldButton;
+
+    /** Vivaldi **/
+    private PanelButton mPanelButton;
+    private ImageButton mBackButton;
+    private ImageButton mForwardButton;
+    private NavigationPopup mNavigationPopup;
+
+    /**
      * A global layout listener used to capture a new texture when the experimental toolbar button
      * is added or removed.
      */
-    private ViewTreeObserver.OnGlobalLayoutListener mExperimentalButtonLayoutListener;
+    private ViewTreeObserver.OnGlobalLayoutListener mOptionalButtonLayoutListener;
 
     // The following are some properties used during animation.  We use explicit property classes
     // to avoid the cost of reflection for each animation setup.
@@ -348,9 +371,9 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
         super(context, attrs);
         mToolbarSidePadding = getResources().getDimensionPixelOffset(R.dimen.toolbar_edge_padding);
         mLightModeDefaultColor =
-                ColorUtils.getThemedToolbarIconTint(getContext(), true).getDefaultColor();
+                ToolbarColors.getThemedToolbarIconTint(getContext(), true).getDefaultColor();
         mDarkModeDefaultColor =
-                ColorUtils.getThemedToolbarIconTint(getContext(), false).getDefaultColor();
+                ToolbarColors.getThemedToolbarIconTint(getContext(), false).getDefaultColor();
     }
 
     @Override
@@ -370,11 +393,21 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
             mToolbarBackground =
                     new ColorDrawable(getToolbarColorForVisualState(VisualState.NORMAL));
 
+            // Vivaldi
+            mShieldButton = findViewById(R.id.shield_button);
+            mPanelButton = findViewById(R.id.panel_button);
+            mBackButton = findViewById(R.id.back_button);
+            mForwardButton = findViewById(R.id.forward_button);
+            mBackButton.setImageDrawable(getResources()
+                    .getDrawable(R.drawable.vivaldi_bottom_nav_back_56dp));
+            mForwardButton.setImageDrawable(getResources()
+                    .getDrawable(R.drawable.vivaldi_bottom_nav_forward_56dp));
+
             initLocationBarBackground();
 
             setLayoutTransition(null);
 
-            if (getMenuButtonWrapper() != null && !mIsBottomToolbarVisible) {
+            if (getMenuButtonWrapper() != null) {
                 getMenuButtonWrapper().setVisibility(View.VISIBLE);
             }
             else if (getMenuButtonWrapper() != null && ChromeApplication.isVivaldi())
@@ -390,6 +423,10 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
     void destroy() {
         super.destroy();
         if (mHomeButton != null) mHomeButton.destroy();
+        // Vivaldi
+        if (mShieldButton != null) mShieldButton.destroy();
+        if (mPanelButton != null) mPanelButton.destroy();
+
         cancelAnimations();
     }
 
@@ -436,8 +473,8 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
      * @return The location bar color.
      */
     private int getLocationBarColorForToolbarColor(int toolbarColor) {
-        return ColorUtils.getTextBoxColorForToolbarBackground(
-                getResources(), false, toolbarColor, isIncognito());
+        return ToolbarColors.getTextBoxColorForToolbarBackgroundInNonNativePage(
+                getResources(), toolbarColor, isIncognito());
     }
 
     private void inflateTabSwitchingResources() {
@@ -478,6 +515,18 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
         if (mHomeButton != null) {
             mHomeButton.setOnClickListener(this);
         }
+        // Vivaldi
+        if (mPanelButton != null) {
+            mPanelButton.setOnClickListener(this);
+        }
+        if (mBackButton != null) {
+            mBackButton.setOnClickListener(this);
+            mBackButton.setLongClickable(true);
+        }
+        if (mForwardButton != null) {
+            mForwardButton.setOnClickListener(this);
+            mForwardButton.setLongClickable(true);
+        }
 
         if (getMenuButton() != null) {
             getMenuButton().setOnKeyListener(new KeyboardNavigationListener() {
@@ -498,10 +547,12 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
             });
         }
         onHomeButtonUpdate(HomepageManager.isHomepageEnabled()
-                || FeatureUtilities.isBottomToolbarEnabled());
+                || BottomToolbarConfiguration.isBottomToolbarEnabled());
 
         setTabSwitcherAnimationMenuDrawable();
         updateVisualsForLocationBarState();
+        // Vivaldi
+        mShieldButton.initAdblockObserver();
     }
 
     @Override
@@ -513,6 +564,10 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
                 && mNtpSearchBoxScrollPercent != UNINITIALIZED_PERCENT) {
             return true;
         }
+
+        // Note (david@vivaldi.com): When in tab switcher more prevent all touch events to the child
+        // views.
+        if (ChromeApplication.isVivaldi() && isInTabSwitcherMode()) return true;
 
         return super.onInterceptTouchEvent(ev);
     }
@@ -539,10 +594,22 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
         if (mHomeButton != null && mHomeButton == v) {
             openHomepage();
             if (isNativeLibraryReady()
-                    && PartnerBrowserCustomizations.isHomepageProviderAvailableAndEnabled()) {
-                TrackerFactory.getTrackerForProfile(Profile.getLastUsedProfile())
-                        .notifyEvent(EventConstants.PARTNER_HOME_PAGE_BUTTON_PRESSED);
+                    && PartnerBrowserCustomizations.getInstance()
+                               .isHomepageProviderAvailableAndEnabled()) {
+                Profile profile = isIncognito()
+                        ? Profile.getLastUsedRegularProfile().getOffTheRecordProfile()
+                        : Profile.getLastUsedRegularProfile();
+                TrackerFactory.getTrackerForProfile(profile).notifyEvent(
+                        EventConstants.PARTNER_HOME_PAGE_BUTTON_PRESSED);
             }
+        }
+        // Vivaldi
+        else if (mPanelButton != null && mPanelButton == v) {
+            PanelUtils.showPanel(null, false);
+        } else if (mBackButton != null && mBackButton == v) {
+            back();
+        } else if (mForwardButton != null && mForwardButton == v) {
+            forward();
         }
     }
 
@@ -612,17 +679,7 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
         if (mLayoutLocationBarInFocusedMode
                 || (mVisualState == VisualState.NEW_TAB_NORMAL
                         && mTabSwitcherState == STATIC_TAB)) {
-            int priorVisibleWidth = 0;
-            for (int i = 0; i < mLocationBar.getChildCount(); i++) {
-                View child = mLocationBar.getChildAt(i);
-                if (child == mLocationBar.getFirstViewVisibleWhenFocused()) break;
-                if (ChromeApplication.isVivaldi()) {
-                    if (child == findViewById(R.id.location_bar_status)) break;
-                }
-                if (child.getVisibility() == GONE) continue;
-                priorVisibleWidth += child.getMeasuredWidth();
-            }
-
+            int priorVisibleWidth = mLocationBar.getOffsetOfFirstVisibleFocusedView();
             width = getFocusedLocationBarWidth(containerWidth, priorVisibleWidth);
             leftMargin = getFocusedLocationBarLeftMargin(priorVisibleWidth);
         } else {
@@ -631,7 +688,7 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
         }
 
         if (mLayoutLocationBarWithoutExtraButton) {
-            float offset = getLocationBarWidthOffsetForExperimentalButton();
+            float offset = getLocationBarWidthOffsetForOptionalButton();
             if (getLayoutDirection() == LAYOUT_DIRECTION_RTL) leftMargin -= (int) offset;
             width += (int) offset;
         }
@@ -696,6 +753,17 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
         if (mHomeButton != null && mHomeButton.getVisibility() != GONE) {
             padding = mHomeButton.getMeasuredWidth();
         }
+        // Vivaldi
+        if (mPanelButton != null && mPanelButton.getVisibility() != GONE) {
+            padding += mPanelButton.getMeasuredWidth();
+        }
+        if (mBackButton != null && mBackButton.getVisibility() != GONE) {
+            padding += mPanelButton.getMeasuredWidth();
+        }
+        if (mForwardButton != null && mForwardButton.getVisibility() != GONE) {
+            padding += mForwardButton.getMeasuredWidth();
+        }
+
         return padding;
     }
 
@@ -744,13 +812,13 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
                 // toolbar color so that the NTP content is not visible beneath the toolbar. In
                 // between the transition, we set a translucent default toolbar color based on
                 // the expansion percentage of the toolbar.
-                return android.support.v4.graphics.ColorUtils.setAlphaComponent(
-                        ColorUtils.getDefaultThemeColor(getResources(), false),
+                return androidx.core.graphics.ColorUtils.setAlphaComponent(
+                        ChromeColors.getDefaultThemeColor(getResources(), false),
                         Math.round(mUrlExpansionPercent * 255));
             case VisualState.NORMAL:
-                return ColorUtils.getDefaultThemeColor(getResources(), false);
+                return ChromeColors.getDefaultThemeColor(getResources(), false);
             case VisualState.INCOGNITO:
-                return ColorUtils.getDefaultThemeColor(getResources(), true);
+                return ChromeColors.getDefaultThemeColor(getResources(), true);
             case VisualState.BRAND_COLOR:
                 return getToolbarDataProvider().getPrimaryColor();
             default:
@@ -852,8 +920,8 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
                 (int) MathUtils.interpolate(getViewBoundsLeftOfLocationBar(visualState),
                         getFocusedLeftPositionOfLocationBarBackground(), expansion);
 
-        if (mExperimentalButtonAnimationRunning && getLayoutDirection() == LAYOUT_DIRECTION_RTL) {
-            leftViewPosition -= getLocationBarBackgroundOffsetForExperimentalButton();
+        if (mOptionalButtonAnimationRunning && getLayoutDirection() == LAYOUT_DIRECTION_RTL) {
+            leftViewPosition -= getLocationBarBackgroundOffsetForOptionalButton();
         }
 
         return leftViewPosition;
@@ -877,32 +945,31 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
                 (int) MathUtils.interpolate(getViewBoundsRightOfLocationBar(visualState),
                         getFocusedRightPositionOfLocationBarBackground(), expansion);
 
-        if (mExperimentalButtonAnimationRunning
-                && !(getLayoutDirection() == LAYOUT_DIRECTION_RTL)) {
-            rightViewPosition += getLocationBarBackgroundOffsetForExperimentalButton();
+        if (mOptionalButtonAnimationRunning && !(getLayoutDirection() == LAYOUT_DIRECTION_RTL)) {
+            rightViewPosition += getLocationBarBackgroundOffsetForOptionalButton();
         }
 
         return rightViewPosition;
     }
 
     /**
-     * @return The location bar background position offset, for use when the experimental button
+     * @return The location bar background position offset, for use when the optional button
      *         show/hide animation is running.
      */
-    private int getLocationBarBackgroundOffsetForExperimentalButton() {
-        return (int) (getLocationBarWidthOffsetForExperimentalButton() * mLocBarWidthChangePercent);
+    private int getLocationBarBackgroundOffsetForOptionalButton() {
+        return (int) (getLocationBarWidthOffsetForOptionalButton() * mLocBarWidthChangePercent);
     }
 
     /**
-     * @return The difference in the location bar width when the experimental button is hidden
-     *         rather than showing. This is effectively the width of the experimental button with
+     * @return The difference in the location bar width when the optional button is hidden
+     *         rather than showing. This is effectively the width of the optional button with
      *         some adjustment to account for possible padding differences when the button
      *         visibility changes.
      */
-    private float getLocationBarWidthOffsetForExperimentalButton() {
-        float widthChange = mExperimentalButton.getWidth();
+    private float getLocationBarWidthOffsetForOptionalButton() {
+        float widthChange = mOptionalButton.getWidth();
 
-        // When the experimental button is the only visible button after the location bar and the
+        // When the optional button is the only visible button after the location bar and the
         // button is hidden mToolbarSidePadding is used for the padding after the location bar.
         if (!isMenuButtonPresent()) {
             widthChange -= mToolbarSidePadding;
@@ -955,12 +1022,11 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
 
         int toolbarButtonVisibility = getToolbarButtonVisibility();
         mToolbarButtonsContainer.setVisibility(toolbarButtonVisibility);
-        if (!mIsBottomToolbarVisible && !getToolbarDataProvider().isInOverviewAndShowingOmnibox()) {
+        if (!getToolbarDataProvider().isInOverviewAndShowingOmnibox()) {
             if (mHomeButton != null && mHomeButton.getVisibility() != GONE) {
                 mHomeButton.setVisibility(toolbarButtonVisibility);
             }
         }
-
         updateLocationBarLayoutForExpansionAnimation();
     }
 
@@ -981,18 +1047,18 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
         int currentWidth = locationBarLayoutParams.width;
 
         float locationBarBaseTranslationX = mUnfocusedLocationBarLayoutLeft - currentLeftMargin;
-        if (mExperimentalButtonAnimationRunning) {
+        if (mOptionalButtonAnimationRunning) {
             // When showing the button, we disable location bar relayout
             // (mDisableLocationBarRelayout), so the location bar's left margin and
             // mUnfocusedLocationBarLayoutLeft have not been updated to take into account the
-            // appearance of the experimental icon. The views to left of the location bar will
+            // appearance of the optional icon. The views to left of the location bar will
             // be wider than mUnfocusedlocationBarLayoutLeft in RTL, so adjust the translation by
             // that amount.
-            // When hiding the button, we force a relayout without the experimental toolbar button
+            // When hiding the button, we force a relayout without the optional toolbar button
             // (mLayoutLocationBarWithoutExtraButton). mUnfocusedLocationBarLayoutLeft reflects
-            // the view bounds left of the location bar, which still includes the experimental
+            // the view bounds left of the location bar, which still includes the optional
             // button. The location bar left margin, however, has been adjusted to reflect its
-            // end value when the experimental button is fully hidden. The
+            // end value when the optional button is fully hidden. The
             // locationBarBaseTranslationX above accounts for the difference between
             // mUnfocusedLocationBarLayoutLeft and the location bar's current left margin.
             locationBarBaseTranslationX +=
@@ -1015,8 +1081,8 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
         }
 
         locationBarBaseTranslationX *= 1f
-                - (mExperimentalButtonAnimationRunning ? mLocBarWidthChangePercent
-                                                       : mUrlExpansionPercent);
+                - (mOptionalButtonAnimationRunning ? mLocBarWidthChangePercent
+                                                   : mUrlExpansionPercent);
 
         mLocationBarBackgroundNtpOffset.setEmpty();
         mLocationBarNtpOffsetLeft = 0;
@@ -1058,7 +1124,7 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
             mUrlBar.setTranslationX(0);
         }
 
-        if (!mExperimentalButtonAnimationRunning) {
+        if (!mOptionalButtonAnimationRunning) {
             mUrlActionContainer.setTranslationX(getUrlActionsTranslationXForExpansionAnimation(
                     isLocationBarRtl, locationBarBaseTranslationX));
             mLocationBar.setUrlFocusChangePercent(mUrlExpansionPercent);
@@ -1066,7 +1132,7 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
             // Only transition theme colors if in static tab mode that is not the NTP. In practice
             // this only runs when you focus the omnibox on a web page.
             if (!isLocationBarShownInNTP() && mTabSwitcherState == STATIC_TAB) {
-                int defaultColor = ColorUtils.getDefaultThemeColor(getResources(), isIncognito());
+                int defaultColor = ChromeColors.getDefaultThemeColor(getResources(), isIncognito());
                 int defaultLocationBarColor = getLocationBarColorForToolbarColor(defaultColor);
                 int primaryColor = getToolbarDataProvider().getPrimaryColor();
                 int themedLocationBarColor = getLocationBarColorForToolbarColor(primaryColor);
@@ -1257,6 +1323,15 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
             mHomeButton.setAlpha(previousAlpha);
         }
 
+        if (ChromeApplication.isVivaldi()) {
+            if (mPanelButton != null && mPanelButton.getVisibility() != View.GONE)
+                drawLocationBarButton(mPanelButton, canvas, floatAlpha);
+            if (mForwardButton != null && mForwardButton.getVisibility() != View.GONE)
+                drawLocationBarButton(mForwardButton, canvas, floatAlpha);
+            if (mBackButton != null && mBackButton.getVisibility() != View.GONE)
+                drawLocationBarButton(mBackButton, canvas, floatAlpha);
+        }
+
         // Draw the location/URL bar.
         previousAlpha = mLocationBar.getAlpha();
         mLocationBar.setAlpha(previousAlpha * floatAlpha);
@@ -1269,36 +1344,34 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
         // Translate to draw end toolbar buttons.
         translateCanvasToView(this, mToolbarButtonsContainer, canvas);
 
-        // Draw the experimental button if necessary.
-        if (mExperimentalButton != null && mExperimentalButton.getVisibility() != View.GONE) {
+        // Draw the optional button if necessary.
+        if (mOptionalButton != null && mOptionalButton.getVisibility() != View.GONE) {
             canvas.save();
-            Drawable expButton = mExperimentalButton.getDrawable();
+            Drawable optionalButtonDrawable = mOptionalButton.getDrawable();
 
-            translateCanvasToView(mToolbarButtonsContainer, mExperimentalButton, canvas);
+            translateCanvasToView(mToolbarButtonsContainer, mOptionalButton, canvas);
 
-            int backgroundWidth = mExperimentalButton.getDrawable().getIntrinsicWidth();
-            int backgroundHeight = mExperimentalButton.getDrawable().getIntrinsicHeight();
-            int backgroundLeft =
-                    (mExperimentalButton.getWidth() - mExperimentalButton.getPaddingLeft()
-                            - mExperimentalButton.getPaddingRight() - backgroundWidth)
+            int backgroundWidth = mOptionalButton.getDrawable().getIntrinsicWidth();
+            int backgroundHeight = mOptionalButton.getDrawable().getIntrinsicHeight();
+            int backgroundLeft = (mOptionalButton.getWidth() - mOptionalButton.getPaddingLeft()
+                                         - mOptionalButton.getPaddingRight() - backgroundWidth)
                     / 2;
-            backgroundLeft += mExperimentalButton.getPaddingLeft();
-            int backgroundTop =
-                    (mExperimentalButton.getHeight() - mExperimentalButton.getPaddingTop()
-                            - mExperimentalButton.getPaddingBottom() - backgroundHeight)
+            backgroundLeft += mOptionalButton.getPaddingLeft();
+            int backgroundTop = (mOptionalButton.getHeight() - mOptionalButton.getPaddingTop()
+                                        - mOptionalButton.getPaddingBottom() - backgroundHeight)
                     / 2;
-            backgroundTop += mExperimentalButton.getPaddingTop();
+            backgroundTop += mOptionalButton.getPaddingTop();
             canvas.translate(backgroundLeft, backgroundTop);
 
-            expButton.setAlpha(rgbAlpha);
-            expButton.draw(canvas);
+            optionalButtonDrawable.setAlpha(rgbAlpha);
+            optionalButtonDrawable.draw(canvas);
 
             canvas.restore();
         }
 
-        // Draw the tab stack button and associated text.
+        // Draw the tab stack button and associated text if necessary.
         if (mTabSwitcherAnimationTabStackDrawable != null && mToggleTabStackButton != null
-                && !mIsBottomToolbarVisible && mUrlExpansionPercent != 1f) {
+                && mUrlExpansionPercent != 1f && !isTabSwitcherOnBottom()) {
             // Draw the tab stack button image.
             canvas.save();
             translateCanvasToView(mToolbarButtonsContainer, mToggleTabStackButton, canvas);
@@ -1320,30 +1393,16 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
             mTabSwitcherAnimationTabStackDrawable.setBounds(
                     mToggleTabStackButton.getDrawable().getBounds());
             mTabSwitcherAnimationTabStackDrawable.setAlpha(rgbAlpha);
+            if (ChromeApplication.isVivaldi())
+                drawLocationBarButton(mToggleTabStackButton, canvas, floatAlpha);
+            else
             mTabSwitcherAnimationTabStackDrawable.draw(canvas);
             canvas.restore();
         }
 
         // Draw the menu button if necessary.
         final ImageButton menuButton = getMenuButton();
-        // NOTE(david@vivaldi.com): In Vivaldi we always draw the menu button and also use different
-        // bounds in order to prevent the menu button from being squashed (VB-50041).
-        if (ChromeApplication.isVivaldi()) {
-            if (menuButton != null && !isShowingAppMenuUpdateBadge()
-                    && mTabSwitcherAnimationMenuDrawable != null && mUrlExpansionPercent != 1f) {
-                int offset =
-                        (menuButton.getDrawable().getMinimumWidth() - menuButton.getWidth()) / 2;
-                mTabSwitcherAnimationMenuDrawable.setBounds(menuButton.getPaddingLeft() - offset,
-                        menuButton.getPaddingTop(), menuButton.getWidth() + offset,
-                        menuButton.getHeight());
-                translateCanvasToView(mToolbarButtonsContainer, menuButton, canvas);
-                mTabSwitcherAnimationMenuDrawable.setAlpha(rgbAlpha);
-                int color = useLight() ? mLightModeDefaultColor : mDarkModeDefaultColor;
-                mTabSwitcherAnimationMenuDrawable.setColorFilter(color, PorterDuff.Mode.SRC_IN);
-                mTabSwitcherAnimationMenuDrawable.draw(canvas);
-            }
-        } else
-        if (menuButton != null && !mIsBottomToolbarVisible && !isShowingAppMenuUpdateBadge()
+        if (menuButton != null && !isShowingAppMenuUpdateBadge()
                 && mTabSwitcherAnimationMenuDrawable != null && mUrlExpansionPercent != 1f) {
             mTabSwitcherAnimationMenuDrawable.setBounds(menuButton.getPaddingLeft(),
                     menuButton.getPaddingTop(),
@@ -1353,6 +1412,9 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
             mTabSwitcherAnimationMenuDrawable.setAlpha(rgbAlpha);
             int color = useLight() ? mLightModeDefaultColor : mDarkModeDefaultColor;
             mTabSwitcherAnimationMenuDrawable.setColorFilter(color, PorterDuff.Mode.SRC_IN);
+            if (ChromeApplication.isVivaldi())
+                drawLocationBarButton(menuButton, canvas, floatAlpha);
+            else
             mTabSwitcherAnimationMenuDrawable.draw(canvas);
         }
 
@@ -1361,8 +1423,8 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
                                             : mTabSwitcherAnimationMenuBadgeDarkDrawable;
 
         final View menuBadge = getMenuBadge();
-        if (menuBadge != null && !mIsBottomToolbarVisible && isShowingAppMenuUpdateBadge()
-                && badgeDrawable != null && mUrlExpansionPercent != 1f) {
+        if (menuBadge != null && isShowingAppMenuUpdateBadge() && badgeDrawable != null
+                && mUrlExpansionPercent != 1f) {
             badgeDrawable.setBounds(menuBadge.getPaddingLeft(), menuBadge.getPaddingTop(),
                     menuBadge.getWidth() - menuBadge.getPaddingRight(),
                     menuBadge.getHeight() - menuBadge.getPaddingBottom());
@@ -1496,7 +1558,7 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
             // viewport used to draw the background.  During expansion transitions, compensation
             // is applied to increase the clip regions such that when the location bar converts
             // to the narrower collapsed layout the visible content is the same.
-            if (mUrlExpansionPercent != 1f && !mExperimentalButtonAnimationRunning) {
+            if (mUrlExpansionPercent != 1f && !mOptionalButtonAnimationRunning) {
                 int leftDelta = mUnfocusedLocationBarLayoutLeft
                         - getViewBoundsLeftOfLocationBar(mVisualState);
                 int rightDelta = getViewBoundsRightOfLocationBar(mVisualState)
@@ -1516,7 +1578,7 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
                     locationBarClipRight -= ViewCompat.getPaddingEnd(mLocationBar) * inversePercent;
                 }
             }
-            if (mExperimentalButtonAnimationRunning) {
+            if (mOptionalButtonAnimationRunning) {
                 if (mLocationBar.getLayoutDirection() == LAYOUT_DIRECTION_RTL) {
                     locationBarClipLeft += mLocationBar.getPaddingStart();
                 } else {
@@ -1682,14 +1744,18 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
     @Override
     public void updateButtonVisibility() {
         if (mHomeButton == null) return;
-
-        boolean hideHomeButton = !mIsHomeButtonEnabled || mIsBottomToolbarVisible
-                || FeatureUtilities.isStartSurfaceEnabled();
+        boolean hideHomeButton = !mIsHomeButtonEnabled
+                || (mIsBottomToolbarVisible && BottomToolbarVariationManager.isHomeButtonOnBottom())
+                || (StartSurfaceConfiguration.isStartSurfaceEnabled()
+                        && !StartSurfaceConfiguration.isStartSurfaceSinglePaneEnabled());
+        if (ChromeApplication.isVivaldi() && mPanelButton.getVisibility() == GONE)
+            hideHomeButton = true;
         if (hideHomeButton) {
             removeHomeButton();
         } else {
             addHomeButton();
         }
+        mShieldButton.updateVisibility();
     }
 
     @Override
@@ -1705,10 +1771,25 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
             }
         }
 
+        if (mOptionalButton != null && mOptionalButtonUsesTint) {
+            ApiCompatibilityUtils.setImageTintList(mOptionalButton, tint);
+        }
+
+        // Vivaldi
+        ApiCompatibilityUtils.setImageTintList(mHomeButton, tint);
+        ApiCompatibilityUtils.setImageTintList(mBackButton, tint);
+        ApiCompatibilityUtils.setImageTintList(mForwardButton, tint);
+        ApiCompatibilityUtils.setImageTintList(mPanelButton, tint);
+
         // TODO(amaralp): Have the LocationBar listen to tint changes.
         if (mLocationBar != null) mLocationBar.updateVisualsForState();
 
         if (mLayoutUpdateHost != null) mLayoutUpdateHost.requestUpdate();
+    }
+
+    @Override
+    public HomeButton getHomeButtonForTesting() {
+        return mHomeButton;
     }
 
     private void removeHomeButton() {
@@ -1870,6 +1951,9 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
         mDelayingTabSwitcherAnimation = delayAnimation;
 
         if (inTabSwitcherMode) {
+            // Note(david@vivaldi.com) To avoid the blinking effects while opening the tab switcher
+            // in Vivaldi.
+            if (!ChromeApplication.isVivaldi()) {
             if (mUrlFocusLayoutAnimator != null && mUrlFocusLayoutAnimator.isRunning()) {
                 mUrlFocusLayoutAnimator.end();
                 mUrlFocusLayoutAnimator = null;
@@ -1882,6 +1966,7 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
 
             updateViewsForTabSwitcherMode();
             mTabSwitcherModeAnimation = createEnterTabSwitcherModeAnimation();
+            }
         } else {
             if (!mDelayingTabSwitcherAnimation) {
                 mTabSwitcherModeAnimation = createExitTabSwitcherAnimation(showToolbar);
@@ -1928,8 +2013,8 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
         mIsHomeButtonEnabled = !inTabSwitcherMode;
 
         if (mToggleTabStackButton != null) {
-            mToggleTabStackButton.setVisibility(
-                    inTabSwitcherMode || mIsBottomToolbarVisible ? GONE : VISIBLE);
+            boolean isGone = inTabSwitcherMode || isTabSwitcherOnBottom();
+            mToggleTabStackButton.setVisibility(isGone ? GONE : VISIBLE);
         }
 
         if (getMenuButton() != null) {
@@ -1938,12 +2023,7 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
 
         triggerUrlFocusAnimation(inTabSwitcherMode && !urlHasFocus());
 
-        if (inTabSwitcherMode) {
-            mUrlBar.setText("");
-        } else if (getToolbarDataProvider() != null
-                && getToolbarDataProvider().getUrlBarData() != null) {
-            mUrlBar.setText(getToolbarDataProvider().getUrlBarData().displayText);
-        }
+        if (inTabSwitcherMode) mUrlBar.setText("");
 
         return true;
     }
@@ -1978,6 +2058,14 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
             mDelayedTabSwitcherModeAnimation.start();
         } else {
             updateViewsForTabSwitcherMode();
+        }
+
+        // Set the url bar text back after finished hiding the tab switcher.
+        if (getToolbarDataProvider().shouldShowLocationBarInOverviewMode()
+                && mTabSwitcherState == STATIC_TAB && getToolbarDataProvider() != null
+                && getToolbarDataProvider().getUrlBarData() != null) {
+            assert !getToolbarDataProvider().isInOverviewAndShowingOmnibox();
+            mUrlBar.setText(getToolbarDataProvider().getUrlBarData().displayText);
         }
     }
 
@@ -2040,17 +2128,8 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
         animator.setInterpolator(BakedBezierInterpolator.TRANSFORM_CURVE);
         animators.add(animator);
 
-        for (int i = 0; i < mLocationBar.getChildCount(); i++) {
-            View childView = mLocationBar.getChildAt(i);
-            if (childView == mLocationBar.getFirstViewVisibleWhenFocused()) break;
-            if (ChromeApplication.isVivaldi()) {
-                if (childView == findViewById(R.id.location_bar_status)) break;
-            }
-            animator = ObjectAnimator.ofFloat(childView, ALPHA, 0);
-            animator.setDuration(URL_FOCUS_CHANGE_ANIMATION_DURATION_MS);
-            animator.setInterpolator(BakedBezierInterpolator.TRANSFORM_CURVE);
-            animators.add(animator);
-        }
+        mLocationBar.populateFadeAnimations(
+                animators, 0, URL_FOCUS_CHANGE_ANIMATION_DURATION_MS, 0);
 
         float density = getContext().getResources().getDisplayMetrics().density;
         boolean isRtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
@@ -2058,7 +2137,7 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
                 MathUtils.flipSignIf(URL_FOCUS_TOOLBAR_BUTTONS_TRANSLATION_X_DP, isRtl) * density;
 
         final View menuButtonWrapper = getMenuButtonWrapper();
-        if (menuButtonWrapper != null && !mIsBottomToolbarVisible) {
+        if (menuButtonWrapper != null) {
             animator = ObjectAnimator.ofFloat(
                     menuButtonWrapper, TRANSLATION_X, toolbarButtonTranslationX);
             animator.setDuration(URL_FOCUS_TOOLBAR_BUTTONS_DURATION_MS);
@@ -2071,7 +2150,7 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
             animators.add(animator);
         }
 
-        if (mToggleTabStackButton != null && !mIsBottomToolbarVisible) {
+        if (mToggleTabStackButton != null && !isTabSwitcherOnBottom()) {
             animator = ObjectAnimator.ofFloat(
                     mToggleTabStackButton, TRANSLATION_X, toolbarButtonTranslationX);
             animator.setDuration(URL_FOCUS_TOOLBAR_BUTTONS_DURATION_MS);
@@ -2084,14 +2163,14 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
             animators.add(animator);
         }
 
-        if (mExperimentalButton != null && mExperimentalButton.getVisibility() != View.GONE) {
+        if (mOptionalButton != null && mOptionalButton.getVisibility() != View.GONE) {
             animator = ObjectAnimator.ofFloat(
-                    mExperimentalButton, TRANSLATION_X, toolbarButtonTranslationX);
+                    mOptionalButton, TRANSLATION_X, toolbarButtonTranslationX);
             animator.setDuration(URL_FOCUS_TOOLBAR_BUTTONS_DURATION_MS);
             animator.setInterpolator(BakedBezierInterpolator.FADE_OUT_CURVE);
             animators.add(animator);
 
-            animator = ObjectAnimator.ofFloat(mExperimentalButton, ALPHA, 0);
+            animator = ObjectAnimator.ofFloat(mOptionalButton, ALPHA, 0);
             animator.setDuration(URL_FOCUS_TOOLBAR_BUTTONS_DURATION_MS);
             animator.setInterpolator(BakedBezierInterpolator.FADE_OUT_CURVE);
             animators.add(animator);
@@ -2110,7 +2189,7 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
         animators.add(animator);
 
         final View menuButtonWrapper = getMenuButtonWrapper();
-        if (menuButtonWrapper != null && !mIsBottomToolbarVisible) {
+        if (menuButtonWrapper != null) {
             animator = ObjectAnimator.ofFloat(menuButtonWrapper, TRANSLATION_X, 0);
             animator.setDuration(URL_FOCUS_TOOLBAR_BUTTONS_DURATION_MS);
             animator.setStartDelay(URL_CLEAR_FOCUS_MENU_DELAY_MS);
@@ -2124,7 +2203,7 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
             animators.add(animator);
         }
 
-        if (mToggleTabStackButton != null && !mIsBottomToolbarVisible) {
+        if (mToggleTabStackButton != null && !isTabSwitcherOnBottom()) {
             animator = ObjectAnimator.ofFloat(mToggleTabStackButton, TRANSLATION_X, 0);
             animator.setDuration(URL_FOCUS_TOOLBAR_BUTTONS_DURATION_MS);
             animator.setStartDelay(URL_CLEAR_FOCUS_TABSTACK_DELAY_MS);
@@ -2138,35 +2217,25 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
             animators.add(animator);
         }
 
-        if (mExperimentalButton != null && mExperimentalButton.getVisibility() != View.GONE) {
-            // TODO(twellington): it's possible that the experimental button was shown while
+        if (mOptionalButton != null && mOptionalButton.getVisibility() != View.GONE) {
+            // TODO(twellington): it's possible that the optional button was shown while
             // the url bar was focused, in which case the translation x and alpha animators
             // are a no-op. Account for this case.
-            animator = ObjectAnimator.ofFloat(mExperimentalButton, TRANSLATION_X, 0);
+            animator = ObjectAnimator.ofFloat(mOptionalButton, TRANSLATION_X, 0);
             animator.setDuration(URL_FOCUS_TOOLBAR_BUTTONS_DURATION_MS);
             animator.setStartDelay(URL_CLEAR_FOCUS_EXPERIMENTAL_BUTTON_DELAY_MS);
             animator.setInterpolator(BakedBezierInterpolator.TRANSFORM_CURVE);
             animators.add(animator);
 
-            animator = ObjectAnimator.ofFloat(mExperimentalButton, ALPHA, 1);
+            animator = ObjectAnimator.ofFloat(mOptionalButton, ALPHA, 1);
             animator.setDuration(URL_FOCUS_TOOLBAR_BUTTONS_DURATION_MS);
             animator.setStartDelay(URL_CLEAR_FOCUS_EXPERIMENTAL_BUTTON_DELAY_MS);
             animator.setInterpolator(BakedBezierInterpolator.TRANSFORM_CURVE);
             animators.add(animator);
         }
 
-        for (int i = 0; i < mLocationBar.getChildCount(); i++) {
-            View childView = mLocationBar.getChildAt(i);
-            if (childView == mLocationBar.getFirstViewVisibleWhenFocused()) break;
-            if (ChromeApplication.isVivaldi()) {
-                if (childView == findViewById(R.id.location_bar_status)) break;
-            }
-            animator = ObjectAnimator.ofFloat(childView, ALPHA, 1);
-            animator.setStartDelay(URL_FOCUS_TOOLBAR_BUTTONS_DURATION_MS);
-            animator.setDuration(URL_CLEAR_FOCUS_MENU_DELAY_MS);
-            animator.setInterpolator(BakedBezierInterpolator.TRANSFORM_CURVE);
-            animators.add(animator);
-        }
+        mLocationBar.populateFadeAnimations(
+                animators, URL_FOCUS_TOOLBAR_BUTTONS_DURATION_MS, URL_CLEAR_FOCUS_MENU_DELAY_MS, 1);
 
         if (isLocationBarShownInNTP() && mNtpSearchBoxScrollPercent == 0f) return;
 
@@ -2186,7 +2255,8 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
             mUrlBar.setText("");
             if (!hasFocus) return;
         }
-
+        // Vivaldi
+        mShieldButton.onUrlFocusChange(hasFocus);
         triggerUrlFocusAnimation(hasFocus);
     }
 
@@ -2195,7 +2265,7 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
             mUrlFocusLayoutAnimator.cancel();
             mUrlFocusLayoutAnimator = null;
         }
-        if (mExperimentalButtonAnimationRunning) mExperimentalButtonAnimator.end();
+        if (mOptionalButtonAnimationRunning) mOptionalButtonAnimator.end();
 
         List<Animator> animators = new ArrayList<>();
         if (hasFocus) {
@@ -2457,8 +2527,8 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
 
     private boolean hideShadowForInterstitial() {
         return getToolbarDataProvider() != null && getToolbarDataProvider().getTab() != null
-                && (getToolbarDataProvider().getTab().isShowingInterstitialPage()
-                           || getToolbarDataProvider().getTab().isShowingErrorPage());
+                && (((TabImpl) getToolbarDataProvider().getTab()).isShowingInterstitialPage()
+                        || getToolbarDataProvider().getTab().isShowingErrorPage());
     }
 
     private @VisualState int computeVisualState() {
@@ -2473,6 +2543,14 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
      */
     private int getProgressBarColor() {
         return getToolbarDataProvider().getPrimaryColor();
+    }
+
+    /**
+     * @return Whether tab switcher is shown on the bottom toolbar.
+     *         Return false when bottom toolbar is not visible.
+     */
+    private boolean isTabSwitcherOnBottom() {
+        return mIsBottomToolbarVisible && BottomToolbarVariationManager.isTabSwitcherOnBottom();
     }
 
     private void updateVisualsForLocationBarState() {
@@ -2534,6 +2612,8 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
         // since currently visual state does not map correctly to tab switcher state. See
         // https://crbug.com/832594 for more info.
         if (mTabSwitcherState != EXITING_TAB_SWITCHER) {
+            // Note (david@vivaldi.com): Not needed in Vivaldi.
+            if(!ChromeApplication.isVivaldi())
             updateToolbarBackgroundFromState(mVisualState);
         }
 
@@ -2598,69 +2678,77 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
     }
 
     @Override
-    void enableExperimentalButton(OnClickListener onClickListener, Drawable image,
-            @StringRes int contentDescriptionResId) {
-        if (mExperimentalButton == null) {
-            ViewStub viewStub = findViewById(R.id.experimental_button_stub);
-            mExperimentalButton = (ImageButton) viewStub.inflate();
+    void updateOptionalButton(ButtonData buttonData) {
+        if (mOptionalButton == null) {
+            ViewStub viewStub = findViewById(R.id.optional_button_stub);
+            mOptionalButton = (ImageButton) viewStub.inflate();
 
-            if (!isMenuButtonPresent()) mExperimentalButton.setPadding(0, 0, 0, 0);
-            mExperimentalButtonTranslation = getResources().getDimensionPixelSize(
+            if (!isMenuButtonPresent()) mOptionalButton.setPadding(0, 0, 0, 0);
+            mOptionalButtonTranslation = getResources().getDimensionPixelSize(
                     R.dimen.toolbar_optional_button_animation_translation);
-            if (getLayoutDirection() == LAYOUT_DIRECTION_RTL) mExperimentalButtonTranslation *= -1;
-        } else {
-            if (mExperimentalButtonAnimationRunning) {
-                mExperimentalButtonAnimator.end();
-            }
-            assert mExperimentalButton.getVisibility()
-                    == View.GONE : "#disableExperimentalButton() should be called first.";
+            if (getLayoutDirection() == LAYOUT_DIRECTION_RTL) mOptionalButtonTranslation *= -1;
+        } else if (mOptionalButtonAnimationRunning) {
+            // TODO(https://crbug.com/865801): refine this logic to allow for same-button updates,
+            // e.g. swapping in a new drawable part way through the animation.
+            mOptionalButtonAnimator.end();
         }
 
-        mExperimentalButton.setOnClickListener(onClickListener);
-        mExperimentalButton.setImageDrawable(image);
-        mExperimentalButton.setContentDescription(
-                getContext().getResources().getString(contentDescriptionResId));
-        mExperimentalButtonLayoutListener = () -> requestLayoutHostUpdateForExperimentalButton();
+        mOptionalButton.setOnClickListener(buttonData.onClickListener);
+        mOptionalButton.setImageDrawable(buttonData.drawable);
+        mOptionalButton.setContentDescription(
+                getContext().getResources().getString(buttonData.contentDescriptionResId));
+
+        mOptionalButtonUsesTint = buttonData.supportsTinting;
+        if (mOptionalButtonUsesTint) {
+            ApiCompatibilityUtils.setImageTintList(mOptionalButton, getTint());
+        } else {
+            ApiCompatibilityUtils.setImageTintList(mOptionalButton, null);
+        }
+        mOptionalButtonLayoutListener = () -> requestLayoutHostUpdateForOptionalButton();
         if (mTabSwitcherState == STATIC_TAB) {
-            if (!mUrlFocusChangeInProgress && !urlHasFocus()) {
-                runShowExperimentalButtonAnimation();
+            if (!mUrlFocusChangeInProgress && !urlHasFocus()
+                    && mOptionalButton.getVisibility() == View.GONE) {
+                runShowOptionalButtonAnimation();
             } else {
-                mExperimentalButton.setVisibility(View.VISIBLE);
+                mOptionalButton.setVisibility(View.VISIBLE);
+                onOptionalButtonAnimationEnd();
             }
         } else {
-            mExperimentalButton.setVisibility(View.VISIBLE);
-            getViewTreeObserver().addOnGlobalLayoutListener(mExperimentalButtonLayoutListener);
+            mOptionalButton.setVisibility(View.VISIBLE);
+            getViewTreeObserver().addOnGlobalLayoutListener(mOptionalButtonLayoutListener);
         }
     }
 
     @Override
-    void updateExperimentalButtonImage(Drawable image) {
-        assert mExperimentalButton != null;
-        mExperimentalButton.setImageDrawable(image);
-    }
-
-    @Override
-    void disableExperimentalButton() {
-        if (mExperimentalButton == null || mExperimentalButton.getVisibility() == View.GONE) {
+    void hideOptionalButton() {
+        // mLayoutLocationBarWithoutExtraButton implies that the hide animation is currently
+        // running.
+        if (mOptionalButton == null || mOptionalButton.getVisibility() == View.GONE
+                || mLayoutLocationBarWithoutExtraButton) {
             return;
         }
 
-        if (mTabSwitcherState == STATIC_TAB && !mUrlFocusChangeInProgress && !urlHasFocus()) {
-            runHideExperimentalButtonsAnimators();
+        boolean transitioningAwayFromLocationBarInNTP = mVisibleNewTabPage != null
+                && mVisibleNewTabPage.isLocationBarShownInNTP() && !isLocationBarShownInNTP();
+
+        if (mTabSwitcherState == STATIC_TAB && !mUrlFocusChangeInProgress && !urlHasFocus()
+                && !transitioningAwayFromLocationBarInNTP) {
+            runHideOptionalButtonsAnimators();
         } else {
-            mExperimentalButton.setVisibility(View.GONE);
-            getViewTreeObserver().addOnGlobalLayoutListener(mExperimentalButtonLayoutListener);
+            mOptionalButton.setVisibility(View.GONE);
+            getViewTreeObserver().addOnGlobalLayoutListener(mOptionalButtonLayoutListener);
         }
     }
 
     @Override
-    View getExperimentalButtonView() {
-        return mExperimentalButton;
+    @VisibleForTesting
+    public View getOptionalButtonView() {
+        return mOptionalButton;
     }
 
     /**
      * Whether the menu button is visible. Used as a proxy for whether there are end toolbar
-     * buttons besides the experimental button.
+     * buttons besides the optional button.
      */
     private boolean isMenuButtonPresent() {
         final ImageButton menuButton = getMenuButton();
@@ -2668,17 +2756,17 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
         return menuButton.isShown();
     }
 
-    private void requestLayoutHostUpdateForExperimentalButton() {
+    private void requestLayoutHostUpdateForOptionalButton() {
         if (mLayoutUpdateHost != null) mLayoutUpdateHost.requestUpdate();
-        getViewTreeObserver().removeOnGlobalLayoutListener(mExperimentalButtonLayoutListener);
+        getViewTreeObserver().removeOnGlobalLayoutListener(mOptionalButtonLayoutListener);
     }
 
     /**
-     * Runs an animation that fades in the experimental button while shortening the location bar
+     * Runs an animation that fades in the optional button while shortening the location bar
      * background.
      */
-    private void runShowExperimentalButtonAnimation() {
-        if (mExperimentalButtonAnimationRunning) mExperimentalButtonAnimator.end();
+    private void runShowOptionalButtonAnimation() {
+        if (mOptionalButtonAnimationRunning) mOptionalButtonAnimator.end();
 
         List<Animator> animators = new ArrayList<>();
 
@@ -2689,53 +2777,51 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
         widthChangeAnimator.setInterpolator(BakedBezierInterpolator.TRANSFORM_CURVE);
         animators.add(widthChangeAnimator);
 
-        mExperimentalButton.setAlpha(0.f);
-        ObjectAnimator buttonAnimator =
-                ObjectAnimator.ofFloat(mExperimentalButton, View.ALPHA, 1.f);
+        mOptionalButton.setAlpha(0.f);
+        ObjectAnimator buttonAnimator = ObjectAnimator.ofFloat(mOptionalButton, View.ALPHA, 1.f);
         buttonAnimator.setInterpolator(BakedBezierInterpolator.TRANSFORM_CURVE);
         buttonAnimator.setStartDelay(EXPERIMENTAL_ICON_ANIMATION_DELAY_MS);
         buttonAnimator.setDuration(EXPERIMENTAL_ICON_ANIMATION_DURATION_MS);
         animators.add(buttonAnimator);
 
-        mExperimentalButton.setTranslationX(mExperimentalButtonTranslation);
+        mOptionalButton.setTranslationX(mOptionalButtonTranslation);
         ObjectAnimator buttonTranslationAnimator =
-                ObjectAnimator.ofFloat(mExperimentalButton, View.TRANSLATION_X, 0);
+                ObjectAnimator.ofFloat(mOptionalButton, View.TRANSLATION_X, 0);
         buttonTranslationAnimator.setInterpolator(BakedBezierInterpolator.TRANSFORM_CURVE);
         buttonTranslationAnimator.setStartDelay(EXPERIMENTAL_ICON_ANIMATION_DELAY_MS);
         buttonTranslationAnimator.setDuration(EXPERIMENTAL_ICON_ANIMATION_DURATION_MS);
         animators.add(buttonTranslationAnimator);
 
-        mExperimentalButtonAnimator = new AnimatorSet();
-        mExperimentalButtonAnimator.addListener(new CancelAwareAnimatorListener() {
+        mOptionalButtonAnimator = new AnimatorSet();
+        mOptionalButtonAnimator.addListener(new CancelAwareAnimatorListener() {
             @Override
             public void onStart(Animator animation) {
                 mDisableLocationBarRelayout = true;
-                mExperimentalButtonAnimationRunning = true;
-                mExperimentalButton.setVisibility(View.VISIBLE);
+                mOptionalButtonAnimationRunning = true;
+                mOptionalButton.setVisibility(View.VISIBLE);
             }
 
             @Override
             public void onEnd(Animator animation) {
-                onExperimentalButtonAnimationEnd();
+                onOptionalButtonAnimationEnd();
                 mDisableLocationBarRelayout = false;
-                mExperimentalButtonAnimationRunning = false;
-                getViewTreeObserver().addOnGlobalLayoutListener(mExperimentalButtonLayoutListener);
+                mOptionalButtonAnimationRunning = false;
+                getViewTreeObserver().addOnGlobalLayoutListener(mOptionalButtonLayoutListener);
                 requestLayout();
             }
         });
-        mExperimentalButtonAnimator.playTogether(animators);
-        mExperimentalButtonAnimator.start();
+        mOptionalButtonAnimator.playTogether(animators);
+        mOptionalButtonAnimator.start();
     }
 
     /**
-     * Runs an animation that fades out the experimental button while lengthening the location bar
+     * Runs an animation that fades out the optional button while lengthening the location bar
      * background.
      */
-    private void runHideExperimentalButtonsAnimators() {
-        if (mExperimentalButtonAnimationRunning) mExperimentalButtonAnimator.end();
+    private void runHideOptionalButtonsAnimators() {
+        if (mOptionalButtonAnimationRunning) mOptionalButtonAnimator.end();
 
         List<Animator> animators = new ArrayList<>();
-
         mLocBarWidthChangePercent = 0.f;
         Animator widthChangeAnimator =
                 ObjectAnimator.ofFloat(this, mLocBarWidthChangePercentProperty, 1.f);
@@ -2743,50 +2829,49 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
         widthChangeAnimator.setInterpolator(BakedBezierInterpolator.TRANSFORM_CURVE);
         animators.add(widthChangeAnimator);
 
-        mExperimentalButton.setAlpha(1.f);
-        ObjectAnimator buttonAnimator =
-                ObjectAnimator.ofFloat(mExperimentalButton, View.ALPHA, 0.f);
+        mOptionalButton.setAlpha(1.f);
+        ObjectAnimator buttonAnimator = ObjectAnimator.ofFloat(mOptionalButton, View.ALPHA, 0.f);
         buttonAnimator.setInterpolator(BakedBezierInterpolator.FADE_OUT_CURVE);
         buttonAnimator.setDuration(EXPERIMENTAL_ICON_ANIMATION_DURATION_MS);
         animators.add(buttonAnimator);
 
-        mExperimentalButton.setTranslationX(0);
+        mOptionalButton.setTranslationX(0);
         ObjectAnimator buttonTranslationAnimator = ObjectAnimator.ofFloat(
-                mExperimentalButton, View.TRANSLATION_X, mExperimentalButtonTranslation);
+                mOptionalButton, View.TRANSLATION_X, mOptionalButtonTranslation);
         buttonTranslationAnimator.setInterpolator(BakedBezierInterpolator.FADE_OUT_CURVE);
         buttonTranslationAnimator.setDuration(EXPERIMENTAL_ICON_ANIMATION_DURATION_MS);
         animators.add(buttonTranslationAnimator);
 
-        mExperimentalButtonAnimator = new AnimatorSet();
-        mExperimentalButtonAnimator.addListener(new CancelAwareAnimatorListener() {
+        mOptionalButtonAnimator = new AnimatorSet();
+        mOptionalButtonAnimator.addListener(new CancelAwareAnimatorListener() {
             @Override
             public void onStart(Animator animation) {
                 mLayoutLocationBarWithoutExtraButton = true;
-                mExperimentalButtonAnimationRunning = true;
+                mOptionalButtonAnimationRunning = true;
                 requestLayout();
             }
 
             @Override
             public void onEnd(Animator animation) {
-                onExperimentalButtonAnimationEnd();
-                mExperimentalButton.setVisibility(View.GONE);
+                onOptionalButtonAnimationEnd();
+                mOptionalButton.setVisibility(View.GONE);
                 mLayoutLocationBarWithoutExtraButton = false;
-                mExperimentalButtonAnimationRunning = false;
-                getViewTreeObserver().addOnGlobalLayoutListener(mExperimentalButtonLayoutListener);
+                mOptionalButtonAnimationRunning = false;
+                getViewTreeObserver().addOnGlobalLayoutListener(mOptionalButtonLayoutListener);
             }
         });
-        mExperimentalButtonAnimator.playTogether(animators);
-        mExperimentalButtonAnimator.start();
+        mOptionalButtonAnimator.playTogether(animators);
+        mOptionalButtonAnimator.start();
     }
 
     /**
      * Resets the alpha and translation X for all views affected by the animations for showing or
      * hiding buttons.
      */
-    private void onExperimentalButtonAnimationEnd() {
-        mExperimentalButtonAnimator = null;
-        mExperimentalButton.setAlpha(1.f);
-        mExperimentalButton.setTranslationX(0);
+    private void onOptionalButtonAnimationEnd() {
+        mOptionalButtonAnimator = null;
+        mOptionalButton.setAlpha(1.f);
+        mOptionalButton.setTranslationX(0);
     }
 
     private void setTabSwitcherAnimationMenuDrawable() {
@@ -2812,7 +2897,10 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
     private static class NtpSearchBoxDrawable extends DrawableWrapper {
         private final Drawable.Callback mCallback;
 
-        private int mBoundsLeft, mBoundsTop, mBoundsRight, mBoundsBottom;
+        private int mBoundsLeft;
+        private int mBoundsTop;
+        private int mBoundsRight;
+        private int mBoundsBottom;
         private boolean mPendingBoundsUpdateFromToolbar;
         private boolean mDrawnByNtp;
 
@@ -2877,12 +2965,10 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
     public void onBottomToolbarVisibilityChanged(boolean isVisible) {
         mIsBottomToolbarVisible = isVisible;
 
-        final int visibility = isVisible ? GONE : VISIBLE;
-        mToggleTabStackButton.setVisibility(visibility);
-        if (ChromeApplication.isVivaldi()) getMenuButtonWrapper().setVisibility(VISIBLE);
-        else
-        getMenuButtonWrapper().setVisibility(ChromeApplication.isVivaldi() ? VISIBLE : visibility);
+        mToggleTabStackButton.setVisibility(isTabSwitcherOnBottom() ? GONE : VISIBLE);
         updateButtonVisibility();
+        // Vivaldi
+        updateButtonVisibility(isVisible);
         mToolbarButtonsContainer.requestLayout();
     }
 
@@ -2895,8 +2981,84 @@ public class ToolbarPhone extends ToolbarLayout implements Invalidator.Client, O
             mBrandColorTransitionAnimation.cancel();
         }
 
-        if (mExperimentalButtonAnimator != null && mExperimentalButtonAnimator.isRunning()) {
-            mExperimentalButtonAnimator.cancel();
+        if (mOptionalButtonAnimator != null && mOptionalButtonAnimator.isRunning()) {
+            mOptionalButtonAnimator.cancel();
         }
+    }
+
+
+    // Vivaldi
+    @Override
+    void setThemeColorProvider(ThemeColorProvider themeColorProvider) {
+        super.setThemeColorProvider(themeColorProvider);
+        if (mShieldButton != null)
+            mShieldButton.setThemeColorProvider(themeColorProvider);
+    }
+
+    // Vivaldi
+    public void updateButtonVisibility(boolean visible) {
+        int visibility = visible ? GONE : VISIBLE;
+        mPanelButton.setVisibility(visibility);
+        mBackButton.setVisibility(visibility);
+        mForwardButton.setVisibility(visibility);
+        if (visible) removeHomeButton();
+        else addHomeButton();
+    }
+
+    @Override
+    void updateBackButtonVisibility(boolean canGoBack) {
+        boolean enableButton = canGoBack && !isInTabSwitcherMode();
+        mBackButton.setEnabled(enableButton);
+        mBackButton.setFocusable(enableButton);
+    }
+
+    @Override
+    void updateForwardButtonVisibility(boolean canGoForward) {
+        boolean enableButton = canGoForward && !isInTabSwitcherMode();
+        mForwardButton.setEnabled(enableButton);
+        mForwardButton.setFocusable(enableButton);
+    }
+
+    // Vivaldi
+    void drawLocationBarButton(ImageButton button, Canvas canvas, float alpha) {
+        if (button != null && button.getVisibility() != View.GONE) {
+            float previousAlpha = button.getAlpha();
+            button.setAlpha(previousAlpha * alpha);
+            drawChild(canvas, button, SystemClock.uptimeMillis());
+            button.setAlpha(previousAlpha);
+        }
+    }
+
+    @Override
+    public boolean showContextMenuForChild(View originalView) {
+        if (mBackButton == originalView) {
+            // Display backwards navigation popup.
+            displayNavigationPopup(false, mBackButton);
+            return true;
+        } else if (mForwardButton == originalView) {
+            // Display forwards navigation popup.
+            displayNavigationPopup(true, mForwardButton);
+            return true;
+        }
+        return super.showContextMenuForChild(originalView);
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasWindowFocus) {
+        // Ensure the the popup is not shown after resuming activity from background.
+        if (hasWindowFocus && mNavigationPopup != null) {
+            mNavigationPopup.dismiss();
+            mNavigationPopup = null;
+        }
+        super.onWindowFocusChanged(hasWindowFocus);
+    }
+
+    private void displayNavigationPopup(boolean isForward, View anchorView) {
+        Tab tab = getToolbarDataProvider().getTab();
+        if (tab == null || tab.getWebContents() == null) return;
+        mNavigationPopup = new NavigationPopup(Profile.fromWebContents(tab.getWebContents()),
+                getContext(), tab.getWebContents().getNavigationController(),
+                isForward ? NavigationPopup.Type.TABLET_FORWARD : NavigationPopup.Type.TABLET_BACK);
+        mNavigationPopup.show(anchorView);
     }
 }

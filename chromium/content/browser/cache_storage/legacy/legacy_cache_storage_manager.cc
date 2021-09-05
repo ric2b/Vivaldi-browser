@@ -24,8 +24,10 @@
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
+#include "base/task/post_task.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/time.h"
+#include "components/services/storage/public/cpp/constants.h"
 #include "content/browser/cache_storage/cache_storage.h"
 #include "content/browser/cache_storage/cache_storage.pb.h"
 #include "content/browser/cache_storage/cache_storage_quota_client.h"
@@ -42,7 +44,7 @@ namespace content {
 namespace {
 
 bool DeleteDir(const base::FilePath& path) {
-  return base::DeleteFile(path, true /* recursive */);
+  return base::DeleteFileRecursively(path);
 }
 
 void DeleteOriginDidDeleteDir(storage::QuotaClient::DeletionCallback callback,
@@ -255,7 +257,7 @@ scoped_refptr<LegacyCacheStorageManager> LegacyCacheStorageManager::Create(
     scoped_refptr<CacheStorageContextImpl::ObserverList> observers) {
   base::FilePath root_path = path;
   if (!path.empty()) {
-    root_path = path.Append(ServiceWorkerContextCore::kServiceWorkerDirectory)
+    root_path = path.Append(storage::kServiceWorkerDirectory)
                     .AppendASCII("CacheStorage");
   }
 
@@ -273,7 +275,7 @@ LegacyCacheStorageManager::CreateForTesting(
           old_manager->root_path(), old_manager->cache_task_runner(),
           old_manager->scheduler_task_runner(),
           old_manager->quota_manager_proxy_.get(), old_manager->observers_));
-  manager->SetBlobParametersForCache(old_manager->blob_storage_context());
+  manager->SetBlobParametersForCache(old_manager->blob_storage_context_);
   return manager;
 }
 
@@ -300,7 +302,7 @@ CacheStorageHandle LegacyCacheStorageManager::OpenCacheStorage(
     LegacyCacheStorage* cache_storage = new LegacyCacheStorage(
         ConstructOriginPath(root_path_, origin, owner), IsMemoryBacked(),
         cache_task_runner_.get(), scheduler_task_runner_, quota_manager_proxy_,
-        blob_context_, this, origin, owner);
+        blob_storage_context_, this, origin, owner);
     cache_storage_map_[{origin, owner}] = base::WrapUnique(cache_storage);
     return cache_storage->CreateHandle();
   }
@@ -308,11 +310,12 @@ CacheStorageHandle LegacyCacheStorageManager::OpenCacheStorage(
 }
 
 void LegacyCacheStorageManager::SetBlobParametersForCache(
-    base::WeakPtr<storage::BlobStorageContext> blob_storage_context) {
+    scoped_refptr<BlobStorageContextWrapper> blob_storage_context) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(cache_storage_map_.empty());
-  DCHECK(!blob_context_ || blob_context_.get() == blob_storage_context.get());
-  blob_context_ = blob_storage_context;
+  DCHECK(!blob_storage_context_ ||
+         blob_storage_context_ == blob_storage_context);
+  blob_storage_context_ = std::move(blob_storage_context);
 }
 
 void LegacyCacheStorageManager::NotifyCacheListChanged(

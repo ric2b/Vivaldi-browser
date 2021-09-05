@@ -9,6 +9,7 @@
 #include "ash/login/ui/views_utils.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shell.h"
+#include "ash/style/ash_color_provider.h"
 #include "base/scoped_observer.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/aura/client/focus_change_observer.h"
@@ -16,6 +17,7 @@
 #include "ui/compositor/layer_animator.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/events/event_handler.h"
+#include "ui/gfx/geometry/point.h"
 #include "ui/views/background.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/wm/core/coordinate_conversion.h"
@@ -24,19 +26,16 @@ namespace ash {
 namespace {
 
 // Total width of the bubble view.
-constexpr int kBubbleTotalWidthDp = 178;
+constexpr int kBubbleTotalWidthDp = 192;
 
-// Horizontal margin of the bubble view.
-constexpr int kBubbleHorizontalMarginDp = 14;
-
-// Top margin of the bubble view.
-constexpr int kBubbleTopMarginDp = 13;
-
-// Bottom margin of the bubble view.
-constexpr int kBubbleBottomMarginDp = 18;
+// Margin around the bubble view.
+constexpr int kBubblePaddingDp = 16;
 
 // Spacing between the child view inside the bubble view.
-constexpr int kBubbleBetweenChildSpacingDp = 6;
+constexpr int kBubbleBetweenChildSpacingDp = 16;
+
+// Border radius of the rounded bubble.
+constexpr int kErrorBubbleBorderRadius = 8;
 
 // The amount of time for bubble show/hide animation.
 constexpr base::TimeDelta kBubbleAnimationDuration =
@@ -122,17 +121,25 @@ LoginBaseBubbleView::LoginBaseBubbleView(views::View* anchor_view,
                                          aura::Window* parent_window)
     : anchor_view_(anchor_view),
       bubble_handler_(std::make_unique<LoginBubbleHandler>(this)) {
-  SetLayoutManager(std::make_unique<views::BoxLayout>(
-      views::BoxLayout::Orientation::kVertical,
-      gfx::Insets(kBubbleTopMarginDp, kBubbleHorizontalMarginDp,
-                  kBubbleBottomMarginDp, kBubbleHorizontalMarginDp),
-      kBubbleBetweenChildSpacingDp));
+  views::BoxLayout* layout_manager =
+      SetLayoutManager(std::make_unique<views::BoxLayout>(
+          views::BoxLayout::Orientation::kVertical,
+          gfx::Insets(kBubblePaddingDp), kBubbleBetweenChildSpacingDp));
+  layout_manager->set_cross_axis_alignment(
+      views::BoxLayout::CrossAxisAlignment::kStart);
 
   SetVisible(false);
-  SetBackground(views::CreateSolidBackground(SK_ColorBLACK));
 
   // Layer rendering is needed for animation.
   SetPaintToLayer();
+  SkColor background_color = AshColorProvider::Get()->GetBaseLayerColor(
+      AshColorProvider::BaseLayerType::kTransparent80,
+      AshColorProvider::AshColorMode::kDark);
+  layer()->SetBackgroundBlur(
+      static_cast<float>(AshColorProvider::LayerBlurSigma::kBlurDefault));
+  SetBackground(views::CreateRoundedRectBackground(background_color,
+                                                   kErrorBubbleBorderRadius));
+  layer()->SetFillsBoundsOpaquely(false);
 }
 
 LoginBaseBubbleView::~LoginBaseBubbleView() = default;
@@ -206,6 +213,56 @@ void LoginBaseBubbleView::Layout() {
 
 void LoginBaseBubbleView::OnBlur() {
   Hide();
+}
+
+gfx::Point LoginBaseBubbleView::CalculatePositionUsingDefaultStrategy(
+    PositioningStrategy strategy,
+    int horizontal_padding,
+    int vertical_padding) const {
+  if (!GetAnchorView())
+    return gfx::Point();
+
+  gfx::Point anchor_position = GetAnchorView()->bounds().origin();
+  ConvertPointToTarget(GetAnchorView()->parent() /*source*/,
+                       GetAnchorView()->GetWidget()->GetRootView() /*target*/,
+                       &anchor_position);
+  auto bounds = GetBoundsAvailableToShowBubble();
+  gfx::Size bubble_size(width() + 2 * horizontal_padding,
+                        height() + vertical_padding);
+  gfx::Point result = gfx::Point();
+  switch (strategy) {
+    case PositioningStrategy::kShowOnLeftSideOrRightSide:
+      result = login_views_utils::CalculateBubblePositionLeftRightStrategy(
+          {anchor_position, GetAnchorView()->size()}, bubble_size, bounds);
+      break;
+    case PositioningStrategy::kShowOnRightSideOrLeftSide:
+      result = login_views_utils::CalculateBubblePositionRightLeftStrategy(
+          {anchor_position, GetAnchorView()->size()}, bubble_size, bounds);
+      break;
+  }
+  // Get position of the bubble surrounded by paddings.
+  result.Offset(horizontal_padding, 0);
+  ConvertPointToTarget(GetAnchorView()->GetWidget()->GetRootView() /*source*/,
+                       parent() /*target*/, &result);
+  return result;
+}
+
+gfx::Rect LoginBaseBubbleView::GetBoundsAvailableToShowBubble() const {
+  auto bounds = GetRootViewBounds();
+  auto work_area = GetWorkArea();
+  // Get min means here to exclude either shelf or virtual keyaboard.
+  bounds.set_height(std::min(bounds.height(), work_area.height()));
+  return bounds;
+}
+
+gfx::Rect LoginBaseBubbleView::GetRootViewBounds() const {
+  return GetAnchorView()->GetWidget()->GetRootView()->GetLocalBounds();
+}
+
+gfx::Rect LoginBaseBubbleView::GetWorkArea() const {
+  return display::Screen::GetScreen()
+      ->GetDisplayNearestWindow(GetAnchorView()->GetWidget()->GetNativeWindow())
+      .work_area();
 }
 
 void LoginBaseBubbleView::ScheduleAnimation(bool visible) {

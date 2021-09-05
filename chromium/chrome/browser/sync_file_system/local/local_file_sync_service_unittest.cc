@@ -12,6 +12,7 @@
 #include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -34,7 +35,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_utils.h"
-#include "storage/browser/fileapi/file_system_context.h"
+#include "storage/browser/file_system/file_system_context.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/leveldatabase/leveldb_chrome.h"
@@ -119,8 +120,7 @@ class LocalFileSyncServiceTest
     file_system_.reset(new CannedSyncableFileSystem(
         GURL(kOrigin), in_memory_env_.get(),
         base::CreateSingleThreadTaskRunner({BrowserThread::IO}),
-        base::CreateSingleThreadTaskRunner(
-            {base::ThreadPool(), base::MayBlock()})));
+        base::ThreadPool::CreateSingleThreadTaskRunner({base::MayBlock()})));
 
     local_service_ = LocalFileSyncService::CreateForTesting(
         &profile_, in_memory_env_.get());
@@ -303,8 +303,7 @@ TEST_F(LocalFileSyncServiceTest, MAYBE_LocalChangeObserverMultipleContexts) {
   CannedSyncableFileSystem file_system2(
       GURL(kOrigin2), in_memory_env_.get(),
       base::CreateSingleThreadTaskRunner({BrowserThread::IO}),
-      base::CreateSingleThreadTaskRunner(
-          {base::ThreadPool(), base::MayBlock()}));
+      base::ThreadPool::CreateSingleThreadTaskRunner({base::MayBlock()}));
   file_system2.SetUp(CannedSyncableFileSystem::QUOTA_ENABLED);
 
   base::RunLoop run_loop;

@@ -14,12 +14,13 @@ import android.text.TextUtils;
 import android.view.View;
 
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.favicon.FaviconHelper;
-import org.chromium.chrome.browser.favicon.FaviconUtils;
+import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.ui.widget.RoundedIconGenerator;
-import org.chromium.chrome.browser.ui.widget.TintedDrawable;
-import org.chromium.chrome.browser.util.UrlConstants;
+import org.chromium.chrome.browser.ui.favicon.FaviconHelper;
+import org.chromium.chrome.browser.ui.favicon.FaviconUtils;
+import org.chromium.chrome.browser.ui.favicon.RoundedIconGenerator;
+import org.chromium.components.browser_ui.widget.TintedDrawable;
+import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.content_public.browser.NavigationEntry;
 import org.chromium.content_public.browser.NavigationHistory;
 import org.chromium.ui.modelutil.MVCListAdapter.ListItem;
@@ -42,6 +43,8 @@ class NavigationSheetMediator {
     private final int mFaviconSize;
     private final ModelList mModelList;
     private final Drawable mHistoryIcon;
+    private final Drawable mDefaultIcon;
+    private final String mNewTabText;
 
     private NavigationHistory mHistory;
 
@@ -80,6 +83,9 @@ class NavigationSheetMediator {
         mFaviconSize = context.getResources().getDimensionPixelSize(R.dimen.default_favicon_size);
         mHistoryIcon = TintedDrawable.constructTintedDrawable(
                 context, R.drawable.ic_history_googblue_24dp, R.color.default_icon_color);
+        mDefaultIcon = TintedDrawable.constructTintedDrawable(
+                context, R.drawable.ic_chrome, R.color.default_icon_color);
+        mNewTabText = context.getResources().getString(R.string.menu_new_tab);
     }
 
     /**
@@ -103,8 +109,11 @@ class NavigationSheetMediator {
                 FaviconHelper.FaviconImageCallback imageCallback =
                         (bitmap, iconUrl) -> onFaviconAvailable(pageUrl, bitmap);
                 if (!pageUrl.equals(UrlConstants.HISTORY_URL)) {
-                    mFaviconHelper.getLocalFaviconImageForURL(
-                            Profile.getLastUsedProfile(), pageUrl, mFaviconSize, imageCallback);
+                    // TODO (https://crbug.com/1048632): Use the current profile (i.e., regular
+                    // profile or incognito profile) instead of always using regular profile. It
+                    // works correctly now, but it is not safe.
+                    mFaviconHelper.getLocalFaviconImageForURL(Profile.getLastUsedRegularProfile(),
+                            pageUrl, mFaviconSize, imageCallback);
                     requestedUrls.add(pageUrl);
                 } else {
                     mModelList.get(i).model.set(ItemProperties.ICON, mHistoryIcon);
@@ -131,14 +140,22 @@ class NavigationSheetMediator {
         if (mModelList.size() == 0) return;
         for (int i = 0; i < mHistory.getEntryCount(); i++) {
             if (TextUtils.equals(pageUrl, mHistory.getEntryAtIndex(i).getUrl())) {
-                if (favicon == null) favicon = mIconGenerator.generateIconForUrl(pageUrl);
-                mModelList.get(i).model.set(ItemProperties.ICON, new BitmapDrawable(favicon));
+                Drawable drawable;
+                if (favicon == null) {
+                    drawable = NewTabPage.isNTPUrl(pageUrl)
+                            ? mDefaultIcon
+                            : new BitmapDrawable(mIconGenerator.generateIconForUrl(pageUrl));
+                } else {
+                    drawable = new BitmapDrawable(favicon);
+                }
+                mModelList.get(i).model.set(ItemProperties.ICON, drawable);
             }
         }
     }
 
-    private static String getEntryText(NavigationEntry entry) {
+    private String getEntryText(NavigationEntry entry) {
         String entryText = entry.getTitle();
+        if (NewTabPage.isNTPUrl(entry.getUrl())) entryText = mNewTabText;
         if (TextUtils.isEmpty(entryText)) entryText = entry.getVirtualUrl();
         if (TextUtils.isEmpty(entryText)) entryText = entry.getUrl();
         return entryText;

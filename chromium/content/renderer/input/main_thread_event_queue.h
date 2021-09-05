@@ -17,8 +17,8 @@
 #include "content/renderer/input/input_event_prediction.h"
 #include "content/renderer/input/main_thread_event_queue_task_list.h"
 #include "content/renderer/input/scoped_web_input_event_with_latency_info.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/platform/scheduler/web_thread_scheduler.h"
-#include "third_party/blink/public/platform/web_input_event.h"
 #include "ui/events/blink/did_overscroll_params.h"
 #include "ui/events/blink/web_input_event_traits.h"
 #include "ui/latency/latency_info.h"
@@ -96,6 +96,7 @@ class CONTENT_EXPORT MainThreadEventQueue
                    const ui::LatencyInfo& latency,
                    InputEventDispatchType dispatch_type,
                    InputEventAckState ack_result,
+                   const blink::WebInputEventAttribution& attribution,
                    HandledEventCallback handled_callback);
   void DispatchRafAlignedInput(base::TimeTicks frame_time);
   void QueueClosure(base::OnceClosure closure);
@@ -129,9 +130,11 @@ class CONTENT_EXPORT MainThreadEventQueue
   void SetNeedsMainFrame();
   // Returns false if the event can not be handled and the HandledEventCallback
   // will not be run.
-  bool HandleEventOnMainThread(const blink::WebCoalescedInputEvent& event,
-                               const ui::LatencyInfo& latency,
-                               HandledEventCallback handled_callback);
+  bool HandleEventOnMainThread(
+      const blink::WebCoalescedInputEvent& event,
+      const ui::LatencyInfo& latency,
+      const blink::WebInputEventAttribution& attribution,
+      HandledEventCallback handled_callback);
 
   bool IsRawUpdateEvent(
       const std::unique_ptr<MainThreadEventQueueTask>& item) const;

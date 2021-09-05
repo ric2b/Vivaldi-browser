@@ -10,8 +10,8 @@
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
+#include "content/public/browser/context_menu_params.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/context_menu_params.h"
 #include "extensions/api/menubar_menu/menubar_menu_api.h"
 #include "extensions/browser/extension_function_dispatcher.h"
 #include "extensions/tools/vivaldi_tools.h"
@@ -101,6 +101,17 @@ ExtensionFunction::ResponseAction BookmarkContextMenuShowFunction::Run() {
   }
 
   bookmark_menu_container_.reset(new ::vivaldi::BookmarkMenuContainer(this));
+  switch (params->properties.edge) {
+    case vivaldi::bookmark_context_menu::EDGE_ABOVE:
+      bookmark_menu_container_->edge = ::vivaldi::BookmarkMenuContainer::Above;
+      break;
+    case vivaldi::bookmark_context_menu::EDGE_BELOW:
+      bookmark_menu_container_->edge = ::vivaldi::BookmarkMenuContainer::Below;
+      break;
+    default:
+      bookmark_menu_container_->edge = ::vivaldi::BookmarkMenuContainer::Off;
+      break;
+  };
   bookmark_menu_container_->support.initIcons(params->properties.icons);
   bookmark_menu_container_->sort_field = sortField;
   bookmark_menu_container_->sort_order = sortOrder;
@@ -117,6 +128,8 @@ ExtensionFunction::ResponseAction BookmarkContextMenuShowFunction::Run() {
     sibling->offset = e.offset;
     sibling->folder_group = e.folder_group;
     sibling->rect = gfx::Rect(e.rect.x, e.rect.y, e.rect.width, e.rect.height);
+    sibling->menu_index = 0;
+    sibling->tweak_separator = false;
   }
 
   content::WebContents* web_contents = dispatcher()->GetAssociatedWebContents();

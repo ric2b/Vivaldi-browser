@@ -4,7 +4,7 @@
 
 #include "ui/ozone/platform/wayland/host/wayland_connection.h"
 
-#include <xdg-shell-unstable-v5-client-protocol.h>
+#include <xdg-shell-client-protocol.h>
 #include <xdg-shell-unstable-v6-client-protocol.h>
 #include <memory>
 
@@ -28,8 +28,6 @@
 #include "ui/ozone/platform/wayland/host/wayland_shm.h"
 #include "ui/ozone/platform/wayland/host/wayland_window.h"
 #include "ui/ozone/platform/wayland/host/wayland_zwp_linux_dmabuf.h"
-
-static_assert(XDG_SHELL_VERSION_CURRENT == 5, "Unsupported xdg-shell version");
 
 namespace ui {
 
@@ -85,14 +83,15 @@ bool WaylandConnection::Initialize() {
     LOG(ERROR) << "No wl_shm object";
     return false;
   }
-  if (!seat_) {
-    LOG(ERROR) << "No wl_seat object";
-    return false;
-  }
   if (!shell_v6_ && !shell_) {
-    LOG(ERROR) << "No xdg_shell object";
+    LOG(ERROR) << "No Wayland shell found";
     return false;
   }
+
+  // When we are running tests with weston in headless mode, the seat is not
+  // announced.
+  if (!seat_)
+    LOG(WARNING) << "No wl_seat object. The functionality may suffer.";
 
   return true;
 }
@@ -124,13 +123,17 @@ void WaylandConnection::MaybePrepareReadQueue() {
 }
 
 void WaylandConnection::ScheduleFlush() {
-  if (scheduled_flush_)
-    return;
-  DCHECK(base::MessageLoopCurrentForUI::IsSet());
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::BindOnce(&WaylandConnection::Flush, base::Unretained(this)));
-  scheduled_flush_ = true;
+  // When we are in tests, the message loop is set later when the
+  // initialization of the OzonePlatform complete. Thus, just
+  // flush directly. This doesn't happen in normal run.
+  if (!base::MessageLoopCurrentForUI::IsSet()) {
+    Flush();
+  } else if (!scheduled_flush_) {
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE,
+        base::BindOnce(&WaylandConnection::Flush, base::Unretained(this)));
+    scheduled_flush_ = true;
+  }
 }
 
 void WaylandConnection::SetCursorBitmap(const std::vector<SkBitmap>& bitmaps,
@@ -176,6 +179,9 @@ void WaylandConnection::RequestDragData(
 }
 
 bool WaylandConnection::IsDragInProgress() {
+  // |data_device_| can be null when running on headless weston.
+  if (!data_device_)
+    return false;
   return data_device_->IsDragEntered() || drag_data_source();
 }
 
@@ -272,7 +278,7 @@ void WaylandConnection::Global(void* data,
       &WaylandConnection::Capabilities,
       &WaylandConnection::Name,
   };
-  static const xdg_shell_listener shell_listener = {
+  static const xdg_wm_base_listener shell_listener = {
       &WaylandConnection::Ping,
   };
   static const zxdg_shell_v6_listener shell_v6_listener = {
@@ -283,6 +289,7 @@ void WaylandConnection::Global(void* data,
   if (!connection->compositor_ && strcmp(interface, "wl_compositor") == 0) {
     connection->compositor_ = wl::Bind<wl_compositor>(
         registry, name, std::min(version, kMaxCompositorVersion));
+    connection->compositor_version_ = version;
     if (!connection->compositor_)
       LOG(ERROR) << "Failed to bind to wl_compositor global";
   } else if (!connection->subcompositor_ &&
@@ -311,23 +318,21 @@ void WaylandConnection::Global(void* data,
     connection->shell_v6_ = wl::Bind<zxdg_shell_v6>(
         registry, name, std::min(version, kMaxXdgShellVersion));
     if (!connection->shell_v6_) {
-      LOG(ERROR) << "Failed to  bind to zxdg_shell_v6 global";
+      LOG(ERROR) << "Failed to bind to zxdg_shell_v6 global";
       return;
     }
     zxdg_shell_v6_add_listener(connection->shell_v6_.get(), &shell_v6_listener,
                                connection);
   } else if (!connection->shell_v6_ && !connection->shell_ &&
-             strcmp(interface, "xdg_shell") == 0) {
-    connection->shell_ = wl::Bind<xdg_shell>(
+             strcmp(interface, "xdg_wm_base") == 0) {
+    connection->shell_ = wl::Bind<xdg_wm_base>(
         registry, name, std::min(version, kMaxXdgShellVersion));
     if (!connection->shell_) {
-      LOG(ERROR) << "Failed to  bind to xdg_shell global";
+      LOG(ERROR) << "Failed to bind to xdg_wm_base global";
       return;
     }
-    xdg_shell_add_listener(connection->shell_.get(), &shell_listener,
-                           connection);
-    xdg_shell_use_unstable_version(connection->shell_.get(),
-                                   XDG_SHELL_VERSION_CURRENT);
+    xdg_wm_base_add_listener(connection->shell_.get(), &shell_listener,
+                             connection);
   } else if (base::EqualsCaseInsensitiveASCII(interface, "wl_output")) {
     if (version < kMinWlOutputVersion) {
       LOG(ERROR)
@@ -485,9 +490,9 @@ void WaylandConnection::PingV6(void* data,
 }
 
 // static
-void WaylandConnection::Ping(void* data, xdg_shell* shell, uint32_t serial) {
+void WaylandConnection::Ping(void* data, xdg_wm_base* shell, uint32_t serial) {
   WaylandConnection* connection = static_cast<WaylandConnection*>(data);
-  xdg_shell_pong(shell, serial);
+  xdg_wm_base_pong(shell, serial);
   connection->ScheduleFlush();
 }
 

@@ -25,10 +25,12 @@
 #include "chrome/browser/chromeos/login/screens/arc_terms_of_service_screen.h"
 #include "chrome/browser/chromeos/login/screens/demo_preferences_screen.h"
 #include "chrome/browser/chromeos/login/screens/demo_setup_screen.h"
+#include "chrome/browser/chromeos/login/screens/enable_adb_sideloading_screen.h"
 #include "chrome/browser/chromeos/login/screens/enable_debugging_screen.h"
 #include "chrome/browser/chromeos/login/screens/eula_screen.h"
 #include "chrome/browser/chromeos/login/screens/kiosk_autolaunch_screen.h"
 #include "chrome/browser/chromeos/login/screens/network_screen.h"
+#include "chrome/browser/chromeos/login/screens/packaged_license_screen.h"
 #include "chrome/browser/chromeos/login/screens/recommend_apps_screen.h"
 #include "chrome/browser/chromeos/login/screens/terms_of_service_screen.h"
 #include "chrome/browser/chromeos/login/screens/update_screen.h"
@@ -47,7 +49,6 @@ class DemoSetupController;
 class ErrorScreen;
 struct Geoposition;
 class LoginDisplayHost;
-class LoginScreenContext;
 class SimpleGeolocationProvider;
 class TimeZoneProvider;
 struct TimeZoneResponseData;
@@ -84,7 +85,7 @@ class WizardController {
   static void SkipEnrollmentPromptsForTesting();
 
   // Forces screens that should only appear in chrome branded builds to show.
-  static std::unique_ptr<base::AutoReset<bool>> ForceOfficialBuildForTesting();
+  static std::unique_ptr<base::AutoReset<bool>> ForceBrandedBuildForTesting();
 
   // Returns true if OOBE is operating under the
   // Zero-Touch Hands-Off Enrollment Flow.
@@ -95,7 +96,7 @@ class WizardController {
   void Init(OobeScreenId first_screen);
 
   // Advances to screen defined by |screen| and shows it.
-  void AdvanceToScreen(OobeScreenId screen);
+  void AdvanceToScreen(OobeScreenId screen_id);
 
   // Starts Demo Mode setup flow. The flow starts from network screen and reuses
   // some of regular OOBE screens. It consists of the following screens:
@@ -114,7 +115,7 @@ class WizardController {
       base::Optional<DemoSession::DemoModeConfig> demo_config = base::nullopt);
 
   // Advances to login/update screen. Should be used in for testing only.
-  void SkipToLoginForTesting(const LoginScreenContext& context);
+  void SkipToLoginForTesting();
   void SkipToUpdateForTesting();
 
   // Skip update, go straight to enrollment after EULA is accepted.
@@ -133,8 +134,24 @@ class WizardController {
   // Returns true if the current wizard instance has reached the login screen.
   bool login_screen_started() const { return login_screen_started_; }
 
+  // Returns true if packaged license screen should be shown.
+  // License screen should be shown when device packed with license and other
+  // enrollment flows are not triggered by the device state.
+  bool should_show_packaged_license_screen() const {
+    return prescribed_enrollment_config_.is_license_packaged_with_device &&
+           !prescribed_enrollment_config_.should_enroll();
+  }
+
+  void set_prescribed_enrollment_config_for_testing(
+      policy::EnrollmentConfig config) {
+    prescribed_enrollment_config_ = config;
+  }
+
+  // Returns true if a given screen exists.
+  bool HasScreen(OobeScreenId screen_id);
+
   // Returns a given screen. Creates it lazily.
-  BaseScreen* GetScreen(OobeScreenId screen);
+  BaseScreen* GetScreen(OobeScreenId screen_id);
 
   // Returns the current ScreenManager instance.
   ScreenManager* screen_manager() const { return screen_manager_.get(); }
@@ -161,6 +178,7 @@ class WizardController {
   void ShowDemoModePreferencesScreen();
   void ShowResetScreen();
   void ShowKioskAutolaunchScreen();
+  void ShowEnableAdbSideloadingScreen();
   void ShowEnableDebuggingScreen();
   void ShowKioskEnableScreen();
   void ShowTermsOfServiceScreen();
@@ -171,7 +189,6 @@ class WizardController {
   void ShowAppDownloadingScreen();
   void ShowWrongHWIDScreen();
   void ShowAutoEnrollmentCheckScreen();
-  void ShowArcKioskSplashScreen();
   void ShowHIDDetectionScreen();
   void ShowDeviceDisabledScreen();
   void ShowEncryptionMigrationScreen();
@@ -179,15 +196,21 @@ class WizardController {
   void ShowUpdateRequiredScreen();
   void ShowAssistantOptInFlowScreen();
   void ShowMultiDeviceSetupScreen();
+  void ShowGestureNavigationScreen();
   void ShowDiscoverScreen();
   void ShowMarketingOptInScreen();
+  void ShowPackagedLicenseScreen();
 
   // Shows images login screen.
-  void ShowLoginScreen(const LoginScreenContext& context);
+  void ShowLoginScreen();
+
+  // Shows default screen depending on device ownership.
+  void OnOwnershipStatusCheckDone(
+      DeviceSettingsService::OwnershipStatus status);
 
   // Shared actions to be performed on a screen exit.
-  // |exit_code| is the screen specific exit code reported by the screen.
-  void OnScreenExit(OobeScreenId screen, int exit_code);
+  // |exit_reason| is the screen specific exit reason reported by the screen.
+  void OnScreenExit(OobeScreenId screen, const std::string& exit_reason);
 
   // Exit handlers:
   void OnWrongHWIDScreenExit();
@@ -202,6 +225,7 @@ class WizardController {
   void OnAutoEnrollmentCheckScreenExit();
   void OnEnrollmentScreenExit(EnrollmentScreen::Result result);
   void OnEnrollmentDone();
+  void OnEnableAdbSideloadingScreenExit();
   void OnEnableDebuggingScreenExit();
   void OnKioskEnableScreenExit();
   void OnKioskAutolaunchScreenExit(KioskAutolaunchScreen::Result result);
@@ -213,7 +237,6 @@ class WizardController {
   void OnSyncConsentFinished();
   void OnFingerprintSetupScreenExit();
   void OnDiscoverScreenExit();
-  void OnMarketingOptInScreenExit();
   void OnArcTermsOfServiceScreenExit(ArcTermsOfServiceScreen::Result result);
   void OnArcTermsOfServiceSkipped();
   void OnArcTermsOfServiceAccepted();
@@ -221,10 +244,13 @@ class WizardController {
   void OnAppDownloadingScreenExit();
   void OnAssistantOptInFlowScreenExit();
   void OnMultiDeviceSetupScreenExit();
+  void OnGestureNavigationScreenExit();
+  void OnMarketingOptInScreenExit();
   void OnResetScreenExit();
   void OnDeviceModificationCanceled();
   void OnSupervisionTransitionScreenExit();
   void OnOobeFlowFinished();
+  void OnPackagedLicenseScreenExit(PackagedLicenseScreen::Result result);
 
   // Callback invoked once it has been determined whether the device is disabled
   // or not.
@@ -263,10 +289,13 @@ class WizardController {
   void SetCurrentScreen(BaseScreen* screen);
 
   // Update the status area visibility for |screen|.
-  void UpdateStatusAreaVisibilityForScreen(OobeScreenId screen);
+  void UpdateStatusAreaVisibilityForScreen(OobeScreenId screen_id);
 
   // Launched kiosk app configured for auto-launch.
   void AutoLaunchKioskApp();
+
+  // Launched webkiosk app configured for auto-launch.
+  void AutoLaunchWebKioskApp();
 
   // Called when LocalState is initialized.
   void OnLocalStateInitialized(bool /* succeeded */);
@@ -280,7 +309,9 @@ class WizardController {
 
   OobeScreenId first_screen() const { return first_screen_; }
 
-  // Called when network is UP.
+  // Starts a network request to resolve the timezone. Skips the request
+  // completely when the timezone is overridden through the command line.
+  void StartNetworkTimezoneResolve();
   void StartTimezoneResolve();
 
   // Creates provider on demand.
@@ -329,8 +360,8 @@ class WizardController {
   // Screen that was active before, or nullptr for login screen.
   BaseScreen* previous_screen_ = nullptr;
 
-// True if running official BUILD.
-  static bool is_official_build_;
+  // True if this is a branded build (i.e. Google Chrome).
+  static bool is_branded_build_;
 
   // True if full OOBE flow should be shown.
   bool is_out_of_box_ = false;

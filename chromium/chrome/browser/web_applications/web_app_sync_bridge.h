@@ -12,9 +12,11 @@
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "chrome/browser/web_applications/components/app_registry_controller.h"
+#include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "components/sync/model/entity_change.h"
+#include "components/sync/model/entity_data.h"
 #include "components/sync/model/model_type_sync_bridge.h"
 
 class Profile;
@@ -25,6 +27,10 @@ class MetadataChangeList;
 class ModelError;
 class ModelTypeChangeProcessor;
 }  // namespace syncer
+
+namespace sync_pb {
+class WebAppSpecifics;
+}  // namespace sync_pb
 
 namespace web_app {
 
@@ -61,11 +67,28 @@ class WebAppSyncBridge : public AppRegistryController,
 
   // AppRegistryController:
   void Init(base::OnceClosure callback) override;
-  void SetAppDisplayMode(const AppId& app_id,
-                         blink::mojom::DisplayMode display_mode) override;
+  void SetAppUserDisplayMode(const AppId& app_id,
+                             DisplayMode user_display_mode) override;
   void SetAppIsLocallyInstalledForTesting(const AppId& app_id,
                                           bool is_locally_installed) override;
   WebAppSyncBridge* AsWebAppSyncBridge() override;
+
+  // An access to read-only registry. Does an upcast to read-only type.
+  const WebAppRegistrar& registrar() const { return *registrar_; }
+
+  // syncer::ModelTypeSyncBridge:
+  std::unique_ptr<syncer::MetadataChangeList> CreateMetadataChangeList()
+      override;
+  base::Optional<syncer::ModelError> MergeSyncData(
+      std::unique_ptr<syncer::MetadataChangeList> metadata_change_list,
+      syncer::EntityChangeList entity_data) override;
+  base::Optional<syncer::ModelError> ApplySyncChanges(
+      std::unique_ptr<syncer::MetadataChangeList> metadata_change_list,
+      syncer::EntityChangeList entity_changes) override;
+  void GetData(StorageKeyList storage_keys, DataCallback callback) override;
+  void GetAllDataForDebugging(DataCallback callback) override;
+  std::string GetClientTag(const syncer::EntityData& entity_data) override;
+  std::string GetStorageKey(const syncer::EntityData& entity_data) override;
 
  private:
   void CheckRegistryUpdateData(const RegistryUpdateData& update_data) const;
@@ -97,19 +120,7 @@ class WebAppSyncBridge : public AppRegistryController,
   void ApplySyncChangesToRegistrar(
       std::unique_ptr<RegistryUpdateData> update_local_data);
 
-  // syncer::ModelTypeSyncBridge:
-  std::unique_ptr<syncer::MetadataChangeList> CreateMetadataChangeList()
-      override;
-  base::Optional<syncer::ModelError> MergeSyncData(
-      std::unique_ptr<syncer::MetadataChangeList> metadata_change_list,
-      syncer::EntityChangeList entity_data) override;
-  base::Optional<syncer::ModelError> ApplySyncChanges(
-      std::unique_ptr<syncer::MetadataChangeList> metadata_change_list,
-      syncer::EntityChangeList entity_changes) override;
-  void GetData(StorageKeyList storage_keys, DataCallback callback) override;
-  void GetAllDataForDebugging(DataCallback callback) override;
-  std::string GetClientTag(const syncer::EntityData& entity_data) override;
-  std::string GetStorageKey(const syncer::EntityData& entity_data) override;
+  void MaybeInstallAppsInSyncInstall();
 
   std::unique_ptr<WebAppDatabase> database_;
   WebAppRegistrarMutable* const registrar_;
@@ -121,6 +132,12 @@ class WebAppSyncBridge : public AppRegistryController,
 
   DISALLOW_COPY_AND_ASSIGN(WebAppSyncBridge);
 };
+
+bool AreAppsLocallyInstalledByDefault();
+
+std::unique_ptr<syncer::EntityData> CreateSyncEntityData(const WebApp& app);
+
+void ApplySyncDataToApp(const sync_pb::WebAppSpecifics& sync_data, WebApp* app);
 
 }  // namespace web_app
 

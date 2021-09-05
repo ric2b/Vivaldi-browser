@@ -25,6 +25,7 @@
 
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/dom/element.h"
+#include "third_party/blink/renderer/core/html/forms/labels_node_list.h"
 #include "third_party/blink/renderer/platform/text/text_direction.h"
 #include "third_party/blink/renderer/platform/wtf/casting.h"
 
@@ -38,7 +39,6 @@ class ExceptionState;
 class FormAssociated;
 class HTMLFormElement;
 class KeyboardEvent;
-class LabelsNodeList;
 class StringOrTrustedScript;
 class StringTreatNullAsEmptyStringOrTrustedScript;
 
@@ -60,7 +60,6 @@ class CORE_EXPORT HTMLElement : public Element {
   }
 
   String title() const final;
-  int tabIndex() const override;
 
   void setInnerText(const String&, ExceptionState&);
   virtual void setInnerText(const StringOrTrustedScript&, ExceptionState&);
@@ -110,6 +109,7 @@ class CORE_EXPORT HTMLElement : public Element {
 
   virtual bool IsHTMLUnknownElement() const { return false; }
   virtual bool IsPluginElement() const { return false; }
+  virtual bool IsHTMLPortalElement() const { return false; }
 
   // https://html.spec.whatwg.org/C/#category-label
   virtual bool IsLabelable() const;
@@ -119,6 +119,10 @@ class CORE_EXPORT HTMLElement : public Element {
   // http://www.whatwg.org/specs/web-apps/current-work/multipage/elements.html#interactive-content
   virtual bool IsInteractiveContent() const;
   void DefaultEventHandler(Event&) override;
+
+  // Used to handle return/space key events and simulate clicks. Returns true
+  // if the event is handled.
+  bool HandleKeyboardActivation(Event& event);
 
   static const AtomicString& EventNameForAttributeName(
       const QualifiedName& attr_name);
@@ -216,19 +220,20 @@ class CORE_EXPORT HTMLElement : public Element {
   void OnXMLLangAttrChanged(const AttributeModificationParams&);
 };
 
-DEFINE_ELEMENT_TYPE_CASTS(HTMLElement, IsHTMLElement());
-
-template <>
-struct DowncastTraits<HTMLElement> {
-  static bool AllowFrom(const Node& node) { return node.IsHTMLElement(); }
-};
-
 template <typename T>
 bool IsElementOfType(const HTMLElement&);
 template <>
 inline bool IsElementOfType<const HTMLElement>(const HTMLElement&) {
   return true;
 }
+template <>
+inline bool IsElementOfType<const HTMLElement>(const Node& node) {
+  return IsA<HTMLElement>(node);
+}
+template <>
+struct DowncastTraits<HTMLElement> {
+  static bool AllowFrom(const Node& node) { return node.IsHTMLElement(); }
+};
 
 inline HTMLElement::HTMLElement(const QualifiedName& tag_name,
                                 Document& document,
@@ -257,31 +262,6 @@ class HasHTMLTagName {
  private:
   const HTMLQualifiedName& tag_name_;
 };
-
-// This requires isHTML*Element(const Element&) and isHTML*Element(const
-// HTMLElement&).  When the input element is an HTMLElement, we don't need to
-// check the namespace URI, just the local name.
-#define DEFINE_HTMLELEMENT_TYPE_CASTS_WITH_FUNCTION(thisType)               \
-  inline bool Is##thisType(const thisType* element);                        \
-  inline bool Is##thisType(const thisType& element);                        \
-  inline bool Is##thisType(const HTMLElement* element) {                    \
-    return element && Is##thisType(*element);                               \
-  }                                                                         \
-  inline bool Is##thisType(const Node& node) {                              \
-    auto* html_element = DynamicTo<HTMLElement>(node);                      \
-    return html_element ? Is##thisType(html_element) : false;               \
-  }                                                                         \
-  inline bool Is##thisType(const Node* node) {                              \
-    return node && Is##thisType(*node);                                     \
-  }                                                                         \
-  inline bool Is##thisType(const Element* element) {                        \
-    return element && Is##thisType(*element);                               \
-  }                                                                         \
-  template <>                                                               \
-  inline bool IsElementOfType<const thisType>(const HTMLElement& element) { \
-    return Is##thisType(element);                                           \
-  }                                                                         \
-  DEFINE_ELEMENT_TYPE_CASTS_WITH_FUNCTION(thisType)
 
 }  // namespace blink
 

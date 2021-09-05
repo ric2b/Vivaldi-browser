@@ -16,8 +16,9 @@
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
 #include "url/gurl.h"
+#include "weblayer/browser/profile_impl.h"
+#include "weblayer/browser/tab_impl.h"
 #include "weblayer/public/navigation_controller.h"
-#include "weblayer/public/tab.h"
 
 namespace weblayer {
 
@@ -35,6 +36,13 @@ Shell::Shell(std::unique_ptr<Tab> tab)
   if (tab_) {
     tab_->AddObserver(this);
     tab_->GetNavigationController()->AddObserver(this);
+#if !defined(OS_ANDROID)  // Android does this in Java.
+
+    // TODO: how will tests work with this on android? can we get to the
+    // concrete type?
+
+    static_cast<TabImpl*>(tab_.get())->profile()->SetDownloadDelegate(this);
+#endif
   }
 }
 
@@ -126,6 +134,21 @@ void Shell::LoadStateChanged(bool is_loading, bool to_different_document) {
 
 void Shell::LoadProgressChanged(double progress) {
   PlatformSetLoadProgress(progress);
+}
+
+bool Shell::InterceptDownload(const GURL& url,
+                              const std::string& user_agent,
+                              const std::string& content_disposition,
+                              const std::string& mime_type,
+                              int64_t content_length) {
+  return false;
+}
+
+void Shell::AllowDownload(const GURL& url,
+                          const std::string& request_method,
+                          base::Optional<url::Origin> request_initiator,
+                          AllowDownloadCallback callback) {
+  std::move(callback).Run(true);
 }
 
 gfx::Size Shell::AdjustWindowSize(const gfx::Size& initial_size) {

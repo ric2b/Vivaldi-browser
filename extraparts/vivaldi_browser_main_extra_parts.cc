@@ -26,9 +26,11 @@
 #include "extensions/api/bookmarks/bookmarks_private_api.h"
 #include "extensions/api/calendar/calendar_api.h"
 #include "extensions/api/contacts/contacts_api.h"
+#include "extensions/api/content_blocking/content_blocking_api.h"
 #include "extensions/api/extension_action_utils/extension_action_utils_api.h"
 #include "extensions/api/history/history_private_api.h"
 #include "extensions/api/import_data/import_data_api.h"
+#include "extensions/api/menu_content/menu_content_api.h"
 #include "extensions/api/notes/notes_api.h"
 #include "extensions/api/prefs/prefs_api.h"
 #include "extensions/api/runtime/runtime_api.h"
@@ -101,11 +103,13 @@ void VivaldiBrowserMainExtraParts::
   extensions::BookmarkContextMenuAPI::GetFactoryInstance();
   extensions::CalendarAPI::GetFactoryInstance();
   extensions::ContactsAPI::GetFactoryInstance();
+  extensions::ContentBlockingAPI::GetFactoryInstance();
   extensions::VivaldiBookmarksAPI::GetFactoryInstance();
   extensions::DevtoolsConnectorAPI::GetFactoryInstance();
   extensions::ExtensionActionUtilFactory::GetInstance();
   extensions::ImportDataAPI::GetFactoryInstance();
   extensions::NotesAPI::GetFactoryInstance();
+  extensions::MenuContentAPI::GetFactoryInstance();
   extensions::TabsPrivateAPI::GetFactoryInstance();
   extensions::SyncAPI::GetFactoryInstance();
   extensions::VivaldiAccountAPI::GetFactoryInstance();

@@ -29,44 +29,52 @@ InspectorMediaEventHandler::InspectorMediaEventHandler(
     : inspector_context_(inspector_context),
       player_id_(inspector_context_->CreatePlayer()) {}
 
-// TODO(tmathmeyer) It would be wonderful if the definition for MediaLogEvent
+// TODO(tmathmeyer) It would be wonderful if the definition for MediaLogRecord
 // and InspectorPlayerEvent / InspectorPlayerProperty could be unified so that
-// this method is no longer needed. Refactor MediaLogEvent at some point.
+// this method is no longer needed. Refactor MediaLogRecord at some point.
 void InspectorMediaEventHandler::SendQueuedMediaEvents(
-    std::vector<media::MediaLogEvent> events_to_send) {
+    std::vector<media::MediaLogRecord> events_to_send) {
+  // If the video player is gone, the whole frame
+  if (video_player_destroyed_)
+    return;
+
   blink::InspectorPlayerEvents events;
   blink::InspectorPlayerProperties properties;
 
-  for (media::MediaLogEvent event : events_to_send) {
-    if (event.type == media::MediaLogEvent::PROPERTY_CHANGE) {
-      for (auto&& itr : event.params.DictItems()) {
-        blink::InspectorPlayerProperty prop = {
-            blink::WebString::FromUTF8(itr.first), ToString(itr.second)};
-        properties.emplace_back(prop);
+  for (media::MediaLogRecord event : events_to_send) {
+    switch (event.type) {
+      case media::MediaLogRecord::Type::kMessage: {
+        for (auto&& itr : event.params.DictItems()) {
+          blink::InspectorPlayerEvent ev = {
+              blink::InspectorPlayerEvent::MESSAGE_EVENT, event.time,
+              blink::WebString::FromUTF8(itr.first), ToString(itr.second)};
+          events.emplace_back(std::move(ev));
+        }
+        break;
       }
-    } else {
-      blink::InspectorPlayerEvent::InspectorPlayerEventType event_type =
-          blink::InspectorPlayerEvent::SYSTEM_EVENT;
-
-      if (event.type == media::MediaLogEvent::MEDIA_ERROR_LOG_ENTRY ||
-          event.type == media::MediaLogEvent::MEDIA_WARNING_LOG_ENTRY ||
-          event.type == media::MediaLogEvent::MEDIA_INFO_LOG_ENTRY ||
-          event.type == media::MediaLogEvent::MEDIA_DEBUG_LOG_ENTRY) {
-        event_type = blink::InspectorPlayerEvent::MESSAGE_EVENT;
+      case media::MediaLogRecord::Type::kMediaPropertyChange: {
+        for (auto&& itr : event.params.DictItems()) {
+          blink::InspectorPlayerProperty prop = {
+              blink::WebString::FromUTF8(itr.first), ToString(itr.second)};
+          properties.emplace_back(std::move(prop));
+        }
+        break;
       }
-      if (event.params.size() == 0) {
+      case media::MediaLogRecord::Type::kMediaEventTriggered: {
         blink::InspectorPlayerEvent ev = {
-            blink::InspectorPlayerEvent::PLAYBACK_EVENT, event.time,
-            blink::WebString::FromUTF8("Event"),
-            blink::WebString::FromUTF8(
-                media::MediaLog::EventTypeToString(event.type))};
-        events.emplace_back(ev);
+            blink::InspectorPlayerEvent::TRIGGERED_EVENT, event.time,
+            blink::WebString::FromUTF8("event"), ToString(event.params)};
+        events.emplace_back(std::move(ev));
+        break;
       }
-      for (auto&& itr : event.params.DictItems()) {
-        blink::InspectorPlayerEvent ev = {event_type, event.time,
-                                          blink::WebString::FromUTF8(itr.first),
-                                          ToString(itr.second)};
-        events.emplace_back(ev);
+      case media::MediaLogRecord::Type::kMediaStatus: {
+        // TODO(tmathmeyer) Make a new type in the browser protocol instead
+        // of overloading InspectorPlayerEvent.
+        blink::InspectorPlayerEvent ev = {
+            blink::InspectorPlayerEvent::ERROR_EVENT, event.time,
+            blink::WebString::FromUTF8("error"), ToString(event.params)};
+        events.emplace_back(std::move(ev));
+        break;
       }
     }
   }
@@ -75,6 +83,10 @@ void InspectorMediaEventHandler::SendQueuedMediaEvents(
 
   if (!properties.empty())
     inspector_context_->SetPlayerProperties(player_id_, properties);
+}
+
+void InspectorMediaEventHandler::OnWebMediaPlayerDestroyed() {
+  video_player_destroyed_ = true;
 }
 
 }  // namespace content

@@ -2,39 +2,36 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-/**
- * @fileoverview A helper object used from the Incompatible Applications section
- * to interact with the browser.
- */
-
-cr.exportPath('settings');
-
-/**
- * All possible actions to take on an incompatible application.
- *
- * Must be kept in sync with BlacklistMessageType in
- * chrome/browser/win/conflicts/proto/module_list.proto
- * @readonly
- * @enum {number}
- */
-settings.ActionTypes = {
-  UNINSTALL: 0,
-  MORE_INFO: 1,
-  UPGRADE: 2,
-};
-
-/**
- * @typedef {{
- *   name: string,
- *   actionType: {settings.ActionTypes},
- *   actionUrl: string,
- * }}
- */
-settings.IncompatibleApplication;
+// clang-format off
+// #import {addSingletonGetter, sendWithPromise} from 'chrome://resources/js/cr.m.js';
+// clang-format on
 
 cr.define('settings', function() {
+  /**
+   * All possible actions to take on an incompatible application.
+   *
+   * Must be kept in sync with BlacklistMessageType in
+   * chrome/browser/win/conflicts/proto/module_list.proto
+   * @readonly
+   * @enum {number}
+   */
+  /* #export */ const ActionTypes = {
+    UNINSTALL: 0,
+    MORE_INFO: 1,
+    UPGRADE: 2,
+  };
+
+  /**
+   * @typedef {{
+   *   name: string,
+   *   actionType: {settings.ActionTypes},
+   *   actionUrl: string,
+   * }}
+   */
+  /* #export */ let IncompatibleApplication;
+
   /** @interface */
-  class IncompatibleApplicationsBrowserProxy {
+  /* #export */ class IncompatibleApplicationsBrowserProxy {
     /**
      * Get the list of incompatible applications.
      * @return {!Promise<!Array<!settings.IncompatibleApplication>>}
@@ -80,7 +77,7 @@ cr.define('settings', function() {
   }
 
   /** @implements {settings.IncompatibleApplicationsBrowserProxy} */
-  class IncompatibleApplicationsBrowserProxyImpl {
+  /* #export */ class IncompatibleApplicationsBrowserProxyImpl {
     /** @override */
     requestIncompatibleApplicationsList() {
       return cr.sendWithPromise('requestIncompatibleApplicationsList');
@@ -115,9 +112,11 @@ cr.define('settings', function() {
 
   cr.addSingletonGetter(IncompatibleApplicationsBrowserProxyImpl);
 
+  // #cr_define_end
   return {
-    IncompatibleApplicationsBrowserProxy: IncompatibleApplicationsBrowserProxy,
-    IncompatibleApplicationsBrowserProxyImpl:
-        IncompatibleApplicationsBrowserProxyImpl,
+    ActionTypes,
+    IncompatibleApplication,
+    IncompatibleApplicationsBrowserProxy,
+    IncompatibleApplicationsBrowserProxyImpl,
   };
 });

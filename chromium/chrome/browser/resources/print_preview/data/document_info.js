@@ -2,13 +2,20 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-cr.exportPath('print_preview');
+import {WebUIListenerBehavior} from 'chrome://resources/js/web_ui_listener_behavior.m.js';
+import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
+import {Coordinate2d} from './coordinate2d.js';
+import {CustomMarginsOrientation, Margins} from './margins.js';
+import {PrintableArea} from './printable_area.js';
+import {Size} from './size.js';
 
 /**
  * @typedef {{
  *   hasCssMediaStyles: boolean,
  *   hasSelection: boolean,
  *   isModifiable: boolean,
+ *   isFromArc: boolean,
  *   isPdf: boolean,
  *   isScalingDisabled: boolean,
  *   fitToPageScaling: number,
@@ -16,7 +23,7 @@ cr.exportPath('print_preview');
  *   title: string,
  * }}
  */
-print_preview.DocumentSettings;
+export let DocumentSettings;
 
 /**
  * @typedef {{
@@ -32,7 +39,7 @@ print_preview.DocumentSettings;
  *   printableAreaHeight: number,
  * }}
  */
-print_preview.PageLayoutInfo;
+export let PageLayoutInfo;
 
 Polymer({
   is: 'print-preview-document-info',
@@ -40,15 +47,16 @@ Polymer({
   behaviors: [WebUIListenerBehavior],
 
   properties: {
-    /** @type {!print_preview.DocumentSettings} */
+    /** @type {!DocumentSettings} */
     documentSettings: {
       type: Object,
       notify: true,
-      value: function() {
+      value() {
         return {
           hasCssMediaStyles: false,
           hasSelection: false,
           isModifiable: true,
+          isFromArc: false,
           isPdf: false,
           isScalingDisabled: false,
           fitToPageScaling: 100,
@@ -63,7 +71,7 @@ Polymer({
       value: -1,
     },
 
-    /** @type {print_preview.Margins} */
+    /** @type {Margins} */
     margins: {
       type: Object,
       notify: true,
@@ -73,27 +81,25 @@ Polymer({
      * Size of the pages of the document in points. Actual page-related
      * information won't be set until preview generation occurs, so use
      * a default value until then.
-     * @type {!print_preview.Size}
+     * @type {!Size}
      */
     pageSize: {
       type: Object,
       notify: true,
-      value: function() {
-        return new print_preview.Size(612, 792);
+      value() {
+        return new Size(612, 792);
       },
     },
 
     /**
      * Printable area of the document in points.
-     * @type {!print_preview.PrintableArea}
+     * @type {!PrintableArea}
      */
     printableArea: {
       type: Object,
       notify: true,
-      value: function() {
-        return new print_preview.PrintableArea(
-            new print_preview.Coordinate2d(0, 0),
-            new print_preview.Size(612, 792));
+      value() {
+        return new PrintableArea(new Coordinate2d(0, 0), new Size(612, 792));
       },
     },
   },
@@ -105,7 +111,7 @@ Polymer({
   isInitialized_: false,
 
   /** @override */
-  attached: function() {
+  attached() {
     this.addWebUIListener(
         'page-count-ready', this.onPageCountReady_.bind(this));
     this.addWebUIListener(
@@ -115,14 +121,16 @@ Polymer({
   /**
    * Initializes the state of the data model.
    * @param {boolean} isModifiable Whether the document is modifiable.
+   * @param {boolean} isFromArc Whether the document is from ARC.
    * @param {boolean} isPdf Whether the document is PDF.
    * @param {string} title Title of the document.
    * @param {boolean} hasSelection Whether the document has user-selected
    *     content.
    */
-  init: function(isModifiable, isPdf, title, hasSelection) {
+  init(isModifiable, isFromArc, isPdf, title, hasSelection) {
     this.isInitialized_ = true;
     this.set('documentSettings.isModifiable', isModifiable);
+    this.set('documentSettings.isFromArc', isFromArc);
     // TODO(crbug.com/702995): Remove once Flash is deprecated.
     this.set('documentSettings.isPdf', isPdf);
     this.set('documentSettings.title', title);
@@ -134,7 +142,7 @@ Polymer({
    * @param {boolean} isScalingDisabled Whether scaling of the document is
    *     prohibited.
    */
-  updateIsScalingDisabled: function(isScalingDisabled) {
+  updateIsScalingDisabled(isScalingDisabled) {
     if (this.isInitialized_) {
       this.set('documentSettings.isScalingDisabled', isScalingDisabled);
     }
@@ -143,29 +151,29 @@ Polymer({
   /**
    * Called when the page layout of the document is ready. Always occurs
    * as a result of a preview request.
-   * @param {!print_preview.PageLayoutInfo} pageLayout Layout information
+   * @param {!PageLayoutInfo} pageLayout Layout information
    *     about the document.
    * @param {boolean} hasCustomPageSizeStyle Whether this document has a
    *     custom page size or style to use.
    * @private
    */
-  onPageLayoutReady_: function(pageLayout, hasCustomPageSizeStyle) {
-    const origin = new print_preview.Coordinate2d(
-        pageLayout.printableAreaX, pageLayout.printableAreaY);
-    const size = new print_preview.Size(
-        pageLayout.printableAreaWidth, pageLayout.printableAreaHeight);
+  onPageLayoutReady_(pageLayout, hasCustomPageSizeStyle) {
+    const origin =
+        new Coordinate2d(pageLayout.printableAreaX, pageLayout.printableAreaY);
+    const size =
+        new Size(pageLayout.printableAreaWidth, pageLayout.printableAreaHeight);
 
-    const margins = new print_preview.Margins(
+    const margins = new Margins(
         Math.round(pageLayout.marginTop), Math.round(pageLayout.marginRight),
         Math.round(pageLayout.marginBottom), Math.round(pageLayout.marginLeft));
 
-    const o = print_preview.CustomMarginsOrientation;
-    const pageSize = new print_preview.Size(
+    const o = CustomMarginsOrientation;
+    const pageSize = new Size(
         pageLayout.contentWidth + margins.get(o.LEFT) + margins.get(o.RIGHT),
         pageLayout.contentHeight + margins.get(o.TOP) + margins.get(o.BOTTOM));
 
     if (this.isInitialized_) {
-      this.printableArea = new print_preview.PrintableArea(origin, size);
+      this.printableArea = new PrintableArea(origin, size);
       this.pageSize = pageSize;
       this.set('documentSettings.hasCssMediaStyles', hasCustomPageSizeStyle);
       this.margins = margins;
@@ -181,8 +189,8 @@ Polymer({
    *     to page.
    * @private
    */
-  onPageCountReady_: function(pageCount, previewResponseId, fitToPageScaling) {
-    if (this.inFlightRequestId != previewResponseId || !this.isInitialized_) {
+  onPageCountReady_(pageCount, previewResponseId, fitToPageScaling) {
+    if (this.inFlightRequestId !== previewResponseId || !this.isInitialized_) {
       return;
     }
     this.set('documentSettings.pageCount', pageCount);

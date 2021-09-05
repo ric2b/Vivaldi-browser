@@ -41,7 +41,6 @@
 
 #if defined(OS_WIN)
 #include "device/fido/win/authenticator.h"
-#include "device/fido/win/webauthn_api.h"
 #endif
 
 namespace {
@@ -125,13 +124,8 @@ void ChromeAuthenticatorRequestDelegate::RegisterProfilePrefs(
 }
 
 ChromeAuthenticatorRequestDelegate::ChromeAuthenticatorRequestDelegate(
-    content::RenderFrameHost* render_frame_host,
-    const std::string& relying_party_id)
-    : render_frame_host_(render_frame_host),
-      relying_party_id_(relying_party_id),
-      transient_dialog_model_holder_(
-          std::make_unique<AuthenticatorRequestDialogModel>(relying_party_id)),
-      weak_dialog_model_(transient_dialog_model_holder_.get()) {}
+    content::RenderFrameHost* render_frame_host)
+    : render_frame_host_(render_frame_host) {}
 
 ChromeAuthenticatorRequestDelegate::~ChromeAuthenticatorRequestDelegate() {
   // Currently, completion of the request is indicated by //content destroying
@@ -161,6 +155,39 @@ content::BrowserContext* ChromeAuthenticatorRequestDelegate::browser_context()
     const {
   return content::WebContents::FromRenderFrameHost(render_frame_host())
       ->GetBrowserContext();
+}
+
+base::Optional<std::string>
+ChromeAuthenticatorRequestDelegate::MaybeGetRelyingPartyIdOverride(
+    const std::string& claimed_relying_party_id,
+    const url::Origin& caller_origin) {
+  // Don't override cryptotoken processing.
+  constexpr char kCryptotokenOrigin[] =
+      "chrome-extension://kmendfapggjehodndflmmgagdbamhnfd";
+  if (caller_origin == url::Origin::Create(GURL(kCryptotokenOrigin))) {
+    return base::nullopt;
+  }
+
+  // Otherwise, allow extensions to use WebAuthn and map their origins directly
+  // to RP IDs.
+  if (caller_origin.scheme() == "chrome-extension") {
+    // The requested RP ID for an extension must simply be the extension
+    // identifier because no flexibility is permitted. If a caller doesn't
+    // specify an RP ID then Blink defaults the value to the origin's host.
+    if (claimed_relying_party_id != caller_origin.host()) {
+      return base::nullopt;
+    }
+    return caller_origin.Serialize();
+  }
+
+  return base::nullopt;
+}
+
+void ChromeAuthenticatorRequestDelegate::SetRelyingPartyId(
+    const std::string& rp_id) {
+  transient_dialog_model_holder_ =
+      std::make_unique<AuthenticatorRequestDialogModel>(rp_id);
+  weak_dialog_model_ = transient_dialog_model_holder_.get();
 }
 
 bool ChromeAuthenticatorRequestDelegate::DoesBlockRequestOnFailure(
@@ -201,13 +228,15 @@ bool ChromeAuthenticatorRequestDelegate::DoesBlockRequestOnFailure(
     case InterestingFailureReason::kUserConsentDenied:
       weak_dialog_model_->OnUserConsentDenied();
       break;
+    case InterestingFailureReason::kWinUserCancelled:
+      return weak_dialog_model_->OnWinUserCancelled();
   }
   return true;
 }
 
 void ChromeAuthenticatorRequestDelegate::RegisterActionCallbacks(
     base::OnceClosure cancel_callback,
-    base::Closure start_over_callback,
+    base::RepeatingClosure start_over_callback,
     device::FidoRequestHandlerBase::RequestCallback request_callback,
     base::RepeatingClosure bluetooth_adapter_power_on_callback,
     device::FidoRequestHandlerBase::BlePairingCallback ble_pairing_callback) {
@@ -363,8 +392,6 @@ void ChromeAuthenticatorRequestDelegate::UpdateLastTransportUsed(
   if (!weak_dialog_model_)
     return;
 
-  weak_dialog_model_->OnSuccess(transport);
-
   // We already invoke AddFidoBleDeviceToPairedList() on
   // AuthenticatorRequestDialogModel::OnPairingSuccess(). We invoke the function
   // here once more to take into account the case when user pairs Bluetooth
@@ -392,33 +419,11 @@ bool ChromeAuthenticatorRequestDelegate::IsWebAuthnUIEnabled() {
   return !disable_ui_;
 }
 
-bool ChromeAuthenticatorRequestDelegate::
-    IsUserVerifyingPlatformAuthenticatorAvailable() {
-#if defined(OS_MACOSX)
-  // Touch ID is available in Incognito, but not in Guest mode.
-  if (Profile::FromBrowserContext(browser_context())->IsGuestSession())
-    return false;
-
-  return device::fido::mac::TouchIdAuthenticator::IsAvailable(
-      TouchIdAuthenticatorConfigForProfile(
-          Profile::FromBrowserContext(browser_context())));
-#elif defined(OS_WIN)
-  if (browser_context()->IsOffTheRecord())
-    return false;
-
-  return base::FeatureList::IsEnabled(device::kWebAuthUseNativeWinApi) &&
-         device::WinWebAuthnApiAuthenticator::
-             IsUserVerifyingPlatformAuthenticatorAvailable(
-                 GetDiscoveryFactory()->win_webauthn_api());
-#else
-  return false;
-#endif  // defined(OS_MACOSX) || defined(OS_WIN)
-}
-
 #if defined(OS_MACOSX)
 base::Optional<ChromeAuthenticatorRequestDelegate::TouchIdAuthenticatorConfig>
 ChromeAuthenticatorRequestDelegate::GetTouchIdAuthenticatorConfig() {
-  if (!IsUserVerifyingPlatformAuthenticatorAvailable())
+  // Touch ID is available in Incognito but not Guest windows.
+  if (Profile::FromBrowserContext(browser_context())->IsGuestSession())
     return base::nullopt;
 
   return TouchIdAuthenticatorConfigForProfile(
@@ -521,9 +526,26 @@ void ChromeAuthenticatorRequestDelegate::CollectPIN(
   weak_dialog_model_->CollectPIN(attempts, std::move(provide_pin_cb));
 }
 
-void ChromeAuthenticatorRequestDelegate::FinishCollectPIN() {
+void ChromeAuthenticatorRequestDelegate::FinishCollectToken() {
+  if (!weak_dialog_model_)
+    return;
+
   weak_dialog_model_->SetCurrentStep(
       AuthenticatorRequestDialogModel::Step::kClientPinTapAgain);
+}
+
+void ChromeAuthenticatorRequestDelegate::OnRetryUserVerification(int attempts) {
+  if (!weak_dialog_model_)
+    return;
+
+  weak_dialog_model_->OnRetryUserVerification(attempts);
+}
+
+void ChromeAuthenticatorRequestDelegate::OnInternalUserVerificationLocked() {
+  if (!weak_dialog_model_)
+    return;
+
+  weak_dialog_model_->set_internal_uv_locked();
 }
 
 void ChromeAuthenticatorRequestDelegate::SetMightCreateResidentCredential(

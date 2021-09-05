@@ -1,0 +1,110 @@
+// Copyright 2020 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+syntax = "proto3";
+
+package feedui;
+
+option optimize_for = LITE_RUNTIME;
+
+option java_package = "org.chromium.components.feed.proto";
+option java_outer_classname = "FeedUiProto";
+
+// This is a simplified and complete set of protos that define UI.
+// It includes everything from search.now.ui needed in the UI, and excludes
+// other data to reduce complexity. These proto messages should be constructible
+// from the store protos.
+
+// A stream is a list of chunks in order.
+// Each StreamUpdate contains the full list of chunks,
+// but subsequent StreamUpdates after the first may refer to
+// chunks previously received by chunk_id.
+message StreamUpdate {
+  // Either a reference to an existing slice, or a new slice.
+  message SliceUpdate {
+    oneof update {
+      Slice slice = 1;
+      string slice_id = 2;
+    }
+  }
+  // One entry for each slice in the stream, in the order they should be
+  // presented. Existing slices not present in updated_slices should be dropped.
+  repeated SliceUpdate updated_slices = 1;
+  // Additional shared states to be used. Usually just one, and sent only on the
+  // first update.
+  repeated SharedState new_shared_states = 2;
+}
+
+// A horizontal slice of UI to be presented in the vertical-scrolling feed.
+message Slice {
+  oneof SliceData {
+    XSurfaceSlice xsurface_slice = 1;
+    ZeroStateSlice zero_state_slice = 3;
+  }
+  string slice_id = 2;
+}
+
+// This slice is sent when no feed data can be loaded.
+message ZeroStateSlice {
+  enum Type {
+    UNKNOWN = 0;
+    // A generic error that explains there are no cards available.
+    NO_CARDS_AVAILABLE = 1;
+    // An error indicating there were problems refreshing the feed.
+    CANT_REFRESH = 2;
+  };
+  Type type = 1;
+}
+
+message XSurfaceSlice {
+  bytes xsurface_frame = 1;
+}
+
+// Wraps an XSurface shared state with a unique ID.
+message SharedState {
+  string id = 1;
+  bytes xsurface_shared_state = 2;
+}
+
+// An event on the UI.
+message UiEvent {
+  enum Type {
+    UNKNOWN = 0;
+    CARD_TAPPED = 1;
+    CARD_VIEWED = 2;
+    CARD_SWIPED = 3;
+    MORE_BUTTON_VIEWED = 4;
+    MORE_BUTTON_CLICKED = 5;
+    SPINNER_STARTED = 6;
+    SPINNER_FINISHED = 7;
+    SPINNER_DESTROYED_WITHOUT_COMPLETING = 8;
+    PIET_FRAME_RENDERING_EVENT = 9;
+    SCROLL_STREAM = 10;
+  }
+  enum SpinnerType {
+    UNKNOWN_SPINNER_TYPE = 0;
+    // Spinner shown on initial load of the Feed.
+    INITIAL_LOAD = 1;
+    // Spinner shown when Feed is refreshed.
+    ZERO_STATE_REFRESH = 2;
+    // Spinner shown when more button is clicked.
+    MORE_BUTTON = 3;
+    // Spinner shown when a synthetic token is consumed.
+    SYNTHETIC_TOKEN = 4;
+    // Spinner shown when a spinner is shown for loading the infinite feed.
+    INFINITE_FEED = 5;
+  }
+  // For CARD_* type events.
+  string chunk_id = 1;
+  // For MORE_BUTTON_* type events.
+  int32 more_button_position = 2;
+  // For SPINNER_* type events.
+  SpinnerType spinner_type = 3;
+  // For SPINNER_FINISHED and SPINNER_DESTROYED_WITHOUT_COMPLETING.
+  int32 spinner_time_shown = 4;
+  // For PIET_FRAME_RENDERING_EVENT.
+  repeated int32 piet_error_codes = 5;
+  // For SCROLL_STREAM.
+  int32 scroll_distance = 6;
+}

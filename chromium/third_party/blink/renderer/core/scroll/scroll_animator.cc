@@ -211,7 +211,7 @@ bool ScrollAnimator::WillAnimateToOffset(const ScrollOffset& target_offset) {
 
 void ScrollAnimator::AdjustAnimationAndSetScrollOffset(
     const ScrollOffset& offset,
-    ScrollType scroll_type) {
+    mojom::blink::ScrollType scroll_type) {
   IntSize adjustment = RoundedIntSize(offset) -
                        RoundedIntSize(scrollable_area_->GetScrollOffset());
   ScrollOffsetChanged(offset, scroll_type);
@@ -289,11 +289,14 @@ bool ScrollAnimator::SendAnimationToCompositor() {
 
 void ScrollAnimator::CreateAnimationCurve() {
   DCHECK(!animation_curve_);
+  // It is not correct to assume the input type from the granularity, but we've
+  // historically determined animation parameters from granularity.
+  CompositorScrollOffsetAnimationCurve::ScrollType scroll_type =
+      (last_granularity_ == ScrollGranularity::kScrollByPixel)
+          ? CompositorScrollOffsetAnimationCurve::ScrollType::kMouseWheel
+          : CompositorScrollOffsetAnimationCurve::ScrollType::kKeyboard;
   animation_curve_ = std::make_unique<CompositorScrollOffsetAnimationCurve>(
-      CompositorOffsetFromBlinkOffset(target_offset_),
-      last_granularity_ == ScrollGranularity::kScrollByPixel
-          ? CompositorScrollOffsetAnimationCurve::kScrollDurationInverseDelta
-          : CompositorScrollOffsetAnimationCurve::kScrollDurationConstant);
+      CompositorOffsetFromBlinkOffset(target_offset_), scroll_type);
   animation_curve_->SetInitialValue(
       CompositorOffsetFromBlinkOffset(CurrentOffset()));
 }
@@ -404,7 +407,7 @@ bool ScrollAnimator::RegisterAndScheduleAnimation() {
   return true;
 }
 
-void ScrollAnimator::Trace(blink::Visitor* visitor) {
+void ScrollAnimator::Trace(Visitor* visitor) {
   ScrollAnimatorBase::Trace(visitor);
 }
 

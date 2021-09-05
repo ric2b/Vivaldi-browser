@@ -12,7 +12,6 @@
 
 #include "base/hash/hash.h"
 #include "base/logging.h"
-#include "net/disk_cache/blockfile/trace.h"
 
 namespace disk_cache {
 
@@ -145,7 +144,6 @@ template<typename T> bool StorageBlock<T>::Load() {
     }
   }
   LOG(WARNING) << "Failed data load.";
-  Trace("Failed data load.");
   return false;
 }
 
@@ -158,7 +156,6 @@ template<typename T> bool StorageBlock<T>::Store() {
     }
   }
   LOG(ERROR) << "Failed data store.";
-  Trace("Failed data store.");
   return false;
 }
 
@@ -174,7 +171,6 @@ template<typename T> bool StorageBlock<T>::Load(FileIOCallback* callback,
     }
   }
   LOG(WARNING) << "Failed data load.";
-  Trace("Failed data load.");
   return false;
 }
 
@@ -188,7 +184,6 @@ template<typename T> bool StorageBlock<T>::Store(FileIOCallback* callback,
     }
   }
   LOG(ERROR) << "Failed data store.";
-  Trace("Failed data store.");
   return false;
 }
 
@@ -217,7 +212,7 @@ template<typename T> void StorageBlock<T>::DeleteData() {
 
 template <typename T>
 uint32_t StorageBlock<T>::CalculateHash() const {
-  return base::Hash(data_, offsetof(T, self_hash));
+  return base::PersistentHash(data_, offsetof(T, self_hash));
 }
 
 }  // namespace disk_cache

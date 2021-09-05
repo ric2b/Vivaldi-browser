@@ -8,6 +8,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_gc_controller.h"
 #include "third_party/blink/renderer/core/testing/death_aware_script_wrappable.h"
 #include "third_party/blink/renderer/core/testing/gc_object_liveness_observer.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 #include "v8/include/v8.h"
 
 namespace blink {
@@ -31,7 +32,7 @@ TEST_F(ScriptWrappableV8GCIntegrationTest, V8ReportsLiveObjectsDuringFullGc) {
   GCObjectLivenessObserver<DeathAwareScriptWrappable> observer;
   {
     v8::HandleScope handle_scope(GetIsolate());
-    DeathAwareScriptWrappable* object = DeathAwareScriptWrappable::Create();
+    auto* object = MakeGarbageCollected<DeathAwareScriptWrappable>();
     observer.Observe(object);
 
     holder.Reset(GetIsolate(),
@@ -52,7 +53,7 @@ TEST_F(ScriptWrappableV8GCIntegrationTest,
   GCObjectLivenessObserver<DeathAwareScriptWrappable> observer;
   {
     v8::HandleScope handle_scope(GetIsolate());
-    DeathAwareScriptWrappable* object = DeathAwareScriptWrappable::Create();
+    auto* object = MakeGarbageCollected<DeathAwareScriptWrappable>();
     observer.Observe(object);
 
     v8::Local<v8::Value> wrapper =
@@ -85,7 +86,7 @@ TEST_F(ScriptWrappableV8GCIntegrationTest,
   GCObjectLivenessObserver<DeathAwareScriptWrappable> observer;
   {
     v8::HandleScope handle_scope(GetIsolate());
-    DeathAwareScriptWrappable* object = DeathAwareScriptWrappable::Create();
+    auto* object = MakeGarbageCollected<DeathAwareScriptWrappable>();
     observer.Observe(object);
 
     // Creates new V8 wrapper and associates it with global scope
@@ -109,7 +110,7 @@ TEST_F(ScriptWrappableV8GCIntegrationTest,
   GCObjectLivenessObserver<DeathAwareScriptWrappable> observer;
   {
     v8::HandleScope handle_scope(GetIsolate());
-    DeathAwareScriptWrappable* object = DeathAwareScriptWrappable::Create();
+    auto* object = MakeGarbageCollected<DeathAwareScriptWrappable>();
     observer.Observe(object);
 
     // Creates new V8 wrapper and associates it with global scope

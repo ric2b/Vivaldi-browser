@@ -5,20 +5,18 @@
 import("//third_party/closure_compiler/compile_js.gni")
 
 js_type_check("closure_compile") {
-  deps = [
-    ":os_settings_page",
-  ]
+  deps = [ ":os_settings_page" ]
 }
 
 js_library("os_settings_page") {
   deps = [
-    "../..:page_visibility",
-    "../..:route",
+    "..:os_page_visibility",
+    "..:os_route",
+    "../..:router",
     "../..:search_settings",
-    "../../android_apps_page:android_apps_browser_proxy",
-    "../../chrome_cleanup_page:chrome_cleanup_proxy",
     "../../prefs:prefs_behavior",
     "../../settings_page:main_page_behavior",
+    "../os_apps_page:android_apps_browser_proxy",
     "//ui/webui/resources/js:load_time_data",
     "//ui/webui/resources/js:web_ui_listener_behavior",
   ]

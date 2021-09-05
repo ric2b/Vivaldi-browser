@@ -24,11 +24,11 @@ import android.view.WindowManager;
 
 import androidx.annotation.CallSuper;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.StrictModeContext;
 import org.chromium.base.TraceEvent;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.library_loader.LoaderErrors;
 import org.chromium.base.library_loader.ProcessInitException;
@@ -51,6 +51,9 @@ import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modaldialog.ModalDialogManagerHolder;
 
 import java.lang.reflect.Field;
+
+import org.chromium.chrome.browser.ChromeApplication;
+import org.vivaldi.browser.preferences.VivaldiPreferences;
 
 /**
  * An activity that talks with application and activity level delegates for async initialization.
@@ -247,8 +250,8 @@ public abstract class AsyncInitializationActivity extends ChromeBaseAppCompatAct
 
     @CallSuper
     @Override
-    public void onStartupFailure() {
-        throw new ProcessInitException(LoaderErrors.LOADER_ERROR_NATIVE_STARTUP_FAILED);
+    public void onStartupFailure(Exception failureCause) {
+        throw new ProcessInitException(LoaderErrors.NATIVE_STARTUP_FAILED, failureCause);
     }
 
     /**
@@ -272,7 +275,8 @@ public abstract class AsyncInitializationActivity extends ChromeBaseAppCompatAct
      * @param intent intent to dispatch
      * @return {@link LaunchIntentDispatcher.Action} to take
      */
-    protected @LaunchIntentDispatcher.Action int maybeDispatchLaunchIntent(Intent intent) {
+    protected @LaunchIntentDispatcher.Action int maybeDispatchLaunchIntent(
+            Intent intent, Bundle savedInstanceState) {
         return LaunchIntentDispatcher.Action.CONTINUE;
     }
 
@@ -281,7 +285,7 @@ public abstract class AsyncInitializationActivity extends ChromeBaseAppCompatAct
         setIntent(validateIntent(getIntent()));
 
         @LaunchIntentDispatcher.Action
-        int dispatchAction = maybeDispatchLaunchIntent(getIntent());
+        int dispatchAction = maybeDispatchLaunchIntent(getIntent(), savedInstanceState);
         if (dispatchAction != LaunchIntentDispatcher.Action.CONTINUE) {
             abortLaunch(dispatchAction);
             return;
@@ -315,7 +319,7 @@ public abstract class AsyncInitializationActivity extends ChromeBaseAppCompatAct
         mModalDialogManager = createModalDialogManager();
 
         mStartupDelayed = shouldDelayBrowserStartup();
-        ChromeBrowserInitializer.getInstance(this).handlePreNativeStartup(this);
+        ChromeBrowserInitializer.getInstance().handlePreNativeStartup(this);
     }
 
     /**
@@ -462,6 +466,16 @@ public abstract class AsyncInitializationActivity extends ChromeBaseAppCompatAct
 
         mNativeInitializationController.onResume();
         if (mLaunchBehindWorkaround != null) mLaunchBehindWorkaround.onResume();
+
+        // Note(david@vivaldi.com): Handle the status bar visibility.
+        if (ChromeApplication.isVivaldi()) {
+            int flag = WindowManager.LayoutParams.FLAG_FULLSCREEN;
+            if (VivaldiPreferences.getSharedPreferencesManager().readBoolean(
+                        VivaldiPreferences.HIDE_STATUS_BAR, false))
+                getWindow().setFlags(flag, flag);
+            else
+                getWindow().clearFlags(flag);
+        }
     }
 
     @CallSuper
@@ -496,7 +510,7 @@ public abstract class AsyncInitializationActivity extends ChromeBaseAppCompatAct
     @Override
     public final void onCreateWithNative() {
         mLifecycleDispatcher.onCreateWithNative();
-        ChromeBrowserInitializer.getInstance(this).handlePostNativeStartup(true, this);
+        ChromeBrowserInitializer.getInstance().handlePostNativeStartup(true, this);
     }
 
     @CallSuper

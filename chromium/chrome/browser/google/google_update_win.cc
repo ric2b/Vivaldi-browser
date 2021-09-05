@@ -29,6 +29,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
+#include "base/task/thread_pool.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/version.h"
@@ -391,11 +392,11 @@ UpdateCheckDriver::UpdateCheckDriver(
     bool install_update_if_possible,
     gfx::AcceleratedWidget elevation_window,
     const base::WeakPtr<UpdateCheckDelegate>& delegate)
-    : task_runner_(g_update_driver_task_runner
-                       ? g_update_driver_task_runner
-                       : base::CreateCOMSTATaskRunner(
-                             {base::ThreadPool(), base::MayBlock(),
-                              base::TaskPriority::USER_VISIBLE})),
+    : task_runner_(
+          g_update_driver_task_runner
+              ? g_update_driver_task_runner
+              : base::ThreadPool::CreateCOMSTATaskRunner(
+                    {base::MayBlock(), base::TaskPriority::USER_VISIBLE})),
       result_runner_(base::SequencedTaskRunnerHandle::Get()),
       locale_(locale),
       install_update_if_possible_(install_update_if_possible),
@@ -544,7 +545,7 @@ HRESULT UpdateCheckDriver::BeginUpdateCheckInternal(
       // nice to have, a failure to do so does not affect the likelihood that
       // the update check and/or install will succeed.
       app_bundle->put_displayLanguage(
-          base::win::ScopedBstr(base::UTF8ToUTF16(locale_)));
+          base::win::ScopedBstr(base::UTF8ToUTF16(locale_)).Get());
     }
 
     hresult = app_bundle->initialize();
@@ -568,7 +569,8 @@ HRESULT UpdateCheckDriver::BeginUpdateCheckInternal(
     Microsoft::WRL::ComPtr<IDispatch> dispatch;
     // It is common for this call to fail with APP_USING_EXTERNAL_UPDATER if
     // an auto update is in progress.
-    hresult = app_bundle_->createInstalledApp(base::win::ScopedBstr(app_guid));
+    hresult =
+        app_bundle_->createInstalledApp(base::win::ScopedBstr(app_guid).Get());
     if (FAILED(hresult))
       return hresult;
     // Move the IAppBundleWeb reference into a local now so that failures from
@@ -653,7 +655,7 @@ bool UpdateCheckDriver::IsErrorState(
 
     base::win::ScopedBstr message;
     if (SUCCEEDED(current_state->get_completionMessage(message.Receive())))
-      error_string->assign(message, message.Length());
+      error_string->assign(message.Get(), message.Length());
 
     return true;
   }
@@ -680,7 +682,7 @@ bool UpdateCheckDriver::IsFinalState(
     base::win::ScopedBstr version;
     *upgrade_status = UPGRADE_IS_AVAILABLE;
     if (SUCCEEDED(current_state->get_availableVersion(version.Receive())))
-      new_version->assign(version, version.Length());
+      new_version->assign(version.Get(), version.Length());
     return true;
   }
   if (state_value == STATE_INSTALL_COMPLETE) {
@@ -717,7 +719,7 @@ bool UpdateCheckDriver::IsIntermediateState(
     case STATE_UPDATE_AVAILABLE: {
       base::win::ScopedBstr version;
       if (SUCCEEDED(current_state->get_availableVersion(version.Receive())))
-        new_version->assign(version, version.Length());
+        new_version->assign(version.Get(), version.Length());
       break;
     }
 

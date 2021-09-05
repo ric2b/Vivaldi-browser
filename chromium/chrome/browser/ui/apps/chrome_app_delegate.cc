@@ -59,6 +59,8 @@
 #include "chrome/browser/printing/printing_init.h"
 #endif
 
+#include "app/vivaldi_apptools.h"
+
 namespace {
 
 // Time to wait for an app window to show before allowing Chrome to quit.
@@ -235,7 +237,12 @@ void ChromeAppDelegate::RenderViewCreated(
     content::HostZoomMap* zoom_map =
         content::HostZoomMap::GetForWebContents(web_contents);
     DCHECK(zoom_map);
+
+    // NOTE(pettern@vivaldi.com): Do not reset the zoom level for app
+    // windows we open. See VB-61528.
+    if (!vivaldi::IsVivaldiApp(web_contents->GetURL().host())) {
     zoom_map->SetZoomLevelForHost(web_contents->GetURL().host(), 0);
+    }
   }
 }
 
@@ -340,8 +347,8 @@ bool ChromeAppDelegate::IsWebContentsVisible(
   return platform_util::IsVisible(web_contents->GetNativeView());
 }
 
-void ChromeAppDelegate::SetTerminatingCallback(const base::Closure& callback) {
-  terminating_callback_ = callback;
+void ChromeAppDelegate::SetTerminatingCallback(base::OnceClosure callback) {
+  terminating_callback_ = std::move(callback);
 }
 
 void ChromeAppDelegate::OnHide() {
@@ -396,5 +403,5 @@ void ChromeAppDelegate::Observe(int type,
                                 const content::NotificationDetails& details) {
   DCHECK_EQ(chrome::NOTIFICATION_APP_TERMINATING, type);
   if (!terminating_callback_.is_null())
-    terminating_callback_.Run();
+    std::move(terminating_callback_).Run();
 }

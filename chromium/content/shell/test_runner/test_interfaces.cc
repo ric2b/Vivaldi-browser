@@ -27,14 +27,9 @@ namespace test_runner {
 
 TestInterfaces::TestInterfaces()
     : gamepad_controller_(new GamepadController()),
-      test_runner_(new TestRunner(this)),
-      delegate_(nullptr),
-      main_view_(nullptr) {
-  blink::SetWebTestMode(true);
+      test_runner_(new TestRunner(this)) {
   // NOTE: please don't put feature specific enable flags here,
   // instead add them to runtime_enabled_features.json5
-
-  ResetAll();
 }
 
 TestInterfaces::~TestInterfaces() {
@@ -67,6 +62,18 @@ void TestInterfaces::ResetTestHelperControllers() {
 
   for (WebViewTestProxy* web_view_test_proxy : window_list_)
     web_view_test_proxy->Reset();
+}
+
+void TestInterfaces::DelegateDestroyed(WebTestDelegate* delegate) {
+  if (delegate == delegate_) {
+    if (!window_list_.empty()) {
+      SetDelegate(window_list_[0]->delegate());
+      SetMainView(window_list_[0]->GetWebView());
+    } else {
+      SetDelegate(nullptr);
+      SetMainView(nullptr);
+    }
+  }
 }
 
 void TestInterfaces::ResetAll() {
@@ -138,8 +145,7 @@ void TestInterfaces::WindowClosed(WebViewTestProxy* proxy) {
   }
   window_list_.erase(pos);
 
-  if (proxy->webview() == main_view_)
-    SetMainView(nullptr);
+  DelegateDestroyed(proxy->delegate());
 }
 
 TestRunner* TestInterfaces::GetTestRunner() {

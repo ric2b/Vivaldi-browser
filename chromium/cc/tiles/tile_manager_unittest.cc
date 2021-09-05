@@ -1531,7 +1531,10 @@ class TestSoftwareRasterBufferProvider : public FakeRasterBufferProviderImpl {
   std::unique_ptr<RasterBuffer> AcquireBufferForRaster(
       const ResourcePool::InUsePoolResource& resource,
       uint64_t resource_content_id,
-      uint64_t previous_content_id) override {
+      uint64_t previous_content_id,
+      bool depends_on_at_raster_decodes,
+      bool depends_on_hardware_accelerated_jpeg_candidates,
+      bool depends_on_hardware_accelerated_webp_candidates) override {
     if (!resource.software_backing()) {
       auto backing = std::make_unique<TestSoftwareBacking>();
       backing->shared_bitmap_id = viz::SharedBitmap::GenerateId();
@@ -1831,13 +1834,7 @@ class ActivationTasksDoNotBlockReadyToDrawTest : public TileManagerTest {
   }
 
   std::unique_ptr<LayerTreeFrameSink> CreateLayerTreeFrameSink() override {
-    return FakeLayerTreeFrameSink::Create3d();
-  }
-
-  LayerTreeSettings CreateSettings() override {
-    auto settings = TileManagerTest::CreateSettings();
-    settings.gpu_rasterization_forced = true;
-    return settings;
+    return FakeLayerTreeFrameSink::Create3dForGpuRasterization();
   }
 };
 
@@ -1946,8 +1943,8 @@ TEST_F(PartialRasterTileManagerTest, CancelledTasksHaveNoContentId) {
   // with its invalidated resource ID.
   gfx::Rect total_invalidated_rect;
   EXPECT_FALSE(host_impl()->resource_pool()->TryAcquireResourceForPartialRaster(
-      kInvalidatedId + 1, gfx::Rect(), kInvalidatedId,
-      &total_invalidated_rect));
+      kInvalidatedId + 1, gfx::Rect(), kInvalidatedId, &total_invalidated_rect,
+      gfx::ColorSpace::CreateSRGB()));
   EXPECT_EQ(gfx::Rect(), total_invalidated_rect);
 
   // Free our host_impl_ before the tile_task_manager we passed it, as it
@@ -1969,7 +1966,10 @@ class VerifyResourceContentIdRasterBufferProvider
   std::unique_ptr<RasterBuffer> AcquireBufferForRaster(
       const ResourcePool::InUsePoolResource& resource,
       uint64_t resource_content_id,
-      uint64_t previous_content_id) override {
+      uint64_t previous_content_id,
+      bool depends_on_at_raster_decodes,
+      bool depends_on_hardware_accelerated_jpeg_candidates,
+      bool depends_on_hardware_accelerated_webp_candidates) override {
     EXPECT_EQ(expected_content_id_, resource_content_id);
     return nullptr;
   }
@@ -2001,8 +2001,8 @@ void RunPartialRasterCheck(std::unique_ptr<LayerTreeHostImpl> host_impl,
 
   // Ensure there's a resource with our |kInvalidatedId| in the resource pool.
   ResourcePool::InUsePoolResource resource =
-      host_impl->resource_pool()->AcquireResource(kTileSize, viz::RGBA_8888,
-                                                  gfx::ColorSpace());
+      host_impl->resource_pool()->AcquireResource(
+          kTileSize, viz::RGBA_8888, gfx::ColorSpace::CreateSRGB());
 
   resource.set_software_backing(std::make_unique<TestSoftwareBacking>());
   host_impl->resource_pool()->PrepareForExport(resource);
@@ -2066,8 +2066,8 @@ void RunPartialTileDecodeCheck(std::unique_ptr<LayerTreeHostImpl> host_impl,
 
   // Ensure there's a resource with our |kInvalidatedId| in the resource pool.
   ResourcePool::InUsePoolResource resource =
-      host_impl->resource_pool()->AcquireResource(kTileSize, viz::RGBA_8888,
-                                                  gfx::ColorSpace());
+      host_impl->resource_pool()->AcquireResource(
+          kTileSize, viz::RGBA_8888, gfx::ColorSpace::CreateSRGB());
   host_impl->resource_pool()->OnContentReplaced(resource, kInvalidatedId);
   host_impl->resource_pool()->ReleaseResource(std::move(resource));
 
@@ -2167,7 +2167,10 @@ class InvalidResourceRasterBufferProvider
   std::unique_ptr<RasterBuffer> AcquireBufferForRaster(
       const ResourcePool::InUsePoolResource& resource,
       uint64_t resource_content_id,
-      uint64_t previous_content_id) override {
+      uint64_t previous_content_id,
+      bool depends_on_at_raster_decodes,
+      bool depends_on_hardware_accelerated_jpeg_candidates,
+      bool depends_on_hardware_accelerated_webp_candidates) override {
     if (!resource.gpu_backing()) {
       auto backing = std::make_unique<StubGpuBacking>();
       // Don't set a mailbox to signal invalid resource.
@@ -2263,7 +2266,10 @@ class MockReadyToDrawRasterBufferProviderImpl
   std::unique_ptr<RasterBuffer> AcquireBufferForRaster(
       const ResourcePool::InUsePoolResource& resource,
       uint64_t resource_content_id,
-      uint64_t previous_content_id) override {
+      uint64_t previous_content_id,
+      bool depends_on_at_raster_decodes,
+      bool depends_on_hardware_accelerated_jpeg_candidates,
+      bool depends_on_hardware_accelerated_webp_candidates) override {
     if (!resource.software_backing())
       resource.set_software_backing(std::make_unique<TestSoftwareBacking>());
     return std::make_unique<FakeRasterBuffer>();
@@ -3251,7 +3257,10 @@ class VerifyImageProviderRasterBufferProvider
   std::unique_ptr<RasterBuffer> AcquireBufferForRaster(
       const ResourcePool::InUsePoolResource& resource,
       uint64_t resource_content_id,
-      uint64_t previous_content_id) override {
+      uint64_t previous_content_id,
+      bool depends_on_at_raster_decodes,
+      bool depends_on_hardware_accelerated_jpeg_candidates,
+      bool depends_on_hardware_accelerated_webp_candidates) override {
     buffer_count_++;
     return std::make_unique<VerifyImageProviderRasterBuffer>();
   }

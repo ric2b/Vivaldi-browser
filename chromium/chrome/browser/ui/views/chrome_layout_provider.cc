@@ -8,7 +8,7 @@
 
 #include "base/logging.h"
 #include "chrome/browser/ui/views/chrome_typography.h"
-#include "ui/base/material_design/material_design_controller.h"
+#include "ui/base/pointer/touch_ui_controller.h"
 #include "ui/gfx/shadow_value.h"
 
 namespace {
@@ -50,15 +50,14 @@ ChromeLayoutProvider::CreateLayoutProvider() {
 
 gfx::Insets ChromeLayoutProvider::GetInsetsMetric(int metric) const {
   DCHECK_LT(metric, views::VIEWS_INSETS_MAX);
-  const bool touch_ui = ui::MaterialDesignController::touch_ui();
+  const bool touch_ui = ui::TouchUiController::Get()->touch_ui();
   switch (metric) {
     case views::INSETS_DIALOG:
     case views::INSETS_DIALOG_SUBSECTION:
       return gfx::Insets(kHarmonyLayoutUnit);
     case views::INSETS_CHECKBOX_RADIO_BUTTON: {
       gfx::Insets insets = LayoutProvider::GetInsetsMetric(metric);
-      // Material Design requires that checkboxes and radio buttons are aligned
-      // flush to the left edge.
+      // Checkboxes and radio buttons should be aligned flush to the left edge.
       return gfx::Insets(insets.top(), 0, insets.bottom(), insets.right());
     }
     case views::INSETS_VECTOR_IMAGE_BUTTON:
@@ -71,8 +70,6 @@ gfx::Insets ChromeLayoutProvider::GetInsetsMetric(int metric) const {
       return touch_ui ? gfx::Insets(8, 10) : gfx::Insets(6);
     case INSETS_TOAST:
       return gfx::Insets(0, kHarmonyLayoutUnit);
-    case INSETS_TAB_GROUP_TITLE_CHIP:
-      return gfx::Insets(0, 12);
     default:
       return LayoutProvider::GetInsetsMetric(metric);
   }
@@ -144,8 +141,6 @@ int ChromeLayoutProvider::GetDistanceMetric(int metric) const {
       return kHarmonyLayoutUnit * 12;
     case DISTANCE_SUBSECTION_HORIZONTAL_INDENT:
       return 0;
-    case DISTANCE_TAB_GROUP_TITLE_CHIP_MARGIN:
-      return 4;
     case DISTANCE_TOAST_CONTROL_VERTICAL:
       return 8;
     case DISTANCE_TOAST_LABEL_VERTICAL:

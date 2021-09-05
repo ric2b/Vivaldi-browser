@@ -8,8 +8,14 @@
 #include <string>
 
 @class NSString;
+@class NSArray;
 
 namespace breakpad_helper {
+
+// Key format for breadcrumbs attached to crash reports. Format string contains
+// %lu for index as there are multiple breadcrumbs keys uploaded to crash
+// server.
+extern NSString* const kBreadcrumbs;
 
 // Starts the crash handlers. This must be run as soon as possible to catch
 // early crashes.
@@ -68,6 +74,9 @@ void SetMemoryWarningInProgress(bool value);
 
 // Sets a key indicating that UI thread is frozen (if value is 'true'),
 // otherwise remove the key.
+// Setting the value is synchronous as it is expected to be set just before the
+// report generation.
+// Unsetting the value is asynchronous.
 void SetHangReport(bool value);
 
 // Sets a key indicating the current free memory amount in KB. 0 does not remove
@@ -123,6 +132,11 @@ void SetGridToVisibleTabAnimation(NSString* to_view_controller,
 // Removes the key to help debug a crash when animating from grid to visible
 // tab.
 void RemoveGridToVisibleTabAnimation();
+
+// Sets keys with the given |breadcrumbs|. Each item in |breadcrumbs| will be
+// stored separately with kBreadcrumbs+<index> key (where kBreadcrumbs0 stores
+// the latest breadscrumbs).
+void SetBreadcrumbEvents(NSArray* breadcrumbs);
 
 // Sets a key in browser to store the playback state of media player (audio or
 // video). This function records a new start. This function is called for each

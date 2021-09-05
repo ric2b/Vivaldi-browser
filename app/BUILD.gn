@@ -125,6 +125,10 @@ if (is_android) {
         locale = "in"
       } else if (locale == "ja-KS") {
         locale = "ja-rKS"
+      } else if (locale == "fr-CA") {
+        locale = "fr-rCA"
+      } else if (locale == "zh-HK") {
+        locale = "zh-rHK"
       }
       outputs += [ "values-$locale/vivaldi_android_strings.xml" ]
     }
@@ -157,7 +161,7 @@ action("write_translation_xml_generation_script") {
   inputs = [ script ]
   outputs = [ "$root_out_dir/generate_translation_xml.py" ]
 
-  args = rebase_path(outputs, root_out_dir) + locales + vivaldi_pending_locales
+  args = rebase_path(outputs, root_out_dir) + all_chrome_locales + vivaldi_pending_locales
 }
 
 action("write_pakfile_xml_generation_script") {
@@ -173,7 +177,7 @@ action("write_full_pakfile_xml_generation_script") {
   inputs = [ script ]
   outputs = [ "$root_out_dir/generate_full_pak_xml.py" ]
 
-  args = rebase_path(outputs, root_out_dir) + locales + vivaldi_pending_locales
+  args = rebase_path(outputs, root_out_dir) + all_chrome_locales + vivaldi_pending_locales
 }
 
 config("vivaldi_app_config") {

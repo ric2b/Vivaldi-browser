@@ -14,6 +14,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/extensions/launch_util.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/views/apps/app_info_dialog/app_info_label.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/grit/generated_resources.h"
 #include "extensions/browser/extension_prefs.h"
@@ -97,11 +98,7 @@ base::string16 LaunchOptionsComboboxModel::GetItemAt(int index) {
 
 AppInfoSummaryPanel::AppInfoSummaryPanel(Profile* profile,
                                          const extensions::Extension* app)
-    : AppInfoPanel(profile, app),
-      size_value_(nullptr),
-      homepage_link_(nullptr),
-      licenses_link_(nullptr),
-      launch_options_combobox_(nullptr) {
+    : AppInfoPanel(profile, app) {
   SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical, gfx::Insets(),
       ChromeLayoutProvider::Get()->GetDistanceMetric(
@@ -125,35 +122,33 @@ void AppInfoSummaryPanel::AddDescriptionAndLinksControl(
               DISTANCE_RELATED_CONTROL_VERTICAL_SMALL)));
 
   if (!app_->description().empty()) {
-    const size_t max_length = 400;
+    constexpr size_t kMaxLength = 400;
     base::string16 text = base::UTF8ToUTF16(app_->description());
-    if (text.length() > max_length) {
-      text = text.substr(0, max_length);
+    if (text.length() > kMaxLength) {
+      text = text.substr(0, kMaxLength - 5);
       text += base::ASCIIToUTF16(" ... ");
     }
 
-    auto description_label = std::make_unique<views::Label>(text);
+    auto description_label = std::make_unique<AppInfoLabel>(text);
     description_label->SetMultiLine(true);
-    description_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
     description_and_labels_stack->AddChildView(std::move(description_label));
   }
 
+  const auto add_link = [&](int message_id,
+                            void (AppInfoSummaryPanel::*ptr)()) {
+    auto* link = description_and_labels_stack->AddChildView(
+        std::make_unique<views::Link>(l10n_util::GetStringUTF16(message_id)));
+    link->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+    link->set_callback(base::BindRepeating(ptr, base::Unretained(this)));
+    link->SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
+  };
   if (CanShowAppHomePage()) {
-    auto homepage_link = std::make_unique<views::Link>(
-        l10n_util::GetStringUTF16(IDS_APPLICATION_INFO_HOMEPAGE_LINK));
-    homepage_link->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-    homepage_link->set_listener(this);
-    homepage_link_ =
-        description_and_labels_stack->AddChildView(std::move(homepage_link));
+    add_link(IDS_APPLICATION_INFO_HOMEPAGE_LINK,
+             &AppInfoSummaryPanel::ShowAppHomePage);
   }
-
   if (CanDisplayLicenses()) {
-    auto licenses_link = std::make_unique<views::Link>(
-        l10n_util::GetStringUTF16(IDS_APPLICATION_INFO_LICENSES_BUTTON_TEXT));
-    licenses_link->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-    licenses_link->set_listener(this);
-    licenses_link_ =
-        description_and_labels_stack->AddChildView(std::move(licenses_link));
+    add_link(IDS_APPLICATION_INFO_LICENSES_BUTTON_TEXT,
+             &AppInfoSummaryPanel::DisplayLicenses);
   }
 
   vertical_stack->AddChildView(std::move(description_and_labels_stack));
@@ -169,13 +164,11 @@ void AppInfoSummaryPanel::AddDetailsControl(views::View* vertical_stack) {
           DISTANCE_RELATED_CONTROL_VERTICAL_SMALL));
 
   // Add the size.
-  auto size_title = std::make_unique<views::Label>(
+  auto size_title = std::make_unique<AppInfoLabel>(
       l10n_util::GetStringUTF16(IDS_APPLICATION_INFO_SIZE_LABEL));
-  size_title->SetHorizontalAlignment(gfx::ALIGN_LEFT);
 
-  auto size_value = std::make_unique<views::Label>(
+  auto size_value = std::make_unique<AppInfoLabel>(
       l10n_util::GetStringUTF16(IDS_APPLICATION_INFO_SIZE_LOADING_LABEL));
-  size_value->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   size_value_ = size_value.get();
   StartCalculatingAppSize();
 
@@ -184,13 +177,11 @@ void AppInfoSummaryPanel::AddDetailsControl(views::View* vertical_stack) {
 
   // The version doesn't make sense for bookmark apps.
   if (!app_->from_bookmark()) {
-    auto version_title = std::make_unique<views::Label>(
+    auto version_title = std::make_unique<AppInfoLabel>(
         l10n_util::GetStringUTF16(IDS_APPLICATION_INFO_VERSION_LABEL));
-    version_title->SetHorizontalAlignment(gfx::ALIGN_LEFT);
 
-    auto version_value = std::make_unique<views::Label>(
+    auto version_value = std::make_unique<AppInfoLabel>(
         base::UTF8ToUTF16(app_->GetVersionForDisplay()));
-    version_value->SetHorizontalAlignment(gfx::ALIGN_LEFT);
 
     details_list->AddChildView(CreateKeyValueField(std::move(version_title),
                                                    std::move(version_value)));
@@ -241,16 +232,6 @@ void AppInfoSummaryPanel::OnPerformAction(views::Combobox* combobox) {
   }
 }
 
-void AppInfoSummaryPanel::LinkClicked(views::Link* source, int event_flags) {
-  if (source == homepage_link_) {
-    ShowAppHomePage();
-  } else if (source == licenses_link_) {
-    DisplayLicenses();
-  } else {
-    NOTREACHED();
-  }
-}
-
 void AppInfoSummaryPanel::StartCalculatingAppSize() {
   // In tests the app may be a dummy app without a path. In this case, avoid
   // calculating the directory size as it would calculate the size of the
@@ -283,6 +264,7 @@ bool AppInfoSummaryPanel::CanSetLaunchType() const {
   return !app_->is_platform_app() && !app_->is_extension() &&
          app_->id() != extension_misc::kChromeAppId;
 }
+
 void AppInfoSummaryPanel::ShowAppHomePage() {
   DCHECK(CanShowAppHomePage());
   OpenLink(extensions::ManifestURL::GetHomepageURL(app_));

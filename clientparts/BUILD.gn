@@ -1,3 +1,5 @@
+import("//extensions/buildflags/buildflags.gni")
+
 source_set("clientparts") {
   sources = [
     "vivaldi_content_browser_client_parts.cc",
@@ -9,6 +11,14 @@ source_set("clientparts") {
     "//components/prefs:prefs",
     "//content/public/browser",
     "//skia",
+    "//vivaldi/components/request_filter",
     "//vivaldi/prefs",
   ]
+  if (enable_extensions) {
+    deps += [
+      "//extensions/common/api",
+      "//vivaldi/extensions/api:apis",
+      "//vivaldi/extensions/helper:app_helper",
+    ]
+  }
 }

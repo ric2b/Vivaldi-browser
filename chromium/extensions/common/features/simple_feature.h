@@ -90,6 +90,7 @@ class SimpleFeature : public Feature {
     COMPONENT_LOCATION,
     EXTERNAL_COMPONENT_LOCATION,
     POLICY_LOCATION,
+    UNPACKED_LOCATION,
   };
 
   // Setters used by generated code to create the feature.
@@ -197,7 +198,8 @@ class SimpleFeature : public Feature {
   bool MatchesSessionTypes(FeatureSessionType session_type) const;
 
   Availability CheckDependencies(
-      const base::Callback<Availability(const Feature*)>& checker) const;
+      const base::RepeatingCallback<Availability(const Feature*)>& checker)
+      const;
 
   static bool IsValidExtensionId(const std::string& extension_id);
   static bool IsValidHashedExtensionId(const HashedExtensionId& hashed_id);

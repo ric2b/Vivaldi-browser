@@ -47,14 +47,6 @@ class MIDIOutput final : public MIDIPort {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static MIDIOutput* Create(MIDIAccess*,
-                            unsigned port_index,
-                            const String& id,
-                            const String& manufacturer,
-                            const String& name,
-                            const String& version,
-                            midi::mojom::PortState);
-
   MIDIOutput(MIDIAccess*,
              unsigned port_index,
              const String& id,
@@ -71,14 +63,14 @@ class MIDIOutput final : public MIDIPort {
   void send(NotShared<DOMUint8Array>, ExceptionState&);
   void send(Vector<unsigned>, ExceptionState&);
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  private:
   void DidOpen(bool opened) override;
   void SendInternal(DOMUint8Array*, base::TimeTicks timestamp, ExceptionState&);
 
   unsigned port_index_;
-  HeapDeque<std::pair<Member<DOMUint8Array>, base::TimeTicks>> pending_data_;
+  HeapVector<std::pair<Member<DOMUint8Array>, base::TimeTicks>> pending_data_;
 };
 
 }  // namespace blink

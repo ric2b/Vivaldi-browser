@@ -30,7 +30,7 @@ import java.util.Map;
  * JellyBean through Marshmallow.
  */
 public final class BootstrapApplication extends Application {
-    private static final String TAG = "cr.incrementalinstall";
+    private static final String TAG = "incrementalinstall";
     private static final String MANAGED_DIR_PREFIX = "/data/local/tmp/incremental-app-";
     private static final String REAL_APP_META_DATA_NAME = "incremental-install-real-app";
     private static final String REAL_INSTRUMENTATION_META_DATA_NAME0 =
@@ -101,10 +101,10 @@ public final class BootstrapApplication extends Application {
             }
 
             mClassLoaderPatcher.importNativeLibs(instLibDir);
-            sIncrementalDexFiles = mClassLoaderPatcher.loadDexFiles(instDexDir);
+            sIncrementalDexFiles = mClassLoaderPatcher.loadDexFiles(instDexDir, instPackageName);
             if (instPackageNameDiffers) {
                 mClassLoaderPatcher.importNativeLibs(appLibDir);
-                mClassLoaderPatcher.loadDexFiles(appDexDir);
+                mClassLoaderPatcher.loadDexFiles(appDexDir, appPackageName);
             }
 
             if (isFirstRun && mClassLoaderPatcher.mIsPrimaryProcess) {
@@ -130,8 +130,9 @@ public final class BootstrapApplication extends Application {
             // Even when instrumentation is not enabled, ActivityThread uses a default
             // Instrumentation instance internally. We hook it here in order to hook into the
             // call to Instrumentation.onCreate().
-            Reflect.setField(mActivityThread, "mInstrumentation",
-                    new BootstrapInstrumentation(this));
+            BootstrapInstrumentation bootstrapInstrumentation = new BootstrapInstrumentation(this);
+            populateInstrumenationFields(bootstrapInstrumentation);
+            Reflect.setField(mActivityThread, "mInstrumentation", bootstrapInstrumentation);
 
             // attachBaseContext() is called from ActivityThread#handleBindApplication() and
             // Application#mApplication is changed right after we return. Thus, we cannot swap
@@ -188,14 +189,22 @@ public final class BootstrapApplication extends Application {
         Log.i(TAG, "Instantiating instrumentation " + realInstrumentationName);
         Instrumentation ret =
                 (Instrumentation) Reflect.newInstance(Class.forName(realInstrumentationName));
+        populateInstrumenationFields(ret);
+        return ret;
+    }
 
+    /**
+     * Sets important fields on a newly created Instrumentation object by copying them from the
+     * original Instrumentation instance.
+     */
+    private void populateInstrumenationFields(Instrumentation target)
+            throws ReflectiveOperationException {
         // Initialize the fields that are set by Instrumentation.init().
         String[] initFields = {"mAppContext", "mComponent", "mInstrContext", "mMessageQueue",
                 "mThread", "mUiAutomationConnection", "mWatcher"};
         for (String fieldName : initFields) {
-            Reflect.setField(ret, fieldName, Reflect.getField(mOrigInstrumentation, fieldName));
+            Reflect.setField(target, fieldName, Reflect.getField(mOrigInstrumentation, fieldName));
         }
-        return ret;
     }
 
     /**

@@ -5,8 +5,8 @@
 package org.chromium.chrome.browser;
 
 import androidx.annotation.IntDef;
+import androidx.annotation.VisibleForTesting;
 
-import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.base.metrics.RecordHistogram;
@@ -26,8 +26,9 @@ public class IntentHeadersRecorder {
     /** Determines whether a header is CORS Safelisted or not. */
     @JNINamespace("chrome::android")
     /* package */ static class HeaderClassifier {
-        /* package */ boolean isCorsSafelistedHeader(String name, String value) {
-            return IntentHeadersRecorderJni.get().isCorsSafelistedHeader(name, value);
+        /* package */ boolean isCorsSafelistedHeader(
+                String name, String value, boolean firstParty) {
+            return IntentHeadersRecorderJni.get().isCorsSafelistedHeader(name, value, firstParty);
         }
     }
 
@@ -65,9 +66,12 @@ public class IntentHeadersRecorder {
     }
 
     /* Records that a HTTP header has been used. */
-    public void recordHeader(String name, String value) {
-        if (mClassifier.isCorsSafelistedHeader(name, value)) mSafeHeaders++;
-        else mUnsafeHeaders++;
+    public void recordHeader(String name, String value, boolean firstParty) {
+        if (mClassifier.isCorsSafelistedHeader(name, value, firstParty)) {
+            mSafeHeaders++;
+        } else {
+            mUnsafeHeaders++;
+        }
     }
 
     /**
@@ -102,6 +106,6 @@ public class IntentHeadersRecorder {
 
     @NativeMethods
     interface Natives {
-        boolean isCorsSafelistedHeader(String name, String value);
+        boolean isCorsSafelistedHeader(String name, String value, boolean firstParty);
     }
 }

@@ -25,7 +25,7 @@ import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.ChromeSwitches;
+import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge.OfflinePageModelObserver;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge.SavePageCallback;
 import org.chromium.chrome.browser.offlinepages.downloads.OfflinePageDownloadBridge;
@@ -303,7 +303,7 @@ public class OfflinePageBridgeTest {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             Assert.assertNotNull("Tab is null", mActivityTestRule.getActivity().getActivityTab());
             Assert.assertEquals("URL does not match requested.", mTestPage,
-                    mActivityTestRule.getActivity().getActivityTab().getUrl());
+                    mActivityTestRule.getActivity().getActivityTab().getUrlString());
             Assert.assertNotNull("WebContents is null", mActivityTestRule.getWebContents());
 
             mOfflinePageBridge.addObserver(new OfflinePageModelObserver() {
@@ -441,7 +441,7 @@ public class OfflinePageBridgeTest {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             Assert.assertNotNull("Tab is null", mActivityTestRule.getActivity().getActivityTab());
             Assert.assertEquals("URL does not match requested.", expectedUrl,
-                    mActivityTestRule.getActivity().getActivityTab().getUrl());
+                    mActivityTestRule.getActivity().getActivityTab().getUrlString());
             Assert.assertNotNull("WebContents is null", mActivityTestRule.getWebContents());
 
             mOfflinePageBridge.savePage(

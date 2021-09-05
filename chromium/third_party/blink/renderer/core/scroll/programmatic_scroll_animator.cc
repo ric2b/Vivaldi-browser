@@ -34,8 +34,9 @@ void ProgrammaticScrollAnimator::ResetAnimationState() {
 
 void ProgrammaticScrollAnimator::NotifyOffsetChanged(
     const ScrollOffset& offset) {
-  ScrollType scroll_type =
-      is_sequenced_scroll_ ? kSequencedScroll : kProgrammaticScroll;
+  mojom::blink::ScrollType scroll_type =
+      is_sequenced_scroll_ ? mojom::blink::ScrollType::kSequenced
+                           : mojom::blink::ScrollType::kProgrammatic;
   ScrollOffsetChanged(offset, scroll_type);
 }
 
@@ -66,7 +67,7 @@ void ProgrammaticScrollAnimator::AnimateToOffset(
   on_finish_ = std::move(on_finish);
   animation_curve_ = std::make_unique<CompositorScrollOffsetAnimationCurve>(
       CompositorOffsetFromBlinkOffset(target_offset_),
-      CompositorScrollOffsetAnimationCurve::kScrollDurationDeltaBased);
+      CompositorScrollOffsetAnimationCurve::ScrollType::kProgrammatic);
 
   scrollable_area_->RegisterForAnimation();
   if (!scrollable_area_->ScheduleAnimation()) {
@@ -201,7 +202,7 @@ void ProgrammaticScrollAnimator::AnimationFinished() {
   }
 }
 
-void ProgrammaticScrollAnimator::Trace(blink::Visitor* visitor) {
+void ProgrammaticScrollAnimator::Trace(Visitor* visitor) {
   visitor->Trace(scrollable_area_);
   ScrollAnimatorCompositorCoordinator::Trace(visitor);
 }

@@ -9,8 +9,8 @@
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/chromeos/crostini/crostini_manager.h"
 #include "chrome/browser/chromeos/crostini/crostini_pref_names.h"
-#include "chrome/browser/chromeos/crostini/crostini_registry_service.h"
-#include "chrome/browser/chromeos/crostini/crostini_registry_service_factory.h"
+#include "chrome/browser/chromeos/guest_os/guest_os_registry_service.h"
+#include "chrome/browser/chromeos/guest_os/guest_os_registry_service_factory.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile.h"
@@ -108,22 +108,20 @@ void CrostiniTestHelper::ReInitializeAppServiceIntegration() {
     chromeos::DBusThreadManager::Initialize();
   }
 
-  if (base::FeatureList::IsEnabled(features::kAppServiceAsh)) {
-    // The App Service is originally initialized when the Profile is created,
-    // but this class' constructor takes the Profile* as an argument, which
-    // means that the fake user (created during that constructor) is
-    // necessarily configured after the App Service's initialization.
-    //
-    // Without further action, in tests (but not in production which looks at
-    // real users, not fakes), the App Service serves no Crostini apps, as at
-    // the time it looked, the profile/user doesn't have Crostini enabled.
-    //
-    // We therefore manually have the App Service re-examine whether Crostini
-    // is enabled for this profile.
-    auto* proxy = apps::AppServiceProxyFactory::GetForProfile(profile_);
-    proxy->ReInitializeCrostiniForTesting(profile_);
-    proxy->FlushMojoCallsForTesting();
-  }
+  // The App Service is originally initialized when the Profile is created,
+  // but this class' constructor takes the Profile* as an argument, which
+  // means that the fake user (created during that constructor) is
+  // necessarily configured after the App Service's initialization.
+  //
+  // Without further action, in tests (but not in production which looks at
+  // real users, not fakes), the App Service serves no Crostini apps, as at
+  // the time it looked, the profile/user doesn't have Crostini enabled.
+  //
+  // We therefore manually have the App Service re-examine whether Crostini
+  // is enabled for this profile.
+  auto* proxy = apps::AppServiceProxyFactory::GetForProfile(profile_);
+  proxy->ReInitializeCrostiniForTesting(profile_);
+  proxy->FlushMojoCallsForTesting();
 }
 
 void CrostiniTestHelper::UpdateAppKeywords(
@@ -182,7 +180,7 @@ ApplicationList CrostiniTestHelper::BasicAppList(
 }
 
 void CrostiniTestHelper::UpdateRegistry() {
-  crostini::CrostiniRegistryServiceFactory::GetForProfile(profile_)
+  guest_os::GuestOsRegistryServiceFactory::GetForProfile(profile_)
       ->UpdateApplicationList(current_apps_);
 }
 

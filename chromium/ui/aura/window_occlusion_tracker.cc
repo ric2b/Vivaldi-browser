@@ -24,10 +24,12 @@ namespace {
 
 // When one of these properties is animated, a window is considered non-occluded
 // and cannot occlude other windows.
+// TODO(crbug.com/1057024): Mark a window VISIBLE when COLOR animation starts.
 constexpr ui::LayerAnimationElement::AnimatableProperties
     kSkipWindowWhenPropertiesAnimated =
         ui::LayerAnimationElement::TRANSFORM |
-        ui::LayerAnimationElement::BOUNDS | ui::LayerAnimationElement::OPACITY;
+        ui::LayerAnimationElement::BOUNDS | ui::LayerAnimationElement::OPACITY |
+        ui::LayerAnimationElement::COLOR;
 
 // When an animation ends for one of these properties, occlusion states might
 // be affected. The end of an animation for a property in
@@ -137,8 +139,11 @@ SkIRect GetOpaqueBoundsInRootWindow(
   DCHECK_EQ(1u, window->opaque_regions_for_occlusion().size());
 
   // Don't let clients mark regions outside their window bounds as opaque.
+  // Note: opaque_regions_for_occlusion() are relative to the window, i.e. the
+  // top-left corner of the window is considered to be the point (0, 0).
   gfx::Rect opaque_region = window->opaque_regions_for_occlusion()[0];
-  opaque_region.Intersect(window->bounds());
+  opaque_region.Intersect(gfx::Rect(window->bounds().size()));
+
   return ComputeClippedAndTransformedBounds(
       opaque_region, transform_relative_to_root, clipped_bounds);
 }
@@ -364,6 +369,10 @@ bool WindowOcclusionTracker::RecomputeOcclusionImpl(
     return false;
   }
 
+  // TODO: While considering that a window whose color is animated doesn't
+  // occlude other windows helps reduce the number of times that occlusion is
+  // recomputed, it isn't necessary to consider that the window whose color is
+  // animated itself is non-occluded.
   if (WindowIsAnimated(window) || WindowIsExcluded(window)) {
     SetWindowAndDescendantsAreOccluded(window, /* is_occluded */ false,
                                        /* is_parent_visible */ true);
@@ -430,9 +439,16 @@ bool WindowOcclusionTracker::RecomputeOcclusionImpl(
 bool WindowOcclusionTracker::VisibleWindowCanOccludeOtherWindows(
     Window* window) const {
   DCHECK(window->layer());
-  const float combined_opacity =
-      ShouldUseTargetValues() ? GetLayerCombinedTargetOpacity(window->layer())
-                              : window->layer()->GetCombinedOpacity();
+  float combined_opacity = ShouldUseTargetValues()
+                               ? GetLayerCombinedTargetOpacity(window->layer())
+                               : window->layer()->GetCombinedOpacity();
+  // Just check the alpha on this layer as an alpha on parent solid color layers
+  // will not affect children's opacity.
+  if (window->layer()->type() == ui::LAYER_SOLID_COLOR) {
+    auto color = ShouldUseTargetValues() ? window->layer()->GetTargetColor()
+                                         : window->layer()->background_color();
+    combined_opacity *= SkColorGetA(color) / 255.f;
+  }
   return (!window->transparent() && WindowHasContent(window) &&
           combined_opacity == 1.0f &&
           // For simplicity, a shaped window is not considered opaque.
@@ -682,7 +698,8 @@ void WindowOcclusionTracker::TrackedWindowAddedToRoot(Window* window) {
     auto* host = root_window->GetHost();
     if (host) {
       host->AddObserver(this);
-      host->EnableNativeWindowOcclusionTracking();
+      native_window_occlusion_tracker_.EnableNativeWindowOcclusionTracking(
+          host);
     }
   }
   MaybeComputeOcclusion();
@@ -698,7 +715,8 @@ void WindowOcclusionTracker::TrackedWindowRemovedFromRoot(Window* window) {
     RemoveObserverFromWindowAndDescendants(root_window);
     root_windows_.erase(root_window_state_it);
     root_window->GetHost()->RemoveObserver(this);
-    root_window->GetHost()->DisableNativeWindowOcclusionTracking();
+    native_window_occlusion_tracker_.DisableNativeWindowOcclusionTracking(
+        root_window->GetHost());
   }
 }
 
@@ -865,9 +883,17 @@ void WindowOcclusionTracker::OnWindowAlphaShapeSet(Window* window) {
   });
 }
 
-void WindowOcclusionTracker::OnWindowTransparentChanged(Window* window) {
+void WindowOcclusionTracker::OnWindowTransparentChanged(
+    Window* window,
+    ui::PropertyChangeReason reason) {
+  // Call MaybeObserveAnimatedWindow() outside the lambda so that the window can
+  // be marked as animated even when its root is dirty.
+  const bool animation_started =
+      (reason == ui::PropertyChangeReason::FROM_ANIMATION) &&
+      MaybeObserveAnimatedWindow(window);
   MarkRootWindowAsDirtyAndMaybeComputeOcclusionIf(window, [=]() {
-    return WindowOpacityChangeMayAffectOcclusionStates(window);
+    return animation_started ||
+           WindowOpacityChangeMayAffectOcclusionStates(window);
   });
 }
 

@@ -4,10 +4,15 @@
 
 #include "ash/shelf/back_button.h"
 
+#include "ash/keyboard/keyboard_util.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_focus_cycler.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "ash/wm/window_state.h"
+#include "ash/wm/window_util.h"
+#include "base/metrics/user_metrics.h"
+#include "base/metrics/user_metrics_action.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -57,15 +62,20 @@ void BackButton::OnShelfButtonAboutToRequestFocusFromTabTraversal(
 void BackButton::ButtonPressed(views::Button* sender,
                                const ui::Event& event,
                                views::InkDrop* ink_drop) {
-  // Send up event as well as down event as ARC++ clients expect this sequence.
-  // TODO: Investigate if we should be using the current modifiers.
-  aura::Window* root_window = GetWidget()->GetNativeWindow()->GetRootWindow();
-  ui::KeyEvent press_key_event(ui::ET_KEY_PRESSED, ui::VKEY_BROWSER_BACK,
-                               ui::EF_NONE);
-  ignore_result(root_window->GetHost()->SendEventToSink(&press_key_event));
-  ui::KeyEvent release_key_event(ui::ET_KEY_RELEASED, ui::VKEY_BROWSER_BACK,
-                                 ui::EF_NONE);
-  ignore_result(root_window->GetHost()->SendEventToSink(&release_key_event));
+  base::RecordAction(base::UserMetricsAction("AppList_BackButtonPressed"));
+
+  if (keyboard_util::CloseKeyboardIfActive())
+    return;
+
+  if (window_util::ShouldMinimizeTopWindowOnBack()) {
+    auto* top_window = window_util::GetTopWindow();
+    DCHECK(top_window);
+    WindowState::Get(top_window)->Minimize();
+    return;
+  }
+
+  window_util::SendBackKeyEvent(
+      GetWidget()->GetNativeWindow()->GetRootWindow());
 }
 
 }  // namespace ash

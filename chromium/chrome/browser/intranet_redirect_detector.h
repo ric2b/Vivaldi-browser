@@ -12,6 +12,7 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "components/pref_registry/pref_registry_syncable.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "mojo/public/cpp/bindings/receiver.h"
@@ -77,10 +78,14 @@ class IntranetRedirectDetector
   void OnConnectionChanged(network::mojom::ConnectionType type) override;
 
   // network::mojom::DnsConfigChangeManagerClient
-  void OnSystemDnsConfigChanged() override;
+  void OnDnsConfigChanged() override;
 
   void SetupDnsConfigClient();
   void OnDnsConfigClientConnectionError();
+
+  // Whether the IntranetRedirectDetector is enabled, or, through policy,
+  // disabled.
+  bool IsEnabledByPolicy();
 
   GURL redirect_origin_;
   std::map<network::SimpleURLLoader*, std::unique_ptr<network::SimpleURLLoader>>

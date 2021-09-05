@@ -93,7 +93,7 @@ class ExtensionTabUtil {
   static int GetWindowId(const Browser* browser);
   static int GetWindowIdOfTabStripModel(const TabStripModel* tab_strip_model);
   static int GetTabId(const content::WebContents* web_contents);
-  static std::string GetTabStatusText(bool is_loading);
+  static std::string GetTabStatusText(content::WebContents* web_contents);
   static int GetWindowIdOfTab(const content::WebContents* web_contents);
   static std::unique_ptr<base::ListValue> CreateTabList(
       const Browser* browser,
@@ -214,6 +214,10 @@ class ExtensionTabUtil {
   // equivalent. Extensions should be prevented from navigating to such URLs.
   static bool IsKillURL(const GURL& url);
 
+  // Logs if the URL of a tab that an extension is creating or navitaging to has
+  // the devtools scheme.
+  static void LogPossibleDevtoolsSchemeNavigation(const GURL& url);
+
   // Opens a tab for the specified |web_contents|.
   static void CreateTab(std::unique_ptr<content::WebContents> web_contents,
                         const std::string& extension_id,
@@ -243,6 +247,11 @@ class ExtensionTabUtil {
   // Returns true if the given Browser can report tabs to extensions.
   // Example of Browsers which don't support tabs include apps and devtools.
   static bool BrowserSupportsTabs(Browser* browser);
+
+  // Determines the loading status of the given |contents|. This needs to access
+  // some non-const member functions of |contents|, but actually leaves it
+  // unmodified.
+  static api::tabs::TabStatus GetLoadingStatus(content::WebContents* contents);
 };
 
 }  // namespace extensions

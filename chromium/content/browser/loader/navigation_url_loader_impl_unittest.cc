@@ -17,6 +17,7 @@
 #include "content/browser/frame_host/navigation_request_info.h"
 #include "content/browser/loader/navigation_loader_interceptor.h"
 #include "content/browser/loader/navigation_url_loader.h"
+#include "content/browser/loader/single_request_url_loader_factory.h"
 #include "content/browser/web_package/prefetched_signed_exchange_cache.h"
 #include "content/common/navigation_params.h"
 #include "content/common/navigation_params.mojom.h"
@@ -34,6 +35,7 @@
 #include "content/test/test_navigation_url_loader_delegate.h"
 #include "net/base/load_flags.h"
 #include "net/base/mock_network_change_notifier.h"
+#include "net/proxy_resolution/configured_proxy_resolution_service.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/url_request_context.h"
@@ -56,7 +58,7 @@ class TestNavigationLoaderInterceptor : public NavigationLoaderInterceptor {
       : most_recent_resource_request_(most_recent_resource_request) {
     net::URLRequestContextBuilder context_builder;
     context_builder.set_proxy_resolution_service(
-        net::ProxyResolutionService::CreateDirect());
+        net::ConfiguredProxyResolutionService::CreateDirect());
     context_ = context_builder.Build();
     constexpr int child_id = 4;
     constexpr int route_id = 8;
@@ -75,13 +77,15 @@ class TestNavigationLoaderInterceptor : public NavigationLoaderInterceptor {
                          BrowserContext* browser_context,
                          LoaderCallback callback,
                          FallbackCallback fallback_callback) override {
-    std::move(callback).Run(base::BindOnce(
-        &TestNavigationLoaderInterceptor::StartLoader, base::Unretained(this)));
+    std::move(callback).Run(base::MakeRefCounted<SingleRequestURLLoaderFactory>(
+        base::BindOnce(&TestNavigationLoaderInterceptor::StartLoader,
+                       base::Unretained(this))));
   }
 
-  void StartLoader(const network::ResourceRequest& resource_request,
-                   network::mojom::URLLoaderRequest request,
-                   network::mojom::URLLoaderClientPtr client) {
+  void StartLoader(
+      const network::ResourceRequest& resource_request,
+      mojo::PendingReceiver<network::mojom::URLLoader> receiver,
+      mojo::PendingRemote<network::mojom::URLLoaderClient> client) {
     *most_recent_resource_request_ = resource_request;
     static network::mojom::URLLoaderFactoryParams params;
     params.process_id = network::mojom::kBrowserProcessId;
@@ -91,22 +95,22 @@ class TestNavigationLoaderInterceptor : public NavigationLoaderInterceptor {
         nullptr /* network_context_client */,
         base::BindOnce(&TestNavigationLoaderInterceptor::DeleteURLLoader,
                        base::Unretained(this)),
-        std::move(request), 0 /* options */, resource_request,
+        std::move(receiver), 0 /* options */, resource_request,
         std::move(client), TRAFFIC_ANNOTATION_FOR_TESTS, &params,
-        0, /* request_id */
+        /*coep_reporter=*/nullptr, 0, /* request_id */
         0 /* keepalive_request_size */, resource_scheduler_client_,
         nullptr /* keepalive_statistics_recorder */,
         nullptr /* network_usage_accumulator */, nullptr /* header_client */,
-        nullptr /* origin_policy_manager */);
+        nullptr /* origin_policy_manager */, nullptr /* trust_token_helper */);
   }
 
   bool MaybeCreateLoaderForResponse(
       const network::ResourceRequest& request,
-      const network::ResourceResponseHead& response,
+      network::mojom::URLResponseHeadPtr* response,
       mojo::ScopedDataPipeConsumerHandle* response_body,
-      network::mojom::URLLoaderPtr* loader,
-      network::mojom::URLLoaderClientRequest* client_request,
-      ThrottlingURLLoader* url_loader,
+      mojo::PendingRemote<network::mojom::URLLoader>* loader,
+      mojo::PendingReceiver<network::mojom::URLLoaderClient>* client_receiver,
+      blink::ThrottlingURLLoader* url_loader,
       bool* skip_other_interceptors,
       bool* will_return_unsafe_redirect) override {
     return false;
@@ -138,9 +142,9 @@ class NavigationURLLoaderImplTest : public testing::Test {
     // BrowserContext::GetDefaultStoragePartition will segfault when
     // ContentBrowserClient::CreateNetworkContext tries to call
     // GetNetworkService.
-    service_manager::mojom::ConnectorRequest connector_request;
+    mojo::PendingReceiver<service_manager::mojom::Connector> connector_receiver;
     SetSystemConnectorForTesting(
-        service_manager::Connector::Create(&connector_request));
+        service_manager::Connector::Create(&connector_receiver));
 
     browser_context_.reset(new TestBrowserContext);
     http_test_server_.AddDefaultHandlers(
@@ -168,13 +172,16 @@ class NavigationURLLoaderImplTest : public testing::Test {
         mojom::BeginNavigationParams::New(
             headers, net::LOAD_NORMAL, false /* skip_service_worker */,
             blink::mojom::RequestContextType::LOCATION,
+            network::mojom::RequestDestination::kDocument,
             blink::WebMixedContentContextType::kBlockable,
             false /* is_form_submission */,
             false /* was_initiated_by_link_click */,
             GURL() /* searchable_form_url */,
             std::string() /* searchable_form_encoding */,
             GURL() /* client_side_redirect_url */,
-            base::nullopt /* devtools_initiator_info */);
+            base::nullopt /* devtools_initiator_info */,
+            false /* attach_same_site_cookie */,
+            nullptr /* trust_token_params */);
 
     auto common_params = CreateCommonNavigationParams();
     common_params->url = url;
@@ -185,7 +192,8 @@ class NavigationURLLoaderImplTest : public testing::Test {
 
     std::unique_ptr<NavigationRequestInfo> request_info(
         new NavigationRequestInfo(
-            std::move(common_params), std::move(begin_params), url,
+            std::move(common_params), std::move(begin_params),
+            net::SiteForCookies::FromUrl(url),
             net::NetworkIsolationKey(origin, origin), is_main_frame,
             false /* parent_is_main_frame */, false /* are_ancestors_secure */,
             -1 /* frame_tree_node_id */, false /* is_for_guests_only */,

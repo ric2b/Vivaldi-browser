@@ -4,12 +4,14 @@
 
 #import "ios/showcase/infobars/sc_infobar_banner_coordinator.h"
 
+#import "base/ios/block_types.h"
 #import "ios/chrome/browser/infobars/infobar_type.h"
 #import "ios/chrome/browser/ui/infobars/banners/infobar_banner_delegate.h"
 #import "ios/chrome/browser/ui/infobars/banners/infobar_banner_view_controller.h"
 #import "ios/chrome/browser/ui/infobars/modals/infobar_modal_delegate.h"
 #import "ios/chrome/browser/ui/infobars/modals/infobar_modal_view_controller.h"
 #import "ios/chrome/browser/ui/infobars/presentation/infobar_modal_transition_driver.h"
+#import "ios/showcase/infobars/sc_infobar_constants.h"
 #import "ios/showcase/infobars/sc_infobar_container_view_controller.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -39,7 +41,7 @@
          presentsModal:YES
                   type:InfobarType::kInfobarTypeConfirm];
   self.bannerViewController.titleText = kInfobarBannerTitleLabel;
-  self.bannerViewController.subTitleText = kInfobarBannerSubtitleLabel;
+  self.bannerViewController.subtitleText = kInfobarBannerSubtitleLabel;
   self.bannerViewController.buttonText = kInfobarBannerButtonLabel;
   self.containerViewController.bannerViewController = self.bannerViewController;
 
@@ -48,13 +50,17 @@
 }
 
 - (void)dealloc {
-  [self dismissInfobarBanner:nil animated:YES completion:nil userInitiated:NO];
+  [self dismissInfobarBannerForUserInteraction:NO];
 }
 
 #pragma mark InfobarBannerDelegate
 
-- (void)bannerInfobarButtonWasPressed:(id)sender {
-  [self dismissInfobarBanner:nil animated:YES completion:nil userInitiated:NO];
+- (void)bannerInfobarButtonWasPressed:(UIButton*)sender {
+  [self dismissInfobarBannerForUserInteraction:NO];
+}
+
+- (void)dismissInfobarBannerForUserInteraction:(BOOL)userInitiated {
+  [self.baseViewController dismissViewControllerAnimated:YES completion:nil];
 }
 
 - (void)presentInfobarModalFromBanner {
@@ -75,32 +81,21 @@
                                         completion:nil];
 }
 
-- (void)dismissInfobarBanner:(id)sender
-                    animated:(BOOL)animated
-                  completion:(ProceduralBlock)completion
-               userInitiated:(BOOL)userInitiated {
-  [self.baseViewController dismissViewControllerAnimated:animated
-                                              completion:nil];
-}
-
 - (void)infobarBannerWasDismissed {
   self.bannerViewController = nil;
 }
 
 #pragma mark InfobarModalDelegate
 
-- (void)modalInfobarButtonWasAccepted:(id)sender {
-  [self dismissInfobarModal:sender animated:YES completion:nil];
+- (void)dismissInfobarModal:(id)infobarModal {
+  [self.baseViewController dismissViewControllerAnimated:YES completion:nil];
 }
 
-- (void)dismissInfobarModal:(UIButton*)sender
-                   animated:(BOOL)animated
-                 completion:(ProceduralBlock)completion {
-  [self.baseViewController dismissViewControllerAnimated:animated
-                                              completion:nil];
+- (void)modalInfobarButtonWasAccepted:(id)infobarModal {
+  [self dismissInfobarModal:infobarModal];
 }
 
-- (void)modalInfobarWasDismissed:(id)sender {
+- (void)modalInfobarWasDismissed:(id)infobarModal {
 }
 
 @end

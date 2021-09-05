@@ -15,13 +15,12 @@ ServiceIPCServer::ServiceIPCServer(
     base::WaitableEvent* shutdown_event)
     : client_(client),
       io_task_runner_(io_task_runner),
-      shutdown_event_(shutdown_event),
-      binding_(this) {
+      shutdown_event_(shutdown_event) {
   DCHECK(client);
   DCHECK(shutdown_event);
   binder_registry_.AddInterface(
-      base::Bind(&ServiceIPCServer::HandleServiceProcessConnection,
-                 base::Unretained(this)));
+      base::BindRepeating(&ServiceIPCServer::HandleServiceProcessConnection,
+                          base::Unretained(this)));
 }
 
 bool ServiceIPCServer::Init() {
@@ -30,12 +29,13 @@ bool ServiceIPCServer::Init() {
 }
 
 void ServiceIPCServer::CreateChannel() {
-  binding_.Close();
+  receiver_.reset();
 
-  binding_.Bind(service_manager::mojom::InterfaceProviderRequest(
-      client_->CreateChannelMessagePipe()));
-  binding_.set_connection_error_handler(
-      base::Bind(&ServiceIPCServer::OnChannelError, base::Unretained(this)));
+  receiver_.Bind(
+      mojo::PendingReceiver<service_manager::mojom::InterfaceProvider>(
+          client_->CreateChannelMessagePipe()));
+  receiver_.set_disconnect_handler(base::BindOnce(
+      &ServiceIPCServer::OnChannelError, base::Unretained(this)));
 }
 
 ServiceIPCServer::~ServiceIPCServer() = default;

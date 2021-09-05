@@ -15,6 +15,7 @@
 #include "chrome/browser/ui/passwords/passwords_leak_dialog_delegate.h"
 #include "chrome/browser/ui/passwords/passwords_model_delegate.h"
 #include "chrome/common/buildflags.h"
+#include "components/password_manager/core/browser/password_manager_client.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
@@ -30,8 +31,9 @@ class WebContents;
 namespace password_manager {
 enum class CredentialType;
 struct InteractionsStats;
+class PasswordFeatureManager;
 class PasswordFormManagerForUI;
-}
+}  // namespace password_manager
 
 class AccountChooserPrompt;
 struct AccountInfo;
@@ -90,6 +92,9 @@ class ManagePasswordsUIController
   void OnCredentialLeak(password_manager::CredentialLeakType leak_dialog_type,
                         const GURL& origin) override;
 
+  void NotifyUnsyncedCredentialsWillBeDeleted(
+      const std::vector<autofill::PasswordForm>& unsynced_credentials);
+
   // PasswordStore::Observer:
   void OnLoginsChanged(
       const password_manager::PasswordStoreChangeList& changes) override;
@@ -103,15 +108,20 @@ class ManagePasswordsUIController
     return bubble_status_ == BubbleStatus::SHOULD_POP_UP;
   }
 
-  base::WeakPtr<PasswordsModelDelegate> GetModelDelegateProxy();
+  // virtual to be overridden in tests.
+  virtual base::WeakPtr<PasswordsModelDelegate> GetModelDelegateProxy();
 
   // PasswordsModelDelegate:
   content::WebContents* GetWebContents() const override;
   const GURL& GetOrigin() const override;
   password_manager::PasswordFormMetricsRecorder*
   GetPasswordFormMetricsRecorder() override;
+  password_manager::PasswordFeatureManager* GetPasswordFeatureManager()
+      override;
   password_manager::ui::State GetState() const override;
   const autofill::PasswordForm& GetPendingPassword() const override;
+  const std::vector<autofill::PasswordForm>& GetUnsyncedCredentials()
+      const override;
   password_manager::metrics_util::CredentialSourceType GetCredentialSource()
       const override;
   const std::vector<std::unique_ptr<autofill::PasswordForm>>& GetCurrentForms()
@@ -138,6 +148,10 @@ class ManagePasswordsUIController
                   bool is_default_promo_account) override;
   void OnDialogHidden() override;
   bool AuthenticateUser() override;
+  void AuthenticateUserForAccountStoreOptInAndSavePassword(
+      CoreAccountId account_id,
+      const base::string16& username,
+      const base::string16& password) override;
   bool ArePasswordsRevealedWhenBubbleIsOpened() const override;
 
 #if defined(UNIT_TEST)
@@ -148,13 +162,7 @@ class ManagePasswordsUIController
 #endif  // defined(UNIT_TEST)
 
  protected:
-  explicit ManagePasswordsUIController(
-      content::WebContents* web_contents);
-
-  // The pieces of saving and blacklisting passwords that interact with
-  // FormManager, split off into internal functions for testing/mocking.
-  virtual void SavePasswordInternal();
-  virtual void NeverSavePasswordInternal();
+  explicit ManagePasswordsUIController(content::WebContents* web_contents);
 
   // Hides the bubble if opened. Mocked in the tests.
   virtual void HidePasswordBubble();
@@ -244,6 +252,19 @@ class ManagePasswordsUIController
 
   // Shows an authentication dialog and returns true if auth is successful.
   virtual bool ShowAuthenticationDialog();
+
+  // Gets invoked gaia reauth flow is finished. If the reauth was successful,
+  // and the |form_manager| is still the same, |username| and |password| are
+  // saved against the current origin, and sets the user to be opted in for
+  // account store. If the reauth was unsuccessful, it changes the default
+  // destination to profle store and reopens the save bubble.
+  void AuthenticateUserForAccountStoreOptInCallback(
+      const GURL& origin,
+      password_manager::PasswordFormManagerForUI* form_manager,
+      const base::string16& username,
+      const base::string16& password,
+      password_manager::PasswordManagerClient::ReauthSucceeded
+          reauth_succeeded);
 
   // Timeout in seconds for the manual fallback for saving.
   static int save_fallback_timeout_in_seconds_;

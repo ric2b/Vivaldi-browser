@@ -13,21 +13,12 @@ GEN_INCLUDE([
   'settings_accessibility_test.js',
 ]);
 
-GEN('#include "chromeos/constants/chromeos_features.h"');
-
 // TODO(crbug/950007): refactor this into an OSSettingsAccessibilityTest class
 // eslint-disable-next-line no-var
 var TtsAccessibilityTest = class extends PolymerTest {
   /** @override */
   get commandLineSwitches() {
     return ['enable-experimental-a11y-features'];
-  }
-
-  /** @override */
-  get featureList() {
-    // Always test with SplitSettings on because the pages are the same in the
-    // legacy combined settings and we don't want to test everything twice.
-    return {enabled: ['chromeos::features::kSplitSettings']};
   }
 
   /** @override */
@@ -43,7 +34,8 @@ AccessibilityTest.define('TtsAccessibilityTest', {
   axeOptions: SettingsAccessibilityTest.axeOptions,
   /** @override */
   setup: function() {
-    settings.router.navigateTo(settings.routes.MANAGE_TTS_SETTINGS);
+    settings.Router.getInstance().navigateTo(
+        settings.routes.MANAGE_TTS_SETTINGS);
     Polymer.dom.flush();
   },
   /** @override */

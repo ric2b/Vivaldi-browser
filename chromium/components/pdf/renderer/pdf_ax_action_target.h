@@ -19,8 +19,13 @@ class PdfAccessibilityTree;
 // accessibility actions.
 class PdfAXActionTarget : public ui::AXActionTarget {
  public:
+  static const PdfAXActionTarget* FromAXActionTarget(
+      const ui::AXActionTarget* ax_action_target);
+
   PdfAXActionTarget(const ui::AXNode& plugin_node, PdfAccessibilityTree* tree);
   ~PdfAXActionTarget() override;
+
+  const ui::AXNode& AXNode() const { return target_plugin_node_; }
 
  protected:
   // AXActionTarget overrides.
@@ -48,7 +53,8 @@ class PdfAXActionTarget : public ui::AXActionTarget {
   bool ScrollToMakeVisibleWithSubFocus(
       const gfx::Rect& rect,
       ax::mojom::ScrollAlignment horizontal_scroll_alignment,
-      ax::mojom::ScrollAlignment vertical_scroll_alignment) const override;
+      ax::mojom::ScrollAlignment vertical_scroll_alignment,
+      ax::mojom::ScrollBehavior scroll_behavior) const override;
   bool ScrollToGlobalPoint(const gfx::Point& point) const override;
 
  private:

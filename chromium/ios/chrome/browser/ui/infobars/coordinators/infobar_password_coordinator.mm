@@ -10,6 +10,7 @@
 #import "ios/chrome/browser/passwords/ios_chrome_save_password_infobar_delegate.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/infobars/banners/infobar_banner_view_controller.h"
+#import "ios/chrome/browser/ui/infobars/coordinators/infobar_coordinator+subclassing.h"
 #import "ios/chrome/browser/ui/infobars/coordinators/infobar_coordinator_implementation.h"
 #import "ios/chrome/browser/ui/infobars/infobar_badge_ui_delegate.h"
 #import "ios/chrome/browser/ui/infobars/infobar_container.h"
@@ -35,7 +36,8 @@
     InfobarPasswordTableViewController* modalViewController;
 // The InfobarType for the banner presented by this Coordinator.
 @property(nonatomic, assign, readonly) InfobarType infobarBannerType;
-
+// YES if the Infobar has been Accepted.
+@property(nonatomic, assign) BOOL infobarAccepted;
 @end
 
 @implementation InfobarPasswordCoordinator
@@ -65,19 +67,22 @@
 - (void)start {
   if (!self.started) {
     self.started = YES;
+    self.infobarAccepted = NO;
     self.bannerViewController = [[InfobarBannerViewController alloc]
         initWithDelegate:self
            presentsModal:self.hasBadge
                     type:self.infobarBannerType];
-    self.bannerViewController.titleText = base::SysUTF16ToNSString(
+    NSString* titleText = base::SysUTF16ToNSString(
         self.passwordInfoBarDelegate->GetMessageText());
+    self.bannerViewController.titleText = titleText;
     NSString* username = self.passwordInfoBarDelegate->GetUserNameText();
     NSString* password = self.passwordInfoBarDelegate->GetPasswordText();
     password = [@"" stringByPaddingToLength:[password length]
                                  withString:@"•"
                             startingAtIndex:0];
-    self.bannerViewController.subTitleText =
-        [NSString stringWithFormat:@"%@ %@", username, password];
+    [self.bannerViewController
+        setSubtitleText:[NSString
+                            stringWithFormat:@"%@ %@", username, password]];
     self.bannerViewController.buttonText =
         base::SysUTF16ToNSString(self.passwordInfoBarDelegate->GetButtonLabel(
             ConfirmInfoBarDelegate::BUTTON_OK));
@@ -85,9 +90,11 @@
         [UIImage imageNamed:@"infobar_passwords_icon"];
     NSString* hiddenPasswordText =
         l10n_util::GetNSString(IDS_IOS_SETTINGS_PASSWORD_HIDDEN_LABEL);
-    self.bannerViewController.optionalAccessibilityLabel = [NSString
-        stringWithFormat:@"%@,%@, %@", self.bannerViewController.titleText,
-                         username, hiddenPasswordText];
+    [self.bannerViewController
+        setBannerAccessibilityLabel:[NSString
+                                        stringWithFormat:@"%@,%@, %@",
+                                                         titleText, username,
+                                                         hiddenPasswordText]];
   }
 }
 
@@ -97,7 +104,9 @@
     self.started = NO;
     // RemoveInfoBar() will delete the InfobarIOS that owns this Coordinator
     // from memory.
-    self.delegate->RemoveInfoBar();
+    if (self.delegate) {
+      self.delegate->RemoveInfoBar();
+    }
     _passwordInfoBarDelegate = nil;
     [self.infobarContainer childCoordinatorStopped:self];
   }
@@ -149,6 +158,14 @@
   return YES;
 }
 
+- (BOOL)isInfobarAccepted {
+  return self.infobarAccepted;
+}
+
+- (BOOL)infobarBannerActionWillPresentModal {
+  return NO;
+}
+
 - (void)infobarBannerWasPresented {
   // There's a chance the Delegate was destroyed while the presentation was
   // taking place e.g. User navigated away. Check if the delegate still exists.
@@ -162,15 +179,23 @@
   if (presentedFromBanner)
     return;
 
-  self.passwordInfoBarDelegate->InfobarPresenting(NO /*automatic*/);
+  // There's a chance the Delegate was destroyed while the presentation was
+  // taking place. Check if the delegate still exists.
+  if (self.passwordInfoBarDelegate)
+    self.passwordInfoBarDelegate->InfobarPresenting(NO /*automatic*/);
 }
 
-- (void)dismissBannerWhenInteractionIsFinished {
+- (void)dismissBannerIfReady {
   [self.bannerViewController dismissWhenInteractionIsFinished];
+}
+
+- (BOOL)infobarActionInProgress {
+  return NO;
 }
 
 - (void)performInfobarAction {
   self.passwordInfoBarDelegate->Accept();
+  self.infobarAccepted = YES;
 }
 
 - (void)infobarBannerWillBeDismissed:(BOOL)userInitiated {
@@ -213,24 +238,22 @@
 
 - (void)neverSaveCredentialsForCurrentSite {
   self.passwordInfoBarDelegate->Cancel();
-  [self dismissInfobarModal:self
-                   animated:YES
-                 completion:^{
-                   // Completely remove the Infobar along with its badge after
-                   // blacklisting the Website.
-                   [self detachView];
-                 }];
+  [self dismissInfobarModalAnimated:YES
+                         completion:^{
+                           // Completely remove the Infobar along with its badge
+                           // after blocking the Website.
+                           [self detachView];
+                         }];
 }
 
 - (void)presentPasswordSettings {
   DCHECK(self.dispatcher);
-  [self
-      dismissInfobarModal:self
-                 animated:NO
-               completion:^{
-                 [self.dispatcher showSavedPasswordsSettingsFromViewController:
-                                      self.baseViewController];
-               }];
+  [self dismissInfobarModalAnimated:NO
+                         completion:^{
+                           [self.dispatcher
+                               showSavedPasswordsSettingsFromViewController:
+                                   self.baseViewController];
+                         }];
 }
 
 #pragma mark - Helpers

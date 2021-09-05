@@ -12,10 +12,10 @@ include_rules = [
   "+components/autofill/core/browser",
   "+components/autofill/core/common",
   "+components/cdm/browser",
-  "+components/crash/content/app",
   "+components/crash/content/browser",
   "+components/crash/core",
   "+components/download/public/common",
+  "+components/embedder_support/android/metrics",
   "+components/heap_profiling",
   "+components/keyed_service/core",
   "+components/minidump_uploader",
@@ -59,8 +59,14 @@ include_rules = [
   "+printing",
 
   "+services/network/public",
+  # This is needed for the CookieManager to configure the CookieStore directly.
+  "+services/network/cookie_access_delegate_impl.h",
+  "+services/network/network_service.h",
   "+services/resource_coordinator/public/cpp",
   "+services/service_manager/public/cpp",
+
+  # This is needed for AwPacResolver
+  "+services/proxy_resolver",
 
   # network service related unit tests
   "+services/network/test",
@@ -70,6 +76,7 @@ include_rules = [
   "+storage/browser/quota",
   "+storage/common/quota",
 
+  "+third_party/blink/public/mojom/loader/resource_load_info.mojom-shared.h",
   "+third_party/crashpad/crashpad/client",
   "+third_party/crashpad/crashpad/util",
 
@@ -93,6 +100,8 @@ include_rules = [
   "+third_party/blink/public/mojom/mediastream/media_stream.mojom-shared.h",
   # Interface required for in-process input event handling.
   "+third_party/blink/public/web/WebCompositorInputHandler.h",
+  # For favicon url
+  "+third_party/blink/public/mojom/favicon",
   # For find-in-page
   "+third_party/blink/public/mojom/frame",
   # Required for the Web Speech API.

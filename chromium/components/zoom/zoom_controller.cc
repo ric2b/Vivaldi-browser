@@ -24,7 +24,7 @@
 #include "extensions/buildflags/buildflags.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-#include "prefs/vivaldi_tab_zoom_pref.h"
+#include "prefs/vivaldi_tab_zoom_pref.h" // nogncheck
 #endif
 
 using content::BrowserThread;
@@ -181,7 +181,7 @@ bool ZoomController::SetZoomLevelByClient(
             web_contents()->GetRenderViewHost()->GetRoutingID();
         zoom_map->SetTemporaryZoomLevel(render_process_id, render_view_id,
                                         zoom_level);
-        last_client_ = NULL;
+        last_client_.reset();
         return true;
       } else if (!entry) {
         // This could happen for WebViews that had not been navigated. VB-27804.

@@ -8,14 +8,15 @@
 #include <memory>
 #include "base/memory/scoped_refptr.h"
 #include "base/sequenced_task_runner.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_image_bitmap_options.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_image_source.h"
 #include "third_party/blink/renderer/core/html/canvas/image_element_base.h"
-#include "third_party/blink/renderer/core/imagebitmap/image_bitmap_options.h"
 #include "third_party/blink/renderer/core/imagebitmap/image_bitmap_source.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/geometry/int_rect.h"
 #include "third_party/blink/renderer/platform/graphics/image.h"
+#include "third_party/blink/renderer/platform/graphics/image_orientation.h"
 #include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
@@ -40,48 +41,6 @@ class CORE_EXPORT ImageBitmap final : public ScriptWrappable,
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static ImageBitmap* Create(
-      ImageElementBase*,
-      base::Optional<IntRect>,
-      Document*,
-      const ImageBitmapOptions* = ImageBitmapOptions::Create());
-  static ImageBitmap* Create(
-      HTMLVideoElement*,
-      base::Optional<IntRect>,
-      Document*,
-      const ImageBitmapOptions* = ImageBitmapOptions::Create());
-  static ImageBitmap* Create(
-      HTMLCanvasElement*,
-      base::Optional<IntRect>,
-      const ImageBitmapOptions* = ImageBitmapOptions::Create());
-  static ImageBitmap* Create(
-      OffscreenCanvas*,
-      base::Optional<IntRect>,
-      const ImageBitmapOptions* = ImageBitmapOptions::Create());
-  static ImageBitmap* Create(
-      ImageData*,
-      base::Optional<IntRect>,
-      const ImageBitmapOptions* = ImageBitmapOptions::Create());
-  static ImageBitmap* Create(
-      ImageBitmap*,
-      base::Optional<IntRect>,
-      const ImageBitmapOptions* = ImageBitmapOptions::Create());
-  static ImageBitmap* Create(scoped_refptr<StaticBitmapImage>);
-  static ImageBitmap* Create(
-      scoped_refptr<StaticBitmapImage>,
-      base::Optional<IntRect>,
-      const ImageBitmapOptions* = ImageBitmapOptions::Create());
-  // This function is called by structured-cloning an ImageBitmap.
-  // isImageBitmapPremultiplied indicates whether the original ImageBitmap is
-  // premultiplied or not.
-  // isImageBitmapOriginClean indicates whether the original ImageBitmap is
-  // origin clean or not.
-  static ImageBitmap* Create(const void* pixel_data,
-                             uint32_t width,
-                             uint32_t height,
-                             bool is_image_bitmap_premultiplied,
-                             bool is_image_bitmap_origin_clean,
-                             const CanvasColorParams&);
   static ScriptPromise CreateAsync(
       ImageElementBase*,
       base::Optional<IntRect>,
@@ -93,23 +52,32 @@ class CORE_EXPORT ImageBitmap final : public ScriptWrappable,
   ImageBitmap(ImageElementBase*,
               base::Optional<IntRect>,
               Document*,
-              const ImageBitmapOptions*);
+              const ImageBitmapOptions* = ImageBitmapOptions::Create());
   ImageBitmap(HTMLVideoElement*,
               base::Optional<IntRect>,
               Document*,
-              const ImageBitmapOptions*);
+              const ImageBitmapOptions* = ImageBitmapOptions::Create());
   ImageBitmap(HTMLCanvasElement*,
               base::Optional<IntRect>,
-              const ImageBitmapOptions*);
+              const ImageBitmapOptions* = ImageBitmapOptions::Create());
   ImageBitmap(OffscreenCanvas*,
               base::Optional<IntRect>,
-              const ImageBitmapOptions*);
-  ImageBitmap(ImageData*, base::Optional<IntRect>, const ImageBitmapOptions*);
-  ImageBitmap(ImageBitmap*, base::Optional<IntRect>, const ImageBitmapOptions*);
+              const ImageBitmapOptions* = ImageBitmapOptions::Create());
+  ImageBitmap(ImageData*,
+              base::Optional<IntRect>,
+              const ImageBitmapOptions* = ImageBitmapOptions::Create());
+  ImageBitmap(ImageBitmap*,
+              base::Optional<IntRect>,
+              const ImageBitmapOptions* = ImageBitmapOptions::Create());
   ImageBitmap(scoped_refptr<StaticBitmapImage>);
   ImageBitmap(scoped_refptr<StaticBitmapImage>,
               base::Optional<IntRect>,
-              const ImageBitmapOptions*);
+              const ImageBitmapOptions* = ImageBitmapOptions::Create());
+  // This constructor may called by structured-cloning an ImageBitmap.
+  // isImageBitmapPremultiplied indicates whether the original ImageBitmap is
+  // premultiplied or not.
+  // isImageBitmapOriginClean indicates whether the original ImageBitmap is
+  // origin clean or not.
   ImageBitmap(const void* pixel_data,
               uint32_t width,
               uint32_t height,
@@ -144,8 +112,8 @@ class CORE_EXPORT ImageBitmap final : public ScriptWrappable,
                                                AccelerationHint,
                                                const FloatSize&) override;
   bool WouldTaintOrigin() const override { return !image_->OriginClean(); }
-  void AdjustDrawRects(FloatRect* src_rect, FloatRect* dst_rect) const override;
-  FloatSize ElementSize(const FloatSize&) const override;
+  FloatSize ElementSize(const FloatSize&,
+                        const RespectImageOrientationEnum) const override;
   bool IsImageBitmap() const override { return true; }
   bool IsAccelerated() const override;
 
@@ -154,7 +122,8 @@ class CORE_EXPORT ImageBitmap final : public ScriptWrappable,
   ScriptPromise CreateImageBitmap(ScriptState*,
                                   EventTarget&,
                                   base::Optional<IntRect>,
-                                  const ImageBitmapOptions*) override;
+                                  const ImageBitmapOptions*,
+                                  ExceptionState&) override;
 
   struct ParsedOptions {
     bool flip_y = false;

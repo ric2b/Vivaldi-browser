@@ -139,22 +139,24 @@ void VersionUpdater::StartExitUpdate(Result result) {
   Init();
 }
 
-void VersionUpdater::GetEolStatus(EolStatusCallback callback) {
+base::OneShotTimer* VersionUpdater::GetRebootTimerForTesting() {
+  return &reboot_timer_;
+}
+
+void VersionUpdater::GetEolInfo(EolInfoCallback callback) {
+  UpdateEngineClient* update_engine_client =
+      DBusThreadManager::Get()->GetUpdateEngineClient();
   // Request the End of Life (Auto Update Expiration) status. Bind to a weak_ptr
   // bound method rather than passing |callback| directly so that |callback|
   // does not outlive |this|.
-  DBusThreadManager::Get()->GetUpdateEngineClient()->GetEolStatus(
-      base::BindOnce(&VersionUpdater::OnGetEolStatus,
+  update_engine_client->GetEolInfo(
+      base::BindOnce(&VersionUpdater::OnGetEolInfo,
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }
 
-void VersionUpdater::OnGetEolStatus(EolStatusCallback callback,
-                                    update_engine::EndOfLifeStatus status) {
-  std::move(callback).Run(status);
-}
-
-base::OneShotTimer* VersionUpdater::GetRebootTimerForTesting() {
-  return &reboot_timer_;
+void VersionUpdater::OnGetEolInfo(EolInfoCallback callback,
+                                  UpdateEngineClient::EolInfo info) {
+  std::move(callback).Run(std::move(info));
 }
 
 void VersionUpdater::UpdateStatusChangedForTesting(

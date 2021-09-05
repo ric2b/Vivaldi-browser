@@ -323,14 +323,18 @@ void EventGenerator::GestureTapAt(const gfx::Point& location) {
 }
 
 void EventGenerator::GestureTapDownAndUp(const gfx::Point& location) {
+  UpdateCurrentDispatcher(location);
+  gfx::Point converted_location = location;
+  delegate()->ConvertPointToTarget(current_target_, &converted_location);
+
   const int kTouchId = 3;
   ui::TouchEvent press(
-      ui::ET_TOUCH_PRESSED, location, ui::EventTimeForNow(),
+      ui::ET_TOUCH_PRESSED, converted_location, ui::EventTimeForNow(),
       ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH, kTouchId));
   Dispatch(&press);
 
   ui::TouchEvent release(
-      ui::ET_TOUCH_RELEASED, location,
+      ui::ET_TOUCH_RELEASED, converted_location,
       press.time_stamp() + base::TimeDelta::FromMilliseconds(1000),
       ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH, kTouchId));
   Dispatch(&release);
@@ -360,6 +364,7 @@ void EventGenerator::GestureScrollSequenceWithCallback(
     const base::TimeDelta& step_delay,
     int steps,
     const ScrollStepCallback& callback) {
+  UpdateCurrentDispatcher(start);
   const int kTouchId = 5;
   base::TimeTicks timestamp = ui::EventTimeForNow();
   ui::TouchEvent press(ui::ET_TOUCH_PRESSED, start, timestamp,
@@ -527,6 +532,8 @@ void EventGenerator::ScrollSequence(const gfx::Point& start,
                                     float y_offset,
                                     int steps,
                                     int num_fingers) {
+  UpdateCurrentDispatcher(start);
+
   base::TimeTicks timestamp = ui::EventTimeForNow();
   ui::ScrollEvent fling_cancel(ui::ET_SCROLL_FLING_CANCEL,
                                start,
@@ -644,14 +651,6 @@ void EventGenerator::DispatchKeyEvent(bool is_press,
   native_event.time =
       (ui::EventTimeForNow() - base::TimeTicks()).InMilliseconds() & UINT32_MAX;
   ui::KeyEvent keyev(native_event, flags);
-#elif defined(USE_X11)
-  ui::ScopedXI2Event xevent;
-  xevent.InitKeyEvent(is_press ? ui::ET_KEY_PRESSED : ui::ET_KEY_RELEASED,
-                      key_code,
-                      flags);
-  static_cast<XEvent*>(xevent)->xkey.time =
-      (ui::EventTimeForNow() - base::TimeTicks()).InMilliseconds() & UINT32_MAX;
-  ui::KeyEvent keyev(xevent);
 #else
   ui::EventType type = is_press ? ui::ET_KEY_PRESSED : ui::ET_KEY_RELEASED;
   ui::KeyEvent keyev(type, key_code, flags);

@@ -9,6 +9,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "base/callback.h"
 #include "base/compiler_specific.h"
@@ -66,6 +67,10 @@ class DataReductionProxySettingsObserver {
   virtual void OnProxyRequestHeadersChanged(
       const net::HttpRequestHeaders& headers) {}
 
+  // Notifies when the prefetch proxy hosts have changed.
+  virtual void OnPrefetchProxyHostsChanged(
+      const std::vector<GURL>& prefetch_proxies) {}
+
   // Notifies when |DataReductionProxySettings::InitDataReductionProxySettings|
   // is finished.
   virtual void OnSettingsInitialized() {}
@@ -80,9 +85,9 @@ class DataReductionProxySettingsObserver {
 class DataReductionProxySettings {
  public:
   using SyntheticFieldTrialRegistrationCallback =
-      base::Callback<bool(base::StringPiece, base::StringPiece)>;
+      base::RepeatingCallback<bool(base::StringPiece, base::StringPiece)>;
 
-  DataReductionProxySettings();
+  explicit DataReductionProxySettings(bool is_off_the_record_profile);
   virtual ~DataReductionProxySettings();
 
   // Initializes the Data Reduction Proxy with the profile prefs. The caller
@@ -102,7 +107,8 @@ class DataReductionProxySettings {
   // This checks only the Data Saver prefs on Android or forcing flag on any
   // platform. Does not check any holdback experiments. Note that this may be
   // different from the value of |IsDataReductionProxyEnabled|.
-  static bool IsDataSaverEnabledByUser(PrefService* prefs);
+  static bool IsDataSaverEnabledByUser(bool is_off_the_record_profile,
+                                       PrefService* prefs);
 
   // Enables or disables Data Saver, regardless of platform.
   static void SetDataSaverEnabledForTesting(PrefService* prefs, bool enabled);
@@ -166,8 +172,14 @@ class DataReductionProxySettings {
   // Sets the headers to use for requests to the compression server.
   void SetProxyRequestHeaders(const net::HttpRequestHeaders& headers);
 
+  // Sets the list of prefetch_proxies to use.
+  void UpdatePrefetchProxyHosts(const std::vector<GURL>& prefetch_proxies);
+
   // Returns headers to use for requests to the compression server.
   const net::HttpRequestHeaders& GetProxyRequestHeaders() const;
+
+  // Returns the list of hosts for the prefetch proxy.
+  const std::vector<GURL>& GetPrefetchProxies() const;
 
   // Adds an observer that is notified every time the proxy request headers
   // change.
@@ -191,9 +203,7 @@ class DataReductionProxySettings {
 
   // Returns the |DataReductionProxyConfig| being used. May be null if
   // InitDataReductionProxySettings has not been called.
-  DataReductionProxyConfig* Config() const {
-    return config_;
-  }
+  DataReductionProxyConfig* Config() const { return config_; }
 
   // Permits changing the underlying |DataReductionProxyConfig| without running
   // the initialization loop.
@@ -299,10 +309,16 @@ class DataReductionProxySettings {
   // The headers to use for requests to the proxy server.
   net::HttpRequestHeaders proxy_request_headers_;
 
+  // The list of prefetch proxy hosts to use.
+  std::vector<GURL> prefetch_proxies_;
+
   // A list of CustomProxyConfigClients that may have been added before
   // the DataReductionProxyService was available.
   std::vector<mojo::Remote<network::mojom::CustomProxyConfigClient>>
       proxy_config_clients_;
+
+  // True if |this| was constructed for an off-the-record profile.
+  const bool is_off_the_record_profile_;
 
   base::ThreadChecker thread_checker_;
 

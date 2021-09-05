@@ -5,6 +5,9 @@
 #ifndef UI_OZONE_PLATFORM_DRM_HOST_HOST_CURSOR_PROXY_H_
 #define UI_OZONE_PLATFORM_DRM_HOST_HOST_CURSOR_PROXY_H_
 
+#include "base/single_thread_task_runner.h"
+#include "mojo/public/cpp/bindings/associated_remote.h"
+#include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/ozone/platform/drm/host/drm_cursor.h"
 #include "ui/ozone/public/mojom/device_cursor.mojom.h"
@@ -18,8 +21,10 @@ namespace ui {
 // priviledged process.
 class HostCursorProxy : public DrmCursorProxy {
  public:
-  HostCursorProxy(ui::ozone::mojom::DeviceCursorAssociatedPtr main_cursor_ptr,
-                  ui::ozone::mojom::DeviceCursorAssociatedPtr evdev_cursor_ptr);
+  HostCursorProxy(
+      mojo::PendingAssociatedRemote<ui::ozone::mojom::DeviceCursor> main_cursor,
+      mojo::PendingAssociatedRemote<ui::ozone::mojom::DeviceCursor>
+          evdev_cursor);
   ~HostCursorProxy() override;
 
  private:
@@ -31,12 +36,16 @@ class HostCursorProxy : public DrmCursorProxy {
   void Move(gfx::AcceleratedWidget window, const gfx::Point& point) override;
   void InitializeOnEvdevIfNecessary() override;
 
-  // Mojo implementation of the DrmCursorProxy.
-  ui::ozone::mojom::DeviceCursorAssociatedPtr main_cursor_ptr_ = nullptr;
-  ui::ozone::mojom::DeviceCursorAssociatedPtr evdev_cursor_ptr_ = nullptr;
+  // Accessed from UI thread only.
+  mojo::AssociatedRemote<ui::ozone::mojom::DeviceCursor> main_cursor_;
+
+  // Accessed from evdev thread only.
+  mojo::AssociatedRemote<ui::ozone::mojom::DeviceCursor> evdev_cursor_;
+  mojo::PendingAssociatedRemote<ui::ozone::mojom::DeviceCursor>
+      evdev_cursor_pending_remote_;
 
   base::PlatformThreadRef ui_thread_ref_;
-  bool evdev_bound_ = false;
+  scoped_refptr<base::SingleThreadTaskRunner> evdev_task_runner_;
 
   DISALLOW_COPY_AND_ASSIGN(HostCursorProxy);
 };

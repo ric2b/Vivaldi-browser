@@ -7,7 +7,6 @@ package org.chromium.chrome.browser.tasks.tab_management;
 import android.content.Context;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
-import android.support.v4.widget.TextViewCompat;
 import android.text.TextWatcher;
 import android.util.AttributeSet;
 import android.view.Gravity;
@@ -16,6 +15,8 @@ import android.view.ViewGroup;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+
+import androidx.core.widget.TextViewCompat;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.tab_ui.R;
@@ -125,17 +126,9 @@ public class TabGroupUiToolbarView extends FrameLayout {
     }
 
     /**
-     * Setup the toolbar layout base on the component it belongs to. The toolbars for TabGridSheet
-     * and TabGridDialog are different.
+     * Setup the toolbar layout for TabGridDialog.
      */
-    void setupToolbarLayout(boolean isDialog) {
-        if (!isDialog) {
-            // We don't support toolbar menu for TabGridSheet.
-            mMainContent.removeView(mMenuButton);
-            // We don't support tab group naming for TabGridSheet.
-            mTitleTextView.setFocusable(false);
-            return;
-        }
+    void setupDialogToolbarLayout() {
         Context context = getContext();
         mLeftButton.setImageResource(org.chromium.chrome.R.drawable.ic_arrow_back_24dp);
         int topicMargin =
@@ -144,7 +137,7 @@ public class TabGroupUiToolbarView extends FrameLayout {
         params.setMarginStart(topicMargin);
         mTitleTextView.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
         TextViewCompat.setTextAppearance(
-                mTitleTextView, org.chromium.chrome.R.style.TextAppearance_BlackHeadline);
+                mTitleTextView, org.chromium.chrome.R.style.TextAppearance_Headline_Primary);
     }
 
     /**
@@ -154,5 +147,12 @@ public class TabGroupUiToolbarView extends FrameLayout {
         mTitleTextView.setFocusable(false);
         mTitleTextView.setBackgroundColor(Color.TRANSPARENT);
         mMainContent.removeView(mMenuButton);
+    }
+
+    /**
+     * Setup the drawable in the left button.
+     */
+    void setLeftButtonDrawableId(int drawableId) {
+        mLeftButton.setImageResource(drawableId);
     }
 }

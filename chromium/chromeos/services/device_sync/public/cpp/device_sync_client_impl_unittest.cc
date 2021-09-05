@@ -5,8 +5,10 @@
 #include "chromeos/services/device_sync/public/cpp/device_sync_client_impl.h"
 
 #include <algorithm>
+#include <string>
 #include <tuple>
 #include <utility>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/memory/scoped_refptr.h"
@@ -18,13 +20,16 @@
 #include "base/test/task_environment.h"
 #include "base/test/test_simple_task_runner.h"
 #include "chromeos/components/multidevice/remote_device_test_util.h"
+#include "chromeos/components/multidevice/software_feature.h"
 #include "chromeos/services/device_sync/device_sync_impl.h"
-#include "chromeos/services/device_sync/device_sync_service.h"
 #include "chromeos/services/device_sync/fake_device_sync.h"
+#include "chromeos/services/device_sync/feature_status_change.h"
+#include "chromeos/services/device_sync/proto/cryptauth_common.pb.h"
 #include "chromeos/services/device_sync/public/cpp/fake_client_app_metadata_provider.h"
 #include "chromeos/services/device_sync/public/cpp/fake_gcm_device_info_provider.h"
 #include "chromeos/services/device_sync/public/mojom/device_sync.mojom.h"
 #include "components/gcm_driver/fake_gcm_driver.h"
+#include "components/prefs/testing_pref_service.h"
 #include "components/signin/public/identity_manager/identity_test_environment.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -58,11 +63,10 @@ class FakeDeviceSyncImplFactory : public DeviceSyncImpl::Factory {
   ~FakeDeviceSyncImplFactory() override = default;
 
   // DeviceSyncImpl::Factory:
-  std::unique_ptr<DeviceSyncBase> BuildInstance(
+  std::unique_ptr<DeviceSyncBase> CreateInstance(
       signin::IdentityManager* identity_manager,
       gcm::GCMDriver* gcm_driver,
-      mojo::PendingRemote<prefs::mojom::PrefStoreConnector>
-          pref_store_connector,
+      PrefService* profile_prefs,
       const GcmDeviceInfoProvider* gcm_device_info_provider,
       ClientAppMetadataProvider* client_app_metadata_provider,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
@@ -152,14 +156,16 @@ class DeviceSyncClientImplTest : public testing::Test {
 
     identity_test_environment_ =
         std::make_unique<signin::IdentityTestEnvironment>();
-    identity_test_environment_->MakePrimaryAccountAvailable(kTestEmail);
+    // "Unconsented" because this feature is not tied to browser sync consent.
+    identity_test_environment_->MakeUnconsentedPrimaryAccountAvailable(
+        kTestEmail);
 
     auto fake_device_sync = std::make_unique<FakeDeviceSync>();
     fake_device_sync_ = fake_device_sync.get();
     fake_device_sync_impl_factory_ =
         std::make_unique<FakeDeviceSyncImplFactory>(
             std::move(fake_device_sync));
-    DeviceSyncImpl::Factory::SetInstanceForTesting(
+    DeviceSyncImpl::Factory::SetFactoryForTesting(
         fake_device_sync_impl_factory_.get());
 
     auto shared_url_loader_factory =
@@ -169,33 +175,28 @@ class DeviceSyncClientImplTest : public testing::Test {
               return nullptr;
             }));
 
-    mojo::Remote<mojom::DeviceSyncServiceInitializer> initializer;
-    service_ = std::make_unique<DeviceSyncService>(
-        identity_test_environment_->identity_manager(), fake_gcm_driver_.get(),
-        fake_gcm_device_info_provider_.get(),
-        fake_client_app_metadata_provider_.get(), shared_url_loader_factory,
-        initializer.BindNewPipeAndPassReceiver());
+    test_pref_service_ = std::make_unique<TestingPrefServiceSimple>();
+    DeviceSyncImpl::RegisterProfilePrefs(test_pref_service_->registry());
 
-    mojo::PendingRemote<prefs::mojom::PrefStoreConnector> pref_store_connector;
-    ignore_result(pref_store_connector.InitWithNewPipeAndPassReceiver());
-    initializer->Initialize(remote_service_.BindNewPipeAndPassReceiver(),
-                            std::move(pref_store_connector));
+    device_sync_ = DeviceSyncImpl::Factory::Create(
+        identity_test_environment_->identity_manager(), fake_gcm_driver_.get(),
+        test_pref_service_.get(), fake_gcm_device_info_provider_.get(),
+        fake_client_app_metadata_provider_.get(), shared_url_loader_factory,
+        std::make_unique<base::OneShotTimer>());
 
     test_observer_ = std::make_unique<TestDeviceSyncClientObserver>();
 
-    CreateClient();
-  }
-
-  void CreateClient() {
-    // DeviceSyncClient's constructor posts two tasks to the TaskRunner. Idle
+    // DeviceSyncClient initialization posts two tasks to the TaskRunner. Idle
     // the TaskRunner so that the tasks can be run via a RunLoop later on.
     auto test_task_runner = base::MakeRefCounted<base::TestSimpleTaskRunner>();
-    client_ = base::WrapUnique(
-        new DeviceSyncClientImpl(remote_service_.get(), test_task_runner));
+    client_ = std::make_unique<DeviceSyncClientImpl>();
+    device_sync_->BindReceiver(
+        client_->GetDeviceSyncRemote()->BindNewPipeAndPassReceiver());
+    client_->Initialize(test_task_runner);
     test_task_runner->RunUntilIdle();
   }
 
-  void InitializeClient(bool complete_enrollment_before_sync = true) {
+  void SetupClient(bool complete_enrollment_before_sync = true) {
     client_->AddObserver(test_observer_.get());
 
     SendPendingMojoMessages();
@@ -301,7 +302,7 @@ class DeviceSyncClientImplTest : public testing::Test {
   }
 
   void TearDown() override {
-    DeviceSyncImpl::Factory::SetInstanceForTesting(nullptr);
+    DeviceSyncImpl::Factory::SetFactoryForTesting(nullptr);
     client_->RemoveObserver(test_observer_.get());
   }
 
@@ -351,6 +352,31 @@ class DeviceSyncClientImplTest : public testing::Test {
     EXPECT_EQ(expected_result_code, set_software_feature_state_result_code_);
   }
 
+  void CallSetFeatureStatus(
+      mojom::NetworkRequestResult expected_result_code,
+      const base::Optional<std::string> invalid_instance_id = base::nullopt) {
+    base::RunLoop run_loop;
+
+    std::string instance_id = invalid_instance_id.value_or(
+        test_remote_device_ref_list_[0].instance_id());
+
+    client_->SetFeatureStatus(
+        instance_id, multidevice::SoftwareFeature::kBetterTogetherHost,
+        FeatureStatusChange::kEnableExclusively,
+        base::BindOnce(&DeviceSyncClientImplTest::OnSetFeatureStatusCompleted,
+                       base::Unretained(this), run_loop.QuitClosure()));
+
+    if (!invalid_instance_id) {
+      SendPendingMojoMessages();
+      fake_device_sync_->InvokePendingSetFeatureStatusCallback(
+          expected_result_code);
+    }
+
+    run_loop.Run();
+
+    EXPECT_EQ(expected_result_code, set_feature_status_result_code_);
+  }
+
   void CallFindEligibleDevices(
       mojom::NetworkRequestResult expected_result_code,
       multidevice::RemoteDeviceList expected_eligible_devices,
@@ -379,6 +405,33 @@ class DeviceSyncClientImplTest : public testing::Test {
     VerifyRemoteDeviceRefListAndRemoteDeviceListAreEqual(
         std::get<2>(find_eligible_devices_error_code_and_response_),
         expected_ineligible_devices);
+  }
+
+  void CallNotifyDevices(mojom::NetworkRequestResult expected_result_code,
+                         const base::Optional<std::vector<std::string>>&
+                             invalid_instance_ids = base::nullopt) {
+    base::RunLoop run_loop;
+
+    std::vector<std::string> instance_ids =
+        invalid_instance_ids.value_or(std::vector<std::string>(
+            {test_remote_device_ref_list_[0].instance_id(),
+             test_remote_device_ref_list_[1].instance_id()}));
+
+    client_->NotifyDevices(
+        instance_ids, cryptauthv2::TargetService::DEVICE_SYNC,
+        multidevice::SoftwareFeature::kBetterTogetherHost,
+        base::BindOnce(&DeviceSyncClientImplTest::OnNotifyDevicesCompleted,
+                       base::Unretained(this), run_loop.QuitClosure()));
+
+    if (!invalid_instance_ids) {
+      SendPendingMojoMessages();
+      fake_device_sync_->InvokePendingNotifyDevicesCallback(
+          expected_result_code);
+    }
+
+    run_loop.Run();
+
+    EXPECT_EQ(expected_result_code, notify_devices_result_code_);
   }
 
   void CallGetDevicesActivityStatus(
@@ -471,8 +524,8 @@ class DeviceSyncClientImplTest : public testing::Test {
       fake_client_app_metadata_provider_;
   FakeDeviceSync* fake_device_sync_;
   std::unique_ptr<FakeDeviceSyncImplFactory> fake_device_sync_impl_factory_;
-  std::unique_ptr<DeviceSyncService> service_;
-  mojo::Remote<mojom::DeviceSyncService> remote_service_;
+  std::unique_ptr<TestingPrefServiceSimple> test_pref_service_;
+  std::unique_ptr<DeviceSyncBase> device_sync_;
   std::unique_ptr<TestDeviceSyncClientObserver> test_observer_;
 
   std::unique_ptr<DeviceSyncClientImpl> client_;
@@ -484,10 +537,12 @@ class DeviceSyncClientImplTest : public testing::Test {
   base::Optional<bool> force_sync_now_completed_success_;
   base::Optional<mojom::NetworkRequestResult>
       set_software_feature_state_result_code_;
+  base::Optional<mojom::NetworkRequestResult> set_feature_status_result_code_;
   std::tuple<mojom::NetworkRequestResult,
              multidevice::RemoteDeviceRefList,
              multidevice::RemoteDeviceRefList>
       find_eligible_devices_error_code_and_response_;
+  base::Optional<mojom::NetworkRequestResult> notify_devices_result_code_;
   std::tuple<mojom::NetworkRequestResult,
              base::Optional<std::vector<mojom::DeviceActivityStatusPtr>>>
       get_devices_activity_status_code_and_response_;
@@ -512,6 +567,12 @@ class DeviceSyncClientImplTest : public testing::Test {
     std::move(callback).Run();
   }
 
+  void OnSetFeatureStatusCompleted(base::OnceClosure callback,
+                                   mojom::NetworkRequestResult result_code) {
+    set_feature_status_result_code_ = result_code;
+    std::move(callback).Run();
+  }
+
   void OnFindEligibleDevicesCompleted(
       base::OnceClosure callback,
       mojom::NetworkRequestResult result_code,
@@ -519,6 +580,12 @@ class DeviceSyncClientImplTest : public testing::Test {
       multidevice::RemoteDeviceRefList ineligible_devices) {
     find_eligible_devices_error_code_and_response_ =
         std::make_tuple(result_code, eligible_devices, ineligible_devices);
+    std::move(callback).Run();
+  }
+
+  void OnNotifyDevicesCompleted(base::OnceClosure callback,
+                                mojom::NetworkRequestResult result_code) {
+    notify_devices_result_code_ = result_code;
     std::move(callback).Run();
   }
 
@@ -543,7 +610,7 @@ class DeviceSyncClientImplTest : public testing::Test {
 
 TEST_F(DeviceSyncClientImplTest,
        TestCompleteInitialSyncBeforeInitialEnrollment) {
-  InitializeClient(false /* complete_enrollment_before_sync */);
+  SetupClient(false /* complete_enrollment_before_sync */);
 }
 
 TEST_F(
@@ -598,7 +665,7 @@ TEST_F(
 TEST_F(DeviceSyncClientImplTest, TestOnEnrollmentFinished) {
   EXPECT_EQ(0u, test_observer_->enrollment_finished_count());
 
-  InitializeClient();
+  SetupClient();
 
   EXPECT_EQ(test_remote_device_list_[0].public_key,
             client_->GetLocalDeviceMetadata()->public_key());
@@ -635,7 +702,7 @@ TEST_F(DeviceSyncClientImplTest, TestOnEnrollmentFinished) {
 TEST_F(DeviceSyncClientImplTest, TestOnNewDevicesSynced) {
   EXPECT_EQ(0u, test_observer_->new_devices_synced_count());
 
-  InitializeClient();
+  SetupClient();
 
   VerifyRemoteDeviceRefListAndRemoteDeviceListAreEqual(
       client_->GetSyncedDevices(), test_remote_device_list_);
@@ -664,31 +731,31 @@ TEST_F(DeviceSyncClientImplTest, TestOnNewDevicesSynced) {
 }
 
 TEST_F(DeviceSyncClientImplTest, TestForceEnrollmentNow_ExpectSuccess) {
-  InitializeClient();
+  SetupClient();
 
   CallForceEnrollmentNow(true /* expected_success */);
 }
 
 TEST_F(DeviceSyncClientImplTest, TestForceEnrollmentNow_ExpectFailure) {
-  InitializeClient();
+  SetupClient();
 
   CallForceEnrollmentNow(false /* expected_success */);
 }
 
 TEST_F(DeviceSyncClientImplTest, TestSyncNow_ExpectSuccess) {
-  InitializeClient();
+  SetupClient();
 
   CallSyncNow(true /* expected_success */);
 }
 
 TEST_F(DeviceSyncClientImplTest, TestSyncNow_ExpectFailure) {
-  InitializeClient();
+  SetupClient();
 
   CallSyncNow(false /* expected_success */);
 }
 
 TEST_F(DeviceSyncClientImplTest, TestGetSyncedDevices_DeviceRemovedFromCache) {
-  InitializeClient();
+  SetupClient();
 
   VerifyRemoteDeviceRefListAndRemoteDeviceListAreEqual(
       client_->GetSyncedDevices(), test_remote_device_list_);
@@ -711,13 +778,36 @@ TEST_F(DeviceSyncClientImplTest, TestGetSyncedDevices_DeviceRemovedFromCache) {
 }
 
 TEST_F(DeviceSyncClientImplTest, TestSetSoftwareFeatureState) {
-  InitializeClient();
+  SetupClient();
 
   CallSetSoftwareFeatureState(mojom::NetworkRequestResult::kSuccess);
 }
 
+TEST_F(DeviceSyncClientImplTest, TestSetFeatureStatus_Success) {
+  SetupClient();
+
+  CallSetFeatureStatus(mojom::NetworkRequestResult::kSuccess);
+}
+
+TEST_F(DeviceSyncClientImplTest, TestSetFeatureStatus_InvalidInstanceId) {
+  SetupClient();
+
+  // Instance ID cannot be empty.
+  CallSetFeatureStatus(mojom::NetworkRequestResult::kBadRequest,
+                       std::string() /* invalid_instance_id */);
+
+  // Instance ID must be base64 encoded.
+  CallSetFeatureStatus(mojom::NetworkRequestResult::kBadRequest,
+                       "$%^&*#" /* invalid_instance_id */);
+
+  // Instance ID must be 8 bytes after base64 decoding.
+  CallSetFeatureStatus(
+      mojom::NetworkRequestResult::kBadRequest,
+      "thisislongerthaneightbytes==" /* invalid_instance_id */);
+}
+
 TEST_F(DeviceSyncClientImplTest, TestFindEligibleDevices_NoErrorCode) {
-  InitializeClient();
+  SetupClient();
 
   multidevice::RemoteDeviceList expected_eligible_devices(
       {test_remote_device_list_[0], test_remote_device_list_[1]});
@@ -731,15 +821,33 @@ TEST_F(DeviceSyncClientImplTest, TestFindEligibleDevices_NoErrorCode) {
 }
 
 TEST_F(DeviceSyncClientImplTest, TestFindEligibleDevices_ErrorCode) {
-  InitializeClient();
+  SetupClient();
 
   CallFindEligibleDevices(mojom::NetworkRequestResult::kEndpointNotFound,
                           multidevice::RemoteDeviceList(),
                           multidevice::RemoteDeviceList());
 }
 
+TEST_F(DeviceSyncClientImplTest, TestNotifyDevices_Success) {
+  SetupClient();
+
+  CallNotifyDevices(mojom::NetworkRequestResult::kSuccess);
+}
+
+TEST_F(DeviceSyncClientImplTest, TestNotifyDevices_InvalidInstanceIds) {
+  SetupClient();
+
+  // Instance IDs cannot be empty, must be base64 encoded, and must be 8 bytes
+  // after base64 decoding.
+  CallNotifyDevices(
+      mojom::NetworkRequestResult::kBadRequest,
+      std::vector<std::string>{
+          std::string(), "$%^&*#",
+          "thisislongerthaneightbytes=="} /* invalid_instance_ids */);
+}
+
 TEST_F(DeviceSyncClientImplTest, TestGetDevicesActivityStatus_NoErrorCode) {
-  InitializeClient();
+  SetupClient();
   std::vector<mojom::DeviceActivityStatusPtr> expected_activity_statuses;
   expected_activity_statuses.emplace_back(mojom::DeviceActivityStatus::New(
       "deviceid", base::Time(), cryptauthv2::ConnectivityStatus::ONLINE));
@@ -749,14 +857,14 @@ TEST_F(DeviceSyncClientImplTest, TestGetDevicesActivityStatus_NoErrorCode) {
 }
 
 TEST_F(DeviceSyncClientImplTest, TestGetDevicesActivityStatus_ErrorCode) {
-  InitializeClient();
+  SetupClient();
 
   CallGetDevicesActivityStatus(mojom::NetworkRequestResult::kEndpointNotFound,
                                base::nullopt);
 }
 
 TEST_F(DeviceSyncClientImplTest, TestGetDebugInfo) {
-  InitializeClient();
+  SetupClient();
 
   CallGetDebugInfo();
 }

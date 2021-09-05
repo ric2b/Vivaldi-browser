@@ -40,8 +40,8 @@ namespace {
 // Current version number. We write databases at the "current" version number,
 // but any previous version that can read the "compatible" one can make do with
 // our database without *too* many bad effects.
-const int kCurrentVersionNumber = 4;
-const int kCompatibleVersionNumber = 4;
+const int kCurrentVersionNumber = 5;
+const int kCompatibleVersionNumber = 5;
 
 sql::InitStatus LogMigrationFailure(int from_version) {
   LOG(ERROR) << "Calendar DB failed to migrate from version " << from_version
@@ -116,7 +116,9 @@ sql::InitStatus CalendarDatabase::Init(const base::FilePath& calendar_name) {
     return sql::INIT_FAILURE;
 
   if (!CreateCalendarTable() || !CreateEventTable() ||
-      !CreateEventTypeTable() || !CreateRecurringExceptionTable())
+      !CreateEventTypeTable() || !CreateRecurringExceptionTable() ||
+      !CreateNotificationTable() || !CreateInviteTable() ||
+      !CreateAccountTable())
     return sql::INIT_FAILURE;
 
   // Version check.
@@ -214,6 +216,28 @@ sql::InitStatus CalendarDatabase::EnsureCurrentVersion() {
   if (cur_version == 3) {
     // Version prior to adding rrule to events table
     if (!MigrateCalendarToVersion4()) {
+      return LogMigrationFailure(cur_version);
+    }
+    ++cur_version;
+    meta_table_.SetVersionNumber(cur_version);
+    meta_table_.SetCompatibleVersionNumber(
+        std::min(cur_version, kCompatibleVersionNumber));
+  }
+
+  if (cur_version == 4) {
+    // Version prior to adding partstat column to invite table
+    if (!MigrateCalendarToVersion5()) {
+      return LogMigrationFailure(cur_version);
+    }
+    ++cur_version;
+    meta_table_.SetVersionNumber(cur_version);
+    meta_table_.SetCompatibleVersionNumber(
+        std::min(cur_version, kCompatibleVersionNumber));
+  }
+
+  if (cur_version == 5) {
+    // Version prior to adding partstat column to invite table
+    if (!MigrateCalendarToVersion6()) {
       return LogMigrationFailure(cur_version);
     }
     ++cur_version;

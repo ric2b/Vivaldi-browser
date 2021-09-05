@@ -13,12 +13,14 @@
 #include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
+#import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/signin/authentication_service.h"
 #import "ios/chrome/browser/signin/authentication_service_factory.h"
 #include "ios/chrome/browser/sync/profile_sync_service_factory.h"
 #include "ios/chrome/browser/sync/sync_observer_bridge.h"
 #include "ios/chrome/browser/sync/sync_setup_service_factory.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
+#import "ios/chrome/browser/ui/commands/command_dispatcher.h"
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/ui/icons/chrome_icon.h"
 #import "ios/chrome/browser/ui/settings/google_services/manage_sync_settings_command_handler.h"
@@ -59,9 +61,20 @@
 
 @implementation ManageSyncSettingsCoordinator
 
+@synthesize baseNavigationController = _baseNavigationController;
+
+- (instancetype)initWithBaseNavigationController:
+                    (UINavigationController*)navigationController
+                                         browser:(Browser*)browser {
+  if (self = [super initWithBaseViewController:navigationController
+                                       browser:browser]) {
+    _baseNavigationController = navigationController;
+  }
+  return self;
+}
+
 - (void)start {
-  DCHECK(self.dispatcher);
-  DCHECK(self.navigationController);
+  DCHECK(self.baseNavigationController);
   self.mediator = [[ManageSyncSettingsMediator alloc]
       initWithSyncService:self.syncService
           userPrefService:self.browserState->GetPrefs()];
@@ -69,14 +82,13 @@
       SyncSetupServiceFactory::GetForBrowserState(self.browserState);
   self.mediator.commandHandler = self;
   self.viewController = [[ManageSyncSettingsTableViewController alloc]
-      initWithTableViewStyle:UITableViewStyleGrouped
-                 appBarStyle:ChromeTableViewControllerStyleNoAppBar];
+      initWithStyle:UITableViewStyleGrouped];
   self.viewController.serviceDelegate = self.mediator;
   self.viewController.presentationDelegate = self;
   self.viewController.modelDelegate = self.mediator;
   self.mediator.consumer = self.viewController;
-  [self.navigationController pushViewController:self.viewController
-                                       animated:YES];
+  [self.baseNavigationController pushViewController:self.viewController
+                                           animated:YES];
   _syncObserver.reset(new SyncObserverBridge(self, self.syncService));
 }
 
@@ -95,18 +107,18 @@
       self.dismissWebAndAppSettingDetailsControllerBlock(NO);
       self.dismissWebAndAppSettingDetailsControllerBlock = nil;
     }
-    [self.navigationController popToViewController:self.viewController
-                                          animated:NO];
-    [self.navigationController popViewControllerAnimated:YES];
+    [self.baseNavigationController popToViewController:self.viewController
+                                              animated:NO];
+    [self.baseNavigationController popViewControllerAnimated:YES];
   }
 }
 
 #pragma mark - ManageSyncSettingsTableViewControllerPresentationDelegate
 
-- (void)manageSyncSettingsTableViewControllerWasPopped:
+- (void)manageSyncSettingsTableViewControllerWasRemoved:
     (ManageSyncSettingsTableViewController*)controller {
   DCHECK_EQ(self.viewController, controller);
-  [self.delegate manageSyncSettingsCoordinatorWasPopped:self];
+  [self.delegate manageSyncSettingsCoordinatorWasRemoved:self];
 }
 
 #pragma mark - ChromeIdentityBrowserOpener
@@ -116,7 +128,9 @@
     viewController:(UIViewController*)viewController {
   OpenNewTabCommand* command =
       [OpenNewTabCommand commandWithURLFromChrome:net::GURLWithNSURL(url)];
-  [self.dispatcher closeSettingsUIAndOpenURL:command];
+  id<ApplicationCommands> handler = HandlerForProtocol(
+      self.browser->GetCommandDispatcher(), ApplicationCommands);
+  [handler closeSettingsUIAndOpenURL:command];
 }
 
 #pragma mark - ManageSyncSettingsCommandHandler
@@ -133,8 +147,13 @@
     controllerToPush = [[SyncEncryptionTableViewController alloc]
         initWithBrowserState:self.browserState];
   }
-  controllerToPush.dispatcher = self.dispatcher;
-  [self.navigationController pushViewController:controllerToPush animated:YES];
+  // TODO(crbug.com/1045047): Use HandlerForProtocol after commands protocol
+  // clean up.
+  controllerToPush.dispatcher = static_cast<
+      id<ApplicationCommands, BrowserCommands, BrowsingDataCommands>>(
+      self.browser->GetCommandDispatcher());
+  [self.baseNavigationController pushViewController:controllerToPush
+                                           animated:YES];
 }
 
 - (void)openWebAppActivityDialog {
@@ -155,14 +174,15 @@
       GURL(kSyncGoogleDashboardURL),
       GetApplicationContext()->GetApplicationLocale());
   OpenNewTabCommand* command = [OpenNewTabCommand commandWithURLFromChrome:url];
-  [self.dispatcher closeSettingsUIAndOpenURL:command];
+  id<ApplicationCommands> handler = HandlerForProtocol(
+      self.browser->GetCommandDispatcher(), ApplicationCommands);
+  [handler closeSettingsUIAndOpenURL:command];
 }
 
 #pragma mark - SyncObserverModelBridge
 
 - (void)onSyncStateChanged {
-  if (self.syncService->GetDisableReasons() !=
-      syncer::SyncService::DISABLE_REASON_NONE) {
+  if (!self.syncService->GetDisableReasons().Empty()) {
     [self closeManageSyncSettings];
   }
 }

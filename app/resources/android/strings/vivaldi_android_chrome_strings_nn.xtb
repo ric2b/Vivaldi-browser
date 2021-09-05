@@ -1,16 +1,41 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="nn">
+<translation id="1169602411434249000">Blokker sporing</translation>
+<translation id="1397811292916898096">Søk med <ph name="PRODUCT_NAME" /></translation>
+<translation id="1598449788754183301">Veksl mellom normale og private faner</translation>
+<translation id="1644574205037202324">Historikk</translation>
+<translation id="17513872634828108">Opne faner</translation>
+<translation id="1829244130665387512">Søk på sida</translation>
+<translation id="2038563949887743358">Slå på Syn skrivebordsversjon</translation>
+<translation id="2433507940547922241">Utsjånad</translation>
+<translation id="2633278372998075009">Private faner</translation>
 <translation id="3076631378407175873">Opphavsrett <ph name="YEAR" /> Vivaldi Technologies AS.</translation>
+<translation id="3234355010754616171">Ny privat fane</translation>
+<translation id="3518985090088779359">Godta og fortset</translation>
 <translation id="3700829948786686853">Velkomen til Vivaldi</translation>
 <translation id="4121750346708795461">Ved å nytta denne applikasjonen godtek du Vivaldi sin <ph name="BEGIN_LINK1" />sluttbrukarlisensavtale<ph name="END_LINK1" /> og <ph name="BEGIN_LINK2" />personvernreglar<ph name="END_LINK2" />.</translation>
+<translation id="4243710787042215766">Opna i privat fane</translation>
+<translation id="4526803704855831732">Privat faner</translation>
+<translation id="4883379392681899581">Gå ut av privatvisning</translation>
+<translation id="4943872375798546930">Ingen resultat</translation>
 <translation id="5118676864324397542"><ph name="APP_NAME" /> lagring</translation>
+<translation id="5233638681132016545">Ny fane</translation>
+<translation id="5495228542153126976">Du gjekk inn i privatvisning</translation>
+<translation id="572328651809341494">Sist nytta faner</translation>
 <translation id="5840488417521835756">Lær om emne på nettstadar utan å forlata sida. Trykk-og-søk er ein eigenskap om berre er tilgjengeleg om du nyttar Google som standard søkjemotor i Vivaldi. Han sender eit ord og nærliggjande kontekst til Google-søk og kjem attende med definisjonar, bilde, søkjeresultat og andre detaljar.
 
 Du tilpassar søkjet ditt ved å trykkja lenge. Gjer søkjet ditt betre ved å skyva panelet heilt opp og trykk på søkjefeltet.</translation>
+<translation id="6336451774241870485">Ny privat fane</translation>
+<translation id="6593061639179217415">Skrivebordsversjon</translation>
+<translation id="6610147964972079463">Lukk private faner</translation>
 <translation id="706339621163631076">Nettlesaren sine personvernreglar</translation>
 <translation id="7427132068601343474">Om Vivaldi</translation>
+<translation id="7465104139234185284">Lukk alle private faner</translation>
 <translation id="7519434535192513364">Trykk-og-søk er ein eigenskap som berre er tilgjengeleg om du nyttar Google som standard søkjemotor i Vivaldi. Han sender det valde ordet og den gjeldande sida til Google-søk. Du kan slå av dette i<ph name="BEGIN_LINK" />innstillingane<ph name="END_LINK" />.</translation>
 <translation id="7649070708921625228">Hjelp</translation>
 <translation id="804786196054284061">Sluttbrukarlisensavtale</translation>
+<translation id="8820817407110198400">Bokmerke</translation>
+<translation id="9063523880881406963">Slå av Syn skrivebordsversjon</translation>
+<translation id="9080642952018487277">Gå inn i privatvisning</translation>
 </translationbundle>

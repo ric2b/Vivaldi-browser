@@ -16,6 +16,7 @@
 #include "third_party/blink/renderer/core/loader/document_loader.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/web_test_support.h"
 
 namespace blink {
@@ -124,17 +125,20 @@ void ApplicationCacheHostForFrame::LogMessage(
   // TODO(michaeln): Make app cache host per-frame and correctly report to the
   // involved frame.
   auto* local_frame = DynamicTo<LocalFrame>(main_frame);
-  local_frame->GetDocument()->AddConsoleMessage(ConsoleMessage::Create(
-      mojom::ConsoleMessageSource::kOther, log_level, message));
+  local_frame->GetDocument()->AddConsoleMessage(
+      MakeGarbageCollected<ConsoleMessage>(mojom::ConsoleMessageSource::kOther,
+                                           log_level, message));
 }
 
 void ApplicationCacheHostForFrame::SetSubresourceFactory(
     mojo::PendingRemote<network::mojom::blink::URLLoaderFactory>
         url_loader_factory) {
-  auto pending_factories = std::make_unique<URLLoaderFactoryBundleInfo>();
+  auto pending_factories = std::make_unique<PendingURLLoaderFactoryBundle>();
+  // |PassPipe()| invalidates all state, so capture |version()| first.
+  uint32_t version = url_loader_factory.version();
   pending_factories->pending_appcache_factory() =
       mojo::PendingRemote<network::mojom::URLLoaderFactory>(
-          url_loader_factory.PassPipe(), url_loader_factory.version());
+          url_loader_factory.PassPipe(), version);
   local_frame_->Client()->UpdateSubresourceFactory(
       std::move(pending_factories));
 }
@@ -204,21 +208,14 @@ void ApplicationCacheHostForFrame::SelectCacheWithManifest(
     const KURL& manifest_url) {
   LocalFrame* frame = document_loader_->GetFrame();
   Document* document = frame->GetDocument();
-  if (document->IsSandboxed(WebSandboxFlags::kOrigin)) {
+  if (document->IsSandboxed(mojom::blink::WebSandboxFlags::kOrigin)) {
     // Prevent sandboxes from establishing application caches.
     SelectCacheWithoutManifest();
     return;
   }
-  if (document->IsSecureContext()) {
-    Deprecation::CountDeprecation(
-        document, WebFeature::kApplicationCacheManifestSelectSecureOrigin);
-  } else {
-    Deprecation::CountDeprecation(
-        document, WebFeature::kApplicationCacheManifestSelectInsecureOrigin);
-    HostsUsingFeatures::CountAnyWorld(
-        *document, HostsUsingFeatures::Feature::
-                       kApplicationCacheManifestSelectInsecureHost);
-  }
+  CHECK(document->IsSecureContext());
+  Deprecation::CountDeprecation(
+      document, WebFeature::kApplicationCacheManifestSelectSecureOrigin);
 
   if (!backend_host_.is_bound())
     return;
@@ -233,7 +230,7 @@ void ApplicationCacheHostForFrame::SelectCacheWithManifest(
   // Check for new 'master' entries.
   if (document_response_.AppCacheID() == mojom::blink::kAppCacheNoCacheId) {
     if (is_scheme_supported_ && is_get_method_ &&
-        SecurityOrigin::AreSameSchemeHostPort(manifest_kurl, document_url_)) {
+        SecurityOrigin::AreSameOrigin(manifest_kurl, document_url_)) {
       status_ = mojom::blink::AppCacheStatus::APPCACHE_STATUS_CHECKING;
       is_new_master_entry_ = NEW_ENTRY;
     } else {
@@ -288,7 +285,7 @@ void ApplicationCacheHostForFrame::DidReceiveResponseForMainResource(
     is_new_master_entry_ = OLD_ENTRY;
 }
 
-void ApplicationCacheHostForFrame::Trace(blink::Visitor* visitor) {
+void ApplicationCacheHostForFrame::Trace(Visitor* visitor) {
   visitor->Trace(dom_application_cache_);
   visitor->Trace(local_frame_);
   visitor->Trace(document_loader_);

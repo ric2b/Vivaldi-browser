@@ -524,6 +524,20 @@ TEST(ValuesTest, Append) {
   EXPECT_TRUE(value.GetList().back().is_list());
 }
 
+TEST(ValuesTest, Insert) {
+  ListValue value;
+  auto GetList = [&value]() -> decltype(auto) { return value.GetList(); };
+  auto GetConstList = [&value] { return as_const(value).GetList(); };
+
+  auto storage_iter = value.Insert(GetList().end(), Value(true));
+  EXPECT_TRUE(GetList().begin() == storage_iter);
+  EXPECT_TRUE(storage_iter->is_bool());
+
+  auto span_iter = value.Insert(GetConstList().begin(), Value(123));
+  EXPECT_TRUE(GetConstList().begin() == span_iter);
+  EXPECT_TRUE(span_iter->is_int());
+}
+
 TEST(ValuesTest, EraseListIter) {
   ListValue value;
   value.Append(1);
@@ -583,6 +597,21 @@ TEST(ValuesTest, EraseListValueIf) {
   EXPECT_TRUE(value.GetList().empty());
 
   EXPECT_EQ(0u, value.EraseListValueIf([](const auto& val) { return true; }));
+}
+
+TEST(ValuesTest, ClearList) {
+  ListValue value;
+  value.Append(1);
+  value.Append(2);
+  value.Append(3);
+  EXPECT_EQ(3u, value.GetList().size());
+
+  value.ClearList();
+  EXPECT_TRUE(value.GetList().empty());
+
+  // ClearList() should be idempotent.
+  value.ClearList();
+  EXPECT_TRUE(value.GetList().empty());
 }
 
 TEST(ValuesTest, FindKey) {
@@ -2177,6 +2206,22 @@ TEST(ValuesTest, DictionaryIterator) {
   }
   EXPECT_TRUE(seen1);
   EXPECT_TRUE(seen2);
+}
+
+TEST(ValuesTest, MutatingCopiedPairsInDictItemsMutatesUnderlyingValues) {
+  Value dict(Value::Type::DICTIONARY);
+  dict.SetKey("key", Value("initial value"));
+
+  // Because the non-const DictItems() iterates over
+  // <const std::string&, Value&> pairs, it's possible
+  // to alter iterated-over values in place even when
+  // "copying" the key-value pair:
+  for (auto kv : dict.DictItems())
+    kv.second.GetString() = "replacement";
+
+  std::string* found = dict.FindStringKey("key");
+  ASSERT_TRUE(found);
+  EXPECT_EQ(*found, "replacement");
 }
 
 TEST(ValuesTest, StdDictionaryIterator) {

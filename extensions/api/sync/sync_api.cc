@@ -19,7 +19,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "components/browser_sync/browser_sync_switches.h"
 #include "components/invalidation/public/invalidator_state.h"
-#include "components/invalidation/public/object_id_invalidation_map.h"
+//#include "components/invalidation/public/object_id_invalidation_map.h"
 #include "components/sync/base/invalidation_helper.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/driver/sync_driver_switches.h"
@@ -104,25 +104,35 @@ vivaldi::sync::SyncerError ToVivaldiSyncerError(
 }
 
 std::vector<extensions::vivaldi::sync::DisableReason>
-ToVivaldiSyncDisableReasons(int reasons) {
+ToVivaldiSyncDisableReasons(syncer::SyncService::DisableReasonSet reasons) {
   std::vector<extensions::vivaldi::sync::DisableReason> disable_reasons;
 
-  if (reasons & syncer::SyncService::DISABLE_REASON_PLATFORM_OVERRIDE)
-    disable_reasons.push_back(
-        vivaldi::sync::DisableReason::DISABLE_REASON_PLATFORM_OVERRIDE);
-  if (reasons & syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY)
-    disable_reasons.push_back(
-        vivaldi::sync::DisableReason::DISABLE_REASON_ENTERPRISE_POLICY);
-  if (reasons & syncer::SyncService::DISABLE_REASON_NOT_SIGNED_IN)
-    disable_reasons.push_back(
-        vivaldi::sync::DisableReason::DISABLE_REASON_NOT_SIGNED_IN);
-  if (reasons & syncer::SyncService::DISABLE_REASON_USER_CHOICE)
-    disable_reasons.push_back(
-        vivaldi::sync::DisableReason::DISABLE_REASON_USER_CHOICE);
-  if (reasons & syncer::SyncService::DISABLE_REASON_UNRECOVERABLE_ERROR)
-    disable_reasons.push_back(
-        vivaldi::sync::DisableReason::DISABLE_REASON_UNRECOVERABLE_ERROR);
-
+  for (auto reason : reasons) {
+    switch (reason) {
+      case syncer::SyncService::DISABLE_REASON_PLATFORM_OVERRIDE:
+        disable_reasons.push_back(
+            vivaldi::sync::DisableReason::DISABLE_REASON_PLATFORM_OVERRIDE);
+        break;
+      case syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY:
+        disable_reasons.push_back(
+            vivaldi::sync::DisableReason::DISABLE_REASON_ENTERPRISE_POLICY);
+        break;
+      case syncer::SyncService::DISABLE_REASON_NOT_SIGNED_IN:
+        disable_reasons.push_back(
+            vivaldi::sync::DisableReason::DISABLE_REASON_NOT_SIGNED_IN);
+        break;
+      case syncer::SyncService::DISABLE_REASON_USER_CHOICE:
+        disable_reasons.push_back(
+            vivaldi::sync::DisableReason::DISABLE_REASON_USER_CHOICE);
+        break;
+      case syncer::SyncService::DISABLE_REASON_UNRECOVERABLE_ERROR:
+        disable_reasons.push_back(
+            vivaldi::sync::DisableReason::DISABLE_REASON_UNRECOVERABLE_ERROR);
+        break;
+      default:
+        break;
+    }
+  }
   return disable_reasons;
 }
 
@@ -344,11 +354,11 @@ vivaldi::sync::EngineData GetEngineData(Profile* profile) {
     // Skip the model types that don't make sense for us to synchronize.
     if (data_type == syncer::UserSelectableType::kThemes ||
         data_type == syncer::UserSelectableType::kApps ||
-        //This type is only for Chrome OS.
-        data_type == syncer::UserSelectableType::kWifiConfigurations ||
         // Syncing typedUrls already syncsø sessions anyway. For now we group
         // both in our UI
-        data_type == syncer::UserSelectableType::kTabs) {
+        data_type == syncer::UserSelectableType::kTabs ||
+        // Chromium only supports reading lists on iOS.
+        data_type == syncer::UserSelectableType::kReadingList) {
       continue;
     }
 
@@ -488,8 +498,9 @@ ExtensionFunction::ResponseAction SyncGetDefaultSessionNameFunction::Run() {
            base::TaskPriority::BEST_EFFORT,
            base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})
           .get(),
-      FROM_HERE, base::Bind(&syncer::GetPersonalizableDeviceNameBlocking),
-      base::Bind(&SyncGetDefaultSessionNameFunction::OnGetDefaultSessionName,
+      FROM_HERE, base::BindOnce(&syncer::GetPersonalizableDeviceNameBlocking),
+      base::BindOnce(
+          &SyncGetDefaultSessionNameFunction::OnGetDefaultSessionName,
                  this));
   return RespondLater();
 }
@@ -598,10 +609,13 @@ SyncUpdateNotificationClientStatusFunction::Run() {
   // If notifications just got re-enabled, just invalidate everything to
   // compensate for potentially missed notifications.
   if (state == syncer::INVALIDATIONS_ENABLED) {
-    syncer::ObjectIdInvalidationMap invalidation_map =
-        syncer::ObjectIdInvalidationMap::InvalidateAll(
-            syncer::ModelTypeSetToObjectIdSet(syncer::ProtocolTypes()));
-    sync_manager->invalidation_service()->PerformInvalidation(invalidation_map);
+    syncer::TopicInvalidationMap invalidations;
+    for (const auto model_type: syncer::ProtocolTypes()) {
+      syncer::Topic topic;
+      syncer::RealModelTypeToNotificationType(model_type, &topic);
+      invalidations.Insert(syncer::Invalidation::InitUnknownVersion(topic));
+    }
+    sync_manager->invalidation_service()->PerformInvalidation(invalidations);
   }
 
   return RespondNow(NoArguments());
@@ -624,10 +638,9 @@ ExtensionFunction::ResponseAction SyncNotificationReceivedFunction::Run() {
       sync_manager->invalidation_service()->GetInvalidatorClientId()) {
     int64_t version;
     base::StringToInt64(params->version, &version);
-    syncer::ObjectIdInvalidationMap invalidations;
+    syncer::TopicInvalidationMap invalidations;
     invalidations.Insert(syncer::Invalidation::Init(
-        invalidation::ObjectId(ipc::invalidation::ObjectSource::CHROME_SYNC,
-                               params->notification_type),
+        syncer::Topic(params->notification_type),
         version, ""));
     sync_manager->invalidation_service()->PerformInvalidation(invalidations);
   }

@@ -294,11 +294,11 @@ bool ThroughputAnalyzer::IsHangingWindow(int64_t bits_received,
 
   // Record kbps as function of |is_hanging|.
   if (is_hanging) {
-    UMA_HISTOGRAM_COUNTS_1M("NQE.ThroughputObservation.Hanging",
-                            downstream_kbps_double);
+    LOCAL_HISTOGRAM_COUNTS_1000000("NQE.ThroughputObservation.Hanging",
+                                   downstream_kbps_double);
   } else {
-    UMA_HISTOGRAM_COUNTS_1M("NQE.ThroughputObservation.NotHanging",
-                            downstream_kbps_double);
+    LOCAL_HISTOGRAM_COUNTS_1000000("NQE.ThroughputObservation.NotHanging",
+                                   downstream_kbps_double);
   }
   return is_hanging;
 }
@@ -404,8 +404,8 @@ int64_t ThroughputAnalyzer::CountTotalContentSizeBytes() const {
 bool ThroughputAnalyzer::DegradesAccuracy(const URLRequest& request) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  bool private_network_request = nqe::internal::IsPrivateHost(
-      request.context()->host_resolver(), HostPortPair::FromURL(request.url()));
+  bool private_network_request =
+      nqe::internal::IsRequestForPrivateHost(request);
 
   return !(use_localhost_requests_for_tests_ || !private_network_request) ||
          request.creation_time() < last_connection_change_;

@@ -5,14 +5,112 @@
 #include "base/no_destructor.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/post_task.h"
+#include "components/bookmarks/browser/base_bookmark_model_observer.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_model_observer.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "ui/base/models/tree_node_iterator.h"
 
-namespace vivaldi_bookmark_kit {
+namespace bookmarks {
 
 namespace {
+
+// Copied from the Chromium BookmarkModel class (.cc) for convenience.
+BookmarkNode* AsMutableNode(const BookmarkNode* node) {
+  return const_cast<BookmarkNode*>(node);
+}
+
+}  // namespace
+
+// Helper to access BookmarkModel private members
+class VivaldiBookmarkModelFriend {
+ public:
+  static base::WeakPtr<BookmarkModel> GetModelWeakPtr(BookmarkModel* model) {
+    if (!model)
+      return nullptr;
+    return model->weak_factory_.GetWeakPtr();
+  }
+
+  // Android-specific method to change meta that also affect url index
+  static void SetNodeMetaInfoWithIndexChange(BookmarkModel* model,
+                                             const BookmarkNode* node,
+                                             const std::string& key,
+                                             const std::string& value) {
+    // NOTE(igor@vivaldi.com): Follow BookmarkModel::SetTitle().
+    DCHECK(node);
+
+    std::string old_value;
+    node->GetMetaInfo(key, &old_value);
+    if (value == old_value)
+      return;
+
+    for (BookmarkModelObserver& observer : model->observers_) {
+      observer.OnWillChangeBookmarkNode(model, node);
+    }
+
+    if (node->is_url()) {
+      model->titled_url_index_->Remove(node);
+    }
+    if (!value.empty()) {
+      AsMutableNode(node)->SetMetaInfo(key, value);
+    } else {
+      AsMutableNode(node)->DeleteMetaInfo(key);
+    }
+    if (node->is_url()) {
+      model->titled_url_index_->Add(node);
+    }
+
+    if (model->store_)
+      model->store_->ScheduleSave();
+
+    for (BookmarkModelObserver& observer : model->observers_) {
+      observer.BookmarkNodeChanged(model, node);
+    }
+  }
+};
+
+}  // namespace bookmarks
+
+namespace vivaldi_bookmark_kit {
+
+using bookmarks::VivaldiBookmarkModelFriend;
+
+namespace {
+
+class BookmarkModelLoadWaiter : public bookmarks::BaseBookmarkModelObserver {
+ public:
+  BookmarkModelLoadWaiter(RunAfterModelLoadCallback callback)
+      : callback_(std::move(callback)) {}
+
+ private:
+  ~BookmarkModelLoadWaiter() override = default;
+
+  // bookmarks::BaseBookmarkModelObserver:
+  void BookmarkModelChanged() override {}
+
+  void BookmarkModelLoaded(bookmarks::BookmarkModel* model,
+                           bool ids_reassigned) override {
+    model->RemoveObserver(this);
+    RunAfterModelLoadCallback callback = std::move(callback_);
+    delete this;
+    std::move(callback).Run(model);
+  }
+
+  void BookmarkModelBeingDeleted(bookmarks::BookmarkModel* model) override {
+    // The model can be deleted before AfterBookmarkModelLoaded is called.
+    // Ensure that we do not leak this and prevent AfterBookmarkModelLoaded from
+    // being called.
+    RunAfterModelLoadCallback callback = std::move(callback_);
+    delete this;
+    LOG(ERROR) << "Model was deleted";
+    std::move(callback).Run(nullptr);
+  }
+
+  RunAfterModelLoadCallback callback_;
+
+  DISALLOW_COPY_AND_ASSIGN(BookmarkModelLoadWaiter);
+};
 
 // Struct holding std::string constants with names that we use to get/set values
 // from bookmark meta data. This avoids running string destructors at shutdown.
@@ -23,9 +121,7 @@ struct VivaldiMetaNames {
   const std::string nickname = "Nickname";
   const std::string description = "Description";
   const std::string partner = "Partner";
-  const std::string default_favicon_uri = "Default_Favicon_URI";
   const std::string thumbnail = "Thumbnail";
-  const std::string visited = "Visited";
 
   // values stored in the node
   const std::string true_value = "true";
@@ -36,6 +132,20 @@ struct VivaldiMetaNames {
 const VivaldiMetaNames& GetMetaNames() {
   static base::NoDestructor<VivaldiMetaNames> instance;
   return *instance;
+}
+
+bool GetMetaBool(const BookmarkNode* node, const std::string& key) {
+  std::string temp;
+  if (node->GetMetaInfo(key, &temp))
+    return temp == GetMetaNames().true_value;
+  return false;
+}
+
+std::string GetMetaString(const BookmarkNode* node, const std::string& key) {
+  std::string value;
+  if (node->GetMetaInfo(key, &value))
+    return value;
+  return std::string();
 }
 
 void SetMetaBool(BookmarkNode::MetaInfoMap* map,
@@ -58,17 +168,25 @@ void SetMetaString(BookmarkNode::MetaInfoMap* map,
   }
 }
 
-void SetMetaTime(BookmarkNode::MetaInfoMap* map,
-                 const std::string& key,
-                 base::Time time_value) {
-  if (!time_value.is_null()) {
-    (*map)[key] = base::NumberToString(time_value.ToInternalValue());
-  } else {
-    map->erase(key);
+}  // namespace
+
+void RunAfterModelLoad(bookmarks::BookmarkModel* model,
+                       RunAfterModelLoadCallback callback) {
+  if (!model || model->loaded()) {
+    std::move(callback).Run(model);
+    return;
   }
+  // waiter will be deleted after receiving BookmarkModelLoaded or
+  // BookmarkModelBeingDeleted notifications.
+  BookmarkModelLoadWaiter* waiter =
+      new BookmarkModelLoadWaiter(std::move(callback));
+  model->AddObserver(waiter);
 }
 
-}  // namespace
+base::WeakPtr<BookmarkModel> GetModelWeakPtr(BookmarkModel* model) {
+  return VivaldiBookmarkModelFriend::GetModelWeakPtr(model);
+}
+
 
 CustomMetaInfo::CustomMetaInfo() = default;
 CustomMetaInfo::~CustomMetaInfo() = default;
@@ -101,17 +219,38 @@ void CustomMetaInfo::SetPartner(const std::string& partner) {
   SetMetaString(&map_, GetMetaNames().partner, partner);
 }
 
-void CustomMetaInfo::SetDefaultFaviconUri(
-    const std::string& default_favicon_uri) {
-  SetMetaString(&map_, GetMetaNames().default_favicon_uri, default_favicon_uri);
-}
-
-void CustomMetaInfo::SetVisitedDate(base::Time visited) {
-  SetMetaTime(&map_, GetMetaNames().visited, visited);
-}
-
 void CustomMetaInfo::SetThumbnail(const std::string& thumbnail) {
   SetMetaString(&map_, GetMetaNames().thumbnail, thumbnail);
+}
+
+bool GetSpeeddial(const BookmarkNode* node) {
+  return GetMetaBool(node, GetMetaNames().speeddial);
+}
+
+bool GetBookmarkbar(const BookmarkNode* node) {
+  return GetMetaBool(node, GetMetaNames().bookmarkbar);
+}
+
+std::string GetNickname(const BookmarkNode* node) {
+  return GetMetaString(node, GetMetaNames().nickname);
+}
+
+std::string GetDescription(const BookmarkNode* node) {
+  return GetMetaString(node, GetMetaNames().description);
+}
+
+std::string GetPartner(const BookmarkNode* node) {
+  return GetMetaString(node, GetMetaNames().partner);
+}
+
+std::string GetThumbnail(const BookmarkNode* node) {
+  return GetMetaString(node, GetMetaNames().thumbnail);
+}
+
+bool IsSeparator(const BookmarkNode* node) {
+  // TODO(espen@vivaldi.com): Add separator flag to node. Needed many places.
+  return node->GetTitle() == GetMetaNames().tripple_dash &&
+         GetDescription(node) == GetMetaNames().separator;
 }
 
 void InitModelNonClonedKeys(BookmarkModel* model) {
@@ -119,6 +258,45 @@ void InitModelNonClonedKeys(BookmarkModel* model) {
   model->AddNonClonedKey(GetMetaNames().partner);
   model->AddNonClonedKey(GetMetaNames().speeddial);
   model->AddNonClonedKey(GetMetaNames().bookmarkbar);
+}
+
+bool DoesNickExists(const BookmarkModel* model,
+                    const std::string& nickname,
+                    const BookmarkNode* updated_node) {
+  ui::TreeNodeIterator<const BookmarkNode> iterator(model->root_node());
+  while (iterator.has_next()) {
+    const BookmarkNode* node = iterator.Next();
+    if (GetNickname(node) == nickname && node != updated_node)
+      return true;
+  }
+  return false;
+}
+
+void SetNodeNickname(BookmarkModel* model,
+                     const BookmarkNode* node,
+                     const std::string& nickname) {
+  VivaldiBookmarkModelFriend::SetNodeMetaInfoWithIndexChange(
+      model, node, GetMetaNames().nickname, nickname);
+}
+
+void SetNodeDescription(BookmarkModel* model,
+                        const BookmarkNode* node,
+                        const std::string& description) {
+  VivaldiBookmarkModelFriend::SetNodeMetaInfoWithIndexChange(
+      model, node, GetMetaNames().description, description);
+}
+
+void SetNodeSpeeddial(BookmarkModel* model,
+                      const BookmarkNode* node,
+                      bool speeddial) {
+  // Use Chromium implementation as URL index does not depends on the speeddial
+  // status.
+  if (speeddial) {
+    model->SetNodeMetaInfo(node, GetMetaNames().speeddial,
+                           GetMetaNames().true_value);
+  } else {
+    model->DeleteNodeMetaInfo(node, GetMetaNames().speeddial);
+  }
 }
 
 }  // namespace vivaldi_bookmark_kit

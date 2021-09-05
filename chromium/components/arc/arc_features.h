@@ -16,6 +16,7 @@ extern const base::Feature kAppRuntimePerormanceStatistics;
 extern const base::Feature kBootCompletedBroadcastFeature;
 extern const base::Feature kCleanArcDataOnRegularToChildTransitionFeature;
 extern const base::Feature kCustomTabsExperimentFeature;
+extern const base::Feature kEnableApplicationZoomFeature;
 extern const base::Feature kEnableChildToRegularTransitionFeature;
 extern const base::Feature kEnableDocumentsProviderInFilesAppFeature;
 extern const base::Feature kEnableRegularToChildTransitionFeature;
@@ -27,7 +28,7 @@ extern const base::Feature kPrintSpoolerExperimentFeature;
 extern const base::Feature kSmartTextSelectionFeature;
 extern const base::Feature kUsbHostFeature;
 extern const base::Feature kUsbStorageUIFeature;
-extern const base::Feature kVpnFeature;
+extern const base::Feature kVideoDecoder;
 
 }  // namespace arc
 

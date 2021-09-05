@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "base/i18n/string_search.h"
+#include "base/guid.h"
 #include "base/lazy_instance.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -16,14 +17,15 @@
 #include "content/public/browser/browser_context.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/schema/notes.h"
+#include "extensions/tools/vivaldi_tools.h"
 #include "notes/notes_factory.h"
 #include "notes/notes_model.h"
-#include "notes/notesnode.h"
+#include "notes/note_node.h"
 #include "ui/base/models/tree_node_iterator.h"
 
 using vivaldi::NotesModelFactory;
-using vivaldi::Notes_Model;
-using vivaldi::Notes_Node;
+using vivaldi::NotesModel;
+using vivaldi::NoteNode;
 using extensions::vivaldi::notes::NoteTreeNode;
 using extensions::vivaldi::notes::NoteAttachment;
 
@@ -65,14 +67,14 @@ void NotesAPI::OnListenerAdded(const EventListenerInfo& details) {
   EventRouter::Get(browser_context_)->UnregisterObserver(this);
 }
 
-void NotesAPI::ExtensiveNotesChangesBeginning(Notes_Model* model) {
+void NotesAPI::ExtensiveNotesChangesBeginning(NotesModel* model) {
   DCHECK(model_ == model);
   ::vivaldi::BroadcastEvent(vivaldi::notes::OnImportBegan::kEventName,
                             vivaldi::notes::OnImportBegan::Create(),
                             browser_context_);
 }
 
-void NotesAPI::ExtensiveNotesChangesEnded(Notes_Model* model) {
+void NotesAPI::ExtensiveNotesChangesEnded(NotesModel* model) {
   DCHECK(model_ == model);
   ::vivaldi::BroadcastEvent(vivaldi::notes::OnImportEnded::kEventName,
                             vivaldi::notes::OnImportEnded::Create(),
@@ -81,7 +83,7 @@ void NotesAPI::ExtensiveNotesChangesEnded(Notes_Model* model) {
 
 namespace {
 
-void SendCreated(BrowserContext* browser_context,
+void SendCreated(content::BrowserContext* browser_context,
                  int64_t id,
                  const NoteTreeNode& treenode) {
   ::vivaldi::BroadcastEvent(
@@ -90,7 +92,7 @@ void SendCreated(BrowserContext* browser_context,
       browser_context);
 }
 
-void SendChanged(BrowserContext* browser_context,
+void SendChanged(content::BrowserContext* browser_context,
                  int64_t id,
                  const vivaldi::notes::OnChanged::ChangeInfo& change_info) {
   ::vivaldi::BroadcastEvent(
@@ -99,7 +101,7 @@ void SendChanged(BrowserContext* browser_context,
       browser_context);
 }
 
-void SendMoved(BrowserContext* browser_context,
+void SendMoved(content::BrowserContext* browser_context,
                int64_t id,
                int64_t parent_id,
                int index,
@@ -118,7 +120,7 @@ void SendMoved(BrowserContext* browser_context,
       browser_context);
 }
 
-void SendRemoved(BrowserContext* browser_context,
+void SendRemoved(content::BrowserContext* browser_context,
                  int64_t id,
                  int64_t parent_id,
                  int indexofdeleted) {
@@ -151,12 +153,12 @@ std::unique_ptr<std::vector<NoteAttachment>> CreateNoteAttachments(
   return new_attachments;
 }
 
-NoteTreeNode MakeTreeNode(Notes_Node* node) {
+NoteTreeNode MakeTreeNode(NoteNode* node) {
   NoteTreeNode notes_tree_node;
 
   notes_tree_node.id = base::NumberToString(node->id());
 
-  const Notes_Node* parent = node->parent();
+  const NoteNode* parent = node->parent();
   if (parent) {
     notes_tree_node.parent_id.reset(
         new std::string(base::NumberToString(parent->id())));
@@ -192,16 +194,16 @@ NoteTreeNode MakeTreeNode(Notes_Node* node) {
   return notes_tree_node;
 }
 
-Notes_Model* GetNotesModel(ExtensionFunction* fun) {
+NotesModel* GetNotesModel(ExtensionFunction* fun) {
   return NotesModelFactory::GetForBrowserContext(fun->browser_context());
 }
 
-Notes_Node* GetNodeFromId(Notes_Node* node, int64_t id) {
+NoteNode* GetNodeFromId(NoteNode* node, int64_t id) {
   if (node->id() == id) {
     return node;
   }
   for (auto& it: node->children()) {
-    Notes_Node* childnode = GetNodeFromId(it.get(), id);
+    NoteNode* childnode = GetNodeFromId(it.get(), id);
     if (childnode) {
       return childnode;
     }
@@ -209,7 +211,7 @@ Notes_Node* GetNodeFromId(Notes_Node* node, int64_t id) {
   return nullptr;
 }
 
-Notes_Node* ParseNoteId(Notes_Model* model,
+NoteNode* ParseNoteId(NotesModel* model,
                         const std::string& id_str,
                         std::string* error) {
   int64_t id;
@@ -217,7 +219,7 @@ Notes_Node* ParseNoteId(Notes_Model* model,
     *error = "Note id is not a number - " + id_str;
     return nullptr;
   }
-  Notes_Node* node = GetNodeFromId(model->root_node(), id);
+  NoteNode* node = GetNodeFromId(model->root_node(), id);
   if (!node) {
     *error = "No note with id " + id_str;
     return nullptr;
@@ -236,21 +238,21 @@ ExtensionFunction::ResponseAction NotesGetFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   std::vector<NoteTreeNode> notes;
-  Notes_Model* model = GetNotesModel(this);
+  NotesModel* model = GetNotesModel(this);
   std::string error;
   if (params->id_or_id_list.as_strings) {
     std::vector<std::string>& ids = *params->id_or_id_list.as_strings;
     size_t count = ids.size();
     EXTENSION_FUNCTION_VALIDATE(count > 0);
     for (size_t i = 0; i < count; ++i) {
-      Notes_Node* node = ParseNoteId(model, ids[i], &error);
+      NoteNode* node = ParseNoteId(model, ids[i], &error);
       if (!node) {
         return RespondNow(Error(error));
       }
       notes.push_back(MakeTreeNode(node));
     }
   } else {
-    Notes_Node* node =
+    NoteNode* node =
         ParseNoteId(model, *params->id_or_id_list.as_string, &error);
     if (!node) {
       return RespondNow(Error(error));
@@ -261,7 +263,7 @@ ExtensionFunction::ResponseAction NotesGetFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction NotesGetTreeFunction::Run() {
-  Notes_Model* model = GetNotesModel(this);
+  NotesModel* model = GetNotesModel(this);
 
   // If the model has not loaded yet wait until it does and do the work then.
   if (!model->loaded()) {
@@ -274,9 +276,9 @@ ExtensionFunction::ResponseAction NotesGetTreeFunction::Run() {
   }
 }
 
-void NotesGetTreeFunction::SendGetTreeResponse(Notes_Model* model) {
+void NotesGetTreeFunction::SendGetTreeResponse(NotesModel* model) {
   std::vector<NoteTreeNode> notes;
-  Notes_Node* root = model->main_node();
+  NoteNode* root = model->main_node();
   NoteTreeNode new_note = MakeTreeNode(root);
   new_note.children->push_back(MakeTreeNode(model->trash_node()));
   // After the above push the condition is always true
@@ -286,14 +288,14 @@ void NotesGetTreeFunction::SendGetTreeResponse(Notes_Model* model) {
   Respond(ArgumentList(vivaldi::notes::GetTree::Results::Create(notes)));
 }
 
-void NotesGetTreeFunction::NotesModelLoaded(Notes_Model* model,
+void NotesGetTreeFunction::NotesModelLoaded(NotesModel* model,
                                             bool ids_reassigned) {
   SendGetTreeResponse(model);
   model->RemoveObserver(this);
   Release();
 }
 
-void NotesGetTreeFunction::NotesModelBeingDeleted(Notes_Model* model) {
+void NotesGetTreeFunction::NotesModelBeingDeleted(NotesModel* model) {
   Respond(Error("NotesModelBeingDeleted"));
   model->RemoveObserver(this);
   Release();
@@ -304,29 +306,30 @@ ExtensionFunction::ResponseAction NotesCreateFunction::Run() {
       vivaldi::notes::Create::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  Notes_Model* model = GetNotesModel(this);
+  NotesModel* model = GetNotesModel(this);
 
   int64_t id = model->GetNewIndex();
-  std::unique_ptr<Notes_Node> newnode = std::make_unique<Notes_Node>(id);
-  Notes_Node* newnode_ptr = newnode.get();
+
+  // default to note
+  NoteNode::Type type = NoteNode::NOTE;
+  if (params->note.type.get()) {
+    std::string type_string = (*params->note.type);
+    if (type_string == "note")
+      type = NoteNode::NOTE;
+    else if (type_string == "separator")
+      type = NoteNode::SEPARATOR;
+    else
+      type = NoteNode::FOLDER;
+  }
+
+  std::unique_ptr<NoteNode> newnode =
+      std::make_unique<NoteNode>(id, base::GenerateGUID(), type);
+  NoteNode* newnode_ptr = newnode.get();
   // Lots of optionals, make sure to check for the contents.
   if (params->note.title.get()) {
     base::string16 title;
     title = base::UTF8ToUTF16(*params->note.title);
     newnode->SetTitle(title);
-  }
-
-  if (params->note.type.get()) {
-    std::string type = (*params->note.type);
-    if (type == "note")
-      newnode->SetType(Notes_Node::NOTE);
-    else if (type == "separator")
-      newnode->SetType(Notes_Node::SEPARATOR);
-    else
-      newnode->SetType(Notes_Node::FOLDER);
-  } else {
-    // default to note
-    newnode->SetType(Notes_Node::NOTE);
   }
 
   if (params->note.content.get()) {
@@ -340,7 +343,7 @@ ExtensionFunction::ResponseAction NotesCreateFunction::Run() {
     newnode->SetURL(url);
   }
 
-  Notes_Node* parent = nullptr;
+  NoteNode* parent = nullptr;
   if (params->note.parent_id.get()) {
     std::string error;
     parent = ParseNoteId(model, *params->note.parent_id, &error);
@@ -390,9 +393,9 @@ ExtensionFunction::ResponseAction NotesUpdateFunction::Run() {
       vivaldi::notes::Update::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  Notes_Model* model = GetNotesModel(this);
+  NotesModel* model = GetNotesModel(this);
   std::string error;
-  Notes_Node* node = ParseNoteId(model, params->id, &error);
+  NoteNode* node = ParseNoteId(model, params->id, &error);
   if (!node) {
     return RespondNow(Error(error));
   }
@@ -453,17 +456,17 @@ ExtensionFunction::ResponseAction NotesRemoveFunction::Run() {
       vivaldi::notes::Remove::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  Notes_Model* model = GetNotesModel(this);
+  NotesModel* model = GetNotesModel(this);
   std::string error;
-  Notes_Node* node = ParseNoteId(model, params->id, &error);
+  NoteNode* node = ParseNoteId(model, params->id, &error);
   if (!node) {
     return RespondNow(Error(error));
   }
-  Notes_Node* parent = node->parent();
+  NoteNode* parent = node->parent();
   if (!parent) {
     parent = model->root_node();
   }
-  Notes_Node* trash_node = model->trash_node();
+  NoteNode* trash_node = model->trash_node();
   if (trash_node == node) {
     // Trying to delete trash, should not happen.
     NOTREACHED();
@@ -474,7 +477,7 @@ ExtensionFunction::ResponseAction NotesRemoveFunction::Run() {
   if (node->is_separator()) {
     move_to_trash = false;
   } else {
-    Notes_Node* tmp = node;
+    NoteNode* tmp = node;
     while (!tmp->is_root()) {
       if (tmp->parent() == trash_node) {
         move_to_trash = false;
@@ -488,7 +491,7 @@ ExtensionFunction::ResponseAction NotesRemoveFunction::Run() {
   // TODO(pettern): Event notifications should be handled in the observer
   // for the model.
   if (move_to_trash) {
-    Notes_Node* old_parent = node->parent();
+    NoteNode* old_parent = node->parent();
     int oldIndex = old_parent->GetIndexOf(node);
 
     // Move to trash
@@ -537,10 +540,10 @@ ExtensionFunction::ResponseAction NotesSearchFunction::Run() {
 
   base::string16 needle = base::UTF8ToUTF16(params->query.substr(offset));
   if (needle.length() > 0) {
-    ui::TreeNodeIterator<Notes_Node> iterator(GetNotesModel(this)->root_node());
+    ui::TreeNodeIterator<NoteNode> iterator(GetNotesModel(this)->root_node());
 
     while (iterator.has_next()) {
-      Notes_Node* node = iterator.Next();
+      NoteNode* node = iterator.Next();
       bool match = false;
       if (examine_content) {
         match = base::i18n::StringSearchIgnoringCaseAndAccents(
@@ -566,14 +569,14 @@ ExtensionFunction::ResponseAction NotesMoveFunction::Run() {
       vivaldi::notes::Move::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  Notes_Model* model = GetNotesModel(this);
+  NotesModel* model = GetNotesModel(this);
 
   std::string error;
-  Notes_Node* node = ParseNoteId(model, params->id, &error);
+  NoteNode* node = ParseNoteId(model, params->id, &error);
   if (!node) {
     return RespondNow(Error(error));
   }
-  const Notes_Node* parent;
+  const NoteNode* parent;
   if (!params->destination.parent_id.get()) {
     // Optional, defaults to current parent.
     parent = node->parent();
@@ -595,16 +598,16 @@ ExtensionFunction::ResponseAction NotesMoveFunction::Run() {
     index = parent->children().size();
   }
 
-  Notes_Node* old_parent = node->parent();
+  NoteNode* old_parent = node->parent();
   int64_t old_parent_id = old_parent->id();
   int old_index = old_parent->GetIndexOf(node);
 
   bool moved = model->Move(node, parent, index);
-  DCHECK(moved);
   if (!moved) {
     // This will happen if we attempt to move a folder into a subfolder of its
     // own. Should never happen (missing test in JS), but better be on the safe
     // side as a reply will mess up the displayed data.
+    // It can also happen if moving a note to the location it already occupies.
     return RespondNow(Error("Cannot move node"));
   }
 
@@ -618,11 +621,11 @@ ExtensionFunction::ResponseAction NotesMoveFunction::Run() {
 ExtensionFunction::ResponseAction NotesEmptyTrashFunction::Run() {
   bool success = false;
 
-  Notes_Model* model = GetNotesModel(this);
-  Notes_Node* trash_node = model->trash_node();
+  NotesModel* model = GetNotesModel(this);
+  NoteNode* trash_node = model->trash_node();
   if (trash_node) {
     while (!trash_node->children().empty()) {
-      Notes_Node* node = trash_node->children()[0].get();
+      NoteNode* node = trash_node->children()[0].get();
       int64_t removed_node_id = node->id();
       model->Remove(trash_node, 0);
       SendRemoved(browser_context(), removed_node_id, trash_node->id(), 0);

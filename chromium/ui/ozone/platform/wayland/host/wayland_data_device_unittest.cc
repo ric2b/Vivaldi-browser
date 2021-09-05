@@ -15,7 +15,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/clipboard/clipboard_constants.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
-#include "ui/base/dragdrop/file_info.h"
+#include "ui/base/dragdrop/file_info/file_info.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/ozone/platform/wayland/test/constants.h"
@@ -481,9 +481,9 @@ TEST_P(WaylandDataDeviceManagerTest, ValidateDroppedXMozUrl) {
   }
 }
 
-INSTANTIATE_TEST_SUITE_P(XdgVersionV5Test,
+INSTANTIATE_TEST_SUITE_P(XdgVersionStableTest,
                          WaylandDataDeviceManagerTest,
-                         ::testing::Values(kXdgShellV5));
+                         ::testing::Values(kXdgShellStable));
 
 INSTANTIATE_TEST_SUITE_P(XdgVersionV6Test,
                          WaylandDataDeviceManagerTest,

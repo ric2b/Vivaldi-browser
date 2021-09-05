@@ -13,9 +13,11 @@ const base::Feature kDoubleTapToZoomInTabletMode{
     "DoubleTapToZoomInTabletMode", base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
 
-#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)
-const base::Feature kSyncClipboardServiceFeature{
-    "SyncClipboardService", base::FEATURE_DISABLED_BY_DEFAULT};
-#endif  // OS_WIN || OS_MACOSX || OS_LINUX
+#if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
+// Enables taking snapshots of the user data directory after a major
+// milestone update and restoring them after a version rollback.
+const base::Feature kUserDataSnapshot{"UserDataSnapshot",
+                                      base::FEATURE_DISABLED_BY_DEFAULT};
+#endif  // !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
 
 }  // namespace features

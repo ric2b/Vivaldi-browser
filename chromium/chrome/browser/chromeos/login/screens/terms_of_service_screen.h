@@ -29,6 +29,11 @@ class TermsOfServiceScreen : public BaseScreen {
  public:
   enum class Result { ACCEPTED, DECLINED };
 
+  static std::string GetResultString(Result result);
+
+  // The possible states that the screen may assume.
+  enum class ScreenState : int { LOADING = 0, LOADED = 1, ERROR = 2 };
+
   using ScreenExitCallback = base::RepeatingCallback<void(Result result)>;
   TermsOfServiceScreen(TermsOfServiceScreenView* view,
                        const ScreenExitCallback& exit_callback);
@@ -43,11 +48,12 @@ class TermsOfServiceScreen : public BaseScreen {
   // Called when view is destroyed so there is no dead reference to it.
   void OnViewDestroyed(TermsOfServiceScreenView* view);
 
-  // BaseScreen:
-  void Show() override;
-  void Hide() override;
-
  private:
+  // BaseScreen:
+  void ShowImpl() override;
+  void HideImpl() override;
+  void OnUserAction(const std::string& action_id) override;
+
   // Start downloading the Terms of Service.
   void StartDownload();
 

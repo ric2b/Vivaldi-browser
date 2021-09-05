@@ -6,10 +6,12 @@
 
 #include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
 #include "third_party/blink/public/platform/platform.h"
+#include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/csp/csp_violation_report_body.h"
 #include "third_party/blink/renderer/core/frame/deprecation_report_body.h"
+#include "third_party/blink/renderer/core/frame/document_policy_violation_report_body.h"
 #include "third_party/blink/renderer/core/frame/feature_policy_violation_report_body.h"
 #include "third_party/blink/renderer/core/frame/intervention_report_body.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
@@ -25,7 +27,9 @@ namespace blink {
 const char ReportingContext::kSupplementName[] = "ReportingContext";
 
 ReportingContext::ReportingContext(ExecutionContext& context)
-    : Supplement<ExecutionContext>(context), execution_context_(context) {}
+    : Supplement<ExecutionContext>(context),
+      execution_context_(context),
+      reporting_service_(&context) {}
 
 // static
 ReportingContext* ReportingContext::From(ExecutionContext* context) {
@@ -80,10 +84,11 @@ void ReportingContext::UnregisterObserver(ReportingObserver* observer) {
   observers_.erase(observer);
 }
 
-void ReportingContext::Trace(blink::Visitor* visitor) {
+void ReportingContext::Trace(Visitor* visitor) {
   visitor->Trace(observers_);
   visitor->Trace(report_buffer_);
   visitor->Trace(execution_context_);
+  visitor->Trace(reporting_service_);
   Supplement<ExecutionContext>::Trace(visitor);
 }
 
@@ -104,11 +109,12 @@ void ReportingContext::CountReport(Report* report) {
   UseCounter::Count(execution_context_, feature);
 }
 
-const mojo::Remote<mojom::blink::ReportingServiceProxy>&
+const HeapMojoRemote<mojom::blink::ReportingServiceProxy>&
 ReportingContext::GetReportingService() const {
-  if (!reporting_service_) {
-    Platform::Current()->GetBrowserInterfaceBrokerProxy()->GetInterface(
-        reporting_service_.BindNewPipeAndPassReceiver());
+  if (!reporting_service_.is_bound()) {
+    Platform::Current()->GetBrowserInterfaceBroker()->GetInterface(
+        reporting_service_.BindNewPipeAndPassReceiver(
+            execution_context_->GetTaskRunner(TaskType::kMiscPlatformAPI)));
   }
   return reporting_service_;
 }
@@ -118,7 +124,8 @@ void ReportingContext::SendToReportingAPI(Report* report,
   const String& type = report->type();
   if (!(type == ReportType::kCSPViolation || type == ReportType::kDeprecation ||
         type == ReportType::kFeaturePolicyViolation ||
-        type == ReportType::kIntervention)) {
+        type == ReportType::kIntervention ||
+        type == ReportType::kDocumentPolicyViolation)) {
     return;
   }
 
@@ -138,29 +145,19 @@ void ReportingContext::SendToReportingAPI(Report* report,
     const CSPViolationReportBody* body =
         static_cast<CSPViolationReportBody*>(report->body());
     GetReportingService()->QueueCspViolationReport(
-        url,
-        endpoint,
-        body->documentURL() ? body->documentURL() : "",
-        body->referrer(),
-        body->blockedURL(),
+        url, endpoint, body->documentURL() ? body->documentURL() : "",
+        body->referrer(), body->blockedURL(),
         body->effectiveDirective() ? body->effectiveDirective() : "",
         body->originalPolicy() ? body->originalPolicy() : "",
-        body->sourceFile(),
-        body->sample(),
-        body->disposition() ? body->disposition() : "",
-        body->statusCode(),
-        line_number,
-        column_number);
+        body->sourceFile(), body->sample(),
+        body->disposition() ? body->disposition() : "", body->statusCode(),
+        line_number, column_number);
   } else if (type == ReportType::kDeprecation) {
     // Send the deprecation report.
     const DeprecationReportBody* body =
         static_cast<DeprecationReportBody*>(report->body());
-    base::Optional<base::Time> anticipated_removal =
-        base::Time::FromDoubleT(body->anticipatedRemoval(is_null));
-    if (is_null)
-      anticipated_removal = base::nullopt;
     GetReportingService()->QueueDeprecationReport(
-        url, body->id(), anticipated_removal, body->message(),
+        url, body->id(), body->AnticipatedRemoval(), body->message(),
         body->sourceFile(), line_number, column_number);
   } else if (type == ReportType::kFeaturePolicyViolation) {
     // Send the feature policy violation report.
@@ -175,6 +172,14 @@ void ReportingContext::SendToReportingAPI(Report* report,
         static_cast<InterventionReportBody*>(report->body());
     GetReportingService()->QueueInterventionReport(
         url, body->id(), body->message(), body->sourceFile(), line_number,
+        column_number);
+  } else if (type == ReportType::kDocumentPolicyViolation) {
+    const DocumentPolicyViolationReportBody* body =
+        static_cast<DocumentPolicyViolationReportBody*>(report->body());
+    // Send the document policy violation report.
+    GetReportingService()->QueueDocumentPolicyViolationReport(
+        url, endpoint, body->featureId(), body->disposition(),
+        "Document policy violation", body->sourceFile(), line_number,
         column_number);
   }
 }

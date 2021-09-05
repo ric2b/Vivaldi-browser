@@ -24,6 +24,7 @@
 <translation id="2230458221926704099">Remediați conexiunea folosind <ph name="BEGIN_LINK" />aplicația de diagnosticare<ph name="END_LINK" /></translation>
 <translation id="2292556288342944218">Accesul la internet este blocat</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> necesită un nume de utilizator și o parolă.</translation>
+<translation id="2344028582131185878">Descărcări automate</translation>
 <translation id="2355395290879513365">Este posibil ca atacatorii să poată vedea imaginile la care vă uitați pe acest site web și să vă păcălească prin modificarea lor.</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> a trimis un răspuns nevalid.</translation>
 <translation id="2609632851001447353">Variații</translation>
@@ -94,6 +95,7 @@
 <translation id="6165508094623778733">Aflați mai multe</translation>
 <translation id="6177128806592000436">Conexiunea la acest site web nu este securizată</translation>
 <translation id="6203231073485539293">Verificați conexiunea la internet</translation>
+<translation id="625755898061068298">Ați ales să dezactivați avertismentele de securitate pentru acest site web.</translation>
 <translation id="6264485186158353794">Înapoi la zona sigură</translation>
 <translation id="6305205051461490394"><ph name="URL" />  nu poate fi accesat.</translation>
 <translation id="6321917430147971392">Verificați setările DNS</translation>

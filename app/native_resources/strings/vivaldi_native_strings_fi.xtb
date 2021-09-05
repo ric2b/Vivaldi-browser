@@ -11,6 +11,7 @@
 <translation id="1462666970065907900">Haluatko varmasti sulkea tämän ikkunan?</translation>
 <translation id="1657174850639146440">Hirviö 9</translation>
 <translation id="1676595396635191120">Uusi yksityisikkuna</translation>
+<translation id="1728549374069268714">Liitä ja siirry</translation>
 <translation id="1756026472674246267">Avaa linkki uuteen välilehteen</translation>
 <translation id="1759842336958782510">Chrome</translation>
 <translation id="1769904678986817931">Kuvan ominaisuudet…</translation>
@@ -25,6 +26,7 @@
 <translation id="2848085334714181751">Eläin 3</translation>
 <translation id="2873951654529031587">Roskakori</translation>
 <translation id="292258461174562431">Hirviö 4</translation>
+<translation id="2923448633003185837">Liitä ja siirry</translation>
 <translation id="2977472760057091832">Avaa linkki yksityisikkunaan</translation>
 <translation id="2989805286512600854">Avaa uuteen välilehteen</translation>
 <translation id="3027988479108856431">Yandexin asetukset eivät valitettavasti ole käytettävissä selaimen ollessa auki. Tuodaksesi asetukset Vivaldiin tallenna työsi ja sulje kaikki Yandex-ikkunat. Napsauta sitten Jatka.</translation>
@@ -43,7 +45,6 @@
 <translation id="3542768452570884558">Avaa linkki uuteen ikkunaan</translation>
 <translation id="3588820906588687999">Avaa kuva uuteen välilehteen</translation>
 <translation id="3601066750251199488">Hirviö 3</translation>
-<translation id="366643050267431920">Lisää tapahtumaksi</translation>
 <translation id="3732157130969736834">Kirjanmerkkilinkki</translation>
 <translation id="3732388226447288666">Eläin 2</translation>
 <translation id="3732439195215136813">Eläin 5</translation>
@@ -66,7 +67,6 @@
 <translation id="4636708767492582204">Lähetä sähköpostitse</translation>
 <translation id="4677434526832593569">Eläin 8</translation>
 <translation id="4881695831933465202">Avaa</translation>
-<translation id="4973311370126107785">JavaScriptin suoritus AppleScriptin kautta on poistettu käytöstä. Ota se käyttöön valitsemalla valikosta Työkalut &gt; Salli JavaScript Apple-tapahtumista.</translation>
 <translation id="5014281392052865061">Tuodut pikavalinnat</translation>
 <translation id="5092656712000637858">Lisää sivu verkkopaneeliin</translation>
 <translation id="5177818338935286353">Hirviö 7</translation>
@@ -87,6 +87,7 @@
 <translation id="6229528619562190452">Päivitä Vivaldi napsauttamalla tästä.</translation>
 <translation id="6234173136417926046">Käytä kuvaa aloitussivun taustana</translation>
 <translation id="630690498669249215">Operan kirjanmerkkitiedosto</translation>
+<translation id="6339818817272922368">Paikallinen tili</translation>
 <translation id="6438786710866753178">Maisema 4</translation>
 <translation id="6477028720702061455">Valitse Operan profiilikansio tuomista varten</translation>
 <translation id="6510706699590490869">Päivitä &amp;Vivaldi</translation>
@@ -98,8 +99,10 @@
 <translation id="7086554968911045110">Maisema 7</translation>
 <translation id="7111492742514999492">Maisema 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
+<translation id="7496505986576158197">Vivaldin on mahdollistanut avoin lähdekoodiprojekti <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> sekä muut <ph name="BEGIN_LINK_OSS" />avoimen koodin ohjelmat<ph name="END_LINK_OSS" />.</translation>
 <translation id="7715497554424665066">&amp;Ohita päivitys</translation>
 <translation id="7724603315864178912">Leikkaa</translation>
+<translation id="7793738202466490491">Lisää kalenteritapahtumaksi</translation>
 <translation id="7865983598101744945">Vahvista lopettaminen</translation>
 <translation id="7957213167373139414">Kalenteri</translation>
 <translation id="8027581147000338959">Avaa uuteen ikkunaan</translation>
@@ -109,6 +112,7 @@
 <translation id="8331671104904436324">Avaa taustavälilehteen</translation>
 <translation id="8373293945112511707">Maisema 1</translation>
 <translation id="8427094907586191051">Maisema 17</translation>
+<translation id="8446668873108041390">JavaScriptin suoritus AppleScriptin kautta on poistettu käytöstä. Kohdassa Asetukset &gt; Yksityisyys &gt; Apple-tapahtumat on asetus tämän sallimiseksi.</translation>
 <translation id="8539196077526389150">Maisema 13</translation>
 <translation id="8624587806981488221">Lataa &amp;kuva uudelleen</translation>
 <translation id="864444594187862076">Operan versio 15+ (kehitysversio)</translation>

@@ -7,7 +7,7 @@
 #include "base/location.h"
 #include "base/metrics/histogram_macros.h"
 #include "third_party/blink/public/platform/platform.h"
-#include "third_party/blink/renderer/core/dom/idle_request_options.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_idle_request_options.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/inspector/inspector_trace_events.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
@@ -90,7 +90,7 @@ void ScriptedIdleTaskController::V8IdleTask::invoke(IdleDeadline* deadline) {
 
 ScriptedIdleTaskController::ScriptedIdleTaskController(
     ExecutionContext* context)
-    : ContextLifecycleStateObserver(context),
+    : ExecutionContextLifecycleStateObserver(context),
       scheduler_(ThreadScheduler::Current()),
       next_callback_id_(0),
       paused_(false) {}
@@ -99,7 +99,7 @@ ScriptedIdleTaskController::~ScriptedIdleTaskController() = default;
 
 void ScriptedIdleTaskController::Trace(Visitor* visitor) {
   visitor->Trace(idle_tasks_);
-  ContextLifecycleStateObserver::Trace(visitor);
+  ExecutionContextLifecycleStateObserver::Trace(visitor);
 }
 
 int ScriptedIdleTaskController::NextCallbackId() {
@@ -228,7 +228,7 @@ void ScriptedIdleTaskController::RunCallback(
   idle_tasks_.erase(id);
 }
 
-void ScriptedIdleTaskController::ContextDestroyed(ExecutionContext*) {
+void ScriptedIdleTaskController::ContextDestroyed() {
   idle_tasks_.clear();
 }
 

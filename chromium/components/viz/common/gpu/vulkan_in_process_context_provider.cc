@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "components/viz/common/gpu/vulkan_in_process_context_provider.h"
+
 #include "gpu/vulkan/buildflags.h"
 #include "gpu/vulkan/vulkan_device_queue.h"
 #include "gpu/vulkan/vulkan_fence_helper.h"
@@ -16,23 +17,13 @@ namespace viz {
 
 scoped_refptr<VulkanInProcessContextProvider>
 VulkanInProcessContextProvider::Create(
-    gpu::VulkanImplementation* vulkan_implementation) {
+    gpu::VulkanImplementation* vulkan_implementation,
+    const GrContextOptions& options) {
   scoped_refptr<VulkanInProcessContextProvider> context_provider(
       new VulkanInProcessContextProvider(vulkan_implementation));
-  if (!context_provider->Initialize())
+  if (!context_provider->Initialize(options))
     return nullptr;
   return context_provider;
-}
-
-GrVkGetProc make_unified_getter(const PFN_vkGetInstanceProcAddr& iproc,
-                                const PFN_vkGetDeviceProcAddr& dproc) {
-  return [&iproc, &dproc](const char* proc_name, VkInstance instance,
-                          VkDevice device) {
-    if (device != VK_NULL_HANDLE) {
-      return dproc(device, proc_name);
-    }
-    return iproc(instance, proc_name);
-  };
 }
 
 VulkanInProcessContextProvider::VulkanInProcessContextProvider(
@@ -43,7 +34,8 @@ VulkanInProcessContextProvider::~VulkanInProcessContextProvider() {
   Destroy();
 }
 
-bool VulkanInProcessContextProvider::Initialize() {
+bool VulkanInProcessContextProvider::Initialize(
+    const GrContextOptions& context_options) {
   DCHECK(!device_queue_);
 
   const auto& instance_extensions = vulkan_implementation_->GetVulkanInstance()
@@ -74,11 +66,11 @@ bool VulkanInProcessContextProvider::Initialize() {
                                        ->vulkan_info()
                                        .used_api_version;
 
-  gpu::VulkanFunctionPointers* vulkan_function_pointers =
-      gpu::GetVulkanFunctionPointers();
-  GrVkGetProc get_proc =
-      make_unified_getter(vulkan_function_pointers->vkGetInstanceProcAddrFn,
-                          vulkan_function_pointers->vkGetDeviceProcAddrFn);
+  GrVkGetProc get_proc = [](const char* proc_name, VkInstance instance,
+                            VkDevice device) {
+    return device ? vkGetDeviceProcAddr(device, proc_name)
+                  : vkGetInstanceProcAddr(instance, proc_name);
+  };
 
   std::vector<const char*> device_extensions;
   device_extensions.reserve(device_queue_->enabled_extensions().size());
@@ -98,7 +90,7 @@ bool VulkanInProcessContextProvider::Initialize() {
       vulkan_implementation_->enforce_protected_memory() ? GrProtected::kYes
                                                          : GrProtected::kNo;
 
-  gr_context_ = GrContext::MakeVulkan(backend_context);
+  gr_context_ = GrContext::MakeVulkan(backend_context, context_options);
 
   return gr_context_ != nullptr;
 }

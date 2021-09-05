@@ -29,16 +29,17 @@
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/public/platform/web_size.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_mutation_observer_init.h"
 #include "third_party/blink/renderer/core/css/css_property_value_set.h"
 #include "third_party/blink/renderer/core/dom/element_traversal.h"
 #include "third_party/blink/renderer/core/dom/events/event_dispatch_forbidden_scope.h"
 #include "third_party/blink/renderer/core/dom/mutation_observer.h"
-#include "third_party/blink/renderer/core/dom/mutation_observer_init.h"
 #include "third_party/blink/renderer/core/dom/mutation_record.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/events/gesture_event.h"
 #include "third_party/blink/renderer/core/events/keyboard_event.h"
 #include "third_party/blink/renderer/core/events/pointer_event.h"
+#include "third_party/blink/renderer/core/events/touch_event.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
@@ -105,7 +106,7 @@ constexpr int kMinWidthForOverlayPlayButton = 72;
 
 constexpr int kMinScrubbingMessageWidth = 300;
 
-const char* kStateCSSClasses[8] = {
+const char* const kStateCSSClasses[8] = {
     "state-no-source",                 // kNoSource
     "state-no-metadata",               // kNotLoaded
     "state-loading-metadata-paused",   // kLoadingMetadataPaused
@@ -211,7 +212,7 @@ class MediaControlsImpl::BatchedControlUpdate {
   }
 
  private:
-  Member<MediaControlsImpl> controls_;
+  MediaControlsImpl* controls_;
   static int batch_depth_;
 
   DISALLOW_COPY_AND_ASSIGN(BatchedControlUpdate);
@@ -236,7 +237,7 @@ class MediaControlsImpl::MediaControlsResizeObserverDelegate final
     controls_->NotifyElementSizeChanged(entries[0]->contentRect());
   }
 
-  void Trace(blink::Visitor* visitor) override {
+  void Trace(Visitor* visitor) override {
     visitor->Trace(controls_);
     ResizeObserver::Delegate::Trace(visitor);
   }
@@ -262,7 +263,7 @@ class MediaControlsImpl::MediaElementMutationCallback
   }
 
   ExecutionContext* GetExecutionContext() const override {
-    return &controls_->GetDocument();
+    return controls_->GetDocument().ToExecutionContext();
   }
 
   void Deliver(const MutationRecordVector& records,
@@ -296,7 +297,7 @@ class MediaControlsImpl::MediaElementMutationCallback
 
   void Disconnect() { observer_->disconnect(); }
 
-  void Trace(blink::Visitor* visitor) override {
+  void Trace(Visitor* visitor) override {
     visitor->Trace(controls_);
     visitor->Trace(observer_);
     MutationObserver::Delegate::Trace(visitor);
@@ -308,8 +309,9 @@ class MediaControlsImpl::MediaElementMutationCallback
 };
 
 bool MediaControlsImpl::IsTouchEvent(Event* event) {
-  return event->IsTouchEvent() || event->IsGestureEvent() ||
-         (event->IsMouseEvent() && ToMouseEvent(event)->FromTouch());
+  auto* mouse_event = DynamicTo<MouseEvent>(event);
+  return IsA<TouchEvent>(event) || IsA<GestureEvent>(event) ||
+         (mouse_event && mouse_event->FromTouch());
 }
 
 MediaControlsImpl::MediaControlsImpl(HTMLMediaElement& media_element)
@@ -386,27 +388,27 @@ MediaControlsImpl* MediaControlsImpl::Create(HTMLMediaElement& media_element,
   controls->Reset();
 
   if (RuntimeEnabledFeatures::VideoFullscreenOrientationLockEnabled() &&
-      media_element.IsHTMLVideoElement()) {
+      IsA<HTMLVideoElement>(media_element)) {
     // Initialize the orientation lock when going fullscreen feature.
     controls->orientation_lock_delegate_ =
         MakeGarbageCollected<MediaControlsOrientationLockDelegate>(
-            ToHTMLVideoElement(media_element));
+            To<HTMLVideoElement>(media_element));
   }
 
   if (MediaControlsDisplayCutoutDelegate::IsEnabled() &&
-      media_element.IsHTMLVideoElement()) {
+      IsA<HTMLVideoElement>(media_element)) {
     // Initialize the pinch gesture to expand into the display cutout feature.
     controls->display_cutout_delegate_ =
         MakeGarbageCollected<MediaControlsDisplayCutoutDelegate>(
-            ToHTMLVideoElement(media_element));
+            To<HTMLVideoElement>(media_element));
   }
 
   if (RuntimeEnabledFeatures::VideoRotateToFullscreenEnabled() &&
-      media_element.IsHTMLVideoElement()) {
+      IsA<HTMLVideoElement>(media_element)) {
     // Initialize the rotate-to-fullscreen feature.
     controls->rotate_to_fullscreen_delegate_ =
         MakeGarbageCollected<MediaControlsRotateToFullscreenDelegate>(
-            ToHTMLVideoElement(media_element));
+            To<HTMLVideoElement>(media_element));
   }
 
   MediaControlsResourceLoader::InjectMediaControlsUAStyleSheet();
@@ -531,7 +533,7 @@ void MediaControlsImpl::InitializeControls() {
   if (RuntimeEnabledFeatures::PictureInPictureEnabled() &&
       GetDocument().GetSettings() &&
       GetDocument().GetSettings()->GetPictureInPictureEnabled() &&
-      MediaElement().IsHTMLVideoElement()) {
+      IsA<HTMLVideoElement>(MediaElement())) {
     picture_in_picture_button_ =
         MakeGarbageCollected<MediaControlPictureInPictureButtonElement>(*this);
     picture_in_picture_button_->SetIsWanted(
@@ -539,7 +541,7 @@ void MediaControlsImpl::InitializeControls() {
   }
 
   if (RuntimeEnabledFeatures::DisplayCutoutAPIEnabled() &&
-      MediaElement().IsHTMLVideoElement()) {
+      IsA<HTMLVideoElement>(MediaElement())) {
     display_cutout_fullscreen_button_ =
         MakeGarbageCollected<MediaControlDisplayCutoutFullscreenButtonElement>(
             *this);
@@ -601,9 +603,9 @@ void MediaControlsImpl::InitializeControls() {
 
 void MediaControlsImpl::PopulatePanel() {
   // Clear the panels.
-  panel_->SetInnerHTMLFromString("");
+  panel_->setInnerHTML("");
   if (media_button_panel_)
-    media_button_panel_->SetInnerHTMLFromString("");
+    media_button_panel_->setInnerHTML("");
 
   Element* button_panel = panel_;
   if (ShouldShowVideoControls()) {
@@ -736,35 +738,35 @@ void MediaControlsImpl::UpdateCSSClassFromState() {
     if (state == kNoSource) {
       // Check if the play button or overflow menu has the "disabled" attribute
       // set so we avoid unnecessarily resetting it.
-      if (!play_button_->hasAttribute(html_names::kDisabledAttr)) {
+      if (!play_button_->FastHasAttribute(html_names::kDisabledAttr)) {
         play_button_->setAttribute(html_names::kDisabledAttr, "");
         updated = true;
       }
 
       if (ShouldShowVideoControls() &&
-          !overflow_menu_->hasAttribute(html_names::kDisabledAttr)) {
+          !overflow_menu_->FastHasAttribute(html_names::kDisabledAttr)) {
         overflow_menu_->setAttribute(html_names::kDisabledAttr, "");
         updated = true;
       }
     } else {
-      if (play_button_->hasAttribute(html_names::kDisabledAttr)) {
+      if (play_button_->FastHasAttribute(html_names::kDisabledAttr)) {
         play_button_->removeAttribute(html_names::kDisabledAttr);
         updated = true;
       }
 
-      if (overflow_menu_->hasAttribute(html_names::kDisabledAttr)) {
+      if (overflow_menu_->FastHasAttribute(html_names::kDisabledAttr)) {
         overflow_menu_->removeAttribute(html_names::kDisabledAttr);
         updated = true;
       }
     }
 
     if (state == kNoSource || state == kNotLoaded) {
-      if (!timeline_->hasAttribute(html_names::kDisabledAttr)) {
+      if (!timeline_->FastHasAttribute(html_names::kDisabledAttr)) {
         timeline_->setAttribute(html_names::kDisabledAttr, "");
         updated = true;
       }
     } else {
-      if (timeline_->hasAttribute(html_names::kDisabledAttr)) {
+      if (timeline_->FastHasAttribute(html_names::kDisabledAttr)) {
         timeline_->removeAttribute(html_names::kDisabledAttr);
         updated = true;
       }
@@ -873,8 +875,8 @@ void MediaControlsImpl::Reset() {
   OnControlsListUpdated();
 }
 
-void MediaControlsImpl::UpdateTimeIndicators() {
-  timeline_->SetPosition(MediaElement().currentTime());
+void MediaControlsImpl::UpdateTimeIndicators(bool suppress_aria) {
+  timeline_->SetPosition(MediaElement().currentTime(), suppress_aria);
   UpdateCurrentTimeDisplay();
 }
 
@@ -1008,8 +1010,9 @@ void MediaControlsImpl::MakeTransparent() {
 
 bool MediaControlsImpl::ShouldHideMediaControls(unsigned behavior_flags) const {
   // Never hide for a media element without visual representation.
-  if (!MediaElement().IsHTMLVideoElement() || !MediaElement().HasVideo() ||
-      ToHTMLVideoElement(MediaElement()).IsRemotingInterstitialVisible()) {
+  auto* video_element = DynamicTo<HTMLVideoElement>(MediaElement());
+  if (!video_element || !MediaElement().HasVideo() ||
+      video_element->IsRemotingInterstitialVisible()) {
     return false;
   }
 
@@ -1059,7 +1062,7 @@ bool MediaControlsImpl::ShouldHideMediaControls(unsigned behavior_flags) const {
 }
 
 bool MediaControlsImpl::AreVideoControlsHovered() const {
-  DCHECK(MediaElement().IsHTMLVideoElement());
+  DCHECK(IsA<HTMLVideoElement>(MediaElement()));
 
   return media_button_panel_->IsHovered() || timeline_->IsHovered();
 }
@@ -1195,7 +1198,7 @@ void MediaControlsImpl::ExitFullscreen() {
 
 bool MediaControlsImpl::IsFullscreenEnabled() const {
   return fullscreen_button_->IsWanted() &&
-         !fullscreen_button_->hasAttribute(html_names::kDisabledAttr);
+         !fullscreen_button_->FastHasAttribute(html_names::kDisabledAttr);
 }
 
 void MediaControlsImpl::RemotePlaybackStateChanged() {
@@ -1314,7 +1317,7 @@ void MediaControlsImpl::UpdateOverflowMenuWanted() const {
 
   // The overflow menu is always wanted if it has the "disabled" attr set.
   overflow_wanted = overflow_wanted ||
-                    overflow_menu_->hasAttribute(html_names::kDisabledAttr);
+                    overflow_menu_->FastHasAttribute(html_names::kDisabledAttr);
   overflow_menu_->SetDoesFit(overflow_wanted);
   overflow_menu_->SetIsWanted(overflow_wanted);
 
@@ -1464,10 +1467,11 @@ void MediaControlsImpl::DefaultEventHandler(Event& event) {
     ResetHideMediaControlsTimer();
   }
 
-  if (event.IsKeyboardEvent() && !event.defaultPrevented() &&
+  auto* keyboard_event = DynamicTo<KeyboardEvent>(event);
+  if (keyboard_event && !event.defaultPrevented() &&
       !IsSpatialNavigationEnabled(GetDocument().GetFrame())) {
-    const String& key = ToKeyboardEvent(event).key();
-    if (key == "Enter" || ToKeyboardEvent(event).keyCode() == ' ') {
+    const String& key = keyboard_event->key();
+    if (key == "Enter" || keyboard_event->keyCode() == ' ') {
       if (overlay_play_button_) {
         overlay_play_button_->OnMediaKeyboardEvent(&event);
       } else {
@@ -1612,10 +1616,11 @@ void MediaControlsImpl::MaybeJump(int seconds) {
 }
 
 bool MediaControlsImpl::IsOnLeftSide(Event* event) {
-  if (!event->IsGestureEvent())
+  auto* gesture_event = DynamicTo<GestureEvent>(event);
+  if (!gesture_event)
     return false;
 
-  float tap_x = ToGestureEvent(event)->NativeEvent().PositionInWidget().x;
+  float tap_x = gesture_event->NativeEvent().PositionInWidget().x();
 
   DOMRect* rect = getBoundingClientRect();
   double middle = rect->x() + (rect->width() / 2);
@@ -1693,9 +1698,10 @@ void MediaControlsImpl::ShowCursor() {
 }
 
 bool MediaControlsImpl::ContainsRelatedTarget(Event* event) {
-  if (!event->IsPointerEvent())
+  auto* pointer_event = DynamicTo<PointerEvent>(event);
+  if (!pointer_event)
     return false;
-  EventTarget* related_target = ToPointerEvent(event)->relatedTarget();
+  EventTarget* related_target = pointer_event->relatedTarget();
   if (!related_target)
     return false;
   return contains(related_target->ToNode());
@@ -1737,7 +1743,7 @@ void MediaControlsImpl::OnFocusIn() {
 }
 
 void MediaControlsImpl::OnTimeUpdate() {
-  UpdateTimeIndicators();
+  UpdateTimeIndicators(true /* suppress_aria */);
 
   // 'timeupdate' might be called in a paused state. The controls should not
   // become transparent in that case.
@@ -1976,7 +1982,7 @@ bool MediaControlsImpl::ShouldActAsAudioControls() const {
   // A video element should act like an audio element when it has an audio track
   // but no video track.
   return MediaElement().ShouldShowControls() &&
-         MediaElement().IsHTMLVideoElement() && MediaElement().HasAudio() &&
+         IsA<HTMLVideoElement>(MediaElement()) && MediaElement().HasAudio() &&
          !MediaElement().HasVideo();
 }
 
@@ -2014,7 +2020,7 @@ bool MediaControlsImpl::ShouldShowAudioControls() const {
 }
 
 bool MediaControlsImpl::ShouldShowVideoControls() const {
-  return MediaElement().IsHTMLVideoElement() && !ShouldShowAudioControls();
+  return IsA<HTMLVideoElement>(MediaElement()) && !ShouldShowAudioControls();
 }
 
 void MediaControlsImpl::NetworkStateChanged() {
@@ -2119,11 +2125,10 @@ void MediaControlsImpl::OnLoadedData() {
 }
 
 HTMLVideoElement& MediaControlsImpl::VideoElement() {
-  DCHECK(MediaElement().IsHTMLVideoElement());
-  return *ToHTMLVideoElement(&MediaElement());
+  return *To<HTMLVideoElement>(&MediaElement());
 }
 
-void MediaControlsImpl::Trace(blink::Visitor* visitor) {
+void MediaControlsImpl::Trace(Visitor* visitor) {
   visitor->Trace(element_mutation_callback_);
   visitor->Trace(resize_observer_);
   visitor->Trace(panel_);

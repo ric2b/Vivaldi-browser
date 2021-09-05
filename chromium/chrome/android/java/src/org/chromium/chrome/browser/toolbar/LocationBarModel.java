@@ -11,33 +11,40 @@ import android.text.TextUtils;
 import androidx.annotation.ColorRes;
 import androidx.annotation.DrawableRes;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
-import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
 import org.chromium.chrome.browser.dom_distiller.DomDistillerTabUtils;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.native_page.NativePageFactory;
 import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
-import org.chromium.chrome.browser.omnibox.OmniboxUrlEmphasizer;
+import org.chromium.chrome.browser.omnibox.ChromeAutocompleteSchemeClassifier;
 import org.chromium.chrome.browser.omnibox.SearchEngineLogoUtils;
 import org.chromium.chrome.browser.omnibox.UrlBarData;
+import org.chromium.chrome.browser.previews.Previews;
 import org.chromium.chrome.browser.previews.PreviewsAndroidBridge;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.ssl.ChromeSecurityStateModelDelegate;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabUtils;
 import org.chromium.chrome.browser.tab.TrustedCdn;
-import org.chromium.chrome.browser.util.ColorUtils;
-import org.chromium.chrome.browser.util.UrlConstants;
-import org.chromium.chrome.browser.util.UrlUtilities;
+import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.dom_distiller.core.DomDistillerUrlUtils;
+import org.chromium.components.embedder_support.util.UrlConstants;
+import org.chromium.components.embedder_support.util.UrlUtilities;
+import org.chromium.components.omnibox.OmniboxUrlEmphasizer;
+import org.chromium.components.omnibox.SecurityStatusIcon;
 import org.chromium.components.security_state.ConnectionSecurityLevel;
+import org.chromium.components.security_state.SecurityStateModel;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.ui.util.ColorUtils;
+import org.chromium.url.URI;
 
-import java.net.URI;
 import java.net.URISyntaxException;
 
 import android.graphics.Color;
@@ -66,7 +73,7 @@ public class LocationBarModel implements ToolbarDataProvider, ToolbarCommonPrope
      */
     public LocationBarModel(Context context) {
         mContext = context;
-        mPrimaryColor = ColorUtils.getDefaultThemeColor(context.getResources(), false);
+        mPrimaryColor = ChromeColors.getDefaultThemeColor(context.getResources(), false);
     }
 
     /**
@@ -132,7 +139,7 @@ public class LocationBarModel implements ToolbarDataProvider, ToolbarCommonPrope
         if (!hasTab()) return "";
 
         // Tab.getUrl() returns empty string if it does not have a URL.
-        return getTab().getUrl().trim();
+        return getTab().getUrlString().trim();
     }
 
     @Override
@@ -185,7 +192,7 @@ public class LocationBarModel implements ToolbarDataProvider, ToolbarCommonPrope
                     DomDistillerTabUtils.getFormattedUrlFromOriginalDistillerUrl(originalUrl));
 
             // Clear the editing text for untrusted offline pages.
-            if (!OfflinePageUtils.isShowingTrustedOfflinePage(mTab)) {
+            if (!OfflinePageUtils.isShowingTrustedOfflinePage(mTab.getWebContents())) {
                 return buildUrlBarData(url, formattedUrl, "");
             }
 
@@ -226,10 +233,13 @@ public class LocationBarModel implements ToolbarDataProvider, ToolbarCommonPrope
                 // Ignore as this only is for applying color
             }
 
+            ChromeAutocompleteSchemeClassifier chromeAutocompleteSchemeClassifier =
+                    new ChromeAutocompleteSchemeClassifier(getProfile());
             OmniboxUrlEmphasizer.emphasizeUrl(spannableDisplayText, mContext.getResources(),
-                    getProfile(), getSecurityLevel(), isInternalPage,
+                    chromeAutocompleteSchemeClassifier, getSecurityLevel(), isInternalPage,
                     !ColorUtils.shouldUseLightForegroundOnBackground(getPrimaryColor()),
                     shouldEmphasizeHttpsScheme());
+            chromeAutocompleteSchemeClassifier.destroy();
         }
 
         return UrlBarData.forUrlAndText(url, spannableDisplayText, editingText);
@@ -288,15 +298,16 @@ public class LocationBarModel implements ToolbarDataProvider, ToolbarCommonPrope
 
     @Override
     public Profile getProfile() {
-        Profile lastUsedProfile = Profile.getLastUsedProfile();
+        Profile lastUsedRegularProfile = Profile.getLastUsedRegularProfile();
         if (mIsIncognito) {
             // When in overview mode with no open tabs, there has not been created an
             // OffTheRecordProfile yet. #getOffTheRecordProfile will create a profile if none
             // exists.
-            assert lastUsedProfile.hasOffTheRecordProfile() || isInOverviewAndShowingOmnibox();
-            return lastUsedProfile.getOffTheRecordProfile();
+            assert lastUsedRegularProfile.hasOffTheRecordProfile()
+                    || isInOverviewAndShowingOmnibox();
+            return lastUsedRegularProfile.getOffTheRecordProfile();
         }
-        return lastUsedProfile.getOriginalProfile();
+        return lastUsedRegularProfile;
     }
 
     public void setOverviewModeBehavior(OverviewModeBehavior overviewModeBehavior) {
@@ -319,14 +330,14 @@ public class LocationBarModel implements ToolbarDataProvider, ToolbarCommonPrope
     private void updateUsingBrandColor() {
         mIsUsingBrandColor = !isIncognito()
                 && mPrimaryColor
-                        != ColorUtils.getDefaultThemeColor(mContext.getResources(), isIncognito())
+                        != ChromeColors.getDefaultThemeColor(mContext.getResources(), isIncognito())
                 && hasTab() && !mTab.isNativePage();
     }
 
     @Override
     public int getPrimaryColor() {
         return isInOverviewAndShowingOmnibox()
-                ? ColorUtils.getDefaultThemeColor(mContext.getResources(), isIncognito())
+                ? ChromeColors.getDefaultThemeColor(mContext.getResources(), isIncognito())
                 : mPrimaryColor;
     }
 
@@ -344,7 +355,7 @@ public class LocationBarModel implements ToolbarDataProvider, ToolbarCommonPrope
 
     @Override
     public boolean isPreview() {
-        return hasTab() && mTab.isPreview();
+        return hasTab() && Previews.isPreview(mTab);
     }
 
     @Override
@@ -370,7 +381,7 @@ public class LocationBarModel implements ToolbarDataProvider, ToolbarCommonPrope
         // If we're showing a query in the omnibox, and the security level is high enough to show
         // the search icon, return that instead of the security icon.
         if (getDisplaySearchTerms() != null) {
-                return R.drawable.omnibox_search;
+            return R.drawable.ic_suggestion_magnifier;
         }
 
         if (ChromeApplication.isVivaldi() && NewTabPage.isNTPUrl(getCurrentUrl())) {
@@ -384,18 +395,26 @@ public class LocationBarModel implements ToolbarDataProvider, ToolbarCommonPrope
 
     @VisibleForTesting
     @ConnectionSecurityLevel
-    static int getSecurityLevel(Tab tab, boolean isOfflinePage, @Nullable String publisherUrl) {
+    int getSecurityLevel(Tab tab, boolean isOfflinePage, @Nullable String publisherUrl) {
         if (tab == null || isOfflinePage) {
             return ConnectionSecurityLevel.NONE;
         }
 
-        int securityLevel = tab.getSecurityLevel();
         if (publisherUrl != null) {
-            assert securityLevel != ConnectionSecurityLevel.DANGEROUS;
+            assert getSecurityLevelFromStateModel(tab.getWebContents())
+                    != ConnectionSecurityLevel.DANGEROUS;
             return (URI.create(publisherUrl).getScheme().equals(UrlConstants.HTTPS_SCHEME))
                     ? ConnectionSecurityLevel.SECURE
                     : ConnectionSecurityLevel.WARNING;
         }
+        return getSecurityLevelFromStateModel(tab.getWebContents());
+    }
+
+    @VisibleForTesting
+    @ConnectionSecurityLevel
+    int getSecurityLevelFromStateModel(WebContents webContents) {
+        int securityLevel = SecurityStateModel.getSecurityLevelForWebContents(
+                webContents, ChromeSecurityStateModelDelegate.getInstance());
         return securityLevel;
     }
 
@@ -411,25 +430,20 @@ public class LocationBarModel implements ToolbarDataProvider, ToolbarCommonPrope
             return R.drawable.ic_offline_pin_24dp;
         }
 
-        switch (securityLevel) {
-            case ConnectionSecurityLevel.NONE:
-                return isSmallDevice
-                                && (!SearchEngineLogoUtils.shouldShowSearchEngineLogo(isIncognito())
-                                        || getNewTabPageForCurrentTab() != null)
-                        ? 0
-                        : R.drawable.omnibox_info;
-            case ConnectionSecurityLevel.WARNING:
-                return R.drawable.omnibox_info;
-            case ConnectionSecurityLevel.DANGEROUS:
-                return R.drawable.omnibox_https_invalid;
-            case ConnectionSecurityLevel.SECURE_WITH_POLICY_INSTALLED_CERT:
-            case ConnectionSecurityLevel.SECURE:
-            case ConnectionSecurityLevel.EV_SECURE:
-                return R.drawable.omnibox_https_valid;
-            default:
-                assert false;
+        // Return early if native initialization hasn't been done yet.
+        if ((securityLevel == ConnectionSecurityLevel.NONE
+                    || securityLevel == ConnectionSecurityLevel.WARNING)
+                && mNativeLocationBarModelAndroid == 0) {
+            return R.drawable.omnibox_info;
         }
-        return 0;
+
+        boolean skipIconForNeutralState =
+                !SearchEngineLogoUtils.shouldShowSearchEngineLogo(isIncognito())
+                || getNewTabPageForCurrentTab() != null;
+
+        return SecurityStatusIcon.getSecurityIconResource(securityLevel,
+                SecurityStateModel.shouldShowDangerTriangleForWarningLevel(), isSmallDevice,
+                skipIconForNeutralState);
     }
 
     @Override
@@ -446,7 +460,7 @@ public class LocationBarModel implements ToolbarDataProvider, ToolbarCommonPrope
 
         if (isIncognito() || needLightIcon) {
             // For a dark theme color, use light icons.
-            return ColorUtils.getThemedToolbarIconTintRes(true);
+            return ToolbarColors.getThemedToolbarIconTintRes(true);
         }
 
         if (isPreview()) {
@@ -463,7 +477,7 @@ public class LocationBarModel implements ToolbarDataProvider, ToolbarCommonPrope
             // For theme colors which are not dark and are also not
             // light enough to warrant an opaque URL bar, use dark
             // icons.
-            return ColorUtils.getThemedToolbarIconTintRes(false);
+            return ToolbarColors.getThemedToolbarIconTintRes(false);
         }
 
         // TODO(https://crbug.com/940134): Change the color here and also #needLightIcon logic.
@@ -479,13 +493,15 @@ public class LocationBarModel implements ToolbarDataProvider, ToolbarCommonPrope
             return R.color.google_green_600;
         }
 
-        return ColorUtils.getThemedToolbarIconTintRes(false);
+        return ToolbarColors.getThemedToolbarIconTintRes(false);
     }
 
     @Override
     public String getDisplaySearchTerms() {
         if (mNativeLocationBarModelAndroid == 0) return null;
-        if (mTab != null && !(mTab.getActivity() instanceof ChromeTabbedActivity)) return null;
+        if (mTab != null && !(TabUtils.getActivity(mTab) instanceof ChromeTabbedActivity)) {
+            return null;
+        }
         if (isPreview()) return null;
         return LocationBarModelJni.get().getDisplaySearchTerms(
                 mNativeLocationBarModelAndroid, LocationBarModel.this);

@@ -11,7 +11,9 @@
 
 #include "ash/app_list/model/app_list_folder_item.h"
 #include "ash/app_list/views/horizontal_page.h"
+#include "base/callback_helpers.h"
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 
 namespace ash {
 
@@ -30,9 +32,6 @@ class SuggestionChipContainerView;
 // active folder.
 class APP_LIST_EXPORT AppsContainerView : public HorizontalPage {
  public:
-  // Returns the minimum horizontal margins that apps grid has to respect.
-  static int GetMinimumGridHorizontalMargin();
-
   AppsContainerView(ContentsView* contents_view, AppListModel* model);
   ~AppsContainerView() override;
 
@@ -67,8 +66,26 @@ class APP_LIST_EXPORT AppsContainerView : public HorizontalPage {
 
   // Updates the visibility of the items in this view according to
   // |app_list_state| and |is_in_drag|.
-  void UpdateControlVisibility(ash::AppListViewState app_list_state,
+  void UpdateControlVisibility(AppListViewState app_list_state,
                                bool is_in_drag);
+
+  // Animates the container opacity from the opacity for the current app list
+  // transition progress to the opacity for |target_view_state|.
+  // |current_progress| - the current app list transition progress.
+  // |animator| - callback that when run starts the opacity animation.
+  using OpacityAnimator =
+      base::RepeatingCallback<void(views::View*, bool target_visibility)>;
+  void AnimateOpacity(float current_progress,
+                      AppListViewState target_view_state,
+                      const OpacityAnimator& animator);
+
+  // Sets the expected y position for apps container children, and runs
+  // |animator| for each of them to run transform animation from current bounds.
+  // (This assumes that animator knows the offset between current apps container
+  // bounds and target apps container bounds).
+  using TransformAnimator = base::RepeatingCallback<void(views::View*)>;
+  void AnimateYPosition(AppListViewState target_view_state,
+                        const TransformAnimator& animator);
 
   // Updates y position and opacity of the items in this view during dragging.
   void UpdateYPositionAndOpacity(float progress, bool restore_opacity);
@@ -107,7 +124,7 @@ class APP_LIST_EXPORT AppsContainerView : public HorizontalPage {
   // HorizontalPage overrides:
   void OnWillBeHidden() override;
   views::View* GetFirstFocusableView() override;
-  gfx::Rect GetPageBoundsForState(ash::AppListState state) const override;
+  gfx::Rect GetPageBoundsForState(AppListState state) const override;
 
   SuggestionChipContainerView* suggestion_chip_container_view_for_test() {
     return suggestion_chip_container_view_;
@@ -119,8 +136,15 @@ class APP_LIST_EXPORT AppsContainerView : public HorizontalPage {
   AppListFolderView* app_list_folder_view() { return app_list_folder_view_; }
   PageSwitcher* page_switcher() { return page_switcher_; }
 
+  // Called by app list view when the app list config changes.
+  void OnAppListConfigUpdated();
+
   // Updates suggestion chips from app list model.
   void UpdateSuggestionChips();
+
+  // Temporarily disables blur on suggestion chips view background. The blur
+  // will remained disabled until the returned closure runner goes out of scope.
+  base::ScopedClosureRunner DisableSuggestionChipsBlur();
 
  private:
   enum ShowState {
@@ -156,6 +180,12 @@ class APP_LIST_EXPORT AppsContainerView : public HorizontalPage {
   // depending on the current display work area size.
   GridLayout CalculateGridLayout() const;
 
+  // Callback returned by DisableBlur().
+  void OnSuggestionChipsBlurDisablerReleased();
+
+  // The number of active requests to disable blur.
+  size_t suggestion_chips_blur_disabler_count_ = 0;
+
   ContentsView* contents_view_;  // Not owned.
 
   // The views below are owned by views hierarchy.
@@ -182,6 +212,8 @@ class APP_LIST_EXPORT AppsContainerView : public HorizontalPage {
   // |cached_container_margins_|, provided the method arguments match the cached
   // arguments (otherwise the margins will be recalculated).
   CachedContainerMargins cached_container_margins_;
+
+  base::WeakPtrFactory<AppsContainerView> weak_ptr_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(AppsContainerView);
 };

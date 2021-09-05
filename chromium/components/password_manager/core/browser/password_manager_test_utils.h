@@ -30,7 +30,22 @@ namespace password_manager {
 template <class Context, class Store>
 scoped_refptr<RefcountedKeyedService> BuildPasswordStore(Context* context) {
   scoped_refptr<password_manager::PasswordStore> store(new Store);
-  if (!store->Init(syncer::SyncableService::StartSyncFlare(), nullptr))
+  if (!store->Init(nullptr))
+    return nullptr;
+  return store;
+}
+
+// As above, but allows passing parameters to the to-be-created store. The
+// parameters are specified *before* context so that they can be bound (as in
+// base::BindRepeating(&BuildPasswordStoreWithArgs<...>, my_arg)), leaving
+// |context| as a free parameter for TestingFactory.
+template <class Context, class Store, typename... Args>
+scoped_refptr<RefcountedKeyedService> BuildPasswordStoreWithArgs(
+    Args... args,
+    Context* context) {
+  scoped_refptr<password_manager::PasswordStore> store(
+      new Store(std::forward<Args>(args)...));
+  if (!store->Init(nullptr))
     return nullptr;
   return store;
 }
@@ -47,7 +62,6 @@ struct PasswordFormData {
   const wchar_t* password_element;
   const wchar_t* username_value;  // Set to NULL for a blacklist entry.
   const wchar_t* password_value;
-  const bool preferred;
   const double last_usage_time;
   const double creation_time;
 };
@@ -64,15 +78,14 @@ std::unique_ptr<autofill::PasswordForm> FillPasswordFormWithData(
     const PasswordFormData& form_data,
     bool use_federated_login = false);
 
-// Creates a new vector entry in the |first| element of the returned pair. The
-// |second| element holds the PasswordForm that the |first| element points to.
-// That way, the pointer only points to a valid address in the called scope.
-std::pair<const autofill::PasswordForm*,
-          std::unique_ptr<const autofill::PasswordForm>>
-CreateEntry(const std::string& username,
-            const std::string& password,
-            const GURL& origin_url,
-            bool is_psl_match);
+// Creates a new vector entry. Callers are expected to call .get() to get a raw
+// pointer to the underlying PasswordForm.
+std::unique_ptr<autofill::PasswordForm> CreateEntry(
+    const std::string& username,
+    const std::string& password,
+    const GURL& origin_url,
+    bool is_psl_match,
+    bool is_affiliation_based_match);
 
 // Checks whether the PasswordForms pointed to in |actual_values| are in some
 // permutation pairwise equal to those in |expectations|. Returns true in case
@@ -107,7 +120,7 @@ class MockPasswordReuseDetectorConsumer : public PasswordReuseDetectorConsumer {
   MOCK_METHOD4(OnReuseFound,
                void(size_t,
                     base::Optional<PasswordHashData>,
-                    const std::vector<std::string>&,
+                    const std::vector<MatchingReusedCredential>&,
                     int));
 };
 

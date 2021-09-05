@@ -116,8 +116,8 @@ public class FullscreenManagerTestUtils {
 
         fullscreenManager.addListener(new FullscreenListener() {
             @Override
-            public void onControlsOffsetChanged(
-                    int topOffset, int bottomOffset, boolean needsAnimate) {
+            public void onControlsOffsetChanged(int topOffset, int topControlsMinHeightOffset,
+                    int bottomOffset, int bottomControlsMinHeightOffset, boolean needsAnimate) {
                 if (fullscreenManager.getTopVisibleContentOffset() != initialVisibleContentOffset) {
                     contentMovedCallback.notifyCalled();
                     fullscreenManager.removeListener(this);
@@ -125,13 +125,11 @@ public class FullscreenManagerTestUtils {
             }
 
             @Override
-            public void onToggleOverlayVideoMode(boolean enabled) {}
-
-            @Override
             public void onContentOffsetChanged(int offset) {}
 
             @Override
-            public void onBottomControlsHeightChanged(int bottomControlsHeight) {}
+            public void onBottomControlsHeightChanged(
+                    int bottomControlsHeight, int bottomControlsMinHeight) {}
         });
 
         float dragX = 50f;

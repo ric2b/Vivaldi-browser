@@ -11,12 +11,10 @@
 #include "base/supports_user_data.h"
 
 class BrowserObserver;
+class ChromeBrowserState;
+@class CommandDispatcher;
 @class TabModel;
 class WebStateList;
-
-namespace ios {
-class ChromeBrowserState;
-}
 
 // Browser is the model for a window containing multiple tabs. Instances
 // are owned by a BrowserList to allow multiple windows for a single user
@@ -26,12 +24,12 @@ class ChromeBrowserState;
 class Browser : public base::SupportsUserData {
  public:
   // Creates a new Browser attached to |browser_state|.
-  static std::unique_ptr<Browser> Create(
-      ios::ChromeBrowserState* browser_state);
+  static std::unique_ptr<Browser> Create(ChromeBrowserState* browser_state);
+
   ~Browser() override {}
 
   // Accessor for the owning ChromeBrowserState.
-  virtual ios::ChromeBrowserState* GetBrowserState() const = 0;
+  virtual ChromeBrowserState* GetBrowserState() const = 0;
 
   // Accessor for the TabModel. DEPRECATED: prefer GetWebStateList() whenever
   // possible.
@@ -39,6 +37,9 @@ class Browser : public base::SupportsUserData {
 
   // Accessor for the WebStateList.
   virtual WebStateList* GetWebStateList() const = 0;
+
+  // Accessor for the CommandDispatcher.
+  virtual CommandDispatcher* GetCommandDispatcher() const = 0;
 
   // Adds and removes observers.
   virtual void AddObserver(BrowserObserver* observer) = 0;

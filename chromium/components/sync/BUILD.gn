@@ -71,19 +71,14 @@ jumbo_static_library("rest_of_sync") {
     "engine/model_type_processor_proxy.h",
     "engine/net/http_bridge.cc",
     "engine/net/http_bridge.h",
-    "engine/net/http_bridge_network_resources.cc",
-    "engine/net/http_bridge_network_resources.h",
     "engine/net/http_post_provider_factory.h",
     "engine/net/http_post_provider_interface.h",
-    "engine/net/network_resources.h",
     "engine/non_blocking_sync_common.cc",
     "engine/non_blocking_sync_common.h",
     "engine/passive_model_worker.cc",
     "engine/passive_model_worker.h",
     "engine/polling_constants.cc",
     "engine/polling_constants.h",
-    "engine/sequenced_model_worker.cc",
-    "engine/sequenced_model_worker.h",
     "engine/shutdown_reason.cc",
     "engine/shutdown_reason.h",
     "engine/sync_auth_provider.h",
@@ -91,7 +86,6 @@ jumbo_static_library("rest_of_sync") {
     "engine/sync_backend_registrar.h",
     "engine/sync_credentials.cc",
     "engine/sync_credentials.h",
-    "engine/sync_encryption_handler.cc",
     "engine/sync_encryption_handler.h",
     "engine/sync_engine.cc",
     "engine/sync_engine.h",
@@ -105,16 +99,18 @@ jumbo_static_library("rest_of_sync") {
     "engine/sync_manager_factory.h",
     "engine/sync_status.cc",
     "engine/sync_status.h",
+    "engine/sync_status_observer.cc",
+    "engine/sync_status_observer.h",
     "engine/sync_string_conversions.cc",
     "engine/sync_string_conversions.h",
-    "engine/ui_model_worker.cc",
-    "engine/ui_model_worker.h",
     "engine_impl/all_status.cc",
     "engine_impl/all_status.h",
     "engine_impl/apply_control_data_updates.cc",
     "engine_impl/apply_control_data_updates.h",
     "engine_impl/backoff_delay_provider.cc",
     "engine_impl/backoff_delay_provider.h",
+    "engine_impl/bookmark_update_preprocessing.cc",
+    "engine_impl/bookmark_update_preprocessing.h",
     "engine_impl/commit.cc",
     "engine_impl/commit.h",
     "engine_impl/commit_contribution.cc",
@@ -290,6 +286,10 @@ jumbo_static_library("rest_of_sync") {
     "model_impl/blocking_model_type_store_impl.h",
     "model_impl/client_tag_based_model_type_processor.cc",
     "model_impl/client_tag_based_model_type_processor.h",
+    "model_impl/client_tag_based_remote_update_handler.cc",
+    "model_impl/client_tag_based_remote_update_handler.h",
+    "model_impl/dummy_metadata_change_list.cc",
+    "model_impl/dummy_metadata_change_list.h",
     "model_impl/forwarding_model_type_controller_delegate.cc",
     "model_impl/forwarding_model_type_controller_delegate.h",
     "model_impl/in_memory_metadata_change_list.cc",
@@ -302,6 +302,8 @@ jumbo_static_library("rest_of_sync") {
     "model_impl/model_type_store_service_impl.h",
     "model_impl/processor_entity.cc",
     "model_impl/processor_entity.h",
+    "model_impl/processor_entity_tracker.cc",
+    "model_impl/processor_entity_tracker.h",
     "model_impl/proxy_model_type_controller_delegate.cc",
     "model_impl/proxy_model_type_controller_delegate.h",
     "model_impl/sync_metadata_store_change_list.cc",
@@ -343,8 +345,6 @@ jumbo_static_library("rest_of_sync") {
     "syncable/change_record.h",
     "syncable/change_reorder_buffer.cc",
     "syncable/change_reorder_buffer.h",
-    "syncable/delete_journal.cc",
-    "syncable/delete_journal.h",
     "syncable/dir_open_result.h",
     "syncable/directory.cc",
     "syncable/directory.h",
@@ -391,8 +391,6 @@ jumbo_static_library("rest_of_sync") {
     "syncable/syncable_base_write_transaction.h",
     "syncable/syncable_changes_version.h",
     "syncable/syncable_columns.h",
-    "syncable/syncable_delete_journal.cc",
-    "syncable/syncable_delete_journal.h",
     "syncable/syncable_enum_conversions.cc",
     "syncable/syncable_enum_conversions.h",
     "syncable/syncable_id.cc",
@@ -434,6 +432,7 @@ jumbo_static_library("rest_of_sync") {
     "//base:i18n",
     "//build:branding_buildflags",
     "//components/keyed_service/core",
+    "//components/variations/net",
     "//services/network/public/cpp",
     "//sql",
     "//third_party/cacheinvalidation",
@@ -508,9 +507,7 @@ static_library("test_support_engine") {
     "test/test_transaction_observer.h",
   ]
 
-  public_deps = [
-    "//components/sync/base:test_support",
-  ]
+  public_deps = [ "//components/sync/base:test_support" ]
 
   deps = [
     ":sync",
@@ -553,13 +550,9 @@ static_library("test_support_model") {
     "model/test_model_type_store_service.h",
   ]
 
-  public_deps = [
-    "//components/sync/base:test_support",
-  ]
+  public_deps = [ "//components/sync/base:test_support" ]
 
-  deps = [
-    ":sync",
-  ]
+  deps = [ ":sync" ]
 }
 
 source_set("unit_tests") {
@@ -568,7 +561,6 @@ source_set("unit_tests") {
     "base/bind_to_task_runner_unittest.cc",
     "base/cancelation_signal_unittest.cc",
     "base/client_tag_hash_unittest.cc",
-    "base/data_type_histogram_unittest.cc",
     "base/enum_set_unittest.cc",
     "base/immutable_unittest.cc",
     "base/model_type_unittest.cc",
@@ -581,17 +573,15 @@ source_set("unit_tests") {
     "base/user_demographics_unittest.cc",
     "base/weak_handle_unittest.cc",
     "driver/about_sync_util_unittest.cc",
-    "driver/async_directory_type_controller_unittest.cc",
     "driver/backend_migrator_unittest.cc",
     "driver/data_type_manager_impl_unittest.cc",
-    "driver/frontend_data_type_controller_unittest.cc",
-    "driver/generic_change_processor_unittest.cc",
+    "driver/file_based_trusted_vault_client_unittest.cc",
     "driver/glue/sync_engine_impl_unittest.cc",
     "driver/model_association_manager_unittest.cc",
     "driver/model_type_controller_unittest.cc",
+    "driver/passphrase_type_metrics_provider_unittest.cc",
     "driver/profile_sync_service_startup_unittest.cc",
     "driver/profile_sync_service_unittest.cc",
-    "driver/shared_change_processor_unittest.cc",
     "driver/startup_controller_unittest.cc",
     "driver/sync_auth_manager_unittest.cc",
     "driver/sync_service_crypto_unittest.cc",
@@ -603,11 +593,10 @@ source_set("unit_tests") {
     "engine/cycle/sync_cycle_snapshot_unittest.cc",
     "engine/model_safe_worker_unittest.cc",
     "engine/net/http_bridge_unittest.cc",
-    "engine/sequenced_model_worker_unittest.cc",
     "engine/sync_backend_registrar_unittest.cc",
-    "engine/ui_model_worker_unittest.cc",
     "engine_impl/apply_control_data_updates_unittest.cc",
     "engine_impl/backoff_delay_provider_unittest.cc",
+    "engine_impl/bookmark_update_preprocessing_unittest.cc",
     "engine_impl/cycle/data_type_debug_info_emitter_unittest.cc",
     "engine_impl/cycle/nudge_tracker_unittest.cc",
     "engine_impl/cycle/status_controller_unittest.cc",
@@ -651,6 +640,7 @@ source_set("unit_tests") {
     "model_impl/processor_entity_unittest.cc",
     "model_impl/syncable_service_based_bridge_unittest.cc",
     "nigori/cryptographer_impl_unittest.cc",
+    "nigori/keystore_keys_cryptographer_unittest.cc",
     "nigori/nigori_key_bag_unittest.cc",
     "nigori/nigori_model_type_processor_unittest.cc",
     "nigori/nigori_state_unittest.cc",
@@ -668,7 +658,6 @@ source_set("unit_tests") {
     "syncable/nigori_util_unittest.cc",
     "syncable/parent_child_index_unittest.cc",
     "syncable/proto_value_ptr_unittest.cc",
-    "syncable/syncable_delete_journal_unittest.cc",
     "syncable/syncable_enum_conversions_unittest.cc",
     "syncable/syncable_id_unittest.cc",
     "syncable/syncable_unittest.cc",
@@ -688,6 +677,8 @@ source_set("unit_tests") {
     "//base",
     "//base/test:test_support",
     "//components/invalidation/impl",
+    "//components/metrics",
+    "//components/os_crypt",
     "//components/os_crypt:test_support",
     "//components/prefs:test_support",
     "//components/signin/public/base:test_support",
@@ -728,6 +719,10 @@ source_set("unit_tests") {
       "//components/policy/core/browser",
     ]
   }
+
+  if (is_chromeos) {
+    deps += [ "//chromeos/constants" ]
+  }
 }
 
 if (is_android) {
@@ -740,6 +735,6 @@ if (is_android) {
       "//base:base_java",
       "//third_party/junit",
     ]
-    java_files = [ "test/android/javatests/src/org/chromium/components/sync/test/util/MockSyncContentResolverDelegate.java" ]
+    sources = [ "test/android/javatests/src/org/chromium/components/sync/test/util/MockSyncContentResolverDelegate.java" ]
   }
 }

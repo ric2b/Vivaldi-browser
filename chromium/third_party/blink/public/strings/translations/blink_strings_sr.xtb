@@ -4,6 +4,7 @@
 <translation id="1018939186200882850">ставка менија</translation>
 <translation id="10623998915015855">дугме за укључивање/искључивање</translation>
 <translation id="1088086359088493902">Секунде</translation>
+<translation id="1142001580032786438">Приказуј бирач недеље</translation>
 <translation id="1171774979989969504">Унесите имејл адресу.</translation>
 <translation id="1178581264944972037">Паузирај</translation>
 <translation id="1188858454923323853">комплементарно</translation>
@@ -11,6 +12,7 @@
 <translation id="1206693055195146388">клизач</translation>
 <translation id="1211441953136645838">завршна напомена</translation>
 <translation id="1281252709823657822">дијалог</translation>
+<translation id="1306460908038601864">Искључено</translation>
 <translation id="1335095011850992622">заслуге</translation>
 <translation id="1342835525016946179">article</translation>
 <translation id="1359897965706325498">банер</translation>
@@ -21,6 +23,7 @@
 <translation id="1727886345390570319">сакријте мени опционалног титла</translation>
 <translation id="1729654308190250600">Унесите имејл адресу која није празна.</translation>
 <translation id="1758486001363313524">Друго...</translation>
+<translation id="1787192514241997742">укупно време: <ph name="REMAINING_TIME" /></translation>
 <translation id="1806710327868736751">дијалог обавештења</translation>
 <translation id="1821985195704844674">мрежа стабла</translation>
 <translation id="1822429046913737220">пре подне/по подне</translation>
@@ -54,7 +57,6 @@
 <translation id="2674318244760992338">подножје</translation>
 <translation id="2709516037105925701">Аутоматско попуњавање</translation>
 <translation id="2723001399770238859">аудио</translation>
-<translation id="2725963129578236554">коментари</translation>
 <translation id="2746543609216772311">Вредност мора да буде <ph name="MINIMUM_DATE_OR_TIME" /> или новија.</translation>
 <translation id="2759744352195237655">искачуће дугме</translation>
 <translation id="2761667185364618470">Потврдите избор у овом пољу за потврду уколико желите да наставите.</translation>
@@ -83,7 +85,6 @@
 <translation id="3822383571486410024">Продужите овај текст на <ph name="MIN_CHARACTERS" /> знак(ов)а или више (тренутно користите <ph name="CURRENT_LENGTH" /> знак(ов)а).</translation>
 <translation id="383465348367842624">Део пре „<ph name="ATSIGN" />“ не треба да садржи симбол „<ph name="INVALIDCHARACTER" />“.</translation>
 <translation id="3846214748874656680">Изађи из целог екрана</translation>
-<translation id="3889183436948184105">ревизија</translation>
 <translation id="3920932319529768807">закључак</translation>
 <translation id="3924558731517983934">апликација</translation>
 <translation id="3944740393230681990">пролог</translation>
@@ -101,11 +102,11 @@
 <translation id="4444765639179266822">Изгледа да пише: <ph name="OCR_TEXT" /></translation>
 <translation id="4446524499724042288">референца речника термина</translation>
 <translation id="4522570452068850558">Детаљи</translation>
-<translation id="4542388879936266156">преостало време: <ph name="REMAINING_TIME" /></translation>
 <translation id="4597532268155981612">образац</translation>
 <translation id="4661075872484491155">стабло</translation>
 <translation id="4664250907885839816">Део после „<ph name="ATSIGN" />“ не треба да садржи симбол „<ph name="INVALIDCHARACTER" />“.</translation>
 <translation id="4668956016107839909">додатак</translation>
+<translation id="4698212723196775569">кôд</translation>
 <translation id="4718048029184481307">Репродукује се у режиму слике у слици</translation>
 <translation id="4742539557769756338">корицe</translation>
 <translation id="4748357248530471599">укључи/искључи цео екран без области изрезаног приказа</translation>
@@ -114,9 +115,14 @@
 <translation id="479989351350248267">search</translation>
 <translation id="4812940957355064477">Унесите број.</translation>
 <translation id="4912536737030637138">библиографска ставка</translation>
+<translation id="4915360478455618802">Приказуј бирач времена</translation>
+<translation id="492244087561876220">коментар</translation>
+<translation id="4950364064308314478">Приказуј бирач локалног датума и времена</translation>
+<translation id="4971739861736909480">Изабрано: <ph name="ACCNAME" /></translation>
 <translation id="4975562563186953947">Изабрано: <ph name="SELECTED_COUNT" /></translation>
 <translation id="4992066212339426712">Укључи звук</translation>
 <translation id="49969490063480558">Унесите неки део после „<ph name="ATSIGN" />“. Адреса „<ph name="INVALIDADDRESS" />“ је непотпуна.</translation>
+<translation id="5022314756875057021">група редова</translation>
 <translation id="5034860022980953847">индикатор напретка</translation>
 <translation id="5090250355906949916">клизач за трајање видео снимка</translation>
 <translation id="5093189678851173835">натпис</translation>
@@ -127,6 +133,7 @@
 <translation id="520299402983819650"><ph name="QUANTITY" /> PB</translation>
 <translation id="5307600278924710095">Унесите неки део пре „<ph name="ATSIGN" />“. Адреса „<ph name="INVALIDADDRESS" />“ је непотпуна.</translation>
 <translation id="5334352251556557839">Пуштање медија није успело.</translation>
+<translation id="537648784377940524">Минимални датум (<ph name="MIN_DATE_OR_TIME" />) мора да буде пре максималног датума (<ph name="MAX_DATE_OR_TIME" />).</translation>
 <translation id="5406322316791861025">цифра</translation>
 <translation id="5453733299334684579">ставка стабла</translation>
 <translation id="5466621249238537318">Изаберите једну или више датотека.</translation>
@@ -142,7 +149,6 @@
 <translation id="5677946354068040947">још опција</translation>
 <translation id="576709008726043716">увод</translation>
 <translation id="57838592816432529">Искључи звук</translation>
-<translation id="5860033963881614850">Искључено</translation>
 <translation id="588258955323874662">Цеo екран</translation>
 <translation id="5888666972993069672">Тренутно се пребацује на <ph name="DEVICE_FRIENDLY_NAME" /></translation>
 <translation id="591047860372322273">оквир за претрагу</translation>
@@ -163,7 +169,6 @@
 <translation id="6404546809543547843">клизач за трајање аудио-садржаја</translation>
 <translation id="6443871981718447451">прикажите мени опционалног титла</translation>
 <translation id="6453774872122745852">признања</translation>
-<translation id="6475115390776617481">присуство уживо</translation>
 <translation id="648732519525291180">бирач времена</translation>
 <translation id="6550675742724504774">Опције</translation>
 <translation id="6572309429103589720">Нетачна граматика</translation>
@@ -191,6 +196,7 @@
 <translation id="7118469954320184356">Опис није доступан.</translation>
 <translation id="7139483182332611405">предговор</translation>
 <translation id="7214187073215825913">информације о садржају</translation>
+<translation id="7238347055216017155">наглашавање</translation>
 <translation id="7263440858009898357">Изаберите ставку са листе.</translation>
 <translation id="727747134524199931">заглавље колоне</translation>
 <translation id="7320576522385648310">баферовање</translation>
@@ -217,6 +223,8 @@
 <translation id="7888071071722539607">Уврстите „<ph name="ATSIGN" />“ у имејл адресу. У адреси е-поште „<ph name="INVALIDADDRESS" />“ недостаје „<ph name="ATSIGN" />“.</translation>
 <translation id="7891486169920085145">разделник</translation>
 <translation id="795667975304826397">Није одабрано</translation>
+<translation id="7962328325860248200">Није изабрано: <ph name="ACCNAME" /></translation>
+<translation id="8034303206267677282">јако</translation>
 <translation id="8053789581856978548">поље за текст претраге</translation>
 <translation id="8057695513531652401">обавештење</translation>
 <translation id="8105797009065549151">референца напомене</translation>
@@ -228,6 +236,7 @@
 <translation id="8284326494547611709">Титл</translation>
 <translation id="8346634859695247203">одељак</translation>
 <translation id="835897206747267392">Неважећа вредност.</translation>
+<translation id="839593075537728968">Вредност мора да буде између <ph name="MINIMUM_TIME" /> и <ph name="MAXIMUM_TIME" />.</translation>
 <translation id="8403857369060869934">протекло време: <ph name="ELAPSED_TIME" /></translation>
 <translation id="8415319359811155763">део</translation>
 <translation id="8433900881053900389">трака с алаткама</translation>
@@ -244,10 +253,10 @@
 <translation id="860475260694818407">садржај</translation>
 <translation id="8613126697340063924">контролишите репродукцију на удаљеном уређају</translation>
 <translation id="862370744433916922">титл</translation>
+<translation id="8634971699417195529">Приказуј бирач месеца</translation>
 <translation id="8711688047404765493">излаз</translation>
 <translation id="8750798805984357768">Изаберите неку од ових опција.</translation>
 <translation id="8808573423886751634">поглавље</translation>
-<translation id="8822203815165896261">информације о ауторству</translation>
 <translation id="8845239796550121995">Тренутно се пребацује на ТВ</translation>
 <translation id="8851136666856101339">main</translation>
 <translation id="8875657656876809964">Грешка при пуштању видео снимка</translation>

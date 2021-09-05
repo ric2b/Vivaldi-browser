@@ -57,16 +57,17 @@ class LoggedParserSandboxSetupHooks : public ParserSandboxSetupHooks {
 class SandboxedShortcutParserTest : public base::MultiProcessTest {
  public:
   SandboxedShortcutParserTest()
-      : parser_ptr_(nullptr, base::OnTaskRunnerDeleter(nullptr)),
+      : parser_(nullptr, base::OnTaskRunnerDeleter(nullptr)),
         temp_dirs_with_chrome_lnk_(kDirQuantity) {}
 
   void SetUp() override {
     ASSERT_TRUE(child_process_logger_.Initialize());
 
     mojo_task_runner_ = MojoTaskRunner::Create();
-    ParserSandboxSetupHooks setup_hooks(
+    LoggedParserSandboxSetupHooks setup_hooks(
         mojo_task_runner_.get(),
-        base::BindOnce([] { FAIL() << "Parser sandbox connection error"; }));
+        base::BindOnce([] { FAIL() << "Parser sandbox connection error"; }),
+        &child_process_logger_);
 
     ResultCode result_code =
         StartSandboxTarget(MakeCmdLine("SandboxedShortcutParserTargetMain"),
@@ -75,9 +76,9 @@ class SandboxedShortcutParserTest : public base::MultiProcessTest {
       child_process_logger_.DumpLogs();
     ASSERT_EQ(RESULT_CODE_SUCCESS, result_code);
 
-    parser_ptr_ = setup_hooks.TakeParserPtr();
+    parser_ = setup_hooks.TakeParserRemote();
     shortcut_parser_ = std::make_unique<SandboxedShortcutParser>(
-        mojo_task_runner_.get(), parser_ptr_.get());
+        mojo_task_runner_.get(), parser_.get());
 
     ASSERT_TRUE(temp_dir_without_chrome_lnk_.CreateUniqueTempDir());
     ASSERT_TRUE(base::CreateTemporaryFileInDir(
@@ -114,7 +115,7 @@ class SandboxedShortcutParserTest : public base::MultiProcessTest {
   size_t shortcut_quantity_ = 0;
 
   scoped_refptr<MojoTaskRunner> mojo_task_runner_;
-  UniqueParserPtr parser_ptr_;
+  RemoteParserPtr parser_;
   std::unique_ptr<SandboxedShortcutParser> shortcut_parser_;
 
   FilePathSet fake_chrome_exe_file_path_set_;

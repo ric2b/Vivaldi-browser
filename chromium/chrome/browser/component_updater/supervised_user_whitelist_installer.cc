@@ -28,6 +28,7 @@
 #include "base/strings/string_util.h"
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
+#include "base/task/thread_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/value_conversions.h"
 #include "base/values.h"
@@ -44,7 +45,6 @@
 #include "components/prefs/scoped_user_pref_update.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/system_connector.h"
 #include "services/data_decoder/public/cpp/json_sanitizer.h"
 
 namespace component_updater {
@@ -67,8 +67,8 @@ const char kExtensionShortName[] = "short_name";
 const char kExtensionIcons[] = "icons";
 const char kExtensionLargeIcon[] = "128";
 
-constexpr base::TaskTraits kTaskTraits = {
-    base::ThreadPool(), base::MayBlock(), base::TaskPriority::BEST_EFFORT,
+constexpr base::TaskTraits kThreadPoolTaskTraits = {
+    base::MayBlock(), base::TaskPriority::BEST_EFFORT,
     base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN};
 
 base::string16 GetWhitelistTitle(const base::DictionaryValue& manifest) {
@@ -130,21 +130,23 @@ void RecordUncleanUninstall() {
                              "ManagedUsers_Whitelist_UncleanUninstall")));
 }
 
-void OnWhitelistSanitizationError(const base::FilePath& whitelist,
-                                  const std::string& error) {
-  LOG(WARNING) << "Invalid whitelist " << whitelist.value() << ": " << error;
-}
-
 void DeleteFileOnTaskRunner(const base::FilePath& path) {
-  if (!base::DeleteFile(path, true))
+  if (!base::DeleteFileRecursively(path))
     DPLOG(ERROR) << "Couldn't delete " << path.value();
 }
 
 void OnWhitelistSanitizationResult(
+    const base::FilePath& whitelist_path,
     const std::string& crx_id,
     scoped_refptr<base::SequencedTaskRunner> task_runner,
     base::OnceClosure callback,
-    const std::string& result) {
+    data_decoder::JsonSanitizer::Result result) {
+  if (!result.value) {
+    LOG(WARNING) << "Invalid whitelist " << whitelist_path.value() << ": "
+                 << *result.error;
+    return;
+  }
+
   const base::FilePath sanitized_whitelist_path =
       GetSanitizedWhitelistPath(crx_id);
   const base::FilePath install_directory = sanitized_whitelist_path.DirName();
@@ -155,8 +157,9 @@ void OnWhitelistSanitizationResult(
     }
   }
 
-  const int size = result.size();
-  if (base::WriteFile(sanitized_whitelist_path, result.data(), size) != size) {
+  const int size = result.value->size();
+  if (base::WriteFile(sanitized_whitelist_path, result.value->data(), size) !=
+      size) {
     PLOG(ERROR) << "Couldn't write file " << sanitized_whitelist_path.value();
     return;
   }
@@ -180,10 +183,9 @@ void CheckForSanitizedWhitelistOnTaskRunner(
   }
 
   data_decoder::JsonSanitizer::Sanitize(
-      content::GetSystemConnector(), unsafe_json,
-      base::BindOnce(&OnWhitelistSanitizationResult, crx_id, task_runner,
-                     callback),
-      base::BindOnce(&OnWhitelistSanitizationError, whitelist_path));
+      unsafe_json,
+      base::BindOnce(&OnWhitelistSanitizationResult, whitelist_path, crx_id,
+                     task_runner, callback));
 }
 
 void RemoveUnregisteredWhitelistsOnTaskRunner(
@@ -257,7 +259,7 @@ class SupervisedUserWhitelistComponentInstallerPolicy
       const std::string& name,
       const RawWhitelistReadyCallback& callback)
       : crx_id_(crx_id), name_(name), callback_(callback) {}
-  ~SupervisedUserWhitelistComponentInstallerPolicy() override {}
+  ~SupervisedUserWhitelistComponentInstallerPolicy() override = default;
 
  private:
   // ComponentInstallerPolicy overrides:
@@ -363,7 +365,7 @@ class SupervisedUserWhitelistInstallerImpl
       ComponentUpdateService* cus,
       ProfileAttributesStorage* profile_attributes_storage,
       PrefService* local_state);
-  ~SupervisedUserWhitelistInstallerImpl() override {}
+  ~SupervisedUserWhitelistInstallerImpl() override = default;
 
  private:
   void RegisterComponent(const std::string& crx_id,
@@ -403,7 +405,7 @@ class SupervisedUserWhitelistInstallerImpl
       observer_;
 
   scoped_refptr<base::SequencedTaskRunner> sequenced_task_runner_ =
-      base::CreateSequencedTaskRunner(kTaskTraits);
+      base::ThreadPool::CreateSequencedTaskRunner(kThreadPoolTaskTraits);
 
   base::WeakPtrFactory<SupervisedUserWhitelistInstallerImpl> weak_ptr_factory_{
       this};
@@ -476,8 +478,8 @@ void SupervisedUserWhitelistInstallerImpl::OnRawWhitelistReady(
     const base::FilePath& large_icon_path,
     const base::FilePath& whitelist_path) {
   // TODO(sorin): avoid using a single thread task runner crbug.com/744718.
-  auto task_runner = base::CreateSingleThreadTaskRunner(
-      kTaskTraits, base::SingleThreadTaskRunnerThreadMode::SHARED);
+  auto task_runner = base::ThreadPool::CreateSingleThreadTaskRunner(
+      kThreadPoolTaskTraits, base::SingleThreadTaskRunnerThreadMode::SHARED);
   task_runner->PostTask(
       FROM_HERE,
       base::BindOnce(

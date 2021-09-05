@@ -5,8 +5,9 @@
 import 'chrome://tab-strip/tab.js';
 
 import {getFavicon} from 'chrome://resources/js/icon.m.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {TabStripEmbedderProxy} from 'chrome://tab-strip/tab_strip_embedder_proxy.js';
-import {TabNetworkState, TabsApiProxy} from 'chrome://tab-strip/tabs_api_proxy.js';
+import {CloseTabAction, TabNetworkState, TabsApiProxy} from 'chrome://tab-strip/tabs_api_proxy.js';
 
 import {TestTabStripEmbedderProxy} from './test_tab_strip_embedder_proxy.js';
 import {TestTabsApiProxy} from './test_tabs_api_proxy.js';
@@ -17,13 +18,30 @@ suite('Tab', function() {
   let tabElement;
 
   const tab = {
+    active: false,
+    alertStates: [],
     id: 1001,
     networkState: TabNetworkState.NONE,
+    pinned: false,
     title: 'My title',
   };
 
+  const strings = {
+    closeTab: 'Close tab',
+    loadingTab: 'Loading...',
+    tabCrashed: '$1 has crashed',
+    tabNetworkError: '$1 has a network error',
+  };
+
   setup(() => {
+    loadTimeData.overrideValues(strings);
+
     document.body.innerHTML = '';
+
+    // Set CSS variable for animations
+    document.body.style.setProperty('--tabstrip-tab-height', '100px');
+    document.body.style.setProperty('--tabstrip-tab-width', '280px');
+    document.body.style.setProperty('--tabstrip-tab-spacing', '20px');
 
     testTabStripEmbedderProxy = new TestTabStripEmbedderProxy();
     TabStripEmbedderProxy.instance_ = testTabStripEmbedderProxy;
@@ -36,25 +54,100 @@ suite('Tab', function() {
     document.body.appendChild(tabElement);
   });
 
-  test('slideIn animates in the element', async () => {
+  test('slideIn animates scale for the last tab', async () => {
+    document.documentElement.dir = 'ltr';
+    tabElement.style.paddingRight = '100px';
+    const tabElementStyle = window.getComputedStyle(tabElement);
+
     const animationPromise = tabElement.slideIn();
-    // Before animation completes
-    assertEquals('0', window.getComputedStyle(tabElement).opacity);
-    assertEquals('0px', window.getComputedStyle(tabElement).maxWidth);
+    // Before animation completes.
+    assertEquals('20px', tabElementStyle.paddingRight);
+    assertEquals('280px', tabElementStyle.maxWidth);
+    assertEquals('matrix(0, 0, 0, 0, 0, 0)', tabElementStyle.transform);
     await animationPromise;
-    // After animation completes
-    assertEquals('1', window.getComputedStyle(tabElement).opacity);
-    assertEquals('280px', window.getComputedStyle(tabElement).maxWidth);
+    // After animation completes.
+    assertEquals('100px', tabElementStyle.paddingRight);
+    assertEquals('none', tabElementStyle.maxWidth);
+    assertEquals('none', tabElementStyle.transform);
+  });
+
+  test('slideIn animations for not the last tab', async () => {
+    // Add another element to make sure the element being tested is not the
+    // last.
+    document.body.appendChild(document.createElement('div'));
+
+    document.documentElement.dir = 'ltr';
+    tabElement.style.paddingRight = '100px';
+    const tabElementStyle = window.getComputedStyle(tabElement);
+
+    const animationPromise = tabElement.slideIn();
+    // Before animation completes.
+    assertEquals('0px', tabElementStyle.paddingRight);
+    assertEquals('0px', tabElementStyle.maxWidth);
+    assertEquals('matrix(0, 0, 0, 0, 0, 0)', tabElementStyle.transform);
+    await animationPromise;
+    // After animation completes.
+    assertEquals('100px', tabElementStyle.paddingRight);
+    assertEquals('none', tabElementStyle.maxWidth);
+    assertEquals('none', tabElementStyle.transform);
+  });
+
+  test('slideIn animations right to left for RTL languages', async () => {
+    // Add another element to make sure the element being tested is not the
+    // last.
+    document.body.appendChild(document.createElement('div'));
+
+    document.documentElement.dir = 'rtl';
+    tabElement.style.paddingLeft = '100px';
+    const tabElementStyle = window.getComputedStyle(tabElement);
+
+    const animationPromise = tabElement.slideIn();
+    // Before animation completes.
+    assertEquals('0px', tabElementStyle.paddingLeft);
+    assertEquals('0px', tabElementStyle.maxWidth);
+    assertEquals('matrix(0, 0, 0, 0, 0, 0)', tabElementStyle.transform);
+    await animationPromise;
+    // After animation completes.
+    assertEquals('100px', tabElementStyle.paddingLeft);
+    assertEquals('none', tabElementStyle.maxWidth);
+    assertEquals('none', tabElementStyle.transform);
   });
 
   test('slideOut animates out the element', async () => {
+    testTabStripEmbedderProxy.setVisible(true);
+    const tabElementStyle = window.getComputedStyle(tabElement);
     const animationPromise = tabElement.slideOut();
-    // Before animation completes
-    assertEquals('1', window.getComputedStyle(tabElement).opacity);
-    assertEquals('280px', window.getComputedStyle(tabElement).maxWidth);
+    // Before animation completes.
+    assertEquals('1', tabElementStyle.opacity);
+    assertEquals('none', tabElementStyle.maxWidth);
+    assertEquals('matrix(1, 0, 0, 1, 0, 0)', tabElementStyle.transform);
+    assertTrue(tabElement.isConnected);
     await animationPromise;
-    // After animation completes
-    assertFalse(document.body.contains(tabElement));
+    // After animation completes.
+    assertFalse(tabElement.isConnected);
+  });
+
+  test('slideOut does not animate when tab strip is hidden', () => {
+    testTabStripEmbedderProxy.setVisible(false);
+    assertTrue(tabElement.isConnected);
+    tabElement.slideOut();
+
+    // The tab should immediately be disconnected without waiting for the
+    // animation to finish.
+    assertFalse(tabElement.isConnected);
+  });
+
+  test('slideOut resolves immediately when tab strip becomes hidden', () => {
+    testTabStripEmbedderProxy.setVisible(true);
+    assertTrue(tabElement.isConnected);
+    const animationPromise = tabElement.slideOut();
+
+    testTabStripEmbedderProxy.setVisible(false);
+    document.dispatchEvent(new Event('visibilitychange'));
+
+    // The tab should immediately be disconnected without waiting for the
+    // animation to finish.
+    assertFalse(tabElement.isConnected);
   });
 
   test('toggles an [active] attribute when active', () => {
@@ -62,6 +155,19 @@ suite('Tab', function() {
     assertTrue(tabElement.hasAttribute('active'));
     tabElement.tab = Object.assign({}, tab, {active: false});
     assertFalse(tabElement.hasAttribute('active'));
+  });
+
+  test('sets [aria-selected] attribute when active', () => {
+    tabElement.tab = Object.assign({}, tab, {active: true});
+    assertEquals(
+        'true',
+        tabElement.shadowRoot.querySelector('#tab').getAttribute(
+            'aria-selected'));
+    tabElement.tab = Object.assign({}, tab, {active: false});
+    assertEquals(
+        'false',
+        tabElement.shadowRoot.querySelector('#tab').getAttribute(
+            'aria-selected'));
   });
 
   test('hides entire favicon container when showIcon is false', () => {
@@ -157,7 +263,7 @@ suite('Tab', function() {
       });
 
   test('clicking on the element activates the tab', () => {
-    tabElement.click();
+    tabElement.shadowRoot.querySelector('#tab').click();
     return testTabsApiProxy.whenCalled('activateTab', tabId => {
       assertEquals(tabId, tab.id);
     });
@@ -168,15 +274,40 @@ suite('Tab', function() {
         tab.title, tabElement.shadowRoot.querySelector('#titleText').innerText);
   });
 
+  test('sets the loading title while loading', () => {
+    const loadingTabWithoutTitle = Object.assign({}, tab, {
+      networkState: TabNetworkState.WAITING,
+      shouldHideThrobber: false,
+    });
+    delete loadingTabWithoutTitle.title;
+    tabElement.tab = loadingTabWithoutTitle;
+    assertEquals(
+        strings['loadingTab'],
+        tabElement.shadowRoot.querySelector('#titleText').innerText);
+  });
+
   test('exposes the tab ID to an attribute', () => {
     tabElement.tab = Object.assign({}, tab, {id: 1001});
     assertEquals('1001', tabElement.getAttribute('data-tab-id'));
   });
 
-  test('closes the tab', () => {
+  test('closes the tab when clicking close button', () => {
     tabElement.shadowRoot.querySelector('#close').click();
-    return testTabsApiProxy.whenCalled('closeTab').then(tabId => {
+    return testTabsApiProxy.whenCalled('closeTab').then(([
+                                                          tabId, closeTabAction
+                                                        ]) => {
       assertEquals(tabId, tab.id);
+      assertEquals(closeTabAction, CloseTabAction.CLOSE_BUTTON);
+    });
+  });
+
+  test('closes the tab on swipe', () => {
+    tabElement.dispatchEvent(new CustomEvent('swipe'));
+    return testTabsApiProxy.whenCalled('closeTab').then(([
+                                                          tabId, closeTabAction
+                                                        ]) => {
+      assertEquals(tabId, tab.id);
+      assertEquals(closeTabAction, CloseTabAction.SWIPED_TO_CLOSE);
     });
   });
 
@@ -225,11 +356,7 @@ suite('Tab', function() {
     assertEquals(window.getComputedStyle(thumbnailImage).display, 'none');
   });
 
-  test('tracks and updates the thumbnail source', async () => {
-    const requestedTabId =
-        await testTabsApiProxy.whenCalled('trackThumbnailForTab');
-    assertEquals(requestedTabId, tab.id);
-
+  test('updates the thumbnail source', async () => {
     const thumbnailSource = 'data:mock-thumbnail-source';
     tabElement.updateThumbnail(thumbnailSource);
     assertEquals(
@@ -244,7 +371,7 @@ suite('Tab', function() {
     assertFalse(tabElement.hasAttribute('dragging_'));
   });
 
-  test('getting the drag image grabs the contents', () => {
+  test('gets the drag image', () => {
     assertEquals(
         tabElement.getDragImage(),
         tabElement.shadowRoot.querySelector('#dragImage'));
@@ -254,7 +381,7 @@ suite('Tab', function() {
     let event = new Event('contextmenu');
     event.clientX = 1;
     event.clientY = 2;
-    tabElement.dispatchEvent(event);
+    tabElement.shadowRoot.querySelector('#tab').dispatchEvent(event);
 
     const contextMenuArgs =
         await testTabStripEmbedderProxy.whenCalled('showTabContextMenu');
@@ -265,7 +392,61 @@ suite('Tab', function() {
 
   test('activating closes WebUI container', () => {
     assertEquals(testTabStripEmbedderProxy.getCallCount('closeContainer'), 0);
-    tabElement.click();
+    tabElement.shadowRoot.querySelector('#tab').click();
     assertEquals(testTabStripEmbedderProxy.getCallCount('closeContainer'), 1);
+  });
+
+  test('sets an accessible title', () => {
+    const titleTextElement = tabElement.shadowRoot.querySelector('#titleText');
+    assertEquals(titleTextElement.getAttribute('aria-label'), tab.title);
+
+    tabElement.tab = Object.assign({}, tab, {
+      crashed: true,
+      title: 'My tab',
+    });
+    assertEquals(
+        titleTextElement.getAttribute('aria-label'), 'My tab has crashed');
+
+    tabElement.tab = Object.assign({}, tab, {
+      crashed: false,
+      networkState: TabNetworkState.ERROR,
+      title: 'My tab',
+    });
+    assertEquals(
+        titleTextElement.getAttribute('aria-label'),
+        'My tab has a network error');
+  });
+
+  test('focusing on the host moves focus to inner tab element', () => {
+    tabElement.focus();
+    assertEquals(
+        tabElement.shadowRoot.activeElement,
+        tabElement.shadowRoot.querySelector('#tab'));
+  });
+
+  test('supports Enter and Space key for activating tab', async () => {
+    const innerTabElement = tabElement.shadowRoot.querySelector('#tab');
+    innerTabElement.dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter'}));
+    assertEquals(await testTabsApiProxy.whenCalled('activateTab'), tab.id);
+    testTabsApiProxy.reset();
+
+    innerTabElement.dispatchEvent(new KeyboardEvent('keydown', {key: ' '}));
+    assertEquals(await testTabsApiProxy.whenCalled('activateTab'), tab.id);
+    testTabsApiProxy.reset();
+  });
+
+  test('DragImagePreservesAspectRatio', () => {
+    const originalBoundingBox = tabElement.$('#tab').getBoundingClientRect();
+    const originalAspectRatio =
+        originalBoundingBox.width / originalBoundingBox.height;
+    tabElement.setDragging(true);
+    const dragImageBoundingBox =
+        tabElement.getDragImage().querySelector('#tab').getBoundingClientRect();
+    const dragImageAspectRatio =
+        dragImageBoundingBox.width / dragImageBoundingBox.height;
+    // Check the Math.floor values of these values to prevent possible
+    // flakiness caused by comparing float values.
+    assertEquals(
+        Math.floor(originalAspectRatio), Math.floor(dragImageAspectRatio));
   });
 });

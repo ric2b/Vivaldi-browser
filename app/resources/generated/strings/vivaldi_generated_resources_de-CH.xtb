@@ -1,9 +1,12 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="de-CH">
+<translation id="1017280919048282932">&amp;Zum Wörterbuech dezue tue</translation>
 <translation id="1031362278801463162">Vorschau werd glade</translation>
+<translation id="1049795001945932310">&amp;Sprochihstellige</translation>
 <translation id="1056898198331236512">Warnig</translation>
 <translation id="1128109161498068552">Keinere Internetsite dä Zuegriff met systemexklusive Nachrechte uf MIDI Grät erlaube</translation>
+<translation id="1163931534039071049">Frame-Quelltext &amp;ahzeige</translation>
 <translation id="1165039591588034296">Fähler</translation>
 <translation id="1175364870820465910">&amp;Drocke...</translation>
 <translation id="1177863135347784049">Eigendi</translation>
@@ -17,6 +20,7 @@
 <translation id="1430915738399379752">Drocke</translation>
 <translation id="1433811987160647649">Vor em Zuegreff nachefroge</translation>
 <translation id="1451375123200651445">Internetsite, Einzeldatei (MHTML)</translation>
+<translation id="1476607407192946488">&amp;Sprochihstellige</translation>
 <translation id="150411034776756821"><ph name="SITE" /> weg tue</translation>
 <translation id="1546280085599573572">Weg dere Erwiterig het sech d'Site gänderet, wo bem Klick uf "Startsite" chund.</translation>
 <translation id="1588438908519853928">Normal</translation>
@@ -27,19 +31,21 @@
 <translation id="1698122934742150150">Nome aktuelli privati Setzig</translation>
 <translation id="1706625117072057435">Vergrösserigsstufe</translation>
 <translation id="1708338024780164500">(ned verwendet)</translation>
+<translation id="1723824996674794290">&amp;Neus Fenster</translation>
 <translation id="1729533290416704613">Sie kontrolliert au, welli Site bi dä Suechi öber d'Adressleiste ahzegt werd.</translation>
 <translation id="1744108098763830590">Hentergrondsite</translation>
+<translation id="176587472219019965">Neus &amp;Fenster</translation>
 <translation id="1828901632669367785">Öber s'Systemdialogfeld drocke...</translation>
 <translation id="1886996562706621347">Registrierig vo Internetsite als Standard-Handler för Protokoll zueloh (empfohle)</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
 <translation id="1963227389609234879">Alli weg tue</translation>
 <translation id="1994173015038366702">Internetsite-URL</translation>
+<translation id="2019718679933488176">&amp;Audio im neue Tab uf tue</translation>
 <translation id="2050339315714019657">Hochformat</translation>
 <translation id="2087822576218954668">Drocke: <ph name="PRINT_NAME" /></translation>
 <translation id="2148892889047469596">Riter öberträge</translation>
 <translation id="2150139952286079145">Ziel sueche</translation>
 <translation id="2177950615300672361">Inkognito-Riter: <ph name="TAB_NAME" /></translation>
-<translation id="218070003709087997">Gäbet Sie en Zahl ih, om d'Ahazhl Exemplar fest z'legge wo sell drockt werde (1 bes 999).</translation>
 <translation id="219008588003277019">Nativs Client-Modul: <ph name="NEXE_NAME" /></translation>
 <translation id="2249605167705922988">z. B. 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Identifikatore för gschötzi Inhält zueloh (eventuell Neustart vom Computer erforderlech)</translation>
@@ -49,10 +55,9 @@
 <translation id="2282146716419988068">GPU Verarbeitig</translation>
 <translation id="2301382460326681002">Stammverzeichnis vo dä Erwiterig esch ongöltig.</translation>
 <translation id="2318143611928805047">Papierformat</translation>
-<translation id="2318923050469484167">Aktuelli privati Setzig (<ph name="EMBEDDING" />)</translation>
 <translation id="2322193970951063277">Chop- ond Fuesszile</translation>
+<translation id="2326931316514688470">Ahwendig &amp;neu lade</translation>
 <translation id="2327492829706409234">Ahwendig ihschalte</translation>
-<translation id="2344028582131185878">Automatischs Abelade</translation>
 <translation id="2348176352564285430">Ahwendig: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">Erwiterigsverzeichnis uswähle.</translation>
 <translation id="2379281330731083556">Öber s'Systemdialogfeld drocke... <ph name="SHORTCUT_KEY" /></translation>
@@ -65,10 +70,10 @@
 <translation id="2476578072172137802">Siite-Ihstellige</translation>
 <translation id="2482878487686419369">Benachrichtigunge</translation>
 <translation id="2509495747794740764">Dä Wert för d'Skalierig moss zwösche 10 ond 200 legge.</translation>
-<translation id="2580924999637585241">Gsamt: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="26224892172169984">Verarbeitig vo Protokoll för kei Internetsite zueloh</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Weder ihschalte</translation>
+<translation id="2721037002783622288">Mit <ph name="SEARCH_ENGINE" /> nachem Beld &amp;sueche</translation>
 <translation id="2809586584051668049">ond <ph name="NUMBER_ADDITIONAL_DISABLED" /> meh</translation>
 <translation id="2812989263793994277">Kei Belder ahzeige</translation>
 <translation id="2850541429955027218">Design dezue tue</translation>
@@ -79,9 +84,9 @@
 <translation id="2932883381142163287">Messbruch melde</translation>
 <translation id="2941112035454246133">Nedrig</translation>
 <translation id="2972581237482394796">&amp;Wederholle</translation>
-<translation id="299483336428448530">Vo dine Eltere installiert.</translation>
 <translation id="3012631534724231212">(Iframe)</translation>
 <translation id="3013291976881901233">MIDI Grät</translation>
+<translation id="3021678814754966447">Frame-Quelltext &amp;ahzeige</translation>
 <translation id="3036546437875325427">Flash aktiviere</translation>
 <translation id="3038675903128704560">Verwendig vo Plug-Ins för dä Zuegriff uf Ehre Computer för kei Internetsite zueloh</translation>
 <translation id="3046910703532196514">Internetsite, vollständig</translation>
@@ -107,13 +112,14 @@
 <translation id="3494769164076977169">Nachefroge, wenn en Internetsite versuecht, nach dä erste Datei witeri dateie automatisch abezlade (empfohle)</translation>
 <translation id="3505030558724226696">Grätezuegreff ufhebe</translation>
 <translation id="3523642406908660543">Nachefroge, wenn en Internetsite es Plug-In för dä Zuegreff uf Ehre Computer wott bruche (empfohle)</translation>
+<translation id="3560034655160545939">&amp;Rechtschriebprüefig</translation>
 <translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; wott dä Drocker &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; för en Groppe freigäh, vo dere Sie dä Inhaber send: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Wenn Sie zuestemmed, chönd alli Groppemetglieder dä Drocker bruche.</translation>
 <translation id="3587482841069643663">Alli</translation>
 <translation id="3668823961463113931">Handhaber</translation>
 <translation id="3678156199662914018">Erwiterig: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Ahfrog zor Beldschermfreigab dörr <ph name="APP_NAME" /></translation>
 <translation id="3725367690636977613">Site</translation>
-<translation id="3744111561329211289">Synchronisierig im Hintergrund</translation>
+<translation id="3744111561329211289">Abgliche im Hentergrond</translation>
 <translation id="3797900183766075808">&amp;Met <ph name="SEARCH_ENGINE" /> nach "<ph name="SEARCH_TERMS" />" sueche</translation>
 <translation id="3800806661949714323">Alli ahzeige (empfohle)</translation>
 <translation id="383891835335927981">Kei Internetsite send vergrösseret oder verchlineret wurde</translation>
@@ -123,15 +129,18 @@
 <translation id="3908501907586732282">Erwiterig ihschalte</translation>
 <translation id="3909791450649380159">&amp;Usschnide</translation>
 <translation id="3927932062596804919">Ablehne</translation>
+<translation id="3936390757709632190">&amp;Audio im neue Tab uf tue</translation>
 <translation id="3943582379552582368">&amp;Zrug</translation>
+<translation id="3948116654032448504">Mit <ph name="SEARCH_ENGINE" /> nachem Beld &amp;sueche</translation>
 <translation id="3955193568934677022">Abspelle vo gschütztem Inhalt uf Internetsite zueloh (empfohle)</translation>
 <translation id="3979395879372752341">Neui Erwiiterig dezue due: (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">–</translation>
+<translation id="4022426551683927403">&amp;Zum Wörderbuech dezue tue</translation>
 <translation id="407520071244661467">Skaliere</translation>
 <translation id="4087089424473531098">Die folgend Erwiterig hets erstell:
 
 <ph name="EXTENSION_FILE" /></translation>
-<translation id="4088095054444612037">För Groppe akzeptiere</translation>
+<translation id="4088095054444612037">För Groppe ahnäh</translation>
 <translation id="4091434297613116013">Blätter Papier</translation>
 <translation id="4096508467498758490">Erwiiterige im Entwecklermodus deaktiviere</translation>
 <translation id="4100839878934973028">Es anders Programm uf Ehrem Computer hed es App dezue doh, wo sech vellecht ofd Fonktionswiis vo Viwaldi uswerkt.</translation>
@@ -152,6 +161,7 @@
 <translation id="4593021220803146968"><ph name="URL" /> öffne</translation>
 <translation id="4595560905247879544">Ahwendige ond Erwiterige chönd nome vom Administrator, <ph name="CUSTODIAN_NAME" />,veränderet werde.</translation>
 <translation id="4613271546271159013">D'Site, wo bem Öffne vomene neue Riter ahzeigt werd, het sech weg dere Erwiterig veränderet.</translation>
+<translation id="4643612240819915418">&amp;Audio im neue Tab uf tue</translation>
 <translation id="4726710629007580002">Bem Versuech die Erwiterig z'installiere hets Warnige gäh:</translation>
 <translation id="479536056609751218">Internetsite, nome HTML</translation>
 <translation id="488785315393301722">Details ahzeige</translation>
@@ -160,15 +170,16 @@
 <translation id="4927753642311223124">Da gets nüt z'gseh, gang witer.</translation>
 <translation id="4988526792673242964">Site</translation>
 <translation id="4994474651455208930">Registrierig vo Internetsite als Standard-Handler för Protokoll zueloh</translation>
-<translation id="5000922062037820727">Blockt (empfohle)</translation>
+<translation id="5000922062037820727">Verbote (empfohle)</translation>
 <translation id="5027562294707732951">Erwiterig dezue tue</translation>
 <translation id="5036662165765606524">Keinere Internetsite erlaube, automatisch mehreri Dateie abezlade</translation>
-<translation id="5039804452771397117">Erlaube</translation>
+<translation id="5039804452771397117">Zueloh</translation>
 <translation id="5063480226653192405">Verwendig</translation>
 <translation id="5068918910148307423">Körzlech gschlossene Internetsite s'Fertigstellevom Dateversand ond -empfang ned erlaube</translation>
 <translation id="5143374789336132547">Weg de Erwiterig <ph name="EXTENSION_NAME" /> het sech d'Site gänderet, wo bem Klick uf "Startsite" chund.</translation>
 <translation id="5154108062446123722">Erwiterti Ihstellige för <ph name="PRINTING_DESTINATION" /></translation>
 <translation id="5233231016133573565">Prozess-ID</translation>
+<translation id="5233736638227740678">&amp;Ihfüege</translation>
 <translation id="5265562206369321422">Set öber nere Woche offline</translation>
 <translation id="5269977353971873915">Fähler bem Drocke</translation>
 <translation id="52912272896845572">Privati Schlösseldatei esch ongöltig.</translation>
@@ -189,7 +200,7 @@
 <translation id="5627086634964711283">Sie bestemmt au, welli Site bim Klick uf "Startsite" chond.</translation>
 <translation id="563535393368633106">Vor em Zuegreff nachefroge (empfohle)</translation>
 <translation id="5649053991847567735">Automatischs Abelade</translation>
-<translation id="5677928146339483299">Blockt</translation>
+<translation id="5677928146339483299">Verbote</translation>
 <translation id="5689516760719285838">Standort</translation>
 <translation id="5707185214361380026">Fähler bem Lade vo dä Erwiterig us:</translation>
 <translation id="5715711091495208045">Plug-in-Broker: <ph name="PLUGIN_NAME" /></translation>
@@ -199,11 +210,11 @@
 <translation id="5804241973901381774">Berechtigunge</translation>
 <translation id="5828633471261496623">am Drocke...</translation>
 <translation id="583281660410589416">Onbekannt</translation>
-<translation id="5838456317242088717">Aktuelli privati Setzig</translation>
-<translation id="5908769186679515905">Usfüehre vo Flash uf Internetsite blockiere</translation>
+<translation id="5908769186679515905">Usfüehre vo Flash uf Internetsite verbiete</translation>
 <translation id="5956585768868398362">Esch das die erwartet Siite för d'Suechi?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (Spetzewert <ph name="NUM_KILOBYTES_LIVE" />)</translation>
 <translation id="5965661248935608907">Sie bestemmt au, welli Site bi dä Suechi öber d'Adressleiste ahzeigt werd oder wenn Sie uf "Startsite" dröcket.</translation>
+<translation id="5978277834170881274">&amp;Rechtschriebprüefig bruche</translation>
 <translation id="5979421442488174909">Öbersetze uf <ph name="LANGUAGE" /></translation>
 <translation id="6011449291337289699">Internetsite-Date lösche</translation>
 <translation id="6042308850641462728">Meh</translation>
@@ -212,7 +223,6 @@
 <translation id="6122081475643980456">Ehri Internetsiite werd beiiflosst</translation>
 <translation id="6147020289383635445">Drockvorschau fählgschlage.</translation>
 <translation id="6169666352732958425">Dä Desktop chan ned öbertreiht werde.</translation>
-<translation id="6196640612572343990">Drittahbüter-Guetzli (Cookies) blockiere</translation>
 <translation id="6196854373336333322">D'Erwiterig <ph name="EXTENSION_NAME" /> het d'Kontrolle öber Ehri Proxyihstellige öbernoh. Das heisst, dass sie alli Onlineaktivitäte chan ändere, störe oder öberwache. Wenn Sie ned secher send, wieso die Änderig passiert esch, eschs bestemmt kei Absecht gsi.</translation>
 <translation id="6247802389331535091">System: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="6248988683584659830">Ihstellige dörrsueche</translation>
@@ -240,13 +250,14 @@
 <translation id="6991665348624301627">Drockziel uswähle</translation>
 <translation id="7005848115657603926">Ongöltige Siteberich, bruchet Sie <ph name="EXAMPLE_PAGE_RANGE" /></translation>
 <translation id="7006634003215061422">Ondere Rand</translation>
-<translation id="7053983685419859001">Blocke</translation>
+<translation id="7053983685419859001">verbiete</translation>
 <translation id="7175353351958621980">Glade vo:</translation>
 <translation id="7270858098575133036">Nachefroge, wenn en Internetsite met systemexklusive Nachrechte uf  MIDI Grät wott zuegrife</translation>
 <translation id="7287143125007575591">Zuegreff verweigeret.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7311079019872751559">Plug-In Zuegreff ohni Sandbox</translation>
 <translation id="7385854874724088939">Bem Drocke esch en Fähler passiert. Bitte öberprüefet Sie Ehre Drocker ond probieret Sies nomal.</translation>
+<translation id="7421925624202799674">Sitequelltext &amp;ahzeige</translation>
 <translation id="7423098979219808738">Erst froge</translation>
 <translation id="7427348830195639090">Hentergrondsite: <ph name="BACKGROUND_PAGE_URL" /></translation>
 <translation id="7453008956351770337">Dörr d'Uswahl vo dem Drocker erlaubet Sie dä folgende Erwiterig, uf Ehre Drocker zue z'grife:</translation>
@@ -263,6 +274,7 @@
 <translation id="7760004034676677601">Esch das d'Siite, wo Sie bim Start erwartet hend?</translation>
 <translation id="7771452384635174008">Format</translation>
 <translation id="7782102568078991263">Kei witeri Vorschläg vo Google</translation>
+<translation id="7786889348652477777">Ahwendig &amp;neu lade</translation>
 <translation id="7791543448312431591">Dezue tue</translation>
 <translation id="7814458197256864873">&amp;Kopiere</translation>
 <translation id="7818135753970109980">Neui Darstellig dezue doh (<ph name="EXTENSION_NAME" />)</translation>
@@ -292,7 +304,9 @@ Speicheret Sie Ehri Schlösseldatei amene sechere Ort. Sie bruchet die Datei om 
 <translation id="8413385045638830869">Erst froge (empfohle)</translation>
 <translation id="8569682776816196752">Kei Ziel gfonde</translation>
 <translation id="857943718398505171">Zuegloh (empfohle)</translation>
+<translation id="8584280235376696778">&amp;Video im neue Tab uf tue</translation>
 <translation id="8615618338313291042">Anonymi Ahwendig: <ph name="APP_NAME" /></translation>
+<translation id="8664389313780386848">Sitequelltext &amp;ahzeige</translation>
 <translation id="8708000541097332489">Bim Schlüsse lösche</translation>
 <translation id="8714838604780058252">Hentergrondgrafike</translation>
 <translation id="8757090071857742562">Dä Desktop chan ned öbertreiht werde. Öberprüefet Sie, öb Sie d'Ufforderig zor Freigab vo Ehrem Beldscherm bestätigt hend.</translation>

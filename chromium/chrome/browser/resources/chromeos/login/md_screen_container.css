@@ -3,18 +3,13 @@
  * found in the LICENSE file.
  */
 
-:root {
-  --oobe-dialog-host-height: 100%;
-  --oobe-dialog-host-width: 100%;
-}
-
  #outer-container {
    align-items: center;
    box-sizing: border-box;
    height: 100%;
    justify-content: center;
-   min-height: calc(var(--oobe-dialog-min-height) + var(--shelf-area-height));
-   padding-bottom: var(--shelf-area-height);  /* Leave space for the shelf */
+   min-height: var(--oobe-dialog-min-height);
+   padding-bottom: 0;
    padding-inline-end: var(--oobe-dialog-side-margin);
    padding-inline-start: var(--oobe-dialog-side-margin);
    position: absolute;
@@ -29,12 +24,8 @@
    min-height: 0;
  }
 
-.oobe-display #outer-container {
-  perspective: 600px;
-}
-
 #scroll-container {
-  bottom: 0;        /* Allows content overlap with the shelf. */
+  bottom: var(--shelf-area-height);  /* Leave space for the shelf */
   left: 0;
   overflow-x: hidden;
   overflow-y: auto;

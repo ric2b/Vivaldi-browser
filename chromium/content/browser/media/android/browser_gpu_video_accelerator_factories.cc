@@ -33,6 +33,7 @@ void OnGpuChannelEstablished(
   attributes.samples = 0;
   attributes.sample_buffers = 0;
   attributes.bind_generates_resource = false;
+  attributes.enable_raster_interface = true;
 
   gpu::GpuChannelEstablishFactory* factory =
       BrowserMainLoop::GetInstance()->gpu_channel_establish_factory();
@@ -97,18 +98,19 @@ int32_t BrowserGpuVideoAcceleratorFactories::GetCommandBufferRouteId() {
   return context_provider_->GetCommandBufferProxy()->route_id();
 }
 
-bool BrowserGpuVideoAcceleratorFactories::IsDecoderConfigSupported(
+media::GpuVideoAcceleratorFactories::Supported
+BrowserGpuVideoAcceleratorFactories::IsDecoderConfigSupported(
     media::VideoDecoderImplementation implementation,
     const media::VideoDecoderConfig& config) {
   // TODO(sandersd): Add a cache here too?
-  return true;
+  return media::GpuVideoAcceleratorFactories::Supported::kTrue;
 }
 
 std::unique_ptr<media::VideoDecoder>
 BrowserGpuVideoAcceleratorFactories::CreateVideoDecoder(
     media::MediaLog* media_log,
     media::VideoDecoderImplementation implementation,
-    const media::RequestOverlayInfoCB& request_overlay_info_cb) {
+    media::RequestOverlayInfoCB request_overlay_info_cb) {
   return nullptr;
 }
 
@@ -153,11 +155,6 @@ BrowserGpuVideoAcceleratorFactories::GpuMemoryBufferManager() {
   return nullptr;
 }
 
-std::unique_ptr<base::SharedMemory>
-BrowserGpuVideoAcceleratorFactories::CreateSharedMemory(size_t size) {
-  return nullptr;
-}
-
 base::UnsafeSharedMemoryRegion
 BrowserGpuVideoAcceleratorFactories::CreateSharedMemoryRegion(size_t size) {
   return {};
@@ -168,15 +165,15 @@ BrowserGpuVideoAcceleratorFactories::GetTaskRunner() {
   return nullptr;
 }
 
-media::VideoEncodeAccelerator::SupportedProfiles
+base::Optional<media::VideoEncodeAccelerator::SupportedProfiles>
 BrowserGpuVideoAcceleratorFactories::
     GetVideoEncodeAcceleratorSupportedProfiles() {
   return media::VideoEncodeAccelerator::SupportedProfiles();
 }
 
-scoped_refptr<viz::ContextProvider>
+viz::RasterContextProvider*
 BrowserGpuVideoAcceleratorFactories::GetMediaContextProvider() {
-  return context_provider_;
+  return context_provider_.get();
 }
 
 void BrowserGpuVideoAcceleratorFactories::SetRenderingColorSpace(

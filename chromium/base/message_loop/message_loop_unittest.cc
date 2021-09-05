@@ -221,7 +221,8 @@ class DummyTaskObserver : public TaskObserver {
 
   ~DummyTaskObserver() override = default;
 
-  void WillProcessTask(const PendingTask& pending_task) override {
+  void WillProcessTask(const PendingTask& pending_task,
+                       bool /* was_blocked_or_low_priority */) override {
     num_tasks_started_++;
     EXPECT_LE(num_tasks_started_, num_tasks_);
     EXPECT_EQ(num_tasks_started_, num_tasks_processed_ + 1);
@@ -1472,7 +1473,7 @@ TEST_P(MessageLoopTypedTest, IsIdleForTestingNonNestableTask) {
   EXPECT_TRUE(loop->IsIdleForTesting());
 }
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          MessageLoopTypedTest,
                          ::testing::Values(MessagePumpType::DEFAULT,
                                            MessagePumpType::UI,
@@ -1565,6 +1566,7 @@ bool QuitOnSystemTimer(UINT message,
     ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
                                             BindOnce(&::PostQuitMessage, 0));
   }
+  *result = 0;
   return true;
 }
 
@@ -1579,6 +1581,7 @@ bool DelayedQuitOnSystemTimer(UINT message,
         FROM_HERE, BindOnce(&::PostQuitMessage, 0),
         TimeDelta::FromMilliseconds(10));
   }
+  *result = 0;
   return true;
 }
 

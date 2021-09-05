@@ -58,7 +58,7 @@ class DetailsTest : public testing::Test {
     return profile;
   }
 
-  ClientMemory client_memory_;
+  UserData user_data_;
 };
 
 TEST_F(DetailsTest, UpdateFromParametersEmpty) {
@@ -98,6 +98,7 @@ TEST_F(DetailsTest, UpdateFromParametersUpdateFromDetails) {
   parameters["DETAILS_DESCRIPTION_LINE_2"] = "line2";
   parameters["DETAILS_DESCRIPTION_LINE_3"] = "Est. total";
   parameters["DETAILS_IMAGE_URL"] = "image";
+  parameters["DETAILS_IMAGE_ACCESSIBILITY_HINT"] = "hint";
   parameters["DETAILS_IMAGE_CLICKTHROUGH_URL"] = "clickthrough";
   parameters["DETAILS_TOTAL_PRICE_LABEL"] = "total";
   parameters["DETAILS_TOTAL_PRICE"] = "12";
@@ -114,6 +115,7 @@ TEST_F(DetailsTest, UpdateFromParametersUpdateFromDetails) {
   EXPECT_THAT(details.priceAttribution(), Eq("Est. total"));
   EXPECT_THAT(details.imageUrl(),
               Eq("image"));  // Overwrites show_image_placeholder
+  EXPECT_THAT(details.imageAccessibilityHint(), Eq("hint"));
   EXPECT_TRUE(details.imageAllowClickthrough());
   EXPECT_THAT(details.imageClickthroughUrl(), Eq("clickthrough"));
   EXPECT_THAT(details.totalPriceLabel(), Eq("total"));
@@ -161,17 +163,16 @@ TEST_F(DetailsTest, UpdateFromProtoBackwardsCompatibility) {
 
 TEST_F(DetailsTest, UpdateFromContactDetailsNoAddressInMemory) {
   EXPECT_FALSE(Details::UpdateFromContactDetails(ShowDetailsProto(),
-                                                 &client_memory_, nullptr));
+                                                 &user_data_, nullptr));
 }
 
 TEST_F(DetailsTest, UpdateFromContactDetails) {
   ShowDetailsProto proto;
   proto.set_contact_details("contact");
-  client_memory_.set_selected_address("contact", MakeAutofillProfile());
+  user_data_.selected_addresses_["contact"] = MakeAutofillProfile();
 
   Details details;
-  EXPECT_TRUE(
-      Details::UpdateFromContactDetails(proto, &client_memory_, &details));
+  EXPECT_TRUE(Details::UpdateFromContactDetails(proto, &user_data_, &details));
 
   EXPECT_THAT(details.title(),
               Eq(l10n_util::GetStringUTF8(IDS_PAYMENTS_CONTACT_DETAILS_LABEL)));
@@ -181,17 +182,16 @@ TEST_F(DetailsTest, UpdateFromContactDetails) {
 
 TEST_F(DetailsTest, UpdateFromShippingAddressNoAddressInMemory) {
   EXPECT_FALSE(Details::UpdateFromShippingAddress(ShowDetailsProto(),
-                                                  &client_memory_, nullptr));
+                                                  &user_data_, nullptr));
 }
 
 TEST_F(DetailsTest, UpdateFromShippingAddress) {
   ShowDetailsProto proto;
   proto.set_shipping_address("shipping");
-  client_memory_.set_selected_address("shipping", MakeAutofillProfile());
+  user_data_.selected_addresses_["shipping"] = MakeAutofillProfile();
 
   Details details;
-  EXPECT_TRUE(
-      Details::UpdateFromShippingAddress(proto, &client_memory_, &details));
+  EXPECT_TRUE(Details::UpdateFromShippingAddress(proto, &user_data_, &details));
 
   EXPECT_THAT(
       details.title(),
@@ -205,25 +205,25 @@ TEST_F(DetailsTest, UpdateFromSelectedCreditCardEmptyMemory) {
   ShowDetailsProto proto;
   proto.set_credit_card(true);
   EXPECT_FALSE(Details::UpdateFromContactDetails(ShowDetailsProto(),
-                                                 &client_memory_, nullptr));
+                                                 &user_data_, nullptr));
 }
 
 TEST_F(DetailsTest, UpdateFromSelectedCreditCardNotRequested) {
   ShowDetailsProto proto;
   proto.set_credit_card(false);
-  client_memory_.set_selected_card(MakeCreditCard());
+  user_data_.selected_card_ = MakeCreditCard();
   EXPECT_FALSE(Details::UpdateFromContactDetails(ShowDetailsProto(),
-                                                 &client_memory_, nullptr));
+                                                 &user_data_, nullptr));
 }
 
 TEST_F(DetailsTest, UpdateFromCreditCard) {
   ShowDetailsProto proto;
   proto.set_credit_card(true);
-  client_memory_.set_selected_card(MakeCreditCard());
+  user_data_.selected_card_ = MakeCreditCard();
 
   Details details;
   EXPECT_TRUE(
-      Details::UpdateFromSelectedCreditCard(proto, &client_memory_, &details));
+      Details::UpdateFromSelectedCreditCard(proto, &user_data_, &details));
 
   EXPECT_THAT(
       details.title(),
@@ -359,6 +359,14 @@ TEST_F(DetailsTest, GetImageUrl) {
   proto.mutable_details()->set_image_url("url");
   EXPECT_TRUE(Details::UpdateFromProto(proto, &details));
   EXPECT_THAT(details.imageUrl(), Eq("url"));
+}
+
+TEST_F(DetailsTest, GetImageAccessibilityHint) {
+  Details details;
+  ShowDetailsProto proto;
+  proto.mutable_details()->set_image_accessibility_hint("hint");
+  EXPECT_TRUE(Details::UpdateFromProto(proto, &details));
+  EXPECT_THAT(details.imageAccessibilityHint(), Eq("hint"));
 }
 
 TEST_F(DetailsTest, GetClickthroughData) {

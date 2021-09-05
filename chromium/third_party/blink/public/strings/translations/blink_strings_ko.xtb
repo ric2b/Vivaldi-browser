@@ -4,6 +4,7 @@
 <translation id="1018939186200882850">메뉴 항목</translation>
 <translation id="10623998915015855">전환 버튼</translation>
 <translation id="1088086359088493902">초</translation>
+<translation id="1142001580032786438">주 선택도구 표시</translation>
 <translation id="1171774979989969504">이메일 주소를 입력하세요.</translation>
 <translation id="1178581264944972037">일시중지</translation>
 <translation id="1188858454923323853">상호 보완</translation>
@@ -11,6 +12,7 @@
 <translation id="1206693055195146388">슬라이더</translation>
 <translation id="1211441953136645838">미주</translation>
 <translation id="1281252709823657822">대화상자</translation>
+<translation id="1306460908038601864">꺼짐</translation>
 <translation id="1335095011850992622">저작권 표시</translation>
 <translation id="1342835525016946179">article</translation>
 <translation id="1359897965706325498">배너</translation>
@@ -21,6 +23,7 @@
 <translation id="1727886345390570319">자막 메뉴 숨기기</translation>
 <translation id="1729654308190250600">비어 있지 않은 이메일 주소를 입력해 주세요.</translation>
 <translation id="1758486001363313524">다른 일자...</translation>
+<translation id="1787192514241997742">총 시간: <ph name="REMAINING_TIME" /></translation>
 <translation id="1806710327868736751">알림 대화상자</translation>
 <translation id="1821985195704844674">트리 격자</translation>
 <translation id="1822429046913737220">오전/오후</translation>
@@ -54,7 +57,6 @@
 <translation id="2674318244760992338">바닥글</translation>
 <translation id="2709516037105925701">자동 완성</translation>
 <translation id="2723001399770238859">오디오</translation>
-<translation id="2725963129578236554">댓글</translation>
 <translation id="2746543609216772311">값은 <ph name="MINIMUM_DATE_OR_TIME" /> 이후여야 합니다.</translation>
 <translation id="2759744352195237655">팝업 버튼</translation>
 <translation id="2761667185364618470">계속하려면 이 확인란을 선택하세요.</translation>
@@ -83,7 +85,6 @@
 <translation id="3822383571486410024">이 텍스트를 <ph name="MIN_CHARACTERS" />자 이상으로 늘리세요(현재 <ph name="CURRENT_LENGTH" />자 사용 중).</translation>
 <translation id="383465348367842624">'<ph name="ATSIGN" />' 앞 부분에 '<ph name="INVALIDCHARACTER" />' 기호가 포함되면 안됩니다.</translation>
 <translation id="3846214748874656680">전체화면 종료</translation>
-<translation id="3889183436948184105">개정</translation>
 <translation id="3920932319529768807">결론</translation>
 <translation id="3924558731517983934">애플리케이션</translation>
 <translation id="3944740393230681990">프롤로그</translation>
@@ -101,11 +102,11 @@
 <translation id="4444765639179266822">텍스트가 <ph name="OCR_TEXT" />인 것으로 보입니다</translation>
 <translation id="4446524499724042288">용어 참조</translation>
 <translation id="4522570452068850558">세부정보</translation>
-<translation id="4542388879936266156">남은 시간: <ph name="REMAINING_TIME" /></translation>
 <translation id="4597532268155981612">양식</translation>
 <translation id="4661075872484491155">tree</translation>
 <translation id="4664250907885839816">'<ph name="ATSIGN" />' 다음 부분에 '<ph name="INVALIDCHARACTER" />' 기호가 포함되면 안됩니다.</translation>
 <translation id="4668956016107839909">부록</translation>
+<translation id="4698212723196775569">코드</translation>
 <translation id="4718048029184481307">PIP 모드에서 재생</translation>
 <translation id="4742539557769756338">표지</translation>
 <translation id="4748357248530471599">디스플레이 컷아웃을 전체화면으로 전환</translation>
@@ -114,9 +115,14 @@
 <translation id="479989351350248267">검색</translation>
 <translation id="4812940957355064477">숫자를 입력하세요.</translation>
 <translation id="4912536737030637138">참고문헌 항목</translation>
+<translation id="4915360478455618802">시간 선택도구 표시</translation>
+<translation id="492244087561876220">댓글</translation>
+<translation id="4950364064308314478">현지 날짜 및 시간 선택도구 표시</translation>
+<translation id="4971739861736909480"><ph name="ACCNAME" /> 선택됨</translation>
 <translation id="4975562563186953947"><ph name="SELECTED_COUNT" />개 선택됨</translation>
 <translation id="4992066212339426712">음소거 해제</translation>
 <translation id="49969490063480558">'<ph name="ATSIGN" />' 뒷 부분을 입력해 주세요. '<ph name="INVALIDADDRESS" />'(이)가 완전하지 않습니다.</translation>
+<translation id="5022314756875057021">행 그룹</translation>
 <translation id="5034860022980953847">진행률 표시기</translation>
 <translation id="5090250355906949916">동영상 시간 스크러버</translation>
 <translation id="5093189678851173835">제명</translation>
@@ -127,6 +133,7 @@
 <translation id="520299402983819650"><ph name="QUANTITY" />PB</translation>
 <translation id="5307600278924710095">'<ph name="ATSIGN" />' 앞 부분을 입력해 주세요. '<ph name="INVALIDADDRESS" />'(이)가 완전하지 않습니다.</translation>
 <translation id="5334352251556557839">미디어를 재생할 수 없습니다.</translation>
+<translation id="537648784377940524">최소 날짜(<ph name="MIN_DATE_OR_TIME" />)는 최대 날짜(<ph name="MAX_DATE_OR_TIME" />) 이전이어야 합니다.</translation>
 <translation id="5406322316791861025">그림</translation>
 <translation id="5453733299334684579">트리 항목</translation>
 <translation id="5466621249238537318">파일을 한 개 이상 선택하세요.</translation>
@@ -142,7 +149,6 @@
 <translation id="5677946354068040947">옵션 더보기</translation>
 <translation id="576709008726043716">소개</translation>
 <translation id="57838592816432529">음소거</translation>
-<translation id="5860033963881614850">사용 안함</translation>
 <translation id="588258955323874662">전체화면</translation>
 <translation id="5888666972993069672">현재 <ph name="DEVICE_FRIENDLY_NAME" />(으)로 전송 중</translation>
 <translation id="591047860372322273">검색창</translation>
@@ -163,7 +169,6 @@
 <translation id="6404546809543547843">오디오 시간 스크러버</translation>
 <translation id="6443871981718447451">자막 메뉴 표시</translation>
 <translation id="6453774872122745852">감사의 말</translation>
-<translation id="6475115390776617481">실시간 공동작업자</translation>
 <translation id="648732519525291180">시간 선택기</translation>
 <translation id="6550675742724504774">옵션</translation>
 <translation id="6572309429103589720">문법이 잘못되었습니다.</translation>
@@ -191,6 +196,7 @@
 <translation id="7118469954320184356">설명이 없습니다.</translation>
 <translation id="7139483182332611405">머리말</translation>
 <translation id="7214187073215825913">콘텐츠 정보</translation>
+<translation id="7238347055216017155">강조</translation>
 <translation id="7263440858009898357">목록에서 항목을 선택하세요.</translation>
 <translation id="727747134524199931">열 헤더</translation>
 <translation id="7320576522385648310">버퍼링</translation>
@@ -217,6 +223,8 @@
 <translation id="7888071071722539607">이메일 주소에 '<ph name="ATSIGN" />'를 포함해 주세요. '<ph name="INVALIDADDRESS" />'에 '<ph name="ATSIGN" />'가 없습니다.</translation>
 <translation id="7891486169920085145">분할선</translation>
 <translation id="795667975304826397">선택된 파일 없음</translation>
+<translation id="7962328325860248200"><ph name="ACCNAME" /> 선택되지 않음</translation>
+<translation id="8034303206267677282">굵게</translation>
 <translation id="8053789581856978548">검색어 입력란</translation>
 <translation id="8057695513531652401">안내문</translation>
 <translation id="8105797009065549151">참고 자료</translation>
@@ -228,6 +236,7 @@
 <translation id="8284326494547611709">자막</translation>
 <translation id="8346634859695247203">섹션</translation>
 <translation id="835897206747267392">값이 잘못되었습니다.</translation>
+<translation id="839593075537728968">값은 <ph name="MINIMUM_TIME" />에서 <ph name="MAXIMUM_TIME" /> 사이여야 합니다.</translation>
 <translation id="8403857369060869934">경과 시간: <ph name="ELAPSED_TIME" /></translation>
 <translation id="8415319359811155763">부</translation>
 <translation id="8433900881053900389">툴바</translation>
@@ -244,10 +253,10 @@
 <translation id="860475260694818407">목차</translation>
 <translation id="8613126697340063924">원격 재생 제어</translation>
 <translation id="862370744433916922">부제</translation>
+<translation id="8634971699417195529">월 선택도구 표시</translation>
 <translation id="8711688047404765493">출력</translation>
 <translation id="8750798805984357768">다음 옵션 중 하나를 선택하세요.</translation>
 <translation id="8808573423886751634">장</translation>
-<translation id="8822203815165896261">저자 정보</translation>
 <translation id="8845239796550121995">TV로 전송 중</translation>
 <translation id="8851136666856101339">main</translation>
 <translation id="8875657656876809964">동영상 재생 오류</translation>

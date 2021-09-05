@@ -20,7 +20,6 @@
 #include "ash/assistant/assistant_controller_observer.h"
 #include "ash/assistant/model/assistant_ui_model_observer.h"
 #include "ash/display/window_tree_host_manager.h"
-#include "ash/home_screen/home_launcher_gesture_handler_observer.h"
 #include "ash/home_screen/home_screen_delegate.h"
 #include "ash/public/cpp/app_list/app_list_controller.h"
 #include "ash/public/cpp/keyboard/keyboard_controller_observer.h"
@@ -28,11 +27,13 @@
 #include "ash/public/cpp/tablet_mode_observer.h"
 #include "ash/public/cpp/wallpaper_controller_observer.h"
 #include "ash/session/session_observer.h"
+#include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shell_observer.h"
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/overview/overview_observer.h"
 #include "base/observer_list.h"
 #include "components/sync/model/string_ordinal.h"
+#include "ui/aura/window_observer.h"
 #include "ui/display/types/display_constants.h"
 
 class PrefRegistrySimple;
@@ -48,31 +49,30 @@ class AppListControllerObserver;
 // Ash's AppListController owns the AppListModel and implements interface
 // functions that allow Chrome to modify and observe the Shelf and AppListModel
 // state.
-class ASH_EXPORT AppListControllerImpl
-    : public AppListController,
-      public SessionObserver,
-      public AppListModelObserver,
-      public AppListViewDelegate,
-      public ash::ShellObserver,
-      public OverviewObserver,
-      public TabletModeObserver,
-      public KeyboardControllerObserver,
-      public WallpaperControllerObserver,
-      public AssistantStateObserver,
-      public WindowTreeHostManager::Observer,
-      public ash::MruWindowTracker::Observer,
-      public AssistantControllerObserver,
-      public AssistantUiModelObserver,
-      public HomeLauncherGestureHandlerObserver,
-      public HomeScreenDelegate {
+class ASH_EXPORT AppListControllerImpl : public AppListController,
+                                         public SessionObserver,
+                                         public AppListModelObserver,
+                                         public AppListViewDelegate,
+                                         public ShellObserver,
+                                         public OverviewObserver,
+                                         public TabletModeObserver,
+                                         public KeyboardControllerObserver,
+                                         public WallpaperControllerObserver,
+                                         public AssistantStateObserver,
+                                         public WindowTreeHostManager::Observer,
+                                         public aura::WindowObserver,
+                                         public MruWindowTracker::Observer,
+                                         public AssistantControllerObserver,
+                                         public AssistantUiModelObserver,
+                                         public HomeScreenDelegate {
  public:
   AppListControllerImpl();
   ~AppListControllerImpl() override;
 
-  enum HomeLauncherAnimationState {
-    kFinished,
-    kShowing,
-    kHiding,
+  enum HomeLauncherTransitionState {
+    kFinished,      // No drag or animation is in progress
+    kMostlyShown,   // The home launcher occupies more than half of the screen
+    kMostlyHidden,  // The home launcher occupies less than half of the screen
   };
 
   static void RegisterProfilePrefs(PrefRegistrySimple* registry);
@@ -82,15 +82,15 @@ class ASH_EXPORT AppListControllerImpl
   // AppListController:
   void SetClient(AppListClient* client) override;
   AppListClient* GetClient() override;
-  void AddItem(std::unique_ptr<ash::AppListItemMetadata> app_item) override;
-  void AddItemToFolder(std::unique_ptr<ash::AppListItemMetadata> app_item,
+  void AddItem(std::unique_ptr<AppListItemMetadata> app_item) override;
+  void AddItemToFolder(std::unique_ptr<AppListItemMetadata> app_item,
                        const std::string& folder_id) override;
   void RemoveItem(const std::string& id) override;
   void RemoveUninstalledItem(const std::string& id) override;
   void MoveItemToFolder(const std::string& id,
                         const std::string& folder_id) override;
-  void SetStatus(ash::AppListModelStatus status) override;
-  void SetState(ash::AppListState state) override;
+  void SetStatus(AppListModelStatus status) override;
+  void SetState(AppListState state) override;
   void HighlightItemInstalledFromUI(const std::string& id) override;
   void SetSearchEngineIsGoogle(bool is_google) override;
   void SetSearchTabletAndClamshellAccessibleName(
@@ -100,19 +100,19 @@ class ASH_EXPORT AppListControllerImpl
   void UpdateSearchBox(const base::string16& text,
                        bool initiated_by_user) override;
   void PublishSearchResults(
-      std::vector<std::unique_ptr<ash::SearchResultMetadata>> results) override;
+      std::vector<std::unique_ptr<SearchResultMetadata>> results) override;
   void SetItemMetadata(const std::string& id,
-                       std::unique_ptr<ash::AppListItemMetadata> data) override;
+                       std::unique_ptr<AppListItemMetadata> data) override;
   void SetItemIcon(const std::string& id, const gfx::ImageSkia& icon) override;
   void SetItemIsInstalling(const std::string& id, bool is_installing) override;
   void SetItemPercentDownloaded(const std::string& id,
                                 int32_t percent_downloaded) override;
   void SetModelData(int profile_id,
-                    std::vector<std::unique_ptr<ash::AppListItemMetadata>> apps,
+                    std::vector<std::unique_ptr<AppListItemMetadata>> apps,
                     bool is_search_engine_google) override;
 
   void SetSearchResultMetadata(
-      std::unique_ptr<ash::SearchResultMetadata> metadata) override;
+      std::unique_ptr<SearchResultMetadata> metadata) override;
   void SetSearchResultIsInstalling(const std::string& id,
                                    bool is_installing) override;
   void SetSearchResultPercentDownloaded(const std::string& id,
@@ -131,31 +131,39 @@ class ASH_EXPORT AppListControllerImpl
   void GetAppInfoDialogBounds(GetAppInfoDialogBoundsCallback callback) override;
   void ShowAppList() override;
   aura::Window* GetWindow() override;
-  bool IsVisible() override;
+  bool IsVisible(const base::Optional<int64_t>& display_id) override;
 
   // AppListModelObserver:
   void OnAppListItemAdded(AppListItem* item) override;
   void OnAppListItemWillBeDeleted(AppListItem* item) override;
   void OnAppListItemUpdated(AppListItem* item) override;
-  void OnAppListStateChanged(ash::AppListState new_state,
-                             ash::AppListState old_state) override;
+  void OnAppListStateChanged(AppListState new_state,
+                             AppListState old_state) override;
 
   // SessionObserver:
   void OnActiveUserPrefServiceChanged(PrefService* pref_service) override;
+  void OnSessionStateChanged(session_manager::SessionState state) override;
 
   // Methods used in ash:
-  bool GetTargetVisibility() const;
+  bool GetTargetVisibility(const base::Optional<int64_t>& display_id) const;
   void Show(int64_t display_id,
-            AppListShowSource show_source,
+            base::Optional<AppListShowSource> show_source,
             base::TimeTicks event_time_stamp);
   void UpdateYPositionAndOpacity(int y_position_in_screen,
                                  float background_opacity);
-  void EndDragFromShelf(ash::AppListViewState app_list_state);
+  void EndDragFromShelf(AppListViewState app_list_state);
   void ProcessMouseWheelEvent(const ui::MouseWheelEvent& event);
-  ash::ShelfAction ToggleAppList(int64_t display_id,
-                                 AppListShowSource show_source,
-                                 base::TimeTicks event_time_stamp);
-  ash::AppListViewState GetAppListViewState();
+  // Toggles app list visibility. In tablet mode, this can only show the app
+  // list (by hiding any windows that might be shown over the homde launcher).
+  // |display_id| is the id of display where app list should toggle.
+  // |show_source| is the source of the event. |event_time_stamp| records the
+  // event timestamp.
+  ShelfAction ToggleAppList(int64_t display_id,
+                            AppListShowSource show_source,
+                            base::TimeTicks event_time_stamp);
+  AppListViewState GetAppListViewState();
+  // Returns whether the home launcher should be visible.
+  bool ShouldHomeLauncherBeVisible() const;
 
   // AppListViewDelegate:
   AppListModel* GetModel() override;
@@ -166,7 +174,8 @@ class ASH_EXPORT AppListControllerImpl
                         int event_flags,
                         AppListLaunchedFrom launched_from,
                         AppListLaunchType launch_type,
-                        int suggestion_index) override;
+                        int suggestion_index,
+                        bool launch_as_default) override;
   void LogResultLaunchHistogram(SearchResultLaunchLocation launch_location,
                                 int suggestion_index) override;
   void LogSearchAbandonHistogram() override;
@@ -188,11 +197,10 @@ class ASH_EXPORT AppListControllerImpl
   void GetContextMenuModel(const std::string& id,
                            GetContextMenuModelCallback callback) override;
   ui::ImplicitAnimationObserver* GetAnimationObserver(
-      ash::AppListViewState target_state) override;
+      AppListViewState target_state) override;
   void ShowWallpaperContextMenu(const gfx::Point& onscreen_location,
                                 ui::MenuSourceType source_type) override;
-  bool ProcessHomeLauncherGesture(ui::GestureEvent* event,
-                                  const gfx::Point& screen_location) override;
+  bool ProcessHomeLauncherGesture(ui::GestureEvent* event) override;
   bool KeyboardTraversalEngaged() override;
   bool CanProcessEventsOnApplistViews() override;
   bool ShouldDismissImmediately() override;
@@ -200,23 +208,22 @@ class ASH_EXPORT AppListControllerImpl
       mojo::PendingReceiver<content::mojom::NavigableContentsFactory> receiver)
       override;
   int GetTargetYForAppListHide(aura::Window* root_window) override;
-  ash::AssistantViewDelegate* GetAssistantViewDelegate() override;
+  AssistantViewDelegate* GetAssistantViewDelegate() override;
   void OnSearchResultVisibilityChanged(const std::string& id,
                                        bool visibility) override;
   void NotifySearchResultsForLogging(
       const base::string16& raw_query,
-      const ash::SearchResultIdWithPositionIndices& results,
+      const SearchResultIdWithPositionIndices& results,
       int position_index) override;
   bool IsAssistantAllowedAndEnabled() const override;
   bool ShouldShowAssistantPrivacyInfo() const override;
   void MaybeIncreaseAssistantPrivacyInfoShownCount() override;
   void MarkAssistantPrivacyInfoDismissed() override;
-  void OnStateTransitionAnimationCompleted(
-      ash::AppListViewState state) override;
+  void OnStateTransitionAnimationCompleted(AppListViewState state) override;
   void GetAppLaunchedMetricParams(
       AppLaunchedMetricParams* metric_params) override;
   gfx::Rect SnapBoundsToDisplayEdge(const gfx::Rect& bounds) override;
-  int GetShelfHeight() override;
+  int GetShelfSize() override;
 
   void AddObserver(AppListControllerObserver* observer);
   void RemoveObserver(AppListControllerObserver* obsever);
@@ -226,11 +233,12 @@ class ASH_EXPORT AppListControllerImpl
   void OnVisibilityWillChange(bool visible, int64_t display_id);
 
   // ShellObserver:
-  void OnShelfAlignmentChanged(aura::Window* root_window) override;
+  void OnShelfAlignmentChanged(aura::Window* root_window,
+                               ShelfAlignment old_alignment) override;
   void OnShellDestroying() override;
 
   // OverviewObserver:
-  void OnOverviewModeWillStart() override;
+  void OnOverviewModeStarting() override;
   void OnOverviewModeStartingAnimationComplete(bool canceled) override;
   void OnOverviewModeEnding(OverviewSession* session) override;
   void OnOverviewModeEnded() override;
@@ -254,6 +262,10 @@ class ASH_EXPORT AppListControllerImpl
   // WindowTreeHostManager::Observer:
   void OnDisplayConfigurationChanged() override;
 
+  // aura::WindowObserver:
+  void OnWindowVisibilityChanging(aura::Window* window, bool visible) override;
+  void OnWindowDestroyed(aura::Window* window) override;
+
   // MruWindowTracker::Observer:
   void OnWindowUntracked(aura::Window* untracked_window) override;
 
@@ -267,28 +279,32 @@ class ASH_EXPORT AppListControllerImpl
       base::Optional<AssistantEntryPoint> entry_point,
       base::Optional<AssistantExitPoint> exit_point) override;
 
-  // HomeLauncherGestureHandlerObserver:
-  void OnHomeLauncherAnimationComplete(bool shown, int64_t display_id) override;
-  void OnHomeLauncherTargetPositionChanged(bool showing,
-                                           int64_t display_id) override;
-
   // HomeScreenDelegate:
   void ShowHomeScreenView() override;
   aura::Window* GetHomeScreenWindow() override;
   void UpdateYPositionAndOpacityForHomeLauncher(
       int y_position_in_screen,
       float opacity,
+      base::Optional<AnimationInfo> animation_info,
       UpdateAnimationSettingsCallback callback) override;
-  void UpdateAfterHomeLauncherShown() override;
+  void UpdateScaleAndOpacityForHomeLauncher(
+      float scale,
+      float opacity,
+      base::Optional<AnimationInfo> animation_info,
+      UpdateAnimationSettingsCallback callback) override;
   base::Optional<base::TimeDelta> GetOptionalAnimationDuration() override;
-  void NotifyHomeLauncherAnimationTransition(AnimationTrigger trigger,
-                                             bool launcher_will_show) override;
+  base::ScopedClosureRunner DisableHomeScreenBackgroundBlur() override;
+  void OnHomeLauncherAnimationComplete(bool shown, int64_t display_id) override;
+  void OnHomeLauncherPositionChanged(int percent_shown,
+                                     int64_t display_id) override;
   bool IsHomeScreenVisible() override;
+  gfx::Rect GetInitialAppListItemScreenBoundsForWindow(
+      aura::Window* window) override;
 
   bool onscreen_keyboard_shown() const { return onscreen_keyboard_shown_; }
 
-  HomeLauncherAnimationState home_launcher_animation_state() const {
-    return home_launcher_animation_state_;
+  HomeLauncherTransitionState home_launcher_transition_state() const {
+    return home_launcher_transition_state_;
   }
 
   // Performs the 'back' action for the active page.
@@ -296,34 +312,28 @@ class ASH_EXPORT AppListControllerImpl
 
   void SetKeyboardTraversalMode(bool engaged);
 
-  // Handles home button press event. (Search key should trigger the same
-  // behavior.) All three parameters are only used in clamshell mode.
-  // |display_id| is the id of display where app list should toggle.
-  // |show_source| is the source of the event. |event_time_stamp| records the
-  // event timestamp.
-  ash::ShelfAction OnHomeButtonPressed(int64_t display_id,
-                                       AppListShowSource show_source,
-                                       base::TimeTicks event_time_stamp);
-
   // Returns current visibility of the Assistant page.
   bool IsShowingEmbeddedAssistantUI() const;
 
   // Get updated app list view state after dragging from shelf.
-  ash::AppListViewState CalculateStateAfterShelfDrag(
+  AppListViewState CalculateStateAfterShelfDrag(
       const ui::LocatedEvent& event_in_screen,
       float launcher_above_shelf_bottom_amount) const;
 
   void SetAppListModelForTest(std::unique_ptr<AppListModel> model);
 
   using StateTransitionAnimationCallback =
-      base::RepeatingCallback<void(ash::AppListViewState)>;
+      base::RepeatingCallback<void(AppListViewState)>;
 
-  void SetStateTransitionAnimationCallback(
+  void SetStateTransitionAnimationCallbackForTesting(
       StateTransitionAnimationCallback callback);
 
-  void RecordShelfAppLaunched(
-      base::Optional<AppListViewState> recorded_app_list_view_state,
-      base::Optional<bool> home_launcher_shown);
+  using HomeLauncherAnimationCallback =
+      base::RepeatingCallback<void(bool shown)>;
+  void SetHomeLauncherAnimationCallbackForTesting(
+      HomeLauncherAnimationCallback callback);
+
+  void RecordShelfAppLaunched();
 
   // Updates which container the launcher window should be in.
   void UpdateLauncherContainer(
@@ -339,6 +349,10 @@ class ASH_EXPORT AppListControllerImpl
   aura::Window* GetContainerForDisplayId(
       base::Optional<int64_t> display_id = base::nullopt);
 
+  // Methods for recording the state of the app list before it changes in order
+  // to record metrics.
+  void RecordAppListState();
+
  private:
   // HomeScreenDelegate:
   void OnHomeLauncherDragStart() override;
@@ -347,7 +361,7 @@ class ASH_EXPORT AppListControllerImpl
 
   syncer::StringOrdinal GetOemFolderPos();
   std::unique_ptr<AppListItem> CreateAppListItem(
-      std::unique_ptr<ash::AppListItemMetadata> metadata);
+      std::unique_ptr<AppListItemMetadata> metadata);
   AppListFolderItem* FindFolderItem(const std::string& folder_id);
 
   // Update the visibility of Assistant functionality.
@@ -369,6 +383,9 @@ class ASH_EXPORT AppListControllerImpl
   // Record the app launch for AppListAppLaunchedV2 metric.
   void RecordAppLaunched(AppListLaunchedFrom launched_from);
 
+  // Updates the window that is tracked as |tracked_app_window_|.
+  void UpdateTrackedAppWindow();
+
   // Whether the home launcher is
   // * being shown (either through an animation or a drag)
   // * being hidden (either through an animation or a drag)
@@ -378,7 +395,7 @@ class ASH_EXPORT AppListControllerImpl
   // information given by "showing" versus "hiding" is the starting point of
   // the drag and the assumed final state (which won't be accurate if the
   // gesture is reversed).
-  HomeLauncherAnimationState home_launcher_animation_state_ = kFinished;
+  HomeLauncherTransitionState home_launcher_transition_state_ = kFinished;
 
   AppListClient* client_ = nullptr;
 
@@ -414,7 +431,35 @@ class ASH_EXPORT AppListControllerImpl
   // each profile has its own AppListModelUpdater to manipulate app list items.
   int profile_id_ = kAppListInvalidProfileID;
 
+  // Used when tablet mode is active to track the MRU window among the windows
+  // that were obscuring the home launcher when the home launcher visibility was
+  // last calculated.
+  // This window changing it's visibility to false is used as a signal that the
+  // home launcher visibility should be recalculated.
+  aura::Window* tracked_app_window_ = nullptr;
+
+  // A callback that can be registered by a test to wait for the app list state
+  // transition animation to finish.
   StateTransitionAnimationCallback state_transition_animation_callback_;
+
+  // A callback that can be registered by a test to wait for the home launcher
+  // visibility animation to finish. Should only be used in tablet mode.
+  HomeLauncherAnimationCallback home_launcher_animation_callback_;
+
+  // The AppListViewState at the moment it was recorded, used to record app
+  // launching metrics. This allows an accurate AppListViewState to be recorded
+  // before AppListViewState changes.
+  base::Optional<AppListViewState> recorded_app_list_view_state_;
+
+  // Whether the applist was shown at the moment it was recorded, used to record
+  // app launching metrics. This is recorded because AppList visibility can
+  // change before the metric is recorded.
+  base::Optional<bool> recorded_app_list_visibility_;
+
+  // ScopedClosureRunner which while in scope keeps background blur in home
+  // screen (in particular, apps container suggestion chips background)
+  // disabled. Set while home screen transitions are in progress.
+  base::Optional<base::ScopedClosureRunner> home_screen_blur_disabler_;
 
   base::ObserverList<AppListControllerObserver> observers_;
 

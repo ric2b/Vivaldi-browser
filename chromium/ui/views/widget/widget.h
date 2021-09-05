@@ -16,6 +16,7 @@
 #include "base/optional.h"
 #include "base/scoped_observer.h"
 #include "build/build_config.h"
+#include "ui/base/default_theme_provider.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/events/event_source.h"
 #include "ui/gfx/geometry/rect.h"
@@ -34,12 +35,11 @@ class TimeDelta;
 namespace gfx {
 class Point;
 class Rect;
-}
+}  // namespace gfx
 
 namespace ui {
 class Accelerator;
 class Compositor;
-class DefaultThemeProvider;
 class GestureRecognizer;
 class InputMethod;
 class Layer;
@@ -61,7 +61,7 @@ class WidgetRemovalsObserver;
 namespace internal {
 class NativeWidgetPrivate;
 class RootView;
-}
+}  // namespace internal
 
 ////////////////////////////////////////////////////////////////////////////////
 // Widget class
@@ -112,9 +112,9 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
   };
 
   // Source that initiated the move loop.
-  enum MoveLoopSource {
-    MOVE_LOOP_SOURCE_MOUSE,
-    MOVE_LOOP_SOURCE_TOUCH,
+  enum class MoveLoopSource {
+    kMouse,
+    kTouch,
   };
 
   // Behavior when escape is pressed during a move loop.
@@ -153,32 +153,31 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
 
   struct VIEWS_EXPORT InitParams {
     enum Type {
-      TYPE_WINDOW,      // A decorated Window, like a frame window.
-                        // Widgets of TYPE_WINDOW will have a NonClientView.
-      TYPE_WINDOW_FRAMELESS,
-                        // An undecorated Window.
-      TYPE_CONTROL,     // A control, like a button.
-      TYPE_POPUP,       // An undecorated Window, with transient properties.
-      TYPE_MENU,        // An undecorated Window, with transient properties
-                        // specialized to menus.
+      TYPE_WINDOW,  // A decorated Window, like a frame window.
+                    // Widgets of TYPE_WINDOW will have a NonClientView.
+      TYPE_WINDOW_FRAMELESS,  // An undecorated Window.
+      TYPE_CONTROL,           // A control, like a button.
+      TYPE_POPUP,  // An undecorated Window, with transient properties.
+      TYPE_MENU,   // An undecorated Window, with transient properties
+                   // specialized to menus.
       TYPE_TOOLTIP,
       TYPE_BUBBLE,
-      TYPE_DRAG,        // An undecorated Window, used during a drag-and-drop to
-                        // show the drag image.
+      TYPE_DRAG,  // An undecorated Window, used during a drag-and-drop to
+                  // show the drag image.
     };
 
-    enum WindowOpacity {
+    enum class WindowOpacity {
       // Infer fully opaque or not. For WinAura, top-level windows that are not
       // of TYPE_WINDOW are translucent so that they can be made to fade in.
       // For LinuxAura, only windows that are TYPE_DRAG are translucent.  In all
       // other cases, windows are fully opaque.
-      INFER_OPACITY,
+      kInferred,
       // Fully opaque.
-      OPAQUE_WINDOW,
+      kOpaque,
       // Possibly translucent/transparent.  Widgets that fade in or out using
       // SetOpacity() but do not make use of an alpha channel should use
-      // INFER_OPACITY.
-      TRANSLUCENT_WINDOW,
+      // kInferred.
+      kTranslucent,
     };
 
     enum Activatable {
@@ -199,13 +198,13 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
       WIDGET_OWNS_NATIVE_WIDGET
     };
 
-    enum ShadowType {
-      SHADOW_TYPE_DEFAULT,  // Use default shadow setting. It will be one of
-                            // the settings below depending on InitParams::type
-                            // and the native widget's type.
-      SHADOW_TYPE_NONE,     // Don't draw any shadow.
-      SHADOW_TYPE_DROP,     // Draw a drop shadow that emphasizes Z-order
-                            // relationship to other windows.
+    enum class ShadowType {
+      kDefault,  // Use default shadow setting. It will be one of
+                 // the settings below depending on InitParams::type
+                 // and the native widget's type.
+      kNone,     // Don't draw any shadow.
+      kDrop,     // Draw a drop shadow that emphasizes Z-order
+                 // relationship to other windows.
     };
 
     // Default initialization with |type| set to TYPE_WINDOW.
@@ -236,16 +235,20 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
     // Internal name. Propagated to the NativeWidget. Useful for debugging.
     std::string name;
 
+    // False if this widget behaves like a top-level widget, true otherwise. A
+    // top-level widget has its own focus and IME state, independent of any
+    // other widget. A widget for which child is true should have a parent; if
+    // it doesn't, it will not handle keyboard events or IME input at all.
+    // TODO(https://crbug.com/1057758): DCHECK(parent || !child)
     bool child = false;
 
-    // If TRANSLUCENT_WINDOW, the widget may be fully or partially transparent.
-    // If OPAQUE_WINDOW, we can perform optimizations based on the widget being
-    // fully opaque.
-    // Default is based on ViewsDelegate::GetOpacityForInitParams().  Defaults
-    // to OPAQUE_WINDOW for non-window widgets.
-    // Translucent windows may not always be supported. Use
-    // IsTranslucentWindowOpacitySupported() to determine whether they are.
-    WindowOpacity opacity = INFER_OPACITY;
+    // If kTranslucent, the widget may be fully or partially transparent.
+    // If kOpaque, we can perform optimizations based on the widget being fully
+    // opaque. Default is based on ViewsDelegate::GetOpacityForInitParams().
+    // Defaults to kOpaque for non-window widgets. Translucent windows may not
+    // always be supported. Use IsTranslucentWindowOpacitySupported() to
+    // determine whether they are.
+    WindowOpacity opacity = WindowOpacity::kInferred;
 
     bool accept_events = true;
 
@@ -261,9 +264,9 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
 
     bool mirror_origin_in_rtl = false;
 
-    ShadowType shadow_type = SHADOW_TYPE_DEFAULT;
+    ShadowType shadow_type = ShadowType::kDefault;
 
-    // A hint about the size of the shadow if the type is SHADOW_TYPE_DROP. May
+    // A hint about the size of the shadow if the type is ShadowType::kDrop. May
     // be ignored on some platforms. No value indicates no preference.
     base::Optional<int> shadow_elevation;
 
@@ -282,6 +285,31 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
     // Whether the widget should be maximized or minimized.
     ui::WindowShowState show_state = ui::SHOW_STATE_DEFAULT;
 
+    // The native *view* (not native *window*) to which this widget should be
+    // parented. If this widget has a parent, then:
+    // * If that parent closes, this widget is closed too
+    // * If that parent is hidden, this widget is hidden too
+    // * This widget is stacked above the parent widget (always on Mac, usually
+    //   elsewhere)
+    // * This widget's initial bounds are constrained to the parent widget's
+    //   bounds, which prevents window restoration from placing windows
+    //   offscreen
+    // Note: on some platforms (Mac) this directly implies a parent-child
+    // relationship in the backing native windows, but on Aura platforms it does
+    // not necessarily.
+    //
+    // Windows with no parent window are permitted, although in Aura these
+    // windows instead need a "context". On Aura systems, if a widget has no
+    // parent set, its backing aura::Window is parented to the Aura root window.
+    //
+    // TODO(https://crbug.com/1057758): It makes no sense that this is a
+    // NativeView instead of a NativeWindow. On Aura, NativeView and
+    // NativeWindow are synonyms, and NativeWidgetAura immediately treats the
+    // provided NativeView as an aura::Window; on Mac, the NativeView is
+    // immediately converted to an NSWindow (ie a gfx::NativeWindow) and used
+    // that way throughout. This should simply be a NativeWindow - windows are
+    // parented to other windows, not to views, and it being a view confuses
+    // the concept with bubble anchoring a la BubbleDialogDelegateView.
     gfx::NativeView parent = nullptr;
 
     // Specifies the initial bounds of the Widget. Default is empty, which means
@@ -357,25 +385,22 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
   };
 
   Widget();
+  explicit Widget(InitParams params);
   ~Widget() override;
 
   // Creates a decorated window Widget with the specified properties. The
   // returned Widget is owned by its NativeWidget; see Widget class comment for
   // details.
   static Widget* CreateWindowWithParent(WidgetDelegate* delegate,
-                                        gfx::NativeView parent);
-  static Widget* CreateWindowWithParentAndBounds(WidgetDelegate* delegate,
-                                                 gfx::NativeView parent,
-                                                 const gfx::Rect& bounds);
+                                        gfx::NativeView parent,
+                                        const gfx::Rect& bounds = gfx::Rect());
 
   // Creates a decorated window Widget in the same desktop context as |context|.
   // The returned Widget is owned by its NativeWidget; see Widget class comment
   // for details.
   static Widget* CreateWindowWithContext(WidgetDelegate* delegate,
-                                         gfx::NativeWindow context);
-  static Widget* CreateWindowWithContextAndBounds(WidgetDelegate* delegate,
-                                                  gfx::NativeWindow context,
-                                                  const gfx::Rect& bounds);
+                                         gfx::NativeWindow context,
+                                         const gfx::Rect& bounds = gfx::Rect());
 
   // Closes all Widgets that aren't identified as "secondary widgets". Called
   // during application shutdown when the last non-secondary widget is closed.
@@ -401,8 +426,7 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
 
   // Returns all Widgets owned by |native_view| (including child widgets, but
   // not including itself).
-  static void GetAllOwnedWidgets(gfx::NativeView native_view,
-                                 Widgets* owned);
+  static void GetAllOwnedWidgets(gfx::NativeView native_view, Widgets* owned);
 
   // Re-parent a NativeView and notify all Widgets in |native_view|'s hierarchy
   // of the change.
@@ -546,6 +570,14 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
   // Note that while you can pass ClosedReason::kUnspecified, it is highly
   // discouraged and only supported for backwards-compatibility with Close().
   void CloseWithReason(ClosedReason closed_reason);
+
+  // A UI test which tries to asynchronously examine a widget (e.g. the pixel
+  // tests) will fail if the widget is closed before that.  This can happen
+  // easily with widgets that close on focus loss coupled with tests being run
+  // in parallel, since one test's widget can be closed by the appearance of
+  // another test's.  This method can be used to temporarily disable
+  // Widget::Close() for such asynchronous cases.
+  void SetBlockCloseForTesting(bool block_close) { block_close_ = block_close; }
 
   // TODO(beng): Move off public API.
   // Closes the widget immediately. Compare to |Close|. This will destroy the
@@ -756,9 +788,7 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
     return const_cast<NonClientView*>(
         const_cast<const Widget*>(this)->non_client_view());
   }
-  const NonClientView* non_client_view() const {
-    return non_client_view_;
-  }
+  const NonClientView* non_client_view() const { return non_client_view_; }
 
   ClientView* client_view() {
     return const_cast<ClientView*>(
@@ -779,8 +809,7 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
 
   // Returns the widget's layer, if any.
   ui::Layer* GetLayer() {
-    return const_cast<ui::Layer*>(
-        const_cast<const Widget*>(this)->GetLayer());
+    return const_cast<ui::Layer*>(const_cast<const Widget*>(this)->GetLayer());
   }
   const ui::Layer* GetLayer() const;
 
@@ -871,6 +900,8 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
   // the returned lock. Multiple locks can exist with disjoint lifetimes. The
   // returned lock can safely outlive the associated widget.
   std::unique_ptr<PaintAsActiveLock> LockPaintAsActive();
+
+  base::WeakPtr<Widget> GetWeakPtr();
 
   // Overridden from NativeWidgetDelegate:
   bool IsModal() const override;
@@ -987,6 +1018,9 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
   // Notifies the window frame that the active rendering state has changed.
   void UpdatePaintAsActiveState(bool paint_as_active);
 
+  // If a descendent of |root_view_| is focused, then clear the focus.
+  void ClearFocusFromWidget();
+
   static bool g_disable_activation_change_handling_;
 
   internal::NativeWidgetPrivate* native_widget_ = nullptr;
@@ -1017,7 +1051,7 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
   std::unique_ptr<FocusManager> focus_manager_;
 
   // A theme provider to use when no other theme provider is specified.
-  std::unique_ptr<ui::DefaultThemeProvider> default_theme_provider_;
+  const ui::DefaultThemeProvider default_theme_provider_;
 
   // Valid for the lifetime of RunShellDrag(), indicates the view the drag
   // started from.
@@ -1096,6 +1130,9 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
   // True when window movement via mouse interaction with the frame should be
   // disabled.
   bool movement_disabled_ = false;
+
+  // Block the widget from closing.
+  bool block_close_ = false;
 
   ScopedObserver<ui::NativeTheme, ui::NativeThemeObserver> observer_manager_{
       this};

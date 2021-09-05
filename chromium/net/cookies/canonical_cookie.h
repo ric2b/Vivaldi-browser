@@ -34,6 +34,7 @@ using CookieAndLineStatusList = std::vector<CookieAndLineWithStatus>;
 class NET_EXPORT CanonicalCookie {
  public:
   class CookieInclusionStatus;
+  using UniqueCookieKey = std::tuple<std::string, std::string, std::string>;
 
   CanonicalCookie();
   CanonicalCookie(const CanonicalCookie& other);
@@ -44,17 +45,19 @@ class NET_EXPORT CanonicalCookie {
   // themselves.
   // NOTE: Prefer using CreateSanitizedCookie() over directly using this
   // constructor.
-  CanonicalCookie(const std::string& name,
-                  const std::string& value,
-                  const std::string& domain,
-                  const std::string& path,
-                  const base::Time& creation,
-                  const base::Time& expiration,
-                  const base::Time& last_access,
-                  bool secure,
-                  bool httponly,
-                  CookieSameSite same_site,
-                  CookiePriority priority);
+  CanonicalCookie(
+      const std::string& name,
+      const std::string& value,
+      const std::string& domain,
+      const std::string& path,
+      const base::Time& creation,
+      const base::Time& expiration,
+      const base::Time& last_access,
+      bool secure,
+      bool httponly,
+      CookieSameSite same_site,
+      CookiePriority priority,
+      CookieSourceScheme scheme_secure = CookieSourceScheme::kUnset);
 
   ~CanonicalCookie();
 
@@ -113,6 +116,10 @@ class NET_EXPORT CanonicalCookie {
   bool IsHttpOnly() const { return httponly_; }
   CookieSameSite SameSite() const { return same_site_; }
   CookiePriority Priority() const { return priority_; }
+  // Returns an enum indicating the source scheme that set this cookie. This is
+  // not part of the cookie spec but is being used to collect metrics for a
+  // potential change to the cookie spec.
+  CookieSourceScheme SourceScheme() const { return source_scheme_; }
   bool IsDomainCookie() const {
     return !domain_.empty() && domain_[0] == '.'; }
   bool IsHostCookie() const { return !IsDomainCookie(); }
@@ -137,7 +144,7 @@ class NET_EXPORT CanonicalCookie {
 
   // Returns a key such that two cookies with the same UniqueKey() are
   // guaranteed to be equivalent in the sense of IsEquivalent().
-  std::tuple<std::string, std::string, std::string> UniqueKey() const {
+  UniqueCookieKey UniqueKey() const {
     return std::make_tuple(name_, domain_, path_);
   }
 
@@ -155,6 +162,9 @@ class NET_EXPORT CanonicalCookie {
   // '/login' and '/' do not match '/login/en').
   bool IsEquivalentForSecureCookieMatching(const CanonicalCookie& ecc) const;
 
+  void SetSourceScheme(CookieSourceScheme source_scheme) {
+    source_scheme_ = source_scheme;
+  }
   void SetLastAccessDate(const base::Time& date) {
     last_access_date_ = date;
   }
@@ -187,6 +197,11 @@ class NET_EXPORT CanonicalCookie {
       const CookieOptions& options,
       CookieAccessSemantics access_semantics =
           CookieAccessSemantics::UNKNOWN) const;
+
+  // Overload that updates an existing |status| rather than returning a new one.
+  void IsSetPermittedInContext(const CookieOptions& options,
+                               CookieAccessSemantics access_semantics,
+                               CookieInclusionStatus* status) const;
 
   std::string DebugString() const;
 
@@ -250,6 +265,12 @@ class NET_EXPORT CanonicalCookie {
     COOKIE_PREFIX_LAST
   };
 
+  // Applies the appropriate warning for the given cross-scheme
+  // SameSiteCookieContext.
+  void AddSameSiteCrossSchemeWarning(
+      CookieInclusionStatus* status,
+      const CookieOptions::SameSiteCookieContext context) const;
+
   // Returns the CookiePrefix (or COOKIE_PREFIX_NONE if none) that
   // applies to the given cookie |name|.
   static CookiePrefix GetCookiePrefix(const std::string& name);
@@ -297,6 +318,7 @@ class NET_EXPORT CanonicalCookie {
   bool httponly_;
   CookieSameSite same_site_;
   CookiePriority priority_;
+  CookieSourceScheme source_scheme_;
 };
 
 // This class represents if a cookie was included or excluded in a cookie get or
@@ -319,25 +341,23 @@ class NET_EXPORT CanonicalCookie::CookieInclusionStatus {
     EXCLUDE_NOT_ON_PATH = 4,
     EXCLUDE_SAMESITE_STRICT = 5,
     EXCLUDE_SAMESITE_LAX = 6,
-    // TODO(crbug.com/989171): Replace this with FirstPartyLax and
-    // FirstPartyStrict.
-    EXCLUDE_SAMESITE_EXTENDED = 7,
+
     // The following two are used for the SameSiteByDefaultCookies experiment,
     // where if the SameSite attribute is not specified, it will be treated as
     // SameSite=Lax by default.
-    EXCLUDE_SAMESITE_UNSPECIFIED_TREATED_AS_LAX = 8,
+    EXCLUDE_SAMESITE_UNSPECIFIED_TREATED_AS_LAX = 7,
     // This is used if SameSite=None is specified, but the cookie is not
     // Secure.
-    EXCLUDE_SAMESITE_NONE_INSECURE = 9,
-    EXCLUDE_USER_PREFERENCES = 10,
+    EXCLUDE_SAMESITE_NONE_INSECURE = 8,
+    EXCLUDE_USER_PREFERENCES = 9,
 
     // Statuses specific to setting cookies
-    EXCLUDE_FAILURE_TO_STORE = 11,
-    EXCLUDE_NONCOOKIEABLE_SCHEME = 12,
-    EXCLUDE_OVERWRITE_SECURE = 13,
-    EXCLUDE_OVERWRITE_HTTP_ONLY = 14,
-    EXCLUDE_INVALID_DOMAIN = 15,
-    EXCLUDE_INVALID_PREFIX = 16,
+    EXCLUDE_FAILURE_TO_STORE = 10,
+    EXCLUDE_NONCOOKIEABLE_SCHEME = 11,
+    EXCLUDE_OVERWRITE_SECURE = 12,
+    EXCLUDE_OVERWRITE_HTTP_ONLY = 13,
+    EXCLUDE_INVALID_DOMAIN = 14,
+    EXCLUDE_INVALID_PREFIX = 15,
 
     // This should be kept last.
     NUM_EXCLUSION_REASONS
@@ -345,26 +365,41 @@ class NET_EXPORT CanonicalCookie::CookieInclusionStatus {
 
   // Reason to warn about a cookie. If you add one, please update
   // GetDebugString().
-  // TODO(chlily): Do we need to support multiple warning statuses?
   enum WarningReason {
-    DO_NOT_WARN = 0,
+    // Of the following 3 SameSite warnings, there will be, at most, a single
+    // active one.
+
     // Warn if a cookie with unspecified SameSite attribute is used in a
     // cross-site context.
-    WARN_SAMESITE_UNSPECIFIED_CROSS_SITE_CONTEXT,
+    WARN_SAMESITE_UNSPECIFIED_CROSS_SITE_CONTEXT = 0,
     // Warn if a cookie with SameSite=None is not Secure.
-    WARN_SAMESITE_NONE_INSECURE,
+    WARN_SAMESITE_NONE_INSECURE = 1,
     // Warn if a cookie with unspecified SameSite attribute is defaulted into
     // Lax and is sent on a request with unsafe method, only because it is new
     // enough to activate the Lax-allow-unsafe intervention.
-    WARN_SAMESITE_UNSPECIFIED_LAX_ALLOW_UNSAFE,
+    WARN_SAMESITE_UNSPECIFIED_LAX_ALLOW_UNSAFE = 2,
+
+    // The following warnings indicate that a SameSite cookie is being sent/set
+    // across schemes and with what same-site context.
+    // See CookieOptions::SameSiteCookieContext.
+    WARN_SAMESITE_LAX_METHOD_UNSAFE_CROSS_SCHEME_SECURE_URL = 3,
+    WARN_SAMESITE_LAX_CROSS_SCHEME_SECURE_URL = 4,
+    WARN_SAMESITE_STRICT_CROSS_SCHEME_SECURE_URL = 5,
+    WARN_SAMESITE_LAX_METHOD_UNSAFE_CROSS_SCHEME_INSECURE_URL = 6,
+    WARN_SAMESITE_LAX_CROSS_SCHEME_INSECURE_URL = 7,
+    WARN_SAMESITE_STRICT_CROSS_SCHEME_INSECURE_URL = 8,
+
+    // This should be kept last.
+    NUM_WARNING_REASONS
   };
 
-  // Makes a status that says include.
+  // Makes a status that says include and should not warn.
   CookieInclusionStatus();
 
+  // Make a status that contains the given exclusion reason.
+  explicit CookieInclusionStatus(ExclusionReason reason);
   // Makes a status that contains the given exclusion reason and warning.
-  explicit CookieInclusionStatus(ExclusionReason reason,
-                                 WarningReason warning = DO_NOT_WARN);
+  CookieInclusionStatus(ExclusionReason reason, WarningReason warning);
 
   bool operator==(const CookieInclusionStatus& other) const;
   bool operator!=(const CookieInclusionStatus& other) const;
@@ -379,24 +414,41 @@ class NET_EXPORT CanonicalCookie::CookieInclusionStatus {
   // Add an exclusion reason.
   void AddExclusionReason(ExclusionReason status_type);
 
-  // Add all the exclusion reasons given in |other|. If there is a warning in
-  // |other| (other than DO_NOT_WARN), also apply that. This could overwrite the
-  // existing warning, so set the most important warnings last.
-  void AddExclusionReasonsAndWarningIfAny(const CookieInclusionStatus& other);
-
   // Remove an exclusion reason.
   void RemoveExclusionReason(ExclusionReason reason);
+
+  // If the cookie would have been excluded for reasons other than
+  // SAMESITE_UNSPECIFIED_TREATED_AS_LAX or SAMESITE_NONE_INSECURE, don't bother
+  // warning about it (clear the warning).
+  void MaybeClearSameSiteWarning();
 
   // Whether the cookie should be warned about.
   bool ShouldWarn() const;
 
-  WarningReason warning() const { return warning_; }
-  void set_warning(WarningReason warning) { warning_ = warning; }
+  // Whether the given reason for warning is present.
+  bool HasWarningReason(WarningReason reason) const;
+
+  // Whether a cross-scheme warning is present.
+  // If the function returns true and |reason| is valid then |reason| will
+  // contain which warning was found.
+  bool HasCrossSchemeWarning(
+      CookieInclusionStatus::WarningReason* reason = nullptr) const;
+
+  // Add an warning reason.
+  void AddWarningReason(WarningReason reason);
+
+  // Remove an warning reason.
+  void RemoveWarningReason(WarningReason reason);
 
   // Used for serialization/deserialization.
   uint32_t exclusion_reasons() const { return exclusion_reasons_; }
   void set_exclusion_reasons(uint32_t exclusion_reasons) {
     exclusion_reasons_ = exclusion_reasons;
+  }
+
+  uint32_t warning_reasons() const { return warning_reasons_; }
+  void set_warning_reasons(uint32_t warning_reasons) {
+    warning_reasons_ = warning_reasons;
   }
 
   // Get exclusion reason(s) and warning in string format.
@@ -412,17 +464,22 @@ class NET_EXPORT CanonicalCookie::CookieInclusionStatus {
   bool HasExactlyExclusionReasonsForTesting(
       std::vector<ExclusionReason> reasons) const;
 
+  // Checks whether the warning reasons are exactly the set of warning
+  // reasons in the vector. (Ignores exclusions.)
+  bool HasExactlyWarningReasonsForTesting(
+      std::vector<WarningReason> reasons) const;
+
   // Makes a status that contains the given exclusion reasons and warning.
   static CookieInclusionStatus MakeFromReasonsForTesting(
       std::vector<ExclusionReason> reasons,
-      WarningReason warning = DO_NOT_WARN);
+      std::vector<WarningReason> warnings = std::vector<WarningReason>());
 
  private:
   // A bit vector of the applicable exclusion reasons.
   uint32_t exclusion_reasons_ = 0u;
 
-  // Applicable warning reason.
-  WarningReason warning_ = DO_NOT_WARN;
+  // A bit vector of the applicable warning reasons.
+  uint32_t warning_reasons_ = 0u;
 };
 
 NET_EXPORT inline std::ostream& operator<<(

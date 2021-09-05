@@ -29,7 +29,7 @@ const size_t kMaximumNavigationLogs = 10;
 const size_t kMaximumDecisionLogs = 25;
 
 // Mock class to test correct MessageLog is passed back to the
-// mojo::InterventionsInternalsPagePtr.
+// mojo::InterventionsInternalsPage.
 class TestPreviewsLoggerObserver : public PreviewsLoggerObserver {
  public:
   TestPreviewsLoggerObserver()
@@ -622,6 +622,22 @@ TEST_F(PreviewsLoggerTest,
       PreviewsEligibilityReason::NOT_ALLOWED_BY_OPTIMIZATION_GUIDE,
       false /*final_reason */);
   std::string expected_description = "Allowed by server rules";
+  EXPECT_EQ(expected_description, actual_description);
+}
+
+TEST_F(PreviewsLoggerTest, LogPreviewDecisionDescriptionPageLoadNotPainful) {
+  std::string actual_description = LogPreviewDecisionAndGetReasonDescription(
+      PreviewsEligibilityReason::PAGE_LOAD_PREDICTION_NOT_PAINFUL,
+      true /* final_reason */);
+  std::string expected_description = "Page load not predicted to be painful";
+  EXPECT_EQ(expected_description, actual_description);
+}
+
+TEST_F(PreviewsLoggerTest, LogPreviewDecisionDescriptionPageLoadPainful) {
+  std::string actual_description = LogPreviewDecisionAndGetReasonDescription(
+      PreviewsEligibilityReason::PAGE_LOAD_PREDICTION_NOT_PAINFUL,
+      false /* final_reason */);
+  std::string expected_description = "Page load predicted to be painful";
   EXPECT_EQ(expected_description, actual_description);
 }
 

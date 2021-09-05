@@ -68,7 +68,7 @@ class SigninErrorNotifierTest : public BrowserWithTestWindowTest {
         GetIdentityTestEnvironmentFactories();
   }
 
-  void SetAuthError(const std::string& account_id,
+  void SetAuthError(const CoreAccountId& account_id,
                     const GoogleServiceAuthError& error) {
     signin::UpdatePersistentErrorOfRefreshTokenForAccount(
         identity_test_env()->identity_manager(), account_id, error);
@@ -98,7 +98,7 @@ TEST_F(SigninErrorNotifierTest, NoNotification) {
 // flow itself will prompt the user to sign out, so the notification
 // is unnecessary.
 TEST_F(SigninErrorNotifierTest, NoNotificationAfterAddSupervisionEnabled) {
-  std::string account_id =
+  CoreAccountId account_id =
       identity_test_env()->MakeAccountAvailable(kTestEmail).account_id;
   identity_test_env()->SetPrimaryAccount(kTestEmail);
 
@@ -119,8 +119,27 @@ TEST_F(SigninErrorNotifierTest, ErrorResetForPrimaryAccount) {
   EXPECT_FALSE(
       display_service_->GetNotification(kPrimaryAccountErrorNotificationId));
 
-  std::string account_id =
+  CoreAccountId account_id =
       identity_test_env()->MakePrimaryAccountAvailable(kTestEmail).account_id;
+  SetAuthError(
+      account_id,
+      GoogleServiceAuthError(GoogleServiceAuthError::INVALID_GAIA_CREDENTIALS));
+  EXPECT_TRUE(
+      display_service_->GetNotification(kPrimaryAccountErrorNotificationId));
+
+  SetAuthError(account_id, GoogleServiceAuthError::AuthErrorNone());
+  EXPECT_FALSE(
+      display_service_->GetNotification(kPrimaryAccountErrorNotificationId));
+}
+
+TEST_F(SigninErrorNotifierTest, ErrorShownForUnconsentedPrimaryAccount) {
+  EXPECT_FALSE(
+      display_service_->GetNotification(kPrimaryAccountErrorNotificationId));
+
+  CoreAccountId account_id =
+      identity_test_env()
+          ->MakeUnconsentedPrimaryAccountAvailable(kTestEmail)
+          .account_id;
   SetAuthError(
       account_id,
       GoogleServiceAuthError(GoogleServiceAuthError::INVALID_GAIA_CREDENTIALS));
@@ -136,7 +155,7 @@ TEST_F(SigninErrorNotifierTest, ErrorResetForSecondaryAccount) {
   EXPECT_FALSE(
       display_service_->GetNotification(kSecondaryAccountErrorNotificationId));
 
-  std::string account_id =
+  CoreAccountId account_id =
       identity_test_env()->MakeAccountAvailable(kTestEmail).account_id;
   SetAuthError(
       account_id,
@@ -152,7 +171,7 @@ TEST_F(SigninErrorNotifierTest, ErrorResetForSecondaryAccount) {
 }
 
 TEST_F(SigninErrorNotifierTest, ErrorTransitionForPrimaryAccount) {
-  std::string account_id =
+  CoreAccountId account_id =
       identity_test_env()->MakePrimaryAccountAvailable(kTestEmail).account_id;
   SetAuthError(
       account_id,
@@ -199,7 +218,7 @@ TEST_F(SigninErrorNotifierTest, AuthStatusEnumerateAllErrors) {
       base::size(table) == GoogleServiceAuthError::NUM_STATES -
                                GoogleServiceAuthError::kDeprecatedStateCount,
       "table size should match number of auth error types");
-  std::string account_id =
+  CoreAccountId account_id =
       identity_test_env()->MakePrimaryAccountAvailable(kTestEmail).account_id;
 
   for (size_t i = 0; i < base::size(table); ++i) {

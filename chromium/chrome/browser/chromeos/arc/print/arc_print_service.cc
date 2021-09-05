@@ -18,6 +18,8 @@
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/printing/cups_print_job.h"
 #include "chrome/browser/chromeos/printing/cups_print_job_manager.h"
@@ -38,7 +40,8 @@
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_source.h"
 #include "content/public/common/child_process_host.h"
-#include "mojo/public/cpp/bindings/strong_binding.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/platform/platform_handle.h"
 #include "mojo/public/cpp/system/platform_handle.h"
 #include "printing/backend/print_backend.h"
@@ -130,23 +133,17 @@ class ArcPrintServiceFactory
 std::unique_ptr<printing::MetafileSkia> ReadFileOnBlockingTaskRunner(
     base::File file,
     size_t data_size) {
-  // TODO(vkuzkokov) Can we make give pipe to CUPS directly?
-  std::vector<char> buf(data_size);
-  int bytes = file.ReadAtCurrentPos(buf.data(), data_size);
-  if (bytes < 0) {
+  // TODO(vkuzkokov): Can we make give pipe to CUPS directly?
+  std::vector<uint8_t> buf(data_size);
+  if (!file.ReadAtCurrentPosAndCheck(buf)) {
     PLOG(ERROR) << "Error reading PDF";
     return nullptr;
   }
-  if (static_cast<size_t>(bytes) != data_size)
-    return nullptr;
 
   file.Close();
 
   auto metafile = std::make_unique<printing::MetafileSkia>();
-  if (!metafile->InitFromData(buf.data(), buf.size())) {
-    LOG(ERROR) << "Failed to initialize PDF metafile";
-    return nullptr;
-  }
+  CHECK(metafile->InitFromData(buf));
   return metafile;
 }
 
@@ -177,9 +174,10 @@ void OnSetSettingsDoneOnIOThread(std::unique_ptr<printing::PrinterQuery> query,
 }
 
 std::unique_ptr<printing::PrinterSemanticCapsAndDefaults>
-FetchCapabilitiesOnBlockingTaskRunner(const std::string& printer_id) {
+FetchCapabilitiesOnBlockingTaskRunner(const std::string& printer_id,
+                                      const std::string& locale) {
   scoped_refptr<printing::PrintBackend> backend(
-      printing::PrintBackend::CreateInstance(nullptr));
+      printing::PrintBackend::CreateInstance(nullptr, locale));
   auto caps = std::make_unique<printing::PrinterSemanticCapsAndDefaults>();
   if (!backend->GetPrinterSemanticCapsAndDefaults(printer_id, caps.get())) {
     LOG(ERROR) << "Failed to get caps for " << printer_id;
@@ -206,11 +204,11 @@ class PrinterDiscoverySessionHostImpl
       public chromeos::CupsPrintersManager::Observer {
  public:
   PrinterDiscoverySessionHostImpl(
-      mojo::InterfaceRequest<mojom::PrinterDiscoverySessionHost> request,
+      mojo::PendingReceiver<mojom::PrinterDiscoverySessionHost> receiver,
       mojom::PrinterDiscoverySessionInstancePtr instance,
       ArcPrintServiceImpl* service,
       Profile* profile)
-      : binding_(this, std::move(request)),
+      : receiver_(this, std::move(receiver)),
         instance_(std::move(instance)),
         service_(service),
         printers_manager_(
@@ -218,7 +216,7 @@ class PrinterDiscoverySessionHostImpl
                 profile)),
         configurer_(chromeos::PrinterConfigurer::Create(profile)) {
     printers_manager_->AddObserver(this);
-    binding_.set_connection_error_handler(MakeErrorHandler());
+    receiver_.set_disconnect_handler(MakeErrorHandler());
     instance_.set_connection_error_handler(MakeErrorHandler());
   }
 
@@ -306,9 +304,12 @@ class PrinterDiscoverySessionHostImpl
   }
 
   void FetchCapabilities(const chromeos::Printer& printer) {
-    base::PostTaskAndReplyWithResult(
-        FROM_HERE, {base::ThreadPool(), base::MayBlock()},
-        base::BindOnce(&FetchCapabilitiesOnBlockingTaskRunner, printer.id()),
+    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+    base::ThreadPool::PostTaskAndReplyWithResult(
+        FROM_HERE, {base::MayBlock()},
+        base::BindOnce(&FetchCapabilitiesOnBlockingTaskRunner, printer.id(),
+                       g_browser_process->GetApplicationLocale()),
         base::BindOnce(&PrinterDiscoverySessionHostImpl::CapabilitiesReceived,
                        weak_ptr_factory_.GetWeakPtr(), printer));
   }
@@ -332,7 +333,7 @@ class PrinterDiscoverySessionHostImpl
   }
 
   // Binds |this|.
-  mojo::Binding<mojom::PrinterDiscoverySessionHost> binding_;
+  mojo::Receiver<mojom::PrinterDiscoverySessionHost> receiver_;
 
   mojom::PrinterDiscoverySessionInstancePtr instance_;
   ArcPrintServiceImpl* const service_;
@@ -374,22 +375,22 @@ printing::DuplexMode FromArcDuplexMode(mojom::PrintDuplexMode mode) {
 class PrintJobHostImpl : public mojom::PrintJobHost,
                          public content::NotificationObserver {
  public:
-  PrintJobHostImpl(mojo::InterfaceRequest<mojom::PrintJobHost> request,
+  PrintJobHostImpl(mojo::PendingReceiver<mojom::PrintJobHost> receiver,
                    mojom::PrintJobInstancePtr instance,
                    ArcPrintServiceImpl* service,
                    chromeos::CupsPrintJobManager* job_manager,
                    std::unique_ptr<printing::PrintSettings> settings,
                    base::File file,
                    size_t data_size)
-      : binding_(this, std::move(request)),
+      : receiver_(this, std::move(receiver)),
         instance_(std::move(instance)),
         service_(service),
         job_manager_(job_manager) {
     // We read printing data from pipe on working thread in parallel with
     // initializing PrinterQuery on IO thread. When both tasks are complete we
     // start printing.
-    base::PostTaskAndReplyWithResult(
-        FROM_HERE, {base::ThreadPool(), base::MayBlock()},
+    base::ThreadPool::PostTaskAndReplyWithResult(
+        FROM_HERE, {base::MayBlock()},
         base::BindOnce(&ReadFileOnBlockingTaskRunner, std::move(file),
                        data_size),
         base::BindOnce(&PrintJobHostImpl::OnFileRead,
@@ -399,7 +400,7 @@ class PrintJobHostImpl : public mojom::PrintJobHost,
         base::BindOnce(&CreateQueryOnIOThread, std::move(settings),
                        base::BindOnce(&PrintJobHostImpl::OnSetSettingsDone,
                                       weak_ptr_factory_.GetWeakPtr())));
-    binding_.set_connection_error_handler(MakeErrorHandler());
+    receiver_.set_disconnect_handler(MakeErrorHandler());
     instance_.set_connection_error_handler(MakeErrorHandler());
   }
 
@@ -500,7 +501,7 @@ class PrintJobHostImpl : public mojom::PrintJobHost,
   }
 
   // Binds the lifetime of |this| to the Mojo connection.
-  mojo::Binding<mojom::PrintJobHost> binding_;
+  mojo::Receiver<mojom::PrintJobHost> receiver_;
 
   mojom::PrintJobInstancePtr instance_;
   ArcPrintServiceImpl* const service_;
@@ -633,7 +634,7 @@ void ArcPrintServiceImpl::Print(mojom::PrintJobInstancePtr instance,
   auto job = std::make_unique<PrintJobHostImpl>(
       mojo::MakeRequest(&host_proxy), std::move(instance), this,
       chromeos::CupsPrintJobManagerFactory::GetForBrowserContext(profile_),
-      std::move(settings), base::File(fd.release()), print_job->data_size);
+      std::move(settings), base::File(std::move(fd)), print_job->data_size);
   PrintJobHostImpl* job_raw = job.get();
   jobs_.emplace(job_raw, std::move(job));
   std::move(callback).Run(std::move(host_proxy));

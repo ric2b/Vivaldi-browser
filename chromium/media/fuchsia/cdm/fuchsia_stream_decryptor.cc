@@ -25,30 +25,16 @@ namespace {
 // available, so it doesn't need more than one output buffer.
 const size_t kMinClearStreamOutputFrames = 1;
 
-std::string GetEncryptionMode(EncryptionMode mode) {
+std::string GetEncryptionScheme(EncryptionScheme mode) {
   switch (mode) {
-    case EncryptionMode::kCenc:
-      return fuchsia::media::drm::ENCRYPTION_MODE_CENC;
-    case EncryptionMode::kCbcs:
-      return fuchsia::media::drm::ENCRYPTION_MODE_CBCS;
+    case EncryptionScheme::kCenc:
+      return fuchsia::media::ENCRYPTION_SCHEME_CENC;
+    case EncryptionScheme::kCbcs:
+      return fuchsia::media::ENCRYPTION_SCHEME_CBCS;
     default:
       NOTREACHED() << "unknown encryption mode " << static_cast<int>(mode);
       return "";
   }
-}
-
-fuchsia::media::KeyId GetKeyId(const std::string& key_id) {
-  fuchsia::media::KeyId fuchsia_key_id;
-  // |key_id| may be empty when sending clear frames while we don't have
-  // Key Id yet. Send a zero |key_id| in that case.
-  // TODO(crbug.com/1012525): Remove this case once fxb/38253 is resolved.
-  if (key_id.empty()) {
-    fuchsia_key_id.data = {0};
-  } else {
-    DCHECK_EQ(key_id.size(), fuchsia::media::KEY_ID_SIZE);
-    std::copy(key_id.begin(), key_id.end(), fuchsia_key_id.data.begin());
-  }
-  return fuchsia_key_id;
 }
 
 std::vector<fuchsia::media::SubsampleEntry> GetSubsamples(
@@ -72,23 +58,9 @@ fuchsia::media::EncryptionPattern GetEncryptionPattern(
   return fuchsia_pattern;
 }
 
-// We shouldn't need to set Key ID for clear frames, but it's currently
-// required by the CDM API, see fxb/38253 . This function takes
-// |placeholder_key_id| to workaround that issue.
-// TODO(crbug.com/1012525): Remove |placeholder_key_id| once fxb/38253 is
-// resolved.
-fuchsia::media::FormatDetails GetClearFormatDetails(
-    size_t packet_size,
-    const std::string& placeholder_key_id) {
+fuchsia::media::FormatDetails GetClearFormatDetails() {
   fuchsia::media::EncryptedFormat encrypted_format;
-  encrypted_format.set_mode(fuchsia::media::drm::ENCRYPTION_MODE_CENC)
-      .set_key_id(GetKeyId(placeholder_key_id))
-      .set_init_vector(std::vector<uint8_t>(DecryptConfig::kDecryptionKeySize));
-
-  std::vector<fuchsia::media::SubsampleEntry> subsamples(1);
-  subsamples[0].clear_bytes = packet_size;
-  subsamples[0].encrypted_bytes = 0;
-  encrypted_format.set_subsamples(subsamples);
+  encrypted_format.set_scheme(fuchsia::media::ENCRYPTION_SCHEME_UNENCRYPTED);
 
   fuchsia::media::FormatDetails format;
   format.set_format_details_version_ordinal(0);
@@ -101,12 +73,13 @@ fuchsia::media::FormatDetails GetEncryptedFormatDetails(
   DCHECK(config);
 
   fuchsia::media::EncryptedFormat encrypted_format;
-  encrypted_format.set_mode(GetEncryptionMode(config->encryption_mode()))
-      .set_key_id(GetKeyId(config->key_id()))
+  encrypted_format.set_scheme(GetEncryptionScheme(config->encryption_scheme()))
+      .set_key_id(std::vector<uint8_t>(config->key_id().begin(),
+                                       config->key_id().end()))
       .set_init_vector(
           std::vector<uint8_t>(config->iv().begin(), config->iv().end()))
       .set_subsamples(GetSubsamples(config->subsamples()));
-  if (config->encryption_mode() == EncryptionMode::kCbcs) {
+  if (config->encryption_scheme() == EncryptionScheme::kCbcs) {
     DCHECK(config->encryption_pattern().has_value());
     encrypted_format.set_pattern(
         GetEncryptionPattern(config->encryption_pattern().value()));
@@ -227,7 +200,7 @@ void FuchsiaStreamDecryptorBase::SendInputPacket(
   fuchsia::media::FormatDetails format =
       (buffer->decrypt_config())
           ? GetEncryptedFormatDetails(buffer->decrypt_config())
-          : GetClearFormatDetails(packet.size(), last_new_key_id_);
+          : GetClearFormatDetails();
 
   packet.set_format(std::move(format));
   processor_.Process(std::move(packet));
@@ -494,8 +467,7 @@ void FuchsiaSecureStreamDecryptor::OnOutputPacket(
   client_->OnDecryptorOutputPacket(std::move(packet));
 }
 
-FuchsiaSecureStreamDecryptor::NewKeyCB
-FuchsiaSecureStreamDecryptor::GetOnNewKeyClosure() {
+base::RepeatingClosure FuchsiaSecureStreamDecryptor::GetOnNewKeyClosure() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   return BindToCurrentLoop(base::BindRepeating(
@@ -531,16 +503,8 @@ void FuchsiaSecureStreamDecryptor::OnNoKey() {
   client_->OnDecryptorNoKey();
 }
 
-void FuchsiaSecureStreamDecryptor::OnNewKey(const std::string& key_id) {
+void FuchsiaSecureStreamDecryptor::OnNewKey() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-  // Currently Widevine CDM requires a valid key_id for frames that are not
-  // encrypted, but we don't have a key_id in the beginning of the stream. To
-  // workaround this issue we save the |key_id| here and then use it for clear
-  // frames in SendInputPacket().
-  // TODO(crbug.com/1012525): Remove this hack once fxb/38253 is resolved: CDM
-  // shouldn't need |key_id| to handle clear frames.
-  last_new_key_id_ = key_id;
 
   if (!waiting_for_key_) {
     retry_on_no_key_ = true;

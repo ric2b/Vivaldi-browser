@@ -213,7 +213,6 @@ void ProfileWriter::AddBookmarks(
       vivaldi_meta.SetDescription(bookmark->description);
       vivaldi_meta.SetThumbnail(bookmark->thumbnail);
       vivaldi_meta.SetSpeeddial(bookmark->speeddial);
-      vivaldi_meta.SetVisitedDate(bookmark->visited_time);
 
       model->AddURL(parent, parent->children().size(), bookmark->title,
                     bookmark->url, vivaldi_meta.map(), bookmark->creation_time);
@@ -314,6 +313,12 @@ void ProfileWriter::AddKeywords(
     // TemplateURLService requires keywords to be unique. If there is already a
     // TemplateURL with this keyword, don't import it again.
     if (model->GetTemplateURLForKeyword(turl->keyword()) != nullptr)
+      continue;
+
+    // The omnibox doesn't properly handle search keywords with whitespace,
+    // so skip importing them.
+    if (turl->keyword().find_first_of(base::kWhitespaceUTF16) !=
+        base::string16::npos)
       continue;
 
     // For search engines if there is already a keyword with the same

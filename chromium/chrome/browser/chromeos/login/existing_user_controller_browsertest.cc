@@ -16,11 +16,12 @@
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
+#include "base/test/bind_test_util.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/chrome_notification_types.h"
-#include "chrome/browser/chromeos/authpolicy/auth_policy_credentials_manager.h"
+#include "chrome/browser/chromeos/authpolicy/authpolicy_credentials_manager.h"
 #include "chrome/browser/chromeos/login/existing_user_controller.h"
 #include "chrome/browser/chromeos/login/help_app_launcher.h"
 #include "chrome/browser/chromeos/login/helper.h"
@@ -46,7 +47,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chromeos/constants/chromeos_switches.h"
-#include "chromeos/dbus/auth_policy/fake_auth_policy_client.h"
+#include "chromeos/dbus/authpolicy/fake_authpolicy_client.h"
 #include "chromeos/dbus/cryptohome/fake_cryptohome_client.h"
 #include "chromeos/dbus/power/fake_power_manager_client.h"
 #include "chromeos/dbus/session_manager/fake_session_manager_client.h"
@@ -472,7 +473,7 @@ class ExistingUserControllerPublicSessionTest
       runner1 = new content::MessageLoopRunner;
       subscription1 = chromeos::CrosSettings::Get()->AddSettingsObserver(
           chromeos::kAccountsPrefDeviceLocalAccountAutoLoginId,
-          runner1->QuitClosure());
+          base::BindLambdaForTesting([&]() { runner1->Quit(); }));
     }
     scoped_refptr<content::MessageLoopRunner> runner2;
     std::unique_ptr<CrosSettings::ObserverSubscription> subscription2;
@@ -482,7 +483,7 @@ class ExistingUserControllerPublicSessionTest
       runner2 = new content::MessageLoopRunner;
       subscription2 = chromeos::CrosSettings::Get()->AddSettingsObserver(
           chromeos::kAccountsPrefDeviceLocalAccountAutoLoginDelay,
-          runner2->QuitClosure());
+          base::BindLambdaForTesting([&]() { runner2->Quit(); }));
     }
 
     // Update the policy.
@@ -538,11 +539,8 @@ IN_PROC_BROWSER_TEST_F(ExistingUserControllerPublicSessionTest,
   EXPECT_FALSE(auto_login_timer()->IsRunning());
 }
 
-// Disable since the flake from this test makes it hard to track down other
-// problems on the bots.
-// See https://crbug.com/644205 or https://crbug.com/516015 .
 IN_PROC_BROWSER_TEST_F(ExistingUserControllerPublicSessionTest,
-                       DISABLED_AutoLoginNoDelay) {
+                       AutoLoginNoDelay) {
   // Set up mocks to check login success.
   UserContext user_context(user_manager::USER_TYPE_PUBLIC_ACCOUNT,
                            public_session_account_id_);
@@ -787,13 +785,13 @@ class ExistingUserControllerActiveDirectoryTest
   // Needs to be a member because this class is a friend of
   // AuthPolicyCredentialsManagerFactory to access GetServiceForBrowserContext.
   KerberosFilesHandler* GetKerberosFilesHandler() {
-    auto* auth_policy_credentials_manager =
+    auto* authpolicy_credentials_manager =
         static_cast<AuthPolicyCredentialsManager*>(
             AuthPolicyCredentialsManagerFactory::GetInstance()
                 ->GetServiceForBrowserContext(
                     ProfileManager::GetLastUsedProfile(), false /* create */));
-    EXPECT_TRUE(auth_policy_credentials_manager);
-    return auth_policy_credentials_manager->GetKerberosFilesHandlerForTesting();
+    EXPECT_TRUE(authpolicy_credentials_manager);
+    return authpolicy_credentials_manager->GetKerberosFilesHandlerForTesting();
   }
 
   void LoginAdOnline() {
@@ -1101,7 +1099,8 @@ class ExistingUserControllerAuthFailureTest
     // login, the login attempt cannot be shortcut by login manager mixin API -
     // it has to go through login UI.
     const std::string& password = user_context.GetKey()->GetSecret();
-    ash::LoginScreenTestApi::SubmitPassword(test_user_.account_id, password);
+    ash::LoginScreenTestApi::SubmitPassword(test_user_.account_id, password,
+                                            true /*check_if_submittable*/);
   }
 
   void SetUpStubAuthenticatorAndAttemptLoginWithWrongPassword() {
@@ -1112,8 +1111,8 @@ class ExistingUserControllerAuthFailureTest
     test::UserSessionManagerTestApi(UserSessionManager::GetInstance())
         .InjectAuthenticatorBuilder(std::move(authenticator_builder));
 
-    ash::LoginScreenTestApi::SubmitPassword(test_user_.account_id,
-                                            "wrong!!!!!");
+    ash::LoginScreenTestApi::SubmitPassword(test_user_.account_id, "wrong!!!!!",
+                                            true /*check_if_submittable*/);
   }
 
   // Waits for auth error message to be shown in login UI.
@@ -1147,8 +1146,9 @@ IN_PROC_BROWSER_TEST_F(ExistingUserControllerAuthFailureTest, TpmError) {
   EXPECT_EQ(0, FakePowerManagerClient::Get()->num_request_restart_calls());
 
   test::OobeJS().ExpectVisiblePath({"tpm-error-message"});
-  test::OobeJS().ExpectVisiblePath({"reboot-button"});
-  test::OobeJS().Evaluate("document.getElementById('reboot-button').click()");
+  test::OobeJS().ExpectVisiblePath({"tpm-restart-button"});
+  test::OobeJS().Evaluate(
+      "document.getElementById('tpm-restart-button').click()");
 
   EXPECT_EQ(1, FakePowerManagerClient::Get()->num_request_restart_calls());
 }

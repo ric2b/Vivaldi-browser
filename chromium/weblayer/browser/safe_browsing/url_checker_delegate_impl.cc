@@ -6,8 +6,8 @@
 
 #include "base/bind.h"
 #include "base/task/post_task.h"
-#include "components/safe_browsing/db/database_manager.h"
-#include "components/security_interstitials/content/unsafe_resource.h"
+#include "components/safe_browsing/core/db/database_manager.h"
+#include "components/security_interstitials/core/unsafe_resource.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "weblayer/browser/safe_browsing/safe_browsing_ui_manager.h"
@@ -28,7 +28,7 @@ UrlCheckerDelegateImpl::UrlCheckerDelegateImpl(
 UrlCheckerDelegateImpl::~UrlCheckerDelegateImpl() = default;
 
 void UrlCheckerDelegateImpl::MaybeDestroyPrerenderContents(
-    const base::Callback<content::WebContents*()>& web_contents_getter) {}
+    content::WebContents::OnceGetter web_contents_getter) {}
 
 void UrlCheckerDelegateImpl::StartDisplayingBlockingPageHelper(
     const security_interstitials::UnsafeResource& resource,
@@ -43,6 +43,13 @@ void UrlCheckerDelegateImpl::StartDisplayingBlockingPageHelper(
           base::Unretained(this), resource));
 }
 
+void UrlCheckerDelegateImpl::
+    StartObservingInteractionsForDelayedBlockingPageHelper(
+        const security_interstitials::UnsafeResource& resource,
+        bool is_main_frame) {
+  NOTREACHED() << "Delayed warnings aren't implemented for WebLayer";
+}
+
 void UrlCheckerDelegateImpl::StartDisplayingDefaultBlockingPage(
     const security_interstitials::UnsafeResource& resource) {
   content::WebContents* web_contents = resource.web_contents_getter.Run();
@@ -53,7 +60,8 @@ void UrlCheckerDelegateImpl::StartDisplayingDefaultBlockingPage(
 
   // Report back that it is not ok to proceed with loading the URL.
   base::PostTask(FROM_HERE, {content::BrowserThread::IO},
-                 base::BindOnce(resource.callback, false));
+                 base::BindOnce(resource.callback, false /* proceed */,
+                                false /* showed_interstitial */));
 }
 
 bool UrlCheckerDelegateImpl::IsUrlWhitelisted(const GURL& url) {
@@ -62,7 +70,6 @@ bool UrlCheckerDelegateImpl::IsUrlWhitelisted(const GURL& url) {
 }
 
 bool UrlCheckerDelegateImpl::ShouldSkipRequestCheck(
-    content::ResourceContext* resource_context,
     const GURL& original_url,
     int frame_tree_node_id,
     int render_process_id,

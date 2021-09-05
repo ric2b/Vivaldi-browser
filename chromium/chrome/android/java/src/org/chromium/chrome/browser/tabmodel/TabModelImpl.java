@@ -4,18 +4,21 @@
 
 package org.chromium.chrome.browser.tabmodel;
 
+import org.chromium.base.MathUtils;
 import org.chromium.base.ObserverList;
 import org.chromium.base.TraceEvent;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
+import org.chromium.chrome.browser.homepage.HomepageManager;
 import org.chromium.chrome.browser.ntp.RecentlyClosedBridge;
-import org.chromium.chrome.browser.partnercustomizations.HomepageManager;
 import org.chromium.chrome.browser.tab.InterceptNavigationDelegateImpl;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabCreationState;
+import org.chromium.chrome.browser.tab.TabLaunchType;
+import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.browser.tab.TabState;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager.TabCreator;
-import org.chromium.chrome.browser.util.FeatureUtilities;
-import org.chromium.chrome.browser.util.MathUtils;
+import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.common.ResourceRequestBody;
@@ -103,8 +106,11 @@ public class TabModelImpl extends TabModelJniBridge {
 
     @Override
     public void destroy() {
-        for (Tab tab : mTabs) {
-            if (tab.isInitialized()) tab.destroy();
+        // When reparenting tabs, only commit that tab closures and keep the rest of the tabs alive.
+        if (!mModelDelegate.isReparentingInProgress()) {
+            for (Tab tab : mTabs) {
+                if (tab.isInitialized()) tab.destroy();
+            }
         }
 
         mRewoundList.destroy();
@@ -135,7 +141,8 @@ public class TabModelImpl extends TabModelJniBridge {
      * step notifications.
      */
     @Override
-    public void addTab(Tab tab, int index, @TabLaunchType int type) {
+    public void addTab(
+            Tab tab, int index, @TabLaunchType int type, @TabCreationState int creationState) {
         try {
             TraceEvent.begin("TabModelImpl.addTab");
 
@@ -174,7 +181,7 @@ public class TabModelImpl extends TabModelJniBridge {
             int newIndex = indexOf(tab);
             tabAddedToModel(tab);
 
-            for (TabModelObserver obs : mObservers) obs.didAddTab(tab, type);
+            for (TabModelObserver obs : mObservers) obs.didAddTab(tab, type, creationState);
 
             // setIndex takes care of making sure the appropriate model is active.
             if (selectTab) setIndex(newIndex, TabSelectionType.FROM_NEW);
@@ -434,7 +441,7 @@ public class TabModelImpl extends TabModelJniBridge {
         // TODO(meiliang): This is a band-aid fix, should remove after LayoutManager is able to
         // manage the Grid Tab Switcher.
         // Disable animation if GridTabSwitcher or TabGroup is enabled.
-        boolean animate = !FeatureUtilities.isGridTabSwitcherEnabled();
+        boolean animate = !TabUiFeatureUtilities.isGridTabSwitcherEnabled();
 
         closeAllTabs(animate, false, true);
     }
@@ -748,6 +755,8 @@ public class TabModelImpl extends TabModelJniBridge {
          * before destroying it.
          */
         public void destroy() {
+            // All tabs pending closure are committed in TabModelImpl#destroy.
+            if (TabModelImpl.this.mModelDelegate.isReparentingInProgress()) return;
             for (Tab tab : mRewoundTabs) {
                 if (tab.isInitialized()) tab.destroy();
             }

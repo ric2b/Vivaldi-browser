@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/hid_chooser.h"
 #include "content/public/browser/hid_delegate.h"
@@ -20,9 +21,16 @@ namespace content {
 
 HidService::HidService(RenderFrameHost* render_frame_host,
                        mojo::PendingReceiver<blink::mojom::HidService> receiver)
-    : FrameServiceBase(render_frame_host, std::move(receiver)) {}
+    : FrameServiceBase(render_frame_host, std::move(receiver)) {
+  watchers_.set_disconnect_handler(base::BindRepeating(
+      &HidService::OnWatcherConnectionError, base::Unretained(this)));
+}
 
-HidService::~HidService() = default;
+HidService::~HidService() {
+  // The remaining watchers will be closed from this end.
+  if (!watchers_.empty())
+    DecrementActiveFrameCount();
+}
 
 // static
 void HidService::Create(
@@ -51,7 +59,7 @@ void HidService::GetDevices(GetDevicesCallback callback) {
   GetContentClient()
       ->browser()
       ->GetHidDelegate()
-      ->GetHidManager(web_contents())
+      ->GetHidManager(WebContents::FromRenderFrameHost(render_frame_host()))
       ->GetDevices(base::BindOnce(&HidService::FinishGetDevices,
                                   weak_factory_.GetWeakPtr(),
                                   std::move(callback)));
@@ -61,8 +69,9 @@ void HidService::RequestDevice(
     std::vector<blink::mojom::HidDeviceFilterPtr> filters,
     RequestDeviceCallback callback) {
   HidDelegate* delegate = GetContentClient()->browser()->GetHidDelegate();
-  if (!delegate->CanRequestDevicePermission(web_contents(), origin())) {
-    std::move(callback).Run(nullptr);
+  if (!delegate->CanRequestDevicePermission(
+          WebContents::FromRenderFrameHost(render_frame_host()), origin())) {
+    std::move(callback).Run(std::vector<device::mojom::HidDeviceInfoPtr>());
     return;
   }
 
@@ -76,14 +85,33 @@ void HidService::Connect(
     const std::string& device_guid,
     mojo::PendingRemote<device::mojom::HidConnectionClient> client,
     ConnectCallback callback) {
+  if (watchers_.empty()) {
+    auto* web_contents_impl = static_cast<WebContentsImpl*>(
+        WebContents::FromRenderFrameHost(render_frame_host()));
+    web_contents_impl->IncrementHidActiveFrameCount();
+  }
+
+  mojo::PendingRemote<device::mojom::HidConnectionWatcher> watcher;
+  watchers_.Add(this, watcher.InitWithNewPipeAndPassReceiver());
   GetContentClient()
       ->browser()
       ->GetHidDelegate()
-      ->GetHidManager(web_contents())
+      ->GetHidManager(WebContents::FromRenderFrameHost(render_frame_host()))
       ->Connect(
-          device_guid, std::move(client),
+          device_guid, std::move(client), std::move(watcher),
           base::BindOnce(&HidService::FinishConnect, weak_factory_.GetWeakPtr(),
                          std::move(callback)));
+}
+
+void HidService::OnWatcherConnectionError() {
+  if (watchers_.empty())
+    DecrementActiveFrameCount();
+}
+
+void HidService::DecrementActiveFrameCount() {
+  auto* web_contents_impl = static_cast<WebContentsImpl*>(
+      WebContents::FromRenderFrameHost(render_frame_host()));
+  web_contents_impl->DecrementHidActiveFrameCount();
 }
 
 void HidService::FinishGetDevices(
@@ -92,21 +120,19 @@ void HidService::FinishGetDevices(
   std::vector<device::mojom::HidDeviceInfoPtr> result;
   HidDelegate* delegate = GetContentClient()->browser()->GetHidDelegate();
   for (auto& device : devices) {
-    if (delegate->HasDevicePermission(web_contents(), origin(), *device))
+    if (delegate->HasDevicePermission(
+            WebContents::FromRenderFrameHost(render_frame_host()), origin(),
+            *device))
       result.push_back(std::move(device));
   }
 
   std::move(callback).Run(std::move(result));
 }
 
-void HidService::FinishRequestDevice(RequestDeviceCallback callback,
-                                     device::mojom::HidDeviceInfoPtr device) {
-  if (!device) {
-    std::move(callback).Run(nullptr);
-    return;
-  }
-
-  std::move(callback).Run(std::move(device));
+void HidService::FinishRequestDevice(
+    RequestDeviceCallback callback,
+    std::vector<device::mojom::HidDeviceInfoPtr> devices) {
+  std::move(callback).Run(std::move(devices));
 }
 
 void HidService::FinishConnect(

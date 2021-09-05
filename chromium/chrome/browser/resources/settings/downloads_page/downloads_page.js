@@ -6,14 +6,6 @@
  * @fileoverview
  * 'settings-downloads-page' is the settings page containing downloads
  * settings.
- *
- * Example:
- *
- *    <iron-animated-pages>
- *      <settings-downloads-page prefs="{{prefs}}">
- *      </settings-downloads-page>
- *      ... other pages ...
- *    </iron-animated-pages>
  */
 Polymer({
   is: 'settings-downloads-page',
@@ -29,12 +21,6 @@ Polymer({
       notify: true,
     },
 
-    /**
-     * Dictionary defining page visibility.
-     * @type {!DownloadsPageVisibility}
-     */
-    pageVisibility: Object,
-
     /** @private */
     autoOpenDownloads_: {
       type: Boolean,
@@ -47,21 +33,6 @@ Polymer({
      */
     downloadLocation_: String,
     // </if>
-
-    /** @private {!Map<string, string>} */
-    focusConfig_: {
-      type: Object,
-      value: function() {
-        const map = new Map();
-        // <if expr="chromeos">
-        if (settings.routes.SMB_SHARES) {
-          map.set(settings.routes.SMB_SHARES.path, '#smbShares');
-        }
-        // </if>
-        return map;
-      },
-    },
-
   },
 
   // <if expr="chromeos">
@@ -74,12 +45,12 @@ Polymer({
   browserProxy_: null,
 
   /** @override */
-  created: function() {
+  created() {
     this.browserProxy_ = settings.DownloadsBrowserProxyImpl.getInstance();
   },
 
   /** @override */
-  ready: function() {
+  ready() {
     this.addWebUIListener('auto-open-downloads-changed', autoOpen => {
       this.autoOpenDownloads_ = autoOpen;
     });
@@ -88,22 +59,17 @@ Polymer({
   },
 
   /** @private */
-  selectDownloadLocation_: function() {
+  selectDownloadLocation_() {
     listenOnce(this, 'transitionend', () => {
       this.browserProxy_.selectDownloadLocation();
     });
   },
 
   // <if expr="chromeos">
-  /** @private */
-  onTapSmbShares_: function() {
-    settings.navigateTo(settings.routes.SMB_SHARES);
-  },
-
   /**
    * @private
    */
-  handleDownloadLocationChanged_: function() {
+  handleDownloadLocationChanged_() {
     this.browserProxy_
         .getDownloadLocationText(/** @type {string} */ (
             this.getPref('download.default_directory').value))
@@ -114,7 +80,7 @@ Polymer({
   // </if>
 
   /** @private */
-  onClearAutoOpenFileTypesTap_: function() {
+  onClearAutoOpenFileTypesTap_() {
     this.browserProxy_.resetAutoOpenFileTypes();
   },
 });

@@ -7,11 +7,11 @@
 #include "third_party/blink/renderer/bindings/core/v8/serialization/post_message_helper.h"
 #include "third_party/blink/renderer/bindings/core/v8/serialization/serialized_script_value.h"
 #include "third_party/blink/renderer/bindings/core/v8/serialization/transferables.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_window_post_message_options.h"
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
 #include "third_party/blink/renderer/core/events/message_event.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/user_activation.h"
-#include "third_party/blink/renderer/core/frame/window_post_message_options.h"
 #include "third_party/blink/renderer/core/html/portal/html_portal_element.h"
 #include "third_party/blink/renderer/core/inspector/main_thread_debugger.h"
 #include "third_party/blink/renderer/core/inspector/thread_debugger.h"
@@ -47,6 +47,9 @@ BlinkTransferableMessage PortalPostMessageHelper::CreateMessage(
   if (exception_state.HadException())
     return {};
 
+  transferable_message.sender_origin =
+      execution_context->GetSecurityOrigin()->IsolatedCopy();
+
   if (ThreadDebugger* debugger =
           ThreadDebugger::From(script_state->GetIsolate())) {
     transferable_message.sender_stack_trace_id =
@@ -70,7 +73,7 @@ void PortalPostMessageHelper::CreateAndDispatchMessageEvent(
          IsA<HTMLPortalElement>(event_target->ToNode()));
 
   if (target_origin &&
-      !target_origin->IsSameSchemeHostPort(
+      !target_origin->IsSameOriginWith(
           event_target->GetExecutionContext()->GetSecurityOrigin())) {
     return;
   }

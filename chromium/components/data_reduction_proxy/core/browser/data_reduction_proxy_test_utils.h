@@ -41,7 +41,6 @@ class TestURLLoaderFactory;
 namespace data_reduction_proxy {
 
 class ClientConfig;
-class DataReductionProxyConfigurator;
 class DataReductionProxyMutableConfigValues;
 class DataReductionProxyRequestOptions;
 class DataReductionProxyServer;
@@ -334,15 +333,6 @@ class DataReductionProxyTestContext {
   // |net::MockClientSocketFactory| specified.
   void EnableDataReductionProxyWithSecureProxyCheckSuccess();
 
-  // Disables the fetch of the warmup URL. Useful for testing to avoid setting
-  // up the network mock sockets.
-  void DisableWarmupURLFetch();
-
-  // Disables the warmup URL fetcher to callback into DRP to report the result
-  // of the warmup fetch. The callback can result in DRP proxies getting
-  // disabled. This method is useful for testing.
-  void DisableWarmupURLFetchCallback();
-
   // Returns the underlying |MockDataReductionProxyConfig|. This can only be
   // called if built with WithMockConfig.
   MockDataReductionProxyConfig* mock_config() const;
@@ -382,10 +372,6 @@ class DataReductionProxyTestContext {
 
   scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory() const {
     return test_shared_url_loader_factory_;
-  }
-
-  DataReductionProxyConfigurator* configurator() const {
-    return settings_->data_reduction_proxy_service()->configurator();
   }
 
   DataReductionProxySettings* settings() const { return settings_.get(); }

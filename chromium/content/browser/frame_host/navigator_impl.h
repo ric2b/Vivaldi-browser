@@ -38,19 +38,16 @@ class CONTENT_EXPORT NavigatorImpl : public Navigator {
       RenderFrameHostImpl* render_frame_host,
       const GURL& url);
 
+  static bool ShouldIgnoreIncomingRendererRequest(
+      const NavigationRequest* ongoing_navigation_request,
+      bool has_user_gesture);
+
   // Navigator implementation.
   NavigatorDelegate* GetDelegate() override;
   NavigationController* GetController() override;
-  void DidFailProvisionalLoadWithError(
-      RenderFrameHostImpl* render_frame_host,
-      const GURL& url,
-      int error_code,
-      const base::string16& error_description,
-      bool showing_repost_interstitial) override;
   void DidFailLoadWithError(RenderFrameHostImpl* render_frame_host,
                             const GURL& url,
-                            int error_code,
-                            const base::string16& error_description) override;
+                            int error_code) override;
   void DidNavigate(RenderFrameHostImpl* render_frame_host,
                    const FrameHostMsg_DidCommitProvisionalLoad_Params& params,
                    std::unique_ptr<NavigationRequest> navigation_request,
@@ -62,20 +59,20 @@ class CONTENT_EXPORT NavigatorImpl : public Navigator {
   void Navigate(std::unique_ptr<NavigationRequest> request,
                 ReloadType reload_type,
                 RestoreType restore_type) override;
-  void RequestOpenURL(RenderFrameHostImpl* render_frame_host,
-                      const GURL& url,
-                      const base::Optional<url::Origin>& initiator_origin,
-                      bool uses_post,
-                      const scoped_refptr<network::ResourceRequestBody>& body,
-                      const std::string& extra_headers,
-                      const Referrer& referrer,
-                      WindowOpenDisposition disposition,
-                      bool should_replace_current_entry,
-                      bool user_gesture,
-                      blink::TriggeringEventInfo triggering_event_info,
-                      const std::string& href_translate,
-                      scoped_refptr<network::SharedURLLoaderFactory>
-                          blob_url_loader_factory) override;
+  void RequestOpenURL(
+      RenderFrameHostImpl* render_frame_host,
+      const GURL& url,
+      const base::Optional<url::Origin>& initiator_origin,
+      const scoped_refptr<network::ResourceRequestBody>& post_body,
+      const std::string& extra_headers,
+      const Referrer& referrer,
+      WindowOpenDisposition disposition,
+      bool should_replace_current_entry,
+      bool user_gesture,
+      blink::TriggeringEventInfo triggering_event_info,
+      const std::string& href_translate,
+      scoped_refptr<network::SharedURLLoaderFactory> blob_url_loader_factory)
+      override;
   void NavigateFromFrameProxy(
       RenderFrameHostImpl* render_frame_host,
       const GURL& url,
@@ -90,9 +87,9 @@ class CONTENT_EXPORT NavigatorImpl : public Navigator {
       const std::string& extra_headers,
       scoped_refptr<network::SharedURLLoaderFactory> blob_url_loader_factory,
       bool has_user_gesture) override;
-  void OnBeforeUnloadACK(FrameTreeNode* frame_tree_node,
-                         bool proceed,
-                         const base::TimeTicks& proceed_time) override;
+  void BeforeUnloadCompleted(FrameTreeNode* frame_tree_node,
+                             bool proceed,
+                             const base::TimeTicks& proceed_time) override;
   void OnBeginNavigation(
       FrameTreeNode* frame_tree_node,
       mojom::CommonNavigationParamsPtr common_params,
@@ -103,18 +100,17 @@ class CONTENT_EXPORT NavigatorImpl : public Navigator {
           navigation_initiator,
       scoped_refptr<PrefetchedSignedExchangeCache>
           prefetched_signed_exchange_cache,
-      std::unique_ptr<BundledExchangesHandleTracker>
-          bundled_exchanges_handle_tracker) override;
+      std::unique_ptr<WebBundleHandleTracker> web_bundle_handle_tracker)
+      override;
   void RestartNavigationAsCrossDocument(
       std::unique_ptr<NavigationRequest> navigation_request) override;
-  void OnAbortNavigation(FrameTreeNode* frame_tree_node) override;
   void LogResourceRequestTime(base::TimeTicks timestamp,
                               const GURL& url) override;
   void LogBeforeUnloadTime(
       const base::TimeTicks& renderer_before_unload_start_time,
       const base::TimeTicks& renderer_before_unload_end_time) override;
-  void CancelNavigation(FrameTreeNode* frame_tree_node,
-                        bool inform_renderer) override;
+  void CancelNavigation(FrameTreeNode* frame_tree_node) override;
+
  private:
   // Holds data used to track browser side navigation metrics.
   struct NavigationMetricsData;

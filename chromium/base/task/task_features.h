@@ -14,15 +14,20 @@ namespace base {
 struct Feature;
 
 extern const BASE_EXPORT Feature kAllTasksUserBlocking;
-extern const BASE_EXPORT Feature kMergeBlockingNonBlockingPools;
 
 // Under this feature, unused threads in ThreadGroup are only detached
 // if the total number of threads in the pool is above the initial capacity.
 extern const BASE_EXPORT Feature kNoDetachBelowInitialCapacity;
 
 // Under this feature, workers blocked with MayBlock are replaced immediately
-// instead of waiting for a threshold.
+// instead of waiting for a threshold in the foreground thread group.
 extern const BASE_EXPORT Feature kMayBlockWithoutDelay;
+
+// Under this feature, best effort capacity is never increased.
+// While it's unlikely we'd ship this as-is, this experiment allows us to
+// determine whether blocked worker replacement logic on best-effort tasks has
+// any impact on guardian metrics.
+extern const BASE_EXPORT Feature kFixedMaxBestEffortTasks;
 
 #if defined(OS_WIN) || defined(OS_MACOSX)
 #define HAS_NATIVE_THREAD_POOL() 1

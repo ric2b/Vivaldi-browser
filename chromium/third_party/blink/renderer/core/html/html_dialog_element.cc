@@ -39,12 +39,11 @@
 
 namespace blink {
 
-using namespace html_names;
-
+// https://html.spec.whatwg.org/C/#the-dialog-element
 // This function chooses the focused element when show() or showModal() is
 // invoked, as described in their spec.
 static void SetFocusForDialog(HTMLDialogElement* dialog) {
-  Element* focusable_descendant = nullptr;
+  Element* control = nullptr;
   Node* next = nullptr;
 
   // TODO(kochi): How to find focusable element inside Shadow DOM is not
@@ -59,24 +58,35 @@ static void SetFocusForDialog(HTMLDialogElement* dialog) {
     if (!element)
       continue;
     if (element->IsAutofocusable() && element->IsFocusable()) {
-      element->focus();
-      return;
+      control = element;
+      break;
     }
-    if (!focusable_descendant && element->IsFocusable())
-      focusable_descendant = element;
+    if (!control && element->IsFocusable())
+      control = element;
   }
+  if (!control)
+    control = dialog;
 
-  if (focusable_descendant) {
-    focusable_descendant->focus();
+  // 3. Run the focusing steps for control.
+  if (control->IsFocusable())
+    control->focus();
+  else
+    dialog->GetDocument().ClearFocusedElement();
+
+  // 4. Let topDocument be the active document of control's node document's
+  // browsing context's top-level browsing context.
+  // 5. If control's node document's origin is not the same as the origin of
+  // topDocument, then return.
+  Document& doc = control->GetDocument();
+  if (!doc.IsActive())
     return;
-  }
-
-  if (dialog->IsFocusable()) {
-    dialog->focus();
+  if (!doc.IsInMainFrame() &&
+      !doc.TopFrameOrigin()->CanAccess(doc.GetSecurityOrigin()))
     return;
-  }
 
-  dialog->GetDocument().ClearFocusedElement();
+  // 6. Empty topDocument's autofocus candidates.
+  // 7. Set topDocument's autofocus processed flag to true.
+  doc.TopDocument().FinalizeAutofocus();
 }
 
 static void InertSubtreesChanged(Document& document) {
@@ -94,7 +104,7 @@ static void InertSubtreesChanged(Document& document) {
 }
 
 HTMLDialogElement::HTMLDialogElement(Document& document)
-    : HTMLElement(kDialogTag, document),
+    : HTMLElement(html_names::kDialogTag, document),
       centering_mode_(kNotCentered),
       centered_position_(0),
       return_value_("") {
@@ -104,9 +114,9 @@ HTMLDialogElement::HTMLDialogElement(Document& document)
 void HTMLDialogElement::close(const String& return_value) {
   // https://html.spec.whatwg.org/C/#close-the-dialog
 
-  if (!FastHasAttribute(kOpenAttr))
+  if (!FastHasAttribute(html_names::kOpenAttr))
     return;
-  SetBooleanAttribute(kOpenAttr, false);
+  SetBooleanAttribute(html_names::kOpenAttr, false);
 
   HTMLDialogElement* active_modal_dialog = GetDocument().ActiveModalDialog();
   GetDocument().RemoveFromTopLayer(this);
@@ -121,7 +131,7 @@ void HTMLDialogElement::close(const String& return_value) {
 
 void HTMLDialogElement::ForceLayoutForCentering() {
   centering_mode_ = kNeedsCentering;
-  GetDocument().UpdateStyleAndLayout();
+  GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kJavaScript);
   if (centering_mode_ == kNeedsCentering)
     SetNotCentered();
 }
@@ -133,19 +143,19 @@ void HTMLDialogElement::ScheduleCloseEvent() {
 }
 
 void HTMLDialogElement::show() {
-  if (FastHasAttribute(kOpenAttr))
+  if (FastHasAttribute(html_names::kOpenAttr))
     return;
-  SetBooleanAttribute(kOpenAttr, true);
+  SetBooleanAttribute(html_names::kOpenAttr, true);
 
   // The layout must be updated here because setFocusForDialog calls
   // Element::isFocusable, which requires an up-to-date layout.
-  GetDocument().UpdateStyleAndLayout();
+  GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kJavaScript);
 
   SetFocusForDialog(this);
 }
 
 void HTMLDialogElement::showModal(ExceptionState& exception_state) {
-  if (FastHasAttribute(kOpenAttr)) {
+  if (FastHasAttribute(html_names::kOpenAttr)) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                       "The element already has an 'open' "
                                       "attribute, and therefore cannot be "
@@ -165,7 +175,7 @@ void HTMLDialogElement::showModal(ExceptionState& exception_state) {
   }
 
   GetDocument().AddToTopLayer(this);
-  SetBooleanAttribute(kOpenAttr, true);
+  SetBooleanAttribute(html_names::kOpenAttr, true);
 
   ForceLayoutForCentering();
 
@@ -205,7 +215,7 @@ bool HTMLDialogElement::IsPresentationAttribute(
   // FIXME: Workaround for <https://bugs.webkit.org/show_bug.cgi?id=91058>:
   // modifying an attribute for which there is an attribute selector in html.css
   // sometimes does not trigger a style recalc.
-  if (name == kOpenAttr)
+  if (name == html_names::kOpenAttr)
     return true;
 
   return HTMLElement::IsPresentationAttribute(name);

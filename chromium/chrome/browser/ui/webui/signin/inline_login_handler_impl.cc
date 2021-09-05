@@ -258,6 +258,7 @@ void OnSyncSetupComplete(Profile* profile,
                                             ServiceAccessType::EXPLICIT_ACCESS);
     password_store->SaveGaiaPasswordHash(
         username, base::UTF8ToUTF16(password),
+        /*is_primary_account_=*/true,
         password_manager::metrics_util::GaiaPasswordHashChange::
             SAVED_ON_CHROME_SIGNIN);
 
@@ -371,9 +372,9 @@ void InlineSigninHelper::OnClientOAuthSuccessAndBrowserOpened(
     scoped_refptr<password_manager::PasswordStore> password_store =
         PasswordStoreFactory::GetForProfile(profile_,
                                             ServiceAccessType::EXPLICIT_ACCESS);
-    if (password_store && !primary_email.empty()) {
+    if (password_store) {
       password_store->SaveGaiaPasswordHash(
-          primary_email, base::UTF8ToUTF16(password_),
+          primary_email, base::UTF8ToUTF16(password_), !primary_email.empty(),
           password_manager::metrics_util::GaiaPasswordHashChange::
               SAVED_ON_CHROME_SIGNIN);
     }
@@ -518,6 +519,13 @@ void InlineLoginHandlerImpl::SetExtraInitParams(base::DictionaryValue& params) {
         params.SetString("emailDomain", all_email_domains[0]);
     }
 
+    std::string show_tos;
+    if (net::GetValueForKeyInQuery(
+            current_url, credential_provider::kShowTosSwitch, &show_tos)) {
+      if (!show_tos.empty())
+        params.SetString("showTos", show_tos);
+    }
+
     // Prevent opening a new window if the embedded page fails to load.
     // This will keep the user from being able to access a fully functional
     // Chrome window in incognito mode.
@@ -579,7 +587,8 @@ void InlineLoginHandlerImpl::CompleteLogin(const std::string& email,
                                            bool skip_for_now,
                                            bool trusted,
                                            bool trusted_found,
-                                           bool choose_what_to_sync) {
+                                           bool choose_what_to_sync,
+                                           base::Value edu_login_params) {
   content::WebContents* contents = web_ui()->GetWebContents();
   const GURL& current_url = contents->GetURL();
 
@@ -597,8 +606,7 @@ void InlineLoginHandlerImpl::CompleteLogin(const std::string& email,
   DCHECK(!auth_code.empty());
 
   content::StoragePartition* partition =
-      content::BrowserContext::GetStoragePartitionForSite(
-          contents->GetBrowserContext(), signin::GetSigninPartitionURL());
+      signin::GetSigninPartition(contents->GetBrowserContext());
 
   // If this was called from the user manager to reauthenticate the profile,
   // the current profile is the system profile.  In this case, use the email to

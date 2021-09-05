@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/containers/circular_deque.h"
 #include "base/location.h"
 #include "base/rand_util.h"
@@ -14,16 +15,16 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
-#include "chrome/browser/permissions/permission_request_id.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/content_settings_types.h"
+#include "components/permissions/permission_request_id.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/page_visibility_state.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
+#include "content/public/common/page_visibility_state.h"
 #include "url/gurl.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -36,6 +37,8 @@
 #include "extensions/common/permissions/permissions_data.h"
 #include "ui/message_center/public/cpp/notifier_id.h"
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
+
+#include "extensions/api/tabs/tabs_private_api.h"
 
 namespace {
 
@@ -53,10 +56,10 @@ class VisibilityTimerTabHelper
   void PostTaskAfterVisibleDelay(const base::Location& from_here,
                                  base::OnceClosure task,
                                  base::TimeDelta visible_delay,
-                                 const PermissionRequestID& id);
+                                 const permissions::PermissionRequestID& id);
 
   // Deletes any earlier task(s) that match |id|.
-  void CancelTask(const PermissionRequestID& id);
+  void CancelTask(const permissions::PermissionRequestID& id);
 
   // WebContentsObserver:
   void OnVisibilityChanged(content::Visibility visibility) override;
@@ -71,7 +74,7 @@ class VisibilityTimerTabHelper
   bool is_visible_;
 
   struct Task {
-    Task(const PermissionRequestID& id,
+    Task(const permissions::PermissionRequestID& id,
          std::unique_ptr<base::RetainingOneShotTimer> timer)
         : id(id), timer(std::move(timer)) {}
 
@@ -85,7 +88,7 @@ class VisibilityTimerTabHelper
       return *this;
     }
 
-    PermissionRequestID id;
+    permissions::PermissionRequestID id;
     std::unique_ptr<base::RetainingOneShotTimer> timer;
   };
   base::circular_deque<Task> task_queue_;
@@ -105,7 +108,7 @@ VisibilityTimerTabHelper::VisibilityTimerTabHelper(
   } else {
     switch (contents->GetMainFrame()->GetVisibilityState()) {
       case content::PageVisibilityState::kHidden:
-      case content::PageVisibilityState::kPrerender:
+      case content::PageVisibilityState::kHiddenButPainting:
         is_visible_ = false;
         break;
       case content::PageVisibilityState::kVisible:
@@ -119,7 +122,7 @@ void VisibilityTimerTabHelper::PostTaskAfterVisibleDelay(
     const base::Location& from_here,
     base::OnceClosure task,
     base::TimeDelta visible_delay,
-    const PermissionRequestID& id) {
+    const permissions::PermissionRequestID& id) {
   if (web_contents()->IsBeingDestroyed())
     return;
 
@@ -140,7 +143,8 @@ void VisibilityTimerTabHelper::PostTaskAfterVisibleDelay(
     task_queue_.front().timer->Reset();
 }
 
-void VisibilityTimerTabHelper::CancelTask(const PermissionRequestID& id) {
+void VisibilityTimerTabHelper::CancelTask(
+    const permissions::PermissionRequestID& id) {
   bool deleting_front = task_queue_.front().id == id;
 
   base::EraseIf(task_queue_, [id](const Task& task) { return task.id == id; });
@@ -177,17 +181,20 @@ void VisibilityTimerTabHelper::RunTask(base::OnceClosure task) {
 }  // namespace
 
 // static
-void NotificationPermissionContext::UpdatePermission(Profile* profile,
-                                                     const GURL& origin,
-                                                     ContentSetting setting) {
+void NotificationPermissionContext::UpdatePermission(
+    content::BrowserContext* browser_context,
+    const GURL& origin,
+    ContentSetting setting) {
   switch (setting) {
     case CONTENT_SETTING_ALLOW:
     case CONTENT_SETTING_BLOCK:
     case CONTENT_SETTING_DEFAULT:
-      HostContentSettingsMapFactory::GetForProfile(profile)
+      HostContentSettingsMapFactory::GetForProfile(browser_context)
           ->SetContentSettingDefaultScope(
-              origin, GURL(), CONTENT_SETTINGS_TYPE_NOTIFICATIONS,
+              origin, GURL(), ContentSettingsType::NOTIFICATIONS,
               content_settings::ResourceIdentifier(), setting);
+
+
       break;
 
     default:
@@ -195,9 +202,10 @@ void NotificationPermissionContext::UpdatePermission(Profile* profile,
   }
 }
 
-NotificationPermissionContext::NotificationPermissionContext(Profile* profile)
-    : PermissionContextBase(profile,
-                            CONTENT_SETTINGS_TYPE_NOTIFICATIONS,
+NotificationPermissionContext::NotificationPermissionContext(
+    content::BrowserContext* browser_context)
+    : PermissionContextBase(browser_context,
+                            ContentSettingsType::NOTIFICATIONS,
                             blink::mojom::FeaturePolicyFeature::kNotFound) {}
 
 NotificationPermissionContext::~NotificationPermissionContext() {}
@@ -215,8 +223,9 @@ ContentSetting NotificationPermissionContext::GetPermissionStatusInternal(
     return extension_status;
 #endif
 
-  ContentSetting setting = PermissionContextBase::GetPermissionStatusInternal(
-      render_frame_host, requesting_origin, embedding_origin);
+  ContentSetting setting =
+      permissions::PermissionContextBase::GetPermissionStatusInternal(
+          render_frame_host, requesting_origin, embedding_origin);
 
   if (requesting_origin != embedding_origin && setting == CONTENT_SETTING_ASK)
     return CONTENT_SETTING_BLOCK;
@@ -232,7 +241,8 @@ ContentSetting NotificationPermissionContext::GetPermissionStatusForExtension(
     return kDefaultSetting;
 
   const extensions::Extension* extension =
-      extensions::ExtensionRegistry::Get(profile())
+      extensions::ExtensionRegistry::Get(
+          Profile::FromBrowserContext(browser_context()))
           ->enabled_extensions()
           .GetByID(origin.host());
 
@@ -244,7 +254,8 @@ ContentSetting NotificationPermissionContext::GetPermissionStatusForExtension(
   }
 
   NotifierStateTracker* notifier_state_tracker =
-      NotifierStateTrackerFactory::GetForProfile(profile());
+      NotifierStateTrackerFactory::GetForProfile(
+          Profile::FromBrowserContext(browser_context()));
   DCHECK(notifier_state_tracker);
 
   message_center::NotifierId notifier_id(
@@ -258,16 +269,17 @@ ContentSetting NotificationPermissionContext::GetPermissionStatusForExtension(
 void NotificationPermissionContext::ResetPermission(
     const GURL& requesting_origin,
     const GURL& embedder_origin) {
-  UpdatePermission(profile(), requesting_origin, CONTENT_SETTING_DEFAULT);
+  UpdatePermission(browser_context(), requesting_origin,
+                   CONTENT_SETTING_DEFAULT);
 }
 
 void NotificationPermissionContext::DecidePermission(
     content::WebContents* web_contents,
-    const PermissionRequestID& id,
+    const permissions::PermissionRequestID& id,
     const GURL& requesting_origin,
     const GURL& embedding_origin,
     bool user_gesture,
-    BrowserPermissionCallback callback) {
+    permissions::BrowserPermissionCallback callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   // Permission requests for either Web Notifications and Push Notifications may
@@ -287,7 +299,7 @@ void NotificationPermissionContext::DecidePermission(
   // INHERIT_IF_LESS_PERMISSIVE, and
   // PermissionMenuModel::PermissionMenuModel which prevents users from manually
   // allowing the permission.
-  if (profile()->IsOffTheRecord()) {
+  if (browser_context()->IsOffTheRecord()) {
     // Random number of seconds in the range [1.0, 2.0).
     double delay_seconds = 1.0 + 1.0 * base::RandDouble();
     VisibilityTimerTabHelper::CreateForWebContents(web_contents);
@@ -303,9 +315,9 @@ void NotificationPermissionContext::DecidePermission(
     return;
   }
 
-  PermissionContextBase::DecidePermission(web_contents, id, requesting_origin,
-                                          embedding_origin, user_gesture,
-                                          std::move(callback));
+  permissions::PermissionContextBase::DecidePermission(
+      web_contents, id, requesting_origin, embedding_origin, user_gesture,
+      std::move(callback));
 }
 
 // Unlike other permission types, granting a notification for a given origin
@@ -319,9 +331,34 @@ void NotificationPermissionContext::UpdateContentSetting(
     ContentSetting content_setting) {
   DCHECK(content_setting == CONTENT_SETTING_ALLOW ||
          content_setting == CONTENT_SETTING_BLOCK);
-  UpdatePermission(profile(), requesting_origin, content_setting);
+  UpdatePermission(browser_context(), requesting_origin, content_setting);
 }
 
 bool NotificationPermissionContext::IsRestrictedToSecureOrigins() const {
   return true;
+}
+
+/* Vivaldi specific */
+void NotificationPermissionContext::UpdateTabContext(
+    const permissions::PermissionRequestID& id,
+    const GURL& requesting_frame,
+    bool allowed) {
+  content::WebContents* web_contents =
+      content::WebContents::FromRenderFrameHost(
+          content::RenderFrameHost::FromID(id.render_process_id(),
+                                           id.render_frame_id()));
+
+  if (web_contents) {
+    extensions::VivaldiPrivateTabObserver* private_tab =
+        extensions::VivaldiPrivateTabObserver::FromWebContents(web_contents);
+
+    ContentSetting content_setting =
+        allowed ? CONTENT_SETTING_ALLOW : CONTENT_SETTING_BLOCK;
+
+    if (private_tab) {
+      private_tab->OnPermissionAccessed(ContentSettingsType::NOTIFICATIONS,
+                                        requesting_frame.spec(),
+                                        content_setting);
+    }
+  }
 }

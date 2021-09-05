@@ -6,6 +6,11 @@
  * @fileoverview Behavior common to Site Settings classes.
  */
 
+// clang-format off
+// #import {ContentSetting,ContentSettingsTypes} from './constants.m.js';
+// #import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+// #import {RawSiteException,SiteException,SiteSettingsPrefsBrowserProxy,SiteSettingsPrefsBrowserProxyImpl} from './site_settings_prefs_browser_proxy.m.js';
+// clang-format on
 
 /**
  * The source information on site exceptions doesn't exactly match the
@@ -13,7 +18,7 @@
  * TODO(dschuyler): Can they be unified (and this dictionary removed)?
  * @type {!Object}
  */
-const kControlledByLookup = {
+/* #export */ const kControlledByLookup = {
   'extension': chrome.settingsPrivate.ControlledBy.EXTENSION,
   'HostedApp': chrome.settingsPrivate.ControlledBy.EXTENSION,
   'platform_app': chrome.settingsPrivate.ControlledBy.EXTENSION,
@@ -52,13 +57,13 @@ const SiteSettingsBehaviorImpl = {
   },
 
   /** @override */
-  created: function() {
+  created() {
     this.browserProxy =
         settings.SiteSettingsPrefsBrowserProxyImpl.getInstance();
   },
 
   /** @override */
-  ready: function() {
+  ready() {
     this.ContentSetting = settings.ContentSetting;
   },
 
@@ -67,7 +72,7 @@ const SiteSettingsBehaviorImpl = {
    * @param {string} url The URL with or without a scheme.
    * @return {string} The URL with a scheme, or an empty string.
    */
-  ensureUrlHasScheme: function(url) {
+  ensureUrlHasScheme(url) {
     if (url.length == 0) {
       return url;
     }
@@ -79,7 +84,7 @@ const SiteSettingsBehaviorImpl = {
    * @param {string} url The URL to sanitize.
    * @return {string} The URL without redundant ports, if any.
    */
-  sanitizePort: function(url) {
+  sanitizePort(url) {
     const urlWithScheme = this.ensureUrlHasScheme(url);
     if (urlWithScheme.startsWith('https://') &&
         urlWithScheme.endsWith(':443')) {
@@ -97,7 +102,7 @@ const SiteSettingsBehaviorImpl = {
    * @return {boolean}
    * @protected
    */
-  computeIsSettingEnabled: function(setting) {
+  computeIsSettingEnabled(setting) {
     return setting != settings.ContentSetting.BLOCK;
   },
 
@@ -107,7 +112,7 @@ const SiteSettingsBehaviorImpl = {
    * @return {URL} The URL to return (or null if origin is not a valid URL).
    * @protected
    */
-  toUrl: function(originOrPattern) {
+  toUrl(originOrPattern) {
     if (originOrPattern.length == 0) {
       return null;
     }
@@ -122,13 +127,28 @@ const SiteSettingsBehaviorImpl = {
   },
 
   /**
+   * Returns a user-friendly name for the origin.
+   * @param {string} origin
+   * @return {string} The user-friendly name.
+   * @protected
+   */
+  originRepresentation(origin) {
+    try {
+      const url = this.toUrl(origin);
+      return url ? (url.host || url.origin) : '';
+    } catch (error) {
+      return '';
+    }
+  },
+
+  /**
    * Convert an exception (received from the C++ handler) to a full
    * SiteException.
    * @param {!RawSiteException} exception The raw site exception from C++.
    * @return {!SiteException} The expanded (full) SiteException.
    * @protected
    */
-  expandSiteException: function(exception) {
+  expandSiteException(exception) {
     const origin = exception.origin;
     const embeddingOrigin = exception.embeddingOrigin;
 
@@ -161,7 +181,7 @@ const SiteSettingsBehaviorImpl = {
    * currently enabled.
    * @return {!Array<!settings.ContentSettingsTypes>}
    */
-  getCategoryList: function() {
+  getCategoryList() {
     if (this.contentTypes_.length == 0) {
       for (const typeName in settings.ContentSettingsTypes) {
         const contentType = settings.ContentSettingsTypes[typeName];
@@ -193,9 +213,6 @@ const SiteSettingsBehaviorImpl = {
     };
     // These categories are gated behind flags.
     addOrRemoveSettingWithFlag(
-        settings.ContentSettingsTypes.SERIAL_PORTS,
-        'enableExperimentalWebPlatformFeatures');
-    addOrRemoveSettingWithFlag(
         settings.ContentSettingsTypes.BLUETOOTH_SCANNING,
         'enableExperimentalWebPlatformFeatures');
     addOrRemoveSettingWithFlag(
@@ -210,10 +227,20 @@ const SiteSettingsBehaviorImpl = {
     addOrRemoveSettingWithFlag(
         settings.ContentSettingsTypes.MIXEDSCRIPT,
         'enableInsecureContentContentSetting');
+    addOrRemoveSettingWithFlag(
+        settings.ContentSettingsTypes.HID_DEVICES,
+        'enableExperimentalWebPlatformFeatures');
+    addOrRemoveSettingWithFlag(
+        settings.ContentSettingsTypes.AR, 'enableWebXrContentSetting');
+    addOrRemoveSettingWithFlag(
+        settings.ContentSettingsTypes.VR, 'enableWebXrContentSetting');
+    addOrRemoveSettingWithFlag(
+        settings.ContentSettingsTypes.BLUETOOTH_DEVICES,
+        'enableWebBluetoothNewPermissionsBackend');
     return this.contentTypes_.slice(0);
   },
 
 };
 
 /** @polymerBehavior */
-const SiteSettingsBehavior = [SiteSettingsBehaviorImpl];
+/* #export */ const SiteSettingsBehavior = [SiteSettingsBehaviorImpl];

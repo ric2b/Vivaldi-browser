@@ -18,7 +18,8 @@ class CSSPropertyTest : public PageTestBase {};
 TEST_F(CSSPropertyTest, VisitedPropertiesAreNotWebExposed) {
   for (CSSPropertyID property_id : CSSPropertyIDList()) {
     const CSSProperty& property = CSSProperty::Get(property_id);
-    EXPECT_TRUE(!property.IsVisited() || !property.IsWebExposed());
+    EXPECT_TRUE(!property.IsVisited() ||
+                !property.IsWebExposed(GetDocument().GetExecutionContext()));
   }
 }
 
@@ -40,7 +41,7 @@ TEST_F(CSSPropertyTest, GetUnvisitedPropertyFromVisited) {
 
 TEST_F(CSSPropertyTest, InternalEffectiveZoomNotWebExposed) {
   const CSSProperty& property = GetCSSPropertyInternalEffectiveZoom();
-  EXPECT_FALSE(property.IsWebExposed());
+  EXPECT_FALSE(property.IsWebExposed(GetDocument().GetExecutionContext()));
 }
 
 TEST_F(CSSPropertyTest, InternalEffectiveZoomCanBeParsed) {
@@ -85,6 +86,20 @@ TEST_F(CSSPropertyTest, VisitedPropertiesCanParseValues) {
   // Verify that we have seen at least one visited property. If we didn't (and
   // there is no bug), it means this test can be removed.
   EXPECT_GT(num_visited, 0u);
+}
+
+TEST_F(CSSPropertyTest, Surrogates) {
+  EXPECT_EQ(&GetCSSPropertyWidth(),
+            GetCSSPropertyInlineSize().SurrogateFor(
+                TextDirection::kLtr, WritingMode::kHorizontalTb));
+  EXPECT_EQ(&GetCSSPropertyHeight(),
+            GetCSSPropertyInlineSize().SurrogateFor(TextDirection::kLtr,
+                                                    WritingMode::kVerticalRl));
+  EXPECT_EQ(&GetCSSPropertyWritingMode(),
+            GetCSSPropertyWebkitWritingMode().SurrogateFor(
+                TextDirection::kLtr, WritingMode::kHorizontalTb));
+  EXPECT_FALSE(GetCSSPropertyWidth().SurrogateFor(TextDirection::kLtr,
+                                                  WritingMode::kHorizontalTb));
 }
 
 }  // namespace blink

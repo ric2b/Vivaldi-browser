@@ -7,12 +7,16 @@
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/banners/app_banner_manager.h"
+#include "chrome/browser/ui/web_applications/web_app_dialog_utils.h"
 #include "chrome/browser/ui/web_applications/web_app_launch_utils.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
+#include "chrome/grit/generated_resources.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/api/runtime/runtime_api.h"
 #include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
+#include "extensions/browser/process_manager.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/models/simple_menu_model.h"
 #include "ui/gfx/text_elider.h"
 
 constexpr size_t kMaxAppNameLength = 30;
@@ -23,7 +27,7 @@ namespace vivaldi {
 // available.
 // Copied from app_menu_model.cc.
 base::Optional<base::string16> GetInstallPWAAppMenuItemName(Browser* browser) {
-  WebContents* web_contents =
+  content::WebContents* web_contents =
     browser->tab_strip_model()->GetActiveWebContents();
   if (!web_contents)
     return base::nullopt;
@@ -54,7 +58,7 @@ bool PWAMenuController::HasFeature() {
 void PWAMenuController::PopulateModel(ui::SimpleMenuModel* menu_model) {
   if (enabled_) {
     base::Optional <web_app::AppId> pwa =
-        web_app::GetPwaForSecureActiveTab(browser_);
+        web_app::GetWebAppForActiveTab(browser_);
     if (pwa) {
       auto* provider = web_app::WebAppProvider::Get(browser_->profile());
       menu_model->AddSeparator(ui::NORMAL_SEPARATOR);
@@ -100,17 +104,17 @@ bool PWAMenuController::HandleCommand(int command_id) {
   if (enabled_) {
     switch (command_id) {
       case IDC_CREATE_SHORTCUT:
-        chrome::CreateBookmarkAppFromCurrentWebContents(browser_,
-          true /* force_shortcut_app */);
+        web_app::CreateWebAppFromCurrentWebContents(
+            browser_, true /* force_shortcut_app */);
         return true;
 
       case IDC_INSTALL_PWA:
-        chrome::CreateBookmarkAppFromCurrentWebContents(browser_,
-          false /* force_shortcut_app */);
+        web_app::CreateWebAppFromCurrentWebContents(
+            browser_, false /* force_shortcut_app */);
         return true;
 
       case IDC_OPEN_IN_PWA_WINDOW:
-        web_app::ReparentWebAppForSecureActiveTab(browser_);
+        web_app::ReparentWebAppForActiveTab(browser_);
         return true;
     }
   }

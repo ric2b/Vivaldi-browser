@@ -6,8 +6,6 @@
 #include <set>
 #include <string>
 
-#include "app/vivaldi_apptools.h"
-#include "app/vivaldi_constants.h"
 #include "base/lazy_instance.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -22,13 +20,19 @@
 #endif
 #include "chrome/common/extensions/api/bookmarks.h"
 #include "components/bookmarks/browser/bookmark_model.h"
-#include "components/datasource/vivaldi_data_source_api.h"
-#include "components/datasource/vivaldi_data_source_api.h"
+#include "components/bookmarks/browser/bookmark_utils.h"
 #include "components/history/core/browser/top_sites.h"
+
+#include "app/vivaldi_apptools.h"
+#include "app/vivaldi_constants.h"
+#include "components/bookmarks/vivaldi_bookmark_kit.h"
+#include "components/datasource/vivaldi_data_source_api.h"
+#include "components/datasource/vivaldi_data_source_api.h"
 #include "extensions/schema/bookmarks_private.h"
 #include "extensions/tools/vivaldi_tools.h"
-#include "ui/vivaldi_browser_window.h"
+#include "browser/vivaldi_default_bookmarks.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
+#include "ui/vivaldi_browser_window.h"
 
 using vivaldi::IsVivaldiApp;
 using vivaldi::kVivaldiReservedApiError;
@@ -98,7 +102,7 @@ static void ClearPartnerId(BookmarkModel* model, const BookmarkNode* node,
          partner++) {
       auto it = std::find(list->begin(), list->end(), base::Value(*partner));
       if (it == list->end()) {
-        updated.GetList().push_back(base::Value(*partner));
+        updated.Append(base::Value(*partner));
       }
     }
     profile->GetPrefs()->Set(vivaldiprefs::kBookmarksDeletedPartners, updated);
@@ -117,24 +121,24 @@ class MetaInfoChangeFilter {
   int64_t id_;
   bool speeddial_;
   bool bookmarkbar_;
-  base::string16 description_;
-  base::string16 nickname_;
+  std::string description_;
+  std::string nickname_;
 };
 
 MetaInfoChangeFilter::MetaInfoChangeFilter(const BookmarkNode* node)
   :id_(node->id()),
-   speeddial_(node->GetSpeeddial()),
-   bookmarkbar_(node->GetBookmarkbar()),
-   description_(node->GetDescription()),
-   nickname_(node->GetNickName()) {
+   speeddial_(vivaldi_bookmark_kit::GetSpeeddial(node)),
+   bookmarkbar_(vivaldi_bookmark_kit::GetBookmarkbar(node)),
+   description_(vivaldi_bookmark_kit::GetDescription(node)),
+   nickname_(vivaldi_bookmark_kit::GetNickname(node)) {
 }
 
 bool MetaInfoChangeFilter::HasChanged(const BookmarkNode* node) {
   if (id_ == node->id() &&
-      speeddial_ == node->GetSpeeddial() &&
-      bookmarkbar_ == node->GetBookmarkbar() &&
-      description_ == node->GetDescription() &&
-      nickname_ == node->GetNickName()) {
+      speeddial_ == vivaldi_bookmark_kit::GetSpeeddial(node) &&
+      bookmarkbar_ == vivaldi_bookmark_kit::GetBookmarkbar(node) &&
+      description_ == vivaldi_bookmark_kit::GetDescription(node) &&
+      nickname_ == vivaldi_bookmark_kit::GetNickname(node)) {
     return false;
   }
   return true;
@@ -142,8 +146,7 @@ bool MetaInfoChangeFilter::HasChanged(const BookmarkNode* node) {
 
 VivaldiBookmarksAPI::VivaldiBookmarksAPI(content::BrowserContext* context)
     : browser_context_(context),
-      bookmark_model_(nullptr),
-      partner_upgrade_active_(false) {
+      bookmark_model_(nullptr) {
   bookmark_model_ = BookmarkModelFactory::GetForBrowserContext(context);
   DCHECK(bookmark_model_);
   bookmark_model_->AddObserver(this);
@@ -168,19 +171,6 @@ VivaldiBookmarksAPI::GetFactoryInstance() {
   return g_factory_bookmark.Pointer();
 }
 
-void VivaldiBookmarksAPI::SetPartnerUpgradeActive(bool active) {
-  partner_upgrade_active_ = active;
-}
-
-// static
-std::string VivaldiBookmarksAPI::GetThumbnailUrl(
-    const bookmarks::BookmarkNode* node) {
-  std::string thumbnail_url;
-  if (!node->GetMetaInfo("Thumbnail", &thumbnail_url))
-    return std::string();
-  return thumbnail_url;
-}
-
 void VivaldiBookmarksAPI::BookmarkModelLoaded(BookmarkModel* model, bool ids_reassigned) {
   VivaldiDataSourcesAPI::ScheduleRemovalOfUnusedUrlData(browser_context_,
                                                         kDataUrlGCStartupDelay);
@@ -200,7 +190,7 @@ void VivaldiBookmarksAPI::BookmarkNodeRemoved(
     const bookmarks::BookmarkNode* node,
     const std::set<GURL>& no_longer_bookmarked) {
   // Register deleted partner node.
-  if (!partner_upgrade_active_) {
+  if (!vivaldi_default_bookmarks::g_bookmark_update_actve) {
     ClearPartnerId(model, node, browser_context_, false, true);
   }
 }
@@ -208,7 +198,7 @@ void VivaldiBookmarksAPI::BookmarkNodeRemoved(
 void VivaldiBookmarksAPI::BookmarkNodeChanged(BookmarkModel* model,
                            const BookmarkNode* node) {
   // Register modified partner node.
-  if (!partner_upgrade_active_) {
+  if (!vivaldi_default_bookmarks::g_bookmark_update_actve) {
     ClearPartnerId(model, node, browser_context_, true, false);
   }
 }
@@ -217,7 +207,7 @@ void VivaldiBookmarksAPI::OnWillChangeBookmarkMetaInfo(
     BookmarkModel* model,
     const BookmarkNode* node) {
   // No need to filter on upgrade
-  if (!partner_upgrade_active_) {
+  if (!vivaldi_default_bookmarks::g_bookmark_update_actve) {
     change_filter_.reset(new MetaInfoChangeFilter(node));
   }
 }
@@ -225,14 +215,16 @@ void VivaldiBookmarksAPI::OnWillChangeBookmarkMetaInfo(
 void VivaldiBookmarksAPI::BookmarkMetaInfoChanged(BookmarkModel* model,
                                                   const BookmarkNode* node) {
   bookmarks_private::OnMetaInfoChanged::ChangeInfo change_info;
-  change_info.speeddial.reset(new bool(node->GetSpeeddial()));
-  change_info.bookmarkbar.reset(new bool(node->GetBookmarkbar()));
-  change_info.description.reset(
-      new std::string(base::UTF16ToUTF8(node->GetDescription())));
-  change_info.thumbnail.reset(new std::string(GetThumbnailUrl(node)));
-  change_info.nickname.reset(
-      new std::string(base::UTF16ToUTF8(node->GetNickName())));
-  // We can add visited time here if we want. Currently not used in UI.
+  change_info.speeddial =
+      std::make_unique<bool>(vivaldi_bookmark_kit::GetSpeeddial(node));
+  change_info.bookmarkbar =
+      std::make_unique<bool>(vivaldi_bookmark_kit::GetBookmarkbar(node));
+  change_info.description =
+      std::make_unique<std::string>(vivaldi_bookmark_kit::GetDescription(node));
+  change_info.thumbnail =
+      std::make_unique<std::string>(vivaldi_bookmark_kit::GetThumbnail(node));
+  change_info.nickname =
+      std::make_unique<std::string>(vivaldi_bookmark_kit::GetNickname(node));
 
   if (change_filter_ && change_filter_->HasChanged(node)) {
     ClearPartnerId(model, node, browser_context_, true, false);
@@ -316,13 +308,31 @@ bool BookmarksPrivateEmptyTrashFunction::RunOnReady() {
     }
     success = true;
   }
-  results_ = Results::Create(success);
+  SetResultList(Results::Create(success));
   return true;
 }
 
-bool BookmarksPrivateUpgradePartnerFunction::RunOnReady() {
-  ::vivaldi::SetPartnerUpgrade auto_set(browser_context(), true);
-  return BookmarksUpdateFunction::RunOnReady();
+ExtensionFunction::ResponseAction
+BookmarksPrivateUpdatePartnersFunction::Run() {
+  using vivaldi::bookmarks_private::UpdatePartners::Params;
+
+  std::unique_ptr<Params> params = Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  vivaldi_default_bookmarks::UpdatePartners(
+      profile, params->locale,
+      base::Bind(
+          &BookmarksPrivateUpdatePartnersFunction::OnUpdatePartnersResult,
+          this));
+  return did_respond() ? AlreadyResponded() : RespondLater();
+}
+
+void BookmarksPrivateUpdatePartnersFunction::OnUpdatePartnersResult(
+    bool ok, bool no_version) {
+  namespace Results = vivaldi::bookmarks_private::UpdatePartners::Results;
+
+  Respond(ArgumentList(Results::Create(ok, no_version)));
 }
 
 bool BookmarksPrivateIsCustomThumbnailFunction::RunOnReady() {
@@ -336,10 +346,10 @@ bool BookmarksPrivateIsCustomThumbnailFunction::RunOnReady() {
   if (!node)
     return false;
 
-  std::string url = VivaldiBookmarksAPI::GetThumbnailUrl(node);
+  std::string url = vivaldi_bookmark_kit::GetThumbnail(node);
   bool is_custom_thumbnail =
       !url.empty() && !VivaldiDataSourcesAPI::IsBookmarkCapureUrl(url);
-  results_ = Results::Create(is_custom_thumbnail);
+  SetResultList(Results::Create(is_custom_thumbnail));
   return true;
 }
 

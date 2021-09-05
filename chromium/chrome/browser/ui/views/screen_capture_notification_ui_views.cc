@@ -20,7 +20,6 @@
 #include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/link.h"
-#include "ui/views/controls/link_listener.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
@@ -73,7 +72,6 @@ class NotificationBarClientView : public views::ClientView {
 class ScreenCaptureNotificationUIViews : public ScreenCaptureNotificationUI,
                                          public views::WidgetDelegateView,
                                          public views::ButtonListener,
-                                         public views::LinkListener,
                                          public views::ViewObserver {
  public:
   explicit ScreenCaptureNotificationUIViews(const base::string16& text);
@@ -97,9 +95,6 @@ class ScreenCaptureNotificationUIViews : public ScreenCaptureNotificationUI,
   // views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
-  // views::LinkListener:
-  void LinkClicked(views::Link* source, int event_flags) override;
-
   // views::ViewObserver:
   void OnViewBoundsChanged(View* observed_view) override;
 
@@ -115,9 +110,9 @@ class ScreenCaptureNotificationUIViews : public ScreenCaptureNotificationUI,
   NotificationBarClientView* client_view_ = nullptr;
   views::ImageView* gripper_ = nullptr;
   views::Label* label_ = nullptr;
-  views::Button* source_button_ = nullptr;
-  views::Button* stop_button_ = nullptr;
-  views::Link* hide_link_ = nullptr;
+  views::View* source_button_ = nullptr;
+  views::View* stop_button_ = nullptr;
+  views::View* hide_link_ = nullptr;
   const base::string16 text_;
 
   DISALLOW_COPY_AND_ASSIGN(ScreenCaptureNotificationUIViews);
@@ -151,11 +146,13 @@ ScreenCaptureNotificationUIViews::ScreenCaptureNotificationUIViews(
       views::MdTextButton::CreateSecondaryUiBlueButton(this, stop_text);
   stop_button_ = AddChildView(std::move(stop_button));
 
-  // TODO(jiayl): IDS_PASSWORDS_PAGE_VIEW_HIDE_BUTTON is used for the need to
-  // merge to M34. Change it to a new IDS_ after the merge.
   auto hide_link = std::make_unique<views::Link>(
-      l10n_util::GetStringUTF16(IDS_PASSWORDS_PAGE_VIEW_HIDE_BUTTON));
-  hide_link->set_listener(this);
+      l10n_util::GetStringUTF16(IDS_MEDIA_SCREEN_CAPTURE_NOTIFICATION_HIDE));
+  hide_link->set_callback(base::BindRepeating(
+      [](ScreenCaptureNotificationUIViews* view) {
+        view->GetWidget()->Minimize();
+      },
+      base::Unretained(this)));
   hide_link->SetUnderline(false);
   hide_link_ = AddChildView(std::move(hide_link));
 
@@ -193,7 +190,7 @@ gfx::NativeViewId ScreenCaptureNotificationUIViews::OnStarted(
   views::Widget::InitParams params(views::Widget::InitParams::TYPE_WINDOW);
   params.delegate = this;
   params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
-  params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
+  params.opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;
   params.remove_standard_frame = true;
   params.z_order = ui::ZOrderLevel::kFloatingUIElement;
   params.name = "ScreenCaptureNotificationUIViews";
@@ -283,11 +280,6 @@ void ScreenCaptureNotificationUIViews::ButtonPressed(views::Button* sender,
     DCHECK_EQ(source_button_, sender);
     NotifySourceChange();
   }
-}
-
-void ScreenCaptureNotificationUIViews::LinkClicked(views::Link* source,
-                                                   int event_flags) {
-  GetWidget()->Minimize();
 }
 
 void ScreenCaptureNotificationUIViews::OnViewBoundsChanged(

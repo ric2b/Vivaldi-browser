@@ -16,15 +16,14 @@
 #include "build/build_config.h"
 #include "chrome/browser/ui/bookmarks/bookmark_editor.h"
 #include "content/public/browser/content_browser_client.h"
-#include "content/public/browser/native_file_system_permission_context.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/native_widget_types.h"
 
 class Browser;
+class ChooserController;
 class LoginHandler;
 class Profile;
 struct WebApplicationInfo;
-enum class PermissionAction;
 
 namespace base {
 class FilePath;
@@ -43,6 +42,10 @@ namespace net {
 class AuthChallengeInfo;
 }
 
+namespace permissions {
+enum class PermissionAction;
+}
+
 namespace safe_browsing {
 class ChromeCleanerController;
 class ChromeCleanerDialogController;
@@ -58,10 +61,6 @@ namespace ui {
 class WebDialogDelegate;
 struct SelectedFileInfo;
 }  // namespace ui
-
-namespace url {
-class Origin;
-}  // namespace url
 
 namespace chrome {
 
@@ -96,25 +95,20 @@ void ShowCreateChromeAppShortcutsDialog(
 using AppInstallationAcceptanceCallback =
     base::OnceCallback<void(bool, std::unique_ptr<WebApplicationInfo>)>;
 
-// Shows the Bookmark App bubble.
-// See Extension::InitFromValueFlags::FROM_BOOKMARK for a description of
-// bookmark apps.
+// Shows the Web App bubble.
 //
 // |web_app_info| is the WebApplicationInfo being converted into an app.
-void ShowBookmarkAppDialog(content::WebContents* web_contents,
-                           std::unique_ptr<WebApplicationInfo> web_app_info,
-                           AppInstallationAcceptanceCallback callback);
+// |web_app_info.app_url| should contain a start url from a web app manifest
+// (for a Desktop PWA), or the current url (when creating a shortcut app).
+void ShowWebAppDialog(content::WebContents* web_contents,
+                      std::unique_ptr<WebApplicationInfo> web_app_info,
+                      AppInstallationAcceptanceCallback callback);
 
-// Sets whether |ShowBookmarkAppDialog| should accept immediately without any
-// user interaction.
-void SetAutoAcceptBookmarkAppDialogForTesting(bool auto_accept);
-
-// Shows the PWA installation confirmation modal dialog.
-//
-// |web_app_info| is the WebApplicationInfo to be installed.
-void ShowPWAInstallDialog(content::WebContents* web_contents,
-                          std::unique_ptr<WebApplicationInfo> web_app_info,
-                          AppInstallationAcceptanceCallback callback);
+// Sets whether |ShowWebAppDialog| should accept immediately without any
+// user interaction. |auto_open_in_window| sets whether the open in window
+// checkbox is checked.
+void SetAutoAcceptWebAppDialogForTesting(bool auto_accept,
+                                         bool auto_open_in_window);
 
 // Shows the PWA installation confirmation bubble anchored off the PWA install
 // icon in the omnibox.
@@ -124,9 +118,26 @@ void ShowPWAInstallBubble(content::WebContents* web_contents,
                           std::unique_ptr<WebApplicationInfo> web_app_info,
                           AppInstallationAcceptanceCallback callback);
 
-// Sets whether |ShowPWAInstallDialog| and |ShowPWAInstallBubble| should accept
-// immediately without any user interaction.
+// Sets whether |ShowPWAInstallBubble| should accept immediately without any
+// user interaction.
 void SetAutoAcceptPWAInstallConfirmationForTesting(bool auto_accept);
+
+#if defined(OS_CHROMEOS)
+
+// Shows the print job confirmation dialog bubble anchored to the toolbar icon
+// for the extension.
+// If there's no toolbar icon, shows a modal dialog using
+// CreateBrowserModalDialogViews(). Note that this dialog is shown up even if we
+// have no |parent| window.
+void ShowPrintJobConfirmationDialog(gfx::NativeWindow parent,
+                                    const std::string& extension_id,
+                                    const base::string16& extension_name,
+                                    const gfx::ImageSkia& extension_icon,
+                                    const base::string16& print_job_title,
+                                    const base::string16& printer_name,
+                                    base::OnceCallback<void(bool)> callback);
+
+#endif  // OS_CHROMEOS
 
 #if defined(OS_MACOSX)
 
@@ -186,7 +197,7 @@ enum class DialogIdentifier {
   ACCOUNT_CHOOSER = 32,
   ARC_APP = 33,
   AUTO_SIGNIN_FIRST_RUN = 34,
-  BOOKMARK_APP_CONFIRMATION = 35,
+  WEB_APP_CONFIRMATION = 35,
   CHOOSER_UI = 36,
   CHOOSER = 37,
   COLLECTED_COOKIES = 38,
@@ -252,6 +263,11 @@ enum class DialogIdentifier {
   PHONE_CHOOSER = 98,
   QR_CODE_GENERATOR = 99,
   CROSTINI_FORCE_CLOSE = 100,
+  APP_UNINSTALL = 101,
+  PRINT_JOB_CONFIRMATION = 102,
+  CROSTINI_RECOVERY = 103,
+  PARENT_PERMISSION = 104,  // ChromeOS only.
+  SIGNIN_REAUTH = 105,
   // Add values above this line with a corresponding label in
   // tools/metrics/histograms/enums.xml
   MAX_VALUE
@@ -285,43 +301,30 @@ void ShowChromeCleanerRebootPrompt(
 
 #endif  // OS_WIN
 
+// Displays a dialog to notify the user that the extension installation is
+// blocked due to policy. It also show additional information from administrator
+// if it exists.
+void ShowExtensionInstallBlockedDialog(
+    const std::string& extension_name,
+    const base::string16& custom_error_message,
+    const gfx::ImageSkia& icon,
+    content::WebContents* web_contents,
+    base::OnceClosure done_callback);
+
+// Returns a OnceClosure that client code can call to close the device chooser.
+// This OnceClosure references the actual dialog as a WeakPtr, so it's safe to
+// call at any point.
+base::OnceClosure ShowDeviceChooserDialog(
+    content::RenderFrameHost* owner,
+    std::unique_ptr<ChooserController> controller);
+bool IsDeviceChooserShowingForTesting(Browser* browser);
+
 }  // namespace chrome
 
 void ShowFolderUploadConfirmationDialog(
     const base::FilePath& path,
     base::OnceCallback<void(const std::vector<ui::SelectedFileInfo>&)> callback,
     std::vector<ui::SelectedFileInfo> selected_files,
-    content::WebContents* web_contents);
-
-// Displays a dialog to ask for write access to the given file or directory for
-// the native file system API.
-void ShowNativeFileSystemPermissionDialog(
-    const url::Origin& origin,
-    const base::FilePath& path,
-    bool is_directory,
-    base::OnceCallback<void(PermissionAction result)> callback,
-    content::WebContents* web_contents);
-
-// Displays a dialog to inform the user that the |path| they picked using the
-// native file system API is blocked by chrome. |is_directory| is true if the
-// user was selecting a directory, otherwise the user was selecting files within
-// a directory. |callback| is called when the user has dismissed the dialog.
-void ShowNativeFileSystemRestrictedDirectoryDialog(
-    const url::Origin& origin,
-    const base::FilePath& path,
-    bool is_directory,
-    base::OnceCallback<void(
-        content::NativeFileSystemPermissionContext::SensitiveDirectoryResult)>
-        callback,
-    content::WebContents* web_contents);
-
-// Displays a dialog to confirm that the user intended to give read access to a
-// specific directory. Similar to ShowFolderUploadConfirmationDialog above,
-// except for use by the Native File System API.
-void ShowNativeFileSystemDirectoryAccessConfirmationDialog(
-    const url::Origin& origin,
-    const base::FilePath& path,
-    base::OnceCallback<void(PermissionAction result)> callback,
     content::WebContents* web_contents);
 
 #endif  // CHROME_BROWSER_UI_BROWSER_DIALOGS_H_

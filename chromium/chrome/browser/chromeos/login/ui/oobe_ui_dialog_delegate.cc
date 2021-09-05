@@ -42,6 +42,7 @@ namespace {
 
 constexpr char kGaiaURL[] = "chrome://oobe/gaia-signin";
 constexpr char kAppLaunchBailout[] = "app_launch_bailout";
+constexpr char kAppLaunchNetworkConfig[] = "app_launch_network_config";
 constexpr char kCancel[] = "cancel";
 
 CoreOobeView::DialogPaddingMode ConvertDialogPaddingMode(
@@ -198,7 +199,7 @@ class CaptivePortalDialogDelegate
     views::Widget::InitParams params(
         views::Widget::InitParams::TYPE_WINDOW_FRAMELESS);
     params.delegate = view_;
-    params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
+    params.opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;
     ash_util::SetupWidgetInitParamsForContainer(
         &params, ash::kShellWindowId_LockSystemModalContainer);
 
@@ -306,6 +307,9 @@ OobeUIDialogDelegate::OobeUIDialogDelegate(
 
   accel_map_[ui::Accelerator(
       ui::VKEY_S, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN)] = kAppLaunchBailout;
+  accel_map_[ui::Accelerator(ui::VKEY_N,
+                             ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN)] =
+      kAppLaunchNetworkConfig;
   accel_map_[ui::Accelerator(ui::VKEY_ESCAPE, 0)] = kCancel;
 
   DCHECK(!dialog_view_ && !widget_);
@@ -323,7 +327,7 @@ OobeUIDialogDelegate::OobeUIDialogDelegate(
       &params, ash::kShellWindowId_LockScreenContainer);
   layout_view_ = new LayoutWidgetDelegateView(this, dialog_view_);
   params.delegate = layout_view_;
-  params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
+  params.opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;
   params.show_state = ui::SHOW_STATE_FULLSCREEN;
 
   widget_ = new views::Widget();
@@ -368,7 +372,11 @@ void OobeUIDialogDelegate::SetShouldDisplayCaptivePortal(bool should_display) {
 
 void OobeUIDialogDelegate::Show() {
   widget_->Show();
-  SetState(ash::OobeDialogState::GAIA_SIGNIN);
+  if (state_ == ash::OobeDialogState::HIDDEN) {
+    SetState(ash::OobeDialogState::GAIA_SIGNIN);
+  } else {
+    ash::LoginScreen::Get()->GetModel()->NotifyOobeDialogState(state_);
+  }
 
   if (should_display_captive_portal_)
     GetOobeUI()->GetErrorScreen()->FixCaptivePortal();
@@ -399,12 +407,13 @@ void OobeUIDialogDelegate::SetState(ash::OobeDialogState state) {
   if (!widget_ || state_ == state)
     return;
 
+  state_ = state;
+
   // Gaia WebUI is preloaded, so it's possible for WebUI to send state updates
   // while the widget is not visible. Defer the state update until Show().
-  if (!widget_->IsVisible() && state != ash::OobeDialogState::HIDDEN)
+  if (!widget_->IsVisible() && state_ != ash::OobeDialogState::HIDDEN)
     return;
 
-  state_ = state;
   ash::LoginScreen::Get()->GetModel()->NotifyOobeDialogState(state_);
 }
 

@@ -1,7 +1,7 @@
 {
   "sandbox": {
     "features": [
-      "deprecated-ambient-replace-as-executable",
+      "config-data",
       "isolated-persistent-storage",
       "isolated-temp",
       "root-ssl-certificates",
@@ -12,14 +12,17 @@
       "zero"
     ],
     "services": [
+      "fuchsia.accessibility.semantics.SemanticsManager",
       "fuchsia.device.NameProvider",
-      "fuchsia.deprecatedtimezone.Timezone",
       "fuchsia.fonts.Provider",
+      "fuchsia.intl.PropertyProvider",
       "fuchsia.logger.Log",
       "fuchsia.logger.LogSink",
       "fuchsia.media.Audio",
+      "fuchsia.media.SessionAudioConsumerFactory",
       "fuchsia.media.drm.Widevine",
       "fuchsia.mediacodec.CodecFactory",
+      "fuchsia.memorypressure.Provider",
       "fuchsia.net.NameLookup",
       "fuchsia.netstack.Netstack",
       "fuchsia.posix.socket.Provider",
@@ -30,6 +33,7 @@
       "fuchsia.sysmem.Allocator",
       "fuchsia.ui.input.ImeService",
       "fuchsia.ui.input.ImeVisibilityService",
+      "fuchsia.vulkan.loader.Loader",
       "fuchsia.web.ContextProvider"
     ]
   }

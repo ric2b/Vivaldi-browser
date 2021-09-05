@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 let webview;
+let windowId;
 
 /**
  * Points the webview to the starting URL of a scope authorization
@@ -18,6 +19,13 @@ function loadAuthUrlAndShowWindow(url, win) {
     e.window.discard();
     window.open(e.targetUrl);
   });
+
+  webview.addContentScripts([{
+    name: 'injectRule',
+    matches: ['https://accounts.google.com/*'],
+    js: {files: ['inject.js']},
+    run_at: 'document_start'
+  }]);
 
   // Request a customized view from GAIA.
   webview.request.onBeforeSendHeaders.addListener(
@@ -36,12 +44,18 @@ function loadAuthUrlAndShowWindow(url, win) {
   }
 
   webview.src = url;
-  if (win) {
-    webview.addEventListener('loadstop', function() {
+  webview.addEventListener('loadstop', function() {
+    if (win) {
       win.show();
-    });
-  }
+      windowId = win.id;
+    }
+  });
 }
+
+chrome.runtime.onMessageExternal.addListener(function(
+    message, sender, sendResponse) {
+  chrome.identityPrivate.setConsentResult(message.consentResult, windowId);
+});
 
 document.addEventListener('DOMContentLoaded', function() {
   webview = document.querySelector('webview');

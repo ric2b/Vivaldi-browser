@@ -10,6 +10,9 @@ class NotesSyncTest : public SyncTest {
   explicit NotesSyncTest(TestType test_type);
   ~NotesSyncTest() override;
 
+  void SetUp() override;
+  void TearDown() override;
+
   bool SetupClients() override;
 
   // Verify that the local notes model (for the Profile corresponding to

@@ -10,8 +10,8 @@
 #include "base/auto_reset.h"
 #include "base/bind.h"
 #include "base/location.h"
+#include "base/memory/read_only_shared_memory_region.h"
 #include "base/memory/ref_counted_memory.h"
-#include "base/memory/shared_memory.h"
 #include "base/message_loop/message_loop_current.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -35,7 +35,7 @@
 #include "components/printing/browser/print_composite_client.h"
 #include "components/printing/browser/print_manager_utils.h"
 #include "components/printing/common/print_messages.h"
-#include "components/services/pdf_compositor/public/cpp/pdf_service_mojo_types.h"
+#include "components/services/print_compositor/public/cpp/print_service_mojo_types.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_details.h"
@@ -51,6 +51,10 @@
 #include "printing/print_settings.h"
 #include "printing/printed_document.h"
 #include "ui/base/l10n/l10n_util.h"
+
+#if defined(OS_WIN)
+#include "printing/printing_features.h"
+#endif
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
 #include "chrome/browser/printing/print_error_dialog.h"
@@ -126,9 +130,13 @@ PrintViewManagerBase::~PrintViewManagerBase() {
 bool PrintViewManagerBase::PrintNow(content::RenderFrameHost* rfh) {
   DisconnectFromCurrentPrintJob();
 
+  // Don't print / print preview interstitials or crashed tabs.
+  if (IsInterstitialOrCrashed())
+    return false;
+
   SetPrintingRFH(rfh);
-  int32_t id = rfh->GetRoutingID();
-  return PrintNowInternal(rfh, std::make_unique<PrintMsg_PrintPages>(id));
+  GetPrintRenderFrame(rfh)->PrintRequestedPages();
+  return true;
 }
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
@@ -157,17 +165,23 @@ void PrintViewManagerBase::PrintDocument(
     const gfx::Rect& content_area,
     const gfx::Point& offsets) {
 #if defined(OS_WIN)
-  print_job_->StartConversionToNativeFormat(print_data, page_size, content_area,
-                                            offsets);
-#else
+  const bool source_is_pdf =
+      !print_job_->document()->settings().is_modifiable();
+  if (!printing::features::ShouldPrintUsingXps(source_is_pdf)) {
+    // Print using GDI, which first requires conversion to EMF.
+    print_job_->StartConversionToNativeFormat(print_data, page_size,
+                                              content_area, offsets);
+    return;
+  }
+#endif
+
   std::unique_ptr<MetafileSkia> metafile = std::make_unique<MetafileSkia>();
-  CHECK(metafile->InitFromData(print_data->front(), print_data->size()));
+  CHECK(metafile->InitFromData(*print_data));
 
   // Update the rendered document. It will send notifications to the listener.
   PrintedDocument* document = print_job_->document();
   document->SetDocument(std::move(metafile), page_size, content_area);
   ShouldQuitFromInnerMessageLoop();
-#endif
 }
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
@@ -280,10 +294,10 @@ void PrintViewManagerBase::OnComposePdfDone(
     const gfx::Rect& content_area,
     const gfx::Point& physical_offsets,
     std::unique_ptr<DelayedFrameDispatchHelper> helper,
-    mojom::PdfCompositor::Status status,
+    mojom::PrintCompositor::Status status,
     base::ReadOnlySharedMemoryRegion region) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  if (status != mojom::PdfCompositor::Status::kSuccess) {
+  if (status != mojom::PrintCompositor::Status::kSuccess) {
     DLOG(ERROR) << "Compositing pdf failed with error " << status;
     return;
   }
@@ -378,6 +392,8 @@ void PrintViewManagerBase::DidStartLoading() {
 
 void PrintViewManagerBase::RenderFrameDeleted(
     content::RenderFrameHost* render_frame_host) {
+  PrintManager::RenderFrameDeleted(render_frame_host);
+
   // Terminates or cancels the print job if one was pending.
   if (render_frame_host != printing_rfh_)
     return;
@@ -611,11 +627,8 @@ void PrintViewManagerBase::ReleasePrintJob() {
   if (!print_job_)
     return;
 
-  if (rfh) {
-    auto msg = std::make_unique<PrintMsg_PrintingDone>(rfh->GetRoutingID(),
-                                                       printing_succeeded_);
-    rfh->Send(msg.release());
-  }
+  if (rfh)
+    GetPrintRenderFrame(rfh)->PrintingDone(printing_succeeded_);
 
   registrar_.Remove(this, chrome::NOTIFICATION_PRINT_JOB_EVENT,
                     content::Source<PrintJob>(print_job_.get()));
@@ -723,7 +736,7 @@ void PrintViewManagerBase::ReleasePrinterQuery() {
 
 void PrintViewManagerBase::SendPrintingEnabled(bool enabled,
                                                content::RenderFrameHost* rfh) {
-  rfh->Send(new PrintMsg_SetPrintingEnabled(rfh->GetRoutingID(), enabled));
+  GetPrintRenderFrame(rfh)->SetPrintingEnabled(enabled);
 }
 
 }  // namespace printing

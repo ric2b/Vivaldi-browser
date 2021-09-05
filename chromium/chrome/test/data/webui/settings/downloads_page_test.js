@@ -2,6 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// clang-format off
+// #import 'chrome://settings/settings.js';
+// #import {DownloadsBrowserProxyImpl} from 'chrome://settings/lazy_load.js';
+// #import {isChromeOS} from 'chrome://resources/js/cr.m.js';
+// #import {TestBrowserProxy} from 'chrome://test/test_browser_proxy.m.js';
+// #import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+// clang-format on
+
 /** @implements {settings.DownloadsBrowserProxy} */
 class TestDownloadsBrowserProxy extends TestBrowserProxy {
   constructor() {
@@ -29,12 +37,10 @@ class TestDownloadsBrowserProxy extends TestBrowserProxy {
   }
 }
 
-let downloadsPage = null;
-
-/** @type {?TestDownloadsBrowserProxy} */
-let DownloadsBrowserProxy = null;
-
 suite('DownloadsHandler', function() {
+  let downloadsBrowserProxy = null;
+  let downloadsPage = null;
+
   setup(function() {
     downloadsBrowserProxy = new TestDownloadsBrowserProxy();
     settings.DownloadsBrowserProxyImpl.instance_ = downloadsBrowserProxy;

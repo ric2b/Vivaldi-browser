@@ -17,7 +17,9 @@ namespace blink {
 
 CustomProperty::CustomProperty(const AtomicString& name,
                                const Document& document)
-    : CustomProperty(name, PropertyRegistration::From(&document, name)) {}
+    : CustomProperty(
+          name,
+          PropertyRegistration::From(document.GetExecutionContext(), name)) {}
 
 CustomProperty::CustomProperty(const AtomicString& name,
                                const PropertyRegistry* registry)
@@ -186,7 +188,7 @@ const CSSValue* CustomProperty::ParseTyped(
     const CSSParserLocalContext& local_context) const {
   if (!registration_)
     return ParseUntyped(range, context, local_context);
-  return registration_->Syntax().Parse(range, &context,
+  return registration_->Syntax().Parse(range, context,
                                        local_context.IsAnimationTainted());
 }
 

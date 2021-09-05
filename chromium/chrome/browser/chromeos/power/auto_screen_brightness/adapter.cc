@@ -517,6 +517,11 @@ void Adapter::SetMetricsReporterDeviceClass() {
             MetricsReporter::DeviceClass::kNocturne);
         return;
       }
+      if (params_.metrics_key == "kohaku") {
+        metrics_reporter_->SetDeviceClass(
+            MetricsReporter::DeviceClass::kKohaku);
+        return;
+      }
       metrics_reporter_->SetDeviceClass(
           MetricsReporter::DeviceClass::kSupportedAls);
       return;
@@ -553,13 +558,15 @@ Adapter::AdapterDecision Adapter::CanAdjustBrightness(base::TimeTicks now) {
 
   // Do not change brightness if it's set by the policy, but do not completely
   // disable the model as the policy could change.
-  if (profile_->GetPrefs()->GetInteger(
-          ash::prefs::kPowerAcScreenBrightnessPercent) >= 0 ||
-      profile_->GetPrefs()->GetInteger(
-          ash::prefs::kPowerBatteryScreenBrightnessPercent) >= 0) {
-    decision.no_brightness_change_cause =
-        NoBrightnessChangeCause::kBrightnessSetByPolicy;
-    return decision;
+  auto* prefs = profile_->GetPrefs();
+  if (prefs) {
+    if (prefs->GetInteger(ash::prefs::kPowerAcScreenBrightnessPercent) >= 0 ||
+        prefs->GetInteger(ash::prefs::kPowerBatteryScreenBrightnessPercent) >=
+            0) {
+      decision.no_brightness_change_cause =
+          NoBrightnessChangeCause::kBrightnessSetByPolicy;
+      return decision;
+    }
   }
 
   if (!new_model_arrived_) {

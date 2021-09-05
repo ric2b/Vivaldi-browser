@@ -5,9 +5,29 @@
 // This is the shared code for security interstitials. It is used for both SSL
 // interstitials and Safe Browsing interstitials.
 
+/**
+ * @typedef {{
+ *   dontProceed: function(),
+ *   proceed: function(),
+ *   showMoreSection: function(),
+ *   openHelpCenter: function(),
+ *   openDiagnostic: function(),
+ *   reload: function(),
+ *   openDateSettings: function(),
+ *   openLogin: function(),
+ *   doReport: function(),
+ *   dontReport: function(),
+ *   openReportingPrivacy: function(),
+ *   openWhitepaper: function(),
+ *   reportPhishingError: function(),
+ * }}
+ */
+// eslint-disable-next-line no-var
+var certificateErrorPageController;
+
 // Should match security_interstitials::SecurityInterstitialCommand
-/** @enum| {string} */
-var SecurityInterstitialCommandId = {
+/** @enum {number} */
+const SecurityInterstitialCommandId = {
   CMD_DONT_PROCEED: 0,
   CMD_PROCEED: 1,
   // Ways for user to get more information
@@ -27,11 +47,11 @@ var SecurityInterstitialCommandId = {
   CMD_REPORT_PHISHING_ERROR: 12
 };
 
-var HIDDEN_CLASS = 'hidden';
+const HIDDEN_CLASS = 'hidden';
 
 /**
  * A convenience method for sending commands to the parent page.
- * @param {string} cmd  The command to send.
+ * @param {SecurityInterstitialCommandId} cmd  The command to send.
  */
 function sendCommand(cmd) {
   if (window.certificateErrorPageController) {
@@ -78,16 +98,25 @@ function sendCommand(cmd) {
     }
     return;
   }
-// <if expr="not is_ios">
+  // <if expr="not is_ios">
   window.domAutomationController.send(cmd);
-// </if>
-// <if expr="is_ios">
-  // TODO(crbug.com/565877): Revisit message passing for WKWebView.
-  var iframe = document.createElement('IFRAME');
-  iframe.setAttribute('src', 'js-command:' + cmd);
-  document.documentElement.appendChild(iframe);
-  iframe.parentNode.removeChild(iframe);
-// </if>
+  // </if>
+  // <if expr="is_ios">
+  // TODO(crbug.com/987407): Used to send commands for non-committed
+  // interstitials on iOS. Should be deleted after committed interstitials are
+  // fully launched.
+  if (!loadTimeData.getBoolean('committed_interstitials_enabled')) {
+    const iframe = document.createElement('IFRAME');
+    iframe.setAttribute('src', 'js-command:' + cmd);
+    document.documentElement.appendChild(iframe);
+    iframe.parentNode.removeChild(iframe);
+  } else {
+    // Used to send commands for iOS committed interstitials.
+    /** @suppress {undefinedVars|missingProperties} */ (function() {
+      __gCrWeb.message.invokeOnHost({'command': 'blockingPage.' + cmd});
+    })();
+  }
+  // </if>
 }
 
 /**
@@ -96,11 +125,35 @@ function sendCommand(cmd) {
  */
 function preventDefaultOnPoundLinkClicks() {
   document.addEventListener('click', function(e) {
-    var anchor = findAncestor(/** @type {Node} */ (e.target), function(el) {
-      return el.tagName == 'A';
+    const anchor = findAncestor(/** @type {Node} */ (e.target), function(el) {
+      return el.tagName === 'A';
     });
     // Use getAttribute() to prevent URL normalization.
-    if (anchor && anchor.getAttribute('href') == '#')
+    if (anchor && anchor.getAttribute('href') === '#') {
       e.preventDefault();
+    }
   });
 }
+
+/**
+ * Ensures interstitial pages on iOS aren't loaded from cache, which breaks
+ * the commands due to ErrorRetryStateMachine::DidFailProvisionalNavigation
+ * not getting triggered.
+ */
+function setupIosRefresh() {
+  if (!loadTimeData.getBoolean('committed_interstitials_enabled')) {
+    return;
+  }
+  const params = new URLSearchParams(window.location.search.substring(1));
+  const failedUrl = decodeURIComponent(params.get('url') || '');
+  const load = () => {
+    window.location.replace(failedUrl);
+  };
+  window.addEventListener('pageshow', function(e) {
+    window.onpageshow = load;
+  }, {once: true});
+}
+
+// <if expr="is_ios">
+document.addEventListener('DOMContentLoaded', setupIosRefresh);
+// </if>

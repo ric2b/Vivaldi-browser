@@ -4,12 +4,25 @@
 # found in the LICENSE file.
 
 import argparse
-import os.path
+import os
 import sys
 
 sys.path.append(os.path.dirname(__file__))
 
-from signing import config, model, pipeline
+from signing import config_factory, commands, logger, model, pipeline
+
+
+def _link_stdout_and_stderr():
+    """This script's output is entirely log messages and debugging information,
+    so there is not a useful distinction between stdout and stderr. Because some
+    subcommands this script runs output to one stream or the other, link the
+    two streams so that any buffering done by Python, or the invoker of this
+    script, does not get incorrectly interleaved.
+    """
+    stdout_fileno = sys.stdout.fileno()
+    sys.stdout.close()
+    sys.stdout = sys.stderr
+    os.dup2(sys.stderr.fileno(), stdout_fileno)
 
 
 def create_config(config_args, development):
@@ -27,24 +40,11 @@ def create_config(config_args, development):
     Returns:
         An instance of |model.CodeSignConfig|.
     """
-    # First look up the processed Chromium config.
-    from signing.chromium_config import ChromiumCodeSignConfig
-    config_class = ChromiumCodeSignConfig
-
-    # Then search for the internal config for Google Chrome.
-    try:
-        from signing.internal_config import InternalCodeSignConfig
-        config_class = InternalCodeSignConfig
-    except ImportError as e:
-        # If the build specified Google Chrome as the product, then the
-        # internal config has to be available.
-        if config_class(*config_args).product == 'Google Chrome':
-            raise e
+    config_class = config_factory.get_class()
 
     if development:
 
         class DevelopmentCodeSignConfig(config_class):
-
             @property
             def codesign_requirements_basic(self):
                 return ''
@@ -67,11 +67,16 @@ def create_config(config_args, development):
     return config_class(*config_args)
 
 
+def _show_tool_versions():
+    logger.info('Showing macOS and tool versions.')
+    commands.run_command(['sw_vers'])
+    commands.run_command(['xcodebuild', '-version'])
+    commands.run_command(['xcrun', '-show-sdk-path'])
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='Code sign and package Chrome for channel distribution.')
-    parser.add_argument(
-        '--keychain', help='The keychain to load the identity from.')
     parser.add_argument(
         '--identity',
         required=True,
@@ -128,6 +133,8 @@ def main():
         'Apple for notarization.')
     group.add_argument('--no-notarize', dest='notarize', action='store_false')
 
+    _link_stdout_and_stderr()
+
     parser.set_defaults(notarize=False)
     args = parser.parse_args()
 
@@ -137,13 +144,14 @@ def main():
                          'are required with --notarize.')
 
     config = create_config(
-        (args.identity, args.installer_identity, args.keychain,
-         args.notary_user, args.notary_password, args.notary_asc_provider),
-        args.development)
+        (args.identity, args.installer_identity, args.notary_user,
+         args.notary_password, args.notary_asc_provider), args.development)
     paths = model.Paths(args.input, args.output, None)
 
     if not os.path.exists(paths.output):
         os.mkdir(paths.output)
+
+    _show_tool_versions()
 
     pipeline.sign_all(
         paths,

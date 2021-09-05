@@ -49,18 +49,23 @@ class MEDIA_GPU_EXPORT D3D11PictureBuffer
   // |texture_wrapper| is responsible for controlling mailbox access to
   // the ID3D11Texture2D,
   // |level| is the picturebuffer index inside the Array-type ID3D11Texture2D.
-  D3D11PictureBuffer(std::unique_ptr<Texture2DWrapper> texture_wrapper,
+  D3D11PictureBuffer(ComD3D11Texture2D texture,
+                     std::unique_ptr<Texture2DWrapper> texture_wrapper,
                      gfx::Size size,
                      size_t level);
 
   bool Init(GetCommandBufferHelperCB get_helper_cb,
             ComD3D11VideoDevice video_device,
             const GUID& decoder_guid,
-            int textures_per_picture,
             std::unique_ptr<MediaLog> media_log);
 
   // Set the contents of a mailbox holder array, return true if successful.
-  bool ProcessTexture(MailboxHolderArray* mailbox_dest);
+  // |input_color_space| is the color space of our input texture, and
+  // |output_color_space| will be set, on success, to the color space that the
+  // processed texture has.
+  bool ProcessTexture(const gfx::ColorSpace& input_color_space,
+                      MailboxHolderArray* mailbox_dest,
+                      gfx::ColorSpace* output_color_space);
   ComD3D11Texture2D Texture() const;
 
   const gfx::Size& size() const { return size_; }
@@ -86,6 +91,7 @@ class MEDIA_GPU_EXPORT D3D11PictureBuffer
   ~D3D11PictureBuffer();
   friend class base::RefCountedThreadSafe<D3D11PictureBuffer>;
 
+  ComD3D11Texture2D texture_;
   std::unique_ptr<Texture2DWrapper> texture_wrapper_;
   gfx::Size size_;
   bool in_picture_use_ = false;

@@ -8,16 +8,16 @@
 #include <utility>
 
 #include "base/strings/string_piece.h"
+#include "components/services/storage/indexed_db/scopes/leveldb_scope_deletion_mode.h"
+#include "components/services/storage/indexed_db/transactional_leveldb/transactional_leveldb_database.h"
+#include "components/services/storage/indexed_db/transactional_leveldb/transactional_leveldb_factory.h"
+#include "components/services/storage/indexed_db/transactional_leveldb/transactional_leveldb_iterator.h"
+#include "components/services/storage/indexed_db/transactional_leveldb/transactional_leveldb_transaction.h"
 #include "content/browser/indexed_db/indexed_db_class_factory.h"
 #include "content/browser/indexed_db/indexed_db_leveldb_coding.h"
 #include "content/browser/indexed_db/indexed_db_leveldb_operations.h"
 #include "content/browser/indexed_db/indexed_db_reporting.h"
 #include "content/browser/indexed_db/indexed_db_tracing.h"
-#include "content/browser/indexed_db/leveldb/leveldb_env.h"
-#include "content/browser/indexed_db/leveldb/transactional_leveldb_database.h"
-#include "content/browser/indexed_db/leveldb/transactional_leveldb_iterator.h"
-#include "content/browser/indexed_db/leveldb/transactional_leveldb_transaction.h"
-#include "content/browser/indexed_db/scopes/leveldb_scope_deletion_mode.h"
 #include "third_party/blink/public/common/indexeddb/indexeddb_metadata.h"
 
 using base::StringPiece;
@@ -435,14 +435,14 @@ Status ReadMetadataForDatabaseNameInternal(
     INTERNAL_READ_ERROR_UNTESTED(GET_IDBDATABASE_METADATA);
 
   // We don't cache this, we just check it if it's there.
-  int64_t blob_key_generator_current_number =
-      DatabaseMetaDataKey::kInvalidBlobKey;
+  int64_t blob_number_generator_current_number =
+      DatabaseMetaDataKey::kInvalidBlobNumber;
 
   s = GetVarInt(
       db_or_transaction,
       DatabaseMetaDataKey::Encode(
           metadata->id, DatabaseMetaDataKey::BLOB_KEY_GENERATOR_CURRENT_NUMBER),
-      &blob_key_generator_current_number, found);
+      &blob_number_generator_current_number, found);
   if (!s.ok()) {
     INTERNAL_READ_ERROR_UNTESTED(GET_IDBDATABASE_METADATA);
     return s;
@@ -450,8 +450,8 @@ Status ReadMetadataForDatabaseNameInternal(
   if (!*found) {
     // This database predates blob support.
     *found = true;
-  } else if (!DatabaseMetaDataKey::IsValidBlobKey(
-                 blob_key_generator_current_number)) {
+  } else if (!DatabaseMetaDataKey::IsValidBlobNumber(
+                 blob_number_generator_current_number)) {
     INTERNAL_CONSISTENCY_ERROR_UNTESTED(GET_IDBDATABASE_METADATA);
     return InternalInconsistencyStatus();
   }
@@ -528,7 +528,7 @@ Status IndexedDBMetadataCoding::CreateDatabase(
     IndexedDBDatabaseMetadata* metadata) {
   // TODO(jsbell): Don't persist metadata if open fails. http://crbug.com/395472
   std::unique_ptr<LevelDBDirectTransaction> transaction =
-      db->leveldb_class_factory()->CreateLevelDBDirectTransaction(db);
+      db->class_factory()->CreateLevelDBDirectTransaction(db);
 
   int64_t row_id = 0;
   Status s = indexed_db::GetNewDatabaseId(transaction.get(), &row_id);
@@ -557,7 +557,7 @@ Status IndexedDBMetadataCoding::CreateDatabase(
       transaction.get(),
       DatabaseMetaDataKey::Encode(
           row_id, DatabaseMetaDataKey::BLOB_KEY_GENERATOR_CURRENT_NUMBER),
-      DatabaseMetaDataKey::kBlobKeyGeneratorInitialNumber);
+      DatabaseMetaDataKey::kBlobNumberGeneratorInitialNumber);
   if (!s.ok()) {
     INTERNAL_READ_ERROR_UNTESTED(CREATE_IDBDATABASE_METADATA);
     return s;

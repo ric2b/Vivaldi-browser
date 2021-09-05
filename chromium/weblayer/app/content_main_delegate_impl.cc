@@ -30,12 +30,15 @@
 
 #if defined(OS_ANDROID)
 #include "base/android/apk_assets.h"
+#include "base/android/bundle_utils.h"
+#include "base/android/java_exception_reporter.h"
 #include "base/android/locale_utils.h"
 #include "base/i18n/rtl.h"
 #include "base/posix/global_descriptors.h"
 #include "content/public/browser/android/compositor.h"
 #include "ui/base/resource/resource_bundle_android.h"
 #include "ui/base/ui_base_switches.h"
+#include "weblayer/browser/android/exception_filter.h"
 #include "weblayer/browser/android_descriptors.h"
 #include "weblayer/common/crash_reporter/crash_keys.h"
 #include "weblayer/common/crash_reporter/crash_reporter_client.h"
@@ -113,17 +116,26 @@ bool ContentMainDelegateImpl::BasicStartupComplete(int* exit_code) {
   // sites to do feature detection, and prevents crashes in some not fully
   // implemented features.
   base::CommandLine* cl = base::CommandLine::ForCurrentProcess();
+  // TODO(crbug.com/1025610): make notifications work with WebLayer.
   cl->AppendSwitch(switches::kDisableNotifications);
+  // TODO(crbug.com/1025626): and crbug.com/1051752, make speech work with
+  // WebLayer.
   cl->AppendSwitch(switches::kDisableSpeechSynthesisAPI);
   cl->AppendSwitch(switches::kDisableSpeechAPI);
-  cl->AppendSwitch(switches::kDisablePermissionsAPI);
+  // TODO(crbug.com/1057099): make presentation-api work with WebLayer.
   cl->AppendSwitch(switches::kDisablePresentationAPI);
+  // TODO(crbug.com/1057100): make remote-playback-api work with WebLayer.
   cl->AppendSwitch(switches::kDisableRemotePlaybackAPI);
 #if defined(OS_ANDROID)
+  // TODO(crbug.com/1066263): make MediaSession work with WebLayer.
   cl->AppendSwitch(switches::kDisableMediaSessionAPI);
 #endif
   DisableFeaturesIfNotSet({
-    ::features::kWebPayments, ::features::kWebAuth, ::features::kSmsReceiver,
+    // TODO(crbug.com/1025619): make web-payments work with WebLayer.
+    ::features::kWebPayments,
+        // TODO(crbug.com/1025627): make webauth work with WebLayer.
+        ::features::kWebAuth, ::features::kSmsReceiver,
+        // TODO(crbug.com/1057106): make web-xr work with WebLayer.
         ::features::kWebXr,
 #if defined(OS_ANDROID)
         media::kPictureInPictureAPI,
@@ -136,11 +148,19 @@ bool ContentMainDelegateImpl::BasicStartupComplete(int* exit_code) {
 
   InitLogging(&params_);
 
-  content_client_ = std::make_unique<ContentClientImpl>();
-  SetContentClient(content_client_.get());
   RegisterPathProvider();
 
   return false;
+}
+
+bool ContentMainDelegateImpl::ShouldCreateFeatureList() {
+#if defined(OS_ANDROID)
+  // On android WebLayer is in charge of creating its own FeatureList.
+  return false;
+#else
+  // TODO(weblayer-dev): Support feature lists on desktop.
+  return true;
+#endif
 }
 
 void ContentMainDelegateImpl::PreSandboxStartup() {
@@ -150,14 +170,41 @@ void ContentMainDelegateImpl::PreSandboxStartup() {
   base::CPU cpu_info;
 #endif
 
+  const base::CommandLine& command_line =
+      *base::CommandLine::ForCurrentProcess();
+  const bool is_browser_process =
+      command_line.GetSwitchValueASCII(switches::kProcessType).empty();
+  if (is_browser_process &&
+      command_line.HasSwitch(switches::kWebLayerUserDataDir)) {
+    base::FilePath path =
+        command_line.GetSwitchValuePath(switches::kWebLayerUserDataDir);
+    if (base::DirectoryExists(path) || base::CreateDirectory(path)) {
+      // Profile needs an absolute path, which we would normally get via
+      // PathService. In this case, manually ensure the path is absolute.
+      if (!path.IsAbsolute())
+        path = base::MakeAbsoluteFilePath(path);
+    } else {
+      LOG(ERROR) << "Unable to create data-path directory: " << path.value();
+    }
+    CHECK(base::PathService::OverrideAndCreateIfNeeded(
+        weblayer::DIR_USER_DATA, path, true /* is_absolute */,
+        false /* create */));
+  }
+
   InitializeResourceBundle();
 
 #if defined(OS_ANDROID)
-  EnableCrashReporter(
-      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-          switches::kProcessType));
+  EnableCrashReporter(command_line.GetSwitchValueASCII(switches::kProcessType));
+  if (is_browser_process) {
+    base::android::SetJavaExceptionFilter(
+        base::BindRepeating(&WebLayerJavaExceptionFilter));
+  }
   SetWebLayerCrashKeys();
 #endif
+}
+
+void ContentMainDelegateImpl::PostEarlyInitialization(bool is_running_tests) {
+  browser_client_->CreateFeatureListAndFieldTrials();
 }
 
 int ContentMainDelegateImpl::RunProcess(
@@ -199,7 +246,13 @@ void ContentMainDelegateImpl::InitializeResourceBundle() {
   bool is_browser_process =
       command_line.GetSwitchValueASCII(switches::kProcessType).empty();
   if (is_browser_process) {
-    ui::SetLocalePaksStoredInApk(true);
+    // If we're not being loaded from a bundle, locales will be loaded from the
+    // webview stored-locales directory. Otherwise, we are in Monochrome, and
+    // we load both chrome and webview's locale assets.
+    if (base::android::BundleUtils::IsBundle())
+      ui::SetLoadSecondaryLocalePaks(true);
+    else
+      ui::SetLocalePaksStoredInApk(true);
     // Passing an empty |pref_locale| yields the system default locale.
     std::string locale = ui::ResourceBundle::InitSharedInstanceWithLocale(
         {} /*pref_locale*/, nullptr, ui::ResourceBundle::LOAD_COMMON_RESOURCES);
@@ -215,30 +268,18 @@ void ContentMainDelegateImpl::InitializeResourceBundle() {
     pak_file_path = pak_file_path.AppendASCII("resources.pak");
     ui::LoadMainAndroidPackFile("assets/resources.pak", pak_file_path);
 
-    constexpr char kWebLayerLocalePath[] =
-        "assets/stored-locales/weblayer/en-US.pak";
-    base::MemoryMappedFile::Region region;
-    int fd = base::android::OpenApkAsset(kWebLayerLocalePath, &region);
-    CHECK_GE(fd, 0) << "Could not find " << kWebLayerLocalePath << " in APK.";
-    ui::ResourceBundle::GetSharedInstance().AddDataPackFromFileRegion(
-        base::File(fd), region, ui::SCALE_FACTOR_NONE);
-    base::GlobalDescriptors::GetInstance()->Set(
-        kWebLayerSecondaryLocalePakDescriptor, fd, region);
-
-    if (command_line.HasSwitch(switches::kWebLayerUserDataDir)) {
-      base::FilePath path =
-          command_line.GetSwitchValuePath(switches::kWebLayerUserDataDir);
-      if (base::DirectoryExists(path) || base::CreateDirectory(path)) {
-        // Profile needs an absolute path, which we would normally get via
-        // PathService. In this case, manually ensure the path is absolute.
-        if (!path.IsAbsolute())
-          path = base::MakeAbsoluteFilePath(path);
-      } else {
-        LOG(ERROR) << "Unable to create data-path directory: " << path.value();
-      }
-      CHECK(base::PathService::OverrideAndCreateIfNeeded(
-          weblayer::DIR_USER_DATA, path, true /* is_absolute */,
-          false /* create */));
+    // The English-only workaround is not needed for bundles, since bundles will
+    // contain assets for all locales.
+    if (!base::android::BundleUtils::IsBundle()) {
+      constexpr char kWebLayerLocalePath[] =
+          "assets/stored-locales/weblayer/en-US.pak";
+      base::MemoryMappedFile::Region region;
+      int fd = base::android::OpenApkAsset(kWebLayerLocalePath, &region);
+      CHECK_GE(fd, 0) << "Could not find " << kWebLayerLocalePath << " in APK.";
+      ui::ResourceBundle::GetSharedInstance()
+          .LoadSecondaryLocaleDataWithPakFileRegion(base::File(fd), region);
+      base::GlobalDescriptors::GetInstance()->Set(
+          kWebLayerSecondaryLocalePakDescriptor, fd, region);
     }
   } else {
     base::i18n::SetICUDefaultLocale(
@@ -251,9 +292,15 @@ void ContentMainDelegateImpl::InitializeResourceBundle() {
     ui::ResourceBundle::InitSharedInstanceWithPakFileRegion(base::File(pak_fd),
                                                             pak_region);
 
-    std::pair<int, ui::ScaleFactor> extra_paks[] = {
+    pak_fd = global_descriptors->Get(kWebLayerSecondaryLocalePakDescriptor);
+    pak_region =
+        global_descriptors->GetRegion(kWebLayerSecondaryLocalePakDescriptor);
+    ui::ResourceBundle::GetSharedInstance()
+        .LoadSecondaryLocaleDataWithPakFileRegion(base::File(pak_fd),
+                                                  pak_region);
+
+    std::vector<std::pair<int, ui::ScaleFactor>> extra_paks = {
         {kWebLayerMainPakDescriptor, ui::SCALE_FACTOR_NONE},
-        {kWebLayerSecondaryLocalePakDescriptor, ui::SCALE_FACTOR_NONE},
         {kWebLayer100PercentPakDescriptor, ui::SCALE_FACTOR_100P}};
 
     for (const auto& pak_info : extra_paks) {
@@ -270,6 +317,11 @@ void ContentMainDelegateImpl::InitializeResourceBundle() {
   pak_file = pak_file.AppendASCII(params_.pak_name);
   ui::ResourceBundle::InitSharedInstanceWithPakPath(pak_file);
 #endif
+}
+
+content::ContentClient* ContentMainDelegateImpl::CreateContentClient() {
+  content_client_ = std::make_unique<ContentClientImpl>();
+  return content_client_.get();
 }
 
 content::ContentBrowserClient*

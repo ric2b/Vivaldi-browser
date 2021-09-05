@@ -50,6 +50,7 @@
 #include "extensions/browser/test_extension_registry_observer.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_builder.h"
+#include "extensions/common/extension_id.h"
 #include "extensions/common/extension_set.h"
 #include "extensions/common/manifest_constants.h"
 #include "extensions/common/permissions/permission_set.h"
@@ -1054,8 +1055,6 @@ TEST_F(DeveloperPrivateApiUnitTest, DeveloperPrivateGetExtensionsInfo) {
 
 // Test developerPrivate.deleteExtensionErrors.
 TEST_F(DeveloperPrivateApiUnitTest, DeveloperPrivateDeleteExtensionErrors) {
-  FeatureSwitch::ScopedOverride error_console_override(
-      FeatureSwitch::error_console(), true);
   profile()->GetPrefs()->SetBoolean(prefs::kExtensionsUIDeveloperMode, true);
   const Extension* extension = LoadSimpleExtension();
 
@@ -1562,6 +1561,45 @@ TEST_F(DeveloperPrivateApiUnitTest,
   RunUpdateHostAccess(*extension, "ON_SPECIFIC_SITES");
   EXPECT_TRUE(modifier.HasWithheldHostPermissions());
   EXPECT_FALSE(modifier.HasGrantedHostPermission(example_com));
+}
+
+TEST_F(DeveloperPrivateApiUnitTest,
+       UpdateHostAccess_BroadPermissionsRemovedOnTransitionToSpecificSites) {
+  scoped_refptr<const Extension> extension =
+      ExtensionBuilder("test").AddPermission("<all_urls>").Build();
+  service()->AddExtension(extension.get());
+  ScriptingPermissionsModifier modifier(profile(), extension.get());
+  modifier.SetWithholdHostPermissions(true);
+
+  const GURL kGoogleCom("https://google.com/");
+  const GURL kChromiumCom("https://chromium.com");
+
+  // Request <all_urls> and google.com so they are both in the runtime granted
+  // list. We use the util function to specifically add the <all_urls> pattern
+  // here, similar to if it was requested through the chrome.permissions.request
+  // API.
+  URLPattern all_url_pattern(Extension::kValidHostPermissionSchemes,
+                             "<all_urls>");
+  permissions_test_util::GrantRuntimePermissionsAndWaitForCompletion(
+      profile(), *extension,
+      PermissionSet(APIPermissionSet(), ManifestPermissionSet(),
+                    URLPatternSet({all_url_pattern}),
+                    URLPatternSet({all_url_pattern})));
+  modifier.GrantHostPermission(kGoogleCom);
+
+  // Even though <all_urls> has been granted, it was granted as a runtime host
+  // pattern, so the extension is still is considered to have withheld host
+  // permissions.
+  EXPECT_TRUE(modifier.HasWithheldHostPermissions());
+  EXPECT_TRUE(modifier.HasGrantedHostPermission(kGoogleCom));
+  EXPECT_TRUE(modifier.HasGrantedHostPermission(kChromiumCom));
+
+  // Changing to specific sites should now remove the broad pattern, leaving
+  // only the google match pattern.
+  RunUpdateHostAccess(*extension, "ON_SPECIFIC_SITES");
+  EXPECT_TRUE(modifier.HasWithheldHostPermissions());
+  EXPECT_TRUE(modifier.HasGrantedHostPermission(kGoogleCom));
+  EXPECT_FALSE(modifier.HasGrantedHostPermission(kChromiumCom));
 }
 
 TEST_F(DeveloperPrivateApiUnitTest,

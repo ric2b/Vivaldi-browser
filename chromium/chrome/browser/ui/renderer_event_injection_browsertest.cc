@@ -19,8 +19,8 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
 #include "net/dns/mock_host_resolver.h"
-#include "third_party/blink/public/platform/web_input_event.h"
-#include "third_party/blink/public/platform/web_touch_event.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
+#include "third_party/blink/public/common/input/web_touch_event.h"
 #include "ui/display/display_switches.h"
 
 namespace {
@@ -87,8 +87,8 @@ class TouchEventObserver
         for (unsigned i = 0; i < web_touch.touches_length; i++) {
           const blink::WebTouchPoint& touch_point = web_touch.touches[i];
           const gfx::Point location(
-              static_cast<int>(touch_point.PositionInWidget().x),
-              static_cast<int>(touch_point.PositionInWidget().y));
+              static_cast<int>(touch_point.PositionInWidget().x()),
+              static_cast<int>(touch_point.PositionInWidget().y()));
           if (touch_point.state == blink::WebTouchPoint::kStatePressed &&
               location == expected_location_) {
             quit_closure_.Run();
@@ -126,11 +126,13 @@ IN_PROC_BROWSER_TEST_P(RendererEventInjectionTest, TestRootTransform) {
 // This configures the display in various interesting ways for ChromeOS. In
 // particular, it tests rotation "/r" and a scale factor of 2 "*2".
 INSTANTIATE_TEST_SUITE_P(
-    ,
+    All,
     RendererEventInjectionTest,
     ::testing::Values("1200x800", "1200x800/r", "1200x800*2", "1200x800*2/r"));
 #else
-INSTANTIATE_TEST_SUITE_P(, RendererEventInjectionTest, ::testing::Values(""));
+INSTANTIATE_TEST_SUITE_P(All,
+                         RendererEventInjectionTest,
+                         ::testing::Values(""));
 #endif
 
 }  // namespace

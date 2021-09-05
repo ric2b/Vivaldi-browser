@@ -1,0 +1,78 @@
+// Copyright (c) 2020 Vivaldi Technologies AS. All rights reserved
+
+#ifndef MENUS_MENU_MODEL_H_
+#define MENUS_MENU_MODEL_H_
+
+#include <memory>
+#include <set>
+#include <vector>
+
+#include "base/memory/scoped_refptr.h"
+#include "components/keyed_service/core/keyed_service.h"
+#include "content/public/browser/notification_observer.h"
+#include "menus/menu_model_observer.h"
+#include "menus/menu_node.h"
+
+class Profile;
+
+namespace base {
+class SequencedTaskRunner;
+}
+
+namespace content {
+class BrowserContext;
+}
+
+namespace menus {
+
+class MenuLoadDetails;
+class MenuStorage;
+
+class Menu_Model : public KeyedService {
+ public:
+  explicit Menu_Model(content::BrowserContext* context);
+  ~Menu_Model() override;
+
+  void Load(const scoped_refptr<base::SequencedTaskRunner>& task_runner);
+  bool Save();
+  void LoadFinished(std::unique_ptr<MenuLoadDetails> details);
+
+  bool SetMenu(std::unique_ptr<Menu_Node> node);
+  bool Move(const Menu_Node* node, const Menu_Node* new_parent, size_t index);
+  Menu_Node* Add(std::unique_ptr<Menu_Node> node, Menu_Node* parent,
+                 size_t index);
+  bool SetTitle(Menu_Node* node, const base::string16& title);
+  bool SetContainerMode(Menu_Node* node, const std::string& mode);
+  bool SetContainerEdge(Menu_Node* node, const std::string& edge);
+  bool Remove(Menu_Node* node);
+  bool Reset(const Menu_Node* node);
+  bool Reset(const std::string& menu);
+
+  bool loaded() const { return loaded_; }
+  bool IsValidIndex(const Menu_Node* parent, size_t index);
+
+  void AddObserver(MenuModelObserver* observer);
+  void RemoveObserver(MenuModelObserver* observer);
+
+  Menu_Node* GetMenu(const std::string& named_menu);
+  Menu_Node& GetRoot() {return root_;}
+  Menu_Control* GetControl() {return control_.get();}
+
+ private:
+  void SetDeleted(Menu_Node* node, bool include_children);
+  void ClearDeleted(const Menu_Node* node, bool include_children);
+  void RemoveGuidDuplication(const Menu_Node* node);
+
+  std::unique_ptr<MenuLoadDetails> CreateLoadDetails(const std::string& menu);
+  std::unique_ptr<MenuLoadDetails> CreateLoadDetails(int64_t id);
+  bool loaded_ = false;
+  base::ObserverList<MenuModelObserver> observers_;
+  content::BrowserContext* context_;
+  std::unique_ptr<MenuStorage> store_;
+  Menu_Node root_;
+  std::unique_ptr<Menu_Control> control_;
+};
+
+}  // namespace menus
+
+#endif  // MENUS_MENU_MODEL_H_

@@ -43,20 +43,6 @@ public class WebappDataStorageTest {
     private SharedPreferences mSharedPreferences;
     private boolean mCallbackCalled;
 
-    private class FetchCallback<T> implements WebappDataStorage.FetchCallback<T> {
-        T mExpected;
-
-        FetchCallback(T expected) {
-            mExpected = expected;
-        }
-
-        @Override
-        public void onDataRetrieved(T readObject) {
-            mCallbackCalled = true;
-            assertEquals(mExpected, readObject);
-        }
-    }
-
     @Before
     public void setUp() {
         mSharedPreferences = ContextUtils.getApplicationContext().getSharedPreferences(
@@ -108,11 +94,7 @@ public class WebappDataStorageTest {
                     @Override
                     public void onDataRetrieved(Bitmap actual) {
                         mCallbackCalled = true;
-
-                        // TODO(lalitm) - once the Robolectric bug is fixed change to
-                        // assertTrue(expected.sameAs(actual)).
-                        // See bitmapEquals(Bitmap, Bitmap) for more information.
-                        assertTrue(bitmapEquals(expected, actual));
+                        assertTrue(expected.sameAs(actual));
                     }
                 });
         BackgroundShadowAsyncTask.runBackgroundTasks();
@@ -340,43 +322,17 @@ public class WebappDataStorageTest {
     }
 
     /**
-     * Test that if there was no previous WebAPK update attempt that the is-update-needed check is
-     * done after the usual delay (instead of the longer relaxed-update delay).
+     * Test that the is-update-needed check is done the first time that the user launches the WebAPK
+     * after clearing Chrome's storage.
      */
     @Test
-    public void testRegularCheckIntervalIfNoPriorWebApkUpdate() {
-        assertTrue(WebappDataStorage.RELAXED_UPDATE_INTERVAL > WebappDataStorage.UPDATE_INTERVAL);
-
+    public void testCheckUpdateAfterClearChromeStorage() {
         WebappDataStorage storage = getStorage();
-
-        assertFalse(storage.shouldCheckForUpdate());
-        mClockRule.advance(WebappDataStorage.UPDATE_INTERVAL);
         assertTrue(storage.shouldCheckForUpdate());
     }
 
     private WebappDataStorage getStorage() {
-        WebappDataStorage storage = WebappDataStorage.open("test");
-
-        // Done when WebAPK is registered in {@link WebApkActivity}.
-        storage.updateTimeOfLastCheckForUpdatedWebManifest();
-        return storage;
-    }
-
-    // TODO(lalitm) - There seems to be a bug in Robolectric where a Bitmap
-    // produced from a byte stream is hardcoded to be a 100x100 bitmap with
-    // ARGB_8888 pixel format. Because of this, we need to work around the
-    // equality check of bitmaps. Remove this once the bug is fixed.
-    private static boolean bitmapEquals(Bitmap expected, Bitmap actual) {
-        if (actual.getWidth() != 100) return false;
-        if (actual.getHeight() != 100) return false;
-        if (!actual.getConfig().equals(Bitmap.Config.ARGB_8888)) return false;
-
-        for (int i = 0; i < actual.getWidth(); i++) {
-            for (int j = 0; j < actual.getHeight(); j++) {
-                if (actual.getPixel(i, j) != 0) return false;
-            }
-        }
-        return true;
+        return WebappDataStorage.open("test");
     }
 
     private static Bitmap createBitmap() {

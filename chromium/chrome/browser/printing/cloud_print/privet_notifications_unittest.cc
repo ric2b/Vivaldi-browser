@@ -7,7 +7,6 @@
 #include <memory>
 #include <utility>
 
-#include "base/message_loop/message_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/notifications/notification_display_service_tester.h"
 #include "chrome/browser/notifications/notification_test_util.h"
@@ -320,6 +319,24 @@ TEST_F(PrivetNotificationsNotificationTest, DontShowAgain) {
                         NotificationHandler::Type::TRANSIENT)
                     .size());
 }
+
+#if defined(OS_CHROMEOS)
+TEST(PrivetNotificationServiceTest, NoNotificationsInGuestMode) {
+  content::BrowserTaskEnvironment task_environment{
+      base::test::TaskEnvironment::TimeSource::MOCK_TIME};
+  TestingProfileManager profile_manager(TestingBrowserProcess::GetGlobal());
+  ASSERT_TRUE(profile_manager.SetUp());
+  Profile* profile = profile_manager.CreateGuestProfile();
+
+  TestPrivetNotificationService service(profile);
+  // Wait for delayed initialization.
+  task_environment.FastForwardBy(PrivetNotificationService::kStartDelay * 2);
+
+  // We're not watching for printers.
+  EXPECT_FALSE(service.device_lister_for_test());
+  EXPECT_FALSE(service.traffic_detector_for_test());
+}
+#endif  // defined(OS_CHROMEOS)
 
 }  // namespace
 

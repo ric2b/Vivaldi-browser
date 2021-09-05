@@ -21,6 +21,7 @@ var Manager = (function() {
     var copyAllPlayerButton = $('copy-all-player-button');
     var copyAllAudioButton = $('copy-all-audio-button');
     var hidePlayersButton = $('hide-players-button');
+    var devtoolsNoticeWindow = $('devtools-notice-window');
 
     // In tests we may not have these buttons.
     if (copyAllPlayerButton) {
@@ -38,6 +39,9 @@ var Manager = (function() {
     }
     if (hidePlayersButton) {
       hidePlayersButton.onclick = this.hidePlayers_.bind(this);
+    }
+    if (devtoolsNoticeWindow) {
+      devtoolsNoticeWindow.onclick = this.hideNoticeWindow_;
     }
   }
 
@@ -125,6 +129,10 @@ var Manager = (function() {
       }, this);
     },
 
+    hideNoticeWindow_: function() {
+      this.style.display = 'none';
+    },
+
     updatePlayerInfoNoRecord: function(id, timestamp, key, value) {
       if (!this.players_[id]) {
         console.error('[updatePlayerInfo] Id ' + id + ' does not exist');
@@ -169,8 +177,8 @@ var Manager = (function() {
       var formatDict = {};
       for (var i in parts) {
         var kv = parts[i].split(': ');
-        if (kv.length == 2) {
-          if (kv[0] == 'pixel format') {
+        if (kv.length === 2) {
+          if (kv[0] === 'pixel format') {
             // The camera does not actually output I420,
             // so this info is misleading.
             continue;
@@ -178,7 +186,7 @@ var Manager = (function() {
           formatDict[kv[0]] = kv[1];
         } else {
           kv = parts[i].split('@');
-          if (kv.length == 2) {
+          if (kv.length === 2) {
             formatDict['resolution'] = kv[0].replace(/[)(]/g, '');
             // Round down the FPS to 2 decimals.
             formatDict['fps'] =

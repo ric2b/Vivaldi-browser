@@ -61,7 +61,7 @@ import java.util.UUID;
 @SuppressLint("WrongConstant")
 @TargetApi(Build.VERSION_CODES.KITKAT)
 public class MediaDrmBridge {
-    private static final String TAG = "cr_media";
+    private static final String TAG = "media";
     private static final String SECURITY_LEVEL = "securityLevel";
     private static final String SERVER_CERTIFICATE = "serviceCertificate";
     private static final String ORIGIN = "origin";
@@ -111,6 +111,9 @@ public class MediaDrmBridge {
 
     // Whether the current MediaDrmBridge instance is waiting for provisioning response.
     private boolean mProvisioningPending;
+
+    // Current 'ORIGIN" setting.
+    private String mOrigin;
 
     // Boolean to track if 'ORIGIN' is set in MediaDrm.
     private boolean mOriginSet;
@@ -416,7 +419,8 @@ public class MediaDrmBridge {
             final Method getInt = systemProperties.getMethod("getInt", String.class, int.class);
             firstApiLevel = (Integer) getInt.invoke(null, FIRST_API_LEVEL, 0);
         } catch (Exception e) {
-            Log.e("Exception while getting system property %s. Using default.", FIRST_API_LEVEL, e);
+            Log.e(TAG, "Exception while getting system property %s. Using default.",
+                    FIRST_API_LEVEL, e);
             firstApiLevel = 0;
         }
         return firstApiLevel;
@@ -486,7 +490,7 @@ public class MediaDrmBridge {
      */
     private boolean setOrigin(String origin) {
         assert Build.VERSION.SDK_INT >= Build.VERSION_CODES.M;
-        Log.i(TAG, "Set origin: %s", origin);
+        Log.d(TAG, "Set origin: %s", origin);
 
         if (!isWidevine()) {
             Log.d(TAG, "Property " + ORIGIN + " isn't supported");
@@ -498,6 +502,7 @@ public class MediaDrmBridge {
 
         try {
             mMediaDrm.setPropertyString(ORIGIN, origin);
+            mOrigin = origin;
             mOriginSet = true;
             return true;
         } catch (java.lang.IllegalArgumentException e) {
@@ -533,7 +538,7 @@ public class MediaDrmBridge {
             return false;
         }
 
-        Log.i(TAG, "Security level: current %s, new %s", currentSecurityLevel, securityLevel);
+        Log.d(TAG, "Security level: current %s, new %s", currentSecurityLevel, securityLevel);
         if (securityLevel.equals(currentSecurityLevel)) {
             // No need to set the same security level again. This is not just
             // a shortcut! Setting the same security level actually causes an
@@ -545,9 +550,7 @@ public class MediaDrmBridge {
             mMediaDrm.setPropertyString(SECURITY_LEVEL, securityLevel);
             return true;
         } catch (java.lang.IllegalArgumentException e) {
-            Log.e(TAG, "Failed to set security level %s", securityLevel, e);
         } catch (java.lang.IllegalStateException e) {
-            Log.e(TAG, "Failed to set security level %s", securityLevel, e);
         }
 
         Log.e(TAG, "Security level %s not supported!", securityLevel);
@@ -1204,6 +1207,7 @@ public class MediaDrmBridge {
             return false;
         }
 
+        Log.i(TAG, "Provisioning origin ID %s", mOriginSet ? mOrigin : "<none>");
         MediaDrmBridgeJni.get().onProvisionRequest(mNativeMediaDrmBridge, MediaDrmBridge.this,
                 request.getDefaultUrl(), request.getData());
         return true;

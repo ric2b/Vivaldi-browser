@@ -30,6 +30,7 @@
 #include "third_party/blink/renderer/core/css/css_pending_substitution_value.h"
 #include "third_party/blink/renderer/core/css/css_property_names.h"
 #include "third_party/blink/renderer/core/css/css_to_length_conversion_data.h"
+#include "third_party/blink/renderer/core/css/parser/css_parser_mode.h"
 #include "third_party/blink/renderer/core/css/resolver/css_to_style_map.h"
 #include "third_party/blink/renderer/core/css/resolver/element_resolve_context.h"
 #include "third_party/blink/renderer/core/css/resolver/element_style_resources.h"
@@ -128,6 +129,27 @@ class CORE_EXPORT StyleResolverState {
     is_animating_custom_properties_ = value;
   }
 
+  // Normally, we apply all active animation effects on top of the style created
+  // by regular CSS declarations. However, !important declarations have a
+  // higher priority than animation effects [1]. If StyleCascade skipped
+  // application of some interpolation, it means something else in the cascade
+  // had a higher priority (i.e. it was !important). In this case, we can't
+  // use the base-computed-style optimization, since that code path is unable
+  // to skip any animation effects at all.
+  //
+  // [1] https://drafts.csswg.org/css-cascade-4/#cascade-origin
+  bool HasImportantOverrides() const { return has_important_overrides_; }
+  void SetHasImportantOverrides() { has_important_overrides_ = true; }
+
+  // This flag is set when applying an animation (or transition) for a font
+  // affecting property. When such properties are animated, font-relative
+  // units (e.g. em, ex) in the base style must respond to the animation.
+  // Therefore we can't use the base computed style optimization in such cases.
+  bool HasFontAffectingAnimation() const {
+    return has_font_affecting_animation_;
+  }
+  void SetHasFontAffectingAnimation() { has_font_affecting_animation_ = true; }
+
   const Element* GetAnimatingElement() const;
 
   void SetParentStyle(scoped_refptr<const ComputedStyle>);
@@ -192,6 +214,8 @@ class CORE_EXPORT StyleResolverState {
   ParsedPropertiesForPendingSubstitutionCache(
       const cssvalue::CSSPendingSubstitutionValue&) const;
 
+  CSSParserMode GetParserMode() const;
+
  private:
   enum class AnimatingElementType { kElement, kPseudoElement };
 
@@ -206,7 +230,7 @@ class CORE_EXPORT StyleResolverState {
       const ComputedStyle* font_style) const;
 
   ElementResolveContext element_context_;
-  Member<Document> document_;
+  Document* document_;
 
   // style_ is the primary output for each element's style resolve.
   scoped_refptr<ComputedStyle> style_;
@@ -224,18 +248,20 @@ class CORE_EXPORT StyleResolverState {
   CSSAnimationUpdate animation_update_;
   bool is_animation_interpolation_map_ready_;
   bool is_animating_custom_properties_;
+  bool has_important_overrides_ = false;
+  bool has_font_affecting_animation_ = false;
 
   bool has_dir_auto_attribute_;
 
-  Member<const CSSValue> cascaded_color_value_;
-  Member<const CSSValue> cascaded_visited_color_value_;
+  const CSSValue* cascaded_color_value_;
+  const CSSValue* cascaded_visited_color_value_;
 
   FontBuilder font_builder_;
 
   std::unique_ptr<CachedUAStyle> cached_ua_style_;
 
   ElementStyleResources element_style_resources_;
-  Member<Element> pseudo_element_;
+  Element* pseudo_element_;
   AnimatingElementType animating_element_type_;
 
   mutable HeapHashMap<

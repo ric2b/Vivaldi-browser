@@ -17,7 +17,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/metrics/histogram_tester.h"
-#include "base/test/mock_entropy_provider.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "base/test/task_environment.h"
@@ -25,8 +24,8 @@
 #include "base/timer/timer.h"
 #include "net/base/features.h"
 #include "net/base/host_port_pair.h"
+#include "net/base/isolation_info.h"
 #include "net/base/load_timing_info.h"
-#include "net/base/network_isolation_key.h"
 #include "net/base/request_priority.h"
 #include "net/nqe/network_quality_estimator_test_util.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
@@ -162,7 +161,7 @@ class CancelingTestRequest : public TestRequest {
 
 class ResourceSchedulerTest : public testing::Test {
  protected:
-  ResourceSchedulerTest() : field_trial_list_(nullptr) {
+  ResourceSchedulerTest() {
     base::test::ScopedFeatureList feature_list;
     feature_list.InitAndEnableFeature(
         net::features::kPartitionHttpServerPropertiesByNetworkIsolationKey);
@@ -252,8 +251,7 @@ class ResourceSchedulerTest : public testing::Test {
       int child_id,
       int route_id) {
     return GetNewTestRequest(url, priority, TRAFFIC_ANNOTATION_FOR_TESTS,
-                             child_id, route_id, true,
-                             net::NetworkIsolationKey());
+                             child_id, route_id, true, net::IsolationInfo());
   }
 
   std::unique_ptr<TestRequest> NewRequest(const char* url,
@@ -280,7 +278,7 @@ class ResourceSchedulerTest : public testing::Test {
       net::RequestPriority priority,
       const net::NetworkTrafficAnnotationTag& traffic_annotation) {
     return GetNewTestRequest(url, priority, traffic_annotation, kBrowserChildId,
-                             kBrowserRouteId, true, net::NetworkIsolationKey());
+                             kBrowserRouteId, true, net::IsolationInfo());
   }
 
   std::unique_ptr<TestRequest> NewSyncRequest(const char* url,
@@ -301,16 +299,15 @@ class ResourceSchedulerTest : public testing::Test {
       int child_id,
       int route_id) {
     return GetNewTestRequest(url, priority, TRAFFIC_ANNOTATION_FOR_TESTS,
-                             child_id, route_id, false,
-                             net::NetworkIsolationKey());
+                             child_id, route_id, false, net::IsolationInfo());
   }
 
-  std::unique_ptr<TestRequest> NewRequestWithNetworkIsolationKey(
+  std::unique_ptr<TestRequest> NewRequestWithIsolationInfo(
       const char* url,
       net::RequestPriority priority,
-      const net::NetworkIsolationKey& network_isolation_key) {
+      const net::IsolationInfo& isolation_info) {
     return GetNewTestRequest(url, priority, TRAFFIC_ANNOTATION_FOR_TESTS,
-                             kChildId, kRouteId, true, network_isolation_key);
+                             kChildId, kRouteId, true, isolation_info);
   }
 
   std::unique_ptr<TestRequest> GetNewTestRequest(
@@ -320,10 +317,10 @@ class ResourceSchedulerTest : public testing::Test {
       int child_id,
       int route_id,
       bool is_async,
-      const net::NetworkIsolationKey& network_isolation_key) {
+      const net::IsolationInfo& isolation_info) {
     std::unique_ptr<net::URLRequest> url_request(NewURLRequestWithChildAndRoute(
         url, priority, traffic_annotation, child_id, route_id));
-    url_request->set_network_isolation_key(network_isolation_key);
+    url_request->set_isolation_info(isolation_info);
 
     auto scheduled_request = scheduler_->ScheduleRequest(
         child_id, route_id, is_async, url_request.get());
@@ -523,7 +520,6 @@ class ResourceSchedulerTest : public testing::Test {
   net::TestNetworkQualityEstimator network_quality_estimator_;
   std::unique_ptr<net::TestURLRequestContext> context_;
   ResourceSchedulerParamsManager resource_scheduler_params_manager_;
-  base::FieldTrialList field_trial_list_;
   base::SimpleTestTickClock tick_clock_;
 };
 
@@ -583,41 +579,43 @@ TEST_F(ResourceSchedulerTest, MaxRequestsPerHostForSpdyWhenNotDelayable) {
 }
 
 TEST_F(ResourceSchedulerTest,
-       MaxRequestsPerHostForSpdyWhenNotDelayableWithNetworkIsolationKey) {
+       MaxRequestsPerHostForSpdyWhenNotDelayableWithIsolationInfo) {
   const url::Origin kOrigin1 = url::Origin::Create(GURL("https://foo.test/"));
-  const net::NetworkIsolationKey kNetworkIsolationKey1(kOrigin1, kOrigin1);
+  const net::IsolationInfo kIsolationInfo1 =
+      net::IsolationInfo::CreateForInternalRequest(kOrigin1);
   const url::Origin kOrigin2 = url::Origin::Create(GURL("https://bar.test/"));
-  const net::NetworkIsolationKey kNetworkIsolationKey2(kOrigin2, kOrigin2);
+  const net::IsolationInfo kIsolationInfo2 =
+      net::IsolationInfo::CreateForInternalRequest(kOrigin2);
 
   InitializeScheduler();
   context_->http_server_properties()->SetSupportsSpdy(
-      url::SchemeHostPort("https", "spdyhost", 443), kNetworkIsolationKey1,
-      true);
+      url::SchemeHostPort("https", "spdyhost", 443),
+      kIsolationInfo1.network_isolation_key(), true);
 
   // Add more than max-per-host low-priority requests.
   std::vector<std::unique_ptr<TestRequest>> requests;
   for (size_t i = 0; i < kMaxNumDelayableRequestsPerHostPerClient + 1; ++i) {
-    requests.push_back(NewRequestWithNetworkIsolationKey(
-        "https://spdyhost/low", net::LOWEST, kNetworkIsolationKey1));
+    requests.push_back(NewRequestWithIsolationInfo(
+        "https://spdyhost/low", net::LOWEST, kIsolationInfo1));
     // No throttling.
     EXPECT_TRUE(requests.back()->started());
   }
   requests.clear();
 
-  // Requests with different NetworkIsolationKeys should be throttled as if they
+  // Requests with different IsolationInfos should be throttled as if they
   // don't support H2.
 
   for (size_t i = 0; i < kMaxNumDelayableRequestsPerHostPerClient + 1; ++i) {
-    requests.push_back(NewRequestWithNetworkIsolationKey(
-        "https://spdyhost/low", net::LOWEST, net::NetworkIsolationKey()));
+    requests.push_back(NewRequestWithIsolationInfo(
+        "https://spdyhost/low", net::LOWEST, net::IsolationInfo()));
     EXPECT_EQ(i < kMaxNumDelayableRequestsPerHostPerClient,
               requests.back()->started());
   }
   requests.clear();
 
   for (size_t i = 0; i < kMaxNumDelayableRequestsPerHostPerClient + 1; ++i) {
-    requests.push_back(NewRequestWithNetworkIsolationKey(
-        "https://spdyhost/low", net::LOWEST, kNetworkIsolationKey2));
+    requests.push_back(NewRequestWithIsolationInfo(
+        "https://spdyhost/low", net::LOWEST, kIsolationInfo2));
     EXPECT_EQ(i < kMaxNumDelayableRequestsPerHostPerClient,
               requests.back()->started());
   }
@@ -1763,13 +1761,14 @@ TEST_F(ResourceSchedulerTest,
   }
 }
 
-TEST_F(
-    ResourceSchedulerTest,
-    MaxRequestsPerHostForSpdyWhenDelayableSlowConnectionsWithNetworkIsolationKey) {
+TEST_F(ResourceSchedulerTest,
+       MaxRequestsPerHostForSpdyWhenDelayableSlowConnectionsWithIsolationInfo) {
   const url::Origin kOrigin1 = url::Origin::Create(GURL("https://foo.test/"));
-  const net::NetworkIsolationKey kNetworkIsolationKey1(kOrigin1, kOrigin1);
+  const net::IsolationInfo kIsolationInfo1 =
+      net::IsolationInfo::CreateForInternalRequest(kOrigin1);
   const url::Origin kOrigin2 = url::Origin::Create(GURL("https://bar.test/"));
-  const net::NetworkIsolationKey kNetworkIsolationKey2(kOrigin2, kOrigin2);
+  const net::IsolationInfo kIsolationInfo2 =
+      net::IsolationInfo::CreateForInternalRequest(kOrigin2);
 
   ConfigureDelayRequestsOnMultiplexedConnectionsFieldTrial();
   network_quality_estimator_.SetAndNotifyObserversOfEffectiveConnectionType(
@@ -1777,8 +1776,8 @@ TEST_F(
 
   InitializeScheduler();
   context_->http_server_properties()->SetSupportsSpdy(
-      url::SchemeHostPort("https", "spdyhost", 443), kNetworkIsolationKey1,
-      true);
+      url::SchemeHostPort("https", "spdyhost", 443),
+      kIsolationInfo1.network_isolation_key(), true);
 
   // Should be in sync with resource_scheduler.cc for effective connection type
   // of 2G.
@@ -1791,8 +1790,8 @@ TEST_F(
   // requests. They should all be allowed.
   std::vector<std::unique_ptr<TestRequest>> requests;
   for (size_t i = 0; i < kMaxNumDelayableRequestsPerHostPerClient + 1; ++i) {
-    requests.push_back(NewRequestWithNetworkIsolationKey(
-        "https://spdyhost/low", net::LOWEST, kNetworkIsolationKey1));
+    requests.push_back(NewRequestWithIsolationInfo(
+        "https://spdyhost/low", net::LOWEST, kIsolationInfo1));
     EXPECT_TRUE(requests[i]->started());
   }
 
@@ -1802,26 +1801,26 @@ TEST_F(
   for (size_t i = kMaxNumDelayableRequestsPerHostPerClient + 1;
        i < kDefaultMaxNumDelayableRequestsPerClient + 1; i++) {
     EXPECT_EQ(i, requests.size());
-    requests.push_back(NewRequestWithNetworkIsolationKey(
-        "https://spdyhost/low", net::LOWEST, kNetworkIsolationKey1));
+    requests.push_back(NewRequestWithIsolationInfo(
+        "https://spdyhost/low", net::LOWEST, kIsolationInfo1));
     EXPECT_EQ(i < kDefaultMaxNumDelayableRequestsPerClient,
               requests[i]->started());
   }
   requests.clear();
 
-  // Requests with other NetworkIsolationKeys are subject to the
+  // Requests with other IsolationInfos are subject to the
   // kMaxNumDelayableRequestsPerHostPerClient limit.
   for (size_t i = 0; i < kMaxNumDelayableRequestsPerHostPerClient + 1; ++i) {
-    requests.push_back(NewRequestWithNetworkIsolationKey(
-        "https://spdyhost/low", net::LOWEST, net::NetworkIsolationKey()));
+    requests.push_back(NewRequestWithIsolationInfo(
+        "https://spdyhost/low", net::LOWEST, net::IsolationInfo()));
     EXPECT_EQ(i < kMaxNumDelayableRequestsPerHostPerClient,
               requests[i]->started());
   }
   requests.clear();
 
   for (size_t i = 0; i < kMaxNumDelayableRequestsPerHostPerClient + 1; ++i) {
-    requests.push_back(NewRequestWithNetworkIsolationKey(
-        "https://spdyhost/low", net::LOWEST, kNetworkIsolationKey2));
+    requests.push_back(NewRequestWithIsolationInfo(
+        "https://spdyhost/low", net::LOWEST, kIsolationInfo2));
     EXPECT_EQ(i < kMaxNumDelayableRequestsPerHostPerClient,
               requests[i]->started());
   }

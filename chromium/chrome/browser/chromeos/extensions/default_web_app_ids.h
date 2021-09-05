@@ -19,6 +19,9 @@ constexpr char kShowtimeAppId[] = "eoccpgmpiempcflglfokeengliildkag";
 // web_app::GenerateAppIdFromURL(GURL("https://canvas.apps.chrome/")).
 constexpr char kCanvasAppId[] = "ieailfmhaghpphfffooibmlghaeopach";
 
+// Generated as web_app::GenerateAppIdFromURL(GURL("chrome://help-app/")).
+constexpr char kHelpAppId[] = "nbljnnecbjbmifnoehiemkgefbnpoeak";
+
 // Generated as
 // web_app::GenerateAppIdFromURL(GURL(
 // "https://google.com/chromebook/whatsnew/embedded/")).
@@ -38,6 +41,9 @@ constexpr char kGoogleNewsAppId[] = "kfgapjallbhpciobgmlhlhokknljkgho";
 // web_app::GenerateAppIdFromURL(
 //     GURL("https://www.google.com/maps/_/sw/tt-install.html")).
 constexpr char kGoogleMapsAppId[] = "mnhkaebcjjhencmpkapnbdaogjamfbcj";
+
+// Generated as web_app::GenerateAppIdFromURL(GURL("chrome://media-app/")).
+constexpr char kMediaAppId[] = "jhdjimmaggjajfjphpljagpgkidjilnj";
 
 }  // namespace default_web_apps
 }  // namespace chromeos

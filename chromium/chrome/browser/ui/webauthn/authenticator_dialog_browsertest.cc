@@ -5,6 +5,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/bind_helpers.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -34,9 +35,7 @@ class AuthenticatorDialogTest : public DialogBrowserTest {
     ::device::FidoRequestHandlerBase::TransportAvailabilityInfo
         transport_availability;
     transport_availability.available_transports = {
-        AuthenticatorTransport::kBluetoothLowEnergy,
         AuthenticatorTransport::kUsbHumanInterfaceDevice,
-        AuthenticatorTransport::kNearFieldCommunication,
         AuthenticatorTransport::kInternal,
         AuthenticatorTransport::kCloudAssistedBluetoothLowEnergy};
     model->set_cable_transport_info(/*cable_extension_provided=*/true,
@@ -107,6 +106,15 @@ class AuthenticatorDialogTest : public DialogBrowserTest {
     } else if (name == "get_pin_one_try_remaining") {
       model->set_has_attempted_pin_entry_for_testing();
       model->CollectPIN(1, base::Bind([](std::string pin) {}));
+    } else if (name == "get_pin_fallback") {
+      model->set_internal_uv_locked();
+      model->CollectPIN(8, base::Bind([](std::string pin) {}));
+    } else if (name == "retry_uv") {
+      model->OnRetryUserVerification(5);
+    } else if (name == "retry_uv_two_tries_remaining") {
+      model->OnRetryUserVerification(2);
+    } else if (name == "retry_uv_one_try_remaining") {
+      model->OnRetryUserVerification(1);
     } else if (name == "second_tap") {
       model->SetCurrentStep(
           AuthenticatorRequestDialogModel::Step::kClientPinTapAgain);
@@ -264,6 +272,24 @@ IN_PROC_BROWSER_TEST_F(AuthenticatorDialogTest,
 
 IN_PROC_BROWSER_TEST_F(AuthenticatorDialogTest,
                        InvokeUi_get_pin_one_try_remaining) {
+  ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_F(AuthenticatorDialogTest, InvokeUi_get_pin_fallback) {
+  ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_F(AuthenticatorDialogTest, InvokeUi_retry_uv) {
+  ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_F(AuthenticatorDialogTest,
+                       InvokeUi_retry_uv_two_tries_remaining) {
+  ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_F(AuthenticatorDialogTest,
+                       InvokeUi_retry_uv_one_try_remaining) {
   ShowAndVerifyUi();
 }
 

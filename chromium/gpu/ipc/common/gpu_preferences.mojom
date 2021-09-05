@@ -19,6 +19,15 @@ enum VulkanImplementationName {
   kLast = kSwiftshader,
 };
 
+// Corresponds to gpu::GrContextType.
+enum GrContextType {
+  kGL = 0,
+  kVulkan = 1,
+  kMetal = 2,
+  kDawn = 3,
+  kLast = kDawn,
+};
+
 // gpu::GpuPreferences
 struct GpuPreferences {
   bool disable_accelerated_video_decode;
@@ -46,7 +55,9 @@ struct GpuPreferences {
   bool enable_gpu_driver_debug_logging;
   bool disable_gpu_program_cache;
   bool enforce_gl_minimums;
-  uint32 force_gpu_mem_available;
+  uint32 force_gpu_mem_available_bytes;
+  uint32 force_gpu_mem_discardable_limit_bytes;
+  uint32 force_max_texture_size;
   uint32 gpu_program_cache_size;
   bool disable_gpu_shader_disk_cache;
   bool enable_threaded_texture_mailboxes;
@@ -59,12 +70,12 @@ struct GpuPreferences {
   bool disable_biplanar_gpu_memory_buffers_for_video_frames;
   array<gfx.mojom.BufferUsageAndFormat> texture_target_exception_list;
 
-  bool disable_gpu_driver_bug_workarounds;
   bool ignore_gpu_blacklist;
   bool enable_oop_rasterization;
   bool disable_oop_rasterization;
   bool enable_oop_rasterization_ddl;
   bool watchdog_starts_backgrounded;
+  GrContextType gr_context_type;
   VulkanImplementationName use_vulkan;
   bool enforce_vulkan_protected_memory;
   bool disable_vulkan_surface;
@@ -72,7 +83,13 @@ struct GpuPreferences {
   bool enable_metal;
   bool enable_gpu_benchmarking_extension;
   bool enable_webgpu;
+  bool enable_gpu_blocked_time_metric;
+  bool enable_perf_data_collection;
 
   [EnableIf=use_ozone]
   mojo_base.mojom.MessagePumpType message_pump_type;
+
+  bool enable_native_gpu_memory_buffers;
+
+  bool force_disable_new_accelerated_video_decoder;
 };

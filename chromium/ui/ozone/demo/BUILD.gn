@@ -32,14 +32,14 @@ source_set("ozone_demo_lib") {
     "//ui/display/types",
     "//ui/events",
     "//ui/events:dom_keycode_converter",
-    "//ui/events/ozone:events_ozone_layout",
+    "//ui/events/ozone/layout",
     "//ui/gfx/geometry",
     "//ui/ozone",
     "//ui/platform_window",
   ]
 
   if (is_fuchsia) {
-    deps += [ "//third_party/fuchsia-sdk/sdk:ui_policy" ]
+    deps += [ "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.ui.policy" ]
   }
 }
 
@@ -61,7 +61,7 @@ executable("ozone_demo") {
     "//components/tracing:startup_tracing",
     "//gpu/vulkan:buildflags",
     "//mojo/core/embedder",
-    "//ui/events/ozone:events_ozone_layout",
+    "//ui/events/ozone/layout",
     "//ui/gl",
     "//ui/gl/init",
     "//ui/ozone",
@@ -94,7 +94,7 @@ executable("skia_demo") {
     "//components/tracing:startup_tracing",
     "//mojo/core/embedder",
     "//skia",
-    "//ui/events/ozone:events_ozone_layout",
+    "//ui/events/ozone/layout",
     "//ui/gl",
     "//ui/gl/init",
     "//ui/ozone",
@@ -102,10 +102,11 @@ executable("skia_demo") {
 }
 
 if (is_fuchsia) {
-  fuchsia_package("ozone_demo_pkg") {
+  cr_fuchsia_package("ozone_demo_pkg") {
     testonly = true
     binary = ":ozone_demo"
     package_name_override = "ozone_demo"
+    manifest = "//build/config/fuchsia/gfx_tests.cmx"
   }
 
   fuchsia_package_runner("ozone_demo_fuchsia") {

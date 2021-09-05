@@ -3,11 +3,11 @@
 
 {%- set class_name = interface.name %}
 {%- set proxy_name = interface.name ~ "Proxy" %}
-{%- set namespace_as_string = "%s"|format(namespace|replace(".","::")) %}
+{%- set namespace_as_string = "%s"|format(module_namespace|replace(".","::")) %}
+{%- set namespace_as_string_with_variant = namespace_as_string ~ ("::" ~ variant if variant) %}
+{%- set qualified_class_name = ("::" ~ namespace_as_string_with_variant if namespace_as_string_with_variant) ~ "::" ~ class_name %}
 
 {%- macro alloc_params(struct, params, message, method_number, is_response) %}
-  mojo::internal::SerializationContext serialization_context;
-  serialization_context.TakeHandlesFromMessage({{message}});
   bool success = true;
 {%-   for param in struct.packed.packed_fields_in_ordinal_order %}
   {{param.field.kind|cpp_wrapper_call_type}} p_{{param.field.name}}{};
@@ -214,10 +214,10 @@ class {{class_name}}_{{method.name}}_ProxyToResponder {
   static {{class_name}}::{{method.name}}Callback CreateCallback(
       uint64_t request_id,
       bool is_sync,
-      std::unique_ptr<mojo::MessageReceiverWithStatus> responder) {
+      std::unique_ptr<mojo::MessageReceiverWithStatus>* responder) {
     std::unique_ptr<{{class_name}}_{{method.name}}_ProxyToResponder> proxy(
         new {{class_name}}_{{method.name}}_ProxyToResponder(
-            request_id, is_sync, std::move(responder)));
+            request_id, is_sync, responder));
     return base::BindOnce(&{{class_name}}_{{method.name}}_ProxyToResponder::Run,
                           std::move(proxy));
   }
@@ -241,10 +241,10 @@ class {{class_name}}_{{method.name}}_ProxyToResponder {
   {{class_name}}_{{method.name}}_ProxyToResponder(
       uint64_t request_id,
       bool is_sync,
-      std::unique_ptr<mojo::MessageReceiverWithStatus> responder)
+      std::unique_ptr<mojo::MessageReceiverWithStatus>* responder)
       : request_id_(request_id),
         is_sync_(is_sync),
-        responder_(std::move(responder)) {
+        responder_(std::move(*responder)) {
   }
 
 #if DCHECK_IS_ON()
@@ -304,6 +304,8 @@ bool {{class_name}}_{{method.name}}_ForwardToCallback::Accept(
               message->mutable_payload());
 
 {%-     set desc = class_name~"::"~method.name~" response" %}
+  mojo::internal::SerializationContext serialization_context;
+  serialization_context.TakeHandlesFromMessage(message);
   {{alloc_params(method.response_param_struct, "params", "message", method.sequential_ordinal, "true")}}
   if (!callback_.is_null())
     std::move(callback_).Run({{pass_params(method.response_parameters)}});
@@ -376,6 +378,8 @@ bool {{class_name}}_{{method.name}}_HandleSyncResponse::Accept(
           message->mutable_payload());
 
 {%-       set desc = class_name~"::"~method.name~" response" %}
+  mojo::internal::SerializationContext serialization_context;
+  serialization_context.TakeHandlesFromMessage(message);
   {{alloc_params(method.response_param_struct, "params", "message", method.sequential_ordinal, "true")}}
 
 {%-       for param in method.response_parameters %}
@@ -397,6 +401,9 @@ bool {{class_name}}StubDispatch::Accept(
     {{interface.name}}* impl,
     mojo::Message* message) {
 {%- if interface.methods %}
+  mojo::internal::MessageDispatchContext dispatch_context(message);
+  mojo::internal::SerializationContext serialization_context;
+  serialization_context.TakeHandlesFromMessage(message);
   switch (message->header()->name) {
 {%-   for method in interface.methods %}
     case internal::k{{class_name}}_{{method.name}}_Name: {
@@ -410,7 +417,6 @@ bool {{class_name}}StubDispatch::Accept(
       static constexpr uint32_t kMessageHash = base::MD5Hash32Constexpr(
               "(Impl){{namespace_as_string}}::{{class_name}}::{{method.name}}");
       base::TaskAnnotator::ScopedSetIpcHash scoped_ipc_hash(kMessageHash);
-      mojo::internal::MessageDispatchContext dispatch_context(message);
 {%-       if method|method_supports_lazy_serialization %}
       if (!message->is_serialized()) {
         auto context = message->TakeUnserializedContext<
@@ -455,6 +461,13 @@ bool {{class_name}}StubDispatch::AcceptWithResponder(
     mojo::Message* message,
     std::unique_ptr<mojo::MessageReceiverWithStatus> responder) {
 {%- if interface.methods %}
+  mojo::internal::MessageDispatchContext dispatch_context(message);
+  mojo::internal::SerializationContext serialization_context;
+  serialization_context.TakeHandlesFromMessage(message);
+  const bool message_is_sync = message->has_flag(mojo::Message::kFlagIsSync);
+  const uint64_t request_id = message->request_id();
+  ALLOW_UNUSED_LOCAL(message_is_sync);
+  ALLOW_UNUSED_LOCAL(request_id);
   switch (message->header()->name) {
 {%-   for method in interface.methods %}
     case internal::k{{class_name}}_{{method.name}}_Name: {
@@ -468,7 +481,6 @@ bool {{class_name}}StubDispatch::AcceptWithResponder(
       static constexpr uint32_t kMessageHash = base::MD5Hash32Constexpr(
               "(Impl){{namespace_as_string}}::{{class_name}}::{{method.name}}");
       base::TaskAnnotator::ScopedSetIpcHash scoped_ipc_hash(kMessageHash);
-      mojo::internal::MessageDispatchContext dispatch_context(message);
 {%-       if method|method_supports_lazy_serialization %}
       if (!message->is_serialized()) {
         auto context = message->TakeUnserializedContext<
@@ -481,9 +493,7 @@ bool {{class_name}}StubDispatch::AcceptWithResponder(
         } else {
           {{class_name}}::{{method.name}}Callback callback =
               {{class_name}}_{{method.name}}_ProxyToResponder::CreateCallback(
-                  message->request_id(),
-                  message->has_flag(mojo::Message::kFlagIsSync),
-                  std::move(responder));
+                  message->request_id(), message_is_sync, &responder);
           context->Dispatch(message, impl, std::move(callback));
           return true;
         }
@@ -500,9 +510,7 @@ bool {{class_name}}StubDispatch::AcceptWithResponder(
           indent(4)}}
       {{class_name}}::{{method.name}}Callback callback =
           {{class_name}}_{{method.name}}_ProxyToResponder::CreateCallback(
-              message->request_id(),
-              message->has_flag(mojo::Message::kFlagIsSync),
-              std::move(responder));
+              message->request_id(), message_is_sync, &responder);
       // A null |impl| means no implementation was bound.
       DCHECK(impl);
       impl->{{method.name}}(
@@ -518,86 +526,58 @@ bool {{class_name}}StubDispatch::AcceptWithResponder(
   return false;
 }
 
+{% if interface.methods and (interface | has_packed_method_ordinals) %}
+static const mojo::internal::GenericValidationInfo k{{class_name}}ValidationInfo[] = {
+{%-   for i in range(interface.methods | map(attribute='ordinal') | max + 1) -%}
+{%-     set method = (interface.methods | selectattr('ordinal', 'equalto', i) | list)[0] %}
+{%-     if method %}
+    {&internal::{{class_name}}_{{method.name}}_Params_Data::Validate,
+{%-       if method.response_parameters != None %}
+     &internal::{{class_name}}_{{method.name}}_ResponseParams_Data::Validate},
+{%-       else %}
+     nullptr /* no response */},
+{%-       endif %}
+{%-     else %}
+    {nullptr, nullptr},  // nonexistent
+{%-     endif %}
+{%-   endfor %}
+};
+{%- elif interface.methods %}
+static const std::pair<uint32_t, mojo::internal::GenericValidationInfo> k{{class_name}}ValidationInfo[] = {
+{%-   for method in interface.methods %}
+    {internal::k{{class_name}}_{{method.name}}_Name,
+     {&internal::{{class_name}}_{{method.name}}_Params_Data::Validate,
+{%-     if method.response_parameters != None %}
+      &internal::{{class_name}}_{{method.name}}_ResponseParams_Data::Validate}},
+{%-     else %}
+      nullptr /* no response */}},
+{%-     endif %}
+{%-   endfor %}
+};
+{%- endif %}
+
 {#--- Request validator definitions #}
 
 bool {{class_name}}RequestValidator::Accept(mojo::Message* message) {
-  if (!message->is_serialized() ||
-      mojo::internal::ControlMessageHandler::IsControlMessage(message)) {
-    return true;
-  }
-
-  mojo::internal::ValidationContext validation_context(
-    message->payload(), message->payload_num_bytes(),
-    message->handles()->size(), message->payload_num_interface_ids(), message,
-    "{{class_name}} RequestValidator");
-
-  switch (message->header()->name) {
-{%- for method in interface.methods %}
-    case internal::k{{class_name}}_{{method.name}}_Name: {
-{%-   if method.response_parameters != None %}
-      if (!mojo::internal::ValidateMessageIsRequestExpectingResponse(
-              message, &validation_context)) {
-        return false;
-      }
-{%-   else %}
-      if (!mojo::internal::ValidateMessageIsRequestWithoutResponse(
-              message, &validation_context)) {
-        return false;
-      }
-{%-   endif %}
-      if (!mojo::internal::ValidateMessagePayload<
-               internal::{{class_name}}_{{method.name}}_Params_Data>(
-                  message, &validation_context)) {
-        return false;
-      }
-      return true;
-    }
-{%- endfor %}
-    default:
-      break;
-  }
-
-  // Unrecognized message.
-  ReportValidationError(
-      &validation_context,
-      mojo::internal::VALIDATION_ERROR_MESSAGE_HEADER_UNKNOWN_METHOD);
-  return false;
+  {#- Not simply Name_ because there is a mojom interface called MessageReceiver #}
+  const char* name = {{qualified_class_name}}::Name_;
+{%- if not interface.methods %}
+  return mojo::internal::ValidateRequestGeneric(message, name, {});
+{%- elif interface | has_packed_method_ordinals %}
+  return mojo::internal::ValidateRequestGenericPacked(message, name, k{{class_name}}ValidationInfo);
+{%- else %}
+  return mojo::internal::ValidateRequestGeneric(message, name, k{{class_name}}ValidationInfo);
+{%- endif %}
 }
 
 {#--- Response validator definitions #}
 {% if interface|has_callbacks %}
 bool {{class_name}}ResponseValidator::Accept(mojo::Message* message) {
-  if (!message->is_serialized() ||
-      mojo::internal::ControlMessageHandler::IsControlMessage(message)) {
-    return true;
-  }
-
-  mojo::internal::ValidationContext validation_context(
-    message->payload(), message->payload_num_bytes(),
-    message->handles()->size(), message->payload_num_interface_ids(), message,
-    "{{class_name}} ResponseValidator");
-
-  if (!mojo::internal::ValidateMessageIsResponse(message, &validation_context))
-    return false;
-  switch (message->header()->name) {
-{%- for method in interface.methods if method.response_parameters != None %}
-    case internal::k{{class_name}}_{{method.name}}_Name: {
-      if (!mojo::internal::ValidateMessagePayload<
-               internal::{{class_name}}_{{method.name}}_ResponseParams_Data>(
-                    message, &validation_context)) {
-        return false;
-      }
-      return true;
-    }
-{%- endfor %}
-    default:
-      break;
-  }
-
-  // Unrecognized message.
-  ReportValidationError(
-      &validation_context,
-      mojo::internal::VALIDATION_ERROR_MESSAGE_HEADER_UNKNOWN_METHOD);
-  return false;
+  const char* name = {{qualified_class_name}}::Name_;
+{%-  if interface | has_packed_method_ordinals %}
+  return mojo::internal::ValidateResponseGenericPacked(message, name, k{{class_name}}ValidationInfo);
+{%-  else %}
+  return mojo::internal::ValidateResponseGeneric(message, name, k{{class_name}}ValidationInfo);
+{%   endif %}
 }
 {%- endif -%}

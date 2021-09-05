@@ -21,14 +21,6 @@
 
 class MultiProcessLock;
 
-#if defined(OS_MACOSX)
-#ifdef __OBJC__
-@class NSString;
-#else
-class NSString;
-#endif
-#endif
-
 namespace base {
 class CommandLine;
 }
@@ -47,10 +39,9 @@ std::string GetServiceProcessScopedVersionedName(const std::string& append_str);
 #endif  // !OS_MACOSX
 
 #if defined(OS_POSIX)
-// Attempts to take a lock named |name|. If |waiting| is true then this will
-// make multiple attempts to acquire the lock.
-// Caller is responsible for ownership of the MultiProcessLock.
-MultiProcessLock* TakeNamedLock(const std::string& name, bool waiting);
+// Attempts to take a session-wide lock named name. Returns a non-null lock if
+// successful.
+std::unique_ptr<MultiProcessLock> TakeNamedLock(const std::string& name);
 #endif
 
 // The following method is used in a process that acts as a client to the
@@ -87,7 +78,7 @@ class ServiceProcessState {
   // |task_runner| must be of type IO and is the loop that POSIX uses
   // to monitor the service process.
   bool SignalReady(scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-                   const base::Closure& terminate_task);
+                   base::OnceClosure terminate_task);
 
   // Signal that the service process is stopped.
   void SignalStopped();

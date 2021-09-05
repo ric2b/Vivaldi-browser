@@ -226,7 +226,7 @@ namespace {
 // modifies all the columns in the entry table.
 static const string::size_type kUpdateStatementBufferSize = 2048;
 
-void OnSqliteError(const base::Closure& catastrophic_error_handler,
+void OnSqliteError(const base::RepeatingClosure& catastrophic_error_handler,
                    int err,
                    sql::Statement* statement) {
   // An error has been detected. Ignore unless it is catastrophic.
@@ -279,11 +279,10 @@ bool SaveEntryToDB(sql::Statement* save_statement, const EntryKernel& entry) {
 ///////////////////////////////////////////////////////////////////////////////
 // DirectoryBackingStore implementation.
 
-DirectoryBackingStore::DirectoryBackingStore(
-    const string& dir_name,
-    const base::RepeatingCallback<std::string()>& cache_guid_generator)
+DirectoryBackingStore::DirectoryBackingStore(const string& dir_name,
+                                             const std::string& cache_guid)
     : dir_name_(dir_name),
-      cache_guid_generator_(cache_guid_generator),
+      cache_guid_(cache_guid),
       database_page_size_(kCurrentPageSizeKB),
       needs_metas_column_refresh_(false),
       needs_share_info_column_refresh_(false) {
@@ -291,12 +290,9 @@ DirectoryBackingStore::DirectoryBackingStore(
   ResetAndCreateConnection();
 }
 
-DirectoryBackingStore::DirectoryBackingStore(
-    const string& dir_name,
-    const base::RepeatingCallback<std::string()>& cache_guid_generator,
-    sql::Database* db)
+DirectoryBackingStore::DirectoryBackingStore(const string& dir_name,
+                                             sql::Database* db)
     : dir_name_(dir_name),
-      cache_guid_generator_(cache_guid_generator),
       database_page_size_(kCurrentPageSizeKB),
       db_(db),
       needs_metas_column_refresh_(false),
@@ -320,10 +316,6 @@ bool DirectoryBackingStore::DeleteEntries(EntryTable from,
     case METAS_TABLE:
       statement.Assign(db_->GetCachedStatement(
           SQL_FROM_HERE, "DELETE FROM metas WHERE metahandle = ?"));
-      break;
-    case DELETE_JOURNAL_TABLE:
-      statement.Assign(db_->GetCachedStatement(
-          SQL_FROM_HERE, "DELETE FROM deleted_metas WHERE metahandle = ?"));
       break;
   }
 
@@ -361,17 +353,6 @@ bool DirectoryBackingStore::SaveChanges(
   }
 
   if (!DeleteEntries(METAS_TABLE, snapshot.metahandles_to_purge))
-    return false;
-
-  PrepareSaveEntryStatement(DELETE_JOURNAL_TABLE,
-                            &save_delete_journal_statement_);
-  for (auto i = snapshot.delete_journals.begin();
-       i != snapshot.delete_journals.end(); ++i) {
-    if (!SaveEntryToDB(&save_delete_journal_statement_, **i))
-      return false;
-  }
-
-  if (!DeleteEntries(DELETE_JOURNAL_TABLE, snapshot.delete_journals_to_purge))
     return false;
 
   if (save_info) {
@@ -728,25 +709,6 @@ bool DirectoryBackingStore::SafeToPurgeOnLoading(
       return true;
   }
   return false;
-}
-
-bool DirectoryBackingStore::LoadDeleteJournals(JournalIndex* delete_journals) {
-  string select;
-  select.reserve(kUpdateStatementBufferSize);
-  select.append("SELECT ");
-  AppendColumnList(&select);
-  select.append(" FROM deleted_metas");
-
-  sql::Statement s(db_->GetUniqueStatement(select.c_str()));
-
-  while (s.Step()) {
-    std::unique_ptr<EntryKernel> kernel = UnpackEntry(&s);
-    // A null kernel is evidence of external data corruption.
-    if (!kernel)
-      return false;
-    DeleteJournal::AddEntryToJournalIndex(delete_journals, std::move(kernel));
-  }
-  return s.Succeeded();
 }
 
 bool DirectoryBackingStore::LoadInfo(Directory::KernelLoadInfo* info) {
@@ -1575,7 +1537,7 @@ bool DirectoryBackingStore::CreateTables() {
     s.BindString(0, dir_name_);                   // id
     s.BindString(1, dir_name_);                   // name
     s.BindString(2, std::string());               // store_birthday
-    s.BindString(3, cache_guid_generator_.Run());  // cache_guid
+    s.BindString(3, cache_guid_);
     s.BindBlob(4, nullptr, 0);                    // bag_of_chips
     if (!s.Run())
       return false;
@@ -1751,9 +1713,6 @@ void DirectoryBackingStore::PrepareSaveEntryStatement(
     case METAS_TABLE:
       query.append("INSERT OR REPLACE INTO metas ");
       break;
-    case DELETE_JOURNAL_TABLE:
-      query.append("INSERT OR REPLACE INTO deleted_metas ");
-      break;
   }
 
   string values;
@@ -1829,12 +1788,12 @@ void DirectoryBackingStore::ResetAndCreateConnection() {
 }
 
 void DirectoryBackingStore::SetCatastrophicErrorHandler(
-    const base::Closure& catastrophic_error_handler) {
+    const base::RepeatingClosure& catastrophic_error_handler) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!catastrophic_error_handler.is_null());
   catastrophic_error_handler_ = catastrophic_error_handler;
   sql::Database::ErrorCallback error_callback =
-      base::Bind(&OnSqliteError, catastrophic_error_handler_);
+      base::BindRepeating(&OnSqliteError, catastrophic_error_handler_);
   db_->set_error_callback(error_callback);
 }
 

@@ -13,25 +13,32 @@
 #include "base/callback_list.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
+#include "base/test/scoped_feature_list.h"
+#include "build/build_config.h"
 #include "build/buildflag.h"
-#include "chrome/browser/extensions/install_verifier.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sync/test/integration/configuration_refresher.h"
 #include "chrome/browser/sync/test/integration/fake_server_invalidation_sender.h"
 #include "chrome/common/buildflags.h"
-#include "chrome/test/base/in_process_browser_test.h"
 #include "components/gcm_driver/instance_id/instance_id.h"
 #include "components/gcm_driver/instance_id/instance_id_driver.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/base/user_selectable_type.h"
 #include "components/sync/test/fake_server/fake_server.h"
+#include "net/base/net_errors.h"
 #include "net/http/http_status_code.h"
-#include "net/url_request/url_request_status.h"
 #include "services/network/test/test_url_loader_factory.h"
 
-#if BUILDFLAG(ENABLE_APP_LIST)
+#if defined(OS_CHROMEOS)
 #include "chrome/browser/ui/app_list/app_list_syncable_service.h"
-#endif  // BUILDFLAG(ENABLE_APP_LIST)
+#endif  // defined(OS_CHROMEOS)
+
+#if defined(OS_ANDROID)
+#include "chrome/test/base/android/android_browser_test.h"
+#else
+#include "chrome/browser/extensions/install_verifier.h"
+#include "chrome/test/base/in_process_browser_test.h"
+#endif
 
 // The E2E tests are designed to run against real backend servers. To identify
 // those tests we use *E2ETest* test name filter and run disabled tests.
@@ -71,7 +78,7 @@ class ProfileSyncService;
 // This is the base class for integration tests for all sync data types. Derived
 // classes must be defined for each sync data type. Individual tests are defined
 // using the IN_PROC_BROWSER_TEST_F macro.
-class SyncTest : public InProcessBrowserTest {
+class SyncTest : public PlatformBrowserTest {
  public:
   // The different types of live sync tests that can be implemented.
   enum TestType {
@@ -100,12 +107,13 @@ class SyncTest : public InProcessBrowserTest {
         : instance_id::InstanceID("FakeAppId", /*gcm_driver = */ nullptr) {}
     ~FakeInstanceID() override = default;
 
-    void GetID(const GetIDCallback& callback) override {}
+    void GetID(GetIDCallback callback) override {}
 
-    void GetCreationTime(const GetCreationTimeCallback& callback) override {}
+    void GetCreationTime(GetCreationTimeCallback callback) override {}
 
     void GetToken(const std::string& authorized_entity,
                   const std::string& scope,
+                  base::TimeDelta time_to_live,
                   const std::map<std::string, std::string>& options,
                   std::set<Flags> flags,
                   GetTokenCallback callback) override {}
@@ -113,7 +121,7 @@ class SyncTest : public InProcessBrowserTest {
     void ValidateToken(const std::string& authorized_entity,
                        const std::string& scope,
                        const std::string& token,
-                       const ValidateTokenCallback& callback) override {}
+                       ValidateTokenCallback callback) override {}
 
     void DeleteToken(const std::string& authorized_entity,
                      const std::string& scope,
@@ -152,6 +160,8 @@ class SyncTest : public InProcessBrowserTest {
 
   void TearDown() override;
 
+  void PostRunTestOnMainThread() override;
+
   // Sets up command line flags required for sync tests.
   void SetUpCommandLine(base::CommandLine* cl) override;
 
@@ -166,6 +176,7 @@ class SyncTest : public InProcessBrowserTest {
   // owns the objects and manages its lifetime.
   std::vector<Profile*> GetAllProfiles();
 
+#if !defined(OS_ANDROID)
   // Returns a pointer to a particular browser. Callee owns the object
   // and manages its lifetime.
   Browser* GetBrowser(int index);
@@ -177,6 +188,7 @@ class SyncTest : public InProcessBrowserTest {
   // the same index as it. Tests typically use browser indexes and profile
   // indexes interchangeably; this allows them to do so freely.
   Browser* AddBrowser(int profile_index);
+#endif
 
   // Returns a pointer to a particular sync client. Callee owns the object
   // and manages its lifetime.
@@ -257,7 +269,7 @@ class SyncTest : public InProcessBrowserTest {
   // Each call to this method will overwrite responses that were previously set.
   void SetOAuth2TokenResponse(const std::string& response_data,
                               net::HttpStatusCode response_code,
-                              net::URLRequestStatus::Status status);
+                              net::Error net_error);
 
   // Triggers a migration for one or more datatypes, and waits
   // for the server to complete it.  This operation is available
@@ -289,17 +301,13 @@ class SyncTest : public InProcessBrowserTest {
 
   void OnWillCreateBrowserContextServices(content::BrowserContext* context);
 
-  virtual void BeforeSetupClient(int index);
+  // Invoked immediately before creating profile |index| under |profile_path|.
+  virtual void BeforeSetupClient(int index, const base::FilePath& profile_path);
 
   // Implementations of the EnableNotifications() and DisableNotifications()
   // functions defined above.
   void DisableNotificationsImpl();
   void EnableNotificationsImpl();
-
-  // If non-empty, |contents| will be written to the Preferences file of the
-  // profile at |index| before that Profile object is created.
-  void SetPreexistingPreferencesFileContents(int index,
-                                             const std::string& contents);
 
   // Helper to ProfileManager::CreateProfileAsync that creates a new profile
   // used for UI Signin. Blocks until profile is created.
@@ -360,17 +368,9 @@ class SyncTest : public InProcessBrowserTest {
       instance_id::InstanceIDDriver* instance_id_driver,
       content::BrowserContext* context);
 
-  // Helper to Profile::CreateProfile that handles path creation, setting up
-  // preexisting pref files, and registering the created profile  as a testing
-  // profile.
+  // Helper to Profile::CreateProfile that handles path creation. It creates
+  // a profile then registers it as a testing profile.
   Profile* MakeTestProfile(base::FilePath profile_path, int index);
-
-  // Helper method used to create a Gaia account at runtime.
-  // This function should only be called when running against external servers
-  // which support this functionality.
-  // Returns true if account creation was successful, false otherwise.
-  bool CreateGaiaAccount(const std::string& username,
-                         const std::string& password);
 
  protected:
   // Helper to block the current thread while the data models sync depends on
@@ -458,11 +458,13 @@ class SyncTest : public InProcessBrowserTest {
   // completed, used for two-client tests with external server.
   std::vector<std::unique_ptr<base::ScopedTempDir>> scoped_temp_dirs_;
 
+#if !defined(OS_ANDROID)
   // Collection of pointers to the browser objects used by a test. One browser
   // instance is created for each sync profile. Browser object lifetime is
   // managed by BrowserList, so we don't use a std::vector<std::unique_ptr<>>
   // here.
   std::vector<Browser*> browsers_;
+#endif
 
   // Collection of sync clients used by a test. A sync client is associated
   // with a sync profile, and implements methods that sync the contents of the
@@ -508,20 +510,12 @@ class SyncTest : public InProcessBrowserTest {
   // Only used for external server tests with two clients.
   bool use_new_user_data_dir_ = false;
 
-  // Indicates the need to create Gaia user account at runtime. This can only
-  // be set if tests are run against external servers with support for user
-  // creation via http requests.
-  bool create_gaia_account_at_runtime_;
-
-  // The contents to be written to a profile's Preferences file before the
-  // Profile object is created. If empty, no preexisting file will be written.
-  // The map key corresponds to the profile's index.
-  std::map<int, std::string> preexisting_preferences_file_contents_;
-
+#if !defined(OS_ANDROID)
   // Disable extension install verification.
   extensions::ScopedInstallVerifierBypassForTest ignore_install_verification_;
+#endif
 
-#if BUILDFLAG(ENABLE_APP_LIST)
+#if defined(OS_CHROMEOS)
   // A factory-like callback to create a model updater for testing, which will
   // take the place of the real updater in AppListSyncableService for testing.
   std::unique_ptr<

@@ -31,7 +31,7 @@
 #include "third_party/blink/renderer/platform/fonts/segmented_font_data.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
-#include "third_party/blink/renderer/platform/wtf/hash_map.h"
+#include "third_party/blink/renderer/platform/wtf/lru_cache.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
@@ -70,7 +70,7 @@ class CSSSegmentedFontFace final
     return approximate_character_count_;
   }
 
-  void Trace(blink::Visitor*);
+  void Trace(Visitor*);
 
  private:
   void PruneTable();
@@ -79,11 +79,10 @@ class CSSSegmentedFontFace final
   using FontFaceList = HeapListHashSet<Member<FontFace>>;
 
   FontSelectionCapabilities font_selection_capabilities_;
-  HashMap<FontCacheKey,
-          scoped_refptr<SegmentedFontData>,
-          FontCacheKeyHash,
-          FontCacheKeyTraits>
+
+  WTF::LruCache<FontCacheKey, scoped_refptr<SegmentedFontData>>
       font_data_table_;
+
   // All non-CSS-connected FontFaces are stored after the CSS-connected ones.
   FontFaceList font_faces_;
   FontFaceList::iterator first_non_css_connected_face_;

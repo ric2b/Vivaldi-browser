@@ -22,16 +22,19 @@ namespace media {
 enum PlatformMediaDataType {
   PLATFORM_MEDIA_AUDIO,
   PLATFORM_MEDIA_VIDEO,
-  PLATFORM_MEDIA_DATA_TYPE_COUNT  // Always keep this as the last one.
 };
+
+constexpr int kPlatformMediaDataTypeCount = PLATFORM_MEDIA_VIDEO + 1;
 
 enum class MediaDataStatus {
   kOk,
   kEOS,
   kMediaError,
   kConfigChanged,
-  kCount
 };
+
+constexpr int kMediaDataStatusCount =
+    static_cast<int>(MediaDataStatus::kConfigChanged) + 1;
 
 struct PlatformMediaTimeInfo {
   base::TimeDelta duration;

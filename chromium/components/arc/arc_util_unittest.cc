@@ -21,6 +21,7 @@
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/test/test_windows.h"
 #include "ui/aura/window.h"
+#include "ui/display/types/display_constants.h"
 
 namespace arc {
 namespace {
@@ -252,16 +253,26 @@ TEST_F(ArcUtilTest, ScaleFactorToDensity) {
   EXPECT_EQ(160, GetLcdDensityForDeviceScaleFactor(1.0f));
   EXPECT_EQ(160, GetLcdDensityForDeviceScaleFactor(1.25f));
   EXPECT_EQ(213, GetLcdDensityForDeviceScaleFactor(1.6f));
-  EXPECT_EQ(240, GetLcdDensityForDeviceScaleFactor(1.7777777f));
+  EXPECT_EQ(240, GetLcdDensityForDeviceScaleFactor(display::kDsf_1_777));
   EXPECT_EQ(240, GetLcdDensityForDeviceScaleFactor(2.0f));
-  EXPECT_EQ(280, GetLcdDensityForDeviceScaleFactor(2.25f));
-  EXPECT_EQ(320, GetLcdDensityForDeviceScaleFactor(2.6666666f));
+  EXPECT_EQ(280, GetLcdDensityForDeviceScaleFactor(display::kDsf_2_252));
+  EXPECT_EQ(320, GetLcdDensityForDeviceScaleFactor(display::kDsf_2_666));
 
   // Bad scale factors shouldn't blow up.
   EXPECT_EQ(160, GetLcdDensityForDeviceScaleFactor(0.5f));
   EXPECT_EQ(160, GetLcdDensityForDeviceScaleFactor(-0.1f));
   EXPECT_EQ(180, GetLcdDensityForDeviceScaleFactor(1.5f));
   EXPECT_EQ(1200, GetLcdDensityForDeviceScaleFactor(10.f));
+
+  auto* command_line = base::CommandLine::ForCurrentProcess();
+  command_line->InitFromArgv({"", "--arc-scale=280"});
+  EXPECT_EQ(280, GetLcdDensityForDeviceScaleFactor(1.234f));
+
+  command_line->InitFromArgv({"", "--arc-scale=120"});
+  EXPECT_EQ(120, GetLcdDensityForDeviceScaleFactor(1.234f));
+
+  command_line->InitFromArgv({"", "--arc-scale=abc"});
+  EXPECT_EQ(240, GetLcdDensityForDeviceScaleFactor(2.0));
 }
 
 }  // namespace

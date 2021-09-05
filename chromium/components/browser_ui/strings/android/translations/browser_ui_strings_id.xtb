@@ -1,0 +1,67 @@
+<?xml version="1.0" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="id">
+<translation id="1124772482545689468">Pengguna</translation>
+<translation id="1181037720776840403">Hapus</translation>
+<translation id="1201402288615127009">Berikutnya</translation>
+<translation id="1383876407941801731">Telusuri</translation>
+<translation id="2079545284768500474">Urungkan</translation>
+<translation id="2148716181193084225">Hari ini</translation>
+<translation id="2359808026110333948">Lanjutkan</translation>
+<translation id="2501278716633472235">Kembali</translation>
+<translation id="2569468611847789653">{COOKIE_COUNT,plural, =1{1 cookie diblokir}other{# cookie diblokir}}</translation>
+<translation id="257931822824936280">Diperluas - klik untuk menciutkan</translation>
+<translation id="2653659639078652383">Kirim</translation>
+<translation id="2704606927547763573">Disalin</translation>
+<translation id="2968755619301702150">Penampil sertifikat</translation>
+<translation id="3115898365077584848">Tampilkan Info</translation>
+<translation id="3295602654194328831">Sembunyikan Info</translation>
+<translation id="3479552764303398839">Jangan sekarang</translation>
+<translation id="385051799172605136">Mundur</translation>
+<translation id="3987993985790029246">Salin link</translation>
+<translation id="4002066346123236978">Judul</translation>
+<translation id="4570913071927164677">Detail</translation>
+<translation id="4645575059429386691">Dikelola oleh orang tua Anda</translation>
+<translation id="4883854917563148705">Setelan yang dikelola tidak dapat disetel ulang</translation>
+<translation id="497421865427891073">Maju</translation>
+<translation id="5100237604440890931">Diciutkan - klik untuk memperluas.</translation>
+<translation id="5300589172476337783">Tampilkan</translation>
+<translation id="5301954838959518834">Oke, mengerti</translation>
+<translation id="5317780077021120954">Simpan</translation>
+<translation id="5391532827096253100">Sambungan ke situs ini tidak aman. Informasi situs</translation>
+<translation id="5556459405103347317">Muat ulang</translation>
+<translation id="5596627076506792578">Opsi lainnya</translation>
+<translation id="5860033963881614850">Nonaktif</translation>
+<translation id="5916664084637901428">Aktif</translation>
+<translation id="5939518447894949180">Setel ulang</translation>
+<translation id="6040143037577758943">Tutup</translation>
+<translation id="6042308850641462728">Lainnya</translation>
+<translation id="6165508094623778733">Pelajari lebih lanjut</translation>
+<translation id="6206551242102657620">Sambungan aman. Informasi situs</translation>
+<translation id="6216432067784365534">Opsi <ph name="NAME_OF_LIST_ITEM" /></translation>
+<translation id="6527303717912515753">Bagikan</translation>
+<translation id="6746124502594467657">Berpindah ke bawah</translation>
+<translation id="6818926723028410516">Pilih item</translation>
+<translation id="6910211073230771657">Dihapus</translation>
+<translation id="6945221475159498467">Pilih</translation>
+<translation id="6963642900430330478">Halaman ini berbahaya. Informasi situs</translation>
+<translation id="6965382102122355670">Oke</translation>
+<translation id="7066151586745993502">{NUM_SELECTED,plural, =1{1 dipilih}other{# dipilih}}</translation>
+<translation id="7087918508125750058"><ph name="ITEM_COUNT" /> dipilih. Opsi yang tersedia di dekat bagian atas layar</translation>
+<translation id="7250468141469952378"><ph name="ITEM_COUNT" /> dipilih</translation>
+<translation id="7649070708921625228">Bantuan</translation>
+<translation id="7658239707568436148">Batal</translation>
+<translation id="7781829728241885113">Kemarin</translation>
+<translation id="7791543448312431591">Tambahkan</translation>
+<translation id="780301667611848630">Lain kali</translation>
+<translation id="7846076177841592234">Batalkan pilihan</translation>
+<translation id="8131740175452115882">Konfirmasi</translation>
+<translation id="8206354486702514201">Setelan ini diberlakukan oleh administrator Anda.</translation>
+<translation id="8249310407154411074">Pindahkan ke atas</translation>
+<translation id="8261506727792406068">Hapus</translation>
+<translation id="8609465669617005112">Berpindah ke atas</translation>
+<translation id="8676374126336081632">Hapus masukan</translation>
+<translation id="8725066075913043281">Coba lagi</translation>
+<translation id="8730621377337864115">Selesai</translation>
+<translation id="9019902583201351841">Dikelola oleh orang tua Anda</translation>
+</translationbundle>

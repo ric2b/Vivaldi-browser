@@ -4,13 +4,19 @@
 
 #include <utility>
 
+#include "app/vivaldi_apptools.h"
+#include "base/task/post_task.h"
 #include "base/version.h"
+#include "components/prefs/pref_service.h"
 #include "components/sync/driver/sync_util.h"
 #include "components/sync/engine_impl/net/url_translator.h"
 #include "components/sync/protocol/sync.pb.h"
+#include "content/public/browser/browser_task_traits.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/storage_partition.h"
 #include "net/base/load_flags.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
+#include "prefs/vivaldi_gen_prefs.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/simple_url_loader.h"
 
@@ -28,13 +34,15 @@ VivaldiProfileSyncService::VivaldiProfileSyncService(
       invalidation_service_(invalidation_service),
       ui_helper_(profile, this),
       weak_factory_(this) {
-  auth_manager_ = std::make_unique<VivaldiSyncAuthManager>(
-      identity_manager_,
-      base::BindRepeating(&VivaldiProfileSyncService::AccountStateChanged,
-                          base::Unretained(this)),
-      base::BindRepeating(&VivaldiProfileSyncService::CredentialsChanged,
-                          base::Unretained(this)),
-      account_manager);
+  if (!vivaldi::ForcedVivaldiRunning()) {
+    auth_manager_ = std::make_unique<VivaldiSyncAuthManager>(
+        identity_manager_,
+        base::BindRepeating(&VivaldiProfileSyncService::AccountStateChanged,
+                            base::Unretained(this)),
+        base::BindRepeating(&VivaldiProfileSyncService::CredentialsChanged,
+                            base::Unretained(this)),
+        account_manager);
+  }
 
   // Notes must be re-synchronized to correct the note-duplication issues.
   base::Version last_seen_version(
@@ -128,28 +136,18 @@ void VivaldiProfileSyncService::ClearSyncData() {
   NotifyObservers();
 }
 
-void VivaldiProfileSyncService::StartSyncingWithServer() {
-  // It is possible to cause sync to start without encryption turned on
-  // by clicking "Request Start" in vivaldi://sync-internals. We prevent that
-  // here.
-  if (user_settings_->IsEncryptEverythingEnabled()) {
-    ProfileSyncService::StartSyncingWithServer();
-  }
-}
-
 void VivaldiProfileSyncService::OnEngineInitialized(
     syncer::ModelTypeSet initial_types,
     const syncer::WeakHandle<syncer::JsBackend>& js_backend,
     const syncer::WeakHandle<syncer::DataTypeDebugInfoListener>&
         debug_info_listener,
-    const std::string& cache_guid,
     const std::string& birthday,
     const std::string& bag_of_chips,
     const std::string& last_keystore_key,
     bool success) {
   ProfileSyncService::OnEngineInitialized(
-      initial_types, js_backend, debug_info_listener, cache_guid, birthday,
-      bag_of_chips, last_keystore_key, success);
+      initial_types, js_backend, debug_info_listener, birthday, bag_of_chips,
+      last_keystore_key, success);
 
   if (!force_local_data_reset_)
     return;
@@ -159,8 +157,8 @@ void VivaldiProfileSyncService::OnEngineInitialized(
   error.action = syncer::RESET_LOCAL_SYNC_DATA;
 
   base::PostTask(FROM_HERE, {content::BrowserThread::UI},
-                           base::Bind(&ProfileSyncService::OnActionableError,
-                                      base::Unretained(this), error));
+                 base::Bind(&ProfileSyncService::OnActionableError,
+                            base::Unretained(this), error));
 }
 
 void VivaldiProfileSyncService::ShutdownImpl(syncer::ShutdownReason reason) {

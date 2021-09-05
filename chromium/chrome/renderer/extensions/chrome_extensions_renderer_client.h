@@ -36,8 +36,16 @@ class RendererPermissionsPolicyDelegate;
 class ResourceRequestPolicy;
 }
 
+namespace net {
+class SiteForCookies;
+}
+
 namespace url {
 class Origin;
+}
+
+namespace ukm {
+class MojoUkmRecorder;
 }
 
 namespace v8 {
@@ -78,6 +86,7 @@ class ChromeExtensionsRendererClient
   void WillSendRequest(blink::WebLocalFrame* frame,
                        ui::PageTransition transition_type,
                        const blink::WebURL& url,
+                       const net::SiteForCookies& site_for_cookies,
                        const url::Origin* initiator_origin,
                        GURL* new_url,
                        bool* attach_same_site_cookies);
@@ -88,10 +97,6 @@ class ChromeExtensionsRendererClient
       std::unique_ptr<extensions::Dispatcher> extension_dispatcher);
   extensions::Dispatcher* GetExtensionDispatcherForTest();
 
-  static bool ShouldFork(blink::WebLocalFrame* frame,
-                         const GURL& url,
-                         bool is_initial_navigation,
-                         bool is_server_redirect);
   static content::BrowserPluginDelegate* CreateBrowserPluginDelegate(
       content::RenderFrame* render_frame,
       const content::WebPluginInfo& info,
@@ -116,6 +121,7 @@ class ChromeExtensionsRendererClient
   }
 
  private:
+  std::unique_ptr<ukm::MojoUkmRecorder> ukm_recorder_;
   std::unique_ptr<extensions::Dispatcher> extension_dispatcher_;
   std::unique_ptr<extensions::RendererPermissionsPolicyDelegate>
       permissions_policy_delegate_;

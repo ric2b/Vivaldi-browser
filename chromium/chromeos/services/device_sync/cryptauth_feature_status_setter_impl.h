@@ -17,6 +17,7 @@
 #include "base/timer/timer.h"
 #include "chromeos/components/multidevice/software_feature.h"
 #include "chromeos/services/device_sync/cryptauth_feature_status_setter.h"
+#include "chromeos/services/device_sync/feature_status_change.h"
 #include "chromeos/services/device_sync/network_request_error.h"
 #include "chromeos/services/device_sync/proto/cryptauth_client_app_metadata.pb.h"
 #include "chromeos/services/device_sync/proto/cryptauth_devicesync.pb.h"
@@ -39,15 +40,22 @@ class CryptAuthFeatureStatusSetterImpl : public CryptAuthFeatureStatusSetter {
  public:
   class Factory {
    public:
-    static Factory* Get();
-    static void SetFactoryForTesting(Factory* test_factory);
-    virtual ~Factory();
-    virtual std::unique_ptr<CryptAuthFeatureStatusSetter> BuildInstance(
+    static std::unique_ptr<CryptAuthFeatureStatusSetter> Create(
         ClientAppMetadataProvider* client_app_metadata_provider,
         CryptAuthClientFactory* client_factory,
         CryptAuthGCMManager* gcm_manager,
         std::unique_ptr<base::OneShotTimer> timer =
             std::make_unique<base::OneShotTimer>());
+
+    static void SetFactoryForTesting(Factory* test_factory);
+
+   protected:
+    virtual ~Factory();
+    virtual std::unique_ptr<CryptAuthFeatureStatusSetter> CreateInstance(
+        ClientAppMetadataProvider* client_app_metadata_provider,
+        CryptAuthClientFactory* client_factory,
+        CryptAuthGCMManager* gcm_manager,
+        std::unique_ptr<base::OneShotTimer> timer) = 0;
 
    private:
     static Factory* test_factory_;

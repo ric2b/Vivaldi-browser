@@ -13,11 +13,11 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/test/test_timeouts.h"
 #include "base/values.h"
-#include "chrome/chrome_cleaner/mojom/parser_interface.mojom.h"
 #include "chrome/chrome_cleaner/ipc/mojo_task_runner.h"
+#include "chrome/chrome_cleaner/mojom/parser_interface.mojom.h"
 #include "chrome/chrome_cleaner/parsers/json_parser/sandboxed_json_parser.h"
 #include "chrome/chrome_cleaner/parsers/target/parser_impl.h"
-#include "mojo/public/cpp/bindings/interface_request.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace chrome_cleaner {
@@ -48,7 +48,7 @@ bool IsDaysOfWeek(const base::DictionaryValue* dictionary) {
          dictionary->HasKey("saturday");
 }
 
-bool IsDaysOfWeek(const std::vector<base::Value>& list) {
+bool IsDaysOfWeek(base::Value::ConstListView list) {
   return base::Contains(list, base::Value("sunday")) &&
          base::Contains(list, base::Value("monday")) &&
          base::Contains(list, base::Value("tuesday")) &&
@@ -62,24 +62,25 @@ class JsonSplicerImplTest : public testing::Test {
  public:
   JsonSplicerImplTest()
       : task_runner_(MojoTaskRunner::Create()),
-        parser_ptr_(new mojom::ParserPtr(),
-                    base::OnTaskRunnerDeleter(task_runner_)),
+        parser_(new mojo::Remote<mojom::Parser>(),
+                base::OnTaskRunnerDeleter(task_runner_)),
         parser_impl_(nullptr, base::OnTaskRunnerDeleter(task_runner_)),
-        sandboxed_json_parser_(task_runner_.get(), parser_ptr_.get()) {
-    task_runner_->PostTask(
-        FROM_HERE, BindOnce(BindParser, parser_ptr_.get(), &parser_impl_));
+        sandboxed_json_parser_(task_runner_.get(), parser_.get()) {
+    task_runner_->PostTask(FROM_HERE,
+                           BindOnce(BindParser, parser_.get(), &parser_impl_));
   }
 
  protected:
   static void BindParser(
-      mojom::ParserPtr* json_parser,
+      mojo::Remote<mojom::Parser>* json_parser,
       std::unique_ptr<ParserImpl, base::OnTaskRunnerDeleter>* parser_impl) {
-    parser_impl->reset(
-        new ParserImpl(mojo::MakeRequest(json_parser), base::DoNothing()));
+    parser_impl->reset(new ParserImpl(json_parser->BindNewPipeAndPassReceiver(),
+                                      base::DoNothing()));
   }
 
   scoped_refptr<MojoTaskRunner> task_runner_;
-  std::unique_ptr<mojom::ParserPtr, base::OnTaskRunnerDeleter> parser_ptr_;
+  std::unique_ptr<mojo::Remote<mojom::Parser>, base::OnTaskRunnerDeleter>
+      parser_;
   std::unique_ptr<ParserImpl, base::OnTaskRunnerDeleter> parser_impl_;
   SandboxedJsonParser sandboxed_json_parser_;
 };
@@ -152,7 +153,7 @@ TEST_F(JsonSplicerImplTest, FailedJsonListSplice) {
              const base::Optional<std::string>& error) {
             ASSERT_FALSE(error.has_value());
             ASSERT_TRUE(value.has_value());
-            std::vector<base::Value>& list = value->GetList();
+            base::Value::ConstListView list = value->GetList();
             ASSERT_TRUE(IsDaysOfWeek(list));
             std::string blank = "";
             ASSERT_FALSE(RemoveValueFromList(&*value, blank));
@@ -176,18 +177,16 @@ TEST_F(JsonSplicerImplTest, JsonListSplice) {
              const base::Optional<std::string>& error) {
             ASSERT_FALSE(error.has_value());
             ASSERT_TRUE(value.has_value());
-            std::vector<base::Value>& list = value->GetList();
+            base::Value::ConstListView list = value->GetList();
             ASSERT_TRUE(IsDaysOfWeek(list));
             std::string monday = "monday";
             ASSERT_TRUE(RemoveValueFromList(&*value, monday));
             ASSERT_FALSE(IsDaysOfWeek(list));
-            ASSERT_FALSE(std::find(list.begin(), list.end(),
-                                   base::Value(monday)) != list.end());
+            ASSERT_FALSE(base::Contains(list, base::Value(monday)));
             std::string wednesday = "wednesday";
             ASSERT_TRUE(RemoveValueFromList(&*value, wednesday));
             ASSERT_FALSE(IsDaysOfWeek(list));
-            ASSERT_FALSE(std::find(list.begin(), list.end(),
-                                   base::Value(monday)) != list.end());
+            ASSERT_FALSE(base::Contains(list, base::Value(monday)));
             done->Signal();
           },
           &done));

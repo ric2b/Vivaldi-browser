@@ -4,8 +4,7 @@
 
 package org.chromium.chrome.browser.tab;
 
-import org.chromium.chrome.browser.tab.TabUma.TabCreationState;
-import org.chromium.chrome.browser.tabmodel.TabLaunchType;
+import org.chromium.base.Callback;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.WindowAndroid;
@@ -28,7 +27,7 @@ public class TabBuilder {
     private TabDelegateFactory mDelegateFactory;
     private boolean mInitiallyHidden;
     private TabState mTabState;
-    private boolean mUnfreeze;
+    private Callback<Tab> mPreInitializeAction;
 
     /**
      * Sets the id with which the Tab to create should be identified.
@@ -102,6 +101,16 @@ public class TabBuilder {
     }
 
     /**
+     * Sets a pre-initialization action to run.
+     * @param action {@link Callback} object to invoke before {@link #initialize()}.
+     * @return {@link TabBuilder} creating the Tab.
+     */
+    public TabBuilder setPreInitializeAction(Callback<Tab> action) {
+        mPreInitializeAction = action;
+        return this;
+    }
+
+    /**
      * Sets a flag indicating whether the Tab should start as hidden. Only used if
      * {@code webContents} is {@code null}.
      * @param initiallyHidden {@code true} if the newly created {@link WebContents} will be hidden.
@@ -122,17 +131,6 @@ public class TabBuilder {
         return this;
     }
 
-    /**
-     * Sets a flag indicating if there should be an attempt to restore state at the end of
-     *        the initialization.
-     * @param unfreeze {@code true} if WebContents needs restoring from its saved state.
-     * @return {@link TabBuilder} creating the Tab.
-     */
-    public TabBuilder setUnfreeze(boolean unfreeze) {
-        mUnfreeze = unfreeze;
-        return this;
-    }
-
     public Tab build() {
         // Pre-condition check
         if (mCreationType != null) {
@@ -146,13 +144,19 @@ public class TabBuilder {
             if (mFromFrozenState) assert mLaunchType == TabLaunchType.FROM_RESTORE;
         }
 
-        Tab tab = new Tab(mId, mParent, mIncognito, mLaunchType);
+        TabImpl tab = new TabImpl(mId, mParent, mIncognito, mLaunchType);
         tab.updateWindowAndroid(mWindow);
+
+        if (mParent != null && mDelegateFactory == null) {
+            mDelegateFactory = ((TabImpl) mParent).getDelegateFactory();
+        }
+
+        if (mPreInitializeAction != null) mPreInitializeAction.onResult(tab);
 
         // Initializes Tab. Its user data objects are also initialized through the event
         // |onInitialized| of TabObserver they register.
         tab.initialize(mParent, mCreationType, mLoadUrlParams, mWebContents, mDelegateFactory,
-                mInitiallyHidden, mTabState, mUnfreeze);
+                mInitiallyHidden, mTabState);
         return tab;
     }
 

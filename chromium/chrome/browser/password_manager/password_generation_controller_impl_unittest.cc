@@ -95,12 +95,11 @@ class MockPasswordGenerationHelper
                                password_manager::PasswordManagerDriver* driver)
       : password_manager::PasswordGenerationFrameHelper(client, driver) {}
 
-  MOCK_METHOD5(GeneratePassword,
+  MOCK_METHOD4(GeneratePassword,
                base::string16(const GURL&,
                               autofill::FormSignature,
                               autofill::FieldSignature,
-                              uint32_t,
-                              uint32_t*));
+                              uint32_t));
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockPasswordGenerationHelper);
@@ -127,10 +126,8 @@ class MockPasswordGenerationDialogView
 PasswordGenerationUIData GetTestGenerationUIData1() {
   PasswordGenerationUIData data;
 
-  PasswordForm& form = data.password_form;
-  form.form_data = autofill::FormData();
-  form.form_data.action = GURL("http://www.example1.com/accounts/Login");
-  form.form_data.url = GURL("http://www.example1.com/accounts/LoginAuth");
+  data.form_data.action = GURL("http://www.example1.com/accounts/Login");
+  data.form_data.url = GURL("http://www.example1.com/accounts/LoginAuth");
 
   data.generation_element = ASCIIToUTF16("testelement1");
   data.max_length = 10;
@@ -141,10 +138,8 @@ PasswordGenerationUIData GetTestGenerationUIData1() {
 PasswordGenerationUIData GetTestGenerationUIData2() {
   PasswordGenerationUIData data;
 
-  PasswordForm& form = data.password_form;
-  form.form_data = autofill::FormData();
-  form.form_data.action = GURL("http://www.example2.com/accounts/Login");
-  form.form_data.url = GURL("http://www.example2.com/accounts/LoginAuth");
+  data.form_data.action = GURL("http://www.example2.com/accounts/Login");
+  data.form_data.url = GURL("http://www.example2.com/accounts/LoginAuth");
 
   data.generation_element = ASCIIToUTF16("testelement2");
   data.max_length = 10;
@@ -248,7 +243,7 @@ void PasswordGenerationControllerTest::InitializeAutomaticGeneration(
       mock_password_manager_driver_.get(), GetTestGenerationUIData1(),
       gfx::RectF(100, 20));
 
-  ON_CALL(*mock_generation_helper_, GeneratePassword(_, _, _, _, _))
+  ON_CALL(*mock_generation_helper_, GeneratePassword(_, _, _, _))
       .WillByDefault(Return(password));
 }
 
@@ -257,7 +252,7 @@ void PasswordGenerationControllerTest::InitializeManualGeneration(
   ON_CALL(*mock_password_manager_driver_, GetPasswordGenerationHelper())
       .WillByDefault(Return(mock_generation_helper_.get()));
 
-  ON_CALL(*mock_generation_helper_, GeneratePassword(_, _, _, _, _))
+  ON_CALL(*mock_generation_helper_, GeneratePassword(_, _, _, _))
       .WillByDefault(Return(password));
 }
 
@@ -295,7 +290,7 @@ TEST_F(PasswordGenerationControllerTest,
       mock_password_manager_driver_.get(), new_ui_data, gfx::RectF(100, 20));
 
   autofill::FormSignature form_signature =
-      autofill::CalculateFormSignature(new_ui_data.password_form.form_data);
+      autofill::CalculateFormSignature(new_ui_data.form_data);
   autofill::FieldSignature field_signature =
       autofill::CalculateFieldSignatureByNameAndType(
           new_ui_data.generation_element, "password");
@@ -309,7 +304,7 @@ TEST_F(PasswordGenerationControllerTest,
       .WillOnce(Return(mock_generation_helper_.get()));
   EXPECT_CALL(*mock_generation_helper_,
               GeneratePassword(_, form_signature, field_signature,
-                               uint32_t(new_ui_data.max_length), _))
+                               uint32_t(new_ui_data.max_length)))
       .WillOnce(Return(generated_password));
   EXPECT_CALL(*raw_dialog_view,
               Show(generated_password,

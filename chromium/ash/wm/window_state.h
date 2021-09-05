@@ -303,7 +303,7 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
 
   // Creates and takes ownership of a pointer to DragDetails when resizing is
   // active. This should be done before a resizer gets created.
-  void CreateDragDetails(const gfx::Point& point_in_parent,
+  void CreateDragDetails(const gfx::PointF& point_in_parent,
                          int window_component,
                          ::wm::WindowMoveSource source);
 
@@ -319,8 +319,8 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
 
   // Notifies that the drag operation has been either completed or reverted.
   // |location| is the last position of the pointer device used to drag.
-  void OnCompleteDrag(const gfx::Point& location);
-  void OnRevertDrag(const gfx::Point& location);
+  void OnCompleteDrag(const gfx::PointF& location);
+  void OnRevertDrag(const gfx::PointF& location);
 
   // Notifies that the window lost the activation.
   void OnActivationLost();
@@ -328,6 +328,11 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
   // Returns a pointer to DragDetails during drag operations.
   const DragDetails* drag_details() const { return drag_details_.get(); }
   DragDetails* drag_details() { return drag_details_.get(); }
+
+  void set_animation_smoothness_histogram_name(
+      base::Optional<std::string> val) {
+    animation_smoothness_histogram_name_ = val;
+  }
 
   // Returns the Display that this WindowState is on.
   display::Display GetDisplay();
@@ -390,7 +395,7 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
   ui::WindowShowState GetShowState() const;
 
   // Return the window's current pin type.
-  ash::WindowPinType GetPinType() const;
+  WindowPinType GetPinType() const;
 
   // Sets the window's bounds in screen coordinates.
   void SetBoundsInScreen(const gfx::Rect& bounds_in_screen);
@@ -448,6 +453,10 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
                                intptr_t old) override;
   void OnWindowAddedToRootWindow(aura::Window* window) override;
   void OnWindowDestroying(aura::Window* window) override;
+  void OnWindowBoundsChanged(aura::Window* window,
+                             const gfx::Rect& old_bounds,
+                             const gfx::Rect& new_bounds,
+                             ui::PropertyChangeReason reason) override;
 
   // The owner of this window settings.
   aura::Window* window_;
@@ -456,6 +465,10 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
   bool bounds_changed_by_user_;
   bool can_consume_system_keys_;
   std::unique_ptr<DragDetails> drag_details_;
+
+  // If this has a value when an animation starts, animation smoothness metrics
+  // with this name will be logged for the animation.
+  base::Optional<std::string> animation_smoothness_histogram_name_;
 
   bool unminimize_to_restore_bounds_;
   bool ignore_keyboard_bounds_change_ = false;
@@ -470,12 +483,12 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
   base::Optional<float> snapped_width_ratio_;
 
   // A property to remember the window position which was set before the
-  // auto window position manager changed the window bounds, so that it can get
-  // restored when only this one window gets shown.
+  // auto window position manager changed the window bounds, so that it can
+  // get restored when only this one window gets shown.
   base::Optional<gfx::Rect> pre_auto_manage_window_bounds_;
 
-  // A property which resets when bounds is changed by user and sets when it is
-  // nullptr, and window is removing from a workspace.
+  // A property which resets when bounds is changed by user and sets when it
+  // is nullptr, and window is removing from a workspace.
   base::Optional<gfx::Rect> pre_added_to_workspace_window_bounds_;
 
   // A property to remember the persistent window info used in multi-displays

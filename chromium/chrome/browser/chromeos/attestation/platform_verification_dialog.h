@@ -50,16 +50,8 @@ class PlatformVerificationDialog : public views::DialogDelegateView,
                              const base::string16& domain,
                              ConsentCallback callback);
 
-  // views::DialogDelegate:
-  std::unique_ptr<View> CreateExtraView() override;
-  bool Cancel() override;
-  bool Accept() override;
-  bool Close() override;
-
-  // views::WidgetDelegate:
+  // views::DialogDelegateView:
   ui::ModalType GetModalType() const override;
-
-  // views::View:
   gfx::Size CalculatePreferredSize() const override;
 
   // views::ButtonListener:
@@ -71,7 +63,7 @@ class PlatformVerificationDialog : public views::DialogDelegateView,
 
   base::string16 domain_;
   ConsentCallback callback_;
-  views::ImageButton* learn_more_button_;
+  views::ImageButton* learn_more_button_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(PlatformVerificationDialog);
 };

@@ -20,12 +20,18 @@ class CommandButton {
   }
 
   /**
-   * Decorates the given element as a progress item.
+   * Decorates the given element.
    * @param {!Element} element Item to be decorated.
    * @return {!CommandButton} Decorated item.
    */
   static decorate(element) {
-    element.__proto__ = CommandButton.prototype;
+    // Add the CommandButton methods to the element we're
+    // decorating, leaving it's prototype chain intact.
+    Object.getOwnPropertyNames(CommandButton.prototype).forEach(name => {
+      if (name !== 'constructor') {
+        element[name] = CommandButton.prototype[name];
+      }
+    });
     element = /** @type {!CommandButton} */ (element);
     element.decorate();
     return element;
@@ -72,7 +78,7 @@ class CommandButton {
     if (typeof command == 'string') {
       assert(command[0] == '#');
       command = /** @type {!cr.ui.Command} */
-          (this.ownerDocument.getElementById(command.slice(1)));
+          (this.ownerDocument.body.querySelector(command));
       cr.ui.decorate(command, cr.ui.Command);
     }
 

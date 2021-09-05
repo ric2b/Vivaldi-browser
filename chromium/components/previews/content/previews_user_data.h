@@ -31,10 +31,6 @@ class PreviewsUserData {
       return std::make_unique<ServerLitePageInfo>(*this);
     }
 
-    // The start time of the original navigation, that is, the one started by
-    // the user.
-    base::TimeTicks original_navigation_start = base::TimeTicks();
-
     // The page id used for this preview.
     uint64_t page_id = 0;
 
@@ -181,15 +177,6 @@ class PreviewsUserData {
     server_lite_page_info_ = std::move(info);
   }
 
-  // The serialized hints version for the hint that was used for the page load.
-  base::Optional<std::string> serialized_hint_version_string() const {
-    return serialized_hint_version_string_;
-  }
-  void set_serialized_hint_version_string(
-      const std::string& serialized_hint_version_string) {
-    serialized_hint_version_string_ = serialized_hint_version_string;
-  }
-
  private:
   // A session unique ID related to this navigation.
   const uint64_t page_id_;
@@ -246,9 +233,6 @@ class PreviewsUserData {
   // was or was not triggered for this navigation. Used only for metrics.
   std::unordered_map<PreviewsType, PreviewsEligibilityReason>
       preview_eligibility_reasons_ = {};
-
-  // The serialized hints version for the hint that was used for the page load.
-  base::Optional<std::string> serialized_hint_version_string_ = base::nullopt;
 
   DISALLOW_ASSIGN(PreviewsUserData);
 };

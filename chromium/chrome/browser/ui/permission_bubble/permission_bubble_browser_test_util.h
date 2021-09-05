@@ -10,32 +10,38 @@
 
 #include "base/macros.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
-#include "chrome/browser/ui/permission_bubble/permission_prompt.h"
+#include "components/permissions/permission_prompt.h"
 
 namespace base {
 class CommandLine;
-}
-class PermissionRequest;
-class Browser;
+}  // namespace base
 
-class TestPermissionBubbleViewDelegate : public PermissionPrompt::Delegate {
+namespace content {
+class WebContents;
+}  // namespace content
+
+namespace permissions {
+class PermissionRequest;
+}
+
+class TestPermissionBubbleViewDelegate
+    : public permissions::PermissionPrompt::Delegate {
  public:
   TestPermissionBubbleViewDelegate();
   ~TestPermissionBubbleViewDelegate() override;
 
-  const std::vector<PermissionRequest*>& Requests() override;
-  PermissionPrompt::DisplayNameOrOrigin GetDisplayNameOrOrigin() override;
+  const std::vector<permissions::PermissionRequest*>& Requests() override;
 
   void Accept() override {}
   void Deny() override {}
   void Closing() override {}
 
-  void set_requests(std::vector<PermissionRequest*> requests) {
+  void set_requests(std::vector<permissions::PermissionRequest*> requests) {
     requests_ = requests;
   }
 
  private:
-  std::vector<PermissionRequest*> requests_;
+  std::vector<permissions::PermissionRequest*> requests_;
 
   DISALLOW_COPY_AND_ASSIGN(TestPermissionBubbleViewDelegate);
 };
@@ -50,14 +56,16 @@ class PermissionBubbleBrowserTest : public extensions::ExtensionBrowserTest {
 
   void SetUpOnMainThread() override;
 
-  // Opens an app window, and returns the associated browser.
-  Browser* OpenExtensionAppWindow();
+  // Opens an app window and returns its WebContents.
+  content::WebContents* OpenExtensionAppWindow();
 
-  PermissionPrompt::Delegate* test_delegate() { return &test_delegate_; }
+  permissions::PermissionPrompt::Delegate* test_delegate() {
+    return &test_delegate_;
+  }
 
  private:
   TestPermissionBubbleViewDelegate test_delegate_;
-  std::vector<std::unique_ptr<PermissionRequest>> requests_;
+  std::vector<std::unique_ptr<permissions::PermissionRequest>> requests_;
 
   DISALLOW_COPY_AND_ASSIGN(PermissionBubbleBrowserTest);
 };

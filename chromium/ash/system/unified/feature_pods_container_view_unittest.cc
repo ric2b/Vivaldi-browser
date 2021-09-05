@@ -14,6 +14,8 @@
 #include "ash/system/unified/unified_system_tray_model.h"
 #include "ash/test/ash_test_base.h"
 #include "base/test/scoped_feature_list.h"
+#include "ui/accessibility/ax_enums.mojom.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/views/view_observer.h"
 
 namespace ash {
@@ -28,7 +30,7 @@ class FeaturePodsContainerViewTest : public NoSessionAshTestBase,
   // AshTestBase:
   void SetUp() override {
     AshTestBase::SetUp();
-    model_ = std::make_unique<UnifiedSystemTrayModel>();
+    model_ = std::make_unique<UnifiedSystemTrayModel>(nullptr);
     controller_ = std::make_unique<UnifiedSystemTrayController>(model_.get());
     container_ = std::make_unique<FeaturePodsContainerView>(
         controller_.get(), true /* initially_expanded */);
@@ -252,6 +254,10 @@ TEST_F(FeaturePodsContainerViewTest, PaginationDynamicRows) {
   const int kNumberOfFeaturePods = kUnifiedFeaturePodItemsInRow * 3;
   const int padding =
       kUnifiedFeaturePodTopPadding + kUnifiedFeaturePodBottomPadding;
+  int row_height =
+      kUnifiedFeaturePodSize.height() + kUnifiedFeaturePodVerticalPadding;
+  int min_height_for_three_rows = kUnifiedFeaturePodMaxRows * row_height +
+                                  padding + kMessageCenterCollapseThreshold;
 
   EnablePagination();
   AddButtons(kNumberOfFeaturePods);
@@ -264,10 +270,9 @@ TEST_F(FeaturePodsContainerViewTest, PaginationDynamicRows) {
     expected_number_of_pages += 1;
   EXPECT_EQ(expected_number_of_pages, pagination_model()->total_pages());
 
-  // Expect 2 rows of feature pods when there is enough height to display them.
-  container()->SetMaxHeight(padding +
-                            (2 * (kUnifiedFeaturePodSize.height() +
-                                  kUnifiedFeaturePodVerticalPadding)));
+  // Expect 2 rows of feature pods when there is enough height to display them
+  // but less than enough to display 3 rows.
+  container()->SetMaxHeight(min_height_for_three_rows - 1);
   expected_number_of_pages =
       kNumberOfFeaturePods / (2 * kUnifiedFeaturePodItemsInRow);
   if (kNumberOfFeaturePods % (2 * kUnifiedFeaturePodItemsInRow))
@@ -276,13 +281,14 @@ TEST_F(FeaturePodsContainerViewTest, PaginationDynamicRows) {
 
   // Expect 3 rows of feature pods at max even when the max height is very
   // large.
-  container()->SetMaxHeight(100 * (kUnifiedFeaturePodSize.height()));
+  container()->SetMaxHeight(min_height_for_three_rows + 1);
   expected_number_of_pages =
       kNumberOfFeaturePods / (3 * kUnifiedFeaturePodItemsInRow);
   if (kNumberOfFeaturePods % (3 * kUnifiedFeaturePodItemsInRow))
     expected_number_of_pages += 1;
   EXPECT_EQ(expected_number_of_pages, pagination_model()->total_pages());
 }
+
 TEST_F(FeaturePodsContainerViewTest, PaginationGestureHandling) {
   const int kNumberOfPages = 8;
 

@@ -25,10 +25,24 @@ namespace syncer {
 // A class that holds information regarding the properties of a device.
 class DeviceInfo {
  public:
+  // A struct that holds information regarding to FCM web push.
+  struct SharingTargetInfo {
+    // FCM registration token of device.
+    std::string fcm_token;
+
+    // Public key for Sharing message encryption[RFC8291].
+    std::string p256dh;
+
+    // Auth secret for Sharing message encryption[RFC8291].
+    std::string auth_secret;
+
+    bool operator==(const SharingTargetInfo& other) const;
+  };
+
+  // A struct that holds information regarding to Sharing features.
   struct SharingInfo {
-    SharingInfo(std::string fcm_token,
-                std::string p256dh,
-                std::string auth_secret,
+    SharingInfo(SharingTargetInfo vapid_target_info,
+                SharingTargetInfo sharing_target_info,
                 std::set<sync_pb::SharingSpecificFields::EnabledFeatures>
                     enabled_features);
     SharingInfo(const SharingInfo& other);
@@ -36,14 +50,12 @@ class DeviceInfo {
     SharingInfo& operator=(const SharingInfo& other);
     ~SharingInfo();
 
-    // FCM registration token of device for sending Sharing messages.
-    std::string fcm_token;
+    // Target info using VAPID key.
+    // TODO(crbug.com/1012226): Deprecate when VAPID migration is over.
+    SharingTargetInfo vapid_target_info;
 
-    // Subscription public key required for Sharing message encryption[RFC8291].
-    std::string p256dh;
-
-    // Auth secret key required for Sharing message encryption[RFC8291].
-    std::string auth_secret;
+    // Target info using Sharing sender ID.
+    SharingTargetInfo sender_id_target_info;
 
     // Set of Sharing features enabled on the device.
     std::set<sync_pb::SharingSpecificFields::EnabledFeatures> enabled_features;
@@ -59,6 +71,7 @@ class DeviceInfo {
              const std::string& signin_scoped_device_id,
              const base::SysInfo::HardwareInfo& hardware_info,
              base::Time last_updated_timestamp,
+             base::TimeDelta pulse_interval,
              bool send_tab_to_self_receiving_enabled,
              const base::Optional<SharingInfo>& sharing_info);
   ~DeviceInfo();
@@ -94,6 +107,11 @@ class DeviceInfo {
 
   // Returns the time at which this device was last updated to the sync servers.
   base::Time last_updated_timestamp() const;
+
+  // Returns the interval with which this device is updated to the sync servers
+  // if online and while sync is actively running (e.g. excludes backgrounded
+  // apps on Android).
+  base::TimeDelta pulse_interval() const;
 
   // Whether the receiving side of the SendTabToSelf feature is enabled.
   bool send_tab_to_self_receiving_enabled() const;
@@ -148,6 +166,8 @@ class DeviceInfo {
   base::SysInfo::HardwareInfo hardware_info_;
 
   const base::Time last_updated_timestamp_;
+
+  const base::TimeDelta pulse_interval_;
 
   bool send_tab_to_self_receiving_enabled_;
 

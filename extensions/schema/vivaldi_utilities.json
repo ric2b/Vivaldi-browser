@@ -42,6 +42,10 @@
           {
             "name": "password",
             "description": "The password dialog opening to save a password."
+          },
+          {
+            "name": "permission",
+            "description": "The permission dialog allowing or blocking one or more permissions."
           }
         ]
       },
@@ -377,6 +381,24 @@
         ]
       },
       {
+        "name": "getMediaAvailableState",
+        "type": "function",
+        "description": "Windows: Returns whether this version of the OS has media codecs installed. Might return false on N versions of Windows.",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "value",
+                "type": "boolean",
+                "description": "true if codecs are available, otherwise false (typically N versions of Windows with no media pack installed)."
+              }
+            ]
+          }
+        ]
+      },
+      {
         "name": "setSharedData",
         "type": "function",
         "description": "Sets the given data to be kept in-memory for the duration of the Vivaldi setting (until Vivaldi exits).",
@@ -555,6 +577,7 @@
           {
             "type": "function",
             "name": "callback",
+            "optional": true,
             "parameters": [
             ]
           }
@@ -568,6 +591,7 @@
           {
             "type": "function",
             "name": "callback",
+            "optional": true,
             "parameters": [
             ]
           }
@@ -778,6 +802,7 @@
           {
             "type": "function",
             "name": "callback",
+            "optional": true,
             "parameters": [
               {
                 "name": "results",
@@ -947,6 +972,13 @@
               }
             ]
           }
+        ]
+      },
+      {
+        "name": "startChromecast",
+        "type": "function",
+        "description": "Shows the Chromecast dialog.",
+        "parameters": [
         ]
       }
     ],

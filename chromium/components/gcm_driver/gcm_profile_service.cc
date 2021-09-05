@@ -25,7 +25,6 @@
 #include "base/memory/weak_ptr.h"
 #include "components/gcm_driver/account_tracker.h"
 #include "components/gcm_driver/gcm_account_tracker.h"
-#include "components/gcm_driver/gcm_channel_status_syncer.h"
 #include "components/gcm_driver/gcm_client_factory.h"
 #include "components/gcm_driver/gcm_desktop_utils.h"
 #include "components/gcm_driver/gcm_driver_desktop.h"
@@ -112,7 +111,7 @@ void GCMProfileService::IdentityObserver::StartAccountTracker(
     return;
 
   std::unique_ptr<AccountTracker> gaia_account_tracker(
-      new AccountTracker(identity_manager_, std::move(url_loader_factory)));
+      new AccountTracker(identity_manager_));
 
   gcm_account_tracker_.reset(new GCMAccountTracker(
       std::move(gaia_account_tracker), identity_manager_, driver_));
@@ -122,31 +121,20 @@ void GCMProfileService::IdentityObserver::StartAccountTracker(
 
 #endif  // !BUILDFLAG(USE_GCM_FROM_PLATFORM)
 
-// static
-bool GCMProfileService::IsGCMEnabled(PrefService* prefs) {
-#if BUILDFLAG(USE_GCM_FROM_PLATFORM)
-  return true;
-#else
-  return prefs->GetBoolean(gcm::prefs::kGCMChannelStatus);
-#endif  // BUILDFLAG(USE_GCM_FROM_PLATFORM)
-}
-
 #if BUILDFLAG(USE_GCM_FROM_PLATFORM)
 GCMProfileService::GCMProfileService(
     base::FilePath path,
-    scoped_refptr<base::SequencedTaskRunner>& blocking_task_runner,
-    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
+    scoped_refptr<base::SequencedTaskRunner>& blocking_task_runner) {
   driver_ = std::make_unique<GCMDriverAndroid>(
-      path.Append(gcm_driver::kGCMStoreDirname), blocking_task_runner,
-      std::move(url_loader_factory));
+      path.Append(gcm_driver::kGCMStoreDirname), blocking_task_runner);
 }
 #else
 GCMProfileService::GCMProfileService(
     PrefService* prefs,
     base::FilePath path,
-    base::RepeatingCallback<
-        void(base::WeakPtr<GCMProfileService>,
-             network::mojom::ProxyResolvingSocketFactoryRequest)>
+    base::RepeatingCallback<void(
+        base::WeakPtr<GCMProfileService>,
+        mojo::PendingReceiver<network::mojom::ProxyResolvingSocketFactory>)>
         get_socket_factory_callback,
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     network::NetworkConnectionTracker* network_connection_tracker,
@@ -159,9 +147,15 @@ GCMProfileService::GCMProfileService(
     scoped_refptr<base::SequencedTaskRunner>& blocking_task_runner)
     : identity_manager_(identity_manager),
       url_loader_factory_(std::move(url_loader_factory)) {
+  signin::IdentityManager::AccountIdMigrationState id_migration =
+      identity_manager_->GetAccountIdMigrationState();
+  bool remove_account_mappings_with_email_key =
+      (id_migration == signin::IdentityManager::MIGRATION_IN_PROGRESS) ||
+      (id_migration == signin::IdentityManager::MIGRATION_DONE);
   driver_ = CreateGCMDriverDesktop(
       std::move(gcm_client_factory), prefs,
       path.Append(gcm_driver::kGCMStoreDirname),
+      remove_account_mappings_with_email_key,
       base::BindRepeating(get_socket_factory_callback,
                           weak_ptr_factory_.GetWeakPtr()),
       url_loader_factory_, network_connection_tracker, channel,

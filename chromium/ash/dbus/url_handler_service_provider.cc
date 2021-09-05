@@ -45,7 +45,7 @@ void UrlHandlerServiceProvider::Start(
       chromeos::kUrlHandlerServiceOpenUrlMethod,
       base::BindRepeating(&UrlHandlerServiceProvider::OpenUrl,
                           weak_ptr_factory_.GetWeakPtr()),
-      base::BindRepeating(&OnExported));
+      base::BindOnce(&OnExported));
 }
 
 bool UrlHandlerServiceProvider::UrlAllowed(const GURL& gurl) const {
@@ -60,21 +60,23 @@ void UrlHandlerServiceProvider::OpenUrl(
   std::string url;
   if (!reader.PopString(&url)) {
     LOG(ERROR) << "Method call lacks URL: " << method_call->ToString();
-    response_sender.Run(dbus::ErrorResponse::FromMethodCall(
-        method_call, DBUS_ERROR_INVALID_ARGS, "No URL string arg"));
+    std::move(response_sender)
+        .Run(dbus::ErrorResponse::FromMethodCall(
+            method_call, DBUS_ERROR_INVALID_ARGS, "No URL string arg"));
     return;
   }
 
   const GURL gurl(url);
   if (!UrlAllowed(gurl)) {
-    response_sender.Run(dbus::ErrorResponse::FromMethodCall(
-        method_call, DBUS_ERROR_FAILED, "Invalid URL"));
+    std::move(response_sender)
+        .Run(dbus::ErrorResponse::FromMethodCall(method_call, DBUS_ERROR_FAILED,
+                                                 "Invalid URL"));
     return;
   }
 
   NewWindowDelegate::GetInstance()->NewTabWithUrl(
       gurl, false /* from_user_interaction */);
-  response_sender.Run(dbus::Response::FromMethodCall(method_call));
+  std::move(response_sender).Run(dbus::Response::FromMethodCall(method_call));
 }
 
 }  // namespace ash

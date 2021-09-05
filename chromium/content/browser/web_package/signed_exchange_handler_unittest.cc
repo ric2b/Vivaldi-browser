@@ -40,7 +40,7 @@
 #include "services/network/public/cpp/network_switches.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/public/common/web_package/signed_exchange_request_matcher.h"
+#include "third_party/blink/public/common/web_package/web_package_request_matcher.h"
 
 using testing::_;
 using testing::DoAll;
@@ -136,6 +136,7 @@ class GMockCertVerifier : public net::CertVerifier {
              net::CompletionOnceCallback callback,
              std::unique_ptr<net::CertVerifier::Request>* out_req,
              const net::NetLogWithSource& net_log) override {
+    verify_result->Reset();
     return VerifyImpl(params, verify_result, out_req, net_log);
   }
 
@@ -305,8 +306,8 @@ class SignedExchangeHandlerTest
   SignedExchangeLoadResult result() const { return result_; }
   net::Error error() const { return error_; }
   const GURL& inner_url() const { return inner_url_; }
-  const network::ResourceResponseHead& resource_response() const {
-    return resource_response_;
+  const network::mojom::URLResponseHead& resource_response() const {
+    return *resource_response_;
   }
 
   // Creates a TestURLRequestContext that uses |mock_ct_policy_enforcer_|.
@@ -335,7 +336,7 @@ class SignedExchangeHandlerTest
         base::BindOnce(&SignedExchangeHandlerTest::OnHeaderFound,
                        base::Unretained(this)),
         std::move(cert_fetcher_factory_), net::LOAD_NORMAL,
-        std::make_unique<blink::SignedExchangeRequestMatcher>(
+        std::make_unique<blink::WebPackageRequestMatcher>(
             net::HttpRequestHeaders(), std::string() /* accept_langs */),
         nullptr /* devtools_proxy */, nullptr /* reporter */,
         FrameTreeNode::kFrameTreeNodeInvalidId);
@@ -384,13 +385,13 @@ class SignedExchangeHandlerTest
   void OnHeaderFound(SignedExchangeLoadResult result,
                      net::Error error,
                      const GURL& url,
-                     const network::ResourceResponseHead& resource_response,
+                     network::mojom::URLResponseHeadPtr resource_response,
                      std::unique_ptr<net::SourceStream> payload_stream) {
     read_header_ = true;
     result_ = result;
     error_ = error;
     inner_url_ = url;
-    resource_response_ = resource_response;
+    resource_response_ = std::move(resource_response);
     payload_stream_ = std::move(payload_stream);
   }
 
@@ -420,7 +421,7 @@ class SignedExchangeHandlerTest
   SignedExchangeLoadResult result_;
   net::Error error_;
   GURL inner_url_;
-  network::ResourceResponseHead resource_response_;
+  network::mojom::URLResponseHeadPtr resource_response_;
   std::unique_ptr<net::SourceStream> payload_stream_;
   std::string source_stream_contents_;
 };

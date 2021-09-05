@@ -8,6 +8,7 @@
 <translation id="1169783199079129864">{MINUTES,plural, =1{1 хв}one{# хв}few{# хв}many{# хв}other{# хв}}</translation>
 <translation id="1181037720776840403">Видалити</translation>
 <translation id="1201402288615127009">Далі</translation>
+<translation id="1218444235442067213"><ph name="APP_NAME" />, додаток із Play Маркету</translation>
 <translation id="1243314992276662751">Завантажити</translation>
 <translation id="1266864766717917324">Не вдалося надіслати: <ph name="CONTENT_TYPE" /></translation>
 <translation id="1269641567813814718">Win</translation>
@@ -18,8 +19,9 @@
 <translation id="1368832886055348810">Зліва направо</translation>
 <translation id="1383876407941801731">Пошук</translation>
 <translation id="1398853756734560583">Збільшити</translation>
-<translation id="1409544243779336081">Рекомендовані додатки</translation>
+<translation id="1414271762428216854"><ph name="APP_NAME" />, установлений додаток</translation>
 <translation id="1450753235335490080">Не вдалося надіслати: <ph name="CONTENT_TYPE" /></translation>
+<translation id="1487931858675166540">Заміна: "<ph name="FIRST_ITEM_TITLE" />" на "<ph name="SECOND_ITEM_TITLE" />"</translation>
 <translation id="1498028757988366001">Ви раніше це шукали. Якщо видалити запит "<ph name="QUERY" />" з історії, він назавжди зникне з вашого облікового запису на всіх пристроях.</translation>
 <translation id="1591184457164800433">{MINUTES,plural, =1{1 хвилина та }one{# хвилина та }few{# хвилини та }many{# хвилин і }other{# хвилини та }}</translation>
 <translation id="1643823602425662293">Сповіщення</translation>
@@ -30,17 +32,17 @@
 <translation id="1801827354178857021">Крапка</translation>
 <translation id="1803208670097017349">{MONTHS,plural, =1{1 місяць}one{# місяць}few{# місяці}many{# місяців}other{# місяця}}</translation>
 <translation id="1809410197924942083"><ph name="QUANTITY" /> МБ/сек.</translation>
-<translation id="1812519734428420144">Рейтинг у зірочках: <ph name="RATING_SCORE" /></translation>
 <translation id="1830179671306812954">{HOURS,plural, =1{1 година та }one{# година та }few{# години та }many{# годин і }other{# години та }}</translation>
+<translation id="1830308660060964064"><ph name="ITEM_TITLE" />: відкріплено</translation>
 <translation id="1842960171412779397">вибрати</translation>
 <translation id="1859234291848436338">Напрямок письма</translation>
 <translation id="1860796786778352021">Закрити сповіщення</translation>
 <translation id="1871244248791675517">Ins</translation>
 <translation id="1884435127456172652"><ph name="NUMBER" />%</translation>
 <translation id="1901303067676059328">Вибрати &amp;всі</translation>
-<translation id="1938451708255335766">Щоб налаштувати щільність показу вікон, перезапустіть додаток.</translation>
 <translation id="2006524834898217237">Перевірте, чи пристрій підключено до Інтернету.</translation>
 <translation id="208586643495776849">Повторіть спробу</translation>
+<translation id="2090963878406559571">Щоб надіслати номер із сайту <ph name="ORIGIN" /> на телефон Android, <ph name="TROUBLESHOOT_LINK" /> для обох пристроїв у налаштуваннях.</translation>
 <translation id="2141853158323869627">{DAYS,plural, =1{1 д.}one{# д.}few{# дн.}many{# дн.}other{# дн.}}</translation>
 <translation id="2148716181193084225">Сьогодні</translation>
 <translation id="2161656808144014275">Текст</translation>
@@ -67,10 +69,12 @@
 <translation id="2666092431469916601">Верх</translation>
 <translation id="2701330563083355633">Надіслано з пристрою "<ph name="DEVICE_NAME" />"</translation>
 <translation id="2743387203779672305">Копіювати в буфер</translation>
+<translation id="2749082172777216925"><ph name="APP_NAME_INFO" />, <ph name="PRICE" /></translation>
 <translation id="2803313416453193357">Відкрити папку</translation>
 <translation id="2824719307700604149">{YEARS,plural, =1{1 рік тому}one{# рік тому}few{# роки тому}many{# років тому}other{# року тому}}</translation>
 <translation id="2907671656515444832">{DAYS,plural, =1{через 1 дн.}one{через # дн.}few{через # дн.}many{через # дн.}other{через # дн.}}</translation>
 <translation id="2931838996092594335">натиснути</translation>
+<translation id="2981684127883932071">Показано пропозиції</translation>
 <translation id="3036649622769666520">Відкрити файли</translation>
 <translation id="3049748772180311791"><ph name="QUANTITY" /> МБ</translation>
 <translation id="3068711042108640621">Полицю розташовано ліворуч</translation>
@@ -81,10 +85,11 @@
 <translation id="3234408098842461169">Курсор униз</translation>
 <translation id="3291688615589870984">{DAYS,plural, =1{1 день}one{# день}few{# дні}many{# днів}other{# дня}}</translation>
 <translation id="3295886253693811851">Зателефонувати через</translation>
+<translation id="3306688585798492231">Вбудований екран</translation>
 <translation id="335581015389089642">Speech</translation>
 <translation id="3389286852084373014">SMS-повідомлення завелике</translation>
-<translation id="3479552764303398839">Не зараз</translation>
 <translation id="348799646910989694">Автоматичне ховання полиці</translation>
+<translation id="3554637740840164787"><ph name="ITEM_TITLE" />: закріплено</translation>
 <translation id="3600566671520689681">{DAYS,plural, =1{Залишився 1 день}one{Залишився # день}few{Залишилося # дні}many{Залишилося # днів}other{Залишилося # дня}}</translation>
 <translation id="3600969208114796418">Файл <ph name="SAVEAS_EXTENSION_TYPE" /></translation>
 <translation id="3608915363409716668"><ph name="MAXIMUM_VALUE" />+</translation>
@@ -97,7 +102,6 @@
 <translation id="3842239759367498783">Продовжити читати з мобільного пристрою <ph name="TITLE" /></translation>
 <translation id="385051799172605136">Назад</translation>
 <translation id="3889424535448813030">Курсор праворуч</translation>
-<translation id="3892641579809465218">Внутрішній екран</translation>
 <translation id="3897092660631435901">Меню</translation>
 <translation id="3909791450649380159">Вирізат&amp;и</translation>
 <translation id="3990502903496589789">Правий край</translation>
@@ -106,8 +110,11 @@
 <translation id="4250229828105606438">Знімок екрана</translation>
 <translation id="4266252015790371705">{MONTHS,plural, =1{1 місяць тому}one{# місяць тому}few{# місяці тому}many{# місяців тому}other{# місяця тому}}</translation>
 <translation id="4289300219472526559">Start Speaking</translation>
+<translation id="430191667033048642">Додаток <ph name="MOVED_APP_NAME" /> переміщено в папку "<ph name="FOLDER_NAME" />".</translation>
 <translation id="4316910396681052118">УСІ ДОДАТКИ</translation>
 <translation id="4588090240171750605">Прокрутка вправо</translation>
+<translation id="4631891353005174729"><ph name="APP_NAME_TYPE" />, оцінка – <ph name="RATING_SCORE" /></translation>
+<translation id="4648249871170053485"><ph name="APP_NAME" />, рекомендований додаток</translation>
 <translation id="4690510401873698237">Полицю розміщено внизу</translation>
 <translation id="4724120544754982507">Центр сповіщень, непрочитаних сповіщень: <ph name="UNREAD_NOTIFICATION_COUNT" /></translation>
 <translation id="4730374152663651037">ЧАСТО ВИКОРИСТОВУЮТЬСЯ</translation>
@@ -117,6 +124,7 @@
 <translation id="4971687151119236543">Попередня композиція</translation>
 <translation id="5046499563572181734">Торкніться тут</translation>
 <translation id="5076340679995252485">&amp;Вставити</translation>
+<translation id="5198715732953550718">Щоб створити нову папку, об'єднано додатки <ph name="MOVED_APP_NAME" /> і <ph name="IN_PLACE_APP" />.</translation>
 <translation id="520299402983819650"><ph name="QUANTITY" /> Пб</translation>
 <translation id="5266161281976477809">Трикутник відкривання</translation>
 <translation id="5278860589123563674">Не вдалося надіслати</translation>
@@ -130,11 +138,12 @@
 <translation id="5574202486608032840">Система <ph name="IDS_SHORT_PRODUCT_OS_NAME" /></translation>
 <translation id="5583640892426849032">Backspace</translation>
 <translation id="5613020302032141669">Курсор ліворуч</translation>
+<translation id="5675363643668471212">Елемент полиці</translation>
 <translation id="5754277640426581776">{MINUTES,plural, =1{1 хв}one{# хв}few{# хв}many{# хв}other{# хв}}</translation>
 <translation id="5763338081255973061">{DAYS,plural, =0{Остання активність: сьогодні}=1{Остання активність: 1 день тому}one{Остання активність: # день тому}few{Остання активність: # дні тому}many{Остання активність: # днів тому}other{Остання активність: # дня тому}}</translation>
 <translation id="5768079895599174203">{DAYS,plural, =1{1 день і }one{# день і }few{# дні та }many{# днів і }other{# дня та }}</translation>
+<translation id="5789643057113097023">.</translation>
 <translation id="5866104238061687188">{YEARS,plural, =1{через 1 р.}one{через # р.}few{через # р.}many{через # р.}other{через # р.}}</translation>
-<translation id="5895138241574237353">Перезапустити</translation>
 <translation id="5906667377645263094">{SECONDS,plural, =1{Залишилась 1 секунда}one{Залишилася # секунда}few{Залишилося # секунди}many{Залишилося # секунд}other{Залишилося # секунди}}</translation>
 <translation id="5941711191222866238">Зменшити</translation>
 <translation id="5943826764092288734">{HOURS,plural, =1{1 година}one{# година}few{# години}many{# годин}other{# години}}</translation>
@@ -179,6 +188,7 @@
 <translation id="6974053822202609517">Справа наліво</translation>
 <translation id="7052633198403197513">F1</translation>
 <translation id="7130207228079676353">НАЙІМОВІРНІШЕ</translation>
+<translation id="7170202025028120564">Налаштування екрана для додатка почнуть діяти після наступного перезапуску.</translation>
 <translation id="7222373446505536781">F11</translation>
 <translation id="7238427729722629793">{MINUTES,plural, =1{Залишилась 1 хв}one{Залишилася # хв}few{Залишилося # хв}many{Залишилося # хв}other{Залишилося # хв}}</translation>
 <translation id="7319740667687257810">Панель запуску, частковий перегляд</translation>
@@ -192,6 +202,7 @@
 <translation id="7658239707568436148">Скасувати</translation>
 <translation id="7781829728241885113">Учора</translation>
 <translation id="7814458197256864873">&amp;Копіювати</translation>
+<translation id="7848989271541991537">Переміщено на сторінку <ph name="PAGE_NUMBER" />, рядок <ph name="ROW_NUMBER" />, стовпець <ph name="COLUMN_NUMBER" />.</translation>
 <translation id="7879499977785298635">Не блокувати</translation>
 <translation id="7907591526440419938">Відкрити файл</translation>
 <translation id="7969046989155602842">Клавіша Command</translation>
@@ -208,6 +219,7 @@
 <translation id="8179976553408161302">Enter</translation>
 <translation id="8210608804940886430">Сторінка вниз</translation>
 <translation id="8245914219290430011">Tab</translation>
+<translation id="8247998213073982446"><ph name="APP_NAME" />, додаток</translation>
 <translation id="8259556432390118667">Шістнадцятковий код кольору</translation>
 <translation id="8328145009876646418">Лівий край</translation>
 <translation id="8331626408530291785">Прокрутка вгору</translation>
@@ -232,12 +244,13 @@
 <translation id="8926951137623668982">Полицю завжди сховано</translation>
 <translation id="8996630695507351249">Переконайтеся, що пристрій <ph name="TARGET_DEVICE_NAME" /> підключено до Інтернету.</translation>
 <translation id="9002566407876343676">відкрити</translation>
-<translation id="9039076430527029379">Перенести на сторінку <ph name="PAGE_NUMBER" />, <ph name="ROW_NUMBER" /> рядок, <ph name="COLUMN_NUMBER" /> стовпець.</translation>
 <translation id="9044832324875206639">{SECONDS,plural, =1{1 с}one{# с}few{# с}many{# с}other{# с}}</translation>
 <translation id="9059834730836941392">Згорнути сповіщення</translation>
 <translation id="9150735707954472829">Вкладка</translation>
 <translation id="9161053988251441839">ПРОПОНОВАНІ ДОДАТКИ</translation>
 <translation id="9170848237812810038">&amp;Скасувати</translation>
+<translation id="9178475906033259337">Показано 1 результат для запиту "<ph name="QUERY" />"</translation>
 <translation id="932327136139879170">Домашня сторінка</translation>
 <translation id="944069440740578670">Непрочитані сповіщення</translation>
+<translation id="974545358917229949">Показано результати (<ph name="RESULT_COUNT" />) для запиту "<ph name="QUERY" />"</translation>
 </translationbundle>

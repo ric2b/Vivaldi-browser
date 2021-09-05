@@ -29,6 +29,7 @@
 <translation id="1243314992276662751">Завантажити</translation>
 <translation id="1249250836236328755">Жанр</translation>
 <translation id="1278813325885878377">Угорська клавіатура QWERTY</translation>
+<translation id="1293556467332435079">Файли</translation>
 <translation id="1297922636971898492">Диск Google зараз недоступний. Завантаження автоматично відновиться після повторного під’єднання до Google Диска.</translation>
 <translation id="1307931752636661898">Не вдається переглянути файли Linux</translation>
 <translation id="1310751437842832374">Транслітерація (mausam → ନମସ୍ତେ)</translation>
@@ -80,6 +81,7 @@
 <translation id="1847880352285315359">Збережено</translation>
 <translation id="1864756863218646478">Файл неможливо знайти.</translation>
 <translation id="1921986354447415460">Турецька клавіатура F</translation>
+<translation id="1924372192547904021">Диск "<ph name="DRIVE_NAME" />" відформатовано</translation>
 <translation id="1931134289871235022">Словацька</translation>
 <translation id="1933345018156373194">Не вдалося перемістити, неочікувана помилка: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="1936717151811561466">Фінська</translation>
@@ -163,6 +165,7 @@
 <translation id="2942290791863759244">Німецька клавіатура NEO 2</translation>
 <translation id="2943400156390503548">Презентації</translation>
 <translation id="2943503720238418293">Введіть коротшу назву</translation>
+<translation id="2949781154072577687">Форматування диска "<ph name="DRIVE_NAME" />"…</translation>
 <translation id="2951236788251446349">Медуза</translation>
 <translation id="2963783323012015985">Турецька розкладка</translation>
 <translation id="2966459079597787514">Шведська розкладка</translation>
@@ -275,6 +278,7 @@
 <translation id="4336032328163998280">Помилка операції копіювання. <ph name="ERROR_MESSAGE" /></translation>
 <translation id="4364327530094270451">Диня</translation>
 <translation id="4372884569765913867">1x1</translation>
+<translation id="4394214039309501350">Зовнішнє посилання</translation>
 <translation id="4425149324548788773">Мій диск</translation>
 <translation id="4465830120256509958">Бразильська розкладка</translation>
 <translation id="4470564870223067757">Клавіатура хангул із 2 наборами клавіш</translation>
@@ -505,6 +509,7 @@
 <translation id="6878261347041253038">Клавіатура деванагарі (фонетична)</translation>
 <translation id="6885780034956018177">Равлик</translation>
 <translation id="6896758677409633944">Копіювати</translation>
+<translation id="6898028766943174120">Інші підпапки…</translation>
 <translation id="691516599546977041">Неможливо зберегти в папку "<ph name="FOLDER_NAME" />". Відредаговані зображення буде збережено в папці "Завантаження".</translation>
 <translation id="6915678159055240887">Chromebox</translation>
 <translation id="6918340160281024199">US Workman</translation>
@@ -517,6 +522,7 @@
 <translation id="696203921837389374">Увімкнути синхронізацію через мобільний Інтернет</translation>
 <translation id="6965382102122355670">OK</translation>
 <translation id="6970230597523682626">Болгарська</translation>
+<translation id="6973630695168034713">Папки</translation>
 <translation id="6978611942794658017">Цей файл створено для ПК, на яких використовується програмне забезпечення Windows. Він несумісний із вашим пристроєм, оскільки на ньому встановлено ОС Chrome. Знайдіть відповідний додаток у Веб-магазині Chrome.</translation>
 <translation id="6979158407327259162">Диск Google</translation>
 <translation id="6990081529015358884">У вас недостатньо місця</translation>
@@ -564,9 +570,11 @@
 <translation id="7589661784326793847">Зачекайте</translation>
 <translation id="7603724359189955920">Сітка</translation>
 <translation id="7627790789328695202">Файл "<ph name="FILE_NAME" />" вже існує. Перейменуйте його та повторіть спробу.</translation>
+<translation id="7628656427739290098">Завершено <ph name="PERCENT" />%.</translation>
 <translation id="7649070708921625228">Довідка</translation>
 <translation id="7654209398114106148">Переміщення елементів (<ph name="NUMBER_OF_ITEMS" />)…</translation>
 <translation id="7658239707568436148">Скасувати</translation>
+<translation id="7695430100978772476">Не вдалося відформатувати диск "<ph name="DRIVE_NAME" />"</translation>
 <translation id="770015031906360009">Грецька</translation>
 <translation id="7706319470528945664">Португальська розкладка</translation>
 <translation id="7711920809702896782">Інформація про зображення</translation>

@@ -1,10 +1,13 @@
 // Copyright (c) 2019 Vivaldi Technologies AS. All rights reserved.
 
 #include <Windows.h>
+#include <cguid.h>
+#include <objbase.h>
 #include <tchar.h>
 #include "ui/lights/razer_chroma_platform_driver_win.h"
 
 #include "base/synchronization/lock.h"
+#include "chrome/browser/profiles/profile.h"
 #include "components/prefs/pref_service.h"
 #include "prefs/vivaldi_gen_prefs.h"
 
@@ -54,8 +57,6 @@ typedef RZRESULT (*QUERYDEVICE)(RZDEVICEID DeviceId,
 
 namespace {
 
-INIT pInit;
-UNINIT pUnInit;
 CREATEEFFECT pCreateEffect;
 CREATEKEYBOARDEFFECT pCreateKeyboardEffect;
 CREATEMOUSEEFFECT pCreateMouseEffect;
@@ -65,7 +66,6 @@ CREATEKEYPADEFFECT pCreateKeypadEffect;
 CREATECHROMALINKEFFECT pCreateChromaLinkEffect;
 SETEFFECT pSetEffect;
 DELETEEFFECT pDeleteEffect;
-QUERYDEVICE pQueryDevice;
 
 }  // namespace
 

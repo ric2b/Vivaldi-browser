@@ -8,18 +8,33 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/callback.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/no_destructor.h"
 #include "build/build_config.h"
-#include "content/public/browser/system_connector.h"
-#include "services/device/public/mojom/constants.mojom.h"
-#include "services/service_manager/public/cpp/connector.h"
-#include "services/service_manager/public/cpp/service_filter.h"
+#include "content/public/browser/device_service.h"
+#include "services/device/public/mojom/battery_status.mojom.h"
+
+namespace {
+
+BatteryMetrics::BatteryMonitorBinder& GetBinderOverride() {
+  static base::NoDestructor<BatteryMetrics::BatteryMonitorBinder> binder;
+  return *binder;
+}
+
+}  // namespace
 
 BatteryMetrics::BatteryMetrics() {
   StartRecording();
 }
 
 BatteryMetrics::~BatteryMetrics() = default;
+
+// static
+void BatteryMetrics::OverrideBatteryMonitorBinderForTesting(
+    BatteryMonitorBinder binder) {
+  GetBinderOverride() = std::move(binder);
+}
 
 void BatteryMetrics::QueryNextStatus() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -33,13 +48,14 @@ void BatteryMetrics::StartRecording() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!battery_monitor_.is_bound());
 
-  // Don't create a long lived BatteryMonitor on windows. crbug.com/794105.
-#if !defined(OS_WIN)
-  content::GetSystemConnector()->Connect(
-      service_manager::ServiceFilter::ByName(device::mojom::kServiceName),
-      battery_monitor_.BindNewPipeAndPassReceiver());
+  auto receiver = battery_monitor_.BindNewPipeAndPassReceiver();
+  const auto& binder = GetBinderOverride();
+  if (binder)
+    binder.Run(std::move(receiver));
+  else
+    content::GetDeviceService().BindBatteryMonitor(std::move(receiver));
+
   QueryNextStatus();
-#endif  // !defined(OS_WIN)
 }
 
 void BatteryMetrics::DidChange(device::mojom::BatteryStatusPtr battery_status) {

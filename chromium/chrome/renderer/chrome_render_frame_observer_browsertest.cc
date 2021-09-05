@@ -11,16 +11,16 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "chrome/test/base/chrome_render_view_test.h"
 #include "components/translate/content/common/translate.mojom.h"
-#include "components/translate/content/renderer/translate_helper.h"
+#include "components/translate/content/renderer/translate_agent.h"
 #include "components/translate/core/common/translate_constants.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_view.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
-#include "services/service_manager/public/cpp/interface_provider.h"
+#include "third_party/blink/public/common/browser_interface_broker_proxy.h"
+#include "third_party/blink/public/web/web_frame_widget.h"
 #include "third_party/blink/public/web/web_view.h"
-#include "third_party/blink/public/web/web_widget.h"
 
 namespace {
 
@@ -38,9 +38,10 @@ class FakeContentTranslateDriver
   }
 
   // translate::mojom::ContentTranslateDriver implementation.
-  void RegisterPage(mojo::PendingRemote<translate::mojom::Page> page,
-                    const translate::LanguageDetectionDetails& details,
-                    bool page_needs_translation) override {
+  void RegisterPage(
+      mojo::PendingRemote<translate::mojom::TranslateAgent> translate_agent,
+      const translate::LanguageDetectionDetails& details,
+      bool page_needs_translation) override {
     called_new_page_ = true;
     page_needs_translation_ = page_needs_translation;
   }
@@ -62,13 +63,21 @@ class ChromeRenderFrameObserverTest : public ChromeRenderViewTest {
   void SetUp() override {
     ChromeRenderViewTest::SetUp();
 
-    service_manager::InterfaceProvider* remote_interfaces =
-        view_->GetMainRenderFrame()->GetRemoteInterfaces();
-    service_manager::InterfaceProvider::TestApi test_api(remote_interfaces);
-    test_api.SetBinderForName(
-        translate::mojom::ContentTranslateDriver::Name_,
-        base::Bind(&FakeContentTranslateDriver::BindHandle,
-                   base::Unretained(&fake_translate_driver_)));
+    view_->GetMainRenderFrame()
+        ->GetBrowserInterfaceBroker()
+        ->SetBinderForTesting(
+            translate::mojom::ContentTranslateDriver::Name_,
+            base::Bind(&FakeContentTranslateDriver::BindHandle,
+                       base::Unretained(&fake_translate_driver_)));
+  }
+
+  void TearDown() override {
+    view_->GetMainRenderFrame()
+        ->GetBrowserInterfaceBroker()
+        ->SetBinderForTesting(translate::mojom::ContentTranslateDriver::Name_,
+                              {});
+
+    ChromeRenderViewTest::TearDown();
   }
 
   FakeContentTranslateDriver fake_translate_driver_;
@@ -82,7 +91,7 @@ TEST_F(ChromeRenderFrameObserverTest, SkipCapturingSubFrames) {
       "<iframe srcdoc=\"This a document in an iframe.\">"
       "</body>");
   view_->GetWebView()->MainFrameWidget()->UpdateAllLifecyclePhases(
-      blink::WebWidget::LifecycleUpdateReason::kTest);
+      blink::DocumentUpdateReason::kTest);
 
   base::RunLoop().RunUntilIdle();
   ASSERT_TRUE(fake_translate_driver_.called_new_page_);

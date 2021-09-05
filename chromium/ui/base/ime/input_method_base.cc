@@ -250,6 +250,10 @@ bool InputMethodBase::SetCompositionRange(
     const std::vector<ui::ImeTextSpan>& text_spans) {
   return false;
 }
+
+bool InputMethodBase::SetSelectionRange(uint32_t start, uint32_t end) {
+  return false;
+}
 #endif
 
 void InputMethodBase::DeleteSurroundingText(int32_t offset, uint32_t length) {}
@@ -282,10 +286,11 @@ InputMethod* InputMethodBase::GetInputMethod() {
   return this;
 }
 
-void InputMethodBase::ConfirmCompositionText(bool reset_engine) {
+void InputMethodBase::ConfirmCompositionText(bool reset_engine,
+                                             bool keep_selection) {
   TextInputClient* client = GetTextInputClient();
   if (client && client->HasCompositionText())
-    client->ConfirmCompositionText();
+    client->ConfirmCompositionText(keep_selection);
 }
 
 bool InputMethodBase::HasCompositionText() {

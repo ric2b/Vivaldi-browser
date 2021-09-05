@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/buildflags_paint_preview.gni")
 import("//build/config/chrome_build.gni")
 import("//build/config/features.gni")
 import("//build/config/freetype/freetype.gni")
@@ -94,6 +95,9 @@ if (use_system_harfbuzz) {
       "src/src/hb-config.hh",
       "src/src/hb-debug.hh",
       "src/src/hb-dispatch.hh",
+      "src/src/hb-draw.cc",
+      "src/src/hb-draw.h",
+      "src/src/hb-draw.hh",
       "src/src/hb-face.cc",
       "src/src/hb-face.hh",
       "src/src/hb-font.cc",
@@ -223,7 +227,6 @@ if (use_system_harfbuzz) {
       "src/src/hb-unicode.cc",
       "src/src/hb-unicode.hh",
       "src/src/hb-utf.hh",
-      "src/src/hb-warning.cc",
       "src/src/hb.hh",
     ]
 
@@ -262,6 +265,13 @@ if (use_system_harfbuzz) {
       "U_DISABLE_VERSION_SUFFIX=0",
     ]
 
+    if (enable_paint_preview) {
+      # Paint Previews make use of CFF subsetting. However, enabling this is
+      # expensive for binary size so only compile it when Paint Previews are
+      # compiled.
+      defines -= [ "HB_NO_SUBSET_CFF" ]
+    }
+
     if (is_component_build) {
       if (is_win) {
         defines += [ "HB_EXTERN=__declspec (dllexport) extern" ]
@@ -293,9 +303,7 @@ if (use_system_harfbuzz) {
 
     public_configs = [ ":harfbuzz_config" ]
 
-    deps = [
-      "//third_party/icu:icuuc",
-    ]
+    deps = [ "//third_party/icu:icuuc" ]
 
     if (use_glib) {
       configs += [ "//build/config/linux:glib" ]
@@ -305,13 +313,27 @@ if (use_system_harfbuzz) {
   }
 }
 
-fuzzer_test("harfbuzz_fuzzer") {
-  sources = [
-    "fuzz/harfbuzz_fuzzer.cc",
-  ]
+source_set("hb_scoped_util") {
+  sources = [ "utils/hb_scoped.h" ]
+  deps = [ "//third_party:freetype_harfbuzz" ]
+}
+
+fuzzer_test("hb_shape_fuzzer") {
+  sources = [ "fuzz/hb_shape_fuzzer.cc" ]
   deps = [
+    ":hb_scoped_util",
+    "//base",
     "//third_party:freetype_harfbuzz",
   ]
-  libfuzzer_options = [ "max_len=16800" ]
+  seed_corpus = "fuzz/seed_corpus"
+}
+
+fuzzer_test("hb_subset_fuzzer") {
+  sources = [ "fuzz/hb_subset_fuzzer.cc" ]
+  deps = [
+    ":hb_scoped_util",
+    "//base",
+    "//third_party:freetype_harfbuzz",
+  ]
   seed_corpus = "fuzz/seed_corpus"
 }

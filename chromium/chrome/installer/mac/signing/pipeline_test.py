@@ -4,6 +4,7 @@
 
 import os.path
 import unittest
+from xml.etree import ElementTree
 
 from . import model, pipeline, test_common, test_config
 
@@ -18,8 +19,41 @@ def _get_work_dir(*args, **kwargs):
 _get_work_dir.count = 0
 
 
-def _productbuild_requirements_path(p, d):
-    return '$W/App Product.req'
+def _component_property_path(paths, dist_config):
+    return '$W/App Product.plist'
+
+
+def _productbuild_distribution_path(p, d, c):
+    return '$W/App Product.dist'
+
+
+def _create_pkgbuild_scripts(p, d):
+    return '$W/scripts'
+
+
+def _read_plist(p):
+    return {'LSMinimumSystemVersion': '10.19.7'}
+
+
+def _write_plist(d, p):
+    _write_plist.contents = d
+
+
+_write_plist.contents = ''
+
+
+def _last_written_plist():
+    return _write_plist.contents
+
+
+def _read_file(p):
+    if p == '$I/Product Packaging/pkg_postinstall.in':
+        return """app dir is '@APP_DIR@'
+app product is '@APP_PRODUCT@'
+brand code is '@BRAND_CODE@'
+framework dir is '@FRAMEWORK_DIR@'"""
+
+    raise
 
 
 def _get_adjacent_item(l, o):
@@ -32,16 +66,15 @@ def _get_adjacent_item(l, o):
 
 @mock.patch.multiple(
     'signing.commands', **{
-        m: mock.DEFAULT for m in ('move_file', 'copy_files',
-                                  'copy_dir_overwrite_and_count_changes',
-                                  'run_command', 'make_dir', 'shutil')
+        m: mock.DEFAULT
+        for m in ('move_file', 'copy_files',
+                  'copy_dir_overwrite_and_count_changes', 'run_command',
+                  'make_dir', 'shutil', 'write_file', 'set_executable')
     })
-@mock.patch.multiple(
-    'signing.signing',
-    **{m: mock.DEFAULT for m in ('sign_part', 'sign_chrome', 'verify_part')})
+@mock.patch.multiple('signing.signing',
+                     **{m: mock.DEFAULT for m in ('sign_part', 'verify_part')})
+@mock.patch.multiple('signing.parts', **{'sign_chrome': mock.DEFAULT})
 @mock.patch('signing.commands.tempfile.mkdtemp', _get_work_dir)
-@mock.patch('signing.pipeline._productbuild_requirements_path',
-            _productbuild_requirements_path)
 class TestPipelineHelpers(unittest.TestCase):
 
     def setUp(self):
@@ -186,8 +219,7 @@ class TestPipelineHelpers(unittest.TestCase):
                 '$W/App Product Canary.app/Contents/Frameworks/Product Framework.framework',
                 '$W/modified_unsigned_framework',
                 dry_run=False),
-            mock.call.sign_chrome(
-                paths, channel_dist_config, sign_framework=True),
+            mock.call.sign_chrome(paths, channel_dist_config, sign_framework=True),
             mock.call.copy_dir_overwrite_and_count_changes(
                 '$W/App Product Canary.app/Contents/Frameworks/Product Framework.framework',
                 '$W/modified_unsigned_framework',
@@ -246,6 +278,90 @@ class TestPipelineHelpers(unittest.TestCase):
             mock.call('$W/App Product Canary.app')
         ])
 
+    @mock.patch('signing.commands.read_file', _read_file)
+    def test_create_pkgbuild_scripts(self, **kwargs):
+        manager = mock.Mock()
+        for attr in kwargs:
+            manager.attach_mock(kwargs[attr], attr)
+
+        dist = model.Distribution(
+            branding_code='MOO',
+            packaging_name_fragment='ForCows',
+            package_as_dmg=False,
+            package_as_pkg=True)
+        dist_config = dist.to_config(test_config.TestConfig())
+        paths = self.paths.replace_work('$W')
+
+        self.assertEqual('$W/scripts',
+                         pipeline._create_pkgbuild_scripts(paths, dist_config))
+
+        manager.assert_has_calls([
+            mock.call.make_dir('$W/scripts'),
+            mock.call.write_file('$W/scripts/postinstall', mock.ANY),
+            mock.call.set_executable('$W/scripts/postinstall')
+        ])
+
+        postinstall_string = manager.mock_calls[1][1][1]
+        self.assertEqual(
+            postinstall_string, """app dir is 'App Product.app'
+app product is 'App Product'
+brand code is 'MOO'
+framework dir is 'App Product.app/Contents/Frameworks/Product Framework.framework'"""
+        )
+
+    @mock.patch('signing.pipeline.plistlib.writePlist', _write_plist)
+    def test_component_property_path(self, **kwargs):
+        manager = mock.Mock()
+        for attr in kwargs:
+            manager.attach_mock(kwargs[attr], attr)
+
+        dist = model.Distribution()
+        dist_config = dist.to_config(test_config.TestConfig())
+        paths = self.paths.replace_work('$W')
+
+        self.assertEqual('$W/App Product.plist',
+                         pipeline._component_property_path(paths, dist_config))
+
+        self.assertEqual(_last_written_plist(), [{
+            'BundleOverwriteAction': 'upgrade',
+            'BundleIsVersionChecked': True,
+            'BundleHasStrictIdentifier': True,
+            'RootRelativeBundlePath': 'App Product.app',
+            'BundleIsRelocatable': False
+        }])
+
+    @mock.patch('signing.commands.plistlib.readPlist', _read_plist)
+    def test_productbuild_distribution_path(self, **kwargs):
+        manager = mock.Mock()
+        for attr in kwargs:
+            manager.attach_mock(kwargs[attr], attr)
+
+        dist = model.Distribution()
+        dist_config = dist.to_config(test_config.TestConfig())
+        paths = self.paths.replace_work('$W')
+
+        component_pkg_path = os.path.join(
+            paths.work, '{}.pkg'.format(dist_config.app_product))
+
+        self.assertEqual(
+            '$W/App Product.dist',
+            pipeline._productbuild_distribution_path(paths, dist_config,
+                                                     component_pkg_path))
+
+        manager.assert_has_calls([
+            mock.call.write_file('$W/App Product.dist', mock.ANY),
+        ])
+
+        xml_string = manager.mock_calls[0][1][1]
+
+        xml_root = ElementTree.fromstring(xml_string)
+        volume_check = xml_root.find('volume-check')
+        allowed_os_versions = volume_check.find('allowed-os-versions')
+        os_versions = allowed_os_versions.findall('os-version')
+        self.assertEqual(len(os_versions), 1)
+        os_version = os_versions[0].get('min')
+        self.assertEqual(os_version, '10.19.7')
+
     def test_package_and_sign_dmg_no_branding(self, **kwargs):
         manager = mock.Mock()
         for attr in kwargs:
@@ -278,6 +394,12 @@ class TestPipelineHelpers(unittest.TestCase):
         self.assertEqual('AppProduct-99.0.9999.99',
                          kwargs['sign_part'].mock_calls[0][1][2].identifier)
 
+    @mock.patch('signing.pipeline._component_property_path',
+                _component_property_path)
+    @mock.patch('signing.pipeline._productbuild_distribution_path',
+                _productbuild_distribution_path)
+    @mock.patch('signing.pipeline._create_pkgbuild_scripts',
+                _create_pkgbuild_scripts)
     def test_package_and_sign_pkg_no_branding(self, **kwargs):
         manager = mock.Mock()
         for attr in kwargs:
@@ -293,7 +415,6 @@ class TestPipelineHelpers(unittest.TestCase):
 
         manager.assert_has_calls([
             mock.call.run_command(mock.ANY),
-            mock.call.run_command(mock.ANY),
             mock.call.run_command(mock.ANY)
         ])
 
@@ -301,21 +422,18 @@ class TestPipelineHelpers(unittest.TestCase):
             call for call in manager.mock_calls if call[0] == 'run_command'
         ]
         pkgbuild_args = run_commands[0][1][0]
-        productbuild_synthesize_args = run_commands[1][1][0]
-        productbuild_args = run_commands[2][1][0]
+        productbuild_args = run_commands[1][1][0]
 
+        self.assertEqual('$W/payload',
+                         _get_adjacent_item(pkgbuild_args, '--root'))
+        self.assertEqual('$W/App Product.plist',
+                         _get_adjacent_item(pkgbuild_args, '--component-plist'))
         self.assertEqual('test.signing.bundle_id',
                          _get_adjacent_item(pkgbuild_args, '--identifier'))
         self.assertEqual('99.0.9999.99',
                          _get_adjacent_item(pkgbuild_args, '--version'))
-
-        self.assertTrue('--synthesize' in productbuild_synthesize_args)
-        self.assertEqual(
-            '$W/App Product.req',
-            _get_adjacent_item(productbuild_synthesize_args, '--product'))
-        self.assertEqual(
-            '$W/App Product.pkg',
-            _get_adjacent_item(productbuild_synthesize_args, '--package'))
+        self.assertEqual('$W/scripts',
+                         _get_adjacent_item(pkgbuild_args, '--scripts'))
 
         self.assertEqual(
             '$W/App Product.dist',
@@ -361,6 +479,12 @@ class TestPipelineHelpers(unittest.TestCase):
         self.assertEqual('AppProduct-99.0.9999.99-MOO',
                          kwargs['sign_part'].mock_calls[0][1][2].identifier)
 
+    @mock.patch('signing.pipeline._component_property_path',
+                _component_property_path)
+    @mock.patch('signing.pipeline._productbuild_distribution_path',
+                _productbuild_distribution_path)
+    @mock.patch('signing.pipeline._create_pkgbuild_scripts',
+                _create_pkgbuild_scripts)
     def test_package_and_sign_pkg_branding(self, **kwargs):
         manager = mock.Mock()
         for attr in kwargs:
@@ -380,7 +504,6 @@ class TestPipelineHelpers(unittest.TestCase):
 
         manager.assert_has_calls([
             mock.call.run_command(mock.ANY),
-            mock.call.run_command(mock.ANY),
             mock.call.run_command(mock.ANY)
         ])
 
@@ -388,21 +511,18 @@ class TestPipelineHelpers(unittest.TestCase):
             call for call in manager.mock_calls if call[0] == 'run_command'
         ]
         pkgbuild_args = run_commands[0][1][0]
-        productbuild_synthesize_args = run_commands[1][1][0]
-        productbuild_args = run_commands[2][1][0]
+        productbuild_args = run_commands[1][1][0]
 
+        self.assertEqual('$W/payload',
+                         _get_adjacent_item(pkgbuild_args, '--root'))
+        self.assertEqual('$W/App Product.plist',
+                         _get_adjacent_item(pkgbuild_args, '--component-plist'))
         self.assertEqual('test.signing.bundle_id',
                          _get_adjacent_item(pkgbuild_args, '--identifier'))
         self.assertEqual('99.0.9999.99',
                          _get_adjacent_item(pkgbuild_args, '--version'))
-
-        self.assertTrue('--synthesize' in productbuild_synthesize_args)
-        self.assertEqual(
-            '$W/App Product.req',
-            _get_adjacent_item(productbuild_synthesize_args, '--product'))
-        self.assertEqual(
-            '$W/App Product.pkg',
-            _get_adjacent_item(productbuild_synthesize_args, '--package'))
+        self.assertEqual('$W/scripts',
+                         _get_adjacent_item(pkgbuild_args, '--scripts'))
 
         self.assertEqual(
             '$W/App Product.dist',
@@ -479,6 +599,29 @@ class TestPipelineHelpers(unittest.TestCase):
                 '$I/Product Packaging/chrome_canary_dmg_dsstore:/.DS_Store'
             ]))
 
+    def test_package_dmg_no_customize_not_chrome(self, **kwargs):
+        dist = model.Distribution()
+        config = test_config.TestConfigNonChromeBranded()
+        paths = self.paths.replace_work('$W')
+
+        dmg_path = pipeline._package_dmg(paths, dist, config)
+        self.assertEqual('$O/AppProduct-99.0.9999.99.dmg', dmg_path)
+
+        pkg_dmg_args = kwargs['run_command'].mock_calls[0][1][0]
+
+        self.assertEqual(dmg_path, _get_adjacent_item(pkg_dmg_args, '--target'))
+        self.assertEqual('App Product',
+                         _get_adjacent_item(pkg_dmg_args, '--volname'))
+        self.assertEqual('$W/empty', _get_adjacent_item(pkg_dmg_args,
+                                                        '--source'))
+
+        copy_specs = [
+            pkg_dmg_args[i + 1]
+            for i, arg in enumerate(pkg_dmg_args)
+            if arg == '--copy'
+        ]
+        self.assertEqual(set(copy_specs), set(['$W/App Product.app:/']))
+
     def test_package_installer_tools(self, **kwargs):
         manager = mock.Mock()
         for attr in kwargs:
@@ -544,6 +687,36 @@ class TestPipelineHelpers(unittest.TestCase):
         self.assertEqual(len(verified_files), len(files_to_sign))
         self.assertEqual(set(signed_files), files_to_sign)
         self.assertEqual(set(verified_files), files_to_sign)
+
+    def test_package_installer_tools_not_chrome(self, **kwargs):
+        manager = mock.Mock()
+        for attr in kwargs:
+            manager.attach_mock(kwargs[attr], attr)
+
+        config = test_config.TestConfigNonChromeBranded()
+        pipeline._package_installer_tools(self.paths, config)
+
+        files_to_copy = set([
+            'goobspatch',
+            'liblzma_decompress.dylib',
+            'goobsdiff',
+            'xz',
+            'xzdec',
+            'dirdiffer.sh',
+            'dirpatcher.sh',
+            'dmgdiffer.sh',
+            'pkg-dmg',
+        ])
+        copied_files = []
+        for call in manager.mock_calls:
+            if call[0] == 'copy_files':
+                args = call[1]
+                self.assertTrue(args[0].startswith('$I/Product Packaging/'))
+                self.assertEqual('$W_1/diff_tools', args[1])
+                copied_files.append(os.path.basename(args[0]))
+
+        self.assertEqual(len(copied_files), len(files_to_copy))
+        self.assertEqual(set(copied_files), files_to_copy)
 
 
 @mock.patch.multiple(

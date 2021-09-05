@@ -21,6 +21,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/no_destructor.h"
+#include "base/optional.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "content/public/browser/content_browser_client.h"
@@ -33,6 +34,7 @@
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_api_frame_id_map.h"
 #include "extensions/browser/extension_function.h"
+#include "extensions/browser/extension_registry_observer.h"
 #include "extensions/common/url_pattern_set.h"
 #include "ipc/ipc_sender.h"
 #include "net/base/auth.h"
@@ -146,23 +148,27 @@ class WebRequestAPI : public BrowserContextKeyedAPI,
     DISALLOW_COPY_AND_ASSIGN(ProxySet);
   };
 
-  class RequestIDGenerator
-      : public base::RefCountedThreadSafe<RequestIDGenerator> {
+  class RequestIDGenerator {
    public:
-    RequestIDGenerator() = default;
-    int64_t Generate() {
-      DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-      return ++id_;
-    }
+    RequestIDGenerator();
+    ~RequestIDGenerator();
+
+    // Generates a WebRequest ID. If the same (routing_id,
+    // network_service_request_id) pair is passed to this as was previously
+    // passed to SaveID(), the |request_id| passed to SaveID() will be returned.
+    int64_t Generate(int32_t routing_id, int32_t network_service_request_id);
+
+    // This saves a WebRequest ID mapped to the (routing_id,
+    // network_service_request_id) pair. Clients must call Generate() with the
+    // same ID pair to retrieve the |request_id|, or else there may be a memory
+    // leak.
+    void SaveID(int32_t routing_id,
+                int32_t network_service_request_id,
+                uint64_t request_id);
 
    private:
-    friend class base::RefCountedThreadSafe<RequestIDGenerator>;
-    ~RequestIDGenerator() {}
-
-    // Although this initialization can be done in a thread other than the IO
-    // thread, we expect at least one memory barrier before actually calling
-    // Generate in the IO thread, so we don't protect the variable with a lock.
     int64_t id_ = 0;
+    std::map<std::pair<int32_t, int32_t>, uint64_t> saved_id_map_;
     DISALLOW_COPY_AND_ASSIGN(RequestIDGenerator);
   };
 
@@ -190,6 +196,7 @@ class WebRequestAPI : public BrowserContextKeyedAPI,
       content::RenderFrameHost* frame,
       int render_process_id,
       content::ContentBrowserClient::URLLoaderFactoryType type,
+      base::Optional<int64_t> navigation_id,
       mojo::PendingReceiver<network::mojom::URLLoaderFactory>* factory_receiver,
       mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>*
           header_client);
@@ -249,7 +256,7 @@ class WebRequestAPI : public BrowserContextKeyedAPI,
 
   content::BrowserContext* const browser_context_;
 
-  scoped_refptr<RequestIDGenerator> request_id_generator_;
+  RequestIDGenerator request_id_generator_;
   std::unique_ptr<ProxySet> proxies_;
 
   // Stores the last result of |MayHaveProxies()|, so it can be used in
@@ -389,8 +396,8 @@ class ExtensionWebRequestEventRouter {
   // requests only, and allows modification of incoming response headers.
   // Returns net::ERR_IO_PENDING if an extension is intercepting the request,
   // OK otherwise. |original_response_headers| is reference counted. |callback|
-  // |override_response_headers| and |allowed_unsafe_redirect_url| are not owned
-  // but are guaranteed to be valid until |callback| is called or
+  // |override_response_headers| and |preserve_fragment_on_redirect_url| are not
+  // owned but are guaranteed to be valid until |callback| is called or
   // OnRequestWillBeDestroyed is called (whatever comes first).
   // Do not modify |original_response_headers| directly but write new ones
   // into |override_response_headers|.
@@ -400,7 +407,7 @@ class ExtensionWebRequestEventRouter {
       net::CompletionOnceCallback callback,
       const net::HttpResponseHeaders* original_response_headers,
       scoped_refptr<net::HttpResponseHeaders>* override_response_headers,
-      GURL* allowed_unsafe_redirect_url);
+      GURL* preserve_fragment_on_redirect_url);
 
   // Dispatches the OnAuthRequired event to any extensions whose filters match
   // the given request. If the listener is not registered as "blocking", then

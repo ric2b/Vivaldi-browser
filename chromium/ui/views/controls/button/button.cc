@@ -4,6 +4,8 @@
 
 #include "ui/views/controls/button/button.h"
 
+#include <utility>
+
 #include "base/strings/utf_string_conversions.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
@@ -56,10 +58,10 @@ Button::WidgetObserverButtonBridge::~WidgetObserverButtonBridge() {
     owner_->GetWidget()->RemoveObserver(this);
 }
 
-void Button::WidgetObserverButtonBridge::OnWidgetActivationChanged(
+void Button::WidgetObserverButtonBridge::OnWidgetPaintAsActiveChanged(
     Widget* widget,
-    bool active) {
-  owner_->WidgetActivationChanged(widget, active);
+    bool paint_as_active) {
+  owner_->WidgetPaintAsActiveChanged(widget, paint_as_active);
 }
 
 void Button::WidgetObserverButtonBridge::OnWidgetDestroying(Widget* widget) {
@@ -120,6 +122,9 @@ bool Button::DefaultButtonControllerDelegate::InDrag() {
 ////////////////////////////////////////////////////////////////////////////////
 
 // static
+constexpr Button::ButtonState Button::kButtonStates[STATE_COUNT];
+
+// static
 const Button* Button::AsButton(const views::View* view) {
   return AsButton(const_cast<View*>(view));
 }
@@ -134,11 +139,16 @@ Button* Button::AsButton(views::View* view) {
 // static
 Button::ButtonState Button::GetButtonStateFrom(ui::NativeTheme::State state) {
   switch (state) {
-    case ui::NativeTheme::kDisabled:  return Button::STATE_DISABLED;
-    case ui::NativeTheme::kHovered:   return Button::STATE_HOVERED;
-    case ui::NativeTheme::kNormal:    return Button::STATE_NORMAL;
-    case ui::NativeTheme::kPressed:   return Button::STATE_PRESSED;
-    case ui::NativeTheme::kNumStates: NOTREACHED();
+    case ui::NativeTheme::kDisabled:
+      return Button::STATE_DISABLED;
+    case ui::NativeTheme::kHovered:
+      return Button::STATE_HOVERED;
+    case ui::NativeTheme::kNormal:
+      return Button::STATE_NORMAL;
+    case ui::NativeTheme::kPressed:
+      return Button::STATE_PRESSED;
+    case ui::NativeTheme::kNumStates:
+      NOTREACHED();
   }
   return Button::STATE_NORMAL;
 }
@@ -205,7 +215,7 @@ void Button::SetState(ButtonState state) {
 
 Button::ButtonState Button::GetVisualState() const {
   if (PlatformStyle::kInactiveWidgetControlsAppearDisabled && GetWidget() &&
-      !GetWidget()->IsActive()) {
+      !GetWidget()->ShouldPaintAsActive()) {
     return STATE_DISABLED;
   }
   return state();
@@ -287,6 +297,32 @@ Button::KeyClickAction Button::GetKeyClickActionForEvent(
 void Button::SetButtonController(
     std::unique_ptr<ButtonController> button_controller) {
   button_controller_ = std::move(button_controller);
+}
+
+gfx::Point Button::GetMenuPosition() const {
+  gfx::Rect lb = GetLocalBounds();
+
+  // Offset of the associated menu position.
+  constexpr gfx::Vector2d kMenuOffset{-2, -4};
+
+  // The position of the menu depends on whether or not the locale is
+  // right-to-left.
+  gfx::Point menu_position(lb.right(), lb.bottom());
+  if (base::i18n::IsRTL())
+    menu_position.set_x(lb.x());
+
+  View::ConvertPointToScreen(this, &menu_position);
+  if (base::i18n::IsRTL())
+    menu_position.Offset(-kMenuOffset.x(), kMenuOffset.y());
+  else
+    menu_position += kMenuOffset;
+
+  DCHECK(GetWidget());
+  const int max_x_coordinate =
+      GetWidget()->GetWorkAreaBoundsInScreen().right() - 1;
+  if (max_x_coordinate && max_x_coordinate <= menu_position.x())
+    menu_position.set_x(max_x_coordinate - 1);
+  return menu_position;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -598,7 +634,7 @@ void Button::OnEnabledChanged() {
   }
 }
 
-void Button::WidgetActivationChanged(Widget* widget, bool active) {
+void Button::WidgetPaintAsActiveChanged(Widget* widget, bool paint_as_active) {
   StateChanged(state());
 }
 

@@ -10,13 +10,16 @@ class TestConfig(config.CodeSignConfig):
     def __init__(self,
                  identity='[IDENTITY]',
                  installer_identity='[INSTALLER-IDENTITY]',
-                 keychain='[KEYCHAIN]',
                  notary_user='[NOTARY-USER]',
                  notary_password='[NOTARY-PASSWORD]',
                  notary_asc_provider=None):
         super(TestConfig,
-              self).__init__(identity, installer_identity, keychain,
-                             notary_user, notary_password, notary_asc_provider)
+              self).__init__(identity, installer_identity, notary_user,
+                             notary_password, notary_asc_provider)
+
+    @staticmethod
+    def is_chrome_branded():
+        return True
 
     @property
     def app_product(self):
@@ -35,13 +38,16 @@ class TestConfig(config.CodeSignConfig):
         return 'test.signing.bundle_id'
 
     @property
-    def optional_parts(self):
-        return set()
-
-    @property
     def provisioning_profile_basename(self):
         return 'provisiontest'
 
     @property
     def run_spctl_assess(self):
         return True
+
+
+class TestConfigNonChromeBranded(TestConfig):
+
+    @staticmethod
+    def is_chrome_branded():
+        return False

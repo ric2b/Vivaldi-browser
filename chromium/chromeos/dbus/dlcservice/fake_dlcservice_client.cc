@@ -15,20 +15,30 @@ FakeDlcserviceClient::~FakeDlcserviceClient() = default;
 
 void FakeDlcserviceClient::Install(
     const dlcservice::DlcModuleList& dlc_module_list,
-    InstallCallback callback) {
+    InstallCallback callback,
+    ProgressCallback progress_callback) {
   VLOG(1) << "Requesting to install DLC(s).";
-  std::move(callback).Run(dlcservice::kErrorNone, dlcservice::DlcModuleList());
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(std::move(callback), install_err_,
+                                dlcservice::DlcModuleList()));
 }
 
 void FakeDlcserviceClient::Uninstall(const std::string& dlc_id,
                                      UninstallCallback callback) {
   VLOG(1) << "Requesting to uninstall DLC=" << dlc_id;
-  std::move(callback).Run(dlcservice::kErrorNone);
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(std::move(callback), uninstall_err_));
 }
 
 void FakeDlcserviceClient::GetInstalled(GetInstalledCallback callback) {
   VLOG(1) << "Requesting to get installed DLC(s).";
-  std::move(callback).Run(dlcservice::kErrorNone, dlcservice::DlcModuleList());
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(std::move(callback), get_installed_err_,
+                                dlcservice::DlcModuleList()));
+}
+
+void FakeDlcserviceClient::OnInstallStatusForTest(dbus::Signal* signal) {
+  NOTREACHED();
 }
 
 }  // namespace chromeos

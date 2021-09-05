@@ -26,7 +26,6 @@
 #include "chrome/browser/extensions/test_extension_system.h"
 #include "chrome/browser/extensions/unpacked_installer.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/ui/toolbar/test_toolbar_action_view_controller.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/common/extensions/api/extension_action/action_info.h"
@@ -43,6 +42,7 @@
 #include "extensions/browser/uninstall_reason.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_builder.h"
+#include "extensions/common/extension_id.h"
 #include "extensions/common/manifest.h"
 #include "extensions/common/value_builder.h"
 #include "extensions/test/test_extension_dir.h"
@@ -145,6 +145,8 @@ class ToolbarActionsModelUnitTest
   // Initialize the ExtensionService, ToolbarActionsModel, and ExtensionSystem.
   void Init();
 
+  void InitToolbarModelAndObserver();
+
   void TearDown() override;
 
   // Adds or removes the given |extension| and verify success.
@@ -225,6 +227,10 @@ class ToolbarActionsModelUnitTest
 
 void ToolbarActionsModelUnitTest::Init() {
   InitializeEmptyExtensionService();
+  InitToolbarModelAndObserver();
+}
+
+void ToolbarActionsModelUnitTest::InitToolbarModelAndObserver() {
   toolbar_model_ =
       extensions::extension_action_test_util::CreateToolbarModelForProfile(
           profile());
@@ -1053,8 +1059,11 @@ TEST_F(ToolbarActionsModelUnitTest, ActionsToolbarIncognitoEnableExtension) {
 }
 
 // Test that hiding actions on the toolbar results in sending them to the
-// overflow menu when the redesign switch is enabled.
-TEST_F(ToolbarActionsModelUnitTest, ActionsToolbarActionsVisibilityWithSwitch) {
+// overflow menu.
+TEST_F(ToolbarActionsModelUnitTest, ActionsToolbarActionsVisibility) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndDisableFeature(features::kExtensionsToolbarMenu);
+
   Init();
 
   // We choose to use all types of extensions here, since the misnamed
@@ -1479,4 +1488,48 @@ TEST_F(ToolbarActionsModelUnitTest, ChangesToPinnedOrderSavedInExtensionPrefs) {
       extension_prefs->GetPinnedExtensions(),
       testing::ElementsAre(browser_action_a()->id(), browser_action_c()->id(),
                            browser_action_b()->id()));
+}
+
+TEST_F(ToolbarActionsModelUnitTest,
+       VisibleExtensionsMigrateToPinnedExtensions) {
+  InitializeEmptyExtensionService();
+
+  // Add the three browser action extensions.
+  ASSERT_TRUE(AddBrowserActionExtensions());
+
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(features::kExtensionsToolbarMenu);
+  // Initialization of the toolbar model triggers migration of the visible
+  // extensions to pinned extensions.
+  InitToolbarModelAndObserver();
+
+  // Verify that the extensions that were visible are now the pinned extensions.
+  extensions::ExtensionPrefs* const extension_prefs =
+      extensions::ExtensionPrefs::Get(profile());
+  EXPECT_THAT(
+      extension_prefs->GetPinnedExtensions(),
+      testing::ElementsAre(browser_action_a()->id(), browser_action_b()->id(),
+                           browser_action_c()->id()));
+}
+
+TEST_F(ToolbarActionsModelUnitTest,
+       VisibleExtensionsOfConstrainedToolbarMigrateToPinnedExtensions) {
+  InitializeEmptyExtensionService();
+
+  profile()->GetPrefs()->SetInteger(extensions::pref_names::kToolbarSize, 2);
+  // Add the three browser action extensions.
+  ASSERT_TRUE(AddBrowserActionExtensions());
+
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(features::kExtensionsToolbarMenu);
+  // Initialization of the toolbar model triggers migration of the visible
+  // extensions to pinned extensions.
+  InitToolbarModelAndObserver();
+
+  // Verify that the extensions that were visible are now the pinned extensions.
+  extensions::ExtensionPrefs* const extension_prefs =
+      extensions::ExtensionPrefs::Get(profile());
+  EXPECT_THAT(
+      extension_prefs->GetPinnedExtensions(),
+      testing::ElementsAre(browser_action_a()->id(), browser_action_b()->id()));
 }

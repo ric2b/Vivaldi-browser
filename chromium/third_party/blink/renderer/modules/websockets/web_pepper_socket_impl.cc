@@ -44,6 +44,7 @@
 #include "third_party/blink/renderer/modules/websockets/web_pepper_socket_channel_client_proxy.h"
 #include "third_party/blink/renderer/modules/websockets/websocket_channel.h"
 #include "third_party/blink/renderer/modules/websockets/websocket_channel_impl.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
 namespace blink {
@@ -59,12 +60,14 @@ std::unique_ptr<WebPepperSocket> WebPepperSocket::Create(
 WebPepperSocketImpl::WebPepperSocketImpl(const WebDocument& document,
                                          WebPepperSocketClient* client)
     : client_(client),
-      channel_proxy_(WebPepperSocketChannelClientProxy::Create(this)),
+      channel_proxy_(
+          MakeGarbageCollected<WebPepperSocketChannelClientProxy>(this)),
       is_closing_or_closed_(false),
       buffered_amount_(0),
       buffered_amount_after_close_(0) {
   Document* core_document = document;
-  private_ = WebSocketChannelImpl::Create(core_document, channel_proxy_.Get(),
+  private_ = WebSocketChannelImpl::Create(core_document->ToExecutionContext(),
+                                          channel_proxy_.Get(),
                                           SourceLocation::Capture());
   DCHECK(private_);
 }
@@ -102,7 +105,7 @@ bool WebPepperSocketImpl::SendText(const WebString& message) {
 
 bool WebPepperSocketImpl::SendArrayBuffer(
     const WebArrayBuffer& web_array_buffer) {
-  unsigned size = web_array_buffer.ByteLength();
+  size_t size = web_array_buffer.ByteLengthAsSizeT();
   buffered_amount_ += size;
   if (is_closing_or_closed_)
     buffered_amount_after_close_ += size;
@@ -114,7 +117,7 @@ bool WebPepperSocketImpl::SendArrayBuffer(
     return true;
 
   DOMArrayBuffer* array_buffer = web_array_buffer;
-  private_->Send(*array_buffer, 0, array_buffer->ByteLength(),
+  private_->Send(*array_buffer, 0, array_buffer->ByteLengthAsSizeT(),
                  base::OnceClosure());
   return true;
 }

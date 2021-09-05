@@ -268,6 +268,20 @@ class BASE_EXPORT TaskTracker {
   // a task queued to histogram.
   std::atomic_int num_tasks_run_{0};
 
+  // ThreadPool.TaskLatencyMicroseconds.*,
+  // ThreadPool.HeartbeatLatencyMicroseconds.*, and
+  // ThreadPool.NumTasksRunWhileQueuing.* histograms. The index is a
+  // TaskPriority. Intentionally leaked.
+  // TODO(scheduler-dev): Consider using STATIC_HISTOGRAM_POINTER_GROUP for
+  // these.
+  using TaskPriorityType = std::underlying_type<TaskPriority>::type;
+  static constexpr TaskPriorityType kNumTaskPriorities =
+      static_cast<TaskPriorityType>(TaskPriority::HIGHEST) + 1;
+  HistogramBase* const task_latency_histograms_[kNumTaskPriorities];
+  HistogramBase* const heartbeat_latency_histograms_[kNumTaskPriorities];
+  HistogramBase* const
+      num_tasks_run_while_queuing_histograms_[kNumTaskPriorities];
+
   // Ensures all state (e.g. dangling cleaned up workers) is coalesced before
   // destroying the TaskTracker (e.g. in test environments).
   // Ref. https://crbug.com/827615.

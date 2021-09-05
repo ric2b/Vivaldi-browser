@@ -7,6 +7,7 @@
 
 #include "base/base64.h"
 #include "base/callback.h"
+#include "base/containers/span.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/values.h"
@@ -43,8 +44,10 @@ class DevToolsProtocolTest : public InProcessBrowserTest,
 
   // DevToolsAgentHostClient interface
   void DispatchProtocolMessage(content::DevToolsAgentHost* agent_host,
-                               const std::string& message) override {
-    auto parsed_message = base::JSONReader::Read(message);
+                               base::span<const uint8_t> message) override {
+    base::StringPiece message_str(reinterpret_cast<const char*>(message.data()),
+                                  message.size());
+    auto parsed_message = base::JSONReader::Read(message_str);
     auto id = parsed_message->FindIntPath("id");
     if (id) {
       // TODO: implement handling of results from method calls (when needed).
@@ -72,7 +75,8 @@ class DevToolsProtocolTest : public InProcessBrowserTest,
     command.SetKey(kMethodParam, base::Value(method));
     std::string json_command;
     base::JSONWriter::Write(command, &json_command);
-    agent_host_->DispatchProtocolMessage(this, json_command);
+    agent_host_->DispatchProtocolMessage(
+        this, base::as_bytes(base::make_span(json_command)));
   }
 
   void RunLoopUpdatingQuitClosure() {
@@ -137,7 +141,7 @@ class DevToolsProtocolTest : public InProcessBrowserTest,
 IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest,
                        VisibleSecurityStateChangedNeutralState) {
   ui_test_utils::NavigateToURL(browser(), GURL("about:blank"));
-  content::WaitForLoadStop(web_contents());
+  EXPECT_TRUE(content::WaitForLoadStop(web_contents()));
 
   Attach();
   SendCommand("Security.enable");
@@ -150,6 +154,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest,
   ASSERT_EQ(std::string("neutral"), *security_state);
   ASSERT_FALSE(
       params.FindPath("visibleSecurityState.certificateSecurityState"));
+  ASSERT_FALSE(params.FindPath("visibleSecurityState.safetyTipInfo"));
   const base::Value* security_state_issue_ids =
       params.FindListPath("visibleSecurityState.securityStateIssueIds");
   ASSERT_TRUE(std::find(security_state_issue_ids->GetList().begin(),
@@ -205,8 +210,17 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, VisibleSecurityStateSecureState) {
     page_valid_to = entry->GetSSL().certificate->valid_expiry().ToDoubleT();
   }
 
+  std::string page_certificate_network_error;
+  if (net::IsCertStatusError(entry->GetSSL().cert_status)) {
+    page_certificate_network_error = net::ErrorToString(
+        net::MapCertStatusToNetError(entry->GetSSL().cert_status));
+  }
+
   bool page_certificate_has_weak_signature =
       (entry->GetSSL().cert_status & net::CERT_STATUS_WEAK_SIGNATURE_ALGORITHM);
+
+  bool page_certificate_has_sha1_signature_present =
+      (entry->GetSSL().cert_status & net::CERT_STATUS_SHA1_SIGNATURE_PRESENT);
 
   int status = net::ObsoleteSSLStatus(entry->GetSSL().connection_status,
                                       entry->GetSSL().peer_signature_algorithm);
@@ -279,11 +293,23 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, VisibleSecurityStateSecureState) {
   ASSERT_TRUE(valid_to);
   ASSERT_EQ(*valid_to, page_valid_to);
 
+  std::string* certificate_network_error =
+      certificate_security_state->FindStringPath("certificateNetworkError");
+  if (certificate_network_error) {
+    ASSERT_EQ(*certificate_network_error, page_certificate_network_error);
+  }
+
   auto certificate_has_weak_signature =
-      certificate_security_state->FindBoolPath("certifcateHasWeakSignature");
+      certificate_security_state->FindBoolPath("certificateHasWeakSignature");
   ASSERT_TRUE(certificate_has_weak_signature);
   ASSERT_EQ(*certificate_has_weak_signature,
             page_certificate_has_weak_signature);
+
+  auto certificate_has_sha1_signature_present =
+      certificate_security_state->FindBoolPath("certificateHasSha1Signature");
+  ASSERT_TRUE(certificate_has_sha1_signature_present);
+  ASSERT_EQ(*certificate_has_sha1_signature_present,
+            page_certificate_has_sha1_signature_present);
 
   auto modern_ssl = certificate_security_state->FindBoolPath("modernSSL");
   ASSERT_TRUE(modern_ssl);
@@ -333,4 +359,6 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, VisibleSecurityStateSecureState) {
   const base::Value* security_state_issue_ids =
       params.FindListPath("visibleSecurityState.securityStateIssueIds");
   EXPECT_EQ(security_state_issue_ids->GetList().size(), 0u);
+
+  ASSERT_FALSE(params.FindPath("visibleSecurityState.safetyTipInfo"));
 }

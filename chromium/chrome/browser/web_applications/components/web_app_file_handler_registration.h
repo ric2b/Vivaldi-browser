@@ -5,31 +5,58 @@
 #ifndef CHROME_BROWSER_WEB_APPLICATIONS_COMPONENTS_WEB_APP_FILE_HANDLER_REGISTRATION_H_
 #define CHROME_BROWSER_WEB_APPLICATIONS_COMPONENTS_WEB_APP_FILE_HANDLER_REGISTRATION_H_
 
-#include <set>
 #include <string>
 
-#include "chrome/browser/web_applications/components/web_app_helpers.h"
+#include "base/callback.h"
+#include "base/files/file_path.h"
+#include "build/build_config.h"
+#include "chrome/browser/web_applications/components/web_app_id.h"
+#include "components/services/app_service/public/cpp/file_handler.h"
 
 class Profile;
 
 namespace web_app {
 
-// returns true if Chrome supports WebApp File Handling on this OS.
-bool OsSupportsWebAppFileHandling();
+// True if file handlers are managed externally by the operating system, and
+// Chrome supports file handling on this operating system.
+// In practice, this is false on Chrome OS (as Chrome OS uses Chrome's installed
+// apps to find file handlers), and on operating systems where Chrome doesn't
+// know how to register file handlers.
+bool ShouldRegisterFileHandlersWithOs();
 
 // Do OS-specific registration to handle opening files with the specified
 // |file_extensions| and |mime_types| with the PWA with the specified |app_id|.
 // This may also involve creating a shim app to launch Chrome from.
-void RegisterFileHandlersForWebApp(const AppId& app_id,
-                                   const std::string& app_name,
-                                   const Profile& profile,
-                                   const std::set<std::string>& file_extensions,
-                                   const std::set<std::string>& mime_types);
+// Note: Some operating systems (such as Chrome OS) may not need to do any work
+// here.
+void RegisterFileHandlersWithOs(const AppId& app_id,
+                                const std::string& app_name,
+                                Profile* profile,
+                                const apps::FileHandlers& file_handlers);
 
 // Undo the file extensions registration for the PWA with specified |app_id|.
 // If a shim app was required, also removes the shim app.
-void UnregisterFileHandlersForWebApp(const AppId& app_id,
-                                     const Profile& profile);
+void UnregisterFileHandlersWithOs(const AppId& app_id, Profile* profile);
+
+#if defined(OS_LINUX)
+using RegisterMimeTypesOnLinuxCallback =
+    base::OnceCallback<bool(base::FilePath profile_path,
+                            std::string file_contents)>;
+
+// Exposed for testing purposes. Register the set of
+// MIME-type-to-file-extensions mappings corresponding to |file_handlers|. File
+// I/O and a a callout to the Linux shell are performed asynchronously in a
+// |callback|, which is set automatically on the usual install code path.
+void RegisterMimeTypesOnLinux(const AppId& app_id,
+                              Profile* profile,
+                              const apps::FileHandlers& file_handlers,
+                              RegisterMimeTypesOnLinuxCallback callback);
+
+// Override the default |callback| passed to RegisterMimeTypesOnLinux. Used in
+// automated browser tests.
+void SetRegisterMimeTypesOnLinuxCallbackForTesting(
+    RegisterMimeTypesOnLinuxCallback callback);
+#endif
 
 }  // namespace web_app
 

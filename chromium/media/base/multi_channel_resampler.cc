@@ -17,8 +17,8 @@ namespace media {
 MultiChannelResampler::MultiChannelResampler(int channels,
                                              double io_sample_rate_ratio,
                                              size_t request_size,
-                                             const ReadCB& read_cb)
-    : read_cb_(read_cb),
+                                             const ReadCB read_cb)
+    : read_cb_(std::move(read_cb)),
       wrapped_resampler_audio_bus_(AudioBus::CreateWrapper(channels)),
       output_frames_ready_(0) {
   // Allocate each channel's resampler.
@@ -26,8 +26,8 @@ MultiChannelResampler::MultiChannelResampler(int channels,
   for (int i = 0; i < channels; ++i) {
     resamplers_.push_back(std::make_unique<SincResampler>(
         io_sample_rate_ratio, request_size,
-        base::Bind(&MultiChannelResampler::ProvideInput, base::Unretained(this),
-                   i)));
+        base::BindRepeating(&MultiChannelResampler::ProvideInput,
+                            base::Unretained(this), i)));
   }
 
   // Setup the wrapped AudioBus for channel data.
@@ -117,6 +117,11 @@ int MultiChannelResampler::ChunkSize() const {
   return resamplers_[0]->ChunkSize();
 }
 
+int MultiChannelResampler::GetMaxInputFramesRequested(
+    int output_frames_requested) const {
+  DCHECK(!resamplers_.empty());
+  return resamplers_[0]->GetMaxInputFramesRequested(output_frames_requested);
+}
 
 double MultiChannelResampler::BufferedFrames() const {
   DCHECK(!resamplers_.empty());

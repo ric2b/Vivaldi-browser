@@ -52,7 +52,7 @@ public class BookmarkModelTest {
     @Before
     public void setUp() {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            Profile profile = Profile.getLastUsedProfile();
+            Profile profile = Profile.getLastUsedRegularProfile();
             mBookmarkModel = new BookmarkModel(profile);
             mBookmarkModel.loadEmptyPartnerBookmarkShimForTesting();
         });
@@ -255,12 +255,17 @@ public class BookmarkModelTest {
         verifyBookmark(folderAA, "faa", null, true, folderA);
     }
 
-    private BookmarkId addBookmark(final BookmarkId parent, final int index, final String title,
-            final String url) {
+    private BookmarkId addBookmark(
+            final BookmarkId parent, final int index, final String title, final String url) {
+        return addBookmark(mBookmarkModel, parent, index, title, url);
+    }
+
+    public static BookmarkId addBookmark(BookmarkModel model, final BookmarkId parent,
+            final int index, final String title, final String url) {
         final AtomicReference<BookmarkId> result = new AtomicReference<BookmarkId>();
         final Semaphore semaphore = new Semaphore(0);
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            result.set(mBookmarkModel.addBookmark(parent, index, title, url));
+            result.set(model.addBookmark(parent, index, title, url));
             semaphore.release();
         });
         try {

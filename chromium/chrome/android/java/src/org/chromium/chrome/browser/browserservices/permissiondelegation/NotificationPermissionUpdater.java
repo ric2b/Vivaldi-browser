@@ -4,10 +4,7 @@
 
 package org.chromium.chrome.browser.browserservices.permissiondelegation;
 
-import static org.chromium.chrome.browser.dependency_injection.ChromeCommonQualifiers.APP_CONTEXT;
-
 import android.content.ComponentName;
-import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 
@@ -16,15 +13,12 @@ import androidx.annotation.WorkerThread;
 import org.chromium.base.Log;
 import org.chromium.base.PackageManagerUtils;
 import org.chromium.base.task.PostTask;
-import org.chromium.chrome.browser.ChromeApplication;
-import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.browserservices.BrowserServicesMetrics;
-import org.chromium.chrome.browser.browserservices.Origin;
 import org.chromium.chrome.browser.browserservices.TrustedWebActivityClient;
+import org.chromium.components.embedder_support.util.Origin;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 
 import javax.inject.Inject;
-import javax.inject.Named;
 import javax.inject.Singleton;
 
 /**
@@ -33,8 +27,6 @@ import javax.inject.Singleton;
  * Origin had before a TWA was installed in the case of TWA uninstallation.
  *
  * TODO(peconn): Add a README.md for Notification Delegation.
- * TODO(peconn): Revert the permission when the TWA is uninstalled.
- * TODO(peconn): Update the permission when a push notification occurs.
  */
 @Singleton
 public class NotificationPermissionUpdater {
@@ -44,7 +36,7 @@ public class NotificationPermissionUpdater {
     private final TrustedWebActivityClient mTrustedWebActivityClient;
 
     @Inject
-    public NotificationPermissionUpdater(@Named(APP_CONTEXT) Context context,
+    public NotificationPermissionUpdater(
             TrustedWebActivityPermissionManager permissionManager,
             TrustedWebActivityClient trustedWebActivityClient) {
         mPermissionManager = permissionManager;
@@ -60,17 +52,14 @@ public class NotificationPermissionUpdater {
      * - Otherwise, it does nothing.
      */
     public void onOriginVerified(Origin origin, String packageName) {
-        if (!ChromeFeatureList.isEnabled(
-                ChromeFeatureList.TRUSTED_WEB_ACTIVITY_NOTIFICATION_DELEGATION_ENROLMENT)) {
-            return;
-        }
-
         // If the client doesn't handle browsable Intents for the URL, we don't do anything special
         // for the origin's notifications.
         if (!appHandlesBrowsableIntent(packageName, origin.uri())) {
-            Log.d(TAG, "Package does not handle Browsable Intents for the origin");
+            Log.d(TAG, "Package does not handle Browsable Intents for the origin.");
             return;
         }
+
+        mPermissionManager.addDelegateApp(origin, packageName);
 
         // It's important to note here that the client we connect to to check for the notification
         // permission may not be the client that triggered this method call.
@@ -88,11 +77,6 @@ public class NotificationPermissionUpdater {
      * app was installed.
      */
     public void onClientAppUninstalled(Origin origin) {
-        if (ChromeFeatureList.isInitialized() && !ChromeFeatureList.isEnabled(
-                ChromeFeatureList.TRUSTED_WEB_ACTIVITY_NOTIFICATION_DELEGATION_ENROLMENT)) {
-            return;
-        }
-
         // See if there is any other app installed that could handle the notifications (and update
         // to that apps notification permission if it exists).
         boolean couldConnect = mTrustedWebActivityClient.checkNotificationPermission(origin,
@@ -104,28 +88,12 @@ public class NotificationPermissionUpdater {
         }
     }
 
-    /**
-     * To be called when a notification is delegated to a client and we notice that the client has
-     * notifications disabled.
-     */
-    @WorkerThread
-    public static void onDelegatedNotificationDisabled(Origin origin, ComponentName app) {
-        // This method is called from TrustedWebActivityClient, which this class requires, so
-        // we can't inject this class into TrustedWebActivityClient and we can't set this class as
-        // an observer of TrustedWebActivityClient since we aren't guaranteed to be created before
-        // TrustedWebActivityClient#notifyNotification is called. So grab an instance of this class
-        // out of Dagger.
-        // TODO(peconn): Make the lifetimes/dependencies here less ugly.
-        ChromeApplication.getComponent().resolveTwaPermissionUpdater()
-                .updatePermission(origin, app, false);
-    }
-
     @WorkerThread
     private void updatePermission(Origin origin, ComponentName app, boolean enabled) {
         // This method will be called by the TrustedWebActivityClient on a background thread, so
         // hop back over to the UI thread to deal with the result.
         PostTask.postTask(UiThreadTaskTraits.USER_VISIBLE, () -> {
-            mPermissionManager.register(origin, app.getPackageName(), enabled);
+            mPermissionManager.updatePermission(origin, app.getPackageName(), enabled);
             Log.d(TAG, "Updating origin notification permissions to: %b", enabled);
         });
     }
@@ -138,7 +106,7 @@ public class NotificationPermissionUpdater {
         browsableIntent.addCategory(Intent.CATEGORY_BROWSABLE);
 
         try (BrowserServicesMetrics.TimingMetric unused =
-                     BrowserServicesMetrics.getBrowsableIntentResolutionTimingContext()) {
+                        BrowserServicesMetrics.getBrowsableIntentResolutionTimingContext()) {
             return PackageManagerUtils.resolveActivity(browsableIntent, 0) != null;
         }
     }

@@ -19,6 +19,7 @@
 #include "ash/public/cpp/app_list/vector_icons/vector_icons.h"
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/metrics/user_action_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "ui/base/ime/composition_text.h"
 #include "ui/chromeos/search_box/search_box_constants.h"
@@ -71,7 +72,7 @@ class SearchBoxViewTest : public views::test::WidgetTest,
     views::test::WidgetTest::SetUp();
 
     app_list_view_ = new AppListView(&view_delegate_);
-    app_list_view_->InitView(false /*is_tablet_mode*/, GetContext());
+    app_list_view_->InitView(/*is_tablet_mode=*/false, GetContext());
 
     widget_ = CreateTopLevelPlatformWidget();
     view_ =
@@ -413,6 +414,23 @@ TEST_F(SearchBoxViewTest, ChangeSelectionWhileResultsAreBeingRemoved) {
       result_page_view->result_selection_controller()->selected_result());
 }
 
+TEST_F(SearchBoxViewTest, NewSearchQueryActionRecordedWhenUserType) {
+  base::UserActionTester user_action_tester;
+  // User starts to type a character in search box.
+  KeyPress(ui::VKEY_A);
+  EXPECT_EQ(1, user_action_tester.GetActionCount("AppList_SearchQueryStarted"));
+
+  // User continues to type another character.
+  KeyPress(ui::VKEY_B);
+  EXPECT_EQ(1, user_action_tester.GetActionCount("AppList_SearchQueryStarted"));
+
+  // User erases the query in the search box and types a new one.
+  KeyPress(ui::VKEY_BACK);
+  KeyPress(ui::VKEY_BACK);
+  KeyPress(ui::VKEY_C);
+  EXPECT_EQ(2, user_action_tester.GetActionCount("AppList_SearchQueryStarted"));
+}
+
 class SearchBoxViewAssistantButtonTest : public SearchBoxViewTest {
  public:
   SearchBoxViewAssistantButtonTest() = default;
@@ -586,7 +604,7 @@ class SearchBoxViewAutocompleteTest
   DISALLOW_COPY_AND_ASSIGN(SearchBoxViewAutocompleteTest);
 };
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          SearchBoxViewAutocompleteTest,
                          ::testing::Values(ui::VKEY_LEFT,
                                            ui::VKEY_RIGHT,

@@ -75,16 +75,6 @@ bool RelaunchRecommendedBubbleView::Accept() {
   return false;
 }
 
-bool RelaunchRecommendedBubbleView::Close() {
-  base::RecordAction(base::UserMetricsAction("RelaunchRecommended_Close"));
-
-  return true;
-}
-
-int RelaunchRecommendedBubbleView::GetDialogButtons() const {
-  return ui::DIALOG_BUTTON_OK;
-}
-
 base::string16 RelaunchRecommendedBubbleView::GetWindowTitle() const {
   return relaunch_recommended_timer_.GetWindowTitle();
 }
@@ -95,8 +85,7 @@ bool RelaunchRecommendedBubbleView::ShouldShowCloseButton() const {
 
 gfx::ImageSkia RelaunchRecommendedBubbleView::GetWindowIcon() {
   return gfx::CreateVectorIcon(gfx::IconDescription(
-      vector_icons::kBusinessIcon, kTitleIconSize, gfx::kChromeIconGrey,
-      base::TimeDelta(), gfx::kNoneIcon));
+      vector_icons::kBusinessIcon, kTitleIconSize, gfx::kChromeIconGrey));
 }
 
 bool RelaunchRecommendedBubbleView::ShouldShowWindowIcon() const {
@@ -156,9 +145,14 @@ RelaunchRecommendedBubbleView::RelaunchRecommendedBubbleView(
           detection_time,
           base::BindRepeating(&RelaunchRecommendedBubbleView::UpdateWindowTitle,
                               base::Unretained(this))) {
-  DialogDelegate::set_button_label(
+  DialogDelegate::SetButtons(ui::DIALOG_BUTTON_OK);
+  DialogDelegate::SetButtonLabel(
       ui::DIALOG_BUTTON_OK,
       l10n_util::GetStringUTF16(IDS_RELAUNCH_ACCEPT_BUTTON));
+
+  DialogDelegate::SetCloseCallback(
+      base::BindOnce(&base::RecordAction,
+                     base::UserMetricsAction("RelaunchRecommended_Close")));
 
   chrome::RecordDialogCreation(chrome::DialogIdentifier::RELAUNCH_RECOMMENDED);
   set_margins(ChromeLayoutProvider::Get()->GetDialogInsetsForContentType(

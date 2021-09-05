@@ -5,12 +5,15 @@
 #include "chrome/browser/bitmap_fetcher/bitmap_fetcher.h"
 
 #include "base/bind.h"
+#include "base/task/post_task.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/storage_partition.h"
+#include "net/base/data_url.h"
 #include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "net/url_request/url_request_status.h"
+#include "url/url_constants.h"
 
 BitmapFetcher::BitmapFetcher(
     const GURL& url,
@@ -23,7 +26,7 @@ BitmapFetcher::~BitmapFetcher() {
 
 void BitmapFetcher::Init(const std::string& referrer,
                          net::URLRequest::ReferrerPolicy referrer_policy,
-                         int load_flags) {
+                         network::mojom::CredentialsMode credentials_mode) {
   if (simple_loader_ != NULL)
     return;
 
@@ -31,15 +34,30 @@ void BitmapFetcher::Init(const std::string& referrer,
   resource_request->url = url_;
   resource_request->referrer = GURL(referrer);
   resource_request->referrer_policy = referrer_policy;
-  resource_request->load_flags = load_flags;
+  resource_request->credentials_mode = credentials_mode;
   simple_loader_ = network::SimpleURLLoader::Create(std::move(resource_request),
                                                     traffic_annotation_);
 }
 
 void BitmapFetcher::Start(network::mojom::URLLoaderFactory* loader_factory) {
+  network::SimpleURLLoader::BodyAsStringCallback callback = base::BindOnce(
+      &BitmapFetcher::OnSimpleLoaderComplete, weak_factory_.GetWeakPtr());
+
+  // Early exit to handle data URLs.
+  if (url_.SchemeIs(url::kDataScheme)) {
+    std::string mime_type, charset, data;
+    std::unique_ptr<std::string> response_body;
+    if (net::DataURL::Parse(url_, &mime_type, &charset, &data))
+      response_body = std::make_unique<std::string>(std::move(data));
+
+    // Post a task to maintain our guarantee that the delegate will only be
+    // called asynchronously.
+    base::PostTask(FROM_HERE,
+                   BindOnce(std::move(callback), std::move(response_body)));
+    return;
+  }
+
   if (simple_loader_) {
-    network::SimpleURLLoader::BodyAsStringCallback callback = base::BindOnce(
-        &BitmapFetcher::OnSimpleLoaderComplete, base::Unretained(this));
     simple_loader_->DownloadToStringOfUnboundedSizeUntilCrashAndDie(
         loader_factory, std::move(callback));
   }

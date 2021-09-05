@@ -37,7 +37,7 @@ class AnimationHostTest : public AnimationTimelinesTest {
     client_impl_.RegisterElementId(element_id_, ElementListType::ACTIVE);
 
     worklet_animation_ = WorkletAnimation::Create(
-        worklet_animation_id_, "test_name", 1, nullptr, nullptr, nullptr);
+        worklet_animation_id_, "test_name", 1, nullptr, nullptr);
     int cc_id = worklet_animation_->id();
     worklet_animation_->AttachElement(element_id_);
     host_->AddAnimationTimeline(timeline_);
@@ -137,14 +137,14 @@ TEST_F(AnimationHostTest, ImplOnlyScrollAnimationUpdateTargetIfDetached) {
 
   time += base::TimeDelta::FromSecondsD(0.1);
   EXPECT_TRUE(host_impl_->ImplOnlyScrollAnimationUpdateTarget(
-      element_id_, scroll_delta, max_scroll_offset, time, base::TimeDelta()));
+      scroll_delta, max_scroll_offset, time, base::TimeDelta()));
 
   // Detach all animations from layers and timelines.
   host_impl_->ClearMutators();
 
   time += base::TimeDelta::FromSecondsD(0.1);
   EXPECT_FALSE(host_impl_->ImplOnlyScrollAnimationUpdateTarget(
-      element_id_, scroll_delta, max_scroll_offset, time, base::TimeDelta()));
+      scroll_delta, max_scroll_offset, time, base::TimeDelta()));
 }
 
 // Tests that verify interaction of AnimationHost with LayerTreeMutator.
@@ -332,16 +332,18 @@ TEST_F(AnimationHostTest, LayerTreeMutatorUpdateReflectsScrollAnimations) {
 
   // Create scroll timeline that links scroll animation and worklet animation
   // together. Use timerange so that we have 1:1 time & scroll mapping.
-  auto scroll_timeline = std::make_unique<ScrollTimeline>(
-      element_id, ScrollTimeline::ScrollDown, base::nullopt, base::nullopt, 100,
-      KeyframeModel::FillMode::NONE);
+  auto scroll_timeline =
+      ScrollTimeline::Create(element_id, ScrollTimeline::ScrollDown,
+                             base::nullopt, base::nullopt, 100);
 
   // Create a worklet animation that is bound to the scroll timeline.
   scoped_refptr<WorkletAnimation> worklet_animation(
       new WorkletAnimation(animation_id2, worklet_animation_id, "test_name", 1,
-                           std::move(scroll_timeline), nullptr, nullptr, true));
+                           nullptr, nullptr, true));
+  host_impl_->AddAnimationTimeline(scroll_timeline);
+  scroll_timeline->AttachAnimation(worklet_animation);
+
   worklet_animation->AttachElement(element_id);
-  timeline_->AttachAnimation(worklet_animation);
 
   AddOpacityTransitionToAnimation(worklet_animation.get(), 1, .7f, .3f, true);
 

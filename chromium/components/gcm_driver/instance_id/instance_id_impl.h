@@ -31,17 +31,18 @@ class InstanceIDImpl : public InstanceID {
   ~InstanceIDImpl() override;
 
   // InstanceID:
-  void GetID(const GetIDCallback& callback) override;
-  void GetCreationTime(const GetCreationTimeCallback& callback) override;
+  void GetID(GetIDCallback callback) override;
+  void GetCreationTime(GetCreationTimeCallback callback) override;
   void GetToken(const std::string& authorized_entity,
                 const std::string& scope,
+                base::TimeDelta time_to_live,
                 const std::map<std::string, std::string>& options,
                 std::set<Flags> flags,
                 GetTokenCallback callback) override;
   void ValidateToken(const std::string& authorized_entity,
                      const std::string& scope,
                      const std::string& token,
-                     const ValidateTokenCallback& callback) override;
+                     ValidateTokenCallback callback) override;
   void DeleteTokenImpl(const std::string& authorized_entity,
                        const std::string& scope,
                        DeleteTokenCallback callback) override;
@@ -60,16 +61,17 @@ class InstanceIDImpl : public InstanceID {
   void GetInstanceIDDataCompleted(const std::string& instance_id,
                                   const std::string& extra_data);
 
-  void DoGetID(const GetIDCallback& callback);
-  void DoGetCreationTime(const GetCreationTimeCallback& callback);
+  void DoGetID(GetIDCallback callback);
+  void DoGetCreationTime(GetCreationTimeCallback callback);
   void DoGetToken(const std::string& authorized_entity,
                   const std::string& scope,
+                  base::TimeDelta time_to_live,
                   const std::map<std::string, std::string>& options,
                   GetTokenCallback callback);
   void DoValidateToken(const std::string& authorized_entity,
                        const std::string& scope,
                        const std::string& token,
-                       const ValidateTokenCallback& callback);
+                       ValidateTokenCallback callback);
   void DoDeleteToken(const std::string& authorized_entity,
                      const std::string& scope,
                      DeleteTokenCallback callback);

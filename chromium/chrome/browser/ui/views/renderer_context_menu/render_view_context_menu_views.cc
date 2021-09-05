@@ -27,11 +27,77 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/strings/grit/ui_strings.h"
+#include "ui/views/controls/menu/menu_host.h"
+#include "ui/views/controls/menu/menu_item_view.h"
+#include "ui/views/controls/menu/submenu_view.h"
+#include "ui/views/view.h"
+#include "ui/views/view_observer.h"
 #include "ui/views/widget/widget.h"
 
 #include "browser/menus/vivaldi_menus.h"
 
 using content::WebContents;
+
+class RenderViewContextMenuViews::SubmenuViewObserver
+    : public views::ViewObserver,
+      public views::WidgetObserver {
+ public:
+  SubmenuViewObserver(RenderViewContextMenuViews* parent,
+                      views::SubmenuView* submenu_view)
+      : parent_(parent), submenu_view_(submenu_view) {
+    observed_submenu_view_.Add(submenu_view);
+    auto* widget = submenu_view_->host();
+    if (widget)
+      observed_submenu_widget_.Add(widget);
+  }
+
+  SubmenuViewObserver(const SubmenuViewObserver&) = delete;
+  SubmenuViewObserver& operator=(const SubmenuViewObserver&) = delete;
+
+  ~SubmenuViewObserver() override = default;
+
+  // ViewObserver:
+  void OnViewIsDeleting(views::View* observed_view) override {
+    // The submenu view is being deleted, make sure the parent no longer
+    // observes it.
+    DCHECK_EQ(submenu_view_, observed_view);
+    parent_->OnSubmenuClosed();
+  }
+
+  void OnViewBoundsChanged(views::View* observed_view) override {
+    DCHECK_EQ(submenu_view_, observed_view);
+    parent_->OnSubmenuViewBoundsChanged(
+        submenu_view_->host()->GetWindowBoundsInScreen());
+  }
+
+  void OnViewAddedToWidget(views::View* observed_view) override {
+    DCHECK_EQ(submenu_view_, observed_view);
+    auto* widget = submenu_view_->host();
+    if (widget)
+      observed_submenu_widget_.Add(widget);
+  }
+
+  // WidgetObserver:
+  void OnWidgetBoundsChanged(views::Widget* widget,
+                             const gfx::Rect& new_bounds_in_screen) override {
+    DCHECK_EQ(submenu_view_->host(), widget);
+    parent_->OnSubmenuViewBoundsChanged(new_bounds_in_screen);
+  }
+
+  void OnWidgetClosing(views::Widget* widget) override {
+    // The widget is being closed, make sure the parent bubble no longer
+    // observes it.
+    DCHECK_EQ(submenu_view_->host(), widget);
+    parent_->OnSubmenuClosed();
+  }
+
+ private:
+  RenderViewContextMenuViews* const parent_;
+  views::SubmenuView* const submenu_view_;
+  ScopedObserver<views::View, views::ViewObserver> observed_submenu_view_{this};
+  ScopedObserver<views::Widget, views::WidgetObserver> observed_submenu_widget_{
+      this};
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 // RenderViewContextMenuViews, public:
@@ -74,7 +140,6 @@ bool RenderViewContextMenuViews::GetAcceleratorForCommandId(
 
   // There are no formally defined accelerators we can query so we assume
   // that Ctrl+C, Ctrl+V, Ctrl+X, Ctrl-A, etc do what they normally do.
-  ui::AcceleratorProvider* accelerator_provider = nullptr;
   switch (command_id) {
     case IDC_BACK:
       *accel = ui::Accelerator(ui::VKEY_LEFT, ui::EF_ALT_DOWN);
@@ -141,7 +206,7 @@ bool RenderViewContextMenuViews::GetAcceleratorForCommandId(
       *accel = ui::Accelerator(ui::VKEY_S, ui::EF_CONTROL_DOWN);
       return true;
 
-    case IDC_CONTENT_CONTEXT_EXIT_FULLSCREEN:
+    case IDC_CONTENT_CONTEXT_EXIT_FULLSCREEN: {
       // Esc only works in HTML5 (site-triggered) fullscreen.
       if (IsHTML5Fullscreen()) {
         // Per UX design feedback, do not show an accelerator when press and
@@ -157,16 +222,18 @@ bool RenderViewContextMenuViews::GetAcceleratorForCommandId(
       // Chromebooks typically do not have an F11 key, so do not show an
       // accelerator here.
       return false;
-#endif
-
+#else
       // User-triggered fullscreen. Show the shortcut for toggling fullscreen
       // (i.e., F11).
-      accelerator_provider = GetBrowserAcceleratorProvider();
+      ui::AcceleratorProvider* accelerator_provider =
+          GetBrowserAcceleratorProvider();
       if (!accelerator_provider)
         return false;
 
       return accelerator_provider->GetAcceleratorForCommandId(IDC_FULLSCREEN,
                                                               accel);
+#endif
+    }
 
     case IDC_VIEW_SOURCE:
       *accel = ui::Accelerator(ui::VKEY_U, ui::EF_CONTROL_DOWN);
@@ -202,8 +269,8 @@ void RenderViewContextMenuViews::ExecuteCommand(int command_id,
       content::RenderViewHost* view_host = GetRenderViewHost();
       view_host->GetWidget()->UpdateTextDirection(
           (command_id == IDC_WRITING_DIRECTION_RTL)
-              ? blink::kWebTextDirectionRightToLeft
-              : blink::kWebTextDirectionLeftToRight);
+              ? base::i18n::RIGHT_TO_LEFT
+              : base::i18n::LEFT_TO_RIGHT);
       view_host->GetWidget()->NotifyTextDirection();
       RenderViewContextMenu::RecordUsedItem(command_id);
       break;
@@ -304,6 +371,20 @@ void RenderViewContextMenuViews::Show() {
   // the context menu is being displayed.
   base::MessageLoopCurrent::ScopedNestableTaskAllower allow;
   RunMenuAt(top_level_widget, screen_point, params().source_type);
+
+  auto* submenu_view = static_cast<ToolkitDelegateViews*>(toolkit_delegate())
+                           ->menu_view()
+                           ->GetSubmenu();
+  if (submenu_view) {
+    for (auto& observer : observers_) {
+      if (submenu_view->host())
+        observer.OnContextMenuShown(
+            params_, submenu_view->host()->GetWindowBoundsInScreen());
+    }
+
+    submenu_view_observer_ =
+        std::make_unique<SubmenuViewObserver>(this, submenu_view);
+  }
 }
 
 views::Widget* RenderViewContextMenuViews::GetTopLevelWidget() {
@@ -321,4 +402,15 @@ aura::Window* RenderViewContextMenuViews::GetActiveNativeView() {
              ? web_contents->GetFullscreenRenderWidgetHostView()
                    ->GetNativeView()
              : web_contents->GetNativeView();
+}
+
+void RenderViewContextMenuViews::OnSubmenuViewBoundsChanged(
+    const gfx::Rect& new_bounds_in_screen) {
+  for (auto& observer : observers_) {
+    observer.OnContextMenuViewBoundsChanged(new_bounds_in_screen);
+  }
+}
+
+void RenderViewContextMenuViews::OnSubmenuClosed() {
+  submenu_view_observer_.reset();
 }

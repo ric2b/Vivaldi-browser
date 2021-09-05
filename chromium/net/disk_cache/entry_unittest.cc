@@ -15,7 +15,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/test/metrics/histogram_tester.h"
-#include "base/test/mock_entropy_provider.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/platform_thread.h"
 #include "net/base/completion_once_callback.h"
@@ -165,10 +164,8 @@ void DiskCacheEntryTest::InternalSyncIO() {
   ASSERT_TRUE(nullptr != entry);
 
   // The bulk of the test runs from within the callback, on the cache thread.
-  RunTaskForTest(base::Bind(&DiskCacheEntryTest::InternalSyncIOBackground,
-                            base::Unretained(this),
-                            entry));
-
+  RunTaskForTest(base::BindOnce(&DiskCacheEntryTest::InternalSyncIOBackground,
+                                base::Unretained(this), entry));
 
   entry->Doom();
   entry->Close();
@@ -401,9 +398,8 @@ void DiskCacheEntryTest::ExternalSyncIO() {
   ASSERT_THAT(CreateEntry("the first key", &entry), IsOk());
 
   // The bulk of the test runs from within the callback, on the cache thread.
-  RunTaskForTest(base::Bind(&DiskCacheEntryTest::ExternalSyncIOBackground,
-                            base::Unretained(this),
-                            entry));
+  RunTaskForTest(base::BindOnce(&DiskCacheEntryTest::ExternalSyncIOBackground,
+                                base::Unretained(this), entry));
 
   entry->Doom();
   entry->Close();
@@ -4973,7 +4969,8 @@ TEST_F(DiskCacheEntryTest, SimpleCacheReadCorruptLength) {
   EXPECT_NE(net::OK, OpenEntry(key, &entry));
 }
 
-TEST_F(DiskCacheEntryTest, SimpleCacheCreateRecoverFromRmdir) {
+// TODO(crbug.com/999584): Flaky on platforms which use POSIX-based file I/O.
+TEST_F(DiskCacheEntryTest, DISABLED_SimpleCacheCreateRecoverFromRmdir) {
   // This test runs as APP_CACHE to make operations more synchronous.
   // (in particular we want to see if create succeeded or not, so we don't
   //  want an optimistic one).
@@ -5532,9 +5529,7 @@ TEST_F(DiskCacheEntryTest, BlockFileSparsePendingAfterDtor) {
 
 class DiskCacheSimplePrefetchTest : public DiskCacheEntryTest {
  public:
-  DiskCacheSimplePrefetchTest()
-      : field_trial_list_(std::make_unique<base::FieldTrialList>(
-            std::make_unique<base::MockEntropyProvider>())) {}
+  DiskCacheSimplePrefetchTest() = default;
 
   enum { kEntrySize = 1024 };
 
@@ -5614,9 +5609,6 @@ class DiskCacheSimplePrefetchTest : public DiskCacheEntryTest {
 
  protected:
   scoped_refptr<net::IOBuffer> payload_;
-
-  // Need to have the one "global" trial list before we change things.
-  std::unique_ptr<base::FieldTrialList> field_trial_list_;
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 

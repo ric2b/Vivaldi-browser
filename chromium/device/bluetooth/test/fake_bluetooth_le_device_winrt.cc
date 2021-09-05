@@ -166,6 +166,7 @@ HRESULT FakeBluetoothLEDeviceWinrt::GetGattServicesAsync(
   auto async_op = Make<base::win::AsyncOperation<GattDeviceServicesResult*>>();
   gatt_services_callback_ = async_op->callback();
   *operation = async_op.Detach();
+  service_uuid_.reset();
   bluetooth_test_winrt_->OnFakeBluetoothDeviceConnectGattCalled();
   return S_OK;
 }
@@ -179,7 +180,12 @@ HRESULT FakeBluetoothLEDeviceWinrt::GetGattServicesWithCacheModeAsync(
 HRESULT FakeBluetoothLEDeviceWinrt::GetGattServicesForUuidAsync(
     GUID service_uuid,
     IAsyncOperation<GattDeviceServicesResult*>** operation) {
-  return E_NOTIMPL;
+  auto async_op = Make<base::win::AsyncOperation<GattDeviceServicesResult*>>();
+  gatt_services_callback_ = async_op->callback();
+  service_uuid_ = service_uuid;
+  *operation = async_op.Detach();
+  bluetooth_test_winrt_->OnFakeBluetoothDeviceConnectGattCalled();
+  return S_OK;
 }
 
 HRESULT FakeBluetoothLEDeviceWinrt::GetGattServicesForUuidWithCacheModeAsync(
@@ -214,8 +220,20 @@ void FakeBluetoothLEDeviceWinrt::SimulatePairingPinCode(std::string pin_code) {
       Make<FakeDeviceInformationPairingWinrt>(std::move(pin_code)));
 }
 
+base::Optional<BluetoothUUID> FakeBluetoothLEDeviceWinrt::GetTargetGattService()
+    const {
+  if (!service_uuid_)
+    return base::nullopt;
+  return BluetoothUUID(*service_uuid_);
+}
+
 void FakeBluetoothLEDeviceWinrt::SimulateGattConnection() {
   status_ = BluetoothConnectionStatus_Connected;
+  connection_status_changed_handler_->Invoke(this, nullptr);
+}
+
+void FakeBluetoothLEDeviceWinrt::SimulateStatusChangeToDisconnect() {
+  status_ = BluetoothConnectionStatus_Disconnected;
   connection_status_changed_handler_->Invoke(this, nullptr);
 }
 
@@ -240,10 +258,8 @@ void FakeBluetoothLEDeviceWinrt::SimulateGattDisconnection() {
 
   // Simulate production UWP behavior that only really disconnects once all
   // references to a device are dropped.
-  if (reference_count_ == 0u) {
-    status_ = BluetoothConnectionStatus_Disconnected;
-    connection_status_changed_handler_->Invoke(this, nullptr);
-  }
+  if (reference_count_ == 0u)
+    SimulateStatusChangeToDisconnect();
 }
 
 void FakeBluetoothLEDeviceWinrt::SimulateDeviceBreaksConnection() {
@@ -256,8 +272,7 @@ void FakeBluetoothLEDeviceWinrt::SimulateDeviceBreaksConnection() {
   }
 
   // Simulate a Gatt Disconnecion regardless of the reference count.
-  status_ = BluetoothConnectionStatus_Disconnected;
-  connection_status_changed_handler_->Invoke(this, nullptr);
+  SimulateStatusChangeToDisconnect();
 }
 
 void FakeBluetoothLEDeviceWinrt::SimulateGattNameChange(

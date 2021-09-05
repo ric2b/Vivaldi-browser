@@ -12,43 +12,36 @@
 #include "content/public/browser/web_ui_controller.h"
 
 class Browser;
+class TabStripUIEmbedder;
+class TabStripUIHandler;
 
-namespace gfx {
-class Point;
-}
-
-namespace ui {
-class MenuModel;
-}
+extern const char kWebUITabIdDataType[];
+extern const char kWebUITabGroupIdDataType[];
 
 // The WebUI version of the tab strip in the browser. It is currently only
 // supported on ChromeOS in tablet mode.
 class TabStripUI : public content::WebUIController {
  public:
-  // Interface to be implemented by the embedder. Provides native UI
-  // functionality such as showing context menus.
-  class Embedder {
-   public:
-    Embedder() = default;
-    virtual ~Embedder() {}
-
-    virtual void CloseContainer() = 0;
-
-    virtual void ShowContextMenuAtPoint(
-        gfx::Point point,
-        std::unique_ptr<ui::MenuModel> menu_model) = 0;
-  };
-
   explicit TabStripUI(content::WebUI* web_ui);
   ~TabStripUI() override;
 
-  // Initialize TabStripUI with its embedder and the Browser it's running in.
-  // Must be called exactly once. The WebUI won't work until this is called.
-  void Initialize(Browser* browser, Embedder* embedder);
+  // Initialize TabStripUI with its embedder and the Browser it's
+  // running in. Must be called exactly once. The WebUI won't work until
+  // this is called.
+  void Initialize(Browser* browser, TabStripUIEmbedder* embedder);
+
+  // The embedder should call this whenever the result of
+  // Embedder::GetLayout() changes.
+  void LayoutChanged();
+
+  // The embedder should call this whenever the tab strip gains keyboard focus.
+  void ReceivedKeyboardFocus();
 
  private:
   void HandleThumbnailUpdate(int extension_tab_id,
                              ThumbnailTracker::CompressedThumbnailData image);
+
+  TabStripUIHandler* handler_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(TabStripUI);
 };

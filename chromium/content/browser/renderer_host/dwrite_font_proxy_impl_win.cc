@@ -473,10 +473,10 @@ void DWriteFontProxyImpl::MatchUniqueFont(
 
   base::string16 font_file_pathname;
   uint32_t ttc_index;
-  bool result = FontFilePathAndTtcIndex(first_font_face.Get(),
-                                        font_file_pathname, ttc_index);
-  if (!result)
+  if (FAILED(FontFilePathAndTtcIndex(first_font_face.Get(), font_file_pathname,
+                                     ttc_index))) {
     return;
+  }
 
   base::FilePath path(base::UTF16ToWide(font_file_pathname));
   std::move(callback).Run(path, ttc_index);
@@ -517,11 +517,14 @@ void DWriteFontProxyImpl::FallbackFamilyAndStyleForCodepoint(
                                                 /* width */ 0,
                                                 /* slant */ 0));
 
-  if (!codepoint)
+  if (!codepoint || !collection_ || !factory_)
     return;
 
   sk_sp<SkFontMgr> font_mgr(
       SkFontMgr_New_DirectWrite(factory_.Get(), collection_.Get()));
+
+  if (!font_mgr)
+    return;
 
   const char* bcp47_locales[] = {locale_name.c_str()};
   int num_locales = locale_name.empty() ? 0 : 1;

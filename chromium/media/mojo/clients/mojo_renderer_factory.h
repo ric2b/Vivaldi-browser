@@ -14,10 +14,8 @@
 #include "media/mojo/buildflags.h"
 #include "media/mojo/mojom/interface_factory.mojom.h"
 #include "media/mojo/mojom/renderer.mojom.h"
-
-namespace service_manager {
-class InterfaceProvider;
-}
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 
 namespace media {
 
@@ -34,8 +32,6 @@ class MojoRenderer;
 // MediaPlayerRendererClientFactory for examples of small wrappers around MRF.
 class MojoRendererFactory : public RendererFactory {
  public:
-  using GetTypeSpecificIdCB = base::Callback<std::string()>;
-
   explicit MojoRendererFactory(
       media::mojom::InterfaceFactory* interface_factory);
   ~MojoRendererFactory() final;
@@ -45,7 +41,7 @@ class MojoRendererFactory : public RendererFactory {
       const scoped_refptr<base::TaskRunner>& worker_task_runner,
       AudioRendererSink* audio_renderer_sink,
       VideoRendererSink* video_renderer_sink,
-      const RequestOverlayInfoCB& request_overlay_info_cb,
+      RequestOverlayInfoCB request_overlay_info_cb,
       const gfx::ColorSpace& target_color_space,
       bool use_platform_media_pipeline = false) final;
 
@@ -58,13 +54,16 @@ class MojoRendererFactory : public RendererFactory {
 #if defined(OS_ANDROID)
   std::unique_ptr<MojoRenderer> CreateFlingingRenderer(
       const std::string& presentation_id,
-      mojom::FlingingRendererClientExtensionPtr client_extenion_ptr,
+      mojo::PendingRemote<mojom::FlingingRendererClientExtension>
+          client_extenion_ptr,
       const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
       VideoRendererSink* video_renderer_sink);
 
   std::unique_ptr<MojoRenderer> CreateMediaPlayerRenderer(
-      mojom::MediaPlayerRendererExtensionRequest renderer_extension_request,
-      mojom::MediaPlayerRendererClientExtensionPtr client_extension_ptr,
+      mojo::PendingReceiver<mojom::MediaPlayerRendererExtension>
+          renderer_extension_receiver,
+      mojo::PendingRemote<mojom::MediaPlayerRendererClientExtension>
+          client_extension_remote,
       const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
       VideoRendererSink* video_renderer_sink);
 #endif  // defined (OS_ANDROID)

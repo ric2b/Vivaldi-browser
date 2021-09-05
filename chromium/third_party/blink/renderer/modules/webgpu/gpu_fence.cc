@@ -13,13 +13,8 @@
 
 namespace blink {
 
-// static
-GPUFence* GPUFence::Create(GPUDevice* device, DawnFence fence) {
-  return MakeGarbageCollected<GPUFence>(device, fence);
-}
-
-GPUFence::GPUFence(GPUDevice* device, DawnFence fence)
-    : DawnObject<DawnFence>(device, fence) {}
+GPUFence::GPUFence(GPUDevice* device, WGPUFence fence)
+    : DawnObject<WGPUFence>(device, fence) {}
 
 GPUFence::~GPUFence() {
   if (IsDawnControlClientDestroyed()) {
@@ -33,19 +28,16 @@ uint64_t GPUFence::getCompletedValue() const {
 }
 
 void GPUFence::OnCompletionCallback(ScriptPromiseResolver* resolver,
-                                    DawnFenceCompletionStatus status) {
+                                    WGPUFenceCompletionStatus status) {
   switch (status) {
-    case DAWN_FENCE_COMPLETION_STATUS_SUCCESS:
+    case WGPUFenceCompletionStatus_Success:
       resolver->Resolve();
       break;
-    case DAWN_FENCE_COMPLETION_STATUS_ERROR:
+    case WGPUFenceCompletionStatus_Error:
+    case WGPUFenceCompletionStatus_Unknown:
+    case WGPUFenceCompletionStatus_DeviceLost:
       resolver->Reject(MakeGarbageCollected<DOMException>(
           DOMExceptionCode::kOperationError));
-      break;
-    case DAWN_FENCE_COMPLETION_STATUS_UNKNOWN:
-    case DAWN_FENCE_COMPLETION_STATUS_DEVICE_LOST:
-      resolver->Reject(
-          MakeGarbageCollected<DOMException>(DOMExceptionCode::kAbortError));
       break;
     default:
       NOTREACHED();

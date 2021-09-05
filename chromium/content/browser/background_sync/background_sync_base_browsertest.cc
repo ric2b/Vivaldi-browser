@@ -10,9 +10,9 @@
 #include "base/metrics/field_trial_param_associator.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/post_task.h"
-#include "base/test/mock_entropy_provider.h"
 #include "content/browser/background_sync/background_sync_manager.h"
 #include "content/browser/storage_partition_impl.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/service_worker_context.h"
 #include "content/public/test/background_sync_test_util.h"
@@ -121,7 +121,7 @@ void BackgroundSyncBaseBrowserTest::RegistrationPendingOnCoreThread(
     const std::string& tag,
     const GURL& url,
     base::OnceCallback<void(bool)> callback) {
-  sw_context->FindReadyRegistrationForDocument(
+  sw_context->FindReadyRegistrationForClientUrl(
       url, base::BindOnce(&BackgroundSyncBaseBrowserTest::
                               RegistrationPendingDidGetSWRegistration,
                           base::Unretained(this), sync_context, tag,
@@ -143,8 +143,6 @@ void BackgroundSyncBaseBrowserTest::SetUp() {
   const char kTrialName[] = "BackgroundSync";
   const char kGroupName[] = "BackgroundSync";
   const char kFeatureName[] = "PeriodicBackgroundSync";
-  base::FieldTrialList field_trial_list(
-      std::make_unique<base::MockEntropyProvider>());
   scoped_refptr<base::FieldTrial> trial =
       base::FieldTrialList::CreateFieldTrial(kTrialName, kGroupName);
   std::map<std::string, std::string> params;

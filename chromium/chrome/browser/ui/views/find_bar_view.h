@@ -12,11 +12,15 @@
 #include "base/strings/string16.h"
 #include "chrome/browser/ui/views/dropdown_bar_host_delegate.h"
 #include "ui/views/controls/button/button.h"
+#include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/textfield/textfield_controller.h"
 #include "ui/views/view.h"
 
 class FindBarHost;
+
+namespace find_in_page {
 class FindNotificationDetails;
+}
 
 namespace gfx {
 class Range;
@@ -57,7 +61,7 @@ class FindBarView : public views::View,
 
   // Updates the label inside the Find text box that shows the ordinal of the
   // active item and how many matches were found.
-  void UpdateForResult(const FindNotificationDetails& result,
+  void UpdateForResult(const find_in_page::FindNotificationDetails& result,
                        const base::string16& find_text);
 
   // Clears the current Match Count value in the Find text box.
@@ -82,7 +86,6 @@ class FindBarView : public views::View,
   void OnAfterPaste() override;
 
  private:
-  class FindBarButton;
   class MatchCountLabel;
 
   // Starts finding |search_text|.  If the text is empty, stops finding.
@@ -107,9 +110,9 @@ class FindBarView : public views::View,
   std::unique_ptr<views::Painter> find_text_border_;
   MatchCountLabel* match_count_text_;
   views::Separator* separator_;
-  FindBarButton* find_previous_button_;
-  FindBarButton* find_next_button_;
-  FindBarButton* close_button_;
+  views::ImageButton* find_previous_button_;
+  views::ImageButton* find_next_button_;
+  views::ImageButton* close_button_;
 
   // The preferred height of the find bar.
   int preferred_height_;

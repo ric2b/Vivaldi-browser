@@ -53,6 +53,7 @@
 #include "gpu/command_buffer/common/sync_token.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
+#include "ui/gl/gpu_preference.h"
 
 #if !defined(__native_client__)
 #include "ui/gfx/color_space.h"
@@ -386,17 +387,19 @@ void GLES2Implementation::OnGpuControlSwapBuffersCompleted(
   std::move(callback).Run(params);
 }
 
-void GLES2Implementation::OnGpuSwitched() {
-  share_group_->SetGpuSwitched(true);
+void GLES2Implementation::OnGpuSwitched(
+    gl::GpuPreference active_gpu_heuristic) {
+  gpu_switched_ = true;
+  active_gpu_heuristic_ = active_gpu_heuristic;
 }
 
-GLboolean GLES2Implementation::DidGpuSwitch() {
-  // TODO(zmo): Redesign this code; it works for now because the share group
-  // only contains one context but in the future only the first OpenGL context
-  // in the share group will receive GL_TRUE as the return value.
-  bool gpu_changed = share_group_->GetGpuSwitched();
-  share_group_->SetGpuSwitched(false);
-  return gpu_changed ? GL_TRUE : GL_FALSE;
+GLboolean GLES2Implementation::DidGpuSwitch(gl::GpuPreference* active_gpu) {
+  if (gpu_switched_) {
+    *active_gpu = active_gpu_heuristic_;
+  }
+  GLboolean result = gpu_switched_ ? GL_TRUE : GL_FALSE;
+  gpu_switched_ = false;
+  return result;
 }
 
 void GLES2Implementation::SendErrorMessage(std::string message, int32_t id) {
@@ -2521,6 +2524,36 @@ void GLES2Implementation::MultiDrawArraysInstancedWEBGLHelper(
   helper_->MultiDrawEndCHROMIUM();
 }
 
+void GLES2Implementation::MultiDrawArraysInstancedBaseInstanceWEBGLHelper(
+    GLenum mode,
+    const GLint* firsts,
+    const GLsizei* counts,
+    const GLsizei* instance_counts,
+    const GLuint* baseinstances,
+    GLsizei drawcount) {
+  DCHECK_GT(drawcount, 0);
+
+  uint32_t buffer_size = ComputeCombinedCopySize(
+      drawcount, firsts, counts, instance_counts, baseinstances);
+  ScopedTransferBufferPtr buffer(buffer_size, helper_, transfer_buffer_);
+
+  helper_->MultiDrawBeginCHROMIUM(drawcount);
+  auto DoMultiDraw = [&](const std::array<uint32_t, 4>& offsets, uint32_t,
+                         uint32_t copy_count) {
+    helper_->MultiDrawArraysInstancedBaseInstanceCHROMIUM(
+        mode, buffer.shm_id(), buffer.offset() + offsets[0], buffer.shm_id(),
+        buffer.offset() + offsets[1], buffer.shm_id(),
+        buffer.offset() + offsets[2], buffer.shm_id(),
+        buffer.offset() + offsets[3], copy_count);
+  };
+  if (!TransferArraysAndExecute(drawcount, &buffer, DoMultiDraw, firsts, counts,
+                                instance_counts, baseinstances)) {
+    SetGLError(GL_OUT_OF_MEMORY, "glMultiDrawArraysInstancedBaseInstanceWEBGL",
+               "out of memory");
+  }
+  helper_->MultiDrawEndCHROMIUM();
+}
+
 void GLES2Implementation::MultiDrawElementsWEBGLHelper(GLenum mode,
                                                        const GLsizei* counts,
                                                        GLenum type,
@@ -2569,6 +2602,42 @@ void GLES2Implementation::MultiDrawElementsInstancedWEBGLHelper(
   if (!TransferArraysAndExecute(drawcount, &buffer, DoMultiDraw, counts,
                                 offsets, instance_counts)) {
     SetGLError(GL_OUT_OF_MEMORY, "glMultiDrawElementsInstancedWEBGL",
+               "out of memory");
+  }
+  helper_->MultiDrawEndCHROMIUM();
+}
+
+void GLES2Implementation::
+    MultiDrawElementsInstancedBaseVertexBaseInstanceWEBGLHelper(
+        GLenum mode,
+        const GLsizei* counts,
+        GLenum type,
+        const GLsizei* offsets,
+        const GLsizei* instance_counts,
+        const GLint* basevertices,
+        const GLuint* baseinstances,
+        GLsizei drawcount) {
+  DCHECK_GT(drawcount, 0);
+
+  uint32_t buffer_size = ComputeCombinedCopySize(
+      drawcount, counts, offsets, instance_counts, basevertices, baseinstances);
+  ScopedTransferBufferPtr buffer(buffer_size, helper_, transfer_buffer_);
+
+  helper_->MultiDrawBeginCHROMIUM(drawcount);
+  auto DoMultiDraw = [&](const std::array<uint32_t, 5>& offsets, uint32_t,
+                         uint32_t copy_count) {
+    helper_->MultiDrawElementsInstancedBaseVertexBaseInstanceCHROMIUM(
+        mode, buffer.shm_id(), buffer.offset() + offsets[0], type,
+        buffer.shm_id(), buffer.offset() + offsets[1], buffer.shm_id(),
+        buffer.offset() + offsets[2], buffer.shm_id(),
+        buffer.offset() + offsets[3], buffer.shm_id(),
+        buffer.offset() + offsets[4], copy_count);
+  };
+  if (!TransferArraysAndExecute(drawcount, &buffer, DoMultiDraw, counts,
+                                offsets, instance_counts, basevertices,
+                                baseinstances)) {
+    SetGLError(GL_OUT_OF_MEMORY,
+               "glMultiDrawElementsInstancedBaseVertexBaseInstanceWEBGL",
                "out of memory");
   }
   helper_->MultiDrawEndCHROMIUM();
@@ -2626,6 +2695,39 @@ void GLES2Implementation::MultiDrawArraysInstancedWEBGL(
   }
   MultiDrawArraysInstancedWEBGLHelper(mode, firsts, counts, instance_counts,
                                       drawcount);
+  CheckGLError();
+}
+
+void GLES2Implementation::MultiDrawArraysInstancedBaseInstanceWEBGL(
+    GLenum mode,
+    const GLint* firsts,
+    const GLsizei* counts,
+    const GLsizei* instance_counts,
+    const GLuint* baseinstances,
+    GLsizei drawcount) {
+  GPU_CLIENT_SINGLE_THREAD_CHECK();
+  GPU_CLIENT_LOG("[" << GetLogPrefix()
+                     << "] glMultiDrawArraysInstancedBaseInstanceWEBGL("
+                     << GLES2Util::GetStringDrawMode(mode) << ", " << firsts
+                     << ", " << counts << ", " << instance_counts << ", "
+                     << baseinstances << ", " << drawcount << ")");
+  if (drawcount < 0) {
+    SetGLError(GL_INVALID_VALUE, "glMultiDrawArraysInstancedBaseInstanceWEBGL",
+               "drawcount < 0");
+    return;
+  }
+  if (drawcount == 0) {
+    return;
+  }
+  // This is for an extension for WebGL which doesn't support client side arrays
+  if (vertex_array_object_manager_->SupportsClientSideBuffers()) {
+    SetGLError(GL_INVALID_OPERATION,
+               "glMultiDrawArraysInstancedBaseInstanceWEBGL",
+               "Missing array buffer for vertex attribute");
+    return;
+  }
+  MultiDrawArraysInstancedBaseInstanceWEBGLHelper(
+      mode, firsts, counts, instance_counts, baseinstances, drawcount);
   CheckGLError();
 }
 
@@ -2695,6 +2797,50 @@ void GLES2Implementation::MultiDrawElementsInstancedWEBGL(
   }
   MultiDrawElementsInstancedWEBGLHelper(mode, counts, type, offsets,
                                         instance_counts, drawcount);
+  CheckGLError();
+}
+
+void GLES2Implementation::MultiDrawElementsInstancedBaseVertexBaseInstanceWEBGL(
+    GLenum mode,
+    const GLsizei* counts,
+    GLenum type,
+    const GLsizei* offsets,
+    const GLsizei* instance_counts,
+    const GLint* basevertices,
+    const GLuint* baseinstances,
+    GLsizei drawcount) {
+  GPU_CLIENT_SINGLE_THREAD_CHECK();
+  GPU_CLIENT_LOG(
+      "[" << GetLogPrefix()
+          << "] glMultiDrawElementsInstancedBaseVertexBaseInstanceWEBGL("
+          << GLES2Util::GetStringDrawMode(mode) << ", " << counts << ", "
+          << GLES2Util::GetStringIndexType(type) << ", " << offsets << ", "
+          << instance_counts << ", " << basevertices << ", " << baseinstances
+          << drawcount << ")");
+  if (drawcount < 0) {
+    SetGLError(GL_INVALID_VALUE, "glMultiDrawElementsInstancedWEBGL",
+               "drawcount < 0");
+    return;
+  }
+  if (drawcount == 0) {
+    return;
+  }
+  // This is for an extension for WebGL which doesn't support client side arrays
+  if (vertex_array_object_manager_->bound_element_array_buffer() == 0) {
+    SetGLError(GL_INVALID_OPERATION,
+               "glMultiDrawElementsInstancedBaseVertexBaseInstanceWEBGL",
+               "No element array buffer");
+    return;
+  }
+  if (vertex_array_object_manager_->SupportsClientSideBuffers()) {
+    SetGLError(GL_INVALID_OPERATION,
+               "glMultiDrawElementsInstancedBaseVertexBaseInstanceWEBGL",
+               "Missing array buffer for vertex attribute");
+    return;
+  }
+  MultiDrawElementsInstancedBaseVertexBaseInstanceWEBGLHelper(
+      mode, counts, type, offsets, instance_counts, basevertices, baseinstances,
+      drawcount);
   CheckGLError();
 }
 
@@ -5512,18 +5658,18 @@ void GLES2Implementation::ScheduleCALayerCHROMIUM(GLuint contents_texture_id,
 
 void GLES2Implementation::SetColorSpaceMetadataCHROMIUM(
     GLuint texture_id,
-    GLColorSpace color_space) {
+    GLcolorSpace color_space) {
 #if defined(__native_client__)
   // Including gfx::ColorSpace would bring Skia and a lot of other code into
   // NaCl's IRT.
   SetGLError(GL_INVALID_VALUE, "GLES2::SetColorSpaceMetadataCHROMIUM",
              "not supported");
 #else
-  gfx::ColorSpace* gfx_color_space =
-      reinterpret_cast<gfx::ColorSpace*>(color_space);
+  gfx::ColorSpace gfx_color_space;
+  if (color_space)
+    gfx_color_space = *reinterpret_cast<const gfx::ColorSpace*>(color_space);
   base::Pickle color_space_data;
-  IPC::ParamTraits<gfx::ColorSpace>::Write(&color_space_data, *gfx_color_space);
-
+  IPC::ParamTraits<gfx::ColorSpace>::Write(&color_space_data, gfx_color_space);
   ScopedTransferBufferPtr buffer(color_space_data.size(), helper_,
                                  transfer_buffer_);
   if (!buffer.valid() || buffer.size() < color_space_data.size()) {
@@ -5881,12 +6027,35 @@ void GLES2Implementation::UnmapTexSubImage2DCHROMIUM(const void* mem) {
 void GLES2Implementation::ResizeCHROMIUM(GLuint width,
                                          GLuint height,
                                          float scale_factor,
-                                         GLenum color_space,
+                                         GLcolorSpace gl_color_space,
                                          GLboolean alpha) {
   GPU_CLIENT_SINGLE_THREAD_CHECK();
   GPU_CLIENT_LOG("[" << GetLogPrefix() << "] glResizeCHROMIUM(" << width << ", "
                      << height << ", " << scale_factor << ", " << alpha << ")");
-  helper_->ResizeCHROMIUM(width, height, scale_factor, color_space, alpha);
+  // Including gfx::ColorSpace would bring Skia and a lot of other code into
+  // NaCl's IRT, so just leave the color space unspecified.
+#if !defined(__native_client__)
+  if (gl_color_space) {
+    gfx::ColorSpace gfx_color_space =
+        *reinterpret_cast<const gfx::ColorSpace*>(gl_color_space);
+    base::Pickle color_space_data;
+    IPC::ParamTraits<gfx::ColorSpace>::Write(&color_space_data,
+                                             gfx_color_space);
+    ScopedTransferBufferPtr buffer(color_space_data.size(), helper_,
+                                   transfer_buffer_);
+    if (!buffer.valid() || buffer.size() < color_space_data.size()) {
+      SetGLError(GL_OUT_OF_MEMORY, "GLES2::SetColorSpaceMetadataCHROMIUM",
+                 "out of memory");
+      return;
+    }
+    memcpy(buffer.address(), color_space_data.data(), color_space_data.size());
+    helper_->ResizeCHROMIUM(width, height, scale_factor, alpha, buffer.shm_id(),
+                            buffer.offset(), color_space_data.size());
+    CheckGLError();
+    return;
+  }
+#endif
+  helper_->ResizeCHROMIUM(width, height, scale_factor, alpha, 0, 0, 0);
   CheckGLError();
 }
 
@@ -6468,6 +6637,51 @@ void GLES2Implementation::DrawArraysInstancedANGLE(GLenum mode,
   CheckGLError();
 }
 
+void GLES2Implementation::DrawArraysInstancedBaseInstanceANGLE(
+    GLenum mode,
+    GLint first,
+    GLsizei count,
+    GLsizei primcount,
+    GLuint baseinstance) {
+  GPU_CLIENT_SINGLE_THREAD_CHECK();
+  GPU_CLIENT_LOG(
+      "[" << GetLogPrefix() << "] glDrawArraysInstancedBaseInstanceANGLE("
+          << GLES2Util::GetStringDrawMode(mode) << ", " << first << ", "
+          << count << ", " << primcount << ", " << baseinstance << ")");
+  if (count < 0) {
+    SetGLError(GL_INVALID_VALUE, "glDrawArraysInstancedBaseInstanceANGLE",
+               "count < 0");
+    return;
+  }
+  if (primcount < 0) {
+    SetGLError(GL_INVALID_VALUE, "glDrawArraysInstancedBaseInstanceANGLE",
+               "primcount < 0");
+    return;
+  }
+  if (primcount == 0) {
+    return;
+  }
+  bool simulated = false;
+  if (vertex_array_object_manager_->SupportsClientSideBuffers()) {
+    GLsizei num_elements;
+    if (!base::CheckAdd(first, count).AssignIfValid(&num_elements)) {
+      SetGLError(GL_INVALID_VALUE, "glDrawArraysInstancedBaseInstanceANGLE",
+                 "first+count overflow");
+      return;
+    }
+    // Client side buffer is not used by WebGL so leave it as is.
+    if (!vertex_array_object_manager_->SetupSimulatedClientSideBuffers(
+            "glDrawArraysInstancedBaseInstanceANGLE", this, helper_,
+            num_elements, primcount, &simulated)) {
+      return;
+    }
+  }
+  helper_->DrawArraysInstancedBaseInstanceANGLE(mode, first, count, primcount,
+                                                baseinstance);
+  RestoreArrayBuffer(simulated);
+  CheckGLError();
+}
+
 void GLES2Implementation::DrawElementsInstancedANGLE(GLenum mode,
                                                      GLsizei count,
                                                      GLenum type,
@@ -6504,6 +6718,54 @@ void GLES2Implementation::DrawElementsInstancedANGLE(GLenum mode,
     }
   }
   helper_->DrawElementsInstancedANGLE(mode, count, type, offset, primcount);
+  RestoreElementAndArrayBuffers(simulated);
+  CheckGLError();
+}
+
+void GLES2Implementation::DrawElementsInstancedBaseVertexBaseInstanceANGLE(
+    GLenum mode,
+    GLsizei count,
+    GLenum type,
+    const void* indices,
+    GLsizei primcount,
+    GLint basevertex,
+    GLuint baseinstance) {
+  GPU_CLIENT_SINGLE_THREAD_CHECK();
+  GPU_CLIENT_LOG("[" << GetLogPrefix()
+                     << "] glDrawElementsInstancedBaseVertexBaseInstanceANGLE("
+                     << GLES2Util::GetStringDrawMode(mode) << ", " << count
+                     << ", " << GLES2Util::GetStringIndexType(type) << ", "
+                     << static_cast<const void*>(indices) << ", " << primcount
+                     << ", " << basevertex << ", " << baseinstance << ")");
+  if (count < 0) {
+    SetGLError(GL_INVALID_VALUE,
+               "glDrawElementsInstancedBaseVertexBaseInstanceANGLE",
+               "count less than 0.");
+    return;
+  }
+  if (primcount < 0) {
+    SetGLError(GL_INVALID_VALUE,
+               "glDrawElementsInstancedBaseVertexBaseInstanceANGLE",
+               "primcount < 0");
+    return;
+  }
+  GLuint offset = 0;
+  bool simulated = false;
+  if (count > 0 && primcount > 0) {
+    if (vertex_array_object_manager_->bound_element_array_buffer() != 0 &&
+        !ValidateOffset("glDrawElementsInstancedBaseVertexBaseInstanceANGLE",
+                        reinterpret_cast<GLintptr>(indices))) {
+      return;
+    }
+    // Client side buffer is not used by WebGL so leave it as is.
+    if (!vertex_array_object_manager_->SetupSimulatedIndexAndClientSideBuffers(
+            "glDrawElementsInstancedBaseVertexBaseInstanceANGLE", this, helper_,
+            count, type, primcount, indices, &offset, &simulated)) {
+      return;
+    }
+  }
+  helper_->DrawElementsInstancedBaseVertexBaseInstanceANGLE(
+      mode, count, type, offset, primcount, basevertex, baseinstance);
   RestoreElementAndArrayBuffers(simulated);
   CheckGLError();
 }
@@ -6801,7 +7063,7 @@ bool CreateImageValidInternalFormat(GLenum internalformat,
     case GL_R16_EXT:
       return capabilities.texture_norm16;
     case GL_RGB10_A2_EXT:
-      return capabilities.image_xr30 || capabilities.image_xb30;
+      return capabilities.image_ar30 || capabilities.image_ab30;
     case GL_RGB_YCBCR_P010_CHROMIUM:
       return capabilities.image_ycbcr_p010;
     case GL_RED:
@@ -7104,547 +7366,6 @@ void GLES2Implementation::GetInternalformativ(GLenum target,
     for (GLsizei ii = 0; ii < buf_size; ++ii) {
       params[ii] = data[ii];
     }
-  }
-  CheckGLError();
-}
-
-GLuint GLES2Implementation::GenPathsCHROMIUM(GLsizei range) {
-  GPU_CLIENT_LOG("[" << GetLogPrefix() << "] glGenPathsCHROMIUM(" << range
-                     << ")");
-  GPU_CLIENT_SINGLE_THREAD_CHECK();
-  static const char kFunctionName[] = "glGenPathsCHROMIUM";
-  if (range < 0) {
-    SetGLError(GL_INVALID_VALUE, kFunctionName, "range < 0");
-    return 0;
-  }
-  if (!base::IsValueInRangeForNumericType<int32_t>(range)) {
-    SetGLError(GL_INVALID_OPERATION, kFunctionName, "range more than 32-bit");
-    return 0;
-  }
-  if (range == 0)
-    return 0;
-
-  GLuint first_client_id = 0;
-  GetRangeIdHandler(id_namespaces::kPaths)
-      ->MakeIdRange(this, range, &first_client_id);
-
-  if (first_client_id == 0) {
-    // Ran out of id space. Is not specified to raise any gl errors.
-    return 0;
-  }
-
-  helper_->GenPathsCHROMIUM(first_client_id, range);
-
-  GPU_CLIENT_LOG_CODE_BLOCK({
-    for (GLsizei i = 0; i < range; ++i) {
-      GPU_CLIENT_LOG("  " << i << ": " << (first_client_id + i));
-    }
-  });
-  CheckGLError();
-  return first_client_id;
-}
-
-void GLES2Implementation::DeletePathsCHROMIUM(GLuint first_client_id,
-                                              GLsizei range) {
-  GPU_CLIENT_SINGLE_THREAD_CHECK();
-  GPU_CLIENT_LOG("[" << GetLogPrefix() << "] glDeletePathsCHROMIUM("
-                     << first_client_id << ", " << range << ")");
-  static const char kFunctionName[] = "glDeletePathsCHROMIUM";
-
-  if (range < 0) {
-    SetGLError(GL_INVALID_VALUE, kFunctionName, "range < 0");
-    return;
-  }
-  if (!base::IsValueInRangeForNumericType<int32_t>(range)) {
-    SetGLError(GL_INVALID_OPERATION, kFunctionName, "range more than 32-bit");
-    return;
-  }
-  if (range == 0)
-    return;
-
-  GLuint last_client_id;
-  if (!base::CheckAdd(first_client_id, range - 1)
-           .AssignIfValid(&last_client_id)) {
-    SetGLError(GL_INVALID_OPERATION, kFunctionName, "overflow");
-    return;
-  }
-
-  GetRangeIdHandler(id_namespaces::kPaths)
-      ->FreeIdRange(this, first_client_id, range,
-                    &GLES2Implementation::DeletePathsCHROMIUMStub);
-  CheckGLError();
-}
-
-void GLES2Implementation::DeletePathsCHROMIUMStub(GLuint first_client_id,
-                                                  GLsizei range) {
-  helper_->DeletePathsCHROMIUM(first_client_id, range);
-}
-
-void GLES2Implementation::PathCommandsCHROMIUM(GLuint path,
-                                               GLsizei num_commands,
-                                               const GLubyte* commands,
-                                               GLsizei num_coords,
-                                               GLenum coord_type,
-                                               const void* coords) {
-  GPU_CLIENT_SINGLE_THREAD_CHECK();
-  GPU_CLIENT_LOG("[" << GetLogPrefix() << "] glPathCommandsCHROMIUM(" << path
-                     << ", " << num_commands << ", " << commands << ", "
-                     << num_coords << ", " << coords << ")");
-  static const char kFunctionName[] = "glPathCommandsCHROMIUM";
-  if (path == 0) {
-    SetGLError(GL_INVALID_VALUE, kFunctionName, "invalid path object");
-    return;
-  }
-  if (num_commands < 0) {
-    SetGLError(GL_INVALID_VALUE, kFunctionName, "numCommands < 0");
-    return;
-  }
-  if (num_commands != 0 && !commands) {
-    SetGLError(GL_INVALID_VALUE, kFunctionName, "missing commands");
-    return;
-  }
-  if (num_coords < 0) {
-    SetGLError(GL_INVALID_VALUE, kFunctionName, "numCoords < 0");
-    return;
-  }
-  if (num_coords != 0 && !coords) {
-    SetGLError(GL_INVALID_VALUE, kFunctionName, "missing coords");
-    return;
-  }
-  uint32_t coord_type_size =
-      GLES2Util::GetGLTypeSizeForPathCoordType(coord_type);
-  if (coord_type_size == 0) {
-    SetGLError(GL_INVALID_ENUM, kFunctionName, "invalid coordType");
-    return;
-  }
-  if (num_commands == 0) {
-    // No commands must mean no coords, thus nothing to memcpy. Let
-    // the service validate the call. Validate coord_type above, so
-    // that the parameters will be checked the in the same order
-    // regardless of num_commands.
-    helper_->PathCommandsCHROMIUM(path, num_commands, 0, 0, num_coords,
-                                  coord_type, 0, 0);
-    CheckGLError();
-    return;
-  }
-
-  uint32_t coords_size;
-  if (!base::CheckMul(num_coords, coord_type_size)
-           .AssignIfValid(&coords_size)) {
-    SetGLError(GL_INVALID_OPERATION, kFunctionName, "overflow");
-    return;
-  }
-
-  uint32_t required_buffer_size;
-  if (!base::CheckAdd(coords_size, num_commands)
-           .AssignIfValid(&required_buffer_size)) {
-    SetGLError(GL_INVALID_OPERATION, kFunctionName, "overflow");
-    return;
-  }
-
-  ScopedTransferBufferPtr buffer(required_buffer_size, helper_,
-                                 transfer_buffer_);
-  if (!buffer.valid() || buffer.size() < required_buffer_size) {
-    SetGLError(GL_OUT_OF_MEMORY, kFunctionName, "too large");
-    return;
-  }
-
-  uint32_t coords_shm_id = 0;
-  uint32_t coords_shm_offset = 0;
-  // Copy coords first because they need more strict alignment.
-  if (coords_size > 0) {
-    unsigned char* coords_addr = static_cast<unsigned char*>(buffer.address());
-    memcpy(coords_addr, coords, coords_size);
-    coords_shm_id = buffer.shm_id();
-    coords_shm_offset = buffer.offset();
-  }
-
-  DCHECK_GT(num_commands, 0);
-  unsigned char* commands_addr =
-      static_cast<unsigned char*>(buffer.address()) + coords_size;
-  memcpy(commands_addr, commands, num_commands);
-
-  helper_->PathCommandsCHROMIUM(path, num_commands, buffer.shm_id(),
-                                buffer.offset() + coords_size, num_coords,
-                                coord_type, coords_shm_id, coords_shm_offset);
-  CheckGLError();
-}
-
-bool GLES2Implementation::PrepareInstancedPathCommand(
-    const char* function_name,
-    GLsizei num_paths,
-    GLenum path_name_type,
-    const void* paths,
-    GLenum transform_type,
-    const GLfloat* transform_values,
-    ScopedTransferBufferPtr* buffer,
-    uint32_t* out_paths_shm_id,
-    uint32_t* out_paths_offset,
-    uint32_t* out_transforms_shm_id,
-    uint32_t* out_transforms_offset) {
-  if (num_paths < 0) {
-    SetGLError(GL_INVALID_VALUE, function_name, "numPaths < 0");
-    return false;
-  }
-  uint32_t path_name_size =
-      GLES2Util::GetGLTypeSizeForGLPathNameType(path_name_type);
-
-  if (path_name_size == 0) {
-    SetGLError(GL_INVALID_ENUM, function_name, "invalid pathNameType");
-    return false;
-  }
-
-  uint32_t transforms_component_count =
-      GLES2Util::GetComponentCountForGLTransformType(transform_type);
-
-  if (transform_type != GL_NONE && transforms_component_count == 0) {
-    SetGLError(GL_INVALID_ENUM, function_name, "invalid transformType");
-    return false;
-  }
-
-  if (num_paths == 0) {
-    // This might still be a valid or an invalid GL call. Make an empty call to
-    // the service side to check the rest of the parameters. We check the above
-    // parameters client-side, in order to get same GL errors whether num_paths
-    // == 0 or not. We do not check the parameters below, as they are anyway
-    // checked by the service side. We can not check all the parameters
-    // client-side, since the validators are not available.
-    *out_paths_shm_id = 0;
-    *out_paths_offset = 0;
-    *out_transforms_shm_id = 0;
-    *out_transforms_offset = 0;
-    return true;
-  }
-
-  if (!paths) {
-    SetGLError(GL_INVALID_VALUE, function_name, "missing paths");
-    return false;
-  }
-
-  if (transform_type != GL_NONE && !transform_values) {
-    SetGLError(GL_INVALID_VALUE, function_name, "missing transforms");
-    return false;
-  }
-
-  uint32_t paths_size;
-  if (!base::CheckMul(path_name_size, num_paths).AssignIfValid(&paths_size)) {
-    SetGLError(GL_INVALID_OPERATION, function_name, "overflow");
-    return false;
-  }
-
-  // The multiplication below will not overflow.
-  DCHECK_LE(transforms_component_count, 12U);
-  uint32_t one_transform_size = sizeof(GLfloat) * transforms_component_count;
-
-  uint32_t transforms_size;
-  if (!base::CheckMul(one_transform_size, num_paths)
-           .AssignIfValid(&transforms_size)) {
-    SetGLError(GL_INVALID_OPERATION, function_name, "overflow");
-    return false;
-  }
-
-  uint32_t required_buffer_size;
-  if (!base::CheckAdd(transforms_size, paths_size)
-           .AssignIfValid(&required_buffer_size)) {
-    SetGLError(GL_INVALID_OPERATION, function_name, "overflow");
-    return false;
-  }
-
-  buffer->Reset(required_buffer_size);
-
-  if (!buffer->valid() || buffer->size() < required_buffer_size) {
-    SetGLError(GL_OUT_OF_MEMORY, function_name, "too large");
-    return false;
-  }
-
-  // Copy transforms first, they may have more strict alignment.
-  if (transforms_size > 0) {
-    unsigned char* transforms_addr =
-        static_cast<unsigned char*>(buffer->address());
-    memcpy(transforms_addr, transform_values, transforms_size);
-    *out_transforms_shm_id = buffer->shm_id();
-    *out_transforms_offset = buffer->offset();
-  } else {
-    *out_transforms_shm_id = 0;
-    *out_transforms_offset = 0;
-  }
-
-  DCHECK_GT(paths_size, 0U);
-  unsigned char* paths_addr =
-      static_cast<unsigned char*>(buffer->address()) + transforms_size;
-  memcpy(paths_addr, paths, paths_size);
-  *out_paths_shm_id = buffer->shm_id();
-  *out_paths_offset = buffer->offset() + transforms_size;
-
-  return true;
-}
-
-void GLES2Implementation::StencilFillPathInstancedCHROMIUM(
-    GLsizei num_paths,
-    GLenum path_name_type,
-    const GLvoid* paths,
-    GLuint path_base,
-    GLenum fill_mode,
-    GLuint mask,
-    GLenum transform_type,
-    const GLfloat* transform_values) {
-  GPU_CLIENT_SINGLE_THREAD_CHECK();
-  GPU_CLIENT_LOG("[" << GetLogPrefix()
-                     << "] glStencilFillPathInstancedCHROMIUM(" << num_paths
-                     << ", " << path_name_type << ", " << paths << ", "
-                     << path_base << ", " << fill_mode << ", " << mask << ", "
-                     << transform_type << ", " << transform_values << ")");
-
-  ScopedTransferBufferPtr buffer(helper_, transfer_buffer_);
-  uint32_t paths_shm_id = 0;
-  uint32_t paths_offset = 0;
-  uint32_t transforms_shm_id = 0;
-  uint32_t transforms_offset = 0;
-  if (!PrepareInstancedPathCommand(
-          "glStencilFillPathInstancedCHROMIUM", num_paths, path_name_type,
-          paths, transform_type, transform_values, &buffer, &paths_shm_id,
-          &paths_offset, &transforms_shm_id, &transforms_offset)) {
-    return;
-  }
-
-  helper_->StencilFillPathInstancedCHROMIUM(
-      num_paths, path_name_type, paths_shm_id, paths_offset, path_base,
-      fill_mode, mask, transform_type, transforms_shm_id, transforms_offset);
-
-  CheckGLError();
-}
-
-void GLES2Implementation::StencilStrokePathInstancedCHROMIUM(
-    GLsizei num_paths,
-    GLenum path_name_type,
-    const GLvoid* paths,
-    GLuint path_base,
-    GLint ref,
-    GLuint mask,
-    GLenum transform_type,
-    const GLfloat* transform_values) {
-  GPU_CLIENT_SINGLE_THREAD_CHECK();
-  GPU_CLIENT_LOG("[" << GetLogPrefix()
-                     << "] glStencilStrokePathInstancedCHROMIUM(" << num_paths
-                     << ", " << path_name_type << ", " << paths << ", "
-                     << path_base << ", " << ref << ", " << mask << ", "
-                     << transform_type << ", " << transform_values << ")");
-
-  ScopedTransferBufferPtr buffer(helper_, transfer_buffer_);
-  uint32_t paths_shm_id = 0;
-  uint32_t paths_offset = 0;
-  uint32_t transforms_shm_id = 0;
-  uint32_t transforms_offset = 0;
-  if (!PrepareInstancedPathCommand(
-          "glStencilStrokePathInstancedCHROMIUM", num_paths, path_name_type,
-          paths, transform_type, transform_values, &buffer, &paths_shm_id,
-          &paths_offset, &transforms_shm_id, &transforms_offset)) {
-    return;
-  }
-
-  helper_->StencilStrokePathInstancedCHROMIUM(
-      num_paths, path_name_type, paths_shm_id, paths_offset, path_base, ref,
-      mask, transform_type, transforms_shm_id, transforms_offset);
-
-  CheckGLError();
-}
-
-void GLES2Implementation::CoverFillPathInstancedCHROMIUM(
-    GLsizei num_paths,
-    GLenum path_name_type,
-    const GLvoid* paths,
-    GLuint path_base,
-    GLenum cover_mode,
-    GLenum transform_type,
-    const GLfloat* transform_values) {
-  GPU_CLIENT_SINGLE_THREAD_CHECK();
-  GPU_CLIENT_LOG("[" << GetLogPrefix() << "] glCoverFillPathInstancedCHROMIUM("
-                     << num_paths << ", " << path_name_type << ", " << paths
-                     << ", " << path_base << ", " << cover_mode << ", "
-                     << transform_type << ", " << transform_values << ")");
-
-  ScopedTransferBufferPtr buffer(helper_, transfer_buffer_);
-  uint32_t paths_shm_id = 0;
-  uint32_t paths_offset = 0;
-  uint32_t transforms_shm_id = 0;
-  uint32_t transforms_offset = 0;
-  if (!PrepareInstancedPathCommand(
-          "glCoverFillPathInstancedCHROMIUM", num_paths, path_name_type, paths,
-          transform_type, transform_values, &buffer, &paths_shm_id,
-          &paths_offset, &transforms_shm_id, &transforms_offset)) {
-    return;
-  }
-
-  helper_->CoverFillPathInstancedCHROMIUM(
-      num_paths, path_name_type, paths_shm_id, paths_offset, path_base,
-      cover_mode, transform_type, transforms_shm_id, transforms_offset);
-
-  CheckGLError();
-}
-
-void GLES2Implementation::CoverStrokePathInstancedCHROMIUM(
-    GLsizei num_paths,
-    GLenum path_name_type,
-    const GLvoid* paths,
-    GLuint path_base,
-    GLenum cover_mode,
-    GLenum transform_type,
-    const GLfloat* transform_values) {
-  GPU_CLIENT_SINGLE_THREAD_CHECK();
-  GPU_CLIENT_LOG("[" << GetLogPrefix()
-                     << "] glCoverStrokePathInstancedCHROMIUM(" << num_paths
-                     << ", " << path_name_type << ", " << paths << ", "
-                     << path_base << ", " << cover_mode << ", "
-                     << transform_type << ", " << transform_values << ")");
-
-  ScopedTransferBufferPtr buffer(helper_, transfer_buffer_);
-  uint32_t paths_shm_id = 0;
-  uint32_t paths_offset = 0;
-  uint32_t transforms_shm_id = 0;
-  uint32_t transforms_offset = 0;
-  if (!PrepareInstancedPathCommand(
-          "glCoverStrokePathInstancedCHROMIUM", num_paths, path_name_type,
-          paths, transform_type, transform_values, &buffer, &paths_shm_id,
-          &paths_offset, &transforms_shm_id, &transforms_offset)) {
-    return;
-  }
-
-  helper_->CoverStrokePathInstancedCHROMIUM(
-      num_paths, path_name_type, paths_shm_id, paths_offset, path_base,
-      cover_mode, transform_type, transforms_shm_id, transforms_offset);
-
-  CheckGLError();
-}
-
-void GLES2Implementation::StencilThenCoverFillPathInstancedCHROMIUM(
-    GLsizei num_paths,
-    GLenum path_name_type,
-    const GLvoid* paths,
-    GLuint path_base,
-    GLenum fill_mode,
-    GLuint mask,
-    GLenum cover_mode,
-    GLenum transform_type,
-    const GLfloat* transform_values) {
-  GPU_CLIENT_SINGLE_THREAD_CHECK();
-  GPU_CLIENT_LOG(
-      "[" << GetLogPrefix() << "] glStencilThenCoverFillPathInstancedCHROMIUM("
-          << num_paths << ", " << path_name_type << ", " << paths << ", "
-          << path_base << ", " << cover_mode << ", " << fill_mode << ", "
-          << mask << ", " << transform_type << ", " << transform_values << ")");
-
-  ScopedTransferBufferPtr buffer(helper_, transfer_buffer_);
-  uint32_t paths_shm_id = 0;
-  uint32_t paths_offset = 0;
-  uint32_t transforms_shm_id = 0;
-  uint32_t transforms_offset = 0;
-  if (!PrepareInstancedPathCommand(
-          "glStencilThenCoverFillPathInstancedCHROMIUM", num_paths,
-          path_name_type, paths, transform_type, transform_values, &buffer,
-          &paths_shm_id, &paths_offset, &transforms_shm_id,
-          &transforms_offset)) {
-    return;
-  }
-
-  helper_->StencilThenCoverFillPathInstancedCHROMIUM(
-      num_paths, path_name_type, paths_shm_id, paths_offset, path_base,
-      fill_mode, mask, cover_mode, transform_type, transforms_shm_id,
-      transforms_offset);
-
-  CheckGLError();
-}
-
-void GLES2Implementation::StencilThenCoverStrokePathInstancedCHROMIUM(
-    GLsizei num_paths,
-    GLenum path_name_type,
-    const GLvoid* paths,
-    GLuint path_base,
-    GLint ref,
-    GLuint mask,
-    GLenum cover_mode,
-    GLenum transform_type,
-    const GLfloat* transform_values) {
-  GPU_CLIENT_SINGLE_THREAD_CHECK();
-  GPU_CLIENT_LOG("[" << GetLogPrefix()
-                     << "] glStencilThenCoverStrokePathInstancedCHROMIUM("
-                     << num_paths << ", " << path_name_type << ", " << paths
-                     << ", " << path_base << ", " << cover_mode << ", " << ref
-                     << ", " << mask << ", " << transform_type << ", "
-                     << transform_values << ")");
-
-  ScopedTransferBufferPtr buffer(helper_, transfer_buffer_);
-  uint32_t paths_shm_id = 0;
-  uint32_t paths_offset = 0;
-  uint32_t transforms_shm_id = 0;
-  uint32_t transforms_offset = 0;
-  if (!PrepareInstancedPathCommand(
-          "glStencilThenCoverStrokePathInstancedCHROMIUM", num_paths,
-          path_name_type, paths, transform_type, transform_values, &buffer,
-          &paths_shm_id, &paths_offset, &transforms_shm_id,
-          &transforms_offset)) {
-    return;
-  }
-
-  helper_->StencilThenCoverStrokePathInstancedCHROMIUM(
-      num_paths, path_name_type, paths_shm_id, paths_offset, path_base, ref,
-      mask, cover_mode, transform_type, transforms_shm_id, transforms_offset);
-
-  CheckGLError();
-}
-
-void GLES2Implementation::BindFragmentInputLocationCHROMIUM(GLuint program,
-                                                            GLint location,
-                                                            const char* name) {
-  GPU_CLIENT_SINGLE_THREAD_CHECK();
-  GPU_CLIENT_LOG("[" << GetLogPrefix()
-                     << "] glBindFragmentInputLocationCHROMIUM(" << program
-                     << ", " << location << ", " << name << ")");
-  SetBucketAsString(kResultBucketId, name);
-  helper_->BindFragmentInputLocationCHROMIUMBucket(program, location,
-                                                   kResultBucketId);
-  helper_->SetBucketSize(kResultBucketId, 0);
-  CheckGLError();
-}
-
-void GLES2Implementation::ProgramPathFragmentInputGenCHROMIUM(
-    GLuint program,
-    GLint location,
-    GLenum gen_mode,
-    GLint components,
-    const GLfloat* coeffs) {
-  GPU_CLIENT_SINGLE_THREAD_CHECK();
-  GPU_CLIENT_LOG("[" << GetLogPrefix()
-                     << "] glProgramPathFragmentInputGenCHROMIUM(" << program
-                     << ", " << gen_mode << ", " << components << ", " << coeffs
-                     << ")");
-
-  uint32_t coeffs_per_component =
-      GLES2Util::GetCoefficientCountForGLPathFragmentInputGenMode(gen_mode);
-
-  if (components <= 0 || components > 4 || gen_mode == GL_NONE ||
-      coeffs_per_component == 0 || location == -1) {
-    helper_->ProgramPathFragmentInputGenCHROMIUM(program, location, gen_mode,
-                                                 components, 0, 0);
-  } else {
-    // The multiplication below will not overflow.
-    DCHECK(coeffs_per_component > 0 && coeffs_per_component <= 4);
-    DCHECK(components > 0 && components <= 4);
-    uint32_t coeffs_size = sizeof(GLfloat) * coeffs_per_component * components;
-
-    ScopedTransferBufferPtr buffer(coeffs_size, helper_, transfer_buffer_);
-    if (!buffer.valid() || buffer.size() < coeffs_size) {
-      SetGLError(GL_OUT_OF_MEMORY, "glProgramPathFragmentInputGenCHROMIUM",
-                 "no room in transfer buffer");
-      return;
-    }
-
-    DCHECK_GT(coeffs_size, 0U);
-    unsigned char* addr = static_cast<unsigned char*>(buffer.address());
-    memcpy(addr, coeffs, coeffs_size);
-
-    helper_->ProgramPathFragmentInputGenCHROMIUM(program, location, gen_mode,
-                                                 components, buffer.shm_id(),
-                                                 buffer.offset());
   }
   CheckGLError();
 }

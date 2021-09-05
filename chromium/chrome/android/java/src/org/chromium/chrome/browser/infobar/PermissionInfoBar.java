@@ -8,21 +8,22 @@ import android.os.Bundle;
 
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ResourceId;
-import org.chromium.chrome.browser.permissions.AndroidPermissionRequester;
-import org.chromium.chrome.browser.preferences.PreferencesLauncher;
-import org.chromium.chrome.browser.preferences.website.SingleCategoryPreferences;
-import org.chromium.chrome.browser.preferences.website.SiteSettingsCategory;
-import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.permissions.ChromePermissionsClient;
+import org.chromium.chrome.browser.settings.SettingsLauncher;
+import org.chromium.chrome.browser.site_settings.SingleCategorySettings;
+import org.chromium.chrome.browser.site_settings.SiteSettingsCategory;
+import org.chromium.chrome.browser.ui.messages.infobar.InfoBarCompactLayout;
+import org.chromium.chrome.browser.ui.messages.infobar.InfoBarLayout;
+import org.chromium.components.permissions.AndroidPermissionRequester;
+import org.chromium.ui.base.WindowAndroid;
 
 /**
  * An infobar used for prompting the user to grant a web API permission.
  */
 public class PermissionInfoBar
         extends ConfirmInfoBar implements AndroidPermissionRequester.RequestDelegate {
-
-    /** The tab which this infobar will be displayed upon. */
-    protected final Tab mTab;
+    /** The window which this infobar will be displayed upon. */
+    protected final WindowAndroid mWindow;
 
     /** The content settings types corresponding to the permission requested in this infobar. */
     protected int[] mContentSettingsTypes;
@@ -42,12 +43,12 @@ public class PermissionInfoBar
     /** The secondary text shown below the message in the expanded state. */
     private String mDescription;
 
-    protected PermissionInfoBar(Tab tab, int[] contentSettingsTypes, int iconDrawableId,
-            String compactMessage, String compactLinkText, String message, String description,
-            String primaryButtonText, String secondaryButtonText) {
+    protected PermissionInfoBar(WindowAndroid window, int[] contentSettingsTypes,
+            int iconDrawableId, String compactMessage, String compactLinkText, String message,
+            String description, String primaryButtonText, String secondaryButtonText) {
         super(iconDrawableId, R.color.infobar_icon_drawable_color, null /* iconBitmap */, message,
                 null /* linkText */, primaryButtonText, secondaryButtonText);
-        mTab = tab;
+        mWindow = window;
         mContentSettingsTypes = contentSettingsTypes;
         mManageButtonLastClicked = false;
         mIsExpanded = false;
@@ -87,8 +88,8 @@ public class PermissionInfoBar
         if (isPrimaryButton) {
             // requestAndroidPermissions will call back into this class to finalize the action if it
             // returns true.
-            if (AndroidPermissionRequester.requestAndroidPermissions(
-                        mTab, mContentSettingsTypes.clone(), this)) {
+            if (AndroidPermissionRequester.requestAndroidPermissions(mWindow,
+                        mContentSettingsTypes.clone(), this, ChromePermissionsClient.get())) {
                 return;
             }
         } else {
@@ -129,19 +130,17 @@ public class PermissionInfoBar
 
     private void launchNotificationsSettingsPage() {
         Bundle fragmentArguments = new Bundle();
-        fragmentArguments.putString(SingleCategoryPreferences.EXTRA_CATEGORY,
+        fragmentArguments.putString(SingleCategorySettings.EXTRA_CATEGORY,
                 SiteSettingsCategory.preferenceKey(SiteSettingsCategory.Type.NOTIFICATIONS));
-        PreferencesLauncher.launchSettingsPage(
-                getContext(), SingleCategoryPreferences.class, fragmentArguments);
+        SettingsLauncher.getInstance().launchSettingsPage(
+                getContext(), SingleCategorySettings.class, fragmentArguments);
     }
 
     /**
      * Creates and begins the process for showing a PermissionInfoBar.
-     * @param tab                   The owning tab for the infobar.
+     * @param window                The window this infobar will be displayed upon.
      * @param contentSettingsTypes  The list of ContentSettingTypes being requested by this infobar.
-     * @param enumeratedIconId      ID corresponding to the icon that will be shown for the infobar.
-     *                              The ID must have been mapped using the ResourceMapper class
-     *                              before passing it to this function.
+     * @param iconId                ID corresponding to the icon that will be shown for the infobar.
      * @param compactMessage        Message to show in the compact state.
      * @param compactLinkText       Text of link displayed right to the message in compact state.
      * @param message               Primary message in the extended state.
@@ -150,12 +149,10 @@ public class PermissionInfoBar
      * @param buttonManage          String to display on the Manage button.
      */
     @CalledByNative
-    private static PermissionInfoBar create(Tab tab, int[] contentSettingsTypes,
-            int enumeratedIconId, String compactMessage, String compactLinkText, String message,
+    private static PermissionInfoBar create(WindowAndroid window, int[] contentSettingsTypes,
+            int iconId, String compactMessage, String compactLinkText, String message,
             String description, String buttonOk, String buttonManage) {
-        int drawableId = ResourceId.mapToDrawableId(enumeratedIconId);
-
-        PermissionInfoBar infoBar = new PermissionInfoBar(tab, contentSettingsTypes, drawableId,
+        PermissionInfoBar infoBar = new PermissionInfoBar(window, contentSettingsTypes, iconId,
                 compactMessage, compactLinkText, message, description, buttonOk, buttonManage);
 
         return infoBar;

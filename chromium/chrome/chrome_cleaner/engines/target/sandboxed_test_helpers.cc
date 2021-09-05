@@ -77,12 +77,12 @@ class SandboxChildProcess::FakeEngineDelegate : public EngineDelegate {
     return privileged_removal_calls_;
   }
 
-  void UnbindRequestsPtrs() {
+  void UnbindRequestsRemotes() {
     if (privileged_scan_calls_) {
-      privileged_scan_calls_->UnbindRequestsPtr();
+      privileged_scan_calls_->UnbindRequestsRemote();
     }
     if (privileged_file_calls_) {
-      privileged_file_calls_->UnbindRequestsPtr();
+      privileged_file_calls_->UnbindRequestsRemote();
     }
   }
 
@@ -112,7 +112,7 @@ SandboxChildProcess::SandboxChildProcess(
       FROM_HERE,
       base::BindOnce(&SandboxChildProcess::BindEngineCommandsReceiver,
                      base::Unretained(this),
-                     base::Passed(&engine_commands_receiver), &event));
+                     std::move(engine_commands_receiver), &event));
   event.Wait();
 }
 
@@ -140,18 +140,18 @@ SandboxChildProcess::GetCleanerEngineRequestsProxy() {
   return fake_engine_delegate_->GetCleanerEngineRequestsProxy();
 }
 
-void SandboxChildProcess::UnbindRequestsPtrs() {
+void SandboxChildProcess::UnbindRequestsRemotes() {
   base::SingleThreadTaskExecutor main_task_executor;
   base::RunLoop run_loop;
   if (GetCleanerEngineRequestsProxy() != nullptr) {
     mojo_task_runner_->PostTask(
         FROM_HERE,
-        base::BindOnce(&CleanerEngineRequestsProxy::UnbindRequestsPtr,
+        base::BindOnce(&CleanerEngineRequestsProxy::UnbindRequestsRemote,
                        GetCleanerEngineRequestsProxy()));
   }
 
   mojo_task_runner_->PostTask(
-      FROM_HERE, base::BindOnce(&FakeEngineDelegate::UnbindRequestsPtrs,
+      FROM_HERE, base::BindOnce(&FakeEngineDelegate::UnbindRequestsRemotes,
                                 fake_engine_delegate_));
 
   mojo_task_runner_->PostTaskAndReply(FROM_HERE, base::DoNothing(),
@@ -167,7 +167,7 @@ SandboxChildProcess::~SandboxChildProcess() {
                      [](std::unique_ptr<EngineCommandsImpl> commands) {
                        commands.reset();
                      },
-                     base::Passed(&engine_commands_impl_)));
+                     std::move(engine_commands_impl_)));
 }
 
 }  // namespace chrome_cleaner

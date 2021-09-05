@@ -5,15 +5,17 @@
 package org.chromium.chrome.browser.accessibility;
 
 import android.annotation.SuppressLint;
-import android.content.SharedPreferences;
+
+import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ContextUtils;
+import org.chromium.base.MathUtils;
 import org.chromium.base.ObserverList;
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.NativeMethods;
-import org.chromium.chrome.browser.util.MathUtils;
+import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
+import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 
 /**
  * Singleton class for accessing these font size-related preferences:
@@ -30,14 +32,11 @@ public class FontSizePrefs {
      * The font scale threshold beyond which force enable zoom is automatically turned on. It
      * is chosen such that force enable zoom will be activated when the accessibility large text
      * setting is on (i.e. this value should be the same as or lesser than the font size scale used
-     * by accessiblity large text).
+     * by accessibility large text).
      */
     public static final float FORCE_ENABLE_ZOOM_THRESHOLD_MULTIPLIER = 1.3f;
 
     private static final float EPSILON = 0.001f;
-
-    static final String PREF_USER_SET_FORCE_ENABLE_ZOOM = "user_set_force_enable_zoom";
-    static final String PREF_USER_FONT_SCALE_FACTOR = "user_font_scale_factor";
 
     @SuppressLint("StaticFieldLeak")
     private static FontSizePrefs sFontSizePrefs;
@@ -102,10 +101,8 @@ public class FontSizePrefs {
      * Sets the userFontScaleFactor. This should be a value between .5 and 2.
      */
     public void setUserFontScaleFactor(float userFontScaleFactor) {
-        SharedPreferences.Editor sharedPreferencesEditor =
-                ContextUtils.getAppSharedPreferences().edit();
-        sharedPreferencesEditor.putFloat(PREF_USER_FONT_SCALE_FACTOR, userFontScaleFactor);
-        sharedPreferencesEditor.apply();
+        SharedPreferencesManager.getInstance().writeFloat(
+                ChromePreferenceKeys.FONT_USER_FONT_SCALE_FACTOR, userFontScaleFactor);
         setFontScaleFactor(userFontScaleFactor * getSystemFontScale());
     }
 
@@ -113,8 +110,9 @@ public class FontSizePrefs {
      * Returns the userFontScaleFactor. This is the value that should be displayed to the user.
      */
     public float getUserFontScaleFactor() {
-        SharedPreferences sharedPreferences = ContextUtils.getAppSharedPreferences();
-        float userFontScaleFactor = sharedPreferences.getFloat(PREF_USER_FONT_SCALE_FACTOR, 0f);
+        SharedPreferencesManager sharedPreferences = SharedPreferencesManager.getInstance();
+        float userFontScaleFactor =
+                sharedPreferences.readFloat(ChromePreferenceKeys.FONT_USER_FONT_SCALE_FACTOR, 0f);
         if (userFontScaleFactor == 0f) {
             float fontScaleFactor = getFontScaleFactor();
 
@@ -128,9 +126,8 @@ public class FontSizePrefs {
                 userFontScaleFactor =
                         MathUtils.clamp(fontScaleFactor / getSystemFontScale(), 0.5f, 2f);
             }
-            SharedPreferences.Editor sharedPreferencesEditor = sharedPreferences.edit();
-            sharedPreferencesEditor.putFloat(PREF_USER_FONT_SCALE_FACTOR, userFontScaleFactor);
-            sharedPreferencesEditor.apply();
+            sharedPreferences.writeFloat(
+                    ChromePreferenceKeys.FONT_USER_FONT_SCALE_FACTOR, userFontScaleFactor);
         }
         return userFontScaleFactor;
     }
@@ -174,17 +171,15 @@ public class FontSizePrefs {
     }
 
     private void setForceEnableZoom(boolean enabled, boolean fromUser) {
-        SharedPreferences.Editor sharedPreferencesEditor =
-                ContextUtils.getAppSharedPreferences().edit();
-        sharedPreferencesEditor.putBoolean(PREF_USER_SET_FORCE_ENABLE_ZOOM, fromUser);
-        sharedPreferencesEditor.apply();
+        SharedPreferencesManager.getInstance().writeBoolean(
+                ChromePreferenceKeys.FONT_USER_SET_FORCE_ENABLE_ZOOM, fromUser);
         FontSizePrefsJni.get().setForceEnableZoom(
                 mFontSizePrefsAndroidPtr, FontSizePrefs.this, enabled);
     }
 
     private boolean getUserSetForceEnableZoom() {
-        return ContextUtils.getAppSharedPreferences().getBoolean(
-                PREF_USER_SET_FORCE_ENABLE_ZOOM, false);
+        return SharedPreferencesManager.getInstance().readBoolean(
+                ChromePreferenceKeys.FONT_USER_SET_FORCE_ENABLE_ZOOM, false);
     }
 
     private void setFontScaleFactor(float fontScaleFactor) {

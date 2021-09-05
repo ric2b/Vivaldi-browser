@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chrome/browser/net/profile_network_context_service.h"
-
 #include <algorithm>
 #include <string>
 #include <vector>
@@ -16,15 +14,22 @@
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/thread_pool/thread_pool_instance.h"
+#include "base/test/metrics/histogram_tester.h"
+#include "base/test/scoped_feature_list.h"
+#include "base/threading/platform_thread.h"  // For |Sleep()|.
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/metrics/subprocess_metrics_provider.h"
 #include "chrome/browser/net/profile_network_context_service.h"
 #include "chrome/browser/net/profile_network_context_service_factory.h"
+#include "chrome/browser/net/profile_network_context_service_test_utils.h"
 #include "chrome/browser/policy/policy_test_utils.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/common/chrome_constants.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths_internal.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
@@ -36,7 +41,9 @@
 #include "content/public/common/content_features.h"
 #include "content/public/test/simple_url_loader_test_helper.h"
 #include "mojo/public/cpp/system/data_pipe_utils.h"
+#include "net/base/features.h"
 #include "net/base/load_flags.h"
+#include "net/http/http_auth_preferences.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
@@ -49,7 +56,6 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if defined(OS_CHROMEOS)
-#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/chromeos/policy/login_policy_test_base.h"
 #include "chrome/browser/chromeos/policy/user_policy_test_helper.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
@@ -67,13 +73,12 @@
 // Most tests for this class are in NetworkContextConfigurationBrowserTest.
 class ProfileNetworkContextServiceBrowsertest : public InProcessBrowserTest {
  public:
-  ProfileNetworkContextServiceBrowsertest() {
-    EXPECT_TRUE(embedded_test_server()->Start());
-  }
+  ProfileNetworkContextServiceBrowsertest() = default;
 
-  ~ProfileNetworkContextServiceBrowsertest() override {}
+  ~ProfileNetworkContextServiceBrowsertest() override = default;
 
   void SetUpOnMainThread() override {
+    EXPECT_TRUE(embedded_test_server()->Start());
     loader_factory_ = content::BrowserContext::GetDefaultStoragePartition(
                           browser()->profile())
                           ->GetURLLoaderFactoryForBrowserProcess()
@@ -82,6 +87,14 @@ class ProfileNetworkContextServiceBrowsertest : public InProcessBrowserTest {
 
   network::mojom::URLLoaderFactory* loader_factory() const {
     return loader_factory_;
+  }
+
+ protected:
+  // The HttpCache is only created when a request is issued, thus we perform a
+  // navigation to ensure that the http cache is initialized.
+  void NavigateToCreateHttpCache() {
+    ui_test_utils::NavigateToURL(
+        browser(), embedded_test_server()->GetURL("/createbackend"));
   }
 
  private:
@@ -150,6 +163,213 @@ IN_PROC_BROWSER_TEST_F(ProfileNetworkContextServiceBrowsertest, BrotliEnabled) {
       base::SplitString(*simple_loader_helper.response_body(), ",",
                         base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
   EXPECT_TRUE(base::Contains(encodings, "br"));
+}
+
+void CheckCacheResetStatus(base::HistogramTester* histograms, bool reset) {
+  // TODO(crbug/1041810): The failure case, here, is to time out.  Since Chrome
+  // doesn't synchronize cache loading, there's no guarantee that this is
+  // complete and it's merely available at earliest convenience.  If shutdown
+  // occurs prior to the cache being loaded, then nothing is reported.  This
+  // should probably be fixed to avoid the use of the sleep function, but that
+  // will require synchronizing in some meaningful way to guarantee the cache
+  // has been loaded prior to testing the histograms.
+  while (!histograms->GetBucketCount("HttpCache.HardReset", reset)) {
+    content::FetchHistogramsFromChildProcesses();
+    SubprocessMetricsProvider::MergeHistogramDeltasForTesting();
+    base::PlatformThread::Sleep(base::TimeDelta::FromMilliseconds(5));
+  }
+
+  if (reset) {
+    // Some tests load the cache multiple times, but should only be reset once.
+    EXPECT_EQ(histograms->GetBucketCount("HttpCache.HardReset", true), 1);
+  } else {
+    // Make sure it's never reset.
+    EXPECT_EQ(histograms->GetBucketCount("HttpCache.HardReset", true), 0);
+  }
+}
+
+class ProfileNetworkContextServiceCacheSameBrowsertest
+    : public ProfileNetworkContextServiceBrowsertest {
+ public:
+  ProfileNetworkContextServiceCacheSameBrowsertest() = default;
+  ~ProfileNetworkContextServiceCacheSameBrowsertest() override = default;
+
+  void SetUp() override {
+    scoped_feature_list_.InitWithFeatures(
+        {}, {net::features::kSplitCacheByNetworkIsolationKey,
+             net::features::kAppendFrameOriginToNetworkIsolationKey,
+             net::features::kUseRegistrableDomainInNetworkIsolationKey});
+    ProfileNetworkContextServiceBrowsertest::SetUp();
+  }
+
+  base::HistogramTester histograms_;
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_F(ProfileNetworkContextServiceCacheSameBrowsertest,
+                       PRE_TestCacheResetParameter) {
+  NavigateToCreateHttpCache();
+  CheckCacheResetStatus(&histograms_, false);
+
+  // At this point, we have already called the initialization.
+  // Verify that we have the correct values in the local_state.
+  PrefService* local_state = g_browser_process->local_state();
+  DCHECK_EQ(
+      local_state->GetString(
+          "profile_network_context_service.http_cache_finch_experiment_groups"),
+      "None None None");
+}
+
+IN_PROC_BROWSER_TEST_F(ProfileNetworkContextServiceCacheSameBrowsertest,
+                       TestCacheResetParameter) {
+  NavigateToCreateHttpCache();
+  CheckCacheResetStatus(&histograms_, false);
+
+  // At this point, we have already called the initialization.
+  // Verify that we have the correct values in the local_state.
+  PrefService* local_state = g_browser_process->local_state();
+  DCHECK_EQ(
+      local_state->GetString(
+          "profile_network_context_service.http_cache_finch_experiment_groups"),
+      "None None None");
+}
+
+class ProfileNetworkContextServiceCacheChangeBrowsertest
+    : public ProfileNetworkContextServiceBrowsertest {
+ public:
+  ProfileNetworkContextServiceCacheChangeBrowsertest() {
+    scoped_feature_list_.InitWithFeaturesAndParameters(
+        {{net::features::kAppendFrameOriginToNetworkIsolationKey, {}}},
+        {net::features::kSplitCacheByNetworkIsolationKey,
+         net::features::kUseRegistrableDomainInNetworkIsolationKey});
+  }
+  ~ProfileNetworkContextServiceCacheChangeBrowsertest() override = default;
+
+  base::HistogramTester histograms_;
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+// Flaky on Linux and Mac: https://crbug.com/1041810
+// The first time we load, even if we're in an experiment there's no reset
+// from the unknown state.
+IN_PROC_BROWSER_TEST_F(ProfileNetworkContextServiceCacheChangeBrowsertest,
+                       PRE_TestCacheResetParameter) {
+  NavigateToCreateHttpCache();
+  CheckCacheResetStatus(&histograms_, false);
+
+  // At this point, we have already called the initialization.
+  // Verify that we have the correct values in the local_state.
+  PrefService* local_state = g_browser_process->local_state();
+  DCHECK_EQ(
+      local_state->GetString(
+          "profile_network_context_service.http_cache_finch_experiment_groups"),
+      "None scoped_feature_list_trial_group None");
+  // Set the local state for the next test.
+  local_state->SetString(
+      "profile_network_context_service.http_cache_finch_experiment_groups",
+      "None None None");
+}
+
+// The second time we load we know the state, which was "None None None" for the
+// previous test, so we should see a reset being in an experiment.
+IN_PROC_BROWSER_TEST_F(ProfileNetworkContextServiceCacheChangeBrowsertest,
+                       TestCacheResetParameter) {
+  NavigateToCreateHttpCache();
+  CheckCacheResetStatus(&histograms_, true);
+
+  // At this point, we have already called the initialization once.
+  // Verify that we have the correct values in the local_state.
+  PrefService* local_state = g_browser_process->local_state();
+  DCHECK_EQ(
+      local_state->GetString(
+          "profile_network_context_service.http_cache_finch_experiment_groups"),
+      "None scoped_feature_list_trial_group None");
+}
+
+class AmbientAuthenticationTestWithPolicy
+    : public policy::PolicyTest,
+      public testing::WithParamInterface<AmbientAuthenticationFeatureState> {
+ public:
+  AmbientAuthenticationTestWithPolicy() {
+    feature_state_ = GetParam();
+    AmbientAuthenticationTestHelper::CookTheFeatureList(scoped_feature_list_,
+                                                        feature_state_);
+    policy::PolicyTest::SetUpInProcessBrowserTestFixture();
+  }
+
+  void IsAmbientAuthAllowedForProfilesTest() {
+    PrefService* service = g_browser_process->local_state();
+    int policy_value =
+        service->GetInteger(prefs::kAmbientAuthenticationInPrivateModesEnabled);
+
+    Profile* regular_profile = browser()->profile();
+    Profile* incognito_profile = regular_profile->GetOffTheRecordProfile();
+
+    EXPECT_TRUE(AmbientAuthenticationTestHelper::IsAmbientAuthAllowedForProfile(
+        regular_profile));
+    EXPECT_EQ(AmbientAuthenticationTestHelper::IsAmbientAuthAllowedForProfile(
+                  incognito_profile),
+              AmbientAuthenticationTestHelper::IsIncognitoAllowedInFeature(
+                  feature_state_) ||
+                  AmbientAuthenticationTestHelper::IsIncognitoAllowedInPolicy(
+                      policy_value));
+// ChromeOS guest sessions don't have the capability to
+// do ambient authentications.
+#if !defined(OS_CHROMEOS)
+    EXPECT_EQ(AmbientAuthenticationTestHelper::IsAmbientAuthAllowedForProfile(
+                  AmbientAuthenticationTestHelper::GetGuestProfile()),
+              AmbientAuthenticationTestHelper::IsGuestAllowedInFeature(
+                  feature_state_) ||
+                  AmbientAuthenticationTestHelper::IsGuestAllowedInPolicy(
+                      policy_value));
+#endif
+  }
+
+  void EnablePolicyWithValue(net::AmbientAuthAllowedProfileTypes value) {
+    SetPolicy(&policies_,
+              policy::key::kAmbientAuthenticationInPrivateModesEnabled,
+              std::make_unique<base::Value>(static_cast<int>(value)));
+    UpdateProviderPolicy(policies_);
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+  AmbientAuthenticationFeatureState feature_state_;
+  policy::PolicyMap policies_;
+};
+
+INSTANTIATE_TEST_CASE_P(
+    AmbientAuthAllFeatureValuesTest,
+    AmbientAuthenticationTestWithPolicy,
+    testing::Values(AmbientAuthenticationFeatureState::GUEST_OFF_INCOGNITO_OFF,
+                    AmbientAuthenticationFeatureState::GUEST_OFF_INCOGNITO_ON,
+                    AmbientAuthenticationFeatureState::GUEST_ON_INCOGNITO_OFF,
+                    AmbientAuthenticationFeatureState::GUEST_ON_INCOGNITO_ON));
+
+IN_PROC_BROWSER_TEST_P(AmbientAuthenticationTestWithPolicy, RegularOnly) {
+  EnablePolicyWithValue(net::AmbientAuthAllowedProfileTypes::REGULAR_ONLY);
+  IsAmbientAuthAllowedForProfilesTest();
+}
+
+IN_PROC_BROWSER_TEST_P(AmbientAuthenticationTestWithPolicy,
+                       IncognitoAndRegular) {
+  EnablePolicyWithValue(
+      net::AmbientAuthAllowedProfileTypes::INCOGNITO_AND_REGULAR);
+  IsAmbientAuthAllowedForProfilesTest();
+}
+
+IN_PROC_BROWSER_TEST_P(AmbientAuthenticationTestWithPolicy, GuestAndRegular) {
+  EnablePolicyWithValue(net::AmbientAuthAllowedProfileTypes::GUEST_AND_REGULAR);
+  IsAmbientAuthAllowedForProfilesTest();
+}
+
+IN_PROC_BROWSER_TEST_P(AmbientAuthenticationTestWithPolicy, All) {
+  EnablePolicyWithValue(net::AmbientAuthAllowedProfileTypes::ALL);
+  IsAmbientAuthAllowedForProfilesTest();
 }
 
 // Test subclass that adds switches::kDiskCacheDir and switches::kDiskCacheSize
@@ -389,7 +609,11 @@ IN_PROC_BROWSER_TEST_P(
   network::mojom::NetworkContextParamsPtr network_context_params_ptr =
       profile_network_context_service->CreateNetworkContextParams(
           /*in_memory=*/false, empty_relative_partition_path);
-  EXPECT_EQ(GetParam(), network_context_params_ptr->use_builtin_cert_verifier);
+  EXPECT_EQ(
+      GetParam()
+          ? network::mojom::NetworkContextParams::CertVerifierImpl::kBuiltin
+          : network::mojom::NetworkContextParams::CertVerifierImpl::kSystem,
+      network_context_params_ptr->use_builtin_cert_verifier);
 
 #if BUILDFLAG(BUILTIN_CERT_VERIFIER_POLICY_SUPPORTED)
   // If the BuiltinCertificateVerifierEnabled policy is set it should override
@@ -402,7 +626,8 @@ IN_PROC_BROWSER_TEST_P(
   network_context_params_ptr =
       profile_network_context_service->CreateNetworkContextParams(
           /*in_memory=*/false, empty_relative_partition_path);
-  EXPECT_TRUE(network_context_params_ptr->use_builtin_cert_verifier);
+  EXPECT_EQ(network::mojom::NetworkContextParams::CertVerifierImpl::kBuiltin,
+            network_context_params_ptr->use_builtin_cert_verifier);
 
   SetPolicy(&policies, policy::key::kBuiltinCertificateVerifierEnabled,
             std::make_unique<base::Value>(false));
@@ -411,12 +636,13 @@ IN_PROC_BROWSER_TEST_P(
   network_context_params_ptr =
       profile_network_context_service->CreateNetworkContextParams(
           /*in_memory=*/false, empty_relative_partition_path);
-  EXPECT_FALSE(network_context_params_ptr->use_builtin_cert_verifier);
+  EXPECT_EQ(network::mojom::NetworkContextParams::CertVerifierImpl::kSystem,
+            network_context_params_ptr->use_builtin_cert_verifier);
 #endif
 }
 
 INSTANTIATE_TEST_SUITE_P(
-    ,
+    All,
     ProfileNetworkContextServiceCertVerifierBuiltinFeaturePolicyTest,
     ::testing::Bool());
 #endif
@@ -424,6 +650,7 @@ INSTANTIATE_TEST_SUITE_P(
 enum class CorsTestMode {
   kWithCorsMitigationListPolicy,
   kWithoutCorsMitigationListPolicy,
+  kWithHiddenCorsMitigationListPolicy,
 };
 
 class CorsExtraSafelistedHeaderNamesTest
@@ -432,26 +659,29 @@ class CorsExtraSafelistedHeaderNamesTest
  public:
   CorsExtraSafelistedHeaderNamesTest() {
     switch (GetParam()) {
-      case CorsTestMode::kWithCorsMitigationListPolicy: {
-        auto list = std::make_unique<base::ListValue>();
-        list->AppendString("bar");
-        policy::PolicyMap policies;
-        policies.Set(policy::key::kCorsMitigationList,
-                     policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
-                     policy::POLICY_SOURCE_CLOUD, std::move(list), nullptr);
-        provider_.UpdateChromePolicy(policies);
+      case CorsTestMode::kWithCorsMitigationListPolicy:
+        SetUpPolicy();
         scoped_feature_list_.InitWithFeaturesAndParameters(
             {{network::features::kOutOfBlinkCors, {}},
              {features::kExtraSafelistedRequestHeadersForOutOfBlinkCors,
               {{"extra-safelisted-request-headers-for-enterprise", "foo"}}}},
-            {});
+            {{features::kHideCorsMitigationListPolicySupport}, {}});
         break;
-      }
       case CorsTestMode::kWithoutCorsMitigationListPolicy:
         scoped_feature_list_.InitWithFeaturesAndParameters(
             {{network::features::kOutOfBlinkCors, {}},
              {features::kExtraSafelistedRequestHeadersForOutOfBlinkCors,
               {{"extra-safelisted-request-headers", "foo,bar"}}}},
+            {});
+        break;
+      case CorsTestMode::kWithHiddenCorsMitigationListPolicy:
+        SetUpPolicy();
+        scoped_feature_list_.InitWithFeaturesAndParameters(
+            {{network::features::kOutOfBlinkCors, {}},
+             {features::kHideCorsMitigationListPolicySupport, {}},
+             {features::kExtraSafelistedRequestHeadersForOutOfBlinkCors,
+              {{"extra-safelisted-request-headers-for-enterprise",
+                "foo,bar"}}}},
             {});
         break;
     }
@@ -503,6 +733,16 @@ class CorsExtraSafelistedHeaderNamesTest
       "/cors-extra-safelisted-header-names.html";
 
  private:
+  void SetUpPolicy() {
+    auto list = std::make_unique<base::ListValue>();
+    list->AppendString("bar");
+    policy::PolicyMap policies;
+    policies.Set(policy::key::kCorsMitigationList,
+                 policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
+                 policy::POLICY_SOURCE_CLOUD, std::move(list), nullptr);
+    provider_.UpdateChromePolicy(policies);
+  }
+
   std::unique_ptr<net::test_server::HttpResponse> HandleRequest(
       const net::test_server::HttpRequest& request) {
     std::unique_ptr<net::test_server::BasicHttpResponse> response =
@@ -586,3 +826,8 @@ INSTANTIATE_TEST_SUITE_P(
     WithoutCorsMitigationListPolicy,
     CorsExtraSafelistedHeaderNamesTest,
     testing::Values(CorsTestMode::kWithoutCorsMitigationListPolicy));
+
+INSTANTIATE_TEST_SUITE_P(
+    WithHiddenCorsMitigationListPolicy,
+    CorsExtraSafelistedHeaderNamesTest,
+    testing::Values(CorsTestMode::kWithHiddenCorsMitigationListPolicy));

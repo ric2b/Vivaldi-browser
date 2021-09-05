@@ -99,8 +99,8 @@ class FidoGetAssertionHandlerTest : public ::testing::Test {
     ForgeDiscoveries();
 
     auto handler = std::make_unique<GetAssertionRequestHandler>(
-        nullptr /* connector */, fake_discovery_factory_.get(),
-        supported_transports_, std::move(request),
+        fake_discovery_factory_.get(), supported_transports_,
+        std::move(request),
         /*allow_skipping_pin_touch=*/true, get_assertion_cb_.callback());
     return handler;
   }
@@ -236,7 +236,7 @@ TEST_F(FidoGetAssertionHandlerTest, TestIncompatibleUserVerificationSetting) {
   discovery()->AddDevice(std::move(device));
 
   task_environment_.FastForwardUntilNoTasksRemain();
-  EXPECT_EQ(GetAssertionStatus::kUserConsentButCredentialNotRecognized,
+  EXPECT_EQ(GetAssertionStatus::kAuthenticatorMissingUserVerification,
             get_assertion_callback().status());
 }
 
@@ -259,7 +259,7 @@ TEST_F(FidoGetAssertionHandlerTest,
   discovery()->AddDevice(std::move(device));
 
   task_environment_.FastForwardUntilNoTasksRemain();
-  EXPECT_EQ(GetAssertionStatus::kUserConsentButCredentialNotRecognized,
+  EXPECT_EQ(GetAssertionStatus::kAuthenticatorMissingUserVerification,
             get_assertion_callback().status());
 }
 
@@ -756,7 +756,7 @@ TEST(GetAssertionRequestHandlerTest, IncorrectTransportType) {
 
   TestGetAssertionRequestCallback cb;
   auto request_handler = std::make_unique<GetAssertionRequestHandler>(
-      nullptr /* connector */, &virtual_device_factory,
+      &virtual_device_factory,
       base::flat_set<FidoTransportProtocol>(
           {FidoTransportProtocol::kUsbHumanInterfaceDevice}),
       std::move(request), /*allow_skipping_pin_touch=*/true, cb.callback());
@@ -800,7 +800,9 @@ class TestObserver : public FidoRequestHandlerBase::Observer {
       base::OnceCallback<void(std::string)> provide_pin_cb) override {
     NOTREACHED();
   }
-  void FinishCollectPIN() override { NOTREACHED(); }
+  void FinishCollectToken() override { NOTREACHED(); }
+  void OnRetryUserVerification(int attempts) override {}
+  void OnInternalUserVerificationLocked() override {}
   void SetMightCreateResidentCredential(bool v) override {}
 
   bool controls_dispatch_ = false;
@@ -824,7 +826,7 @@ TEST(GetAssertionRequestHandlerWinTest, TestWinUsbDiscovery) {
     FidoDiscoveryFactory fido_discovery_factory;
     fido_discovery_factory.set_win_webauthn_api(&api);
     auto handler = std::make_unique<GetAssertionRequestHandler>(
-        fake_hid_manager.service_manager_connector(), &fido_discovery_factory,
+        &fido_discovery_factory,
         base::flat_set<FidoTransportProtocol>(
             {FidoTransportProtocol::kUsbHumanInterfaceDevice}),
         CtapGetAssertionRequest(test_data::kRelyingPartyId,
@@ -843,7 +845,7 @@ TEST(GetAssertionRequestHandlerWinTest, TestWinUsbDiscovery) {
     EXPECT_EQ(handler->AuthenticatorsForTesting().size(), 1u);
     EXPECT_EQ(handler->AuthenticatorsForTesting()
                   .begin()
-                  ->second->IsWinNativeApiAuthenticator(),
+                  ->second->authenticator->IsWinNativeApiAuthenticator(),
               enable_api);
   }
 }

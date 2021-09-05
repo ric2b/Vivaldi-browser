@@ -19,7 +19,6 @@
 #include "cc/animation/animation_id_provider.h"
 #include "cc/animation/animation_timeline.h"
 #include "cc/animation/element_animations.h"
-#include "cc/animation/keyframe_effect.h"
 #include "cc/animation/scroll_offset_animation_curve.h"
 #include "cc/animation/scroll_offset_animations.h"
 #include "cc/animation/scroll_offset_animations_impl.h"
@@ -172,11 +171,10 @@ void AnimationHost::UnregisterElementId(ElementId element_id,
     element_animations->ElementIdUnregistered(element_id, list_type);
 }
 
-void AnimationHost::RegisterKeyframeEffectForElement(
-    ElementId element_id,
-    KeyframeEffect* keyframe_effect) {
+void AnimationHost::RegisterAnimationForElement(ElementId element_id,
+                                                Animation* animation) {
   DCHECK(element_id);
-  DCHECK(keyframe_effect);
+  DCHECK(animation);
 
   scoped_refptr<ElementAnimations> element_animations =
       GetElementAnimationsForElementId(element_id);
@@ -188,14 +186,13 @@ void AnimationHost::RegisterKeyframeEffectForElement(
 
   DCHECK(element_animations->AnimationHostIs(this));
 
-  element_animations->AddKeyframeEffect(keyframe_effect);
+  element_animations->AddKeyframeEffect(animation->keyframe_effect());
 }
 
-void AnimationHost::UnregisterKeyframeEffectForElement(
-    ElementId element_id,
-    KeyframeEffect* keyframe_effect) {
+void AnimationHost::UnregisterAnimationForElement(ElementId element_id,
+                                                  Animation* animation) {
   DCHECK(element_id);
-  DCHECK(keyframe_effect);
+  DCHECK(animation);
 
   scoped_refptr<ElementAnimations> element_animations =
       GetElementAnimationsForElementId(element_id);
@@ -207,13 +204,15 @@ void AnimationHost::UnregisterKeyframeEffectForElement(
   PropertyToElementIdMap element_id_map =
       element_animations->GetPropertyToElementIdMap();
 
-  element_animations->RemoveKeyframeEffect(keyframe_effect);
+  element_animations->RemoveKeyframeEffect(animation->keyframe_effect());
 
   if (element_animations->IsEmpty()) {
     element_animations->ClearAffectedElementTypes(element_id_map);
     element_to_animations_map_.erase(element_animations->element_id());
     element_animations->ClearAnimationHost();
   }
+
+  RemoveFromTicking(animation);
 }
 
 void AnimationHost::SetMutatorHostClient(MutatorHostClient* client) {
@@ -379,7 +378,7 @@ bool AnimationHost::ActivateAnimations(MutatorEvents* mutator_events) {
   TRACE_EVENT0("cc", "AnimationHost::ActivateAnimations");
   AnimationsList ticking_animations_copy = ticking_animations_;
   for (auto& it : ticking_animations_copy) {
-    it->ActivateKeyframeEffects();
+    it->ActivateKeyframeModels();
     // Finish animations which no longer affect active or pending elements.
     it->UpdateState(false, animation_events);
   }
@@ -473,9 +472,21 @@ bool AnimationHost::UpdateAnimationState(bool start_ready_animations,
   return true;
 }
 
+void AnimationHost::TakeTimeUpdatedEvents(MutatorEvents* events) {
+  auto* animation_events = static_cast<AnimationEvents*>(events);
+  if (!animation_events->needs_time_updated_events())
+    return;
+
+  for (auto& it : ticking_animations_)
+    it->TakeTimeUpdatedEvent(animation_events);
+
+  animation_events->set_needs_time_updated_events(false);
+}
+
 void AnimationHost::PromoteScrollTimelinesPendingToActive() {
-  for (auto& animation : ticking_animations_) {
-    animation->PromoteScrollTimelinePendingToActive();
+  for (auto& kv : id_to_timeline_map_) {
+    auto& timeline = kv.second;
+    timeline->ActivateTimeline();
   }
 }
 
@@ -485,36 +496,18 @@ std::unique_ptr<MutatorEvents> AnimationHost::CreateEvents() {
 
 void AnimationHost::SetAnimationEvents(
     std::unique_ptr<MutatorEvents> mutator_events) {
+  DCHECK_EQ(thread_instance_, ThreadInstance::MAIN);
   auto events =
       base::WrapUnique(static_cast<AnimationEvents*>(mutator_events.release()));
 
   for (size_t event_index = 0; event_index < events->events_.size();
        ++event_index) {
-    ElementId element_id = events->events_[event_index].element_id;
-
-    // Use the map of all ElementAnimations, not just ticking animations, since
-    // non-ticking animations may still receive events for impl-only animations.
-    const ElementToAnimationsMap& all_element_animations =
-        element_to_animations_map_;
-    auto iter = all_element_animations.find(element_id);
-    if (iter != all_element_animations.end()) {
-      switch (events->events_[event_index].type) {
-        case AnimationEvent::STARTED:
-          (*iter).second->NotifyAnimationStarted(events->events_[event_index]);
-          break;
-
-        case AnimationEvent::FINISHED:
-          (*iter).second->NotifyAnimationFinished(events->events_[event_index]);
-          break;
-
-        case AnimationEvent::ABORTED:
-          (*iter).second->NotifyAnimationAborted(events->events_[event_index]);
-          break;
-
-        case AnimationEvent::TAKEOVER:
-          (*iter).second->NotifyAnimationTakeover(events->events_[event_index]);
-          break;
-      }
+    AnimationEvent& event = events->events_[event_index];
+    AnimationTimeline* timeline = GetTimelineById(event.uid.timeline_id);
+    if (timeline) {
+      Animation* animation = timeline->GetAnimationById(event.uid.animation_id);
+      if (animation)
+        animation->DispatchAndDelegateAnimationEvent(event);
     }
   }
 }
@@ -667,21 +660,19 @@ void AnimationHost::ImplOnlyScrollAnimationCreate(
     base::TimeDelta delayed_by,
     base::TimeDelta animation_start_offset) {
   DCHECK(scroll_offset_animations_impl_);
-  scroll_offset_animations_impl_->ScrollAnimationCreate(
+  scroll_offset_animations_impl_->MouseWheelScrollAnimationCreate(
       element_id, target_offset, current_offset, delayed_by,
       animation_start_offset);
 }
 
 bool AnimationHost::ImplOnlyScrollAnimationUpdateTarget(
-    ElementId element_id,
     const gfx::Vector2dF& scroll_delta,
     const gfx::ScrollOffset& max_scroll_offset,
     base::TimeTicks frame_monotonic_time,
     base::TimeDelta delayed_by) {
   DCHECK(scroll_offset_animations_impl_);
   return scroll_offset_animations_impl_->ScrollAnimationUpdateTarget(
-      element_id, scroll_delta, max_scroll_offset, frame_monotonic_time,
-      delayed_by);
+      scroll_delta, max_scroll_offset, frame_monotonic_time, delayed_by);
 }
 
 ScrollOffsetAnimations& AnimationHost::scroll_offset_animations() const {
@@ -695,9 +686,12 @@ void AnimationHost::ScrollAnimationAbort() {
       false /* needs_completion */);
 }
 
-bool AnimationHost::IsImplOnlyScrollAnimating() const {
+ElementId AnimationHost::ImplOnlyScrollAnimatingElement() const {
   DCHECK(scroll_offset_animations_impl_);
-  return scroll_offset_animations_impl_->IsAnimating();
+  if (!scroll_offset_animations_impl_->IsAnimating())
+    return ElementId();
+
+  return scroll_offset_animations_impl_->GetElementId();
 }
 
 void AnimationHost::AddToTicking(scoped_refptr<Animation> animation) {
@@ -730,6 +724,20 @@ void AnimationHost::SetLayerTreeMutator(
   mutator_->SetClient(this);
 }
 
+WorkletAnimation* AnimationHost::FindWorkletAnimation(WorkletAnimationId id) {
+  // TODO(majidvp): Use a map to make lookup O(1)
+  auto animation = std::find_if(
+      ticking_animations_.begin(), ticking_animations_.end(), [id](auto& it) {
+        return it->IsWorkletAnimation() &&
+               ToWorkletAnimation(it.get())->worklet_animation_id() == id;
+      });
+
+  if (animation == ticking_animations_.end())
+    return nullptr;
+
+  return ToWorkletAnimation(animation->get());
+}
+
 void AnimationHost::SetMutationUpdate(
     std::unique_ptr<MutatorOutputState> output_state) {
   if (!output_state)
@@ -739,17 +747,9 @@ void AnimationHost::SetMutationUpdate(
   for (auto& animation_state : output_state->animations) {
     WorkletAnimationId id = animation_state.worklet_animation_id;
 
-    // TODO(majidvp): Use a map to make lookup O(1)
-    auto to_update = std::find_if(
-        ticking_animations_.begin(), ticking_animations_.end(), [id](auto& it) {
-          return it->IsWorkletAnimation() &&
-                 ToWorkletAnimation(it.get())->worklet_animation_id() == id;
-        });
-
-    if (to_update == ticking_animations_.end())
-      continue;
-
-    ToWorkletAnimation(to_update->get())->SetOutputState(animation_state);
+    WorkletAnimation* to_update = FindWorkletAnimation(id);
+    if (to_update)
+      to_update->SetOutputState(animation_state);
   }
 }
 

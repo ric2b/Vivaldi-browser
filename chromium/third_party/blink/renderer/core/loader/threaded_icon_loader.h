@@ -38,7 +38,7 @@ class CORE_EXPORT ThreadedIconLoader final
   // those dimensions.
   void Start(ExecutionContext* execution_context,
              const ResourceRequest& resource_request,
-             const base::Optional<WebSize>& resize_dimensions,
+             const base::Optional<gfx::Size>& resize_dimensions,
              IconCallback callback);
 
   // Stops the background task. The provided callback will not be run if
@@ -51,7 +51,7 @@ class CORE_EXPORT ThreadedIconLoader final
   void DidFail(const ResourceError& error) override;
   void DidFailRedirectCheck() override;
 
-  void Trace(blink::Visitor* visitor) override;
+  void Trace(Visitor* visitor) override;
 
  private:
   void DecodeAndResizeImageOnBackgroundThread(
@@ -67,7 +67,7 @@ class CORE_EXPORT ThreadedIconLoader final
   scoped_refptr<SharedBuffer> data_;
 
   // Accessed from main thread and background thread.
-  base::Optional<WebSize> resize_dimensions_;
+  base::Optional<gfx::Size> resize_dimensions_;
   SkBitmap decoded_icon_;
 
   IconCallback icon_callback_;

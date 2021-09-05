@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="bg">
+<translation id="1169602411434249000">Блокиране на тракери</translation>
 <translation id="1397811292916898096">Потърси чрез <ph name="PRODUCT_NAME" /></translation>
+<translation id="1598449788754183301">Превключване между обикновени и частни раздели</translation>
 <translation id="1644574205037202324">История</translation>
 <translation id="17513872634828108">Отворени раздели</translation>
 <translation id="1829244130665387512">Намиране в страницата</translation>
@@ -10,9 +12,11 @@
 <translation id="2633278372998075009">Частни раздели</translation>
 <translation id="3076631378407175873">Авторски права Vivaldi Technologies AS,  <ph name="YEAR" /> г. Всички права запазени.</translation>
 <translation id="3234355010754616171">Създай частен раздел</translation>
+<translation id="3518985090088779359">Приемам — напред</translation>
 <translation id="3700829948786686853">Добре дошли във Vivaldi</translation>
 <translation id="4121750346708795461">С ползване на приложението, вие приемате <ph name="BEGIN_LINK1" />Лицензионното споразумение с крайния потребител<ph name="END_LINK1" /> и <ph name="BEGIN_LINK2" />Политиката на поверителност<ph name="END_LINK2" /> на Vivaldi.</translation>
 <translation id="4243710787042215766">Отвори в частен раздел</translation>
+<translation id="4526803704855831732">Частни раздели</translation>
 <translation id="4883379392681899581">Излизане от частен режим</translation>
 <translation id="4943872375798546930">Няма резултати</translation>
 <translation id="5118676864324397542">Хранилище на <ph name="APP_NAME" /></translation>
@@ -22,7 +26,7 @@
 <translation id="5840488417521835756">Узнавате темите в сайтовете, без да напускате страницата. Възможността Търси с докосване е достъпна, когато Google е зададена като основна търсачка във Vivaldi. Само в този случай думата и нейният контекст се изпращат до търсачката на Google и в резултат се извеждат определения, картини, резултати от търсенето и др. подробности.
 
 Нагласяването на търсената дума става с дълго натискане до избиране. Подобряване на заявката — с приплъзване на панела и докосване на полето за търсене.</translation>
-<translation id="6336451774241870485">Частен раздел</translation>
+<translation id="6336451774241870485">Създаване на частен раздел</translation>
 <translation id="6593061639179217415">Настолна версия</translation>
 <translation id="6610147964972079463">Затвори частните раздели</translation>
 <translation id="706339621163631076">Политика на поверителност на браузъра</translation>
@@ -30,8 +34,7 @@
 <translation id="7465104139234185284">Затваряне на частните раздели</translation>
 <translation id="7519434535192513364">Възможността Търси с докосване е достъпна, когато Google е зададена като основна търсачка във Vivaldi. Тя изпраща думата и нейният контекст до търсачката на Google. Можете да я изключите от <ph name="BEGIN_LINK" />Настройки<ph name="END_LINK" />.</translation>
 <translation id="7649070708921625228">Помощ</translation>
-<translation id="804786196054284061">Лицензионно споразумение с крайния потребител</translation>
-<translation id="8428213095426709021">Настройки</translation>
+<translation id="804786196054284061">Лицензионно споразумение с краен потребител</translation>
 <translation id="8820817407110198400">Отметки</translation>
 <translation id="9063523880881406963">Изключване на настолната версия</translation>
 <translation id="9080642952018487277">Влизане в частен режим</translation>

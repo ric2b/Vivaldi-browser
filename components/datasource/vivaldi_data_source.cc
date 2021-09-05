@@ -17,6 +17,7 @@
 #include "chrome/common/url_constants.h"
 #include "components/datasource/css_mods_data_source.h"
 #include "components/datasource/local_image_data_source.h"
+#include "components/datasource/notes_attachment_data_source.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "net/url_request/url_request.h"
@@ -28,7 +29,9 @@
 #endif  // defined(OS_WIN)
 
 namespace {
+#if defined(OS_WIN)
 const char kDesktopImageType[] = "desktop-image";
+#endif
 const char kCSSModsType[] = "css-mods";
 const char kCSSModsData[] = "css";
 const char kDefaultFallbackImageBase64[] = "R0lGODlhAQABAAAAACwAAAAAAQABAAA=";
@@ -53,6 +56,9 @@ VivaldiDataSource::VivaldiDataSource(Profile* profile) {
       VIVALDI_DATA_URL_THUMBNAIL_DIR,
       std::make_unique<LocalImageDataClassHandler>(
           profile, extensions::VivaldiDataSourcesAPI::THUMBNAIL_URL));
+  data_class_handlers_.emplace(
+      VIVALDI_DATA_URL_NOTES_ATTACHMENT,
+      std::make_unique<NotesAttachmentDataClassHandler>(profile));
   data_class_handlers_.emplace(
       kCSSModsType, std::make_unique<CSSModsDataClassHandler>(profile));
 
@@ -104,24 +110,26 @@ VivaldiDataSource::TaskRunnerForRequestPath(const std::string& path) {
 }
 
 void VivaldiDataSource::StartDataRequest(
-    const std::string& path,
+    const GURL& path,
     const content::WebContents::Getter& wc_getter,
-    const content::URLDataSource::GotDataCallback& callback) {
+    content::URLDataSource::GotDataCallback callback) {
   std::string type;
   std::string data;
 
-  ExtractRequestTypeAndData(path, type, data);
+  ExtractRequestTypeAndData(path.path(), type, data);
 
   bool success = false;
   auto it = data_class_handlers_.find(type);
   if (it != data_class_handlers_.end()) {
-    success = it->second->GetData(data, callback);
+    success = it->second->GetData(data, std::move(callback));
+    if (!success) {
+      NOTIMPLEMENTED();
+      // TODO: Callback is invalid here, implement handlers to never
+      // return false.
+      // std::move(callback).Run(fallback_image_data_);
+    }
   } else {
     NOTIMPLEMENTED();
-  }
-  if (!success) {
-    callback.Run(fallback_image_data_);
-    return;
   }
 }
 
@@ -130,13 +138,17 @@ void VivaldiDataSource::StartDataRequest(
 void VivaldiDataSource::ExtractRequestTypeAndData(const std::string& path,
                                                   std::string& type,
                                                   std::string& data) const {
-  size_t pos = path.find("bookmark_thumbnail");
+  std::string new_path = path;
+  if (new_path[0] == '/') {
+    new_path = new_path.erase(0, 1);
+  }
+  size_t pos = new_path.find("bookmark_thumbnail");
   if (pos != std::string::npos) {
     // This is a shortcut path to handle old-style
     // bookmark thumbnail links.
-    pos = path.find('/', pos);
-    data = path.substr(pos + 1);
-    type = "local-image";
+    pos = new_path.find('/', pos);
+    data = new_path.substr(pos + 1);
+    type = VIVALDI_DATA_URL_THUMBNAIL_DIR;
 
     // Strip all after ? for links such as
     // chrome://thumb/http://bookmark_thumbnail/610?1535393294240
@@ -147,12 +159,12 @@ void VivaldiDataSource::ExtractRequestTypeAndData(const std::string& path,
     return;
   }
   // Default path for new links.
-  pos = path.find('/');
+  pos = new_path.find('/');
   if (pos != std::string::npos) {
-    type = path.substr(0, pos);
-    data = path.substr(pos+1);
+    type = new_path.substr(0, pos);
+    data = new_path.substr(pos+1);
   } else {
-    type = path;
+    type = new_path;
   }
   // Strip all after ?
   pos = data.find('?');

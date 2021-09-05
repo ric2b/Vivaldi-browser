@@ -15,6 +15,15 @@ if (!is_android) {
     ]
   }
 
+  update_template_instance("//components:components_tests_pak") {
+    sources += [
+      "$root_gen_dir/vivaldi/app/vivaldi_native_strings_en-US.pak"
+    ]
+    deps += [
+      "//vivaldi/app:vivaldi_native_strings",
+    ]
+  }
+
   _mac_postfix = ""
   if (is_mac) {
     _mac_postfix = "__repack"
@@ -111,15 +120,6 @@ update_target("//components/bookmarks/browser:browser") {
     "//vivaldi/app:vivaldi_native_strings",
     "//vivaldi/app:vivaldi_native_resources",
     "//vivaldi/app:vivaldi_unscaled_native_resources",
-  ]
-}
-
-update_template_instance("//components:components_tests_pak") {
-  sources += [
-    "$root_gen_dir/vivaldi/app/vivaldi_native_strings_en-US.pak"
-  ]
-  deps += [
-    "//vivaldi/app:vivaldi_native_strings",
   ]
 }
 

@@ -17,6 +17,7 @@ import android.content.pm.ResolveInfo;
 import android.content.res.Resources;
 import android.graphics.Rect;
 import android.os.Build;
+import android.os.Handler;
 import android.provider.Browser;
 import android.text.Spanned;
 import android.text.TextUtils;
@@ -31,15 +32,16 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
+import android.view.textclassifier.SelectionEvent;
 import android.view.textclassifier.TextClassifier;
 
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.BuildInfo;
 import org.chromium.base.Log;
 import org.chromium.base.PackageManagerUtils;
 import org.chromium.base.UserData;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
@@ -104,11 +106,19 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
     // Embedders should set this properly to use the correct view for readback.
     private static boolean sShouldGetReadbackViewFromWindowAndroid;
 
+    // A flag to determine if we must only use the context from the associated web contents
+    // to inflate menus. By default we use the context held by the ActionMode, because this
+    // enables correct theming, but in cases where we rely on the wrapping of contexts for
+    // correct resource lookup, this is not correct. In that case we must directly inflate
+    // menus from the context.
+    private static boolean sMustUseWebContentsContext;
+
     private static final class UserDataFactoryLazyHolder {
         private static final UserDataFactory<SelectionPopupControllerImpl> INSTANCE =
                 SelectionPopupControllerImpl::new;
     }
 
+    private final Handler mHandler;
     private Context mContext;
     private WindowAndroid mWindowAndroid;
     private WebContentsImpl mWebContents;
@@ -127,6 +137,8 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
     // required because ActionMode only exposes a temporary hide routine.
     private Runnable mRepeatingHideRunnable;
 
+    // Can be null temporarily when switching between WindowAndroid.
+    @Nullable
     private View mView;
     private ActionMode mActionMode;
 
@@ -196,6 +208,10 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
         sShouldGetReadbackViewFromWindowAndroid = true;
     }
 
+    public static void setMustUseWebContentsContext() {
+        sMustUseWebContentsContext = true;
+    }
+
     /**
      * Get {@link SelectionPopupController} object used for the give WebContents.
      * {@link #create()} should precede any calls to this.
@@ -235,6 +251,7 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
 
     private SelectionPopupControllerImpl(
             WebContents webContents, PopupController popupController, boolean initializeNative) {
+        mHandler = new Handler();
         mWebContents = (WebContentsImpl) webContents;
         mPopupController = popupController;
         mContext = mWebContents.getContext();
@@ -253,7 +270,7 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
                 assert mHidden;
                 final long hideDuration = getDefaultHideDuration();
                 // Ensure the next hide call occurs before the ActionMode reappears.
-                mView.postDelayed(mRepeatingHideRunnable, hideDuration - 1);
+                mHandler.postDelayed(mRepeatingHideRunnable, hideDuration - 1);
                 hideActionModeTemporarily(hideDuration);
             }
         };
@@ -286,14 +303,12 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
 
     @Override
     public void onUpdateContainerView(ViewGroup view) {
-        assert view != null;
-
         // Cleans up action mode before switching to a new container view.
         if (isActionModeValid()) finishActionMode();
         mUnselectAllOnDismiss = true;
         destroyPastePopup();
 
-        view.setClickable(true);
+        if (view != null) view.setClickable(true);
         mView = view;
         initHandleObserver();
     }
@@ -337,7 +352,8 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
     }
 
     // True if action mode is initialized to a working (not a no-op) mode.
-    private boolean isActionModeSupported() {
+    @VisibleForTesting
+    public boolean isActionModeSupported() {
         return mCallback != EMPTY_CALLBACK;
     }
 
@@ -374,7 +390,7 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
                         break;
                     case MenuSourceType.MENU_SOURCE_ADJUST_SELECTION_RESET:
                         mSelectionMetricsLogger.logSelectionAction(mLastSelectedText,
-                                mLastSelectionOffset, SmartSelectionMetricsLogger.ActionType.RESET,
+                                mLastSelectionOffset, SelectionEvent.ACTION_RESET,
                                 /* SelectionClient.Result = */ null);
                         break;
                     case MenuSourceType.MENU_SOURCE_TOUCH_HANDLE:
@@ -410,7 +426,7 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
      * <p> If the action mode cannot be created the selection is cleared.
      */
     public void showActionModeOrClearOnFailure() {
-        if (!isActionModeSupported() || !hasSelection()) return;
+        if (!isActionModeSupported() || !hasSelection() || mView == null) return;
 
         // Just refresh non-floating action mode if it already exists to avoid blinking.
         if (isActionModeValid() && !isFloatingActionMode()) {
@@ -441,6 +457,7 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
     }
 
     private ActionMode startFloatingActionMode() {
+        assert mView != null;
         assert Build.VERSION.SDK_INT >= Build.VERSION_CODES.M;
         ActionMode actionMode = ContentApiHelperForM.startActionMode(mView, this, mCallback);
         return actionMode;
@@ -459,7 +476,7 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
     }
 
     private void createAndShowPastePopup() {
-        if (mView.getParent() == null || mView.getVisibility() != View.VISIBLE) {
+        if (mView == null || mView.getParent() == null || mView.getVisibility() != View.VISIBLE) {
             return;
         }
 
@@ -548,7 +565,7 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
     @Override
     public void finishActionMode() {
         mHidden = false;
-        if (mView != null) mView.removeCallbacks(mRepeatingHideRunnable);
+        mHandler.removeCallbacks(mRepeatingHideRunnable);
 
         if (isActionModeValid()) {
             mActionMode.finish();
@@ -594,6 +611,7 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
     @Override
     public void onWindowAndroidChanged(WindowAndroid newWindowAndroid) {
         mWindowAndroid = newWindowAndroid;
+        mContext = mWebContents.getContext();
         initHandleObserver();
         destroyPastePopup();
     }
@@ -652,7 +670,7 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
         if (mHidden) {
             mRepeatingHideRunnable.run();
         } else {
-            mView.removeCallbacks(mRepeatingHideRunnable);
+            mHandler.removeCallbacks(mRepeatingHideRunnable);
             // To show the action mode that is being hidden call hide() again with a short delay.
             hideActionModeTemporarily(SHOW_DELAY_MS);
         }
@@ -709,15 +727,23 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
      * the items that are not relevant to the input text being edited.
      */
     public static void initializeMenu(Context context, ActionMode mode, Menu menu) {
-        try {
-            mode.getMenuInflater().inflate(R.menu.select_action_menu, menu);
-        } catch (Resources.NotFoundException e) {
-            // TODO(tobiasjs) by the time we get here we have already
-            // caused a resource loading failure to be logged. WebView
-            // resource access needs to be improved so that this
-            // logspam can be avoided.
-            new MenuInflater(context).inflate(R.menu.select_action_menu, menu);
+        if (!sMustUseWebContentsContext) {
+            // For WebView the correct choice is to use the actionMode context because webview
+            // assets have been added to its asset path. However we need to fall back to
+            // using the web contents context in the case where the AssetManager associated with
+            // the actionMode context does not contain our assets, because not doing so will cause a
+            // crash.
+            try {
+                mode.getMenuInflater().inflate(R.menu.select_action_menu, menu);
+                return;
+            } catch (Resources.NotFoundException e) {
+                // TODO(tobiasjs) by the time we get here we have already
+                // caused a resource loading failure to be logged. WebView
+                // resource access needs to be improved so that this
+                // logspam can be avoided.
+            }
         }
+        new MenuInflater(context).inflate(R.menu.select_action_menu, menu);
     }
 
     @TargetApi(Build.VERSION_CODES.O)
@@ -879,6 +905,8 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
 
     @Override
     public boolean onActionItemClicked(ActionMode mode, MenuItem item) {
+        // Actions should only happen when there is a WindowAndroid so mView should not be null.
+        assert mView != null;
         if (!isActionModeValid()) return true;
 
         int id = item.getItemId();
@@ -971,28 +999,28 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
 
     private int getActionType(int menuItemId, int menuItemGroupId) {
         if (menuItemGroupId == android.R.id.textAssist) {
-            return SmartSelectionMetricsLogger.ActionType.SMART_SHARE;
+            return SelectionEvent.ACTION_SMART_SHARE;
         }
         if (menuItemId == R.id.select_action_menu_select_all) {
-            return SmartSelectionMetricsLogger.ActionType.SELECT_ALL;
+            return SelectionEvent.ACTION_SELECT_ALL;
         }
         if (menuItemId == R.id.select_action_menu_cut) {
-            return SmartSelectionMetricsLogger.ActionType.CUT;
+            return SelectionEvent.ACTION_CUT;
         }
         if (menuItemId == R.id.select_action_menu_copy) {
-            return SmartSelectionMetricsLogger.ActionType.COPY;
+            return SelectionEvent.ACTION_COPY;
         }
         if (menuItemId == R.id.select_action_menu_paste
                 || menuItemId == R.id.select_action_menu_paste_as_plain_text) {
-            return SmartSelectionMetricsLogger.ActionType.PASTE;
+            return SelectionEvent.ACTION_PASTE;
         }
         if (menuItemId == R.id.select_action_menu_share) {
-            return SmartSelectionMetricsLogger.ActionType.SHARE;
+            return SelectionEvent.ACTION_SHARE;
         }
         if (menuItemId == android.R.id.textAssist) {
-            return SmartSelectionMetricsLogger.ActionType.SMART_SHARE;
+            return SelectionEvent.ACTION_SMART_SHARE;
         }
-        return SmartSelectionMetricsLogger.ActionType.OTHER;
+        return SelectionEvent.ACTION_OTHER;
     }
 
     /**
@@ -1000,6 +1028,7 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
      */
     @VisibleForTesting
     void doAssistAction() {
+        assert mView != null;
         if (mClassificationResult == null || !mClassificationResult.hasNamedAction()) return;
 
         assert mClassificationResult.onClickListener != null
@@ -1241,6 +1270,8 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
             @SelectionEventType int eventType, int left, int top, int right, int bottom) {
         // Ensure the provided selection coordinates form a non-empty rect, as required by
         // the selection action mode.
+        // NOTE: the native side ensures the rectangle is not empty, but that's done using floating
+        // point, which means it's entirely possible for this code to receive an empty rect.
         if (left == right) ++right;
         if (top == bottom) ++bottom;
 
@@ -1376,7 +1407,7 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
 
     @VisibleForTesting
     /* package */ void performHapticFeedback() {
-        if (BuildInfo.isAtLeastQ()) {
+        if (BuildInfo.isAtLeastQ() && mView != null) {
             mView.performHapticFeedback(HapticFeedbackConstants.TEXT_HANDLE_MOVE);
         }
     }
@@ -1396,7 +1427,7 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
         if (unSelected) {
             if (mSelectionMetricsLogger != null) {
                 mSelectionMetricsLogger.logSelectionAction(mLastSelectedText, mLastSelectionOffset,
-                        SmartSelectionMetricsLogger.ActionType.ABANDON,
+                        SelectionEvent.ACTION_ABANDON,
                         /* SelectionClient.Result = */ null);
             }
             destroyActionModeAndKeepSelection();
@@ -1413,10 +1444,9 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
     @Override
     public void setSelectionClient(@Nullable SelectionClient selectionClient) {
         mSelectionClient = selectionClient;
-        if (mSelectionClient != null) {
-            mSelectionMetricsLogger =
-                    (SmartSelectionMetricsLogger) mSelectionClient.getSelectionMetricsLogger();
-        }
+        mSelectionMetricsLogger = mSelectionClient == null
+                ? null
+                : (SmartSelectionMetricsLogger) mSelectionClient.getSelectionMetricsLogger();
 
         mClassificationResult = null;
 

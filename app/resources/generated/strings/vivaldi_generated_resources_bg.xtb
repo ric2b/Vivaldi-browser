@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="bg">
 <translation id="1017280919048282932">Добави в речник&amp;а</translation>
+<translation id="1029317248976101138">Увеличи</translation>
 <translation id="1031362278801463162">Зареждане на предизглед</translation>
 <translation id="1047431265488717055">Копирай тек&amp;ста на препратката</translation>
 <translation id="1049795001945932310">Настройки на &amp;езика</translation>
@@ -54,6 +55,7 @@
 <translation id="1886996562706621347">Позволи запитване от сайтовете дали да бъдат обработчик по подразбиране на даден протокол (препоръчително)</translation>
 <translation id="1901303067676059328">&amp;Избери всичко</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> тни</translation>
+<translation id="1936931585862840749">Укажете брой отпечатвани копия с число (от 1 до <ph name="MAX_COPIES" />).</translation>
 <translation id="1963227389609234879">Премахни всички</translation>
 <translation id="1994173015038366702">Адрес на сайта</translation>
 <translation id="2019718679933488176">Отвори &amp;звука в нов раздел</translation>
@@ -66,7 +68,6 @@
 <translation id="2150139952286079145">Търсене на назначение</translation>
 <translation id="215753907730220065">Изход от цял екран</translation>
 <translation id="2177950615300672361">Частен раздел: <ph name="TAB_NAME" /></translation>
-<translation id="218070003709087997">Ползвайте число за брой на отпечатаните копия (от 1 до 999).</translation>
 <translation id="219008588003277019">Модул в Native Client: <ph name="NEXE_NAME" /></translation>
 <translation id="220138918934036434">Скрий бутона</translation>
 <translation id="2218515861914035131">Постави като текст</translation>
@@ -78,11 +79,9 @@
 <translation id="2282146716419988068">Процес на ГПУ</translation>
 <translation id="2301382460326681002">Главната директория на разширението е недействителна.</translation>
 <translation id="2318143611928805047">Размер на листа</translation>
-<translation id="2318923050469484167">Текуща частна сесия (<ph name="EMBEDDING" />)</translation>
 <translation id="2322193970951063277">Ползвай колонтитули</translation>
 <translation id="2326931316514688470">Пре&amp;зареди приложението</translation>
 <translation id="2327492829706409234">Разреши приложението</translation>
-<translation id="2344028582131185878">Автоизтегляниe</translation>
 <translation id="2348176352564285430">Приложение: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">Изберете директория на разширението.</translation>
 <translation id="2379281330731083556">Отпечатай чрез системата… <ph name="SHORTCUT_KEY" /></translation>
@@ -95,12 +94,12 @@
 <translation id="2470702053775288986">Забранени неподдържани разширения</translation>
 <translation id="2476578072172137802">Настройки на сайта</translation>
 <translation id="2482878487686419369">Известяване</translation>
+<translation id="2498539833203011245">Намали</translation>
 <translation id="2509495747794740764">Мащабът е число между 10 и 200.</translation>
 <translation id="253557089021624350">Брой пакети Keepalive</translation>
 <translation id="2546283357679194313">Бисквитки и данни на сайта</translation>
 <translation id="2550212893339833758">Разменна памет</translation>
 <translation id="2553440850688409052">Скрий приставката</translation>
-<translation id="2580924999637585241">Всичко: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="26224892172169984">Не позволявай на никой сайт да обработва протоколи</translation>
 <translation id="2662876636500006917">Магазин на Chrome</translation>
 <translation id="2678063897982469759">Разреши повторно</translation>
@@ -120,7 +119,6 @@
 <translation id="2932883381142163287">Докладвай злоупотреба</translation>
 <translation id="2941112035454246133">Нисък</translation>
 <translation id="2972581237482394796">По&amp;втори</translation>
-<translation id="299483336428448530">Инсталирано от родител.</translation>
 <translation id="3003623123441819449">Кеш на CSS</translation>
 <translation id="3008272652534848354">Занули разрешенията</translation>
 <translation id="3012631534724231212">(в iframe)</translation>
@@ -274,7 +272,6 @@
 <translation id="5425042808445046667">Продължи изтеглянето</translation>
 <translation id="5427459444770871191">Завърти по &amp;часовника</translation>
 <translation id="5431318178759467895">цветно</translation>
-<translation id="5472133193607270166">Когато е включена, сайтовете не могат да ползват вашата активност на сърфиране, за да персонализират показваната реклама. Определени сайтове могат да престанат да работят правилно.</translation>
 <translation id="5483785310822538350">Оттегли достъпа до файлове и устройства</translation>
 <translation id="5485102783864353244">Добави приложението</translation>
 <translation id="5486561344817861625">Симулирай повторен пуск на браузъра</translation>
@@ -302,7 +299,6 @@
 <translation id="5804241973901381774">Разрешения</translation>
 <translation id="5828633471261496623">Отпечатване…</translation>
 <translation id="583281660410589416">Неизвестен</translation>
-<translation id="5838456317242088717">За текущата частна сесия</translation>
 <translation id="5860491529813859533">Включи</translation>
 <translation id="5867841422488265304">Потърсете или въведете адрес</translation>
 <translation id="5908769186679515905">Блокирай изпълнение на Flash от сайтовете</translation>
@@ -322,8 +318,7 @@
 <translation id="6147020289383635445">Предизгледът се провали.</translation>
 <translation id="6156863943908443225">Кеш на скриптове</translation>
 <translation id="6169666352732958425">Прехвърляне на работния плот е невъзможно.</translation>
-<translation id="6196640612572343990">Блокирай бисквитките на трети страни</translation>
-<translation id="6196854373336333322">Разширение „<ph name="EXTENSION_NAME" />“ пое контрол над настройките на сървър посредник, което значи, че може да променя, прекъсва и дори да следи всичко, докато сте на линия. Ако не сте сигурен на какво се дължи, вероятно не искате промяната да остане в сила.</translation>
+<translation id="6196854373336333322">Разширение „<ph name="EXTENSION_NAME" />“ пое контрол над настройките на сървър посредник, което значи, че може да променя, прекъсва и дори да следи всичко, докато сте в интернет. Ако не сте сигурен на какво се дължи, вероятно не искате промяната да остане в сила.</translation>
 <translation id="6206311232642889873">Коп&amp;ирай картината</translation>
 <translation id="6239558157302047471">Пре&amp;зареди рамката</translation>
 <translation id="6247802389331535091">Система: <ph name="ARC_PROCESS_NAME" /></translation>
@@ -335,6 +330,7 @@
 <translation id="6295158916970320988">Всички сайтове</translation>
 <translation id="6295855836753816081">Записване…</translation>
 <translation id="6308937455967653460">Запиши пр&amp;епратката като…</translation>
+<translation id="6315493146179903667">Изведи на преден план</translation>
 <translation id="6326855256003666642">Брой пакети Keepalive</translation>
 <translation id="6374469231428023295">Опитай отново</translation>
 <translation id="6385543213911723544">Сайтовете могат да записват и четат данните в бисквитките</translation>
@@ -380,12 +376,13 @@
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> тни</translation>
 <translation id="7309257895202129721">Покажи &amp;контролите</translation>
 <translation id="7311079019872751559">Неограничен достъп на приставки</translation>
-<translation id="7385854874724088939">Нещо се обърка при опита за отпечатване. Моля, проверете принтера и опитайте отново.</translation>
+<translation id="73174032666024687"><ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
+<translation id="7385854874724088939">Нещо не е наред при опита за отпечатване. Моля, проверете принтера и опитайте отново.</translation>
 <translation id="7412226954991670867">Памет на ГПУ</translation>
 <translation id="7421925624202799674">&amp;Покажи кода на страницата</translation>
 <translation id="7423098979219808738">Питай първо</translation>
 <translation id="7427348830195639090">Фонова страница: <ph name="BACKGROUND_PAGE_URL" /></translation>
-<translation id="7453008956351770337">С избирането на принтера правите допълнение към разрешението за достъп до вашия принтер:</translation>
+<translation id="7453008956351770337">С избирането на принтера правите допълнение към разрешението за достъп до принтера:</translation>
 <translation id="749028671485790643">Лице <ph name="VALUE" /></translation>
 <translation id="7521387064766892559">Джаваскрипт</translation>
 <translation id="7564847347806291057">Прекрати процеса</translation>
@@ -443,7 +440,7 @@
 <translation id="8261378640211443080">Разширението не е в списъка на <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> и може да е било добавено без ваше знание.</translation>
 <translation id="8270242299912238708">Документи PDF</translation>
 <translation id="8339059274628563283">Локално съхранявани данни на <ph name="SITE" /></translation>
-<translation id="8351419472474436977">Разширение пое контрол над настройките на сървър посредник, което значи, че може да променя, прекъсва и дори да следи всичко, докато сте на линия. Ако не сте сигурен на какво се дължи, вероятно не искате промяната да остане в сила.</translation>
+<translation id="8351419472474436977">Разширение пое контрол над настройките на сървър посредник, което значи, че може да променя, прекъсва и дори да следи всичко, докато сте в интернет. Ако не сте сигурен на какво се дължи, вероятно не искате промяната да остане в сила.</translation>
 <translation id="8382913212082956454">Копирай адреса за &amp;е-поща</translation>
 <translation id="8413385045638830869">Питай първо (препоръчително)</translation>
 <translation id="8434480141477525001">Дебъгващ порт в NaCl</translation>

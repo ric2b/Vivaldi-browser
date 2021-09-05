@@ -27,7 +27,7 @@
 #include "media/base/win/mf_initializer.h"
 #include "third_party/libyuv/include/libyuv.h"
 
-using media::mf::MediaBufferScopedPointer;
+using media::MediaBufferScopedPointer;
 
 namespace media {
 
@@ -229,7 +229,7 @@ bool MediaFoundationVideoEncodeAccelerator::Initialize(const Config& config,
   HRESULT hr =
       encoder_->GetInputStreamInfo(input_stream_id_, &input_stream_info);
   RETURN_ON_HR_FAILURE(hr, "Couldn't get input stream info", false);
-  input_sample_ = mf::CreateEmptySampleWithBuffer(
+  input_sample_ = CreateEmptySampleWithBuffer(
       input_stream_info.cbSize
           ? input_stream_info.cbSize
           : VideoFrame::AllocationSize(PIXEL_FORMAT_I420, input_visible_size_),
@@ -238,7 +238,7 @@ bool MediaFoundationVideoEncodeAccelerator::Initialize(const Config& config,
   MFT_OUTPUT_STREAM_INFO output_stream_info;
   hr = encoder_->GetOutputStreamInfo(output_stream_id_, &output_stream_info);
   RETURN_ON_HR_FAILURE(hr, "Couldn't get output stream info", false);
-  output_sample_ = mf::CreateEmptySampleWithBuffer(
+  output_sample_ = CreateEmptySampleWithBuffer(
       output_stream_info.cbSize
           ? output_stream_info.cbSize
           : bitstream_buffer_size_ * kOutputSampleBufferSizeRatio,
@@ -296,7 +296,7 @@ void MediaFoundationVideoEncodeAccelerator::UseOutputBitstreamBuffer(
       FROM_HERE,
       base::BindOnce(
           &MediaFoundationVideoEncodeAccelerator::UseOutputBitstreamBufferTask,
-          encoder_task_weak_factory_.GetWeakPtr(), base::Passed(&buffer_ref)));
+          encoder_task_weak_factory_.GetWeakPtr(), std::move(buffer_ref)));
 }
 
 void MediaFoundationVideoEncodeAccelerator::RequestEncodingParametersChange(
@@ -359,7 +359,7 @@ bool MediaFoundationVideoEncodeAccelerator::CreateHardwareEncoderMFT() {
     }
   }
 
-  if (!InitializeMediaFoundation())
+  if (!(session_ = InitializeMediaFoundation()))
     return false;
 
   uint32_t flags = MFT_ENUM_FLAG_HARDWARE | MFT_ENUM_FLAG_SORTANDFILTER;
@@ -415,7 +415,7 @@ bool MediaFoundationVideoEncodeAccelerator::InitializeInputOutputSamples(
   }
 
   // Initialize output parameters.
-  hr = MFCreateMediaType(imf_output_media_type_.GetAddressOf());
+  hr = MFCreateMediaType(&imf_output_media_type_);
   RETURN_ON_HR_FAILURE(hr, "Couldn't create media type", false);
   hr = imf_output_media_type_->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
   RETURN_ON_HR_FAILURE(hr, "Couldn't set media type", false);
@@ -441,7 +441,7 @@ bool MediaFoundationVideoEncodeAccelerator::InitializeInputOutputSamples(
   RETURN_ON_HR_FAILURE(hr, "Couldn't set output media type", false);
 
   // Initialize input parameters.
-  hr = MFCreateMediaType(imf_input_media_type_.GetAddressOf());
+  hr = MFCreateMediaType(&imf_input_media_type_);
   RETURN_ON_HR_FAILURE(hr, "Couldn't create media type", false);
   hr = imf_input_media_type_->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
   RETURN_ON_HR_FAILURE(hr, "Couldn't set media type", false);
@@ -468,7 +468,7 @@ bool MediaFoundationVideoEncodeAccelerator::SetEncoderModes() {
   RETURN_ON_FAILURE((encoder_.Get() != nullptr),
                     "No HW encoder instance created", false);
 
-  HRESULT hr = encoder_.CopyTo(codec_api_.GetAddressOf());
+  HRESULT hr = encoder_.As(&codec_api_);
   RETURN_ON_HR_FAILURE(hr, "Couldn't get ICodecAPI", false);
   VARIANT var;
   var.vt = VT_UI4;
@@ -539,7 +539,7 @@ void MediaFoundationVideoEncodeAccelerator::EncodeTask(
   DCHECK(encoder_thread_task_runner_->BelongsToCurrentThread());
 
   Microsoft::WRL::ComPtr<IMFMediaBuffer> input_buffer;
-  input_sample_->GetBufferByIndex(0, input_buffer.GetAddressOf());
+  input_sample_->GetBufferByIndex(0, &input_buffer);
 
   {
     MediaBufferScopedPointer scoped_buffer(input_buffer.Get());
@@ -627,7 +627,7 @@ void MediaFoundationVideoEncodeAccelerator::ProcessOutput() {
   DVLOG(3) << "Got encoded data " << hr;
 
   Microsoft::WRL::ComPtr<IMFMediaBuffer> output_buffer;
-  hr = output_sample_->GetBufferByIndex(0, output_buffer.GetAddressOf());
+  hr = output_sample_->GetBufferByIndex(0, &output_buffer);
   RETURN_ON_HR_FAILURE(hr, "Couldn't get buffer by index", );
   DWORD size = 0;
   hr = output_buffer->GetCurrentLength(&size);

@@ -12,24 +12,27 @@
 #include <utility>
 #include <vector>
 
+#include "base/strings/string16.h"
+#include "base/values.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/content_settings_types.h"
-#include "content/public/browser/web_ui.h"
+#include "components/prefs/pref_service.h"
 #include "extensions/common/extension.h"
 
-class ChooserContextBase;
 class HostContentSettingsMap;
 class Profile;
 
-namespace base {
-class DictionaryValue;
-class ListValue;
-class Value;
-}  // namespace base
+namespace content {
+class WebUI;
+}
 
 namespace extensions {
 class ExtensionRegistry;
+}
+
+namespace permissions {
+class ChooserContextBase;
 }
 
 namespace site_settings {
@@ -50,22 +53,25 @@ typedef std::map<std::pair<ContentSettingsPattern, std::string>,
 using ChooserExceptionDetails =
     std::map<std::pair<GURL, std::string>, std::set<std::pair<GURL, bool>>>;
 
-// Maps from a chooser exception name/object pair to a ChooserExceptionDetails.
-// This will group and sort the exceptions by the UI string and object for
-// display.
-using AllChooserObjects =
-    std::map<std::pair<std::string, base::Value>, ChooserExceptionDetails>;
-
+constexpr char kAllowAll[] = "allowAll";
+constexpr char kBlockThirdPartyIncognito[] = "blockThirdPartyIncognito";
+constexpr char kBlockThirdParty[] = "blockThirdParty";
+constexpr char kBlockAll[] = "blockAll";
+constexpr char kSessionOnly[] = "sessionOnly";
 constexpr char kChooserType[] = "chooserType";
 constexpr char kDisplayName[] = "displayName";
 constexpr char kEmbeddingOrigin[] = "embeddingOrigin";
 constexpr char kIncognito[] = "incognito";
 constexpr char kObject[] = "object";
+constexpr char kDisabled[] = "disabled";
 constexpr char kOrigin[] = "origin";
 constexpr char kOriginForFavicon[] = "originForFavicon";
+constexpr char kRecentPermissions[] = "recentPermissions";
 constexpr char kSetting[] = "setting";
 constexpr char kSites[] = "sites";
+constexpr char kPolicyIndicator[] = "indicator";
 constexpr char kSource[] = "source";
+constexpr char kType[] = "type";
 
 enum class SiteSettingSource {
   kAdsFilterBlacklist,
@@ -80,6 +86,37 @@ enum class SiteSettingSource {
   kNumSources,
 };
 
+// Possible policy indicators that can be shown in settings.
+// Must be kept in sync with the CrPolicyIndicatorType enum located in
+// src/ui/webui/resources/cr_elements/policy/cr_policy_indicator_behavior.js
+enum class PolicyIndicatorType {
+  kDevicePolicy,
+  kExtension,
+  kNone,
+  kOwner,
+  kPrimaryUser,
+  kRecommended,
+  kUserPolicy,
+  kParent,
+  kChildRestriction,
+  kNumIndicators,
+};
+
+// Represents the managed state for a single settings control.
+struct ManagedState {
+  bool disabled = false;
+  PolicyIndicatorType indicator = PolicyIndicatorType::kNone;
+};
+
+// Represents the manage states for all of the cookie controls.
+struct CookieControlsManagedState {
+  ManagedState allow_all;
+  ManagedState block_third_party_incognito;
+  ManagedState block_third_party;
+  ManagedState block_all;
+  ManagedState session_only;
+};
+
 // Returns whether a group name has been registered for the given type.
 bool HasRegisteredGroupName(ContentSettingsType type);
 
@@ -87,8 +124,15 @@ bool HasRegisteredGroupName(ContentSettingsType type);
 ContentSettingsType ContentSettingsTypeFromGroupName(const std::string& name);
 std::string ContentSettingsTypeToGroupName(ContentSettingsType type);
 
+// Converts a ListValue of group names to a list of ContentSettingsTypes
+std::vector<ContentSettingsType> ContentSettingsTypesFromGroupNames(
+    const base::Value::ConstListView types);
+
 // Converts a SiteSettingSource to its string identifier.
 std::string SiteSettingSourceToString(const SiteSettingSource source);
+
+// Converts a ManagedState to a base::Value suitable for sending to JavaScript.
+base::Value GetValueForManagedState(const ManagedState& state);
 
 // Helper function to construct a dictionary for an exception.
 std::unique_ptr<base::DictionaryValue> GetExceptionForPage(
@@ -145,12 +189,16 @@ void GetPolicyAllowedUrls(
     content::WebUI* web_ui,
     bool incognito);
 
+// Returns all site permission exceptions for a given content type
+std::vector<ContentSettingPatternSource> GetSiteExceptionsForContentType(
+    HostContentSettingsMap* map,
+    ContentSettingsType content_type);
+
 // This struct facilitates lookup of a chooser context factory function by name
 // for a given content settings type and is declared early so that it can used
 // by functions below.
 struct ChooserTypeNameEntry {
-  ChooserContextBase* (*get_context)(Profile*);
-  std::string (*get_object_name)(const base::Value&);
+  permissions::ChooserContextBase* (*get_context)(Profile*);
   const char* name;
 };
 
@@ -170,7 +218,7 @@ const ChooserTypeNameEntry* ChooserTypeFromGroupName(const std::string& name);
 // The structure of the SiteException objects is the same as the objects
 // returned by GetExceptionForPage().
 base::Value CreateChooserExceptionObject(
-    const std::string& display_name,
+    const base::string16& display_name,
     const base::Value& object,
     const std::string& chooser_type,
     const ChooserExceptionDetails& chooser_exception_details);
@@ -179,6 +227,16 @@ base::Value CreateChooserExceptionObject(
 base::Value GetChooserExceptionListFromProfile(
     Profile* profile,
     const ChooserTypeNameEntry& chooser_type);
+
+// Returns the cookie controls manage state for a given profile.
+CookieControlsManagedState GetCookieControlsManagedState(Profile* profile);
+
+// Concerts a PolicyIndicatorType to its string identifier.
+std::string PolicyIndicatorTypeToString(const PolicyIndicatorType type);
+
+// Returns the appropriate indicator for the source of a preference.
+PolicyIndicatorType GetPolicyIndicatorFromPref(
+    const PrefService::Preference* pref);
 
 }  // namespace site_settings
 

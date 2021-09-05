@@ -12,14 +12,17 @@
 // access to files or directories.
 class NativeFileSystemAccessIconView : public PageActionIconView {
  public:
-  explicit NativeFileSystemAccessIconView(Delegate* delegate);
+  NativeFileSystemAccessIconView(
+      IconLabelBubbleView::Delegate* icon_label_bubble_delegate,
+      PageActionIconView::Delegate* page_action_icon_delegate);
 
   // PageActionIconView:
   views::BubbleDialogDelegateView* GetBubble() const override;
-  bool Update() override;
+  void UpdateImpl() override;
   base::string16 GetTextForTooltipAndAccessibleName() const override;
   void OnExecuting(ExecuteSource execute_source) override;
   const gfx::VectorIcon& GetVectorIcon() const override;
+  const char* GetClassName() const override;
 
  private:
   bool has_write_access_ = false;

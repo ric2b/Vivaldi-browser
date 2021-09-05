@@ -8,13 +8,13 @@
 
 #include <utility>
 
-#include "ash/public/cpp/app_list/tokenized_string.h"
-#include "ash/public/cpp/app_list/tokenized_string_match.h"
 #include "base/numerics/ranges.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/chromeos/launcher_search_provider/launcher_search_provider_service_factory.h"
 #include "chrome/browser/ui/app_list/search/launcher_search/launcher_search_provider.h"
 #include "chrome/browser/ui/app_list/search/launcher_search/launcher_search_result.h"
+#include "chrome/common/string_matching/tokenized_string.h"
+#include "chrome/common/string_matching/tokenized_string_match.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension_set.h"
 #include "extensions/common/permissions/permissions_data.h"
@@ -56,7 +56,8 @@ void Service::OnQueryStarted(app_list::LauncherSearchProvider* provider,
       extensions::EventRouter::Get(profile_);
 
   CacheListenerExtensionIds();
-  for (const ExtensionId extension_id : *cached_listener_extension_ids_.get()) {
+  for (const ExtensionId& extension_id :
+       *cached_listener_extension_ids_.get()) {
     // Convert query_id_ to string here since queryId is defined as string in
     // javascript side API while we use uint32_t internally to generate it.
     event_router->DispatchEventToExtension(
@@ -77,7 +78,8 @@ void Service::OnQueryEnded() {
       extensions::EventRouter::Get(profile_);
 
   CacheListenerExtensionIds();
-  for (const ExtensionId extension_id : *cached_listener_extension_ids_.get()) {
+  for (const ExtensionId& extension_id :
+       *cached_listener_extension_ids_.get()) {
     event_router->DispatchEventToExtension(
         extension_id,
         std::make_unique<extensions::Event>(
@@ -135,9 +137,9 @@ void Service::SetSearchResults(
     // set the title tags (highlighting which parts of the title matched the
     // search query).
     const base::string16 title = base::UTF8ToUTF16(result.title);
-    ash::TokenizedString tokenized_title(title);
-    ash::TokenizedStringMatch match;
-    ash::TokenizedString tokenized_query(base::UTF8ToUTF16(query_));
+    TokenizedString tokenized_title(title);
+    TokenizedStringMatch match;
+    TokenizedString tokenized_query(base::UTF8ToUTF16(query_));
     if (!match.Calculate(tokenized_query, tokenized_title))
       continue;
 

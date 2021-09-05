@@ -10,13 +10,14 @@
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/loader/prefetch_url_loader.h"
+#include "content/browser/loader/url_loader_throttles.h"
 #include "content/browser/url_loader_factory_getter.h"
 #include "content/browser/web_package/prefetched_signed_exchange_cache.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_client.h"
-#include "content/public/common/resource_type.h"
-#include "mojo/public/cpp/bindings/strong_binding.h"
+#include "mojo/public/cpp/bindings/remote.h"
+#include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "net/base/load_flags.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
@@ -24,6 +25,7 @@
 #include "storage/browser/blob/blob_storage_context.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/loader/url_loader_throttle.h"
+#include "third_party/blink/public/mojom/loader/resource_load_info.mojom-shared.h"
 #include "third_party/blink/public/mojom/renderer_preferences.mojom.h"
 
 namespace content {
@@ -90,7 +92,7 @@ PrefetchURLLoaderService::PrefetchURLLoaderService(
 void PrefetchURLLoaderService::GetFactory(
     mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver,
     int frame_tree_node_id,
-    std::unique_ptr<network::SharedURLLoaderFactoryInfo> factories,
+    std::unique_ptr<network::PendingSharedURLLoaderFactory> factories,
     base::WeakPtr<RenderFrameHostImpl> render_frame_host,
     scoped_refptr<PrefetchedSignedExchangeCache>
         prefetched_signed_exchange_cache) {
@@ -105,12 +107,12 @@ void PrefetchURLLoaderService::GetFactory(
 }
 
 void PrefetchURLLoaderService::CreateLoaderAndStart(
-    network::mojom::URLLoaderRequest request,
+    mojo::PendingReceiver<network::mojom::URLLoader> receiver,
     int32_t routing_id,
     int32_t request_id,
     uint32_t options,
     const network::ResourceRequest& resource_request_in,
-    network::mojom::URLLoaderClientPtr client,
+    mojo::PendingRemote<network::mojom::URLLoaderClient> client,
     const net::MutableNetworkTrafficAnnotationTag& traffic_annotation) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
@@ -118,12 +120,13 @@ void PrefetchURLLoaderService::CreateLoaderAndStart(
   // request.
   network::ResourceRequest resource_request = resource_request_in;
 
-  DCHECK_EQ(static_cast<int>(ResourceType::kPrefetch),
+  DCHECK_EQ(static_cast<int>(blink::mojom::ResourceType::kPrefetch),
             resource_request.resource_type);
   auto& current_context = *loader_factory_receivers_.current_context();
 
   if (!current_context.render_frame_host) {
-    client->OnComplete(network::URLLoaderCompletionStatus(net::ERR_ABORTED));
+    mojo::Remote<network::mojom::URLLoaderClient>(std::move(client))
+        ->OnComplete(network::URLLoaderCompletionStatus(net::ERR_ABORTED));
     return;
   }
 
@@ -141,8 +144,9 @@ void PrefetchURLLoaderService::CreateLoaderAndStart(
     // An invalid request could indicate a compromised renderer inappropriately
     // modifying the request, so we immediately complete it with an error.
     if (!IsValidCrossOriginPrefetch(resource_request)) {
-      client->OnComplete(
-          network::URLLoaderCompletionStatus(net::ERR_INVALID_ARGUMENT));
+      mojo::Remote<network::mojom::URLLoaderClient>(std::move(client))
+          ->OnComplete(
+              network::URLLoaderCompletionStatus(net::ERR_INVALID_ARGUMENT));
       return;
     }
 
@@ -170,8 +174,9 @@ void PrefetchURLLoaderService::CreateLoaderAndStart(
     // An unexpected token could indicate a compromised renderer trying to fetch
     // a request in a special way. We'll cancel the request.
     if (nik_iterator == current_context.prefetch_network_isolation_keys.end()) {
-      client->OnComplete(
-          network::URLLoaderCompletionStatus(net::ERR_INVALID_ARGUMENT));
+      mojo::Remote<network::mojom::URLLoaderClient>(std::move(client))
+          ->OnComplete(
+              network::URLLoaderCompletionStatus(net::ERR_INVALID_ARGUMENT));
       return;
     }
 
@@ -191,11 +196,11 @@ void PrefetchURLLoaderService::CreateLoaderAndStart(
             ->prefetched_signed_exchange_cache;
   }
 
-  // For now we strongly bind the loader to the request, while we can
-  // also possibly make the new loader owned by the factory so that
-  // they can live longer than the client (i.e. run in detached mode).
+  // For now we make self owned receiver for the loader to the request, while we
+  // can also possibly make the new loader owned by the factory so that they can
+  // live longer than the client (i.e. run in detached mode).
   // TODO(kinuko): Revisit this.
-  mojo::MakeStrongBinding(
+  mojo::MakeSelfOwnedReceiver(
       std::make_unique<PrefetchURLLoader>(
           routing_id, request_id, options, current_context.frame_tree_node_id,
           resource_request, std::move(client), traffic_annotation,
@@ -209,7 +214,7 @@ void PrefetchURLLoaderService::CreateLoaderAndStart(
           base::BindOnce(
               &PrefetchURLLoaderService::GenerateRecursivePrefetchToken, this,
               current_context.weak_ptr_factory.GetWeakPtr())),
-      std::move(request));
+      std::move(receiver));
 }
 
 PrefetchURLLoaderService::~PrefetchURLLoaderService() = default;
@@ -262,7 +267,7 @@ void PrefetchURLLoaderService::EnsureCrossOriginFactory() {
     return;
 
   DCHECK(current_context.render_frame_host);
-  std::unique_ptr<network::SharedURLLoaderFactoryInfo> factories =
+  std::unique_ptr<network::PendingSharedURLLoaderFactory> factories =
       current_context.render_frame_host
           ->CreateCrossOriginPrefetchLoaderFactoryBundle();
   current_context.cross_origin_factory =
@@ -312,7 +317,7 @@ std::vector<std::unique_ptr<blink::URLLoaderThrottle>>
 PrefetchURLLoaderService::CreateURLLoaderThrottles(
     const network::ResourceRequest& request,
     int frame_tree_node_id) {
-  return GetContentClient()->browser()->CreateURLLoaderThrottles(
+  return CreateContentBrowserURLLoaderThrottles(
       request, browser_context_,
       base::BindRepeating(&WebContents::FromFrameTreeNodeId,
                           frame_tree_node_id),

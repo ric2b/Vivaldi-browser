@@ -28,6 +28,12 @@ const std::vector<const char*> kOptions = {"Option1", "Option2", "Option3",
                                            "Option4"};
 namespace {
 
+template <typename T>
+bool EquivalentData(const T& a, const T& b) {
+  typename T::IdentityComparator less;
+  return !less(a, b) && !less(b, a);
+}
+
 void CreateTestFieldDataPredictions(const std::string& signature,
                                     FormFieldDataPredictions* field_predict) {
   test::CreateTestSelectField("TestLabel", "TestName", "TestValue", kOptions,
@@ -51,16 +57,19 @@ void CreateTestPasswordFormFillData(PasswordFormFillData* fill_data) {
                               "TestPasswordFieldValue", kOptions, kOptions, 4,
                               &fill_data->password_field);
   fill_data->preferred_realm = "https://foo.com/";
+  fill_data->uses_account_store = true;
 
   base::string16 name;
-  PasswordAndRealm pr;
+  PasswordAndMetadata pr;
   name = base::ASCIIToUTF16("Tom");
   pr.password = base::ASCIIToUTF16("Tom_Password");
   pr.realm = "https://foo.com/";
+  pr.uses_account_store = false;
   fill_data->additional_logins[name] = pr;
   name = base::ASCIIToUTF16("Jerry");
   pr.password = base::ASCIIToUTF16("Jerry_Password");
   pr.realm = "https://bar.com/";
+  pr.uses_account_store = true;
   fill_data->additional_logins[name] = pr;
 
   fill_data->wait_for_username = true;
@@ -91,7 +100,6 @@ void CreateTestPasswordForm(PasswordForm* form) {
   form->new_password_value = base::ASCIIToUTF16("new_password_value");
   form->new_password_marked_by_site = false;
   form->new_password_element = base::ASCIIToUTF16("confirmation_password");
-  form->preferred = false;
   form->date_created = AutofillClock::Now();
   form->date_synced = AutofillClock::Now();
   form->blacklisted_by_user = false;
@@ -118,7 +126,7 @@ void CreatePasswordGenerationUIData(
   data->generation_element = base::ASCIIToUTF16("generation_element");
   data->text_direction = base::i18n::RIGHT_TO_LEFT;
   data->is_generation_element_password_type = false;
-  CreateTestPasswordForm(&data->password_form);
+  test::CreateTestAddressFormData(&data->form_data);
 }
 
 void CheckEqualPasswordFormFillData(const PasswordFormFillData& expected,
@@ -126,9 +134,10 @@ void CheckEqualPasswordFormFillData(const PasswordFormFillData& expected,
   EXPECT_EQ(expected.form_renderer_id, actual.form_renderer_id);
   EXPECT_EQ(expected.origin, actual.origin);
   EXPECT_EQ(expected.action, actual.action);
-  EXPECT_EQ(expected.username_field, actual.username_field);
-  EXPECT_EQ(expected.password_field, actual.password_field);
+  EXPECT_TRUE(EquivalentData(expected.username_field, actual.username_field));
+  EXPECT_TRUE(EquivalentData(expected.password_field, actual.password_field));
   EXPECT_EQ(expected.preferred_realm, actual.preferred_realm);
+  EXPECT_EQ(expected.uses_account_store, actual.uses_account_store);
 
   {
     EXPECT_EQ(expected.additional_logins.size(),
@@ -141,6 +150,8 @@ void CheckEqualPasswordFormFillData(const PasswordFormFillData& expected,
       EXPECT_EQ(iter1->first, iter2->first);
       EXPECT_EQ(iter1->second.password, iter2->second.password);
       EXPECT_EQ(iter1->second.realm, iter2->second.realm);
+      EXPECT_EQ(iter1->second.uses_account_store,
+                iter2->second.uses_account_store);
     }
     ASSERT_EQ(iter1, end1);
     ASSERT_EQ(iter2, end2);
@@ -158,7 +169,7 @@ void CheckEqualPassPasswordGenerationUIData(
   EXPECT_EQ(expected.is_generation_element_password_type,
             actual.is_generation_element_password_type);
   EXPECT_EQ(expected.text_direction, actual.text_direction);
-  EXPECT_EQ(expected.password_form, actual.password_form);
+  EXPECT_TRUE(expected.form_data.SameFormAs(actual.form_data));
 }
 
 }  // namespace
@@ -228,7 +239,7 @@ class AutofillTypeTraitsTestImpl : public testing::Test,
 void ExpectFormFieldData(const FormFieldData& expected,
                          base::OnceClosure closure,
                          const FormFieldData& passed) {
-  EXPECT_EQ(expected, passed);
+  EXPECT_TRUE(EquivalentData(expected, passed));
   EXPECT_EQ(expected.value, passed.value);
   EXPECT_EQ(expected.typed_value, passed.typed_value);
   std::move(closure).Run();
@@ -237,7 +248,7 @@ void ExpectFormFieldData(const FormFieldData& expected,
 void ExpectFormData(const FormData& expected,
                     base::OnceClosure closure,
                     const FormData& passed) {
-  EXPECT_EQ(expected, passed);
+  EXPECT_TRUE(EquivalentData(expected, passed));
   std::move(closure).Run();
 }
 
@@ -307,6 +318,7 @@ TEST_F(AutofillTypeTraitsTestImpl, PassFormFieldData) {
   input.text_direction = base::i18n::RIGHT_TO_LEFT;
   input.properties_mask = FieldPropertiesFlags::HAD_FOCUS;
   input.typed_value = base::ASCIIToUTF16("TestTypedValue");
+  input.bounds = gfx::RectF(1, 2, 10, 100);
 
   base::RunLoop loop;
   mojo::Remote<mojom::TypeTraitsTest> remote(GetTypeTraitsTestRemote());

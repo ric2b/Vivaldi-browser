@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "content/browser/renderer_host/media/service_video_capture_device_launcher.h"
@@ -17,7 +18,9 @@
 #include "content/public/browser/video_capture_service.h"
 #include "content/public/common/content_features.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
-#include "mojo/public/cpp/bindings/strong_binding.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/remote.h"
+#include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "services/video_capture/public/mojom/video_capture_service.mojom.h"
 #include "services/video_capture/public/uma/video_capture_service_event.h"
 
@@ -122,9 +125,10 @@ ServiceVideoCaptureProvider::ServiceVideoCaptureProvider(
   } else if (features::IsVideoCaptureServiceEnabledForBrowserProcess()) {
     // Connect immediately and permanently when the service runs in-process.
     base::CreateSingleThreadTaskRunner({BrowserThread::IO})
-        ->PostTask(FROM_HERE,
-                   base::Bind(&ServiceVideoCaptureProvider::OnServiceStarted,
-                              weak_ptr_factory_.GetWeakPtr()));
+        ->PostTask(
+            FROM_HERE,
+            base::BindOnce(&ServiceVideoCaptureProvider::OnServiceStarted,
+                           weak_ptr_factory_.GetWeakPtr()));
   }
 }
 
@@ -156,10 +160,10 @@ void ServiceVideoCaptureProvider::OnServiceStarted() {
   // change events when virtual devices are added to or removed from the
   // service.
   auto service_connection = LazyConnectToService();
-  video_capture::mojom::DevicesChangedObserverPtr observer;
-  mojo::MakeStrongBinding(
+  mojo::PendingRemote<video_capture::mojom::DevicesChangedObserver> observer;
+  mojo::MakeSelfOwnedReceiver(
       std::make_unique<VirtualVideoCaptureDevicesChangedObserver>(),
-      mojo::MakeRequest(&observer));
+      observer.InitWithNewPipeAndPassReceiver());
   service_connection->source_provider()->RegisterVirtualDevicesChangedObserver(
       std::move(observer),
       true /*raise_event_if_virtual_devices_already_present*/);
@@ -214,20 +218,22 @@ ServiceVideoCaptureProvider::LazyConnectToService() {
 
   auto ui_task_runner = base::CreateSingleThreadTaskRunner({BrowserThread::UI});
 #if defined(OS_CHROMEOS)
-  video_capture::mojom::AcceleratorFactoryPtr accelerator_factory;
+  mojo::PendingRemote<video_capture::mojom::AcceleratorFactory>
+      accelerator_factory;
   if (!create_accelerator_factory_cb_)
     create_accelerator_factory_cb_ =
         base::BindRepeating(&CreateAcceleratorFactory);
-  mojo::MakeStrongBinding(create_accelerator_factory_cb_.Run(),
-                          mojo::MakeRequest(&accelerator_factory));
+  mojo::MakeSelfOwnedReceiver(
+      create_accelerator_factory_cb_.Run(),
+      accelerator_factory.InitWithNewPipeAndPassReceiver());
   GetVideoCaptureService().InjectGpuDependencies(
       std::move(accelerator_factory));
 #endif  // defined(OS_CHROMEOS)
 
-  video_capture::mojom::VideoSourceProviderPtr source_provider;
+  mojo::Remote<video_capture::mojom::VideoSourceProvider> source_provider;
   GetVideoCaptureService().ConnectToVideoSourceProvider(
-      mojo::MakeRequest(&source_provider));
-  source_provider.set_connection_error_handler(base::BindOnce(
+      source_provider.BindNewPipeAndPassReceiver());
+  source_provider.set_disconnect_handler(base::BindOnce(
       &ServiceVideoCaptureProvider::OnLostConnectionToSourceProvider,
       weak_ptr_factory_.GetWeakPtr()));
   auto result = base::MakeRefCounted<RefCountedVideoSourceProvider>(

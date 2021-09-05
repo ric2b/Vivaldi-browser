@@ -7,6 +7,7 @@ package org.chromium.chrome.browser.vr.jsdialog;
 import static org.chromium.chrome.browser.vr.XrTestFramework.PAGE_LOAD_TIMEOUT_S;
 import static org.chromium.chrome.browser.vr.XrTestFramework.POLL_TIMEOUT_LONG_MS;
 import static org.chromium.chrome.browser.vr.XrTestFramework.POLL_TIMEOUT_SHORT_MS;
+import static org.chromium.chrome.browser.vr.XrTestFramework.VR_SKIA_GOLD_CORPUS;
 import static org.chromium.chrome.test.util.ChromeRestriction.RESTRICTION_TYPE_VIEWER_DAYDREAM;
 
 import android.support.test.filters.MediumTest;
@@ -20,8 +21,8 @@ import org.junit.runner.RunWith;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
-import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
+import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.vr.UserFriendlyElementName;
 import org.chromium.chrome.browser.vr.VrBrowserTestFramework;
 import org.chromium.chrome.browser.vr.rules.ChromeTabbedActivityVrTestRule;
@@ -29,8 +30,8 @@ import org.chromium.chrome.browser.vr.util.NativeUiUtils;
 import org.chromium.chrome.browser.vr.util.RenderTestUtils;
 import org.chromium.chrome.browser.vr.util.VrBrowserTransitionUtils;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
-import org.chromium.chrome.test.util.RenderTestRule;
 import org.chromium.content_public.browser.test.util.JavaScriptUtils;
+import org.chromium.ui.test.util.RenderTestRule;
 
 import java.io.IOException;
 
@@ -46,7 +47,7 @@ public class VrBrowserJavaScriptModalDialogTest {
 
     @Rule
     public RenderTestRule mRenderTestRule =
-            new RenderTestRule("components/test/data/js_dialogs/render_tests");
+            new RenderTestRule.SkiaGoldBuilder().setCorpus(VR_SKIA_GOLD_CORPUS).build();
 
     private ChromeTabbedActivity mActivity;
     private VrBrowserTestFramework mVrBrowserTestFramework;
@@ -55,9 +56,8 @@ public class VrBrowserJavaScriptModalDialogTest {
     public void setUp() {
         mActivity = mActivityTestRule.getActivity();
         mVrBrowserTestFramework = new VrBrowserTestFramework(mActivityTestRule);
-        mVrBrowserTestFramework.loadUrlAndAwaitInitialization(
-                VrBrowserTestFramework.getFileUrlForHtmlTestFile("2d_permission_page"),
-                PAGE_LOAD_TIMEOUT_S);
+        mVrBrowserTestFramework.loadFileAndAwaitInitialization(
+                "2d_permission_page", PAGE_LOAD_TIMEOUT_S);
         VrBrowserTransitionUtils.forceEnterVrBrowserOrFail(POLL_TIMEOUT_LONG_MS);
         NativeUiUtils.enableMockedInput();
         // Wait for any residual animations from entering VR to finish so that they don't get caught

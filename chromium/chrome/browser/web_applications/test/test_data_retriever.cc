@@ -34,10 +34,12 @@ void TestDataRetriever::CheckInstallabilityAndRetrieveManifest(
     content::WebContents* web_contents,
     bool bypass_service_worker_check,
     CheckInstallabilityCallback callback) {
-  DCHECK(manifest_);
+  base::Optional<blink::Manifest> opt_manifest;
+  if (manifest_ && !manifest_->IsEmpty())
+    opt_manifest = *manifest_;
 
   completion_callback_ =
-      base::BindOnce(std::move(callback), *manifest_,
+      base::BindOnce(std::move(callback), opt_manifest,
                      /*valid_manifest_for_web_app=*/true, is_installable_);
   ScheduleCompletionCallback();
 }
@@ -64,6 +66,10 @@ void TestDataRetriever::SetRendererWebApplicationInfo(
   web_app_info_ = std::move(web_app_info);
 }
 
+void TestDataRetriever::SetEmptyRendererWebApplicationInfo() {
+  SetRendererWebApplicationInfo(std::make_unique<WebApplicationInfo>());
+}
+
 void TestDataRetriever::SetManifest(std::unique_ptr<blink::Manifest> manifest,
                                     bool is_installable) {
   manifest_ = std::move(manifest);
@@ -87,7 +93,7 @@ void TestDataRetriever::SetDestructionCallback(base::OnceClosure callback) {
 
 void TestDataRetriever::BuildDefaultDataToRetrieve(const GURL& url,
                                                    const GURL& scope) {
-  SetRendererWebApplicationInfo(std::make_unique<WebApplicationInfo>());
+  SetEmptyRendererWebApplicationInfo();
 
   auto manifest = std::make_unique<blink::Manifest>();
   manifest->start_url = url;

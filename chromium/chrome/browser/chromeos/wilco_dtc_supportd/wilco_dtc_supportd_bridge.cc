@@ -15,19 +15,19 @@
 #include "base/strings/string_piece.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/chromeos/wilco_dtc_supportd/mojo_utils.h"
+#include "chrome/browser/chromeos/wilco_dtc_supportd/wilco_dtc_supportd_client.h"
 #include "chrome/browser/chromeos/wilco_dtc_supportd/wilco_dtc_supportd_messaging.h"
+#include "chrome/browser/chromeos/wilco_dtc_supportd/wilco_dtc_supportd_network_context.h"
 #include "chrome/browser/chromeos/wilco_dtc_supportd/wilco_dtc_supportd_notification_controller.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
-#include "chromeos/dbus/wilco_dtc_supportd_client.h"
-#include "mojo/public/cpp/bindings/interface_ptr_info.h"
+#include "chromeos/services/cros_healthd/public/cpp/service_connection.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/platform/platform_channel.h"
 #include "mojo/public/cpp/platform/platform_channel_endpoint.h"
 #include "mojo/public/cpp/platform/platform_handle.h"
 #include "mojo/public/cpp/system/invitation.h"
 #include "mojo/public/cpp/system/message_pipe.h"
-#include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "third_party/cros_system_api/dbus/wilco_dtc_supportd/dbus-constants.h"
 
 namespace chromeos {
@@ -58,8 +58,8 @@ class WilcoDtcSupportdBridgeDelegateImpl final
 
   // Delegate overrides:
   void CreateWilcoDtcSupportdServiceFactoryMojoInvitation(
-      wilco_dtc_supportd::mojom::WilcoDtcSupportdServiceFactoryPtr*
-          wilco_dtc_supportd_service_factory_mojo_ptr,
+      mojo::Remote<wilco_dtc_supportd::mojom::WilcoDtcSupportdServiceFactory>*
+          wilco_dtc_supportd_service_factory_mojo_remote,
       base::ScopedFD* remote_endpoint_fd) override;
 
  private:
@@ -74,8 +74,8 @@ WilcoDtcSupportdBridgeDelegateImpl::~WilcoDtcSupportdBridgeDelegateImpl() =
 
 void WilcoDtcSupportdBridgeDelegateImpl::
     CreateWilcoDtcSupportdServiceFactoryMojoInvitation(
-        wilco_dtc_supportd::mojom::WilcoDtcSupportdServiceFactoryPtr*
-            wilco_dtc_supportd_service_factory_mojo_ptr,
+        mojo::Remote<wilco_dtc_supportd::mojom::WilcoDtcSupportdServiceFactory>*
+            wilco_dtc_supportd_service_factory_mojo_remote,
         base::ScopedFD* remote_endpoint_fd) {
   mojo::OutgoingInvitation invitation;
   mojo::PlatformChannel channel;
@@ -84,8 +84,8 @@ void WilcoDtcSupportdBridgeDelegateImpl::
   mojo::OutgoingInvitation::Send(std::move(invitation),
                                  base::kNullProcessHandle,
                                  channel.TakeLocalEndpoint());
-  wilco_dtc_supportd_service_factory_mojo_ptr->Bind(
-      mojo::InterfacePtrInfo<
+  wilco_dtc_supportd_service_factory_mojo_remote->Bind(
+      mojo::PendingRemote<
           wilco_dtc_supportd::mojom::WilcoDtcSupportdServiceFactory>(
           std::move(server_pipe), 0 /* version */));
   *remote_endpoint_fd =
@@ -113,19 +113,19 @@ int WilcoDtcSupportdBridge::max_connection_attempt_count_for_testing() {
 }
 
 WilcoDtcSupportdBridge::WilcoDtcSupportdBridge(
-    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory)
+    std::unique_ptr<WilcoDtcSupportdNetworkContext> network_context)
     : WilcoDtcSupportdBridge(
           std::make_unique<WilcoDtcSupportdBridgeDelegateImpl>(),
-          std::move(url_loader_factory),
+          std::move(network_context),
           std::make_unique<WilcoDtcSupportdNotificationController>()) {}
 
 WilcoDtcSupportdBridge::WilcoDtcSupportdBridge(
     std::unique_ptr<Delegate> delegate,
-    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
+    std::unique_ptr<WilcoDtcSupportdNetworkContext> network_context,
     std::unique_ptr<WilcoDtcSupportdNotificationController>
         notification_controller)
     : delegate_(std::move(delegate)),
-      web_request_service_(std::move(url_loader_factory)),
+      web_request_service_(std::move(network_context)),
       notification_controller_(std::move(notification_controller)) {
   DCHECK(delegate_);
   DCHECK(notification_controller_);
@@ -160,11 +160,9 @@ void WilcoDtcSupportdBridge::WaitForDBusService() {
   // ScheduleWaitingForDBusService().
   dbus_waiting_weak_ptr_factory_.InvalidateWeakPtrs();
 
-  DBusThreadManager::Get()
-      ->GetWilcoDtcSupportdClient()
-      ->WaitForServiceToBeAvailable(
-          base::BindOnce(&WilcoDtcSupportdBridge::OnWaitedForDBusService,
-                         dbus_waiting_weak_ptr_factory_.GetWeakPtr()));
+  chromeos::WilcoDtcSupportdClient::Get()->WaitForServiceToBeAvailable(
+      base::BindOnce(&WilcoDtcSupportdBridge::OnWaitedForDBusService,
+                     dbus_waiting_weak_ptr_factory_.GetWeakPtr()));
 }
 
 void WilcoDtcSupportdBridge::ScheduleWaitingForDBusService() {
@@ -193,16 +191,16 @@ void WilcoDtcSupportdBridge::OnWaitedForDBusService(bool service_is_available) {
 }
 
 void WilcoDtcSupportdBridge::BootstrapMojoConnection() {
-  DCHECK(!wilco_dtc_supportd_service_factory_mojo_ptr_);
+  DCHECK(!wilco_dtc_supportd_service_factory_mojo_remote_);
 
   // Create a Mojo message pipe and attach
-  // |wilco_dtc_supportd_service_factory_mojo_ptr_| to its local endpoint.
+  // |wilco_dtc_supportd_service_factory_mojo_remote_| to its local endpoint.
   base::ScopedFD remote_endpoint_fd;
   delegate_->CreateWilcoDtcSupportdServiceFactoryMojoInvitation(
-      &wilco_dtc_supportd_service_factory_mojo_ptr_, &remote_endpoint_fd);
-  DCHECK(wilco_dtc_supportd_service_factory_mojo_ptr_);
+      &wilco_dtc_supportd_service_factory_mojo_remote_, &remote_endpoint_fd);
+  DCHECK(wilco_dtc_supportd_service_factory_mojo_remote_);
   DCHECK(remote_endpoint_fd.is_valid());
-  wilco_dtc_supportd_service_factory_mojo_ptr_.set_connection_error_handler(
+  wilco_dtc_supportd_service_factory_mojo_remote_.set_disconnect_handler(
       base::BindOnce(&WilcoDtcSupportdBridge::OnMojoConnectionError,
                      weak_ptr_factory_.GetWeakPtr()));
 
@@ -213,7 +211,7 @@ void WilcoDtcSupportdBridge::BootstrapMojoConnection() {
   mojo::PendingRemote<wilco_dtc_supportd::mojom::WilcoDtcSupportdClient>
       self_proxy;
   mojo_self_receiver_.Bind(self_proxy.InitWithNewPipeAndPassReceiver());
-  wilco_dtc_supportd_service_factory_mojo_ptr_->GetService(
+  wilco_dtc_supportd_service_factory_mojo_remote_->GetService(
       wilco_dtc_supportd_service_mojo_remote_.BindNewPipeAndPassReceiver(),
       std::move(self_proxy),
       base::BindOnce(&WilcoDtcSupportdBridge::OnMojoGetServiceCompleted,
@@ -221,19 +219,17 @@ void WilcoDtcSupportdBridge::BootstrapMojoConnection() {
 
   // Send the file descriptor with the Mojo message pipe's remote endpoint to
   // the wilco_dtc_supportd daemon via the D-Bus.
-  DBusThreadManager::Get()
-      ->GetWilcoDtcSupportdClient()
-      ->BootstrapMojoConnection(
-          std::move(remote_endpoint_fd),
-          base::BindOnce(&WilcoDtcSupportdBridge::OnBootstrappedMojoConnection,
-                         weak_ptr_factory_.GetWeakPtr()));
+  chromeos::WilcoDtcSupportdClient::Get()->BootstrapMojoConnection(
+      std::move(remote_endpoint_fd),
+      base::BindOnce(&WilcoDtcSupportdBridge::OnBootstrappedMojoConnection,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 void WilcoDtcSupportdBridge::OnBootstrappedMojoConnection(bool success) {
   if (success)
     return;
   DLOG(ERROR) << "Failed to establish Mojo connection to wilco_dtc_supportd";
-  wilco_dtc_supportd_service_factory_mojo_ptr_.reset();
+  wilco_dtc_supportd_service_factory_mojo_remote_.reset();
   wilco_dtc_supportd_service_mojo_remote_.reset();
   ScheduleWaitingForDBusService();
 }
@@ -249,7 +245,7 @@ void WilcoDtcSupportdBridge::OnMojoGetServiceCompleted() {
 void WilcoDtcSupportdBridge::OnMojoConnectionError() {
   DLOG(WARNING)
       << "Mojo connection to the wilco_dtc_supportd daemon got shut down";
-  wilco_dtc_supportd_service_factory_mojo_ptr_.reset();
+  wilco_dtc_supportd_service_factory_mojo_remote_.reset();
   wilco_dtc_supportd_service_mojo_remote_.reset();
   ScheduleWaitingForDBusService();
 }
@@ -264,7 +260,8 @@ void WilcoDtcSupportdBridge::PerformWebRequest(
   GURL gurl;
   if (url.is_valid()) {
     base::ReadOnlySharedMemoryMapping shared_memory;
-    gurl = GURL(GetStringPieceFromMojoHandle(std::move(url), &shared_memory));
+    gurl = GURL(MojoUtils::GetStringPieceFromMojoHandle(std::move(url),
+                                                        &shared_memory));
     if (!shared_memory.IsValid()) {
       LOG(ERROR) << "Failed to read data from mojo handle";
       std::move(callback).Run(
@@ -284,7 +281,7 @@ void WilcoDtcSupportdBridge::PerformWebRequest(
       continue;
     }
     shared_memories.emplace_back();
-    header_contents.push_back(GetStringPieceFromMojoHandle(
+    header_contents.push_back(MojoUtils::GetStringPieceFromMojoHandle(
         std::move(header), &shared_memories.back()));
     if (!shared_memories.back().IsValid()) {
       LOG(ERROR) << "Failed to read data from mojo handle";
@@ -300,8 +297,8 @@ void WilcoDtcSupportdBridge::PerformWebRequest(
   std::string request_body_content;
   if (request_body.is_valid()) {
     base::ReadOnlySharedMemoryMapping shared_memory;
-    request_body_content = std::string(
-        GetStringPieceFromMojoHandle(std::move(request_body), &shared_memory));
+    request_body_content = std::string(MojoUtils::GetStringPieceFromMojoHandle(
+        std::move(request_body), &shared_memory));
     if (!shared_memory.IsValid()) {
       LOG(ERROR) << "Failed to read data from mojo handle";
       std::move(callback).Run(
@@ -315,6 +312,38 @@ void WilcoDtcSupportdBridge::PerformWebRequest(
   web_request_service_.PerformRequest(
       http_method, std::move(gurl), std::move(header_contents),
       std::move(request_body_content), std::move(callback));
+}
+
+void WilcoDtcSupportdBridge::SendWilcoDtcMessageToUi(
+    mojo::ScopedHandle json_message,
+    SendWilcoDtcMessageToUiCallback callback) {
+  // Extract the string value of the received message.
+  DCHECK(json_message);
+  base::ReadOnlySharedMemoryMapping json_message_shared_memory;
+  base::StringPiece json_message_string =
+      MojoUtils::GetStringPieceFromMojoHandle(std::move(json_message),
+                                              &json_message_shared_memory);
+  if (json_message_string.empty()) {
+    LOG(ERROR) << "Failed to read data from mojo handle";
+    std::move(callback).Run(mojo::ScopedHandle() /* response_json_message */);
+    return;
+  }
+
+  DeliverWilcoDtcSupportdUiMessageToExtensions(
+      json_message_string.as_string(),
+      base::BindOnce(
+          [](SendWilcoDtcMessageToUiCallback callback,
+             const std::string& response) {
+            mojo::ScopedHandle response_mojo_handle;
+            if (!response.empty()) {
+              response_mojo_handle =
+                  MojoUtils::CreateReadOnlySharedMemoryMojoHandle(response);
+              if (!response_mojo_handle)
+                LOG(ERROR) << "Failed to create mojo handle for string";
+            }
+            std::move(callback).Run(std::move(response_mojo_handle));
+          },
+          std::move(callback)));
 }
 
 void WilcoDtcSupportdBridge::GetConfigurationData(
@@ -343,39 +372,17 @@ void WilcoDtcSupportdBridge::HandleEvent(WilcoDtcSupportdEvent event) {
     case WilcoDtcSupportdEvent::kDockThunderbolt:
       notification_controller_->ShowDockThunderboltNotification();
       return;
+    case WilcoDtcSupportdEvent::kLowPowerCharger:
+      notification_controller_->ShowLowPowerChargerNotification();
+      return;
   }
   LOG(ERROR) << "Unrecognized event " << event << " event";
 }
 
-void WilcoDtcSupportdBridge::SendWilcoDtcMessageToUi(
-    mojo::ScopedHandle json_message,
-    SendWilcoDtcMessageToUiCallback callback) {
-  // Extract the string value of the received message.
-  DCHECK(json_message);
-  base::ReadOnlySharedMemoryMapping json_message_shared_memory;
-  base::StringPiece json_message_string = GetStringPieceFromMojoHandle(
-      std::move(json_message), &json_message_shared_memory);
-  if (json_message_string.empty()) {
-    LOG(ERROR) << "Failed to read data from mojo handle";
-    std::move(callback).Run(mojo::ScopedHandle() /* response_json_message */);
-    return;
-  }
-
-  DeliverWilcoDtcSupportdUiMessageToExtensions(
-      json_message_string.as_string(),
-      base::BindOnce(
-          [](SendWilcoDtcMessageToUiCallback callback,
-             const std::string& response) {
-            mojo::ScopedHandle response_mojo_handle;
-            if (!response.empty()) {
-              response_mojo_handle =
-                  CreateReadOnlySharedMemoryMojoHandle(response);
-              if (!response_mojo_handle)
-                LOG(ERROR) << "Failed to create mojo handle for string";
-            }
-            std::move(callback).Run(std::move(response_mojo_handle));
-          },
-          std::move(callback)));
+void WilcoDtcSupportdBridge::GetCrosHealthdDiagnosticsService(
+    cros_healthd::mojom::CrosHealthdDiagnosticsServiceRequest service) {
+  cros_healthd::ServiceConnection::GetInstance()->GetDiagnosticsService(
+      std::move(service));
 }
 
 }  // namespace chromeos

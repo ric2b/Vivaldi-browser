@@ -8,10 +8,12 @@
 #include <vector>
 
 #include "ash/public/cpp/app_list/app_list_switches.h"
+#include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/ash_switches.h"
 #include "base/base_switches.h"
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/memory/weak_ptr.h"
 #include "base/process/launch.h"
 #include "base/stl_util.h"
@@ -43,6 +45,7 @@
 #include "content/public/common/content_switches.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "media/base/media_switches.h"
+#include "media/capture/capture_switches.h"
 #include "media/media_buildflags.h"
 #include "services/service_manager/sandbox/switches.h"
 #include "third_party/cros_system_api/switches/chrome_switches.h"
@@ -121,17 +124,17 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kEnableViewport,
     ::switches::kEnableZeroCopy,
     ::switches::kEnableHardwareOverlays,
-    ::switches::kExtraTouchNoiseFiltering,
     ::switches::kEdgeTouchFiltering,
+#if BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
+    ::switches::kForceDisableNewAcceleratedVideoDecoder,
+#endif  // BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
     ::switches::kHostWindowBounds,
     ::switches::kMainFrameResizesAreOrientationChanges,
     ::switches::kForceDeviceScaleFactor,
     ::switches::kForceGpuMemAvailableMb,
-    ::switches::kForceGpuRasterization,
     ::switches::kGpuRasterizationMSAASampleCount,
     ::switches::kGpuStartupDialog,
     ::switches::kGpuSandboxStartEarly,
-    ::switches::kLowPressureTouchFiltering,
     ::switches::kNumRasterThreads,
     ::switches::kPpapiFlashArgs,
     ::switches::kPpapiFlashPath,
@@ -139,7 +142,7 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kPpapiInProcess,
     ::switches::kRemoteDebuggingPort,
     ::switches::kRendererStartupDialog,
-    ::switches::kTouchCalibration,
+    ::switches::kSchedulerConfigurationDefault,
     ::switches::kTouchDevices,
     ::switches::kTouchEventFeatureDetection,
     ::switches::kTopChromeTouchUi,
@@ -156,7 +159,6 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kEnableWebGLDraftExtensions,
     ::switches::kDisableWebGLImageChromium,
     ::switches::kEnableWebGLImageChromium,
-    ::switches::kEnableWebVR,
     ::switches::kEnableUnsafeWebGPU,
     ::switches::kDisableWebRtcHWDecoding,
     ::switches::kDisableWebRtcHWEncoding,
@@ -167,6 +169,7 @@ void DeriveCommandLine(const GURL& start_url,
     ash::switches::kAshEnablePaletteOnAllDisplays,
     ash::switches::kAshTouchHud,
     ash::switches::kAuraLegacyPowerButton,
+    ash::switches::kEnableDimShelf,
     ash::switches::kShowTaps,
     ash::switches::kShowWebUiLock,
     ash::switches::kShowWebUiLogin,
@@ -194,6 +197,7 @@ void DeriveCommandLine(const GURL& start_url,
     cc::switches::kUIShowFPSCounter,
     chromeos::switches::kArcAvailability,
     chromeos::switches::kArcAvailable,
+    chromeos::switches::kArcScale,
     chromeos::switches::kDbusStub,
     chromeos::switches::kDisableArcDataWipe,
     chromeos::switches::kDisableArcOptInVerification,
@@ -221,6 +225,26 @@ void DeriveCommandLine(const GURL& start_url,
     CHECK(it.value().GetAsString(&value));
     command_line->AppendSwitchASCII(it.key(), value);
   }
+}
+
+// Adds whitelisted features to |out_command_line| if they are enabled in the
+// current session.
+void DeriveEnabledFeatures(base::CommandLine* out_command_line) {
+  static const base::Feature* kForwardEnabledFeatures[] = {
+      &ash::features::kAutoNightLight,
+  };
+
+  std::vector<std::string> enabled_features;
+  for (const auto* feature : kForwardEnabledFeatures) {
+    if (base::FeatureList::IsEnabled(*feature))
+      enabled_features.push_back(feature->name);
+  }
+
+  if (enabled_features.empty())
+    return;
+
+  out_command_line->AppendSwitchASCII("enable-features",
+                                      base::JoinString(enabled_features, ","));
 }
 
 // Simulates a session manager restart by launching give command line
@@ -336,6 +360,7 @@ void GetOffTheRecordCommandLine(const GURL& start_url,
     otr_switches.SetString(switches::kOobeGuestSession, std::string());
 
   DeriveCommandLine(start_url, base_command_line, otr_switches, command_line);
+  DeriveEnabledFeatures(command_line);
 }
 
 void RestartChrome(const base::CommandLine& command_line) {

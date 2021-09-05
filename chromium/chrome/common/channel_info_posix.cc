@@ -17,11 +17,9 @@ namespace {
 // Helper function to return both the channel enum and modifier string.
 // Implements both together to prevent their behavior from diverging, which has
 // happened multiple times in the past.
-version_info::Channel GetChannelImpl(std::string* modifier_out,
-                                     std::string* data_dir_suffix_out) {
+version_info::Channel GetChannelImpl(std::string* modifier_out) {
   version_info::Channel channel = version_info::Channel::UNKNOWN;
   std::string modifier;
-  std::string data_dir_suffix;
 
   char* env = getenv("CHROME_VERSION_EXTRA");
   if (env)
@@ -31,20 +29,13 @@ version_info::Channel GetChannelImpl(std::string* modifier_out,
   // Only ever return "", "unknown", "dev" or "beta" in a branded build.
   if (modifier == "unstable")  // linux version of "dev"
     modifier = "dev";
-  if (modifier == "stable") {
+  if (modifier == "stable" || modifier == "snapshot") {
     channel = version_info::Channel::STABLE;
     modifier = "";
   } else if (modifier == "dev") {
     channel = version_info::Channel::DEV;
-    data_dir_suffix = "-unstable";
   } else if (modifier == "beta") {
     channel = version_info::Channel::BETA;
-    data_dir_suffix = "-beta";
-#if defined(VIVALDI_BUILD)
-  } else if (modifier == "snapshot") {
-    channel = version_info::Channel::STABLE;
-    data_dir_suffix = "-snapshot";
-#endif
   } else {
     modifier = "unknown";
   }
@@ -52,8 +43,6 @@ version_info::Channel GetChannelImpl(std::string* modifier_out,
 
   if (modifier_out)
     modifier_out->swap(modifier);
-  if (data_dir_suffix_out)
-    data_dir_suffix_out->swap(data_dir_suffix);
 
   return channel;
 }
@@ -62,17 +51,33 @@ version_info::Channel GetChannelImpl(std::string* modifier_out,
 
 std::string GetChannelName() {
   std::string modifier;
-  GetChannelImpl(&modifier, nullptr);
+  GetChannelImpl(&modifier);
   return modifier;
 }
 
-#if defined(GOOGLE_CHROME_BUILD) || defined(VIVALDI_BUILD)
 std::string GetChannelSuffixForDataDir() {
-  std::string data_dir_suffix;
-  GetChannelImpl(nullptr, &data_dir_suffix);
-  return data_dir_suffix;
+  switch (GetChannel()) {
+#if defined(VIVALDI_BUILD)
+  case version_info::Channel::STABLE:
+    {
+      char* env = getenv("CHROME_VERSION_EXTRA");
+      if (env) {
+        std::string modifier = env;
+        if (modifier == "snapshot")
+          return "-snapshot";
+      }
+      return std::string();
+    }
+#endif
+    case version_info::Channel::BETA:
+      return "-beta";
+    case version_info::Channel::DEV:
+      return "-unstable";
+    default:
+      // Stable and unknown (e.g. in unbranded builds) don't get a suffix.
+      return std::string();
+  }
 }
-#endif  // defined(GOOGLE_CHROME_BUILD)
 
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
 std::string GetDesktopName(base::Environment* env) {
@@ -109,7 +114,7 @@ std::string GetDesktopName(base::Environment* env) {
 #endif  // defined(OS_LINUX) && !defined(OS_CHROMEOS)
 
 version_info::Channel GetChannel() {
-  return GetChannelImpl(nullptr, nullptr);
+  return GetChannelImpl(nullptr);
 }
 
 }  // namespace chrome

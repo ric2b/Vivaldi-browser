@@ -15,6 +15,7 @@
 #include "cc/resources/shared_bitmap_id_registrar.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "gpu/command_buffer/common/sync_token.h"
+#include "third_party/blink/public/mojom/input/focus_type.mojom-forward.h"
 #include "third_party/blink/public/web/web_document.h"
 #include "third_party/blink/public/web/web_element.h"
 #include "third_party/blink/public/web/web_local_frame.h"
@@ -43,9 +44,9 @@ struct TransferableResource;
 
 namespace test_runner {
 
-class WebTestDelegate;
+class TestInterfaces;
 
-// A fake implemention of blink::WebPlugin for testing purposes.
+// A fake implementation of blink::WebPlugin for testing purposes.
 //
 // It uses GL to paint a scene consisiting of a primitive over a background. The
 // primitive and background can be customized using the following plugin
@@ -60,7 +61,7 @@ class WebTestDelegate;
 class TestPlugin : public blink::WebPlugin, public cc::TextureLayerClient {
  public:
   static TestPlugin* Create(const blink::WebPluginParams& params,
-                            WebTestDelegate* delegate,
+                            TestInterfaces* test_interfaces,
                             blink::WebLocalFrame* frame);
   ~TestPlugin() override;
 
@@ -75,24 +76,22 @@ class TestPlugin : public blink::WebPlugin, public cc::TextureLayerClient {
   blink::WebPluginContainer* Container() const override;
   bool CanProcessDrag() const override;
   bool SupportsKeyboardFocus() const override;
-  void UpdateAllLifecyclePhases(
-      blink::WebWidget::LifecycleUpdateReason) override {}
+  void UpdateAllLifecyclePhases(blink::DocumentUpdateReason) override {}
   void Paint(cc::PaintCanvas* canvas, const blink::WebRect& rect) override {}
   void UpdateGeometry(const blink::WebRect& window_rect,
                       const blink::WebRect& clip_rect,
                       const blink::WebRect& unobscured_rect,
                       bool is_visible) override;
-  void UpdateFocus(bool focus, blink::WebFocusType focus_type) override {}
+  void UpdateFocus(bool focus, blink::mojom::FocusType focus_type) override {}
   void UpdateVisibility(bool visibility) override {}
   blink::WebInputEventResult HandleInputEvent(
       const blink::WebCoalescedInputEvent& event,
-      blink::WebCursorInfo& info) override;
-  bool HandleDragStatusUpdate(
-      blink::WebDragStatus drag_status,
-      const blink::WebDragData& data,
-      blink::WebDragOperationsMask mask,
-      const blink::WebFloatPoint& position,
-      const blink::WebFloatPoint& screen_position) override;
+      ui::Cursor* cursor) override;
+  bool HandleDragStatusUpdate(blink::WebDragStatus drag_status,
+                              const blink::WebDragData& data,
+                              blink::WebDragOperationsMask mask,
+                              const gfx::PointF& position,
+                              const gfx::PointF& screen_position) override;
   void DidReceiveResponse(const blink::WebURLResponse& response) override {}
   void DidReceiveData(const char* data, size_t data_length) override {}
   void DidFinishLoading() override {}
@@ -107,7 +106,7 @@ class TestPlugin : public blink::WebPlugin, public cc::TextureLayerClient {
 
  private:
   TestPlugin(const blink::WebPluginParams& params,
-             WebTestDelegate* delegate,
+             TestInterfaces* test_interfaces,
              blink::WebLocalFrame* frame);
 
   enum Primitive { PrimitiveNone, PrimitiveTriangle };
@@ -169,7 +168,7 @@ class TestPlugin : public blink::WebPlugin, public cc::TextureLayerClient {
       const gpu::SyncToken& sync_token,
       bool lost);
 
-  WebTestDelegate* delegate_;
+  TestInterfaces* test_interfaces_;
   blink::WebPluginContainer* container_;
   blink::WebLocalFrame* web_local_frame_;
 

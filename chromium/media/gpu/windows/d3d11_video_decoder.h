@@ -23,6 +23,7 @@
 #include "media/gpu/command_buffer_helper.h"
 #include "media/gpu/media_gpu_export.h"
 #include "media/gpu/windows/d3d11_com_defs.h"
+#include "media/gpu/windows/d3d11_decoder_configurator.h"
 #include "media/gpu/windows/d3d11_h264_accelerator.h"
 #include "media/gpu/windows/d3d11_texture_selector.h"
 #include "media/gpu/windows/d3d11_video_decoder_client.h"
@@ -80,11 +81,13 @@ class MEDIA_GPU_EXPORT D3D11VideoDecoder : public VideoDecoder,
 
   // D3D11VideoDecoderClient implementation.
   D3D11PictureBuffer* GetPicture() override;
-  void OutputResult(const CodecPicture* picture,
+  bool OutputResult(const CodecPicture* picture,
                     D3D11PictureBuffer* picture_buffer) override;
 
-  static bool GetD3D11FeatureLevel(ComD3D11Device dev,
-                                   D3D_FEATURE_LEVEL* feature_level);
+  static bool GetD3D11FeatureLevel(
+      ComD3D11Device dev,
+      const gpu::GpuDriverBugWorkarounds& gpu_workarounds,
+      D3D_FEATURE_LEVEL* feature_level);
 
   // Return the set of video decoder configs that we support.
   static std::vector<SupportedVideoDecoderConfig>
@@ -159,10 +162,13 @@ class MEDIA_GPU_EXPORT D3D11VideoDecoder : public VideoDecoder,
     // Call to get the D3D11 device failed.
     kCouldNotGetD3D11Device = 7,
 
+    // GPU workarounds has turned this off.
+    kOffByWorkaround = 8,
+
     // For UMA. Must be the last entry. It should be initialized to the
     // numerically largest value above; if you add more entries, then please
     // update this to the last one.
-    kMaxValue = kCouldNotGetD3D11Device
+    kMaxValue = kOffByWorkaround
   };
 
   enum class D3D11LifetimeProgression {
@@ -249,6 +255,8 @@ class MEDIA_GPU_EXPORT D3D11VideoDecoder : public VideoDecoder,
 
   std::unique_ptr<AcceleratedVideoDecoder> accelerated_video_decoder_;
 
+  std::unique_ptr<D3D11DecoderConfigurator> decoder_configurator_;
+
   std::unique_ptr<TextureSelector> texture_selector_;
 
   std::list<std::pair<scoped_refptr<DecoderBuffer>, DecodeCB>>
@@ -269,6 +277,9 @@ class MEDIA_GPU_EXPORT D3D11VideoDecoder : public VideoDecoder,
   std::vector<scoped_refptr<D3D11PictureBuffer>> picture_buffers_;
 
   State state_ = State::kInitializing;
+
+  // Profile of the video being decoded.
+  VideoCodecProfile profile_ = VIDEO_CODEC_PROFILE_UNKNOWN;
 
   // Callback to get a command buffer helper.  Must be called from the gpu
   // main thread only.

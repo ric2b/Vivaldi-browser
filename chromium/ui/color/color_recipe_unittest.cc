@@ -7,7 +7,8 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/color/color_mixer.h"
 #include "ui/color/color_set.h"
-#include "ui/color/color_unittest_utils.h"
+#include "ui/color/color_test_ids.h"
+#include "ui/color/color_transform.h"
 #include "ui/gfx/color_palette.h"
 
 namespace ui {
@@ -28,8 +29,7 @@ TEST(ColorRecipeTest, EmptyRecipeIsPassthrough) {
 // Tests that a transform in a recipe has an effect.
 TEST(ColorRecipeTest, OneTransform) {
   constexpr SkColor kOutput = SK_ColorGREEN;
-  ColorRecipe recipe;
-  recipe.AddTransform(FromColor(kOutput));
+  ColorRecipe recipe = {kOutput};
   const auto verify_transform = [&](SkColor input) {
     EXPECT_EQ(kOutput, recipe.GenerateResult(input, ColorMixer()));
   };
@@ -40,9 +40,8 @@ TEST(ColorRecipeTest, OneTransform) {
 
 // Tests that in a recipe with multiple transforms, each is applied.
 TEST(ColorRecipeTest, ChainedTransforms) {
-  ColorRecipe recipe;
-  recipe.AddTransform(DeriveDefaultIconColor())
-      .AddTransform(BlendForMinContrast(kColorTest0));
+  ColorRecipe recipe = DeriveDefaultIconColor(FromTransformInput()) +
+                       BlendForMinContrast(FromTransformInput(), kColorTest0);
   constexpr SkColor kBackground = SK_ColorWHITE;
   ColorMixer mixer;
   mixer.AddSet({kColorSetTest0, {{kColorTest0, kBackground}}});

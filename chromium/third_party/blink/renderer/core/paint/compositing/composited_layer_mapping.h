@@ -98,15 +98,7 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
       const PaintLayer* compositing_container);
   void UpdateGraphicsLayerGeometry(
       const PaintLayer* compositing_container,
-      const PaintLayer* compositing_stacking_context,
-      Vector<PaintLayer*>& layers_needing_paint_invalidation,
-      GraphicsLayerUpdater::UpdateContext& update_context);
-
-  // Update whether background paints onto scrolling contents layer.
-  // Returns (through the reference params) what invalidations are needed.
-  void UpdateBackgroundPaintsOntoScrollingContentsLayer(
-      bool& invalidate_graphics_layer,
-      bool& invalidate_scrolling_contents_layer);
+      Vector<PaintLayer*>& layers_needing_paint_invalidation);
 
   // Update whether layer needs blending.
   void UpdateContentsOpaque();
@@ -171,7 +163,6 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
   void UpdateElementId();
 
   // GraphicsLayerClient interface
-  void InvalidateTargetElementForTesting() override;
   IntRect ComputeInterestRect(
       const GraphicsLayer*,
       const IntRect& previous_interest_rect) const override;
@@ -184,7 +175,6 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
   bool ShouldThrottleRendering() const override;
   bool IsUnderSVGHiddenContainer() const override;
   bool IsTrackingRasterInvalidations() const override;
-  void SetOverlayScrollbarsHidden(bool) override;
   void GraphicsLayersDidChange() override;
   bool PaintBlockedByDisplayLockIncludingAncestors(
       DisplayLockContextLifecycleTarget) const override;
@@ -261,27 +251,29 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
   bool AdjustForCompositedScrolling(const GraphicsLayer*,
                                     IntSize& offset) const;
 
+  bool DrawsBackgroundOntoContentLayer() const {
+    return draws_background_onto_content_layer_;
+  }
+
+ private:
   // Returns true for layers with scrollable overflow which have a background
   // that can be painted into the composited scrolling contents layer (i.e.
   // the background can scroll with the content). When the background is also
   // opaque this allows us to composite the scroller even on low DPI as we can
   // draw with subpixel anti-aliasing.
   bool BackgroundPaintsOntoScrollingContentsLayer() const {
-    return background_paints_onto_scrolling_contents_layer_;
+    return GetLayoutObject().GetBackgroundPaintLocation() &
+           kBackgroundPaintInScrollingContents;
   }
 
   // Returns true if the background paints onto the main graphics layer.
   // In some situations, we may paint background on both the main graphics layer
   // and the scrolling contents layer.
   bool BackgroundPaintsOntoGraphicsLayer() const {
-    return background_paints_onto_graphics_layer_;
+    return GetLayoutObject().GetBackgroundPaintLocation() &
+           kBackgroundPaintInGraphicsLayer;
   }
 
-  bool DrawsBackgroundOntoContentLayer() const {
-    return draws_background_onto_content_layer_;
-  }
-
- private:
   IntRect RecomputeInterestRect(const GraphicsLayer*) const;
   static bool InterestRectChangedEnoughToRepaint(
       const IntRect& previous_interest_rect,
@@ -302,34 +294,30 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
   // associated with this mapping.
   bool IsScrollableAreaLayer(const GraphicsLayer*) const;
 
+  // Returns whether the given layer is a repaint needed part of the scrollable
+  // area, if any, associated with this mapping.
+  bool IsScrollableAreaLayerWhichNeedsRepaint(const GraphicsLayer*) const;
+
   // Helper methods to updateGraphicsLayerGeometry:
   void ComputeGraphicsLayerParentLocation(
       const PaintLayer* compositing_container,
       IntPoint& graphics_layer_parent_location);
   void UpdateSquashingLayerGeometry(
-      const IntPoint& graphics_layer_parent_location,
       const PaintLayer* compositing_container,
       const IntPoint& snapped_offset_from_composited_ancestor,
       Vector<GraphicsLayerPaintInfo>& layers,
       Vector<PaintLayer*>& layers_needing_paint_invalidation);
-  void UpdateMainGraphicsLayerGeometry(
-      const IntRect& relative_compositing_bounds,
-      const IntRect& local_compositing_bounds,
-      const IntPoint& graphics_layer_parent_location,
-      GraphicsLayerUpdater::UpdateContext& update_context);
+  void UpdateMainGraphicsLayerGeometry(const IntRect& local_compositing_bounds);
   void UpdateOverflowControlsHostLayerGeometry(
-      const PaintLayer* compositing_stacking_context,
-      const PaintLayer* compositing_container,
-      IntPoint graphics_layer_parent_location);
+      const PaintLayer* compositing_container);
   void UpdateChildTransformLayerGeometry();
   void UpdateMaskLayerGeometry();
   void UpdateForegroundLayerGeometry();
   void UpdateDecorationOutlineLayerGeometry(
       const IntSize& relative_compositing_bounds_size);
-  void UpdateScrollingLayerGeometry(const IntRect& local_compositing_bounds);
+  void UpdateScrollingLayerGeometry();
 
   void CreatePrimaryGraphicsLayer();
-  void DestroyGraphicsLayers();
 
   std::unique_ptr<GraphicsLayer> CreateGraphicsLayer(
       CompositingReasons,
@@ -365,8 +353,6 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
   void ComputeBoundsOfOwningLayer(
       const PaintLayer* composited_ancestor,
       IntRect& local_compositing_bounds,
-      IntRect& compositing_bounds_relative_to_composited_ancestor,
-      PhysicalOffset& offset_from_composited_ancestor,
       IntPoint& snapped_offset_from_composited_ancestor);
 
   GraphicsLayerPaintingPhase PaintingPhaseForPrimaryLayer() const;
@@ -389,7 +375,6 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
   Color LayoutObjectBackgroundColor() const;
   void UpdateBackgroundColor();
   void UpdateContentsRect();
-  void UpdateAfterPartResize();
   void UpdateCompositingReasons();
 
   static bool HasVisibleNonCompositingDescendant(PaintLayer* parent);
@@ -413,9 +398,6 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
   // Clear the groupedMapping entry on the layer at the given index, only if
   // that layer does not appear earlier in the set of layers for this object.
   bool InvalidateLayerIfNoPrecedingEntry(wtf_size_t);
-
-  // Main GraphicsLayer of the CLM for the iframe's content document.
-  GraphicsLayer* FrameContentsGraphicsLayer() const;
 
   PaintLayer& owning_layer_;
 
@@ -495,18 +477,8 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
   PhysicalRect composited_bounds_;
 
   unsigned pending_update_scope_ : 2;
-  unsigned is_main_frame_layout_view_layer_ : 1;
 
   unsigned scrolling_contents_are_empty_ : 1;
-
-  // Keep track of whether the background is painted onto the scrolling contents
-  // layer for invalidations.
-  unsigned background_paints_onto_scrolling_contents_layer_ : 1;
-
-  // Solid color border boxes may be painted into both the scrolling contents
-  // layer and the graphics layer because the scrolling contents layer is
-  // clipped by the padding box.
-  unsigned background_paints_onto_graphics_layer_ : 1;
 
   bool draws_background_onto_content_layer_;
 

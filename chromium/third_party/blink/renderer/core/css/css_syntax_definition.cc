@@ -42,9 +42,7 @@ bool CouldConsumeReservedKeyword(CSSParserTokenRange range) {
 
 const CSSValue* ConsumeSingleType(const CSSSyntaxComponent& syntax,
                                   CSSParserTokenRange& range,
-                                  const CSSParserContext* context) {
-  using namespace css_property_parser_helpers;
-
+                                  const CSSParserContext& context) {
   switch (syntax.GetType()) {
     case CSSSyntaxType::kIdent:
       if (range.Peek().GetType() == kIdentToken &&
@@ -54,40 +52,54 @@ const CSSValue* ConsumeSingleType(const CSSSyntaxComponent& syntax,
             AtomicString(syntax.GetString()));
       }
       return nullptr;
-    case CSSSyntaxType::kLength:
-      return ConsumeLength(range, kHTMLStandardMode,
-                           ValueRange::kValueRangeAll);
+    case CSSSyntaxType::kLength: {
+      CSSParserContext::ParserModeOverridingScope scope(context,
+                                                        kHTMLStandardMode);
+      return css_property_parser_helpers::ConsumeLength(
+          range, context, ValueRange::kValueRangeAll);
+    }
     case CSSSyntaxType::kNumber:
-      return ConsumeNumber(range, ValueRange::kValueRangeAll);
+      return css_property_parser_helpers::ConsumeNumber(
+          range, context, ValueRange::kValueRangeAll);
     case CSSSyntaxType::kPercentage:
-      return ConsumePercent(range, ValueRange::kValueRangeAll);
-    case CSSSyntaxType::kLengthPercentage:
-      return ConsumeLengthOrPercent(range, kHTMLStandardMode,
-                                    ValueRange::kValueRangeAll);
-    case CSSSyntaxType::kColor:
-      return ConsumeColor(range, kHTMLStandardMode);
+      return css_property_parser_helpers::ConsumePercent(
+          range, context, ValueRange::kValueRangeAll);
+    case CSSSyntaxType::kLengthPercentage: {
+      CSSParserContext::ParserModeOverridingScope scope(context,
+                                                        kHTMLStandardMode);
+      return css_property_parser_helpers::ConsumeLengthOrPercent(
+          range, context, ValueRange::kValueRangeAll);
+    }
+    case CSSSyntaxType::kColor: {
+      CSSParserContext::ParserModeOverridingScope scope(context,
+                                                        kHTMLStandardMode);
+      return css_property_parser_helpers::ConsumeColor(range, context);
+    }
     case CSSSyntaxType::kImage:
-      return ConsumeImage(range, context);
+      return css_property_parser_helpers::ConsumeImage(range, context);
     case CSSSyntaxType::kUrl:
-      return ConsumeUrl(range, context);
+      return css_property_parser_helpers::ConsumeUrl(range, context);
     case CSSSyntaxType::kInteger:
-      return ConsumeIntegerOrNumberCalc(range);
+      return css_property_parser_helpers::ConsumeIntegerOrNumberCalc(range,
+                                                                     context);
     case CSSSyntaxType::kAngle:
-      return ConsumeAngle(range, context, base::Optional<WebFeature>());
+      return css_property_parser_helpers::ConsumeAngle(
+          range, context, base::Optional<WebFeature>());
     case CSSSyntaxType::kTime:
-      return ConsumeTime(range, ValueRange::kValueRangeAll);
+      return css_property_parser_helpers::ConsumeTime(
+          range, context, ValueRange::kValueRangeAll);
     case CSSSyntaxType::kResolution:
-      return ConsumeResolution(range);
+      return css_property_parser_helpers::ConsumeResolution(range);
     case CSSSyntaxType::kTransformFunction:
-      return ConsumeTransformValue(range, *context);
+      return css_property_parser_helpers::ConsumeTransformValue(range, context);
     case CSSSyntaxType::kTransformList:
-      return ConsumeTransformList(range, *context);
+      return css_property_parser_helpers::ConsumeTransformList(range, context);
     case CSSSyntaxType::kCustomIdent:
       // TODO(crbug.com/579788): Implement 'revert'.
       // TODO(crbug.com/882285): Make 'default' invalid as <custom-ident>.
       if (IsReservedIdentToken(range.Peek()))
         return nullptr;
-      return ConsumeCustomIdent(range, *context);
+      return css_property_parser_helpers::ConsumeCustomIdent(range, context);
     default:
       NOTREACHED();
       return nullptr;
@@ -96,7 +108,7 @@ const CSSValue* ConsumeSingleType(const CSSSyntaxComponent& syntax,
 
 const CSSValue* ConsumeSyntaxComponent(const CSSSyntaxComponent& syntax,
                                        CSSParserTokenRange range,
-                                       const CSSParserContext* context) {
+                                       const CSSParserContext& context) {
   // CSS-wide keywords are already handled by the CSSPropertyParser
   if (syntax.GetRepeat() == CSSSyntaxRepeat::kSpaceSeparated) {
     CSSValueList* list = CSSValueList::CreateSpaceSeparated();
@@ -128,7 +140,7 @@ const CSSValue* ConsumeSyntaxComponent(const CSSSyntaxComponent& syntax,
 }  // namespace
 
 const CSSValue* CSSSyntaxDefinition::Parse(CSSParserTokenRange range,
-                                           const CSSParserContext* context,
+                                           const CSSParserContext& context,
                                            bool is_animation_tainted) const {
   if (IsTokenStream()) {
     // TODO(crbug.com/579788): Implement 'revert'.
@@ -136,7 +148,7 @@ const CSSValue* CSSSyntaxDefinition::Parse(CSSParserTokenRange range,
     if (CouldConsumeReservedKeyword(range))
       return nullptr;
     return CSSVariableParser::ParseRegisteredPropertyValue(
-        range, *context, false, is_animation_tainted);
+        range, context, false, is_animation_tainted);
   }
   range.ConsumeWhitespace();
   for (const CSSSyntaxComponent& component : syntax_components_) {
@@ -144,7 +156,7 @@ const CSSValue* CSSSyntaxDefinition::Parse(CSSParserTokenRange range,
             ConsumeSyntaxComponent(component, range, context))
       return result;
   }
-  return CSSVariableParser::ParseRegisteredPropertyValue(range, *context, true,
+  return CSSVariableParser::ParseRegisteredPropertyValue(range, context, true,
                                                          is_animation_tainted);
 }
 

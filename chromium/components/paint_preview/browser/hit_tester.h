@@ -7,7 +7,6 @@
 
 #include <vector>
 
-#include "base/macros.h"
 #include "cc/base/rtree.h"
 #include "components/paint_preview/common/proto/paint_preview.pb.h"
 #include "ui/gfx/geometry/rect.h"
@@ -27,6 +26,9 @@ class HitTester {
   HitTester();
   ~HitTester();
 
+  HitTester(const HitTester&) = delete;
+  HitTester& operator=(const HitTester&) = delete;
+
   // Builds a R-Tree from the underlying data.
   void Build(const PaintPreviewFrameProto& proto);
   void Build(const std::vector<LinkData>& links);
@@ -44,8 +46,6 @@ class HitTester {
 
  private:
   cc::RTree<GURL> rtree_;
-
-  DISALLOW_COPY_AND_ASSIGN(HitTester);
 };
 
 }  // namespace paint_preview

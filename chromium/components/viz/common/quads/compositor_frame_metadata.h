@@ -17,8 +17,10 @@
 #include "components/viz/common/surfaces/surface_range.h"
 #include "components/viz/common/viz_common_export.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/gfx/display_color_spaces.h"
 #include "ui/gfx/geometry/size_f.h"
 #include "ui/gfx/geometry/vector2d_f.h"
+#include "ui/gfx/overlay_transform.h"
 #include "ui/latency/latency_info.h"
 
 #if defined(OS_ANDROID)
@@ -70,6 +72,8 @@ class VIZ_COMMON_EXPORT CompositorFrameMetadata {
   float page_scale_factor = 0.f;
 
   gfx::SizeF scrollable_viewport_size;
+
+  gfx::ContentColorUsage content_color_usage = gfx::ContentColorUsage::kSRGB;
 
   bool may_contain_video = false;
 
@@ -133,16 +137,20 @@ class VIZ_COMMON_EXPORT CompositorFrameMetadata {
   // determine if scrolling/scaling in a particular direction is possible.
   float min_page_scale_factor = 0.f;
 
-  // Used to position the location top bar and page content, whose precise
-  // position is computed by the renderer compositor.
-  float top_controls_height = 0.f;
-  float top_controls_shown_ratio = 0.f;
+  // The visible height of the top-controls. If the value is not set, then the
+  // visible height should be the same as in the latest submitted frame with a
+  // value set.
+  base::Optional<float> top_controls_visible_height;
 
   // The time at which the LocalSurfaceId used to submit this CompositorFrame
   // was allocated.
   base::TimeTicks local_surface_id_allocation_time;
 
   base::Optional<base::TimeDelta> preferred_frame_interval;
+
+  // Display transform hint when the frame is generated. Note this is only
+  // applicable to frames of the root surface.
+  gfx::OverlayTransform display_transform_hint = gfx::OVERLAY_TRANSFORM_NONE;
 
  private:
   CompositorFrameMetadata(const CompositorFrameMetadata& other);

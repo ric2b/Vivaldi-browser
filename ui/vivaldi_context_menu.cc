@@ -1,6 +1,8 @@
 #include "ui/vivaldi_context_menu.h"
 
 #include "browser/vivaldi_browser_finder.h"
+#include "chrome/browser/ui/browser_finder.h"
+#include "content/public/browser/render_widget_host_view.h"
 
 namespace vivaldi {
 
@@ -19,16 +21,8 @@ views::Widget* VivaldiMenu::GetTopLevelWidgetFromWebContents(
       GetActiveNativeViewFromWebContents(web_contents));
 }
 
-// static
-Browser* VivaldiMenu::GetBrowserFromWebContents(
-    content::WebContents* web_contents) {
-  views::Widget* widget = GetTopLevelWidgetFromWebContents(web_contents);
-  return widget ? chrome::FindBrowserWithWindow(widget->GetNativeWindow())
-                : nullptr;
-}
-
 BookmarkMenuContainer::BookmarkMenuContainer(Delegate* a_delegate)
-  :delegate(a_delegate) {}
+  :edge(Below), delegate(a_delegate) {}
 BookmarkMenuContainer::~BookmarkMenuContainer() {}
 MenubarMenuParams::MenubarMenuParams(Delegate* a_delegate)
   :delegate(a_delegate) {}

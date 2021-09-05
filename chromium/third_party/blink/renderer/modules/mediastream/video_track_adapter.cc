@@ -23,7 +23,7 @@
 #include "media/base/limits.h"
 #include "media/base/video_util.h"
 #include "third_party/blink/public/platform/platform.h"
-#include "third_party/blink/public/web/modules/mediastream/video_track_adapter_settings.h"
+#include "third_party/blink/renderer/modules/mediastream/video_track_adapter_settings.h"
 #include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
 #include "third_party/blink/renderer/platform/wtf/thread_safe_ref_counted.h"
 
@@ -133,6 +133,7 @@ class VideoTrackAdapter::VideoFrameResolutionAdapter
  public:
   struct VideoTrackCallbacks {
     VideoCaptureDeliverFrameInternalCallback frame_callback;
+    DeliverEncodedVideoFrameInternalCallback encoded_frame_callback;
     VideoTrackSettingsInternalCallback settings_callback;
     VideoTrackFormatInternalCallback format_callback;
   };
@@ -143,13 +144,16 @@ class VideoTrackAdapter::VideoFrameResolutionAdapter
       const VideoTrackAdapterSettings& settings,
       base::WeakPtr<MediaStreamVideoSource> media_stream_video_source);
 
-  // Add |frame_callback| to receive video frames on the IO-thread and
-  // |settings_callback| to set track settings on the main thread.
-  // |frame_callback| will however be released on the main render thread.
-  void AddCallbacks(const MediaStreamVideoTrack* track,
-                    VideoCaptureDeliverFrameInternalCallback frame_callback,
-                    VideoTrackSettingsInternalCallback settings_callback,
-                    VideoTrackFormatInternalCallback format_callback);
+  // Add |frame_callback|, |encoded_frame_callback| to receive video frames on
+  // the IO-thread and |settings_callback| to set track settings on the main
+  // thread. |frame_callback| will however be released on the main render
+  // thread.
+  void AddCallbacks(
+      const MediaStreamVideoTrack* track,
+      VideoCaptureDeliverFrameInternalCallback frame_callback,
+      DeliverEncodedVideoFrameInternalCallback encoded_frame_callback,
+      VideoTrackSettingsInternalCallback settings_callback,
+      VideoTrackFormatInternalCallback format_callback);
 
   // Removes the callbacks associated with |track| if |track| has been added. It
   // is ok to call RemoveCallbacks() even if |track| has not been added.
@@ -164,6 +168,9 @@ class VideoTrackAdapter::VideoFrameResolutionAdapter
   void DeliverFrame(scoped_refptr<media::VideoFrame> frame,
                     const base::TimeTicks& estimated_capture_time,
                     bool is_device_rotated);
+
+  void DeliverEncodedVideoFrame(scoped_refptr<EncodedVideoFrame> frame,
+                                base::TimeTicks estimated_capture_time);
 
   // Returns true if all arguments match with the output of this adapter.
   bool SettingsMatch(const VideoTrackAdapterSettings& settings) const;
@@ -253,13 +260,14 @@ VideoTrackAdapter::VideoFrameResolutionAdapter::~VideoFrameResolutionAdapter() {
 void VideoTrackAdapter::VideoFrameResolutionAdapter::AddCallbacks(
     const MediaStreamVideoTrack* track,
     VideoCaptureDeliverFrameInternalCallback frame_callback,
+    DeliverEncodedVideoFrameInternalCallback encoded_frame_callback,
     VideoTrackSettingsInternalCallback settings_callback,
     VideoTrackFormatInternalCallback format_callback) {
   DCHECK_CALLED_ON_VALID_THREAD(io_thread_checker_);
 
-  VideoTrackCallbacks track_callbacks = {std::move(frame_callback),
-                                         std::move(settings_callback),
-                                         std::move(format_callback)};
+  VideoTrackCallbacks track_callbacks = {
+      std::move(frame_callback), std::move(encoded_frame_callback),
+      std::move(settings_callback), std::move(format_callback)};
   callbacks_.emplace(track, std::move(track_callbacks));
 }
 
@@ -334,8 +342,16 @@ void VideoTrackAdapter::VideoFrameResolutionAdapter::DeliverFrame(
     // |desired_size| that fits entirely inside of |frame->visible_rect()|.
     // This will be the rect we need to crop the original frame to.
     // From this rect, the original frame can be scaled down to |desired_size|.
-    const gfx::Rect region_in_frame =
+    gfx::Rect region_in_frame =
         media::ComputeLetterboxRegion(frame->visible_rect(), desired_size);
+
+    if (frame->HasTextures() || frame->HasGpuMemoryBuffer()) {
+      // ComputeLetterboxRegion() produces in some cases odd dimensions due to
+      // internal rounding errors; |region_in_frame| is always smaller or equal
+      // to frame->visible_rect(), we can "grow it" if the dimensions are odd.
+      region_in_frame.set_width((region_in_frame.width() + 1) & ~1);
+      region_in_frame.set_height((region_in_frame.height() + 1) & ~1);
+    }
 
     video_frame = media::VideoFrame::WrapVideoFrame(
         frame, frame->format(), region_in_frame, desired_size);
@@ -353,6 +369,15 @@ void VideoTrackAdapter::VideoFrameResolutionAdapter::DeliverFrame(
              << video_frame->visible_rect().ToString();
   }
   DoDeliverFrame(std::move(video_frame), estimated_capture_time);
+}
+
+void VideoTrackAdapter::VideoFrameResolutionAdapter::DeliverEncodedVideoFrame(
+    scoped_refptr<EncodedVideoFrame> frame,
+    base::TimeTicks estimated_capture_time) {
+  DCHECK_CALLED_ON_VALID_THREAD(io_thread_checker_);
+  for (const auto& callback : callbacks_) {
+    callback.second.encoded_frame_callback.Run(frame, estimated_capture_time);
+  }
 }
 
 bool VideoTrackAdapter::VideoFrameResolutionAdapter::SettingsMatch(
@@ -506,6 +531,7 @@ VideoTrackAdapter::~VideoTrackAdapter() {
 
 void VideoTrackAdapter::AddTrack(const MediaStreamVideoTrack* track,
                                  VideoCaptureDeliverFrameCB frame_callback,
+                                 EncodedVideoFrameCB encoded_frame_callback,
                                  VideoTrackSettingsCallback settings_callback,
                                  VideoTrackFormatCallback format_callback,
                                  const VideoTrackAdapterSettings& settings) {
@@ -517,6 +543,8 @@ void VideoTrackAdapter::AddTrack(const MediaStreamVideoTrack* track,
           &VideoTrackAdapter::AddTrackOnIO, WTF::CrossThreadUnretained(this),
           WTF::CrossThreadUnretained(track),
           WTF::Passed(CrossThreadBindRepeating(std::move(frame_callback))),
+          WTF::Passed(
+              CrossThreadBindRepeating(std::move(encoded_frame_callback))),
           WTF::Passed(CrossThreadBindRepeating(std::move(settings_callback))),
           WTF::Passed(CrossThreadBindRepeating(std::move(format_callback))),
           settings));
@@ -525,6 +553,7 @@ void VideoTrackAdapter::AddTrack(const MediaStreamVideoTrack* track,
 void VideoTrackAdapter::AddTrackOnIO(
     const MediaStreamVideoTrack* track,
     VideoCaptureDeliverFrameInternalCallback frame_callback,
+    DeliverEncodedVideoFrameInternalCallback encoded_frame_callback,
     VideoTrackSettingsInternalCallback settings_callback,
     VideoTrackFormatInternalCallback format_callback,
     const VideoTrackAdapterSettings& settings) {
@@ -542,9 +571,9 @@ void VideoTrackAdapter::AddTrackOnIO(
     adapters_.push_back(adapter);
   }
 
-  adapter->AddCallbacks(track, std::move(frame_callback),
-                        std::move(settings_callback),
-                        std::move(format_callback));
+  adapter->AddCallbacks(
+      track, std::move(frame_callback), std::move(encoded_frame_callback),
+      std::move(settings_callback), std::move(format_callback));
 }
 
 void VideoTrackAdapter::RemoveTrack(const MediaStreamVideoTrack* track) {
@@ -727,6 +756,7 @@ void VideoTrackAdapter::ReconfigureTrackOnIO(
   // If the track was found, re-add it with new settings.
   if (track_callbacks.frame_callback) {
     AddTrackOnIO(track, std::move(track_callbacks.frame_callback),
+                 std::move(track_callbacks.encoded_frame_callback),
                  std::move(track_callbacks.settings_callback),
                  std::move(track_callbacks.format_callback), settings);
   }
@@ -757,6 +787,15 @@ void VideoTrackAdapter::DeliverFrameOnIO(
   }
   for (const auto& adapter : adapters_)
     adapter->DeliverFrame(frame, estimated_capture_time, is_device_rotated);
+}
+
+void VideoTrackAdapter::DeliverEncodedVideoFrameOnIO(
+    scoped_refptr<EncodedVideoFrame> frame,
+    base::TimeTicks estimated_capture_time) {
+  DCHECK(io_task_runner_->BelongsToCurrentThread());
+  TRACE_EVENT0("media", "VideoTrackAdapter::DeliverEncodedVideoFrameOnIO");
+  for (const auto& adapter : adapters_)
+    adapter->DeliverEncodedVideoFrame(frame, estimated_capture_time);
 }
 
 void VideoTrackAdapter::CheckFramesReceivedOnIO(

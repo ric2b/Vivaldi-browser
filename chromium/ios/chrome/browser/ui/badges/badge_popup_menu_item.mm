@@ -7,8 +7,10 @@
 #import "base/logging.h"
 #import "ios/chrome/browser/ui/list_model/list_model.h"
 #import "ios/chrome/browser/ui/table_view/chrome_table_view_styler.h"
-#import "ios/chrome/common/colors/semantic_color_names.h"
-#import "ios/chrome/common/ui_util/constraints_ui_util.h"
+#import "ios/chrome/common/ui/colors/semantic_color_names.h"
+#import "ios/chrome/common/ui/util/constraints_ui_util.h"
+#include "ios/chrome/grit/ios_strings.h"
+#include "ui/base/l10n/l10n_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -49,11 +51,22 @@ const CGFloat kBadgeCornerRadius = 5.0;
     switch (badgeType) {
       case BadgeType::kBadgeTypePasswordSave:
         _actionIdentifier = PopupMenuActionShowSavePasswordOptions;
-        _title = @"Save Password";
+        _title = l10n_util::GetNSString(
+            IDS_IOS_PASSWORD_MANAGER_SAVE_PASSWORD_TITLE);
         break;
       case BadgeType::kBadgeTypePasswordUpdate:
         _actionIdentifier = PopupMenuActionShowUpdatePasswordOptions;
-        _title = @"Update Password";
+        _title = l10n_util::GetNSString(
+            IDS_IOS_PASSWORD_MANAGER_UPDATE_PASSWORD_TITLE);
+        break;
+      case BadgeType::kBadgeTypeSaveCard:
+        _actionIdentifier = PopupMenuActionShowSaveCardOptions;
+        _title = l10n_util::GetNSString(IDS_IOS_AUTOFILL_SAVE_CARD);
+        break;
+      case BadgeType::kBadgeTypeTranslate:
+        _actionIdentifier = PopupMenuActionShowTranslateOptions;
+        // TODO(crbug.com/1014959): use l10n to translate string.
+        _title = @"Translate Page";
         break;
       case BadgeType::kBadgeTypeIncognito:
         NOTREACHED() << "A BadgePopupMenuItem should not be an Incognito badge";
@@ -79,6 +92,14 @@ const CGFloat kBadgeCornerRadius = 5.0;
     case BadgeType::kBadgeTypePasswordSave:
     case BadgeType::kBadgeTypePasswordUpdate:
       badgeImage = [[UIImage imageNamed:@"infobar_passwords_icon"]
+          imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+      break;
+    case BadgeType::kBadgeTypeSaveCard:
+      badgeImage = [[UIImage imageNamed:@"infobar_save_card_icon"]
+          imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+      break;
+    case BadgeType::kBadgeTypeTranslate:
+      badgeImage = [[UIImage imageNamed:@"infobar_translate_icon"]
           imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
       break;
     case BadgeType::kBadgeTypeIncognito:

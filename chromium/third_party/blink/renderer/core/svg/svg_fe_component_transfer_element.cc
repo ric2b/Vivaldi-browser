@@ -39,7 +39,7 @@ SVGFEComponentTransferElement::SVGFEComponentTransferElement(Document& document)
   AddToPropertyMap(in1_);
 }
 
-void SVGFEComponentTransferElement::Trace(blink::Visitor* visitor) {
+void SVGFEComponentTransferElement::Trace(Visitor* visitor) {
   visitor->Trace(in1_);
   SVGFilterPrimitiveStandardAttributes::Trace(visitor);
 }
@@ -69,13 +69,13 @@ FilterEffect* SVGFEComponentTransferElement::Build(
 
   for (SVGElement* element = Traversal<SVGElement>::FirstChild(*this); element;
        element = Traversal<SVGElement>::NextSibling(*element)) {
-    if (auto* func_r = ToSVGFEFuncRElementOrNull(*element))
+    if (auto* func_r = DynamicTo<SVGFEFuncRElement>(*element))
       red = func_r->TransferFunction();
-    else if (auto* func_g = ToSVGFEFuncGElementOrNull(*element))
+    else if (auto* func_g = DynamicTo<SVGFEFuncGElement>(*element))
       green = func_g->TransferFunction();
-    else if (auto* func_b = ToSVGFEFuncBElementOrNull(*element))
+    else if (auto* func_b = DynamicTo<SVGFEFuncBElement>(*element))
       blue = func_b->TransferFunction();
-    else if (auto* func_a = ToSVGFEFuncAElementOrNull(*element))
+    else if (auto* func_a = DynamicTo<SVGFEFuncAElement>(*element))
       alpha = func_a->TransferFunction();
   }
 

@@ -30,6 +30,7 @@
 <translation id="1243314992276662751">Μεταφόρτωση</translation>
 <translation id="1249250836236328755">Είδος</translation>
 <translation id="1278813325885878377">Πληκτρολόγιο Qwerty Ουγγρικών</translation>
+<translation id="1293556467332435079">Αρχεία</translation>
 <translation id="1297922636971898492">Το Google Drive δεν είναι διαθέσιμο αυτήν τη στιγμή. Η μεταφόρτωση θα ξεκινήσει ξανά, όταν το Google Drive είναι και πάλι διαθέσιμο.</translation>
 <translation id="1307931752636661898">Δεν είναι δυνατή η προβολή αρχείων Linux</translation>
 <translation id="1310751437842832374">Μεταγραφή (mausam → ନମସ୍ତେ)</translation>
@@ -81,6 +82,7 @@
 <translation id="1847880352285315359">Αποθηκεύτηκε</translation>
 <translation id="1864756863218646478">Δεν ήταν δυνατή η εύρεση του αρχείου.</translation>
 <translation id="1921986354447415460">Πληκτρολόγιο Τουρκικών-F</translation>
+<translation id="1924372192547904021">Έγινε μορφοποίηση της συσκευής <ph name="DRIVE_NAME" /></translation>
 <translation id="1931134289871235022">Σλοβακικά</translation>
 <translation id="1933345018156373194">Αποτυχία μετακίνησης, μη αναμενόμενο σφάλμα: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="1936717151811561466">Φινλανδικά
@@ -167,6 +169,7 @@
 <translation id="2942290791863759244">Πληκτρολόγιο Γερμανικών Neo 2</translation>
 <translation id="2943400156390503548">Διαφάνειες</translation>
 <translation id="2943503720238418293">Χρησιμοποιήστε πιο σύντομο όνομα</translation>
+<translation id="2949781154072577687">Μορφοποίηση <ph name="DRIVE_NAME" />…</translation>
 <translation id="2951236788251446349">Μέδουσα</translation>
 <translation id="2963783323012015985">Πληκτρολόγιο με τουρκικούς χαρακτήρες</translation>
 <translation id="2966459079597787514">Πληκτρολόγιο με σουηδικούς χαρακτήρες</translation>
@@ -283,6 +286,7 @@
 <translation id="4336032328163998280">Αποτυχία λειτουργίας αντιγραφής. <ph name="ERROR_MESSAGE" /></translation>
 <translation id="4364327530094270451">Πεπόνι</translation>
 <translation id="4372884569765913867">1x1</translation>
+<translation id="4394214039309501350">Εξωτερικός σύνδεσμος</translation>
 <translation id="4425149324548788773">Το Drive μου</translation>
 <translation id="4465830120256509958">Πληκτρολόγιο με βραζιλιάνικους χαρακτήρες</translation>
 <translation id="4470564870223067757">Σύνολο Χανγκίλ 2</translation>
@@ -519,6 +523,7 @@
 <translation id="6878261347041253038">Πληκτρολόγιο Ντεβαναγκάρι (Φωνητικό)</translation>
 <translation id="6885780034956018177">Σαλιγκάρι</translation>
 <translation id="6896758677409633944">Αντιγραφή</translation>
+<translation id="6898028766943174120">Περισσότεροι υποφακέλοι…</translation>
 <translation id="691516599546977041">Δεν είναι δυνατή η αποθήκευση στον φάκελο <ph name="FOLDER_NAME" />. Οι επεξεργασμένες εικόνες θα αποθηκεύονται στον φάκελο Λήψεις.</translation>
 <translation id="6915678159055240887">Chromebox</translation>
 <translation id="6918340160281024199">ΗΠΑ Workman</translation>
@@ -531,6 +536,7 @@
 <translation id="696203921837389374">Ενεργοποίηση συγχρονισμού μέσω δεδομένων κινητής τηλεφωνίας</translation>
 <translation id="6965382102122355670">OK</translation>
 <translation id="6970230597523682626">Βουλγαρικά</translation>
+<translation id="6973630695168034713">Φάκελοι</translation>
 <translation id="6978611942794658017">Αυτό το αρχείο έχει σχεδιαστεί για έναν υπολογιστή ο οποίος χρησιμοποιεί λογισμικό Windows. Δεν είναι συμβατό με τη συσκευή σας η οποία χρησιμοποιεί Chrome OS. Αναζήτηστε μια κατάλληλη εφαρμογή αντικατάστασης στο Chrome Web Store.</translation>
 <translation id="6979158407327259162">Google Drive</translation>
 <translation id="6990081529015358884">Δεν υπάρχει ελεύθερος χώρος</translation>
@@ -581,9 +587,11 @@
 <translation id="7589661784326793847">Περιμένετε λίγο</translation>
 <translation id="7603724359189955920">Πλέγματα</translation>
 <translation id="7627790789328695202">Ωχ! Το αρχείο <ph name="FILE_NAME" /> υπάρχει ήδη. Μετονομάστε το και δοκιμάστε ξανά.</translation>
+<translation id="7628656427739290098">Ολοκληρώθηκε <ph name="PERCENT" />%.</translation>
 <translation id="7649070708921625228">Βοήθεια</translation>
 <translation id="7654209398114106148">Μετακίνηση <ph name="NUMBER_OF_ITEMS" /> στοιχείων...</translation>
 <translation id="7658239707568436148">Ακύρωση</translation>
+<translation id="7695430100978772476">Δεν ήταν δυνατή η μορφοποίηση της συσκευής <ph name="DRIVE_NAME" /></translation>
 <translation id="770015031906360009">Ελληνικά</translation>
 <translation id="7706319470528945664">Πληκτρολόγιο με πορτογαλικούς χαρακτήρες</translation>
 <translation id="7711920809702896782">Πληροφορίες εικόνας</translation>

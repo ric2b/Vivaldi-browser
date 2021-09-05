@@ -10,7 +10,7 @@
 #include "media/base/video_frame.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/public/platform/modules/peerconnection/webrtc_video_track_source.h"
+#include "third_party/blink/renderer/platform/peerconnection/webrtc_video_track_source.h"
 #include "third_party/blink/renderer/platform/testing/video_frame_utils.h"
 #include "third_party/webrtc/api/video/video_frame.h"
 #include "third_party/webrtc/rtc_base/ref_counted_object.h"
@@ -358,24 +358,23 @@ TEST_P(WebRtcVideoTrackSourceTest, UpdateRectWithScaling) {
       FrameAdaptation_Scale(kNaturalSize, kScaleToSize));
 
   // Any UPDATE_RECT for the first received frame is expected to get
-  // ignored and the full frame should be marked as updated.
+  // ignored and no update rect should be set.
   const gfx::Rect kUpdateRect1(120, 70, 160, 40);
   EXPECT_CALL(mock_sink_, OnFrame(_))
       .WillOnce(Invoke([](const webrtc::VideoFrame& frame) {
-        ExpectUpdateRectEquals(gfx::Rect(0, 0, frame.width(), frame.height()),
-                               frame.update_rect());
+        EXPECT_FALSE(frame.has_update_rect());
       }));
   int capture_counter = 101;  // arbitrary absolute value
   SendTestFrameWithUpdateRect(kCodedSize, kVisibleRect, kNaturalSize,
                               capture_counter, kUpdateRect1, storage_type);
   Mock::VerifyAndClearExpectations(&mock_sink_);
 
-  // When scaling is applied and UPDATE_RECT is not empty, we always expect a
-  // full update rect.
+  // When scaling is applied and UPDATE_RECT is not empty, we scale the
+  // update rect.
+  // Calculated by hand according to KNaturalSize and KScaleToSize.
   EXPECT_CALL(mock_sink_, OnFrame(_))
       .WillOnce(Invoke([](const webrtc::VideoFrame& frame) {
-        ExpectUpdateRectEquals(gfx::Rect(0, 0, frame.width(), frame.height()),
-                               frame.update_rect());
+        ExpectUpdateRectEquals(gfx::Rect(10, 10, 100, 30), frame.update_rect());
       }));
   SendTestFrameWithUpdateRect(kCodedSize, kVisibleRect, kNaturalSize,
                               ++capture_counter, kUpdateRect1, storage_type);
@@ -390,11 +389,10 @@ TEST_P(WebRtcVideoTrackSourceTest, UpdateRectWithScaling) {
                               ++capture_counter, gfx::Rect(), storage_type);
 
   // When UPDATE_RECT is empty, but the scaling has changed, we expect to
-  // deliver an full UpdateRect.
+  // deliver no known update_rect.
   EXPECT_CALL(mock_sink_, OnFrame(_))
       .WillOnce(Invoke([](const webrtc::VideoFrame& frame) {
-        ExpectUpdateRectEquals(gfx::Rect(0, 0, frame.width(), frame.height()),
-                               frame.update_rect());
+        EXPECT_FALSE(frame.has_update_rect());
       }));
   const gfx::Size kScaleToSize2 = gfx::Size(60, 26);
   track_source_->SetCustomFrameAdaptationParamsForTesting(

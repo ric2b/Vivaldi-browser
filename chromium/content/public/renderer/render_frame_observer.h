@@ -13,12 +13,13 @@
 #include "base/strings/string16.h"
 #include "content/common/content_export.h"
 #include "content/public/common/previews_state.h"
-#include "content/public/common/resource_type.h"
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_sender.h"
 #include "mojo/public/cpp/bindings/scoped_interface_endpoint_handle.h"
 #include "mojo/public/cpp/system/message_pipe.h"
+#include "services/network/public/mojom/url_response_head.mojom-forward.h"
 #include "third_party/blink/public/common/loader/loading_behavior_flag.h"
+#include "third_party/blink/public/mojom/loader/resource_load_info.mojom-shared.h"
 #include "third_party/blink/public/mojom/use_counter/css_property_id.mojom.h"
 #include "third_party/blink/public/mojom/web_client_hints/web_client_hints_types.mojom.h"
 #include "third_party/blink/public/mojom/web_feature/web_feature.mojom.h"
@@ -41,7 +42,6 @@ class WebWorkerFetchContext;
 }
 
 namespace network {
-struct ResourceResponseHead;
 struct URLLoaderCompletionStatus;
 }  // namespace network
 
@@ -152,6 +152,9 @@ class CONTENT_EXPORT RenderFrameObserver : public IPC::Listener,
   // Notifications when |PerformanceTiming| data becomes available
   virtual void DidChangePerformanceTiming() {}
 
+  // Notifications When an input delay data becomes available.
+  virtual void DidObserveInputDelay(base::TimeDelta input_delay) {}
+
   // Notifications when a cpu timing update becomes available, when a frame
   // has performed at least 100ms of tasks.
   virtual void DidChangeCpuTiming(base::TimeDelta time) {}
@@ -191,8 +194,8 @@ class CONTENT_EXPORT RenderFrameObserver : public IPC::Listener,
   virtual void DidStartResponse(
       const GURL& response_url,
       int request_id,
-      const network::ResourceResponseHead& response_head,
-      content::ResourceType resource_type,
+      const network::mojom::URLResponseHead& response_head,
+      network::mojom::RequestDestination request_destination,
       PreviewsState previews_state) {}
   virtual void DidCompleteResponse(
       int request_id,
@@ -229,6 +232,10 @@ class CONTENT_EXPORT RenderFrameObserver : public IPC::Listener,
 
   // Called when a worker fetch context will be created.
   virtual void WillCreateWorkerFetchContext(blink::WebWorkerFetchContext*) {}
+
+  // Called when a frame's intersection with the root frame changes.
+  virtual void OnMainFrameDocumentIntersectionChanged(
+      const blink::WebRect& intersect_rect) {}
 
   // Called to give the embedder an opportunity to bind an interface request
   // for a frame. If the request can be bound, |interface_pipe| will be taken.

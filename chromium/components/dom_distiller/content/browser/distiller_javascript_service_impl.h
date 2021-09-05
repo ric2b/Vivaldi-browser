@@ -5,9 +5,8 @@
 #ifndef COMPONENTS_DOM_DISTILLER_CONTENT_BROWSER_DISTILLER_JAVASCRIPT_SERVICE_IMPL_H_
 #define COMPONENTS_DOM_DISTILLER_CONTENT_BROWSER_DISTILLER_JAVASCRIPT_SERVICE_IMPL_H_
 
-#include "base/macros.h"
-#include "components/dom_distiller/content/browser/distiller_ui_handle.h"
 #include "components/dom_distiller/content/common/mojom/distiller_javascript_service.mojom.h"
+#include "components/dom_distiller/core/distiller_ui_handle.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 
 namespace dom_distiller {
@@ -16,8 +15,8 @@ namespace dom_distiller {
 class DistillerJavaScriptServiceImpl
     : public mojom::DistillerJavaScriptService {
  public:
-  DistillerJavaScriptServiceImpl(content::RenderFrameHost* render_frame_host,
-                                 DistillerUIHandle* distiller_ui_handle);
+  explicit DistillerJavaScriptServiceImpl(
+      DistillerUIHandle* distiller_ui_handle);
   ~DistillerJavaScriptServiceImpl() override;
 
   // Mojo mojom::DistillerJavaScriptService implementation.
@@ -25,18 +24,19 @@ class DistillerJavaScriptServiceImpl
   // Show the Android view containing Reader Mode settings.
   void HandleDistillerOpenSettingsCall() override;
 
- private:
-  content::RenderFrameHost* render_frame_host_;
-  DistillerUIHandle* distiller_ui_handle_;
+  DistillerJavaScriptServiceImpl(const DistillerJavaScriptServiceImpl&) =
+      delete;
+  DistillerJavaScriptServiceImpl& operator=(
+      const DistillerJavaScriptServiceImpl&) = delete;
 
-  DISALLOW_COPY_AND_ASSIGN(DistillerJavaScriptServiceImpl);
+ private:
+  DistillerUIHandle* distiller_ui_handle_;
 };
 
 // static
 void CreateDistillerJavaScriptService(
     DistillerUIHandle* distiller_ui_handle,
-    mojo::PendingReceiver<mojom::DistillerJavaScriptService> receiver,
-    content::RenderFrameHost* render_frame_host);
+    mojo::PendingReceiver<mojom::DistillerJavaScriptService> receiver);
 
 }  // namespace dom_distiller
 

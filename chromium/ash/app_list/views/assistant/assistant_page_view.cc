@@ -4,6 +4,7 @@
 
 #include "ash/app_list/views/assistant/assistant_page_view.h"
 
+#include <algorithm>
 #include <memory>
 #include <utility>
 
@@ -15,7 +16,6 @@
 #include "ash/assistant/model/assistant_ui_model.h"
 #include "ash/assistant/ui/assistant_ui_constants.h"
 #include "ash/assistant/ui/assistant_view_delegate.h"
-#include "ash/assistant/ui/assistant_web_view.h"
 #include "ash/assistant/util/assistant_util.h"
 #include "ash/public/cpp/app_list/app_list_config.h"
 #include "ash/public/cpp/assistant/assistant_state.h"
@@ -69,26 +69,20 @@ AssistantPageView::~AssistantPageView() {
 void AssistantPageView::InitLayout() {
   SetPaintToLayer();
   layer()->SetFillsBoundsOpaquely(false);
+
   view_shadow_ = std::make_unique<ViewShadow>(this, kShadowElevation);
   view_shadow_->SetRoundedCornerRadius(
       search_box::kSearchBoxBorderCornerRadiusSearchResult);
 
   SetBackground(views::CreateSolidBackground(SK_ColorWHITE));
-
   SetLayoutManager(std::make_unique<views::FillLayout>());
 
-  if (assistant_view_delegate_) {
-    assistant_main_view_ = new AssistantMainView(assistant_view_delegate_);
-    AddChildView(assistant_main_view_);
+  // |assistant_view_delegate_| could be nullptr in test.
+  if (!assistant_view_delegate_)
+    return;
 
-    // Web view.
-    assistant_web_view_ = new AssistantWebView(assistant_view_delegate_);
-    AddChildView(assistant_web_view_);
-
-    // Update the view state based on the current UI mode.
-    OnUiModeChanged(assistant_view_delegate_->GetUiModel()->ui_mode(),
-                    /*due_to_interaction=*/false);
-  }
+  assistant_main_view_ = AddChildView(
+      std::make_unique<AssistantMainView>(assistant_view_delegate_));
 }
 
 const char* AssistantPageView::GetClassName() const {
@@ -128,12 +122,7 @@ void AssistantPageView::RequestFocus() {
       if (assistant_main_view_)
         assistant_main_view_->RequestFocus();
       break;
-    case AssistantUiMode::kWebUi:
-      if (assistant_web_view_)
-        assistant_web_view_->RequestFocus();
-      break;
-    case AssistantUiMode::kMainUi:
-    case AssistantUiMode::kMiniUi:
+    case AssistantUiMode::kAmbientUi:
       NOTREACHED();
       break;
   }
@@ -147,10 +136,6 @@ void AssistantPageView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
 void AssistantPageView::ChildPreferredSizeChanged(views::View* child) {
   MaybeUpdateAppListState(child->GetHeightForWidth(width()));
   PreferredSizeChanged();
-
-  // After layout events, focus can be lost so we need to explicitly request
-  // on behalf of the child views.
-  RequestFocus();
 }
 
 void AssistantPageView::ChildVisibilityChanged(views::View* child) {
@@ -200,8 +185,6 @@ void AssistantPageView::OnShown() {
 
 void AssistantPageView::OnAnimationStarted(AppListState from_state,
                                            AppListState to_state) {
-  if (to_state != AppListState::kStateEmbeddedAssistant)
-    return;
   UpdatePageBoundsForState(to_state, contents_view()->GetContentsBounds(),
                            contents_view()->GetSearchBoxBounds(to_state));
 }
@@ -238,30 +221,6 @@ views::View* AssistantPageView::GetLastFocusableView() {
       this, GetWidget(), /*reverse=*/true, /*dont_loop=*/false);
 }
 
-void AssistantPageView::OnUiModeChanged(AssistantUiMode ui_mode,
-                                        bool due_to_interaction) {
-  for (auto* child : children())
-    child->SetVisible(false);
-
-  switch (ui_mode) {
-    case AssistantUiMode::kLauncherEmbeddedUi:
-      if (assistant_main_view_)
-        assistant_main_view_->SetVisible(true);
-      break;
-    case AssistantUiMode::kWebUi:
-      if (assistant_web_view_)
-        assistant_web_view_->SetVisible(true);
-      break;
-    case AssistantUiMode::kMainUi:
-    case AssistantUiMode::kMiniUi:
-      NOTREACHED();
-      break;
-  }
-
-  PreferredSizeChanged();
-  RequestFocus();
-}
-
 void AssistantPageView::OnUiVisibilityChanged(
     AssistantVisibility new_visibility,
     AssistantVisibility old_visibility,
@@ -275,16 +234,16 @@ void AssistantPageView::OnUiVisibilityChanged(
     return;
   }
 
+  // Assistant page will get focus when widget shown.
+  if (GetWidget() && GetWidget()->IsActive())
+    RequestFocus();
+
   const bool prefer_voice =
       assistant_view_delegate_->IsTabletMode() ||
       AssistantState::Get()->launch_with_mic_open().value_or(false);
   if (!assistant::util::IsVoiceEntryPoint(entry_point.value(), prefer_voice)) {
     NotifyAccessibilityEvent(ax::mojom::Event::kAlert, true);
   }
-}
-
-const AssistantMainView* AssistantPageView::GetMainViewForTest() const {
-  return assistant_main_view_;
 }
 
 int AssistantPageView::GetChildViewHeightForWidth(int width) const {
@@ -295,12 +254,7 @@ int AssistantPageView::GetChildViewHeightForWidth(int width) const {
         if (assistant_main_view_)
           height = assistant_main_view_->GetHeightForWidth(width);
         break;
-      case AssistantUiMode::kWebUi:
-        if (assistant_web_view_)
-          height = assistant_web_view_->GetHeightForWidth(width);
-        break;
-      case AssistantUiMode::kMainUi:
-      case AssistantUiMode::kMiniUi:
+      case AssistantUiMode::kAmbientUi:
         NOTREACHED();
         break;
     }

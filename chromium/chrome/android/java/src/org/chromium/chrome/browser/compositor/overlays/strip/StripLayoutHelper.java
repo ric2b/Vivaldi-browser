@@ -24,8 +24,9 @@ import android.widget.ListPopupWindow;
 
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
+import androidx.annotation.VisibleForTesting;
 
-import org.chromium.base.VisibleForTesting;
+import org.chromium.base.MathUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.compositor.animation.CompositorAnimator;
 import org.chromium.chrome.browser.compositor.layouts.LayoutRenderHost;
@@ -39,12 +40,13 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager.TabCreator;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
-import org.chromium.chrome.browser.util.MathUtils;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.LocalizationUtils;
 
 import java.util.ArrayList;
 import java.util.List;
+
+import org.chromium.chrome.browser.ChromeApplication;
 
 /**
  * This class handles managing the positions and behavior of all tabs in a tab strip.  It is
@@ -81,7 +83,7 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
     // Visibility Constants
     private static final float TAB_STACK_WIDTH_DP = 4.f;
     private static final float TAB_OVERLAP_WIDTH_DP = 24.f;
-    private static final float MIN_TAB_WIDTH_DP = 190.f;
+    private static final float MIN_TAB_WIDTH_DP = 150.f;
     private static final float MAX_TAB_WIDTH_DP = 265.f;
     private static final float REORDER_MOVE_START_THRESHOLD_DP = 50.f;
     private static final float REORDER_EDGE_SCROLL_MAX_SPEED_DP = 1000.f;
@@ -163,6 +165,10 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
      */
     public StripLayoutHelper(Context context, LayoutUpdateHost updateHost,
             LayoutRenderHost renderHost, boolean incognito) {
+        // Note (david@vivaldi.com): In Vivaldi there is 1dp gap between the tabs.
+        if (ChromeApplication.isVivaldi())
+            mTabOverlapWidth = 20.f;
+        else
         mTabOverlapWidth = TAB_OVERLAP_WIDTH_DP;
         mNewTabButtonWidth = NEW_TAB_BUTTON_WIDTH_DP;
 
@@ -191,13 +197,17 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
         mNewTabButton.setAccessibilityDescription(
                 res.getString(R.string.accessibility_toolbar_btn_new_tab),
                 res.getString(R.string.accessibility_toolbar_btn_new_incognito_tab));
+
+        // Vivaldi
+        updateNewTabButtonState();
+
         mContext = context;
         mIncognito = incognito;
         mBrightness = 1.f;
 
         // Create tab menu
         mTabMenu = new ListPopupWindow(mContext);
-        mTabMenu.setAdapter(new ArrayAdapter<String>(mContext, R.layout.list_menu_item,
+        mTabMenu.setAdapter(new ArrayAdapter<String>(mContext, android.R.layout.simple_list_item_1,
                 new String[] {
                         mContext.getString(!mIncognito ? R.string.menu_close_all_tabs
                                                        : R.string.menu_close_all_incognito_tabs)}));
@@ -216,6 +226,8 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
         mTabMenu.setModal(true);
 
         mShouldCascadeTabs = DeviceFormFactor.isNonMultiDisplayContextOnTablet(context);
+        // Note(david@vivaldi.com): We never cascade tabs in Vivaldi.
+        if (ChromeApplication.isVivaldi()) mShouldCascadeTabs = false;
         mStripStacker = mShouldCascadeTabs ? mCascadingStripStacker : mScrollingStripStacker;
         mIsFirstLayoutPass = true;
     }
@@ -367,7 +379,10 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
 
         if (widthChanged) {
             computeAndUpdateTabWidth(false);
+            // Note(david@vivaldi.com): We never cascade tabs in Vivaldi.
+            if (!ChromeApplication.isVivaldi()) {
             setShouldCascadeTabs(width >= DeviceFormFactor.MINIMUM_TABLET_WIDTH_DP);
+            }
         }
         if (mStripTabs.length > 0) mUpdateHost.requestUpdate();
 
@@ -1226,6 +1241,9 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
             mNewTabButton.setVisible(false);
             return;
         }
+        // Note(david@vivaldi.com): We are abusing the ModelSelectorButton of the
+        // |StripLayoutHelperManager| to create a new tab, instead of using this one here.
+        if (!ChromeApplication.isVivaldi())
         mNewTabButton.setVisible(true);
 
         // 3. Position the new tab button.
@@ -1260,6 +1278,10 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
         } else if (index > selIndex) {
             optimalLeft += tabWidth;
         }
+
+        // Note(david@vivaldi.com): Sometimes the scroll offsets are wrong especially when a new tab
+        // has been created. Make sure we always update the ScrollOffsetLimits in any case.
+        updateScrollOffsetLimits();
 
         // 4. Return the proper deltaX that has to be applied to the current scroll to see the
         // tab.
@@ -1654,6 +1676,12 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
     }
 
     private boolean isSelectedTabCompletelyVisible(StripLayoutTab selectedTab) {
+        // Note(david@vivaldi.com): We need to take the new mNewTabButtonWidth into account.
+        if (ChromeApplication.isVivaldi())
+            return selectedTab.isVisible() && selectedTab.getDrawX() >= 0
+                    && selectedTab.getDrawX() + selectedTab.getWidth()
+                    <= mWidth - mNewTabButtonWidth;
+
         return selectedTab.isVisible() && selectedTab.getDrawX() >= 0
                 && selectedTab.getDrawX() + selectedTab.getWidth() <= mWidth;
     }

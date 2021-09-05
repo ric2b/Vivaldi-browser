@@ -74,7 +74,6 @@ void OperaBookmarkReader::AddBookmark(
   std::string description;
 
   double created_time = 0;
-  double visited_time = 0;
 
   if (!is_folder && !entries.GetString("url", &url))
     url = base::string16();
@@ -95,10 +94,6 @@ void OperaBookmarkReader::AddBookmark(
       !base::StringToDouble(temp, &created_time))
     created_time = 0;
 
-  if (!entries.GetString("visited", &temp) ||
-      !base::StringToDouble(temp, &visited_time))
-    visited_time = 0;
-
   ImportedBookmarkEntry entry;
   entry.in_toolbar = false;  // on_personal_bar;
   entry.is_folder = is_folder;
@@ -108,7 +103,6 @@ void OperaBookmarkReader::AddBookmark(
   entry.path = current_folder;
   entry.url = GURL(url);
   entry.creation_time = base::Time::FromTimeT(created_time);
-  entry.visited_time = base::Time::FromTimeT(visited_time);
 
   bookmarks.push_back(entry);
 }

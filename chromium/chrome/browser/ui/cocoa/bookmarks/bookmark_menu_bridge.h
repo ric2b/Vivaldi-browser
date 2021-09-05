@@ -100,7 +100,9 @@ class BookmarkMenuBridge : public bookmarks::BookmarkModelObserver {
   // menu, such as "Open All Bookmarks".
   void AddNodeAsSubmenu(NSMenu* menu,
                         const bookmarks::BookmarkNode* node,
-                        NSImage* image);
+                        NSImage* image
+                        , unsigned int* menu_index = nullptr // Added by vivaldi
+                        );
 
   // Helper for recursively adding items to our bookmark menu.
   // All children of |node| will be added to |menu|.

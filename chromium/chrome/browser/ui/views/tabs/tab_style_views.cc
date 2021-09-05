@@ -11,7 +11,6 @@
 #include "cc/paint/paint_record.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/layout_constants.h"
-#include "chrome/browser/ui/tabs/tab_group_visual_data.h"
 #include "chrome/browser/ui/tabs/tab_types.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/frame/browser_non_client_frame_view.h"
@@ -21,6 +20,7 @@
 #include "chrome/browser/ui/views/tabs/tab_controller.h"
 #include "chrome/browser/ui/views/tabs/tab_group_underline.h"
 #include "chrome/grit/theme_resources.h"
+#include "components/tab_groups/tab_group_visual_data.h"
 #include "third_party/skia/include/core/SkScalar.h"
 #include "third_party/skia/include/pathops/SkPathOps.h"
 #include "ui/base/theme_provider.h"
@@ -32,10 +32,6 @@
 #include "ui/views/widget/widget.h"
 
 namespace {
-
-// Opacity of the active tab background painted over inactive selected tabs.
-constexpr float kSelectedTabOpacity = 0.75f;
-
 // How the tab shape path is modified for selected tabs.
 using ShapeModifier = int;
 // No modification should be done.
@@ -74,6 +70,24 @@ class GM2TabStyle : public TabStyleViews {
   // the "layout" opacities, which ignore the effects of surrounding tabs' hover
   // effects and consider only the current tab's state.
   SeparatorOpacities GetSeparatorOpacities(bool for_layout) const;
+
+  // Returns a single separator's opacity based on whether it is the
+  // logically |leading| separator. |for_layout| has the same meaning as in
+  // GetSeparatorOpacities().
+  float GetSeparatorOpacity(bool for_layout, bool leading) const;
+
+  // Helper that returns an interpolated opacity if the tab or its neighbor
+  // |other_tab| is mid-hover-animation. Used in almost all cases when a
+  // separator is shown, since hovering is independent of tab state.
+  // |for_layout| has the same meaning as in GetSeparatorOpacities().
+  float GetHoverInterpolatedSeparatorOpacity(bool for_layout,
+                                             const Tab* other_tab) const;
+
+  // Helper that returns an interpolated opacity if the tab is
+  // mid-bounds-animation. Used only for the first and last tabs, since those
+  // are the primary cases where separator opacity is likely to change during
+  // a bounds animation.
+  float GetBoundsInterpolatedSeparatorOpacity() const;
 
   // Returns whether we shoould extend the hit test region for Fitts' Law.
   bool ShouldExtendHitTest() const;
@@ -309,8 +323,7 @@ SkPath GM2TabStyle::GetPath(PathType path_type,
       } else {
         path.lineTo(tab_left - bottom_radius, tab_bottom);
         path.arcTo(bottom_radius, bottom_radius, 0, SkPath::kSmall_ArcSize,
-                   SkPath::kCCW_Direction, tab_left,
-                   tab_bottom - bottom_radius);
+                   SkPathDirection::kCCW, tab_left, tab_bottom - bottom_radius);
       }
     }
 
@@ -326,7 +339,7 @@ SkPath GM2TabStyle::GetPath(PathType path_type,
       // ┌─╯         ╰─┐
       path.lineTo(tab_left, tab_top + top_radius);
       path.arcTo(top_radius, top_radius, 0, SkPath::kSmall_ArcSize,
-                 SkPath::kCW_Direction, tab_left + top_radius, tab_top);
+                 SkPathDirection::kCW, tab_left + top_radius, tab_top);
     }
 
     // Draw the top crossbar and top-right curve, if present.
@@ -341,7 +354,7 @@ SkPath GM2TabStyle::GetPath(PathType path_type,
       // ┌─╯         ╰─┐
       path.lineTo(tab_right - top_radius, tab_top);
       path.arcTo(top_radius, top_radius, 0, SkPath::kSmall_ArcSize,
-                 SkPath::kCW_Direction, tab_right, tab_top + top_radius);
+                 SkPathDirection::kCW, tab_right, tab_top + top_radius);
     }
 
     if (tab_right != right) {
@@ -354,7 +367,7 @@ SkPath GM2TabStyle::GetPath(PathType path_type,
       } else {
         path.lineTo(tab_right, tab_bottom - bottom_radius);
         path.arcTo(bottom_radius, bottom_radius, 0, SkPath::kSmall_ArcSize,
-                   SkPath::kCCW_Direction, tab_right + bottom_radius,
+                   SkPathDirection::kCCW, tab_right + bottom_radius,
                    tab_bottom);
       }
       if (tab_bottom != extended_bottom)
@@ -536,78 +549,141 @@ TabStyle::SeparatorBounds GM2TabStyle::GetSeparatorBounds(float scale) const {
 
 TabStyle::SeparatorOpacities GM2TabStyle::GetSeparatorOpacities(
     bool for_layout) const {
-  // Something should visually separate tabs from each other and any adjacent
-  // new tab button.  Normally, active and hovered tabs draw distinct shapes
-  // (via different background colors) and thus need no separators, while
-  // background tabs need separators between them.
-  float leading_opacity, trailing_opacity;
-  if (tab_->IsActive()) {
-    leading_opacity = trailing_opacity = 0;
-  } else {
-    const Tab* subsequent_tab = tab_->controller()->GetAdjacentTab(tab_, 1);
-    const Tab* previous_tab = tab_->controller()->GetAdjacentTab(tab_, -1);
+  // Adjacent slots should be visually separated from each other. This can be
+  // achieved in multiple ways:
+  //   - Contrasting background colors for tabs, due to:
+  //       - Active state
+  //       - Selected state
+  //       - Hovered state
+  //       - Theming (affected by all the above, plus the neutral state)
+  //   - Manually painting a separator.
+  // The separator should be the last resort, if none of the above states
+  // apply. It's also needed if multiple adjacent views are selected, in which
+  // case the uniform selected color does not provide enough contrast.
+  // In addition, separators should smoothly fade in and out between states,
+  // particularly during the hover animation.
 
-    // Fade out the intervening separator while this tab or an adjacent tab is
-    // hovered, which prevents sudden opacity changes when scrubbing the mouse
-    // across the tabstrip. If that adjacent tab is active, don't consider its
-    // hover animation value, otherwise the separator on this tab will disappear
-    // while that tab is being dragged.
-    auto adjacent_hover_value = [for_layout](const Tab* tab) {
-      if (for_layout || !tab || tab->IsActive())
-        return 0.f;
-      auto* tab_style = static_cast<const GM2TabStyle*>(tab->tab_style());
-      return float{tab_style->GetHoverAnimationValue()};
-    };
-    const float hover_value = GetHoverAnimationValue();
-    trailing_opacity =
-        1.f - std::max(hover_value, adjacent_hover_value(subsequent_tab));
-    leading_opacity =
-        1.f - std::max(hover_value, adjacent_hover_value(previous_tab));
-
-    if (tab_->IsSelected()) {
-      // Since this tab is selected, its shape will be visible against adjacent
-      // unselected tabs, so remove the separator in those cases.
-      if (previous_tab && !previous_tab->IsSelected())
-        leading_opacity = 0;
-      if (subsequent_tab && !subsequent_tab->IsSelected())
-        trailing_opacity = 0;
-    } else if (tab_->controller()->HasVisibleBackgroundTabShapes()) {
-      // Since this tab is unselected, adjacent selected tabs will normally
-      // paint atop it, covering the separator.  But if the user drags those
-      // selected tabs away, the exposed region looks like the window frame; and
-      // since background tab shapes are visible, there should be no separator.
-      // TODO(pkasting): https://crbug.com/876599  When a tab is animating
-      // into this gap, we should adjust its separator opacities as well.
-      if (previous_tab && previous_tab->IsSelected())
-        leading_opacity = 0;
-      if (subsequent_tab && subsequent_tab->IsSelected())
-        trailing_opacity = 0;
-    }
-  }
-
-  // For the first or (when tab shapes are visible) last tab in the strip, fade
-  // the leading or trailing separator based on how close to the target bounds
-  // this tab is.  In the steady state, this hides the leading separator; it
-  // fades out the separators as tabs animate into these positions, after they
-  // pass by the other tabs; and it snaps the separators to full visibility
-  // immediately when animating away from these positions, which seems
-  // desirable.
-  const gfx::Rect target_bounds =
-      tab_->controller()->GetTabAnimationTargetBounds(tab_);
-  const int tab_width = std::max(tab_->width(), target_bounds.width());
-  const float target_opacity =
-      float{std::min(std::abs(tab_->x() - target_bounds.x()), tab_width)} /
-      tab_width;
-  if (tab_->controller()->IsFirstVisibleTab(tab_))
-    leading_opacity = target_opacity;
-  if (tab_->controller()->IsLastVisibleTab(tab_) &&
-      tab_->controller()->HasVisibleBackgroundTabShapes())
-    trailing_opacity = target_opacity;
+  float leading_opacity = GetSeparatorOpacity(for_layout, true);
+  float trailing_opacity = GetSeparatorOpacity(for_layout, false);
 
   // Return the opacities in physical order, rather than logical.
   if (base::i18n::IsRTL())
     std::swap(leading_opacity, trailing_opacity);
   return {leading_opacity, trailing_opacity};
+}
+
+float GM2TabStyle::GetSeparatorOpacity(bool for_layout, bool leading) const {
+  // If the current tab is active, never show the separator.
+  if (tab_->IsActive())
+    return 0.0f;
+
+  const Tab* adjacent_tab =
+      tab_->controller()->GetAdjacentTab(tab_, leading ? -1 : 1);
+
+  const Tab* left_tab = leading ? adjacent_tab : tab_;
+  const Tab* right_tab = leading ? tab_ : adjacent_tab;
+  const bool adjacent_to_header =
+      right_tab && right_tab->group().has_value() &&
+      (!left_tab || left_tab->group() != right_tab->group());
+
+  // If the current tab is selected, default to hiding the separator. Only show
+  // the separator if it's adjacent to other selected tabs.
+  if (tab_->IsSelected()) {
+    // If the adjacent view is actually a group header, hide the separator since
+    // group headers normally cannot be selected. Group headers can become
+    // selected when dragging groups, but in that case it is always the first
+    // view dragging followed by the active tab (which has a group outline
+    // instead of a separator). So a separator is still not necessary here.
+    if (adjacent_to_header)
+      return 0.0f;
+
+    if (adjacent_tab && adjacent_tab->IsSelected())
+      return GetHoverInterpolatedSeparatorOpacity(for_layout, adjacent_tab);
+
+    return 0.0f;
+  }
+
+  // Otherwise, default to showing the separator, respecting the hover
+  // animation. Only hide the separator if it's in the first slot, or in
+  // certain cases if the tab has a visible background (see below).
+
+  // Do not show the separator if it is to the right of a group header.
+  // Otherwise, show the separator since the following group header takes up a
+  // slot.
+  if (adjacent_to_header) {
+    if (leading)
+      return 0.0f;
+    return GetHoverInterpolatedSeparatorOpacity(for_layout, nullptr);
+  }
+
+  // If the tab has a visible background even when not selected or active, there
+  // are additional cases where the separators can be hidden.
+  if (tab_->controller()->HasVisibleBackgroundTabShapes()) {
+    // If the tab with a visible background is in an end slot, hide the
+    // separator because it doesn't need additional contrast with the tab strip
+    // or the new tab button. This value isn't interpolated like the others
+    // because the separator was likely already hidden: if it's animating into
+    // an end slot, then the tab was probably next to a selected dragging tab
+    // (see the condition below).
+    if (!adjacent_tab)
+      return 0.0f;
+
+    // If the adjacent tab is selected, any separator on the current tab will be
+    // "hidden" beneath the adjacent tab's background. Normally tabs will still
+    // have a separator, in case the adjacent tab is dragged away and it reveals
+    // an empty gap. However, tabs with visible backgrounds already have
+    // sufficient contrast against the empty gap, so this contingency isn't
+    // needed. Therefore, the separator is hidden only for tabs with visible
+    // backgrounds.
+    // TODO(crbug.com/876599): This value should be interpolated because the
+    // separator may be going from shown (the default) to hidden (when animating
+    // past an empty gap like this). This should behave similarly to
+    // GetBoundsInterpolatedSeparatorOpacity(), but not just for the end slots.
+    if (adjacent_tab->IsSelected())
+      return 0.0f;
+  }
+
+  // If the tab does not have a visible background and is in the first slot,
+  // make sure the opacity is interpolated correctly when it animates into
+  // position, since the separator is likely going from shown (the default) to
+  // hidden (in the first slot). See GetBoundsInterpolatedSeparatorOpacity().
+  if (!adjacent_tab && leading)
+    return GetBoundsInterpolatedSeparatorOpacity();
+
+  return GetHoverInterpolatedSeparatorOpacity(for_layout, adjacent_tab);
+}
+
+float GM2TabStyle::GetHoverInterpolatedSeparatorOpacity(
+    bool for_layout,
+    const Tab* other_tab) const {
+  // Fade out the intervening separator while this tab or an adjacent tab is
+  // hovered, which prevents sudden opacity changes when scrubbing the mouse
+  // across the tabstrip. If that adjacent tab is active, don't consider its
+  // hover animation value, otherwise the separator on this tab will disappear
+  // while that tab is being dragged.
+  auto adjacent_hover_value = [for_layout](const Tab* other_tab) {
+    if (for_layout || !other_tab || other_tab->IsActive())
+      return 0.0f;
+    auto* tab_style = static_cast<const GM2TabStyle*>(other_tab->tab_style());
+    return float{tab_style->GetHoverAnimationValue()};
+  };
+  const float hover_value = GetHoverAnimationValue();
+  return 1.0f - std::max(hover_value, adjacent_hover_value(other_tab));
+}
+
+float GM2TabStyle::GetBoundsInterpolatedSeparatorOpacity() const {
+  // When the bounds of a tab are animating, fade the separator based on how
+  // close to the target bounds this tab is. This function is only called
+  // when the target bounds are an end slot. That means this function will fade
+  // the separators in or out as a tab animtes into the end slot, but it will
+  // not be called if the tab is animating out of the end slot. In that case,
+  // the separator will snap to full opacity immediately, which is visually
+  // consistent with other bounds animations.
+  const gfx::Rect target_bounds =
+      tab_->controller()->GetTabAnimationTargetBounds(tab_);
+  const int tab_width = std::max(tab_->width(), target_bounds.width());
+  return float{std::min(std::abs(tab_->x() - target_bounds.x()), tab_width)} /
+         tab_width;
 }
 
 bool GM2TabStyle::ShouldExtendHitTest() const {
@@ -655,8 +731,8 @@ float GM2TabStyle::GetThrobValue() const {
 }
 
 int GM2TabStyle::GetStrokeThickness(bool should_paint_as_active) const {
-  base::Optional<SkColor> group_color = tab_->GetGroupColor();
-  if (group_color.has_value() && tab_->IsActive())
+  base::Optional<tab_groups::TabGroupId> group = tab_->group();
+  if (group.has_value() && tab_->IsActive())
     return TabGroupUnderline::kStrokeThickness;
 
   if (tab_->IsActive() || should_paint_as_active)

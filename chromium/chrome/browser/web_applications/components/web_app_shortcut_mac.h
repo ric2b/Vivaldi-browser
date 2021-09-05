@@ -46,9 +46,9 @@ using ShimTerminatedCallback = base::OnceClosure;
 void LaunchShim(LaunchShimUpdateBehavior update_behavior,
                 ShimLaunchedCallback launched_callback,
                 ShimTerminatedCallback terminated_callback,
-                std::unique_ptr<web_app::ShortcutInfo> shortcut_info);
+                std::unique_ptr<ShortcutInfo> shortcut_info);
 
-std::unique_ptr<web_app::ShortcutInfo> RecordAppShimErrorAndBuildShortcutInfo(
+std::unique_ptr<ShortcutInfo> RecordAppShimErrorAndBuildShortcutInfo(
     const base::FilePath& bundle_path);
 
 // Return true if launching and updating app shims will fail because of the
@@ -96,7 +96,6 @@ class WebAppShortcutCreator {
 
   bool CreateShortcuts(ShortcutCreationReason creation_reason,
                        ShortcutLocations creation_locations);
-  void DeleteShortcuts();
 
   // Recreate the shortcuts where they are found on disk and in the profile
   // path. If |create_if_needed| is true, then create the shortcuts if no
@@ -119,11 +118,8 @@ class WebAppShortcutCreator {
   FRIEND_TEST_ALL_PREFIXES(WebAppShortcutCreatorTest,
                            UpdateBookmarkAppShortcut);
 
-  // Returns the bundle identifier to use for this app bundle.
-  std::string GetBundleIdentifier() const;
-
-  // Returns the bundle identifier for the internal copy of the bundle.
-  std::string GetInternalBundleIdentifier() const;
+  // Return true if the bundle for this app should be profile-agnostic.
+  bool IsMultiProfile() const;
 
   // Copies the app loader template into a temporary directory and fills in all
   // relevant information. This works around a Finder bug where the app's icon

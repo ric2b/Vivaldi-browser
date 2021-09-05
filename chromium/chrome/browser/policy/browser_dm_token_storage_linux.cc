@@ -21,6 +21,8 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/syslog_logging.h"
 #include "base/task/post_task.h"
+#include "base/task/task_traits.h"
+#include "base/task/thread_pool.h"
 #include "base/task_runner_util.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "base/threading/sequenced_task_runner_handle.h"
@@ -33,9 +35,6 @@ namespace {
 const char kDmTokenBaseDir[] = FILE_PATH_LITERAL("Policy/Enrollment/");
 const char kEnrollmentTokenFilename[] =
     FILE_PATH_LITERAL("enrollment/CloudManagementEnrollmentToken");
-// TODO(crbug.com/907589) : Remove once no longer in use.
-const char kEnrollmentTokenOldFilename[] =
-    FILE_PATH_LITERAL("enrollment/enrollment_token");
 const char kMachineIdFilename[] = FILE_PATH_LITERAL("/etc/machine-id");
 
 // Enrollment Mandatory Option.
@@ -81,7 +80,8 @@ BrowserDMTokenStorage* BrowserDMTokenStorage::Get() {
   return storage.get();
 }
 
-BrowserDMTokenStorageLinux::BrowserDMTokenStorageLinux() {}
+BrowserDMTokenStorageLinux::BrowserDMTokenStorageLinux()
+    : task_runner_(base::ThreadPool::CreateTaskRunner({base::MayBlock()})) {}
 
 BrowserDMTokenStorageLinux::~BrowserDMTokenStorageLinux() {}
 
@@ -122,15 +122,8 @@ std::string BrowserDMTokenStorageLinux::InitEnrollmentToken() {
   base::FilePath token_file_path =
       dir_policy_files_path.Append(kEnrollmentTokenFilename);
 
-  // Read the enrollment token from the new location. If that fails, try the old
-  // location (which will be deprecated soon). If that also fails, bail as there
-  // is no token set.
-  if (!base::ReadFileToString(token_file_path, &enrollment_token)) {
-    // TODO(crbug.com/907589) : Remove once no longer in use.
-    token_file_path = dir_policy_files_path.Append(kEnrollmentTokenOldFilename);
-    if (!base::ReadFileToString(token_file_path, &enrollment_token))
-      return std::string();
-  }
+  if (!base::ReadFileToString(token_file_path, &enrollment_token))
+    return std::string();
 
   return base::TrimWhitespaceASCII(enrollment_token, base::TRIM_ALL)
       .as_string();
@@ -145,7 +138,7 @@ std::string BrowserDMTokenStorageLinux::InitDMToken() {
   if (!base::ReadFileToString(token_file_path, &token))
     return std::string();
 
-  return token;
+  return base::TrimWhitespaceASCII(token, base::TRIM_ALL).as_string();
 }
 
 bool BrowserDMTokenStorageLinux::InitEnrollmentErrorOption() {
@@ -167,13 +160,15 @@ bool BrowserDMTokenStorageLinux::InitEnrollmentErrorOption() {
          kEnrollmentMandatoryOption;
 }
 
-void BrowserDMTokenStorageLinux::SaveDMToken(const std::string& token) {
-  std::string client_id = RetrieveClientId();
-  base::PostTaskAndReplyWithResult(
-      FROM_HERE, {base::ThreadPool(), base::MayBlock()},
-      base::BindOnce(&StoreDMTokenInUserDataDir, token, client_id),
-      base::BindOnce(&BrowserDMTokenStorage::OnDMTokenStored,
-                     weak_factory_.GetWeakPtr()));
+BrowserDMTokenStorage::StoreTask BrowserDMTokenStorageLinux::SaveDMTokenTask(
+    const std::string& token,
+    const std::string& client_id) {
+  return base::BindOnce(&StoreDMTokenInUserDataDir, token, client_id);
+}
+
+scoped_refptr<base::TaskRunner>
+BrowserDMTokenStorageLinux::SaveDMTokenTaskRunner() {
+  return task_runner_;
 }
 
 std::string BrowserDMTokenStorageLinux::ReadMachineIdFile() {

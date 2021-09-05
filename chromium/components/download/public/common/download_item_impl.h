@@ -28,6 +28,8 @@
 #include "components/download/public/common/download_url_parameters.h"
 #include "components/download/public/common/resume_mode.h"
 #include "components/download/public/common/url_loader_factory_provider.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "services/device/public/mojom/wake_lock_provider.mojom.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -217,8 +219,9 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadItemImpl
   void RemoveObserver(DownloadItem::Observer* observer) override;
   void UpdateObservers() override;
   void ValidateDangerousDownload() override;
+  void ValidateMixedContentDownload() override;
   void StealDangerousDownload(bool need_removal,
-                              const AcquireFileCallback& callback) override;
+                              AcquireFileCallback callback) override;
   void Pause() override;
   void Resume(bool user_resume) override;
   void Cancel(bool user_cancel) override;
@@ -258,6 +261,7 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadItemImpl
   const std::string& GetLastModifiedTime() const override;
   const std::string& GetETag() const override;
   bool IsSavePackageDownload() const override;
+  DownloadSource GetDownloadSource() const override;
   const base::FilePath& GetFullPath() const override;
   const base::FilePath& GetTargetFilePath() const override;
   const base::FilePath& GetForcedFilePath() const override;
@@ -266,10 +270,12 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadItemImpl
   TargetDisposition GetTargetDisposition() const override;
   const std::string& GetHash() const override;
   bool GetFileExternallyRemoved() const override;
-  void DeleteFile(const base::Callback<void(bool)>& callback) override;
+  void DeleteFile(base::OnceCallback<void(bool)> callback) override;
   DownloadFile* GetDownloadFile() override;
   bool IsDangerous() const override;
+  bool IsMixedContent() const override;
   DownloadDangerType GetDangerType() const override;
+  MixedContentStatus GetMixedContentStatus() const override;
   bool TimeRemaining(base::TimeDelta* remaining) const override;
   int64_t CurrentSpeed() const override;
   int PercentComplete() const override;
@@ -364,8 +370,6 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadItemImpl
   }
 
   bool fetch_error_body() const { return fetch_error_body_; }
-
-  DownloadSource download_source() const { return download_source_; }
 
   uint64_t ukm_download_id() const { return ukm_download_id_; }
 
@@ -554,6 +558,7 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadItemImpl
       const base::FilePath& target_path,
       TargetDisposition disposition,
       DownloadDangerType danger_type,
+      MixedContentStatus mixed_content_status,
       const base::FilePath& intermediate_path,
       DownloadInterruptReason interrupt_reason);
 
@@ -617,7 +622,7 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadItemImpl
   // Check if a download is ready for completion.  The callback provided
   // may be called at some point in the future if an external entity
   // state has change s.t. this routine should be checked again.
-  bool IsDownloadReadyForCompletion(const base::Closure& state_change_notify);
+  bool IsDownloadReadyForCompletion(base::OnceClosure state_change_notify);
 
   // Call to transition state; all state transitions should go through this.
   // |notify_action| specifies whether or not to call UpdateObservers() after
@@ -649,6 +654,10 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadItemImpl
 
   // Whether strong validators are present.
   bool HasStrongValidators() const;
+
+  // Binds a device.mojom.WakeLockProvider receiver for any job that needs one.
+  void BindWakeLockProvider(
+      mojo::PendingReceiver<device::mojom::WakeLockProvider> receiver);
 
   DownloadItem::DownloadRenameResult RenameDownloadedFile(
       const std::string& name);
@@ -830,6 +839,9 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadItemImpl
 
   // Whether download has been resumed.
   bool has_resumed_ = false;
+
+  // The MixedContentStatus if determined.
+  MixedContentStatus mixed_content_status_ = MixedContentStatus::UNKNOWN;
 
   THREAD_CHECKER(thread_checker_);
 

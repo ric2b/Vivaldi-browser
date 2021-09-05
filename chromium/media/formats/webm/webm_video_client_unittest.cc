@@ -140,7 +140,8 @@ TEST_P(WebMVideoClientTest, InitializeConfigVP9Profiles) {
   VideoDecoderConfig expected_config(
       kCodecVP9, profile, VideoDecoderConfig::AlphaMode::kIsOpaque,
       VideoColorSpace::REC709(), kNoTransformation, kCodedSize,
-      gfx::Rect(kCodedSize), kCodedSize, codec_private, Unencrypted());
+      gfx::Rect(kCodedSize), kCodedSize, codec_private,
+      EncryptionScheme::kUnencrypted);
 
   EXPECT_TRUE(config.Matches(expected_config))
       << "Config (" << config.AsHumanReadableString()
@@ -148,7 +149,7 @@ TEST_P(WebMVideoClientTest, InitializeConfigVP9Profiles) {
       << expected_config.AsHumanReadableString() << ")";
 }
 
-INSTANTIATE_TEST_SUITE_P(/* No prefix. */,
+INSTANTIATE_TEST_SUITE_P(All,
                          WebMVideoClientTest,
                          ::testing::ValuesIn(kCodecTestParams));
 

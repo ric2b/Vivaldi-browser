@@ -1,0 +1,77 @@
+// Copyright 2019 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+import "oaidl.idl";
+import "ocidl.idl";
+
+[
+  object,
+  dual,
+  uuid(ICOMPLETESTATUS_IID),
+  helpstring("ICompleteStatus Interface"),
+  pointer_default(unique)
+]
+interface ICompleteStatus : IUnknown {
+  [propget] HRESULT statusCode([out, retval] LONG*);
+  [propget] HRESULT statusMessage([out, retval] BSTR*);
+};
+
+[
+  object,
+  oleautomation,
+  uuid(IUPDATEROBSERVER_IID),
+  helpstring("IUpdaterObserver Interface"),
+  pointer_default(unique)
+]
+interface IUpdaterObserver : IUnknown {
+  HRESULT OnComplete([in] ICompleteStatus* status);
+};
+
+[
+  object,
+  dual,
+  uuid(IUPDATER_IID),
+  helpstring("IUpdater Interface"),
+  pointer_default(unique)
+]
+interface IUpdater : IUnknown {
+  HRESULT CheckForUpdate([in, string] const WCHAR* app_id);
+  HRESULT Register([in, string] const WCHAR* app_id,
+                   [in, string] const WCHAR* brand_code,
+                   [in, string] const WCHAR* tag,
+                   [in, string] const WCHAR* version,
+                   [in, string] const WCHAR* existence_checker_path);
+  HRESULT Update([in, string] const WCHAR* app_id);
+  HRESULT UpdateAll([in] IUpdaterObserver* observer);
+};
+
+[
+  uuid(UPDATER_LIB_UUID),
+  version(1.0),
+  helpstring("Omaha 4.0 Type Library")
+]
+library UpdaterLib {
+  importlib("stdole2.tlb");
+
+  interface IUpdater;
+
+  [
+    uuid(UPDATER_CLSID),
+    helpstring("Updater Class")
+  ]
+  coclass UpdaterClass
+  {
+    [default] interface IUnknown;
+  }
+
+  [
+    uuid(UPDATER_SERVICE_UUID),
+    helpstring("Updater Service Class")
+  ]
+  coclass UpdaterServiceClass
+  {
+    [default] interface IUnknown;
+  }
+
+};

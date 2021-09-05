@@ -20,7 +20,6 @@
 #include "test/errors.h"
 #include "test/file.h"
 #include "test/filesystem.h"
-#include "test/gtest_disabled.h"
 #include "test/scoped_temp_dir.h"
 #include "util/file/file_io.h"
 #include "util/file/filesystem.h"
@@ -53,6 +52,12 @@ class CrashReportDatabaseTest : public testing::Test {
               CrashReportDatabase::kNoError);
     static constexpr char kTest[] = "test";
     ASSERT_TRUE(new_report->Writer()->Write(kTest, sizeof(kTest)));
+
+    char contents[sizeof(kTest)];
+    FileReaderInterface* reader = new_report->Reader();
+    ASSERT_TRUE(reader->ReadExactly(contents, sizeof(contents)));
+    EXPECT_EQ(memcmp(contents, kTest, sizeof(contents)), 0);
+    EXPECT_EQ(reader->ReadExactly(contents, 1), 0);
 
     UUID uuid;
     EXPECT_EQ(db_->FinishedWritingCrashReport(std::move(new_report), &uuid),
@@ -671,7 +676,7 @@ TEST_F(CrashReportDatabaseTest, RequestUpload) {
 TEST_F(CrashReportDatabaseTest, Attachments) {
 #if defined(OS_MACOSX) || defined(OS_WIN)
   // Attachments aren't supported on Mac and Windows yet.
-  DISABLED_TEST();
+  GTEST_SKIP();
 #else
   std::unique_ptr<CrashReportDatabase::NewReport> new_report;
   ASSERT_EQ(db()->PrepareNewCrashReport(&new_report),
@@ -717,7 +722,7 @@ TEST_F(CrashReportDatabaseTest, Attachments) {
 TEST_F(CrashReportDatabaseTest, OrphanedAttachments) {
 #if defined(OS_MACOSX) || defined(OS_WIN)
   // Attachments aren't supported on Mac and Windows yet.
-  DISABLED_TEST();
+  GTEST_SKIP();
 #else
   // TODO: This is using paths that are specific to the generic implementation
   // and will need to be generalized for Mac and Windows.

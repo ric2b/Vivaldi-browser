@@ -62,6 +62,7 @@ bool ExtractSyncEntity(ModelType type,
     // Directory should have taken care of assigning proper unique_position
     // during the first sync flow.
     DCHECK_NE(BOOKMARKS, type);
+    DCHECK_NE(NOTES, type);
   }
 
   entity->mutable_specifics()->CopyFrom(entry.GetServerSpecifics());

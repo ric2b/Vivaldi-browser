@@ -18,9 +18,20 @@
 
 class SharingDialog;
 
+namespace gfx {
+struct VectorIcon;
+}  // namespace gfx
+
 // All data required to display a SharingDialog.
 struct SharingDialogData {
  public:
+  // TODO(crbug.com/1013099): Merge both images using alpha blending so they
+  // work on any background color.
+  struct HeaderIcons {
+    HeaderIcons(const gfx::VectorIcon* light, const gfx::VectorIcon* dark);
+    const gfx::VectorIcon* light;
+    const gfx::VectorIcon* dark;
+  };
   SharingDialogData();
   ~SharingDialogData();
   SharingDialogData(SharingDialogData&& other);
@@ -35,9 +46,9 @@ struct SharingDialogData {
   base::string16 title;
   base::string16 error_text;
   int help_text_id = 0;
+  int help_text_origin_id = 0;
   int help_link_text_id = 0;
-  int header_image_light = 0;
-  int header_image_dark = 0;
+  base::Optional<HeaderIcons> header_icons;
   int origin_text_id = 0;
   base::Optional<url::Origin> initiating_origin;
 

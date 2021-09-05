@@ -28,6 +28,8 @@
 
 namespace net {
 
+class NetworkIsolationKey;
+
 namespace {
 
 // A lock shared by all ProxyResolverMac instances. It is used to synchronize
@@ -147,13 +149,15 @@ void SynchronizedRunLoopObserver::RemoveFromCurrentRunLoop(
 
 void SynchronizedRunLoopObserver::RunLoopObserverCallBack(
     CFRunLoopObserverRef observer,
-    CFRunLoopActivity activity) {
+    CFRunLoopActivity activity) NO_THREAD_SAFETY_ANALYSIS {
   DCHECK(thread_checker_.CalledOnValidThread());
   // Acquire the lock when a source has been signaled and going to be fired.
   // In the context of the proxy resolver that happens when the proxy for a
   // given URL has been resolved and the callback function that handles the
   // result is going to be fired.
   // Release the lock when all source events have been handled.
+  //
+  // NO_THREAD_SAFETY_ANALYSIS: Runtime dependent locking.
   switch (activity) {
     case kCFRunLoopBeforeSources:
       if (!lock_acquired_) {
@@ -189,6 +193,7 @@ class ProxyResolverMac : public ProxyResolver {
 
   // ProxyResolver methods:
   int GetProxyForURL(const GURL& url,
+                     const NetworkIsolationKey& network_isolation_key,
                      ProxyInfo* results,
                      CompletionOnceCallback callback,
                      std::unique_ptr<Request>* request,
@@ -206,11 +211,13 @@ ProxyResolverMac::~ProxyResolverMac() {}
 
 // Gets the proxy information for a query URL from a PAC. Implementation
 // inspired by http://developer.apple.com/samplecode/CFProxySupportTool/
-int ProxyResolverMac::GetProxyForURL(const GURL& query_url,
-                                     ProxyInfo* results,
-                                     CompletionOnceCallback /*callback*/,
-                                     std::unique_ptr<Request>* /*request*/,
-                                     const NetLogWithSource& net_log) {
+int ProxyResolverMac::GetProxyForURL(
+    const GURL& query_url,
+    const NetworkIsolationKey& network_isolation_key,
+    ProxyInfo* results,
+    CompletionOnceCallback /*callback*/,
+    std::unique_ptr<Request>* /*request*/,
+    const NetLogWithSource& net_log) {
   // OS X's system resolver does not support WebSocket URLs in proxy.pac, as of
   // version 10.13.5. See https://crbug.com/862121.
   GURL mutable_query_url = query_url;

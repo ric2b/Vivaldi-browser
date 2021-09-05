@@ -19,6 +19,10 @@
 #include "url/gurl.h"
 #include "url/url_constants.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 namespace {
 
 // Schemes accepted by the ClipboardRecentContentIOS.
@@ -66,7 +70,7 @@ ClipboardRecentContentIOS::ClipboardRecentContentIOS(
 
 ClipboardRecentContentIOS::ClipboardRecentContentIOS(
     ClipboardRecentContentImplIOS* implementation) {
-  implementation_.reset(implementation);
+  implementation_ = implementation;
 }
 
 base::Optional<GURL> ClipboardRecentContentIOS::GetRecentURLFromClipboard() {
@@ -89,14 +93,13 @@ ClipboardRecentContentIOS::GetRecentTextFromClipboard() {
   return base::SysNSStringToUTF16(text_from_pasteboard);
 }
 
-base::Optional<gfx::Image>
-ClipboardRecentContentIOS::GetRecentImageFromClipboard() {
-  UIImage* image_from_pasteboard = [implementation_ recentImageFromClipboard];
-  if (!image_from_pasteboard) {
-    return base::nullopt;
-  }
+void ClipboardRecentContentIOS::GetRecentImageFromClipboard(
+    GetRecentImageCallback callback) {
+  std::move(callback).Run(GetRecentImageFromClipboardInternal());
+}
 
-  return gfx::Image(image_from_pasteboard);
+bool ClipboardRecentContentIOS::HasRecentImageFromClipboard() {
+  return GetRecentImageFromClipboardInternal().has_value();
 }
 
 ClipboardRecentContentIOS::~ClipboardRecentContentIOS() {}
@@ -113,4 +116,14 @@ void ClipboardRecentContentIOS::SuppressClipboardContent() {
 void ClipboardRecentContentIOS::ClearClipboardContent() {
   NOTIMPLEMENTED();
   return;
+}
+
+base::Optional<gfx::Image>
+ClipboardRecentContentIOS::GetRecentImageFromClipboardInternal() {
+  UIImage* image_from_pasteboard = [implementation_ recentImageFromClipboard];
+  if (!image_from_pasteboard) {
+    return base::nullopt;
+  }
+
+  return gfx::Image(image_from_pasteboard);
 }

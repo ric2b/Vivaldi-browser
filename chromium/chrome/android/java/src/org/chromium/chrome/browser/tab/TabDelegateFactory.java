@@ -5,8 +5,9 @@
 package org.chromium.chrome.browser.tab;
 
 import org.chromium.chrome.browser.contextmenu.ContextMenuPopulator;
-import org.chromium.chrome.browser.externalnav.ExternalNavigationHandler;
+import org.chromium.components.browser_ui.util.BrowserControlsVisibilityDelegate;
 import org.chromium.components.embedder_support.delegate.WebContentsDelegateAndroid;
+import org.chromium.components.external_intents.ExternalNavigationHandler;
 import org.chromium.components.navigation_interception.InterceptNavigationDelegate;
 
 /**
@@ -34,12 +35,6 @@ public interface TabDelegateFactory {
      * @return The {@link ContextMenuPopulator} to be used for this tab.
      */
     ContextMenuPopulator createContextMenuPopulator(Tab tab);
-
-    /**
-     * Return true if app banners are to be permitted in this tab. May need to be overridden.
-     * @return true if app banners are permitted, and false otherwise.
-     */
-    boolean canShowAppBanners();
 
     /**
      * Creates the {@link BrowserControlsVisibilityDelegate} the tab will be initialized with.

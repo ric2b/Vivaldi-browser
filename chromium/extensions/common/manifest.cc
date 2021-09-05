@@ -218,6 +218,13 @@ bool Manifest::ValidateManifest(
           it.key()));
     }
   }
+
+  if (IsUnpackedLocation(location_) &&
+      value_->FindPath(manifest_keys::kDifferentialFingerprint)) {
+    warnings->push_back(
+        InstallWarning(manifest_errors::kHasDifferentialFingerprint,
+                       manifest_keys::kDifferentialFingerprint));
+  }
   return true;
 }
 
@@ -312,7 +319,7 @@ bool Manifest::CanAccessPath(const std::string& path) const {
 bool Manifest::CanAccessPath(base::span<const base::StringPiece> path) const {
   std::string key;
   for (base::StringPiece component : path) {
-    component.AppendToString(&key);
+    key.append(component.data(), component.size());
     if (!CanAccessKey(key))
       return false;
     key += '.';

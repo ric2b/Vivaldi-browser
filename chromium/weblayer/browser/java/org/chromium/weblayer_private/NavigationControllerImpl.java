@@ -11,6 +11,8 @@ import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.weblayer_private.interfaces.INavigationController;
 import org.chromium.weblayer_private.interfaces.INavigationControllerClient;
+import org.chromium.weblayer_private.interfaces.NavigateParams;
+import org.chromium.weblayer_private.interfaces.StrictModeWorkaround;
 
 /**
  * Acts as the bridge between java and the C++ implementation of of NavigationController.
@@ -18,12 +20,10 @@ import org.chromium.weblayer_private.interfaces.INavigationControllerClient;
 @JNINamespace("weblayer")
 public final class NavigationControllerImpl extends INavigationController.Stub {
     private long mNativeNavigationController;
-    private TabImpl mTab;
     private INavigationControllerClient mNavigationControllerClient;
 
     public NavigationControllerImpl(TabImpl tab, INavigationControllerClient client) {
         mNavigationControllerClient = client;
-        mTab = tab;
         mNativeNavigationController =
                 NavigationControllerImplJni.get().getNavigationController(tab.getNativeTab());
         NavigationControllerImplJni.get().setNavigationControllerImpl(
@@ -31,62 +31,94 @@ public final class NavigationControllerImpl extends INavigationController.Stub {
     }
 
     @Override
-    public void navigate(String uri) {
-        NavigationControllerImplJni.get().navigate(
-                mNativeNavigationController, NavigationControllerImpl.this, uri);
+    public void navigate(String uri, NavigateParams params) throws RemoteException {
+        StrictModeWorkaround.apply();
+        if (WebLayerFactoryImpl.getClientMajorVersion() < 83) {
+            assert params == null;
+        }
+        if (params == null) {
+            NavigationControllerImplJni.get().navigate(
+                    mNativeNavigationController, NavigationControllerImpl.this, uri);
+        } else {
+            NavigationControllerImplJni.get().navigateWithParams(mNativeNavigationController,
+                    NavigationControllerImpl.this, uri, params.mShouldReplaceCurrentEntry);
+        }
     }
 
     @Override
     public void goBack() {
+        StrictModeWorkaround.apply();
         NavigationControllerImplJni.get().goBack(
                 mNativeNavigationController, NavigationControllerImpl.this);
     }
 
     @Override
     public void goForward() {
+        StrictModeWorkaround.apply();
         NavigationControllerImplJni.get().goForward(
                 mNativeNavigationController, NavigationControllerImpl.this);
     }
 
     @Override
     public boolean canGoBack() {
+        StrictModeWorkaround.apply();
         return NavigationControllerImplJni.get().canGoBack(
                 mNativeNavigationController, NavigationControllerImpl.this);
     }
 
     @Override
     public boolean canGoForward() {
+        StrictModeWorkaround.apply();
         return NavigationControllerImplJni.get().canGoForward(
                 mNativeNavigationController, NavigationControllerImpl.this);
     }
 
     @Override
+    public void goToIndex(int index) {
+        StrictModeWorkaround.apply();
+        NavigationControllerImplJni.get().goToIndex(
+                mNativeNavigationController, NavigationControllerImpl.this, index);
+    }
+
+    @Override
     public void reload() {
+        StrictModeWorkaround.apply();
         NavigationControllerImplJni.get().reload(
                 mNativeNavigationController, NavigationControllerImpl.this);
     }
 
     @Override
     public void stop() {
+        StrictModeWorkaround.apply();
         NavigationControllerImplJni.get().stop(
                 mNativeNavigationController, NavigationControllerImpl.this);
     }
 
     @Override
     public int getNavigationListSize() {
+        StrictModeWorkaround.apply();
         return NavigationControllerImplJni.get().getNavigationListSize(
                 mNativeNavigationController, NavigationControllerImpl.this);
     }
 
     @Override
     public int getNavigationListCurrentIndex() {
+        StrictModeWorkaround.apply();
         return NavigationControllerImplJni.get().getNavigationListCurrentIndex(
                 mNativeNavigationController, NavigationControllerImpl.this);
     }
 
     @Override
     public String getNavigationEntryDisplayUri(int index) {
+        StrictModeWorkaround.apply();
         return NavigationControllerImplJni.get().getNavigationEntryDisplayUri(
+                mNativeNavigationController, NavigationControllerImpl.this, index);
+    }
+
+    @Override
+    public String getNavigationEntryTitle(int index) {
+        StrictModeWorkaround.apply();
+        return NavigationControllerImplJni.get().getNavigationEntryTitle(
                 mNativeNavigationController, NavigationControllerImpl.this, index);
     }
 
@@ -143,10 +175,14 @@ public final class NavigationControllerImpl extends INavigationController.Stub {
         long getNavigationController(long tab);
         void navigate(
                 long nativeNavigationControllerImpl, NavigationControllerImpl caller, String uri);
+        void navigateWithParams(long nativeNavigationControllerImpl,
+                NavigationControllerImpl caller, String uri, boolean shouldReplaceCurrentEntry);
         void goBack(long nativeNavigationControllerImpl, NavigationControllerImpl caller);
         void goForward(long nativeNavigationControllerImpl, NavigationControllerImpl caller);
         boolean canGoBack(long nativeNavigationControllerImpl, NavigationControllerImpl caller);
         boolean canGoForward(long nativeNavigationControllerImpl, NavigationControllerImpl caller);
+        void goToIndex(
+                long nativeNavigationControllerImpl, NavigationControllerImpl caller, int index);
         void reload(long nativeNavigationControllerImpl, NavigationControllerImpl caller);
         void stop(long nativeNavigationControllerImpl, NavigationControllerImpl caller);
         int getNavigationListSize(
@@ -154,6 +190,8 @@ public final class NavigationControllerImpl extends INavigationController.Stub {
         int getNavigationListCurrentIndex(
                 long nativeNavigationControllerImpl, NavigationControllerImpl caller);
         String getNavigationEntryDisplayUri(
+                long nativeNavigationControllerImpl, NavigationControllerImpl caller, int index);
+        String getNavigationEntryTitle(
                 long nativeNavigationControllerImpl, NavigationControllerImpl caller, int index);
     }
 }

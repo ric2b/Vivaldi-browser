@@ -22,11 +22,14 @@ class EligibleHostDevicesProviderImpl
  public:
   class Factory {
    public:
-    static Factory* Get();
-    static void SetFactoryForTesting(Factory* factory);
-    virtual ~Factory();
-    virtual std::unique_ptr<EligibleHostDevicesProvider> BuildInstance(
+    static std::unique_ptr<EligibleHostDevicesProvider> Create(
         device_sync::DeviceSyncClient* device_sync_client);
+    static void SetFactoryForTesting(Factory* factory);
+
+   protected:
+    virtual ~Factory();
+    virtual std::unique_ptr<EligibleHostDevicesProvider> CreateInstance(
+        device_sync::DeviceSyncClient* device_sync_client) = 0;
 
    private:
     static Factory* test_factory_;
@@ -40,15 +43,23 @@ class EligibleHostDevicesProviderImpl
 
   // EligibleHostDevicesProvider:
   multidevice::RemoteDeviceRefList GetEligibleHostDevices() const override;
+  multidevice::DeviceWithConnectivityStatusList GetEligibleActiveHostDevices()
+      const override;
 
   // device_sync::DeviceSyncClient::Observer:
   void OnNewDevicesSynced() override;
 
   void UpdateEligibleDevicesSet();
 
+  void OnGetDevicesActivityStatus(
+      device_sync::mojom::NetworkRequestResult,
+      base::Optional<std::vector<device_sync::mojom::DeviceActivityStatusPtr>>);
+
   device_sync::DeviceSyncClient* device_sync_client_;
 
   multidevice::RemoteDeviceRefList eligible_devices_from_last_sync_;
+  multidevice::DeviceWithConnectivityStatusList
+      eligible_active_devices_from_last_sync_;
 
   DISALLOW_COPY_AND_ASSIGN(EligibleHostDevicesProviderImpl);
 };

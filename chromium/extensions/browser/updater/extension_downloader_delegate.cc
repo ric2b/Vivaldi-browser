@@ -9,36 +9,55 @@
 
 namespace extensions {
 
-ExtensionDownloaderDelegate::PingResult::PingResult() : did_ping(false) {
-}
+ExtensionDownloaderDelegate::PingResult::PingResult() : did_ping(false) {}
 
-ExtensionDownloaderDelegate::PingResult::~PingResult() {
-}
+ExtensionDownloaderDelegate::PingResult::~PingResult() = default;
 
-ExtensionDownloaderDelegate::~ExtensionDownloaderDelegate() {
-}
+ExtensionDownloaderDelegate::FailureData::FailureData()
+    : network_error_code(0), fetch_tries(0) {}
+ExtensionDownloaderDelegate::FailureData::FailureData(
+    const FailureData& other) = default;
+ExtensionDownloaderDelegate::FailureData::FailureData(const int net_error_code,
+                                                      const int fetch_attempts)
+    : network_error_code(net_error_code), fetch_tries(fetch_attempts) {}
+
+ExtensionDownloaderDelegate::FailureData::FailureData(
+    const int net_error_code,
+    const base::Optional<int> response,
+    const int fetch_attempts)
+    : network_error_code(net_error_code),
+      response_code(response),
+      fetch_tries(fetch_attempts) {}
+
+ExtensionDownloaderDelegate::FailureData::~FailureData() = default;
+
+ExtensionDownloaderDelegate::~ExtensionDownloaderDelegate() = default;
 
 void ExtensionDownloaderDelegate::OnExtensionDownloadStageChanged(
-    const std::string& id,
-    ExtensionDownloaderDelegate::Stage stage) {}
+    const ExtensionId& id,
+    Stage stage) {}
+
+void ExtensionDownloaderDelegate::OnExtensionDownloadCacheStatusRetrieved(
+    const ExtensionId& id,
+    CacheStatus cache_status) {}
 
 void ExtensionDownloaderDelegate::OnExtensionDownloadFailed(
-    const std::string& id,
-    ExtensionDownloaderDelegate::Error error,
-    const ExtensionDownloaderDelegate::PingResult& ping_result,
-    const std::set<int>& request_id) {
-}
+    const ExtensionId& id,
+    Error error,
+    const PingResult& ping_result,
+    const std::set<int>& request_id,
+    const FailureData& data) {}
 
 void ExtensionDownloaderDelegate::OnExtensionDownloadRetryForTests() {}
 
 bool ExtensionDownloaderDelegate::GetPingDataForExtension(
-    const std::string& id,
+    const ExtensionId& id,
     ManifestFetchData::PingData* ping) {
   return false;
 }
 
 std::string ExtensionDownloaderDelegate::GetUpdateUrlData(
-    const std::string& id) {
+    const ExtensionId& id) {
   return std::string();
 }
 

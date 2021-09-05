@@ -9,14 +9,15 @@
 #include "chrome/browser/ui/views/frame/app_menu_button.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/color_palette.h"
-#include "ui/views/controls/button/menu_button_listener.h"
+#include "ui/views/controls/button/button.h"
 
 class BrowserView;
 
 // The 'app menu' button for a web app window.
-class WebAppMenuButton : public AppMenuButton,
-                         public views::MenuButtonListener {
+class WebAppMenuButton : public AppMenuButton, public views::ButtonListener {
  public:
+  static int GetMenuButtonSizeForBrowser(Browser* browser);
+
   explicit WebAppMenuButton(BrowserView* browser_view);
   ~WebAppMenuButton() override;
 
@@ -26,10 +27,8 @@ class WebAppMenuButton : public AppMenuButton,
   // Fades the menu button highlight on and off.
   void StartHighlightAnimation();
 
-  // views::MenuButtonListener:
-  void OnMenuButtonClicked(views::Button* source,
-                           const gfx::Point& point,
-                           const ui::Event* event) override;
+  // views::ButtonListener:
+  void ButtonPressed(views::Button* source, const ui::Event& event) override;
 
   // AppMenuButton:
   SkColor GetInkDropBaseColor() const override;

@@ -14,10 +14,13 @@ import android.os.StatFs;
 import android.os.StrictMode;
 import android.util.Log;
 
+import androidx.annotation.VisibleForTesting;
+
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
+import org.chromium.base.annotations.MainDex;
 import org.chromium.base.annotations.NativeMethods;
-import org.chromium.base.metrics.CachedMetrics;
+import org.chromium.base.metrics.RecordHistogram;
 
 import java.io.BufferedReader;
 import java.io.FileReader;
@@ -28,6 +31,7 @@ import java.util.regex.Pattern;
  * Exposes system related information about the current device.
  */
 @JNINamespace("base::android")
+@MainDex
 public class SysUtils {
     // A device reporting strictly more total memory in megabytes cannot be considered 'low-end'.
     private static final int ANDROID_LOW_MEMORY_DEVICE_THRESHOLD_MB = 512;
@@ -43,9 +47,6 @@ public class SysUtils {
     private static Integer sAmountOfPhysicalMemoryKB;
 
     private static Boolean sHighEndDiskDevice;
-
-    private static CachedMetrics.BooleanHistogramSample sLowEndMatches =
-            new CachedMetrics.BooleanHistogramSample("Android.SysUtilsLowEndMatches");
 
     private SysUtils() { }
 
@@ -173,6 +174,7 @@ public class SysUtils {
             return false;
         }
 
+        // If this logic changes, update the comments above base::SysUtils::IsLowEndDevice.
         sAmountOfPhysicalMemoryKB = detectAmountOfPhysicalMemoryKB();
         boolean isLowEnd = true;
         if (sAmountOfPhysicalMemoryKB <= 0) {
@@ -191,7 +193,8 @@ public class SysUtils {
                                 Context.ACTIVITY_SERVICE))
                                .isLowRamDevice();
         }
-        sLowEndMatches.record(isLowEnd == isLowRam);
+        RecordHistogram.recordBooleanHistogram(
+                "Android.SysUtilsLowEndMatches", isLowEnd == isLowRam);
 
         return isLowEnd;
     }
@@ -224,6 +227,19 @@ public class SysUtils {
             Log.v(TAG, "Cannot get disk data capacity", e);
         }
         return false;
+    }
+
+    @VisibleForTesting
+    public static void setAmountOfPhysicalMemoryKBForTesting(int physicalMemoryKB) {
+        sAmountOfPhysicalMemoryKB = physicalMemoryKB;
+    }
+
+    /**
+     * @return Whether this device is running Android Go. This is assumed when we're running Android
+     * O or later and we're on a low-end device.
+     */
+    public static boolean isAndroidGo() {
+        return isLowEndDevice() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O;
     }
 
     @NativeMethods

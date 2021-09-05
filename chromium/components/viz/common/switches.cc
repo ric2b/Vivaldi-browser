@@ -23,6 +23,9 @@ const char kDeadlineToSynchronizeSurfaces[] =
 // Also implies --disable-gpu-vsync (see //ui/gl/gl_switches.h).
 const char kDisableFrameRateLimit[] = "disable-frame-rate-limit";
 
+// Sets the number of max pending frames in the GL buffer queue to 1.
+const char kDoubleBufferCompositing[] = "double-buffer-compositing";
+
 // Experimental de-jelly support.
 const char kEnableDeJelly[] = "enable-de-jelly";
 
@@ -53,10 +56,6 @@ const char kShowAggregatedDamage[] = "show-aggregated-damage";
 // Show debug borders for DC layers - red for overlays and blue for underlays.
 // The debug borders are offset from the layer rect by a few pixels for clarity.
 const char kShowDCLayerDebugBorders[] = "show-dc-layer-debug-borders";
-
-// Enables the viz hit-test logic (HitTestAggregator and HitTestQuery), with
-// hit-test data coming from surface layer.
-const char kUseVizHitTestSurfaceLayer[] = "use-viz-hit-test-surface-layer";
 
 base::Optional<uint32_t> GetDeadlineToSynchronizeSurfaces() {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();

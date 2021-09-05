@@ -50,9 +50,9 @@ template("process_version_rc_template") {
     _extra_args += invoker.extra_args
   }
   _sources = [
-    lastchange_file,
     "//chrome/VERSION",
     branding_file_path,
+    lastchange_file,
   ]
   if (defined(is_vivaldi) && is_vivaldi) {
     _sources += [

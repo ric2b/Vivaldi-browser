@@ -34,7 +34,7 @@ PepperBrokerMessageFilter::PepperBrokerMessageFilter(PP_Instance instance,
 
 PepperBrokerMessageFilter::~PepperBrokerMessageFilter() {}
 
-scoped_refptr<base::TaskRunner>
+scoped_refptr<base::SequencedTaskRunner>
 PepperBrokerMessageFilter::OverrideTaskRunnerForMessage(
     const IPC::Message& message) {
   return base::CreateSingleThreadTaskRunner({BrowserThread::UI});
@@ -63,11 +63,9 @@ int32_t PepperBrokerMessageFilter::OnIsAllowed(
       Profile::FromBrowserContext(render_process_host->GetBrowserContext());
   HostContentSettingsMap* content_settings =
       HostContentSettingsMapFactory::GetForProfile(profile);
-  ContentSetting setting =
-      content_settings->GetContentSetting(document_url_,
-                                          document_url_,
-                                          CONTENT_SETTINGS_TYPE_PPAPI_BROKER,
-                                          std::string());
+  ContentSetting setting = content_settings->GetContentSetting(
+      document_url_, document_url_, ContentSettingsType::PPAPI_BROKER,
+      std::string());
   if (setting == CONTENT_SETTING_ALLOW)
     return PP_OK;
   return PP_ERROR_FAILED;

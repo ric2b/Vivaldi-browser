@@ -25,6 +25,8 @@
 #include "ash/system/unified/user_chooser_detailed_view_controller.h"
 #include "ash/system/user/rounded_image_view.h"
 #include "base/strings/utf_string_conversions.h"
+#include "ui/accessibility/ax_enums.mojom.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/strings/grit/ui_strings.h"
@@ -95,9 +97,8 @@ AddUserButton::AddUserButton(UserChooserDetailedViewController* controller)
 
   auto* label = new views::Label(
       l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_SIGN_IN_ANOTHER_ACCOUNT));
-  label->SetEnabledColor(
-      AshColorProvider::Get()->DeprecatedGetContentLayerColor(
-          ContentLayerType::kTextPrimary, kUnifiedMenuTextColor));
+  label->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
+      ContentLayerType::kTextPrimary, AshColorMode::kDark));
   label->SetAutoColorReadabilityEnabled(false);
   label->SetSubpixelRenderingEnabled(false);
   AddChildView(label);
@@ -137,9 +138,8 @@ class Separator : public views::View {
 
 views::View* CreateAddUserErrorView(const base::string16& message) {
   auto* label = new views::Label(message);
-  label->SetEnabledColor(
-      AshColorProvider::Get()->DeprecatedGetContentLayerColor(
-          ContentLayerType::kTextPrimary, kUnifiedMenuTextColor));
+  label->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
+      ContentLayerType::kTextPrimary, AshColorMode::kDark));
   label->SetAutoColorReadabilityEnabled(false);
   label->SetSubpixelRenderingEnabled(false);
   label->SetBorder(
@@ -228,9 +228,8 @@ UserItemButton::UserItemButton(int user_index,
       Shell::Get()->session_controller()->GetUserSession(user_index);
 
   name_->SetText(base::UTF8ToUTF16(user_session->user_info.display_name));
-  name_->SetEnabledColor(
-      AshColorProvider::Get()->DeprecatedGetContentLayerColor(
-          ContentLayerType::kTextPrimary, kUnifiedMenuTextColor));
+  name_->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
+      ContentLayerType::kTextPrimary, AshColorMode::kDark));
   name_->SetAutoColorReadabilityEnabled(false);
   name_->SetSubpixelRenderingEnabled(false);
   vertical_labels->AddChildView(name_);
@@ -295,6 +294,14 @@ base::string16 UserItemButton::GetTooltipText(const gfx::Point& p) const {
     return base::string16();
   }
   return views::Button::GetTooltipText(p);
+}
+
+void UserItemButton::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  // The button for the currently active user is not clickable.
+  if (user_index_ == 0)
+    node_data->role = ax::mojom::Role::kLabelText;
+  else
+    node_data->role = ax::mojom::Role::kButton;
 }
 
 void UserItemButton::ButtonPressed(views::Button* sender,

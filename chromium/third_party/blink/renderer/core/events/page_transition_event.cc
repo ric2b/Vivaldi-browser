@@ -25,6 +25,7 @@
 
 #include "third_party/blink/renderer/core/events/page_transition_event.h"
 
+#include "third_party/blink/renderer/bindings/core/v8/v8_page_transition_event_init.h"
 #include "third_party/blink/renderer/core/event_interface_names.h"
 
 namespace blink {
@@ -34,6 +35,13 @@ PageTransitionEvent::PageTransitionEvent() : persisted_(false) {}
 PageTransitionEvent::PageTransitionEvent(const AtomicString& type,
                                          bool persisted)
     : Event(type, Bubbles::kYes, Cancelable::kYes), persisted_(persisted) {}
+
+PageTransitionEvent::PageTransitionEvent(base::TimeTicks navigation_start)
+    : Event(event_type_names::kPageshow,
+            Bubbles::kYes,
+            Cancelable::kYes,
+            navigation_start),
+      persisted_(true) {}
 
 PageTransitionEvent::PageTransitionEvent(
     const AtomicString& type,
@@ -49,7 +57,7 @@ const AtomicString& PageTransitionEvent::InterfaceName() const {
   return event_interface_names::kPageTransitionEvent;
 }
 
-void PageTransitionEvent::Trace(blink::Visitor* visitor) {
+void PageTransitionEvent::Trace(Visitor* visitor) {
   Event::Trace(visitor);
 }
 

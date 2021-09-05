@@ -12,11 +12,13 @@
 
 #import "base/mac/scoped_nsobject.h"
 #import "base/mac/sdk_forward_declarations.h"
-#include "chrome/browser/apps/app_shim/extension_app_shim_handler_mac.h"
+#include "chrome/browser/profiles/profile.h"
 #import "chrome/browser/ui/views/apps/app_window_native_widget_mac.h"
+#include "content/public/browser/render_widget_host_view.h"
 #include "extensions/schema/window_private.h"
 #include "extensions/tools/vivaldi_tools.h"
 #import "ui/gfx/mac/coordinate_conversion.h"
+#include "ui/views/controls/webview/webview.h"
 #include "ui/vivaldi_browser_window.h"
 #import "ui/vivaldi_native_app_window_frame_view_mac.h"
 
@@ -208,11 +210,7 @@ void VivaldiNativeAppWindowViewsMac::Restore() {
   VivaldiNativeAppWindowViews::Restore();
 }
 
-void VivaldiNativeAppWindowViewsMac::FlashFrame(bool flash) {
-/*  apps::ExtensionAppShimHandler::Get()->RequestUserAttentionForWindow(
-      app_window(), flash ? apps::APP_SHIM_ATTENTION_CRITICAL
-                          : apps::APP_SHIM_ATTENTION_CANCEL);*/
-}
+void VivaldiNativeAppWindowViewsMac::FlashFrame(bool flash) {}
 
 void VivaldiNativeAppWindowViewsMac::OnWidgetCreated(views::Widget* widget) {
   nswindow_observer_.reset(

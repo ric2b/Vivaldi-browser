@@ -5,10 +5,11 @@
 #ifndef CHROME_BROWSER_UI_SIGNIN_VIEW_CONTROLLER_DELEGATE_H_
 #define CHROME_BROWSER_UI_SIGNIN_VIEW_CONTROLLER_DELEGATE_H_
 
-#include "base/macros.h"
+#include "base/callback_forward.h"
 
 class Browser;
 class SigninViewController;
+struct CoreAccountId;
 
 namespace signin_metrics {
 enum class AccessPoint;
@@ -16,6 +17,10 @@ enum class AccessPoint;
 
 namespace content {
 class WebContents;
+}
+
+namespace signin {
+enum class ReauthResult;
 }
 
 // Interface to the platform-specific managers of the Signin and Sync
@@ -40,6 +45,26 @@ class SigninViewControllerDelegate {
       SigninViewController* signin_view_controller,
       Browser* browser);
 
+  // Returns a platform-specific SigninViewContolllerDelegate instance that
+  // displays the reauth modal dialog. The returned object should delete itself
+  // when the window it's managing is closed.
+  static SigninViewControllerDelegate* CreateReauthDelegate(
+      SigninViewController* signin_view_controller,
+      Browser* browser,
+      const CoreAccountId& account_id,
+      base::OnceCallback<void(signin::ReauthResult)> reauth_callback);
+
+  // Returns a platform-specific SigninViewContolllerDelegate instance that
+  // displays the fake reauth modal dialog. The returned object should delete
+  // itself when the window it's managing is closed.
+  // WARNING: This dialog is for development use only and should not be used in
+  // production.
+  static SigninViewControllerDelegate* CreateFakeReauthDelegate(
+      SigninViewController* signin_view_controller,
+      Browser* browser,
+      const CoreAccountId& account_id,
+      base::OnceCallback<void(signin::ReauthResult)> reauth_callback);
+
   // Closes the sign-in dialog. Note that this method may destroy this object,
   // so the caller should no longer use this object after calling this method.
   virtual void CloseModalSignin() = 0;
@@ -53,11 +78,7 @@ class SigninViewControllerDelegate {
   virtual content::WebContents* GetWebContents() = 0;
 
  protected:
-  SigninViewControllerDelegate();
-  virtual ~SigninViewControllerDelegate();
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(SigninViewControllerDelegate);
+  virtual ~SigninViewControllerDelegate() = default;
 };
 
 #endif  // CHROME_BROWSER_UI_SIGNIN_VIEW_CONTROLLER_DELEGATE_H_

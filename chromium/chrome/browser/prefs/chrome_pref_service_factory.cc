@@ -47,7 +47,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/prefs/pref_store.h"
 #include "components/prefs/pref_value_store.h"
-#include "components/safe_browsing/common/safe_browsing_prefs.h"
+#include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "components/search_engines/default_search_manager.h"
 #include "components/search_engines/search_engines_pref_names.h"
 #include "components/signin/public/base/signin_pref_names.h"
@@ -404,7 +404,6 @@ std::unique_ptr<PrefService> CreateLocalState(
     policy::PolicyService* policy_service,
     scoped_refptr<PrefRegistry> pref_registry,
     bool async,
-    std::unique_ptr<PrefValueStore::Delegate> delegate,
     policy::BrowserPolicyConnector* policy_connector) {
   sync_preferences::PrefServiceSyncableFactory factory;
   PrepareFactory(&factory, pref_filename, policy_service,
@@ -414,7 +413,7 @@ std::unique_ptr<PrefService> CreateLocalState(
                  nullptr,  // extension_prefs
                  async, policy_connector);
 
-  return factory.Create(std::move(pref_registry), std::move(delegate));
+  return factory.Create(std::move(pref_registry));
 }
 
 std::unique_ptr<sync_preferences::PrefServiceSyncable> CreateProfilePrefs(
@@ -427,8 +426,7 @@ std::unique_ptr<sync_preferences::PrefServiceSyncable> CreateProfilePrefs(
     scoped_refptr<user_prefs::PrefRegistrySyncable> pref_registry,
     policy::BrowserPolicyConnector* connector,
     bool async,
-    scoped_refptr<base::SequencedTaskRunner> io_task_runner,
-    std::unique_ptr<PrefValueStore::Delegate> delegate) {
+    scoped_refptr<base::SequencedTaskRunner> io_task_runner) {
   TRACE_EVENT0("browser", "chrome_prefs::CreateProfilePrefs");
 
   mojo::PendingRemote<prefs::mojom::ResetOnLoadObserver> reset_on_load_observer;
@@ -445,19 +443,7 @@ std::unique_ptr<sync_preferences::PrefServiceSyncable> CreateProfilePrefs(
   PrepareFactory(&factory, profile_path, policy_service,
                  supervised_user_settings, std::move(user_pref_store),
                  std::move(extension_prefs), async, connector);
-  return factory.CreateSyncable(std::move(pref_registry), std::move(delegate));
-}
-
-void InstallPoliciesOnLocalState(
-    PrefService* preexisting_local_state,
-    policy::PolicyService* policy_service,
-    std::unique_ptr<PrefValueStore::Delegate> delegate) {
-  sync_preferences::PrefServiceSyncableFactory factory;
-  policy::BrowserPolicyConnector* policy_connector =
-      g_browser_process->browser_policy_connector();
-  factory.SetManagedPolicies(policy_service, policy_connector);
-  factory.SetRecommendedPolicies(policy_service, policy_connector);
-  factory.ChangePrefValueStore(preexisting_local_state, std::move(delegate));
+  return factory.CreateSyncable(std::move(pref_registry));
 }
 
 void DisableDomainCheckForTesting() {

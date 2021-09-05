@@ -6,23 +6,19 @@
 
 #include <cmath>
 
-#include "third_party/skia/include/core/SkMatrix44.h"
+#include "ui/display/display_transform.h"
 #include "ui/gfx/geometry/size_f.h"
 #include "ui/gfx/transform.h"
 
 namespace ash {
 namespace {
 
-// Round near zero value to zero.
-void RoundNearZero(gfx::Transform* transform) {
-  const float kEpsilon = 0.001f;
-  SkMatrix44& matrix = transform->matrix();
-  for (int x = 0; x < 4; ++x) {
-    for (int y = 0; y < 4; ++y) {
-      if (std::abs(SkMScalarToFloat(matrix.get(x, y))) < kEpsilon)
-        matrix.set(x, y, SkFloatToMScalar(0.0f));
-    }
-  }
+display::Display::Rotation RotationBetween(
+    display::Display::Rotation old_rotation,
+    display::Display::Rotation new_rotation) {
+  return static_cast<display::Display::Rotation>(
+      display::Display::Rotation::ROTATE_0 +
+      ((new_rotation - old_rotation) + 4) % 4);
 }
 
 }  // namespace
@@ -30,26 +26,8 @@ void RoundNearZero(gfx::Transform* transform) {
 gfx::Transform CreateRotationTransform(display::Display::Rotation old_rotation,
                                        display::Display::Rotation new_rotation,
                                        const gfx::SizeF& size_to_rotate) {
-  const int rotation_angle = 90 * (((new_rotation - old_rotation) + 4) % 4);
-  gfx::Transform rotate;
-  switch (rotation_angle) {
-    case 0:
-      break;
-    case 90:
-      rotate.Translate(size_to_rotate.height(), 0);
-      rotate.Rotate(90);
-      break;
-    case 180:
-      rotate.Translate(size_to_rotate.width(), size_to_rotate.height());
-      rotate.Rotate(180);
-      break;
-    case 270:
-      rotate.Translate(0, size_to_rotate.width());
-      rotate.Rotate(270);
-      break;
-  }
-  RoundNearZero(&rotate);
-  return rotate;
+  return display::CreateRotationTransform(
+      RotationBetween(old_rotation, new_rotation), size_to_rotate);
 }
 
 }  // namespace ash

@@ -20,9 +20,9 @@ namespace features {
 extern const base::Feature kDoubleTapToZoomInTabletMode;
 #endif
 
-#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)
-extern const base::Feature kSyncClipboardServiceFeature;
-#endif  // OS_WIN || OS_MACOSX || OS_LINUX
+#if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
+extern const base::Feature kUserDataSnapshot;
+#endif
 
 }  // namespace features
 

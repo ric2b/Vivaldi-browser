@@ -9,7 +9,6 @@ import static org.chromium.chrome.browser.vr.XrTestFramework.POLL_TIMEOUT_LONG_M
 import static org.chromium.chrome.browser.vr.XrTestFramework.POLL_TIMEOUT_SHORT_MS;
 
 import android.os.Build;
-import android.os.SystemClock;
 import android.support.test.filters.MediumTest;
 
 import org.junit.Before;
@@ -24,11 +23,14 @@ import org.chromium.base.test.params.ParameterSet;
 import org.chromium.base.test.params.ParameterizedRunner;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
-import org.chromium.chrome.browser.ChromeSwitches;
+import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.vr.rules.XrActivityRestriction;
 import org.chromium.chrome.browser.vr.util.VrTestRuleUtils;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
+import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
+import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
+import org.chromium.content_public.browser.ContentFeatureList;
 
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -61,20 +63,32 @@ public class WebXrVrConsentTest {
         mWebXrVrConsentTestFramework = new WebXrVrConsentTestFramework(mTestRule);
     }
 
-    /**
-     * Tests that denying consent blocks the session from being created.
-     */
     @Test
     @MediumTest
     @XrActivityRestriction({XrActivityRestriction.SupportedActivity.ALL})
+    @DisableFeatures(ContentFeatureList.WEBXR_PERMISSIONS_API)
     public void testConsentCancelFailsSessionCreation() {
+        testConsentCancelFailsSessionCreationImpl();
+    }
+
+    @Test
+    @MediumTest
+    @XrActivityRestriction({XrActivityRestriction.SupportedActivity.ALL})
+    @EnableFeatures(ContentFeatureList.WEBXR_PERMISSIONS_API)
+    public void testPermissionDenyFailsSessionCreation() {
+        testConsentCancelFailsSessionCreationImpl();
+    }
+
+    /**
+     * Tests that denying consent blocks the session from being created.
+     */
+    private void testConsentCancelFailsSessionCreationImpl() {
         mWebXrVrConsentTestFramework.setConsentDialogAction(
                 WebXrVrTestFramework.CONSENT_DIALOG_ACTION_DENY);
         mWebXrVrConsentTestFramework.setConsentDialogExpected(true);
 
-        mWebXrVrConsentTestFramework.loadUrlAndAwaitInitialization(
-                WebXrVrTestFramework.getFileUrlForHtmlTestFile("test_webxr_consent"),
-                PAGE_LOAD_TIMEOUT_S);
+        mWebXrVrConsentTestFramework.loadFileAndAwaitInitialization(
+                "test_webxr_consent", PAGE_LOAD_TIMEOUT_S);
 
         mWebXrVrConsentTestFramework.enterSessionWithUserGesture();
         mWebXrVrConsentTestFramework.pollJavaScriptBooleanOrFail(
@@ -84,41 +98,62 @@ public class WebXrVrConsentTest {
         mWebXrVrConsentTestFramework.assertNoJavaScriptErrors();
     }
 
-    /**
-     * Tests that attempting to enter a session that requires the same permission level does not
-     * reprompt.
-     */
     @Test
     @MediumTest
     @XrActivityRestriction({XrActivityRestriction.SupportedActivity.ALL})
+    @DisableFeatures(ContentFeatureList.WEBXR_PERMISSIONS_API)
     public void testConsentPersistsSameLevel() {
-        mWebXrVrConsentTestFramework.loadUrlAndAwaitInitialization(
-                WebXrVrTestFramework.getFileUrlForHtmlTestFile("generic_webxr_page"),
-                PAGE_LOAD_TIMEOUT_S);
-        mWebXrVrConsentTestFramework.enterSessionWithUserGestureOrFail();
-        mWebXrVrConsentTestFramework.endSessionOrFail();
+        testConsentPersistsImpl();
+    }
 
-        // TODO(https://crbug.com/998307): Remove this once root cause of entering VRB is found.
-        SystemClock.sleep(1000);
+    @Test
+    @MediumTest
+    @XrActivityRestriction({XrActivityRestriction.SupportedActivity.ALL})
+    @EnableFeatures(ContentFeatureList.WEBXR_PERMISSIONS_API)
+    public void testVrPermissionPersistance() {
+        testConsentPersistsImpl();
+    }
+
+    /**
+     * Tests that attempting to enter a session that requires the same permission level/type does
+     * not reprompt.
+     */
+    private void testConsentPersistsImpl() {
+        mWebXrVrConsentTestFramework.loadFileAndAwaitInitialization(
+                "generic_webxr_page", PAGE_LOAD_TIMEOUT_S);
+        mWebXrVrConsentTestFramework.enterSessionWithUserGestureOrFail();
+        mWebXrVrConsentTestFramework.endSession();
 
         mWebXrVrConsentTestFramework.setConsentDialogExpected(false);
 
         mWebXrVrConsentTestFramework.enterSessionWithUserGestureOrFail();
     }
 
+    @Test
+    @MediumTest
+    @XrActivityRestriction({XrActivityRestriction.SupportedActivity.ALL})
+    @DisableFeatures(ContentFeatureList.WEBXR_PERMISSIONS_API)
+    public void testConsentNotNeededForInline() {
+        testConsentNotNeededForInlineImpl();
+    }
+
+    @Test
+    @MediumTest
+    @XrActivityRestriction({XrActivityRestriction.SupportedActivity.ALL})
+    @EnableFeatures(ContentFeatureList.WEBXR_PERMISSIONS_API)
+    public void testPermissionNotNeededForInline() {
+        testConsentNotNeededForInlineImpl();
+    }
+
     /**
      * Tests that attempting to enter an inline session with no special features does not require
      * consent.
      */
-    @Test
-    @MediumTest
-    @XrActivityRestriction({XrActivityRestriction.SupportedActivity.ALL})
-    public void testConsentNotNeededForInline() {
+    private void testConsentNotNeededForInlineImpl() {
         mWebXrVrConsentTestFramework.setConsentDialogExpected(false);
 
-        mWebXrVrConsentTestFramework.loadUrlAndAwaitInitialization(
-                WebXrVrTestFramework.getFileUrlForHtmlTestFile("test_webxr_consent"),
-                PAGE_LOAD_TIMEOUT_S);
+        mWebXrVrConsentTestFramework.loadFileAndAwaitInitialization(
+                "test_webxr_consent", PAGE_LOAD_TIMEOUT_S);
 
         mWebXrVrConsentTestFramework.runJavaScriptOrFail(
                 "requestMagicWindowSession()", POLL_TIMEOUT_SHORT_MS);
@@ -129,23 +164,21 @@ public class WebXrVrConsentTest {
 
     /**
      * Tests that if consent is granted for a higher level, the lower level does not need consent.
+     * Consent-prompt flow specific.
      */
     @Test
     @MediumTest
     @XrActivityRestriction({XrActivityRestriction.SupportedActivity.ALL})
+    @DisableFeatures(ContentFeatureList.WEBXR_PERMISSIONS_API)
     public void testConsentPersistsLowerLevel() {
-        mWebXrVrConsentTestFramework.loadUrlAndAwaitInitialization(
-                WebXrVrTestFramework.getFileUrlForHtmlTestFile("test_webxr_consent"),
-                PAGE_LOAD_TIMEOUT_S);
+        mWebXrVrConsentTestFramework.loadFileAndAwaitInitialization(
+                "test_webxr_consent", PAGE_LOAD_TIMEOUT_S);
 
         // Set up to request the highest level of consent support on Android (height).
         mWebXrVrConsentTestFramework.runJavaScriptOrFail(
                 "setupImmersiveSessionToRequestHeight()", POLL_TIMEOUT_SHORT_MS);
         mWebXrVrConsentTestFramework.enterSessionWithUserGestureOrFail();
-        mWebXrVrConsentTestFramework.endSessionOrFail();
-
-        // TODO(https://crbug.com/998307): Remove this once root cause of entering VRB is found.
-        SystemClock.sleep(1000);
+        mWebXrVrConsentTestFramework.endSession();
 
         // Now set up to request the lower level of consent. The session should be entered without
         // the consent prompt.
@@ -157,23 +190,22 @@ public class WebXrVrConsentTest {
 
     /**
      * Tests that if consent is granted for a lower level, the higher level still needs consent.
+     * Consent-prompt flow specific.
      */
     @Test
     @MediumTest
     @XrActivityRestriction({XrActivityRestriction.SupportedActivity.ALL})
+    @DisableFeatures(ContentFeatureList.WEBXR_PERMISSIONS_API)
+    // Need to force consent prompt visible
     public void testConsentRepromptsHigherLevel() {
-        mWebXrVrConsentTestFramework.loadUrlAndAwaitInitialization(
-                WebXrVrTestFramework.getFileUrlForHtmlTestFile("test_webxr_consent"),
-                PAGE_LOAD_TIMEOUT_S);
+        mWebXrVrConsentTestFramework.loadFileAndAwaitInitialization(
+                "test_webxr_consent", PAGE_LOAD_TIMEOUT_S);
 
         // Request a session at the lowest level of consent, and ensure that it is entered.
         mWebXrVrConsentTestFramework.runJavaScriptOrFail(
                 "setupImmersiveSessionToRequestDefault()", POLL_TIMEOUT_SHORT_MS);
         mWebXrVrConsentTestFramework.enterSessionWithUserGestureOrFail();
-        mWebXrVrConsentTestFramework.endSessionOrFail();
-
-        // TODO(https://crbug.com/998307): Remove this once root cause of entering VRB is found.
-        SystemClock.sleep(1000);
+        mWebXrVrConsentTestFramework.endSession();
 
         // Now request a session that requires a higher level of consent. It should still be
         // prompted for consent and the session should enter.
@@ -182,23 +214,39 @@ public class WebXrVrConsentTest {
         mWebXrVrConsentTestFramework.enterSessionWithUserGestureOrFail();
     }
 
-    /**
-     * Tests that granted consent does not persist after a page reload.
-     */
     @Test
     @MediumTest
     @XrActivityRestriction({XrActivityRestriction.SupportedActivity.ALL})
+    @DisableFeatures(ContentFeatureList.WEBXR_PERMISSIONS_API)
     public void testConsentRepromptsAfterReload() {
-        mWebXrVrConsentTestFramework.loadUrlAndAwaitInitialization(
-                WebXrVrTestFramework.getFileUrlForHtmlTestFile("generic_webxr_page"),
-                PAGE_LOAD_TIMEOUT_S);
+        // Verfies that consent is prompted for again after reload.
+        testConsentAfterReload(true);
+    }
+
+    @Test
+    @MediumTest
+    @XrActivityRestriction({XrActivityRestriction.SupportedActivity.ALL})
+    @EnableFeatures(ContentFeatureList.WEBXR_PERMISSIONS_API)
+    public void testPermissionPersistsAfterReload() {
+        // Verifies that permission is persisted after reload.
+        testConsentAfterReload(false);
+    }
+
+    /**
+     * Tests that granted consent does not persist after a page reload.
+     */
+    private void testConsentAfterReload(boolean expectedAfterReload) {
+        mWebXrVrConsentTestFramework.loadFileAndAwaitInitialization(
+                "generic_webxr_page", PAGE_LOAD_TIMEOUT_S);
 
         mWebXrVrConsentTestFramework.enterSessionWithUserGestureOrFail();
-        mWebXrVrConsentTestFramework.endSessionOrFail();
+        mWebXrVrConsentTestFramework.endSession();
 
-        mWebXrVrConsentTestFramework.loadUrlAndAwaitInitialization(
-                WebXrVrTestFramework.getFileUrlForHtmlTestFile("generic_webxr_page"),
-                PAGE_LOAD_TIMEOUT_S);
+        mWebXrVrConsentTestFramework.loadFileAndAwaitInitialization(
+                "generic_webxr_page", PAGE_LOAD_TIMEOUT_S);
+
+        mWebXrVrConsentTestFramework.setConsentDialogExpected(expectedAfterReload);
+
         mWebXrVrConsentTestFramework.enterSessionWithUserGestureOrFail();
     }
 }

@@ -7,6 +7,7 @@
 #include <linux/input.h>
 
 #include <algorithm>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/callback.h"
@@ -123,6 +124,11 @@ void InputControllerEvdev::SetTouchpadSensitivity(int value) {
   ScheduleUpdateDeviceSettings();
 }
 
+void InputControllerEvdev::SetTouchpadScrollSensitivity(int value) {
+  input_device_settings_.touchpad_scroll_sensitivity = value;
+  ScheduleUpdateDeviceSettings();
+}
+
 void InputControllerEvdev::SetTapToClick(bool enabled) {
   input_device_settings_.tap_to_click_enabled = enabled;
   ScheduleUpdateDeviceSettings();
@@ -148,6 +154,11 @@ void InputControllerEvdev::SetMouseSensitivity(int value) {
   ScheduleUpdateDeviceSettings();
 }
 
+void InputControllerEvdev::SetMouseScrollSensitivity(int value) {
+  input_device_settings_.mouse_scroll_sensitivity = value;
+  ScheduleUpdateDeviceSettings();
+}
+
 void InputControllerEvdev::SetPrimaryButtonRight(bool right) {
   button_map_->SetPrimaryButtonRight(right);
 }
@@ -162,8 +173,18 @@ void InputControllerEvdev::SetMouseAcceleration(bool enabled) {
   ScheduleUpdateDeviceSettings();
 }
 
+void InputControllerEvdev::SetMouseScrollAcceleration(bool enabled) {
+  input_device_settings_.mouse_scroll_acceleration_enabled = enabled;
+  ScheduleUpdateDeviceSettings();
+}
+
 void InputControllerEvdev::SetTouchpadAcceleration(bool enabled) {
   input_device_settings_.touchpad_acceleration_enabled = enabled;
+  ScheduleUpdateDeviceSettings();
+}
+
+void InputControllerEvdev::SetTouchpadScrollAcceleration(bool enabled) {
+  input_device_settings_.touchpad_scroll_acceleration_enabled = enabled;
   ScheduleUpdateDeviceSettings();
 }
 
@@ -189,9 +210,9 @@ void InputControllerEvdev::GetTouchEventLog(const base::FilePath& out_dir,
 }
 
 void InputControllerEvdev::GetGesturePropertiesService(
-    ozone::mojom::GesturePropertiesServiceRequest request) {
+    mojo::PendingReceiver<ozone::mojom::GesturePropertiesService> receiver) {
   if (input_device_factory_)
-    input_device_factory_->GetGesturePropertiesService(std::move(request));
+    input_device_factory_->GetGesturePropertiesService(std::move(receiver));
 }
 
 void InputControllerEvdev::ScheduleUpdateDeviceSettings() {

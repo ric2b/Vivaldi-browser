@@ -14,28 +14,24 @@
 #include "base/allocator/partition_allocator/random.h"
 #include "base/logging.h"
 
-namespace {
-
-// Returns true if we've hit the end of a random-length period. We don't want to
-// invoke `RandomValue` too often, because we call this function in a hot spot
-// (`Free`), and `RandomValue` incurs the cost of atomics.
-#if !DCHECK_IS_ON()
-bool RandomPeriod() {
-  static thread_local uint8_t counter = 0;
-  if (UNLIKELY(counter == 0)) {
-    counter = base::RandomValue();
-  }
-  counter--;
-  return counter == 0;
-}
-#endif
-
-}  // namespace
-
 namespace base {
 namespace internal {
 
 struct PartitionRootBase;
+
+// PartitionPage::Free() defers unmapping a large page until the lock is
+// released. Callers of PartitionPage::Free() must invoke Run().
+// TODO(1061437): Reconsider once the new locking mechanism is implemented.
+struct DeferredUnmap {
+  void* ptr = nullptr;
+  size_t size = 0;
+  // In most cases there is no page to unmap and ptr == nullptr. This function
+  // is inlined to avoid the overhead of a function call in the common case.
+  ALWAYS_INLINE void Run();
+
+ private:
+  BASE_EXPORT NOINLINE void Unmap();
+};
 
 // Some notes on page states. A page can be in one of four major states:
 // 1) Active.
@@ -80,8 +76,9 @@ struct PartitionPage {
   // Public API
 
   // Note the matching Alloc() functions are in PartitionPage.
-  BASE_EXPORT NOINLINE void FreeSlowPath();
-  ALWAYS_INLINE void Free(void* ptr);
+  // Callers must invoke DeferredUnmap::Run() after releasing the lock.
+  BASE_EXPORT NOINLINE DeferredUnmap FreeSlowPath() WARN_UNUSED_RESULT;
+  ALWAYS_INLINE DeferredUnmap Free(void* ptr) WARN_UNUSED_RESULT;
 
   void Decommit(PartitionRootBase* root);
   void DecommitIfPossible(PartitionRootBase* root);
@@ -219,28 +216,23 @@ ALWAYS_INLINE size_t PartitionPage::get_raw_size() const {
   return 0;
 }
 
-ALWAYS_INLINE void PartitionPage::Free(void* ptr) {
-  size_t slot_size = this->bucket->slot_size;
+ALWAYS_INLINE DeferredUnmap PartitionPage::Free(void* ptr) {
+#if DCHECK_IS_ON()
+  size_t slot_size = bucket->slot_size;
   const size_t raw_size = get_raw_size();
   if (raw_size) {
     slot_size = raw_size;
   }
 
-#if DCHECK_IS_ON()
   // If these asserts fire, you probably corrupted memory.
   PartitionCookieCheckValue(ptr);
   PartitionCookieCheckValue(reinterpret_cast<char*>(ptr) + slot_size -
                             kCookieSize);
 
   memset(ptr, kFreedByte, slot_size);
-#else
-  // `memset` only once in a while.
-  if (UNLIKELY(RandomPeriod())) {
-    memset(ptr, kFreedByte, slot_size);
-  }
 #endif
 
-  DCHECK(this->num_allocated_slots);
+  DCHECK(num_allocated_slots);
   // Catches an immediate double free.
   CHECK(ptr != freelist_head);
   // Look for double free one level deeper in debug.
@@ -250,14 +242,15 @@ ALWAYS_INLINE void PartitionPage::Free(void* ptr) {
       static_cast<internal::PartitionFreelistEntry*>(ptr);
   entry->next = internal::PartitionFreelistEntry::Encode(freelist_head);
   freelist_head = entry;
-  --this->num_allocated_slots;
-  if (UNLIKELY(this->num_allocated_slots <= 0)) {
-    FreeSlowPath();
+  --num_allocated_slots;
+  if (UNLIKELY(num_allocated_slots <= 0)) {
+    return FreeSlowPath();
   } else {
     // All single-slot allocations must go through the slow path to
     // correctly update the size metadata.
     DCHECK(get_raw_size() == 0);
   }
+  return {};
 }
 
 ALWAYS_INLINE bool PartitionPage::is_active() const {
@@ -302,12 +295,18 @@ ALWAYS_INLINE void PartitionPage::set_raw_size(size_t size) {
 }
 
 ALWAYS_INLINE void PartitionPage::Reset() {
-  DCHECK(this->is_decommitted());
+  DCHECK(is_decommitted());
 
   num_unprovisioned_slots = bucket->get_slots_per_span();
   DCHECK(num_unprovisioned_slots);
 
   next_page = nullptr;
+}
+
+ALWAYS_INLINE void DeferredUnmap::Run() {
+  if (UNLIKELY(ptr)) {
+    Unmap();
+  }
 }
 
 }  // namespace internal

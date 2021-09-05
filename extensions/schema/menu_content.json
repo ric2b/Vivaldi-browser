@@ -1,0 +1,342 @@
+// Copyright (c) 2020 Vivaldi Technologies AS. All rights reserved
+
+[
+  {
+    "namespace": "menuContent",
+    "description": "Use the <code>vivaldi.menuContent</code> API to configure menus.",
+    "types": [
+      {
+        "id": "NodeType",
+        "type": "string",
+        "description": "Defines supported nodes",
+        "enum": [ "menu", "command", "checkbox", "radio", "folder", "separator", "container" ]
+      },
+      {
+        "id": "Role",
+        "type": "string",
+        "description": "Defines menu type.",
+        "enum": [ "horizontal", "vertical", "mac"]
+      },
+      {
+        "id": "ContainerMode",
+        "type": "string",
+        "description": "Defines container layouts.",
+        "enum": [ "inline", "folder"]
+      },
+      {
+        "id": "ContainerEdge",
+        "type": "string",
+        "description": "Defines on what edge of a container additional items can be added.",
+        "enum": [ "above", "below", "off"]
+      },
+      {
+        "id": "MenuTreeNode",
+        "type": "object",
+        "description": "A node (folder or menu entry) in the menu tree. Child nodes are ordered within their parent folder.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique identifier."
+          },
+          "type": {
+            "$ref": "NodeType",
+            "description": "The kind of node."
+          },
+          "action": {
+            "type": "string",
+            "description": "A command or a menu identifier. It does not have to be unique. Can be empty for separators."
+          },
+          "custom": {
+            "type": "boolean",
+            "optional": true,
+            "description": "When true, the item has been added by the user."
+          },
+          "title": {
+            "type": "string",
+            "optional": true,
+            "description": "Node title. If not present the title is determined using the action."
+          },
+          "radiogroup": {
+            "type": "string",
+            "optional": true,
+            "description": "Mandatory for radio elements."
+          },
+          "containermode": {
+            "$ref": "ContainerMode",
+            "optional": true,
+            "description": "Mandatory for container elements."
+          },
+          "containeredge": {
+            "$ref": "ContainerEdge",
+            "optional": true,
+            "description": "Mandatory for container elements."
+          },
+          "children": {
+            "type": "array",
+            "optional": true,
+            "items": { "$ref": "MenuTreeNode" },
+            "description": "An ordered list of children of this node."
+          }
+        }
+      }
+    ],
+    "functions": [
+      {
+        "name": "get",
+        "type": "function",
+        "description": "Retrieves a named menu.",
+        "parameters": [
+          {
+            "name": "namedMenu",
+            "type": "string"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "id",
+                "type": "string",
+                "description": "Root id of the named menu."
+              },
+              {
+                "name": "role",
+                "$ref": "Role",
+                "description": "Describes how the menu can be used."
+              },
+              {
+                "name": "result",
+                "type": "array",
+                "items": { "$ref": "MenuTreeNode" }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "set",
+        "type": "function",
+        "description": "Saves a named menu.",
+        "parameters": [
+          {
+            "name": "namedMenu",
+            "type": "string"
+          },
+          {
+            "name": "items",
+            "type": "array",
+            "items": { "$ref": "MenuTreeNode" }
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "result",
+                "type": "boolean"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "move",
+        "type": "function",
+        "description": "Moves one or more items within a named menu.",
+        "parameters": [
+          {
+            "name": "namedMenu",
+            "type": "string"
+          },
+          {
+            "name": "ids",
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          {
+            "name": "parentId",
+            "type": "string"
+          },
+          {
+            "name": "index",
+            "type": "integer"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "result",
+                "type": "boolean"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "create",
+        "type": "function",
+        "description": "Add one or more items within a named menu.",
+        "parameters": [
+          {
+            "name": "namedMenu",
+            "type": "string"
+          },
+          {
+            "name": "parentId",
+            "type": "string"
+          },
+          {
+            "name": "index",
+            "type": "integer",
+            "description": "Where to add elements. A negative value means at end."
+          },
+          {
+            "name": "items",
+            "type": "array",
+            "items": { "$ref": "MenuTreeNode" }
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "result",
+                "type": "boolean"
+              },
+              {
+                "name": "ids",
+                "type": "array",
+                "items": { "type": "string" }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "remove",
+        "type": "function",
+        "description": "Deletes one or more items within a named menu.",
+        "parameters": [
+          {
+            "name": "namedMenu",
+            "type": "string"
+          },
+          {
+            "name": "ids",
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "result",
+                "type": "boolean"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "update",
+        "type": "function",
+        "description": "Updates the properties of a node.",
+        "parameters": [
+          {
+            "name": "namedMenu",
+            "type": "string"
+          },
+          {
+            "name": "id",
+            "type": "string"
+          },
+          {
+            "type": "object",
+            "name": "changes",
+            "properties": {
+              "title": {
+                "type": "string",
+                "optional": true
+              },
+              "containerMode": {
+                "$ref": "ContainerMode",
+                "optional": true
+              },
+              "containerEdge": {
+                "$ref": "ContainerEdge",
+                "optional": true
+              }
+            }
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "result",
+                "type": "boolean"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "reset",
+        "type": "function",
+        "description": "Restores default content within a named menu or in a submenu of that named menu.",
+        "parameters": [
+          {
+            "name": "namedMenu",
+            "type": "string"
+          },
+          {
+            "name": "ids",
+            "type": "array",
+            "items": { "type": "string" },
+            "optional": true
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "result",
+                "type": "boolean"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "events": [
+      {
+        "name": "onChanged",
+        "type": "function",
+        "description": "Fires when the content of a named menu has changed.",
+        "parameters": [
+          {
+            "name": "namedMenu",
+            "type": "string"
+          },
+          {
+            "name": "id",
+            "type": "string",
+            "description": "Unique identifier for the named menu."
+          },
+           {
+            "name": "selectId",
+            "type": "string",
+            "description": "If non-negative this id can be used to set selected element."
+          },
+          {
+            "name": "items",
+            "type": "array",
+            "items": { "$ref": "MenuTreeNode" }
+          }
+        ]
+      }
+    ]
+  }
+]

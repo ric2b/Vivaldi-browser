@@ -58,17 +58,17 @@ class ContentAutofillDriver : public AutofillDriver,
   // AutofillDriver:
   bool IsIncognito() const override;
   bool IsInMainFrame() const override;
+  bool CanShowAutofillUi() const override;
   ui::AXTreeID GetAxTreeId() const override;
   scoped_refptr<network::SharedURLLoaderFactory> GetURLLoaderFactory() override;
   bool RendererIsAvailable() override;
-  void ConnectToAuthenticator(
-      mojo::PendingReceiver<blink::mojom::InternalAuthenticator> receiver)
-      override;
+  InternalAuthenticator* GetOrCreateCreditCardInternalAuthenticator() override;
   void SendFormDataToRenderer(int query_id,
                               RendererFormDataAction action,
                               const FormData& data) override;
   void PropagateAutofillPredictions(
       const std::vector<autofill::FormStructure*>& forms) override;
+  void HandleParsedForms(const std::vector<FormStructure*>& forms) override;
   void SendAutofillTypePredictionsToRenderer(
       const std::vector<FormStructure*>& forms) override;
   void RendererShouldAcceptDataListSuggestion(
@@ -83,6 +83,7 @@ class ContentAutofillDriver : public AutofillDriver,
   void PopupHidden() override;
   gfx::RectF TransformBoundingBoxToViewportCoordinates(
       const gfx::RectF& bounding_box) override;
+  net::NetworkIsolationKey NetworkIsolationKey() override;
 
   // mojom::AutofillDriver:
   void FormsSeen(const std::vector<FormData>& forms,
@@ -162,10 +163,8 @@ class ContentAutofillDriver : public AutofillDriver,
   // a common root.
   AutofillManager* autofill_manager_;
 
-#if !defined(OS_ANDROID)
-  // Implementation of the InternalAuthenticator mojom.
-  std::unique_ptr<content::InternalAuthenticatorImpl> authenticator_impl_;
-#endif
+  // Pointer to an implementation of InternalAuthenticator.
+  std::unique_ptr<InternalAuthenticator> authenticator_impl_;
 
   // AutofillExternalDelegate instance that this object instantiates in the
   // case where the Autofill native UI is enabled.

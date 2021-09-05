@@ -45,7 +45,7 @@ class SearchIPCRouterPolicyImpl : public SearchIPCRouter::Policy {
   bool ShouldSendSetInputInProgress(bool is_active_tab) override;
   bool ShouldSendOmniboxFocusChanged() override;
   bool ShouldSendMostVisitedInfo() override;
-  bool ShouldSendThemeBackgroundInfo() override;
+  bool ShouldSendNtpTheme() override;
   bool ShouldSendLocalBackgroundSelected() override;
   bool ShouldProcessSetCustomBackgroundInfo() override;
   bool ShouldProcessSelectLocalBackgroundImage() override;
@@ -54,9 +54,15 @@ class SearchIPCRouterPolicyImpl : public SearchIPCRouter::Policy {
   bool ShouldProcessSearchSuggestionSelected() override;
   bool ShouldProcessOptOutOfSearchSuggestions() override;
   bool ShouldProcessThemeChangeMessages() override;
+  bool ShouldProcessAutocompleteResultChanged(bool is_active_tab) override;
+  bool ShouldProcessAutocompleteMatchImageAvailable(
+      bool is_active_tab) override;
   bool ShouldProcessQueryAutocomplete(bool is_active_tab) override;
-  bool ShouldProcessStopAutocomplete(bool is_active_tab) override;
+  bool ShouldProcessStopAutocomplete() override;
+  bool ShouldProcessLogCharTypedToRepaintLatency() override;
   bool ShouldProcessBlocklistPromo() override;
+  bool ShouldProcessOpenExtensionsPage() override;
+  bool ShouldProcessOpenAutocompleteMatch(bool is_active_tab) override;
   bool ShouldProcessDeleteAutocompleteMatch() override;
 
   // Used by unit tests.

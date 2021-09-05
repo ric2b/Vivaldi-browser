@@ -25,8 +25,8 @@ CastWindowManagerDefault::GetWindowOrder() {
 }
 
 void CastWindowManagerDefault::InjectEvent(ui::Event* event) {}
-void CastWindowManagerDefault::SetWindowId(gfx::NativeView window,
-                                           WindowId window_id) {}
+void CastWindowManagerDefault::SetZOrder(gfx::NativeView window,
+                                         mojom::ZOrder z_order) {}
 void CastWindowManagerDefault::AddObserver(Observer* observer) {}
 void CastWindowManagerDefault::RemoveObserver(Observer* observer) {}
 
@@ -42,5 +42,8 @@ void CastWindowManagerDefault::AddTouchActivityObserver(
     CastTouchActivityObserver* observer) {}
 void CastWindowManagerDefault::RemoveTouchActivityObserver(
     CastTouchActivityObserver* observer) {}
+
+void CastWindowManagerDefault::SetEnableRoundedCorners(bool enable) {}
+void CastWindowManagerDefault::NotifyColorInversionEnabled(bool enabled) {}
 
 }  // namespace chromecast

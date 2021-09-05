@@ -30,6 +30,7 @@ public class TabPrinter implements Printable {
 
     private final WeakReference<Tab> mTab;
     private final String mDefaultTitle;
+    private final String mErrorMessage;
 
     @CalledByNative
     private static TabPrinter getPrintable(Tab tab) {
@@ -38,8 +39,9 @@ public class TabPrinter implements Printable {
 
     public TabPrinter(Tab tab) {
         mTab = new WeakReference<Tab>(tab);
-        mDefaultTitle = ContextUtils.getApplicationContext().getResources().getString(
-                R.string.menu_print);
+        mDefaultTitle = ContextUtils.getApplicationContext().getString(R.string.menu_print);
+        mErrorMessage =
+                ContextUtils.getApplicationContext().getString(R.string.error_printing_failed);
     }
 
     @Override
@@ -58,7 +60,7 @@ public class TabPrinter implements Printable {
         String title = tab.getTitle();
         if (!TextUtils.isEmpty(title)) return title;
 
-        String url = tab.getUrl();
+        String url = tab.getUrlString();
         if (!TextUtils.isEmpty(url)) return url;
 
         return mDefaultTitle;
@@ -68,11 +70,16 @@ public class TabPrinter implements Printable {
     public boolean canPrint() {
         Tab tab = mTab.get();
         if (tab == null || !tab.isInitialized()) {
-            // tab.isInitialized() will be false if tab is in destroy process.
+            // Tab.isInitialized() will be false if tab is in destroy process.
             Log.d(TAG, "Tab is not avaliable for printing.");
             return false;
         }
         return true;
+    }
+
+    @Override
+    public String getErrorMessage() {
+        return mErrorMessage;
     }
 
     @NativeMethods

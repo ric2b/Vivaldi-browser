@@ -13,13 +13,6 @@
 
 namespace extensions {
 
-namespace {
-
-const wchar_t kVivaldiKey[] = L"Software\\Vivaldi";
-const wchar_t kUniqueUserValue[] = L"unique_user_id";
-
-}  // anonymous namespace
-
 bool UtilitiesGetSystemDateFormatFunction::ReadDateFormats(
     vivaldi::utilities::DateFormats* date_formats) {
   // According to MSDN documentation max len is 80

@@ -17,6 +17,10 @@
 class GURL;
 struct FrameHostMsg_DidCommitProvisionalLoad_Params;
 
+namespace blink {
+struct UserAgentOverride;
+}  // namespace blink
+
 namespace content {
 
 class FrameTreeNode;
@@ -50,8 +54,7 @@ class CONTENT_EXPORT NavigatorDelegate {
   // Document load in |render_frame_host| failed.
   virtual void DidFailLoadWithError(RenderFrameHostImpl* render_frame_host,
                                     const GURL& url,
-                                    int error_code,
-                                    const base::string16& error_description) {}
+                                    int error_code) {}
 
   // Handles post-navigation tasks in navigation BEFORE the entry has been
   // committed to the NavigationController.
@@ -91,8 +94,8 @@ class CONTENT_EXPORT NavigatorDelegate {
   // different process between the load start and commit.
   virtual bool ShouldTransferNavigation(bool is_main_frame_navigation);
 
-  // Returns the overriden user agent string if it's set.
-  virtual const std::string& GetUserAgentOverride() = 0;
+  // Returns the overridden user agent string if it's set.
+  virtual const blink::UserAgentOverride& GetUserAgentOverride() = 0;
 
   // Returns whether we should override the user agent in new tabs, e.g., for
   // Android Webview's popup window when current entry.
@@ -124,10 +127,6 @@ class CONTENT_EXPORT NavigatorDelegate {
   // embedder and |nullptr| is returned.
   virtual std::unique_ptr<NavigationUIData> GetNavigationUIData(
       NavigationHandle* navigation_handle);
-
-  // Whether the delegate is displaying an interstitial page over the current
-  // page.
-  virtual bool ShowingInterstitialPage() = 0;
 };
 
 }  // namespace content

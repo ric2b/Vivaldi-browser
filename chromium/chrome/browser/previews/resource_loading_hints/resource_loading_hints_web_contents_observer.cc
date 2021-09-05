@@ -4,6 +4,8 @@
 
 #include "chrome/browser/previews/resource_loading_hints/resource_loading_hints_web_contents_observer.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/metrics/histogram_macros.h"
@@ -119,9 +121,9 @@ void ResourceLoadingHintsWebContentsObserver::SendResourceLoadingHints(
   for (const std::string& hint : hints)
     hints_ptr->subresources_to_block.push_back(hint);
 
-    auto hints_receiver_associated =
-        GetResourceLoadingHintsReceiver(navigation_handle);
-    hints_receiver_associated->SetResourceLoadingHints(std::move(hints_ptr));
+  auto hints_receiver_associated =
+      GetResourceLoadingHintsReceiver(navigation_handle);
+  hints_receiver_associated->SetResourceLoadingHints(std::move(hints_ptr));
 }
 
 const std::vector<std::string> ResourceLoadingHintsWebContentsObserver::
@@ -132,10 +134,16 @@ const std::vector<std::string> ResourceLoadingHintsWebContentsObserver::
 
   PreviewsService* previews_service =
       PreviewsServiceFactory::GetForProfile(profile_);
-  previews::PreviewsUIService* previews_ui_service =
-      previews_service->previews_ui_service();
-  return previews_ui_service->GetResourceLoadingHintsResourcePatternsToBlock(
-      document_gurl);
+  previews::PreviewsOptimizationGuide* previews_optimization_guide =
+      previews_service->previews_ui_service()
+          ->previews_decider_impl()
+          ->previews_opt_guide();
+  std::vector<std::string> resource_patterns_to_block;
+  if (previews_optimization_guide) {
+    previews_optimization_guide->GetResourceLoadingHints(
+        document_gurl, &resource_patterns_to_block);
+  }
+  return resource_patterns_to_block;
 }
 
 mojo::AssociatedRemote<blink::mojom::PreviewsResourceLoadingHintsReceiver>

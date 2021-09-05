@@ -23,18 +23,20 @@ import org.chromium.chrome.browser.compositor.layouts.components.CompositorButto
 import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelper;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tab.Tab.TabHidingType;
+import org.chromium.chrome.browser.tab.TabCreationState;
+import org.chromium.chrome.browser.tab.TabHidingType;
+import org.chromium.chrome.browser.tab.TabLaunchType;
+import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.browser.tab.TabWebContentsObserver;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelObserver;
-import org.chromium.chrome.browser.tabmodel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
-import org.chromium.chrome.browser.tabmodel.TabSelectionType;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.browser.TabTitleObserver;
 import org.chromium.content_public.browser.LoadUrlParams;
+import org.chromium.content_public.browser.RenderWidgetHostView;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.content_public.browser.test.util.TestTouchUtils;
@@ -52,14 +54,14 @@ import java.util.concurrent.TimeoutException;
  * A utility class that contains methods generic to all Tabs tests.
  */
 public class ChromeTabUtils {
-    private static final String TAG = "cr_ChromeTabUtils";
-    public static final int TITLE_UPDATE_TIMEOUT_MS = 3000;
+    private static final String TAG = "ChromeTabUtils";
+    public static final int TITLE_UPDATE_TIMEOUT_SECONDS = 3;
 
     /**
      * The required page load percentage for the page to be considered ready assuming the
      * TextureView is also ready.
      */
-    private static final int CONSIDERED_READY_LOAD_PERCENTAGE = 100;
+    private static final float CONSIDERED_READY_LOAD_PERCENTAGE = 1;
 
     /**
      * An observer that waits for a Tab to load a page.
@@ -117,7 +119,7 @@ public class ChromeTabUtils {
     }
 
     private static boolean loadComplete(Tab tab, String url) {
-        return !tab.isLoading() && (url == null || TextUtils.equals(tab.getUrl(), url))
+        return !tab.isLoading() && (url == null || TextUtils.equals(tab.getUrlString(), url))
                 && !tab.getWebContents().isLoadingToDifferentDocument();
     }
 
@@ -212,7 +214,8 @@ public class ChromeTabUtils {
                         "Page did not load.  Tab information at time of failure -- "
                                 + "expected url: '%s', actual URL: '%s', load progress: %d, is "
                                 + "loading: %b, web contents init: %b, web contents loading: %b",
-                        url, tab.getUrl(), tab.getProgress(), tab.isLoading(), webContents != null,
+                        url, tab.getUrlString(), Math.round(100 * tab.getProgress()),
+                        tab.isLoading(), webContents != null,
                         webContents == null ? false : webContents.isLoadingToDifferentDocument()));
             }
         }
@@ -243,8 +246,7 @@ public class ChromeTabUtils {
             startedCallback.waitForCallback(0, 1, secondsToWait, TimeUnit.SECONDS);
         } catch (TimeoutException e) {
             Assert.fail("Page did not start loading.  Tab information at time of failure --"
-                    + " url: " + tab.getUrl()
-                    + ", load progress: " + tab.getProgress()
+                    + " url: " + tab.getUrlString() + ", load progress: " + tab.getProgress()
                     + ", is loading: " + Boolean.toString(tab.isLoading()));
         }
     }
@@ -282,7 +284,7 @@ public class ChromeTabUtils {
         }
 
         @Override
-        public void onInteractabilityChanged(boolean interactable) {
+        public void onInteractabilityChanged(Tab tab, boolean interactable) {
             if (interactable) {
                 mCallback.notifyCalled();
                 mTab.removeObserver(this);
@@ -338,7 +340,8 @@ public class ChromeTabUtils {
         final CallbackHelper createdCallback = new CallbackHelper();
         normalTabModel.addObserver(new EmptyTabModelObserver() {
             @Override
-            public void didAddTab(Tab tab, @TabLaunchType int type) {
+            public void didAddTab(
+                    Tab tab, @TabLaunchType int type, @TabCreationState int creationState) {
                 createdCallback.notifyCalled();
                 normalTabModel.removeObserver(this);
             }
@@ -384,7 +387,8 @@ public class ChromeTabUtils {
         TabModel tabModel = activity.getTabModelSelector().getModel(incognito);
         TabModelObserver observer = new EmptyTabModelObserver() {
             @Override
-            public void didAddTab(Tab tab, @TabLaunchType int type) {
+            public void didAddTab(
+                    Tab tab, @TabLaunchType int type, @TabCreationState int creationState) {
                 createdCallback.notifyCalled();
             }
 
@@ -639,8 +643,9 @@ public class ChromeTabUtils {
                 testRule.getActivity().getTabModelSelector().getModel(expectIncognito);
         tabModel.addObserver(new EmptyTabModelObserver() {
             @Override
-            public void didAddTab(Tab tab, @TabLaunchType int type) {
-                if (TextUtils.equals(expectedUrl, tab.getUrl())) {
+            public void didAddTab(
+                    Tab tab, @TabLaunchType int type, @TabCreationState int creationState) {
+                if (TextUtils.equals(expectedUrl, tab.getUrlString())) {
                     createdCallback.notifyCalled();
                     tabModel.removeObserver(this);
                 }
@@ -688,8 +693,9 @@ public class ChromeTabUtils {
                 backgroundActivity.getTabModelSelector().getModel(expectIncognito);
         tabModel.addObserver(new EmptyTabModelObserver() {
             @Override
-            public void didAddTab(Tab tab, @TabLaunchType int type) {
-                if (TextUtils.equals(expectedUrl, tab.getUrl())) {
+            public void didAddTab(
+                    Tab tab, @TabLaunchType int type, @TabCreationState int creationState) {
+                if (TextUtils.equals(expectedUrl, tab.getUrlString())) {
                     createdCallback.notifyCalled();
                     tabModel.removeObserver(this);
                 }
@@ -731,7 +737,7 @@ public class ChromeTabUtils {
     public static void waitForTitle(Tab tab, String newTitle) {
         TabTitleObserver titleObserver = new TabTitleObserver(tab, newTitle);
         try {
-            titleObserver.waitForTitleUpdate(TITLE_UPDATE_TIMEOUT_MS);
+            titleObserver.waitForTitleUpdate(TITLE_UPDATE_TIMEOUT_SECONDS);
         } catch (TimeoutException e) {
             Assert.fail(String.format(Locale.ENGLISH,
                     "Tab title didn't update to %s in time.", newTitle));
@@ -742,6 +748,18 @@ public class ChromeTabUtils {
      * @return Whether or not the loading and rendering of the page is done.
      */
     public static boolean isLoadingAndRenderingDone(Tab tab) {
-        return tab.isReady() && tab.getProgress() >= CONSIDERED_READY_LOAD_PERCENTAGE;
+        return isRendererReady(tab) && tab.getProgress() >= CONSIDERED_READY_LOAD_PERCENTAGE;
+    }
+
+    /**
+     * @return Whether or not the tab has something valid to render.
+     */
+    public static boolean isRendererReady(Tab tab) {
+        if (tab.getNativePage() != null) return true;
+        WebContents webContents = tab.getWebContents();
+        if (webContents == null) return false;
+
+        RenderWidgetHostView rwhv = webContents.getRenderWidgetHostView();
+        return rwhv != null && rwhv.isReady();
     }
 }

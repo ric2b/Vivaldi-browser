@@ -56,18 +56,19 @@ class CRLSetComponentInstallerTest : public PlatformTest {
     request.request_initiator = url::Origin();
 
     client_ = std::make_unique<network::TestURLLoaderClient>();
-    network::mojom::URLLoaderFactoryPtr loader_factory;
+    mojo::Remote<network::mojom::URLLoaderFactory> loader_factory;
     network::mojom::URLLoaderFactoryParamsPtr params =
         network::mojom::URLLoaderFactoryParams::New();
     params->process_id = 0;
     params->is_corb_enabled = false;
-    network_context_->CreateURLLoaderFactory(mojo::MakeRequest(&loader_factory),
-                                             std::move(params));
+    network_context_->CreateURLLoaderFactory(
+        loader_factory.BindNewPipeAndPassReceiver(), std::move(params));
+    loader_.reset();
     loader_factory->CreateLoaderAndStart(
-        mojo::MakeRequest(&loader_), 1, 1,
+        loader_.BindNewPipeAndPassReceiver(), 1, 1,
         network::mojom::kURLLoadOptionSendSSLInfoWithResponse |
             network::mojom::kURLLoadOptionSendSSLInfoForCertificateError,
-        request, client_->CreateInterfacePtr(),
+        request, client_->CreateRemote(),
         net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS));
     client_->RunUntilComplete();
   }
@@ -89,7 +90,7 @@ class CRLSetComponentInstallerTest : public PlatformTest {
   std::unique_ptr<network::TestURLLoaderClient> client_;
   std::unique_ptr<network::NetworkService> network_service_;
   mojo::Remote<network::mojom::NetworkContext> network_context_;
-  network::mojom::URLLoaderPtr loader_;
+  mojo::Remote<network::mojom::URLLoader> loader_;
   base::ScopedTempDir temp_dir_;
 
  private:
@@ -106,16 +107,16 @@ TEST_F(CRLSetComponentInstallerTest, ConfiguresOnInstall) {
   ASSERT_EQ(net::OK, client_->completion_status().error_code);
 
   // Simulate a CRLSet being installed.
-  ASSERT_NO_FATAL_FAILURE(InstallCRLSet(
-      net::GetTestCertsDirectory().AppendASCII("crlset_by_leaf_spki.raw")));
+  ASSERT_NO_FATAL_FAILURE(
+      InstallCRLSet(net::GetTestCertsDirectory().AppendASCII(
+          "crlset_known_interception_by_root.raw")));
 
-  // Ensure the test server is now blocked.
+  // Ensure the test server is now flagged as a known MITM certificate.
   LoadURL(test_server_.GetURL("/empty.html"));
-  EXPECT_EQ(net::ERR_INSECURE_RESPONSE,
-            client_->completion_status().error_code);
-  ASSERT_TRUE(client_->completion_status().ssl_info.has_value());
-  EXPECT_TRUE(client_->completion_status().ssl_info->cert_status &
-              net::CERT_STATUS_REVOKED);
+  ASSERT_EQ(net::OK, client_->completion_status().error_code);
+  ASSERT_TRUE(client_->ssl_info());
+  EXPECT_TRUE(client_->ssl_info()->cert_status &
+              net::CERT_STATUS_KNOWN_INTERCEPTION_DETECTED);
 }
 
 TEST_F(CRLSetComponentInstallerTest, ReconfiguresAfterRestartWithCRLSet) {
@@ -128,16 +129,16 @@ TEST_F(CRLSetComponentInstallerTest, ReconfiguresAfterRestartWithCRLSet) {
   ASSERT_EQ(net::OK, client_->completion_status().error_code);
 
   // Simulate a CRLSet being installed.
-  ASSERT_NO_FATAL_FAILURE(InstallCRLSet(
-      net::GetTestCertsDirectory().AppendASCII("crlset_by_leaf_spki.raw")));
+  ASSERT_NO_FATAL_FAILURE(
+      InstallCRLSet(net::GetTestCertsDirectory().AppendASCII(
+          "crlset_known_interception_by_root.raw")));
 
-  // Ensure the test server is now blocked.
+  // Ensure the test server is now flagged as a known MITM certificate.
   LoadURL(test_server_.GetURL("/empty.html"));
-  EXPECT_EQ(net::ERR_INSECURE_RESPONSE,
-            client_->completion_status().error_code);
-  ASSERT_TRUE(client_->completion_status().ssl_info.has_value());
-  EXPECT_TRUE(client_->completion_status().ssl_info->cert_status &
-              net::CERT_STATUS_REVOKED);
+  ASSERT_EQ(net::OK, client_->completion_status().error_code);
+  ASSERT_TRUE(client_->ssl_info());
+  EXPECT_TRUE(client_->ssl_info()->cert_status &
+              net::CERT_STATUS_KNOWN_INTERCEPTION_DETECTED);
 
   // Simulate a Network Service crash
   SimulateCrash();
@@ -149,14 +150,13 @@ TEST_F(CRLSetComponentInstallerTest, ReconfiguresAfterRestartWithCRLSet) {
       network_context_.BindNewPipeAndPassReceiver(),
       network::mojom::NetworkContextParams::New());
 
-  // Ensure the test server is still blocked even with a new context and
+  // Ensure the test server is still flagged even with a new context and
   // service.
   LoadURL(test_server_.GetURL("/empty.html"));
-  EXPECT_EQ(net::ERR_INSECURE_RESPONSE,
-            client_->completion_status().error_code);
-  ASSERT_TRUE(client_->completion_status().ssl_info.has_value());
-  EXPECT_TRUE(client_->completion_status().ssl_info->cert_status &
-              net::CERT_STATUS_REVOKED);
+  ASSERT_EQ(net::OK, client_->completion_status().error_code);
+  ASSERT_TRUE(client_->ssl_info());
+  EXPECT_TRUE(client_->ssl_info()->cert_status &
+              net::CERT_STATUS_KNOWN_INTERCEPTION_DETECTED);
 }
 
 TEST_F(CRLSetComponentInstallerTest, ReconfiguresAfterRestartWithNoCRLSet) {

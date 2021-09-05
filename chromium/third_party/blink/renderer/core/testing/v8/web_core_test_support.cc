@@ -29,6 +29,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_origin_trials_test.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/testing/internal_settings.h"
 #include "third_party/blink/renderer/core/testing/internals.h"
@@ -100,6 +101,12 @@ void InstallOriginTrialFeaturesForTesting(
           script_state->GetIsolate(), script_state->World(),
           v8::Local<v8::Object>(), prototype_object, interface_object);
     }
+    if (RuntimeEnabledFeatures::OriginTrialsSampleAPIDeprecationEnabled(
+            execution_context)) {
+      V8OriginTrialsTest::InstallOriginTrialsSampleAPIDeprecation(
+          script_state->GetIsolate(), script_state->World(),
+          v8::Local<v8::Object>(), prototype_object, interface_object);
+    }
     if (RuntimeEnabledFeatures::OriginTrialsSampleAPIImpliedEnabled(
             execution_context)) {
       V8OriginTrialsTest::InstallOriginTrialsSampleAPIImplied(
@@ -122,10 +129,8 @@ void ResetInternalsObject(v8::Local<v8::Context> context) {
 
   ScriptState* script_state = ScriptState::From(context);
   ScriptState::Scope scope(script_state);
-  Document* document = To<Document>(ExecutionContext::From(script_state));
-  DCHECK(document);
-  LocalFrame* frame = document->GetFrame();
-  // Should the document have been detached, the page is assumed being destroyed
+  LocalFrame* frame = LocalDOMWindow::From(script_state)->GetFrame();
+  // Should the frame have been detached, the page is assumed being destroyed
   // (=> no reset required.)
   if (!frame)
     return;
@@ -149,6 +154,17 @@ void InstallPendingOriginTrialFeatureForTesting(
                   V8OriginTrialsTest::GetWrapperTypeInfo(), &prototype_object,
                   &interface_object)) {
         V8OriginTrialsTest::InstallOriginTrialsSampleAPI(
+            script_state->GetIsolate(), script_state->World(),
+            v8::Local<v8::Object>(), prototype_object, interface_object);
+      }
+      break;
+    }
+    case OriginTrialFeature::kOriginTrialsSampleAPIDeprecation: {
+      if (script_state->PerContextData()
+              ->GetExistingConstructorAndPrototypeForType(
+                  V8OriginTrialsTest::GetWrapperTypeInfo(), &prototype_object,
+                  &interface_object)) {
+        V8OriginTrialsTest::InstallOriginTrialsSampleAPIDeprecation(
             script_state->GetIsolate(), script_state->World(),
             v8::Local<v8::Object>(), prototype_object, interface_object);
       }

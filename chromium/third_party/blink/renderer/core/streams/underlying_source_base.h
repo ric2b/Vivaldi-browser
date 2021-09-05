@@ -9,8 +9,8 @@
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_value.h"
 #include "third_party/blink/renderer/core/core_export.h"
-#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+#include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
@@ -18,16 +18,16 @@
 
 namespace blink {
 
-class ReadableStreamDefaultControllerInterface;
+class ReadableStreamDefaultControllerWithScriptScope;
 
 class CORE_EXPORT UnderlyingSourceBase
     : public ScriptWrappable,
-      public ContextLifecycleObserver {
+      public ExecutionContextLifecycleObserver {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(UnderlyingSourceBase);
 
  public:
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
   ~UnderlyingSourceBase() override = default;
 
   ScriptPromise startWrapper(ScriptState*, ScriptValue stream);
@@ -35,25 +35,27 @@ class CORE_EXPORT UnderlyingSourceBase
 
   virtual ScriptPromise pull(ScriptState*);
 
+  ScriptPromise cancelWrapper(ScriptState*);
   ScriptPromise cancelWrapper(ScriptState*, ScriptValue reason);
   virtual ScriptPromise Cancel(ScriptState*, ScriptValue reason);
 
   ScriptValue type(ScriptState*) const;
 
-  // ContextLifecycleObserver
+  // ExecutionContextLifecycleObserver
   // TODO(ricea): Is this still useful?
-  void ContextDestroyed(ExecutionContext*) override;
+  void ContextDestroyed() override;
 
  protected:
   explicit UnderlyingSourceBase(ScriptState* script_state)
-      : ContextLifecycleObserver(ExecutionContext::From(script_state)) {}
+      : ExecutionContextLifecycleObserver(
+            ExecutionContext::From(script_state)) {}
 
-  ReadableStreamDefaultControllerInterface* Controller() const {
+  ReadableStreamDefaultControllerWithScriptScope* Controller() const {
     return controller_;
   }
 
  private:
-  Member<ReadableStreamDefaultControllerInterface> controller_;
+  Member<ReadableStreamDefaultControllerWithScriptScope> controller_;
 };
 
 }  // namespace blink

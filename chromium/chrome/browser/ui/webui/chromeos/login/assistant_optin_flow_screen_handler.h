@@ -13,7 +13,8 @@
 #include "base/macros.h"
 #include "chrome/browser/ui/webui/chromeos/login/base_screen_handler.h"
 #include "chromeos/services/assistant/public/mojom/settings.mojom.h"
-#include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/receiver.h"
+#include "mojo/public/cpp/bindings/remote.h"
 
 namespace chromeos {
 
@@ -95,6 +96,7 @@ class AssistantOptInFlowScreenHandler
   void Initialize() override;
 
   // ash::AssistantStateObserver:
+  void OnAssistantSettingsEnabled(bool enabled) override;
   void OnAssistantStatusChanged(ash::mojom::AssistantState state) override;
 
   // Connect to assistant settings manager.
@@ -162,8 +164,9 @@ class AssistantOptInFlowScreenHandler
   // Whether the screen has been initialized.
   bool initialized_ = false;
 
-  mojo::Binding<assistant::mojom::SpeakerIdEnrollmentClient> client_binding_;
-  assistant::mojom::AssistantSettingsManagerPtr settings_manager_;
+  mojo::Receiver<assistant::mojom::SpeakerIdEnrollmentClient> client_receiver_{
+      this};
+  mojo::Remote<assistant::mojom::AssistantSettingsManager> settings_manager_;
   base::WeakPtrFactory<AssistantOptInFlowScreenHandler> weak_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(AssistantOptInFlowScreenHandler);

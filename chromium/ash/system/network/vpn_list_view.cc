@@ -34,7 +34,6 @@
 #include "components/onc/onc_constants.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
-#include "services/service_manager/public/cpp/connector.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/image/image_skia.h"
@@ -263,6 +262,8 @@ void VPNListNetworkEntry::UpdateFromNetworkState(
     if (IsVpnConfigAllowed()) {
       disconnect_button_ = TrayPopupUtils::CreateTrayPopupButton(
           this, l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_VPN_DISCONNECT));
+      disconnect_button_->SetAccessibleName(l10n_util::GetStringFUTF16(
+          IDS_ASH_STATUS_TRAY_NETWORK_DISCONNECT_BUTTON_A11Y_LABEL, label));
       AddRightView(disconnect_button_);
     }
     tri_view()->SetContainerBorder(
@@ -270,8 +271,21 @@ void VPNListNetworkEntry::UpdateFromNetworkState(
         views::CreateEmptyBorder(
             0, kTrayPopupButtonEndMargin - kTrayPopupLabelHorizontalPadding, 0,
             kTrayPopupButtonEndMargin));
+    SetAccessibleName(l10n_util::GetStringFUTF16(
+        IDS_ASH_STATUS_TRAY_NETWORK_A11Y_LABEL_OPEN_WITH_CONNECTION_STATUS,
+        label,
+        l10n_util::GetStringUTF16(
+            IDS_ASH_STATUS_TRAY_NETWORK_STATUS_CONNECTED)));
   } else if (vpn->connection_state == ConnectionStateType::kConnecting) {
+    SetAccessibleName(l10n_util::GetStringFUTF16(
+        IDS_ASH_STATUS_TRAY_NETWORK_A11Y_LABEL_OPEN_WITH_CONNECTION_STATUS,
+        label,
+        l10n_util::GetStringUTF16(
+            IDS_ASH_STATUS_TRAY_NETWORK_STATUS_CONNECTING)));
     owner_->SetupConnectingScrollListItem(this);
+  } else {
+    SetAccessibleName(l10n_util::GetStringFUTF16(
+        IDS_ASH_STATUS_TRAY_NETWORK_A11Y_LABEL_CONNECT, label));
   }
 
   Layout();
@@ -309,7 +323,7 @@ void VPNListView::OnGetNetworkStateList(NetworkStateList networks) {
     }
   }
   if (!hovered_provider) {
-    for (const std::pair<const views::View*, std::string>& entry :
+    for (const std::pair<const views::View* const, std::string>& entry :
          network_view_guid_map_) {
       if (entry.first->IsMouseHovered()) {
         hovered_network_guid = entry.second;
@@ -340,7 +354,7 @@ void VPNListView::OnGetNetworkStateList(NetworkStateList networks) {
       }
     }
   } else if (!hovered_network_guid.empty()) {
-    for (const std::pair<const views::View*, std::string>& entry :
+    for (const std::pair<const views::View* const, std::string>& entry :
          network_view_guid_map_) {
       if (entry.second == hovered_network_guid) {
         scroll_to_show_view = entry.first;
@@ -372,8 +386,7 @@ void VPNListView::OnVpnProvidersChanged() {
 }
 
 void VPNListView::RegisterProfilePrefs(PrefRegistrySimple* registry) {
-  registry->RegisterBooleanPref(prefs::kVpnConfigAllowed, true,
-                                PrefRegistry::PUBLIC);
+  registry->RegisterBooleanPref(prefs::kVpnConfigAllowed, true);
 }
 
 const char* VPNListView::GetClassName() const {

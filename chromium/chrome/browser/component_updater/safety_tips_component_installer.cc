@@ -13,8 +13,9 @@
 #include "base/memory/ref_counted.h"
 #include "base/stl_util.h"
 #include "base/task/post_task.h"
-#include "chrome/browser/lookalikes/safety_tips/safety_tips.pb.h"
-#include "chrome/browser/lookalikes/safety_tips/safety_tips_config.h"
+#include "base/task/thread_pool.h"
+#include "chrome/browser/reputation/safety_tips.pb.h"
+#include "chrome/browser/reputation/safety_tips_config.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 
@@ -97,11 +98,10 @@ void SafetyTipsComponentInstallerPolicy::ComponentReady(
   // The default proto will always be a placeholder since the updated versions
   // are not checked in to the repo. Simply load whatever the component updater
   // gave us without checking the default proto from the resource bundle.
-  base::PostTaskAndReplyWithResult(
-      FROM_HERE,
-      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::BEST_EFFORT},
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::BindOnce(&LoadSafetyTipsProtoFromDisk, pb_path),
-      base::BindOnce(&safety_tips::SetRemoteConfigProto));
+      base::BindOnce(&SetSafetyTipsRemoteConfigProto));
 }
 
 // Called during startup and installation before ComponentReady().

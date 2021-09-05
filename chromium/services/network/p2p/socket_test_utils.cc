@@ -19,7 +19,7 @@ namespace network {
 
 const int kStunHeaderSize = 20;
 const uint16_t kStunBindingRequest = 0x0001;
-const uint16_t kStunBindingResponse = 0x0102;
+const uint16_t kStunBindingResponse = 0x0101;
 const uint16_t kStunBindingError = 0x0111;
 const uint32_t kStunMagicCookie = 0x2112A442;
 
@@ -211,21 +211,22 @@ int64_t FakeSocket::GetTotalReceivedBytes() const {
   return 0;
 }
 
-FakeSocketClient::FakeSocketClient(mojom::P2PSocketPtr socket,
-                                   mojom::P2PSocketClientRequest client_request)
-    : socket_(std::move(socket)), binding_(this, std::move(client_request)) {
-  binding_.set_connection_error_handler(
-      base::BindLambdaForTesting([&]() { connection_error_ = true; }));
+FakeSocketClient::FakeSocketClient(
+    mojo::PendingRemote<mojom::P2PSocket> socket,
+    mojo::PendingReceiver<mojom::P2PSocketClient> client_receiver)
+    : socket_(std::move(socket)), receiver_(this, std::move(client_receiver)) {
+  receiver_.set_disconnect_handler(
+      base::BindLambdaForTesting([&]() { disconnect_error_ = true; }));
 }
 
 FakeSocketClient::~FakeSocketClient() {}
 
 void FakeSocketClient::IncomingTcpConnection(
     const net::IPEndPoint& endpoint,
-    network::mojom::P2PSocketPtr socket,
-    network::mojom::P2PSocketClientRequest client_request) {
+    mojo::PendingRemote<network::mojom::P2PSocket> socket,
+    mojo::PendingReceiver<network::mojom::P2PSocketClient> client_receiver) {
   accepted_.push_back(
-      std::make_pair(std::move(socket), std::move(client_request)));
+      std::make_pair(std::move(socket), std::move(client_receiver)));
 }
 
 void FakeSocketClient::CloseAccepted() {

@@ -12,6 +12,10 @@
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 
 #include "app/vivaldi_apptools.h"
+#include "content/public/browser/render_widget_host_view.h"
+#include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
+#include "ui/vivaldi_browser_window.h"
+#include "ui/vivaldi_native_app_window_views.h"
 
 // This file contains the bubble_anchor_util implementation for a Views
 // browser window (BrowserView).
@@ -47,14 +51,31 @@ gfx::Rect GetPageInfoAnchorRect(Browser* browser) {
   // available.
   DCHECK_EQ(GetPageInfoAnchorConfiguration(browser).anchor_view, nullptr);
 
-  // TODO(pettern@vivaldi.com): Is this a bit of a quick hack to avoid crashing.
-  // See VB-36537 for more details.
   if (vivaldi::IsVivaldiRunning()) {
-    BrowserWindow *window = browser->window();
-    gfx::Point browser_view_origin = window->GetBounds().origin();
-    browser_view_origin +=
-        gfx::Vector2d(bubble_anchor_util::kNoToolbarLeftOffset, 0);
-    return gfx::Rect(browser_view_origin, gfx::Size());
+    extensions::VivaldiUtilitiesAPI* api =
+        extensions::VivaldiUtilitiesAPI::GetFactoryInstance()->Get(
+            browser->profile());
+
+    std::string flow_direction;
+    gfx::Rect rect(api->GetDialogPosition(browser->session_id().id(),
+                                          "permission", &flow_direction));
+
+    // Adjust rect to urlbar on top/bottom.
+    gfx::Point pos =
+        flow_direction == "down" ? rect.bottom_right() : rect.top_right();
+
+    VivaldiBrowserWindow* vivaldi_browser_window =
+        static_cast<VivaldiBrowserWindow*>(browser->window());
+    VivaldiNativeAppWindowViews* native_view =
+        static_cast<VivaldiNativeAppWindowViews*>(
+            vivaldi_browser_window->GetBaseWindow());
+
+    views::View::ConvertPointToScreen(native_view, &pos);
+    views::View::ConvertRectToScreen(native_view, &rect);
+    rect.set_x(pos.x() - (rect.width() / 2));
+
+    return rect;
+
   } else {
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
   // Get position in view (taking RTL UI into account).

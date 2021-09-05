@@ -10,16 +10,25 @@
 #include "components/prefs/default_pref_store.h"
 
 namespace user_prefs {
+namespace {
 
-PrefRegistrySyncable::PrefRegistrySyncable() {
-}
+constexpr uint32_t kSyncablePrefFlags =
+#if defined(OS_CHROMEOS)
+    PrefRegistrySyncable::SYNCABLE_OS_PREF |
+    PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF |
+#endif
+    PrefRegistrySyncable::SYNCABLE_PREF |
+    PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF;
 
-PrefRegistrySyncable::~PrefRegistrySyncable() {
-}
+}  // namespace
+
+PrefRegistrySyncable::PrefRegistrySyncable() = default;
+
+PrefRegistrySyncable::~PrefRegistrySyncable() = default;
 
 void PrefRegistrySyncable::SetSyncableRegistrationCallback(
-    const SyncableRegistrationCallback& cb) {
-  callback_ = cb;
+    SyncableRegistrationCallback cb) {
+  callback_ = std::move(cb);
 }
 
 void PrefRegistrySyncable::OnPrefRegistered(const std::string& path,
@@ -28,10 +37,14 @@ void PrefRegistrySyncable::OnPrefRegistered(const std::string& path,
   // SYNCABLE_PRIORITY_PREF flags at the same time.
   DCHECK(!(flags & PrefRegistrySyncable::SYNCABLE_PREF) ||
          !(flags & PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF));
+#if defined(OS_CHROMEOS)
+  // Ditto for the mutually exclusive OS pref flags.
+  DCHECK(!(flags & PrefRegistrySyncable::SYNCABLE_OS_PREF) ||
+         !(flags & PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF));
+#endif
 
-  if (flags & PrefRegistrySyncable::SYNCABLE_PREF ||
-      flags & PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF) {
-    if (!callback_.is_null())
+  if (flags & kSyncablePrefFlags) {
+    if (callback_)
       callback_.Run(path, flags);
   }
 }

@@ -10,6 +10,9 @@
 
 #include "platform_media/common/feature_toggles.h"
 
+#include "platform_media/common/platform_media_pipeline_types.h"
+#include "platform_media/gpu/data_source/ipc_data_source.h"
+
 #import <AudioToolbox/AudioToolbox.h>
 #import <AVFoundation/AVFoundation.h>
 
@@ -24,8 +27,8 @@
 #include "base/strings/string_piece.h"
 #include "base/synchronization/atomic_flag.h"
 #include "base/threading/thread_checker.h"
-#include "media/base/data_source.h"
 #include "ui/gfx/geometry/size.h"
+
 
 @class DataSourceLoader;
 @class PlayerNotificationObserver;
@@ -38,16 +41,13 @@ class DataBuffer;
 namespace media {
 
 class AVFAudioTap;
-class IPCDataSource;
 
 class AVFMediaDecoderClient {
  public:
   virtual ~AVFMediaDecoderClient() {}
 
-  virtual void AudioSamplesReady(
-      const scoped_refptr<DataBuffer>& buffer) = 0;
-  virtual void VideoFrameReady(
-      const scoped_refptr<DataBuffer>& buffer) = 0;
+  virtual void MediaSamplesReady(
+      PlatformMediaDataType type, scoped_refptr<DataBuffer> buffer) = 0;
   virtual void StreamHasEnded() = 0;
 
   virtual bool HasAvailableCapacity() = 0;
@@ -74,9 +74,9 @@ class AVFMediaDecoder {
   explicit AVFMediaDecoder(AVFMediaDecoderClient* client);
   ~AVFMediaDecoder();
 
-  void Initialize(media::DataSource* data_source,
-                  const std::string& mime_type,
-                  const ResultCB& result_cb);
+  void Initialize(ipc_data_source::Reader data_source,
+                  ipc_data_source::Info source_info,
+                  ResultCB result_cb);
   void Seek(const base::TimeDelta& time, const ResultCB& result_cb);
 
   void NotifyStreamCapacityDepleted();
@@ -109,7 +109,6 @@ class AVFMediaDecoder {
   enum PlaybackState { STARTING, PLAYING, STOPPING, STOPPED };
 
   void AssetKeysLoaded(const ResultCB& initialize_cb,
-                       base::scoped_nsobject<AVAsset> asset,
                        base::scoped_nsobject<NSArray> keys);
   void PlayerStatusKnown(const ResultCB& initialize_cb,
                          base::scoped_nsobject<id> status);

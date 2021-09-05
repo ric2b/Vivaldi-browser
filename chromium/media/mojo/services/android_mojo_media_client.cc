@@ -16,7 +16,6 @@
 #include "media/mojo/mojom/media_drm_storage.mojom.h"
 #include "media/mojo/mojom/provision_fetcher.mojom.h"
 #include "media/mojo/services/android_mojo_util.h"
-#include "services/service_manager/public/cpp/connect.h"
 
 using media::android_mojo_util::CreateProvisionFetcher;
 using media::android_mojo_util::CreateMediaDrmStorage;
@@ -43,8 +42,8 @@ std::unique_ptr<CdmFactory> AndroidMojoMediaClient::CreateCdmFactory(
   }
 
   return std::make_unique<AndroidCdmFactory>(
-      base::Bind(&CreateProvisionFetcher, host_interfaces),
-      base::Bind(&CreateMediaDrmStorage, host_interfaces));
+      base::BindRepeating(&CreateProvisionFetcher, host_interfaces),
+      base::BindRepeating(&CreateMediaDrmStorage, host_interfaces));
 }
 
 }  // namespace media

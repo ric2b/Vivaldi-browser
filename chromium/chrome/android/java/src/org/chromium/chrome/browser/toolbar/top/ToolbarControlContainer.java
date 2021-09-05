@@ -21,12 +21,15 @@ import org.chromium.chrome.browser.compositor.resources.ResourceFactory;
 import org.chromium.chrome.browser.contextualsearch.SwipeRecognizer;
 import org.chromium.chrome.browser.toolbar.ControlContainer;
 import org.chromium.chrome.browser.toolbar.ToolbarProgressBar;
-import org.chromium.chrome.browser.ui.widget.ClipDrawableProgressBar.DrawingInfo;
-import org.chromium.chrome.browser.ui.widget.ViewResourceFrameLayout;
-import org.chromium.chrome.browser.util.ViewUtils;
+import org.chromium.components.browser_ui.widget.ClipDrawableProgressBar.DrawingInfo;
+import org.chromium.components.browser_ui.widget.ViewResourceFrameLayout;
 import org.chromium.ui.KeyboardVisibilityDelegate;
+import org.chromium.ui.base.ViewUtils;
 import org.chromium.ui.resources.dynamics.ViewResourceAdapter;
 import org.chromium.ui.widget.OptimizedFrameLayout;
+
+import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.ui.base.DeviceFormFactor;
 
 /**
  * Layout for the browser controls (omnibox, menu, tab strip, etc..).
@@ -50,6 +53,12 @@ public class ToolbarControlContainer extends OptimizedFrameLayout implements Con
      */
     public ToolbarControlContainer(Context context, AttributeSet attrs) {
         super(context, attrs);
+		// Note(david@vivaldi.com): Initialize with the correct height.
+        if (ChromeApplication.isVivaldi()
+                && !DeviceFormFactor.isNonMultiDisplayContextOnTablet(context))
+            mTabStripHeight =
+                    context.getResources().getDimension(R.dimen.tab_strip_height_phone_with_tabs);
+        else
         mTabStripHeight = context.getResources().getDimension(R.dimen.tab_strip_height);
         mSwipeRecognizer = new SwipeRecognizerImpl(context);
     }
@@ -252,6 +261,15 @@ public class ToolbarControlContainer extends OptimizedFrameLayout implements Con
 
         // Don't react on touch events if the toolbar container is not fully visible.
         if (!isFullyVisible()) return true;
+
+        // Note(david@vivaldi.com): When |isInTabSwitcherMode| we don't eat the event.
+        if (ChromeApplication.isVivaldi()) {
+            View toolbarView = findViewById(R.id.toolbar);
+            assert toolbarView != null;
+            if (toolbarView instanceof ToolbarPhone)
+                if(((ToolbarPhone) toolbarView).isInTabSwitcherMode())
+                    return false;
+        }
 
         // If we have ACTION_DOWN in this context, that means either no child consumed the event or
         // this class is the top UI at the event position. Then, we don't need to feed the event to

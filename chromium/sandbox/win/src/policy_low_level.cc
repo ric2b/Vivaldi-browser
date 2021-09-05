@@ -40,7 +40,7 @@ LowLevelPolicy::LowLevelPolicy(PolicyGlobal* policy_store)
 // Adding a rule is nothing more than pushing it into an stl container. Done()
 // is called for the rule in case the code that made the rule in the first
 // place has not done it.
-bool LowLevelPolicy::AddRule(int service, PolicyRule* rule) {
+bool LowLevelPolicy::AddRule(IpcTag service, PolicyRule* rule) {
   if (!rule->Done()) {
     return false;
   }
@@ -59,6 +59,10 @@ LowLevelPolicy::~LowLevelPolicy() {
   }
 }
 
+size_t LowLevelPolicy::GetPolicyGlobalSize() {
+  return policy_global_size_;
+}
+
 // Here is where the heavy byte shuffling is done. We take all the rules and
 // 'compile' them into a single memory region. Now, the rules are in random
 // order so the first step is to reorganize them into a stl map that is keyed
@@ -69,8 +73,10 @@ LowLevelPolicy::~LowLevelPolicy() {
 bool LowLevelPolicy::Done() {
   typedef std::list<RuleNode> RuleNodes;
   typedef std::list<const PolicyRule*> RuleList;
-  typedef std::map<uint32_t, RuleList> Mmap;
+  typedef std::map<IpcTag, RuleList> Mmap;
   Mmap mmap;
+
+  policy_global_size_ = 0;
 
   for (RuleNodes::iterator it = rules_.begin(); it != rules_.end(); ++it) {
     mmap[it->service].push_back(it->rule);
@@ -82,11 +88,11 @@ bool LowLevelPolicy::Done() {
   size_t avail_size = policy_store_->data_size;
 
   for (Mmap::iterator it = mmap.begin(); it != mmap.end(); ++it) {
-    uint32_t service = (*it).first;
-    if (service >= kMaxServiceCount) {
+    IpcTag service = (*it).first;
+    if (static_cast<size_t>(service) >= kMaxServiceCount) {
       return false;
     }
-    policy_store_->entry[service] = current_buffer;
+    policy_store_->entry[static_cast<size_t>(service)] = current_buffer;
 
     RuleList::iterator rules_it = (*it).second.begin();
     RuleList::iterator rules_it_end = (*it).second.end();
@@ -113,11 +119,15 @@ bool LowLevelPolicy::Done() {
       svc_opcode_count += op_count;
     }
 
-    current_buffer->opcode_count += svc_opcode_count;
-    size_t policy_byte_count =
+    current_buffer->opcode_count = svc_opcode_count;
+    size_t policy_buffers_occupied =
         (svc_opcode_count * sizeof(PolicyOpcode)) / sizeof(current_buffer[0]);
-    current_buffer = &current_buffer[policy_byte_count + 1];
+    current_buffer = &current_buffer[policy_buffers_occupied + 1];
   }
+
+  // The size used to store policy rules. Must be >=0 if we got here
+  // or we would have bailed out for lack of space earlier.
+  policy_global_size_ = policy_store_->data_size - avail_size;
 
   return true;
 }
@@ -159,7 +169,7 @@ bool PolicyRule::GenStringOpcode(RuleType rule_type,
                                  int state,
                                  bool last_call,
                                  int* skip_count,
-                                 base::string16* fragment) {
+                                 std::wstring* fragment) {
   // The last opcode must:
   //   1) Always clear the context.
   //   2) Preserve the negation.
@@ -231,7 +241,7 @@ bool PolicyRule::AddStringMatch(RuleType rule_type,
   uint32_t last_char = kLastCharIsNone;
   int state = PENDING_NONE;
   int skip_count = 0;       // counts how many '?' we have seen in a row.
-  base::string16 fragment;  // accumulates the non-wildcard part.
+  std::wstring fragment;    // accumulates the non-wildcard part.
 
   while (L'\0' != *current_char) {
     switch (*current_char) {

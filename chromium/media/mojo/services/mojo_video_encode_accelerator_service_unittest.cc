@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/test/task_environment.h"
 #include "gpu/config/gpu_preferences.h"
@@ -13,7 +14,8 @@
 #include "media/mojo/services/mojo_video_encode_accelerator_service.h"
 #include "media/video/fake_video_encode_accelerator.h"
 #include "media/video/video_encode_accelerator.h"
-#include "mojo/public/cpp/bindings/strong_binding.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -53,6 +55,7 @@ class MockMojoVideoEncodeAcceleratorClient
   MOCK_METHOD2(BitstreamBufferReady,
                void(int32_t, const media::BitstreamBufferMetadata&));
   MOCK_METHOD1(NotifyError, void(VideoEncodeAccelerator::Error));
+  MOCK_METHOD1(NotifyEncoderInfoChange, void(const VideoEncoderInfo& info));
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockMojoVideoEncodeAcceleratorClient);
@@ -68,12 +71,12 @@ class MojoVideoEncodeAcceleratorServiceTest : public ::testing::Test {
   MojoVideoEncodeAcceleratorServiceTest() = default;
 
   void TearDown() override {
-    // The destruction of a mojo::StrongBinding closes the bound message pipe
-    // but does not destroy the implementation object: needs to happen manually,
-    // otherwise we leak it. This only applies if BindAndInitialize() has been
-    // called.
-    if (mojo_vea_binding_)
-      mojo_vea_binding_->Close();
+    // The destruction of a mojo::SelfOwnedReceiver closes the bound message
+    // pipe but does not destroy the implementation object: needs to happen
+    // manually, otherwise we leak it. This only applies if BindAndInitialize()
+    // has been called.
+    if (mojo_vea_receiver_)
+      mojo_vea_receiver_->Close();
   }
 
   // Creates the class under test, configuring the underlying FakeVEA to succeed
@@ -81,17 +84,17 @@ class MojoVideoEncodeAcceleratorServiceTest : public ::testing::Test {
   void CreateMojoVideoEncodeAccelerator(
       bool will_fake_vea_initialization_succeed = true) {
     mojo_vea_service_ = std::make_unique<MojoVideoEncodeAcceleratorService>(
-        base::Bind(&CreateAndInitializeFakeVEA,
-                   will_fake_vea_initialization_succeed),
+        base::BindRepeating(&CreateAndInitializeFakeVEA,
+                            will_fake_vea_initialization_succeed),
         gpu::GpuPreferences());
   }
 
   void BindAndInitialize() {
-    // Create an Mojo VEA Client InterfacePtr and point it to bind to our Mock.
-    mojom::VideoEncodeAcceleratorClientPtr mojo_vea_client;
-    mojo_vea_binding_ = mojo::MakeStrongBinding(
+    // Create an Mojo VEA Client remote and bind it to our Mock.
+    mojo::PendingRemote<mojom::VideoEncodeAcceleratorClient> mojo_vea_client;
+    mojo_vea_receiver_ = mojo::MakeSelfOwnedReceiver(
         std::make_unique<MockMojoVideoEncodeAcceleratorClient>(),
-        mojo::MakeRequest(&mojo_vea_client));
+        mojo_vea_client.InitWithNewPipeAndPassReceiver());
 
     EXPECT_CALL(*mock_mojo_vea_client(),
                 RequireBitstreamBuffers(_, kInputVisibleSize, _));
@@ -101,7 +104,7 @@ class MojoVideoEncodeAcceleratorServiceTest : public ::testing::Test {
         PIXEL_FORMAT_I420, kInputVisibleSize, H264PROFILE_MIN, kInitialBitrate);
     mojo_vea_service()->Initialize(
         config, std::move(mojo_vea_client),
-        base::Bind([](bool success) { ASSERT_TRUE(success); }));
+        base::BindOnce([](bool success) { ASSERT_TRUE(success); }));
     base::RunLoop().RunUntilIdle();
   }
 
@@ -111,7 +114,7 @@ class MojoVideoEncodeAcceleratorServiceTest : public ::testing::Test {
 
   MockMojoVideoEncodeAcceleratorClient* mock_mojo_vea_client() const {
     return static_cast<media::MockMojoVideoEncodeAcceleratorClient*>(
-        mojo_vea_binding_->impl());
+        mojo_vea_receiver_->impl());
   }
 
   FakeVideoEncodeAccelerator* fake_vea() const {
@@ -122,7 +125,8 @@ class MojoVideoEncodeAcceleratorServiceTest : public ::testing::Test {
  private:
   base::test::SingleThreadTaskEnvironment task_environment_;
 
-  mojo::StrongBindingPtr<mojom::VideoEncodeAcceleratorClient> mojo_vea_binding_;
+  mojo::SelfOwnedReceiverRef<mojom::VideoEncodeAcceleratorClient>
+      mojo_vea_receiver_;
 
   // The class under test.
   std::unique_ptr<MojoVideoEncodeAcceleratorService> mojo_vea_service_;
@@ -221,14 +225,15 @@ TEST_F(MojoVideoEncodeAcceleratorServiceTest,
        InitializeWithInvalidClientFails) {
   CreateMojoVideoEncodeAccelerator();
 
-  mojom::VideoEncodeAcceleratorClientPtr invalid_mojo_vea_client = nullptr;
+  mojo::PendingRemote<mojom::VideoEncodeAcceleratorClient>
+      invalid_mojo_vea_client;
 
   const uint32_t kInitialBitrate = 100000u;
   const media::VideoEncodeAccelerator::Config config(
       PIXEL_FORMAT_I420, kInputVisibleSize, H264PROFILE_MIN, kInitialBitrate);
   mojo_vea_service()->Initialize(
       config, std::move(invalid_mojo_vea_client),
-      base::Bind([](bool success) { ASSERT_FALSE(success); }));
+      base::BindOnce([](bool success) { ASSERT_FALSE(success); }));
   base::RunLoop().RunUntilIdle();
 }
 
@@ -238,20 +243,20 @@ TEST_F(MojoVideoEncodeAcceleratorServiceTest, InitializeFailure) {
   CreateMojoVideoEncodeAccelerator(
       false /* will_fake_vea_initialization_succeed */);
 
-  mojom::VideoEncodeAcceleratorClientPtr mojo_vea_client;
-  auto mojo_vea_binding = mojo::MakeStrongBinding(
+  mojo::PendingRemote<mojom::VideoEncodeAcceleratorClient> mojo_vea_client;
+  auto mojo_vea_receiver = mojo::MakeSelfOwnedReceiver(
       std::make_unique<MockMojoVideoEncodeAcceleratorClient>(),
-      mojo::MakeRequest(&mojo_vea_client));
+      mojo_vea_client.InitWithNewPipeAndPassReceiver());
 
   const uint32_t kInitialBitrate = 100000u;
   const media::VideoEncodeAccelerator::Config config(
       PIXEL_FORMAT_I420, kInputVisibleSize, H264PROFILE_MIN, kInitialBitrate);
   mojo_vea_service()->Initialize(
       config, std::move(mojo_vea_client),
-      base::Bind([](bool success) { ASSERT_FALSE(success); }));
+      base::BindOnce([](bool success) { ASSERT_FALSE(success); }));
   base::RunLoop().RunUntilIdle();
 
-  mojo_vea_binding->Close();
+  mojo_vea_receiver->Close();
 }
 
 // This test verifies that UseOutputBitstreamBuffer() with a wrong ShMem size

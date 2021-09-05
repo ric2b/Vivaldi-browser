@@ -21,7 +21,6 @@
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "media/audio/audio_device_description.h"
-#include "media/audio/audio_output_controller.h"
 #include "media/audio/audio_output_device_thread_callback.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/limits.h"
@@ -69,7 +68,7 @@ void AudioOutputDevice::InitializeOnIOThread(const AudioParameters& params,
 AudioOutputDevice::~AudioOutputDevice() {
   {
     // Abort any pending callbacks. Technically we don't need to acquire the
-    // lock here since ther eshould be no other calls outstanding, but because
+    // lock here since there should be no other calls outstanding, but because
     // we've used the GUARDED_BY compiler syntax, we'll get an error without it.
     base::AutoLock auto_lock(device_info_lock_);
     if (pending_device_info_cb_) {
@@ -197,9 +196,9 @@ void AudioOutputDevice::RequestDeviceAuthorizationOnIOThread() {
     auth_timeout_action_.reset(new base::OneShotTimer());
     auth_timeout_action_->Start(
         FROM_HERE, auth_timeout_,
-        base::BindRepeating(&AudioOutputDevice::OnDeviceAuthorized, this,
-                            OUTPUT_DEVICE_STATUS_ERROR_TIMED_OUT,
-                            AudioParameters(), std::string()));
+        base::BindOnce(&AudioOutputDevice::OnDeviceAuthorized, this,
+                       OUTPUT_DEVICE_STATUS_ERROR_TIMED_OUT, AudioParameters(),
+                       std::string()));
   }
 }
 
@@ -366,16 +365,16 @@ void AudioOutputDevice::OnDeviceAuthorized(
 
 void AudioOutputDevice::OnStreamCreated(
     base::UnsafeSharedMemoryRegion shared_memory_region,
-    base::SyncSocket::Handle socket_handle,
+    base::SyncSocket::ScopedHandle socket_handle,
     bool playing_automatically) {
   TRACE_EVENT0("audio", "AudioOutputDevice::OnStreamCreated")
 
   DCHECK(io_task_runner_->BelongsToCurrentThread());
   DCHECK(shared_memory_region.IsValid());
 #if defined(OS_WIN)
-  DCHECK(socket_handle);
+  DCHECK(socket_handle.IsValid());
 #else
-  DCHECK_GE(socket_handle, 0);
+  DCHECK(socket_handle.is_valid());
 #endif
   DCHECK_GT(shared_memory_region.GetSize(), 0u);
 
@@ -408,7 +407,7 @@ void AudioOutputDevice::OnStreamCreated(
     if (playing_automatically)
       audio_callback_->InitializePlayStartTime();
     audio_thread_.reset(new AudioDeviceThread(
-        audio_callback_.get(), socket_handle, "AudioOutputDevice",
+        audio_callback_.get(), std::move(socket_handle), "AudioOutputDevice",
         base::ThreadPriority::REALTIME_AUDIO));
   }
 }

@@ -5,10 +5,16 @@
 #import "ios/chrome/browser/ui/badges/badge_popup_menu_coordinator.h"
 
 #include "base/logging.h"
+#include "base/metrics/histogram_macros.h"
+#include "ios/chrome/browser/infobars/infobar_metrics_recorder.h"
 #import "ios/chrome/browser/infobars/infobar_type.h"
+#import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/ui/badges/badge_constants.h"
 #import "ios/chrome/browser/ui/badges/badge_item.h"
 #import "ios/chrome/browser/ui/badges/badge_popup_menu_item.h"
+#import "ios/chrome/browser/ui/badges/badges_histograms.h"
+#import "ios/chrome/browser/ui/commands/command_dispatcher.h"
+#import "ios/chrome/browser/ui/commands/infobar_commands.h"
 #import "ios/chrome/browser/ui/popup_menu/public/cells/popup_menu_item.h"
 #import "ios/chrome/browser/ui/popup_menu/public/popup_menu_consumer.h"
 #import "ios/chrome/browser/ui/popup_menu/public/popup_menu_presenter.h"
@@ -76,16 +82,6 @@
   [self.consumer setPopupMenuItems:self.popupMenuItems];
 }
 
-#pragma mark - ContainedPresenterDelegate
-
-- (void)containedPresenterDidPresent:(id<ContainedPresenter>)presenter {
-  // noop.
-}
-
-- (void)containedPresenterDidDismiss:(id<ContainedPresenter>)presenter {
-  // noop.
-}
-
 #pragma mark - PopupMenuPresenterDelegate
 
 - (void)popupMenuPresenterWillDismiss:(PopupMenuPresenter*)presenter {
@@ -98,15 +94,31 @@
                        didSelectItem:(TableViewItem<PopupMenuItem>*)item
                               origin:(CGPoint)origin {
   [self dismissPopupMenu];
+  id<InfobarCommands> handler =
+      HandlerForProtocol(self.browser->GetCommandDispatcher(), InfobarCommands);
   switch (item.actionIdentifier) {
     case PopupMenuActionShowSavePasswordOptions: {
-      [self.dispatcher
-          displayModalInfobar:InfobarType::kInfobarTypePasswordSave];
+      UMA_HISTOGRAM_ENUMERATION(kInfobarOverflowMenuTappedHistogram,
+                                MobileMessagesInfobarType::SavePassword);
+      [handler displayModalInfobar:InfobarType::kInfobarTypePasswordSave];
       break;
     }
     case PopupMenuActionShowUpdatePasswordOptions: {
-      [self.dispatcher
-          displayModalInfobar:InfobarType::kInfobarTypePasswordUpdate];
+      UMA_HISTOGRAM_ENUMERATION(kInfobarOverflowMenuTappedHistogram,
+                                MobileMessagesInfobarType::UpdatePassword);
+      [handler displayModalInfobar:InfobarType::kInfobarTypePasswordUpdate];
+      break;
+    }
+    case PopupMenuActionShowSaveCardOptions: {
+      UMA_HISTOGRAM_ENUMERATION(kInfobarOverflowMenuTappedHistogram,
+                                MobileMessagesInfobarType::SaveCard);
+      [handler displayModalInfobar:InfobarType::kInfobarTypeSaveCard];
+      break;
+    }
+    case PopupMenuActionShowTranslateOptions: {
+      UMA_HISTOGRAM_ENUMERATION(kInfobarOverflowMenuTappedHistogram,
+                                MobileMessagesInfobarType::Translate);
+      [handler displayModalInfobar:InfobarType::kInfobarTypeTranslate];
       break;
     }
     default:

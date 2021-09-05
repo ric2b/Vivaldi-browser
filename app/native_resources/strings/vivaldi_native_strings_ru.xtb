@@ -29,7 +29,7 @@
 <translation id="2923448633003185837">Вставить и перейти</translation>
 <translation id="2977472760057091832">Открыть ссылку в приватном окне</translation>
 <translation id="2989805286512600854">Открыть в новой вкладке</translation>
-<translation id="3027988479108856431">К сожалению, настройки Яндекс-браузера недоступны при работающем браузере. Для импортирования этих настроек в Vivaldi, сохраните свои данные и закройте все окна Яндекс-браузера. Затем нажмите "Продолжить".</translation>
+<translation id="3027988479108856431">К сожалению, настройки Яндекс-браузера недоступны при работающем браузере. Для импорта этих настроек в Vivaldi, сохраните свои данные и закройте все окна Яндекс-браузера. Затем нажмите "Продолжить".</translation>
 <translation id="3084011186245865060">Пейзаж 6</translation>
 <translation id="3127383884976966729">Зверушка 7</translation>
 <translation id="3156398087075132709">Новая закладка</translation>
@@ -45,7 +45,6 @@
 <translation id="3542768452570884558">Открыть ссылку в новом окне</translation>
 <translation id="3588820906588687999">Открыть картинку в новой вкладке</translation>
 <translation id="3601066750251199488">Монстр 3</translation>
-<translation id="366643050267431920">Добавить как событие</translation>
 <translation id="3732157130969736834">Поместить ссылку в закладки</translation>
 <translation id="3732388226447288666">Зверушка 2</translation>
 <translation id="3732439195215136813">Зверушка 5</translation>
@@ -68,7 +67,6 @@
 <translation id="4636708767492582204">Отправить по почте</translation>
 <translation id="4677434526832593569">Зверушка 8</translation>
 <translation id="4881695831933465202">Открыть</translation>
-<translation id="4973311370126107785">Выполнение JavaScript через AppleScript отключено. Для включения войдите в меню, выберите Tools &gt; Allow JavaScript из Apple Events.</translation>
 <translation id="5014281392052865061">Импортированная Экспресс-панель</translation>
 <translation id="5092656712000637858">Добавить страницу на веб-панель</translation>
 <translation id="5177818338935286353">Монстр 7</translation>
@@ -85,10 +83,11 @@
 <translation id="5770433027661640693">Пейзаж 10</translation>
 <translation id="5857090052475505287">Новая папка</translation>
 <translation id="588258955323874662">Полноэкранный режим</translation>
-<translation id="5916080360077521750">К сожалению, настройки Chrome недоступны при работающем браузере. Для импортирования этих настроек в Vivaldi, сохраните свои данные и закройте все окна Chrome. Затем нажмите "Продолжить".</translation>
+<translation id="5916080360077521750">К сожалению, настройки Chrome недоступны при работающем браузере. Для импорта этих настроек в Vivaldi, сохраните свои данные и закройте все окна Chrome. Затем нажмите "Продолжить".</translation>
 <translation id="6229528619562190452">Нажмите здесь для обновления Vivaldi.</translation>
 <translation id="6234173136417926046">Установить фоном Экспресс-панели</translation>
 <translation id="630690498669249215">Файл закладок Opera</translation>
+<translation id="6339818817272922368">Локальная учётная запись</translation>
 <translation id="6438786710866753178">Пейзаж 4</translation>
 <translation id="6477028720702061455">Выберите папку профиля Opera для импорта</translation>
 <translation id="6510706699590490869">&amp;Обновить Vivaldi</translation>
@@ -103,6 +102,7 @@
 <translation id="7496505986576158197">Vivaldi создан с использованием проекта <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> с открытым исходным кодом и другого <ph name="BEGIN_LINK_OSS" />открытого ПО<ph name="END_LINK_OSS" />.</translation>
 <translation id="7715497554424665066">&amp;Не обновляться</translation>
 <translation id="7724603315864178912">Вырезать</translation>
+<translation id="7793738202466490491">Добавить как событие календаря</translation>
 <translation id="7865983598101744945">Подтвердите выход</translation>
 <translation id="7957213167373139414">Мой календарь</translation>
 <translation id="8027581147000338959">Открыть в новом окне</translation>
@@ -112,6 +112,7 @@
 <translation id="8331671104904436324">Открыть в фоновой вкладке</translation>
 <translation id="8373293945112511707">Пейзаж 1</translation>
 <translation id="8427094907586191051">Пейзаж 17</translation>
+<translation id="8446668873108041390">Выполнение JavaScript через AppleScript отключено. В настройках Settings &gt; Privacy &gt; Apple Events вы можете разрешить JavaScript из Apple Events.</translation>
 <translation id="8539196077526389150">Пейзаж 13</translation>
 <translation id="8624587806981488221">&amp;Обновить картинку</translation>
 <translation id="864444594187862076">Opera версии 15+ (Тестовая)</translation>

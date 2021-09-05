@@ -7,18 +7,25 @@
 
 #include <memory>
 #include "base/bind.h"
+#include "base/metrics/user_metrics.h"
+#include "base/metrics/user_metrics_action.h"
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
 #include "chrome/browser/content_settings/local_shared_objects_container.h"
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/cookie_controls/cookie_controls_service.h"
 #include "chrome/browser/ui/cookie_controls/cookie_controls_view.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
+#include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/pref_names.h"
+#include "components/page_info/android/cookie_controls_status.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/reload_type.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/url_constants.h"
 #include "extensions/common/constants.h"
+
+using base::UserMetricsAction;
 
 CookieControlsController::CookieControlsController(
     content::WebContents* web_contents) {
@@ -26,6 +33,11 @@ CookieControlsController::CookieControlsController(
   Profile* profile =
       Profile::FromBrowserContext(web_contents->GetBrowserContext());
   cookie_settings_ = CookieSettingsFactory::GetForProfile(profile);
+  if (profile->IsOffTheRecord()) {
+    regular_cookie_settings_ =
+        CookieSettingsFactory::GetForProfile(profile->GetOriginalProfile());
+  }
+
   pref_change_registrar_.Init(profile->GetPrefs());
   pref_change_registrar_.Add(
       prefs::kCookieControlsMode,
@@ -37,10 +49,10 @@ CookieControlsController::CookieControlsController(
                           base::Unretained(this)));
 }
 
-CookieControlsController::~CookieControlsController() {}
+CookieControlsController::~CookieControlsController() = default;
 
-void CookieControlsController::OnBubbleUiClosing(
-    content::WebContents* web_contents) {
+void CookieControlsController::OnUiClosing() {
+  auto* web_contents = GetWebContents();
   if (should_reload_ && web_contents && !web_contents->IsBeingDestroyed())
     web_contents->GetController().Reload(content::ReloadType::NORMAL, true);
   should_reload_ = false;
@@ -53,32 +65,56 @@ void CookieControlsController::Update(content::WebContents* web_contents) {
     tab_observer_ = std::make_unique<TabObserver>(
         this, TabSpecificContentSettings::FromWebContents(web_contents));
   }
+  auto status = GetStatus(web_contents);
+  int blocked_count = GetBlockedCookieCount();
   for (auto& observer : observers_)
-    observer.OnStatusChanged(GetStatus(web_contents), GetBlockedCookieCount());
+    observer.OnStatusChanged(status.first, status.second, blocked_count);
 }
 
-CookieControlsController::Status CookieControlsController::GetStatus(
-    content::WebContents* web_contents) {
-  if (!cookie_settings_->IsCookieControlsEnabled())
-    return CookieControlsController::Status::kDisabled;
-
+std::pair<CookieControlsStatus, CookieControlsEnforcement>
+CookieControlsController::GetStatus(content::WebContents* web_contents) {
+  if (!cookie_settings_->IsCookieControlsEnabled()) {
+    return {CookieControlsStatus::kDisabled,
+            CookieControlsEnforcement::kNoEnforcement};
+  }
   const GURL& url = web_contents->GetURL();
   if (url.SchemeIs(content::kChromeUIScheme) ||
       url.SchemeIs(extensions::kExtensionScheme)) {
-    return CookieControlsController::Status::kDisabled;
+    return {CookieControlsStatus::kDisabled,
+            CookieControlsEnforcement::kNoEnforcement};
   }
 
-  return cookie_settings_->IsThirdPartyAccessAllowed(web_contents->GetURL())
-             ? CookieControlsController::Status::kDisabledForSite
-             : CookieControlsController::Status::kEnabled;
+  content_settings::SettingSource source;
+  bool is_allowed = cookie_settings_->IsThirdPartyAccessAllowed(
+      web_contents->GetURL(), &source);
+
+  CookieControlsStatus status = is_allowed
+                                    ? CookieControlsStatus::kDisabledForSite
+                                    : CookieControlsStatus::kEnabled;
+  CookieControlsEnforcement enforcement;
+  if (source == content_settings::SETTING_SOURCE_POLICY) {
+    enforcement = CookieControlsEnforcement::kEnforcedByPolicy;
+  } else if (is_allowed && regular_cookie_settings_ &&
+             regular_cookie_settings_->ShouldBlockThirdPartyCookies() &&
+             regular_cookie_settings_->IsThirdPartyAccessAllowed(
+                 web_contents->GetURL(), nullptr /* source */)) {
+    // TODO(crbug.com/1015767): Rules from regular mode can't be temporarily
+    // overridden in incognito.
+    enforcement = CookieControlsEnforcement::kEnforcedByCookieSetting;
+  } else {
+    enforcement = CookieControlsEnforcement::kNoEnforcement;
+  }
+  return {status, enforcement};
 }
 
 void CookieControlsController::OnCookieBlockingEnabledForSite(
     bool block_third_party_cookies) {
   if (block_third_party_cookies) {
+    base::RecordAction(UserMetricsAction("CookieControls.Bubble.TurnOn"));
     should_reload_ = false;
     cookie_settings_->ResetThirdPartyCookieSetting(GetWebContents()->GetURL());
   } else {
+    base::RecordAction(UserMetricsAction("CookieControls.Bubble.TurnOff"));
     should_reload_ = true;
     cookie_settings_->SetThirdPartyCookieSetting(
         GetWebContents()->GetURL(), ContentSetting::CONTENT_SETTING_ALLOW);

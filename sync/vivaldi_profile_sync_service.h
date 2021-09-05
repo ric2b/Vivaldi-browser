@@ -8,6 +8,7 @@
 
 #include "base/observer_list.h"
 #include "components/sync/driver/profile_sync_service.h"
+#include "net/http/http_response_headers.h"
 #include "sync/vivaldi_sync_ui_helper.h"
 
 class Profile;
@@ -48,13 +49,11 @@ class VivaldiProfileSyncService : public syncer::ProfileSyncService {
 
  private:
   void ShutdownImpl(syncer::ShutdownReason reason) override;
-  void StartSyncingWithServer() override;
   void OnEngineInitialized(
       syncer::ModelTypeSet initial_types,
       const syncer::WeakHandle<syncer::JsBackend>& js_backend,
       const syncer::WeakHandle<syncer::DataTypeDebugInfoListener>&
           debug_info_listener,
-      const std::string& cache_guid,
       const std::string& birthday,
       const std::string& bag_of_chips,
       const std::string& last_keystore_key,

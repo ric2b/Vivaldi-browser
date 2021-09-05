@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-#include "base/memory/shared_memory_handle.h"
+#include "base/memory/unsafe_shared_memory_region.h"
 #include "base/scoped_observer.h"
 #include "chrome/browser/extensions/api/tabs/tabs_api.h"
 #include "chrome/browser/ui/tabs/tab_change_type.h"
@@ -28,6 +28,13 @@
 typedef base::OnceCallback<void(
     std::vector<VivaldiViewMsg_AccessKeyDefinition>)>
     AccessKeysCallback;
+
+typedef base::OnceCallback<void(
+    std::vector<VivaldiViewMsg_NavigationRect>)>
+    GetSpatialNavigationRectsCallback;
+
+typedef base::OnceCallback<void(int, int)>
+    GetScrollPositionCallback;
 
 class TabStripModelObserver;
 
@@ -50,6 +57,10 @@ class TabsPrivateAPI : public BrowserContextKeyedAPI {
       content::BrowserContext* browser_context,
       const content::NativeWebKeyboardEvent& event,
       bool is_auto_repeat);
+
+  static void SendMouseChangeEvent(
+      content::BrowserContext* browser_context,
+      bool is_motion);
 
   // KeyedService implementation.
   void Shutdown() override;
@@ -94,7 +105,7 @@ class VivaldiPrivateTabObserver
   void BroadcastTabInfo();
 
   // content::WebContentsObserver implementation.
-  void DidChangeThemeColor(base::Optional<SkColor> theme_color) override;
+  void DidChangeThemeColor() override;
   void RenderViewCreated(content::RenderViewHost* render_view_host) override;
   void RenderViewHostChanged(content::RenderViewHost* old_host,
                              content::RenderViewHost* new_host) override;
@@ -143,6 +154,13 @@ class VivaldiPrivateTabObserver
 
   void AccessKeyAction(std::string);
 
+  void GetSpatialNavigationRects(GetSpatialNavigationRectsCallback callback);
+  void OnGetSpatialNavigationRectsResponse(
+      std::vector<VivaldiViewMsg_NavigationRect> rect);
+
+  void GetScrollPosition(GetScrollPositionCallback callback);
+  void OnGetScrollPositionResponse(int x, int y);
+
   // If a page is accessing a resource controlled by a permission this will
   // fire.
   void OnPermissionAccessed(ContentSettingsType type, std::string origin,
@@ -174,6 +192,10 @@ private:
   bool mute_ = false;
 
   AccessKeysCallback access_keys_callback_;
+
+  GetSpatialNavigationRectsCallback spatnav_callback_;
+
+  GetScrollPositionCallback scroll_position_callback_;
 
   // We want to communicate changes in some prefs to the renderer right away.
   PrefChangeRegistrar prefs_registrar_;
@@ -286,6 +308,59 @@ class TabsPrivateScrollPageFunction : public ExtensionFunction {
   ResponseAction Run() override;
 
   DISALLOW_COPY_AND_ASSIGN(TabsPrivateScrollPageFunction);
+};
+
+class TabsPrivateGetSpatialNavigationRectsFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("tabsPrivate.getSpatialNavigationRects",
+                             TABSSPRIVATE_GETSPATIALNAVIGATIONRECTS)
+
+  TabsPrivateGetSpatialNavigationRectsFunction() = default;
+
+ protected:
+  ~TabsPrivateGetSpatialNavigationRectsFunction() override = default;
+
+ private:
+  void GetSpatialNavigationRectsResponse(
+      std::vector<VivaldiViewMsg_NavigationRect> rects);
+
+  ResponseAction Run() override;
+
+  DISALLOW_COPY_AND_ASSIGN(TabsPrivateGetSpatialNavigationRectsFunction);
+};
+
+class TabsPrivateGetScrollPositionFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("tabsPrivate.getScrollPosition",
+                             TABSSPRIVATE_GETSCROLLPOSITION)
+
+ TabsPrivateGetScrollPositionFunction() = default;
+
+ protected:
+  ~TabsPrivateGetScrollPositionFunction() override = default;
+
+ private:
+  void GetScrollPositionResponse(int x, int y);
+
+  ResponseAction Run() override;
+
+  DISALLOW_COPY_AND_ASSIGN(TabsPrivateGetScrollPositionFunction);
+};
+
+class TabsPrivateActivateElementFromPointFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("tabsPrivate.activateElementFromPoint",
+                             TABSSPRIVATE_ACTIVATEELEMENTFROMPOINT)
+
+  TabsPrivateActivateElementFromPointFunction() = default;
+
+ protected:
+  ~TabsPrivateActivateElementFromPointFunction() override = default;
+
+ private:
+  ResponseAction Run() override;
+
+  DISALLOW_COPY_AND_ASSIGN(TabsPrivateActivateElementFromPointFunction);
 };
 
 }  // namespace extensions

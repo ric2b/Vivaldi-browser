@@ -172,31 +172,18 @@ bool ServiceProcessState::DeleteServiceProcessDataRegion() {
 
 #endif  // !defined(OS_MACOSX)
 
-// Attempts to take a lock named |name|. If |waiting| is true then this will
-// make multiple attempts to acquire the lock.
-// Caller is responsible for ownership of the MultiProcessLock.
-MultiProcessLock* TakeNamedLock(const std::string& name, bool waiting) {
+// Attempts to take a lock named |name|. Returns the lock if successful, or
+// nullptr if not.
+std::unique_ptr<MultiProcessLock> TakeNamedLock(const std::string& name) {
   std::unique_ptr<MultiProcessLock> lock = MultiProcessLock::Create(name);
-  if (lock == NULL) return NULL;
-  bool got_lock = false;
-  for (int i = 0; i < 10; ++i) {
-    if (lock->TryLock()) {
-      got_lock = true;
-      break;
-    }
-    if (!waiting) break;
-    base::PlatformThread::Sleep(base::TimeDelta::FromMilliseconds(100 * i));
-  }
-  if (!got_lock) {
+  if (!lock->TryLock())
     lock.reset();
-  }
-  return lock.release();
+  return lock;
 }
 
 ServiceProcessTerminateMonitor::ServiceProcessTerminateMonitor(
-    const base::Closure& terminate_task)
-    : terminate_task_(terminate_task) {
-}
+    base::OnceClosure terminate_task)
+    : terminate_task_(std::move(terminate_task)) {}
 
 ServiceProcessTerminateMonitor::~ServiceProcessTerminateMonitor() {
 }
@@ -206,8 +193,7 @@ void ServiceProcessTerminateMonitor::OnFileCanReadWithoutBlocking(int fd) {
     int buffer;
     int length = read(fd, &buffer, sizeof(buffer));
     if ((length == sizeof(buffer)) && (buffer == kTerminateMessage)) {
-      terminate_task_.Run();
-      terminate_task_.Reset();
+      std::move(terminate_task_).Run();
     } else if (length > 0) {
       DLOG(ERROR) << "Unexpected read: " << buffer;
     } else if (length == 0) {
@@ -321,18 +307,18 @@ void ServiceProcessState::CreateState() {
 
 bool ServiceProcessState::SignalReady(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-    const base::Closure& terminate_task) {
+    base::OnceClosure terminate_task) {
   DCHECK(task_runner);
   DCHECK(state_);
 
 #if !defined(OS_MACOSX)
-  state_->running_lock.reset(TakeServiceRunningLock(true));
-  if (state_->running_lock.get() == NULL) {
+  state_->running_lock = TakeServiceRunningLock();
+  if (!state_->running_lock.get()) {
     return false;
   }
 #endif
-  state_->terminate_monitor.reset(
-      new ServiceProcessTerminateMonitor(terminate_task));
+  state_->terminate_monitor = std::make_unique<ServiceProcessTerminateMonitor>(
+      std::move(terminate_task));
   if (pipe(state_->sockets) < 0) {
     DPLOG(ERROR) << "pipe";
     return false;

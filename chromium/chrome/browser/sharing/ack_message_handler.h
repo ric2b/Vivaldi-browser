@@ -5,46 +5,27 @@
 #ifndef CHROME_BROWSER_SHARING_ACK_MESSAGE_HANDLER_H_
 #define CHROME_BROWSER_SHARING_ACK_MESSAGE_HANDLER_H_
 
+#include <memory>
 #include <string>
 
+#include "base/callback_forward.h"
 #include "base/macros.h"
-#include "base/observer_list.h"
 #include "chrome/browser/sharing/sharing_message_handler.h"
 
-namespace chrome_browser_sharing {
-enum MessageType : int;
-}  // namespace chrome_browser_sharing
+class SharingMessageSender;
 
 // Class to managae ack message and notify observers.
 class AckMessageHandler : public SharingMessageHandler {
  public:
-  // Interface for objects observing ack message received events.
-  class AckMessageObserver : public base::CheckedObserver {
-   public:
-    // Called when an ack message is received, where |message_type| is the type
-    // of the original message, and |message_id| is the identifier of the
-    // original message.
-    virtual void OnAckReceived(chrome_browser_sharing::MessageType message_type,
-                               const std::string& message_id) = 0;
-  };
-
-  AckMessageHandler();
+  explicit AckMessageHandler(SharingMessageSender* sharing_message_sender);
   ~AckMessageHandler() override;
 
-  // Add an observer ack message received events. An observer should not be
-  // added more than once.
-  void AddObserver(AckMessageObserver* observer);
-
-  // Removes the given observer from ack message received events. Does nothing
-  // if this observer has not been added.
-  void RemoveObserver(AckMessageObserver* observer);
-
   // SharingMessageHandler implementation:
-  void OnMessage(
-      const chrome_browser_sharing::SharingMessage& message) override;
+  void OnMessage(chrome_browser_sharing::SharingMessage message,
+                 SharingMessageHandler::DoneCallback done_callback) override;
 
  private:
-  base::ObserverList<AckMessageObserver> observers_;
+  SharingMessageSender* sharing_message_sender_;
 
   DISALLOW_COPY_AND_ASSIGN(AckMessageHandler);
 };

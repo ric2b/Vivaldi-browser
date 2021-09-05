@@ -9,10 +9,9 @@ import android.content.Context;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ResourceId;
-import org.chromium.chrome.browser.infobar.InfoBarContainerLayout.Item.InfoBarPriority;
-import org.chromium.chrome.browser.preferences.PreferencesLauncher;
-import org.chromium.chrome.browser.preferences.website.SingleWebsitePreferences;
+import org.chromium.chrome.browser.settings.SettingsLauncher;
+import org.chromium.chrome.browser.site_settings.SingleWebsiteSettings;
+import org.chromium.chrome.browser.ui.messages.infobar.InfoBarLayout;
 
 /**
  * An infobar to disclose to the user that the default search engine has geolocation access by
@@ -23,11 +22,10 @@ public class SearchGeolocationDisclosureInfoBar extends InfoBar {
     private final int mInlineLinkRangeEnd;
 
     @CalledByNative
-    private static InfoBar show(int enumeratedIconId, String messageText, int inlineLinkRangeStart,
-            int inlineLinkRangeEnd) {
-        int drawableId = ResourceId.mapToDrawableId(enumeratedIconId);
+    private static InfoBar show(
+            int iconId, String messageText, int inlineLinkRangeStart, int inlineLinkRangeEnd) {
         return new SearchGeolocationDisclosureInfoBar(
-                drawableId, messageText, inlineLinkRangeStart, inlineLinkRangeEnd);
+                iconId, messageText, inlineLinkRangeStart, inlineLinkRangeEnd);
     }
 
     /**
@@ -58,7 +56,7 @@ public class SearchGeolocationDisclosureInfoBar extends InfoBar {
     @CalledByNative
     private static void showSettingsPage(String searchUrl) {
         Context context = ContextUtils.getApplicationContext();
-        PreferencesLauncher.launchSettingsPage(context, SingleWebsitePreferences.class,
-                SingleWebsitePreferences.createFragmentArgsForSite(searchUrl));
+        SettingsLauncher.getInstance().launchSettingsPage(context, SingleWebsiteSettings.class,
+                SingleWebsiteSettings.createFragmentArgsForSite(searchUrl));
     }
 }

@@ -40,10 +40,10 @@
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/mojom/loader/request_context_frame_type.mojom-blink.h"
+#include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom-blink.h"
 #include "third_party/blink/public/platform/scheduler/web_scoped_virtual_time_pauser.h"
 #include "third_party/blink/public/platform/web_client_hints_type.h"
 #include "third_party/blink/public/platform/web_document_subresource_filter.h"
-#include "third_party/blink/public/platform/web_insecure_request_policy.h"
 #include "third_party/blink/public/platform/web_runtime_features.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/frame/ad_tracker.h"
@@ -73,7 +73,7 @@
 #include "third_party/blink/renderer/platform/testing/histogram_tester.h"
 #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
-#include "third_party/blink/renderer/platform/weborigin/security_violation_reporting_policy.h"
+#include "third_party/blink/renderer/platform/weborigin/reporting_disposition.h"
 
 namespace blink {
 
@@ -121,6 +121,7 @@ class FrameFetchContextTest : public testing::Test {
 
   void RecreateFetchContext(const KURL& url = KURL(),
                             const String& feature_policy_header = String()) {
+    dummy_page_holder = nullptr;
     dummy_page_holder = std::make_unique<DummyPageHolder>(IntSize(500, 500));
     dummy_page_holder->GetPage().SetDeviceScaleFactorDeprecated(1.0);
     if (url.IsValid()) {
@@ -181,30 +182,31 @@ class FrameFetchContextSubresourceFilterTest : public FrameFetchContextTest {
 
   void SetFilterPolicy(WebDocumentSubresourceFilter::LoadPolicy policy,
                        bool is_associated_with_ad_subframe = false) {
-    document->Loader()->SetSubresourceFilter(SubresourceFilter::Create(
-        *document, std::make_unique<FixedPolicySubresourceFilter>(
-                       policy, &filtered_load_callback_counter_,
-                       is_associated_with_ad_subframe)));
+    document->Loader()->SetSubresourceFilter(
+        MakeGarbageCollected<SubresourceFilter>(
+            document->ToExecutionContext(),
+            std::make_unique<FixedPolicySubresourceFilter>(
+                policy, &filtered_load_callback_counter_,
+                is_associated_with_ad_subframe)));
   }
 
   base::Optional<ResourceRequestBlockedReason> CanRequest() {
-    return CanRequestInternal(SecurityViolationReportingPolicy::kReport);
+    return CanRequestInternal(ReportingDisposition::kReport);
   }
 
   base::Optional<ResourceRequestBlockedReason> CanRequestKeepAlive() {
-    return CanRequestInternal(SecurityViolationReportingPolicy::kReport,
+    return CanRequestInternal(ReportingDisposition::kReport,
                               true /* keepalive */);
   }
 
   base::Optional<ResourceRequestBlockedReason> CanRequestPreload() {
-    return CanRequestInternal(
-        SecurityViolationReportingPolicy::kSuppressReporting);
+    return CanRequestInternal(ReportingDisposition::kSuppressReporting);
   }
 
   base::Optional<ResourceRequestBlockedReason> CanRequestAndVerifyIsAd(
       bool expect_is_ad) {
     base::Optional<ResourceRequestBlockedReason> reason =
-        CanRequestInternal(SecurityViolationReportingPolicy::kReport);
+        CanRequestInternal(ReportingDisposition::kReport);
     ResourceRequest request(KURL("http://example.com/"));
     EXPECT_EQ(expect_is_ad, GetFetchContext()->CalculateIfAdSubresource(
                                 request, ResourceType::kMock));
@@ -213,18 +215,18 @@ class FrameFetchContextSubresourceFilterTest : public FrameFetchContextTest {
 
   void AppendExecutingScriptToAdTracker(const String& url) {
     AdTracker* ad_tracker = document->GetFrame()->GetAdTracker();
-    ad_tracker->WillExecuteScript(document, url);
+    ad_tracker->WillExecuteScript(document->ToExecutionContext(), url);
   }
 
   void AppendAdScriptToAdTracker(const KURL& ad_script_url) {
     AdTracker* ad_tracker = document->GetFrame()->GetAdTracker();
-    ad_tracker->AppendToKnownAdScripts(*(document.Get()),
+    ad_tracker->AppendToKnownAdScripts(*document->ToExecutionContext(),
                                        ad_script_url.GetString());
   }
 
  private:
   base::Optional<ResourceRequestBlockedReason> CanRequestInternal(
-      SecurityViolationReportingPolicy reporting_policy,
+      ReportingDisposition reporting_disposition,
       bool keepalive = false) {
     const KURL input_url("http://example.com/");
     ResourceRequest resource_request(input_url);
@@ -236,7 +238,7 @@ class FrameFetchContextSubresourceFilterTest : public FrameFetchContextTest {
     ResourceLoaderOptions options;
     return GetFetchContext()->CanRequest(
         ResourceType::kImage, resource_request, input_url, options,
-        reporting_policy, ResourceRequest::RedirectStatus::kNoRedirect);
+        reporting_disposition, ResourceRequest::RedirectStatus::kNoRedirect);
   }
 
   int filtered_load_callback_counter_;
@@ -277,7 +279,7 @@ class FrameFetchContextModifyRequestTest : public FrameFetchContextTest {
 
  protected:
   void ModifyRequestForCSP(ResourceRequest& resource_request,
-                           network::mojom::RequestContextFrameType frame_type) {
+                           mojom::RequestContextFrameType frame_type) {
     document->GetFrame()->Loader().RecordLatestRequiredCSP();
     document->GetFrame()->Loader().ModifyRequestForCSP(
         resource_request,
@@ -287,12 +289,12 @@ class FrameFetchContextModifyRequestTest : public FrameFetchContextTest {
 
   void ExpectUpgrade(const char* input, const char* expected) {
     ExpectUpgrade(input, mojom::RequestContextType::SCRIPT,
-                  network::mojom::RequestContextFrameType::kNone, expected);
+                  mojom::RequestContextFrameType::kNone, expected);
   }
 
   void ExpectUpgrade(const char* input,
                      mojom::RequestContextType request_context,
-                     network::mojom::RequestContextFrameType frame_type,
+                     mojom::RequestContextFrameType frame_type,
                      const char* expected) {
     const KURL input_url(input);
     const KURL expected_url(expected);
@@ -312,7 +314,7 @@ class FrameFetchContextModifyRequestTest : public FrameFetchContextTest {
 
   void ExpectUpgradeInsecureRequestHeader(
       const char* input,
-      network::mojom::RequestContextFrameType frame_type,
+      mojom::RequestContextFrameType frame_type,
       bool should_prefer) {
     const KURL input_url(input);
 
@@ -336,25 +338,29 @@ class FrameFetchContextModifyRequestTest : public FrameFetchContextTest {
 
   void ExpectIsAutomaticUpgradeSet(const char* input,
                                    const char* main_frame,
-                                   WebInsecureRequestPolicy policy,
+                                   mojom::blink::InsecureRequestPolicy policy,
                                    bool expected_value) {
     const KURL input_url(input);
     const KURL main_frame_url(main_frame);
     ResourceRequest resource_request(input_url);
-    resource_request.SetRequestContext(mojom::RequestContextType::SCRIPT);
+    // TODO(crbug.com/1026464, carlosil): Default behavior currently is to not
+    // autoupgrade images, setting the context to AUDIO to ensure the upgrade
+    // flow runs, this can be switched back to IMAGE once autoupgrades launch
+    // for them.
+    resource_request.SetRequestContext(mojom::RequestContextType::AUDIO);
 
     RecreateFetchContext(main_frame_url);
-    document->SetInsecureRequestPolicy(policy);
+    document->GetSecurityContext().SetInsecureRequestPolicy(policy);
 
     ModifyRequestForCSP(resource_request,
-                        network::mojom::RequestContextFrameType::kNone);
+                        mojom::RequestContextFrameType::kNone);
 
     EXPECT_EQ(expected_value, resource_request.IsAutomaticUpgrade());
   }
 
   void ExpectSetRequiredCSPRequestHeader(
       const char* input,
-      network::mojom::RequestContextFrameType frame_type,
+      mojom::RequestContextFrameType frame_type,
       const AtomicString& expected_required_csp) {
     const KURL input_url(input);
     ResourceRequest resource_request(input_url);
@@ -366,11 +372,10 @@ class FrameFetchContextModifyRequestTest : public FrameFetchContextTest {
               resource_request.HttpHeaderField(http_names::kSecRequiredCSP));
   }
 
-  void SetFrameOwnerBasedOnFrameType(
-      network::mojom::RequestContextFrameType frame_type,
-      HTMLIFrameElement* iframe,
-      const AtomicString& potential_value) {
-    if (frame_type != network::mojom::RequestContextFrameType::kNested) {
+  void SetFrameOwnerBasedOnFrameType(mojom::RequestContextFrameType frame_type,
+                                     HTMLIFrameElement* iframe,
+                                     const AtomicString& potential_value) {
+    if (frame_type != mojom::RequestContextFrameType::kNested) {
       document->GetFrame()->SetOwner(nullptr);
       return;
     }
@@ -405,48 +410,41 @@ TEST_F(FrameFetchContextModifyRequestTest, UpgradeInsecureResourceRequests) {
        "ftp://example.test:1212/image.png"},
   };
 
-  document->SetInsecureRequestPolicy(kUpgradeInsecureRequests);
+  document->GetSecurityContext().SetInsecureRequestPolicy(
+      mojom::blink::InsecureRequestPolicy::kUpgradeInsecureRequests);
 
   for (const auto& test : tests) {
-    document->ClearInsecureNavigationsToUpgradeForTest();
+    document->GetSecurityContext().ClearInsecureNavigationsToUpgradeForTest();
 
     // We always upgrade for FrameTypeNone.
     ExpectUpgrade(test.original, mojom::RequestContextType::SCRIPT,
-                  network::mojom::RequestContextFrameType::kNone,
-                  test.upgraded);
+                  mojom::RequestContextFrameType::kNone, test.upgraded);
 
     // We never upgrade for FrameTypeNested. This is done on the browser
     // process.
     ExpectUpgrade(test.original, mojom::RequestContextType::SCRIPT,
-                  network::mojom::RequestContextFrameType::kNested,
-                  test.original);
+                  mojom::RequestContextFrameType::kNested, test.original);
 
     // We do not upgrade for FrameTypeTopLevel or FrameTypeAuxiliary...
     ExpectUpgrade(test.original, mojom::RequestContextType::SCRIPT,
-                  network::mojom::RequestContextFrameType::kTopLevel,
-                  test.original);
+                  mojom::RequestContextFrameType::kTopLevel, test.original);
     ExpectUpgrade(test.original, mojom::RequestContextType::SCRIPT,
-                  network::mojom::RequestContextFrameType::kAuxiliary,
-                  test.original);
+                  mojom::RequestContextFrameType::kAuxiliary, test.original);
 
     // unless the request context is RequestContextForm.
     ExpectUpgrade(test.original, mojom::RequestContextType::FORM,
-                  network::mojom::RequestContextFrameType::kTopLevel,
-                  test.upgraded);
+                  mojom::RequestContextFrameType::kTopLevel, test.upgraded);
     ExpectUpgrade(test.original, mojom::RequestContextType::FORM,
-                  network::mojom::RequestContextFrameType::kAuxiliary,
-                  test.upgraded);
+                  mojom::RequestContextFrameType::kAuxiliary, test.upgraded);
 
     // Or unless the host of the resource is in the document's
     // InsecureNavigationsSet:
-    document->AddInsecureNavigationUpgrade(
+    document->GetSecurityContext().AddInsecureNavigationUpgrade(
         example_origin->Host().Impl()->GetHash());
     ExpectUpgrade(test.original, mojom::RequestContextType::SCRIPT,
-                  network::mojom::RequestContextFrameType::kTopLevel,
-                  test.upgraded);
+                  mojom::RequestContextFrameType::kTopLevel, test.upgraded);
     ExpectUpgrade(test.original, mojom::RequestContextType::SCRIPT,
-                  network::mojom::RequestContextFrameType::kAuxiliary,
-                  test.upgraded);
+                  mojom::RequestContextFrameType::kAuxiliary, test.upgraded);
   }
 }
 
@@ -456,7 +454,8 @@ TEST_F(FrameFetchContextModifyRequestTest,
   feature_list.InitAndDisableFeature(blink::features::kMixedContentAutoupgrade);
 
   RecreateFetchContext(KURL("https://secureorigin.test/image.png"));
-  document->SetInsecureRequestPolicy(kLeaveInsecureRequestsAlone);
+  document->GetSecurityContext().SetInsecureRequestPolicy(
+      mojom::blink::InsecureRequestPolicy::kLeaveInsecureRequestsAlone);
 
   ExpectUpgrade("http://example.test/image.png",
                 "http://example.test/image.png");
@@ -482,70 +481,74 @@ TEST_F(FrameFetchContextModifyRequestTest,
 TEST_F(FrameFetchContextModifyRequestTest, IsAutomaticUpgradeSet) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitAndEnableFeature(features::kMixedContentAutoupgrade);
-  ExpectIsAutomaticUpgradeSet("http://example.test/image.png",
-                              "https://example.test",
-                              kLeaveInsecureRequestsAlone, true);
+  ExpectIsAutomaticUpgradeSet(
+      "http://example.test/image.png", "https://example.test",
+      mojom::blink::InsecureRequestPolicy::kLeaveInsecureRequestsAlone, true);
 }
 
 TEST_F(FrameFetchContextModifyRequestTest, IsAutomaticUpgradeNotSet) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitAndEnableFeature(features::kMixedContentAutoupgrade);
   // Upgrade shouldn't happen if the resource is already https.
-  ExpectIsAutomaticUpgradeSet("https://example.test/image.png",
-                              "https://example.test",
-                              kLeaveInsecureRequestsAlone, false);
+  ExpectIsAutomaticUpgradeSet(
+      "https://example.test/image.png", "https://example.test",
+      mojom::blink::InsecureRequestPolicy::kLeaveInsecureRequestsAlone, false);
   // Upgrade shouldn't happen if the site is http.
-  ExpectIsAutomaticUpgradeSet("http://example.test/image.png",
-                              "http://example.test",
-                              kLeaveInsecureRequestsAlone, false);
+  ExpectIsAutomaticUpgradeSet(
+      "http://example.test/image.png", "http://example.test",
+      mojom::blink::InsecureRequestPolicy::kLeaveInsecureRequestsAlone, false);
 
   // Flag shouldn't be set if upgrade was due to upgrade-insecure-requests.
-  ExpectIsAutomaticUpgradeSet("http://example.test/image.png",
-                              "https://example.test", kUpgradeInsecureRequests,
-                              false);
+  ExpectIsAutomaticUpgradeSet(
+      "http://example.test/image.png", "https://example.test",
+      mojom::blink::InsecureRequestPolicy::kUpgradeInsecureRequests, false);
 }
 
 TEST_F(FrameFetchContextModifyRequestTest, SendUpgradeInsecureRequestHeader) {
   struct TestCase {
     const char* to_request;
-    network::mojom::RequestContextFrameType frame_type;
+    mojom::RequestContextFrameType frame_type;
     bool should_prefer;
   } tests[] = {{"http://example.test/page.html",
-                network::mojom::RequestContextFrameType::kAuxiliary, true},
+                mojom::RequestContextFrameType::kAuxiliary, true},
                {"http://example.test/page.html",
-                network::mojom::RequestContextFrameType::kNested, true},
+                mojom::RequestContextFrameType::kNested, true},
                {"http://example.test/page.html",
-                network::mojom::RequestContextFrameType::kNone, false},
+                mojom::RequestContextFrameType::kNone, false},
                {"http://example.test/page.html",
-                network::mojom::RequestContextFrameType::kTopLevel, true},
+                mojom::RequestContextFrameType::kTopLevel, true},
                {"https://example.test/page.html",
-                network::mojom::RequestContextFrameType::kAuxiliary, true},
+                mojom::RequestContextFrameType::kAuxiliary, true},
                {"https://example.test/page.html",
-                network::mojom::RequestContextFrameType::kNested, true},
+                mojom::RequestContextFrameType::kNested, true},
                {"https://example.test/page.html",
-                network::mojom::RequestContextFrameType::kNone, false},
+                mojom::RequestContextFrameType::kNone, false},
                {"https://example.test/page.html",
-                network::mojom::RequestContextFrameType::kTopLevel, true}};
+                mojom::RequestContextFrameType::kTopLevel, true}};
 
   // This should work correctly both when the FrameFetchContext has a Document,
   // and when it doesn't (e.g. during main frame navigations), so run through
   // the tests both before and after providing a document to the context.
   for (const auto& test : tests) {
-    document->SetInsecureRequestPolicy(kLeaveInsecureRequestsAlone);
+    document->GetSecurityContext().SetInsecureRequestPolicy(
+        mojom::blink::InsecureRequestPolicy::kLeaveInsecureRequestsAlone);
     ExpectUpgradeInsecureRequestHeader(test.to_request, test.frame_type,
                                        test.should_prefer);
 
-    document->SetInsecureRequestPolicy(kUpgradeInsecureRequests);
+    document->GetSecurityContext().SetInsecureRequestPolicy(
+        mojom::blink::InsecureRequestPolicy::kUpgradeInsecureRequests);
     ExpectUpgradeInsecureRequestHeader(test.to_request, test.frame_type,
                                        test.should_prefer);
   }
 
   for (const auto& test : tests) {
-    document->SetInsecureRequestPolicy(kLeaveInsecureRequestsAlone);
+    document->GetSecurityContext().SetInsecureRequestPolicy(
+        mojom::blink::InsecureRequestPolicy::kLeaveInsecureRequestsAlone);
     ExpectUpgradeInsecureRequestHeader(test.to_request, test.frame_type,
                                        test.should_prefer);
 
-    document->SetInsecureRequestPolicy(kUpgradeInsecureRequests);
+    document->GetSecurityContext().SetInsecureRequestPolicy(
+        mojom::blink::InsecureRequestPolicy::kUpgradeInsecureRequests);
     ExpectUpgradeInsecureRequestHeader(test.to_request, test.frame_type,
                                        test.should_prefer);
   }
@@ -554,15 +557,15 @@ TEST_F(FrameFetchContextModifyRequestTest, SendUpgradeInsecureRequestHeader) {
 TEST_F(FrameFetchContextModifyRequestTest, SendRequiredCSPHeader) {
   struct TestCase {
     const char* to_request;
-    network::mojom::RequestContextFrameType frame_type;
-  } tests[] = {{"https://example.test/page.html",
-                network::mojom::RequestContextFrameType::kAuxiliary},
-               {"https://example.test/page.html",
-                network::mojom::RequestContextFrameType::kNested},
-               {"https://example.test/page.html",
-                network::mojom::RequestContextFrameType::kNone},
-               {"https://example.test/page.html",
-                network::mojom::RequestContextFrameType::kTopLevel}};
+    mojom::RequestContextFrameType frame_type;
+  } tests[] = {
+      {"https://example.test/page.html",
+       mojom::RequestContextFrameType::kAuxiliary},
+      {"https://example.test/page.html",
+       mojom::RequestContextFrameType::kNested},
+      {"https://example.test/page.html", mojom::RequestContextFrameType::kNone},
+      {"https://example.test/page.html",
+       mojom::RequestContextFrameType::kTopLevel}};
 
   auto* iframe = MakeGarbageCollected<HTMLIFrameElement>(*document);
   const AtomicString& required_csp = AtomicString("default-src 'none'");
@@ -572,7 +575,7 @@ TEST_F(FrameFetchContextModifyRequestTest, SendRequiredCSPHeader) {
     SetFrameOwnerBasedOnFrameType(test.frame_type, iframe, required_csp);
     ExpectSetRequiredCSPRequestHeader(
         test.to_request, test.frame_type,
-        test.frame_type == network::mojom::RequestContextFrameType::kNested
+        test.frame_type == mojom::RequestContextFrameType::kNested
             ? required_csp
             : g_null_atom);
 
@@ -580,7 +583,7 @@ TEST_F(FrameFetchContextModifyRequestTest, SendRequiredCSPHeader) {
                                   another_required_csp);
     ExpectSetRequiredCSPRequestHeader(
         test.to_request, test.frame_type,
-        test.frame_type == network::mojom::RequestContextFrameType::kNested
+        test.frame_type == mojom::RequestContextFrameType::kNested
             ? another_required_csp
             : g_null_atom);
   }
@@ -648,8 +651,15 @@ TEST_F(FrameFetchContextHintsTest, MonitorDeviceMemorySecureTransport) {
   ExpectHeader("https://www.example.com/1.gif", "Viewport-Width", false, "");
   // Without a feature policy header, the client hints should be sent only to
   // the first party origins.
+  // Device-memory is a legacy hint that's sent on Android regardless of Feature
+  // Policy delegation.
+#if defined(OS_ANDROID)
+  ExpectHeader("https://www.someother-example.com/1.gif", "Device-Memory", true,
+               "4");
+#else
   ExpectHeader("https://www.someother-example.com/1.gif", "Device-Memory",
                false, "");
+#endif
 }
 
 // Verify that client hints are not attached when the resources do not belong to
@@ -982,15 +992,28 @@ TEST_F(FrameFetchContextHintsTest, MonitorSomeHintsFeaturePolicy) {
   // With a feature policy header, the client hints should be sent to the
   // declared third party origins.
   ExpectHeader("https://www.example.net/1.gif", "Device-Memory", true, "4");
+  // Device-memory is a legacy hint that's sent on Android regardless of Feature
+  // Policy delegation.
+#if defined(OS_ANDROID)
+  ExpectHeader("https://www.someother-example.com/1.gif", "Device-Memory", true,
+               "4");
+#else
   ExpectHeader("https://www.someother-example.com/1.gif", "Device-Memory",
                false, "");
+#endif
   // `Sec-CH-UA` is special.
   ExpectHeader("https://www.example.net/1.gif", "Sec-CH-UA", true, "");
 
   // Other hints not declared in the policy are still not attached.
   ExpectHeader("https://www.example.net/1.gif", "downlink", false, "");
   ExpectHeader("https://www.example.net/1.gif", "ect", false, "");
+  // DPR is a legacy hint that's sent on Android regardless of Feature Policy
+  // delegation.
+#if defined(OS_ANDROID)
+  ExpectHeader("https://www.example.net/1.gif", "DPR", true, "1");
+#else
   ExpectHeader("https://www.example.net/1.gif", "DPR", false, "");
+#endif
   ExpectHeader("https://www.example.net/1.gif", "Sec-CH-Lang", false, "");
   ExpectHeader("https://www.example.net/1.gif", "Sec-CH-UA-Arch", false, "");
   ExpectHeader("https://www.example.net/1.gif", "Sec-CH-UA-Platform", false,
@@ -1218,7 +1241,9 @@ TEST_F(FrameFetchContextMockedLocalFrameClientTest,
 
 TEST_F(FrameFetchContextTest, AddResourceTimingWhenDetached) {
   scoped_refptr<ResourceTimingInfo> info = ResourceTimingInfo::Create(
-      "type", base::TimeTicks() + base::TimeDelta::FromSecondsD(0.3));
+      "type", base::TimeTicks() + base::TimeDelta::FromSecondsD(0.3),
+      mojom::RequestContextType::UNSPECIFIED,
+      network::mojom::RequestDestination::kEmpty);
 
   dummy_page_holder = nullptr;
 
@@ -1279,8 +1304,8 @@ TEST_F(FrameFetchContextTest, SetFirstPartyCookieWhenDetached) {
 
   SetFirstPartyCookie(request);
 
-  EXPECT_TRUE(SecurityOrigin::AreSameSchemeHostPort(document_url,
-                                                    request.SiteForCookies()));
+  EXPECT_TRUE(request.SiteForCookies().IsEquivalent(
+      net::SiteForCookies::FromUrl(document_url)));
 }
 
 TEST_F(FrameFetchContextTest, TopFrameOrigin) {

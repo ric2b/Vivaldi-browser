@@ -357,7 +357,8 @@ blink::mojom::FetchAPIResponsePtr CreateResponse(
           metadata.response().cors_exposed_header_names().begin(),
           metadata.response().cors_exposed_header_names().end()),
       nullptr /* side_data_blob */, nullptr /* side_data_blob_for_cache_put */,
-      nullptr /* content_security_policy */);
+      std::vector<network::mojom::ContentSecurityPolicyPtr>(),
+      metadata.response().loaded_with_credentials());
 }
 
 // The size of opaque (non-cors) resource responses are padded in order
@@ -396,7 +397,16 @@ int64_t CalculateResponsePaddingInternal(
   DCHECK(ShouldPadResourceSize(response));
   DCHECK_GE(side_data_size, 0);
   const std::string& url = response->url_list(response->url_list_size() - 1);
-  return storage::ComputeResponsePadding(url, padding_key, side_data_size > 0);
+  bool loaded_with_credentials = response->has_loaded_with_credentials() &&
+                                 response->loaded_with_credentials();
+  return storage::ComputeResponsePadding(url, padding_key, side_data_size > 0,
+                                         loaded_with_credentials);
+}
+
+net::RequestPriority GetDiskCachePriority(
+    CacheStorageSchedulerPriority priority) {
+  return priority == CacheStorageSchedulerPriority::kHigh ? net::HIGHEST
+                                                          : net::MEDIUM;
 }
 
 }  // namespace
@@ -449,13 +459,13 @@ LegacyCacheStorageCache::CreateMemoryCache(
     LegacyCacheStorage* cache_storage,
     scoped_refptr<base::SequencedTaskRunner> scheduler_task_runner,
     scoped_refptr<storage::QuotaManagerProxy> quota_manager_proxy,
-    base::WeakPtr<storage::BlobStorageContext> blob_context,
+    scoped_refptr<BlobStorageContextWrapper> blob_storage_context,
     std::unique_ptr<crypto::SymmetricKey> cache_padding_key) {
   LegacyCacheStorageCache* cache = new LegacyCacheStorageCache(
       origin, owner, cache_name, base::FilePath(), cache_storage,
       std::move(scheduler_task_runner), std::move(quota_manager_proxy),
-      std::move(blob_context), 0 /* cache_size */, 0 /* cache_padding */,
-      std::move(cache_padding_key));
+      std::move(blob_storage_context), 0 /* cache_size */,
+      0 /* cache_padding */, std::move(cache_padding_key));
   cache->SetObserver(cache_storage);
   cache->InitBackend();
   return base::WrapUnique(cache);
@@ -471,14 +481,14 @@ LegacyCacheStorageCache::CreatePersistentCache(
     const base::FilePath& path,
     scoped_refptr<base::SequencedTaskRunner> scheduler_task_runner,
     scoped_refptr<storage::QuotaManagerProxy> quota_manager_proxy,
-    base::WeakPtr<storage::BlobStorageContext> blob_context,
+    scoped_refptr<BlobStorageContextWrapper> blob_storage_context,
     int64_t cache_size,
     int64_t cache_padding,
     std::unique_ptr<crypto::SymmetricKey> cache_padding_key) {
   LegacyCacheStorageCache* cache = new LegacyCacheStorageCache(
       origin, owner, cache_name, path, cache_storage,
       std::move(scheduler_task_runner), std::move(quota_manager_proxy),
-      std::move(blob_context), cache_size, cache_padding,
+      std::move(blob_storage_context), cache_size, cache_padding,
       std::move(cache_padding_key));
   cache->SetObserver(cache_storage);
   cache->InitBackend();
@@ -505,7 +515,7 @@ void LegacyCacheStorageCache::AddHandleRef() {
 
 void LegacyCacheStorageCache::DropHandleRef() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(handle_ref_count_ > 0);
+  DCHECK_GT(handle_ref_count_, 0U);
   handle_ref_count_ -= 1;
   // Dropping the last reference may result in the parent CacheStorage
   // deleting itself or this Cache object.  Be careful not to touch the
@@ -539,7 +549,7 @@ void LegacyCacheStorageCache::Match(
       priority,
       base::BindOnce(
           &LegacyCacheStorageCache::MatchImpl, weak_ptr_factory_.GetWeakPtr(),
-          std::move(request), std::move(match_options), trace_id,
+          std::move(request), std::move(match_options), trace_id, priority,
           scheduler_->WrapCallbackToRunNext(id, std::move(callback))));
 }
 
@@ -564,6 +574,7 @@ void LegacyCacheStorageCache::MatchAll(
           &LegacyCacheStorageCache::MatchAllImpl,
           weak_ptr_factory_.GetWeakPtr(), std::move(request),
           std::move(match_options), trace_id,
+          CacheStorageSchedulerPriority::kNormal,
           scheduler_->WrapCallbackToRunNext(id, std::move(callback))));
 }
 
@@ -922,7 +933,7 @@ LegacyCacheStorageCache::LegacyCacheStorageCache(
     LegacyCacheStorage* cache_storage,
     scoped_refptr<base::SequencedTaskRunner> scheduler_task_runner,
     scoped_refptr<storage::QuotaManagerProxy> quota_manager_proxy,
-    base::WeakPtr<storage::BlobStorageContext> blob_context,
+    scoped_refptr<BlobStorageContextWrapper> blob_storage_context,
     int64_t cache_size,
     int64_t cache_padding,
     std::unique_ptr<crypto::SymmetricKey> cache_padding_key)
@@ -943,7 +954,7 @@ LegacyCacheStorageCache::LegacyCacheStorageCache(
       cache_entry_handler_(
           CacheStorageCacheEntryHandler::CreateCacheEntryHandler(
               owner,
-              std::move(blob_context))),
+              std::move(blob_storage_context))),
       memory_only_(path.empty()) {
   DCHECK(!origin_.opaque());
   DCHECK(quota_manager_proxy_.get());
@@ -962,6 +973,7 @@ void LegacyCacheStorageCache::QueryCache(
     blink::mojom::FetchAPIRequestPtr request,
     blink::mojom::CacheQueryOptionsPtr options,
     QueryTypes query_types,
+    CacheStorageSchedulerPriority priority,
     QueryCacheCallback callback) {
   DCHECK_NE(
       QUERY_CACHE_ENTRIES | QUERY_CACHE_RESPONSES_WITH_BODIES,
@@ -1000,8 +1012,9 @@ void LegacyCacheStorageCache::QueryCache(
     auto open_entry_callback = base::AdaptCallbackForRepeating(base::BindOnce(
         &LegacyCacheStorageCache::QueryCacheDidOpenFastPath,
         weak_ptr_factory_.GetWeakPtr(), std::move(query_cache_context)));
-    disk_cache::EntryResult result =
-        backend_->OpenEntry(request_url, net::HIGHEST, open_entry_callback);
+
+    disk_cache::EntryResult result = backend_->OpenEntry(
+        request_url, GetDiskCachePriority(priority), open_entry_callback);
     if (result.net_error() != net::ERR_IO_PENDING)
       std::move(open_entry_callback).Run(std::move(result));
     return;
@@ -1032,7 +1045,7 @@ void LegacyCacheStorageCache::QueryCacheOpenNextEntry(
         LegacyCacheStorageCache* self = From(handle);
         if (!self)
           return;
-        DCHECK(self->query_cache_recursive_depth_ > 0);
+        DCHECK_GT(self->query_cache_recursive_depth_, 0);
         self->query_cache_recursive_depth_ -= 1;
       },
       CreateHandle()));
@@ -1244,7 +1257,8 @@ int64_t LegacyCacheStorageCache::CalculateResponsePadding(
   if (!ShouldPadResourceSize(response))
     return 0;
   return storage::ComputeResponsePadding(response.url_list.back().spec(),
-                                         padding_key, side_data_size > 0);
+                                         padding_key, side_data_size > 0,
+                                         response.loaded_with_credentials);
 }
 
 // static
@@ -1256,9 +1270,10 @@ void LegacyCacheStorageCache::MatchImpl(
     blink::mojom::FetchAPIRequestPtr request,
     blink::mojom::CacheQueryOptionsPtr match_options,
     int64_t trace_id,
+    CacheStorageSchedulerPriority priority,
     ResponseCallback callback) {
   MatchAllImpl(
-      std::move(request), std::move(match_options), trace_id,
+      std::move(request), std::move(match_options), trace_id, priority,
       base::BindOnce(&LegacyCacheStorageCache::MatchDidMatchAll,
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }
@@ -1285,6 +1300,7 @@ void LegacyCacheStorageCache::MatchAllImpl(
     blink::mojom::FetchAPIRequestPtr request,
     blink::mojom::CacheQueryOptionsPtr options,
     int64_t trace_id,
+    CacheStorageSchedulerPriority priority,
     ResponsesCallback callback) {
   DCHECK_NE(BACKEND_UNINITIALIZED, backend_state_);
   TRACE_EVENT_WITH_FLOW2("CacheStorage",
@@ -1305,7 +1321,7 @@ void LegacyCacheStorageCache::MatchAllImpl(
   callback = WrapCallbackWithHandle(std::move(callback));
 
   QueryCache(std::move(request), std::move(options),
-             QUERY_CACHE_REQUESTS | QUERY_CACHE_RESPONSES_WITH_BODIES,
+             QUERY_CACHE_REQUESTS | QUERY_CACHE_RESPONSES_WITH_BODIES, priority,
              base::BindOnce(&LegacyCacheStorageCache::MatchAllDidQueryCache,
                             weak_ptr_factory_.GetWeakPtr(), std::move(callback),
                             trace_id));
@@ -1401,10 +1417,11 @@ void LegacyCacheStorageCache::WriteSideDataImpl(
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback),
                      expected_response_time, trace_id, buffer, buf_len));
 
-  // Use LOWEST priority here as writing side data is less important than
-  // loading resources on the page.
+  // Note, the simple disk_cache priority is not important here because we
+  // only allow one write operation at a time.  Therefore there will be no
+  // competing operations in the disk_cache queue.
   disk_cache::EntryResult result =
-      backend_->OpenEntry(url.spec(), net::LOWEST, open_entry_callback);
+      backend_->OpenEntry(url.spec(), net::MEDIUM, open_entry_callback);
   if (result.net_error() != net::ERR_IO_PENDING)
     std::move(open_entry_callback).Run(std::move(result));
 }
@@ -1644,8 +1661,8 @@ void LegacyCacheStorageCache::PutDidDeleteEntry(
                      weak_ptr_factory_.GetWeakPtr(), std::move(put_context)));
 
   DCHECK(scheduler_->IsRunningExclusiveOperation());
-  disk_cache::EntryResult result = backend_ptr->CreateEntry(
-      request_.url.spec(), net::HIGHEST, create_entry_callback);
+  disk_cache::EntryResult result = backend_ptr->OpenOrCreateEntry(
+      request_.url.spec(), net::MEDIUM, create_entry_callback);
 
   if (result.net_error() != net::ERR_IO_PENDING)
     std::move(create_entry_callback).Run(std::move(result));
@@ -1669,6 +1686,7 @@ void LegacyCacheStorageCache::PutDidCreateEntry(
   base::UmaHistogramSparse("ServiceWorkerCache.DiskCacheCreateEntryResult",
                            std::abs(rv));
   if (rv != net::OK) {
+    quota_manager_proxy_->NotifyWriteFailed(origin_);
     PutComplete(std::move(put_context), CacheStorageError::kErrorExists);
     return;
   }
@@ -1692,6 +1710,8 @@ void LegacyCacheStorageCache::PutDidCreateEntry(
       put_context->response->response_type));
   for (const auto& url : put_context->response->url_list)
     response_metadata->add_url_list(url.spec());
+  response_metadata->set_loaded_with_credentials(
+      put_context->response->loaded_with_credentials);
   response_metadata->set_response_time(
       put_context->response->response_time.ToInternalValue());
   for (ResponseHeaderMap::const_iterator it =
@@ -1748,6 +1768,7 @@ void LegacyCacheStorageCache::PutDidWriteHeaders(
                          TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
 
   if (rv != expected_bytes) {
+    quota_manager_proxy_->NotifyWriteFailed(origin_);
     PutComplete(
         std::move(put_context),
         MakeErrorStorage(ErrorStorageType::kPutDidWriteHeadersWrongBytes));
@@ -1762,21 +1783,7 @@ void LegacyCacheStorageCache::PutDidWriteHeaders(
                                                0 /* side_data_size */);
   }
 
-  // The metadata is written, now for the response content. The data is streamed
-  // from the blob into the cache entry.
-  if (put_context->response->blob &&
-      !put_context->response->blob->uuid.empty()) {
-    PutWriteBlobToCache(std::move(put_context), INDEX_RESPONSE_BODY);
-    return;
-  }
-
-  if (put_context->side_data_blob) {
-    DCHECK_EQ(owner_, CacheStorageOwner::kBackgroundFetch);
-    PutWriteBlobToCache(std::move(put_context), INDEX_SIDE_DATA);
-    return;
-  }
-
-  PutComplete(std::move(put_context), CacheStorageError::kSuccess);
+  PutWriteBlobToCache(std::move(put_context), INDEX_RESPONSE_BODY);
 }
 
 void LegacyCacheStorageCache::PutWriteBlobToCache(
@@ -1809,11 +1816,43 @@ void LegacyCacheStorageCache::PutWriteBlobToCache(
     case INDEX_HEADERS:
       NOTREACHED();
   }
-  DCHECK(blob);
 
   ScopedWritableEntry entry(put_context->cache_entry.release());
 
-  auto blob_to_cache = std::make_unique<CacheStorageBlobToDiskCache>();
+  // If there isn't blob data for this index, then we may need to clear any
+  // pre-existing data.  This can happen under rare circumstances if a stale
+  // file is present and accepted by OpenOrCreateEntry().
+  if (!blob) {
+    disk_cache::Entry* temp_entry_ptr = entry.get();
+
+    net::CompletionRepeatingCallback clear_callback =
+        base::AdaptCallbackForRepeating(base::BindOnce(
+            &LegacyCacheStorageCache::PutWriteBlobToCacheComplete,
+            weak_ptr_factory_.GetWeakPtr(), std::move(put_context),
+            disk_cache_body_index, std::move(entry)));
+
+    // If there is no pre-existing data, then proceed to the next
+    // step immediately.
+    if (temp_entry_ptr->GetDataSize(disk_cache_body_index) != 0) {
+      std::move(clear_callback).Run(net::OK);
+      return;
+    }
+
+    // There is pre-existing data and we need to truncate it.
+    int rv = temp_entry_ptr->WriteData(
+        disk_cache_body_index, /* offset = */ 0, /* buf = */ nullptr,
+        /* buf_len = */ 0, clear_callback, /* truncate = */ true);
+
+    if (rv != net::ERR_IO_PENDING)
+      std::move(clear_callback).Run(rv);
+
+    return;
+  }
+
+  // We have real data, so stream it into the entry.  This will overwrite
+  // any existing data.
+  auto blob_to_cache = std::make_unique<CacheStorageBlobToDiskCache>(
+      quota_manager_proxy_, origin_);
   CacheStorageBlobToDiskCache* blob_to_cache_raw = blob_to_cache.get();
   BlobToDiskCacheIDMap::KeyType blob_to_cache_key =
       active_blob_to_disk_cache_writers_.Add(std::move(blob_to_cache));
@@ -1822,12 +1861,13 @@ void LegacyCacheStorageCache::PutWriteBlobToCache(
       std::move(entry), disk_cache_body_index, std::move(blob), blob_size,
       base::BindOnce(&LegacyCacheStorageCache::PutDidWriteBlobToCache,
                      weak_ptr_factory_.GetWeakPtr(), std::move(put_context),
-                     blob_to_cache_key));
+                     blob_to_cache_key, disk_cache_body_index));
 }
 
 void LegacyCacheStorageCache::PutDidWriteBlobToCache(
     std::unique_ptr<PutContext> put_context,
     BlobToDiskCacheIDMap::KeyType blob_to_cache_key,
+    int disk_cache_body_index,
     ScopedWritableEntry entry,
     bool success) {
   DCHECK(entry);
@@ -1836,18 +1876,30 @@ void LegacyCacheStorageCache::PutDidWriteBlobToCache(
                          TRACE_ID_GLOBAL(put_context->trace_id),
                          TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
 
-  put_context->cache_entry = std::move(entry);
-
   active_blob_to_disk_cache_writers_.Remove(blob_to_cache_key);
 
-  if (!success) {
+  PutWriteBlobToCacheComplete(std::move(put_context), disk_cache_body_index,
+                              std::move(entry),
+                              (success ? net::OK : net::ERR_FAILED));
+}
+
+void LegacyCacheStorageCache::PutWriteBlobToCacheComplete(
+    std::unique_ptr<PutContext> put_context,
+    int disk_cache_body_index,
+    ScopedWritableEntry entry,
+    int rv) {
+  DCHECK(entry);
+
+  put_context->cache_entry = std::move(entry);
+
+  if (rv != net::OK) {
     PutComplete(
         std::move(put_context),
         MakeErrorStorage(ErrorStorageType::kPutDidWriteBlobToCacheFailed));
     return;
   }
 
-  if (put_context->side_data_blob) {
+  if (disk_cache_body_index == INDEX_RESPONSE_BODY) {
     PutWriteBlobToCache(std::move(put_context), INDEX_SIDE_DATA);
     return;
   }
@@ -1899,6 +1951,7 @@ void LegacyCacheStorageCache::CalculateCacheSizePaddingGotSize(
   options->ignore_search = true;
   QueryCache(std::move(request), std::move(options),
              QUERY_CACHE_RESPONSES_NO_BODIES,
+             CacheStorageSchedulerPriority::kNormal,
              base::BindOnce(&LegacyCacheStorageCache::PaddingDidQueryCache,
                             weak_ptr_factory_.GetWeakPtr(), std::move(callback),
                             cache_size));
@@ -2017,6 +2070,7 @@ void LegacyCacheStorageCache::GetAllMatchedEntriesImpl(
   QueryCache(
       std::move(request), std::move(options),
       QUERY_CACHE_REQUESTS | QUERY_CACHE_RESPONSES_WITH_BODIES,
+      CacheStorageSchedulerPriority::kNormal,
       base::BindOnce(
           &LegacyCacheStorageCache::GetAllMatchedEntriesDidQueryCache,
           weak_ptr_factory_.GetWeakPtr(), trace_id, std::move(callback)));
@@ -2093,6 +2147,7 @@ void LegacyCacheStorageCache::DeleteImpl(
   QueryCache(
       std::move(request), std::move(match_options),
       QUERY_CACHE_ENTRIES | QUERY_CACHE_RESPONSES_NO_BODIES,
+      CacheStorageSchedulerPriority::kNormal,
       base::BindOnce(&LegacyCacheStorageCache::DeleteDidQueryCache,
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }
@@ -2150,6 +2205,7 @@ void LegacyCacheStorageCache::KeysImpl(
   callback = WrapCallbackWithHandle(std::move(callback));
 
   QueryCache(std::move(request), std::move(options), QUERY_CACHE_REQUESTS,
+             CacheStorageSchedulerPriority::kNormal,
              base::BindOnce(&LegacyCacheStorageCache::KeysDidQueryCache,
                             weak_ptr_factory_.GetWeakPtr(), std::move(callback),
                             trace_id));
@@ -2242,8 +2298,7 @@ void LegacyCacheStorageCache::CreateBackend(ErrorCallback callback) {
   DCHECK(scheduler_->IsRunningExclusiveOperation());
   int rv = disk_cache::CreateCacheBackend(
       cache_type, net::CACHE_BACKEND_SIMPLE, path_, max_bytes,
-      false, /* force */
-      nullptr, backend,
+      disk_cache::ResetHandling::kNeverReset, nullptr, backend,
       base::BindOnce(&LegacyCacheStorageCache::DeleteBackendCompletedIO,
                      weak_ptr_factory_.GetWeakPtr()),
       create_cache_callback);

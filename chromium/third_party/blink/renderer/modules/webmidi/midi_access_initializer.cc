@@ -8,9 +8,9 @@
 #include <utility>
 
 #include "third_party/blink/public/mojom/permissions/permission.mojom-blink.h"
-#include "third_party/blink/public/platform/interface_provider.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_midi_options.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
@@ -18,7 +18,6 @@
 #include "third_party/blink/renderer/core/frame/navigator.h"
 #include "third_party/blink/renderer/modules/permissions/permission_utils.h"
 #include "third_party/blink/renderer/modules/webmidi/midi_access.h"
-#include "third_party/blink/renderer/modules/webmidi/midi_options.h"
 #include "third_party/blink/renderer/modules/webmidi/midi_port.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/mojo/mojo_helper.h"
@@ -38,11 +37,11 @@ void MIDIAccessInitializer::Dispose() {
   permission_service_.reset();
 }
 
-void MIDIAccessInitializer::ContextDestroyed(ExecutionContext* context) {
+void MIDIAccessInitializer::ContextDestroyed() {
   dispatcher_.reset();
   permission_service_.reset();
 
-  ScriptPromiseResolver::ContextDestroyed(context);
+  ScriptPromiseResolver::ContextDestroyed();
 }
 
 ScriptPromise MIDIAccessInitializer::Start() {
@@ -56,7 +55,7 @@ ScriptPromise MIDIAccessInitializer::Start() {
       GetExecutionContext(),
       permission_service_.BindNewPipeAndPassReceiver(std::move(task_runner)));
 
-  Document& doc = To<Document>(*GetExecutionContext());
+  Document& doc = Document::From(*GetExecutionContext());
   permission_service_->RequestPermission(
       CreateMidiPermissionDescriptor(options_->hasSysex() && options_->sysex()),
       LocalFrame::HasTransientUserActivation(doc.GetFrame()),
@@ -108,7 +107,7 @@ void MIDIAccessInitializer::DidStartSession(Result result) {
     case Result::NOT_INITIALIZED:
       break;
     case Result::OK:
-      return Resolve(MIDIAccess::Create(
+      return Resolve(MakeGarbageCollected<MIDIAccess>(
           std::move(dispatcher_), options_->hasSysex() && options_->sysex(),
           port_descriptors_, GetExecutionContext()));
     case Result::NOT_SUPPORTED:

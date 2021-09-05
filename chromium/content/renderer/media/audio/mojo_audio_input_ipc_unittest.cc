@@ -17,9 +17,9 @@
 #include "media/audio/audio_device_description.h"
 #include "media/base/audio_parameters.h"
 #include "media/mojo/mojom/audio_data_pipe.mojom.h"
-#include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/system/buffer.h"
 #include "mojo/public/cpp/system/platform_handle.h"
@@ -59,13 +59,12 @@ class MockStream : public media::mojom::AudioInputStream {
 
 class MockDelegate : public media::AudioInputIPCDelegate {
  public:
-  MockDelegate() {}
-  ~MockDelegate() override {}
+  MockDelegate() = default;
+  ~MockDelegate() override = default;
 
   void OnStreamCreated(base::ReadOnlySharedMemoryRegion mem_handle,
-                       base::SyncSocket::Handle socket_handle,
+                       base::SyncSocket::ScopedHandle socket_handle,
                        bool initially_muted) override {
-    base::SyncSocket socket(socket_handle);  // Releases the socket descriptor.
     GotOnStreamCreated(initially_muted);
   }
 
@@ -79,7 +78,9 @@ class FakeStreamCreator {
  public:
   FakeStreamCreator(media::mojom::AudioInputStream* stream,
                     bool initially_muted)
-      : stream_(stream), binding_(stream_), initially_muted_(initially_muted) {}
+      : stream_(stream),
+        receiver_(stream_),
+        initially_muted_(initially_muted) {}
 
   void Create(const media::AudioSourceParameters& source_params,
               mojo::PendingRemote<mojom::RendererAudioInputStreamFactoryClient>
@@ -89,21 +90,20 @@ class FakeStreamCreator {
               const media::AudioParameters& params,
               bool automatic_gain_control,
               uint32_t total_segments) {
-    EXPECT_FALSE(binding_.is_bound());
+    EXPECT_FALSE(receiver_.is_bound());
     EXPECT_NE(stream_, nullptr);
     EXPECT_EQ(source_params.session_id, SourceParams().session_id);
     factory_client_.reset();
     factory_client_.Bind(std::move(factory_client));
-    media::mojom::AudioInputStreamPtr stream_ptr;
-    binding_.Bind(mojo::MakeRequest(&stream_ptr));
     base::CancelableSyncSocket foreign_socket;
     EXPECT_TRUE(
         base::CancelableSyncSocket::CreatePair(&socket_, &foreign_socket));
     factory_client_->StreamCreated(
-        std::move(stream_ptr), mojo::MakeRequest(&stream_client_),
+        receiver_.BindNewPipeAndPassRemote(),
+        stream_client_.BindNewPipeAndPassReceiver(),
         {base::in_place,
          base::ReadOnlySharedMemoryRegion::Create(kMemoryLength).region,
-         mojo::WrapPlatformFile(foreign_socket.Release())},
+         mojo::PlatformHandle(foreign_socket.Take())},
         initially_muted_, base::UnguessableToken::Create());
   }
 
@@ -113,8 +113,8 @@ class FakeStreamCreator {
   }
 
   void Rearm() {
-    if (binding_.is_bound())
-      binding_.Unbind();
+    stream_client_.reset();
+    receiver_.reset();
     socket_.Close();
   }
 
@@ -125,9 +125,9 @@ class FakeStreamCreator {
 
  private:
   media::mojom::AudioInputStream* stream_;
-  media::mojom::AudioInputStreamClientPtr stream_client_;
+  mojo::Remote<media::mojom::AudioInputStreamClient> stream_client_;
   mojo::Remote<mojom::RendererAudioInputStreamFactoryClient> factory_client_;
-  mojo::Binding<media::mojom::AudioInputStream> binding_;
+  mojo::Receiver<media::mojom::AudioInputStream> receiver_;
   bool initially_muted_;
   base::CancelableSyncSocket socket_;
 };

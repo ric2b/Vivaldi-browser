@@ -11,12 +11,12 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/download/download_permission_request.h"
-#include "chrome/browser/permissions/permission_request_manager.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/permission_bubble/mock_permission_prompt_factory.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/permissions/permission_request_manager.h"
+#include "components/permissions/test/mock_permission_prompt_factory.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_details.h"
 #include "content/public/browser/notification_service.h"
@@ -28,7 +28,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if defined(OS_ANDROID)
-#include "chrome/browser/android/chrome_feature_list.h"
+#include "chrome/browser/flags/android/chrome_feature_list.h"
 #endif
 
 using content::WebContents;
@@ -46,11 +46,11 @@ class DownloadRequestLimiterTest : public ChromeRenderViewHostTestHarness {
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();
 
-    PermissionRequestManager::CreateForWebContents(web_contents());
-    PermissionRequestManager* manager =
-        PermissionRequestManager::FromWebContents(web_contents());
+    permissions::PermissionRequestManager::CreateForWebContents(web_contents());
+    permissions::PermissionRequestManager* manager =
+        permissions::PermissionRequestManager::FromWebContents(web_contents());
     mock_permission_prompt_factory_.reset(
-        new MockPermissionPromptFactory(manager));
+        new permissions::MockPermissionPromptFactory(manager));
 
     UpdateExpectations(ACCEPT);
     cancel_count_ = continue_count_ = 0;
@@ -76,6 +76,7 @@ class DownloadRequestLimiterTest : public ChromeRenderViewHostTestHarness {
         web_contents,
         "GET",  // request method
         std::move(origin),
+        false,  // from_download_cross_origin_redirect
         base::Bind(&DownloadRequestLimiterTest::ContinueDownload,
                    base::Unretained(this)));
     base::RunLoop().RunUntilIdle();
@@ -131,7 +132,7 @@ class DownloadRequestLimiterTest : public ChromeRenderViewHostTestHarness {
     HostContentSettingsMapFactory::GetForProfile(
         Profile::FromBrowserContext(contents->GetBrowserContext()))
         ->SetContentSettingDefaultScope(
-            host, GURL(), CONTENT_SETTINGS_TYPE_AUTOMATIC_DOWNLOADS,
+            host, GURL(), ContentSettingsType::AUTOMATIC_DOWNLOADS,
             std::string(), setting);
   }
 
@@ -143,17 +144,17 @@ class DownloadRequestLimiterTest : public ChromeRenderViewHostTestHarness {
 
   void UpdateExpectations(TestingAction action) {
     // Set expectations for PermissionRequestManager.
-    PermissionRequestManager::AutoResponseType response_type =
-        PermissionRequestManager::DISMISS;
+    permissions::PermissionRequestManager::AutoResponseType response_type =
+        permissions::PermissionRequestManager::DISMISS;
     switch (action) {
       case ACCEPT:
-        response_type = PermissionRequestManager::ACCEPT_ALL;
+        response_type = permissions::PermissionRequestManager::ACCEPT_ALL;
         break;
       case CANCEL:
-        response_type = PermissionRequestManager::DENY_ALL;
+        response_type = permissions::PermissionRequestManager::DENY_ALL;
         break;
       case WAIT:
-        response_type = PermissionRequestManager::NONE;
+        response_type = permissions::PermissionRequestManager::NONE;
         break;
     }
     mock_permission_prompt_factory_->set_response_type(response_type);
@@ -167,7 +168,8 @@ class DownloadRequestLimiterTest : public ChromeRenderViewHostTestHarness {
   // Number of times CancelDownload was invoked.
   int cancel_count_;
 
-  std::unique_ptr<MockPermissionPromptFactory> mock_permission_prompt_factory_;
+  std::unique_ptr<permissions::MockPermissionPromptFactory>
+      mock_permission_prompt_factory_;
 };
 
 TEST_F(DownloadRequestLimiterTest, Allow) {
@@ -996,5 +998,41 @@ TEST_F(DownloadRequestLimiterTest,
   EXPECT_EQ(DownloadRequestLimiter::DOWNLOADS_NOT_ALLOWED,
             download_request_limiter_->GetDownloadStatus(web_contents()));
   EXPECT_EQ(DownloadRequestLimiter::DOWNLOAD_UI_BLOCKED,
+            download_request_limiter_->GetDownloadUiStatus(web_contents()));
+}
+
+// Test that renderer initiated download from opaque origins are correctly
+// limited.
+TEST_F(DownloadRequestLimiterTest, OpaqueOrigins) {
+  // about:blank is an opaque origin.
+  NavigateAndCommit(GURL("about:blank"));
+  LoadCompleted();
+
+  // Create another opaque origin that will trigger all the download.
+  url::Origin origin;
+  // The first download should go through.
+  CanDownloadFor(web_contents(), origin);
+  ExpectAndResetCounts(1, 0, 0, __LINE__);
+  EXPECT_EQ(DownloadRequestLimiter::PROMPT_BEFORE_DOWNLOAD,
+            download_request_limiter_->GetDownloadStatus(web_contents()));
+  EXPECT_EQ(DownloadRequestLimiter::DOWNLOAD_UI_DEFAULT,
+            download_request_limiter_->GetDownloadUiStatus(web_contents()));
+
+  // The 2nd download will be canceled, there is no prompt since the origin
+  // is opaque.
+  CanDownloadFor(web_contents(), origin);
+  ExpectAndResetCounts(0, 1, 0, __LINE__);
+  EXPECT_EQ(DownloadRequestLimiter::DOWNLOADS_NOT_ALLOWED,
+            download_request_limiter_->GetDownloadStatus(web_contents()));
+  EXPECT_EQ(DownloadRequestLimiter::DOWNLOAD_UI_BLOCKED,
+            download_request_limiter_->GetDownloadUiStatus(web_contents()));
+
+  // Trigger another download from about:blank, that should not be affected
+  // as it is a special URL.
+  CanDownloadFor(web_contents());
+  ExpectAndResetCounts(1, 0, 0, __LINE__);
+  EXPECT_EQ(DownloadRequestLimiter::PROMPT_BEFORE_DOWNLOAD,
+            download_request_limiter_->GetDownloadStatus(web_contents()));
+  EXPECT_EQ(DownloadRequestLimiter::DOWNLOAD_UI_DEFAULT,
             download_request_limiter_->GetDownloadUiStatus(web_contents()));
 }

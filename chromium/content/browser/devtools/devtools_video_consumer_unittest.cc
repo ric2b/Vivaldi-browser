@@ -12,7 +12,6 @@
 #include "content/public/test/test_utils.h"
 #include "media/base/limits.h"
 #include "media/capture/mojom/video_capture_types.mojom.h"
-#include "mojo/public/cpp/base/shared_memory_utils.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
@@ -42,9 +41,10 @@ class MockFrameSinkVideoCapturer : public viz::mojom::FrameSinkVideoCapturer {
 
   bool is_bound() const { return receiver_.is_bound(); }
 
-  void Bind(viz::mojom::FrameSinkVideoCapturerRequest request) {
+  void Bind(
+      mojo::PendingReceiver<viz::mojom::FrameSinkVideoCapturer> receiver) {
     DCHECK(!receiver_.is_bound());
-    receiver_.Bind(std::move(request));
+    receiver_.Bind(std::move(receiver));
   }
 
   void Reset() {
@@ -131,10 +131,12 @@ class MockFrameSinkVideoCapturer : public viz::mojom::FrameSinkVideoCapturer {
 class MockFrameSinkVideoConsumerFrameCallbacks
     : public viz::mojom::FrameSinkVideoConsumerFrameCallbacks {
  public:
-  MockFrameSinkVideoConsumerFrameCallbacks() {}
+  MockFrameSinkVideoConsumerFrameCallbacks() = default;
 
-  void Bind(viz::mojom::FrameSinkVideoConsumerFrameCallbacksRequest request) {
-    receiver_.Bind(std::move(request));
+  void Bind(
+      mojo::PendingReceiver<viz::mojom::FrameSinkVideoConsumerFrameCallbacks>
+          receiver) {
+    receiver_.Bind(std::move(receiver));
   }
 
   MOCK_METHOD0(Done, void());
@@ -185,8 +187,9 @@ class DevToolsVideoConsumerTest : public testing::Test {
   }
 
   void SimulateFrameCapture(base::ReadOnlySharedMemoryRegion data) {
-    viz::mojom::FrameSinkVideoConsumerFrameCallbacksPtr callbacks_ptr;
-    callbacks.Bind(mojo::MakeRequest(&callbacks_ptr));
+    mojo::PendingRemote<viz::mojom::FrameSinkVideoConsumerFrameCallbacks>
+        callbacks_remote;
+    callbacks.Bind(callbacks_remote.InitWithNewPipeAndPassReceiver());
 
     media::mojom::VideoFrameInfoPtr info = media::mojom::VideoFrameInfo::New(
         base::TimeDelta(), base::Value(base::Value::Type::DICTIONARY), kFormat,
@@ -195,7 +198,7 @@ class DevToolsVideoConsumerTest : public testing::Test {
 
     consumer_->OnFrameCaptured(std::move(data), std::move(info),
                                gfx::Rect(kResolution),
-                               std::move(callbacks_ptr));
+                               std::move(callbacks_remote));
   }
 
   void StartCaptureWithMockCapturer() {
@@ -234,9 +237,8 @@ class DevToolsVideoConsumerTest : public testing::Test {
     return std::make_unique<viz::ClientFrameSinkVideoCapturer>(
         base::BindRepeating(
             [](base::WeakPtr<DevToolsVideoConsumerTest> self,
-               viz::mojom::FrameSinkVideoCapturerRequest request) {
-              self->capturer_.Bind(std::move(request));
-            },
+               mojo::PendingReceiver<viz::mojom::FrameSinkVideoCapturer>
+                   receiver) { self->capturer_.Bind(std::move(receiver)); },
             weak_factory_.GetWeakPtr()));
   }
 
@@ -250,7 +252,7 @@ TEST_F(DevToolsVideoConsumerTest, CallbacksAreCalledWhenBufferValid) {
   // On valid buffer the |receiver_| gets a frame via OnFrameFromVideoConsumer.
   EXPECT_CALL(receiver_, OnFrameFromVideoConsumerMock(_)).Times(1);
 
-  auto region = mojo::CreateReadOnlySharedMemoryRegion(
+  auto region = base::ReadOnlySharedMemoryRegion::Create(
                     media::VideoFrame::AllocationSize(kFormat, kResolution))
                     .region;
   ASSERT_TRUE(region.IsValid());
@@ -278,7 +280,7 @@ TEST_F(DevToolsVideoConsumerTest, CallbackIsNotCalledWhenBufferIsTooSmall) {
   ASSERT_LT(too_few_number_of_bytes,
             media::VideoFrame::AllocationSize(kFormat, kResolution));
   auto region =
-      mojo::CreateReadOnlySharedMemoryRegion(too_few_number_of_bytes).region;
+      base::ReadOnlySharedMemoryRegion::Create(too_few_number_of_bytes).region;
   ASSERT_TRUE(region.IsValid());
   SimulateFrameCapture(std::move(region));
   base::RunLoop().RunUntilIdle();

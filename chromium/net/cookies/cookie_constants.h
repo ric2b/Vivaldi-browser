@@ -36,7 +36,7 @@ enum class CookieSameSite {
   NO_RESTRICTION = 0,
   LAX_MODE = 1,
   STRICT_MODE = 2,
-  EXTENDED_MODE = 3,  // TODO(chlily): Remove or gate behind flag.
+  // Reserved 3 (was EXTENDED_MODE), next number is 4.
 };
 
 // These are the enforcement modes that may be applied to a cookie when deciding
@@ -64,7 +64,7 @@ enum class CookieSameSiteString {
   kLax = 3,
   kStrict = 4,
   kNone = 5,
-  kExtended = 6,
+  kExtended = 6,  // Deprecated, kept for metrics only.
 
   // Keep last, update if adding new value.
   kMaxValue = kExtended
@@ -82,9 +82,17 @@ enum class CookieAccessSemantics {
   LEGACY,
 };
 
+// What scheme was used in the setting of a cookie.
+// Do not renumber.
+enum class CookieSourceScheme {
+  kUnset = 0,
+  kNonSecure = 1,
+  kSecure = 2,
+
+  kMaxValue = kSecure  // Keep as the last value.
+};
+
 // Returns the Set-Cookie header priority token corresponding to |priority|.
-//
-// TODO(mkwst): Remove this once its callsites are refactored.
 NET_EXPORT std::string CookiePriorityToString(CookiePriority priority);
 
 // Converts the Set-Cookie header priority token |priority| to a CookiePriority.

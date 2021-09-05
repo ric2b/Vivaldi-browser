@@ -17,7 +17,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
-#include "components/rappor/rappor_service_impl.h"
 #include "components/search_engines/search_engines_pref_names.h"
 #include "components/search_engines/search_terms_data.h"
 #include "components/search_engines/template_url_prepopulate_data.h"
@@ -284,13 +283,11 @@ TemplateURLService::TemplateURLService(
     std::unique_ptr<SearchTermsData> search_terms_data,
     const scoped_refptr<KeywordWebDataService>& web_data_service,
     std::unique_ptr<TemplateURLServiceClient> client,
-    rappor::RapporServiceImpl* rappor_service,
     const base::Closure& dsp_change_callback)
     : prefs_(prefs),
       search_terms_data_(std::move(search_terms_data)),
       web_data_service_(web_data_service),
       client_(std::move(client)),
-      rappor_service_(rappor_service),
       dsp_change_callback_(dsp_change_callback),
       default_search_manager_(
           prefs_,
@@ -876,14 +873,6 @@ void TemplateURLService::OnWebDataServiceRequestDone(
         "Search.DefaultSearchProviderType",
         default_search_provider_->GetEngineType(search_terms_data()),
         SEARCH_ENGINE_MAX);
-
-    if (rappor_service_) {
-      rappor_service_->RecordSampleString(
-          "Search.DefaultSearchProvider", rappor::ETLD_PLUS_ONE_RAPPOR_TYPE,
-          net::registry_controlled_domains::GetDomainAndRegistry(
-              default_search_provider_->url_ref().GetHost(search_terms_data()),
-              net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES));
-    }
   }
 }
 
@@ -908,11 +897,12 @@ void TemplateURLService::OnHistoryURLVisited(const URLVisitedDetails& details) {
   // This interferes with keyword storage in history
   // and we do not use it at the moment anyway
   return;
-#endif
+#else
   if (!loaded_)
     visits_to_add_.push_back(details);
   else
     UpdateKeywordSearchTermsForURL(details);
+#endif
 }
 
 void TemplateURLService::Shutdown() {
@@ -1462,19 +1452,13 @@ void TemplateURLService::Init(const Initializer* initializers,
 
 TemplateURL* TemplateURLService::BestEngineForKeyword(TemplateURL* engine1,
                                                       TemplateURL* engine2) {
-  DCHECK(engine1);
-  DCHECK(engine2);
-  DCHECK_EQ(engine1->keyword(), engine2->keyword());
+  CHECK(engine1);
+  CHECK(engine2);
+  CHECK_EQ(engine1->keyword(), engine2->keyword());
 
   // We should only have overlapping keywords when at least one comes from
   // an extension.
-  DCHECK(IsCreatedByExtension(engine1) || IsCreatedByExtension(engine2));
-
-  // TODO(a-v-y) Remove following code for non extension engines when reasons
-  // for crash https://bugs.chromium.org/p/chromium/issues/detail?id=697745
-  // become clear.
-  if (!IsCreatedByExtension(engine1) && !IsCreatedByExtension(engine2))
-    return CanReplace(engine1) ? engine2 : engine1;
+  CHECK(IsCreatedByExtension(engine1) || IsCreatedByExtension(engine2));
 
   if (engine2->type() == engine1->type()) {
     return engine1->extension_info_->install_time >
@@ -1492,8 +1476,11 @@ TemplateURL* TemplateURLService::BestEngineForKeyword(TemplateURL* engine1,
 
 void TemplateURLService::RemoveFromMaps(const TemplateURL* template_url) {
   const base::string16& keyword = template_url->keyword();
-  DCHECK_NE(0U, keyword_to_turl_and_length_.count(keyword));
-  if (keyword_to_turl_and_length_[keyword].first == template_url) {
+  auto iter = keyword_to_turl_and_length_.find(keyword);
+  CHECK(iter != keyword_to_turl_and_length_.end());
+  // The entry at |iter| may not be |template_url| if it's an extension-created
+  // entry with the same keyword.
+  if (iter->second.first == template_url) {
     // We need to check whether the keyword can now be provided by another
     // TemplateURL. See the comments for BestEngineForKeyword() for more
     // information on extension keywords and how they can coexist with
@@ -1512,7 +1499,7 @@ void TemplateURLService::RemoveFromMaps(const TemplateURL* template_url) {
       AddToMap(best_fallback);
       AddToDomainMap(best_fallback);
     } else {
-      keyword_to_turl_and_length_.erase(keyword);
+      keyword_to_turl_and_length_.erase(iter);
     }
   }
 
@@ -1538,7 +1525,7 @@ void TemplateURLService::AddToMaps(TemplateURL* template_url) {
     AddToDomainMap(template_url);
   } else {
     TemplateURL* existing_url = i->second.first;
-    DCHECK_NE(existing_url, template_url);
+    CHECK_NE(existing_url, template_url);
     if (BestEngineForKeyword(existing_url, template_url) != existing_url) {
       RemoveFromDomainMap(existing_url);
       AddToMap(template_url);
@@ -1708,8 +1695,10 @@ bool TemplateURLService::Update(TemplateURL* existing_turl,
   // calling AddToMaps() below).
   existing_turl->CopyFrom(new_values);
   existing_turl->data_.id = previous_id;
-  if (keep_old_keyword)
+  if (keep_old_keyword) {
+    CHECK_NE(old_keyword, new_values.keyword());
     existing_turl->data_.SetKeyword(old_keyword);
+  }
 
   AddToMaps(existing_turl);
 
@@ -1727,7 +1716,7 @@ bool TemplateURLService::Update(TemplateURL* existing_turl,
   if (default_search_provider_source_ != DefaultSearchManager::FROM_FALLBACK)
     MaybeUpdateDSEViaPrefs(existing_turl);
 
-  DCHECK(!HasDuplicateKeywords());
+  CHECK(!HasDuplicateKeywords());
   return true;
 }
 
@@ -1842,6 +1831,14 @@ void TemplateURLService::ApplyDefaultSearchChange(
 bool TemplateURLService::ApplyDefaultSearchChangeNoMetrics(
     const TemplateURLData* data,
     DefaultSearchManager::Source source) {
+  // We do not want any sort of reentrancy while changing the default search
+  // engine. This can occur when resolving conflicting entries. In those cases,
+  // it's best to early exit and let the original process finish.
+  if (applying_default_search_engine_change_)
+    return false;
+  base::AutoReset<bool> applying_change(&applying_default_search_engine_change_,
+                                        true);
+
   if (!loaded_) {
     // Set |initial_default_search_provider_| from the preferences. This is
     // mainly so we can hold ownership until we get to the point where the list
@@ -1859,15 +1856,6 @@ bool TemplateURLService::ApplyDefaultSearchChangeNoMetrics(
     default_search_provider_source_ = source;
     return changed;
   }
-
-  // Prevent recursion if we update the value stored in default_search_manager_.
-  // Note that we exclude the case of data == NULL because that could cause a
-  // false positive for recursion when the initial_default_search_provider_ is
-  // NULL due to policy. We'll never actually get recursion with data == NULL.
-  if (source == default_search_provider_source_ && data != nullptr &&
-      TemplateURL::MatchesData(default_search_provider_, data,
-                               search_terms_data()))
-    return false;
 
   // This may be deleted later. Use exclusively for pointer comparison to detect
   // a change.
@@ -2006,7 +1994,7 @@ TemplateURL* TemplateURLService::Add(std::unique_ptr<TemplateURL> template_url,
   if (template_url_ptr)
     model_mutated_notification_pending_ = true;
 
-  DCHECK(!HasDuplicateKeywords());
+  CHECK(!HasDuplicateKeywords());
   return template_url_ptr;
 }
 

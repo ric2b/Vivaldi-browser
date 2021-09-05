@@ -9,7 +9,6 @@
 #include <memory>
 #include <string>
 
-#include "base/callback.h"
 #include "base/feature_list.h"
 #include "base/macros.h"
 #include "components/security_state/core/insecure_input_event_data.h"
@@ -18,6 +17,8 @@
 #include "net/cert/sct_status_flags.h"
 #include "net/cert/x509_certificate.h"
 #include "url/gurl.h"
+
+class PrefRegistrySimple;
 
 // Provides helper methods and data types that are used to determine the
 // high-level security information about a page or request.
@@ -196,11 +197,17 @@ struct VisibleSecurityState {
   bool is_view_source;
   // True if the page is a devtools page.
   bool is_devtools;
+  // True if the page is a reader mode page.
+  bool is_reader_mode;
   // True if the page was loaded over a legacy TLS version.
   bool connection_used_legacy_tls;
   // True if the page should be excluded from a UI treatment for legacy TLS
   // (used for control group in an experimental UI rollout).
   bool should_suppress_legacy_tls_warning;
+  // True if the page should be excluded from a warning UI treatment for mixed
+  // content. If set to false, the page will receive a neutral (rather than
+  // positively secure) UI treatment.
+  bool should_suppress_mixed_content_warning;
   // Contains information about input events that may impact the security
   // level of the page.
   InsecureInputEventData insecure_input_events;
@@ -210,26 +217,23 @@ struct VisibleSecurityState {
 // display and run mixed content. They are used to coordinate the
 // treatment of mixed content with other security UI elements.
 constexpr SecurityLevel kDisplayedInsecureContentLevel = NONE;
+constexpr SecurityLevel kDisplayedInsecureContentWarningLevel = WARNING;
 constexpr SecurityLevel kRanInsecureContentLevel = DANGEROUS;
-
-// Returns true if the given |url|'s origin should be considered secure.
-using IsOriginSecureCallback = base::Callback<bool(const GURL& url)>;
 
 // Returns a SecurityLevel to describe the current page.
 // |visible_security_state| contains the relevant security state.
 // |used_policy_installed_certificate| indicates whether the page or request
 // is known to be loaded with a certificate installed by the system admin.
-// |is_origin_secure_callback| determines whether a URL's origin should be
-// considered secure.
 SecurityLevel GetSecurityLevel(
     const VisibleSecurityState& visible_security_state,
-    bool used_policy_installed_certificate,
-    IsOriginSecureCallback is_origin_secure_callback);
+    bool used_policy_installed_certificate);
 
 // Returns true if the current page was loaded using a cryptographic protocol
 // and its certificate has any major errors.
 bool HasMajorCertificateError(
     const VisibleSecurityState& visible_security_state);
+
+void RegisterProfilePrefs(PrefRegistrySimple* registry);
 
 // Returns true for a valid |url| with a cryptographic scheme, e.g., HTTPS, WSS.
 bool IsSchemeCryptographic(const GURL& url);
@@ -262,6 +266,10 @@ std::string GetLegacyTLSHistogramName(
     const VisibleSecurityState& visible_security_state);
 
 bool IsSHA1InChain(const VisibleSecurityState& visible_security_state);
+
+// Returns whether the WARNING state should downgrade the security icon from
+// info to danger triangle as part of an experiment (crbug.com/997972).
+bool ShouldShowDangerTriangleForWarningLevel();
 
 }  // namespace security_state
 

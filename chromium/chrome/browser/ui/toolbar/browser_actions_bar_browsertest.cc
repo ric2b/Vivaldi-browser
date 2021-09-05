@@ -20,9 +20,8 @@
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/scripting_permissions_modifier.h"
-#include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/extensions/browser_action_test_util.h"
+#include "chrome/browser/ui/extensions/extension_action_test_helper.h"
 #include "chrome/browser/ui/extensions/extension_action_view_controller.h"
 #include "chrome/browser/ui/extensions/icon_with_badge_image_source.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -30,10 +29,12 @@
 #include "chrome/browser/ui/toolbar/toolbar_action_view_controller.h"
 #include "chrome/browser/ui/toolbar/toolbar_actions_bar.h"
 #include "chrome/browser/ui/toolbar/toolbar_actions_model.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/crx_file/id_util.h"
 #include "components/prefs/pref_service.h"
+#include "components/sessions/content/session_tab_helper.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
@@ -42,7 +43,6 @@
 #include "extensions/browser/notification_types.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_builder.h"
-#include "extensions/common/value_builder.h"
 #include "extensions/test/extension_test_message_listener.h"
 #include "extensions/test/test_extension_dir.h"
 #include "net/dns/mock_host_resolver.h"
@@ -54,17 +54,10 @@ const char* kInjectionSucceededMessage = "injection succeeded";
 scoped_refptr<const extensions::Extension> CreateExtension(
     const std::string& name,
     bool has_browser_action) {
-  extensions::DictionaryBuilder manifest;
-  manifest.Set("name", name).
-           Set("description", "an extension").
-           Set("manifest_version", 2).
-           Set("version", "1.0");
+  extensions::ExtensionBuilder builder(name);
   if (has_browser_action)
-    manifest.Set("browser_action", extensions::DictionaryBuilder().Build());
-  return extensions::ExtensionBuilder()
-      .SetManifest(manifest.Build())
-      .SetID(crx_file::id_util::GenerateId(name))
-      .Build();
+    builder.SetAction(extensions::ExtensionBuilder::ActionType::BROWSER_ACTION);
+  return builder.Build();
 }
 
 class BlockedActionWaiter
@@ -97,6 +90,9 @@ class BlockedActionWaiter
 
 BrowserActionsBarBrowserTest::BrowserActionsBarBrowserTest()
     : toolbar_model_(nullptr) {
+  // This suite relies on behavior specific to ToolbarActionsBar. See
+  // ExtensionsMenuViewBrowserTest and ExtensionsMenuViewUnitTest for new tests.
+  feature_list_.InitAndDisableFeature(features::kExtensionsToolbarMenu);
 }
 
 BrowserActionsBarBrowserTest::~BrowserActionsBarBrowserTest() {
@@ -110,7 +106,7 @@ void BrowserActionsBarBrowserTest::SetUpCommandLine(
 
 void BrowserActionsBarBrowserTest::SetUpOnMainThread() {
   extensions::ExtensionBrowserTest::SetUpOnMainThread();
-  browser_actions_bar_ = BrowserActionTestUtil::Create(browser());
+  browser_actions_bar_ = ExtensionActionTestHelper::Create(browser());
   toolbar_model_ = ToolbarActionsModel::Get(profile());
 }
 
@@ -317,7 +313,7 @@ IN_PROC_BROWSER_TEST_F(BrowserActionsBarBrowserTest,
   ASSERT_TRUE(action);
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
-  int tab_id = SessionTabHelper::IdForTab(web_contents).id();
+  int tab_id = sessions::SessionTabHelper::IdForTab(web_contents).id();
   action->SetIsVisible(tab_id, true);
   extensions::ExtensionActionAPI* extension_action_api =
       extensions::ExtensionActionAPI::Get(profile());
@@ -400,8 +396,8 @@ IN_PROC_BROWSER_TEST_F(BrowserActionsBarBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(BrowserActionsBarBrowserTest,
                        OverflowedBrowserActionPopupTest) {
-  std::unique_ptr<BrowserActionTestUtil> overflow_bar =
-      browser_actions_bar()->CreateOverflowBar();
+  std::unique_ptr<ExtensionActionTestHelper> overflow_bar =
+      browser_actions_bar()->CreateOverflowBar(browser());
 
   // Load up two extensions that have browser action popups.
   base::FilePath data_dir =
@@ -487,8 +483,8 @@ IN_PROC_BROWSER_TEST_F(BrowserActionsBarBrowserTest,
 // Regression test for crbug.com/599467.
 IN_PROC_BROWSER_TEST_F(BrowserActionsBarBrowserTest,
                        OverflowedBrowserActionPopupTestRemoval) {
-  std::unique_ptr<BrowserActionTestUtil> overflow_bar =
-      browser_actions_bar()->CreateOverflowBar();
+  std::unique_ptr<ExtensionActionTestHelper> overflow_bar =
+      browser_actions_bar()->CreateOverflowBar(browser());
 
   // Install an extension and shrink the visible count to zero so the extension
   // is overflowed.
@@ -574,8 +570,8 @@ IN_PROC_BROWSER_TEST_F(BrowserActionsBarBrowserTest, RemovePoppedOutAction) {
 
   // Pop out Extension 3 (index 3).
   base::Closure closure = base::DoNothing();
-  ToolbarActionsBar* toolbar_actions_bar =
-      browser()->window()->GetToolbarActionsBar();
+  ToolbarActionsBar* const toolbar_actions_bar =
+      ToolbarActionsBar::FromBrowserWindow(browser()->window());
   EXPECT_EQ(extension3->id(), toolbar_actions_bar->GetActions()[2]->GetId());
   toolbar_actions_bar->PopOutAction(toolbar_actions_bar->GetActions()[2], false,
                                     closure);
@@ -655,12 +651,14 @@ IN_PROC_BROWSER_TEST_F(BrowserActionsBarIncognitoTest, IncognitoMode) {
 
   CloseBrowserSynchronously(browser());
 
+  ToolbarActionsBar* const toolbar_actions_bar =
+      ToolbarActionsBar::FromBrowserWindow(second_browser->window());
   std::vector<ToolbarActionViewController*> actions =
-      second_browser->window()->GetToolbarActionsBar()->GetActions();
+      toolbar_actions_bar->GetActions();
   ASSERT_EQ(1u, actions.size());
   gfx::Image icon = actions[0]->GetIcon(
       second_browser->tab_strip_model()->GetActiveWebContents(),
-      second_browser->window()->GetToolbarActionsBar()->GetViewSize());
+      toolbar_actions_bar->GetViewSize());
   const gfx::ImageSkia* skia = icon.ToImageSkia();
   ASSERT_TRUE(skia);
   // Force the image to try and load a representation.
@@ -762,7 +760,8 @@ IN_PROC_BROWSER_TEST_F(BrowserActionsBarRuntimeHostPermissionsBrowserTest,
   EXPECT_TRUE(action_runner->WantsToRun(extension()));
   EXPECT_FALSE(injection_listener.was_satisfied());
 
-  ToolbarActionsBar* actions_bar = browser()->window()->GetToolbarActionsBar();
+  ToolbarActionsBar* const actions_bar =
+      ToolbarActionsBar::FromBrowserWindow(browser()->window());
   std::vector<ToolbarActionViewController*> actions = actions_bar->GetActions();
   ASSERT_EQ(1u, actions.size());
 
@@ -944,8 +943,8 @@ class BrowserActionsBarUiBrowserTest
       return false;
     }
 
-    ToolbarActionsBar* actions_bar =
-        browser()->window()->GetToolbarActionsBar();
+    ToolbarActionsBar* const actions_bar =
+        ToolbarActionsBar::FromBrowserWindow(browser()->window());
     std::vector<ToolbarActionViewController*> actions =
         actions_bar->GetActions();
     if (actions.size() != 1) {

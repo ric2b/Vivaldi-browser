@@ -23,9 +23,9 @@
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "chrome/test/base/testing_profile_manager.h"
 #include "components/version_info/channel.h"
-#include "content/public/test/test_service_manager_context.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/gfx/scrollbar_size.h"
 #include "ui/views/controls/webview/webview.h"
 
 #if defined(OS_MACOSX)
@@ -54,32 +54,7 @@ base::string16 SubBrowserName(const char* fmt) {
 
 }  // namespace
 
-class BrowserViewTest : public TestWithBrowserView {
- public:
-  BrowserViewTest() = default;
-  ~BrowserViewTest() override = default;
-
-  void SetUp() override {
-    TestWithBrowserView::SetUp();
-    test_service_manager_context_ =
-        std::make_unique<content::TestServiceManagerContext>();
-  }
-
-  void TearDown() override {
-    // Must be reset before browser thread teardown.
-    test_service_manager_context_.reset();
-    TestWithBrowserView::TearDown();
-  }
-
- private:
-  // WebContentsImpl accesses
-  // content::ServiceManagerConnection::GetForProcess(), so we must make sure it
-  // is instantiated.
-  std::unique_ptr<content::TestServiceManagerContext>
-      test_service_manager_context_;
-
-  DISALLOW_COPY_AND_ASSIGN(BrowserViewTest);
-};
+using BrowserViewTest = TestWithBrowserView;
 
 // Test basic construction and initialization.
 TEST_F(BrowserViewTest, BrowserView) {
@@ -189,6 +164,53 @@ TEST_F(BrowserViewTest, DISABLED_BrowserViewLayout) {
   BookmarkBarView::DisableAnimationsForTesting(false);
 }
 
+// TODO(https://crbug.com/1020758): Flaky on Linux.
+#if defined(OS_LINUX)
+#define MAYBE_FindBarBoundingBoxLocationBar \
+  DISABLED_FindBarBoundingBoxLocationBar
+#else
+#define MAYBE_FindBarBoundingBoxLocationBar FindBarBoundingBoxLocationBar
+#endif
+// Test the find bar's bounding box when the location bar is visible.
+TEST_F(BrowserViewTest, MAYBE_FindBarBoundingBoxLocationBar) {
+  ASSERT_FALSE(base::i18n::IsRTL());
+  const views::View* location_bar = browser_view()->GetLocationBarView();
+  const views::View* contents_container =
+      browser_view()->GetContentsContainerForTest();
+
+  // Make sure we are testing the case where the location bar is visible.
+  EXPECT_TRUE(location_bar->GetVisible());
+  const gfx::Rect find_bar_bounds = browser_view()->GetFindBarBoundingBox();
+  const gfx::Rect location_bar_bounds =
+      location_bar->ConvertRectToWidget(location_bar->GetLocalBounds());
+  const gfx::Rect contents_bounds = contents_container->ConvertRectToWidget(
+      contents_container->GetLocalBounds());
+
+  const gfx::Rect target(
+      location_bar_bounds.x(), location_bar_bounds.bottom(),
+      location_bar_bounds.width(),
+      contents_bounds.bottom() - location_bar_bounds.bottom());
+  EXPECT_EQ(target.ToString(), find_bar_bounds.ToString());
+}
+
+// Test the find bar's bounding box when the location bar is not visible.
+TEST_F(BrowserViewTest, FindBarBoundingBoxNoLocationBar) {
+  ASSERT_FALSE(base::i18n::IsRTL());
+  const views::View* location_bar = browser_view()->GetLocationBarView();
+  const views::View* contents_container =
+      browser_view()->GetContentsContainerForTest();
+
+  // Make sure we are testing the case where the location bar is absent.
+  browser_view()->GetLocationBarView()->SetVisible(false);
+  EXPECT_FALSE(location_bar->GetVisible());
+  const gfx::Rect find_bar_bounds = browser_view()->GetFindBarBoundingBox();
+  gfx::Rect contents_bounds = contents_container->ConvertRectToWidget(
+      contents_container->GetLocalBounds());
+  contents_bounds.Inset(0, 0, gfx::scrollbar_size(), 0);
+
+  EXPECT_EQ(contents_bounds.ToString(), find_bar_bounds.ToString());
+}
+
 // On macOS, most accelerators are handled by CommandDispatcher.
 #if !defined(OS_MACOSX)
 // Test that repeated accelerators are processed or ignored depending on the
@@ -261,7 +283,7 @@ TEST_F(BrowserViewTest, DISABLED_AccessibleWindowTitle) {
 
   Tab* tab = browser_view()->tabstrip()->tab_at(0);
   TabRendererData start_media;
-  start_media.alert_state = TabAlertState::AUDIO_PLAYING;
+  start_media.alert_state = {TabAlertState::AUDIO_PLAYING};
   tab->SetData(std::move(start_media));
   EXPECT_EQ(SubBrowserName("about:blank - Audio playing - %s"),
             browser_view()->GetAccessibleWindowTitleForChannelAndProfile(

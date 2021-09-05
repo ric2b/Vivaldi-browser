@@ -2,98 +2,124 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-cr.define('settings_subpage', function() {
-  suite('SettingsSubpage', function() {
-    setup(function() {
-      PolymerTest.clearBody();
-    });
+// clang-format off
+// #import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+// #import {flushTasks} from 'chrome://test/test_util.m.js';
+// #import {Route, Router} from 'chrome://settings/settings.js';
+// #import {setupPopstateListener} from 'chrome://test/settings/test_util.m.js';
+// clang-format on
 
-    test('clear search (event)', function() {
-      const subpage = document.createElement('settings-subpage');
-      // Having a searchLabel will create the cr-search-field.
-      subpage.searchLabel = 'test';
-      document.body.appendChild(subpage);
-      Polymer.dom.flush();
-      const search = subpage.$$('cr-search-field');
-      assertTrue(!!search);
-      search.setValue('Hello');
-      subpage.fire('clear-subpage-search');
-      Polymer.dom.flush();
-      assertEquals('', search.getValue());
-    });
+suite('SettingsSubpage', function() {
+  let testRoutes;
 
-    test('clear search (click)', async () => {
-      const subpage = document.createElement('settings-subpage');
-      // Having a searchLabel will create the cr-search-field.
-      subpage.searchLabel = 'test';
-      document.body.appendChild(subpage);
-      Polymer.dom.flush();
-      const search = subpage.$$('cr-search-field');
-      assertTrue(!!search);
-      search.setValue('Hello');
-      assertEquals(null, search.root.activeElement);
-      search.$.clearSearch.click();
-      await test_util.flushTasks();
-      assertEquals('', search.getValue());
-      assertEquals(search.$.searchInput, search.root.activeElement);
-    });
+  setup(function() {
+    testRoutes = {
+      BASIC: new settings.Route('/'),
+    };
+    testRoutes.SEARCH = testRoutes.BASIC.createSection('/search', 'search');
+    testRoutes.SEARCH_ENGINES = testRoutes.SEARCH.createChild('/searchEngines');
+    testRoutes.PEOPLE = testRoutes.BASIC.createSection('/people', 'people');
+    testRoutes.SYNC = testRoutes.PEOPLE.createChild('/syncSetup');
+    testRoutes.PRIVACY = testRoutes.BASIC.createSection('/privacy', 'privacy');
+    testRoutes.CERTIFICATES = testRoutes.PRIVACY.createChild('/certificates');
 
-    test('navigates to parent when there is no history', function() {
-      // Pretend that we initially started on the CERTIFICATES route.
-      window.history.replaceState(
-          undefined, '', settings.routes.CERTIFICATES.path);
-      settings.initializeRouteFromUrl();
-      assertEquals(settings.routes.CERTIFICATES, settings.getCurrentRoute());
+    settings.Router.resetInstanceForTesting(new settings.Router(testRoutes));
 
-      const subpage = document.createElement('settings-subpage');
-      document.body.appendChild(subpage);
+    test_util.setupPopstateListener();
 
-      subpage.$$('cr-icon-button').click();
-      assertEquals(settings.routes.PRIVACY, settings.getCurrentRoute());
-    });
+    PolymerTest.clearBody();
+  });
 
-    test('navigates to any route via window.back()', function(done) {
-      settings.navigateTo(settings.routes.BASIC);
-      settings.navigateTo(settings.routes.SYNC);
-      assertEquals(settings.routes.SYNC, settings.getCurrentRoute());
+  test('clear search (event)', function() {
+    const subpage = document.createElement('settings-subpage');
+    // Having a searchLabel will create the cr-search-field.
+    subpage.searchLabel = 'test';
+    document.body.appendChild(subpage);
+    Polymer.dom.flush();
+    const search = subpage.$$('cr-search-field');
+    assertTrue(!!search);
+    search.setValue('Hello');
+    subpage.fire('clear-subpage-search');
+    Polymer.dom.flush();
+    assertEquals('', search.getValue());
+  });
 
-      const subpage = document.createElement('settings-subpage');
-      document.body.appendChild(subpage);
+  test('clear search (click)', async () => {
+    const subpage = document.createElement('settings-subpage');
+    // Having a searchLabel will create the cr-search-field.
+    subpage.searchLabel = 'test';
+    document.body.appendChild(subpage);
+    Polymer.dom.flush();
+    const search = subpage.$$('cr-search-field');
+    assertTrue(!!search);
+    search.setValue('Hello');
+    assertEquals(null, search.root.activeElement);
+    search.$.clearSearch.click();
+    await test_util.flushTasks();
+    assertEquals('', search.getValue());
+    assertEquals(search.$.searchInput, search.root.activeElement);
+  });
 
-      subpage.$$('cr-icon-button').click();
+  test('navigates to parent when there is no history', function() {
+    // Pretend that we initially started on the CERTIFICATES route.
+    window.history.replaceState(undefined, '', testRoutes.CERTIFICATES.path);
+    settings.Router.getInstance().initializeRouteFromUrl();
+    assertEquals(
+        testRoutes.CERTIFICATES,
+        settings.Router.getInstance().getCurrentRoute());
 
-      window.addEventListener('popstate', function(event) {
-        assertEquals(settings.routes.BASIC, settings.getCurrentRoute());
-        done();
-      });
-    });
+    const subpage = document.createElement('settings-subpage');
+    document.body.appendChild(subpage);
 
-    test('updates the title of the document when active', function() {
-      const expectedTitle = 'My Subpage Title';
-      settings.navigateTo(settings.routes.SEARCH);
-      const subpage = document.createElement('settings-subpage');
-      subpage.setAttribute('route-path', settings.routes.SEARCH_ENGINES.path);
-      subpage.setAttribute('page-title', expectedTitle);
-      document.body.appendChild(subpage);
+    subpage.$$('cr-icon-button').click();
+    assertEquals(
+        testRoutes.PRIVACY, settings.Router.getInstance().getCurrentRoute());
+  });
 
-      settings.navigateTo(settings.routes.SEARCH_ENGINES);
+  test('navigates to any route via window.back()', function(done) {
+    settings.Router.getInstance().navigateTo(testRoutes.BASIC);
+    settings.Router.getInstance().navigateTo(testRoutes.SYNC);
+    assertEquals(
+        testRoutes.SYNC, settings.Router.getInstance().getCurrentRoute());
+
+    const subpage = document.createElement('settings-subpage');
+    document.body.appendChild(subpage);
+
+    subpage.$$('cr-icon-button').click();
+
+    window.addEventListener('popstate', function(event) {
       assertEquals(
-          document.title,
-          loadTimeData.getStringF('settingsAltPageTitle', expectedTitle));
+          settings.Router.getInstance().getRoutes().BASIC,
+          settings.Router.getInstance().getCurrentRoute());
+      done();
     });
   });
 
-  suite('SettingsSubpageSearch', function() {
-    test('host autofocus propagates to <cr-input>', function() {
-      PolymerTest.clearBody();
-      const element = document.createElement('cr-search-field');
-      element.setAttribute('autofocus', true);
-      document.body.appendChild(element);
+  test('updates the title of the document when active', function() {
+    const expectedTitle = 'My Subpage Title';
+    settings.Router.getInstance().navigateTo(testRoutes.SEARCH);
+    const subpage = document.createElement('settings-subpage');
+    subpage.setAttribute('route-path', testRoutes.SEARCH_ENGINES.path);
+    subpage.setAttribute('page-title', expectedTitle);
+    document.body.appendChild(subpage);
 
-      assertTrue(element.$$('cr-input').hasAttribute('autofocus'));
+    settings.Router.getInstance().navigateTo(testRoutes.SEARCH_ENGINES);
+    assertEquals(
+        document.title,
+        loadTimeData.getStringF('settingsAltPageTitle', expectedTitle));
+  });
+});
 
-      element.removeAttribute('autofocus');
-      assertFalse(element.$$('cr-input').hasAttribute('autofocus'));
-    });
+suite('SettingsSubpageSearch', function() {
+  test('host autofocus propagates to <cr-input>', function() {
+    PolymerTest.clearBody();
+    const element = document.createElement('cr-search-field');
+    element.setAttribute('autofocus', true);
+    document.body.appendChild(element);
+
+    assertTrue(element.$$('cr-input').hasAttribute('autofocus'));
+
+    element.removeAttribute('autofocus');
+    assertFalse(element.$$('cr-input').hasAttribute('autofocus'));
   });
 });

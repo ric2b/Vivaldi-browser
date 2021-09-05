@@ -156,9 +156,7 @@ source_set("eg_app_support+eg2") {
 
 source_set("run_all_unittests") {
   testonly = true
-  sources = [
-    "test/run_all_unittests.cc",
-  ]
+  sources = [ "test/run_all_unittests.cc" ]
   deps = [
     "//base",
     "//base/test:test_support",
@@ -176,10 +174,8 @@ bundle_data("ios_web_unittests_bundle_data") {
     "test/data/testfavicon.png",
     "test/data/testpass.pkpass",
   ]
-  outputs = [
-    "{{bundle_resources_dir}}/{{source_root_relative_dir}}/" +
-        "{{source_file_part}}",
-  ]
+  outputs = [ "{{bundle_resources_dir}}/{{source_root_relative_dir}}/" +
+              "{{source_file_part}}" ]
 }
 
 test("ios_web_unittests") {
@@ -204,8 +200,10 @@ test("ios_web_unittests") {
     "//ios/web/favicon:unittests",
     "//ios/web/find_in_page:find_in_page_unittests",
     "//ios/web/js_messaging:unittests",
+    "//ios/web/public/web_view_only:unittests",
     "//ios/web/security:unittests",
     "//ios/web/session:unittests",
+    "//ios/web/test:packed_resources",
     "//ios/web/web_view:unittests",
   ]
 
@@ -284,9 +282,9 @@ source_set("ios_web_navigation_unittests") {
   sources = [
     "navigation/crw_navigation_item_holder_unittest.mm",
     "navigation/crw_navigation_item_storage_unittest.mm",
-    "navigation/crw_session_controller_unittest.mm",
     "navigation/crw_session_storage_unittest.mm",
     "navigation/crw_wk_navigation_states_unittest.mm",
+    "navigation/error_page_helper_unittest.mm",
     "navigation/error_retry_state_machine_unittest.mm",
     "navigation/navigation_context_impl_unittest.mm",
     "navigation/navigation_item_impl_unittest.mm",
@@ -345,13 +343,10 @@ source_set("test_support") {
   configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
-    "public/test/crw_mock_web_state_delegate.h",
-    "public/test/crw_mock_web_state_delegate.mm",
+    "public/test/crw_fake_web_state_delegate.h",
+    "public/test/crw_fake_web_state_delegate.mm",
   ]
-  deps = [
-    "//ios/testing:ocmock_support",
-    "//ios/web",
-  ]
+  deps = [ "//ios/web" ]
 }
 
 source_set("ios_web_web_state_unittests") {
@@ -403,6 +398,7 @@ source_set("ios_web_web_state_unittests") {
     "web_state/context_menu_params_utils_unittest.mm",
     "web_state/page_display_state_unittest.mm",
     "web_state/page_viewport_state_unittest.mm",
+    "web_state/web_state_context_menu_bridge_unittest.mm",
     "web_state/web_state_delegate_bridge_unittest.mm",
     "web_state/web_state_impl_unittest.mm",
     "web_state/web_state_observer_bridge_unittest.mm",
@@ -489,6 +485,7 @@ source_set("ios_web_web_state_ui_unittests") {
   ]
 
   sources = [
+    "web_state/ui/crw_properties_store_unittest.mm",
     "web_state/ui/crw_web_controller_unittest.mm",
     "web_state/ui/crw_web_view_content_view_unittest.mm",
     "web_state/ui/crw_web_view_proxy_impl_unittest.mm",
@@ -573,6 +570,7 @@ test("ios_web_inttests") {
   sources = [
     "browser_state_web_view_partition_inttest.mm",
     "find_in_page/find_in_page_manager_inttest.mm",
+    "navigation/error_page_helper_inttest.mm",
     "navigation/history_state_operations_inttest.mm",
     "navigation/meta_tag_inttest.mm",
     "navigation/window_location_inttest.mm",
@@ -639,43 +637,31 @@ js_compile_bundle("main_frame_document_end_web_bundle") {
   ]
 }
 
-js_compile_bundle("nav_bundle") {
-  visibility = [ ":js_resources" ]
-  closure_entry_point = "__crWeb.legacynavigation"
-
-  sources = [
-    "web_state/js/resources/legacy_navigation.js",
-  ]
-}
-
 js_compile_checked("js_resources") {
   public_deps = [
     ":all_frames_document_end_web_bundle",
     ":all_frames_web_bundle",
     ":main_frame_document_end_web_bundle",
     ":main_frame_web_bundle",
-    ":nav_bundle",
   ]
 
-  sources = [
-    "js_messaging/resources/window_id.js",
-  ]
+  sources = [ "js_messaging/resources/window_id.js" ]
 }
 
 bundle_data("navigation_resources") {
   sources = [
+    "navigation/resources/error_page_injected.html",
+    "navigation/resources/error_page_loaded.html",
     "navigation/resources/restore_session.html",
   ]
-  outputs = [
-    "{{bundle_resources_dir}}/{{source_file_part}}",
-  ]
+  outputs = [ "{{bundle_resources_dir}}/{{source_file_part}}" ]
 }
 
 grit("resources") {
   source = "ios_web_resources.grd"
 
-  # The .grd contains references to generated files.
-  source_is_generated = true
+  # Required due to flattenhtml="true" on a generated file.
+  enable_input_discovery_for_gn_analyze = false
 
   outputs = [
     "grit/ios_web_resources.h",
@@ -685,7 +671,5 @@ grit("resources") {
     "-E",
     "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
   ]
-  deps = [
-    "//mojo/public/js:bindings",
-  ]
+  deps = [ "//mojo/public/js:bindings" ]
 }

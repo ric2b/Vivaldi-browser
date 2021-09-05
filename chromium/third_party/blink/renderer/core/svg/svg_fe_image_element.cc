@@ -51,7 +51,7 @@ void SVGFEImageElement::Dispose() {
   ClearImageResource();
 }
 
-void SVGFEImageElement::Trace(blink::Visitor* visitor) {
+void SVGFEImageElement::Trace(Visitor* visitor) {
   visitor->Trace(preserve_aspect_ratio_);
   visitor->Trace(cached_image_);
   visitor->Trace(target_id_observer_);
@@ -143,7 +143,7 @@ void SVGFEImageElement::ImageNotifyFinished(ImageResourceContent*) {
     return;
 
   Element* parent = parentElement();
-  if (!parent || !IsSVGFilterElement(parent) || !parent->GetLayoutObject())
+  if (!parent || !IsA<SVGFilterElement>(parent) || !parent->GetLayoutObject())
     return;
 
   if (LayoutObject* layout_object = GetLayoutObject())
@@ -158,8 +158,9 @@ FilterEffect* SVGFEImageElement::Build(SVGFilterBuilder*, Filter* filter) {
     return MakeGarbageCollected<FEImage>(
         filter, image, preserve_aspect_ratio_->CurrentValue());
   }
-
-  return MakeGarbageCollected<FEImage>(filter, GetTreeScope(), HrefString(),
+  const SVGElement* target = DynamicTo<SVGElement>(
+      TargetElementFromIRIString(HrefString(), GetTreeScope()));
+  return MakeGarbageCollected<FEImage>(filter, target,
                                        preserve_aspect_ratio_->CurrentValue());
 }
 

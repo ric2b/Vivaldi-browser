@@ -44,7 +44,14 @@ module.exports = {
         'property': '__defineSetter__',
         'message': 'Use Object.defineProperty',
       },
+      {
+        'object': 'cr',
+        'property': 'exportPath',
+        'message': 'Use ES modules or cr.define() instead',
+      },
     ],
+    'no-var': 'error',
+    'prefer-const': 'error',
     'semi': ['error', 'always'],
 
     // TODO(dpapad): Add more checks according to our styleguide.

@@ -4,9 +4,11 @@
 
 package org.chromium.chrome.browser.contextmenu;
 
+import android.net.Uri;
+
 import androidx.annotation.IntDef;
 
-import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.common.Referrer;
 
 import java.lang.annotation.Retention;
@@ -29,6 +31,11 @@ public interface ContextMenuItemDelegate {
      * Called when this ContextMenuItemDelegate is about to be destroyed.
      */
     void onDestroy();
+
+    /**
+     * @return The web contents of the current tab owned by this delegate.
+     */
+    WebContents getWebContents();
 
     /**
      * @return Whether or not this context menu is being shown for an incognito content.
@@ -111,6 +118,12 @@ public interface ContextMenuItemDelegate {
     void onSaveToClipboard(String text, @ClipboardType int clipboardType);
 
     /**
+     * Called when the image should be saved to the clipboard.
+     * @param Uri The (@link Uri) of the image to save to the clipboard.
+     */
+    void onSaveImageToClipboard(Uri uri);
+
+    /**
      * @return whether an activity is available to handle an intent to call a phone number.
      */
     public boolean supportsCall();
@@ -191,4 +204,12 @@ public interface ContextMenuItemDelegate {
      * @param title The title text to show on top control.
      */
     void onOpenInEphemeralTab(String url, String title);
+
+    /**
+     * Vivaldi
+     * Called when the {@code url} should be opened in a new foreground tab with the same incognito
+     * state as the current {@link Tab}.
+     * @param url The URL to open.
+     */
+    void onOpenInNewTabForeground(String url, Referrer referrer);
 }

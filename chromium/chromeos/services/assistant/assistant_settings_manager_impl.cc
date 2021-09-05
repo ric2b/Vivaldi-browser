@@ -9,9 +9,9 @@
 #include "ash/public/cpp/assistant/assistant_state_base.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "chromeos/dbus/util/version_loader.h"
 #include "chromeos/services/assistant/assistant_manager_service_impl.h"
-#include "chromeos/services/assistant/constants.h"
 #include "chromeos/services/assistant/cros_platform_api.h"
 #include "chromeos/services/assistant/public/features.h"
 #include "chromeos/services/assistant/public/proto/assistant_device_settings_ui.pb.h"
@@ -45,9 +45,9 @@ AssistantSettingsManagerImpl::AssistantSettingsManagerImpl(
 
 AssistantSettingsManagerImpl::~AssistantSettingsManagerImpl() = default;
 
-void AssistantSettingsManagerImpl::BindRequest(
-    mojom::AssistantSettingsManagerRequest request) {
-  bindings_.AddBinding(this, std::move(request));
+void AssistantSettingsManagerImpl::BindReceiver(
+    mojo::PendingReceiver<mojom::AssistantSettingsManager> receiver) {
+  receivers_.Add(this, std::move(receiver));
 }
 
 void AssistantSettingsManagerImpl::GetSettings(const std::string& selector,
@@ -123,7 +123,7 @@ void AssistantSettingsManagerImpl::UpdateSettings(
 
 void AssistantSettingsManagerImpl::StartSpeakerIdEnrollment(
     bool skip_cloud_enrollment,
-    mojom::SpeakerIdEnrollmentClientPtr client) {
+    mojo::PendingRemote<mojom::SpeakerIdEnrollmentClient> client) {
   DCHECK(HasStarted(assistant_manager_service_));
   DCHECK(main_task_runner()->RunsTasksInCurrentSequence());
 
@@ -132,10 +132,10 @@ void AssistantSettingsManagerImpl::StartSpeakerIdEnrollment(
   if (!assistant_manager_service_->assistant_manager_internal())
     return;
 
-  speaker_id_enrollment_client_ = std::move(client);
+  speaker_id_enrollment_client_.Bind(std::move(client));
 
   assistant_client::SpeakerIdEnrollmentConfig client_config;
-  client_config.user_id = kUserID;
+  client_config.user_id = context_->primary_account_gaia_id();
   client_config.skip_cloud_enrollment = skip_cloud_enrollment;
 
   assistant_manager_service_->assistant_manager_internal()
@@ -188,7 +188,7 @@ void AssistantSettingsManagerImpl::SyncSpeakerIdEnrollmentStatus() {
 
   assistant_manager_service_->assistant_manager_internal()
       ->GetSpeakerIdEnrollmentStatus(
-          kUserID,
+          context_->primary_account_gaia_id(),
           [weak_ptr = weak_factory_.GetWeakPtr(),
            task_runner = main_task_runner()](
               const assistant_client::SpeakerIdEnrollmentStatus& status) {

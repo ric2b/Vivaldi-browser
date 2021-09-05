@@ -23,7 +23,7 @@ namespace {
 // dumpstate routine to avoid calling an executable during an automated test.
 // This value should not be mutated through any other function except
 // CrashUtil::SetDumpStateCbForTest().
-static base::Callback<int(const std::string&)>* g_dumpstate_cb = nullptr;
+static base::OnceCallback<int(const std::string&)>* g_dumpstate_cb = nullptr;
 
 }  // namespace
 
@@ -50,15 +50,16 @@ bool CrashUtil::RequestUploadCrashDump(
       "",  // suffix
       AppStateTracker::GetPreviousApp(), AppStateTracker::GetCurrentApp(),
       AppStateTracker::GetLastLaunchedApp(), CAST_BUILD_RELEASE,
-      CAST_BUILD_INCREMENTAL, "" /* reason */);
+      CAST_BUILD_INCREMENTAL, "", /* reason */
+      AppStateTracker::GetStadiaSessionId());
   DummyMinidumpGenerator minidump_generator(existing_minidump_path);
 
   base::FilePath filename = base::FilePath(existing_minidump_path).BaseName();
 
   std::unique_ptr<MinidumpWriter> writer;
   if (g_dumpstate_cb) {
-    writer.reset(new MinidumpWriter(
-        &minidump_generator, filename.value(), params, *g_dumpstate_cb));
+    writer.reset(new MinidumpWriter(&minidump_generator, filename.value(),
+                                    params, std::move(*g_dumpstate_cb)));
   } else {
     writer.reset(
         new MinidumpWriter(&minidump_generator, filename.value(), params));
@@ -85,9 +86,10 @@ bool CrashUtil::RequestUploadCrashDump(
 }
 
 void CrashUtil::SetDumpStateCbForTest(
-    const base::Callback<int(const std::string&)>& cb) {
+    base::OnceCallback<int(const std::string&)> cb) {
   DCHECK(!g_dumpstate_cb);
-  g_dumpstate_cb = new base::Callback<int(const std::string&)>(cb);
+  g_dumpstate_cb =
+      new base::OnceCallback<int(const std::string&)>(std::move(cb));
 }
 
 }  // namespace chromecast

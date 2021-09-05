@@ -18,6 +18,7 @@
 #include "base/optional.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chromeos/dbus/constants/dbus_switches.h"
 
@@ -47,6 +48,19 @@ void FakeDebugDaemonClient::DumpDebugLogs(bool is_compressed,
 void FakeDebugDaemonClient::SetDebugMode(const std::string& subsystem,
                                          VoidDBusMethodCallback callback) {
   std::move(callback).Run(false);
+}
+
+void FakeDebugDaemonClient::SetKstaledRatio(uint8_t val,
+                                            KstaledRatioCallback callback) {
+  // We just return true.
+  std::move(callback).Run(true /* success */);
+}
+
+void FakeDebugDaemonClient::SetSwapParameter(
+    const std::string& parameter,
+    int32_t value,
+    DBusMethodCallback<std::string> callback) {
+  std::move(callback).Run(std::string());
 }
 
 std::string FakeDebugDaemonClient::GetTracingAgentName() {
@@ -143,28 +157,28 @@ void FakeDebugDaemonClient::UploadCrashes() {}
 
 void FakeDebugDaemonClient::EnableDebuggingFeatures(
     const std::string& password,
-    const DebugDaemonClient::EnableDebuggingCallback& callback) {
-  base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                base::BindOnce(callback, true));
+    EnableDebuggingCallback callback) {
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(std::move(callback), true));
 }
 
 void FakeDebugDaemonClient::QueryDebuggingFeatures(
-    const DebugDaemonClient::QueryDevFeaturesCallback& callback) {
+    QueryDevFeaturesCallback callback) {
   bool supported = base::CommandLine::ForCurrentProcess()->HasSwitch(
       chromeos::switches::kSystemDevMode);
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
       base::BindOnce(
-          callback, true,
+          std::move(callback), true,
           static_cast<int>(
               supported ? features_mask_
                         : debugd::DevFeatureFlag::DEV_FEATURES_DISABLED)));
 }
 
 void FakeDebugDaemonClient::RemoveRootfsVerification(
-    const DebugDaemonClient::EnableDebuggingCallback& callback) {
-  base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                base::BindOnce(callback, true));
+    EnableDebuggingCallback callback) {
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(std::move(callback), true));
 }
 
 void FakeDebugDaemonClient::WaitForServiceToBeAvailable(
@@ -180,9 +194,9 @@ void FakeDebugDaemonClient::WaitForServiceToBeAvailable(
 
 void FakeDebugDaemonClient::SetOomScoreAdj(
     const std::map<pid_t, int32_t>& pid_to_oom_score_adj,
-    const SetOomScoreAdjCallback& callback) {
+    SetOomScoreAdjCallback callback) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::BindOnce(callback, true, ""));
+      FROM_HERE, base::BindOnce(std::move(callback), true, ""));
 }
 
 void FakeDebugDaemonClient::SetDebuggingFeaturesStatus(int features_mask) {
@@ -204,7 +218,7 @@ void FakeDebugDaemonClient::CupsAddManuallyConfiguredPrinter(
     const std::string& name,
     const std::string& uri,
     const std::string& ppd_contents,
-    DebugDaemonClient::CupsAddPrinterCallback callback) {
+    CupsAddPrinterCallback callback) {
   printers_.insert(name);
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::BindOnce(std::move(callback), 0));
@@ -213,7 +227,7 @@ void FakeDebugDaemonClient::CupsAddManuallyConfiguredPrinter(
 void FakeDebugDaemonClient::CupsAddAutoConfiguredPrinter(
     const std::string& name,
     const std::string& uri,
-    DebugDaemonClient::CupsAddPrinterCallback callback) {
+    CupsAddPrinterCallback callback) {
   printers_.insert(name);
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::BindOnce(std::move(callback), 0));
@@ -221,8 +235,8 @@ void FakeDebugDaemonClient::CupsAddAutoConfiguredPrinter(
 
 void FakeDebugDaemonClient::CupsRemovePrinter(
     const std::string& name,
-    DebugDaemonClient::CupsRemovePrinterCallback callback,
-    const base::Closure& error_callback) {
+    CupsRemovePrinterCallback callback,
+    base::OnceClosure error_callback) {
   const bool has_printer = base::Contains(printers_, name);
   if (has_printer)
     printers_.erase(name);
@@ -242,6 +256,7 @@ void FakeDebugDaemonClient::StopConcierge(ConciergeCallback callback) {
 }
 
 void FakeDebugDaemonClient::StartPluginVmDispatcher(
+    const std::string& owner_id,
     PluginVmDispatcherCallback callback) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::BindOnce(std::move(callback), true));

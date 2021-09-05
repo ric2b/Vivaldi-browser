@@ -20,9 +20,7 @@ component("sandbox") {
     "switches.h",
   ]
   defines = [ "SERVICE_MANAGER_SANDBOX_IMPL" ]
-  public_deps = [
-    "//services/service_manager/embedder:embedder_switches",
-  ]
+  public_deps = [ "//services/service_manager/embedder:embedder_switches" ]
   deps = [
     ":sanitizer_buildflags",
     "//base",
@@ -46,12 +44,16 @@ component("sandbox") {
       "linux/bpf_gpu_policy_linux.h",
       "linux/bpf_network_policy_linux.cc",
       "linux/bpf_network_policy_linux.h",
-      "linux/bpf_pdf_compositor_policy_linux.cc",
-      "linux/bpf_pdf_compositor_policy_linux.h",
       "linux/bpf_ppapi_policy_linux.cc",
       "linux/bpf_ppapi_policy_linux.h",
+      "linux/bpf_print_compositor_policy_linux.cc",
+      "linux/bpf_print_compositor_policy_linux.h",
       "linux/bpf_renderer_policy_linux.cc",
       "linux/bpf_renderer_policy_linux.h",
+      "linux/bpf_sharing_service_policy_linux.cc",
+      "linux/bpf_sharing_service_policy_linux.h",
+      "linux/bpf_soda_policy_linux.cc",
+      "linux/bpf_soda_policy_linux.h",
       "linux/bpf_utility_policy_linux.cc",
       "linux/bpf_utility_policy_linux.h",
       "linux/sandbox_debug_handling_linux.cc",
@@ -110,14 +112,14 @@ component("sandbox") {
     ]
 
     deps += [
-      "//third_party/fuchsia-sdk/sdk:deprecatedtimezone",
-      "//third_party/fuchsia-sdk/sdk:fonts",
-      "//third_party/fuchsia-sdk/sdk:logger",
-      "//third_party/fuchsia-sdk/sdk:mediacodec",
-      "//third_party/fuchsia-sdk/sdk:net",
-      "//third_party/fuchsia-sdk/sdk:netstack",
-      "//third_party/fuchsia-sdk/sdk:sysmem",
-      "//third_party/fuchsia-sdk/sdk:ui_scenic",
+      "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.fonts",
+      "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.intl",
+      "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.logger",
+      "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.mediacodec",
+      "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.net",
+      "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.netstack",
+      "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.sysmem",
+      "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.ui.scenic",
     ]
   }
 }

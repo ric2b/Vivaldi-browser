@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// The history system runs on a background thread so that potentially slow
+// The history system runs on a background sequence so that potentially slow
 // database operations don't delay the browser. This backend processing is
 // represented by HistoryBackend. The HistoryService's job is to dispatch to
 // that thread.
 //
-// Main thread                       History thread
+// Main thread                       backend_task_runner_
 // -----------                       --------------
 // HistoryService <----------------> HistoryBackend
 //                                   -> HistoryDatabase
@@ -28,6 +28,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/task_runner_util.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -62,14 +63,16 @@
 using base::Time;
 
 namespace history {
+
 namespace {
 
-const base::Feature kHistoryServiceUsesTaskScheduler{
-    "HistoryServiceUsesTaskScheduler", base::FEATURE_DISABLED_BY_DEFAULT};
-
-static const char* kHistoryThreadName = "Chrome_HistoryThread";
+const char* kHistoryThreadName = "Chrome_HistoryThread";
 
 }  // namespace
+
+// static
+const base::Feature HistoryService::kHistoryServiceUsesTaskScheduler{
+    "HistoryServiceUsesTaskScheduler", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Sends messages from the backend to us on the main thread. This must be a
 // separate class from the history service so that it can hold a reference to
@@ -303,18 +306,19 @@ base::CancelableTaskTracker::TaskId HistoryService::ScheduleDBTask(
   return task_id;
 }
 
-void HistoryService::FlushForTest(const base::Closure& flushed) {
-  backend_task_runner_->PostTaskAndReply(FROM_HERE, base::DoNothing(), flushed);
+void HistoryService::FlushForTest(base::OnceClosure flushed) {
+  backend_task_runner_->PostTaskAndReply(FROM_HERE, base::DoNothing(),
+                                         std::move(flushed));
 }
 
-void HistoryService::SetOnBackendDestroyTask(const base::Closure& task) {
+void HistoryService::SetOnBackendDestroyTask(base::OnceClosure task) {
   TRACE_EVENT0("browser", "HistoryService::SetOnBackendDestroyTask");
   DCHECK(backend_task_runner_) << "History service being called after cleanup";
   DCHECK(thread_checker_.CalledOnValidThread());
   ScheduleTask(
       PRIORITY_NORMAL,
       base::BindOnce(&HistoryBackend::SetOnBackendDestroyTask, history_backend_,
-                     base::ThreadTaskRunnerHandle::Get(), task));
+                     base::ThreadTaskRunnerHandle::Get(), std::move(task)));
 }
 
 void HistoryService::GetCountsAndLastVisitForOriginsForTesting(
@@ -476,7 +480,9 @@ base::CancelableTaskTracker::TaskId HistoryService::GetFavicon(
     favicon_base::FaviconResultsCallback callback,
     base::CancelableTaskTracker* tracker) {
   TRACE_EVENT0("browser", "HistoryService::GetFavicons");
-  DCHECK(backend_task_runner_) << "History service being called after cleanup";
+  CHECK(backend_task_runner_) << "History service being called after cleanup";
+  // TODO(https://crbug.com/1024959): convert to DCHECK once crash is resolved.
+  CHECK(tracker);
   DCHECK(thread_checker_.CalledOnValidThread());
   return tracker->PostTaskAndReplyWithResult(
       backend_task_runner_.get(), FROM_HERE,
@@ -728,6 +734,39 @@ void HistoryService::CountUniqueHostsVisitedLastMonth(
       std::move(callback));
 }
 
+void HistoryService::GetDomainDiversity(
+    base::Time report_time,
+    int number_of_days_to_report,
+    DomainMetricBitmaskType metric_type_bitmask,
+    DomainDiversityCallback callback,
+    base::CancelableTaskTracker* tracker) {
+  DCHECK(backend_task_runner_) << "History service being called after cleanup";
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  tracker->PostTaskAndReplyWithResult(
+      backend_task_runner_.get(), FROM_HERE,
+      base::BindOnce(&HistoryBackend::GetDomainDiversity, history_backend_,
+                     report_time, number_of_days_to_report,
+                     metric_type_bitmask),
+      std::move(callback));
+}
+
+base::CancelableTaskTracker::TaskId HistoryService::GetLastVisitToHost(
+    const GURL& host,
+    base::Time begin_time,
+    base::Time end_time,
+    GetLastVisitToHostCallback callback,
+    base::CancelableTaskTracker* tracker) {
+  DCHECK(backend_task_runner_) << "History service being called after cleanup";
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  return tracker->PostTaskAndReplyWithResult(
+      backend_task_runner_.get(), FROM_HERE,
+      base::BindOnce(&HistoryBackend::GetLastVisitToHost, history_backend_,
+                     host, begin_time, end_time),
+      std::move(callback));
+}
+
 // Downloads -------------------------------------------------------------------
 
 // Handle creation of a download by creating an entry in the history service's
@@ -764,9 +803,8 @@ void HistoryService::QueryDownloads(DownloadQueryCallback callback) {
 
 // Handle updates for a particular download. This is a 'fire and forget'
 // operation, so we don't need to be called back.
-void HistoryService::UpdateDownload(
-    const DownloadRow& data,
-    bool should_commit_immediately) {
+void HistoryService::UpdateDownload(const DownloadRow& data,
+                                    bool should_commit_immediately) {
   TRACE_EVENT0("browser", "HistoryService::UpdateDownload");
   DCHECK(backend_task_runner_) << "History service being called after cleanup";
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -895,7 +933,6 @@ bool HistoryService::Init(
     bool no_db,
     const HistoryDatabaseParams& history_database_params) {
   TRACE_EVENT0("browser,startup", "HistoryService::Init")
-  SCOPED_UMA_HISTOGRAM_TIMER("History.HistoryServiceInitTime");
   DCHECK(thread_checker_.CalledOnValidThread());
 
   // Unit tests can inject |backend_task_runner_| before this is called.
@@ -909,8 +946,8 @@ bool HistoryService::Init(
       }
       backend_task_runner_ = thread_->task_runner();
     } else {
-      backend_task_runner_ = base::CreateSequencedTaskRunner(
-          {base::ThreadPool(), base::MayBlock(), base::WithBaseSyncPrimitives(),
+      backend_task_runner_ = base::ThreadPool::CreateSequencedTaskRunner(
+          {base::MayBlock(), base::WithBaseSyncPrimitives(),
            base::TaskPriority::USER_BLOCKING,
            base::TaskShutdownBehavior::BLOCK_SHUTDOWN});
     }
@@ -935,8 +972,12 @@ bool HistoryService::Init(
   drop_visits_and_url_tables_on_shutdown_ =
       history_database_params.number_of_days_to_keep_visits == 0;
 
-  if (visit_delegate_ && !visit_delegate_->Init(this))
+  if (visit_delegate_ && !visit_delegate_->Init(this)) {
+    // This is rare enough that it's worth logging.
+    LOG(WARNING) << "HistoryService::Init() failed by way of "
+                    "VisitDelegate::Init failing";
     return false;
+  }
 
   if (history_client_)
     history_client_->OnHistoryServiceCreated(this);
@@ -1011,15 +1052,6 @@ void HistoryService::NotifyProfileError(sql::InitStatus init_status,
   DCHECK(thread_checker_.CalledOnValidThread());
   if (history_client_)
     history_client_->NotifyProfileError(init_status, diagnostics);
-}
-
-void HistoryService::DeleteURL(const GURL& url) {
-  TRACE_EVENT0("browser", "HistoryService::DeleteURL");
-  DCHECK(backend_task_runner_) << "History service being called after cleanup";
-  DCHECK(thread_checker_.CalledOnValidThread());
-  // We will update the visited links when we observe the delete notifications.
-  ScheduleTask(PRIORITY_NORMAL, base::BindOnce(&HistoryBackend::DeleteURL,
-                                               history_backend_, url));
 }
 
 void HistoryService::DeleteURLs(const std::vector<GURL>& urls) {
@@ -1156,7 +1188,7 @@ void HistoryService::DeleteLocalAndRemoteUrl(WebHistoryService* web_history,
         /*restrict_urls=*/{url}, base::Time(), base::Time::Max(),
         base::DoNothing(), partial_traffic_annotation);
   }
-  DeleteURL(url);
+  DeleteURLs({url});
 }
 
 void HistoryService::OnDBLoaded() {

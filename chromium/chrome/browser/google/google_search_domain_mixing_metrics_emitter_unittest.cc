@@ -8,6 +8,7 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/simple_test_clock.h"
 #include "base/timer/mock_timer.h"
+#include "components/history/core/browser/domain_mixing_metrics.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/browser/history_types.h"
 #include "components/history/core/test/history_service_test_util.h"
@@ -135,7 +136,11 @@ TEST_F(GoogleSearchDomainMixingMetricsEmitterTest, WaitsUntilNeeded) {
             task_environment_.NextMainThreadPendingTaskDelay());
 }
 
-TEST_F(GoogleSearchDomainMixingMetricsEmitterTest, EmitsMetricsOnStart) {
+// Disabled pending deletion, see https://crbug.com/1040458
+// This test takes several seconds of CPU time to run because it simulates a
+// month worth of history expiration running, which happens every 300 seconds.
+TEST_F(GoogleSearchDomainMixingMetricsEmitterTest,
+       DISABLED_EmitsMetricsOnStart) {
   // Metrics were computed up to 4am on Jan 1st.
   base::Time last_metrics_time;
   ASSERT_TRUE(
@@ -152,12 +157,17 @@ TEST_F(GoogleSearchDomainMixingMetricsEmitterTest, EmitsMetricsOnStart) {
   emitter_->Start();
 
   base::HistogramTester tester;
-  task_environment_.FastForwardUntilNoTasksRemain();
+
+  // Fast forward far enough that histograms have been written to for all
+  // intervals.
+  task_environment_.FastForwardBy(
+      base::TimeDelta::FromDays(history::kOneMonth));
   BlockUntilHistoryProcessesPendingRequests(history_service_.get());
   VerifyHistograms(tester);
 }
 
-TEST_F(GoogleSearchDomainMixingMetricsEmitterTest, EmitsMetricsWhenTimerFires) {
+TEST_F(GoogleSearchDomainMixingMetricsEmitterTest,
+       DISABLED_EmitsMetricsWhenTimerFires) {
   // Metrics were computed up to 4am on Jan 1st.
   base::Time last_metrics_time;
   ASSERT_TRUE(
@@ -173,8 +183,10 @@ TEST_F(GoogleSearchDomainMixingMetricsEmitterTest, EmitsMetricsWhenTimerFires) {
   // Start the emitter.
   emitter_->Start();
 
-  // Wait for the first run to be done.
-  task_environment_.FastForwardUntilNoTasksRemain();
+  // Fast forward far enough that histograms have been written to for all
+  // intervals.
+  task_environment_.FastForwardBy(
+      base::TimeDelta::FromDays(history::kOneMonth));
   BlockUntilHistoryProcessesPendingRequests(history_service_.get());
 
   // last_metrics_time is expected to have been incremented.
@@ -195,7 +207,10 @@ TEST_F(GoogleSearchDomainMixingMetricsEmitterTest, EmitsMetricsWhenTimerFires) {
   timer_->Fire();
 
   base::HistogramTester tester;
-  task_environment_.FastForwardUntilNoTasksRemain();
+  // Fast forward far enough that histograms have been written to for all
+  // intervals.
+  task_environment_.FastForwardBy(
+      base::TimeDelta::FromDays(history::kOneMonth));
   BlockUntilHistoryProcessesPendingRequests(history_service_.get());
   VerifyHistograms(tester);
 

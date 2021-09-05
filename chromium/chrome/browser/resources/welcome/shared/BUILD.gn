@@ -20,9 +20,7 @@ js_type_check("closure_compile") {
 }
 
 js_library("bookmark_proxy") {
-  deps = [
-    "//ui/webui/resources/js:cr.m",
-  ]
+  deps = [ "//ui/webui/resources/js:cr.m" ]
   externs_list = [
     "$externs_path/chrome_extensions.js",
     "$externs_path/chrome_send.js",
@@ -86,7 +84,7 @@ polymer_modulizer("step_indicator") {
 }
 
 group("polymer3_elements") {
-  deps = [
+  public_deps = [
     ":action_link_style_css_module",
     ":animations_css_module",
     ":chooser_shared_css_module",

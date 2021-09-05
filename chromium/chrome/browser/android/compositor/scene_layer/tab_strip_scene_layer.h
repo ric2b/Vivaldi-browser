@@ -117,6 +117,13 @@ class TabStripSceneLayer : public SceneLayer {
   bool ShouldShowBackground() override;
   SkColor GetBackgroundColor() override;
 
+  // Vivaldi
+  void SetTabStripBackgroundColor(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& jobj,
+      jint java_color,
+      jboolean use_light);
+
  private:
   scoped_refptr<TabHandleLayer> GetNextLayer(
       LayerTitleCache* layer_title_cache);
@@ -135,6 +142,9 @@ class TabStripSceneLayer : public SceneLayer {
   unsigned write_index_;
   TabHandleLayerList tab_handle_layers_;
   SceneLayer* content_tree_;
+
+  // Vivaldi
+  bool use_light_foreground_on_background;
 
   DISALLOW_COPY_AND_ASSIGN(TabStripSceneLayer);
 };

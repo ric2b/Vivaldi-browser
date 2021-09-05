@@ -104,7 +104,7 @@ def MaybeUpload(do_upload, filename, platform, extra_gsutil_args=[]):
     print('gsutil %s' % ' '.join(gsutil_args))
 
 
-def UploadPDBToSymbolServer():
+def UploadPDBsToSymbolServer(binaries):
   assert sys.platform == 'win32'
   # Upload PDB and binary to the symbol server on Windows.  Put them into the
   # chromium-browser-symsrv bucket, since chrome devs have that in their
@@ -117,7 +117,7 @@ def UploadPDBToSymbolServer():
   #    can compute this ABCDEFAB01234 string for us, so use that.
   #    The .ex_ instead of .exe at the end means that the file is compressed.
   # PDB:
-  # gs://chromium-browser-symsrv/clang-cl.exe.pdb/AABBCCDD/clang-cl.dll.pd_
+  # gs://chromium-browser-symsrv/clang-cl.exe.pdb/AABBCCDD/clang-cl.exe.pd_
   #   AABBCCDD here is computed from the output of
   #      dumpbin /all mybinary.exe | find "Format: RSDS"
   #   but tools/symsrc/pdb_fingerprint_from_img.py can compute it already, so
@@ -125,7 +125,6 @@ def UploadPDBToSymbolServer():
   sys.path.insert(0, os.path.join(CHROMIUM_DIR, 'tools', 'symsrc'))
   import img_fingerprint, pdb_fingerprint_from_img
 
-  binaries = [ 'bin/clang-cl.exe', 'bin/lld-link.exe' ]
   for binary_path in binaries:
     binary_path = os.path.join(LLVM_RELEASE_DIR, binary_path)
     binary_id = img_fingerprint.GetImgFingerprint(binary_path)
@@ -188,8 +187,6 @@ def main():
     build_cmd = [sys.executable, os.path.join(THIS_DIR, 'build.py'),
                  '--bootstrap', '--disable-asserts',
                  '--run-tests', '--pgo']
-    if sys.platform.startswith('linux'):
-      build_cmd.append('--lto-lld')
     TeeCmd(build_cmd, log)
 
   stamp = open(STAMP_FILE).read().rstrip()
@@ -239,6 +236,10 @@ def main():
       # Profile runtime (used by profiler and code coverage).
       'lib/clang/$V/lib/darwin/libclang_rt.profile_iossim.a',
       'lib/clang/$V/lib/darwin/libclang_rt.profile_osx.a',
+
+      # UndefinedBehaviorSanitizer runtime.
+      'lib/clang/$V/lib/darwin/libclang_rt.ubsan_iossim_dynamic.dylib',
+      'lib/clang/$V/lib/darwin/libclang_rt.ubsan_osx_dynamic.dylib',
     ])
   elif sys.platform.startswith('linux'):
     want.extend([
@@ -446,6 +447,17 @@ def main():
             filter=PrintTarProgress)
   MaybeUpload(args.upload, objdumpdir + '.tgz', platform)
 
+  # Zip up clang-tidy for users who opt into it, and Tricium.
+  clang_tidy_dir = 'clang-tidy-' + stamp
+  shutil.rmtree(clang_tidy_dir, ignore_errors=True)
+  os.makedirs(os.path.join(clang_tidy_dir, 'bin'))
+  shutil.copy(os.path.join(LLVM_RELEASE_DIR, 'bin', 'clang-tidy' + exe_ext),
+              os.path.join(clang_tidy_dir, 'bin'))
+  with tarfile.open(clang_tidy_dir + '.tgz', 'w:gz') as tar:
+    tar.add(os.path.join(clang_tidy_dir, 'bin'), arcname='bin',
+            filter=PrintTarProgress)
+  MaybeUpload(args.upload, clang_tidy_dir + '.tgz', platform)
+
   # On Mac, lld isn't part of the main zip.  Upload it in a separate zip.
   if sys.platform == 'darwin':
     llddir = 'lld-' + stamp
@@ -487,8 +499,30 @@ def main():
             filter=PrintTarProgress)
   MaybeUpload(args.upload, translation_unit_dir + '.tgz', platform)
 
+  # Zip up the libclang binaries.
+  libclang_dir = 'libclang-' + stamp
+  shutil.rmtree(libclang_dir, ignore_errors=True)
+  os.makedirs(os.path.join(libclang_dir, 'bin'))
+  os.makedirs(os.path.join(libclang_dir, 'bindings', 'python', 'clang'))
+  if sys.platform == 'win32':
+    shutil.copy(os.path.join(LLVM_RELEASE_DIR, 'bin', 'libclang.dll'),
+                os.path.join(libclang_dir, 'bin'))
+  for filename in ['__init__.py', 'cindex.py', 'enumerations.py']:
+    shutil.copy(os.path.join(LLVM_DIR, 'clang', 'bindings', 'python', 'clang',
+                             filename),
+                os.path.join(libclang_dir, 'bindings', 'python', 'clang'))
+  tar_entries = ['bin', 'bindings' ]
+  with tarfile.open(libclang_dir + '.tgz', 'w:gz') as tar:
+    for entry in tar_entries:
+      tar.add(os.path.join(libclang_dir, entry), arcname=entry,
+              filter=PrintTarProgress)
+  MaybeUpload(args.upload, libclang_dir + '.tgz', platform)
+
   if sys.platform == 'win32' and args.upload:
-    UploadPDBToSymbolServer()
+    binaries = [f for f in want if f.endswith('.exe') or f.endswith('.dll')]
+    assert 'bin/clang-cl.exe' in binaries
+    assert 'bin/lld-link.exe' in binaries
+    UploadPDBsToSymbolServer(binaries)
 
   # FIXME: Warn if the file already exists on the server.
 

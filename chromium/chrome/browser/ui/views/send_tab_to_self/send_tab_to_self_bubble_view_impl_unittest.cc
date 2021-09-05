@@ -54,11 +54,7 @@ class SendTabToSelfBubbleViewImplTest : public ChromeViewsTestBase {
     ChromeViewsTestBase::SetUp();
 
     // Create an anchor for the bubble.
-    views::Widget::InitParams params =
-        CreateParams(views::Widget::InitParams::TYPE_WINDOW);
-    params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
-    anchor_widget_ = std::make_unique<views::Widget>();
-    anchor_widget_->Init(std::move(params));
+    anchor_widget_ = CreateTestWidget(views::Widget::InitParams::TYPE_WINDOW);
 
     profile_ = std::make_unique<TestingProfile>();
     controller_ = std::make_unique<SendTabToSelfBubbleControllerMock>();
@@ -75,13 +71,16 @@ class SendTabToSelfBubbleViewImplTest : public ChromeViewsTestBase {
     base::SimpleTestClock clock;
     std::vector<TargetDeviceInfo> list;
     TargetDeviceInfo valid_device_1(
-        "Device_1", "device_guid_1", sync_pb::SyncEnums_DeviceType_TYPE_LINUX,
+        "Device_1", "Device_1", "device_guid_1",
+        sync_pb::SyncEnums_DeviceType_TYPE_LINUX,
         /*last_updated_timestamp=*/clock.Now() - base::TimeDelta::FromDays(0));
     TargetDeviceInfo valid_device_2(
-        "Device_2", "device_guid_2", sync_pb::SyncEnums_DeviceType_TYPE_WIN,
+        "Device_2", "Device_2", "device_guid_2",
+        sync_pb::SyncEnums_DeviceType_TYPE_WIN,
         /*last_updated_timestamp=*/clock.Now() - base::TimeDelta::FromDays(1));
     TargetDeviceInfo valid_device_3(
-        "Device_3", "device_guid_3", sync_pb::SyncEnums_DeviceType_TYPE_PHONE,
+        "Device_3", "Device_3", "device_guid_3",
+        sync_pb::SyncEnums_DeviceType_TYPE_PHONE,
         /*last_updated_timestamp=*/clock.Now() - base::TimeDelta::FromDays(5));
     list.push_back(valid_device_1);
     list.push_back(valid_device_2);

@@ -17,8 +17,8 @@
 #include "components/download/public/common/download_utils.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/cert/cert_status_flags.h"
-#include "services/network/public/cpp/resource_response.h"
 #include "services/network/public/mojom/url_loader.mojom.h"
+#include "services/network/public/mojom/url_response_head.mojom.h"
 #include "url/origin.h"
 
 namespace download {
@@ -72,7 +72,7 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadResponseHandler
 
  private:
   std::unique_ptr<DownloadCreateInfo> CreateDownloadCreateInfo(
-      const network::ResourceResponseHead& head);
+      const network::mojom::URLResponseHead& head);
 
   // Helper method that is called when response is received.
   void OnResponseStarted(mojom::DownloadStreamHandlePtr stream_handle);
@@ -99,6 +99,7 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadResponseHandler
   net::CertStatus cert_status_;
   bool has_strong_validators_;
   base::Optional<url::Origin> request_initiator_;
+  net::NetworkIsolationKey network_isolation_key_;
   bool is_partial_request_;
   bool completed_;
 

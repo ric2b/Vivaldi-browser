@@ -14,20 +14,22 @@
 #include "base/run_loop.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
+#include "chromecast/common/mojom/service_connector.mojom.h"
+#include "chromecast/media/api/cma_backend_factory.h"
 #include "chromecast/media/audio/cast_audio_manager.h"
 #include "chromecast/media/audio/cast_audio_output_stream.h"
-#include "chromecast/media/cma/backend/cma_backend_factory.h"
 #include "media/audio/audio_io.h"
 #include "media/audio/test_audio_thread.h"
-#include "services/service_manager/public/cpp/connector.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
 
-std::unique_ptr<service_manager::Connector> CreateConnector() {
-  service_manager::mojom::ConnectorRequest request;
-  return service_manager::Connector::Create(&request);
+mojo::PendingRemote<chromecast::mojom::ServiceConnector> CreateConnector() {
+  mojo::PendingRemote<chromecast::mojom::ServiceConnector> connector;
+  ignore_result(connector.InitWithNewPipeAndPassReceiver());
+  return connector;
 }
 
 std::string DummyGetSessionId(std::string /* audio_group_id */) {
@@ -65,7 +67,8 @@ void SignalPull(
 
 void SignalError(
     ::media::AudioOutputStream::AudioSourceCallback* source_callback) {
-  source_callback->OnError();
+  source_callback->OnError(
+      ::media::AudioOutputStream::AudioSourceCallback::ErrorType::kUnknown);
 }
 
 // Mock implementations
@@ -79,7 +82,7 @@ class MockAudioSourceCallback
 
   MOCK_METHOD4(OnMoreData,
                int(base::TimeDelta, base::TimeTicks, int, ::media::AudioBus*));
-  MOCK_METHOD0(OnError, void());
+  MOCK_METHOD1(OnError, void(ErrorType));
 
  private:
   int OnMoreDataImpl(base::TimeDelta /* delay */,
@@ -107,7 +110,6 @@ class MockMediaAudioOutputStream : public ::media::AudioOutputStream {
 class MockCastAudioManager : public CastAudioManager {
  public:
   explicit MockCastAudioManager(
-      service_manager::Connector* connector,
       scoped_refptr<base::SingleThreadTaskRunner> media_task_runner)
       : CastAudioManager(
             std::make_unique<::media::TestAudioThread>(),
@@ -117,7 +119,7 @@ class MockCastAudioManager : public CastAudioManager {
             base::BindRepeating(&DummyGetSessionId),
             media_task_runner,
             media_task_runner,
-            connector,
+            CreateConnector(),
             true /* use_mixer */) {
     ON_CALL(*this, ReleaseOutputStream(_))
         .WillByDefault(
@@ -141,14 +143,13 @@ class CastAudioMixerTest : public ::testing::Test {
  public:
   CastAudioMixerTest()
       : task_environment_(base::test::TaskEnvironment::MainThreadType::UI),
-        connector_(CreateConnector()),
         source_callback_(nullptr) {}
   ~CastAudioMixerTest() override {}
 
  protected:
   void SetUp() override {
     mock_manager_.reset(new StrictMock<MockCastAudioManager>(
-        connector_.get(), task_environment_.GetMainThreadTaskRunner()));
+        task_environment_.GetMainThreadTaskRunner()));
     mock_mixer_stream_.reset(new StrictMock<MockMediaAudioOutputStream>());
 
     ON_CALL(*mock_manager_, MakeMixerOutputStream(_))
@@ -172,7 +173,6 @@ class CastAudioMixerTest : public ::testing::Test {
   }
 
   base::test::TaskEnvironment task_environment_;
-  std::unique_ptr<service_manager::Connector> connector_;
   std::unique_ptr<MockCastAudioManager> mock_manager_;
   std::unique_ptr<MockMediaAudioOutputStream> mock_mixer_stream_;
 
@@ -365,7 +365,7 @@ TEST_F(CastAudioMixerTest, OnError) {
 
   // Note that error will only be triggered on the first stream because that
   // is the only stream that has been started.
-  EXPECT_CALL(source, OnError());
+  EXPECT_CALL(source, OnError(_));
   SignalError(source_callback_);
   base::RunLoop().RunUntilIdle();
 

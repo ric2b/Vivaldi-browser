@@ -1,5 +1,5 @@
 This is a testharness.js-based test.
-Found 204 tests; 202 PASS, 2 FAIL, 0 TIMEOUT, 0 NOTRUN.
+Found 208 tests; 199 PASS, 9 FAIL, 0 TIMEOUT, 0 NOTRUN.
 PASS idl_test setup
 PASS idl_test validation
 PASS Partial interface Navigator: original interface defined
@@ -8,6 +8,7 @@ PASS Partial dictionary WebGLContextAttributes: original dictionary defined
 PASS Partial dictionary WebGLContextAttributes: member names are unique
 PASS Partial interface mixin WebGLRenderingContextBase: original interface mixin defined
 PASS Partial interface mixin WebGLRenderingContextBase: member names are unique
+PASS Partial interface Navigator[2]: member names are unique
 PASS Partial interface mixin NavigatorID: member names are unique
 FAIL WebGLRenderingContext includes WebGLRenderingContextBase: member names are unique assert_true: member canvas is unique expected true got false
 FAIL WebGLRenderingContext includes WebGLRenderingContextOverloads: member names are unique assert_true: member bufferData is unique expected true got false
@@ -18,22 +19,15 @@ PASS Navigator includes NavigatorContentUtils: member names are unique
 PASS Navigator includes NavigatorCookies: member names are unique
 PASS Navigator includes NavigatorPlugins: member names are unique
 PASS Navigator includes NavigatorConcurrentHardware: member names are unique
-PASS XR interface: existence and properties of interface object
-PASS XR interface object length
-PASS XR interface object name
-PASS XR interface: existence and properties of interface prototype object
-PASS XR interface: existence and properties of interface prototype object's "constructor" property
-PASS XR interface: existence and properties of interface prototype object's @@unscopables property
-PASS XR interface: operation isSessionSupported(XRSessionMode)
-PASS XR interface: operation requestSession(XRSessionMode, XRSessionInit)
-PASS XR interface: attribute ondevicechange
-PASS XR must be primary interface of navigator.xr
-PASS Stringification of navigator.xr
-PASS XR interface: navigator.xr must inherit property "isSessionSupported(XRSessionMode)" with the proper type
-PASS XR interface: calling isSessionSupported(XRSessionMode) on navigator.xr with too few arguments must throw TypeError
-PASS XR interface: navigator.xr must inherit property "requestSession(XRSessionMode, XRSessionInit)" with the proper type
-PASS XR interface: calling requestSession(XRSessionMode, XRSessionInit) on navigator.xr with too few arguments must throw TypeError
-PASS XR interface: navigator.xr must inherit property "ondevicechange" with the proper type
+PASS XRSystem interface: existence and properties of interface object
+PASS XRSystem interface object length
+PASS XRSystem interface object name
+PASS XRSystem interface: existence and properties of interface prototype object
+PASS XRSystem interface: existence and properties of interface prototype object's "constructor" property
+PASS XRSystem interface: existence and properties of interface prototype object's @@unscopables property
+PASS XRSystem interface: operation isSessionSupported(XRSessionMode)
+PASS XRSystem interface: operation requestSession(XRSessionMode, optional XRSessionInit)
+PASS XRSystem interface: attribute ondevicechange
 PASS XRSession interface: existence and properties of interface object
 PASS XRSession interface object length
 PASS XRSession interface object name
@@ -43,16 +37,19 @@ PASS XRSession interface: existence and properties of interface prototype object
 PASS XRSession interface: attribute visibilityState
 PASS XRSession interface: attribute renderState
 PASS XRSession interface: attribute inputSources
-PASS XRSession interface: operation updateRenderState(XRRenderStateInit)
+PASS XRSession interface: operation updateRenderState(optional XRRenderStateInit)
 PASS XRSession interface: operation requestReferenceSpace(XRReferenceSpaceType)
 PASS XRSession interface: operation requestAnimationFrame(XRFrameRequestCallback)
 PASS XRSession interface: operation cancelAnimationFrame(long)
 PASS XRSession interface: operation end()
 PASS XRSession interface: attribute onend
-PASS XRSession interface: attribute onselect
 PASS XRSession interface: attribute oninputsourceschange
+PASS XRSession interface: attribute onselect
 PASS XRSession interface: attribute onselectstart
 PASS XRSession interface: attribute onselectend
+PASS XRSession interface: attribute onsqueeze
+PASS XRSession interface: attribute onsqueezestart
+PASS XRSession interface: attribute onsqueezeend
 PASS XRSession interface: attribute onvisibilitychange
 PASS XRRenderState interface: existence and properties of interface object
 PASS XRRenderState interface object length
@@ -202,6 +199,13 @@ PASS XRReferenceSpaceEvent interface: existence and properties of interface prot
 PASS XRReferenceSpaceEvent interface: existence and properties of interface prototype object's @@unscopables property
 PASS XRReferenceSpaceEvent interface: attribute referenceSpace
 PASS XRReferenceSpaceEvent interface: attribute transform
+FAIL XRPermissionStatus interface: existence and properties of interface object assert_own_property: self does not have own property "XRPermissionStatus" expected property "XRPermissionStatus" missing
+FAIL XRPermissionStatus interface object length assert_own_property: self does not have own property "XRPermissionStatus" expected property "XRPermissionStatus" missing
+FAIL XRPermissionStatus interface object name assert_own_property: self does not have own property "XRPermissionStatus" expected property "XRPermissionStatus" missing
+FAIL XRPermissionStatus interface: existence and properties of interface prototype object assert_own_property: self does not have own property "XRPermissionStatus" expected property "XRPermissionStatus" missing
+FAIL XRPermissionStatus interface: existence and properties of interface prototype object's "constructor" property assert_own_property: self does not have own property "XRPermissionStatus" expected property "XRPermissionStatus" missing
+FAIL XRPermissionStatus interface: existence and properties of interface prototype object's @@unscopables property assert_own_property: self does not have own property "XRPermissionStatus" expected property "XRPermissionStatus" missing
+FAIL XRPermissionStatus interface: attribute granted assert_own_property: self does not have own property "XRPermissionStatus" expected property "XRPermissionStatus" missing
 PASS Navigator interface: attribute xr
 PASS Navigator interface: navigator must inherit property "xr" with the proper type
 Harness: the test ran to completion.

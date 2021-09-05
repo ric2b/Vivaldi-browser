@@ -17,14 +17,12 @@ int TestLauncherDelegateImpl::RunTestSuite(int argc, char** argv) {
   // Browser tests are expected not to tear-down various globals and may
   // complete with the thread priority being above NORMAL.
   test_suite.DisableCheckForLeakedGlobals();
+  test_suite.DisableCheckForThreadPriorityAtTestEnd();
   return test_suite.Run();
 }
 
-bool TestLauncherDelegateImpl::AdjustChildProcessCommandLine(
-    base::CommandLine* command_line,
-    const base::FilePath& temp_data_dir) {
-  command_line->AppendSwitchPath(switches::kWebLayerUserDataDir, temp_data_dir);
-  return true;
+std::string TestLauncherDelegateImpl::GetUserDataDirectoryCommandLineSwitch() {
+  return switches::kWebLayerUserDataDir;
 }
 
 #if !defined(OS_ANDROID)

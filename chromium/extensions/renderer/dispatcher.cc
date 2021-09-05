@@ -33,6 +33,7 @@
 #include "extensions/common/api/messaging/message.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/cors_util.h"
+#include "extensions/common/extension.h"
 #include "extensions/common/extension_api.h"
 #include "extensions/common/extension_messages.h"
 #include "extensions/common/extension_urls.h"
@@ -122,6 +123,11 @@ using blink::WebView;
 using content::RenderThread;
 
 namespace extensions {
+
+// Constant to define the default profile id for the renderer to 0.
+// Since each renderer is associated with a single context, we don't need
+// separate ids for the profile.
+const int kRendererProfileId = 0;
 
 namespace {
 
@@ -383,6 +389,10 @@ void Dispatcher::DidCreateScriptContext(
     case Feature::WEBUI_CONTEXT:
       UMA_HISTOGRAM_TIMES("Extensions.DidCreateScriptContext_WebUI", elapsed);
       break;
+    case Feature::WEBUI_UNTRUSTED_CONTEXT:
+      // Extension APIs in untrusted WebUIs are temporary so don't bother
+      // recording metrics for them.
+      break;
     case Feature::LOCK_SCREEN_EXTENSION_CONTEXT:
       UMA_HISTOGRAM_TIMES(
           "Extensions.DidCreateScriptContext_LockScreenExtension", elapsed);
@@ -481,8 +491,11 @@ void Dispatcher::WillEvaluateServiceWorkerOnWorkerThread(
     std::unique_ptr<IPCMessageSender> ipc_sender =
         IPCMessageSender::CreateWorkerThreadIPCMessageSender(
             worker_dispatcher, service_worker_version_id);
+    ActivationSequence worker_activation_sequence =
+        *RendererExtensionRegistry::Get()->GetWorkerActivationSequence(
+            extension->id());
     worker_dispatcher->AddWorkerData(
-        service_worker_version_id, context,
+        service_worker_version_id, worker_activation_sequence, context,
         CreateBindingsSystem(std::move(ipc_sender)));
     worker_thread_util::SetWorkerContextProxy(context_proxy);
 
@@ -723,6 +736,7 @@ std::vector<Dispatcher::JsResourceInfo> Dispatcher::GetJsResources() {
   std::vector<JsResourceInfo> resources = {
       {"appView", IDR_APP_VIEW_JS},
       {"appViewElement", IDR_APP_VIEW_ELEMENT_JS},
+      {"appViewDeny", IDR_APP_VIEW_DENY_JS},
       {"entryIdManager", IDR_ENTRY_ID_MANAGER},
       {"extensionOptions", IDR_EXTENSION_OPTIONS_JS},
       {"extensionOptionsElement", IDR_EXTENSION_OPTIONS_ELEMENT_JS},
@@ -753,6 +767,7 @@ std::vector<Dispatcher::JsResourceInfo> Dispatcher::GetJsResources() {
       {"webView", IDR_WEB_VIEW_JS},
       {"webViewElement", IDR_WEB_VIEW_ELEMENT_JS},
       {"extensionsWebViewElement", IDR_EXTENSIONS_WEB_VIEW_ELEMENT_JS},
+      {"webViewDeny", IDR_WEB_VIEW_DENY_JS},
       {"webViewActionRequests", IDR_WEB_VIEW_ACTION_REQUESTS_JS},
       {"webViewApiMethods", IDR_WEB_VIEW_API_METHODS_JS},
       {"webViewAttributes", IDR_WEB_VIEW_ATTRIBUTES_JS},
@@ -768,6 +783,7 @@ std::vector<Dispatcher::JsResourceInfo> Dispatcher::GetJsResources() {
       {"automation", IDR_AUTOMATION_CUSTOM_BINDINGS_JS},
       {"automationEvent", IDR_AUTOMATION_EVENT_JS},
       {"automationNode", IDR_AUTOMATION_NODE_JS},
+      {"automationTreeCache", IDR_AUTOMATION_TREE_CACHE_JS},
       {"app.runtime", IDR_APP_RUNTIME_CUSTOM_BINDINGS_JS},
       {"app.window", IDR_APP_WINDOW_CUSTOM_BINDINGS_JS},
       {"declarativeWebRequest", IDR_DECLARATIVE_WEBREQUEST_CUSTOM_BINDINGS_JS},
@@ -784,12 +800,6 @@ std::vector<Dispatcher::JsResourceInfo> Dispatcher::GetJsResources() {
       // Platform app sources that are not API-specific..
       {"platformApp", IDR_PLATFORM_APP_JS},
   };
-
-  if (base::FeatureList::IsEnabled(::features::kGuestViewCrossProcessFrames)) {
-    resources.push_back({"guestViewIframe", IDR_GUEST_VIEW_IFRAME_JS});
-    resources.push_back(
-        {"guestViewIframeContainer", IDR_GUEST_VIEW_IFRAME_CONTAINER_JS});
-  }
 
   vivaldi::VivaldiAddScriptResources(&resources);
 
@@ -991,17 +1001,12 @@ void Dispatcher::OnDispatchOnDisconnect(int worker_thread_id,
       NULL);  // All render frames.
 }
 
-void ResumeEvaluationOnWorkerThread(
-    blink::WebServiceWorkerContextProxy* context_proxy) {
-  DCHECK(context_proxy);
-  context_proxy->ResumeEvaluation();
-}
-
 void Dispatcher::OnLoaded(
     const std::vector<ExtensionMsg_Loaded_Params>& loaded_extensions) {
   for (const auto& param : loaded_extensions) {
     std::string error;
-    scoped_refptr<const Extension> extension = param.ConvertToExtension(&error);
+    scoped_refptr<const Extension> extension =
+        param.ConvertToExtension(kRendererProfileId, &error);
     if (!extension.get()) {
       NOTREACHED() << error;
       // Note: in tests |param.id| has been observed to be empty (see comment
@@ -1025,8 +1030,13 @@ void Dispatcher::OnLoaded(
       // consider making this a release CHECK.
       NOTREACHED();
     }
+    if (param.worker_activation_sequence) {
+      extension_registry->SetWorkerActivationSequence(
+          extension, *param.worker_activation_sequence);
+    }
     if (param.uses_default_policy_blocked_allowed_hosts) {
-      extension->permissions_data()->SetUsesDefaultHostRestrictions();
+      extension->permissions_data()->SetUsesDefaultHostRestrictions(
+          kRendererProfileId);
     } else {
       extension->permissions_data()->SetPolicyHostRestrictions(
           param.policy_blocked_hosts, param.policy_allowed_hosts);
@@ -1042,12 +1052,11 @@ void Dispatcher::OnLoaded(
       if (it != service_workers_paused_for_on_loaded_message_.end()) {
         scoped_refptr<base::SingleThreadTaskRunner> task_runner =
             std::move(it->second->task_runner);
-        blink::WebServiceWorkerContextProxy* context_proxy =
-            it->second->context_proxy;
-        service_workers_paused_for_on_loaded_message_.erase(it);
+        // Using base::Unretained() should be fine as this won't get destructed.
         task_runner->PostTask(
             FROM_HERE,
-            base::BindOnce(&ResumeEvaluationOnWorkerThread, context_proxy));
+            base::BindOnce(&Dispatcher::ResumeEvaluationOnWorkerThread,
+                           base::Unretained(this), extension->id()));
       }
     }
   }
@@ -1072,10 +1081,6 @@ void Dispatcher::OnDispatchEvent(
   content::RenderFrame* background_frame =
       ExtensionFrameHelper::GetBackgroundPageFrame(params.extension_id);
 
-  // Required for |web_user_gesture|.
-  std::unique_ptr<HandleScopeHelper> v8_handle_scope;
-
-  std::unique_ptr<InteractionProvider::Scope> web_user_gesture;
   // Synthesize a user gesture if this was in response to user action; this is
   // necessary if the gesture was e.g. by clicking on the extension toolbar
   // icon, context menu entry, etc.
@@ -1090,9 +1095,7 @@ void Dispatcher::OnDispatchEvent(
         ScriptContextSet::GetMainWorldContextForFrame(background_frame);
     if (background_context && bindings_system_->HasEventListenerInContext(
                                   params.event_name, background_context)) {
-      v8_handle_scope = std::make_unique<HandleScopeHelper>(background_context);
-      web_user_gesture = ExtensionInteractionProvider::Scope::ForFrame(
-          background_frame->GetWebFrame());
+      background_frame->GetWebFrame()->NotifyUserActivation();
     }
   }
 
@@ -1217,7 +1220,8 @@ void Dispatcher::OnUnloaded(const std::string& id) {
 void Dispatcher::OnUpdateDefaultPolicyHostRestrictions(
     const ExtensionMsg_UpdateDefaultPolicyHostRestrictions_Params& params) {
   PermissionsData::SetDefaultPolicyHostRestrictions(
-      params.default_policy_blocked_hosts, params.default_policy_allowed_hosts);
+      kRendererProfileId, params.default_policy_blocked_hosts,
+      params.default_policy_allowed_hosts);
   // Update blink host permission allowlist exceptions for all loaded
   // extensions.
   for (const std::string& extension_id :
@@ -1239,7 +1243,8 @@ void Dispatcher::OnUpdatePermissions(
     return;
 
   if (params.uses_default_policy_host_restrictions) {
-    extension->permissions_data()->SetUsesDefaultHostRestrictions();
+    extension->permissions_data()->SetUsesDefaultHostRestrictions(
+        kRendererProfileId);
   } else {
     extension->permissions_data()->SetPolicyHostRestrictions(
         params.policy_blocked_hosts, params.policy_allowed_hosts);
@@ -1341,12 +1346,8 @@ void Dispatcher::UpdateOriginPermissions(const Extension& extension) {
 
 void Dispatcher::EnableCustomElementWhiteList() {
   blink::WebCustomElement::AddEmbedderCustomElementName("appview");
-  blink::WebCustomElement::AddEmbedderCustomElementName("appviewbrowserplugin");
   blink::WebCustomElement::AddEmbedderCustomElementName("extensionoptions");
-  blink::WebCustomElement::AddEmbedderCustomElementName(
-      "extensionoptionsbrowserplugin");
   blink::WebCustomElement::AddEmbedderCustomElementName("webview");
-  blink::WebCustomElement::AddEmbedderCustomElementName("webviewbrowserplugin");
 }
 
 void Dispatcher::UpdateAllBindings() {
@@ -1420,6 +1421,23 @@ void Dispatcher::RequireGuestViewModules(ScriptContext* context) {
   ModuleSystem* module_system = context->module_system();
   bool requires_guest_view_module = false;
 
+  // This determines whether to register error-providing custom elements for the
+  // GuestView types that are not available. We only do this in contexts where
+  // it is possible to gain access to a given GuestView element by declaring the
+  // necessary permission in a manifest file. We don't want to define
+  // error-providing elements in other extension contexts as the names could
+  // collide with names used in the extension. Also, WebUIs may be whitelisted
+  // to use GuestViews, but we don't define the error-providing elements in this
+  // case.
+  const bool is_platform_app =
+      context->context_type() == Feature::BLESSED_EXTENSION_CONTEXT &&
+      !context->IsForServiceWorker() && context->extension() &&
+      context->extension()->is_platform_app();
+  const bool app_view_permission_exists = is_platform_app;
+  // The webview permission is also available to internal whitelisted
+  // extensions, but not to extensions in general.
+  const bool web_view_permission_exists = is_platform_app;
+
   // TODO(fsamuel): Eagerly calling Require on context startup is expensive.
   // It would be better if there were a light way of detecting when a webview
   // or appview is created and only then set up the infrastructure.
@@ -1428,6 +1446,8 @@ void Dispatcher::RequireGuestViewModules(ScriptContext* context) {
   if (context->GetAvailability("appViewEmbedderInternal").is_available()) {
     requires_guest_view_module = true;
     module_system->Require("appViewElement");
+  } else if (app_view_permission_exists) {
+    module_system->Require("appViewDeny");
   }
 
   // Require ExtensionOptions.
@@ -1442,12 +1462,8 @@ void Dispatcher::RequireGuestViewModules(ScriptContext* context) {
     // The embedder of the extensions layer may define its own implementation
     // of WebView.
     delegate_->RequireWebViewModules(context);
-  }
-
-  if (requires_guest_view_module &&
-      base::FeatureList::IsEnabled(::features::kGuestViewCrossProcessFrames)) {
-    module_system->Require("guestViewIframe");
-    module_system->Require("guestViewIframeContainer");
+  } else if (web_view_permission_exists) {
+    module_system->Require("webViewDeny");
   }
 
   if (requires_guest_view_module) {
@@ -1461,15 +1477,6 @@ void Dispatcher::RequireGuestViewModules(ScriptContext* context) {
         ->SetForceMainWorldInitialization(true);
   }
 
-  // The "guestViewDeny" module must always be loaded last. It registers
-  // error-providing custom elements for the GuestView types that are not
-  // available, and thus all of those types must have been checked and loaded
-  // (or not loaded) beforehand.
-  if (context->context_type() == Feature::BLESSED_EXTENSION_CONTEXT &&
-      !context->IsForServiceWorker()) {
-    module_system->Require("guestViewDeny");
-  }
-
   vivaldi::VivaldiAddRequiredModules(context, module_system);
 }
 
@@ -1479,6 +1486,18 @@ std::unique_ptr<NativeExtensionBindingsSystem> Dispatcher::CreateBindingsSystem(
       std::make_unique<NativeExtensionBindingsSystem>(std::move(ipc_sender));
   delegate_->InitializeBindingsSystem(this, bindings_system.get());
   return bindings_system;
+}
+
+void Dispatcher::ResumeEvaluationOnWorkerThread(
+    const ExtensionId& extension_id) {
+  base::AutoLock lock(service_workers_paused_for_on_loaded_message_lock_);
+  auto it = service_workers_paused_for_on_loaded_message_.find(extension_id);
+  if (it != service_workers_paused_for_on_loaded_message_.end()) {
+    blink::WebServiceWorkerContextProxy* context_proxy =
+        it->second->context_proxy;
+    context_proxy->ResumeEvaluation();
+    service_workers_paused_for_on_loaded_message_.erase(it);
+  }
 }
 
 }  // namespace extensions

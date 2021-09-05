@@ -2,17 +2,14 @@
 
 #include "browser/vivaldi_browser_finder.h"
 
-#include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
-#include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "components/guest_view/browser/guest_view_base.h"
 #include "extensions/buildflags/buildflags.h"
 #include "ui/vivaldi_browser_window.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-#include "extensions/browser/app_window/app_window.h"
-#include "extensions/browser/app_window/app_window_registry.h"
+#include "chrome/browser/extensions/extension_tab_util.h"
 #endif
 
 using content::WebContents;

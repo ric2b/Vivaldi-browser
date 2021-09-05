@@ -38,9 +38,9 @@ std::string VivaldiWebSource::GetSource() {
 const char kBackgroundColorCss[] = "background-color";
 
 void VivaldiWebSource::StartDataRequest(
-    const std::string& path,
+    const GURL& path,
     const content::WebContents::Getter& wc_getter,
-    const content::URLDataSource::GotDataCallback& callback) {
+    content::URLDataSource::GotDataCallback callback) {
   std::string type;
   std::string data;
   std::string color;
@@ -67,7 +67,7 @@ void VivaldiWebSource::StartDataRequest(
     out.push_back(kHtmlFooter);
 
     std::string out_html = base::StrCat(out);
-    callback.Run(base::RefCountedString::TakeString(&out_html));
+    std::move(callback).Run(base::RefCountedString::TakeString(&out_html));
   } else {
     NOTREACHED();
   }
@@ -75,23 +75,17 @@ void VivaldiWebSource::StartDataRequest(
 
 // In a url such as chrome://vivaldi-data/desktop-image/0 type is
 // "desktop-image" and data is "0".
-void VivaldiWebSource::ExtractRequestTypeAndData(const std::string& path,
-                                                  std::string& type,
-                                                  std::string& data) {
-  std::string page_url_str(path);
-
-  size_t pos = path.find('/');
-  if (pos != std::string::npos) {
-    type = path.substr(0, pos);
-    data = path.substr(pos+1);
-  } else {
-    pos = path.find('?');
-    if (pos != std::string::npos) {
-      type = path.substr(0, pos);
-      data = path.substr(pos + 1);
-    } else {
-      type = path;
+void VivaldiWebSource::ExtractRequestTypeAndData(const GURL& url,
+                                                 std::string& type,
+                                                 std::string& data) {
+  if (url.has_path()) {
+    type = url.path();
+    if (type[0] == '/') {
+      type = type.erase(0, 1);
     }
+    data = url.query();
+  } else {
+    type = url.GetContent();
   }
 }
 

@@ -10,11 +10,9 @@
 #include "base/files/file_path.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_bubble_delegate_view.h"
 #include "ui/base/models/table_model.h"
-#include "ui/views/controls/button/button.h"
 #include "url/origin.h"
 
-class NativeFileSystemUsageBubbleView : public LocationBarBubbleDelegateView,
-                                        public views::ButtonListener {
+class NativeFileSystemUsageBubbleView : public LocationBarBubbleDelegateView {
  public:
   struct Usage {
     Usage();
@@ -22,6 +20,7 @@ class NativeFileSystemUsageBubbleView : public LocationBarBubbleDelegateView,
     Usage(Usage&&);
     Usage& operator=(Usage&&);
 
+    std::vector<base::FilePath> readable_files;
     std::vector<base::FilePath> readable_directories;
     std::vector<base::FilePath> writable_files;
     std::vector<base::FilePath> writable_directories;
@@ -39,7 +38,8 @@ class NativeFileSystemUsageBubbleView : public LocationBarBubbleDelegateView,
  private:
   class FilePathListModel : public ui::TableModel {
    public:
-    FilePathListModel(std::vector<base::FilePath> files,
+    FilePathListModel(const views::View* view,
+                      std::vector<base::FilePath> files,
                       std::vector<base::FilePath> directories);
     ~FilePathListModel() override;
     // ui::TableModel:
@@ -50,6 +50,10 @@ class NativeFileSystemUsageBubbleView : public LocationBarBubbleDelegateView,
     void SetObserver(ui::TableModelObserver*) override;
 
    private:
+    // The model needs access to the view it is in to access the correct theme
+    // for icon colors.
+    const views::View* const owner_;
+
     const std::vector<base::FilePath> files_;
     const std::vector<base::FilePath> directories_;
     DISALLOW_COPY_AND_ASSIGN(FilePathListModel);
@@ -63,17 +67,14 @@ class NativeFileSystemUsageBubbleView : public LocationBarBubbleDelegateView,
 
   // LocationBarBubbleDelegateView:
   base::string16 GetAccessibleWindowTitle() const override;
-  int GetDialogButtons() const override;
   bool ShouldShowCloseButton() const override;
   void Init() override;
   void WindowClosing() override;
   void CloseBubble() override;
   gfx::Size CalculatePreferredSize() const override;
   void ChildPreferredSizeChanged(views::View* child) override;
-  std::unique_ptr<views::View> CreateExtraView() override;
 
-  // views::ButtonListener:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
+  void OnDialogCancelled();
 
   // Singleton instance of the bubble. The bubble can only be shown on the
   // active browser window, so there is no case in which it will be shown
@@ -82,8 +83,8 @@ class NativeFileSystemUsageBubbleView : public LocationBarBubbleDelegateView,
 
   const url::Origin origin_;
   const Usage usage_;
-  FilePathListModel writable_paths_model_;
   FilePathListModel readable_paths_model_;
+  FilePathListModel writable_paths_model_;
 
   DISALLOW_COPY_AND_ASSIGN(NativeFileSystemUsageBubbleView);
 };

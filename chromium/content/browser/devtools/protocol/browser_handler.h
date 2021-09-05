@@ -18,8 +18,12 @@ namespace protocol {
 
 class BrowserHandler : public DevToolsDomainHandler, public Browser::Backend {
  public:
-  BrowserHandler();
+  explicit BrowserHandler(bool allow_set_download_behavior);
   ~BrowserHandler() override;
+
+  static Response FindBrowserContext(
+      const Maybe<std::string>& browser_context_id,
+      BrowserContext** browser_context);
 
   void Wire(UberDispatcher* dispatcher) override;
 
@@ -46,27 +50,33 @@ class BrowserHandler : public DevToolsDomainHandler, public Browser::Backend {
       std::unique_ptr<protocol::Array<std::string>>* arguments) override;
 
   Response SetPermission(
-      const std::string& origin,
+      Maybe<std::string> origin,
       std::unique_ptr<protocol::Browser::PermissionDescriptor> permission,
       const protocol::Browser::PermissionSetting& setting,
       Maybe<std::string> browser_context_id) override;
 
   Response GrantPermissions(
-      const std::string& origin,
+      Maybe<std::string> origin,
       std::unique_ptr<protocol::Array<protocol::Browser::PermissionType>>
           permissions,
       Maybe<std::string> browser_context_id) override;
 
   Response ResetPermissions(Maybe<std::string> browser_context_id) override;
 
+  Response SetDownloadBehavior(const std::string& behavior,
+                               Maybe<std::string> browser_context_id,
+                               Maybe<std::string> download_path) override;
+  Response DoSetDownloadBehavior(const std::string& behavior,
+                                 BrowserContext* browser_context,
+                                 Maybe<std::string> download_path);
+
   Response Crash() override;
   Response CrashGpuProcess() override;
 
  private:
-  Response FindBrowserContext(const Maybe<std::string>& browser_context_id,
-                              BrowserContext** browser_context);
-
   base::flat_set<std::string> contexts_with_overridden_permissions_;
+  base::flat_set<std::string> contexts_with_overridden_downloads_;
+  const bool allow_set_download_behavior_;
 
   DISALLOW_COPY_AND_ASSIGN(BrowserHandler);
 };

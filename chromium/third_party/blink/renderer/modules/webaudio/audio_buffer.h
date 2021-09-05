@@ -95,19 +95,19 @@ class MODULES_EXPORT AudioBuffer final : public ScriptWrappable {
                        ExceptionState&);
   void copyFromChannel(NotShared<DOMFloat32Array>,
                        int32_t channel_number,
-                       uint32_t buffer_offset,
+                       size_t buffer_offset,
                        ExceptionState&);
   void copyToChannel(NotShared<DOMFloat32Array>,
                      int32_t channel_number,
                      ExceptionState&);
   void copyToChannel(NotShared<DOMFloat32Array>,
                      int32_t channel_number,
-                     uint32_t buffer_offset,
+                     size_t buffer_offset,
                      ExceptionState&);
 
   void Zero();
 
-  void Trace(blink::Visitor* visitor) override {
+  void Trace(Visitor* visitor) override {
     visitor->Trace(channels_);
     ScriptWrappable::Trace(visitor);
   }
@@ -141,14 +141,14 @@ class SharedAudioBuffer final {
   }
   float sampleRate() const { return sample_rate_; }
 
-  const Vector<WTF::ArrayBufferContents>& channels() { return channels_; }
+  const Vector<ArrayBufferContents>& channels() { return channels_; }
 
   void Zero();
 
  private:
   float sample_rate_;
   uint32_t length_;
-  Vector<WTF::ArrayBufferContents> channels_;
+  Vector<ArrayBufferContents> channels_;
 };
 
 }  // namespace blink

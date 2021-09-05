@@ -1,9 +1,11 @@
 import("//build/config/jumbo.gni")
 
-jumbo_source_set("extraparts") {
+source_set("extraparts") {
   sources = [
     "vivaldi_browser_main_extra_parts.cc",
     "vivaldi_browser_main_extra_parts.h",
+    "vivaldi_content_browser_client.cc",
+    "vivaldi_content_browser_client.h",
   ]
   if (is_linux) {
     sources += [
@@ -31,20 +33,39 @@ jumbo_source_set("extraparts") {
       "vivaldi_browser_main_extra_parts_android.cc",
     ]
   }
+  if (!is_android) {
+    sources += [
+      "media_renderer_host_message_filter.cc",
+      "media_renderer_host_message_filter.h",
+    ]
+  }
   deps = [
     "//base:base",
     #"//chrome/browser",
     "//chrome/common:constants",
+    "//components/sessions",
+    "//components/translate/core/browser",
+    #"//content/browser",
+    "//content/public/browser",
+    "//content/public/common",
+    "//extensions/buildflags",
     "//skia",
     "//third_party/blink/public:blink_headers",
+    "//vivaldi/browser",
     "//vivaldi/calendar",
     "//vivaldi/contact",
+    "//vivaldi/components:adverse_adblocking",
     "//vivaldi/prefs",
     "//vivaldi/notes:browser",
+    "//vivaldi/ui",
   ]
   if (!is_android) {
     deps += [
+      "//vivaldi/components/datasource",
+      "//vivaldi/extensions",
+      "//vivaldi/extensions/api:apis",
       "//vivaldi/extensions/schema",
+      "//vivaldi/extensions/tools",
     ]
   }
 

@@ -116,9 +116,9 @@ static int CalculateChunkSize(int block_size_, double io_ratio) {
 
 SincResampler::SincResampler(double io_sample_rate_ratio,
                              int request_frames,
-                             const ReadCB& read_cb)
+                             const ReadCB read_cb)
     : io_sample_rate_ratio_(io_sample_rate_ratio),
-      read_cb_(read_cb),
+      read_cb_(std::move(read_cb)),
       request_frames_(request_frames),
       input_buffer_size_(request_frames_ + kKernelSize),
       // Create input buffers with a 16-byte alignment for SSE optimizations.
@@ -308,6 +308,14 @@ void SincResampler::Flush() {
   memset(input_buffer_.get(), 0,
          sizeof(*input_buffer_.get()) * input_buffer_size_);
   UpdateRegions(false);
+}
+
+int SincResampler::GetMaxInputFramesRequested(
+    int output_frames_requested) const {
+  const int num_chunks = static_cast<int>(
+      std::ceil(static_cast<float>(output_frames_requested) / chunk_size_));
+
+  return num_chunks * request_frames_;
 }
 
 double SincResampler::BufferedFrames() const {

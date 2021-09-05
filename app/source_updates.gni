@@ -16,6 +16,9 @@ update_target("//base:base") {
   sources += [
     "//vivaldi/app/vivaldi_apptools.h",
   ]
+  allow_circular_includes_from = [
+    "//base:base_static",
+  ]
 }
 
 update_target("//base:base_static") {
@@ -179,11 +182,23 @@ foreach(_target_config, CHROMIUM_VIVALDI_RESOURCE_LIST) {
 
 if (is_win) {
   update_template_instance("//chrome/installer/util:generate_strings") {
+    _temp_default_embedded_i18_locales = default_embedded_i18_locales
+    foreach(_temp_locale, vivaldi_pending_locales) {
+      _found = false
+      foreach(_temp_prior_locale, _temp_default_embedded_i18_locales) {
+        if (_temp_prior_locale == _temp_locale) {
+          _found = true
+        }
+      }
+      if (!_found) {
+        _temp_default_embedded_i18_locales += [_temp_locale]
+      }
+    }
     grd_files_info += [ [
         "//vivaldi/app/resources/strings/",
         "vivaldi_strings",
         "strings",
-        default_embedded_i18_locales + vivaldi_pending_locales - ["iw", "no"] + ["he", "nb"]
+        _temp_default_embedded_i18_locales - ["iw", "no"] + ["he", "nb"]
     ] ]
   }
 }

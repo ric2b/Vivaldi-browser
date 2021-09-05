@@ -6,6 +6,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_HEAP_PAGE_MEMORY_H_
 
 #include "base/atomic_ref_count.h"
+#include "base/containers/flat_map.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/heap/heap_page.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
@@ -14,7 +15,6 @@
 namespace blink {
 
 class RegionTree;
-class RegionTreeNode;
 
 class MemoryRegion {
   USING_FAST_MALLOC(MemoryRegion);
@@ -24,7 +24,7 @@ class MemoryRegion {
     DCHECK_GT(size, 0u);
   }
 
-  bool Contains(Address addr) const {
+  bool Contains(ConstAddress addr) const {
     return base_ <= addr && addr < (base_ + size_);
   }
 
@@ -73,7 +73,7 @@ class PageMemoryRegion : public MemoryRegion {
                     region_tree);
   }
 
-  BasePage* PageFromAddress(Address address) {
+  BasePage* PageFromAddress(ConstAddress address) {
     DCHECK(Contains(address));
     if (!in_use_[Index(address)])
       return nullptr;
@@ -85,11 +85,11 @@ class PageMemoryRegion : public MemoryRegion {
  private:
   PageMemoryRegion(Address base, size_t, unsigned num_pages, RegionTree*);
 
-  unsigned Index(Address address) const {
+  unsigned Index(ConstAddress address) const {
     DCHECK(Contains(address));
     if (is_large_page_)
       return 0;
-    size_t offset = BlinkPageAddress(address) - Base();
+    size_t offset = BlinkPageAddress(const_cast<Address>(address)) - Base();
     DCHECK_EQ(offset % kBlinkPageSize, 0u);
     return static_cast<unsigned>(offset / kBlinkPageSize);
   }
@@ -101,7 +101,7 @@ class PageMemoryRegion : public MemoryRegion {
   // bitmap such that thread non-interference comes for free.
   bool in_use_[kBlinkPagesPerRegion];
   base::AtomicRefCount num_pages_;
-  RegionTree* region_tree_;
+  RegionTree* const region_tree_;
 };
 
 // A RegionTree is a simple binary search tree of PageMemoryRegions sorted
@@ -110,36 +110,14 @@ class RegionTree {
   USING_FAST_MALLOC(RegionTree);
 
  public:
-  RegionTree() : root_(nullptr) {}
-
   void Add(PageMemoryRegion*);
   void Remove(PageMemoryRegion*);
-  PageMemoryRegion* Lookup(Address);
+  PageMemoryRegion* Lookup(ConstAddress);
 
  private:
-  RegionTreeNode* root_;
-};
-
-class RegionTreeNode {
-  USING_FAST_MALLOC(RegionTreeNode);
-
- public:
-  explicit RegionTreeNode(PageMemoryRegion* region)
-      : region_(region), left_(nullptr), right_(nullptr) {}
-
-  ~RegionTreeNode() {
-    delete left_;
-    delete right_;
-  }
-
-  void AddTo(RegionTreeNode** context);
-
- private:
-  PageMemoryRegion* region_;
-  RegionTreeNode* left_;
-  RegionTreeNode* right_;
-
-  friend RegionTree;
+  // Using flat_map allows to improve locality to minimize cache misses and
+  // balance binary lookup.
+  base::flat_map<ConstAddress, PageMemoryRegion*> set_;
 };
 
 // Representation of the memory used for a Blink heap page.

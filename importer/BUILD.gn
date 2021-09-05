@@ -1,6 +1,6 @@
 import("//build/config/jumbo.gni")
 
-jumbo_static_library("importer") {
+static_library("importer") {
   if (!is_android) {
     sources = [
       "chrome_bookmark_reader.cpp",
@@ -9,8 +9,6 @@ jumbo_static_library("importer") {
       "chrome_importer_utils.h",
       "chromium_importer.cpp",
       "chromium_importer.h",
-      #"chromium_profile_importer.cpp",
-      #"chromium_profile_importer.h",
       "viv_importer_bookmark.cpp",
       "viv_importer_notes.cpp",
       "viv_importer_wand.cpp",
@@ -27,7 +25,9 @@ jumbo_static_library("importer") {
       #"//chrome/utility:utility",
       "//components/autofill/core/common",
       "//components/bookmarks/browser:browser",
+      "//sql",
       "//third_party/boringssl",
+      "//ui/base",
       "//url:url",
       "//vivaldi/app:resources",
       "//vivaldi/app:vivaldi_native_strings",
@@ -40,7 +40,7 @@ jumbo_static_library("importer") {
   }
 }
 
-jumbo_static_library("browser") {
+static_library("browser") {
   if (!is_android) {
     sources = [
       "chromium_profile_importer.cpp",
@@ -77,14 +77,19 @@ jumbo_static_library("browser") {
     }
 
     deps = [
+      ":importer",
       "//base:base",
       #"//chrome/common:common",
       "//components/autofill/core/common",
+      "//ui/base",
       "//url:url",
       "//vivaldi/app:resources",
       "//vivaldi/app:vivaldi_native_strings",
       "//vivaldi/app:vivaldi_native_resources",
       "//vivaldi/app:vivaldi_unscaled_native_resources",
+    ]
+    allow_circular_includes_from = [
+      ":importer",
     ]
   }
 }

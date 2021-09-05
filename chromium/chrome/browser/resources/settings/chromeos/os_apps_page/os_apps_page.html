@@ -5,21 +5,20 @@
 <link rel="import" href="chrome://resources/cr_elements/cr_link_row/cr_link_row.html">
 <link rel="import" href="chrome://resources/cr_elements/policy/cr_policy_pref_indicator.html">
 <link rel="import" href="chrome://resources/html/i18n_behavior.html">
-<link rel="import" href="../../android_apps_page/android_apps_browser_proxy.html">
-<link rel="import" href="../../android_apps_page/android_apps_subpage.html">
 <link rel="import" href="../../i18n_setup.html">
 <link rel="import" href="../../prefs/prefs_behavior.html">
-<link rel="import" href="../../route.html">
+<link rel="import" href="../os_route.html">
+<link rel="import" href="../../router.html">
 <link rel="import" href="../../settings_page/settings_animated_pages.html">
 <link rel="import" href="../../settings_page/settings_subpage.html">
 <link rel="import" href="../../settings_shared_css.html">
 <link rel="import" href="../../settings_shared_css.html">
+<link rel="import" href="../localized_link/localized_link.html">
+<link rel="import" href="android_apps_browser_proxy.html">
+<link rel="import" href="android_apps_subpage.html">
 <link rel="import" href="app_management_page/app_management_page.html">
-<link rel="import" href="app_management_page/app_permission_view.html">
+<link rel="import" href="app_management_page/app_detail_view.html">
 <link rel="import" href="app_management_page/uninstall_button.html">
-
-<!-- Changes to the android sections of this file should be reflected in
-    ../../android_apps_page/android_apps_page.html -->
 
 <dom-module id="os-settings-apps-page">
   <template>
@@ -35,7 +34,8 @@
       <template is="dom-if" if="[[showAppManagement]]">
         <cr-link-row id="appManagement"
           label="$i18n{appManagementTitle}"
-          on-click="onClickAppManagement_">
+          on-click="onClickAppManagement_"
+          role-description="$i18n{subpageArrowRoleDescription}">
         </cr-link-row>
       </template>
       <template is="dom-if" if="[[showAndroidApps]]">
@@ -45,8 +45,10 @@
               on-click="onAndroidAppsSubpageTap_">
             <div class="start settings-box-text">
               $i18n{androidAppsPageLabel}
-              <div class="secondary" id="secondaryText"
-                  inner-h-t-m-l="[[i18nAdvanced('androidAppsSubtext')]]">
+              <div class="secondary" id="secondaryText">
+                <settings-localized-link
+                    localized-string="[[i18nAdvanced('androidAppsSubtext')]]">
+                </settings-localized-link>
               </div>
             </div>
             <cr-policy-pref-indicator pref="[[prefs.arc.enabled]]"
@@ -55,7 +57,9 @@
             <template is="dom-if" if="[[androidAppsInfo.playStoreEnabled]]">
               <cr-icon-button class="subpage-arrow"
                   aria-label="$i18n{androidAppsPageTitle}"
-                  aria-describedby="secondaryText"></cr-icon-button>
+                  aria-describedby="secondaryText"
+                  aria-roledescription="$i18n{subpageArrowRoleDescription}">
+              </cr-icon-button>
             </template>
             <template is="dom-if" if="[[!androidAppsInfo.playStoreEnabled]]">
               <div class="separator"></div>
@@ -77,7 +81,7 @@
       </template>
     </div>
     <!-- APP MANAGEMENT -->
-    <template is="dom-if" if="showAppManagement">
+    <template is="dom-if" if="[[showAppManagement]]">
       <template is="dom-if" route-path="/app-management" no-search>
         <settings-subpage
             page-title="$i18n{appManagementTitle}"
@@ -94,8 +98,8 @@
             title-icon="[[iconUrlFromId_(app_)]]">
           <app-management-uninstall-button slot="subpage-title-extra">
           </app-management-uninstall-button>
-          <app-management-app-permission-view>
-          </app-management-app-permission-view>
+          <app-management-app-detail-view>
+          </app-management-app-detail-view>
         </settings-subpage>
       </template>
     </template>

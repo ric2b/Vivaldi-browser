@@ -7,7 +7,9 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/feature_list.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "build/build_config.h"
 #include "gpu/command_buffer/client/gpu_memory_buffer_manager.h"
 #include "media/capture/video/create_video_capture_device_factory.h"
@@ -15,6 +17,9 @@
 #include "media/capture/video/video_capture_buffer_pool.h"
 #include "media/capture/video/video_capture_buffer_tracker.h"
 #include "media/capture/video/video_capture_system_impl.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "services/video_capture/device_factory_media_to_mojo_adapter.h"
 #include "services/video_capture/testing_controls_impl.h"
@@ -28,6 +33,17 @@
 
 namespace video_capture {
 
+namespace {
+
+// Used to assess the impact of running the video capture service at background
+// priority. If the experiment confirms that running the video capture service
+// at background priority causes jank, change the code to use a foreground
+// priority by default. See https://crbug.com/1066137.
+const base::Feature kForegroundVideoCaptureService{
+    "ForegroundVideoCaptureService", base::FEATURE_DISABLED_BY_DEFAULT};
+
+}  // namespace
+
 // Intended usage of this class is to instantiate on any sequence, and then
 // operate and release the instance on the task runner exposed via
 // GetTaskRunner() via WeakPtrs provided via GetWeakPtr(). To this end,
@@ -36,9 +52,13 @@ namespace video_capture {
 class VideoCaptureServiceImpl::GpuDependenciesContext {
  public:
   GpuDependenciesContext() {
-    gpu_io_task_runner_ = base::CreateSequencedTaskRunner(
-        {base::ThreadPool(), base::TaskPriority::BEST_EFFORT,
-         base::MayBlock()});
+    const base::TaskPriority priority =
+        base::FeatureList::IsEnabled(kForegroundVideoCaptureService)
+            ? base::TaskPriority::USER_BLOCKING
+            : base::TaskPriority::BEST_EFFORT;
+
+    gpu_io_task_runner_ = base::ThreadPool::CreateSequencedTaskRunner(
+        {priority, base::MayBlock()});
   }
 
   ~GpuDependenciesContext() {
@@ -55,8 +75,9 @@ class VideoCaptureServiceImpl::GpuDependenciesContext {
 
 #if defined(OS_CHROMEOS)
   void InjectGpuDependencies(
-      mojom::AcceleratorFactoryPtrInfo accelerator_factory_info) {
+      mojo::PendingRemote<mojom::AcceleratorFactory> accelerator_factory_info) {
     DCHECK(gpu_io_task_runner_->RunsTasksInCurrentSequence());
+    accelerator_factory_.reset();
     accelerator_factory_.Bind(std::move(accelerator_factory_info));
   }
 
@@ -80,7 +101,7 @@ class VideoCaptureServiceImpl::GpuDependenciesContext {
   scoped_refptr<base::SequencedTaskRunner> gpu_io_task_runner_;
 
 #if defined(OS_CHROMEOS)
-  mojom::AcceleratorFactoryPtr accelerator_factory_;
+  mojo::Remote<mojom::AcceleratorFactory> accelerator_factory_;
 #endif  // defined(OS_CHROMEOS)
 
   base::WeakPtrFactory<GpuDependenciesContext> weak_factory_for_gpu_io_thread_{
@@ -94,7 +115,7 @@ VideoCaptureServiceImpl::VideoCaptureServiceImpl(
       ui_task_runner_(std::move(ui_task_runner)) {}
 
 VideoCaptureServiceImpl::~VideoCaptureServiceImpl() {
-  factory_bindings_.CloseAllBindings();
+  factory_receivers_.Clear();
   device_factory_.reset();
 
 #if defined(OS_CHROMEOS)
@@ -109,12 +130,12 @@ VideoCaptureServiceImpl::~VideoCaptureServiceImpl() {
 
 #if defined(OS_CHROMEOS)
 void VideoCaptureServiceImpl::InjectGpuDependencies(
-    mojom::AcceleratorFactoryPtr accelerator_factory) {
+    mojo::PendingRemote<mojom::AcceleratorFactory> accelerator_factory) {
   LazyInitializeGpuDependenciesContext();
   gpu_dependencies_context_->GetTaskRunner()->PostTask(
       FROM_HERE, base::BindOnce(&GpuDependenciesContext::InjectGpuDependencies,
                                 gpu_dependencies_context_->GetWeakPtr(),
-                                accelerator_factory.PassInterface()));
+                                std::move(accelerator_factory)));
 }
 
 void VideoCaptureServiceImpl::ConnectToCameraAppDeviceBridge(
@@ -125,15 +146,15 @@ void VideoCaptureServiceImpl::ConnectToCameraAppDeviceBridge(
 #endif  // defined(OS_CHROMEOS)
 
 void VideoCaptureServiceImpl::ConnectToDeviceFactory(
-    mojom::DeviceFactoryRequest request) {
+    mojo::PendingReceiver<mojom::DeviceFactory> receiver) {
   LazyInitializeDeviceFactory();
-  factory_bindings_.AddBinding(device_factory_.get(), std::move(request));
+  factory_receivers_.Add(device_factory_.get(), std::move(receiver));
 }
 
 void VideoCaptureServiceImpl::ConnectToVideoSourceProvider(
-    mojom::VideoSourceProviderRequest request) {
+    mojo::PendingReceiver<mojom::VideoSourceProvider> receiver) {
   LazyInitializeVideoSourceProvider();
-  video_source_provider_->AddClient(std::move(request));
+  video_source_provider_->AddClient(std::move(receiver));
 }
 
 void VideoCaptureServiceImpl::SetRetryCount(int32_t count) {

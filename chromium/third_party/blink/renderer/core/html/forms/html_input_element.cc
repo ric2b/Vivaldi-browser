@@ -32,8 +32,8 @@
 
 #include "third_party/blink/public/mojom/choosers/date_time_chooser.mojom-blink.h"
 #include "third_party/blink/public/platform/task_type.h"
-#include "third_party/blink/public/platform/web_scroll_into_view_params.h"
 #include "third_party/blink/public/strings/grit/blink_strings.h"
+#include "third_party/blink/renderer/bindings/core/v8/native_value_traits_impl.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_event_listener.h"
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
 #include "third_party/blink/renderer/core/css/css_property_names.h"
@@ -49,6 +49,7 @@
 #include "third_party/blink/renderer/core/events/before_text_inserted_event.h"
 #include "third_party/blink/renderer/core/events/keyboard_event.h"
 #include "third_party/blink/renderer/core/events/mouse_event.h"
+#include "third_party/blink/renderer/core/fileapi/file_list.h"
 #include "third_party/blink/renderer/core/frame/deprecation.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
@@ -73,17 +74,18 @@
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/platform/bindings/exception_messages.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
+#include "third_party/blink/renderer/platform/bindings/to_v8.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/language.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/text/platform_locale.h"
 #include "third_party/blink/renderer/platform/wtf/math_extras.h"
+#include "ui/base/ui_base_features.h"
 
 namespace blink {
 
 using ValueMode = InputType::ValueMode;
-using namespace html_names;
 
 class ListAttributeTargetObserver : public IdTargetObserver {
  public:
@@ -100,7 +102,7 @@ const int kDefaultSize = 20;
 
 HTMLInputElement::HTMLInputElement(Document& document,
                                    const CreateElementFlags flags)
-    : TextControlElement(kInputTag, document),
+    : TextControlElement(html_names::kInputTag, document),
       size_(kDefaultSize),
       has_dirty_value_(false),
       is_checked_(false),
@@ -139,14 +141,6 @@ void HTMLInputElement::Trace(Visitor* visitor) {
   visitor->Trace(list_attribute_target_observer_);
   visitor->Trace(image_loader_);
   TextControlElement::Trace(visitor);
-}
-
-const AttrNameToTrustedType& HTMLInputElement::GetCheckedAttributeTypes()
-    const {
-  DEFINE_STATIC_LOCAL(AttrNameToTrustedType, attribute_map,
-                      ({{"formaction", SpecificTrustedType::kTrustedURL},
-                        {"src", SpecificTrustedType::kTrustedURL}}));
-  return attribute_map;
 }
 
 bool HTMLInputElement::HasPendingActivity() const {
@@ -192,27 +186,27 @@ bool HTMLInputElement::IsValidValue(const String& value) const {
 }
 
 bool HTMLInputElement::TooLong() const {
-  return willValidate() && TooLong(value(), kCheckDirtyFlag);
+  return TooLong(value(), kCheckDirtyFlag);
 }
 
 bool HTMLInputElement::TooShort() const {
-  return willValidate() && TooShort(value(), kCheckDirtyFlag);
+  return TooShort(value(), kCheckDirtyFlag);
 }
 
 bool HTMLInputElement::TypeMismatch() const {
-  return willValidate() && input_type_->TypeMismatch();
+  return input_type_->TypeMismatch();
 }
 
 bool HTMLInputElement::ValueMissing() const {
-  return willValidate() && input_type_->ValueMissing(value());
+  return input_type_->ValueMissing(value());
 }
 
 bool HTMLInputElement::HasBadInput() const {
-  return willValidate() && input_type_view_->HasBadInput();
+  return input_type_view_->HasBadInput();
 }
 
 bool HTMLInputElement::PatternMismatch() const {
-  return willValidate() && input_type_->PatternMismatch(value());
+  return input_type_->PatternMismatch(value());
 }
 
 bool HTMLInputElement::TooLong(const String& value,
@@ -226,17 +220,16 @@ bool HTMLInputElement::TooShort(const String& value,
 }
 
 bool HTMLInputElement::RangeUnderflow() const {
-  return willValidate() && input_type_->RangeUnderflow(value());
+  return input_type_->RangeUnderflow(value());
 }
 
 bool HTMLInputElement::RangeOverflow() const {
-  return willValidate() && input_type_->RangeOverflow(value());
+  return input_type_->RangeOverflow(value());
 }
 
 String HTMLInputElement::validationMessage() const {
   if (!willValidate())
     return String();
-
   if (CustomError())
     return CustomValidationMessage();
 
@@ -244,7 +237,7 @@ String HTMLInputElement::validationMessage() const {
 }
 
 String HTMLInputElement::ValidationSubMessage() const {
-  if (!willValidate() || CustomError())
+  if (CustomError())
     return String();
   return input_type_->ValidationMessage(*input_type_view_).second;
 }
@@ -258,7 +251,7 @@ double HTMLInputElement::Maximum() const {
 }
 
 bool HTMLInputElement::StepMismatch() const {
-  return willValidate() && input_type_->StepMismatch(value());
+  return input_type_->StepMismatch(value());
 }
 
 bool HTMLInputElement::GetAllowedValueStep(Decimal* step) const {
@@ -302,6 +295,16 @@ bool HTMLInputElement::MayTriggerVirtualKeyboard() const {
   return input_type_->MayTriggerVirtualKeyboard();
 }
 
+bool HTMLInputElement::ShouldHaveFocusAppearance() const {
+  // For FormControlsRefresh don't draw focus ring for an input that has its
+  // popup open.
+  if (::features::IsFormControlsRefreshEnabled() &&
+      input_type_view_->HasOpenedPopup())
+    return false;
+
+  return TextControlElement::ShouldHaveFocusAppearance();
+}
+
 void HTMLInputElement::UpdateFocusAppearanceWithOptions(
     SelectionBehaviorOnFocus selection_behavior,
     const FocusOptions* options) {
@@ -319,11 +322,13 @@ void HTMLInputElement::UpdateFocusAppearanceWithOptions(
     // TODO(tkent): scrollRectToVisible is a workaround of a bug of
     // FrameSelection::revealSelection().  It doesn't scroll correctly in a
     // case of RangeSelection. crbug.com/443061.
-    GetDocument().EnsurePaintLocationDataValidForNode(this);
+    GetDocument().EnsurePaintLocationDataValidForNode(
+        this, DocumentUpdateReason::kFocus);
     if (!options->preventScroll()) {
       if (GetLayoutObject()) {
-        GetLayoutObject()->ScrollRectToVisible(BoundingBoxForScrollIntoView(),
-                                               WebScrollIntoViewParams());
+        GetLayoutObject()->ScrollRectToVisible(
+            BoundingBoxForScrollIntoView(),
+            ScrollAlignment::CreateScrollIntoViewParams());
       }
       if (GetDocument().GetFrame())
         GetDocument().GetFrame()->Selection().RevealSelection();
@@ -350,7 +355,7 @@ void HTMLInputElement::EndEditing() {
 void HTMLInputElement::DispatchFocusInEvent(
     const AtomicString& event_type,
     Element* old_focused_element,
-    WebFocusType type,
+    mojom::blink::FocusType type,
     InputDeviceCapabilities* source_capabilities) {
   if (event_type == event_type_names::kDOMFocusIn)
     input_type_view_->HandleFocusInEvent(old_focused_element, type);
@@ -363,7 +368,7 @@ void HTMLInputElement::HandleBlurEvent() {
 }
 
 void HTMLInputElement::setType(const AtomicString& type) {
-  setAttribute(kTypeAttr, type);
+  setAttribute(html_names::kTypeAttr, type);
 }
 
 void HTMLInputElement::InitializeTypeInParsing() {
@@ -372,10 +377,10 @@ void HTMLInputElement::InitializeTypeInParsing() {
   DCHECK(!input_type_view_);
 
   const AtomicString& new_type_name =
-      InputType::NormalizeTypeName(FastGetAttribute(kTypeAttr));
+      InputType::NormalizeTypeName(FastGetAttribute(html_names::kTypeAttr));
   input_type_ = InputType::Create(*this, new_type_name);
   input_type_view_ = input_type_->CreateView();
-  String default_value = FastGetAttribute(kValueAttr);
+  String default_value = FastGetAttribute(html_names::kValueAttr);
   if (input_type_->GetValueMode() == ValueMode::kValue)
     non_attribute_value_ = SanitizeValue(default_value);
   has_been_password_field_ |= new_type_name == input_type_names::kPassword;
@@ -398,7 +403,7 @@ void HTMLInputElement::UpdateType() {
   DCHECK(input_type_view_);
 
   const AtomicString& new_type_name =
-      InputType::NormalizeTypeName(FastGetAttribute(kTypeAttr));
+      InputType::NormalizeTypeName(FastGetAttribute(html_names::kTypeAttr));
   if (input_type_->FormControlType() == new_type_name)
     return;
 
@@ -414,10 +419,6 @@ void HTMLInputElement::UpdateType() {
   input_type_view_->DestroyShadowSubtree();
   DropInnerEditorElement();
   SetForceReattachLayoutTree();
-
-  // In this function, we should not do force to do style recalc and layout.
-  DocumentLifecycle::DisallowTransitionScope disallow_transition(
-      GetDocument().Lifecycle());
 
   if (input_type_->SupportsRequired() != new_type->SupportsRequired() &&
       IsRequired()) {
@@ -478,7 +479,7 @@ void HTMLInputElement::UpdateType() {
       (new_value_mode == ValueMode::kDefault ||
        new_value_mode == ValueMode::kDefaultOn)) {
     if (HasDirtyValue())
-      setAttribute(kValueAttr, AtomicString(non_attribute_value_));
+      setAttribute(html_names::kValueAttr, AtomicString(non_attribute_value_));
     non_attribute_value_ = String();
     has_dirty_value_ = false;
   }
@@ -490,7 +491,7 @@ void HTMLInputElement::UpdateType() {
   // set the control's dirty value flag to false.
   else if (old_value_mode != ValueMode::kValue &&
            new_value_mode == ValueMode::kValue) {
-    AtomicString value_string = FastGetAttribute(kValueAttr);
+    AtomicString value_string = FastGetAttribute(html_names::kValueAttr);
     input_type_->WarnIfValueIsInvalid(value_string);
     non_attribute_value_ = SanitizeValue(value_string);
     has_dirty_value_ = false;
@@ -507,7 +508,7 @@ void HTMLInputElement::UpdateType() {
   } else {
     // ValueMode wasn't changed, or kDefault <-> kDefaultOn.
     if (!HasDirtyValue()) {
-      String default_value = FastGetAttribute(kValueAttr);
+      String default_value = FastGetAttribute(html_names::kValueAttr);
       if (!default_value.IsNull())
         input_type_->WarnIfValueIsInvalid(default_value);
     }
@@ -530,19 +531,19 @@ void HTMLInputElement::UpdateType() {
       input_type_->ShouldRespectHeightAndWidthAttributes()) {
     DCHECK(GetElementData());
     AttributeCollection attributes = AttributesWithoutUpdate();
-    if (const Attribute* height = attributes.Find(kHeightAttr)) {
+    if (const Attribute* height = attributes.Find(html_names::kHeightAttr)) {
       TextControlElement::AttributeChanged(AttributeModificationParams(
-          kHeightAttr, height->Value(), height->Value(),
+          html_names::kHeightAttr, height->Value(), height->Value(),
           AttributeModificationReason::kDirectly));
     }
-    if (const Attribute* width = attributes.Find(kWidthAttr)) {
+    if (const Attribute* width = attributes.Find(html_names::kWidthAttr)) {
       TextControlElement::AttributeChanged(AttributeModificationParams(
-          kWidthAttr, width->Value(), width->Value(),
+          html_names::kWidthAttr, width->Value(), width->Value(),
           AttributeModificationReason::kDirectly));
     }
-    if (const Attribute* align = attributes.Find(kAlignAttr)) {
+    if (const Attribute* align = attributes.Find(html_names::kAlignAttr)) {
       TextControlElement::AttributeChanged(AttributeModificationParams(
-          kAlignAttr, align->Value(), align->Value(),
+          html_names::kAlignAttr, align->Value(), align->Value(),
           AttributeModificationReason::kDirectly));
     }
   }
@@ -608,6 +609,20 @@ bool HTMLInputElement::CanStartSelection() const {
   return TextControlElement::CanStartSelection();
 }
 
+base::Optional<uint32_t> HTMLInputElement::selectionStartForBinding(
+    ExceptionState& exception_state) const {
+  if (!input_type_->SupportsSelectionAPI())
+    return base::nullopt;
+  return TextControlElement::selectionStart();
+}
+
+base::Optional<uint32_t> HTMLInputElement::selectionEndForBinding(
+    ExceptionState& exception_state) const {
+  if (!input_type_->SupportsSelectionAPI())
+    return base::nullopt;
+  return TextControlElement::selectionEnd();
+}
+
 unsigned HTMLInputElement::selectionStartForBinding(
     bool& is_null,
     ExceptionState& exception_state) const {
@@ -634,6 +649,32 @@ String HTMLInputElement::selectionDirectionForBinding(
     return String();
   }
   return TextControlElement::selectionDirection();
+}
+
+void HTMLInputElement::setSelectionStartForBinding(
+    base::Optional<uint32_t> start,
+    ExceptionState& exception_state) {
+  if (!input_type_->SupportsSelectionAPI()) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      "The input element's type ('" +
+                                          input_type_->FormControlType() +
+                                          "') does not support selection.");
+    return;
+  }
+  TextControlElement::setSelectionStart(start.value_or(0));
+}
+
+void HTMLInputElement::setSelectionEndForBinding(
+    base::Optional<uint32_t> end,
+    ExceptionState& exception_state) {
+  if (!input_type_->SupportsSelectionAPI()) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      "The input element's type ('" +
+                                          input_type_->FormControlType() +
+                                          "') does not support selection.");
+    return;
+  }
+  TextControlElement::setSelectionEnd(end.value_or(0));
 }
 
 void HTMLInputElement::setSelectionStartForBinding(
@@ -713,9 +754,10 @@ void HTMLInputElement::AccessKeyAction(bool send_mouse_events) {
 bool HTMLInputElement::IsPresentationAttribute(
     const QualifiedName& name) const {
   // FIXME: Remove type check.
-  if (name == kVspaceAttr || name == kHspaceAttr || name == kAlignAttr ||
-      name == kWidthAttr || name == kHeightAttr ||
-      (name == kBorderAttr && type() == input_type_names::kImage))
+  if (name == html_names::kVspaceAttr || name == html_names::kHspaceAttr ||
+      name == html_names::kAlignAttr || name == html_names::kWidthAttr ||
+      name == html_names::kHeightAttr ||
+      (name == html_names::kBorderAttr && type() == input_type_names::kImage))
     return true;
   return TextControlElement::IsPresentationAttribute(name);
 }
@@ -724,22 +766,22 @@ void HTMLInputElement::CollectStyleForPresentationAttribute(
     const QualifiedName& name,
     const AtomicString& value,
     MutableCSSPropertyValueSet* style) {
-  if (name == kVspaceAttr) {
+  if (name == html_names::kVspaceAttr) {
     AddHTMLLengthToStyle(style, CSSPropertyID::kMarginTop, value);
     AddHTMLLengthToStyle(style, CSSPropertyID::kMarginBottom, value);
-  } else if (name == kHspaceAttr) {
+  } else if (name == html_names::kHspaceAttr) {
     AddHTMLLengthToStyle(style, CSSPropertyID::kMarginLeft, value);
     AddHTMLLengthToStyle(style, CSSPropertyID::kMarginRight, value);
-  } else if (name == kAlignAttr) {
+  } else if (name == html_names::kAlignAttr) {
     if (input_type_->ShouldRespectAlignAttribute())
       ApplyAlignmentAttributeToStyle(value, style);
-  } else if (name == kWidthAttr) {
+  } else if (name == html_names::kWidthAttr) {
     if (input_type_->ShouldRespectHeightAndWidthAttributes())
       AddHTMLLengthToStyle(style, CSSPropertyID::kWidth, value);
-  } else if (name == kHeightAttr) {
+  } else if (name == html_names::kHeightAttr) {
     if (input_type_->ShouldRespectHeightAndWidthAttributes())
       AddHTMLLengthToStyle(style, CSSPropertyID::kHeight, value);
-  } else if (name == kBorderAttr &&
+  } else if (name == html_names::kBorderAttr &&
              type() == input_type_names::kImage) {  // FIXME: Remove type check.
     ApplyBorderAttributeToStyle(value, style);
   } else {
@@ -755,13 +797,13 @@ void HTMLInputElement::ParseAttribute(
   const QualifiedName& name = params.name;
   const AtomicString& value = params.new_value;
 
-  if (name == kNameAttr) {
+  if (name == html_names::kNameAttr) {
     RemoveFromRadioButtonGroup();
     name_ = value;
     AddToRadioButtonGroup();
     TextControlElement::ParseAttribute(params);
-  } else if (name == kAutocompleteAttr) {
-    if (DeprecatedEqualIgnoringCase(value, "off")) {
+  } else if (name == html_names::kAutocompleteAttr) {
+    if (EqualIgnoringASCIICase(value, "off")) {
       autocomplete_ = kOff;
     } else {
       if (value.IsEmpty())
@@ -769,9 +811,9 @@ void HTMLInputElement::ParseAttribute(
       else
         autocomplete_ = kOn;
     }
-  } else if (name == kTypeAttr) {
+  } else if (name == html_names::kTypeAttr) {
     UpdateType();
-  } else if (name == kValueAttr) {
+  } else if (name == html_names::kValueAttr) {
     // We only need to setChanged if the form is looking at the default value
     // right now.
     if (!HasDirtyValue()) {
@@ -780,14 +822,14 @@ void HTMLInputElement::ParseAttribute(
       UpdatePlaceholderVisibility();
       SetNeedsStyleRecalc(
           kSubtreeStyleChange,
-          StyleChangeReasonForTracing::FromAttribute(kValueAttr));
+          StyleChangeReasonForTracing::FromAttribute(html_names::kValueAttr));
     }
     needs_to_update_view_value_ = true;
     SetNeedsValidityCheck();
     input_type_->WarnIfValueIsInvalidAndElementIsVisible(value);
     input_type_->InRangeChanged();
     input_type_view_->ValueAttributeChanged();
-  } else if (name == kCheckedAttr) {
+  } else if (name == html_names::kCheckedAttr) {
     // Another radio button in the same group might be checked by state
     // restore. We shouldn't call setChecked() even if this has the checked
     // attribute. So, delay the setChecked() call until
@@ -799,11 +841,11 @@ void HTMLInputElement::ParseAttribute(
       dirty_checkedness_ = false;
     }
     PseudoStateChanged(CSSSelector::kPseudoDefault);
-  } else if (name == kMaxlengthAttr) {
+  } else if (name == html_names::kMaxlengthAttr) {
     SetNeedsValidityCheck();
-  } else if (name == kMinlengthAttr) {
+  } else if (name == html_names::kMinlengthAttr) {
     SetNeedsValidityCheck();
-  } else if (name == kSizeAttr) {
+  } else if (name == html_names::kSizeAttr) {
     unsigned size = 0;
     if (value.IsEmpty() || !ParseHTMLNonNegativeInteger(value, size) ||
         size == 0 || size > 0x7fffffffu)
@@ -812,64 +854,64 @@ void HTMLInputElement::ParseAttribute(
       size_ = size;
       if (GetLayoutObject()) {
         GetLayoutObject()
-            ->SetNeedsLayoutAndPrefWidthsRecalcAndFullPaintInvalidation(
+            ->SetNeedsLayoutAndIntrinsicWidthsRecalcAndFullPaintInvalidation(
                 layout_invalidation_reason::kAttributeChanged);
       }
     }
-  } else if (name == kAltAttr) {
+  } else if (name == html_names::kAltAttr) {
     input_type_view_->AltAttributeChanged();
-  } else if (name == kSrcAttr) {
+  } else if (name == html_names::kSrcAttr) {
     input_type_view_->SrcAttributeChanged();
-  } else if (name == kUsemapAttr || name == kAccesskeyAttr) {
+  } else if (name == html_names::kUsemapAttr ||
+             name == html_names::kAccesskeyAttr) {
     // FIXME: ignore for the moment
-  } else if (name == kOnsearchAttr) {
+  } else if (name == html_names::kOnsearchAttr) {
     // Search field and slider attributes all just cause updateFromElement to be
     // called through style recalcing.
     SetAttributeEventListener(event_type_names::kSearch,
                               CreateAttributeEventListener(this, name, value));
-  } else if (name == kIncrementalAttr) {
+  } else if (name == html_names::kIncrementalAttr) {
     UseCounter::Count(GetDocument(), WebFeature::kIncrementalAttribute);
-  } else if (name == kMinAttr) {
+  } else if (name == html_names::kMinAttr) {
     input_type_view_->MinOrMaxAttributeChanged();
     input_type_->SanitizeValueInResponseToMinOrMaxAttributeChange();
     input_type_->InRangeChanged();
     SetNeedsValidityCheck();
     UseCounter::Count(GetDocument(), WebFeature::kMinAttribute);
-  } else if (name == kMaxAttr) {
+  } else if (name == html_names::kMaxAttr) {
     input_type_view_->MinOrMaxAttributeChanged();
     input_type_->SanitizeValueInResponseToMinOrMaxAttributeChange();
     input_type_->InRangeChanged();
     SetNeedsValidityCheck();
     UseCounter::Count(GetDocument(), WebFeature::kMaxAttribute);
-  } else if (name == kMultipleAttr) {
+  } else if (name == html_names::kMultipleAttr) {
     input_type_view_->MultipleAttributeChanged();
     SetNeedsValidityCheck();
-  } else if (name == kStepAttr) {
+  } else if (name == html_names::kStepAttr) {
     input_type_view_->StepAttributeChanged();
     SetNeedsValidityCheck();
     UseCounter::Count(GetDocument(), WebFeature::kStepAttribute);
-  } else if (name == kPatternAttr) {
+  } else if (name == html_names::kPatternAttr) {
     SetNeedsValidityCheck();
     UseCounter::Count(GetDocument(), WebFeature::kPatternAttribute);
-  } else if (name == kReadonlyAttr) {
+  } else if (name == html_names::kReadonlyAttr) {
     TextControlElement::ParseAttribute(params);
     input_type_view_->ReadonlyAttributeChanged();
-  } else if (name == kListAttr) {
+  } else if (name == html_names::kListAttr) {
     has_non_empty_list_ = !value.IsEmpty();
     if (has_non_empty_list_) {
       ResetListAttributeTargetObserver();
       ListAttributeTargetChanged();
     }
     UseCounter::Count(GetDocument(), WebFeature::kListAttribute);
-  } else if (name == kWebkitdirectoryAttr) {
+  } else if (name == html_names::kWebkitdirectoryAttr) {
     TextControlElement::ParseAttribute(params);
     UseCounter::Count(GetDocument(), WebFeature::kPrefixedDirectoryAttribute);
   } else {
-    if (name == kFormactionAttr)
+    if (name == html_names::kFormactionAttr)
       LogUpdateAttributeIfIsolatedWorldAndInDocument("input", params);
     TextControlElement::ParseAttribute(params);
   }
-  input_type_view_->AttributeChanged();
 }
 
 void HTMLInputElement::ParserDidSetAttributes() {
@@ -883,7 +925,7 @@ void HTMLInputElement::FinishParsingChildren() {
   DCHECK(input_type_view_);
   TextControlElement::FinishParsingChildren();
   if (!state_restored_) {
-    bool checked = hasAttribute(kCheckedAttr);
+    bool checked = FastHasAttribute(html_names::kCheckedAttr);
     if (checked)
       setChecked(checked);
     dirty_checkedness_ = false;
@@ -893,6 +935,11 @@ void HTMLInputElement::FinishParsingChildren() {
 bool HTMLInputElement::LayoutObjectIsNeeded(const ComputedStyle& style) const {
   return input_type_->LayoutObjectIsNeeded() &&
          TextControlElement::LayoutObjectIsNeeded(style);
+}
+
+// TODO(crbug.com/1040826): Remove this override.
+bool HTMLInputElement::TypeShouldForceLegacyLayout() const {
+  return input_type_view_->TypeShouldForceLegacyLayout();
 }
 
 LayoutObject* HTMLInputElement::CreateLayoutObject(const ComputedStyle& style,
@@ -917,12 +964,12 @@ String HTMLInputElement::AltText() const {
   // http://www.w3.org/TR/1998/REC-html40-19980424/appendix/notes.html#altgen
   // also heavily discussed by Hixie on bugzilla
   // note this is intentionally different to HTMLImageElement::altText()
-  String alt = FastGetAttribute(kAltAttr);
+  String alt = FastGetAttribute(html_names::kAltAttr);
   // fall back to title attribute
   if (alt.IsNull())
-    alt = FastGetAttribute(kTitleAttr);
+    alt = FastGetAttribute(html_names::kTitleAttr);
   if (alt.IsNull())
-    alt = FastGetAttribute(kValueAttr);
+    alt = FastGetAttribute(html_names::kValueAttr);
   if (alt.IsNull())
     alt = GetLocale().QueryString(IDS_FORM_INPUT_ALT);
   return alt;
@@ -958,7 +1005,7 @@ void HTMLInputElement::ResetImpl() {
     SetNeedsValidityCheck();
   }
 
-  setChecked(hasAttribute(kCheckedAttr));
+  setChecked(FastHasAttribute(html_names::kCheckedAttr));
   dirty_checkedness_ = false;
 }
 
@@ -994,6 +1041,7 @@ void HTMLInputElement::setChecked(bool now_checked,
   if (checked() == now_checked)
     return;
 
+  input_type_->WillUpdateCheckedness(now_checked);
   is_checked_ = now_checked;
 
   if (RadioButtonGroupScope* scope = GetRadioButtonGroupScope())
@@ -1048,7 +1096,7 @@ bool HTMLInputElement::SizeShouldIncludeDecoration(int& preferred_size) const {
 
 void HTMLInputElement::CloneNonAttributePropertiesFrom(const Element& source,
                                                        CloneChildrenFlag flag) {
-  const HTMLInputElement& source_element = ToHTMLInputElement(source);
+  const auto& source_element = To<HTMLInputElement>(source);
 
   non_attribute_value_ = source_element.non_attribute_value_;
   has_dirty_value_ = source_element.has_dirty_value_;
@@ -1068,9 +1116,9 @@ String HTMLInputElement::value() const {
     case ValueMode::kFilename:
       return input_type_->ValueInFilenameValueMode();
     case ValueMode::kDefault:
-      return FastGetAttribute(kValueAttr);
+      return FastGetAttribute(html_names::kValueAttr);
     case ValueMode::kDefaultOn: {
-      AtomicString value_string = FastGetAttribute(kValueAttr);
+      AtomicString value_string = FastGetAttribute(html_names::kValueAttr);
       return value_string.IsNull() ? "on" : value_string;
     }
     case ValueMode::kValue:
@@ -1078,6 +1126,10 @@ String HTMLInputElement::value() const {
   }
   NOTREACHED();
   return g_empty_string;
+}
+
+String HTMLInputElement::rawValue() const {
+  return input_type_view_->RawValue();
 }
 
 String HTMLInputElement::ValueOrDefaultLabel() const {
@@ -1161,23 +1213,6 @@ void HTMLInputElement::setValue(const String& value,
 
   if (value_changed)
     NotifyFormStateChanged();
-
-  if (isConnected()) {
-    if (AXObjectCache* cache = GetDocument().ExistingAXObjectCache()) {
-      auto* page = GetDocument().GetPage();
-      auto* view = GetDocument().View();
-      // Run the document lifecycle to ensure AX notifications fire,
-      // even if the value didn't change.
-      if (page && view) {
-        // TODO(aboxhall): add a lifecycle phase for accessibility updates.
-        if (!view->CanThrottleRendering())
-          page->Animator().ScheduleVisualUpdate(GetDocument().GetFrame());
-
-        GetDocument().Lifecycle().EnsureStateAtMost(
-            DocumentLifecycle::kVisualUpdatePending);
-      }
-    }
-  }
 }
 
 void HTMLInputElement::SetNonAttributeValue(const String& sanitized_value) {
@@ -1209,16 +1244,27 @@ void HTMLInputElement::UpdateView() {
   input_type_view_->UpdateView();
 }
 
-double HTMLInputElement::valueAsDate(bool& is_null) const {
+ScriptValue HTMLInputElement::valueAsDate(ScriptState* script_state) const {
+  UseCounter::Count(GetDocument(), WebFeature::kInputElementValueAsDateGetter);
+  // TODO(crbug.com/988343): InputType::ValueAsDate() should return
+  // base::Optional<base::Time>.
   double date = input_type_->ValueAsDate();
-  is_null = !std::isfinite(date);
-  return date;
+  v8::Isolate* isolate = script_state->GetIsolate();
+  if (!std::isfinite(date))
+    return ScriptValue::CreateNull(isolate);
+  return ScriptValue(isolate, ToV8(base::Time::FromJsTime(date), script_state));
 }
 
-void HTMLInputElement::setValueAsDate(double value,
-                                      bool is_null,
+void HTMLInputElement::setValueAsDate(ScriptState* script_state,
+                                      const ScriptValue& value,
                                       ExceptionState& exception_state) {
-  input_type_->SetValueAsDate(value, exception_state);
+  UseCounter::Count(GetDocument(), WebFeature::kInputElementValueAsDateSetter);
+  base::Optional<base::Time> date =
+      NativeValueTraits<IDLNullable<IDLDate>>::NativeValue(
+          script_state->GetIsolate(), value.V8Value(), exception_state);
+  if (exception_state.HadException())
+    return;
+  input_type_->SetValueAsDate(date, exception_state);
 }
 
 double HTMLInputElement::valueAsNumber() const {
@@ -1278,12 +1324,12 @@ EventDispatchHandlingState* HTMLInputElement::PreDispatchEventHandler(
   }
   if (event.type() != event_type_names::kClick)
     return nullptr;
-  if (!event.IsMouseEvent() ||
-      ToMouseEvent(event).button() !=
+
+  auto* mouse_event = DynamicTo<MouseEvent>(event);
+  if (!mouse_event ||
+      mouse_event->button() !=
           static_cast<int16_t>(WebPointerProperties::Button::kLeft))
     return nullptr;
-  if (formOwner() && CanBeSuccessfulSubmitButton())
-    formOwner()->WillActivateSubmitButton(this);
   return input_type_view_->WillDispatchClick();
 }
 
@@ -1296,29 +1342,19 @@ void HTMLInputElement::PostDispatchEventHandler(
                                      *static_cast<ClickHandlingState*>(state));
 }
 
-void HTMLInputElement::DidPreventDefault(const Event& event) {
-  if (auto* form = formOwner())
-    form->DidActivateSubmitButton(this);
-}
-
-void HTMLInputElement::DefaultEventHandler(Event& event) {
-  DefaultEventHandlerInternal(event);
-
-  if (event.type() == event_type_names::kDOMActivate && formOwner())
-    formOwner()->DidActivateSubmitButton(this);
-}
-
-void HTMLInputElement::DefaultEventHandlerInternal(Event& evt) {
-  if (evt.IsMouseEvent() && evt.type() == event_type_names::kClick &&
-      ToMouseEvent(evt).button() ==
+void HTMLInputElement::DefaultEventHandler(Event& evt) {
+  auto* mouse_event = DynamicTo<MouseEvent>(evt);
+  if (mouse_event && evt.type() == event_type_names::kClick &&
+      mouse_event->button() ==
           static_cast<int16_t>(WebPointerProperties::Button::kLeft)) {
-    input_type_view_->HandleClickEvent(ToMouseEvent(evt));
+    input_type_view_->HandleClickEvent(To<MouseEvent>(evt));
     if (evt.DefaultHandled())
       return;
   }
 
-  if (evt.IsKeyboardEvent() && evt.type() == event_type_names::kKeydown) {
-    input_type_view_->HandleKeydownEvent(ToKeyboardEvent(evt));
+  auto* keyboad_event = DynamicTo<KeyboardEvent>(evt);
+  if (keyboad_event && evt.type() == event_type_names::kKeydown) {
+    input_type_view_->HandleKeydownEvent(*keyboad_event);
     if (evt.DefaultHandled())
       return;
   }
@@ -1349,14 +1385,14 @@ void HTMLInputElement::DefaultEventHandlerInternal(Event& evt) {
 
   // Use key press event here since sending simulated mouse events
   // on key down blocks the proper sending of the key press event.
-  if (evt.IsKeyboardEvent() && evt.type() == event_type_names::kKeypress) {
-    input_type_view_->HandleKeypressEvent(ToKeyboardEvent(evt));
+  if (keyboad_event && evt.type() == event_type_names::kKeypress) {
+    input_type_view_->HandleKeypressEvent(*keyboad_event);
     if (evt.DefaultHandled())
       return;
   }
 
-  if (evt.IsKeyboardEvent() && evt.type() == event_type_names::kKeyup) {
-    input_type_view_->HandleKeyupEvent(ToKeyboardEvent(evt));
+  if (keyboad_event && evt.type() == event_type_names::kKeyup) {
+    input_type_view_->HandleKeyupEvent(*keyboad_event);
     if (evt.DefaultHandled())
       return;
   }
@@ -1390,8 +1426,8 @@ void HTMLInputElement::DefaultEventHandlerInternal(Event& evt) {
         static_cast<BeforeTextInsertedEvent&>(evt));
   }
 
-  if (evt.IsMouseEvent() && evt.type() == event_type_names::kMousedown) {
-    input_type_view_->HandleMouseDownEvent(ToMouseEvent(evt));
+  if (mouse_event && evt.type() == event_type_names::kMousedown) {
+    input_type_view_->HandleMouseDownEvent(*mouse_event);
     if (evt.DefaultHandled())
       return;
   }
@@ -1420,8 +1456,8 @@ bool HTMLInputElement::WillRespondToMouseClickEvents() {
 }
 
 bool HTMLInputElement::IsURLAttribute(const Attribute& attribute) const {
-  return attribute.GetName() == kSrcAttr ||
-         attribute.GetName() == kFormactionAttr ||
+  return attribute.GetName() == html_names::kSrcAttr ||
+         attribute.GetName() == html_names::kFormactionAttr ||
          TextControlElement::IsURLAttribute(attribute);
 }
 
@@ -1435,7 +1471,7 @@ const QualifiedName& HTMLInputElement::SubResourceAttributeName() const {
 }
 
 const AtomicString& HTMLInputElement::DefaultValue() const {
-  return FastGetAttribute(kValueAttr);
+  return FastGetAttribute(html_names::kValueAttr);
 }
 
 static inline bool IsRFC2616TokenCharacter(UChar ch) {
@@ -1483,20 +1519,21 @@ static Vector<String> ParseAcceptAttribute(const String& accept_string,
 }
 
 Vector<String> HTMLInputElement::AcceptMIMETypes() const {
-  return ParseAcceptAttribute(FastGetAttribute(kAcceptAttr), IsValidMIMEType);
+  return ParseAcceptAttribute(FastGetAttribute(html_names::kAcceptAttr),
+                              IsValidMIMEType);
 }
 
 Vector<String> HTMLInputElement::AcceptFileExtensions() const {
-  return ParseAcceptAttribute(FastGetAttribute(kAcceptAttr),
+  return ParseAcceptAttribute(FastGetAttribute(html_names::kAcceptAttr),
                               IsValidFileExtension);
 }
 
 const AtomicString& HTMLInputElement::Alt() const {
-  return FastGetAttribute(kAltAttr);
+  return FastGetAttribute(html_names::kAltAttr);
 }
 
 bool HTMLInputElement::Multiple() const {
-  return FastHasAttribute(kMultipleAttr);
+  return FastHasAttribute(html_names::kMultipleAttr);
 }
 
 void HTMLInputElement::setSize(unsigned size, ExceptionState& exception_state) {
@@ -1505,13 +1542,13 @@ void HTMLInputElement::setSize(unsigned size, ExceptionState& exception_state) {
         DOMExceptionCode::kIndexSizeError,
         "The value provided is 0, which is an invalid size.");
   } else {
-    SetUnsignedIntegralAttribute(kSizeAttr, size ? size : kDefaultSize,
-                                 kDefaultSize);
+    SetUnsignedIntegralAttribute(html_names::kSizeAttr,
+                                 size ? size : kDefaultSize, kDefaultSize);
   }
 }
 
 KURL HTMLInputElement::Src() const {
-  return GetDocument().CompleteURL(FastGetAttribute(kSrcAttr));
+  return GetDocument().CompleteURL(FastGetAttribute(html_names::kSrcAttr));
 }
 
 FileList* HTMLInputElement::files() const {
@@ -1539,8 +1576,12 @@ void HTMLInputElement::SetCanReceiveDroppedFiles(
   if (!!can_receive_dropped_files_ == can_receive_dropped_files)
     return;
   can_receive_dropped_files_ = can_receive_dropped_files;
-  if (GetLayoutObject())
-    GetLayoutObject()->UpdateFromElement();
+  if (HTMLInputElement* button = UploadButton())
+    button->SetActive(can_receive_dropped_files);
+}
+
+HTMLInputElement* HTMLInputElement::UploadButton() const {
+  return input_type_view_->UploadButton();
 }
 
 String HTMLInputElement::SanitizeValue(const String& proposed_value) const {
@@ -1599,8 +1640,8 @@ Node::InsertionNotificationRequest HTMLInputElement::InsertedInto(
   if (insertion_point.isConnected() && !Form())
     AddToRadioButtonGroup();
   ResetListAttributeTargetObserver();
-  LogAddElementIfIsolatedWorldAndInDocument("input", kTypeAttr,
-                                            kFormactionAttr);
+  LogAddElementIfIsolatedWorldAndInDocument("input", html_names::kTypeAttr,
+                                            html_names::kFormactionAttr);
   return kInsertionShouldCallDidNotifySubtreeInsertions;
 }
 
@@ -1646,9 +1687,8 @@ void HTMLInputElement::SelectColorInColorChooser(const Color& color) {
     client->DidChooseColor(color);
 }
 
-void HTMLInputElement::EndColorChooser() {
-  if (ColorChooserClient* client = input_type_->GetColorChooserClient())
-    client->DidEndChooser();
+void HTMLInputElement::EndColorChooserForTesting() {
+  input_type_view_->ClosePopupView();
 }
 
 HTMLElement* HTMLInputElement::list() const {
@@ -1662,8 +1702,8 @@ HTMLDataListElement* HTMLInputElement::DataList() const {
   if (!input_type_->ShouldRespectListAttribute())
     return nullptr;
 
-  return ToHTMLDataListElementOrNull(
-      GetTreeScope().getElementById(FastGetAttribute(kListAttr)));
+  return DynamicTo<HTMLDataListElement>(
+      GetTreeScope().getElementById(FastGetAttribute(html_names::kListAttr)));
 }
 
 bool HTMLInputElement::HasValidDataListOptions() const {
@@ -1721,7 +1761,7 @@ void HTMLInputElement::SetListAttributeTargetObserver(
 }
 
 void HTMLInputElement::ResetListAttributeTargetObserver() {
-  const AtomicString& value = FastGetAttribute(kListAttr);
+  const AtomicString& value = FastGetAttribute(html_names::kListAttr);
   if (!value.IsNull() && isConnected()) {
     SetListAttributeTargetObserver(
         MakeGarbageCollected<ListAttributeTargetObserver>(value, this));
@@ -1778,24 +1818,16 @@ String HTMLInputElement::DefaultToolTip() const {
   return input_type_->DefaultToolTip(*input_type_view_);
 }
 
+String HTMLInputElement::FileStatusText() const {
+  return input_type_view_->FileStatusText();
+}
+
+bool HTMLInputElement::ShouldApplyMiddleEllipsis() const {
+  return files() && files()->length() <= 1;
+}
+
 bool HTMLInputElement::ShouldAppearIndeterminate() const {
   return input_type_->ShouldAppearIndeterminate();
-}
-
-bool HTMLInputElement::IsInRequiredRadioButtonGroup() {
-  // TODO(tkent): Remove type check.
-  DCHECK_EQ(type(), input_type_names::kRadio);
-  if (RadioButtonGroupScope* scope = GetRadioButtonGroupScope())
-    return scope->IsInRequiredGroup(this);
-  return false;
-}
-
-HTMLInputElement* HTMLInputElement::CheckedRadioButtonForGroup() {
-  if (checked())
-    return this;
-  if (RadioButtonGroupScope* scope = GetRadioButtonGroupScope())
-    return scope->CheckedButtonForGroup(GetName());
-  return nullptr;
 }
 
 RadioButtonGroupScope* HTMLInputElement::GetRadioButtonGroupScope() const {
@@ -1835,11 +1867,11 @@ unsigned HTMLInputElement::width() const {
 }
 
 void HTMLInputElement::setHeight(unsigned height) {
-  SetUnsignedIntegralAttribute(kHeightAttr, height);
+  SetUnsignedIntegralAttribute(html_names::kHeightAttr, height);
 }
 
 void HTMLInputElement::setWidth(unsigned width) {
-  SetUnsignedIntegralAttribute(kWidthAttr, width);
+  SetUnsignedIntegralAttribute(html_names::kWidthAttr, width);
 }
 
 ListAttributeTargetObserver::ListAttributeTargetObserver(
@@ -1961,8 +1993,9 @@ bool HTMLInputElement::IsInteractiveContent() const {
 }
 
 scoped_refptr<ComputedStyle> HTMLInputElement::CustomStyleForLayoutObject() {
-  return input_type_view_->CustomStyleForLayoutObject(
-      OriginalStyleForLayoutObject());
+  scoped_refptr<ComputedStyle> style = OriginalStyleForLayoutObject();
+  input_type_view_->CustomStyleForLayoutObject(*style);
+  return style;
 }
 
 void HTMLInputElement::DidRecalcStyle(const StyleRecalcChange change) {
@@ -2010,6 +2043,10 @@ PaintLayerScrollableArea* HTMLInputElement::GetScrollableArea() const {
     return InnerEditorElement()->GetScrollableArea();
 
   return Element::GetScrollableArea();
+}
+
+bool HTMLInputElement::IsDraggedSlider() const {
+  return input_type_view_->IsDraggedSlider();
 }
 
 }  // namespace blink

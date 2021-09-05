@@ -17,7 +17,6 @@
 #include "base/compiler_specific.h"
 #include "base/logging.h"
 #include "base/message_loop/message_pump_type.h"
-#include "base/no_destructor.h"
 #include "base/numerics/ranges.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -25,14 +24,19 @@
 #include "chromecast/base/chromecast_switches.h"
 #include "chromecast/base/serializers.h"
 #include "chromecast/base/thread_health_checker.h"
+#include "chromecast/media/audio/audio_io_thread.h"
+#include "chromecast/media/audio/interleaved_channel_mixer.h"
+#include "chromecast/media/audio/mixer_service/loopback_interrupt_reason.h"
 #include "chromecast/media/base/audio_device_ids.h"
 #include "chromecast/media/cma/backend/cast_audio_json.h"
-#include "chromecast/media/cma/backend/interleaved_channel_mixer.h"
 #include "chromecast/media/cma/backend/mixer/audio_output_redirector.h"
+#include "chromecast/media/cma/backend/mixer/channel_layout.h"
 #include "chromecast/media/cma/backend/mixer/filter_group.h"
+#include "chromecast/media/cma/backend/mixer/loopback_handler.h"
 #include "chromecast/media/cma/backend/mixer/mixer_service_receiver.h"
 #include "chromecast/media/cma/backend/mixer/post_processing_pipeline_impl.h"
 #include "chromecast/media/cma/backend/mixer/post_processing_pipeline_parser.h"
+#include "chromecast/media/cma/backend/volume_map.h"
 #include "chromecast/public/media/mixer_output_stream.h"
 #include "media/audio/audio_device_description.h"
 
@@ -54,7 +58,7 @@ namespace media {
 
 namespace {
 
-const int kMinInputChannels = 2;
+const size_t kMinInputChannels = 2;
 const int kDefaultInputChannels = 2;
 const int kInvalidNumChannels = 0;
 
@@ -149,36 +153,24 @@ class StreamMixer::ExternalMediaVolumeChangeRequestObserver
   StreamMixer* const mixer_;
 };
 
-float StreamMixer::VolumeInfo::GetEffectiveVolume() {
-  return std::min(volume, limit);
-}
-
-// static
-StreamMixer* StreamMixer::Get() {
-  static base::NoDestructor<StreamMixer> mixer_instance;
-  return mixer_instance.get();
-}
-
-// static
-MixerControl* MixerControl::Get() {
-  return StreamMixer::Get();
-}
-
-StreamMixer::StreamMixer()
+StreamMixer::StreamMixer(
+    scoped_refptr<base::SequencedTaskRunner> io_task_runner)
     : StreamMixer(nullptr,
                   std::make_unique<base::Thread>("CMA mixer"),
-                  nullptr) {}
+                  nullptr,
+                  std::move(io_task_runner)) {}
 
 StreamMixer::StreamMixer(
     std::unique_ptr<MixerOutputStream> output,
     std::unique_ptr<base::Thread> mixer_thread,
-    scoped_refptr<base::SingleThreadTaskRunner> mixer_task_runner)
+    scoped_refptr<base::SingleThreadTaskRunner> mixer_task_runner,
+    scoped_refptr<base::SequencedTaskRunner> io_task_runner)
     : output_(std::move(output)),
       post_processing_pipeline_factory_(
           std::make_unique<PostProcessingPipelineFactoryImpl>()),
       mixer_thread_(std::move(mixer_thread)),
       mixer_task_runner_(std::move(mixer_task_runner)),
-      loopback_handler_(LoopbackHandler::Create(mixer_task_runner_)),
+      io_task_runner_(std::move(io_task_runner)),
       enable_dynamic_channel_count_(
           GetSwitchValueBoolean(switches::kMixerEnableDynamicChannelCount,
                                 false)),
@@ -209,24 +201,22 @@ StreamMixer::StreamMixer(
     // MixerOutputStreamFuchsia uses FIDL, which works only on IO threads.
     options.message_pump_type = base::MessagePumpType::IO;
 #endif
+    options.stack_size = 512 * 1024;
     mixer_thread_->StartWithOptions(options);
     mixer_task_runner_ = mixer_thread_->task_runner();
     mixer_task_runner_->PostTask(FROM_HERE, base::BindOnce(&UseHighPriority));
 
+    if (!io_task_runner_) {
+      io_task_runner_ = AudioIoThread::Get()->task_runner();
+    }
+
     health_checker_ = std::make_unique<ThreadHealthChecker>(
-        mixer_task_runner_, loopback_handler_->GetTaskRunner(),
-        kHealthCheckInterval, kMixerThreadCheckTimeout,
+        mixer_task_runner_, io_task_runner_, kHealthCheckInterval,
+        kMixerThreadCheckTimeout,
         base::BindRepeating(&StreamMixer::OnHealthCheckFailed,
                             base::Unretained(this)));
     LOG(INFO) << "Mixer health checker started";
-
-    io_thread_ = std::make_unique<base::Thread>("MixerIO");
-    base::Thread::Options io_options;
-    io_options.message_pump_type = base::MessagePumpType::IO;
-    io_options.priority = base::ThreadPriority::REALTIME_AUDIO;
-    CHECK(io_thread_->StartWithOptions(io_options));
-    io_task_runner_ = io_thread_->task_runner();
-  } else {
+  } else if (!io_task_runner_) {
     io_task_runner_ = mixer_task_runner_;
   }
 
@@ -249,7 +239,10 @@ StreamMixer::StreamMixer(
         external_volume_observer_.get());
   }
 
-  receiver_ = base::SequenceBound<MixerServiceReceiver>(io_task_runner_, this);
+  loopback_handler_ = std::make_unique<LoopbackHandler>(io_task_runner_);
+  receiver_ = base::SequenceBound<MixerServiceReceiver>(
+      io_task_runner_, this, loopback_handler_.get());
+  UpdateStreamCounts();
 }
 
 void StreamMixer::OnHealthCheckFailed() {
@@ -257,6 +250,7 @@ void StreamMixer::OnHealthCheckFailed() {
 }
 
 void StreamMixer::ResetPostProcessors(CastMediaShlib::ResultCallback callback) {
+  VolumeMap::Reload();
   RUN_ON_MIXER_THREAD(ResetPostProcessorsOnThread, std::move(callback), "");
 }
 
@@ -368,6 +362,10 @@ void StreamMixer::EnableDynamicChannelCountForTest(bool enable) {
   enable_dynamic_channel_count_ = enable;
 }
 
+LoopbackHandler* StreamMixer::GetLoopbackHandlerForTest() {
+  return loopback_handler_.get();
+}
+
 StreamMixer::~StreamMixer() {
   LOG(INFO) << __func__;
 
@@ -388,7 +386,7 @@ StreamMixer::~StreamMixer() {
 
 void StreamMixer::FinalizeOnMixerThread() {
   DCHECK(mixer_task_runner_->BelongsToCurrentThread());
-  Stop();
+  Stop(LoopbackInterruptReason::kOutputStopped);
 
   inputs_.clear();
   ignored_inputs_.clear();
@@ -404,7 +402,7 @@ void StreamMixer::SetNumOutputChannelsOnThread(int num_channels) {
   fixed_num_output_channels_ = num_channels;
 
   if (state_ == kStateRunning && num_channels != num_output_channels_) {
-    Stop();
+    Stop(LoopbackInterruptReason::kConfigChange);
     Start();
   }
 }
@@ -454,7 +452,7 @@ void StreamMixer::Start() {
   }
 
   if (!output_->Start(requested_sample_rate, requested_output_channels)) {
-    Stop();
+    Stop(LoopbackInterruptReason::kOutputStopped);
     return;
   }
 
@@ -469,8 +467,10 @@ void StreamMixer::Start() {
   CHECK_GT(frames_per_write_, 0);
 
   output_channel_mixer_ = std::make_unique<InterleavedChannelMixer>(
-      ::media::GuessChannelLayout(mixer_pipeline_->GetOutputChannelCount()),
-      ::media::GuessChannelLayout(num_output_channels_), frames_per_write_);
+      mixer::GuessChannelLayout(mixer_pipeline_->GetOutputChannelCount()),
+      mixer_pipeline_->GetOutputChannelCount(),
+      mixer::GuessChannelLayout(num_output_channels_), num_output_channels_,
+      frames_per_write_);
 
   int num_loopback_channels = mixer_pipeline_->GetLoopbackChannelCount();
   if (!enable_dynamic_channel_count_ && num_output_channels_ == 1) {
@@ -479,8 +479,10 @@ void StreamMixer::Start() {
   LOG(INFO) << "Using " << num_loopback_channels << " loopback "
             << ChannelString(num_loopback_channels);
   loopback_channel_mixer_ = std::make_unique<InterleavedChannelMixer>(
-      ::media::GuessChannelLayout(mixer_pipeline_->GetLoopbackChannelCount()),
-      ::media::GuessChannelLayout(num_loopback_channels), frames_per_write_);
+      mixer::GuessChannelLayout(mixer_pipeline_->GetLoopbackChannelCount()),
+      mixer_pipeline_->GetLoopbackChannelCount(),
+      mixer::GuessChannelLayout(num_loopback_channels), num_loopback_channels,
+      frames_per_write_);
 
   loopback_handler_->SetDataSize(frames_per_write_ *
                                  mixer_pipeline_->GetLoopbackChannelCount() *
@@ -508,7 +510,7 @@ void StreamMixer::Start() {
   redirector_frames_per_write_ = redirector_samples_per_second_ *
                                  frames_per_write_ / output_samples_per_second_;
   for (auto& redirector : audio_output_redirectors_) {
-    redirector.second->Start(redirector_samples_per_second_);
+    redirector.second->SetSampleRate(redirector_samples_per_second_);
   }
 
   state_ = kStateRunning;
@@ -530,19 +532,15 @@ void StreamMixer::Start() {
   mixer_task_runner_->PostTask(FROM_HERE, playback_loop_task_);
 }
 
-void StreamMixer::Stop() {
+void StreamMixer::Stop(LoopbackInterruptReason reason) {
   LOG(INFO) << __func__;
   DCHECK(mixer_task_runner_->BelongsToCurrentThread());
 
   weak_factory_.InvalidateWeakPtrs();
-  loopback_handler_->SendInterrupt();
+  loopback_handler_->SendInterrupt(reason);
 
   if (output_) {
     output_->Stop();
-  }
-
-  for (auto& redirector : audio_output_redirectors_) {
-    redirector.second->Stop();
   }
 
   state_ = kStateStopped;
@@ -582,7 +580,7 @@ void StreamMixer::CheckChangeOutputParams(int num_input_channels,
   requested_output_samples_per_second_ = input_samples_per_second;
 
   // Restart the output so that the new output params take effect.
-  Stop();
+  Stop(LoopbackInterruptReason::kConfigChange);
   Start();
 }
 
@@ -619,13 +617,12 @@ void StreamMixer::AddInput(MixerInput::Source* input_source) {
   // We only change the output rate if it is not set to a fixed value.
   if (input_source->primary() || inputs_.empty()) {
     CheckChangeOutputParams(GetEffectiveChannelCount(input_source),
-                            input_source->input_samples_per_second());
+                            input_source->sample_rate());
   }
 
   if (state_ == kStateStopped) {
     requested_input_channels_ = GetEffectiveChannelCount(input_source);
-    requested_output_samples_per_second_ =
-        input_source->input_samples_per_second();
+    requested_output_samples_per_second_ = input_source->sample_rate();
     Start();
   }
 
@@ -650,13 +647,12 @@ void StreamMixer::AddInput(MixerInput::Source* input_source) {
 
   auto type = input->content_type();
   if (type != AudioContentType::kOther) {
-    if (input->primary()) {
-      input->SetContentTypeVolume(volume_info_[type].GetEffectiveVolume(),
-                                  kUseDefaultFade);
-    } else {
-      input->SetContentTypeVolume(volume_info_[type].volume, kUseDefaultFade);
-    }
+    input->SetContentTypeVolume(volume_info_[type].volume);
     input->SetMuted(volume_info_[type].muted);
+  }
+  if (input->primary() && input->focus_type() != AudioContentType::kOther) {
+    input->SetOutputLimit(volume_info_[input->focus_type()].limit,
+                          kUseDefaultFade);
   }
 
   for (auto& redirector : audio_output_redirectors_) {
@@ -734,12 +730,20 @@ void StreamMixer::UpdateStreamCounts() {
   int primary = 0;
   int sfx = 0;
   for (const auto& it : inputs_) {
-    if (it.second->source()->active()) {
-      (it.second->primary() ? primary : sfx) += 1;
+    MixerInput* input = it.second.get();
+    if (input->source()->active() &&
+        (input->TargetVolume() > 0.0f || input->InstantaneousVolume() > 0.0f)) {
+      (input->primary() ? primary : sfx) += 1;
     }
   }
-  receiver_.Post(FROM_HERE, &MixerServiceReceiver::OnStreamCountChanged,
-                 primary, sfx);
+
+  if (primary != last_sent_primary_stream_count_ ||
+      sfx != last_sent_sfx_stream_count_) {
+    last_sent_primary_stream_count_ = primary;
+    last_sent_sfx_stream_count_ = sfx;
+    receiver_.Post(FROM_HERE, &MixerServiceReceiver::OnStreamCountChanged,
+                   primary, sfx);
+  }
 }
 
 MediaPipelineBackend::AudioDecoder::RenderingDelay
@@ -761,11 +765,12 @@ void StreamMixer::PlaybackLoop() {
   if (inputs_.empty() && base::TimeTicks::Now() >= close_timestamp_ &&
       !mixer_pipeline_->IsRinging()) {
     LOG(INFO) << "Close timeout";
-    Stop();
+    Stop(LoopbackInterruptReason::kOutputStopped);
     return;
   }
 
   WriteOneBuffer();
+  UpdateStreamCounts();
 
   mixer_task_runner_->PostTask(FROM_HERE, playback_loop_task_);
 }
@@ -827,18 +832,12 @@ void StreamMixer::WriteMixedPcm(int frames, int64_t expected_playback_time) {
                  &playback_interrupted);
 
   if (playback_interrupted) {
-    loopback_handler_->SendInterrupt();
+    loopback_handler_->SendInterrupt(LoopbackInterruptReason::kUnderrun);
+
+    for (const auto& input : inputs_) {
+      input.first->OnOutputUnderrun();
+    }
   }
-}
-
-void StreamMixer::AddLoopbackAudioObserver(
-    CastMediaShlib::LoopbackAudioObserver* observer) {
-  loopback_handler_->AddObserver(observer);
-}
-
-void StreamMixer::RemoveLoopbackAudioObserver(
-    CastMediaShlib::LoopbackAudioObserver* observer) {
-  loopback_handler_->RemoveObserver(observer);
 }
 
 void StreamMixer::AddAudioOutputRedirector(
@@ -851,7 +850,7 @@ void StreamMixer::AddAudioOutputRedirector(
   audio_output_redirectors_[key] = std::move(redirector);
 
   if (state_ == kStateRunning) {
-    key->Start(redirector_samples_per_second_);
+    key->SetSampleRate(redirector_samples_per_second_);
   }
 
   for (const auto& input : inputs_) {
@@ -872,38 +871,21 @@ void StreamMixer::RemoveAudioOutputRedirectorOnThread(
   audio_output_redirectors_.erase(redirector);
 }
 
-void StreamMixer::ModifyAudioOutputRedirection(
-    AudioOutputRedirector* redirector,
-    std::vector<std::pair<AudioContentType, std::string>>
-        stream_match_patterns) {
-  MAKE_SURE_MIXER_THREAD(ModifyAudioOutputRedirection, redirector,
-                         std::move(stream_match_patterns));
-
-  auto it = audio_output_redirectors_.find(redirector);
-  if (it != audio_output_redirectors_.end()) {
-    it->second->UpdatePatterns(std::move(stream_match_patterns));
-  }
-}
-
 void StreamMixer::SetVolume(AudioContentType type, float level) {
   MAKE_SURE_MIXER_THREAD(SetVolume, type, level);
   DCHECK(type != AudioContentType::kOther);
 
   volume_info_[type].volume = level;
-  float effective_volume = volume_info_[type].GetEffectiveVolume();
   for (const auto& input : inputs_) {
     if (input.second->content_type() == type) {
-      if (input.second->primary()) {
-        input.second->SetContentTypeVolume(effective_volume, kUseDefaultFade);
-      } else {
-        // Volume limits don't apply to effects streams.
-        input.second->SetContentTypeVolume(level, kUseDefaultFade);
-      }
+      input.second->SetContentTypeVolume(level);
     }
   }
   if (external_audio_pipeline_supported_ && type == AudioContentType::kMedia) {
-    ExternalAudioPipelineShlib::SetExternalMediaVolume(effective_volume);
+    ExternalAudioPipelineShlib::SetExternalMediaVolume(
+        std::min(level, volume_info_[type].limit));
   }
+  UpdateStreamCounts();
 }
 
 void StreamMixer::SetMuted(AudioContentType type, bool muted) {
@@ -919,6 +901,7 @@ void StreamMixer::SetMuted(AudioContentType type, bool muted) {
   if (external_audio_pipeline_supported_ && type == AudioContentType::kMedia) {
     ExternalAudioPipelineShlib::SetExternalMediaMuted(muted);
   }
+  UpdateStreamCounts();
 }
 
 void StreamMixer::SetOutputLimit(AudioContentType type, float limit) {
@@ -928,7 +911,6 @@ void StreamMixer::SetOutputLimit(AudioContentType type, float limit) {
   LOG(INFO) << "Set volume limit for " << static_cast<int>(type) << " to "
             << limit;
   volume_info_[type].limit = limit;
-  float effective_volume = volume_info_[type].GetEffectiveVolume();
   int fade_ms = kUseDefaultFade;
   if (type == AudioContentType::kMedia) {
     if (limit >= 1.0f) {  // Unducking.
@@ -939,13 +921,15 @@ void StreamMixer::SetOutputLimit(AudioContentType type, float limit) {
   }
   for (const auto& input : inputs_) {
     // Volume limits don't apply to effects streams.
-    if (input.second->primary() && input.second->content_type() == type) {
-      input.second->SetContentTypeVolume(effective_volume, fade_ms);
+    if (input.second->primary() && input.second->focus_type() == type) {
+      input.second->SetOutputLimit(limit, fade_ms);
     }
   }
   if (external_audio_pipeline_supported_ && type == AudioContentType::kMedia) {
-    ExternalAudioPipelineShlib::SetExternalMediaVolume(effective_volume);
+    ExternalAudioPipelineShlib::SetExternalMediaVolume(
+        std::min(volume_info_[type].volume, limit));
   }
+  UpdateStreamCounts();
 }
 
 void StreamMixer::SetVolumeMultiplier(MixerInput::Source* source,
@@ -956,6 +940,7 @@ void StreamMixer::SetVolumeMultiplier(MixerInput::Source* source,
   if (it != inputs_.end()) {
     it->second->SetVolumeMultiplier(multiplier);
   }
+  UpdateStreamCounts();
 }
 
 void StreamMixer::SetPostProcessorConfig(std::string name, std::string config) {

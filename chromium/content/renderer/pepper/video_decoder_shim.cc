@@ -28,6 +28,7 @@
 #include "media/base/decoder_buffer.h"
 #include "media/base/limits.h"
 #include "media/base/media_util.h"
+#include "media/base/status.h"
 #include "media/base/video_decoder.h"
 #include "media/filters/ffmpeg_video_decoder.h"
 #include "media/filters/vpx_video_decoder.h"
@@ -647,7 +648,7 @@ class VideoDecoderShim::DecoderImpl {
   void Stop();
 
  private:
-  void OnInitDone(bool success);
+  void OnInitDone(media::Status status);
   void DoDecode();
   void OnDecodeComplete(media::DecodeStatus status);
   void OnOutputComplete(scoped_refptr<media::VideoFrame> frame);
@@ -710,7 +711,7 @@ void VideoDecoderShim::DecoderImpl::Initialize(
                           weak_ptr_factory_.GetWeakPtr()),
       base::NullCallback());
 #else
-  OnInitDone(false);
+  OnInitDone(media::StatusCode::kDecoderFailedInitialization);
 #endif  // BUILDFLAG(ENABLE_LIBVPX) || BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS)
 }
 
@@ -755,8 +756,8 @@ void VideoDecoderShim::DecoderImpl::Stop() {
   // This instance is deleted once we exit this scope.
 }
 
-void VideoDecoderShim::DecoderImpl::OnInitDone(bool success) {
-  if (!success) {
+void VideoDecoderShim::DecoderImpl::OnInitDone(media::Status status) {
+  if (!status.is_ok()) {
     main_task_runner_->PostTask(
         FROM_HERE,
         base::BindOnce(&VideoDecoderShim::OnInitializeFailed, shim_));
@@ -895,7 +896,7 @@ bool VideoDecoderShim::Initialize(const Config& vda_config, Client* client) {
       gfx::Size(32, 24),  // Small sizes that won't fail.
       gfx::Rect(32, 24), gfx::Size(32, 24),
       // TODO(bbudge): Verify extra data isn't needed.
-      media::EmptyExtraData(), media::Unencrypted());
+      media::EmptyExtraData(), media::EncryptionScheme::kUnencrypted);
 
   media_task_runner_->PostTask(
       FROM_HERE, base::BindOnce(&VideoDecoderShim::DecoderImpl::Initialize,

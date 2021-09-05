@@ -21,9 +21,12 @@ function test_with_window(f, name, srcdoc) {
   }, name);
 }
 
+// TODO(1066131): After https://github.com/web-platform-tests/wpt/pull/21876 is
+// rolled into Chromium, this function can be replaced with:
+//   assert_throws_dom(code, global_context.DOMException, func, description);
 function assert_throws_dom_exception(global_context, code, func, description) {
   let exception;
-  assert_throws(code, () => {
+  assert_throws_dom(code, () => {
     try {
       func.call(this);
     } catch(e) {
@@ -49,9 +52,13 @@ function assert_is_upgraded(element, className, description) {
   assert_equals(Object.getPrototypeOf(element), className.prototype, description);
 }
 
-// Asserts that func synchronously invokes the error event handler in w
-// with the expected error.
-function assert_reports(w, expected_error, func, description) {
+// Asserts that func synchronously invokes the error event handler in w.
+// Captures and returns the error that is reported.
+//
+// Do not use this function directly; instead use one of assert_reports_js,
+// assert_reports_dom, or assert_reports_exactly. Those functions also check
+// that the error reported is the expected one.
+function assert_reports_impl(w, func) {
   let old_onerror = w.onerror;
   let errors = [];
   w.onerror = (event, source, line_number, column_number, error) => {
@@ -66,7 +73,26 @@ function assert_reports(w, expected_error, func, description) {
     w.onerror = old_onerror;
   }
   assert_equals(errors.length, 1, 'only one error should have been reported');
-  // assert_throws has an error expectation matcher that can only be
-  // accessed by throwing the error
-  assert_throws(expected_error, () => { throw errors[0]; });
+  return errors[0];
+}
+
+// Asserts that func synchronously invokes the error event handler in w
+// with the expected DOMException.
+function assert_reports_dom(w, expected_error, func, description) {
+  const e = assert_reports_impl(w, func);
+  assert_throws_dom(expected_error, () => { throw e; }, description);
+}
+
+// Asserts that func synchronously invokes the error event handler in w
+// with the expected JavaScript error.
+function assert_reports_js(w, expected_error, func, description) {
+  const e = assert_reports_impl(w, func);
+  assert_throws_js(expected_error, () => { throw e; }, description);
+}
+
+// Asserts that func synchronously invokes the error event handler in w
+// with exactly the expected error.
+function assert_reports_exactly(w, expected_error, func, description) {
+  const e = assert_reports_impl(w, func);
+  assert_throws_exactly(expected_error, () => { throw e; }, description);
 }

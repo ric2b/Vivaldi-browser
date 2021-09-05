@@ -43,7 +43,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="@dimen/fre_image_height"
                     tools:ignore="ContentDescription"
-                    android:src="@drawable/ic_launcher_round" />
+                    android:src="@drawable/fre_product_logo" />
 
                 <LinearLayout
                     android:id="@+id/fre_content_wrapper"
@@ -62,7 +62,7 @@
                         android:layout_marginBottom="@dimen/fre_vertical_spacing"
                         android:gravity="center"
                         android:lineSpacingMultiplier="1.4"
-                        android:textAppearance="@style/TextAppearance.BlackBodyDefault" />
+                        android:textAppearance="@style/TextAppearance.TextMedium.Primary" />
 
                     <CheckBox
                         android:id="@+id/send_report_checkbox"
@@ -70,7 +70,7 @@
                         android:layout_height="wrap_content"
                         android:lineSpacingMultiplier="1.4"
                         android:text="@string/fre_send_report_check"
-                        android:textAppearance="@style/TextAppearance.BlackBodyDefault" />
+                        android:textAppearance="@style/TextAppearance.TextMedium.Primary" />
                     </LinearLayout>
             </LinearLayout>
         </LinearLayout>

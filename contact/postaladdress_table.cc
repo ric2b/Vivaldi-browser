@@ -150,4 +150,12 @@ bool PostalAddressTable::DoesPostalAddressIdExist(
   return statement.ColumnInt(0) == 1;
 }
 
+bool PostalAddressTable::DeletePostalAddressesForContact(ContactID contact_id) {
+  sql::Statement statement(GetDB().GetCachedStatement(
+      SQL_FROM_HERE, "DELETE from postaladdress WHERE contact_id=?"));
+  statement.BindInt64(0, contact_id);
+
+  return statement.Run();
+}
+
 }  // namespace contact

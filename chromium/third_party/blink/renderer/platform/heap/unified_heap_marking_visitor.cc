@@ -28,8 +28,6 @@ UnifiedHeapMarkingVisitorBase::UnifiedHeapMarkingVisitorBase(
 
 void UnifiedHeapMarkingVisitorBase::VisitImpl(
     const TraceWrapperV8Reference<v8::Value>& v8_reference) {
-  if (v8_reference.Get().IsEmpty())
-    return;
   DCHECK(isolate_);
   if (task_id_ != WorklistTaskId::MutatorThread) {
     // This is a temporary solution. Pushing directly from concurrent threads
@@ -40,7 +38,10 @@ void UnifiedHeapMarkingVisitorBase::VisitImpl(
     v8_references_worklist_.Push(&v8_reference);
     return;
   }
-  controller_->RegisterEmbedderReference(v8_reference.Get());
+  if (v8_reference.Get().IsEmpty())
+    return;
+  controller_->RegisterEmbedderReference(
+      v8_reference.template Cast<v8::Data>().Get());
 }
 
 UnifiedHeapMarkingVisitor::UnifiedHeapMarkingVisitor(ThreadState* thread_state,
@@ -51,6 +52,7 @@ UnifiedHeapMarkingVisitor::UnifiedHeapMarkingVisitor(ThreadState* thread_state,
                                     isolate,
                                     WorklistTaskId::MutatorThread) {}
 
+// static
 void UnifiedHeapMarkingVisitor::WriteBarrier(
     const TraceWrapperV8Reference<v8::Value>& object) {
   if (object.IsEmpty() || !ThreadState::IsAnyIncrementalMarking())
@@ -63,10 +65,11 @@ void UnifiedHeapMarkingVisitor::WriteBarrier(
   thread_state->CurrentVisitor()->Trace(object);
 }
 
+// static
 void UnifiedHeapMarkingVisitor::WriteBarrier(
     v8::Isolate* isolate,
     const WrapperTypeInfo* wrapper_type_info,
-    void* object) {
+    const void* object) {
   // |object| here is either ScriptWrappable or CustomWrappable.
 
   if (!ThreadState::IsAnyIncrementalMarking())
@@ -77,6 +80,11 @@ void UnifiedHeapMarkingVisitor::WriteBarrier(
     return;
 
   wrapper_type_info->Trace(thread_state->CurrentVisitor(), object);
+}
+
+void UnifiedHeapMarkingVisitor::Visit(
+    const TraceWrapperV8Reference<v8::Value>& v) {
+  VisitImpl(v);
 }
 
 ConcurrentUnifiedHeapMarkingVisitor::ConcurrentUnifiedHeapMarkingVisitor(
@@ -90,6 +98,11 @@ ConcurrentUnifiedHeapMarkingVisitor::ConcurrentUnifiedHeapMarkingVisitor(
 void ConcurrentUnifiedHeapMarkingVisitor::FlushWorklists() {
   ConcurrentMarkingVisitor::FlushWorklists();
   v8_references_worklist_.FlushToGlobal();
+}
+
+void ConcurrentUnifiedHeapMarkingVisitor::Visit(
+    const TraceWrapperV8Reference<v8::Value>& v) {
+  VisitImpl(v);
 }
 
 }  // namespace blink

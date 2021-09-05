@@ -37,8 +37,8 @@ class CORE_EXPORT CSSParserContext final
   // FIXME: This constructor shouldn't exist if we properly piped the UseCounter
   // through the CSS subsystem. Currently the UseCounter life time is too crazy
   // and we need a way to override it.
-  CSSParserContext(const CSSParserContext* other,
-                   const Document* use_counter_document = nullptr);
+  explicit CSSParserContext(const CSSParserContext* other,
+                            const Document* use_counter_document = nullptr);
 
   CSSParserContext(const CSSParserContext* other,
                    const KURL& base_url_override,
@@ -73,7 +73,7 @@ class CORE_EXPORT CSSParserContext final
                    bool is_html_document,
                    bool use_legacy_background_size_shorthand_behavior,
                    SecureContextMode,
-                   ContentSecurityPolicyDisposition,
+                   network::mojom::CSPDisposition,
                    const Document* use_counter_document,
                    ResourceFetchRestriction resource_fetch_restriction);
 
@@ -119,8 +119,10 @@ class CORE_EXPORT CSSParserContext final
   void CountDeprecation(WebFeature) const;
   bool IsUseCounterRecordingEnabled() const { return document_; }
   bool IsDocumentHandleEqual(const Document* other) const;
+  const Document* GetDocument() const;
+  const ExecutionContext* GetExecutionContext() const;
 
-  ContentSecurityPolicyDisposition ShouldCheckContentSecurityPolicy() const {
+  network::mojom::CSPDisposition ShouldCheckContentSecurityPolicy() const {
     return should_check_content_security_policy_;
   }
 
@@ -133,12 +135,32 @@ class CORE_EXPORT CSSParserContext final
   // TODO(yoichio): Remove when CustomElementsV0 is removed. crrev.com/660759.
   bool CustomElementsV0Enabled() const;
 
-  void Trace(blink::Visitor*);
+  bool IsForMarkupSanitization() const;
+
+  // Overrides |mode_| of a CSSParserContext within the scope, allowing us to
+  // switching parsing mode while parsing different parts of a style sheet.
+  // TODO(xiaochengh): This isn't the right approach, as it breaks the
+  // immutability of CSSParserContext. We should introduce some local context.
+  class ParserModeOverridingScope {
+    STACK_ALLOCATED();
+
+   public:
+    ParserModeOverridingScope(const CSSParserContext& context,
+                              CSSParserMode mode)
+        : mode_reset_(const_cast<CSSParserMode*>(&context.mode_), mode) {}
+
+   private:
+    base::AutoReset<CSSParserMode> mode_reset_;
+  };
+
+  void Trace(Visitor*);
 
  private:
+  friend class ParserModeOverridingScope;
+
   KURL base_url_;
 
-  ContentSecurityPolicyDisposition should_check_content_security_policy_;
+  network::mojom::CSPDisposition should_check_content_security_policy_;
 
   // If true, allows reading and modifying of the CSS rules.
   // https://drafts.csswg.org/cssom/#concept-css-style-sheet-origin-clean-flag

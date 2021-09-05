@@ -15,20 +15,11 @@
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/time.h"
 #include "chromecast/base/chromecast_switches.h"
-#include "chromecast/media/audio/audio_buildflags.h"
+#include "chromecast/media/audio/mixer_service/audio_socket_service.h"
 #include "chromecast/media/audio/mixer_service/constants.h"
-#include "net/base/address_list.h"
-#include "net/base/ip_address.h"
-#include "net/base/ip_endpoint.h"
+#include "chromecast/media/audio/mixer_service/mixer_socket.h"
 #include "net/base/net_errors.h"
-#include "net/log/net_log_source.h"
 #include "net/socket/stream_socket.h"
-
-#if BUILDFLAG(USE_UNIX_SOCKETS)
-#include "net/socket/unix_domain_client_socket_posix.h"
-#else
-#include "net/socket/tcp_client_socket.h"
-#endif
 
 namespace chromecast {
 namespace media {
@@ -40,14 +31,23 @@ constexpr base::TimeDelta kConnectTimeout = base::TimeDelta::FromSeconds(1);
 
 }  // namespace
 
+std::unique_ptr<MixerSocket> CreateLocalMixerServiceConnection()
+    __attribute__((__weak__));
+
 MixerConnection::MixerConnection() : weak_factory_(this) {}
 
 MixerConnection::~MixerConnection() = default;
 
 void MixerConnection::Connect() {
   DCHECK(!connecting_socket_);
+  if (CreateLocalMixerServiceConnection) {
+    auto socket = CreateLocalMixerServiceConnection();
+    if (socket) {
+      OnConnected(std::move(socket));
+      return;
+    }
+  }
 
-#if BUILDFLAG(USE_UNIX_SOCKETS)
   const base::CommandLine* command_line =
       base::CommandLine::ForCurrentProcess();
   std::string path =
@@ -55,15 +55,9 @@ void MixerConnection::Connect() {
   if (path.empty()) {
     path = kDefaultUnixDomainSocketPath;
   }
-  connecting_socket_ = std::make_unique<net::UnixDomainClientSocket>(
-      path, true /* use_abstract_namespace */);
-#else   // BUILDFLAG(USE_UNIX_SOCKETS)
   int port = GetSwitchValueNonNegativeInt(switches::kMixerServiceEndpoint,
                                           kDefaultTcpPort);
-  net::IPEndPoint endpoint(net::IPAddress::IPv4Localhost(), port);
-  connecting_socket_ = std::make_unique<net::TCPClientSocket>(
-      net::AddressList(endpoint), nullptr, nullptr, net::NetLogSource());
-#endif  // BUILDFLAG(USE_UNIX_SOCKETS)
+  connecting_socket_ = AudioSocketService::Connect(path, port);
 
   int result = connecting_socket_->Connect(base::BindOnce(
       &MixerConnection::ConnectCallback, weak_factory_.GetWeakPtr()));
@@ -87,7 +81,8 @@ void MixerConnection::ConnectCallback(int result) {
     LOG_IF(INFO, !log_timeout_) << "Now connected to mixer service";
     log_connection_failure_ = true;
     log_timeout_ = true;
-    OnConnected(std::move(connecting_socket_));
+    auto socket = std::make_unique<MixerSocket>(std::move(connecting_socket_));
+    OnConnected(std::move(socket));
     return;
   }
 

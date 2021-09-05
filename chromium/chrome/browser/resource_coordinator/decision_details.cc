@@ -17,12 +17,10 @@ namespace {
 const char* kDecisionFailureReasonStrings[] = {
     "Browser opted out via enterprise policy",
     "Tab opted out via origin trial",
-    "Tab did not report its origin trial opt-in/opt-out",
     "Origin is in global blacklist",
     "Origin has been observed playing audio while backgrounded",
     "Origin has been observed updating favicon while backgrounded",
     "Origin is temporarily protected while under observation",
-    "Origin has been observed emitting notifications while backgrounded",
     "Origin has been observed updating title while backgrounded",
     "Tab is currently capturing the camera and/or microphone",
     "Tab has been protected by an extension",
@@ -39,6 +37,8 @@ const char* kDecisionFailureReasonStrings[] = {
     "Tab is currently connected to a bluetooth device",
     "Tab is currently holding a WebLock",
     "Tab is currently holding an IndexedDB lock",
+    "Tab has notification permission ",
+    "Tab is a web application window",
 };
 static_assert(base::size(kDecisionFailureReasonStrings) ==
                   static_cast<size_t>(DecisionFailureReason::MAX),
@@ -86,9 +86,6 @@ void PopulateFailureReason(
     case DecisionFailureReason::ORIGIN_TRIAL_OPT_OUT:
       ukm->SetFailureOriginTrialOptOut(1);
       break;
-    case DecisionFailureReason::ORIGIN_TRIAL_UNKNOWN:
-      ukm->SetFailureOriginTrialUnknown(1);
-      break;
     case DecisionFailureReason::GLOBAL_BLACKLIST:
       ukm->SetFailureGlobalBlacklist(1);
       break;
@@ -100,9 +97,6 @@ void PopulateFailureReason(
       break;
     case DecisionFailureReason::HEURISTIC_INSUFFICIENT_OBSERVATION:
       ukm->SetFailureHeuristicInsufficientObservation(1);
-      break;
-    case DecisionFailureReason::HEURISTIC_NOTIFICATIONS:
-      ukm->SetFailureHeuristicNotifications(1);
       break;
     case DecisionFailureReason::HEURISTIC_TITLE:
       ukm->SetFailureHeuristicTitle(1);
@@ -151,6 +145,12 @@ void PopulateFailureReason(
       break;
     case DecisionFailureReason::LIVE_STATE_USING_INDEXEDDB_LOCK:
       ukm->SetFailureLiveStateUsingIndexedDBLock(1);
+      break;
+    case DecisionFailureReason::LIVE_STATE_HAS_NOTIFICATIONS_PERMISSION:
+      ukm->SetFailureLiveStateHasNotificationsPermission(1);
+      break;
+    case DecisionFailureReason::LIVE_WEB_APP:
+      ukm->SetFailureLiveWebApp(1);
       break;
     case DecisionFailureReason::MAX:
       NOTREACHED();

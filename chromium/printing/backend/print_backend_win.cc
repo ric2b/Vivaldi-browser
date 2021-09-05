@@ -166,7 +166,7 @@ void LoadDpi(const wchar_t* printer,
 
 class PrintBackendWin : public PrintBackend {
  public:
-  PrintBackendWin() {}
+  explicit PrintBackendWin(const std::string& locale) : PrintBackend(locale) {}
 
   // PrintBackend implementation.
   bool EnumeratePrinters(PrinterList* printer_list) override;
@@ -182,7 +182,7 @@ class PrintBackendWin : public PrintBackend {
   bool IsValidPrinter(const std::string& printer_name) override;
 
  protected:
-  ~PrintBackendWin() override {}
+  ~PrintBackendWin() override = default;
 };
 
 bool PrintBackendWin::EnumeratePrinters(PrinterList* printer_list) {
@@ -304,8 +304,8 @@ bool PrintBackendWin::GetPrinterSemanticCapsAndDefaults(
   caps.collate_capable =
       (DeviceCapabilities(name, port, DC_COLLATE, nullptr, nullptr) == 1);
 
-  caps.copies_capable =
-      (DeviceCapabilities(name, port, DC_COPIES, nullptr, nullptr) > 1);
+  caps.copies_max =
+      std::max(1, DeviceCapabilities(name, port, DC_COPIES, nullptr, nullptr));
 
   LoadPaper(name, port, user_settings.get(), &caps);
   LoadDpi(name, port, user_settings.get(), &caps);
@@ -392,8 +392,10 @@ bool PrintBackendWin::IsValidPrinter(const std::string& printer_name) {
 
 // static
 scoped_refptr<PrintBackend> PrintBackend::CreateInstanceImpl(
-    const base::DictionaryValue* print_backend_settings) {
-  return base::MakeRefCounted<PrintBackendWin>();
+    const base::DictionaryValue* print_backend_settings,
+    const std::string& locale,
+    bool /*for_cloud_print*/) {
+  return base::MakeRefCounted<PrintBackendWin>(locale);
 }
 
 }  // namespace printing

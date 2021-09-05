@@ -16,6 +16,12 @@
 #include "ash/public/cpp/rounded_corner_decorator.h"
 #endif
 
+#include "ui/views/vivaldi_video_observer.h"
+
+namespace vivaldi {
+class VideoProgress;
+}
+
 namespace views {
 class BackToTabImageButton;
 class CloseImageButton;
@@ -31,8 +37,9 @@ class OverlayWindowViews : public content::OverlayWindow,
                            public views::ButtonListener,
                            public views::Widget {
  public:
-  explicit OverlayWindowViews(
+  static std::unique_ptr<content::OverlayWindow> Create(
       content::PictureInPictureWindowController* controller);
+
   ~OverlayWindowViews() override;
 
   enum class WindowQuadrant { kBottomLeft, kBottomRight, kTopLeft, kTopRight };
@@ -105,6 +112,9 @@ class OverlayWindowViews : public content::OverlayWindow,
                           const gfx::Size& window_size);
 
  private:
+  explicit OverlayWindowViews(
+      content::PictureInPictureWindowController* controller);
+
   // Return the work area for the nearest display the widget is on.
   gfx::Rect GetWorkAreaForWindow() const;
 
@@ -116,6 +126,9 @@ class OverlayWindowViews : public content::OverlayWindow,
 
   // Set up the views::Views that will be shown on the window.
   void SetUpViews();
+
+  // Finish initialization by performing the steps that require the root View.
+  void OnRootViewReady();
 
   // Update the bounds of the layers on the window. This may introduce
   // letterboxing.
@@ -171,11 +184,6 @@ class OverlayWindowViews : public content::OverlayWindow,
   // Not owned; |controller_| owns |this|.
   content::PictureInPictureWindowController* controller_;
 
-  // Whether or not the components of the window has been set up. This is used
-  // as a check as some event handlers (e.g. focus) is propogated to the window
-  // before its contents is initialized. This is only set once.
-  bool is_initialized_ = false;
-
   // Whether or not the window has been shown before. This is used to determine
   // sizing and placement. This is different from checking whether the window
   // components has been initialized.
@@ -201,6 +209,11 @@ class OverlayWindowViews : public content::OverlayWindow,
   // The natural size of the video to show. This is used to compute sizing and
   // ensuring factors such as aspect ratio is maintained.
   gfx::Size natural_size_;
+
+  // Temporary storage for child Views. Used during the time between
+  // construction and initialization, when the views::View pointer members must
+  // already be initialized, but there is no root view to add them to yet.
+  std::vector<std::unique_ptr<views::View>> view_holder_;
 
   // Views to be shown.
   views::View* window_background_view_ = nullptr;
@@ -238,6 +251,19 @@ class OverlayWindowViews : public content::OverlayWindow,
   // Whether or not the previous track button will be shown. This is the
   // case when Media Session "previoustrack" action is handled by the website.
   bool show_previous_track_button_ = false;
+
+  // Vivaldi
+  vivaldi::VideoProgress* progress_view_ = nullptr;
+  bool show_progress_view_ = false;
+
+  void CreateVivaldiVideoControls();
+  void UpdateVivaldiControlsVisibility(bool is_visible);
+  void UpdateVivaldiControlsBounds(int primary_control_y, int margin);
+  void CreateVivaldiVideoObserver();
+  void HandleVivaldiKeyboardEvents(ui::KeyEvent* event);
+
+  std::unique_ptr<vivaldi::VideoProgressObserver> video_progress_observer_;
+  // Vivaldi end
 
   DISALLOW_COPY_AND_ASSIGN(OverlayWindowViews);
 };

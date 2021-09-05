@@ -7,6 +7,8 @@
 #include <memory>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/logging.h"
@@ -19,10 +21,10 @@
 #include "chrome/browser/chromeos/login/startup_utils.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/policy/device_cloud_policy_initializer.h"
-#include "chrome/browser/chromeos/policy/enrollment_status_chromeos.h"
 #include "chrome/browser/chromeos/policy/policy_oauth2_token_fetcher.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/net/system_network_context_manager.h"
+#include "chrome/browser/policy/enrollment_status.h"
 #include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
@@ -75,8 +77,7 @@ namespace chromeos {
 EnterpriseEnrollmentHelperImpl::EnterpriseEnrollmentHelperImpl() {
   // Init the TPM if it has not been done until now (in debug build we might
   // have not done that yet).
-  CryptohomeClient::Get()->TpmCanAttemptOwnership(
-      EmptyVoidDBusMethodCallback());
+  CryptohomeClient::Get()->TpmCanAttemptOwnership(base::DoNothing());
 }
 
 EnterpriseEnrollmentHelperImpl::~EnterpriseEnrollmentHelperImpl() {
@@ -226,18 +227,6 @@ void EnterpriseEnrollmentHelperImpl::ClearAuth(base::OnceClosure callback) {
           weak_ptr_factory_.GetWeakPtr(), std::move(callback))));
 }
 
-bool EnterpriseEnrollmentHelperImpl::ShouldCheckLicenseType() const {
-  // The license selection dialog is not used when doing Zero Touch or setting
-  // up offline demo-mode, or when forced to enroll by server.
-  if (enrollment_config_.is_mode_attestation() ||
-      enrollment_config_.mode == policy::EnrollmentConfig::MODE_SERVER_FORCED ||
-      enrollment_config_.mode == policy::EnrollmentConfig::MODE_OFFLINE_DEMO) {
-    return false;
-  }
-  return !base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kEnterpriseDisableLicenseTypeSelection);
-}
-
 void EnterpriseEnrollmentHelperImpl::DoEnroll(
     std::unique_ptr<policy::DMAuth> auth_data) {
   CHECK(auth_data);
@@ -247,6 +236,8 @@ void EnterpriseEnrollmentHelperImpl::DoEnroll(
              policy::EnrollmentConfig::MODE_OFFLINE_DEMO ||
          oauth_status_ == OAUTH_STARTED_WITH_AUTH_CODE ||
          oauth_status_ == OAUTH_STARTED_WITH_TOKEN);
+  VLOG(1) << "Enroll with token type: "
+          << static_cast<int>(auth_data->token_type());
   auth_data_ = std::move(auth_data);
   policy::BrowserPolicyConnectorChromeOS* connector =
       g_browser_process->platform_part()->browser_policy_connector_chromeos();
@@ -271,24 +262,7 @@ void EnterpriseEnrollmentHelperImpl::DoEnroll(
       enrollment_config_, auth_data_->Clone(),
       base::Bind(&EnterpriseEnrollmentHelperImpl::OnEnrollmentFinished,
                  weak_ptr_factory_.GetWeakPtr()));
-  if (ShouldCheckLicenseType()) {
-    dcp_initializer->CheckAvailableLicenses(
-        base::Bind(&EnterpriseEnrollmentHelperImpl::OnLicenseMapObtained,
-                   weak_ptr_factory_.GetWeakPtr()));
-  } else {
-    dcp_initializer->StartEnrollment();
-  }
-}
-
-void EnterpriseEnrollmentHelperImpl::UseLicenseType(policy::LicenseType type) {
-  DCHECK(type != policy::LicenseType::UNKNOWN);
-  policy::DeviceCloudPolicyInitializer* dcp_initializer =
-      g_browser_process->platform_part()
-          ->browser_policy_connector_chromeos()
-          ->GetDeviceCloudPolicyInitializer();
-
-  CHECK(dcp_initializer);
-  dcp_initializer->StartEnrollmentWithLicense(type);
+  dcp_initializer->StartEnrollment();
 }
 
 void EnterpriseEnrollmentHelperImpl::GetDeviceAttributeUpdatePermission() {
@@ -343,6 +317,7 @@ void EnterpriseEnrollmentHelperImpl::OnTokenFetched(
 
 void EnterpriseEnrollmentHelperImpl::OnEnrollmentFinished(
     policy::EnrollmentStatus status) {
+  VLOG(1) << "Enrollment finished, status: " << status.status();
   ReportEnrollmentStatus(status);
   if (oauth_status_ != OAUTH_NOT_STARTED)
     oauth_status_ = OAUTH_FINISHED;
@@ -352,31 +327,6 @@ void EnterpriseEnrollmentHelperImpl::OnEnrollmentFinished(
     status_consumer()->OnDeviceEnrolled();
   } else {
     status_consumer()->OnEnrollmentError(status);
-  }
-}
-
-void EnterpriseEnrollmentHelperImpl::OnLicenseMapObtained(
-    const EnrollmentLicenseMap& licenses) {
-  int count = 0;
-  policy::LicenseType license_type = policy::LicenseType::UNKNOWN;
-  for (const auto& it : licenses) {
-    if (it.second > 0) {
-      count++;
-      license_type = it.first;
-    }
-  }
-  if (count == 0) {
-    // No user license type selection allowed, start usual enrollment.
-    policy::BrowserPolicyConnectorChromeOS* connector =
-        g_browser_process->platform_part()->browser_policy_connector_chromeos();
-    policy::DeviceCloudPolicyInitializer* dcp_initializer =
-        connector->GetDeviceCloudPolicyInitializer();
-    CHECK(dcp_initializer);
-    dcp_initializer->StartEnrollment();
-  } else if (count == 1) {
-    UseLicenseType(license_type);
-  } else {
-    status_consumer()->OnMultipleLicensesAvailable(licenses);
   }
 }
 
@@ -553,9 +503,6 @@ void EnterpriseEnrollmentHelperImpl::ReportEnrollmentStatus(
       break;
     case policy::EnrollmentStatus::DM_TOKEN_STORE_FAILED:
       UMA(policy::kMetricEnrollmentStoreDMTokenFailed);
-      break;
-    case policy::EnrollmentStatus::LICENSE_REQUEST_FAILED:
-      UMA(policy::kMetricEnrollmentLicenseRequestFailed);
       break;
     case policy::EnrollmentStatus::OFFLINE_POLICY_LOAD_FAILED:
     case policy::EnrollmentStatus::OFFLINE_POLICY_DECODING_FAILED:

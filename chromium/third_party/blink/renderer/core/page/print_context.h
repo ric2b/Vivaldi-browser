@@ -103,7 +103,7 @@ class CORE_EXPORT PrintContext : public GarbageCollected<PrintContext> {
                                            int margin_left);
   static int NumberOfPages(LocalFrame*, const FloatSize& page_size_in_pixels);
 
-  virtual void Trace(blink::Visitor*);
+  virtual void Trace(Visitor*);
 
   bool use_printing_layout() const;
 
@@ -139,10 +139,10 @@ class ScopedPrintContext {
   explicit ScopedPrintContext(LocalFrame*);
   ~ScopedPrintContext();
 
-  PrintContext* operator->() const { return context_.Get(); }
+  PrintContext* operator->() const { return context_; }
 
  private:
-  Member<PrintContext> context_;
+  PrintContext* context_;
 
   DISALLOW_COPY_AND_ASSIGN(ScopedPrintContext);
 };

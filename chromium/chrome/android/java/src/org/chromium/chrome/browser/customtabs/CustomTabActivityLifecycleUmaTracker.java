@@ -4,20 +4,21 @@
 
 package org.chromium.chrome.browser.customtabs;
 
-import android.content.SharedPreferences;
 import android.text.TextUtils;
 
-import org.chromium.base.ContextUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.task.PostTask;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.IntentHandler;
+import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider;
 import org.chromium.chrome.browser.dependency_injection.ActivityScope;
 import org.chromium.chrome.browser.gsa.GSAState;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.NativeInitObserver;
 import org.chromium.chrome.browser.lifecycle.PauseResumeWithNativeObserver;
+import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
+import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.rappor.RapporServiceBridge;
 import org.chromium.chrome.browser.webapps.WebappCustomTabTimeSpentLogger;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
@@ -30,10 +31,9 @@ import javax.inject.Inject;
 @ActivityScope
 public class CustomTabActivityLifecycleUmaTracker implements PauseResumeWithNativeObserver,
         NativeInitObserver {
-    private static final String LAST_URL_PREF = "pref_last_custom_tab_url";
 
-    private final CustomTabIntentDataProvider mIntentDataProvider;
-    private final ChromeActivity mActivity;
+    private final BrowserServicesIntentDataProvider mIntentDataProvider;
+    private final ChromeActivity<?> mActivity;
     private final CustomTabsConnection mConnection;
 
     private WebappCustomTabTimeSpentLogger mWebappTimeSpentLogger;
@@ -41,7 +41,7 @@ public class CustomTabActivityLifecycleUmaTracker implements PauseResumeWithNati
 
     @Inject
     public CustomTabActivityLifecycleUmaTracker(ActivityLifecycleDispatcher lifecycleDispatcher,
-            ChromeActivity activity, CustomTabIntentDataProvider intentDataProvider,
+            ChromeActivity<?> activity, BrowserServicesIntentDataProvider intentDataProvider,
             CustomTabsConnection customTabsConnection) {
         mIntentDataProvider = intentDataProvider;
         mActivity = activity;
@@ -59,13 +59,14 @@ public class CustomTabActivityLifecycleUmaTracker implements PauseResumeWithNati
                 RecordUserAction.record("CustomTabs.StartedReopened");
             }
         } else {
-            SharedPreferences preferences = ContextUtils.getAppSharedPreferences();
-            String lastUrl = preferences.getString(LAST_URL_PREF, null);
+            SharedPreferencesManager preferences = SharedPreferencesManager.getInstance();
+            String lastUrl =
+                    preferences.readString(ChromePreferenceKeys.CUSTOM_TABS_LAST_URL, null);
             String urlToLoad = mIntentDataProvider.getUrlToLoad();
             if (lastUrl != null && lastUrl.equals(urlToLoad)) {
                 RecordUserAction.record("CustomTabsMenuOpenSameUrl");
             } else {
-                preferences.edit().putString(LAST_URL_PREF, urlToLoad).apply();
+                preferences.writeString(ChromePreferenceKeys.CUSTOM_TABS_LAST_URL, urlToLoad);
             }
 
             if (mIntentDataProvider.isOpenedByChrome()) {

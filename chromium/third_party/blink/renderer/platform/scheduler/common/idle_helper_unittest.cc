@@ -9,7 +9,6 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/task/sequence_manager/sequence_manager.h"
@@ -173,26 +172,12 @@ class IdleHelperForTest : public IdleHelper, public IdleHelper::Delegate {
 
 class BaseIdleHelperTest : public testing::Test {
  public:
-  BaseIdleHelperTest(
-      std::unique_ptr<base::MessageLoop> message_loop,
+  explicit BaseIdleHelperTest(
       base::TimeDelta required_quiescence_duration_before_long_idle_period)
-      : message_loop_(std::move(message_loop)),
-        test_task_runner_(base::MakeRefCounted<base::TestMockTimeTaskRunner>(
+      : test_task_runner_(base::MakeRefCounted<base::TestMockTimeTaskRunner>(
             base::TestMockTimeTaskRunner::Type::kStandalone)) {
-    if (!message_loop_) {
-      sequence_manager_ =
-          base::sequence_manager::SequenceManagerForTest::Create(
-              nullptr, test_task_runner_,
-              test_task_runner_->GetMockTickClock());
-    } else {
-      // It's okay to use |test_task_runner_| just as a mock clock because
-      // it isn't bound to thread and all tasks will go through a MessageLoop.
-      sequence_manager_ =
-          base::sequence_manager::SequenceManagerForTest::CreateOnCurrentThread(
-              base::sequence_manager::SequenceManager::Settings::Builder()
-                  .SetTickClock(test_task_runner_->GetMockTickClock())
-                  .Build());
-    }
+    sequence_manager_ = base::sequence_manager::SequenceManagerForTest::Create(
+        nullptr, test_task_runner_, test_task_runner_->GetMockTickClock());
     scheduler_helper_ = std::make_unique<NonMainThreadSchedulerHelper>(
         sequence_manager_.get(), nullptr, TaskType::kInternalTest);
     idle_helper_ = std::make_unique<IdleHelperForTest>(
@@ -276,7 +261,6 @@ class BaseIdleHelperTest : public testing::Test {
     return idle_helper_->idle_queue_;
   }
 
-  std::unique_ptr<base::MessageLoop> message_loop_;
   scoped_refptr<base::TestMockTimeTaskRunner> test_task_runner_;
   std::unique_ptr<SequenceManager> sequence_manager_;
   std::unique_ptr<NonMainThreadSchedulerHelper> scheduler_helper_;
@@ -290,7 +274,7 @@ class BaseIdleHelperTest : public testing::Test {
 
 class IdleHelperTest : public BaseIdleHelperTest {
  public:
-  IdleHelperTest() : BaseIdleHelperTest(nullptr, base::TimeDelta()) {}
+  IdleHelperTest() : BaseIdleHelperTest(base::TimeDelta()) {}
 
   ~IdleHelperTest() override = default;
 
@@ -401,7 +385,7 @@ TEST_F(IdleHelperTest, TestIdleTaskExceedsDeadline) {
 class IdleHelperTestWithIdlePeriodObserver : public BaseIdleHelperTest {
  public:
   IdleHelperTestWithIdlePeriodObserver()
-      : BaseIdleHelperTest(nullptr, base::TimeDelta()) {}
+      : BaseIdleHelperTest(base::TimeDelta()) {}
 
   ~IdleHelperTestWithIdlePeriodObserver() override = default;
 
@@ -448,72 +432,6 @@ TEST_F(IdleHelperTestWithIdlePeriodObserver, TestEnterAndExitIdlePeriod) {
       test_task_runner_->NowTicks(),
       test_task_runner_->NowTicks() + base::TimeDelta::FromMilliseconds(10));
   idle_helper_->EndIdlePeriod();
-}
-
-class IdleHelperWithMessageLoopTest : public BaseIdleHelperTest {
- public:
-  IdleHelperWithMessageLoopTest()
-      : BaseIdleHelperTest(std::make_unique<base::MessageLoop>(),
-                           base::TimeDelta()) {}
-  ~IdleHelperWithMessageLoopTest() override = default;
-
-  void PostFromNestedRunloop(
-      Vector<std::pair<SingleThreadIdleTaskRunner::IdleTask, bool>>* tasks) {
-    for (std::pair<SingleThreadIdleTaskRunner::IdleTask, bool>& pair : *tasks) {
-      if (pair.second) {
-        idle_task_runner_->PostIdleTask(FROM_HERE, std::move(pair.first));
-      } else {
-        idle_task_runner_->PostNonNestableIdleTask(FROM_HERE,
-                                                   std::move(pair.first));
-      }
-    }
-    idle_helper_->StartIdlePeriod(
-        IdleHelper::IdlePeriodState::kInShortIdlePeriod,
-        test_task_runner_->NowTicks(),
-        test_task_runner_->NowTicks() + base::TimeDelta::FromMilliseconds(10));
-    base::RunLoop(base::RunLoop::Type::kNestableTasksAllowed).RunUntilIdle();
-  }
-
-  void SetUp() override {
-    EXPECT_CALL(*idle_helper_, OnIdlePeriodStarted()).Times(AnyNumber());
-    EXPECT_CALL(*idle_helper_, OnIdlePeriodEnded()).Times(AnyNumber());
-    EXPECT_CALL(*idle_helper_, OnPendingTasksChanged(_)).Times(AnyNumber());
-  }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(IdleHelperWithMessageLoopTest);
-};
-
-TEST_F(IdleHelperWithMessageLoopTest,
-       NonNestableIdleTaskDoesntExecuteInNestedLoop) {
-  Vector<String> order;
-  idle_task_runner_->PostIdleTask(
-      FROM_HERE, base::BindOnce(&AppendToVectorIdleTestTask, &order, "1"));
-  idle_task_runner_->PostIdleTask(
-      FROM_HERE, base::BindOnce(&AppendToVectorIdleTestTask, &order, "2"));
-
-  Vector<std::pair<SingleThreadIdleTaskRunner::IdleTask, bool>>
-      tasks_to_post_from_nested_loop;
-  tasks_to_post_from_nested_loop.push_back(std::make_pair(
-      base::BindOnce(&AppendToVectorIdleTestTask, &order, "3"), false));
-  tasks_to_post_from_nested_loop.push_back(std::make_pair(
-      base::BindOnce(&AppendToVectorIdleTestTask, &order, "4"), true));
-  tasks_to_post_from_nested_loop.push_back(std::make_pair(
-      base::BindOnce(&AppendToVectorIdleTestTask, &order, "5"), true));
-
-  default_task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(&IdleHelperWithMessageLoopTest::PostFromNestedRunloop,
-                     base::Unretained(this),
-                     base::Unretained(&tasks_to_post_from_nested_loop)));
-
-  idle_helper_->StartIdlePeriod(
-      IdleHelper::IdlePeriodState::kInShortIdlePeriod,
-      test_task_runner_->NowTicks(),
-      test_task_runner_->NowTicks() + base::TimeDelta::FromMilliseconds(10));
-  base::RunLoop().RunUntilIdle();
-  // Note we expect task 3 to run last because it's non-nestable.
-  EXPECT_THAT(order, testing::ElementsAre("1", "2", "4", "5", "3"));
 }
 
 TEST_F(IdleHelperTestWithIdlePeriodObserver, TestLongIdlePeriod) {
@@ -852,7 +770,6 @@ class IdleHelperWithQuiescencePeriodTest : public BaseIdleHelperTest {
 
   IdleHelperWithQuiescencePeriodTest()
       : BaseIdleHelperTest(
-            nullptr,
             base::TimeDelta::FromMilliseconds(kQuiescenceDelayMs)) {}
 
   ~IdleHelperWithQuiescencePeriodTest() override = default;

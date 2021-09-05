@@ -13,10 +13,12 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
+#include "base/optional.h"
 #include "base/profiler/metadata_recorder.h"
+#include "base/profiler/module_cache.h"
 #include "base/profiler/profile_builder.h"
-#include "base/sampling_heap_profiler/module_cache.h"
 #include "base/time/time.h"
+#include "components/metrics/call_stack_profile_metadata.h"
 #include "components/metrics/call_stack_profile_params.h"
 #include "components/metrics/child_call_stack_profile_collector.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -64,14 +66,19 @@ class CallStackProfileBuilder : public base::ProfileBuilder {
 
   // Both weight and count are used by the heap profiler only.
   void OnSampleCompleted(std::vector<base::Frame> frames,
+                         base::TimeTicks sample_timestamp,
                          size_t weight,
                          size_t count);
 
   // base::ProfileBuilder:
   base::ModuleCache* GetModuleCache() override;
-  void RecordMetadata(base::ProfileBuilder::MetadataProvider*
-                          metadata_provider = nullptr) override;
-  void OnSampleCompleted(std::vector<base::Frame> frames) override;
+  void RecordMetadata(
+      base::ProfileBuilder::MetadataProvider* metadata_provider) override;
+  void ApplyMetadataRetrospectively(base::TimeTicks period_start,
+                                    base::TimeTicks period_end,
+                                    const MetadataItem& item) override;
+  void OnSampleCompleted(std::vector<base::Frame> frames,
+                         base::TimeTicks sample_timestamp) override;
   void OnProfileCompleted(base::TimeDelta profile_duration,
                           base::TimeDelta sampling_period) override;
 
@@ -90,7 +97,8 @@ class CallStackProfileBuilder : public base::ProfileBuilder {
 
  protected:
   // Test seam.
-  virtual void PassProfilesToMetricsProvider(SampledProfile sampled_profile);
+  virtual void PassProfilesToMetricsProvider(base::TimeTicks profile_start_time,
+                                             SampledProfile sampled_profile);
 
  private:
   // The functor for Stack comparison.
@@ -98,15 +106,6 @@ class CallStackProfileBuilder : public base::ProfileBuilder {
     bool operator()(const CallStackProfile::Stack* stack1,
                     const CallStackProfile::Stack* stack2) const;
   };
-
-  // Adds the already-collected metadata to the sample.
-  void AddSampleMetadata(CallStackProfile* profile,
-                         CallStackProfile::StackSample* sample);
-
-  // Adds the specified name hash to the profile's name hash collection if it's
-  // not already in it. Returns the index of the name hash in the collection.
-  size_t MaybeAddNameHashToProfile(CallStackProfile* profile,
-                                   uint64_t name_hash);
 
   // The module cache to use for the duration the sampling associated with this
   // ProfileBuilder.
@@ -129,20 +128,17 @@ class CallStackProfileBuilder : public base::ProfileBuilder {
   // The distinct modules in the current profile.
   std::vector<const base::ModuleCache::Module*> modules_;
 
+  // Timestamps recording when each sample was taken.
+  std::vector<base::TimeTicks> sample_timestamps_;
+
   // Callback made when sampling a profile completes.
   base::OnceClosure completed_callback_;
 
   // The start time of a profile collection.
-  const base::TimeTicks profile_start_time_;
+  base::TimeTicks profile_start_time_;
 
-  // The data fetched from the MetadataRecorder for the next sample.
-  base::ProfileBuilder::MetadataItemArray metadata_items_;
-  size_t metadata_item_count_ = 0;
-  // The data fetched from the MetadataRecorder for the previous sample.
-  std::map<uint64_t, int64_t> previous_items_;
-
-  // Maps metadata hash to index in |metadata_name_hash| array.
-  std::unordered_map<uint64_t, int> metadata_hashes_cache_;
+  // Maintains the current metadata to apply to samples.
+  CallStackProfileMetadata metadata_;
 
   DISALLOW_COPY_AND_ASSIGN(CallStackProfileBuilder);
 };

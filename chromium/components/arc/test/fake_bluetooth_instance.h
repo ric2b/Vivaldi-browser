@@ -10,7 +10,6 @@
 
 #include "base/macros.h"
 #include "components/arc/mojom/bluetooth.mojom.h"
-#include "mojo/public/cpp/bindings/binding.h"
 
 namespace device {
 class BluetoothUUID;
@@ -79,6 +78,9 @@ class FakeBluetoothInstance : public mojom::BluetoothInstance {
       std::vector<mojom::BluetoothPropertyPtr> properties) override;
   void OnDeviceFound(
       std::vector<mojom::BluetoothPropertyPtr> properties) override;
+  void OnDevicePropertiesChanged(
+      mojom::BluetoothAddressPtr remote_addr,
+      std::vector<mojom::BluetoothPropertyPtr> properties) override;
   void OnDiscoveryStateChanged(mojom::BluetoothDiscoveryState state) override;
   void OnBondStateChanged(mojom::BluetoothStatus status,
                           mojom::BluetoothAddressPtr remote_addr,
@@ -139,6 +141,11 @@ class FakeBluetoothInstance : public mojom::BluetoothInstance {
     return device_found_data_;
   }
 
+  const std::vector<std::vector<mojom::BluetoothPropertyPtr>>&
+  device_properties_changed_data() const {
+    return device_properties_changed_data_;
+  }
+
   const std::vector<std::unique_ptr<LEDeviceFoundData>>& le_device_found_data()
       const {
     return le_device_found_data_;
@@ -150,6 +157,8 @@ class FakeBluetoothInstance : public mojom::BluetoothInstance {
 
  private:
   std::vector<std::vector<mojom::BluetoothPropertyPtr>> device_found_data_;
+  std::vector<std::vector<mojom::BluetoothPropertyPtr>>
+      device_properties_changed_data_;
   std::vector<std::unique_ptr<LEDeviceFoundData>> le_device_found_data_;
   std::vector<std::unique_ptr<GattDBResult>> gatt_db_result_;
 

@@ -4,8 +4,12 @@
 
 #include "chrome/browser/ui/views/global_media_controls/media_dialog_view.h"
 
+#include "base/bind_helpers.h"
 #include "base/run_loop.h"
 #include "base/test/scoped_feature_list.h"
+#include "chrome/browser/media/router/media_router_factory.h"
+#include "chrome/browser/media/router/presentation/web_contents_presentation_manager.h"
+#include "chrome/browser/media/router/test/mock_media_router.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/global_media_controls/media_toolbar_button_observer.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
@@ -16,7 +20,8 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "components/media_message_center/media_notification_view.h"
+#include "components/media_message_center/media_notification_view_impl.h"
+#include "content/public/browser/presentation_request.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/media_start_stop_observer.h"
 #include "media/base/media_switches.h"
@@ -90,6 +95,17 @@ class MediaToolbarButtonWatcher : public MediaToolbarButtonObserver,
     Wait();
   }
 
+  void WaitForNotificationCount(int count) {
+    if (GetNotificationCount() == count)
+      return;
+
+    waiting_for_notification_count_ = true;
+    expected_notification_count_ = count;
+    observed_dialog_ = MediaDialogView::GetDialogViewForTesting();
+    observed_dialog_->AddObserver(this);
+    Wait();
+  }
+
  private:
   void CheckDialogForText() {
     if (!waiting_for_dialog_to_contain_text_)
@@ -102,12 +118,24 @@ class MediaToolbarButtonWatcher : public MediaToolbarButtonObserver,
     MaybeStopWaiting();
   }
 
+  void CheckNotificationCount() {
+    if (!waiting_for_notification_count_)
+      return;
+
+    if (GetNotificationCount() != expected_notification_count_)
+      return;
+
+    waiting_for_notification_count_ = false;
+    MaybeStopWaiting();
+  }
+
   void MaybeStopWaiting() {
     if (!run_loop_)
       return;
 
     if (!waiting_for_dialog_opened_ && !waiting_for_button_shown_ &&
-        !waiting_for_dialog_to_contain_text_) {
+        !waiting_for_dialog_to_contain_text_ &&
+        !waiting_for_notification_count_) {
       run_loop_->Quit();
     }
   }
@@ -121,19 +149,26 @@ class MediaToolbarButtonWatcher : public MediaToolbarButtonObserver,
   // Checks the title and artist of each notification in the dialog to see if
   // |text| is contained anywhere in the dialog.
   bool DialogContainsText(const base::string16& text) {
-    for (const auto notification_pair :
+    for (const auto& notification_pair :
          MediaDialogView::GetDialogViewForTesting()
              ->GetNotificationsForTesting()) {
-      const media_message_center::MediaNotificationView* view =
+      const media_message_center::MediaNotificationViewImpl* view =
           notification_pair.second->view_for_testing();
       if (view->title_label_for_testing()->GetText().find(text) !=
               std::string::npos ||
           view->artist_label_for_testing()->GetText().find(text) !=
-              std::string::npos) {
+              std::string::npos ||
+          view->GetSourceTitleForTesting().find(text) != std::string::npos) {
         return true;
       }
     }
     return false;
+  }
+
+  int GetNotificationCount() {
+    return MediaDialogView::GetDialogViewForTesting()
+        ->GetNotificationsForTesting()
+        .size();
   }
 
   MediaToolbarButtonView* const button_;
@@ -141,12 +176,77 @@ class MediaToolbarButtonWatcher : public MediaToolbarButtonObserver,
 
   bool waiting_for_dialog_opened_ = false;
   bool waiting_for_button_shown_ = false;
+  bool waiting_for_notification_count_ = false;
 
   MediaDialogView* observed_dialog_ = nullptr;
   bool waiting_for_dialog_to_contain_text_ = false;
   base::string16 expected_text_;
+  int expected_notification_count_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(MediaToolbarButtonWatcher);
+};
+
+class TestWebContentsPresentationManager
+    : public media_router::WebContentsPresentationManager {
+ public:
+  void NotifyMediaRoutesChanged(
+      const std::vector<media_router::MediaRoute>& routes) {
+    for (auto& observer : observers_) {
+      observer.OnMediaRoutesChanged(routes);
+    }
+  }
+
+  void AddObserver(Observer* observer) override {
+    observers_.AddObserver(observer);
+  }
+
+  void RemoveObserver(Observer* observer) override {
+    observers_.RemoveObserver(observer);
+  }
+
+  MOCK_CONST_METHOD0(HasDefaultPresentationRequest, bool());
+  MOCK_CONST_METHOD0(GetDefaultPresentationRequest,
+                     const content::PresentationRequest&());
+
+  void OnPresentationResponse(
+      const content::PresentationRequest& presentation_request,
+      media_router::mojom::RoutePresentationConnectionPtr connection,
+      const media_router::RouteRequestResult& result) override {}
+
+  base::WeakPtr<WebContentsPresentationManager> GetWeakPtr() override {
+    return weak_factory_.GetWeakPtr();
+  }
+
+ private:
+  base::ObserverList<Observer> observers_;
+  base::WeakPtrFactory<TestWebContentsPresentationManager> weak_factory_{this};
+};
+
+class TestMediaRouter : public media_router::MockMediaRouter {
+ public:
+  static std::unique_ptr<KeyedService> Create(
+      content::BrowserContext* context) {
+    return std::make_unique<TestMediaRouter>();
+  }
+
+  void RegisterMediaRoutesObserver(
+      media_router::MediaRoutesObserver* observer) override {
+    routes_observers_.push_back(observer);
+  }
+
+  void UnregisterMediaRoutesObserver(
+      media_router::MediaRoutesObserver* observer) override {
+    base::Erase(routes_observers_, observer);
+  }
+
+  void NotifyMediaRoutesChanged(
+      const std::vector<media_router::MediaRoute>& routes) {
+    for (auto* observer : routes_observers_)
+      observer->OnRoutesUpdated(routes, {});
+  }
+
+ private:
+  std::vector<media_router::MediaRoutesObserver*> routes_observers_;
 };
 
 }  // anonymous namespace
@@ -163,8 +263,36 @@ class MediaDialogViewBrowserTest : public InProcessBrowserTest {
   }
 
   void SetUp() override {
-    feature_list_.InitAndEnableFeature(media::kGlobalMediaControls);
+    feature_list_.InitWithFeatures(
+        {media::kGlobalMediaControls, media::kGlobalMediaControlsForCast}, {});
+
+    presentation_manager_ =
+        std::make_unique<TestWebContentsPresentationManager>();
+    media_router::WebContentsPresentationManager::SetTestInstance(
+        presentation_manager_.get());
+
     InProcessBrowserTest::SetUp();
+  }
+
+  void TearDown() override {
+    InProcessBrowserTest::TearDown();
+    media_router::WebContentsPresentationManager::SetTestInstance(nullptr);
+  }
+
+  void SetUpInProcessBrowserTestFixture() override {
+    subscription_ =
+        BrowserContextDependencyManager::GetInstance()
+            ->RegisterWillCreateBrowserContextServicesCallbackForTesting(
+                base::BindRepeating(&MediaDialogViewBrowserTest::
+                                        OnWillCreateBrowserContextServices,
+                                    base::Unretained(this)));
+  }
+
+  void OnWillCreateBrowserContextServices(content::BrowserContext* context) {
+    media_router_ = static_cast<TestMediaRouter*>(
+        media_router::MediaRouterFactory::GetInstance()
+            ->SetTestingFactoryAndUse(
+                context, base::BindRepeating(&TestMediaRouter::Create)));
   }
 
   MediaToolbarButtonView* GetToolbarIcon() {
@@ -195,7 +323,7 @@ class MediaDialogViewBrowserTest : public InProcessBrowserTest {
             FILE_PATH_LITERAL("video-with-different-metadata.html")));
     ui_test_utils::NavigateToURLWithDisposition(
         browser(), url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
-        ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+        ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
   }
 
   void StartPlayback() {
@@ -228,6 +356,10 @@ class MediaDialogViewBrowserTest : public InProcessBrowserTest {
         .WaitForDialogToContainText(text);
   }
 
+  void WaitForNotificationCount(int count) {
+    MediaToolbarButtonWatcher(GetToolbarIcon()).WaitForNotificationCount(count);
+  }
+
   void ClickPauseButtonOnDialog() {
     base::RunLoop().RunUntilIdle();
     ASSERT_TRUE(MediaDialogView::IsShowing());
@@ -252,6 +384,10 @@ class MediaDialogViewBrowserTest : public InProcessBrowserTest {
     return browser()->tab_strip_model()->GetActiveWebContents();
   }
 
+ protected:
+  std::unique_ptr<TestWebContentsPresentationManager> presentation_manager_;
+  TestMediaRouter* media_router_ = nullptr;
+
  private:
   void ClickButton(views::Button* button) {
     base::RunLoop closure_loop;
@@ -269,7 +405,7 @@ class MediaDialogViewBrowserTest : public InProcessBrowserTest {
 
   // Recursively tries to find a views::ImageButton for the given
   // MediaSessionAction. This operates under the assumption that
-  // media_message_center::MediaNotificationView sets the tags of its action
+  // media_message_center::MediaNotificationViewImpl sets the tags of its action
   // buttons to the MediaSessionAction value.
   views::ImageButton* GetButtonForAction(views::View* view, int action) {
     if (view->GetClassName() == views::ImageButton::kViewClassName) {
@@ -290,10 +426,10 @@ class MediaDialogViewBrowserTest : public InProcessBrowserTest {
   // Finds a MediaNotificationContainerImplView by title.
   MediaNotificationContainerImplView* GetNotificationByTitle(
       const base::string16& title) {
-    for (const auto notification_pair :
+    for (const auto& notification_pair :
          MediaDialogView::GetDialogViewForTesting()
              ->GetNotificationsForTesting()) {
-      const media_message_center::MediaNotificationView* view =
+      const media_message_center::MediaNotificationViewImpl* view =
           notification_pair.second->view_for_testing();
       if (view->title_label_for_testing()->GetText() == title)
         return notification_pair.second;
@@ -302,6 +438,9 @@ class MediaDialogViewBrowserTest : public InProcessBrowserTest {
   }
 
   base::test::ScopedFeatureList feature_list_;
+  std::unique_ptr<
+      base::CallbackList<void(content::BrowserContext*)>::Subscription>
+      subscription_;
 
   DISALLOW_COPY_AND_ASSIGN(MediaDialogViewBrowserTest);
 };
@@ -407,4 +546,27 @@ IN_PROC_BROWSER_TEST_F(MediaDialogViewBrowserTest,
   // Clicking the first notification should make the first tab active.
   ClickNotificationByTitle(base::ASCIIToUTF16("Big Buck Bunny"));
   EXPECT_EQ(first_web_contents, GetActiveWebContents());
+}
+
+IN_PROC_BROWSER_TEST_F(MediaDialogViewBrowserTest, ShowsCastSession) {
+  OpenTestURL();
+  StartPlayback();
+  WaitForStart();
+
+  const std::string route_description = "Casting: Big Buck Bunny";
+  const std::string sink_name = "My Sink";
+  media_router::MediaRoute route("id", media_router::MediaSource("source_id"),
+                                 "sink_id", route_description, true, true);
+  route.set_media_sink_name(sink_name);
+  route.set_controller_type(media_router::RouteControllerType::kGeneric);
+  media_router_->NotifyMediaRoutesChanged({route});
+  base::RunLoop().RunUntilIdle();
+  presentation_manager_->NotifyMediaRoutesChanged({route});
+
+  WaitForVisibleToolbarIcon();
+  ClickToolbarIcon();
+  WaitForDialogOpened();
+  WaitForDialogToContainText(
+      base::UTF8ToUTF16(route_description + " \xC2\xB7 " + sink_name));
+  WaitForNotificationCount(1);
 }

@@ -24,7 +24,6 @@ namespace {
 
 constexpr bool kIsRoot = true;
 constexpr bool kIsChildRoot = false;
-constexpr bool kNeedsSyncPoints = true;
 
 constexpr char kMetricPrefixSurfaceAggregator[] = "SurfaceAggregator.";
 constexpr char kMetricSpeedRunsPerS[] = "speed";
@@ -58,8 +57,7 @@ class SurfaceAggregatorPerfTest : public testing::Test {
     std::vector<base::UnguessableToken> child_tokens(num_surfaces);
     for (int i = 0; i < num_surfaces; i++) {
       child_supports[i] = std::make_unique<CompositorFrameSinkSupport>(
-          nullptr, &manager_, FrameSinkId(1, i + 1), kIsChildRoot,
-          kNeedsSyncPoints);
+          nullptr, &manager_, FrameSinkId(1, i + 1), kIsChildRoot);
       child_tokens[i] = base::UnguessableToken::Create();
     }
     aggregator_ = std::make_unique<SurfaceAggregator>(
@@ -109,8 +107,7 @@ class SurfaceAggregatorPerfTest : public testing::Test {
             SurfaceRange(base::nullopt,
                          SurfaceId(FrameSinkId(1, i),
                                    LocalSurfaceId(i, child_tokens[i - 1]))),
-            SK_ColorWHITE, /*stretch_content_to_fill_bounds=*/false,
-            /*ignores_input_event=*/false);
+            SK_ColorWHITE, /*stretch_content_to_fill_bounds=*/false);
       }
 
       frame_builder.AddRenderPass(std::move(pass));
@@ -119,8 +116,7 @@ class SurfaceAggregatorPerfTest : public testing::Test {
     }
 
     auto root_support = std::make_unique<CompositorFrameSinkSupport>(
-        nullptr, &manager_, FrameSinkId(1, num_surfaces + 1), kIsRoot,
-        kNeedsSyncPoints);
+        nullptr, &manager_, FrameSinkId(1, num_surfaces + 1), kIsRoot);
     auto root_token = base::UnguessableToken::Create();
     base::TimeTicks next_fake_display_time =
         base::TimeTicks() + base::TimeDelta::FromSeconds(1);
@@ -138,8 +134,7 @@ class SurfaceAggregatorPerfTest : public testing::Test {
               SurfaceId(FrameSinkId(1, num_surfaces),
                         LocalSurfaceId(num_surfaces,
                                        child_tokens[num_surfaces - 1]))),
-          SK_ColorWHITE, /*stretch_content_to_fill_bounds=*/false,
-          /*ignores_input_event=*/false);
+          SK_ColorWHITE, /*stretch_content_to_fill_bounds=*/false);
 
       pass->output_rect = gfx::Rect(0, 0, 100, 100);
 

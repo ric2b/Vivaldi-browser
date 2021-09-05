@@ -7,9 +7,16 @@
 #include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/layout/svg/svg_resources.h"
+#include "third_party/blink/renderer/core/svg/animation/element_smil_animations.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 
 namespace blink {
+
+ElementSMILAnimations& SVGElementRareData::EnsureSMILAnimations() {
+  if (!smil_animations_)
+    smil_animations_ = MakeGarbageCollected<ElementSMILAnimations>();
+  return *smil_animations_;
+}
 
 MutableCSSPropertyValueSet*
 SVGElementRareData::EnsureAnimatedSMILStyleProperties() {
@@ -43,20 +50,21 @@ void SVGElementRareData::ClearOverriddenComputedStyle() {
   override_computed_style_ = nullptr;
 }
 
-SVGResourceClient& SVGElementRareData::EnsureSVGResourceClient(
+SVGElementResourceClient& SVGElementRareData::EnsureSVGResourceClient(
     SVGElement* element) {
   if (!resource_client_)
     resource_client_ = MakeGarbageCollected<SVGElementResourceClient>(element);
   return *resource_client_;
 }
 
-void SVGElementRareData::Trace(blink::Visitor* visitor) {
+void SVGElementRareData::Trace(Visitor* visitor) {
   visitor->Trace(outgoing_references_);
   visitor->Trace(incoming_references_);
   visitor->Trace(animated_smil_style_properties_);
   visitor->Trace(element_instances_);
   visitor->Trace(corresponding_element_);
   visitor->Trace(resource_client_);
+  visitor->Trace(smil_animations_);
 }
 
 AffineTransform* SVGElementRareData::AnimateMotionTransform() {

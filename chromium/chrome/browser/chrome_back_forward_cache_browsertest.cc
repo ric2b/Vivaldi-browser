@@ -4,11 +4,20 @@
 
 #include "base/command_line.h"
 #include "base/macros.h"
+#include "base/test/mock_callback.h"
 #include "base/test/scoped_feature_list.h"
+#include "build/build_config.h"
+#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/permissions/permission_manager_factory.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/content_settings/core/common/content_settings.h"
+#include "components/content_settings/core/common/content_settings_types.h"
 #include "components/network_session_configurator/common/network_switches.h"
+#include "components/permissions/permission_manager.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
@@ -19,6 +28,7 @@
 #include "device/bluetooth/test/mock_bluetooth_adapter.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "third_party/blink/public/mojom/webshare/webshare.mojom.h"
 
 class ChromeBackForwardCacheBrowserTest : public InProcessBrowserTest {
  public:
@@ -97,7 +107,7 @@ IN_PROC_BROWSER_TEST_F(ChromeBackForwardCacheBrowserTest, Basic) {
 
   // 3) Navigate back.
   web_contents()->GetController().GoBack();
-  content::WaitForLoadStop(web_contents());
+  EXPECT_TRUE(content::WaitForLoadStop(web_contents()));
 
   // A is restored, B is stored.
   EXPECT_FALSE(delete_observer_rfh_a.deleted());
@@ -107,7 +117,7 @@ IN_PROC_BROWSER_TEST_F(ChromeBackForwardCacheBrowserTest, Basic) {
 
   // 4) Navigate forward.
   web_contents()->GetController().GoForward();
-  content::WaitForLoadStop(web_contents());
+  EXPECT_TRUE(content::WaitForLoadStop(web_contents()));
 
   // A is stored, B is restored.
   EXPECT_FALSE(delete_observer_rfh_a.deleted());
@@ -133,7 +143,7 @@ IN_PROC_BROWSER_TEST_F(ChromeBackForwardCacheBrowserTest, BasicIframe) {
     iframe.url = url;
     document.body.appendChild(iframe);
   )"));
-  content::WaitForLoadStop(web_contents());
+  EXPECT_TRUE(content::WaitForLoadStop(web_contents()));
 
   content::RenderFrameHost* rfh_b = nullptr;
   for (content::RenderFrameHost* rfh : web_contents()->GetAllFrames()) {
@@ -154,7 +164,7 @@ IN_PROC_BROWSER_TEST_F(ChromeBackForwardCacheBrowserTest, BasicIframe) {
 
   // 3) Navigate back.
   web_contents()->GetController().GoBack();
-  content::WaitForLoadStop(web_contents());
+  EXPECT_TRUE(content::WaitForLoadStop(web_contents()));
 
   // The page A(B) is restored.
   EXPECT_FALSE(delete_observer_rfh_a.deleted());
@@ -199,3 +209,113 @@ IN_PROC_BROWSER_TEST_F(ChromeBackForwardCacheBrowserTest, WebBluetooth) {
   EXPECT_TRUE(content::NavigateToURL(web_contents(), GetURL("b.com")));
   delete_observer.WaitUntilDeleted();
 }
+
+IN_PROC_BROWSER_TEST_F(ChromeBackForwardCacheBrowserTest,
+                       PermissionContextBase) {
+  // HTTPS needed for GEOLOCATION permission
+  net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  https_server.AddDefaultHandlers(GetChromeTestDataDir());
+  https_server.SetSSLConfig(net::EmbeddedTestServer::CERT_OK);
+  ASSERT_TRUE(https_server.Start());
+
+  GURL url_a(https_server.GetURL("a.com", "/title1.html"));
+  GURL url_b(https_server.GetURL("b.com", "/title1.html"));
+
+  HostContentSettingsMapFactory::GetForProfile(browser()->profile())
+      ->SetDefaultContentSetting(ContentSettingsType::GEOLOCATION,
+                                 ContentSetting::CONTENT_SETTING_ASK);
+
+  // 1) Navigate to A.
+  EXPECT_TRUE(NavigateToURL(web_contents(), url_a));
+  content::RenderFrameHost* rfh_a = current_frame_host();
+  content::RenderFrameDeletedObserver delete_observer_rfh_a(rfh_a);
+
+  // 2) Navigate to B.
+  EXPECT_TRUE(NavigateToURL(web_contents(), url_b));
+  ASSERT_FALSE(delete_observer_rfh_a.deleted());
+  base::MockOnceCallback<void(ContentSetting)> callback;
+  EXPECT_CALL(callback, Run(ContentSetting::CONTENT_SETTING_ASK));
+  PermissionManagerFactory::GetForProfile(browser()->profile())
+      ->RequestPermission(ContentSettingsType::GEOLOCATION, rfh_a, url_a,
+                          /* user_gesture = */ true, callback.Get());
+
+  delete_observer_rfh_a.WaitUntilDeleted();
+}
+
+#if defined(OS_ANDROID)
+IN_PROC_BROWSER_TEST_F(ChromeBackForwardCacheBrowserTest,
+                       DoesNotCacheIfWebShare) {
+  // HTTPS needed for WebShare permission.
+  net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  https_server.AddDefaultHandlers(GetChromeTestDataDir());
+  https_server.SetSSLConfig(net::EmbeddedTestServer::CERT_OK);
+  ASSERT_TRUE(https_server.Start());
+
+  GURL url_a(https_server.GetURL("a.com", "/title1.html"));
+  GURL url_b(https_server.GetURL("b.com", "/title1.html"));
+
+  // 1) Navigate to A.
+  EXPECT_TRUE(content::NavigateToURL(web_contents(), url_a));
+
+  // Use the WebShare feature on the empty page.
+  EXPECT_EQ("success", content::EvalJs(current_frame_host(), R"(
+    new Promise(resolve => {
+      navigator.share({title: 'the title'})
+        .then(m => { resolve("success"); })
+        .catch(error => { resolve(error.message); });
+    });
+  )"));
+
+  content::RenderFrameDeletedObserver deleted(current_frame_host());
+
+  // 2) Navigate away.
+  EXPECT_TRUE(content::NavigateToURL(web_contents(), url_b));
+
+  // The page uses WebShare so it should be deleted.
+  deleted.WaitUntilDeleted();
+
+  // 3) Go back.
+  web_contents()->GetController().GoBack();
+  EXPECT_TRUE(content::WaitForLoadStop(web_contents()));
+}
+
+IN_PROC_BROWSER_TEST_F(ChromeBackForwardCacheBrowserTest,
+                       DoesNotCacheIfWebNfc) {
+  // HTTPS needed for WebNfc permission.
+  net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  https_server.AddDefaultHandlers(GetChromeTestDataDir());
+  https_server.SetSSLConfig(net::EmbeddedTestServer::CERT_OK);
+  ASSERT_TRUE(https_server.Start());
+
+  GURL url_a(https_server.GetURL("a.com", "/title1.html"));
+  GURL url_b(https_server.GetURL("b.com", "/title1.html"));
+
+  // 1) Navigate to A.
+  EXPECT_TRUE(content::NavigateToURL(web_contents(), url_a));
+
+  // Use the WebNfc feature on the empty page.
+  EXPECT_EQ("success", content::EvalJs(current_frame_host(), R"(
+    const writer = new NDEFWriter();
+    new Promise(async resolve => {
+      try {
+        await writer.write("Hello");
+        resolve('success');
+      } catch (error) {
+        resolve(error.message);
+      }
+    });
+  )"));
+
+  content::RenderFrameDeletedObserver deleted(current_frame_host());
+
+  // 2) Navigate away.
+  EXPECT_TRUE(content::NavigateToURL(web_contents(), url_b));
+
+  // The page uses WebShare so it should be deleted.
+  deleted.WaitUntilDeleted();
+
+  // 3) Go back.
+  web_contents()->GetController().GoBack();
+  EXPECT_TRUE(content::WaitForLoadStop(web_contents()));
+}
+#endif

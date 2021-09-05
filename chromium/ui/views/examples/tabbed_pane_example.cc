@@ -4,9 +4,13 @@
 
 #include "ui/views/examples/tabbed_pane_example.h"
 
+#include <memory>
+#include <utility>
+
 #include "base/strings/utf_string_conversions.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/tabbed_pane/tabbed_pane.h"
+#include "ui/views/examples/examples_window.h"
 #include "ui/views/layout/grid_layout.h"
 
 using base::ASCIIToUTF16;
@@ -14,8 +18,7 @@ using base::ASCIIToUTF16;
 namespace views {
 namespace examples {
 
-TabbedPaneExample::TabbedPaneExample() : ExampleBase("Tabbed Pane") {
-}
+TabbedPaneExample::TabbedPaneExample() : ExampleBase("Tabbed Pane") {}
 
 TabbedPaneExample::~TabbedPaneExample() = default;
 
@@ -32,8 +35,8 @@ void TabbedPaneExample::CreateExampleView(View* container) {
 
   const int tabbed_pane_column = 0;
   ColumnSet* column_set = layout->AddColumnSet(tabbed_pane_column);
-  column_set->AddColumn(GridLayout::FILL, GridLayout::FILL,
-                        1.0f, GridLayout::USE_PREF, 0, 0);
+  column_set->AddColumn(GridLayout::FILL, GridLayout::FILL, 1.0f,
+                        GridLayout::USE_PREF, 0, 0);
   layout->StartRow(1 /* expand */, tabbed_pane_column);
   tabbed_pane_ = layout->AddView(std::move(tabbed_pane));
 
@@ -46,8 +49,8 @@ void TabbedPaneExample::CreateExampleView(View* container) {
   const int button_column = 1;
   column_set = layout->AddColumnSet(button_column);
   for (size_t i = 0; i < 3; i++) {
-    column_set->AddColumn(GridLayout::FILL, GridLayout::FILL,
-                          1.0f, GridLayout::USE_PREF, 0, 0);
+    column_set->AddColumn(GridLayout::FILL, GridLayout::FILL, 1.0f,
+                          GridLayout::USE_PREF, 0, 0);
   }
 
   layout->StartRow(0 /* no expand */, button_column);
@@ -67,18 +70,17 @@ void TabbedPaneExample::ButtonPressed(Button* sender, const ui::Event& event) {
     if (tabbed_pane_->GetTabCount() > 1)
       tabbed_pane_->SelectTabAt(1);
   }
-  PrintStatus();
+  PrintCurrentStatus();
 }
 
 void TabbedPaneExample::TabSelectedAt(int index) {
   // Just print the status when selection changes.
-  PrintStatus();
+  PrintCurrentStatus();
 }
 
-void TabbedPaneExample::PrintStatus() {
-  ExampleBase::PrintStatus("Tab Count:%" PRIuS ", Selected Tab:%" PRIuS,
-                           tabbed_pane_->GetTabCount(),
-                           tabbed_pane_->GetSelectedTabIndex());
+void TabbedPaneExample::PrintCurrentStatus() {
+  PrintStatus("Tab Count:%" PRIuS ", Selected Tab:%" PRIuS,
+              tabbed_pane_->GetTabCount(), tabbed_pane_->GetSelectedTabIndex());
 }
 
 void TabbedPaneExample::AddButton(const std::string& label) {

@@ -26,7 +26,6 @@
 #include "components/sync/syncable/entry_kernel.h"
 #include "components/sync/syncable/metahandle_set.h"
 #include "components/sync/syncable/parent_child_index.h"
-#include "components/sync/syncable/syncable_delete_journal.h"
 
 namespace base {
 namespace trace_event {
@@ -144,8 +143,6 @@ class Directory {
     PersistedKernelInfo kernel_info;
     OwnedEntryKernelSet dirty_metas;
     MetahandleSet metahandles_to_purge;
-    OwnedEntryKernelSet delete_journals;
-    MetahandleSet delete_journals_to_purge;
   };
 
   struct Kernel {
@@ -244,7 +241,7 @@ class Directory {
   Directory(
       std::unique_ptr<DirectoryBackingStore> store,
       const WeakHandle<UnrecoverableErrorHandler>& unrecoverable_error_handler,
-      const base::Closure& report_unrecoverable_error_function,
+      const base::RepeatingClosure& report_unrecoverable_error_function,
       NigoriHandler* nigori_handler);
   virtual ~Directory();
 
@@ -308,25 +305,21 @@ class Directory {
   // This applies only to types with implicitly created root folders.
   void MarkInitialSyncEndedForType(BaseWriteTransaction* trans, ModelType type);
 
-  // Legacy store birthday, exposed for UMA purposes and migration from
-  // directory to prefs.
-  std::string legacy_store_birthday() const;
+  // Legacy store birthday, exposed for UMA purposes.
+  std::string legacy_store_birthday_for_uma() const;
   void set_legacy_store_birthday(const std::string& store_birthday);
 
   // (Account) Bag of chip is an opaque state used by the server to track the
   // client.
   void set_legacy_bag_of_chips(const std::string& bag_of_chips);
 
-  // Authoritative cache GUID: unique to each account / client pair.
-  // TODO(crbug.com/923285): Move authoritative cache GUID elsewhere, since its
-  // lifetime here is now complex and can be easily confused with the legacy
-  // cache GUID.
+  // Authoritative cache GUID: unique to each account / client pair. Owned
+  // by DirectoryBackingStore but exposed here for convenience.
   const std::string& cache_guid() const;
-  void set_cache_guid(const std::string& cache_guid);
 
   // Legacy cache GUID (non-authoritative) as historically persisted on disk,
-  // exposed for UMA purposes and migration from directory to prefs.
-  std::string legacy_cache_guid() const;
+  // exposed for UMA purposes only.
+  std::string legacy_cache_guid_for_uma() const;
 
   // Returns a pointer to our Nigori node handler.
   NigoriHandler* GetNigoriHandler();
@@ -344,8 +337,6 @@ class Directory {
   void OnUnrecoverableError(const BaseTransaction* trans,
                             const base::Location& location,
                             const std::string& message);
-
-  DeleteJournal* delete_journal();
 
   // Returns the child meta handles (even those for deleted/unlinked
   // nodes) for given parent id.  Clears |result| if there are no
@@ -508,7 +499,6 @@ class Directory {
  private:
   friend class SyncableDirectoryTest;
   friend class syncer::TestUserShare;
-  FRIEND_TEST_ALL_PREFIXES(SyncableDirectoryTest, ManageDeleteJournals);
   FRIEND_TEST_ALL_PREFIXES(SyncableDirectoryTest,
                            TakeSnapshotGetsAllDirtyHandlesTest);
   FRIEND_TEST_ALL_PREFIXES(SyncableDirectoryTest,
@@ -586,10 +576,7 @@ class Directory {
 
   // Helper methods used by PurgeDisabledTypes.
   void UnapplyEntry(EntryKernel* entry);
-  void DeleteEntry(const ScopedKernelLock& lock,
-                   bool save_to_journal,
-                   EntryKernel* entry,
-                   OwnedEntryKernelSet* entries_to_journal);
+  void DeleteEntry(const ScopedKernelLock& lock, EntryKernel* entry);
 
   // A private version of the public GetMetaHandlesOfType for when you already
   // have a ScopedKernelLock.
@@ -612,24 +599,18 @@ class Directory {
   // error on it.
   bool unrecoverable_error_set(const BaseTransaction* trans) const;
 
-  std::string cache_guid_;
-
   std::unique_ptr<Kernel> kernel_;
 
   std::unique_ptr<DirectoryBackingStore> store_;
 
   const WeakHandle<UnrecoverableErrorHandler> unrecoverable_error_handler_;
-  base::Closure report_unrecoverable_error_function_;
+  base::RepeatingClosure report_unrecoverable_error_function_;
   bool unrecoverable_error_set_;
 
   // Not owned.
   NigoriHandler* const nigori_handler_;
 
   InvariantCheckLevel invariant_check_level_;
-
-  // Maintain deleted entries not in |kernel_| until it's verified that they
-  // are deleted in native models as well.
-  std::unique_ptr<DeleteJournal> delete_journal_;
 
   base::WeakPtrFactory<Directory> weak_ptr_factory_{this};
 

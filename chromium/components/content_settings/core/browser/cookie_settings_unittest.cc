@@ -3,12 +3,15 @@
 // found in the LICENSE file.
 
 #include "components/content_settings/core/browser/cookie_settings.h"
+#include <cstddef>
 
 #include "base/scoped_observer.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
+#include "base/values.h"
 #include "components/content_settings/core/browser/content_settings_registry.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/features.h"
 #include "components/content_settings/core/common/pref_names.h"
@@ -67,6 +70,8 @@ class CookieSettingsTest : public testing::Test {
         kHttpsSubdomainSite("https://www.example.com"),
         kHttpsSite8080("https://example.com:8080"),
         kAllHttpsSitesPattern(ContentSettingsPattern::FromString("https://*")) {
+    feature_list_.InitAndDisableFeature(
+        net::features::kSameSiteByDefaultCookies);
   }
 
   ~CookieSettingsTest() override { settings_map_->ShutdownOnUIThread(); }
@@ -115,6 +120,9 @@ class CookieSettingsTest : public testing::Test {
   const GURL kHttpsSubdomainSite;
   const GURL kHttpsSite8080;
   ContentSettingsPattern kAllHttpsSitesPattern;
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
 };
 
 TEST_F(CookieSettingsTest, TestWhitelistedScheme) {
@@ -360,7 +368,7 @@ TEST_F(CookieSettingsTest, CookiesThirdPartyBlockedAllSitesAllowed) {
   // match all HTTPS sites.
   settings_map_->SetContentSettingCustomScope(
       kAllHttpsSitesPattern, ContentSettingsPattern::Wildcard(),
-      CONTENT_SETTINGS_TYPE_COOKIES, std::string(), CONTENT_SETTING_ALLOW);
+      ContentSettingsType::COOKIES, std::string(), CONTENT_SETTING_ALLOW);
   cookie_settings_->SetDefaultCookieSetting(CONTENT_SETTING_SESSION_ONLY);
 
   // |kAllowedSite| should be allowed.
@@ -438,30 +446,52 @@ TEST_F(CookieSettingsTest, ExtensionsThirdParty) {
 }
 
 TEST_F(CookieSettingsTest, ThirdPartyException) {
-  EXPECT_TRUE(cookie_settings_->IsThirdPartyAccessAllowed(kFirstPartySite));
+  EXPECT_TRUE(
+      cookie_settings_->IsThirdPartyAccessAllowed(kFirstPartySite, nullptr));
   EXPECT_TRUE(
       cookie_settings_->IsCookieAccessAllowed(kHttpsSite, kFirstPartySite));
 
   prefs_.SetBoolean(prefs::kBlockThirdPartyCookies, true);
-  EXPECT_FALSE(cookie_settings_->IsThirdPartyAccessAllowed(kFirstPartySite));
+  EXPECT_FALSE(
+      cookie_settings_->IsThirdPartyAccessAllowed(kFirstPartySite, nullptr));
   EXPECT_FALSE(
       cookie_settings_->IsCookieAccessAllowed(kHttpsSite, kFirstPartySite));
 
   cookie_settings_->SetThirdPartyCookieSetting(kFirstPartySite,
                                                CONTENT_SETTING_ALLOW);
-  EXPECT_TRUE(cookie_settings_->IsThirdPartyAccessAllowed(kFirstPartySite));
+  EXPECT_TRUE(
+      cookie_settings_->IsThirdPartyAccessAllowed(kFirstPartySite, nullptr));
   EXPECT_TRUE(
       cookie_settings_->IsCookieAccessAllowed(kHttpsSite, kFirstPartySite));
 
   cookie_settings_->ResetThirdPartyCookieSetting(kFirstPartySite);
-  EXPECT_FALSE(cookie_settings_->IsThirdPartyAccessAllowed(kFirstPartySite));
+  EXPECT_FALSE(
+      cookie_settings_->IsThirdPartyAccessAllowed(kFirstPartySite, nullptr));
   EXPECT_FALSE(
       cookie_settings_->IsCookieAccessAllowed(kHttpsSite, kFirstPartySite));
 
   cookie_settings_->SetCookieSetting(kHttpsSite, CONTENT_SETTING_ALLOW);
-  EXPECT_FALSE(cookie_settings_->IsThirdPartyAccessAllowed(kFirstPartySite));
+  EXPECT_FALSE(
+      cookie_settings_->IsThirdPartyAccessAllowed(kFirstPartySite, nullptr));
   EXPECT_TRUE(
       cookie_settings_->IsCookieAccessAllowed(kHttpsSite, kFirstPartySite));
+}
+
+TEST_F(CookieSettingsTest, ManagedThirdPartyException) {
+  SettingSource source;
+  EXPECT_TRUE(
+      cookie_settings_->IsThirdPartyAccessAllowed(kFirstPartySite, &source));
+  EXPECT_TRUE(
+      cookie_settings_->IsCookieAccessAllowed(kHttpsSite, kFirstPartySite));
+  EXPECT_EQ(source, SettingSource::SETTING_SOURCE_USER);
+
+  prefs_.SetManagedPref(prefs::kManagedDefaultCookiesSetting,
+                        std::make_unique<base::Value>(CONTENT_SETTING_BLOCK));
+  EXPECT_FALSE(
+      cookie_settings_->IsThirdPartyAccessAllowed(kFirstPartySite, &source));
+  EXPECT_FALSE(
+      cookie_settings_->IsCookieAccessAllowed(kHttpsSite, kFirstPartySite));
+  EXPECT_EQ(source, SettingSource::SETTING_SOURCE_POLICY);
 }
 
 TEST_F(CookieSettingsTest, ThirdPartySettingObserver) {
@@ -473,7 +503,7 @@ TEST_F(CookieSettingsTest, ThirdPartySettingObserver) {
 
 TEST_F(CookieSettingsTest, LegacyCookieAccessAllowAll) {
   settings_map_->SetDefaultContentSetting(
-      CONTENT_SETTINGS_TYPE_LEGACY_COOKIE_ACCESS, CONTENT_SETTING_ALLOW);
+      ContentSettingsType::LEGACY_COOKIE_ACCESS, CONTENT_SETTING_ALLOW);
   EXPECT_EQ(net::CookieAccessSemantics::LEGACY,
             cookie_settings_->GetCookieAccessSemanticsForDomain(kDomain));
   EXPECT_EQ(net::CookieAccessSemantics::LEGACY,
@@ -482,7 +512,7 @@ TEST_F(CookieSettingsTest, LegacyCookieAccessAllowAll) {
 
 TEST_F(CookieSettingsTest, LegacyCookieAccessBlockAll) {
   settings_map_->SetDefaultContentSetting(
-      CONTENT_SETTINGS_TYPE_LEGACY_COOKIE_ACCESS, CONTENT_SETTING_BLOCK);
+      ContentSettingsType::LEGACY_COOKIE_ACCESS, CONTENT_SETTING_BLOCK);
   EXPECT_EQ(net::CookieAccessSemantics::NONLEGACY,
             cookie_settings_->GetCookieAccessSemanticsForDomain(kDomain));
   EXPECT_EQ(net::CookieAccessSemantics::NONLEGACY,
@@ -501,7 +531,7 @@ TEST_F(CookieSettingsTest,
   settings_map_->SetContentSettingCustomScope(
       ContentSettingsPattern::FromString(kDomain),
       ContentSettingsPattern::Wildcard(),
-      CONTENT_SETTINGS_TYPE_LEGACY_COOKIE_ACCESS, std::string(),
+      ContentSettingsType::LEGACY_COOKIE_ACCESS, std::string(),
       CONTENT_SETTING_BLOCK);
   const struct {
     net::CookieAccessSemantics status;
@@ -532,7 +562,7 @@ TEST_F(CookieSettingsTest,
   settings_map_->SetContentSettingCustomScope(
       ContentSettingsPattern::FromString(kDomainWildcardPattern),
       ContentSettingsPattern::Wildcard(),
-      CONTENT_SETTINGS_TYPE_LEGACY_COOKIE_ACCESS, std::string(),
+      ContentSettingsType::LEGACY_COOKIE_ACCESS, std::string(),
       CONTENT_SETTING_BLOCK);
   const struct {
     net::CookieAccessSemantics status;
@@ -574,7 +604,7 @@ TEST_F(SameSiteByDefaultCookieSettingsTest,
   settings_map_->SetContentSettingCustomScope(
       ContentSettingsPattern::FromString(kDomain),
       ContentSettingsPattern::Wildcard(),
-      CONTENT_SETTINGS_TYPE_LEGACY_COOKIE_ACCESS, std::string(),
+      ContentSettingsType::LEGACY_COOKIE_ACCESS, std::string(),
       CONTENT_SETTING_ALLOW);
   const struct {
     net::CookieAccessSemantics status;
@@ -604,7 +634,7 @@ TEST_F(SameSiteByDefaultCookieSettingsTest,
   settings_map_->SetContentSettingCustomScope(
       ContentSettingsPattern::FromString(kDomainWildcardPattern),
       ContentSettingsPattern::Wildcard(),
-      CONTENT_SETTINGS_TYPE_LEGACY_COOKIE_ACCESS, std::string(),
+      ContentSettingsType::LEGACY_COOKIE_ACCESS, std::string(),
       CONTENT_SETTING_ALLOW);
   const struct {
     net::CookieAccessSemantics status;

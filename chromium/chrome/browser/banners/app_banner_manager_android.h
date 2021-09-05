@@ -12,15 +12,16 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
+#include "chrome/browser/android/webapps/add_to_homescreen_installer.h"
 #include "chrome/browser/banners/app_banner_manager.h"
 #include "chrome/browser/installable/installable_ambient_badge_infobar_delegate.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "url/gurl.h"
 
-namespace banners {
+struct AddToHomescreenParams;
 
-class AppBannerUiDelegateAndroid;
+namespace banners {
 
 // Extends the AppBannerManager to support native Android apps. This class owns
 // a Java-side AppBannerManager which interfaces with the Java runtime to fetch
@@ -128,13 +129,9 @@ class AppBannerManagerAndroid
   // Hides the ambient badge if it is showing.
   void HideAmbientBadge();
 
-  std::unique_ptr<AppBannerUiDelegateAndroid> ui_delegate_;
-
-  // The URL of the badge icon.
-  GURL badge_icon_url_;
-
-  // The badge icon object.
-  SkBitmap badge_icon_;
+  // Called for recording metrics.
+  void RecordEventForAppBanner(AddToHomescreenInstaller::Event event,
+                               const AddToHomescreenParams& a2hs_params);
 
   // The Java-side AppBannerManager.
   base::android::ScopedJavaGlobalRef<jobject> java_banner_manager_;
@@ -147,9 +144,6 @@ class AppBannerManagerAndroid
 
   // Title to display in the banner for native app.
   base::string16 native_app_title_;
-
-  // Whether WebAPKs can be installed.
-  bool can_install_webapk_;
 
   base::WeakPtrFactory<AppBannerManagerAndroid> weak_factory_{this};
 

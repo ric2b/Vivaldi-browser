@@ -27,7 +27,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/user_activity/user_activity_detector.h"
 #include "ui/events/event.h"
-#include "ui/events/event_constants.h"
+#include "ui/events/types/event_type.h"
 
 namespace chromeos {
 namespace power {
@@ -235,8 +235,8 @@ class ModellerImplTest : public testing::Test {
  protected:
   void WriteModelToFile(const Model& model) {
     const ModellerImpl::ModelSavingSpec& model_saving_spec =
-        ModellerImpl::ModellerImpl::GetModelSavingSpecFromProfile(
-            profile_.get());
+        ModellerImpl::ModellerImpl::GetModelSavingSpecFromProfilePath(
+            profile_->GetPath());
     CHECK(!model_saving_spec.global_curve.empty());
     CHECK(!model_saving_spec.personal_curve.empty());
     CHECK(!model_saving_spec.iteration_count.empty());

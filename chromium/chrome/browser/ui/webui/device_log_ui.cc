@@ -11,15 +11,16 @@
 #include "base/bind_helpers.h"
 #include "base/macros.h"
 #include "base/values.h"
-#include "chrome/browser/ui/webui/localized_string.h"
+#include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/common/url_constants.h"
-#include "chrome/grit/browser_resources.h"
+#include "chrome/grit/dev_ui_browser_resources.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/device_event_log/device_event_log.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/browser/web_ui_message_handler.h"
+#include "ui/base/webui/web_ui_util.h"
 
 namespace chromeos {
 
@@ -66,13 +67,14 @@ DeviceLogUI::DeviceLogUI(content::WebUI* web_ui)
   content::WebUIDataSource* html =
       content::WebUIDataSource::Create(chrome::kChromeUIDeviceLogHost);
 
-  static constexpr LocalizedString kStrings[] = {
+  static constexpr webui::LocalizedString kStrings[] = {
       {"titleText", IDS_DEVICE_LOG_TITLE},
       {"autoRefreshText", IDS_DEVICE_AUTO_REFRESH},
       {"logRefreshText", IDS_DEVICE_LOG_REFRESH},
       {"logClearText", IDS_DEVICE_LOG_CLEAR},
+      {"logClearTypesText", IDS_DEVICE_LOG_CLEAR_TYPES},
       {"logNoEntriesText", IDS_DEVICE_LOG_NO_ENTRIES},
-      {"logLevelShowText", IDS_DEVICE_LOG_LEVEL_SHOW},
+      {"logLevelLabel", IDS_DEVICE_LOG_LEVEL_LABEL},
       {"logLevelErrorText", IDS_DEVICE_LOG_LEVEL_ERROR},
       {"logLevelUserText", IDS_DEVICE_LOG_LEVEL_USER},
       {"logLevelEventText", IDS_DEVICE_LOG_LEVEL_EVENT},
@@ -89,7 +91,7 @@ DeviceLogUI::DeviceLogUI(content::WebUI* web_ui)
       {"logTypeFidoText", IDS_DEVICE_LOG_TYPE_FIDO},
       {"logEntryFormat", IDS_DEVICE_LOG_ENTRY},
   };
-  AddLocalizedStringsBulk(html, kStrings, base::size(kStrings));
+  AddLocalizedStringsBulk(html, kStrings);
 
   html->UseStringsJs();
   html->AddResourcePath("device_log_ui.css", IDR_DEVICE_LOG_UI_CSS);

@@ -15,12 +15,9 @@
 #include "base/macros.h"
 #include "base/optional.h"
 #include "base/time/time.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/views/widget/widget_observer.h"
 #include "ui/wm/public/activation_change_observer.h"
-
-namespace ui {
-class LayerOwner;
-}  // namespace ui
 
 namespace views {
 class Widget;
@@ -38,7 +35,7 @@ class UnifiedSystemTrayView;
 // case, this class calls UnifiedSystemTray::CloseBubble() to delete itself.
 class ASH_EXPORT UnifiedSystemTrayBubble
     : public TrayBubbleBase,
-      public ash::ScreenLayoutObserver,
+      public ScreenLayoutObserver,
       public views::WidgetObserver,
       public ShelfObserver,
       public ::wm::ActivationChangeObserver,
@@ -73,6 +70,9 @@ class ASH_EXPORT UnifiedSystemTrayBubble
   // Ensure the bubble is expanded.
   void EnsureExpanded();
 
+  // Set the state to collapsed without animation.
+  void CollapseWithoutAnimating();
+
   // Show audio settings detailed view.
   void ShowAudioDetailedView();
 
@@ -101,6 +101,9 @@ class ASH_EXPORT UnifiedSystemTrayBubble
 
   // Inform UnifiedSystemTrayView of focus being acquired.
   void FocusEntered(bool reverse);
+
+  // Called when the message center widget is activated.
+  void OnMessageCenterActivated();
 
   // TrayBubbleBase:
   TrayBackgroundView* GetTray() const override;
@@ -139,9 +142,8 @@ class ASH_EXPORT UnifiedSystemTrayBubble
 
   void UpdateBubbleBounds();
 
-  // Create / destroy background blur layer that is used during animation.
-  void CreateBlurLayerForAnimation();
-  void DestroyBlurLayerForAnimation();
+  // Called when the tray animation is finished.
+  void OnAnimationFinished();
 
   // Set visibility of bubble frame border. Used for disabling the border during
   // animation.
@@ -167,9 +169,6 @@ class ASH_EXPORT UnifiedSystemTrayBubble
   // The time the bubble is created. If the bubble is not created by button
   // click (|show_by_click| in ctor is false), it is not set.
   base::Optional<base::TimeTicks> time_shown_by_click_;
-
-  // Background blur layer that is used during animation.
-  std::unique_ptr<ui::LayerOwner> blur_layer_;
 
   TrayBubbleView* bubble_view_ = nullptr;
   UnifiedSystemTrayView* unified_view_ = nullptr;

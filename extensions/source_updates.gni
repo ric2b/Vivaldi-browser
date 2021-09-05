@@ -39,9 +39,11 @@ update_template_instance("//chrome/common/extensions/api:manifest_features") {
 update_template_instance("//extensions/browser:browser_sources") {
   sources += [
     "//vivaldi/extensions/vivaldi_extension_prefs.cc",
-      "//vivaldi/extensions/api/guest_view/vivaldi_web_view_guest.cpp",
+    "//vivaldi/extensions/api/guest_view/vivaldi_web_view_guest.cpp",
   ]
   deps += [
+    "//chrome/common:mojo_bindings",
+    "//chrome/browser/sharing/proto",
     "//third_party/blink/public:blink_headers",
     "//vivaldi/extensions/schema",
     "//vivaldi/prefs:prefs_files_generator",

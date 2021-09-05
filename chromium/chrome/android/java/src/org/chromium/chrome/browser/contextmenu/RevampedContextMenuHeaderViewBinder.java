@@ -11,6 +11,7 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.performance_hints.PerformanceHintsObserver.PerformanceClass;
 import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel;
 
@@ -25,7 +26,13 @@ class RevampedContextMenuHeaderViewBinder {
                             : View.VISIBLE);
         } else if (propertyKey == RevampedContextMenuHeaderProperties.TITLE_MAX_LINES) {
             final int maxLines = model.get(RevampedContextMenuHeaderProperties.TITLE_MAX_LINES);
-            ((TextView) view.findViewById(R.id.menu_header_title)).setMaxLines(maxLines);
+            final TextView titleText = view.findViewById(R.id.menu_header_title);
+            titleText.setMaxLines(maxLines);
+            if (maxLines == Integer.MAX_VALUE) {
+                titleText.setEllipsize(null);
+            } else {
+                titleText.setEllipsize(TextUtils.TruncateAt.END);
+            }
         } else if (propertyKey == RevampedContextMenuHeaderProperties.URL) {
             TextView urlText = view.findViewById(R.id.menu_header_url);
             urlText.setText(model.get(RevampedContextMenuHeaderProperties.URL));
@@ -33,10 +40,11 @@ class RevampedContextMenuHeaderViewBinder {
                     TextUtils.isEmpty(model.get(RevampedContextMenuHeaderProperties.URL))
                             ? View.GONE
                             : View.VISIBLE);
-        } else if (propertyKey == RevampedContextMenuHeaderProperties.URL_CLICK_LISTENER) {
+        } else if (propertyKey
+                == RevampedContextMenuHeaderProperties.TITLE_AND_URL_CLICK_LISTENER) {
             view.findViewById(R.id.title_and_url)
-                    .setOnClickListener(
-                            model.get(RevampedContextMenuHeaderProperties.URL_CLICK_LISTENER));
+                    .setOnClickListener(model.get(
+                            RevampedContextMenuHeaderProperties.TITLE_AND_URL_CLICK_LISTENER));
         } else if (propertyKey == RevampedContextMenuHeaderProperties.URL_MAX_LINES) {
             final int maxLines = model.get(RevampedContextMenuHeaderProperties.URL_MAX_LINES);
             final TextView urlText = view.findViewById(R.id.menu_header_url);
@@ -57,6 +65,14 @@ class RevampedContextMenuHeaderViewBinder {
                     model.get(RevampedContextMenuHeaderProperties.CIRCLE_BG_VISIBLE);
             view.findViewById(R.id.circle_background)
                     .setVisibility(isVisible ? View.VISIBLE : View.INVISIBLE);
+        } else if (propertyKey == RevampedContextMenuHeaderProperties.URL_PERFORMANCE_CLASS) {
+            @PerformanceClass
+            int performanceClass =
+                    model.get(RevampedContextMenuHeaderProperties.URL_PERFORMANCE_CLASS);
+            view.findViewById(R.id.menu_header_performance_info)
+                    .setVisibility(performanceClass == PerformanceClass.PERFORMANCE_FAST
+                                    ? View.VISIBLE
+                                    : View.GONE);
         }
     }
 }

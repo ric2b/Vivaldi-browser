@@ -20,7 +20,7 @@ from common_args import AddCommonArgs, ConfigureLogging, GetDeploymentTargetForA
 from net_test_server import SetupTestServer
 from run_package import RunPackage, RunPackageArgs
 
-DEFAULT_TEST_CONCURRENCY = 4
+DEFAULT_TEST_SERVER_CONCURRENCY = 4
 
 TEST_RESULT_PATH = '/data/test_summary.json'
 TEST_FILTER_PATH = '/data/test_filter.txt'
@@ -28,6 +28,7 @@ TEST_FILTER_PATH = '/data/test_filter.txt'
 def main():
   parser = argparse.ArgumentParser()
   AddCommonArgs(parser)
+
   parser.add_argument('--gtest_filter',
                       help='GTest filter to use in place of any default.')
   parser.add_argument('--gtest_repeat',
@@ -36,6 +37,16 @@ def main():
   parser.add_argument('--test-launcher-retry-limit',
                       help='Number of times that test suite will retry failing '
                            'tests. This is multiplicative with --gtest_repeat.')
+  parser.add_argument(
+      '--test-launcher-shard-index',
+      type=int,
+      default=os.environ.get('GTEST_SHARD_INDEX'),
+      help='Index of this instance amongst swarming shards.')
+  parser.add_argument(
+      '--test-launcher-total-shards',
+      type=int,
+      default=os.environ.get('GTEST_TOTAL_SHARDS'),
+      help='Total number of swarming shards of this suite.')
   parser.add_argument('--gtest_break_on_failure', action='store_true',
                       default=False,
                       help='Should GTest break on failure; useful with '
@@ -71,9 +82,20 @@ def main():
   parser.add_argument('child_args', nargs='*',
                       help='Arguments for the test process.')
   args = parser.parse_args()
+
+  # Flag output_directory is required for tests launched with this script.
+  if not args.output_directory:
+    raise ValueError("output-directory must be specified.")
+
   ConfigureLogging(args)
 
-  child_args = ['--test-launcher-retry-limit=0']
+  child_args = []
+  if args.test_launcher_shard_index != None:
+    child_args.append(
+        '--test-launcher-shard-index=%d' % args.test_launcher_shard_index)
+  if args.test_launcher_total_shards != None:
+    child_args.append(
+        '--test-launcher-total-shards=%d' % args.test_launcher_total_shards)
   if args.single_process_tests:
     child_args.append('--single-process-tests')
   if args.test_launcher_bot_mode:
@@ -82,9 +104,21 @@ def main():
     child_args.append('--test-launcher-batch-limit=%d' %
                        args.test_launcher_batch_limit)
 
-  test_concurrency = args.test_launcher_jobs \
-      if args.test_launcher_jobs else DEFAULT_TEST_CONCURRENCY
-  child_args.append('--test-launcher-jobs=%d' % test_concurrency)
+  # Only set --test-launcher-jobs if the caller specifies it, in general.
+  # If the caller enables the test-server then we need to launch the right
+  # number of instances to match the maximum number of parallel test jobs, so
+  # in that case we set --test-launcher-jobs based on the number of CPU cores
+  # specified for the emulator to use.
+  test_concurrency = None
+  if args.test_launcher_jobs:
+    test_concurrency = args.test_launcher_jobs
+  elif args.enable_test_server:
+    if args.device == 'device':
+      test_concurrency = DEFAULT_TEST_SERVER_CONCURRENCY
+    else:
+      test_concurrency = args.qemu_cpu_cores
+  if test_concurrency:
+    child_args.append('--test-launcher-jobs=%d' % test_concurrency)
 
   if args.gtest_filter:
     child_args.append('--gtest_filter=' + args.gtest_filter)
@@ -104,10 +138,7 @@ def main():
   if args.child_args:
     child_args.extend(args.child_args)
 
-  # KVM is required on x64 test bots.
-  require_kvm = args.test_launcher_bot_mode and args.target_cpu == 'x64'
-
-  with GetDeploymentTargetForArgs(args, require_kvm=require_kvm) as target:
+  with GetDeploymentTargetForArgs(args) as target:
     target.Start()
 
     if args.test_launcher_filter_file:
@@ -117,6 +148,7 @@ def main():
 
     test_server = None
     if args.enable_test_server:
+      assert test_concurrency
       test_server = SetupTestServer(target, test_concurrency,
                                     args.package_name)
 

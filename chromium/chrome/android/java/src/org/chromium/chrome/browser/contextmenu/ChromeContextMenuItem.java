@@ -15,8 +15,10 @@ import androidx.annotation.StringRes;
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.DefaultBrowserInfo;
+import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
+import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
-import org.chromium.chrome.browser.util.FeatureUtilities;
+import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 import org.chromium.ui.text.SpanApplier;
 import org.chromium.ui.text.SpanApplier.SpanInfo;
 
@@ -32,8 +34,10 @@ public class ChromeContextMenuItem implements ContextMenuItem {
             Item.OPEN_IN_OTHER_WINDOW, Item.OPEN_IN_EPHEMERAL_TAB, Item.COPY_LINK_ADDRESS,
             Item.COPY_LINK_TEXT, Item.SAVE_LINK_AS, Item.LOAD_ORIGINAL_IMAGE, Item.SAVE_IMAGE,
             Item.OPEN_IMAGE, Item.OPEN_IMAGE_IN_NEW_TAB, Item.OPEN_IMAGE_IN_EPHEMERAL_TAB,
-            Item.SEARCH_BY_IMAGE, Item.SEARCH_WITH_GOOGLE_LENS, Item.CALL, Item.SEND_MESSAGE,
-            Item.ADD_TO_CONTACTS, Item.COPY, Item.SAVE_VIDEO, Item.OPEN_IN_CHROME})
+            Item.COPY_IMAGE, Item.SEARCH_BY_IMAGE, Item.SEARCH_WITH_GOOGLE_LENS, Item.CALL,
+            Item.SEND_MESSAGE, Item.ADD_TO_CONTACTS, Item.COPY, Item.SAVE_VIDEO,
+            Item.OPEN_IN_CHROME,
+            Item.OPEN_IN_NEW_TAB_BACKGROUND}) // Vivaldi
     @Retention(RetentionPolicy.SOURCE)
     public @interface Item {
         // Values are numerated from 0 and can't have gaps.
@@ -56,25 +60,27 @@ public class ChromeContextMenuItem implements ContextMenuItem {
         int OPEN_IMAGE = 12;
         int OPEN_IMAGE_IN_NEW_TAB = 13;
         int OPEN_IMAGE_IN_EPHEMERAL_TAB = 14;
-        int SEARCH_BY_IMAGE = 15;
-        int SEARCH_WITH_GOOGLE_LENS = 16;
+        int COPY_IMAGE = 15;
+        int SEARCH_BY_IMAGE = 16;
+        int SEARCH_WITH_GOOGLE_LENS = 17;
         // Message Group
-        int CALL = 17;
-        int SEND_MESSAGE = 18;
-        int ADD_TO_CONTACTS = 19;
-        int COPY = 20;
+        int CALL = 18;
+        int SEND_MESSAGE = 19;
+        int ADD_TO_CONTACTS = 20;
+        int COPY = 21;
         // Video Group
-        int SAVE_VIDEO = 21;
+        int SAVE_VIDEO = 22;
         // Other
-        int OPEN_IN_CHROME = 22;
+        int OPEN_IN_CHROME = 23;
+        int OPEN_IN_NEW_TAB_BACKGROUND = 24; // Vivaldi
         // ALWAYS UPDATE!
-        int NUM_ENTRIES = 23;
+        int NUM_ENTRIES = 25;
     }
 
     /**
      * Mapping from {@link Item} to the ID found in the ids.xml.
      */
-    private final static int[] MENU_IDS = {
+    private static final int[] MENU_IDS = {
             R.id.contextmenu_open_in_new_chrome_tab, // Item.OPEN_IN_NEW_CHROME_TAB
             R.id.contextmenu_open_in_chrome_incognito_tab, // Item.OPEN_IN_CHROME_INCOGNITO_TAB
             R.id.contextmenu_open_in_browser_id, // Item.OPEN_IN_BROWSER_ID
@@ -90,6 +96,7 @@ public class ChromeContextMenuItem implements ContextMenuItem {
             R.id.contextmenu_open_image, // Item.OPEN_IMAGE
             R.id.contextmenu_open_image_in_new_tab, // Item.OPEN_IMAGE_IN_NEW_TAB
             R.id.contextmenu_open_image_in_ephemeral_tab, // Item.OPEN_IMAGE_IN_EPHEMERAL_TAB
+            R.id.contextmenu_copy_image, // Item.COPY_IMAGE
             R.id.contextmenu_search_by_image, // Item.SEARCH_BY_IMAGE
             R.id.contextmenu_search_with_google_lens, // Item.SEARCH_WITH_GOOGLE_LENS
             R.id.contextmenu_call, // Item.CALL
@@ -98,12 +105,13 @@ public class ChromeContextMenuItem implements ContextMenuItem {
             R.id.contextmenu_copy, // Item.COPY
             R.id.contextmenu_save_video, // Item.SAVE_VIDEO
             R.id.contextmenu_open_in_chrome, // Item.OPEN_IN_CHROME
+            R.id.contextmenu_open_in_new_tab_background, // Vivaldi Item.OPEN_IN_NEW_TAB_BACKGROUND
     };
 
     /**
      * Mapping from {@link Item} to the ID of the string that describes the action of the item.
      */
-    private final static int[] STRING_IDS = {
+    private static final int[] STRING_IDS = {
             R.string.contextmenu_open_in_new_chrome_tab, // Item.OPEN_IN_NEW_CHROME_TAB:
             R.string.contextmenu_open_in_chrome_incognito_tab, // Item.OPEN_IN_CHROME_INCOGNITO_TAB:
             0, // Item.OPEN_IN_BROWSER_ID is not handled by this mapping.
@@ -119,6 +127,7 @@ public class ChromeContextMenuItem implements ContextMenuItem {
             R.string.contextmenu_open_image, // Item.OPEN_IMAGE:
             R.string.contextmenu_open_image_in_new_tab, // Item.OPEN_IMAGE_IN_NEW_TAB:
             R.string.contextmenu_open_image_in_ephemeral_tab, // Item.OPEN_IMAGE_IN_EPHEMERAL_TAB:
+            R.string.contextmenu_copy_image, // Item.COPY_IMAGE:
             R.string.contextmenu_search_web_for_image, // Item.SEARCH_BY_IMAGE:
             R.string.contextmenu_search_with_google_lens, // Item.SEARCH_WITH_GOOGLE_LENS:
             R.string.contextmenu_call, // Item.CALL:
@@ -127,9 +136,14 @@ public class ChromeContextMenuItem implements ContextMenuItem {
             R.string.contextmenu_copy, // Item.COPY:
             R.string.contextmenu_save_video, // Item.SAVE_VIDEO:
             R.string.menu_open_in_chrome, // Item.OPEN_IN_CHROME:
+            R.string.contextmenu_open_in_new_tab_background, // Vivaldi
+                                                             // Item.OPEN_IN_NEW_TAB_BACKGROUND:
     };
 
     private final @Item int mItem;
+
+    // If set to true, adds a "New" superscript label to the menu string.
+    private boolean mShowNewLabel;
 
     public ChromeContextMenuItem(@Item int item) {
         mItem = item;
@@ -141,6 +155,11 @@ public class ChromeContextMenuItem implements ContextMenuItem {
         return MENU_IDS[mItem];
     }
 
+    @Override
+    public void setShowInProductHelp() {
+        mShowNewLabel = true;
+    }
+
     /**
      * Get string ID from the ID of the item.
      * @param item #Item Item ID.
@@ -149,7 +168,7 @@ public class ChromeContextMenuItem implements ContextMenuItem {
     private static @StringRes int getStringId(@Item int item) {
         assert STRING_IDS.length == Item.NUM_ENTRIES;
 
-        if (FeatureUtilities.isTabGroupsAndroidEnabled() && item == Item.OPEN_IN_NEW_TAB) {
+        if (TabUiFeatureUtilities.isTabGroupsAndroidEnabled() && item == Item.OPEN_IN_NEW_TAB) {
             return R.string.contextmenu_open_in_new_tab_group;
         }
 
@@ -173,15 +192,31 @@ public class ChromeContextMenuItem implements ContextMenuItem {
                                 .getDefaultSearchEngineTemplateUrl()
                                 .getShortName());
             case Item.OPEN_IN_EPHEMERAL_TAB:
+                return addOrRemoveNewLabel(
+                        context, ChromePreferenceKeys.CONTEXT_MENU_OPEN_IN_EPHEMERAL_TAB_CLICKED);
             case Item.OPEN_IMAGE_IN_EPHEMERAL_TAB:
+                return addOrRemoveNewLabel(context,
+                        ChromePreferenceKeys.CONTEXT_MENU_OPEN_IMAGE_IN_EPHEMERAL_TAB_CLICKED);
             case Item.SEARCH_WITH_GOOGLE_LENS:
-                return SpanApplier.applySpans(context.getString(getStringId(mItem)),
-                        new SpanInfo("<new>", "</new>", new SuperscriptSpan(),
-                                new RelativeSizeSpan(0.75f),
-                                new ForegroundColorSpan(ApiCompatibilityUtils.getColor(
-                                        context.getResources(), R.color.default_text_color_blue))));
+                return addOrRemoveNewLabel(
+                        context, ChromePreferenceKeys.CONTEXT_MENU_SEARCH_WITH_GOOGLE_LENS_CLICKED);
             default:
                 return context.getString(getStringId(mItem));
         }
+    }
+
+    /**
+     * Modify the menu title by applying span attributes or removing the 'New' label if the menu
+     * has already been selected before.
+     */
+    private CharSequence addOrRemoveNewLabel(Context context, String prefKey) {
+        String menuTitle = context.getString(getStringId(mItem));
+        if (!mShowNewLabel || SharedPreferencesManager.getInstance().readBoolean(prefKey, false)) {
+            return SpanApplier.removeSpanText(menuTitle, new SpanInfo("<new>", "</new>"));
+        }
+        return SpanApplier.applySpans(menuTitle,
+                new SpanInfo("<new>", "</new>", new SuperscriptSpan(), new RelativeSizeSpan(0.75f),
+                        new ForegroundColorSpan(ApiCompatibilityUtils.getColor(
+                                context.getResources(), R.color.default_text_color_blue))));
     }
 }

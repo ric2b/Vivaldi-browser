@@ -22,6 +22,7 @@
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/policy/core/common/policy_namespace.h"
 #include "components/policy/core/common/policy_service.h"
+#include "services/data_decoder/public/cpp/data_decoder.h"
 
 class BrowserContextKeyedServiceFactory;
 
@@ -161,6 +162,13 @@ class ArcPolicyBridge : public KeyedService,
       const std::string& command,
       mojom::PolicyInstance::OnCommandReceivedCallback callback);
 
+  const std::string& get_arc_policy_for_reporting() {
+    return arc_policy_for_reporting_;
+  }
+  const std::string& get_arc_policy_compliance_report() {
+    return arc_policy_compliance_report_;
+  }
+
  private:
   void InitializePolicyService();
 
@@ -168,9 +176,9 @@ class ArcPolicyBridge : public KeyedService,
   std::string GetCurrentJSONPolicies() const;
 
   // Called when the compliance report from ARC is parsed.
-  void OnReportComplianceParseSuccess(
+  void OnReportComplianceParse(
       base::OnceCallback<void(const std::string&)> callback,
-      base::Value parsed_json);
+      data_decoder::DataDecoder::ValueOrError result);
 
   void UpdateComplianceReportMetrics(const base::DictionaryValue* report);
 
@@ -204,6 +212,12 @@ class ArcPolicyBridge : public KeyedService,
 
   // Called when the ARC connection is ready.
   base::OnceClosure on_arc_instance_ready_callback_;
+
+  // Saved last sent ArcPolicy. Should be used only for feedback reporting.
+  std::string arc_policy_for_reporting_;
+  // Saved last received compliance report. Should be used only for feedback
+  // reporting.
+  std::string arc_policy_compliance_report_;
 
   // Must be the last member.
   base::WeakPtrFactory<ArcPolicyBridge> weak_ptr_factory_{this};

@@ -18,13 +18,13 @@
 namespace media {
 
 MojoDemuxerStreamAdapter::MojoDemuxerStreamAdapter(
-    mojom::DemuxerStreamPtr demuxer_stream,
+    mojo::PendingRemote<mojom::DemuxerStream> demuxer_stream,
     const base::Closure& stream_ready_cb)
     : demuxer_stream_(std::move(demuxer_stream)),
       stream_ready_cb_(stream_ready_cb),
       type_(UNKNOWN) {
   DVLOG(1) << __func__;
-  demuxer_stream_->Initialize(base::Bind(
+  demuxer_stream_->Initialize(base::BindOnce(
       &MojoDemuxerStreamAdapter::OnStreamReady, weak_factory_.GetWeakPtr()));
 }
 
@@ -32,14 +32,14 @@ MojoDemuxerStreamAdapter::~MojoDemuxerStreamAdapter() {
   DVLOG(1) << __func__;
 }
 
-void MojoDemuxerStreamAdapter::Read(const ReadCB& read_cb) {
+void MojoDemuxerStreamAdapter::Read(ReadCB read_cb) {
   DVLOG(3) << __func__;
   // We shouldn't be holding on to a previous callback if a new Read() came in.
   DCHECK(!read_cb_);
 
-  read_cb_ = read_cb;
-  demuxer_stream_->Read(base::Bind(&MojoDemuxerStreamAdapter::OnBufferReady,
-                                   weak_factory_.GetWeakPtr()));
+  read_cb_ = std::move(read_cb);
+  demuxer_stream_->Read(base::BindOnce(&MojoDemuxerStreamAdapter::OnBufferReady,
+                                       weak_factory_.GetWeakPtr()));
 }
 
 bool MojoDemuxerStreamAdapter::IsReadPending() const {

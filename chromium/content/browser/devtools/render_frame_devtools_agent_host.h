@@ -18,6 +18,7 @@
 #include "content/browser/devtools/devtools_agent_host_impl.h"
 #include "content/common/content_export.h"
 #include "content/common/navigation_params.mojom.h"
+#include "content/public/browser/render_process_host_observer.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "net/base/net_errors.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
@@ -42,7 +43,8 @@ class RenderFrameHostImpl;
 
 class CONTENT_EXPORT RenderFrameDevToolsAgentHost
     : public DevToolsAgentHostImpl,
-      private WebContentsObserver {
+      private WebContentsObserver,
+      private RenderProcessHostObserver {
  public:
   static void AddAllAgentHosts(DevToolsAgentHost::List* result);
 
@@ -75,6 +77,9 @@ class CONTENT_EXPORT RenderFrameDevToolsAgentHost
 #endif
 
   FrameTreeNode* frame_tree_node() { return frame_tree_node_; }
+
+  void OnNavigationRequestWillBeSent(
+      const NavigationRequest& navigation_request);
 
   // DevToolsAgentHost overrides.
   void DisconnectWebContents() override;
@@ -119,17 +124,22 @@ class CONTENT_EXPORT RenderFrameDevToolsAgentHost
                               RenderFrameHost* new_host) override;
   void FrameDeleted(RenderFrameHost* rfh) override;
   void RenderFrameDeleted(RenderFrameHost* rfh) override;
-  void RenderProcessGone(base::TerminationStatus status) override;
   void DidAttachInterstitialPage() override;
   void DidDetachInterstitialPage() override;
   void OnVisibilityChanged(content::Visibility visibility) override;
   void OnPageScaleFactorChanged(float page_scale_factor) override;
+
+  // RenderProcessHostObserver overrides.
+  void RenderProcessExited(RenderProcessHost* host,
+                           const ChildProcessTerminationInfo& info) override;
 
   bool IsChildFrame();
 
   void DestroyOnRenderFrameGone();
   void UpdateFrameHost(RenderFrameHostImpl* frame_host);
   void SetFrameTreeNode(FrameTreeNode* frame_tree_node);
+  void ChangeFrameHostAndObservedProcess(RenderFrameHostImpl* frame_host);
+  void UpdateFrameAlive();
 
   bool ShouldAllowSession(DevToolsSession* session);
 
@@ -150,7 +160,7 @@ class CONTENT_EXPORT RenderFrameDevToolsAgentHost
   RenderFrameHostImpl* frame_host_ = nullptr;
   base::flat_set<NavigationRequest*> navigation_requests_;
   bool render_frame_alive_ = false;
-  void* active_file_chooser_interceptor_ = nullptr;
+  bool render_frame_crashed_ = false;
 
   // The FrameTreeNode associated with this agent.
   FrameTreeNode* frame_tree_node_;

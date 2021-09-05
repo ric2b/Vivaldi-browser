@@ -9,13 +9,14 @@
 #include "base/strings/stringprintf.h"
 #include "base/task/post_task.h"
 #include "content/browser/native_file_system/native_file_system_error.h"
+#include "content/browser/native_file_system/native_file_system_transfer_token_impl.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/base/mime_util.h"
 #include "storage/browser/blob/blob_data_builder.h"
 #include "storage/browser/blob/blob_impl.h"
 #include "storage/browser/blob/blob_storage_context.h"
-#include "storage/browser/fileapi/file_system_operation_runner.h"
+#include "storage/browser/file_system/file_system_operation_runner.h"
 #include "third_party/blink/public/mojom/blob/blob.mojom.h"
 #include "third_party/blink/public/mojom/blob/serialized_blob.mojom.h"
 #include "third_party/blink/public/mojom/native_file_system/native_file_system_error.mojom.h"
@@ -61,7 +62,7 @@ void NativeFileSystemFileHandleImpl::AsBlob(AsBlobCallback callback) {
   if (GetReadPermissionStatus() != PermissionStatus::GRANTED) {
     std::move(callback).Run(native_file_system_error::FromStatus(
                                 NativeFileSystemStatus::kPermissionDenied),
-                            nullptr);
+                            base::File::Info(), nullptr);
     return;
   }
 
@@ -91,6 +92,48 @@ void NativeFileSystemFileHandleImpl::CreateFileWriter(
                                 mojo::NullRemote());
       }),
       std::move(callback));
+}
+
+void NativeFileSystemFileHandleImpl::IsSameEntry(
+    mojo::PendingRemote<blink::mojom::NativeFileSystemTransferToken> token,
+    IsSameEntryCallback callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  manager()->ResolveTransferToken(
+      std::move(token),
+      base::BindOnce(&NativeFileSystemFileHandleImpl::IsSameEntryImpl,
+                     weak_factory_.GetWeakPtr(), std::move(callback)));
+}
+
+void NativeFileSystemFileHandleImpl::IsSameEntryImpl(
+    IsSameEntryCallback callback,
+    NativeFileSystemTransferTokenImpl* other) {
+  if (!other) {
+    std::move(callback).Run(
+        native_file_system_error::FromStatus(
+            blink::mojom::NativeFileSystemStatus::kOperationFailed),
+        false);
+    return;
+  }
+
+  if (other->type() != NativeFileSystemTransferTokenImpl::HandleType::kFile) {
+    std::move(callback).Run(native_file_system_error::Ok(), false);
+    return;
+  }
+
+  const storage::FileSystemURL& url1 = url();
+  const storage::FileSystemURL& url2 = other->url();
+
+  // If two URLs are of a different type they are definitely not related.
+  if (url1.type() != url2.type()) {
+    std::move(callback).Run(native_file_system_error::Ok(), false);
+    return;
+  }
+
+  // Otherwise compare path.
+  const base::FilePath& path1 = url1.path();
+  const base::FilePath& path2 = url2.path();
+  std::move(callback).Run(native_file_system_error::Ok(), path1 == path2);
 }
 
 void NativeFileSystemFileHandleImpl::Transfer(
@@ -144,7 +187,7 @@ void NativeFileSystemFileHandleImpl::DidGetMetaDataForBlob(
 
   if (result != base::File::FILE_OK) {
     std::move(callback).Run(native_file_system_error::FromFileError(result),
-                            nullptr);
+                            base::File::Info(), nullptr);
     return;
   }
 
@@ -169,7 +212,7 @@ void NativeFileSystemFileHandleImpl::DidGetMetaDataForBlob(
       blob_remote.InitWithNewPipeAndPassReceiver();
 
   std::move(callback).Run(
-      native_file_system_error::Ok(),
+      native_file_system_error::Ok(), info,
       blink::mojom::SerializedBlob::New(uuid, content_type, info.size,
                                         std::move(blob_remote)));
 
@@ -238,7 +281,7 @@ void NativeFileSystemFileHandleImpl::CreateSwapFile(
   // file.
   storage::FileSystemURL swap_url =
       manager()->context()->CreateCrackedFileSystemURL(
-          url().origin().GetURL(), url().mount_type(), swap_path);
+          url().origin(), url().mount_type(), swap_path);
 
   // If that failed, it means this file was part of an isolated file system,
   // and specifically, a single file isolated file system. In that case we'll

@@ -1,10 +1,37 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="hu">
+<translation id="1089894737218087497">Önálló telepítés</translation>
+<translation id="1682285232070778125">Vivaldi, mint alapértelmezett böngésző</translation>
+<translation id="1974060860693918893">Haladó</translation>
+<translation id="2134216661302048561">A Vivaldi telepítő nem végzett a Vivaldi böngésző telepítésével. Biztos ki akarsz most lépni?</translation>
+<translation id="2286454467119466181">Egyszerű</translation>
+<translation id="237789874664518125">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. Minden jog fenntartva. &lt;a&gt;Privacy Policy&lt;/a&gt;</translation>
 <translation id="2392002507524894126">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. Minden jog fenntartva.</translation>
+<translation id="2611953850925269349">Biztosan kilépsz a Vivaldi-ból?</translation>
+<translation id="3004507951429848293">Az 'Elfogadás és frissítés' gombra kattintva elfogadod a Vivaldi &lt;a&gt;szolgáltatási feltételeit&lt;/a&gt;</translation>
+<translation id="335985608243443814">Tallózás...</translation>
+<translation id="3485073444286678268">A célmappa érvénytelen. Kérlek, válassz másikat.</translation>
 <translation id="3642991949832251880">Biztosan kilépsz a Vivaldiból?</translation>
+<translation id="3784826321032465839">Vivaldi telepítése</translation>
 <translation id="3850557856045828465">Figyelmeztetés: A Vivaldi nem tudja megakadályozni, hogy a bővítmények rögzítsék a böngészési előzményeket. A bővítmény inkognitómódban való használatának letiltásához töröld e lehetőség bejelölését.</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
+<translation id="4079588913451946215">Telepítés minden felhasználó számára</translation>
+<translation id="421958613172216971">Mappa választása</translation>
+<translation id="4234678621326711327">Telepítés a jelenlegi felhasználónak</translation>
+<translation id="4322221081772213228">Az 'Elfogadás és telepítés' gombra kattintva elfogadod a Vivaldi &lt;a&gt;szolgáltatási feltételeit&lt;/a&gt;</translation>
+<translation id="4380252528729894811">Célmappa</translation>
+<translation id="4619978527973181021">Elfogadás és telepítés</translation>
+<translation id="479976146866774527">Vivaldi telepítése</translation>
+<translation id="5051728323101947360">Az önálló Vivaldi alapértelmezett alkalmazásként lesz elérhető</translation>
+<translation id="5247376421371319618">Elfogadás és frissítés</translation>
+<translation id="5288672417093782294">A Vivaldi értesítési beállításainak megnyitása</translation>
+<translation id="5302048478445481009">Nyelv</translation>
 <translation id="5743878272102782872">Feladatkezelő - Vivaldi</translation>
 <translation id="6213772951145281007">A sütik és webhelyadatok törlése a Vivaldi bezárásakor</translation>
+<translation id="6569282126279967574">Hmm. A Vivaldi összeomlott. Újraindítod most?</translation>
+<translation id="694714344624446243">Vivaldi telepítő</translation>
+<translation id="7658239707568436148">Mégse</translation>
+<translation id="8773751185824654197">Megjegyzés: Ha futó Vivaldi böngészőt frissítesz, az adott példány bezáródik majd újraindul</translation>
+<translation id="933060950687965486">Telepítés típusa</translation>
 </translationbundle>

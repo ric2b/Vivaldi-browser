@@ -12,6 +12,10 @@
 <link rel="import" href="site_settings_behavior.html">
 <link rel="import" href="site_settings_prefs_browser_proxy.html">
 
+<if expr="chromeos">
+<link rel="import" href="android_info_browser_proxy.html">
+</if>
+
 <dom-module id="protocol-handlers">
   <template>
     <style include="settings-shared">
@@ -60,7 +64,7 @@
       </div>
     </template>
 
-    <cr-action-menu>
+    <cr-action-menu role-description="$i18n{menu}">
       <button class="dropdown-item" on-click="onDefaultClick_"
           id="defaultButton" hidden$="[[actionMenuModel_.is_default]]">
         $i18n{handlerSetDefault}

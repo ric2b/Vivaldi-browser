@@ -9,6 +9,7 @@
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "gpu/vulkan/vulkan_function_pointers.h"
+#include "gpu/vulkan/vulkan_image.h"
 #include "gpu/vulkan/vulkan_instance.h"
 #include "gpu/vulkan/vulkan_surface.h"
 #include "ui/gfx/gpu_fence.h"
@@ -16,44 +17,32 @@
 
 namespace gpu {
 
+VulkanImplementationWin32::VulkanImplementationWin32(bool use_swiftshader)
+    : VulkanImplementation(use_swiftshader) {}
+
 VulkanImplementationWin32::~VulkanImplementationWin32() = default;
 
 bool VulkanImplementationWin32::InitializeVulkanInstance(bool using_surface) {
   DCHECK(using_surface);
   std::vector<const char*> required_extensions = {
-      VK_KHR_SURFACE_EXTENSION_NAME, VK_KHR_WIN32_SURFACE_EXTENSION_NAME};
+      VK_KHR_SURFACE_EXTENSION_NAME,
+      VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
+  };
 
   VulkanFunctionPointers* vulkan_function_pointers =
       gpu::GetVulkanFunctionPointers();
 
+  base::FilePath path(use_swiftshader() ? L"vk_swiftshader.dll"
+                                        : L"vulkan-1.dll");
+
   base::NativeLibraryLoadError native_library_load_error;
-  vulkan_function_pointers->vulkan_loader_library_ = base::LoadNativeLibrary(
-      base::FilePath(L"vulkan-1.dll"), &native_library_load_error);
-  if (!vulkan_function_pointers->vulkan_loader_library_)
+  vulkan_function_pointers->vulkan_loader_library =
+      base::LoadNativeLibrary(path, &native_library_load_error);
+  if (!vulkan_function_pointers->vulkan_loader_library)
     return false;
 
   if (!vulkan_instance_.Initialize(required_extensions, {}))
     return false;
-
-  // Initialize platform function pointers
-  vkGetPhysicalDeviceWin32PresentationSupportKHR_ =
-      reinterpret_cast<PFN_vkGetPhysicalDeviceWin32PresentationSupportKHR>(
-          vkGetInstanceProcAddr(
-              vulkan_instance_.vk_instance(),
-              "vkGetPhysicalDeviceWin32PresentationSupportKHR"));
-  if (!vkGetPhysicalDeviceWin32PresentationSupportKHR_) {
-    LOG(ERROR) << "vkGetPhysicalDeviceWin32PresentationSupportKHR not found";
-    return false;
-  }
-
-  vkCreateWin32SurfaceKHR_ =
-      reinterpret_cast<PFN_vkCreateWin32SurfaceKHR>(vkGetInstanceProcAddr(
-          vulkan_instance_.vk_instance(), "vkCreateWin32SurfaceKHR"));
-  if (!vkCreateWin32SurfaceKHR_) {
-    LOG(ERROR) << "vkCreateWin32SurfaceKHR not found";
-    return false;
-  }
-
   return true;
 }
 
@@ -69,7 +58,7 @@ std::unique_ptr<VulkanSurface> VulkanImplementationWin32::CreateViewSurface(
   surface_create_info.hinstance =
       reinterpret_cast<HINSTANCE>(GetWindowLongPtr(window, GWLP_HINSTANCE));
   surface_create_info.hwnd = window;
-  VkResult result = vkCreateWin32SurfaceKHR_(
+  VkResult result = vkCreateWin32SurfaceKHR(
       vulkan_instance_.vk_instance(), &surface_create_info, nullptr, &surface);
   if (VK_SUCCESS != result) {
     DLOG(ERROR) << "vkCreatWin32SurfaceKHR() failed: " << result;
@@ -85,13 +74,20 @@ bool VulkanImplementationWin32::GetPhysicalDevicePresentationSupport(
     VkPhysicalDevice device,
     const std::vector<VkQueueFamilyProperties>& queue_family_properties,
     uint32_t queue_family_index) {
-  return vkGetPhysicalDeviceWin32PresentationSupportKHR_(device,
-                                                         queue_family_index);
+  return vkGetPhysicalDeviceWin32PresentationSupportKHR(device,
+                                                        queue_family_index);
 }
 
 std::vector<const char*>
 VulkanImplementationWin32::GetRequiredDeviceExtensions() {
-  return {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+  return {
+      VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+  };
+}
+
+std::vector<const char*>
+VulkanImplementationWin32::GetOptionalDeviceExtensions() {
+  return {};
 }
 
 VkFence VulkanImplementationWin32::CreateVkFenceForGpuFence(
@@ -136,17 +132,14 @@ bool VulkanImplementationWin32::CanImportGpuMemoryBuffer(
   return false;
 }
 
-bool VulkanImplementationWin32::CreateImageFromGpuMemoryHandle(
-    VkDevice vk_device,
+std::unique_ptr<VulkanImage>
+VulkanImplementationWin32::CreateImageFromGpuMemoryHandle(
+    VulkanDeviceQueue* device_queue,
     gfx::GpuMemoryBufferHandle gmb_handle,
     gfx::Size size,
-    VkImage* vk_image,
-    VkImageCreateInfo* vk_image_info,
-    VkDeviceMemory* vk_device_memory,
-    VkDeviceSize* mem_allocation_size,
-    base::Optional<VulkanYCbCrInfo>* ycbcr_info) {
+    VkFormat vk_formae) {
   NOTIMPLEMENTED();
-  return false;
+  return nullptr;
 }
 
 }  // namespace gpu

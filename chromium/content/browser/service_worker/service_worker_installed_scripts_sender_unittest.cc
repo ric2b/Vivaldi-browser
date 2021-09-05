@@ -91,10 +91,10 @@ class ExpectedScriptInfo {
         body_(body),
         meta_data_(meta_data) {}
 
-  ServiceWorkerDatabase::ResourceRecord WriteToDiskCache(
+  storage::mojom::ServiceWorkerResourceRecordPtr WriteToDiskCache(
       ServiceWorkerStorage* storage) const {
-    return ::content::WriteToDiskCacheSync(storage, script_url_, resource_id_,
-                                           headers_, body_, meta_data_);
+    return ::content::WriteToDiskCacheWithIdSync(
+        storage, script_url_, resource_id_, headers_, body_, meta_data_);
   }
 
   void CheckIfIdentical(
@@ -182,11 +182,10 @@ class ServiceWorkerInstalledScriptsSenderTest : public testing::Test {
     options.scope = scope_;
     registration_ = base::MakeRefCounted<ServiceWorkerRegistration>(
         options, 1L, context()->AsWeakPtr());
-    version_ = base::MakeRefCounted<ServiceWorkerVersion>(
-        registration_.get(),
+    version_ = CreateNewServiceWorkerVersion(
+        context()->registry(), registration_.get(),
         GURL("http://www.example.com/test/service_worker.js"),
-        blink::mojom::ScriptType::kClassic,
-        context()->storage()->NewVersionId(), context()->AsWeakPtr());
+        blink::mojom::ScriptType::kClassic);
     version_->set_fetch_handler_existence(
         ServiceWorkerVersion::FetchHandlerExistence::EXISTS);
     version_->SetStatus(ServiceWorkerVersion::INSTALLED);
@@ -198,6 +197,7 @@ class ServiceWorkerInstalledScriptsSenderTest : public testing::Test {
     helper_.reset();
   }
 
+  EmbeddedWorkerTestHelper* helper() { return helper_.get(); }
   ServiceWorkerContextCore* context() { return helper_->context(); }
   ServiceWorkerVersion* version() { return version_.get(); }
 
@@ -249,7 +249,7 @@ TEST_F(ServiceWorkerInstalledScriptsSenderTest, SendScripts) {
   };
 
   {
-    std::vector<ServiceWorkerDatabase::ResourceRecord> records;
+    std::vector<storage::mojom::ServiceWorkerResourceRecordPtr> records;
     for (const auto& info : kExpectedScriptInfoMap)
       records.push_back(info.second.WriteToDiskCache(context()->storage()));
     version()->script_cache_map()->SetResources(records);
@@ -305,7 +305,7 @@ TEST_F(ServiceWorkerInstalledScriptsSenderTest, FailedToSendBody) {
   };
 
   {
-    std::vector<ServiceWorkerDatabase::ResourceRecord> records;
+    std::vector<storage::mojom::ServiceWorkerResourceRecordPtr> records;
     for (const auto& info : kExpectedScriptInfoMap)
       records.push_back(info.second.WriteToDiskCache(context()->storage()));
     version()->script_cache_map()->SetResources(records);
@@ -350,7 +350,7 @@ TEST_F(ServiceWorkerInstalledScriptsSenderTest, FailedToSendBody) {
 TEST_F(ServiceWorkerInstalledScriptsSenderTest, FailedToSendMetaData) {
   const GURL kMainScriptURL = version()->script_url();
   std::string long_meta_data = "I'm the meta data!";
-  long_meta_data.resize(1E6, '!');
+  long_meta_data.resize(3E6, '!');
   std::map<GURL, ExpectedScriptInfo> kExpectedScriptInfoMap = {
       {kMainScriptURL,
        {1,
@@ -364,7 +364,7 @@ TEST_F(ServiceWorkerInstalledScriptsSenderTest, FailedToSendMetaData) {
   };
 
   {
-    std::vector<ServiceWorkerDatabase::ResourceRecord> records;
+    std::vector<storage::mojom::ServiceWorkerResourceRecordPtr> records;
     for (const auto& info : kExpectedScriptInfoMap)
       records.push_back(info.second.WriteToDiskCache(context()->storage()));
     version()->script_cache_map()->SetResources(records);
@@ -435,7 +435,7 @@ TEST_F(ServiceWorkerInstalledScriptsSenderTest, Histograms) {
   };
 
   {
-    std::vector<ServiceWorkerDatabase::ResourceRecord> records;
+    std::vector<storage::mojom::ServiceWorkerResourceRecordPtr> records;
     for (const auto& info : kExpectedScriptInfoMap)
       records.push_back(info.second.WriteToDiskCache(context()->storage()));
     version()->script_cache_map()->SetResources(records);
@@ -515,7 +515,7 @@ TEST_F(ServiceWorkerInstalledScriptsSenderTest, RequestScriptBeforeStreaming) {
   };
 
   {
-    std::vector<ServiceWorkerDatabase::ResourceRecord> records;
+    std::vector<storage::mojom::ServiceWorkerResourceRecordPtr> records;
     for (const auto& info : kExpectedScriptInfoMap)
       records.push_back(info.second.WriteToDiskCache(context()->storage()));
     version()->script_cache_map()->SetResources(records);
@@ -602,7 +602,7 @@ TEST_F(ServiceWorkerInstalledScriptsSenderTest, RequestScriptAfterStreaming) {
   };
 
   {
-    std::vector<ServiceWorkerDatabase::ResourceRecord> records;
+    std::vector<storage::mojom::ServiceWorkerResourceRecordPtr> records;
     for (const auto& info : kExpectedScriptInfoMap)
       records.push_back(info.second.WriteToDiskCache(context()->storage()));
     version()->script_cache_map()->SetResources(records);
@@ -653,6 +653,34 @@ TEST_F(ServiceWorkerInstalledScriptsSenderTest, RequestScriptAfterStreaming) {
     info.CheckIfIdentical(script_info);
   }
   EXPECT_EQ(FinishedReason::kSuccess, sender->last_finished_reason());
+}
+
+// Test that the scripts sender aborts gracefully on ServiceWorkerContext
+// shutdown.
+TEST_F(ServiceWorkerInstalledScriptsSenderTest, NoContext) {
+  const GURL kMainScriptURL = version()->script_url();
+  std::map<GURL, ExpectedScriptInfo> kExpectedScriptInfoMap = {
+      {kMainScriptURL,
+       {1,
+        kMainScriptURL,
+        {{"Content-Length", "35"},
+         {"Content-Type", "text/javascript; charset=utf-8"},
+         {"TestHeader", "BlahBlah"}},
+        "utf-8",
+        "I'm script body for the main script",
+        "I'm meta data for the main script"}}};
+  std::vector<storage::mojom::ServiceWorkerResourceRecordPtr> records;
+  for (const auto& info : kExpectedScriptInfoMap)
+    records.push_back(info.second.WriteToDiskCache(context()->storage()));
+  version()->script_cache_map()->SetResources(records);
+  auto sender =
+      std::make_unique<ServiceWorkerInstalledScriptsSender>(version());
+
+  helper()->ShutdownContext();
+  base::RunLoop().RunUntilIdle();
+
+  sender->Start();
+  EXPECT_EQ(sender->last_finished_reason(), FinishedReason::kNoContextError);
 }
 
 }  // namespace content

@@ -15,13 +15,14 @@
 #include "base/no_destructor.h"
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
+#include "base/task/thread_pool.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/apps/app_service/dip_px_util.h"
 #include "chrome/browser/extensions/chrome_app_icon.h"
 #include "chrome/browser/extensions/chrome_app_icon_loader.h"
+#include "chrome/browser/web_applications/components/app_icon_manager.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/system_connector.h"
 #include "extensions/browser/component_extension_resource_manager.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extensions_browser_client.h"
@@ -30,6 +31,7 @@
 #include "extensions/common/manifest_handlers/icons_handler.h"
 #include "extensions/grit/extensions_browser_resources.h"
 #include "services/data_decoder/public/cpp/decode_image.h"
+#include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/geometry/size.h"
@@ -174,9 +176,8 @@ void RunCallbackWithCompressedDataFromExtension(
   }
 
   // Try and load data from the resource file.
-  base::PostTaskAndReplyWithResult(
-      FROM_HERE,
-      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::BindOnce(&CompressedDataFromResource, std::move(ext_resource)),
       base::BindOnce(&RunCallbackWithCompressedData, size_hint_in_dip,
                      default_icon_resource, is_placeholder_icon,
@@ -214,10 +215,8 @@ void RunCallbackWithImageSkia(int size_hint_in_dip,
     }
 
     processed_image.MakeThreadSafe();
-    base::PostTaskAndReplyWithResult(
-        FROM_HERE,
-        {base::ThreadPool(), base::MayBlock(),
-         base::TaskPriority::USER_VISIBLE},
+    base::ThreadPool::PostTaskAndReplyWithResult(
+        FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
         base::BindOnce(&EncodeImage, processed_image),
         base::BindOnce(&RunCallbackWithCompressedData, size_hint_in_dip,
                        default_icon_resource, is_placeholder_icon, icon_effects,
@@ -286,9 +285,8 @@ void RunCallbackWithFallback(
     return;
   }
 
-  data_decoder::DecodeImage(
-      content::GetSystemConnector(), data,
-      data_decoder::mojom::ImageCodec::DEFAULT, false,
+  data_decoder::DecodeImageIsolated(
+      data, data_decoder::mojom::ImageCodec::DEFAULT, false,
       data_decoder::kDefaultMaxSizeInBytes, gfx::Size(),
       base::BindOnce(&RunCallbackWithSkBitmap, size_hint_in_dip,
                      is_placeholder_icon, icon_effects, icon_compression,
@@ -314,13 +312,28 @@ void ApplyIconEffects(IconEffects icon_effects,
   }
 #endif
 
-  const bool apply_chrome_badge = icon_effects & IconEffects::kBadge;
-  const bool app_launchable = !(icon_effects & IconEffects::kGray);
   const bool from_bookmark = icon_effects & IconEffects::kRoundCorners;
 
+  bool app_launchable = true;
+  // Only one badge can be visible at a time.
+  // Priority in which badges are applied (from the highest): Blocked > Paused >
+  // Chrome. This means than when apps are disabled or paused app type
+  // distinction information (Chrome vs Android) is lost.
+  extensions::ChromeAppIcon::Badge badge_type =
+      extensions::ChromeAppIcon::Badge::kNone;
+  if (icon_effects & IconEffects::kBlocked) {
+    badge_type = extensions::ChromeAppIcon::Badge::kBlocked;
+    app_launchable = false;
+  } else if (icon_effects & IconEffects::kPaused) {
+    badge_type = extensions::ChromeAppIcon::Badge::kPaused;
+    app_launchable = false;
+  } else if (icon_effects & IconEffects::kChromeBadge) {
+    badge_type = extensions::ChromeAppIcon::Badge::kChrome;
+  }
+
   extensions::ChromeAppIcon::ApplyEffects(size_hint_in_dip, resize_function,
-                                          apply_chrome_badge, app_launchable,
-                                          from_bookmark, image_skia);
+                                          app_launchable, from_bookmark,
+                                          badge_type, image_skia);
 }
 
 void LoadIconFromExtension(apps::mojom::IconCompression icon_compression,
@@ -374,6 +387,48 @@ void LoadIconFromExtension(apps::mojom::IconCompression icon_compression,
                        std::move(callback));
 }
 
+void LoadIconFromWebApp(const web_app::AppIconManager& icon_manager,
+                        apps::mojom::IconCompression icon_compression,
+                        int size_hint_in_dip,
+                        const std::string& web_app_id,
+                        IconEffects icon_effects,
+                        apps::mojom::Publisher::LoadIconCallback callback) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  constexpr bool is_placeholder_icon = false;
+  constexpr int default_icon_resource = IDR_APP_DEFAULT_ICON;
+
+  const int icon_size_in_px = apps_util::ConvertDipToPx(
+      size_hint_in_dip, /*quantize_to_supported_scale_factor=*/true);
+
+  if (icon_manager.HasSmallestIcon(web_app_id, icon_size_in_px)) {
+    if (icon_compression == apps::mojom::IconCompression::kCompressed &&
+        icon_effects == IconEffects::kNone) {
+      icon_manager.ReadSmallestCompressedIcon(
+          web_app_id, icon_size_in_px,
+          base::BindOnce(&RunCallbackWithCompressedData, size_hint_in_dip,
+                         default_icon_resource, is_placeholder_icon,
+                         IconEffects::kNone, std::move(callback)));
+    } else if (icon_compression != apps::mojom::IconCompression::kUnknown) {
+      // If |icon_effects| are requested, we must always load the
+      // uncompressed image to apply the icon effects, and then re-encode the
+      // image if the compressed icon is requested.
+      icon_manager.ReadSmallestIcon(
+          web_app_id, icon_size_in_px,
+          base::BindOnce(&RunCallbackWithSkBitmap, size_hint_in_dip,
+                         is_placeholder_icon, icon_effects, icon_compression,
+                         std::move(callback)));
+    }
+  }
+
+  if (callback) {
+    // Fall back to the default_icon_resource.
+    LoadIconFromResource(icon_compression, size_hint_in_dip,
+                         default_icon_resource, is_placeholder_icon,
+                         icon_effects, std::move(callback));
+  }
+}
+
 void LoadIconFromFileWithFallback(
     apps::mojom::IconCompression icon_compression,
     int size_hint_in_dip,
@@ -390,10 +445,8 @@ void LoadIconFromFileWithFallback(
 
     case apps::mojom::IconCompression::kUncompressed:
     case apps::mojom::IconCompression::kCompressed: {
-      base::PostTaskAndReplyWithResult(
-          FROM_HERE,
-          {base::ThreadPool(), base::MayBlock(),
-           base::TaskPriority::USER_VISIBLE},
+      base::ThreadPool::PostTaskAndReplyWithResult(
+          FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
           base::BindOnce(&ReadFileAsCompressedData, path),
           base::BindOnce(&RunCallbackWithFallback, size_hint_in_dip,
                          is_placeholder_icon, icon_effects, icon_compression,

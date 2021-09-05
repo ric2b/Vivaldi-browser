@@ -25,12 +25,13 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "browser/thumbnails/thumbnail_capture_contents.h"
+#include "browser/vivaldi_browser_finder.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/common/chrome_paths.h"
-#include "content/browser/renderer_host/render_view_host_delegate_view.h"
-#include "content/browser/web_contents/web_contents_impl.h"
+#include "content/browser/renderer_host/render_view_host_delegate_view.h" // nogncheck
+#include "content/browser/web_contents/web_contents_impl.h" // nogncheck
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_widget_host_view.h"
@@ -39,12 +40,13 @@
 #include "extensions/common/api/extension_types.h"
 #include "extensions/common/error_utils.h"
 #include "extensions/schema/thumbnails.h"
+#include "extensions/tools/vivaldi_tools.h"
 #include "renderer/vivaldi_render_messages.h"
-#include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/display/screen.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/geometry/dip_util.h"
+#include "ui/gfx/geometry/size_conversions.h"
 #include "ui/vivaldi_browser_window.h"
 #include "ui/vivaldi_skia_utils.h"
 #include "ui/vivaldi_ui_utils.h"
@@ -508,8 +510,10 @@ ExtensionFunction::ResponseAction ThumbnailsCaptureTabFunction::Run() {
   double scale = 1.0f;
   display::Screen* screen = display::Screen::GetScreen();
   if (screen) {
-    scale = screen->GetDisplayNearestPoint(gfx::Point(rect.x(), rect.y()))
-                .device_scale_factor();
+    gfx::NativeWindow window = tabstrip_contents->GetTopLevelNativeWindow();
+    display::Display display =
+      screen->GetDisplayNearestWindow(window);
+    scale = display.device_scale_factor();
   }
   capture_params.rect = gfx::ConvertRectToPixel(scale, rect);
   capture_params.target_size = out_dimension;

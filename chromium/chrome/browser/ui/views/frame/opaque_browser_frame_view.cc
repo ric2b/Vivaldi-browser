@@ -174,22 +174,22 @@ void OpaqueBrowserFrameView::InitViews() {
     window_icon_->Update();
   }
 
+  web_app::AppBrowserController* controller =
+      browser_view()->browser()->app_controller();
+  if (controller) {
+    set_web_app_frame_toolbar(AddChildView(
+        std::make_unique<WebAppFrameToolbarView>(frame(), browser_view())));
+  }
+
+  // The window title appears above the web app frame toolbar (if present),
+  // which surrounds the title with minimal-ui buttons on the left,
+  // and other controls (such as the app menu button) on the right.
   window_title_ = new views::Label(browser_view()->GetWindowTitle());
   window_title_->SetVisible(browser_view()->ShouldShowWindowTitle());
   window_title_->SetSubpixelRenderingEnabled(false);
   window_title_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   window_title_->SetID(VIEW_ID_WINDOW_TITLE);
   AddChildView(window_title_);
-
-  web_app::AppBrowserController* controller =
-      browser_view()->browser()->app_controller();
-  if (controller && controller->HasTitlebarToolbar()) {
-    set_web_app_frame_toolbar(
-        AddChildView(std::make_unique<WebAppFrameToolbarView>(
-            frame(), browser_view(),
-            GetCaptionColor(BrowserFrameActiveState::kActive),
-            GetCaptionColor(BrowserFrameActiveState::kInactive))));
-  }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -348,20 +348,18 @@ void OpaqueBrowserFrameView::ButtonPressed(views::Button* sender,
     frame()->Restore();
   } else if (sender == close_button_) {
     frame()->CloseWithReason(views::Widget::ClosedReason::kCloseButtonClicked);
-  }
-}
-
-void OpaqueBrowserFrameView::OnMenuButtonClicked(views::Button* source,
-                                                 const gfx::Point& point,
-                                                 const ui::Event* event) {
+  } else if (sender == window_icon_) {
 #if defined(OS_LINUX)
-  views::MenuRunner menu_runner(frame()->GetSystemMenuModel(),
-                                views::MenuRunner::HAS_MNEMONICS);
-  menu_runner.RunMenuAt(
-      browser_view()->GetWidget(), window_icon_->button_controller(),
-      window_icon_->GetBoundsInScreen(), views::MenuAnchorPosition::kTopLeft,
-      ui::MENU_SOURCE_MOUSE);
+    // TODO(pbos): Figure out / document why this is Linux only. This needs a
+    // comment.
+    views::MenuRunner menu_runner(frame()->GetSystemMenuModel(),
+                                  views::MenuRunner::HAS_MNEMONICS);
+    menu_runner.RunMenuAt(
+        browser_view()->GetWidget(), window_icon_->button_controller(),
+        window_icon_->GetBoundsInScreen(), views::MenuAnchorPosition::kTopLeft,
+        ui::MENU_SOURCE_MOUSE);
 #endif
+  }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -444,7 +442,7 @@ bool OpaqueBrowserFrameView::IsTabStripVisible() const {
 
 bool OpaqueBrowserFrameView::IsToolbarVisible() const {
   return browser_view()->IsToolbarVisible() &&
-      !browser_view()->toolbar()->GetPreferredSize().IsEmpty();
+         !browser_view()->toolbar()->GetPreferredSize().IsEmpty();
 }
 
 int OpaqueBrowserFrameView::GetTabStripHeight() const {
@@ -704,8 +702,8 @@ void OpaqueBrowserFrameView::PaintRestoredFrameBorder(
 
 void OpaqueBrowserFrameView::PaintMaximizedFrameBorder(
     gfx::Canvas* canvas) const {
-  frame_background_->set_maximized_top_inset(
-      GetTopInset(true) - GetTopInset(false));
+  frame_background_->set_maximized_top_inset(GetTopInset(true) -
+                                             GetTopInset(false));
   frame_background_->PaintMaximized(canvas, this);
 }
 
@@ -713,18 +711,12 @@ void OpaqueBrowserFrameView::PaintClientEdge(gfx::Canvas* canvas) const {
   const bool tabstrip_visible = browser_view()->IsTabStripVisible();
   const gfx::Rect client_bounds =
       layout_->CalculateClientAreaBounds(width(), height());
-  int y = client_bounds.y();
-  // If the toolbar isn't going to draw a top edge for us, draw one ourselves.
-  if (!tabstrip_visible) {
-    canvas->DrawLine(gfx::Point(client_bounds.x(), client_bounds.y() - 1),
-                     gfx::Point(client_bounds.right(), client_bounds.y() - 1),
-                     GetToolbarTopSeparatorColor());
-  }
 
   // In maximized mode, the only edge to draw is the top one, so we're done.
   if (IsFrameCondensed())
     return;
 
+  int y = client_bounds.y();
   const gfx::Rect toolbar_bounds = browser_view()->toolbar()->bounds();
   if (tabstrip_visible) {
     // The client edges start at the top of the toolbar.
@@ -733,8 +725,7 @@ void OpaqueBrowserFrameView::PaintClientEdge(gfx::Canvas* canvas) const {
 
   // For popup windows, draw location bar sides.
   const SkColor location_bar_border_color =
-      browser_view()->toolbar()->location_bar()->GetOpaqueBorderColor(
-          browser_view()->IsIncognito());
+      browser_view()->toolbar()->location_bar()->GetOpaqueBorderColor();
   if (!tabstrip_visible && IsToolbarVisible()) {
     gfx::Rect side(client_bounds.x() - kClientEdgeThickness, y,
                    kClientEdgeThickness, toolbar_bounds.height());

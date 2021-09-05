@@ -153,10 +153,17 @@ scoped_refptr<VideoFrame> VideoFrameCompositor::GetCurrentFrameOnAnyThread() {
   return current_frame_;
 }
 
-void VideoFrameCompositor::SetCurrentFrame(scoped_refptr<VideoFrame> frame) {
+void VideoFrameCompositor::SetCurrentFrame_Locked(
+    scoped_refptr<VideoFrame> frame,
+    base::TimeTicks expected_display_time) {
   DCHECK(task_runner_->BelongsToCurrentThread());
-  base::AutoLock lock(current_frame_lock_);
+  TRACE_EVENT1("media", "VideoFrameCompositor::SetCurrentFrame", "frame",
+               frame->AsHumanReadableString());
+  current_frame_lock_.AssertAcquired();
   current_frame_ = std::move(frame);
+  last_presentation_time_ = tick_clock_->NowTicks();
+  last_expected_display_time_ = expected_display_time;
+  ++presentation_counter_;
 }
 
 void VideoFrameCompositor::PutCurrentFrame() {
@@ -167,6 +174,8 @@ void VideoFrameCompositor::PutCurrentFrame() {
 bool VideoFrameCompositor::UpdateCurrentFrame(base::TimeTicks deadline_min,
                                               base::TimeTicks deadline_max) {
   DCHECK(task_runner_->BelongsToCurrentThread());
+  TRACE_EVENT2("media", "VideoFrameCompositor::UpdateCurrentFrame",
+               "deadline_min", deadline_min, "deadline_max", deadline_max);
   return CallRender(deadline_min, deadline_max, false);
 }
 
@@ -216,13 +225,15 @@ void VideoFrameCompositor::PaintSingleFrame(scoped_refptr<VideoFrame> frame,
                                   std::move(frame), repaint_duplicate_frame));
     return;
   }
-  if (ProcessNewFrame(std::move(frame), repaint_duplicate_frame) &&
+  if (ProcessNewFrame(std::move(frame), tick_clock_->NowTicks(),
+                      repaint_duplicate_frame) &&
       IsClientSinkAvailable()) {
     client_->DidReceiveFrame();
   }
 }
 
 void VideoFrameCompositor::UpdateCurrentFrameIfStale() {
+  TRACE_EVENT0("media", "VideoFrameCompositor::UpdateCurrentFrameIfStale");
   DCHECK(task_runner_->BelongsToCurrentThread());
 
   // If we're not rendering, then the frame can't be stale.
@@ -246,9 +257,12 @@ void VideoFrameCompositor::UpdateCurrentFrameIfStale() {
   if (interval < base::TimeDelta::FromMilliseconds(4))
     return;
 
-  // Update the interval based on the time between calls and call background
-  // render which will give this information to the client.
-  last_interval_ = interval;
+  {
+    base::AutoLock lock(callback_lock_);
+    // Update the interval based on the time between calls and call background
+    // render which will give this information to the client.
+    last_interval_ = interval;
+  }
   BackgroundRender();
 }
 
@@ -258,7 +272,49 @@ void VideoFrameCompositor::SetOnNewProcessedFrameCallback(
   new_processed_frame_cb_ = std::move(cb);
 }
 
+void VideoFrameCompositor::SetOnFramePresentedCallback(
+    OnNewFramePresentedCB present_cb) {
+  base::AutoLock lock(current_frame_lock_);
+  new_presented_frame_cb_ = std::move(present_cb);
+}
+
+std::unique_ptr<blink::WebMediaPlayer::VideoFramePresentationMetadata>
+VideoFrameCompositor::GetLastPresentedFrameMetadata() {
+  auto frame_metadata =
+      std::make_unique<blink::WebMediaPlayer::VideoFramePresentationMetadata>();
+
+  scoped_refptr<VideoFrame> last_frame;
+  {
+    // Manually acquire the lock instead of calling GetCurrentFrameOnAnyThread()
+    // to also fetch the other frame dependent properties.
+    base::AutoLock lock(current_frame_lock_);
+    last_frame = current_frame_;
+    frame_metadata->presentation_time = last_presentation_time_;
+    frame_metadata->expected_display_time = last_expected_display_time_;
+    frame_metadata->presented_frames = presentation_counter_;
+  }
+
+  frame_metadata->width = last_frame->visible_rect().width();
+  frame_metadata->height = last_frame->visible_rect().height();
+
+  frame_metadata->media_time = last_frame->timestamp();
+
+  frame_metadata->metadata.MergeMetadataFrom(last_frame->metadata());
+
+  {
+    base::AutoLock lock(callback_lock_);
+    if (callback_) {
+      frame_metadata->average_frame_duration =
+          callback_->GetPreferredRenderInterval();
+    }
+    frame_metadata->rendering_interval = last_interval_;
+  }
+
+  return frame_metadata;
+}
+
 bool VideoFrameCompositor::ProcessNewFrame(scoped_refptr<VideoFrame> frame,
+                                           base::TimeTicks presentation_time,
                                            bool repaint_duplicate_frame) {
   DCHECK(task_runner_->BelongsToCurrentThread());
 
@@ -271,10 +327,21 @@ bool VideoFrameCompositor::ProcessNewFrame(scoped_refptr<VideoFrame> frame,
   // subsequent PutCurrentFrame() call it will mark it as rendered.
   rendered_last_frame_ = false;
 
-  SetCurrentFrame(std::move(frame));
+  // Copy to a local variable to avoid potential deadlock when executing the
+  // callback.
+  OnNewFramePresentedCB frame_presented_cb;
+  {
+    base::AutoLock lock(current_frame_lock_);
+    SetCurrentFrame_Locked(std::move(frame), presentation_time);
+    frame_presented_cb = std::move(new_presented_frame_cb_);
+  }
 
   if (new_processed_frame_cb_)
-    std::move(new_processed_frame_cb_).Run(base::TimeTicks::Now());
+    std::move(new_processed_frame_cb_).Run(tick_clock_->NowTicks());
+
+  if (frame_presented_cb) {
+    std::move(frame_presented_cb).Run();
+  }
 
   return true;
 }
@@ -295,11 +362,19 @@ void VideoFrameCompositor::SetForceSubmit(bool force_submit) {
   submitter_->SetForceSubmit(force_submit);
 }
 
+base::TimeDelta VideoFrameCompositor::GetLastIntervalWithoutLock()
+    NO_THREAD_SAFETY_ANALYSIS {
+  DCHECK(task_runner_->BelongsToCurrentThread());
+  // |last_interval_| is only updated on the compositor thread, so it's safe to
+  // return it without acquiring |callback_lock_|
+  return last_interval_;
+}
+
 void VideoFrameCompositor::BackgroundRender() {
   DCHECK(task_runner_->BelongsToCurrentThread());
   const base::TimeTicks now = tick_clock_->NowTicks();
   last_background_render_ = now;
-  bool new_frame = CallRender(now, now + last_interval_, true);
+  bool new_frame = CallRender(now, now + GetLastIntervalWithoutLock(), true);
   if (new_frame && IsClientSinkAvailable())
     client_->DidReceiveFrame();
 }
@@ -327,7 +402,7 @@ bool VideoFrameCompositor::CallRender(base::TimeTicks deadline_min,
 
   const bool new_frame = ProcessNewFrame(
       callback_->Render(deadline_min, deadline_max, background_rendering),
-      false);
+      deadline_min, false);
 
   // We may create a new frame here with background rendering, but the provider
   // has no way of knowing that a new frame had been processed, so keep track of

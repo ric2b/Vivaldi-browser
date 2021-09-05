@@ -12,17 +12,34 @@
 #include "base/logging.h"
 #include "base/strings/string_piece.h"
 #include "base/threading/sequenced_task_runner_handle.h"
+#include "base/time/time.h"
+#include "base/timer/elapsed_timer.h"
 #include "build/build_config.h"
+#include "components/device_event_log/device_event_log.h"
 #include "device/fido/ble_adapter_manager.h"
 #include "device/fido/fido_authenticator.h"
 #include "device/fido/fido_discovery_factory.h"
-#include "services/service_manager/public/cpp/connector.h"
 
 #if defined(OS_WIN)
 #include "device/fido/win/authenticator.h"
 #endif
 
+namespace {
+// Authenticators that return a response in less than this time are likely to
+// have done so without interaction from the user.
+static const base::TimeDelta kMinExpectedAuthenticatorResponseTime =
+    base::TimeDelta::FromMilliseconds(300);
+}  // namespace
+
 namespace device {
+
+// FidoRequestHandlerBase::AuthenticatorState ---------------------------------
+
+FidoRequestHandlerBase::AuthenticatorState::AuthenticatorState(
+    FidoAuthenticator* authenticator)
+    : authenticator(authenticator) {}
+
+FidoRequestHandlerBase::AuthenticatorState::~AuthenticatorState() = default;
 
 // FidoRequestHandlerBase::TransportAvailabilityInfo --------------------------
 
@@ -46,24 +63,22 @@ FidoRequestHandlerBase::Observer::~Observer() = default;
 // FidoRequestHandlerBase -----------------------------------------------------
 
 FidoRequestHandlerBase::FidoRequestHandlerBase(
-    service_manager::Connector* connector,
     FidoDiscoveryFactory* fido_discovery_factory,
     const base::flat_set<FidoTransportProtocol>& available_transports) {
 #if defined(OS_WIN)
-  InitDiscoveriesWin(fido_discovery_factory, connector, available_transports);
+  InitDiscoveriesWin(fido_discovery_factory, available_transports);
 #else
-  InitDiscoveries(fido_discovery_factory, connector, available_transports);
+  InitDiscoveries(fido_discovery_factory, available_transports);
 #endif  // !defined(OS_WIN)
 }
 
 void FidoRequestHandlerBase::InitDiscoveries(
     FidoDiscoveryFactory* fido_discovery_factory,
-    service_manager::Connector* connector,
     const base::flat_set<FidoTransportProtocol>& available_transports) {
   transport_availability_info_.available_transports = available_transports;
   for (const auto transport : available_transports) {
     std::unique_ptr<FidoDiscoveryBase> discovery =
-        fido_discovery_factory->Create(transport, connector);
+        fido_discovery_factory->Create(transport);
     if (discovery == nullptr) {
       // This can occur in tests when a ScopedVirtualU2fDevice is in effect and
       // HID transports are not configured or when caBLE discovery data isn't
@@ -109,14 +124,13 @@ void FidoRequestHandlerBase::InitDiscoveries(
 #if defined(OS_WIN)
 void FidoRequestHandlerBase::InitDiscoveriesWin(
     FidoDiscoveryFactory* fido_discovery_factory,
-    service_manager::Connector* connector,
     const base::flat_set<FidoTransportProtocol>& available_transports) {
   // Try to instantiate the discovery for proxying requests to the native
   // Windows WebAuthn API; or fall back to using the regular device transport
   // discoveries if the API is unavailable.
   auto discovery = fido_discovery_factory->MaybeCreateWinWebAuthnApiDiscovery();
   if (!discovery) {
-    InitDiscoveries(fido_discovery_factory, connector, available_transports);
+    InitDiscoveries(fido_discovery_factory, available_transports);
     return;
   }
 
@@ -144,7 +158,7 @@ void FidoRequestHandlerBase::InitDiscoveriesWin(
         FidoTransportProtocol::kCloudAssistedBluetoothLowEnergy};
   }
 
-  InitDiscoveries(fido_discovery_factory, connector, other_transports);
+  InitDiscoveries(fido_discovery_factory, other_transports);
 }
 #endif  // defined(OS_WIN)
 
@@ -154,11 +168,7 @@ FidoRequestHandlerBase::~FidoRequestHandlerBase() {
 
 void FidoRequestHandlerBase::StartAuthenticatorRequest(
     const std::string& authenticator_id) {
-  auto authenticator_it = active_authenticators_.find(authenticator_id);
-  if (authenticator_it == active_authenticators_.end())
-    return;
-
-  InitializeAuthenticatorAndDispatchRequest(authenticator_it->second);
+  InitializeAuthenticatorAndDispatchRequest(authenticator_id);
 }
 
 void FidoRequestHandlerBase::CancelActiveAuthenticators(
@@ -168,7 +178,7 @@ void FidoRequestHandlerBase::CancelActiveAuthenticators(
     DCHECK(!task_it->first.empty());
     if (task_it->first != exclude_device_id) {
       DCHECK(task_it->second);
-      task_it->second->Cancel();
+      task_it->second->authenticator->Cancel();
 
       // Note that the pointer being erased is non-owning. The actual
       // FidoAuthenticator instance is owned by its discovery (which in turn is
@@ -233,6 +243,20 @@ void FidoRequestHandlerBase::Start() {
     discovery->Start();
 }
 
+bool FidoRequestHandlerBase::AuthenticatorMayHaveReturnedImmediately(
+    const std::string& authenticator_id) {
+  auto it = active_authenticators_.find(authenticator_id);
+  if (it == active_authenticators_.end())
+    return false;
+
+  if (!it->second->timer)
+    return true;
+
+  FIDO_LOG(DEBUG) << "Authenticator returned in "
+                  << it->second->timer->Elapsed();
+  return it->second->timer->Elapsed() < kMinExpectedAuthenticatorResponseTime;
+}
+
 void FidoRequestHandlerBase::AuthenticatorRemoved(
     FidoDiscoveryBase* discovery,
     FidoAuthenticator* authenticator) {
@@ -275,7 +299,8 @@ void FidoRequestHandlerBase::AuthenticatorPairingModeChanged(
 
   if (observer_) {
     observer_->FidoAuthenticatorPairingModeChanged(
-        device_id, is_in_pairing_mode, it->second->GetDisplayName());
+        device_id, is_in_pairing_mode,
+        it->second->authenticator->GetDisplayName());
   }
 }
 
@@ -283,8 +308,13 @@ void FidoRequestHandlerBase::DiscoveryStarted(
     FidoDiscoveryBase* discovery,
     bool success,
     std::vector<FidoAuthenticator*> authenticators) {
-  for (auto* authenticator : authenticators) {
-    AuthenticatorAdded(discovery, authenticator);
+  if (!success) {
+    transport_availability_info_.available_transports.erase(
+        discovery->transport());
+  } else {
+    for (auto* authenticator : authenticators) {
+      AuthenticatorAdded(discovery, authenticator);
+    }
   }
   DCHECK(notify_observer_callback_);
   notify_observer_callback_.Run();
@@ -293,9 +323,17 @@ void FidoRequestHandlerBase::DiscoveryStarted(
 void FidoRequestHandlerBase::AuthenticatorAdded(
     FidoDiscoveryBase* discovery,
     FidoAuthenticator* authenticator) {
-  DCHECK(authenticator &&
-         !base::Contains(active_authenticators(), authenticator->GetId()));
-  active_authenticators_.emplace(authenticator->GetId(), authenticator);
+  DCHECK(!authenticator->GetId().empty());
+  bool was_inserted;
+  std::tie(std::ignore, was_inserted) = active_authenticators_.insert(
+      {authenticator->GetId(),
+       std::make_unique<AuthenticatorState>(authenticator)});
+  if (!was_inserted) {
+    NOTREACHED();
+    FIDO_LOG(ERROR) << "Authenticator with duplicate ID "
+                    << authenticator->GetId();
+    return;
+  }
 
   // If |observer_| exists, dispatching request to |authenticator| is
   // delegated to |observer_|. Else, dispatch request to |authenticator|
@@ -317,7 +355,7 @@ void FidoRequestHandlerBase::AuthenticatorAdded(
         FROM_HERE,
         base::BindOnce(
             &FidoRequestHandlerBase::InitializeAuthenticatorAndDispatchRequest,
-            GetWeakPtr(), authenticator));
+            GetWeakPtr(), authenticator->GetId()));
   } else {
     VLOG(2) << "Embedder controls the dispatch.";
   }
@@ -346,14 +384,26 @@ void FidoRequestHandlerBase::NotifyObserverTransportAvailability() {
 }
 
 void FidoRequestHandlerBase::InitializeAuthenticatorAndDispatchRequest(
-    FidoAuthenticator* authenticator) {
-  authenticator->InitializeAuthenticator(
-      base::BindOnce(&FidoRequestHandlerBase::DispatchRequest,
-                     weak_factory_.GetWeakPtr(), authenticator));
+    const std::string& authenticator_id) {
+  auto authenticator_it = active_authenticators_.find(authenticator_id);
+  if (authenticator_it == active_authenticators_.end()) {
+    return;
+  }
+  AuthenticatorState* authenticator_state = authenticator_it->second.get();
+  authenticator_state->timer = std::make_unique<base::ElapsedTimer>();
+  authenticator_state->authenticator->InitializeAuthenticator(base::BindOnce(
+      &FidoRequestHandlerBase::DispatchRequest, weak_factory_.GetWeakPtr(),
+      authenticator_state->authenticator));
 }
 
 void FidoRequestHandlerBase::ConstructBleAdapterPowerManager() {
   bluetooth_adapter_manager_ = std::make_unique<BleAdapterManager>(this);
+}
+
+void FidoRequestHandlerBase::StopDiscoveries() {
+  for (const auto& discovery : discoveries_) {
+    discovery->MaybeStop();
+  }
 }
 
 }  // namespace device

@@ -10,12 +10,10 @@
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
-#include "base/metrics/field_trial_params.h"
-#include "base/strings/string_number_conversions.h"
-#include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 
@@ -86,12 +84,9 @@ namespace disk_cache {
 
 const int kDefaultCacheSize = 80 * 1024 * 1024;
 
-const base::Feature kChangeDiskCacheSizeExperiment{
-    "ChangeDiskCacheSize", base::FEATURE_DISABLED_BY_DEFAULT};
-
 void DeleteCache(const base::FilePath& path, bool remove_folder) {
   if (remove_folder) {
-    if (!base::DeleteFile(path, /* recursive */ true))
+    if (!base::DeleteFileRecursively(path))
       LOG(WARNING) << "Unable to delete cache folder.";
     return;
   }
@@ -102,7 +97,7 @@ void DeleteCache(const base::FilePath& path, bool remove_folder) {
       base::FileEnumerator::FILES | base::FileEnumerator::DIRECTORIES);
   for (base::FilePath file = iter.Next(); !file.value().empty();
        file = iter.Next()) {
-    if (!base::DeleteFile(file, /* recursive */ true)) {
+    if (!base::DeleteFileRecursively(file)) {
       LOG(WARNING) << "Unable to delete cache.";
       return;
     }
@@ -116,9 +111,12 @@ void DeleteCache(const base::FilePath& path, bool remove_folder) {
 // rename the cache directory (for instance due to a sharing violation), and in
 // that case a cache for this profile (on the desired path) cannot be created.
 bool DelayedCacheCleanup(const base::FilePath& full_path) {
-  // GetTempCacheName() and MoveCache() use synchronous file
-  // operations.
+  // GetTempCacheName() and MoveCache() use synchronous file operations.
   base::ThreadRestrictions::ScopedAllowIO allow_io;
+
+  // We can exit early if nothing was done/the directory is empty.
+  if (base::IsDirectoryEmpty(full_path))
+    return true;
 
   base::FilePath current_path = full_path.StripTrailingSeparators();
 
@@ -143,56 +141,37 @@ bool DelayedCacheCleanup(const base::FilePath& full_path) {
     return false;
   }
 
-  base::PostTask(
-      FROM_HERE,
-      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::BEST_EFFORT,
-       base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
-      base::BindOnce(&CleanupCallback, path, name_str));
+  base::ThreadPool::PostTask(FROM_HERE,
+                             {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
+                              base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
+                             base::BindOnce(&CleanupCallback, path, name_str));
   return true;
 }
 
 // Returns the preferred maximum number of bytes for the cache given the
 // number of available bytes.
-int PreferredCacheSize(int64_t available) {
-  // Percent of cache size to use, relative to the default size. "100" means to
-  // use 100% of the default size.
-  int percent_relative_size;
-  std::map<std::string, std::string> params;
-  if (!base::GetFieldTrialParamsByFeature(
-          disk_cache::kChangeDiskCacheSizeExperiment, &params) ||
-      !base::StringToInt(params["percent_relative_size"],
-                         &percent_relative_size) ||
-      percent_relative_size <= 0) {
-    percent_relative_size = 100;
-  }
-
-  // Cap scaling, as a safety check, to avoid overflow.
-  if (percent_relative_size > 200)
-    percent_relative_size = 200;
-
-  int64_t scaled_default_disk_cache_size =
-      static_cast<int64_t>(disk_cache::kDefaultCacheSize) *
-      percent_relative_size / 100;
+int PreferredCacheSize(int64_t available, net::CacheType type) {
   if (available < 0)
-    return static_cast<int32_t>(scaled_default_disk_cache_size);
+    return kDefaultCacheSize;
 
   int64_t preferred_cache_size = PreferredCacheSizeInternal(available);
 
-  // If the preferred cache size is less 20% of the available space, scale for
-  // the field trial, capping the scaled value at 20% of the available space.
-  if (preferred_cache_size < available / 5) {
-    preferred_cache_size = preferred_cache_size * percent_relative_size / 100;
-    if (preferred_cache_size > available / 5)
-      preferred_cache_size = available / 5;
-  }
-
   // Limit cache size to somewhat less than kint32max to avoid potential
   // integer overflows in cache backend implementations.
-  DCHECK_LT(scaled_default_disk_cache_size * 4,
-            std::numeric_limits<int32_t>::max());
-  return static_cast<int32_t>(
-      std::min(preferred_cache_size,
-               static_cast<int64_t>(scaled_default_disk_cache_size * 4)));
+  //
+  // Note: the 4x limit is of course far below that; historically it came
+  // from the blockfile backend with the following explanation:
+  // "Let's not use more than the default size while we tune-up the performance
+  // of bigger caches. "
+  int64_t size_limit = static_cast<int64_t>(kDefaultCacheSize) * 4;
+  // Native code entries can be large, so we would like a larger cache.
+  // Make the size limit 50% larger in that case.
+  if (type == net::GENERATED_NATIVE_CODE_CACHE) {
+    size_limit = (size_limit / 2) * 3;
+  }
+
+  DCHECK_LT(size_limit, std::numeric_limits<int32_t>::max());
+  return static_cast<int32_t>(std::min(preferred_cache_size, size_limit));
 }
 
 }  // namespace disk_cache

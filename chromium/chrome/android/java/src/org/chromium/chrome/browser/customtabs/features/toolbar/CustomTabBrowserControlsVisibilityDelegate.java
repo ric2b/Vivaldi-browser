@@ -8,8 +8,8 @@ import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.dependency_injection.ActivityScope;
 import org.chromium.chrome.browser.fullscreen.BrowserStateBrowserControlsVisibilityDelegate;
 import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
-import org.chromium.chrome.browser.tab.BrowserControlsVisibilityDelegate;
-import org.chromium.chrome.browser.tab.TabBrowserControlsState;
+import org.chromium.components.browser_ui.util.BrowserControlsVisibilityDelegate;
+import org.chromium.content_public.common.BrowserControlsState;
 
 import javax.inject.Inject;
 
@@ -19,44 +19,49 @@ import dagger.Lazy;
  * Implementation of {@link BrowserControlsVisibilityDelegate} for custom tabs.
  */
 @ActivityScope
-public class CustomTabBrowserControlsVisibilityDelegate
-        implements BrowserControlsVisibilityDelegate {
+public class CustomTabBrowserControlsVisibilityDelegate extends BrowserControlsVisibilityDelegate {
     private final Lazy<ChromeFullscreenManager> mFullscreenManagerDelegate;
     private final ActivityTabProvider mTabProvider;
-    private boolean mHidden;
+    private @BrowserControlsState int mBrowserControlsState = BrowserControlsState.BOTH;
 
     @Inject
     public CustomTabBrowserControlsVisibilityDelegate(
             Lazy<ChromeFullscreenManager> fullscreenManager, ActivityTabProvider tabProvider) {
+        super(BrowserControlsState.BOTH);
         mFullscreenManagerDelegate = fullscreenManager;
         mTabProvider = tabProvider;
+        getDefaultVisibilityDelegate().addObserver((constraints) -> updateVisibilityConstraints());
+        updateVisibilityConstraints();
     }
 
     /**
-     * Sets browser controls hidden. Note: this is not enough to completely hide the toolbar, use
-     * {@link CustomTabToolbarCoordinator#setToolbarHidden} for that.
+     * Sets the browser controls state. Note: this is not enough to completely hide the toolbar, use
+     * {@link CustomTabToolbarCoordinator#setBrowserControlsState()} for that.
      */
-    public void setControlsHidden(boolean hidden) {
-        if (hidden == mHidden) return;
-        mHidden = hidden;
-        updateActiveTabFullscreenEnabledState();
+    public void setControlsState(@BrowserControlsState int browserControlsState) {
+        if (browserControlsState == mBrowserControlsState) return;
+        mBrowserControlsState = browserControlsState;
+        updateVisibilityConstraints();
     }
 
-    @Override
-    public boolean canShowBrowserControls() {
-        return !mHidden && getDefaultVisibilityDelegate().canShowBrowserControls();
+    @BrowserControlsState
+    private int calculateVisibilityConstraints() {
+        @BrowserControlsState
+        int defaultConstraints = getDefaultVisibilityDelegate().get();
+        if (defaultConstraints == BrowserControlsState.HIDDEN
+                || mBrowserControlsState == BrowserControlsState.HIDDEN) {
+            return BrowserControlsState.HIDDEN;
+        } else if (mBrowserControlsState != BrowserControlsState.BOTH) {
+            return mBrowserControlsState;
+        }
+        return defaultConstraints;
     }
 
-    @Override
-    public boolean canAutoHideBrowserControls() {
-        return getDefaultVisibilityDelegate().canAutoHideBrowserControls();
+    private void updateVisibilityConstraints() {
+        set(calculateVisibilityConstraints());
     }
 
     private BrowserStateBrowserControlsVisibilityDelegate getDefaultVisibilityDelegate() {
         return mFullscreenManagerDelegate.get().getBrowserVisibilityDelegate();
-    }
-
-    private void updateActiveTabFullscreenEnabledState() {
-        TabBrowserControlsState.updateEnabledState(mTabProvider.get());
     }
 }

@@ -41,16 +41,16 @@ class AXFragmentRootPlatformNodeWin : public AXPlatformNodeWin,
   // IRawElementProviderSimple methods.
   //
 
-  STDMETHOD(get_HostRawElementProvider)
-  (IRawElementProviderSimple** host_element_provider) override {
+  IFACEMETHODIMP get_HostRawElementProvider(
+      IRawElementProviderSimple** host_element_provider) override {
     UIA_VALIDATE_CALL_1_ARG(host_element_provider);
 
     HWND hwnd = GetDelegate()->GetTargetForNativeAccessibilityEvent();
     return UiaHostProviderFromHwnd(hwnd, host_element_provider);
   }
 
-  STDMETHOD(GetPropertyValue)
-  (PROPERTYID property_id, VARIANT* result) override {
+  IFACEMETHODIMP GetPropertyValue(PROPERTYID property_id,
+                                  VARIANT* result) override {
     UIA_VALIDATE_CALL_1_ARG(result);
 
     switch (property_id) {
@@ -82,8 +82,8 @@ class AXFragmentRootPlatformNodeWin : public AXPlatformNodeWin,
   // IRawElementProviderFragment methods.
   //
 
-  STDMETHOD(get_FragmentRoot)
-  (IRawElementProviderFragmentRoot** fragment_root) override {
+  IFACEMETHODIMP get_FragmentRoot(
+      IRawElementProviderFragmentRoot** fragment_root) override {
     UIA_VALIDATE_CALL_1_ARG(fragment_root);
 
     QueryInterface(IID_PPV_ARGS(fragment_root));
@@ -93,12 +93,10 @@ class AXFragmentRootPlatformNodeWin : public AXPlatformNodeWin,
   //
   // IRawElementProviderFragmentRoot methods.
   //
-
-  // x and y are in pixels, in screen coordinates.
-  STDMETHOD(ElementProviderFromPoint)
-  (double x,
-   double y,
-   IRawElementProviderFragment** element_provider) override {
+  IFACEMETHODIMP ElementProviderFromPoint(
+      double screen_physical_pixel_x,
+      double screen_physical_pixel_y,
+      IRawElementProviderFragment** element_provider) override {
     UIA_VALIDATE_CALL_1_ARG(element_provider);
 
     *element_provider = nullptr;
@@ -109,7 +107,8 @@ class AXFragmentRootPlatformNodeWin : public AXPlatformNodeWin,
     AXPlatformNode* node_to_test = this;
     do {
       gfx::NativeViewAccessible test_result =
-          node_to_test->GetDelegate()->HitTestSync(x, y);
+          node_to_test->GetDelegate()->HitTestSync(screen_physical_pixel_x,
+                                                   screen_physical_pixel_y);
       if (test_result != nullptr && test_result != hit_element) {
         hit_element = test_result;
         node_to_test = AXPlatformNode::FromNativeViewAccessible(test_result);
@@ -124,15 +123,31 @@ class AXFragmentRootPlatformNodeWin : public AXPlatformNodeWin,
     return S_OK;
   }
 
-  STDMETHOD(GetFocus)(IRawElementProviderFragment** focus) override {
+  IFACEMETHODIMP GetFocus(IRawElementProviderFragment** focus) override {
     UIA_VALIDATE_CALL_1_ARG(focus);
 
     *focus = nullptr;
 
-    gfx::NativeViewAccessible focused_element = GetDelegate()->GetFocus();
-    if (focused_element != nullptr) {
+    gfx::NativeViewAccessible focused_element = nullptr;
+
+    // GetFocus() can return a node at the root of a subtree, for example when
+    // transitioning from Views into web content. In such cases we want to
+    // continue drilling to retrieve the actual focused element.
+    AXPlatformNode* node_to_test = this;
+    do {
+      gfx::NativeViewAccessible test_result =
+          node_to_test->GetDelegate()->GetFocus();
+      if (test_result != nullptr && test_result != focused_element) {
+        focused_element = test_result;
+        node_to_test =
+            AXPlatformNode::FromNativeViewAccessible(focused_element);
+      } else {
+        node_to_test = nullptr;
+      }
+    } while (node_to_test);
+
+    if (focused_element)
       focused_element->QueryInterface(IID_PPV_ARGS(focus));
-    }
 
     return S_OK;
   }
@@ -140,8 +155,8 @@ class AXFragmentRootPlatformNodeWin : public AXPlatformNodeWin,
   //
   // IRawElementProviderAdviseEvents methods.
   //
-  STDMETHODIMP AdviseEventAdded(EVENTID event_id,
-                                SAFEARRAY* property_ids) override {
+  IFACEMETHODIMP AdviseEventAdded(EVENTID event_id,
+                                  SAFEARRAY* property_ids) override {
     if (event_id == UIA_LiveRegionChangedEventId) {
       live_region_change_listeners_++;
 
@@ -162,8 +177,8 @@ class AXFragmentRootPlatformNodeWin : public AXPlatformNodeWin,
     return S_OK;
   }
 
-  STDMETHODIMP AdviseEventRemoved(EVENTID event_id,
-                                  SAFEARRAY* property_ids) override {
+  IFACEMETHODIMP AdviseEventRemoved(EVENTID event_id,
+                                    SAFEARRAY* property_ids) override {
     if (event_id == UIA_LiveRegionChangedEventId) {
       DCHECK(live_region_change_listeners_ > 0);
       live_region_change_listeners_--;
@@ -193,6 +208,16 @@ class AXFragmentRootMapWin {
     return map_[widget];
   }
 
+  ui::AXFragmentRootWin* GetFragmentRootParentOf(
+      gfx::NativeViewAccessible accessible) const {
+    for (const auto& entry : map_) {
+      AXPlatformNodeDelegate* child = entry.second->GetChildNodeDelegate();
+      if (child && (child->GetNativeViewAccessible() == accessible))
+        return entry.second;
+    }
+    return nullptr;
+  }
+
  private:
   std::unordered_map<gfx::AcceleratedWidget, AXFragmentRootWin*> map_;
 };
@@ -215,7 +240,20 @@ AXFragmentRootWin* AXFragmentRootWin::GetForAcceleratedWidget(
   return AXFragmentRootMapWin::GetInstance().GetFragmentRoot(widget);
 }
 
+// static
+AXFragmentRootWin* AXFragmentRootWin::GetFragmentRootParentOf(
+    gfx::NativeViewAccessible accessible) {
+  return AXFragmentRootMapWin::GetInstance().GetFragmentRootParentOf(
+      accessible);
+}
+
 gfx::NativeViewAccessible AXFragmentRootWin::GetNativeViewAccessible() {
+  // The fragment root is the entry point from the operating system for UI
+  // Automation. Signal observers when we're asked for a platform object on it.
+  for (WinAccessibilityAPIUsageObserver& observer :
+       GetWinAccessibilityAPIUsageObserverList()) {
+    observer.OnUIAutomationUsed();
+  }
   return platform_node_.Get();
 }
 
@@ -227,7 +265,7 @@ gfx::NativeViewAccessible AXFragmentRootWin::GetParent() {
   return delegate_->GetParentOfAXFragmentRoot();
 }
 
-int AXFragmentRootWin::GetChildCount() {
+int AXFragmentRootWin::GetChildCount() const {
   return delegate_->GetChildOfAXFragmentRoot() ? 1 : 0;
 }
 
@@ -239,7 +277,26 @@ gfx::NativeViewAccessible AXFragmentRootWin::ChildAtIndex(int index) {
   return nullptr;
 }
 
-gfx::NativeViewAccessible AXFragmentRootWin::HitTestSync(int x, int y) {
+gfx::NativeViewAccessible AXFragmentRootWin::GetNextSibling() {
+  int child_index = GetIndexInParentOfChild();
+  if (child_index >= 0) {
+    AXPlatformNodeDelegate* parent = GetParentNodeDelegate();
+    if (parent && child_index < (parent->GetChildCount() - 1))
+      return GetParentNodeDelegate()->ChildAtIndex(child_index + 1);
+  }
+
+  return nullptr;
+}
+
+gfx::NativeViewAccessible AXFragmentRootWin::GetPreviousSibling() {
+  int child_index = GetIndexInParentOfChild();
+  if (child_index > 0)
+    return GetParentNodeDelegate()->ChildAtIndex(child_index - 1);
+
+  return nullptr;
+}
+
+gfx::NativeViewAccessible AXFragmentRootWin::HitTestSync(int x, int y) const {
   AXPlatformNodeDelegate* child_delegate = GetChildNodeDelegate();
   if (child_delegate)
     return child_delegate->HitTestSync(x, y);
@@ -274,12 +331,39 @@ AXPlatformNode* AXFragmentRootWin::GetFromTreeIDAndNodeID(
   return nullptr;
 }
 
-AXPlatformNodeDelegate* AXFragmentRootWin::GetChildNodeDelegate() {
+AXPlatformNodeDelegate* AXFragmentRootWin::GetParentNodeDelegate() const {
+  gfx::NativeViewAccessible parent = delegate_->GetParentOfAXFragmentRoot();
+  if (parent)
+    return ui::AXPlatformNode::FromNativeViewAccessible(parent)->GetDelegate();
+
+  return nullptr;
+}
+
+AXPlatformNodeDelegate* AXFragmentRootWin::GetChildNodeDelegate() const {
   gfx::NativeViewAccessible child = delegate_->GetChildOfAXFragmentRoot();
   if (child)
     return ui::AXPlatformNode::FromNativeViewAccessible(child)->GetDelegate();
 
   return nullptr;
+}
+
+int AXFragmentRootWin::GetIndexInParentOfChild() const {
+  AXPlatformNodeDelegate* parent = GetParentNodeDelegate();
+
+  if (!parent)
+    return 0;
+
+  AXPlatformNodeDelegate* child = GetChildNodeDelegate();
+  if (child) {
+    int child_count = parent->GetChildCount();
+    for (int child_index = 0; child_index < child_count; child_index++) {
+      if (ui::AXPlatformNode::FromNativeViewAccessible(
+              parent->ChildAtIndex(child_index))
+              ->GetDelegate() == child)
+        return child_index;
+    }
+  }
+  return 0;
 }
 
 }  // namespace ui

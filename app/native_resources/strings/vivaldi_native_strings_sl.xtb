@@ -45,7 +45,6 @@
 <translation id="3542768452570884558">Odpri povezavo v novem oknu</translation>
 <translation id="3588820906588687999">Odpri sliko v novem zavihku</translation>
 <translation id="3601066750251199488">Pošast 3</translation>
-<translation id="366643050267431920">Dodaj kot dogodek</translation>
 <translation id="3732157130969736834">Shrani trenutno povezavo kot zaznamek</translation>
 <translation id="3732388226447288666">Žival 2</translation>
 <translation id="3732439195215136813">Žival 5</translation>
@@ -68,7 +67,6 @@
 <translation id="4636708767492582204">Pošlji po pošti</translation>
 <translation id="4677434526832593569">Žival 8</translation>
 <translation id="4881695831933465202">Odpri</translation>
-<translation id="4973311370126107785">Izvajanje JavaScript prek AppleScript je izklopljeno. Če ga želite vklopiti, v menijski vrstici pojdite na Orodja&gt; Dovoli JavaScript iz Apple Events.</translation>
 <translation id="5014281392052865061">Uvoženo Hitro izbiranje</translation>
 <translation id="5092656712000637858">Dodaj stran na spletni panel</translation>
 <translation id="5177818338935286353">Pošast 7</translation>
@@ -89,6 +87,7 @@
 <translation id="6229528619562190452">Kliknite tukaj, če želite posodobiti Vivaldi.</translation>
 <translation id="6234173136417926046">Uporabi sliko kot ozadje začetne strani</translation>
 <translation id="630690498669249215">Datoteka Opera Zaznamki</translation>
+<translation id="6339818817272922368">Lokalni račun</translation>
 <translation id="6438786710866753178">Pokrajina 4</translation>
 <translation id="6477028720702061455">Izberite mapo profila Opera za uvoz</translation>
 <translation id="6510706699590490869">&amp;Posodobi Vivaldi</translation>
@@ -103,6 +102,7 @@
 <translation id="7496505986576158197">Vivaldi omogoča <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> odprtokodni projekt in druga <ph name="BEGIN_LINK_OSS" /> odprtokodna programska oprema<ph name="END_LINK_OSS" />.</translation>
 <translation id="7715497554424665066">&amp;Prezri posodobitev</translation>
 <translation id="7724603315864178912">Izreži</translation>
+<translation id="7793738202466490491">Dodaj kot dogodek v koledarju</translation>
 <translation id="7865983598101744945">Potrdite izhod</translation>
 <translation id="7957213167373139414">Moj koledar</translation>
 <translation id="8027581147000338959">Odpri v novem oknu</translation>
@@ -112,6 +112,7 @@
 <translation id="8331671104904436324">Odpri v zavihku v ozadju</translation>
 <translation id="8373293945112511707">Pokrajina 1</translation>
 <translation id="8427094907586191051">Pokrajina 17</translation>
+<translation id="8446668873108041390">Izvajanje JavaScript prek AppleScript je izklopljeno. Pod Nastavitve&gt; Zasebnost&gt; Apple Events, obstaja nastavitev, ki omogoča JavaScript iz Apple Events.</translation>
 <translation id="8539196077526389150">Pokrajina 13</translation>
 <translation id="8624587806981488221">&amp;Ponovno naloži sliko</translation>
 <translation id="864444594187862076">Opera različica 15+ (razvijalec)</translation>

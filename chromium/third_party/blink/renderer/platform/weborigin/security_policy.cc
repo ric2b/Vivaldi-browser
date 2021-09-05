@@ -72,8 +72,7 @@ network::mojom::ReferrerPolicy ReferrerPolicyResolveDefault(
     network::mojom::ReferrerPolicy referrer_policy) {
   if (referrer_policy == network::mojom::ReferrerPolicy::kDefault) {
     if (RuntimeEnabledFeatures::ReducedReferrerGranularityEnabled()) {
-      return network::mojom::ReferrerPolicy::
-          kNoReferrerWhenDowngradeOriginWhenCrossOrigin;
+      return network::mojom::ReferrerPolicy::kStrictOriginWhenCrossOrigin;
     } else {
       return network::mojom::ReferrerPolicy::kNoReferrerWhenDowngrade;
     }
@@ -137,7 +136,7 @@ Referrer SecurityPolicy::GenerateReferrer(
           SecurityOrigin::Create(referrer_url);
       scoped_refptr<const SecurityOrigin> url_origin =
           SecurityOrigin::Create(url);
-      if (!url_origin->IsSameSchemeHostPort(referrer_origin.get())) {
+      if (!url_origin->IsSameOriginWith(referrer_origin.get())) {
         String origin = referrer_origin->ToString();
         return Referrer(origin + "/", referrer_policy_no_default);
       }
@@ -148,7 +147,7 @@ Referrer SecurityPolicy::GenerateReferrer(
           SecurityOrigin::Create(referrer_url);
       scoped_refptr<const SecurityOrigin> url_origin =
           SecurityOrigin::Create(url);
-      if (!url_origin->IsSameSchemeHostPort(referrer_origin.get())) {
+      if (!url_origin->IsSameOriginWith(referrer_origin.get())) {
         return Referrer(Referrer::NoReferrer(), referrer_policy_no_default);
       }
       return Referrer(referrer, referrer_policy_no_default);
@@ -160,13 +159,12 @@ Referrer SecurityPolicy::GenerateReferrer(
                           : origin + "/",
                       referrer_policy_no_default);
     }
-    case network::mojom::ReferrerPolicy::
-        kNoReferrerWhenDowngradeOriginWhenCrossOrigin: {
+    case network::mojom::ReferrerPolicy::kStrictOriginWhenCrossOrigin: {
       scoped_refptr<const SecurityOrigin> referrer_origin =
           SecurityOrigin::Create(referrer_url);
       scoped_refptr<const SecurityOrigin> url_origin =
           SecurityOrigin::Create(url);
-      if (!url_origin->IsSameSchemeHostPort(referrer_origin.get())) {
+      if (!url_origin->IsSameOriginWith(referrer_origin.get())) {
         String origin = referrer_origin->ToString();
         return Referrer(ShouldHideReferrer(url, referrer_url)
                             ? Referrer::NoReferrer()
@@ -328,8 +326,7 @@ bool SecurityPolicy::ReferrerPolicyFromString(
     return true;
   }
   if (EqualIgnoringASCIICase(policy, "strict-origin-when-cross-origin")) {
-    *result = network::mojom::ReferrerPolicy::
-        kNoReferrerWhenDowngradeOriginWhenCrossOrigin;
+    *result = network::mojom::ReferrerPolicy::kStrictOriginWhenCrossOrigin;
     return true;
   }
   if (EqualIgnoringASCIICase(policy, "no-referrer-when-downgrade") ||

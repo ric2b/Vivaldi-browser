@@ -16,6 +16,7 @@
 #include "base/no_destructor.h"
 #include "base/strings/string_util.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/task_runner_util.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "base/threading/thread_restrictions.h"
@@ -44,6 +45,16 @@ const base::FilePath::CharType kGemInfoPath[] =
 #endif
 const base::FilePath::CharType kCpuFrequencyPath[] =
     FILE_PATH_LITERAL("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq");
+
+const base::FilePath::CharType kPowercapPath[] =
+    FILE_PATH_LITERAL("/sys/class/powercap");
+const base::FilePath::CharType kIntelRaplQuery[] = FILE_PATH_LITERAL("intel-rapl:*");
+const base::FilePath::CharType kEnergyPath[] = FILE_PATH_LITERAL("energy_uj");
+const base::FilePath::CharType kNamePath[] = FILE_PATH_LITERAL("name");
+
+constexpr char kCpuPowerDomainName[] = "core";
+constexpr char kGpuPowerDomainName[] = "uncore";
+constexpr char kMemoryPowerDomainName[] = "dram";
 
 bool IsWhitespace(char c) {
   return c == ' ' || c == '\t' || c == '\n';
@@ -116,6 +127,9 @@ enum SystemReader {
   kGemInfo,
   kCpuTemperature,
   kCpuFrequency,
+  kCpuEnergy,
+  kGpuEnergy,
+  kMemoryEnergy,
   kTotal
 };
 
@@ -132,9 +146,73 @@ struct ArcSystemStatCollector::Sample {
   int gem_size_kb = 0;
   int cpu_temperature = std::numeric_limits<int>::min();
   int cpu_frequency = 0;
+  // Power in milli-watts.
+  int cpu_power = 0;
+  int gpu_power = 0;
+  int memory_power = 0;
+};
+
+struct OneValueReaderInfo {
+  SystemReader reader = SystemReader::kTotal;
+  int64_t* value = nullptr;
+  int64_t default_value = 0;
 };
 
 struct ArcSystemStatCollector::SystemReadersContext {
+  // Initializes |SystemReadersContext| for Intel power counters. Must be called
+  // on background thread.
+  static void InitIntelPowerOnBackgroundThread(SystemReadersContext* context) {
+    // Power counters for Intel platforms.
+    const base::FilePath powercap_path(kPowercapPath);
+    if (!base::PathExists(powercap_path)) {
+      LOG(WARNING) << "There are no power counters for this board";
+      return;
+    }
+
+    base::FileEnumerator dirs(powercap_path, false /* recursive */,
+                              base::FileEnumerator::DIRECTORIES,
+                              kIntelRaplQuery);
+
+    for (base::FilePath dir = dirs.Next(); !dir.empty(); dir = dirs.Next()) {
+      const base::FilePath domain_file_path = dir.Append(kNamePath);
+
+      std::string domain_name;
+      if (!base::PathExists(domain_file_path) ||
+          !base::ReadFileToString(domain_file_path, &domain_name)) {
+        LOG(ERROR) << "Unable to get power counter name in "
+                   << domain_file_path.value();
+        continue;
+      }
+
+      SystemReader reader;
+      base::TrimWhitespaceASCII(domain_name, base::TRIM_ALL, &domain_name);
+      if (domain_name == kCpuPowerDomainName) {
+        reader = kCpuEnergy;
+      } else if (domain_name == kGpuPowerDomainName) {
+        reader = kGpuEnergy;
+      } else if (domain_name == kMemoryPowerDomainName) {
+        reader = kMemoryEnergy;
+      } else {
+        LOG(WARNING) << "Ignore power counter " << domain_name << " in "
+                     << domain_file_path.value();
+        continue;
+      }
+
+      if (context->system_readers[reader].is_valid()) {
+        LOG(ERROR) << "Found duplicate power counter " << domain_name << " in "
+                   << domain_file_path.value();
+        continue;
+      }
+
+      const base::FilePath energy_file_path = dir.Append(kEnergyPath);
+      context->system_readers[reader].reset(
+          open(energy_file_path.value().c_str(), O_RDONLY));
+      if (!context->system_readers[reader].is_valid()) {
+        LOG(ERROR) << "Failed to open power counter: " << domain_name << " as "
+                   << energy_file_path.value();
+      }
+    }
+  }
   // Creates and initializes |SystemReadersContext|. Must be called on
   // background thread.
   static std::unique_ptr<SystemReadersContext> InitOnBackgroundThread() {
@@ -172,6 +250,8 @@ struct ArcSystemStatCollector::SystemReadersContext {
       LOG(ERROR) << "Failed to open cpu frequency file: " << kCpuFrequencyPath;
     }
 
+    InitIntelPowerOnBackgroundThread(context.get());
+
     return context;
   }
 
@@ -205,6 +285,7 @@ ArcSystemStatCollector::~ArcSystemStatCollector() {
 }
 
 void ArcSystemStatCollector::Start(const base::TimeDelta& max_interval) {
+  max_interval_ = max_interval;
   const size_t sample_count =
       1 + max_interval.InMicroseconds() /
               kSystemStatUpdateInterval.InMicroseconds();
@@ -213,8 +294,8 @@ void ArcSystemStatCollector::Start(const base::TimeDelta& max_interval) {
   // Maximum 10 warning per session.
   missed_update_warning_left_ = 10;
 
-  background_task_runner_ = base::CreateSequencedTaskRunner(
-      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE});
+  background_task_runner_ = base::ThreadPool::CreateSequencedTaskRunner(
+      {base::MayBlock(), base::TaskPriority::USER_VISIBLE});
 
   base::PostTaskAndReplyWithResult(
       background_task_runner_.get(), FROM_HERE,
@@ -254,6 +335,13 @@ void ArcSystemStatCollector::Flush(const base::TimeTicks& min_timestamp,
                                        ArcValueEvent::Type::kCpuTemperature);
   ArcValueEventTrimmer cpu_frequency(&system_model->memory_events(),
                                      ArcValueEvent::Type::kCpuFrequency);
+  ArcValueEventTrimmer cpu_power(&system_model->memory_events(),
+                                 ArcValueEvent::Type::kCpuPower);
+  ArcValueEventTrimmer gpu_power(&system_model->memory_events(),
+                                 ArcValueEvent::Type::kGpuPower);
+  ArcValueEventTrimmer memory_power(&system_model->memory_events(),
+                                    ArcValueEvent::Type::kMemoryPower);
+
   while (sample_index < write_index_) {
     const Sample& sample = samples_[sample_index % samples_.size()];
     ++sample_index;
@@ -274,7 +362,16 @@ void ArcSystemStatCollector::Flush(const base::TimeTicks& min_timestamp,
       cpu_temperature.MaybeAdd(timestamp, sample.cpu_temperature);
     if (sample.cpu_frequency > 0)
       cpu_frequency.MaybeAdd(timestamp, sample.cpu_frequency);
+    cpu_power.MaybeAdd(timestamp, sample.cpu_power);
+    gpu_power.MaybeAdd(timestamp, sample.gpu_power);
+    memory_power.MaybeAdd(timestamp, sample.memory_power);
   }
+
+  // These are optional. Keep it if non-zero value is detected.
+  cpu_power.ResetIfConstant(0);
+  gpu_power.ResetIfConstant(0);
+  memory_power.ResetIfConstant(0);
+
   // Trimmer may break time sequence for events of different types. However
   // time sequence of events of the same type should be preserved.
   std::sort(system_model->memory_events().begin(),
@@ -301,9 +398,8 @@ void ArcSystemStatCollector::ScheduleSystemStatUpdate() {
 void ArcSystemStatCollector::FreeSystemReadersContext() {
   if (!context_)
     return;
-  base::PostTask(
-      FROM_HERE,
-      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::BEST_EFFORT},
+  base::ThreadPool::PostTask(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::BindOnce(&SystemReadersContext::FreeOnBackgroundThread,
                      std::move(context_)));
 }
@@ -324,6 +420,7 @@ std::unique_ptr<ArcSystemStatCollector::SystemReadersContext>
 ArcSystemStatCollector::ReadSystemStatOnBackgroundThread(
     std::unique_ptr<SystemReadersContext> context) {
   DCHECK(context);
+  context->current_frame.timestamp = base::TimeTicks::Now();
   if (!context->system_readers[SystemReader::kZram].is_valid() ||
       !ParseStatFile(context->system_readers[SystemReader::kZram].get(),
                      kZramStatColumns, context->current_frame.zram_stat)) {
@@ -360,27 +457,28 @@ ArcSystemStatCollector::ReadSystemStatOnBackgroundThread(
     }
   }
 
-  if (!context->system_readers[SystemReader::kCpuTemperature].is_valid() ||
-      !ParseStatFile(
-          context->system_readers[SystemReader::kCpuTemperature].get(),
-          kOneValueColumns, &context->current_frame.cpu_temperature)) {
-    context->current_frame.cpu_temperature = std::numeric_limits<int>::min();
-    static bool error_reported = false;
-    if (!error_reported) {
-      LOG(ERROR) << "Failed to read cpu temperature : "
-                 << GetCpuTemperaturePathOnFileThread();
-      error_reported = true;
-    }
-  }
+  OneValueReaderInfo one_value_readers[] = {
+      {SystemReader::kCpuTemperature, &context->current_frame.cpu_temperature,
+       std::numeric_limits<int>::min()},
+      {SystemReader::kCpuFrequency, &context->current_frame.cpu_frequency, 0},
+      {SystemReader::kCpuEnergy, &context->current_frame.cpu_energy, 0},
+      {SystemReader::kGpuEnergy, &context->current_frame.gpu_energy, 0},
+      {SystemReader::kMemoryEnergy, &context->current_frame.memory_energy, 0},
+  };
+  static bool one_value_readers_error_reported[base::size(one_value_readers)] =
+      {0};
 
-  if (!context->system_readers[SystemReader::kCpuFrequency].is_valid() ||
-      !ParseStatFile(context->system_readers[SystemReader::kCpuFrequency].get(),
-                     kOneValueColumns, &context->current_frame.cpu_frequency)) {
-    context->current_frame.cpu_frequency = 0;
-    static bool error_reported = false;
-    if (!error_reported) {
-      LOG(ERROR) << "Failed to read cpu frequency : " << kCpuFrequencyPath;
-      error_reported = true;
+  for (size_t i = 0; i < base::size(one_value_readers); ++i) {
+    if (!context->system_readers[one_value_readers[i].reader].is_valid() ||
+        !ParseStatFile(
+            context->system_readers[one_value_readers[i].reader].get(),
+            kOneValueColumns, one_value_readers[i].value)) {
+      *one_value_readers[i].value = one_value_readers[i].default_value;
+      if (one_value_readers_error_reported[i])
+        continue;
+      LOG(ERROR) << "Failed to read system stat "
+                 << one_value_readers[i].reader;
+      one_value_readers_error_reported[i] = true;
     }
   }
 
@@ -392,7 +490,7 @@ void ArcSystemStatCollector::UpdateSystemStatOnUiThread(
   DCHECK(!context_ && context);
   DCHECK(!samples_.empty());
   Sample& current_sample = samples_[write_index_ % samples_.size()];
-  current_sample.timestamp = base::TimeTicks::Now();
+  current_sample.timestamp = context->current_frame.timestamp;
   current_sample.mem_total_kb = context->current_frame.mem_info[0];
   // kTotal - available.
   current_sample.mem_used_kb =
@@ -402,12 +500,30 @@ void ArcSystemStatCollector::UpdateSystemStatOnUiThread(
 
   // We calculate delta, so ignore first update.
   if (write_index_) {
+    DCHECK_GT(context->current_frame.timestamp, previous_frame_.timestamp);
+    const double to_milli_watts_scale =
+        0.001 / (context->current_frame.timestamp - previous_frame_.timestamp)
+                    .InSecondsF();
     current_sample.swap_sectors_read =
         context->current_frame.zram_stat[0] - previous_frame_.zram_stat[0];
     current_sample.swap_sectors_write =
         context->current_frame.zram_stat[1] - previous_frame_.zram_stat[1];
     current_sample.swap_waiting_time_ms =
         context->current_frame.zram_stat[2] - previous_frame_.zram_stat[2];
+
+    // Energy is in micro-joules, power is in milli-watts.
+    current_sample.cpu_power = static_cast<int>(
+        (context->current_frame.cpu_energy - previous_frame_.cpu_energy) *
+        to_milli_watts_scale);
+    current_sample.gpu_power = static_cast<int>(
+        (context->current_frame.gpu_energy - previous_frame_.gpu_energy) *
+        to_milli_watts_scale);
+    current_sample.memory_power = static_cast<int>(
+        (context->current_frame.memory_energy - previous_frame_.memory_energy) *
+        to_milli_watts_scale);
+    DCHECK_GE(current_sample.cpu_power, 0);
+    DCHECK_GE(current_sample.gpu_power, 0);
+    DCHECK_GE(current_sample.memory_power, 0);
   }
   current_sample.cpu_temperature = context->current_frame.cpu_temperature;
   current_sample.cpu_frequency = context->current_frame.cpu_frequency;

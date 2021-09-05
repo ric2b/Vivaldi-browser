@@ -109,7 +109,8 @@ bool RegisterTestTask(TaskScheduler* task_scheduler,
 // Append switches to the command line that is used to run cleaner or reporter
 // in tests. Switches will disable logs upload, profile reset and other side
 // effects.
-void AppendTestSwitches(base::CommandLine* command_line);
+void AppendTestSwitches(const base::ScopedTempDir& temp_dir,
+                        base::CommandLine* command_line);
 
 // Expect the |expected_path| to be found in expanded disk footprint of |pup|.
 void ExpectDiskFootprint(const PUPData::PUP& pup,
@@ -174,6 +175,13 @@ class ScopedTempDirNoWow64 : protected base::ScopedTempDir {
 // This function drops unneeded privileges if possible, but won't try to raise
 // privileges. Returns false if the privileges could not be made correct.
 bool CheckTestPrivileges();
+
+// On Windows, sometimes the copied files don't have correct ACLs.
+// So we reset ACL before running the test.
+// For debug, it will reset ucrtbased.dll. For release, it will reset
+// ucrtbase.dll.
+// See crbug.com/956016.
+bool ResetAclForUcrtbase();
 
 // Accepts PUPData::PUP parameters with id equals to |expected_id|.
 MATCHER_P(PupHasId, expected_id, "") {

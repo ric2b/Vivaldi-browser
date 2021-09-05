@@ -18,17 +18,17 @@ import android.graphics.PorterDuffXfermode;
 import android.graphics.Rect;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
-import android.support.v7.content.res.AppCompatResources;
 
 import androidx.annotation.MainThread;
 import androidx.annotation.Nullable;
 import androidx.annotation.Px;
+import androidx.annotation.VisibleForTesting;
+import androidx.appcompat.content.res.AppCompatResources;
 
 import org.chromium.base.ObserverList;
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
-import org.chromium.components.signin.AccountManagerFacade;
+import org.chromium.components.signin.AccountManagerFacadeProvider;
 import org.chromium.components.signin.ProfileDataSource;
 
 import java.util.HashMap;
@@ -104,7 +104,8 @@ public class ProfileDataCache implements ProfileDownloader.Observer, ProfileData
     }
 
     public ProfileDataCache(Context context, @Px int imageSize, @Nullable BadgeConfig badgeConfig) {
-        this(context, imageSize, badgeConfig, AccountManagerFacade.get().getProfileDataSource());
+        this(context, imageSize, badgeConfig,
+                AccountManagerFacadeProvider.getInstance().getProfileDataSource());
     }
 
     @VisibleForTesting

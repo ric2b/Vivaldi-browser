@@ -5,9 +5,10 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_TYPED_ARRAYS_DOM_SHARED_ARRAY_BUFFER_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_TYPED_ARRAYS_DOM_SHARED_ARRAY_BUFFER_H_
 
+#include "base/allocator/partition_allocator/oom.h"
 #include "third_party/blink/renderer/core/core_export.h"
+#include "third_party/blink/renderer/core/typed_arrays/array_buffer/array_buffer_contents.h"
 #include "third_party/blink/renderer/core/typed_arrays/dom_array_buffer_base.h"
-#include "third_party/blink/renderer/platform/wtf/typed_arrays/array_buffer.h"
 
 namespace blink {
 
@@ -15,33 +16,47 @@ class CORE_EXPORT DOMSharedArrayBuffer final : public DOMArrayBufferBase {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static DOMSharedArrayBuffer* Create(scoped_refptr<WTF::ArrayBuffer> buffer) {
-    DCHECK(buffer->IsShared());
-    return MakeGarbageCollected<DOMSharedArrayBuffer>(std::move(buffer));
+  static DOMSharedArrayBuffer* Create(ArrayBufferContents contents) {
+    DCHECK(contents.IsShared());
+    return MakeGarbageCollected<DOMSharedArrayBuffer>(std::move(contents));
   }
+
   static DOMSharedArrayBuffer* Create(unsigned num_elements,
                                       unsigned element_byte_size) {
-    return Create(
-        WTF::ArrayBuffer::CreateShared(num_elements, element_byte_size));
+    ArrayBufferContents contents(num_elements, element_byte_size,
+                                 ArrayBufferContents::kShared,
+                                 ArrayBufferContents::kZeroInitialize);
+    if (UNLIKELY(!contents.DataShared())) {
+      OOM_CRASH(num_elements * element_byte_size);
+    }
+    return Create(std::move(contents));
   }
+
   static DOMSharedArrayBuffer* Create(const void* source,
                                       unsigned byte_length) {
-    return Create(WTF::ArrayBuffer::CreateShared(source, byte_length));
-  }
-  static DOMSharedArrayBuffer* Create(WTF::ArrayBufferContents& contents) {
-    DCHECK(contents.IsShared());
-    return Create(WTF::ArrayBuffer::Create(contents));
-  }
-
-  explicit DOMSharedArrayBuffer(scoped_refptr<WTF::ArrayBuffer> buffer)
-      : DOMArrayBufferBase(std::move(buffer)) {}
-
-  bool ShareContentsWith(WTF::ArrayBufferContents& result) {
-    return Buffer()->ShareContentsWith(result);
+    ArrayBufferContents contents(byte_length, 1, ArrayBufferContents::kShared,
+                                 ArrayBufferContents::kDontInitialize);
+    if (UNLIKELY(!contents.DataShared())) {
+      OOM_CRASH(byte_length);
+    }
+    memcpy(contents.DataShared(), source, byte_length);
+    return Create(std::move(contents));
   }
 
-  v8::Local<v8::Object> Wrap(v8::Isolate*,
-                             v8::Local<v8::Object> creation_context) override;
+  explicit DOMSharedArrayBuffer(ArrayBufferContents contents)
+      : DOMArrayBufferBase(std::move(contents)) {}
+
+  bool ShareContentsWith(ArrayBufferContents& result) {
+    if (!Content()->BackingStore()) {
+      result.Detach();
+      return false;
+    }
+    Content()->ShareWith(result);
+    return true;
+  }
+
+  v8::Local<v8::Value> Wrap(v8::Isolate*,
+                            v8::Local<v8::Object> creation_context) override;
 };
 
 }  // namespace blink

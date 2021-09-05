@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.autofill_assistant.user_data;
 
 import android.content.Context;
+import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -34,7 +35,7 @@ public class AssistantTermsSection {
     private final TextView mTermsAgree;
     @Nullable
     private final TextView mTermsRequireReview;
-    private final TextView mThirdPartyPrivacyNotice;
+    private final TextView mPrivacyNotice;
     @Nullable
     private Delegate mDelegate;
 
@@ -50,7 +51,8 @@ public class AssistantTermsSection {
         mTermsList.setAllowMultipleChoices(showAsSingleCheckbox);
 
         mTermsAgree = new TextView(context);
-        ApiCompatibilityUtils.setTextAppearance(mTermsAgree, R.style.TextAppearance_BlackCaption);
+        ApiCompatibilityUtils.setTextAppearance(
+                mTermsAgree, R.style.TextAppearance_TextSmall_Secondary);
         mTermsAgree.setGravity(Gravity.CENTER_VERTICAL);
         mTermsList.addItem(mTermsAgree, /* hasEditButton= */ false, selected -> {
             if (selected) {
@@ -67,7 +69,7 @@ public class AssistantTermsSection {
         } else {
             mTermsRequireReview = new TextView(context);
             ApiCompatibilityUtils.setTextAppearance(
-                    mTermsRequireReview, R.style.TextAppearance_BlackCaption);
+                    mTermsRequireReview, R.style.TextAppearance_TextSmall_Secondary);
             mTermsRequireReview.setGravity(Gravity.CENTER_VERTICAL);
             mTermsRequireReview.setTag(
                     AssistantTagsForTesting.COLLECT_USER_DATA_TERMS_REQUIRE_REVIEW);
@@ -78,8 +80,7 @@ public class AssistantTermsSection {
             }, /* itemEditedListener= */ null);
         }
 
-        mThirdPartyPrivacyNotice =
-                mView.findViewById(R.id.payment_request_3rd_party_privacy_notice);
+        mPrivacyNotice = mView.findViewById(R.id.collect_data_privacy_notice);
     }
 
     private void onTermsAndConditionsLinkClicked(int link) {
@@ -114,7 +115,7 @@ public class AssistantTermsSection {
     }
 
     void setAcceptTermsAndConditionsText(String text) {
-        if (text.isEmpty()) {
+        if (TextUtils.isEmpty(text)) {
             mTermsList.setVisibility(View.GONE);
         } else {
             mTermsList.setVisibility(View.VISIBLE);
@@ -130,9 +131,10 @@ public class AssistantTermsSection {
         }
     }
 
-    void setThirdPartyPrivacyNoticeText(String text) {
+    void setPrivacyNoticeText(String text) {
         AssistantTextUtils.applyVisualAppearanceTags(
-                mThirdPartyPrivacyNotice, text, /* linkCallback= */ null);
+                mPrivacyNotice, text, /* linkCallback= */ null);
+        mPrivacyNotice.setVisibility(TextUtils.isEmpty(text) ? View.GONE : View.VISIBLE);
     }
 
     View getView() {

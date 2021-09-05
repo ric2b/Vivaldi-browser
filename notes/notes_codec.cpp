@@ -10,11 +10,14 @@
 #include <memory>
 #include <vector>
 
+#include "base/base64.h"
+#include "base/guid.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
+#include "notes/note_node.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
 
@@ -23,13 +26,24 @@ using std::cout;
 
 namespace vivaldi {
 
-const char* NotesCodec::kRootsKey = "roots";
-const char* NotesCodec::kVersionKey = "version";
-const char* NotesCodec::kChecksumKey = "checksum";
-const char* NotesCodec::kIdKey = "id";
-const char* NotesCodec::kNameKey = "subject";
-const char* NotesCodec::kChildrenKey = "children";
-const char* NotesCodec::kSyncTransactionVersion = "sync_transaction_version";
+const char NotesCodec::kVersionKey[] = "version";
+const char NotesCodec::kChecksumKey[] = "checksum";
+const char NotesCodec::kIdKey[] = "id";
+const char NotesCodec::kTypeKey[] = "type";
+const char NotesCodec::kSubjectKey[] = "subject";
+const char NotesCodec::kGuidKey[] = "guid";
+const char NotesCodec::kDateAddedKey[] = "date_added";
+const char NotesCodec::kURLKey[] = "url";
+const char NotesCodec::kChildrenKey[] = "children";
+const char NotesCodec::kContentKey[] = "content";
+const char NotesCodec::kAttachmentsKey[] = "attachments";
+const char NotesCodec::kSyncTransactionVersion[] = "sync_transaction_version";
+const char NotesCodec::kSyncMetadata[] = "sync_metadata";
+const char NotesCodec::kTypeNote[] = "note";
+const char NotesCodec::kTypeFolder[] = "folder";
+const char NotesCodec::kTypeSeparator[] = "separator";
+const char NotesCodec::kTypeOther[] = "other";
+const char NotesCodec::kTypeTrash[] = "trash";
 
 // Current version of the file.
 static const int kCurrentVersion = 1;
@@ -39,42 +53,45 @@ NotesCodec::NotesCodec()
       ids_valid_(true),
       maximum_id_(0),
       model_sync_transaction_version_(
-          Notes_Node::kInvalidSyncTransactionVersion) {}
+          NoteNode::kInvalidSyncTransactionVersion) {}
 
 NotesCodec::~NotesCodec() {}
 
-void NotesCodec::register_id(int64_t id) {
-  if (ids_.count(id) != 0) {
-    ids_valid_ = false;
-    return;
-  }
-  ids_.insert(id);
-}
-
-std::unique_ptr<base::Value> NotesCodec::Encode(Notes_Model* model) {
+std::unique_ptr<base::Value> NotesCodec::Encode(
+    NotesModel* model,
+    const std::string& sync_metadata_str) {
   return Encode(model->main_node(), model->other_node(), model->trash_node(),
-                model->root_node()->sync_transaction_version());
+                model->root_node()->sync_transaction_version(),
+                sync_metadata_str);
 }
 
-std::unique_ptr<base::Value> NotesCodec::Encode(const Notes_Node* notes_node,
-                                const Notes_Node* other_notes_node,
-                                const Notes_Node* trash_notes_node,
-                                int64_t sync_transaction_version) {
+std::unique_ptr<base::Value> NotesCodec::Encode(
+    const NoteNode* notes_node,
+    const NoteNode* other_notes_node,
+    const NoteNode* trash_notes_node,
+    int64_t sync_transaction_version,
+    const std::string& sync_metadata_str) {
   ids_reassigned_ = false;
   InitializeChecksum();
 
-  std::vector<const Notes_Node*> extra_nodes;
+  std::vector<const NoteNode*> extra_nodes;
   extra_nodes.push_back(other_notes_node);
   extra_nodes.push_back(trash_notes_node);
 
-  std::unique_ptr<base::Value> roots(notes_node->Encode(this, &extra_nodes));
+  std::unique_ptr<base::Value> roots(EncodeNode(notes_node, &extra_nodes));
 
-  std::unique_ptr<base::DictionaryValue>
-      main(base::DictionaryValue::From(std::move(roots)));
+  std::unique_ptr<base::DictionaryValue> main(
+      base::DictionaryValue::From(std::move(roots)));
   if (main) {
-    if (sync_transaction_version != Notes_Node::kInvalidSyncTransactionVersion) {
+    if (sync_transaction_version != NoteNode::kInvalidSyncTransactionVersion) {
       main->SetString(kSyncTransactionVersion,
                       base::NumberToString(sync_transaction_version));
+    }
+    if (!sync_metadata_str.empty()) {
+      std::string sync_metadata_str_base64;
+      base::Base64Encode(sync_metadata_str, &sync_metadata_str_base64);
+      main->SetKey(kSyncMetadata,
+                   base::Value(std::move(sync_metadata_str_base64)));
     }
     main->SetInteger(kVersionKey, kCurrentVersion);
     FinalizeChecksum();
@@ -87,19 +104,22 @@ std::unique_ptr<base::Value> NotesCodec::Encode(const Notes_Node* notes_node,
   return main;
 }
 
-bool NotesCodec::Decode(Notes_Node* notes_node,
-                        Notes_Node* other_notes_node,
-                        Notes_Node* trash_notes_node,
+bool NotesCodec::Decode(NoteNode* notes_node,
+                        NoteNode* other_notes_node,
+                        NoteNode* trash_notes_node,
                         int64_t* max_id,
-                        const base::Value& value) {
+                        const base::Value& value,
+                        std::string* sync_metadata_str) {
   ids_.clear();
+  guids_ = {NoteNode::kRootNodeGuid, NoteNode::kMainNodeGuid,
+            NoteNode::kOtherNotesNodeGuid, NoteNode::kTrashNodeGuid};
   ids_reassigned_ = false;
   ids_valid_ = true;
   maximum_id_ = 0;
   stored_checksum_.clear();
   InitializeChecksum();
-  bool success =
-      DecodeHelper(notes_node, other_notes_node, trash_notes_node, value);
+  bool success = DecodeHelper(notes_node, other_notes_node, trash_notes_node,
+                              value, sync_metadata_str);
   FinalizeChecksum();
   // If either the checksums differ or some IDs were missing/not unique,
   // reassign IDs.
@@ -110,39 +130,99 @@ bool NotesCodec::Decode(Notes_Node* notes_node,
   return success;
 }
 
-void NotesCodec::ExtractSpecialNode(Notes_Node::Type type,
-                                    Notes_Node* source,
-                                    Notes_Node* target) {
-  DCHECK(source);
-  DCHECK(target);
+std::unique_ptr<base::Value> NotesCodec::EncodeNode(
+    const NoteNode* node,
+    const std::vector<const NoteNode*>* extra_nodes) {
+  std::unique_ptr<base::DictionaryValue> value(new base::DictionaryValue());
 
-  std::unique_ptr<Notes_Node> item;
-  for (size_t i = 0; i < source->children().size(); ++i) {
-    Notes_Node* child = source->children()[i].get();
-    if (child->type() == type) {
-      // Remove the special childnode from the node, moving into a separate node
-      item = source->Remove(i);
+  std::string node_id = base::NumberToString(node->id());
+  value->SetString(NotesCodec::kIdKey, node_id);
+  UpdateChecksum(node_id);
+
+  base::string16 subject = node->GetTitle();
+  value->SetString(NotesCodec::kSubjectKey, subject);
+  UpdateChecksum(subject);
+
+  const std::string& guid = node->guid();
+  value->SetString(kGuidKey, guid);
+
+  std::string type;
+  bool is_folder = false;
+  switch (node->type()) {
+    case NoteNode::FOLDER:
+    case NoteNode::MAIN:
+      type = kTypeFolder;
+      is_folder = true;
       break;
+    case NoteNode::NOTE:
+      type = kTypeNote;
+      break;
+    case NoteNode::TRASH:
+      type = kTypeTrash;
+      is_folder = true;
+      break;
+    case NoteNode::OTHER:
+      type = kTypeOther;
+      is_folder = true;
+      break;
+    case NoteNode::SEPARATOR:
+      type = kTypeSeparator;
+      break;
+    default:
+      NOTREACHED();
+      break;
+  }
+  value->SetString(NotesCodec::kTypeKey, type);
+  UpdateChecksum(type);
+
+  std::string temp =
+      base::NumberToString(node->GetCreationTime().ToInternalValue());
+  value->SetString(NotesCodec::kDateAddedKey, temp);
+
+  if (is_folder) {
+    std::unique_ptr<base::ListValue> child_list(new base::ListValue());
+
+    for (const auto& child : node->children()) {
+      child_list->Append(EncodeNode(child.get(), nullptr));
+    }
+    if (extra_nodes) {
+      for (const auto* child : *extra_nodes) {
+        child_list->Append(EncodeNode(child, nullptr));
+      }
+    }
+    value->Set(NotesCodec::kChildrenKey, std::move(child_list));
+  } else if (node->type() == NoteNode::NOTE) {
+    value->SetString(NotesCodec::kContentKey, node->GetContent());
+    UpdateChecksum(node->GetContent());
+
+    temp = node->GetURL().possibly_invalid_spec();
+    value->SetString(NotesCodec::kURLKey, temp);
+    UpdateChecksum(temp);
+
+    if (node->GetAttachments().size()) {
+      std::unique_ptr<base::ListValue> attachments(new base::ListValue());
+
+      for (const auto& attachment : node->GetAttachments()) {
+        attachments->Append(attachment.second.Encode(this));
+      }
+
+      value->Set(NotesCodec::kAttachmentsKey, std::move(attachments));
     }
   }
 
-  if (item) {
-    // Using variable instead of relying on children().size() decrement
-    size_t count = item->children().size();
-    while (count-- > 0) {
-      target->Add(item->Remove(0), 0);
-    }
-    target->set_id(item->id());
-    target->SetTitle(item->GetTitle());
-    target->SetCreationTime(item->GetCreationTime());
-    item.reset();
+  if (node->sync_transaction_version() !=
+      NoteNode::kInvalidSyncTransactionVersion) {
+    value->SetString(NotesCodec::kSyncTransactionVersion,
+                     base::NumberToString(node->sync_transaction_version()));
   }
+  return value;
 }
 
-bool NotesCodec::DecodeHelper(Notes_Node* notes_node,
-                              Notes_Node* other_notes_node,
-                              Notes_Node* trash_node,
-                              const base::Value& value) {
+bool NotesCodec::DecodeHelper(NoteNode* notes_node,
+                              NoteNode* other_notes_node,
+                              NoteNode* trash_node,
+                              const base::Value& value,
+                              std::string* sync_metadata_str) {
   if (value.type() != base::Value::Type::DICTIONARY)
     return false;  // Unexpected type.
 
@@ -162,11 +242,13 @@ bool NotesCodec::DecodeHelper(Notes_Node* notes_node,
       return false;
   }
 
-  notes_node->Decode(d_value, &maximum_id_, this);
-  // Other and trash nodes are included inside the normal notes node during
-  // encoding; extract them so that they can be placed in the root node
-  ExtractSpecialNode(Notes_Node::OTHER, notes_node, other_notes_node);
-  ExtractSpecialNode(Notes_Node::TRASH, notes_node, trash_node);
+  DecodeNode(d_value, nullptr, notes_node, other_notes_node, trash_node);
+
+  std::string sync_metadata_str_base64;
+  if (sync_metadata_str &&
+      d_value.GetString(kSyncMetadata, &sync_metadata_str_base64)) {
+    base::Base64Decode(sync_metadata_str_base64, sync_metadata_str);
+  }
 
   std::string sync_transaction_version_str;
   if (d_value.GetString(kSyncTransactionVersion,
@@ -178,9 +260,209 @@ bool NotesCodec::DecodeHelper(Notes_Node* notes_node,
   return true;
 }
 
-void NotesCodec::ReassignIDs(Notes_Node* notes_node,
-                             Notes_Node* other_node,
-                             Notes_Node* trash_node) {
+bool NotesCodec::DecodeNode(const base::DictionaryValue& value,
+                            NoteNode* parent,
+                            NoteNode* node,
+                            NoteNode* child_other_node,
+                            NoteNode* child_trash_node) {
+  // If no |node| is specified, we'll create one and add it to the |parent|.
+  // Therefore, in that case, |parent| must be non-NULL.
+  if (!node && !parent) {
+    NOTREACHED();
+    return false;
+  }
+
+  // It's not valid to have both a node and a specified parent.
+  if (node && parent) {
+    NOTREACHED();
+    return false;
+  }
+
+  std::string id_string;
+  int64_t id = 0;
+  if (ids_valid_) {
+    if (!value.GetString(kIdKey, &id_string) ||
+        !base::StringToInt64(id_string, &id) || ids_.count(id) != 0) {
+      ids_valid_ = false;
+    } else {
+      ids_.insert(id);
+    }
+  }
+  UpdateChecksum(id_string);
+
+  maximum_id_ = std::max(maximum_id_, id);
+
+  base::string16 title_string;
+  if (value.GetString(NotesCodec::kSubjectKey, &title_string)) {
+    UpdateChecksum(title_string);
+  }
+
+  std::string guid;
+  // |node| is only passed in for notes of type NotePermanentNode, in
+  // which case we do not need to check for GUID validity as their GUIDs are
+  // hard-coded and not read from the persisted file.
+  if (!node) {
+    // GUIDs can be empty for notes that were created before GUIDs were
+    // required. When encountering one such note we thus assign to it a new
+    // GUID. The same applies if the stored GUID is invalid or a duplicate.
+    if (!value.GetString(kGuidKey, &guid) || guid.empty() ||
+        !base::IsValidGUID(guid)) {
+      guid = base::GenerateGUID();
+      guids_reassigned_ = true;
+    }
+
+    // GUIDs are case insensitive as per RFC 4122. To prevent collisions due to
+    // capitalization differences, all GUIDs are canonicalized to lowercase
+    // during JSON-parsing.
+    guid = base::ToLowerASCII(guid);
+    DCHECK(base::IsValidGUIDOutputString(guid));
+
+    // Guard against GUID collisions, which would violate BookmarkModel's
+    // invariant that each GUID is unique.
+    if (guids_.count(guid) != 0) {
+      guid = base::GenerateGUID();
+      guids_reassigned_ = true;
+    }
+
+    guids_.insert(guid);
+  }
+
+  std::string date_added_string;
+  base::Time creation_time = base::Time::Now();
+  if (value.GetString(NotesCodec::kDateAddedKey, &date_added_string)) {
+    int64_t internal_time;
+    base::StringToInt64(date_added_string, &internal_time);
+    // If this is a new note do not refresh the time from disk.
+    if (internal_time) {
+      creation_time = base::Time::FromInternalValue(internal_time);
+    }
+  }
+
+  std::string type_string;
+  if (!value.GetString(NotesCodec::kTypeKey, &type_string)) {
+    NOTREACHED();  // We must have type!
+    return false;
+  }
+
+  NoteNode::Type type = NoteNode::NOTE;
+  if (type_string == kTypeNote)
+    type = NoteNode::NOTE;
+  else if (type_string == kTypeSeparator)
+    type = NoteNode::SEPARATOR;
+  else if (type_string == kTypeFolder)
+    type = NoteNode::FOLDER;
+  else if (!node || (type_string != kTypeOther && type_string != kTypeTrash))
+    // We can't create a permanent node when loading.
+    return false;
+  UpdateChecksum(type_string);
+
+  base::string16 content_string;
+  if (type_string == kTypeNote) {
+    if (!value.GetString(NotesCodec::kContentKey, &content_string))
+      return false;
+    UpdateChecksum(content_string);
+
+    if (!node)
+      node = new NoteNode(id, guid, type);
+    else
+      return false;
+
+    node->SetContent(content_string);
+
+    std::string url_string;
+    if (value.GetString(NotesCodec::kURLKey, &url_string))
+      node->SetURL(GURL(url_string));
+    UpdateChecksum(node->GetURL().possibly_invalid_spec());
+
+    const base::ListValue* attachments = NULL;
+    if (value.GetList(NotesCodec::kAttachmentsKey, &attachments) &&
+        attachments) {
+      for (size_t i = 0; i < attachments->GetSize(); i++) {
+        const base::DictionaryValue* d_att = NULL;
+        if (attachments->GetDictionary(i, &d_att)) {
+          std::unique_ptr<NoteAttachment> item(
+              NoteAttachment::Decode(d_att, this));
+          if (item)
+            node->AddAttachment(std::move(*item));
+        }
+      }
+    }
+
+    if (parent)
+      parent->Add(base::WrapUnique(node));
+  } else if (type_string != kTypeSeparator) {
+    const base::Value* child_list = NULL;
+
+    if (!value.Get(kChildrenKey, &child_list))
+      return false;
+
+    if (child_list->type() != base::Value::Type::LIST)
+      return false;
+
+    if (!node)
+      node = new NoteNode(id, guid, type);
+    else
+      node->set_id(id);
+
+    if (parent)
+      parent->Add(base::WrapUnique(node));
+
+    for (const auto& child_value : child_list->GetList()) {
+      const base::DictionaryValue* child_dict = NULL;
+
+      if (!child_value.GetAsDictionary(&child_dict))
+        return false;
+
+      std::string type_string;
+      if (child_dict->GetString(NotesCodec::kTypeKey, &type_string)) {
+        if (type_string == kTypeOther) {
+          if (!child_other_node)
+            return false;
+          DecodeNode(*child_dict, nullptr, child_other_node, nullptr, nullptr);
+          child_other_node = nullptr;
+          continue;
+        }
+        if (type_string == kTypeTrash) {
+          if (!child_trash_node)
+            return false;
+          DecodeNode(*child_dict, nullptr, child_trash_node, nullptr, nullptr);
+          child_trash_node = nullptr;
+          continue;
+        }
+      }
+      DecodeNode(*child_dict, node, nullptr, nullptr, nullptr);
+    }
+  } else {
+    DCHECK(type_string == kTypeSeparator);
+
+    if (!node)
+      node = new NoteNode(id, guid, type);
+    else
+      node->set_id(id);
+
+    if (parent)
+      parent->Add(base::WrapUnique(node));
+  }
+
+  node->SetTitle(title_string);
+  node->SetCreationTime(creation_time);
+
+  int64_t sync_transaction_version = node->sync_transaction_version();
+  std::string sync_transaction_version_str;
+  if (value.GetString(NotesCodec::kSyncTransactionVersion,
+                      &sync_transaction_version_str) &&
+      !base::StringToInt64(sync_transaction_version_str,
+                           &sync_transaction_version))
+    return false;
+
+  node->set_sync_transaction_version(sync_transaction_version);
+
+  return true;
+}
+
+void NotesCodec::ReassignIDs(NoteNode* notes_node,
+                             NoteNode* other_node,
+                             NoteNode* trash_node) {
   maximum_id_ = 0;
   ReassignIDsHelper(notes_node);
   ReassignIDsHelper(other_node);
@@ -188,10 +470,10 @@ void NotesCodec::ReassignIDs(Notes_Node* notes_node,
   ids_reassigned_ = true;
 }
 
-void NotesCodec::ReassignIDsHelper(Notes_Node* node) {
+void NotesCodec::ReassignIDsHelper(NoteNode* node) {
   DCHECK(node);
   node->set_id(++maximum_id_);
-  for (auto& it: node->children())
+  for (auto& it : node->children())
     ReassignIDsHelper(it.get());
 }
 

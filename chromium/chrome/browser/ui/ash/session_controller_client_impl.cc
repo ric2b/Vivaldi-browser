@@ -11,11 +11,9 @@
 #include "ash/public/cpp/ash_pref_names.h"
 #include "ash/public/cpp/session/session_controller.h"
 #include "ash/public/cpp/session/session_types.h"
-#include "ash/public/mojom/constants.mojom.h"
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -84,11 +82,12 @@ uint32_t GetSessionId(const User& user) {
 // no user session started for the given user.
 std::unique_ptr<ash::UserSession> UserToUserSession(const User& user) {
   const uint32_t user_session_id = GetSessionId(user);
-  if (user_session_id == 0u)
-    return nullptr;
+  DCHECK_NE(0u, user_session_id);
+
+  Profile* profile = chromeos::ProfileHelper::Get()->GetProfileByUser(&user);
+  DCHECK(profile);
 
   auto session = std::make_unique<ash::UserSession>();
-  Profile* profile = chromeos::ProfileHelper::Get()->GetProfileByUser(&user);
   session->session_id = user_session_id;
   session->user_info.type = user.GetType();
   session->user_info.account_id = user.GetAccountId();
@@ -99,11 +98,9 @@ std::unique_ptr<ash::UserSession> UserToUserSession(const User& user) {
   session->user_info.has_gaia_account = user.has_gaia_account();
   session->user_info.should_display_managed_ui =
       profile && chrome::ShouldDisplayManagedUi(profile);
-  if (profile) {
-    session->user_info.service_instance_group =
-        content::BrowserContext::GetServiceInstanceGroupFor(profile);
-    session->user_info.is_new_profile = profile->IsNewProfile();
-  }
+  session->user_info.service_instance_group =
+      content::BrowserContext::GetServiceInstanceGroupFor(profile);
+  session->user_info.is_new_profile = profile->IsNewProfile();
 
   session->user_info.avatar.image = user.GetImage();
   if (session->user_info.avatar.image.isNull()) {
@@ -113,13 +110,10 @@ std::unique_ptr<ash::UserSession> UserToUserSession(const User& user) {
   }
 
   if (user.IsSupervised()) {
-    if (profile) {
-      SupervisedUserService* service =
-          SupervisedUserServiceFactory::GetForProfile(profile);
-      session->custodian_email = service->GetCustodianEmailAddress();
-      session->second_custodian_email =
-          service->GetSecondCustodianEmailAddress();
-    }
+    SupervisedUserService* service =
+        SupervisedUserServiceFactory::GetForProfile(profile);
+    session->custodian_email = service->GetCustodianEmailAddress();
+    session->second_custodian_email = service->GetSecondCustodianEmailAddress();
   }
 
   chromeos::UserFlow* const user_flow =
@@ -169,8 +163,6 @@ SessionControllerClientImpl::SessionControllerClientImpl() {
   UserManager::Get()->AddObserver(this);
 
   registrar_.Add(this, chrome::NOTIFICATION_APP_TERMINATING,
-                 content::NotificationService::AllSources());
-  registrar_.Add(this, chrome::NOTIFICATION_LOGIN_USER_PROFILE_PREPARED,
                  content::NotificationService::AllSources());
 
   local_state_registrar_ = std::make_unique<PrefChangeRegistrar>();
@@ -348,19 +340,12 @@ bool SessionControllerClientImpl::IsMultiProfileAvailable() {
 void SessionControllerClientImpl::ActiveUserChanged(User* active_user) {
   SendSessionInfoIfChanged();
 
-  // UserAddedToSession is not called for the primary user session so its meta
-  // data here needs to be sent to ash before setting user session order.
-  // However, ActiveUserChanged happens at different timing for primary user
-  // and secondary users. For primary user, it happens before user profile load.
-  // For secondary users, it happens after user profile load. This caused
-  // confusing down the path. Bail out here to defer the primary user session
-  // metadata  sent until it becomes active so that ash side could expect a
-  // consistent state.
-  // TODO(xiyuan): Get rid of this after http://crbug.com/657149 refactoring.
-  if (!primary_user_session_sent_ &&
-      UserManager::Get()->GetPrimaryUser() == active_user) {
+  // Try to send user session before updating the order. Skip sending session
+  // order if user session ends up to be pending (due to user profile loading).
+  // TODO(crbug.com/657149): Get rid of this after refactoring.
+  SendUserSession(*active_user);
+  if (pending_users_.find(active_user->GetAccountId()) != pending_users_.end())
     return;
-  }
 
   SendUserSessionOrder();
 }
@@ -370,8 +355,15 @@ void SessionControllerClientImpl::UserAddedToSession(const User* added_user) {
   SendUserSession(*added_user);
 }
 
+void SessionControllerClientImpl::LocalStateChanged(
+    user_manager::UserManager* user_manager) {
+  SendSessionInfoIfChanged();
+}
+
 void SessionControllerClientImpl::OnUserImageChanged(const User& user) {
-  SendUserSession(user);
+  // Only sends user session for signed-in user.
+  if (GetSessionId(user) != 0)
+    SendUserSession(user);
 }
 
 // static
@@ -483,18 +475,20 @@ void SessionControllerClientImpl::DoCycleActiveUser(
 }
 
 void SessionControllerClientImpl::OnSessionStateChanged() {
-  // Sent the primary user metadata and user session order that are deferred
-  // from ActiveUserChanged before update session state.
-  if (!primary_user_session_sent_ &&
-      SessionManager::Get()->session_state() == SessionState::ACTIVE) {
-    DCHECK_EQ(UserManager::Get()->GetPrimaryUser(),
-              UserManager::Get()->GetActiveUser());
-    primary_user_session_sent_ = true;
-    SendUserSession(*UserManager::Get()->GetPrimaryUser());
-    SendUserSessionOrder();
+  if (SessionManager::Get()->session_state() == SessionState::ACTIVE) {
+    // The active user should not be pending when the session becomes active.
+    DCHECK(pending_users_.find(
+               UserManager::Get()->GetActiveUser()->GetAccountId()) ==
+           pending_users_.end());
   }
 
   SendSessionInfoIfChanged();
+}
+
+void SessionControllerClientImpl::OnUserProfileLoaded(
+    const AccountId& account_id) {
+  OnLoginUserProfilePrepared(
+      chromeos::ProfileHelper::Get()->GetProfileByAccountId(account_id));
 }
 
 void SessionControllerClientImpl::OnCustodianInfoChanged() {
@@ -513,11 +507,6 @@ void SessionControllerClientImpl::Observe(
     case chrome::NOTIFICATION_APP_TERMINATING:
       session_controller_->NotifyChromeTerminating();
       break;
-    case chrome::NOTIFICATION_LOGIN_USER_PROFILE_PREPARED: {
-      Profile* profile = content::Details<Profile>(details).ptr();
-      OnLoginUserProfilePrepared(profile);
-      break;
-    }
     default:
       NOTREACHED() << "Unexpected notification " << type;
       break;
@@ -550,23 +539,11 @@ void SessionControllerClientImpl::OnLoginUserProfilePrepared(Profile* profile) {
                              session_info_changed_closure);
   pref_change_registrars_.push_back(std::move(pref_change_registrar));
 
-  // Needed because the user-to-profile mapping isn't available until later,
-  // which is needed in UserToUserSession().
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::BindOnce(&SessionControllerClientImpl::SendUserSessionForProfile,
-                     weak_ptr_factory_.GetWeakPtr(), profile));
+  SendUserSession(*user);
 }
 
 void SessionControllerClientImpl::OnOffHoursEndTimeChanged() {
   SendSessionLengthLimit();
-}
-
-void SessionControllerClientImpl::SendUserSessionForProfile(Profile* profile) {
-  DCHECK(profile);
-  const User* user = chromeos::ProfileHelper::Get()->GetUserByProfile(profile);
-  DCHECK(user);
-  SendUserSession(*user);
 }
 
 void SessionControllerClientImpl::SendSessionInfoIfChanged() {
@@ -589,20 +566,29 @@ void SessionControllerClientImpl::SendSessionInfoIfChanged() {
 }
 
 void SessionControllerClientImpl::SendUserSession(const User& user) {
-  auto user_session = UserToUserSession(user);
+  // |user| must have a session, i.e. signed-in already.
+  DCHECK_NE(0u, GetSessionId(user));
 
-  // Bail if the user has no session. Currently the only code path that hits
-  // this condition is from OnUserImageChanged when user images are changed
-  // on the login screen (e.g. policy change that adds a public session user,
-  // or tests that create new users on the login screen).
-  if (!user_session)
+  // Check user profile via GetProfileByUser() instead of is_profile_created()
+  // flag because many tests have only setup testing user profile in
+  // ProfileHelper but do not have the flag updated.
+  if (!chromeos::ProfileHelper::Get()->GetProfileByUser(&user)) {
+    pending_users_.insert(user.GetAccountId());
     return;
+  }
 
+  auto user_session = UserToUserSession(user);
   if (last_sent_user_session_ && *user_session == *last_sent_user_session_)
     return;
 
   last_sent_user_session_ = std::move(user_session);
   session_controller_->UpdateUserSession(*last_sent_user_session_);
+
+  if (!pending_users_.empty()) {
+    pending_users_.erase(user.GetAccountId());
+    if (pending_users_.empty())
+      SendUserSessionOrder();
+  }
 }
 
 void SessionControllerClientImpl::SendUserSessionOrder() {

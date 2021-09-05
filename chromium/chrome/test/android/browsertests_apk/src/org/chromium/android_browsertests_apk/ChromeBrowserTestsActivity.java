@@ -6,7 +6,6 @@ package org.chromium.android_browsertests_apk;
 
 import android.content.Intent;
 
-import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.content_public.browser.BrowserStartupController;
@@ -19,7 +18,7 @@ import java.io.File;
  * Android activity for running chrome browser tests.
  */
 public class ChromeBrowserTestsActivity extends ChromeTabbedActivity {
-    private static final String TAG = "cr_browser_test";
+    private static final String TAG = "browser_test";
 
     private NativeTest mTest = new NativeTest();
 
@@ -43,15 +42,22 @@ public class ChromeBrowserTestsActivity extends ChromeTabbedActivity {
         NativeBrowserTest.deletePrivateDataDirectory(getPrivateDataDirectory());
 
         // Replace ContentMain() with running our NativeTest suite.
-        BrowserStartupController.get(LibraryProcessType.PROCESS_BROWSER)
-                .setContentMainCallbackForTests(() -> {
-                    // This jumps into C++ to set up and run the test harness. The test harness runs
-                    // ContentMain()-equivalent code, and then waits for javaStartupTasksComplete()
-                    // to be called. We delay that until finishNativeInitialization() is done which
-                    // marks the end of the startup tasks posted from C++ in ContentMain() and then
-                    // by Java in BrowserStartupControllerImpl::browserStartupComplete().
-                    mTest.postStart(this, false);
-                });
+        BrowserStartupController.getInstance().setContentMainCallbackForTests(() -> {
+            // This jumps into C++ to set up and run the test harness. The test harness runs
+            // ContentMain()-equivalent code, and then waits for javaStartupTasksComplete()
+            // to be called. We delay that until finishNativeInitialization() is done which
+            // marks the end of the startup tasks posted from C++ in ContentMain() and then
+            // by Java in BrowserStartupControllerImpl::browserStartupComplete().
+            mTest.postStart(this, false);
+        });
+    }
+
+    /**
+     * Tests don't use the preallocated child connection.
+     */
+    @Override
+    public boolean shouldAllocateChildConnection() {
+        return false;
     }
 
     /**

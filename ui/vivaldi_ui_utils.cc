@@ -10,12 +10,13 @@
 #include "app/vivaldi_constants.h"
 #include "base/json/json_reader.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
+#include "chrome/browser/lifetime/browser_shutdown.h"
 #include "chrome/browser/platform_util.h"
-#include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "components/sessions/content/session_tab_helper.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "ui/gfx/codec/jpeg_codec.h"
@@ -169,7 +170,8 @@ Browser* FindBrowserForPinnedTabs(Browser* current_browser) {
     return nullptr;
   }
   if (browser_shutdown::IsTryingToQuit() ||
-      browser_shutdown::GetShutdownType() != browser_shutdown::NOT_VALID) {
+      browser_shutdown::GetShutdownType() !=
+          browser_shutdown::ShutdownType::kNotValid) {
     // Do not move anything on shutdown
     return nullptr;
   }
@@ -240,7 +242,8 @@ bool GetTabById(int tab_id, content::WebContents** contents, int* index) {
     for (int i = 0; i < target_tab_strip->count(); ++i) {
       content::WebContents* target_contents =
           target_tab_strip->GetWebContentsAt(i);
-      if (SessionTabHelper::IdForTab(target_contents).id() == tab_id) {
+      if (sessions::SessionTabHelper::IdForTab(target_contents).id() ==
+          tab_id) {
         if (contents)
           *contents = target_contents;
         if (index)

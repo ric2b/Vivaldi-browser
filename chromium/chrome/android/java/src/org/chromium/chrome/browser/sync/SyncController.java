@@ -6,16 +6,15 @@ package org.chromium.chrome.browser.sync;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
-import android.content.Context;
 
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ApplicationStatus.ActivityStateListener;
 import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.task.PostTask;
 import org.chromium.chrome.browser.identity.UniqueIdentificationGenerator;
@@ -23,10 +22,9 @@ import org.chromium.chrome.browser.identity.UniqueIdentificationGeneratorFactory
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.SigninManager;
-import org.chromium.components.signin.ChromeSigninController;
 import org.chromium.components.sync.AndroidSyncSettings;
 import org.chromium.components.sync.ModelType;
-import org.chromium.components.sync.Passphrase;
+import org.chromium.components.sync.PassphraseType;
 import org.chromium.components.sync.StopSource;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 
@@ -67,12 +65,10 @@ public class SyncController implements ProfileSyncService.SyncStateChangedListen
     private static SyncController sInstance;
     private static boolean sInitialized;
 
-    private final ChromeSigninController mChromeSigninController;
     private final ProfileSyncService mProfileSyncService;
     private final SyncNotificationController mSyncNotificationController;
 
     private SyncController() {
-        mChromeSigninController = ChromeSigninController.get();
         AndroidSyncSettings.get().registerObserver(this);
         mProfileSyncService = ProfileSyncService.get();
         mProfileSyncService.addSyncStateChangedListener(this);
@@ -95,7 +91,7 @@ public class SyncController implements ProfileSyncService.SyncStateChangedListen
             }
         });
 
-        IdentityServicesProvider.getSigninManager().addSignInStateObserver(
+        IdentityServicesProvider.get().getSigninManager().addSignInStateObserver(
                 new SigninManager.SignInStateObserver() {
                     @Override
                     public void onSignedIn() {
@@ -125,16 +121,6 @@ public class SyncController implements ProfileSyncService.SyncStateChangedListen
     }
 
     /**
-     * Retrieve the singleton instance of this class.
-     * @deprecated Use get with no arguments instead.
-     * @return the singleton instance.
-     */
-    @Nullable
-    public static SyncController get(Context context) {
-        return get();
-    }
-
-    /**
      * Updates sync to reflect the state of the Android sync settings.
      */
     private void updateSyncStateFromAndroid() {
@@ -154,7 +140,7 @@ public class SyncController implements ProfileSyncService.SyncStateChangedListen
         if (isSyncEnabled) {
             mProfileSyncService.requestStart();
         } else {
-            if (Profile.getLastUsedProfile().isChild()) {
+            if (Profile.getLastUsedRegularProfile().isChild()) {
                 // For child accounts, Sync needs to stay enabled, so we reenable it in settings.
                 // TODO(bauerb): Remove the dependency on child account code and instead go through
                 // prefs (here and in the Sync customization UI).
@@ -214,7 +200,9 @@ public class SyncController implements ProfileSyncService.SyncStateChangedListen
     public boolean isSyncingUrlsWithKeystorePassphrase() {
         return mProfileSyncService.isEngineInitialized()
                 && mProfileSyncService.getPreferredDataTypes().contains(ModelType.TYPED_URLS)
-                && mProfileSyncService.getPassphraseType() == Passphrase.Type.KEYSTORE;
+                && (mProfileSyncService.getPassphraseType() == PassphraseType.KEYSTORE_PASSPHRASE
+                        || mProfileSyncService.getPassphraseType()
+                                == PassphraseType.TRUSTED_VAULT_PASSPHRASE);
     }
 
     /**

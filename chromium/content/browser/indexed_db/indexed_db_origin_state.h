@@ -10,13 +10,15 @@
 
 #include "base/callback.h"
 #include "base/containers/flat_map.h"
+#include "base/feature_list.h"
+#include "base/gtest_prod_util.h"
 #include "base/sequence_checker.h"
 #include "base/strings/string16.h"
 #include "base/time/clock.h"
 #include "base/timer/timer.h"
+#include "components/services/storage/indexed_db/scopes/disjoint_range_lock_manager.h"
 #include "content/browser/indexed_db/indexed_db_origin_state_handle.h"
 #include "content/browser/indexed_db/indexed_db_task_helper.h"
-#include "content/browser/indexed_db/scopes/disjoint_range_lock_manager.h"
 #include "content/common/content_export.h"
 #include "third_party/leveldatabase/src/include/leveldb/status.h"
 #include "url/origin.h"
@@ -26,12 +28,13 @@ class IndexedDBBackingStore;
 class IndexedDBDatabase;
 class IndexedDBFactoryImpl;
 class IndexedDBPreCloseTaskQueue;
-
-namespace indexed_db {
-class LevelDBFactory;
-}  // namespace indexed_db
+class TransactionalLevelDBFactory;
 
 constexpr const char kIDBCloseImmediatelySwitch[] = "idb-close-immediately";
+
+// This is an emergency kill switch to use with Finch if the feature needs to be
+// shut off.
+CONTENT_EXPORT extern const base::Feature kCompactIDBOnClose;
 
 // IndexedDBOriginState manages the per-origin IndexedDB state, and contains the
 // backing store for the origin.
@@ -56,12 +59,12 @@ class CONTENT_EXPORT IndexedDBOriginState {
   // occurs after backing store close.
   // Visible for testing.
   static constexpr const base::TimeDelta kMaxEarliestGlobalSweepFromNow =
-      base::TimeDelta::FromHours(2);
+      base::TimeDelta::FromHours(1);
   // Maximum time interval between runs of the IndexedDBSweeper for a given
   // origin. Sweeping only occurs after backing store close.
   // Visible for testing.
   static constexpr const base::TimeDelta kMaxEarliestOriginSweepFromNow =
-      base::TimeDelta::FromDays(7);
+      base::TimeDelta::FromDays(3);
 
   enum class ClosingState {
     // IndexedDBOriginState isn't closing.
@@ -77,15 +80,16 @@ class CONTENT_EXPORT IndexedDBOriginState {
 
   // Calling |destruct_myself| should destruct this object.
   // |earliest_global_sweep_time| is expected to outlive this object.
-  IndexedDBOriginState(url::Origin origin,
-                       bool persist_for_incognito,
-                       base::Clock* clock,
-                       indexed_db::LevelDBFactory* leveldb_factory,
-                       base::Time* earliest_global_sweep_time,
-                       std::unique_ptr<DisjointRangeLockManager> lock_manager,
-                       TasksAvailableCallback notify_tasks_callback,
-                       TearDownCallback tear_down_callback,
-                       std::unique_ptr<IndexedDBBackingStore> backing_store);
+  IndexedDBOriginState(
+      url::Origin origin,
+      bool persist_for_incognito,
+      base::Clock* clock,
+      TransactionalLevelDBFactory* transactional_leveldb_factory,
+      base::Time* earliest_global_sweep_time,
+      std::unique_ptr<DisjointRangeLockManager> lock_manager,
+      TasksAvailableCallback notify_tasks_callback,
+      TearDownCallback tear_down_callback,
+      std::unique_ptr<IndexedDBBackingStore> backing_store);
   ~IndexedDBOriginState();
 
   void AbortAllTransactions(bool compact);
@@ -151,6 +155,13 @@ class CONTENT_EXPORT IndexedDBOriginState {
   friend IndexedDBFactoryImpl;
   friend IndexedDBOriginStateHandle;
 
+  // Test needs access to ShouldRunTombstoneSweeper.
+  FRIEND_TEST_ALL_PREFIXES(IndexedDBFactoryTestWithMockTime,
+                           TombstoneSweeperTiming);
+
+  // Test needs access to CompactionKillSwitchWorks.
+  FRIEND_TEST_ALL_PREFIXES(IndexedDBFactoryTest, CompactionKillSwitchWorks);
+
   IndexedDBDatabase* AddDatabase(const base::string16& name,
                                  std::unique_ptr<IndexedDBDatabase> database);
 
@@ -170,6 +181,13 @@ class CONTENT_EXPORT IndexedDBOriginState {
 
   void CloseAndDestruct();
 
+  // Executes database operations, and if |true| is returned by this function,
+  // then the current time will be written to the database as the last sweep
+  // time.
+  bool ShouldRunTombstoneSweeper();
+
+  bool ShouldRunCompaction();
+
   SEQUENCE_CHECKER(sequence_checker_);
 
   url::Origin origin_;
@@ -184,7 +202,7 @@ class CONTENT_EXPORT IndexedDBOriginState {
   bool has_blobs_outstanding_ = false;
   bool skip_closing_sequence_ = false;
   base::Clock* const clock_;
-  indexed_db::LevelDBFactory* const leveldb_factory_;
+  TransactionalLevelDBFactory* const transactional_leveldb_factory_;
 
   bool running_tasks_ = false;
   bool task_run_scheduled_ = false;
@@ -195,7 +213,7 @@ class CONTENT_EXPORT IndexedDBOriginState {
   ClosingState closing_stage_ = ClosingState::kNotClosing;
   base::OneShotTimer close_timer_;
   const std::unique_ptr<DisjointRangeLockManager> lock_manager_;
-  const std::unique_ptr<IndexedDBBackingStore> backing_store_;
+  std::unique_ptr<IndexedDBBackingStore> backing_store_;
 
   OriginDBMap databases_;
   // This is the refcount for the number of IndexedDBOriginStateHandle's given

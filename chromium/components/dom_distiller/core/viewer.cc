@@ -56,53 +56,46 @@ const char kSansSerifCssClass[] = "sans-serif";
 const char kMonospaceCssClass[] = "monospace";
 
 std::string GetPlatformSpecificCss() {
-#if defined(OS_IOS)
-  return base::StrCat(
-      {ui::ResourceBundle::GetSharedInstance().DecompressDataResource(
-           IDR_DISTILLER_MOBILE_CSS),
-       ui::ResourceBundle::GetSharedInstance().DecompressDataResource(
-           IDR_DISTILLER_IOS_CSS)});
-#elif defined(OS_ANDROID)
-  return ui::ResourceBundle::GetSharedInstance().DecompressDataResource(
-      IDR_DISTILLER_MOBILE_CSS);
+#if defined(OS_ANDROID) || defined(OS_IOS)
+  return "";
 #else  // Desktop
-  return ui::ResourceBundle::GetSharedInstance().DecompressDataResource(
+  return ui::ResourceBundle::GetSharedInstance().LoadDataResourceString(
       IDR_DISTILLER_DESKTOP_CSS);
 #endif
 }
 
 // Maps themes to JS themes.
-const std::string GetJsTheme(DistilledPagePrefs::Theme theme) {
-  if (theme == DistilledPagePrefs::THEME_DARK)
+const std::string GetJsTheme(mojom::Theme theme) {
+  if (theme == mojom::Theme::kDark)
     return kDarkJsTheme;
-  if (theme == DistilledPagePrefs::THEME_SEPIA)
+  if (theme == mojom::Theme::kSepia)
     return kSepiaJsTheme;
   return kLightJsTheme;
 }
 
 // Maps themes to CSS classes.
-const std::string GetThemeCssClass(DistilledPagePrefs::Theme theme) {
-  if (theme == DistilledPagePrefs::THEME_DARK)
+const std::string GetThemeCssClass(mojom::Theme theme) {
+  if (theme == mojom::Theme::kDark)
     return kDarkCssClass;
-  if (theme == DistilledPagePrefs::THEME_SEPIA)
+  if (theme == mojom::Theme::kSepia)
     return kSepiaCssClass;
   return kLightCssClass;
 }
 
 // Maps font families to JS font families.
-const std::string GetJsFontFamily(DistilledPagePrefs::FontFamily font_family) {
-  if (font_family == DistilledPagePrefs::FONT_FAMILY_SERIF)
+const std::string GetJsFontFamily(mojom::FontFamily font_family) {
+  if (font_family == mojom::FontFamily::kSerif)
     return kSerifJsFontFamily;
-  if (font_family == DistilledPagePrefs::FONT_FAMILY_MONOSPACE)
+  if (font_family == mojom::FontFamily::kMonospace)
     return kMonospaceJsFontFamily;
   return kSansSerifJsFontFamily;
 }
 
 // Maps fontFamilies to CSS fontFamily classes.
-const std::string GetFontCssClass(DistilledPagePrefs::FontFamily font_family) {
-  if (font_family == DistilledPagePrefs::FONT_FAMILY_SERIF)
+const std::string GetFontCssClass(mojom::FontFamily font_family) {
+  if (font_family == mojom::FontFamily::kSerif)
     return kSerifCssClass;
-  if (font_family == DistilledPagePrefs::FONT_FAMILY_MONOSPACE)
+  if (font_family == mojom::FontFamily::kMonospace)
     return kMonospaceCssClass;
   return kSansSerifCssClass;
 }
@@ -115,12 +108,10 @@ void EnsureNonEmptyContent(std::string* content) {
   }
 }
 
-std::string ReplaceHtmlTemplateValues(
-    const std::string& original_url,
-    const DistilledPagePrefs::Theme theme,
-    const DistilledPagePrefs::FontFamily font_family) {
+std::string ReplaceHtmlTemplateValues(const mojom::Theme theme,
+                                      const mojom::FontFamily font_family) {
   std::string html_template =
-      ui::ResourceBundle::GetSharedInstance().DecompressDataResource(
+      ui::ResourceBundle::GetSharedInstance().LoadDataResourceString(
           IDR_DOM_DISTILLER_VIEWER_HTML);
   std::vector<std::string> substitutions;
 
@@ -149,10 +140,6 @@ std::string ReplaceHtmlTemplateValues(
       IDS_DOM_DISTILLER_JAVASCRIPT_DISABLED_CONTENT));  // $5
 
   substitutions.push_back(svg.str());  // $6
-
-  substitutions.push_back(original_url);  // $7
-  substitutions.push_back(l10n_util::GetStringUTF8(
-      IDS_DOM_DISTILLER_VIEWER_CLOSE_READER_VIEW));  // $8
 
   return base::ReplaceStringPlaceholders(html_template, substitutions, nullptr);
 }
@@ -187,7 +174,13 @@ const std::string GetErrorPageJs() {
 }
 
 const std::string GetSetTitleJs(std::string title) {
+#if defined(OS_ANDROID) || defined(OS_IOS)
   base::Value value(title);
+#else  // Desktop
+  std::string suffix(
+      l10n_util::GetStringUTF8(IDS_DOM_DISTILLER_VIEWER_TITLE_SUFFIX));
+  base::Value value(title + " - " + suffix);
+#endif
   std::string output;
   base::JSONWriter::Write(value, &output);
   return "setTitle(" + output + ");";
@@ -206,11 +199,9 @@ const std::string GetToggleLoadingIndicatorJs(bool is_last_page) {
   return "showLoadingIndicator(false);";
 }
 
-const std::string GetUnsafeArticleTemplateHtml(
-    const std::string& original_url,
-    DistilledPagePrefs::Theme theme,
-    DistilledPagePrefs::FontFamily font_family) {
-  return ReplaceHtmlTemplateValues(original_url, theme, font_family);
+const std::string GetArticleTemplateHtml(mojom::Theme theme,
+                                         mojom::FontFamily font_family) {
+  return ReplaceHtmlTemplateValues(theme, font_family);
 }
 
 const std::string GetUnsafeArticleContentJs(
@@ -233,18 +224,18 @@ const std::string GetUnsafeArticleContentJs(
 
 const std::string GetCss() {
   return base::StrCat(
-      {ui::ResourceBundle::GetSharedInstance().DecompressDataResource(
+      {ui::ResourceBundle::GetSharedInstance().LoadDataResourceString(
            IDR_DISTILLER_CSS),
        GetPlatformSpecificCss()});
 }
 
 const std::string GetLoadingImage() {
-  return ui::ResourceBundle::GetSharedInstance().DecompressDataResource(
+  return ui::ResourceBundle::GetSharedInstance().LoadDataResourceString(
       IDR_DISTILLER_LOADING_IMAGE);
 }
 
 const std::string GetJavaScript() {
-  return ui::ResourceBundle::GetSharedInstance().DecompressDataResource(
+  return ui::ResourceBundle::GetSharedInstance().LoadDataResourceString(
       IDR_DOM_DISTILLER_VIEWER_JS);
 }
 
@@ -283,12 +274,11 @@ std::unique_ptr<ViewerHandle> CreateViewRequest(
   return std::unique_ptr<ViewerHandle>();
 }
 
-const std::string GetDistilledPageThemeJs(DistilledPagePrefs::Theme theme) {
+const std::string GetDistilledPageThemeJs(mojom::Theme theme) {
   return "useTheme('" + GetJsTheme(theme) + "');";
 }
 
-const std::string GetDistilledPageFontFamilyJs(
-    DistilledPagePrefs::FontFamily font_family) {
+const std::string GetDistilledPageFontFamilyJs(mojom::FontFamily font_family) {
   return "useFontFamily('" + GetJsFontFamily(font_family) + "');";
 }
 

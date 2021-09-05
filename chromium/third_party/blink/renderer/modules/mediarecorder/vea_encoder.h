@@ -30,8 +30,8 @@ class VEAEncoder final : public VideoTrackRecorder::Encoder,
                          public media::VideoEncodeAccelerator::Client {
  public:
   static scoped_refptr<VEAEncoder> Create(
-      const VideoTrackRecorder::OnEncodedVideoCB& on_encoded_video_callback,
-      const VideoTrackRecorder::OnErrorCB& on_error_callback,
+      const VideoTrackRecorder::OnEncodedVideoCB& on_encoded_video_cb,
+      const VideoTrackRecorder::OnErrorCB& on_error_cb,
       int32_t bits_per_second,
       media::VideoCodecProfile codec,
       const gfx::Size& size,
@@ -58,13 +58,19 @@ class VEAEncoder final : public VideoTrackRecorder::Encoder,
     base::WritableSharedMemoryMapping mapping;
   };
 
-  VEAEncoder(
-      const VideoTrackRecorder::OnEncodedVideoCB& on_encoded_video_callback,
-      const VideoTrackRecorder::OnErrorCB& on_error_callback,
-      int32_t bits_per_second,
-      media::VideoCodecProfile codec,
-      const gfx::Size& size,
-      scoped_refptr<base::SingleThreadTaskRunner> task_runner);
+  struct OutputBuffer {
+    base::UnsafeSharedMemoryRegion region;
+    base::WritableSharedMemoryMapping mapping;
+
+    bool IsValid();
+  };
+
+  VEAEncoder(const VideoTrackRecorder::OnEncodedVideoCB& on_encoded_video_cb,
+             const VideoTrackRecorder::OnErrorCB& on_error_cb,
+             int32_t bits_per_second,
+             media::VideoCodecProfile codec,
+             const gfx::Size& size,
+             scoped_refptr<base::SingleThreadTaskRunner> task_runner);
 
   void UseOutputBitstreamBufferId(int32_t bitstream_buffer_id);
   void FrameFinished(std::unique_ptr<InputBuffer> shm);
@@ -87,7 +93,7 @@ class VEAEncoder final : public VideoTrackRecorder::Encoder,
   std::unique_ptr<media::VideoEncodeAccelerator> video_encoder_;
 
   // Shared memory buffers for output with the VEA.
-  Vector<std::unique_ptr<base::SharedMemory>> output_buffers_;
+  Vector<std::unique_ptr<OutputBuffer>> output_buffers_;
 
   // Shared memory buffers for output with the VEA as FIFO.
   // TODO(crbug.com/960665): Replace with a WTF equivalent.
@@ -116,7 +122,7 @@ class VEAEncoder final : public VideoTrackRecorder::Encoder,
   bool force_next_frame_to_be_keyframe_;
 
   // This callback can be exercised on any thread.
-  const VideoTrackRecorder::OnErrorCB on_error_callback_;
+  const VideoTrackRecorder::OnErrorCB on_error_cb_;
 };
 
 }  // namespace blink

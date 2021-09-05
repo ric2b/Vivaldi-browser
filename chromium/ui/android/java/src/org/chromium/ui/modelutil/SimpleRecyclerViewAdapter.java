@@ -4,13 +4,13 @@
 
 package org.chromium.ui.modelutil;
 
-import android.support.v7.widget.RecyclerView;
 import android.util.Pair;
 import android.util.SparseArray;
 import android.view.View;
 import android.view.ViewGroup;
 
 import androidx.annotation.Nullable;
+import androidx.recyclerview.widget.RecyclerView;
 
 import org.chromium.ui.modelutil.ListObservable.ListObserver;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor.ViewBinder;
@@ -119,7 +119,7 @@ public class SimpleRecyclerViewAdapter
 
     @Override
     public ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
-        return new ViewHolder(mViewBuilderMap.get(viewType).first.buildView(),
+        return new ViewHolder(mViewBuilderMap.get(viewType).first.buildView(parent),
                 mViewBuilderMap.get(viewType).second);
     }
 

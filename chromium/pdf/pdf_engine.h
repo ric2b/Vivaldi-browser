@@ -8,7 +8,6 @@
 #include <stdint.h>
 
 #include <memory>
-#include <set>
 #include <string>
 #include <vector>
 
@@ -16,12 +15,15 @@
 #include "base/optional.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
+#include "base/values.h"
 #include "build/build_config.h"
+#include "pdf/document_layout.h"
 #include "ppapi/c/dev/pp_cursor_type_dev.h"
 #include "ppapi/c/dev/ppp_printing_dev.h"
 #include "ppapi/c/ppb_input_event.h"
 #include "ppapi/cpp/completion_callback.h"
 #include "ppapi/cpp/image_data.h"
+#include "ppapi/cpp/private/pdf.h"
 #include "ppapi/cpp/rect.h"
 #include "ppapi/cpp/size.h"
 #include "ppapi/cpp/url_loader.h"
@@ -41,7 +43,6 @@ typedef void (*PDFEnsureTypefaceCharactersAccessible)(const LOGFONT* font,
 
 struct PP_PdfAccessibilityActionData;
 struct PP_PdfPrintSettings_Dev;
-struct PP_PrivateAccessibilityTextRunInfo;
 
 namespace gfx {
 class Rect;
@@ -55,7 +56,7 @@ class VarDictionary;
 
 namespace chrome_pdf {
 
-class DocumentLayout;
+struct DocumentMetadata;
 
 // Do one time initialization of the SDK.
 // If |enable_v8| is false, then the PDFEngine will not be able to run
@@ -117,30 +118,14 @@ class PDFEngine {
     FormType form_type = FormType::kNone;
   };
 
-  // Features in a page that are relevant to measure.
-  struct PageFeatures {
-    PageFeatures();
-    PageFeatures(const PageFeatures& other);
-    ~PageFeatures();
-
-    // Whether the instance has been initialized and filled.
-    bool IsInitialized() const;
-
-    // 0-based page index in the document. < 0 when uninitialized.
-    int index = -1;
-
-    // Set of annotation types found in page.
-    std::set<int> annotation_types;
-  };
-
   // The interface that's provided to the rendering engine.
   class Client {
    public:
     virtual ~Client() {}
 
-    // Proposes a document layout to the client.
-    // TODO(crbug.com/885110): Layout still occurs immediately for now. In the
-    // future, the client will need to accept the layout before it takes effect.
+    // Proposes a document layout to the client. For the proposed layout to
+    // become effective, the client must call PDFEngine::ApplyDocumentLayout()
+    // with the new layout options (although this call can be asynchronous).
     virtual void ProposeDocumentLayout(const DocumentLayout& layout) = 0;
 
     // Informs the client that the given rect needs to be repainted.
@@ -190,10 +175,6 @@ class PDFEngine {
 
     // Updates the index of the currently selected search item.
     virtual void NotifySelectedFindResultChanged(int current_find_index) {}
-
-    // Notifies a page became visible.
-    virtual void NotifyPageBecameVisible(
-        const PDFEngine::PageFeatures* page_features) {}
 
     // Prompts the user for a password to open this document. The callback is
     // called when the password is retrieved.
@@ -285,6 +266,38 @@ class PDFEngine {
     virtual float GetToolbarHeightInScreenCoords() = 0;
   };
 
+  struct AccessibilityLinkInfo {
+    std::string url;
+    int start_char_index;
+    int char_count;
+    pp::FloatRect bounds;
+  };
+
+  struct AccessibilityImageInfo {
+    std::string alt_text;
+    pp::FloatRect bounds;
+  };
+
+  struct AccessibilityHighlightInfo {
+    int start_char_index = -1;
+    int char_count;
+    pp::FloatRect bounds;
+    uint32_t color;
+  };
+
+  struct AccessibilityTextFieldInfo {
+    AccessibilityTextFieldInfo();
+    AccessibilityTextFieldInfo(const AccessibilityTextFieldInfo& that);
+    ~AccessibilityTextFieldInfo();
+
+    std::string name;
+    std::string value;
+    bool is_read_only;
+    bool is_required;
+    bool is_password;
+    pp::FloatRect bounds;
+  };
+
   // Factory method to create an instance of the PDF Engine.
   static std::unique_ptr<PDFEngine> Create(Client* client,
                                            bool enable_javascript);
@@ -322,6 +335,14 @@ class PDFEngine {
   virtual void ZoomUpdated(double new_zoom_level) = 0;
   virtual void RotateClockwise() = 0;
   virtual void RotateCounterclockwise() = 0;
+  virtual void SetTwoUpView(bool enable) = 0;
+
+  // Applies the document layout options proposed by a call to
+  // PDFEngine::Client::ProposeDocumentLayout(), returning the overall size of
+  // the new effective layout.
+  virtual pp::Size ApplyDocumentLayout(
+      const DocumentLayout::Options& options) = 0;
+
   virtual std::string GetSelectedText() = 0;
   // Returns true if focus is within an editable form text area.
   virtual bool CanEditText() = 0;
@@ -344,6 +365,8 @@ class PDFEngine {
   // Checks the permissions associated with this document.
   virtual bool HasPermission(DocumentPermission permission) const = 0;
   virtual void SelectAll() = 0;
+  // Gets metadata about the document.
+  virtual const DocumentMetadata& GetDocumentMetadata() const = 0;
   // Gets the number of pages in the document.
   virtual int GetNumberOfPages() = 0;
   // Gets the named destination by name.
@@ -370,30 +393,26 @@ class PDFEngine {
   // Get a given unicode character on a given page.
   virtual uint32_t GetCharUnicode(int page_index, int char_index) = 0;
   // Given a start char index, find the longest continuous run of text that's
-  // in a single direction and with the same style and font size. Return a
-  // filled out PP_PrivateAccessibilityTextRunInfo on success or base::nullopt
-  // on failure. e.g. When |start_char_index| is out of bounds.
-  virtual base::Optional<PP_PrivateAccessibilityTextRunInfo> GetTextRunInfo(
-      int page_index,
-      int start_char_index) = 0;
-  // Gets the number of links on a given page.
-  virtual uint32_t GetLinkCount(int page_index) = 0;
-  // Gets url, underlying text range and bounding box of a link at |link_index|
-  // on page |page_index|. Returns false if the |link_index| is invalid.
-  virtual bool GetLinkInfo(int page_index,
-                           uint32_t link_index,
-                           std::string* out_url,
-                           int* out_start_char_index,
-                           int* out_char_count,
-                           pp::FloatRect* out_bounds) = 0;
-  // Gets the number of images on a given page.
-  virtual uint32_t GetImageCount(int page_index) = 0;
-  // Gets the alt text and bounding box of an image at |image_index| on page
-  // |page_index|. Returns false if the |image_index| is invalid.
-  virtual bool GetImageInfo(int page_index,
-                            uint32_t image_index,
-                            std::string* out_alt_text,
-                            pp::FloatRect* out_bounds) = 0;
+  // in a single direction and with the same text style. Return a filled out
+  // pp::PDF::PrivateAccessibilityTextRunInfo on success or base::nullopt on
+  // failure. e.g. When |start_char_index| is out of bounds.
+  virtual base::Optional<pp::PDF::PrivateAccessibilityTextRunInfo>
+  GetTextRunInfo(int page_index, int start_char_index) = 0;
+  // For all the links on page |page_index|, get their urls, underlying text
+  // ranges and bounding boxes.
+  virtual std::vector<AccessibilityLinkInfo> GetLinkInfo(int page_index) = 0;
+  // For all the images in page |page_index|, get their alt texts and bounding
+  // boxes.
+  virtual std::vector<AccessibilityImageInfo> GetImageInfo(int page_index) = 0;
+  // For all the highlights in page |page_index|, get their underlying text
+  // ranges and bounding boxes.
+  virtual std::vector<AccessibilityHighlightInfo> GetHighlightInfo(
+      int page_index) = 0;
+  // For all the text fields in page |page_index|, get their properties like
+  // name, value, bounding boxes etc.
+  virtual std::vector<AccessibilityTextFieldInfo> GetTextFieldInfo(
+      int page_index) = 0;
+
   // Gets the PDF document's print scaling preference. True if the document can
   // be scaled to fit.
   virtual bool GetPrintScaling() = 0;
@@ -419,7 +438,6 @@ class PDFEngine {
   // document at page |index|.
   virtual void AppendPage(PDFEngine* engine, int index) = 0;
 
-  virtual std::string GetMetadata(const std::string& key) = 0;
   virtual std::vector<uint8_t> GetSaveData() = 0;
 
   virtual void SetCaretPosition(const pp::Point& position) = 0;
@@ -469,6 +487,12 @@ class PDFEngineExports {
 
   static PDFEngineExports* Get();
 
+#if defined(OS_CHROMEOS)
+  // See the definition of CreateFlattenedPdf in pdf.cc for details.
+  virtual std::vector<uint8_t> CreateFlattenedPdf(
+      base::span<const uint8_t> input_buffer) = 0;
+#endif  // defined(OS_CHROMEOS)
+
 #if defined(OS_WIN)
   // See the definition of RenderPDFPageToDC in pdf.cc for details.
   virtual bool RenderPDFPageToDC(base::span<const uint8_t> pdf_buffer,
@@ -506,6 +530,18 @@ class PDFEngineExports {
   virtual bool GetPDFDocInfo(base::span<const uint8_t> pdf_buffer,
                              int* page_count,
                              double* max_page_width) = 0;
+
+  // Whether the PDF is Tagged (see 10.7 "Tagged PDF" in PDF Reference 1.7).
+  // Returns true if it's a tagged (accessible) PDF, false if it's a valid
+  // PDF but untagged, and nullopt if the PDF can't be parsed.
+  virtual base::Optional<bool> IsPDFDocTagged(
+      base::span<const uint8_t> pdf_buffer) = 0;
+
+  // Given a tagged PDF (see IsPDFDocTagged, above), return the portion of
+  // the structure tree for a given page as a hierarchical tree of base::Values.
+  virtual base::Value GetPDFStructTreeForPage(
+      base::span<const uint8_t> pdf_buffer,
+      int page_index) = 0;
 
   // See the definition of GetPDFPageSizeByIndex in pdf.cc for details.
   virtual bool GetPDFPageSizeByIndex(base::span<const uint8_t> pdf_buffer,

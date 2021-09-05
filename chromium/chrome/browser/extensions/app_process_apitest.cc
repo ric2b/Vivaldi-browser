@@ -17,9 +17,9 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/view_ids.h"
-#include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/embedder_support/switches.h"
 #include "components/sync/model/string_ordinal.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/notification_service.h"
@@ -63,7 +63,7 @@ class AppApiTest : public extensions::ExtensionApiTest {
   void SetUpCommandLine(base::CommandLine* command_line) override {
     extensions::ExtensionApiTest::SetUpCommandLine(command_line);
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
-        switches::kDisablePopupBlocking);
+        embedder_support::kDisablePopupBlocking);
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
         extensions::switches::kAllowHTTPBackgroundPage);
   }
@@ -96,7 +96,7 @@ class AppApiTest : public extensions::ExtensionApiTest {
     ui_test_utils::NavigateToURLWithDisposition(
         browser(), base_url.Resolve("path1/empty.html"),
         WindowOpenDisposition::NEW_FOREGROUND_TAB,
-        ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+        ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
     LOG(INFO) << "Nav 1.";
     EXPECT_TRUE(process_map->Contains(browser()
                                           ->tab_strip_model()
@@ -174,7 +174,7 @@ IN_PROC_BROWSER_TEST_F(AppApiTest, DISABLED_AppProcess) {
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), base_url.Resolve("path1/empty.html"),
       WindowOpenDisposition::NEW_FOREGROUND_TAB,
-      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
   EXPECT_TRUE(process_map->Contains(browser()
                                         ->tab_strip_model()
                                         ->GetWebContentsAt(1)
@@ -187,7 +187,7 @@ IN_PROC_BROWSER_TEST_F(AppApiTest, DISABLED_AppProcess) {
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), base_url.Resolve("path2/empty.html"),
       WindowOpenDisposition::NEW_FOREGROUND_TAB,
-      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
   EXPECT_TRUE(process_map->Contains(browser()
                                         ->tab_strip_model()
                                         ->GetWebContentsAt(2)
@@ -341,7 +341,7 @@ IN_PROC_BROWSER_TEST_F(AppApiTest, MAYBE_BookmarkAppGetsNormalProcess) {
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), base_url.Resolve("path1/empty.html"),
       WindowOpenDisposition::NEW_FOREGROUND_TAB,
-      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
   EXPECT_FALSE(process_map->Contains(browser()
                                          ->tab_strip_model()
                                          ->GetWebContentsAt(1)

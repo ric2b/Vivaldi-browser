@@ -4,6 +4,7 @@
 
 #include "chrome/browser/chromeos/login/test/oobe_screens_utils.h"
 
+#include "build/branding_buildflags.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/login/oobe_screen.h"
 #include "chrome/browser/chromeos/login/screens/sync_consent_screen.h"
@@ -17,6 +18,7 @@
 #include "chrome/browser/ui/webui/chromeos/login/enrollment_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/eula_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/fingerprint_setup_screen_handler.h"
+#include "chrome/browser/ui/webui/chromeos/login/marketing_opt_in_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/network_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/update_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/welcome_screen_handler.h"
@@ -42,10 +44,6 @@ void WaitForExit(OobeScreenId screen_id) {
 }  // namespace
 
 void WaitForWelcomeScreen() {
-  content::WindowedNotificationObserver observer(
-      chrome::NOTIFICATION_LOGIN_OR_LOCK_WEBUI_VISIBLE,
-      content::NotificationService::AllSources());
-  observer.Wait();
   WaitFor(WelcomeView::kScreenId);
 }
 
@@ -58,6 +56,10 @@ void WaitForNetworkSelectionScreen() {
 }
 
 void TapNetworkSelectionNext() {
+  test::OobeJS()
+      .CreateEnabledWaiter(true /* enabled */,
+                           {"oobe-network-md", "nextButton"})
+      ->Wait();
   test::OobeJS().TapOnPath({"oobe-network-md", "nextButton"});
 }
 
@@ -127,10 +129,8 @@ void SkipToEnrollmentOnRecovery() {
   test::WaitForNetworkSelectionScreen();
   test::TapNetworkSelectionNext();
 
-#if defined(GOOGLE_CHROME_BUILD)
   WaitForEulaScreen();
   TapEulaAccept();
-#endif
 
   test::WaitForUpdateScreen();
   test::ExitUpdateScreenNoUpdate();
@@ -142,20 +142,32 @@ void WaitForEnrollmentScreen() {
   WaitFor(EnrollmentScreenView::kScreenId);
 }
 
-#if defined(GOOGLE_CHROME_BUILD)
+void WaitForLastScreenAndTapGetStarted() {
+  WaitFor(MarketingOptInScreenView::kScreenId);
+  test::OobeJS().TapOnPath(
+      {"marketing-opt-in", "marketing-opt-in-next-button"});
+}
+
 void WaitForEulaScreen() {
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
   WaitFor(EulaView::kScreenId);
+#endif
 }
 
 void TapEulaAccept() {
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
   test::OobeJS().TapOnPath({"oobe-eula-md", "acceptButton"});
+#endif
 }
 
 void WaitForSyncConsentScreen() {
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
   WaitFor(SyncConsentScreenView::kScreenId);
+#endif
 }
 
 void ExitScreenSyncConsent() {
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
   SyncConsentScreen* screen = static_cast<SyncConsentScreen*>(
       WizardController::default_controller()->GetScreen(
           SyncConsentScreenView::kScreenId));
@@ -163,8 +175,8 @@ void ExitScreenSyncConsent() {
   screen->SetProfileSyncDisabledByPolicyForTesting(true);
   screen->OnStateChanged(nullptr);
   WaitForExit(SyncConsentScreenView::kScreenId);
-}
 #endif
+}
 
 }  // namespace test
 }  // namespace chromeos

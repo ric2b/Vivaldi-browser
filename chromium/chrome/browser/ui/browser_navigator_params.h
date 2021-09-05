@@ -26,8 +26,8 @@
 #include "url/gurl.h"
 
 #if !defined(OS_ANDROID)
-#include "chrome/browser/ui/tabs/tab_group_id.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "components/tab_groups/tab_group_id.h"
 #endif
 
 class Browser;
@@ -100,12 +100,6 @@ struct NavigateParams {
   // Any redirect URLs that occurred for this navigation before |url|.
   // Usually empty.
   std::vector<GURL> redirect_chain;
-
-  // Indicates whether this navigation will be sent using POST.
-  bool uses_post = false;
-
-  // Create webcontentsview as a guest.
-  bool should_create_guestframe = false;
 
   // The post data when the navigation uses POST.
   scoped_refptr<network::ResourceRequestBody> post_data;
@@ -205,6 +199,10 @@ struct NavigateParams {
   // NO_ACTION, |window_action| will be set to SHOW_WINDOW.
   WindowAction window_action = NO_ACTION;
 
+  // Whether the browser is being created for captive portal resolution. If
+  // true, |disposition| should be NEW_POPUP.
+  bool is_captive_portal_popup = false;
+
   // If false then the navigation was not initiated by a user gesture.
   bool user_gesture = true;
 
@@ -233,7 +231,7 @@ struct NavigateParams {
   Browser* browser = nullptr;
 
   // The group the caller would like the tab to be added to.
-  base::Optional<TabGroupId> group;
+  base::Optional<tab_groups::TabGroupId> group;
 
   // A bitmask of values defined in TabStripModel::AddTabTypes. Helps
   // determine where to insert a new tab and whether or not it should be
@@ -290,6 +288,9 @@ struct NavigateParams {
 
   // Indicates the reload type of this navigation.
   content::ReloadType reload_type = content::ReloadType::NONE;
+
+  // Create webcontentsview as a guest.
+  bool should_create_guestframe = false;
 
  private:
   NavigateParams();

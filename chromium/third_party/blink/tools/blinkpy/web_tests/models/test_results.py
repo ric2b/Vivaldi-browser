@@ -28,13 +28,10 @@
 
 import cPickle
 
-from blinkpy.web_tests.models import test_failures
+from blinkpy.web_tests.models import test_failures, test_expectations
+from blinkpy.web_tests.models.typ_types import ResultType, Artifacts
+from blinkpy.web_tests.port.base import ARTIFACTS_SUB_DIR
 
-from blinkpy.common import path_finder
-
-path_finder.add_typ_dir_to_sys_path()
-
-from typ.artifacts import Artifacts
 
 def build_test_result(
     driver_output, test_name, retry_attempt=0,
@@ -75,8 +72,19 @@ class TestResult(object):
             failure.has_repaint_overlay for failure in self.failures)
         self.crash_site = crash_site
         self.retry_attempt = retry_attempt
-        # FIXME: Setting this in the constructor makes this class hard to mutate.
-        self.type = test_failures.determine_result_type(failures)
+
+        results = set([f.result for f in self.failures] or [ResultType.Pass])
+        assert len(results) <= 2, (
+            'single_test_runner.py incorrectly reported results %s for test %s' %
+            (', '.join(results), test_name))
+        if len(results) == 2:
+            assert ResultType.Timeout in results and ResultType.Failure in results, (
+                'The only combination of 2 results allowable is TIMEOUT and FAIL. '
+                'Test %s reported the following results %s' % (test_name, ', '.join(results)))
+            self.type = ResultType.Timeout
+        else:
+            # FIXME: Setting this in the constructor makes this class hard to mutate.
+            self.type = results.pop()
 
         # These are set by the worker, not by the driver, so they are not passed to the constructor.
         self.worker_name = ''
@@ -84,7 +92,7 @@ class TestResult(object):
         self.total_run_time = 0  # The time taken to run the test plus any references, compute diffs, etc.
         self.test_number = None
         self.artifacts = Artifacts(
-            self.results_directory, self.filesystem, retry_attempt,
+            self.results_directory, self.filesystem, retry_attempt, ARTIFACTS_SUB_DIR,
             repeat_tests=self.repeat_tests)
 
     def create_artifacts(self):

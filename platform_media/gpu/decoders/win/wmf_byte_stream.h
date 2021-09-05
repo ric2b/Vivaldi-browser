@@ -10,41 +10,35 @@
 
 #include "platform_media/common/feature_toggles.h"
 
-#include "platform_media/gpu/decoders/win/read_stream_listener.h"
+#include "platform_media/gpu/data_source/ipc_data_source.h"
+
+#include "base/callback.h"
+#include "base/threading/thread_checker.h"
+#include "base/single_thread_task_runner.h"
 
 // Windows Media Foundation headers
 #include <mfapi.h>
 #include <mfidl.h>
 
-#include <vector>
-
 #include <wrl/client.h>
 #include <wrl/implements.h>
 
-#include "base/threading/thread_checker.h"
-
 namespace media {
-class DataSource;
-}
-
-namespace media {
-
-class ReadStream;
 
 typedef Microsoft::WRL::RuntimeClass<
     Microsoft::WRL::RuntimeClassFlags<Microsoft::WRL::ClassicCom>,
-    IMFByteStream,
-    IMFAttributes>
+    IMFByteStream>
     WMFByteStream_UnknownBase;
 
-class WMFByteStream : public WMFByteStream_UnknownBase,
-      public ReadStreamListener {
+class WMFByteStream : public WMFByteStream_UnknownBase {
  public:
-  explicit WMFByteStream(DataSource* data_source);
+  WMFByteStream();
   ~WMFByteStream() override;
 
-  HRESULT Initialize(LPCWSTR mime_type);
-  void Stop();
+  void Initialize(scoped_refptr<base::SingleThreadTaskRunner> main_task_runner,
+                  ipc_data_source::Reader source_reader,
+                  bool is_streaming,
+                  int64_t stream_length);
 
   // Overrides from IMFByteStream
   HRESULT STDMETHODCALLTYPE GetCapabilities(DWORD* capabilities) override;
@@ -72,69 +66,13 @@ class WMFByteStream : public WMFByteStream_UnknownBase,
   HRESULT STDMETHODCALLTYPE Flush() override;
   HRESULT STDMETHODCALLTYPE Close() override;
 
-  // IMFAttributes methods
-  HRESULT STDMETHODCALLTYPE GetItem(REFGUID guid_key,
-                                    PROPVARIANT* value) override;
-  HRESULT STDMETHODCALLTYPE GetItemType(REFGUID guid_key,
-                                        MF_ATTRIBUTE_TYPE* type) override;
-  HRESULT STDMETHODCALLTYPE CompareItem(REFGUID guid_key, REFPROPVARIANT value,
-                                        BOOL* result) override;
-  HRESULT STDMETHODCALLTYPE Compare(IMFAttributes* theirs,
-                                    MF_ATTRIBUTES_MATCH_TYPE match_type,
-                                    BOOL* result) override;
-  HRESULT STDMETHODCALLTYPE GetUINT32(REFGUID guid_key, UINT32* value) override;
-  HRESULT STDMETHODCALLTYPE GetUINT64(REFGUID guid_vey, UINT64* value) override;
-  HRESULT STDMETHODCALLTYPE GetDouble(REFGUID guid_key, double* value) override;
-  HRESULT STDMETHODCALLTYPE GetGUID(REFGUID guid_key,
-                                    GUID* guid_value) override;
-  HRESULT STDMETHODCALLTYPE GetStringLength(REFGUID guid_key,
-                                            UINT32* length) override;
-  HRESULT STDMETHODCALLTYPE GetString(REFGUID guid_key, LPWSTR value,
-                                      UINT32 buf_size, UINT32* length) override;
-  HRESULT STDMETHODCALLTYPE GetAllocatedString(REFGUID guid_key, LPWSTR* value,
-                                               UINT32* length) override;
-  HRESULT STDMETHODCALLTYPE GetBlobSize(REFGUID guid_key,
-                                        UINT32* blob_size) override;
-  HRESULT STDMETHODCALLTYPE GetBlob(REFGUID guid_key, UINT8* buf,
-                                    UINT32 buf_size,
-                                    UINT32* blob_size) override;
-  HRESULT STDMETHODCALLTYPE GetAllocatedBlob(REFGUID guid_key, UINT8** buf,
-                                             UINT32* size) override;
-  HRESULT STDMETHODCALLTYPE GetUnknown(REFGUID guid_key, REFIID riid,
-                                       LPVOID* ppv) override;
-  HRESULT STDMETHODCALLTYPE SetItem(REFGUID guid_key,
-                                    REFPROPVARIANT value) override;
-  HRESULT STDMETHODCALLTYPE DeleteItem(REFGUID guid_key) override;
-  HRESULT STDMETHODCALLTYPE DeleteAllItems() override;
-  HRESULT STDMETHODCALLTYPE SetUINT32(REFGUID guid_key, UINT32 value) override;
-  HRESULT STDMETHODCALLTYPE SetUINT64(REFGUID guid_key, UINT64 value) override;
-  HRESULT STDMETHODCALLTYPE SetDouble(REFGUID guid_key, double value) override;
-  HRESULT STDMETHODCALLTYPE SetGUID(REFGUID guid_key,
-                                    REFGUID guid_value) override;
-  HRESULT STDMETHODCALLTYPE SetString(REFGUID guid_key, LPCWSTR value) override;
-  HRESULT STDMETHODCALLTYPE SetBlob(REFGUID guid_key, const UINT8* buf,
-                                    UINT32 buf_size) override;
-  HRESULT STDMETHODCALLTYPE SetUnknown(REFGUID guid_key,
-                                       IUnknown* unknown) override;
-  HRESULT STDMETHODCALLTYPE LockStore() override;
-  HRESULT STDMETHODCALLTYPE UnlockStore() override;
-  HRESULT STDMETHODCALLTYPE GetCount(UINT32* items) override;
-  HRESULT STDMETHODCALLTYPE GetItemByIndex(UINT32 index, GUID* guid_key,
-                                           PROPVARIANT* value) override;
-  HRESULT STDMETHODCALLTYPE CopyAllItems(IMFAttributes* dest) override;
-
  private:
-
-  void OnReadData(int size) override;
-
-  IMFAsyncResult* async_result_;
-  ReadStream* read_stream_;
-
-  // We implement IMFAttributes by forwarding all calls to an instance of the
-  // standard IMFAttributes class, which we store a reference to here.
-  Microsoft::WRL::ComPtr<IMFAttributes> attributes_;
-
-  base::ThreadChecker thread_checker_;
+  scoped_refptr<base::SingleThreadTaskRunner> main_task_runner_;
+  ipc_data_source::Reader source_reader_;
+  int64_t stream_length_ = -1;
+  bool is_streaming_ = false;
+  int64_t stream_position_ = 0;
+  bool received_eos_ = false;
 };
 
 }  // namespace media

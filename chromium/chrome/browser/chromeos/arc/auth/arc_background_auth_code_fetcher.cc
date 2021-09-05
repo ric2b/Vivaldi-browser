@@ -15,6 +15,7 @@
 #include "components/account_id/account_id.h"
 #include "components/signin/public/identity_manager/access_token_fetcher.h"
 #include "components/signin/public/identity_manager/access_token_info.h"
+#include "components/signin/public/identity_manager/scope_set.h"
 #include "components/user_manager/known_user.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/common/url_constants.h"
@@ -52,7 +53,7 @@ const char kAuthTokenExchangeEndPoint[] =
 ArcBackgroundAuthCodeFetcher::ArcBackgroundAuthCodeFetcher(
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     Profile* profile,
-    const std::string& account_id,
+    const CoreAccountId& account_id,
     bool initial_signin,
     bool is_primary_account)
     : url_loader_factory_(std::move(url_loader_factory)),
@@ -76,7 +77,7 @@ void ArcBackgroundAuthCodeFetcher::OnPrepared(bool success) {
     return;
   }
 
-  identity::ScopeSet scopes;
+  signin::ScopeSet scopes;
   scopes.insert(GaiaConstants::kOAuth1LoginScope);
   access_token_fetcher_ = context_.CreateAccessTokenFetcher(
       kConsumerName, scopes,
@@ -235,10 +236,6 @@ void ArcBackgroundAuthCodeFetcher::ReportResult(
       UpdateSecondaryAccountSilentAuthCodeUMA(uma_status);
   }
   std::move(callback_).Run(!auth_code.empty(), auth_code);
-}
-
-void ArcBackgroundAuthCodeFetcher::SkipMergeSessionForTesting() {
-  context_.SkipMergeSessionForTesting();
 }
 
 }  // namespace arc

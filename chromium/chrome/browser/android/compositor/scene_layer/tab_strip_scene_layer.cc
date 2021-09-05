@@ -13,6 +13,10 @@
 #include "ui/android/resources/resource_manager_impl.h"
 #include "ui/gfx/transform.h"
 
+// Vivaldi
+#include "app/vivaldi_apptools.h"
+#include "chrome/browser/android/color_helpers.h"
+
 using base::android::JavaParamRef;
 using base::android::JavaRef;
 
@@ -49,6 +53,9 @@ TabStripSceneLayer::TabStripSceneLayer(JNIEnv* env,
   tab_strip_layer_->AddChild(right_fade_);
   tab_strip_layer_->AddChild(model_selector_button_);
   layer()->AddChild(tab_strip_layer_);
+
+  // Vivaldi
+  use_light_foreground_on_background = false;
 }
 
 TabStripSceneLayer::~TabStripSceneLayer() {
@@ -152,6 +159,12 @@ void TabStripSceneLayer::UpdateNewTabButton(
   ui::Resource* button_resource = resource_manager->GetResource(
       ui::ANDROID_RESOURCE_TYPE_STATIC, resource_id);
 
+  // Vivaldi
+  if (!use_light_foreground_on_background) {
+    button_resource =
+        resource_manager->GetStaticResourceWithTint(resource_id, SK_ColorBLACK);
+  }
+
   new_tab_button_->SetUIResourceId(button_resource->ui_resource()->id());
   float left_offset = (width - button_resource->size().width()) / 2;
   float top_offset = (height - button_resource->size().height()) / 2;
@@ -175,6 +188,12 @@ void TabStripSceneLayer::UpdateModelSelectorButton(
       ui::ResourceManagerImpl::FromJavaObject(jresource_manager);
   ui::Resource* button_resource = resource_manager->GetResource(
       ui::ANDROID_RESOURCE_TYPE_STATIC, resource_id);
+
+  // Vivaldi
+  if (!use_light_foreground_on_background) {
+    button_resource =
+        resource_manager->GetStaticResourceWithTint(resource_id, SK_ColorBLACK);
+  }
 
   model_selector_button_->SetUIResourceId(button_resource->ui_resource()->id());
   float left_offset = (width - button_resource->size().width()) / 2;
@@ -203,6 +222,11 @@ void TabStripSceneLayer::UpdateTabStripLeftFade(
       ui::ResourceManagerImpl::FromJavaObject(jresource_manager);
   ui::Resource* fade_resource = resource_manager->GetResource(
       ui::ANDROID_RESOURCE_TYPE_STATIC, resource_id);
+  // Note (david@vivaldi.com): In Vivaldi we tint the fade resource.
+  if (vivaldi::IsVivaldiRunning()) {
+    fade_resource = resource_manager->GetStaticResourceWithTint(
+        resource_id, tab_strip_layer_->background_color());
+  }
   left_fade_->SetUIResourceId(fade_resource->ui_resource()->id());
 
   // The same resource is used for both left and right fade, so the
@@ -245,6 +269,11 @@ void TabStripSceneLayer::UpdateTabStripRightFade(
       ui::ResourceManagerImpl::FromJavaObject(jresource_manager);
   ui::Resource* fade_resource = resource_manager->GetResource(
       ui::ANDROID_RESOURCE_TYPE_STATIC, resource_id);
+  // Note (david@vivaldi.com): In Vivaldi we tint the fade resource.
+  if (vivaldi::IsVivaldiRunning()) {
+    fade_resource = resource_manager->GetStaticResourceWithTint(
+        resource_id, tab_strip_layer_->background_color());
+  }
   right_fade_->SetUIResourceId(fade_resource->ui_resource()->id());
 
   // Set opacity.
@@ -331,6 +360,19 @@ SkColor TabStripSceneLayer::GetBackgroundColor() {
   if (content_tree_)
     return content_tree_->GetBackgroundColor();
   return SceneLayer::GetBackgroundColor();
+}
+
+// Vivaldi
+void TabStripSceneLayer::SetTabStripBackgroundColor(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& jobj,
+    jint java_color,
+    jboolean use_light) {
+  base::Optional<SkColor> color = JavaColorToOptionalSkColor(java_color);
+  if (color) {
+    tab_strip_layer_->SetBackgroundColor(*color);
+    use_light_foreground_on_background = use_light;
+  }
 }
 
 static jlong JNI_TabStripSceneLayer_Init(JNIEnv* env,

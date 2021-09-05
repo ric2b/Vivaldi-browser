@@ -14,6 +14,7 @@
 #include "third_party/blink/renderer/bindings/tests/idls/core/test_object.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
+#include "third_party/blink/renderer/core/testing/internal_dictionary.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
 namespace blink {
@@ -46,10 +47,6 @@ void TestDictionary::setAnyMember(ScriptValue value) {
 
 void TestDictionary::setCallbackFunctionMember(V8VoidCallbackFunction* value) {
   callback_function_member_ = value;
-}
-
-void TestDictionary::setDictionaryMember(Dictionary value) {
-  dictionary_member_ = value;
 }
 
 void TestDictionary::setDoubleOrNullOrDoubleOrNullSequenceMember(const DoubleOrDoubleOrNullSequence& value) {
@@ -110,6 +107,11 @@ void TestDictionary::setObjectOrNullMember(ScriptValue value) {
 
 void TestDictionary::setObjectOrNullMemberToNull() {
   object_or_null_member_ = ScriptValue();
+}
+
+void TestDictionary::setObjectOrNullSequenceMember(const HeapVector<ScriptValue>& value) {
+  object_or_null_sequence_member_ = value;
+  has_object_or_null_sequence_member_ = true;
 }
 
 void TestDictionary::setOtherDoubleOrStringMember(const DoubleOrString& value) {
@@ -202,7 +204,7 @@ void TestDictionary::setUnionWithTypedefs(const FloatOrBoolean& value) {
   union_with_typedefs_ = value;
 }
 
-void TestDictionary::Trace(blink::Visitor* visitor) {
+void TestDictionary::Trace(Visitor* visitor) {
   visitor->Trace(any_in_record_member_);
   visitor->Trace(any_member_);
   visitor->Trace(callback_function_member_);
@@ -217,6 +219,7 @@ void TestDictionary::Trace(blink::Visitor* visitor) {
   visitor->Trace(internal_dictionary_sequence_member_);
   visitor->Trace(object_member_);
   visitor->Trace(object_or_null_member_);
+  visitor->Trace(object_or_null_sequence_member_);
   visitor->Trace(other_double_or_string_member_);
   visitor->Trace(required_callback_function_member_);
   visitor->Trace(test_enum_or_null_or_test_enum_sequence_member_);

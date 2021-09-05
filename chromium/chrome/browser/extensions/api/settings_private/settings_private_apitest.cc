@@ -6,6 +6,7 @@
 
 #include "base/command_line.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop_current.h"
 #include "base/run_loop.h"
 #include "base/values.h"
@@ -53,7 +54,7 @@ class SettingsPrivateApiTest : public ExtensionApiTest {
  protected:
   bool RunSettingsSubtest(const std::string& subtest) {
     return RunExtensionSubtest("settings_private", "main.html?" + subtest,
-                               kFlagLoadAsComponent);
+                               kFlagNone, kFlagLoadAsComponent);
   }
 
   void SetPrefPolicy(const std::string& key, policy::PolicyLevel level) {

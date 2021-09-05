@@ -24,17 +24,16 @@
 #include "ui/views/animation/flood_fill_ink_drop_ripple.h"
 #include "ui/views/animation/ink_drop_highlight.h"
 #include "ui/views/animation/ink_drop_impl.h"
-#include "ui/views/animation/ink_drop_mask.h"
-#include "ui/views/animation/ink_drop_painted_layer_delegates.h"
 #include "ui/views/controls/button/button.h"
+#include "ui/views/controls/highlight_path_generator.h"
 #include "ui/views/layout/box_layout.h"
 
 namespace ash {
 
 namespace {
 
-constexpr int kNormalButtonRadius = 4;
-constexpr int kSelectedButtonRadius = 5;
+constexpr int kNormalButtonRadius = 3;
+constexpr int kSelectedButtonRadius = 4;
 constexpr int kInkDropRadiusForRootGrid = 16;
 constexpr int kInkDropRadiusForFolderGrid = 10;
 constexpr SkScalar kStrokeWidth = SkIntToScalar(2);
@@ -72,6 +71,9 @@ class PageSwitcherButton : public views::Button {
       : views::Button(listener),
         is_root_app_grid_page_switcher_(is_root_app_grid_page_switcher) {
     SetInkDropMode(InkDropMode::ON);
+    views::InstallFixedSizeCircleHighlightPathGenerator(
+        this, is_root_app_grid_page_switcher ? kInkDropRadiusForRootGrid
+                                             : kInkDropRadiusForFolderGrid);
   }
 
   ~PageSwitcherButton() override {}
@@ -102,17 +104,9 @@ class PageSwitcherButton : public views::Button {
   std::unique_ptr<views::InkDrop> CreateInkDrop() override {
     std::unique_ptr<views::InkDropImpl> ink_drop =
         Button::CreateDefaultInkDropImpl();
-    ink_drop->SetShowHighlightOnHover(true);
     ink_drop->SetAutoHighlightMode(
         views::InkDropImpl::AutoHighlightMode::SHOW_ON_RIPPLE);
     return std::move(ink_drop);
-  }
-
-  std::unique_ptr<views::InkDropMask> CreateInkDropMask() const override {
-    return std::make_unique<views::CircleInkDropMask>(
-        size(), GetLocalBounds().CenterPoint(),
-        is_root_app_grid_page_switcher_ ? kInkDropRadiusForRootGrid
-                                        : kInkDropRadiusForFolderGrid);
   }
 
   std::unique_ptr<views::InkDropRipple> CreateInkDropRipple() const override {
@@ -132,13 +126,12 @@ class PageSwitcherButton : public views::Button {
 
   std::unique_ptr<views::InkDropHighlight> CreateInkDropHighlight()
       const override {
-    return std::make_unique<views::InkDropHighlight>(
-        gfx::PointF(GetLocalBounds().CenterPoint()),
-        std::make_unique<views::CircleLayerDelegate>(
-            is_root_app_grid_page_switcher_ ? kDarkInkDropHighlightColor
-                                            : kLightInkDropHighlightColor,
-            is_root_app_grid_page_switcher_ ? kInkDropRadiusForRootGrid
-                                            : kInkDropRadiusForFolderGrid));
+    auto highlight = std::make_unique<views::InkDropHighlight>(
+        gfx::SizeF(size()), is_root_app_grid_page_switcher_
+                                ? kDarkInkDropHighlightColor
+                                : kLightInkDropHighlightColor);
+    highlight->set_visible_opacity(1.f);
+    return highlight;
   }
 
   void NotifyClick(const ui::Event& event) override {
@@ -204,7 +197,7 @@ PageSwitcherButton* GetButtonByIndex(views::View* buttons, size_t index) {
 
 }  // namespace
 
-PageSwitcher::PageSwitcher(ash::PaginationModel* model,
+PageSwitcher::PageSwitcher(PaginationModel* model,
                            bool is_root_app_grid_page_switcher,
                            bool is_tablet_mode)
     : model_(model),
@@ -225,7 +218,7 @@ PageSwitcher::PageSwitcher(ash::PaginationModel* model,
 
   AddChildView(buttons_);
 
-  TotalPagesChanged();
+  TotalPagesChanged(0, model->total_pages());
   SelectedPageChanged(-1, model->selected_page());
   model_->AddObserver(this);
 }
@@ -279,7 +272,8 @@ void PageSwitcher::ButtonPressed(views::Button* sender,
   model_->SelectPage(page, true /* animate */);
 }
 
-void PageSwitcher::TotalPagesChanged() {
+void PageSwitcher::TotalPagesChanged(int previous_page_count,
+                                     int new_page_count) {
   if (!model_)
     return;
 

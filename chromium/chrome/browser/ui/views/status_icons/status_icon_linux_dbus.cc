@@ -20,6 +20,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/task_runner_util.h"
 #include "components/dbus/menu/menu.h"
 #include "components/dbus/properties/dbus_properties.h"
@@ -173,7 +174,7 @@ base::FilePath WriteIconFile(size_t icon_file_id,
   base::FilePath file_path = temp_dir.Append(
       "status_icon_" + base::NumberToString(icon_file_id) + ".png");
   if (!base::WriteFile(file_path, data->front_as<char>(), data->size())) {
-    base::DeleteFile(temp_dir, true);
+    base::DeleteFileRecursively(temp_dir);
     return {};
   }
 
@@ -184,9 +185,8 @@ base::FilePath WriteIconFile(size_t icon_file_id,
 
 StatusIconLinuxDbus::StatusIconLinuxDbus()
     : should_write_icon_to_file_(ShouldWriteIconToFile()),
-      icon_task_runner_(base::CreateSequencedTaskRunner(
-          {base::ThreadPool(), base::MayBlock(),
-           base::TaskPriority::USER_VISIBLE,
+      icon_task_runner_(base::ThreadPool::CreateSequencedTaskRunner(
+          {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
            base::TaskShutdownBehavior::BLOCK_SHUTDOWN})) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   dbus::Bus::Options bus_options;
@@ -398,7 +398,7 @@ void StatusIconLinuxDbus::OnActivate(
     dbus::ExportedObject::ResponseSender sender) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   delegate_->OnClick();
-  sender.Run(dbus::Response::FromMethodCall(method_call));
+  std::move(sender).Run(dbus::Response::FromMethodCall(method_call));
 }
 
 void StatusIconLinuxDbus::OnContextMenu(
@@ -409,7 +409,7 @@ void StatusIconLinuxDbus::OnContextMenu(
   int32_t x;
   int32_t y;
   if (!reader.PopInt32(&x) || !reader.PopInt32(&y)) {
-    sender.Run(nullptr);
+    std::move(sender).Run(nullptr);
     return;
   }
 
@@ -422,7 +422,7 @@ void StatusIconLinuxDbus::OnContextMenu(
   menu_runner_->RunMenuAt(
       nullptr, nullptr, gfx::Rect(gfx::Point(x, y), gfx::Size()),
       views::MenuAnchorPosition::kTopRight, ui::MENU_SOURCE_MOUSE);
-  sender.Run(dbus::Response::FromMethodCall(method_call));
+  std::move(sender).Run(dbus::Response::FromMethodCall(method_call));
 }
 
 void StatusIconLinuxDbus::OnScroll(
@@ -430,7 +430,7 @@ void StatusIconLinuxDbus::OnScroll(
     dbus::ExportedObject::ResponseSender sender) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   // Ignore scroll events.
-  sender.Run(dbus::Response::FromMethodCall(method_call));
+  std::move(sender).Run(dbus::Response::FromMethodCall(method_call));
 }
 
 void StatusIconLinuxDbus::OnSecondaryActivate(
@@ -439,7 +439,7 @@ void StatusIconLinuxDbus::OnSecondaryActivate(
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   // Intentionally ignore secondary activations.  In the future, we may decide
   // to run the same handler as regular activations.
-  sender.Run(dbus::Response::FromMethodCall(method_call));
+  std::move(sender).Run(dbus::Response::FromMethodCall(method_call));
 }
 
 void StatusIconLinuxDbus::UpdateMenuImpl(ui::MenuModel* model,

@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -31,8 +32,11 @@
 #include "ui/views/widget/native_widget_aura.h"
 #endif
 
+#include "app/vivaldi_apptools.h"
+
 namespace {
 
+#if !defined(OS_CHROMEOS)
 const int kContentsBorderThickness = 5;
 const float kContentsBorderOpacity = 0.50;
 const SkColor kContentsBorderColor = gfx::kGoogleBlue500;
@@ -46,7 +50,7 @@ void InitContentsBorderWidget(content::WebContents* contents) {
   views::Widget* widget = new views::Widget;
   views::Widget::InitParams params(views::Widget::InitParams::TYPE_POPUP);
   params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
-  params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
+  params.opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;
   views::Widget* frame = browser_view->contents_web_view()->GetWidget();
   params.parent = frame->GetNativeView();
   params.context = frame->GetNativeWindow();
@@ -71,8 +75,11 @@ void InitContentsBorderWidget(content::WebContents* contents) {
 
   browser_view->set_contents_border_widget(widget);
 }
+#endif
 
 void SetContentsBorderVisible(content::WebContents* contents, bool visible) {
+  // TODO(https://crbug.com/1030925) fix contents border on ChromeOS.
+#if !defined(OS_CHROMEOS)
   if (!contents)
     return;
   Browser* browser = chrome::FindBrowserWithWebContents(contents);
@@ -91,6 +98,7 @@ void SetContentsBorderVisible(content::WebContents* contents, bool visible) {
     contents_border_widget->Show();
   else
     contents_border_widget->Hide();
+#endif
 }
 
 base::string16 GetTabName(content::WebContents* tab) {
@@ -121,7 +129,12 @@ TabSharingUIViews::TabSharingUIViews(const content::DesktopMediaID& media_id,
   Observe(shared_tab_);
   shared_tab_name_ = GetTabName(shared_tab_);
   profile_ = ProfileManager::GetLastUsedProfileAllowedByPolicy();
+  if (!vivaldi::IsVivaldiRunning()) {
+  // TODO(https://crbug.com/1030925) fix contents border on ChromeOS.
+#if !defined(OS_CHROMEOS)
   InitContentsBorderWidget(shared_tab_);
+#endif
+  }
 }
 
 TabSharingUIViews::~TabSharingUIViews() {
@@ -134,9 +147,11 @@ gfx::NativeViewId TabSharingUIViews::OnStarted(
     content::MediaStreamUI::SourceCallback source_callback) {
   source_callback_ = std::move(source_callback);
   stop_callback_ = std::move(stop_callback);
+  if (!vivaldi::IsVivaldiRunning()) {
   CreateInfobarsForAllTabs();
   SetContentsBorderVisible(shared_tab_, true);
   CreateTabCaptureIndicator();
+  }
   return 0;
 }
 
@@ -241,12 +256,9 @@ void TabSharingUIViews::DidFinishNavigation(content::NavigationHandle* handle) {
   }
   shared_tab_name_ = GetTabName(shared_tab_);
   for (const auto& infobars_entry : infobars_) {
-    if (infobars_entry.first == shared_tab_)
-      continue;
     // Recreate infobars to reflect the new shared tab name.
-    infobars_entry.second->owner()->RemoveObserver(this);
-    infobars_entry.second->RemoveSelf();
-    CreateInfobarForWebContents(infobars_entry.first);
+    if (infobars_entry.first != shared_tab_)
+      CreateInfobarForWebContents(infobars_entry.first);
   }
 }
 
@@ -265,12 +277,18 @@ void TabSharingUIViews::CreateInfobarsForAllTabs() {
 
 void TabSharingUIViews::CreateInfobarForWebContents(
     content::WebContents* contents) {
+  auto infobars_entry = infobars_.find(contents);
+  // Recreate the infobar if it already exists.
+  if (infobars_entry != infobars_.end()) {
+    infobars_entry->second->owner()->RemoveObserver(this);
+    infobars_entry->second->RemoveSelf();
+  }
   auto* infobar_service = InfoBarService::FromWebContents(contents);
   infobar_service->AddObserver(this);
   infobars_[contents] = TabSharingInfoBarDelegate::Create(
-      infobar_service,
-      shared_tab_ == contents ? base::string16() : shared_tab_name_, app_name_,
-      !source_callback_.is_null() /*is_sharing_allowed*/, this);
+      infobar_service, shared_tab_name_, app_name_,
+      shared_tab_ == contents /*shared_tab*/,
+      !source_callback_.is_null() /*can_share*/, this);
 }
 
 void TabSharingUIViews::RemoveInfobarsForAllTabs() {

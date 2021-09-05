@@ -216,9 +216,10 @@ class FileTasks {
    */
   static isOffline_(volumeManager) {
     const connection = volumeManager.getDriveConnectionState();
-    return connection.type == VolumeManagerCommon.DriveConnectionType.OFFLINE &&
+    return connection.type ==
+        chrome.fileManagerPrivate.DriveConnectionStateType.OFFLINE &&
         connection.reason ==
-        VolumeManagerCommon.DriveConnectionReason.NO_NETWORK;
+        chrome.fileManagerPrivate.DriveOfflineReason.NO_NETWORK;
   }
 
   /**
@@ -689,7 +690,7 @@ class FileTasks {
 
     const isDriveOffline =
         this.volumeManager_.getDriveConnectionState().type ===
-        VolumeManagerCommon.DriveConnectionType.OFFLINE;
+        chrome.fileManagerPrivate.DriveConnectionStateType.OFFLINE;
 
     if (isDriveOffline) {
       this.metadataModel_.get(this.entries_, ['availableOffline', 'hosted'])
@@ -716,7 +717,7 @@ class FileTasks {
     }
 
     const isOnMetered = this.volumeManager_.getDriveConnectionState().type ===
-        VolumeManagerCommon.DriveConnectionType.METERED;
+        chrome.fileManagerPrivate.DriveConnectionStateType.METERED;
 
     if (isOnMetered) {
       this.metadataModel_.get(this.entries_, ['availableWhenMetered', 'size'])
@@ -912,11 +913,11 @@ class FileTasks {
    * @param {!Array<!chrome.fileManagerPrivate.FileTask>} tasks
    */
   updateShareMenuButton_(shareMenuButton, tasks) {
-    let driveShareCommand =
+    const driveShareCommand =
         shareMenuButton.menu.querySelector('cr-menu-item[command="#share"]');
-    let driveShareCommandSeparator =
+    const driveShareCommandSeparator =
         shareMenuButton.menu.querySelector('#drive-share-separator');
-    let moreActionsSeparator =
+    const moreActionsSeparator =
         shareMenuButton.menu.querySelector('#more-actions-separator');
 
     // Update share command.
@@ -937,7 +938,7 @@ class FileTasks {
     // Temporarily remove the more actions item while the rest of the menu
     // items are being cleared out so we don't lose it and make it hidden for
     // now
-    let moreActions = shareMenuButton.menu.querySelector(
+    const moreActions = shareMenuButton.menu.querySelector(
         'cr-menu-item[command="#show-submenu"]');
     moreActions.remove();
     moreActions.setAttribute('hidden', '');

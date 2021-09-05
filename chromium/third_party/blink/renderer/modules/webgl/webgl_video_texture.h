@@ -10,13 +10,12 @@
 namespace blink {
 
 class HTMLVideoElement;
-class WebGLVideoFrameInfo;
+class VideoFrameMetadata;
 
 class WebGLVideoTexture final : public WebGLExtension {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static WebGLVideoTexture* Create(WebGLRenderingContextBase*);
   static bool Supported(WebGLRenderingContextBase*);
   static const char* ExtensionName();
 
@@ -24,17 +23,17 @@ class WebGLVideoTexture final : public WebGLExtension {
 
   WebGLExtensionName GetName() const override;
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
   // Get video frame from video frame compositor and bind it to platform
   // texture.
-  WebGLVideoFrameInfo* VideoElementTargetVideoTexture(ExecutionContext*,
-                                                      unsigned,
-                                                      HTMLVideoElement*,
-                                                      ExceptionState&);
+  VideoFrameMetadata* VideoElementTargetVideoTexture(ExecutionContext*,
+                                                     unsigned,
+                                                     HTMLVideoElement*,
+                                                     ExceptionState&);
 
  private:
-  Member<WebGLVideoFrameInfo> current_frame_info_;
+  Member<VideoFrameMetadata> current_frame_metadata_;
 };
 
 }  // namespace blink

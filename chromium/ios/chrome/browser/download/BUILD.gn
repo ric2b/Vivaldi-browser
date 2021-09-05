@@ -11,22 +11,20 @@ source_set("download") {
     "browser_download_service.mm",
     "browser_download_service_factory.h",
     "browser_download_service_factory.mm",
-    "download_directory_util.cc",
     "download_directory_util.h",
+    "download_directory_util.mm",
     "download_manager_metric_names.h",
     "download_manager_tab_helper.h",
     "download_manager_tab_helper.mm",
     "download_manager_tab_helper_delegate.h",
-    "google_drive_app_util.h",
-    "google_drive_app_util.mm",
+    "external_app_util.h",
+    "external_app_util.mm",
     "pass_kit_tab_helper.h",
     "pass_kit_tab_helper.mm",
     "pass_kit_tab_helper_delegate.h",
   ]
 
-  public_deps = [
-    ":mime_types",
-  ]
+  public_deps = [ ":mime_types" ]
 
   deps = [
     "//base",
@@ -34,6 +32,7 @@ source_set("download") {
     "//components/keyed_service/ios",
     "//ios/chrome/browser/browser_state",
     "//ios/chrome/browser/network_activity",
+    "//ios/web/common",
     "//ios/web/public",
     "//ios/web/public/download",
   ]
@@ -56,9 +55,7 @@ source_set("mime_types") {
     "usdz_mime_type.h",
   ]
 
-  deps = [
-    "//base",
-  ]
+  deps = [ "//base" ]
 
   configs += [ "//build/config/compiler:enable_arc" ]
 }
@@ -82,6 +79,7 @@ source_set("unit_tests") {
     "//ios/chrome/browser/download",
     "//ios/chrome/browser/network_activity",
     "//ios/chrome/test/fakes",
+    "//ios/web/common:features",
     "//ios/web/public",
     "//ios/web/public/download",
     "//ios/web/public/test",
@@ -99,7 +97,5 @@ source_set("test_support") {
     "download_test_util.cc",
     "download_test_util.h",
   ]
-  deps = [
-    "//base",
-  ]
+  deps = [ "//base" ]
 }

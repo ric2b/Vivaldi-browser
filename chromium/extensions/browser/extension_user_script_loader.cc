@@ -115,8 +115,10 @@ bool LoadScriptContent(const HostID& host_id,
     if (verifier.get()) {
       // Call VerifyContent() after yielding on UI thread so it is ensured that
       // ContentVerifierIOData is populated at the time we call VerifyContent().
+      // Priority set explicitly to avoid unwanted task priority inheritance.
       base::PostTask(
-          FROM_HERE, {content::BrowserThread::UI},
+          FROM_HERE,
+          {content::BrowserThread::UI, base::TaskPriority::USER_BLOCKING},
           base::BindOnce(
               &ForwardVerifyContentToIO,
               VerifyContentInfo(verifier, host_id.id(),
@@ -151,8 +153,9 @@ SubstitutionMap* GetLocalizationMessages(
   auto iter = hosts_info.find(host_id);
   if (iter == hosts_info.end())
     return nullptr;
+  const ExtensionUserScriptLoader::PathAndLocaleInfo& info = iter->second;
   return file_util::LoadMessageBundleSubstitutionMap(
-      iter->second.first, host_id.id(), iter->second.second);
+      info.file_path, host_id.id(), info.default_locale, info.gzip_permission);
 }
 
 void LoadUserScripts(UserScriptList* user_scripts,
@@ -193,9 +196,12 @@ void LoadScriptsOnFileTaskRunner(
   LoadUserScripts(user_scripts.get(), hosts_info, added_script_ids, verifier);
   base::ReadOnlySharedMemoryRegion memory =
       UserScriptLoader::Serialize(*user_scripts);
-  base::PostTask(FROM_HERE, {content::BrowserThread::UI},
-                 base::BindOnce(std::move(callback), std::move(user_scripts),
-                                std::move(memory)));
+  // Explicit priority to prevent unwanted task priority inheritance.
+  base::PostTask(
+      FROM_HERE,
+      {content::BrowserThread::UI, base::TaskPriority::USER_BLOCKING},
+      base::BindOnce(std::move(callback), std::move(user_scripts),
+                     std::move(memory)));
 }
 
 }  // namespace
@@ -259,8 +265,10 @@ void ExtensionUserScriptLoader::UpdateHostsInfo(
       continue;
     if (hosts_info_.find(host_id) != hosts_info_.end())
       continue;
-    hosts_info_[host_id] = ExtensionSet::ExtensionPathAndDefaultLocale(
-        extension->path(), LocaleInfo::GetDefaultLocale(extension));
+    hosts_info_[host_id] = PathAndLocaleInfo{
+        extension->path(), LocaleInfo::GetDefaultLocale(extension),
+        extension_l10n_util::GetGzippedMessagesPermissionForExtension(
+            extension)};
   }
 }
 

@@ -5,21 +5,25 @@
 package org.chromium.chrome.browser.autofill_assistant.user_data;
 
 import android.app.Activity;
-import android.text.TextUtils;
 import android.view.View;
+import android.view.ViewGroup;
+
+import androidx.annotation.Nullable;
 
 import org.chromium.base.task.PostTask;
 import org.chromium.chrome.browser.ChromeVersionInfo;
-import org.chromium.chrome.browser.autofill.PersonalDataManager;
+import org.chromium.chrome.browser.autofill.prefeditor.EditorDialog;
+import org.chromium.chrome.browser.autofill_assistant.generic_ui.AssistantValue;
+import org.chromium.chrome.browser.autofill_assistant.user_data.additional_sections.AssistantAdditionalSection.Delegate;
 import org.chromium.chrome.browser.autofill_assistant.user_data.additional_sections.AssistantAdditionalSectionContainer;
 import org.chromium.chrome.browser.payments.AddressEditor;
-import org.chromium.chrome.browser.payments.AutofillPaymentApp;
+import org.chromium.chrome.browser.payments.AutofillAddress;
+import org.chromium.chrome.browser.payments.AutofillContact;
 import org.chromium.chrome.browser.payments.AutofillPaymentInstrument;
 import org.chromium.chrome.browser.payments.BasicCardUtils;
 import org.chromium.chrome.browser.payments.CardEditor;
 import org.chromium.chrome.browser.payments.ContactEditor;
-import org.chromium.chrome.browser.payments.PaymentInstrument;
-import org.chromium.chrome.browser.widget.prefeditor.EditorDialog;
+import org.chromium.components.payments.MethodStrings;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.payments.mojom.PaymentMethodData;
@@ -28,8 +32,6 @@ import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -41,51 +43,6 @@ import java.util.Map;
 class AssistantCollectUserDataBinder
         implements PropertyModelChangeProcessor.ViewBinder<AssistantCollectUserDataModel,
                 AssistantCollectUserDataBinder.ViewHolder, PropertyKey> {
-    /**
-     * Helper class that compares instances of {@link PersonalDataManager.AutofillProfile} by
-     * completeness in regards to the current state of the given {@link
-     * AssistantCollectUserDataModel}.
-     */
-    class CompletenessComparator implements Comparator<PersonalDataManager.AutofillProfile> {
-        final boolean mRequestName;
-        final boolean mRequestShipping;
-        final boolean mRequestEmail;
-        final boolean mRequestPhone;
-        CompletenessComparator(AssistantCollectUserDataModel model) {
-            mRequestName = model.get(AssistantCollectUserDataModel.REQUEST_NAME);
-            mRequestShipping = model.get(AssistantCollectUserDataModel.REQUEST_SHIPPING_ADDRESS);
-            mRequestEmail = model.get(AssistantCollectUserDataModel.REQUEST_EMAIL);
-            mRequestPhone = model.get(AssistantCollectUserDataModel.REQUEST_PHONE);
-        }
-
-        @Override
-        public int compare(
-                PersonalDataManager.AutofillProfile a, PersonalDataManager.AutofillProfile b) {
-            int result = countCompleteFields(a) - countCompleteFields(b);
-            // Fallback, compare by name alphabetically.
-            if (result == 0) {
-                return a.getFullName().compareTo(b.getFullName());
-            }
-            return result;
-        }
-
-        private int countCompleteFields(PersonalDataManager.AutofillProfile profile) {
-            int completeFields = 0;
-            if (mRequestName && !TextUtils.isEmpty((profile.getFullName()))) {
-                completeFields++;
-            }
-            if (mRequestShipping && !TextUtils.isEmpty(profile.getStreetAddress())) {
-                completeFields++;
-            }
-            if (mRequestEmail && !TextUtils.isEmpty(profile.getEmailAddress())) {
-                completeFields++;
-            }
-            if (mRequestPhone && !TextUtils.isEmpty(profile.getPhoneNumber())) {
-                completeFields++;
-            }
-            return completeFields;
-        }
-    }
 
     /**
      * A wrapper class that holds the different views of the CollectUserData request.
@@ -102,11 +59,13 @@ class AssistantCollectUserDataBinder
         private final AssistantShippingAddressSection mShippingAddressSection;
         private final AssistantTermsSection mTermsSection;
         private final AssistantTermsSection mTermsAsCheckboxSection;
+        private final AssistantInfoSection mInfoSection;
         private final AssistantAdditionalSectionContainer mPrependedSections;
         private final AssistantAdditionalSectionContainer mAppendedSections;
+        private final ViewGroup mGenericUserInterfaceContainerPrepended;
+        private final ViewGroup mGenericUserInterfaceContainerAppended;
         private final Object mDividerTag;
         private final Activity mActivity;
-        private PersonalDataManager.PersonalDataManagerObserver mPersonalDataManagerObserver;
 
         public ViewHolder(View rootView, AssistantVerticalExpanderAccordion accordion,
                 int sectionPadding, AssistantLoginSection loginSection,
@@ -116,8 +75,11 @@ class AssistantCollectUserDataBinder
                 AssistantPaymentMethodSection paymentMethodSection,
                 AssistantShippingAddressSection shippingAddressSection,
                 AssistantTermsSection termsSection, AssistantTermsSection termsAsCheckboxSection,
+                AssistantInfoSection infoSection,
                 AssistantAdditionalSectionContainer prependedSections,
-                AssistantAdditionalSectionContainer appendedSections, Object dividerTag,
+                AssistantAdditionalSectionContainer appendedSections,
+                ViewGroup genericUserInterfaceContainerPrepended,
+                ViewGroup genericUserInterfaceContainerAppended, Object dividerTag,
                 Activity activity) {
             mRootView = rootView;
             mPaymentRequestExpanderAccordion = accordion;
@@ -130,34 +92,13 @@ class AssistantCollectUserDataBinder
             mShippingAddressSection = shippingAddressSection;
             mTermsSection = termsSection;
             mTermsAsCheckboxSection = termsAsCheckboxSection;
+            mInfoSection = infoSection;
             mPrependedSections = prependedSections;
             mAppendedSections = appendedSections;
+            mGenericUserInterfaceContainerPrepended = genericUserInterfaceContainerPrepended;
+            mGenericUserInterfaceContainerAppended = genericUserInterfaceContainerAppended;
             mDividerTag = dividerTag;
             mActivity = activity;
-        }
-
-        /**
-         * Explicitly clean up.
-         */
-        public void destroy() {
-            stopListenToPersonalDataManager();
-        }
-
-        private void startListenToPersonalDataManager(
-                PersonalDataManager.PersonalDataManagerObserver observer) {
-            if (mPersonalDataManagerObserver != null) {
-                return;
-            }
-            mPersonalDataManagerObserver = observer;
-            PersonalDataManager.getInstance().registerDataObserver(mPersonalDataManagerObserver);
-        }
-
-        private void stopListenToPersonalDataManager() {
-            if (mPersonalDataManagerObserver == null) {
-                return;
-            }
-            PersonalDataManager.getInstance().unregisterDataObserver(mPersonalDataManagerObserver);
-            mPersonalDataManagerObserver = null;
         }
     }
 
@@ -193,35 +134,42 @@ class AssistantCollectUserDataBinder
                                 view.mTermsAsCheckboxSection.setTermsStatus(
                                         AssistantTermsAndConditionsState.NOT_SELECTED);
                             });
-                            collectUserDataDelegate.onTermsAndConditionsLinkClicked(link);
+                            collectUserDataDelegate.onTextLinkClicked(link);
                         }
                     };
-            AssistantDateSection.Delegate dateStartDelegate = collectUserDataDelegate == null
-                    ? null
-                    : (year, month, day, hour, minute, second) -> {
-                AssistantDateTime newStartValue =
-                        new AssistantDateTime(year, month, day, hour, minute, second);
-                if (newStartValue.getTimeInUtcMillis()
-                        > view.mDateRangeEndSection.getCurrentValue().getTimeInUtcMillis()) {
-                    view.mDateRangeEndSection.setCurrentValue(newStartValue);
-                }
-                collectUserDataDelegate.onDateTimeRangeStartChanged(
-                        year, month, day, hour, minute, second);
-            };
-            AssistantDateSection.Delegate dateEndDelegate = collectUserDataDelegate == null
-                    ? null
-                    : (year, month, day, hour, minute, second) -> {
-                AssistantDateTime newEndValue =
-                        new AssistantDateTime(year, month, day, hour, minute, second);
-                if (newEndValue.getTimeInUtcMillis()
-                        < view.mDateRangeStartSection.getCurrentValue().getTimeInUtcMillis()) {
-                    view.mDateRangeStartSection.setCurrentValue(newEndValue);
-                }
-                collectUserDataDelegate.onDateTimeRangeEndChanged(
-                        year, month, day, hour, minute, second);
-            };
+            AssistantDateSection.Delegate dateStartDelegate =
+                    collectUserDataDelegate == null ? null : new AssistantDateSection.Delegate() {
+                        @Override
+                        public void onDateChanged(@Nullable AssistantDateTime date) {
+                            collectUserDataDelegate.onDateTimeRangeStartDateChanged(date);
+                            // Set new start date as calendar fallback for the end date.
+                            view.mDateRangeEndSection.setCalendarFallbackDate(date);
+                        }
+
+                        @Override
+                        public void onTimeSlotChanged(@Nullable Integer index) {
+                            collectUserDataDelegate.onDateTimeRangeStartTimeSlotChanged(index);
+                        }
+                    };
+            AssistantDateSection.Delegate dateEndDelegate =
+                    collectUserDataDelegate == null ? null : new AssistantDateSection.Delegate() {
+                        @Override
+                        public void onDateChanged(@Nullable AssistantDateTime date) {
+                            collectUserDataDelegate.onDateTimeRangeEndDateChanged(date);
+                            // Set new end date as calendar fallback for the start date.
+                            view.mDateRangeStartSection.setCalendarFallbackDate(date);
+                        }
+
+                        @Override
+                        public void onTimeSlotChanged(@Nullable Integer index) {
+                            collectUserDataDelegate.onDateTimeRangeEndTimeSlotChanged(index);
+                        }
+                    };
             view.mTermsSection.setDelegate(termsDelegate);
             view.mTermsAsCheckboxSection.setDelegate(termsDelegate);
+            view.mInfoSection.setListener(collectUserDataDelegate != null
+                            ? collectUserDataDelegate::onTextLinkClicked
+                            : null);
             view.mContactDetailsSection.setListener(collectUserDataDelegate != null
                             ? collectUserDataDelegate::onContactInfoChanged
                             : null);
@@ -237,18 +185,29 @@ class AssistantCollectUserDataBinder
             view.mDateRangeStartSection.setDelegate(dateStartDelegate);
             view.mDateRangeEndSection.setDelegate(dateEndDelegate);
             view.mPrependedSections.setDelegate(collectUserDataDelegate != null
-                            ? collectUserDataDelegate::onKeyValueChanged
+                            ? getAdditionalSectionsDelegate(collectUserDataDelegate)
                             : null);
             view.mAppendedSections.setDelegate(collectUserDataDelegate != null
-                            ? collectUserDataDelegate::onKeyValueChanged
+                            ? getAdditionalSectionsDelegate(collectUserDataDelegate)
                             : null);
-        } else if (propertyKey == AssistantCollectUserDataModel.SUPPORTED_BASIC_CARD_NETWORKS) {
-            updateAvailablePaymentMethods(model);
-        } else if (propertyKey == AssistantCollectUserDataModel.SUPPORTED_PAYMENT_METHODS) {
-            updateAvailableAutofillPaymentMethods(model);
         } else {
             assert handled : "Unhandled property detected in AssistantCollectUserDataBinder!";
         }
+    }
+
+    private Delegate getAdditionalSectionsDelegate(
+            AssistantCollectUserDataDelegate collectUserDataDelegate) {
+        return new Delegate() {
+            @Override
+            public void onValueChanged(String key, AssistantValue value) {
+                collectUserDataDelegate.onKeyValueChanged(key, value);
+            }
+
+            @Override
+            public void onTextFocusLost() {
+                collectUserDataDelegate.onTextFocusLost();
+            }
+        };
     }
 
     private boolean shouldShowContactDetails(AssistantCollectUserDataModel model) {
@@ -263,13 +222,21 @@ class AssistantCollectUserDataBinder
             view.mLoginSection.setTitle(
                     model.get(AssistantCollectUserDataModel.LOGIN_SECTION_TITLE));
             return true;
-        } else if (propertyKey == AssistantCollectUserDataModel.DATE_RANGE_START_LABEL) {
-            view.mDateRangeStartSection.setTitle(
-                    model.get(AssistantCollectUserDataModel.DATE_RANGE_START_LABEL));
+        } else if (propertyKey == AssistantCollectUserDataModel.DATE_RANGE_START_DATE_LABEL) {
+            view.mDateRangeStartSection.setDateTitle(
+                    model.get(AssistantCollectUserDataModel.DATE_RANGE_START_DATE_LABEL));
             return true;
-        } else if (propertyKey == AssistantCollectUserDataModel.DATE_RANGE_END_LABEL) {
-            view.mDateRangeEndSection.setTitle(
-                    model.get(AssistantCollectUserDataModel.DATE_RANGE_END_LABEL));
+        } else if (propertyKey == AssistantCollectUserDataModel.DATE_RANGE_START_TIME_LABEL) {
+            view.mDateRangeStartSection.setTimeTitle(
+                    model.get(AssistantCollectUserDataModel.DATE_RANGE_START_TIME_LABEL));
+            return true;
+        } else if (propertyKey == AssistantCollectUserDataModel.DATE_RANGE_END_DATE_LABEL) {
+            view.mDateRangeEndSection.setDateTitle(
+                    model.get(AssistantCollectUserDataModel.DATE_RANGE_END_DATE_LABEL));
+            return true;
+        } else if (propertyKey == AssistantCollectUserDataModel.DATE_RANGE_END_TIME_LABEL) {
+            view.mDateRangeEndSection.setTimeTitle(
+                    model.get(AssistantCollectUserDataModel.DATE_RANGE_END_TIME_LABEL));
             return true;
         }
         return false;
@@ -281,31 +248,35 @@ class AssistantCollectUserDataBinder
      */
     private boolean updateSectionContents(
             AssistantCollectUserDataModel model, PropertyKey propertyKey, ViewHolder view) {
-        if (propertyKey == AssistantCollectUserDataModel.AVAILABLE_AUTOFILL_PAYMENT_METHODS) {
-            List<AutofillPaymentInstrument> availablePaymentMethods =
-                    model.get(AssistantCollectUserDataModel.AVAILABLE_AUTOFILL_PAYMENT_METHODS);
-            if (availablePaymentMethods == null) availablePaymentMethods = Collections.emptyList();
-            view.mPaymentMethodSection.onAvailablePaymentMethodsChanged(availablePaymentMethods);
-            return true;
-        } else if (propertyKey == AssistantCollectUserDataModel.AVAILABLE_PROFILES
-                || propertyKey == AssistantCollectUserDataModel.DEFAULT_EMAIL) {
-            List<PersonalDataManager.AutofillProfile> autofillProfiles =
-                    model.get(AssistantCollectUserDataModel.AVAILABLE_PROFILES);
-            if (autofillProfiles == null) {
-                autofillProfiles = Collections.emptyList();
-            }
-            if (shouldShowContactDetails(model)) {
-                view.mContactDetailsSection.onProfilesChanged(autofillProfiles,
-                        model.get(AssistantCollectUserDataModel.REQUEST_EMAIL),
-                        model.get(AssistantCollectUserDataModel.REQUEST_NAME),
-                        model.get(AssistantCollectUserDataModel.REQUEST_PHONE),
-                        model.get(AssistantCollectUserDataModel.DEFAULT_EMAIL));
-            }
+        if (propertyKey == AssistantCollectUserDataModel.AVAILABLE_PAYMENT_INSTRUMENTS
+                || propertyKey == AssistantCollectUserDataModel.WEB_CONTENTS) {
             if (model.get(AssistantCollectUserDataModel.REQUEST_PAYMENT)) {
-                view.mPaymentMethodSection.onProfilesChanged(autofillProfiles);
+                List<AutofillPaymentInstrument> paymentInstruments;
+                if (model.get(AssistantCollectUserDataModel.WEB_CONTENTS) == null) {
+                    paymentInstruments = Collections.emptyList();
+                } else {
+                    paymentInstruments =
+                            model.get(AssistantCollectUserDataModel.AVAILABLE_PAYMENT_INSTRUMENTS);
+                }
+                view.mPaymentMethodSection.onAvailablePaymentMethodsChanged(paymentInstruments);
             }
+            return true;
+        } else if (propertyKey == AssistantCollectUserDataModel.AVAILABLE_CONTACTS) {
+            if (shouldShowContactDetails(model)) {
+                view.mContactDetailsSection.onContactsChanged(
+                        model.get(AssistantCollectUserDataModel.AVAILABLE_CONTACTS));
+            }
+            return true;
+        } else if (propertyKey == AssistantCollectUserDataModel.AVAILABLE_SHIPPING_ADDRESSES) {
             if (model.get(AssistantCollectUserDataModel.REQUEST_SHIPPING_ADDRESS)) {
-                view.mShippingAddressSection.onProfilesChanged(autofillProfiles);
+                view.mShippingAddressSection.onAddressesChanged(
+                        model.get(AssistantCollectUserDataModel.AVAILABLE_SHIPPING_ADDRESSES));
+            }
+            return true;
+        } else if (propertyKey == AssistantCollectUserDataModel.AVAILABLE_BILLING_ADDRESSES) {
+            if (model.get(AssistantCollectUserDataModel.REQUEST_PAYMENT)) {
+                view.mPaymentMethodSection.onAddressesChanged(
+                        model.get(AssistantCollectUserDataModel.AVAILABLE_BILLING_ADDRESSES));
             }
             return true;
         } else if (propertyKey == AssistantCollectUserDataModel.REQUIRE_BILLING_POSTAL_CODE
@@ -315,19 +286,53 @@ class AssistantCollectUserDataBinder
             view.mPaymentMethodSection.setBillingPostalCodeMissingText(
                     model.get(AssistantCollectUserDataModel.BILLING_POSTAL_CODE_MISSING_TEXT));
             return true;
+        } else if (propertyKey == AssistantCollectUserDataModel.CREDIT_CARD_EXPIRED_TEXT) {
+            view.mPaymentMethodSection.setCreditCardExpiredText(
+                    model.get(AssistantCollectUserDataModel.CREDIT_CARD_EXPIRED_TEXT));
+            return true;
         } else if (propertyKey == AssistantCollectUserDataModel.AVAILABLE_LOGINS) {
             if (model.get(AssistantCollectUserDataModel.REQUEST_LOGIN_CHOICE)) {
                 view.mLoginSection.onLoginsChanged(
                         model.get(AssistantCollectUserDataModel.AVAILABLE_LOGINS));
             }
             return true;
-        } else if (propertyKey == AssistantCollectUserDataModel.DATE_RANGE_START) {
+        } else if (propertyKey == AssistantCollectUserDataModel.DATE_RANGE_START_OPTIONS) {
             view.mDateRangeStartSection.setDateChoiceOptions(
-                    model.get(AssistantCollectUserDataModel.DATE_RANGE_START));
+                    model.get(AssistantCollectUserDataModel.DATE_RANGE_START_OPTIONS));
             return true;
-        } else if (propertyKey == AssistantCollectUserDataModel.DATE_RANGE_END) {
+        } else if (propertyKey == AssistantCollectUserDataModel.DATE_RANGE_START_DATE) {
+            view.mDateRangeStartSection.setCurrentDate(
+                    model.get(AssistantCollectUserDataModel.DATE_RANGE_START_DATE));
+            return true;
+        } else if (propertyKey == AssistantCollectUserDataModel.DATE_RANGE_START_TIMESLOT) {
+            view.mDateRangeStartSection.setCurrentTimeSlot(
+                    model.get(AssistantCollectUserDataModel.DATE_RANGE_START_TIMESLOT));
+            return true;
+        } else if (propertyKey == AssistantCollectUserDataModel.DATE_RANGE_END_OPTIONS) {
             view.mDateRangeEndSection.setDateChoiceOptions(
-                    model.get(AssistantCollectUserDataModel.DATE_RANGE_END));
+                    model.get(AssistantCollectUserDataModel.DATE_RANGE_END_OPTIONS));
+            return true;
+        } else if (propertyKey == AssistantCollectUserDataModel.DATE_RANGE_END_DATE) {
+            view.mDateRangeEndSection.setCurrentDate(
+                    model.get(AssistantCollectUserDataModel.DATE_RANGE_END_DATE));
+            return true;
+        } else if (propertyKey == AssistantCollectUserDataModel.DATE_RANGE_END_TIMESLOT) {
+            view.mDateRangeEndSection.setCurrentTimeSlot(
+                    model.get(AssistantCollectUserDataModel.DATE_RANGE_END_TIMESLOT));
+            return true;
+        } else if (propertyKey
+                == AssistantCollectUserDataModel.DATE_RANGE_DATE_NOT_SET_ERROR_MESSAGE) {
+            view.mDateRangeStartSection.setDateNotSetErrorMessage(
+                    model.get(AssistantCollectUserDataModel.DATE_RANGE_DATE_NOT_SET_ERROR_MESSAGE));
+            view.mDateRangeEndSection.setDateNotSetErrorMessage(
+                    model.get(AssistantCollectUserDataModel.DATE_RANGE_DATE_NOT_SET_ERROR_MESSAGE));
+            return true;
+        } else if (propertyKey
+                == AssistantCollectUserDataModel.DATE_RANGE_TIME_NOT_SET_ERROR_MESSAGE) {
+            view.mDateRangeStartSection.setTimeNotSetErrorMessage(
+                    model.get(AssistantCollectUserDataModel.DATE_RANGE_TIME_NOT_SET_ERROR_MESSAGE));
+            view.mDateRangeEndSection.setTimeNotSetErrorMessage(
+                    model.get(AssistantCollectUserDataModel.DATE_RANGE_TIME_NOT_SET_ERROR_MESSAGE));
             return true;
         } else if (propertyKey == AssistantCollectUserDataModel.PREPENDED_SECTIONS) {
             view.mPrependedSections.setSections(
@@ -349,11 +354,41 @@ class AssistantCollectUserDataBinder
             view.mTermsAsCheckboxSection.setTermsRequireReviewText(
                     model.get(AssistantCollectUserDataModel.TERMS_REQUIRE_REVIEW_TEXT));
             return true;
-        } else if (propertyKey == AssistantCollectUserDataModel.THIRDPARTY_PRIVACY_NOTICE_TEXT) {
-            view.mTermsSection.setThirdPartyPrivacyNoticeText(
-                    model.get(AssistantCollectUserDataModel.THIRDPARTY_PRIVACY_NOTICE_TEXT));
-            view.mTermsAsCheckboxSection.setThirdPartyPrivacyNoticeText(
-                    model.get(AssistantCollectUserDataModel.THIRDPARTY_PRIVACY_NOTICE_TEXT));
+        } else if (propertyKey == AssistantCollectUserDataModel.INFO_SECTION_TEXT) {
+            view.mInfoSection.setText(model.get(AssistantCollectUserDataModel.INFO_SECTION_TEXT));
+            return true;
+        } else if (propertyKey == AssistantCollectUserDataModel.INFO_SECTION_TEXT_CENTER) {
+            view.mInfoSection.setCenter(
+                    model.get(AssistantCollectUserDataModel.INFO_SECTION_TEXT_CENTER));
+            return true;
+        } else if (propertyKey == AssistantCollectUserDataModel.PRIVACY_NOTICE_TEXT) {
+            view.mTermsSection.setPrivacyNoticeText(
+                    model.get(AssistantCollectUserDataModel.PRIVACY_NOTICE_TEXT));
+            view.mTermsAsCheckboxSection.setPrivacyNoticeText(
+                    model.get(AssistantCollectUserDataModel.PRIVACY_NOTICE_TEXT));
+            return true;
+        } else if (propertyKey == AssistantCollectUserDataModel.GENERIC_USER_INTERFACE_PREPENDED) {
+            view.mGenericUserInterfaceContainerPrepended.removeAllViews();
+            if (model.get(AssistantCollectUserDataModel.GENERIC_USER_INTERFACE_PREPENDED) != null) {
+                view.mGenericUserInterfaceContainerPrepended.addView(
+                        model.get(AssistantCollectUserDataModel.GENERIC_USER_INTERFACE_PREPENDED));
+            }
+            return true;
+        } else if (propertyKey == AssistantCollectUserDataModel.GENERIC_USER_INTERFACE_APPENDED) {
+            view.mGenericUserInterfaceContainerAppended.removeAllViews();
+            if (model.get(AssistantCollectUserDataModel.GENERIC_USER_INTERFACE_APPENDED) != null) {
+                view.mGenericUserInterfaceContainerAppended.addView(
+                        model.get(AssistantCollectUserDataModel.GENERIC_USER_INTERFACE_APPENDED));
+            }
+            return true;
+        } else if (propertyKey
+                == AssistantCollectUserDataModel.CONTACT_SUMMARY_DESCRIPTION_OPTIONS) {
+            view.mContactDetailsSection.setContactSummaryOptions(
+                    model.get(AssistantCollectUserDataModel.CONTACT_SUMMARY_DESCRIPTION_OPTIONS));
+            return true;
+        } else if (propertyKey == AssistantCollectUserDataModel.CONTACT_FULL_DESCRIPTION_OPTIONS) {
+            view.mContactDetailsSection.setContactFullOptions(
+                    model.get(AssistantCollectUserDataModel.CONTACT_FULL_DESCRIPTION_OPTIONS));
             return true;
         }
 
@@ -413,18 +448,6 @@ class AssistantCollectUserDataBinder
         int visibility =
                 model.get(AssistantCollectUserDataModel.VISIBLE) ? View.VISIBLE : View.GONE;
         if (view.mRootView.getVisibility() != visibility) {
-            if (visibility == View.VISIBLE) {
-                // Update available profiles and credit cards before PR is made visible.
-                updateAvailableProfiles(model, view);
-                updateAvailablePaymentMethods(model);
-
-                view.startListenToPersonalDataManager(() -> {
-                    AssistantCollectUserDataBinder.this.updateAvailableProfiles(model, view);
-                    AssistantCollectUserDataBinder.this.updateAvailablePaymentMethods(model);
-                });
-            } else {
-                view.stopListenToPersonalDataManager();
-            }
             view.mRootView.setVisibility(visibility);
         }
         return true;
@@ -436,17 +459,37 @@ class AssistantCollectUserDataBinder
      */
     private boolean updateSectionSelectedItem(
             AssistantCollectUserDataModel model, PropertyKey propertyKey, ViewHolder view) {
-        if (propertyKey == AssistantCollectUserDataModel.SHIPPING_ADDRESS) {
-            view.mShippingAddressSection.addOrUpdateItem(
-                    model.get(AssistantCollectUserDataModel.SHIPPING_ADDRESS), true);
+        if (propertyKey == AssistantCollectUserDataModel.SELECTED_SHIPPING_ADDRESS) {
+            if (model.get(AssistantCollectUserDataModel.REQUEST_SHIPPING_ADDRESS)) {
+                AutofillAddress shippingAddress =
+                        model.get(AssistantCollectUserDataModel.SELECTED_SHIPPING_ADDRESS);
+                if (shippingAddress != null) {
+                    view.mShippingAddressSection.addOrUpdateItem(
+                            shippingAddress, /* select= */ true);
+                }
+                // No need to reset selection if null, this will be handled by setItems().
+            }
             return true;
-        } else if (propertyKey == AssistantCollectUserDataModel.PAYMENT_METHOD) {
-            view.mPaymentMethodSection.addOrUpdateItem(
-                    model.get(AssistantCollectUserDataModel.PAYMENT_METHOD), true);
+        } else if (propertyKey == AssistantCollectUserDataModel.SELECTED_PAYMENT_INSTRUMENT) {
+            if (model.get(AssistantCollectUserDataModel.REQUEST_PAYMENT)) {
+                AutofillPaymentInstrument paymentInstrument =
+                        model.get(AssistantCollectUserDataModel.SELECTED_PAYMENT_INSTRUMENT);
+                if (paymentInstrument != null) {
+                    view.mPaymentMethodSection.addOrUpdateItem(
+                            paymentInstrument, /* select= */ true);
+                }
+                // No need to reset selection if null, this will be handled by setItems().
+            }
             return true;
-        } else if (propertyKey == AssistantCollectUserDataModel.CONTACT_DETAILS) {
-            view.mContactDetailsSection.addOrUpdateItem(
-                    model.get(AssistantCollectUserDataModel.CONTACT_DETAILS), true);
+        } else if (propertyKey == AssistantCollectUserDataModel.SELECTED_CONTACT_DETAILS) {
+            if (shouldShowContactDetails(model)) {
+                AutofillContact contact =
+                        model.get(AssistantCollectUserDataModel.SELECTED_CONTACT_DETAILS);
+                if (contact != null) {
+                    view.mContactDetailsSection.addOrUpdateItem(contact, /* select= */ true);
+                }
+                // No need to reset selection if null, this will be handled by setItems().
+            }
             return true;
         } else if (propertyKey == AssistantCollectUserDataModel.TERMS_STATUS) {
             int termsStatus = model.get(AssistantCollectUserDataModel.TERMS_STATUS);
@@ -459,17 +502,6 @@ class AssistantCollectUserDataBinder
             return true;
         }
         return false;
-    }
-
-    // TODO(crbug.com/806868): Move this logic to native.
-    private void updateAvailableProfiles(AssistantCollectUserDataModel model, ViewHolder view) {
-        List<PersonalDataManager.AutofillProfile> autofillProfiles =
-                PersonalDataManager.getInstance().getProfilesToSuggest(
-                        /* includeNameInLabel= */ false);
-
-        // Suggest complete profiles first.
-        Collections.sort(autofillProfiles, new CompletenessComparator(model));
-        model.set(AssistantCollectUserDataModel.AVAILABLE_PROFILES, autofillProfiles);
     }
 
     /**
@@ -562,15 +594,20 @@ class AssistantCollectUserDataBinder
                     0, view.mSectionToSectionPadding, view.mSectionToSectionPadding);
         }
         view.mTermsSection.setPaddings(view.mSectionToSectionPadding, 0);
-        view.mTermsAsCheckboxSection.setPaddings(view.mSectionToSectionPadding, 0);
+        // Do not set padding to the view.mTermsAsCheckboxSection, it already has "padding" from
+        // its checkbox (that coincidentally matches the padding of mSectionToSectionPadding).
+        view.mInfoSection.setPaddings(view.mSectionToSectionPadding, 0);
 
         // Hide dividers for currently invisible sections and after the expanded section, if any.
         boolean prevSectionIsExpandedOrInvisible = false;
         for (int i = 0; i < view.mPaymentRequestExpanderAccordion.getChildCount(); i++) {
             View child = view.mPaymentRequestExpanderAccordion.getChildAt(i);
-            if (child instanceof AssistantVerticalExpander) {
-                prevSectionIsExpandedOrInvisible = ((AssistantVerticalExpander) child).isExpanded()
-                        || child.getVisibility() != View.VISIBLE;
+            if (child instanceof AssistantVerticalExpander
+                    || child == view.mDateRangeStartSection.getView()
+                    || child == view.mDateRangeEndSection.getView()) {
+                prevSectionIsExpandedOrInvisible = child.getVisibility() != View.VISIBLE
+                        || (child instanceof AssistantVerticalExpander
+                                && ((AssistantVerticalExpander) child).isExpanded());
             } else if (child.getTag() == view.mDividerTag) {
                 child.setVisibility(prevSectionIsExpandedOrInvisible ? View.GONE : View.VISIBLE);
             } else {
@@ -590,8 +627,7 @@ class AssistantCollectUserDataBinder
                 && (propertyKey != AssistantCollectUserDataModel.REQUEST_NAME)
                 && (propertyKey != AssistantCollectUserDataModel.REQUEST_EMAIL)
                 && (propertyKey != AssistantCollectUserDataModel.REQUEST_PHONE)
-                && (propertyKey
-                        != AssistantCollectUserDataModel.AVAILABLE_AUTOFILL_PAYMENT_METHODS)) {
+                && (propertyKey != AssistantCollectUserDataModel.SUPPORTED_BASIC_CARD_NETWORKS)) {
             return false;
         }
 
@@ -609,27 +645,26 @@ class AssistantCollectUserDataBinder
                             model.get(AssistantCollectUserDataModel.REQUEST_PHONE),
                             model.get(AssistantCollectUserDataModel.REQUEST_EMAIL),
                             !webContents.isIncognito());
-            contactEditor.setEditorDialog(new EditorDialog(view.mActivity, null,
+            contactEditor.setEditorDialog(new EditorDialog(view.mActivity,
                     /*deleteRunnable =*/null));
             view.mContactDetailsSection.setEditor(contactEditor);
         }
 
         AddressEditor addressEditor = new AddressEditor(AddressEditor.Purpose.PAYMENT_REQUEST,
                 /* saveToDisk= */ !webContents.isIncognito());
-        addressEditor.setEditorDialog(new EditorDialog(view.mActivity, null,
+        addressEditor.setEditorDialog(new EditorDialog(view.mActivity,
                 /*deleteRunnable =*/null));
 
         CardEditor cardEditor = new CardEditor(webContents, addressEditor,
                 /* includeOrgLabel= */ false, /* observerForTest= */ null);
-        Map<String, PaymentMethodData> paymentMethods =
-                model.get(AssistantCollectUserDataModel.SUPPORTED_PAYMENT_METHODS);
-        if (paymentMethods != null) {
-            for (Map.Entry<String, PaymentMethodData> entry : paymentMethods.entrySet()) {
-                cardEditor.addAcceptedPaymentMethodIfRecognized(entry.getValue());
-            }
+        List<String> supportedCardNetworks =
+                model.get(AssistantCollectUserDataModel.SUPPORTED_BASIC_CARD_NETWORKS);
+        if (supportedCardNetworks != null) {
+            cardEditor.addAcceptedPaymentMethodIfRecognized(
+                    getPaymentMethodDataFromNetworks(supportedCardNetworks));
         }
 
-        EditorDialog cardEditorDialog = new EditorDialog(view.mActivity, null,
+        EditorDialog cardEditorDialog = new EditorDialog(view.mActivity,
                 /*deleteRunnable =*/null);
         if (ChromeVersionInfo.isBetaBuild() || ChromeVersionInfo.isStableBuild()) {
             cardEditorDialog.disableScreenshots();
@@ -641,60 +676,28 @@ class AssistantCollectUserDataBinder
         return true;
     }
 
-    /**
-     * Updates the map of supported payment methods (identifier -> methodData), filtered by
-     * |SUPPORTED_BASIC_CARD_NETWORKS|.
-     */
-    // TODO(crbug.com/806868): Move the logic to retrieve and filter payment methods to native.
-    private void updateAvailablePaymentMethods(AssistantCollectUserDataModel model) {
+    private PaymentMethodData getPaymentMethodDataFromNetworks(List<String> supportedCardNetworks) {
         // Only enable 'basic-card' payment method.
         PaymentMethodData methodData = new PaymentMethodData();
-        methodData.supportedMethod = BasicCardUtils.BASIC_CARD_METHOD_NAME;
+        methodData.supportedMethod = MethodStrings.BASIC_CARD;
 
         // Apply basic-card filter if specified
-        List<String> supportedBasicCardNetworks =
-                model.get(AssistantCollectUserDataModel.SUPPORTED_BASIC_CARD_NETWORKS);
-        if (supportedBasicCardNetworks != null && supportedBasicCardNetworks.size() > 0) {
+        if (supportedCardNetworks != null && supportedCardNetworks.size() > 0) {
             ArrayList<Integer> filteredNetworks = new ArrayList<>();
             Map<String, Integer> networks = BasicCardUtils.getNetworkIdentifiers();
-            for (int i = 0; i < supportedBasicCardNetworks.size(); i++) {
-                assert networks.containsKey(supportedBasicCardNetworks.get(i));
-                filteredNetworks.add(networks.get(supportedBasicCardNetworks.get(i)));
+            for (String network : supportedCardNetworks) {
+                assert networks.containsKey(network);
+                if (networks.containsKey(network)) {
+                    filteredNetworks.add(networks.get(network));
+                }
             }
 
             methodData.supportedNetworks = new int[filteredNetworks.size()];
-            for (int i = 0; i < filteredNetworks.size(); i++) {
+            for (int i = 0; i < filteredNetworks.size(); ++i) {
                 methodData.supportedNetworks[i] = filteredNetworks.get(i);
             }
         }
 
-        Map<String, PaymentMethodData> supportedPaymentMethods = new HashMap<>();
-        supportedPaymentMethods.put(BasicCardUtils.BASIC_CARD_METHOD_NAME, methodData);
-        model.set(AssistantCollectUserDataModel.SUPPORTED_PAYMENT_METHODS, supportedPaymentMethods);
-    }
-
-    /**
-     * Updates the list of available autofill payment methods (i.e., the list of available payment
-     * methods available to the user as items in the UI).
-     */
-    // TODO(crbug.com/806868): Move this logic to native.
-    private void updateAvailableAutofillPaymentMethods(AssistantCollectUserDataModel model) {
-        WebContents webContents = model.get(AssistantCollectUserDataModel.WEB_CONTENTS);
-
-        AutofillPaymentApp autofillPaymentApp = new AutofillPaymentApp(webContents);
-        Map<String, PaymentMethodData> supportedPaymentMethods =
-                model.get(AssistantCollectUserDataModel.SUPPORTED_PAYMENT_METHODS);
-        List<PaymentInstrument> paymentMethods = autofillPaymentApp.getInstruments(
-                supportedPaymentMethods != null ? supportedPaymentMethods : Collections.emptyMap(),
-                /*forceReturnServerCards=*/true);
-
-        List<AutofillPaymentInstrument> availablePaymentMethods = new ArrayList<>();
-        for (PaymentInstrument method : paymentMethods) {
-            if (method instanceof AutofillPaymentInstrument) {
-                availablePaymentMethods.add(((AutofillPaymentInstrument) method));
-            }
-        }
-        model.set(AssistantCollectUserDataModel.AVAILABLE_AUTOFILL_PAYMENT_METHODS,
-                availablePaymentMethods);
+        return methodData;
     }
 }

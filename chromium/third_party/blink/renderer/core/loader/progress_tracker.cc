@@ -67,7 +67,7 @@ ProgressTracker::ProgressTracker(LocalFrame* frame)
 
 ProgressTracker::~ProgressTracker() = default;
 
-void ProgressTracker::Trace(blink::Visitor* visitor) {
+void ProgressTracker::Trace(Visitor* visitor) {
   visitor->Trace(frame_);
 }
 
@@ -115,6 +115,7 @@ void ProgressTracker::ProgressCompleted() {
   SendFinalProgress();
   Reset();
   GetLocalFrameClient()->DidStopLoading();
+  frame_->UpdateFaviconURL();
   probe::FrameStoppedLoading(frame_);
 }
 
@@ -132,7 +133,11 @@ void ProgressTracker::SendFinalProgress() {
   if (progress_value_ == 1)
     return;
   progress_value_ = 1;
-  GetLocalFrameClient()->ProgressEstimateChanged(progress_value_);
+  frame_->GetLocalFrameHostRemote().DidChangeLoadProgress(progress_value_);
+
+  // Vivaldi:
+  frame_->GetLocalFrameHostRemote().DidChangeLoadProgressExtended(
+    progress_value_, bytes_received_, elementsLoaded_, elementsTotal_);
 }
 
 void ProgressTracker::WillStartLoading(uint64_t identifier,
@@ -227,8 +232,11 @@ void ProgressTracker::MaybeSendProgress() {
       progress_value_ - last_notified_progress_value_;
   if (notification_progress_delta >= kProgressNotificationInterval ||
       notified_progress_time_delta >= kProgressNotificationTimeInterval) {
-    GetLocalFrameClient()->extendedProgressEstimateChanged(progress_value_,
-      bytes_received_, elementsLoaded_, elementsTotal_);
+    frame_->GetLocalFrameHostRemote().DidChangeLoadProgress(progress_value_);
+
+    // Vivaldi:
+    frame_->GetLocalFrameHostRemote().DidChangeLoadProgressExtended(
+        progress_value_, bytes_received_, elementsLoaded_, elementsTotal_);
     last_notified_progress_value_ = progress_value_;
     last_notified_progress_time_ = now;
   }

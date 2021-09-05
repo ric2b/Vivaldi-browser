@@ -13,7 +13,9 @@
 #include "base/callback_helpers.h"
 #include "base/strings/string_util.h"
 #include "media/base/media_log.h"
+#include "media/base/bind_to_current_loop.h"
 #include "platform_media/renderer/decoders/ipc_demuxer_stream.h"
+#include "platform_media/renderer/decoders/ipc_factory.h"
 #include "platform_media/renderer/pipeline/ipc_media_pipeline_host.h"
 #include "platform_media/common/platform_logging_util.h"
 #include "platform_media/common/platform_media_pipeline_types.h"
@@ -45,7 +47,7 @@ static const char* const kIPCMediaPipelineSupportedMimeTypes[] = {
 std::string MimeTypeFromContentTypeOrURL(const std::string& content_type,
                                          const GURL& url) {
   std::string mime_type = base::ToLowerASCII(content_type);
-  if (mime_type.empty()) {
+  if (mime_type.empty() || mime_type == "application/octet-stream") {
 #if defined(OS_WIN)
     base::FilePath file(base::FilePath::FromUTF8Unsafe(url.ExtractFileName()));
 #elif defined(OS_POSIX)
@@ -61,34 +63,28 @@ std::string MimeTypeFromContentTypeOrURL(const std::string& content_type,
 namespace media {
 
 IPCDemuxer::IPCDemuxer(
-    const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
-    DataSource* data_source,
     std::unique_ptr<IPCMediaPipelineHost> ipc_media_pipeline_host,
-    const std::string& content_type,
-    const GURL& url,
     MediaLog* media_log)
-    : task_runner_(task_runner),
-      host_(NULL),
-      data_source_(data_source),
-      mimetype_(MimeTypeFromContentTypeOrURL(content_type, url)),
-      stopping_(false),
-      ipc_media_pipeline_host_(std::move(ipc_media_pipeline_host)),
+    : ipc_media_pipeline_host_(std::move(ipc_media_pipeline_host)),
       media_log_(media_log),
       weak_ptr_factory_(this) {
-  DCHECK(data_source_);
-  DCHECK(ipc_media_pipeline_host_.get());
+  DCHECK(ipc_media_pipeline_host_);
+  DCHECK(IPCFactory::MainTaskRunner()->RunsTasksInCurrentSequence());
 }
 
 IPCDemuxer::~IPCDemuxer() {
-  // We hand out weak pointers on the |task_runner_| thread.  Make sure they are
-  // all invalidated by the time we are destroyed (on the render thread).
+  DCHECK(IPCFactory::MainTaskRunner()->RunsTasksInCurrentSequence());
+  // Ensure that Stop was called while we were on the media thread.
+  DCHECK(!ipc_media_pipeline_host_);
   DCHECK(!weak_ptr_factory_.HasWeakPtrs());
 }
 
 // static
-bool IPCDemuxer::CanPlayType(const std::string& content_type, const GURL& url) {
+std::string IPCDemuxer::CanPlayType(const std::string& content_type, const GURL& url) {
   const std::string mime_type = MimeTypeFromContentTypeOrURL(content_type, url);
-  return IPCDemuxer::CanPlayType(mime_type);
+  if (CanPlayType(mime_type))
+    return mime_type;
+  return std::string();
 }
 
 //static
@@ -105,65 +101,106 @@ std::string IPCDemuxer::GetDisplayName() const {
 }
 
 void IPCDemuxer::Initialize(DemuxerHost* host,
-                            const PipelineStatusCB& status_cb) {
-  DCHECK(task_runner_->BelongsToCurrentThread());
-  DCHECK(!stopping_);
+                            PipelineStatusCallback status_cb) {
+  DCHECK(IPCFactory::MediaTaskRunner()->RunsTasksInCurrentSequence());
+  DCHECK(ipc_media_pipeline_host_);
 
-  host_ = host;
-  ipc_media_pipeline_host_->Initialize(
-      mimetype_,
-      base::Bind(&IPCDemuxer::OnInitialized,
-                 weak_ptr_factory_.GetWeakPtr(),
-                 status_cb));
+  if (ipc_media_pipeline_host_->audio_config().is_valid()) {
+    VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+            << Loggable(ipc_media_pipeline_host_->audio_config());
+    audio_stream_.reset(new IPCDemuxerStream(DemuxerStream::AUDIO,
+                                             ipc_media_pipeline_host_.get()));
+  } else {
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Audio Config is not Valid ";
+  }
+
+  if (ipc_media_pipeline_host_->video_config().is_valid()) {
+    VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+            << Loggable(ipc_media_pipeline_host_->video_config());
+    video_stream_.reset(new IPCDemuxerStream(DemuxerStream::VIDEO,
+                                             ipc_media_pipeline_host_.get()));
+    MEDIA_LOG(INFO, media_log_) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                                << " " << GetDisplayName();
+  } else {
+    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " Video Config is not Valid ";
+  }
+
+  host->SetDuration(ipc_media_pipeline_host_->time_info().duration);
+  ipc_media_pipeline_host_->data_source()->SetBitrate(
+      ipc_media_pipeline_host_->bitrate());
+
+  // Demuxer requires that the callback runs after the method returns.
+  IPCFactory::MediaTaskRunner()->PostTask(
+      FROM_HERE,
+      base::BindOnce(std::move(status_cb), PipelineStatus::PIPELINE_OK));
 }
 
 void IPCDemuxer::StartWaitingForSeek(base::TimeDelta seek_time) {
-  if (!stopping_)
+  DCHECK(IPCFactory::MainTaskRunner()->RunsTasksInCurrentSequence());
+  // As we are called from the main thread, we cannot use a weak pointer as it
+  // should be used only on the media thread. We must not access any fields in
+  // the instance that can be changed on the media thread either. But we can use
+  // Unretained(this). When WebMediaPlayerImpl::~WebMediaPlayerImpl later runs
+  // on the main thread, it posts the demuxer instance it owns to the media
+  // thread first. Thus this instance will be deleted strictly after the posted
+  // method returns.
+  IPCFactory::MediaTaskRunner()->PostTask(
+      FROM_HERE, base::BindOnce(&IPCDemuxer::StartWaitingForSeekOnMediaThread,
+                                base::Unretained(this)));
+}
+
+void IPCDemuxer::StartWaitingForSeekOnMediaThread() {
+  DCHECK(IPCFactory::MediaTaskRunner()->RunsTasksInCurrentSequence());
+  if (ipc_media_pipeline_host_) {
     ipc_media_pipeline_host_->StartWaitingForSeek();
+  }
 }
 
 void IPCDemuxer::CancelPendingSeek(base::TimeDelta seek_time) {
+  DCHECK(IPCFactory::MainTaskRunner()->RunsTasksInCurrentSequence());
 }
 
-void IPCDemuxer::Seek(base::TimeDelta time, const PipelineStatusCB& status_cb) {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+void IPCDemuxer::Seek(base::TimeDelta time, PipelineStatusCallback status_cb) {
+  DCHECK(IPCFactory::MediaTaskRunner()->RunsTasksInCurrentSequence());
 
-  if (stopping_) {
+  if (!ipc_media_pipeline_host_) {
     LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                << ": PIPELINE_ERROR_ABORT";
-    status_cb.Run(PipelineStatus::PIPELINE_ERROR_ABORT);
+    std::move(status_cb).Run(PipelineStatus::PIPELINE_ERROR_ABORT);
     return;
   }
 
-  ipc_media_pipeline_host_->Seek(time, status_cb);
+  ipc_media_pipeline_host_->Seek(time, std::move(status_cb));
 }
 
 void IPCDemuxer::Stop() {
-  DCHECK(task_runner_->BelongsToCurrentThread());
-  DCHECK(!stopping_);
+  DCHECK(IPCFactory::MediaTaskRunner()->RunsTasksInCurrentSequence());
 
-  stopping_ = true;
-
-  if (audio_stream_.get() != NULL)
+  if (ipc_media_pipeline_host_) {
+    // IPCMediaPipelineHost must only live on the media thread.
+    ipc_media_pipeline_host_->data_source()->Stop();
+    ipc_media_pipeline_host_.reset();
+  }
+  if (audio_stream_) {
     audio_stream_->Stop();
-  if (video_stream_.get() != NULL)
+  }
+  if (video_stream_) {
     video_stream_->Stop();
-
-  ipc_media_pipeline_host_->Stop();
-  // IPCMediaPipelineHost must only live on the |task_runner_| thread.
-  ipc_media_pipeline_host_.reset();
+  }
 
   // We will be destroyed soon.  Invalidate all weak pointers while we're still
-  // on the |task_runner_| thread.
+  // on the media thread.
   weak_ptr_factory_.InvalidateWeakPtrs();
 }
 
 void IPCDemuxer::AbortPendingReads() {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(IPCFactory::MediaTaskRunner()->RunsTasksInCurrentSequence());
 }
 
 std::vector<DemuxerStream*> IPCDemuxer::GetAllStreams() {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(IPCFactory::MediaTaskRunner()->RunsTasksInCurrentSequence());
   std::vector<DemuxerStream*> result;
   if (audio_stream_)
     result.push_back(audio_stream_.get());
@@ -173,7 +210,7 @@ std::vector<DemuxerStream*> IPCDemuxer::GetAllStreams() {
 }
 
 IPCDemuxerStream* IPCDemuxer::GetStream(DemuxerStream::Type type) {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(IPCFactory::MediaTaskRunner()->RunsTasksInCurrentSequence());
 
   switch (type) {
     case DemuxerStream::AUDIO:
@@ -186,13 +223,18 @@ IPCDemuxerStream* IPCDemuxer::GetStream(DemuxerStream::Type type) {
 }
 
 base::TimeDelta IPCDemuxer::GetStartTime() const {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(IPCFactory::MediaTaskRunner()->RunsTasksInCurrentSequence());
+  if (!ipc_media_pipeline_host_)
+    return base::TimeDelta();
 
-  return start_time_;
+  // Make sure we abide by the Demuxer::GetStartTime() contract.  We cannot
+  // guarantee that the platform decoders return a non-negative value.
+  return std::max(ipc_media_pipeline_host_->time_info().start_time,
+                  base::TimeDelta());
 }
 
 base::Time IPCDemuxer::GetTimelineOffset() const {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(IPCFactory::MediaTaskRunner()->RunsTasksInCurrentSequence());
 
   return base::Time();
 }
@@ -206,7 +248,7 @@ void IPCDemuxer::OnEnabledAudioTracksChanged(
     const std::vector<MediaTrack::Id>& track_ids,
     base::TimeDelta currTime,
     TrackChangeCB change_completed_cb) {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(IPCFactory::MediaTaskRunner()->RunsTasksInCurrentSequence());
   IPCDemuxerStream* audio_stream = GetStream(DemuxerStream::AUDIO);
   CHECK(audio_stream);
   bool enabled = !track_ids.empty();
@@ -226,7 +268,7 @@ void IPCDemuxer::OnSelectedVideoTrackChanged(
     const std::vector<MediaTrack::Id>& track_ids,
     base::TimeDelta currTime,
     TrackChangeCB change_completed_cb) {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(IPCFactory::MediaTaskRunner()->RunsTasksInCurrentSequence());
   IPCDemuxerStream* video_stream = GetStream(DemuxerStream::VIDEO);
   CHECK(video_stream);
   bool enabled = !track_ids.empty();
@@ -240,60 +282,6 @@ void IPCDemuxer::OnSelectedVideoTrackChanged(
   std::vector<DemuxerStream*> streams(enabled_streams.begin(),
                                       enabled_streams.end());
   std::move(change_completed_cb).Run(DemuxerStream::VIDEO, streams);
-}
-
-void IPCDemuxer::OnInitialized(const PipelineStatusCB& callback,
-                               bool success,
-                               int bitrate,
-                               const PlatformMediaTimeInfo& time_info,
-                               const PlatformAudioConfig& audio_config,
-                               const PlatformVideoConfig& video_config) {
-  DCHECK(task_runner_->BelongsToCurrentThread());
-
-  if (stopping_) {
-    LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-               << ": PIPELINE_ERROR_ABORT";
-    callback.Run(PipelineStatus::PIPELINE_ERROR_ABORT);
-    return;
-  }
-
-  if (!success) {
-    LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-               << ": PIPELINE_ERROR_INITIALIZATION_FAILED";
-    callback.Run(PipelineStatus::PIPELINE_ERROR_INITIALIZATION_FAILED);
-    return;
-  }
-
-  if (audio_config.is_valid()) {
-    VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-            << Loggable(audio_config);
-    audio_stream_.reset(new IPCDemuxerStream(DemuxerStream::AUDIO,
-                                             ipc_media_pipeline_host_.get()));
-  } else {
-    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " Audio Config is not Valid ";
-  }
-
-  if (video_config.is_valid()) {
-    VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-            << Loggable(video_config);
-    video_stream_.reset(new IPCDemuxerStream(DemuxerStream::VIDEO,
-                                             ipc_media_pipeline_host_.get()));
-    MEDIA_LOG(INFO, media_log_) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                                << " " << GetDisplayName();
-  } else {
-    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " Video Config is not Valid ";
-  }
-
-  host_->SetDuration(time_info.duration);
-  data_source_->SetBitrate(bitrate);
-
-  // Make sure we abide by the Demuxer::GetStartTime() contract.  We cannot
-  // guarantee that the platform decoders return a non-negative value.
-  start_time_ = std::max(time_info.start_time, base::TimeDelta());
-
-  callback.Run(PipelineStatus::PIPELINE_OK);
 }
 
 }  // namespace media

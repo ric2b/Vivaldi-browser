@@ -2,28 +2,29 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "third_party/blink/public/web/modules/peerconnection/rtc_rtp_sender_impl.h"
+#include "third_party/blink/renderer/modules/peerconnection/rtc_rtp_sender_impl.h"
 
 #include <memory>
 
 #include "base/bind.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/public/platform/modules/mediastream/media_stream_audio_source.h"
 #include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
 #include "third_party/blink/public/platform/web_media_stream_source.h"
 #include "third_party/blink/public/platform/web_media_stream_track.h"
-#include "third_party/blink/public/platform/web_rtc_stats.h"
-#include "third_party/blink/public/platform/web_rtc_void_request.h"
 #include "third_party/blink/public/platform/web_string.h"
-#include "third_party/blink/public/web/modules/peerconnection/mock_peer_connection_dependency_factory.h"
-#include "third_party/blink/public/web/modules/peerconnection/mock_peer_connection_impl.h"
-#include "third_party/blink/public/web/modules/peerconnection/webrtc_media_stream_track_adapter_map.h"
-#include "third_party/blink/public/web/modules/peerconnection/webrtc_stats_report_obtainer.h"
 #include "third_party/blink/public/web/web_heap.h"
+#include "third_party/blink/renderer/modules/peerconnection/mock_peer_connection_dependency_factory.h"
+#include "third_party/blink/renderer/modules/peerconnection/mock_peer_connection_impl.h"
+#include "third_party/blink/renderer/modules/peerconnection/test_webrtc_stats_report_obtainer.h"
+#include "third_party/blink/renderer/modules/peerconnection/webrtc_media_stream_track_adapter_map.h"
+#include "third_party/blink/renderer/platform/mediastream/media_stream_audio_source.h"
+#include "third_party/blink/renderer/platform/peerconnection/rtc_stats.h"
+#include "third_party/blink/renderer/platform/peerconnection/rtc_void_request.h"
 #include "third_party/blink/renderer/platform/testing/io_task_runner_testing_platform_support.h"
 #include "third_party/webrtc/api/stats/rtc_stats_report.h"
 #include "third_party/webrtc/api/stats/rtcstats_objects.h"
@@ -39,7 +40,7 @@ class RTCRtpSenderImplTest : public ::testing::Test {
   void SetUp() override {
     dependency_factory_.reset(new blink::MockPeerConnectionDependencyFactory());
     main_thread_ = blink::scheduler::GetSingleThreadTaskRunnerForTesting();
-    track_map_ = new blink::WebRtcMediaStreamTrackAdapterMap(
+    track_map_ = base::MakeRefCounted<blink::WebRtcMediaStreamTrackAdapterMap>(
         dependency_factory_.get(), main_thread_);
     peer_connection_ = new rtc::RefCountedObject<blink::MockPeerConnectionImpl>(
         dependency_factory_.get(), nullptr);
@@ -95,7 +96,9 @@ class RTCRtpSenderImplTest : public ::testing::Test {
         std::vector<std::string>());
     sender_state.Initialize();
     return std::make_unique<RTCRtpSenderImpl>(
-        peer_connection_.get(), track_map_, std::move(sender_state));
+        peer_connection_.get(), track_map_, std::move(sender_state),
+        /*force_encoded_audio_insertable_streams=*/false,
+        /*force_encoded_video_insertable_streams=*/false);
   }
 
   // Calls replaceTrack(), which is asynchronous, returning a callback that when
@@ -108,9 +111,10 @@ class RTCRtpSenderImplTest : public ::testing::Test {
     // On complete, |*result_holder| is set with the result of replaceTrack()
     // and the |run_loop| quit.
     sender_->ReplaceTrack(
-        web_track, base::BindOnce(&RTCRtpSenderImplTest::CallbackOnComplete,
-                                  base::Unretained(this), result_holder.get(),
-                                  run_loop.get()));
+        web_track,
+        WTF::Bind(&RTCRtpSenderImplTest::CallbackOnComplete,
+                  WTF::Unretained(this), WTF::Unretained(result_holder.get()),
+                  WTF::Unretained(run_loop.get())));
     // When the resulting callback is invoked, waits for |run_loop| to complete
     // and returns |*result_holder|.
     return base::BindOnce(&RTCRtpSenderImplTest::RunLoopAndReturnResult,
@@ -118,9 +122,9 @@ class RTCRtpSenderImplTest : public ::testing::Test {
                           std::move(run_loop));
   }
 
-  scoped_refptr<blink::WebRTCStatsReportObtainer> CallGetStats() {
-    scoped_refptr<blink::WebRTCStatsReportObtainer> obtainer =
-        new blink::WebRTCStatsReportObtainer();
+  scoped_refptr<blink::TestWebRTCStatsReportObtainer> CallGetStats() {
+    scoped_refptr<blink::TestWebRTCStatsReportObtainer> obtainer =
+        base::MakeRefCounted<TestWebRTCStatsReportObtainer>();
     sender_->GetStats(obtainer->GetStatsCallbackWrapper(), {});
     return obtainer;
   }

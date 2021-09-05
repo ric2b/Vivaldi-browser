@@ -233,8 +233,8 @@ class FakeGCMInternalsBuilder : public GCMInternalsBuilder {
   std::unique_ptr<ConnectionFactory> BuildConnectionFactory(
       const std::vector<GURL>& endpoints,
       const net::BackoffEntry::Policy& backoff_policy,
-      base::RepeatingCallback<
-          void(network::mojom::ProxyResolvingSocketFactoryRequest)>
+      base::RepeatingCallback<void(
+          mojo::PendingReceiver<network::mojom::ProxyResolvingSocketFactory>)>
           get_socket_factory_callback,
       scoped_refptr<base::SequencedTaskRunner> io_task_runner,
       GCMStatsRecorder* recorder,
@@ -268,8 +268,8 @@ std::unique_ptr<ConnectionFactory>
 FakeGCMInternalsBuilder::BuildConnectionFactory(
     const std::vector<GURL>& endpoints,
     const net::BackoffEntry::Policy& backoff_policy,
-    base::RepeatingCallback<
-        void(network::mojom::ProxyResolvingSocketFactoryRequest)>
+    base::RepeatingCallback<void(
+        mojo::PendingReceiver<network::mojom::ProxyResolvingSocketFactory>)>
         get_socket_factory_callback,
     scoped_refptr<base::SequencedTaskRunner> io_task_runner,
     GCMStatsRecorder* recorder,
@@ -594,6 +594,7 @@ void GCMClientImplTest::InitializeGCMClient() {
   chrome_build_info.product_category_for_subtypes = kProductCategoryForSubtypes;
   gcm_client_->Initialize(
       chrome_build_info, gcm_store_path(),
+      /*remove_account_mappings_with_email_key=*/true,
       task_environment_.GetMainThreadTaskRunner(),
       base::ThreadTaskRunnerHandle::Get(), base::DoNothing(),
       base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
@@ -1586,7 +1587,7 @@ TEST_F(GCMClientImplStartAndStopTest, OnGCMReadyAccountsAndTokenFetchingTime) {
   base::Time expected_time = base::Time::Now();
   gcm_client()->SetLastTokenFetchTime(expected_time);
   AccountMapping expected_mapping;
-  expected_mapping.account_id = "accId";
+  expected_mapping.account_id = CoreAccountId("accId");
   expected_mapping.email = "email@gmail.com";
   expected_mapping.status = AccountMapping::MAPPED;
   expected_mapping.status_change_timestamp = expected_time;

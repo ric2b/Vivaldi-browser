@@ -66,7 +66,8 @@ class AppListTestViewDelegate : public AppListViewDelegate,
                         int event_flags,
                         ash::AppListLaunchedFrom launched_from,
                         ash::AppListLaunchType launch_type,
-                        int suggestion_index) override;
+                        int suggestion_index,
+                        bool launch_as_default) override;
   void LogResultLaunchHistogram(SearchResultLaunchLocation launch_location,
                                 int suggestion_index) override {}
   void LogSearchAbandonHistogram() override {}
@@ -90,8 +91,7 @@ class AppListTestViewDelegate : public AppListViewDelegate,
       ash::AppListViewState target_state) override;
   void ShowWallpaperContextMenu(const gfx::Point& onscreen_location,
                                 ui::MenuSourceType source_type) override;
-  bool ProcessHomeLauncherGesture(ui::GestureEvent* event,
-                                  const gfx::Point& screen_location) override;
+  bool ProcessHomeLauncherGesture(ui::GestureEvent* event) override;
   bool CanProcessEventsOnApplistViews() override;
   bool ShouldDismissImmediately() override;
   void GetNavigableContentsFactory(
@@ -114,7 +114,7 @@ class AppListTestViewDelegate : public AppListViewDelegate,
   void GetAppLaunchedMetricParams(
       AppLaunchedMetricParams* metric_params) override;
   gfx::Rect SnapBoundsToDisplayEdge(const gfx::Rect& bounds) override;
-  int GetShelfHeight() override;
+  int GetShelfSize() override;
 
   // Do a bulk replacement of the items in the model.
   void ReplaceTestModel(int item_count);

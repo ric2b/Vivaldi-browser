@@ -34,6 +34,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/bind_test_util.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "base/version.h"
@@ -89,12 +90,12 @@
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/safe_browsing/buildflags.h"
+#include "components/services/storage/public/mojom/indexed_db_control.mojom.h"
 #include "components/sync/model/string_ordinal.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/browser/dom_storage_context.h"
 #include "content/public/browser/gpu_data_manager.h"
-#include "content/public/browser/indexed_db_context.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/plugin_service.h"
 #include "content/public/browser/render_process_host.h"
@@ -165,7 +166,6 @@
 using content::BrowserContext;
 using content::BrowserThread;
 using content::DOMStorageContext;
-using content::IndexedDBContext;
 using content::PluginService;
 
 namespace extensions {
@@ -1229,7 +1229,7 @@ TEST_F(ExtensionServiceTest, InstallingExternalExtensionWithFlags) {
   ASSERT_TRUE(extension->from_bookmark());
 }
 
-// Test the handling of Extension::EXTERNAL_EXTENSION_UNINSTALLED
+// Test the handling of uninstalling external extensions.
 TEST_F(ExtensionServiceTest, UninstallingExternalExtensions) {
   InitializeEmptyExtensionService();
 
@@ -1291,6 +1291,95 @@ TEST_F(ExtensionServiceTest, UninstallingExternalExtensions) {
   EXPECT_TRUE(service()->pending_extension_manager()->Remove(good_crx));
 
   ASSERT_FALSE(service()->pending_extension_manager()->IsIdPending(good_crx));
+}
+
+// Tests that uninstalling an external extension, and then reinstalling the
+// extension as a user install (e.g. from the webstore) succeeds.
+TEST_F(ExtensionServiceTest, UninstallExternalExtensionAndReinstallAsUser) {
+  InitializeEmptyExtensionService();
+
+  base::FilePath path = data_dir().AppendASCII("good.crx");
+
+  std::string version_str = "1.0.0.0";
+  // Install an external extension.
+  std::unique_ptr<ExternalInstallInfoFile> info =
+      CreateExternalExtension(good_crx, version_str, path,
+                              Manifest::EXTERNAL_PREF, Extension::NO_FLAGS);
+  MockExternalProvider* provider =
+      AddMockExternalProvider(Manifest::EXTERNAL_PREF);
+  provider->UpdateOrAddExtension(std::move(info));
+  WaitForExternalExtensionInstalled();
+
+  ASSERT_TRUE(registry()->enabled_extensions().GetByID(good_crx));
+
+  // Uninstall the extension.
+  UninstallExtension(good_crx);
+  ExtensionPrefs* prefs = ExtensionPrefs::Get(profile());
+  EXPECT_TRUE(prefs->IsExternalExtensionUninstalled(good_crx));
+
+  // Reinstall the extension as a user-space extension. This should succeed.
+  scoped_refptr<CrxInstaller> installer(CrxInstaller::CreateSilent(service()));
+  installer->set_allow_silent_install(true);
+  base::RunLoop run_loop;
+  installer->set_installer_callback(base::BindOnce(
+      [](base::Closure quit_closure,
+         const base::Optional<CrxInstallError>& result) {
+        ASSERT_FALSE(result) << result->message();
+        quit_closure.Run();
+      },
+      run_loop.QuitWhenIdleClosure()));
+  installer->InstallCrx(path);
+  run_loop.Run();
+
+  ASSERT_TRUE(registry()->enabled_extensions().GetByID(good_crx));
+}
+
+// Tests uninstalling an external extension from a higher version, and then
+// installing a lower version as a user. This should succeed.
+// Regression test for https://crbug.com/795026.
+TEST_F(ExtensionServiceTest,
+       UninstallExternalExtensionAndReinstallAsUserWithLowerVersion) {
+  InitializeEmptyExtensionService();
+
+  base::FilePath path = data_dir().AppendASCII("good2.crx");
+
+  constexpr char kExternalVersion[] = "1.0.0.1";
+  // Install an external extension.
+  std::unique_ptr<ExternalInstallInfoFile> info =
+      CreateExternalExtension(good_crx, kExternalVersion, path,
+                              Manifest::EXTERNAL_PREF, Extension::NO_FLAGS);
+  MockExternalProvider* provider =
+      AddMockExternalProvider(Manifest::EXTERNAL_PREF);
+  provider->UpdateOrAddExtension(std::move(info));
+  WaitForExternalExtensionInstalled();
+
+  ASSERT_TRUE(registry()->enabled_extensions().GetByID(good_crx));
+
+  // Uninstall the extension.
+  UninstallExtension(good_crx);
+  ExtensionPrefs* prefs = ExtensionPrefs::Get(profile());
+  EXPECT_TRUE(prefs->IsExternalExtensionUninstalled(good_crx));
+
+  // Reinstall the extension as a user-space extension with a lower version.
+  // This should succeed.
+  scoped_refptr<CrxInstaller> installer(CrxInstaller::CreateSilent(service()));
+  installer->set_allow_silent_install(true);
+  base::RunLoop run_loop;
+  installer->set_installer_callback(base::BindOnce(
+      [](base::Closure quit_closure,
+         const base::Optional<CrxInstallError>& result) {
+        ASSERT_FALSE(result) << result->message();
+        quit_closure.Run();
+      },
+      run_loop.QuitWhenIdleClosure()));
+  installer->InstallCrx(data_dir().AppendASCII("good.crx"));
+  run_loop.Run();
+
+  const Extension* extension =
+      registry()->enabled_extensions().GetByID(good_crx);
+  ASSERT_TRUE(extension);
+  constexpr char kLowerVersion[] = "1.0.0.0";
+  EXPECT_EQ(kLowerVersion, extension->version().GetString());
 }
 
 // Test that uninstalling an external extension does not crash when
@@ -4881,7 +4970,8 @@ TEST_F(ExtensionServiceTest, ClearExtensionData) {
       net::CanonicalCookie::Create(ext_url, "dummy=value", base::Time::Now(),
                                    base::nullopt /* server_time */);
   cookie_store->SetCanonicalCookieAsync(
-      std::move(cookie), ext_url.scheme(), net::CookieOptions(),
+      std::move(cookie), ext_url.scheme(),
+      net::CookieOptions::MakeAllInclusive(),
       base::BindOnce(&ExtensionCookieCallback::SetCookieCallback,
                      base::Unretained(&callback)));
   content::RunAllTasksUntilIdle();
@@ -4917,13 +5007,25 @@ TEST_F(ExtensionServiceTest, ClearExtensionData) {
   // Create indexed db. Similarly, it is enough to only simulate this by
   // creating the directory on the disk, and resetting the caches of
   // "known" origins.
-  IndexedDBContext* idb_context = BrowserContext::GetDefaultStoragePartition(
-                                      profile())->GetIndexedDBContext();
-  base::FilePath idb_path =
-      idb_context->GetFilePathForTesting(url::Origin::Create(ext_url));
-  EXPECT_TRUE(base::CreateDirectory(idb_path));
-  EXPECT_TRUE(base::DirectoryExists(idb_path));
-  idb_context->ResetCachesForTesting();
+  auto& idb_control = BrowserContext::GetDefaultStoragePartition(profile())
+                          ->GetIndexedDBControl();
+  mojo::Remote<storage::mojom::IndexedDBControlTest> idb_control_test;
+  idb_control.BindTestInterface(idb_control_test.BindNewPipeAndPassReceiver());
+
+  base::FilePath idb_path;
+  {
+    base::RunLoop run_loop;
+    idb_control_test->GetFilePathForTesting(
+        url::Origin::Create(ext_url),
+        base::BindLambdaForTesting([&](const base::FilePath& path) {
+          idb_path = path;
+          EXPECT_TRUE(base::CreateDirectory(idb_path));
+          EXPECT_TRUE(base::DirectoryExists(idb_path));
+          idb_control_test->ResetCachesForTesting(
+              base::BindLambdaForTesting([&]() { run_loop.Quit(); }));
+        }));
+    run_loop.Run();
+  }
 
   // Uninstall the extension.
   ASSERT_TRUE(service()->UninstallExtension(
@@ -5024,7 +5126,7 @@ TEST_F(ExtensionServiceTest, ClearAppData) {
     bool set_result = false;
     base::RunLoop run_loop;
     cookie_manager_remote->SetCanonicalCookie(
-        *cc.get(), origin1.scheme(), net::CookieOptions(),
+        *cc.get(), origin1.scheme(), net::CookieOptions::MakeAllInclusive(),
         base::BindOnce(&SetCookieSaveData, &set_result,
                        run_loop.QuitClosure()));
     run_loop.Run();
@@ -5035,7 +5137,7 @@ TEST_F(ExtensionServiceTest, ClearAppData) {
     base::RunLoop run_loop;
     std::vector<net::CanonicalCookie> cookies_result;
     cookie_manager_remote->GetCookieList(
-        origin1, net::CookieOptions(),
+        origin1, net::CookieOptions::MakeAllInclusive(),
         base::BindOnce(&GetCookiesSaveData, &cookies_result,
                        run_loop.QuitClosure()));
     run_loop.Run();
@@ -5065,13 +5167,25 @@ TEST_F(ExtensionServiceTest, ClearAppData) {
   // Create indexed db. Similarly, it is enough to only simulate this by
   // creating the directory on the disk, and resetting the caches of
   // "known" origins.
-  IndexedDBContext* idb_context = BrowserContext::GetDefaultStoragePartition(
-                                      profile())->GetIndexedDBContext();
-  base::FilePath idb_path =
-      idb_context->GetFilePathForTesting(url::Origin::Create(origin1));
-  EXPECT_TRUE(base::CreateDirectory(idb_path));
-  EXPECT_TRUE(base::DirectoryExists(idb_path));
-  idb_context->ResetCachesForTesting();
+  auto& idb_control = BrowserContext::GetDefaultStoragePartition(profile())
+                          ->GetIndexedDBControl();
+  mojo::Remote<storage::mojom::IndexedDBControlTest> idb_control_test;
+  idb_control.BindTestInterface(idb_control_test.BindNewPipeAndPassReceiver());
+
+  base::FilePath idb_path;
+  {
+    base::RunLoop run_loop;
+    idb_control_test->GetFilePathForTesting(
+        url::Origin::Create(origin1),
+        base::BindLambdaForTesting([&](const base::FilePath& path) {
+          idb_path = path;
+          EXPECT_TRUE(base::CreateDirectory(idb_path));
+          EXPECT_TRUE(base::DirectoryExists(idb_path));
+          idb_control_test->ResetCachesForTesting(
+              base::BindLambdaForTesting([&]() { run_loop.Quit(); }));
+        }));
+    run_loop.Run();
+  }
 
   // Uninstall one of them, unlimited storage should still be granted
   // to the origin.
@@ -5085,7 +5199,7 @@ TEST_F(ExtensionServiceTest, ClearAppData) {
     base::RunLoop run_loop;
     std::vector<net::CanonicalCookie> cookies_result;
     cookie_manager_remote->GetCookieList(
-        origin1, net::CookieOptions(),
+        origin1, net::CookieOptions::MakeAllInclusive(),
         base::BindOnce(&GetCookiesSaveData, &cookies_result,
                        run_loop.QuitClosure()));
     run_loop.Run();
@@ -5104,7 +5218,7 @@ TEST_F(ExtensionServiceTest, ClearAppData) {
     base::RunLoop run_loop;
     std::vector<net::CanonicalCookie> cookies_result;
     cookie_manager_remote->GetCookieList(
-        origin1, net::CookieOptions(),
+        origin1, net::CookieOptions::MakeAllInclusive(),
         base::BindOnce(&GetCookiesSaveData, &cookies_result,
                        run_loop.QuitClosure()));
     run_loop.Run();
@@ -6072,23 +6186,22 @@ TEST_F(ExtensionServiceTest, InstallPriorityExternalUpdateUrl) {
   EXPECT_FALSE(service()->OnExternalExtensionUpdateUrlFound(info, true));
   EXPECT_FALSE(pending->IsIdPending(kGoodId));
 
-  // Install when the location has higher priority.
+  // Update the download location when install is requested from higher priority
+  // location.
   info.download_location = Manifest::EXTERNAL_POLICY_DOWNLOAD;
-  EXPECT_TRUE(service()->OnExternalExtensionUpdateUrlFound(info, true));
-  EXPECT_TRUE(pending->IsIdPending(kGoodId));
+  EXPECT_FALSE(service()->OnExternalExtensionUpdateUrlFound(info, true));
+  EXPECT_FALSE(pending->IsIdPending(kGoodId));
 
   // Try the low priority again.  Should be rejected.
   info.download_location = Manifest::EXTERNAL_PREF_DOWNLOAD;
   EXPECT_FALSE(service()->OnExternalExtensionUpdateUrlFound(info, true));
   // The existing record should still be present in the pending extension
   // manager.
-  EXPECT_TRUE(pending->IsIdPending(kGoodId));
-
-  pending->Remove(kGoodId);
+  EXPECT_FALSE(pending->IsIdPending(kGoodId));
 
   // Skip install when the location has the same priority as the installed
   // location.
-  info.download_location = Manifest::INTERNAL;
+  info.download_location = Manifest::EXTERNAL_POLICY_DOWNLOAD;
   EXPECT_FALSE(service()->OnExternalExtensionUpdateUrlFound(info, true));
 
   EXPECT_FALSE(pending->IsIdPending(kGoodId));
@@ -7421,6 +7534,71 @@ TEST_F(ExtensionServiceTest, UserInstalledExtensionThenRequiredByPolicy) {
   EXPECT_FALSE(prefs->IsExtensionDisabled(good_crx));
 }
 
+// If the extension is first manually installed by the user, and then added to
+// the force installed list, on restarting, the extension should behave as a
+// force installed extension.
+TEST_F(ExtensionServiceTest,
+       UserInstalledExtensionThenRequiredByPolicyOnRestart) {
+  InitializeEmptyExtensionServiceWithTestingPrefs();
+
+  // Install an extension as if the user did it.
+  base::FilePath path = data_dir().AppendASCII("good.crx");
+  const Extension* extension = InstallCRX(path, INSTALL_NEW);
+  ASSERT_TRUE(extension);
+  EXPECT_EQ(good_crx, extension->id());
+  EXPECT_EQ(Manifest::INTERNAL, extension->location());
+
+  std::string kVersionStr = "1.0.0.0";
+  EXPECT_EQ(kVersionStr, extension->VersionString());
+
+  {
+    ManagementPrefUpdater pref(profile_->GetTestingPrefService());
+    // Mark good.crx for force-installation.
+    pref.SetIndividualExtensionAutoInstalled(
+        good_crx, "http://example.com/update_url", true);
+  }
+
+  ExtensionManagement* management =
+      ExtensionManagementFactory::GetForBrowserContext(profile());
+  ExtensionManagement::InstallationMode installation_mode =
+      management->GetInstallationMode(extension);
+  EXPECT_EQ(ExtensionManagement::INSTALLATION_FORCED, installation_mode);
+
+  GURL good_update_url(kGoodUpdateURL);
+  ExternalInstallInfoUpdateUrl info(
+      good_crx, std::string(), std::move(good_update_url),
+      Manifest::EXTERNAL_POLICY_DOWNLOAD, Extension::NO_FLAGS, false);
+  service()->OnExternalExtensionUpdateUrlFound(info, true);
+  base::RunLoop().RunUntilIdle();
+
+  extension = registry()->GetInstalledExtension(good_crx);
+  ASSERT_TRUE(extension);
+  ManagementPolicy* policy =
+      ExtensionSystem::Get(browser_context())->management_policy();
+
+  // The extension should still be installed, and should be required to
+  // remain installed.
+  EXPECT_TRUE(policy->MustRemainInstalled(extension, nullptr));
+  EXPECT_FALSE(policy->UserMayModifySettings(extension, nullptr));
+  EXPECT_EQ(extension->location(), Manifest::EXTERNAL_POLICY_DOWNLOAD);
+
+  EXPECT_TRUE(registry()->enabled_extensions().GetByID(good_crx));
+  ExtensionPrefs* prefs = ExtensionPrefs::Get(profile());
+  EXPECT_EQ(disable_reason::DISABLE_NONE, prefs->GetDisableReasons(good_crx));
+  EXPECT_FALSE(prefs->IsExtensionDisabled(good_crx));
+
+  // Simulate a chrome process restart.
+  service()->ReloadExtensionsForTest();
+  policy = ExtensionSystem::Get(browser_context())->management_policy();
+  EXPECT_TRUE(registry()->enabled_extensions().Contains(good_crx));
+  extension = registry()->GetInstalledExtension(good_crx);
+  // The location should remain same on restart.
+  EXPECT_EQ(extension->location(), Manifest::EXTERNAL_POLICY_DOWNLOAD);
+  // Extension should behave similar to force installed on restart.
+  EXPECT_TRUE(policy->MustRemainInstalled(extension, nullptr));
+  EXPECT_FALSE(policy->UserMayModifySettings(extension, nullptr));
+}
+
 // Regression test for crbug.com/460699. Ensure PluginManager doesn't crash even
 // if OnExtensionUnloaded is invoked twice in succession.
 TEST_F(ExtensionServiceTest, PluginManagerCrash) {
@@ -7489,7 +7667,7 @@ TEST_P(ExternalExtensionPriorityTest, PolicyForegroundFetch) {
   service()->updater()->SetExtensionDownloaderForTesting(nullptr);
 }
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          ExternalExtensionPriorityTest,
                          testing::Values(Manifest::EXTERNAL_POLICY_DOWNLOAD,
                                          Manifest::EXTERNAL_COMPONENT,

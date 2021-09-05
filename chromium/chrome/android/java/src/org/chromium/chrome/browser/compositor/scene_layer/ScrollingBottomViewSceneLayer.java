@@ -13,10 +13,12 @@ import org.chromium.chrome.browser.compositor.LayerTitleCache;
 import org.chromium.chrome.browser.compositor.layouts.components.VirtualView;
 import org.chromium.chrome.browser.compositor.layouts.eventfilter.EventFilter;
 import org.chromium.chrome.browser.compositor.overlays.SceneOverlay;
-import org.chromium.chrome.browser.ui.widget.ViewResourceFrameLayout;
+import org.chromium.components.browser_ui.widget.ViewResourceFrameLayout;
 import org.chromium.ui.resources.ResourceManager;
 
 import java.util.List;
+
+import org.chromium.chrome.browser.ChromeApplication;
 
 /**
  * A composited view that sits at the bottom of the screen and listens to changes in the browser
@@ -122,6 +124,8 @@ public class ScrollingBottomViewSceneLayer extends SceneOverlayLayer implements 
 
     @Override
     public boolean isSceneOverlayTreeShowing() {
+        // (david@vivaldi.com) Fix for VB-53633.
+        if (ChromeApplication.isVivaldi() && mIsVisible) return true;
         // If the offset is greater than the toolbar's height, don't draw the layer.
         return mIsVisible && mCurrentYOffsetPx < mBottomView.getHeight() - mTopShadowHeightPx;
     }

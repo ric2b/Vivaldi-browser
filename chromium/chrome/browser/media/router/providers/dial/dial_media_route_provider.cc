@@ -14,7 +14,6 @@
 #include "chrome/browser/media/router/data_decoder_util.h"
 #include "chrome/browser/media/router/providers/dial/dial_media_route_provider_metrics.h"
 #include "chrome/common/media_router/media_source.h"
-#include "services/service_manager/public/cpp/connector.h"
 #include "url/origin.h"
 
 namespace media_router {
@@ -40,11 +39,9 @@ DialMediaRouteProvider::DialMediaRouteProvider(
     mojo::PendingReceiver<mojom::MediaRouteProvider> receiver,
     mojo::PendingRemote<mojom::MediaRouter> media_router,
     DialMediaSinkServiceImpl* media_sink_service,
-    service_manager::Connector* connector,
     const std::string& hash_token,
     const scoped_refptr<base::SequencedTaskRunner>& task_runner)
     : media_sink_service_(media_sink_service),
-      data_decoder_(std::make_unique<DataDecoder>(connector)),
       internal_message_util_(hash_token) {
   DETACH_FROM_SEQUENCE(sequence_checker_);
   DCHECK(media_sink_service_);
@@ -203,20 +200,22 @@ void DialMediaRouteProvider::TerminateRoute(const std::string& route_id,
 void DialMediaRouteProvider::SendRouteMessage(const std::string& media_route_id,
                                               const std::string& message) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  data_decoder_->ParseJson(
-      message,
-      base::BindRepeating(&DialMediaRouteProvider::HandleParsedRouteMessage,
-                          weak_ptr_factory_.GetWeakPtr(), media_route_id),
-      base::BindRepeating(&ReportParseError,
-                          DialParseMessageResult::kParseError));
+  GetDataDecoder().ParseJson(
+      message, base::BindOnce(&DialMediaRouteProvider::HandleParsedRouteMessage,
+                              weak_ptr_factory_.GetWeakPtr(), media_route_id));
 }
 
 void DialMediaRouteProvider::HandleParsedRouteMessage(
     const MediaRoute::Id& route_id,
-    base::Value message) {
+    data_decoder::DataDecoder::ValueOrError result) {
+  if (!result.value) {
+    ReportParseError(DialParseMessageResult::kParseError, *result.error);
+    return;
+  }
+
   std::string error;
   std::unique_ptr<DialInternalMessage> internal_message =
-      DialInternalMessage::From(std::move(message), &error);
+      DialInternalMessage::From(std::move(*result.value), &error);
   if (!internal_message) {
     ReportParseError(DialParseMessageResult::kInvalidMessage, error);
     return;
@@ -494,14 +493,6 @@ void DialMediaRouteProvider::UpdateMediaSinks(const std::string& media_source) {
   media_sink_service_->OnUserGesture();
 }
 
-void DialMediaRouteProvider::SearchSinks(
-    const std::string& sink_id,
-    const std::string& media_source,
-    mojom::SinkSearchCriteriaPtr search_criteria,
-    SearchSinksCallback callback) {
-  std::move(callback).Run(std::string());
-}
-
 void DialMediaRouteProvider::ProvideSinks(
     const std::string& provider_name,
     const std::vector<media_router::MediaSinkInternal>& sinks) {
@@ -515,6 +506,11 @@ void DialMediaRouteProvider::CreateMediaRouteController(
     CreateMediaRouteControllerCallback callback) {
   NOTIMPLEMENTED();
   std::move(callback).Run(false);
+}
+
+void DialMediaRouteProvider::GetState(GetStateCallback callback) {
+  NOTIMPLEMENTED();
+  std::move(callback).Run(mojom::ProviderStatePtr());
 }
 
 void DialMediaRouteProvider::SetActivityManagerForTest(

@@ -138,7 +138,7 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
 
   // Sets closure to be called after load is done. If already loaded, calls
   // closure immediately.
-  void SetLoadCompletedCallback(const base::Closure& closure);
+  void SetLoadCompletedCallback(base::OnceClosure closure);
 
   // Forwards an unhandled keyboard event to the DevTools frontend.
   bool ForwardKeyboardEvent(const content::NativeWebKeyboardEvent& event);
@@ -230,6 +230,7 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
 
   // Vivaldi methods:
   bool IsClosing() { return life_stage_ == kClosing; }
+  bool IsDocked() { return is_docked_; }
   // Given the inspected web contents, returns the main web contents used
   // to host devtools.
   static content::WebContents* GetDevtoolsWebContentsForInspectedWebContents(
@@ -429,10 +430,10 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
   // True if we're in the process of handling a beforeunload event originating
   // from the inspected webcontents, see InterceptPageBeforeUnload for details.
   bool intercepted_page_beforeunload_;
-  base::Closure load_completed_callback_;
-  base::Closure close_callback_;
+  base::OnceClosure load_completed_callback_;
+  base::OnceClosure close_callback_;
   bool ready_for_test_;
-  base::Closure ready_for_test_callback_;
+  base::OnceClosure ready_for_test_callback_;
 
   base::TimeTicks inspect_element_start_time_;
   std::unique_ptr<DevToolsEventForwarder> event_forwarder_;

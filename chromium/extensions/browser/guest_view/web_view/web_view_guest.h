@@ -187,6 +187,10 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
   bool GuestMadeEmbedderFullscreen() const;
   void SetFullscreenState(bool is_fullscreen);
 
+  void RequestPointerLockPermission(bool user_gesture,
+                                    bool last_unlocked_by_target,
+                                    base::OnceCallback<void(bool)> callback);
+
   // GuestViewBase implementation.
   void CreateWebContents(const base::DictionaryValue& create_params,
                          WebContentsCreatedCallback callback) final;
@@ -215,17 +219,11 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
   void WillDestroy() final;
 
   // WebContentsDelegate implementation.
-  bool DidAddMessageToConsole(content::WebContents* source,
-                              blink::mojom::ConsoleMessageLevel log_level,
-                              const base::string16& message,
-                              int32_t line_no,
-                              const base::string16& source_id) final;
   void CloseContents(content::WebContents* source) final;
   bool HandleContextMenu(content::RenderFrameHost* render_frame_host,
                          const content::ContextMenuParams& params) final;
   bool HandleKeyboardEvent(content::WebContents* source,
                            const content::NativeWebKeyboardEvent& event) final;
-  void LoadProgressChanged(content::WebContents* source, double progress) final;
   bool PreHandleGestureEvent(content::WebContents* source,
                              const blink::WebGestureEvent& event) final;
   void RendererResponsive(content::WebContents* source,
@@ -238,10 +236,6 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
       content::WebContents* source,
       const content::MediaStreamRequest& request,
       content::MediaResponseCallback callback) final;
-  void RequestPointerLockPermission(
-      bool user_gesture,
-      bool last_unlocked_by_target,
-      const base::Callback<void(bool)>& callback) final;
   bool CheckMediaAccessPermission(content::RenderFrameHost* render_frame_host,
                                   const GURL& security_origin,
                                   blink::mojom::MediaStreamType type) final;
@@ -283,12 +277,17 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
   void ReadyToCommitNavigation(
       content::NavigationHandle* navigation_handle) final;
   void DidFinishNavigation(content::NavigationHandle* navigation_handle) final;
+  void LoadProgressChanged(double progress) final;
   void DocumentOnLoadCompletedInMainFrame() final;
   void RenderProcessGone(base::TerminationStatus status) final;
-  void UserAgentOverrideSet(const std::string& user_agent) final;
+  void UserAgentOverrideSet(const blink::UserAgentOverride& ua_override) final;
   void FrameNameChanged(content::RenderFrameHost* render_frame_host,
                         const std::string& name) final;
   void OnAudioStateChanged(bool audible) final;
+  void OnDidAddMessageToConsole(blink::mojom::ConsoleMessageLevel log_level,
+                                const base::string16& message,
+                                int32_t line_no,
+                                const base::string16& source_id) final;
 
   // Informs the embedder of a frame name change.
   void ReportFrameNameChange(const std::string& name);
@@ -368,12 +367,12 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
     // Whether OpenURL navigation from the newly created GuestView has changed
     // |url|. The pending OpenURL navigation needs to be applied after attaching
     // the GuestView.
-    bool url_changed_via_open_url;
+    bool url_changed_via_open_url = false;
 
     // Whether the newly created GuestView begun navigating away from the
     // initial URL.  Used to suppress the initial navigation when attaching the
     // GuestView and applying its attributes.
-    bool did_start_navigating_away_from_initial_url;
+    bool did_start_navigating_away_from_initial_url = false;
 
     // Vivaldi
     content::Referrer* referrer = nullptr;
@@ -381,14 +380,7 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
     // Vivaldi
     content::OpenURLParams* params = nullptr;
 
-    NewWindowInfo(const GURL& url, const std::string& name)
-      ; /* Complex constructor.
-      // Moved to vivaldi/extensions/api/guest_view/vivaldi_web_view_guest.cpp
-      : name(name),
-          url(url),
-          url_changed_via_open_url(false),
-          did_start_navigating_away_from_initial_url(false) {}
-    */
+    NewWindowInfo(const GURL& url, const std::string& name);
     NewWindowInfo(const NewWindowInfo&);
     ~NewWindowInfo();
   };

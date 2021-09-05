@@ -38,7 +38,6 @@
 #include "third_party/blink/renderer/core/css/parser/css_parser_token_range.h"
 #include "third_party/blink/renderer/core/css/style_change_reason.h"
 #include "third_party/blink/renderer/core/dom/document.h"
-#include "third_party/blink/renderer/core/enter_key_hint_names.h"
 #include "third_party/blink/renderer/core/event_interface_names.h"
 #include "third_party/blink/renderer/core/event_target_names.h"
 #include "third_party/blink/renderer/core/event_type_names.h"
@@ -46,8 +45,8 @@
 #include "third_party/blink/renderer/core/html/canvas/canvas_rendering_context_factory.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/html_tokenizer_names.h"
-#include "third_party/blink/renderer/core/input_mode_names.h"
 #include "third_party/blink/renderer/core/input_type_names.h"
+#include "third_party/blink/renderer/core/keywords.h"
 #include "third_party/blink/renderer/core/mathml_names.h"
 #include "third_party/blink/renderer/core/media_type_names.h"
 #include "third_party/blink/renderer/core/performance_entry_names.h"
@@ -60,8 +59,6 @@
 #include "third_party/blink/renderer/platform/font_family_names.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_initiator_type_names.h"
 #include "third_party/blink/renderer/platform/network/http_names.h"
-#include "third_party/blink/renderer/platform/weborigin/kurl.h"
-#include "third_party/blink/renderer/platform/weborigin/scheme_registry.h"
 #include "third_party/blink/renderer/platform/weborigin/security_policy.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/partitions.h"
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string_table.h"
@@ -99,12 +96,12 @@ void CoreInitializer::Initialize() {
 
   const unsigned kCoreStaticStringsCount =
       kQualifiedNamesCount + event_interface_names::kNamesCount +
-      enter_key_hint_names::kNamesCount + event_target_names::kNamesCount +
-      event_type_names::kNamesCount + fetch_initiator_type_names::kNamesCount +
-      font_family_names::kNamesCount + html_tokenizer_names::kNamesCount +
-      http_names::kNamesCount + input_mode_names::kNamesCount +
-      input_type_names::kNamesCount + media_feature_names::kNamesCount +
-      media_type_names::kNamesCount + performance_entry_names::kNamesCount;
+      event_target_names::kNamesCount + event_type_names::kNamesCount +
+      fetch_initiator_type_names::kNamesCount + font_family_names::kNamesCount +
+      html_tokenizer_names::kNamesCount + http_names::kNamesCount +
+      input_type_names::kNamesCount + keywords::kNamesCount +
+      media_feature_names::kNamesCount + media_type_names::kNamesCount +
+      performance_entry_names::kNamesCount;
 
   StringImpl::ReserveStaticStringsCapacityForSize(
       kCoreStaticStringsCount + StringImpl::AllStaticStrings().size());
@@ -120,15 +117,14 @@ void CoreInitializer::Initialize() {
   xmlns_names::Init();
 
   event_interface_names::Init();
-  enter_key_hint_names::Init();
   event_target_names::Init();
   event_type_names::Init();
   fetch_initiator_type_names::Init();
   font_family_names::Init();
   html_tokenizer_names::Init();
   http_names::Init();
-  input_mode_names::Init();
   input_type_names::Init();
+  keywords::Init();
   media_feature_names::Init();
   media_type_names::Init();
   performance_entry_names::Init();
@@ -138,8 +134,6 @@ void CoreInitializer::Initialize() {
 
   style_change_extra_data::Init();
 
-  KURL::Initialize();
-  SchemeRegistry::Initialize();
   SecurityPolicy::Init();
 
   RegisterEventFactory();

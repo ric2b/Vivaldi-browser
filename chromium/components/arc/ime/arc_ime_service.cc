@@ -299,6 +299,13 @@ void ArcImeService::OnTextInputTypeChanged(
     ui::TextInputType type,
     bool is_personalized_learning_allowed,
     int flags) {
+  // The focus is on a non-ARC window. This method can be called even When a
+  // text input on a non-ARC window is focused because there is a dummy input
+  // view in Android side which is synchronized with the text input on the
+  // non-ARC window.
+  if (focused_arc_window_ == nullptr)
+    return;
+
   if (ime_type_ == type &&
       is_personalized_learning_allowed_ == is_personalized_learning_allowed &&
       ime_flags_ == flags) {
@@ -311,10 +318,27 @@ void ArcImeService::OnTextInputTypeChanged(
   ui::InputMethod* const input_method = GetInputMethod();
   if (input_method)
     input_method->OnTextInputTypeChanged(this);
+
+  // Call HideKeyboard() here. On a text field on an ARC++ app, just having
+  // non-null text input type doesn't mean the virtual keyboard is necessary. If
+  // the virtual keyboard is really needed, ShowVirtualKeyboardIfEnabled will be
+  // called later.
+  if (keyboard::KeyboardUIController::HasInstance()) {
+    auto* keyboard_controller = keyboard::KeyboardUIController::Get();
+    if (keyboard_controller->IsEnabled())
+      keyboard_controller->HideKeyboardImplicitlyBySystem();
+  }
 }
 
 void ArcImeService::OnCursorRectChanged(const gfx::Rect& rect,
                                         bool is_screen_coordinates) {
+  // The focus is on a non-ARC window. This method can be called even when a
+  // text input on a non-ARC window is focused because there is a dummy input
+  // view in Android side which is synchronized with the text input on the
+  // non-ARC window.
+  if (focused_arc_window_ == nullptr)
+    return;
+
   InvalidateSurroundingTextAndSelectionRange();
   if (!UpdateCursorRect(rect, is_screen_coordinates))
     return;
@@ -325,6 +349,13 @@ void ArcImeService::OnCursorRectChanged(const gfx::Rect& rect,
 }
 
 void ArcImeService::OnCancelComposition() {
+  // The focus is on a non-ARC window. This method can be called even when a
+  // text input on a non-ARC window is focused because there is a dummy input
+  // view in Android side which is synchronized with the text input on the
+  // non-ARC window.
+  if (focused_arc_window_ == nullptr)
+    return;
+
   InvalidateSurroundingTextAndSelectionRange();
   ui::InputMethod* const input_method = GetInputMethod();
   if (input_method)
@@ -332,6 +363,13 @@ void ArcImeService::OnCancelComposition() {
 }
 
 void ArcImeService::ShowVirtualKeyboardIfEnabled() {
+  // The focus is on a non-ARC window. This method can be called even when a
+  // text input on a non-ARC window is focused because there is a dummy input
+  // view in Android side which is synchronized with the text input on the
+  // non-ARC window.
+  if (focused_arc_window_ == nullptr)
+    return;
+
   ui::InputMethod* const input_method = GetInputMethod();
   if (input_method && input_method->GetTextInputClient() == this) {
     input_method->ShowVirtualKeyboardIfEnabled();
@@ -344,6 +382,13 @@ void ArcImeService::OnCursorRectChangedWithSurroundingText(
     const base::string16& text_in_range,
     const gfx::Range& selection_range,
     bool is_screen_coordinates) {
+  // The focus is on a non-ARC window. This method can be called even when a
+  // text input on a non-ARC window is focused because there is a dummy input
+  // view in Android side which is synchronized with the text input on the
+  // non-ARC window.
+  if (focused_arc_window_ == nullptr)
+    return;
+
   text_range_ = text_range;
   text_in_range_ = text_in_range;
   selection_range_ = selection_range;
@@ -354,18 +399,6 @@ void ArcImeService::OnCursorRectChangedWithSurroundingText(
   ui::InputMethod* const input_method = GetInputMethod();
   if (input_method)
     input_method->OnCaretBoundsChanged(this);
-}
-
-void ArcImeService::RequestHideIme() {
-  // Ignore the request when the ARC app is not focused.
-  if (!focused_arc_window_)
-    return;
-
-  if (keyboard::KeyboardUIController::HasInstance()) {
-    auto* keyboard_controller = keyboard::KeyboardUIController::Get();
-    if (keyboard_controller->IsEnabled())
-      keyboard_controller->HideKeyboardImplicitlyBySystem();
-  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -396,9 +429,13 @@ void ArcImeService::SetCompositionText(
   ime_bridge_->SendSetCompositionText(composition);
 }
 
-void ArcImeService::ConfirmCompositionText() {
-  InvalidateSurroundingTextAndSelectionRange();
+void ArcImeService::ConfirmCompositionText(bool keep_selection) {
+  if (!keep_selection) {
+    InvalidateSurroundingTextAndSelectionRange();
+  }
   has_composition_text_ = false;
+  // Note: SendConfirmCompositonText() will commit the text and
+  // keep the selection unchanged
   ime_bridge_->SendConfirmCompositionText();
 }
 
@@ -550,7 +587,9 @@ bool ArcImeService::GetCompositionTextRange(gfx::Range* range) const {
 }
 
 bool ArcImeService::SetEditableSelectionRange(const gfx::Range& range) {
-  return false;
+  selection_range_ = range;
+  ime_bridge_->SendSelectionRange(selection_range_);
+  return true;
 }
 
 bool ArcImeService::DeleteRange(const gfx::Range& range) {

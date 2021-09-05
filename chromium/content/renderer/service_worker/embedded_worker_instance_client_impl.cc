@@ -34,7 +34,7 @@ void EmbeddedWorkerInstanceClientImpl::Create(
         receiver) {
   // This won't be leaked because the lifetime will be managed internally.
   // See the class documentation for detail.
-  // We can't use MakeStrongBinding because must give the worker thread
+  // We can't use MakeSelfOwnedReceiver because must give the worker thread
   // a chance to stop by calling TerminateWorkerContext() and waiting
   // before destructing.
   new EmbeddedWorkerInstanceClientImpl(std::move(receiver),
@@ -43,11 +43,10 @@ void EmbeddedWorkerInstanceClientImpl::Create(
 
 void EmbeddedWorkerInstanceClientImpl::CreateForRequest(
     scoped_refptr<base::SingleThreadTaskRunner> initiator_thread_task_runner,
-    blink::mojom::EmbeddedWorkerInstanceClientRequest request) {
-  // Implicit conversion from EmbeddedWorkerInstanceClientRequest to
-  // mojo::PendingReceiver<blink::mojom::EmbeddedWorkerInstanceClient>.
+    mojo::PendingReceiver<blink::mojom::EmbeddedWorkerInstanceClient>
+        receiver) {
   EmbeddedWorkerInstanceClientImpl::Create(
-      std::move(initiator_thread_task_runner), std::move(request));
+      std::move(initiator_thread_task_runner), std::move(receiver));
 }
 
 void EmbeddedWorkerInstanceClientImpl::WorkerContextDestroyed() {
@@ -73,9 +72,6 @@ void EmbeddedWorkerInstanceClientImpl::StartWorker(
              blink::features::kEagerCacheStorageSetupForServiceWorkers));
   mojo::PendingRemote<blink::mojom::CacheStorage> cache_storage =
       std::move(params->provider_info->cache_storage);
-  service_manager::mojom::InterfaceProviderPtrInfo interface_provider =
-      std::move(params->provider_info->interface_provider);
-
   mojo::PendingRemote<blink::mojom::BrowserInterfaceBroker>
       browser_interface_broker =
           std::move(params->provider_info->browser_interface_broker);
@@ -87,7 +83,7 @@ void EmbeddedWorkerInstanceClientImpl::StartWorker(
       std::move(params->service_worker_receiver),
       std::move(params->controller_receiver), std::move(params->instance_host),
       std::move(params->provider_info), this, std::move(start_timing),
-      std::move(params->preference_watcher_request),
+      std::move(params->preference_watcher_receiver),
       std::move(params->subresource_loader_factories),
       std::move(params->subresource_loader_updater),
       params->script_url_to_skip_throttling, initiator_thread_task_runner_,
@@ -118,8 +114,8 @@ void EmbeddedWorkerInstanceClientImpl::StartWorker(
   service_worker_context_client_->StartWorkerContextOnInitiatorThread(
       std::move(worker), std::move(start_data),
       std::move(installed_scripts_manager_params),
-      params->content_settings_proxy.PassHandle(), cache_storage.PassPipe(),
-      interface_provider.PassHandle(), browser_interface_broker.PassPipe());
+      params->content_settings_proxy.PassPipe(), cache_storage.PassPipe(),
+      browser_interface_broker.PassPipe());
 }
 
 void EmbeddedWorkerInstanceClientImpl::StopWorker() {
@@ -128,11 +124,6 @@ void EmbeddedWorkerInstanceClientImpl::StopWorker() {
   // StopWorker must be called after StartWorker is called.
   service_worker_context_client_->worker().TerminateWorkerContext();
   // We continue in WorkerContextDestroyed() after the worker thread is stopped.
-}
-
-void EmbeddedWorkerInstanceClientImpl::ResumeAfterDownload() {
-  DCHECK(initiator_thread_task_runner_->BelongsToCurrentThread());
-  service_worker_context_client_->worker().ResumeAfterDownload();
 }
 
 EmbeddedWorkerInstanceClientImpl::EmbeddedWorkerInstanceClientImpl(
@@ -173,6 +164,7 @@ EmbeddedWorkerInstanceClientImpl::BuildStartData(
 
   start_data->script_url = params.script_url;
   start_data->user_agent = blink::WebString::FromUTF8(params.user_agent);
+  start_data->ua_metadata = params.ua_metadata;
   start_data->script_type = params.script_type;
   start_data->wait_for_debugger_mode =
       params.wait_for_debugger

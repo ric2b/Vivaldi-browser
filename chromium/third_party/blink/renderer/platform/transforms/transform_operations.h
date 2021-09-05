@@ -73,7 +73,7 @@ class PLATFORM_EXPORT TransformOperations {
   }
 
   // Return true if any of the operation types are non-perspective 3D operation
-  // types (even if the values describe affine transforms)
+  // types (even if the values describe affine transforms).
   bool HasNonPerspective3DOperation() const {
     for (auto& operation : operations_) {
       if (operation->Is3DOperation() &&
@@ -91,8 +91,7 @@ class PLATFORM_EXPORT TransformOperations {
     return true;
   }
 
-  // Returns true if any operation has a non-trivial component in the Z
-  // axis.
+  // Returns true if any operation has a non-trivial component in the Z axis.
   bool HasNonTrivial3DComponent() const {
     for (auto& operation : operations_) {
       if (operation->HasNonTrivial3DComponent())
@@ -140,11 +139,6 @@ class PLATFORM_EXPORT TransformOperations {
                            const double& max_progress,
                            FloatBox* bounds) const;
 
-  TransformOperations BlendPrefixByMatchingOperations(
-      const TransformOperations& from,
-      wtf_size_t matching_prefix_length,
-      double progress,
-      bool* success) const;
   scoped_refptr<TransformOperation> BlendRemainingByUsingMatrixInterpolation(
       const TransformOperations& from,
       wtf_size_t matching_prefix_length,
@@ -154,6 +148,10 @@ class PLATFORM_EXPORT TransformOperations {
                             double progress) const;
   TransformOperations Add(const TransformOperations& addend) const;
   TransformOperations Zoom(double factor) const;
+
+  // Perform accumulation of |to| onto |this|, as specified in
+  // https://drafts.csswg.org/css-transforms-2/#combining-transform-lists
+  TransformOperations Accumulate(const TransformOperations& to) const;
 
  private:
   Vector<scoped_refptr<TransformOperation>> operations_;

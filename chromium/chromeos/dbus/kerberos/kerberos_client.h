@@ -58,6 +58,15 @@ class COMPONENT_EXPORT(KERBEROS) KerberosClient {
     // comma separated list, e.g. "AddAccount,ListAccounts".
     virtual std::string StopRecordingAndGetRecordedFunctionCalls() = 0;
 
+    // Returns the number of accounts currently saved.
+    virtual std::size_t GetNumberOfAccounts() const = 0;
+
+    // Sets the simulated number of network failures for |AcquireKerberosTgt()|.
+    // The default value is zero. This value should be set when testing the
+    // exponential backoff retry for adding managed accounts.
+    virtual void SetSimulatedNumberOfNetworkFailures(
+        int number_of_failures) = 0;
+
    protected:
     virtual ~TestInterface() {}
   };

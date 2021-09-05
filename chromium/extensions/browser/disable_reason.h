@@ -44,8 +44,9 @@ enum DisableReason {
   DISABLE_CUSTODIAN_APPROVAL_REQUIRED = 1 << 15,
   // Blocked due to management policy.
   DISABLE_BLOCKED_BY_POLICY = 1 << 16,
+  // DISABLE_BLOCKED_MATURE = 1 << 17, // Deprecated.
   // This should always be the last value.
-  DISABLE_REASON_LAST = 1LL << 17,
+  DISABLE_REASON_LAST = 1LL << 18,
 };
 
 static_assert(DISABLE_REASON_LAST - 1 <= std::numeric_limits<int>::max(),

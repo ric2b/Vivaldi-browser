@@ -4,6 +4,11 @@
 
 package org.chromium.chrome.browser.tasks.tab_management;
 
+import static org.chromium.chrome.browser.tasks.tab_management.MessageCardViewProperties.MESSAGE_TYPE;
+import static org.chromium.chrome.browser.tasks.tab_management.TabListModel.CardProperties.CARD_ALPHA;
+import static org.chromium.chrome.browser.tasks.tab_management.TabListModel.CardProperties.CARD_TYPE;
+import static org.chromium.chrome.browser.tasks.tab_management.TabListModel.CardProperties.ModelType.TAB;
+
 import android.app.Activity;
 import android.content.ComponentCallbacks;
 import android.content.Context;
@@ -11,47 +16,63 @@ import android.content.res.ColorStateList;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.drawable.Drawable;
+import android.os.Build;
+import android.os.Bundle;
 import android.os.Handler;
-import android.support.v7.content.res.AppCompatResources;
-import android.support.v7.widget.GridLayoutManager;
-import android.support.v7.widget.helper.ItemTouchHelper;
+import android.text.TextUtils;
 import android.util.Pair;
 import android.view.View;
+import android.view.accessibility.AccessibilityNodeInfo;
+import android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction;
 
 import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
+import androidx.appcompat.content.res.AppCompatResources;
+import androidx.recyclerview.widget.GridLayoutManager;
+import androidx.recyclerview.widget.ItemTouchHelper;
 
 import org.chromium.base.Callback;
 import org.chromium.base.Log;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
+import org.chromium.base.task.PostTask;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.native_page.NativePageFactory;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabCreationState;
+import org.chromium.chrome.browser.tab.TabImpl;
+import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabObserver;
+import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelFilter;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelObserver;
-import org.chromium.chrome.browser.tabmodel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabList;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelFilter;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
-import org.chromium.chrome.browser.tabmodel.TabSelectionType;
+import org.chromium.chrome.browser.tasks.pseudotab.TabAttributeCache;
 import org.chromium.chrome.browser.tasks.tab_groups.EmptyTabGroupModelFilterObserver;
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupUtils;
 import org.chromium.chrome.browser.tasks.tab_management.TabProperties.UiType;
-import org.chromium.chrome.browser.util.FeatureUtilities;
-import org.chromium.chrome.browser.widget.selection.SelectionDelegate;
 import org.chromium.chrome.tab_ui.R;
+import org.chromium.components.browser_ui.widget.selectable_list.SelectionDelegate;
+import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.components.feature_engagement.FeatureConstants;
+import org.chromium.components.search_engines.TemplateUrlService;
+import org.chromium.content_public.browser.LoadUrlParams;
+import org.chromium.content_public.browser.NavigationController;
 import org.chromium.content_public.browser.NavigationHandle;
+import org.chromium.content_public.browser.NavigationHistory;
+import org.chromium.content_public.browser.UiThreadTaskTraits;
+import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.SimpleRecyclerViewAdapter;
 
@@ -89,7 +110,7 @@ class TabListMediator {
          * @see TabContentManager#getTabThumbnailWithCallback
          */
         void getTabThumbnailWithCallback(
-                Tab tab, Callback<Bitmap> callback, boolean forceUpdate, boolean writeToCache);
+                int tabId, Callback<Bitmap> callback, boolean forceUpdate, boolean writeToCache);
     }
 
     /**
@@ -118,6 +139,38 @@ class TabListMediator {
     }
 
     /**
+     * An interface to expose functionality needed to support reordering in grid layouts in
+     * accessibility mode.
+     */
+    public interface TabGridAccessibilityHelper {
+        /**
+         * This method gets the possible actions for reordering a tab in grid layout.
+         *
+         * @param view The host view that triggers the accessibility action.
+         * @return The list of possible {@link AccessibilityAction}s for host view.
+         */
+        List<AccessibilityAction> getPotentialActionsForView(View view);
+
+        /**
+         * This method gives the previous and target position of current reordering based on the
+         * host view and current action.
+         *
+         * @param view   The host view that triggers the accessibility action.
+         * @param action The id of the action.
+         * @return {@link Pair} that contains previous and target position of this action.
+         */
+        Pair<Integer, Integer> getPositionsOfReorderAction(View view, int action);
+
+        /**
+         * This method returns whether the given action is a type of the reordering actions.
+         *
+         * @param action The accessibility action.
+         * @return Whether the given action is a reordering action.
+         */
+        boolean isReorderAction(int action);
+    }
+
+    /**
      * The object to set to {@link TabProperties#THUMBNAIL_FETCHER} for the TabGridViewBinder to
      * obtain the thumbnail asynchronously.
      */
@@ -143,8 +196,9 @@ class TabListMediator {
                 callback.onResult(bitmap);
             };
             sFetchCountForTesting++;
+            int tabId = mTab != null ? mTab.getId() : Tab.INVALID_TAB_ID;
             mThumbnailProvider.getTabThumbnailWithCallback(
-                    mTab, forking, mForceUpdate, mWriteToCache);
+                    tabId, forking, mForceUpdate, mWriteToCache);
         }
     }
 
@@ -171,18 +225,6 @@ class TabListMediator {
     };
 
     /**
-     * An interface to get the onClickListener for "Create group" button.
-     */
-    public interface CreateGroupButtonProvider {
-        /**
-         * @return {@link TabActionListener} to create tab group. If the given {@link Tab} is not
-         * able to create group, return null;
-         */
-        @Nullable
-        TabActionListener getCreateGroupButtonOnClickListener(Tab tab);
-    }
-
-    /**
      * An interface to get a SelectionDelegate that contains the selected items for a selectable
      * tab list.
      */
@@ -206,12 +248,12 @@ class TabListMediator {
         void onTabSelecting(int tabId);
     }
 
-    @IntDef({TabClosedFrom.TAB_STRIP, TabClosedFrom.TAB_GRID_SHEET, TabClosedFrom.GRID_TAB_SWITCHER,
+    @IntDef({TabClosedFrom.TAB_STRIP, TabClosedFrom.GRID_TAB_SWITCHER,
             TabClosedFrom.GRID_TAB_SWITCHER_GROUP})
     @Retention(RetentionPolicy.SOURCE)
     private @interface TabClosedFrom {
         int TAB_STRIP = 0;
-        int TAB_GRID_SHEET = 1;
+        // int TAB_GRID_SHEET = 1;  // Obsolete
         int GRID_TAB_SWITCHER = 2;
         int GRID_TAB_SWITCHER_GROUP = 3;
         int NUM_ENTRIES = 4;
@@ -221,23 +263,23 @@ class TabListMediator {
     private static Map<Integer, Integer> sTabClosedFromMapTabClosedFromMap = new HashMap<>();
 
     private final Context mContext;
-    private final TabListFaviconProvider mTabListFaviconProvider;
     private final TabListModel mModel;
     private final TabModelSelector mTabModelSelector;
     private final ThumbnailProvider mThumbnailProvider;
     private final TabActionListener mTabClosedListener;
     private final TitleProvider mTitleProvider;
-    private final CreateGroupButtonProvider mCreateGroupButtonProvider;
     private final SelectionDelegateProvider mSelectionDelegateProvider;
     private final GridCardOnClickListenerProvider mGridCardOnClickListenerProvider;
     private final TabGridDialogHandler mTabGridDialogHandler;
     private final String mComponentName;
+
+    private TabListFaviconProvider mTabListFaviconProvider;
     private boolean mActionsOnAllRelatedTabs;
     private ComponentCallbacks mComponentCallbacks;
     private TabGridItemTouchHelperCallback mTabGridItemTouchHelperCallback;
     private int mNextTabId = Tab.INVALID_TAB_ID;
-    private boolean mTabRestoreCompleted;
     private @UiType int mUiType;
+    private int mSearchChipIconDrawableId;
 
     private TabSwitcherView.TAB_VIEW mCurrentTabViewInstance;
 
@@ -322,7 +364,7 @@ class TabListMediator {
     private final TabObserver mTabObserver = new EmptyTabObserver() {
         @Override
         public void onDidStartNavigation(Tab tab, NavigationHandle navigationHandle) {
-            if (NativePageFactory.isNativePageUrl(tab.getUrl(), tab.isIncognito())) return;
+            if (NativePageFactory.isNativePageUrl(tab.getUrlString(), tab.isIncognito())) return;
             if (navigationHandle.isSameDocument() || !navigationHandle.isInMainFrame()) return;
             if (mModel.indexFromId(tab.getId()) == TabModel.INVALID_TAB_INDEX) return;
             mModel.get(mModel.indexFromId(tab.getId()))
@@ -341,13 +383,33 @@ class TabListMediator {
         public void onFaviconUpdated(Tab updatedTab, Bitmap icon) {
             updateFaviconForTab(updatedTab, icon);
         }
+
+        @Override
+        public void onUrlUpdated(Tab tab) {
+            if (!TabUiFeatureUtilities.isTabGroupsAndroidContinuationEnabled()) return;
+            int index = mModel.indexFromId(tab.getId());
+
+            if (index == TabModel.INVALID_TAB_INDEX && mActionsOnAllRelatedTabs) {
+                Tab currentGroupSelectedTab =
+                        TabGroupUtils.getSelectedTabInGroupForTab(mTabModelSelector, tab);
+                if (currentGroupSelectedTab == null) return;
+                index = mModel.indexFromId(currentGroupSelectedTab.getId());
+            }
+
+            if (index == TabModel.INVALID_TAB_INDEX) return;
+            mModel.get(index).model.set(TabProperties.URL, getUrlForTab(tab));
+        }
     };
 
     private final TabModelObserver mTabModelObserver;
 
+    private @Nullable TemplateUrlService.TemplateUrlServiceObserver mTemplateUrlObserver;
+
     private TabGroupTitleEditor mTabGroupTitleEditor;
 
     private TabGroupModelFilter.Observer mTabGroupObserver;
+
+    private View.AccessibilityDelegate mAccessibilityDelegate;
 
     /**
      * Interface for implementing a {@link Runnable} that takes a tabId for a generic action.
@@ -366,9 +428,6 @@ class TabListMediator {
      * @param tabListFaviconProvider Provider for all favicon related drawables.
      * @param actionOnRelatedTabs Whether tab-related actions should be operated on all related
      *                            tabs.
-     * @param createGroupButtonProvider {@link CreateGroupButtonProvider} to provide "Create group"
-     *                                   button information. It's null when "Create group" is not
-     *                                   possible.
      * @param selectionDelegateProvider Provider for a {@link SelectionDelegate} that is used for
      *                                  a selectable list. It's null when selection is not possible.
      * @param gridCardOnClickListenerProvider Provides the onClickListener for opening dialog when
@@ -380,7 +439,6 @@ class TabListMediator {
     public TabListMediator(Context context, TabListModel model, TabModelSelector tabModelSelector,
             @Nullable ThumbnailProvider thumbnailProvider, @Nullable TitleProvider titleProvider,
             TabListFaviconProvider tabListFaviconProvider, boolean actionOnRelatedTabs,
-            @Nullable CreateGroupButtonProvider createGroupButtonProvider,
             @Nullable SelectionDelegateProvider selectionDelegateProvider,
             @Nullable GridCardOnClickListenerProvider gridCardOnClickListenerProvider,
             @Nullable TabGridDialogHandler dialogHandler, String componentName,
@@ -392,7 +450,6 @@ class TabListMediator {
         mTabListFaviconProvider = tabListFaviconProvider;
         mComponentName = componentName;
         mTitleProvider = titleProvider != null ? titleProvider : Tab::getTitle;
-        mCreateGroupButtonProvider = createGroupButtonProvider;
         mSelectionDelegateProvider = selectionDelegateProvider;
         mGridCardOnClickListenerProvider = gridCardOnClickListenerProvider;
         mTabGridDialogHandler = dialogHandler;
@@ -428,9 +485,6 @@ class TabListMediator {
                         case TabClosedFrom.TAB_STRIP:
                             RecordUserAction.record("TabStrip.UndoCloseTab");
                             break;
-                        case TabClosedFrom.TAB_GRID_SHEET:
-                            RecordUserAction.record("TabGridSheet.UndoCloseTab");
-                            break;
                         case TabClosedFrom.GRID_TAB_SWITCHER:
                             RecordUserAction.record("GridTabSwitch.UndoCloseTab");
                             break;
@@ -443,19 +497,16 @@ class TabListMediator {
                     }
                     sTabClosedFromMapTabClosedFromMap.remove(tab.getId());
                 }
-            }
-
-            @Override
-            public void didAddTab(Tab tab, @TabLaunchType int type) {
-                if (!mTabRestoreCompleted) return;
-                onTabAdded(tab, !mActionsOnAllRelatedTabs);
-                if (type == TabLaunchType.FROM_RESTORE && mActionsOnAllRelatedTabs) {
-                    // When tab is restored after restoring stage (e.g. exiting multi-window mode),
-                    // we need to update related property models.
+                // TODO(yuezhanggg): clean up updateTab() calls in this class.
+                if (mActionsOnAllRelatedTabs) {
                     TabModelFilter filter = mTabModelSelector.getTabModelFilterProvider()
                                                     .getCurrentTabModelFilter();
                     int index = filter.indexOf(tab);
-                    if (index == TabList.INVALID_TAB_INDEX) return;
+                    if (index == TabList.INVALID_TAB_INDEX
+                            || getRelatedTabsForId(tab.getId()).size() == 1
+                            || index >= mModel.size()) {
+                        return;
+                    }
                     Tab currentGroupSelectedTab = filter.getTabAt(index);
 
                     assert mModel.indexFromId(currentGroupSelectedTab.getId()) == index;
@@ -466,8 +517,37 @@ class TabListMediator {
             }
 
             @Override
+            public void didAddTab(
+                    Tab tab, @TabLaunchType int type, @TabCreationState int creationState) {
+                boolean isTabModelRestoreCompleted = mTabModelSelector.getTabModelFilterProvider()
+                                                             .getCurrentTabModelFilter()
+                                                             .isTabModelRestored();
+                if (!isTabModelRestoreCompleted) return;
+                onTabAdded(tab, !mActionsOnAllRelatedTabs);
+                if (type == TabLaunchType.FROM_RESTORE && mActionsOnAllRelatedTabs) {
+                    // When tab is restored after restoring stage (e.g. exiting multi-window mode,
+                    // switching between dark/light mode in incognito), we need to update related
+                    // property models.
+                    TabModelFilter filter = mTabModelSelector.getTabModelFilterProvider()
+                                                    .getCurrentTabModelFilter();
+                    int index = filter.indexOf(tab);
+                    if (index == TabList.INVALID_TAB_INDEX) return;
+                    Tab currentGroupSelectedTab = filter.getTabAt(index);
+                    // TabModel and TabListModel may be in the process of syncing up through
+                    // restoring. Examples of this situation are switching between light/dark mode
+                    // in incognito, exiting multi-window mode, etc.
+                    if (mModel.indexFromId(currentGroupSelectedTab.getId()) != index) {
+                        return;
+                    }
+                    updateTab(index, currentGroupSelectedTab,
+                            mModel.get(index).model.get(TabProperties.IS_SELECTED), false, false);
+                }
+            }
+
+            @Override
             public void willCloseTab(Tab tab, boolean animate) {
                 if (mModel.indexFromId(tab.getId()) == TabModel.INVALID_TAB_INDEX) return;
+                tab.removeObserver(mTabObserver);
                 mModel.removeAt(mModel.indexFromId(tab.getId()));
             }
 
@@ -484,11 +564,6 @@ class TabListMediator {
             public void tabRemoved(Tab tab) {
                 if (mModel.indexFromId(tab.getId()) == TabModel.INVALID_TAB_INDEX) return;
                 mModel.removeAt(mModel.indexFromId(tab.getId()));
-            }
-
-            @Override
-            public void restoreCompleted() {
-                mTabRestoreCompleted = true;
             }
         };
 
@@ -670,16 +745,26 @@ class TabListMediator {
 
                 int nextTabId = Tab.INVALID_TAB_ID;
                 if (mModel.size() > 1) {
-                    nextTabId = closingTabIndex == 0
-                            ? mModel.get(closingTabIndex + 1).model.get(TabProperties.TAB_ID)
-                            : mModel.get(closingTabIndex - 1).model.get(TabProperties.TAB_ID);
+                    PropertyModel nextCardModel = closingTabIndex == 0
+                            ? mModel.get(closingTabIndex + 1).model
+                            : mModel.get(closingTabIndex - 1).model;
+                    nextTabId = nextCardModel.get(CARD_TYPE) == TAB
+                            ? nextCardModel.get(TabProperties.TAB_ID)
+                            : Tab.INVALID_TAB_ID;
                 }
 
                 return TabModelUtils.getTabById(mTabModelSelector.getCurrentModel(), nextTabId);
             }
         };
 
-        if (FeatureUtilities.isTabGroupsAndroidUiImprovementsEnabled()) {
+        mTabGridItemTouchHelperCallback =
+                new TabGridItemTouchHelperCallback(mModel, mTabModelSelector, mTabClosedListener,
+                        mTabGridDialogHandler, mComponentName, mActionsOnAllRelatedTabs);
+    }
+
+    public void initWithNative(Profile profile) {
+        mTabListFaviconProvider.initWithNative(profile);
+        if (TabUiFeatureUtilities.isTabGroupsAndroidContinuationEnabled()) {
             mTabGroupTitleEditor = new TabGroupTitleEditor(mTabModelSelector) {
                 @Override
                 protected void updateTabGroupTitle(Tab tab, String title) {
@@ -708,9 +793,18 @@ class TabListMediator {
                 }
             };
         }
-        mTabGridItemTouchHelperCallback =
-                new TabGridItemTouchHelperCallback(mModel, mTabModelSelector, mTabClosedListener,
-                        mTabGridDialogHandler, mComponentName, mActionsOnAllRelatedTabs);
+
+        if (TabUiFeatureUtilities.ENABLE_SEARCH_CHIP.getValue()) {
+            mSearchChipIconDrawableId = getSearchChipIconDrawableId();
+            mTemplateUrlObserver = () -> {
+                mSearchChipIconDrawableId = getSearchChipIconDrawableId();
+                for (int i = 0; i < mModel.size(); i++) {
+                    mModel.get(i).model.set(
+                            TabProperties.SEARCH_CHIP_ICON_DRAWABLE_ID, mSearchChipIconDrawableId);
+                }
+            };
+            TemplateUrlServiceFactory.get().addObserver(mTemplateUrlObserver);
+        }
     }
 
     private void onTabClosedFrom(int tabId, String fromComponent) {
@@ -718,8 +812,6 @@ class TabListMediator {
         int from;
         if (fromComponent.equals(TabGroupUiCoordinator.COMPONENT_NAME)) {
             from = TabClosedFrom.TAB_STRIP;
-        } else if (fromComponent.equals(TabGridSheetCoordinator.COMPONENT_NAME)) {
-            from = TabClosedFrom.TAB_GRID_SHEET;
         } else if (fromComponent.equals(TabSwitcherCoordinator.COMPONENT_NAME)) {
             from = TabClosedFrom.GRID_TAB_SWITCHER;
         } else {
@@ -733,6 +825,7 @@ class TabListMediator {
         sTabClosedFromMapTabClosedFromMap.put(tabId, TabClosedFrom.GRID_TAB_SWITCHER_GROUP);
     }
 
+    @VisibleForTesting
     void setActionOnAllRelatedTabsForTesting(boolean actionOnAllRelatedTabs) {
         mActionsOnAllRelatedTabs = actionOnAllRelatedTabs;
     }
@@ -794,7 +887,7 @@ class TabListMediator {
      * The selected border should re-appear in the final fading-in stage.
      */
     void prepareOverview() {
-        if (!FeatureUtilities.isTabToGtsAnimationEnabled()
+        if (!TabUiFeatureUtilities.isTabToGtsAnimationEnabled()
                 || !mTabModelSelector.getTabModelFilterProvider()
                             .getCurrentTabModelFilter()
                             .isTabModelRestored()) {
@@ -802,23 +895,37 @@ class TabListMediator {
         }
 
         assert mVisible;
-        int count = 0;
+        int selectedTabCount = 0;
+        int tabsCount = 0;
         for (int i = 0; i < mModel.size(); i++) {
-            if (mModel.get(i).model.get(TabProperties.IS_SELECTED)) count++;
+            if (mModel.get(i).model.get(CARD_TYPE) != TAB) continue;
+
+            if (mModel.get(i).model.get(TabProperties.IS_SELECTED)) selectedTabCount++;
             mModel.get(i).model.set(TabProperties.IS_SELECTED, false);
+            tabsCount += 1;
         }
-        assert (count == 1 || mModel.size() == 0)
+        assert (selectedTabCount == 1 || tabsCount == 0)
             : "There should be exactly one selected tab or no tabs at all when calling "
               + "TabListMediator.prepareOverview()";
     }
 
     private boolean areTabsUnchanged(@Nullable List<Tab> tabs) {
-        if (tabs == null) {
-            return mModel.size() == 0;
+        int tabsCount = 0;
+        for (int i = 0; i < mModel.size(); i++) {
+            if (mModel.get(i).model.get(CARD_TYPE) == TAB) {
+                tabsCount += 1;
+            }
         }
-        if (tabs.size() != mModel.size()) return false;
+        if (tabs == null) {
+            return tabsCount == 0;
+        }
+        if (tabs.size() != tabsCount) return false;
+
         for (int i = 0; i < tabs.size(); i++) {
-            if (tabs.get(i).getId() != mModel.get(i).model.get(TabProperties.TAB_ID)) return false;
+            if (mModel.get(i).model.get(CARD_TYPE) == TAB
+                    && mModel.get(i).model.get(TabProperties.TAB_ID) != tabs.get(i).getId()) {
+                return false;
+            }
         }
         return true;
     }
@@ -853,12 +960,12 @@ class TabListMediator {
         if (tabsList == null) {
             return true;
         }
-        Tab currentTab = mTabModelSelector.getCurrentTab();
-        if (currentTab == null) return false;
+
+        int currentTabId = mTabModelSelector.getCurrentTabId();
 
         for (int i = 0; i < tabsList.size(); i++) {
             addTabInfoToModel(
-                    tabsList.get(i), i, isSelectedTab(tabsList.get(i).getId(), currentTab.getId()));
+                    tabsList.get(i), i, isSelectedTab(tabsList.get(i).getId(), currentTabId));
         }
         return false;
     }
@@ -882,7 +989,9 @@ class TabListMediator {
     void softCleanup() {
         assert !mVisible;
         for (int i = 0; i < mModel.size(); i++) {
-            mModel.get(i).model.set(TabProperties.THUMBNAIL_FETCHER, null);
+            if (mModel.get(i).model.get(CARD_TYPE) == TAB) {
+                mModel.get(i).model.set(TabProperties.THUMBNAIL_FETCHER, null);
+            }
         }
     }
 
@@ -907,10 +1016,17 @@ class TabListMediator {
             }
         }
         mModel.get(index).model.set(TabProperties.TAB_SELECTED_LISTENER, tabSelectedListener);
-        mModel.get(index).model.set(
-                TabProperties.CREATE_GROUP_LISTENER, getCreateGroupButtonListener(tab, isSelected));
         mModel.get(index).model.set(TabProperties.IS_SELECTED, isSelected);
         mModel.get(index).model.set(TabProperties.TITLE, getLatestTitleForTab(tab));
+        mModel.get(index).model.set(TabProperties.URL, getUrlForTab(tab));
+
+        if (TabUiFeatureUtilities.ENABLE_SEARCH_CHIP.getValue() && mUiType == UiType.CLOSABLE) {
+            mModel.get(index).model.set(TabProperties.SEARCH_QUERY, getLastSearchTerm(tab));
+            mModel.get(index).model.set(TabProperties.SEARCH_LISTENER,
+                    SearchTermChipUtils.getSearchQueryListener(tab, mTabSelectedListener));
+            mModel.get(index).model.set(
+                    TabProperties.SEARCH_CHIP_ICON_DRAWABLE_ID, mSearchChipIconDrawableId);
+        }
 
         updateFaviconForTab(tab, null);
         boolean forceUpdate = isSelected && !quickMode;
@@ -918,7 +1034,7 @@ class TabListMediator {
                 && (mModel.get(index).model.get(TabProperties.THUMBNAIL_FETCHER) == null
                         || forceUpdate || isUpdatingId)) {
             ThumbnailFetcher callback = new ThumbnailFetcher(mThumbnailProvider, tab, forceUpdate,
-                    forceUpdate && !FeatureUtilities.isTabToGtsAnimationEnabled());
+                    forceUpdate && !TabUiFeatureUtilities.isTabToGtsAnimationEnabled());
             mModel.get(index).model.set(TabProperties.THUMBNAIL_FETCHER, callback);
         }
     }
@@ -949,7 +1065,7 @@ class TabListMediator {
     }
 
     /**
-     * Update the grid layout span count base on orientation.
+     * Update the grid layout span count and span size lookup base on orientation.
      * @param manager     The {@link GridLayoutManager} used to update the span count.
      * @param orientation The orientation base on which we update the span count.
      */
@@ -959,9 +1075,58 @@ class TabListMediator {
             manager.setSpanCount(TabListCoordinator.GRID_LAYOUT_SPAN_COUNT_PORTRAIT);
             return;
         }
-        manager.setSpanCount(orientation == Configuration.ORIENTATION_PORTRAIT
-                        ? TabListCoordinator.GRID_LAYOUT_SPAN_COUNT_PORTRAIT
-                        : TabListCoordinator.GRID_LAYOUT_SPAN_COUNT_LANDSCAPE);
+        int spanCount = orientation == Configuration.ORIENTATION_PORTRAIT
+                ? TabListCoordinator.GRID_LAYOUT_SPAN_COUNT_PORTRAIT
+                : TabListCoordinator.GRID_LAYOUT_SPAN_COUNT_LANDSCAPE;
+        manager.setSpanCount(spanCount);
+        manager.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {
+            @Override
+            public int getSpanSize(int position) {
+                int itemType = mModel.get(position).type;
+
+                if (itemType == TabProperties.UiType.MESSAGE) return manager.getSpanCount();
+                return 1;
+            }
+        });
+    }
+
+    /**
+     * Setup the {@link View.AccessibilityDelegate} for grid layout.
+     * @param helper The {@link TabGridAccessibilityHelper} used to setup accessibility support.
+     */
+    void setupAccessibilityDelegate(TabGridAccessibilityHelper helper) {
+        if (!TabUiFeatureUtilities.isTabGroupsAndroidContinuationEnabled()) {
+            return;
+        }
+        mAccessibilityDelegate = new View.AccessibilityDelegate() {
+            @Override
+            public void onInitializeAccessibilityNodeInfo(View host, AccessibilityNodeInfo info) {
+                super.onInitializeAccessibilityNodeInfo(host, info);
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
+                    return;
+                }
+                for (AccessibilityAction action : helper.getPotentialActionsForView(host)) {
+                    info.addAction(action);
+                }
+            }
+
+            @Override
+            public boolean performAccessibilityAction(View host, int action, Bundle args) {
+                if (!helper.isReorderAction(action)) {
+                    return super.performAccessibilityAction(host, action, args);
+                }
+
+                Pair<Integer, Integer> positions = helper.getPositionsOfReorderAction(host, action);
+                int currentPosition = positions.first;
+                int targetPosition = positions.second;
+                if (!isValidMovePosition(currentPosition) || !isValidMovePosition(targetPosition)) {
+                    return false;
+                }
+                mModel.move(currentPosition, targetPosition);
+                RecordUserAction.record("TabGrid.AccessibilityDelegate.Reordered");
+                return true;
+            }
+        };
     }
 
     /**
@@ -1001,6 +1166,9 @@ class TabListMediator {
         if (mTabGroupTitleEditor != null) {
             mTabGroupTitleEditor.destroy();
         }
+        if (mTemplateUrlObserver != null) {
+            TemplateUrlServiceFactory.get().removeObserver(mTemplateUrlObserver);
+        }
     }
 
     private void addTabInfoToModel(final Tab tab, int index, boolean isSelected) {
@@ -1032,27 +1200,31 @@ class TabListMediator {
                 new PropertyModel.Builder(TabProperties.ALL_KEYS_TAB_GRID)
                         .with(TabProperties.TAB_ID, tab.getId())
                         .with(TabProperties.TITLE, getLatestTitleForTab(tab))
+                        .with(TabProperties.URL, getUrlForTab(tab))
                         .with(TabProperties.FAVICON,
                                 mTabListFaviconProvider.getDefaultFaviconDrawable(
                                         tab.isIncognito()))
                         .with(TabProperties.IS_SELECTED, isSelected)
                         .with(TabProperties.IPH_PROVIDER, showIPH ? mIphProvider : null)
-                        .with(TabProperties.TAB_SELECTED_LISTENER, tabSelectedListener)
-                        .with(TabProperties.TAB_CLOSED_LISTENER, mTabClosedListener)
-                        .with(TabProperties.CREATE_GROUP_LISTENER,
-                                getCreateGroupButtonListener(tab, isSelected))
-                        .with(TabProperties.ALPHA, 1f)
+                        .with(CARD_ALPHA, 1f)
                         .with(TabProperties.CARD_ANIMATION_STATUS,
                                 ClosableTabGridView.AnimationStatus.CARD_RESTORE)
-                        .with(TabProperties.SELECTABLE_TAB_CLICKED_LISTENER,
-                                mSelectableTabOnClickListener)
                         .with(TabProperties.TAB_SELECTION_DELEGATE, getTabSelectionDelegate())
                         .with(TabProperties.IS_INCOGNITO, tab.isIncognito())
                         .with(TabProperties.SELECTED_TAB_BACKGROUND_DRAWABLE_ID,
                                 selectedTabBackgroundDrawableId)
                         .with(TabProperties.TABSTRIP_FAVICON_BACKGROUND_COLOR_ID,
                                 tabstripFaviconBackgroundDrawableId)
+                        .with(TabProperties.ACCESSIBILITY_DELEGATE, mAccessibilityDelegate)
+                        .with(CARD_TYPE, TAB)
                         .build();
+
+        if (TabUiFeatureUtilities.ENABLE_SEARCH_CHIP.getValue() && mUiType == UiType.CLOSABLE) {
+            tabInfo.set(TabProperties.SEARCH_QUERY, getLastSearchTerm(tab));
+            tabInfo.set(TabProperties.SEARCH_LISTENER,
+                    SearchTermChipUtils.getSearchQueryListener(tab, mTabSelectedListener));
+            tabInfo.set(TabProperties.SEARCH_CHIP_ICON_DRAWABLE_ID, mSearchChipIconDrawableId);
+        }
 
         if (mUiType == UiType.SELECTABLE) {
             // Incognito in both light/dark theme is the same as non-incognito mode in dark theme.
@@ -1063,7 +1235,7 @@ class TabListMediator {
                                       : R.color.default_icon_color_inverse);
             ColorStateList actionButtonBackgroundColorList =
                     AppCompatResources.getColorStateList(mContext,
-                            tab.isIncognito() ? R.color.default_icon_color_white
+                            tab.isIncognito() ? R.color.default_icon_color_light
                                               : R.color.default_icon_color);
             // TODO(995876): Update color modern_blue_300 to active_color_dark when the associated
             // bug is landed.
@@ -1077,6 +1249,11 @@ class TabListMediator {
                     actionButtonBackgroundColorList);
             tabInfo.set(TabProperties.SELECTABLE_TAB_ACTION_BUTTON_SELECTED_BACKGROUND,
                     actionbuttonSelectedBackgroundColorList);
+            tabInfo.set(
+                    TabProperties.SELECTABLE_TAB_CLICKED_LISTENER, mSelectableTabOnClickListener);
+        } else {
+            tabInfo.set(TabProperties.TAB_SELECTED_LISTENER, tabSelectedListener);
+            tabInfo.set(TabProperties.TAB_CLOSED_LISTENER, mTabClosedListener);
         }
 
         if (index >= mModel.size()) {
@@ -1089,10 +1266,53 @@ class TabListMediator {
 
         if (mThumbnailProvider != null && mVisible) {
             ThumbnailFetcher callback = new ThumbnailFetcher(mThumbnailProvider, tab, isSelected,
-                    isSelected && !FeatureUtilities.isTabToGtsAnimationEnabled());
+                    isSelected && !TabUiFeatureUtilities.isTabToGtsAnimationEnabled());
             tabInfo.set(TabProperties.THUMBNAIL_FETCHER, callback);
         }
         tab.addObserver(mTabObserver);
+    }
+
+    private String getLastSearchTerm(Tab tab) {
+        assert TabUiFeatureUtilities.ENABLE_SEARCH_CHIP.getValue();
+        if (mActionsOnAllRelatedTabs && TabUiFeatureUtilities.isTabGroupsAndroidEnabled()
+                && getRelatedTabsForId(tab.getId()).size() > 1) {
+            return null;
+        }
+        return TabAttributeCache.getLastSearchTerm(tab.getId());
+    }
+
+    private int getSearchChipIconDrawableId() {
+        int iconDrawableId;
+        if (TabUiFeatureUtilities.ENABLE_SEARCH_CHIP_ADAPTIVE.getValue()) {
+            iconDrawableId = TemplateUrlServiceFactory.get().isDefaultSearchEngineGoogle()
+                    ? R.drawable.ic_logo_googleg_24dp
+                    : R.drawable.ic_search;
+        } else {
+            iconDrawableId = R.drawable.ic_search;
+        }
+        return iconDrawableId;
+    }
+
+    private String getUrlForTab(Tab tab) {
+        if (!TabUiFeatureUtilities.isTabGroupsAndroidContinuationEnabled()) return "";
+        if (!mActionsOnAllRelatedTabs) return tab.getUrlString();
+
+        List<Tab> relatedTabs = getRelatedTabsForId(tab.getId());
+        if (relatedTabs.size() == 1) return tab.getUrlString();
+
+        StringBuilder builder = new StringBuilder();
+        // TODO(1024925): Address i18n issue for the list separator.
+        String separator = ", ";
+        for (int i = 0; i < relatedTabs.size(); i++) {
+            String domain =
+                    UrlUtilities.getDomainAndRegistry(relatedTabs.get(i).getUrlString(), false);
+            if (!domain.isEmpty()) {
+                builder.append(domain);
+
+                if (i < relatedTabs.size() - 1) builder.append(separator);
+            }
+        }
+        return builder.toString();
     }
 
     @Nullable
@@ -1100,16 +1320,6 @@ class TabListMediator {
         return mSelectionDelegateProvider == null
                 ? null
                 : mSelectionDelegateProvider.getSelectionDelegate();
-    }
-
-    @Nullable
-    private TabActionListener getCreateGroupButtonListener(Tab tab, boolean isSelected) {
-        TabActionListener createGroupButtonOnClickListener = null;
-        if (isSelected && mCreateGroupButtonProvider != null) {
-            createGroupButtonOnClickListener =
-                    mCreateGroupButtonProvider.getCreateGroupButtonOnClickListener(tab);
-        }
-        return createGroupButtonOnClickListener;
     }
 
     @VisibleForTesting
@@ -1120,7 +1330,7 @@ class TabListMediator {
         if (getRelatedTabsForId(tab.getId()).size() <= 1) {
             return originalTitle;
         }
-        String storedTitle = mTabGroupTitleEditor.getTabGroupTitle(tab.getRootId());
+        String storedTitle = mTabGroupTitleEditor.getTabGroupTitle(((TabImpl) tab).getRootId());
         return storedTitle == null ? originalTitle : storedTitle;
     }
 
@@ -1153,10 +1363,15 @@ class TabListMediator {
             mModel.get(modelIndex).model.set(TabProperties.FAVICON, null);
             return;
         }
+
+        if (!mTabListFaviconProvider.isInitialized()) {
+            return;
+        }
+
         // If there is an available icon, we fetch favicon synchronously; otherwise asynchronously.
         if (icon != null) {
             Drawable drawable = mTabListFaviconProvider.getFaviconForUrlSync(
-                    tab.getUrl(), tab.isIncognito(), icon);
+                    tab.getUrlString(), tab.isIncognito(), icon);
             mModel.get(modelIndex).model.set(TabProperties.FAVICON, drawable);
             return;
         }
@@ -1170,11 +1385,122 @@ class TabListMediator {
             }
         };
         mTabListFaviconProvider.getFaviconForUrlAsync(
-                tab.getUrl(), tab.isIncognito(), faviconCallback);
+                tab.getUrlString(), tab.isIncognito(), faviconCallback);
+    }
+
+    /**
+     * Inserts a special {@link org.chromium.ui.modelutil.MVCListAdapter.ListItem} at given index of
+     * the current {@link TabListModel}.
+     *
+     * @param index The index of the {@link org.chromium.ui.modelutil.MVCListAdapter.ListItem} to be
+     *              inserted.
+     * @param uiType The view type the model will bind to.
+     * @param model The model that will be bound to a view.
+     */
+    void addSpecialItemToModel(int index, @UiType int uiType, PropertyModel model) {
+        mModel.add(index, new SimpleRecyclerViewAdapter.ListItem(uiType, model));
+    }
+
+    /**
+     * Removes a special {@link @link org.chromium.ui.modelutil.MVCListAdapter.ListItem} that
+     * has the given {@code uiType} and/or its {@link PropertyModel} has the given
+     * {@code itemIdentifier} from the current {@link TabListModel}.
+     *
+     * @param uiType The uiType to match.
+     * @param itemIdentifier The itemIdentifier to match. This can be obsoleted if the {@link @link
+     *         org.chromium.ui.modelutil.MVCListAdapter.ListItem} does not need additional
+     *         identifier.
+     */
+    void removeSpecialItemFromModel(@UiType int uiType, int itemIdentifier) {
+        int index = TabModel.INVALID_TAB_INDEX;
+        if (uiType == UiType.MESSAGE) {
+            if (itemIdentifier == MessageService.MessageType.ALL) {
+                while (mModel.lastIndexForMessageItem() != TabModel.INVALID_TAB_INDEX) {
+                    index = mModel.lastIndexForMessageItem();
+                    mModel.removeAt(index);
+                }
+                return;
+            }
+            index = mModel.lastIndexForMessageItemFromType(itemIdentifier);
+        } else if (uiType == UiType.NEW_TAB_TILE) {
+            index = mModel.getIndexForNewTabTile();
+        }
+
+        if (index == TabModel.INVALID_TAB_INDEX) return;
+
+        assert validateItemAt(index, uiType, itemIdentifier);
+        mModel.removeAt(index);
+    }
+
+    private boolean validateItemAt(int index, @UiType int uiType, int itemIdentifier) {
+        if (uiType == UiType.MESSAGE) {
+            return mModel.get(index).type == uiType
+                    && mModel.get(index).model.get(MESSAGE_TYPE) == itemIdentifier;
+        } else if (uiType == UiType.NEW_TAB_TILE) {
+            return mModel.get(index).type == uiType;
+        }
+
+        return false;
     }
 
     @VisibleForTesting
-    void setTabRestoreCompletedForTesting(boolean isRestored) {
-        mTabRestoreCompleted = isRestored;
+    View.AccessibilityDelegate getAccessibilityDelegateForTesting() {
+        return mAccessibilityDelegate;
+    }
+
+    /**
+     * These functions are wrapped in an inner class here for the formal equivalence checker, and
+     * it has to be at the end of the file. Otherwise the lambda and interface orders would be
+     * changed, resulting in differences.
+     */
+    @VisibleForTesting
+    static class SearchTermChipUtils {
+        static @VisibleForTesting Boolean sIsSearchChipAdaptiveIconEnabledForTesting;
+
+        private static TabObserver sLazyNavigateToLastSearchQuery = new EmptyTabObserver() {
+            @Override
+            public void onPageLoadStarted(Tab tab, String url) {
+                assert tab.getWebContents() != null;
+                if (tab.getWebContents() == null) return;
+
+                // Directly calling navigateToLastSearchQuery() would lead to unsafe re-entrant
+                // calls to NavigateToPendingEntry.
+                PostTask.postTask(
+                        UiThreadTaskTraits.USER_BLOCKING, () -> navigateToLastSearchQuery(tab));
+                tab.removeObserver(sLazyNavigateToLastSearchQuery);
+            }
+        };
+
+        @VisibleForTesting
+        static void navigateToLastSearchQuery(Tab tab) {
+            if (tab.getWebContents() == null) {
+                tab.addObserver(sLazyNavigateToLastSearchQuery);
+                return;
+            }
+            NavigationController controller = tab.getWebContents().getNavigationController();
+            NavigationHistory history = controller.getNavigationHistory();
+            for (int i = history.getCurrentEntryIndex() - 1; i >= 0; i--) {
+                int offset = i - history.getCurrentEntryIndex();
+                if (!controller.canGoToOffset(offset)) continue;
+
+                String url = history.getEntryAtIndex(i).getOriginalUrl();
+                String query = TemplateUrlServiceFactory.get().getSearchQueryForUrl(url);
+                if (TextUtils.isEmpty(query)) continue;
+
+                tab.loadUrl(new LoadUrlParams(url, PageTransition.KEYWORD_GENERATED));
+                return;
+            }
+        }
+
+        private static TabActionListener getSearchQueryListener(
+                Tab originalTab, TabActionListener select) {
+            return (tabId) -> {
+                if (originalTab == null) return;
+                assert tabId == originalTab.getId();
+                RecordUserAction.record("TabGrid.TabSearchChipTapped");
+                select.run(tabId);
+                navigateToLastSearchQuery(originalTab);
+            };
+        }
     }
 }

@@ -13,7 +13,7 @@ using ConvertThumbnailDataCallback = base::RepeatingCallback<void(
     scoped_refptr<base::RefCountedMemory> thumbnail)>;
 
 namespace vivaldi {
-void ConvertThumbnailDataOnUIThread(
+void ConvertThumbnailDataImpl(
   const base::FilePath& path,
   int64_t bookmark_id,
   scoped_refptr<base::RefCountedMemory> thumbnail);

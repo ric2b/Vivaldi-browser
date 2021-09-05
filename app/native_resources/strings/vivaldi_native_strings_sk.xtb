@@ -45,7 +45,6 @@
 <translation id="3542768452570884558">Otvoriť odkaz v novom okne</translation>
 <translation id="3588820906588687999">Otvoriť obrázok v novom liste</translation>
 <translation id="3601066750251199488">Mimozemšťan (Príšerka 3)</translation>
-<translation id="366643050267431920">Pridať ako udalosť</translation>
 <translation id="3732157130969736834">Pridať odkaz do záložiek</translation>
 <translation id="3732388226447288666">Líška (Zviera 2)</translation>
 <translation id="3732439195215136813">Koala (Zviera 5)</translation>
@@ -99,6 +98,7 @@
 <translation id="7086554968911045110">Noc v horách (Krajina 7)</translation>
 <translation id="7111492742514999492">Veterný mlyn (Krajina 9)</translation>
 <translation id="7337881442233988129">Chromium</translation>
+<translation id="7496505986576158197">Prehliadač Vivaldi dokázal vzniknúť vďaka <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> open source projektu a ďalšiemu <ph name="BEGIN_LINK_OSS" /> open source softvéru<ph name="END_LINK_OSS" />.</translation>
 <translation id="7715497554424665066">&amp;Odmietnuť aktualizáciu</translation>
 <translation id="7724603315864178912">Vystrihnúť</translation>
 <translation id="7865983598101744945">Potvrdenie k ukončeniu prehliadača</translation>

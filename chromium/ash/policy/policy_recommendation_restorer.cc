@@ -62,6 +62,10 @@ void PolicyRecommendationRestorer::OnUserActivity(const ui::Event* event) {
     restore_timer_.Reset();
 }
 
+void PolicyRecommendationRestorer::DisableForTesting() {
+  disabled_for_testing_ = true;
+}
+
 void PolicyRecommendationRestorer::Restore(bool allow_delay,
                                            const std::string& pref_name) {
   const PrefService::Preference* pref =
@@ -89,7 +93,7 @@ void PolicyRecommendationRestorer::Restore(bool allow_delay,
 
   if (allow_delay)
     StartTimer();
-  else
+  else if (!disabled_for_testing_)
     pref_change_registrar_->prefs()->ClearPref(pref->name());
 }
 
@@ -115,10 +119,9 @@ void PolicyRecommendationRestorer::StartTimer() {
   // case of a recommended value changing, a single timer is a close
   // approximation of the behavior that would be obtained by resetting the timer
   // for the affected pref only.
-  restore_timer_.Start(
-      FROM_HERE, kRestoreDelayInMinutes,
-      base::BindRepeating(&PolicyRecommendationRestorer::RestoreAll,
-                          base::Unretained(this)));
+  restore_timer_.Start(FROM_HERE, kRestoreDelayInMinutes,
+                       base::BindOnce(&PolicyRecommendationRestorer::RestoreAll,
+                                      base::Unretained(this)));
 }
 
 void PolicyRecommendationRestorer::StopTimer() {

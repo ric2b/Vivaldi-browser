@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {$} from 'chrome://resources/js/util.m.js';
+
 window.onerror = e => chrome.test.fail(e.stack);
 window.onunhandledrejection = e => chrome.test.fail(e.reason);
 
@@ -71,9 +73,9 @@ chrome.test.runTests([
       chrome.test.assertEq(3, cameras.length);
 
       const expectations = [
-        {top: 44.25, left: -106.5, right: 718.5, bottom: -442.5},
-        {top: 23.25, left: -3.75, right: 408.75, bottom: -220.125},
-        {top: -14.25, left: 33.75, right: 446.25, bottom: -257.625},
+        {top: 44.25, left: -106.5, right: 718.5, bottom: -448.5},
+        {top: 23.25, left: -3.75, right: 408.75, bottom: -223.125},
+        {top: -14.25, left: 33.75, right: 446.25, bottom: -260.625},
       ];
 
       for (const expectation of expectations) {
@@ -172,15 +174,15 @@ chrome.test.runTests([
       inkHost.dispatchEvent(new PointerEvent('pointermove', pen));
       inkHost.dispatchEvent(new PointerEvent('pointerup', pen));
 
-      await waitFor(() => undo.disabled == false);
+      await waitFor(() => undo.disabled === false);
       chrome.test.assertEq(redo.disabled, true);
 
       undo.click();
-      await waitFor(() => undo.disabled == true);
+      await waitFor(() => undo.disabled === true);
       chrome.test.assertEq(redo.disabled, false);
 
       redo.click();
-      await waitFor(() => undo.disabled == false);
+      await waitFor(() => undo.disabled === false);
       chrome.test.assertEq(redo.disabled, true);
     });
   },

@@ -46,7 +46,8 @@ AutoEnrollmentCheckScreen::AutoEnrollmentCheckScreen(
     AutoEnrollmentCheckScreenView* view,
     ErrorScreen* error_screen,
     const base::RepeatingClosure& exit_callback)
-    : BaseScreen(AutoEnrollmentCheckScreenView::kScreenId),
+    : BaseScreen(AutoEnrollmentCheckScreenView::kScreenId,
+                 OobeScreenPriority::DEFAULT),
       view_(view),
       error_screen_(error_screen),
       exit_callback_(exit_callback),
@@ -74,7 +75,7 @@ void AutoEnrollmentCheckScreen::ClearState() {
   captive_portal_status_ = NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_UNKNOWN;
 }
 
-void AutoEnrollmentCheckScreen::Show() {
+void AutoEnrollmentCheckScreen::ShowImpl() {
   // If the decision got made already, don't show the screen at all.
   if (!AutoEnrollmentController::IsEnabled() || IsCompleted()) {
     SignalCompletion();
@@ -125,7 +126,7 @@ void AutoEnrollmentCheckScreen::Show() {
       false /* force */);
 }
 
-void AutoEnrollmentCheckScreen::Hide() {}
+void AutoEnrollmentCheckScreen::HideImpl() {}
 
 void AutoEnrollmentCheckScreen::OnViewDestroyed(
     AutoEnrollmentCheckScreenView* view) {

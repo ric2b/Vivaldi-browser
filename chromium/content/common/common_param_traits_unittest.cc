@@ -27,6 +27,8 @@
 #include "printing/page_range.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkBitmap.h"
+#include "ui/base/cursor/cursor.h"
+#include "ui/base/mojom/cursor_type.mojom-shared.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/ipc/gfx_param_traits.h"
 #include "ui/gfx/ipc/skia/gfx_skia_param_traits.h"
@@ -247,34 +249,6 @@ TEST(IPCMessageTest, SSLInfo) {
   ASSERT_EQ(in.ocsp_result, out.ocsp_result);
 }
 
-TEST(IPCMessageTest, RenderWidgetSurfaceProperties) {
-  content::RenderWidgetSurfaceProperties input;
-  input.size = gfx::Size(23, 45);
-  input.device_scale_factor = 0.8;
-  input.top_controls_height = 16.5;
-  input.top_controls_shown_ratio = 0.4;
-#ifdef OS_ANDROID
-  input.has_transparent_background = true;
-#endif
-
-  IPC::Message msg(1, 2, IPC::Message::PRIORITY_NORMAL);
-  IPC::ParamTraits<content::RenderWidgetSurfaceProperties>::Write(&msg, input);
-
-  content::RenderWidgetSurfaceProperties output;
-  base::PickleIterator iter(msg);
-  EXPECT_TRUE(IPC::ParamTraits<content::RenderWidgetSurfaceProperties>::Read(
-      &msg, &iter, &output));
-
-  EXPECT_EQ(input.size, output.size);
-  EXPECT_EQ(input.device_scale_factor, output.device_scale_factor);
-  EXPECT_EQ(input.top_controls_height, output.top_controls_height);
-  EXPECT_EQ(input.top_controls_shown_ratio, output.top_controls_shown_ratio);
-#ifdef OS_ANDROID
-  EXPECT_EQ(input.has_transparent_background,
-            output.has_transparent_background);
-#endif
-}
-
 static constexpr viz::FrameSinkId kArbitraryFrameSinkId(1, 1);
 
 TEST(IPCMessageTest, SurfaceInfo) {
@@ -297,11 +271,13 @@ TEST(IPCMessageTest, SurfaceInfo) {
 }
 
 TEST(IPCMessageTest, WebCursor) {
-  content::CursorInfo info(ui::CursorType::kCustom);
-  info.custom_image.allocN32Pixels(32, 32);
-  info.hotspot = gfx::Point(10, 20);
-  info.image_scale_factor = 1.5f;
-  content::WebCursor input(info);
+  ui::Cursor cursor(ui::mojom::CursorType::kCustom);
+  SkBitmap bitmap;
+  bitmap.allocN32Pixels(32, 32);
+  cursor.set_custom_bitmap(bitmap);
+  cursor.set_custom_hotspot(gfx::Point(10, 20));
+  cursor.set_image_scale_factor(1.5f);
+  content::WebCursor input(cursor);
   IPC::Message msg(1, 2, IPC::Message::PRIORITY_NORMAL);
   IPC::ParamTraits<content::WebCursor>::Write(&msg, input);
 

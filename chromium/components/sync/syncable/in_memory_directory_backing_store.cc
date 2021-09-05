@@ -9,12 +9,11 @@ namespace syncable {
 
 InMemoryDirectoryBackingStore::InMemoryDirectoryBackingStore(
     const std::string& dir_name,
-    const base::RepeatingCallback<std::string()>& cache_guid_generator)
-    : DirectoryBackingStore(dir_name, cache_guid_generator) {}
+    const std::string& cache_guid)
+    : DirectoryBackingStore(dir_name, cache_guid) {}
 
 DirOpenResult InMemoryDirectoryBackingStore::Load(
     Directory::MetahandlesMap* handles_map,
-    JournalIndex* delete_journals,
     MetahandleSet* metahandles_to_purge,
     Directory::KernelLoadInfo* kernel_load_info) {
   if (!IsOpen()) {
@@ -27,8 +26,6 @@ DirOpenResult InMemoryDirectoryBackingStore::Load(
     return FAILED_OPEN_DATABASE;
 
   if (!LoadEntries(handles_map, metahandles_to_purge))
-    return FAILED_DATABASE_CORRUPT;
-  if (!LoadDeleteJournals(delete_journals))
     return FAILED_DATABASE_CORRUPT;
   if (!LoadInfo(kernel_load_info))
     return FAILED_DATABASE_CORRUPT;

@@ -1,4 +1,36 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="sv">
+<translation id="3830627370375585318">Tillåt att Vivaldi får åtkomst till nätverket i inställningarna för din brandvägg eller
+        ditt virusskydd.</translation>
+<translation id="4200102020577305737">Öppna
+          Vivaldi-menyn &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          LAN-inställningar
+          och avmarkera "Använd en proxyserver för nätverket".</translation>
+<translation id="4932161901409251843">Öppna
+          Vivaldi-menyn &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          och kontrollera att "ingen proxy" eller "direkt" har angetts i konfigurationen.</translation>
+<translation id="5248344925342018662">Du kollar på en säker Vivaldi-sida</translation>
+<translation id="7023871570427738255">Öppna
+        Vivaldi-menyn &gt;
+        <ph name="SETTINGS_TITLE" />
+        &gt;
+        <ph name="ADVANCED_TITLE" />
+        och avmarkera <ph name="NO_PREFETCH_DESCRIPTION" />.
+        Om det inte hjälper rekommenderar vi att du markerar det
+        här alternativet igen så att funktionaliteten förbättras.</translation>
+<translation id="8187289872471304532">Öppna
+          Program &gt; Systeminställningar &gt; Nätverk &gt; Avancerat &gt; Proxyservrar
+          och avmarkera alla proxyservrar.</translation>
 </translationbundle>

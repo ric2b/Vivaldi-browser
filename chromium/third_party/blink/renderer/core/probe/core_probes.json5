@@ -37,6 +37,11 @@
         "UpdateApplicationCacheStatus",
       ]
     },
+    InspectorAuditsAgent: {
+      probes: [
+        "InspectorIssueAdded"
+      ]
+    },
     InspectorCSSAgent: {
       probes: [
         "ActiveStyleSheetsUpdated",
@@ -170,6 +175,7 @@
         "DidResizeMainFrame",
         "DidRunJavaScriptDialog",
         "DomContentLoadedEventFired",
+        "FileChooserOpened",
         "FrameAttachedToParent",
         "FrameClearedScheduledNavigation",
         "FrameDetachedFromParent",
@@ -207,6 +213,8 @@
         "RecalculateStyle",
         "UpdateLayout",
         "V8Compile",
+        "WillStartDebuggerTask",
+        "DidFinishDebuggerTask",
       ]
     },
     InspectorTraceEvents: {
@@ -230,6 +238,8 @@
         "DidStartProvisionalLoad",
         "DidFailProvisionalLoad",
         "DidCommitLoad",
+        "PaintTiming",
+        "DomContentLoadedEventFired",
       ]
     },
   }

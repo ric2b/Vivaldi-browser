@@ -11,14 +11,23 @@
 
 #include "base/macros.h"
 #include "base/sequence_checker.h"
+#include "base/strings/string16.h"
 #include "services/device/usb/usb_device.h"
 
 namespace device {
 
 struct UsbDeviceDescriptor;
+struct WebUsbPlatformCapabilityDescriptor;
 
 class UsbDeviceWin : public UsbDevice {
  public:
+  UsbDeviceWin(const base::string16& device_path,
+               const base::string16& hub_path,
+               const std::vector<base::string16>& child_device_paths,
+               uint32_t bus_number,
+               uint32_t port_number,
+               const base::string16& driver_name);
+
   // UsbDevice implementation:
   void Open(OpenCallback callback) override;
 
@@ -26,17 +35,13 @@ class UsbDeviceWin : public UsbDevice {
   friend class UsbServiceWin;
   friend class UsbDeviceHandleWin;
 
-  // Called by UsbServiceWin only.
-  UsbDeviceWin(const std::string& device_path,
-               const std::string& hub_path,
-               uint32_t bus_number,
-               uint32_t port_number,
-               const std::string& driver_name);
-
   ~UsbDeviceWin() override;
 
-  const std::string& device_path() const { return device_path_; }
-  const std::string& driver_name() const { return driver_name_; }
+  const base::string16& device_path() const { return device_path_; }
+  const std::vector<base::string16>& child_device_paths() const {
+    return child_device_paths_;
+  }
+  const base::string16& driver_name() const { return driver_name_; }
 
   // Opens the device's parent hub in order to read the device, configuration
   // and string descriptors.
@@ -53,19 +58,26 @@ class UsbDeviceWin : public UsbDevice {
       uint8_t i_product,
       uint8_t i_serial_number,
       std::unique_ptr<std::map<uint8_t, base::string16>> string_map);
-  void OnOpenedToReadWebUsbDescriptors(
+  void OnReadWebUsbCapabilityDescriptor(
       base::OnceCallback<void(bool)> callback,
+      scoped_refptr<UsbDeviceHandle> device_handle,
+      const base::Optional<WebUsbPlatformCapabilityDescriptor>& descriptor);
+  void OnOpenedToReadWebUsbLandingPage(
+      base::OnceCallback<void(bool)> callback,
+      uint8_t vendor_code,
+      uint8_t landing_page_id,
       scoped_refptr<UsbDeviceHandle> device_handle);
-  void OnReadWebUsbDescriptors(base::OnceCallback<void(bool)> callback,
+  void OnReadWebUsbLandingPage(base::OnceCallback<void(bool)> callback,
                                scoped_refptr<UsbDeviceHandle> device_handle,
                                const GURL& landing_page);
 
  private:
   SEQUENCE_CHECKER(sequence_checker_);
 
-  const std::string device_path_;
-  const std::string hub_path_;
-  const std::string driver_name_;
+  const base::string16 device_path_;
+  const base::string16 hub_path_;
+  const std::vector<base::string16> child_device_paths_;
+  const base::string16 driver_name_;
 
   DISALLOW_COPY_AND_ASSIGN(UsbDeviceWin);
 };

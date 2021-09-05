@@ -9,8 +9,6 @@ import android.animation.AnimatorListenerAdapter;
 import android.animation.TimeInterpolator;
 import android.animation.ValueAnimator;
 import android.content.Context;
-import android.content.res.Resources;
-import android.content.res.TypedArray;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.ColorFilter;
@@ -22,13 +20,13 @@ import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Region;
 import android.graphics.drawable.Drawable;
-import android.support.annotation.Nullable;
-import android.support.v4.content.res.ResourcesCompat;
 import android.text.TextUtils;
 import android.util.DisplayMetrics;
 import android.util.TypedValue;
+import android.widget.TextView;
 
 import androidx.annotation.IntDef;
+import androidx.annotation.Nullable;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.autofill_assistant.R;
@@ -142,20 +140,15 @@ class AssistantOverlayDrawable extends Drawable implements FullscreenListener {
 
         mFullscreenManager.addListener(this);
 
-        // Inherit font from AssistantBlackBody style.
+        // Inherit font from AssistantBlackBody style. This is done by letting a temporary text view
+        // resolve the target typeface, because resolving it manually with ResourcesCompat.getFont()
+        // yields a StrictMode violation due to disk access.
         mTextPaint = new Paint();
-        TypedArray styled_attributes = context.obtainStyledAttributes(
-                R.style.TextAppearance_AssistantBlackBody, R.styleable.TextAppearance);
-        if (styled_attributes.hasValue(R.styleable.TextAppearance_android_fontFamily)) {
-            int fontId = styled_attributes.getResourceId(
-                    R.styleable.TextAppearance_android_fontFamily, -1);
-            try {
-                mTextPaint.setTypeface(ResourcesCompat.getFont(context, fontId));
-            } catch (Resources.NotFoundException ignored) {
-                // Use default font
-            }
+        TextView temp = new TextView(context);
+        ApiCompatibilityUtils.setTextAppearance(temp, R.style.TextAppearance_AssistantBlackBody);
+        if (temp.getTypeface() != null) {
+            mTextPaint.setTypeface(temp.getTypeface());
         }
-        styled_attributes.recycle();
 
         // Sets colors to default.
         setBackgroundColor(null);
@@ -263,11 +256,10 @@ class AssistantOverlayDrawable extends Drawable implements FullscreenListener {
             return;
         }
 
-        if (mOverlayImage.mTextSize != null) {
-            mTextPaint.setTextSize(mOverlayImage.mTextSize.getSizeInPixels(
-                    mContext.getResources().getDisplayMetrics()));
+        mTextPaint.setTextSize(mOverlayImage.mTextSizeInPixels);
+        if (mOverlayImage.mTextColor != null) {
+            mTextPaint.setColor(mOverlayImage.mTextColor);
         }
-        mTextPaint.setColor(mOverlayImage.mTextColor);
         invalidateSelf();
     }
 
@@ -305,29 +297,22 @@ class AssistantOverlayDrawable extends Drawable implements FullscreenListener {
         canvas.drawPaint(mBackground);
 
         // Draw overlay image, if specified.
-        if (mTransparentArea.isEmpty() && mOverlayImage != null
-                && mOverlayImage.mImageBitmap != null && mOverlayImage.mImageSize != null) {
-            DisplayMetrics displayMetrics = mContext.getResources().getDisplayMetrics();
-            int imageSize = mOverlayImage.mImageSize.getSizeInPixels(displayMetrics);
-            int topMargin = 0;
-            if (mOverlayImage.mImageTopMargin != null) {
-                topMargin = mOverlayImage.mImageTopMargin.getSizeInPixels(displayMetrics);
-            }
+        if (!mPartial && mOverlayImage != null && mOverlayImage.mImageBitmap != null) {
             canvas.drawBitmap(mOverlayImage.mImageBitmap,
-                    bounds.left + (bounds.right - bounds.left) / 2.0f - imageSize / 2.0f,
-                    yTop + topMargin, null);
+                    bounds.left + (bounds.right - bounds.left) / 2.0f
+                            - mOverlayImage.mImageSizeInPixels / 2.0f,
+                    yTop + mOverlayImage.mImageTopMarginInPixels, null);
 
             if (!TextUtils.isEmpty(mOverlayImage.mText)) {
-                int bottomMargin = 0;
-                if (mOverlayImage.mImageBottomMargin != null) {
-                    bottomMargin = mOverlayImage.mImageBottomMargin.getSizeInPixels(displayMetrics);
-                }
                 String text = trimStringToWidth(
                         mOverlayImage.mText, bounds.right - bounds.left, mTextPaint);
                 float textWidth = mTextPaint.measureText(text);
                 canvas.drawText(text,
                         bounds.left + (bounds.right - bounds.left) / 2.0f - textWidth / 2.0f,
-                        yTop + topMargin + imageSize + bottomMargin, mTextPaint);
+                        yTop + mOverlayImage.mImageTopMarginInPixels
+                                + mOverlayImage.mImageSizeInPixels
+                                + mOverlayImage.mImageBottomMarginInPixels,
+                        mTextPaint);
             }
         }
 
@@ -384,15 +369,14 @@ class AssistantOverlayDrawable extends Drawable implements FullscreenListener {
     }
 
     @Override
-    public void onControlsOffsetChanged(int topOffset, int bottomOffset, boolean needsAnimate) {
+    public void onControlsOffsetChanged(int topOffset, int topControlsMinHeightOffset,
+            int bottomOffset, int bottomControlsMinHeightOffset, boolean needsAnimate) {
         invalidateSelf();
     }
 
     @Override
-    public void onToggleOverlayVideoMode(boolean enabled) {}
-
-    @Override
-    public void onBottomControlsHeightChanged(int bottomControlsHeight) {
+    public void onBottomControlsHeightChanged(
+            int bottomControlsHeight, int bottomControlsMinHeight) {
         invalidateSelf();
     }
 

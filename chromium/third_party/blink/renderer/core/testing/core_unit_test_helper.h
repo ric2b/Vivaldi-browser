@@ -21,7 +21,6 @@
 #include "third_party/blink/renderer/core/loader/empty_clients.h"
 #include "third_party/blink/renderer/core/paint/ng/ng_paint_fragment.h"
 #include "third_party/blink/renderer/core/testing/page_test_base.h"
-#include "third_party/blink/renderer/core/testing/use_mock_scrollbar_settings.h"
 #include "third_party/blink/renderer/platform/testing/layer_tree_host_embedder.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 
@@ -33,7 +32,7 @@ class SingleChildLocalFrameClient final : public EmptyLocalFrameClient {
  public:
   explicit SingleChildLocalFrameClient() = default;
 
-  void Trace(blink::Visitor* visitor) override {
+  void Trace(Visitor* visitor) override {
     visitor->Trace(child_);
     EmptyLocalFrameClient::Trace(visitor);
   }
@@ -53,7 +52,7 @@ class LocalFrameClientWithParent final : public EmptyLocalFrameClient {
  public:
   explicit LocalFrameClientWithParent(LocalFrame* parent) : parent_(parent) {}
 
-  void Trace(blink::Visitor* visitor) override {
+  void Trace(Visitor* visitor) override {
     visitor->Trace(parent_);
     EmptyLocalFrameClient::Trace(visitor);
   }
@@ -98,12 +97,19 @@ class RenderingTestChromeClient : public EmptyChromeClient {
     return device_emulation_transform_;
   }
 
+  void InjectGestureScrollEvent(LocalFrame& local_frame,
+                                WebGestureDevice device,
+                                const gfx::Vector2dF& delta,
+                                ScrollGranularity granularity,
+                                CompositorElementId scrollable_area_element_id,
+                                WebInputEvent::Type injected_type) override;
+
  private:
   std::unique_ptr<LayerTreeHostEmbedder> layer_tree_;
   TransformationMatrix device_emulation_transform_;
 };
 
-class RenderingTest : public PageTestBase, public UseMockScrollbarSettings {
+class RenderingTest : public PageTestBase {
   USING_FAST_MALLOC(RenderingTest);
 
  public:

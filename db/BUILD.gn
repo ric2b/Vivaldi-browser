@@ -1,6 +1,6 @@
 import("//build/config/jumbo.gni")
 
-jumbo_static_library("db") {
+static_library("db") {
   sources = [
     "vivaldi_history_database.cc",
     "vivaldi_history_database.h",
@@ -8,8 +8,10 @@ jumbo_static_library("db") {
     "vivaldi_history_types.cc"
   ]
   deps = [
-    "//base:base",
+    "//base",
     "//skia",
-    "//sql:sql",
+    "//sql",
+    "//ui/base",
+    "//url",
   ]
 }

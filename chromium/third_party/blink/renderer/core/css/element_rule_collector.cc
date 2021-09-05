@@ -48,9 +48,22 @@
 
 namespace blink {
 
+namespace {
+
+unsigned AdjustLinkMatchType(EInsideLink inside_link,
+                             unsigned link_match_type) {
+  if (inside_link == EInsideLink::kNotInsideLink)
+    return CSSSelector::kMatchLink;
+  return link_match_type;
+}
+
+}  // namespace
+
 ElementRuleCollector::ElementRuleCollector(const ElementResolveContext& context,
                                            const SelectorFilter& filter,
-                                           ComputedStyle* style)
+                                           MatchResult& result,
+                                           ComputedStyle* style,
+                                           EInsideLink inside_link)
     : context_(context),
       selector_filter_(filter),
       style_(style),
@@ -60,7 +73,9 @@ ElementRuleCollector::ElementRuleCollector(const ElementResolveContext& context,
           selector_filter_.ParentStackIsConsistent(context.ParentNode())),
       same_origin_only_(false),
       matching_ua_rules_(false),
-      include_empty_rules_(false) {}
+      include_empty_rules_(false),
+      inside_link_(inside_link),
+      result_(result) {}
 
 ElementRuleCollector::~ElementRuleCollector() = default;
 
@@ -99,7 +114,9 @@ void ElementRuleCollector::AddElementStyleProperties(
     bool is_cacheable) {
   if (!property_set)
     return;
-  result_.AddMatchedProperties(property_set);
+  auto link_match_type = static_cast<unsigned>(CSSSelector::kMatchAll);
+  result_.AddMatchedProperties(
+      property_set, AdjustLinkMatchType(inside_link_, link_match_type));
   if (!is_cacheable)
     result_.SetIsCacheable(false);
 }
@@ -133,6 +150,7 @@ void ElementRuleCollector::CollectMatchingRulesForList(
       &context_.GetElement(), SelectorChecker::kVisitedMatchEnabled);
   context.scope = match_request.scope;
   context.pseudo_id = pseudo_style_request_.pseudo_id;
+  context.is_from_vtt = match_request.is_from_vtt;
 
   unsigned rejected = 0;
   unsigned fast_rejected = 0;
@@ -325,7 +343,8 @@ void ElementRuleCollector::SortAndTransferMatchedRules() {
   for (unsigned i = 0; i < matched_rules_.size(); i++) {
     const RuleData* rule_data = matched_rules_[i].GetRuleData();
     result_.AddMatchedProperties(
-        &rule_data->Rule()->Properties(), rule_data->LinkMatchType(),
+        &rule_data->Rule()->Properties(),
+        AdjustLinkMatchType(inside_link_, rule_data->LinkMatchType()),
         rule_data->GetValidPropertyFilter(matching_ua_rules_));
   }
 }
@@ -350,7 +369,8 @@ void ElementRuleCollector::DidMatchRule(
          dynamic_pseudo == kPseudoIdAfter) &&
         !rule_data->Rule()->Properties().HasProperty(CSSPropertyID::kContent))
       return;
-    style_->SetHasPseudoElementStyle(dynamic_pseudo);
+    if (!rule_data->Rule()->Properties().IsEmpty())
+      style_->SetHasPseudoElementStyle(dynamic_pseudo);
   } else {
     matched_rules_.push_back(MatchedRule(
         rule_data, result.specificity, cascade_order,

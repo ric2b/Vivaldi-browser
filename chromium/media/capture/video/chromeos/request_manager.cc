@@ -34,7 +34,8 @@ constexpr std::initializer_list<StreamType> kYUVReprocessStreams = {
 }  // namespace
 
 RequestManager::RequestManager(
-    cros::mojom::Camera3CallbackOpsRequest callback_ops_request,
+    mojo::PendingReceiver<cros::mojom::Camera3CallbackOps>
+        callback_ops_receiver,
     std::unique_ptr<StreamCaptureInterface> capture_interface,
     CameraDeviceContext* device_context,
     VideoCaptureBufferType buffer_type,
@@ -42,7 +43,7 @@ RequestManager::RequestManager(
     BlobifyCallback blobify_callback,
     scoped_refptr<base::SingleThreadTaskRunner> ipc_task_runner,
     CameraAppDeviceImpl* camera_app_device)
-    : callback_ops_(this, std::move(callback_ops_request)),
+    : callback_ops_(this, std::move(callback_ops_receiver)),
       capture_interface_(std::move(capture_interface)),
       device_context_(device_context),
       video_capture_use_gmb_(buffer_type ==
@@ -227,30 +228,27 @@ void RequestManager::UnsetRepeatingCaptureMetadata(
 
 void RequestManager::SetJpegOrientation(
     cros::mojom::CameraMetadataPtr* settings) {
-  std::vector<uint8_t> frame_orientation(sizeof(int32_t));
-  *reinterpret_cast<int32_t*>(frame_orientation.data()) =
-      base::checked_cast<int32_t>(device_context_->GetCameraFrameOrientation());
-  cros::mojom::CameraMetadataEntryPtr e =
-      cros::mojom::CameraMetadataEntry::New();
-  e->tag = cros::mojom::CameraMetadataTag::ANDROID_JPEG_ORIENTATION;
-  e->type = cros::mojom::EntryType::TYPE_INT32;
-  e->count = 1;
-  e->data = std::move(frame_orientation);
+  auto e = BuildMetadataEntry(
+      cros::mojom::CameraMetadataTag::ANDROID_JPEG_ORIENTATION,
+      base::checked_cast<int32_t>(
+          device_context_->GetCameraFrameOrientation()));
   AddOrUpdateMetadataEntry(settings, std::move(e));
 }
 
 void RequestManager::SetSensorTimestamp(
     cros::mojom::CameraMetadataPtr* settings,
     uint64_t shutter_timestamp) {
-  std::vector<uint8_t> sensor_timestamp(sizeof(int64_t));
-  *reinterpret_cast<int64_t*>(sensor_timestamp.data()) =
-      base::checked_cast<int64_t>(shutter_timestamp);
-  cros::mojom::CameraMetadataEntryPtr e =
-      cros::mojom::CameraMetadataEntry::New();
-  e->tag = cros::mojom::CameraMetadataTag::ANDROID_SENSOR_TIMESTAMP;
-  e->type = cros::mojom::EntryType::TYPE_INT64;
-  e->count = 1;
-  e->data = sensor_timestamp;
+  auto e = BuildMetadataEntry(
+      cros::mojom::CameraMetadataTag::ANDROID_SENSOR_TIMESTAMP,
+      base::checked_cast<int64_t>(shutter_timestamp));
+  AddOrUpdateMetadataEntry(settings, std::move(e));
+}
+
+void RequestManager::SetZeroShutterLag(cros::mojom::CameraMetadataPtr* settings,
+                                       bool enabled) {
+  auto e = BuildMetadataEntry(
+      cros::mojom::CameraMetadataTag::ANDROID_CONTROL_ENABLE_ZSL,
+      static_cast<uint8_t>(enabled));
   AddOrUpdateMetadataEntry(settings, std::move(e));
 }
 
@@ -276,7 +274,7 @@ void RequestManager::PrepareCaptureRequest() {
   // 3. Preview + Capture (BlobOutput)
   std::set<StreamType> stream_types;
   cros::mojom::CameraMetadataPtr settings;
-  TakePhotoCallback callback = base::DoNothing();
+  TakePhotoCallback callback = base::NullCallback();
   base::Optional<uint64_t> input_buffer_id;
   cros::mojom::Effect reprocess_effect = cros::mojom::Effect::NO_EFFECT;
 
@@ -336,7 +334,11 @@ void RequestManager::PrepareCaptureRequest() {
     ++preview_buffers_queued_;
   }
 
-  UpdateCaptureSettings(&capture_request->settings);
+  // Currently only 3A related settings will be applied, which means we don't
+  // need to apply for reprocess request.
+  if (!is_reprocess_request) {
+    UpdateCaptureSettings(&capture_request->settings);
+  }
   capture_interface_->ProcessCaptureRequest(
       std::move(capture_request),
       base::BindOnce(&RequestManager::OnProcessedCaptureRequest, GetWeakPtr()));
@@ -373,7 +375,7 @@ bool RequestManager::TryPrepareReprocessRequest(
 
   stream_types->insert(kYUVReprocessStreams);
   // Prepare metadata by adding extra metadata.
-  *settings = repeating_request_settings_.Clone();
+  *settings = reprocess_job_info->metadata.Clone();
   SetSensorTimestamp(settings, reprocess_job_info->shutter_timestamp);
   SetJpegOrientation(settings);
   for (auto& metadata : task.extra_metadata) {
@@ -440,6 +442,7 @@ bool RequestManager::TryPrepareOneShotRequest(
     *settings = std::move(take_photo_settings_queue_.front());
     SetJpegOrientation(settings);
   }
+  SetZeroShutterLag(settings, true);
   take_photo_settings_queue_.pop();
   return true;
 }
@@ -658,6 +661,10 @@ void RequestManager::Notify(cros::mojom::Camera3NotifyMsgPtr message) {
       first_frame_shutter_time_ = reference_time;
     }
     pending_result.timestamp = reference_time - first_frame_shutter_time_;
+    if (camera_app_device_ && pending_result.still_capture_callback) {
+      camera_app_device_->OnShutterDone();
+    }
+
     TrySubmitPendingBuffers(frame_number);
   }
 }
@@ -788,7 +795,7 @@ void RequestManager::SubmitCaptureResult(
       DCHECK_GT(pending_result.shutter_timestamp, 0UL);
       ReprocessJobInfo reprocess_job_info(
           std::move(frame_number_reprocess_tasks_map_[frame_number]),
-          pending_result.shutter_timestamp);
+          std::move(pending_result.metadata), pending_result.shutter_timestamp);
       buffer_id_reprocess_job_info_map_.emplace(buffer_ipc_id,
                                                 std::move(reprocess_job_info));
       frame_number_reprocess_tasks_map_.erase(frame_number);
@@ -937,12 +944,17 @@ RequestManager::CaptureResult::CaptureResult()
 
 RequestManager::CaptureResult::~CaptureResult() = default;
 
-RequestManager::ReprocessJobInfo::ReprocessJobInfo(ReprocessTaskQueue queue,
-                                                   uint64_t timestamp)
-    : task_queue(std::move(queue)), shutter_timestamp(timestamp) {}
+RequestManager::ReprocessJobInfo::ReprocessJobInfo(
+    ReprocessTaskQueue queue,
+    cros::mojom::CameraMetadataPtr metadata,
+    uint64_t timestamp)
+    : task_queue(std::move(queue)),
+      metadata(std::move(metadata)),
+      shutter_timestamp(timestamp) {}
 
 RequestManager::ReprocessJobInfo::ReprocessJobInfo(ReprocessJobInfo&& info)
     : task_queue(std::move(info.task_queue)),
+      metadata(std::move(info.metadata)),
       shutter_timestamp(info.shutter_timestamp) {}
 
 RequestManager::ReprocessJobInfo::~ReprocessJobInfo() = default;

@@ -6,8 +6,10 @@
 #include <memory>
 #include <string>
 
+#include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/zoom/chrome_zoom_level_prefs.h"
 #include "components/zoom/zoom_observer.h"
+#include "extensions/browser/event_router.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/extension_function.h"
 

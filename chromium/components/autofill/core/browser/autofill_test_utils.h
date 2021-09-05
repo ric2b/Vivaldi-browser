@@ -12,6 +12,7 @@
 #include "components/autofill/core/browser/autofill_field.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
+#include "components/autofill/core/browser/data_model/credit_card_cloud_token_data.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/proto/server.pb.h"
 
@@ -134,6 +135,7 @@ CreditCard GetIncompleteCreditCard();
 // Returns a masked server card full of dummy info.
 CreditCard GetMaskedServerCard();
 CreditCard GetMaskedServerCardAmex();
+CreditCard GetMaskedServerCardWithNickname();
 
 // Returns a full server card full of dummy info.
 CreditCard GetFullServerCard();
@@ -141,6 +143,13 @@ CreditCard GetFullServerCard();
 // Returns a randomly generated credit card of |record_type|. Note that the
 // card is not guaranteed to be valid/sane from a card validation standpoint.
 CreditCard GetRandomCreditCard(CreditCard::RecordType record_Type);
+
+// Returns a credit card cloud token data full of dummy info.
+CreditCardCloudTokenData GetCreditCardCloudTokenData1();
+
+// Returns a credit card cloud token data full of dummy info, different from the
+// one above.
+CreditCardCloudTokenData GetCreditCardCloudTokenData2();
 
 // A unit testing utility that is common to a number of the Autofill unit
 // tests.  |SetProfileInfo| provides a quick way to populate a profile with
@@ -266,6 +275,7 @@ void GenerateTestAutofillPopup(
 
 std::string ObfuscatedCardDigitsAsUTF8(const std::string& str);
 
+// Returns 2-digit month string, like "02", "10".
 std::string NextMonth();
 std::string LastYear();
 std::string NextYear();

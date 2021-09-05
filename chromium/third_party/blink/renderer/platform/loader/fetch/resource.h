@@ -68,7 +68,6 @@ class FetchParameters;
 class ResourceClient;
 class ResourceFetcher;
 class ResourceFinishObserver;
-class ResourceTimingInfo;
 class ResourceLoader;
 class ResponseBodyLoaderDrainableInterface;
 class SecurityOrigin;
@@ -158,7 +157,7 @@ class PLATFORM_EXPORT Resource : public GarbageCollected<Resource>,
 
   ~Resource() override;
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
   virtual WTF::TextEncoding Encoding() const { return WTF::TextEncoding(); }
   virtual void AppendData(const char*, size_t);
@@ -177,13 +176,13 @@ class PLATFORM_EXPORT Resource : public GarbageCollected<Resource>,
 
   virtual bool ShouldIgnoreHTTPStatusCodeErrors() const { return false; }
 
-  const ResourceRequest& GetResourceRequest() const {
+  const ResourceRequestHead& GetResourceRequest() const {
     return resource_request_;
   }
-  const ResourceRequest& LastResourceRequest() const;
+  const ResourceRequestHead& LastResourceRequest() const;
   const ResourceResponse* LastResourceResponse() const;
 
-  virtual void SetRevalidatingRequest(const ResourceRequest&);
+  virtual void SetRevalidatingRequest(const ResourceRequestHead&);
 
   // This url can have a fragment, but it can match resources that differ by the
   // fragment only.
@@ -274,8 +273,6 @@ class PLATFORM_EXPORT Resource : public GarbageCollected<Resource>,
       scoped_refptr<base::SingleThreadTaskRunner> loader_task_runner) {}
   void SetResponse(const ResourceResponse&);
   const ResourceResponse& GetResponse() const { return response_; }
-
-  virtual void ReportResourceTimingToClients(const ResourceTimingInfo&) {}
 
   // Sets the serialized metadata retrieved from the platform's cache.
   // Subclasses of Resource that support cached metadata should override this
@@ -377,13 +374,6 @@ class PLATFORM_EXPORT Resource : public GarbageCollected<Resource>,
   // be triggered right away in ResourceLoader.
   virtual void WillReloadAfterDiskCacheMiss() {}
 
-  // TODO(shaochuan): This is for saving back the actual ResourceRequest sent
-  // in ResourceFetcher::StartLoad() for retry in cache-aware loading, remove
-  // once ResourceRequest is not modified in StartLoad(). crbug.com/632580
-  void SetResourceRequest(const ResourceRequest& resource_request) {
-    resource_request_ = resource_request;
-  }
-
   // Used by the MemoryCache to reduce the memory consumption of the entry.
   void Prune();
 
@@ -429,8 +419,14 @@ class PLATFORM_EXPORT Resource : public GarbageCollected<Resource>,
   // The caller owns the |clock| which must outlive the Resource.
   static void SetClockForTesting(const base::Clock* clock);
 
+  size_t CalculateOverheadSizeForTest() const {
+    return CalculateOverheadSize();
+  }
+
  protected:
-  Resource(const ResourceRequest&, ResourceType, const ResourceLoaderOptions&);
+  Resource(const ResourceRequestHead&,
+           ResourceType,
+           const ResourceLoaderOptions&);
 
   // Returns true if the resource has finished any processing it wanted to do
   // after loading. Should only be used to decide whether to call
@@ -476,11 +472,11 @@ class PLATFORM_EXPORT Resource : public GarbageCollected<Resource>,
     DISALLOW_NEW();
 
    public:
-    explicit RedirectPair(const ResourceRequest& request,
+    explicit RedirectPair(const ResourceRequestHead& request,
                           const ResourceResponse& redirect_response)
         : request_(request), redirect_response_(redirect_response) {}
 
-    ResourceRequest request_;
+    ResourceRequestHead request_;
     ResourceResponse redirect_response_;
   };
   const Vector<RedirectPair>& RedirectChain() const { return redirect_chain_; }
@@ -569,7 +565,7 @@ class PLATFORM_EXPORT Resource : public GarbageCollected<Resource>,
 
   TaskHandle async_finish_pending_clients_task_;
 
-  ResourceRequest resource_request_;
+  ResourceRequestHead resource_request_;
 
   // Resource::CalculateOverheadSize() is affected by changes in
   // |m_resourceRequest.url()|, but |m_overheadSize| is not updated after

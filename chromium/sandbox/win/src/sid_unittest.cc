@@ -159,7 +159,7 @@ TEST(SidTest, NamedCapability) {
 TEST(SidTest, Sddl) {
   Sid sid_sddl = Sid::FromSddlString(L"S-1-1-0");
   ASSERT_TRUE(sid_sddl.IsValid());
-  base::string16 sddl_str;
+  std::wstring sddl_str;
   ASSERT_TRUE(sid_sddl.ToSddlString(&sddl_str));
   ASSERT_EQ(L"S-1-1-0", sddl_str);
 }
@@ -177,6 +177,14 @@ TEST(SidTest, SubAuthorities) {
   Sid sid_admin =
       Sid::FromSubAuthorities(&nt_authority, 2, admin_subauthorities);
   ASSERT_TRUE(EqualSid(sid_admin, ATL::Sids::Admins()));
+}
+
+TEST(SidTest, RandomSid) {
+  Sid sid1 = Sid::GenerateRandomSid();
+  ASSERT_TRUE(sid1.IsValid());
+  Sid sid2 = Sid::GenerateRandomSid();
+  ASSERT_TRUE(sid2.IsValid());
+  ASSERT_FALSE(::EqualSid(sid1.GetPSID(), sid2.GetPSID()));
 }
 
 }  // namespace sandbox

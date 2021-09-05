@@ -11,10 +11,21 @@
 
 namespace chromeos {
 
+// static
+std::string KioskAutolaunchScreen::GetResultString(Result result) {
+  switch (result) {
+    case Result::COMPLETED:
+      return "Completed";
+    case Result::CANCELED:
+      return "Canceled";
+  }
+}
+
 KioskAutolaunchScreen::KioskAutolaunchScreen(
     KioskAutolaunchScreenView* view,
     const ScreenExitCallback& exit_callback)
-    : BaseScreen(KioskAutolaunchScreenView::kScreenId),
+    : BaseScreen(KioskAutolaunchScreenView::kScreenId,
+                 OobeScreenPriority::DEFAULT),
       view_(view),
       exit_callback_(exit_callback) {
   DCHECK(view_);
@@ -36,11 +47,11 @@ void KioskAutolaunchScreen::OnViewDestroyed(KioskAutolaunchScreenView* view) {
     view_ = NULL;
 }
 
-void KioskAutolaunchScreen::Show() {
+void KioskAutolaunchScreen::ShowImpl() {
   if (view_)
     view_->Show();
 }
 
-void KioskAutolaunchScreen::Hide() {}
+void KioskAutolaunchScreen::HideImpl() {}
 
 }  // namespace chromeos

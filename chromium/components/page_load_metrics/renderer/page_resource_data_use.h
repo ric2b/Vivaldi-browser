@@ -8,13 +8,13 @@
 #include "base/macros.h"
 #include "components/page_load_metrics/common/page_load_metrics.mojom.h"
 #include "content/public/common/previews_state.h"
-#include "content/public/common/resource_type.h"
+#include "services/network/public/mojom/url_response_head.mojom-forward.h"
+#include "third_party/blink/public/mojom/loader/resource_load_info.mojom-shared.h"
 #include "url/origin.h"
 
 class GURL;
 
 namespace network {
-struct ResourceResponseHead;
 struct URLLoaderCompletionStatus;
 }  // namespace network
 
@@ -30,14 +30,15 @@ class PageResourceDataUse {
 
   void DidStartResponse(const GURL& response_url,
                         int resource_id,
-                        const network::ResourceResponseHead& response_head,
-                        content::ResourceType resource_type,
+                        const network::mojom::URLResponseHead& response_head,
+                        network::mojom::RequestDestination request_destination,
                         content::PreviewsState previews_state);
 
   // Updates received bytes.
   void DidReceiveTransferSizeUpdate(int received_data_length);
 
-  // Updates received bytes from encoded length.
+  // Updates received bytes information and decoded body length using the final
+  // state of the resource load.
   void DidCompleteResponse(const network::URLLoaderCompletionStatus& status);
 
   // Flags the resource as canceled.
@@ -79,6 +80,7 @@ class PageResourceDataUse {
   uint64_t total_received_bytes_ = 0;
   uint64_t last_update_bytes_ = 0;
   uint64_t encoded_body_length_ = 0;
+  uint64_t decoded_body_length_ = 0;
 
   bool is_complete_;
   bool is_canceled_;

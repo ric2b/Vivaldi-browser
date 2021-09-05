@@ -11,9 +11,11 @@
 #include "chrome/browser/predictors/loading_test_util.h"
 #include "chrome/browser/predictors/preconnect_manager.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/ukm/test_ukm_recorder.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_utils.h"
 #include "net/base/network_isolation_key.h"
+#include "services/metrics/public/cpp/ukm_builders.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using testing::_;
@@ -49,6 +51,7 @@ class LoadingStatsCollectorTest : public testing::Test {
   std::unique_ptr<StrictMock<MockResourcePrefetchPredictor>> mock_predictor_;
   std::unique_ptr<LoadingStatsCollector> stats_collector_;
   std::unique_ptr<base::HistogramTester> histogram_tester_;
+  std::unique_ptr<ukm::TestAutoSetUkmRecorder> ukm_recorder_;
 };
 
 LoadingStatsCollectorTest::LoadingStatsCollectorTest() = default;
@@ -65,6 +68,7 @@ void LoadingStatsCollectorTest::SetUp() {
   stats_collector_ =
       std::make_unique<LoadingStatsCollector>(mock_predictor_.get(), config);
   histogram_tester_ = std::make_unique<base::HistogramTester>();
+  ukm_recorder_ = std::make_unique<ukm::TestAutoSetUkmRecorder>();
   content::RunAllTasksUntilIdle();
 }
 
@@ -78,28 +82,28 @@ void LoadingStatsCollectorTest::TestRedirectStatusHistogram(
   const std::string& script_url = "https://cdn.google.com/script.js";
   PreconnectPrediction prediction = CreatePreconnectPrediction(
       GURL(prediction_url).host(), initial_url != prediction_url,
-      {{GURL(script_url).GetOrigin(), 1, net::NetworkIsolationKey()}});
+      {{url::Origin::Create(GURL(script_url)), 1, net::NetworkIsolationKey()}});
   EXPECT_CALL(*mock_predictor_, PredictPreconnectOrigins(GURL(initial_url), _))
       .WillOnce(DoAll(SetArgPointee<1>(prediction), Return(true)));
 
   // Navigation simulation.
-  std::vector<content::mojom::ResourceLoadInfoPtr> resources;
+  std::vector<blink::mojom::ResourceLoadInfoPtr> resources;
   resources.push_back(
       CreateResourceLoadInfoWithRedirects({initial_url, navigation_url}));
-  resources.push_back(
-      CreateResourceLoadInfo(script_url, content::ResourceType::kScript));
+  resources.push_back(CreateResourceLoadInfo(
+      script_url, network::mojom::RequestDestination::kScript));
   PageRequestSummary summary =
       CreatePageRequestSummary(navigation_url, initial_url, resources);
 
-  stats_collector_->RecordPageRequestSummary(summary);
+  stats_collector_->RecordPageRequestSummary(summary, base::nullopt);
 
   // Histogram check.
   histogram_tester_->ExpectUniqueSample(
-      internal::kLoadingPredictorPreconnectLearningRedirectStatus,
+      "LoadingPredictor.PreconnectLearningRedirectStatus.Navigation",
       static_cast<int>(expected_status), 1);
 }
 
-TEST_F(LoadingStatsCollectorTest, TestPreconnectPrecisionRecallHistograms) {
+TEST_F(LoadingStatsCollectorTest, TestPreconnectPrecisionRecallMetrics) {
   const std::string main_frame_url = "http://google.com/?query=cats";
   auto gen = [](int index) {
     return base::StringPrintf("http://cdn%d.google.com/script.js", index);
@@ -108,33 +112,161 @@ TEST_F(LoadingStatsCollectorTest, TestPreconnectPrecisionRecallHistograms) {
   // Predicts 4 origins: 2 useful, 2 useless.
   PreconnectPrediction prediction = CreatePreconnectPrediction(
       GURL(main_frame_url).host(), false,
-      {{GURL(main_frame_url).GetOrigin(), 1, net::NetworkIsolationKey()},
-       {GURL(gen(1)).GetOrigin(), 1, net::NetworkIsolationKey()},
-       {GURL(gen(2)).GetOrigin(), 1, net::NetworkIsolationKey()},
-       {GURL(gen(3)).GetOrigin(), 0, net::NetworkIsolationKey()}});
+      {{url::Origin::Create(GURL(main_frame_url)), 1,
+        net::NetworkIsolationKey()},
+       {url::Origin::Create(GURL(gen(1))), 1, net::NetworkIsolationKey()},
+       {url::Origin::Create(GURL(gen(2))), 1, net::NetworkIsolationKey()},
+       {url::Origin::Create(GURL(gen(3))), 0, net::NetworkIsolationKey()}});
   EXPECT_CALL(*mock_predictor_,
               PredictPreconnectOrigins(GURL(main_frame_url), _))
       .WillOnce(DoAll(SetArgPointee<1>(prediction), Return(true)));
 
   // Simulate a page load with 2 resources, one we know, one we don't, plus we
   // know the main frame origin.
-  std::vector<content::mojom::ResourceLoadInfoPtr> resources;
+  std::vector<blink::mojom::ResourceLoadInfoPtr> resources;
   resources.push_back(CreateResourceLoadInfo(main_frame_url));
-  resources.push_back(
-      CreateResourceLoadInfo(gen(1), content::ResourceType::kScript));
-  resources.push_back(
-      CreateResourceLoadInfo(gen(100), content::ResourceType::kScript));
+  resources.push_back(CreateResourceLoadInfo(
+      gen(1), network::mojom::RequestDestination::kScript));
+  resources.push_back(CreateResourceLoadInfo(
+      gen(100), network::mojom::RequestDestination::kScript));
   PageRequestSummary summary =
       CreatePageRequestSummary(main_frame_url, main_frame_url, resources);
 
-  stats_collector_->RecordPageRequestSummary(summary);
+  stats_collector_->RecordPageRequestSummary(summary, base::nullopt);
 
   histogram_tester_->ExpectUniqueSample(
-      internal::kLoadingPredictorPreconnectLearningRecall, 66, 1);
+      "LoadingPredictor.PreconnectLearningRecall.Navigation", 66, 1);
   histogram_tester_->ExpectUniqueSample(
-      internal::kLoadingPredictorPreconnectLearningPrecision, 50, 1);
+      "LoadingPredictor.PreconnectLearningPrecision.Navigation", 50, 1);
   histogram_tester_->ExpectUniqueSample(
-      internal::kLoadingPredictorPreconnectLearningCount, 4, 1);
+      "LoadingPredictor.PreconnectLearningCount.Navigation", 4, 1);
+  histogram_tester_->ExpectTotalCount(
+      "LoadingPredictor.PreconnectLearningRecall.OptimizationGuide", 0);
+  histogram_tester_->ExpectTotalCount(
+      "LoadingPredictor.PreconnectLearningPrecision.OptimizationGuide", 0);
+  histogram_tester_->ExpectTotalCount(
+      "LoadingPredictor.PreconnectLearningCount.OptimizationGuide", 0);
+
+  auto entries = ukm_recorder_->GetEntriesByName(
+      ukm::builders::LoadingPredictor::kEntryName);
+  EXPECT_EQ(1u, entries.size());
+  auto* entry = entries[0];
+  ukm_recorder_->ExpectEntryMetric(
+      entry, ukm::builders::LoadingPredictor::kLocalPredictionOriginsName, 4);
+  ukm_recorder_->ExpectEntryMetric(
+      entry,
+      ukm::builders::LoadingPredictor::
+          kLocalPredictionCorrectlyPredictedOriginsName,
+      2);
+  // Make sure optimization guide metrics are not recorded.
+  EXPECT_FALSE(ukm_recorder_->EntryHasMetric(
+      entry, ukm::builders::LoadingPredictor::
+                 kOptimizationGuidePredictionDecisionName));
+  EXPECT_FALSE(ukm_recorder_->EntryHasMetric(
+      entry, ukm::builders::LoadingPredictor::
+                 kOptimizationGuidePredictionOriginsName));
+  EXPECT_FALSE(ukm_recorder_->EntryHasMetric(
+      entry, ukm::builders::LoadingPredictor::
+                 kOptimizationGuidePredictionCorrectlyPredictedOriginsName));
+  EXPECT_FALSE(ukm_recorder_->EntryHasMetric(
+      entry, ukm::builders::LoadingPredictor::
+                 kOptimizationGuidePredictionSubresourcesName));
+  EXPECT_FALSE(ukm_recorder_->EntryHasMetric(
+      entry,
+      ukm::builders::LoadingPredictor::
+          kOptimizationGuidePredictionCorrectlyPredictedSubresourcesName));
+}
+
+TEST_F(LoadingStatsCollectorTest,
+       TestPreconnectPrecisionRecallMetricsWithOptimizationGuide) {
+  const std::string main_frame_url = "http://google.com/?query=cats";
+  auto gen = [](int index) {
+    return base::StringPrintf("http://cdn%d.google.com/script.js", index);
+  };
+
+  PreconnectPrediction local_prediction;
+  EXPECT_CALL(*mock_predictor_,
+              PredictPreconnectOrigins(GURL(main_frame_url), _))
+      .WillOnce(DoAll(SetArgPointee<1>(local_prediction), Return(false)));
+
+  // Optimization Guide predicts 4 origins: 2 useful, 2 useless.
+  base::Optional<OptimizationGuidePrediction> optimization_guide_prediction =
+      OptimizationGuidePrediction();
+  optimization_guide_prediction->decision =
+      optimization_guide::OptimizationGuideDecision::kTrue;
+  optimization_guide_prediction->preconnect_prediction =
+      CreatePreconnectPrediction(
+          GURL(main_frame_url).host(), false,
+          {{url::Origin::Create(GURL(main_frame_url)), 1,
+            net::NetworkIsolationKey()},
+           {url::Origin::Create(GURL(gen(1))), 1, net::NetworkIsolationKey()},
+           {url::Origin::Create(GURL(gen(2))), 1, net::NetworkIsolationKey()},
+           {url::Origin::Create(GURL(gen(3))), 0, net::NetworkIsolationKey()}});
+  optimization_guide_prediction->predicted_subresources = {
+      GURL(gen(1)), GURL(gen(2)), GURL(gen(3)), GURL(gen(4))};
+
+  // Simulate a page load with 2 resources, one we know, one we don't, plus we
+  // know the main frame origin.
+  std::vector<blink::mojom::ResourceLoadInfoPtr> resources;
+  resources.push_back(CreateResourceLoadInfo(main_frame_url));
+  resources.push_back(CreateResourceLoadInfo(
+      gen(1), network::mojom::RequestDestination::kScript));
+  resources.push_back(CreateResourceLoadInfo(
+      gen(100), network::mojom::RequestDestination::kScript));
+  PageRequestSummary summary =
+      CreatePageRequestSummary(main_frame_url, main_frame_url, resources);
+
+  stats_collector_->RecordPageRequestSummary(summary,
+                                             optimization_guide_prediction);
+
+  histogram_tester_->ExpectUniqueSample(
+      "LoadingPredictor.PreconnectLearningRecall.OptimizationGuide", 66, 1);
+  histogram_tester_->ExpectUniqueSample(
+      "LoadingPredictor.PreconnectLearningPrecision.OptimizationGuide", 50, 1);
+  histogram_tester_->ExpectUniqueSample(
+      "LoadingPredictor.PreconnectLearningCount.OptimizationGuide", 4, 1);
+  histogram_tester_->ExpectTotalCount(
+      "LoadingPredictor.PreconnectLearningRecall.Navigation", 0);
+  histogram_tester_->ExpectTotalCount(
+      "LoadingPredictor.PreconnectLearningPrecision.Navigation", 0);
+  histogram_tester_->ExpectTotalCount(
+      "LoadingPredictor.PreconnectLearningCount.Navigation", 0);
+
+  auto entries = ukm_recorder_->GetEntriesByName(
+      ukm::builders::LoadingPredictor::kEntryName);
+  EXPECT_EQ(1u, entries.size());
+  auto* entry = entries[0];
+  ukm_recorder_->ExpectEntryMetric(
+      entry,
+      ukm::builders::LoadingPredictor::kOptimizationGuidePredictionDecisionName,
+      static_cast<int64_t>(
+          optimization_guide::OptimizationGuideDecision::kTrue));
+  ukm_recorder_->ExpectEntryMetric(
+      entry,
+      ukm::builders::LoadingPredictor::kOptimizationGuidePredictionOriginsName,
+      4);
+  ukm_recorder_->ExpectEntryMetric(
+      entry,
+      ukm::builders::LoadingPredictor::
+          kOptimizationGuidePredictionCorrectlyPredictedOriginsName,
+      2);
+  ukm_recorder_->ExpectEntryMetric(
+      entry,
+      ukm::builders::LoadingPredictor::
+          kOptimizationGuidePredictionSubresourcesName,
+      4);
+  ukm_recorder_->ExpectEntryMetric(
+      entry,
+      ukm::builders::LoadingPredictor::
+          kOptimizationGuidePredictionCorrectlyPredictedSubresourcesName,
+      1);
+  // Make sure local metrics are not recorded since there was not a local
+  // prediction.
+  EXPECT_FALSE(ukm_recorder_->EntryHasMetric(
+      entry, ukm::builders::LoadingPredictor::kLocalPredictionOriginsName));
+  EXPECT_FALSE(ukm_recorder_->EntryHasMetric(
+      entry, ukm::builders::LoadingPredictor::
+                 kLocalPredictionCorrectlyPredictedOriginsName));
 }
 
 TEST_F(LoadingStatsCollectorTest, TestRedirectStatusNoRedirect) {
@@ -176,11 +308,11 @@ TEST_F(LoadingStatsCollectorTest, TestPreconnectHistograms) {
     // Initialize PreconnectStats.
 
     // These two are hits.
-    PreconnectedRequestStats origin1(GURL(gen(1)).GetOrigin(), true);
-    PreconnectedRequestStats origin2(GURL(gen(2)).GetOrigin(), false);
+    PreconnectedRequestStats origin1(url::Origin::Create(GURL(gen(1))), true);
+    PreconnectedRequestStats origin2(url::Origin::Create(GURL(gen(2))), false);
     // And these two are misses.
-    PreconnectedRequestStats origin3(GURL(gen(3)).GetOrigin(), false);
-    PreconnectedRequestStats origin4(GURL(gen(4)).GetOrigin(), true);
+    PreconnectedRequestStats origin3(url::Origin::Create(GURL(gen(3))), false);
+    PreconnectedRequestStats origin4(url::Origin::Create(GURL(gen(4))), true);
 
     auto stats = std::make_unique<PreconnectStats>(GURL(main_frame_url));
     stats->requests_stats = {origin1, origin2, origin3, origin4};
@@ -190,18 +322,18 @@ TEST_F(LoadingStatsCollectorTest, TestPreconnectHistograms) {
 
   {
     // Simulate a page load with 3 origins.
-    std::vector<content::mojom::ResourceLoadInfoPtr> resources;
+    std::vector<blink::mojom::ResourceLoadInfoPtr> resources;
     resources.push_back(CreateResourceLoadInfo(main_frame_url));
-    resources.push_back(
-        CreateResourceLoadInfo(gen(1), content::ResourceType::kScript));
-    resources.push_back(
-        CreateResourceLoadInfo(gen(2), content::ResourceType::kScript));
-    resources.push_back(
-        CreateResourceLoadInfo(gen(100), content::ResourceType::kScript));
+    resources.push_back(CreateResourceLoadInfo(
+        gen(1), network::mojom::RequestDestination::kScript));
+    resources.push_back(CreateResourceLoadInfo(
+        gen(2), network::mojom::RequestDestination::kScript));
+    resources.push_back(CreateResourceLoadInfo(
+        gen(100), network::mojom::RequestDestination::kScript));
     PageRequestSummary summary =
         CreatePageRequestSummary(main_frame_url, main_frame_url, resources);
 
-    stats_collector_->RecordPageRequestSummary(summary);
+    stats_collector_->RecordPageRequestSummary(summary, base::nullopt);
   }
 
   histogram_tester_->ExpectUniqueSample(
@@ -225,13 +357,14 @@ TEST_F(LoadingStatsCollectorTest, TestPreconnectHistogramsEmpty) {
               PredictPreconnectOrigins(GURL(main_frame_url), _))
       .WillOnce(Return(false));
 
-  std::vector<content::mojom::ResourceLoadInfoPtr> resources;
+  std::vector<blink::mojom::ResourceLoadInfoPtr> resources;
   resources.push_back(CreateResourceLoadInfo(main_frame_url));
-  resources.push_back(CreateResourceLoadInfo("http://cdn.google.com/script.js",
-                                             content::ResourceType::kScript));
+  resources.push_back(
+      CreateResourceLoadInfo("http://cdn.google.com/script.js",
+                             network::mojom::RequestDestination::kScript));
   PageRequestSummary summary =
       CreatePageRequestSummary(main_frame_url, main_frame_url, resources);
-  stats_collector_->RecordPageRequestSummary(summary);
+  stats_collector_->RecordPageRequestSummary(summary, base::nullopt);
 
   // No histograms should be recorded.
   histogram_tester_->ExpectTotalCount(
@@ -259,11 +392,11 @@ TEST_F(LoadingStatsCollectorTest, TestPreconnectHistogramsPreresolvesOnly) {
     // Initialize PreconnectStats.
 
     // These two are hits.
-    PreconnectedRequestStats origin1(GURL(gen(1)).GetOrigin(), false);
-    PreconnectedRequestStats origin2(GURL(gen(2)).GetOrigin(), false);
+    PreconnectedRequestStats origin1(url::Origin::Create(GURL(gen(1))), false);
+    PreconnectedRequestStats origin2(url::Origin::Create(GURL(gen(2))), false);
     // And these two are misses.
-    PreconnectedRequestStats origin3(GURL(gen(3)).GetOrigin(), false);
-    PreconnectedRequestStats origin4(GURL(gen(4)).GetOrigin(), false);
+    PreconnectedRequestStats origin3(url::Origin::Create(GURL(gen(3))), false);
+    PreconnectedRequestStats origin4(url::Origin::Create(GURL(gen(4))), false);
 
     auto stats = std::make_unique<PreconnectStats>(GURL(main_frame_url));
     stats->requests_stats = {origin1, origin2, origin3, origin4};
@@ -273,18 +406,18 @@ TEST_F(LoadingStatsCollectorTest, TestPreconnectHistogramsPreresolvesOnly) {
 
   {
     // Simulate a page load with 3 origins.
-    std::vector<content::mojom::ResourceLoadInfoPtr> resources;
+    std::vector<blink::mojom::ResourceLoadInfoPtr> resources;
     resources.push_back(CreateResourceLoadInfo(main_frame_url));
-    resources.push_back(
-        CreateResourceLoadInfo(gen(1), content::ResourceType::kScript));
-    resources.push_back(
-        CreateResourceLoadInfo(gen(2), content::ResourceType::kScript));
-    resources.push_back(
-        CreateResourceLoadInfo(gen(100), content::ResourceType::kScript));
+    resources.push_back(CreateResourceLoadInfo(
+        gen(1), network::mojom::RequestDestination::kScript));
+    resources.push_back(CreateResourceLoadInfo(
+        gen(2), network::mojom::RequestDestination::kScript));
+    resources.push_back(CreateResourceLoadInfo(
+        gen(100), network::mojom::RequestDestination::kScript));
     PageRequestSummary summary =
         CreatePageRequestSummary(main_frame_url, main_frame_url, resources);
 
-    stats_collector_->RecordPageRequestSummary(summary);
+    stats_collector_->RecordPageRequestSummary(summary, base::nullopt);
   }
 
   histogram_tester_->ExpectUniqueSample(

@@ -8,21 +8,24 @@
 
 #include "base/bind.h"
 #include "base/feature_list.h"
-#include "base/metrics/user_metrics.h"
-#include "base/metrics/user_metrics_action.h"
 #include "base/values.h"
-#include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/profiles/profile.h"
-#include "components/content_settings/core/browser/cookie_settings.h"
-#include "components/content_settings/core/common/features.h"
-#include "components/content_settings/core/common/pref_names.h"
-#include "components/policy/core/common/policy_service.h"
-#include "components/policy/policy_constants.h"
-#include "components/prefs/pref_service.h"
+#include "chrome/browser/ui/cookie_controls/cookie_controls_service.h"
+#include "chrome/browser/ui/cookie_controls/cookie_controls_service_factory.h"
+#include "chrome/common/chrome_features.h"
 
-CookieControlsHandler::CookieControlsHandler() {}
+namespace {
+static const char* kPolicyIcon = "cr20:domain";
+static const char* kExtensionIcon = "cr:extension";
+static const char* kSettingsIcon = "cr:settings_icon";
+}  // namespace
 
-CookieControlsHandler::~CookieControlsHandler() {}
+CookieControlsHandler::CookieControlsHandler(Profile* profile)
+    : service_(CookieControlsServiceFactory::GetForProfile(profile)) {}
+
+CookieControlsHandler::~CookieControlsHandler() {
+  service_->RemoveObserver(this);
+}
 
 void CookieControlsHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback(
@@ -38,80 +41,59 @@ void CookieControlsHandler::RegisterMessages() {
 }
 
 void CookieControlsHandler::OnJavascriptAllowed() {
-  Profile* profile = Profile::FromWebUI(web_ui());
-  pref_change_registrar_.Init(profile->GetPrefs());
-  pref_change_registrar_.Add(
-      prefs::kCookieControlsMode,
-      base::Bind(&CookieControlsHandler::OnCookieControlsChanged,
-                 base::Unretained(this)));
-  pref_change_registrar_.Add(
-      prefs::kBlockThirdPartyCookies,
-      base::Bind(&CookieControlsHandler::OnThirdPartyCookieBlockingChanged,
-                 base::Unretained(this)));
-  policy_registrar_ = std::make_unique<policy::PolicyChangeRegistrar>(
-      profile->GetProfilePolicyConnector()->policy_service(),
-      policy::PolicyNamespace(policy::POLICY_DOMAIN_CHROME, std::string()));
-  policy_registrar_->Observe(
-      policy::key::kBlockThirdPartyCookies,
-      base::BindRepeating(
-          &CookieControlsHandler::OnThirdPartyCookieBlockingPolicyChanged,
-          base::Unretained(this)));
+  service_->AddObserver(this);
 }
 
 void CookieControlsHandler::OnJavascriptDisallowed() {
-  pref_change_registrar_.RemoveAll();
-  policy_registrar_.reset();
+  service_->RemoveObserver(this);
 }
 
 void CookieControlsHandler::HandleCookieControlsToggleChanged(
     const base::ListValue* args) {
   bool checked;
   CHECK(args->GetBoolean(0, &checked));
-  Profile* profile = Profile::FromWebUI(web_ui());
-  profile->GetPrefs()->SetInteger(
-      prefs::kCookieControlsMode,
-      static_cast<int>(
-          checked ? content_settings::CookieControlsMode::kIncognitoOnly
-                  : content_settings::CookieControlsMode::kOff));
-  base::RecordAction(
-      checked ? base::UserMetricsAction("CookieControls.NTP.Enabled")
-              : base::UserMetricsAction("CookieControls.NTP.Disabled"));
+  service_->HandleCookieControlsToggleChanged(checked);
 }
 
 void CookieControlsHandler::HandleObserveCookieControlsSettingsChanges(
     const base::ListValue* args) {
   AllowJavascript();
-  OnCookieControlsChanged();
-  OnThirdPartyCookieBlockingChanged();
+  SendCookieControlsUIChanges();
 }
 
-void CookieControlsHandler::OnCookieControlsChanged() {
+const char* CookieControlsHandler::GetEnforcementIcon(Profile* profile) {
+  CookieControlsService* service =
+      CookieControlsServiceFactory::GetForProfile(profile);
+  switch (service->GetCookieControlsEnforcement()) {
+    case CookieControlsEnforcement::kEnforcedByPolicy:
+      return kPolicyIcon;
+    case CookieControlsEnforcement::kEnforcedByExtension:
+      return kExtensionIcon;
+    case CookieControlsEnforcement::kEnforcedByCookieSetting:
+      return kSettingsIcon;
+    case CookieControlsEnforcement::kNoEnforcement:
+      return "";
+  }
+}
+
+void CookieControlsHandler::OnThirdPartyCookieBlockingPrefChanged() {
+  SendCookieControlsUIChanges();
+}
+
+void CookieControlsHandler::OnThirdPartyCookieBlockingPolicyChanged() {
+  SendCookieControlsUIChanges();
+}
+
+void CookieControlsHandler::SendCookieControlsUIChanges() {
   Profile* profile = Profile::FromWebUI(web_ui());
-  FireWebUIListener("cookie-controls-changed",
-                    base::Value(GetToggleCheckedValue(profile)));
-}
-
-bool CookieControlsHandler::GetToggleCheckedValue(const Profile* profile) {
-  int mode = profile->GetPrefs()->GetInteger(prefs::kCookieControlsMode);
-  return mode != static_cast<int>(content_settings::CookieControlsMode::kOff);
-}
-
-void CookieControlsHandler::OnThirdPartyCookieBlockingChanged() {
-  Profile* profile = Profile::FromWebUI(web_ui());
-  FireWebUIListener("third-party-cookie-blocking-changed",
-                    base::Value(ShouldHideCookieControlsUI(profile)));
-}
-
-void CookieControlsHandler::OnThirdPartyCookieBlockingPolicyChanged(
-    const base::Value* previous,
-    const base::Value* current) {
-  OnThirdPartyCookieBlockingChanged();
-}
-
-bool CookieControlsHandler::ShouldHideCookieControlsUI(const Profile* profile) {
-  return !base::FeatureList::IsEnabled(
-             content_settings::kImprovedCookieControls) ||
-         profile->GetPrefs()->IsManagedPreference(
-             prefs::kBlockThirdPartyCookies) ||
-         profile->GetPrefs()->GetBoolean(prefs::kBlockThirdPartyCookies);
+  base::DictionaryValue dict;
+  dict.SetBoolKey("enforced", service_->ShouldEnforceCookieControls());
+  dict.SetBoolKey("checked", service_->GetToggleCheckedValue());
+  dict.SetStringKey("icon", CookieControlsHandler::GetEnforcementIcon(profile));
+  bool use_new_cookie_page =
+      base::FeatureList::IsEnabled(features::kPrivacySettingsRedesign);
+  dict.SetString("cookieSettingsUrl",
+                 use_new_cookie_page ? "chrome://settings/cookies"
+                                     : "chrome://settings/content/cookies");
+  FireWebUIListener("cookie-controls-changed", dict);
 }

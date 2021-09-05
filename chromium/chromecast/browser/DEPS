@@ -12,12 +12,13 @@ include_rules = [
   "+chromecast/metrics",
   "+chromecast/net",
   "+chromecast/service",
+  "+chromecast/ui",
   "+components/cdm/browser",
   "+components/crash",
   "+components/download/public/common",
   "+components/heap_profiling",
   "+components/keyed_service",
-  "+components/network_hints/browser",
+  "+components/network_hints",
   "+components/network_session_configurator/common",
   "+components/policy/core/browser",
   "+components/prefs",
@@ -28,6 +29,7 @@ include_rules = [
   "+components/services/heap_profiling/public/mojom",
   "+components/services/heap_profiling/public/cpp/settings.h",
   "+components/storage_monitor",
+  "+components/ui_devtools",
   "+components/user_prefs",
   "+components/variations/net",
   "+components/version_info",
@@ -55,6 +57,7 @@ include_rules = [
   "+services/service_manager/embedder",
   "+storage/browser/quota/quota_settings.h",
   "+third_party/blink/public/common",
+  "+third_party/blink/public/mojom/loader/resource_load_info.mojom.h",
   "+third_party/blink/public/mojom/mediastream/media_stream.mojom-shared.h",
   "+third_party/blink/public/mojom/messaging",
   "+third_party/blink/public/mojom/speech/speech_synthesis.mojom-forward.h",
@@ -81,6 +84,14 @@ include_rules = [
   # TODO(halliwell): Need to re-work this dependency otherwise Cast can't run
   # with Viz out of process.
   "+components/viz/service/display/overlay_strategy_underlay_cast.h",
+  # TODO(guohuideng): 1. When Display Compositor is fully moved to GPU process,
+  # remove the above dependency on "overlay_strategy_underlay_cast.h".
+  # 2. Separate SetGeometry from VideoPlaneController, and get rid of the
+  # dependency on.
+  "+chromecast/media/service/cast_renderer.h",
+
+  # For favicon url
+  "+third_party/blink/public/mojom/favicon",
 
   # No inclusion of WebKit from the browser, other than the ones in
   # WebKit/public/{mojom,common}, or the ones that are strictly enum/POD,

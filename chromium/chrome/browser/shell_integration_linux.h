@@ -8,8 +8,14 @@
 #include <string>
 
 #include "base/files/file_path.h"
+#include "chrome/browser/web_applications/components/web_app_id.h"
 #include "chrome/common/buildflags.h"
+#include "components/services/app_service/public/cpp/file_handler.h"
 #include "url/gurl.h"
+
+#if defined(OS_CHROMEOS)
+#error shell_integration_linux is for desktop linux only.
+#endif
 
 namespace base {
 class CommandLine;
@@ -65,6 +71,7 @@ std::string GetDesktopFileContents(const base::FilePath& chrome_exe_path,
                                    const std::string& icon_name,
                                    const base::FilePath& profile_path,
                                    const std::string& categories,
+                                   const std::string& mime_type,
                                    bool no_display);
 
 // Returns contents for .desktop file that executes command_line. This is a more
@@ -77,6 +84,7 @@ std::string GetDesktopFileContentsForCommand(
     const base::string16& title,
     const std::string& icon_name,
     const std::string& categories,
+    const std::string& mime_type,
     bool no_display);
 
 // Returns contents for .directory file named |title| with icon |icon_name|. If
@@ -84,13 +92,17 @@ std::string GetDesktopFileContentsForCommand(
 std::string GetDirectoryFileContents(const base::string16& title,
                                      const std::string& icon_name);
 
-#if BUILDFLAG(ENABLE_APP_LIST)
-// Create shortcuts in the application menu for the app launcher. Duplicate
-// shortcuts are avoided, so if a requested shortcut already exists it is
-// deleted first. Also creates the icon required by the shortcut.
-bool CreateAppListDesktopShortcut(const std::string& wm_class,
-                                  const std::string& title);
-#endif
+// Returns the filename for a .xml file, corresponding to a given |app_id|,
+// which is passed to `xdg-mime` to register one or more custom MIME types in
+// Linux.
+base::FilePath GetMimeTypesRegistrationFilename(
+    const base::FilePath& profile_path,
+    const web_app::AppId& app_id);
+
+// Returns the contents of a .xml file as specified by |file_handlers|, which is
+// passed to `xdg-mime` to register one or more custom MIME types in Linux.
+std::string GetMimeTypesRegistrationFileContents(
+    const apps::FileHandlers& file_handlers);
 
 // Windows that correspond to web apps need to have a deterministic (and
 // different) WMClass than normal chrome windows so the window manager groups

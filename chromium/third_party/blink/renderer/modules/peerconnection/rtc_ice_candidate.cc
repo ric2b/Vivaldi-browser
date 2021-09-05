@@ -34,11 +34,12 @@
 
 #include "third_party/blink/renderer/bindings/core/v8/script_value.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_object_builder.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_rtc_ice_candidate_init.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
-#include "third_party/blink/renderer/modules/peerconnection/rtc_ice_candidate_init.h"
 #include "third_party/blink/renderer/platform/bindings/exception_messages.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 
 namespace blink {
@@ -64,90 +65,111 @@ RTCIceCandidate* RTCIceCandidate::Create(
                       WebFeature::kRTCIceCandidateDefaultSdpMLineIndex);
   }
 
-  return MakeGarbageCollected<RTCIceCandidate>(WebRTCICECandidate::Create(
-      candidate_init->candidate(), sdp_mid, std::move(sdp_m_line_index),
-      candidate_init->usernameFragment()));
+  return MakeGarbageCollected<RTCIceCandidate>(
+      MakeGarbageCollected<RTCIceCandidatePlatform>(
+          candidate_init->candidate(), sdp_mid, std::move(sdp_m_line_index),
+          candidate_init->usernameFragment()));
 }
 
 RTCIceCandidate* RTCIceCandidate::Create(
-    scoped_refptr<WebRTCICECandidate> web_candidate) {
-  return MakeGarbageCollected<RTCIceCandidate>(std::move(web_candidate));
+    RTCIceCandidatePlatform* platform_candidate) {
+  return MakeGarbageCollected<RTCIceCandidate>(platform_candidate);
 }
 
-RTCIceCandidate::RTCIceCandidate(
-    scoped_refptr<WebRTCICECandidate> web_candidate)
-    : web_candidate_(std::move(web_candidate)) {}
+RTCIceCandidate::RTCIceCandidate(RTCIceCandidatePlatform* platform_candidate)
+    : platform_candidate_(platform_candidate) {}
 
 String RTCIceCandidate::candidate() const {
-  return web_candidate_->Candidate();
+  return platform_candidate_->Candidate();
 }
 
 String RTCIceCandidate::sdpMid() const {
-  return web_candidate_->SdpMid();
+  return platform_candidate_->SdpMid();
+}
+
+base::Optional<uint16_t> RTCIceCandidate::sdpMLineIndex() const {
+  return platform_candidate_->SdpMLineIndex();
 }
 
 uint16_t RTCIceCandidate::sdpMLineIndex(bool& is_null) const {
-  is_null = !web_candidate_->SdpMLineIndex().has_value();
-  return is_null ? 0 : *web_candidate_->SdpMLineIndex();
+  is_null = !platform_candidate_->SdpMLineIndex().has_value();
+  return platform_candidate_->SdpMLineIndex().value_or(0);
 }
 
-scoped_refptr<WebRTCICECandidate> RTCIceCandidate::WebCandidate() const {
-  return web_candidate_;
+RTCIceCandidatePlatform* RTCIceCandidate::PlatformCandidate() const {
+  return platform_candidate_;
+}
+
+void RTCIceCandidate::Trace(Visitor* visitor) {
+  visitor->Trace(platform_candidate_);
+  ScriptWrappable::Trace(visitor);
 }
 
 String RTCIceCandidate::foundation() const {
-  return web_candidate_->Foundation();
+  return platform_candidate_->Foundation();
 }
 
 String RTCIceCandidate::component() const {
-  return web_candidate_->Component();
+  return platform_candidate_->Component();
+}
+
+base::Optional<uint32_t> RTCIceCandidate::priority() const {
+  return platform_candidate_->Priority();
 }
 
 uint32_t RTCIceCandidate::priority(bool& is_null) const {
-  is_null = !web_candidate_->Priority().has_value();
-  return is_null ? 0 : *web_candidate_->Priority();
+  is_null = !platform_candidate_->Priority().has_value();
+  return platform_candidate_->Priority().value_or(0);
 }
 
 String RTCIceCandidate::address() const {
-  return web_candidate_->Address();
+  return platform_candidate_->Address();
 }
 
 String RTCIceCandidate::protocol() const {
-  return web_candidate_->Protocol();
+  return platform_candidate_->Protocol();
+}
+
+base::Optional<uint16_t> RTCIceCandidate::port() const {
+  return platform_candidate_->Port();
 }
 
 uint16_t RTCIceCandidate::port(bool& is_null) const {
-  is_null = !web_candidate_->Port().has_value();
-  return is_null ? 0 : *web_candidate_->Port();
+  is_null = !platform_candidate_->Port().has_value();
+  return platform_candidate_->Port().value_or(0);
 }
 
 String RTCIceCandidate::type() const {
-  return web_candidate_->Type();
+  return platform_candidate_->Type();
 }
 
 String RTCIceCandidate::tcpType() const {
-  return web_candidate_->TcpType();
+  return platform_candidate_->TcpType();
 }
 
 String RTCIceCandidate::relatedAddress() const {
-  return web_candidate_->RelatedAddress();
+  return platform_candidate_->RelatedAddress();
+}
+
+base::Optional<uint16_t> RTCIceCandidate::relatedPort() const {
+  return platform_candidate_->RelatedPort();
 }
 
 uint16_t RTCIceCandidate::relatedPort(bool& is_null) const {
-  is_null = !web_candidate_->RelatedPort().has_value();
-  return is_null ? 0 : *web_candidate_->RelatedPort();
+  is_null = !platform_candidate_->RelatedPort().has_value();
+  return platform_candidate_->RelatedPort().value_or(0);
 }
 
 String RTCIceCandidate::usernameFragment() const {
-  return web_candidate_->UsernameFragment();
+  return platform_candidate_->UsernameFragment();
 }
 
 ScriptValue RTCIceCandidate::toJSONForBinding(ScriptState* script_state) {
   V8ObjectBuilder result(script_state);
-  result.AddString("candidate", web_candidate_->Candidate());
-  result.AddString("sdpMid", web_candidate_->SdpMid());
-  if (web_candidate_->SdpMLineIndex())
-    result.AddNumber("sdpMLineIndex", *web_candidate_->SdpMLineIndex());
+  result.AddString("candidate", platform_candidate_->Candidate());
+  result.AddString("sdpMid", platform_candidate_->SdpMid());
+  if (platform_candidate_->SdpMLineIndex())
+    result.AddNumber("sdpMLineIndex", *platform_candidate_->SdpMLineIndex());
   return result.GetScriptValue();
 }
 

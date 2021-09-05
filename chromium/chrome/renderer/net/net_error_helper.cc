@@ -108,13 +108,18 @@ bool IsOfflineContentOnNetErrorFeatureEnabled() {
 
 #if defined(OS_ANDROID)
 bool IsAutoFetchFeatureEnabled() {
-  return base::FeatureList::IsEnabled(features::kAutoFetchOnNetErrorPage);
+  return true;
 }
 #else   // OS_ANDROID
 bool IsAutoFetchFeatureEnabled() {
   return false;
 }
 #endif  // OS_ANDROID
+
+bool IsRunningInForcedAppMode() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kForceAppMode);
+}
 
 const net::NetworkTrafficAnnotationTag& GetNetworkTrafficAnnotationTag() {
   static const net::NetworkTrafficAnnotationTag network_traffic_annotation_tag =
@@ -162,10 +167,11 @@ NetErrorHelper::NetErrorHelper(RenderFrame* render_frame)
                                      !render_frame->IsHidden()));
 
   render_frame->GetAssociatedInterfaceRegistry()->AddInterface(
-      base::Bind(&NetErrorHelper::OnNetworkDiagnosticsClientRequest,
-                 base::Unretained(this)));
-  render_frame->GetAssociatedInterfaceRegistry()->AddInterface(base::Bind(
-      &NetErrorHelper::OnNavigationCorrectorRequest, base::Unretained(this)));
+      base::BindRepeating(&NetErrorHelper::OnNetworkDiagnosticsClientRequest,
+                          base::Unretained(this)));
+  render_frame->GetAssociatedInterfaceRegistry()->AddInterface(
+      base::BindRepeating(&NetErrorHelper::OnNavigationCorrectorRequest,
+                          base::Unretained(this)));
 }
 
 NetErrorHelper::~NetErrorHelper() {
@@ -205,70 +211,12 @@ content::RenderFrame* NetErrorHelper::GetRenderFrame() {
   return render_frame();
 }
 
-void NetErrorHelper::SendCommand(
-    security_interstitials::SecurityInterstitialCommand command) {
+mojo::AssociatedRemote<security_interstitials::mojom::InterstitialCommands>
+NetErrorHelper::GetInterface() {
   mojo::AssociatedRemote<security_interstitials::mojom::InterstitialCommands>
       interface;
   render_frame()->GetRemoteAssociatedInterfaces()->GetInterface(&interface);
-  switch (command) {
-    case security_interstitials::CMD_DONT_PROCEED: {
-      interface->DontProceed();
-      break;
-    }
-    case security_interstitials::CMD_PROCEED: {
-      interface->Proceed();
-      break;
-    }
-    case security_interstitials::CMD_SHOW_MORE_SECTION: {
-      interface->ShowMoreSection();
-      break;
-    }
-    case security_interstitials::CMD_OPEN_HELP_CENTER: {
-      interface->OpenHelpCenter();
-      break;
-    }
-    case security_interstitials::CMD_OPEN_DIAGNOSTIC: {
-      interface->OpenDiagnostic();
-      break;
-    }
-    case security_interstitials::CMD_RELOAD: {
-      interface->Reload();
-      break;
-    }
-    case security_interstitials::CMD_OPEN_DATE_SETTINGS: {
-      interface->OpenDateSettings();
-      break;
-    }
-    case security_interstitials::CMD_OPEN_LOGIN: {
-      interface->OpenLogin();
-      break;
-    }
-    case security_interstitials::CMD_DO_REPORT: {
-      interface->DoReport();
-      break;
-    }
-    case security_interstitials::CMD_DONT_REPORT: {
-      interface->DontReport();
-      break;
-    }
-    case security_interstitials::CMD_OPEN_REPORTING_PRIVACY: {
-      interface->OpenReportingPrivacy();
-      break;
-    }
-    case security_interstitials::CMD_OPEN_WHITEPAPER: {
-      interface->OpenWhitepaper();
-      break;
-    }
-    case security_interstitials::CMD_REPORT_PHISHING_ERROR: {
-      interface->ReportPhishingError();
-      break;
-    }
-    default: {
-      // Other values in the enum are only used by tests so this
-      // method should not be called with them.
-      NOTREACHED();
-    }
-  }
+  return interface;
 }
 
 void NetErrorHelper::DidStartNavigation(
@@ -336,8 +284,9 @@ std::unique_ptr<network::ResourceRequest> NetErrorHelper::CreatePostRequest(
   resource_request->method = "POST";
   resource_request->fetch_request_context_type =
       static_cast<int>(blink::mojom::RequestContextType::INTERNAL);
+  resource_request->destination = network::mojom::RequestDestination::kEmpty;
   resource_request->resource_type =
-      static_cast<int>(content::ResourceType::kSubResource);
+      static_cast<int>(blink::mojom::ResourceType::kSubResource);
 
   blink::WebLocalFrame* frame = render_frame()->GetWebFrame();
   resource_request->site_for_cookies = frame->GetDocument().SiteForCookies();
@@ -385,17 +334,19 @@ LocalizedError::PageState NetErrorHelper::GenerateLocalizedErrorPage(
 
   int resource_id = IDR_NET_ERROR_HTML;
   std::string extracted_string =
-      ui::ResourceBundle::GetSharedInstance().DecompressDataResource(
+      ui::ResourceBundle::GetSharedInstance().LoadDataResourceString(
           resource_id);
   base::StringPiece template_html(extracted_string.data(),
                                   extracted_string.size());
 
   LocalizedError::PageState page_state = LocalizedError::GetPageState(
       error.reason(), error.domain(), error.url(), is_failed_post,
+      error.resolve_error_info().is_secure_network_error,
       error.stale_copy_in_cache(), can_show_network_diagnostics_dialog,
       ChromeRenderThreadObserver::is_incognito_process(),
       IsOfflineContentOnNetErrorFeatureEnabled(), IsAutoFetchFeatureEnabled(),
-      RenderThread::Get()->GetLocale(), std::move(params));
+      IsRunningInForcedAppMode(), RenderThread::Get()->GetLocale(),
+      std::move(params));
   DCHECK(!template_html.empty()) << "unable to load template.";
   // "t" is the id of the template's root node.
   *error_html =
@@ -423,10 +374,12 @@ LocalizedError::PageState NetErrorHelper::UpdateErrorPage(
     bool can_show_network_diagnostics_dialog) {
   LocalizedError::PageState page_state = LocalizedError::GetPageState(
       error.reason(), error.domain(), error.url(), is_failed_post,
+      error.resolve_error_info().is_secure_network_error,
       error.stale_copy_in_cache(), can_show_network_diagnostics_dialog,
       ChromeRenderThreadObserver::is_incognito_process(),
       IsOfflineContentOnNetErrorFeatureEnabled(), IsAutoFetchFeatureEnabled(),
-      RenderThread::Get()->GetLocale(), std::unique_ptr<ErrorPageParams>());
+      IsRunningInForcedAppMode(), RenderThread::Get()->GetLocale(),
+      std::unique_ptr<ErrorPageParams>());
 
   std::string json;
   JSONWriter::Write(page_state.strings, &json);

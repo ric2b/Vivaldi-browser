@@ -8,7 +8,7 @@
 #include <cmath>
 #include <utility>
 
-#include "third_party/blink/renderer/core/geometry/dom_point_init.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_dom_point_init.h"
 #include "third_party/blink/renderer/core/geometry/dom_point_read_only.h"
 #include "third_party/blink/renderer/modules/xr/xr_rigid_transform.h"
 #include "third_party/blink/renderer/modules/xr/xr_utils.h"
@@ -142,7 +142,7 @@ DOMFloat32Array* XRRay::matrix() {
   // steps:
   //    Step 1. If the operation IsDetachedBuffer on internal matrix is false,
   //    return transform’s internal matrix.
-  if (!matrix_ || !matrix_->View() || !matrix_->View()->Data()) {
+  if (!matrix_ || !matrix_->Data()) {
     // Returned matrix should represent transformation from ray originating at
     // (0,0,0) with direction (0,0,-1) into ray originating at |origin_| with
     // direction |direction_|.
@@ -208,7 +208,7 @@ TransformationMatrix XRRay::RawMatrix() {
   return *raw_matrix_;
 }
 
-void XRRay::Trace(blink::Visitor* visitor) {
+void XRRay::Trace(Visitor* visitor) {
   visitor->Trace(origin_);
   visitor->Trace(direction_);
   visitor->Trace(matrix_);

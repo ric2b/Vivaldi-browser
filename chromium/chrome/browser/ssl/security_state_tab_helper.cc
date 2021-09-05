@@ -14,10 +14,11 @@
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/lookalikes/safety_tips/reputation_web_contents_observer.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/reputation/reputation_web_contents_observer.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/browser/safe_browsing/ui_manager.h"
+#include "chrome/browser/ssl/known_interception_disclosure_infobar_delegate.h"
 #include "chrome/browser/ssl/tls_deprecation_config.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
@@ -29,6 +30,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/buildflags.h"
 #include "components/security_state/content/content_utils.h"
+#include "components/security_state/core/security_state_pref_names.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
@@ -108,7 +110,10 @@ bool IsLegacyTLS(GURL url, int connection_status) {
   net::SSLVersion ssl_version =
       net::SSLConnectionStatusToVersion(connection_status);
 
-  return ssl_version < ssl_version_min;
+  // Signed Exchanges do not have connection status set. Exclude unknown TLS
+  // versions from legacy TLS treatment. See https://crbug.com/1041773.
+  return ssl_version != net::SSL_CONNECTION_VERSION_UNKNOWN &&
+         ssl_version < ssl_version_min;
 }
 
 }  // namespace
@@ -123,9 +128,8 @@ SecurityStateTabHelper::SecurityStateTabHelper(
 SecurityStateTabHelper::~SecurityStateTabHelper() {}
 
 security_state::SecurityLevel SecurityStateTabHelper::GetSecurityLevel() {
-  return security_state::GetSecurityLevel(
-      *GetVisibleSecurityState(), UsedPolicyInstalledCertificate(),
-      base::BindRepeating(&content::IsOriginSecure));
+  return security_state::GetSecurityLevel(*GetVisibleSecurityState(),
+                                          UsedPolicyInstalledCertificate());
 }
 
 std::unique_ptr<security_state::VisibleSecurityState>
@@ -158,15 +162,24 @@ SecurityStateTabHelper::GetVisibleSecurityState() {
   // information is still being initialized, thus no need to check for that.
   state->malicious_content_status = GetMaliciousContentStatus();
 
-  safety_tips::ReputationWebContentsObserver* reputation_web_contents_observer =
-      safety_tips::ReputationWebContentsObserver::FromWebContents(
-          web_contents());
+  ReputationWebContentsObserver* reputation_web_contents_observer =
+      ReputationWebContentsObserver::FromWebContents(web_contents());
   state->safety_tip_info =
       reputation_web_contents_observer
           ? reputation_web_contents_observer
                 ->GetSafetyTipInfoForVisibleNavigation()
           : security_state::SafetyTipInfo(
                 {security_state::SafetyTipStatus::kUnknown, GURL()});
+
+  Profile* profile =
+      Profile::FromBrowserContext(web_contents()->GetBrowserContext());
+
+  if (profile &&
+      !profile->GetPrefs()->GetBoolean(
+          security_state::prefs::kStricterMixedContentTreatmentEnabled)) {
+    state->should_suppress_mixed_content_warning = true;
+  }
+
   return state;
 }
 
@@ -215,6 +228,9 @@ void SecurityStateTabHelper::DidFinishNavigation(
     // the number of times it was available.
     UMA_HISTOGRAM_BOOLEAN("interstitial.ssl.visited_site_after_warning", true);
   }
+
+  MaybeShowKnownInterceptionDisclosureDialog(
+      web_contents(), visible_security_state->cert_status);
 }
 
 void SecurityStateTabHelper::DidChangeVisibleSecurityState() {

@@ -1,6 +1,7 @@
 
 var liblouisBuild = (function() {
   var _scriptDir = typeof document !== 'undefined' && document.currentScript ? document.currentScript.src : undefined;
+  if (typeof __filename !== 'undefined') _scriptDir = _scriptDir || __filename;
   return (
 function(liblouisBuild) {
   liblouisBuild = liblouisBuild || {};
@@ -200,7 +201,7 @@ Module.expectedDataFileDownloads++;
   }
 
  }
- loadPackage({"files": [{"start": 0, "audio": 0, "end": 7819, "filename": "/no-no-braillo-047-01.dis"}, {"start": 7819, "audio": 0, "end": 50043, "filename": "/Makefile.in"}, {"start": 50043, "audio": 0, "end": 78616, "filename": "/da-dk-g26.ctb"}, {"start": 78616, "audio": 0, "end": 82833, "filename": "/hyph_es_ES.dic"}, {"start": 82833, "audio": 0, "end": 83751, "filename": "/digits6Dots.uti"}, {"start": 83751, "audio": 0, "end": 94715, "filename": "/sin.cti"}, {"start": 94715, "audio": 0, "end": 118502, "filename": "/en-us-comp8-ext.utb"}, {"start": 118502, "audio": 0, "end": 129169, "filename": "/hyph_eo.dic"}, {"start": 129169, "audio": 0, "end": 138802, "filename": "/de-accents.cti"}, {"start": 138802, "audio": 0, "end": 139563, "filename": "/zh_CHN.tbl"}, {"start": 139563, "audio": 0, "end": 140779, "filename": "/mn-in-g1.utb"}, {"start": 140779, "audio": 0, "end": 140940, "filename": "/README"}, {"start": 140940, "audio": 0, "end": 156430, "filename": "/gr-pl-comp8.uti"}, {"start": 156430, "audio": 0, "end": 156995, "filename": "/gez.tbl"}, {"start": 156995, "audio": 0, "end": 157598, "filename": "/es.tbl"}, {"start": 157598, "audio": 0, "end": 158524, "filename": "/loweredDigits6Dots.uti"}, {"start": 158524, "audio": 0, "end": 167293, "filename": "/sl-si-comp8.ctb"}, {"start": 167293, "audio": 0, "end": 175751, "filename": "/hr-translation.cti"}, {"start": 175751, "audio": 0, "end": 176066, "filename": "/zh_HK.tbl"}, {"start": 176066, "audio": 0, "end": 178168, "filename": "/spaces.uti"}, {"start": 178168, "audio": 0, "end": 183342, "filename": "/fa-ir-comp8.ctb"}, {"start": 183342, "audio": 0, "end": 183908, "filename": "/ml.tbl"}, {"start": 183908, "audio": 0, "end": 184477, "filename": "/is.tbl"}, {"start": 184477, "audio": 0, "end": 228659, "filename": "/ur-pk-g2.ctb"}, {"start": 228659, "audio": 0, "end": 229218, "filename": "/sr.tbl"}, {"start": 229218, "audio": 0, "end": 240711, "filename": "/lt-6dot.utb"}, {"start": 240711, "audio": 0, "end": 262454, "filename": "/hyph_cs_CZ.dic"}, {"start": 262454, "audio": 0, "end": 264892, "filename": "/en-us-brf.dis"}, {"start": 264892, "audio": 0, "end": 278619, "filename": "/IPA-unicode-range.uti"}, {"start": 278619, "audio": 0, "end": 304111, "filename": "/el.ctb"}, {"start": 304111, "audio": 0, "end": 304671, "filename": "/pl.tbl"}, {"start": 304671, "audio": 0, "end": 316007, "filename": "/ru.ctb"}, {"start": 316007, "audio": 0, "end": 352102, "filename": "/de-g1-core-patterns.dic"}, {"start": 352102, "audio": 0, "end": 354301, "filename": "/de-eurobrl6.dis"}, {"start": 354301, "audio": 0, "end": 367561, "filename": "/sl-si-g1.utb"}, {"start": 367561, "audio": 0, "end": 368125, "filename": "/sa.tbl"}, {"start": 368125, "audio": 0, "end": 376556, "filename": "/fi-fi-8dot.ctb"}, {"start": 376556, "audio": 0, "end": 396610, "filename": "/no-no-8dot.utb"}, {"start": 396610, "audio": 0, "end": 404120, "filename": "/pt-pt-g1.utb"}, {"start": 404120, "audio": 0, "end": 417248, "filename": "/hu-hu-g2.ctb"}, {"start": 417248, "audio": 0, "end": 417839, "filename": "/lt.tbl"}, {"start": 417839, "audio": 0, "end": 418399, "filename": "/sd.tbl"}, {"start": 418399, "audio": 0, "end": 419003, "filename": "/ar.tbl"}, {"start": 419003, "audio": 0, "end": 419579, "filename": "/hy.tbl"}, {"start": 419579, "audio": 0, "end": 426842, "filename": "/en-nabcc.utb"}, {"start": 426842, "audio": 0, "end": 430204, "filename": "/hu-hu-g1_braille_input.cti"}, {"start": 430204, "audio": 0, "end": 440721, "filename": "/hr-comp8.utb"}, {"start": 440721, "audio": 0, "end": 442766, "filename": "/en-ueb-math.ctb"}, {"start": 442766, "audio": 0, "end": 444448, "filename": "/mao-nz-g1.ctb"}, {"start": 444448, "audio": 0, "end": 452427, "filename": "/hyph_fr_FR.dic"}, {"start": 452427, "audio": 0, "end": 467976, "filename": "/ukmaths_unicode_defs.cti"}, {"start": 467976, "audio": 0, "end": 471210, "filename": "/ukchardefs.cti"}, {"start": 471210, "audio": 0, "end": 1733747, "filename": "/zh-chn.ctb"}, {"start": 1733747, "audio": 0, "end": 1734963, "filename": "/aw-in-g1.utb"}, {"start": 1734963, "audio": 0, "end": 1767574, "filename": "/hu-hu-g2_exceptions.cti"}, {"start": 1767574, "audio": 0, "end": 1771617, "filename": "/ru-compbrl.ctb"}, {"start": 1771617, "audio": 0, "end": 1776906, "filename": "/gd.ctb"}, {"start": 1776906, "audio": 0, "end": 1958283, "filename": "/en-ueb-g2.ctb"}, {"start": 1958283, "audio": 0, "end": 1968542, "filename": "/gurumuki.cti"}, {"start": 1968542, "audio": 0, "end": 1969101, "filename": "/ca.tbl"}, {"start": 1969101, "audio": 0, "end": 1978400, "filename": "/devanagari.cti"}, {"start": 1978400, "audio": 0, "end": 1978982, "filename": "/hr-comp8.tbl"}, {"start": 1978982, "audio": 0, "end": 1983533, "filename": "/mt.ctb"}, {"start": 1983533, "audio": 0, "end": 2258309, "filename": "/ko-g2-rules.cti"}, {"start": 2258309, "audio": 0, "end": 2259526, "filename": "/gu-in-g1.utb"}, {"start": 2259526, "audio": 0, "end": 2260881, "filename": "/hu-backtranslate-correction.dis"}, {"start": 2260881, "audio": 0, "end": 2262235, "filename": "/cs-g1.ctb"}, {"start": 2262235, "audio": 0, "end": 2290300, "filename": "/en-us-interline.ctb"}, {"start": 2290300, "audio": 0, "end": 2290905, "filename": "/cvox-common.cti"}, {"start": 2290905, "audio": 0, "end": 2292121, "filename": "/as-in-g1.utb"}, {"start": 2292121, "audio": 0, "end": 2292682, "filename": "/awa.tbl"}, {"start": 2292682, "audio": 0, "end": 2479360, "filename": "/hyph_nn_NO.dic"}, {"start": 2479360, "audio": 0, "end": 2490106, "filename": "/no-no-chardefs6.uti"}, {"start": 2490106, "audio": 0, "end": 2506078, "filename": "/hr-chardefs.cti"}, {"start": 2506078, "audio": 0, "end": 2530766, "filename": "/de-g0-core.uti"}, {"start": 2530766, "audio": 0, "end": 2533812, "filename": "/eurodefs.cti"}, {"start": 2533812, "audio": 0, "end": 2541877, "filename": "/iu-ca-g1.ctb"}, {"start": 2541877, "audio": 0, "end": 2558204, "filename": "/de-chardefs6.cti"}, {"start": 2558204, "audio": 0, "end": 2568302, "filename": "/ar-ar-g2.ctb"}, {"start": 2568302, "audio": 0, "end": 2588300, "filename": "/de-chardefs8.cti"}, {"start": 2588300, "audio": 0, "end": 2596863, "filename": "/ckb-chardefs.cti"}, {"start": 2596863, "audio": 0, "end": 2602764, "filename": "/is.ctb"}, {"start": 2602764, "audio": 0, "end": 2615338, "filename": "/tr-g2.ctb"}, {"start": 2615338, "audio": 0, "end": 2619358, "filename": "/no-no-g1.ctb"}, {"start": 2619358, "audio": 0, "end": 2620284, "filename": "/bh.ctb"}, {"start": 2620284, "audio": 0, "end": 2620841, "filename": "/bra.tbl"}, {"start": 2620841, "audio": 0, "end": 2627670, "filename": "/es-new.dis"}, {"start": 2627670, "audio": 0, "end": 2641787, "filename": "/da-dk-g18.ctb"}, {"start": 2641787, "audio": 0, "end": 2660006, "filename": "/Lv-Lv-g1.utb"}, {"start": 2660006, "audio": 0, "end": 2691265, "filename": "/hyph_sv_SE.dic"}, {"start": 2691265, "audio": 0, "end": 2693725, "filename": "/eo-g1.ctb"}, {"start": 2693725, "audio": 0, "end": 2699886, "filename": "/Makefile.am"}, {"start": 2699886, "audio": 0, "end": 2700476, "filename": "/gd.tbl"}, {"start": 2700476, "audio": 0, "end": 2737277, "filename": "/hyph_de_DE.dic"}, {"start": 2737277, "audio": 0, "end": 2738671, "filename": "/de-g1-core.cti"}, {"start": 2738671, "audio": 0, "end": 2752196, "filename": "/da-dk-g08.ctb"}, {"start": 2752196, "audio": 0, "end": 2775877, "filename": "/ko-g1-rules.cti"}, {"start": 2775877, "audio": 0, "end": 2779209, "filename": "/sr-g1.ctb"}, {"start": 2779209, "audio": 0, "end": 3161557, "filename": "/ko-chars.cti"}, {"start": 3161557, "audio": 0, "end": 3165073, "filename": "/en-in-g1.ctb"}, {"start": 3165073, "audio": 0, "end": 3185869, "filename": "/no-no-comp8.ctb"}, {"start": 3185869, "audio": 0, "end": 3188075, "filename": "/hyph_it_IT.dic"}, {"start": 3188075, "audio": 0, "end": 3188633, "filename": "/or.tbl"}, {"start": 3188633, "audio": 0, "end": 3190122, "filename": "/de-chess.ctb"}, {"start": 3190122, "audio": 0, "end": 3191163, "filename": "/sot-za-g1.ctb"}, {"start": 3191163, "audio": 0, "end": 3192988, "filename": "/mn-MN-g1.utb"}, {"start": 3192988, "audio": 0, "end": 3194407, "filename": "/compress.cti"}, {"start": 3194407, "audio": 0, "end": 3201224, "filename": "/IPA.utb"}, {"start": 3201224, "audio": 0, "end": 3222784, "filename": "/pt-pt-g2.ctb"}, {"start": 3222784, "audio": 0, "end": 3242865, "filename": "/nl-chardefs.uti"}, {"start": 3242865, "audio": 0, "end": 3254359, "filename": "/fi1.ctb"}, {"start": 3254359, "audio": 0, "end": 3254905, "filename": "/kru.tbl"}, {"start": 3254905, "audio": 0, "end": 3256122, "filename": "/np-in-g1.utb"}, {"start": 3256122, "audio": 0, "end": 3263754, "filename": "/sv-1996.ctb"}, {"start": 3263754, "audio": 0, "end": 3264360, "filename": "/en_CA.tbl"}, {"start": 3264360, "audio": 0, "end": 3265425, "filename": "/digits6DotsPlusDot6.uti"}, {"start": 3265425, "audio": 0, "end": 3266845, "filename": "/latinLetterDef6Dots.uti"}, {"start": 3266845, "audio": 0, "end": 3294775, "filename": "/en-us-g2.ctb"}, {"start": 3294775, "audio": 0, "end": 3295985, "filename": "/ckb-g1.ctb"}, {"start": 3295985, "audio": 0, "end": 3298590, "filename": "/sk-translation.cti"}, {"start": 3298590, "audio": 0, "end": 3305020, "filename": "/nl-g0.uti"}, {"start": 3305020, "audio": 0, "end": 3305977, "filename": "/litdigits6Dots.uti"}, {"start": 3305977, "audio": 0, "end": 3310697, "filename": "/grc-international-en.utb"}, {"start": 3310697, "audio": 0, "end": 3311262, "filename": "/mni.tbl"}, {"start": 3311262, "audio": 0, "end": 3319572, "filename": "/nl-BE-g0.utb"}, {"start": 3319572, "audio": 0, "end": 3320500, "filename": "/digits8Dots.uti"}, {"start": 3320500, "audio": 0, "end": 3325536, "filename": "/et-g0.utb"}, {"start": 3325536, "audio": 0, "end": 3326099, "filename": "/eo.tbl"}, {"start": 3326099, "audio": 0, "end": 3333760, "filename": "/Pl-Pl-g1.utb"}, {"start": 3333760, "audio": 0, "end": 3340463, "filename": "/countries.cti"}, {"start": 3340463, "audio": 0, "end": 3346437, "filename": "/unicode.dis"}, {"start": 3346437, "audio": 0, "end": 3372868, "filename": "/braille-patterns.cti"}, {"start": 3372868, "audio": 0, "end": 3375010, "filename": "/no-no-8dot-fallback-6dot-g0.utb"}, {"start": 3375010, "audio": 0, "end": 3375176, "filename": "/lt-6dot.tbl"}, {"start": 3375176, "audio": 0, "end": 3375750, "filename": "/mt.tbl"}, {"start": 3375750, "audio": 0, "end": 3380056, "filename": "/cy-cy-g2.ctb"}, {"start": 3380056, "audio": 0, "end": 3393034, "filename": "/da-dk-6miscChars.cti"}, {"start": 3393034, "audio": 0, "end": 3409338, "filename": "/grc-international-composed.uti"}, {"start": 3409338, "audio": 0, "end": 3410382, "filename": "/tsn-za-g1.ctb"}, {"start": 3410382, "audio": 0, "end": 3415390, "filename": "/ro.ctb"}, {"start": 3415390, "audio": 0, "end": 3420323, "filename": "/ta-ta-g1.ctb"}, {"start": 3420323, "audio": 0, "end": 3445156, "filename": "/unicode-braille.utb"}, {"start": 3445156, "audio": 0, "end": 3446554, "filename": "/latinLetterDef8Dots.uti"}, {"start": 3446554, "audio": 0, "end": 3447114, "filename": "/ne.tbl"}, {"start": 3447114, "audio": 0, "end": 3448948, "filename": "/printables.cti"}, {"start": 3448948, "audio": 0, "end": 3449485, "filename": "/sl.tbl"}, {"start": 3449485, "audio": 0, "end": 3451652, "filename": "/en-us-compbrl.uti"}, {"start": 3451652, "audio": 0, "end": 3452869, "filename": "/si-in-g1.utb"}, {"start": 3452869, "audio": 0, "end": 3457550, "filename": "/tr.ctb"}, {"start": 3457550, "audio": 0, "end": 3458112, "filename": "/kn.tbl"}, {"start": 3458112, "audio": 0, "end": 3459349, "filename": "/es-g1.ctb"}, {"start": 3459349, "audio": 0, "end": 3467453, "filename": "/en_CA.ctb"}, {"start": 3467453, "audio": 0, "end": 3550978, "filename": "/hyph_nl_NL.dic"}, {"start": 3550978, "audio": 0, "end": 3553096, "filename": "/tr-g1.ctb"}, {"start": 3553096, "audio": 0, "end": 3558303, "filename": "/ru-litbrl.ctb"}, {"start": 3558303, "audio": 0, "end": 3560172, "filename": "/ko-2006-g2.ctb"}, {"start": 3560172, "audio": 0, "end": 3560712, "filename": "/pi.tbl"}, {"start": 3560712, "audio": 0, "end": 3561256, "filename": "/gon.tbl"}, {"start": 3561256, "audio": 0, "end": 3564797, "filename": "/ckb-translation.cti"}, {"start": 3564797, "audio": 0, "end": 3565774, "filename": "/ca-g1.ctb"}, {"start": 3565774, "audio": 0, "end": 3573380, "filename": "/cs-comp8.utb"}, {"start": 3573380, "audio": 0, "end": 3578023, "filename": "/ga-g2.ctb"}, {"start": 3578023, "audio": 0, "end": 3582128, "filename": "/et.ctb"}, {"start": 3582128, "audio": 0, "end": 3623940, "filename": "/da-dk-g28.ctb"}, {"start": 3623940, "audio": 0, "end": 3631751, "filename": "/fi.utb"}, {"start": 3631751, "audio": 0, "end": 3633283, "filename": "/ukmaths_single_cell_defs.cti"}, {"start": 3633283, "audio": 0, "end": 3633582, "filename": "/no.tbl"}, {"start": 3633582, "audio": 0, "end": 3634526, "filename": "/gon.ctb"}, {"start": 3634526, "audio": 0, "end": 3635100, "filename": "/bo.tbl"}, {"start": 3635100, "audio": 0, "end": 3649716, "filename": "/uni-text.dis"}, {"start": 3649716, "audio": 0, "end": 3658999, "filename": "/en-ueb-g1.ctb"}, {"start": 3658999, "audio": 0, "end": 3689550, "filename": "/hyph_pl_PL.dic"}, {"start": 3689550, "audio": 0, "end": 3715083, "filename": "/es-g2.ctb"}, {"start": 3715083, "audio": 0, "end": 3718556, "filename": "/grc-international-common.uti"}, {"start": 3718556, "audio": 0, "end": 3733249, "filename": "/se-se.dis"}, {"start": 3733249, "audio": 0, "end": 3749695, "filename": "/grc-international-decomposed.uti"}, {"start": 3749695, "audio": 0, "end": 3766529, "filename": "/lt.ctb"}, {"start": 3766529, "audio": 0, "end": 3767089, "filename": "/te.tbl"}, {"start": 3767089, "audio": 0, "end": 3775149, "filename": "/da-dk-g16-lit.ctb"}, {"start": 3775149, "audio": 0, "end": 3776504, "filename": "/sin.utb"}, {"start": 3776504, "audio": 0, "end": 3777947, "filename": "/hr-digits.uti"}, {"start": 3777947, "audio": 0, "end": 3781023, "filename": "/uk.utb"}, {"start": 3781023, "audio": 0, "end": 3786623, "filename": "/ko.cti"}, {"start": 3786623, "audio": 0, "end": 3796228, "filename": "/gujarati.cti"}, {"start": 3796228, "audio": 0, "end": 3826376, "filename": "/da-dk-g28l.ctb"}, {"start": 3826376, "audio": 0, "end": 3848026, "filename": "/text_nabcc.dis"}, {"start": 3848026, "audio": 0, "end": 3848953, "filename": "/kok.ctb"}, {"start": 3848953, "audio": 0, "end": 3849523, "filename": "/ta.tbl"}, {"start": 3849523, "audio": 0, "end": 4113784, "filename": "/zh-hk.ctb"}, {"start": 4113784, "audio": 0, "end": 4120821, "filename": "/Es-Es-G0.utb"}, {"start": 4120821, "audio": 0, "end": 4128671, "filename": "/ar-ar-comp8.utb"}, {"start": 4128671, "audio": 0, "end": 4133154, "filename": "/en-us-g1.ctb"}, {"start": 4133154, "audio": 0, "end": 4135527, "filename": "/mn-MN-common.cti"}, {"start": 4135527, "audio": 0, "end": 4136103, "filename": "/et.tbl"}, {"start": 4136103, "audio": 0, "end": 4136665, "filename": "/sv.tbl"}, {"start": 4136665, "audio": 0, "end": 4281009, "filename": "/fr-bfu-g2.ctb"}, {"start": 4281009, "audio": 0, "end": 4287439, "filename": "/bg.ctb"}, {"start": 4287439, "audio": 0, "end": 4289578, "filename": "/en-gb-comp8.ctb"}, {"start": 4289578, "audio": 0, "end": 4303222, "filename": "/no-no.dis"}, {"start": 4303222, "audio": 0, "end": 4305012, "filename": "/ko-g2.ctb"}, {"start": 4305012, "audio": 0, "end": 4309921, "filename": "/hu-hu-g1.ctb"}, {"start": 4309921, "audio": 0, "end": 4312880, "filename": "/eo-g1-x-system.ctb"}, {"start": 4312880, "audio": 0, "end": 4988814, "filename": "/zhcn-g1.ctb"}, {"start": 4988814, "audio": 0, "end": 4989795, "filename": "/litdigits6DotsPlusDot6.uti"}, {"start": 4989795, "audio": 0, "end": 4990813, "filename": "/maketablelist.sh"}, {"start": 4990813, "audio": 0, "end": 5008146, "filename": "/pl-pl-comp8.ctb"}, {"start": 5008146, "audio": 0, "end": 5012911, "filename": "/Se-Se-g1.utb"}, {"start": 5012911, "audio": 0, "end": 5013511, "filename": "/cy.tbl"}, {"start": 5013511, "audio": 0, "end": 5016354, "filename": "/ru-letters.dis"}, {"start": 5016354, "audio": 0, "end": 5024377, "filename": "/da-dk-g16.ctb"}, {"start": 5024377, "audio": 0, "end": 5026033, "filename": "/nl-BE.dis"}, {"start": 5026033, "audio": 0, "end": 5037544, "filename": "/fi2.ctb"}, {"start": 5037544, "audio": 0, "end": 5038759, "filename": "/be-in-g1.utb"}, {"start": 5038759, "audio": 0, "end": 5039972, "filename": "/te-in-g1.utb"}, {"start": 5039972, "audio": 0, "end": 5046303, "filename": "/no-no-g0.utb"}, {"start": 5046303, "audio": 0, "end": 5046883, "filename": "/dra.tbl"}, {"start": 5046883, "audio": 0, "end": 5054984, "filename": "/en-chardefs.cti"}, {"start": 5054984, "audio": 0, "end": 5071480, "filename": "/nemethdefs.cti"}, {"start": 5071480, "audio": 0, "end": 5072041, "filename": "/ckb.tbl"}, {"start": 5072041, "audio": 0, "end": 5072961, "filename": "/ta.ctb"}, {"start": 5072961, "audio": 0, "end": 5087374, "filename": "/da-dk-g26l.ctb"}, {"start": 5087374, "audio": 0, "end": 5123841, "filename": "/hyph_en_US.dic"}, {"start": 5123841, "audio": 0, "end": 5142609, "filename": "/no-no-g3.ctb"}, {"start": 5142609, "audio": 0, "end": 5143535, "filename": "/kru.ctb"}, {"start": 5143535, "audio": 0, "end": 5146058, "filename": "/cs-translation.cti"}, {"start": 5146058, "audio": 0, "end": 5146629, "filename": "/lv.tbl"}, {"start": 5146629, "audio": 0, "end": 5147530, "filename": "/unicode-without-blank.dis"}, {"start": 5147530, "audio": 0, "end": 5263483, "filename": "/hu-exceptionwords.cti"}, {"start": 5263483, "audio": 0, "end": 5268178, "filename": "/hu-hu-comp8.ctb"}, {"start": 5268178, "audio": 0, "end": 5268742, "filename": "/as.tbl"}, {"start": 5268742, "audio": 0, "end": 5274417, "filename": "/fa-ir-g1.utb"}, {"start": 5274417, "audio": 0, "end": 5276789, "filename": "/sk-sk.utb"}, {"start": 5276789, "audio": 0, "end": 5298031, "filename": "/is-chardefs8.cti"}, {"start": 5298031, "audio": 0, "end": 5301123, "filename": "/pt-pt-comp8.ctb"}, {"start": 5301123, "audio": 0, "end": 5362341, "filename": "/hyph_brl_da_dk.dic"}, {"start": 5362341, "audio": 0, "end": 5371869, "filename": "/oriya.cti"}, {"start": 5371869, "audio": 0, "end": 5392317, "filename": "/en-us-mathtext.ctb"}, {"start": 5392317, "audio": 0, "end": 5402622, "filename": "/boxes.ctb"}, {"start": 5402622, "audio": 0, "end": 5404713, "filename": "/de-eurobrl6u.dis"}, {"start": 5404713, "audio": 0, "end": 5406490, "filename": "/ko-2006-g1.ctb"}, {"start": 5406490, "audio": 0, "end": 5407382, "filename": "/ne.ctb"}, {"start": 5407382, "audio": 0, "end": 5416878, "filename": "/sv-1989.ctb"}, {"start": 5416878, "audio": 0, "end": 5609446, "filename": "/de-g2-core-patterns.dic"}, {"start": 5609446, "audio": 0, "end": 5618252, "filename": "/nl-NL-g0.utb"}, {"start": 5618252, "audio": 0, "end": 5619814, "filename": "/us-table.dis"}, {"start": 5619814, "audio": 0, "end": 5620340, "filename": "/cs.tbl"}, {"start": 5620340, "audio": 0, "end": 5642371, "filename": "/sk-chardefs.cti"}, {"start": 5642371, "audio": 0, "end": 5646225, "filename": "/wordcx.dis"}, {"start": 5646225, "audio": 0, "end": 5646773, "filename": "/kok.tbl"}, {"start": 5646773, "audio": 0, "end": 5647396, "filename": "/nl_BE.tbl"}, {"start": 5647396, "audio": 0, "end": 5652852, "filename": "/chr-us-g1.ctb"}, {"start": 5652852, "audio": 0, "end": 5839530, "filename": "/hyph_nb_NO.dic"}, {"start": 5839530, "audio": 0, "end": 5840089, "filename": "/kha.tbl"}, {"start": 5840089, "audio": 0, "end": 5852607, "filename": "/cy-cy-g1.utb"}, {"start": 5852607, "audio": 0, "end": 5853238, "filename": "/hu.tbl"}, {"start": 5853238, "audio": 0, "end": 5860119, "filename": "/sr-chardefs.cti"}, {"start": 5860119, "audio": 0, "end": 5865450, "filename": "/cs-letterDef8Dots.uti"}, {"start": 5865450, "audio": 0, "end": 5870651, "filename": "/sk-sk-g1.utb"}, {"start": 5870651, "audio": 0, "end": 5871239, "filename": "/tr-g2.tbl"}, {"start": 5871239, "audio": 0, "end": 5872613, "filename": "/de-g2.ctb"}, {"start": 5872613, "audio": 0, "end": 5872935, "filename": "/zh_TW.tbl"}, {"start": 5872935, "audio": 0, "end": 5873509, "filename": "/tr.tbl"}, {"start": 5873509, "audio": 0, "end": 5878140, "filename": "/en-us-comp6.ctb"}, {"start": 5878140, "audio": 0, "end": 5878703, "filename": "/ru.tbl"}, {"start": 5878703, "audio": 0, "end": 5879267, "filename": "/it.tbl"}, {"start": 5879267, "audio": 0, "end": 5880959, "filename": "/ko-g1.ctb"}, {"start": 5880959, "audio": 0, "end": 5882175, "filename": "/hi-in-g1.utb"}, {"start": 5882175, "audio": 0, "end": 5949711, "filename": "/hyph_ru.dic"}, {"start": 5949711, "audio": 0, "end": 5950999, "filename": "/hyph_pt_PT.dic"}, {"start": 5950999, "audio": 0, "end": 5952191, "filename": "/kh-in-g1.utb"}, {"start": 5952191, "audio": 0, "end": 5953410, "filename": "/ks-in-g1.utb"}, {"start": 5953410, "audio": 0, "end": 5953974, "filename": "/gu.tbl"}, {"start": 5953974, "audio": 0, "end": 5954532, "filename": "/hi.tbl"}, {"start": 5954532, "audio": 0, "end": 5991290, "filename": "/Makefile"}, {"start": 5991290, "audio": 0, "end": 5992800, "filename": "/hr-g1.ctb"}, {"start": 5992800, "audio": 0, "end": 6012288, "filename": "/en-ueb-chardefs.uti"}, {"start": 6012288, "audio": 0, "end": 6012864, "filename": "/ro.tbl"}, {"start": 6012864, "audio": 0, "end": 6037706, "filename": "/afr-za-g2.ctb"}, {"start": 6037706, "audio": 0, "end": 6046409, "filename": "/kannada.cti"}, {"start": 6046409, "audio": 0, "end": 6057984, "filename": "/da-dk-octobraille.dis"}, {"start": 6057984, "audio": 0, "end": 6059499, "filename": "/marburg_single_cell_defs.cti"}, {"start": 6059499, "audio": 0, "end": 6060997, "filename": "/en-chess.ctb"}, {"start": 6060997, "audio": 0, "end": 6064223, "filename": "/ga-g1.utb"}, {"start": 6064223, "audio": 0, "end": 6076256, "filename": "/vi.ctb"}, {"start": 6076256, "audio": 0, "end": 6076818, "filename": "/bn.tbl"}, {"start": 6076818, "audio": 0, "end": 6087440, "filename": "/ru-ru-g1.utb"}, {"start": 6087440, "audio": 0, "end": 6100918, "filename": "/no-no-generic.ctb"}, {"start": 6100918, "audio": 0, "end": 7479065, "filename": "/zh-tw.ctb"}, {"start": 7479065, "audio": 0, "end": 7479697, "filename": "/nl.tbl"}, {"start": 7479697, "audio": 0, "end": 7491330, "filename": "/da-lt.ctb"}, {"start": 7491330, "audio": 0, "end": 7492548, "filename": "/mr-in-g1.utb"}, {"start": 7492548, "audio": 0, "end": 7522029, "filename": "/de-g2-core.cti"}, {"start": 7522029, "audio": 0, "end": 7526435, "filename": "/it-it-comp6.utb"}, {"start": 7526435, "audio": 0, "end": 7535827, "filename": "/ar-ar-g1.utb"}, {"start": 7535827, "audio": 0, "end": 7542786, "filename": "/vi-g1.ctb"}, {"start": 7542786, "audio": 0, "end": 7543708, "filename": "/mun.ctb"}, {"start": 7543708, "audio": 0, "end": 7544927, "filename": "/ml-in-g1.utb"}, {"start": 7544927, "audio": 0, "end": 7545972, "filename": "/controlchars.cti"}, {"start": 7545972, "audio": 0, "end": 7547186, "filename": "/br-in-g1.utb"}, {"start": 7547186, "audio": 0, "end": 7550580, "filename": "/afr-za-g1.ctb"}, {"start": 7550580, "audio": 0, "end": 7552072, "filename": "/corrections.cti"}, {"start": 7552072, "audio": 0, "end": 7564209, "filename": "/fr-bfu-comp68.cti"}, {"start": 7564209, "audio": 0, "end": 7565114, "filename": "/dra.ctb"}, {"start": 7565114, "audio": 0, "end": 7579456, "filename": "/ca-chardefs.cti"}, {"start": 7579456, "audio": 0, "end": 7586512, "filename": "/he.ctb"}, {"start": 7586512, "audio": 0, "end": 7590471, "filename": "/ko-2006.cti"}, {"start": 7590471, "audio": 0, "end": 7591045, "filename": "/vi.tbl"}, {"start": 7591045, "audio": 0, "end": 7619778, "filename": "/it-it-comp8.utb"}, {"start": 7619778, "audio": 0, "end": 7620994, "filename": "/pu-in-g1.utb"}, {"start": 7620994, "audio": 0, "end": 7630332, "filename": "/de-de-comp8.ctb"}, {"start": 7630332, "audio": 0, "end": 7642033, "filename": "/hu-chardefs.cti"}, {"start": 7642033, "audio": 0, "end": 7660592, "filename": "/wiskunde-chardefs.cti"}, {"start": 7660592, "audio": 0, "end": 7663810, "filename": "/tamil.cti"}, {"start": 7663810, "audio": 0, "end": 7676711, "filename": "/no-no-g2.ctb"}, {"start": 7676711, "audio": 0, "end": 7676857, "filename": "/hr-g1.tbl"}, {"start": 7676857, "audio": 0, "end": 7677419, "filename": "/pa.tbl"}, {"start": 7677419, "audio": 0, "end": 7684667, "filename": "/bo.ctb"}, {"start": 7684667, "audio": 0, "end": 7691783, "filename": "/ethio-g1.ctb"}, {"start": 7691783, "audio": 0, "end": 7692707, "filename": "/pi.ctb"}, {"start": 7692707, "audio": 0, "end": 7706675, "filename": "/es-chardefs.cti"}, {"start": 7706675, "audio": 0, "end": 7707219, "filename": "/bh.tbl"}, {"start": 7707219, "audio": 0, "end": 7708742, "filename": "/de-g1.ctb"}, {"start": 7708742, "audio": 0, "end": 7718983, "filename": "/se-se.ctb"}, {"start": 7718983, "audio": 0, "end": 7720448, "filename": "/haw-us-g1.ctb"}, {"start": 7720448, "audio": 0, "end": 7728672, "filename": "/ru-ru.dis"}, {"start": 7728672, "audio": 0, "end": 7742845, "filename": "/no-no-generic.dis"}, {"start": 7742845, "audio": 0, "end": 7754522, "filename": "/fr-bfu-comp6.utb"}, {"start": 7754522, "audio": 0, "end": 7787328, "filename": "/no-no-latinLetterDef6Dots_diacritics.uti"}, {"start": 7787328, "audio": 0, "end": 7787938, "filename": "/pt.tbl"}, {"start": 7787938, "audio": 0, "end": 7790323, "filename": "/de-accents-detailed.cti"}, {"start": 7790323, "audio": 0, "end": 7800474, "filename": "/telugu.cti"}, {"start": 7800474, "audio": 0, "end": 7812007, "filename": "/ur-pk-g1.utb"}, {"start": 7812007, "audio": 0, "end": 7826309, "filename": "/cs-chardefs.cti"}, {"start": 7826309, "audio": 0, "end": 7826857, "filename": "/mwr.tbl"}, {"start": 7826857, "audio": 0, "end": 7828289, "filename": "/sk-g1.ctb"}, {"start": 7828289, "audio": 0, "end": 7833715, "filename": "/hy.ctb"}, {"start": 7833715, "audio": 0, "end": 7834272, "filename": "/sk.tbl"}, {"start": 7834272, "audio": 0, "end": 7848517, "filename": "/da-dk-g26l-lit.ctb"}, {"start": 7848517, "audio": 0, "end": 7863118, "filename": "/de-de.dis"}, {"start": 7863118, "audio": 0, "end": 8480469, "filename": "/zhcn-g2.ctb"}, {"start": 8480469, "audio": 0, "end": 8487292, "filename": "/es-old.dis"}, {"start": 8487292, "audio": 0, "end": 8498514, "filename": "/malayalam.cti"}, {"start": 8498514, "audio": 0, "end": 8500146, "filename": "/en-us-comp8.ctb"}, {"start": 8500146, "audio": 0, "end": 8508449, "filename": "/da-dk.dis"}, {"start": 8508449, "audio": 0, "end": 8509660, "filename": "/or-in-g1.utb"}, {"start": 8509660, "audio": 0, "end": 8529314, "filename": "/en-GB-g2.ctb"}, {"start": 8529314, "audio": 0, "end": 8536456, "filename": "/is-chardefs6.cti"}, {"start": 8536456, "audio": 0, "end": 8546823, "filename": "/bengali.cti"}, {"start": 8546823, "audio": 0, "end": 8547092, "filename": "/en_US-comp8-ext.tbl"}, {"start": 8547092, "audio": 0, "end": 8547670, "filename": "/bg.tbl"}, {"start": 8547670, "audio": 0, "end": 8609068, "filename": "/hyph_da_DK.dic"}, {"start": 8609068, "audio": 0, "end": 8609751, "filename": "/en_US.tbl"}, {"start": 8609751, "audio": 0, "end": 8622291, "filename": "/en-gb-g1.utb"}, {"start": 8622291, "audio": 0, "end": 8623506, "filename": "/ka-in-g1.utb"}, {"start": 8623506, "audio": 0, "end": 8639054, "filename": "/marburg_unicode_defs.cti"}, {"start": 8639054, "audio": 0, "end": 8640681, "filename": "/de-g0.utb"}, {"start": 8640681, "audio": 0, "end": 8642694, "filename": "/ru-chardefs.cti"}, {"start": 8642694, "audio": 0, "end": 8643621, "filename": "/mwr.ctb"}, {"start": 8643621, "audio": 0, "end": 8644165, "filename": "/mun.tbl"}, {"start": 8644165, "audio": 0, "end": 8646917, "filename": "/ru-unicode.dis"}, {"start": 8646917, "audio": 0, "end": 8647853, "filename": "/loweredDigits8Dots.uti"}, {"start": 8647853, "audio": 0, "end": 8648532, "filename": "/en_GB.tbl"}, {"start": 8648532, "audio": 0, "end": 8650353, "filename": "/mn-MN-g2.ctb"}, {"start": 8650353, "audio": 0, "end": 8650915, "filename": "/mr.tbl"}, {"start": 8650915, "audio": 0, "end": 8651487, "filename": "/he.tbl"}, {"start": 8651487, "audio": 0, "end": 8665847, "filename": "/fr-bfu-comp8.utb"}, {"start": 8665847, "audio": 0, "end": 8685688, "filename": "/da-dk-g26-lit.ctb"}, {"start": 8685688, "audio": 0, "end": 9561792, "filename": "/hyph_hu_HU.dic"}, {"start": 9561792, "audio": 0, "end": 9563011, "filename": "/sa-in-g1.utb"}], "remote_package_size": 9563011, "package_uuid": "44fbc30b-5073-4849-9b7d-133432ec4d60"});
+ loadPackage({"files": [{"start": 0, "audio": 0, "end": 7510, "filename": "/pt-pt-g1.utb"}, {"start": 7510, "audio": 0, "end": 15360, "filename": "/ar-ar-comp8.utb"}, {"start": 15360, "audio": 0, "end": 44841, "filename": "/de-g2-core.cti"}, {"start": 44841, "audio": 0, "end": 46330, "filename": "/de-chess.ctb"}, {"start": 46330, "audio": 0, "end": 58848, "filename": "/cy-cy-g1.utb"}, {"start": 58848, "audio": 0, "end": 75152, "filename": "/grc-international-composed.uti"}, {"start": 75152, "audio": 0, "end": 107958, "filename": "/no-no-latinLetterDef6Dots_diacritics.uti"}, {"start": 107958, "audio": 0, "end": 115769, "filename": "/fi.utb"}, {"start": 115769, "audio": 0, "end": 121444, "filename": "/fa-ir-g1.utb"}, {"start": 121444, "audio": 0, "end": 121970, "filename": "/cs.tbl"}, {"start": 121970, "audio": 0, "end": 135614, "filename": "/no-no.dis"}, {"start": 135614, "audio": 0, "end": 153833, "filename": "/Lv-Lv-g1.utb"}, {"start": 153833, "audio": 0, "end": 162602, "filename": "/sl-si-comp8.ctb"}, {"start": 162602, "audio": 0, "end": 171940, "filename": "/de-de-comp8.ctb"}, {"start": 171940, "audio": 0, "end": 172516, "filename": "/hy.tbl"}, {"start": 172516, "audio": 0, "end": 174293, "filename": "/ko-2006-g1.ctb"}, {"start": 174293, "audio": 0, "end": 183685, "filename": "/ar-ar-g1.utb"}, {"start": 183685, "audio": 0, "end": 1446222, "filename": "/zh-chn.ctb"}, {"start": 1446222, "audio": 0, "end": 1446796, "filename": "/vi.tbl"}, {"start": 1446796, "audio": 0, "end": 1449169, "filename": "/mn-MN-common.cti"}, {"start": 1449169, "audio": 0, "end": 1450457, "filename": "/hyph_pt_PT.dic"}, {"start": 1450457, "audio": 0, "end": 1451021, "filename": "/sa.tbl"}, {"start": 1451021, "audio": 0, "end": 1451584, "filename": "/eo.tbl"}, {"start": 1451584, "audio": 0, "end": 1452184, "filename": "/cy.tbl"}, {"start": 1452184, "audio": 0, "end": 1453165, "filename": "/litdigits6DotsPlusDot6.uti"}, {"start": 1453165, "audio": 0, "end": 1458765, "filename": "/ko.cti"}, {"start": 1458765, "audio": 0, "end": 1459687, "filename": "/mun.ctb"}, {"start": 1459687, "audio": 0, "end": 1460291, "filename": "/ar.tbl"}, {"start": 1460291, "audio": 0, "end": 1460437, "filename": "/hr-g1.tbl"}, {"start": 1460437, "audio": 0, "end": 1462822, "filename": "/de-accents-detailed.cti"}, {"start": 1462822, "audio": 0, "end": 1465781, "filename": "/eo-g1-x-system.ctb"}, {"start": 1465781, "audio": 0, "end": 1480141, "filename": "/fr-bfu-comp8.utb"}, {"start": 1480141, "audio": 0, "end": 1480704, "filename": "/ru.tbl"}, {"start": 1480704, "audio": 0, "end": 1482903, "filename": "/de-eurobrl6.dis"}, {"start": 1482903, "audio": 0, "end": 1525141, "filename": "/Makefile.in"}, {"start": 1525141, "audio": 0, "end": 1529772, "filename": "/en-us-comp6.ctb"}, {"start": 1529772, "audio": 0, "end": 1591170, "filename": "/hyph_da_DK.dic"}, {"start": 1591170, "audio": 0, "end": 1592386, "filename": "/mn-in-g1.utb"}, {"start": 1592386, "audio": 0, "end": 1614417, "filename": "/sk-chardefs.cti"}, {"start": 1614417, "audio": 0, "end": 1617779, "filename": "/hu-hu-g1_braille_input.cti"}, {"start": 1617779, "audio": 0, "end": 2493883, "filename": "/hyph_hu_HU.dic"}, {"start": 2493883, "audio": 0, "end": 2494566, "filename": "/en_US.tbl"}, {"start": 2494566, "audio": 0, "end": 2519399, "filename": "/unicode-braille.utb"}, {"start": 2519399, "audio": 0, "end": 3956728, "filename": "/zh-tw.ctb"}, {"start": 3956728, "audio": 0, "end": 3957318, "filename": "/gd.tbl"}, {"start": 3957318, "audio": 0, "end": 3957617, "filename": "/no.tbl"}, {"start": 3957617, "audio": 0, "end": 3958161, "filename": "/mun.tbl"}, {"start": 3958161, "audio": 0, "end": 3958430, "filename": "/en_US-comp8-ext.tbl"}, {"start": 3958430, "audio": 0, "end": 3969652, "filename": "/malayalam.cti"}, {"start": 3969652, "audio": 0, "end": 3970578, "filename": "/kru.ctb"}, {"start": 3970578, "audio": 0, "end": 3994259, "filename": "/ko-g1-rules.cti"}, {"start": 3994259, "audio": 0, "end": 3994864, "filename": "/cvox-common.cti"}, {"start": 3994864, "audio": 0, "end": 4005828, "filename": "/sin.cti"}, {"start": 4005828, "audio": 0, "end": 4013434, "filename": "/cs-comp8.utb"}, {"start": 4013434, "audio": 0, "end": 4027736, "filename": "/cs-chardefs.cti"}, {"start": 4027736, "audio": 0, "end": 4028314, "filename": "/bg.tbl"}, {"start": 4028314, "audio": 0, "end": 4064781, "filename": "/hyph_en_US.dic"}, {"start": 4064781, "audio": 0, "end": 4071740, "filename": "/vi-g1.ctb"}, {"start": 4071740, "audio": 0, "end": 4258418, "filename": "/hyph_nn_NO.dic"}, {"start": 4258418, "audio": 0, "end": 4282205, "filename": "/en-us-comp8-ext.utb"}, {"start": 4282205, "audio": 0, "end": 4298532, "filename": "/de-chardefs6.cti"}, {"start": 4298532, "audio": 0, "end": 4311433, "filename": "/no-no-g2.ctb"}, {"start": 4311433, "audio": 0, "end": 4312498, "filename": "/digits6DotsPlusDot6.uti"}, {"start": 4312498, "audio": 0, "end": 4313853, "filename": "/sin.utb"}, {"start": 4313853, "audio": 0, "end": 4323486, "filename": "/de-accents.cti"}, {"start": 4323486, "audio": 0, "end": 4324703, "filename": "/gu-in-g1.utb"}, {"start": 4324703, "audio": 0, "end": 4326146, "filename": "/hr-digits.uti"}, {"start": 4326146, "audio": 0, "end": 4336892, "filename": "/no-no-chardefs6.uti"}, {"start": 4336892, "audio": 0, "end": 4352441, "filename": "/ukmaths_unicode_defs.cti"}, {"start": 4352441, "audio": 0, "end": 4353861, "filename": "/latinLetterDef6Dots.uti"}, {"start": 4353861, "audio": 0, "end": 4379353, "filename": "/el.ctb"}, {"start": 4379353, "audio": 0, "end": 4379912, "filename": "/ca.tbl"}, {"start": 4379912, "audio": 0, "end": 4383138, "filename": "/ga-g1.utb"}, {"start": 4383138, "audio": 0, "end": 4393505, "filename": "/bengali.cti"}, {"start": 4393505, "audio": 0, "end": 4394042, "filename": "/sl.tbl"}, {"start": 4394042, "audio": 0, "end": 4410014, "filename": "/hr-chardefs.cti"}, {"start": 4410014, "audio": 0, "end": 4410594, "filename": "/dra.tbl"}, {"start": 4410594, "audio": 0, "end": 4411158, "filename": "/gu.tbl"}, {"start": 4411158, "audio": 0, "end": 4426648, "filename": "/gr-pl-comp8.uti"}, {"start": 4426648, "audio": 0, "end": 4427572, "filename": "/pi.ctb"}, {"start": 4427572, "audio": 0, "end": 4464375, "filename": "/Makefile"}, {"start": 4464375, "audio": 0, "end": 4484456, "filename": "/nl-chardefs.uti"}, {"start": 4484456, "audio": 0, "end": 4485021, "filename": "/gez.tbl"}, {"start": 4485021, "audio": 0, "end": 4492137, "filename": "/ethio-g1.ctb"}, {"start": 4492137, "audio": 0, "end": 4496354, "filename": "/hyph_es_ES.dic"}, {"start": 4496354, "audio": 0, "end": 4496916, "filename": "/mr.tbl"}, {"start": 4496916, "audio": 0, "end": 4498961, "filename": "/en-ueb-math.ctb"}, {"start": 4498961, "audio": 0, "end": 4513374, "filename": "/da-dk-g26l.ctb"}, {"start": 4513374, "audio": 0, "end": 4520674, "filename": "/IPA.utb"}, {"start": 4520674, "audio": 0, "end": 4522816, "filename": "/no-no-8dot-fallback-6dot-g0.utb"}, {"start": 4522816, "audio": 0, "end": 4524033, "filename": "/np-in-g1.utb"}, {"start": 4524033, "audio": 0, "end": 4524951, "filename": "/digits6Dots.uti"}, {"start": 4524951, "audio": 0, "end": 4526820, "filename": "/ko-2006-g2.ctb"}, {"start": 4526820, "audio": 0, "end": 4554750, "filename": "/en-us-g2.ctb"}, {"start": 4554750, "audio": 0, "end": 4555655, "filename": "/dra.ctb"}, {"start": 4555655, "audio": 0, "end": 4561431, "filename": "/nl-comp8.utb"}, {"start": 4561431, "audio": 0, "end": 4564274, "filename": "/ru-letters.dis"}, {"start": 4564274, "audio": 0, "end": 4564814, "filename": "/pi.tbl"}, {"start": 4564814, "audio": 0, "end": 4573620, "filename": "/nl-NL-g0.utb"}, {"start": 4573620, "audio": 0, "end": 4598308, "filename": "/de-g0-core.uti"}, {"start": 4598308, "audio": 0, "end": 4601060, "filename": "/ru-unicode.dis"}, {"start": 4601060, "audio": 0, "end": 4606486, "filename": "/hy.ctb"}, {"start": 4606486, "audio": 0, "end": 4607060, "filename": "/tr.tbl"}, {"start": 4607060, "audio": 0, "end": 4610136, "filename": "/uk.utb"}, {"start": 4610136, "audio": 0, "end": 4613609, "filename": "/grc-international-common.uti"}, {"start": 4613609, "audio": 0, "end": 4616987, "filename": "/afr-za-g1.ctb"}, {"start": 4616987, "audio": 0, "end": 4620319, "filename": "/sr-g1.ctb"}, {"start": 4620319, "audio": 0, "end": 4627951, "filename": "/sv-1996.ctb"}, {"start": 4627951, "audio": 0, "end": 4630090, "filename": "/en-gb-comp8.ctb"}, {"start": 4630090, "audio": 0, "end": 4632695, "filename": "/sk-translation.cti"}, {"start": 4632695, "audio": 0, "end": 4633254, "filename": "/sr.tbl"}, {"start": 4633254, "audio": 0, "end": 4644747, "filename": "/lt-6dot.utb"}, {"start": 4644747, "audio": 0, "end": 4654287, "filename": "/Pl-Pl-g1.utb"}, {"start": 4654287, "audio": 0, "end": 4662310, "filename": "/da-dk-g16.ctb"}, {"start": 4662310, "audio": 0, "end": 4694921, "filename": "/hu-hu-g2_exceptions.cti"}, {"start": 4694921, "audio": 0, "end": 4778446, "filename": "/hyph_nl_NL.dic"}, {"start": 4778446, "audio": 0, "end": 4786904, "filename": "/hr-translation.cti"}, {"start": 4786904, "audio": 0, "end": 4787468, "filename": "/as.tbl"}, {"start": 4787468, "audio": 0, "end": 4794524, "filename": "/he.ctb"}, {"start": 4794524, "audio": 0, "end": 4796358, "filename": "/printables.cti"}, {"start": 4796358, "audio": 0, "end": 4797037, "filename": "/en_GB.tbl"}, {"start": 4797037, "audio": 0, "end": 4799050, "filename": "/ru-chardefs.cti"}, {"start": 4799050, "audio": 0, "end": 4809148, "filename": "/ar-ar-g2.ctb"}, {"start": 4809148, "audio": 0, "end": 4822673, "filename": "/da-dk-g08.ctb"}, {"start": 4822673, "audio": 0, "end": 4829936, "filename": "/en-nabcc.utb"}, {"start": 4829936, "audio": 0, "end": 4831173, "filename": "/es-g1.ctb"}, {"start": 4831173, "audio": 0, "end": 4832829, "filename": "/nl-BE.dis"}, {"start": 4832829, "audio": 0, "end": 4852879, "filename": "/no-no-8dot.utb"}, {"start": 4852879, "audio": 0, "end": 4853897, "filename": "/maketablelist.sh"}, {"start": 4853897, "audio": 0, "end": 4862001, "filename": "/en_CA.ctb"}, {"start": 4862001, "audio": 0, "end": 4873702, "filename": "/hu-chardefs.cti"}, {"start": 4873702, "audio": 0, "end": 4874250, "filename": "/mwr.tbl"}, {"start": 4874250, "audio": 0, "end": 4875011, "filename": "/zh_CHN.tbl"}, {"start": 4875011, "audio": 0, "end": 4919193, "filename": "/ur-pk-g2.ctb"}, {"start": 4919193, "audio": 0, "end": 4928476, "filename": "/en-ueb-g1.ctb"}, {"start": 4928476, "audio": 0, "end": 4936786, "filename": "/nl-BE-g0.utb"}, {"start": 4936786, "audio": 0, "end": 4937713, "filename": "/kok.ctb"}, {"start": 4937713, "audio": 0, "end": 4945778, "filename": "/iu-ca-g1.ctb"}, {"start": 4945778, "audio": 0, "end": 4946996, "filename": "/mr-in-g1.utb"}, {"start": 4946996, "audio": 0, "end": 5133674, "filename": "/hyph_nb_NO.dic"}, {"start": 5133674, "audio": 0, "end": 5134284, "filename": "/pt.tbl"}, {"start": 5134284, "audio": 0, "end": 5139004, "filename": "/grc-international-en.utb"}, {"start": 5139004, "audio": 0, "end": 5140825, "filename": "/mn-MN-g2.ctb"}, {"start": 5140825, "audio": 0, "end": 5142036, "filename": "/or-in-g1.utb"}, {"start": 5142036, "audio": 0, "end": 5151564, "filename": "/oriya.cti"}, {"start": 5151564, "audio": 0, "end": 5153096, "filename": "/ukmaths_single_cell_defs.cti"}, {"start": 5153096, "audio": 0, "end": 5164729, "filename": "/da-lt.ctb"}, {"start": 5164729, "audio": 0, "end": 5165290, "filename": "/awa.tbl"}, {"start": 5165290, "audio": 0, "end": 5174786, "filename": "/sv-1989.ctb"}, {"start": 5174786, "audio": 0, "end": 5176001, "filename": "/be-in-g1.utb"}, {"start": 5176001, "audio": 0, "end": 5176633, "filename": "/nl.tbl"}, {"start": 5176633, "audio": 0, "end": 5177850, "filename": "/si-in-g1.utb"}, {"start": 5177850, "audio": 0, "end": 5181068, "filename": "/tamil.cti"}, {"start": 5181068, "audio": 0, "end": 5195313, "filename": "/da-dk-g26l-lit.ctb"}, {"start": 5195313, "audio": 0, "end": 5197685, "filename": "/sk-sk.utb"}, {"start": 5197685, "audio": 0, "end": 5198229, "filename": "/bh.tbl"}, {"start": 5198229, "audio": 0, "end": 5202712, "filename": "/en-us-g1.ctb"}, {"start": 5202712, "audio": 0, "end": 5203278, "filename": "/ml.tbl"}, {"start": 5203278, "audio": 0, "end": 5208043, "filename": "/Se-Se-g1.utb"}, {"start": 5208043, "audio": 0, "end": 5210481, "filename": "/en-us-brf.dis"}, {"start": 5210481, "audio": 0, "end": 5236014, "filename": "/es-g2.ctb"}, {"start": 5236014, "audio": 0, "end": 5237646, "filename": "/en-us-comp8.ctb"}, {"start": 5237646, "audio": 0, "end": 5245747, "filename": "/en-chardefs.cti"}, {"start": 5245747, "audio": 0, "end": 5247865, "filename": "/tr-g1.ctb"}, {"start": 5247865, "audio": 0, "end": 5249081, "filename": "/pu-in-g1.utb"}, {"start": 5249081, "audio": 0, "end": 5265915, "filename": "/lt.ctb"}, {"start": 5265915, "audio": 0, "end": 5266538, "filename": "/nl_BE.tbl"}, {"start": 5266538, "audio": 0, "end": 5267757, "filename": "/sa-in-g1.utb"}, {"start": 5267757, "audio": 0, "end": 5268976, "filename": "/ks-in-g1.utb"}, {"start": 5268976, "audio": 0, "end": 5273671, "filename": "/hu-hu-comp8.ctb"}, {"start": 5273671, "audio": 0, "end": 5289219, "filename": "/marburg_unicode_defs.cti"}, {"start": 5289219, "audio": 0, "end": 5293894, "filename": "/ga-g2.ctb"}, {"start": 5293894, "audio": 0, "end": 5558155, "filename": "/zh-hk.ctb"}, {"start": 5558155, "audio": 0, "end": 5558712, "filename": "/sk.tbl"}, {"start": 5558712, "audio": 0, "end": 6234646, "filename": "/zhcn-g1.ctb"}, {"start": 6234646, "audio": 0, "end": 6235222, "filename": "/et.tbl"}, {"start": 6235222, "audio": 0, "end": 6264269, "filename": "/afr-za-g2.ctb"}, {"start": 6264269, "audio": 0, "end": 6265461, "filename": "/kh-in-g1.utb"}, {"start": 6265461, "audio": 0, "end": 6270370, "filename": "/hu-hu-g1.ctb"}, {"start": 6270370, "audio": 0, "end": 6271868, "filename": "/en-chess.ctb"}, {"start": 6271868, "audio": 0, "end": 6272183, "filename": "/zh_HK.tbl"}, {"start": 6272183, "audio": 0, "end": 6272753, "filename": "/ta.tbl"}, {"start": 6272753, "audio": 0, "end": 6273310, "filename": "/bra.tbl"}, {"start": 6273310, "audio": 0, "end": 6287483, "filename": "/no-no-generic.dis"}, {"start": 6287483, "audio": 0, "end": 6288043, "filename": "/ne.tbl"}, {"start": 6288043, "audio": 0, "end": 6293051, "filename": "/ro.ctb"}, {"start": 6293051, "audio": 0, "end": 6294516, "filename": "/haw-us-g1.ctb"}, {"start": 6294516, "audio": 0, "end": 6296683, "filename": "/en-us-compbrl.uti"}, {"start": 6296683, "audio": 0, "end": 6298057, "filename": "/de-g2.ctb"}, {"start": 6298057, "audio": 0, "end": 6298618, "filename": "/ckb.tbl"}, {"start": 6298618, "audio": 0, "end": 6299834, "filename": "/hi-in-g1.utb"}, {"start": 6299834, "audio": 0, "end": 6313094, "filename": "/sl-si-g1.utb"}, {"start": 6313094, "audio": 0, "end": 6339525, "filename": "/braille-patterns.cti"}, {"start": 6339525, "audio": 0, "end": 6359523, "filename": "/de-chardefs8.cti"}, {"start": 6359523, "audio": 0, "end": 6360083, "filename": "/sd.tbl"}, {"start": 6360083, "audio": 0, "end": 6365539, "filename": "/chr-us-g1.ctb"}, {"start": 6365539, "audio": 0, "end": 6372787, "filename": "/bo.ctb"}, {"start": 6372787, "audio": 0, "end": 6372953, "filename": "/lt-6dot.tbl"}, {"start": 6372953, "audio": 0, "end": 6386141, "filename": "/IPA-unicode-range.uti"}, {"start": 6386141, "audio": 0, "end": 6389682, "filename": "/ckb-translation.cti"}, {"start": 6389682, "audio": 0, "end": 6397742, "filename": "/da-dk-g16-lit.ctb"}, {"start": 6397742, "audio": 0, "end": 6398288, "filename": "/kru.tbl"}, {"start": 6398288, "audio": 0, "end": 6399707, "filename": "/compress.cti"}, {"start": 6399707, "audio": 0, "end": 6400664, "filename": "/litdigits6Dots.uti"}, {"start": 6400664, "audio": 0, "end": 6414382, "filename": "/da-dk-6miscChars.cti"}, {"start": 6414382, "audio": 0, "end": 6418688, "filename": "/cy-cy-g2.ctb"}, {"start": 6418688, "audio": 0, "end": 6423977, "filename": "/gd.ctb"}, {"start": 6423977, "audio": 0, "end": 6434644, "filename": "/hyph_eo.dic"}, {"start": 6434644, "audio": 0, "end": 6435621, "filename": "/ca-g1.ctb"}, {"start": 6435621, "audio": 0, "end": 6440952, "filename": "/cs-letterDef8Dots.uti"}, {"start": 6440952, "audio": 0, "end": 6442777, "filename": "/mn-MN-g1.utb"}, {"start": 6442777, "audio": 0, "end": 6451208, "filename": "/fi-fi-8dot.ctb"}, {"start": 6451208, "audio": 0, "end": 6457638, "filename": "/bg.ctb"}, {"start": 6457638, "audio": 0, "end": 6458269, "filename": "/hu.tbl"}, {"start": 6458269, "audio": 0, "end": 6469946, "filename": "/fr-bfu-comp6.utb"}, {"start": 6469946, "audio": 0, "end": 6484562, "filename": "/uni-text.dis"}, {"start": 6484562, "audio": 0, "end": 6502418, "filename": "/pl-pl-comp8.ctb"}, {"start": 6502418, "audio": 0, "end": 6503362, "filename": "/gon.ctb"}, {"start": 6503362, "audio": 0, "end": 6517963, "filename": "/de-de.dis"}, {"start": 6517963, "audio": 0, "end": 6548514, "filename": "/hyph_pl_PL.dic"}, {"start": 6548514, "audio": 0, "end": 6549559, "filename": "/controlchars.cti"}, {"start": 6549559, "audio": 0, "end": 6550957, "filename": "/latinLetterDef8Dots.uti"}, {"start": 6550957, "audio": 0, "end": 6551531, "filename": "/mt.tbl"}, {"start": 6551531, "audio": 0, "end": 6552572, "filename": "/sot-za-g1.ctb"}, {"start": 6552572, "audio": 0, "end": 6567265, "filename": "/se-se.dis"}, {"start": 6567265, "audio": 0, "end": 6580393, "filename": "/hu-hu-g2.ctb"}, {"start": 6580393, "audio": 0, "end": 6580953, "filename": "/pl.tbl"}, {"start": 6580953, "audio": 0, "end": 6592986, "filename": "/vi.ctb"}, {"start": 6592986, "audio": 0, "end": 6603503, "filename": "/hr-comp8.utb"}, {"start": 6603503, "audio": 0, "end": 6604857, "filename": "/cs-g1.ctb"}, {"start": 6604857, "audio": 0, "end": 6606647, "filename": "/ko-g2.ctb"}, {"start": 6606647, "audio": 0, "end": 6611848, "filename": "/sk-sk-g1.utb"}, {"start": 6611848, "audio": 0, "end": 6620551, "filename": "/kannada.cti"}, {"start": 6620551, "audio": 0, "end": 6632062, "filename": "/fi2.ctb"}, {"start": 6632062, "audio": 0, "end": 6776406, "filename": "/fr-bfu-g2.ctb"}, {"start": 6776406, "audio": 0, "end": 6776968, "filename": "/kn.tbl"}, {"start": 6776968, "audio": 0, "end": 6813063, "filename": "/de-g1-core-patterns.dic"}, {"start": 6813063, "audio": 0, "end": 6813654, "filename": "/lt.tbl"}, {"start": 6813654, "audio": 0, "end": 6820084, "filename": "/nl-g0.uti"}, {"start": 6820084, "audio": 0, "end": 6829689, "filename": "/gujarati.cti"}, {"start": 6829689, "audio": 0, "end": 6839930, "filename": "/se-se.ctb"}, {"start": 6839930, "audio": 0, "end": 6840492, "filename": "/sv.tbl"}, {"start": 6840492, "audio": 0, "end": 6840814, "filename": "/zh_TW.tbl"}, {"start": 6840814, "audio": 0, "end": 6841740, "filename": "/loweredDigits6Dots.uti"}, {"start": 6841740, "audio": 0, "end": 6862188, "filename": "/en-us-mathtext.ctb"}, {"start": 6862188, "audio": 0, "end": 6863398, "filename": "/ckb-g1.ctb"}, {"start": 6863398, "audio": 0, "end": 6864334, "filename": "/loweredDigits8Dots.uti"}, {"start": 6864334, "audio": 0, "end": 6864908, "filename": "/bo.tbl"}, {"start": 6864908, "audio": 0, "end": 6876993, "filename": "/fr-bfu-comp68.cti"}, {"start": 6876993, "audio": 0, "end": 6878503, "filename": "/hr-g1.ctb"}, {"start": 6878503, "audio": 0, "end": 6884834, "filename": "/no-no-g0.utb"}, {"start": 6884834, "audio": 0, "end": 6896170, "filename": "/ru.ctb"}, {"start": 6896170, "audio": 0, "end": 6900024, "filename": "/wordcx.dis"}, {"start": 6900024, "audio": 0, "end": 6900916, "filename": "/ne.ctb"}, {"start": 6900916, "audio": 0, "end": 6907797, "filename": "/sr-chardefs.cti"}, {"start": 6907797, "audio": 0, "end": 6911756, "filename": "/ko-2006.cti"}, {"start": 6911756, "audio": 0, "end": 6932998, "filename": "/is-chardefs8.cti"}, {"start": 6932998, "audio": 0, "end": 6952486, "filename": "/en-ueb-chardefs.uti"}, {"start": 6952486, "audio": 0, "end": 6953062, "filename": "/ro.tbl"}, {"start": 6953062, "audio": 0, "end": 6981635, "filename": "/da-dk-g26.ctb"}, {"start": 6981635, "audio": 0, "end": 6986809, "filename": "/fa-ir-comp8.ctb"}, {"start": 6986809, "audio": 0, "end": 7007605, "filename": "/no-no-comp8.ctb"}, {"start": 7007605, "audio": 0, "end": 7009120, "filename": "/marburg_single_cell_defs.cti"}, {"start": 7009120, "audio": 0, "end": 7025566, "filename": "/grc-international-decomposed.uti"}, {"start": 7025566, "audio": 0, "end": 7025727, "filename": "/README"}, {"start": 7025727, "audio": 0, "end": 7042223, "filename": "/nemethdefs.cti"}, {"start": 7042223, "audio": 0, "end": 7063966, "filename": "/hyph_cs_CZ.dic"}, {"start": 7063966, "audio": 0, "end": 7069002, "filename": "/et-g0.utb"}, {"start": 7069002, "audio": 0, "end": 7079307, "filename": "/boxes.ctb"}, {"start": 7079307, "audio": 0, "end": 7079869, "filename": "/bn.tbl"}, {"start": 7079869, "audio": 0, "end": 7080475, "filename": "/en_CA.tbl"}, {"start": 7080475, "audio": 0, "end": 7081401, "filename": "/bh.ctb"}, {"start": 7081401, "audio": 0, "end": 7082329, "filename": "/digits8Dots.uti"}, {"start": 7082329, "audio": 0, "end": 7464677, "filename": "/ko-chars.cti"}, {"start": 7464677, "audio": 0, "end": 7465896, "filename": "/ml-in-g1.utb"}, {"start": 7465896, "audio": 0, "end": 7473038, "filename": "/is-chardefs6.cti"}, {"start": 7473038, "audio": 0, "end": 7514824, "filename": "/da-dk-g28.ctb"}, {"start": 7514824, "audio": 0, "end": 7516316, "filename": "/corrections.cti"}, {"start": 7516316, "audio": 0, "end": 7545049, "filename": "/it-it-comp8.utb"}, {"start": 7545049, "audio": 0, "end": 7566609, "filename": "/pt-pt-g2.ctb"}, {"start": 7566609, "audio": 0, "end": 7578184, "filename": "/da-dk-octobraille.dis"}, {"start": 7578184, "audio": 0, "end": 7579746, "filename": "/us-table.dis"}, {"start": 7579746, "audio": 0, "end": 7587970, "filename": "/ru-ru.dis"}, {"start": 7587970, "audio": 0, "end": 7588552, "filename": "/hr-comp8.tbl"}, {"start": 7588552, "audio": 0, "end": 7589767, "filename": "/ka-in-g1.utb"}, {"start": 7589767, "audio": 0, "end": 7590325, "filename": "/or.tbl"}, {"start": 7590325, "audio": 0, "end": 7590885, "filename": "/te.tbl"}, {"start": 7590885, "audio": 0, "end": 7622144, "filename": "/hyph_sv_SE.dic"}, {"start": 7622144, "audio": 0, "end": 7622713, "filename": "/is.tbl"}, {"start": 7622713, "audio": 0, "end": 7623926, "filename": "/te-in-g1.utb"}, {"start": 7623926, "audio": 0, "end": 7898702, "filename": "/ko-g2-rules.cti"}, {"start": 7898702, "audio": 0, "end": 7902807, "filename": "/et.ctb"}, {"start": 7902807, "audio": 0, "end": 7911370, "filename": "/ckb-chardefs.cti"}, {"start": 7911370, "audio": 0, "end": 8528721, "filename": "/zhcn-g2.ctb"}, {"start": 8528721, "audio": 0, "end": 8548562, "filename": "/da-dk-g26-lit.ctb"}, {"start": 8548562, "audio": 0, "end": 8549106, "filename": "/gon.tbl"}, {"start": 8549106, "audio": 0, "end": 8741674, "filename": "/de-g2-core-patterns.dic"}, {"start": 8741674, "audio": 0, "end": 8769739, "filename": "/en-us-interline.ctb"}, {"start": 8769739, "audio": 0, "end": 8806540, "filename": "/hyph_de_DE.dic"}, {"start": 8806540, "audio": 0, "end": 8807111, "filename": "/lv.tbl"}, {"start": 8807111, "audio": 0, "end": 8808803, "filename": "/ko-g1.ctb"}, {"start": 8808803, "audio": 0, "end": 8810019, "filename": "/as-in-g1.utb"}, {"start": 8810019, "audio": 0, "end": 8810584, "filename": "/mni.tbl"}, {"start": 8810584, "audio": 0, "end": 8812107, "filename": "/de-g1.ctb"}, {"start": 8812107, "audio": 0, "end": 9002258, "filename": "/en-ueb-g2.ctb"}, {"start": 9002258, "audio": 0, "end": 9009081, "filename": "/es-old.dis"}, {"start": 9009081, "audio": 0, "end": 9009653, "filename": "/he.tbl"}, {"start": 9009653, "audio": 0, "end": 9010869, "filename": "/aw-in-g1.utb"}, {"start": 9010869, "audio": 0, "end": 9021128, "filename": "/gurumuki.cti"}, {"start": 9021128, "audio": 0, "end": 9021690, "filename": "/pa.tbl"}, {"start": 9021690, "audio": 0, "end": 9025710, "filename": "/no-no-g1.ctb"}, {"start": 9025710, "audio": 0, "end": 9055858, "filename": "/da-dk-g28l.ctb"}, {"start": 9055858, "audio": 0, "end": 9068398, "filename": "/en-gb-g1.utb"}, {"start": 9068398, "audio": 0, "end": 9075227, "filename": "/es-new.dis"}, {"start": 9075227, "audio": 0, "end": 9077687, "filename": "/eo-g1.ctb"}, {"start": 9077687, "audio": 0, "end": 9081203, "filename": "/en-in-g1.ctb"}, {"start": 9081203, "audio": 0, "end": 9092736, "filename": "/ur-pk-g1.utb"}, {"start": 9092736, "audio": 0, "end": 9093339, "filename": "/es.tbl"}, {"start": 9093339, "audio": 0, "end": 9103490, "filename": "/telugu.cti"}, {"start": 9103490, "audio": 0, "end": 9113546, "filename": "/da-dk-8miscChars.cti"}, {"start": 9113546, "audio": 0, "end": 9114940, "filename": "/de-g1-core.cti"}, {"start": 9114940, "audio": 0, "end": 9117463, "filename": "/cs-translation.cti"}, {"start": 9117463, "audio": 0, "end": 9123664, "filename": "/Makefile.am"}, {"start": 9123664, "audio": 0, "end": 9143318, "filename": "/en-GB-g2.ctb"}, {"start": 9143318, "audio": 0, "end": 9143906, "filename": "/tr-g2.tbl"}, {"start": 9143906, "audio": 0, "end": 9149807, "filename": "/is.ctb"}, {"start": 9149807, "audio": 0, "end": 9151021, "filename": "/br-in-g1.utb"}, {"start": 9151021, "audio": 0, "end": 9153227, "filename": "/hyph_it_IT.dic"}, {"start": 9153227, "audio": 0, "end": 9155329, "filename": "/spaces.uti"}, {"start": 9155329, "audio": 0, "end": 9168807, "filename": "/no-no-generic.ctb"}, {"start": 9168807, "audio": 0, "end": 9171899, "filename": "/pt-pt-comp8.ctb"}, {"start": 9171899, "audio": 0, "end": 9179878, "filename": "/hyph_fr_FR.dic"}, {"start": 9179878, "audio": 0, "end": 9185085, "filename": "/ru-litbrl.ctb"}, {"start": 9185085, "audio": 0, "end": 9186440, "filename": "/hu-backtranslate-correction.dis"}, {"start": 9186440, "audio": 0, "end": 9253976, "filename": "/hyph_ru.dic"}, {"start": 9253976, "audio": 0, "end": 9272744, "filename": "/no-no-g3.ctb"}, {"start": 9272744, "audio": 0, "end": 9273302, "filename": "/hi.tbl"}, {"start": 9273302, "audio": 0, "end": 9274203, "filename": "/unicode-without-blank.dis"}, {"start": 9274203, "audio": 0, "end": 9282022, "filename": "/no-no-braillo-047-01.dis"}, {"start": 9282022, "audio": 0, "end": 9286703, "filename": "/tr.ctb"}, {"start": 9286703, "audio": 0, "end": 9291109, "filename": "/it-it-comp6.utb"}, {"start": 9291109, "audio": 0, "end": 9292736, "filename": "/de-g0.utb"}, {"start": 9292736, "audio": 0, "end": 9295782, "filename": "/eurodefs.cti"}, {"start": 9295782, "audio": 0, "end": 9310124, "filename": "/ca-chardefs.cti"}, {"start": 9310124, "audio": 0, "end": 9328683, "filename": "/wiskunde-chardefs.cti"}, {"start": 9328683, "audio": 0, "end": 9332726, "filename": "/ru-compbrl.ctb"}, {"start": 9332726, "audio": 0, "end": 9448679, "filename": "/hu-exceptionwords.cti"}, {"start": 9448679, "audio": 0, "end": 9455716, "filename": "/Es-Es-G0.utb"}, {"start": 9455716, "audio": 0, "end": 9457807, "filename": "/de-eurobrl6u.dis"}, {"start": 9457807, "audio": 0, "end": 9469301, "filename": "/fi1.ctb"}, {"start": 9469301, "audio": 0, "end": 9475275, "filename": "/unicode.dis"}, {"start": 9475275, "audio": 0, "end": 9479826, "filename": "/mt.ctb"}, {"start": 9479826, "audio": 0, "end": 9480753, "filename": "/mwr.ctb"}, {"start": 9480753, "audio": 0, "end": 9490052, "filename": "/devanagari.cti"}, {"start": 9490052, "audio": 0, "end": 9511702, "filename": "/text_nabcc.dis"}, {"start": 9511702, "audio": 0, "end": 9520005, "filename": "/da-dk.dis"}, {"start": 9520005, "audio": 0, "end": 9520564, "filename": "/kha.tbl"}, {"start": 9520564, "audio": 0, "end": 9533138, "filename": "/tr-g2.ctb"}, {"start": 9533138, "audio": 0, "end": 9536372, "filename": "/ukchardefs.cti"}, {"start": 9536372, "audio": 0, "end": 9550340, "filename": "/es-chardefs.cti"}, {"start": 9550340, "audio": 0, "end": 9551772, "filename": "/sk-g1.ctb"}, {"start": 9551772, "audio": 0, "end": 9558475, "filename": "/countries.cti"}, {"start": 9558475, "audio": 0, "end": 9569097, "filename": "/ru-ru-g1.utb"}, {"start": 9569097, "audio": 0, "end": 9569645, "filename": "/kok.tbl"}, {"start": 9569645, "audio": 0, "end": 9583735, "filename": "/da-dk-g18.ctb"}, {"start": 9583735, "audio": 0, "end": 9585417, "filename": "/mao-nz-g1.ctb"}, {"start": 9585417, "audio": 0, "end": 9646635, "filename": "/hyph_brl_da_dk.dic"}, {"start": 9646635, "audio": 0, "end": 9647199, "filename": "/it.tbl"}, {"start": 9647199, "audio": 0, "end": 9652132, "filename": "/ta-ta-g1.ctb"}, {"start": 9652132, "audio": 0, "end": 9653176, "filename": "/tsn-za-g1.ctb"}, {"start": 9653176, "audio": 0, "end": 9654096, "filename": "/ta.ctb"}], "remote_package_size": 9654096, "package_uuid": "20947335-6d7d-49bc-886e-29452d401f75"});
 
 })();
 
@@ -249,13 +250,6 @@ if (Module['ENVIRONMENT']) {
 }
 
 
-// Three configurations we can be running in:
-// 1) We could be the application main() thread running in the main JS UI thread. (ENVIRONMENT_IS_WORKER == false and ENVIRONMENT_IS_PTHREAD == false)
-// 2) We could be the application main() thread proxied to worker. (with Emscripten -s PROXY_TO_WORKER=1) (ENVIRONMENT_IS_WORKER == true, ENVIRONMENT_IS_PTHREAD == false)
-// 3) We could be an application pthread running in a worker. (ENVIRONMENT_IS_WORKER == true and ENVIRONMENT_IS_PTHREAD == true)
-
-
-
 
 // `/` should be present at the end if `scriptDirectory` is not empty
 var scriptDirectory = '';
@@ -272,21 +266,18 @@ var read_,
     readBinary,
     setWindowTitle;
 
+var nodeFS;
+var nodePath;
+
 if (ENVIRONMENT_IS_NODE) {
   scriptDirectory = __dirname + '/';
 
-  // Expose functionality in the same simple way that the shells work
-  // Note that we pollute the global namespace here, otherwise we break in node
-  var nodeFS;
-  var nodePath;
 
   read_ = function shell_read(filename, binary) {
-    var ret;
-      if (!nodeFS) nodeFS = require('fs');
-      if (!nodePath) nodePath = require('path');
-      filename = nodePath['normalize'](filename);
-      ret = nodeFS['readFileSync'](filename);
-    return binary ? ret : ret.toString();
+    if (!nodeFS) nodeFS = require('fs');
+    if (!nodePath) nodePath = require('path');
+    filename = nodePath['normalize'](filename);
+    return nodeFS['readFileSync'](filename, binary ? null : 'utf8');
   };
 
   readBinary = function readBinary(filename) {
@@ -297,6 +288,9 @@ if (ENVIRONMENT_IS_NODE) {
     assert(ret.buffer);
     return ret;
   };
+
+
+
 
   if (process['argv'].length > 1) {
     thisProgram = process['argv'][1].replace(/\\/g, '/');
@@ -320,6 +314,8 @@ if (ENVIRONMENT_IS_NODE) {
   };
 
   Module['inspect'] = function () { return '[Emscripten Module object]'; };
+
+
 } else
 if (ENVIRONMENT_IS_SHELL) {
 
@@ -359,6 +355,10 @@ if (ENVIRONMENT_IS_SHELL) {
     console.warn = console.error = typeof printErr !== 'undefined' ? printErr : print;
   }
 } else
+
+// Note that this includes Node.js workers when relevant (pthreads is enabled).
+// Node.js workers are detected as a combination of ENVIRONMENT_IS_WORKER and
+// ENVIRONMENT_HAS_NODE.
 if (ENVIRONMENT_IS_WEB || ENVIRONMENT_IS_WORKER) {
   if (ENVIRONMENT_IS_WORKER) { // Check worker, not web, since window could be polyfilled
     scriptDirectory = self.location.href;
@@ -379,6 +379,11 @@ if (ENVIRONMENT_IS_WEB || ENVIRONMENT_IS_WORKER) {
   } else {
     scriptDirectory = '';
   }
+
+
+  // Differentiate the Web Worker from the Node Worker case, as reading must
+  // be done differently.
+  {
 
 
   read_ = function shell_read(url) {
@@ -413,11 +418,17 @@ if (ENVIRONMENT_IS_WEB || ENVIRONMENT_IS_WORKER) {
     xhr.send(null);
   };
 
+
+
+
+  }
+
   setWindowTitle = function(title) { document.title = title };
 } else
 {
   throw new Error('environment detection error');
 }
+
 
 // Set up the out() and err() hooks, which are how we can print to stdout or
 // stderr, respectively.
@@ -438,9 +449,9 @@ moduleOverrides = null;
 // to the proper local x. This has two benefits: first, we only emit it if it is
 // expected to arrive, and second, by using a local everywhere else that can be
 // minified.
-if (Module['arguments']) arguments_ = Module['arguments'];if (!Object.getOwnPropertyDescriptor(Module, 'arguments')) Object.defineProperty(Module, 'arguments', { get: function() { abort('Module.arguments has been replaced with plain arguments_') } });
-if (Module['thisProgram']) thisProgram = Module['thisProgram'];if (!Object.getOwnPropertyDescriptor(Module, 'thisProgram')) Object.defineProperty(Module, 'thisProgram', { get: function() { abort('Module.thisProgram has been replaced with plain thisProgram') } });
-if (Module['quit']) quit_ = Module['quit'];if (!Object.getOwnPropertyDescriptor(Module, 'quit')) Object.defineProperty(Module, 'quit', { get: function() { abort('Module.quit has been replaced with plain quit_') } });
+if (Module['arguments']) arguments_ = Module['arguments'];if (!Object.getOwnPropertyDescriptor(Module, 'arguments')) Object.defineProperty(Module, 'arguments', { configurable: true, get: function() { abort('Module.arguments has been replaced with plain arguments_') } });
+if (Module['thisProgram']) thisProgram = Module['thisProgram'];if (!Object.getOwnPropertyDescriptor(Module, 'thisProgram')) Object.defineProperty(Module, 'thisProgram', { configurable: true, get: function() { abort('Module.thisProgram has been replaced with plain thisProgram') } });
+if (Module['quit']) quit_ = Module['quit'];if (!Object.getOwnPropertyDescriptor(Module, 'quit')) Object.defineProperty(Module, 'quit', { configurable: true, get: function() { abort('Module.quit has been replaced with plain quit_') } });
 
 // perform assertions in shell.js after we set up out() and err(), as otherwise if an assertion fails it cannot print the message
 // Assertions on removed incoming Module JS APIs.
@@ -452,10 +463,14 @@ assert(typeof Module['read'] === 'undefined', 'Module.read option was removed (m
 assert(typeof Module['readAsync'] === 'undefined', 'Module.readAsync option was removed (modify readAsync in JS)');
 assert(typeof Module['readBinary'] === 'undefined', 'Module.readBinary option was removed (modify readBinary in JS)');
 assert(typeof Module['setWindowTitle'] === 'undefined', 'Module.setWindowTitle option was removed (modify setWindowTitle in JS)');
-if (!Object.getOwnPropertyDescriptor(Module, 'read')) Object.defineProperty(Module, 'read', { get: function() { abort('Module.read has been replaced with plain read_') } });
-if (!Object.getOwnPropertyDescriptor(Module, 'readAsync')) Object.defineProperty(Module, 'readAsync', { get: function() { abort('Module.readAsync has been replaced with plain readAsync') } });
-if (!Object.getOwnPropertyDescriptor(Module, 'readBinary')) Object.defineProperty(Module, 'readBinary', { get: function() { abort('Module.readBinary has been replaced with plain readBinary') } });
-// TODO: add when SDL2 is fixed if (!Object.getOwnPropertyDescriptor(Module, 'setWindowTitle')) Object.defineProperty(Module, 'setWindowTitle', { get: function() { abort('Module.setWindowTitle has been replaced with plain setWindowTitle') } });
+if (!Object.getOwnPropertyDescriptor(Module, 'read')) Object.defineProperty(Module, 'read', { configurable: true, get: function() { abort('Module.read has been replaced with plain read_') } });
+if (!Object.getOwnPropertyDescriptor(Module, 'readAsync')) Object.defineProperty(Module, 'readAsync', { configurable: true, get: function() { abort('Module.readAsync has been replaced with plain readAsync') } });
+if (!Object.getOwnPropertyDescriptor(Module, 'readBinary')) Object.defineProperty(Module, 'readBinary', { configurable: true, get: function() { abort('Module.readBinary has been replaced with plain readBinary') } });
+// TODO: add when SDL2 is fixed if (!Object.getOwnPropertyDescriptor(Module, 'setWindowTitle')) Object.defineProperty(Module, 'setWindowTitle', { configurable: true, get: function() { abort('Module.setWindowTitle has been replaced with plain setWindowTitle') } });
+var IDBFS = 'IDBFS is no longer included by default; build with -lidbfs.js';
+var PROXYFS = 'PROXYFS is no longer included by default; build with -lproxyfs.js';
+var WORKERFS = 'WORKERFS is no longer included by default; build with -lworkerfs.js';
+var NODEFS = 'NODEFS is no longer included by default; build with -lnodefs.js';
 
 
 // TODO remove when SDL2 is fixed (also see above)
@@ -542,10 +557,28 @@ var jsCallStartIndex = 1;
 var functionPointers = new Array(1);
 
 // Wraps a JS function as a wasm function with a given signature.
-// In the future, we may get a WebAssembly.Function constructor. Until then,
-// we create a wasm module that takes the JS function as an import with a given
-// signature, and re-exports that as a wasm function.
 function convertJsFunctionToWasm(func, sig) {
+
+  // If the type reflection proposal is available, use the new
+  // "WebAssembly.Function" constructor.
+  // Otherwise, construct a minimal wasm module importing the JS function and
+  // re-exporting it.
+  if (typeof WebAssembly.Function === "function") {
+    var typeNames = {
+      'i': 'i32',
+      'j': 'i64',
+      'f': 'f32',
+      'd': 'f64'
+    };
+    var type = {
+      parameters: [],
+      results: sig[0] == 'v' ? [] : [typeNames[sig[0]]]
+    };
+    for (var i = 1; i < sig.length; ++i) {
+      type.parameters.push(typeNames[sig[i]]);
+    }
+    return new WebAssembly.Function(type, func);
+  }
 
   // The module is static, with the exception of the type section, which is
   // generated based on the signature passed in.
@@ -599,11 +632,11 @@ function convertJsFunctionToWasm(func, sig) {
   // This accepts an import (at "e.f"), that it reroutes to an export (at "f")
   var module = new WebAssembly.Module(bytes);
   var instance = new WebAssembly.Instance(module, {
-    e: {
-      f: func
+    'e': {
+      'f': func
     }
   });
-  var wrappedFunc = instance.exports.f;
+  var wrappedFunc = instance.exports['f'];
   return wrappedFunc;
 }
 
@@ -645,6 +678,7 @@ function removeFunctionWasm(index) {
 // 'sig' parameter is required for the llvm backend but only when func is not
 // already a WebAssembly function.
 function addFunction(func, sig) {
+  assert(typeof func !== 'undefined');
 
 
   var base = 0;
@@ -750,8 +784,8 @@ var GLOBAL_BASE = 1024;
 //    is up at http://kripken.github.io/emscripten-site/docs/api_reference/preamble.js.html
 
 
-var wasmBinary;if (Module['wasmBinary']) wasmBinary = Module['wasmBinary'];if (!Object.getOwnPropertyDescriptor(Module, 'wasmBinary')) Object.defineProperty(Module, 'wasmBinary', { get: function() { abort('Module.wasmBinary has been replaced with plain wasmBinary') } });
-var noExitRuntime;if (Module['noExitRuntime']) noExitRuntime = Module['noExitRuntime'];if (!Object.getOwnPropertyDescriptor(Module, 'noExitRuntime')) Object.defineProperty(Module, 'noExitRuntime', { get: function() { abort('Module.noExitRuntime has been replaced with plain noExitRuntime') } });
+var wasmBinary;if (Module['wasmBinary']) wasmBinary = Module['wasmBinary'];if (!Object.getOwnPropertyDescriptor(Module, 'wasmBinary')) Object.defineProperty(Module, 'wasmBinary', { configurable: true, get: function() { abort('Module.wasmBinary has been replaced with plain wasmBinary') } });
+var noExitRuntime;if (Module['noExitRuntime']) noExitRuntime = Module['noExitRuntime'];if (!Object.getOwnPropertyDescriptor(Module, 'noExitRuntime')) Object.defineProperty(Module, 'noExitRuntime', { configurable: true, get: function() { abort('Module.noExitRuntime has been replaced with plain noExitRuntime') } });
 
 
 if (typeof WebAssembly !== 'object') {
@@ -803,8 +837,14 @@ function getValue(ptr, type, noSafe) {
 
 var wasmMemory;
 
-// Potentially used for direct table calls.
-var wasmTable;
+// In fastcomp asm.js, we don't need a wasm Table at all.
+// In the wasm backend, we polyfill the WebAssembly object,
+// so this creates a (non-native-wasm) table for us.
+var wasmTable = new WebAssembly.Table({
+  'initial': 92,
+  'maximum': 92,
+  'element': 'anyfunc'
+});
 
 
 //========================================
@@ -1405,13 +1445,12 @@ function updateGlobalBufferAndViews(buf) {
   Module['HEAPF64'] = HEAPF64 = new Float64Array(buf);
 }
 
-
 var STATIC_BASE = 1024,
-    STACK_BASE = 40240,
+    STACK_BASE = 40176,
     STACKTOP = STACK_BASE,
-    STACK_MAX = 5283120,
-    DYNAMIC_BASE = 5283120,
-    DYNAMICTOP_PTR = 40208;
+    STACK_MAX = 5283056,
+    DYNAMIC_BASE = 5283056,
+    DYNAMICTOP_PTR = 39984;
 
 assert(STACK_BASE % 16 === 0, 'stack must start aligned');
 assert(DYNAMIC_BASE % 16 === 0, 'heap must start aligned');
@@ -1421,7 +1460,7 @@ assert(DYNAMIC_BASE % 16 === 0, 'heap must start aligned');
 var TOTAL_STACK = 5242880;
 if (Module['TOTAL_STACK']) assert(TOTAL_STACK === Module['TOTAL_STACK'], 'the stack size can no longer be determined at runtime')
 
-var INITIAL_TOTAL_MEMORY = Module['TOTAL_MEMORY'] || 167772160;if (!Object.getOwnPropertyDescriptor(Module, 'TOTAL_MEMORY')) Object.defineProperty(Module, 'TOTAL_MEMORY', { get: function() { abort('Module.TOTAL_MEMORY has been replaced with plain INITIAL_TOTAL_MEMORY') } });
+var INITIAL_TOTAL_MEMORY = Module['TOTAL_MEMORY'] || 167772160;if (!Object.getOwnPropertyDescriptor(Module, 'TOTAL_MEMORY')) Object.defineProperty(Module, 'TOTAL_MEMORY', { configurable: true, get: function() { abort('Module.TOTAL_MEMORY has been replaced with plain INITIAL_TOTAL_MEMORY') } });
 
 assert(INITIAL_TOTAL_MEMORY >= TOTAL_STACK, 'TOTAL_MEMORY should be larger than TOTAL_STACK, was ' + INITIAL_TOTAL_MEMORY + '! (TOTAL_STACK=' + TOTAL_STACK + ')');
 
@@ -1434,6 +1473,11 @@ assert(typeof Int32Array !== 'undefined' && typeof Float64Array !== 'undefined' 
 
 
 
+// In standalone mode, the wasm creates the memory, and the user can't provide it.
+// In non-standalone/normal mode, we create the memory here.
+
+// Create the main memory. (Note: this isn't used in STANDALONE_WASM mode since the wasm
+// memory is created in the wasm, not in JS.)
 
   if (Module['wasmMemory']) {
     wasmMemory = Module['wasmMemory'];
@@ -1460,11 +1504,16 @@ updateGlobalBufferAndViews(buffer);
 HEAP32[DYNAMICTOP_PTR>>2] = DYNAMIC_BASE;
 
 
+
+
 // Initializes the stack cookie. Called at the startup of main and at the startup of each thread in pthreads mode.
 function writeStackCookie() {
   assert((STACK_MAX & 3) == 0);
   HEAPU32[(STACK_MAX >> 2)-1] = 0x02135467;
   HEAPU32[(STACK_MAX >> 2)-2] = 0x89BACDFE;
+  // Also test the global address 0 for integrity.
+  // We don't do this with ASan because ASan does its own checks for this.
+  HEAP32[0] = 0x63736d65; /* 'emsc' */
 }
 
 function checkStackCookie() {
@@ -1483,13 +1532,15 @@ function abortStackOverflow(allocSize) {
 }
 
 
-  HEAP32[0] = 0x63736d65; /* 'emsc' */
-
 
 
 // Endianness check (note: assumes compiler arch was little-endian)
-HEAP16[1] = 0x6373;
-if (HEAPU8[2] !== 0x73 || HEAPU8[3] !== 0x63) throw 'Runtime error: expected the system to be little-endian!';
+(function() {
+  var h16 = new Int16Array(1);
+  var h8 = new Int8Array(h16.buffer);
+  h16[0] = 0x6373;
+  if (h8[0] !== 0x73 || h8[1] !== 0x63) throw 'Runtime error: expected the system to be little-endian!';
+})();
 
 function abortFnPtrError(ptr, sig) {
 	abort("Invalid function pointer " + ptr + " called with signature '" + sig + "'. Perhaps this is an invalid value (e.g. caused by calling a virtual method on a NULL pointer)? Or calling a function with an incorrect type, which will fail? (it is worth building your source files with -Werror (warnings are errors), as warnings can indicate undefined behavior which can cause this). Build with ASSERTIONS=2 for more info.");
@@ -1729,6 +1780,28 @@ Module["preloadedImages"] = {}; // maps url to image data
 Module["preloadedAudios"] = {}; // maps url to audio data
 
 
+function abort(what) {
+  if (Module['onAbort']) {
+    Module['onAbort'](what);
+  }
+
+  what += '';
+  out(what);
+  err(what);
+
+  ABORT = true;
+  EXITSTATUS = 1;
+
+  var output = 'abort(' + what + ') at ' + stackTrace();
+  what = output;
+
+  // Throw a wasm runtime error, because a JS error might be seen as a foreign
+  // exception, which means we'd run destructors on it. We need the error to
+  // simply make the program stop.
+  throw new WebAssembly.RuntimeError(what);
+}
+
+
 var memoryInitializer = null;
 
 
@@ -1800,11 +1873,11 @@ function getBinaryPromise() {
 
 // Create the wasm instance.
 // Receives the wasm imports, returns the exports.
-function createWasm(env) {
-
+function createWasm() {
   // prepare imports
   var info = {
-    'env': env
+    'env': asmLibraryArg,
+    'wasi_unstable': asmLibraryArg
     ,
     'global': {
       'NaN': NaN,
@@ -1886,30 +1959,7 @@ function createWasm(env) {
   return {}; // no exports yet; we'll fill them in later
 }
 
-// Provide an "asm.js function" for the application, called to "link" the asm.js module. We instantiate
-// the wasm module at that time, and it receives imports and provides exports and so forth, the app
-// doesn't need to care that it is wasm or asm.js.
-
-Module['asm'] = function(global, env, providedBuffer) {
-  // memory was already allocated (so js could use the buffer)
-  env['memory'] = wasmMemory
-  ;
-  // import table
-  env['table'] = wasmTable = new WebAssembly.Table({
-    'initial': 84,
-    'maximum': 84,
-    'element': 'anyfunc'
-  });
-  // With the wasm backend __memory_base and __table_base and only needed for
-  // relocatable output.
-  env['__memory_base'] = 1024; // tell the memory segments where to place themselves
-  // table starts at 0 by default (even in dynamic linking, for the main module)
-  env['__table_base'] = 0;
-
-  var exports = createWasm(env);
-  assert(exports, 'binaryen setup failed (no wasm support?)');
-  return exports;
-};
+Module['asm'] = createWasm;
 
 // Globals used by JS i64 conversions
 var tempDouble;
@@ -1923,7 +1973,7 @@ var ASM_CONSTS = [];
 
 
 
-// STATICTOP = STATIC_BASE + 39216;
+// STATICTOP = STATIC_BASE + 39152;
 /* global initializers */  __ATINIT__.push({ func: function() { ___emscripten_environ_constructor() } });
 
 
@@ -1934,7 +1984,7 @@ var ASM_CONSTS = [];
 
 
 /* no memory initializer */
-var tempDoublePtr = 40224
+var tempDoublePtr = 40160
 assert(tempDoublePtr % 8 == 0);
 
 function copyTempFloat(ptr) { // functions, because inlining this code increases code size too much
@@ -2008,7 +2058,8 @@ function copyTempDouble(ptr) {
       if (!___buildEnvironment.called) {
         ___buildEnvironment.called = true;
         // Set default values. Use string keys for Closure Compiler compatibility.
-        ENV['USER'] = ENV['LOGNAME'] = 'web_user';
+        ENV['USER'] = 'web_user';
+        ENV['LOGNAME'] = 'web_user';
         ENV['PATH'] = '/';
         ENV['PWD'] = '/';
         ENV['HOME'] = '/home/web_user';
@@ -2206,7 +2257,7 @@ function copyTempDouble(ptr) {
       },stream_ops:{open:function(stream) {
           var tty = TTY.ttys[stream.node.rdev];
           if (!tty) {
-            throw new FS.ErrnoError(19);
+            throw new FS.ErrnoError(43);
           }
           stream.tty = tty;
           stream.seekable = false;
@@ -2217,7 +2268,7 @@ function copyTempDouble(ptr) {
           stream.tty.ops.flush(stream.tty);
         },read:function(stream, buffer, offset, length, pos /* ignored */) {
           if (!stream.tty || !stream.tty.ops.get_char) {
-            throw new FS.ErrnoError(6);
+            throw new FS.ErrnoError(60);
           }
           var bytesRead = 0;
           for (var i = 0; i < length; i++) {
@@ -2225,10 +2276,10 @@ function copyTempDouble(ptr) {
             try {
               result = stream.tty.ops.get_char(stream.tty);
             } catch (e) {
-              throw new FS.ErrnoError(5);
+              throw new FS.ErrnoError(29);
             }
             if (result === undefined && bytesRead === 0) {
-              throw new FS.ErrnoError(11);
+              throw new FS.ErrnoError(6);
             }
             if (result === null || result === undefined) break;
             bytesRead++;
@@ -2240,14 +2291,14 @@ function copyTempDouble(ptr) {
           return bytesRead;
         },write:function(stream, buffer, offset, length, pos) {
           if (!stream.tty || !stream.tty.ops.put_char) {
-            throw new FS.ErrnoError(6);
+            throw new FS.ErrnoError(60);
           }
           try {
             for (var i = 0; i < length; i++) {
               stream.tty.ops.put_char(stream.tty, buffer[offset+i]);
             }
           } catch (e) {
-            throw new FS.ErrnoError(5);
+            throw new FS.ErrnoError(29);
           }
           if (length) {
             stream.node.timestamp = Date.now();
@@ -2262,20 +2313,8 @@ function copyTempDouble(ptr) {
               var buf = Buffer.alloc ? Buffer.alloc(BUFSIZE) : new Buffer(BUFSIZE);
               var bytesRead = 0;
   
-              var isPosixPlatform = (process.platform != 'win32'); // Node doesn't offer a direct check, so test by exclusion
-  
-              var fd = process.stdin.fd;
-              if (isPosixPlatform) {
-                // Linux and Mac cannot use process.stdin.fd (which isn't set up as sync)
-                var usingDevice = false;
-                try {
-                  fd = fs.openSync('/dev/stdin', 'r');
-                  usingDevice = true;
-                } catch (e) {}
-              }
-  
               try {
-                bytesRead = fs.readSync(fd, buf, 0, BUFSIZE, null);
+                bytesRead = nodeFS.readSync(process.stdin.fd, buf, 0, BUFSIZE, null);
               } catch(e) {
                 // Cross-platform differences: on Windows, reading EOF throws an exception, but on other OSes,
                 // reading EOF returns 0. Uniformize behavior by treating the EOF exception to return 0.
@@ -2283,7 +2322,6 @@ function copyTempDouble(ptr) {
                 else throw e;
               }
   
-              if (usingDevice) { fs.closeSync(fd); }
               if (bytesRead > 0) {
                 result = buf.slice(0, bytesRead).toString('utf-8');
               } else {
@@ -2341,7 +2379,7 @@ function copyTempDouble(ptr) {
       },createNode:function(parent, name, mode, dev) {
         if (FS.isBlkdev(mode) || FS.isFIFO(mode)) {
           // no supported
-          throw new FS.ErrnoError(1);
+          throw new FS.ErrnoError(63);
         }
         if (!MEMFS.ops_table) {
           MEMFS.ops_table = {
@@ -2501,7 +2539,7 @@ function copyTempDouble(ptr) {
             MEMFS.resizeFileStorage(node, attr.size);
           }
         },lookup:function(parent, name) {
-          throw FS.genericErrors[2];
+          throw FS.genericErrors[44];
         },mknod:function(parent, name, mode, dev) {
           return MEMFS.createNode(parent, name, mode, dev);
         },rename:function(old_node, new_dir, new_name) {
@@ -2514,7 +2552,7 @@ function copyTempDouble(ptr) {
             }
             if (new_node) {
               for (var i in new_node.contents) {
-                throw new FS.ErrnoError(39);
+                throw new FS.ErrnoError(55);
               }
             }
           }
@@ -2528,7 +2566,7 @@ function copyTempDouble(ptr) {
         },rmdir:function(parent, name) {
           var node = FS.lookupNode(parent, name);
           for (var i in node.contents) {
-            throw new FS.ErrnoError(39);
+            throw new FS.ErrnoError(55);
           }
           delete parent.contents[name];
         },readdir:function(node) {
@@ -2546,7 +2584,7 @@ function copyTempDouble(ptr) {
           return node;
         },readlink:function(node) {
           if (!FS.isLink(node.mode)) {
-            throw new FS.ErrnoError(22);
+            throw new FS.ErrnoError(28);
           }
           return node.link;
         }},stream_ops:{read:function(stream, buffer, offset, length, position) {
@@ -2561,6 +2599,8 @@ function copyTempDouble(ptr) {
           }
           return size;
         },write:function(stream, buffer, offset, length, position, canOwn) {
+          // The data buffer should be a typed array view
+          assert(!(buffer instanceof ArrayBuffer));
   
           if (!length) return 0;
           var node = stream.node;
@@ -2594,30 +2634,32 @@ function copyTempDouble(ptr) {
           return length;
         },llseek:function(stream, offset, whence) {
           var position = offset;
-          if (whence === 1) {  // SEEK_CUR.
+          if (whence === 1) {
             position += stream.position;
-          } else if (whence === 2) {  // SEEK_END.
+          } else if (whence === 2) {
             if (FS.isFile(stream.node.mode)) {
               position += stream.node.usedBytes;
             }
           }
           if (position < 0) {
-            throw new FS.ErrnoError(22);
+            throw new FS.ErrnoError(28);
           }
           return position;
         },allocate:function(stream, offset, length) {
           MEMFS.expandFileStorage(stream.node, offset + length);
           stream.node.usedBytes = Math.max(stream.node.usedBytes, offset + length);
         },mmap:function(stream, buffer, offset, length, position, prot, flags) {
+          // The data buffer should be a typed array view
+          assert(!(buffer instanceof ArrayBuffer));
           if (!FS.isFile(stream.node.mode)) {
-            throw new FS.ErrnoError(19);
+            throw new FS.ErrnoError(43);
           }
           var ptr;
           var allocated;
           var contents = stream.node.contents;
           // Only make a new copy when MAP_PRIVATE is specified.
           if ( !(flags & 2) &&
-                (contents.buffer === buffer || contents.buffer === buffer.buffer) ) {
+                contents.buffer === buffer.buffer ) {
             // We can't emulate MAP_SHARED when the file is not backed by the buffer
             // we're mapping to (e.g. the HEAP buffer).
             allocated = false;
@@ -2637,14 +2679,14 @@ function copyTempDouble(ptr) {
             var fromHeap = (buffer.buffer == HEAP8.buffer);
             ptr = _malloc(length);
             if (!ptr) {
-              throw new FS.ErrnoError(12);
+              throw new FS.ErrnoError(48);
             }
             (fromHeap ? HEAP8 : buffer).set(contents, ptr);
           }
           return { ptr: ptr, allocated: allocated };
         },msync:function(stream, buffer, offset, length, mmapFlags) {
           if (!FS.isFile(stream.node.mode)) {
-            throw new FS.ErrnoError(19);
+            throw new FS.ErrnoError(43);
           }
           if (mmapFlags & 2) {
             // MAP_PRIVATE calls need not to be synced back to underlying fs
@@ -2656,668 +2698,9 @@ function copyTempDouble(ptr) {
           return 0;
         }}};
   
-  var IDBFS={dbs:{},indexedDB:function() {
-        if (typeof indexedDB !== 'undefined') return indexedDB;
-        var ret = null;
-        if (typeof window === 'object') ret = window.indexedDB || window.mozIndexedDB || window.webkitIndexedDB || window.msIndexedDB;
-        assert(ret, 'IDBFS used, but indexedDB not supported');
-        return ret;
-      },DB_VERSION:21,DB_STORE_NAME:"FILE_DATA",mount:function(mount) {
-        // reuse all of the core MEMFS functionality
-        return MEMFS.mount.apply(null, arguments);
-      },syncfs:function(mount, populate, callback) {
-        IDBFS.getLocalSet(mount, function(err, local) {
-          if (err) return callback(err);
+  var ERRNO_MESSAGES={0:"Success",1:"Arg list too long",2:"Permission denied",3:"Address already in use",4:"Address not available",5:"Address family not supported by protocol family",6:"No more processes",7:"Socket already connected",8:"Bad file number",9:"Trying to read unreadable message",10:"Mount device busy",11:"Operation canceled",12:"No children",13:"Connection aborted",14:"Connection refused",15:"Connection reset by peer",16:"File locking deadlock error",17:"Destination address required",18:"Math arg out of domain of func",19:"Quota exceeded",20:"File exists",21:"Bad address",22:"File too large",23:"Host is unreachable",24:"Identifier removed",25:"Illegal byte sequence",26:"Connection already in progress",27:"Interrupted system call",28:"Invalid argument",29:"I/O error",30:"Socket is already connected",31:"Is a directory",32:"Too many symbolic links",33:"Too many open files",34:"Too many links",35:"Message too long",36:"Multihop attempted",37:"File or path name too long",38:"Network interface is not configured",39:"Connection reset by network",40:"Network is unreachable",41:"Too many open files in system",42:"No buffer space available",43:"No such device",44:"No such file or directory",45:"Exec format error",46:"No record locks available",47:"The link has been severed",48:"Not enough core",49:"No message of desired type",50:"Protocol not available",51:"No space left on device",52:"Function not implemented",53:"Socket is not connected",54:"Not a directory",55:"Directory not empty",56:"State not recoverable",57:"Socket operation on non-socket",59:"Not a typewriter",60:"No such device or address",61:"Value too large for defined data type",62:"Previous owner died",63:"Not super-user",64:"Broken pipe",65:"Protocol error",66:"Unknown protocol",67:"Protocol wrong type for socket",68:"Math result not representable",69:"Read only file system",70:"Illegal seek",71:"No such process",72:"Stale file handle",73:"Connection timed out",74:"Text file busy",75:"Cross-device link",100:"Device not a stream",101:"Bad font file fmt",102:"Invalid slot",103:"Invalid request code",104:"No anode",105:"Block device required",106:"Channel number out of range",107:"Level 3 halted",108:"Level 3 reset",109:"Link number out of range",110:"Protocol driver not attached",111:"No CSI structure available",112:"Level 2 halted",113:"Invalid exchange",114:"Invalid request descriptor",115:"Exchange full",116:"No data (for no delay io)",117:"Timer expired",118:"Out of streams resources",119:"Machine is not on the network",120:"Package not installed",121:"The object is remote",122:"Advertise error",123:"Srmount error",124:"Communication error on send",125:"Cross mount point (not really error)",126:"Given log. name not unique",127:"f.d. invalid for this operation",128:"Remote address changed",129:"Can   access a needed shared lib",130:"Accessing a corrupted shared lib",131:".lib section in a.out corrupted",132:"Attempting to link in too many libs",133:"Attempting to exec a shared library",135:"Streams pipe error",136:"Too many users",137:"Socket type not supported",138:"Not supported",139:"Protocol family not supported",140:"Can't send after socket shutdown",141:"Too many references",142:"Host is down",148:"No medium (in tape drive)",156:"Level 2 not synchronized"};
   
-          IDBFS.getRemoteSet(mount, function(err, remote) {
-            if (err) return callback(err);
-  
-            var src = populate ? remote : local;
-            var dst = populate ? local : remote;
-  
-            IDBFS.reconcile(src, dst, callback);
-          });
-        });
-      },getDB:function(name, callback) {
-        // check the cache first
-        var db = IDBFS.dbs[name];
-        if (db) {
-          return callback(null, db);
-        }
-  
-        var req;
-        try {
-          req = IDBFS.indexedDB().open(name, IDBFS.DB_VERSION);
-        } catch (e) {
-          return callback(e);
-        }
-        if (!req) {
-          return callback("Unable to connect to IndexedDB");
-        }
-        req.onupgradeneeded = function(e) {
-          var db = e.target.result;
-          var transaction = e.target.transaction;
-  
-          var fileStore;
-  
-          if (db.objectStoreNames.contains(IDBFS.DB_STORE_NAME)) {
-            fileStore = transaction.objectStore(IDBFS.DB_STORE_NAME);
-          } else {
-            fileStore = db.createObjectStore(IDBFS.DB_STORE_NAME);
-          }
-  
-          if (!fileStore.indexNames.contains('timestamp')) {
-            fileStore.createIndex('timestamp', 'timestamp', { unique: false });
-          }
-        };
-        req.onsuccess = function() {
-          db = req.result;
-  
-          // add to the cache
-          IDBFS.dbs[name] = db;
-          callback(null, db);
-        };
-        req.onerror = function(e) {
-          callback(this.error);
-          e.preventDefault();
-        };
-      },getLocalSet:function(mount, callback) {
-        var entries = {};
-  
-        function isRealDir(p) {
-          return p !== '.' && p !== '..';
-        };
-        function toAbsolute(root) {
-          return function(p) {
-            return PATH.join2(root, p);
-          }
-        };
-  
-        var check = FS.readdir(mount.mountpoint).filter(isRealDir).map(toAbsolute(mount.mountpoint));
-  
-        while (check.length) {
-          var path = check.pop();
-          var stat;
-  
-          try {
-            stat = FS.stat(path);
-          } catch (e) {
-            return callback(e);
-          }
-  
-          if (FS.isDir(stat.mode)) {
-            check.push.apply(check, FS.readdir(path).filter(isRealDir).map(toAbsolute(path)));
-          }
-  
-          entries[path] = { timestamp: stat.mtime };
-        }
-  
-        return callback(null, { type: 'local', entries: entries });
-      },getRemoteSet:function(mount, callback) {
-        var entries = {};
-  
-        IDBFS.getDB(mount.mountpoint, function(err, db) {
-          if (err) return callback(err);
-  
-          try {
-            var transaction = db.transaction([IDBFS.DB_STORE_NAME], 'readonly');
-            transaction.onerror = function(e) {
-              callback(this.error);
-              e.preventDefault();
-            };
-  
-            var store = transaction.objectStore(IDBFS.DB_STORE_NAME);
-            var index = store.index('timestamp');
-  
-            index.openKeyCursor().onsuccess = function(event) {
-              var cursor = event.target.result;
-  
-              if (!cursor) {
-                return callback(null, { type: 'remote', db: db, entries: entries });
-              }
-  
-              entries[cursor.primaryKey] = { timestamp: cursor.key };
-  
-              cursor.continue();
-            };
-          } catch (e) {
-            return callback(e);
-          }
-        });
-      },loadLocalEntry:function(path, callback) {
-        var stat, node;
-  
-        try {
-          var lookup = FS.lookupPath(path);
-          node = lookup.node;
-          stat = FS.stat(path);
-        } catch (e) {
-          return callback(e);
-        }
-  
-        if (FS.isDir(stat.mode)) {
-          return callback(null, { timestamp: stat.mtime, mode: stat.mode });
-        } else if (FS.isFile(stat.mode)) {
-          // Performance consideration: storing a normal JavaScript array to a IndexedDB is much slower than storing a typed array.
-          // Therefore always convert the file contents to a typed array first before writing the data to IndexedDB.
-          node.contents = MEMFS.getFileDataAsTypedArray(node);
-          return callback(null, { timestamp: stat.mtime, mode: stat.mode, contents: node.contents });
-        } else {
-          return callback(new Error('node type not supported'));
-        }
-      },storeLocalEntry:function(path, entry, callback) {
-        try {
-          if (FS.isDir(entry.mode)) {
-            FS.mkdir(path, entry.mode);
-          } else if (FS.isFile(entry.mode)) {
-            FS.writeFile(path, entry.contents, { canOwn: true });
-          } else {
-            return callback(new Error('node type not supported'));
-          }
-  
-          FS.chmod(path, entry.mode);
-          FS.utime(path, entry.timestamp, entry.timestamp);
-        } catch (e) {
-          return callback(e);
-        }
-  
-        callback(null);
-      },removeLocalEntry:function(path, callback) {
-        try {
-          var lookup = FS.lookupPath(path);
-          var stat = FS.stat(path);
-  
-          if (FS.isDir(stat.mode)) {
-            FS.rmdir(path);
-          } else if (FS.isFile(stat.mode)) {
-            FS.unlink(path);
-          }
-        } catch (e) {
-          return callback(e);
-        }
-  
-        callback(null);
-      },loadRemoteEntry:function(store, path, callback) {
-        var req = store.get(path);
-        req.onsuccess = function(event) { callback(null, event.target.result); };
-        req.onerror = function(e) {
-          callback(this.error);
-          e.preventDefault();
-        };
-      },storeRemoteEntry:function(store, path, entry, callback) {
-        var req = store.put(entry, path);
-        req.onsuccess = function() { callback(null); };
-        req.onerror = function(e) {
-          callback(this.error);
-          e.preventDefault();
-        };
-      },removeRemoteEntry:function(store, path, callback) {
-        var req = store.delete(path);
-        req.onsuccess = function() { callback(null); };
-        req.onerror = function(e) {
-          callback(this.error);
-          e.preventDefault();
-        };
-      },reconcile:function(src, dst, callback) {
-        var total = 0;
-  
-        var create = [];
-        Object.keys(src.entries).forEach(function (key) {
-          var e = src.entries[key];
-          var e2 = dst.entries[key];
-          if (!e2 || e.timestamp > e2.timestamp) {
-            create.push(key);
-            total++;
-          }
-        });
-  
-        var remove = [];
-        Object.keys(dst.entries).forEach(function (key) {
-          var e = dst.entries[key];
-          var e2 = src.entries[key];
-          if (!e2) {
-            remove.push(key);
-            total++;
-          }
-        });
-  
-        if (!total) {
-          return callback(null);
-        }
-  
-        var errored = false;
-        var db = src.type === 'remote' ? src.db : dst.db;
-        var transaction = db.transaction([IDBFS.DB_STORE_NAME], 'readwrite');
-        var store = transaction.objectStore(IDBFS.DB_STORE_NAME);
-  
-        function done(err) {
-          if (err && !errored) {
-            errored = true;
-            return callback(err);
-          }
-        };
-  
-        transaction.onerror = function(e) {
-          done(this.error);
-          e.preventDefault();
-        };
-  
-        transaction.oncomplete = function(e) {
-          if (!errored) {
-            callback(null);
-          }
-        };
-  
-        // sort paths in ascending order so directory entries are created
-        // before the files inside them
-        create.sort().forEach(function (path) {
-          if (dst.type === 'local') {
-            IDBFS.loadRemoteEntry(store, path, function (err, entry) {
-              if (err) return done(err);
-              IDBFS.storeLocalEntry(path, entry, done);
-            });
-          } else {
-            IDBFS.loadLocalEntry(path, function (err, entry) {
-              if (err) return done(err);
-              IDBFS.storeRemoteEntry(store, path, entry, done);
-            });
-          }
-        });
-  
-        // sort paths in descending order so files are deleted before their
-        // parent directories
-        remove.sort().reverse().forEach(function(path) {
-          if (dst.type === 'local') {
-            IDBFS.removeLocalEntry(path, done);
-          } else {
-            IDBFS.removeRemoteEntry(store, path, done);
-          }
-        });
-      }};
-  
-  var NODEFS={isWindows:false,staticInit:function() {
-        NODEFS.isWindows = !!process.platform.match(/^win/);
-        var flags = process["binding"]("constants");
-        // Node.js 4 compatibility: it has no namespaces for constants
-        if (flags["fs"]) {
-          flags = flags["fs"];
-        }
-        NODEFS.flagsForNodeMap = {
-          "1024": flags["O_APPEND"],
-          "64": flags["O_CREAT"],
-          "128": flags["O_EXCL"],
-          "0": flags["O_RDONLY"],
-          "2": flags["O_RDWR"],
-          "4096": flags["O_SYNC"],
-          "512": flags["O_TRUNC"],
-          "1": flags["O_WRONLY"]
-        };
-      },bufferFrom:function (arrayBuffer) {
-        // Node.js < 4.5 compatibility: Buffer.from does not support ArrayBuffer
-        // Buffer.from before 4.5 was just a method inherited from Uint8Array
-        // Buffer.alloc has been added with Buffer.from together, so check it instead
-        return Buffer.alloc ? Buffer.from(arrayBuffer) : new Buffer(arrayBuffer);
-      },mount:function (mount) {
-        assert(ENVIRONMENT_HAS_NODE);
-        return NODEFS.createNode(null, '/', NODEFS.getMode(mount.opts.root), 0);
-      },createNode:function (parent, name, mode, dev) {
-        if (!FS.isDir(mode) && !FS.isFile(mode) && !FS.isLink(mode)) {
-          throw new FS.ErrnoError(22);
-        }
-        var node = FS.createNode(parent, name, mode);
-        node.node_ops = NODEFS.node_ops;
-        node.stream_ops = NODEFS.stream_ops;
-        return node;
-      },getMode:function (path) {
-        var stat;
-        try {
-          stat = fs.lstatSync(path);
-          if (NODEFS.isWindows) {
-            // Node.js on Windows never represents permission bit 'x', so
-            // propagate read bits to execute bits
-            stat.mode = stat.mode | ((stat.mode & 292) >> 2);
-          }
-        } catch (e) {
-          if (!e.code) throw e;
-          throw new FS.ErrnoError(-e.errno); // syscall errnos are negated, node's are not
-        }
-        return stat.mode;
-      },realPath:function (node) {
-        var parts = [];
-        while (node.parent !== node) {
-          parts.push(node.name);
-          node = node.parent;
-        }
-        parts.push(node.mount.opts.root);
-        parts.reverse();
-        return PATH.join.apply(null, parts);
-      },flagsForNode:function(flags) {
-        flags &= ~0x200000 /*O_PATH*/; // Ignore this flag from musl, otherwise node.js fails to open the file.
-        flags &= ~0x800 /*O_NONBLOCK*/; // Ignore this flag from musl, otherwise node.js fails to open the file.
-        flags &= ~0x8000 /*O_LARGEFILE*/; // Ignore this flag from musl, otherwise node.js fails to open the file.
-        flags &= ~0x80000 /*O_CLOEXEC*/; // Some applications may pass it; it makes no sense for a single process.
-        var newFlags = 0;
-        for (var k in NODEFS.flagsForNodeMap) {
-          if (flags & k) {
-            newFlags |= NODEFS.flagsForNodeMap[k];
-            flags ^= k;
-          }
-        }
-  
-        if (!flags) {
-          return newFlags;
-        } else {
-          throw new FS.ErrnoError(22);
-        }
-      },node_ops:{getattr:function(node) {
-          var path = NODEFS.realPath(node);
-          var stat;
-          try {
-            stat = fs.lstatSync(path);
-          } catch (e) {
-            if (!e.code) throw e;
-            throw new FS.ErrnoError(-e.errno);
-          }
-          // node.js v0.10.20 doesn't report blksize and blocks on Windows. Fake them with default blksize of 4096.
-          // See http://support.microsoft.com/kb/140365
-          if (NODEFS.isWindows && !stat.blksize) {
-            stat.blksize = 4096;
-          }
-          if (NODEFS.isWindows && !stat.blocks) {
-            stat.blocks = (stat.size+stat.blksize-1)/stat.blksize|0;
-          }
-          return {
-            dev: stat.dev,
-            ino: stat.ino,
-            mode: stat.mode,
-            nlink: stat.nlink,
-            uid: stat.uid,
-            gid: stat.gid,
-            rdev: stat.rdev,
-            size: stat.size,
-            atime: stat.atime,
-            mtime: stat.mtime,
-            ctime: stat.ctime,
-            blksize: stat.blksize,
-            blocks: stat.blocks
-          };
-        },setattr:function(node, attr) {
-          var path = NODEFS.realPath(node);
-          try {
-            if (attr.mode !== undefined) {
-              fs.chmodSync(path, attr.mode);
-              // update the common node structure mode as well
-              node.mode = attr.mode;
-            }
-            if (attr.timestamp !== undefined) {
-              var date = new Date(attr.timestamp);
-              fs.utimesSync(path, date, date);
-            }
-            if (attr.size !== undefined) {
-              fs.truncateSync(path, attr.size);
-            }
-          } catch (e) {
-            if (!e.code) throw e;
-            throw new FS.ErrnoError(-e.errno);
-          }
-        },lookup:function (parent, name) {
-          var path = PATH.join2(NODEFS.realPath(parent), name);
-          var mode = NODEFS.getMode(path);
-          return NODEFS.createNode(parent, name, mode);
-        },mknod:function (parent, name, mode, dev) {
-          var node = NODEFS.createNode(parent, name, mode, dev);
-          // create the backing node for this in the fs root as well
-          var path = NODEFS.realPath(node);
-          try {
-            if (FS.isDir(node.mode)) {
-              fs.mkdirSync(path, node.mode);
-            } else {
-              fs.writeFileSync(path, '', { mode: node.mode });
-            }
-          } catch (e) {
-            if (!e.code) throw e;
-            throw new FS.ErrnoError(-e.errno);
-          }
-          return node;
-        },rename:function (oldNode, newDir, newName) {
-          var oldPath = NODEFS.realPath(oldNode);
-          var newPath = PATH.join2(NODEFS.realPath(newDir), newName);
-          try {
-            fs.renameSync(oldPath, newPath);
-          } catch (e) {
-            if (!e.code) throw e;
-            throw new FS.ErrnoError(-e.errno);
-          }
-        },unlink:function(parent, name) {
-          var path = PATH.join2(NODEFS.realPath(parent), name);
-          try {
-            fs.unlinkSync(path);
-          } catch (e) {
-            if (!e.code) throw e;
-            throw new FS.ErrnoError(-e.errno);
-          }
-        },rmdir:function(parent, name) {
-          var path = PATH.join2(NODEFS.realPath(parent), name);
-          try {
-            fs.rmdirSync(path);
-          } catch (e) {
-            if (!e.code) throw e;
-            throw new FS.ErrnoError(-e.errno);
-          }
-        },readdir:function(node) {
-          var path = NODEFS.realPath(node);
-          try {
-            return fs.readdirSync(path);
-          } catch (e) {
-            if (!e.code) throw e;
-            throw new FS.ErrnoError(-e.errno);
-          }
-        },symlink:function(parent, newName, oldPath) {
-          var newPath = PATH.join2(NODEFS.realPath(parent), newName);
-          try {
-            fs.symlinkSync(oldPath, newPath);
-          } catch (e) {
-            if (!e.code) throw e;
-            throw new FS.ErrnoError(-e.errno);
-          }
-        },readlink:function(node) {
-          var path = NODEFS.realPath(node);
-          try {
-            path = fs.readlinkSync(path);
-            path = NODEJS_PATH.relative(NODEJS_PATH.resolve(node.mount.opts.root), path);
-            return path;
-          } catch (e) {
-            if (!e.code) throw e;
-            throw new FS.ErrnoError(-e.errno);
-          }
-        }},stream_ops:{open:function (stream) {
-          var path = NODEFS.realPath(stream.node);
-          try {
-            if (FS.isFile(stream.node.mode)) {
-              stream.nfd = fs.openSync(path, NODEFS.flagsForNode(stream.flags));
-            }
-          } catch (e) {
-            if (!e.code) throw e;
-            throw new FS.ErrnoError(-e.errno);
-          }
-        },close:function (stream) {
-          try {
-            if (FS.isFile(stream.node.mode) && stream.nfd) {
-              fs.closeSync(stream.nfd);
-            }
-          } catch (e) {
-            if (!e.code) throw e;
-            throw new FS.ErrnoError(-e.errno);
-          }
-        },read:function (stream, buffer, offset, length, position) {
-          // Node.js < 6 compatibility: node errors on 0 length reads
-          if (length === 0) return 0;
-          try {
-            return fs.readSync(stream.nfd, NODEFS.bufferFrom(buffer.buffer), offset, length, position);
-          } catch (e) {
-            throw new FS.ErrnoError(-e.errno);
-          }
-        },write:function (stream, buffer, offset, length, position) {
-          try {
-            return fs.writeSync(stream.nfd, NODEFS.bufferFrom(buffer.buffer), offset, length, position);
-          } catch (e) {
-            throw new FS.ErrnoError(-e.errno);
-          }
-        },llseek:function (stream, offset, whence) {
-          var position = offset;
-          if (whence === 1) {  // SEEK_CUR.
-            position += stream.position;
-          } else if (whence === 2) {  // SEEK_END.
-            if (FS.isFile(stream.node.mode)) {
-              try {
-                var stat = fs.fstatSync(stream.nfd);
-                position += stat.size;
-              } catch (e) {
-                throw new FS.ErrnoError(-e.errno);
-              }
-            }
-          }
-  
-          if (position < 0) {
-            throw new FS.ErrnoError(22);
-          }
-  
-          return position;
-        }}};
-  
-  var WORKERFS={DIR_MODE:16895,FILE_MODE:33279,reader:null,mount:function (mount) {
-        assert(ENVIRONMENT_IS_WORKER);
-        if (!WORKERFS.reader) WORKERFS.reader = new FileReaderSync();
-        var root = WORKERFS.createNode(null, '/', WORKERFS.DIR_MODE, 0);
-        var createdParents = {};
-        function ensureParent(path) {
-          // return the parent node, creating subdirs as necessary
-          var parts = path.split('/');
-          var parent = root;
-          for (var i = 0; i < parts.length-1; i++) {
-            var curr = parts.slice(0, i+1).join('/');
-            // Issue 4254: Using curr as a node name will prevent the node
-            // from being found in FS.nameTable when FS.open is called on
-            // a path which holds a child of this node,
-            // given that all FS functions assume node names
-            // are just their corresponding parts within their given path,
-            // rather than incremental aggregates which include their parent's
-            // directories.
-            if (!createdParents[curr]) {
-              createdParents[curr] = WORKERFS.createNode(parent, parts[i], WORKERFS.DIR_MODE, 0);
-            }
-            parent = createdParents[curr];
-          }
-          return parent;
-        }
-        function base(path) {
-          var parts = path.split('/');
-          return parts[parts.length-1];
-        }
-        // We also accept FileList here, by using Array.prototype
-        Array.prototype.forEach.call(mount.opts["files"] || [], function(file) {
-          WORKERFS.createNode(ensureParent(file.name), base(file.name), WORKERFS.FILE_MODE, 0, file, file.lastModifiedDate);
-        });
-        (mount.opts["blobs"] || []).forEach(function(obj) {
-          WORKERFS.createNode(ensureParent(obj["name"]), base(obj["name"]), WORKERFS.FILE_MODE, 0, obj["data"]);
-        });
-        (mount.opts["packages"] || []).forEach(function(pack) {
-          pack['metadata'].files.forEach(function(file) {
-            var name = file.filename.substr(1); // remove initial slash
-            WORKERFS.createNode(ensureParent(name), base(name), WORKERFS.FILE_MODE, 0, pack['blob'].slice(file.start, file.end));
-          });
-        });
-        return root;
-      },createNode:function (parent, name, mode, dev, contents, mtime) {
-        var node = FS.createNode(parent, name, mode);
-        node.mode = mode;
-        node.node_ops = WORKERFS.node_ops;
-        node.stream_ops = WORKERFS.stream_ops;
-        node.timestamp = (mtime || new Date).getTime();
-        assert(WORKERFS.FILE_MODE !== WORKERFS.DIR_MODE);
-        if (mode === WORKERFS.FILE_MODE) {
-          node.size = contents.size;
-          node.contents = contents;
-        } else {
-          node.size = 4096;
-          node.contents = {};
-        }
-        if (parent) {
-          parent.contents[name] = node;
-        }
-        return node;
-      },node_ops:{getattr:function(node) {
-          return {
-            dev: 1,
-            ino: undefined,
-            mode: node.mode,
-            nlink: 1,
-            uid: 0,
-            gid: 0,
-            rdev: undefined,
-            size: node.size,
-            atime: new Date(node.timestamp),
-            mtime: new Date(node.timestamp),
-            ctime: new Date(node.timestamp),
-            blksize: 4096,
-            blocks: Math.ceil(node.size / 4096),
-          };
-        },setattr:function(node, attr) {
-          if (attr.mode !== undefined) {
-            node.mode = attr.mode;
-          }
-          if (attr.timestamp !== undefined) {
-            node.timestamp = attr.timestamp;
-          }
-        },lookup:function(parent, name) {
-          throw new FS.ErrnoError(2);
-        },mknod:function (parent, name, mode, dev) {
-          throw new FS.ErrnoError(1);
-        },rename:function (oldNode, newDir, newName) {
-          throw new FS.ErrnoError(1);
-        },unlink:function(parent, name) {
-          throw new FS.ErrnoError(1);
-        },rmdir:function(parent, name) {
-          throw new FS.ErrnoError(1);
-        },readdir:function(node) {
-          var entries = ['.', '..'];
-          for (var key in node.contents) {
-            if (!node.contents.hasOwnProperty(key)) {
-              continue;
-            }
-            entries.push(key);
-          }
-          return entries;
-        },symlink:function(parent, newName, oldPath) {
-          throw new FS.ErrnoError(1);
-        },readlink:function(node) {
-          throw new FS.ErrnoError(1);
-        }},stream_ops:{read:function (stream, buffer, offset, length, position) {
-          if (position >= stream.node.size) return 0;
-          var chunk = stream.node.contents.slice(position, position + length);
-          var ab = WORKERFS.reader.readAsArrayBuffer(chunk);
-          buffer.set(new Uint8Array(ab), offset);
-          return chunk.size;
-        },write:function (stream, buffer, offset, length, position) {
-          throw new FS.ErrnoError(5);
-        },llseek:function (stream, offset, whence) {
-          var position = offset;
-          if (whence === 1) {  // SEEK_CUR.
-            position += stream.position;
-          } else if (whence === 2) {  // SEEK_END.
-            if (FS.isFile(stream.node.mode)) {
-              position += stream.node.size;
-            }
-          }
-          if (position < 0) {
-            throw new FS.ErrnoError(22);
-          }
-          return position;
-        }}};
-  
-  var ERRNO_MESSAGES={0:"Success",1:"Not super-user",2:"No such file or directory",3:"No such process",4:"Interrupted system call",5:"I/O error",6:"No such device or address",7:"Arg list too long",8:"Exec format error",9:"Bad file number",10:"No children",11:"No more processes",12:"Not enough core",13:"Permission denied",14:"Bad address",15:"Block device required",16:"Mount device busy",17:"File exists",18:"Cross-device link",19:"No such device",20:"Not a directory",21:"Is a directory",22:"Invalid argument",23:"Too many open files in system",24:"Too many open files",25:"Not a typewriter",26:"Text file busy",27:"File too large",28:"No space left on device",29:"Illegal seek",30:"Read only file system",31:"Too many links",32:"Broken pipe",33:"Math arg out of domain of func",34:"Math result not representable",35:"File locking deadlock error",36:"File or path name too long",37:"No record locks available",38:"Function not implemented",39:"Directory not empty",40:"Too many symbolic links",42:"No message of desired type",43:"Identifier removed",44:"Channel number out of range",45:"Level 2 not synchronized",46:"Level 3 halted",47:"Level 3 reset",48:"Link number out of range",49:"Protocol driver not attached",50:"No CSI structure available",51:"Level 2 halted",52:"Invalid exchange",53:"Invalid request descriptor",54:"Exchange full",55:"No anode",56:"Invalid request code",57:"Invalid slot",59:"Bad font file fmt",60:"Device not a stream",61:"No data (for no delay io)",62:"Timer expired",63:"Out of streams resources",64:"Machine is not on the network",65:"Package not installed",66:"The object is remote",67:"The link has been severed",68:"Advertise error",69:"Srmount error",70:"Communication error on send",71:"Protocol error",72:"Multihop attempted",73:"Cross mount point (not really error)",74:"Trying to read unreadable message",75:"Value too large for defined data type",76:"Given log. name not unique",77:"f.d. invalid for this operation",78:"Remote address changed",79:"Can   access a needed shared lib",80:"Accessing a corrupted shared lib",81:".lib section in a.out corrupted",82:"Attempting to link in too many libs",83:"Attempting to exec a shared library",84:"Illegal byte sequence",86:"Streams pipe error",87:"Too many users",88:"Socket operation on non-socket",89:"Destination address required",90:"Message too long",91:"Protocol wrong type for socket",92:"Protocol not available",93:"Unknown protocol",94:"Socket type not supported",95:"Not supported",96:"Protocol family not supported",97:"Address family not supported by protocol family",98:"Address already in use",99:"Address not available",100:"Network interface is not configured",101:"Network is unreachable",102:"Connection reset by network",103:"Connection aborted",104:"Connection reset by peer",105:"No buffer space available",106:"Socket is already connected",107:"Socket is not connected",108:"Can't send after socket shutdown",109:"Too many references",110:"Connection timed out",111:"Connection refused",112:"Host is down",113:"Host is unreachable",114:"Socket already connected",115:"Connection already in progress",116:"Stale file handle",122:"Quota exceeded",123:"No medium (in tape drive)",125:"Operation canceled",130:"Previous owner died",131:"State not recoverable"};
-  
-  var ERRNO_CODES={EPERM:1,ENOENT:2,ESRCH:3,EINTR:4,EIO:5,ENXIO:6,E2BIG:7,ENOEXEC:8,EBADF:9,ECHILD:10,EAGAIN:11,EWOULDBLOCK:11,ENOMEM:12,EACCES:13,EFAULT:14,ENOTBLK:15,EBUSY:16,EEXIST:17,EXDEV:18,ENODEV:19,ENOTDIR:20,EISDIR:21,EINVAL:22,ENFILE:23,EMFILE:24,ENOTTY:25,ETXTBSY:26,EFBIG:27,ENOSPC:28,ESPIPE:29,EROFS:30,EMLINK:31,EPIPE:32,EDOM:33,ERANGE:34,ENOMSG:42,EIDRM:43,ECHRNG:44,EL2NSYNC:45,EL3HLT:46,EL3RST:47,ELNRNG:48,EUNATCH:49,ENOCSI:50,EL2HLT:51,EDEADLK:35,ENOLCK:37,EBADE:52,EBADR:53,EXFULL:54,ENOANO:55,EBADRQC:56,EBADSLT:57,EDEADLOCK:35,EBFONT:59,ENOSTR:60,ENODATA:61,ETIME:62,ENOSR:63,ENONET:64,ENOPKG:65,EREMOTE:66,ENOLINK:67,EADV:68,ESRMNT:69,ECOMM:70,EPROTO:71,EMULTIHOP:72,EDOTDOT:73,EBADMSG:74,ENOTUNIQ:76,EBADFD:77,EREMCHG:78,ELIBACC:79,ELIBBAD:80,ELIBSCN:81,ELIBMAX:82,ELIBEXEC:83,ENOSYS:38,ENOTEMPTY:39,ENAMETOOLONG:36,ELOOP:40,EOPNOTSUPP:95,EPFNOSUPPORT:96,ECONNRESET:104,ENOBUFS:105,EAFNOSUPPORT:97,EPROTOTYPE:91,ENOTSOCK:88,ENOPROTOOPT:92,ESHUTDOWN:108,ECONNREFUSED:111,EADDRINUSE:98,ECONNABORTED:103,ENETUNREACH:101,ENETDOWN:100,ETIMEDOUT:110,EHOSTDOWN:112,EHOSTUNREACH:113,EINPROGRESS:115,EALREADY:114,EDESTADDRREQ:89,EMSGSIZE:90,EPROTONOSUPPORT:93,ESOCKTNOSUPPORT:94,EADDRNOTAVAIL:99,ENETRESET:102,EISCONN:106,ENOTCONN:107,ETOOMANYREFS:109,EUSERS:87,EDQUOT:122,ESTALE:116,ENOTSUP:95,ENOMEDIUM:123,EILSEQ:84,EOVERFLOW:75,ECANCELED:125,ENOTRECOVERABLE:131,EOWNERDEAD:130,ESTRPIPE:86};var FS={root:null,mounts:[],devices:{},streams:[],nextInode:1,nameTable:null,currentPath:"/",initialized:false,ignorePermissions:true,trackingDelegate:{},tracking:{openFlags:{READ:1,WRITE:2}},ErrnoError:null,genericErrors:{},filesystems:null,syncFSRequests:0,handleFSError:function(e) {
+  var ERRNO_CODES={EPERM:63,ENOENT:44,ESRCH:71,EINTR:27,EIO:29,ENXIO:60,E2BIG:1,ENOEXEC:45,EBADF:8,ECHILD:12,EAGAIN:6,EWOULDBLOCK:6,ENOMEM:48,EACCES:2,EFAULT:21,ENOTBLK:105,EBUSY:10,EEXIST:20,EXDEV:75,ENODEV:43,ENOTDIR:54,EISDIR:31,EINVAL:28,ENFILE:41,EMFILE:33,ENOTTY:59,ETXTBSY:74,EFBIG:22,ENOSPC:51,ESPIPE:70,EROFS:69,EMLINK:34,EPIPE:64,EDOM:18,ERANGE:68,ENOMSG:49,EIDRM:24,ECHRNG:106,EL2NSYNC:156,EL3HLT:107,EL3RST:108,ELNRNG:109,EUNATCH:110,ENOCSI:111,EL2HLT:112,EDEADLK:16,ENOLCK:46,EBADE:113,EBADR:114,EXFULL:115,ENOANO:104,EBADRQC:103,EBADSLT:102,EDEADLOCK:16,EBFONT:101,ENOSTR:100,ENODATA:116,ETIME:117,ENOSR:118,ENONET:119,ENOPKG:120,EREMOTE:121,ENOLINK:47,EADV:122,ESRMNT:123,ECOMM:124,EPROTO:65,EMULTIHOP:36,EDOTDOT:125,EBADMSG:9,ENOTUNIQ:126,EBADFD:127,EREMCHG:128,ELIBACC:129,ELIBBAD:130,ELIBSCN:131,ELIBMAX:132,ELIBEXEC:133,ENOSYS:52,ENOTEMPTY:55,ENAMETOOLONG:37,ELOOP:32,EOPNOTSUPP:138,EPFNOSUPPORT:139,ECONNRESET:15,ENOBUFS:42,EAFNOSUPPORT:5,EPROTOTYPE:67,ENOTSOCK:57,ENOPROTOOPT:50,ESHUTDOWN:140,ECONNREFUSED:14,EADDRINUSE:3,ECONNABORTED:13,ENETUNREACH:40,ENETDOWN:38,ETIMEDOUT:73,EHOSTDOWN:142,EHOSTUNREACH:23,EINPROGRESS:26,EALREADY:7,EDESTADDRREQ:17,EMSGSIZE:35,EPROTONOSUPPORT:66,ESOCKTNOSUPPORT:137,EADDRNOTAVAIL:4,ENETRESET:39,EISCONN:30,ENOTCONN:53,ETOOMANYREFS:141,EUSERS:136,EDQUOT:19,ESTALE:72,ENOTSUP:138,ENOMEDIUM:148,EILSEQ:25,EOVERFLOW:61,ECANCELED:11,ENOTRECOVERABLE:56,EOWNERDEAD:62,ESTRPIPE:135};var FS={root:null,mounts:[],devices:{},streams:[],nextInode:1,nameTable:null,currentPath:"/",initialized:false,ignorePermissions:true,trackingDelegate:{},tracking:{openFlags:{READ:1,WRITE:2}},ErrnoError:null,genericErrors:{},filesystems:null,syncFSRequests:0,handleFSError:function(e) {
         if (!(e instanceof FS.ErrnoError)) throw e + ' : ' + stackTrace();
         return ___setErrNo(e.errno);
       },lookupPath:function(path, opts) {
@@ -3337,7 +2720,7 @@ function copyTempDouble(ptr) {
         }
   
         if (opts.recurse_count > 8) {  // max recursive lookup of 8
-          throw new FS.ErrnoError(40);
+          throw new FS.ErrnoError(32);
         }
   
         // split the path
@@ -3378,7 +2761,7 @@ function copyTempDouble(ptr) {
               current = lookup.node;
   
               if (count++ > 40) {  // limit max consecutive symlinks to 40 (SYMLOOP_MAX).
-                throw new FS.ErrnoError(40);
+                throw new FS.ErrnoError(32);
               }
             }
           }
@@ -3522,22 +2905,22 @@ function copyTempDouble(ptr) {
         }
         // return 0 if any user, group or owner bits are set.
         if (perms.indexOf('r') !== -1 && !(node.mode & 292)) {
-          return 13;
+          return 2;
         } else if (perms.indexOf('w') !== -1 && !(node.mode & 146)) {
-          return 13;
+          return 2;
         } else if (perms.indexOf('x') !== -1 && !(node.mode & 73)) {
-          return 13;
+          return 2;
         }
         return 0;
       },mayLookup:function(dir) {
         var err = FS.nodePermissions(dir, 'x');
         if (err) return err;
-        if (!dir.node_ops.lookup) return 13;
+        if (!dir.node_ops.lookup) return 2;
         return 0;
       },mayCreate:function(dir, name) {
         try {
           var node = FS.lookupNode(dir, name);
-          return 17;
+          return 20;
         } catch (e) {
         }
         return FS.nodePermissions(dir, 'wx');
@@ -3554,27 +2937,27 @@ function copyTempDouble(ptr) {
         }
         if (isdir) {
           if (!FS.isDir(node.mode)) {
-            return 20;
+            return 54;
           }
           if (FS.isRoot(node) || FS.getPath(node) === FS.cwd()) {
-            return 16;
+            return 10;
           }
         } else {
           if (FS.isDir(node.mode)) {
-            return 21;
+            return 31;
           }
         }
         return 0;
       },mayOpen:function(node, flags) {
         if (!node) {
-          return 2;
+          return 44;
         }
         if (FS.isLink(node.mode)) {
-          return 40;
+          return 32;
         } else if (FS.isDir(node.mode)) {
           if (FS.flagsToPermissionString(flags) !== 'r' || // opening for write
               (flags & 512)) { // TODO: check for O_SEARCH? (== search for dir only)
-            return 21;
+            return 31;
           }
         }
         return FS.nodePermissions(node, FS.flagsToPermissionString(flags));
@@ -3586,7 +2969,7 @@ function copyTempDouble(ptr) {
             return fd;
           }
         }
-        throw new FS.ErrnoError(24);
+        throw new FS.ErrnoError(33);
       },getStream:function(fd) {
         return FS.streams[fd];
       },createStream:function(stream, fd_start, fd_end) {
@@ -3631,7 +3014,7 @@ function copyTempDouble(ptr) {
             stream.stream_ops.open(stream);
           }
         },llseek:function() {
-          throw new FS.ErrnoError(29);
+          throw new FS.ErrnoError(70);
         }},major:function(dev) {
         return ((dev) >> 8);
       },minor:function(dev) {
@@ -3697,12 +3080,17 @@ function copyTempDouble(ptr) {
           mount.type.syncfs(mount, populate, done);
         });
       },mount:function(type, opts, mountpoint) {
+        if (typeof type === 'string') {
+          // The filesystem was not included, and instead we have an error
+          // message stored in the variable.
+          throw type;
+        }
         var root = mountpoint === '/';
         var pseudo = !mountpoint;
         var node;
   
         if (root && FS.root) {
-          throw new FS.ErrnoError(16);
+          throw new FS.ErrnoError(10);
         } else if (!root && !pseudo) {
           var lookup = FS.lookupPath(mountpoint, { follow_mount: false });
   
@@ -3710,11 +3098,11 @@ function copyTempDouble(ptr) {
           node = lookup.node;
   
           if (FS.isMountpoint(node)) {
-            throw new FS.ErrnoError(16);
+            throw new FS.ErrnoError(10);
           }
   
           if (!FS.isDir(node.mode)) {
-            throw new FS.ErrnoError(20);
+            throw new FS.ErrnoError(54);
           }
         }
   
@@ -3747,7 +3135,7 @@ function copyTempDouble(ptr) {
         var lookup = FS.lookupPath(mountpoint, { follow_mount: false });
   
         if (!FS.isMountpoint(lookup.node)) {
-          throw new FS.ErrnoError(22);
+          throw new FS.ErrnoError(28);
         }
   
         // destroy the nodes for this mount, and all its child mounts
@@ -3783,14 +3171,14 @@ function copyTempDouble(ptr) {
         var parent = lookup.node;
         var name = PATH.basename(path);
         if (!name || name === '.' || name === '..') {
-          throw new FS.ErrnoError(22);
+          throw new FS.ErrnoError(28);
         }
         var err = FS.mayCreate(parent, name);
         if (err) {
           throw new FS.ErrnoError(err);
         }
         if (!parent.node_ops.mknod) {
-          throw new FS.ErrnoError(1);
+          throw new FS.ErrnoError(63);
         }
         return parent.node_ops.mknod(parent, name, mode, dev);
       },create:function(path, mode) {
@@ -3812,7 +3200,7 @@ function copyTempDouble(ptr) {
           try {
             FS.mkdir(d, mode);
           } catch(e) {
-            if (e.errno != 17) throw e;
+            if (e.errno != 20) throw e;
           }
         }
       },mkdev:function(path, mode, dev) {
@@ -3824,12 +3212,12 @@ function copyTempDouble(ptr) {
         return FS.mknod(path, mode, dev);
       },symlink:function(oldpath, newpath) {
         if (!PATH_FS.resolve(oldpath)) {
-          throw new FS.ErrnoError(2);
+          throw new FS.ErrnoError(44);
         }
         var lookup = FS.lookupPath(newpath, { parent: true });
         var parent = lookup.node;
         if (!parent) {
-          throw new FS.ErrnoError(2);
+          throw new FS.ErrnoError(44);
         }
         var newname = PATH.basename(newpath);
         var err = FS.mayCreate(parent, newname);
@@ -3837,7 +3225,7 @@ function copyTempDouble(ptr) {
           throw new FS.ErrnoError(err);
         }
         if (!parent.node_ops.symlink) {
-          throw new FS.ErrnoError(1);
+          throw new FS.ErrnoError(63);
         }
         return parent.node_ops.symlink(parent, newname, oldpath);
       },rename:function(old_path, new_path) {
@@ -3853,24 +3241,24 @@ function copyTempDouble(ptr) {
           lookup = FS.lookupPath(new_path, { parent: true });
           new_dir = lookup.node;
         } catch (e) {
-          throw new FS.ErrnoError(16);
+          throw new FS.ErrnoError(10);
         }
-        if (!old_dir || !new_dir) throw new FS.ErrnoError(2);
+        if (!old_dir || !new_dir) throw new FS.ErrnoError(44);
         // need to be part of the same mount
         if (old_dir.mount !== new_dir.mount) {
-          throw new FS.ErrnoError(18);
+          throw new FS.ErrnoError(75);
         }
         // source must exist
         var old_node = FS.lookupNode(old_dir, old_name);
         // old path should not be an ancestor of the new path
         var relative = PATH_FS.relative(old_path, new_dirname);
         if (relative.charAt(0) !== '.') {
-          throw new FS.ErrnoError(22);
+          throw new FS.ErrnoError(28);
         }
         // new path should not be an ancestor of the old path
         relative = PATH_FS.relative(new_path, old_dirname);
         if (relative.charAt(0) !== '.') {
-          throw new FS.ErrnoError(39);
+          throw new FS.ErrnoError(55);
         }
         // see if the new path already exists
         var new_node;
@@ -3898,10 +3286,10 @@ function copyTempDouble(ptr) {
           throw new FS.ErrnoError(err);
         }
         if (!old_dir.node_ops.rename) {
-          throw new FS.ErrnoError(1);
+          throw new FS.ErrnoError(63);
         }
         if (FS.isMountpoint(old_node) || (new_node && FS.isMountpoint(new_node))) {
-          throw new FS.ErrnoError(16);
+          throw new FS.ErrnoError(10);
         }
         // if we are going to change the parent, check write permissions
         if (new_dir !== old_dir) {
@@ -3944,10 +3332,10 @@ function copyTempDouble(ptr) {
           throw new FS.ErrnoError(err);
         }
         if (!parent.node_ops.rmdir) {
-          throw new FS.ErrnoError(1);
+          throw new FS.ErrnoError(63);
         }
         if (FS.isMountpoint(node)) {
-          throw new FS.ErrnoError(16);
+          throw new FS.ErrnoError(10);
         }
         try {
           if (FS.trackingDelegate['willDeletePath']) {
@@ -3967,7 +3355,7 @@ function copyTempDouble(ptr) {
         var lookup = FS.lookupPath(path, { follow: true });
         var node = lookup.node;
         if (!node.node_ops.readdir) {
-          throw new FS.ErrnoError(20);
+          throw new FS.ErrnoError(54);
         }
         return node.node_ops.readdir(node);
       },unlink:function(path) {
@@ -3983,10 +3371,10 @@ function copyTempDouble(ptr) {
           throw new FS.ErrnoError(err);
         }
         if (!parent.node_ops.unlink) {
-          throw new FS.ErrnoError(1);
+          throw new FS.ErrnoError(63);
         }
         if (FS.isMountpoint(node)) {
-          throw new FS.ErrnoError(16);
+          throw new FS.ErrnoError(10);
         }
         try {
           if (FS.trackingDelegate['willDeletePath']) {
@@ -4006,20 +3394,20 @@ function copyTempDouble(ptr) {
         var lookup = FS.lookupPath(path);
         var link = lookup.node;
         if (!link) {
-          throw new FS.ErrnoError(2);
+          throw new FS.ErrnoError(44);
         }
         if (!link.node_ops.readlink) {
-          throw new FS.ErrnoError(22);
+          throw new FS.ErrnoError(28);
         }
         return PATH_FS.resolve(FS.getPath(link.parent), link.node_ops.readlink(link));
       },stat:function(path, dontFollow) {
         var lookup = FS.lookupPath(path, { follow: !dontFollow });
         var node = lookup.node;
         if (!node) {
-          throw new FS.ErrnoError(2);
+          throw new FS.ErrnoError(44);
         }
         if (!node.node_ops.getattr) {
-          throw new FS.ErrnoError(1);
+          throw new FS.ErrnoError(63);
         }
         return node.node_ops.getattr(node);
       },lstat:function(path) {
@@ -4033,7 +3421,7 @@ function copyTempDouble(ptr) {
           node = path;
         }
         if (!node.node_ops.setattr) {
-          throw new FS.ErrnoError(1);
+          throw new FS.ErrnoError(63);
         }
         node.node_ops.setattr(node, {
           mode: (mode & 4095) | (node.mode & ~4095),
@@ -4044,7 +3432,7 @@ function copyTempDouble(ptr) {
       },fchmod:function(fd, mode) {
         var stream = FS.getStream(fd);
         if (!stream) {
-          throw new FS.ErrnoError(9);
+          throw new FS.ErrnoError(8);
         }
         FS.chmod(stream.node, mode);
       },chown:function(path, uid, gid, dontFollow) {
@@ -4056,7 +3444,7 @@ function copyTempDouble(ptr) {
           node = path;
         }
         if (!node.node_ops.setattr) {
-          throw new FS.ErrnoError(1);
+          throw new FS.ErrnoError(63);
         }
         node.node_ops.setattr(node, {
           timestamp: Date.now()
@@ -4067,12 +3455,12 @@ function copyTempDouble(ptr) {
       },fchown:function(fd, uid, gid) {
         var stream = FS.getStream(fd);
         if (!stream) {
-          throw new FS.ErrnoError(9);
+          throw new FS.ErrnoError(8);
         }
         FS.chown(stream.node, uid, gid);
       },truncate:function(path, len) {
         if (len < 0) {
-          throw new FS.ErrnoError(22);
+          throw new FS.ErrnoError(28);
         }
         var node;
         if (typeof path === 'string') {
@@ -4082,13 +3470,13 @@ function copyTempDouble(ptr) {
           node = path;
         }
         if (!node.node_ops.setattr) {
-          throw new FS.ErrnoError(1);
+          throw new FS.ErrnoError(63);
         }
         if (FS.isDir(node.mode)) {
-          throw new FS.ErrnoError(21);
+          throw new FS.ErrnoError(31);
         }
         if (!FS.isFile(node.mode)) {
-          throw new FS.ErrnoError(22);
+          throw new FS.ErrnoError(28);
         }
         var err = FS.nodePermissions(node, 'w');
         if (err) {
@@ -4101,10 +3489,10 @@ function copyTempDouble(ptr) {
       },ftruncate:function(fd, len) {
         var stream = FS.getStream(fd);
         if (!stream) {
-          throw new FS.ErrnoError(9);
+          throw new FS.ErrnoError(8);
         }
         if ((stream.flags & 2097155) === 0) {
-          throw new FS.ErrnoError(22);
+          throw new FS.ErrnoError(28);
         }
         FS.truncate(stream.node, len);
       },utime:function(path, atime, mtime) {
@@ -4115,7 +3503,7 @@ function copyTempDouble(ptr) {
         });
       },open:function(path, flags, mode, fd_start, fd_end) {
         if (path === "") {
-          throw new FS.ErrnoError(2);
+          throw new FS.ErrnoError(44);
         }
         flags = typeof flags === 'string' ? FS.modeStringToFlags(flags) : flags;
         mode = typeof mode === 'undefined' ? 438 /* 0666 */ : mode;
@@ -4144,7 +3532,7 @@ function copyTempDouble(ptr) {
           if (node) {
             // if O_CREAT and O_EXCL are set, error out if the node already exists
             if ((flags & 128)) {
-              throw new FS.ErrnoError(17);
+              throw new FS.ErrnoError(20);
             }
           } else {
             // node doesn't exist, try to create it
@@ -4153,7 +3541,7 @@ function copyTempDouble(ptr) {
           }
         }
         if (!node) {
-          throw new FS.ErrnoError(2);
+          throw new FS.ErrnoError(44);
         }
         // can't truncate a device
         if (FS.isChrdev(node.mode)) {
@@ -4161,7 +3549,7 @@ function copyTempDouble(ptr) {
         }
         // if asked only for a directory, then this must be one
         if ((flags & 65536) && !FS.isDir(node.mode)) {
-          throw new FS.ErrnoError(20);
+          throw new FS.ErrnoError(54);
         }
         // check permissions, if this is not a file we just created now (it is ok to
         // create and write to a file with read-only permissions; it is read-only
@@ -4219,7 +3607,7 @@ function copyTempDouble(ptr) {
         return stream;
       },close:function(stream) {
         if (FS.isClosed(stream)) {
-          throw new FS.ErrnoError(9);
+          throw new FS.ErrnoError(8);
         }
         if (stream.getdents) stream.getdents = null; // free readdir state
         try {
@@ -4236,57 +3624,57 @@ function copyTempDouble(ptr) {
         return stream.fd === null;
       },llseek:function(stream, offset, whence) {
         if (FS.isClosed(stream)) {
-          throw new FS.ErrnoError(9);
+          throw new FS.ErrnoError(8);
         }
         if (!stream.seekable || !stream.stream_ops.llseek) {
-          throw new FS.ErrnoError(29);
+          throw new FS.ErrnoError(70);
         }
-        if (whence != 0 /* SEEK_SET */ && whence != 1 /* SEEK_CUR */ && whence != 2 /* SEEK_END */) {
-          throw new FS.ErrnoError(22);
+        if (whence != 0 && whence != 1 && whence != 2) {
+          throw new FS.ErrnoError(28);
         }
         stream.position = stream.stream_ops.llseek(stream, offset, whence);
         stream.ungotten = [];
         return stream.position;
       },read:function(stream, buffer, offset, length, position) {
         if (length < 0 || position < 0) {
-          throw new FS.ErrnoError(22);
+          throw new FS.ErrnoError(28);
         }
         if (FS.isClosed(stream)) {
-          throw new FS.ErrnoError(9);
+          throw new FS.ErrnoError(8);
         }
         if ((stream.flags & 2097155) === 1) {
-          throw new FS.ErrnoError(9);
+          throw new FS.ErrnoError(8);
         }
         if (FS.isDir(stream.node.mode)) {
-          throw new FS.ErrnoError(21);
+          throw new FS.ErrnoError(31);
         }
         if (!stream.stream_ops.read) {
-          throw new FS.ErrnoError(22);
+          throw new FS.ErrnoError(28);
         }
         var seeking = typeof position !== 'undefined';
         if (!seeking) {
           position = stream.position;
         } else if (!stream.seekable) {
-          throw new FS.ErrnoError(29);
+          throw new FS.ErrnoError(70);
         }
         var bytesRead = stream.stream_ops.read(stream, buffer, offset, length, position);
         if (!seeking) stream.position += bytesRead;
         return bytesRead;
       },write:function(stream, buffer, offset, length, position, canOwn) {
         if (length < 0 || position < 0) {
-          throw new FS.ErrnoError(22);
+          throw new FS.ErrnoError(28);
         }
         if (FS.isClosed(stream)) {
-          throw new FS.ErrnoError(9);
+          throw new FS.ErrnoError(8);
         }
         if ((stream.flags & 2097155) === 0) {
-          throw new FS.ErrnoError(9);
+          throw new FS.ErrnoError(8);
         }
         if (FS.isDir(stream.node.mode)) {
-          throw new FS.ErrnoError(21);
+          throw new FS.ErrnoError(31);
         }
         if (!stream.stream_ops.write) {
-          throw new FS.ErrnoError(22);
+          throw new FS.ErrnoError(28);
         }
         if (stream.flags & 1024) {
           // seek to the end before writing in append mode
@@ -4296,7 +3684,7 @@ function copyTempDouble(ptr) {
         if (!seeking) {
           position = stream.position;
         } else if (!stream.seekable) {
-          throw new FS.ErrnoError(29);
+          throw new FS.ErrnoError(70);
         }
         var bytesWritten = stream.stream_ops.write(stream, buffer, offset, length, position, canOwn);
         if (!seeking) stream.position += bytesWritten;
@@ -4308,19 +3696,19 @@ function copyTempDouble(ptr) {
         return bytesWritten;
       },allocate:function(stream, offset, length) {
         if (FS.isClosed(stream)) {
-          throw new FS.ErrnoError(9);
+          throw new FS.ErrnoError(8);
         }
         if (offset < 0 || length <= 0) {
-          throw new FS.ErrnoError(22);
+          throw new FS.ErrnoError(28);
         }
         if ((stream.flags & 2097155) === 0) {
-          throw new FS.ErrnoError(9);
+          throw new FS.ErrnoError(8);
         }
         if (!FS.isFile(stream.node.mode) && !FS.isDir(stream.node.mode)) {
-          throw new FS.ErrnoError(19);
+          throw new FS.ErrnoError(43);
         }
         if (!stream.stream_ops.allocate) {
-          throw new FS.ErrnoError(95);
+          throw new FS.ErrnoError(138);
         }
         stream.stream_ops.allocate(stream, offset, length);
       },mmap:function(stream, buffer, offset, length, position, prot, flags) {
@@ -4333,13 +3721,13 @@ function copyTempDouble(ptr) {
         if ((prot & 2) !== 0
             && (flags & 2) === 0
             && (stream.flags & 2097155) !== 2) {
-          throw new FS.ErrnoError(13);
+          throw new FS.ErrnoError(2);
         }
         if ((stream.flags & 2097155) === 1) {
-          throw new FS.ErrnoError(13);
+          throw new FS.ErrnoError(2);
         }
         if (!stream.stream_ops.mmap) {
-          throw new FS.ErrnoError(19);
+          throw new FS.ErrnoError(43);
         }
         return stream.stream_ops.mmap(stream, buffer, offset, length, position, prot, flags);
       },msync:function(stream, buffer, offset, length, mmapFlags) {
@@ -4351,7 +3739,7 @@ function copyTempDouble(ptr) {
         return 0;
       },ioctl:function(stream, cmd, arg) {
         if (!stream.stream_ops.ioctl) {
-          throw new FS.ErrnoError(25);
+          throw new FS.ErrnoError(59);
         }
         return stream.stream_ops.ioctl(stream, cmd, arg);
       },readFile:function(path, opts) {
@@ -4393,10 +3781,10 @@ function copyTempDouble(ptr) {
       },chdir:function(path) {
         var lookup = FS.lookupPath(path, { follow: true });
         if (lookup.node === null) {
-          throw new FS.ErrnoError(2);
+          throw new FS.ErrnoError(44);
         }
         if (!FS.isDir(lookup.node.mode)) {
-          throw new FS.ErrnoError(20);
+          throw new FS.ErrnoError(54);
         }
         var err = FS.nodePermissions(lookup.node, 'x');
         if (err) {
@@ -4463,7 +3851,7 @@ function copyTempDouble(ptr) {
               lookup: function(parent, name) {
                 var fd = +name;
                 var stream = FS.getStream(fd);
-                if (!stream) throw new FS.ErrnoError(9);
+                if (!stream) throw new FS.ErrnoError(8);
                 var ret = {
                   parent: null,
                   mount: { mountpoint: 'fake' },
@@ -4535,7 +3923,7 @@ function copyTempDouble(ptr) {
         FS.ErrnoError.prototype = new Error();
         FS.ErrnoError.prototype.constructor = FS.ErrnoError;
         // Some errors may happen quite a bit, to avoid overhead we reuse them (and suffer a lack of stack info)
-        [2].forEach(function(code) {
+        [44].forEach(function(code) {
           FS.genericErrors[code] = new FS.ErrnoError(code);
           FS.genericErrors[code].stack = '<generic error, no stack>';
         });
@@ -4552,9 +3940,6 @@ function copyTempDouble(ptr) {
   
         FS.filesystems = {
           'MEMFS': MEMFS,
-          'IDBFS': IDBFS,
-          'NODEFS': NODEFS,
-          'WORKERFS': WORKERFS,
         };
       },init:function(input, output, error) {
         assert(!FS.init.initialized, 'FS.init was previously called. If you want to initialize later with custom parameters, remove any earlier calls (note that one is automatically added to the generated code)');
@@ -4694,10 +4079,10 @@ function copyTempDouble(ptr) {
               try {
                 result = input();
               } catch (e) {
-                throw new FS.ErrnoError(5);
+                throw new FS.ErrnoError(29);
               }
               if (result === undefined && bytesRead === 0) {
-                throw new FS.ErrnoError(11);
+                throw new FS.ErrnoError(6);
               }
               if (result === null || result === undefined) break;
               bytesRead++;
@@ -4713,7 +4098,7 @@ function copyTempDouble(ptr) {
               try {
                 output(buffer[offset+i]);
               } catch (e) {
-                throw new FS.ErrnoError(5);
+                throw new FS.ErrnoError(29);
               }
             }
             if (length) {
@@ -4744,7 +4129,7 @@ function copyTempDouble(ptr) {
         } else {
           throw new Error('Cannot load without read() or XMLHttpRequest.');
         }
-        if (!success) ___setErrNo(5);
+        if (!success) ___setErrNo(29);
         return success;
       },createLazyFile:function(parent, name, url, canRead, canWrite) {
         // Lazy chunked Uint8Array (implements get and length from Uint8Array). Actual getting is abstracted away for eventual reuse.
@@ -4876,7 +4261,7 @@ function copyTempDouble(ptr) {
           var fn = node.stream_ops[key];
           stream_ops[key] = function forceLoadLazyFile() {
             if (!FS.forceLoadFile(node)) {
-              throw new FS.ErrnoError(5);
+              throw new FS.ErrnoError(29);
             }
             return fn.apply(null, arguments);
           };
@@ -4884,7 +4269,7 @@ function copyTempDouble(ptr) {
         // use a custom read function
         stream_ops.read = function stream_ops_read(stream, buffer, offset, length, position) {
           if (!FS.forceLoadFile(node)) {
-            throw new FS.ErrnoError(5);
+            throw new FS.ErrnoError(29);
           }
           var contents = stream.node.contents;
           if (position >= contents.length)
@@ -5020,7 +4405,7 @@ function copyTempDouble(ptr) {
             dir = FS.cwd();
           } else {
             var dirstream = FS.getStream(dirfd);
-            if (!dirstream) throw new FS.ErrnoError(9);
+            if (!dirstream) throw new FS.ErrnoError(8);
             dir = dirstream.path;
           }
           path = PATH.join2(dir, path);
@@ -5032,7 +4417,7 @@ function copyTempDouble(ptr) {
         } catch (e) {
           if (e && e.node && PATH.normalize(path) !== PATH.normalize(FS.getPath(e.node))) {
             // an error occurred while trying to look up the path; we should just report ENOTDIR
-            return -20;
+            return -54;
           }
           throw e;
         }
@@ -5075,12 +4460,12 @@ function copyTempDouble(ptr) {
           case 4096:
           case 49152:
             break;
-          default: return -22;
+          default: return -28;
         }
         FS.mknod(path, mode, dev);
         return 0;
       },doReadlink:function(path, buf, bufsize) {
-        if (bufsize <= 0) return -22;
+        if (bufsize <= 0) return -28;
         var ret = FS.readlink(path);
   
         var len = Math.min(bufsize, lengthBytesUTF8(ret));
@@ -5094,20 +4479,20 @@ function copyTempDouble(ptr) {
       },doAccess:function(path, amode) {
         if (amode & ~7) {
           // need a valid mode
-          return -22;
+          return -28;
         }
         var node;
         var lookup = FS.lookupPath(path, { follow: true });
         node = lookup.node;
         if (!node) {
-          return -2;
+          return -44;
         }
         var perms = '';
         if (amode & 4) perms += 'r';
         if (amode & 2) perms += 'w';
         if (amode & 1) perms += 'x';
         if (perms /* otherwise, they've just passed F_OK */ && FS.nodePermissions(node, perms)) {
-          return -13;
+          return -2;
         }
         return 0;
       },doDup:function(path, flags, suggestFD) {
@@ -5142,9 +4527,11 @@ function copyTempDouble(ptr) {
       },getStr:function() {
         var ret = UTF8ToString(SYSCALLS.get());
         return ret;
-      },getStreamFromFD:function() {
-        var stream = FS.getStream(SYSCALLS.get());
-        if (!stream) throw new FS.ErrnoError(9);
+      },getStreamFromFD:function(fd) {
+        // TODO: when all syscalls use wasi, can remove the next line
+        if (fd === undefined) fd = SYSCALLS.get();
+        var stream = FS.getStream(fd);
+        if (!stream) throw new FS.ErrnoError(8);
         return stream;
       },get64:function() {
         var low = SYSCALLS.get(), high = SYSCALLS.get();
@@ -5153,53 +4540,7 @@ function copyTempDouble(ptr) {
         return low;
       },getZero:function() {
         assert(SYSCALLS.get() === 0);
-      }};function ___syscall140(which, varargs) {SYSCALLS.varargs = varargs;
-  try {
-   // llseek
-      var stream = SYSCALLS.getStreamFromFD(), offset_high = SYSCALLS.get(), offset_low = SYSCALLS.get(), result = SYSCALLS.get(), whence = SYSCALLS.get();
-      var HIGH_OFFSET = 0x100000000; // 2^32
-      // use an unsigned operator on low and shift high by 32-bits
-      var offset = offset_high * HIGH_OFFSET + (offset_low >>> 0);
-  
-      var DOUBLE_LIMIT = 0x20000000000000; // 2^53
-      // we also check for equality since DOUBLE_LIMIT + 1 == DOUBLE_LIMIT
-      if (offset <= -DOUBLE_LIMIT || offset >= DOUBLE_LIMIT) {
-        return -75;
-      }
-  
-      FS.llseek(stream, offset, whence);
-      (tempI64 = [stream.position>>>0,(tempDouble=stream.position,(+(Math_abs(tempDouble))) >= 1.0 ? (tempDouble > 0.0 ? ((Math_min((+(Math_floor((tempDouble)/4294967296.0))), 4294967295.0))|0)>>>0 : (~~((+(Math_ceil((tempDouble - +(((~~(tempDouble)))>>>0))/4294967296.0)))))>>>0) : 0)],HEAP32[((result)>>2)]=tempI64[0],HEAP32[(((result)+(4))>>2)]=tempI64[1]);
-      if (stream.getdents && offset === 0 && whence === 0) stream.getdents = null; // reset readdir state
-      return 0;
-    } catch (e) {
-    if (typeof FS === 'undefined' || !(e instanceof FS.ErrnoError)) abort(e);
-    return -e.errno;
-  }
-  }
-
-  function ___syscall145(which, varargs) {SYSCALLS.varargs = varargs;
-  try {
-   // readv
-      var stream = SYSCALLS.getStreamFromFD(), iov = SYSCALLS.get(), iovcnt = SYSCALLS.get();
-      return SYSCALLS.doReadv(stream, iov, iovcnt);
-    } catch (e) {
-    if (typeof FS === 'undefined' || !(e instanceof FS.ErrnoError)) abort(e);
-    return -e.errno;
-  }
-  }
-
-  function ___syscall146(which, varargs) {SYSCALLS.varargs = varargs;
-  try {
-   // writev
-      var stream = SYSCALLS.getStreamFromFD(), iov = SYSCALLS.get(), iovcnt = SYSCALLS.get();
-      return SYSCALLS.doWritev(stream, iov, iovcnt);
-    } catch (e) {
-    if (typeof FS === 'undefined' || !(e instanceof FS.ErrnoError)) abort(e);
-    return -e.errno;
-  }
-  }
-
-  function ___syscall195(which, varargs) {SYSCALLS.varargs = varargs;
+      }};function ___syscall195(which, varargs) {SYSCALLS.varargs = varargs;
   try {
    // SYS_stat64
       var path = SYSCALLS.getStr(), buf = SYSCALLS.get();
@@ -5263,7 +4604,7 @@ function copyTempDouble(ptr) {
         case 0: {
           var arg = SYSCALLS.get();
           if (arg < 0) {
-            return -22;
+            return -28;
           }
           var newStream;
           newStream = FS.open(stream.path, stream.flags, 0, arg);
@@ -5297,13 +4638,13 @@ function copyTempDouble(ptr) {
           return 0; // Pretend that the locking is successful.
         case 16:
         case 8:
-          return -22; // These are for sockets. We don't have them fully implemented yet.
+          return -28; // These are for sockets. We don't have them fully implemented yet.
         case 9:
           // musl trusts getown return values, due to a bug where they must be, as they overlap with errors. just return -1 here, so fnctl() returns that, and we set errno ourselves.
-          ___setErrNo(22);
+          ___setErrNo(28);
           return -1;
         default: {
-          return -22;
+          return -28;
         }
       }
     } catch (e) {
@@ -5331,7 +4672,7 @@ function copyTempDouble(ptr) {
       switch (op) {
         case 21509:
         case 21505: {
-          if (!stream.tty) return -25;
+          if (!stream.tty) return -59;
           return 0;
         }
         case 21510:
@@ -5340,18 +4681,18 @@ function copyTempDouble(ptr) {
         case 21506:
         case 21507:
         case 21508: {
-          if (!stream.tty) return -25;
+          if (!stream.tty) return -59;
           return 0; // no-op, not actually adjusting terminal settings
         }
         case 21519: {
-          if (!stream.tty) return -25;
+          if (!stream.tty) return -59;
           var argp = SYSCALLS.get();
           HEAP32[((argp)>>2)]=0;
           return 0;
         }
         case 21520: {
-          if (!stream.tty) return -25;
-          return -22; // not supported
+          if (!stream.tty) return -59;
+          return -28; // not supported
         }
         case 21531: {
           var argp = SYSCALLS.get();
@@ -5360,14 +4701,14 @@ function copyTempDouble(ptr) {
         case 21523: {
           // TODO: in theory we should write to the winsize struct that gets
           // passed in, but for now musl doesn't read anything on it
-          if (!stream.tty) return -25;
+          if (!stream.tty) return -59;
           return 0;
         }
         case 21524: {
           // TODO: technically, this ioctl call should change the window size.
           // but, since emscripten doesn't have any concept of a terminal window
           // yet, we'll just silently throw it away as we do TIOCGWINSZ
-          if (!stream.tty) return -25;
+          if (!stream.tty) return -59;
           return 0;
         }
         default: abort('bad ioctl syscall ' + op);
@@ -5378,22 +4719,93 @@ function copyTempDouble(ptr) {
   }
   }
 
-  function ___syscall6(which, varargs) {SYSCALLS.varargs = varargs;
-  try {
-   // close
-      var stream = SYSCALLS.getStreamFromFD();
+  function ___unlock() {}
+
+  
+  function _fd_close(fd) {try {
+  
+      var stream = SYSCALLS.getStreamFromFD(fd);
       FS.close(stream);
       return 0;
     } catch (e) {
     if (typeof FS === 'undefined' || !(e instanceof FS.ErrnoError)) abort(e);
-    return -e.errno;
+    return e.errno;
   }
+  }function ___wasi_fd_close(
+  ) {
+  return _fd_close.apply(null, arguments)
   }
 
-  function ___unlock() {}
+  
+  function _fd_read(fd, iov, iovcnt, pnum) {try {
+  
+      var stream = SYSCALLS.getStreamFromFD(fd);
+      var num = SYSCALLS.doReadv(stream, iov, iovcnt);
+      HEAP32[((pnum)>>2)]=num
+      return 0;
+    } catch (e) {
+    if (typeof FS === 'undefined' || !(e instanceof FS.ErrnoError)) abort(e);
+    return e.errno;
+  }
+  }function ___wasi_fd_read(
+  ) {
+  return _fd_read.apply(null, arguments)
+  }
+
+  
+  function _fd_seek(fd, offset_low, offset_high, whence, newOffset) {try {
+  
+      var stream = SYSCALLS.getStreamFromFD(fd);
+      var HIGH_OFFSET = 0x100000000; // 2^32
+      // use an unsigned operator on low and shift high by 32-bits
+      var offset = offset_high * HIGH_OFFSET + (offset_low >>> 0);
+  
+      var DOUBLE_LIMIT = 0x20000000000000; // 2^53
+      // we also check for equality since DOUBLE_LIMIT + 1 == DOUBLE_LIMIT
+      if (offset <= -DOUBLE_LIMIT || offset >= DOUBLE_LIMIT) {
+        return -61;
+      }
+  
+      FS.llseek(stream, offset, whence);
+      (tempI64 = [stream.position>>>0,(tempDouble=stream.position,(+(Math_abs(tempDouble))) >= 1.0 ? (tempDouble > 0.0 ? ((Math_min((+(Math_floor((tempDouble)/4294967296.0))), 4294967295.0))|0)>>>0 : (~~((+(Math_ceil((tempDouble - +(((~~(tempDouble)))>>>0))/4294967296.0)))))>>>0) : 0)],HEAP32[((newOffset)>>2)]=tempI64[0],HEAP32[(((newOffset)+(4))>>2)]=tempI64[1]);
+      if (stream.getdents && offset === 0 && whence === 0) stream.getdents = null; // reset readdir state
+      return 0;
+    } catch (e) {
+    if (typeof FS === 'undefined' || !(e instanceof FS.ErrnoError)) abort(e);
+    return e.errno;
+  }
+  }function ___wasi_fd_seek(
+  ) {
+  return _fd_seek.apply(null, arguments)
+  }
+
+  
+  function _fd_write(fd, iov, iovcnt, pnum) {try {
+  
+      var stream = SYSCALLS.getStreamFromFD(fd);
+      var num = SYSCALLS.doWritev(stream, iov, iovcnt);
+      HEAP32[((pnum)>>2)]=num
+      return 0;
+    } catch (e) {
+    if (typeof FS === 'undefined' || !(e instanceof FS.ErrnoError)) abort(e);
+    return e.errno;
+  }
+  }function ___wasi_fd_write(
+  ) {
+  return _fd_write.apply(null, arguments)
+  }
 
   function _emscripten_get_heap_size() {
       return HEAP8.length;
+    }
+
+   
+
+  
+  function abortOnCannotGrowMemory(requestedSize) {
+      abort('Cannot enlarge memory arrays to size ' + requestedSize + ' bytes (OOM). Either (1) compile with  -s TOTAL_MEMORY=X  with X higher than the current value ' + HEAP8.length + ', (2) compile with  -s ALLOW_MEMORY_GROWTH=1  which allows increasing the size at runtime, or (3) if you want malloc to return NULL (0) instead of this abort, compile with  -s ABORTING_MALLOC=0 ');
+    }function _emscripten_resize_heap(requestedSize) {
+      abortOnCannotGrowMemory(requestedSize);
     }
 
   function _exit(status) {
@@ -5441,16 +4853,7 @@ function copyTempDouble(ptr) {
 
    
 
-  
-  
-  function abortOnCannotGrowMemory(requestedSize) {
-      abort('Cannot enlarge memory arrays to size ' + requestedSize + ' bytes (OOM). Either (1) compile with  -s TOTAL_MEMORY=X  with X higher than the current value ' + HEAP8.length + ', (2) compile with  -s ALLOW_MEMORY_GROWTH=1  which allows increasing the size at runtime, or (3) if you want malloc to return NULL (0) instead of this abort, compile with  -s ABORTING_MALLOC=0 ');
-    }function _emscripten_resize_heap(requestedSize) {
-      abortOnCannotGrowMemory(requestedSize);
-    } 
-
 FS.staticInit();Module["FS_createFolder"] = FS.createFolder;Module["FS_createPath"] = FS.createPath;Module["FS_createDataFile"] = FS.createDataFile;Module["FS_createPreloadedFile"] = FS.createPreloadedFile;Module["FS_createLazyFile"] = FS.createLazyFile;Module["FS_createLink"] = FS.createLink;Module["FS_createDevice"] = FS.createDevice;Module["FS_unlink"] = FS.unlink;;
-if (ENVIRONMENT_HAS_NODE) { var fs = require("fs"); var NODEJS_PATH = require("path"); NODEFS.staticInit(); };
 var ASSERTIONS = true;
 
 // Copyright 2017 The Emscripten Authors.  All rights reserved.
@@ -5523,53 +4926,7 @@ function jsCall_vii(index,a1,a2) {
 
 var asmGlobalArg = {};
 
-var asmLibraryArg = {
-  "abort": abort,
-  "setTempRet0": setTempRet0,
-  "getTempRet0": getTempRet0,
-  "abortStackOverflow": abortStackOverflow,
-  "nullFunc_ii": nullFunc_ii,
-  "nullFunc_iidiiii": nullFunc_iidiiii,
-  "nullFunc_iii": nullFunc_iii,
-  "nullFunc_iiii": nullFunc_iiii,
-  "nullFunc_jiji": nullFunc_jiji,
-  "nullFunc_vi": nullFunc_vi,
-  "nullFunc_vii": nullFunc_vii,
-  "jsCall_ii": jsCall_ii,
-  "jsCall_iidiiii": jsCall_iidiiii,
-  "jsCall_iii": jsCall_iii,
-  "jsCall_iiii": jsCall_iiii,
-  "jsCall_jiji": jsCall_jiji,
-  "jsCall_vi": jsCall_vi,
-  "jsCall_vii": jsCall_vii,
-  "___buildEnvironment": ___buildEnvironment,
-  "___lock": ___lock,
-  "___setErrNo": ___setErrNo,
-  "___syscall140": ___syscall140,
-  "___syscall145": ___syscall145,
-  "___syscall146": ___syscall146,
-  "___syscall195": ___syscall195,
-  "___syscall220": ___syscall220,
-  "___syscall221": ___syscall221,
-  "___syscall5": ___syscall5,
-  "___syscall54": ___syscall54,
-  "___syscall6": ___syscall6,
-  "___unlock": ___unlock,
-  "_emscripten_get_heap_size": _emscripten_get_heap_size,
-  "_emscripten_memcpy_big": _emscripten_memcpy_big,
-  "_emscripten_resize_heap": _emscripten_resize_heap,
-  "_exit": _exit,
-  "_getenv": _getenv,
-  "_llvm_stackrestore": _llvm_stackrestore,
-  "_llvm_stacksave": _llvm_stacksave,
-  "abortOnCannotGrowMemory": abortOnCannotGrowMemory,
-  "demangle": demangle,
-  "demangleAll": demangleAll,
-  "jsStackTrace": jsStackTrace,
-  "stackTrace": stackTrace,
-  "tempDoublePtr": tempDoublePtr,
-  "DYNAMICTOP_PTR": DYNAMICTOP_PTR
-};
+var asmLibraryArg = { "___buildEnvironment": ___buildEnvironment, "___lock": ___lock, "___setErrNo": ___setErrNo, "___syscall195": ___syscall195, "___syscall220": ___syscall220, "___syscall221": ___syscall221, "___syscall5": ___syscall5, "___syscall54": ___syscall54, "___unlock": ___unlock, "___wasi_fd_close": ___wasi_fd_close, "___wasi_fd_read": ___wasi_fd_read, "___wasi_fd_seek": ___wasi_fd_seek, "___wasi_fd_write": ___wasi_fd_write, "__memory_base": 1024, "__table_base": 0, "_emscripten_get_heap_size": _emscripten_get_heap_size, "_emscripten_memcpy_big": _emscripten_memcpy_big, "_emscripten_resize_heap": _emscripten_resize_heap, "_exit": _exit, "_fd_close": _fd_close, "_fd_read": _fd_read, "_fd_seek": _fd_seek, "_fd_write": _fd_write, "_getenv": _getenv, "_llvm_stackrestore": _llvm_stackrestore, "_llvm_stacksave": _llvm_stacksave, "abort": abort, "abortOnCannotGrowMemory": abortOnCannotGrowMemory, "abortStackOverflow": abortStackOverflow, "demangle": demangle, "demangleAll": demangleAll, "getTempRet0": getTempRet0, "jsCall_ii": jsCall_ii, "jsCall_iidiiii": jsCall_iidiiii, "jsCall_iii": jsCall_iii, "jsCall_iiii": jsCall_iiii, "jsCall_jiji": jsCall_jiji, "jsCall_vi": jsCall_vi, "jsCall_vii": jsCall_vii, "jsStackTrace": jsStackTrace, "memory": wasmMemory, "nullFunc_ii": nullFunc_ii, "nullFunc_iidiiii": nullFunc_iidiiii, "nullFunc_iii": nullFunc_iii, "nullFunc_iiii": nullFunc_iiii, "nullFunc_jiji": nullFunc_jiji, "nullFunc_vi": nullFunc_vi, "nullFunc_vii": nullFunc_vii, "setTempRet0": setTempRet0, "stackTrace": stackTrace, "table": wasmTable, "tempDoublePtr": tempDoublePtr };
 // EMSCRIPTEN_START_ASM
 var asm =Module["asm"]// EMSCRIPTEN_END_ASM
 (asmGlobalArg, asmLibraryArg, buffer);
@@ -5599,10 +4956,10 @@ var __lou_allocMem = Module["__lou_allocMem"] = function() {
   return Module["asm"]["__lou_allocMem"].apply(null, arguments)
 };
 
-var __lou_backTranslateWithTracing = Module["__lou_backTranslateWithTracing"] = function() {
+var __lou_backTranslate = Module["__lou_backTranslate"] = function() {
   assert(runtimeInitialized, 'you need to wait for the runtime to be ready (e.g. wait for main() to be called)');
   assert(!runtimeExited, 'the runtime was exited (use NO_EXIT_RUNTIME to keep it alive after main() exits)');
-  return Module["asm"]["__lou_backTranslateWithTracing"].apply(null, arguments)
+  return Module["asm"]["__lou_backTranslate"].apply(null, arguments)
 };
 
 var __lou_charHash = Module["__lou_charHash"] = function() {
@@ -5615,6 +4972,18 @@ var __lou_charToFallbackDots = Module["__lou_charToFallbackDots"] = function() {
   assert(runtimeInitialized, 'you need to wait for the runtime to be ready (e.g. wait for main() to be called)');
   assert(!runtimeExited, 'the runtime was exited (use NO_EXIT_RUNTIME to keep it alive after main() exits)');
   return Module["asm"]["__lou_charToFallbackDots"].apply(null, arguments)
+};
+
+var __lou_compileDisplayRule = Module["__lou_compileDisplayRule"] = function() {
+  assert(runtimeInitialized, 'you need to wait for the runtime to be ready (e.g. wait for main() to be called)');
+  assert(!runtimeExited, 'the runtime was exited (use NO_EXIT_RUNTIME to keep it alive after main() exits)');
+  return Module["asm"]["__lou_compileDisplayRule"].apply(null, arguments)
+};
+
+var __lou_compileTranslationRule = Module["__lou_compileTranslationRule"] = function() {
+  assert(runtimeInitialized, 'you need to wait for the runtime to be ready (e.g. wait for main() to be called)');
+  assert(!runtimeExited, 'the runtime was exited (use NO_EXIT_RUNTIME to keep it alive after main() exits)');
+  return Module["asm"]["__lou_compileTranslationRule"].apply(null, arguments)
 };
 
 var __lou_defaultTableResolver = Module["__lou_defaultTableResolver"] = function() {
@@ -5659,10 +5028,10 @@ var __lou_getCharFromDots = Module["__lou_getCharFromDots"] = function() {
   return Module["asm"]["__lou_getCharFromDots"].apply(null, arguments)
 };
 
-var __lou_getCurrentDisplayTable = Module["__lou_getCurrentDisplayTable"] = function() {
+var __lou_getDisplayTable = Module["__lou_getDisplayTable"] = function() {
   assert(runtimeInitialized, 'you need to wait for the runtime to be ready (e.g. wait for main() to be called)');
   assert(!runtimeExited, 'the runtime was exited (use NO_EXIT_RUNTIME to keep it alive after main() exits)');
-  return Module["asm"]["__lou_getCurrentDisplayTable"].apply(null, arguments)
+  return Module["asm"]["__lou_getDisplayTable"].apply(null, arguments)
 };
 
 var __lou_getDotsForChar = Module["__lou_getDotsForChar"] = function() {
@@ -5671,10 +5040,22 @@ var __lou_getDotsForChar = Module["__lou_getDotsForChar"] = function() {
   return Module["asm"]["__lou_getDotsForChar"].apply(null, arguments)
 };
 
+var __lou_getTable = Module["__lou_getTable"] = function() {
+  assert(runtimeInitialized, 'you need to wait for the runtime to be ready (e.g. wait for main() to be called)');
+  assert(!runtimeExited, 'the runtime was exited (use NO_EXIT_RUNTIME to keep it alive after main() exits)');
+  return Module["asm"]["__lou_getTable"].apply(null, arguments)
+};
+
 var __lou_getTablePath = Module["__lou_getTablePath"] = function() {
   assert(runtimeInitialized, 'you need to wait for the runtime to be ready (e.g. wait for main() to be called)');
   assert(!runtimeExited, 'the runtime was exited (use NO_EXIT_RUNTIME to keep it alive after main() exits)');
   return Module["asm"]["__lou_getTablePath"].apply(null, arguments)
+};
+
+var __lou_getTranslationTable = Module["__lou_getTranslationTable"] = function() {
+  assert(runtimeInitialized, 'you need to wait for the runtime to be ready (e.g. wait for main() to be called)');
+  assert(!runtimeExited, 'the runtime was exited (use NO_EXIT_RUNTIME to keep it alive after main() exits)');
+  return Module["asm"]["__lou_getTranslationTable"].apply(null, arguments)
 };
 
 var __lou_handlePassVariableAction = Module["__lou_handlePassVariableAction"] = function() {
@@ -5767,16 +5148,28 @@ var __lou_stringHash = Module["__lou_stringHash"] = function() {
   return Module["asm"]["__lou_stringHash"].apply(null, arguments)
 };
 
-var __lou_translateWithTracing = Module["__lou_translateWithTracing"] = function() {
+var __lou_translate = Module["__lou_translate"] = function() {
   assert(runtimeInitialized, 'you need to wait for the runtime to be ready (e.g. wait for main() to be called)');
   assert(!runtimeExited, 'the runtime was exited (use NO_EXIT_RUNTIME to keep it alive after main() exits)');
-  return Module["asm"]["__lou_translateWithTracing"].apply(null, arguments)
+  return Module["asm"]["__lou_translate"].apply(null, arguments)
 };
 
 var __lou_unknownDots = Module["__lou_unknownDots"] = function() {
   assert(runtimeInitialized, 'you need to wait for the runtime to be ready (e.g. wait for main() to be called)');
   assert(!runtimeExited, 'the runtime was exited (use NO_EXIT_RUNTIME to keep it alive after main() exits)');
   return Module["asm"]["__lou_unknownDots"].apply(null, arguments)
+};
+
+var _defaultLogCallback = Module["_defaultLogCallback"] = function() {
+  assert(runtimeInitialized, 'you need to wait for the runtime to be ready (e.g. wait for main() to be called)');
+  assert(!runtimeExited, 'the runtime was exited (use NO_EXIT_RUNTIME to keep it alive after main() exits)');
+  return Module["asm"]["_defaultLogCallback"].apply(null, arguments)
+};
+
+var _emscripten_get_sbrk_ptr = Module["_emscripten_get_sbrk_ptr"] = function() {
+  assert(runtimeInitialized, 'you need to wait for the runtime to be ready (e.g. wait for main() to be called)');
+  assert(!runtimeExited, 'the runtime was exited (use NO_EXIT_RUNTIME to keep it alive after main() exits)');
+  return Module["asm"]["_emscripten_get_sbrk_ptr"].apply(null, arguments)
 };
 
 var _fflush = Module["_fflush"] = function() {
@@ -5995,12 +5388,6 @@ var _memset = Module["_memset"] = function() {
   return Module["asm"]["_memset"].apply(null, arguments)
 };
 
-var _sbrk = Module["_sbrk"] = function() {
-  assert(runtimeInitialized, 'you need to wait for the runtime to be ready (e.g. wait for main() to be called)');
-  assert(!runtimeExited, 'the runtime was exited (use NO_EXIT_RUNTIME to keep it alive after main() exits)');
-  return Module["asm"]["_sbrk"].apply(null, arguments)
-};
-
 var establishStackSpace = Module["establishStackSpace"] = function() {
   assert(runtimeInitialized, 'you need to wait for the runtime to be ready (e.g. wait for main() to be called)');
   assert(!runtimeExited, 'the runtime was exited (use NO_EXIT_RUNTIME to keep it alive after main() exits)');
@@ -6141,14 +5528,15 @@ if (!Object.getOwnPropertyDescriptor(Module, "printErr")) Module["printErr"] = f
 if (!Object.getOwnPropertyDescriptor(Module, "getTempRet0")) Module["getTempRet0"] = function() { abort("'getTempRet0' was not exported. add it to EXTRA_EXPORTED_RUNTIME_METHODS (see the FAQ)") };
 if (!Object.getOwnPropertyDescriptor(Module, "setTempRet0")) Module["setTempRet0"] = function() { abort("'setTempRet0' was not exported. add it to EXTRA_EXPORTED_RUNTIME_METHODS (see the FAQ)") };
 if (!Object.getOwnPropertyDescriptor(Module, "callMain")) Module["callMain"] = function() { abort("'callMain' was not exported. add it to EXTRA_EXPORTED_RUNTIME_METHODS (see the FAQ)") };
+if (!Object.getOwnPropertyDescriptor(Module, "abort")) Module["abort"] = function() { abort("'abort' was not exported. add it to EXTRA_EXPORTED_RUNTIME_METHODS (see the FAQ)") };
 Module["Pointer_stringify"] = Pointer_stringify;
 if (!Object.getOwnPropertyDescriptor(Module, "warnOnce")) Module["warnOnce"] = function() { abort("'warnOnce' was not exported. add it to EXTRA_EXPORTED_RUNTIME_METHODS (see the FAQ)") };
-if (!Object.getOwnPropertyDescriptor(Module, "writeStackCookie")) Module["writeStackCookie"] = function() { abort("'writeStackCookie' was not exported. add it to EXTRA_EXPORTED_RUNTIME_METHODS (see the FAQ)") };
-if (!Object.getOwnPropertyDescriptor(Module, "checkStackCookie")) Module["checkStackCookie"] = function() { abort("'checkStackCookie' was not exported. add it to EXTRA_EXPORTED_RUNTIME_METHODS (see the FAQ)") };
-if (!Object.getOwnPropertyDescriptor(Module, "abortStackOverflow")) Module["abortStackOverflow"] = function() { abort("'abortStackOverflow' was not exported. add it to EXTRA_EXPORTED_RUNTIME_METHODS (see the FAQ)") };Module["ALLOC_NORMAL"] = ALLOC_NORMAL;
-if (!Object.getOwnPropertyDescriptor(Module, "ALLOC_STACK")) Object.defineProperty(Module, "ALLOC_STACK", { get: function() { abort("'ALLOC_STACK' was not exported. add it to EXTRA_EXPORTED_RUNTIME_METHODS (see the FAQ)") } });
-if (!Object.getOwnPropertyDescriptor(Module, "ALLOC_DYNAMIC")) Object.defineProperty(Module, "ALLOC_DYNAMIC", { get: function() { abort("'ALLOC_DYNAMIC' was not exported. add it to EXTRA_EXPORTED_RUNTIME_METHODS (see the FAQ)") } });
-if (!Object.getOwnPropertyDescriptor(Module, "ALLOC_NONE")) Object.defineProperty(Module, "ALLOC_NONE", { get: function() { abort("'ALLOC_NONE' was not exported. add it to EXTRA_EXPORTED_RUNTIME_METHODS (see the FAQ)") } });
+Module["writeStackCookie"] = writeStackCookie;
+Module["checkStackCookie"] = checkStackCookie;
+Module["abortStackOverflow"] = abortStackOverflow;Module["ALLOC_NORMAL"] = ALLOC_NORMAL;
+if (!Object.getOwnPropertyDescriptor(Module, "ALLOC_STACK")) Object.defineProperty(Module, "ALLOC_STACK", { configurable: true, get: function() { abort("'ALLOC_STACK' was not exported. add it to EXTRA_EXPORTED_RUNTIME_METHODS (see the FAQ)") } });
+if (!Object.getOwnPropertyDescriptor(Module, "ALLOC_DYNAMIC")) Object.defineProperty(Module, "ALLOC_DYNAMIC", { configurable: true, get: function() { abort("'ALLOC_DYNAMIC' was not exported. add it to EXTRA_EXPORTED_RUNTIME_METHODS (see the FAQ)") } });
+if (!Object.getOwnPropertyDescriptor(Module, "ALLOC_NONE")) Object.defineProperty(Module, "ALLOC_NONE", { configurable: true, get: function() { abort("'ALLOC_NONE' was not exported. add it to EXTRA_EXPORTED_RUNTIME_METHODS (see the FAQ)") } });
 Module["calledRun"] = calledRun;
 
 
@@ -6189,6 +5577,7 @@ function ExitStatus(status) {
 }
 
 var calledMain = false;
+
 
 dependenciesFulfilled = function runCaller() {
   // If run has never been called, and we should call run (INVOKE_RUN is true, and Module.noInitialRun is not false)
@@ -6304,7 +5693,7 @@ function exit(status, implicit) {
   if (noExitRuntime) {
     // if exit() was called, we may warn the user if the runtime isn't actually being shut down
     if (!implicit) {
-      err('exit(' + status + ') called, but EXIT_RUNTIME is not set, so halting execution but not exiting the runtime or preventing further async execution (build with EXIT_RUNTIME=1, if you want a true shutdown)');
+      err('program exited (with status: ' + status + '), but EXIT_RUNTIME is not set, so halting execution but not exiting the runtime or preventing further async execution (build with EXIT_RUNTIME=1, if you want a true shutdown)');
     }
   } else {
 
@@ -6318,31 +5707,6 @@ function exit(status, implicit) {
 
   quit_(status, new ExitStatus(status));
 }
-
-var abortDecorators = [];
-
-function abort(what) {
-  if (Module['onAbort']) {
-    Module['onAbort'](what);
-  }
-
-  what += '';
-  out(what);
-  err(what);
-
-  ABORT = true;
-  EXITSTATUS = 1;
-
-  var extra = '';
-  var output = 'abort(' + what + ') at ' + stackTrace() + extra;
-  if (abortDecorators) {
-    abortDecorators.forEach(function(decorator) {
-      output = decorator(output, what);
-    });
-  }
-  throw output;
-}
-Module['abort'] = abort;
 
 if (Module['preInit']) {
   if (typeof Module['preInit'] == 'function') Module['preInit'] = [Module['preInit']];

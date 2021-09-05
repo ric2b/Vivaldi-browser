@@ -29,8 +29,8 @@ namespace {
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 
-// By default, JavaScript, images and autoplay are enabled, and blockable mixed
-// content is blocked in guest content
+// By default, JavaScript and images are enabled, and blockable mixed content is
+// blocked in guest content
 void GetGuestViewDefaultContentSettingRules(
     bool incognito,
     RendererContentSettingRules* rules) {
@@ -41,11 +41,6 @@ void GetGuestViewDefaultContentSettingRules(
       std::string(), incognito));
 
   rules->script_rules.push_back(ContentSettingPatternSource(
-      ContentSettingsPattern::Wildcard(), ContentSettingsPattern::Wildcard(),
-      base::Value::FromUniquePtrValue(
-          content_settings::ContentSettingToValue(CONTENT_SETTING_ALLOW)),
-      std::string(), incognito));
-  rules->autoplay_rules.push_back(ContentSettingPatternSource(
       ContentSettingsPattern::Wildcard(), ContentSettingsPattern::Wildcard(),
       base::Value::FromUniquePtrValue(
           content_settings::ContentSettingToValue(CONTENT_SETTING_ALLOW)),
@@ -76,15 +71,6 @@ RendererUpdater::RendererUpdater(Profile* profile)
   merge_session_running_ =
       merge_session_throttling_utils::ShouldDelayRequestForProfile(profile_);
 #endif
-  variations_http_header_provider_ =
-      variations::VariationsHttpHeaderProvider::GetInstance();
-  variations_http_header_provider_->AddObserver(this);
-  cached_variation_ids_header_ =
-      variations_http_header_provider_->GetClientDataHeader(
-          false /* is_signed_in */);
-  cached_variation_ids_header_signed_in_ =
-      variations_http_header_provider_->GetClientDataHeader(
-          true /* is_signed_in */);
 
   PrefService* pref_service = profile->GetPrefs();
   force_google_safesearch_.Init(prefs::kForceGoogleSafeSearch, pref_service);
@@ -120,8 +106,6 @@ void RendererUpdater::Shutdown() {
 #endif
   identity_manager_observer_.RemoveAll();
   identity_manager_ = nullptr;
-  variations_http_header_provider_->RemoveObserver(this);
-  variations_http_header_provider_ = nullptr;
 }
 
 void RendererUpdater::InitializeRenderer(
@@ -216,14 +200,6 @@ void RendererUpdater::OnPrimaryAccountCleared(
   UpdateAllRenderers();
 }
 
-void RendererUpdater::VariationIdsHeaderUpdated(
-    const std::string& variation_ids_header,
-    const std::string& variation_ids_header_signed_in) {
-  cached_variation_ids_header_ = variation_ids_header;
-  cached_variation_ids_header_signed_in_ = variation_ids_header_signed_in;
-  UpdateAllRenderers();
-}
-
 void RendererUpdater::UpdateAllRenderers() {
   auto renderer_configurations = GetRendererConfigurations();
   for (auto& renderer_configuration : renderer_configurations)
@@ -237,8 +213,5 @@ void RendererUpdater::UpdateRenderer(
       ->SetConfiguration(chrome::mojom::DynamicParams::New(
           force_google_safesearch_.GetValue(),
           force_youtube_restrict_.GetValue(),
-          allowed_domains_for_apps_.GetValue(),
-          identity_manager_->HasPrimaryAccount()
-              ? cached_variation_ids_header_signed_in_
-              : cached_variation_ids_header_));
+          allowed_domains_for_apps_.GetValue()));
 }

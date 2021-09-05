@@ -6,31 +6,35 @@
 #include "chrome/browser/profiles/profile.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "content/public/browser/browser_thread.h"
+#include "sync/note_sync_service_factory.h"
+#include "sync/notes/note_sync_service.h"
 
+#include "notes/note_node.h"
 #include "notes/notes_factory.h"
 #include "notes/notes_model.h"
-#include "notes/notesnode.h"
 
 namespace vivaldi {
 
 NotesModelFactory::NotesModelFactory()
     : BrowserContextKeyedServiceFactory(
           "Notes_Model",
-          BrowserContextDependencyManager::GetInstance()) {}
+          BrowserContextDependencyManager::GetInstance()) {
+  DependsOn(NoteSyncServiceFactory::GetInstance());
+}
 
 NotesModelFactory::~NotesModelFactory() {}
 
 // static
-Notes_Model* NotesModelFactory::GetForBrowserContext(
-  content::BrowserContext* browser_context) {
-  return static_cast<Notes_Model*>(
+NotesModel* NotesModelFactory::GetForBrowserContext(
+    content::BrowserContext* browser_context) {
+  return static_cast<NotesModel*>(
       GetInstance()->GetServiceForBrowserContext(browser_context, true));
 }
 
 // static
-Notes_Model* NotesModelFactory::GetForBrowserContextIfExists(
-  content::BrowserContext* browser_context) {
-  return static_cast<Notes_Model*>(
+NotesModel* NotesModelFactory::GetForBrowserContextIfExists(
+    content::BrowserContext* browser_context) {
+  return static_cast<NotesModel*>(
       GetInstance()->GetServiceForBrowserContext(browser_context, false));
 }
 
@@ -41,7 +45,9 @@ NotesModelFactory* NotesModelFactory::GetInstance() {
 
 KeyedService* NotesModelFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
-  Notes_Model* notes_model = new Notes_Model(context);
+  Profile* profile = Profile::FromBrowserContext(context);
+  NotesModel* notes_model = new NotesModel(context,
+                    NoteSyncServiceFactory::GetForProfile(profile));
   notes_model->Load(Profile::FromBrowserContext(context)->GetIOTaskRunner());
   return notes_model;
 }

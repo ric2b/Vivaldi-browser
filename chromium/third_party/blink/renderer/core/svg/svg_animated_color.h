@@ -33,10 +33,9 @@
 
 #include "third_party/blink/renderer/core/css/style_color.h"
 #include "third_party/blink/renderer/core/svg/properties/svg_property.h"
+#include "third_party/blink/renderer/platform/wtf/casting.h"
 
 namespace blink {
-
-class SVGAnimationElement;
 
 // StyleColor adaptor to SVGPropertyBase. This is only used for SMIL animations.
 // FIXME: WebAnimations: Replacable with AnimatableColor once SMIL animations
@@ -49,7 +48,7 @@ class SVGColorProperty final : public SVGPropertyBase {
   String ValueAsString() const override;
 
   void Add(SVGPropertyBase*, SVGElement*) override;
-  void CalculateAnimatedValue(SVGAnimationElement*,
+  void CalculateAnimatedValue(const SVGAnimateElement&,
                               float percentage,
                               unsigned repeat_count,
                               SVGPropertyBase* from,
@@ -65,7 +64,12 @@ class SVGColorProperty final : public SVGPropertyBase {
   StyleColor style_color_;
 };
 
-DEFINE_SVG_PROPERTY_TYPE_CASTS(SVGColorProperty);
+template <>
+struct DowncastTraits<SVGColorProperty> {
+  static bool AllowFrom(const SVGPropertyBase& value) {
+    return value.GetType() == SVGColorProperty::ClassType();
+  }
+};
 
 }  // namespace blink
 

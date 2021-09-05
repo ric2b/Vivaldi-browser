@@ -103,8 +103,8 @@ void PopupBlockerTabHelper::AddBlockedPopup(
   next_id_++;
   blocked_popups_[id] = std::make_unique<BlockedRequest>(
       std::move(*params), window_features, block_type);
-  TabSpecificContentSettings::FromWebContents(web_contents())->
-      OnContentBlocked(CONTENT_SETTINGS_TYPE_POPUPS);
+  TabSpecificContentSettings::FromWebContents(web_contents())
+      ->OnContentBlocked(ContentSettingsType::POPUPS);
   manager_.NotifyObservers(id, blocked_popups_[id]->params.url);
 
 #if defined(OS_ANDROID)
@@ -141,7 +141,8 @@ void PopupBlockerTabHelper::ShowBlockedPopup(
 #endif
   if (popup->params.navigated_or_inserted_contents) {
     auto* tracker = PopupTracker::CreateForWebContents(
-        popup->params.navigated_or_inserted_contents, web_contents());
+        popup->params.navigated_or_inserted_contents, web_contents(),
+        popup->params.disposition);
     tracker->set_is_trusted(true);
 
     if (popup->params.disposition == WindowOpenDisposition::NEW_POPUP) {

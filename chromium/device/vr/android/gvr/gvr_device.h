@@ -31,19 +31,13 @@ class DEVICE_VR_EXPORT GvrDevice : public VRDeviceBase,
       mojom::XRRuntime::RequestSessionCallback callback) override;
   void PauseTracking() override;
   void ResumeTracking() override;
-  void EnsureInitialized(EnsureInitializedCallback callback) override;
+  void ShutdownSession(mojom::XRRuntime::ShutdownSessionCallback) override;
 
   void OnDisplayConfigurationChanged(
       JNIEnv* env,
       const base::android::JavaRef<jobject>& obj);
 
-  void Activate(mojom::VRDisplayEventReason reason,
-                base::Callback<void(bool)> on_handled);
-
  private:
-  // VRDeviceBase
-  void OnListeningForActivate(bool listening) override;
-
   void OnStartPresentResult(mojom::XRSessionPtr session);
 
   // XRSessionController

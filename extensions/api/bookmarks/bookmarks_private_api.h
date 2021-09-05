@@ -32,10 +32,6 @@ class VivaldiBookmarksAPI : public bookmarks::BookmarkModelObserver,
   static BrowserContextKeyedAPIFactory<VivaldiBookmarksAPI>*
   GetFactoryInstance();
 
-  void SetPartnerUpgradeActive(bool active);
-
-  static std::string GetThumbnailUrl(const bookmarks::BookmarkNode* node);
-
   static bool SetBookmarkThumbnail(content::BrowserContext* browser_context,
                                    int64_t bookmark_id,
                                    const std::string& url,
@@ -81,7 +77,6 @@ class VivaldiBookmarksAPI : public bookmarks::BookmarkModelObserver,
 
   bookmarks::BookmarkModel* bookmark_model_;
 
-  bool partner_upgrade_active_;
   std::unique_ptr<MetaInfoChangeFilter> change_filter_;
 
   // BrowserContextKeyedAPI implementation.
@@ -126,21 +121,22 @@ class BookmarksPrivateEmptyTrashFunction : public BookmarksFunction {
   DISALLOW_COPY_AND_ASSIGN(BookmarksPrivateEmptyTrashFunction);
 };
 
-class BookmarksPrivateUpgradePartnerFunction : public BookmarksUpdateFunction {
+class BookmarksPrivateUpdatePartnersFunction : public ExtensionFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("bookmarksPrivate.upgradePartner",
-                             BOOKMARKSPRIVATE_UPGRADE_PARTNER)
+  DECLARE_EXTENSION_FUNCTION("bookmarksPrivate.updatePartners",
+                             BOOKMARKSPRIVATE_UPDATE_PARTNERS)
 
-  BookmarksPrivateUpgradePartnerFunction() = default;
-
- protected:
-  ~BookmarksPrivateUpgradePartnerFunction() override = default;
+  BookmarksPrivateUpdatePartnersFunction() = default;
 
  private:
-  // BookmarksFunction:
-  bool RunOnReady() override;
+  ~BookmarksPrivateUpdatePartnersFunction() override = default;
 
-  DISALLOW_COPY_AND_ASSIGN(BookmarksPrivateUpgradePartnerFunction);
+  // BookmarksFunction:
+  ResponseAction Run() override;
+
+  void OnUpdatePartnersResult(bool ok, bool no_version);
+
+  DISALLOW_COPY_AND_ASSIGN(BookmarksPrivateUpdatePartnersFunction);
 };
 
 class BookmarksPrivateIsCustomThumbnailFunction : public BookmarksFunction {

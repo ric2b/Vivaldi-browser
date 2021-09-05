@@ -5,6 +5,10 @@
 #include "android_webview/browser/js_java_interaction/js_java_configurator_host.h"
 
 #include "android_webview/browser/js_java_interaction/js_to_java_messaging.h"
+#include "android_webview/browser_jni_headers/WebMessageListenerInfo_jni.h"
+#include "android_webview/common/aw_origin_matcher.h"
+#include "android_webview/common/aw_origin_matcher_mojom_traits.h"
+#include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/bind.h"
@@ -17,7 +21,7 @@ namespace android_webview {
 
 struct JsObject {
   JsObject(base::string16 name,
-           net::ProxyBypassRules allowed_origin_rules,
+           AwOriginMatcher allowed_origin_rules,
            const base::android::JavaRef<jobject>& listener)
       : name_(std::move(name)),
         allowed_origin_rules_(std::move(allowed_origin_rules)),
@@ -38,7 +42,7 @@ struct JsObject {
   ~JsObject() = default;
 
   base::string16 name_;
-  net::ProxyBypassRules allowed_origin_rules_;
+  AwOriginMatcher allowed_origin_rules_;
   base::android::ScopedJavaGlobalRef<jobject> listener_ref_;
 
   DISALLOW_COPY_AND_ASSIGN(JsObject);
@@ -63,13 +67,9 @@ JsJavaConfiguratorHost::AddWebMessageListener(
   AppendJavaStringArrayToStringVector(env, allowed_origin_rules,
                                       &native_allowed_origin_rule_strings);
 
-  net::ProxyBypassRules native_allowed_origin_rules;
-  // We don't want to inject js object to origins that matches implicit rules
-  // automatically. Later rules override earilier rules, so we add subtracing
-  // rules first.
-  native_allowed_origin_rules.AddRulesToSubtractImplicit();
+  AwOriginMatcher origin_matcher;
   for (auto& rule : native_allowed_origin_rule_strings) {
-    if (!native_allowed_origin_rules.AddRuleFromString(rule)) {
+    if (!origin_matcher.AddRuleFromString(rule)) {
       return base::android::ConvertUTF8ToJavaString(
           env, "allowedOriginRules " + rule + " is invalid");
     }
@@ -83,8 +83,7 @@ JsJavaConfiguratorHost::AddWebMessageListener(
     }
   }
 
-  js_objects_.emplace_back(native_js_object_name, native_allowed_origin_rules,
-                           listener);
+  js_objects_.emplace_back(native_js_object_name, origin_matcher, listener);
 
   web_contents()->ForEachFrame(base::BindRepeating(
       &JsJavaConfiguratorHost::NotifyFrame, base::Unretained(this)));
@@ -106,6 +105,30 @@ void JsJavaConfiguratorHost::RemoveWebMessageListener(
       break;
     }
   }
+}
+
+base::android::ScopedJavaLocalRef<jobjectArray>
+JsJavaConfiguratorHost::GetJsObjectsInfo(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jclass>& clazz) {
+  jobjectArray joa =
+      env->NewObjectArray(js_objects_.size(), clazz.obj(), nullptr);
+  base::android::CheckException(env);
+
+  for (size_t i = 0; i < js_objects_.size(); ++i) {
+    const JsObject& js_object = js_objects_[i];
+    std::vector<std::string> rules;
+    for (const auto& rule : js_object.allowed_origin_rules_.rules())
+      rules.push_back(rule->ToString());
+
+    base::android::ScopedJavaLocalRef<jobject> object =
+        Java_WebMessageListenerInfo_create(
+            env, base::android::ConvertUTF16ToJavaString(env, js_object.name_),
+            base::android::ToJavaArrayOfStrings(env, rules),
+            js_object.listener_ref_);
+    env->SetObjectArrayElement(joa, i, object.obj());
+  }
+  return base::android::ScopedJavaLocalRef<jobjectArray>(env, joa);
 }
 
 void JsJavaConfiguratorHost::RenderFrameCreated(

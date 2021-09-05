@@ -22,6 +22,7 @@
 #include "components/autofill/core/browser/autofill_manager.h"
 #include "components/autofill/core/browser/autofill_metrics.h"
 #include "components/autofill/core/browser/ui/popup_item_ids.h"
+#include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_payments_features.h"
 #include "components/autofill/core/common/autofill_util.h"
 #include "components/signin/public/base/signin_metrics.h"
@@ -114,6 +115,26 @@ void AutofillExternalDelegate::OnSuggestionsReturned(
   if (has_autofill_suggestions_)
     ApplyAutofillOptions(&suggestions, is_all_server_suggestions);
 
+    // Append the "Hide Suggestions" menu item for only Autofill Address and
+    // Autocomplete popups.
+#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_MACOSX) || \
+    defined(OS_CHROMEOS)
+  if (base::FeatureList::IsEnabled(
+          features::kAutofillEnableHideSuggestionsUI)) {
+    // If the user has selected a suggestion, it indicates the suggestions are
+    // useful to the user and no need  hide them. In this case,
+    // ApplyAutofillOptions() should have added a "Clear form" option instead.
+    if (!query_field_.is_autofilled) {
+      if (!suggestions.empty() && (GetPopupType() == PopupType::kAddresses ||
+                                   GetPopupType() == PopupType::kUnspecified)) {
+        suggestions.push_back(Suggestion(
+            l10n_util::GetStringUTF16(IDS_AUTOFILL_HIDE_SUGGESTIONS)));
+        suggestions.back().frontend_id =
+            POPUP_ITEM_ID_HIDE_AUTOFILL_SUGGESTIONS;
+      }
+    }
+  }
+#endif
   // Append the credit card signin promo, if appropriate (there are no other
   // suggestions).
   if (suggestions.empty() && should_show_cc_signin_promo_) {
@@ -132,13 +153,14 @@ void AutofillExternalDelegate::OnSuggestionsReturned(
   InsertDataListValues(&suggestions);
 
   if (suggestions.empty()) {
+    OnAutofillAvailabilityEvent(mojom::AutofillState::kNoSuggestions);
     // No suggestions, any popup currently showing is obsolete.
-    manager_->client()->HideAutofillPopup();
+    manager_->client()->HideAutofillPopup(PopupHidingReason::kNoSuggestions);
     return;
   }
 
   // Send to display.
-  if (query_field_.is_focusable) {
+  if (query_field_.is_focusable && GetAutofillDriver()->CanShowAutofillUi()) {
     manager_->client()->ShowAutofillPopup(
         element_bounds_, query_field_.text_direction, suggestions,
         autoselect_first_suggestion, popup_type_, GetWeakPtr());
@@ -170,6 +192,10 @@ void AutofillExternalDelegate::SetCurrentDataListValues(
 }
 
 void AutofillExternalDelegate::OnPopupShown() {
+  // If a popup was shown, then we showed either autofill or autocomplete.
+  OnAutofillAvailabilityEvent(
+      has_autofill_suggestions_ ? mojom::AutofillState::kAutofillAvailable
+                                : mojom::AutofillState::kAutocompleteAvailable);
   manager_->DidShowSuggestions(has_autofill_suggestions_, query_form_,
                                query_field_);
 
@@ -187,9 +213,8 @@ void AutofillExternalDelegate::OnPopupSuppressed() {
   manager_->DidSuppressPopup(query_form_, query_field_);
 }
 
-void AutofillExternalDelegate::DidSelectSuggestion(
-    const base::string16& value,
-    int identifier) {
+void AutofillExternalDelegate::DidSelectSuggestion(const base::string16& value,
+                                                   int identifier) {
   ClearPreviewedForm();
 
   // Only preview the data if it is a profile.
@@ -210,7 +235,9 @@ void AutofillExternalDelegate::DidAcceptSuggestion(const base::string16& value,
     AutofillMetrics::LogAutofillFormCleared();
     driver_->RendererShouldClearFilledSection();
   } else if (identifier == POPUP_ITEM_ID_PASSWORD_ENTRY ||
-             identifier == POPUP_ITEM_ID_USERNAME_ENTRY) {
+             identifier == POPUP_ITEM_ID_USERNAME_ENTRY ||
+             identifier == POPUP_ITEM_ID_ACCOUNT_STORAGE_PASSWORD_ENTRY ||
+             identifier == POPUP_ITEM_ID_ACCOUNT_STORAGE_USERNAME_ENTRY) {
     NOTREACHED();  // Should be handled elsewhere.
   } else if (identifier == POPUP_ITEM_ID_DATALIST_ENTRY) {
     driver_->RendererShouldAcceptDataListSuggestion(value);
@@ -220,12 +247,21 @@ void AutofillExternalDelegate::DidAcceptSuggestion(const base::string16& value,
     AutofillMetrics::LogAutocompleteSuggestionAcceptedIndex(position);
     manager_->OnAutocompleteEntrySelected(value);
   } else if (identifier == POPUP_ITEM_ID_SCAN_CREDIT_CARD) {
-    manager_->client()->ScanCreditCard(base::Bind(
+    manager_->client()->ScanCreditCard(base::BindOnce(
         &AutofillExternalDelegate::OnCreditCardScanned, GetWeakPtr()));
   } else if (identifier == POPUP_ITEM_ID_CREDIT_CARD_SIGNIN_PROMO) {
     manager_->client()->ExecuteCommand(identifier);
   } else if (identifier == POPUP_ITEM_ID_SHOW_ACCOUNT_CARDS) {
     manager_->OnUserAcceptedCardsFromAccountOption();
+  } else if (identifier == POPUP_ITEM_ID_HIDE_AUTOFILL_SUGGESTIONS) {
+    // No-op as the popup will be closed in the end of the method.
+    manager_->OnUserHideSuggestions(query_form_, query_field_);
+  } else if (identifier == POPUP_ITEM_ID_USE_VIRTUAL_CARD) {
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
+    manager_->FetchVirtualCardCandidates();
+#else
+    NOTREACHED();
+#endif
   } else {
     if (identifier > 0) {  // Denotes an Autofill suggestion.
       AutofillMetrics::LogAutofillSuggestionAcceptedIndex(
@@ -245,7 +281,7 @@ void AutofillExternalDelegate::DidAcceptSuggestion(const base::string16& value,
     should_show_cards_from_account_option_ = false;
     manager_->RefetchCardsAndUpdatePopup(query_id_, query_form_, query_field_);
   } else {
-    manager_->client()->HideAutofillPopup();
+    manager_->client()->HideAutofillPopup(PopupHidingReason::kAcceptSuggestion);
   }
 }
 
@@ -271,7 +307,7 @@ bool AutofillExternalDelegate::RemoveSuggestion(const base::string16& value,
 }
 
 void AutofillExternalDelegate::DidEndTextFieldEditing() {
-  manager_->client()->HideAutofillPopup();
+  manager_->client()->HideAutofillPopup(PopupHidingReason::kEndEditing);
 }
 
 void AutofillExternalDelegate::ClearPreviewedForm() {
@@ -296,7 +332,7 @@ void AutofillExternalDelegate::RegisterDeletionCallback(
 }
 
 void AutofillExternalDelegate::Reset() {
-  manager_->client()->HideAutofillPopup();
+  manager_->client()->HideAutofillPopup(PopupHidingReason::kNavigation);
 }
 
 base::WeakPtr<AutofillExternalDelegate> AutofillExternalDelegate::GetWeakPtr() {
@@ -314,17 +350,14 @@ void AutofillExternalDelegate::FillAutofillFormData(int unique_id,
   if (IsAutofillWarningEntry(unique_id))
     return;
 
-  AutofillDriver::RendererFormDataAction renderer_action = is_preview ?
-      AutofillDriver::FORM_DATA_ACTION_PREVIEW :
-      AutofillDriver::FORM_DATA_ACTION_FILL;
+  AutofillDriver::RendererFormDataAction renderer_action =
+      is_preview ? AutofillDriver::FORM_DATA_ACTION_PREVIEW
+                 : AutofillDriver::FORM_DATA_ACTION_FILL;
 
   DCHECK(driver_->RendererIsAvailable());
   // Fill the values for the whole form.
-  manager_->FillOrPreviewForm(renderer_action,
-                              query_id_,
-                              query_form_,
-                              query_field_,
-                              unique_id);
+  manager_->FillOrPreviewForm(renderer_action, query_id_, query_form_,
+                              query_field_, unique_id);
 }
 
 void AutofillExternalDelegate::PossiblyRemoveAutofillWarnings(
@@ -419,8 +452,7 @@ void AutofillExternalDelegate::InsertDataListValues(
   }
 }
 
-base::string16 AutofillExternalDelegate::GetSettingsSuggestionValue()
-    const {
+base::string16 AutofillExternalDelegate::GetSettingsSuggestionValue() const {
   switch (GetPopupType()) {
     case PopupType::kAddresses:
       return l10n_util::GetStringUTF16(IDS_AUTOFILL_MANAGE_ADDRESSES);

@@ -3,7 +3,6 @@ import("//vivaldi/vivaldi_init_settings.gni")
 assert(is_vivaldi)
 
 import("//vivaldi/gn/config/stored_version.gni")
-import("//build/config/compiler/compiler.gni")
 import("//vivaldi/gn/config/features.gni")
 import("//vivaldi/gn/config/product.gni")
 import("//vivaldi/gn/compile_updates.gni")
@@ -17,21 +16,22 @@ if(is_mac) {
   }
 }
 
-import("//build/config/mac/mac_sdk_overrides.gni")
 import("//vivaldi/gn/config/signer_features.gni")
 
 declare_args() {
   enable_ipc_fuzzer = true
 }
 
-update_template_instance(
-    "//chrome/installer/mini_installer:mini_installer") {
-  sign_executables = true
-}
-update_target(
-    "//chrome/installer/mini_installer:mini_installer_archive") {
-  deps = []
-  inputs = []
+if (is_win) {
+  update_template_instance(
+      "//chrome/installer/mini_installer:mini_installer") {
+    sign_executables = true
+  }
+  update_target(
+      "//chrome/installer/mini_installer:mini_installer_archive") {
+    deps = []
+    inputs = []
+  }
 }
 
 group("signings") {

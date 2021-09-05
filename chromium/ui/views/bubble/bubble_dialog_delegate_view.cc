@@ -4,6 +4,8 @@
 
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
@@ -22,7 +24,6 @@
 #include "ui/views/views_features.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_observer.h"
-#include "ui/views/window/dialog_client_view.h"
 
 #if defined(OS_WIN)
 #include "ui/base/win/shell.h"
@@ -90,17 +91,19 @@ Widget* CreateBubbleWidget(BubbleDialogDelegateView* bubble) {
   Widget::InitParams bubble_params(Widget::InitParams::TYPE_BUBBLE);
   bubble_params.delegate = bubble;
   bubble_params.opacity = CustomShadowsSupported()
-                              ? Widget::InitParams::TRANSLUCENT_WINDOW
-                              : Widget::InitParams::OPAQUE_WINDOW;
+                              ? Widget::InitParams::WindowOpacity::kTranslucent
+                              : Widget::InitParams::WindowOpacity::kOpaque;
   bubble_params.accept_events = bubble->accept_events();
   bubble_params.remove_standard_frame = true;
+  bubble_params.layer_type = bubble->GetLayerType();
+
   // Use a window default shadow if the bubble doesn't provides its own.
   if (bubble->GetShadow() == BubbleBorder::NO_ASSETS)
-    bubble_params.shadow_type = Widget::InitParams::SHADOW_TYPE_DEFAULT;
+    bubble_params.shadow_type = Widget::InitParams::ShadowType::kDefault;
   else if (CustomShadowsSupported())
-    bubble_params.shadow_type = Widget::InitParams::SHADOW_TYPE_NONE;
+    bubble_params.shadow_type = Widget::InitParams::ShadowType::kNone;
   else
-    bubble_params.shadow_type = Widget::InitParams::SHADOW_TYPE_DROP;
+    bubble_params.shadow_type = Widget::InitParams::ShadowType::kDrop;
   if (bubble->parent_window())
     bubble_params.parent = bubble->parent_window();
   else if (bubble->anchor_widget())
@@ -122,19 +125,52 @@ Widget* CreateBubbleWidget(BubbleDialogDelegateView* bubble) {
 
 }  // namespace
 
-BubbleDialogDelegateView::~BubbleDialogDelegateView() {
-  if (GetWidget())
-    GetWidget()->RemoveObserver(this);
-  SetLayoutManager(nullptr);
-  SetAnchorView(nullptr);
-}
+class BubbleDialogDelegateView::AnchorViewObserver : public ViewObserver {
+ public:
+  AnchorViewObserver(BubbleDialogDelegateView* parent, View* anchor_view)
+      : parent_(parent), anchor_view_(anchor_view) {
+    anchor_view_->AddObserver(this);
+  }
+
+  AnchorViewObserver(const AnchorViewObserver&) = delete;
+  AnchorViewObserver& operator=(const AnchorViewObserver&) = delete;
+
+  ~AnchorViewObserver() override { anchor_view_->RemoveObserver(this); }
+
+  View* anchor_view() const { return anchor_view_; }
+
+  // ViewObserver:
+  void OnViewIsDeleting(View* observed_view) override {
+    // The anchor is being deleted, make sure the parent bubble no longer
+    // observes it.
+    DCHECK_EQ(anchor_view_, observed_view);
+    parent_->SetAnchorView(nullptr);
+  }
+
+  void OnViewBoundsChanged(View* observed_view) override {
+    // This code really wants to know the anchor bounds in screen coordinates
+    // have changed. There isn't a good way to detect this outside of the view.
+    // Observing View bounds changing catches some cases but not all of them.
+    DCHECK_EQ(anchor_view_, observed_view);
+    parent_->OnAnchorBoundsChanged();
+  }
+
+  void OnViewAddedToWidget(View* observed_view) override {
+    parent_->SetAnchorWidget(observed_view->GetWidget());
+  }
+
+  // TODO(pbos): Consider observing View visibility changes and only updating
+  // view bounds when the anchor is visible.
+
+ private:
+  BubbleDialogDelegateView* const parent_;
+  View* const anchor_view_;
+};
 
 // static
 Widget* BubbleDialogDelegateView::CreateBubble(
     BubbleDialogDelegateView* bubble_delegate) {
   bubble_delegate->Init();
-  // Get the latest anchor widget from the anchor view at bubble creation time.
-  bubble_delegate->SetAnchorView(bubble_delegate->GetAnchorView());
   Widget* bubble_widget = CreateBubbleWidget(bubble_delegate);
 
   if (vivaldi::IsVivaldiRunning()) {
@@ -150,8 +186,32 @@ Widget* BubbleDialogDelegateView::CreateBubble(
   }
 
   bubble_delegate->SizeToContents();
-  bubble_widget->AddObserver(bubble_delegate);
+  bubble_delegate->widget_observer_.Add(bubble_widget);
   return bubble_widget;
+}
+
+BubbleDialogDelegateView::BubbleDialogDelegateView()
+    : BubbleDialogDelegateView(nullptr, BubbleBorder::TOP_LEFT) {}
+
+BubbleDialogDelegateView::BubbleDialogDelegateView(View* anchor_view,
+                                                   BubbleBorder::Arrow arrow,
+                                                   BubbleBorder::Shadow shadow)
+    : shadow_(shadow) {
+  SetArrow(arrow);
+  LayoutProvider* provider = LayoutProvider::Get();
+  // An individual bubble should override these margins if its layout differs
+  // from the typical title/text/buttons.
+  set_margins(provider->GetDialogInsetsForContentType(TEXT, TEXT));
+  title_margins_ = provider->GetInsetsMetric(INSETS_DIALOG_TITLE);
+  if (anchor_view)
+    SetAnchorView(anchor_view);
+  UpdateColorsFromTheme();
+  UMA_HISTOGRAM_BOOLEAN("Dialog.BubbleDialogDelegateView.Create", true);
+}
+
+BubbleDialogDelegateView::~BubbleDialogDelegateView() {
+  SetLayoutManager(nullptr);
+  SetAnchorView(nullptr);
 }
 
 BubbleDialogDelegateView* BubbleDialogDelegateView::AsBubbleDialogDelegate() {
@@ -169,7 +229,7 @@ NonClientFrameView* BubbleDialogDelegateView::CreateNonClientFrameView(
 
   frame->set_footnote_margins(
       provider->GetInsetsMetric(INSETS_DIALOG_SUBSECTION));
-  frame->SetFootnoteView(CreateFootnoteView());
+  frame->SetFootnoteView(DisownFootnoteView());
 
   std::unique_ptr<BubbleBorder> border =
       std::make_unique<BubbleBorder>(arrow(), GetShadow(), color());
@@ -208,6 +268,9 @@ void BubbleDialogDelegateView::OnWidgetClosing(Widget* widget) {
 void BubbleDialogDelegateView::OnWidgetDestroying(Widget* widget) {
   if (anchor_widget() == widget)
     SetAnchorView(nullptr);
+
+  if (widget_observer_.IsObserving(widget))
+    widget_observer_.Remove(widget);
 }
 
 void BubbleDialogDelegateView::OnWidgetVisibilityChanging(Widget* widget,
@@ -252,6 +315,29 @@ void BubbleDialogDelegateView::OnWidgetBoundsChanged(
     SizeToContents();
 }
 
+void BubbleDialogDelegateView::OnWidgetPaintAsActiveChanged(
+    Widget* widget,
+    bool paint_as_active) {
+  // We only care about the current widget having its state changed; if the
+  // anchor widget receives active status directly then there's no need to apply
+  // paint as active lock.
+  if (widget != GetWidget())
+    return;
+
+  if (!paint_as_active) {
+    paint_as_active_lock_.reset();
+    return;
+  }
+
+  if (!anchor_widget() || !anchor_widget()->GetTopLevelWidget())
+    return;
+
+  // When this bubble renders as active, its anchor widget should also render as
+  // active.
+  paint_as_active_lock_ =
+      anchor_widget()->GetTopLevelWidget()->LockPaintAsActive();
+}
+
 BubbleBorder::Shadow BubbleDialogDelegateView::GetShadow() const {
   if (CustomShadowsSupported() || shadow_ == BubbleBorder::NO_ASSETS)
     return shadow_;
@@ -259,7 +345,9 @@ BubbleBorder::Shadow BubbleDialogDelegateView::GetShadow() const {
 }
 
 View* BubbleDialogDelegateView::GetAnchorView() const {
-  return anchor_view_tracker_->view();
+  if (!anchor_view_observer_)
+    return nullptr;
+  return anchor_view_observer_->anchor_view();
 }
 
 void BubbleDialogDelegateView::SetHighlightedButton(
@@ -297,50 +385,34 @@ void BubbleDialogDelegateView::SetArrowWithoutResizing(
 }
 
 gfx::Rect BubbleDialogDelegateView::GetAnchorRect() const {
+  // TODO(tluk) eliminate the need for GetAnchorRect() to return an empty rect
+  // if neither an |anchor_rect_| or an anchor view have been set.
   if (!GetAnchorView())
-    return anchor_rect_;
+    return anchor_rect_.value_or(gfx::Rect());
 
   anchor_rect_ = GetAnchorView()->GetAnchorBoundsInScreen();
-  anchor_rect_.Inset(anchor_view_insets_);
-  return anchor_rect_;
+  anchor_rect_->Inset(anchor_view_insets_);
+  return anchor_rect_.value();
 }
 
 void BubbleDialogDelegateView::OnBeforeBubbleWidgetInit(
     Widget::InitParams* params,
     Widget* widget) const {}
 
+ui::LayerType BubbleDialogDelegateView::GetLayerType() const {
+  return ui::LAYER_TEXTURED;
+}
+
 void BubbleDialogDelegateView::UseCompactMargins() {
   set_margins(gfx::Insets(6));
 }
 
 void BubbleDialogDelegateView::OnAnchorBoundsChanged() {
+  if (!GetWidget())
+    return;
+  // TODO(pbos): Reconsider whether to update the anchor when the view isn't
+  // drawn.
   SizeToContents();
-}
-
-BubbleDialogDelegateView::BubbleDialogDelegateView()
-    : BubbleDialogDelegateView(nullptr, BubbleBorder::TOP_LEFT) {}
-
-BubbleDialogDelegateView::BubbleDialogDelegateView(View* anchor_view,
-                                                   BubbleBorder::Arrow arrow,
-                                                   BubbleBorder::Shadow shadow)
-    : close_on_deactivate_(true),
-      anchor_view_tracker_(std::make_unique<ViewTracker>()),
-      anchor_widget_(nullptr),
-      shadow_(shadow),
-      color_explicitly_set_(false),
-      accept_events_(true),
-      adjust_if_offscreen_(true),
-      parent_window_(nullptr) {
-  SetArrow(arrow);
-  LayoutProvider* provider = LayoutProvider::Get();
-  // An individual bubble should override these margins if its layout differs
-  // from the typical title/text/buttons.
-  set_margins(provider->GetDialogInsetsForContentType(TEXT, TEXT));
-  title_margins_ = provider->GetInsetsMetric(INSETS_DIALOG_TITLE);
-  if (anchor_view)
-    SetAnchorView(anchor_view);
-  UpdateColorsFromTheme();
-  UMA_HISTOGRAM_BOOLEAN("Dialog.BubbleDialogDelegateView.Create", true);
 }
 
 gfx::Rect BubbleDialogDelegateView::GetBubbleBounds() {
@@ -368,21 +440,6 @@ ax::mojom::Role BubbleDialogDelegateView::GetAccessibleWindowRole() {
   return ax::mojom::Role::kAlertDialog;
 }
 
-void BubbleDialogDelegateView::OnPaintAsActiveChanged(bool paint_as_active) {
-  if (!paint_as_active) {
-    paint_as_active_lock_.reset();
-    return;
-  }
-
-  if (!anchor_widget() || !anchor_widget()->GetTopLevelWidget())
-    return;
-
-  // When this bubble renders as active, its anchor widget should also render as
-  // active.
-  paint_as_active_lock_ =
-      anchor_widget()->GetTopLevelWidget()->LockPaintAsActive();
-}
-
 gfx::Size BubbleDialogDelegateView::GetMinimumSize() const {
   // Note that although BubbleDialogFrameView will never invoke this, a subclass
   // may override CreateNonClientFrameView() to provide a NonClientFrameView
@@ -395,58 +452,30 @@ gfx::Size BubbleDialogDelegateView::GetMaximumSize() const {
 }
 
 void BubbleDialogDelegateView::OnThemeChanged() {
+  DialogDelegateView::OnThemeChanged();
   UpdateColorsFromTheme();
 }
 
 void BubbleDialogDelegateView::Init() {}
 
 void BubbleDialogDelegateView::SetAnchorView(View* anchor_view) {
-  if (GetAnchorView())
+  if (GetAnchorView()) {
     GetAnchorView()->ClearProperty(kAnchoredDialogKey);
-
-  // When the anchor view gets set the associated anchor widget might
-  // change as well.
-  if (!anchor_view || anchor_widget() != anchor_view->GetWidget()) {
-    if (anchor_widget()) {
-      if (GetWidget() && GetWidget()->IsVisible())
-        UpdateHighlightedButton(false);
-      paint_as_active_lock_.reset();
-      anchor_widget_->RemoveObserver(this);
-      anchor_widget_ = nullptr;
-    }
-    if (anchor_view) {
-      anchor_widget_ = anchor_view->GetWidget();
-      if (anchor_widget_) {
-        anchor_widget_->AddObserver(this);
-        const bool visible = GetWidget() && GetWidget()->IsVisible();
-        UpdateHighlightedButton(visible);
-        // Have the anchor widget's paint-as-active state track this view's
-        // widget - lock is only required if the bubble widget is active.
-        if (anchor_widget_->GetTopLevelWidget() && GetWidget() &&
-            GetWidget()->ShouldPaintAsActive()) {
-          paint_as_active_lock_ =
-              anchor_widget_->GetTopLevelWidget()->LockPaintAsActive();
-        }
-      }
-    }
+    anchor_view_observer_.reset();
   }
 
-  anchor_view_tracker_->SetView(anchor_view);
+  SetAnchorWidget(anchor_view ? anchor_view->GetWidget() : nullptr);
+  if (!anchor_view)
+    return;
 
-  if (anchor_view && GetWidget()) {
-    // Do not update anchoring for NULL views; this could indicate
-    // that our NativeWindow is being destroyed, so it would be
-    // dangerous for us to update our anchor bounds at that
-    // point. (It's safe to skip this, since if we were to update the
-    // bounds when |anchor_view| is NULL, the bubble won't move.)
-    OnAnchorBoundsChanged();
-  }
+  anchor_view_observer_ =
+      std::make_unique<AnchorViewObserver>(this, anchor_view);
+  OnAnchorBoundsChanged();
 
-  if (anchor_view && focus_traversable_from_anchor_view_) {
-    // Make sure that focus can move into here from the anchor view (but not
-    // out, focus will cycle inside the dialog once it gets here).
+  // Make sure that focus can move into here from the anchor view (but not out,
+  // focus will cycle inside the dialog once it gets here).
+  if (focus_traversable_from_anchor_view_)
     anchor_view->SetProperty(kAnchoredDialogKey, this);
-  }
 }
 
 void BubbleDialogDelegateView::SetAnchorRect(const gfx::Rect& rect) {
@@ -512,9 +541,31 @@ void BubbleDialogDelegateView::OnDeactivate() {
     GetWidget()->CloseWithReason(views::Widget::ClosedReason::kLostFocus);
 }
 
+void BubbleDialogDelegateView::SetAnchorWidget(Widget* anchor_widget) {
+  if (anchor_widget_ == anchor_widget)
+    return;
+
+  if (anchor_widget_)
+    anchor_widget_->RemoveObserver(this);
+
+  UpdateHighlightedButton(GetWidget() && GetWidget()->IsVisible() &&
+                          anchor_widget);
+  // Have the anchor widget's paint-as-active state track this view's widget.
+  // Lock is only required if the bubble widget is active.
+  paint_as_active_lock_ =
+      (GetWidget() && GetWidget()->ShouldPaintAsActive() && anchor_widget &&
+       anchor_widget->GetTopLevelWidget())
+          ? anchor_widget->GetTopLevelWidget()->LockPaintAsActive()
+          : nullptr;
+  anchor_widget_ = anchor_widget;
+
+  if (anchor_widget_)
+    anchor_widget_->AddObserver(this);
+}
+
 void BubbleDialogDelegateView::UpdateHighlightedButton(bool highlighted) {
   Button* button = Button::AsButton(highlighted_button_tracker_.view());
-  button = button ? button : Button::AsButton(anchor_view_tracker_->view());
+  button = button ? button : Button::AsButton(GetAnchorView());
   if (button && highlight_button_when_shown_)
     button->SetHighlighted(highlighted);
 }

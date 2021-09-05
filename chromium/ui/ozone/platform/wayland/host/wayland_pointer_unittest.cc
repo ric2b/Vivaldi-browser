@@ -72,14 +72,15 @@ TEST_P(WaylandPointerTest, Enter) {
 
 TEST_P(WaylandPointerTest, Leave) {
   MockPlatformWindowDelegate other_delegate;
-  WaylandWindow other_window(&other_delegate, connection_.get());
   gfx::AcceleratedWidget other_widget = gfx::kNullAcceleratedWidget;
   EXPECT_CALL(other_delegate, OnAcceleratedWidgetAvailable(_))
       .WillOnce(SaveArg<0>(&other_widget));
+
   PlatformWindowInitProperties properties;
   properties.bounds = gfx::Rect(0, 0, 10, 10);
   properties.type = PlatformWindowType::kWindow;
-  ASSERT_TRUE(other_window.Initialize(std::move(properties)));
+  auto other_window = WaylandWindow::Create(&other_delegate, connection_.get(),
+                                            std::move(properties));
   ASSERT_NE(other_widget, gfx::kNullAcceleratedWidget);
 
   Sync();
@@ -369,9 +370,9 @@ TEST_P(WaylandPointerTest, SetBitmapOnPointerFocus) {
   Mock::VerifyAndClearExpectations(pointer_);
 }
 
-INSTANTIATE_TEST_SUITE_P(XdgVersionV5Test,
+INSTANTIATE_TEST_SUITE_P(XdgVersionStableTest,
                          WaylandPointerTest,
-                         ::testing::Values(kXdgShellV5));
+                         ::testing::Values(kXdgShellStable));
 INSTANTIATE_TEST_SUITE_P(XdgVersionV6Test,
                          WaylandPointerTest,
                          ::testing::Values(kXdgShellV6));

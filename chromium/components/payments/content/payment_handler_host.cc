@@ -42,8 +42,8 @@ content::DevToolsBackgroundServicesContext* GetDevTools(
 // callback.
 void RunCallbackWithError(const std::string& error,
                           ChangePaymentRequestDetailsCallback callback) {
-  mojom::PaymentMethodChangeResponsePtr response =
-      mojom::PaymentMethodChangeResponse::New();
+  mojom::PaymentRequestDetailsUpdatePtr response =
+      mojom::PaymentRequestDetailsUpdate::New();
   response->error = error;
   std::move(callback).Run(std::move(response));
 }
@@ -72,7 +72,7 @@ mojo::PendingRemote<mojom::PaymentHandlerHost> PaymentHandlerHost::Bind() {
 }
 
 void PaymentHandlerHost::UpdateWith(
-    mojom::PaymentMethodChangeResponsePtr response) {
+    mojom::PaymentRequestDetailsUpdatePtr response) {
   if (!change_payment_request_details_callback_)
     return;
 
@@ -156,12 +156,12 @@ void PaymentHandlerHost::UpdateWith(
   std::move(change_payment_request_details_callback_).Run(std::move(response));
 }
 
-void PaymentHandlerHost::NoUpdatedPaymentDetails() {
+void PaymentHandlerHost::OnPaymentDetailsNotUpdated() {
   if (!change_payment_request_details_callback_)
     return;
 
   std::move(change_payment_request_details_callback_)
-      .Run(mojom::PaymentMethodChangeResponse::New());
+      .Run(mojom::PaymentRequestDetailsUpdate::New());
 }
 
 void PaymentHandlerHost::Disconnect() {

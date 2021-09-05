@@ -14,6 +14,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.BlockJUnit4ClassRunner;
 
+import org.chromium.base.Consumer;
+import org.chromium.base.Function;
 import org.chromium.chromecast.base.Inheritance.Base;
 import org.chromium.chromecast.base.Inheritance.Derived;
 

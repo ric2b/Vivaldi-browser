@@ -6,8 +6,12 @@
 
 #include "base/ios/block_types.h"
 #include "base/mac/foundation_util.h"
+#include "base/metrics/user_metrics.h"
+#include "base/metrics/user_metrics_action.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/main/browser.h"
 #include "ios/chrome/browser/ui/commands/application_commands.h"
+#include "ios/chrome/browser/ui/commands/command_dispatcher.h"
 #import "ios/chrome/browser/ui/recent_tabs/recent_tabs_mediator.h"
 #import "ios/chrome/browser/ui/recent_tabs/recent_tabs_presentation_delegate.h"
 #import "ios/chrome/browser/ui/recent_tabs/recent_tabs_table_view_controller.h"
@@ -15,9 +19,8 @@
 #import "ios/chrome/browser/ui/table_view/feature_flags.h"
 #import "ios/chrome/browser/ui/table_view/table_view_navigation_controller.h"
 #import "ios/chrome/browser/ui/table_view/table_view_navigation_controller_constants.h"
+#import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
-#import "ios/chrome/browser/url_loading/url_loading_service.h"
-#import "ios/chrome/browser/url_loading/url_loading_service_factory.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -37,7 +40,6 @@
 
 @implementation RecentTabsCoordinator
 @synthesize completion = _completion;
-@synthesize dispatcher = _dispatcher;
 @synthesize mediator = _mediator;
 @synthesize recentTabsNavigationController = _recentTabsNavigationController;
 @synthesize recentTabsTransitioningDelegate = _recentTabsTransitioningDelegate;
@@ -46,17 +48,19 @@
   // Initialize and configure RecentTabsTableViewController.
   RecentTabsTableViewController* recentTabsTableViewController =
       [[RecentTabsTableViewController alloc] init];
-  recentTabsTableViewController.browserState = self.browserState;
+  recentTabsTableViewController.browser = self.browser;
   recentTabsTableViewController.loadStrategy = self.loadStrategy;
-  recentTabsTableViewController.dispatcher = self.dispatcher;
+  CommandDispatcher* dispatcher = self.browser->GetCommandDispatcher();
+  id<ApplicationCommands> handler =
+      HandlerForProtocol(dispatcher, ApplicationCommands);
+  recentTabsTableViewController.handler = handler;
   recentTabsTableViewController.presentationDelegate = self;
-  recentTabsTableViewController.webStateList = self.webStateList;
 
   // Adds the "Done" button and hooks it up to |stop|.
   UIBarButtonItem* dismissButton = [[UIBarButtonItem alloc]
       initWithBarButtonSystemItem:UIBarButtonSystemItemDone
                            target:self
-                           action:@selector(stop)];
+                           action:@selector(dismissButtonTapped)];
   [dismissButton
       setAccessibilityIdentifier:kTableViewNavigationDismissButtonId];
   recentTabsTableViewController.navigationItem.rightBarButtonItem =
@@ -105,6 +109,8 @@
         setModalPresentationStyle:UIModalPresentationCustom];
   }
 
+  recentTabsTableViewController.preventUpdates = NO;
+
   [self.baseViewController
       presentViewController:self.recentTabsNavigationController
                    animated:YES
@@ -126,6 +132,11 @@
   [self.mediator disconnect];
 }
 
+- (void)dismissButtonTapped {
+  base::RecordAction(base::UserMetricsAction("MobileRecentTabsClose"));
+  [self stop];
+}
+
 #pragma mark - RecentTabsPresentationDelegate
 
 - (void)dismissRecentTabs {
@@ -141,9 +152,12 @@
 
 - (void)showHistoryFromRecentTabs {
   // Dismiss recent tabs before presenting history.
+  CommandDispatcher* dispatcher = self.browser->GetCommandDispatcher();
+  id<ApplicationCommands> handler =
+      HandlerForProtocol(dispatcher, ApplicationCommands);
   __weak RecentTabsCoordinator* weakSelf = self;
   self.completion = ^{
-    [weakSelf.dispatcher showHistory];
+    [handler showHistory];
     weakSelf.completion = nil;
   };
   [self stop];

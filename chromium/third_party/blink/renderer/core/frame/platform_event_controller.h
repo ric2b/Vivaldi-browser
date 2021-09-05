@@ -14,6 +14,8 @@
 
 namespace blink {
 
+class Document;
+
 // Base controller class for registering controllers with a dispatcher.
 // It watches page visibility and calls stopUpdating when page is not visible.
 // It provides a DidUpdateData() callback method which is called when new data
@@ -26,7 +28,7 @@ class CORE_EXPORT PlatformEventController : public PageVisibilityObserver {
   // This is called when new data becomes available.
   virtual void DidUpdateData() = 0;
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
   Document* GetDocument() const { return document_; }
 
  protected:

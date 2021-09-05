@@ -15,18 +15,14 @@ template("unwind_table_asset") {
     }
 
     _root_dir = "$root_out_dir"
-    if (build_apk_secondary_abi && defined(android_secondary_abi_cpu)) {
+    if (defined(android_secondary_abi_cpu)) {
       _root_dir = get_label_info(":foo($android_secondary_abi_toolchain)",
                                  "root_out_dir")
     }
 
     script = "//build/android/gyp/extract_unwind_tables.py"
-    outputs = [
-      _asset_path,
-    ]
-    inputs = [
-      "${_root_dir}/lib.unstripped/$shlib_prefix${invoker.library_target}$shlib_extension",
-    ]
+    outputs = [ _asset_path ]
+    inputs = [ "${_root_dir}/lib.unstripped/$shlib_prefix${invoker.library_target}$shlib_extension" ]
 
     args = [
       "--input_path",
@@ -45,12 +41,8 @@ template("unwind_table_asset") {
     if (defined(invoker.testonly)) {
       testonly = invoker.testonly
     }
-    sources = [
-      _asset_path,
-    ]
+    sources = [ _asset_path ]
     disable_compression = true
-    deps = [
-      ":$_unwind_action",
-    ]
+    deps = [ ":$_unwind_action" ]
   }
 }

@@ -45,7 +45,7 @@ void WriteToPickle(content::WebContents& web_contents, base::Pickle* pickle) {
 
   content::NavigationController& controller = web_contents.GetController();
   const int entry_count = controller.GetEntryCount();
-  const int selected_entry = controller.GetCurrentEntryIndex();
+  const int selected_entry = controller.GetLastCommittedEntryIndex();
   DCHECK_GE(entry_count, 0);
   DCHECK_GE(selected_entry, -1);  // -1 is valid
   DCHECK_LT(selected_entry, entry_count);
@@ -92,8 +92,9 @@ bool RestoreFromPickle(base::PickleIterator* iterator,
   entries.reserve(entry_count);
   for (int i = 0; i < entry_count; ++i) {
     entries.push_back(content::NavigationEntry::Create());
-    if (!internal::RestoreNavigationEntryFromPickle(state_version, iterator,
-                                                    entries[i].get()))
+    if (!internal::RestoreNavigationEntryFromPickle(
+            state_version, iterator, web_contents->GetBrowserContext(),
+            entries[i].get()))
       return false;
   }
 
@@ -182,14 +183,20 @@ void WriteNavigationEntryToPickle(uint32_t state_version,
 }
 
 bool RestoreNavigationEntryFromPickle(base::PickleIterator* iterator,
+                                      content::BrowserContext* browser_context,
                                       content::NavigationEntry* entry) {
-  return RestoreNavigationEntryFromPickle(AW_STATE_VERSION, iterator, entry);
+  return RestoreNavigationEntryFromPickle(AW_STATE_VERSION, iterator,
+                                          browser_context, entry);
 }
 
 bool RestoreNavigationEntryFromPickle(uint32_t state_version,
                                       base::PickleIterator* iterator,
+                                      content::BrowserContext* browser_context,
                                       content::NavigationEntry* entry) {
   DCHECK(IsSupportedVersion(state_version));
+  DCHECK(iterator);
+  DCHECK(browser_context);
+  DCHECK(entry);
 
   GURL deserialized_url;
   {
@@ -330,6 +337,7 @@ bool RestoreNavigationEntryFromPickle(uint32_t state_version,
     entry->SetHttpStatusCode(http_status_code);
   }
 
+  entry->InitRestoredEntry(browser_context);
   return true;
 }
 

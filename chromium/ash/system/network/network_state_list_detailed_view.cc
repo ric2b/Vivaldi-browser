@@ -11,6 +11,7 @@
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "ash/system/machine_learning/user_settings_event_logger.h"
 #include "ash/system/model/system_tray_model.h"
 #include "ash/system/network/tray_network_state_model.h"
 #include "ash/system/tray/system_menu_button.h"
@@ -79,7 +80,26 @@ bool NetworkTypeIsConfigurable(NetworkType type) {
   return false;
 }
 
+void LogUserNetworkEvent(const NetworkStateProperties& network) {
+  auto* const logger = ml::UserSettingsEventLogger::Get();
+  if (logger) {
+    logger->LogNetworkUkmEvent(network);
+  }
+}
+
 }  // namespace
+
+bool CanNetworkConnect(
+    chromeos::network_config::mojom::ConnectionStateType connection_state,
+    chromeos::network_config::mojom::NetworkType type,
+    bool connectable) {
+  // Network can be connected to if the network is not connected and:
+  // * The network is connectable or
+  // * The active user is primary and the network is configurable
+  return connection_state == ConnectionStateType::kNotConnected &&
+         (connectable ||
+          (!IsSecondaryUser() && NetworkTypeIsConfigurable(type)));
+}
 
 // A bubble which displays network info.
 class NetworkStateListDetailedView::InfoBubble
@@ -90,6 +110,7 @@ class NetworkStateListDetailedView::InfoBubble
              NetworkStateListDetailedView* detailed_view)
       : views::BubbleDialogDelegateView(anchor, views::BubbleBorder::TOP_RIGHT),
         detailed_view_(detailed_view) {
+    DialogDelegate::SetButtons(ui::DIALOG_BUTTON_NONE);
     set_margins(gfx::Insets(kBubbleMargin));
     SetArrow(views::BubbleBorder::NONE);
     set_shadow(views::BubbleBorder::NO_ASSETS);
@@ -126,12 +147,9 @@ class NetworkStateListDetailedView::InfoBubble
       detailed_view_->ResetInfoBubble();
   }
 
-  // BubbleDialogDelegateView:
-  int GetDialogButtons() const override { return ui::DIALOG_BUTTON_NONE; }
-
   void OnBeforeBubbleWidgetInit(views::Widget::InitParams* params,
                                 views::Widget* widget) const override {
-    params->shadow_type = views::Widget::InitParams::SHADOW_TYPE_DROP;
+    params->shadow_type = views::Widget::InitParams::ShadowType::kDrop;
     params->shadow_elevation = kBubbleShadowElevation;
     params->name = "NetworkStateListDetailedView::InfoBubble";
   }
@@ -271,22 +289,15 @@ void NetworkStateListDetailedView::HandleViewClicked(views::View* view) {
 
 void NetworkStateListDetailedView::HandleViewClickedImpl(
     NetworkStatePropertiesPtr network) {
-  if (network) {
-    // Attempt a network connection if the network is not connected and:
-    // * The network is connectable or
-    // * The active user is primary and the network is configurable
-    bool can_connect =
-        network->connection_state == ConnectionStateType::kNotConnected &&
-        (network->connectable ||
-         (!IsSecondaryUser() && NetworkTypeIsConfigurable(network->type)));
-    if (can_connect) {
-      Shell::Get()->metrics()->RecordUserMetricsAction(
-          list_type_ == LIST_TYPE_VPN
-              ? UMA_STATUS_AREA_CONNECT_TO_VPN
-              : UMA_STATUS_AREA_CONNECT_TO_CONFIGURED_NETWORK);
-      chromeos::NetworkConnect::Get()->ConnectToNetworkId(network->guid);
-      return;
-    }
+  if (network && CanNetworkConnect(network->connection_state, network->type,
+                                   network->connectable)) {
+    Shell::Get()->metrics()->RecordUserMetricsAction(
+        list_type_ == LIST_TYPE_VPN
+            ? UMA_STATUS_AREA_CONNECT_TO_VPN
+            : UMA_STATUS_AREA_CONNECT_TO_CONFIGURED_NETWORK);
+    LogUserNetworkEvent(*network.get());
+    chromeos::NetworkConnect::Get()->ConnectToNetworkId(network->guid);
+    return;
   }
   // If the network is no longer available or not connectable or configurable,
   // show the Settings UI.

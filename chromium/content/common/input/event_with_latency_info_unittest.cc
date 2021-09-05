@@ -7,7 +7,7 @@
 #include <limits>
 
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/public/platform/web_input_event.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
 
 using blink::WebGestureEvent;
 using blink::WebInputEvent;
@@ -332,8 +332,8 @@ TEST_F(EventWithLatencyInfoTest, WebMouseWheelEventCoalescing) {
   Coalesce(mouse_wheel_0, &mouse_wheel_1);
 
   // Coalesced event has the position of the most recent event.
-  EXPECT_EQ(1, mouse_wheel_1.event.PositionInWidget().x);
-  EXPECT_EQ(1, mouse_wheel_1.event.PositionInWidget().y);
+  EXPECT_EQ(1, mouse_wheel_1.event.PositionInWidget().x());
+  EXPECT_EQ(1, mouse_wheel_1.event.PositionInWidget().y());
 
   // deltaX/Y, wheelTicksX/Y, and movementX/Y of the coalesced event are
   // calculated properly.

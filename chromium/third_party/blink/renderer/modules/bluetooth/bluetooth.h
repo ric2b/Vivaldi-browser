@@ -18,12 +18,13 @@
 namespace blink {
 
 class BluetoothLEScanOptions;
+class ExceptionState;
 class RequestDeviceOptions;
 class ScriptPromise;
 class ScriptState;
 
 class Bluetooth final : public EventTargetWithInlineData,
-                        public ContextLifecycleObserver,
+                        public ExecutionContextLifecycleObserver,
                         public PageVisibilityObserver,
                         public mojom::blink::WebBluetoothScanClient {
   DEFINE_WRAPPERTYPEINFO();
@@ -34,7 +35,8 @@ class Bluetooth final : public EventTargetWithInlineData,
   ~Bluetooth() override;
 
   // IDL exposed interface:
-  ScriptPromise getAvailability(ScriptState*);
+  ScriptPromise getAvailability(ScriptState*, ExceptionState&);
+  ScriptPromise getDevices(ScriptState*, ExceptionState&);
   ScriptPromise requestDevice(ScriptState*,
                               const RequestDeviceOptions*,
                               ExceptionState&);
@@ -53,10 +55,10 @@ class Bluetooth final : public EventTargetWithInlineData,
   ExecutionContext* GetExecutionContext() const override;
 
   // GC
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
-  // ContextLifecycleObserver
-  void ContextDestroyed(ExecutionContext*) override;
+  // ExecutionContextLifecycleObserver
+  void ContextDestroyed() override;
 
   DEFINE_ATTRIBUTE_EVENT_LISTENER(advertisementreceived, kAdvertisementreceived)
 
@@ -70,6 +72,9 @@ class Bluetooth final : public EventTargetWithInlineData,
   BluetoothDevice* GetBluetoothDeviceRepresentingDevice(
       mojom::blink::WebBluetoothDevicePtr,
       ExecutionContext*);
+
+  void GetDevicesCallback(ScriptPromiseResolver*,
+                          Vector<mojom::blink::WebBluetoothDevicePtr>);
 
   void RequestDeviceCallback(ScriptPromiseResolver*,
                              mojom::blink::WebBluetoothResult,

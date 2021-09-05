@@ -44,14 +44,19 @@ class CryptAuthV2EnrollerImpl : public CryptAuthV2Enroller {
  public:
   class Factory {
    public:
-    static Factory* Get();
-    static void SetFactoryForTesting(Factory* test_factory);
-    virtual ~Factory();
-    virtual std::unique_ptr<CryptAuthV2Enroller> BuildInstance(
+    static std::unique_ptr<CryptAuthV2Enroller> Create(
         CryptAuthKeyRegistry* key_registry,
         CryptAuthClientFactory* client_factory,
         std::unique_ptr<base::OneShotTimer> timer =
             std::make_unique<base::OneShotTimer>());
+    static void SetFactoryForTesting(Factory* test_factory);
+
+   protected:
+    virtual ~Factory();
+    virtual std::unique_ptr<CryptAuthV2Enroller> CreateInstance(
+        CryptAuthKeyRegistry* key_registry,
+        CryptAuthClientFactory* client_factory,
+        std::unique_ptr<base::OneShotTimer> timer) = 0;
 
    private:
     static Factory* test_factory_;
@@ -138,13 +143,15 @@ class CryptAuthV2EnrollerImpl : public CryptAuthV2Enroller {
       const std::string& session_id,
       const base::flat_map<CryptAuthKeyBundle::Name, cryptauthv2::KeyDirective>&
           new_key_directives,
-      const base::flat_map<CryptAuthKeyBundle::Name, CryptAuthKey>& new_keys,
+      const base::flat_map<CryptAuthKeyBundle::Name,
+                           base::Optional<CryptAuthKey>>& new_keys,
       const base::Optional<CryptAuthKey>& client_ephemeral_dh);
 
   void OnEnrollKeysSuccess(
       const base::flat_map<CryptAuthKeyBundle::Name, cryptauthv2::KeyDirective>&
           new_key_directives,
-      const base::flat_map<CryptAuthKeyBundle::Name, CryptAuthKey>& new_keys,
+      const base::flat_map<CryptAuthKeyBundle::Name,
+                           base::Optional<CryptAuthKey>>& new_keys,
       const cryptauthv2::EnrollKeysResponse& response);
 
   void OnEnrollKeysFailure(NetworkRequestError error);

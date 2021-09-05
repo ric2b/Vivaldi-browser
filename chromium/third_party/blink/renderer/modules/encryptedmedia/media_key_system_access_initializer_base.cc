@@ -4,13 +4,15 @@
 
 #include "third_party/blink/renderer/modules/encryptedmedia/media_key_system_access_initializer_base.h"
 
+#include "base/metrics/histogram_functions.h"
 #include "media/base/eme_constants.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_media_key_system_media_capability.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/modules/encryptedmedia/encrypted_media_utils.h"
-#include "third_party/blink/renderer/platform/instrumentation/histogram.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/network/parsed_content_type.h"
 #include "third_party/blink/renderer/platform/wtf/wtf_size_t.h"
 
@@ -32,9 +34,11 @@ ConvertEncryptionScheme(const String& encryption_scheme) {
     return WebMediaKeySystemMediaCapability::EncryptionScheme::kCenc;
   if (encryption_scheme == "cbcs")
     return WebMediaKeySystemMediaCapability::EncryptionScheme::kCbcs;
+  if (encryption_scheme == "cbcs-1-9")
+    return WebMediaKeySystemMediaCapability::EncryptionScheme::kCbcs_1_9;
 
-  NOTREACHED();
-  return WebMediaKeySystemMediaCapability::EncryptionScheme::kNotSpecified;
+  // Any other strings are not recognized (and therefore not supported).
+  return WebMediaKeySystemMediaCapability::EncryptionScheme::kUnrecognized;
 }
 
 static WebVector<WebMediaKeySystemMediaCapability> ConvertCapabilities(
@@ -56,14 +60,8 @@ static WebVector<WebMediaKeySystemMediaCapability> ConvertCapabilities(
       if (type.GetParameters().ParameterCount() == 1u)
         result[i].codecs = type.ParameterValueForName("codecs");
     }
-    result[i].robustness = capabilities[i]->robustness();
 
-    // From
-    // https://github.com/WICG/encrypted-media-encryption-scheme/blob/master/explainer.md
-    // "Asking for "any" encryption scheme is unrealistic. Defining null as
-    // "any scheme" is convenient for backward compatibility, though.
-    // Applications which ignore this feature by leaving encryptionScheme null
-    // get the same user agent behavior they did before this feature existed."
+    result[i].robustness = capabilities[i]->robustness();
     result[i].encryption_scheme =
         capabilities[i]->hasEncryptionScheme()
             ? ConvertEncryptionScheme(capabilities[i]->encryptionScheme())
@@ -87,7 +85,7 @@ MediaKeySystemAccessInitializerBase::MediaKeySystemAccessInitializerBase(
     const String& key_system,
     const HeapVector<Member<MediaKeySystemConfiguration>>&
         supported_configurations)
-    : ContextLifecycleObserver(ExecutionContext::From((script_state))),
+    : ExecutionContextClient(ExecutionContext::From((script_state))),
       resolver_(MakeGarbageCollected<ScriptPromiseResolver>(script_state)),
       key_system_(key_system),
       supported_configurations_(supported_configurations.size()) {
@@ -148,10 +146,10 @@ ScriptPromise MediaKeySystemAccessInitializerBase::Promise() {
   return resolver_->Promise();
 }
 
-void MediaKeySystemAccessInitializerBase::Trace(blink::Visitor* visitor) {
+void MediaKeySystemAccessInitializerBase::Trace(Visitor* visitor) {
   visitor->Trace(resolver_);
   EncryptedMediaRequest::Trace(visitor);
-  ContextLifecycleObserver::Trace(visitor);
+  ExecutionContextClient::Trace(visitor);
 }
 
 bool MediaKeySystemAccessInitializerBase::IsExecutionContextValid() const {
@@ -200,28 +198,28 @@ void MediaKeySystemAccessInitializerBase::CheckVideoCapabilityRobustness()
   }
 
   if (has_video_capabilities) {
-    DEFINE_THREAD_SAFE_STATIC_LOCAL(
-        EnumerationHistogram, empty_robustness_histogram,
-        ("Media.EME.Widevine.VideoCapability.HasEmptyRobustness", 2));
-    empty_robustness_histogram.Count(has_empty_robustness);
+    base::UmaHistogramBoolean(
+        "Media.EME.Widevine.VideoCapability.HasEmptyRobustness",
+        has_empty_robustness);
   }
 
   if (has_empty_robustness) {
     // TODO(xhwang): Write a best practice doc explaining details about risks of
     // using an empty robustness here, and provide the link to the doc in this
     // message. See http://crbug.com/720013
-    GetExecutionContext()->AddConsoleMessage(ConsoleMessage::Create(
-        mojom::ConsoleMessageSource::kJavaScript,
-        mojom::ConsoleMessageLevel::kWarning,
-        "It is recommended that a robustness level be specified. Not "
-        "specifying the robustness level could result in unexpected "
-        "behavior."));
+    GetExecutionContext()->AddConsoleMessage(
+        MakeGarbageCollected<ConsoleMessage>(
+            mojom::ConsoleMessageSource::kJavaScript,
+            mojom::ConsoleMessageLevel::kWarning,
+            "It is recommended that a robustness level be specified. Not "
+            "specifying the robustness level could result in unexpected "
+            "behavior."));
   }
 
   if (!IsExecutionContextValid())
     return;
 
-  Document* document = To<Document>(GetExecutionContext());
+  Document* document = Document::From(GetExecutionContext());
   if (!document)
     return;
 

@@ -10,12 +10,12 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/deferred_sequenced_task_runner.h"
 #include "base/environment.h"
 #include "base/feature_list.h"
 #include "base/message_loop/message_pump_type.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
+#include "base/sequenced_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
@@ -63,12 +63,6 @@ network::NetworkConnectionTracker* g_network_connection_tracker;
 bool g_network_service_is_responding = false;
 base::Time g_last_network_service_crash;
 
-std::deque<std::pair<std::string, base::Time>>& GetDebugEvents() {
-  static base::NoDestructor<std::deque<std::pair<std::string, base::Time>>>
-      debug_events;
-  return *debug_events;
-}
-
 std::unique_ptr<network::NetworkService>& GetLocalNetworkService() {
   static base::NoDestructor<
       base::SequenceLocalStorageSlot<std::unique_ptr<network::NetworkService>>>
@@ -97,15 +91,25 @@ base::Thread& GetNetworkServiceDedicatedThread() {
   return *thread;
 }
 
+// The instance NetworkService used when hosting the service in-process. This is
+// set up by |CreateInProcessNetworkServiceOnThread()| and destroyed by
+// |ShutDownNetworkService()|.
+network::NetworkService* g_in_process_instance = nullptr;
+
 void CreateInProcessNetworkServiceOnThread(
     mojo::PendingReceiver<network::mojom::NetworkService> receiver) {
   // The test interface doesn't need to be implemented in the in-process case.
   auto registry = std::make_unique<service_manager::BinderRegistry>();
   registry->AddInterface(base::BindRepeating(
       [](mojo::PendingReceiver<network::mojom::NetworkServiceTest>) {}));
-  static base::NoDestructor<network::NetworkService> service(
+  g_in_process_instance = new network::NetworkService(
       std::move(registry), std::move(receiver),
       true /* delay_initialization_until_set_client */);
+}
+
+scoped_refptr<base::SequencedTaskRunner>& GetNetworkTaskRunnerStorage() {
+  static base::NoDestructor<scoped_refptr<base::SequencedTaskRunner>> storage;
+  return *storage;
 }
 
 void CreateInProcessNetworkService(
@@ -119,10 +123,11 @@ void CreateInProcessNetworkService(
     task_runner = base::CreateSingleThreadTaskRunner({BrowserThread::IO});
   }
 
-  GetNetworkTaskRunner()->StartWithTaskRunner(task_runner);
-  task_runner->PostTask(FROM_HERE,
-                        base::BindOnce(&CreateInProcessNetworkServiceOnThread,
-                                       std::move(receiver)));
+  GetNetworkTaskRunnerStorage() = std::move(task_runner);
+
+  GetNetworkTaskRunner()->PostTask(
+      FROM_HERE, base::BindOnce(&CreateInProcessNetworkServiceOnThread,
+                                std::move(receiver)));
 }
 
 network::mojom::NetworkServiceParamsPtr CreateNetworkServiceParams() {
@@ -190,7 +195,6 @@ void OnNetworkServiceCrash() {
   DCHECK(!g_network_service_remote->is_connected());
   g_last_network_service_crash = base::Time::Now();
   GetCrashHandlersList().Notify();
-  AddNetworkServiceDebugEvent("ONSC");
 }
 
 // Parses the desired granularity of NetLog capturing specified by the command
@@ -227,13 +231,6 @@ net::NetLogCaptureMode GetNetCaptureModeFromCommandLine(
   return net::NetLogCaptureMode::kDefault;
 }
 
-scoped_refptr<base::DeferredSequencedTaskRunner>&
-GetNetworkTaskRunnerStorage() {
-  static base::NoDestructor<scoped_refptr<base::DeferredSequencedTaskRunner>>
-      storage;
-  return *storage;
-}
-
 }  // namespace
 
 network::mojom::NetworkService* GetNetworkService() {
@@ -242,13 +239,14 @@ network::mojom::NetworkService* GetNetworkService() {
   static NetworkServiceClient* g_client;
   if (!g_network_service_remote->is_bound() ||
       !g_network_service_remote->is_connected()) {
+    bool service_was_bound = g_network_service_remote->is_bound();
     g_network_service_remote->reset();
     if (GetContentClient()->browser()->IsShuttingDown()) {
       // This happens at system shutdown, since in other scenarios the network
       // process would only be torn down once the message loop stopped running.
-      // We don't want to want to start the network service again so just create
-      // message pipe that's not bound to stop consumers from requesting
-      // creation of the service.
+      // We don't want to start the network service again so just create message
+      // pipe that's not bound to stop consumers from requesting creation of the
+      // service.
       auto receiver = g_network_service_remote->BindNewPipeAndPassReceiver();
       auto leaked_pipe = receiver.PassPipe().release();
     } else {
@@ -260,10 +258,12 @@ network::mojom::NetworkService* GetNetworkService() {
         if (IsInProcessNetworkService()) {
           CreateInProcessNetworkService(std::move(receiver));
         } else {
+          if (service_was_bound)
+            LOG(ERROR) << "Network service crashed, restarting service.";
           ServiceProcessHost::Launch(
               std::move(receiver),
               ServiceProcessHost::Options()
-                  .WithSandboxType(service_manager::SANDBOX_TYPE_NETWORK)
+                  .WithSandboxType(service_manager::SandboxType::kNetwork)
                   .WithDisplayName(base::UTF8ToUTF16("Network Service"))
                   .Pass());
         }
@@ -285,7 +285,6 @@ network::mojom::NetworkService* GetNetworkService() {
         }
       }
 
-      AddNetworkServiceDebugEvent("START");
       mojo::PendingRemote<network::mojom::NetworkServiceClient> client_remote;
       auto client_receiver = client_remote.InitWithNewPipeAndPassReceiver();
       // Call SetClient before creating NetworkServiceClient, as the latter
@@ -295,7 +294,6 @@ network::mojom::NetworkService* GetNetworkService() {
       g_network_service_is_responding = false;
       g_network_service_remote->QueryVersion(base::BindRepeating(
           [](base::Time start_time, uint32_t) {
-            AddNetworkServiceDebugEvent("RESP");
             g_network_service_is_responding = true;
             base::TimeDelta delta = base::Time::Now() - start_time;
             UMA_HISTOGRAM_MEDIUM_TIMES("NetworkService.TimeToFirstResponse",
@@ -445,12 +443,9 @@ void SetNetworkConnectionTrackerForTesting(
   }
 }
 
-scoped_refptr<base::DeferredSequencedTaskRunner> GetNetworkTaskRunner() {
+const scoped_refptr<base::SequencedTaskRunner>& GetNetworkTaskRunner() {
   DCHECK(IsInProcessNetworkService());
-  auto& storage = GetNetworkTaskRunnerStorage();
-  if (!storage)
-    storage = base::MakeRefCounted<base::DeferredSequencedTaskRunner>();
-  return storage;
+  return GetNetworkTaskRunnerStorage();
 }
 
 void ForceCreateNetworkServiceDirectlyForTesting() {
@@ -464,6 +459,10 @@ void ResetNetworkServiceForTesting() {
 void ShutDownNetworkService() {
   delete g_network_service_remote;
   g_network_service_remote = nullptr;
+  if (g_in_process_instance) {
+    GetNetworkTaskRunner()->DeleteSoon(FROM_HERE, g_in_process_instance);
+    g_in_process_instance = nullptr;
+  }
   GetNetworkTaskRunnerStorage().reset();
 }
 
@@ -495,26 +494,6 @@ void PingNetworkService(base::OnceClosure closure) {
           std::move(closure).Run();
       },
       base::Passed(std::move(closure))));
-}
-
-void AddNetworkServiceDebugEvent(const std::string& event) {
-  auto& events = GetDebugEvents();
-  events.push_front({event, base::Time::Now()});
-  // Keep at most 20 most recent events.
-  if (events.size() > 20)
-    events.pop_back();
-}
-
-std::string GetNetworkServiceDebugEventsString() {
-  auto& events = GetDebugEvents();
-  if (events.empty())
-    return std::string();
-  std::stringstream stream;
-  base::Time now = base::Time::Now();
-  for (const auto& info : events) {
-    stream << info.first << ":" << (now - info.second).InSecondsF() << ",";
-  }
-  return stream.str();
 }
 
 }  // namespace content

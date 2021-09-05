@@ -6,6 +6,7 @@
 #include "base/macros.h"
 #include "base/test/bind_test_util.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/sync/test/integration/bookmarks_helper.h"
 #include "chrome/browser/sync/test/integration/encryption_helper.h"
 #include "chrome/browser/sync/test/integration/profile_sync_service_harness.h"
@@ -192,7 +193,8 @@ IN_PROC_BROWSER_TEST_F(SingleClientUserEventsSyncTest, Encryption) {
       browser_sync::UserEventServiceFactory::GetForProfile(GetProfile(0));
   event_service->RecordUserEvent(test_event1);
   EXPECT_TRUE(ExpectUserEvents({test_event1}));
-  ASSERT_TRUE(EnableEncryption(0));
+  GetSyncService(0)->GetUserSettings()->SetEncryptionPassphrase("passphrase");
+  ASSERT_TRUE(PassphraseAcceptedChecker(GetSyncService(0)).Wait());
   event_service->RecordUserEvent(test_event2);
 
   // Just checking that we don't see test_event2 isn't very convincing yet,

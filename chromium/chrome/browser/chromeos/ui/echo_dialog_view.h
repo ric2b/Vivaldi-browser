@@ -31,8 +31,20 @@ class EchoDialogListener;
 class EchoDialogView : public views::DialogDelegateView,
                        public views::ButtonListener {
  public:
-  explicit EchoDialogView(EchoDialogListener* listener);
+  struct Params {
+    bool echo_enabled = false;
+    base::string16 service_name;
+    base::string16 origin;
+  };
+
+  EchoDialogView(EchoDialogListener* listener, const Params& params);
   ~EchoDialogView() override;
+
+  // Shows the dialog.
+  void Show(gfx::NativeWindow parent);
+
+ private:
+  friend class ExtensionEchoPrivateApiTest;
 
   // Initializes dialog layout that will be showed when echo extension is
   // allowed to redeem offers. |service_name| is the name of the service that
@@ -48,38 +60,21 @@ class EchoDialogView : public views::DialogDelegateView,
   // The dialog will have only Cancel button.
   void InitForDisabledEcho();
 
-  // Shows the dialog.
-  void Show(gfx::NativeWindow parent);
-
- private:
-  friend class ExtensionEchoPrivateApiTest;
-
-  // views::DialogDelegate overrides.
-  std::unique_ptr<views::View> CreateExtraView() override;
-  int GetDialogButtons() const override;
-  base::string16 GetDialogButtonLabel(ui::DialogButton button) const override;
-  bool Cancel() override;
-  bool Accept() override;
-
-  // views::WidgetDelegate overrides.
+  // views::DialogDelegateView:
   ui::ModalType GetModalType() const override;
   bool ShouldShowWindowTitle() const override;
   bool ShouldShowCloseButton() const override;
-
-  // views::ButtonListener overrides.
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
-
-  // views::View override.
   gfx::Size CalculatePreferredSize() const override;
 
+  // views::ButtonListener:
+  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
+
   // Sets the border and label view.
-  void SetBorderAndLabel(views::View* label,
+  void SetBorderAndLabel(std::unique_ptr<views::View> label,
                          const gfx::FontList& label_font_list);
 
-  EchoDialogListener* listener_;
-  views::ImageButton* learn_more_button_;
-  int ok_button_label_id_;
-  int cancel_button_label_id_;
+  EchoDialogListener* listener_ = nullptr;
+  views::ImageButton* learn_more_button_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(EchoDialogView);
 };

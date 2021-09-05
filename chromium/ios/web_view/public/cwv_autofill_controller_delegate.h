@@ -10,6 +10,7 @@
 NS_ASSUME_NONNULL_BEGIN
 
 @class CWVAutofillController;
+@class CWVAutofillForm;
 @class CWVAutofillFormSuggestion;
 @class CWVAutofillProfile;
 @class CWVCreditCard;
@@ -41,42 +42,49 @@ typedef NS_ENUM(NSInteger, CWVPasswordUserDecision) {
 @optional
 
 // Called when a form field element receives a "focus" event.
+// |userInitiated| is YES if field was focused as a result of user interaction.
 - (void)autofillController:(CWVAutofillController*)autofillController
     didFocusOnFieldWithIdentifier:(NSString*)fieldIdentifier
                         fieldType:(NSString*)fieldType
                          formName:(NSString*)formName
                           frameID:(NSString*)frameID
-                            value:(NSString*)value;
+                            value:(NSString*)value
+                    userInitiated:(BOOL)userInitiated;
 
 // Called when a form field element receives an "input" event.
+// |userInitiated| is YES if field received input as a result of user
+// interaction.
 - (void)autofillController:(CWVAutofillController*)autofillController
     didInputInFieldWithIdentifier:(NSString*)fieldIdentifier
                         fieldType:(NSString*)fieldType
                          formName:(NSString*)formName
                           frameID:(NSString*)frameID
-                            value:(NSString*)value;
+                            value:(NSString*)value
+                    userInitiated:(BOOL)userInitiated;
 
 // Called when a form field element receives a "blur" (un-focused) event.
+// |userInitiated| is YES if field was blurred as a result of user interaction.
 - (void)autofillController:(CWVAutofillController*)autofillController
     didBlurOnFieldWithIdentifier:(NSString*)fieldIdentifier
                        fieldType:(NSString*)fieldType
                         formName:(NSString*)formName
                          frameID:(NSString*)frameID
-                           value:(NSString*)value;
+                           value:(NSString*)value
+                   userInitiated:(BOOL)userInitiated;
 
-// Called when a form was submitted. |userInitiated| is YES if form is submitted
-// as a result of user interaction.
+// Called when a form was submitted.
+// |userInitiated| is YES if form was submitted as a result of user interaction.
 - (void)autofillController:(CWVAutofillController*)autofillController
      didSubmitFormWithName:(NSString*)formName
-             userInitiated:(BOOL)userInitiated
-               isMainFrame:(BOOL)isMainFrame;
+                   frameID:(NSString*)frameID
+             userInitiated:(BOOL)userInitiated;
 
-// Called when a form related element is inserted into the DOM.
-// A form related element includes forms, inputs, selects, and options.
-// This callback is throttled and will group together multiple inserts that are
-// close together in time into one invocation.
-- (void)autofillControllerDidInsertFormElements:
-    (CWVAutofillController*)autofillController;
+// Called when |forms| are found in a frame with |frameID|.
+// Will be called after initial load and after any form mutations.
+// Always includes all forms in the frame.
+- (void)autofillController:(CWVAutofillController*)autofillController
+              didFindForms:(NSArray<CWVAutofillForm*>*)forms
+                   frameID:(NSString*)frameID;
 
 // Called when it is possible to save a new autofill profile used in filling
 // address forms. This is usually invoked after successfully submitting an

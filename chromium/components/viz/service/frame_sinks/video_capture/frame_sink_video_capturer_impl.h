@@ -10,7 +10,7 @@
 #include <memory>
 #include <queue>
 #include <vector>
-
+#include "base/callback_forward.h"
 #include "base/containers/flat_map.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -29,8 +29,9 @@
 #include "components/viz/service/viz_service_export.h"
 #include "media/base/video_frame.h"
 #include "media/capture/content/video_capture_oracle.h"
-#include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/viz/privileged/mojom/compositing/frame_sink_video_capture.mojom.h"
 #include "ui/gfx/geometry/rect.h"
@@ -73,11 +74,13 @@ class VIZ_SERVICE_EXPORT FrameSinkVideoCapturerImpl final
       public mojom::FrameSinkVideoCapturer {
  public:
   // |frame_sink_manager| must outlive this instance. Binds this instance to the
-  // Mojo message pipe endpoint in |request|, but |request| may be empty for
+  // Mojo message pipe endpoint in |receiver|, but |receiver| may be empty for
   // unit testing.
-  FrameSinkVideoCapturerImpl(FrameSinkVideoCapturerManager* frame_sink_manager,
-                             mojom::FrameSinkVideoCapturerRequest request,
-                             std::unique_ptr<media::VideoCaptureOracle> oracle);
+  FrameSinkVideoCapturerImpl(
+      FrameSinkVideoCapturerManager* frame_sink_manager,
+      mojo::PendingReceiver<mojom::FrameSinkVideoCapturer> receiver,
+      std::unique_ptr<media::VideoCaptureOracle> oracle,
+      bool log_to_webrtc);
 
   ~FrameSinkVideoCapturerImpl() final;
 
@@ -225,11 +228,13 @@ class VIZ_SERVICE_EXPORT FrameSinkVideoCapturerImpl final
   // numbers.
   static gfx::Rect ExpandRectToI420SubsampleBoundaries(const gfx::Rect& rect);
 
+  void OnLog(const std::string& message);
+
   // Owner/Manager of this instance.
   FrameSinkVideoCapturerManager* const frame_sink_manager_;
 
-  // Mojo binding for this instance.
-  mojo::Binding<mojom::FrameSinkVideoCapturer> binding_;
+  // Mojo receiver for this instance.
+  mojo::Receiver<mojom::FrameSinkVideoCapturer> receiver_{this};
 
   // Represents this instance as an issuer of CopyOutputRequests. The Surface
   // uses this to auto-cancel stale requests (i.e., prior requests that did not
@@ -321,6 +326,10 @@ class VIZ_SERVICE_EXPORT FrameSinkVideoCapturerImpl final
   // make a difference in the overall results.
   base::flat_map<int32_t, std::unique_ptr<VideoCaptureOverlay>> overlays_;
 
+  // The visible height of the top-controls in the last CompositorFrameMetadata
+  // received.
+  double last_top_controls_visible_height_ = 0.f;
+
   // This class assumes its control operations and async callbacks won't execute
   // simultaneously.
   SEQUENCE_CHECKER(sequence_checker_);
@@ -328,6 +337,9 @@ class VIZ_SERVICE_EXPORT FrameSinkVideoCapturerImpl final
   // A weak pointer factory used for cancelling consumer feedback from any
   // in-flight frame deliveries.
   base::WeakPtrFactory<media::VideoCaptureOracle> feedback_weak_factory_;
+
+  // Enables debug log messages to be sent to webrtc native log.
+  const bool log_to_webrtc_;
 
   // A weak pointer factory used for cancelling the results from any in-flight
   // copy output requests.

@@ -75,7 +75,7 @@ class OzonePlatformHeadless : public OzonePlatform {
   std::unique_ptr<SystemInputInjector> CreateSystemInputInjector() override {
     return nullptr;  // no input injection support.
   }
-  std::unique_ptr<PlatformWindowBase> CreatePlatformWindow(
+  std::unique_ptr<PlatformWindow> CreatePlatformWindow(
       PlatformWindowDelegate* delegate,
       PlatformWindowInitProperties properties) override {
     return std::make_unique<HeadlessWindow>(delegate, window_manager_.get(),
@@ -89,9 +89,10 @@ class OzonePlatformHeadless : public OzonePlatform {
     return std::make_unique<HeadlessScreen>();
   }
   std::unique_ptr<InputMethod> CreateInputMethod(
-      internal::InputMethodDelegate* delegate) override {
+      internal::InputMethodDelegate* delegate,
+      gfx::AcceleratedWidget widget) override {
 #if defined(OS_FUCHSIA)
-    return std::make_unique<InputMethodFuchsia>(delegate);
+    return std::make_unique<InputMethodFuchsia>(delegate, widget);
 #else
     return std::make_unique<InputMethodMinimal>(delegate);
 #endif
@@ -103,8 +104,9 @@ class OzonePlatformHeadless : public OzonePlatform {
     // This unbreaks tests that create their own.
     if (!PlatformEventSource::GetInstance())
       platform_event_source_ = std::make_unique<HeadlessPlatformEventSource>();
+    keyboard_layout_engine_ = std::make_unique<StubKeyboardLayoutEngine>();
     KeyboardLayoutEngineManager::SetKeyboardLayoutEngine(
-        std::make_unique<StubKeyboardLayoutEngine>());
+        keyboard_layout_engine_.get());
 
     overlay_manager_ = std::make_unique<StubOverlayManager>();
     input_controller_ = CreateStubInputController();
@@ -118,6 +120,7 @@ class OzonePlatformHeadless : public OzonePlatform {
   }
 
  private:
+  std::unique_ptr<KeyboardLayoutEngine> keyboard_layout_engine_;
   std::unique_ptr<HeadlessWindowManager> window_manager_;
   std::unique_ptr<HeadlessSurfaceFactory> surface_factory_;
   std::unique_ptr<PlatformEventSource> platform_event_source_;

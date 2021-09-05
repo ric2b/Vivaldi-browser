@@ -10,7 +10,8 @@
 #include <vector>
 
 #include "components/autofill/core/common/password_form.h"
-#include "components/password_manager/core/browser/leaked_credentials_table.h"
+#include "components/password_manager/core/browser/compromised_credentials_table.h"
+#include "components/password_manager/core/browser/field_info_table.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/core/browser/statistics_table.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -32,7 +33,8 @@ class MockPasswordStore : public PasswordStore {
                void(const autofill::PasswordForm&,
                     const autofill::PasswordForm&));
   MOCK_METHOD3(ReportMetrics, void(const std::string&, bool, bool));
-  MOCK_METHOD2(ReportMetricsImpl, void(const std::string&, bool));
+  MOCK_METHOD3(ReportMetricsImpl,
+               void(const std::string&, bool, BulkCheckDone));
   MOCK_METHOD2(AddLoginImpl,
                PasswordStoreChangeList(const autofill::PasswordForm&,
                                        AddLoginError* error));
@@ -41,19 +43,20 @@ class MockPasswordStore : public PasswordStore {
                                        UpdateLoginError* error));
   MOCK_METHOD1(RemoveLoginImpl,
                PasswordStoreChangeList(const autofill::PasswordForm&));
-  MOCK_METHOD3(RemoveLoginsByURLAndTimeImpl,
-               PasswordStoreChangeList(const base::Callback<bool(const GURL&)>&,
-                                       base::Time,
-                                       base::Time));
+  MOCK_METHOD3(
+      RemoveLoginsByURLAndTimeImpl,
+      PasswordStoreChangeList(const base::RepeatingCallback<bool(const GURL&)>&,
+                              base::Time,
+                              base::Time));
   MOCK_METHOD2(RemoveLoginsCreatedBetweenImpl,
                PasswordStoreChangeList(base::Time, base::Time));
   MOCK_METHOD3(RemoveStatisticsByOriginAndTimeImpl,
-               bool(const base::Callback<bool(const GURL&)>&,
+               bool(const base::RepeatingCallback<bool(const GURL&)>&,
                     base::Time,
                     base::Time));
-  MOCK_METHOD1(
-      DisableAutoSignInForOriginsImpl,
-      PasswordStoreChangeList(const base::Callback<bool(const GURL&)>&));
+  MOCK_METHOD1(DisableAutoSignInForOriginsImpl,
+               PasswordStoreChangeList(
+                   const base::RepeatingCallback<bool(const GURL&)>&));
   std::vector<std::unique_ptr<autofill::PasswordForm>> FillMatchingLogins(
       const PasswordStore::FormDigest& form) override {
     return std::vector<std::unique_ptr<autofill::PasswordForm>>();
@@ -72,14 +75,22 @@ class MockPasswordStore : public PasswordStore {
                std::vector<InteractionsStats>(const GURL& origin_domain));
   MOCK_METHOD1(AddSiteStatsImpl, void(const InteractionsStats&));
   MOCK_METHOD1(RemoveSiteStatsImpl, void(const GURL&));
-  MOCK_METHOD1(AddLeakedCredentialsImpl, void(const LeakedCredentials&));
-  MOCK_METHOD2(RemoveLeakedCredentialsImpl,
-               void(const GURL&, const base::string16&));
-  MOCK_METHOD0(GetAllLeakedCredentialsImpl, std::vector<LeakedCredentials>());
-  MOCK_METHOD3(RemoveLeakedCredentialsByUrlAndTimeImpl,
-               void(const base::RepeatingCallback<bool(const GURL&)>&,
+  MOCK_METHOD1(AddCompromisedCredentialsImpl,
+               bool(const CompromisedCredentials&));
+  MOCK_METHOD3(RemoveCompromisedCredentialsImpl,
+               bool(const std::string&,
+                    const base::string16&,
+                    RemoveCompromisedCredentialsReason));
+  MOCK_METHOD0(GetAllCompromisedCredentialsImpl,
+               std::vector<CompromisedCredentials>());
+  MOCK_METHOD3(RemoveCompromisedCredentialsByUrlAndTimeImpl,
+               bool(const base::RepeatingCallback<bool(const GURL&)>&,
                     base::Time,
                     base::Time));
+  MOCK_METHOD1(AddFieldInfoImpl, void(const FieldInfo&));
+  MOCK_METHOD0(GetAllFieldInfoImpl, std::vector<FieldInfo>());
+  MOCK_METHOD2(RemoveFieldInfoByTimeImpl, void(base::Time, base::Time));
+
   MOCK_CONST_METHOD0(IsAbleToSavePasswords, bool());
 
 #if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
@@ -87,9 +98,10 @@ class MockPasswordStore : public PasswordStore {
                void(const base::string16&,
                     const std::string&,
                     PasswordReuseDetectorConsumer*));
-  MOCK_METHOD3(SaveGaiaPasswordHash,
+  MOCK_METHOD4(SaveGaiaPasswordHash,
                void(const std::string&,
                     const base::string16&,
+                    bool,
                     metrics_util::GaiaPasswordHashChange));
   MOCK_METHOD2(SaveEnterprisePasswordHash,
                void(const std::string&, const base::string16&));
@@ -115,8 +127,7 @@ class MockPasswordStore : public PasswordStore {
   // PasswordStore:
   scoped_refptr<base::SequencedTaskRunner> CreateBackgroundTaskRunner()
       const override;
-  bool InitOnBackgroundSequence(
-      const syncer::SyncableService::StartSyncFlare& flare) override;
+  bool InitOnBackgroundSequence() override;
 };
 
 }  // namespace password_manager

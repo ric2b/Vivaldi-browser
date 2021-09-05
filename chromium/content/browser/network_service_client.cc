@@ -12,6 +12,7 @@
 #include "base/task/post_task.h"
 #include "base/threading/sequence_bound.h"
 #include "base/unguessable_token.h"
+#include "components/rappor/public/rappor_service.h"
 #include "content/browser/browsing_data/clear_site_data_handler.h"
 #include "content/browser/devtools/devtools_instrumentation.h"
 #include "content/browser/frame_host/frame_tree_node.h"
@@ -22,18 +23,22 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/child_process_security_policy.h"
+#include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/global_request_id.h"
 #include "content/public/browser/network_service_instance.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/network_service_util.h"
-#include "content/public/common/resource_type.h"
 #include "services/network/public/cpp/load_info_util.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "third_party/blink/public/mojom/web_feature/web_feature.mojom.h"
 
 #if defined(OS_ANDROID)
 #include "base/android/content_uri_utils.h"
+#endif
+
+#if defined(OS_MACOSX)
+#include "base/message_loop/message_loop_current.h"
 #endif
 
 namespace content {
@@ -74,7 +79,7 @@ NetworkServiceClient::NetworkServiceClient(
 #if defined(OS_ANDROID)
     DCHECK(!net::NetworkChangeNotifier::CreateIfNeeded());
     GetNetworkService()->GetNetworkChangeManager(
-        mojo::MakeRequest(&network_change_manager_));
+        network_change_manager_.BindNewPipeAndPassReceiver());
     net::NetworkChangeNotifier::AddConnectionTypeObserver(this);
     net::NetworkChangeNotifier::AddMaxBandwidthObserver(this);
     net::NetworkChangeNotifier::AddIPAddressObserver(this);
@@ -193,17 +198,6 @@ void NetworkServiceClient::OnDNSChanged() {
       network::mojom::ConnectionSubtype(
           net::NetworkChangeNotifier::GetConnectionSubtype()));
 }
-
-void NetworkServiceClient::OnInitialDNSConfigRead() {
-  network_change_manager_->OnNetworkChanged(
-      true /* dns_changed */, false /* ip_address_changed */,
-      false /* connection_type_changed */,
-      network::mojom::ConnectionType(
-          net::NetworkChangeNotifier::GetConnectionType()),
-      false /* connection_subtype_changed */,
-      network::mojom::ConnectionSubtype(
-          net::NetworkChangeNotifier::GetConnectionSubtype()));
-}
 #endif
 
 void NetworkServiceClient::OnDataUseUpdate(
@@ -236,4 +230,50 @@ void NetworkServiceClient::OnRawResponse(
       process_id, routing_id, devtools_request_id, cookies_with_status, headers,
       raw_response_headers);
 }
+
+void NetworkServiceClient::OnCorsPreflightRequest(
+    int32_t process_id,
+    int32_t render_frame_id,
+    const base::UnguessableToken& devtools_request_id,
+    const network::ResourceRequest& request,
+    const GURL& initiator_url) {
+  devtools_instrumentation::OnCorsPreflightRequest(
+      process_id, render_frame_id, devtools_request_id, request, initiator_url);
+}
+
+void NetworkServiceClient::OnCorsPreflightResponse(
+    int32_t process_id,
+    int32_t render_frame_id,
+    const base::UnguessableToken& devtools_request_id,
+    const GURL& url,
+    network::mojom::URLResponseHeadPtr head) {
+  devtools_instrumentation::OnCorsPreflightResponse(
+      process_id, render_frame_id, devtools_request_id, url, std::move(head));
+}
+
+void NetworkServiceClient::OnCorsPreflightRequestCompleted(
+    int32_t process_id,
+    int32_t render_frame_id,
+    const base::UnguessableToken& devtools_request_id,
+    const network::URLLoaderCompletionStatus& status) {
+  devtools_instrumentation::OnCorsPreflightRequestCompleted(
+      process_id, render_frame_id, devtools_request_id, status);
+}
+
+void NetworkServiceClient::LogCrossOriginFetchFromContentScript3(
+    const std::string& isolated_world_host) {
+  rappor::RapporService* rappor =
+      GetContentClient()->browser()->GetRapporService();
+  if (rappor) {
+    rappor->RecordSampleString("Extensions.CrossOriginFetchFromContentScript3",
+                               rappor::UMA_RAPPOR_TYPE, isolated_world_host);
+  }
+
+  ContentBrowserClient* client = GetContentClient()->browser();
+  if (client) {
+    client->LogUkmEventForCrossOriginFetchFromContentScript3(
+        isolated_world_host);
+  }
+}
+
 }  // namespace content

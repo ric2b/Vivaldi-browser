@@ -10,6 +10,7 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_metrics.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/payments/card_unmask_delegate.h"
@@ -25,8 +26,15 @@ class CardUnmaskPromptControllerImpl : public CardUnmaskPromptController {
                                  bool is_off_the_record);
   virtual ~CardUnmaskPromptControllerImpl();
 
+  // This should be OnceCallback<unique_ptr<CardUnmaskPromptView>> but there are
+  // tests which don't do the ownership correctly.
+  using CardUnmaskPromptViewFactory =
+      base::OnceCallback<CardUnmaskPromptView*()>;
+
   // Functions called by ChromeAutofillClient.
-  void ShowPrompt(CardUnmaskPromptView* view,
+  // It is guaranteed that |view_factory| is called before this function
+  // returns, i.e., the callback will not outlive the stack frame of ShowPrompt.
+  void ShowPrompt(CardUnmaskPromptViewFactory view_factory,
                   const CreditCard& card,
                   AutofillClient::UnmaskCardReason reason,
                   base::WeakPtr<CardUnmaskDelegate> delegate);
@@ -48,7 +56,10 @@ class CardUnmaskPromptControllerImpl : public CardUnmaskPromptController {
   bool ShouldRequestExpirationDate() const override;
   bool CanStoreLocally() const override;
   bool GetStoreLocallyStartState() const override;
+#if defined(OS_ANDROID)
+  bool ShouldOfferWebauthn() const override;
   bool GetWebauthnOfferStartState() const override;
+#endif
   bool InputCvcIsValid(const base::string16& input_text) const override;
   bool InputExpirationIsValid(const base::string16& month,
                               const base::string16& year) const override;

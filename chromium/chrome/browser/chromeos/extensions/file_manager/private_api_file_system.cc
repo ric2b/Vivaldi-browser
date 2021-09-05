@@ -21,6 +21,7 @@
 #include "base/strings/string_util.h"
 #include "base/system/sys_info.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/task_runner_util.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/drive/file_system_util.h"
@@ -39,8 +40,6 @@
 #include "chrome/common/extensions/api/file_manager_private_internal.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/disks/disk_mount_manager.h"
-#include "components/drive/chromeos/file_system_interface.h"
-#include "components/drive/drive.pb.h"
 #include "components/drive/event_logger.h"
 #include "components/drive/file_system_core_util.h"
 #include "components/storage_monitor/storage_info.h"
@@ -55,15 +54,16 @@
 #include "extensions/browser/extension_util.h"
 #include "net/base/escape.h"
 #include "services/device/public/mojom/mtp_manager.mojom.h"
-#include "storage/browser/fileapi/external_mount_points.h"
-#include "storage/browser/fileapi/file_stream_reader.h"
-#include "storage/browser/fileapi/file_system_context.h"
-#include "storage/browser/fileapi/file_system_file_util.h"
-#include "storage/browser/fileapi/file_system_operation_context.h"
-#include "storage/browser/fileapi/file_system_operation_runner.h"
-#include "storage/common/fileapi/file_system_info.h"
-#include "storage/common/fileapi/file_system_types.h"
-#include "storage/common/fileapi/file_system_util.h"
+#include "services/device/public/mojom/mtp_storage_info.mojom.h"
+#include "storage/browser/file_system/external_mount_points.h"
+#include "storage/browser/file_system/file_stream_reader.h"
+#include "storage/browser/file_system/file_system_context.h"
+#include "storage/browser/file_system/file_system_file_util.h"
+#include "storage/browser/file_system/file_system_operation_context.h"
+#include "storage/browser/file_system/file_system_operation_runner.h"
+#include "storage/common/file_system/file_system_info.h"
+#include "storage/common/file_system/file_system_types.h"
+#include "storage/common/file_system/file_system_util.h"
 #include "third_party/cros_system_api/constants/cryptohome.h"
 
 using chromeos::disks::DiskMountManager;
@@ -383,9 +383,8 @@ ExtensionFunction::ResponseAction FileManagerPrivateGrantAccessFunction::Run() {
   for (auto* profile : profiles) {
     if (profile->IsOffTheRecord())
       continue;
-    const GURL site = util::GetSiteForExtensionId(extension_id(), profile);
     storage::FileSystemContext* const context =
-        content::BrowserContext::GetStoragePartitionForSite(profile, site)
+        util::GetStoragePartitionForExtensionId(extension_id(), profile)
             ->GetFileSystemContext();
     for (const auto& url : params->entry_urls) {
       const storage::FileSystemURL file_system_url =
@@ -409,19 +408,19 @@ ExtensionFunction::ResponseAction FileManagerPrivateGrantAccessFunction::Run() {
 namespace {
 
 void PostResponseCallbackTaskToUIThread(
-    const FileWatchFunctionBase::ResponseCallback& callback,
+    FileWatchFunctionBase::ResponseCallback callback,
     bool success) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   base::PostTask(FROM_HERE, {BrowserThread::UI},
-                 base::BindOnce(callback, success));
+                 base::BindOnce(std::move(callback), success));
 }
 
 void PostNotificationCallbackTaskToUIThread(
-    const storage::WatcherManager::NotificationCallback& callback,
+    storage::WatcherManager::NotificationCallback callback,
     storage::WatcherManager::ChangeType type) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   base::PostTask(FROM_HERE, {BrowserThread::UI},
-                 base::BindOnce(callback, type));
+                 base::BindOnce(std::move(callback), type));
 }
 
 }  // namespace
@@ -593,10 +592,8 @@ FileManagerPrivateGetSizeStatsFunction::Run() {
   } else {
     uint64_t* total_size = new uint64_t(0);
     uint64_t* remaining_size = new uint64_t(0);
-    base::PostTaskAndReply(
-        FROM_HERE,
-        {base::ThreadPool(), base::MayBlock(),
-         base::TaskPriority::USER_VISIBLE},
+    base::ThreadPool::PostTaskAndReply(
+        FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
         base::BindOnce(&GetSizeStatsAsync, volume->mount_path(), total_size,
                        remaining_size),
         base::BindOnce(&FileManagerPrivateGetSizeStatsFunction::OnGetSizeStats,
@@ -649,14 +646,8 @@ FileManagerPrivateInternalValidatePathNameLengthFunction::Run() {
   if (!chromeos::FileSystemBackend::CanHandleURL(file_system_url))
     return RespondNow(Error("Invalid URL"));
 
-  // No explicit limit on the length of Drive file names.
-  if (file_system_url.type() == storage::kFileSystemTypeDrive) {
-    return RespondNow(OneArgument(std::make_unique<base::Value>(true)));
-  }
-
-  base::PostTaskAndReplyWithResult(
-      FROM_HERE,
-      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_BLOCKING},
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_BLOCKING},
       base::BindOnce(&GetFileNameMaxLengthAsync,
                      file_system_url.path().AsUTF8Unsafe()),
       base::BindOnce(&FileManagerPrivateInternalValidatePathNameLengthFunction::
@@ -824,8 +815,8 @@ void FileManagerPrivateInternalStartCopyFunction::RunAfterGetFileMetadata(
   }
   destination_dirs.push_back(destination_url_.path().DirName());
 
-  base::PostTaskAndReplyWithResult(
-      FROM_HERE, {base::ThreadPool(), base::MayBlock()},
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock()},
       base::BindOnce(&GetLocalDiskSpaces, std::move(destination_dirs)),
       base::BindOnce(
           &FileManagerPrivateInternalStartCopyFunction::RunAfterCheckDiskSpace,
@@ -1074,9 +1065,8 @@ FileManagerPrivateSearchFilesByHashesFunction::Run() {
 
   // DriveFs doesn't provide dedicated backup solution yet, so for now just walk
   // the files and check MD5 extended attribute.
-  base::PostTaskAndReplyWithResult(
-      FROM_HERE,
-      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::BEST_EFFORT},
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::BindOnce(
           &FileManagerPrivateSearchFilesByHashesFunction::SearchByAttribute,
           this, hashes,
@@ -1166,9 +1156,8 @@ ExtensionFunction::ResponseAction FileManagerPrivateSearchFilesFunction::Run() {
   base::FilePath root = file_manager::util::GetMyFilesFolderForProfile(
       chrome_details_.GetProfile());
 
-  base::PostTaskAndReplyWithResult(
-      FROM_HERE,
-      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::BEST_EFFORT},
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::BindOnce(&SearchByPattern, root, params->search_params.query,
                      base::internal::checked_cast<size_t>(
                          params->search_params.max_results)),
@@ -1196,7 +1185,6 @@ void FileManagerPrivateSearchFilesFunction::OnSearchByPattern(
   const std::string fs_root = base::StrCat({url.spec(), "/"});
 
   auto entries = std::make_unique<base::ListValue>();
-  entries->GetList().reserve(results.size());
   for (const auto& result : results) {
     base::FilePath fs_path("/");
     if (!my_files_path.AppendRelativePath(result.first, &fs_path)) {
@@ -1248,9 +1236,8 @@ FileManagerPrivateInternalGetDirectorySizeFunction::Run() {
         Error("Failed to get a local path from the entry's url."));
   }
 
-  base::PostTaskAndReplyWithResult(
-      FROM_HERE,
-      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::BindOnce(&base::ComputeDirectorySize, root_path),
       base::BindOnce(&FileManagerPrivateInternalGetDirectorySizeFunction::
                          OnDirectorySizeRetrieved,

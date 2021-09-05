@@ -6,6 +6,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_FRAME_INTERVENTION_REPORT_BODY_H_
 
 #include "third_party/blink/renderer/bindings/core/v8/source_location.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_object_builder.h"
 #include "third_party/blink/renderer/core/frame/location_report_body.h"
 
 namespace blink {
@@ -19,8 +20,9 @@ class CORE_EXPORT InterventionReportBody : public LocationReportBody {
 
   ~InterventionReportBody() override = default;
 
-  String id() const { return id_; }
-  String message() const { return message_; }
+  const String& id() const { return id_; }
+  const String& message() const { return message_; }
+  void BuildJSONValue(V8ObjectBuilder& builder) const override;
 
  private:
   const String id_;

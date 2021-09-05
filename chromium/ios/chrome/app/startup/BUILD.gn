@@ -61,6 +61,7 @@ source_set("startup") {
     "//ios/chrome/browser/web:web_internal",
     "//ios/chrome/common",
     "//ios/chrome/common/app_group",
+    "//ios/components/webui:url_constants",
     "//ios/net",
     "//ios/public/provider/chrome/browser",
     "//ios/web",
@@ -72,15 +73,14 @@ source_set("startup") {
 source_set("unit_tests") {
   configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
-  sources = [
-    "chrome_app_startup_parameters_unittest.mm",
-  ]
+  sources = [ "chrome_app_startup_parameters_unittest.mm" ]
   deps = [
     ":startup",
     "//base",
     "//ios/chrome/app",
     "//ios/chrome/browser",
     "//ios/chrome/common/app_group",
+    "//ios/components/webui:url_constants",
     "//testing/gtest",
     "//url",
   ]

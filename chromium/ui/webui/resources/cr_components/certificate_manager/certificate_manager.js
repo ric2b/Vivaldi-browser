@@ -20,7 +20,7 @@ Polymer({
     /** @type {!Array<!CertificatesOrgGroup>} */
     personalCerts: {
       type: Array,
-      value: function() {
+      value() {
         return [];
       },
     },
@@ -28,7 +28,7 @@ Polymer({
     /** @type {!Array<!CertificatesOrgGroup>} */
     serverCerts: {
       type: Array,
-      value: function() {
+      value() {
         return [];
       },
     },
@@ -36,7 +36,7 @@ Polymer({
     /** @type {!Array<!CertificatesOrgGroup>} */
     caCerts: {
       type: Array,
-      value: function() {
+      value() {
         return [];
       },
     },
@@ -44,7 +44,7 @@ Polymer({
     /** @type {!Array<!CertificatesOrgGroup>} */
     otherCerts: {
       type: Array,
-      value: function() {
+      value() {
         return [];
       },
     },
@@ -120,7 +120,7 @@ Polymer({
     /** @private */
     isKiosk_: {
       type: Boolean,
-      value: function() {
+      value() {
         return loadTimeData.valueExists('isKiosk') &&
             loadTimeData.getBoolean('isKiosk');
       },
@@ -134,7 +134,7 @@ Polymer({
   },
 
   /** @override */
-  attached: function() {
+  attached() {
     this.addWebUIListener('certificates-changed', this.set.bind(this));
     this.addWebUIListener(
         'client-import-allowed-changed',
@@ -146,12 +146,12 @@ Polymer({
   },
 
   /** @private */
-  setClientImportAllowed: function(allowed) {
+  setClientImportAllowed(allowed) {
     this.clientImportAllowed = allowed;
   },
 
   /** @private */
-  setCAImportAllowed: function(allowed) {
+  setCAImportAllowed(allowed) {
     this.caImportAllowed = allowed;
   },
 
@@ -161,36 +161,36 @@ Polymer({
    * @return {boolean} Whether to show tab at |tabIndex|.
    * @private
    */
-  isTabSelected_: function(selectedIndex, tabIndex) {
-    return selectedIndex == tabIndex;
+  isTabSelected_(selectedIndex, tabIndex) {
+    return selectedIndex === tabIndex;
   },
 
   /** @override */
-  ready: function() {
+  ready() {
     this.addEventListener(CertificateActionEvent, event => {
       this.dialogModel_ = event.detail.subnode;
       this.dialogModelCertificateType_ = event.detail.certificateType;
 
-      if (event.detail.action == CertificateAction.IMPORT) {
-        if (event.detail.certificateType == CertificateType.PERSONAL) {
+      if (event.detail.action === CertificateAction.IMPORT) {
+        if (event.detail.certificateType === CertificateType.PERSONAL) {
           this.openDialog_(
               'certificate-password-decryption-dialog',
               'showPasswordDecryptionDialog_', event.detail.anchor);
-        } else if (event.detail.certificateType == CertificateType.CA) {
+        } else if (event.detail.certificateType === CertificateType.CA) {
           this.openDialog_(
               'ca-trust-edit-dialog', 'showCaTrustEditDialog_',
               event.detail.anchor);
         }
       } else {
-        if (event.detail.action == CertificateAction.EDIT) {
+        if (event.detail.action === CertificateAction.EDIT) {
           this.openDialog_(
               'ca-trust-edit-dialog', 'showCaTrustEditDialog_',
               event.detail.anchor);
-        } else if (event.detail.action == CertificateAction.DELETE) {
+        } else if (event.detail.action === CertificateAction.DELETE) {
           this.openDialog_(
               'certificate-delete-confirmation-dialog',
               'showDeleteConfirmationDialog_', event.detail.anchor);
-        } else if (event.detail.action == CertificateAction.EXPORT_PERSONAL) {
+        } else if (event.detail.action === CertificateAction.EXPORT_PERSONAL) {
           this.openDialog_(
               'certificate-password-encryption-dialog',
               'showPasswordEncryptionDialog_', event.detail.anchor);
@@ -225,7 +225,7 @@ Polymer({
    *     the error).
    * @private
    */
-  openDialog_: function(dialogTagName, domIfBooleanName, anchor) {
+  openDialog_(dialogTagName, domIfBooleanName, anchor) {
     if (anchor) {
       this.activeDialogAnchor_ = anchor;
     }
@@ -243,7 +243,7 @@ Polymer({
    * @return {!Array<string>}
    * @private
    */
-  computeTabNames_: function() {
+  computeTabNames_() {
     return [
       loadTimeData.getString('certificateManagerYourCertificates'),
       ...(this.isKiosk_ ?

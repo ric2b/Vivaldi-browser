@@ -69,11 +69,15 @@ base::TimeDelta MetricsServiceClient::GetUploadInterval() {
   return GetStandardUploadInterval();
 }
 
-bool MetricsServiceClient::SyncStateAllowsUkm() {
+bool MetricsServiceClient::ShouldStartUpFastForTesting() const {
   return false;
 }
 
-bool MetricsServiceClient::SyncStateAllowsExtensionUkm() {
+bool MetricsServiceClient::IsUkmAllowedForAllProfiles() {
+  return false;
+}
+
+bool MetricsServiceClient::IsUkmAllowedWithExtensionsForAllProfiles() {
   return false;
 }
 
@@ -89,8 +93,12 @@ std::string MetricsServiceClient::GetUploadSigningKey() {
   return std::string();
 }
 
+bool MetricsServiceClient::ShouldResetClientIdsOnClonedInstall() {
+  return false;
+}
+
 void MetricsServiceClient::SetUpdateRunningServicesCallback(
-    const base::Closure& callback) {
+    const base::RepeatingClosure& callback) {
   update_running_services_ = callback;
 }
 

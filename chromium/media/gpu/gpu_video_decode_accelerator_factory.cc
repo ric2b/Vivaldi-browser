@@ -15,6 +15,7 @@
 #include "media/gpu/gpu_video_accelerator_util.h"
 #include "media/gpu/macros.h"
 #include "media/gpu/media_gpu_export.h"
+#include "media/media_buildflags.h"
 
 #if defined(OS_WIN)
 #include "base/win/windows_version.h"
@@ -167,12 +168,12 @@ GpuVideoDecodeAcceleratorFactory::CreateVDA(
 #if defined(OS_WIN)
     &GpuVideoDecodeAcceleratorFactory::CreateDXVAVDA,
 #endif
+#if BUILDFLAG(USE_VAAPI)
+    &GpuVideoDecodeAcceleratorFactory::CreateVaapiVDA,
+#endif
 #if BUILDFLAG(USE_V4L2_CODEC)
     &GpuVideoDecodeAcceleratorFactory::CreateV4L2VDA,
     &GpuVideoDecodeAcceleratorFactory::CreateV4L2SVDA,
-#endif
-#if BUILDFLAG(USE_VAAPI)
-    &GpuVideoDecodeAcceleratorFactory::CreateVaapiVDA,
 #endif
 #if defined(OS_MACOSX)
     &GpuVideoDecodeAcceleratorFactory::CreateVTVDA,

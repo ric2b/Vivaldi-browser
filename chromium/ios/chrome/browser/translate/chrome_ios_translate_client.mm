@@ -21,8 +21,8 @@
 #include "components/translate/core/browser/translate_step.h"
 #include "components/translate/core/common/language_detection_details.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#include "ios/chrome/browser/infobars/infobar.h"
 #include "ios/chrome/browser/infobars/infobar_controller.h"
+#include "ios/chrome/browser/infobars/infobar_ios.h"
 #include "ios/chrome/browser/infobars/infobar_manager_impl.h"
 #include "ios/chrome/browser/language/language_model_manager_factory.h"
 #import "ios/chrome/browser/translate/language_selection_handler.h"
@@ -31,6 +31,8 @@
 #import "ios/chrome/browser/translate/translate_option_selection_handler.h"
 #include "ios/chrome/browser/translate/translate_ranker_factory.h"
 #include "ios/chrome/browser/translate/translate_service_ios.h"
+#import "ios/chrome/browser/ui/infobars/coordinators/infobar_translate_coordinator.h"
+#import "ios/chrome/browser/ui/infobars/infobar_feature.h"
 #import "ios/chrome/browser/ui/translate/translate_notification_handler.h"
 #include "ios/chrome/grit/ios_theme_resources.h"
 #include "ios/web/public/browser_state.h"
@@ -59,10 +61,10 @@ ChromeIOSTranslateClient::ChromeIOSTranslateClient(web::WebState* web_state)
       translate_manager_(std::make_unique<translate::TranslateManager>(
           this,
           translate::TranslateRankerFactory::GetForBrowserState(
-              ios::ChromeBrowserState::FromBrowserState(
+              ChromeBrowserState::FromBrowserState(
                   web_state->GetBrowserState())),
           LanguageModelManagerFactory::GetForBrowserState(
-              ios::ChromeBrowserState::FromBrowserState(
+              ChromeBrowserState::FromBrowserState(
                   web_state->GetBrowserState()))
               ->GetPrimaryModel())),
       translate_driver_(web_state,
@@ -91,13 +93,20 @@ translate::TranslateManager* ChromeIOSTranslateClient::GetTranslateManager() {
 
 std::unique_ptr<infobars::InfoBar> ChromeIOSTranslateClient::CreateInfoBar(
     std::unique_ptr<translate::TranslateInfoBarDelegate> delegate) const {
-  TranslateInfoBarController* controller = [[TranslateInfoBarController alloc]
-      initWithInfoBarDelegate:delegate.get()];
-  controller.languageSelectionHandler = language_selection_handler_;
-  controller.translateOptionSelectionHandler =
-      translate_option_selection_handler_;
-  controller.translateNotificationHandler = translate_notification_handler_;
-  return std::make_unique<InfoBarIOS>(controller, std::move(delegate));
+  if (IsTranslateInfobarMessagesUIEnabled()) {
+    TranslateInfobarCoordinator* coordinator =
+        [[TranslateInfobarCoordinator alloc]
+            initWithInfoBarDelegate:delegate.get()];
+    return std::make_unique<InfoBarIOS>(coordinator, std::move(delegate));
+  } else {
+    TranslateInfoBarController* controller = [[TranslateInfoBarController alloc]
+        initWithInfoBarDelegate:delegate.get()];
+    controller.languageSelectionHandler = language_selection_handler_;
+    controller.translateOptionSelectionHandler =
+        translate_option_selection_handler_;
+    controller.translateNotificationHandler = translate_notification_handler_;
+    return std::make_unique<InfoBarIOS>(controller, std::move(delegate));
+  }
 }
 
 bool ChromeIOSTranslateClient::ShowTranslateUI(
@@ -127,16 +136,16 @@ translate::IOSTranslateDriver* ChromeIOSTranslateClient::GetTranslateDriver() {
 
 PrefService* ChromeIOSTranslateClient::GetPrefs() {
   DCHECK(web_state_);
-  ios::ChromeBrowserState* chrome_browser_state =
-      ios::ChromeBrowserState::FromBrowserState(web_state_->GetBrowserState());
+  ChromeBrowserState* chrome_browser_state =
+      ChromeBrowserState::FromBrowserState(web_state_->GetBrowserState());
   return chrome_browser_state->GetOriginalChromeBrowserState()->GetPrefs();
 }
 
 std::unique_ptr<translate::TranslatePrefs>
 ChromeIOSTranslateClient::GetTranslatePrefs() {
   DCHECK(web_state_);
-  ios::ChromeBrowserState* chrome_browser_state =
-      ios::ChromeBrowserState::FromBrowserState(web_state_->GetBrowserState());
+  ChromeBrowserState* chrome_browser_state =
+      ChromeBrowserState::FromBrowserState(web_state_->GetBrowserState());
   return CreateTranslatePrefs(chrome_browser_state->GetPrefs());
 }
 
@@ -144,7 +153,7 @@ translate::TranslateAcceptLanguages*
 ChromeIOSTranslateClient::GetTranslateAcceptLanguages() {
   DCHECK(web_state_);
   return TranslateAcceptLanguagesFactory::GetForBrowserState(
-      ios::ChromeBrowserState::FromBrowserState(web_state_->GetBrowserState()));
+      ChromeBrowserState::FromBrowserState(web_state_->GetBrowserState()));
 }
 
 int ChromeIOSTranslateClient::GetInfobarIconID() const {

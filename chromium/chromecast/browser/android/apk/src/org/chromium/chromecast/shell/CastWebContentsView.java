@@ -10,9 +10,13 @@ import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.IBinder;
-import android.support.annotation.Nullable;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
+import android.view.View;
+import android.view.accessibility.AccessibilityNodeProvider;
 import android.widget.FrameLayout;
+
+import androidx.annotation.Nullable;
 
 import org.chromium.base.Log;
 import org.chromium.chromecast.base.CastSwitches;
@@ -30,7 +34,7 @@ import org.chromium.chromecast.base.CastSwitches;
  * it is destroyed, CastContentWindowAndroid should be notified by intent.
  */
 public class CastWebContentsView extends FrameLayout {
-    private static final String TAG = "cr_CastWebContentV";
+    private static final String TAG = "CastWebContentV";
 
     private CastWebContentsSurfaceHelper mSurfaceHelper;
 
@@ -41,9 +45,14 @@ public class CastWebContentsView extends FrameLayout {
 
     private void initView() {
         FrameLayout.LayoutParams matchParent = new FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT);
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT);
         addView(LayoutInflater.from(getContext())
-                        .inflate(R.layout.cast_web_contents_activity, null), matchParent);
+                        .inflate(R.layout.cast_web_contents_activity, null),
+                matchParent);
+
+        // Adds a transparent view on top to allow a highlight rectangule to be drawn when
+        // accessibility is turned on.
+        addView(new View(getContext()), matchParent);
     }
 
     public void onStart(Bundle startArgumentsBundle) {
@@ -90,5 +99,40 @@ public class CastWebContentsView extends FrameLayout {
 
     private void sendIntentSync(Intent in) {
         CastWebContentsIntentUtils.getLocalBroadcastManager().sendBroadcastSync(in);
+    }
+
+    @Override
+    public void setAccessibilityDelegate(AccessibilityDelegate delegate) {
+        View contentView = getContentView();
+        if (contentView != null) {
+            contentView.setAccessibilityDelegate(delegate);
+        } else {
+            Log.w(TAG, "Content view is null!");
+        }
+    }
+
+    @Override
+    public boolean onHoverEvent(MotionEvent event) {
+        View contentView = getContentView();
+        if (contentView != null) {
+            return contentView.onHoverEvent(event);
+        } else {
+            Log.w(TAG, "Content view is null!");
+            return false;
+        }
+    }
+
+    public AccessibilityNodeProvider getWebContentsAccessibilityNodeProvider() {
+        View contentView = getContentView();
+        if (contentView != null) {
+            return contentView.getAccessibilityNodeProvider();
+        } else {
+            Log.w(TAG, "Content view is null! Returns a null AccessibilityNodeProvider.");
+            return null;
+        }
+    }
+
+    private View getContentView() {
+        return findViewWithTag(CastWebContentsScopes.VIEW_TAG_CONTENT_VIEW);
     }
 }

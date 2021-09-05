@@ -4,19 +4,22 @@
 
 #include "chrome/browser/chromeos/power/ml/smart_dim/ml_service_client.h"
 
+#include <string>
+#include <utility>
+
 #include "base/bind.h"
+#include "base/containers/flat_map.h"
 #include "base/feature_list.h"
 #include "base/memory/weak_ptr.h"
-#include "base/metrics/histogram_macros.h"
-#include "base/threading/thread.h"
 #include "base/time/time.h"
+#include "chrome/browser/chromeos/power/ml/smart_dim/metrics.h"
 #include "chrome/browser/chromeos/power/ml/smart_dim/model_impl.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/services/machine_learning/public/cpp/service_connection.h"
 #include "chromeos/services/machine_learning/public/mojom/graph_executor.mojom.h"
 #include "chromeos/services/machine_learning/public/mojom/model.mojom.h"
 #include "chromeos/services/machine_learning/public/mojom/tensor.mojom.h"
-#include "mojo/public/cpp/bindings/map.h"
+#include "mojo/public/cpp/bindings/remote.h"
 
 using ::chromeos::machine_learning::mojom::BuiltinModelId;
 using ::chromeos::machine_learning::mojom::BuiltinModelSpec;
@@ -35,12 +38,6 @@ namespace power {
 namespace ml {
 
 namespace {
-
-// TODO(crbug.com/893425): This should exist in only one location, so it should
-// be merged with its duplicate in model_impl.cc to a common location.
-void LogPowerMLSmartDimModelResult(SmartDimModelResult result) {
-  UMA_HISTOGRAM_ENUMERATION("PowerML.SmartDimModel.Result", result);
-}
 
 // Real impl of MlServiceClient.
 class MlServiceClientImpl : public MlServiceClient {
@@ -78,11 +75,11 @@ class MlServiceClientImpl : public MlServiceClient {
   // available.
   void InitMlServiceHandlesIfNeeded();
 
-  void OnConnectionError();
+  void OnMojoDisconnect();
 
   // Pointers used to execute functions in the ML service server end.
-  ::chromeos::machine_learning::mojom::ModelPtr model_;
-  ::chromeos::machine_learning::mojom::GraphExecutorPtr executor_;
+  mojo::Remote<::chromeos::machine_learning::mojom::Model> model_;
+  mojo::Remote<::chromeos::machine_learning::mojom::GraphExecutor> executor_;
 
   base::WeakPtrFactory<MlServiceClientImpl> weak_factory_{this};
 
@@ -137,7 +134,7 @@ void MlServiceClientImpl::InitMlServiceHandlesIfNeeded() {
             : BuiltinModelId::SMART_DIM_20181115);
     chromeos::machine_learning::ServiceConnection::GetInstance()
         ->LoadBuiltinModel(
-            std::move(spec), mojo::MakeRequest(&model_),
+            std::move(spec), model_.BindNewPipeAndPassReceiver(),
             base::BindOnce(&MlServiceClientImpl::LoadModelCallback,
                            weak_factory_.GetWeakPtr()));
   }
@@ -145,15 +142,15 @@ void MlServiceClientImpl::InitMlServiceHandlesIfNeeded() {
   if (!executor_) {
     // Get the graph executor.
     model_->CreateGraphExecutor(
-        mojo::MakeRequest(&executor_),
+        executor_.BindNewPipeAndPassReceiver(),
         base::BindOnce(&MlServiceClientImpl::CreateGraphExecutorCallback,
                        weak_factory_.GetWeakPtr()));
-    executor_.set_connection_error_handler(base::BindOnce(
-        &MlServiceClientImpl::OnConnectionError, weak_factory_.GetWeakPtr()));
+    executor_.set_disconnect_handler(base::BindOnce(
+        &MlServiceClientImpl::OnMojoDisconnect, weak_factory_.GetWeakPtr()));
   }
 }
 
-void MlServiceClientImpl::OnConnectionError() {
+void MlServiceClientImpl::OnMojoDisconnect() {
   // TODO(crbug.com/893425): Log to UMA.
   LOG(WARNING) << "Mojo connection for ML service closed.";
   executor_.reset();
@@ -168,7 +165,7 @@ void MlServiceClientImpl::DoInference(
   InitMlServiceHandlesIfNeeded();
 
   // Prepare the input tensor.
-  std::map<std::string, TensorPtr> inputs;
+  base::flat_map<std::string, TensorPtr> inputs;
   auto tensor = Tensor::New();
   tensor->shape = Int64List::New();
   tensor->shape->value = std::vector<int64_t>({1, features.size()});
@@ -181,7 +178,7 @@ void MlServiceClientImpl::DoInference(
   std::vector<std::string> outputs({std::string("output")});
 
   executor_->Execute(
-      mojo::MapToFlatMap(std::move(inputs)), std::move(outputs),
+      std::move(inputs), std::move(outputs),
       base::BindOnce(&MlServiceClientImpl::ExecuteCallback,
                      weak_factory_.GetWeakPtr(), get_prediction_callback,
                      std::move(decision_callback)));

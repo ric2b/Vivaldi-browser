@@ -165,8 +165,6 @@ class VivaldiNativeAppWindowViews : public extensions::NativeAppWindow,
                                gfx::Rect* bounds,
                                ui::WindowShowState* show_state) const override;
   void DeleteDelegate() override;
-  views::Widget* GetWidget() override;
-  const views::Widget* GetWidget() const override;
   bool ShouldDescendIntoChildForEventHandling(
       gfx::NativeView child,
       const gfx::Point& location) override;

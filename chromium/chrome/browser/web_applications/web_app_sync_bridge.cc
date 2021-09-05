@@ -21,21 +21,27 @@
 #include "chrome/browser/web_applications/web_app_registry_update.h"
 #include "chrome/browser/web_applications/web_app_sync_install_delegate.h"
 #include "chrome/common/channel_info.h"
+#include "chrome/common/chrome_features.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/base/report_unrecoverable_error.h"
-#include "components/sync/model/entity_data.h"
 #include "components/sync/model/metadata_batch.h"
 #include "components/sync/model/metadata_change_list.h"
 #include "components/sync/model/model_type_store.h"
 #include "components/sync/model/mutable_data_batch.h"
 #include "components/sync/model_impl/client_tag_based_model_type_processor.h"
 #include "components/sync/protocol/web_app_specifics.pb.h"
-#include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
 #include "url/gurl.h"
 
 namespace web_app {
 
-namespace {
+bool AreAppsLocallyInstalledByDefault() {
+#if defined(OS_CHROMEOS)
+  // On Chrome OS, sync always locally installs an app.
+  return true;
+#else
+  return false;
+#endif
+}
 
 std::unique_ptr<syncer::EntityData> CreateSyncEntityData(const WebApp& app) {
   auto entity_data = std::make_unique<syncer::EntityData>();
@@ -44,7 +50,8 @@ std::unique_ptr<syncer::EntityData> CreateSyncEntityData(const WebApp& app) {
   sync_pb::WebAppSpecifics* sync_data =
       entity_data->specifics.mutable_web_app();
   sync_data->set_launch_url(app.launch_url().spec());
-  sync_data->set_display_mode(ToWebAppSpecificsDisplayMode(app.display_mode()));
+  sync_data->set_user_display_mode(
+      ToWebAppSpecificsUserDisplayMode(app.user_display_mode()));
   sync_data->set_name(app.sync_data().name);
   if (app.sync_data().theme_color.has_value())
     sync_data->set_theme_color(app.sync_data().theme_color.value());
@@ -75,8 +82,8 @@ void ApplySyncDataToApp(const sync_pb::WebAppSpecifics& sync_data,
     return;
   }
 
-  // Always override display mode with a synced value.
-  app->SetDisplayMode(ToMojomDisplayMode(sync_data.display_mode()));
+  // Always override user_display mode with a synced value.
+  app->SetUserDisplayMode(ToMojomDisplayMode(sync_data.user_display_mode()));
 
   WebApp::SyncData parsed_sync_data;
   parsed_sync_data.name = sync_data.name();
@@ -84,17 +91,6 @@ void ApplySyncDataToApp(const sync_pb::WebAppSpecifics& sync_data,
     parsed_sync_data.theme_color = sync_data.theme_color();
   app->SetSyncData(std::move(parsed_sync_data));
 }
-
-bool AreAppsLocallyInstalledByDefault() {
-#if defined(OS_CHROMEOS)
-  // On Chrome OS, sync always locally installs an app.
-  return true;
-#else
-  return false;
-#endif
-}
-
-}  // namespace
 
 WebAppSyncBridge::WebAppSyncBridge(
     Profile* profile,
@@ -171,13 +167,12 @@ void WebAppSyncBridge::Init(base::OnceClosure callback) {
                                          std::move(callback)));
 }
 
-void WebAppSyncBridge::SetAppDisplayMode(
-    const AppId& app_id,
-    blink::mojom::DisplayMode display_mode) {
+void WebAppSyncBridge::SetAppUserDisplayMode(const AppId& app_id,
+                                             DisplayMode user_display_mode) {
   ScopedRegistryUpdate update(this);
   WebApp* web_app = update->UpdateApp(app_id);
   if (web_app)
-    web_app->SetDisplayMode(display_mode);
+    web_app->SetUserDisplayMode(user_display_mode);
 }
 
 void WebAppSyncBridge::SetAppIsLocallyInstalledForTesting(
@@ -250,36 +245,39 @@ void WebAppSyncBridge::UpdateSync(
   if (!change_processor()->IsTrackingMetadata())
     return;
 
-  for (const std::unique_ptr<WebApp>& app : update_data.apps_to_create) {
-    if (app->IsSynced()) {
-      change_processor()->Put(app->app_id(), CreateSyncEntityData(*app),
+  for (const std::unique_ptr<WebApp>& new_app : update_data.apps_to_create) {
+    if (new_app->IsSynced()) {
+      change_processor()->Put(new_app->app_id(), CreateSyncEntityData(*new_app),
                               metadata_change_list);
     }
   }
 
-  // An app may obtain or may loose IsSynced flag without being deleted. We
-  // should conservatively include or exclude the app from the synced apps
-  // subset. TODO(loyso): Use previous state of the app (and CoW) to detect
-  // if IsSynced flag changed.
-  //
-  // TODO(loyso): Send an update to sync server only if any sync-specific
-  // data was changed. Implement some dirty flags in WebApp setter methods.
-  for (const std::unique_ptr<WebApp>& app : update_data.apps_to_update) {
-    if (app->IsSynced()) {
-      change_processor()->Put(app->app_id(), CreateSyncEntityData(*app),
+  for (const std::unique_ptr<WebApp>& new_state : update_data.apps_to_update) {
+    const AppId& app_id = new_state->app_id();
+    // Find the current state of the app to be overritten.
+    const WebApp* current_state = registrar_->GetAppById(app_id);
+    DCHECK(current_state);
+
+    // Include the app in the sync "view" if IsSynced flag becomes true. Update
+    // the app if IsSynced flag stays true. Exclude the app from the sync "view"
+    // if IsSynced flag becomes false.
+    //
+    // TODO(loyso): Send an update to sync server only if any sync-specific
+    // data was changed. Implement some dirty flags in WebApp setter methods.
+    if (new_state->IsSynced()) {
+      change_processor()->Put(app_id, CreateSyncEntityData(*new_state),
                               metadata_change_list);
-    } else {
-      change_processor()->Delete(app->app_id(), metadata_change_list);
+    } else if (current_state->IsSynced()) {
+      change_processor()->Delete(app_id, metadata_change_list);
     }
   }
 
-  // We should unconditionally delete from sync (in case IsSynced flag was
-  // removed during the update). TODO(loyso): Use previous state of the app (and
-  // CoW) to detect if IsSynced flag changed.
-  for (const AppId& app_id : update_data.apps_to_delete) {
-    const WebApp* app = registrar_->GetAppById(app_id);
-    DCHECK(app);
-    change_processor()->Delete(app_id, metadata_change_list);
+  for (const AppId& app_id_to_delete : update_data.apps_to_delete) {
+    const WebApp* current_state = registrar_->GetAppById(app_id_to_delete);
+    DCHECK(current_state);
+    // Exclude the app from the sync "view" if IsSynced flag was true.
+    if (current_state->IsSynced())
+      change_processor()->Delete(app_id_to_delete, metadata_change_list);
   }
 }
 
@@ -292,6 +290,8 @@ void WebAppSyncBridge::OnDatabaseOpened(
 
   registrar_->InitRegistry(std::move(registry));
   std::move(callback).Run();
+
+  MaybeInstallAppsInSyncInstall();
 }
 
 void WebAppSyncBridge::OnDataWritten(CommitCallback callback, bool success) {
@@ -389,6 +389,9 @@ void WebAppSyncBridge::ApplySyncDataChange(
 
 void WebAppSyncBridge::ApplySyncChangesToRegistrar(
     std::unique_ptr<RegistryUpdateData> update_local_data) {
+  if (update_local_data->IsEmpty())
+    return;
+
   std::vector<WebApp*> apps_to_install;
   for (const auto& web_app : update_local_data->apps_to_create)
     apps_to_install.push_back(web_app.get());
@@ -398,12 +401,18 @@ void WebAppSyncBridge::ApplySyncChangesToRegistrar(
 
   // Do a full follow up install for all remote entities that don’t exist
   // locally.
-  install_delegate_->InstallWebAppsAfterSync(std::move(apps_to_install));
+  if (!apps_to_install.empty()) {
+    install_delegate_->InstallWebAppsAfterSync(std::move(apps_to_install),
+                                               base::DoNothing());
+  }
 
   // Do a full follow up uninstall for all deleted remote entities that exist
   // locally and not needed by other sources. We need to clean up disk data
   // (icons).
-  install_delegate_->UninstallWebAppsAfterSync(std::move(apps_unregistered));
+  if (!apps_unregistered.empty()) {
+    install_delegate_->UninstallWebAppsAfterSync(std::move(apps_unregistered),
+                                                 base::DoNothing());
+  }
 }
 
 std::unique_ptr<syncer::MetadataChangeList>
@@ -414,7 +423,7 @@ WebAppSyncBridge::CreateMetadataChangeList() {
 base::Optional<syncer::ModelError> WebAppSyncBridge::MergeSyncData(
     std::unique_ptr<syncer::MetadataChangeList> metadata_change_list,
     syncer::EntityChangeList entity_data) {
-  DCHECK(change_processor()->IsTrackingMetadata());
+  CHECK(change_processor()->IsTrackingMetadata());
 
   auto update_local_data = std::make_unique<RegistryUpdateData>();
 
@@ -435,7 +444,7 @@ base::Optional<syncer::ModelError> WebAppSyncBridge::MergeSyncData(
 base::Optional<syncer::ModelError> WebAppSyncBridge::ApplySyncChanges(
     std::unique_ptr<syncer::MetadataChangeList> metadata_change_list,
     syncer::EntityChangeList entity_changes) {
-  DCHECK(change_processor()->IsTrackingMetadata());
+  CHECK(change_processor()->IsTrackingMetadata());
 
   auto update_local_data = std::make_unique<RegistryUpdateData>();
 
@@ -487,6 +496,20 @@ std::string WebAppSyncBridge::GetClientTag(
 std::string WebAppSyncBridge::GetStorageKey(
     const syncer::EntityData& entity_data) {
   return GetClientTag(entity_data);
+}
+
+void WebAppSyncBridge::MaybeInstallAppsInSyncInstall() {
+  std::vector<WebApp*> apps_in_sync_install;
+
+  for (WebApp& app : registrar_->AllAppsMutable()) {
+    if (app.is_in_sync_install())
+      apps_in_sync_install.push_back(&app);
+  }
+
+  if (!apps_in_sync_install.empty()) {
+    install_delegate_->InstallWebAppsAfterSync(std::move(apps_in_sync_install),
+                                               base::DoNothing());
+  }
 }
 
 }  // namespace web_app

@@ -10,11 +10,14 @@
 class AppMenuButton;
 class AvatarToolbarButton;
 class BrowserActionsContainer;
+class ExtensionsToolbarContainer;
 class PageActionIconView;
-class ToolbarActionView;
+class ReloadButton;
+class ToolbarButton;
 
 namespace gfx {
 class Rect;
+class Size;
 }
 
 namespace views {
@@ -30,9 +33,11 @@ class ToolbarButtonProvider {
   // TODO(pbos): Transition callers off of this function.
   virtual BrowserActionsContainer* GetBrowserActionsContainer() = 0;
 
-  // Gets the associated ToolbarActionView for this id.
-  virtual ToolbarActionView* GetToolbarActionViewForId(
-      const std::string& id) = 0;
+  // Gets the ExtensionsToolbarContainer.
+  virtual ExtensionsToolbarContainer* GetExtensionsToolbarContainer() = 0;
+
+  // Get the default size for toolbar buttons.
+  virtual gfx::Size GetToolbarButtonSize() const = 0;
 
   // Gets the default view to use as an anchor for extension dialogs if the
   // ToolbarActionView is not visible or available.
@@ -45,10 +50,9 @@ class ToolbarButtonProvider {
   // Gets the app menu button.
   virtual AppMenuButton* GetAppMenuButton() = 0;
 
-  // Gets the area available for the find bar in widget space where
-  // |contents_height| is the amount of vertical space available, otherwise if
-  // there is no appropriate anchor point returns empty gfx::Rect.
-  virtual gfx::Rect GetFindBarBoundingBox(int contents_height) const = 0;
+  // Returns a bounding box for the find bar in widget coordinates given the
+  // bottom of the contents container.
+  virtual gfx::Rect GetFindBarBoundingBox(int contents_bottom) = 0;
 
   // Gives the toolbar focus.
   virtual void FocusToolbar() = 0;
@@ -64,6 +68,12 @@ class ToolbarButtonProvider {
 
   // Returns the avatar button.
   virtual AvatarToolbarButton* GetAvatarToolbarButton() = 0;
+
+  // Returns the back button.
+  virtual ToolbarButton* GetBackButton() = 0;
+
+  // Returns the reload button.
+  virtual ReloadButton* GetReloadButton() = 0;
 
   // TODO(calamity): Move other buttons and button actions into here.
  protected:

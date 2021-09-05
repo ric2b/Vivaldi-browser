@@ -6,26 +6,26 @@ package org.chromium.chrome.browser.autofill_assistant;
 
 import android.accounts.Account;
 import android.content.Context;
-import android.os.Bundle;
+import android.os.Build;
 import android.telephony.TelephonyManager;
 
 import androidx.annotation.Nullable;
 
 import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
+import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.chrome.browser.signin.IdentityServicesProvider;
-import org.chromium.components.signin.AccountManagerFacade;
-import org.chromium.components.signin.OAuth2TokenService;
+import org.chromium.components.signin.AccountManagerFacadeProvider;
+import org.chromium.components.signin.identitymanager.IdentityManager;
 import org.chromium.content_public.browser.WebContents;
 
+import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * An Autofill Assistant client, associated with a specific WebContents.
@@ -37,7 +37,6 @@ class AutofillAssistantClient {
     /** OAuth2 scope that RPCs require. */
     private static final String AUTH_TOKEN_TYPE =
             "oauth2:https://www.googleapis.com/auth/userinfo.profile";
-    private static final String PARAMETER_USER_EMAIL = "USER_EMAIL";
 
     /**
      * Pointer to the corresponding native autofill_assistant::ClientAndroid instance. Might be 0 if
@@ -92,9 +91,12 @@ class AutofillAssistantClient {
      *
      * @param initialUrl the original deep link, if known. When started from CCT, this
      * is the URL included into the intent
-     * @param parameters autobot parameters to set during the whole flow
+     * @param parameters Autofill Assistant parameters to set during the whole flow
      * @param experimentIds comma-separated set of experiments to use while running the flow
-     * @param intentExtras extras of the original intent
+     * @param callerAccount the account calling the flow
+     * @param userName the user name associated with this flow
+     * @param isChromeCustomTab whether this was started from a {@link CustomTabActivity} or a
+     *         normal Chrome tab.
      * @param onboardingCoordinator if non-null, reuse existing UI elements, usually created to show
      *         onboarding.
      *
@@ -103,15 +105,17 @@ class AutofillAssistantClient {
      * still fail after this method returns true; the failure will be displayed on the UI.
      */
     boolean start(String initialUrl, Map<String, String> parameters, String experimentIds,
-            Bundle intentExtras, @Nullable AssistantOnboardingCoordinator onboardingCoordinator) {
+            @Nullable String callerAccount, @Nullable String userName, boolean isChromeCustomTab,
+            @Nullable AssistantOnboardingCoordinator onboardingCoordinator) {
         if (mNativeClientAndroid == 0) return false;
 
         checkNativeClientIsAliveOrThrow();
-        chooseAccountAsyncIfNecessary(parameters.get(PARAMETER_USER_EMAIL), intentExtras);
+        chooseAccountAsyncIfNecessary(userName);
         return AutofillAssistantClientJni.get().start(mNativeClientAndroid,
-                AutofillAssistantClient.this, initialUrl, experimentIds,
+                AutofillAssistantClient.this, initialUrl, experimentIds, callerAccount,
                 parameters.keySet().toArray(new String[parameters.size()]),
-                parameters.values().toArray(new String[parameters.size()]), onboardingCoordinator,
+                parameters.values().toArray(new String[parameters.size()]), isChromeCustomTab,
+                onboardingCoordinator,
                 /* onboardingShown= */
                 onboardingCoordinator != null && onboardingCoordinator.getOnboardingShown(),
                 AutofillAssistantServiceInjector.getServiceToInject());
@@ -141,22 +145,43 @@ class AutofillAssistantClient {
                 mNativeClientAndroid, AutofillAssistantClient.this, otherWebContents);
     }
 
-    /** Lists available direct actions. */
-    public void listDirectActions(String userName, String experimentIds,
-            Map<String, String> arguments, Callback<Set<String>> callback) {
+    /** Starts the controller and fetching scripts for websites. */
+    public void fetchWebsiteActions(String userName, String experimentIds,
+            Map<String, String> arguments, Callback<Boolean> callback) {
         if (mNativeClientAndroid == 0) {
-            callback.onResult(Collections.emptySet());
+            callback.onResult(false);
             return;
         }
 
-        chooseAccountAsyncIfNecessary(userName.isEmpty() ? null : userName, null);
+        chooseAccountAsyncIfNecessary(userName.isEmpty() ? null : userName);
 
         // The native side calls sendDirectActionList() on the callback once the controller has
         // results.
-        AutofillAssistantClientJni.get().listDirectActions(mNativeClientAndroid,
+        AutofillAssistantClientJni.get().fetchWebsiteActions(mNativeClientAndroid,
                 AutofillAssistantClient.this, experimentIds,
                 arguments.keySet().toArray(new String[arguments.size()]),
                 arguments.values().toArray(new String[arguments.size()]), callback);
+    }
+
+    /** Return true if the controller exists and is in tracking mode. */
+    public boolean hasRunFirstCheck() {
+        if (mNativeClientAndroid == 0) {
+            return false;
+        }
+
+        ThreadUtils.assertOnUiThread();
+        return AutofillAssistantClientJni.get().hasRunFirstCheck(
+                mNativeClientAndroid, AutofillAssistantClient.this);
+    }
+
+    /** Lists available direct actions. */
+    public List<AutofillAssistantDirectAction> getDirectActions() {
+        if (mNativeClientAndroid == 0) {
+            return Collections.emptyList();
+        }
+        AutofillAssistantDirectAction[] actions = AutofillAssistantClientJni.get().getDirectActions(
+                mNativeClientAndroid, AutofillAssistantClient.this);
+        return Arrays.asList(actions);
     }
 
     /**
@@ -165,7 +190,7 @@ class AutofillAssistantClient {
      * @param actionId id of the action
      * @param experimentIds comma-separated set of experiments to use while running the flow
      * @param arguments report these as autobot parameters while performing this specific action
-     * @param onboardingcoordinator if non-null, reuse existing UI elements, usually created to show
+     * @param onboardingCoordinator if non-null, reuse existing UI elements, usually created to show
      *         onboarding.
      * @return true if the action was found started, false otherwise. The action can still fail
      * after this method returns true; the failure will be displayed on the UI.
@@ -175,7 +200,7 @@ class AutofillAssistantClient {
             @Nullable AssistantOnboardingCoordinator onboardingCoordinator) {
         if (mNativeClientAndroid == 0) return false;
 
-        // Note that only listDirectActions can start AA, so only it needs
+        // Note that only fetchWebsiteActions can start AA, so only it needs
         // chooseAccountAsyncIfNecessary.
         return AutofillAssistantClientJni.get().performDirectAction(mNativeClientAndroid,
                 AutofillAssistantClient.this, actionId, experimentIds,
@@ -188,12 +213,11 @@ class AutofillAssistantClient {
         return new AutofillAssistantClient(nativeClientAndroid);
     }
 
-    private void chooseAccountAsyncIfNecessary(
-            @Nullable String accountFromParameter, @Nullable Bundle extras) {
+    private void chooseAccountAsyncIfNecessary(@Nullable String userName) {
         if (mAccountInitializationStarted) return;
         mAccountInitializationStarted = true;
 
-        AccountManagerFacade.get().tryGetGoogleAccounts(accounts -> {
+        AccountManagerFacadeProvider.getInstance().tryGetGoogleAccounts(accounts -> {
             if (mNativeClientAndroid == 0) return;
             if (accounts.size() == 1) {
                 // If there's only one account, there aren't any doubts.
@@ -210,24 +234,11 @@ class AutofillAssistantClient {
                 return;
             }
 
-            if (accountFromParameter != null) {
-                Account account = findAccountByName(accounts, accountFromParameter);
+            if (userName != null) {
+                Account account = findAccountByName(accounts, userName);
                 if (account != null) {
                     onAccountChosen(account);
                     return;
-                }
-            }
-
-            if (extras != null) {
-                for (String extra : extras.keySet()) {
-                    // TODO(crbug.com/806868): Deprecate ACCOUNT_NAME.
-                    if (extra.endsWith("ACCOUNT_NAME")) {
-                        Account account = findAccountByName(accounts, extras.getString(extra));
-                        if (account != null) {
-                            onAccountChosen(account);
-                            return;
-                        }
-                    }
                 }
             }
             onAccountChosen(null);
@@ -271,8 +282,8 @@ class AutofillAssistantClient {
             return;
         }
 
-        IdentityServicesProvider.getOAuth2TokenService().getAccessToken(
-                mAccount, AUTH_TOKEN_TYPE, new OAuth2TokenService.GetAccessTokenCallback() {
+        IdentityServicesProvider.get().getIdentityManager().getAccessToken(
+                mAccount, AUTH_TOKEN_TYPE, new IdentityManager.GetAccessTokenCallback() {
                     @Override
                     public void onGetTokenSuccess(String token) {
                         if (mNativeClientAndroid != 0) {
@@ -297,7 +308,7 @@ class AutofillAssistantClient {
             return;
         }
 
-        IdentityServicesProvider.getOAuth2TokenService().invalidateAccessToken(accessToken);
+        IdentityServicesProvider.get().getIdentityManager().invalidateAccessToken(accessToken);
     }
 
     /** Returns the e-mail address that corresponds to the access token or an empty string. */
@@ -326,14 +337,28 @@ class AutofillAssistantClient {
         return null;
     }
 
+    /** Returns the android version of the device. */
+    @CalledByNative
+    private int getSdkInt() {
+        return Build.VERSION.SDK_INT;
+    }
+
+    /** Returns the manufacturer of the device. */
+    @CalledByNative
+    private String getDeviceManufacturer() {
+        return Build.MANUFACTURER;
+    }
+
+    /** Returns the model of the device. */
+    @CalledByNative
+    private String getDeviceModel() {
+        return Build.MODEL;
+    }
+
     /** Adds a dynamic action to the given reporter. */
     @CalledByNative
-    private void sendDirectActionList(Callback<Set<String>> callback, String[] names) {
-        Set<String> set = new HashSet<>();
-        for (String name : names) {
-            set.add(name);
-        }
-        callback.onResult(set);
+    private void onFetchWebsiteActions(Callback<Boolean> callback, boolean success) {
+        callback.onResult(success);
     }
 
     @CalledByNative
@@ -345,7 +370,8 @@ class AutofillAssistantClient {
     interface Natives {
         AutofillAssistantClient fromWebContents(WebContents webContents);
         boolean start(long nativeClientAndroid, AutofillAssistantClient caller, String initialUrl,
-                String experimentIds, String[] parameterNames, String[] parameterValues,
+                String experimentIds, String callerAccount, String[] parameterNames,
+                String[] parameterValues, boolean isChromeCustomTab,
                 @Nullable AssistantOnboardingCoordinator onboardingCoordinator,
                 boolean onboardingShown, long nativeService);
         void onAccessToken(long nativeClientAndroid, AutofillAssistantClient caller,
@@ -354,9 +380,14 @@ class AutofillAssistantClient {
         void destroyUI(long nativeClientAndroid, AutofillAssistantClient caller);
         void transferUITo(
                 long nativeClientAndroid, AutofillAssistantClient caller, Object otherWebContents);
-        void listDirectActions(long nativeClientAndroid, AutofillAssistantClient caller,
+        void fetchWebsiteActions(long nativeClientAndroid, AutofillAssistantClient caller,
                 String experimentIds, String[] argumentNames, String[] argumentValues,
                 Object callback);
+        boolean hasRunFirstCheck(long nativeClientAndroid, AutofillAssistantClient caller);
+
+        AutofillAssistantDirectAction[] getDirectActions(
+                long nativeClientAndroid, AutofillAssistantClient caller);
+
         boolean performDirectAction(long nativeClientAndroid, AutofillAssistantClient caller,
                 String actionId, String experimentId, String[] argumentNames,
                 String[] argumentValues,

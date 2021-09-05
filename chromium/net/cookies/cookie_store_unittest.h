@@ -14,10 +14,10 @@
 
 #include "base/bind.h"
 #include "base/location.h"
-#include "base/message_loop/message_loop.h"
 #include "base/message_loop/message_loop_current.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_tokenizer.h"
+#include "base/test/task_environment.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "net/cookies/canonical_cookie.h"
@@ -126,9 +126,11 @@ class CookieStoreTest : public testing::Test {
         http_baz_com_("http://baz.com"),
         http_bar_com_("http://bar.com") {
     // This test may be used outside of the net test suite, and thus may not
-    // have a message loop.
-    if (!base::MessageLoopCurrent::Get())
-      message_loop_.reset(new base::MessageLoop);
+    // have a task environment.
+    if (!base::MessageLoopCurrent::Get()) {
+      task_environment_ =
+          std::make_unique<base::test::SingleThreadTaskEnvironment>();
+    }
   }
 
   // Helper methods for the asynchronous Cookie Store API that call the
@@ -141,6 +143,8 @@ class CookieStoreTest : public testing::Test {
     CookieOptions options;
     if (!CookieStoreTestTraits::supports_http_only)
       options.set_include_httponly();
+    options.set_same_site_cookie_context(
+        net::CookieOptions::SameSiteCookieContext::MakeInclusive());
     return GetCookiesWithOptions(cs, url, options);
   }
 
@@ -213,7 +217,7 @@ class CookieStoreTest : public testing::Test {
     if (can_modify_httponly)
       options.set_include_httponly();
     options.set_same_site_cookie_context(
-        net::CookieOptions::SameSiteCookieContext::SAME_SITE_STRICT);
+        net::CookieOptions::SameSiteCookieContext::MakeInclusive());
     cs->SetCanonicalCookieAsync(std::move(cookie), std::move(source_scheme),
                                 options, callback.MakeCallback());
     callback.WaitUntilDone();
@@ -227,6 +231,8 @@ class CookieStoreTest : public testing::Test {
     CookieOptions options;
     if (!CookieStoreTestTraits::supports_http_only)
       options.set_include_httponly();
+    options.set_same_site_cookie_context(
+        net::CookieOptions::SameSiteCookieContext::MakeInclusive());
     return CreateAndSetCookie(cs, url, cookie_line, options,
                               base::make_optional(server_time));
   }
@@ -237,6 +243,8 @@ class CookieStoreTest : public testing::Test {
     CookieOptions options;
     if (!CookieStoreTestTraits::supports_http_only)
       options.set_include_httponly();
+    options.set_same_site_cookie_context(
+        net::CookieOptions::SameSiteCookieContext::MakeInclusive());
     return CreateAndSetCookie(cs, url, cookie_line, options);
   }
 
@@ -256,7 +264,7 @@ class CookieStoreTest : public testing::Test {
       options.set_include_httponly();
     // Allow setting SameSite cookies.
     options.set_same_site_cookie_context(
-        net::CookieOptions::SameSiteCookieContext::SAME_SITE_STRICT);
+        net::CookieOptions::SameSiteCookieContext::MakeInclusive());
 
     DCHECK(cs);
     ResultSavingCookieCallback<CanonicalCookie::CookieInclusionStatus> callback;
@@ -277,7 +285,7 @@ class CookieStoreTest : public testing::Test {
     if (can_modify_httponly)
       options.set_include_httponly();
     options.set_same_site_cookie_context(
-        net::CookieOptions::SameSiteCookieContext::SAME_SITE_STRICT);
+        net::CookieOptions::SameSiteCookieContext::MakeInclusive());
     cs->SetCanonicalCookieAsync(std::move(cookie), std::move(source_scheme),
                                 options, callback.MakeCallback());
     callback.WaitUntilDone();
@@ -387,7 +395,7 @@ class CookieStoreTest : public testing::Test {
   const CookieURLHelper http_baz_com_;
   const CookieURLHelper http_bar_com_;
 
-  std::unique_ptr<base::MessageLoop> message_loop_;
+  std::unique_ptr<base::test::SingleThreadTaskEnvironment> task_environment_;
 
  private:
   // Returns a set of strings of type "name=value". Fails in case of duplicate.
@@ -414,7 +422,7 @@ TYPED_TEST_P(CookieStoreTest, FilterTest) {
   std::unique_ptr<CanonicalCookie> cc(CanonicalCookie::CreateSanitizedCookie(
       this->www_foo_foo_.url(), "A", "B", std::string(), "/foo", one_hour_ago,
       one_hour_from_now, base::Time(), false, false,
-      CookieSameSite::NO_RESTRICTION, COOKIE_PRIORITY_DEFAULT));
+      CookieSameSite::STRICT_MODE, COOKIE_PRIORITY_DEFAULT));
   ASSERT_TRUE(cc);
   EXPECT_TRUE(this->SetCanonicalCookie(cs, std::move(cc), "https",
                                        true /*modify_httponly*/));
@@ -424,7 +432,7 @@ TYPED_TEST_P(CookieStoreTest, FilterTest) {
   cc = CanonicalCookie::CreateSanitizedCookie(
       this->www_foo_bar_.url(), "C", "D", this->www_foo_bar_.domain(), "/bar",
       two_hours_ago, base::Time(), one_hour_ago, false, true,
-      CookieSameSite::NO_RESTRICTION, COOKIE_PRIORITY_DEFAULT);
+      CookieSameSite::STRICT_MODE, COOKIE_PRIORITY_DEFAULT);
   ASSERT_TRUE(cc);
   EXPECT_TRUE(this->SetCanonicalCookie(cs, std::move(cc), "https",
                                        true /*modify_httponly*/));
@@ -474,8 +482,11 @@ TYPED_TEST_P(CookieStoreTest, FilterTest) {
   // Verify that the cookie was set as 'httponly' by passing in a CookieOptions
   // that excludes them and getting an empty result.
   if (TypeParam::supports_http_only) {
-    cookies = this->GetCookieListWithOptions(cs, this->www_foo_bar_.url(),
-                                             CookieOptions());
+    net::CookieOptions options;
+    options.set_same_site_cookie_context(
+        net::CookieOptions::SameSiteCookieContext::MakeInclusive());
+    cookies =
+        this->GetCookieListWithOptions(cs, this->www_foo_bar_.url(), options);
     it = cookies.begin();
     ASSERT_TRUE(it == cookies.end());
   }
@@ -538,7 +549,7 @@ TYPED_TEST_P(CookieStoreTest, SetCanonicalCookieTest) {
       std::make_unique<CanonicalCookie>(
           "A", "B", foo_foo_host, "/foo", one_hour_ago, one_hour_from_now,
           base::Time(), false /* secure */, false /* httponly */,
-          CookieSameSite::NO_RESTRICTION, COOKIE_PRIORITY_DEFAULT),
+          CookieSameSite::LAX_MODE, COOKIE_PRIORITY_DEFAULT),
       "http", true));
   // Note that for the creation time to be set exactly, without modification,
   // it must be different from the one set by the line above.
@@ -546,7 +557,7 @@ TYPED_TEST_P(CookieStoreTest, SetCanonicalCookieTest) {
       cs,
       std::make_unique<CanonicalCookie>(
           "C", "D", "." + foo_bar_domain, "/bar", two_hours_ago, base::Time(),
-          one_hour_ago, false, true, CookieSameSite::NO_RESTRICTION,
+          one_hour_ago, false, true, CookieSameSite::LAX_MODE,
           COOKIE_PRIORITY_DEFAULT),
       "http", true));
 
@@ -605,7 +616,7 @@ TYPED_TEST_P(CookieStoreTest, SetCanonicalCookieTest) {
                 std::make_unique<CanonicalCookie>(
                     "G", "H", http_foo_host, "/unique", base::Time(),
                     base::Time(), base::Time(), false /* secure */,
-                    true /* httponly */, CookieSameSite::NO_RESTRICTION,
+                    true /* httponly */, CookieSameSite::LAX_MODE,
                     COOKIE_PRIORITY_DEFAULT),
                 "http", false /* modify_http_only */)
             .HasExclusionReason(
@@ -632,7 +643,7 @@ TYPED_TEST_P(CookieStoreTest, SetCanonicalCookieTest) {
         std::make_unique<CanonicalCookie>(
             "G", "H", http_foo_host, "/unique", base::Time(), base::Time(),
             base::Time(), false /* secure */, true /* httponly */,
-            CookieSameSite::NO_RESTRICTION, COOKIE_PRIORITY_DEFAULT),
+            CookieSameSite::LAX_MODE, COOKIE_PRIORITY_DEFAULT),
         "http", true /* modify_http_only */));
 
     EXPECT_TRUE(
@@ -641,7 +652,7 @@ TYPED_TEST_P(CookieStoreTest, SetCanonicalCookieTest) {
                 std::make_unique<CanonicalCookie>(
                     "G", "H", http_foo_host, "/unique", base::Time(),
                     base::Time(), base::Time(), false /* secure */,
-                    true /* httponly */, CookieSameSite::NO_RESTRICTION,
+                    true /* httponly */, CookieSameSite::LAX_MODE,
                     COOKIE_PRIORITY_DEFAULT),
                 "http", false /* modify_http_only */)
             .HasExclusionReason(
@@ -653,7 +664,7 @@ TYPED_TEST_P(CookieStoreTest, SetCanonicalCookieTest) {
         std::make_unique<CanonicalCookie>(
             "G", "H", http_foo_host, "/unique", base::Time(), base::Time(),
             base::Time(), false /* secure */, true /* httponly */,
-            CookieSameSite::NO_RESTRICTION, COOKIE_PRIORITY_DEFAULT),
+            CookieSameSite::LAX_MODE, COOKIE_PRIORITY_DEFAULT),
         "http", true /* modify_http_only */));
   }
 
@@ -730,28 +741,28 @@ TYPED_TEST_P(CookieStoreTest, SecureEnforcement) {
       cs,
       std::make_unique<CanonicalCookie>(
           "A", "B", http_domain, "/", base::Time::Now(), base::Time(),
-          base::Time(), true, false, CookieSameSite::NO_RESTRICTION,
+          base::Time(), true, false, CookieSameSite::STRICT_MODE,
           COOKIE_PRIORITY_DEFAULT),
       "http", true /*modify_httponly*/));
   EXPECT_TRUE(this->SetCanonicalCookie(
       cs,
       std::make_unique<CanonicalCookie>(
           "A", "B", http_domain, "/", base::Time::Now(), base::Time(),
-          base::Time(), true, false, CookieSameSite::NO_RESTRICTION,
+          base::Time(), true, false, CookieSameSite::STRICT_MODE,
           COOKIE_PRIORITY_DEFAULT),
       "https", true /*modify_httponly*/));
   EXPECT_TRUE(this->SetCanonicalCookie(
       cs,
       std::make_unique<CanonicalCookie>(
           "A", "B", http_domain, "/", base::Time::Now(), base::Time(),
-          base::Time(), false, false, CookieSameSite::NO_RESTRICTION,
+          base::Time(), false, false, CookieSameSite::STRICT_MODE,
           COOKIE_PRIORITY_DEFAULT),
       "https", true /*modify_httponly*/));
   EXPECT_TRUE(this->SetCanonicalCookie(
       cs,
       std::make_unique<CanonicalCookie>(
           "A", "B", http_domain, "/", base::Time::Now(), base::Time(),
-          base::Time(), false, false, CookieSameSite::NO_RESTRICTION,
+          base::Time(), false, false, CookieSameSite::STRICT_MODE,
           COOKIE_PRIORITY_DEFAULT),
       "http", true /*modify_httponly*/));
 }
@@ -768,31 +779,31 @@ TYPED_TEST_P(CookieStoreTest, EmptyKeyTest) {
   EXPECT_TRUE(this->SetCookie(cs, url1, "foo"));
   EXPECT_EQ("foo", this->GetCookies(cs, url1));
 
-  // Regression tests for https://crbug.com/601786
+  // Cookies with neither name nor value (e.g. `Set-Cookie: =`) are ignored.
   GURL url2("http://foo2.bar.com");
   EXPECT_TRUE(this->SetCookie(cs, url2, "foo"));
-  EXPECT_TRUE(this->SetCookie(cs, url2, "\t"));
-  EXPECT_EQ("", this->GetCookies(cs, url2));
+  EXPECT_FALSE(this->SetCookie(cs, url2, "\t"));
+  EXPECT_EQ("foo", this->GetCookies(cs, url2));
 
   GURL url3("http://foo3.bar.com");
   EXPECT_TRUE(this->SetCookie(cs, url3, "foo"));
-  EXPECT_TRUE(this->SetCookie(cs, url3, "="));
-  EXPECT_EQ("", this->GetCookies(cs, url3));
+  EXPECT_FALSE(this->SetCookie(cs, url3, "="));
+  EXPECT_EQ("foo", this->GetCookies(cs, url3));
 
   GURL url4("http://foo4.bar.com");
   EXPECT_TRUE(this->SetCookie(cs, url4, "foo"));
-  EXPECT_TRUE(this->SetCookie(cs, url4, ""));
-  EXPECT_EQ("", this->GetCookies(cs, url4));
+  EXPECT_FALSE(this->SetCookie(cs, url4, ""));
+  EXPECT_EQ("foo", this->GetCookies(cs, url4));
 
   GURL url5("http://foo5.bar.com");
   EXPECT_TRUE(this->SetCookie(cs, url5, "foo"));
-  EXPECT_TRUE(this->SetCookie(cs, url5, "; bar"));
-  EXPECT_EQ("", this->GetCookies(cs, url5));
+  EXPECT_FALSE(this->SetCookie(cs, url5, "; bar"));
+  EXPECT_EQ("foo", this->GetCookies(cs, url5));
 
   GURL url6("http://foo6.bar.com");
   EXPECT_TRUE(this->SetCookie(cs, url6, "foo"));
-  EXPECT_TRUE(this->SetCookie(cs, url6, " "));
-  EXPECT_EQ("", this->GetCookies(cs, url6));
+  EXPECT_FALSE(this->SetCookie(cs, url6, " "));
+  EXPECT_EQ("foo", this->GetCookies(cs, url6));
 #endif
 }
 
@@ -1174,9 +1185,10 @@ TYPED_TEST_P(CookieStoreTest, InvalidScheme_Read) {
       this->SetCookie(cs, this->http_www_foo_.url(), kValidDomainCookieLine));
   this->MatchCookieLines(std::string(),
                          this->GetCookies(cs, this->ftp_foo_.url()));
-  EXPECT_EQ(0U, this->GetCookieListWithOptions(cs, this->ftp_foo_.url(),
-                                               CookieOptions())
-                    .size());
+  EXPECT_EQ(0U,
+            this->GetCookieListWithOptions(cs, this->ftp_foo_.url(),
+                                           CookieOptions::MakeAllInclusive())
+                .size());
 }
 
 TYPED_TEST_P(CookieStoreTest, PathTest) {
@@ -1204,6 +1216,8 @@ TYPED_TEST_P(CookieStoreTest, EmptyExpires) {
   CookieOptions options;
   if (!TypeParam::supports_http_only)
     options.set_include_httponly();
+  options.set_same_site_cookie_context(
+      net::CookieOptions::SameSiteCookieContext::MakeInclusive());
   GURL url("http://www7.ipdl.inpit.go.jp/Tokujitu/tjkta.ipdl?N0000=108");
   std::string set_cookie_line =
       "ACSTM=20130308043820420042; path=/; domain=ipdl.inpit.go.jp; Expires=";
@@ -1232,6 +1246,8 @@ TYPED_TEST_P(CookieStoreTest, HttpOnlyTest) {
   CookieStore* cs = this->GetCookieStore();
   CookieOptions options;
   options.set_include_httponly();
+  options.set_same_site_cookie_context(
+      net::CookieOptions::SameSiteCookieContext::MakeInclusive());
 
   // Create a httponly cookie.
   EXPECT_TRUE(this->CreateAndSetCookie(cs, this->http_www_foo_.url(),
@@ -1518,6 +1534,8 @@ TYPED_TEST_P(CookieStoreTest, OverwritePersistentCookie) {
   // overwrite the non-http-only version.
   CookieOptions allow_httponly;
   allow_httponly.set_include_httponly();
+  allow_httponly.set_same_site_cookie_context(
+      net::CookieOptions::SameSiteCookieContext::MakeInclusive());
   EXPECT_TRUE(this->CreateAndSetCookie(cs, url_foo,
                                        "b=val2; path=/path1; httponly; "
                                        "expires=Mon, 18-Apr-22 22:50:14 GMT",
@@ -1572,6 +1590,9 @@ TYPED_TEST_P(CookieStoreTest, EmptyName) {
   CookieOptions options;
   if (!TypeParam::supports_http_only)
     options.set_include_httponly();
+  options.set_same_site_cookie_context(
+      net::CookieOptions::SameSiteCookieContext::MakeInclusive());
+
   EXPECT_TRUE(this->CreateAndSetCookie(cs, url_foo, "a", options));
   CookieList list = this->GetAllCookiesForURL(cs, url_foo);
   EXPECT_EQ(1u, list.size());
@@ -1612,6 +1633,9 @@ TYPED_TEST_P(CookieStoreTest, CookieOrdering) {
             this->GetCookies(cs, GURL("http://d.c.b.a.foo.com/aa/bb/cc/dd")));
 
   CookieOptions options;
+  options.set_same_site_cookie_context(
+      net::CookieOptions::SameSiteCookieContext::MakeInclusive());
+
   CookieList cookies = this->GetCookieListWithOptions(
       cs, GURL("http://d.c.b.a.foo.com/aa/bb/cc/dd"), options);
   CookieList::const_iterator it = cookies.begin();
@@ -1732,7 +1756,7 @@ TYPED_TEST_P(CookieStoreTest, DeleteCanonicalCookieAsync) {
 
   // Delete the "/foo" cookie, and make sure only it was deleted.
   CookieList cookies = this->GetCookieListWithOptions(
-      cs, this->www_foo_foo_.url(), CookieOptions());
+      cs, this->www_foo_foo_.url(), CookieOptions::MakeAllInclusive());
   ASSERT_EQ(1u, cookies.size());
   EXPECT_EQ(1u, this->DeleteCanonicalCookie(cs, cookies[0]));
   EXPECT_EQ(1u, this->GetAllCookies(cs).size());
@@ -1744,7 +1768,7 @@ TYPED_TEST_P(CookieStoreTest, DeleteCanonicalCookieAsync) {
 
   // Try to delete the "/bar" cookie after overwriting it with a new cookie.
   cookies = this->GetCookieListWithOptions(cs, this->www_foo_bar_.url(),
-                                           CookieOptions());
+                                           CookieOptions::MakeAllInclusive());
   ASSERT_EQ(1u, cookies.size());
   EXPECT_TRUE(this->SetCookie(cs, this->http_www_foo_.url(), "A=D;Path=/bar"));
   EXPECT_EQ(0u, this->DeleteCanonicalCookie(cs, cookies[0]));
@@ -1753,7 +1777,7 @@ TYPED_TEST_P(CookieStoreTest, DeleteCanonicalCookieAsync) {
 
   // Delete the new "/bar" cookie.
   cookies = this->GetCookieListWithOptions(cs, this->www_foo_bar_.url(),
-                                           CookieOptions());
+                                           CookieOptions::MakeAllInclusive());
   ASSERT_EQ(1u, cookies.size());
   EXPECT_EQ(1u, this->DeleteCanonicalCookie(cs, cookies[0]));
   EXPECT_EQ(0u, this->GetAllCookies(cs).size());

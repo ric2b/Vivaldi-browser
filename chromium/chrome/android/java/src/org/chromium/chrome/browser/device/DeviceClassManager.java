@@ -4,10 +4,16 @@
 
 package org.chromium.chrome.browser.device;
 
+import androidx.annotation.VisibleForTesting;
+
 import org.chromium.base.CommandLine;
+import org.chromium.base.ContextUtils;
 import org.chromium.base.SysUtils;
-import org.chromium.chrome.browser.ChromeSwitches;
-import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
+import org.chromium.chrome.browser.flags.CachedFeatureFlags;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.flags.ChromeSwitches;
+import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
+import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.util.AccessibilityUtil;
 import org.chromium.ui.base.DeviceFormFactor;
 
@@ -21,7 +27,6 @@ public class DeviceClassManager {
     private static DeviceClassManager sInstance;
 
     // Set of features that can be enabled/disabled
-    private boolean mEnableSnapshots;
     private boolean mEnableLayerDecorationCache;
     private boolean mEnableAccessibilityLayout;
     private boolean mEnableAnimations;
@@ -44,14 +49,12 @@ public class DeviceClassManager {
     private DeviceClassManager() {
         // Device based configurations.
         if (SysUtils.isLowEndDevice()) {
-            mEnableSnapshots = false;
             mEnableLayerDecorationCache = true;
             mEnableAccessibilityLayout = true;
             mEnableAnimations = false;
             mEnablePrerendering = false;
             mEnableToolbarSwipe = false;
         } else {
-            mEnableSnapshots = true;
             mEnableLayerDecorationCache = true;
             mEnableAccessibilityLayout = false;
             mEnableAnimations = true;
@@ -64,13 +67,11 @@ public class DeviceClassManager {
         }
 
         if (ChromeApplication.isVivaldi()) {
-            mEnableSnapshots = true;
             mEnableAccessibilityLayout = false;
         }
 
         // Flag based configurations.
         CommandLine commandLine = CommandLine.getInstance();
-        assert commandLine.isNativeImplementation();
         mEnableAccessibilityLayout |= commandLine
                 .hasSwitch(ChromeSwitches.ENABLE_ACCESSIBILITY_TAB_SWITCHER);
         mEnableFullscreen =
@@ -80,13 +81,6 @@ public class DeviceClassManager {
         if (mEnableAccessibilityLayout) {
             mEnableAnimations = false;
         }
-    }
-
-    /**
-     * @return Whether or not we can take screenshots.
-     */
-    public static boolean enableSnapshots() {
-        return getInstance().mEnableSnapshots;
     }
 
     /**
@@ -100,10 +94,16 @@ public class DeviceClassManager {
      * @return Whether or not should use the accessibility tab switcher.
      */
     public static boolean enableAccessibilityLayout() {
+        if (isPhone()
+                && CachedFeatureFlags.isEnabled(ChromeFeatureList.TAB_GROUPS_CONTINUATION_ANDROID)
+                && CachedFeatureFlags.isEnabled(ChromeFeatureList.TAB_GROUPS_ANDROID)) {
+            return false;
+        }
+
         if (getInstance().mEnableAccessibilityLayout) return true;
         if (!AccessibilityUtil.isAccessibilityEnabled()) return false;
-        return ChromePreferenceManager.getInstance().readBoolean(
-                ChromePreferenceManager.ACCESSIBILITY_TAB_SWITCHER, true);
+        return SharedPreferencesManager.getInstance().readBoolean(
+                ChromePreferenceKeys.ACCESSIBILITY_TAB_SWITCHER, true);
     }
 
     /**
@@ -119,8 +119,8 @@ public class DeviceClassManager {
     public static boolean enableAnimations() {
         if (!getInstance().mEnableAnimations) return false;
         if (!AccessibilityUtil.isAccessibilityEnabled()) return true;
-        return !ChromePreferenceManager.getInstance().readBoolean(
-                ChromePreferenceManager.ACCESSIBILITY_TAB_SWITCHER, true);
+        return !SharedPreferencesManager.getInstance().readBoolean(
+                ChromePreferenceKeys.ACCESSIBILITY_TAB_SWITCHER, true);
     }
 
     /**
@@ -135,5 +135,18 @@ public class DeviceClassManager {
      */
     public static boolean enableToolbarSwipe() {
         return getInstance().mEnableToolbarSwipe;
+    }
+
+    private static boolean isPhone() {
+        return !DeviceFormFactor.isNonMultiDisplayContextOnTablet(
+                ContextUtils.getApplicationContext());
+    }
+
+    /**
+     * Reset the instance for testing.
+     */
+    @VisibleForTesting
+    public static void resetForTesting() {
+        sInstance = null;
     }
 }

@@ -11,10 +11,13 @@
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
+#include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/modules/permissions/permission_utils.h"
-#include "third_party/blink/renderer/modules/wake_lock/wake_lock_state_record.h"
+#include "third_party/blink/renderer/modules/wake_lock/wake_lock_manager.h"
 #include "third_party/blink/renderer/modules/wake_lock/wake_lock_type.h"
+#include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
+#include "third_party/blink/renderer/platform/scheduler/public/frame_or_worker_scheduler.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
@@ -24,46 +27,68 @@ using mojom::blink::PermissionService;
 using mojom::blink::PermissionStatus;
 
 WakeLock::WakeLock(Document& document)
-    : ContextLifecycleObserver(&document),
+    : ExecutionContextLifecycleObserver(&document),
       PageVisibilityObserver(document.GetPage()),
-      state_records_{
-          MakeGarbageCollected<WakeLockStateRecord>(&document,
-                                                    WakeLockType::kScreen),
-          MakeGarbageCollected<WakeLockStateRecord>(&document,
-                                                    WakeLockType::kSystem)} {}
+      managers_{
+          MakeGarbageCollected<WakeLockManager>(document.ToExecutionContext(),
+                                                WakeLockType::kScreen),
+          MakeGarbageCollected<WakeLockManager>(document.ToExecutionContext(),
+                                                WakeLockType::kSystem)} {
+  document.GetScheduler()->RegisterStickyFeature(
+      SchedulingPolicy::Feature::kWakeLock,
+      {SchedulingPolicy::RecordMetricsForBackForwardCache()});
+}
 
 WakeLock::WakeLock(DedicatedWorkerGlobalScope& worker_scope)
-    : ContextLifecycleObserver(&worker_scope),
+    : ExecutionContextLifecycleObserver(&worker_scope),
       PageVisibilityObserver(nullptr),
-      state_records_{
-          MakeGarbageCollected<WakeLockStateRecord>(&worker_scope,
-                                                    WakeLockType::kScreen),
-          MakeGarbageCollected<WakeLockStateRecord>(&worker_scope,
-                                                    WakeLockType::kSystem)} {}
+      managers_{MakeGarbageCollected<WakeLockManager>(&worker_scope,
+                                                      WakeLockType::kScreen),
+                MakeGarbageCollected<WakeLockManager>(&worker_scope,
+                                                      WakeLockType::kSystem)} {}
 
-ScriptPromise WakeLock::request(ScriptState* script_state, const String& type) {
-  // https://w3c.github.io/wake-lock/#request-static-method
+ScriptPromise WakeLock::request(ScriptState* script_state,
+                                const String& type,
+                                ExceptionState& exception_state) {
+  // https://w3c.github.io/wake-lock/#the-request-method
   auto* context = ExecutionContext::From(script_state);
   DCHECK(context->IsDocument() || context->IsDedicatedWorkerGlobalScope());
 
-  // 2.1. If document is not allowed to use the policy-controlled feature named
-  //      "wake-lock", reject promise with a "NotAllowedError" DOMException and
-  //      return promise.
+  if (type == "screen" &&
+      !RuntimeEnabledFeatures::ScreenWakeLockEnabled(context)) {
+    exception_state.ThrowTypeError(
+        "The provided value 'screen' is not a valid enum value of type "
+        "WakeLockType.");
+    return ScriptPromise();
+  }
+
+  if (type == "system" && !RuntimeEnabledFeatures::SystemWakeLockEnabled()) {
+    exception_state.ThrowTypeError(
+        "The provided value 'system' is not a valid enum value of type "
+        "WakeLockType.");
+    return ScriptPromise();
+  }
+
+  // 2.1 If type is 'screen' and the document is not allowed to use the
+  //     policy-controlled feature named "screen-wake-lock", reject promise with
+  //     a "NotAllowedError" DOMException and return promise.
   // [N.B. Per https://github.com/w3c/webappsec-feature-policy/issues/207 there
   // is no official support for workers in the Feature Policy spec, but we can
   // perform FP checks in workers in Blink]
   // 2.2. If the user agent denies the wake lock of this type for document,
   //      reject promise with a "NotAllowedError" DOMException and return
   //      promise.
-  if (!context->GetSecurityContext().IsFeatureEnabled(
-          mojom::FeaturePolicyFeature::kWakeLock,
+  if (type == "screen" &&
+      !context->IsFeatureEnabled(
+          mojom::blink::FeaturePolicyFeature::kScreenWakeLock,
           ReportOptions::kReportOnFailure)) {
-    return ScriptPromise::RejectWithDOMException(
-        script_state,
-        MakeGarbageCollected<DOMException>(
-            DOMExceptionCode::kNotAllowedError,
-            "Access to WakeLock features is disallowed by feature policy"));
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kNotAllowedError,
+        "Access to Screen Wake Lock features is disallowed by feature policy");
+    return ScriptPromise();
   }
+
+  // TODO: Check feature policy enabling for System Wake Lock
 
   if (context->IsDedicatedWorkerGlobalScope()) {
     // 3. If the current global object is the DedicatedWorkerGlobalScope object:
@@ -72,46 +97,45 @@ ScriptPromise WakeLock::request(ScriptState* script_state, const String& type) {
     // 3.2. If type is "screen", reject promise with a "NotAllowedError"
     //      DOMException, and return promise.
     if (type == "screen") {
-      return ScriptPromise::RejectWithDOMException(
-          script_state, MakeGarbageCollected<DOMException>(
-                            DOMExceptionCode::kNotAllowedError,
-                            "Screen locks cannot be requested from workers"));
+      exception_state.ThrowDOMException(
+          DOMExceptionCode::kNotAllowedError,
+          "Screen locks cannot be requested from workers");
+      return ScriptPromise();
     }
   } else if (context->IsDocument()) {
     // 2. Let document be the responsible document of the current settings
     // object.
-    auto* document = To<Document>(context);
+    auto* document = Document::From(context);
 
     // 4. Otherwise, if the current global object is the Window object:
     // 4.1. If the document's browsing context is null, reject promise with a
     //      "NotAllowedError" DOMException and return promise.
     if (!document) {
-      return ScriptPromise::RejectWithDOMException(
-          script_state, MakeGarbageCollected<DOMException>(
-                            DOMExceptionCode::kNotAllowedError,
-                            "The document has no associated browsing context"));
+      exception_state.ThrowDOMException(
+          DOMExceptionCode::kNotAllowedError,
+          "The document has no associated browsing context");
+      return ScriptPromise();
     }
 
     // 4.2. If document is not fully active, reject promise with a
     //      "NotAllowedError" DOMException, and return promise.
     if (!document->IsActive()) {
-      return ScriptPromise::RejectWithDOMException(
-          script_state,
-          MakeGarbageCollected<DOMException>(DOMExceptionCode::kNotAllowedError,
-                                             "The document is not active"));
+      exception_state.ThrowDOMException(DOMExceptionCode::kNotAllowedError,
+                                        "The document is not active");
+      return ScriptPromise();
     }
     // 4.3. If type is "screen" and the Document of the top-level browsing
     //      context is hidden, reject promise with a "NotAllowedError"
     //      DOMException, and return promise.
     if (type == "screen" &&
         !(document->GetPage() && document->GetPage()->IsPageVisible())) {
-      return ScriptPromise::RejectWithDOMException(
-          script_state, MakeGarbageCollected<DOMException>(
-                            DOMExceptionCode::kNotAllowedError,
-                            "The requesting page is not visible"));
+      exception_state.ThrowDOMException(DOMExceptionCode::kNotAllowedError,
+                                        "The requesting page is not visible");
+      return ScriptPromise();
     }
   }
 
+  // 1. Let promise be a new promise.
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
   ScriptPromise promise = resolver->Promise();
 
@@ -129,10 +153,8 @@ ScriptPromise WakeLock::request(ScriptState* script_state, const String& type) {
       break;
   }
 
-  // 6. Run the following steps in parallel, but abort when options' signal
-  // member is present and its aborted flag is set:
-  // 6.1. Let state be the result of awaiting obtain permission steps with
-  //      type:
+  // 5. Run the following steps in parallel, but abort when type is "screen" and
+  // document is hidden:
   DoRequest(wake_lock_type, resolver);
 
   // 7. Return promise.
@@ -140,6 +162,8 @@ ScriptPromise WakeLock::request(ScriptState* script_state, const String& type) {
 }
 
 void WakeLock::DoRequest(WakeLockType type, ScriptPromiseResolver* resolver) {
+  // https://w3c.github.io/wake-lock/#the-request-method
+  // 5.1. Let state be the result of awaiting obtain permission steps with type:
   ObtainPermission(
       type, WTF::Bind(&WakeLock::DidReceivePermissionResponse,
                       WrapPersistent(this), type, WrapPersistent(resolver)));
@@ -148,11 +172,11 @@ void WakeLock::DoRequest(WakeLockType type, ScriptPromiseResolver* resolver) {
 void WakeLock::DidReceivePermissionResponse(WakeLockType type,
                                             ScriptPromiseResolver* resolver,
                                             PermissionStatus status) {
-  // https://w3c.github.io/wake-lock/#request-static-method
+  // https://w3c.github.io/wake-lock/#the-request-method
   DCHECK(status == PermissionStatus::GRANTED ||
          status == PermissionStatus::DENIED);
   DCHECK(resolver);
-  // 6.1.1. If state is "denied", then reject promise with a "NotAllowedError"
+  // 5.1.1. If state is "denied", then reject promise with a "NotAllowedError"
   //        DOMException, and abort these steps.
   if (status != PermissionStatus::GRANTED) {
     resolver->Reject(MakeGarbageCollected<DOMException>(
@@ -160,9 +184,8 @@ void WakeLock::DidReceivePermissionResponse(WakeLockType type,
         "Wake Lock permission request denied"));
     return;
   }
-  // https://github.com/w3c/wake-lock/issues/222: the page can become hidden
-  // between request() and WakeLockStateRecord::AcquireWakeLock(), in which case
-  // we need to abort early.
+  // 6. If aborted, run these steps:
+  // 6.1. Reject promise with a "NotAllowedError" DOMException.
   if (type == WakeLockType::kScreen &&
       !(GetPage() && GetPage()->IsPageVisible())) {
     resolver->Reject(MakeGarbageCollected<DOMException>(
@@ -170,29 +193,29 @@ void WakeLock::DidReceivePermissionResponse(WakeLockType type,
         "The requesting page is not visible"));
     return;
   }
-  // 6.2. Let success be the result of awaiting acquire a wake lock with promise
+  // 5.3. Let success be the result of awaiting acquire a wake lock with lock
   // and type:
-  // 6.2.1. If success is false then reject promise with a "NotAllowedError"
+  // 5.3.1. If success is false then reject promise with a "NotAllowedError"
   //        DOMException, and abort these steps.
-  WakeLockStateRecord* state_record = state_records_[static_cast<size_t>(type)];
-  DCHECK(state_record);
-  state_record->AcquireWakeLock(resolver);
+  WakeLockManager* manager = managers_[static_cast<size_t>(type)];
+  DCHECK(manager);
+  manager->AcquireWakeLock(resolver);
 }
 
-void WakeLock::ContextDestroyed(ExecutionContext*) {
+void WakeLock::ContextDestroyed() {
   // https://w3c.github.io/wake-lock/#handling-document-loss-of-full-activity
   // 1. Let document be the responsible document of the current settings object.
   // 2. Let screenRecord be the platform wake lock's state record associated
   // with document and wake lock type "screen".
-  // 3. For each lockPromise in screenRecord.[[WakeLockStateRecord]]:
-  // 3.1. Run release a wake lock with lockPromise and "screen".
+  // 3. For each lock in screenRecord.[[ActiveLocks]]:
+  // 3.1. Run release a wake lock with lock and "screen".
   // 4. Let systemRecord be the platform wake lock's state record associated
   // with document and wake lock type "system".
-  // 5. For each lockPromise in systemRecord.[[WakeLockStateRecord]]:
-  // 5.1. Run release a wake lock with lockPromise and "system".
-  for (WakeLockStateRecord* state_record : state_records_) {
-    if (state_record)
-      state_record->ClearWakeLocks();
+  // 5. For each lock in systemRecord.[[ActiveLocks]]:
+  // 5.1. Run release a wake lock with lock and "system".
+  for (WakeLockManager* manager : managers_) {
+    if (manager)
+      manager->ClearWakeLocks();
   }
 }
 
@@ -204,12 +227,12 @@ void WakeLock::PageVisibilityChanged() {
     return;
   // 3. Let screenRecord be the platform wake lock's state record associated
   // with wake lock type "screen".
-  // 4. For each lockPromise in screenRecord.[[WakeLockStateRecord]]:
-  // 4.1. Run release a wake lock with lockPromise and "screen".
-  WakeLockStateRecord* state_record =
-      state_records_[static_cast<size_t>(WakeLockType::kScreen)];
-  if (state_record)
-    state_record->ClearWakeLocks();
+  // 4. For each lock in screenRecord.[[ActiveLocks]]:
+  // 4.1. Run release a wake lock with lock and "screen".
+  WakeLockManager* manager =
+      managers_[static_cast<size_t>(WakeLockType::kScreen)];
+  if (manager)
+    manager->ClearWakeLocks();
 }
 
 void WakeLock::ObtainPermission(
@@ -240,7 +263,7 @@ void WakeLock::ObtainPermission(
       "WakeLockType and mojom::blink::WakeLockType must have identical values");
 
   auto* local_frame = GetExecutionContext()->IsDocument()
-                          ? To<Document>(GetExecutionContext())->GetFrame()
+                          ? Document::From(GetExecutionContext())->GetFrame()
                           : nullptr;
   GetPermissionService()->RequestPermission(
       CreateWakeLockPermissionDescriptor(
@@ -258,10 +281,10 @@ PermissionService* WakeLock::GetPermissionService() {
 }
 
 void WakeLock::Trace(Visitor* visitor) {
-  for (WakeLockStateRecord* state_record : state_records_)
-    visitor->Trace(state_record);
+  for (const WakeLockManager* manager : managers_)
+    visitor->Trace(manager);
   PageVisibilityObserver::Trace(visitor);
-  ContextLifecycleObserver::Trace(visitor);
+  ExecutionContextLifecycleObserver::Trace(visitor);
   ScriptWrappable::Trace(visitor);
 }
 

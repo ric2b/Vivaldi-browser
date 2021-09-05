@@ -890,8 +890,7 @@ class LayerTreeHostContextTestDontUseLostResources
     auto result = child_context_provider_->BindToCurrentThread();
     CHECK_EQ(result, gpu::ContextResult::kSuccess);
     shared_bitmap_manager_ = std::make_unique<viz::TestSharedBitmapManager>();
-    child_resource_provider_ =
-        std::make_unique<viz::ClientResourceProvider>(true);
+    child_resource_provider_ = std::make_unique<viz::ClientResourceProvider>();
   }
 
   static void EmptyReleaseCallback(const gpu::SyncToken& sync_token,
@@ -983,8 +982,7 @@ class LayerTreeHostContextTestDontUseLostResources
     layer_tree_host()->SetDebugState(debug_state);
 
     scoped_refptr<PaintedScrollbarLayer> scrollbar =
-        PaintedScrollbarLayer::Create(
-            std::unique_ptr<Scrollbar>(new FakeScrollbar));
+        PaintedScrollbarLayer::Create(base::MakeRefCounted<FakeScrollbar>());
     scrollbar->SetScrollElementId(layer->element_id());
     scrollbar->SetBounds(gfx::Size(10, 10));
     scrollbar->SetIsDrawable(true);
@@ -1346,11 +1344,7 @@ class UIResourceLostBeforeCommit : public UIResourceLostTestSimple {
   UIResourceId test_id1_;
 };
 
-// http://crbug.com/803532 : Flaky on Win 7 (dbg) and linux tsan
-#if (defined(NDEBUG) || !defined(OS_WIN)) && \
-    (!defined(THREAD_SANITIZER) || !defined(OS_LINUX))
-SINGLE_THREAD_TEST_F(UIResourceLostBeforeCommit);
-#endif
+// http://crbug.com/803532 : SINGLE_THREAD_TEST_F is flaky on every bot
 MULTI_THREAD_TEST_F(UIResourceLostBeforeCommit);
 
 // Losing UI resource before the pending trees is activated but after the

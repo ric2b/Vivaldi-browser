@@ -9,6 +9,7 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/run_loop.h"
 #include "content/browser/background_sync/background_sync_manager.h"
 #include "content/browser/background_sync/background_sync_network_observer.h"
@@ -178,6 +179,7 @@ void BackgroundSyncServiceImplTestHarness::CreateServiceWorkerRegistration() {
   options.scope = GURL(kServiceWorkerScope);
   embedded_worker_helper_->context()->RegisterServiceWorker(
       GURL(kServiceWorkerScript), options,
+      blink::mojom::FetchClientSettingsObject::New(),
       base::BindOnce(&RegisterServiceWorkerCallback, &called,
                      &sw_registration_id_));
   base::RunLoop().RunUntilIdle();

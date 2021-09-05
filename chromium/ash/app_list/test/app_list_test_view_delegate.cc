@@ -42,12 +42,13 @@ void AppListTestViewDelegate::OpenSearchResult(
     int event_flags,
     ash::AppListLaunchedFrom launched_from,
     ash::AppListLaunchType launch_type,
-    int suggestion_index) {
+    int suggestion_index,
+    bool launch_as_default) {
   const SearchModel::SearchResults* results = search_model_->results();
   for (size_t i = 0; i < results->item_count(); ++i) {
     if (results->GetItemAt(i)->id() == result_id) {
       open_search_result_counts_[i]++;
-      if (app_list_features::IsEmbeddedAssistantUIEnabled() &&
+      if (app_list_features::IsAssistantSearchEnabled() &&
           results->GetItemAt(i)->is_omnibox_search()) {
         ++open_assistant_ui_count_;
       }
@@ -125,8 +126,7 @@ void AppListTestViewDelegate::ShowWallpaperContextMenu(
 }
 
 bool AppListTestViewDelegate::ProcessHomeLauncherGesture(
-    ui::GestureEvent* event,
-    const gfx::Point& screen_location) {
+    ui::GestureEvent* event) {
   return false;
 }
 
@@ -195,7 +195,7 @@ gfx::Rect AppListTestViewDelegate::SnapBoundsToDisplayEdge(
   return bounds;
 }
 
-int AppListTestViewDelegate::GetShelfHeight() {
+int AppListTestViewDelegate::GetShelfSize() {
   // TODO(mmourgos): change this to 48 once shelf-hotseat flag is enabled.
   // Return the height of the shelf when clamshell mode is active.
   return 56;

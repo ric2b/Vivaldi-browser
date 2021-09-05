@@ -8,7 +8,7 @@
  * @param {Object} dict A dictionary representing the key event.
  * @return {!Event} A key event.
  */
-function DeserializeKeyEvent(dict) {
+export function DeserializeKeyEvent(dict) {
   const e = document.createEvent('Event');
   e.initEvent('keydown', true, true);
   e.keyCode = dict.keyCode;
@@ -27,7 +27,7 @@ function DeserializeKeyEvent(dict) {
  * @param {Event} event A key event.
  * @return {Object} A dictionary representing the key event.
  */
-function SerializeKeyEvent(event) {
+export function SerializeKeyEvent(event) {
   return {
     keyCode: event.keyCode,
     code: event.code,
@@ -43,7 +43,7 @@ function SerializeKeyEvent(event) {
  * has finished loading or failed to load.
  * @enum {string}
  */
-const LoadState = {
+export const LoadState = {
   LOADING: 'loading',
   SUCCESS: 'success',
   FAILED: 'failed'
@@ -54,7 +54,7 @@ const LoadState = {
  * the PDF viewer so that it can be customized by things like print preview.
  *
  */
-class PDFScriptingAPI {
+export class PDFScriptingAPI {
   /**
    * @param {Window} window the window of the page containing the pdf viewer.
    * @param {Object} plugin the plugin element containing the pdf viewer.
@@ -68,7 +68,7 @@ class PDFScriptingAPI {
     this.viewportChangedCallback_;
 
     /** @private {Function} */
-    this.loadCallback_;
+    this.loadCompleteCallback_;
 
     /** @private {Function} */
     this.selectedTextCallback_;
@@ -80,9 +80,9 @@ class PDFScriptingAPI {
     this.plugin_;
 
     window.addEventListener('message', event => {
-      if (event.origin !=
+      if (event.origin !==
               'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai' &&
-          event.origin != 'chrome://print') {
+          event.origin !== 'chrome://print') {
         console.error(
             'Received message that was not from the extension: ' + event);
         return;
@@ -108,8 +108,8 @@ class PDFScriptingAPI {
         case 'documentLoaded': {
           const data = /** @type {{load_state: LoadState}} */ (event.data);
           this.loadState_ = data.load_state;
-          if (this.loadCallback_) {
-            this.loadCallback_(this.loadState_ == LoadState.SUCCESS);
+          if (this.loadCompleteCallback_) {
+            this.loadCompleteCallback_(this.loadState_ === LoadState.SUCCESS);
           }
           break;
         }
@@ -181,10 +181,10 @@ class PDFScriptingAPI {
    *
    * @param {Function} callback the callback to be called.
    */
-  setLoadCallback(callback) {
-    this.loadCallback_ = callback;
-    if (this.loadState_ != LoadState.LOADING && this.loadCallback_) {
-      this.loadCallback_(this.loadState_ == LoadState.SUCCESS);
+  setLoadCompleteCallback(callback) {
+    this.loadCompleteCallback_ = callback;
+    if (this.loadState_ !== LoadState.LOADING && this.loadCompleteCallback_) {
+      this.loadCompleteCallback_(this.loadState_ === LoadState.SUCCESS);
     }
   }
 
@@ -296,12 +296,12 @@ class PDFScriptingAPI {
  *
  * @param {string} src the source URL of the PDF to load initially.
  * @param {string} baseUrl the base URL of the PDF viewer
- * @return {HTMLIFrameElement} the iframe element containing the PDF viewer.
+ * @return {!HTMLIFrameElement} the iframe element containing the PDF viewer.
  */
-function PDFCreateOutOfProcessPlugin(src, baseUrl) {
+export function PDFCreateOutOfProcessPlugin(src, baseUrl) {
   const client = new PDFScriptingAPI(window, null);
-  const iframe = assertInstanceof(
-      window.document.createElement('iframe'), HTMLIFrameElement);
+  const iframe = /** @type {!HTMLIFrameElement} */ (
+      window.document.createElement('iframe'));
   iframe.setAttribute('src', baseUrl + '/index.html?' + src);
 
   iframe.onload = function() {
@@ -309,15 +309,15 @@ function PDFCreateOutOfProcessPlugin(src, baseUrl) {
   };
 
   // Add the functions to the iframe so that they can be called directly.
+  iframe.darkModeChanged = client.darkModeChanged.bind(client);
+  iframe.hideToolbars = client.hideToolbars.bind(client);
+  iframe.loadPreviewPage = client.loadPreviewPage.bind(client);
+  iframe.resetPrintPreviewMode = client.resetPrintPreviewMode.bind(client);
+  iframe.scrollPosition = client.scrollPosition.bind(client);
+  iframe.sendKeyEvent = client.sendKeyEvent.bind(client);
+  iframe.setKeyEventCallback = client.setKeyEventCallback.bind(client);
+  iframe.setLoadCompleteCallback = client.setLoadCompleteCallback.bind(client);
   iframe.setViewportChangedCallback =
       client.setViewportChangedCallback.bind(client);
-  iframe.setLoadCallback = client.setLoadCallback.bind(client);
-  iframe.setKeyEventCallback = client.setKeyEventCallback.bind(client);
-  iframe.resetPrintPreviewMode = client.resetPrintPreviewMode.bind(client);
-  iframe.loadPreviewPage = client.loadPreviewPage.bind(client);
-  iframe.sendKeyEvent = client.sendKeyEvent.bind(client);
-  iframe.scrollPosition = client.scrollPosition.bind(client);
-  iframe.hideToolbars = client.hideToolbars.bind(client);
-  iframe.darkModeChanged = client.darkModeChanged.bind(client);
   return iframe;
 }

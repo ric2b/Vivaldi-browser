@@ -55,6 +55,13 @@ const DevicePolicyToUserPolicyMapEntry kDevicePoliciesWithPolicyOptionsMap[] = {
     {key::kDeviceLoginScreenKeyboardFocusHighlightEnabled,
      key::kKeyboardFocusHighlightEnabled},
     {key::kDeviceLoginScreenScreenMagnifierType, key::kScreenMagnifierType},
+    {key::kDeviceLoginScreenShowOptionsInSystemTrayMenu,
+     key::kShowAccessibilityOptionsInSystemTrayMenu},
+    {key::kDeviceLoginScreenPrimaryMouseButtonSwitch,
+     key::kPrimaryMouseButtonSwitch},
+    {key::kDeviceLoginScreenAccessibilityShortcutsEnabled,
+     key::kAccessibilityShortcutsEnabled},
+    {key::kDeviceLoginScreenPrivacyScreenEnabled, key::kPrivacyScreenEnabled},
 };
 
 const DevicePolicyToUserPolicyMapEntry kRecommendedDevicePoliciesMap[] = {

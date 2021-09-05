@@ -11,9 +11,9 @@
 #import "ios/chrome/browser/ui/table_view/chrome_table_view_styler.h"
 #import "ios/chrome/browser/ui/util/rtl_geometry.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
-#import "ios/chrome/common/colors/UIColor+cr_semantic_colors.h"
-#import "ios/chrome/common/colors/semantic_color_names.h"
-#import "ios/chrome/common/ui_util/constraints_ui_util.h"
+#import "ios/chrome/common/ui/colors/UIColor+cr_semantic_colors.h"
+#import "ios/chrome/common/ui/colors/semantic_color_names.h"
+#import "ios/chrome/common/ui/util/constraints_ui_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -81,16 +81,18 @@ const CGFloat kEditIconLength = 18;
   } else {
     if (self.hasValidText) {
       cell.textField.textColor = UIColor.cr_secondaryLabelColor;
+    } else {
+      cell.textField.textColor = [UIColor colorNamed:kRedColor];
     }
-    if (cell.textField.editing && cell.textField.text.length > 0) {
+
+    if (!self.hasValidText) {
+      cell.iconView.accessibilityIdentifier =
+          [NSString stringWithFormat:@"%@_errorIcon", self.textFieldName];
+      [cell setIcon:TableViewTextEditItemIconTypeError];
+    } else if (cell.textField.editing && cell.textField.text.length > 0) {
       cell.iconView.accessibilityIdentifier =
           [NSString stringWithFormat:@"%@_noIcon", self.textFieldName];
       [cell setIcon:TableViewTextEditItemIconTypeNone];
-    } else if (!self.hasValidText) {
-      cell.iconView.accessibilityIdentifier =
-          [NSString stringWithFormat:@"%@_errorIcon", self.textFieldName];
-      cell.textField.textColor = [UIColor colorNamed:kRedColor];
-      [cell setIcon:TableViewTextEditItemIconTypeError];
     } else {
       cell.iconView.accessibilityIdentifier =
           [NSString stringWithFormat:@"%@_editIcon", self.textFieldName];

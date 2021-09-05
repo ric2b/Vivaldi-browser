@@ -13,6 +13,7 @@
 #include <algorithm>
 
 #include "base/memory/scoped_refptr.h"
+#include "third_party/blink/renderer/bindings/core/v8/native_value_traits_impl.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_dom_configuration.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_location.h"
 #include "third_party/blink/renderer/core/animation/document_animation.h"
@@ -190,16 +191,6 @@ v8::Local<v8::Object> V8TestInterfaceDocument::FindInstanceInPrototypeChain(
 TestInterfaceDocument* V8TestInterfaceDocument::ToImplWithTypeCheck(
     v8::Isolate* isolate, v8::Local<v8::Value> value) {
   return HasInstance(value, isolate) ? ToImpl(v8::Local<v8::Object>::Cast(value)) : nullptr;
-}
-
-TestInterfaceDocument* NativeValueTraits<TestInterfaceDocument>::NativeValue(
-    v8::Isolate* isolate, v8::Local<v8::Value> value, ExceptionState& exception_state) {
-  TestInterfaceDocument* native_value = V8TestInterfaceDocument::ToImplWithTypeCheck(isolate, value);
-  if (!native_value) {
-    exception_state.ThrowTypeError(ExceptionMessages::FailedToConvertJSValue(
-        "TestInterfaceDocument"));
-  }
-  return native_value;
 }
 
 }  // namespace blink

@@ -15,6 +15,7 @@ import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
 import androidx.browser.customtabs.CustomTabsIntent;
 import androidx.browser.customtabs.CustomTabsSessionToken;
+import androidx.browser.trusted.TrustedWebActivityDisplayMode;
 import androidx.browser.trusted.sharing.ShareData;
 import androidx.browser.trusted.sharing.ShareTarget;
 
@@ -26,7 +27,6 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.Collections;
 import java.util.List;
-import java.util.regex.Pattern;
 
 /**
  * Interface for model classes which parses incoming intent for customization data.
@@ -137,6 +137,13 @@ public class BrowserServicesIntentDataProvider {
      */
     public int getToolbarColor() {
         return Color.WHITE;
+    }
+
+    /**
+     * @return Whether the intent specifies a custom toolbar color.
+     */
+    public boolean hasCustomToolbarColor() {
+        return false;
     }
 
     /**
@@ -283,13 +290,6 @@ public class BrowserServicesIntentDataProvider {
     }
 
     /**
-     * @return Whether the Custom Tab was opened from a WebAPK.
-     */
-    public boolean isOpenedByWebApk() {
-        return false;
-    }
-
-    /**
      * @return Whether the Activity should be opened in incognito mode.
      */
     public boolean isIncognito() {
@@ -301,6 +301,37 @@ public class BrowserServicesIntentDataProvider {
      */
     public boolean isTrustedWebActivity() {
         return false;
+    }
+
+    /**
+     * @return Whether the Activity is either a Webapp or a WebAPK activity.
+     */
+    public boolean isWebappOrWebApkActivity() {
+        return false;
+    }
+
+    /**
+     * @return Whether the Activity is a WebAPK activity.
+     */
+    public boolean isWebApkActivity() {
+        return false;
+    }
+
+    /**
+     * @return Whether the Activity should attempt to load a dynamic module.
+     *
+     * Will return false if native is not initialized.
+     */
+    public boolean isDynamicModuleEnabled() {
+        return false;
+    }
+
+    /**
+     * Returns {@link TrustedWebActivityDisplayMode} supplied in the intent.
+     */
+    @Nullable
+    public TrustedWebActivityDisplayMode getTwaDisplayMode() {
+        return null;
     }
 
     /**
@@ -318,31 +349,6 @@ public class BrowserServicesIntentDataProvider {
     @Nullable
     public String getModuleDexAssetName() {
         return null;
-    }
-
-    /**
-     * @return The pattern compiled from the regex that defines the module managed URLs,
-     * or null if not specified.
-     */
-    @Nullable
-    public Pattern getExtraModuleManagedUrlsPattern() {
-        return null;
-    }
-
-    /**
-     * @return The header value sent to managed hosts when the URL matches
-     *         {@link #getExtraModuleManagedUrlsPattern()}.
-     */
-    @Nullable
-    public String getExtraModuleManagedUrlsHeaderValue() {
-        return null;
-    }
-
-    /**
-     * @return Whether to hide CCT header on module managed URLs.
-     */
-    public boolean shouldHideCctHeaderOnModuleManagedUrls() {
-        return false;
     }
 
     /**
@@ -450,5 +456,10 @@ public class BrowserServicesIntentDataProvider {
      */
     public final boolean isForPaymentRequest() {
         return getUiType() == CustomTabsUiType.PAYMENT_REQUEST;
+    }
+
+    @Nullable
+    public PendingIntent getFocusIntent() {
+        return null;
     }
 }

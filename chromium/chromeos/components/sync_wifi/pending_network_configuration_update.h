@@ -24,10 +24,12 @@ class PendingNetworkConfigurationUpdate {
   PendingNetworkConfigurationUpdate(
       const NetworkIdentifier& id,
       const std::string& change_guid,
-      const base::Optional<sync_pb::WifiConfigurationSpecificsData>& specifics,
+      const base::Optional<sync_pb::WifiConfigurationSpecifics>& specifics,
       int completed_attempts);
   PendingNetworkConfigurationUpdate(
       const PendingNetworkConfigurationUpdate& update);
+  PendingNetworkConfigurationUpdate& operator=(
+      PendingNetworkConfigurationUpdate& update);
   virtual ~PendingNetworkConfigurationUpdate();
 
   // The identifier for the network.
@@ -37,9 +39,8 @@ class PendingNetworkConfigurationUpdate {
   const std::string& change_guid() const { return change_guid_; }
 
   // When null, this is a delete operation, if there is a
-  // WifiConfigurationSpecificsData then it is an add or update.
-  const base::Optional<sync_pb::WifiConfigurationSpecificsData>& specifics()
-      const {
+  // WifiConfigurationSpecifics then it is an add or update.
+  const base::Optional<sync_pb::WifiConfigurationSpecifics>& specifics() const {
     return specifics_;
   }
 
@@ -49,9 +50,15 @@ class PendingNetworkConfigurationUpdate {
   bool IsDeleteOperation() const;
 
  private:
-  const NetworkIdentifier id_;
-  const std::string change_guid_;
-  const base::Optional<sync_pb::WifiConfigurationSpecificsData> specifics_;
+  friend class FakePendingNetworkConfigurationTracker;
+
+  void SetCompletedAttemptsForTesting(int completed_attempts) {
+    completed_attempts_ = completed_attempts;
+  }
+
+  NetworkIdentifier id_;
+  std::string change_guid_;
+  base::Optional<sync_pb::WifiConfigurationSpecifics> specifics_;
   int completed_attempts_;
 };
 

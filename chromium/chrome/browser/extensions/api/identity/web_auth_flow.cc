@@ -21,6 +21,7 @@
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/grit/browser_resources.h"
 #include "components/guest_view/browser/guest_view_base.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_details.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
@@ -34,6 +35,7 @@
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_system.h"
+#include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "net/http/http_response_headers.h"
 #include "url/gurl.h"
 #include "url/url_constants.h"
@@ -57,7 +59,7 @@ WebAuthFlow::WebAuthFlow(
       provider_url_(provider_url),
       mode_(mode),
       embedded_window_created_(false) {
-  TRACE_EVENT_ASYNC_BEGIN0("identity", "WebAuthFlow", this);
+  TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("identity", "WebAuthFlow", this);
 }
 
 WebAuthFlow::~WebAuthFlow() {
@@ -74,7 +76,7 @@ WebAuthFlow::~WebAuthFlow() {
     if (app_window_ && app_window_->web_contents())
       app_window_->web_contents()->Close();
   }
-  TRACE_EVENT_ASYNC_END0("identity", "WebAuthFlow", this);
+  TRACE_EVENT_NESTABLE_ASYNC_END0("identity", "WebAuthFlow", this);
 }
 
 void WebAuthFlow::Start() {
@@ -116,6 +118,22 @@ void WebAuthFlow::Start() {
 void WebAuthFlow::DetachDelegateAndDelete() {
   delegate_ = NULL;
   base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, this);
+}
+
+content::StoragePartition* WebAuthFlow::GetGuestPartition() {
+  return content::BrowserContext::GetStoragePartitionForSite(
+      profile_, GetWebViewSiteURL());
+}
+
+const std::string& WebAuthFlow::GetAppWindowKey() const {
+  return app_window_key_;
+}
+
+// static
+GURL WebAuthFlow::GetWebViewSiteURL() {
+  return extensions::WebViewGuest::GetSiteForGuestPartitionConfig(
+      extension_misc::kIdentityApiUiAppId, /*partition_name=*/std::string(),
+      /*in_memory=*/true);
 }
 
 void WebAuthFlow::OnAppWindowAdded(AppWindow* app_window) {
@@ -203,8 +221,13 @@ void WebAuthFlow::DidRedirectNavigation(
 
 void WebAuthFlow::DidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
-  bool failed = false;
+  // Websites may create and remove <iframe> during the auth flow. In
+  // particular, to integrate CAPTCHA tests. Chrome shouldn't abort the auth
+  // flow if a navigation failed in a sub-frame. https://crbug.com/1049565.
+  if (!navigation_handle->IsInMainFrame())
+    return;
 
+  bool failed = false;
   if (navigation_handle->GetNetErrorCode() != net::OK) {
     if (navigation_handle->GetURL().spec() == url::kAboutBlankURL) {
       // As part of the OAUth 2.0 protocol with GAIA, at the end of the web
@@ -226,17 +249,15 @@ void WebAuthFlow::DidFinishNavigation(
                 navigation_handle->GetNetErrorCode());
     } else {
       failed = true;
-      TRACE_EVENT_ASYNC_STEP_PAST1("identity", "WebAuthFlow", this,
-                                   "DidFinishNavigationFailure", "error_code",
-                                   navigation_handle->GetNetErrorCode());
+      TRACE_EVENT_NESTABLE_ASYNC_INSTANT1(
+          "identity", "DidFinishNavigationFailure", this, "error_code",
+          navigation_handle->GetNetErrorCode());
     }
-  } else if (navigation_handle->IsInMainFrame() &&
-             navigation_handle->GetResponseHeaders() &&
+  } else if (navigation_handle->GetResponseHeaders() &&
              navigation_handle->GetResponseHeaders()->response_code() >= 400) {
     failed = true;
-    TRACE_EVENT_ASYNC_STEP_PAST1(
-        "identity", "WebAuthFlow", this, "DidFinishNavigationFailure",
-        "response_code",
+    TRACE_EVENT_NESTABLE_ASYNC_INSTANT1(
+        "identity", "DidFinishNavigationFailure", this, "response_code",
         navigation_handle->GetResponseHeaders()->response_code());
   }
 

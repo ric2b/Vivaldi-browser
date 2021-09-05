@@ -45,7 +45,6 @@
 <translation id="3542768452570884558">Отвори везу у новом прозору</translation>
 <translation id="3588820906588687999">Отвори слику у новој картици</translation>
 <translation id="3601066750251199488">Чудовиште 3</translation>
-<translation id="366643050267431920">Додај као догађај</translation>
 <translation id="3732157130969736834">Додај везу у обележиваче</translation>
 <translation id="3732388226447288666">Животиња 2</translation>
 <translation id="3732439195215136813">Животиња 5</translation>
@@ -68,7 +67,6 @@
 <translation id="4636708767492582204">Пошаљи поштом</translation>
 <translation id="4677434526832593569">Животиња 8</translation>
 <translation id="4881695831933465202">Отвори</translation>
-<translation id="4973311370126107785">Извршавање JavaScript-е преко AppleScript је искључено. Да бисте га укључили, на траци менија идите на Алати &gt; Дозволи JavaScript из Apple Events.</translation>
 <translation id="5014281392052865061">Увезено брзо бирање</translation>
 <translation id="5092656712000637858">Додај страницу као веб панел</translation>
 <translation id="5177818338935286353">Чудовиште 7</translation>
@@ -89,6 +87,7 @@
 <translation id="6229528619562190452">Кликните овде да бисте ажурирали Vivaldi.</translation>
 <translation id="6234173136417926046">Користи слику као позадину брзог бирања</translation>
 <translation id="630690498669249215">Датотека са обележивачима из Opera</translation>
+<translation id="6339818817272922368">Локални налог</translation>
 <translation id="6438786710866753178">Пејзаж 4</translation>
 <translation id="6477028720702061455">Изаберите фасциклу профила Opera прегледача за увоз</translation>
 <translation id="6510706699590490869">Ажурирај Vivaldi</translation>
@@ -100,9 +99,10 @@
 <translation id="7086554968911045110">Пејзаж 7</translation>
 <translation id="7111492742514999492">Пејзаж 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
-<translation id="7496505986576158197">Vivaldi су омогућили пројекат отвореног кода <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" />  и други <ph name="BEGIN_LINK_OSS" />софтвер отвореног кода<ph name="END_LINK_OSS" />.</translation>
+<translation id="7496505986576158197">Vivaldi прегледач су омогућили пројекат отвореног кода <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> и други <ph name="BEGIN_LINK_OSS" />софтвер отвореног кода<ph name="END_LINK_OSS" />.</translation>
 <translation id="7715497554424665066">Игнориши ажурирање</translation>
 <translation id="7724603315864178912">Исеци</translation>
+<translation id="7793738202466490491">Додај као догађај календара</translation>
 <translation id="7865983598101744945">Потврда затварања прегледача</translation>
 <translation id="7957213167373139414">Мој календар</translation>
 <translation id="8027581147000338959">Отвори у новом прозору</translation>
@@ -112,6 +112,7 @@
 <translation id="8331671104904436324">Отвори у картици у позадини</translation>
 <translation id="8373293945112511707">Пејзаж 1</translation>
 <translation id="8427094907586191051">Пејзаж 17</translation>
+<translation id="8446668873108041390">Извршавање JavaScript-а преко AppleScript-а је искључено. У оквиру Подешавања &gt; Приватност &gt; Apple Events постоји подешавање за омогућавање JavaScript-а из Apple Events-а.</translation>
 <translation id="8539196077526389150">Пејзаж 13</translation>
 <translation id="8624587806981488221">&amp;Поново учитај слику</translation>
 <translation id="864444594187862076">Opera 15+ (Developer)</translation>

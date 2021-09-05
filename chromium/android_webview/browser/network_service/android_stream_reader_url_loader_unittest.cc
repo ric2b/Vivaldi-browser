@@ -4,21 +4,21 @@
 
 #include "android_webview/browser/network_service/android_stream_reader_url_loader.h"
 
+#include <utility>
+
 #include "android_webview/browser/input_stream.h"
 #include "base/run_loop.h"
 #include "base/test/task_environment.h"
-#include "content/public/common/resource_type.h"
 #include "mojo/core/embedder/embedder.h"
 #include "net/http/http_request_headers.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "services/network/test/test_url_loader_client.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/mojom/loader/resource_load_info.mojom-shared.h"
 
 namespace android_webview {
 
 namespace {
-
-const GURL kTestURL = GURL("https://www.example.com/");
 
 void VerifyHeaderNameAndValue(net::HttpResponseHeaders* headers,
                               std::string header_name,
@@ -36,7 +36,7 @@ void VerifyHeaderNameAndValue(net::HttpResponseHeaders* headers,
 // for the input stream and puts it in the IOBuffer |nb_reads| times.
 class FakeInputStream : public InputStream {
  public:
-  explicit FakeInputStream() : contents_(""), nb_reads_(0) {}
+  FakeInputStream() : contents_(""), nb_reads_(0) {}
   explicit FakeInputStream(std::string contents)
       : contents_(contents), nb_reads_(1) {}
   explicit FakeInputStream(std::string contents, int nb_reads)
@@ -84,7 +84,7 @@ class FakeFailingInputStream : public InputStream {
 class TestResponseDelegate
     : public AndroidStreamReaderURLLoader::ResponseDelegate {
  public:
-  TestResponseDelegate(std::unique_ptr<InputStream> input_stream)
+  explicit TestResponseDelegate(std::unique_ptr<InputStream> input_stream)
       : input_stream_(std::move(input_stream)) {}
   TestResponseDelegate(std::unique_ptr<InputStream> input_stream,
                        const std::string custom_mime_type)
@@ -161,12 +161,12 @@ class AndroidStreamReaderURLLoaderTest : public ::testing::Test {
     mojo::core::Init();
   }
 
-  network::ResourceRequest CreateRequest(const GURL& url) {
+  network::ResourceRequest CreateRequest() {
     network::ResourceRequest request;
-    request.url = url;
+    request.url = GURL("https://www.example.com/");
     request.method = "GET";
     request.resource_type =
-        static_cast<int>(content::ResourceType::kSubResource);
+        static_cast<int>(blink::mojom::ResourceType::kSubResource);
     return request;
   }
 
@@ -176,7 +176,7 @@ class AndroidStreamReaderURLLoaderTest : public ::testing::Test {
       network::TestURLLoaderClient* client,
       std::unique_ptr<InputStream> input_stream) {
     return new AndroidStreamReaderURLLoader(
-        request, client->CreateInterfacePtr(),
+        request, client->CreateRemote(),
         net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS),
         std::make_unique<TestResponseDelegate>(std::move(input_stream)));
   }
@@ -188,7 +188,7 @@ class AndroidStreamReaderURLLoaderTest : public ::testing::Test {
       std::unique_ptr<InputStream> input_stream,
       const std::string custom_mime_type) {
     return new AndroidStreamReaderURLLoader(
-        request, client->CreateInterfacePtr(),
+        request, client->CreateRemote(),
         net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS),
         std::make_unique<TestResponseDelegate>(std::move(input_stream),
                                                custom_mime_type));
@@ -204,7 +204,7 @@ class AndroidStreamReaderURLLoaderTest : public ::testing::Test {
       const std::string custom_header_name,
       const std::string custom_header_value) {
     return new AndroidStreamReaderURLLoader(
-        request, client->CreateInterfacePtr(),
+        request, client->CreateRemote(),
         net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS),
         std::make_unique<TestResponseDelegate>(
             std::move(input_stream), custom_status, custom_header_name,
@@ -239,7 +239,7 @@ class AndroidStreamReaderURLLoaderTest : public ::testing::Test {
 };
 
 TEST_F(AndroidStreamReaderURLLoaderTest, ReadFakeStream) {
-  network::ResourceRequest request = CreateRequest(kTestURL);
+  network::ResourceRequest request = CreateRequest();
   std::unique_ptr<network::TestURLLoaderClient> client =
       std::make_unique<network::TestURLLoaderClient>();
   AndroidStreamReaderURLLoader* loader =
@@ -254,7 +254,7 @@ TEST_F(AndroidStreamReaderURLLoaderTest, ReadFakeStream) {
 }
 
 TEST_F(AndroidStreamReaderURLLoaderTest, ReadFailingStream) {
-  network::ResourceRequest request = CreateRequest(kTestURL);
+  network::ResourceRequest request = CreateRequest();
   std::unique_ptr<network::TestURLLoaderClient> client =
       std::make_unique<network::TestURLLoaderClient>();
   AndroidStreamReaderURLLoader* loader = CreateLoader(
@@ -265,7 +265,7 @@ TEST_F(AndroidStreamReaderURLLoaderTest, ReadFailingStream) {
 }
 
 TEST_F(AndroidStreamReaderURLLoaderTest, ValidRangeRequest) {
-  network::ResourceRequest request = CreateRequest(kTestURL);
+  network::ResourceRequest request = CreateRequest();
   request.headers.SetHeader(net::HttpRequestHeaders::kRange, "bytes=10-200");
 
   std::unique_ptr<network::TestURLLoaderClient> client =
@@ -280,7 +280,7 @@ TEST_F(AndroidStreamReaderURLLoaderTest, ValidRangeRequest) {
 }
 
 TEST_F(AndroidStreamReaderURLLoaderTest, InvalidRangeRequest) {
-  network::ResourceRequest request = CreateRequest(kTestURL);
+  network::ResourceRequest request = CreateRequest();
   request.headers.SetHeader(net::HttpRequestHeaders::kRange, "bytes=10-0");
 
   std::unique_ptr<network::TestURLLoaderClient> client =
@@ -294,7 +294,7 @@ TEST_F(AndroidStreamReaderURLLoaderTest, InvalidRangeRequest) {
 }
 
 TEST_F(AndroidStreamReaderURLLoaderTest, NullInputStream) {
-  network::ResourceRequest request = CreateRequest(kTestURL);
+  network::ResourceRequest request = CreateRequest();
 
   std::unique_ptr<network::TestURLLoaderClient> client =
       std::make_unique<network::TestURLLoaderClient>();
@@ -310,7 +310,7 @@ TEST_F(AndroidStreamReaderURLLoaderTest, NullInputStream) {
 }
 
 TEST_F(AndroidStreamReaderURLLoaderTest, ReadFakeStreamWithBody) {
-  network::ResourceRequest request = CreateRequest(kTestURL);
+  network::ResourceRequest request = CreateRequest();
 
   std::string expected_body("test");
   std::unique_ptr<network::TestURLLoaderClient> client =
@@ -329,7 +329,7 @@ TEST_F(AndroidStreamReaderURLLoaderTest, ReadFakeStreamWithBody) {
 }
 
 TEST_F(AndroidStreamReaderURLLoaderTest, ReadFakeStreamWithBodyMultipleReads) {
-  network::ResourceRequest request = CreateRequest(kTestURL);
+  network::ResourceRequest request = CreateRequest();
 
   std::string expected_body("test");
   std::unique_ptr<network::TestURLLoaderClient> client =
@@ -348,7 +348,7 @@ TEST_F(AndroidStreamReaderURLLoaderTest, ReadFakeStreamWithBodyMultipleReads) {
 
 TEST_F(AndroidStreamReaderURLLoaderTest,
        ReadFakeStreamCloseConsumerPipeDuringResponse) {
-  network::ResourceRequest request = CreateRequest(kTestURL);
+  network::ResourceRequest request = CreateRequest();
 
   std::string expected_body("test");
   std::unique_ptr<network::TestURLLoaderClient> client =
@@ -375,7 +375,7 @@ TEST_F(AndroidStreamReaderURLLoaderTest, CustomResponseHeaderAndStatus) {
   const std::string custom_status_line = "HTTP/1.1 401 Gone";
   const std::string custom_header_name = "X-Test-Header";
   const std::string custom_header_value = "TestHeaderValue";
-  network::ResourceRequest request = CreateRequest(kTestURL);
+  network::ResourceRequest request = CreateRequest();
 
   std::string expected_body("test");
   std::unique_ptr<network::TestURLLoaderClient> client =

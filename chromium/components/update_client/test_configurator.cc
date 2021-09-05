@@ -34,12 +34,13 @@ std::vector<GURL> MakeDefaultUrls() {
 
 }  // namespace
 
-TestConfigurator::TestConfigurator()
+TestConfigurator::TestConfigurator(PrefService* pref_service)
     : brand_("TEST"),
       initial_time_(0),
       ondemand_time_(0),
       enabled_cup_signing_(false),
       enabled_component_updates_(true),
+      pref_service_(pref_service),
       unzip_factory_(base::MakeRefCounted<update_client::UnzipChromiumFactory>(
           base::BindRepeating(&unzip::LaunchInProcessUnzipper))),
       patch_factory_(base::MakeRefCounted<update_client::PatchChromiumFactory>(
@@ -52,8 +53,7 @@ TestConfigurator::TestConfigurator()
               test_shared_loader_factory_,
               base::BindRepeating([](const GURL& url) { return false; }))) {}
 
-TestConfigurator::~TestConfigurator() {
-}
+TestConfigurator::~TestConfigurator() = default;
 
 int TestConfigurator::InitialDelay() const {
   return initial_time_;
@@ -182,12 +182,8 @@ void TestConfigurator::SetPingUrl(const GURL& url) {
   ping_url_ = url;
 }
 
-void TestConfigurator::SetAppGuid(const std::string& app_guid) {
-  app_guid_ = app_guid;
-}
-
 PrefService* TestConfigurator::GetPrefService() const {
-  return nullptr;
+  return pref_service_;
 }
 
 ActivityDataService* TestConfigurator::GetActivityDataService() const {
@@ -198,21 +194,9 @@ bool TestConfigurator::IsPerUserInstall() const {
   return true;
 }
 
-std::vector<uint8_t> TestConfigurator::GetRunActionKeyHash() const {
-  return std::vector<uint8_t>(std::begin(gjpm_hash), std::end(gjpm_hash));
-}
-
-std::string TestConfigurator::GetAppGuid() const {
-  return app_guid_;
-}
-
 std::unique_ptr<ProtocolHandlerFactory>
 TestConfigurator::GetProtocolHandlerFactory() const {
   return std::make_unique<ProtocolHandlerFactoryJSON>();
-}
-
-RecoveryCRXElevator TestConfigurator::GetRecoveryCRXElevator() const {
-  return {};
 }
 
 }  // namespace update_client

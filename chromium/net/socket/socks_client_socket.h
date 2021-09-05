@@ -20,6 +20,7 @@
 #include "net/base/net_errors.h"
 #include "net/base/net_export.h"
 #include "net/dns/host_resolver.h"
+#include "net/dns/public/resolve_error_info.h"
 #include "net/log/net_log_with_source.h"
 #include "net/socket/stream_socket.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
@@ -31,8 +32,10 @@ class NET_EXPORT_PRIVATE SOCKSClientSocket : public StreamSocket {
  public:
   // |destination| contains the hostname and port to which the socket above will
   // communicate to via the socks layer. For testing the referrer is optional.
+  // |network_isolation_key| is used for host resolution.
   SOCKSClientSocket(std::unique_ptr<StreamSocket> transport_socket,
                     const HostPortPair& destination,
+                    const NetworkIsolationKey& network_isolation_key,
                     RequestPriority priority,
                     HostResolver* host_resolver,
                     bool disable_secure_dns,
@@ -77,6 +80,9 @@ class NET_EXPORT_PRIVATE SOCKSClientSocket : public StreamSocket {
 
   int GetPeerAddress(IPEndPoint* address) const override;
   int GetLocalAddress(IPEndPoint* address) const override;
+
+  // Returns error information about any host resolution attempt.
+  ResolveErrorInfo GetResolveErrorInfo() const;
 
  private:
   FRIEND_TEST_ALL_PREFIXES(SOCKSClientSocketTest, CompleteHandshake);
@@ -140,7 +146,9 @@ class NET_EXPORT_PRIVATE SOCKSClientSocket : public StreamSocket {
   bool disable_secure_dns_;
   std::unique_ptr<HostResolver::ResolveHostRequest> resolve_host_request_;
   const HostPortPair destination_;
+  const NetworkIsolationKey network_isolation_key_;
   RequestPriority priority_;
+  ResolveErrorInfo resolve_error_info_;
 
   NetLogWithSource net_log_;
 

@@ -383,6 +383,10 @@ bool CSSPropertyEquality::PropertiesEqual(const PropertyHandle& property,
     case CSSPropertyID::kZIndex:
       return a.HasAutoZIndex() == b.HasAutoZIndex() &&
              (a.HasAutoZIndex() || a.ZIndex() == b.ZIndex());
+    case CSSPropertyID::kContainIntrinsicSize:
+      return a.ContainIntrinsicSize() == b.ContainIntrinsicSize();
+    case CSSPropertyID::kAspectRatio:
+      return a.AspectRatio() == b.AspectRatio();
     default:
       NOTREACHED();
       return true;

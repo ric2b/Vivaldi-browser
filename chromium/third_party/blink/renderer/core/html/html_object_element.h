@@ -132,11 +132,13 @@ class CORE_EXPORT HTMLObjectElement final : public HTMLPlugInElement,
     return NamedItemType::kNameOrId;
   }
 
+  int DefaultTabIndex() const override;
+
   String class_id_;
   bool use_fallback_content_ : 1;
 };
 
-// Like ToHTMLObjectElement() but accepts a ListedElement as input
+// Like To<HTMLObjectElement>() but accepts a ListedElement as input
 // instead of a Node.
 const HTMLObjectElement* ToHTMLObjectElementFromListedElement(
     const ListedElement*);

@@ -21,6 +21,7 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "sync/notes/note_sync_service.h"
 
 #include "notes/notes_codec.h"
 #include "notes/notes_model.h"
@@ -55,26 +56,30 @@ void LoadCallback(const base::FilePath& path,
       // thread.
       int64_t max_node_id = 0;
       NotesCodec codec;
+      std::string sync_metadata_str;
       TimeTicks start_time = TimeTicks::Now();
       codec.Decode(details->notes_node(), details->other_notes_node(),
-                   details->trash_notes_node(), &max_node_id, *root.get());
+                   details->trash_notes_node(), &max_node_id, *root.get(),
+                   &sync_metadata_str);
+      details->set_sync_metadata_str(std::move(sync_metadata_str));
       details->update_highest_id(max_node_id);
       details->set_computed_checksum(codec.computed_checksum());
       details->set_stored_checksum(codec.stored_checksum());
       details->set_ids_reassigned(codec.ids_reassigned());
+      details->set_guids_reassigned(codec.guids_reassigned());
       UMA_HISTOGRAM_TIMES("Notes.DecodeTime", TimeTicks::Now() - start_time);
     }
   }
 
   base::PostTask(FROM_HERE, {BrowserThread::UI},
-                          base::Bind(&NotesStorage::OnLoadFinished, storage,
-                                     base::Passed(&details)));
+                 base::Bind(&NotesStorage::OnLoadFinished, storage,
+                            base::Passed(&details)));
 }
 
 // NotesLoadDetails ---------------------------------------------------------
-NotesLoadDetails::NotesLoadDetails(Notes_Node* notes_node,
-                                   Notes_Node* other_notes_node,
-                                   Notes_Node* trash_notes_node,
+NotesLoadDetails::NotesLoadDetails(NoteNode* notes_node,
+                                   NoteNode* other_notes_node,
+                                   NoteNode* trash_notes_node,
                                    int64_t max_id)
     : notes_node_(notes_node),
       other_notes_node_(other_notes_node),
@@ -87,7 +92,7 @@ NotesLoadDetails::~NotesLoadDetails() {}
 // NotesStorage -------------------------------------------------------------
 
 NotesStorage::NotesStorage(content::BrowserContext* context,
-                           Notes_Model* model,
+                           NotesModel* model,
                            base::SequencedTaskRunner* sequenced_task_runner)
     : model_(model),
       writer_(context->GetPath().Append(kNotesFileName),
@@ -128,7 +133,8 @@ void NotesStorage::NotesModelDeleted() {
 
 bool NotesStorage::SerializeData(std::string* output) {
   NotesCodec codec;
-  std::unique_ptr<base::Value> value(codec.Encode(model_));
+  std::unique_ptr<base::Value> value(
+      codec.Encode(model_, model_->sync_service()->EncodeNoteSyncMetadata()));
   JSONStringValueSerializer serializer(output);
   serializer.set_pretty_print(true);
   return serializer.Serialize(*(value.get()));

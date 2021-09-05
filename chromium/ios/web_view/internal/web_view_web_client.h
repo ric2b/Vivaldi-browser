@@ -25,6 +25,8 @@ class WebViewWebClient : public web::WebClient {
       int resource_id,
       ui::ScaleFactor scale_factor) const override;
   base::RefCountedMemory* GetDataResourceBytes(int resource_id) const override;
+  NSString* GetDocumentStartScriptForAllFrames(
+      web::BrowserState* browser_state) const override;
   NSString* GetDocumentStartScriptForMainFrame(
       web::BrowserState* browser_state) const override;
   base::string16 GetPluginNotSupportedText() const override;
@@ -36,6 +38,7 @@ class WebViewWebClient : public web::WebClient {
       bool overridable,
       int64_t navigation_id,
       const base::RepeatingCallback<void(bool)>& callback) override;
+  bool EnableLongPressAndForceTouchHandling() const override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(WebViewWebClient);

@@ -10,6 +10,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/task_runner_util.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "components/autofill/core/common/password_form.h"
@@ -17,13 +18,16 @@
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/common/passwords_directory_util_ios.h"
 #include "components/strings/grit/components_strings.h"
-#import "ios/chrome/browser/ui/settings/password/reauthentication_module.h"
+#import "ios/chrome/common/ui/reauthentication/reauthentication_module.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
+
+using password_manager::metrics_util::LogPasswordSettingsReauthResult;
+using password_manager::metrics_util::ReauthResult;
 
 namespace {
 
@@ -43,9 +47,8 @@ enum class ReauthenticationStatus {
 - (void)serializePasswords:
             (std::vector<std::unique_ptr<autofill::PasswordForm>>)passwords
                    handler:(void (^)(std::string))serializedPasswordsHandler {
-  base::PostTaskAndReplyWithResult(
-      FROM_HERE,
-      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_BLOCKING},
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_BLOCKING},
       base::BindOnce(&password_manager::PasswordCSVWriter::SerializePasswords,
                      std::move(passwords)),
       base::BindOnce(serializedPasswordsHandler));
@@ -90,9 +93,8 @@ enum class ReauthenticationStatus {
     }
     return WriteToURLStatus::SUCCESS;
   };
-  base::PostTaskAndReplyWithResult(
-      FROM_HERE,
-      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_BLOCKING},
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_BLOCKING},
       base::BindOnce(writeToFile), base::BindOnce(handler));
 }
 
@@ -207,18 +209,23 @@ enum class ReauthenticationStatus {
 - (void)startReauthentication {
   __weak PasswordExporter* weakSelf = self;
 
-  void (^onReauthenticationFinished)(BOOL) = ^(BOOL success) {
-    PasswordExporter* strongSelf = weakSelf;
-    if (!strongSelf)
-      return;
-    if (success) {
-      strongSelf.reauthenticationStatus = ReauthenticationStatus::SUCCESSFUL;
-      [strongSelf showPreparingPasswordsAlert];
-    } else {
-      strongSelf.reauthenticationStatus = ReauthenticationStatus::FAILED;
-    }
-    [strongSelf tryExporting];
-  };
+  void (^onReauthenticationFinished)(ReauthenticationResult) =
+      ^(ReauthenticationResult result) {
+        DCHECK(result != ReauthenticationResult::kSkipped);
+        PasswordExporter* strongSelf = weakSelf;
+        if (!strongSelf)
+          return;
+        if (result == ReauthenticationResult::kSuccess) {
+          LogPasswordSettingsReauthResult(ReauthResult::kSuccess);
+          strongSelf.reauthenticationStatus =
+              ReauthenticationStatus::SUCCESSFUL;
+          [strongSelf showPreparingPasswordsAlert];
+        } else {
+          LogPasswordSettingsReauthResult(ReauthResult::kFailure);
+          strongSelf.reauthenticationStatus = ReauthenticationStatus::FAILED;
+        }
+        [strongSelf tryExporting];
+      };
 
   [_weakReauthenticationModule
       attemptReauthWithLocalizedReason:l10n_util::GetNSString(
@@ -326,9 +333,8 @@ enum class ReauthenticationStatus {
 - (void)deleteTemporaryFile:(NSURL*)passwordsTempFileURL {
   NSURL* uniqueDirectoryURL =
       [passwordsTempFileURL URLByDeletingLastPathComponent];
-  base::PostTask(
-      FROM_HERE,
-      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::BEST_EFFORT},
+  base::ThreadPool::PostTask(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::BindOnce(^{
         NSFileManager* fileManager = [NSFileManager defaultManager];
         base::ScopedBlockingCall scoped_blocking_call(

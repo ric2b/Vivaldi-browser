@@ -20,7 +20,8 @@
 #include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
-#include "base/task/post_task.h"
+#include "base/task/task_traits.h"
+#include "base/task/thread_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/updater/win/net/net_util.h"
 #include "chrome/updater/win/net/network.h"
@@ -53,7 +54,7 @@ NetworkFetcherWinHTTP::NetworkFetcherWinHTTP(const HINTERNET& session_handle)
     : main_thread_task_runner_(base::ThreadTaskRunnerHandle::Get()),
       session_handle_(session_handle) {}
 
-NetworkFetcherWinHTTP::~NetworkFetcherWinHTTP() {}
+NetworkFetcherWinHTTP::~NetworkFetcherWinHTTP() = default;
 
 void NetworkFetcherWinHTTP::Close() {
   request_handle_.reset();
@@ -212,6 +213,9 @@ scoped_hinternet NetworkFetcherWinHTTP::OpenRequest() {
 
 HRESULT NetworkFetcherWinHTTP::SendRequest(const std::string& data) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+
+  VLOG(2) << data;
+
   const uint32_t bytes_to_send = base::saturated_cast<uint32_t>(data.size());
   void* request_body =
       bytes_to_send ? const_cast<char*>(data.c_str()) : WINHTTP_NO_REQUEST_DATA;
@@ -232,7 +236,7 @@ void NetworkFetcherWinHTTP::SendRequestComplete() {
       request_handle_.get(),
       WINHTTP_QUERY_RAW_HEADERS_CRLF | WINHTTP_QUERY_FLAG_REQUEST_HEADERS,
       WINHTTP_HEADER_NAME_BY_INDEX, &all);
-  VLOG(2) << "request headers: " << all;
+  VLOG(3) << "request headers: " << all;
 
   net_error_ = ReceiveResponse();
   if (FAILED(net_error_))
@@ -252,7 +256,7 @@ void NetworkFetcherWinHTTP::ReceiveResponseComplete() {
   base::string16 all;
   QueryHeadersString(request_handle_.get(), WINHTTP_QUERY_RAW_HEADERS_CRLF,
                      WINHTTP_HEADER_NAME_BY_INDEX, &all);
-  VLOG(2) << "response headers: " << all;
+  VLOG(3) << "response headers: " << all;
 
   int response_code = 0;
   net_error_ = QueryHeadersInt(request_handle_.get(), WINHTTP_QUERY_STATUS_CODE,
@@ -286,9 +290,7 @@ void NetworkFetcherWinHTTP::ReceiveResponseComplete() {
     xheader_retry_after_sec_ = xheader_retry_after_sec;
   }
 
-  std::move(fetch_started_callback_)
-      .Run(final_url_.is_valid() ? final_url_ : url_, response_code,
-           content_length);
+  std::move(fetch_started_callback_).Run(response_code, content_length);
 
   net_error_ = QueryDataAvailable();
   if (FAILED(net_error_))
@@ -340,10 +342,10 @@ void NetworkFetcherWinHTTP::RequestError(const WINHTTP_ASYNC_RESULT* result) {
 
 void NetworkFetcherWinHTTP::WriteDataToFile() {
   constexpr base::TaskTraits kTaskTraits = {
-      base::ThreadPool(), base::MayBlock(), base::TaskPriority::BEST_EFFORT,
+      base::MayBlock(), base::TaskPriority::BEST_EFFORT,
       base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN};
 
-  base::PostTaskAndReplyWithResult(
+  base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE, kTaskTraits,
       base::BindOnce(&NetworkFetcherWinHTTP::WriteDataToFileBlocking,
                      base::Unretained(this)),
@@ -518,13 +520,10 @@ void NetworkFetcherWinHTTP::StatusCallback(HINTERNET handle,
     base::StringAppendF(&msg, ", info=%s",
                         base::SysWideToUTF8(info_string).c_str());
 
-  VLOG(2) << "WinHttp status callback:"
+  VLOG(3) << "WinHttp status callback:"
           << " handle=" << handle << ", " << msg;
 
   switch (status) {
-    case WINHTTP_CALLBACK_STATUS_REDIRECT:
-      final_url_ = GURL(static_cast<base::char16*>(info));
-      break;
     case WINHTTP_CALLBACK_STATUS_HANDLE_CLOSING:
       self_ = nullptr;
       break;

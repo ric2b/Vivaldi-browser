@@ -29,6 +29,7 @@
 <translation id="1243314992276662751">Hochladen</translation>
 <translation id="1249250836236328755">Genre</translation>
 <translation id="1278813325885878377">Ungarische QWERTY-Tastatur</translation>
+<translation id="1293556467332435079">Dateien</translation>
 <translation id="1297922636971898492">Google Drive ist momentan nicht verfügbar. Das Hochladen Ihrer Dateien wird automatisch fortgesetzt, sobald Google Drive wieder verfügbar ist.</translation>
 <translation id="1307931752636661898">Linux-Dateien können nicht angezeigt werden</translation>
 <translation id="1310751437842832374">Transliteration (mausam → ନମସ୍ତେ)</translation>
@@ -80,6 +81,7 @@
 <translation id="1847880352285315359">Gespeichert</translation>
 <translation id="1864756863218646478">Die Datei wurde nicht gefunden.</translation>
 <translation id="1921986354447415460">Tastatur "Türkisch-F"</translation>
+<translation id="1924372192547904021">"<ph name="DRIVE_NAME" />" wurde formatiert</translation>
 <translation id="1931134289871235022">Slowakisch</translation>
 <translation id="1933345018156373194">Unerwarteter Fehler beim Verschieben: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="1936717151811561466">Finnisch</translation>
@@ -163,6 +165,7 @@
 <translation id="2942290791863759244">Deutsche Neo2-Tastatur</translation>
 <translation id="2943400156390503548">Präsentationen</translation>
 <translation id="2943503720238418293">Verwenden Sie einen kürzeren Namen</translation>
+<translation id="2949781154072577687">"<ph name="DRIVE_NAME" />" wird formatiert...</translation>
 <translation id="2951236788251446349">Qualle</translation>
 <translation id="2963783323012015985">Türkische Tastatur</translation>
 <translation id="2966459079597787514">Schwedische Tastatur</translation>
@@ -184,7 +187,7 @@
 <translation id="3197563288998582412">UK – Dvorak</translation>
 <translation id="3202131003361292969">Pfad</translation>
 <translation id="3224239078034945833">Kanadisch – mehrsprachig</translation>
-<translation id="3236289833370040187">Die Inhaberschaft wird übertragen an <ph name="DESTINATION_DOMAIN" />.</translation>
+<translation id="3236289833370040187">Die Eigentümerschaft geht auf <ph name="DESTINATION_DOMAIN" /> über.</translation>
 <translation id="3241720467332021590">Irisch</translation>
 <translation id="3245321423178950146">Unbekannter Musiker</translation>
 <translation id="3252266817569339921">Französisch</translation>
@@ -275,6 +278,7 @@
 <translation id="4336032328163998280">Fehler beim Kopieren. <ph name="ERROR_MESSAGE" /></translation>
 <translation id="4364327530094270451">Melone</translation>
 <translation id="4372884569765913867">1 x 1</translation>
+<translation id="4394214039309501350">Externer Link</translation>
 <translation id="4425149324548788773">Meine Ablage</translation>
 <translation id="4465830120256509958">Brasilianische Tastatur</translation>
 <translation id="4470564870223067757">Hangul 2 Set</translation>
@@ -505,6 +509,7 @@
 <translation id="6878261347041253038">Devanagari-Tastatur (phonetisch)</translation>
 <translation id="6885780034956018177">Schnecke</translation>
 <translation id="6896758677409633944">Kopieren</translation>
+<translation id="6898028766943174120">Weitere Unterordner…</translation>
 <translation id="691516599546977041">Fehler beim Speichern unter "<ph name="FOLDER_NAME" />". Bearbeitete Bilder werden im Ordner "Downloads" gespeichert.</translation>
 <translation id="6915678159055240887">Chromebox</translation>
 <translation id="6918340160281024199">US-amerikanische Workman-Tastatur</translation>
@@ -517,6 +522,7 @@
 <translation id="696203921837389374">Synchronisierung über mobile Daten aktivieren</translation>
 <translation id="6965382102122355670">Ok</translation>
 <translation id="6970230597523682626">Bulgarisch</translation>
+<translation id="6973630695168034713">Ordner</translation>
 <translation id="6978611942794658017">Diese Datei wurde für Computer entwickelt, die mit Windows-Software betrieben werden. Die Datei ist nicht kompatibel mit Ihrem Chrome OS-Gerät. Suchen Sie im Chrome Web Store nach einer geeigneten Ersatz-App.</translation>
 <translation id="6979158407327259162">Google Drive</translation>
 <translation id="6990081529015358884">Sie haben keinen freien Speicherplatz mehr.</translation>
@@ -564,9 +570,11 @@
 <translation id="7589661784326793847">Einen Moment bitte</translation>
 <translation id="7603724359189955920">Gitter</translation>
 <translation id="7627790789328695202">Hoppla, <ph name="FILE_NAME" /> existiert bereits. Geben Sie einen anderen Namen ein und versuchen Sie es erneut.</translation>
+<translation id="7628656427739290098">Zu <ph name="PERCENT" /> % abgeschlossen.</translation>
 <translation id="7649070708921625228">Hilfe</translation>
 <translation id="7654209398114106148"><ph name="NUMBER_OF_ITEMS" /> Elemente werden verschoben...</translation>
 <translation id="7658239707568436148">Abbrechen</translation>
+<translation id="7695430100978772476">"<ph name="DRIVE_NAME" />" konnte nicht formatiert werden</translation>
 <translation id="770015031906360009">Griechisch</translation>
 <translation id="7706319470528945664">Portugiesische Tastatur</translation>
 <translation id="7711920809702896782">Bildinformationen</translation>

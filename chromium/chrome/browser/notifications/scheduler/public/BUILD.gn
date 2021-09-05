@@ -8,6 +8,8 @@ if (is_android) {
 
 source_set("public") {
   sources = [
+    "client_overview.cc",
+    "client_overview.h",
     "display_agent.cc",
     "display_agent.h",
     "features.cc",
@@ -30,6 +32,10 @@ source_set("public") {
     "notification_scheduler_types.h",
     "schedule_params.cc",
     "schedule_params.h",
+    "schedule_service_utils.cc",
+    "schedule_service_utils.h",
+    "throttle_config.cc",
+    "throttle_config.h",
     "user_action_handler.h",
   ]
 
@@ -42,8 +48,18 @@ source_set("public") {
 
 if (is_android) {
   java_cpp_enum("jni_enums") {
-    sources = [
-      "notification_scheduler_types.h",
-    ]
+    sources = [ "notification_scheduler_types.h" ]
   }
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [ "schedule_service_utils_unittest.cc" ]
+
+  deps = [
+    "//chrome/browser/notifications/scheduler/public",
+    "//chrome/browser/notifications/scheduler/test:test_lib",
+    "//chrome/browser/notifications/scheduler/test:test_support",
+    "//testing/gtest",
+  ]
 }

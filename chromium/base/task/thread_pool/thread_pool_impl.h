@@ -79,8 +79,10 @@ class BASE_EXPORT ThreadPoolImpl : public ThreadPoolInstance,
   void FlushForTesting() override;
   void FlushAsyncForTesting(OnceClosure flush_callback) override;
   void JoinForTesting() override;
-  void SetHasFence(bool has_fence) override;
-  void SetHasBestEffortFence(bool has_best_effort_fence) override;
+  void BeginFence() override;
+  void EndFence() override;
+  void BeginBestEffortFence() override;
+  void EndBestEffortFence() override;
 
   // TaskExecutor:
   bool PostDelayedTask(const Location& from_here,
@@ -118,13 +120,14 @@ class BASE_EXPORT ThreadPoolImpl : public ThreadPoolInstance,
   void ProcessRipeDelayedTasksForTesting();
 
  private:
-  // Invoked after |has_fence_| or |has_best_effort_fence_| is updated. Sets the
-  // CanRunPolicy in TaskTracker and wakes up workers as appropriate.
+  // Invoked after |num_fences_| or |num_best_effort_fences_| is updated. Sets
+  // the CanRunPolicy in TaskTracker and wakes up workers as appropriate.
   void UpdateCanRunPolicy();
 
-  // Returns |traits|, with priority set to TaskPriority::USER_BLOCKING if
+  // Verifies that |traits| do not have properties that are banned in ThreadPool
+  // and returns |traits|, with priority set to TaskPriority::USER_BLOCKING if
   // |all_tasks_user_blocking_| is set.
-  TaskTraits SetUserBlockingPriorityIfNeeded(TaskTraits traits) const;
+  TaskTraits VerifyAndAjustIncomingTraits(TaskTraits traits) const;
 
   void ReportHeartbeatMetrics() const;
 
@@ -141,7 +144,6 @@ class BASE_EXPORT ThreadPoolImpl : public ThreadPoolInstance,
   // PooledTaskRunnerDelegate:
   bool PostTaskWithSequence(Task task,
                             scoped_refptr<Sequence> sequence) override;
-  bool IsRunningPoolWithTraits(const TaskTraits& traits) const override;
   bool ShouldYield(const TaskSource* task_source) const override;
 
   const std::unique_ptr<TaskTrackerImpl> task_tracker_;
@@ -168,10 +170,10 @@ class BASE_EXPORT ThreadPoolImpl : public ThreadPoolInstance,
   // BEST_EFFORT tasks until shutdown.
   const bool has_disable_best_effort_switch_;
 
-  // Whether a fence is preventing execution of tasks of any/BEST_EFFORT
-  // priority. Access controlled by |sequence_checker_|.
-  bool has_fence_ = false;
-  bool has_best_effort_fence_ = false;
+  // Number of fences preventing execution of tasks of any/BEST_EFFORT priority.
+  // Access controlled by |sequence_checker_|.
+  int num_fences_ = 0;
+  int num_best_effort_fences_ = 0;
 
 #if DCHECK_IS_ON()
   // Set once JoinForTesting() has returned.

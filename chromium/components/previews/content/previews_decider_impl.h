@@ -123,13 +123,8 @@ class PreviewsDeciderImpl : public PreviewsDecider,
   void SetIgnoreLongTermBlackListForServerPreviews(
       bool ignore_long_term_blacklist_for_server_previews);
 
-  bool LoadPageHints(content::NavigationHandle* navigation_handle) override;
-
-  bool GetResourceLoadingHints(
-      const GURL& url,
-      std::vector<std::string>* out_resource_patterns_to_block) const override;
-
-  void LogHintCacheMatch(const GURL& url, bool is_committed) const override;
+  bool AreCommitTimePreviewsAvailable(
+      content::NavigationHandle* navigation_handle) override;
 
   // Generates a page ID that is guaranteed to be unique from any other page ID
   // generated in this browser session. Also, guaranteed to be non-zero.

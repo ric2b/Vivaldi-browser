@@ -6,8 +6,6 @@ package org.chromium.chrome.browser.firstrun;
 
 import android.content.res.Resources;
 import android.os.Bundle;
-import android.support.v4.app.Fragment;
-import android.support.v7.widget.SwitchCompat;
 import android.text.method.LinkMovementMethod;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -16,12 +14,17 @@ import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.TextView;
 
+import androidx.appcompat.widget.SwitchCompat;
+import androidx.fragment.app.Fragment;
+
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.datareduction.DataReductionPromoUtils;
 import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
 import org.chromium.ui.text.NoUnderlineClickableSpan;
 import org.chromium.ui.text.SpanApplier;
 import org.chromium.ui.text.SpanApplier.SpanInfo;
+
+import org.chromium.chrome.browser.ChromeApplication;
 
 /**
  * The First Run Experience fragment that allows the user to opt in to Data Saver.
@@ -85,6 +88,7 @@ public class DataReductionProxyFirstRunFragment extends Fragment implements Firs
             }
         });
 
+        if (!ChromeApplication.isVivaldi())
         enableDataSaverSwitch.setChecked(true);
         DataReductionProxySettings.getInstance().setDataReductionProxyEnabled(
                 view.getContext(), enableDataSaverSwitch.isChecked());

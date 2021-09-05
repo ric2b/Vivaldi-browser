@@ -4,12 +4,12 @@
 
 package org.chromium.chrome.browser.browserservices;
 
-import static org.chromium.chrome.browser.preferences.ChromePreferenceManager.TWA_DIALOG_NUMBER_OF_DISMISSALS_ON_CLEAR_DATA;
-import static org.chromium.chrome.browser.preferences.ChromePreferenceManager.TWA_DIALOG_NUMBER_OF_DISMISSALS_ON_UNINSTALL;
+import static org.chromium.chrome.browser.preferences.ChromePreferenceKeys.TWA_DIALOG_NUMBER_OF_DISMISSALS_ON_CLEAR_DATA;
+import static org.chromium.chrome.browser.preferences.ChromePreferenceKeys.TWA_DIALOG_NUMBER_OF_DISMISSALS_ON_UNINSTALL;
 
 import org.chromium.base.StrictModeContext;
 import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
-import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
+import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 
 import javax.inject.Inject;
 
@@ -19,13 +19,12 @@ import dagger.Lazy;
  * Record the results of showing a clear data dialog on TWA client uninstall or data clear.
  */
 public class ClearDataDialogResultRecorder {
-    private final Lazy<ChromePreferenceManager> mPrefsManager;
+    private final Lazy<SharedPreferencesManager> mPrefsManager;
     private final ChromeBrowserInitializer mBrowserInitializer;
     private final TrustedWebActivityUmaRecorder mUmaRecorder;
 
     @Inject
-    public ClearDataDialogResultRecorder(
-            Lazy<ChromePreferenceManager> manager,
+    public ClearDataDialogResultRecorder(Lazy<SharedPreferencesManager> manager,
             ChromeBrowserInitializer browserInitializer,
             TrustedWebActivityUmaRecorder umaRecorder) {
         mPrefsManager = manager;
@@ -39,11 +38,10 @@ public class ClearDataDialogResultRecorder {
      * @param triggeredByUninstall Whether the dialog was triggered by uninstall.
      */
     public void handleDialogResult(boolean accepted, boolean triggeredByUninstall) {
-        if (accepted || mBrowserInitializer.hasNativeInitializationCompleted()) {
+        if (accepted || mBrowserInitializer.isFullBrowserInitialized()) {
             // If accepted, native is going to be loaded for the settings.
-            mBrowserInitializer.runNowOrAfterNativeInitialization(() ->
-                    mUmaRecorder.recordClearDataDialogAction(accepted,
-                            triggeredByUninstall));
+            mBrowserInitializer.runNowOrAfterFullBrowserStarted(
+                    () -> mUmaRecorder.recordClearDataDialogAction(accepted, triggeredByUninstall));
         } else {
             // Avoid loading native just for the sake of recording. Save the info and record
             // on next Chrome launch.

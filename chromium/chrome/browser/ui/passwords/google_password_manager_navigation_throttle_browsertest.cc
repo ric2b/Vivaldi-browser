@@ -99,8 +99,8 @@ class GooglePasswordManagerNavigationThrottleTestWithPasswordManager
 
   std::unique_ptr<ProfileSyncServiceHarness> EnableSync(Profile* profile) {
     ProfileSyncServiceFactory::GetAsProfileSyncServiceForProfile(profile)
-        ->OverrideNetworkResourcesForTest(
-            std::make_unique<fake_server::FakeServerNetworkResources>(
+        ->OverrideNetworkForTest(
+            fake_server::CreateFakeServerHttpPostProviderFactory(
                 GetFakeServer()->AsWeakPtr()));
 
     std::string username;
@@ -165,9 +165,10 @@ IN_PROC_BROWSER_TEST_F(
                           ui::PageTransition::PAGE_TRANSITION_TYPED));
 }
 
+// Timeouts on all platforms. http://crbug.com/1029034
 IN_PROC_BROWSER_TEST_F(
     GooglePasswordManagerNavigationThrottleTestWithPasswordManager,
-    PasswordsWithGPMAndSyncUserClickedLink) {
+    DISABLED_PasswordsWithGPMAndSyncUserClickedLink) {
   base::HistogramTester tester;
   std::unique_ptr<ProfileSyncServiceHarness> harness =
       EnableSync(browser()->profile());

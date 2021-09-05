@@ -9,6 +9,7 @@
 #include "components/zoom/zoom_controller.h"
 #include "content/public/browser/storage_partition.h"
 #include "extensions/browser/extension_zoom_request_client.h"
+#include "extensions/tools/vivaldi_tools.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
 #include "ui/vivaldi_browser_window.h"
 

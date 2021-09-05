@@ -13,7 +13,6 @@
 
 void glActiveShaderProgramFn(GLuint pipeline, GLuint program) override {}
 void glActiveTextureFn(GLenum texture) override {}
-void glApplyFramebufferAttachmentCMAAINTELFn() override {}
 void glAttachShaderFn(GLuint program, GLuint shader) override {}
 void glBeginQueryFn(GLenum target, GLuint id) override {}
 void glBeginTransformFeedbackFn(GLenum primitiveMode) override {}
@@ -312,6 +311,8 @@ void glDeleteFencesAPPLEFn(GLsizei n, const GLuint* fences) override {}
 void glDeleteFencesNVFn(GLsizei n, const GLuint* fences) override {}
 void glDeleteFramebuffersEXTFn(GLsizei n, const GLuint* framebuffers) override {
 }
+void glDeleteMemoryObjectsEXTFn(GLsizei n,
+                                const GLuint* memoryObjects) override {}
 void glDeletePathsNVFn(GLuint path, GLsizei range) override {}
 void glDeleteProgramFn(GLuint program) override {}
 void glDeleteProgramPipelinesFn(GLsizei n, const GLuint* pipelines) override {}
@@ -347,6 +348,11 @@ void glDrawArraysInstancedANGLEFn(GLenum mode,
                                   GLint first,
                                   GLsizei count,
                                   GLsizei primcount) override {}
+void glDrawArraysInstancedBaseInstanceANGLEFn(GLenum mode,
+                                              GLint first,
+                                              GLsizei count,
+                                              GLsizei primcount,
+                                              GLuint baseinstance) override {}
 void glDrawBufferFn(GLenum mode) override {}
 void glDrawBuffersARBFn(GLsizei n, const GLenum* bufs) override {}
 void glDrawElementsFn(GLenum mode,
@@ -361,6 +367,14 @@ void glDrawElementsInstancedANGLEFn(GLenum mode,
                                     GLenum type,
                                     const void* indices,
                                     GLsizei primcount) override {}
+void glDrawElementsInstancedBaseVertexBaseInstanceANGLEFn(
+    GLenum mode,
+    GLsizei count,
+    GLenum type,
+    const void* indices,
+    GLsizei primcount,
+    GLint baseVertex,
+    GLuint baseInstance) override {}
 void glDrawRangeElementsFn(GLenum mode,
                            GLuint start,
                            GLuint end,
@@ -876,9 +890,16 @@ void glImportMemoryFdEXTFn(GLuint memory,
                            GLuint64 size,
                            GLenum handleType,
                            GLint fd) override {}
+void glImportMemoryZirconHandleANGLEFn(GLuint memory,
+                                       GLuint64 size,
+                                       GLenum handleType,
+                                       GLuint handle) override {}
 void glImportSemaphoreFdEXTFn(GLuint semaphore,
                               GLenum handleType,
                               GLint fd) override {}
+void glImportSemaphoreZirconHandleANGLEFn(GLuint semaphore,
+                                          GLenum handleType,
+                                          GLuint handle) override {}
 void glInsertEventMarkerEXTFn(GLsizei length, const char* marker) override {}
 void glInvalidateFramebufferFn(GLenum target,
                                GLsizei numAttachments,
@@ -920,6 +941,9 @@ void glMatrixLoadIdentityEXTFn(GLenum matrixMode) override {}
 void glMaxShaderCompilerThreadsKHRFn(GLuint count) override {}
 void glMemoryBarrierByRegionFn(GLbitfield barriers) override {}
 void glMemoryBarrierEXTFn(GLbitfield barriers) override {}
+void glMemoryObjectParameterivEXTFn(GLuint memoryObject,
+                                    GLenum pname,
+                                    const GLint* param) override {}
 void glMinSampleShadingFn(GLfloat value) override {}
 void glMultiDrawArraysANGLEFn(GLenum mode,
                               const GLint* firsts,
@@ -930,6 +954,13 @@ void glMultiDrawArraysInstancedANGLEFn(GLenum mode,
                                        const GLsizei* counts,
                                        const GLsizei* instanceCounts,
                                        GLsizei drawcount) override {}
+void glMultiDrawArraysInstancedBaseInstanceANGLEFn(
+    GLenum mode,
+    const GLint* firsts,
+    const GLsizei* counts,
+    const GLsizei* instanceCounts,
+    const GLuint* baseInstances,
+    GLsizei drawcount) override {}
 void glMultiDrawElementsANGLEFn(GLenum mode,
                                 const GLsizei* counts,
                                 GLenum type,
@@ -941,6 +972,15 @@ void glMultiDrawElementsInstancedANGLEFn(GLenum mode,
                                          const GLvoid* const* indices,
                                          const GLsizei* instanceCounts,
                                          GLsizei drawcount) override {}
+void glMultiDrawElementsInstancedBaseVertexBaseInstanceANGLEFn(
+    GLenum mode,
+    const GLsizei* counts,
+    GLenum type,
+    const GLvoid* const* indices,
+    const GLsizei* instanceCounts,
+    const GLint* baseVertices,
+    const GLuint* baseInstances,
+    GLsizei drawcount) override {}
 void glObjectLabelFn(GLenum identifier,
                      GLuint name,
                      GLsizei length,

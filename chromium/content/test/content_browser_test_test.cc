@@ -16,6 +16,7 @@
 #include "base/test/launcher/test_launcher.h"
 #include "base/test/launcher/test_launcher_test_utils.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/test/scoped_run_loop_timeout.h"
 #include "base/test/test_switches.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/thread_restrictions.h"
@@ -116,7 +117,13 @@ IN_PROC_BROWSER_TEST_F(ContentBrowserTest, MANUAL_BrowserCrash) {
 }
 
 // Tests that browser tests print the callstack on asserts.
-IN_PROC_BROWSER_TEST_F(ContentBrowserTest, BrowserCrashCallStack) {
+// Disabled on Windows crbug.com/1034784
+#if defined(OS_WIN)
+#define MAYBE_BrowserCrashCallStack DISABLED_BrowserCrashCallStack
+#else
+#define MAYBE_BrowserCrashCallStack BrowserCrashCallStack
+#endif
+IN_PROC_BROWSER_TEST_F(ContentBrowserTest, MAYBE_BrowserCrashCallStack) {
   base::ScopedAllowBlockingForTesting allow_blocking;
   base::ScopedTempDir temp_dir;
   ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
@@ -191,21 +198,14 @@ IN_PROC_BROWSER_TEST_F(ContentBrowserTest, RunMockTests) {
   base::Value* val = root->FindDictKey("test_locations");
   ASSERT_TRUE(val);
   EXPECT_EQ(3u, val->DictSize());
-  // If path or test location changes, the following expectation
-  // will need to change accordingly.
-  std::string file_name = "../../content/test/content_browser_test_test.cc";
-  EXPECT_TRUE(base::test_launcher_utils::ValidateTestLocation(
-      val, "MockContentBrowserTest.DISABLED_PassTest", file_name, 153));
-  EXPECT_TRUE(base::test_launcher_utils::ValidateTestLocation(
-      val, "MockContentBrowserTest.DISABLED_FailTest", file_name, 157));
-  EXPECT_TRUE(base::test_launcher_utils::ValidateTestLocation(
-      val, "MockContentBrowserTest.DISABLED_CrashTest", file_name, 161));
+  EXPECT_TRUE(base::test_launcher_utils::ValidateTestLocations(
+      val, "MockContentBrowserTest"));
 
   val = root->FindListKey("per_iteration_data");
   ASSERT_TRUE(val);
   ASSERT_EQ(1u, val->GetList().size());
 
-  base::Value* iteration_val = &(val->GetList().at(0));
+  base::Value* iteration_val = &(val->GetList()[0]);
   ASSERT_TRUE(iteration_val);
   ASSERT_TRUE(iteration_val->is_dict());
   EXPECT_EQ(3u, iteration_val->DictSize());
@@ -303,12 +303,14 @@ IN_PROC_BROWSER_TEST_F(ContentBrowserTest, NonNestableTask) {
 IN_PROC_BROWSER_TEST_F(ContentBrowserTest, RunTimeoutInstalled) {
   // Verify that a RunLoop timeout is installed and shorter than the test
   // timeout itself.
-  const auto* run_timeout = base::RunLoop::ScopedRunTimeoutForTest::Current();
+  const base::RunLoop::RunLoopTimeout* run_timeout =
+      base::test::ScopedRunLoopTimeout::GetTimeoutForCurrentThread();
   EXPECT_TRUE(run_timeout);
-  EXPECT_LT(run_timeout->timeout(), TestTimeouts::test_launcher_timeout());
+  EXPECT_LT(run_timeout->timeout, TestTimeouts::test_launcher_timeout());
 
-  EXPECT_NONFATAL_FAILURE({ run_timeout->on_timeout().Run(); },
-                          "RunLoop::Run() timed out");
+  static const base::RepeatingClosure& static_on_timeout =
+      run_timeout->on_timeout;
+  EXPECT_FATAL_FAILURE(static_on_timeout.Run(), "RunLoop::Run() timed out");
 }
 
 }  // namespace content

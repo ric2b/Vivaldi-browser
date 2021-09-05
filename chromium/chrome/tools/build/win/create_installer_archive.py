@@ -26,7 +26,7 @@ class LZMA_OOM(Exception):
 
 ARCHIVE_DIR = "installer_archive"
 
-# suffix to uncompresed full archive file, appended to options.output_name
+# suffix to uncompressed full archive file, appended to options.output_name
 ARCHIVE_SUFFIX = ".7z"
 BSDIFF_EXEC = "bsdiff.exe"
 CHROME_DIR = "Vivaldi-bin"
@@ -111,12 +111,13 @@ def CompressUsingLZMA(build_dir, compressed_file, input_file, verbose):
 
 
 def CopyAllFilesToStagingDir(config, distribution, staging_dir, build_dir,
-                             enable_hidpi, include_snapshotblob):
+                             enable_hidpi, include_snapshotblob, verbose):
   """Copies the files required for installer archive.
   Copies all common files required for various distributions of Chromium and
   also files for the specific Chromium build specified by distribution.
   """
-  CopySectionFilesToStagingDir(config, 'GENERAL', staging_dir, build_dir)
+  CopySectionFilesToStagingDir(config, 'GENERAL', staging_dir, build_dir,
+                               verbose)
   if distribution:
     if len(distribution) > 1 and distribution[0] == '_':
       distribution = distribution[1:]
@@ -124,15 +125,26 @@ def CopyAllFilesToStagingDir(config, distribution, staging_dir, build_dir,
     distribution = distribution.upper()
     if config.has_section(distribution):
       CopySectionFilesToStagingDir(config, distribution,
-                                   staging_dir, build_dir)
+                                   staging_dir, build_dir, verbose)
   if enable_hidpi == '1':
-    CopySectionFilesToStagingDir(config, 'HIDPI', staging_dir, build_dir)
+    CopySectionFilesToStagingDir(config, 'HIDPI', staging_dir, build_dir,
+                                 verbose)
 
   if include_snapshotblob == '1':
-    CopySectionFilesToStagingDir(config, 'SNAPSHOTBLOB', staging_dir, build_dir)
+    CopySectionFilesToStagingDir(config, 'SNAPSHOTBLOB', staging_dir, build_dir,
+                                 verbose)
 
+# The 'SafeConfigParser' makes all strings lowercase - which works fine on
+# a cases-insensitive NTFS partition, but makes no sense when trying to build
+# mini_installer.exe on a linux box. This function can be used to make glob
+# matches case insensitive to bypass this issue.
+def insensiglob(pattern):
+  def recase(c):
+    return '[{}{}]'.format(c.lower(), c.upper()) if c.isalpha() else c
+  return glob.glob(''.join(map(recase, pattern)))
 
-def CopySectionFilesToStagingDir(config, section, staging_dir, src_dir):
+def CopySectionFilesToStagingDir(config, section, staging_dir, src_dir,
+                                 verbose):
   """Copies installer archive files specified in section from src_dir to
   staging_dir. This method reads section from config and copies all the
   files specified from src_dir to staging dir.
@@ -144,7 +156,12 @@ def CopySectionFilesToStagingDir(config, section, staging_dir, src_dir):
     src_subdir = option.replace('\\', os.sep)
     dst_dir = os.path.join(staging_dir, config.get(section, option))
     dst_dir = dst_dir.replace('\\', os.sep)
-    src_paths = glob.glob(os.path.join(src_dir, src_subdir))
+    # There are specific issues with libEGL.dll and libGLESv2.dll which require
+    # insensitive globbing on linux machines.
+    src_paths = insensiglob(os.path.join(src_dir, src_subdir))
+    if verbose and not src_paths:
+      print('No matches found for {} in {}'.format(
+        option, os.path.join(os.getcwd(), src_dir)))
     if src_paths and not os.path.exists(dst_dir) and (len(src_paths) != 1 or not os.path.isdir(src_paths[0])):
       os.makedirs(dst_dir)
     for src_path in src_paths:
@@ -263,14 +280,14 @@ def RunSystemCommand(cmd, verbose, retry_fun=None, **kw):
   captures its output and only emits it on failure.
   """
   if verbose:
-    print 'Running', cmd
+    print('Running %s' % ' '.join(cmd))
 
   try:
     # Run |cmd|, redirecting stderr to stdout in order for captured errors to be
     # inline with corresponding stdout.
     output = subprocess.check_output(cmd, stderr=subprocess.STDOUT, **kw)
     if verbose:
-      print output
+      print(output)
   except subprocess.CalledProcessError as e:
     raise Exception("Error while running cmd: %s\n"
                     "Exit code: %s\n"
@@ -593,7 +610,8 @@ def main(options):
   CopyAllFilesToStagingDir(config, options.distribution,
                            staging_dir, options.build_dir,
                            options.enable_hidpi,
-                           options.include_snapshotblob)
+                           options.include_snapshotblob,
+                           options.verbose)
 
   if options.sign_executables:
     SignTargets(config, options, options.distribution,
@@ -725,5 +743,5 @@ def _ParseOptions():
 if '__main__' == __name__:
   options = _ParseOptions()
   if options.verbose:
-    print sys.argv
+    print(sys.argv)
   sys.exit(main(options))

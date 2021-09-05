@@ -48,7 +48,7 @@ WindowProxy::~WindowProxy() {
   DCHECK(lifecycle_ != Lifecycle::kContextIsInitialized);
 }
 
-void WindowProxy::Trace(blink::Visitor* visitor) {
+void WindowProxy::Trace(Visitor* visitor) {
   visitor->Trace(frame_);
 }
 
@@ -158,20 +158,6 @@ void WindowProxy::InitializeIfNeeded() {
       lifecycle_ == Lifecycle::kGlobalObjectIsDetached) {
     Initialize();
   }
-}
-
-v8::Local<v8::Object> WindowProxy::AssociateWithWrapper(
-    DOMWindow* window,
-    const WrapperTypeInfo* wrapper_type_info,
-    v8::Local<v8::Object> wrapper) {
-  if (world_->DomDataStore().Set(isolate_, window, wrapper_type_info,
-                                 wrapper)) {
-    WrapperTypeInfo::WrapperCreated();
-    V8DOMWrapper::SetNativeInfo(isolate_, wrapper, wrapper_type_info, window);
-    DCHECK(V8DOMWrapper::HasInternalFieldsSet(wrapper));
-  }
-  SECURITY_CHECK(ToScriptWrappable(wrapper) == window);
-  return wrapper;
 }
 
 }  // namespace blink

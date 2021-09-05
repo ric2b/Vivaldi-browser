@@ -9,6 +9,7 @@
 
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/platform/platform.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_share_data.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
@@ -16,11 +17,12 @@
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/navigator.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
-#include "third_party/blink/renderer/modules/webshare/share_data.h"
+#include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/v8_throw_exception.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/mojo/mojo_helper.h"
+#include "third_party/blink/renderer/platform/scheduler/public/frame_or_worker_scheduler.h"
 
 namespace blink {
 
@@ -63,7 +65,7 @@ bool HasFiles(const ShareData& share_data) {
 String CheckForTypeError(const Document& doc,
                          const ShareData& share_data,
                          KURL* full_url) {
-  if (!share_data.hasTitle() && !share_data.hasText() && !share_data.hasURL() &&
+  if (!share_data.hasTitle() && !share_data.hasText() && !share_data.hasUrl() &&
       !HasFiles(share_data)) {
     return "No known share data fields supplied. If using only new fields "
            "(other than title, text and url), you must feature-detect "
@@ -89,7 +91,7 @@ class NavigatorShare::ShareClientImpl final
 
   void OnConnectionError();
 
-  void Trace(blink::Visitor* visitor) {
+  void Trace(Visitor* visitor) {
     visitor->Trace(navigator_);
     visitor->Trace(resolver_);
   }
@@ -98,13 +100,23 @@ class NavigatorShare::ShareClientImpl final
   WeakMember<NavigatorShare> navigator_;
   bool has_files_;
   Member<ScriptPromiseResolver> resolver_;
+  FrameOrWorkerScheduler::SchedulingAffectingFeatureHandle
+      feature_handle_for_scheduler_;
 };
 
 NavigatorShare::ShareClientImpl::ShareClientImpl(
     NavigatorShare* navigator_share,
     bool has_files,
     ScriptPromiseResolver* resolver)
-    : navigator_(navigator_share), has_files_(has_files), resolver_(resolver) {}
+    : navigator_(navigator_share),
+      has_files_(has_files),
+      resolver_(resolver),
+      feature_handle_for_scheduler_(
+          ExecutionContext::From(resolver_->GetScriptState())
+              ->GetScheduler()
+              ->RegisterFeature(
+                  SchedulingPolicy::Feature::kWebShare,
+                  {SchedulingPolicy::RecordMetricsForBackForwardCache()})) {}
 
 void NavigatorShare::ShareClientImpl::Callback(mojom::blink::ShareError error) {
   if (navigator_)
@@ -147,7 +159,7 @@ NavigatorShare& NavigatorShare::From(Navigator& navigator) {
   return *supplement;
 }
 
-void NavigatorShare::Trace(blink::Visitor* visitor) {
+void NavigatorShare::Trace(Visitor* visitor) {
   visitor->Trace(clients_);
   Supplement<Navigator>::Trace(visitor);
 }
@@ -158,7 +170,7 @@ const char NavigatorShare::kSupplementName[] = "NavigatorShare";
 
 bool NavigatorShare::canShare(ScriptState* script_state,
                               const ShareData* share_data) {
-  Document* doc = To<Document>(ExecutionContext::From(script_state));
+  Document* doc = Document::From(ExecutionContext::From(script_state));
   KURL full_url;
   return CheckForTypeError(*doc, *share_data, &full_url).IsEmpty();
 }
@@ -170,31 +182,31 @@ bool NavigatorShare::canShare(ScriptState* script_state,
 }
 
 ScriptPromise NavigatorShare::share(ScriptState* script_state,
-                                    const ShareData* share_data) {
-  Document* doc = To<Document>(ExecutionContext::From(script_state));
+                                    const ShareData* share_data,
+                                    ExceptionState& exception_state) {
+  Document* doc = Document::From(ExecutionContext::From(script_state));
   KURL full_url;
   String error_message = CheckForTypeError(*doc, *share_data, &full_url);
   if (!error_message.IsEmpty()) {
-    v8::Local<v8::Value> error = V8ThrowException::CreateTypeError(
-        script_state->GetIsolate(), error_message);
-    return ScriptPromise::Reject(script_state, error);
+    exception_state.ThrowTypeError(error_message);
+    return ScriptPromise();
   }
 
   if (!LocalFrame::HasTransientUserActivation(doc->GetFrame())) {
-    auto* error = MakeGarbageCollected<DOMException>(
+    exception_state.ThrowDOMException(
         DOMExceptionCode::kNotAllowedError,
         "Must be handling a user gesture to perform a share request.");
-    return ScriptPromise::RejectWithDOMException(script_state, error);
+    return ScriptPromise();
   }
 
   if (!service_remote_) {
     LocalFrame* frame = doc->GetFrame();
     if (!frame) {
-      auto* error = MakeGarbageCollected<DOMException>(
+      exception_state.ThrowDOMException(
           DOMExceptionCode::kAbortError,
-          "Internal error: document frame is missing (the "
-          "navigator may be detached).");
-      return ScriptPromise::RejectWithDOMException(script_state, error);
+          "Internal error: document frame is missing (the navigator may be "
+          "detached).");
+      return ScriptPromise();
     }
 
     // See https://bit.ly/2S0zRAS for task types.
@@ -225,9 +237,9 @@ ScriptPromise NavigatorShare::share(ScriptState* script_state,
 
     if (files.size() > kMaxSharedFileCount ||
         total_bytes > kMaxSharedFileBytes) {
-      auto* error = MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kNotAllowedError, "Permission denied");
-      return ScriptPromise::RejectWithDOMException(script_state, error);
+      exception_state.ThrowDOMException(DOMExceptionCode::kNotAllowedError,
+                                        "Permission denied");
+      return ScriptPromise();
     }
   }
 
@@ -242,8 +254,9 @@ ScriptPromise NavigatorShare::share(ScriptState* script_state,
 
 ScriptPromise NavigatorShare::share(ScriptState* script_state,
                                     Navigator& navigator,
-                                    const ShareData* share_data) {
-  return From(navigator).share(script_state, share_data);
+                                    const ShareData* share_data,
+                                    ExceptionState& exception_state) {
+  return From(navigator).share(script_state, share_data, exception_state);
 }
 
 void NavigatorShare::OnConnectionError() {

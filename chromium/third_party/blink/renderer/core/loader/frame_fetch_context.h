@@ -35,6 +35,7 @@ n * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
 #include "base/single_thread_task_runner.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_object.mojom-blink-forward.h"
+#include "third_party/blink/public/mojom/web_client_hints/web_client_hints_types.mojom-blink-forward.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/loader/base_fetch_context.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
@@ -77,7 +78,7 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
       const ResourceRequest& resource_request,
       const KURL& url,
       const ResourceLoaderOptions& options,
-      SecurityViolationReportingPolicy reporting_policy,
+      ReportingDisposition reporting_disposition,
       ResourceRequest::RedirectStatus redirect_status) const override;
   mojom::FetchCacheMode ResourceRequestCachePolicy(
       const ResourceRequest&,
@@ -104,13 +105,20 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
 
   FetchContext* Detach() override;
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
   bool CalculateIfAdSubresource(const ResourceRequest& resource_request,
                                 ResourceType type) override;
 
+  bool SendConversionRequestInsteadOfRedirecting(
+      const KURL& url,
+      ResourceRequest::RedirectStatus redirect_status,
+      ReportingDisposition reporting_disposition) const override;
+
+  mojo::PendingReceiver<mojom::blink::WorkerTimingContainer>
+  TakePendingWorkerTimingReceiver(int request_id) override;
+
  private:
-  class FrameConsoleLogger;
   friend class FrameFetchContextTest;
 
   struct FrozenState;
@@ -119,13 +127,12 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
   // relevant document loader or frame in either cases without null-checks.
   //
   // TODO(kinuko): Remove constness, these return non-const members.
-  DocumentLoader* GetDocumentLoader() const;
   DocumentLoader* MasterDocumentLoader() const;
   LocalFrame* GetFrame() const;
   LocalFrameClient* GetLocalFrameClient() const;
 
   // BaseFetchContext overrides:
-  KURL GetSiteForCookies() const override;
+  net::SiteForCookies GetSiteForCookies() const override;
   scoped_refptr<const SecurityOrigin> GetTopFrameOrigin() const override;
   SubresourceFilter* GetSubresourceFilter() const override;
   PreviewsResourceLoadingHints* GetPreviewsResourceLoadingHints()
@@ -144,11 +151,10 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
   bool ShouldBlockWebSocketByMixedContentCheck(const KURL&) const override;
   std::unique_ptr<WebSocketHandshakeThrottle> CreateWebSocketHandshakeThrottle()
       override;
-  bool ShouldBlockFetchByMixedContentCheck(
-      mojom::RequestContextType,
-      ResourceRequest::RedirectStatus,
-      const KURL&,
-      SecurityViolationReportingPolicy) const override;
+  bool ShouldBlockFetchByMixedContentCheck(mojom::RequestContextType,
+                                           ResourceRequest::RedirectStatus,
+                                           const KURL&,
+                                           ReportingDisposition) const override;
   bool ShouldBlockFetchAsCredentialedSubresource(const ResourceRequest&,
                                                  const KURL&) const override;
 
@@ -160,10 +166,17 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
   WebContentSettingsClient* GetContentSettingsClient() const;
   Settings* GetSettings() const;
   String GetUserAgent() const;
-  UserAgentMetadata GetUserAgentMetadata() const;
+  base::Optional<UserAgentMetadata> GetUserAgentMetadata() const;
   const ClientHintsPreferences GetClientHintsPreferences() const;
   float GetDevicePixelRatio() const;
-  bool ShouldSendClientHint(mojom::WebClientHintsType,
+
+  enum class ClientHintsMode { kLegacy, kStandard };
+  bool ShouldSendClientHint(ClientHintsMode mode,
+                            const FeaturePolicy*,
+                            const url::Origin& resource_origin,
+                            bool is_1p_origin,
+                            mojom::blink::WebClientHintsType,
+                            mojom::blink::FeaturePolicyFeature,
                             const ClientHintsPreferences&,
                             const WebEnabledClientHints&) const;
   void SetFirstPartyCookie(ResourceRequest&);

@@ -21,8 +21,8 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.locale.LocaleManager.SearchEnginePromoType;
-import org.chromium.chrome.browser.ui.widget.RadioButtonLayout;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.components.browser_ui.widget.RadioButtonLayout;
 import org.chromium.components.search_engines.TemplateUrl;
 
 import java.util.ArrayList;
@@ -74,7 +74,7 @@ public class DefaultSearchEngineDialogHelperTest {
 
         @Override
         public boolean equals(Object other) {
-            if (!(other instanceof TemplateUrl)) return false;
+            if (!(other instanceof TestTemplateUrl)) return false;
             TestTemplateUrl otherTemplateUrl = (TestTemplateUrl) other;
             return TextUtils.equals(mKeyword, otherTemplateUrl.mKeyword)
                     && TextUtils.equals(mShortName, otherTemplateUrl.mShortName);

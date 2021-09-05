@@ -17,7 +17,7 @@ class LocalImageDataClassHandler : public VivaldiDataClassHandler {
 
   bool GetData(
       const std::string& data_id,
-      const content::URLDataSource::GotDataCallback& callback) override;
+      content::URLDataSource::GotDataCallback callback) override;
 
  private:
   scoped_refptr<extensions::VivaldiDataSourcesAPI> data_sources_api_;

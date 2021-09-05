@@ -25,6 +25,14 @@
 
 namespace blink {
 
+scoped_refptr<TransformOperation> SkewTransformOperation::Accumulate(
+    const TransformOperation& other) {
+  DCHECK(other.CanBlendWith(*this));
+  const auto& skew_other = To<SkewTransformOperation>(other);
+  return SkewTransformOperation::Create(angle_x_ + skew_other.angle_x_,
+                                        angle_y_ + skew_other.angle_y_, type_);
+}
+
 scoped_refptr<TransformOperation> SkewTransformOperation::Blend(
     const TransformOperation* from,
     double progress,

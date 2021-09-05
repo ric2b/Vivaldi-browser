@@ -23,6 +23,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/task_runner_util.h"
 #include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
@@ -154,18 +155,17 @@ ChromeCleanerFetcher::ChromeCleanerFetcher(
     network::mojom::URLLoaderFactory* url_loader_factory)
     : fetched_callback_(std::move(fetched_callback)),
       url_loader_factory_(url_loader_factory),
-      blocking_task_runner_(base::CreateSequencedTaskRunner(
-          {base::ThreadPool(), base::MayBlock(),
-           base::TaskPriority::BEST_EFFORT,
+      blocking_task_runner_(base::ThreadPool::CreateSequencedTaskRunner(
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
            base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN})),
       scoped_temp_dir_(new base::ScopedTempDir(),
                        base::OnTaskRunnerDeleter(blocking_task_runner_)) {
   base::PostTaskAndReplyWithResult(
       blocking_task_runner_.get(), FROM_HERE,
-      base::Bind(&ChromeCleanerFetcher::CreateTemporaryDirectory,
-                 base::Unretained(this)),
-      base::Bind(&ChromeCleanerFetcher::OnTemporaryDirectoryCreated,
-                 base::Unretained(this)));
+      base::BindOnce(&ChromeCleanerFetcher::CreateTemporaryDirectory,
+                     base::Unretained(this)),
+      base::BindOnce(&ChromeCleanerFetcher::OnTemporaryDirectoryCreated,
+                     base::Unretained(this)));
 }
 
 bool ChromeCleanerFetcher::CreateTemporaryDirectory() {

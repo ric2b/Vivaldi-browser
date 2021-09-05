@@ -14,12 +14,13 @@
 #include <vector>
 
 #include "base/cancelable_callback.h"
+#include "base/deferred_sequenced_task_runner.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/read_only_shared_memory_region.h"
 #include "base/memory/singleton.h"
 #include "base/optional.h"
-#include "base/synchronization/waitable_event.h"
+#include "base/synchronization/atomic_flag.h"
 #include "base/time/time.h"
 #include "content/common/content_export.h"
 #include "third_party/blink/public/common/font_unique_name_lookup/font_unique_name_table.pb.h"
@@ -128,7 +129,15 @@ class CONTENT_EXPORT DWriteFontLookupTableBuilder {
     std::vector<std::string> extracted_names;
   };
 
-  using FamilyResult = std::vector<FontFileWithUniqueNames>;
+  struct FamilyResult {
+    FamilyResult();
+    FamilyResult(FamilyResult&& other);
+    ~FamilyResult();
+    std::vector<FontFileWithUniqueNames> font_files_with_names;
+    HRESULT exit_hresult{S_OK};
+
+    DISALLOW_COPY_AND_ASSIGN(FamilyResult);
+  };
 
   // Try to find a serialized lookup table from the cache directory specified at
   // construction and load it into memory.
@@ -163,9 +172,9 @@ class CONTENT_EXPORT DWriteFontLookupTableBuilder {
   // protobuf.
   void AppendFamilyResultAndFinalizeIfNeeded(const FamilyResult& family_result);
 
-  // Sort the results that were collected into the protobuf structure and signal
-  // that font unique name lookup table construction is complete. Serializes the
-  // constructed protobuf to disk.
+  // Sort the results that were collected into the protobuf structure and
+  // signal that font unique name lookup table construction is complete.
+  // Serializes the constructed protobuf to disk.
   void FinalizeFontTable();
 
   void OnTimeout();
@@ -191,8 +200,23 @@ class CONTENT_EXPORT DWriteFontLookupTableBuilder {
   // Protobuf structure temporarily used and shared during table construction.
   std::unique_ptr<blink::FontUniqueNameTable> font_unique_name_table_;
 
+  struct CallbackOnTaskRunner {
+    CallbackOnTaskRunner(
+        scoped_refptr<base::SequencedTaskRunner>,
+        blink::mojom::DWriteFontProxy::GetUniqueNameLookupTableCallback);
+    CallbackOnTaskRunner(CallbackOnTaskRunner&&);
+    ~CallbackOnTaskRunner();
+    scoped_refptr<base::SequencedTaskRunner> task_runner;
+    blink::mojom::DWriteFontProxy::GetUniqueNameLookupTableCallback
+        mojo_callback;
+  };
+
+  // Task method to bind the CallbackOnTaskRunner for delayed execution when
+  // building the font table is completed.
+  void RunPendingCallback(CallbackOnTaskRunner pending_callback);
+
   base::MappedReadOnlyRegion font_table_memory_;
-  base::WaitableEvent font_table_built_;
+  base::AtomicFlag font_table_built_;
 
   bool direct_write_initialized_ = false;
   base::TimeDelta font_indexing_timeout_;
@@ -211,18 +235,13 @@ class CONTENT_EXPORT DWriteFontLookupTableBuilder {
   base::Optional<base::WaitableEvent> hang_event_for_testing_;
   base::CancelableOnceCallback<void()> timeout_callback_;
 
-  struct CallbackOnTaskRunner {
-    CallbackOnTaskRunner(
-        scoped_refptr<base::SequencedTaskRunner>,
-        blink::mojom::DWriteFontProxy::GetUniqueNameLookupTableCallback);
-    CallbackOnTaskRunner(CallbackOnTaskRunner&&);
-    ~CallbackOnTaskRunner();
-    scoped_refptr<base::SequencedTaskRunner> task_runner;
-    blink::mojom::DWriteFontProxy::GetUniqueNameLookupTableCallback
-        mojo_callback;
-  };
+  // All responses are serialized through this DeferredSequencedTaskRunner. It
+  // is started when the table is ready and guarantees that requests made before
+  // the table was ready are replied to first.
+  scoped_refptr<base::DeferredSequencedTaskRunner> callbacks_task_runner_ =
+      base::MakeRefCounted<base::DeferredSequencedTaskRunner>();
 
-  std::vector<CallbackOnTaskRunner> pending_callbacks_;
+  std::map<HRESULT, unsigned> scanning_error_reasons_;
 
   DISALLOW_COPY_AND_ASSIGN(DWriteFontLookupTableBuilder);
 };

@@ -25,6 +25,7 @@
 
 #include "third_party/blink/renderer/core/css/font_face_set_document.h"
 
+#include "base/metrics/histogram_functions.h"
 #include "third_party/blink/renderer/bindings/core/v8/dictionary.h"
 #include "third_party/blink/renderer/core/css/css_font_selector.h"
 #include "third_party/blink/renderer/core/css/css_property_value_set.h"
@@ -36,12 +37,12 @@
 #include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
 #include "third_party/blink/renderer/core/css/style_engine.h"
 #include "third_party/blink/renderer/core/dom/document.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
-#include "third_party/blink/renderer/platform/instrumentation/histogram.h"
 
 namespace blink {
 
@@ -49,14 +50,14 @@ namespace blink {
 const char FontFaceSetDocument::kSupplementName[] = "FontFaceSetDocument";
 
 FontFaceSetDocument::FontFaceSetDocument(Document& document)
-    : FontFaceSet(document), Supplement<Document>(document) {
-}
+    : FontFaceSet(*document.GetExecutionContext()),
+      Supplement<Document>(document) {}
 
 FontFaceSetDocument::~FontFaceSetDocument() = default;
 
 bool FontFaceSetDocument::InActiveContext() const {
   ExecutionContext* context = GetExecutionContext();
-  return context && To<Document>(context)->IsActive();
+  return context && To<LocalDOMWindow>(context)->document()->IsActive();
 }
 
 
@@ -103,7 +104,7 @@ ScriptPromise FontFaceSetDocument::ready(ScriptState* script_state) {
     // changes and/or layout operations that may cause another font loads.
     // So synchronously update style and layout here.
     // This may trigger font loads, and replace |ready_| with a new Promise.
-    GetDocument()->UpdateStyleAndLayout();
+    GetDocument()->UpdateStyleAndLayout(DocumentUpdateReason::kJavaScript);
   }
   return ready_->Promise(script_state->World());
 }
@@ -156,8 +157,7 @@ bool FontFaceSetDocument::ResolveFontStyle(const String& font_string,
     auto* font_selector = GetDocument()->GetStyleEngine().GetFontSelector();
     FontDescription description =
         FontStyleResolver::ComputeFont(*parsed_style, font_selector);
-    font = Font(description);
-    font.Update(font_selector);
+    font = Font(description, font_selector);
     return true;
   }
 
@@ -173,14 +173,16 @@ bool FontFaceSetDocument::ResolveFontStyle(const String& font_string,
 
   style->SetFontDescription(default_font_description);
 
-  style->GetFont().Update(style->GetFont().GetFontSelector());
-
   GetDocument()->UpdateActiveStyle();
   GetDocument()->EnsureStyleResolver().ComputeFont(
       *GetDocument()->documentElement(), style.get(), *parsed_style);
 
   font = style->GetFont();
-  font.Update(GetFontSelector());
+
+  // StyleResolver::ComputeFont() should have set the document's FontSelector
+  // to |style|.
+  DCHECK_EQ(font.GetFontSelector(), GetFontSelector());
+
   return true;
 }
 
@@ -208,7 +210,7 @@ size_t FontFaceSetDocument::ApproximateBlankCharacterCount(Document& document) {
   return 0;
 }
 
-void FontFaceSetDocument::Trace(blink::Visitor* visitor) {
+void FontFaceSetDocument::Trace(Visitor* visitor) {
   Supplement<Document>::Trace(visitor);
   FontFaceSet::Trace(visitor);
 }
@@ -224,9 +226,7 @@ void FontFaceSetDocument::FontLoadHistogram::UpdateStatus(FontFace* font_face) {
 
 void FontFaceSetDocument::FontLoadHistogram::Record() {
   if (status_ == kHadBlankText || status_ == kDidNotHaveBlankText) {
-    DEFINE_STATIC_LOCAL(EnumerationHistogram, had_blank_text_histogram,
-                        ("WebFont.HadBlankText", 2));
-    had_blank_text_histogram.Count(status_ == kHadBlankText ? 1 : 0);
+    base::UmaHistogramBoolean("WebFont.HadBlankText", status_ == kHadBlankText);
     status_ = kReported;
   }
 }

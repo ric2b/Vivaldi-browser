@@ -11,6 +11,7 @@
 <translation id="1462666970065907900">정말로 이 창을 닫으실건가요?</translation>
 <translation id="1657174850639146440">괴물 9</translation>
 <translation id="1676595396635191120">새 사생활 보호 창</translation>
+<translation id="1728549374069268714">붙여넣고 바로가기</translation>
 <translation id="1756026472674246267">새 탭에서 링크 열기</translation>
 <translation id="1759842336958782510">Chrome</translation>
 <translation id="1769904678986817931">이미지 속성...</translation>
@@ -44,7 +45,6 @@
 <translation id="3542768452570884558">새 창에서 링크 열기</translation>
 <translation id="3588820906588687999">새 탭에서 이미지 열기</translation>
 <translation id="3601066750251199488">괴물 3</translation>
-<translation id="366643050267431920">이벤트로 추가</translation>
 <translation id="3732157130969736834">이 링크 북마크</translation>
 <translation id="3732388226447288666">동물 2</translation>
 <translation id="3732439195215136813">동물 5</translation>
@@ -90,6 +90,7 @@
 <translation id="6438786710866753178">경관 4</translation>
 <translation id="6477028720702061455">가져올 Opera 프로필 폴더 선택</translation>
 <translation id="6510706699590490869">Vivaldi 업데이트 (&amp;U)</translation>
+<translation id="6538338088414940408">새 탭에 링크 열어놓기</translation>
 <translation id="6551219277044048123">검색 엔진에 추가... (&amp;G)</translation>
 <translation id="6630781781151951863">경관 18</translation>
 <translation id="6804831687363620480">죄송하게도, Opera 15+가 실행 중인 상태에서는 설정을 가져올 수 없습니다. Vivaldi로 설정을 가져오려면 현재 작업을 저장하고 모든 Opera 15+ 창을 닫은 후 계속을 클릭하세요.</translation>
@@ -110,6 +111,7 @@
 <translation id="8373293945112511707">경관 1</translation>
 <translation id="8427094907586191051">경관 17</translation>
 <translation id="8539196077526389150">경관 13</translation>
+<translation id="8624587806981488221">이미지 새로고침 (&amp;R)</translation>
 <translation id="864444594187862076">Opera 버전 15+ (개발자 버전)</translation>
 <translation id="8651348004684669199">활성화 탭 추가</translation>
 <translation id="8669345741879513971">괴물 10</translation>

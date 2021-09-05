@@ -111,7 +111,7 @@ void WinAccessibilityEventMonitor::WaitForNextEvent(
   if (event_queue_.empty()) {
     loop_runner_ = new content::MessageLoopRunner();
     loop_runner_->Run();
-    loop_runner_ = NULL;
+    loop_runner_.reset();
   }
   EventInfo event_info = event_queue_.front();
   event_queue_.pop_front();
@@ -140,7 +140,7 @@ void WinAccessibilityEventMonitor::WaitForNextEvent(
   base::win::ScopedBstr name_bstr;
   HRESULT hr = acc_obj->get_accName(child_variant, name_bstr.Receive());
   if (S_OK == hr)
-    *out_name = base::UTF16ToUTF8(base::string16(name_bstr));
+    *out_name = base::UTF16ToUTF8(base::string16(name_bstr.Get()));
   else
     *out_name = "";
 }

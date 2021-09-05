@@ -13,6 +13,7 @@
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
@@ -61,7 +62,7 @@ class SessionHistoryTest : public ContentBrowserTest {
 
     SetupCrossSiteRedirector(embedded_test_server());
     embedded_test_server()->RegisterRequestHandler(
-        base::Bind(&HandleEchoTitleRequest, "/echotitle"));
+        base::BindRepeating(&HandleEchoTitleRequest, "/echotitle"));
 
     ASSERT_TRUE(embedded_test_server()->Start());
     EXPECT_TRUE(NavigateToURL(shell(), GURL(url::kAboutBlankURL)));
@@ -144,7 +145,7 @@ class SessionHistoryScrollAnchorTest : public SessionHistoryTest {
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     SessionHistoryTest::SetUpCommandLine(command_line);
-    command_line->AppendSwitchASCII("enable-blink-features",
+    command_line->AppendSwitchASCII(switches::kEnableBlinkFeatures,
                                     "ScrollAnchorSerialization");
   }
 };

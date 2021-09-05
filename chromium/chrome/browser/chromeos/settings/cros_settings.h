@@ -81,7 +81,7 @@ class CrosSettings {
   //   PrepareTrustedValues() should be called again at that point to determine
   //   whether all providers are serving trusted values now.
   virtual CrosSettingsProvider::TrustedStatus PrepareTrustedValues(
-      const base::Closure& callback) const;
+      base::OnceClosure callback) const;
 
   // These are convenience forms of Get().  The value will be retrieved
   // and the return value will be true if the |path| is valid and the value at
@@ -117,7 +117,7 @@ class CrosSettings {
   using ObserverSubscription = base::CallbackList<void(void)>::Subscription;
   std::unique_ptr<ObserverSubscription> AddSettingsObserver(
       const std::string& path,
-      const base::Closure& callback) WARN_UNUSED_RESULT;
+      base::RepeatingClosure callback) WARN_UNUSED_RESULT;
 
   // Returns the provider that handles settings with the |path| or prefix.
   CrosSettingsProvider* GetProvider(const std::string& path) const;

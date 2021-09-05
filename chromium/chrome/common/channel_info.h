@@ -46,12 +46,18 @@ version_info::Channel GetChannel();
 // Channel::STABLE, if channel is empty, else matches the name and returns
 // {STABLE,BETA,DEV,CANARY, UNKNOWN}.
 version_info::Channel GetChannelByName(const std::string& channel);
+
+// Returns whether this is a side-by-side capable copy of Chromium. For
+// unbranded builds, this is always true. For branded builds, this may not be
+// true for old copies of beta and dev channels that share the same user data
+// dir as the stable channel.
+bool IsSideBySideCapable();
 #endif
 
-#if defined(OS_POSIX) && (defined(GOOGLE_CHROME_BUILD) || defined(VIVALDI_BUILD))
+#if defined(OS_POSIX)
 // Returns a channel-specific suffix to use when constructing the path of the
 // default user data directory, allowing multiple channels to run side-by-side.
-// In the stable channel, this returns the empty string.
+// In the stable channel and in unbranded builds, this returns the empty string.
 std::string GetChannelSuffixForDataDir();
 #endif
 

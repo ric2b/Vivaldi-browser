@@ -13,22 +13,24 @@ import android.content.Intent;
 import android.os.Build;
 
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
-import org.chromium.base.ObservableSupplier;
-import org.chromium.base.VisibleForTesting;
+import org.chromium.base.CommandLine;
 import org.chromium.base.metrics.RecordUserAction;
+import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
-import org.chromium.chrome.browser.MenuOrKeyboardActionController;
+import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.Destroyable;
 import org.chromium.chrome.browser.lifecycle.NativeInitObserver;
 import org.chromium.chrome.browser.lifecycle.PauseResumeWithNativeObserver;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab_activity_glue.ReparentingTask;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.util.AndroidTaskUtils;
-import org.chromium.chrome.browser.util.FeatureUtilities;
+import org.chromium.components.browser_ui.widget.MenuOrKeyboardActionController;
 
 import java.util.List;
 
@@ -146,7 +148,7 @@ public class MultiInstanceManager
 
     @Override
     public void onResumeWithNative() {
-        if (FeatureUtilities.isTabModelMergingEnabled()) {
+        if (isTabModelMergingEnabled()) {
             boolean inMultiWindowMode = mMultiWindowModeStateDispatcher.isInMultiWindowMode()
                     || mMultiWindowModeStateDispatcher.isInMultiDisplayMode();
             // Don't need to merge tabs when mMergeTabsOnResume is null (cold start) since they get
@@ -168,7 +170,7 @@ public class MultiInstanceManager
 
     @Override
     public void onMultiWindowModeChanged(boolean isInMultiWindowMode) {
-        if (!FeatureUtilities.isTabModelMergingEnabled() || !mNativeInitialized) {
+        if (!isTabModelMergingEnabled() || !mNativeInitialized) {
             return;
         }
 
@@ -233,7 +235,7 @@ public class MultiInstanceManager
     }
 
     private void killOtherTask() {
-        if (!FeatureUtilities.isTabModelMergingEnabled()) return;
+        if (!isTabModelMergingEnabled()) return;
 
         Class<?> otherWindowActivityClass =
                 mMultiWindowModeStateDispatcher.getOpenInOtherWindowActivity();
@@ -282,7 +284,7 @@ public class MultiInstanceManager
      */
     @VisibleForTesting
     public void maybeMergeTabs() {
-        if (!FeatureUtilities.isTabModelMergingEnabled()) return;
+        if (!isTabModelMergingEnabled()) return;
 
         killOtherTask();
         RecordUserAction.record("Android.MergeState.Live");
@@ -295,7 +297,7 @@ public class MultiInstanceManager
 
     @SuppressLint("NewApi")
     private boolean isMergedInstanceTaskRunning() {
-        if (!FeatureUtilities.isTabModelMergingEnabled() || sMergedInstanceTaskId == 0) {
+        if (!isTabModelMergingEnabled() || sMergedInstanceTaskId == 0) {
             return false;
         }
 
@@ -314,7 +316,17 @@ public class MultiInstanceManager
         if (intent == null) return;
 
         onMultiInstanceModeStarted();
-        tab.detachAndStartReparenting(intent,
+        ReparentingTask.from(tab).begin(mContext, intent,
                 mMultiWindowModeStateDispatcher.getOpenInOtherWindowActivityOptions(), null);
+    }
+
+    /**
+     * @return True if tab model merging for Android N+ is enabled.
+     */
+    public static boolean isTabModelMergingEnabled() {
+        if (CommandLine.getInstance().hasSwitch(ChromeSwitches.DISABLE_TAB_MERGING_FOR_TESTING)) {
+            return false;
+        }
+        return Build.VERSION.SDK_INT > Build.VERSION_CODES.M;
     }
 }

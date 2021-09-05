@@ -2,8 +2,21 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-(function() {
-'use strict';
+import 'chrome://resources/cr_elements/shared_vars_css.m.js';
+import 'chrome://resources/cr_elements/cr_input/cr_input_style_css.m.js';
+import '../strings.m.js';
+
+import {assert} from 'chrome://resources/js/assert.m.js';
+import {I18nBehavior} from 'chrome://resources/js/i18n_behavior.m.js';
+import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
+import {Coordinate2d} from '../data/coordinate2d.js';
+import {CustomMarginsOrientation} from '../data/margins.js';
+import {MeasurementSystem} from '../data/measurement_system.js';
+import {Size} from '../data/size.js';
+import {observerDepsDefined} from '../print_preview_utils.js';
+
+import {InputBehavior} from './input_behavior.js';
 
 /**
  * Radius of the margin control in pixels. Padding of control + 1 for border.
@@ -14,7 +27,9 @@ const RADIUS_PX = 9;
 Polymer({
   is: 'print-preview-margin-control',
 
-  behaviors: [print_preview.InputBehavior, I18nBehavior],
+  _template: html`{__html_template__}`,
+
+  behaviors: [InputBehavior, I18nBehavior],
 
   properties: {
     disabled: {
@@ -39,7 +54,7 @@ Polymer({
       observer: 'onClipSizeChange_',
     },
 
-    /** @type {?print_preview.MeasurementSystem} */
+    /** @type {?MeasurementSystem} */
     measurementSystem: Object,
 
     /** @private {boolean} */
@@ -62,19 +77,19 @@ Polymer({
       notify: true,
     },
 
-    /** @type {!print_preview.Coordinate2d} */
+    /** @type {!Coordinate2d} */
     translateTransform: {
       type: Object,
       notify: true,
     },
 
-    /** @type {!print_preview.Size} */
+    /** @type {!Size} */
     pageSize: {
       type: Object,
       notify: true,
     },
 
-    /** @type {?print_preview.Size} */
+    /** @type {?Size} */
     clipSize: {
       type: Object,
       notify: true,
@@ -91,18 +106,18 @@ Polymer({
   },
 
   /** @return {!HTMLInputElement} The input element for InputBehavior. */
-  getInput: function() {
-    return this.$.input;
+  getInput() {
+    return /** @type {!HTMLInputElement} */ (this.$.input);
   },
 
   /**
    * @param {number} valueInPts New value of the margin control's textbox in
    *     pts.
    */
-  setTextboxValue: function(valueInPts) {
+  setTextboxValue(valueInPts) {
     const textbox = this.$.input;
     const pts = textbox.value ? this.parseValueToPts_(textbox.value) : null;
-    if (!!pts && valueInPts === Math.round(pts)) {
+    if (pts !== null && valueInPts === Math.round(pts)) {
       // If the textbox's value represents the same value in pts as the new one,
       // don't reset. This allows the "undo" command to work as expected, see
       // https://crbug.com/452844.
@@ -110,15 +125,16 @@ Polymer({
     }
 
     textbox.value = this.serializeValueFromPts_(valueInPts);
+    this.resetString();
   },
 
   /** @return {number} The current position of the margin control. */
-  getPositionInPts: function() {
+  getPositionInPts() {
     return this.positionInPts_;
   },
 
   /** @param {number} position The new position for the margin control. */
-  setPositionInPts: function(position) {
+  setPositionInPts(position) {
     this.positionInPts_ = position;
   },
 
@@ -127,7 +143,7 @@ Polymer({
    *     aria-hidden.
    * @private
    */
-  getAriaHidden_: function() {
+  getAriaHidden_() {
     return this.invisible.toString();
   },
 
@@ -136,22 +152,22 @@ Polymer({
    * @param {number} pixels Pixel value to convert.
    * @return {number} Given value expressed in points.
    */
-  convertPixelsToPts: function(pixels) {
+  convertPixelsToPts(pixels) {
     let pts;
-    const Orientation = print_preview.CustomMarginsOrientation;
-    if (this.side == Orientation.TOP) {
+    const Orientation = CustomMarginsOrientation;
+    if (this.side === Orientation.TOP) {
       pts = pixels - this.translateTransform.y + RADIUS_PX;
       pts /= this.scaleTransform;
-    } else if (this.side == Orientation.RIGHT) {
+    } else if (this.side === Orientation.RIGHT) {
       pts = pixels - this.translateTransform.x + RADIUS_PX;
       pts /= this.scaleTransform;
       pts = this.pageSize.width - pts;
-    } else if (this.side == Orientation.BOTTOM) {
+    } else if (this.side === Orientation.BOTTOM) {
       pts = pixels - this.translateTransform.y + RADIUS_PX;
       pts /= this.scaleTransform;
       pts = this.pageSize.height - pts;
     } else {
-      assert(this.side == Orientation.LEFT);
+      assert(this.side === Orientation.LEFT);
       pts = pixels - this.translateTransform.x + RADIUS_PX;
       pts /= this.scaleTransform;
     }
@@ -162,13 +178,14 @@ Polymer({
    * @param {!PointerEvent} event A pointerdown event triggered by this element.
    * @return {boolean} Whether the margin should start being dragged.
    */
-  shouldDrag: function(event) {
-    return !this.disabled && event.button == 0 &&
-        (event.path[0] == this.$.lineContainer || event.path[0] == this.$.line);
+  shouldDrag(event) {
+    return !this.disabled && event.button === 0 &&
+        (event.path[0] === this.$.lineContainer ||
+         event.path[0] === this.$.line);
   },
 
   /** @private */
-  onDisabledChange_: function() {
+  onDisabledChange_() {
     if (this.disabled) {
       this.focused_ = false;
     }
@@ -179,9 +196,9 @@ Polymer({
    * @return {?number} Value in points represented by the input value.
    * @private
    */
-  parseValueToPts_: function(value) {
+  parseValueToPts_(value) {
     value = value.trim();
-    if (value.length == 0) {
+    if (value.length === 0) {
       return null;
     }
     assert(this.measurementSystem);
@@ -207,7 +224,7 @@ Polymer({
    *     units.
    * @private
    */
-  serializeValueFromPts_: function(value) {
+  serializeValueFromPts_(value) {
     assert(this.measurementSystem);
     value = this.measurementSystem.convertFromPoints(value);
     value = this.measurementSystem.roundValue(value);
@@ -217,11 +234,12 @@ Polymer({
   },
 
   /**
-   * @param {!CustomEvent<string>} e Contains the new value of the input.
+   * @param {!CustomEvent<string|undefined>} e Contains the new value of the
+   *     input.
    * @private
    */
-  onInputChange_: function(e) {
-    if (!e.detail) {
+  onInputChange_(e) {
+    if (e.detail === '' || e.detail === undefined) {
       return;
     }
 
@@ -235,38 +253,38 @@ Polymer({
   },
 
   /** @private */
-  onBlur_: function() {
+  onBlur_() {
     this.focused_ = false;
     this.resetAndUpdate();
     this.fire('text-blur', this.invalid || !this.$.input.value);
   },
 
   /** @private */
-  onFocus_: function() {
+  onFocus_() {
     this.focused_ = true;
     this.fire('text-focus');
   },
 
   /** @private */
-  updatePosition_: function() {
+  updatePosition_() {
     if (!observerDepsDefined(Array.from(arguments))) {
       return;
     }
 
-    const Orientation = print_preview.CustomMarginsOrientation;
+    const Orientation = CustomMarginsOrientation;
     let x = this.translateTransform.x;
     let y = this.translateTransform.y;
     let width = null;
     let height = null;
-    if (this.side == Orientation.TOP) {
+    if (this.side === Orientation.TOP) {
       y = this.scaleTransform * this.positionInPts_ +
           this.translateTransform.y - RADIUS_PX;
       width = this.scaleTransform * this.pageSize.width;
-    } else if (this.side == Orientation.RIGHT) {
+    } else if (this.side === Orientation.RIGHT) {
       x = this.scaleTransform * (this.pageSize.width - this.positionInPts_) +
           this.translateTransform.x - RADIUS_PX;
       height = this.scaleTransform * this.pageSize.height;
-    } else if (this.side == Orientation.BOTTOM) {
+    } else if (this.side === Orientation.BOTTOM) {
       y = this.scaleTransform * (this.pageSize.height - this.positionInPts_) +
           this.translateTransform.y - RADIUS_PX;
       width = this.scaleTransform * this.pageSize.width;
@@ -278,10 +296,10 @@ Polymer({
     window.requestAnimationFrame(() => {
       this.style.left = Math.round(x) + 'px';
       this.style.top = Math.round(y) + 'px';
-      if (width != null) {
+      if (width !== null) {
         this.style.width = Math.round(width) + 'px';
       }
-      if (height != null) {
+      if (height !== null) {
         this.style.height = Math.round(height) + 'px';
       }
     });
@@ -289,7 +307,7 @@ Polymer({
   },
 
   /** @private */
-  onClipSizeChange_: function() {
+  onClipSizeChange_() {
     if (!this.clipSize) {
       return;
     }
@@ -302,4 +320,3 @@ Polymer({
     });
   },
 });
-})();

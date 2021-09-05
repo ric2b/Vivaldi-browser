@@ -4,6 +4,7 @@
 
 #include "chromeos/components/sync_wifi/pending_network_configuration_tracker_impl.h"
 
+#include "base/guid.h"
 #include "base/optional.h"
 #include "base/strings/stringprintf.h"
 #include "chromeos/components/sync_wifi/network_identifier.h"
@@ -32,10 +33,10 @@ PendingNetworkConfigurationUpdate ConvertToPendingUpdate(
     base::Value* dict,
     const NetworkIdentifier& id) {
   std::string* change_guid = dict->FindStringKey(kChangeGuidKey);
-  base::Optional<sync_pb::WifiConfigurationSpecificsData> specifics;
+  base::Optional<sync_pb::WifiConfigurationSpecifics> specifics;
   std::string* specifics_string = dict->FindStringKey(kSpecificsKey);
   if (!specifics_string->empty()) {
-    sync_pb::WifiConfigurationSpecificsData data;
+    sync_pb::WifiConfigurationSpecifics data;
     data.ParseFromString(*specifics_string);
     specifics = data;
   }
@@ -66,21 +67,24 @@ PendingNetworkConfigurationTrackerImpl::PendingNetworkConfigurationTrackerImpl(
 PendingNetworkConfigurationTrackerImpl::
     ~PendingNetworkConfigurationTrackerImpl() = default;
 
-void PendingNetworkConfigurationTrackerImpl::TrackPendingUpdate(
-    const std::string& change_guid,
+std::string PendingNetworkConfigurationTrackerImpl::TrackPendingUpdate(
     const NetworkIdentifier& id,
-    const base::Optional<sync_pb::WifiConfigurationSpecificsData>& specifics) {
+    const base::Optional<sync_pb::WifiConfigurationSpecifics>& specifics) {
   std::string serialized_specifics;
   if (!specifics)
     serialized_specifics = std::string();
   else
     CHECK(specifics->SerializeToString(&serialized_specifics));
 
+  std::string change_guid = base::GenerateGUID();
+
   dict_.SetPath(GeneratePath(id, kChangeGuidKey), base::Value(change_guid));
   dict_.SetPath(GeneratePath(id, kSpecificsKey),
                 base::Value(serialized_specifics));
   dict_.SetPath(GeneratePath(id, kCompletedAttemptsKey), base::Value(0));
   pref_service_->Set(kPendingNetworkConfigurationsPref, dict_);
+
+  return change_guid;
 }
 
 void PendingNetworkConfigurationTrackerImpl::MarkComplete(

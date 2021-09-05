@@ -30,6 +30,7 @@ source_set("content_suggestions") {
   deps = [
     "//base",
     "//components/favicon/core",
+    "//components/feed/core/shared_prefs:feed_shared_prefs",
     "//components/ntp_snippets",
     "//components/ntp_tiles",
     "//components/reading_list/core",
@@ -41,6 +42,7 @@ source_set("content_suggestions") {
     "//ios/chrome/browser",
     "//ios/chrome/browser/browser_state",
     "//ios/chrome/browser/favicon",
+    "//ios/chrome/browser/main:public",
     "//ios/chrome/browser/metrics:metrics_internal",
     "//ios/chrome/browser/ntp",
     "//ios/chrome/browser/ntp_snippets",
@@ -61,7 +63,6 @@ source_set("content_suggestions") {
     "//ios/chrome/browser/ui/content_suggestions/identifier",
     "//ios/chrome/browser/ui/coordinators:chrome_coordinators",
     "//ios/chrome/browser/ui/favicon",
-    "//ios/chrome/browser/ui/location_bar:notifications",
     "//ios/chrome/browser/ui/ntp",
     "//ios/chrome/browser/ui/ntp:ntp_internal",
     "//ios/chrome/browser/ui/overscroll_actions",
@@ -70,10 +71,11 @@ source_set("content_suggestions") {
     "//ios/chrome/browser/ui/toolbar/public",
     "//ios/chrome/browser/ui/util",
     "//ios/chrome/browser/url_loading",
+    "//ios/chrome/browser/voice",
     "//ios/chrome/browser/web_state_list",
     "//ios/chrome/common/app_group",
-    "//ios/chrome/common/favicon",
-    "//ios/chrome/common/ui_util",
+    "//ios/chrome/common/ui/favicon",
+    "//ios/chrome/common/ui/util",
     "//ios/public/provider/chrome/browser",
     "//ios/public/provider/chrome/browser/images",
     "//ios/public/provider/chrome/browser/signin",
@@ -81,6 +83,14 @@ source_set("content_suggestions") {
     "//ios/public/provider/chrome/browser/voice",
     "//ui/base",
     "//ui/strings",
+  ]
+  configs += [ "//build/config/compiler:enable_arc" ]
+}
+
+source_set("constants") {
+  sources = [
+    "content_suggestions_constants.h",
+    "content_suggestions_constants.mm",
   ]
   configs += [ "//build/config/compiler:enable_arc" ]
 }
@@ -112,6 +122,7 @@ source_set("content_suggestions_ui") {
     "user_account_image_update_delegate.h",
   ]
   deps = [
+    ":constants",
     ":content_suggestions_constant",
     ":content_suggestions_ui_util",
     "resources:content_suggestions_no_image",
@@ -124,6 +135,7 @@ source_set("content_suggestions_ui") {
     "//ios/chrome/browser/ui/commands",
     "//ios/chrome/browser/ui/content_suggestions/cells:cells_ui",
     "//ios/chrome/browser/ui/content_suggestions/identifier",
+    "//ios/chrome/browser/ui/elements",
     "//ios/chrome/browser/ui/list_model",
     "//ios/chrome/browser/ui/ntp",
     "//ios/chrome/browser/ui/ntp_tile_views",
@@ -133,15 +145,13 @@ source_set("content_suggestions_ui") {
     "//ios/chrome/browser/ui/toolbar/buttons",
     "//ios/chrome/browser/ui/toolbar/public",
     "//ios/chrome/browser/ui/util:util",
-    "//ios/chrome/common/colors",
-    "//ios/chrome/common/favicon",
-    "//ios/chrome/common/ui_util",
+    "//ios/chrome/common/ui/colors",
+    "//ios/chrome/common/ui/favicon",
+    "//ios/chrome/common/ui/util",
     "//ios/web/common",
     "//ui/base",
   ]
-  public_deps = [
-    "//ios/third_party/material_components_ios",
-  ]
+  public_deps = [ "//ios/third_party/material_components_ios" ]
   configs += [ "//build/config/compiler:enable_arc" ]
 }
 
@@ -150,9 +160,7 @@ source_set("content_suggestions_constant") {
     "ntp_home_constant.h",
     "ntp_home_constant.mm",
   ]
-  deps = [
-    "//ios/chrome/common/colors",
-  ]
+  deps = [ "//ios/chrome/common/ui/colors" ]
   configs += [ "//build/config/compiler:enable_arc" ]
 }
 
@@ -174,7 +182,8 @@ source_set("content_suggestions_ui_util") {
     "//ios/chrome/browser/ui/ntp_tile_views:constants",
     "//ios/chrome/browser/ui/toolbar/public",
     "//ios/chrome/browser/ui/util",
-    "//ios/chrome/common/colors",
+    "//ios/chrome/common/ui/colors",
+    "//ios/components/ui_util",
     "//ios/third_party/material_components_ios",
     "//ios/web/common",
     "//ui/base",
@@ -200,6 +209,8 @@ source_set("unit_tests") {
     "//components/signin/public/identity_manager",
     "//ios/chrome/browser",
     "//ios/chrome/browser/browser_state:test_support",
+    "//ios/chrome/browser/main:public",
+    "//ios/chrome/browser/main:test_support",
     "//ios/chrome/browser/ntp_snippets",
     "//ios/chrome/browser/search_engines",
     "//ios/chrome/browser/signin",
@@ -211,14 +222,16 @@ source_set("unit_tests") {
     "//ios/chrome/browser/ui/content_suggestions/cells",
     "//ios/chrome/browser/ui/content_suggestions/cells:cells_ui",
     "//ios/chrome/browser/ui/content_suggestions/identifier",
-    "//ios/chrome/browser/ui/location_bar:notifications",
     "//ios/chrome/browser/ui/toolbar/test",
     "//ios/chrome/browser/ui/util",
     "//ios/chrome/browser/url_loading",
+    "//ios/chrome/browser/url_loading:test_support",
+    "//ios/chrome/browser/voice:test_support",
     "//ios/chrome/browser/web_state_list",
     "//ios/chrome/browser/web_state_list:test_support",
-    "//ios/chrome/test/base",
+    "//ios/public/provider/chrome/browser:test_support",
     "//ios/public/provider/chrome/browser/ui",
+    "//ios/testing:block_swizzler",
     "//ios/web/public/test",
     "//ios/web/public/test/fakes",
     "//testing/gtest",
@@ -229,15 +242,47 @@ source_set("unit_tests") {
   configs += [ "//build/config/compiler:enable_arc" ]
 }
 
-source_set("eg_tests") {
+source_set("eg2_tests") {
+  defines = [ "CHROME_EARL_GREY_2" ]
+  configs += [
+    "//build/config/compiler:enable_arc",
+    "//build/config/ios:xctest_config",
+  ]
   testonly = true
   sources = [
     "content_suggestions_egtest.mm",
     "ntp_home_egtest.mm",
-    "ntp_home_provider_test_singleton.h",
-    "ntp_home_provider_test_singleton.mm",
   ]
   deps = [
+    ":constants",
+    ":content_suggestions_constant",
+    ":eg_test_support+eg2",
+    "//base",
+    "//base/test:test_support",
+    "//components/strings",
+    "//ios/chrome/app/strings",
+    "//ios/chrome/browser/ui/settings:constants",
+    "//ios/chrome/browser/ui/toolbar/public:constants",
+    "//ios/chrome/test:eg_test_support+eg2",
+    "//ios/chrome/test/earl_grey:eg_test_support+eg2",
+    "//ios/testing/earl_grey:eg_test_support+eg2",
+    "//ios/third_party/earl_grey2:test_lib",
+    "//net:test_support",
+    "//ui/base",
+    "//ui/strings",
+  ]
+  libs = [ "UIKit.framework" ]
+}
+
+source_set("eg_tests") {
+  defines = [ "CHROME_EARL_GREY_1" ]
+  testonly = true
+  sources = [
+    "content_suggestions_egtest.mm",
+    "ntp_home_egtest.mm",
+  ]
+  deps = [
+    ":constants",
     ":content_suggestions_constant",
     ":content_suggestions_ui",
     ":content_suggestions_ui_util",
@@ -259,17 +304,18 @@ source_set("eg_tests") {
     "//ios/chrome/browser/ui/content_suggestions/cells:cells_ui",
     "//ios/chrome/browser/ui/location_bar:location_bar",
     "//ios/chrome/browser/ui/settings",
+    "//ios/chrome/browser/ui/settings:constants",
     "//ios/chrome/browser/ui/toolbar/buttons",
     "//ios/chrome/browser/ui/toolbar/public",
     "//ios/chrome/browser/ui/util",
     "//ios/chrome/test:eg_test_support",
     "//ios/chrome/test:test_support",
     "//ios/chrome/test/app:test_support",
-    "//ios/chrome/test/base:base",
     "//ios/chrome/test/earl_grey:test_support",
     "//ios/testing/earl_grey:earl_grey_support",
     "//ios/third_party/earl_grey:earl_grey+link",
     "//ios/web/public/test/http_server",
+    "//net:test_support",
     "//testing/gmock",
     "//ui/strings",
   ]
@@ -280,18 +326,94 @@ source_set("eg_tests") {
   configs += [ "//build/config/compiler:enable_arc" ]
 }
 
+source_set("eg_test_support+eg2") {
+  defines = [ "CHROME_EARL_GREY_2" ]
+  configs += [
+    "//build/config/compiler:enable_arc",
+    "//build/config/ios:xctest_config",
+  ]
+  testonly = true
+
+  sources = [ "content_suggestions_app_interface.h" ]
+
+  deps = [ "//ios/third_party/earl_grey2:test_lib" ]
+}
+
+source_set("eg_app_support+eg2") {
+  configs += [
+    "//build/config/compiler:enable_arc",
+    "//build/config/ios:xctest_config",
+  ]
+  testonly = true
+  defines = [ "CHROME_EARL_GREY_2" ]
+
+  sources = [
+    "content_suggestions_app_interface.h",
+    "content_suggestions_app_interface.mm",
+    "ntp_home_provider_test_singleton.h",
+    "ntp_home_provider_test_singleton.mm",
+    "ntp_home_test_utils.h",
+    "ntp_home_test_utils.mm",
+  ]
+
+  deps = [
+    ":constants",
+    ":content_suggestions_constant",
+    ":content_suggestions_ui",
+    ":content_suggestions_ui_util",
+    "//base/test:test_support",
+    "//components/keyed_service/ios",
+    "//components/ntp_snippets",
+    "//components/ntp_snippets:test_support",
+    "//components/search_engines",
+    "//ios/chrome/browser",
+    "//ios/chrome/browser:utils",
+    "//ios/chrome/browser/browser_state",
+    "//ios/chrome/browser/ntp_snippets",
+    "//ios/chrome/browser/search_engines",
+    "//ios/chrome/browser/ui/util",
+    "//ios/chrome/test/app:test_support",
+    "//ios/testing:block_swizzler",
+    "//ios/testing/earl_grey:eg_app_support+eg2",
+    "//ios/third_party/earl_grey2:app_framework+link",
+    "//testing/gmock",
+    "//testing/gtest:gtest",
+  ]
+}
+
 source_set("test_support") {
   testonly = true
+  defines = [ "CHROME_EARL_GREY_1" ]
   sources = [
+    "content_suggestions_app_interface.h",
+    "content_suggestions_app_interface.mm",
+    "ntp_home_provider_test_singleton.h",
+    "ntp_home_provider_test_singleton.mm",
     "ntp_home_test_utils.h",
     "ntp_home_test_utils.mm",
   ]
   deps = [
+    ":constants",
+    ":content_suggestions_ui_util",
+    "//components/keyed_service/ios",
     "//components/ntp_snippets",
+    "//components/ntp_snippets:test_support",
+    "//components/search_engines",
+    "//ios/chrome/browser",
+    "//ios/chrome/browser:utils",
+    "//ios/chrome/browser/browser_state",
+    "//ios/chrome/browser/ntp_snippets",
+    "//ios/chrome/browser/search_engines",
     "//ios/chrome/browser/ui/content_suggestions",
     "//ios/chrome/browser/ui/content_suggestions:content_suggestions_constant",
     "//ios/chrome/browser/ui/content_suggestions:content_suggestions_ui",
+    "//ios/chrome/browser/ui/util",
+    "//ios/chrome/test/app:test_support",
+    "//ios/testing:block_swizzler",
+    "//ios/testing/earl_grey:earl_grey_support",
     "//ios/third_party/earl_grey:earl_grey+link",
+    "//ios/web",
+    "//testing/gmock",
   ]
   configs += [ "//build/config/compiler:enable_arc" ]
 }

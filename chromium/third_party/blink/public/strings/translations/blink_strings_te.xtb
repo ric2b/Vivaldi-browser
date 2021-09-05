@@ -4,6 +4,7 @@
 <translation id="1018939186200882850">మెను అంశం</translation>
 <translation id="10623998915015855">టోగుల్ బటన్</translation>
 <translation id="1088086359088493902">సెకన్లు</translation>
+<translation id="1142001580032786438">వారం పికర్‌ను చూపుతుంది</translation>
 <translation id="1171774979989969504">దయచేసి ఇమెయిల్ చిరునామాను ఎంటర్ చెయ్యండి.</translation>
 <translation id="1178581264944972037">పాజ్ చేయి</translation>
 <translation id="1188858454923323853">బహుమానపూర్వకం</translation>
@@ -11,6 +12,7 @@
 <translation id="1206693055195146388">స్లయిడర్</translation>
 <translation id="1211441953136645838">ఎండ్‌నోట్</translation>
 <translation id="1281252709823657822">డైలాగ్</translation>
+<translation id="1306460908038601864">ఆఫ్ చేయబడ్డాయి</translation>
 <translation id="1335095011850992622">సహకారులు</translation>
 <translation id="1342835525016946179">కథనం</translation>
 <translation id="1359897965706325498">బ్యానర్</translation>
@@ -21,6 +23,7 @@
 <translation id="1727886345390570319">ఉపశీర్షికల మెనూని దాచు</translation>
 <translation id="1729654308190250600">దయచేసి ఖాళీ-కాని ఇమెయిల్ చిరునామాను నమోదు చేయండి.</translation>
 <translation id="1758486001363313524">ఇతర...</translation>
+<translation id="1787192514241997742">మొత్తం సమయం: <ph name="REMAINING_TIME" /></translation>
 <translation id="1806710327868736751">alert_dialog</translation>
 <translation id="1821985195704844674">వృక్షాంశ గ్రిడ్</translation>
 <translation id="1822429046913737220">AM/PM</translation>
@@ -54,7 +57,6 @@
 <translation id="2674318244760992338">ఫుటర్</translation>
 <translation id="2709516037105925701">స్వయంపూర్తి</translation>
 <translation id="2723001399770238859">ఆడియో</translation>
-<translation id="2725963129578236554">వ్యాఖ్యలు</translation>
 <translation id="2746543609216772311">విలువ తప్పనిసరిగా <ph name="MINIMUM_DATE_OR_TIME" /> లేదా అంతకంటే తదుపరిది అయి ఉండాలి.</translation>
 <translation id="2759744352195237655">పాప్ అప్ బటన్</translation>
 <translation id="2761667185364618470">మీరు కొనసాగాలనుకుంటే దయచేసి ఈ బాక్స్‌కి టిక్కు పెట్టండి.</translation>
@@ -83,7 +85,6 @@
 <translation id="3822383571486410024">దయచేసి ఈ వచనాన్ని <ph name="MIN_CHARACTERS" /> లేదా అంతకంటే ఎక్కువ అక్షరాలకు పొడిగించండి (ప్రస్తుతం మీరు <ph name="CURRENT_LENGTH" /> అక్షరాలను ఉపయోగిస్తున్నారు).</translation>
 <translation id="383465348367842624">'<ph name="ATSIGN" />'కి ముందు ఉన్న భాగంలో '<ph name="INVALIDCHARACTER" />' చిహ్నం ఉండకూడదు.</translation>
 <translation id="3846214748874656680">పూర్తి స్క్రీన్ నుండి నిష్క్రమించు</translation>
-<translation id="3889183436948184105">పునర్విమర్శ</translation>
 <translation id="3920932319529768807">ముగింపు</translation>
 <translation id="3924558731517983934">అప్లికేషన్‌</translation>
 <translation id="3944740393230681990">ప్రారంభం</translation>
@@ -101,11 +102,11 @@
 <translation id="4444765639179266822">ఇది చెబుతున్నట్లుగా ఉంది: <ph name="OCR_TEXT" /></translation>
 <translation id="4446524499724042288">పదకోశ సూచన</translation>
 <translation id="4522570452068850558">వివరాలు</translation>
-<translation id="4542388879936266156">మిగిలి ఉన్న సమయం: <ph name="REMAINING_TIME" /></translation>
 <translation id="4597532268155981612">ఫారమ్</translation>
 <translation id="4661075872484491155">tree</translation>
 <translation id="4664250907885839816">'<ph name="ATSIGN" />'కి తర్వాత ఉన్న భాగంలో '<ph name="INVALIDCHARACTER" />' చిహ్నం ఉండకూడదు.</translation>
 <translation id="4668956016107839909">అనుబంధం</translation>
+<translation id="4698212723196775569">కోడ్</translation>
 <translation id="4718048029184481307">చిత్రంలో చిత్రం మోడ్‌లో ప్లే అవుతోంది</translation>
 <translation id="4742539557769756338">ముఖచిత్రం</translation>
 <translation id="4748357248530471599">డిస్‌ప్లే కత్తిరింపు పూర్తి స్క్రీన్‌ని సక్రియం చేస్తుంది</translation>
@@ -114,9 +115,14 @@
 <translation id="479989351350248267">search</translation>
 <translation id="4812940957355064477">దయచేసి సంఖ్యను నమోదు చేయండి.</translation>
 <translation id="4912536737030637138">వివరణపట్టి నమోదు</translation>
+<translation id="4915360478455618802">టైమ్ పికర్‌ను చూపుతుంది</translation>
+<translation id="492244087561876220">కామెంట్‌</translation>
+<translation id="4950364064308314478">స్థానిక తేదీ, టైమ్ పికర్‌ను చూపుతుంది</translation>
+<translation id="4971739861736909480"><ph name="ACCNAME" /> ఎంచుకోబడింది</translation>
 <translation id="4975562563186953947"><ph name="SELECTED_COUNT" /> ఎంచుకోబడ్డాయి</translation>
 <translation id="4992066212339426712">అన్‌మ్యూట్ చేయి</translation>
 <translation id="49969490063480558">దయచేసి '<ph name="ATSIGN" />'కి తర్వాత ఉన్న భాగాన్ని నమోదు చేయండి. '<ph name="INVALIDADDRESS" />' అసంపూర్ణంగా ఉంది.</translation>
+<translation id="5022314756875057021">అడ్డు వరుసల గుంపు</translation>
 <translation id="5034860022980953847">ప్రోగ్రెస్ సూచిక</translation>
 <translation id="5090250355906949916">వీడియో సమయ స్క్రబ్బర్</translation>
 <translation id="5093189678851173835">పరిచయ వాక్యం</translation>
@@ -127,6 +133,7 @@
 <translation id="520299402983819650"><ph name="QUANTITY" /> PB</translation>
 <translation id="5307600278924710095">దయచేసి '<ph name="ATSIGN" />'కి ముందు ఉన్న భాగాన్ని నమోదు చేయండి. '<ph name="INVALIDADDRESS" />' అసంపూర్ణంగా ఉంది.</translation>
 <translation id="5334352251556557839">మీడియాను ప్లే చేయడం సాధ్యపడలేదు.</translation>
+<translation id="537648784377940524">కనిష్ఠ తేదీ (<ph name="MIN_DATE_OR_TIME" />) తప్పనిసరిగా గరిష్ఠ తేదీ (<ph name="MAX_DATE_OR_TIME" />) కంటే ముందు ఉండాలి.</translation>
 <translation id="5406322316791861025">రూపం</translation>
 <translation id="5453733299334684579">వృక్షాంశం</translation>
 <translation id="5466621249238537318">దయచేసి ఒకటి లేదా మరిన్ని ఫైళ్ళను ఎంచుకోండి.</translation>
@@ -142,7 +149,6 @@
 <translation id="5677946354068040947">మరిన్ని ఎంపికలు</translation>
 <translation id="576709008726043716">పరిచయం</translation>
 <translation id="57838592816432529">మ్యూట్ చేయి</translation>
-<translation id="5860033963881614850">ఆఫ్ అయ్యింది</translation>
 <translation id="588258955323874662">పూర్తితెర</translation>
 <translation id="5888666972993069672">ఇప్పుడు <ph name="DEVICE_FRIENDLY_NAME" />కి ప్రసారం చేస్తోంది</translation>
 <translation id="591047860372322273">శోధన పెట్టె</translation>
@@ -163,7 +169,6 @@
 <translation id="6404546809543547843">ఆడియో సమయ స్క్రబ్బర్</translation>
 <translation id="6443871981718447451">ఉపశీర్షికల మెనూని చూపు</translation>
 <translation id="6453774872122745852">గుర్తింపులు</translation>
-<translation id="6475115390776617481">లైవ్ ప్రెజెన్స్</translation>
 <translation id="648732519525291180">సమయం ఎంపిక</translation>
 <translation id="6550675742724504774">ఎంపికలు</translation>
 <translation id="6572309429103589720">చెల్లని వ్యాకరణం</translation>
@@ -191,6 +196,7 @@
 <translation id="7118469954320184356">వివరణ అందుబాటులో లేదు.</translation>
 <translation id="7139483182332611405">ముందుమాట</translation>
 <translation id="7214187073215825913">కంటెంట్ సమాచారం</translation>
+<translation id="7238347055216017155">ఉద్ఘాటన</translation>
 <translation id="7263440858009898357">దయచేసి జాబితాలోని ఒక అంశాన్ని ఎంచుకోండి.</translation>
 <translation id="727747134524199931">నిలువు వరుస శీర్షిక</translation>
 <translation id="7320576522385648310">బఫర్ చేయడం</translation>
@@ -217,6 +223,8 @@
 <translation id="7888071071722539607">దయచేసి ఇమెయిల్ చిరునామాలో '<ph name="ATSIGN" />'ని చేర్చండి. '<ph name="INVALIDADDRESS" />'లో '<ph name="ATSIGN" />' లేదు.</translation>
 <translation id="7891486169920085145">విభజన</translation>
 <translation id="795667975304826397">ఫైల్ ఏదీ ఎంచుకోలేదు</translation>
+<translation id="7962328325860248200"><ph name="ACCNAME" /> ఎంచుకోబడలేదు</translation>
+<translation id="8034303206267677282">ప్రబలమైనది</translation>
 <translation id="8053789581856978548">శోధన వచనం ఫీల్డ్</translation>
 <translation id="8057695513531652401">గమనిక</translation>
 <translation id="8105797009065549151">గమనిక సూచన</translation>
@@ -228,6 +236,7 @@
 <translation id="8284326494547611709">ఉపశీర్షికలు</translation>
 <translation id="8346634859695247203">విభాగం</translation>
 <translation id="835897206747267392">చెల్లని విలువ.</translation>
+<translation id="839593075537728968">విలువ ఖచ్చితంగా <ph name="MINIMUM_TIME" />, <ph name="MAXIMUM_TIME" /> మధ్యలో ఉండాలి.</translation>
 <translation id="8403857369060869934">గడిచిన సమయం: <ph name="ELAPSED_TIME" /></translation>
 <translation id="8415319359811155763">భాగం</translation>
 <translation id="8433900881053900389">సాధన పట్టీ</translation>
@@ -244,10 +253,10 @@
 <translation id="860475260694818407">కంటెంట్‌ల‌ పట్టిక</translation>
 <translation id="8613126697340063924">రిమోట్ ప్లేబ్యాక్‌ను నియంత్రిస్తుంది</translation>
 <translation id="862370744433916922">ఉపశీర్షిక</translation>
+<translation id="8634971699417195529">నెల పికర్‌ను చూపుతుంది</translation>
 <translation id="8711688047404765493">అవుట్‌పుట్</translation>
 <translation id="8750798805984357768">దయచేసి ఈ ఎంపికలలో ఒకదాన్ని ఎంచుకోండి.</translation>
 <translation id="8808573423886751634">అధ్యాయం</translation>
-<translation id="8822203815165896261">ఆథరింగ్ సమాచారం</translation>
 <translation id="8845239796550121995">ఇప్పుడు మీ టీవీలో ప్రసారం చేస్తోంది</translation>
 <translation id="8851136666856101339">main</translation>
 <translation id="8875657656876809964">వీడియో ప్లేబ్యాక్ ఎర్రర్</translation>

@@ -16,31 +16,32 @@
 
 #include "base/mac/scoped_nsobject.h"
 #include "base/time/time.h"
-#include "gpu/gpu_export.h"
 #include "media/base/data_buffer.h"
 #include "media/base/data_source.h"
-#include "platform_media/common/platform_media_pipeline_types.h"
 #include "ui/gfx/geometry/size.h"
+
+#include "platform_media/common/platform_media_pipeline_types.h"
+#include "platform_media/gpu/pipeline/ipc_decoding_buffer.h"
 
 @class DataSourceLoader;
 
 namespace media {
 
 class IPCDataSource;
+class DataRequestHandler;
 
 // Wraps AVAssetReader and uses it to perform media decoding tasks.
 //
-// AVFMediaReader takes raw media data as input and outputs decoded audio and
-// video data, handling both the demuxing and decoding internally.  Input data
-// is provided via an IPCDataSource.
-class GPU_EXPORT AVFMediaReader {
+// AVFMediaReader takes an asset as input and outputs its decoded audio and
+// video data, handling both the demuxing and decoding internally.
+class AVFMediaReader {
  public:
   // Once AVFMediaReader has been constructed, all functions must run on the
   // |queue| passed to the constructor.
   explicit AVFMediaReader(dispatch_queue_t queue);
   ~AVFMediaReader();
 
-  bool Initialize(media::DataSource* data_source, const std::string& mime_type);
+  bool Initialize(base::scoped_nsobject<AVAsset> asset);
 
   int bitrate() const;
   base::TimeDelta duration() const;
@@ -57,8 +58,8 @@ class GPU_EXPORT AVFMediaReader {
   CMFormatDescriptionRef video_stream_format() const;
   CGAffineTransform video_transform() const;
 
-  scoped_refptr<DataBuffer> GetNextAudioSample();
-  scoped_refptr<DataBuffer> GetNextVideoSample();
+  void GetNextMediaSample(PlatformMediaDataType type,
+                          IPCDecodingBuffer* ipc_buffer);
 
   bool Seek(base::TimeDelta time);
 
@@ -68,11 +69,10 @@ class GPU_EXPORT AVFMediaReader {
     StreamReader();
     ~StreamReader();
 
-    PlatformMediaDataType type;
     base::scoped_nsobject<AVAssetReader> asset_reader;
     base::scoped_nsobject<AVAssetReaderTrackOutput> output;
     base::TimeDelta expected_next_timestamp;
-    bool end_of_stream;
+    bool end_of_stream = false;
 
    private:
     DISALLOW_COPY_AND_ASSIGN(StreamReader);
@@ -87,14 +87,9 @@ class GPU_EXPORT AVFMediaReader {
 
   AVAssetTrack* GetTrack(PlatformMediaDataType type) const;
 
-  scoped_refptr<DataBuffer> ProcessNextSample(
-      PlatformMediaDataType type);
-  scoped_refptr<DataBuffer> ReadNextSample(
-      PlatformMediaDataType type);
-
-  base::scoped_nsobject<AVURLAsset> asset_;
+  base::scoped_nsobject<AVAsset> asset_;
   base::scoped_nsobject<DataSourceLoader> data_source_loader_;
-  StreamReader stream_readers_[PlatformMediaDataType::PLATFORM_MEDIA_DATA_TYPE_COUNT];
+  StreamReader stream_readers_[kPlatformMediaDataTypeCount];
 
   int bitrate_;
   gfx::Size video_coded_size_;

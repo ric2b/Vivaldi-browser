@@ -31,13 +31,11 @@ cr.define('app_management', function() {
         this.handler = this.fakeHandler.getRemote();
 
         const permissionOptions = {};
-        permissionOptions[PwaPermissionType.CONTENT_SETTINGS_TYPE_GEOLOCATION] =
-            {
-              permissionValue: TriState.kAllow,
-              isManaged: true,
-            };
-        permissionOptions[PwaPermissionType
-                              .CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA] = {
+        permissionOptions[PwaPermissionType.GEOLOCATION] = {
+          permissionValue: TriState.kAllow,
+          isManaged: true,
+        };
+        permissionOptions[PwaPermissionType.MEDIASTREAM_CAMERA] = {
           permissionValue: TriState.kBlock,
           isManaged: true
         };
@@ -121,5 +119,6 @@ cr.define('app_management', function() {
 
   cr.addSingletonGetter(BrowserProxy);
 
+  // #cr_define_end
   return {BrowserProxy: BrowserProxy};
 });

@@ -183,7 +183,7 @@ void AudioOutputStreamFuchsia::ReportError() {
   reference_time_ = base::TimeTicks();
   timer_.Stop();
   if (callback_)
-    callback_->OnError();
+    callback_->OnError(AudioSourceCallback::ErrorType::kUnknown);
 }
 
 void AudioOutputStreamFuchsia::PumpSamples() {
@@ -258,8 +258,8 @@ void AudioOutputStreamFuchsia::SchedulePumpSamples(base::TimeTicks now) {
                                    min_lead_time_.value() -
                                    parameters_.GetBufferDuration() / 2;
   timer_.Start(FROM_HERE, next_pump_time - now,
-               base::Bind(&AudioOutputStreamFuchsia::PumpSamples,
-                          base::Unretained(this)));
+               base::BindOnce(&AudioOutputStreamFuchsia::PumpSamples,
+                              base::Unretained(this)));
 }
 
 }  // namespace media

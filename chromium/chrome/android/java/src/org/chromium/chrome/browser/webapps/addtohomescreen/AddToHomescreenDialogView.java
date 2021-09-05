@@ -10,7 +10,6 @@ import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.drawable.Icon;
 import android.os.Build;
-import android.support.annotation.StringRes;
 import android.text.Editable;
 import android.text.TextUtils;
 import android.text.TextWatcher;
@@ -22,10 +21,11 @@ import android.widget.LinearLayout;
 import android.widget.RatingBar;
 import android.widget.TextView;
 
+import androidx.annotation.StringRes;
+import androidx.annotation.VisibleForTesting;
+
 import org.chromium.base.ContextUtils;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.webapps.addtohomescreen.AddToHomescreenProperties.AppType;
 import org.chromium.ui.modaldialog.DialogDismissalCause;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modaldialog.ModalDialogProperties;
@@ -39,11 +39,11 @@ import org.chromium.ui.modelutil.PropertyModel;
  * data is not yet fetched, and accepting the dialog is disabled until all data is available and in
  * its place on the screen.
  */
-public class AddToHomescreenDialogView
-        implements View.OnClickListener, ModalDialogProperties.Controller {
+class AddToHomescreenDialogView implements View.OnClickListener, ModalDialogProperties.Controller {
     private PropertyModel mDialogModel;
     private ModalDialogManager mModalDialogManager;
-    private AddToHomescreenViewDelegate mDelegate;
+    @VisibleForTesting
+    protected AddToHomescreenViewDelegate mDelegate;
 
     private View mParentView;
     /**
@@ -62,7 +62,7 @@ public class AddToHomescreenDialogView
 
     private boolean mCanSubmit;
 
-    public AddToHomescreenDialogView(Context context, ModalDialogManager modalDialogManager,
+    AddToHomescreenDialogView(Context context, ModalDialogManager modalDialogManager,
             @StringRes int titleText, AddToHomescreenViewDelegate delegate) {
         assert delegate != null;
 
@@ -159,7 +159,7 @@ public class AddToHomescreenDialogView
 
         mShortcutTitleInput.setVisibility(type == AppType.SHORTCUT ? View.VISIBLE : View.GONE);
         mAppLayout.setVisibility(type != AppType.SHORTCUT ? View.VISIBLE : View.GONE);
-        mAppOriginView.setVisibility(type == AppType.WEB_APK ? View.VISIBLE : View.GONE);
+        mAppOriginView.setVisibility(type == AppType.WEBAPK ? View.VISIBLE : View.GONE);
         mAppRatingBar.setVisibility(type == AppType.NATIVE ? View.VISIBLE : View.GONE);
         mPlayLogoView.setVisibility(type == AppType.NATIVE ? View.VISIBLE : View.GONE);
     }

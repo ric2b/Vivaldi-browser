@@ -32,23 +32,20 @@ class BrowserDMTokenStorageWin : public BrowserDMTokenStorage {
   std::string InitEnrollmentToken() override;
   std::string InitDMToken() override;
   bool InitEnrollmentErrorOption() override;
-  void SaveDMToken(const std::string& token) override;
+  StoreTask SaveDMTokenTask(const std::string& token,
+                            const std::string& client_id) override;
+  scoped_refptr<base::TaskRunner> SaveDMTokenTaskRunner() override;
 
   scoped_refptr<base::SingleThreadTaskRunner> com_sta_task_runner_;
 
-  // This should always be the last member of the class.
-  base::WeakPtrFactory<BrowserDMTokenStorageWin> weak_factory_{this};
-
   FRIEND_TEST_ALL_PREFIXES(BrowserDMTokenStorageWinTest, InitClientId);
-  FRIEND_TEST_ALL_PREFIXES(BrowserDMTokenStorageWinTest, InitEnrollmentToken);
-  // TODO(crbug.com/907589): Remove once no longer in use.
   FRIEND_TEST_ALL_PREFIXES(BrowserDMTokenStorageWinTest,
-                           InitOldEnrollmentToken);
-  // TODO(crbug.com/907589): Remove once no longer in use.
+                           InitEnrollmentTokenFromPreferred);
   FRIEND_TEST_ALL_PREFIXES(BrowserDMTokenStorageWinTest,
-                           InitOldEnrollmentTokenPriority);
+                           InitEnrollmentTokenFromSecondary);
   FRIEND_TEST_ALL_PREFIXES(BrowserDMTokenStorageWinTest, InitDMToken);
-  FRIEND_TEST_ALL_PREFIXES(BrowserDMTokenStorageWinTest, SaveDMToken);
+  FRIEND_TEST_ALL_PREFIXES(BrowserDMTokenStorageWinTest,
+                           InitDMTokenFromBrowserLocation);
 
   DISALLOW_COPY_AND_ASSIGN(BrowserDMTokenStorageWin);
 };

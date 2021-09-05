@@ -67,6 +67,8 @@ class URLRequestJob::URLRequestJobSourceStream : public SourceStream {
 
   std::string Description() const override { return std::string(); }
 
+  bool MayHaveMoreBytes() const override { return true; }
+
  private:
   // It is safe to keep a raw pointer because |job_| owns the last stream which
   // indirectly owns |this|. Therefore, |job_| will not be destroyed when |this|
@@ -270,15 +272,19 @@ void URLRequestJob::GetConnectionAttempts(ConnectionAttempts* out) const {
 }
 
 // static
-GURL URLRequestJob::ComputeReferrerForPolicy(URLRequest::ReferrerPolicy policy,
-                                             const GURL& original_referrer,
-                                             const GURL& destination) {
+GURL URLRequestJob::ComputeReferrerForPolicy(
+    URLRequest::ReferrerPolicy policy,
+    const GURL& original_referrer,
+    const GURL& destination,
+    bool* same_origin_out_for_metrics) {
   bool secure_referrer_but_insecure_destination =
       original_referrer.SchemeIsCryptographic() &&
       !destination.SchemeIsCryptographic();
   url::Origin referrer_origin = url::Origin::Create(original_referrer);
   bool same_origin =
       referrer_origin.IsSameOriginWith(url::Origin::Create(destination));
+  if (same_origin_out_for_metrics)
+    *same_origin_out_for_metrics = same_origin;
   switch (policy) {
     case URLRequest::CLEAR_REFERRER_ON_TRANSITION_FROM_SECURE_TO_INSECURE:
       return secure_referrer_but_insecure_destination ? GURL()

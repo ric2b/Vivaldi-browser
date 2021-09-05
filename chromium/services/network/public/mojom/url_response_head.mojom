@@ -7,6 +7,8 @@ module network.mojom;
 import "mojo/public/mojom/base/time.mojom";
 import "mojo/public/mojom/base/unguessable_token.mojom";
 import "services/network/public/mojom/content_security_policy.mojom";
+import "services/network/public/mojom/cross_origin_embedder_policy.mojom";
+import "services/network/public/mojom/cross_origin_opener_policy.mojom";
 import "services/network/public/mojom/fetch_api.mojom";
 import "services/network/public/mojom/http_raw_request_response_info.mojom";
 import "services/network/public/mojom/ip_endpoint.mojom";
@@ -122,16 +124,6 @@ struct URLResponseHead {
   // https://fetch.spec.whatwg.org/#concept-response-type
   FetchResponseType response_type;
 
-  // The time immediately before starting ServiceWorker. If the response is not
-  // provided by the ServiceWorker, kept empty.
-  // TODO(ksakamoto): Move this to net::LoadTimingInfo.
-  mojo_base.mojom.TimeTicks service_worker_start_time;
-
-  // The time immediately before dispatching fetch event in ServiceWorker.
-  // If the response is not provided by the ServiceWorker, kept empty.
-  // TODO(ksakamoto): Move this to net::LoadTimingInfo.
-  mojo_base.mojom.TimeTicks service_worker_ready_time;
-
   // True when the response is served from the CacheStorage via the
   // ServiceWorker.
   bool is_in_cache_storage = false;
@@ -186,12 +178,15 @@ struct URLResponseHead {
   // will be removed in the future.
   bool is_legacy_tls_version = false;
 
+  // https://fetch.spec.whatwg.org/#concept-response-timing-allow-passed
+  bool timing_allow_passed = false;
+
   // If the request received an authentication challenge, the challenge info is
   // recorded here.
   AuthChallengeInfo? auth_challenge_info;
 
   // The parsed content security policy from the response headers.
-  ContentSecurityPolicy? content_security_policy;
+  array<ContentSecurityPolicy> content_security_policy;
 
   // TimeTicks::Now() when the browser received the request from the renderer.
   mojo_base.mojom.TimeTicks request_start;
@@ -207,4 +202,12 @@ struct URLResponseHead {
   // is propagated to the renderer and set on recursive prefetch requests
   // (see corresponding documentation in url_loader.mojom).
   mojo_base.mojom.UnguessableToken? recursive_prefetch_token;
+
+  // The parsed representation of Cross-Origin-Embedder-Policy and
+  // Cross-Origin-Embedder-Policy-Report-Only headers.
+  CrossOriginEmbedderPolicy cross_origin_embedder_policy;
+
+  // The parsed value of the Cross-Origin-Opener-Policy (COOP) header.
+  CrossOriginOpenerPolicy cross_origin_opener_policy =
+      CrossOriginOpenerPolicy.kUnsafeNone;
 };

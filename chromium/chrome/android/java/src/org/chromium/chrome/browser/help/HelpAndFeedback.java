@@ -20,8 +20,10 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.feedback.FeedbackCollector;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.util.UrlConstants;
-import org.chromium.chrome.browser.util.UrlUtilitiesJni;
+import org.chromium.components.embedder_support.util.UrlConstants;
+import org.chromium.components.embedder_support.util.UrlUtilitiesJni;
+
+import java.util.Map;
 
 import javax.annotation.Nonnull;
 
@@ -31,9 +33,10 @@ import org.chromium.chrome.browser.ChromeApplication;
  * Launches an activity that displays a relevant support page and has an option to provide feedback.
  */
 public class HelpAndFeedback {
-    protected static final String FALLBACK_SUPPORT_URL = "https://help.vivaldi.com";
+    protected static final String FALLBACK_SUPPORT_URL =
+            "https://help.vivaldi.com";
             // TODO VIVALDI "https://support.google.com/chrome/topic/6069782";
-    private static final String TAG = "cr_HelpAndFeedback";
+    private static final String TAG = "HelpAndFeedback";
 
     private static HelpAndFeedback sInstance;
 
@@ -90,7 +93,7 @@ public class HelpAndFeedback {
         RecordUserAction.record("MobileHelpAndFeedback");
         new FeedbackCollector(activity, profile, url, null /* categoryTag */,
                 null /* description */, helpContext, true /* takeScreenshot */,
-                collector -> show(activity, helpContext, collector));
+                null /* feed context */, collector -> show(activity, helpContext, collector));
     }
 
     /**
@@ -105,7 +108,8 @@ public class HelpAndFeedback {
     public void showFeedback(final Activity activity, Profile profile, @Nullable String url,
             @Nullable final String categoryTag) {
         new FeedbackCollector(activity, profile, url, categoryTag, null /* description */, null,
-                true /* takeScreenshot */, collector -> showFeedback(activity, collector));
+                true /* takeScreenshot */, null /* feed context */,
+                collector -> showFeedback(activity, collector));
     }
 
     /**
@@ -116,15 +120,16 @@ public class HelpAndFeedback {
      * @param profile the current profile.
      * @param url the current URL. May be null.
      * @param categoryTag The category that this feedback report falls under.
+     * @param feedContext Feed specific parameters (url, title, etc) to include with feedback.
      * @param feedbackContext The context that describes the current feature being used.
      */
     public void showFeedback(final Activity activity, Profile profile, @Nullable String url,
-            @Nullable final String categoryTag, @Nullable final String feedbackContext) {
+            @Nullable final String categoryTag, @Nullable final Map<String, String> feedContext,
+            @Nullable final String feedbackContext) {
         new FeedbackCollector(activity, profile, url, categoryTag, null /* description */,
-                feedbackContext, true /* takeScreenshot */,
+                feedbackContext, true /* takeScreenshot */, feedContext,
                 collector -> showFeedback(activity, collector));
     }
-
     /**
      * Get help context ID from URL.
      *

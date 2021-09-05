@@ -20,11 +20,12 @@
 #include "net/cert/cert_verify_result.h"
 #include "net/log/net_log_with_source.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/network/public/mojom/url_response_head.mojom.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
 namespace blink {
-class SignedExchangeRequestMatcher;
+class WebPackageRequestMatcher;
 }  // namespace blink
 
 namespace net {
@@ -36,7 +37,6 @@ struct OCSPVerifyResult;
 }  // namespace net
 
 namespace network {
-struct ResourceResponseHead;
 namespace mojom {
 class NetworkContext;
 }
@@ -75,7 +75,7 @@ class CONTENT_EXPORT SignedExchangeHandler {
       SignedExchangeLoadResult result,
       net::Error error,
       const GURL& request_url,
-      const network::ResourceResponseHead& resource_response,
+      network::mojom::URLResponseHeadPtr resource_response,
       std::unique_ptr<net::SourceStream> payload_stream)>;
 
   static void SetNetworkContextForTesting(
@@ -94,7 +94,7 @@ class CONTENT_EXPORT SignedExchangeHandler {
       ExchangeHeadersCallback headers_callback,
       std::unique_ptr<SignedExchangeCertFetcherFactory> cert_fetcher_factory,
       int load_flags,
-      std::unique_ptr<blink::SignedExchangeRequestMatcher> request_matcher,
+      std::unique_ptr<blink::WebPackageRequestMatcher> request_matcher,
       std::unique_ptr<SignedExchangeDevToolsProxy> devtools_proxy,
       SignedExchangeReporter* reporter,
       int frame_tree_node_id);
@@ -170,7 +170,7 @@ class CONTENT_EXPORT SignedExchangeHandler {
 
   std::unique_ptr<SignedExchangeCertificateChain> unverified_cert_chain_;
 
-  std::unique_ptr<blink::SignedExchangeRequestMatcher> request_matcher_;
+  std::unique_ptr<blink::WebPackageRequestMatcher> request_matcher_;
 
   std::unique_ptr<SignedExchangeDevToolsProxy> devtools_proxy_;
 

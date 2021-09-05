@@ -4,12 +4,11 @@
 #include <stack>
 #include <string>
 
-#include "chrome/browser/importer/importer_list.h"
-
 #include "base/files/file_util.h"
 #include "base/mac/foundation_util.h"
 #include "base/mac/scoped_nsautorelease_pool.h"
 #include "base/path_service.h"
+#include "chrome/browser/importer/importer_list.h"
 #include "chrome/common/importer/importer_data_types.h"
 #include "chrome/common/importer/importer_type.h"
 #include "importer/chromium_profile_importer.h"

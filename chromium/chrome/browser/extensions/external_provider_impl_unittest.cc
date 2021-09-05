@@ -23,7 +23,6 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_service_test_base.h"
-#include "chrome/browser/extensions/updater/extension_cache_fake.h"
 #include "chrome/browser/extensions/updater/extension_updater.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_paths.h"
@@ -35,6 +34,7 @@
 #include "content/public/browser/notification_service.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/pref_names.h"
+#include "extensions/browser/updater/extension_cache_fake.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
@@ -139,6 +139,7 @@ class ExternalProviderImplTest : public ExtensionServiceTestBase {
               int(sizeof(prefs)));
     InitializeExtensionService(params);
     service_->updater()->Start();
+    content::RunAllTasksUntilIdle();
   }
 
   // ExtensionServiceTestBase overrides:
@@ -220,7 +221,7 @@ TEST_F(ExternalProviderImplTest, InAppPayments) {
 
   base::RunLoop run_loop;
   service_->set_external_updates_finished_callback_for_test(
-      run_loop.QuitClosure());
+      run_loop.QuitWhenIdleClosure());
   service_->CheckForExternalUpdates();
   run_loop.Run();
 
@@ -236,7 +237,7 @@ TEST_F(ExternalProviderImplTest, BlockedExternalUserProviders) {
 
   base::RunLoop run_loop;
   service_->set_external_updates_finished_callback_for_test(
-      run_loop.QuitClosure());
+      run_loop.QuitWhenIdleClosure());
   service_->CheckForExternalUpdates();
   run_loop.Run();
 
@@ -249,7 +250,7 @@ TEST_F(ExternalProviderImplTest, NotBlockedExternalUserProviders) {
 
   base::RunLoop run_loop;
   service_->set_external_updates_finished_callback_for_test(
-      run_loop.QuitClosure());
+      run_loop.QuitWhenIdleClosure());
   service_->CheckForExternalUpdates();
   run_loop.Run();
 

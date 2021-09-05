@@ -4,7 +4,9 @@
 
 #include "net/url_request/url_request_context_builder.h"
 
+#include "base/bind_helpers.h"
 #include "base/run_loop.h"
+#include "base/task/thread_pool.h"
 #include "build/build_config.h"
 #include "net/base/network_isolation_key.h"
 #include "net/base/request_priority.h"
@@ -16,6 +18,7 @@
 #include "net/http/http_auth_handler.h"
 #include "net/http/http_auth_handler_factory.h"
 #include "net/log/net_log_with_source.h"
+#include "net/proxy_resolution/configured_proxy_resolution_service.h"
 #include "net/ssl/ssl_info.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/gtest_util.h"
@@ -63,7 +66,7 @@ class MockHttpAuthHandlerFactory : public HttpAuthHandlerFactory {
                         std::unique_ptr<HttpAuthHandler>* handler) override {
     handler->reset();
 
-    return challenge->scheme() == supported_scheme_
+    return challenge->auth_scheme() == supported_scheme_
                ? return_code_
                : ERR_UNSUPPORTED_AUTH_SCHEME;
   }
@@ -139,7 +142,7 @@ TEST_F(URLRequestContextBuilderTest, CustomHttpAuthHandlerFactory) {
   const int kBasicReturnCode = OK;
   std::unique_ptr<HttpAuthHandler> handler;
   builder_.SetHttpAuthHandlerFactory(
-      std::make_unique<MockHttpAuthHandlerFactory>("ExtraScheme",
+      std::make_unique<MockHttpAuthHandlerFactory>("extrascheme",
                                                    kBasicReturnCode));
   std::unique_ptr<URLRequestContext> context(builder_.Build());
   SSLInfo null_ssl_info;
@@ -172,7 +175,8 @@ TEST_F(URLRequestContextBuilderTest, ShutDownNELAndReportingWithPendingUpload) {
   host_resolver->set_ondemand_mode(true);
   MockHostResolver* mock_host_resolver = host_resolver.get();
   builder_.set_host_resolver(std::move(host_resolver));
-  builder_.set_proxy_resolution_service(ProxyResolutionService::CreateDirect());
+  builder_.set_proxy_resolution_service(
+      ConfiguredProxyResolutionService::CreateDirect());
   builder_.set_reporting_policy(std::make_unique<ReportingPolicy>());
   builder_.set_network_error_logging_enabled(true);
   base::ScopedTempDir scoped_temp_dir;
@@ -182,8 +186,8 @@ TEST_F(URLRequestContextBuilderTest, ShutDownNELAndReportingWithPendingUpload) {
           scoped_temp_dir.GetPath().Append(
               FILE_PATH_LITERAL("ReportingAndNelStore")),
           base::ThreadTaskRunnerHandle::Get(),
-          base::CreateSequencedTaskRunner(
-              {base::ThreadPool(), base::MayBlock(),
+          base::ThreadPool::CreateSequencedTaskRunner(
+              {base::MayBlock(),
                net::GetReportingAndNelStoreBackgroundSequencePriority(),
                base::TaskShutdownBehavior::BLOCK_SHUTDOWN})));
 

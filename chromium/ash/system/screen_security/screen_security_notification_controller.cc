@@ -80,7 +80,7 @@ void ScreenSecurityNotificationController::CreateNotification(
               },
               weak_ptr_factory_.GetWeakPtr(), is_capture));
 
-  std::unique_ptr<Notification> notification = ash::CreateSystemNotification(
+  std::unique_ptr<Notification> notification = CreateSystemNotification(
       message_center::NOTIFICATION_TYPE_SIMPLE,
       is_capture ? kScreenCaptureNotificationId : kScreenShareNotificationId,
       l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_SCREEN_SHARE_TITLE),
@@ -118,11 +118,11 @@ void ScreenSecurityNotificationController::ChangeSource() {
 }
 
 void ScreenSecurityNotificationController::OnScreenCaptureStart(
-    base::RepeatingClosure stop_callback,
-    base::RepeatingClosure source_callback,
+    const base::RepeatingClosure& stop_callback,
+    const base::RepeatingClosure& source_callback,
     const base::string16& screen_capture_status) {
-  capture_stop_callbacks_.emplace_back(std::move(stop_callback));
-  change_source_callback_ = std::move(source_callback);
+  capture_stop_callbacks_.push_back(stop_callback);
+  change_source_callback_ = source_callback;
 
   // We do not want to show the screen capture notification and the chromecast
   // casting tray notification at the same time.
@@ -142,7 +142,7 @@ void ScreenSecurityNotificationController::OnScreenCaptureStop() {
 }
 
 void ScreenSecurityNotificationController::OnScreenShareStart(
-    const base::Closure& stop_callback,
+    const base::RepeatingClosure& stop_callback,
     const base::string16& helper_name) {
   share_stop_callbacks_.emplace_back(std::move(stop_callback));
 

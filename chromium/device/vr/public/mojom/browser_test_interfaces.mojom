@@ -80,6 +80,31 @@ struct ControllerFrameData {
   bool is_valid;
 };
 
+// Event type is used by test to simulate runtime events.
+enum EventType {
+  kSessionLost,
+  kVisibilityVisibleBlurred,
+  kInstanceLost,
+  kInteractionProfileChanged,
+  kNoEvent
+};
+
+// InteractionProfileType is used to indicate which interaction profile runtime
+// would like to change to
+enum InteractionProfileType {
+  // Windows Mixed Reality Motion Controller
+  kWMRMotion,
+  // Khronos Simple Controller
+  kKHRSimple,
+  kInvalid,
+};
+
+// EventData is used by test to pass all event related data.
+struct EventData {
+  EventType type = kNoEvent;
+  InteractionProfileType interaction_profile = kInvalid;
+};
+
 // Tests may implement this, and register it to control behavior of devices for
 // tests.  The test interface lives in the browser process, and may be consumed
 // by the device utility process.
@@ -118,10 +143,8 @@ interface XRTestHook {
   // given index, e.g. its current position and pressed buttons.
   [Sync] WaitGetControllerData(uint32 index) => (ControllerFrameData data);
 
-  // Called by the OpenXR test. Test can inform runtime when it should stop
-  // session by calling this function and test if such events are handled
-  // correctly.
-  [Sync] WaitGetSessionStateStopping() => (bool stopping);
+  // Called by the OpenXR test to simulate runtime events.
+  [Sync] WaitGetEventData() => (EventData data);
 };
 
 // Interface exposed by IsolatedXRService to allow browser tests to hook VR APIs

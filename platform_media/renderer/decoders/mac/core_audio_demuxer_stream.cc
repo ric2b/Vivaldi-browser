@@ -180,7 +180,7 @@ void CoreAudioDemuxerStream::InitializeAudioDecoderConfig() {
                            channel_layout,
                            input_format_.mSampleRate,
                            extra_data,
-                           Unencrypted(),
+                           EncryptionScheme::kUnencrypted,
                            base::TimeDelta(),
                            0);
   VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
@@ -188,12 +188,12 @@ void CoreAudioDemuxerStream::InitializeAudioDecoderConfig() {
           << Loggable(audio_config_);
 }
 
-void CoreAudioDemuxerStream::Read(const ReadCB& read_cb) {
+void CoreAudioDemuxerStream::Read(ReadCB read_cb) {
   CHECK(read_cb_.is_null()) << "Overlapping reads are not supported";
-  read_cb_ = read_cb;
+  read_cb_ = std::move(read_cb);
 
   if (!audio_queue_) {
-    std::move(read_cb_).Run(kAborted, NULL);
+    std::move(read_cb_).Run(kAborted, nullptr);
     return;
   }
 
@@ -223,7 +223,7 @@ void CoreAudioDemuxerStream::ReadCompleted(uint8_t* read_data, int read_size) {
   if (err != noErr) {
     LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                << " AudioFileStreamParseBytes error: " << err;
-    std::move(read_cb_).Run(kAborted, NULL);
+    std::move(read_cb_).Run(kAborted, nullptr);
     return;
   }
 
@@ -237,7 +237,7 @@ void CoreAudioDemuxerStream::ReadCompleted(uint8_t* read_data, int read_size) {
   }
 
   if (EnqueueBuffer() != noErr) {
-    std::move(read_cb_).Run(kAborted, NULL);
+    std::move(read_cb_).Run(kAborted, nullptr);
     return;
   }
 
@@ -282,7 +282,7 @@ void CoreAudioDemuxerStream::Stop() {
 
 void CoreAudioDemuxerStream::Abort() {
   if (!read_cb_.is_null()) {
-    std::move(read_cb_).Run(kAborted, NULL);
+    std::move(read_cb_).Run(kAborted, nullptr);
   }
 }
 

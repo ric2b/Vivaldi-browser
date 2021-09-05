@@ -24,9 +24,11 @@
 #include "components/download/public/common/download_task_runner.h"
 #include "components/download/public/common/download_url_parameters.h"
 #include "net/base/load_flags.h"
+#include "net/base/network_isolation_key.h"
 #include "net/http/http_request_headers.h"
 #include "net/http/http_status_code.h"
 #include "services/network/public/cpp/resource_request.h"
+#include "url/origin.h"
 #if defined(OS_ANDROID)
 #include "base/android/content_uri_utils.h"
 #include "components/download/internal/common/android/download_collection_bridge.h"
@@ -262,13 +264,18 @@ std::unique_ptr<network::ResourceRequest> CreateResourceRequest(
   request->method = params->method();
   request->url = params->url();
   request->request_initiator = params->initiator();
-  if (!params->network_isolation_key().IsEmpty()) {
-    request->trusted_params = network::ResourceRequest::TrustedParams();
-    request->trusted_params->network_isolation_key =
-        params->network_isolation_key();
-  }
+  request->trusted_params = network::ResourceRequest::TrustedParams();
+
+  // Treat downloads like top-level frame navigations to be consistent with
+  // cookie behavior. Also, since web-initiated downloads bypass the disk cache,
+  // sites can't use download timing information to tell if a cross-site URL has
+  // been visited before.
+  url::Origin origin = url::Origin::Create(params->url());
+  request->trusted_params->network_isolation_key =
+      net::NetworkIsolationKey(origin, origin);
+
   request->do_not_prompt_for_login = params->do_not_prompt_for_login();
-  request->site_for_cookies = params->url();
+  request->site_for_cookies = net::SiteForCookies::FromUrl(params->url());
   request->referrer = params->referrer();
   request->referrer_policy = params->referrer_policy();
   request->is_main_frame = true;
@@ -423,7 +430,7 @@ DownloadDBEntry CreateDownloadDBEntryFromItem(const DownloadItemImpl& item) {
   download_info.in_progress_info = in_progress_info;
 
   download_info.ukm_info =
-      UkmInfo(item.download_source(), item.ukm_download_id());
+      UkmInfo(item.GetDownloadSource(), item.ukm_download_id());
   entry.download_info = download_info;
   return entry;
 }

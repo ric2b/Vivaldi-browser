@@ -104,7 +104,6 @@ class ArcImeService : public KeyedService,
       const base::string16& text_in_range,
       const gfx::Range& selection_range,
       bool is_screen_coordinates) override;
-  void RequestHideIme() override;
 
   // Overridden from ash::KeyboardControllerObserver.
   void OnKeyboardAppearanceChanged(
@@ -112,7 +111,7 @@ class ArcImeService : public KeyedService,
 
   // Overridden from ui::TextInputClient:
   void SetCompositionText(const ui::CompositionText& composition) override;
-  void ConfirmCompositionText() override;
+  void ConfirmCompositionText(bool keep_selection) override;
   void ClearCompositionText() override;
   void InsertText(const base::string16& text) override;
   void InsertChar(const ui::KeyEvent& event) override;

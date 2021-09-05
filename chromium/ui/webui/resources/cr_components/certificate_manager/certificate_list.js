@@ -13,7 +13,7 @@ Polymer({
     /** @type {!Array<!CertificatesOrgGroup>} */
     certificates: {
       type: Array,
-      value: function() {
+      value() {
         return [];
       },
     },
@@ -29,7 +29,7 @@ Polymer({
     /** @private */
     isGuest_: {
       type: Boolean,
-      value: function() {
+      value() {
         return loadTimeData.valueExists('isGuest') &&
             loadTimeData.getBoolean('isGuest');
       },
@@ -38,7 +38,7 @@ Polymer({
     /** @private */
     isKiosk_: {
       type: Boolean,
-      value: function() {
+      value() {
         return loadTimeData.valueExists('isKiosk') &&
             loadTimeData.getBoolean('isKiosk');
       },
@@ -51,8 +51,8 @@ Polymer({
    * @return {string}
    * @private
    */
-  getDescription_: function() {
-    if (this.certificates.length == 0) {
+  getDescription_() {
+    if (this.certificates.length === 0) {
       return this.i18n('certificateManagerNoCertificates');
     }
 
@@ -74,8 +74,8 @@ Polymer({
    * @return {boolean}
    * @private
    */
-  canImport_: function() {
-    return !this.isKiosk_ && this.certificateType != CertificateType.OTHER &&
+  canImport_() {
+    return !this.isKiosk_ && this.certificateType !== CertificateType.OTHER &&
         this.importAllowed;
   },
 
@@ -84,9 +84,9 @@ Polymer({
    * @return {boolean}
    * @private
    */
-  canImportAndBind_: function() {
-    return !this.isGuest_ && this.certificateType == CertificateType.PERSONAL &&
-        this.importAllowed;
+  canImportAndBind_() {
+    return !this.isGuest_ &&
+        this.certificateType === CertificateType.PERSONAL && this.importAllowed;
   },
   // </if>
 
@@ -96,7 +96,7 @@ Polymer({
    * @param {*} error Expects {!CertificatesError|!CertificatesImportError}.
    * @private
    */
-  onRejected_: function(anchor, error) {
+  onRejected_(anchor, error) {
     if (error === null) {
       // Nothing to do here. Null indicates that the user clicked "cancel" on
       // a native file chooser dialog.
@@ -114,7 +114,7 @@ Polymer({
    * @param {!HTMLElement} anchor
    * @private
    */
-  dispatchImportActionEvent_: function(subnode, anchor) {
+  dispatchImportActionEvent_(subnode, anchor) {
     this.fire(
         CertificateActionEvent,
         /** @type {!CertificateActionEventDetail} */ ({
@@ -129,7 +129,7 @@ Polymer({
    * @param {!Event} e
    * @private
    */
-  onImportTap_: function(e) {
+  onImportTap_(e) {
     this.handleImport_(false, /** @type {!HTMLElement} */ (e.target));
   },
 
@@ -138,7 +138,7 @@ Polymer({
    * @private
    * @param {!Event} e
    */
-  onImportAndBindTap_: function(e) {
+  onImportAndBindTap_(e) {
     this.handleImport_(true, /** @type {!HTMLElement} */ (e.target));
   },
   // </if>
@@ -148,21 +148,21 @@ Polymer({
    * @param {!HTMLElement} anchor
    * @private
    */
-  handleImport_: function(useHardwareBacked, anchor) {
+  handleImport_(useHardwareBacked, anchor) {
     const browserProxy =
         certificate_manager.CertificatesBrowserProxyImpl.getInstance();
-    if (this.certificateType == CertificateType.PERSONAL) {
+    if (this.certificateType === CertificateType.PERSONAL) {
       browserProxy.importPersonalCertificate(useHardwareBacked)
           .then(showPasswordPrompt => {
             if (showPasswordPrompt) {
               this.dispatchImportActionEvent_(null, anchor);
             }
           }, this.onRejected_.bind(this, anchor));
-    } else if (this.certificateType == CertificateType.CA) {
+    } else if (this.certificateType === CertificateType.CA) {
       browserProxy.importCaCertificate().then(certificateName => {
         this.dispatchImportActionEvent_({name: certificateName}, anchor);
       }, this.onRejected_.bind(this, anchor));
-    } else if (this.certificateType == CertificateType.SERVER) {
+    } else if (this.certificateType === CertificateType.SERVER) {
       browserProxy.importServerCertificate().catch(
           this.onRejected_.bind(this, anchor));
     } else {

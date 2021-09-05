@@ -23,8 +23,8 @@ Polymer({
    * @return {boolean} Whether the given index corresponds to the last sub-node.
    * @private
    */
-  isLast_: function(index) {
-    return index == this.model.subnodes.length - 1;
+  isLast_(index) {
+    return index === this.model.subnodes.length - 1;
   },
 
   getPolicyIndicatorType_() {

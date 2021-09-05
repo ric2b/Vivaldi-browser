@@ -53,14 +53,14 @@ DatabaseThread::~DatabaseThread() {
   DCHECK(!thread_);
 }
 
-void DatabaseThread::Trace(blink::Visitor* visitor) {}
+void DatabaseThread::Trace(Visitor* visitor) {}
 
 void DatabaseThread::Start() {
   DCHECK(IsMainThread());
   if (thread_)
     return;
   thread_ = blink::Thread::CreateThread(
-      ThreadCreationParams(WebThreadType::kDatabaseThread).SetSupportsGC(true));
+      ThreadCreationParams(ThreadType::kDatabaseThread).SetSupportsGC(true));
   PostCrossThreadTask(*thread_->GetTaskRunner(), FROM_HERE,
                       CrossThreadBindOnce(&DatabaseThread::SetupDatabaseThread,
                                           WrapCrossThreadPersistent(this)));

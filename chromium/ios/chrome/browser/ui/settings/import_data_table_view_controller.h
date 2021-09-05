@@ -16,7 +16,7 @@ extern NSString* const kImportDataImportCellId;
 // The accessibility identifier of the Keep Data Separate cell.
 extern NSString* const kImportDataKeepSeparateCellId;
 
-// The accessiblity identifier of the Continue navigation button.
+// The accessibility identifier of the Continue navigation button.
 extern NSString* const kImportDataContinueButtonId;
 
 // Notifies of the user action on the corresponding
@@ -43,10 +43,7 @@ extern NSString* const kImportDataContinueButtonId;
                          toEmail:(NSString*)toEmail
                       isSignedIn:(BOOL)isSignedIn NS_DESIGNATED_INITIALIZER;
 
-- (instancetype)initWithTableViewStyle:(UITableViewStyle)style
-                           appBarStyle:
-                               (ChromeTableViewControllerStyle)appBarStyle
-    NS_UNAVAILABLE;
+- (instancetype)initWithStyle:(UITableViewStyle)style NS_UNAVAILABLE;
 
 @end
 

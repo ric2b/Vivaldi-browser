@@ -15,11 +15,13 @@
 #include "base/posix/eintr_wrapper.h"
 #include "base/run_loop.h"
 #include "base/test/bind_test_util.h"
+#include "chrome/browser/chromeos/wilco_dtc_supportd/fake_wilco_dtc_supportd_client.h"
+#include "chrome/browser/chromeos/wilco_dtc_supportd/wilco_dtc_supportd_bridge.h"
+#include "chrome/browser/chromeos/wilco_dtc_supportd/wilco_dtc_supportd_client.h"
+#include "chrome/browser/chromeos/wilco_dtc_supportd/wilco_dtc_supportd_network_context.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile_manager.h"
-#include "chromeos/dbus/dbus_thread_manager.h"
-#include "chromeos/dbus/fake_wilco_dtc_supportd_client.h"
-#include "chromeos/dbus/wilco_dtc_supportd_client.h"
+#include "mojo/public/cpp/bindings/remote.h"
 
 namespace chromeos {
 
@@ -108,13 +110,14 @@ class TestingWilcoDtcSupportdBridgeWrapperDelegate final
   // WilcoDtcSupportdBridge::Delegate overrides:
 
   void CreateWilcoDtcSupportdServiceFactoryMojoInvitation(
-      wilco_dtc_supportd::mojom::WilcoDtcSupportdServiceFactoryPtr*
-          wilco_dtc_supportd_service_factory_mojo_ptr,
+      mojo::Remote<wilco_dtc_supportd::mojom::WilcoDtcSupportdServiceFactory>*
+          wilco_dtc_supportd_service_factory_mojo_remote,
       base::ScopedFD* remote_endpoint_fd) override {
     // Bind the Mojo pointer passed to the bridge with the
     // TestingMojoWilcoDtcSupportdServiceFactory implementation.
     mojo_wilco_dtc_supportd_service_factory_->Bind(
-        mojo::MakeRequest(wilco_dtc_supportd_service_factory_mojo_ptr));
+        wilco_dtc_supportd_service_factory_mojo_remote
+            ->BindNewPipeAndPassReceiver());
 
     // Return a fake file descriptor - its value is not used in the unit test
     // environment for anything except comparing with zero.
@@ -130,9 +133,8 @@ class TestingWilcoDtcSupportdBridgeWrapperDelegate final
 };
 
 FakeWilcoDtcSupportdClient* GetFakeDbusWilcoDtcSupportdClient() {
-  DCHECK(DBusThreadManager::Get()->IsUsingFakes());
   WilcoDtcSupportdClient* const wilco_dtc_supportd_client =
-      DBusThreadManager::Get()->GetWilcoDtcSupportdClient();
+      WilcoDtcSupportdClient::Get();
   DCHECK(wilco_dtc_supportd_client);
   return static_cast<FakeWilcoDtcSupportdClient*>(wilco_dtc_supportd_client);
 }
@@ -144,10 +146,10 @@ std::unique_ptr<TestingWilcoDtcSupportdBridgeWrapper>
 TestingWilcoDtcSupportdBridgeWrapper::Create(
     wilco_dtc_supportd::mojom::WilcoDtcSupportdService*
         mojo_wilco_dtc_supportd_service,
-    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
+    std::unique_ptr<WilcoDtcSupportdNetworkContext> network_context,
     std::unique_ptr<WilcoDtcSupportdBridge>* bridge) {
   return base::WrapUnique(new TestingWilcoDtcSupportdBridgeWrapper(
-      mojo_wilco_dtc_supportd_service, std::move(url_loader_factory), bridge));
+      mojo_wilco_dtc_supportd_service, std::move(network_context), bridge));
 }
 
 TestingWilcoDtcSupportdBridgeWrapper::~TestingWilcoDtcSupportdBridgeWrapper() =
@@ -205,7 +207,7 @@ void TestingWilcoDtcSupportdBridgeWrapper::HandleMojoGetService(
 TestingWilcoDtcSupportdBridgeWrapper::TestingWilcoDtcSupportdBridgeWrapper(
     wilco_dtc_supportd::mojom::WilcoDtcSupportdService*
         mojo_wilco_dtc_supportd_service,
-    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
+    std::unique_ptr<WilcoDtcSupportdNetworkContext> network_context,
     std::unique_ptr<WilcoDtcSupportdBridge>* bridge)
     : mojo_wilco_dtc_supportd_service_receiver_(
           mojo_wilco_dtc_supportd_service) {
@@ -218,7 +220,7 @@ TestingWilcoDtcSupportdBridgeWrapper::TestingWilcoDtcSupportdBridgeWrapper(
               base::BindRepeating(
                   &TestingWilcoDtcSupportdBridgeWrapper::HandleMojoGetService,
                   base::Unretained(this)))),
-      url_loader_factory,
+      std::move(network_context),
       std::make_unique<WilcoDtcSupportdNotificationController>(
           profile_manager->profile_manager()));
 }

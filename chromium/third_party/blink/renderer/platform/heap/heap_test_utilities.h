@@ -29,6 +29,8 @@ class TestSupportingGC : public testing::Test {
   static void ConservativelyCollectGarbage(
       BlinkGC::SweepingType sweeping_type = BlinkGC::kEagerSweeping);
 
+  ~TestSupportingGC() override;
+
   // Performs multiple rounds of garbage collections until no more memory can be
   // freed. This is useful to avoid other garbage collections having to deal
   // with stale memory.
@@ -156,10 +158,51 @@ class IncrementalMarkingTestDriver {
                        BlinkGC::StackState::kNoHeapPointersOnStack);
   void FinishGC(bool complete_sweep = true);
 
+  // Methods for forcing a concurrent marking step without any assistance from
+  // mutator thread (i.e. without incremental marking on the mutator thread).
+  bool SingleConcurrentStep(BlinkGC::StackState stack_state =
+                                BlinkGC::StackState::kNoHeapPointersOnStack);
+  void FinishConcurrentSteps(BlinkGC::StackState stack_state =
+                                 BlinkGC::StackState::kNoHeapPointersOnStack);
+
   size_t GetHeapCompactLastFixupCount() const;
 
  private:
   ThreadState* const thread_state_;
+};
+
+class IntegerObject : public GarbageCollected<IntegerObject> {
+ public:
+  static std::atomic_int destructor_calls;
+
+  explicit IntegerObject(int x) : x_(x) {}
+
+  virtual ~IntegerObject() {
+    destructor_calls.fetch_add(1, std::memory_order_relaxed);
+  }
+
+  virtual void Trace(Visitor* visitor) {}
+
+  int Value() const { return x_; }
+
+  bool operator==(const IntegerObject& other) const {
+    return other.Value() == Value();
+  }
+
+  unsigned GetHash() { return IntHash<int>::GetHash(x_); }
+
+ private:
+  int x_;
+};
+
+struct IntegerObjectHash {
+  static unsigned GetHash(const IntegerObject& key) {
+    return WTF::HashInt(static_cast<uint32_t>(key.Value()));
+  }
+
+  static bool Equal(const IntegerObject& a, const IntegerObject& b) {
+    return a == b;
+  }
 };
 
 }  // namespace blink

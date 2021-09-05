@@ -109,6 +109,12 @@ class COMPONENT_EXPORT(DEBUG_DAEMON) DebugDaemonClient
   virtual void SetStopAgentTracingTaskRunner(
       scoped_refptr<base::TaskRunner> task_runner) = 0;
 
+  using KstaledRatioCallback = base::OnceCallback<void(bool)>;
+
+  // Sets the kstaled ratio to the provided value, for more information
+  // see chromeos/memory/README.md.
+  virtual void SetKstaledRatio(uint8_t val, KstaledRatioCallback) = 0;
+
   // Called once TestICMP() is complete. Takes an optional string.
   // - The optional string has value if information was obtained successfully.
   // - The string value contains information about ICMP connectivity to a
@@ -131,13 +137,12 @@ class COMPONENT_EXPORT(DEBUG_DAEMON) DebugDaemonClient
 
   // Called once EnableDebuggingFeatures() is complete. |succeeded| will be true
   // if debugging features have been successfully enabled.
-  typedef base::Callback<void(bool succeeded)> EnableDebuggingCallback;
+  using EnableDebuggingCallback = base::OnceCallback<void(bool succeeded)>;
 
   // Enables debugging features (sshd, boot from USB). |password| is a new
   // password for root user. Can be only called in dev mode.
-  virtual void EnableDebuggingFeatures(
-      const std::string& password,
-      const EnableDebuggingCallback& callback) = 0;
+  virtual void EnableDebuggingFeatures(const std::string& password,
+                                       EnableDebuggingCallback callback) = 0;
 
   static const int DEV_FEATURE_NONE = 0;
   static const int DEV_FEATURE_ALL_ENABLED =
@@ -149,16 +154,14 @@ class COMPONENT_EXPORT(DEBUG_DAEMON) DebugDaemonClient
   // Called once QueryDebuggingFeatures() is complete. |succeeded| will be true
   // if debugging features have been successfully enabled. |feature_mask| is a
   // bitmask made out of DebuggingFeature enum values.
-  typedef base::Callback<void(bool succeeded, int feature_mask)>
-      QueryDevFeaturesCallback;
+  using QueryDevFeaturesCallback =
+      base::OnceCallback<void(bool succeeded, int feature_mask)>;
   // Checks which debugging features have been already enabled.
-  virtual void QueryDebuggingFeatures(
-      const QueryDevFeaturesCallback& callback) = 0;
+  virtual void QueryDebuggingFeatures(QueryDevFeaturesCallback callback) = 0;
 
   // Removes rootfs verification from the file system. Can be only called in
   // dev mode.
-  virtual void RemoveRootfsVerification(
-      const EnableDebuggingCallback& callback) = 0;
+  virtual void RemoveRootfsVerification(EnableDebuggingCallback callback) = 0;
 
   // Trigger uploading of crashes.
   virtual void UploadCrashes() = 0;
@@ -168,8 +171,8 @@ class COMPONENT_EXPORT(DEBUG_DAEMON) DebugDaemonClient
       WaitForServiceToBeAvailableCallback callback) = 0;
 
   // A callback for SetOomScoreAdj().
-  typedef base::Callback<void(bool success, const std::string& output)>
-      SetOomScoreAdjCallback;
+  using SetOomScoreAdjCallback =
+      base::OnceCallback<void(bool success, const std::string& output)>;
 
   // Set OOM score oom_score_adj for some process.
   // Note that the corresponding DBus configuration of the debugd method
@@ -177,7 +180,7 @@ class COMPONENT_EXPORT(DEBUG_DAEMON) DebugDaemonClient
   // user chronos or Android apps.
   virtual void SetOomScoreAdj(
       const std::map<pid_t, int32_t>& pid_to_oom_score_adj,
-      const SetOomScoreAdjCallback& callback) = 0;
+      SetOomScoreAdjCallback callback) = 0;
 
   // A callback to handle the result of CupsAdd[Auto|Manually]ConfiguredPrinter.
   // A negative value denotes a D-Bus library error while non-negative values
@@ -215,7 +218,7 @@ class COMPONENT_EXPORT(DEBUG_DAEMON) DebugDaemonClient
   // called if there was an error in communicating with debugd.
   virtual void CupsRemovePrinter(const std::string& name,
                                  CupsRemovePrinterCallback callback,
-                                 const base::Closure& error_callback) = 0;
+                                 base::OnceClosure error_callback) = 0;
 
   // A callback to handle the result of StartConcierge/StopConcierge.
   using ConciergeCallback = base::OnceCallback<void(bool success)>;
@@ -232,8 +235,10 @@ class COMPONENT_EXPORT(DEBUG_DAEMON) DebugDaemonClient
   // StartPluginVmDispatcher/StopPluginVmDispatcher.
   using PluginVmDispatcherCallback = base::OnceCallback<void(bool success)>;
   // Calls debugd::kStartVmPluginDispatcher, which starts the PluginVm
-  // dispatcher service. |callback| is called when the method finishes.
-  virtual void StartPluginVmDispatcher(PluginVmDispatcherCallback callback) = 0;
+  // dispatcher service on behalf of |owner_id|. |callback| is called
+  // when the method finishes.
+  virtual void StartPluginVmDispatcher(const std::string& owner_id,
+                                       PluginVmDispatcherCallback callback) = 0;
   // Calls debug::kStopVmPluginDispatcher, which stops the PluginVm dispatcher
   // service. |callback| is called when the method finishes.
   virtual void StopPluginVmDispatcher(PluginVmDispatcherCallback callback) = 0;
@@ -262,6 +267,11 @@ class COMPONENT_EXPORT(DEBUG_DAEMON) DebugDaemonClient
   // Get U2F flags.
   virtual void GetU2fFlags(
       DBusMethodCallback<std::set<std::string>> callback) = 0;
+
+  // Set Swap Parameter
+  virtual void SetSwapParameter(const std::string& parameter,
+                                int32_t value,
+                                DBusMethodCallback<std::string> callback) = 0;
 
   // Factory function, creates a new instance and returns ownership.
   // For normal usage, access the singleton via DBusThreadManager::Get().

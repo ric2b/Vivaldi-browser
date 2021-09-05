@@ -14,9 +14,7 @@
 #import "ios/chrome/browser/web_state_list/web_state_list_observer.h"
 #include "ios/web/public/web_state_observer.h"
 
-namespace ios {
 class ChromeBrowserState;
-}
 
 namespace web {
 class WebState;
@@ -33,7 +31,7 @@ class SendTabToSelfClientServiceIOS : public KeyedService,
                                       public WebStateListObserver,
                                       public web::WebStateObserver {
  public:
-  SendTabToSelfClientServiceIOS(ios::ChromeBrowserState* browser_state,
+  SendTabToSelfClientServiceIOS(ChromeBrowserState* browser_state,
                                 SendTabToSelfModel* model);
   ~SendTabToSelfClientServiceIOS() override;
 
@@ -54,7 +52,7 @@ class SendTabToSelfClientServiceIOS : public KeyedService,
                            web::WebState* old_web_state,
                            web::WebState* new_web_state,
                            int active_index,
-                           int reason) override;
+                           ActiveWebStateChangeReason reason) override;
 
   // WebStateObserver::
   void WasShown(web::WebState* web_state) override;
@@ -73,7 +71,7 @@ class SendTabToSelfClientServiceIOS : public KeyedService,
   SendTabToSelfModel* model_;
 
   // The current browser state. Must outlive this object.
-  ios::ChromeBrowserState* browser_state_;
+  ChromeBrowserState* browser_state_;
 
   // The pending SendTabToSelf entry to display an InfoBar for.
   const SendTabToSelfEntry* entry_ = nullptr;

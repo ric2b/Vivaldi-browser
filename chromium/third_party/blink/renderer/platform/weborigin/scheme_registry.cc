@@ -112,12 +112,6 @@ URLSchemesRegistry& GetMutableURLSchemesRegistry() {
 
 }  // namespace
 
-// Must be called before we create other threads to avoid racy static local
-// initialization.
-void SchemeRegistry::Initialize() {
-  GetURLSchemesRegistry();
-}
-
 void SchemeRegistry::RegisterURLSchemeAsLocal(const String& scheme) {
   DCHECK_EQ(scheme, scheme.LowerASCII());
   GetMutableURLSchemesRegistry().local_schemes.insert(scheme);
@@ -249,7 +243,7 @@ String SchemeRegistry::ListOfCorsEnabledURLSchemes() {
 }
 
 bool SchemeRegistry::ShouldTreatURLSchemeAsLegacy(const String& scheme) {
-  return scheme == "ftp" || scheme == "gopher";
+  return scheme == "ftp";
 }
 
 bool SchemeRegistry::ShouldTrackUsageMetricsForScheme(const String& scheme) {

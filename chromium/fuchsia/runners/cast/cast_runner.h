@@ -5,6 +5,8 @@
 #ifndef FUCHSIA_RUNNERS_CAST_CAST_RUNNER_H_
 #define FUCHSIA_RUNNERS_CAST_CAST_RUNNER_H_
 
+#include <fuchsia/sys/cpp/fidl.h>
+#include <fuchsia/web/cpp/fidl.h>
 #include <memory>
 #include <set>
 #include <vector>
@@ -14,10 +16,15 @@
 #include "base/containers/unique_ptr_adapters.h"
 #include "base/fuchsia/startup_context.h"
 #include "base/macros.h"
-#include "fuchsia/base/agent_manager.h"
 #include "fuchsia/fidl/chromium/cast/cpp/fidl.h"
 #include "fuchsia/runners/cast/cast_component.h"
 #include "fuchsia/runners/common/web_content_runner.h"
+
+namespace base {
+namespace fuchsia {
+class FilteredServiceDirectory;
+}  // namespace fuchsia
+}  // namespace base
 
 // sys::Runner which instantiates Cast activities specified via cast/casts URIs.
 class CastRunner : public WebContentRunner {
@@ -28,10 +35,12 @@ class CastRunner : public WebContentRunner {
   //     itself to.
   // |context_feature_flags|: The feature flags to use when creating the
   //     runner's Context.
-  CastRunner(sys::OutgoingDirectory* outgoing_directory,
-             fuchsia::web::CreateContextParams create_context_params);
+  CastRunner(fuchsia::web::CreateContextParams create_context_params,
+             sys::OutgoingDirectory* outgoing_directory);
 
   ~CastRunner() override;
+  CastRunner(const CastRunner&) = delete;
+  CastRunner& operator=(const CastRunner&) = delete;
 
   // WebContentRunner implementation.
   void DestroyComponent(WebComponent* component) override;
@@ -54,11 +63,19 @@ class CastRunner : public WebContentRunner {
   // destroyed by their parents when their singleton Components are destroyed.
   // |on_destruction_callback| is invoked when the child component is destroyed.
   CastRunner(OnDestructionCallback on_destruction_callback,
-             fuchsia::web::ContextPtr context);
+             fuchsia::web::ContextPtr context,
+             bool is_headless);
+
+  // Initializes the service directory that's passed to the web context. Must be
+  // called during initialization, before the context is created.
+  void InitializeServiceDirectory();
 
   // Starts a component once all configuration data is available.
   void MaybeStartComponent(
       CastComponent::CastComponentParams* pending_component_params);
+
+  // Cancels the launch of a component.
+  void CancelComponentLaunch(CastComponent::CastComponentParams* params);
 
   void CreateAndRegisterCastComponent(
       CastComponent::CastComponentParams params);
@@ -68,21 +85,21 @@ class CastRunner : public WebContentRunner {
       CastComponent::CastComponentParams* pending_component,
       std::vector<chromium::cast::ApiBinding> bindings);
   void OnChildRunnerDestroyed(CastRunner* cast_runner);
-  fuchsia::web::ContextPtr CreateCastRunnerWebContext();
 
   // Creates a CastRunner configured to serve data from content directories in
-  // |params|.
+  // |params|. Returns nullptr if an error occurred during CastRunner creation.
   CastRunner* CreateChildRunnerForIsolatedComponent(
       CastComponent::CastComponentParams* params);
+
+  // Handler for fuchsia.media.Audio requests in |service_directory_|.
+  void ConnectAudioProtocol(
+      fidl::InterfaceRequest<fuchsia::media::Audio> request);
 
   // Holds StartComponent() requests while the ApplicationConfig is being
   // fetched from the ApplicationConfigManager.
   base::flat_set<std::unique_ptr<CastComponent::CastComponentParams>,
                  base::UniquePtrComparator>
       pending_components_;
-
-  // Used for creating the CastRunner's ContextPtr.
-  fuchsia::web::CreateContextParams create_context_params_;
 
   // Used as a template for creating the ContextPtrs of isolated Runners.
   fuchsia::web::CreateContextParams common_create_context_params_;
@@ -95,7 +112,10 @@ class CastRunner : public WebContentRunner {
   base::flat_set<std::unique_ptr<CastRunner>, base::UniquePtrComparator>
       isolated_runners_;
 
-  DISALLOW_COPY_AND_ASSIGN(CastRunner);
+  std::unique_ptr<base::fuchsia::FilteredServiceDirectory> service_directory_;
+
+  // Last component that was created with permission to access MICROPHONE.
+  CastComponent* audio_capturer_component_ = nullptr;
 };
 
 #endif  // FUCHSIA_RUNNERS_CAST_CAST_RUNNER_H_

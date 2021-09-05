@@ -34,10 +34,10 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/pref_names.h"
-#include "chrome/common/safe_browsing/file_type_policies.h"
 #include "components/download/public/common/download_item.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
+#include "components/safe_browsing/core/file_type_policies.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/download_manager.h"
 #include "content/public/browser/save_page_type.h"
@@ -269,8 +269,10 @@ void DownloadPrefs::RegisterProfilePrefs(
       base::FeatureList::IsEnabled(features::kDownloadsLocationChange)
           ? DownloadPromptStatus::SHOW_INITIAL
           : DownloadPromptStatus::DONT_SHOW;
-  registry->RegisterIntegerPref(prefs::kPromptForDownloadAndroid,
-                                static_cast<int>(download_prompt_status));
+  registry->RegisterIntegerPref(
+      prefs::kPromptForDownloadAndroid,
+      static_cast<int>(download_prompt_status),
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   registry->RegisterBooleanPref(
       prefs::kShowMissingSdCardErrorAndroid,
       base::FeatureList::IsEnabled(features::kDownloadsLocationChange));
@@ -511,7 +513,7 @@ base::FilePath DownloadPrefs::SanitizeDownloadTargetPath(
 
   // Fall back to the default download directory for all other paths.
   return GetDefaultDownloadDirectoryForProfile();
-#endif
+#else
   // If the stored download directory is an absolute path, we presume it's
   // correct; there's not really much more validation we can do here.
   if (path.IsAbsolute())
@@ -520,6 +522,7 @@ base::FilePath DownloadPrefs::SanitizeDownloadTargetPath(
   // When the default download directory is *not* an absolute path, we use the
   // profile directory as a safe default.
   return GetDefaultDownloadDirectoryForProfile();
+#endif
 }
 
 bool DownloadPrefs::AutoOpenCompareFunctor::operator()(

@@ -120,6 +120,7 @@ class WebRtcGetDisplayMediaBrowserTestWithFakeUI
     command_line->AppendSwitch(
         switches::kEnableExperimentalWebPlatformFeatures);
     command_line->AppendSwitch(switches::kUseFakeUIForMediaStream);
+    command_line->RemoveSwitch(switches::kUseFakeDeviceForMediaStream);
     command_line->AppendSwitchASCII(
         switches::kUseFakeDeviceForMediaStream,
         base::StringPrintf("display-media-type=%s",
@@ -188,7 +189,7 @@ IN_PROC_BROWSER_TEST_P(WebRtcGetDisplayMediaBrowserTestWithFakeUI,
   EXPECT_EQ(result, base::StringPrintf("%d", kMaxFrameRate));
 }
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          WebRtcGetDisplayMediaBrowserTestWithFakeUI,
                          testing::Values(TestConfig{"monitor", "true", "never"},
                                          TestConfig{"window", "true", "never"},

@@ -16,14 +16,20 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/compiler_specific.h"
+#include "base/containers/flat_set.h"
 #include "base/files/file_enumerator.h"
+#include "base/files/file_path.h"
+#include "base/files/file_util.h"
+#include "base/memory/memory_pressure_listener.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/no_destructor.h"
 #include "base/rand_util.h"
 #include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "base/timer/elapsed_timer.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "components/favicon_base/favicon_util.h"
@@ -75,11 +81,55 @@ namespace history {
 
 namespace {
 
+#if DCHECK_IS_ON()
+// Use to keep track of paths used to host HistoryBackends. This class
+// is thread-safe. No two backends should ever run at the same time using the
+// same directory since they will contend on the files created there.
+class HistoryPathsTracker {
+ public:
+  HistoryPathsTracker(const HistoryPathsTracker&) = delete;
+  HistoryPathsTracker& operator=(const HistoryPathsTracker&) = delete;
+
+  static HistoryPathsTracker* GetInstance() {
+    static base::NoDestructor<HistoryPathsTracker> instance;
+    return instance.get();
+  }
+
+  void AddPath(const base::FilePath& file_path) {
+    base::AutoLock auto_lock(lock_);
+    paths_.insert(file_path);
+  }
+
+  void RemovePath(const base::FilePath& file_path) {
+    base::AutoLock auto_lock(lock_);
+    auto it = paths_.find(file_path);
+
+    // If the backend was created without a db we are not tracking it.
+    if (it != paths_.end())
+      paths_.erase(it);
+  }
+
+  bool HasPath(const base::FilePath& file_path) {
+    base::AutoLock auto_lock(lock_);
+    return paths_.find(file_path) != paths_.end();
+  }
+
+ private:
+  friend class base::NoDestructor<HistoryPathsTracker>;
+
+  HistoryPathsTracker() = default;
+  ~HistoryPathsTracker() = default;
+
+  base::Lock lock_;
+  base::flat_set<base::FilePath> paths_ GUARDED_BY(lock_);
+};
+#endif
+
 void RunUnlessCanceled(
-    const base::Closure& closure,
+    base::OnceClosure closure,
     const base::CancelableTaskTracker::IsCanceledCallback& is_canceled) {
   if (!is_canceled.Run())
-    closure.Run();
+    std::move(closure).Run();
 }
 
 // How long we'll wait to do a commit, so that things are batched together.
@@ -97,6 +147,19 @@ const int kMaxRedirectCount = 32;
 // The number of days old a history entry can be before it is considered "old"
 // and is deleted.
 // const int kExpireDaysThreshold = 90;
+
+// The maximum number of days for which domain visit metrics are computed
+// each time HistoryBackend::GetDomainDiversity() is called.
+constexpr int kDomainDiversityMaxBacktrackedDays = 7;
+
+// An offset that corrects possible error in date/time arithmetic caused by
+// fluctuation of day length due to Daylight Saving Time (DST). For example,
+// given midnight M, its next midnight can be computed as (M + 24 hour
+// + offset).LocalMidnight(). In most modern DST systems, the DST shift is
+// typically 1 hour. However, a larger value of 4 is chosen here to
+// accommodate larger DST shifts that have been used historically and to
+// avoid other potential issues.
+constexpr int kDSTRoundingOffsetHours = 4;
 
 bool IsFaviconBitmapExpired(base::Time last_updated) {
   return (Time::Now() - last_updated) >
@@ -135,6 +198,12 @@ base::string16 FormatUrlForRedirectComparison(const GURL& url) {
       net::UnescapeRule::NONE, nullptr, nullptr, nullptr);
 }
 
+base::Time MidnightNDaysLater(base::Time time, int days) {
+  return (time.LocalMidnight() + base::TimeDelta::FromDays(days) +
+          base::TimeDelta::FromHours(kDSTRoundingOffsetHours))
+      .LocalMidnight();
+}
+
 QueuedHistoryDBTask::QueuedHistoryDBTask(
     std::unique_ptr<HistoryDBTask> task,
     scoped_refptr<base::SingleThreadTaskRunner> origin_loop,
@@ -164,10 +233,11 @@ bool QueuedHistoryDBTask::Run(HistoryBackend* backend, HistoryDatabase* db) {
 
 void QueuedHistoryDBTask::DoneRun() {
   origin_loop_->PostTask(
-      FROM_HERE, base::BindOnce(&RunUnlessCanceled,
-                                base::Bind(&HistoryDBTask::DoneRunOnMainThread,
-                                           base::Unretained(task_.get())),
-                                is_canceled_));
+      FROM_HERE,
+      base::BindOnce(&RunUnlessCanceled,
+                     base::BindOnce(&HistoryDBTask::DoneRunOnMainThread,
+                                    base::Unretained(task_.get())),
+                     is_canceled_));
 }
 
 // HistoryBackendHelper --------------------------------------------------------
@@ -179,11 +249,9 @@ class HistoryBackendHelper : public base::SupportsUserData {
   ~HistoryBackendHelper() override;
 };
 
-HistoryBackendHelper::HistoryBackendHelper() {
-}
+HistoryBackendHelper::HistoryBackendHelper() = default;
 
-HistoryBackendHelper::~HistoryBackendHelper() {
-}
+HistoryBackendHelper::~HistoryBackendHelper() = default;
 
 // HistoryBackend --------------------------------------------------------------
 
@@ -226,8 +294,13 @@ HistoryBackend::~HistoryBackend() {
   if (!backend_destroy_task_.is_null()) {
     // Notify an interested party (typically a unit test) that we're done.
     DCHECK(backend_destroy_task_runner_);
-    backend_destroy_task_runner_->PostTask(FROM_HERE, backend_destroy_task_);
+    backend_destroy_task_runner_->PostTask(FROM_HERE,
+                                           std::move(backend_destroy_task_));
   }
+
+#if DCHECK_IS_ON()
+  HistoryPathsTracker::GetInstance()->RemovePath(history_dir_);
+#endif
 
 #if defined(OS_ANDROID)
   if (backend_client_ && !history_dir_.empty())
@@ -239,6 +312,12 @@ void HistoryBackend::Init(
     bool force_fail,
     const HistoryDatabaseParams& history_database_params) {
   TRACE_EVENT0("browser", "HistoryBackend::Init");
+
+  DCHECK(base::PathExists(history_database_params.history_dir))
+      << "History directory does not exist. If you are in a test make sure "
+         "that ~TestingProfile() has not been called or that the "
+         "ScopedTempDirectory used outlives this task.";
+
   // HistoryBackend is created on the UI thread by HistoryService, then the
   // HistoryBackend::Init() method is called on the DB thread. Create the
   // base::SupportsUserData on the DB thread since it is not thread-safe.
@@ -254,18 +333,19 @@ void HistoryBackend::Init(
           syncer::TYPED_URLS, /*dump_stack=*/base::RepeatingClosure()));
   typed_url_sync_bridge_->Init();
 
-  memory_pressure_listener_.reset(new base::MemoryPressureListener(
-      base::Bind(&HistoryBackend::OnMemoryPressure, base::Unretained(this))));
+  memory_pressure_listener_.reset(
+      new base::MemoryPressureListener(base::BindRepeating(
+          &HistoryBackend::OnMemoryPressure, base::Unretained(this))));
 }
 
 void HistoryBackend::SetOnBackendDestroyTask(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-    const base::Closure& task) {
+    base::OnceClosure task) {
   TRACE_EVENT0("browser", "HistoryBackend::SetOnBackendDestroyTask");
   if (!backend_destroy_task_.is_null())
     DLOG(WARNING) << "Setting more than one destroy task, overriding";
   backend_destroy_task_runner_ = std::move(task_runner);
-  backend_destroy_task_ = task;
+  backend_destroy_task_ = std::move(task);
 }
 
 void HistoryBackend::Closing() {
@@ -678,6 +758,18 @@ void HistoryBackend::InitImpl(
 
   // Compute the file names.
   history_dir_ = history_database_params.history_dir;
+
+#if DCHECK_IS_ON()
+  DCHECK(!HistoryPathsTracker::GetInstance()->HasPath(history_dir_))
+      << "There already is a HistoryBackend running using the file at: "
+      << history_database_params.history_dir
+      << ". Tests have to make sure that HistoryBackend destruction is "
+         "complete using SetOnBackendDestroyTask() or other flush mechanisms "
+         "before creating a new HistoryBackend that uses the same directory.";
+
+  HistoryPathsTracker::GetInstance()->AddPath(history_dir_);
+#endif
+
   base::FilePath history_name = history_dir_.Append(kHistoryFilename);
   base::FilePath thumbnail_name = GetFaviconsFileName();
 
@@ -690,8 +782,8 @@ void HistoryBackend::InitImpl(
       history_database_params.download_interrupt_reason_crash));
 
   // Unretained to avoid a ref loop with db_.
-  db_->set_error_callback(base::Bind(&HistoryBackend::DatabaseErrorCallback,
-                                     base::Unretained(this)));
+  db_->set_error_callback(base::BindRepeating(
+      &HistoryBackend::DatabaseErrorCallback, base::Unretained(this)));
 
   db_diagnostics_.clear();
   sql::InitStatus status = db_->Init(history_name);
@@ -783,6 +875,12 @@ void HistoryBackend::InitImpl(
 
 void HistoryBackend::OnMemoryPressure(
     base::MemoryPressureListener::MemoryPressureLevel memory_pressure_level) {
+  // TODO(sebmarchand): Check if MEMORY_PRESSURE_LEVEL_MODERATE should also be
+  // ignored.
+  if (memory_pressure_level ==
+      base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_NONE) {
+    return;
+  }
   if (db_)
     db_->TrimMemory();
   if (thumbnail_db_)
@@ -1136,6 +1234,66 @@ HistoryCountResult HistoryBackend::CountUniqueHostsVisitedLastMonth() {
   return {!!db_, db_ ? db_->CountUniqueHostsVisitedLastMonth() : 0};
 }
 
+DomainDiversityResults HistoryBackend::GetDomainDiversity(
+    base::Time report_time,
+    int number_of_days_to_report,
+    DomainMetricBitmaskType metric_type_bitmask) {
+  DCHECK_GE(number_of_days_to_report, 0);
+  DomainDiversityResults result;
+
+  if (!db_)
+    return result;
+
+  number_of_days_to_report =
+      std::min(number_of_days_to_report, kDomainDiversityMaxBacktrackedDays);
+
+  base::Time current_midnight = report_time.LocalMidnight();
+  SCOPED_UMA_HISTOGRAM_TIMER("History.DomainCountQueryTime");
+
+  for (int days_back = 0; days_back < number_of_days_to_report; ++days_back) {
+    DomainMetricSet single_metric_set;
+    single_metric_set.end_time = current_midnight;
+
+    if (metric_type_bitmask & kEnableLast1DayMetric) {
+      base::Time last_midnight = MidnightNDaysLater(current_midnight, -1);
+      single_metric_set.one_day_metric = DomainMetricCountType(
+          db_->CountUniqueDomainsVisited(last_midnight, current_midnight),
+          last_midnight);
+    }
+
+    if (metric_type_bitmask & kEnableLast7DayMetric) {
+      base::Time seven_midnights_ago = MidnightNDaysLater(current_midnight, -7);
+      single_metric_set.seven_day_metric = DomainMetricCountType(
+          db_->CountUniqueDomainsVisited(seven_midnights_ago, current_midnight),
+          seven_midnights_ago);
+    }
+
+    if (metric_type_bitmask & kEnableLast28DayMetric) {
+      base::Time twenty_eight_midnights_ago =
+          MidnightNDaysLater(current_midnight, -28);
+      single_metric_set.twenty_eight_day_metric = DomainMetricCountType(
+          db_->CountUniqueDomainsVisited(twenty_eight_midnights_ago,
+                                         current_midnight),
+          twenty_eight_midnights_ago);
+    }
+    result.push_back(single_metric_set);
+
+    current_midnight = MidnightNDaysLater(current_midnight, -1);
+  }
+
+  return result;
+}
+
+HistoryLastVisitToHostResult HistoryBackend::GetLastVisitToHost(
+    const GURL& host,
+    base::Time begin_time,
+    base::Time end_time) {
+  base::Time last_visit;
+  return {
+      db_ && db_->GetLastVisitToHost(host, begin_time, end_time, &last_visit),
+      last_visit};
+}
+
 // Keyword visits --------------------------------------------------------------
 
 void HistoryBackend::SetKeywordSearchTermsForURL(const GURL& url,
@@ -1229,9 +1387,8 @@ std::vector<DownloadRow> HistoryBackend::QueryDownloads() {
 }
 
 // Update a particular download entry.
-void HistoryBackend::UpdateDownload(
-    const DownloadRow& data,
-    bool should_commit_immediately) {
+void HistoryBackend::UpdateDownload(const DownloadRow& data,
+                                    bool should_commit_immediately) {
   TRACE_EVENT0("browser", "HistoryBackend::UpdateDownload");
   if (!db_)
     return;
@@ -1421,10 +1578,11 @@ MostVisitedURLList HistoryBackend::QueryMostVisitedURLs(int result_count,
 
   base::TimeTicks begin_time = base::TimeTicks::Now();
 
-  auto url_filter = backend_client_
-                        ? base::Bind(&HistoryBackendClient::IsWebSafe,
-                                     base::Unretained(backend_client_.get()))
-                        : base::Callback<bool(const GURL&)>();
+  auto url_filter =
+      backend_client_
+          ? base::BindRepeating(&HistoryBackendClient::IsWebSafe,
+                                base::Unretained(backend_client_.get()))
+          : base::NullCallback();
   std::vector<std::unique_ptr<PageUsageData>> data = db_->QuerySegmentUsage(
       base::Time::Now() - base::TimeDelta::FromDays(days_back), result_count,
       url_filter);
@@ -2369,8 +2527,7 @@ void HistoryBackend::SendFaviconChangedNotificationForPageAndRedirects(
     const GURL& page_url) {
   RedirectList redirect_list = GetCachedRecentRedirects(page_url);
   if (!redirect_list.empty()) {
-    std::set<GURL> favicons_changed(redirect_list.begin(),
-                                       redirect_list.end());
+    std::set<GURL> favicons_changed(redirect_list.begin(), redirect_list.end());
     NotifyFaviconsChanged(favicons_changed, GURL());
   }
 }
@@ -2418,7 +2575,7 @@ void HistoryBackend::ScheduleCommit() {
     return;
 
   scheduled_commit_.Reset(
-      base::Bind(&HistoryBackend::Commit, base::Unretained(this)));
+      base::BindOnce(&HistoryBackend::Commit, base::Unretained(this)));
 
   task_runner_->PostDelayedTask(
       FROM_HERE, scheduled_commit_.callback(),

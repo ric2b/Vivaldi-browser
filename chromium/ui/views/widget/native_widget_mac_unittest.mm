@@ -42,7 +42,6 @@
 #include "ui/views/test/widget_test.h"
 #include "ui/views/widget/native_widget_mac.h"
 #include "ui/views/widget/native_widget_private.h"
-#include "ui/views/window/dialog_client_view.h"
 #include "ui/views/window/dialog_delegate.h"
 
 // Donates an implementation of -[NSAnimation stopAnimation] which calls the
@@ -70,10 +69,10 @@
 @interface MockBridgedView : NSView {
  @private
   // Number of times -[NSView drawRect:] has been called.
-  NSUInteger drawRectCount_;
+  NSUInteger _drawRectCount;
 
   // The dirtyRect parameter passed to last invocation of drawRect:.
-  NSRect lastDirtyRect_;
+  NSRect _lastDirtyRect;
 }
 
 @property(assign, nonatomic) NSUInteger drawRectCount;
@@ -1109,18 +1108,16 @@ class ModalDialogDelegate : public DialogDelegateView {
   explicit ModalDialogDelegate(ui::ModalType modal_type)
       : modal_type_(modal_type) {}
 
-  void set_can_close(bool value) { can_close_ = value; }
-  void set_buttons(int buttons) { buttons_ = buttons; }
+  void SetButtons(int buttons) {
+    DialogDelegate::SetButtons(buttons);
+    DialogModelChanged();
+  }
 
   // DialogDelegateView:
-  int GetDialogButtons() const override { return buttons_; }
   ui::ModalType GetModalType() const override { return modal_type_; }
-  bool Close() override { return can_close_; }
 
  private:
   const ui::ModalType modal_type_;
-  bool can_close_ = true;
-  int buttons_ = ui::DIALOG_BUTTON_OK | ui::DIALOG_BUTTON_CANCEL;
 
   DISALLOW_COPY_AND_ASSIGN(ModalDialogDelegate);
 };
@@ -1139,8 +1136,8 @@ class ScopedSwizzleWaiter {
 
   ~ScopedSwizzleWaiter() { instance_ = nullptr; }
 
-  static IMP GetMethodAndMarkCalled() {
-    return instance_->GetMethodInternal();
+  static void OriginalSetWindowStateForEnd(id receiver, SEL method) {
+    return instance_->CallMethodInternal(receiver, method);
   }
 
   void WaitForMethod() {
@@ -1158,12 +1155,12 @@ class ScopedSwizzleWaiter {
   bool method_called() const { return method_called_; }
 
  private:
-  IMP GetMethodInternal() {
+  void CallMethodInternal(id receiver, SEL selector) {
     DCHECK(!method_called_);
     method_called_ = true;
     if (run_loop_)
       run_loop_->Quit();
-    return swizzler_.GetOriginalImplementation();
+    swizzler_.InvokeOriginal<void>(receiver, selector);
   }
 
   static ScopedSwizzleWaiter* instance_;
@@ -1869,7 +1866,7 @@ TEST_F(NativeWidgetMacTest, InvalidateShadow) {
   EXPECT_EQ(0, [window invalidateShadowCount]);
   widget->CloseNow();
 
-  init_params.opacity = Widget::InitParams::TRANSLUCENT_WINDOW;
+  init_params.opacity = Widget::InitParams::WindowOpacity::kTranslucent;
   widget = CreateWidgetWithTestWindow(std::move(init_params), &window);
   BridgedNativeWidgetTestApi test_api(window);
 
@@ -1911,20 +1908,20 @@ TEST_F(NativeWidgetMacTest, ContentOpacity) {
   Widget::InitParams init_params =
       CreateParams(Widget::InitParams::TYPE_WINDOW_FRAMELESS);
 
-  EXPECT_EQ(init_params.opacity, Widget::InitParams::INFER_OPACITY);
+  EXPECT_EQ(init_params.opacity, Widget::InitParams::WindowOpacity::kInferred);
   Widget* widget = CreateWidgetWithTestWindow(std::move(init_params), &window);
 
   // Infer should default to opaque on Mac.
   EXPECT_TRUE([[window contentView] isOpaque]);
   widget->CloseNow();
 
-  init_params.opacity = Widget::InitParams::TRANSLUCENT_WINDOW;
+  init_params.opacity = Widget::InitParams::WindowOpacity::kTranslucent;
   widget = CreateWidgetWithTestWindow(std::move(init_params), &window);
   EXPECT_FALSE([[window contentView] isOpaque]);
   widget->CloseNow();
 
   // Test opaque explicitly.
-  init_params.opacity = Widget::InitParams::OPAQUE_WINDOW;
+  init_params.opacity = Widget::InitParams::WindowOpacity::kOpaque;
   widget = CreateWidgetWithTestWindow(std::move(init_params), &window);
   EXPECT_TRUE([[window contentView] isOpaque]);
   widget->CloseNow();
@@ -2082,46 +2079,6 @@ TEST_F(NativeWidgetMacTest, ChangeFocusOnChangeFirstResponder) {
   widget->CloseNow();
 }
 
-// Ensure reparented native view has correct bounds.
-TEST_F(NativeWidgetMacTest, ReparentNativeViewBounds) {
-  Widget* parent = CreateTopLevelFramelessPlatformWidget();
-  gfx::Rect parent_rect(100, 100, 300, 200);
-  parent->SetBounds(parent_rect);
-
-  Widget::InitParams params(Widget::InitParams::TYPE_CONTROL);
-  params.parent = parent->GetNativeView();
-  Widget* widget = new Widget;
-  widget->Init(std::move(params));
-  widget->SetContentsView(new View);
-
-  NSView* child_view = widget->GetNativeView().GetNativeNSView();
-  Widget::ReparentNativeView(child_view, parent->GetNativeView());
-
-  // Reparented content view has the size of the Widget that created it.
-  gfx::Rect widget_rect(0, 0, 200, 100);
-  widget->SetBounds(widget_rect);
-  EXPECT_EQ(200, NSWidth([child_view frame]));
-  EXPECT_EQ(100, NSHeight([child_view frame]));
-
-  // Reparented widget has bounds relative to the native parent
-  NSRect native_parent_rect = NSMakeRect(50, 100, 200, 70);
-  base::scoped_nsobject<NSView> native_parent(
-      [[NSView alloc] initWithFrame:native_parent_rect]);
-  [parent->GetNativeView().GetNativeNSView() addSubview:native_parent];
-
-  gfx::Rect screen_rect = widget->GetWindowBoundsInScreen();
-  EXPECT_EQ(100, screen_rect.x());
-  EXPECT_EQ(100, screen_rect.y());
-
-  Widget::ReparentNativeView(child_view, native_parent.get());
-  widget->SetBounds(widget_rect);
-  screen_rect = widget->GetWindowBoundsInScreen();
-  EXPECT_EQ(150, screen_rect.x());
-  EXPECT_EQ(130, screen_rect.y());
-
-  parent->CloseNow();
-}
-
 // Test two kinds of widgets to re-parent.
 TEST_F(NativeWidgetMacTest, ReparentNativeViewTypes) {
   std::unique_ptr<Widget> toplevel1(new Widget);
@@ -2142,16 +2099,13 @@ TEST_F(NativeWidgetMacTest, ReparentNativeViewTypes) {
 
   Widget::ReparentNativeView(child->GetNativeView(),
                              toplevel1->GetNativeView());
-  EXPECT_EQ([child->GetNativeView().GetNativeNSView() window],
+  EXPECT_EQ([child->GetNativeWindow().GetNativeNSWindow() parentWindow],
             [toplevel1->GetNativeView().GetNativeNSView() window]);
-  EXPECT_EQ(0, [child->GetNativeWindow().GetNativeNSWindow() alphaValue]);
 
   Widget::ReparentNativeView(child->GetNativeView(),
                              toplevel2->GetNativeView());
-  EXPECT_EQ([child->GetNativeView().GetNativeNSView() window],
+  EXPECT_EQ([child->GetNativeWindow().GetNativeNSWindow() parentWindow],
             [toplevel2->GetNativeView().GetNativeNSView() window]);
-  EXPECT_EQ(0, [child->GetNativeWindow().GetNativeNSWindow() alphaValue]);
-  EXPECT_NE(0, [toplevel1->GetNativeWindow().GetNativeNSWindow() alphaValue]);
 
   Widget::ReparentNativeView(toplevel2->GetNativeView(),
                              toplevel1->GetNativeView());
@@ -2188,6 +2142,61 @@ class NativeWidgetMacFullKeyboardAccessTest : public NativeWidgetMacTest {
   remote_cocoa::NativeWidgetNSWindowBridge* bridge_ = nullptr;
   ui::test::ScopedFakeFullKeyboardAccess* fake_full_keyboard_access_ = nullptr;
 };
+
+// Ensure that calling SetSize doesn't change the origin.
+TEST_F(NativeWidgetMacTest, SetSizeDoesntChangeOrigin) {
+  Widget* parent = CreateTopLevelFramelessPlatformWidget();
+  gfx::Rect parent_rect(100, 100, 400, 200);
+  parent->SetBounds(parent_rect);
+
+  // Popup children specify their bounds relative to their parent window.
+  Widget* child_control = new Widget;
+  gfx::Rect child_control_rect(50, 70, 300, 100);
+  {
+    Widget::InitParams params(Widget::InitParams::TYPE_CONTROL);
+    params.parent = parent->GetNativeView();
+    params.bounds = child_control_rect;
+    child_control->Init(std::move(params));
+    child_control->SetContentsView(new View);
+  }
+
+  // Window children specify their bounds in screen coords.
+  Widget* child_window = new Widget;
+  gfx::Rect child_window_rect(110, 90, 200, 50);
+  {
+    Widget::InitParams params(Widget::InitParams::TYPE_WINDOW);
+    params.parent = parent->GetNativeView();
+    params.bounds = child_window_rect;
+    child_window->Init(std::move(params));
+  }
+
+  // Sanity-check the initial bounds. Note that the CONTROL should be offset by
+  // the parent's origin.
+  EXPECT_EQ(parent->GetWindowBoundsInScreen(), parent_rect);
+  EXPECT_EQ(
+      child_control->GetWindowBoundsInScreen(),
+      gfx::Rect(child_control_rect.origin() + parent_rect.OffsetFromOrigin(),
+                child_control_rect.size()));
+  EXPECT_EQ(child_window->GetWindowBoundsInScreen(), child_window_rect);
+
+  // Update the size, but not the origin.
+  parent_rect.set_size(gfx::Size(505, 310));
+  parent->SetSize(parent_rect.size());
+  child_control_rect.set_size(gfx::Size(256, 102));
+  child_control->SetSize(child_control_rect.size());
+  child_window_rect.set_size(gfx::Size(172, 96));
+  child_window->SetSize(child_window_rect.size());
+
+  // Ensure that the origin didn't change.
+  EXPECT_EQ(parent->GetWindowBoundsInScreen(), parent_rect);
+  EXPECT_EQ(
+      child_control->GetWindowBoundsInScreen(),
+      gfx::Rect(child_control_rect.origin() + parent_rect.OffsetFromOrigin(),
+                child_control_rect.size()));
+  EXPECT_EQ(child_window->GetWindowBoundsInScreen(), child_window_rect);
+
+  parent->CloseNow();
+}
 
 // Test that updateFullKeyboardAccess method on BridgedContentView correctly
 // sets the keyboard accessibility mode on the associated focus manager.
@@ -2349,19 +2358,6 @@ TEST_F(NativeWidgetMacViewsOrderTest, UnassociatedViewsIsAbove) {
       ]]));
 }
 
-// Test -[NSWindowDelegate windowShouldClose:].
-TEST_F(NativeWidgetMacTest, CanClose) {
-  ModalDialogDelegate* delegate = new ModalDialogDelegate(ui::MODAL_TYPE_NONE);
-  Widget* widget =
-      views::DialogDelegate::CreateDialogWidget(delegate, nullptr, nullptr);
-  NSWindow* window = widget->GetNativeWindow().GetNativeNSWindow();
-  delegate->set_can_close(false);
-  EXPECT_FALSE([[window delegate] windowShouldClose:window]);
-  delegate->set_can_close(true);
-  EXPECT_TRUE([[window delegate] windowShouldClose:window]);
-  widget->CloseNow();
-}
-
 namespace {
 
 // Returns an array of NSTouchBarItemIdentifier (i.e. NSString), extracted from
@@ -2394,7 +2390,6 @@ NSArray* ExtractTouchBarGroupIdentifiers(NSView* view) {
 TEST_F(NativeWidgetMacTest, TouchBar) {
   ModalDialogDelegate* delegate = new ModalDialogDelegate(ui::MODAL_TYPE_NONE);
   views::DialogDelegate::CreateDialogWidget(delegate, nullptr, nullptr);
-  DialogClientView* client_view = delegate->GetDialogClientView();
   NSView* content =
       [delegate->GetWidget()->GetNativeWindow().GetNativeNSWindow()
               contentView];
@@ -2407,8 +2402,8 @@ TEST_F(NativeWidgetMacTest, TouchBar) {
   NSString* const kTouchBarCancelId = @"com.google.chrome-CANCEL";
 
   EXPECT_TRUE(content);
-  EXPECT_TRUE(client_view->ok_button());
-  EXPECT_TRUE(client_view->cancel_button());
+  EXPECT_TRUE(delegate->GetOkButton());
+  EXPECT_TRUE(delegate->GetCancelButton());
 
   if (@available(macOS 10.12.2, *)) {
     NSTouchBar* touch_bar = [content touchBar];
@@ -2429,10 +2424,10 @@ TEST_F(NativeWidgetMacTest, TouchBar) {
   }
 
   // Remove the cancel button.
-  delegate->set_buttons(ui::DIALOG_BUTTON_OK);
+  delegate->SetButtons(ui::DIALOG_BUTTON_OK);
   delegate->DialogModelChanged();
-  EXPECT_TRUE(client_view->ok_button());
-  EXPECT_FALSE(client_view->cancel_button());
+  EXPECT_TRUE(delegate->GetOkButton());
+  EXPECT_FALSE(delegate->GetCancelButton());
 
   if (@available(macOS 10.12.2, *)) {
     NSTouchBar* touch_bar = [content touchBar];
@@ -2475,43 +2470,43 @@ TEST_F(NativeWidgetMacTest, InitCallback) {
 
 @implementation TestStopAnimationWaiter
 - (void)setWindowStateForEnd {
-  views::test::ScopedSwizzleWaiter::GetMethodAndMarkCalled()(self, _cmd);
+  views::test::ScopedSwizzleWaiter::OriginalSetWindowStateForEnd(self, _cmd);
 }
 @end
 
 @implementation NativeWidgetMacTestWindow
 
-@synthesize invalidateShadowCount = invalidateShadowCount_;
-@synthesize fakeOnInactiveSpace = fakeOnInactiveSpace_;
-@synthesize deallocFlag = deallocFlag_;
+@synthesize invalidateShadowCount = _invalidateShadowCount;
+@synthesize fakeOnInactiveSpace = _fakeOnInactiveSpace;
+@synthesize deallocFlag = _deallocFlag;
 
 - (void)dealloc {
-  if (deallocFlag_) {
-    DCHECK(!*deallocFlag_);
-    *deallocFlag_ = true;
+  if (_deallocFlag) {
+    DCHECK(!*_deallocFlag);
+    *_deallocFlag = true;
   }
   [super dealloc];
 }
 
 - (void)invalidateShadow {
-  ++invalidateShadowCount_;
+  ++_invalidateShadowCount;
   [super invalidateShadow];
 }
 
 - (BOOL)isOnActiveSpace {
-  return !fakeOnInactiveSpace_;
+  return !_fakeOnInactiveSpace;
 }
 
 @end
 
 @implementation MockBridgedView
 
-@synthesize drawRectCount = drawRectCount_;
-@synthesize lastDirtyRect = lastDirtyRect_;
+@synthesize drawRectCount = _drawRectCount;
+@synthesize lastDirtyRect = _lastDirtyRect;
 
 - (void)drawRect:(NSRect)dirtyRect {
-  ++drawRectCount_;
-  lastDirtyRect_ = dirtyRect;
+  ++_drawRectCount;
+  _lastDirtyRect = dirtyRect;
 }
 
 @end

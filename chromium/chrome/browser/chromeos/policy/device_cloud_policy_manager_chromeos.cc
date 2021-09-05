@@ -29,6 +29,7 @@
 #include "chrome/browser/chromeos/login/startup_utils.h"
 #include "chrome/browser/chromeos/policy/device_cloud_policy_store_chromeos.h"
 #include "chrome/browser/chromeos/policy/heartbeat_scheduler.h"
+#include "chrome/browser/chromeos/policy/policy_pref_names.h"
 #include "chrome/browser/chromeos/policy/remote_commands/device_commands_factory_chromeos.h"
 #include "chrome/browser/chromeos/policy/rsu/lookup_key_uploader.h"
 #include "chrome/browser/chromeos/policy/server_backed_state_keys_broker.h"
@@ -45,6 +46,7 @@
 #include "components/policy/core/common/cloud/cloud_policy_core.h"
 #include "components/policy/core/common/cloud/cloud_policy_service.h"
 #include "components/policy/core/common/cloud/cloud_policy_store.h"
+#include "components/policy/core/common/cloud/policy_invalidation_scope.h"
 #include "components/policy/core/common/policy_types.h"
 #include "components/policy/core/common/remote_commands/remote_commands_factory.h"
 #include "components/policy/core/common/schema_registry.h"
@@ -243,6 +245,7 @@ void DeviceCloudPolicyManagerChromeOS::RegisterPrefs(
   registry->RegisterDictionaryPref(prefs::kServerBackedDeviceState);
   registry->RegisterBooleanPref(prefs::kRemoveUsersRemoteCommand, false);
   registry->RegisterStringPref(prefs::kLastRsuDeviceIdUploaded, std::string());
+  registry->RegisterListPref(prefs::kStoreLogStatesAcrossReboots);
 }
 
 // static
@@ -324,7 +327,8 @@ void DeviceCloudPolicyManagerChromeOS::StartConnection(
 
   // Start remote commands services now that we have setup everything they need.
   core()->StartRemoteCommandsService(
-      std::make_unique<DeviceCommandsFactoryChromeOS>(this));
+      std::make_unique<DeviceCommandsFactoryChromeOS>(this),
+      PolicyInvalidationScope::kDevice);
 
   // Enable device reporting and status monitoring for cloud managed devices. We
   // want to create these objects even if monitoring is currently inactive, in
@@ -425,15 +429,7 @@ void DeviceCloudPolicyManagerChromeOS::CreateStatusUploader() {
   status_uploader_.reset(new StatusUploader(
       client(),
       std::make_unique<DeviceStatusCollector>(
-          local_state_, chromeos::system::StatisticsProvider::GetInstance(),
-          DeviceStatusCollector::VolumeInfoFetcher(),
-          DeviceStatusCollector::CPUStatisticsFetcher(),
-          DeviceStatusCollector::CPUTempFetcher(),
-          DeviceStatusCollector::AndroidStatusFetcher(),
-          DeviceStatusCollector::TpmStatusFetcher(),
-          DeviceStatusCollector::EMMCLifetimeFetcher(),
-          DeviceStatusCollector::StatefulPartitionInfoFetcher(),
-          DeviceStatusCollector::CrosHealthdDataFetcher()),
+          local_state_, chromeos::system::StatisticsProvider::GetInstance()),
       task_runner_, kDeviceStatusUploadFrequency));
 }
 

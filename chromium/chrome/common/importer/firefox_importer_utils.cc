@@ -50,51 +50,53 @@ base::FilePath GetProfilePath(const base::DictionaryValue& root,
   return path;
 }
 
-// Checks if the named profile is the default profile.
-bool IsDefaultProfile(const base::DictionaryValue& root,
-                      const std::string& profile_name) {
-  std::string is_default;
-  root.GetStringASCII(profile_name + ".Default", &is_default);
-  return is_default == "1";
-}
-
 } // namespace
 
-base::FilePath GetFirefoxProfilePath() {
+std::vector<FirefoxDetail> GetFirefoxDetails(
+    const std::string& firefox_install_id) {
   base::FilePath ini_file = GetProfilesINI();
   std::string content;
   base::ReadFileToString(ini_file, &content);
   DictionaryValueINIParser ini_parser;
   ini_parser.Parse(content);
-  return GetFirefoxProfilePathFromDictionary(ini_parser.root());
+  return GetFirefoxDetailsFromDictionary(ini_parser.root(), firefox_install_id);
 }
 
-base::FilePath GetFirefoxProfilePathFromDictionary(
-    const base::DictionaryValue& root) {
-  std::vector<std::string> profiles;
+std::vector<FirefoxDetail> GetFirefoxDetailsFromDictionary(
+    const base::DictionaryValue& root,
+    const std::string& firefox_install_id) {
+  std::vector<FirefoxDetail> profile_details;
+
   for (int i = 0; ; ++i) {
     std::string current_profile = base::StringPrintf("Profile%d", i);
-    if (root.HasKey(current_profile)) {
-      profiles.push_back(current_profile);
-    } else {
-      // Profiles are continuously numbered. So we exit when we can't
+    if (!root.HasKey(current_profile)) {
+      // Profiles are contiguously numbered. So we exit when we can't
       // find the i-th one.
       break;
     }
+
+    std::string path;
+    if (!root.GetStringASCII(current_profile + ".Path", &path))
+      continue;
+
+    FirefoxDetail details;
+    details.path = GetProfilePath(root, current_profile);
+    std::string name;
+    root.GetStringASCII(current_profile + ".Name", &name);
+    // Make the profile name more presentable by replacing dashes with spaces.
+    base::ReplaceChars(name, "-", " ", &name);
+    details.name = name;
+    profile_details.push_back(details);
   }
 
-  if (profiles.empty())
-    return base::FilePath();
+  // If there is only one profile, set the name as a blank string.
+  // The name is only used to disambiguate profiles in the profile selection UI,
+  // which is only useful when there are multiple profiles.
+  if (profile_details.size() == 1) {
+    profile_details[0].name = "";
+  }
 
-  // When multiple profiles exist, the path to the default profile is returned,
-  // since the other profiles are used mostly by developers for testing.
-  for (std::vector<std::string>::const_iterator it = profiles.begin();
-       it != profiles.end(); ++it)
-    if (IsDefaultProfile(root, *it))
-      return GetProfilePath(root, *it);
-
-  // If no default profile is found, the path to Profile0 will be returned.
-  return GetProfilePath(root, profiles.front());
+  return profile_details;
 }
 
 #if defined(OS_MACOSX)
@@ -312,7 +314,7 @@ base::string16 GetFirefoxImporterName(const base::FilePath& app_path) {
         in_app_section = true;
       } else if (in_app_section) {
         if (base::StartsWith(line, name_attr, base::CompareCase::SENSITIVE)) {
-          line.substr(name_attr.size()).CopyToString(&branding_name);
+          branding_name = std::string(line.substr(name_attr.size()));
           break;
         }
         if (line.length() > 0 && line[0] == '[') {

@@ -5,9 +5,9 @@
 package org.chromium.chrome.browser.directactions;
 
 import androidx.annotation.IntDef;
+import androidx.annotation.VisibleForTesting;
 
-import org.chromium.base.VisibleForTesting;
-import org.chromium.base.metrics.CachedMetrics.EnumeratedHistogramSample;
+import org.chromium.base.metrics.RecordHistogram;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -20,9 +20,6 @@ import java.util.Map;
  * the specific action that was performed.
  */
 class DirectActionUsageHistogram {
-    private static final EnumeratedHistogramSample PERFORM_HISTOGRAM =
-            new EnumeratedHistogramSample(
-                    "Android.DirectAction.Perform", DirectActionId.NUM_ENTRIES);
 
     /** A map that convert known string ids to enum value for the histogram. */
     private static final Map<String, Integer> ACTION_ID_MAP;
@@ -39,6 +36,7 @@ class DirectActionUsageHistogram {
         map.put(ChromeDirectActionIds.NEW_TAB, DirectActionId.NEW_TAB);
         map.put(ChromeDirectActionIds.CLOSE_TAB, DirectActionId.CLOSE_TAB);
         map.put(ChromeDirectActionIds.CLOSE_ALL_TABS, DirectActionId.CLOSE_ALL_TABS);
+        map.put(ChromeDirectActionIds.FIND_IN_PAGE, DirectActionId.FIND_IN_PAGE);
         ACTION_ID_MAP = Collections.unmodifiableMap(map);
     }
 
@@ -50,7 +48,8 @@ class DirectActionUsageHistogram {
     @IntDef({DirectActionId.GO_BACK, DirectActionId.RELOAD, DirectActionId.GO_FORWARD,
             DirectActionId.BOOKMARK_THIS_PAGE, DirectActionId.DOWNLOADS, DirectActionId.PREFERENCES,
             DirectActionId.OPEN_HISTORY, DirectActionId.HELP, DirectActionId.NEW_TAB,
-            DirectActionId.CLOSE_TAB, DirectActionId.CLOSE_ALL_TABS, DirectActionId.NUM_ENTRIES})
+            DirectActionId.CLOSE_TAB, DirectActionId.CLOSE_ALL_TABS, DirectActionId.FIND_IN_PAGE,
+            DirectActionId.NUM_ENTRIES})
     @interface DirectActionId {
         /** No action was executed. */
         int UNKNOWN = 0;
@@ -70,15 +69,16 @@ class DirectActionUsageHistogram {
         int NEW_TAB = 10;
         int CLOSE_TAB = 11;
         int CLOSE_ALL_TABS = 12;
+        int FIND_IN_PAGE = 13;
 
-        int NUM_ENTRIES = 13;
+        int NUM_ENTRIES = 14;
     }
 
     /**
      * Records an attempt to execute a direct action that was rejected as unknown.
      */
     static void recordUnknown() {
-        PERFORM_HISTOGRAM.record(DirectActionId.UNKNOWN);
+        record(DirectActionId.UNKNOWN);
     }
 
     /**
@@ -87,9 +87,15 @@ class DirectActionUsageHistogram {
      * @param actionId The string id of the direct action that was executed.
      */
     static void record(String actionId) {
+        @DirectActionId
         Integer histogramId = ACTION_ID_MAP.get(actionId);
         if (histogramId == null) histogramId = DirectActionId.OTHER;
 
-        PERFORM_HISTOGRAM.record(histogramId);
+        record(histogramId);
+    }
+
+    private static void record(@DirectActionId int actionId) {
+        RecordHistogram.recordEnumeratedHistogram(
+                "Android.DirectAction.Perform", actionId, DirectActionId.NUM_ENTRIES);
     }
 }

@@ -81,16 +81,16 @@ class ChromeDownloadManagerDelegate
 
   // content::DownloadManagerDelegate
   void Shutdown() override;
-  void GetNextId(const content::DownloadIdCallback& callback) override;
+  void GetNextId(content::DownloadIdCallback callback) override;
   bool DetermineDownloadTarget(
       download::DownloadItem* item,
-      const content::DownloadTargetCallback& callback) override;
+      content::DownloadTargetCallback* callback) override;
   bool ShouldOpenFileBasedOnExtension(const base::FilePath& path) override;
   bool ShouldCompleteDownload(download::DownloadItem* item,
                               base::OnceClosure complete_callback) override;
   bool ShouldOpenDownload(
       download::DownloadItem* item,
-      const content::DownloadOpenDelayedCallback& callback) override;
+      content::DownloadOpenDelayedCallback callback) override;
   bool InterceptDownloadIfApplicable(
       const GURL& url,
       const std::string& user_agent,
@@ -103,26 +103,24 @@ class ChromeDownloadManagerDelegate
   void GetSaveDir(content::BrowserContext* browser_context,
                   base::FilePath* website_save_dir,
                   base::FilePath* download_save_dir) override;
-  void ChooseSavePath(
-      content::WebContents* web_contents,
-      const base::FilePath& suggested_path,
-      const base::FilePath::StringType& default_extension,
-      bool can_save_as_complete,
-      const content::SavePackagePathPickedCallback& callback) override;
+  void ChooseSavePath(content::WebContents* web_contents,
+                      const base::FilePath& suggested_path,
+                      const base::FilePath::StringType& default_extension,
+                      bool can_save_as_complete,
+                      content::SavePackagePathPickedCallback callback) override;
   void SanitizeSavePackageResourceName(base::FilePath* filename) override;
+  void SanitizeDownloadParameters(
+      download::DownloadUrlParameters* params) override;
   void OpenDownload(download::DownloadItem* download) override;
-  bool IsMostRecentDownloadItemAtFilePath(
-      download::DownloadItem* download) override;
   void ShowDownloadInShell(download::DownloadItem* download) override;
-  void CheckForFileExistence(
-      download::DownloadItem* download,
-      content::CheckForFileExistenceCallback callback) override;
   std::string ApplicationClientIdForFileScanning() override;
   void CheckDownloadAllowed(
       const content::WebContents::Getter& web_contents_getter,
       const GURL& url,
       const std::string& request_method,
       base::Optional<url::Origin> request_initiator,
+      bool from_download_cross_origin_redirect,
+      bool content_initiated,
       content::CheckDownloadAllowedCallback check_download_allowed_cb) override;
   download::QuarantineConnectionCallback GetQuarantineConnectionCallback()
       override;
@@ -150,6 +148,12 @@ class ChromeDownloadManagerDelegate
   };
 #endif  // FULL_SAFE_BROWSING
 
+  // Callback function after the DownloadProtectionService completes.
+  void CheckClientDownloadDone(uint32_t download_id,
+                               safe_browsing::DownloadCheckResult result);
+
+  base::WeakPtr<ChromeDownloadManagerDelegate> GetWeakPtr();
+
  protected:
   virtual safe_browsing::DownloadProtectionService*
       GetDownloadProtectionService();
@@ -161,10 +165,10 @@ class ChromeDownloadManagerDelegate
       const DownloadTargetDeterminerDelegate::ConfirmationCallback& callback);
 
   // DownloadTargetDeterminerDelegate. Protected for testing.
-  void ShouldBlockDownload(
+  void GetMixedContentStatus(
       download::DownloadItem* download,
       const base::FilePath& virtual_path,
-      const ShouldBlockDownloadCallback& callback) override;
+      const GetMixedContentStatusCallback& callback) override;
   void NotifyExtensions(download::DownloadItem* download,
                         const base::FilePath& suggested_virtual_path,
                         const NotifyExtensionsCallback& callback) override;
@@ -174,7 +178,7 @@ class ChromeDownloadManagerDelegate
       bool create_directory,
       download::DownloadPathReservationTracker::FilenameConflictAction
           conflict_action,
-      const ReservedPathCallback& callback) override;
+      ReservedPathCallback callback) override;
   void RequestConfirmation(download::DownloadItem* download,
                            const base::FilePath& suggested_virtual_path,
                            DownloadConfirmationReason reason,
@@ -208,7 +212,7 @@ class ChromeDownloadManagerDelegate
   FRIEND_TEST_ALL_PREFIXES(ChromeDownloadManagerDelegateTest,
                            RequestConfirmation_Android);
 
-  typedef std::vector<content::DownloadIdCallback> IdCallbackVector;
+  using IdCallbackVector = std::vector<content::DownloadIdCallback>;
 
   // Called to show a file picker for download with |guid|
   void ShowFilePicker(
@@ -220,10 +224,6 @@ class ChromeDownloadManagerDelegate
   void Observe(int type,
                const content::NotificationSource& source,
                const content::NotificationDetails& details) override;
-
-  // Callback function after the DownloadProtectionService completes.
-  void CheckClientDownloadDone(uint32_t download_id,
-                               safe_browsing::DownloadCheckResult result);
 
   // Internal gateways for ShouldCompleteDownload().
   bool IsDownloadReadyForCompletion(
@@ -237,11 +237,11 @@ class ChromeDownloadManagerDelegate
   void SetNextId(uint32_t id);
 
   // Runs the |callback| with next id. Results in the download being started.
-  void ReturnNextId(const content::DownloadIdCallback& callback);
+  void ReturnNextId(content::DownloadIdCallback callback);
 
   void OnDownloadTargetDetermined(
       uint32_t download_id,
-      const content::DownloadTargetCallback& callback,
+      content::DownloadTargetCallback callback,
       std::unique_ptr<DownloadTargetInfo> target_info);
 
   // Returns true if |path| should open in the browser.
@@ -259,6 +259,10 @@ class ChromeDownloadManagerDelegate
       content::CheckDownloadAllowedCallback check_download_allowed_cb,
       bool storage_permission_granted,
       bool allow);
+
+  // Returns whether this is the most recent download in the rare event where
+  // multiple downloads are associated with the same file path.
+  bool IsMostRecentDownloadItemAtFilePath(download::DownloadItem* download);
 
 #if defined(OS_ANDROID)
   // Called after a unique file name is generated in the case that there is a
@@ -288,11 +292,6 @@ class ChromeDownloadManagerDelegate
   // database.
   IdCallbackVector id_callbacks_;
   std::unique_ptr<DownloadPrefs> download_prefs_;
-
-  // SequencedTaskRunner to check for file existence. A sequence is used so
-  // that a large download history doesn't cause a large number of concurrent
-  // disk operations.
-  const scoped_refptr<base::SequencedTaskRunner> disk_access_task_runner_;
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   // Maps from pending extension installations to DownloadItem IDs.

@@ -24,19 +24,21 @@
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_switches.h"
 #include "components/previews/core/previews_features.h"
+#include "components/previews/core/previews_lite_page_redirect.h"
 #include "components/variations/variations_associated_data.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/url_loader_request_interceptor.h"
 #include "content/public/common/previews_state.h"
-#include "content/public/common/resource_type.h"
 #include "content/public/test/browser_task_environment.h"
+#include "net/base/net_errors.h"
+#include "net/cookies/site_for_cookies.h"
 #include "net/http/http_status_code.h"
 #include "net/http/http_util.h"
-#include "net/url_request/url_request_status.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 #include "services/network/test/test_url_loader_factory.h"
 #include "services/network/test/test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/mojom/loader/resource_load_info.mojom-shared.h"
 #include "url/gurl.h"
 
 // TODO(crbug.com/961073): Fix memory leaks in tests and re-enable on LSAN.
@@ -60,7 +62,11 @@ namespace previews {
 
 namespace {
 
-const GURL kTestUrl("https://google.com/path");
+// TODO(https://crbug.com/1042727): Fix test GURL scoping and remove this getter
+// function.
+GURL TestUrl() {
+  return GURL("https://google.com/path");
+}
 
 class PreviewsLitePageRedirectURLLoaderInterceptorTest : public testing::Test {
  public:
@@ -102,6 +108,34 @@ class PreviewsLitePageRedirectURLLoaderInterceptorTest : public testing::Test {
         network::URLLoaderCompletionStatus(net_error));
   }
 
+  void VerifyRequestToPreviewsServer() {
+    ASSERT_GE(test_url_loader_factory_.NumPending(), 1);
+
+    // There are two requests that the url loader sends at the same time, make
+    // sure to get the correct one.
+    network::ResourceRequest request;
+    for (int i = 0; i < test_url_loader_factory_.NumPending(); i++) {
+      request = test_url_loader_factory_.GetPendingRequest(i)->request;
+      if (previews::IsLitePageRedirectPreviewDomain(request.url)) {
+        break;
+      }
+    }
+    ASSERT_TRUE(previews::IsLitePageRedirectPreviewDomain(request.url));
+
+    ASSERT_TRUE(request.trusted_params.has_value());
+    ASSERT_TRUE(request.trusted_params.value()
+                    .network_isolation_key.GetTopFrameOrigin()
+                    .has_value());
+
+    GURL nik_url = request.trusted_params.value()
+                       .network_isolation_key.GetTopFrameOrigin()
+                       .value()
+                       .GetURL();
+
+    EXPECT_TRUE(previews::IsLitePageRedirectPreviewDomain(nik_url));
+    EXPECT_TRUE(request.site_for_cookies.IsFirstParty(nik_url));
+  }
+
   void HandlerCallback(
       content::URLLoaderRequestInterceptor::RequestHandler callback) {
     callback_was_empty_ = callback.is_null();
@@ -131,12 +165,12 @@ TEST_F(PreviewsLitePageRedirectURLLoaderInterceptorTest,
   base::HistogramTester histogram_tester;
 
   network::ResourceRequest request;
-  request.url = kTestUrl;
-  request.resource_type = static_cast<int>(content::ResourceType::kMainFrame);
+  request.url = TestUrl();
+  request.resource_type =
+      static_cast<int>(blink::mojom::ResourceType::kMainFrame);
   request.method = "GET";
 
-  SetFakeResponse(request.url, "Fake Body", net::HTTP_OK,
-                  net::URLRequestStatus::SUCCESS);
+  SetFakeResponse(request.url, "Fake Body", net::HTTP_OK, net::OK);
 
   request.previews_state = content::PREVIEWS_OFF;
   interceptor().MaybeCreateLoader(
@@ -160,14 +194,12 @@ TEST_F(PreviewsLitePageRedirectURLLoaderInterceptorTest,
   base::HistogramTester histogram_tester;
 
   network::ResourceRequest request;
-  request.url = kTestUrl;
-  request.resource_type = static_cast<int>(content::ResourceType::kMainFrame);
+  request.trusted_params = network::ResourceRequest::TrustedParams();
+  request.site_for_cookies = net::SiteForCookies::FromUrl(TestUrl());
+  request.url = TestUrl();
+  request.resource_type =
+      static_cast<int>(blink::mojom::ResourceType::kMainFrame);
   request.method = "GET";
-
-  SetFakeResponse(GetLitePageRedirectURLForURL(request.url), "Fake Body",
-                  net::HTTP_OK, net::URLRequestStatus::SUCCESS);
-  SetProbeResponse(request.url.GetOrigin(), net::HTTP_OK,
-                   net::URLRequestStatus::SUCCESS);
 
   request.previews_state = content::LITE_PAGE_REDIRECT_ON;
   interceptor().MaybeCreateLoader(
@@ -178,12 +210,16 @@ TEST_F(PreviewsLitePageRedirectURLLoaderInterceptorTest,
 
   histogram_tester.ExpectUniqueSample(
       "Previews.ServerLitePage.URLLoader.Attempted", true, 1);
+  base::RunLoop().RunUntilIdle();
+  VerifyRequestToPreviewsServer();
 
+  SetFakeResponse(GetLitePageRedirectURLForURL(request.url), "Fake Body",
+                  net::HTTP_OK, net::OK);
+  SetProbeResponse(request.url.GetOrigin(), net::HTTP_OK, net::OK);
   base::RunLoop().RunUntilIdle();
 
   EXPECT_TRUE(callback_was_empty().has_value());
   EXPECT_FALSE(callback_was_empty().value());
-  LOG(ERROR) << "test end";
 }
 
 TEST_F(PreviewsLitePageRedirectURLLoaderInterceptorTest,
@@ -191,14 +227,12 @@ TEST_F(PreviewsLitePageRedirectURLLoaderInterceptorTest,
   base::HistogramTester histogram_tester;
 
   network::ResourceRequest request;
-  request.url = kTestUrl;
-  request.resource_type = static_cast<int>(content::ResourceType::kMainFrame);
+  request.trusted_params = network::ResourceRequest::TrustedParams();
+  request.site_for_cookies = net::SiteForCookies::FromUrl(TestUrl());
+  request.url = TestUrl();
+  request.resource_type =
+      static_cast<int>(blink::mojom::ResourceType::kMainFrame);
   request.method = "GET";
-
-  SetFakeResponse(GetLitePageRedirectURLForURL(request.url), "Fake Body",
-                  net::HTTP_OK, net::URLRequestStatus::SUCCESS);
-  SetProbeResponse(request.url.GetOrigin(), net::HTTP_OK,
-                   net::URLRequestStatus::FAILED);
 
   request.previews_state = content::LITE_PAGE_REDIRECT_ON;
   interceptor().MaybeCreateLoader(
@@ -209,7 +243,12 @@ TEST_F(PreviewsLitePageRedirectURLLoaderInterceptorTest,
 
   histogram_tester.ExpectUniqueSample(
       "Previews.ServerLitePage.URLLoader.Attempted", true, 1);
+  base::RunLoop().RunUntilIdle();
+  VerifyRequestToPreviewsServer();
 
+  SetFakeResponse(GetLitePageRedirectURLForURL(request.url), "Fake Body",
+                  net::HTTP_OK, net::OK);
+  SetProbeResponse(request.url.GetOrigin(), net::HTTP_OK, net::ERR_FAILED);
   base::RunLoop().RunUntilIdle();
 
   EXPECT_TRUE(callback_was_empty().has_value());
@@ -220,14 +259,13 @@ TEST_F(PreviewsLitePageRedirectURLLoaderInterceptorTest,
        InterceptRequestRedirect) {
   base::HistogramTester histogram_tester;
   network::ResourceRequest request;
-  request.url = kTestUrl;
-  request.resource_type = static_cast<int>(content::ResourceType::kMainFrame);
+  request.trusted_params = network::ResourceRequest::TrustedParams();
+  request.site_for_cookies = net::SiteForCookies::FromUrl(TestUrl());
+  request.url = TestUrl();
+  request.resource_type =
+      static_cast<int>(blink::mojom::ResourceType::kMainFrame);
   request.method = "GET";
   request.previews_state = content::LITE_PAGE_REDIRECT_ON;
-  SetFakeResponse(GetLitePageRedirectURLForURL(request.url), "Fake Body",
-                  net::HTTP_TEMPORARY_REDIRECT, net::URLRequestStatus::SUCCESS);
-  SetProbeResponse(request.url.GetOrigin(), net::HTTP_OK,
-                   net::URLRequestStatus::SUCCESS);
 
   interceptor().MaybeCreateLoader(
       request, nullptr,
@@ -238,6 +276,13 @@ TEST_F(PreviewsLitePageRedirectURLLoaderInterceptorTest,
   histogram_tester.ExpectUniqueSample(
       "Previews.ServerLitePage.URLLoader.Attempted", true, 1);
   base::RunLoop().RunUntilIdle();
+  VerifyRequestToPreviewsServer();
+
+  SetFakeResponse(GetLitePageRedirectURLForURL(request.url), "Fake Body",
+                  net::HTTP_TEMPORARY_REDIRECT, net::OK);
+  SetProbeResponse(request.url.GetOrigin(), net::HTTP_OK, net::OK);
+  base::RunLoop().RunUntilIdle();
+
   EXPECT_TRUE(callback_was_empty().has_value());
   EXPECT_TRUE(callback_was_empty().value());
 }
@@ -246,15 +291,13 @@ TEST_F(PreviewsLitePageRedirectURLLoaderInterceptorTest,
        InterceptRequestServerOverloaded) {
   base::HistogramTester histogram_tester;
   network::ResourceRequest request;
-  request.url = kTestUrl;
-  request.resource_type = static_cast<int>(content::ResourceType::kMainFrame);
+  request.trusted_params = network::ResourceRequest::TrustedParams();
+  request.site_for_cookies = net::SiteForCookies::FromUrl(TestUrl());
+  request.url = TestUrl();
+  request.resource_type =
+      static_cast<int>(blink::mojom::ResourceType::kMainFrame);
   request.method = "GET";
   request.previews_state = content::LITE_PAGE_REDIRECT_ON;
-  SetFakeResponse(GetLitePageRedirectURLForURL(request.url), "Fake Body",
-                  net::HTTP_SERVICE_UNAVAILABLE,
-                  net::URLRequestStatus::SUCCESS);
-  SetProbeResponse(request.url.GetOrigin(), net::HTTP_OK,
-                   net::URLRequestStatus::SUCCESS);
 
   interceptor().MaybeCreateLoader(
       request, nullptr,
@@ -264,6 +307,12 @@ TEST_F(PreviewsLitePageRedirectURLLoaderInterceptorTest,
 
   histogram_tester.ExpectUniqueSample(
       "Previews.ServerLitePage.URLLoader.Attempted", true, 1);
+  base::RunLoop().RunUntilIdle();
+  VerifyRequestToPreviewsServer();
+
+  SetFakeResponse(GetLitePageRedirectURLForURL(request.url), "Fake Body",
+                  net::HTTP_SERVICE_UNAVAILABLE, net::OK);
+  SetProbeResponse(request.url.GetOrigin(), net::HTTP_OK, net::OK);
   base::RunLoop().RunUntilIdle();
 
   EXPECT_TRUE(callback_was_empty().has_value());
@@ -274,14 +323,13 @@ TEST_F(PreviewsLitePageRedirectURLLoaderInterceptorTest,
        InterceptRequestServerNotHandling) {
   base::HistogramTester histogram_tester;
   network::ResourceRequest request;
-  request.url = kTestUrl;
-  request.resource_type = static_cast<int>(content::ResourceType::kMainFrame);
+  request.trusted_params = network::ResourceRequest::TrustedParams();
+  request.site_for_cookies = net::SiteForCookies::FromUrl(TestUrl());
+  request.url = TestUrl();
+  request.resource_type =
+      static_cast<int>(blink::mojom::ResourceType::kMainFrame);
   request.method = "GET";
   request.previews_state = content::LITE_PAGE_REDIRECT_ON;
-  SetFakeResponse(GetLitePageRedirectURLForURL(request.url), "Fake Body",
-                  net::HTTP_FORBIDDEN, net::URLRequestStatus::SUCCESS);
-  SetProbeResponse(request.url.GetOrigin(), net::HTTP_OK,
-                   net::URLRequestStatus::SUCCESS);
 
   interceptor().MaybeCreateLoader(
       request, nullptr,
@@ -291,8 +339,14 @@ TEST_F(PreviewsLitePageRedirectURLLoaderInterceptorTest,
 
   histogram_tester.ExpectUniqueSample(
       "Previews.ServerLitePage.URLLoader.Attempted", true, 1);
-
   base::RunLoop().RunUntilIdle();
+  VerifyRequestToPreviewsServer();
+
+  SetFakeResponse(GetLitePageRedirectURLForURL(request.url), "Fake Body",
+                  net::HTTP_FORBIDDEN, net::OK);
+  SetProbeResponse(request.url.GetOrigin(), net::HTTP_OK, net::OK);
+  base::RunLoop().RunUntilIdle();
+
   EXPECT_TRUE(callback_was_empty().has_value());
   EXPECT_TRUE(callback_was_empty().value());
 }
@@ -300,14 +354,13 @@ TEST_F(PreviewsLitePageRedirectURLLoaderInterceptorTest,
 TEST_F(PreviewsLitePageRedirectURLLoaderInterceptorTest, NetStackError) {
   base::HistogramTester histogram_tester;
   network::ResourceRequest request;
-  request.url = kTestUrl;
-  request.resource_type = static_cast<int>(content::ResourceType::kMainFrame);
+  request.trusted_params = network::ResourceRequest::TrustedParams();
+  request.site_for_cookies = net::SiteForCookies::FromUrl(TestUrl());
+  request.url = TestUrl();
+  request.resource_type =
+      static_cast<int>(blink::mojom::ResourceType::kMainFrame);
   request.method = "GET";
   request.previews_state = content::LITE_PAGE_REDIRECT_ON;
-  SetFakeResponse(GetLitePageRedirectURLForURL(request.url), "Fake Body",
-                  net::HTTP_OK, net::URLRequestStatus::FAILED);
-  SetProbeResponse(request.url.GetOrigin(), net::HTTP_OK,
-                   net::URLRequestStatus::SUCCESS);
 
   interceptor().MaybeCreateLoader(
       request, nullptr,
@@ -317,8 +370,14 @@ TEST_F(PreviewsLitePageRedirectURLLoaderInterceptorTest, NetStackError) {
 
   histogram_tester.ExpectUniqueSample(
       "Previews.ServerLitePage.URLLoader.Attempted", true, 1);
-
   base::RunLoop().RunUntilIdle();
+  VerifyRequestToPreviewsServer();
+
+  SetFakeResponse(GetLitePageRedirectURLForURL(request.url), "Fake Body",
+                  net::HTTP_OK, net::ERR_FAILED);
+  SetProbeResponse(request.url.GetOrigin(), net::HTTP_OK, net::OK);
+  base::RunLoop().RunUntilIdle();
+
   EXPECT_TRUE(callback_was_empty().has_value());
   EXPECT_TRUE(callback_was_empty().value());
 }

@@ -8,6 +8,10 @@
 #include "extensions/browser/extension_function.h"
 #include "extensions/schema/vivaldi_sessions.h"
 
+namespace sessions {
+class SessionCommand;
+}
+
 namespace extensions {
 
 class SessionsPrivateSaveOpenTabsFunction : public ExtensionFunction {
@@ -32,6 +36,19 @@ class SessionsPrivateGetAllFunction : public ExtensionFunction {
 
  private:
   ~SessionsPrivateGetAllFunction() override = default;
+
+  struct SessionEntry {
+    ~SessionEntry();
+    SessionEntry();
+    std::unique_ptr<extensions::vivaldi::sessions_private::SessionItem> item;
+    std::vector<std::unique_ptr<sessions::SessionCommand>> commands;
+
+    DISALLOW_COPY_AND_ASSIGN(SessionEntry);
+  };
+
+  std::vector<std::unique_ptr<SessionsPrivateGetAllFunction::SessionEntry>>
+  RunOnFileThread(base::FilePath path);
+  void SendResponse(std::vector<std::unique_ptr<SessionEntry>> sessions);
 
   // ExtensionFunction:
   ResponseAction Run() override;

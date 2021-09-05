@@ -6,6 +6,7 @@
 #define UI_VIEWS_WINDOW_DIALOG_DELEGATE_H_
 
 #include <memory>
+#include <utility>
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
@@ -49,9 +50,13 @@ class VIEWS_EXPORT DialogDelegate : public WidgetDelegate {
     // the Views-styled one.
     bool custom_frame = true;
 
+    // A bitmask of buttons (from ui::DialogButton) that are present in this
+    // dialog.
+    int buttons = ui::DIALOG_BUTTON_OK | ui::DIALOG_BUTTON_CANCEL;
+
     // Text labels for the buttons on this dialog. Any button without a label
     // here will get the default text for its type from GetDialogButtonLabel.
-    // Prefer to use this field (via set_button_label) rather than override
+    // Prefer to use this field (via SetButtonLabel) rather than override
     // GetDialogButtonLabel - see https://crbug.com/1011446
     base::string16 button_labels[ui::DIALOG_BUTTON_LAST + 1];
   };
@@ -85,8 +90,9 @@ class VIEWS_EXPORT DialogDelegate : public WidgetDelegate {
   virtual void OnDialogInitialized() {}
 
   // Returns a mask specifying which of the available DialogButtons are visible
-  // for the dialog. Note: Dialogs with just an OK button are frowned upon.
-  virtual int GetDialogButtons() const;
+  // for the dialog.
+  // TODO(https://crbug.com/1011446): Rename this to buttons().
+  int GetDialogButtons() const { return params_.buttons; }
 
   // Returns the default dialog button. This should not be a mask as only
   // one button should ever be the default button.  Return
@@ -97,47 +103,34 @@ class VIEWS_EXPORT DialogDelegate : public WidgetDelegate {
   int GetDefaultDialogButton() const;
 
   // Returns the label of the specified dialog button.
-  virtual base::string16 GetDialogButtonLabel(ui::DialogButton button) const;
+  base::string16 GetDialogButtonLabel(ui::DialogButton button) const;
 
   // Returns whether the specified dialog button is enabled.
   virtual bool IsDialogButtonEnabled(ui::DialogButton button) const;
-
-  // Override this function to display an extra view adjacent to the buttons.
-  // Overrides may construct the view; this will only be called once per dialog.
-  // DEPRECATED: Prefer to use SetExtraView() below; this method is being
-  // removed. See https://crbug.com/1011446.
-  virtual std::unique_ptr<View> CreateExtraView();
-
-  // Override this function to display a footnote view below the buttons.
-  // Overrides may construct the view; this will only be called once per dialog.
-  virtual std::unique_ptr<View> CreateFootnoteView();
 
   // For Dialog boxes, if there is a "Cancel" button or no dialog button at all,
   // this is called when the user presses the "Cancel" button.
   // It can also be called on a close action if |Close| has not been
   // overridden. This function should return true if the window can be closed
-  // after it returns, or false if it must remain open.
+  // after it returns, or false if it must remain open. By default, return true
+  // without doing anything.
+  // DEPRECATED: use |SetCancelCallback| instead.
   virtual bool Cancel();
 
   // For Dialog boxes, this is called when the user presses the "OK" button,
   // or the Enter key. It can also be called on a close action if |Close|
   // has not been overridden. This function should return true if the window
-  // can be closed after it returns, or false if it must remain open.
+  // can be closed after it returns, or false if it must remain open. By
+  // default, return true without doing anything.
+  // DEPRECATED: use |SetAcceptCallback| instead.
   virtual bool Accept();
-
-  // Called when the user closes the window without selecting an option,
-  // e.g. by pressing the close button on the window, pressing the Esc key, or
-  // using a window manager gesture. By default, this calls Accept() if the only
-  // button in the dialog is Accept, Cancel() otherwise. This function should
-  // return true if the window can be closed after it returns, or false if it
-  // must remain open.
-  virtual bool Close();
 
   // Overridden from WidgetDelegate:
   View* GetInitiallyFocusedView() override;
   DialogDelegate* AsDialogDelegate() override;
   ClientView* CreateClientView(Widget* widget) override;
   NonClientFrameView* CreateNonClientFrameView(Widget* widget) override;
+  void WindowWillClose() override;
 
   static NonClientFrameView* CreateDialogFrameView(Widget* widget);
 
@@ -151,10 +144,12 @@ class VIEWS_EXPORT DialogDelegate : public WidgetDelegate {
     return view;
   }
 
-  // A helper for accessing the DialogClientView object contained by this
-  // delegate's Window.
-  const DialogClientView* GetDialogClientView() const;
-  DialogClientView* GetDialogClientView();
+  template <typename T>
+  T* SetFootnoteView(std::unique_ptr<T> footnote_view) {
+    T* view = footnote_view.get();
+    footnote_view_ = std::move(footnote_view);
+    return view;
+  }
 
   // Returns the BubbleFrameView of this dialog delegate. A bubble frame view
   // will only be created when use_custom_frame() is true.
@@ -162,8 +157,13 @@ class VIEWS_EXPORT DialogDelegate : public WidgetDelegate {
 
   // Helpers for accessing parts of the DialogClientView without needing to know
   // about DialogClientView. Do not call these before OnDialogInitialized.
-  views::LabelButton* GetOkButton();
-  views::LabelButton* GetCancelButton();
+  views::LabelButton* GetOkButton() const;
+  views::LabelButton* GetCancelButton() const;
+  views::View* GetExtraView() const;
+
+  // Helper for accessing the footnote view. Unlike the three methods just
+  // above, this *is* safe to call before OnDialogInitialized.
+  views::View* GetFootnoteViewForTesting() const;
 
   // Add or remove an observer notified by calls to DialogModelChanged().
   void AddObserver(DialogObserver* observer);
@@ -172,16 +172,76 @@ class VIEWS_EXPORT DialogDelegate : public WidgetDelegate {
   // Notifies observers when the result of the DialogModel overrides changes.
   void DialogModelChanged();
 
-  void set_default_button(int button) { params_.default_button = button; }
   void set_use_round_corners(bool round) { params_.round_corners = round; }
   void set_draggable(bool draggable) { params_.draggable = draggable; }
   bool draggable() const { return params_.draggable; }
   void set_use_custom_frame(bool use) { params_.custom_frame = use; }
   bool use_custom_frame() const { return params_.custom_frame; }
 
-  void set_button_label(ui::DialogButton button, base::string16 label) {
-    params_.button_labels[button] = label;
-  }
+  void SetDefaultButton(int button);
+  void SetButtons(int buttons);
+  void SetButtonLabel(ui::DialogButton button, base::string16 label);
+  void SetAcceptCallback(base::OnceClosure callback);
+  void SetCancelCallback(base::OnceClosure callback);
+  void SetCloseCallback(base::OnceClosure callback);
+
+  // Returns ownership of the extra view for this dialog, if one was provided
+  // via SetExtraView(). This is only for use by DialogClientView; don't call
+  // it.
+  // It would be good to instead have a DialogClientView::SetExtraView method
+  // that passes ownership into DialogClientView once. Unfortunately doing this
+  // broke a bunch of tests in a subtle way: the obvious place to call
+  // DCV::SetExtraView was from DD::OnWidgetInitialized.  DCV::SetExtraView
+  // would then add the new view to DCV, which would invalidate its layout.
+  // However, many tests were doing essentially this:
+  //
+  //   TestDialogDelegate delegate;
+  //   ShowBubble(&delegate);
+  //   TryToUseExtraView();
+  //
+  // and then trying to use the extra view's bounds, most commonly by
+  // synthesizing mouse clicks on it. At this point the extra view's layout is
+  // invalid *but* it has not yet been laid out, because View::InvalidateLayout
+  // schedules a deferred re-layout later. The design where DCV pulls the extra
+  // view from DD doesn't have this issue: during the initial construction of
+  // DCV, DCV fetches the extra view and slots it into its layout, and then the
+  // initial layout pass in Widget::Init causes the extra view to get laid out.
+  // Deferring inserting the extra view until after Widget::Init has finished is
+  // what causes the extra view to not be laid out (and hence the tests to
+  // fail).
+  //
+  // Potential future fixes:
+  // 1) The tests could manually force a re-layout here, or
+  // 2) The tests could be rewritten to not depend on the extra view's
+  //    bounds, by not trying to deliver mouse events to it somehow, or
+  // 3) DCV::SetupLayout could always force an explicit Layout, ignoring the
+  //    lazy layout system in View::InvalidateLayout
+  std::unique_ptr<View> DisownExtraView();
+
+  // Accept or cancel the dialog, as though the user had pressed the
+  // Accept/Cancel buttons. These methods:
+  // 1) Invoke the DialogDelegate's Cancel or Accept methods
+  // 2) Depending on their return value, close the dialog's widget.
+  // Neither of these methods can be called before the dialog has been
+  // initialized.
+  void AcceptDialog();
+  void CancelDialog();
+
+  // This method invokes the behavior that *would* happen if this dialog's
+  // containing widget were closed. It is present only as a compatibility shim
+  // for unit tests; do not add new calls to it.
+  // TODO(https://crbug.com/1011446): Delete this.
+  bool Close();
+
+  // Reset the dialog's shown timestamp, for tests that are subject to the
+  // "unintended interaction" detection mechanism.
+  void ResetViewShownTimeStampForTesting();
+
+  // Set the insets used for the dialog's button row. This should be used only
+  // rarely.
+  // TODO(ellyjones): Investigate getting rid of this entirely and having all
+  // dialogs use the same button row insets.
+  void SetButtonRowInsets(const gfx::Insets& insets);
 
  protected:
   ~DialogDelegate() override;
@@ -191,10 +251,23 @@ class VIEWS_EXPORT DialogDelegate : public WidgetDelegate {
 
   const Params& GetParams() const { return params_; }
 
+  // Return ownership of the footnote view for this dialog. Only use this in
+  // subclass overrides of CreateNonClientFrameView.
+  std::unique_ptr<View> DisownFootnoteView();
+
  private:
   // Overridden from WidgetDelegate. If you need to hook after widget
   // initialization, use OnDialogInitialized above.
   void OnWidgetInitialized() final;
+
+  // A helper for accessing the DialogClientView object contained by this
+  // delegate's Window.
+  const DialogClientView* GetDialogClientView() const;
+  DialogClientView* GetDialogClientView();
+
+  // Runs a close callback, ensuring that at most one close callback is ever
+  // run.
+  void RunCloseCallback(base::OnceClosure callback);
 
   // The margins between the content and the inside of the border.
   // TODO(crbug.com/733040): Most subclasses assume they must set their own
@@ -211,8 +284,20 @@ class VIEWS_EXPORT DialogDelegate : public WidgetDelegate {
   // The extra view for this dialog, if there is one.
   std::unique_ptr<View> extra_view_ = nullptr;
 
+  // The footnote view for this dialog, if there is one.
+  std::unique_ptr<View> footnote_view_ = nullptr;
+
   // Observers for DialogModel changes.
   base::ObserverList<DialogObserver>::Unchecked observer_list_;
+
+  // Callbacks for the dialog's actions:
+  base::OnceClosure accept_callback_;
+  base::OnceClosure cancel_callback_;
+  base::OnceClosure close_callback_;
+
+  // Whether any of the three callbacks just above has been delivered yet, *or*
+  // one of the Accept/Cancel methods have been called and returned true.
+  bool already_started_close_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(DialogDelegate);
 };
@@ -221,19 +306,18 @@ class VIEWS_EXPORT DialogDelegate : public WidgetDelegate {
 // to call View's GetWidget() for the common case where a DialogDelegate
 // implementation is-a View. Note that DialogDelegateView is not owned by
 // view's hierarchy and is expected to be deleted on DeleteDelegate call.
-class VIEWS_EXPORT DialogDelegateView : public DialogDelegate,
-                                        public View {
+class VIEWS_EXPORT DialogDelegateView : public DialogDelegate, public View {
  public:
   DialogDelegateView();
   ~DialogDelegateView() override;
 
-  // Overridden from DialogDelegate:
+  // DialogDelegate:
   void DeleteDelegate() override;
   Widget* GetWidget() override;
   const Widget* GetWidget() const override;
   View* GetContentsView() override;
 
-  // Overridden from View:
+  // View:
   void ViewHierarchyChanged(
       const ViewHierarchyChangedDetails& details) override;
 

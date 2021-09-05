@@ -48,7 +48,7 @@
 #include "crypto/symmetric_key.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/proxy_server.h"
-#include "net/cert/pem_tokenizer.h"
+#include "net/cert/pem.h"
 #include "net/cert/x509_certificate.h"
 #include "net/cert/x509_util_nss.h"
 #include "net/proxy_resolution/proxy_bypass_rules.h"
@@ -959,7 +959,7 @@ bool ParseAndValidateOncForImport(const std::string& onc_blob,
     base::Value* validated_certs = toplevel_onc->FindKeyOfType(
         ::onc::toplevel_config::kCertificates, base::Value::Type::LIST);
     if (validated_certs)
-      certificates->GetList().swap(validated_certs->GetList());
+      *certificates = base::ListValue(validated_certs->TakeList());
   }
 
   // Note that this processing is performed even if |network_configs| is

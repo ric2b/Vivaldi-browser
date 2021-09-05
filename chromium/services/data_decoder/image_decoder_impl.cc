@@ -12,12 +12,11 @@
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "skia/ext/image_operations.h"
 #include "third_party/blink/public/platform/web_data.h"
-#include "third_party/blink/public/platform/web_image.h"
 #include "third_party/blink/public/platform/web_size.h"
+#include "third_party/blink/public/web/web_image.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 
 #if defined(OS_CHROMEOS)
-#include "ui/gfx/codec/chromeos/jpeg_codec_robust_slow.h"
 #include "ui/gfx/codec/png_codec.h"
 #endif
 
@@ -58,9 +57,7 @@ void ResizeImage(SkBitmap* decoded_image,
 
 }  // namespace
 
-ImageDecoderImpl::ImageDecoderImpl(
-    std::unique_ptr<service_manager::ServiceContextRef> service_ref)
-    : service_ref_(std::move(service_ref)) {}
+ImageDecoderImpl::ImageDecoderImpl() = default;
 
 ImageDecoderImpl::~ImageDecoderImpl() = default;
 
@@ -77,15 +74,7 @@ void ImageDecoderImpl::DecodeImage(const std::vector<uint8_t>& encoded_data,
 
   SkBitmap decoded_image;
 #if defined(OS_CHROMEOS)
-  if (codec == mojom::ImageCodec::ROBUST_JPEG) {
-    // Our robust jpeg decoding is using IJG libjpeg.
-    if (encoded_data.size()) {
-      std::unique_ptr<SkBitmap> decoded_jpeg(gfx::JPEGCodecRobustSlow::Decode(
-          encoded_data.data(), encoded_data.size()));
-      if (decoded_jpeg.get() && !decoded_jpeg->empty())
-        decoded_image = *decoded_jpeg;
-    }
-  } else if (codec == mojom::ImageCodec::ROBUST_PNG) {
+  if (codec == mojom::ImageCodec::ROBUST_PNG) {
     // Our robust PNG decoding is using libpng.
     if (encoded_data.size()) {
       SkBitmap decoded_png;

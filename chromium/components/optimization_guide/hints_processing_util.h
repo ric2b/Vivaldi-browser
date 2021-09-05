@@ -13,7 +13,6 @@
 class GURL;
 
 namespace optimization_guide {
-class HintUpdateData;
 
 // Returns the string representation of the optimization type.
 std::string GetStringNameForOptimizationType(
@@ -41,16 +40,12 @@ const proto::PageHint* FindPageHintForURL(const GURL& gurl,
 // practically zero.
 std::string HashHostForDictionary(const std::string& host);
 
-// Verifies and processes |hints| and places the ones it supports into
-// |hint_update_data|.
-//
-// Returns true if there was at least one hint moved into |hint_update_data|.
-bool ProcessHints(google::protobuf::RepeatedPtrField<proto::Hint>* hints,
-                  HintUpdateData* hint_update_data);
-
 // Converts |proto_ect| into a net::EffectiveConnectionType.
 net::EffectiveConnectionType ConvertProtoEffectiveConnectionType(
     proto::EffectiveConnectionType proto_ect);
+
+// Validates a URL used for URL-keyed hints.
+bool IsValidURLForURLKeyedHint(const GURL& url);
 
 }  // namespace optimization_guide
 

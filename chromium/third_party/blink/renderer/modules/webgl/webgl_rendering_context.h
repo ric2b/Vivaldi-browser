@@ -42,9 +42,12 @@ class EXTFloatBlend;
 class EXTFragDepth;
 class EXTShaderTextureLOD;
 class EXTsRGB;
+class EXTTextureCompressionBPTC;
+class EXTTextureCompressionRGTC;
 class EXTTextureFilterAnisotropic;
 class KHRParallelShaderCompile;
 class OESElementIndexUint;
+class OESFboRenderMipmap;
 class OESStandardDerivatives;
 class OESTextureFloat;
 class OESTextureFloatLinear;
@@ -55,7 +58,6 @@ class WebGLDebugRendererInfo;
 class WebGLDepthTexture;
 class WebGLLoseContext;
 class WebGLMultiDraw;
-class WebGLMultiDrawInstanced;
 class WebGLVideoTexture;
 
 class WebGLRenderingContext final : public WebGLRenderingContextBase {
@@ -94,7 +96,7 @@ class WebGLRenderingContext final : public WebGLRenderingContextBase {
   void SetCanvasGetContextResult(RenderingContext&) final;
   void SetOffscreenCanvasGetContextResult(OffscreenRenderingContext&) final;
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  private:
   // Enabled extension objects.
@@ -105,10 +107,13 @@ class WebGLRenderingContext final : public WebGLRenderingContextBase {
   Member<EXTFloatBlend> ext_float_blend_;
   Member<EXTFragDepth> ext_frag_depth_;
   Member<EXTShaderTextureLOD> ext_shader_texture_lod_;
+  Member<EXTTextureCompressionBPTC> ext_texture_compression_bptc_;
+  Member<EXTTextureCompressionRGTC> ext_texture_compression_rgtc_;
   Member<EXTTextureFilterAnisotropic> ext_texture_filter_anisotropic_;
   Member<EXTsRGB> exts_rgb_;
   Member<KHRParallelShaderCompile> khr_parallel_shader_compile_;
   Member<OESElementIndexUint> oes_element_index_uint_;
+  Member<OESFboRenderMipmap> oes_fbo_render_mipmap_;
   Member<OESStandardDerivatives> oes_standard_derivatives_;
   Member<OESTextureFloat> oes_texture_float_;
   Member<OESTextureFloatLinear> oes_texture_float_linear_;
@@ -128,19 +133,8 @@ class WebGLRenderingContext final : public WebGLRenderingContextBase {
   Member<WebGLDrawBuffers> webgl_draw_buffers_;
   Member<WebGLLoseContext> webgl_lose_context_;
   Member<WebGLMultiDraw> webgl_multi_draw_;
-  Member<WebGLMultiDrawInstanced> webgl_multi_draw_instanced_;
   Member<WebGLVideoTexture> webgl_video_texture_;
 };
-
-DEFINE_TYPE_CASTS(WebGLRenderingContext,
-                  CanvasRenderingContext,
-                  context,
-                  context->Is3d() &&
-                      WebGLRenderingContextBase::GetWebGLVersion(context) ==
-                          Platform::kWebGL1ContextType,
-                  context.Is3d() &&
-                      WebGLRenderingContextBase::GetWebGLVersion(&context) ==
-                          Platform::kWebGL1ContextType);
 
 }  // namespace blink
 

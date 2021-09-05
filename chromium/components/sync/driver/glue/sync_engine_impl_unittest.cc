@@ -23,11 +23,10 @@
 #include "build/build_config.h"
 #include "components/invalidation/impl/invalidation_logger.h"
 #include "components/invalidation/impl/invalidation_switches.h"
-#include "components/invalidation/impl/invalidator_storage.h"
 #include "components/invalidation/impl/profile_invalidation_provider.h"
 #include "components/invalidation/public/invalidation_service.h"
+#include "components/invalidation/public/invalidation_util.h"
 #include "components/invalidation/public/invalidator_state.h"
-#include "components/invalidation/public/object_id_invalidation_map.h"
 #include "components/sync/base/invalidation_helper.h"
 #include "components/sync/base/sync_prefs.h"
 #include "components/sync/base/test_unrecoverable_error_handler.h"
@@ -37,15 +36,13 @@
 #include "components/sync/engine/cycle/update_counters.h"
 #include "components/sync/engine/fake_sync_manager.h"
 #include "components/sync/engine/model_safe_worker.h"
-#include "components/sync/engine/net/http_bridge_network_resources.h"
-#include "components/sync/engine/net/network_resources.h"
+#include "components/sync/engine/net/http_bridge.h"
 #include "components/sync/engine/passive_model_worker.h"
 #include "components/sync/engine/sync_engine_host_stub.h"
 #include "components/sync/engine/sync_manager_factory.h"
 #include "components/sync/test/callback_counter.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
-#include "google/cacheinvalidation/include/types.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/test/test_network_connection_tracker.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -71,8 +68,8 @@ scoped_refptr<ModelSafeWorker> CreateModelWorkerForGroup(ModelSafeGroup group) {
 class TestSyncEngineHost : public SyncEngineHostStub {
  public:
   explicit TestSyncEngineHost(
-      base::Callback<void(ModelTypeSet)> set_engine_types)
-      : set_engine_types_(set_engine_types) {}
+      base::OnceCallback<void(ModelTypeSet)> set_engine_types)
+      : set_engine_types_(std::move(set_engine_types)) {}
 
   void OnEngineInitialized(ModelTypeSet initial_types,
                            const WeakHandle<JsBackend>&,
@@ -80,10 +77,9 @@ class TestSyncEngineHost : public SyncEngineHostStub {
                            const std::string&,
                            const std::string&,
                            const std::string&,
-                           const std::string&,
                            bool success) override {
     EXPECT_EQ(expect_success_, success);
-    set_engine_types_.Run(initial_types);
+    std::move(set_engine_types_).Run(initial_types);
     std::move(quit_closure_).Run();
   }
 
@@ -96,7 +92,7 @@ class TestSyncEngineHost : public SyncEngineHostStub {
   }
 
  private:
-  base::Callback<void(ModelTypeSet)> set_engine_types_;
+  base::OnceCallback<void(ModelTypeSet)> set_engine_types_;
   bool expect_success_ = false;
   base::OnceClosure quit_closure_;
 };
@@ -153,9 +149,9 @@ class MockInvalidationService : public invalidation::InvalidationService {
 
   MOCK_METHOD1(RegisterInvalidationHandler,
                void(syncer::InvalidationHandler* handler));
-  MOCK_METHOD2(UpdateRegisteredInvalidationIds,
+  MOCK_METHOD2(UpdateInterestedTopics,
                bool(syncer::InvalidationHandler* handler,
-                    const syncer::ObjectIdSet& ids));
+                    const syncer::TopicSet& topics));
   MOCK_METHOD1(UnregisterInvalidationHandler,
                void(syncer::InvalidationHandler* handler));
   MOCK_METHOD0(GetInvalidatorStat, syncer::InvalidatorState());
@@ -167,12 +163,19 @@ class MockInvalidationService : public invalidation::InvalidationService {
                           void(const base::DictionaryValue&)> post_caller));
 };
 
+std::unique_ptr<HttpPostProviderFactory> CreateHttpBridgeFactory() {
+  return std::make_unique<HttpBridgeFactory>(
+      /*user_agent=*/"",
+      /*pending_url_loader_factory=*/nullptr,
+      /*network_time_update_callback=*/base::DoNothing());
+}
+
 class SyncEngineImplTest : public testing::Test {
  protected:
   SyncEngineImplTest()
       : sync_thread_("SyncThreadForTest"),
-        host_(base::Bind(&SyncEngineImplTest::SetEngineTypes,
-                         base::Unretained(this))),
+        host_(base::BindOnce(&SyncEngineImplTest::SetEngineTypes,
+                             base::Unretained(this))),
         fake_manager_(nullptr) {}
 
   ~SyncEngineImplTest() override {}
@@ -184,8 +187,7 @@ class SyncEngineImplTest : public testing::Test {
 
     sync_prefs_ = std::make_unique<SyncPrefs>(&pref_service_);
     sync_thread_.StartAndWaitForTesting();
-    ON_CALL(invalidator_,
-            UpdateRegisteredInvalidationIds(testing::_, testing::_))
+    ON_CALL(invalidator_, UpdateInterestedTopics(testing::_, testing::_))
         .WillByDefault(testing::Return(true));
     backend_ = std::make_unique<SyncEngineImpl>(
         "dummyDebugName", &invalidator_, sync_prefs_->AsWeakPtr(),
@@ -204,8 +206,6 @@ class SyncEngineImplTest : public testing::Test {
     enabled_types_.Put(SESSIONS);
     enabled_types_.Put(SEARCH_ENGINES);
     enabled_types_.Put(AUTOFILL);
-
-    network_resources_ = std::make_unique<HttpBridgeNetworkResources>();
   }
 
   void TearDown() override {
@@ -222,19 +222,14 @@ class SyncEngineImplTest : public testing::Test {
   // Synchronously initializes the backend.
   void InitializeBackend(bool expect_success) {
     host_.SetExpectSuccess(expect_success);
-    SyncEngine::HttpPostProviderFactoryGetter
-        http_post_provider_factory_getter =
-            base::BindOnce(&NetworkResources::GetHttpPostProviderFactory,
-                           base::Unretained(network_resources_.get()), nullptr,
-                           base::DoNothing());
 
     SyncEngine::InitParams params;
     params.sync_task_runner = sync_thread_.task_runner();
     params.host = &host_;
     params.registrar = std::make_unique<SyncBackendRegistrar>(
-        std::string(), base::Bind(&CreateModelWorkerForGroup));
-    params.http_factory_getter = std::move(http_post_provider_factory_getter);
-    params.authenticated_account_id = "user@example.com";
+        std::string(), base::BindRepeating(&CreateModelWorkerForGroup));
+    params.http_factory_getter = base::BindOnce(&CreateHttpBridgeFactory);
+    params.authenticated_account_id = CoreAccountId("account_id");
     params.sync_manager_factory = std::move(fake_manager_factory_);
     params.unrecoverable_error_handler =
         MakeWeakHandle(test_unrecoverable_error_handler_.GetWeakPtr()),
@@ -267,8 +262,8 @@ class SyncEngineImplTest : public testing::Test {
       params.to_download.Put(NIGORI);
     }
     params.to_purge = Intersection(engine_types_, disabled_types);
-    params.ready_task =
-        base::Bind(&SyncEngineImplTest::DownloadReady, base::Unretained(this));
+    params.ready_task = base::BindOnce(&SyncEngineImplTest::DownloadReady,
+                                       base::Unretained(this));
 
     ModelTypeSet ready_types =
         Difference(params.enabled_types, params.to_download);
@@ -310,7 +305,6 @@ class SyncEngineImplTest : public testing::Test {
   FakeSyncManager* fake_manager_;
   ModelTypeSet engine_types_;
   ModelTypeSet enabled_types_;
-  std::unique_ptr<NetworkResources> network_resources_;
   base::OnceClosure quit_loop_;
   testing::NiceMock<MockInvalidationService> invalidator_;
 };
@@ -744,7 +738,8 @@ TEST_F(SyncEngineImplTest,
   enabled_types_.Put(FAVICON_IMAGES);
   enabled_types_.Put(FAVICON_TRACKING);
 
-  ModelTypeSet invalidation_enabled_types(enabled_types_);
+  ModelTypeSet invalidation_enabled_types(
+      Difference(enabled_types_, CommitOnlyTypes()));
 
 #if defined(OS_ANDROID)
   // SESSIONS, FAVICON_IMAGES, FAVICON_TRACKING are noisy data types whose
@@ -755,15 +750,14 @@ TEST_F(SyncEngineImplTest,
 #endif
 
   InitializeBackend(true);
-  EXPECT_CALL(invalidator_,
-              UpdateRegisteredInvalidationIds(
-                  backend_.get(),
-                  ModelTypeSetToObjectIdSet(invalidation_enabled_types)));
+  EXPECT_CALL(
+      invalidator_,
+      UpdateInterestedTopics(
+          backend_.get(), ModelTypeSetToTopicSet(invalidation_enabled_types)));
   ConfigureDataTypes();
 
   // At shutdown, we clear the registered invalidation ids.
-  EXPECT_CALL(invalidator_,
-              UpdateRegisteredInvalidationIds(backend_.get(), ObjectIdSet()));
+  EXPECT_CALL(invalidator_, UpdateInterestedTopics(backend_.get(), TopicSet()));
 }
 
 TEST_F(SyncEngineImplTest, WhenEnabledTypesStayDisabled) {
@@ -776,13 +770,13 @@ TEST_F(SyncEngineImplTest, WhenEnabledTypesStayDisabled) {
 
   InitializeBackend(true);
   EXPECT_CALL(invalidator_,
-              UpdateRegisteredInvalidationIds(
-                  backend_.get(), ModelTypeSetToObjectIdSet(enabled_types_)));
+              UpdateInterestedTopics(backend_.get(),
+                                     ModelTypeSetToTopicSet(Difference(
+                                         enabled_types_, CommitOnlyTypes()))));
   ConfigureDataTypes();
 
   // At shutdown, we clear the registered invalidation ids.
-  EXPECT_CALL(invalidator_,
-              UpdateRegisteredInvalidationIds(backend_.get(), ObjectIdSet()));
+  EXPECT_CALL(invalidator_, UpdateInterestedTopics(backend_.get(), TopicSet()));
 }
 
 TEST_F(SyncEngineImplTest,
@@ -797,8 +791,9 @@ TEST_F(SyncEngineImplTest,
   ConfigureDataTypes();
 
   EXPECT_CALL(invalidator_,
-              UpdateRegisteredInvalidationIds(
-                  backend_.get(), ModelTypeSetToObjectIdSet(enabled_types_)));
+              UpdateInterestedTopics(backend_.get(),
+                                     ModelTypeSetToTopicSet(Difference(
+                                         enabled_types_, CommitOnlyTypes()))));
   backend_->SetInvalidationsForSessionsEnabled(true);
 
   ModelTypeSet enabled_types(enabled_types_);
@@ -807,22 +802,19 @@ TEST_F(SyncEngineImplTest,
   enabled_types.Remove(FAVICON_TRACKING);
 
   EXPECT_CALL(invalidator_,
-              UpdateRegisteredInvalidationIds(
-                  backend_.get(), ModelTypeSetToObjectIdSet(enabled_types)));
+              UpdateInterestedTopics(backend_.get(),
+                                     ModelTypeSetToTopicSet(Difference(
+                                         enabled_types, CommitOnlyTypes()))));
   backend_->SetInvalidationsForSessionsEnabled(false);
 
   // At shutdown, we clear the registered invalidation ids.
-  EXPECT_CALL(invalidator_,
-              UpdateRegisteredInvalidationIds(backend_.get(), ObjectIdSet()));
+  EXPECT_CALL(invalidator_, UpdateInterestedTopics(backend_.get(), TopicSet()));
 }
 
 // Regression test for crbug.com/1019956.
 TEST_F(SyncEngineImplTest, ShouldDestroyAfterInitFailure) {
   base::test::ScopedFeatureList override_features;
-  override_features.InitWithFeatures(
-      /*enable_feature=*/{switches::kSyncUSSPasswords,
-                          switches::kSyncUSSNigori},
-      /*disable_feature=*/{});
+  override_features.InitAndEnableFeature(switches::kSyncUSSNigori);
 
   fake_manager_factory_->set_should_fail_on_init(true);
   // Sync manager will report initialization failure and gets destroyed during

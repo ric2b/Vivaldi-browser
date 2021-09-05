@@ -171,6 +171,12 @@ bool GetEquivalentInstalledArcApps(content::BrowserContext* context,
   return !arc_apps->empty();
 }
 
+const std::vector<std::string> GetEquivalentInstalledAppIds(
+    const std::string& arc_package_name) {
+  return g_dual_badge_map.Get().GetExtensionIdsForArcPackageName(
+      arc_package_name);
+}
+
 const std::vector<std::string> GetEquivalentInstalledExtensions(
     content::BrowserContext* context,
     const std::string& arc_package_name) {
@@ -210,12 +216,44 @@ bool ShouldApplyChromeBadge(content::BrowserContext* context,
   return true;
 }
 
-void ApplyChromeBadge(gfx::ImageSkia* icon_out) {
+bool ShouldApplyChromeBadgeToWebApp(content::BrowserContext* context,
+                                    const std::string& web_app_id) {
+  DCHECK(context);
+
+  Profile* profile = Profile::FromBrowserContext(context);
+  // Only apply Chrome badge for the primary profile.
+  if (!chromeos::ProfileHelper::IsPrimaryProfile(profile) ||
+      !multi_user_util::IsProfileFromActiveUser(profile)) {
+    return false;
+  }
+
+  if (!HasEquivalentInstalledArcApp(context, web_app_id))
+    return false;
+
+  return true;
+}
+
+void ApplyBadge(gfx::ImageSkia* icon_out, ChromeAppIcon::Badge badge_type) {
   DCHECK(icon_out);
+  DCHECK_NE(ChromeAppIcon::Badge::kNone, badge_type);
+
+  int badge_res = 0;
+  switch (badge_type) {
+    case ChromeAppIcon::Badge::kChrome:
+      badge_res = IDR_CHROME_ICON_BADGE;
+      break;
+    case ChromeAppIcon::Badge::kBlocked:
+      badge_res = IDR_BLOCK_ICON_BADGE;
+      break;
+    case ChromeAppIcon::Badge::kPaused:
+      badge_res = IDR_HOURGLASS_ICON_BADGE;
+      break;
+    default:
+      NOTREACHED();
+  }
 
   const gfx::ImageSkia* badge_image =
-      ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
-          IDR_ARC_DUAL_ICON_BADGE);
+      ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(badge_res);
   DCHECK(badge_image);
 
   gfx::ImageSkia resized_badge_image = *badge_image;

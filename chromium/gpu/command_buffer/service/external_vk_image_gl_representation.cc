@@ -11,6 +11,7 @@
 #include "build/build_config.h"
 #include "gpu/vulkan/vulkan_function_pointers.h"
 #include "gpu/vulkan/vulkan_implementation.h"
+#include "gpu/vulkan/vulkan_util.h"
 
 #define GL_LAYOUT_GENERAL_EXT 0x958D
 #define GL_LAYOUT_COLOR_ATTACHMENT_EXT 0x958E
@@ -23,6 +24,11 @@
 #define GL_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_EXT 0x9531
 
 #define GL_HANDLE_TYPE_OPAQUE_FD_EXT 0x9586
+
+#if defined(OS_FUCHSIA)
+#define GL_HANDLE_TYPE_ZIRCON_VMO_ANGLE 0x93AE
+#define GL_HANDLE_TYPE_ZIRCON_EVENT_ANGLE 0x93AF
+#endif
 
 namespace gpu {
 
@@ -58,27 +64,17 @@ GLenum ToGLImageLayout(VkImageLayout layout) {
 
 }  // namespace
 
-ExternalVkImageGlRepresentation::ExternalVkImageGlRepresentation(
-    SharedImageManager* manager,
+ExternalVkImageGLRepresentationShared::ExternalVkImageGLRepresentationShared(
     SharedImageBacking* backing,
-    MemoryTypeTracker* tracker,
-    gles2::Texture* texture,
     GLuint texture_service_id)
-    : SharedImageRepresentationGLTexture(manager, backing, tracker),
-      texture_(texture),
+    : backing_(static_cast<ExternalVkImageBacking*>(backing)),
       texture_service_id_(texture_service_id) {}
 
-ExternalVkImageGlRepresentation::~ExternalVkImageGlRepresentation() {}
-
-gles2::Texture* ExternalVkImageGlRepresentation::GetTexture() {
-  return texture_;
-}
-
-bool ExternalVkImageGlRepresentation::BeginAccess(GLenum mode) {
+bool ExternalVkImageGLRepresentationShared::BeginAccess(GLenum mode) {
   // There should not be multiple accesses in progress on the same
   // representation.
   if (current_access_mode_) {
-    LOG(ERROR) << "BeginAccess called on ExternalVkImageGlRepresentation before"
+    LOG(ERROR) << "BeginAccess called on ExternalVkImageGLRepresentation before"
                << " the previous access ended.";
     return false;
   }
@@ -87,7 +83,7 @@ bool ExternalVkImageGlRepresentation::BeginAccess(GLenum mode) {
          mode == GL_SHARED_IMAGE_ACCESS_MODE_READWRITE_CHROMIUM);
   const bool readonly = (mode == GL_SHARED_IMAGE_ACCESS_MODE_READ_CHROMIUM);
 
-  if (!readonly && backing()->format() == viz::ResourceFormat::BGRA_8888) {
+  if (!readonly && backing_impl()->format() == viz::ResourceFormat::BGRA_8888) {
     NOTIMPLEMENTED()
         << "BeginAccess write on a BGRA_8888 backing is not supported.";
     return false;
@@ -114,11 +110,11 @@ bool ExternalVkImageGlRepresentation::BeginAccess(GLenum mode) {
   return true;
 }
 
-void ExternalVkImageGlRepresentation::EndAccess() {
+void ExternalVkImageGLRepresentationShared::EndAccess() {
   if (!current_access_mode_) {
     // TODO(crbug.com/933452): We should be able to handle this failure more
     // gracefully rather than shutting down the whole process.
-    LOG(ERROR) << "EndAccess called on ExternalVkImageGlRepresentation before "
+    LOG(ERROR) << "EndAccess called on ExternalVkImageGLRepresentation before "
                << "BeginAccess";
     return;
   }
@@ -140,7 +136,7 @@ void ExternalVkImageGlRepresentation::EndAccess() {
       // TODO(crbug.com/933452): We should be able to handle this failure more
       // gracefully rather than shutting down the whole process.
       LOG(FATAL) << "Unable to create a VkSemaphore in "
-                 << "ExternalVkImageGlRepresentation for synchronization with "
+                 << "ExternalVkImageGLRepresentation for synchronization with "
                  << "Vulkan";
       return;
     }
@@ -150,7 +146,7 @@ void ExternalVkImageGlRepresentation::EndAccess() {
     vkDestroySemaphore(backing_impl()->device(), semaphore, nullptr);
     if (!semaphore_handle.is_valid()) {
       LOG(FATAL) << "Unable to export VkSemaphore into GL in "
-                 << "ExternalVkImageGlRepresentation for synchronization with "
+                 << "ExternalVkImageGLRepresentation for synchronization with "
                  << "Vulkan";
       return;
     }
@@ -162,7 +158,7 @@ void ExternalVkImageGlRepresentation::EndAccess() {
       // TODO(crbug.com/933452): We should be able to semaphore_handle this
       // failure more gracefully rather than shutting down the whole process.
       LOG(FATAL) << "Unable to export VkSemaphore into GL in "
-                 << "ExternalVkImageGlRepresentation for synchronization with "
+                 << "ExternalVkImageGLRepresentation for synchronization with "
                  << "Vulkan";
       return;
     }
@@ -176,20 +172,23 @@ void ExternalVkImageGlRepresentation::EndAccess() {
     api()->glSignalSemaphoreEXTFn(gl_semaphore, 0, nullptr, 1,
                                   &texture_service_id_, &dst_layout);
     api()->glDeleteSemaphoresEXTFn(1, &gl_semaphore);
+    // Base on the spec, the glSignalSemaphoreEXT() call just inserts signal
+    // semaphore command in the gl context. It may or may not flush the context
+    // which depends on the impelemntation. So to make it safe, we always call
+    // glFlush() here. If the implementation does flush in the
+    // glSignalSemaphoreEXT() call, the glFlush() call should be a noop.
+    api()->glFlushFn();
   }
 
   backing_impl()->EndAccess(readonly, std::move(semaphore_handle),
                             true /* is_gl */);
 }
 
-GLuint ExternalVkImageGlRepresentation::ImportVkSemaphoreIntoGL(
+GLuint ExternalVkImageGLRepresentationShared::ImportVkSemaphoreIntoGL(
     SemaphoreHandle handle) {
   if (!handle.is_valid())
     return 0;
-#if defined(OS_FUCHSIA)
-  NOTIMPLEMENTED_LOG_ONCE();
-  return 0;
-#elif defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_ANDROID)
   if (handle.vk_handle_type() !=
       VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT) {
     DLOG(ERROR) << "Importing semaphore handle of unexpected type:"
@@ -204,9 +203,72 @@ GLuint ExternalVkImageGlRepresentation::ImportVkSemaphoreIntoGL(
                                 fd.release());
 
   return gl_semaphore;
-#else  // !defined(OS_FUCHSIA) && !defined(OS_LINUX)
+#elif defined(OS_FUCHSIA)
+  if (handle.vk_handle_type() !=
+      VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_TEMP_ZIRCON_EVENT_BIT_FUCHSIA) {
+    DLOG(ERROR) << "Importing semaphore handle of unexpected type:"
+                << handle.vk_handle_type();
+    return 0;
+  }
+  zx::event event = handle.TakeHandle();
+  gl::GLApi* api = gl::g_current_gl_context;
+  GLuint gl_semaphore;
+  api->glGenSemaphoresEXTFn(1, &gl_semaphore);
+  api->glImportSemaphoreZirconHandleANGLEFn(
+      gl_semaphore, GL_HANDLE_TYPE_ZIRCON_EVENT_ANGLE, event.release());
+  return gl_semaphore;
+#elif defined(OS_WIN)
+  NOTIMPLEMENTED();
+  return 0;
+#else
 #error Unsupported OS
 #endif
+}
+
+ExternalVkImageGLRepresentation::ExternalVkImageGLRepresentation(
+    SharedImageManager* manager,
+    SharedImageBacking* backing,
+    MemoryTypeTracker* tracker,
+    gles2::Texture* texture,
+    GLuint texture_service_id)
+    : SharedImageRepresentationGLTexture(manager, backing, tracker),
+      texture_(texture),
+      representation_shared_(backing, texture_service_id) {}
+
+ExternalVkImageGLRepresentation::~ExternalVkImageGLRepresentation() {}
+
+gles2::Texture* ExternalVkImageGLRepresentation::GetTexture() {
+  return texture_;
+}
+
+bool ExternalVkImageGLRepresentation::BeginAccess(GLenum mode) {
+  return representation_shared_.BeginAccess(mode);
+}
+void ExternalVkImageGLRepresentation::EndAccess() {
+  representation_shared_.EndAccess();
+}
+
+ExternalVkImageGLPassthroughRepresentation::
+    ExternalVkImageGLPassthroughRepresentation(SharedImageManager* manager,
+                                               SharedImageBacking* backing,
+                                               MemoryTypeTracker* tracker,
+                                               GLuint texture_service_id)
+    : SharedImageRepresentationGLTexturePassthrough(manager, backing, tracker),
+      representation_shared_(backing, texture_service_id) {}
+
+ExternalVkImageGLPassthroughRepresentation::
+    ~ExternalVkImageGLPassthroughRepresentation() {}
+
+const scoped_refptr<gles2::TexturePassthrough>&
+ExternalVkImageGLPassthroughRepresentation::GetTexturePassthrough() {
+  return representation_shared_.backing_impl()->GetTexturePassthrough();
+}
+
+bool ExternalVkImageGLPassthroughRepresentation::BeginAccess(GLenum mode) {
+  return representation_shared_.BeginAccess(mode);
+}
+void ExternalVkImageGLPassthroughRepresentation::EndAccess() {
+  representation_shared_.EndAccess();
 }
 
 }  // namespace gpu

@@ -14,7 +14,6 @@ OpenURLParams::OpenURLParams(const GURL& url,
                              bool is_renderer_initiated)
     : url(url),
       referrer(referrer),
-      uses_post(false),
       frame_tree_node_id(RenderFrameHost::kNoFrameTreeNodeId),
       disposition(disposition),
       transition(transition),
@@ -33,7 +32,6 @@ OpenURLParams::OpenURLParams(const GURL& url,
                              bool started_from_context_menu)
     : url(url),
       referrer(referrer),
-      uses_post(false),
       frame_tree_node_id(RenderFrameHost::kNoFrameTreeNodeId),
       disposition(disposition),
       transition(transition),
@@ -52,7 +50,6 @@ OpenURLParams::OpenURLParams(const GURL& url,
                              bool is_renderer_initiated)
     : url(url),
       referrer(referrer),
-      uses_post(false),
       frame_tree_node_id(frame_tree_node_id),
       disposition(disposition),
       transition(transition),
@@ -82,19 +79,34 @@ OpenURLParams OpenURLParams::FromNavigationHandle(NavigationHandle* handle) {
   params.href_translate = handle->GetHrefTranslate();
   params.reload_type = handle->GetReloadType();
 
-  // A non-null |source_site_instance| is important for picking the right
-  // renderer process for hosting about:blank and/or data: URLs (their origin's
-  // precursor is based on |initiator_origin|).
-  if (params.url.IsAboutBlank() || params.url.SchemeIs(url::kDataScheme)) {
-    DCHECK_EQ(params.initiator_origin.has_value(),
-              static_cast<bool>(params.source_site_instance));
-  }
-
   // TODO(lukasza): Consider also covering |post_data| (and |uses_post|) and
   // |extra_headers| (this is difficult, because we can't cast |handle| to
   // NavigationRequest*, because it may be MockNavigationHandle in unit tests).
 
+#if DCHECK_IS_ON()
+  DCHECK(params.Valid());
+#endif
   return params;
 }
+
+#if DCHECK_IS_ON()
+bool OpenURLParams::Valid() const {
+  // Make sure URLs that result in an opaque origin have their initiator
+  // information set so it can be used by downstream components. If |url|
+  // is about:blank or data: URL and |initiator_origin| is set, then we also
+  // need |source_site_instance| set so that
+  // RenderFrameHostManager::DetermineSiteInstanceForURL() can select the
+  // correct SiteInstance for these URLs.
+  const bool is_data_or_about =
+      url.IsAboutBlank() || url.SchemeIs(url::kDataScheme);
+  const bool has_valid_initiator =
+      initiator_origin.has_value() &&
+      initiator_origin->GetTupleOrPrecursorTupleIfOpaque().IsValid();
+  if (is_data_or_about && has_valid_initiator && !source_site_instance)
+    return false;
+
+  return true;
+}
+#endif  // DCHECK_IS_ON()
 
 }  // namespace content

@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-'use strict';
+import {assert} from 'chrome://resources/js/assert.m.js';
 
 /**
  * @param {!Object} streamInfo The stream object pointing to the data contained
@@ -49,7 +49,7 @@ function lookupInitialZoom(streamInfo) {
 /**
  * A class providing an interface to the browser.
  */
-class BrowserApi {
+export class BrowserApi {
   /**
    * @param {!Object} streamInfo The stream object which points to the data
    *     contained in the PDF.
@@ -97,7 +97,7 @@ class BrowserApi {
    */
   setZoom(zoom) {
     assert(
-        this.zoomBehavior_ == BrowserApi.ZoomBehavior.MANAGE,
+        this.zoomBehavior_ === BrowserApi.ZoomBehavior.MANAGE,
         'Viewer does not manage browser zoom.');
     return new Promise((resolve, reject) => {
       chrome.tabs.setZoom(this.streamInfo_.tabId, zoom, resolve);
@@ -132,15 +132,15 @@ class BrowserApi {
    *     factor.
    */
   addZoomEventListener(listener) {
-    if (!(this.zoomBehavior_ == BrowserApi.ZoomBehavior.MANAGE ||
-          this.zoomBehavior_ == BrowserApi.ZoomBehavior.PROPAGATE_PARENT)) {
+    if (!(this.zoomBehavior_ === BrowserApi.ZoomBehavior.MANAGE ||
+          this.zoomBehavior_ === BrowserApi.ZoomBehavior.PROPAGATE_PARENT)) {
       return;
     }
 
     chrome.tabs.onZoomChange.addListener(info => {
       const zoomChangeInfo =
           /** @type {{tabId: number, newZoomFactor: number}} */ (info);
-      if (zoomChangeInfo.tabId != this.streamInfo_.tabId) {
+      if (zoomChangeInfo.tabId !== this.streamInfo_.tabId) {
         return;
       }
       listener(zoomChangeInfo.newZoomFactor);
@@ -161,8 +161,8 @@ BrowserApi.ZoomBehavior = {
 /**
  * Creates a BrowserApi for an extension running as a mime handler.
  *
- * @return {Promise<BrowserApi>} A promise to a BrowserApi instance constructed
- *     using the mimeHandlerPrivate API.
+ * @return {!Promise<!BrowserApi>} A promise to a BrowserApi instance
+ *     constructed using the mimeHandlerPrivate API.
  */
 function createBrowserApiForMimeHandlerView() {
   return new Promise(function(resolve, reject) {
@@ -171,7 +171,7 @@ function createBrowserApiForMimeHandlerView() {
       .then(function(streamInfo) {
         const promises = [];
         let zoomBehavior = BrowserApi.ZoomBehavior.NONE;
-        if (streamInfo.tabId != -1) {
+        if (streamInfo.tabId !== -1) {
           zoomBehavior = streamInfo.embedded ?
               BrowserApi.ZoomBehavior.PROPAGATE_PARENT :
               BrowserApi.ZoomBehavior.MANAGE;
@@ -183,7 +183,7 @@ function createBrowserApiForMimeHandlerView() {
             }
           }));
         }
-        if (zoomBehavior == BrowserApi.ZoomBehavior.MANAGE) {
+        if (zoomBehavior === BrowserApi.ZoomBehavior.MANAGE) {
           promises.push(new Promise(function(resolve) {
             chrome.tabs.setZoomSettings(
                 streamInfo.tabId, {mode: 'manual', scope: 'per-tab'}, resolve);
@@ -198,8 +198,8 @@ function createBrowserApiForMimeHandlerView() {
 /**
  * Creates a BrowserApi instance for an extension not running as a mime handler.
  *
- * @return {Promise<BrowserApi>} A promise to a BrowserApi instance constructed
- *     from the URL.
+ * @return {!Promise<!BrowserApi>} A promise to a BrowserApi instance
+ *     constructed from the URL.
  */
 function createBrowserApiForPrintPreview() {
   const url = window.location.search.substring(1);
@@ -207,7 +207,7 @@ function createBrowserApiForPrintPreview() {
     streamUrl: url,
     originalUrl: url,
     responseHeaders: {},
-    embedded: window.parent != window,
+    embedded: window.parent !== window,
     tabId: -1,
   };
   return new Promise(function(resolve, reject) {
@@ -227,10 +227,10 @@ function createBrowserApiForPrintPreview() {
 }
 
 /**
- * @return {Promise<BrowserApi>} A promise to a BrowserApi instance for the
+ * @return {!Promise<!BrowserApi>} A promise to a BrowserApi instance for the
  *     current environment.
  */
-function createBrowserApi() {
+export function createBrowserApi() {
   if (location.origin === 'chrome://print') {
     return createBrowserApiForPrintPreview();
   }

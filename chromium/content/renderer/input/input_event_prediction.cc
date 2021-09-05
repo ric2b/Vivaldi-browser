@@ -70,9 +70,6 @@ void InputEventPrediction::HandleEvents(
     case WebInputEvent::kPointerMove: {
       size_t coalesced_size = coalesced_event.CoalescedEventSize();
       for (size_t i = 0; i < coalesced_size; i++)
-        ComputeAccuracy(coalesced_event.CoalescedEvent(i));
-
-      for (size_t i = 0; i < coalesced_size; i++)
         UpdatePrediction(coalesced_event.CoalescedEvent(i));
 
       if (enable_resampling_)
@@ -171,8 +168,7 @@ void InputEventPrediction::AddPredictedEvents(
       last_event_timestamp_ + mouse_predictor_->MaxPredictionTime();
   bool success = true;
   while (success) {
-    ui::WebScopedInputEvent predicted_event =
-        ui::WebInputEventTraits::Clone(coalesced_event.Event());
+    ui::WebScopedInputEvent predicted_event = coalesced_event.Event().Clone();
     success = false;
     if (predicted_event->GetType() == WebInputEvent::kTouchMove) {
       WebTouchEvent& touch_event =
@@ -246,11 +242,9 @@ bool InputEventPrediction::GetPointerPrediction(base::TimeTicks predict_time,
   if (event->pointer_type != WebPointerProperties::PointerType::kMouse)
     mouse_predictor_->Reset();
 
-  ui::InputPredictor::InputData predict_result;
   if (auto* predictor = GetPredictor(*event)) {
-    if (predictor->HasPrediction() &&
-        predictor->GeneratePrediction(predict_time, &predict_result)) {
-      event->SetPositionInWidget(predict_result.pos);
+    if (auto predict_result = predictor->GeneratePrediction(predict_time)) {
+      event->SetPositionInWidget(predict_result->pos);
       return true;
     }
   }
@@ -263,52 +257,6 @@ void InputEventPrediction::ResetSinglePredictor(
     mouse_predictor_->Reset();
   else
     pointer_id_predictor_map_.erase(event.id);
-}
-
-void InputEventPrediction::ComputeAccuracy(const WebInputEvent& event) const {
-  base::TimeDelta time_delta = event.TimeStamp() - last_event_timestamp_;
-
-  std::string suffix;
-  if (time_delta < base::TimeDelta::FromMilliseconds(10))
-    suffix = "Short";
-  else if (time_delta < base::TimeDelta::FromMilliseconds(20))
-    suffix = "Middle";
-  else if (time_delta < base::TimeDelta::FromMilliseconds(35))
-    suffix = "Long";
-  else
-    return;
-
-  ui::InputPredictor::InputData predict_result;
-  if (event.GetType() == WebInputEvent::kTouchMove) {
-    const WebTouchEvent& touch_event = static_cast<const WebTouchEvent&>(event);
-    for (unsigned i = 0; i < touch_event.touches_length; ++i) {
-      if (touch_event.touches[i].state == blink::WebTouchPoint::kStateMoved) {
-        auto* predictor = GetPredictor(touch_event.touches[i]);
-        if (predictor && predictor->HasPrediction() &&
-            predictor->GeneratePrediction(event.TimeStamp(), &predict_result)) {
-          float distance =
-              (predict_result.pos -
-               gfx::PointF(touch_event.touches[i].PositionInWidget()))
-                  .Length();
-          base::UmaHistogramCounts1000(
-              "Event.InputEventPrediction.Accuracy.Touch." + suffix,
-              static_cast<int>(distance));
-        }
-      }
-    }
-  } else if (event.GetType() == WebInputEvent::kMouseMove) {
-    const WebMouseEvent& mouse_event = static_cast<const WebMouseEvent&>(event);
-    auto* predictor = GetPredictor(mouse_event);
-    if (predictor && predictor->HasPrediction() &&
-        predictor->GeneratePrediction(event.TimeStamp(), &predict_result)) {
-      float distance =
-          (predict_result.pos - gfx::PointF(mouse_event.PositionInWidget()))
-              .Length();
-      base::UmaHistogramCounts1000(
-          "Event.InputEventPrediction.Accuracy.Mouse." + suffix,
-          static_cast<int>(distance));
-    }
-  }
 }
 
 }  // namespace content

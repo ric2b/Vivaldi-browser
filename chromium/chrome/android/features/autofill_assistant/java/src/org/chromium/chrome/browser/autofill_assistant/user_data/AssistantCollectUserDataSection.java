@@ -5,7 +5,6 @@
 package org.chromium.chrome.browser.autofill_assistant.user_data;
 
 import android.content.Context;
-import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -18,10 +17,9 @@ import androidx.annotation.Nullable;
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.Callback;
 import org.chromium.chrome.autofill_assistant.R;
+import org.chromium.chrome.browser.autofill.prefeditor.EditableOption;
 import org.chromium.chrome.browser.autofill_assistant.AssistantTagsForTesting;
 import org.chromium.chrome.browser.autofill_assistant.AssistantTextUtils;
-import org.chromium.chrome.browser.payments.ui.SectionInformation;
-import org.chromium.chrome.browser.widget.prefeditor.EditableOption;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -142,28 +140,13 @@ public abstract class AssistantCollectUserDataSection<T extends EditableOption> 
      * Replaces the set of displayed items.
      *
      * @param options The new items.
-     * @param selectedItemIndex The index of the item in |items| to select. If < 0, the first
-     * complete item will automatically be selected.
+     * @param selectedItemIndex The index of the item in |items| to select.
      */
     void setItems(List<T> options, int selectedItemIndex) {
-        // Automatically pre-select unless already specified outside.
-        if (selectedItemIndex < 0 && !options.isEmpty()) {
-            for (int i = 0; i < options.size(); i++) {
-                if (options.get(i).isComplete()) {
-                    selectedItemIndex = i;
-                    break;
-                }
-            }
-            // Fallback: if there are no complete items, select the first (incomplete) one.
-            if (selectedItemIndex == SectionInformation.NO_SELECTION) {
-                selectedItemIndex = 0;
-            }
-        }
-
-        Item initiallySelectedItem = null;
         mItems.clear();
         mItemsView.clearItems();
         mSelectedOption = null;
+        Item initiallySelectedItem = null;
         for (int i = 0; i < options.size(); i++) {
             Item item = createItem(options.get(i));
             addItem(item);
@@ -178,8 +161,6 @@ public abstract class AssistantCollectUserDataSection<T extends EditableOption> 
             mIgnoreItemSelectedNotifications = true;
             selectItem(initiallySelectedItem);
             mIgnoreItemSelectedNotifications = false;
-        } else if (mListener != null) {
-            mListener.onResult(null);
         }
     }
 
@@ -192,6 +173,19 @@ public abstract class AssistantCollectUserDataSection<T extends EditableOption> 
             items.add(item.mOption);
         }
         return items;
+    }
+
+    /**
+     * Manually updates the summary and all full views. Should be called by subclasses after a
+     * change to how items are displayed in summary or full views.
+     */
+    void updateViews() {
+        if (mSelectedOption != null) {
+            updateSummaryView(mSummaryView, mSelectedOption);
+        }
+        for (int i = 0; i < mItems.size(); i++) {
+            updateFullView(mItems.get(i).mFullView, mItems.get(i).mOption);
+        }
     }
 
     /**
@@ -208,7 +202,7 @@ public abstract class AssistantCollectUserDataSection<T extends EditableOption> 
         // Update existing item if possible.
         Item item = null;
         for (int i = 0; i < mItems.size(); i++) {
-            if (TextUtils.equals(mItems.get(i).mOption.getIdentifier(), option.getIdentifier())) {
+            if (areEqual(mItems.get(i).mOption, option)) {
                 item = mItems.get(i);
                 item.mOption = option;
                 updateFullView(item.mFullView, item.mOption);
@@ -237,9 +231,11 @@ public abstract class AssistantCollectUserDataSection<T extends EditableOption> 
     }
 
     private AssistantChoiceList createChoiceList(@Nullable String addButtonText) {
-        AssistantChoiceList list = new AssistantChoiceList(mContext, null, addButtonText, 0,
+        AssistantChoiceList list = new AssistantChoiceList(mContext, /* attrs= */ null,
+                addButtonText, /* rowSpacingInPixels= */ 0,
                 mContext.getResources().getDimensionPixelSize(
-                        R.dimen.autofill_assistant_payment_request_column_spacing));
+                        R.dimen.autofill_assistant_payment_request_column_spacing),
+                /* layoutHasEditButton= */ true);
         int verticalPadding = mContext.getResources().getDimensionPixelSize(
                 R.dimen.autofill_assistant_payment_request_choice_top_bottom_padding);
         list.setPadding(mContext.getResources().getDimensionPixelSize(
@@ -249,7 +245,7 @@ public abstract class AssistantCollectUserDataSection<T extends EditableOption> 
                         R.dimen.autofill_assistant_payment_request_choice_list_padding_end),
                 verticalPadding);
         list.setBackgroundColor(ApiCompatibilityUtils.getColor(
-                mContext.getResources(), R.color.payments_section_edit_background));
+                mContext.getResources(), R.color.omnibox_bg_color));
         list.setTag(AssistantTagsForTesting.COLLECT_USER_DATA_CHOICE_LIST);
         if (addButtonText != null) {
             list.setOnAddButtonClickedListener(() -> createOrEditItem(null));
@@ -273,18 +269,6 @@ public abstract class AssistantCollectUserDataSection<T extends EditableOption> 
             titleView.setPadding(titleView.getPaddingLeft(), mTopPadding,
                     titleView.getPaddingRight(), mTitleToContentPadding);
             setBottomPadding(mSectionExpander.getCollapsedView(), mBottomPadding);
-        }
-    }
-
-    private void selectItem(Item item) {
-        mSelectedOption = item.mOption;
-        mItemsView.setCheckedItem(item.mFullView);
-        updateSummaryView(mSummaryView, item.mOption);
-        updateVisibility();
-
-        if (mListener != null) {
-            mListener.onResult(
-                    item.mOption != null && item.mOption.isComplete() ? item.mOption : null);
         }
     }
 
@@ -318,7 +302,7 @@ public abstract class AssistantCollectUserDataSection<T extends EditableOption> 
                         return;
                     }
                     mIgnoreItemSelectedNotifications = true;
-                    selectItem(item.mFullView, item.mOption);
+                    selectItem(item);
                     mIgnoreItemSelectedNotifications = false;
                     if (item.mOption.isComplete()) {
                         // Workaround for Android bug: a layout transition may cause the newly
@@ -333,6 +317,18 @@ public abstract class AssistantCollectUserDataSection<T extends EditableOption> 
                 /*editButtonDrawable=*/editButtonDrawable,
                 /*editButtonContentDescription=*/editButtonContentDescription);
         updateVisibility();
+    }
+
+    private void selectItem(Item item) {
+        mSelectedOption = item.mOption;
+        mItemsView.setCheckedItem(item.mFullView);
+        updateSummaryView(mSummaryView, item.mOption);
+        updateVisibility();
+
+        if (mListener != null) {
+            mListener.onResult(
+                    item.mOption != null && item.mOption.isComplete() ? item.mOption : null);
+        }
     }
 
     /**
@@ -360,6 +356,9 @@ public abstract class AssistantCollectUserDataSection<T extends EditableOption> 
     /** Asks the subclass for the content description of {@code option}. */
     protected abstract String getEditButtonContentDescription(T option);
 
+    /** Ask the subclass if two {@code option} instances should be considered equal. */
+    protected abstract boolean areEqual(@Nullable T optionA, @Nullable T optionB);
+
     /**
      * For convenience. Hides {@code view} if it is empty.
      */
@@ -376,16 +375,6 @@ public abstract class AssistantCollectUserDataSection<T extends EditableOption> 
         lp.setMarginStart(marginStart);
         lp.setMarginEnd(marginEnd);
         view.setLayoutParams(lp);
-    }
-
-    private void selectItem(View fullView, T option) {
-        mItemsView.setCheckedItem(fullView);
-        updateSummaryView(mSummaryView, option);
-        updateVisibility();
-
-        if (mListener != null) {
-            mListener.onResult(option != null && option.isComplete() ? option : null);
-        }
     }
 
     private void updateVisibility() {

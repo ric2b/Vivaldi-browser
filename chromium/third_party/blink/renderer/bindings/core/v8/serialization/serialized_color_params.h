@@ -47,9 +47,14 @@ enum class SerializedColorSpace : uint32_t {
 
 // This enumeration specifies the values used to serialize CanvasPixelFormat.
 enum class SerializedPixelFormat : uint32_t {
-  kRGBA8 = 0,
+  // This is to preserve legacy object when Native was a possible enum state
+  // this will be resolved as either a RGB or BGR pixel format for
+  // canvas_color_params
+  kNative8_LegacyObsolete = 0,
   kF16 = 1,
-  kLast = kF16,
+  kRGBA8 = 2,
+  kBGRA8 = 3,
+  kLast = kBGRA8,
 };
 
 // This enumeration specifies the values used to serialize

@@ -3,6 +3,8 @@
 // found in the LICENSE file.
 
 package org.chromium.chrome.browser.metrics;
+import androidx.annotation.VisibleForTesting;
+
 import org.chromium.base.annotations.NativeMethods;
 
 /**
@@ -22,8 +24,9 @@ public class BackgroundTaskMemoryMetricsEmitter {
         BackgroundTaskMemoryMetricsEmitterJni.get().reportMemoryUsage(isReducedMode, taskTypeAffix);
     }
 
+    @VisibleForTesting
     @NativeMethods
-    interface Natives {
+    public interface Natives {
         void reportMemoryUsage(boolean isReducedMode, String taskTypeAffix);
     }
 }

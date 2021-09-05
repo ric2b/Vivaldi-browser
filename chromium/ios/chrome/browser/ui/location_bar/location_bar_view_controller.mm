@@ -4,6 +4,7 @@
 
 #import "ios/chrome/browser/ui/location_bar/location_bar_view_controller.h"
 
+#include "base/bind.h"
 #include "base/ios/ios_util.h"
 #include "base/metrics/user_metrics.h"
 #include "base/strings/sys_string_conversions.h"
@@ -24,13 +25,15 @@
 #import "ios/chrome/browser/ui/orchestrator/location_bar_offset_provider.h"
 #include "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/util/named_guide.h"
-#import "ios/chrome/common/ui_util/constraints_ui_util.h"
+#import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/grit/ios_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
+
+using base::UserMetricsAction;
 
 namespace {
 
@@ -343,6 +346,7 @@ const double kFullscreenProgressBadgeViewThreshold = 0.85;
 #pragma mark - private
 
 - (void)locationBarSteadyViewTapped {
+  base::RecordAction(base::UserMetricsAction("MobileLocationBarTapped"));
   [self.delegate locationBarSteadyViewTapped];
 }
 
@@ -407,7 +411,7 @@ const double kFullscreenProgressBadgeViewThreshold = 0.85;
       [self.locationBarSteadyView.trailingButton
           setImage:
               [[UIImage imageNamed:@"location_bar_voice"]
-                  imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal]
+                  imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]
           forState:UIControlStateNormal];
       self.locationBarSteadyView.trailingButton.accessibilityLabel =
           l10n_util::GetNSString(IDS_IOS_TOOLS_MENU_VOICE_SEARCH);
@@ -435,7 +439,7 @@ const double kFullscreenProgressBadgeViewThreshold = 0.85;
 // The actual share dialog is opened by the dispatcher, only collect the metrics
 // here.
 - (void)shareButtonPressed {
-  base::RecordAction(base::UserMetricsAction("MobileToolbarShareMenu"));
+  RecordAction(UserMetricsAction("MobileToolbarShareMenu"));
 }
 
 
@@ -486,7 +490,7 @@ const double kFullscreenProgressBadgeViewThreshold = 0.85;
     ClipboardRecentContent* clipboardRecentContent =
         ClipboardRecentContent::GetInstance();
     if (self.searchByImageEnabled &&
-        clipboardRecentContent->GetRecentImageFromClipboard().has_value()) {
+        clipboardRecentContent->HasRecentImageFromClipboard()) {
       return action == @selector(searchCopiedImage:);
     }
     if (clipboardRecentContent->GetRecentURLFromClipboard().has_value()) {
@@ -505,19 +509,25 @@ const double kFullscreenProgressBadgeViewThreshold = 0.85;
 }
 
 - (void)searchCopiedImage:(id)sender {
-  if (base::Optional<gfx::Image> optionalImage =
-          ClipboardRecentContent::GetInstance()
-              ->GetRecentImageFromClipboard()) {
-    UIImage* image = optionalImage.value().ToUIImage();
-    [self.dispatcher searchByImage:image];
+  RecordAction(
+      UserMetricsAction("Mobile.OmniboxContextMenu.SearchCopiedImage"));
+  if (ClipboardRecentContent::GetInstance()->HasRecentImageFromClipboard()) {
+    ClipboardRecentContent::GetInstance()->GetRecentImageFromClipboard(
+        base::BindOnce(^(base::Optional<gfx::Image> optionalImage) {
+          UIImage* image = optionalImage.value().ToUIImage();
+          [self.dispatcher searchByImage:image];
+        }));
   }
 }
 
 - (void)visitCopiedLink:(id)sender {
+  RecordAction(
+      UserMetricsAction("Mobile.OmniboxContextMenu.SearchCopiedImage"));
   [self pasteAndGo:sender];
 }
 
 - (void)searchCopiedText:(id)sender {
+  RecordAction(UserMetricsAction("Mobile.OmniboxContextMenu.SearchCopiedText"));
   [self pasteAndGo:sender];
 }
 

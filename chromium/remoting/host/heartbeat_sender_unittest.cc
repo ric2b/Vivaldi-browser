@@ -21,6 +21,7 @@
 #include "remoting/proto/remoting/v1/directory_service.grpc.pb.h"
 #include "remoting/signaling/fake_signal_strategy.h"
 #include "remoting/signaling/log_to_server.h"
+#include "remoting/signaling/mock_signaling_tracker.h"
 #include "remoting/signaling/signal_strategy.h"
 #include "remoting/signaling/signaling_address.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -77,6 +78,14 @@ decltype(auto) DoValidateHeartbeatAndRespondOk(
   };
 }
 
+class MockDelegate : public HeartbeatSender::Delegate {
+ public:
+  MOCK_METHOD0(OnFirstHeartbeatSuccessful, void());
+  MOCK_METHOD0(OnHostNotFound, void());
+  MOCK_METHOD0(OnAuthFailed, void());
+  MOCK_METHOD0(OnRemoteRestartHost, void());
+};
+
 }  // namespace
 
 class HeartbeatSenderTest : public testing::Test, public LogToServer {
@@ -85,14 +94,19 @@ class HeartbeatSenderTest : public testing::Test, public LogToServer {
     signal_strategy_ =
         std::make_unique<FakeSignalStrategy>(SignalingAddress(kFtlId));
 
+    ON_CALL(mock_signaling_tracker_, IsChannelActive())
+        .WillByDefault(Return(true));
+    ON_CALL(mock_signaling_tracker_, GetLastReportedChannelActiveDuration())
+        .WillByDefault(Return(base::TimeDelta::FromSeconds(10)));
+
+    signal_strategy_->set_signaling_tracker(&mock_signaling_tracker_);
+
     // Start in disconnected state.
     signal_strategy_->Disconnect();
 
     heartbeat_sender_ = std::make_unique<HeartbeatSender>(
-        mock_heartbeat_successful_callback_.Get(),
-        mock_unknown_host_id_error_callback_.Get(),
-        mock_unauthenticated_error_callback_.Get(), kHostId,
-        signal_strategy_.get(), &oauth_token_getter_, this);
+        &mock_delegate_, kHostId, signal_strategy_.get(), &oauth_token_getter_,
+        this);
     auto heartbeat_client = std::make_unique<MockHeartbeatClient>();
     mock_client_ = heartbeat_client.get();
     heartbeat_sender_->client_ = std::move(heartbeat_client);
@@ -128,11 +142,11 @@ class HeartbeatSenderTest : public testing::Test, public LogToServer {
 
   std::unique_ptr<FakeSignalStrategy> signal_strategy_;
 
-  base::MockCallback<base::OnceClosure> mock_heartbeat_successful_callback_;
-  base::MockCallback<base::OnceClosure> mock_unknown_host_id_error_callback_;
-  base::MockCallback<base::OnceClosure> mock_unauthenticated_error_callback_;
+  MockDelegate mock_delegate_;
 
   std::vector<ServerLogEntry> received_log_entries_;
+
+  MockSignalingTracker mock_signaling_tracker_;
 
  private:
   // LogToServer interface.
@@ -153,10 +167,20 @@ TEST_F(HeartbeatSenderTest, SendHeartbeat) {
   EXPECT_CALL(*mock_client_, Heartbeat(_, _))
       .WillOnce(DoValidateHeartbeatAndRespondOk());
 
-  EXPECT_CALL(mock_heartbeat_successful_callback_, Run()).Times(1);
+  EXPECT_CALL(mock_delegate_, OnFirstHeartbeatSuccessful()).Times(1);
 
   signal_strategy_->Connect();
   task_environment_.FastForwardBy(kWaitForAllStrategiesConnectedTimeout);
+}
+
+TEST_F(HeartbeatSenderTest, ChannelInactiveWhenSendingHeartbeat_Disconnect) {
+  EXPECT_CALL(mock_signaling_tracker_, IsChannelActive())
+      .WillOnce(Return(false));
+
+  signal_strategy_->Connect();
+  task_environment_.FastForwardBy(kWaitForAllStrategiesConnectedTimeout);
+
+  ASSERT_EQ(SignalStrategy::State::DISCONNECTED, signal_strategy_->GetState());
 }
 
 TEST_F(HeartbeatSenderTest, SignalingReconnect_NewHeartbeats) {
@@ -167,7 +191,7 @@ TEST_F(HeartbeatSenderTest, SignalingReconnect_NewHeartbeats) {
       .WillOnce(DoValidateHeartbeatAndRespondOk())
       .WillOnce(DoValidateHeartbeatAndRespondOk());
 
-  EXPECT_CALL(mock_heartbeat_successful_callback_, Run()).Times(1);
+  EXPECT_CALL(mock_delegate_, OnFirstHeartbeatSuccessful()).Times(1);
 
   signal_strategy_->Connect();
   signal_strategy_->Disconnect();
@@ -190,7 +214,7 @@ TEST_F(HeartbeatSenderTest, SetHostOfflineReason) {
 
   // Callback should run once, when we get response to offline-reason.
   EXPECT_CALL(mock_ack_callback, Run(_)).Times(1);
-  EXPECT_CALL(mock_heartbeat_successful_callback_, Run()).Times(1);
+  EXPECT_CALL(mock_delegate_, OnFirstHeartbeatSuccessful()).Times(1);
 
   signal_strategy_->Connect();
 }
@@ -207,7 +231,7 @@ TEST_F(HeartbeatSenderTest, HostOsInfoOnFirstHeartbeat) {
         response.set_set_interval_seconds(kGoodIntervalSeconds);
         std::move(callback).Run(grpc::Status::OK, response);
       });
-  EXPECT_CALL(mock_heartbeat_successful_callback_, Run()).Times(1);
+  EXPECT_CALL(mock_delegate_, OnFirstHeartbeatSuccessful()).Times(1);
   signal_strategy_->Connect();
 
   EXPECT_CALL(*mock_client_, Heartbeat(_, _))
@@ -233,7 +257,7 @@ TEST_F(HeartbeatSenderTest, UnknownHostId) {
             grpc::Status(grpc::StatusCode::NOT_FOUND, "not found"), {});
       });
 
-  EXPECT_CALL(mock_unknown_host_id_error_callback_, Run()).Times(1);
+  EXPECT_CALL(mock_delegate_, OnHostNotFound()).Times(1);
 
   signal_strategy_->Connect();
 
@@ -244,7 +268,7 @@ TEST_F(HeartbeatSenderTest, SendHeartbeatLogEntryOnHeartbeat) {
   EXPECT_CALL(*mock_client_, Heartbeat(_, _))
       .WillOnce(DoValidateHeartbeatAndRespondOk());
 
-  EXPECT_CALL(mock_heartbeat_successful_callback_, Run()).Times(1);
+  EXPECT_CALL(mock_delegate_, OnFirstHeartbeatSuccessful()).Times(1);
 
   signal_strategy_->Connect();
 
@@ -289,13 +313,28 @@ TEST_F(HeartbeatSenderTest, Unauthenticated) {
             {});
       });
 
-  EXPECT_CALL(mock_unauthenticated_error_callback_, Run()).Times(1);
+  EXPECT_CALL(mock_delegate_, OnAuthFailed()).Times(1);
 
   signal_strategy_->Connect();
   task_environment_.FastForwardUntilNoTasksRemain();
 
   // Should retry heartbeating at least once.
   ASSERT_LT(1, heartbeat_count);
+}
+
+TEST_F(HeartbeatSenderTest, RemoteCommand) {
+  EXPECT_CALL(*mock_client_, Heartbeat(_, _))
+      .WillOnce([](const apis::v1::HeartbeatRequest& request,
+                   HeartbeatResponseCallback callback) {
+        ValidateHeartbeat(request);
+        apis::v1::HeartbeatResponse response;
+        response.set_set_interval_seconds(kGoodIntervalSeconds);
+        response.set_remote_command(apis::v1::HeartbeatResponse::RESTART_HOST);
+        std::move(callback).Run(grpc::Status::OK, response);
+      });
+  EXPECT_CALL(mock_delegate_, OnFirstHeartbeatSuccessful()).Times(1);
+  EXPECT_CALL(mock_delegate_, OnRemoteRestartHost()).Times(1);
+  signal_strategy_->Connect();
 }
 
 }  // namespace remoting

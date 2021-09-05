@@ -4,7 +4,8 @@
 
 #import "ios/chrome/browser/ui/table_view/table_view_empty_view.h"
 
-#import "ios/chrome/common/colors/semantic_color_names.h"
+#import "ios/chrome/browser/ui/table_view/table_view_constants.h"
+#import "ios/chrome/common/ui/colors/semantic_color_names.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -84,7 +85,7 @@ NSAttributedString* GetAttributedMessage(NSString* message) {
 #pragma mark - Public
 
 + (NSString*)accessibilityIdentifier {
-  return @"TableViewEmptyView";
+  return kTableViewEmptyViewID;
 }
 
 - (void)setScrollViewContentInsets:(UIEdgeInsets)scrollViewContentInsets {

@@ -65,6 +65,15 @@ Animation* AnimationTimeline::GetAnimationById(int animation_id) const {
   return f == id_to_animation_map_.end() ? nullptr : f->second.get();
 }
 
+std::vector<Animation*> AnimationTimeline::GetAnimations() const {
+  std::vector<Animation*> animations;
+  animations.reserve(id_to_animation_map_.size());
+
+  for (auto& kv : id_to_animation_map_)
+    animations.push_back(kv.second.get());
+  return animations;
+}
+
 void AnimationTimeline::ClearAnimations() {
   for (auto& kv : id_to_animation_map_)
     EraseAnimation(kv.second);
@@ -118,7 +127,7 @@ void AnimationTimeline::RemoveDetachedAnimationsFromImplThread(
 }
 
 void AnimationTimeline::EraseAnimation(scoped_refptr<Animation> animation) {
-  if (animation->has_element_animations())
+  if (animation->element_animations())
     animation->DetachElement();
   animation->SetAnimationTimeline(nullptr);
   animation->SetAnimationHost(nullptr);
@@ -133,6 +142,10 @@ void AnimationTimeline::PushPropertiesToImplThread(
       animation->PushPropertiesTo(animation_impl);
     }
   }
+}
+
+bool AnimationTimeline::IsScrollTimeline() const {
+  return false;
 }
 
 }  // namespace cc

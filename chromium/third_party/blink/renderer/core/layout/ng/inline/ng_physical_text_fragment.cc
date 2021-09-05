@@ -32,6 +32,7 @@ static_assert(sizeof(NGPhysicalTextFragment) ==
 }  // anonymous namespace
 
 NGPhysicalTextFragment::NGPhysicalTextFragment(
+    PassKey key,
     const NGPhysicalTextFragment& source,
     unsigned start_offset,
     unsigned end_offset,
@@ -45,25 +46,29 @@ NGPhysicalTextFragment::NGPhysicalTextFragment(
           kFragmentText,
           source.TextType()),
       text_(source.text_),
-      start_offset_(start_offset),
-      end_offset_(end_offset),
+      text_offset_(start_offset, end_offset),
       shape_result_(std::move(shape_result)) {
-  DCHECK_GE(start_offset_, source.StartOffset());
-  DCHECK_LE(end_offset_, source.EndOffset());
+  DCHECK_GE(text_offset_.start, source.StartOffset());
+  DCHECK_LE(text_offset_.end, source.EndOffset());
   DCHECK(shape_result_ || IsFlowControl()) << *this;
-  is_generated_text_ = source.is_generated_text_;
+  base_or_resolved_direction_ = source.base_or_resolved_direction_;
+  is_generated_text_or_math_fraction_ =
+      source.is_generated_text_or_math_fraction_;
   ink_overflow_computed_ = false;
+  is_first_for_node_ = source.is_first_for_node_;
 }
 
 NGPhysicalTextFragment::NGPhysicalTextFragment(NGTextFragmentBuilder* builder)
     : NGPhysicalFragment(builder, kFragmentText, builder->text_type_),
       text_(builder->text_),
-      start_offset_(builder->start_offset_),
-      end_offset_(builder->end_offset_),
+      text_offset_({builder->start_offset_, builder->end_offset_}),
       shape_result_(std::move(builder->shape_result_)) {
   DCHECK(shape_result_ || IsFlowControl()) << *this;
-  is_generated_text_ = builder->IsGeneratedText();
+  base_or_resolved_direction_ =
+      static_cast<unsigned>(builder->ResolvedDirection());
+  is_generated_text_or_math_fraction_ = builder->IsGeneratedText();
   ink_overflow_computed_ = false;
+  is_first_for_node_ = builder->is_first_for_node_;
 }
 
 LayoutUnit NGPhysicalTextFragment::InlinePositionForOffset(
@@ -194,7 +199,8 @@ void NGPhysicalTextFragment::ComputeSelfInkOverflow() const {
     return;
   }
 
-  ink_overflow_ = NGInkOverflow::TextInkOverflow(PaintInfo(), Style(), Size());
+  NGInkOverflow::ComputeTextInkOverflow(PaintInfo(), Style(), Size(),
+                                        &ink_overflow_);
 }
 
 scoped_refptr<const NGPhysicalTextFragment>
@@ -213,8 +219,9 @@ scoped_refptr<const NGPhysicalTextFragment> NGPhysicalTextFragment::TrimText(
   DCHECK_LE(new_end_offset, EndOffset());
   scoped_refptr<ShapeResultView> new_shape_result = ShapeResultView::Create(
       shape_result_.get(), new_start_offset, new_end_offset);
-  return base::AdoptRef(new NGPhysicalTextFragment(
-      *this, new_start_offset, new_end_offset, std::move(new_shape_result)));
+  return base::AdoptRef(
+      new NGPhysicalTextFragment(PassKey(), *this, new_start_offset,
+                                 new_end_offset, std::move(new_shape_result)));
 }
 
 unsigned NGPhysicalTextFragment::TextOffsetForPoint(
@@ -260,12 +267,6 @@ UBiDiLevel NGPhysicalTextFragment::BidiLevel() const {
   DCHECK(containing_item);
   DCHECK_NE(containing_item, items.end());
   return containing_item->BidiLevel();
-}
-
-TextDirection NGPhysicalTextFragment::ResolvedDirection() const {
-  if (TextShapeResult())
-    return TextShapeResult()->Direction();
-  return DirectionFromLevel(BidiLevel());
 }
 
 }  // namespace blink

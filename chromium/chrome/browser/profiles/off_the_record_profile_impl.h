@@ -11,8 +11,8 @@
 #include "base/macros.h"
 #include "base/sequenced_task_runner.h"
 #include "build/build_config.h"
-#include "chrome/browser/profiles/off_the_record_profile_io_data.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_io_data_handle.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "components/domain_reliability/clear_mode.h"
 #include "content/public/browser/content_browser_client.h"
@@ -68,9 +68,6 @@ class OffTheRecordProfileImpl : public Profile {
   policy::UserCloudPolicyManager* GetUserCloudPolicyManager() override;
 #endif  // defined(OS_CHROMEOS)
   scoped_refptr<network::SharedURLLoaderFactory> GetURLLoaderFactory() override;
-  std::unique_ptr<service_manager::Service> HandleServiceRequest(
-      const std::string& service_name,
-      service_manager::mojom::ServiceRequest request) override;
   bool IsSameProfile(Profile* profile) override;
   base::Time GetStartTime() const override;
   ProfileKey* GetProfileKey() const override;
@@ -130,8 +127,6 @@ class OffTheRecordProfileImpl : public Profile {
   GetNativeFileSystemPermissionContext() override;
 
  private:
-  void InitIoData();
-
 #if !defined(OS_ANDROID)
   // Allows a profile to track changes in zoom levels in its parent profile.
   void TrackZoomLevelsFromParent();
@@ -154,7 +149,7 @@ class OffTheRecordProfileImpl : public Profile {
   std::unique_ptr<ChromeZoomLevelPrefs::DefaultZoomLevelSubscription>
       parent_default_zoom_level_subscription_;
 #endif  // !defined(OS_ANDROID)
-  std::unique_ptr<OffTheRecordProfileIOData::Handle> io_data_;
+  ProfileIODataHandle io_data_;
 
   // Time we were started.
   base::Time start_time_;

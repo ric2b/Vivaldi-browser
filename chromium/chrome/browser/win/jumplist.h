@@ -185,12 +185,18 @@ class JumpList : public sessions::TabRestoreServiceObserver,
   void OnMostVisitedURLsAvailable(const history::MostVisitedURLList& data);
 
   // Adds a new ShellLinkItem for |tab| to the JumpList data provided that doing
-  // so will not exceed |max_items|.
-  bool AddTab(const sessions::TabRestoreService::Tab& tab, size_t max_items);
+  // so will not exceed |max_items|. If |cmd_line_profile_dir| is not empty,
+  // it will be added to the command line switch --profile-directory.
+  bool AddTab(const sessions::TabRestoreService::Tab& tab,
+              const base::FilePath& cmd_line_profile_dir,
+              size_t max_items);
 
   // Adds a new ShellLinkItem for each tab in |window| to the JumpList data
-  // provided that doing so will not exceed |max_items|.
+  // provided that doing so will not exceed |max_items|. If
+  // |cmd_line_profile_dir| is not empty, it will be added to the command line
+  // switch --profile-directory.
   void AddWindow(const sessions::TabRestoreService::Window& window,
+                 const base::FilePath& cmd_line_profile_dir,
                  size_t max_items);
 
   // Starts loading a favicon for each URL in |icon_urls_|.
@@ -233,6 +239,7 @@ class JumpList : public sessions::TabRestoreServiceObserver,
       const base::FilePath& profile_dir,
       const ShellLinkItemList& most_visited_pages,
       const ShellLinkItemList& recently_closed_pages,
+      const base::FilePath& cmd_line_profile_dir,
       const ShellLinkItemList& vivaldi_speed_dials,
       bool most_visited_should_update,
       bool recently_closed_should_update,
@@ -249,6 +256,7 @@ class JumpList : public sessions::TabRestoreServiceObserver,
       const base::FilePath& vivaldi_speed_dials_icon_dir,
       const ShellLinkItemList& most_visited_pages,
       const ShellLinkItemList& recently_closed_pages,
+      const base::FilePath& cmd_line_profile_dir,
       const ShellLinkItemList& vivaldi_speed_dials,
       bool most_visited_should_update,
       bool recently_closed_should_update,
@@ -281,6 +289,11 @@ class JumpList : public sessions::TabRestoreServiceObserver,
   // Deletes icon files in |icon_dir| which are not in |icon_cache|.
   static void DeleteIconFiles(const base::FilePath& icon_dir,
                               const URLIconCache& icons_cache);
+
+  // Gets the basename of the profile directory for |profile_|, suitable for
+  // appending --profile-directory=<profile name> to jumplist items' command
+  // lines. If the user has only one profile, this returns an empty FilePath.
+  base::FilePath GetCmdLineProfileDir();
 
   // Tracks FaviconService tasks.
   base::CancelableTaskTracker cancelable_task_tracker_;

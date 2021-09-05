@@ -4,18 +4,19 @@
 
 #include "chrome/chrome_cleaner/parsers/target/parser_impl.h"
 
+#include <utility>
+
 #include "base/json/json_reader.h"
 #include "base/values.h"
 #include "base/win/scoped_handle.h"
 #include "chrome/chrome_cleaner/parsers/shortcut_parser/target/lnk_parser.h"
-#include "mojo/public/cpp/system/platform_handle.h"
 
 namespace chrome_cleaner {
 
-ParserImpl::ParserImpl(mojom::ParserRequest request,
+ParserImpl::ParserImpl(mojo::PendingReceiver<mojom::Parser> receiver,
                        base::OnceClosure connection_error_handler)
-    : binding_(this, std::move(request)) {
-  binding_.set_connection_error_handler(std::move(connection_error_handler));
+    : receiver_(this, std::move(receiver)) {
+  receiver_.set_disconnect_handler(std::move(connection_error_handler));
 }
 
 ParserImpl::~ParserImpl() = default;
@@ -39,11 +40,10 @@ void ParserImpl::ParseJson(const std::string& json,
   }
 }
 
-void ParserImpl::ParseShortcut(mojo::ScopedHandle lnk_file_handle,
+void ParserImpl::ParseShortcut(mojo::PlatformHandle lnk_file_handle,
                                ParserImpl::ParseShortcutCallback callback) {
-  HANDLE raw_shortcut_handle;
-  if (mojo::UnwrapPlatformFile(std::move(lnk_file_handle),
-                               &raw_shortcut_handle) != MOJO_RESULT_OK) {
+  base::win::ScopedHandle shortcut_handle = lnk_file_handle.TakeHandle();
+  if (!shortcut_handle.IsValid()) {
     LOG(ERROR) << "Unable to get raw file HANDLE from mojo.";
     std::move(callback).Run(mojom::LnkParsingResult::INVALID_HANDLE,
                             base::make_optional<base::string16>(),
@@ -51,8 +51,6 @@ void ParserImpl::ParseShortcut(mojo::ScopedHandle lnk_file_handle,
                             base::make_optional<base::string16>());
     return;
   }
-
-  base::win::ScopedHandle shortcut_handle(raw_shortcut_handle);
 
   ParsedLnkFile parsed_shortcut;
   mojom::LnkParsingResult result =

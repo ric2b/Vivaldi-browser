@@ -6,15 +6,83 @@
 """Unittests for test_runner.py."""
 
 import collections
-import glob
 import logging
 import mock
 import os
-import subprocess
 import tempfile
 import unittest
 
+import iossim_util
 import test_runner
+
+SIMULATORS_LIST = {
+    'devices': {
+        'com.apple.CoreSimulator.SimRuntime.iOS-11-4': [{
+            'isAvailable': True,
+            'name': 'iPhone 5s',
+            'state': 'Shutdown',
+            'udid': 'E4E66320-177A-450A-9BA1-488D85B7278E'
+        }],
+        'com.apple.CoreSimulator.SimRuntime.iOS-13-2': [
+            {
+                'isAvailable': True,
+                'name': 'iPhone X',
+                'state': 'Shutdown',
+                'udid': 'E4E66321-177A-450A-9BA1-488D85B7278E'
+            },
+            {
+                'isAvailable': True,
+                'name': 'iPhone 11',
+                'state': 'Shutdown',
+                'udid': 'A4E66321-177A-450A-9BA1-488D85B7278E'
+            }
+        ]
+    },
+    'devicetypes': [
+        {
+            'name': 'iPhone 5s',
+            'bundlePath': '/path/iPhone 4s/Content',
+            'identifier': 'com.apple.CoreSimulator.SimDeviceType.iPhone-5s'
+        },
+        {
+            'name': 'iPhone X',
+            'bundlePath': '/path/iPhone X/Content',
+            'identifier': 'com.apple.CoreSimulator.SimDeviceType.iPhone-X'
+        },
+        {
+            'name': 'iPhone 11',
+            'bundlePath': '/path/iPhone 11/Content',
+            'identifier': 'com.apple.CoreSimulator.SimDeviceType.iPhone-11'
+        },
+    ],
+    'pairs': [],
+    'runtimes': [
+        {
+            "buildversion": "15F79",
+            "bundlePath": "/path/Runtimes/iOS 11.4.simruntime",
+            "identifier": "com.apple.CoreSimulator.SimRuntime.iOS-11-4",
+            "isAvailable": True,
+            "name": "iOS 11.4",
+            "version": "11.4"
+        },
+        {
+            "buildversion": "17A844",
+            "bundlePath": "/path/Runtimes/iOS 13.1.simruntime",
+            "identifier": "com.apple.CoreSimulator.SimRuntime.iOS-13-1",
+            "isAvailable": True,
+            "name": "iOS 13.1",
+            "version": "13.1"
+        },
+        {
+            "buildversion": "17B102",
+            "bundlePath": "/path/Runtimes/iOS.simruntime",
+            "identifier": "com.apple.CoreSimulator.SimRuntime.iOS-13-2",
+            "isAvailable": True,
+            "name": "iOS 13.2",
+            "version": "13.2.2"
+        },
+    ]
+}
 
 
 class TestCase(unittest.TestCase):
@@ -49,56 +117,6 @@ class TestCase(unittest.TestCase):
         setattr(obj, member, original_value)
 
 
-class GetKIFTestFilterTest(TestCase):
-  """Tests for test_runner.get_kif_test_filter."""
-
-  def test_correct(self):
-    """Ensures correctness of filter."""
-    tests = [
-      'KIF.test1',
-      'KIF.test2',
-    ]
-    expected = 'NAME:test1|test2'
-
-    self.assertEqual(test_runner.get_kif_test_filter(tests), expected)
-
-  def test_correct_inverted(self):
-    """Ensures correctness of inverted filter."""
-    tests = [
-      'KIF.test1',
-      'KIF.test2',
-    ]
-    expected = '-NAME:test1|test2'
-
-    self.assertEqual(
-        test_runner.get_kif_test_filter(tests, invert=True), expected)
-
-
-class GetGTestFilterTest(TestCase):
-  """Tests for test_runner.get_gtest_filter."""
-
-  def test_correct(self):
-    """Ensures correctness of filter."""
-    tests = [
-      'test.1',
-      'test.2',
-    ]
-    expected = 'test.1:test.2'
-
-    self.assertEqual(test_runner.get_gtest_filter(tests), expected)
-
-  def test_correct_inverted(self):
-    """Ensures correctness of inverted filter."""
-    tests = [
-      'test.1',
-      'test.2',
-    ]
-    expected = '-test.1:test.2'
-
-    self.assertEqual(
-        test_runner.get_gtest_filter(tests, invert=True), expected)
-
-
 class InstallXcodeTest(TestCase):
   """Tests install_xcode."""
 
@@ -119,6 +137,7 @@ class SimulatorTestRunnerTest(TestCase):
 
   def setUp(self):
     super(SimulatorTestRunnerTest, self).setUp()
+    self.mock(iossim_util, 'get_simulator_list', lambda: SIMULATORS_LIST)
 
     def install_xcode(build, mac_toolchain_cmd, xcode_app_path):
       return True
@@ -158,8 +177,8 @@ class SimulatorTestRunnerTest(TestCase):
       test_runner.SimulatorTestRunner(
         'fake-app',
         'fake-iossim',
-        'platform',
-        'os',
+        'iPhone X',
+        '11.4',
         'xcode-version',
         'xcode-build',
         'out-dir',
@@ -170,8 +189,8 @@ class SimulatorTestRunnerTest(TestCase):
     tr = test_runner.SimulatorTestRunner(
         'fake-app',
         'fake-iossim',
-        'platform',
-        'os',
+        'iPhone X',
+        '11.4',
         'xcode-version',
         'xcode-build',
         'out-dir',
@@ -199,8 +218,8 @@ class SimulatorTestRunnerTest(TestCase):
     tr = test_runner.SimulatorTestRunner(
         'fake-app',
         'fake-iossim',
-        'platform',
-        'os',
+        'iPhone X',
+        '11.4',
         'xcode-version',
         'xcode-build',
         'out-dir',
@@ -211,8 +230,6 @@ class SimulatorTestRunnerTest(TestCase):
 
   def test_run(self):
     """Ensures the _run method is correct with test sharding."""
-    def shard_xctest(object_path, shards, test_cases=None):
-      return [['a/1', 'b/2'], ['c/3', 'd/4'], ['e/5']]
 
     def run_tests(self, test_shard=None):
       out = []
@@ -227,14 +244,13 @@ class SimulatorTestRunnerTest(TestCase):
     tr = test_runner.SimulatorTestRunner(
       'fake-app',
       'fake-iossim',
-      'platform',
-      'os',
+      'iPhone X',
+      '11.4',
       'xcode-version',
       'xcode-build',
       'out-dir',
       xctest=True,
     )
-    self.mock(test_runner, 'shard_xctest', shard_xctest)
     self.mock(test_runner.SimulatorTestRunner, 'run_tests', run_tests)
 
     tr.xctest_path = 'fake.xctest'
@@ -253,8 +269,8 @@ class SimulatorTestRunnerTest(TestCase):
       tr = test_runner.SimulatorTestRunner(
         'fake-app',
         'fake-iossim',
-        'platform',
-        'os',
+        'iPhone X',
+        '11.4',
         'xcode-version',
         'xcode-build',
         'out-dir',
@@ -270,8 +286,8 @@ class SimulatorTestRunnerTest(TestCase):
     tr = test_runner.SimulatorTestRunner(
       'fake-app',
       'fake-iossim',
-      'platform',
-      'os',
+      'iPhone X',
+      '11.4',
       'xcode-version',
       'xcode-build',
       'out-dir',
@@ -279,12 +295,12 @@ class SimulatorTestRunnerTest(TestCase):
     tr.xctest_path = 'fake.xctest'
     # Cases test_filter is not empty, with empty/non-empty self.test_cases.
     tr.test_cases = []
-    cmd = tr.get_launch_command(['a'], invert=False)
+    cmd = tr.get_launch_command(['a'])
     self.assertIn('-t', cmd)
     self.assertIn('a', cmd)
 
     tr.test_cases = ['a', 'b']
-    cmd = tr.get_launch_command(['a'], invert=False)
+    cmd = tr.get_launch_command(['a'])
     self.assertIn('-t', cmd)
     self.assertIn('a', cmd)
     self.assertNotIn('b', cmd)
@@ -344,8 +360,8 @@ class SimulatorTestRunnerTest(TestCase):
     tr = test_runner.SimulatorTestRunner(
         'fake-app',
         'fake-iossim',
-        'platform',
-        'os',
+        'iPhone X',
+        '11.4',
         'xcode-version',
         'xcode-build',
         'out-dir',
@@ -353,175 +369,6 @@ class SimulatorTestRunnerTest(TestCase):
     tr.launch()
     self.assertTrue(tr.logs)
 
-
-class WprProxySimulatorTestRunnerTest(TestCase):
-  """Tests for test_runner.WprProxySimulatorTestRunner."""
-
-  def setUp(self):
-    super(WprProxySimulatorTestRunnerTest, self).setUp()
-
-    def install_xcode(build, mac_toolchain_cmd, xcode_app_path):
-      return True
-
-    self.mock(test_runner, 'get_current_xcode_info', lambda: {
-        'version': 'test version', 'build': 'test build', 'path': 'test/path'})
-    self.mock(test_runner, 'install_xcode', install_xcode)
-    self.mock(test_runner.subprocess, 'check_output',
-              lambda _: 'fake-bundle-id')
-    self.mock(os.path, 'abspath', lambda path: '/abs/path/to/%s' % path)
-    self.mock(os.path, 'exists', lambda _: True)
-    self.mock(test_runner.TestRunner, 'set_sigterm_handler',
-      lambda self, handler: 0)
-    self.mock(test_runner.SimulatorTestRunner, 'getSimulator',
-      lambda _: 'fake-id')
-    self.mock(test_runner.SimulatorTestRunner, 'deleteSimulator',
-      lambda a, b: True)
-    self.mock(test_runner.WprProxySimulatorTestRunner,
-      'copy_trusted_certificate', lambda a, b: True)
-
-  def test_replay_path_not_found(self):
-    """Ensures ReplayPathNotFoundError is raised."""
-
-    self.mock(os.path, 'exists', lambda p: not p.endswith('bad-replay-path'))
-
-    with self.assertRaises(test_runner.ReplayPathNotFoundError):
-      test_runner.WprProxySimulatorTestRunner(
-        'fake-app',
-        'fake-iossim',
-        'bad-replay-path',
-        'platform',
-        'os',
-        'wpr-tools-path',
-        'xcode-version',
-        'xcode-build',
-        'out-dir',
-      )
-
-  def test_wpr_tools_not_found(self):
-    """Ensures WprToolsNotFoundError is raised."""
-
-    self.mock(os.path, 'exists', lambda p: not p.endswith('bad-tools-path'))
-
-    with self.assertRaises(test_runner.WprToolsNotFoundError):
-      test_runner.WprProxySimulatorTestRunner(
-        'fake-app',
-        'fake-iossim',
-        'replay-path',
-        'platform',
-        'os',
-        'bad-tools-path',
-        'xcode-version',
-        'xcode-build',
-        'out-dir',
-      )
-
-  def test_init(self):
-    """Ensures instance is created."""
-    tr = test_runner.WprProxySimulatorTestRunner(
-        'fake-app',
-        'fake-iossim',
-        'replay-path',
-        'platform',
-        'os',
-        'wpr-tools-path',
-        'xcode-version',
-        'xcode-build',
-        'out-dir',
-      )
-
-    self.assertTrue(tr)
-
-  def run_wpr_test(self, test_filter=[], invert=False):
-    """Wrapper that mocks the _run method and returns its result."""
-    class FakeStdout:
-      def __init__(self):
-        self.line_index = 0
-        self.lines = [
-          'Test Case \'-[a 1]\' started.',
-          'Test Case \'-[a 1]\' has uninteresting logs.',
-          'Test Case \'-[a 1]\' passed (0.1 seconds)',
-          'Test Case \'-[b 2]\' started.',
-          'Test Case \'-[b 2]\' passed (0.1 seconds)',
-          'Test Case \'-[c 3]\' started.',
-          'Test Case \'-[c 3]\' has interesting failure info.',
-          'Test Case \'-[c 3]\' failed (0.1 seconds)',
-        ]
-
-      def readline(self):
-        if self.line_index < len(self.lines):
-          return_line = self.lines[self.line_index]
-          self.line_index += 1
-          return return_line
-        else:
-          return None
-
-    class FakeProcess:
-      def __init__(self):
-        self.stdout = FakeStdout()
-        self.returncode = 0
-
-      def stdout(self):
-        return self.stdout
-
-      def wait(self):
-        return
-
-    def popen(recipe_cmd, env, stdout, stderr):
-      return FakeProcess()
-
-    tr = test_runner.WprProxySimulatorTestRunner(
-        'fake-app',
-        'fake-iossim',
-        'replay-path',
-        'platform',
-        'os',
-        'wpr-tools-path',
-        'xcode-version',
-        'xcode-build',
-        'out-dir',
-    )
-    self.mock(test_runner.WprProxySimulatorTestRunner, 'wprgo_start',
-      lambda a,b: None)
-    self.mock(test_runner.WprProxySimulatorTestRunner, 'wprgo_stop',
-      lambda _: None)
-
-    self.mock(os.path, 'isfile', lambda _: True)
-    self.mock(glob, 'glob', lambda _: ["file1", "file2"])
-    self.mock(subprocess, 'Popen', popen)
-
-    tr.xctest_path = 'fake.xctest'
-    cmd = tr.get_launch_command(test_filter=test_filter, invert=invert)
-    return tr._run(cmd=cmd, shards=1)
-
-  def test_run_no_filter(self):
-    """Ensures the _run method can handle passed and failed tests."""
-    result = self.run_wpr_test()
-    self.assertIn('file1.a/1', result.passed_tests)
-    self.assertIn('file1.b/2', result.passed_tests)
-    self.assertIn('file1.c/3', result.failed_tests)
-    self.assertIn('file2.a/1', result.passed_tests)
-    self.assertIn('file2.b/2', result.passed_tests)
-    self.assertIn('file2.c/3', result.failed_tests)
-
-  def test_run_with_filter(self):
-    """Ensures the _run method works with a filter."""
-    result = self.run_wpr_test(test_filter=["file1"], invert=False)
-    self.assertIn('file1.a/1', result.passed_tests)
-    self.assertIn('file1.b/2', result.passed_tests)
-    self.assertIn('file1.c/3', result.failed_tests)
-    self.assertNotIn('file2.a/1', result.passed_tests)
-    self.assertNotIn('file2.b/2', result.passed_tests)
-    self.assertNotIn('file2.c/3', result.failed_tests)
-
-  def test_run_with_inverted_filter(self):
-    """Ensures the _run method works with an inverted filter."""
-    result = self.run_wpr_test(test_filter=["file1"], invert=True)
-    self.assertNotIn('file1.a/1', result.passed_tests)
-    self.assertNotIn('file1.b/2', result.passed_tests)
-    self.assertNotIn('file1.c/3', result.failed_tests)
-    self.assertIn('file2.a/1', result.passed_tests)
-    self.assertIn('file2.b/2', result.passed_tests)
-    self.assertIn('file2.c/3', result.failed_tests)
 
 class DeviceTestRunnerTest(TestCase):
   def setUp(self):
@@ -547,101 +394,6 @@ class DeviceTestRunnerTest(TestCase):
         'out-dir',
     )
     self.tr.xctestrun_data = {'TestTargetName':{}}
-
-  def test_with_test_filter_without_test_cases(self):
-    """Ensures tests in the run with test_filter and no test_cases."""
-    self.tr.set_xctest_filters(['a', 'b'], invert=False)
-    self.assertEqual(
-        self.tr.xctestrun_data['TestTargetName']['OnlyTestIdentifiers'],
-        ['a', 'b']
-    )
-
-  def test_invert_with_test_filter_without_test_cases(self):
-    """Ensures tests in the run invert with test_filter and no test_cases."""
-    self.tr.set_xctest_filters(['a', 'b'], invert=True)
-    self.assertEqual(
-        self.tr.xctestrun_data['TestTargetName']['SkipTestIdentifiers'],
-        ['a', 'b']
-    )
-
-  def test_with_test_filter_with_test_cases(self):
-    """Ensures tests in the run with test_filter and test_cases."""
-    self.tr.test_cases = ['a', 'b', 'c', 'd']
-    self.tr.set_xctest_filters(['a', 'b', 'irrelevant test'], invert=False)
-    self.assertEqual(
-        self.tr.xctestrun_data['TestTargetName']['OnlyTestIdentifiers'],
-        ['a', 'b']
-    )
-
-  def test_invert_with_test_filter_with_test_cases(self):
-    """Ensures tests in the run invert with test_filter and test_cases."""
-    self.tr.test_cases = ['a', 'b', 'c', 'd']
-    self.tr.set_xctest_filters(['a', 'b', 'irrelevant test'], invert=True)
-    self.assertEqual(
-        self.tr.xctestrun_data['TestTargetName']['OnlyTestIdentifiers'],
-        ['c', 'd']
-    )
-
-  def test_without_test_filter_without_test_cases(self):
-    """Ensures tests in the run with no test_filter and no test_cases."""
-    self.tr.set_xctest_filters(test_filter=None, invert=False)
-    self.assertIsNone(
-        self.tr.xctestrun_data['TestTargetName'].get('OnlyTestIdentifiers'))
-
-  def test_invert_without_test_filter_without_test_cases(self):
-    """Ensures tests in the run invert with no test_filter and no test_cases."""
-    self.tr.set_xctest_filters(test_filter=None, invert=True)
-    self.assertIsNone(
-        self.tr.xctestrun_data['TestTargetName'].get('OnlyTestIdentifiers'))
-
-  def test_without_test_filter_with_test_cases(self):
-    """Ensures tests in the run with no test_filter but test_cases."""
-    self.tr.test_cases = ['a', 'b', 'c', 'd']
-    self.tr.set_xctest_filters(test_filter=None, invert=False)
-    self.assertEqual(
-        self.tr.xctestrun_data['TestTargetName']['OnlyTestIdentifiers'],
-        ['a', 'b', 'c', 'd']
-    )
-
-  def test_invert_without_test_filter_with_test_cases(self):
-    """Ensures tests in the run invert with no test_filter but test_cases."""
-    self.tr.test_cases = ['a', 'b', 'c', 'd']
-    self.tr.set_xctest_filters(test_filter=None, invert=True)
-    self.assertEqual(
-        self.tr.xctestrun_data['TestTargetName']['OnlyTestIdentifiers'],
-        ['a', 'b', 'c', 'd']
-    )
-
-  @mock.patch('subprocess.check_output', autospec=True)
-  def test_get_test_names(self, mock_subprocess):
-    otool_output = (
-        'imp 0x102492020 -[BrowserViewControllerTestCase testJavaScript]'
-        'name 0x105ee8b84 testFixForCrbug801165'
-        'types 0x105f0c842 v16 @ 0:8'
-        'name 0x105ee8b9a testOpenURLFromNTP'
-        'types 0x105f0c842 v16 @ 0:8'
-        'imp 0x102493b30 -[BrowserViewControllerTestCase testOpenURLFromNTP]'
-        'name 0x105ee8bad testOpenURLFromTab'
-        'types 0x105f0c842 v16 @ 0:8'
-        'imp 0x102494180 -[BrowserViewControllerTestCase testOpenURLFromTab]'
-        'name 0x105ee8bc0 testOpenURLFromTabSwitcher'
-        'types 0x105f0c842 v16 @ 0:8'
-        'imp 0x102494f70 -[BrowserViewControllerTestCase testTabSwitch]'
-        'types 0x105f0c842 v16 @ 0:8'
-        'imp 0x102494f70 -[BrowserViewControllerTestCase helper]'
-        'imp 0x102494f70 -[BrowserViewControllerTestCCCCCCCCC testMethod]'
-    )
-    mock_subprocess.return_value = otool_output
-    tests = test_runner.get_test_names('')
-    self.assertEqual(
-        [
-            ('BrowserViewControllerTestCase', 'testJavaScript'),
-            ('BrowserViewControllerTestCase', 'testOpenURLFromNTP'),
-            ('BrowserViewControllerTestCase', 'testOpenURLFromTab'),
-            ('BrowserViewControllerTestCase', 'testTabSwitch')
-        ],
-        tests
-    )
 
 
 if __name__ == '__main__':

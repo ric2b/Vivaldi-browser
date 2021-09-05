@@ -20,8 +20,8 @@
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_content_browser_client.h"
+#include "chrome/browser/extensions/api/identity/web_auth_flow.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/signin/scoped_account_consistency.h"
 #include "chrome/browser/signin/signin_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/common/chrome_paths.h"
@@ -103,8 +103,6 @@ class MirrorBrowserTest : public InProcessBrowserTest {
     // load pages from "www.google.com" without an interstitial.
     command_line->AppendSwitch(switches::kIgnoreCertificateErrors);
   }
-
-  ScopedAccountConsistencyMirror scoped_mirror_;
 };
 
 // Verify the following items:
@@ -224,6 +222,39 @@ IN_PROC_BROWSER_TEST_F(MirrorBrowserTest, MirrorRequestHeader) {
 
     header_map.clear();
   }
+}
+
+// Verifies that requests originated from chrome.identity.launchWebAuthFlow()
+// API don't have Mirror headers attached.
+// This is a regression test for crbug.com/1077504.
+IN_PROC_BROWSER_TEST_F(MirrorBrowserTest, MirrorExtensionConsent) {
+  net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  https_server.AddDefaultHandlers(GetChromeTestDataDir());
+
+  const std::string kAuthPath = "/auth";
+  net::test_server::HttpRequest::HeaderMap headers;
+  base::RunLoop run_loop;
+  https_server.RegisterRequestMonitor(base::BindLambdaForTesting(
+      [&](const net::test_server::HttpRequest& request) {
+        if (request.GetURL().path() != kAuthPath)
+          return;
+
+        headers = request.headers;
+        run_loop.Quit();
+      }));
+  ASSERT_TRUE(https_server.Start());
+
+  auto web_auth_flow = std::make_unique<extensions::WebAuthFlow>(
+      nullptr, browser()->profile(),
+      https_server.GetURL("www.google.com", kAuthPath),
+      extensions::WebAuthFlow::INTERACTIVE);
+
+  web_auth_flow->Start();
+  run_loop.Run();
+  EXPECT_FALSE(!!headers.count(signin::kChromeConnectedHeader));
+
+  web_auth_flow.release()->DetachDelegateAndDelete();
+  base::RunLoop().RunUntilIdle();
 }
 
 }  // namespace

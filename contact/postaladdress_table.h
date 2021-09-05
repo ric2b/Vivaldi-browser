@@ -42,6 +42,7 @@ class PostalAddressTable {
                                     PostalAddressRows* postaladdresses);
   bool DoesPostalAddressIdExist(PostalAddressID postaladdress_id,
                                 ContactID contact_id);
+  bool DeletePostalAddressesForContact(ContactID contact_id);
 
  protected:
   virtual sql::Database& GetDB() = 0;

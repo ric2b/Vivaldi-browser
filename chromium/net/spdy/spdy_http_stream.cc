@@ -259,17 +259,29 @@ bool SpdyHttpStream::GetLoadTimingInfo(LoadTimingInfo* load_timing_info) const {
     if (!closed_stream_has_load_timing_info_)
       return false;
     *load_timing_info = closed_stream_load_timing_info_;
-    return true;
+  } else {
+    // If |stream_| has yet to be created, or does not yet have an ID, fail.
+    // The reused flag can only be correctly set once a stream has an ID.
+    // Streams get their IDs once the request has been successfully sent, so
+    // this does not behave that differently from other stream types.
+    if (!stream_ || stream_->stream_id() == 0)
+      return false;
+
+    if (!stream_->GetLoadTimingInfo(load_timing_info))
+      return false;
   }
 
-  // If |stream_| has yet to be created, or does not yet have an ID, fail.
-  // The reused flag can only be correctly set once a stream has an ID.  Streams
-  // get their IDs once the request has been successfully sent, so this does not
-  // behave that differently from other stream types.
-  if (!stream_ || stream_->stream_id() == 0)
-    return false;
+  // If the request waited for handshake confirmation, shift |ssl_end| to
+  // include that time.
+  if (!load_timing_info->connect_timing.ssl_end.is_null() &&
+      !stream_request_.confirm_handshake_end().is_null()) {
+    load_timing_info->connect_timing.ssl_end =
+        stream_request_.confirm_handshake_end();
+    load_timing_info->connect_timing.connect_end =
+        stream_request_.confirm_handshake_end();
+  }
 
-  return stream_->GetLoadTimingInfo(load_timing_info);
+  return true;
 }
 
 int SpdyHttpStream::SendRequest(const HttpRequestHeaders& request_headers,
@@ -340,9 +352,11 @@ int SpdyHttpStream::SendRequest(const HttpRequestHeaders& request_headers,
         return SpdyHeaderBlockNetLogParams(&headers, capture_mode);
       });
   DispatchRequestHeadersCallback(headers);
+
+  bool will_send_data = HasUploadData() | spdy_session_->GreasedFramesEnabled();
   result = stream_->SendRequestHeaders(
       std::move(headers),
-      HasUploadData() ? MORE_DATA_TO_SEND : NO_MORE_DATA_TO_SEND);
+      will_send_data ? MORE_DATA_TO_SEND : NO_MORE_DATA_TO_SEND);
 
   if (result == ERR_IO_PENDING) {
     CHECK(request_callback_.is_null());
@@ -363,6 +377,8 @@ void SpdyHttpStream::Cancel() {
 void SpdyHttpStream::OnHeadersSent() {
   if (HasUploadData()) {
     ReadAndSendRequestBodyData();
+  } else if (spdy_session_->GreasedFramesEnabled()) {
+    SendEmptyBody();
   } else {
     MaybePostRequestCallback(OK);
   }
@@ -436,8 +452,12 @@ void SpdyHttpStream::OnDataReceived(std::unique_ptr<SpdyBuffer> buffer) {
 }
 
 void SpdyHttpStream::OnDataSent() {
-  request_body_buf_size_ = 0;
-  ReadAndSendRequestBodyData();
+  if (HasUploadData()) {
+    request_body_buf_size_ = 0;
+    ReadAndSendRequestBodyData();
+  } else {
+    CHECK(spdy_session_->GreasedFramesEnabled());
+  }
 }
 
 // TODO(xunjieli): Maybe do something with the trailers. crbug.com/422958.
@@ -478,6 +498,10 @@ void SpdyHttpStream::OnClose(int status) {
   if (!response_callback_.is_null()) {
     DoResponseCallback(status);
   }
+}
+
+bool SpdyHttpStream::CanGreaseFrameType() const {
+  return true;
 }
 
 NetLogSource SpdyHttpStream::source_dependency() const {
@@ -525,6 +549,14 @@ void SpdyHttpStream::ReadAndSendRequestBodyData() {
 
   if (rv != ERR_IO_PENDING)
     OnRequestBodyReadCompleted(rv);
+}
+
+void SpdyHttpStream::SendEmptyBody() {
+  CHECK(!HasUploadData());
+  CHECK(spdy_session_->GreasedFramesEnabled());
+
+  auto buffer = base::MakeRefCounted<IOBuffer>(/* buffer_size = */ 0);
+  stream_->SendData(buffer.get(), /* length = */ 0, NO_MORE_DATA_TO_SEND);
 }
 
 void SpdyHttpStream::InitializeStreamHelper() {

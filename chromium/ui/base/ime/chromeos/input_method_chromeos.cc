@@ -42,7 +42,7 @@ InputMethodChromeOS::InputMethodChromeOS(
 }
 
 InputMethodChromeOS::~InputMethodChromeOS() {
-  ConfirmCompositionText(/* reset_engine */ true);
+  ConfirmCompositionText(/* reset_engine */ true, /* keep_selection */ false);
   // We are dead, so we need to ask the client to stop relying on us.
   OnInputMethodChanged();
 
@@ -209,7 +209,9 @@ void InputMethodChromeOS::OnCaretBoundsChanged(const TextInputClient* client) {
 
   chromeos::IMECandidateWindowHandlerInterface* candidate_window =
       ui::IMEBridge::Get()->GetCandidateWindowHandler();
-  if (!candidate_window)
+  chromeos::IMESuggestionWindowHandlerInterface* suggestion_window =
+      ui::IMEBridge::Get()->GetSuggestionWindowHandler();
+  if (!candidate_window && !suggestion_window)
     return;
 
   const gfx::Rect caret_rect = client->GetCaretBounds();
@@ -222,8 +224,10 @@ void InputMethodChromeOS::OnCaretBoundsChanged(const TextInputClient* client) {
   // avoid a bad user experience (the IME window moved to upper left corner).
   if (composition_head.IsEmpty())
     composition_head = caret_rect;
-  candidate_window->SetCursorBounds(caret_rect, composition_head);
-
+  if (candidate_window)
+    candidate_window->SetCursorBounds(caret_rect, composition_head);
+  if (suggestion_window)
+    suggestion_window->SetBounds(caret_rect);
   gfx::Range text_range;
   gfx::Range selection_range;
   base::string16 surrounding_text;
@@ -254,8 +258,7 @@ void InputMethodChromeOS::OnCaretBoundsChanged(const TextInputClient* client) {
   // |surrounding_text| coordinates.
   if (GetEngine()) {
     GetEngine()->SetSurroundingText(
-        base::UTF16ToUTF8(surrounding_text),
-        selection_range.start() - text_range.start(),
+        surrounding_text, selection_range.start() - text_range.start(),
         selection_range.end() - text_range.start(), text_range.start());
   }
 }
@@ -284,7 +287,7 @@ InputMethodChromeOS::GetInputMethodKeyboardController() {
 void InputMethodChromeOS::OnWillChangeFocusedClient(
     TextInputClient* focused_before,
     TextInputClient* focused) {
-  ConfirmCompositionText(/* reset_engine */ true);
+  ConfirmCompositionText(/* reset_engine */ true, /* keep_selection */ false);
 
   if (GetEngine())
     GetEngine()->FocusOut();
@@ -344,8 +347,16 @@ bool InputMethodChromeOS::SetCompositionRange(
   }
 }
 
-void InputMethodChromeOS::ConfirmCompositionText(bool reset_engine) {
-  InputMethodBase::ConfirmCompositionText(reset_engine);
+bool InputMethodChromeOS::SetSelectionRange(uint32_t start, uint32_t end) {
+  if (IsTextInputTypeNone())
+    return false;
+  return GetTextInputClient()->SetEditableSelectionRange(
+      gfx::Range(start, end));
+}
+
+void InputMethodChromeOS::ConfirmCompositionText(bool reset_engine,
+                                                 bool keep_selection) {
+  InputMethodBase::ConfirmCompositionText(reset_engine, keep_selection);
 
   // See https://crbug.com/984472.
   ResetContext(reset_engine);
@@ -376,6 +387,12 @@ void InputMethodChromeOS::UpdateContextFocusState() {
       ui::IMEBridge::Get()->GetCandidateWindowHandler();
   if (candidate_window)
     candidate_window->FocusStateChanged(IsNonPasswordInputFieldFocused());
+
+  // Propagate focus event to suggestion window handler.
+  chromeos::IMESuggestionWindowHandlerInterface* suggestion_window =
+      ui::IMEBridge::Get()->GetSuggestionWindowHandler();
+  if (suggestion_window)
+    suggestion_window->FocusStateChanged();
 
   ui::IMEEngineHandlerInterface::InputContext context(
       GetTextInputType(), GetTextInputMode(), GetTextInputFlags(),
@@ -690,6 +707,7 @@ void InputMethodChromeOS::ExtractCompositionText(
       ImeTextSpan ime_text_span(ui::ImeTextSpan::Type::kComposition,
                                 char16_offsets[start], char16_offsets[end],
                                 text_ime_text_span.thickness,
+                                ui::ImeTextSpan::UnderlineStyle::kSolid,
                                 text_ime_text_span.background_color);
       ime_text_span.underline_color = text_ime_text_span.underline_color;
       out_composition->ime_text_spans.push_back(ime_text_span);
@@ -700,10 +718,10 @@ void InputMethodChromeOS::ExtractCompositionText(
   if (text.selection.start() < text.selection.end()) {
     const uint32_t start = text.selection.start();
     const uint32_t end = text.selection.end();
-    ImeTextSpan ime_text_span(ui::ImeTextSpan::Type::kComposition,
-                              char16_offsets[start], char16_offsets[end],
-                              ui::ImeTextSpan::Thickness::kThick,
-                              SK_ColorTRANSPARENT);
+    ImeTextSpan ime_text_span(
+        ui::ImeTextSpan::Type::kComposition, char16_offsets[start],
+        char16_offsets[end], ui::ImeTextSpan::Thickness::kThick,
+        ui::ImeTextSpan::UnderlineStyle::kSolid, SK_ColorTRANSPARENT);
     out_composition->ime_text_spans.push_back(ime_text_span);
 
     // If the cursor is at start or end of this ime_text_span, then we treat
@@ -720,9 +738,10 @@ void InputMethodChromeOS::ExtractCompositionText(
 
   // Use a thin underline with text color by default.
   if (out_composition->ime_text_spans.empty()) {
-    out_composition->ime_text_spans.push_back(
-        ImeTextSpan(ui::ImeTextSpan::Type::kComposition, 0, length,
-                    ui::ImeTextSpan::Thickness::kThin, SK_ColorTRANSPARENT));
+    out_composition->ime_text_spans.push_back(ImeTextSpan(
+        ui::ImeTextSpan::Type::kComposition, 0, length,
+        ui::ImeTextSpan::Thickness::kThin,
+        ui::ImeTextSpan::UnderlineStyle::kSolid, SK_ColorTRANSPARENT));
   }
 }
 

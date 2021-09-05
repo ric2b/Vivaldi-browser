@@ -20,7 +20,7 @@ import org.chromium.content_public.browser.WebContents;
  * classes communicate with it.
  */
 public class CastWebContentsIntentUtils {
-    private static final String TAG = "cr_CastWebUtil";
+    private static final String TAG = "CastWebUtil";
 
     static final String ACTION_DATA_SCHEME = "cast";
     static final String ACTION_DATA_AUTHORITY = "webcontents";
@@ -79,6 +79,13 @@ public class CastWebContentsIntentUtils {
      */
     public static final String ACTION_ENABLE_TOUCH_INPUT =
             "com.google.android.apps.castshell.intent.action.ENABLE_TOUCH_INPUT";
+
+    /**
+     * Action type of intent from CastWebContentsComponent to set interaction ID and conversation ID
+     * to cast window host.
+     */
+    public static final String ACTION_SET_HOST_CONTEXT =
+            "com.google.android.apps.castshell.intent.action.SET_HOST_CONTEXT";
 
     /** Key of extra value in an intent, the value is a URI of cast://webcontents/<instanceId> */
     static final String INTENT_EXTRA_URI = "content_uri";
@@ -143,6 +150,20 @@ public class CastWebContentsIntentUtils {
     private static final String INTENT_EXTRA_GESTURE_CONSUMED =
             "com.google.android.apps.castshell.intent.extra.GESTURE_CONSUMED";
 
+    /**
+     * Key of extra value of the intent ACTION_SET_HOST_CONTEXT, value is an int of
+     * interaction ID.
+     */
+    private static final String INTENT_EXTRA_INTERACTION_ID =
+            "com.google.android.apps.castshell.intent.extra.INTERACTION_ID";
+
+    /**
+     * Key of extra value of the intent ACTION_SET_HOST_CONTEXT, value is a string of
+     * conversation ID.
+     */
+    private static final String INTENT_EXTRA_CONVERSATION_ID =
+            "com.google.android.apps.castshell.intent.extra.CONVERSATION_ID";
+
     @VisibilityType
     static final int VISIBITY_TYPE_UNKNOWN = VisibilityType.UNKNOWN;
     @VisibilityType
@@ -151,6 +172,8 @@ public class CastWebContentsIntentUtils {
     static final int VISIBITY_TYPE_PARTIAL_OUT = VisibilityType.PARTIAL_OUT;
     @VisibilityType
     static final int VISIBITY_TYPE_HIDDEN = VisibilityType.HIDDEN;
+    @VisibilityType
+    static final int VISIBITY_TYPE_TRANSIENTLY_HIDDEN = VisibilityType.TRANSIENTLY_HIDDEN;
 
     // CastWebContentsSurfaceHelper -> CastWebContentsComponent.Receiver
     // -> CastContentWindowAndroid
@@ -175,14 +198,6 @@ public class CastWebContentsIntentUtils {
         if (DEBUG) Log.d(TAG, "onGesture with uri:" + uri + " type:" + gestureType);
         Intent intent = new Intent(ACTION_ON_GESTURE, uri);
         intent.putExtra(INTENT_EXTRA_GESTURE_TYPE, gestureType);
-        return intent;
-    }
-
-    // CastWebContentsActivity -> CastWebContentsComponent.Receiver
-    // -> CastContentWindowAndroid
-    public static Intent onKeyDown(String instanceId, int keyCode) {
-        Intent intent = new Intent(ACTION_KEY_EVENT, getInstanceUri(instanceId));
-        intent.putExtra(INTENT_EXTRA_KEY_CODE, keyCode);
         return intent;
     }
 
@@ -270,6 +285,16 @@ public class CastWebContentsIntentUtils {
     // Used by intent of ACTION_GESTURE_CONSUMED
     public static boolean isGestureConsumed(Bundle bundle) {
         return bundle.getBoolean(INTENT_EXTRA_GESTURE_CONSUMED);
+    }
+
+    // Used by intent of ACTION_SET_HOST_CONTEXT
+    public static int getInteractionId(Intent in) {
+        return in.getIntExtra(INTENT_EXTRA_INTERACTION_ID, 0);
+    }
+
+    // Used by intent of ACTION_SET_HOST_CONTEXT
+    public static String getConversationId(Intent in) {
+        return in.getStringExtra(INTENT_EXTRA_CONVERSATION_ID);
     }
 
     public static boolean isIntentOfActivityStopped(Intent in) {
@@ -424,6 +449,20 @@ public class CastWebContentsIntentUtils {
     public static Intent onWebContentStopped(Uri uri) {
         Intent intent = new Intent(CastIntents.ACTION_ON_WEB_CONTENT_STOPPED);
         intent.putExtra(INTENT_EXTRA_URI, uri.toString());
+        return intent;
+    }
+
+    // CastWebContentsComponent -> CastWindowManager
+    public static Intent setHostContext(
+            String instanceId, int interactionId, String conversationId) {
+        if (DEBUG) {
+            Log.d(TAG, "setInteractionid interactionId=%s; conversationID=%s", interactionId,
+                    conversationId);
+        }
+        Intent intent = new Intent(ACTION_SET_HOST_CONTEXT);
+        intent.putExtra(INTENT_EXTRA_URI, getInstanceUri(instanceId).toString());
+        intent.putExtra(INTENT_EXTRA_INTERACTION_ID, interactionId);
+        intent.putExtra(INTENT_EXTRA_CONVERSATION_ID, conversationId);
         return intent;
     }
 

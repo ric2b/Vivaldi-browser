@@ -6,6 +6,9 @@
 
 #include <limits>
 #include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -14,6 +17,7 @@
 #include "base/run_loop.h"
 #include "base/sequenced_task_runner.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/task_environment.h"
 #include "base/threading/thread_restrictions.h"
@@ -62,11 +66,10 @@ class BlobRegistryImplTest : public testing::Test {
   void SetUp() override {
     ASSERT_TRUE(data_dir_.CreateUniqueTempDir());
     context_ = std::make_unique<BlobStorageContext>(
-        data_dir_.GetPath(),
-        base::CreateTaskRunner({base::ThreadPool(), base::MayBlock()}));
-    auto storage_policy =
-        base::MakeRefCounted<content::MockSpecialStoragePolicy>();
-    file_system_context_ = base::MakeRefCounted<storage::FileSystemContext>(
+        data_dir_.GetPath(), data_dir_.GetPath(),
+        base::ThreadPool::CreateTaskRunner({base::MayBlock()}));
+    auto storage_policy = base::MakeRefCounted<MockSpecialStoragePolicy>();
+    file_system_context_ = base::MakeRefCounted<FileSystemContext>(
         base::ThreadTaskRunnerHandle::Get().get(),
         base::ThreadTaskRunnerHandle::Get().get(),
         nullptr /* external_mount_points */, storage_policy.get(),
@@ -86,7 +89,7 @@ class BlobRegistryImplTest : public testing::Test {
     mojo::core::SetDefaultProcessErrorCallback(base::BindRepeating(
         &BlobRegistryImplTest::OnBadMessage, base::Unretained(this)));
 
-    storage::BlobStorageLimits limits;
+    BlobStorageLimits limits;
     limits.max_ipc_memory_size = kTestBlobStorageIPCThresholdBytes;
     limits.max_shared_memory_size = kTestBlobStorageMaxSharedMemoryBytes;
     limits.max_bytes_data_item_size = kTestBlobStorageMaxBytesDataItemSize;
@@ -121,10 +124,10 @@ class BlobRegistryImplTest : public testing::Test {
     base::RunLoop loop;
     std::string received_uuid;
     blob->GetInternalUUID(base::BindOnce(
-        [](base::Closure quit_closure, std::string* uuid_out,
+        [](base::OnceClosure quit_closure, std::string* uuid_out,
            const std::string& uuid) {
           *uuid_out = uuid;
-          quit_closure.Run();
+          std::move(quit_closure).Run();
         },
         loop.QuitClosure(), &received_uuid));
     loop.Run();
@@ -137,17 +140,18 @@ class BlobRegistryImplTest : public testing::Test {
 
   void WaitForBlobCompletion(BlobDataHandle* blob_handle) {
     base::RunLoop loop;
-    blob_handle->RunOnConstructionComplete(base::BindOnce(
-        [](const base::Closure& closure, BlobStatus status) { closure.Run(); },
-        loop.QuitClosure()));
+    blob_handle->RunOnConstructionComplete(
+        base::BindOnce([](base::OnceClosure closure,
+                          BlobStatus status) { std::move(closure).Run(); },
+                       loop.QuitClosure()));
     loop.Run();
   }
 
   mojo::PendingRemote<blink::mojom::BytesProvider> CreateBytesProvider(
       const std::string& bytes) {
     if (!bytes_provider_runner_) {
-      bytes_provider_runner_ = base::CreateSequencedTaskRunner(
-          {base::ThreadPool(), base::MayBlock()});
+      bytes_provider_runner_ =
+          base::ThreadPool::CreateSequencedTaskRunner({base::MayBlock()});
     }
     mojo::PendingRemote<blink::mojom::BytesProvider> result;
     auto provider = std::make_unique<MockBytesProvider>(
@@ -163,8 +167,8 @@ class BlobRegistryImplTest : public testing::Test {
       const std::string& bytes,
       mojo::PendingReceiver<blink::mojom::BytesProvider> receiver) {
     if (!bytes_provider_runner_) {
-      bytes_provider_runner_ = base::CreateSequencedTaskRunner(
-          {base::ThreadPool(), base::MayBlock()});
+      bytes_provider_runner_ =
+          base::ThreadPool::CreateSequencedTaskRunner({base::MayBlock()});
     }
     auto provider = std::make_unique<MockBytesProvider>(
         std::vector<uint8_t>(bytes.begin(), bytes.end()), &reply_request_count_,
@@ -186,7 +190,7 @@ class BlobRegistryImplTest : public testing::Test {
   base::ScopedTempDir data_dir_;
   base::test::TaskEnvironment task_environment_;
   std::unique_ptr<BlobStorageContext> context_;
-  scoped_refptr<storage::FileSystemContext> file_system_context_;
+  scoped_refptr<FileSystemContext> file_system_context_;
   std::unique_ptr<BlobRegistryImpl> registry_impl_;
   mojo::Remote<blink::mojom::BlobRegistry> registry_;
   MockBlobRegistryDelegate* delegate_ptr_;
@@ -767,6 +771,36 @@ TEST_F(BlobRegistryImplTest, Register_ValidBytesAsReply) {
   EXPECT_EQ(0u, stream_request_count_);
   EXPECT_EQ(0u, file_request_count_);
   EXPECT_EQ(0u, BlobsUnderConstruction());
+}
+
+TEST_F(BlobRegistryImplTest, Register_InvalidBytesAsReply) {
+  const std::string kId = "id";
+  const std::string kData = "hello";
+
+  std::vector<blink::mojom::DataElementPtr> elements;
+  elements.push_back(
+      blink::mojom::DataElement::NewBytes(blink::mojom::DataElementBytes::New(
+          kData.size(), base::nullopt, CreateBytesProvider(""))));
+
+  mojo::PendingRemote<blink::mojom::Blob> blob;
+  EXPECT_TRUE(registry_->Register(blob.InitWithNewPipeAndPassReceiver(), kId,
+                                  "", "", std::move(elements)));
+
+  std::unique_ptr<BlobDataHandle> handle = context_->GetBlobDataFromUUID(kId);
+  WaitForBlobCompletion(handle.get());
+
+  EXPECT_TRUE(handle->IsBroken());
+  ASSERT_EQ(BlobStatus::ERR_INVALID_CONSTRUCTION_ARGUMENTS,
+            handle->GetBlobStatus());
+
+  EXPECT_EQ(1u, reply_request_count_);
+  EXPECT_EQ(0u, stream_request_count_);
+  EXPECT_EQ(0u, file_request_count_);
+  EXPECT_EQ(0u, BlobsUnderConstruction());
+
+  // Expect 2 bad messages, one for the bad reply by the bytes provider, and one
+  // for the original register call.
+  EXPECT_EQ(2u, bad_messages_.size());
 }
 
 TEST_F(BlobRegistryImplTest, Register_ValidBytesAsStream) {

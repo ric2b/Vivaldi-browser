@@ -22,7 +22,6 @@
 
 #include "third_party/blink/renderer/core/css/style_rule_import.h"
 
-#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/renderer/core/css/style_sheet_contents.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/loader/resource/css_style_sheet_resource.h"
@@ -45,7 +44,7 @@ StyleRuleImport::StyleRuleImport(const String& href,
       loading_(false),
       origin_clean_(origin_clean) {
   if (!media_queries_)
-    media_queries_ = MediaQuerySet::Create(String());
+    media_queries_ = MediaQuerySet::Create(String(), nullptr);
 }
 
 StyleRuleImport::~StyleRuleImport() = default;
@@ -54,7 +53,7 @@ void StyleRuleImport::Dispose() {
   style_sheet_client_->Dispose();
 }
 
-void StyleRuleImport::TraceAfterDispatch(blink::Visitor* visitor) {
+void StyleRuleImport::TraceAfterDispatch(blink::Visitor* visitor) const {
   visitor->Trace(style_sheet_client_);
   visitor->Trace(parent_style_sheet_);
   visitor->Trace(style_sheet_);
@@ -109,8 +108,7 @@ void StyleRuleImport::RequestStyleSheet() {
     return;
 
   Document* document_for_origin = document;
-  if (base::FeatureList::IsEnabled(
-          features::kHtmlImportsRequestInitiatorLock)) {
+  if (document->ImportsController()) {
     // For @imports from HTML imported Documents, we use the
     // context document for getting origin and ResourceFetcher to use the main
     // Document's origin, while using the element document for CompleteURL() to

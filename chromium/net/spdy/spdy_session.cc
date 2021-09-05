@@ -100,9 +100,6 @@ const uint32_t kDefaultInitialEnablePush = 1;
 const uint32_t kDefaultInitialInitialWindowSize = 65535;
 const uint32_t kDefaultInitialMaxFrameSize = 16384;
 
-// The maximum size of header list that the server is allowed to send.
-const uint32_t kSpdyMaxHeaderListSize = 256 * 1024;
-
 // Values of Vary response header on pushed streams.  This is logged to
 // Net.PushedStreamVaryResponseHeader, entries must not be changed.
 enum PushedStreamVaryResponseHeaderValues {
@@ -474,6 +471,13 @@ class SpdyServerPushHelper : public ServerPushDelegate::ServerPushHelper {
 
   const GURL& GetURL() const override { return request_url_; }
 
+  NetworkIsolationKey GetNetworkIsolationKey() const override {
+    if (session_) {
+      return session_->spdy_session_key().network_isolation_key();
+    }
+    return NetworkIsolationKey();
+  }
+
  private:
   base::WeakPtr<SpdySession> session_;
   const GURL request_url_;
@@ -518,6 +522,44 @@ SpdyProtocolErrorDetails MapFramerErrorToProtocolError(
       return SPDY_ERROR_INVALID_CONTROL_FRAME_SIZE;
     case http2::Http2DecoderAdapter::SPDY_OVERSIZED_PAYLOAD:
       return SPDY_ERROR_OVERSIZED_PAYLOAD;
+    case http2::Http2DecoderAdapter::SPDY_HPACK_INDEX_VARINT_ERROR:
+      return SPDY_ERROR_HPACK_INDEX_VARINT_ERROR;
+    case http2::Http2DecoderAdapter::SPDY_HPACK_NAME_LENGTH_VARINT_ERROR:
+      return SPDY_ERROR_HPACK_NAME_LENGTH_VARINT_ERROR;
+    case http2::Http2DecoderAdapter::SPDY_HPACK_VALUE_LENGTH_VARINT_ERROR:
+      return SPDY_ERROR_HPACK_VALUE_LENGTH_VARINT_ERROR;
+    case http2::Http2DecoderAdapter::SPDY_HPACK_NAME_TOO_LONG:
+      return SPDY_ERROR_HPACK_NAME_TOO_LONG;
+    case http2::Http2DecoderAdapter::SPDY_HPACK_VALUE_TOO_LONG:
+      return SPDY_ERROR_HPACK_VALUE_TOO_LONG;
+    case http2::Http2DecoderAdapter::SPDY_HPACK_NAME_HUFFMAN_ERROR:
+      return SPDY_ERROR_HPACK_NAME_HUFFMAN_ERROR;
+    case http2::Http2DecoderAdapter::SPDY_HPACK_VALUE_HUFFMAN_ERROR:
+      return SPDY_ERROR_HPACK_VALUE_HUFFMAN_ERROR;
+    case http2::Http2DecoderAdapter::
+        SPDY_HPACK_MISSING_DYNAMIC_TABLE_SIZE_UPDATE:
+      return SPDY_ERROR_HPACK_MISSING_DYNAMIC_TABLE_SIZE_UPDATE;
+    case http2::Http2DecoderAdapter::SPDY_HPACK_INVALID_INDEX:
+      return SPDY_ERROR_HPACK_INVALID_INDEX;
+    case http2::Http2DecoderAdapter::SPDY_HPACK_INVALID_NAME_INDEX:
+      return SPDY_ERROR_HPACK_INVALID_NAME_INDEX;
+    case http2::Http2DecoderAdapter::
+        SPDY_HPACK_DYNAMIC_TABLE_SIZE_UPDATE_NOT_ALLOWED:
+      return SPDY_ERROR_HPACK_DYNAMIC_TABLE_SIZE_UPDATE_NOT_ALLOWED;
+    case http2::Http2DecoderAdapter::
+        SPDY_HPACK_INITIAL_DYNAMIC_TABLE_SIZE_UPDATE_IS_ABOVE_LOW_WATER_MARK:
+      return SPDY_ERROR_HPACK_INITIAL_DYNAMIC_TABLE_SIZE_UPDATE_IS_ABOVE_LOW_WATER_MARK;
+    case http2::Http2DecoderAdapter::
+        SPDY_HPACK_DYNAMIC_TABLE_SIZE_UPDATE_IS_ABOVE_ACKNOWLEDGED_SETTING:
+      return SPDY_ERROR_HPACK_DYNAMIC_TABLE_SIZE_UPDATE_IS_ABOVE_ACKNOWLEDGED_SETTING;
+    case http2::Http2DecoderAdapter::SPDY_HPACK_TRUNCATED_BLOCK:
+      return SPDY_ERROR_HPACK_TRUNCATED_BLOCK;
+    case http2::Http2DecoderAdapter::SPDY_HPACK_FRAGMENT_TOO_LONG:
+      return SPDY_ERROR_HPACK_FRAGMENT_TOO_LONG;
+    case http2::Http2DecoderAdapter::
+        SPDY_HPACK_COMPRESSED_HEADER_SIZE_EXCEEDS_LIMIT:
+      return SPDY_ERROR_HPACK_COMPRESSED_HEADER_SIZE_EXCEEDS_LIMIT;
+
     case http2::Http2DecoderAdapter::LAST_ERROR:
       NOTREACHED();
   }
@@ -539,6 +581,27 @@ Error MapFramerErrorToNetError(
     case http2::Http2DecoderAdapter::SPDY_UNSUPPORTED_VERSION:
       return ERR_HTTP2_PROTOCOL_ERROR;
     case http2::Http2DecoderAdapter::SPDY_DECOMPRESS_FAILURE:
+    case http2::Http2DecoderAdapter::SPDY_HPACK_INDEX_VARINT_ERROR:
+    case http2::Http2DecoderAdapter::SPDY_HPACK_NAME_LENGTH_VARINT_ERROR:
+    case http2::Http2DecoderAdapter::SPDY_HPACK_VALUE_LENGTH_VARINT_ERROR:
+    case http2::Http2DecoderAdapter::SPDY_HPACK_NAME_TOO_LONG:
+    case http2::Http2DecoderAdapter::SPDY_HPACK_VALUE_TOO_LONG:
+    case http2::Http2DecoderAdapter::SPDY_HPACK_NAME_HUFFMAN_ERROR:
+    case http2::Http2DecoderAdapter::SPDY_HPACK_VALUE_HUFFMAN_ERROR:
+    case http2::Http2DecoderAdapter::
+        SPDY_HPACK_MISSING_DYNAMIC_TABLE_SIZE_UPDATE:
+    case http2::Http2DecoderAdapter::SPDY_HPACK_INVALID_INDEX:
+    case http2::Http2DecoderAdapter::SPDY_HPACK_INVALID_NAME_INDEX:
+    case http2::Http2DecoderAdapter::
+        SPDY_HPACK_DYNAMIC_TABLE_SIZE_UPDATE_NOT_ALLOWED:
+    case http2::Http2DecoderAdapter::
+        SPDY_HPACK_INITIAL_DYNAMIC_TABLE_SIZE_UPDATE_IS_ABOVE_LOW_WATER_MARK:
+    case http2::Http2DecoderAdapter::
+        SPDY_HPACK_DYNAMIC_TABLE_SIZE_UPDATE_IS_ABOVE_ACKNOWLEDGED_SETTING:
+    case http2::Http2DecoderAdapter::SPDY_HPACK_TRUNCATED_BLOCK:
+    case http2::Http2DecoderAdapter::SPDY_HPACK_FRAGMENT_TOO_LONG:
+    case http2::Http2DecoderAdapter::
+        SPDY_HPACK_COMPRESSED_HEADER_SIZE_EXCEEDS_LIMIT:
       return ERR_HTTP2_COMPRESSION_ERROR;
     case http2::Http2DecoderAdapter::SPDY_COMPRESS_FAILURE:
       return ERR_HTTP2_COMPRESSION_ERROR;
@@ -651,33 +714,44 @@ int SpdyStreamRequest::StartRequest(
   type_ = type;
   session_ = session;
   url_ = SimplifyUrlForRequest(url);
-  can_send_early_ = can_send_early;
   priority_ = priority;
   socket_tag_ = socket_tag;
   net_log_ = net_log;
   callback_ = std::move(callback);
   traffic_annotation_ = MutableNetworkTrafficAnnotationTag(traffic_annotation);
 
-  next_state_ = STATE_WAIT_FOR_CONFIRMATION;
-  int rv = DoLoop(OK);
-  if (rv != OK)
+  // If early data is not allowed, confirm the handshake first.
+  int rv = OK;
+  if (!can_send_early) {
+    rv = session_->ConfirmHandshake(
+        base::BindOnce(&SpdyStreamRequest::OnConfirmHandshakeComplete,
+                       weak_ptr_factory_.GetWeakPtr()));
+  }
+  if (rv != OK) {
+    // If rv is ERR_IO_PENDING, OnConfirmHandshakeComplete() will call
+    // TryCreateStream() later.
     return rv;
+  }
 
   base::WeakPtr<SpdyStream> stream;
   rv = session->TryCreateStream(weak_ptr_factory_.GetWeakPtr(), &stream);
-  if (rv != OK)
+  if (rv != OK) {
+    // If rv is ERR_IO_PENDING, the SpdySession will call
+    // OnRequestCompleteSuccess() or OnRequestCompleteFailure() later.
     return rv;
+  }
 
   Reset();
   stream_ = stream;
-  return rv;
+  return OK;
 }
 
 void SpdyStreamRequest::CancelRequest() {
   if (session_)
     session_->CancelStreamRequest(weak_ptr_factory_.GetWeakPtr());
   Reset();
-  // Do this to cancel any pending CompleteStreamRequest() tasks.
+  // Do this to cancel any pending CompleteStreamRequest() and
+  // OnConfirmHandshakeComplete() tasks.
   weak_ptr_factory_.InvalidateWeakPtrs();
 }
 
@@ -732,74 +806,33 @@ void SpdyStreamRequest::Reset() {
   session_.reset();
   stream_.reset();
   url_ = GURL();
-  can_send_early_ = false;
   priority_ = MINIMUM_PRIORITY;
   socket_tag_ = SocketTag();
   net_log_ = NetLogWithSource();
   callback_.Reset();
   traffic_annotation_.reset();
-  next_state_ = STATE_NONE;
 }
 
-void SpdyStreamRequest::OnIOComplete(int rv) {
+void SpdyStreamRequest::OnConfirmHandshakeComplete(int rv) {
+  DCHECK_NE(ERR_IO_PENDING, rv);
   if (rv != OK) {
     OnRequestCompleteFailure(rv);
-  } else {
-    DoLoop(rv);
-  }
-}
-
-int SpdyStreamRequest::DoLoop(int rv) {
-  do {
-    State state = next_state_;
-    next_state_ = STATE_NONE;
-    switch (state) {
-      case STATE_WAIT_FOR_CONFIRMATION:
-        CHECK_EQ(OK, rv);
-        return DoWaitForConfirmation();
-        break;
-      case STATE_REQUEST_STREAM:
-        CHECK_EQ(OK, rv);
-        return DoRequestStream(rv);
-        break;
-      default:
-        NOTREACHED() << "next_state_: " << next_state_;
-        break;
-    }
-  } while (next_state_ != STATE_NONE && next_state_ && rv != ERR_IO_PENDING);
-  return rv;
-}
-
-int SpdyStreamRequest::DoWaitForConfirmation() {
-  if (can_send_early_) {
-    next_state_ = STATE_NONE;
-    return OK;
+    return;
   }
 
-  int rv = session_->ConfirmHandshake(base::BindOnce(
-      &SpdyStreamRequest::OnIOComplete, weak_ptr_factory_.GetWeakPtr()));
-  // If ConfirmHandshake returned synchronously, exit the state machine early
-  // so StartRequest can call TryCreateStream synchronously. Otherwise,
-  // TryCreateStream will be called asynchronously as part of the confirmation
-  // state machine.
-  next_state_ = rv == ERR_IO_PENDING ? STATE_REQUEST_STREAM : STATE_NONE;
-  return rv;
-}
-
-int SpdyStreamRequest::DoRequestStream(int rv) {
-  DCHECK_NE(ERR_IO_PENDING, rv);
-  next_state_ = STATE_NONE;
-  if (rv < 0)
-    return rv;
+  // ConfirmHandshake() completed asynchronously. Record the time so the caller
+  // can adjust LoadTimingInfo.
+  confirm_handshake_end_ = base::TimeTicks::Now();
 
   base::WeakPtr<SpdyStream> stream;
   rv = session_->TryCreateStream(weak_ptr_factory_.GetWeakPtr(), &stream);
   if (rv == OK) {
     OnRequestCompleteSuccess(stream);
   } else if (rv != ERR_IO_PENDING) {
+    // If rv is ERR_IO_PENDING, the SpdySession will call
+    // OnRequestCompleteSuccess() or OnRequestCompleteFailure() later.
     OnRequestCompleteFailure(rv);
   }
-  return rv;
 }
 
 // static
@@ -1078,6 +1111,22 @@ void SpdySession::EnqueueStreamWrite(
                stream->traffic_annotation());
 }
 
+bool SpdySession::GreasedFramesEnabled() const {
+  return greased_http2_frame_.has_value();
+}
+
+void SpdySession::EnqueueGreasedFrame(const base::WeakPtr<SpdyStream>& stream) {
+  if (availability_state_ == STATE_DRAINING)
+    return;
+
+  EnqueueWrite(
+      stream->priority(),
+      static_cast<spdy::SpdyFrameType>(greased_http2_frame_.value().type),
+      std::make_unique<GreasedBufferProducer>(
+          stream, &greased_http2_frame_.value(), buffered_spdy_framer_.get()),
+      stream, stream->traffic_annotation());
+}
+
 int SpdySession::ConfirmHandshake(CompletionOnceCallback callback) {
   int rv = ERR_IO_PENDING;
   if (!in_confirm_handshake_) {
@@ -1243,7 +1292,7 @@ std::unique_ptr<SpdyBuffer> SpdySession::CreateDataBuffer(
   // just a FIN with no payload.
   if (effective_len != 0) {
     DecreaseSendWindowSize(static_cast<int32_t>(effective_len));
-    data_buffer->AddConsumeCallback(base::Bind(
+    data_buffer->AddConsumeCallback(base::BindRepeating(
         &SpdySession::OnWriteBufferConsumed, weak_factory_.GetWeakPtr(),
         static_cast<size_t>(effective_len)));
   }
@@ -1430,6 +1479,8 @@ base::Value SpdySession::GetInfoAsValue() const {
     dict.SetKey("aliases", std::move(alias_list));
   }
   dict.SetStringKey("proxy", host_port_proxy_pair().second.ToURI());
+  dict.SetStringKey("network_isolation_key",
+                    spdy_session_key_.network_isolation_key().ToDebugString());
 
   dict.SetIntKey("active_streams", active_streams_.size());
 
@@ -1648,11 +1699,9 @@ void SpdySession::InitializeInternal(SpdySessionPool* pool) {
   session_send_window_size_ = kDefaultInitialWindowSize;
   session_recv_window_size_ = kDefaultInitialWindowSize;
 
-  auto it = initial_settings_.find(spdy::SETTINGS_MAX_HEADER_LIST_SIZE);
-  uint32_t spdy_max_header_list_size =
-      (it == initial_settings_.end()) ? kSpdyMaxHeaderListSize : it->second;
   buffered_spdy_framer_ = std::make_unique<BufferedSpdyFramer>(
-      spdy_max_header_list_size, net_log_, time_func_);
+      initial_settings_.find(spdy::SETTINGS_MAX_HEADER_LIST_SIZE)->second,
+      net_log_, time_func_);
   buffered_spdy_framer_->set_visitor(this);
   buffered_spdy_framer_->set_debug_visitor(this);
   buffered_spdy_framer_->UpdateHeaderDecoderTableSize(max_header_table_size_);
@@ -2382,7 +2431,7 @@ int SpdySession::DoWrite() {
         // We've exhausted the stream ID space, and no new streams may be
         // created after this one.
         MakeUnavailable();
-        StartGoingAway(kLastStreamId, ERR_ABORTED);
+        StartGoingAway(kLastStreamId, ERR_HTTP2_PROTOCOL_ERROR);
       }
     }
 
@@ -2733,6 +2782,15 @@ void SpdySession::EnqueueSessionWrite(
                std::make_unique<SimpleBufferProducer>(std::move(buffer)),
                base::WeakPtr<SpdyStream>(),
                kSpdySessionCommandsTrafficAnnotation);
+  if (greased_http2_frame_ && frame_type == spdy::SpdyFrameType::SETTINGS) {
+    EnqueueWrite(
+        priority,
+        static_cast<spdy::SpdyFrameType>(greased_http2_frame_.value().type),
+        std::make_unique<GreasedBufferProducer>(base::WeakPtr<SpdyStream>(),
+                                                &greased_http2_frame_.value(),
+                                                buffered_spdy_framer_.get()),
+        base::WeakPtr<SpdyStream>(), kSpdySessionCommandsTrafficAnnotation);
+  }
 }
 
 void SpdySession::EnqueueWrite(
@@ -2746,15 +2804,6 @@ void SpdySession::EnqueueWrite(
 
   write_queue_.Enqueue(priority, frame_type, std::move(producer), stream,
                        traffic_annotation);
-  if (greased_http2_frame_ && (frame_type == spdy::SpdyFrameType::SETTINGS ||
-                               frame_type == spdy::SpdyFrameType::HEADERS)) {
-    write_queue_.Enqueue(
-        priority,
-        static_cast<spdy::SpdyFrameType>(greased_http2_frame_.value().type),
-        std::make_unique<GreasedBufferProducer>(
-            stream, &greased_http2_frame_.value(), buffered_spdy_framer_.get()),
-        stream, traffic_annotation);
-  }
   MaybePostWriteLoop();
 }
 
@@ -3143,8 +3192,8 @@ void SpdySession::OnStreamFrameData(spdy::SpdyStreamId stream_id,
     buffer = std::make_unique<SpdyBuffer>(data, len);
 
     DecreaseRecvWindowSize(static_cast<int32_t>(len));
-    buffer->AddConsumeCallback(base::Bind(&SpdySession::OnReadBufferConsumed,
-                                          weak_factory_.GetWeakPtr()));
+    buffer->AddConsumeCallback(base::BindRepeating(
+        &SpdySession::OnReadBufferConsumed, weak_factory_.GetWeakPtr()));
   } else {
     DCHECK_EQ(len, 0u);
   }

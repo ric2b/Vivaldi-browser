@@ -2,6 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// clang-format off
+// #import 'chrome://test/cr_elements/cr_policy_strings.js';
+// #import {ContentSettingsTypes,LocalDataBrowserProxyImpl,SiteSettingsPrefsBrowserProxyImpl,SortMethod} from 'chrome://settings/lazy_load.js';
+// #import {eventToPromise} from 'chrome://test/test_util.m.js';
+// #import {createSiteGroup} from 'chrome://test/settings/test_util.m.js';
+// #import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+// #import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+// #import {Router, routes} from 'chrome://settings/settings.js';
+// #import {TestLocalDataBrowserProxy} from 'chrome://test/settings/test_local_data_browser_proxy.m.js';
+// #import {TestSiteSettingsPrefsBrowserProxy} from 'chrome://test/settings/test_site_settings_prefs_browser_proxy.m.js';
+// clang-format on
+
 suite('SiteEntry', function() {
   /**
    * An example eTLD+1 Object with multiple origins grouped under it.
@@ -72,7 +84,7 @@ suite('SiteEntry', function() {
   teardown(function() {
     // The code being tested changes the Route. Reset so that state is not
     // leaked across tests.
-    settings.resetRouteForTesting();
+    settings.Router.getInstance().resetRouteForTesting();
   });
 
   test('displays the correct number of origins', function() {
@@ -111,9 +123,10 @@ suite('SiteEntry', function() {
     assertEquals('true', originList.getAttribute('aria-hidden'));
     assertEquals(
         settings.routes.SITE_SETTINGS_SITE_DETAILS.path,
-        settings.getCurrentRoute().path);
+        settings.Router.getInstance().getCurrentRoute().path);
     assertEquals(
-        'https://login.foo.com', settings.getQueryParameters().get('site'));
+        'https://login.foo.com',
+        settings.Router.getInstance().getQueryParameters().get('site'));
   });
 
   test('with multiple origins navigates to Site Details', function() {
@@ -129,10 +142,10 @@ suite('SiteEntry', function() {
     originList[1].click();
     assertEquals(
         settings.routes.SITE_SETTINGS_SITE_DETAILS.path,
-        settings.getCurrentRoute().path);
+        settings.Router.getInstance().getCurrentRoute().path);
     assertEquals(
         TEST_MULTIPLE_SITE_GROUP.origins[1].origin,
-        settings.getQueryParameters().get('site'));
+        settings.Router.getInstance().getQueryParameters().get('site'));
   });
 
   test('with single origin does not show overflow menu', function() {
@@ -140,6 +153,43 @@ suite('SiteEntry', function() {
     Polymer.dom.flush();
     const overflowMenuButton = testElement.$.overflowMenuButton;
     assertTrue(overflowMenuButton.closest('.row-aligned').hidden);
+  });
+
+  test(
+      'with single origin, shows overflow menu if storagePressureUIEnabled',
+      function() {
+        loadTimeData.overrideValues({'enableStoragePressureUI': true});
+        testElement.siteGroup = TEST_SINGLE_SITE_GROUP;
+        Polymer.dom.flush();
+        const overflowMenuButton = testElement.$.overflowMenuButton;
+        assertFalse(overflowMenuButton.closest('.row-aligned').hidden);
+      });
+
+  test('clear data for single origin fires the right method', async function() {
+    loadTimeData.overrideValues({'enableStoragePressureUI': true});
+    testElement.siteGroup =
+        JSON.parse(JSON.stringify(TEST_MULTIPLE_SITE_GROUP));
+    Polymer.dom.flush();
+
+    const collapseChild = testElement.$.originList.get();
+    Polymer.dom.flush();
+    const originList = collapseChild.querySelectorAll('.settings-box');
+    assertEquals(3, originList.length);
+
+    for (let i = 0; i < originList.length; i++) {
+      const menuOpened = test_util.eventToPromise('open-menu', testElement);
+      const originEntry = originList[i];
+      const overflowMenuButton =
+          originEntry.querySelector('#originOverflowMenuButton');
+      overflowMenuButton.click();
+      const openMenuEvent = await menuOpened;
+
+      const args = openMenuEvent.detail;
+      const {actionScope, index, origin} = args;
+      assertEquals('origin', actionScope);
+      assertEquals(testElement.listIndex, index);
+      assertEquals(testElement.siteGroup.origins[i].origin, origin);
+    }
   });
 
   test(

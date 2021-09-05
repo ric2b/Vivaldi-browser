@@ -6,7 +6,7 @@
 
 #include "net/http/http_request_headers.h"
 #include "third_party/blink/public/common/web_package/signed_exchange_consts.h"
-#include "third_party/blink/public/common/web_package/signed_exchange_request_matcher.h"
+#include "third_party/blink/public/common/web_package/web_package_request_matcher.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource.h"
@@ -22,8 +22,10 @@ namespace {
 constexpr char kAlternate[] = "alternate";
 constexpr char kAllowedAltSxg[] = "allowed-alt-sxg";
 
-// These accept header values are also defined in web_url_loader_impl.h and
-// loader_util.h. TODO(horo): Move somewhere and use shared constant value.
+// These accept header values are also defined in
+// blink/renderer/platform/loader/fetch/url_loader/fetch_conversion.cc and
+// services/network/loader_util.h.
+// TODO(horo): Move somewhere and use shared constant value.
 const char kDefaultAcceptHeader[] = "*/*";
 const char kStylesheetAcceptHeader[] = "text/css,*/*;q=0.1";
 const char kImageAcceptHeader[] = "image/webp,image/apng,image/*,*/*;q=0.8";
@@ -175,9 +177,9 @@ AlternateSignedExchangeResourceInfo::FindMatchingEntry(
     accept_langs += language.Utf8();
   }
   net::HttpRequestHeaders request_headers;
-  request_headers.SetHeader("accept", accept_header);
+  request_headers.SetHeader(net::HttpRequestHeaders::kAccept, accept_header);
 
-  SignedExchangeRequestMatcher matcher(request_headers, accept_langs);
+  WebPackageRequestMatcher matcher(request_headers, accept_langs);
   const auto variant_keys_list_it =
       matcher.FindBestMatchingVariantKey(variants, variant_keys_list);
   if (variant_keys_list_it == variant_keys_list.end())

@@ -21,6 +21,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/optional.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -29,7 +30,6 @@
 #include "base/trace_event/memory_usage_estimator.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
-#include "components/omnibox/browser/autocomplete_controller_delegate.h"
 #include "components/omnibox/browser/bookmark_provider.h"
 #include "components/omnibox/browser/builtin_provider.h"
 #include "components/omnibox/browser/clipboard_provider.h"
@@ -59,36 +59,38 @@ namespace {
 // Converts the given match to a type (and possibly subtype) based on the AQS
 // specification. For more details, see
 // http://goto.google.com/binary-clients-logging.
-void AutocompleteMatchToAssistedQuery(
-    const AutocompleteMatch::Type& match,
-    const AutocompleteProvider* provider,
-    size_t* type,
-    size_t* subtype) {
+void AutocompleteMatchToAssistedQuery(const AutocompleteMatch& match,
+                                      size_t* type,
+                                      size_t* subtype) {
   // This type indicates a native chrome suggestion.
   *type = 69;
   // Default value, indicating no subtype.
   *subtype = base::string16::npos;
 
+  // If set, start with the AutocompletMatch::subtype_identifier field.
+  if (match.subtype_identifier != 0)
+    *subtype = match.subtype_identifier;
+
   // If provider is TYPE_ZERO_SUGGEST or TYPE_ON_DEVICE_HEAD, set the subtype
   // accordingly. Type will be set in the switch statement below where we'll
   // enter one of SEARCH_SUGGEST or NAVSUGGEST.
-  if (provider) {
-    if (provider->type() == AutocompleteProvider::TYPE_ZERO_SUGGEST &&
-        (match == AutocompleteMatchType::SEARCH_SUGGEST ||
-         match == AutocompleteMatchType::NAVSUGGEST)) {
+  if (match.provider) {
+    if (match.provider->type() == AutocompleteProvider::TYPE_ZERO_SUGGEST &&
+        (match.type == AutocompleteMatchType::SEARCH_SUGGEST ||
+         match.type == AutocompleteMatchType::NAVSUGGEST)) {
       // We abuse this subtype and use it to for zero-suggest suggestions that
       // aren't personalized by the server. That is, it indicates either
       // client-side most-likely URL suggestions or server-side suggestions
       // that depend only on the URL as context.
       *subtype = 66;
-    } else if (provider->type() == AutocompleteProvider::TYPE_ON_DEVICE_HEAD) {
-      DCHECK(match == AutocompleteMatchType::SEARCH_SUGGEST);
+    } else if (match.provider->type() ==
+               AutocompleteProvider::TYPE_ON_DEVICE_HEAD) {
       // This subtype indicates a match from an on-device head provider.
       *subtype = 271;
     }
   }
 
-  switch (match) {
+  switch (match.type) {
     case AutocompleteMatchType::SEARCH_SUGGEST: {
       // Do not set subtype here; subtype may have been set above.
       *type = 0;
@@ -208,10 +210,8 @@ bool AutocompleteMatchHasCustomDescription(const AutocompleteMatch& match) {
 
 AutocompleteController::AutocompleteController(
     std::unique_ptr<AutocompleteProviderClient> provider_client,
-    AutocompleteControllerDelegate* delegate,
     int provider_types)
-    : delegate_(delegate),
-      provider_client_(std::move(provider_client)),
+    : provider_client_(std::move(provider_client)),
       document_provider_(nullptr),
       history_url_provider_(nullptr),
       keyword_provider_(nullptr),
@@ -251,11 +251,9 @@ AutocompleteController::AutocompleteController(
   // doing its thing by the time the HistoryURLProvider task runs.
   // (And hope that it completes before AutocompleteController::Start() is
   // called the next time.)
-  // ZeroSuggestProvider and ClipboardURLProvider take a reference to
-  // HistoryURLProvider. If we're going to need either, we should initialize
-  // history_url_provider_.
+  // ClipboardURLProvider take a reference to HistoryURLProvider. If we're going
+  // to need it, we should initialize history_url_provider_.
   if (provider_types & (AutocompleteProvider::TYPE_HISTORY_URL |
-                        AutocompleteProvider::TYPE_ZERO_SUGGEST |
                         AutocompleteProvider::TYPE_CLIPBOARD)) {
     history_url_provider_ =
         new HistoryURLProvider(provider_client_.get(), this);
@@ -281,7 +279,10 @@ AutocompleteController::AutocompleteController(
   if (provider_types & AutocompleteProvider::TYPE_ON_DEVICE_HEAD) {
     on_device_head_provider_ =
         OnDeviceHeadProvider::Create(provider_client_.get(), this);
-    providers_.push_back(on_device_head_provider_);
+    if (on_device_head_provider_) {
+      providers_.push_back(on_device_head_provider_);
+      on_device_head_provider_->AddModelUpdateCallback();
+    }
   }
   if (provider_types & AutocompleteProvider::TYPE_CLIPBOARD) {
 #if !defined(OS_IOS)
@@ -323,9 +324,21 @@ AutocompleteController::~AutocompleteController() {
   Stop(false);
 }
 
+void AutocompleteController::AddObserver(Observer* observer) {
+  observers_.AddObserver(observer);
+}
+
 void AutocompleteController::Start(const AutocompleteInput& input) {
   TRACE_EVENT1("omnibox", "AutocompleteController::Start",
                "text", base::UTF16ToUTF8(input.text()));
+
+  // When input.want_asynchronous_matches() is false, the AutocompleteController
+  // is being used for text classification, which should not notify observers.
+  if (input.want_asynchronous_matches()) {
+    for (Observer& obs : observers_)
+      obs.OnStart(this, input);
+  }
+
   const base::string16 old_input_text(input_.text());
   const bool old_allow_exact_keyword_match = input_.allow_exact_keyword_match();
   const bool old_want_asynchronous_matches = input_.want_asynchronous_matches();
@@ -419,9 +432,8 @@ void AutocompleteController::Start(const AutocompleteInput& input) {
   // dereference.
   if (base::FeatureList::IsEnabled(
           omnibox::kSpeculativeServiceWorkerStartOnQueryInput) &&
-      (input.type() == metrics::OmniboxInputType::QUERY) &&
-      !search_service_worker_signal_sent_ &&
-      (result_.default_match() != result_.end())) {
+      input.type() == metrics::OmniboxInputType::QUERY &&
+      !search_service_worker_signal_sent_ && result_.default_match()) {
     search_service_worker_signal_sent_ = true;
     provider_client_->StartServiceWorker(
         result_.default_match()->destination_url);
@@ -532,6 +544,41 @@ void AutocompleteController::UpdateMatchDestinationURLWithQueryFormulationTime(
       (zero_suggest_provider_ &&
        zero_suggest_provider_->field_trial_triggered_in_session()),
       input_.current_page_classification());
+
+  // Append the experiment stats to the AQS parameter to be logged in
+  // searchbox_stats.proto's experiment_stats_v2 field.
+  if (zero_suggest_provider_) {
+    // The field number for the experiment stat type specified as an int
+    // in ExperimentStatsV2.
+    constexpr char kTypeIntFieldNumber[] = "4";
+    // The field number for the string value in ExperimentStatsV2.
+    constexpr char kStringValueFieldNumber[] = "2";
+    std::vector<std::string> experiment_stats_v2;
+    for (const auto& experiment_stat :
+         zero_suggest_provider_->experiment_stats()) {
+      DCHECK(experiment_stat.is_dict());
+      base::Optional<int> type_int =
+          experiment_stat.FindIntPath(kTypeIntFieldNumber);
+      const std::string* string_value =
+          experiment_stat.FindStringPath(kStringValueFieldNumber);
+      if (type_int && string_value) {
+        // The string value consists of suggestion type/subtype pairs which are
+        // delimited with colons. Replace colons with commas as expected by the
+        // Searchbox logging flow.
+        std::string value = *string_value;
+        std::replace(value.begin(), value.end(), ':', ',');
+        // 'i' is used as a delimiter between experiment stat type and value.
+        experiment_stats_v2.push_back(base::NumberToString(*type_int) + "i" +
+                                      value);
+      }
+    }
+    if (!experiment_stats_v2.empty()) {
+      // 'j' is used as a delimiter between individual experiment stat entries.
+      search_terms_args.assisted_query_stats +=
+          "." + base::JoinString(experiment_stats_v2, "j");
+    }
+  }
+
   UpdateMatchDestinationURL(search_terms_args, match);
 }
 
@@ -558,7 +605,7 @@ void AutocompleteController::UpdateResult(
 
   base::Optional<AutocompleteMatch> last_default_match;
   base::string16 last_default_associated_keyword;
-  if (result_.default_match() != result_.end()) {
+  if (result_.default_match()) {
     last_default_match = *result_.default_match();
     if (last_default_match->associated_keyword) {
       last_default_associated_keyword =
@@ -566,25 +613,32 @@ void AutocompleteController::UpdateResult(
     }
   }
 
+  const auto last_result_for_logging = result_.GetMatchDedupComparators();
+
   if (regenerate_result)
     result_.Reset();
 
-  AutocompleteResult last_result;
-  last_result.Swap(&result_);
+  AutocompleteResult old_matches_to_reuse;
+  old_matches_to_reuse.Swap(&result_);
 
   for (Providers::const_iterator i(providers_.begin());
        i != providers_.end(); ++i)
     result_.AppendMatches(input_, (*i)->matches());
 
-  if (OmniboxFieldTrial::IsPedalSuggestionsEnabled())
-    result_.AppendDedicatedPedalMatches(provider_client_.get(), input_);
-
   if (OmniboxFieldTrial::IsTabSwitchSuggestionsEnabled())
     result_.ConvertOpenTabMatches(provider_client_.get(), &input_);
 
+  if (OmniboxFieldTrial::IsPedalSuggestionsEnabled()) {
+    if (OmniboxFieldTrial::IsSuggestionButtonRowEnabled()) {
+      result_.ConvertInSuggestionPedalMatches(provider_client_.get());
+    } else {
+      result_.AppendDedicatedPedalMatches(provider_client_.get(), input_);
+    }
+  }
+
   // Sort the matches and trim to a small number of "best" matches.
   const AutocompleteMatch* preserve_default_match = nullptr;
-  if (!in_start_ && !regenerate_result && last_default_match &&
+  if (!in_start_ && last_default_match &&
       base::FeatureList::IsEnabled(
           omnibox::kOmniboxPreserveDefaultMatchAgainstAsyncUpdate)) {
     preserve_default_match = &last_default_match.value();
@@ -600,20 +654,26 @@ void AutocompleteController::UpdateResult(
   if (!done_) {
     // This conditional needs to match the conditional in Start that invokes
     // StartExpireTimer.
-    result_.CopyOldMatches(input_, &last_result, template_url_service_);
+    result_.TransferOldMatches(input_, &old_matches_to_reuse,
+                               template_url_service_);
   }
 
   // Log metrics for how many matches are asynchronously changed.
-  if (!in_start_)
-    AutocompleteResult::LogAsynchronousUpdateMetrics(last_result, result_);
+  if (!in_start_) {
+    AutocompleteResult::LogAsynchronousUpdateMetrics(last_result_for_logging,
+                                                     result_);
+  }
 
+  if (zero_suggest_provider_) {
+    UpdateHeaders(&result_);
+  }
   UpdateKeywordDescriptions(&result_);
   UpdateAssociatedKeywords(&result_);
   UpdateAssistedQueryStats(&result_);
   if (search_provider_)
     search_provider_->RegisterDisplayedAnswers(result_);
 
-  const bool default_is_valid = result_.default_match() != result_.end();
+  const bool default_is_valid = result_.default_match();
   base::string16 default_associated_keyword;
   if (default_is_valid &&
       result_.default_match()->associated_keyword) {
@@ -695,6 +755,31 @@ void AutocompleteController::UpdateAssociatedKeywords(
   }
 }
 
+void AutocompleteController::UpdateHeaders(AutocompleteResult* result) {
+  DCHECK(result);
+
+  // Set the suggestion group ID to header mapping information.
+  result->set_headers_map(zero_suggest_provider_->headers_map());
+
+  // Move all grouped matches to the bottom while maintaining the current order.
+  std::stable_sort(result->begin(), result->end(),
+                   [](const auto& a, const auto& b) {
+                     return !a.suggestion_group_id.has_value() &&
+                            b.suggestion_group_id.has_value();
+                   });
+
+  // Record header data into the additional_info field for chrome://omnibox.
+  for (AutocompleteMatch& match : *result) {
+    if (match.suggestion_group_id.has_value()) {
+      int group_id = match.suggestion_group_id.value();
+      match.RecordAdditionalInfo("suggestion_group_id", group_id);
+      match.RecordAdditionalInfo(
+          "header string",
+          base::UTF16ToUTF8(result->GetHeaderForGroupId(group_id)));
+    }
+  }
+}
+
 void AutocompleteController::UpdateKeywordDescriptions(
     AutocompleteResult* result) {
   base::string16 last_keyword;
@@ -742,8 +827,7 @@ void AutocompleteController::UpdateAssistedQueryStats(
   for (auto match(result->begin()); match != result->end(); ++match) {
     size_t type = base::string16::npos;
     size_t subtype = base::string16::npos;
-    AutocompleteMatchToAssistedQuery(
-        match->type, match->provider, &type, &subtype);
+    AutocompleteMatchToAssistedQuery(*match, &type, &subtype);
     if (last_type != base::string16::npos &&
         (type != last_type || subtype != last_subtype)) {
       AppendAvailableAutocompletion(
@@ -778,8 +862,8 @@ void AutocompleteController::UpdateAssistedQueryStats(
 }
 
 void AutocompleteController::NotifyChanged(bool notify_default_match) {
-  if (delegate_)
-    delegate_->OnResultChanged(notify_default_match);
+  for (Observer& obs : observers_)
+    obs.OnResultChanged(this, notify_default_match);
   if (done_)
     provider_client_->OnAutocompleteControllerResultReady(this);
 }

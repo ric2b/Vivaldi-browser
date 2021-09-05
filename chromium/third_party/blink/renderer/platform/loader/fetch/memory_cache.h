@@ -51,13 +51,13 @@ class MemoryCacheEntry final : public GarbageCollected<MemoryCacheEntry> {
  public:
   explicit MemoryCacheEntry(Resource* resource) : resource_(resource) {}
 
-  void Trace(blink::Visitor*);
+  void Trace(Visitor*);
   Resource* GetResource() const { return resource_; }
 
  private:
-  void ClearResourceWeak(Visitor*);
+  void ClearResourceWeak(const WeakCallbackInfo&);
 
-  WeakMember<Resource> resource_;
+  UntracedMember<Resource> resource_;
 };
 
 // This cache holds subresources used by Web pages: images, scripts,
@@ -71,7 +71,7 @@ class PLATFORM_EXPORT MemoryCache final : public GarbageCollected<MemoryCache>,
   explicit MemoryCache(scoped_refptr<base::SingleThreadTaskRunner> task_runner);
   ~MemoryCache() override;
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
   struct TypeStatistic {
     STACK_ALLOCATED();

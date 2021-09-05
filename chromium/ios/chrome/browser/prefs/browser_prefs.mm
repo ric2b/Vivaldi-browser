@@ -8,12 +8,12 @@
 #include "components/browsing_data/core/pref_names.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/dom_distiller/core/distilled_page_prefs.h"
+#include "components/feed/core/shared_prefs/pref_names.h"
 #include "components/flags_ui/pref_service_flags_storage.h"
-#include "components/gcm_driver/gcm_channel_status_syncer.h"
 #import "components/handoff/handoff_manager.h"
 #include "components/history/core/common/pref_names.h"
 #include "components/invalidation/impl/invalidator_registrar_with_memory.h"
-#include "components/invalidation/impl/per_user_topic_registration_manager.h"
+#include "components/invalidation/impl/per_user_topic_subscription_manager.h"
 #include "components/language/core/browser/language_prefs.h"
 #include "components/language/core/browser/pref_names.h"
 #include "components/metrics/metrics_pref_names.h"
@@ -29,10 +29,13 @@
 #include "components/omnibox/browser/zero_suggest_provider.h"
 #include "components/password_manager/core/browser/password_manager.h"
 #include "components/payments/core/payment_prefs.h"
+#include "components/policy/core/browser/browser_policy_connector.h"
+#include "components/policy/core/common/policy_statistics_collector.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "components/proxy_config/pref_proxy_config_tracker_impl.h"
 #include "components/rappor/rappor_service_impl.h"
+#include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "components/search_engines/template_url_prepopulate_data.h"
 #include "components/sessions/core/session_id_generator.h"
 #include "components/signin/public/base/signin_pref_names.h"
@@ -60,6 +63,7 @@
 #import "ios/chrome/browser/ui/bookmarks/bookmark_path_cache.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_utils_ios.h"
 #include "ios/chrome/browser/voice/voice_search_prefs_registration.h"
+#import "ios/chrome/browser/web/font_size_tab_helper.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -75,16 +79,27 @@ const char kLastPromptedGoogleURL[] = "browser.last_prompted_google_url";
 // Deprecated 9/2019
 const char kGoogleServicesUsername[] = "google.services.username";
 const char kGoogleServicesUserAccountId[] = "google.services.user_account_id";
+
+// Deprecated 1/2020
+const char kGCMChannelStatus[] = "gcm.channel_status";
+const char kGCMChannelPollIntervalSeconds[] = "gcm.poll_interval";
+const char kGCMChannelLastCheckTime[] = "gcm.check_time";
+
+// Deprecated 2/2020
+const char kInvalidatorClientId[] = "invalidator.client_id";
+const char kInvalidatorInvalidationState[] = "invalidator.invalidation_state";
+const char kInvalidatorSavedInvalidations[] = "invalidator.saved_invalidations";
 }
 
 void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
   BrowserStateInfoCache::RegisterPrefs(registry);
   flags_ui::PrefServiceFlagsStorage::RegisterPrefs(registry);
-  gcm::GCMChannelStatusSyncer::RegisterPrefs(registry);
   signin::IdentityManager::RegisterLocalStatePrefs(registry);
   IOSChromeMetricsServiceClient::RegisterPrefs(registry);
   network_time::NetworkTimeTracker::RegisterPrefs(registry);
   ios::NotificationPromo::RegisterPrefs(registry);
+  policy::BrowserPolicyConnector::RegisterPrefs(registry);
+  policy::PolicyStatisticsCollector::RegisterPrefs(registry);
   PrefProxyConfigTrackerImpl::RegisterPrefs(registry);
   rappor::RapporServiceImpl::RegisterPrefs(registry);
   sessions::SessionIdGenerator::RegisterPrefs(registry);
@@ -112,14 +127,24 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
   if (!base::FeatureList::IsEnabled(kUmaCellular)) {
     registry->RegisterBooleanPref(prefs::kMetricsReportingWifiOnly, true);
   }
+
+  registry->RegisterBooleanPref(kGCMChannelStatus, true);
+  registry->RegisterIntegerPref(kGCMChannelPollIntervalSeconds, 0);
+  registry->RegisterInt64Pref(kGCMChannelLastCheckTime, 0);
+
+  registry->RegisterListPref(kInvalidatorSavedInvalidations);
+  registry->RegisterStringPref(kInvalidatorInvalidationState, std::string());
+  registry->RegisterStringPref(kInvalidatorClientId, std::string());
 }
 
 void RegisterBrowserStatePrefs(user_prefs::PrefRegistrySyncable* registry) {
   autofill::prefs::RegisterProfilePrefs(registry);
   dom_distiller::DistilledPagePrefs::RegisterProfilePrefs(registry);
+  feed::prefs::RegisterFeedSharedProfilePrefs(registry);
   FirstRun::RegisterProfilePrefs(registry);
-  gcm::GCMChannelStatusSyncer::RegisterProfilePrefs(registry);
+  FontSizeTabHelper::RegisterBrowserStatePrefs(registry);
   HostContentSettingsMap::RegisterProfilePrefs(registry);
+  ios::NotificationPromo::RegisterProfilePrefs(registry);
   language::LanguagePrefs::RegisterProfilePrefs(registry);
   ntp_snippets::ClickBasedCategoryRanker::RegisterProfilePrefs(registry);
   ntp_snippets::ContentSuggestionsService::RegisterProfilePrefs(registry);
@@ -129,16 +154,16 @@ void RegisterBrowserStatePrefs(user_prefs::PrefRegistrySyncable* registry) {
   ntp_snippets::UserClassifier::RegisterProfilePrefs(registry);
   ntp_tiles::MostVisitedSites::RegisterProfilePrefs(registry);
   ntp_tiles::PopularSitesImpl::RegisterProfilePrefs(registry);
-  ios::NotificationPromo::RegisterProfilePrefs(registry);
   password_manager::PasswordManager::RegisterProfilePrefs(registry);
   payments::RegisterProfilePrefs(registry);
   PrefProxyConfigTrackerImpl::RegisterProfilePrefs(registry);
   RegisterVoiceSearchBrowserStatePrefs(registry);
+  safe_browsing::RegisterProfilePrefs(registry);
   sync_sessions::SessionSyncPrefs::RegisterProfilePrefs(registry);
   syncer::DeviceInfoPrefs::RegisterProfilePrefs(registry);
-  syncer::SyncPrefs::RegisterProfilePrefs(registry);
-  syncer::PerUserTopicRegistrationManager::RegisterProfilePrefs(registry);
   syncer::InvalidatorRegistrarWithMemory::RegisterProfilePrefs(registry);
+  syncer::PerUserTopicSubscriptionManager::RegisterProfilePrefs(registry);
+  syncer::SyncPrefs::RegisterProfilePrefs(registry);
   TemplateURLPrepopulateData::RegisterProfilePrefs(registry);
   translate::TranslatePrefs::RegisterProfilePrefs(registry);
   unified_consent::UnifiedConsentService::RegisterPrefs(registry);
@@ -186,10 +211,27 @@ void RegisterBrowserStatePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterStringPref(kLastPromptedGoogleURL, std::string());
   registry->RegisterStringPref(kGoogleServicesUsername, std::string());
   registry->RegisterStringPref(kGoogleServicesUserAccountId, std::string());
+
+  registry->RegisterBooleanPref(kGCMChannelStatus, true);
+  registry->RegisterIntegerPref(kGCMChannelPollIntervalSeconds, 0);
+  registry->RegisterInt64Pref(kGCMChannelLastCheckTime, 0);
+
+  registry->RegisterListPref(kInvalidatorSavedInvalidations);
+  registry->RegisterStringPref(kInvalidatorInvalidationState, std::string());
+  registry->RegisterStringPref(kInvalidatorClientId, std::string());
 }
 
 // This method should be periodically pruned of year+ old migrations.
 void MigrateObsoleteLocalStatePrefs(PrefService* prefs) {
+  // Added 1/2020.
+  prefs->ClearPref(kGCMChannelStatus);
+  prefs->ClearPref(kGCMChannelPollIntervalSeconds);
+  prefs->ClearPref(kGCMChannelLastCheckTime);
+
+  // Added 2/2020.
+  prefs->ClearPref(kInvalidatorSavedInvalidations);
+  prefs->ClearPref(kInvalidatorInvalidationState);
+  prefs->ClearPref(kInvalidatorClientId);
 }
 
 // This method should be periodically pruned of year+ old migrations.
@@ -221,4 +263,14 @@ void MigrateObsoleteBrowserStatePrefs(PrefService* prefs) {
 
   // Added 10/2019.
   syncer::DeviceInfoPrefs::MigrateRecentLocalCacheGuidsPref(prefs);
+
+  // Added 1/2020.
+  prefs->ClearPref(kGCMChannelStatus);
+  prefs->ClearPref(kGCMChannelPollIntervalSeconds);
+  prefs->ClearPref(kGCMChannelLastCheckTime);
+
+  // Added 2/2020.
+  prefs->ClearPref(kInvalidatorSavedInvalidations);
+  prefs->ClearPref(kInvalidatorInvalidationState);
+  prefs->ClearPref(kInvalidatorClientId);
 }

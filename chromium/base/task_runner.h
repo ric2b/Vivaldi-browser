@@ -8,10 +8,12 @@
 #include <stddef.h>
 
 #include "base/base_export.h"
+#include "base/bind.h"
 #include "base/callback.h"
 #include "base/location.h"
+#include "base/logging.h"
 #include "base/memory/ref_counted.h"
-#include "base/task/promise/abstract_promise.h"
+#include "base/post_task_and_reply_with_result_internal.h"
 #include "base/time/time.h"
 
 namespace base {
@@ -71,24 +73,6 @@ class BASE_EXPORT TaskRunner
                                OnceClosure task,
                                base::TimeDelta delay) = 0;
 
-  // Returns true iff tasks posted to this TaskRunner are sequenced
-  // with this call.
-  //
-  // In particular:
-  // - Returns true if this is a SequencedTaskRunner to which the
-  //   current task was posted.
-  // - Returns true if this is a SequencedTaskRunner bound to the
-  //   same sequence as the SequencedTaskRunner to which the current
-  //   task was posted.
-  // - Returns true if this is a SingleThreadTaskRunner bound to
-  //   the current thread.
-  // TODO(http://crbug.com/665062):
-  //   This API doesn't make sense for parallel TaskRunners.
-  //   Introduce alternate static APIs for documentation purposes of "this runs
-  //   in pool X", have RunsTasksInCurrentSequence() return false for parallel
-  //   TaskRunners, and ultimately move this method down to SequencedTaskRunner.
-  virtual bool RunsTasksInCurrentSequence() const = 0;
-
   // Posts |task| on the current TaskRunner.  On completion, |reply|
   // is posted to the thread that called PostTaskAndReply().  Both
   // |task| and |reply| are guaranteed to be deleted on the thread
@@ -134,9 +118,35 @@ class BASE_EXPORT TaskRunner
                         OnceClosure task,
                         OnceClosure reply);
 
-  // TODO(alexclarke): This should become pure virtual and replace
-  // PostDelayedTask. NB passing by reference to reduce binary size.
-  bool PostPromiseInternal(WrappedPromise promise, base::TimeDelta delay);
+  // When you have these methods
+  //
+  //   R DoWorkAndReturn();
+  //   void Callback(const R& result);
+  //
+  // and want to call them in a PostTaskAndReply kind of fashion where the
+  // result of DoWorkAndReturn is passed to the Callback, you can use
+  // PostTaskAndReplyWithResult as in this example:
+  //
+  // PostTaskAndReplyWithResult(
+  //     target_thread_.task_runner(),
+  //     FROM_HERE,
+  //     BindOnce(&DoWorkAndReturn),
+  //     BindOnce(&Callback));
+  template <typename TaskReturnType, typename ReplyArgType>
+  bool PostTaskAndReplyWithResult(const Location& from_here,
+                                  OnceCallback<TaskReturnType()> task,
+                                  OnceCallback<void(ReplyArgType)> reply) {
+    DCHECK(task);
+    DCHECK(reply);
+    // std::unique_ptr used to avoid the need of a default constructor.
+    auto* result = new std::unique_ptr<TaskReturnType>();
+    return PostTaskAndReply(
+        from_here,
+        BindOnce(&internal::ReturnAsParamAdapter<TaskReturnType>,
+                 std::move(task), result),
+        BindOnce(&internal::ReplyAdapter<TaskReturnType, ReplyArgType>,
+                 std::move(reply), Owned(result)));
+  }
 
  protected:
   friend struct TaskRunnerTraits;

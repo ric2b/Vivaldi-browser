@@ -6,12 +6,13 @@
 #define CONTENT_BROWSER_SMS_SMS_SERVICE_H_
 
 #include <memory>
+#include <string>
 
 #include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/sequence_checker.h"
 #include "base/time/time.h"
-#include "content/browser/sms/sms_provider.h"
+#include "content/browser/sms/sms_queue.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/frame_service_base.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -21,9 +22,11 @@
 namespace content {
 
 class RenderFrameHost;
+class SmsFetcher;
+struct LoadCommittedDetails;
 
 // SmsService handles mojo connections from the renderer, observing the incoming
-// SMS messages from an SmsProvider.
+// SMS messages from an SmsFetcher.
 // In practice, it is owned and managed by a RenderFrameHost. It accomplishes
 // that via subclassing FrameServiceBase, which observes the lifecycle of a
 // RenderFrameHost and manages it own memory.
@@ -31,32 +34,37 @@ class RenderFrameHost;
 // request.
 class CONTENT_EXPORT SmsService
     : public FrameServiceBase<blink::mojom::SmsReceiver>,
-      public content::SmsProvider::Observer {
+      public SmsFetcher::Subscriber {
  public:
-  static void Create(SmsProvider*,
+  static void Create(SmsFetcher*,
                      RenderFrameHost*,
                      mojo::PendingReceiver<blink::mojom::SmsReceiver>);
 
-  SmsService(SmsProvider*,
+  SmsService(SmsFetcher*,
              RenderFrameHost*,
              mojo::PendingReceiver<blink::mojom::SmsReceiver>);
-  SmsService(SmsProvider*,
+  SmsService(SmsFetcher*,
              const url::Origin&,
              RenderFrameHost*,
              mojo::PendingReceiver<blink::mojom::SmsReceiver>);
   ~SmsService() override;
 
-  // content::SmsProvider::Observer:
-  bool OnReceive(const url::Origin&,
-                 const std::string& one_time_code,
-                 const std::string& sms) override;
-
   // blink::mojom::SmsReceiver:
   void Receive(ReceiveCallback) override;
+  void Abort() override;
+
+  // content::SmsQueue::Subscriber
+  void OnReceive(const std::string& one_time_code) override;
+
+ protected:
+  // content::WebContentsObserver:
+  void NavigationEntryCommitted(
+      const content::LoadCommittedDetails& load_details) override;
 
  private:
   void OpenInfoBar(const std::string& one_time_code);
-  void Process(blink::mojom::SmsStatus, base::Optional<std::string> sms);
+  void Process(blink::mojom::SmsStatus,
+               base::Optional<std::string> one_time_code);
   void CleanUp();
 
   // Called when the user manually clicks the 'Enter code' button.
@@ -64,15 +72,17 @@ class CONTENT_EXPORT SmsService
   // Called when the user manually dismisses the infobar.
   void OnCancel();
 
-  // |sms_provider_| is safe because all instances of SmsProvider are owned
-  // by a SmsKeyedService, which is owned by a Profile, which transitively
-  // owns SmsServices.
-  SmsProvider* sms_provider_;
+  // |fetcher_| is safe because all instances of SmsFetcher are owned
+  // by the browser context, which transitively (through RenderFrameHost) owns
+  // and outlives this class.
+  SmsFetcher* fetcher_;
 
   const url::Origin origin_;
 
+  bool prompt_open_ = false;
+
   ReceiveCallback callback_;
-  base::Optional<std::string> sms_;
+  base::Optional<std::string> one_time_code_;
   base::TimeTicks start_time_;
   base::TimeTicks receive_time_;
 

@@ -48,10 +48,11 @@ class ASH_EXPORT AppListPresenterDelegateImpl : public AppListPresenterDelegate,
   bool IsTabletMode() const override;
   AppListViewDelegate* GetAppListViewDelegate() override;
   bool GetOnScreenKeyboardShown() override;
+  aura::Window* GetContainerForWindow(aura::Window* window) override;
   aura::Window* GetRootWindowForDisplayId(int64_t display_id) override;
   void OnVisibilityChanged(bool visible, int64_t display_id) override;
   void OnVisibilityWillChange(bool visible, int64_t display_id) override;
-  bool IsVisible() override;
+  bool IsVisible(const base::Optional<int64_t>& display_id) override;
   // DisplayObserver overrides:
   void OnDisplayMetricsChanged(const display::Display& display,
                                uint32_t changed_metrics) override;

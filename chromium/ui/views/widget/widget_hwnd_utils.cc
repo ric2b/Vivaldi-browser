@@ -50,7 +50,7 @@ void CalculateWindowStylesFromInitParams(
     *ex_style |= WS_EX_TOPMOST;
   if (params.mirror_origin_in_rtl)
     *ex_style |= l10n_util::GetExtendedTooltipStyles();
-  if (params.shadow_type == Widget::InitParams::SHADOW_TYPE_DROP)
+  if (params.shadow_type == Widget::InitParams::ShadowType::kDrop)
     *class_style |= CS_DROPSHADOW;
 
   // Set type-dependent style attributes.
@@ -166,7 +166,7 @@ void ConfigureWindowStyles(
   // This doesn't work when Aero is disabled, so disable it in that case.
   // Software composited windows can continue to use WS_EX_LAYERED.
   bool is_translucent =
-      (params.opacity == Widget::InitParams::TRANSLUCENT_WINDOW &&
+      (params.opacity == Widget::InitParams::WindowOpacity::kTranslucent &&
        (ui::win::IsAeroGlassEnabled() || params.force_software_compositing));
 
   CalculateWindowStylesFromInitParams(params, widget_delegate,

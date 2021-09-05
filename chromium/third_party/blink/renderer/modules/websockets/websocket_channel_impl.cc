@@ -35,8 +35,7 @@
 #include "base/callback.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
-#include "mojo/public/cpp/bindings/interface_request.h"
-#include "services/service_manager/public/cpp/interface_provider.h"
+#include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/mojom/websockets/websocket_connector.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/task_type.h"
@@ -58,6 +57,7 @@
 #include "third_party/blink/renderer/core/workers/worker_global_scope.h"
 #include "third_party/blink/renderer/modules/websockets/inspector_websocket_events.h"
 #include "third_party/blink/renderer/modules/websockets/websocket_channel_client.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
 #include "third_party/blink/renderer/platform/loader/fetch/unique_identifier.h"
 #include "third_party/blink/renderer/platform/network/network_log.h"
@@ -97,7 +97,7 @@ class WebSocketChannelImpl::BlobLoader final
   void DidFinishLoading() override;
   void DidFail(FileErrorCode) override;
 
-  void Trace(blink::Visitor* visitor) { visitor->Trace(channel_); }
+  void Trace(Visitor* visitor) { visitor->Trace(channel_); }
 
  private:
   Member<WebSocketChannelImpl> channel_;
@@ -113,7 +113,7 @@ class WebSocketChannelImpl::Message final
   // Close message
   Message(uint16_t code, const String& reason);
 
-  void Trace(blink::Visitor* visitor) { visitor->Trace(array_buffer); }
+  void Trace(Visitor* visitor) { visitor->Trace(array_buffer); }
 
   MessageType type;
 
@@ -226,9 +226,9 @@ bool WebSocketChannelImpl::Connect(const KURL& url, const String& protocol) {
     String message =
         "Connecting to a non-secure WebSocket server from a secure origin is "
         "deprecated.";
-    execution_context_->AddConsoleMessage(
-        ConsoleMessage::Create(mojom::ConsoleMessageSource::kJavaScript,
-                               mojom::ConsoleMessageLevel::kWarning, message));
+    execution_context_->AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
+        mojom::ConsoleMessageSource::kJavaScript,
+        mojom::ConsoleMessageLevel::kWarning, message));
   }
 
   url_ = url;
@@ -253,15 +253,9 @@ bool WebSocketChannelImpl::Connect(const KURL& url, const String& protocol) {
   }
 
   mojo::Remote<mojom::blink::WebSocketConnector> connector;
-  if (execution_context_->GetInterfaceProvider()) {
-    execution_context_->GetInterfaceProvider()->GetInterface(
-        connector.BindNewPipeAndPassReceiver(
-            execution_context_->GetTaskRunner(TaskType::kWebSocket)));
-  } else {
-    // Create a fake request. This will lead to a closed WebSocket due to
-    // a mojo connection error.
-    ignore_result(connector.BindNewPipeAndPassReceiver());
-  }
+  execution_context_->GetBrowserInterfaceBroker().GetInterface(
+      connector.BindNewPipeAndPassReceiver(
+          execution_context_->GetTaskRunner(TaskType::kWebSocket)));
 
   connector->Connect(
       url, protocols, GetBaseFetchContext()->GetSiteForCookies(),
@@ -336,8 +330,8 @@ void WebSocketChannelImpl::Send(
 
 WebSocketChannel::SendResult WebSocketChannelImpl::Send(
     const DOMArrayBuffer& buffer,
-    unsigned byte_offset,
-    unsigned byte_length,
+    size_t byte_offset,
+    size_t byte_length,
     base::OnceClosure completion_callback) {
   NETWORK_DVLOG(1) << this << " Send(" << buffer.Data() << ", " << byte_offset
                    << ", " << byte_length << ") "
@@ -396,9 +390,9 @@ void WebSocketChannelImpl::Fail(const String& reason,
     location = location_at_construction_->Clone();
   }
 
-  execution_context_->AddConsoleMessage(
-      ConsoleMessage::Create(mojom::ConsoleMessageSource::kJavaScript, level,
-                             message, std::move(location)));
+  execution_context_->AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
+      mojom::ConsoleMessageSource::kJavaScript, level, message,
+      std::move(location)));
   // |reason| is only for logging and should not be provided for scripts,
   // hence close reason must be empty in tearDownFailedConnection.
   TearDownFailedConnection();
@@ -430,12 +424,16 @@ void WebSocketChannelImpl::CancelHandshake() {
 }
 
 void WebSocketChannelImpl::ApplyBackpressure() {
+  NETWORK_DVLOG(1) << this << " ApplyBackpressure";
   backpressure_ = true;
 }
 
 void WebSocketChannelImpl::RemoveBackpressure() {
-  backpressure_ = false;
-  ConsumePendingDataFrames();
+  NETWORK_DVLOG(1) << this << " RemoveBackpressure";
+  if (backpressure_) {
+    backpressure_ = false;
+    ConsumePendingDataFrames();
+  }
 }
 
 void WebSocketChannelImpl::OnOpeningHandshakeStarted(
@@ -457,11 +455,12 @@ void WebSocketChannelImpl::OnConnectionEstablished(
     mojo::PendingRemote<network::mojom::blink::WebSocket> websocket,
     mojo::PendingReceiver<network::mojom::blink::WebSocketClient>
         client_receiver,
-    const String& protocol,
-    const String& extensions,
     network::mojom::blink::WebSocketHandshakeResponsePtr response,
-    mojo::ScopedDataPipeConsumerHandle readable) {
+    mojo::ScopedDataPipeConsumerHandle readable,
+    mojo::ScopedDataPipeProducerHandle writable) {
   DCHECK_EQ(GetState(), State::kConnecting);
+  const String& protocol = response->selected_protocol;
+  const String& extensions = response->extensions;
   NETWORK_DVLOG(1) << this << " OnConnectionEstablished(" << protocol << ", "
                    << extensions << ")";
   TRACE_EVENT_INSTANT1(
@@ -486,6 +485,8 @@ void WebSocketChannelImpl::OnConnectionEstablished(
   websocket_.Bind(std::move(websocket),
                   execution_context_->GetTaskRunner(TaskType::kNetworking));
   readable_ = std::move(readable);
+  // TODO(suzukikeita): Implement upload via |writable_| instead of SendFrame.
+  writable_ = std::move(writable);
   const MojoResult mojo_result = readable_watcher_.Watch(
       readable_.get(), MOJO_HANDLE_SIGNAL_READABLE,
       MOJO_WATCH_CONDITION_SATISFIED,
@@ -551,11 +552,7 @@ void WebSocketChannelImpl::OnClosingHandshake() {
   client_->DidStartClosingHandshake();
 }
 
-ExecutionContext* WebSocketChannelImpl::GetExecutionContext() {
-  return execution_context_;
-}
-
-void WebSocketChannelImpl::Trace(blink::Visitor* visitor) {
+void WebSocketChannelImpl::Trace(Visitor* visitor) {
   visitor->Trace(blob_loader_);
   visitor->Trace(messages_);
   visitor->Trace(client_);
@@ -598,19 +595,17 @@ WebSocketChannelImpl::State WebSocketChannelImpl::GetState() const {
 void WebSocketChannelImpl::SendInternal(
     network::mojom::blink::WebSocketMessageType message_type,
     const char* data,
-    wtf_size_t total_size,
+    size_t total_size,
     uint64_t* consumed_buffered_amount) {
   network::mojom::blink::WebSocketMessageType frame_type =
       sent_size_of_top_message_
           ? network::mojom::blink::WebSocketMessageType::CONTINUATION
           : message_type;
   DCHECK_GE(total_size, sent_size_of_top_message_);
-  // The first cast is safe since the result of min() never exceeds
-  // the range of wtf_size_t. The second cast is necessary to compile
-  // min() on ILP32.
-  wtf_size_t size = static_cast<wtf_size_t>(
-      std::min(sending_quota_,
-               static_cast<uint64_t>(total_size - sent_size_of_top_message_)));
+  // The cast is safe since the result of min() never exceeds the range of
+  // size_t.
+  size_t size = static_cast<size_t>(std::min<uint64_t>(
+      sending_quota_, total_size - sent_size_of_top_message_));
   bool final = (sent_size_of_top_message_ + size == total_size);
 
   SendAndAdjustQuota(final, frame_type,
@@ -669,8 +664,7 @@ void WebSocketChannelImpl::ProcessSendQueue() {
     switch (message->type) {
       case kMessageTypeText:
         SendInternal(network::mojom::blink::WebSocketMessageType::TEXT,
-                     message->text.data(),
-                     static_cast<wtf_size_t>(message->text.length()),
+                     message->text.data(), message->text.length(),
                      &consumed_buffered_amount);
         break;
       case kMessageTypeBlob:
@@ -684,7 +678,7 @@ void WebSocketChannelImpl::ProcessSendQueue() {
         CHECK(message->array_buffer);
         SendInternal(network::mojom::blink::WebSocketMessageType::BINARY,
                      static_cast<const char*>(message->array_buffer->Data()),
-                     message->array_buffer->ByteLength(),
+                     message->array_buffer->ByteLengthAsSizeT(),
                      &consumed_buffered_amount);
         break;
       case kMessageTypeClose: {

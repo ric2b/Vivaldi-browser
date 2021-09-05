@@ -9,11 +9,12 @@ import android.content.Intent;
 
 import org.chromium.base.StrictModeContext;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
-import org.chromium.chrome.browser.preferences.PreferencesLauncher;
-import org.chromium.chrome.browser.preferences.website.SingleWebsitePreferences;
 import org.chromium.chrome.browser.previews.PreviewsAndroidBridge;
-import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.util.UrlConstants;
+import org.chromium.chrome.browser.settings.SettingsLauncher;
+import org.chromium.chrome.browser.site_settings.SingleWebsiteSettings;
+import org.chromium.components.dom_distiller.core.DomDistillerUrlUtils;
+import org.chromium.components.embedder_support.util.UrlConstants;
+import org.chromium.content_public.browser.WebContents;
 import org.chromium.net.GURLUtils;
 
 /**
@@ -22,13 +23,18 @@ import org.chromium.net.GURLUtils;
  */
 public class SiteSettingsHelper {
     /**
-     * Whether site settings is available for a given {@link Tab}.
+     * Whether site settings is available for a given {@link WebContents}.
+     * @param webContents The WebContents for which to check the site settings.
      */
-    public static boolean isSiteSettingsAvailable(Tab tab) {
-        boolean isOfflinePage = OfflinePageUtils.getOfflinePage(tab) != null;
+    public static boolean isSiteSettingsAvailable(WebContents webContents) {
+        boolean isOfflinePage = OfflinePageUtils.getOfflinePage(webContents) != null;
         boolean isPreviewPage =
-                PreviewsAndroidBridge.getInstance().shouldShowPreviewUI(tab.getWebContents());
-        String scheme = GURLUtils.getScheme(tab.getOriginalUrl());
+                PreviewsAndroidBridge.getInstance().shouldShowPreviewUI(webContents);
+        // TODO(crbug.com/1033178): dedupe the DomDistillerUrlUtils#getOriginalUrlFromDistillerUrl()
+        // calls.
+        String url = DomDistillerUrlUtils.getOriginalUrlFromDistillerUrl(
+                webContents.getVisibleUrlString());
+        String scheme = GURLUtils.getScheme(url);
         return !isOfflinePage && !isPreviewPage
                 && (UrlConstants.HTTP_SCHEME.equals(scheme)
                         || UrlConstants.HTTPS_SCHEME.equals(scheme));
@@ -38,9 +44,9 @@ public class SiteSettingsHelper {
      * Shows the site settings activity for a given url.
      */
     public static void showSiteSettings(Context context, String fullUrl) {
-        Intent preferencesIntent = PreferencesLauncher.createIntentForSettingsPage(context,
-                SingleWebsitePreferences.class.getName(),
-                SingleWebsitePreferences.createFragmentArgsForSite(fullUrl));
+        Intent preferencesIntent = SettingsLauncher.getInstance().createIntentForSettingsPage(
+                context, SingleWebsiteSettings.class.getName(),
+                SingleWebsiteSettings.createFragmentArgsForSite(fullUrl));
         // Disabling StrictMode to avoid violations (https://crbug.com/819410).
         try (StrictModeContext ignored = StrictModeContext.allowDiskReads()) {
             context.startActivity(preferencesIntent);

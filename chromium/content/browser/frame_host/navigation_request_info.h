@@ -25,7 +25,7 @@ namespace content {
 struct CONTENT_EXPORT NavigationRequestInfo {
   NavigationRequestInfo(mojom::CommonNavigationParamsPtr common_params,
                         mojom::BeginNavigationParamsPtr begin_params,
-                        const GURL& site_for_cookies,
+                        const net::SiteForCookies& site_for_cookies,
                         const net::NetworkIsolationKey& network_isolation_key,
                         bool is_main_frame,
                         bool parent_is_main_frame,
@@ -35,7 +35,7 @@ struct CONTENT_EXPORT NavigationRequestInfo {
                         bool report_raw_headers,
                         bool is_prerendering,
                         bool upgrade_if_insecure,
-                        std::unique_ptr<network::SharedURLLoaderFactoryInfo>
+                        std::unique_ptr<network::PendingSharedURLLoaderFactory>
                             blob_url_loader_factory,
                         const base::UnguessableToken& devtools_navigation_token,
                         const base::UnguessableToken& devtools_frame_token,
@@ -46,9 +46,9 @@ struct CONTENT_EXPORT NavigationRequestInfo {
   mojom::CommonNavigationParamsPtr common_params;
   mojom::BeginNavigationParamsPtr begin_params;
 
-  // Usually the URL of the document in the top-level window, which may be
-  // checked by the third-party cookie blocking policy.
-  const GURL site_for_cookies;
+  // Used to check which URLs (if any) are third-party for purposes of cookie
+  // blocking policy.
+  const net::SiteForCookies site_for_cookies;
 
   // Navigation resource requests will be keyed using |network_isolation_key|
   // for accessing shared network resources like the http cache.
@@ -74,7 +74,8 @@ struct CONTENT_EXPORT NavigationRequestInfo {
   const bool upgrade_if_insecure;
 
   // URLLoaderFactory to facilitate loading blob URLs.
-  std::unique_ptr<network::SharedURLLoaderFactoryInfo> blob_url_loader_factory;
+  std::unique_ptr<network::PendingSharedURLLoaderFactory>
+      blob_url_loader_factory;
 
   const base::UnguessableToken devtools_navigation_token;
 

@@ -5,8 +5,6 @@
 #ifndef DEVICE_BLUETOOTH_CHROMEOS_BLUETOOTH_UTILS_H_
 #define DEVICE_BLUETOOTH_CHROMEOS_BLUETOOTH_UTILS_H_
 
-#include <vector>
-
 #include "device/bluetooth/bluetooth_adapter.h"
 #include "device/bluetooth/bluetooth_export.h"
 
@@ -32,21 +30,28 @@ enum class BluetoothUiSurface {
 };
 
 // Return filtered devices based on the filter type and max number of devices.
-device::BluetoothAdapter::DeviceList DEVICE_BLUETOOTH_EXPORT
+DEVICE_BLUETOOTH_EXPORT device::BluetoothAdapter::DeviceList
 FilterBluetoothDeviceList(const BluetoothAdapter::DeviceList& devices,
                           BluetoothFilterType filter_type,
                           int max_devices);
 
-std::vector<std::vector<uint8_t>> DEVICE_BLUETOOTH_EXPORT
-GetBlockedLongTermKeys();
+// Record outcome of user attempting to pair to a device.
+DEVICE_BLUETOOTH_EXPORT void RecordPairingResult(bool success,
+                                                 BluetoothTransport transport,
+                                                 base::TimeDelta duration);
+
+// Record outcome of user attempting to reconnect to a previously paired device.
+DEVICE_BLUETOOTH_EXPORT void RecordUserInitiatedReconnectionAttemptResult(
+    bool success,
+    BluetoothUiSurface surface);
 
 // Record how long it took for a user to find and select the device they wished
 // to connect to.
-void DEVICE_BLUETOOTH_EXPORT
-RecordDeviceSelectionDuration(base::TimeDelta duration,
-                              BluetoothUiSurface surface,
-                              bool was_paired,
-                              BluetoothTransport transport);
+DEVICE_BLUETOOTH_EXPORT void RecordDeviceSelectionDuration(
+    base::TimeDelta duration,
+    BluetoothUiSurface surface,
+    bool was_paired,
+    BluetoothTransport transport);
 
 }  // namespace device
 

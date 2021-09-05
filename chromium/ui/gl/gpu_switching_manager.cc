@@ -23,9 +23,20 @@ void GpuSwitchingManager::RemoveObserver(GpuSwitchingObserver* observer) {
   observer_list_.RemoveObserver(observer);
 }
 
-void GpuSwitchingManager::NotifyGpuSwitched() {
+void GpuSwitchingManager::NotifyGpuSwitched(
+    gl::GpuPreference active_gpu_heuristic) {
   for (GpuSwitchingObserver& observer : observer_list_)
-    observer.OnGpuSwitched();
+    observer.OnGpuSwitched(active_gpu_heuristic);
+}
+
+void GpuSwitchingManager::NotifyDisplayAdded() {
+  for (GpuSwitchingObserver& observer : observer_list_)
+    observer.OnDisplayAdded();
+}
+
+void GpuSwitchingManager::NotifyDisplayRemoved() {
+  for (GpuSwitchingObserver& observer : observer_list_)
+    observer.OnDisplayRemoved();
 }
 
 }  // namespace ui

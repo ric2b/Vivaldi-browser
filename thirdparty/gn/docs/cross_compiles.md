@@ -13,7 +13,7 @@ the platform that the build is run on, and the target is the platform
 where the code will actually run (This is different from
 [autotools](http://www.gnu.org/software/automake/manual/html_node/Cross_002dCompilation.html)'
 terminology, but uses the more common terminology for cross
-compiling**).**
+compiling).
 
 (Confusingly, GN also refers to each build artifact -- an executable,
 library, etc. -- as a target. On this page, we will use "target" only to
@@ -111,10 +111,11 @@ config("my_config") {
 
 ## As a //build/config or //build/toolchain author
 
-The `default_toolchain` is declared in the `//build/config/BUILDCONFIG.gn`
-file. Usually the `default_toolchain` should be the toolchain for the
-`target_os` and `target_cpu`. The `current_toolchain` reflects the
-toolchain that is currently in effect for a rule.
+The `default_toolchain` is declared in the `BUILDCONFIG.gn` file (in Google
+projects this normally is in the `//build/config` directory). Usually the
+`default_toolchain` should be the toolchain for the `target_os` and
+`target_cpu`. The `current_toolchain` reflects the toolchain that is currently
+in effect for a rule.
 
 Be sure you understand the differences between `host_cpu`, `target_cpu`,
 `current_cpu`, and `toolchain_cpu` (and the os equivalents). The first

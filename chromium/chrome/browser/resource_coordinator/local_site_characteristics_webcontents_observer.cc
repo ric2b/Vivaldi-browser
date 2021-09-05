@@ -26,6 +26,26 @@ namespace {
 
 using LoadingState = TabLoadTracker::LoadingState;
 
+// The period of time after loading during which we ignore title/favicon
+// change events. It's possible for some site that are loaded in background to
+// use some of these features without this being an attempt to communicate
+// with the user (e.g. the tab is just really finishing to load).
+constexpr base::TimeDelta kTitleOrFaviconChangePostLoadGracePeriod =
+    base::TimeDelta::FromSeconds(20);
+
+// The period of time during which we ignore events after a tab gets
+// backgrounded. It's necessary because some events might happen shortly after
+// backgrounding a tab without this being an attempt to communicate with the
+// user:
+//    - There might be a delay between a media request gets initiated and the
+//      time the audio actually starts.
+//    - Same-document navigation can cause the title or favicon to change, if
+//      the user switch tab before this completes this will be recorded as a
+//      background communication event while in reality it's just a navigation
+//      event.
+constexpr base::TimeDelta kFeatureUsagePostBackgroundGracePeriod =
+    base::TimeDelta::FromSeconds(10);
+
 performance_manager::TabVisibility ContentVisibilityToRCVisibility(
     content::Visibility visibility) {
   if (visibility == content::Visibility::VISIBLE)
@@ -35,46 +55,12 @@ performance_manager::TabVisibility ContentVisibilityToRCVisibility(
 
 }  // namespace
 
-class LocalSiteCharacteristicsWebContentsObserver::GraphObserver
-    : public performance_manager::FrameNode::ObserverDefaultImpl,
-      public performance_manager::GraphOwned {
- public:
-  using FrameNode = performance_manager::FrameNode;
-  using Graph = performance_manager::Graph;
-  using WebContentsProxy = performance_manager::WebContentsProxy;
-
-  GraphObserver();
-
-  // FrameNodeObserver implementation:
-  void OnNonPersistentNotificationCreated(const FrameNode* frame_node) override;
-
-  // GraphOwned implementation:
-  void OnPassedToGraph(Graph* graph) override {
-    graph->AddFrameNodeObserver(this);
-  }
-  void OnTakenFromGraph(Graph* graph) override {
-    graph->RemoveFrameNodeObserver(this);
-  }
-
- private:
-  static void DispatchNonPersistentNotificationCreated(
-      WebContentsProxy contents_proxy,
-      const url::Origin& origin);
-
-  // Binds to the task runner where the object is constructed.
-  scoped_refptr<base::SequencedTaskRunner> destination_task_runner_;
-
-  SEQUENCE_CHECKER(sequence_checker_);
-};
-
 LocalSiteCharacteristicsWebContentsObserver::
     LocalSiteCharacteristicsWebContentsObserver(
         content::WebContents* web_contents)
     : content::WebContentsObserver(web_contents) {
   // May not be present in some tests.
   if (performance_manager::PerformanceManagerImpl::IsAvailable()) {
-    // The performance manager has to be enabled in order to properly track the
-    // non-persistent notification events.
     TabLoadTracker::Get()->AddObserver(this);
   }
 }
@@ -82,14 +68,6 @@ LocalSiteCharacteristicsWebContentsObserver::
 LocalSiteCharacteristicsWebContentsObserver::
     ~LocalSiteCharacteristicsWebContentsObserver() {
   DCHECK(!writer_);
-}
-
-// static
-void LocalSiteCharacteristicsWebContentsObserver::MaybeCreateGraphObserver() {
-  if (performance_manager::PerformanceManagerImpl::IsAvailable()) {
-    performance_manager::PerformanceManagerImpl::PassToGraph(
-        FROM_HERE, std::make_unique<GraphObserver>());
-  }
 }
 
 void LocalSiteCharacteristicsWebContentsObserver::OnVisibilityChanged(
@@ -181,7 +159,7 @@ void LocalSiteCharacteristicsWebContentsObserver::TitleWasSet(
 }
 
 void LocalSiteCharacteristicsWebContentsObserver::DidUpdateFaviconURL(
-    const std::vector<content::FaviconURL>& candidates) {
+    const std::vector<blink::mojom::FaviconURLPtr>& candidates) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (!first_time_favicon_set_) {
@@ -226,27 +204,15 @@ void LocalSiteCharacteristicsWebContentsObserver::OnLoadingStateChange(
   }
 }
 
-void LocalSiteCharacteristicsWebContentsObserver::
-    OnNonPersistentNotificationCreated() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(performance_manager::PerformanceManagerImpl::IsAvailable());
-
-  MaybeNotifyBackgroundFeatureUsage(
-      &SiteCharacteristicsDataWriter::NotifyUsesNotificationsInBackground,
-      FeatureType::kNotificationUsage);
-}
-
 bool LocalSiteCharacteristicsWebContentsObserver::ShouldIgnoreFeatureUsageEvent(
     FeatureType feature_type) {
   // The feature usage should be ignored if there's no writer for this tab.
   if (!writer_)
     return true;
 
-  // Ignore all features happening before the website gets fully loaded except
-  // for the non-persistent notifications.
-  if (feature_type != FeatureType::kNotificationUsage &&
-      TabLoadTracker::Get()->GetLoadingState(web_contents()) !=
-          LoadingState::LOADED) {
+  // Ignore all features happening before the website gets fully loaded.
+  if (TabLoadTracker::Get()->GetLoadingState(web_contents()) !=
+      LoadingState::LOADED) {
     return true;
   }
 
@@ -259,9 +225,7 @@ bool LocalSiteCharacteristicsWebContentsObserver::ShouldIgnoreFeatureUsageEvent(
   if (feature_type == FeatureType::kTitleChange ||
       feature_type == FeatureType::kFaviconChange) {
     DCHECK(!loaded_time_.is_null());
-    if (NowTicks() - loaded_time_ <
-        GetStaticSiteCharacteristicsDatabaseParams()
-            .title_or_favicon_change_post_load_grace_period) {
+    if (NowTicks() - loaded_time_ < kTitleOrFaviconChangePostLoadGracePeriod) {
       return true;
     }
   }
@@ -269,9 +233,8 @@ bool LocalSiteCharacteristicsWebContentsObserver::ShouldIgnoreFeatureUsageEvent(
   // Ignore events happening shortly after the tab being backgrounded, they're
   // usually false positives.
   DCHECK(!backgrounded_time_.is_null());
-  if (NowTicks() - backgrounded_time_ <
-      GetStaticSiteCharacteristicsDatabaseParams()
-          .feature_usage_post_background_grace_period) {
+  if ((NowTicks() - backgrounded_time_ <
+       kFeatureUsagePostBackgroundGracePeriod)) {
     return true;
   }
 
@@ -303,61 +266,6 @@ void LocalSiteCharacteristicsWebContentsObserver::UpdateBackgroundedTime(
   } else {
     backgrounded_time_ = base::TimeTicks();
   }
-}
-
-LocalSiteCharacteristicsWebContentsObserver::GraphObserver::GraphObserver()
-    : destination_task_runner_(base::SequencedTaskRunnerHandle::Get()) {
-  // This object will be used on the PM sequence hereafter.
-  DETACH_FROM_SEQUENCE(sequence_checker_);
-}
-
-void LocalSiteCharacteristicsWebContentsObserver::GraphObserver::
-    OnNonPersistentNotificationCreated(const FrameNode* frame_node) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-  const performance_manager::PageNode* page_node = frame_node->GetPageNode();
-  destination_task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(
-          &GraphObserver::DispatchNonPersistentNotificationCreated,
-          page_node->GetContentsProxy(),
-          url::Origin::Create(page_node->GetMainFrameUrl().GetOrigin())));
-}
-
-namespace {
-
-// Return the WCO if notification is not late, and it's available.
-LocalSiteCharacteristicsWebContentsObserver* MaybeGetWCO(
-    performance_manager::WebContentsProxy contents_proxy,
-    const url::Origin& origin) {
-  content::WebContents* web_contents = contents_proxy.Get();
-  // The WC may be dead by the time the task posted from the PM sequence arrives
-  // on the UI thread.
-  if (!web_contents)
-    return nullptr;
-
-  // The L41r is not itself WebContentsUserData, but rather stored on
-  // the RC TabHelper, so retrieve that first - if available.
-  ResourceCoordinatorTabHelper* rc_th =
-      ResourceCoordinatorTabHelper::FromWebContents(web_contents);
-  if (!rc_th)
-    return nullptr;
-
-  auto* wco = rc_th->local_site_characteristics_wc_observer();
-  if (wco->writer_origin() != origin)
-    return nullptr;
-
-  return wco;
-}
-
-}  // namespace
-
-// static
-void LocalSiteCharacteristicsWebContentsObserver::GraphObserver::
-    DispatchNonPersistentNotificationCreated(WebContentsProxy contents_proxy,
-                                             const url::Origin& origin) {
-  if (auto* wco = MaybeGetWCO(contents_proxy, origin))
-    wco->OnNonPersistentNotificationCreated();
 }
 
 }  // namespace resource_coordinator

@@ -9,8 +9,8 @@ import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.url.URI;
 
-import java.net.URI;
 import java.net.URISyntaxException;
 
 /** Parses payment manifests in a utility process. */
@@ -76,14 +76,17 @@ public class PaymentManifestParser {
     /**
      * Parses the payment method manifest file asynchronously.
      *
-     * @param content  The content to parse.
+     * @param manifestUrl The URL of the payment method manifest that is being parsed. Used for
+     * resolving the optionally relative URL of the default application.
+     * @param content The content to parse.
      * @param callback The callback to invoke when finished parsing.
      */
-    public void parsePaymentMethodManifest(String content, ManifestParseCallback callback) {
+    public void parsePaymentMethodManifest(
+            URI manifestUrl, String content, ManifestParseCallback callback) {
         ThreadUtils.assertOnUiThread();
         assert mNativePaymentManifestParserAndroid != 0;
         PaymentManifestParserJni.get().parsePaymentMethodManifest(
-                mNativePaymentManifestParserAndroid, content, callback);
+                mNativePaymentManifestParserAndroid, manifestUrl, content, callback);
     }
 
     /**
@@ -135,8 +138,8 @@ public class PaymentManifestParser {
     interface Natives {
         long createPaymentManifestParserAndroid(WebContents webContents);
         void destroyPaymentManifestParserAndroid(long nativePaymentManifestParserAndroid);
-        void parsePaymentMethodManifest(long nativePaymentManifestParserAndroid, String content,
-                ManifestParseCallback callback);
+        void parsePaymentMethodManifest(long nativePaymentManifestParserAndroid, URI manifestUrl,
+                String content, ManifestParseCallback callback);
         void parseWebAppManifest(long nativePaymentManifestParserAndroid, String content,
                 ManifestParseCallback callback);
     }

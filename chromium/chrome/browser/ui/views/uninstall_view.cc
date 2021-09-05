@@ -28,9 +28,15 @@ UninstallView::UninstallView(int* user_selection,
       browsers_combo_(NULL),
       user_selection_(*user_selection),
       quit_closure_(quit_closure) {
-  DialogDelegate::set_button_label(
+  DialogDelegate::SetButtonLabel(
       ui::DIALOG_BUTTON_OK,
       l10n_util::GetStringUTF16(IDS_UNINSTALL_BUTTON_TEXT));
+  DialogDelegate::SetAcceptCallback(
+      base::BindOnce(&UninstallView::OnDialogAccepted, base::Unretained(this)));
+  DialogDelegate::SetCancelCallback(base::BindOnce(
+      &UninstallView::OnDialogCancelled, base::Unretained(this)));
+  DialogDelegate::SetCloseCallback(base::BindOnce(
+      &UninstallView::OnDialogCancelled, base::Unretained(this)));
   set_margins(ChromeLayoutProvider::Get()->GetDialogInsetsForContentType(
       views::TEXT, views::TEXT));
   SetupControls();
@@ -127,7 +133,7 @@ void UninstallView::SetupControls() {
   layout->AddPaddingRow(views::GridLayout::kFixedSize, related_vertical_small);
 }
 
-bool UninstallView::Accept() {
+void UninstallView::OnDialogAccepted() {
   user_selection_ = service_manager::RESULT_CODE_NORMAL_EXIT;
   if (delete_profile_->GetChecked())
     user_selection_ = chrome::RESULT_CODE_UNINSTALL_DELETE_PROFILE;
@@ -138,12 +144,10 @@ bool UninstallView::Accept() {
     options.start_hidden = true;
     base::LaunchProcess(i->second, options);
   }
-  return true;
 }
 
-bool UninstallView::Cancel() {
+void UninstallView::OnDialogCancelled() {
   user_selection_ = chrome::RESULT_CODE_UNINSTALL_USER_CANCEL;
-  return true;
 }
 
 void UninstallView::ButtonPressed(views::Button* sender,

@@ -10,6 +10,7 @@ import android.util.Pair;
 import android.util.SparseBooleanArray;
 
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ApplicationStatus;
@@ -17,7 +18,6 @@ import org.chromium.base.Callback;
 import org.chromium.base.Log;
 import org.chromium.base.StreamUtil;
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.base.task.AsyncTask;
 import org.chromium.base.task.BackgroundOnlyAsyncTask;
 import org.chromium.base.task.SequencedTaskRunner;
@@ -104,7 +104,7 @@ public class CustomTabTabPersistencePolicy implements TabPersistencePolicy {
     private boolean mDestroyed;
 
     @Inject
-    public CustomTabTabPersistencePolicy(ChromeActivity activity) {
+    public CustomTabTabPersistencePolicy(ChromeActivity<?> activity) {
         mTaskId = activity.getTaskId();
         mShouldRestore = (activity.getSavedInstanceState() != null);
     }
@@ -276,7 +276,8 @@ public class CustomTabTabPersistencePolicy implements TabPersistencePolicy {
      * @param activity The activity whose tab IDs are to be collected from.
      * @param tabIds Where the tab IDs should be added to.
      */
-    private static void getAllTabIdsForActivity(CustomTabActivity activity, Set<Integer> tabIds) {
+    private static void getAllTabIdsForActivity(
+            BaseCustomTabActivity activity, Set<Integer> tabIds) {
         if (activity == null) return;
         TabModelSelector selector = activity.getTabModelSelector();
         if (selector == null) return;
@@ -300,8 +301,8 @@ public class CustomTabTabPersistencePolicy implements TabPersistencePolicy {
         ThreadUtils.assertOnUiThread();
 
         for (Activity activity : ApplicationStatus.getRunningActivities()) {
-            if (!(activity instanceof CustomTabActivity)) continue;
-            getAllTabIdsForActivity((CustomTabActivity) activity, liveTabIds);
+            if (!(activity instanceof BaseCustomTabActivity)) continue;
+            getAllTabIdsForActivity((BaseCustomTabActivity) activity, liveTabIds);
             liveTaskIds.add(activity.getTaskId());
         }
     }
@@ -389,7 +390,8 @@ public class CustomTabTabPersistencePolicy implements TabPersistencePolicy {
                 try {
                     int taskId = Integer.parseInt(id);
 
-                    // Ignore the metadata file if it belongs to a currently live CustomTabActivity.
+                    // Ignore the metadata file if it belongs to a currently live
+                    // BaseCustomTabActivity.
                     if (liveTaskIds.contains(taskId)) continue;
 
                     filesToDelete.add(metadataFile.getName());

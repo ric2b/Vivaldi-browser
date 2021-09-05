@@ -7,7 +7,7 @@
  * the browser.
  */
 
-cr.exportPath('settings');
+// #import {addSingletonGetter} from 'chrome://resources/js/cr.m.js';
 
 cr.define('settings', function() {
   /** @interface */
@@ -20,7 +20,7 @@ cr.define('settings', function() {
   }
 
   /** @implements {settings.OpenWindowProxy} */
-  class OpenWindowProxyImpl {
+  /* #export */ class OpenWindowProxyImpl {
     /** @override */
     openURL(url) {
       window.open(url);
@@ -29,8 +29,6 @@ cr.define('settings', function() {
 
   cr.addSingletonGetter(OpenWindowProxyImpl);
 
-  return {
-    OpenWindowProxy: OpenWindowProxy,
-    OpenWindowProxyImpl: OpenWindowProxyImpl,
-  };
+  // #cr_define_end
+  return {OpenWindowProxy, OpenWindowProxyImpl};
 });

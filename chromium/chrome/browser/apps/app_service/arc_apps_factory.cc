@@ -28,8 +28,10 @@ ArcAppsFactory* ArcAppsFactory::GetInstance() {
 }
 
 // static
-bool ArcAppsFactory::IsEnabled() {
-  return AppServiceProxyFactory::IsEnabled();
+void ArcAppsFactory::ShutDownForTesting(content::BrowserContext* context) {
+  auto* factory = GetInstance();
+  factory->BrowserContextShutdown(context);
+  factory->BrowserContextDestroyed(context);
 }
 
 ArcAppsFactory::ArcAppsFactory()

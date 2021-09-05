@@ -29,11 +29,12 @@
  */
 
 #include "third_party/blink/renderer/core/page/chrome_client_impl.h"
+#include "base/run_loop.h"
 #include "cc/trees/layer_tree_host.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/feature_policy/feature_policy.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/mojom/choosers/color_chooser.mojom-blink.h"
-#include "third_party/blink/public/platform/web_input_event.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_local_frame_client.h"
 #include "third_party/blink/public/web/web_view.h"
@@ -62,7 +63,7 @@ class ViewCreatingClient : public frame_test_helpers::TestWebViewClient {
                       const WebWindowFeatures&,
                       const WebString& name,
                       WebNavigationPolicy,
-                      WebSandboxFlags,
+                      mojom::blink::WebSandboxFlags,
                       const FeaturePolicy::FeatureState&,
                       const SessionStorageNamespaceId&) override {
     return web_view_helper_.InitializeWithOpener(opener);
@@ -78,7 +79,7 @@ class CreateWindowTest : public testing::Test {
     web_view_ = helper_.Initialize(nullptr, &web_view_client_);
     main_frame_ = helper_.LocalMainFrame();
     chrome_client_impl_ =
-        ToChromeClientImpl(&web_view_->GetPage()->GetChromeClient());
+        To<ChromeClientImpl>(&web_view_->GetPage()->GetChromeClient());
   }
 
   ViewCreatingClient web_view_client_;
@@ -95,7 +96,8 @@ TEST_F(CreateWindowTest, CreateWindowFromPausedPage) {
   request.SetNavigationPolicy(kNavigationPolicyNewForegroundTab);
   WebWindowFeatures features;
   EXPECT_EQ(nullptr, chrome_client_impl_->CreateWindow(
-                         frame, request, "", features, WebSandboxFlags::kNone,
+                         frame, request, "", features,
+                         mojom::blink::WebSandboxFlags::kNone,
                          FeaturePolicy::FeatureState(), ""));
 }
 
@@ -106,7 +108,7 @@ class FakeColorChooserClient : public GarbageCollected<FakeColorChooserClient>,
       : owner_element_(owner_element) {}
   ~FakeColorChooserClient() override = default;
 
-  void Trace(blink::Visitor* visitor) override {
+  void Trace(Visitor* visitor) override {
     visitor->Trace(owner_element_);
     ColorChooserClient::Trace(visitor);
   }
@@ -136,7 +138,7 @@ class FakeDateTimeChooserClient
       : owner_element_(owner_element) {}
   ~FakeDateTimeChooserClient() override = default;
 
-  void Trace(blink::Visitor* visitor) override {
+  void Trace(Visitor* visitor) override {
     visitor->Trace(owner_element_);
     DateTimeChooserClient::Trace(visitor);
   }
@@ -185,7 +187,7 @@ class PagePopupSuppressionTest : public testing::Test {
     web_view_ = helper_.Initialize();
     main_frame_ = helper_.LocalMainFrame();
     chrome_client_impl_ =
-        ToChromeClientImpl(&web_view_->GetPage()->GetChromeClient());
+        To<ChromeClientImpl>(&web_view_->GetPage()->GetChromeClient());
     LocalFrame* frame = helper_.LocalMainFrame()->GetFrame();
     color_chooser_client_ = MakeGarbageCollected<FakeColorChooserClient>(
         frame->GetDocument()->documentElement());
@@ -257,7 +259,7 @@ class FileChooserQueueTest : public testing::Test {
   void SetUp() override {
     web_view_ = helper_.Initialize();
     chrome_client_impl_ =
-        ToChromeClientImpl(&web_view_->GetPage()->GetChromeClient());
+        To<ChromeClientImpl>(&web_view_->GetPage()->GetChromeClient());
   }
 
   frame_test_helpers::WebViewHelper helper_;
@@ -274,8 +276,8 @@ TEST_F(FileChooserQueueTest, DerefQueuedChooser) {
   auto* client2 = MakeGarbageCollected<MockFileChooserClient>(frame);
   mojom::blink::FileChooserParams params;
   params.title = g_empty_string;
-  scoped_refptr<FileChooser> chooser1 = FileChooser::Create(client1, params);
-  scoped_refptr<FileChooser> chooser2 = FileChooser::Create(client2, params);
+  scoped_refptr<FileChooser> chooser1 = client1->NewFileChooser(params);
+  scoped_refptr<FileChooser> chooser2 = client2->NewFileChooser(params);
 
   chrome_client_impl_->OpenFileChooser(frame, chooser1);
   chrome_client_impl_->OpenFileChooser(frame, chooser2);

@@ -74,7 +74,7 @@ const unsigned char kPngDataChunkType[4] = { 'I', 'D', 'A', 'T' };
 const char kPakFileExtension[] = ".pak";
 #endif
 
-ResourceBundle* g_shared_instance_ = NULL;
+ResourceBundle* g_shared_instance_ = nullptr;
 
 base::FilePath GetResourcesPakFilePath(const std::string& pak_name) {
   base::FilePath path;
@@ -150,15 +150,16 @@ bool BrotliDecompress(base::StringPiece input, std::string* output) {
 }
 
 // Helper function for decompressing resource.
-void Decompress(base::StringPiece data, std::string* output) {
-  if (HasGzipHeader(data)) {
+void DecompressIfNeeded(base::StringPiece data, std::string* output) {
+  if (!data.empty() && HasGzipHeader(data)) {
     bool success = compression::GzipUncompress(data, output);
     DCHECK(success);
-  } else if (HasBrotliHeader(data)) {
+  } else if (!data.empty() && HasBrotliHeader(data)) {
     bool success = BrotliDecompress(data, output);
     DCHECK(success);
   } else {
-    NOTREACHED() << "Resource is not compressed";
+    // Assume the raw data is not compressed.
+    output->assign(data.data(), data.size());
   }
 }
 
@@ -266,7 +267,7 @@ std::string ResourceBundle::InitSharedInstanceWithLocale(
 void ResourceBundle::InitSharedInstanceWithPakFileRegion(
     base::File pak_file,
     const base::MemoryMappedFile::Region& region) {
-  InitSharedInstance(NULL);
+  InitSharedInstance(nullptr);
   auto data_pack = std::make_unique<DataPack>(SCALE_FACTOR_100P);
   if (!data_pack->LoadFromFileRegion(std::move(pak_file), region)) {
     LOG(WARNING) << "failed to load pak file";
@@ -279,7 +280,7 @@ void ResourceBundle::InitSharedInstanceWithPakFileRegion(
 
 // static
 void ResourceBundle::InitSharedInstanceWithPakPath(const base::FilePath& path) {
-  InitSharedInstance(NULL);
+  InitSharedInstance(nullptr);
   g_shared_instance_->LoadTestResources(path, path);
 
   g_shared_instance_->InitDefaultFontList();
@@ -288,18 +289,26 @@ void ResourceBundle::InitSharedInstanceWithPakPath(const base::FilePath& path) {
 // static
 void ResourceBundle::CleanupSharedInstance() {
   delete g_shared_instance_;
-  g_shared_instance_ = NULL;
+  g_shared_instance_ = nullptr;
+}
+
+// static
+ResourceBundle* ResourceBundle::SwapSharedInstanceForTesting(
+    ResourceBundle* instance) {
+  ResourceBundle* ret = g_shared_instance_;
+  g_shared_instance_ = instance;
+  return ret;
 }
 
 // static
 bool ResourceBundle::HasSharedInstance() {
-  return g_shared_instance_ != NULL;
+  return g_shared_instance_ != nullptr;
 }
 
 // static
 ResourceBundle& ResourceBundle::GetSharedInstance() {
   // Must call InitSharedInstance before this function.
-  CHECK(g_shared_instance_ != NULL);
+  CHECK(g_shared_instance_ != nullptr);
   return *g_shared_instance_;
 }
 
@@ -318,7 +327,7 @@ void ResourceBundle::LoadSecondaryLocaleDataWithPakFileRegion(
 #if !defined(OS_ANDROID)
 // static
 bool ResourceBundle::LocaleDataPakExists(const std::string& locale) {
-  bool locale_file_path_exists = !GetLocaleFilePath(locale, true).empty();
+  bool locale_file_path_exists = !GetLocaleFilePath(locale).empty();
   if (!locale_file_path_exists) {
     locale_file_path_exists = vivaldi::IsVivaldiExtraLocale(locale);
   }
@@ -368,8 +377,8 @@ void ResourceBundle::AddDataPackFromFileRegion(
 
 #if !defined(OS_MACOSX)
 // static
-base::FilePath ResourceBundle::GetLocaleFilePath(const std::string& app_locale,
-                                                 bool test_file_exists) {
+base::FilePath ResourceBundle::GetLocaleFilePath(
+    const std::string& app_locale) {
   if (app_locale.empty())
     return base::FilePath();
 
@@ -410,10 +419,10 @@ base::FilePath ResourceBundle::GetLocaleFilePath(const std::string& app_locale,
   if (locale_file_path.empty() || !locale_file_path.IsAbsolute())
     return base::FilePath();
 
-  if (test_file_exists && !base::PathExists(locale_file_path))
-    return base::FilePath();
+  if (base::PathExists(locale_file_path))
+    return locale_file_path;
 
-  return locale_file_path;
+  return base::FilePath();
 }
 #endif
 
@@ -424,13 +433,13 @@ std::string ResourceBundle::LoadLocaleResources(
   std::string app_locale = l10n_util::GetApplicationLocale(pref_locale);
   base::FilePath locale_file_path = GetOverriddenPakPath();
   if (locale_file_path.empty())
-    locale_file_path = GetLocaleFilePath(app_locale, true);
+    locale_file_path = GetLocaleFilePath(app_locale);
 
   if (locale_file_path.empty()) { // (jarle@vivaldi) load fallback locale if 'unsupported' locale
     if (pref_locale == "nn") {
-      locale_file_path = GetLocaleFilePath("nb", true); // Bokmål as a fallback for Nynorsk
+      locale_file_path = GetLocaleFilePath("nb"); // Bokmål as a fallback for Nynorsk
     } else {
-      locale_file_path = GetLocaleFilePath("en-US", true);
+      locale_file_path = GetLocaleFilePath("en-US");
     }
     if (locale_file_path.empty()) {
     // It's possible that there is no locale.pak.
@@ -441,7 +450,7 @@ std::string ResourceBundle::LoadLocaleResources(
 
   std::unique_ptr<DataPack> data_pack(new DataPack(SCALE_FACTOR_100P));
   if (!data_pack->LoadFromPath(locale_file_path)) {
-    LOG(ERROR) << "failed to load locale.pak";
+    LOG(ERROR) << "failed to load locale file: " << locale_file_path;
     NOTREACHED();
     return std::string();
   }
@@ -590,24 +599,25 @@ base::RefCountedMemory* ResourceBundle::LoadDataResourceBytes(
 base::RefCountedMemory* ResourceBundle::LoadDataResourceBytesForScale(
     int resource_id,
     ScaleFactor scale_factor) const {
-  base::RefCountedMemory* bytes = nullptr;
-  if (delegate_)
-    bytes = delegate_->LoadDataResourceBytes(resource_id, scale_factor);
-
-  if (!bytes) {
-    base::StringPiece data =
-        GetRawDataResourceForScale(resource_id, scale_factor);
-    if (!data.empty()) {
-      if (HasGzipHeader(data) || HasBrotliHeader(data)) {
-        base::RefCountedString* bytes_string = new base::RefCountedString();
-        Decompress(data, &(bytes_string->data()));
-        bytes = bytes_string;
-      } else {
-        bytes = new base::RefCountedStaticMemory(data.data(), data.length());
-      }
-    }
+  if (delegate_) {
+    base::RefCountedMemory* bytes =
+        delegate_->LoadDataResourceBytes(resource_id, scale_factor);
+    if (bytes)
+      return bytes;
   }
-  return bytes;
+
+  base::StringPiece data =
+      GetRawDataResourceForScale(resource_id, scale_factor);
+  if (data.empty())
+    return nullptr;
+
+  if (HasGzipHeader(data) || HasBrotliHeader(data)) {
+    base::RefCountedString* bytes_string = new base::RefCountedString();
+    DecompressIfNeeded(data, &(bytes_string->data()));
+    return bytes_string;
+  }
+
+  return new base::RefCountedStaticMemory(data.data(), data.length());
 }
 
 base::StringPiece ResourceBundle::GetRawDataResource(int resource_id) const {
@@ -619,8 +629,9 @@ base::StringPiece ResourceBundle::GetRawDataResourceForScale(
     ScaleFactor scale_factor) const {
   base::StringPiece data;
   if (delegate_ &&
-      delegate_->GetRawDataResource(resource_id, scale_factor, &data))
+      delegate_->GetRawDataResource(resource_id, scale_factor, &data)) {
     return data;
+  }
 
   if (scale_factor != ui::SCALE_FACTOR_100P) {
     for (size_t i = 0; i < data_packs_.size(); i++) {
@@ -637,27 +648,28 @@ base::StringPiece ResourceBundle::GetRawDataResourceForScale(
          data_packs_[i]->GetScaleFactor() == ui::SCALE_FACTOR_300P ||
          data_packs_[i]->GetScaleFactor() == ui::SCALE_FACTOR_NONE) &&
         data_packs_[i]->GetStringPiece(static_cast<uint16_t>(resource_id),
-                                       &data))
+                                       &data)) {
       return data;
+    }
   }
 
   return base::StringPiece();
 }
 
-std::string ResourceBundle::DecompressDataResource(int resource_id) const {
-  return DecompressDataResourceScaled(resource_id, ui::SCALE_FACTOR_NONE);
+std::string ResourceBundle::LoadDataResourceString(int resource_id) const {
+  return LoadDataResourceStringForScale(resource_id, ui::SCALE_FACTOR_NONE);
 }
 
-std::string ResourceBundle::DecompressDataResourceScaled(
+std::string ResourceBundle::LoadDataResourceStringForScale(
     int resource_id,
     ScaleFactor scaling_factor) const {
   std::string output;
-  Decompress(GetRawDataResourceForScale(resource_id, scaling_factor), &output);
+  DecompressIfNeeded(GetRawDataResourceForScale(resource_id, scaling_factor),
+                     &output);
   return output;
 }
 
-std::string ResourceBundle::DecompressLocalizedDataResource(
-    int resource_id) const {
+std::string ResourceBundle::LoadLocalizedResourceString(int resource_id) const {
   base::AutoLock lock_scope(*locale_resources_data_lock_);
   base::StringPiece data;
   if (!(locale_resources_data_.get() &&
@@ -673,7 +685,7 @@ std::string ResourceBundle::DecompressLocalizedDataResource(
     }
   }
   std::string output;
-  Decompress(data, &output);
+  DecompressIfNeeded(data, &output);
   return output;
 }
 
@@ -865,7 +877,7 @@ ResourceBundle::~ResourceBundle() {
 
 // static
 void ResourceBundle::InitSharedInstance(Delegate* delegate) {
-  DCHECK(g_shared_instance_ == NULL) << "ResourceBundle initialized twice";
+  DCHECK(g_shared_instance_ == nullptr) << "ResourceBundle initialized twice";
   g_shared_instance_ = new ResourceBundle(delegate);
   std::vector<ScaleFactor> supported_scale_factors;
 #if defined(OS_IOS)

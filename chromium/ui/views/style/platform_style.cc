@@ -10,6 +10,7 @@
 #include "ui/gfx/utf16_indexing.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/views/background.h"
+#include "ui/views/buildflags.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/button/label_button_border.h"
 #include "ui/views/controls/focusable_border.h"
@@ -17,13 +18,11 @@
 
 #if defined(OS_CHROMEOS)
 #include "ui/views/controls/scrollbar/overlay_scroll_bar.h"
-#elif defined(OS_LINUX)
-#define DESKTOP_LINUX
 #endif
 
 namespace views {
 
-#if defined(OS_WIN) || defined(OS_CHROMEOS)
+#if defined(OS_WIN)
 const bool PlatformStyle::kIsOkButtonLeading = true;
 #else
 const bool PlatformStyle::kIsOkButtonLeading = false;
@@ -49,7 +48,7 @@ const bool PlatformStyle::kTreeViewSelectionPaintsEntireRow = false;
 const bool PlatformStyle::kUseRipples = true;
 const bool PlatformStyle::kTextfieldScrollsToStartOnFocusChange = false;
 const bool PlatformStyle::kTextfieldUsesDragCursorWhenDraggable = true;
-const bool PlatformStyle::kPreferFocusRings = false;
+const bool PlatformStyle::kPreferFocusRings = true;
 const bool PlatformStyle::kInactiveWidgetControlsAppearDisabled = false;
 
 // static
@@ -75,7 +74,7 @@ gfx::Range PlatformStyle::RangeToDeleteBackwards(const base::string16& text,
 
 #endif  // OS_MACOSX
 
-#if !defined(DESKTOP_LINUX)
+#if !BUILDFLAG(ENABLE_DESKTOP_AURA) || !defined(OS_LINUX)
 // static
 std::unique_ptr<Border> PlatformStyle::CreateThemedLabelButtonBorder(
     LabelButton* button) {

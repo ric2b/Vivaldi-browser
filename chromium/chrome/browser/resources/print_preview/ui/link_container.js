@@ -2,13 +2,26 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
+import 'chrome://resources/cr_elements/hidden_style_css.m.js';
+import 'chrome://resources/cr_elements/shared_style_css.m.js';
+import './print_preview_vars_css.js';
+import './throbber_css.js';
+
+import {isWindows} from 'chrome://resources/js/cr.m.js';
+import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
+import {Destination, DestinationOrigin} from '../data/destination.js';
+
 Polymer({
   is: 'print-preview-link-container',
+
+  _template: html`{__html_template__}`,
 
   properties: {
     appKioskMode: Boolean,
 
-    /** @type {?print_preview.Destination} */
+    /** @type {?Destination} */
     destination: Object,
 
     disabled: Boolean,
@@ -43,29 +56,28 @@ Polymer({
    * @return {boolean} Whether the system dialog link should be visible.
    * @private
    */
-  computeShouldShowSystemDialogLink_: function() {
+  computeShouldShowSystemDialogLink_() {
     if (this.appKioskMode) {
       return false;
     }
-    if (!cr.isWindows) {
+    if (!isWindows) {
       return true;
     }
     return !!this.destination &&
-        this.destination.origin == print_preview.DestinationOrigin.LOCAL &&
-        this.destination.id !=
-        print_preview.Destination.GooglePromotedId.SAVE_AS_PDF;
+        this.destination.origin === DestinationOrigin.LOCAL &&
+        this.destination.id !== Destination.GooglePromotedId.SAVE_AS_PDF;
   },
 
   /**
    * @return {boolean} Whether the system dialog link should be disabled
    * @private
    */
-  computeSystemDialogLinkDisabled_: function() {
-    return cr.isWindows && this.disabled;
+  computeSystemDialogLinkDisabled_() {
+    return isWindows && this.disabled;
   },
 
   /** @private */
-  onSystemDialogClick_: function() {
+  onSystemDialogClick_() {
     if (!this.shouldShowSystemDialogLink_) {
       return;
     }
@@ -78,14 +90,14 @@ Polymer({
 
   // <if expr="is_macosx">
   /** @private */
-  onOpenInPreviewClick_: function() {
+  onOpenInPreviewClick_() {
     this.openingInPreview_ = true;
     this.fire('open-pdf-in-preview');
   },
   // </if>
 
   /** @return {boolean} Whether the system dialog link is available. */
-  systemDialogLinkAvailable: function() {
+  systemDialogLinkAvailable() {
     return this.shouldShowSystemDialogLink_ && !this.systemDialogLinkDisabled_;
   },
 });

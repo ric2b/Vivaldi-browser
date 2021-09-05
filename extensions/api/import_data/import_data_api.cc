@@ -59,6 +59,7 @@
 #include "extensions/common/extension_messages.h"
 
 #include "extensions/schema/import_data.h"
+#include "extensions/tools/vivaldi_tools.h"
 
 #include "components/strings/grit/components_strings.h"
 #include "ui/vivaldi_ui_utils.h"

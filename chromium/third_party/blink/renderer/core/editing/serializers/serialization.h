@@ -30,6 +30,7 @@
 #include "third_party/blink/renderer/core/css/css_property_names.h"
 #include "third_party/blink/renderer/core/dom/parser_content_policy.h"
 #include "third_party/blink/renderer/core/editing/forward.h"
+#include "third_party/blink/renderer/core/editing/serializers/create_markup_options.h"
 #include "third_party/blink/renderer/core/editing/serializers/html_interchange.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
@@ -45,8 +46,7 @@ class Node;
 class CSSPropertyValueSet;
 
 enum ChildrenOnly { kIncludeNode, kChildrenOnly };
-enum AbsoluteURLs { kDoNotResolveURLs, kResolveAllURLs, kResolveNonLocalURLs };
-enum class ConvertBlocksToInlines { kNotConvert, kConvert };
+enum IncludeShadowRoots { kNoShadowRoots, kIncludeShadowRoots };
 
 DocumentFragment* CreateFragmentFromText(const EphemeralRange& context,
                                          const String& text);
@@ -86,22 +86,24 @@ void ReplaceChildrenWithText(ContainerNode*, const String&, ExceptionState&);
 
 CORE_EXPORT String CreateMarkup(const Node*,
                                 ChildrenOnly = kIncludeNode,
-                                AbsoluteURLs = kDoNotResolveURLs);
+                                AbsoluteURLs = kDoNotResolveURLs,
+                                IncludeShadowRoots = kNoShadowRoots);
 
 CORE_EXPORT String
 CreateMarkup(const Position& start,
              const Position& end,
-             AnnotateForInterchange = kDoNotAnnotateForInterchange,
-             ConvertBlocksToInlines = ConvertBlocksToInlines::kNotConvert,
-             AbsoluteURLs = kDoNotResolveURLs,
-             Node* constraining_ancestor = nullptr);
+             const CreateMarkupOptions& options = CreateMarkupOptions());
 CORE_EXPORT String
 CreateMarkup(const PositionInFlatTree& start,
              const PositionInFlatTree& end,
-             AnnotateForInterchange = kDoNotAnnotateForInterchange,
-             ConvertBlocksToInlines = ConvertBlocksToInlines::kNotConvert,
-             AbsoluteURLs = kDoNotResolveURLs,
-             Node* constraining_ancestor = nullptr);
+             const CreateMarkupOptions& options = CreateMarkupOptions());
+
+CORE_EXPORT DocumentFragment* CreateSanitizedFragmentFromMarkupWithContext(
+    Document&,
+    const String& raw_markup,
+    unsigned fragment_start,
+    unsigned fragment_end,
+    const String& base_url);
 
 void MergeWithNextTextNode(Text*, ExceptionState&);
 

@@ -16,7 +16,9 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.webapk.lib.common.splash.SplashLayout;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 
 /**
  * Downloads the Web Manifest if the web site still uses the {@link manifestUrl} passed to the
@@ -31,10 +33,10 @@ public class WebApkUpdateDataFetcher extends EmptyTabObserver {
          * @param fetchedInfo    The fetched Web Manifest data.
          * @param primaryIconUrl The icon URL in {@link fetchedInfo#iconUrlToMurmur2HashMap()} best
          *                       suited for use as the launcher icon on this device.
-         * @param badgeIconUrl   The icon URL in {@link fetchedInfo#iconUrlToMurmur2HashMap()} best
-         *                       suited for use as the badge icon on this device.
+         * @param splashIconUrl  The icon URL in {@link fetchedInfo#iconUrlToMurmur2HashMap()} best
+         *                       suited for use as the splash icon on this device.
          */
-        void onGotManifestData(WebApkInfo fetchedInfo, String primaryIconUrl, String badgeIconUrl);
+        void onGotManifestData(WebApkInfo fetchedInfo, String primaryIconUrl, String splashIconUrl);
     }
 
     /**
@@ -73,6 +75,7 @@ public class WebApkUpdateDataFetcher extends EmptyTabObserver {
      * Puts the object in a state where it is safe to be destroyed.
      */
     public void destroy() {
+        if (mTab == null) return;
         mTab.removeObserver(this);
         WebApkUpdateDataFetcherJni.get().destroy(mNativePointer, WebApkUpdateDataFetcher.this);
         mNativePointer = 0;
@@ -103,12 +106,12 @@ public class WebApkUpdateDataFetcher extends EmptyTabObserver {
     @CalledByNative
     protected void onDataAvailable(String manifestStartUrl, String scopeUrl, String name,
             String shortName, String primaryIconUrl, String primaryIconMurmur2Hash,
-            Bitmap primaryIconBitmap, boolean isPrimaryIconMaskable, String badgeIconUrl,
-            String badgeIconMurmur2Hash, Bitmap badgeIconBitmap, String[] iconUrls,
+            Bitmap primaryIconBitmap, boolean isPrimaryIconMaskable, String splashIconUrl,
+            String splashIconMurmur2Hash, Bitmap splashIconBitmap, String[] iconUrls,
             @WebDisplayMode int displayMode, int orientation, long themeColor, long backgroundColor,
             String shareAction, String shareParamsTitle, String shareParamsText,
-            String shareParamsUrl, boolean isShareMethodPost, boolean isShareEncTypeMultipart,
-            String[] shareParamsFileNames, String[][] shareParamsAccepts) {
+            boolean isShareMethodPost, boolean isShareEncTypeMultipart,
+            String[] shareParamsFileNames, String[][] shareParamsAccepts, String[][] shortcuts) {
         Context appContext = ContextUtils.getApplicationContext();
 
         HashMap<String, String> iconUrlToMurmur2HashMap = new HashMap<String, String>();
@@ -116,29 +119,36 @@ public class WebApkUpdateDataFetcher extends EmptyTabObserver {
             String murmur2Hash = null;
             if (iconUrl.equals(primaryIconUrl)) {
                 murmur2Hash = primaryIconMurmur2Hash;
-            } else if (iconUrl.equals(badgeIconUrl)) {
-                murmur2Hash = badgeIconMurmur2Hash;
+            } else if (iconUrl.equals(splashIconUrl)) {
+                murmur2Hash = splashIconMurmur2Hash;
             }
             iconUrlToMurmur2HashMap.put(iconUrl, murmur2Hash);
+        }
+
+        List<WebApkExtras.ShortcutItem> shortcutItems = new ArrayList<>();
+        for (String[] shortcutData : shortcuts) {
+            shortcutItems.add(new WebApkExtras.ShortcutItem(shortcutData[0] /* name */,
+                    shortcutData[1] /* shortName */, shortcutData[2] /* launchUrl */,
+                    shortcutData[3] /* iconUrl */, shortcutData[4] /* iconHash */));
         }
 
         // When share action is empty, we use a default empty share target
         WebApkInfo.ShareTarget shareTarget = TextUtils.isEmpty(shareAction)
                 ? new WebApkInfo.ShareTarget()
                 : new WebApkInfo.ShareTarget(shareAction, shareParamsTitle, shareParamsText,
-                        shareParamsUrl, isShareMethodPost, isShareEncTypeMultipart,
-                        shareParamsFileNames, shareParamsAccepts);
+                        isShareMethodPost, isShareEncTypeMultipart, shareParamsFileNames,
+                        shareParamsAccepts);
 
         int defaultBackgroundColor = SplashLayout.getDefaultBackgroundColor(appContext);
         WebApkInfo info = WebApkInfo.create(mOldInfo.url(), scopeUrl,
-                new WebappIcon(primaryIconBitmap), new WebappIcon(badgeIconBitmap), null, name,
+                new WebappIcon(primaryIconBitmap), new WebappIcon(splashIconBitmap), name,
                 shortName, displayMode, orientation, mOldInfo.source(), themeColor, backgroundColor,
                 defaultBackgroundColor, isPrimaryIconMaskable, false /* isSplashIconMaskable */,
                 mOldInfo.webApkPackageName(), mOldInfo.shellApkVersion(), mOldInfo.manifestUrl(),
                 manifestStartUrl, WebApkDistributor.BROWSER, iconUrlToMurmur2HashMap, shareTarget,
                 mOldInfo.shouldForceNavigation(), mOldInfo.isSplashProvidedByWebApk(), null,
-                mOldInfo.webApkVersionCode());
-        mObserver.onGotManifestData(info, primaryIconUrl, badgeIconUrl);
+                shortcutItems, mOldInfo.webApkVersionCode());
+        mObserver.onGotManifestData(info, primaryIconUrl, splashIconUrl);
     }
 
     @NativeMethods

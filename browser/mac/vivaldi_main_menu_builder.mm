@@ -10,6 +10,9 @@
 #include "app/vivaldi_resources.h"
 #include "app/vivaldi_commands.h"
 #include "chrome/app/chrome_command_ids.h"
+#include "chrome/grit/chromium_strings.h"
+#include "chrome/grit/generated_resources.h"
+#include "components/strings/grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 
 namespace vivaldi {
@@ -168,9 +171,6 @@ base::scoped_nsobject<NSMenuItem> BuildWindowMenu(
       Item(IDS_WINDOW_MENU_MAC)
           .tag(IDC_WINDOW_MENU)
           .submenu({
-            Item(IDS_MINIMIZE_WINDOW_MAC)
-                .tag(IDC_MINIMIZE_WINDOW)
-                .action(@selector(performMiniaturize:)),
             Item(IDS_ZOOM_WINDOW_MAC)
                 .tag(IDC_MAXIMIZE_WINDOW)
                 .action(@selector(performZoom:)),
@@ -180,7 +180,7 @@ base::scoped_nsobject<NSMenuItem> BuildWindowMenu(
                 .action(@selector(arrangeInFront:)),
             Item().is_separator()
               .tag(55555), // 55555 defines start of dynamic tab list
-              //tabs go here
+              // configurable elements and tabs go here.
             Item().is_separator(), // seperator before open window list
           })
           .Build();

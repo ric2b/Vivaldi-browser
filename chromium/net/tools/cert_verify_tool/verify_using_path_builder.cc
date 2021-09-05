@@ -41,8 +41,7 @@ net::der::GeneralizedTime ConvertExplodedTime(
 
 bool AddPemEncodedCert(const net::ParsedCertificate* cert,
                        std::vector<std::string>* pem_encoded_chain) {
-  std::string der_cert;
-  cert->der_cert().AsStringPiece().CopyToString(&der_cert);
+  std::string der_cert(cert->der_cert().AsStringPiece());
   std::string pem;
   if (!net::X509Certificate::GetPEMEncodedFromDER(der_cert, &pem)) {
     std::cerr << "ERROR: GetPEMEncodedFromDER failed\n";
@@ -177,6 +176,9 @@ bool VerifyUsingPathBuilder(
         std::make_unique<net::CertIssuerSourceAia>(std::move(cert_net_fetcher));
     path_builder.AddCertIssuerSource(aia_cert_issuer_source.get());
   }
+
+  // TODO(mattm): should this be a command line flag?
+  path_builder.SetExploreAllPaths(true);
 
   // Run the path builder.
   net::CertPathBuilder::Result result = path_builder.Run();

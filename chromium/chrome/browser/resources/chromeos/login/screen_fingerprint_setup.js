@@ -10,6 +10,11 @@ login.createScreen('FingerprintSetupScreen', 'fingerprint-setup', function() {
   return {
     EXTERNAL_API: ['onEnrollScanDone', 'enableAddAnotherFinger'],
 
+    /** Initial UI State for screen */
+    getOobeUIInitialState() {
+      return OOBE_UI_STATE.ONBOARDING;
+    },
+
     /**
      * Fingerprint setup module.
      * @private
@@ -18,7 +23,7 @@ login.createScreen('FingerprintSetupScreen', 'fingerprint-setup', function() {
 
 
     /** @override */
-    decorate: function() {
+    decorate() {
       this.fingerprintSetupModule_ = $('fingerprint-setup-impl');
     },
 
@@ -29,13 +34,20 @@ login.createScreen('FingerprintSetupScreen', 'fingerprint-setup', function() {
       return this.fingerprintSetupModule_;
     },
 
+    /*
+     * Executed on language change.
+     */
+    updateLocalizedContent() {
+      this.fingerprintSetupModule_.i18nUpdateLocale();
+    },
+
     /**
      * Called when a fingerprint enroll scan result is received.
      * @param {number} scanResult Result of the enroll scan.
      * @param {boolean} isComplete Whether fingerprint enrollment is complete.
      * @param {number} percentComplete Percentage of completion of enrollment.
      */
-    onEnrollScanDone: function(scanResult, isComplete, percentComplete) {
+    onEnrollScanDone(scanResult, isComplete, percentComplete) {
       this.fingerprintSetupModule_.onEnrollScanDone(
           scanResult, isComplete, percentComplete);
     },
@@ -44,7 +56,7 @@ login.createScreen('FingerprintSetupScreen', 'fingerprint-setup', function() {
      * Enable/disable add another finger.
      * @param {boolean} enable True if add another fingerprint is enabled.
      */
-    enableAddAnotherFinger: function(enable) {
+    enableAddAnotherFinger(enable) {
       this.fingerprintSetupModule_.canAddFinger = enable;
     },
   };

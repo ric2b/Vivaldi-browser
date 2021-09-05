@@ -33,7 +33,7 @@ source_set("web_state") {
   sources = [
     "global_web_state_event_tracker.h",
     "global_web_state_event_tracker.mm",
-    "global_web_state_observer.cc",
+    "global_web_state_observer.mm",
     "web_state.mm",
     "web_state_delegate.mm",
     "web_state_delegate_bridge.mm",
@@ -56,9 +56,7 @@ source_set("web_state_impl_header") {
     "//ios/web/public/js_messaging",
   ]
 
-  sources = [
-    "web_state_impl.h",
-  ]
+  sources = [ "web_state_impl.h" ]
 
   configs += [ "//build/config/compiler:enable_arc" ]
 }
@@ -100,6 +98,7 @@ source_set("context_menu") {
     "//components/url_formatter",
     "//ios/web/common",
     "//ios/web/public",
+    "//ui/gfx",
   ]
 
   sources = [

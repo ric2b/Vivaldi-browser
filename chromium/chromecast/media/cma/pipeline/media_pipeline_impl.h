@@ -14,7 +14,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "base/time/time.h"
-#include "chromecast/media/cma/backend/cma_backend.h"
+#include "chromecast/media/api/cma_backend.h"
 #include "chromecast/media/cma/pipeline/load_type.h"
 #include "chromecast/media/cma/pipeline/media_pipeline_client.h"
 #include "media/base/time_delta_interpolator.h"
@@ -56,7 +56,7 @@ class MediaPipelineImpl {
       const VideoPipelineClient& client,
       std::unique_ptr<CodedFrameProvider> frame_provider);
   void StartPlayingFrom(base::TimeDelta time);
-  void Flush(const base::Closure& flush_cb);
+  void Flush(base::OnceClosure flush_cb);
   void SetPlaybackRate(double playback_rate);
   void SetVolume(float volume);
   base::TimeDelta GetMediaTime() const;

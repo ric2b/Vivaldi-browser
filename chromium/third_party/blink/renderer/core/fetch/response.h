@@ -86,8 +86,16 @@ class CORE_EXPORT Response final : public Body {
   // ScriptWrappable
   bool HasPendingActivity() const final;
 
-  // Does not contain the blob response body.
-  mojom::blink::FetchAPIResponsePtr PopulateFetchAPIResponse();
+  // Does not contain the blob response body or any side data blob.
+  // |request_url| is the current request URL that resulted in the response. It
+  // is needed to process some response headers (e.g. CSP).
+  // TODO(lfg, kinuko): The FetchResponseData::url_list_ should include the
+  // request URL per step 9 in Main Fetch
+  // https://fetch.spec.whatwg.org/#main-fetch. Just fixing it might break the
+  // logic in ResourceMultiBufferDataProvider, please see
+  // https://chromium-review.googlesource.com/c/1366464 for more details.
+  mojom::blink::FetchAPIResponsePtr PopulateFetchAPIResponse(
+      const KURL& request_url);
 
   bool HasBody() const;
   BodyStreamBuffer* BodyBuffer() override { return response_->Buffer(); }
@@ -111,7 +119,9 @@ class CORE_EXPORT Response final : public Body {
 
   const Vector<KURL>& InternalURLList() const;
 
-  void Trace(blink::Visitor*) override;
+  FetchHeaderList* InternalHeaderList() const;
+
+  void Trace(Visitor*) override;
 
  protected:
   // A version of IsBodyUsed() which catches exceptions and returns

@@ -19,6 +19,7 @@
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_prefs.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_test_utils.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_pref_names.h"
@@ -301,15 +302,15 @@ class DataReductionProxyCompressionStatsTest : public testing::Test {
                                             original_size, time);
   }
 
-  void GetHistoricalDataUsage(
-      const HistoricalDataUsageCallback& onLoadDataUsage,
-      const base::Time& now) {
-    compression_stats_->GetHistoricalDataUsageImpl(onLoadDataUsage, now);
+  void GetHistoricalDataUsage(HistoricalDataUsageCallback on_load_data_usage,
+                              const base::Time& now) {
+    compression_stats_->GetHistoricalDataUsageImpl(
+        std::move(on_load_data_usage), now);
   }
 
-  void LoadHistoricalDataUsage(
-      const HistoricalDataUsageCallback& onLoadDataUsage) {
-    compression_stats_->service_->LoadHistoricalDataUsage(onLoadDataUsage);
+  void LoadHistoricalDataUsage(HistoricalDataUsageCallback on_load_data_usage) {
+    compression_stats_->service_->LoadHistoricalDataUsage(
+        std::move(on_load_data_usage));
   }
 
   void DeleteHistoricalDataUsage() {
@@ -699,8 +700,8 @@ TEST_F(DataReductionProxyCompressionStatsTest, RecordDataUsageSingleSite) {
 
   DataUsageLoadVerifier verifier(std::move(expected_data_usage));
 
-  GetHistoricalDataUsage(base::Bind(&DataUsageLoadVerifier::OnLoadDataUsage,
-                                    base::Unretained(&verifier)),
+  GetHistoricalDataUsage(base::BindOnce(&DataUsageLoadVerifier::OnLoadDataUsage,
+                                        base::Unretained(&verifier)),
                          now);
   base::RunLoop().RunUntilIdle();
 }
@@ -721,15 +722,15 @@ TEST_F(DataReductionProxyCompressionStatsTest, DisableDataUsageRecording) {
       std::make_unique<std::vector<data_reduction_proxy::DataUsageBucket>>(
           kNumExpectedBuckets);
   DataUsageLoadVerifier verifier1(std::move(expected_data_usage1));
-  LoadHistoricalDataUsage(base::Bind(&DataUsageLoadVerifier::OnLoadDataUsage,
-                                     base::Unretained(&verifier1)));
+  LoadHistoricalDataUsage(base::BindOnce(
+      &DataUsageLoadVerifier::OnLoadDataUsage, base::Unretained(&verifier1)));
 
   // Public API must return an empty array.
   auto expected_data_usage2 =
       std::make_unique<std::vector<data_reduction_proxy::DataUsageBucket>>();
   DataUsageLoadVerifier verifier2(std::move(expected_data_usage2));
-  GetHistoricalDataUsage(base::Bind(&DataUsageLoadVerifier::OnLoadDataUsage,
-                                    base::Unretained(&verifier2)),
+  GetHistoricalDataUsage(base::BindOnce(&DataUsageLoadVerifier::OnLoadDataUsage,
+                                        base::Unretained(&verifier2)),
                          now);
 #else
   // For Android don't delete data usage.
@@ -746,8 +747,8 @@ TEST_F(DataReductionProxyCompressionStatsTest, DisableDataUsageRecording) {
 
   DataUsageLoadVerifier verifier(std::move(expected_data_usage));
 
-  GetHistoricalDataUsage(base::Bind(&DataUsageLoadVerifier::OnLoadDataUsage,
-                                    base::Unretained(&verifier)),
+  GetHistoricalDataUsage(base::BindOnce(&DataUsageLoadVerifier::OnLoadDataUsage,
+                                        base::Unretained(&verifier)),
                          now);
 #endif
 
@@ -786,8 +787,8 @@ TEST_F(DataReductionProxyCompressionStatsTest, RecordDataUsageMultipleSites) {
 
   DataUsageLoadVerifier verifier(std::move(expected_data_usage));
 
-  GetHistoricalDataUsage(base::Bind(&DataUsageLoadVerifier::OnLoadDataUsage,
-                                    base::Unretained(&verifier)),
+  GetHistoricalDataUsage(base::BindOnce(&DataUsageLoadVerifier::OnLoadDataUsage,
+                                        base::Unretained(&verifier)),
                          now);
   base::RunLoop().RunUntilIdle();
 }
@@ -824,8 +825,8 @@ TEST_F(DataReductionProxyCompressionStatsTest,
 
   DataUsageLoadVerifier verifier(std::move(expected_data_usage));
 
-  GetHistoricalDataUsage(base::Bind(&DataUsageLoadVerifier::OnLoadDataUsage,
-                                    base::Unretained(&verifier)),
+  GetHistoricalDataUsage(base::BindOnce(&DataUsageLoadVerifier::OnLoadDataUsage,
+                                        base::Unretained(&verifier)),
                          now);
   base::RunLoop().RunUntilIdle();
 }
@@ -855,8 +856,8 @@ TEST_F(DataReductionProxyCompressionStatsTest,
 
   DataUsageLoadVerifier verifier(std::move(expected_data_usage));
 
-  GetHistoricalDataUsage(base::Bind(&DataUsageLoadVerifier::OnLoadDataUsage,
-                                    base::Unretained(&verifier)),
+  GetHistoricalDataUsage(base::BindOnce(&DataUsageLoadVerifier::OnLoadDataUsage,
+                                        base::Unretained(&verifier)),
                          now);
   base::RunLoop().RunUntilIdle();
 }
@@ -880,8 +881,8 @@ TEST_F(DataReductionProxyCompressionStatsTest, DeleteHistoricalDataUsage) {
           kNumExpectedBuckets);
   DataUsageLoadVerifier verifier(std::move(expected_data_usage));
 
-  GetHistoricalDataUsage(base::Bind(&DataUsageLoadVerifier::OnLoadDataUsage,
-                                    base::Unretained(&verifier)),
+  GetHistoricalDataUsage(base::BindOnce(&DataUsageLoadVerifier::OnLoadDataUsage,
+                                        base::Unretained(&verifier)),
                          now);
   base::RunLoop().RunUntilIdle();
 }
@@ -917,8 +918,8 @@ TEST_F(DataReductionProxyCompressionStatsTest, DeleteBrowsingHistory) {
   site_usage->set_original_size(1100);
   DataUsageLoadVerifier verifier1(std::move(expected_data_usage));
 
-  LoadHistoricalDataUsage(base::Bind(&DataUsageLoadVerifier::OnLoadDataUsage,
-                                     base::Unretained(&verifier1)));
+  LoadHistoricalDataUsage(base::BindOnce(
+      &DataUsageLoadVerifier::OnLoadDataUsage, base::Unretained(&verifier1)));
   base::RunLoop().RunUntilIdle();
 
   // This should delete in-storage usage as well.
@@ -929,8 +930,8 @@ TEST_F(DataReductionProxyCompressionStatsTest, DeleteBrowsingHistory) {
       std::make_unique<std::vector<data_reduction_proxy::DataUsageBucket>>(
           kNumExpectedBuckets);
   DataUsageLoadVerifier verifier2(std::move(expected_data_usage));
-  LoadHistoricalDataUsage(base::Bind(&DataUsageLoadVerifier::OnLoadDataUsage,
-                                     base::Unretained(&verifier2)));
+  LoadHistoricalDataUsage(base::BindOnce(
+      &DataUsageLoadVerifier::OnLoadDataUsage, base::Unretained(&verifier2)));
   base::RunLoop().RunUntilIdle();
 }
 
@@ -964,15 +965,21 @@ TEST_F(DataReductionProxyCompressionStatsTest, ClearDataSavingStatistics) {
           kNumExpectedBuckets);
   DataUsageLoadVerifier verifier(std::move(expected_data_usage));
 
-  GetHistoricalDataUsage(base::Bind(&DataUsageLoadVerifier::OnLoadDataUsage,
-                                    base::Unretained(&verifier)),
+  GetHistoricalDataUsage(base::BindOnce(&DataUsageLoadVerifier::OnLoadDataUsage,
+                                        base::Unretained(&verifier)),
                          now);
   base::RunLoop().RunUntilIdle();
 
   VerifyDailyDataSavingContentLengthPrefLists(nullptr, 0, nullptr, 0, 0);
 }
 
-TEST_F(DataReductionProxyCompressionStatsTest, WeeklyAggregateDataUse) {
+// Aggregate metrics recording was disabled on Android x86 in crbug.com/865373.
+#if defined(OS_ANDROID) && defined(ARCH_CPU_X86)
+#define MAYBE_WeeklyAggregateDataUse DISABLED_WeeklyAggregateDataUse
+#else
+#define MAYBE_WeeklyAggregateDataUse WeeklyAggregateDataUse
+#endif
+TEST_F(DataReductionProxyCompressionStatsTest, MAYBE_WeeklyAggregateDataUse) {
   const int32_t kDataUseKB = 100;
   base::HistogramTester histogram_tester;
 
@@ -1021,7 +1028,14 @@ TEST_F(DataReductionProxyCompressionStatsTest, WeeklyAggregateDataUse) {
       data_use_measurement::DataUseUserData::MAIN_FRAME_HTML, 0);
 }
 
-TEST_F(DataReductionProxyCompressionStatsTest, AggregateDataUseForwardWeeks) {
+// Aggregate metrics recording was disabled on Android x86 in crbug.com/865373.
+#if defined(OS_ANDROID) && defined(ARCH_CPU_X86)
+#define MAYBE_AggregateDataUseForwardWeeks DISABLED_AggregateDataUseForwardWeeks
+#else
+#define MAYBE_AggregateDataUseForwardWeeks AggregateDataUseForwardWeeks
+#endif
+TEST_F(DataReductionProxyCompressionStatsTest,
+       MAYBE_AggregateDataUseForwardWeeks) {
   const int32_t kMainFrameKB = 100;
   const int32_t kNonMainFrameKB = 101;
   base::HistogramTester histogram_tester;

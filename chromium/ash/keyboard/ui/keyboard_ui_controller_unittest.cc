@@ -38,8 +38,6 @@
 #include "ui/compositor/test/layer_animator_test_controller.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/gfx/geometry/rect.h"
-#include "ui/wm/core/default_activation_client.h"
-#include "ui/wm/core/default_screen_position_client.h"
 
 #if defined(USE_OZONE)
 #include "ui/ozone/public/ozone_platform.h"
@@ -147,25 +145,21 @@ class KeyboardUIControllerTest : public aura::test::AuraTestBase,
 
   void SetUp() override {
     aura::test::AuraTestBase::SetUp();
-    new wm::DefaultActivationClient(root_window());
     focus_controller_ = std::make_unique<TestFocusController>(root_window());
     layout_delegate_ =
         std::make_unique<TestKeyboardLayoutDelegate>(root_window());
-
-    aura::client::SetScreenPositionClient(root_window(),
-                                          &screen_position_client_);
 
     // Force enable the virtual keyboard.
     controller_.Initialize(
         std::make_unique<TestKeyboardUIFactory>(host()->GetInputMethod()),
         layout_delegate_.get());
-    keyboard::SetTouchKeyboardEnabled(true);
+    SetTouchKeyboardEnabled(true);
     controller_.AddObserver(this);
   }
 
   void TearDown() override {
-    keyboard::SetTouchKeyboardEnabled(false);
     controller_.RemoveObserver(this);
+    SetTouchKeyboardEnabled(false);
     focus_controller_.reset();
     aura::test::AuraTestBase::TearDown();
   }
@@ -233,7 +227,7 @@ class KeyboardUIControllerTest : public aura::test::AuraTestBase,
     if (client && client->GetTextInputType() != ui::TEXT_INPUT_TYPE_NONE &&
         client->GetTextInputMode() != ui::TEXT_INPUT_MODE_NONE) {
       input_method->ShowVirtualKeyboardIfEnabled();
-      ASSERT_TRUE(keyboard::WaitUntilShown());
+      ASSERT_TRUE(WaitUntilShown());
     }
   }
 
@@ -270,7 +264,6 @@ class KeyboardUIControllerTest : public aura::test::AuraTestBase,
   std::unique_ptr<KeyboardLayoutDelegate> layout_delegate_;
   std::unique_ptr<ui::TextInputClient> test_text_input_client_;
   bool keyboard_disabled_ = false;
-  wm::DefaultScreenPositionClient screen_position_client_;
   ui::ScopedTestInputMethodFactory scoped_test_input_method_factory_;
   DISALLOW_COPY_AND_ASSIGN(KeyboardUIControllerTest);
 };
@@ -494,7 +487,7 @@ TEST_F(KeyboardUIControllerTest, DisableKeyboard) {
   EXPECT_TRUE(keyboard_window->IsVisible());
   EXPECT_FALSE(IsKeyboardDisabled());
 
-  keyboard::SetTouchKeyboardEnabled(false);
+  SetTouchKeyboardEnabled(false);
   EXPECT_TRUE(IsKeyboardDisabled());
 }
 
@@ -533,7 +526,7 @@ TEST_F(KeyboardControllerAnimationTest, ContainerAnimation) {
   EXPECT_TRUE(keyboard_window()->IsVisible());
   float show_start_opacity = layer->opacity();
   gfx::Transform transform;
-  transform.Translate(0, keyboard::kFullWidthKeyboardAnimationDistance);
+  transform.Translate(0, kFullWidthKeyboardAnimationDistance);
   EXPECT_EQ(transform, layer->transform());
   // Actual final bounds should be notified after animation finishes to avoid
   // flash of background being seen.
@@ -729,15 +722,29 @@ TEST_F(KeyboardUIControllerTest, DontClearObserverList) {
   EXPECT_TRUE(keyboard_window->IsVisible());
   EXPECT_FALSE(IsKeyboardDisabled());
 
-  keyboard::SetTouchKeyboardEnabled(false);
+  SetTouchKeyboardEnabled(false);
   EXPECT_TRUE(IsKeyboardDisabled());
 
-  keyboard::SetTouchKeyboardEnabled(true);
+  SetTouchKeyboardEnabled(true);
   ClearKeyboardDisabled();
   EXPECT_FALSE(IsKeyboardDisabled());
 
-  keyboard::SetTouchKeyboardEnabled(false);
+  SetTouchKeyboardEnabled(false);
   EXPECT_TRUE(IsKeyboardDisabled());
+}
+
+// Checks the area set in SetAreaToRemainOnScreen fit within the
+// bounds of the keyboard window.
+TEST_F(KeyboardUIControllerTest,
+       AreaToRemainOnScreenShouldBeContainedInWindow) {
+  ShowKeyboard();
+  aura::Window* keyboard_window = controller().GetKeyboardWindow();
+  keyboard_window->SetBounds(gfx::Rect(10, 10, 400, 600));
+
+  EXPECT_TRUE(controller().SetAreaToRemainOnScreen(gfx::Rect(0, 0, 100, 200)));
+  EXPECT_FALSE(controller().SetAreaToRemainOnScreen(gfx::Rect(0, 0, 450, 650)));
+  EXPECT_FALSE(
+      controller().SetAreaToRemainOnScreen(gfx::Rect(50, 50, 400, 600)));
 }
 
 class MockKeyboardControllerObserver : public ash::KeyboardControllerObserver {
@@ -754,21 +761,21 @@ class MockKeyboardControllerObserver : public ash::KeyboardControllerObserver {
 
 TEST_F(KeyboardUIControllerTest, OnKeyboardEnabledChangedToEnabled) {
   // Start with the keyboard disabled.
-  keyboard::SetTouchKeyboardEnabled(false);
+  SetTouchKeyboardEnabled(false);
 
   MockKeyboardControllerObserver mock_observer;
   controller().AddObserver(&mock_observer);
 
   EXPECT_CALL(mock_observer, OnKeyboardEnabledChanged(true))
       .WillOnce(testing::InvokeWithoutArgs([]() {
-        auto* controller = keyboard::KeyboardUIController::Get();
+        auto* controller = KeyboardUIController::Get();
         ASSERT_TRUE(controller);
         EXPECT_TRUE(controller->IsEnabled());
         EXPECT_TRUE(controller->GetKeyboardWindow());
         EXPECT_TRUE(controller->GetRootWindow());
       }));
 
-  keyboard::SetTouchKeyboardEnabled(true);
+  SetTouchKeyboardEnabled(true);
 
   controller().RemoveObserver(&mock_observer);
 }
@@ -779,14 +786,14 @@ TEST_F(KeyboardUIControllerTest, OnKeyboardEnabledChangedToDisabled) {
 
   EXPECT_CALL(mock_observer, OnKeyboardEnabledChanged(false))
       .WillOnce(testing::InvokeWithoutArgs([]() {
-        auto* controller = keyboard::KeyboardUIController::Get();
+        auto* controller = KeyboardUIController::Get();
         ASSERT_TRUE(controller);
         EXPECT_FALSE(controller->IsEnabled());
         EXPECT_FALSE(controller->GetKeyboardWindow());
         EXPECT_FALSE(controller->GetRootWindow());
       }));
 
-  keyboard::SetTouchKeyboardEnabled(false);
+  SetTouchKeyboardEnabled(false);
 
   controller().RemoveObserver(&mock_observer);
 }

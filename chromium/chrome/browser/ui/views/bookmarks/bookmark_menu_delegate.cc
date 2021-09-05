@@ -41,6 +41,7 @@
 
 #include "app/vivaldi_apptools.h"
 #include "browser/menus/vivaldi_bookmark_context_menu.h"
+#include "components/bookmarks/vivaldi_bookmark_kit.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 using base::UserMetricsAction;
@@ -133,11 +134,13 @@ void BookmarkMenuDelegate::Init(views::MenuDelegate* real_delegate,
                                node == model->bookmark_bar_node();
     bool show_managed =
         show_forced_folders && !managed->managed_node()->children().empty();
+    if (!vivaldi::IsVivaldiRunning()) {
     bool has_children =
         (start_child_index < node->children().size()) || show_managed;
     if (has_children && parent->GetSubmenu() &&
         !parent->GetSubmenu()->GetMenuItems().empty())
       parent->AppendSeparator();
+    }
 
     if (show_managed)
       BuildMenuForManagedNode(parent);
@@ -581,8 +584,8 @@ void BookmarkMenuDelegate::BuildMenuForPermanentNode(const BookmarkNode* node,
     menu->AppendSeparator();
   }
 
-  AddMenuToMaps(menu->AppendSubMenuWithIcon(
-                    next_menu_id_++, MaybeEscapeLabel(node->GetTitle()), icon),
+  AddMenuToMaps(menu->AppendSubMenu(next_menu_id_++,
+                                    MaybeEscapeLabel(node->GetTitle()), icon),
                 node);
 }
 
@@ -606,11 +609,16 @@ void BookmarkMenuDelegate::BuildMenu(const BookmarkNode* parent,
       vivaldi::GetBookmarkFolderIcon(TextColorForMenu(menu, parent_)) :
       chrome::GetBookmarkFolderIcon(TextColorForMenu(menu, parent_));
 
+  unsigned int menu_index = vivaldi::IsVivaldiRunning() ?
+    vivaldi::GetStartIndexForBookmarks(menu, parent->id()) : 0;
+
   std::vector<bookmarks::BookmarkNode*> nodes;
   if (vivaldi::IsVivaldiRunning()) {
     vivaldi::SortBookmarkNodes(parent, nodes);
-    // Call vivaldi::AddVivaldiBookmarkMenuItems here if in front of bookmarks.
-    // And this separator vivaldi::AddSeparator(menu);
+    if (start_child_index == 0) {
+      vivaldi::AddExtraBookmarkMenuItems(profile_, menu, &menu_index, parent,
+          true);
+    }
   }
 
   size_t j = start_child_index;
@@ -618,8 +626,9 @@ void BookmarkMenuDelegate::BuildMenu(const BookmarkNode* parent,
        i != parent->children().cend(); ++i, ++j) {
     const BookmarkNode* node = vivaldi::IsVivaldiRunning() ? nodes[j] : i->get();
     if (vivaldi::IsVivaldiRunning()) {
-      if (vivaldi::AddIfSeparator(node, menu))
+      if (vivaldi::AddIfSeparator(node, menu, &menu_index)) {
         continue;
+      }
     }
     const int id = next_menu_id_++;
     MenuItemView* child_menu_item;
@@ -628,26 +637,37 @@ void BookmarkMenuDelegate::BuildMenu(const BookmarkNode* parent,
       const gfx::ImageSkia* icon = image.IsEmpty() ?
           vivaldi::IsVivaldiRunning() ? vivaldi::GetBookmarkDefaultIcon() :
           rb->GetImageSkiaNamed(IDR_DEFAULT_FAVICON) : image.ToImageSkia();
-      child_menu_item = menu->AppendMenuItemWithIcon(
-          id, MaybeEscapeLabel(node->GetTitle()), *icon);
+      if (vivaldi::IsVivaldiRunning()) {
+        child_menu_item = vivaldi::AddMenuItem(menu, &menu_index, id,
+            MaybeEscapeLabel(node->GetTitle()), *icon,
+            MenuItemView::Type::kNormal);
+      } else {
+      child_menu_item =
+          menu->AppendMenuItem(id, MaybeEscapeLabel(node->GetTitle()), *icon);
+      }
       child_menu_item->GetViewAccessibility().OverrideDescription(
           url_formatter::FormatUrl(
               node->url(), url_formatter::kFormatUrlOmitDefaults,
               net::UnescapeRule::SPACES, nullptr, nullptr, nullptr));
     } else {
       DCHECK(node->is_folder());
-      child_menu_item = menu->AppendSubMenuWithIcon(
-          id, MaybeEscapeLabel(node->GetTitle()),
-          vivaldi::IsVivaldiRunning() && node->GetSpeeddial() ?
-          vivaldi::GetBookmarkSpeeddialIcon(TextColorForMenu(menu, parent_)) :
-          folder_icon);
+      if (vivaldi::IsVivaldiRunning()) {
+        child_menu_item = vivaldi::AddMenuItem(menu, &menu_index, id,
+            MaybeEscapeLabel(node->GetTitle()),
+            vivaldi_bookmark_kit::GetSpeeddial(node) ?
+            vivaldi::GetBookmarkSpeeddialIcon(TextColorForMenu(menu, parent_)) :
+            folder_icon, MenuItemView::Type::kSubMenu);
+      } else {
+      child_menu_item = menu->AppendSubMenu(
+          id, MaybeEscapeLabel(node->GetTitle()), folder_icon);
+      }
       child_menu_item->GetViewAccessibility().OverrideDescription("");
     }
     AddMenuToMaps(child_menu_item, node);
   }
   if (vivaldi::IsVivaldiRunning() && start_child_index == 0) {
-    vivaldi::AddSeparator(menu);
-    vivaldi::AddVivaldiBookmarkMenuItems(profile_, menu, parent);
+    vivaldi::AddExtraBookmarkMenuItems(profile_, menu, &menu_index, parent,
+        false);
   }
 }
 
@@ -659,5 +679,12 @@ void BookmarkMenuDelegate::AddMenuToMaps(MenuItemView* menu,
 
 base::string16 BookmarkMenuDelegate::MaybeEscapeLabel(
     const base::string16& label) {
+  if (vivaldi::IsVivaldiRunning() && !menu_uses_mnemonics_) {
+    // Special test to prevent underlining a space.
+    base::char16 c = ui::GetMnemonic(label);
+    if (c == ' ') {
+      return ui::EscapeMenuLabelAmpersands(label);
+    }
+  }
   return menu_uses_mnemonics_ ? ui::EscapeMenuLabelAmpersands(label) : label;
 }

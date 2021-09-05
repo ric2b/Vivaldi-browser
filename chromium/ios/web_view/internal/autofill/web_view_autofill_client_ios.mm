@@ -68,7 +68,7 @@ WebViewAutofillClientIOS::WebViewAutofillClientIOS(
           base::Closure())) {}
 
 WebViewAutofillClientIOS::~WebViewAutofillClientIOS() {
-  HideAutofillPopup();
+  HideAutofillPopup(PopupHidingReason::kTabGone);
 }
 
 PersonalDataManager* WebViewAutofillClientIOS::GetPersonalDataManager() {
@@ -163,11 +163,6 @@ void WebViewAutofillClientIOS::ShowLocalCardMigrationResults(
   NOTIMPLEMENTED();
 }
 
-void WebViewAutofillClientIOS::ShowWebauthnOfferDialog(
-    WebauthnOfferDialogCallback callback) {
-  NOTIMPLEMENTED();
-}
-
 void WebViewAutofillClientIOS::ConfirmSaveAutofillProfile(
     const AutofillProfile& profile,
     base::OnceClosure callback) {
@@ -186,6 +181,13 @@ void WebViewAutofillClientIOS::ConfirmSaveCreditCardLocally(
 
 void WebViewAutofillClientIOS::ConfirmAccountNameFixFlow(
     base::OnceCallback<void(const base::string16&)> callback) {
+  NOTIMPLEMENTED();
+}
+
+void WebViewAutofillClientIOS::ConfirmExpirationDateFixFlow(
+    const CreditCard& card,
+    base::OnceCallback<void(const base::string16&, const base::string16&)>
+        callback) {
   NOTIMPLEMENTED();
 }
 
@@ -213,8 +215,7 @@ bool WebViewAutofillClientIOS::HasCreditCardScanFeature() {
   return false;
 }
 
-void WebViewAutofillClientIOS::ScanCreditCard(
-    const CreditCardScanCallback& callback) {
+void WebViewAutofillClientIOS::ScanCreditCard(CreditCardScanCallback callback) {
   NOTREACHED();
 }
 
@@ -234,7 +235,23 @@ void WebViewAutofillClientIOS::UpdateAutofillPopupDataListValues(
   NOTREACHED();
 }
 
-void WebViewAutofillClientIOS::HideAutofillPopup() {
+base::span<const autofill::Suggestion>
+WebViewAutofillClientIOS::GetPopupSuggestions() const {
+  NOTIMPLEMENTED();
+  return base::span<const autofill::Suggestion>();
+}
+
+void WebViewAutofillClientIOS::PinPopupView() {
+  NOTIMPLEMENTED();
+}
+
+void WebViewAutofillClientIOS::UpdatePopup(
+    const std::vector<autofill::Suggestion>& suggestions,
+    autofill::PopupType popup_type) {
+  NOTIMPLEMENTED();
+}
+
+void WebViewAutofillClientIOS::HideAutofillPopup(PopupHidingReason reason) {
   [bridge_ hideAutofillPopup];
 }
 

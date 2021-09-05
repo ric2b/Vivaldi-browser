@@ -18,6 +18,7 @@
 #include "base/stl_util.h"
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
+#include "base/task/thread_pool.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "chrome/services/media_gallery_util/public/cpp/safe_audio_video_checker.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -72,14 +73,13 @@ bool SupportedAudioVideoChecker::SupportsFileType(const base::FilePath& path) {
 }
 
 void SupportedAudioVideoChecker::StartPreWriteValidation(
-    const storage::CopyOrMoveFileValidator::ResultCallback& result_callback) {
+    storage::CopyOrMoveFileValidator::ResultCallback result_callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   DCHECK(callback_.is_null());
-  callback_ = result_callback;
+  callback_ = std::move(result_callback);
 
-  base::PostTaskAndReplyWithResult(
-      FROM_HERE,
-      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::BindOnce(&OpenBlocking, path_),
       base::BindOnce(&SupportedAudioVideoChecker::OnFileOpen,
                      weak_factory_.GetWeakPtr()));
@@ -92,11 +92,11 @@ SupportedAudioVideoChecker::SupportedAudioVideoChecker(
 void SupportedAudioVideoChecker::OnFileOpen(base::File file) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   if (!file.IsValid()) {
-    callback_.Run(base::File::FILE_ERROR_SECURITY);
+    std::move(callback_).Run(base::File::FILE_ERROR_SECURITY);
     return;
   }
 
-  safe_checker_ =
-      std::make_unique<SafeAudioVideoChecker>(std::move(file), callback_);
+  safe_checker_ = std::make_unique<SafeAudioVideoChecker>(std::move(file),
+                                                          std::move(callback_));
   safe_checker_->Start();
 }

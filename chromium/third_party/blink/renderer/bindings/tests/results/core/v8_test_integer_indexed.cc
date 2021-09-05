@@ -111,7 +111,7 @@ static void VoidMethodDocumentMethod(const v8::FunctionCallbackInfo<v8::Value>& 
   Document* document;
   document = V8Document::ToImplWithTypeCheck(info.GetIsolate(), info[0]);
   if (!document) {
-    V8ThrowException::ThrowTypeError(info.GetIsolate(), ExceptionMessages::FailedToExecute("voidMethodDocument", "TestIntegerIndexed", "parameter 1 is not of type 'Document'."));
+    V8ThrowException::ThrowTypeError(info.GetIsolate(), ExceptionMessages::FailedToExecute("voidMethodDocument", "TestIntegerIndexed", ExceptionMessages::ArgumentNotOfType(0, "Document")));
     return;
   }
 
@@ -217,24 +217,28 @@ void V8TestIntegerIndexed::LengthAttributeSetterCallback(
 }
 
 void V8TestIntegerIndexed::VoidMethodDocumentMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  BLINK_BINDINGS_TRACE_EVENT("TestIntegerIndexed.voidMethodDocument");
   RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestIntegerIndexed_voidMethodDocument");
 
   test_integer_indexed_v8_internal::VoidMethodDocumentMethod(info);
 }
 
 void V8TestIntegerIndexed::KeysMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  BLINK_BINDINGS_TRACE_EVENT("TestIntegerIndexed.keys");
   RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestIntegerIndexed_keys");
 
   test_integer_indexed_v8_internal::KeysMethod(info);
 }
 
 void V8TestIntegerIndexed::ValuesMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  BLINK_BINDINGS_TRACE_EVENT("TestIntegerIndexed.values");
   RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestIntegerIndexed_values");
 
   test_integer_indexed_v8_internal::ValuesMethod(info);
 }
 
 void V8TestIntegerIndexed::ForEachMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  BLINK_BINDINGS_TRACE_EVENT("TestIntegerIndexed.forEach");
   RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestIntegerIndexed_forEach");
 
   test_integer_indexed_v8_internal::ForEachMethod(info);
@@ -435,16 +439,6 @@ v8::Local<v8::Object> V8TestIntegerIndexed::FindInstanceInPrototypeChain(
 TestIntegerIndexed* V8TestIntegerIndexed::ToImplWithTypeCheck(
     v8::Isolate* isolate, v8::Local<v8::Value> value) {
   return HasInstance(value, isolate) ? ToImpl(v8::Local<v8::Object>::Cast(value)) : nullptr;
-}
-
-TestIntegerIndexed* NativeValueTraits<TestIntegerIndexed>::NativeValue(
-    v8::Isolate* isolate, v8::Local<v8::Value> value, ExceptionState& exception_state) {
-  TestIntegerIndexed* native_value = V8TestIntegerIndexed::ToImplWithTypeCheck(isolate, value);
-  if (!native_value) {
-    exception_state.ThrowTypeError(ExceptionMessages::FailedToConvertJSValue(
-        "TestIntegerIndexed"));
-  }
-  return native_value;
 }
 
 }  // namespace blink

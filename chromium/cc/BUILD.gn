@@ -42,6 +42,7 @@ cc_component("cc") {
     "input/page_scale_animation.h",
     "input/scroll_elasticity_helper.cc",
     "input/scroll_elasticity_helper.h",
+    "input/scroll_input_type.h",
     "input/scroll_snap_data.cc",
     "input/scroll_snap_data.h",
     "input/scroll_state.cc",
@@ -77,7 +78,6 @@ cc_component("cc") {
     "layers/heads_up_display_layer_impl.h",
     "layers/layer.cc",
     "layers/layer.h",
-    "layers/layer_client.h",
     "layers/layer_collections.h",
     "layers/layer_impl.cc",
     "layers/layer_impl.h",
@@ -157,8 +157,18 @@ cc_component("cc") {
     "metrics/compositor_frame_reporting_controller.h",
     "metrics/compositor_timing_history.cc",
     "metrics/compositor_timing_history.h",
+    "metrics/event_metrics.cc",
+    "metrics/event_metrics.h",
+    "metrics/events_metrics_manager.cc",
+    "metrics/events_metrics_manager.h",
     "metrics/frame_sequence_tracker.cc",
     "metrics/frame_sequence_tracker.h",
+    "metrics/latency_ukm_reporter.cc",
+    "metrics/latency_ukm_reporter.h",
+    "metrics/throughput_ukm_reporter.cc",
+    "metrics/throughput_ukm_reporter.h",
+    "metrics/video_playback_roughness_reporter.cc",
+    "metrics/video_playback_roughness_reporter.h",
     "raster/bitmap_raster_buffer_provider.cc",
     "raster/bitmap_raster_buffer_provider.h",
     "raster/gpu_raster_buffer_provider.cc",
@@ -277,6 +287,8 @@ cc_component("cc") {
     "trees/animated_paint_worklet_tracker.h",
     "trees/animation_effect_timings.h",
     "trees/animation_options.h",
+    "trees/browser_controls_params.cc",
+    "trees/browser_controls_params.h",
     "trees/clip_expander.cc",
     "trees/clip_expander.h",
     "trees/clip_node.cc",
@@ -379,7 +391,6 @@ cc_component("cc") {
   deps = [
     "//base",
     "//base/third_party/dynamic_annotations",
-    "//components/ukm",
     "//components/viz/client",
     "//gpu",
     "//gpu/command_buffer/client:gles2_interface",
@@ -389,6 +400,8 @@ cc_component("cc") {
     "//media",  # For VideoLayerImpl.
     "//mojo/public/cpp/bindings:struct_traits",
     "//services/metrics/public/cpp:ukm_builders",
+    "//services/metrics/public/mojom",
+    "//services/tracing/public/cpp:cpp",
     "//ui/events:events_base",
     "//ui/gfx",
     "//ui/gfx/geometry",
@@ -474,10 +487,10 @@ cc_test_static_library("test_support") {
     "test/layer_tree_pixel_test.h",
     "test/layer_tree_test.cc",
     "test/layer_tree_test.h",
-    "test/mock_layer_client.cc",
-    "test/mock_layer_client.h",
     "test/mock_layer_tree_mutator.cc",
     "test/mock_layer_tree_mutator.h",
+    "test/mock_mutator_host.cc",
+    "test/mock_mutator_host.h",
     "test/mock_occlusion_tracker.h",
     "test/paint_op_helper.h",
     "test/pixel_comparator.cc",
@@ -577,9 +590,7 @@ cc_test_static_library("test_support") {
     deps += [ "//gpu/vulkan/init" ]
   }
   if (!is_android) {
-    data_deps = [
-      "//third_party/mesa_headers",
-    ]
+    data_deps = [ "//third_party/mesa_headers" ]
   }
 }
 
@@ -643,7 +654,10 @@ cc_test("cc_unittests") {
     "metrics/compositor_frame_reporter_unittest.cc",
     "metrics/compositor_frame_reporting_controller_unittest.cc",
     "metrics/compositor_timing_history_unittest.cc",
+    "metrics/events_metrics_manager_unittest.cc",
+    "metrics/frame_sequence_metrics_unittest.cc",
     "metrics/frame_sequence_tracker_unittest.cc",
+    "metrics/video_playback_roughness_reporter_unittest.cc",
     "mojo_embedder/async_layer_tree_frame_sink_unittest.cc",
     "paint/discardable_image_map_unittest.cc",
     "paint/display_item_list_unittest.cc",
@@ -671,6 +685,7 @@ cc_test("cc_unittests") {
     "resources/resource_pool_unittest.cc",
     "scheduler/scheduler_state_machine_unittest.cc",
     "scheduler/scheduler_unittest.cc",
+    "test/mock_mutator_host_unittest.cc",
     "tiles/checker_image_tracker_unittest.cc",
     "tiles/decoded_image_tracker_unittest.cc",
     "tiles/gpu_image_decode_cache_unittest.cc",
@@ -738,16 +753,8 @@ cc_test("cc_unittests") {
   ]
 
   if (!is_android) {
-    data = [
-      "//components/viz/test/data/",
-    ]
-  }
-
-  if (is_win) {
-    # TODO(vmpstr): Some SoftwareImageDecodeCacheTests use virtual inheritance,
-    # which MSVC doesn't like. Suppress "Foo inherits Bar via dominance"
-    # warnings for now.
-    cflags = [ "/wd4250" ]
+    data = [ "//components/viz/test/data/" ]
+    sources += [ "paint/skottie_transfer_cache_entry_unittest.cc" ]
   }
 
   deps = [
@@ -782,8 +789,16 @@ cc_test("cc_unittests") {
     "//ui/gl:test_support",
   ]
   data_deps = [
+    "//testing/buildbot/filters:cc_unittests_filters",
     "//third_party/mesa_headers",
   ]
+
+  defines = []
+
+  if (is_fuchsia) {
+    defines += [ "GL_NOT_ON_PLATFORM" ]
+    manifest = "//build/config/fuchsia/gfx_tests.cmx"
+  }
 
   if (enable_vulkan) {
     deps += [
@@ -794,8 +809,10 @@ cc_test("cc_unittests") {
     # TODO(samans): Support more configurations.
     # CFI issue: https://crbug.com/967819
     # LSAN issue: https://crbug.com/971325
-    if (use_x11 && !is_cfi && !is_lsan) {
-      defines = [ "ENABLE_CC_VULKAN_TESTS" ]
+    # Fuchsia ARM64 https://crbug.com/1058247
+    if ((use_x11 && !is_cfi && !is_lsan) ||
+        (is_fuchsia && target_cpu == "x64")) {
+      defines += [ "ENABLE_CC_VULKAN_TESTS" ]
     }
   }
 }
@@ -852,9 +869,7 @@ cc_test("cc_perftests") {
   # This target should not require the Chrome executable to run.
   assert_no_deps = [ "//chrome" ]
 
-  data = [
-    "//components/viz/test/data/",
-  ]
+  data = [ "//components/viz/test/data/" ]
 
   data_deps = [
     # Needed for isolate script to execute.

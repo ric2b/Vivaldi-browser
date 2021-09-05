@@ -15,7 +15,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
-#include "sync/test/integration/notes_helper.h"
+#include "notes/tests/notes_contenthelper.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using base::ASCIIToUTF16;
@@ -37,7 +37,7 @@ const char kFolder1Title[] = "folder1";
 const char kFolder2Title[] = "folder2";
 
 // Helper to verify the two given notes nodes.
-void AssertNodesEqual(const Notes_Node* expected, const Notes_Node* actual) {
+void AssertNodesEqual(const NoteNode* expected, const NoteNode* actual) {
   ASSERT_TRUE(expected);
   ASSERT_TRUE(actual);
   EXPECT_EQ(expected->id(), actual->id());
@@ -51,12 +51,13 @@ void AssertNodesEqual(const Notes_Node* expected, const Notes_Node* actual) {
   } else {
     ASSERT_EQ(expected->children().size(), actual->children().size());
     for (size_t i = 0; i < expected->children().size(); ++i)
-      AssertNodesEqual(expected->children()[i].get(), actual->children()[i].get());
+      AssertNodesEqual(expected->children()[i].get(),
+                       actual->children()[i].get());
   }
 }
 
 // Verifies that the two given notes models are the same.
-void AssertModelsEqual(Notes_Model* expected, Notes_Model* actual) {
+void AssertModelsEqual(NotesModel* expected, NotesModel* actual) {
   ASSERT_NO_FATAL_FAILURE(
       AssertNodesEqual(expected->main_node(), actual->main_node()));
   ASSERT_NO_FATAL_FAILURE(
@@ -68,29 +69,29 @@ void AssertModelsEqual(Notes_Model* expected, Notes_Model* actual) {
 class NotesCodecTest : public testing::Test {
  protected:
   // Helpers to create notes models with different data.
-  Notes_Model* CreateTestModel1(int index = 0) {
-    std::unique_ptr<Notes_Model> model(Notes_Model::CreateModel());
-    const Notes_Node* notes_node = model->main_node();
-    model->AddNote(notes_node, 0, ASCIIToUTF16(kUrl1Title), GURL(kUrl1Url),
+  NotesModel* CreateTestModel1(int index = 0) {
+    std::unique_ptr<NotesModel> model(NotesModel::CreateForTests());
+    const NoteNode* note_node = model->main_node();
+    model->AddNote(note_node, 0, ASCIIToUTF16(kUrl1Title), GURL(kUrl1Url),
                    ASCIIToUTF16(CreateAutoIndexedContent(index)));
     return model.release();
   }
-  Notes_Model* CreateTestModel2() {
-    std::unique_ptr<Notes_Model> model(Notes_Model::CreateModel());
-    const Notes_Node* notes_node = model->main_node();
-    model->AddNote(notes_node, 0, ASCIIToUTF16(kUrl1Title), GURL(kUrl1Url),
+  NotesModel* CreateTestModel2() {
+    std::unique_ptr<NotesModel> model(NotesModel::CreateForTests());
+    const NoteNode* note_node = model->main_node();
+    model->AddNote(note_node, 0, ASCIIToUTF16(kUrl1Title), GURL(kUrl1Url),
                    ASCIIToUTF16(CreateAutoIndexedContent()));
-    model->AddNote(notes_node, 1, ASCIIToUTF16(kUrl2Title), GURL(kUrl2Url),
+    model->AddNote(note_node, 1, ASCIIToUTF16(kUrl2Title), GURL(kUrl2Url),
                    ASCIIToUTF16(CreateAutoIndexedContent()));
     return model.release();
   }
-  Notes_Model* CreateTestModel3() {
-    std::unique_ptr<Notes_Model> model(Notes_Model::CreateModel());
-    const Notes_Node* notes_node = model->main_node();
-    model->AddNote(notes_node, 0, ASCIIToUTF16(kUrl1Title), GURL(kUrl1Url),
+  NotesModel* CreateTestModel3() {
+    std::unique_ptr<NotesModel> model(NotesModel::CreateForTests());
+    const NoteNode* note_node = model->main_node();
+    model->AddNote(note_node, 0, ASCIIToUTF16(kUrl1Title), GURL(kUrl1Url),
                    ASCIIToUTF16(CreateAutoIndexedContent()));
-    const Notes_Node* folder1 =
-        model->AddFolder(notes_node, 1, ASCIIToUTF16(kFolder1Title));
+    const NoteNode* folder1 =
+        model->AddFolder(note_node, 1, ASCIIToUTF16(kFolder1Title));
     model->AddNote(folder1, 0, ASCIIToUTF16(kUrl2Title), GURL(kUrl2Url),
                    ASCIIToUTF16(CreateAutoIndexedContent()));
     return model.release();
@@ -116,13 +117,13 @@ class NotesCodecTest : public testing::Test {
     *result_value = static_cast<base::DictionaryValue*>(child_value);
   }
 
-  base::Value* EncodeHelper(Notes_Model* model, std::string* checksum) {
+  base::Value* EncodeHelper(NotesModel* model, std::string* checksum) {
     NotesCodec encoder;
     // Computed and stored checksums should be empty.
     EXPECT_EQ("", encoder.computed_checksum());
     EXPECT_EQ("", encoder.stored_checksum());
 
-    std::unique_ptr<base::Value> value(encoder.Encode(model));
+    std::unique_ptr<base::Value> value(encoder.Encode(model, ""));
     const std::string& computed_checksum = encoder.computed_checksum();
     const std::string& stored_checksum = encoder.stored_checksum();
 
@@ -135,11 +136,11 @@ class NotesCodecTest : public testing::Test {
     return value.release();
   }
 
-  bool Decode(NotesCodec* codec, Notes_Model* model, const base::Value& value) {
+  bool Decode(NotesCodec* codec, NotesModel* model, const base::Value& value) {
     int64_t max_id;
-    bool result = codec->Decode(AsMutable(model->main_node()),
-                                AsMutable(model->other_node()),
-                                AsMutable(model->trash_node()), &max_id, value);
+    bool result = codec->Decode(
+        AsMutable(model->main_node()), AsMutable(model->other_node()),
+        AsMutable(model->trash_node()), &max_id, value, nullptr);
     model->set_next_index_id(max_id);
     AsMutable(model->root_node())
         ->set_sync_transaction_version(codec->model_sync_transaction_version());
@@ -147,16 +148,16 @@ class NotesCodecTest : public testing::Test {
     return result;
   }
 
-  Notes_Model* DecodeHelper(const base::Value& value,
-                            const std::string& expected_stored_checksum,
-                            std::string* computed_checksum,
-                            bool expected_changes) {
+  NotesModel* DecodeHelper(const base::Value& value,
+                           const std::string& expected_stored_checksum,
+                           std::string* computed_checksum,
+                           bool expected_changes) {
     NotesCodec decoder;
     // Computed and stored checksums should be empty.
     EXPECT_EQ("", decoder.computed_checksum());
     EXPECT_EQ("", decoder.stored_checksum());
 
-    std::unique_ptr<Notes_Model> model(Notes_Model::CreateModel());
+    std::unique_ptr<NotesModel> model(NotesModel::CreateForTests());
     EXPECT_TRUE(Decode(&decoder, model.get(), value));
 
     *computed_checksum = decoder.computed_checksum();
@@ -179,23 +180,23 @@ class NotesCodecTest : public testing::Test {
     return model.release();
   }
 
-  void CheckIDs(const Notes_Node* node, std::set<int64_t>* assigned_ids) {
+  void CheckIDs(const NoteNode* node, std::set<int64_t>* assigned_ids) {
     DCHECK(node);
     int64_t node_id = node->id();
     EXPECT_TRUE(assigned_ids->find(node_id) == assigned_ids->end());
     assigned_ids->insert(node_id);
-    for (auto& it: node->children())
+    for (auto& it : node->children())
       CheckIDs(it.get(), assigned_ids);
   }
 
-  void ExpectIDsUnique(Notes_Model* model) {
+  void ExpectIDsUnique(NotesModel* model) {
     std::set<int64_t> assigned_ids;
     CheckIDs(model->root_node(), &assigned_ids);
   }
 };
 
 TEST_F(NotesCodecTest, ChecksumEncodeDecodeTest) {
-  std::unique_ptr<Notes_Model> model_to_encode(CreateTestModel1());
+  std::unique_ptr<NotesModel> model_to_encode(CreateTestModel1());
   std::string enc_checksum;
   std::unique_ptr<base::Value> value(
       EncodeHelper(model_to_encode.get(), &enc_checksum));
@@ -203,20 +204,20 @@ TEST_F(NotesCodecTest, ChecksumEncodeDecodeTest) {
   EXPECT_TRUE(value.get() != NULL);
 
   std::string dec_checksum;
-  std::unique_ptr<Notes_Model> decoded_model(
+  std::unique_ptr<NotesModel> decoded_model(
       DecodeHelper(*value.get(), enc_checksum, &dec_checksum, false));
 }
 
 TEST_F(NotesCodecTest, ChecksumEncodeIdenticalModelsTest) {
   // Encode two identical models and make sure the check-sums are same as long
   // as the data is the same.
-  std::unique_ptr<Notes_Model> model1(CreateTestModel1(1003));
+  std::unique_ptr<NotesModel> model1(CreateTestModel1(1003));
   std::string enc_checksum1;
   std::unique_ptr<base::Value> value1(
       EncodeHelper(model1.get(), &enc_checksum1));
   EXPECT_TRUE(value1.get() != NULL);
 
-  std::unique_ptr<Notes_Model> model2(CreateTestModel1(1003));
+  std::unique_ptr<NotesModel> model2(CreateTestModel1(1003));
   std::string enc_checksum2;
   std::unique_ptr<base::Value> value2(
       EncodeHelper(model2.get(), &enc_checksum2));
@@ -226,7 +227,7 @@ TEST_F(NotesCodecTest, ChecksumEncodeIdenticalModelsTest) {
 }
 
 TEST_F(NotesCodecTest, ChecksumManualEditTest) {
-  std::unique_ptr<Notes_Model> model_to_encode(CreateTestModel1());
+  std::unique_ptr<NotesModel> model_to_encode(CreateTestModel1());
   std::string enc_checksum;
   std::unique_ptr<base::Value> value(
       EncodeHelper(model_to_encode.get(), &enc_checksum));
@@ -237,21 +238,21 @@ TEST_F(NotesCodecTest, ChecksumManualEditTest) {
   base::DictionaryValue* child1_value;
   GetNotesChildValue(value.get(), 0, &child1_value);
   std::string title;
-  ASSERT_TRUE(child1_value->GetString(NotesCodec::kNameKey, &title));
-  child1_value->SetString(NotesCodec::kNameKey, title + "1");
+  ASSERT_TRUE(child1_value->GetString(NotesCodec::kSubjectKey, &title));
+  child1_value->SetString(NotesCodec::kSubjectKey, title + "1");
 
   std::string dec_checksum;
-  std::unique_ptr<Notes_Model> decoded_model1(
+  std::unique_ptr<NotesModel> decoded_model1(
       DecodeHelper(*value.get(), enc_checksum, &dec_checksum, true));
 
   // Undo the change and make sure the checksum is same as original.
-  child1_value->SetString(NotesCodec::kNameKey, title);
-  std::unique_ptr<Notes_Model> decoded_model2(
+  child1_value->SetString(NotesCodec::kSubjectKey, title);
+  std::unique_ptr<NotesModel> decoded_model2(
       DecodeHelper(*value.get(), enc_checksum, &dec_checksum, false));
 }
 
 TEST_F(NotesCodecTest, ChecksumManualEditIDsTest) {
-  std::unique_ptr<Notes_Model> model_to_encode(CreateTestModel3());
+  std::unique_ptr<NotesModel> model_to_encode(CreateTestModel3());
 
   // The test depends on existence of multiple children under notes main node,
   // so make sure that's the case.
@@ -274,13 +275,13 @@ TEST_F(NotesCodecTest, ChecksumManualEditIDsTest) {
   }
 
   std::string dec_checksum;
-  std::unique_ptr<Notes_Model> decoded_model(
+  std::unique_ptr<NotesModel> decoded_model(
       DecodeHelper(*value.get(), enc_checksum, &dec_checksum, true));
 
   ExpectIDsUnique(decoded_model.get());
 
   // add a few extra nodes to notes model and make sure IDs are still uniuqe.
-  const Notes_Node* notes_node = decoded_model->main_node();
+  const NoteNode* notes_node = decoded_model->main_node();
   decoded_model->AddNote(notes_node, 0, ASCIIToUTF16("new url1"),
                          GURL("http://newurl1.com"),
                          ASCIIToUTF16(CreateAutoIndexedContent()));
@@ -292,12 +293,12 @@ TEST_F(NotesCodecTest, ChecksumManualEditIDsTest) {
 }
 
 TEST_F(NotesCodecTest, PersistIDsTest) {
-  std::unique_ptr<Notes_Model> model_to_encode(CreateTestModel3());
+  std::unique_ptr<NotesModel> model_to_encode(CreateTestModel3());
   NotesCodec encoder;
   std::unique_ptr<base::Value> model_value(
-      encoder.Encode(model_to_encode.get()));
+      encoder.Encode(model_to_encode.get(), ""));
 
-  std::unique_ptr<Notes_Model> decoded_model(Notes_Model::CreateModel());
+  std::unique_ptr<NotesModel> decoded_model(NotesModel::CreateForTests());
   NotesCodec decoder;
   ASSERT_TRUE(Decode(&decoder, decoded_model.get(), *model_value.get()));
   ASSERT_NO_FATAL_FAILURE(
@@ -305,11 +306,11 @@ TEST_F(NotesCodecTest, PersistIDsTest) {
 
   // Add a couple of more items to the decoded notes model and make sure
   // ID persistence is working properly.
-  const Notes_Node* notes_node = decoded_model->main_node();
+  const NoteNode* notes_node = decoded_model->main_node();
   decoded_model->AddNote(notes_node, notes_node->children().size(),
                          ASCIIToUTF16(kUrl3Title), GURL(kUrl3Url),
                          ASCIIToUTF16(CreateAutoIndexedContent()));
-  const Notes_Node* folder2_node = decoded_model->AddFolder(
+  const NoteNode* folder2_node = decoded_model->AddFolder(
       notes_node, notes_node->children().size(), ASCIIToUTF16(kFolder2Title));
   decoded_model->AddNote(folder2_node, 0, ASCIIToUTF16(kUrl4Title),
                          GURL(kUrl4Url),
@@ -317,9 +318,9 @@ TEST_F(NotesCodecTest, PersistIDsTest) {
 
   NotesCodec encoder2;
   std::unique_ptr<base::Value> model_value2(
-      encoder2.Encode(decoded_model.get()));
+      encoder2.Encode(decoded_model.get(), ""));
 
-  std::unique_ptr<Notes_Model> decoded_model2(Notes_Model::CreateModel());
+  std::unique_ptr<NotesModel> decoded_model2(NotesModel::CreateForTests());
   NotesCodec decoder2;
   ASSERT_TRUE(Decode(&decoder2, decoded_model2.get(), *model_value2.get()));
   ASSERT_NO_FATAL_FAILURE(
@@ -328,9 +329,9 @@ TEST_F(NotesCodecTest, PersistIDsTest) {
 
 TEST_F(NotesCodecTest, EncodeAndDecodeSyncTransactionVersion) {
   // Add sync transaction version and encode.
-  std::unique_ptr<Notes_Model> model(CreateTestModel2());
+  std::unique_ptr<NotesModel> model(CreateTestModel2());
   model->SetNodeSyncTransactionVersion(model->root_node(), 1);
-  const Notes_Node* main = model->main_node();
+  const NoteNode* main = model->main_node();
   model->SetNodeSyncTransactionVersion(main->children()[1].get(), 42);
 
   std::string checksum;
@@ -342,7 +343,7 @@ TEST_F(NotesCodecTest, EncodeAndDecodeSyncTransactionVersion) {
   EXPECT_EQ(1, model->root_node()->sync_transaction_version());
   main = model->main_node();
   EXPECT_EQ(42, main->children()[1]->sync_transaction_version());
-  EXPECT_EQ(Notes_Node::kInvalidSyncTransactionVersion,
+  EXPECT_EQ(NoteNode::kInvalidSyncTransactionVersion,
             main->children()[0]->sync_transaction_version());
 }
 

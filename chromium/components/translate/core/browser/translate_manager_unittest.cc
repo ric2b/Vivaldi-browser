@@ -36,9 +36,9 @@
 #include "third_party/metrics_proto/translate_event.pb.h"
 
 using testing::_;
+using testing::Pointee;
 using testing::Return;
 using testing::SetArgPointee;
-using testing::Pointee;
 
 namespace translate {
 
@@ -133,8 +133,7 @@ class TranslateManagerTest : public ::testing::Test {
                          preferred_languages_prefs),
         manager_(TranslateDownloadManager::GetInstance()),
         mock_translate_client_(&driver_, &prefs_),
-        mock_language_model_({MockLanguageModel::LanguageDetails("en", 1.0)}),
-        field_trial_list_(new base::FieldTrialList(nullptr)) {}
+        mock_language_model_({MockLanguageModel::LanguageDetails("en", 1.0)}) {}
 
   void SetUp() override {
     // Ensure we're not requesting a server-side translate language list.
@@ -193,7 +192,6 @@ class TranslateManagerTest : public ::testing::Test {
       mock_translate_client_;
   MockLanguageModel mock_language_model_;
   std::unique_ptr<TranslateManager> translate_manager_;
-  std::unique_ptr<base::FieldTrialList> field_trial_list_;
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
@@ -201,9 +199,9 @@ class TranslateManagerTest : public ::testing::Test {
 // is supported.
 TEST_F(TranslateManagerTest, GetTargetLanguageDefaultsToAppLocale) {
   // Ensure the locale is set to a supported language.
-  ASSERT_TRUE(TranslateDownloadManager::IsSupportedLanguage("en"));
-  manager_->set_application_locale("en");
-  EXPECT_EQ("en",
+  ASSERT_TRUE(TranslateDownloadManager::IsSupportedLanguage("es"));
+  manager_->set_application_locale("es");
+  EXPECT_EQ("es",
             TranslateManager::GetTargetLanguage(&translate_prefs_, nullptr));
 
   // Try a second supported language.
@@ -235,18 +233,19 @@ TEST_F(TranslateManagerTest, GetTargetLanguageDefaultsToAppLocale) {
 
 // Test that the language model is used if provided.
 TEST_F(TranslateManagerTest, GetTargetLanguageFromModel) {
+  manager_->set_application_locale("ru");
   // Try with a single, supported language.
-  ASSERT_TRUE(TranslateDownloadManager::IsSupportedLanguage("en"));
+  ASSERT_TRUE(TranslateDownloadManager::IsSupportedLanguage("es"));
   mock_language_model_.details = {
-      MockLanguageModel::LanguageDetails("en", 1.0)};
-  EXPECT_EQ("en", TranslateManager::GetTargetLanguage(&translate_prefs_,
+      MockLanguageModel::LanguageDetails("es", 1.0)};
+  EXPECT_EQ("es", TranslateManager::GetTargetLanguage(&translate_prefs_,
                                                       &mock_language_model_));
 
   // Try with two supported languages.
   ASSERT_TRUE(TranslateDownloadManager::IsSupportedLanguage("de"));
   mock_language_model_.details = {
       MockLanguageModel::LanguageDetails("de", 1.0),
-      MockLanguageModel::LanguageDetails("en", 0.5)};
+      MockLanguageModel::LanguageDetails("es", 0.5)};
   EXPECT_EQ("de", TranslateManager::GetTargetLanguage(&translate_prefs_,
                                                       &mock_language_model_));
 
@@ -254,8 +253,8 @@ TEST_F(TranslateManagerTest, GetTargetLanguageFromModel) {
   ASSERT_FALSE(TranslateDownloadManager::IsSupportedLanguage("xx"));
   mock_language_model_.details = {
       MockLanguageModel::LanguageDetails("xx", 1.0),
-      MockLanguageModel::LanguageDetails("en", 0.5)};
-  EXPECT_EQ("en", TranslateManager::GetTargetLanguage(&translate_prefs_,
+      MockLanguageModel::LanguageDetails("es", 0.5)};
+  EXPECT_EQ("es", TranslateManager::GetTargetLanguage(&translate_prefs_,
                                                       &mock_language_model_));
 
   // Try with no supported languages.
@@ -263,8 +262,23 @@ TEST_F(TranslateManagerTest, GetTargetLanguageFromModel) {
   mock_language_model_.details = {
       MockLanguageModel::LanguageDetails("xx", 1.0),
       MockLanguageModel::LanguageDetails("yy", 0.5)};
-  EXPECT_EQ("", TranslateManager::GetTargetLanguage(&translate_prefs_,
-                                                    &mock_language_model_));
+  // Should default to application locale.
+  EXPECT_EQ("ru", TranslateManager::GetTargetLanguage(&translate_prefs_,
+                                                      &mock_language_model_));
+
+  // Try with no supported languages, unsupported app locale, and no accept
+  // languages.
+  manager_->set_application_locale("zz");
+  // Should default to English.
+  EXPECT_EQ("en", TranslateManager::GetTargetLanguage(&translate_prefs_,
+                                                      &mock_language_model_));
+
+  // Try with no supported languages and unsupported app locale, but accept
+  // languages.
+  translate_prefs_.AddToLanguageList("de", /*force_blocked=*/false);
+  // Should default to accept language.
+  EXPECT_EQ("de", TranslateManager::GetTargetLanguage(&translate_prefs_,
+                                                      &mock_language_model_));
 
   // Try non standard codes.
   // 'he', 'fil', 'nb' => 'iw', 'tl', 'no'
@@ -295,18 +309,18 @@ TEST_F(TranslateManagerTest, GetTargetLanguageFromModel) {
 TEST_F(TranslateManagerTest, GetTargetLanguageFromModelWithSkippedLanguages) {
   // Try with a single, supported language but request it to be skipped. It
   // should still be chosen since there is no fallback.
-  ASSERT_TRUE(TranslateDownloadManager::IsSupportedLanguage("en"));
+  ASSERT_TRUE(TranslateDownloadManager::IsSupportedLanguage("es"));
   mock_language_model_.details = {
-      MockLanguageModel::LanguageDetails("en", 1.0)};
-  EXPECT_EQ("en", TranslateManager::GetTargetLanguage(
-                      &translate_prefs_, &mock_language_model_, {"en"}));
+      MockLanguageModel::LanguageDetails("es", 1.0)};
+  EXPECT_EQ("es", TranslateManager::GetTargetLanguage(
+                      &translate_prefs_, &mock_language_model_, {"es"}));
 
   // Try with two supported languages and skip the first one.
   ASSERT_TRUE(TranslateDownloadManager::IsSupportedLanguage("de"));
   mock_language_model_.details = {
       MockLanguageModel::LanguageDetails("de", 1.0),
-      MockLanguageModel::LanguageDetails("en", 0.5)};
-  EXPECT_EQ("en", TranslateManager::GetTargetLanguage(
+      MockLanguageModel::LanguageDetails("es", 0.5)};
+  EXPECT_EQ("es", TranslateManager::GetTargetLanguage(
                       &translate_prefs_, &mock_language_model_, {"de"}));
 
   // Try with first supported language lower in the list but request it to be
@@ -314,9 +328,9 @@ TEST_F(TranslateManagerTest, GetTargetLanguageFromModelWithSkippedLanguages) {
   ASSERT_FALSE(TranslateDownloadManager::IsSupportedLanguage("xx"));
   mock_language_model_.details = {
       MockLanguageModel::LanguageDetails("xx", 1.0),
-      MockLanguageModel::LanguageDetails("en", 0.5)};
-  EXPECT_EQ("en", TranslateManager::GetTargetLanguage(
-                      &translate_prefs_, &mock_language_model_, {"en"}));
+      MockLanguageModel::LanguageDetails("es", 0.5)};
+  EXPECT_EQ("es", TranslateManager::GetTargetLanguage(
+                      &translate_prefs_, &mock_language_model_, {"es"}));
 
   // Try non standard codes. Skipping should be specified using the supported
   // language in pairs of synonyms.
@@ -325,13 +339,13 @@ TEST_F(TranslateManagerTest, GetTargetLanguageFromModelWithSkippedLanguages) {
   ASSERT_FALSE(TranslateDownloadManager::IsSupportedLanguage("he"));
   mock_language_model_.details = {
       MockLanguageModel::LanguageDetails("he", 1.0),
-      MockLanguageModel::LanguageDetails("en", 0.5)};
-  EXPECT_EQ("en", TranslateManager::GetTargetLanguage(
+      MockLanguageModel::LanguageDetails("es", 0.5)};
+  EXPECT_EQ("es", TranslateManager::GetTargetLanguage(
                       &translate_prefs_, &mock_language_model_, {"iw"}));
 
   mock_language_model_.details = {
       MockLanguageModel::LanguageDetails("iw", 1.0),
-      MockLanguageModel::LanguageDetails("en", 0.5)};
+      MockLanguageModel::LanguageDetails("es", 0.5)};
   EXPECT_EQ("iw", TranslateManager::GetTargetLanguage(
                       &translate_prefs_, &mock_language_model_, {"he"}));
 }
@@ -350,7 +364,8 @@ TEST_F(TranslateManagerTest, OverrideTriggerWithIndiaEnglishExperiment) {
   TranslateAcceptLanguages accept_languages(&prefs_, accept_languages_prefs);
   ON_CALL(mock_translate_client_, GetTranslateAcceptLanguages())
       .WillByDefault(Return(&accept_languages));
-  ON_CALL(mock_translate_client_, ShowTranslateUI(_, _, _, _, _))
+  ON_CALL(mock_translate_client_,
+          ShowTranslateUI(_, _, _, _, false /* triggered_from_menu */))
       .WillByDefault(Return(true));
 
   translate_manager_ = std::make_unique<translate::TranslateManager>(
@@ -386,7 +401,8 @@ TEST_F(TranslateManagerTest,
   TranslateAcceptLanguages accept_langugages(&prefs_, accept_languages_prefs);
   ON_CALL(mock_translate_client_, GetTranslateAcceptLanguages())
       .WillByDefault(Return(&accept_langugages));
-  ON_CALL(mock_translate_client_, ShowTranslateUI(_, _, _, _, _))
+  ON_CALL(mock_translate_client_,
+          ShowTranslateUI(_, _, _, _, false /* triggered_from_menu */))
       .WillByDefault(Return(true));
 
   translate_manager_ = std::make_unique<translate::TranslateManager>(
@@ -826,8 +842,8 @@ TEST_F(TranslateManagerTest, GetManualSourceAndTargetLanguages) {
   EXPECT_EQ("fr", translate_manager_->GetLanguageState().original_language());
   EXPECT_EQ("fr", translate_manager_->GetLanguageState().current_language());
   mock_language_model_.details = {
-      MockLanguageModel::LanguageDetails("en", 1.0)};
-  EXPECT_EQ("en", TranslateManager::GetTargetLanguage(
+      MockLanguageModel::LanguageDetails("es", 1.0)};
+  EXPECT_EQ("es", TranslateManager::GetTargetLanguage(
                       &translate_prefs_, &mock_language_model_, {}));
 
   EXPECT_FALSE(translate_manager_->GetLanguageState().IsPageTranslated());
@@ -839,7 +855,7 @@ TEST_F(TranslateManagerTest, GetManualSourceAndTargetLanguages) {
   const std::string target_lang = TranslateManager::GetManualTargetLanguage(
       source_code, translate_manager_->GetLanguageState(), &translate_prefs_,
       &mock_language_model_);
-  EXPECT_EQ("en", target_lang);
+  EXPECT_EQ("es", target_lang);
 }
 
 TEST_F(TranslateManagerTest,
@@ -850,8 +866,8 @@ TEST_F(TranslateManagerTest,
   EXPECT_EQ("fr", translate_manager_->GetLanguageState().original_language());
   EXPECT_EQ("de", translate_manager_->GetLanguageState().current_language());
   mock_language_model_.details = {
-      MockLanguageModel::LanguageDetails("en", 1.0)};
-  EXPECT_EQ("en", TranslateManager::GetTargetLanguage(
+      MockLanguageModel::LanguageDetails("es", 1.0)};
+  EXPECT_EQ("es", TranslateManager::GetTargetLanguage(
                       &translate_prefs_, &mock_language_model_, {}));
 
   EXPECT_TRUE(translate_manager_->GetLanguageState().IsPageTranslated());
@@ -1028,6 +1044,34 @@ TEST_F(TranslateManagerTest, PredefinedTargetLanguage_HonourUserSettings) {
       ElementsAre(Bucket(metrics::INITIATION_STATUS_DISABLED_BY_CONFIG, 1),
                   Bucket(metrics::INITIATION_STATUS_AUTO_BY_CONFIG, 1),
                   Bucket(metrics::INITIATION_STATUS_SHOW_ICON, 1)));
+}
+
+TEST_F(TranslateManagerTest, InitiateManualTranslation) {
+  manager_->set_application_locale("en");
+  mock_language_model_.details = {
+      MockLanguageModel::LanguageDetails("de", 1.0),
+  };
+  ON_CALL(mock_translate_client_, IsTranslatableURL(GURL::EmptyGURL()))
+      .WillByDefault(Return(true));
+  TranslateAcceptLanguages accept_langugages(&prefs_, accept_languages_prefs);
+  ON_CALL(mock_translate_client_, GetTranslateAcceptLanguages())
+      .WillByDefault(Return(&accept_langugages));
+  EXPECT_CALL(mock_translate_client_,
+              ShowTranslateUI(_, _, _, _, true /* triggered_from_menu */))
+      .WillOnce(Return(true));
+
+  translate_manager_ = std::make_unique<translate::TranslateManager>(
+      &mock_translate_client_, &mock_translate_ranker_, &mock_language_model_);
+
+  base::HistogramTester histogram_tester;
+  prefs_.SetBoolean(prefs::kOfferTranslateEnabled, true);
+  translate_manager_->GetLanguageState().LanguageDetermined("de", true);
+  network_notifier_.SimulateOnline();
+
+  translate_manager_->InitiateManualTranslation();
+
+  // InitiateManualTranslation should only ShowTranslateUI (not do translation).
+  histogram_tester.ExpectTotalCount(kInitiationStatusName, 0);
 }
 
 }  // namespace testing

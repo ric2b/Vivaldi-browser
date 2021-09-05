@@ -40,6 +40,8 @@ class ASH_EXPORT LoginUserView : public views::View,
     LoginBaseBubbleView* menu() const;
     views::View* user_domain() const;
 
+    void OnTap() const;
+
     bool is_opaque() const;
 
    private:
@@ -84,7 +86,6 @@ class ASH_EXPORT LoginUserView : public views::View,
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
  private:
-  class UserDomainInfoView;
   class UserImage;
   class UserLabel;
   class TapButton;
@@ -124,9 +125,6 @@ class ASH_EXPORT LoginUserView : public views::View,
   // level view, either LockContentsView or LockDebugView. This allows the menu
   // to be clicked outside the bounds of the user view.
   LoginUserMenuView* menu_ = nullptr;
-
-  // Show the domain information for public account user.
-  UserDomainInfoView* user_domain_ = nullptr;
 
   // True iff the view is currently opaque (ie, opacity = 1).
   bool is_opaque_ = false;

@@ -4,11 +4,11 @@
 
 #include "chrome/browser/ui/views/toolbar/toolbar_action_view.h"
 
-#include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/sessions/session_tab_helper.h"
+#include "build/build_config.h"
+#include "chrome/browser/sessions/session_tab_helper_factory.h"
 #include "chrome/browser/ui/toolbar/test_toolbar_action_view_controller.h"
 #include "chrome/browser/ui/toolbar/toolbar_action_view_controller.h"
 #include "chrome/test/base/testing_profile.h"
@@ -26,7 +26,10 @@ class TestToolbarActionViewDelegate : public ToolbarActionView::Delegate {
   TestToolbarActionViewDelegate() : shown_in_menu_(false),
                                     overflow_reference_view_(nullptr),
                                     web_contents_(nullptr) {}
-  ~TestToolbarActionViewDelegate() override {}
+  TestToolbarActionViewDelegate(const TestToolbarActionViewDelegate&) = delete;
+  TestToolbarActionViewDelegate& operator=(
+      const TestToolbarActionViewDelegate&) = delete;
+  ~TestToolbarActionViewDelegate() override = default;
 
   // ToolbarActionView::Delegate:
   content::WebContents* GetCurrentWebContents() override {
@@ -63,8 +66,6 @@ class TestToolbarActionViewDelegate : public ToolbarActionView::Delegate {
   views::MenuButton* overflow_reference_view_;
 
   content::WebContents* web_contents_;
-
-  DISALLOW_COPY_AND_ASSIGN(TestToolbarActionViewDelegate);
 };
 
 class OpenMenuListener : public views::ContextMenuController {
@@ -74,6 +75,8 @@ class OpenMenuListener : public views::ContextMenuController {
         opened_menu_(false) {
     view_->set_context_menu_controller(this);
   }
+  OpenMenuListener(const OpenMenuListener&) = delete;
+  OpenMenuListener& operator=(const OpenMenuListener&) = delete;
   ~OpenMenuListener() override {
     view_->set_context_menu_controller(nullptr);
   }
@@ -90,8 +93,6 @@ class OpenMenuListener : public views::ContextMenuController {
   views::View* view_;
 
   bool opened_menu_;
-
-  DISALLOW_COPY_AND_ASSIGN(OpenMenuListener);
 };
 
 }  // namespace
@@ -99,31 +100,26 @@ class OpenMenuListener : public views::ContextMenuController {
 class ToolbarActionViewUnitTest : public ChromeViewsTestBase {
  public:
   ToolbarActionViewUnitTest() : widget_(nullptr) {}
-  ~ToolbarActionViewUnitTest() override {}
+  ToolbarActionViewUnitTest(const ToolbarActionViewUnitTest&) = delete;
+  ToolbarActionViewUnitTest& operator=(const ToolbarActionViewUnitTest&) =
+      delete;
+  ~ToolbarActionViewUnitTest() override = default;
 
   void SetUp() override {
     ChromeViewsTestBase::SetUp();
-
-    widget_ = new views::Widget;
-    views::Widget::InitParams params =
-        CreateParams(views::Widget::InitParams::TYPE_WINDOW_FRAMELESS);
-    params.bounds = gfx::Rect(0, 0, 200, 200);
-    widget_->Init(std::move(params));
+    widget_ = CreateTestWidget();
   }
 
   void TearDown() override {
-    if (!widget_->IsClosed())
-      widget_->Close();
+    widget_.reset();
     ChromeViewsTestBase::TearDown();
   }
 
-  views::Widget* widget() { return widget_; }
+  views::Widget* widget() { return widget_.get(); }
 
  private:
   // The widget managed by this test.
-  views::Widget* widget_;
-
-  DISALLOW_COPY_AND_ASSIGN(ToolbarActionViewUnitTest);
+  std::unique_ptr<views::Widget> widget_;
 };
 
 // A MenuButton subclass that provides access to some MenuButton internals.
@@ -132,11 +128,9 @@ class TestToolbarActionView : public ToolbarActionView {
   TestToolbarActionView(ToolbarActionViewController* view_controller,
                         Delegate* delegate)
       : ToolbarActionView(view_controller, delegate) {}
-
+  TestToolbarActionView(const TestToolbarActionView&) = delete;
+  TestToolbarActionView& operator=(const TestToolbarActionView&) = delete;
   ~TestToolbarActionView() override {}
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(TestToolbarActionView);
 };
 
 // Verifies there is no crash when a ToolbarActionView with an InkDrop is
@@ -181,7 +175,13 @@ TEST_F(ToolbarActionViewUnitTest,
 
 // Test the basic ui of a ToolbarActionView and that it responds correctly to
 // a controller's state.
-TEST_F(ToolbarActionViewUnitTest, BasicToolbarActionViewTest) {
+#if defined(OS_MACOSX) || defined(OS_LINUX) || defined(OS_WIN)
+// TODO(crbug.com/1042220): Test is flaky on Mac, Linux and Win10.
+#define MAYBE_BasicToolbarActionViewTest DISABLED_BasicToolbarActionViewTest
+#else
+#define MAYBE_BasicToolbarActionViewTest BasicToolbarActionViewTest
+#endif
+TEST_F(ToolbarActionViewUnitTest, MAYBE_BasicToolbarActionViewTest) {
   TestingProfile profile;
 
   // ViewsTestBase initializes the aura environment, so the factory shouldn't.
@@ -197,7 +197,7 @@ TEST_F(ToolbarActionViewUnitTest, BasicToolbarActionViewTest) {
   controller.SetTooltip(tooltip);
   content::WebContents* web_contents =
       web_contents_factory.CreateWebContents(&profile);
-  SessionTabHelper::CreateForWebContents(web_contents);
+  CreateSessionServiceTabHelper(web_contents);
   action_view_delegate.set_web_contents(web_contents);
 
   // Move the mouse off the not-yet-existent button.

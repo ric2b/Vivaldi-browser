@@ -209,8 +209,7 @@ class DirectoryModel extends cr.EventTarget {
    */
   isCurrentRootVolumeType_(volumeType) {
     const rootType = this.getCurrentRootType();
-    return rootType != null &&
-        rootType != VolumeManagerCommon.RootType.RECENT &&
+    return rootType != null && !util.isRecentRootType(rootType) &&
         VolumeManagerCommon.getVolumeTypeFromRootType(rootType) === volumeType;
   }
 
@@ -352,6 +351,20 @@ class DirectoryModel extends cr.EventTarget {
    */
   getCurrentDirEntry() {
     return this.currentDirContents_.getDirectoryEntry();
+  }
+
+  /**
+   * @public
+   * @return {string}
+   */
+  getCurrentDirName() {
+    const dirEntry = this.getCurrentDirEntry();
+    if (!dirEntry) {
+      return '';
+    }
+
+    const locationInfo = this.volumeManager_.getLocationInfo(dirEntry);
+    return util.getEntryLabel(locationInfo, dirEntry);
   }
 
   /**
@@ -585,7 +598,7 @@ class DirectoryModel extends cr.EventTarget {
     // Clear metadata information for the old (no longer visible) items in the
     // file list.
     const fileList = this.getFileList();
-    let removedUrls = [];
+    const removedUrls = [];
     for (let i = 0; i < fileList.length; i++) {
       removedUrls.push(fileList.item(i).toURL());
     }
@@ -1198,7 +1211,7 @@ class DirectoryModel extends cr.EventTarget {
     // its contents.
     const currentDir = this.getCurrentDirEntry();
     const affectedVolumes = event.added.concat(event.removed);
-    for (let volume of affectedVolumes) {
+    for (const volume of affectedVolumes) {
       if (util.isSameEntry(currentDir, volume.prefixEntry)) {
         this.rescan(false);
         break;
@@ -1291,10 +1304,10 @@ class DirectoryModel extends cr.EventTarget {
     const locationInfo = this.volumeManager_.getLocationInfo(entry);
     const canUseDriveSearch =
         this.volumeManager_.getDriveConnectionState().type !==
-            VolumeManagerCommon.DriveConnectionType.OFFLINE &&
+            chrome.fileManagerPrivate.DriveConnectionStateType.OFFLINE &&
         (locationInfo && locationInfo.isDriveBased);
 
-    if (entry.rootType == VolumeManagerCommon.RootType.RECENT) {
+    if (util.isRecentRootType(entry.rootType)) {
       return DirectoryContents.createForRecent(
           context, /** @type {!FakeEntry} */ (entry), query);
     }

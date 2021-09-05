@@ -5,6 +5,7 @@
 // Multiply-included message file, hence no include guard here, but see below
 // for a much smaller-than-usual include guard section.
 // no-include-guard-because-multiply-included
+// NOLINT(build/header_guard)
 
 #include <stdint.h>
 
@@ -38,9 +39,8 @@ IPC_ENUM_TRAITS_MAX_VALUE(display::HDCPState, display::HDCP_STATE_LAST)
 IPC_ENUM_TRAITS_MAX_VALUE(display::PanelOrientation,
                           display::PanelOrientation::kLast)
 
-IPC_ENUM_TRAITS_MAX_VALUE(gfx::OverlayTransform, gfx::OVERLAY_TRANSFORM_LAST)
-
-IPC_ENUM_TRAITS_MAX_VALUE(ui::OverlayStatus, ui::OVERLAY_STATUS_LAST)
+IPC_ENUM_TRAITS_MAX_VALUE(display::PrivacyScreenState,
+                          display::PrivacyScreenState::kPrivacyScreenStateLast)
 
 // clang-format off
 IPC_STRUCT_TRAITS_BEGIN(ui::DisplayMode_Params)
@@ -56,6 +56,7 @@ IPC_STRUCT_TRAITS_BEGIN(ui::DisplaySnapshot_Params)
   IPC_STRUCT_TRAITS_MEMBER(type)
   IPC_STRUCT_TRAITS_MEMBER(is_aspect_preserving_scaling)
   IPC_STRUCT_TRAITS_MEMBER(has_overscan)
+  IPC_STRUCT_TRAITS_MEMBER(privacy_screen_state)
   IPC_STRUCT_TRAITS_MEMBER(has_color_correction_matrix)
   IPC_STRUCT_TRAITS_MEMBER(color_correction_in_linear_space)
   IPC_STRUCT_TRAITS_MEMBER(color_space)
@@ -79,22 +80,6 @@ IPC_STRUCT_TRAITS_BEGIN(display::GammaRampRGBEntry)
   IPC_STRUCT_TRAITS_MEMBER(g)
   IPC_STRUCT_TRAITS_MEMBER(b)
 IPC_STRUCT_TRAITS_END()
-
-IPC_STRUCT_TRAITS_BEGIN(ui::OverlayCheck_Params)
-  IPC_STRUCT_TRAITS_MEMBER(buffer_size)
-  IPC_STRUCT_TRAITS_MEMBER(transform)
-  IPC_STRUCT_TRAITS_MEMBER(format)
-  IPC_STRUCT_TRAITS_MEMBER(display_rect)
-  IPC_STRUCT_TRAITS_MEMBER(crop_rect)
-  IPC_STRUCT_TRAITS_MEMBER(is_opaque)
-  IPC_STRUCT_TRAITS_MEMBER(plane_z_order)
-  IPC_STRUCT_TRAITS_MEMBER(is_overlay_candidate)
-IPC_STRUCT_TRAITS_END()
-
-IPC_STRUCT_TRAITS_BEGIN(ui::OverlayCheckReturn_Params)
-  IPC_STRUCT_TRAITS_MEMBER(status)
-IPC_STRUCT_TRAITS_END()
-
 // clang-format on
 
 //------------------------------------------------------------------------------
@@ -170,10 +155,10 @@ IPC_MESSAGE_CONTROL3(OzoneGpuMsg_SetGammaCorrection,
                      std::vector<display::GammaRampRGBEntry>,  // Degamma lut
                      std::vector<display::GammaRampRGBEntry>)  // Gamma lut
 
-IPC_MESSAGE_CONTROL2(OzoneGpuMsg_CheckOverlayCapabilities,
-                     gfx::AcceleratedWidget /* widget */,
-                     std::vector<ui::OverlayCheck_Params> /* overlays */)
-
+// Set the privacy screen state of the display with |display_id|
+IPC_MESSAGE_CONTROL2(OzoneGpuMsg_SetPrivacyScreen,
+                     int64_t /* display_id */,
+                     bool /* enabled */)
 //------------------------------------------------------------------------------
 // Browser Messages
 // These messages are from the GPU to the browser process.
@@ -203,10 +188,3 @@ IPC_MESSAGE_CONTROL1(OzoneHostMsg_DisplayControlTaken, bool /* success */)
 // Response to OzoneGpuMsg_RelinquishDisplayControl.
 IPC_MESSAGE_CONTROL1(OzoneHostMsg_DisplayControlRelinquished,
                      bool /* success */)
-
-// Response to OzoneGpuMsg_CheckOverlayCapabilities. Returns list of supported
-// params.
-IPC_MESSAGE_CONTROL3(OzoneHostMsg_OverlayCapabilitiesReceived,
-                     gfx::AcceleratedWidget /* widget */,
-                     std::vector<ui::OverlayCheck_Params> /* overlays */,
-                     std::vector<ui::OverlayCheckReturn_Params> /* returns */)

@@ -10,29 +10,26 @@
 #include "base/files/file_path.h"
 #include "base/sequenced_task_runner.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/time/default_clock.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
-#include "chrome/browser/optimization_guide/optimization_guide_top_host_provider.h"
 #include "chrome/browser/previews/previews_lite_page_redirect_decider.h"
 #include "chrome/browser/previews/previews_offline_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_constants.h"
 #include "components/blacklist/opt_out_blacklist/opt_out_store.h"
 #include "components/blacklist/opt_out_blacklist/sql/opt_out_store_sql.h"
+#include "components/data_reduction_proxy/core/browser/data_reduction_proxy_settings.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_features.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
-#include "components/optimization_guide/optimization_guide_features.h"
-#include "components/optimization_guide/optimization_guide_service.h"
 #include "components/previews/content/previews_decider_impl.h"
-#include "components/previews/content/previews_optimization_guide_decider.h"
-#include "components/previews/content/previews_optimization_guide_impl.h"
+#include "components/previews/content/previews_optimization_guide.h"
 #include "components/previews/content/previews_ui_service.h"
 #include "components/previews/core/previews_experiments.h"
 #include "components/previews/core/previews_logger.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/storage_partition.h"
 
 namespace {
 
@@ -60,10 +57,6 @@ std::unique_ptr<previews::RegexpList> GetDenylistRegexpsForDeferAllScript() {
 
 // Returns true if previews can be shown for |type|.
 bool IsPreviewsTypeEnabled(previews::PreviewsType type) {
-  bool server_previews_enabled =
-      previews::params::ArePreviewsAllowed() &&
-      base::FeatureList::IsEnabled(
-          data_reduction_proxy::features::kDataReductionProxyDecidesTransform);
   switch (type) {
     case previews::PreviewsType::OFFLINE:
       return previews::params::IsOfflinePreviewsEnabled();
@@ -72,7 +65,7 @@ bool IsPreviewsTypeEnabled(previews::PreviewsType type) {
     case previews::PreviewsType::LITE_PAGE_REDIRECT:
       return previews::params::IsLitePageServerPreviewsEnabled();
     case previews::PreviewsType::LITE_PAGE:
-      return server_previews_enabled;
+      return false;
     case previews::PreviewsType::NOSCRIPT:
       return previews::params::IsNoScriptPreviewsEnabled();
     case previews::PreviewsType::RESOURCE_LOADING_HINTS:
@@ -164,24 +157,18 @@ PreviewsService::GetAllowedPreviews() {
 }
 
 PreviewsService::PreviewsService(content::BrowserContext* browser_context)
-    : top_host_provider_(std::make_unique<OptimizationGuideTopHostProvider>(
-          browser_context,
-          base::DefaultClock::GetInstance())),
-      previews_lite_page_redirect_decider_(
+    : previews_lite_page_redirect_decider_(
           std::make_unique<PreviewsLitePageRedirectDecider>(browser_context)),
       previews_offline_helper_(
           std::make_unique<PreviewsOfflineHelper>(browser_context)),
       browser_context_(browser_context),
-      optimization_guide_url_loader_factory_(
-          content::BrowserContext::GetDefaultStoragePartition(
-              Profile::FromBrowserContext(browser_context))
-              ->GetURLLoaderFactoryForBrowserProcess()),
       // Set cache size to 25 entries.  This should be sufficient since the
       // redirect loop cache is needed for only one navigation.
       redirect_history_(25u),
       defer_all_script_denylist_regexps_(
           GetDenylistRegexpsForDeferAllScript()) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  DCHECK(!browser_context->IsOffTheRecord());
 }
 
 PreviewsService::~PreviewsService() {
@@ -189,8 +176,6 @@ PreviewsService::~PreviewsService() {
 }
 
 void PreviewsService::Initialize(
-    optimization_guide::OptimizationGuideService* optimization_guide_service,
-    leveldb_proto::ProtoDatabaseProvider* database_provider,
     const scoped_refptr<base::SingleThreadTaskRunner>& ui_task_runner,
     const base::FilePath& profile_path) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -201,8 +186,8 @@ void PreviewsService::Initialize(
 
   // Get the background thread to run SQLite on.
   scoped_refptr<base::SequencedTaskRunner> background_task_runner =
-      base::CreateSequencedTaskRunner({base::ThreadPool(), base::MayBlock(),
-                                       base::TaskPriority::BEST_EFFORT});
+      base::ThreadPool::CreateSequencedTaskRunner(
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT});
 
   Profile* profile = Profile::FromBrowserContext(browser_context_);
 
@@ -210,17 +195,11 @@ void PreviewsService::Initialize(
   OptimizationGuideKeyedService* optimization_guide_keyed_service =
       OptimizationGuideKeyedServiceFactory::GetForProfile(profile);
   if (optimization_guide_keyed_service &&
-      optimization_guide::features::IsOptimizationGuideKeyedServiceEnabled()) {
-    previews_opt_guide =
-        std::make_unique<previews::PreviewsOptimizationGuideDecider>(
-            optimization_guide_keyed_service);
-  } else if (optimization_guide_service) {
-    previews_opt_guide =
-        std::make_unique<previews::PreviewsOptimizationGuideImpl>(
-            optimization_guide_service, ui_task_runner, background_task_runner,
-            profile_path, profile->GetPrefs(), database_provider,
-            top_host_provider_.get(), optimization_guide_url_loader_factory_,
-            g_browser_process->network_quality_tracker());
+      data_reduction_proxy::DataReductionProxySettings::
+          IsDataSaverEnabledByUser(profile->IsOffTheRecord(),
+                                   profile->GetPrefs())) {
+    previews_opt_guide = std::make_unique<previews::PreviewsOptimizationGuide>(
+        optimization_guide_keyed_service);
   }
 
   previews_ui_service_ = std::make_unique<previews::PreviewsUIService>(

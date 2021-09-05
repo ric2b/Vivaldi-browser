@@ -10,9 +10,30 @@
 
 namespace payments {
 
-PaymentRequestTestController::PaymentRequestTestController() {}
+PaymentRequestTestController::PaymentRequestTestController() = default;
 
 PaymentRequestTestController::~PaymentRequestTestController() = default;
+
+content::WebContents*
+PaymentRequestTestController::GetPaymentHandlerWebContents() {
+  return GetPaymentHandlerWebContentsForTest();
+}
+
+bool PaymentRequestTestController::ClickPaymentHandlerSecurityIcon() {
+  return ClickPaymentHandlerSecurityIconForTest();
+}
+
+bool PaymentRequestTestController::ConfirmMinimalUI() {
+  return ConfirmMinimalUIForTest();
+}
+
+bool PaymentRequestTestController::DismissMinimalUI() {
+  return DismissMinimalUIForTest();
+}
+
+bool PaymentRequestTestController::IsAndroidMarshmallowOrLollipop() {
+  return IsAndroidMarshmallowOrLollipopForTest();
+}
 
 void PaymentRequestTestController::SetUpOnMainThread() {
   ChromeBackgroundTaskFactory::SetAsDefault();
@@ -31,13 +52,17 @@ void PaymentRequestTestController::SetUpOnMainThread() {
       base::BindRepeating(
           &PaymentRequestTestController::OnHasEnrolledInstrumentReturned,
           base::Unretained(this)),
-      base::BindRepeating(&PaymentRequestTestController::OnShowInstrumentsReady,
+      base::BindRepeating(&PaymentRequestTestController::OnShowAppsReady,
                           base::Unretained(this)),
       base::BindRepeating(&PaymentRequestTestController::OnNotSupportedError,
                           base::Unretained(this)),
       base::BindRepeating(&PaymentRequestTestController::OnConnectionTerminated,
                           base::Unretained(this)),
       base::BindRepeating(&PaymentRequestTestController::OnAbortCalled,
+                          base::Unretained(this)),
+      base::BindRepeating(&PaymentRequestTestController::OnCompleteCalled,
+                          base::Unretained(this)),
+      base::BindRepeating(&PaymentRequestTestController::OnMinimalUIReady,
                           base::Unretained(this)));
 
   SetUseDelegateOnPaymentRequestForTesting(
@@ -96,9 +121,9 @@ void PaymentRequestTestController::OnHasEnrolledInstrumentReturned() {
     observer_->OnHasEnrolledInstrumentReturned();
 }
 
-void PaymentRequestTestController::OnShowInstrumentsReady() {
+void PaymentRequestTestController::OnShowAppsReady() {
   if (observer_)
-    observer_->OnShowInstrumentsReady();
+    observer_->OnShowAppsReady();
 }
 void PaymentRequestTestController::OnNotSupportedError() {
   if (observer_)
@@ -113,6 +138,16 @@ void PaymentRequestTestController::OnConnectionTerminated() {
 void PaymentRequestTestController::OnAbortCalled() {
   if (observer_)
     observer_->OnAbortCalled();
+}
+
+void PaymentRequestTestController::OnCompleteCalled() {
+  if (observer_)
+    observer_->OnCompleteCalled();
+}
+
+void PaymentRequestTestController::OnMinimalUIReady() {
+  if (observer_)
+    observer_->OnMinimalUIReady();
 }
 
 }  // namespace payments

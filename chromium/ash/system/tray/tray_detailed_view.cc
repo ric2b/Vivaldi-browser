@@ -30,6 +30,7 @@
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/skia_paint_util.h"
 #include "ui/gfx/vector_icon_types.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/image_view.h"
@@ -267,16 +268,11 @@ class ScrollContentsView : public views::View {
 // TrayDetailedView:
 
 TrayDetailedView::TrayDetailedView(DetailedViewDelegate* delegate)
-    : delegate_(delegate),
-      box_layout_(nullptr),
-      scroller_(nullptr),
-      scroll_content_(nullptr),
-      progress_bar_(nullptr),
-      tri_view_(nullptr),
-      back_button_(nullptr) {
+    : delegate_(delegate) {
   box_layout_ = SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical));
-  SetBackground(views::CreateSolidBackground(delegate_->GetBackgroundColor()));
+  SetBackground(views::CreateSolidBackground(
+      delegate_->GetBackgroundColor().value_or(SK_ColorTRANSPARENT)));
 }
 
 TrayDetailedView::~TrayDetailedView() = default;
@@ -313,14 +309,17 @@ void TrayDetailedView::CreateTitleRow(int string_id) {
 void TrayDetailedView::CreateScrollableList() {
   DCHECK(!scroller_);
   auto scroll_content = std::make_unique<ScrollContentsView>(delegate_);
-  scroller_ = new views::ScrollView;
+  scroller_ = AddChildView(std::make_unique<views::ScrollView>());
   scroller_->SetDrawOverflowIndicator(delegate_->IsOverflowIndicatorEnabled());
   scroll_content_ = scroller_->SetContents(std::move(scroll_content));
   // TODO(varkha): Make the sticky rows work with EnableViewPortLayer().
   scroller_->SetBackgroundColor(delegate_->GetBackgroundColor());
 
-  AddChildView(scroller_);
   box_layout_->SetFlexForView(scroller_, 1);
+}
+
+void TrayDetailedView::AddScrollListChild(std::unique_ptr<views::View> child) {
+  scroll_content_->AddChildView(std::move(child));
 }
 
 HoverHighlightView* TrayDetailedView::AddScrollListItem(
@@ -362,6 +361,8 @@ void TrayDetailedView::SetupConnectedScrollListItem(
     base::Optional<uint8_t> battery_percentage) {
   DCHECK(view->is_populated());
 
+  base::string16 status;
+
   if (battery_percentage) {
     view->SetSubText(l10n_util::GetStringFUTF16(
         IDS_ASH_STATUS_TRAY_BLUETOOTH_DEVICE_CONNECTED_WITH_BATTERY_LABEL,
@@ -396,8 +397,9 @@ TriView* TrayDetailedView::AddScrollListSubHeader(const gfx::VectorIcon& icon,
 
   views::ImageView* image_view = TrayPopupUtils::CreateMainImageView();
   image_view->SetImage(gfx::CreateVectorIcon(
-      icon, GetNativeTheme()->GetSystemColor(
-                ui::NativeTheme::kColorId_ProminentButtonColor)));
+      icon, AshColorProvider::Get()->GetContentLayerColor(
+                AshColorProvider::ContentLayerType::kIconPrimary,
+                AshColorProvider::AshColorMode::kDark)));
   header->AddView(TriView::Container::START, image_view);
 
   scroll_content_->AddChildView(header);
@@ -420,9 +422,17 @@ void TrayDetailedView::Reset() {
 void TrayDetailedView::ShowProgress(double value, bool visible) {
   DCHECK(tri_view_);
   if (!progress_bar_) {
-    progress_bar_ = new views::ProgressBar(kTitleRowProgressBarHeight);
+    progress_bar_ = AddChildViewAt(
+        std::make_unique<views::ProgressBar>(kTitleRowProgressBarHeight),
+        kTitleRowSeparatorIndex + 1);
+    progress_bar_->GetViewAccessibility().OverrideName(
+        l10n_util::GetStringUTF16(
+            IDS_ASH_STATUS_TRAY_NETWORK_PROGRESS_ACCESSIBLE_NAME));
     progress_bar_->SetVisible(false);
-    AddChildViewAt(progress_bar_, kTitleRowSeparatorIndex + 1);
+    progress_bar_->SetForegroundColor(
+        AshColorProvider::Get()->GetContentLayerColor(
+            AshColorProvider::ContentLayerType::kProminentIconButton,
+            AshColorProvider::AshColorMode::kDark));
   }
 
   progress_bar_->SetValue(value);

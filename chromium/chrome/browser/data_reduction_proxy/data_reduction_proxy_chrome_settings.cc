@@ -186,8 +186,13 @@ DataReductionProxyChromeSettings::MigrateDataReductionProxyOffProxyPrefsHelper(
   return PROXY_PREF_NOT_CLEARED;
 }
 
-DataReductionProxyChromeSettings::DataReductionProxyChromeSettings()
-    : data_reduction_proxy::DataReductionProxySettings(), profile_(nullptr) {}
+DataReductionProxyChromeSettings::DataReductionProxyChromeSettings(
+    bool is_off_the_record_profile)
+    : data_reduction_proxy::DataReductionProxySettings(
+          is_off_the_record_profile),
+      profile_(nullptr) {
+  DCHECK(!is_off_the_record_profile);
+}
 
 DataReductionProxyChromeSettings::~DataReductionProxyChromeSettings() {}
 
@@ -233,10 +238,6 @@ void DataReductionProxyChromeSettings::InitDataReductionProxySettings(
           version_info::GetChannelString(chrome::GetChannel()), GetUserAgent());
   data_reduction_proxy::DataReductionProxySettings::
       InitDataReductionProxySettings(profile_prefs, std::move(service));
-
-#if defined(OS_CHROMEOS)
-  data_reduction_proxy_service()->config()->EnableGetNetworkIdAsynchronously();
-#endif
 
   data_reduction_proxy::DataReductionProxySettings::
       SetCallbackToRegisterSyntheticFieldTrial(base::Bind(

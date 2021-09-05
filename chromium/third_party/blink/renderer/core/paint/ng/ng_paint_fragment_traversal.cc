@@ -150,22 +150,6 @@ NGPaintFragmentTraversal::InlineDescendantsOf(
   return InlineDescendantsRange(container);
 }
 
-NGPaintFragment* NGPaintFragmentTraversal::PreviousLineOf(
-    const NGPaintFragment& line) {
-  DCHECK(line.PhysicalFragment().IsLineBox());
-  NGPaintFragment* parent = line.Parent();
-  DCHECK(parent);
-  NGPaintFragment* previous_line = nullptr;
-  for (NGPaintFragment* sibling : parent->Children()) {
-    if (sibling == &line)
-      return previous_line;
-    if (sibling->PhysicalFragment().IsLineBox())
-      previous_line = sibling;
-  }
-  NOTREACHED();
-  return nullptr;
-}
-
 void NGPaintFragmentTraversal::MoveToFirstChild() {
   DCHECK(current_->FirstChild());
   current_ = current_->FirstChild();
@@ -288,7 +272,7 @@ bool NGPaintFragmentTraversal::InlineDescendantsRange::Iterator::
 bool NGPaintFragmentTraversal::InlineDescendantsRange::Iterator::ShouldTraverse(
     const NGPaintFragment& fragment) {
   return fragment.PhysicalFragment().IsContainer() &&
-         !fragment.PhysicalFragment().IsBlockFormattingContextRoot();
+         !fragment.PhysicalFragment().IsFormattingContextRoot();
 }
 
 }  // namespace blink

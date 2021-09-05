@@ -23,7 +23,9 @@
 #include "base/test/scoped_path_override.h"
 #include "build/branding_buildflags.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
+#include "chrome/browser/web_applications/components/web_app_id.h"
 #include "chrome/common/chrome_constants.h"
+#include "components/services/app_service/public/cpp/file_handler.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -330,11 +332,12 @@ TEST(ShellIntegrationTest, GetDesktopFileContents) {
     const char* const title;
     const char* const icon_name;
     const char* const categories;
+    const char* const mime_type;
     bool nodisplay;
     const char* const expected_output;
   } test_cases[] = {
       // Real-world case.
-      {"http://gmail.com", "GMail", "chrome-http__gmail.com", "", false,
+      {"http://gmail.com", "GMail", "chrome-http__gmail.com", "", "", false,
 
        "#!/usr/bin/env xdg-open\n"
        "[Desktop Entry]\n"
@@ -347,7 +350,7 @@ TEST(ShellIntegrationTest, GetDesktopFileContents) {
        "StartupWMClass=gmail.com\n"},
 
       // Make sure that empty icons are replaced by the chrome icon.
-      {"http://gmail.com", "GMail", "", "", false,
+      {"http://gmail.com", "GMail", "", "", "", false,
 
        "#!/usr/bin/env xdg-open\n"
        "[Desktop Entry]\n"
@@ -365,7 +368,7 @@ TEST(ShellIntegrationTest, GetDesktopFileContents) {
 
       // Test adding categories and NoDisplay=true.
       {"http://gmail.com", "GMail", "chrome-http__gmail.com",
-       "Graphics;Education;", true,
+       "Graphics;Education;", "", true,
 
        "#!/usr/bin/env xdg-open\n"
        "[Desktop Entry]\n"
@@ -381,7 +384,7 @@ TEST(ShellIntegrationTest, GetDesktopFileContents) {
 
       // Now we're starting to be more evil...
       {"http://evil.com/evil --join-the-b0tnet", "Ownz0red\nExec=rm -rf /",
-       "chrome-http__evil.com_evil", "", false,
+       "chrome-http__evil.com_evil", "", "", false,
 
        "#!/usr/bin/env xdg-open\n"
        "[Desktop Entry]\n"
@@ -394,7 +397,7 @@ TEST(ShellIntegrationTest, GetDesktopFileContents) {
        "Icon=chrome-http__evil.com_evil\n"
        "StartupWMClass=evil.com__evil%20--join-the-b0tnet\n"},
       {"http://evil.com/evil; rm -rf /; \"; rm -rf $HOME >ownz0red",
-       "Innocent Title", "chrome-http__evil.com_evil", "", false,
+       "Innocent Title", "chrome-http__evil.com_evil", "", "", false,
 
        "#!/usr/bin/env xdg-open\n"
        "[Desktop Entry]\n"
@@ -412,7 +415,7 @@ TEST(ShellIntegrationTest, GetDesktopFileContents) {
        "StartupWMClass=evil.com__evil;%20rm%20-rf%20_;%20%22;%20"
        "rm%20-rf%20$HOME%20%3Eownz0red\n"},
       {"http://evil.com/evil | cat `echo ownz0red` >/dev/null",
-       "Innocent Title", "chrome-http__evil.com_evil", "", false,
+       "Innocent Title", "chrome-http__evil.com_evil", "", "", false,
 
        "#!/usr/bin/env xdg-open\n"
        "[Desktop Entry]\n"
@@ -426,7 +429,36 @@ TEST(ShellIntegrationTest, GetDesktopFileContents) {
        "Icon=chrome-http__evil.com_evil\n"
        "StartupWMClass=evil.com__evil%20%7C%20cat%20%60echo%20ownz0red"
        "%60%20%3E_dev_null\n"},
-  };
+      // Test setting mime type
+      {"https://paint.app", "Paint", "chrome-https__paint.app", "Image",
+       "image/png;image/jpg", false,
+
+       "#!/usr/bin/env xdg-open\n"
+       "[Desktop Entry]\n"
+       "Version=1.0\n"
+       "Terminal=false\n"
+       "Type=Application\n"
+       "Name=Paint\n"
+       "MimeType=image/png;image/jpg\n"
+       "Exec=/opt/google/chrome/google-chrome --app=https://paint.app/ %F\n"
+       "Icon=chrome-https__paint.app\n"
+       "Categories=Image\n"
+       "StartupWMClass=paint.app\n"},
+
+      // Test evil mime type.
+      {"https://paint.app", "Evil Paint", "chrome-https__paint.app", "Image",
+       "image/png\nExec=rm -rf /", false,
+
+       "#!/usr/bin/env xdg-open\n"
+       "[Desktop Entry]\n"
+       "Version=1.0\n"
+       "Terminal=false\n"
+       "Type=Application\n"
+       "Name=Evil Paint\n"
+       "Exec=/opt/google/chrome/google-chrome --app=https://paint.app/\n"
+       "Icon=chrome-https__paint.app\n"
+       "Categories=Image\n"
+       "StartupWMClass=paint.app\n"}};
 
   for (size_t i = 0; i < base::size(test_cases); i++) {
     SCOPED_TRACE(i);
@@ -435,12 +467,9 @@ TEST(ShellIntegrationTest, GetDesktopFileContents) {
         GetDesktopFileContents(
             kChromeExePath,
             web_app::GenerateApplicationNameFromURL(GURL(test_cases[i].url)),
-            GURL(test_cases[i].url),
-            std::string(),
-            base::ASCIIToUTF16(test_cases[i].title),
-            test_cases[i].icon_name,
-            base::FilePath(),
-            test_cases[i].categories,
+            GURL(test_cases[i].url), std::string(),
+            base::ASCIIToUTF16(test_cases[i].title), test_cases[i].icon_name,
+            base::FilePath(), test_cases[i].categories, test_cases[i].mime_type,
             test_cases[i].nodisplay));
   }
 }
@@ -461,13 +490,9 @@ TEST(ShellIntegrationTest, GetDesktopFileContentsAppList) {
       "Categories=Network;WebBrowser;\n"
       "StartupWMClass=chrome-app-list\n",
       GetDesktopFileContentsForCommand(
-          command_line,
-          "chrome-app-list",
-          GURL(),
-          base::ASCIIToUTF16("Chrome App Launcher"),
-          "chrome_app_list",
-          "Network;WebBrowser;",
-          false));
+          command_line, "chrome-app-list", GURL(),
+          base::ASCIIToUTF16("Chrome App Launcher"), "chrome_app_list",
+          "Network;WebBrowser;", "", false));
 }
 
 TEST(ShellIntegrationTest, GetDirectoryFileContents) {
@@ -506,6 +531,81 @@ TEST(ShellIntegrationTest, GetDirectoryFileContents) {
               GetDirectoryFileContents(base::ASCIIToUTF16(test_cases[i].title),
                                        test_cases[i].icon_name));
   }
+}
+
+TEST(ShellIntegrationTest, GetMimeTypesRegistrationFilename) {
+  const struct {
+    const char* const profile_path;
+    const char* const app_id;
+    const char* const expected_filename;
+  } test_cases[] = {
+      {"Default", "app-id", "-app-id-Default.xml"},
+      {"Default Profile", "app-id", "-app-id-Default_Profile.xml"},
+      {"foo/Default", "app-id", "-app-id-Default.xml"},
+      {"Default*Profile", "app-id", "-app-id-Default_Profile.xml"}};
+  std::string browser_name(chrome::kBrowserProcessExecutableName);
+
+  for (const auto& test_case : test_cases) {
+    const base::FilePath filename =
+        GetMimeTypesRegistrationFilename(base::FilePath(test_case.profile_path),
+                                         web_app::AppId(test_case.app_id));
+    EXPECT_EQ(browser_name + test_case.expected_filename, filename.value());
+  }
+}
+
+TEST(ShellIntegrationTest, GetMimeTypesRegistrationFileContents) {
+  apps::FileHandlers file_handlers;
+  {
+    apps::FileHandler file_handler;
+    {
+      apps::FileHandler::AcceptEntry accept_entry;
+      accept_entry.mime_type = "application/foo";
+      accept_entry.file_extensions.insert(".foo");
+      file_handler.accept.push_back(accept_entry);
+    }
+    file_handlers.push_back(file_handler);
+  }
+  {
+    apps::FileHandler file_handler;
+    {
+      apps::FileHandler::AcceptEntry accept_entry;
+      accept_entry.mime_type = "application/foobar";
+      accept_entry.file_extensions.insert(".foobar");
+      file_handler.accept.push_back(accept_entry);
+    }
+    file_handlers.push_back(file_handler);
+  }
+  {
+    apps::FileHandler file_handler;
+    {
+      apps::FileHandler::AcceptEntry accept_entry;
+      accept_entry.mime_type = "application/bar";
+      accept_entry.file_extensions.insert(".bar");
+      accept_entry.file_extensions.insert(".baz");
+      file_handler.accept.push_back(accept_entry);
+    }
+    file_handlers.push_back(file_handler);
+  }
+
+  const std::string file_contents =
+      GetMimeTypesRegistrationFileContents(file_handlers);
+  const std::string expected_file_contents =
+      "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+      "<mime-info "
+      "xmlns=\"http://www.freedesktop.org/standards/shared-mime-info\">\n"
+      "  <mime-type type=\"application/foo\">\n"
+      "    <glob pattern=\"*.foo\"/>\n"
+      "  </mime-type>\n"
+      "  <mime-type type=\"application/foobar\">\n"
+      "    <glob pattern=\"*.foobar\"/>\n"
+      "  </mime-type>\n"
+      "  <mime-type type=\"application/bar\">\n"
+      "    <glob pattern=\"*.bar\"/>\n"
+      "    <glob pattern=\"*.baz\"/>\n"
+      "  </mime-type>\n"
+      "</mime-info>\n";
+
+  EXPECT_EQ(file_contents, expected_file_contents);
 }
 
 TEST(ShellIntegrationTest, WmClass) {

@@ -17,8 +17,8 @@
 #include "content/browser/renderer_host/webmenurunner_mac.h"
 #import "ui/base/cocoa/base_view.h"
 
+// Vivaldi addition:
 #include "app/vivaldi_apptools.h"
-#include "content/browser/frame_host/render_widget_host_view_guest.h"
 
 namespace content {
 
@@ -63,21 +63,9 @@ void PopupMenuHelper::ShowPopupMenu(
   RenderWidgetHostViewMac* rwhvm =
       static_cast<RenderWidgetHostViewMac*>(GetRenderWidgetHostView());
   base::scoped_nsobject<RenderWidgetHostViewCocoa> cocoa_view;
-
-  if (vivaldi::IsVivaldiRunning()) {
-    RenderWidgetHostViewGuest* rwhvg = static_cast<RenderWidgetHostViewGuest*>(
-      render_frame_host_->frame_tree_node()
-      ->frame_tree()
-      ->root()
-      ->current_frame_host()
-      ->GetView());
-
-    cocoa_view.reset(static_cast<RenderWidgetHostViewCocoa*>(
-        [rwhvg->GetNativeView().GetNativeNSView() retain]));
-  } else {
+  if (rwhvm->IsRenderWidgetHostViewMac()) {
     cocoa_view.reset([rwhvm->GetInProcessNSView() retain]);
   }
-
   // Display the menu.
   base::scoped_nsobject<WebMenuRunner> runner([[WebMenuRunner alloc]
       initWithItems:items
@@ -103,10 +91,21 @@ void PopupMenuHelper::ShowPopupMenu(
     // Ensure the UI can update while the menu is fading out.
     pump_in_fade_ = std::make_unique<base::ScopedPumpMessagesInPrivateModes>();
 
+    if (!cocoa_view && render_frame_host_ && vivaldi::IsVivaldiRunning()) {
+      NSView* view = render_frame_host_->GetNativeView().GetNativeNSView();
+      //flipRectToNSRect
+      NSRect new_rect(NSRectFromCGRect(bounds.ToCGRect()));
+      new_rect.origin.y = NSHeight([view bounds]) - NSMaxY(new_rect);
+      // Now run a NESTED EVENT LOOP until the pop-up is finished.
+      [runner runMenuInView:view
+                  withBounds:new_rect
+                initialIndex:selected_item];
+    } else {
     // Now run a NESTED EVENT LOOP until the pop-up is finished.
     [runner runMenuInView:cocoa_view
                withBounds:[cocoa_view flipRectToNSRect:bounds]
              initialIndex:selected_item];
+    }
   }
 
   if (!weak_ptr)

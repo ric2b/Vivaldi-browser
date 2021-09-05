@@ -14,11 +14,11 @@
 #include "base/stl_util.h"
 #include "cc/layers/layer.h"
 #include "components/viz/common/frame_sinks/copy_output_request.h"
-#include "third_party/blink/public/platform/web_cursor_info.h"
 #include "ui/android/event_forwarder.h"
 #include "ui/android/ui_android_jni_headers/ViewAndroidDelegate_jni.h"
 #include "ui/android/window_android.h"
 #include "ui/base/layout.h"
+#include "ui/base/mojom/cursor_type.mojom-shared.h"
 #include "ui/events/android/drag_event_android.h"
 #include "ui/events/android/event_handler_android.h"
 #include "ui/events/android/gesture_event_android.h"
@@ -90,6 +90,8 @@ ViewAndroid::ViewAndroid() : ViewAndroid(LayoutType::NORMAL) {}
 
 ViewAndroid::~ViewAndroid() {
   RemoveAllChildren(GetWindowAndroid() != nullptr);
+  for (auto& observer : observer_list_)
+    observer.OnViewAndroidDestroyed();
   observer_list_.Clear();
   RemoveFromParent();
 }
@@ -394,10 +396,10 @@ void ViewAndroid::OnCursorChanged(int type,
   if (delegate.is_null())
     return;
   JNIEnv* env = base::android::AttachCurrentThread();
-  if (type == static_cast<int>(ui::CursorType::kCustom)) {
+  if (type == static_cast<int>(ui::mojom::CursorType::kCustom)) {
     if (custom_image.drawsNothing()) {
       Java_ViewAndroidDelegate_onCursorChanged(
-          env, delegate, static_cast<int>(ui::CursorType::kPointer));
+          env, delegate, static_cast<int>(ui::mojom::CursorType::kPointer));
       return;
     }
     ScopedJavaLocalRef<jobject> java_bitmap =
@@ -418,23 +420,30 @@ void ViewAndroid::OnBackgroundColorChanged(unsigned int color) {
 }
 
 void ViewAndroid::OnTopControlsChanged(float top_controls_offset,
-                                       float top_content_offset) {
+                                       float top_content_offset,
+                                       float top_controls_min_height_offset) {
   ScopedJavaLocalRef<jobject> delegate(GetViewAndroidDelegate());
   if (delegate.is_null())
     return;
   JNIEnv* env = base::android::AttachCurrentThread();
   Java_ViewAndroidDelegate_onTopControlsChanged(
-      env, delegate, top_controls_offset, top_content_offset);
+      env, delegate, std::round(top_controls_offset),
+      std::round(top_content_offset),
+      std::round(top_controls_min_height_offset));
 }
 
-void ViewAndroid::OnBottomControlsChanged(float bottom_controls_offset,
-                                          float bottom_content_offset) {
+void ViewAndroid::OnBottomControlsChanged(
+    float bottom_controls_offset,
+    float bottom_content_offset,
+    float bottom_controls_min_height_offset) {
   ScopedJavaLocalRef<jobject> delegate(GetViewAndroidDelegate());
   if (delegate.is_null())
     return;
   JNIEnv* env = base::android::AttachCurrentThread();
   Java_ViewAndroidDelegate_onBottomControlsChanged(
-      env, delegate, bottom_controls_offset, bottom_content_offset);
+      env, delegate, std::round(bottom_controls_offset),
+      std::round(bottom_content_offset),
+      std::round(bottom_controls_min_height_offset));
 }
 
 int ViewAndroid::GetViewportInsetBottom() {
@@ -443,6 +452,15 @@ int ViewAndroid::GetViewportInsetBottom() {
     return 0;
   JNIEnv* env = base::android::AttachCurrentThread();
   return Java_ViewAndroidDelegate_getViewportInsetBottom(env, delegate);
+}
+
+void ViewAndroid::OnBrowserControlsHeightChanged() {
+  if (event_handler_)
+    event_handler_->OnBrowserControlsHeightChanged();
+  for (auto* child : children_) {
+    if (child->match_parent())
+      child->OnBrowserControlsHeightChanged();
+  }
 }
 
 void ViewAndroid::OnSizeChanged(int width, int height) {

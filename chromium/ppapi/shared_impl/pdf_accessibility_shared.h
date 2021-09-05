@@ -14,6 +14,41 @@
 
 namespace ppapi {
 
+// Needs to stay in sync with PP_PrivateAccessibilityTextStyleInfo.
+struct PPAPI_SHARED_EXPORT PdfAccessibilityTextStyleInfo {
+ public:
+  PdfAccessibilityTextStyleInfo();
+  explicit PdfAccessibilityTextStyleInfo(
+      const PP_PrivateAccessibilityTextStyleInfo& style);
+  PdfAccessibilityTextStyleInfo(PdfAccessibilityTextStyleInfo&& other);
+  ~PdfAccessibilityTextStyleInfo();
+
+  std::string font_name;
+  int font_weight;
+  PP_TextRenderingMode render_mode;
+  float font_size;
+  // Colors are ARGB.
+  uint32_t fill_color;
+  uint32_t stroke_color;
+  bool is_italic;
+  bool is_bold;
+};
+
+// Needs to stay in sync with PP_PrivateAccessibilityTextRunInfo.
+struct PPAPI_SHARED_EXPORT PdfAccessibilityTextRunInfo {
+ public:
+  PdfAccessibilityTextRunInfo();
+  explicit PdfAccessibilityTextRunInfo(
+      const PP_PrivateAccessibilityTextRunInfo& text_run);
+  PdfAccessibilityTextRunInfo(PdfAccessibilityTextRunInfo&& other);
+  ~PdfAccessibilityTextRunInfo();
+
+  uint32_t len;
+  struct PP_FloatRect bounds;
+  PP_PrivateDirection direction;
+  PdfAccessibilityTextStyleInfo style;
+};
+
 // Needs to stay in sync with PP_PrivateAccessibilityLinkInfo.
 struct PPAPI_SHARED_EXPORT PdfAccessibilityLinkInfo {
   PdfAccessibilityLinkInfo();
@@ -40,6 +75,38 @@ struct PPAPI_SHARED_EXPORT PdfAccessibilityImageInfo {
   PP_FloatRect bounds;
 };
 
+// Needs to stay in sync with PP_PrivateAccessibilityHighlightInfo.
+struct PPAPI_SHARED_EXPORT PdfAccessibilityHighlightInfo {
+  PdfAccessibilityHighlightInfo();
+  explicit PdfAccessibilityHighlightInfo(
+      const PP_PrivateAccessibilityHighlightInfo& highlight);
+  ~PdfAccessibilityHighlightInfo();
+
+  std::string note_text;
+  uint32_t index_in_page;
+  uint32_t text_run_index;
+  uint32_t text_run_count;
+  PP_FloatRect bounds;
+  uint32_t color;
+};
+
+// Needs to stay in sync with PP_PrivateAccessibilityTextFieldInfo.
+struct PPAPI_SHARED_EXPORT PdfAccessibilityTextFieldInfo {
+  PdfAccessibilityTextFieldInfo();
+  explicit PdfAccessibilityTextFieldInfo(
+      const PP_PrivateAccessibilityTextFieldInfo& text_field);
+  ~PdfAccessibilityTextFieldInfo();
+
+  std::string name;
+  std::string value;
+  bool is_read_only;
+  bool is_required;
+  bool is_password;
+  uint32_t index_in_page;
+  uint32_t text_run_index;
+  PP_FloatRect bounds;
+};
+
 // Needs to stay in sync with PP_PrivateAccessibilityPageObjects.
 struct PPAPI_SHARED_EXPORT PdfAccessibilityPageObjects {
   PdfAccessibilityPageObjects();
@@ -49,6 +116,8 @@ struct PPAPI_SHARED_EXPORT PdfAccessibilityPageObjects {
 
   std::vector<PdfAccessibilityLinkInfo> links;
   std::vector<PdfAccessibilityImageInfo> images;
+  std::vector<PdfAccessibilityHighlightInfo> highlights;
+  std::vector<PdfAccessibilityTextFieldInfo> text_fields;
 };
 
 }  // namespace ppapi

@@ -46,11 +46,9 @@
 
 namespace blink {
 
-using namespace html_names;
-
 HTMLObjectElement::HTMLObjectElement(Document& document,
                                      const CreateElementFlags flags)
-    : HTMLPlugInElement(kObjectTag,
+    : HTMLPlugInElement(html_names::kObjectTag,
                         document,
                         flags,
                         kShouldNotPreferPlugInsForImages),
@@ -68,8 +66,8 @@ void HTMLObjectElement::Trace(Visitor* visitor) {
 const AttrNameToTrustedType& HTMLObjectElement::GetCheckedAttributeTypes()
     const {
   DEFINE_STATIC_LOCAL(AttrNameToTrustedType, attribute_map,
-                      ({{"data", SpecificTrustedType::kTrustedScriptURL},
-                        {"codebase", SpecificTrustedType::kTrustedScriptURL}}));
+                      ({{"data", SpecificTrustedType::kScriptURL},
+                        {"codebase", SpecificTrustedType::kScriptURL}}));
   return attribute_map;
 }
 
@@ -81,7 +79,7 @@ LayoutEmbeddedContent* HTMLObjectElement::ExistingLayoutEmbeddedContent()
 
 bool HTMLObjectElement::IsPresentationAttribute(
     const QualifiedName& name) const {
-  if (name == kBorderAttr)
+  if (name == html_names::kBorderAttr)
     return true;
   return HTMLPlugInElement::IsPresentationAttribute(name);
 }
@@ -90,7 +88,7 @@ void HTMLObjectElement::CollectStyleForPresentationAttribute(
     const QualifiedName& name,
     const AtomicString& value,
     MutableCSSPropertyValueSet* style) {
-  if (name == kBorderAttr)
+  if (name == html_names::kBorderAttr)
     ApplyBorderAttributeToStyle(value, style);
   else
     HTMLPlugInElement::CollectStyleForPresentationAttribute(name, value, style);
@@ -99,9 +97,9 @@ void HTMLObjectElement::CollectStyleForPresentationAttribute(
 void HTMLObjectElement::ParseAttribute(
     const AttributeModificationParams& params) {
   const QualifiedName& name = params.name;
-  if (name == kFormAttr) {
+  if (name == html_names::kFormAttr) {
     FormAttributeChanged();
-  } else if (name == kTypeAttr) {
+  } else if (name == html_names::kTypeAttr) {
     SetServiceType(params.new_value.LowerASCII());
     wtf_size_t pos = service_type_.Find(";");
     if (pos != kNotFound)
@@ -110,7 +108,7 @@ void HTMLObjectElement::ParseAttribute(
     // Should we suppress the reload stuff when a persistable widget-type is
     // specified?
     ReloadPluginOnAttributeChange(name);
-  } else if (name == kDataAttr) {
+  } else if (name == html_names::kDataAttr) {
     SetUrl(StripLeadingAndTrailingHTMLSpaces(params.new_value));
     if (GetLayoutObject() && IsImageType()) {
       SetNeedsPluginUpdate(true);
@@ -120,23 +118,11 @@ void HTMLObjectElement::ParseAttribute(
     } else {
       ReloadPluginOnAttributeChange(name);
     }
-  } else if (name == kClassidAttr) {
+  } else if (name == html_names::kClassidAttr) {
     class_id_ = params.new_value;
     ReloadPluginOnAttributeChange(name);
   } else {
     HTMLPlugInElement::ParseAttribute(params);
-  }
-}
-
-static void MapDataParamToSrc(PluginParameters& plugin_params) {
-  // Some plugins don't understand the "data" attribute of the OBJECT tag (i.e.
-  // Real and WMP require "src" attribute).
-  int src_index = plugin_params.FindStringInNames("src");
-  int data_index = plugin_params.FindStringInNames("data");
-
-  if (src_index == -1 && data_index != -1) {
-    plugin_params.AppendNameWithValue("src",
-                                      plugin_params.Values()[data_index]);
   }
 }
 
@@ -163,13 +149,13 @@ void HTMLObjectElement::ParametersForPlugin(PluginParameters& plugin_params) {
     // for compatibility, allow the resource's URL to be given by a param
     // element with one of the common names if we know that resource points
     // to a plugin.
-    if (url_.IsEmpty() && !DeprecatedEqualIgnoringCase(name, "data") &&
+    if (url_.IsEmpty() && !EqualIgnoringASCIICase(name, "data") &&
         HTMLParamElement::IsURLParameter(name)) {
       SetUrl(StripLeadingAndTrailingHTMLSpaces(p->Value()));
     }
     // TODO(schenney): crbug.com/572908 serviceType calculation does not belong
     // in this function.
-    if (service_type_.IsEmpty() && DeprecatedEqualIgnoringCase(name, "type")) {
+    if (service_type_.IsEmpty() && EqualIgnoringASCIICase(name, "type")) {
       wtf_size_t pos = p->Value().Find(";");
       if (pos != kNotFound)
         SetServiceType(p->Value().GetString().Left(pos));
@@ -185,7 +171,9 @@ void HTMLObjectElement::ParametersForPlugin(PluginParameters& plugin_params) {
       plugin_params.AppendAttribute(attribute);
   }
 
-  MapDataParamToSrc(plugin_params);
+  // Some plugins don't understand the "data" attribute of the OBJECT tag (i.e.
+  // Real and WMP require "src" attribute).
+  plugin_params.MapDataParamToSrc();
 }
 
 bool HTMLObjectElement::HasFallbackContent() const {
@@ -196,7 +184,7 @@ bool HTMLObjectElement::HasFallbackContent() const {
     if (child_text_node) {
       if (!child_text_node->ContainsOnlyWhitespaceOrEmpty())
         return true;
-    } else if (!IsHTMLParamElement(*child)) {
+    } else if (!IsA<HTMLParamElement>(*child)) {
       return true;
     }
   }
@@ -222,12 +210,12 @@ void HTMLObjectElement::ReloadPluginOnAttributeChange(
   // the updating of certain attributes should bring about "redetermination"
   // of what the element contains.
   bool needs_invalidation;
-  if (name == kTypeAttr) {
-    needs_invalidation =
-        !FastHasAttribute(kClassidAttr) && !FastHasAttribute(kDataAttr);
-  } else if (name == kDataAttr) {
-    needs_invalidation = !FastHasAttribute(kClassidAttr);
-  } else if (name == kClassidAttr) {
+  if (name == html_names::kTypeAttr) {
+    needs_invalidation = !FastHasAttribute(html_names::kClassidAttr) &&
+                         !FastHasAttribute(html_names::kDataAttr);
+  } else if (name == html_names::kDataAttr) {
+    needs_invalidation = !FastHasAttribute(html_names::kClassidAttr);
+  } else if (name == html_names::kClassidAttr) {
     needs_invalidation = true;
   } else {
     NOTREACHED();
@@ -314,23 +302,25 @@ void HTMLObjectElement::ChildrenChanged(const ChildrenChange& change) {
 }
 
 bool HTMLObjectElement::IsURLAttribute(const Attribute& attribute) const {
-  return attribute.GetName() == kCodebaseAttr ||
-         attribute.GetName() == kDataAttr ||
-         (attribute.GetName() == kUsemapAttr && attribute.Value()[0] != '#') ||
+  return attribute.GetName() == html_names::kCodebaseAttr ||
+         attribute.GetName() == html_names::kDataAttr ||
+         (attribute.GetName() == html_names::kUsemapAttr &&
+          attribute.Value()[0] != '#') ||
          HTMLPlugInElement::IsURLAttribute(attribute);
 }
 
 bool HTMLObjectElement::HasLegalLinkAttribute(const QualifiedName& name) const {
-  return name == kClassidAttr || name == kDataAttr || name == kCodebaseAttr ||
+  return name == html_names::kClassidAttr || name == html_names::kDataAttr ||
+         name == html_names::kCodebaseAttr ||
          HTMLPlugInElement::HasLegalLinkAttribute(name);
 }
 
 const QualifiedName& HTMLObjectElement::SubResourceAttributeName() const {
-  return kDataAttr;
+  return html_names::kDataAttr;
 }
 
 const AtomicString HTMLObjectElement::ImageSourceURL() const {
-  return getAttribute(kDataAttr);
+  return FastGetAttribute(html_names::kDataAttr);
 }
 
 void HTMLObjectElement::ReattachFallbackContent() {
@@ -382,24 +372,26 @@ bool HTMLObjectElement::IsExposed() const {
       return false;
   }
   for (HTMLElement& element : Traversal<HTMLElement>::DescendantsOf(*this)) {
-    if (IsHTMLObjectElement(element) || IsHTMLEmbedElement(element))
+    if (IsA<HTMLObjectElement>(element) || IsA<HTMLEmbedElement>(element))
       return false;
   }
   return true;
 }
 
 bool HTMLObjectElement::ContainsJavaApplet() const {
-  if (MIMETypeRegistry::IsJavaAppletMIMEType(getAttribute(kTypeAttr)))
+  if (MIMETypeRegistry::IsJavaAppletMIMEType(
+          FastGetAttribute(html_names::kTypeAttr)))
     return true;
 
   for (HTMLElement& child : Traversal<HTMLElement>::ChildrenOf(*this)) {
-    if (IsHTMLParamElement(child) &&
-        DeprecatedEqualIgnoringCase(child.GetNameAttribute(), "type") &&
+    if (IsA<HTMLParamElement>(child) &&
+        EqualIgnoringASCIICase(child.GetNameAttribute(), "type") &&
         MIMETypeRegistry::IsJavaAppletMIMEType(
-            child.getAttribute(kValueAttr).GetString()))
+            child.FastGetAttribute(html_names::kValueAttr).GetString()))
       return true;
-    if (IsHTMLObjectElement(child) &&
-        ToHTMLObjectElement(child).ContainsJavaApplet())
+
+    auto* html_image_element = DynamicTo<HTMLObjectElement>(child);
+    if (html_image_element && html_image_element->ContainsJavaApplet())
       return true;
   }
 
@@ -416,7 +408,7 @@ HTMLFormElement* HTMLObjectElement::formOwner() const {
 }
 
 bool HTMLObjectElement::IsInteractiveContent() const {
-  return FastHasAttribute(kUsemapAttr);
+  return FastHasAttribute(html_names::kUsemapAttr);
 }
 
 bool HTMLObjectElement::UseFallbackContent() const {
@@ -444,6 +436,10 @@ bool HTMLObjectElement::DidFinishLoading() const {
     return true;
 
   return UseFallbackContent();
+}
+
+int HTMLObjectElement::DefaultTabIndex() const {
+  return 0;
 }
 
 const HTMLObjectElement* ToHTMLObjectElementFromListedElement(

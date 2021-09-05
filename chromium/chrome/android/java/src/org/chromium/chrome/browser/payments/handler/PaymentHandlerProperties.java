@@ -5,11 +5,16 @@
 package org.chromium.chrome.browser.payments.handler;
 
 import org.chromium.ui.modelutil.PropertyKey;
+import org.chromium.ui.modelutil.PropertyModel.WritableIntPropertyKey;
 
 /** PaymentHandler UI properties, which fully describe the state of the UI. */
 /* package */ class PaymentHandlerProperties {
-    // TODO(maxlg): Should add more keys after we add more states to the widget .
-    /* package */ static final PropertyKey[] ALL_KEYS = new PropertyKey[] {};
+    /** The visible height of the PaymentHandler UI's content area in pixels. */
+    /* package */ static final WritableIntPropertyKey CONTENT_VISIBLE_HEIGHT_PX =
+            new WritableIntPropertyKey();
+
+    /* package */ static final PropertyKey[] ALL_KEYS =
+            new PropertyKey[] {CONTENT_VISIBLE_HEIGHT_PX};
 
     // Prevent instantiation.
     private PaymentHandlerProperties() {}

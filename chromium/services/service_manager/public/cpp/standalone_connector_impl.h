@@ -8,6 +8,7 @@
 #include "base/component_export.h"
 #include "base/macros.h"
 #include "mojo/public/cpp/bindings/generic_pending_receiver.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "services/service_manager/public/mojom/connector.mojom.h"
@@ -64,11 +65,7 @@ class COMPONENT_EXPORT(SERVICE_MANAGER_CPP) StandaloneConnectorImpl
       mojo::ScopedMessagePipeHandle service_pipe,
       mojo::PendingReceiver<mojom::ProcessMetadata> metadata_receiver,
       RegisterServiceInstanceCallback callback) override;
-  void Clone(mojom::ConnectorRequest request) override;
-  void FilterInterfaces(const std::string& spec,
-                        const Identity& source,
-                        mojom::InterfaceProviderRequest source_request,
-                        mojom::InterfaceProviderPtr target) override;
+  void Clone(mojo::PendingReceiver<mojom::Connector> receiver) override;
 
   Delegate* const delegate_;
 

@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "base/stl_util.h"
+#include "base/trace_event/trace_event.h"
 #include "ui/display/types/display_snapshot.h"
 #include "ui/display/types/gamma_ramp_rgb_entry.h"
 #include "ui/ozone/platform/drm/common/drm_util.h"
@@ -19,6 +20,8 @@ namespace ui {
 namespace {
 
 const char kContentProtection[] = "Content Protection";
+
+const char kPrivacyScreen[] = "privacy-screen";
 
 struct ContentProtectionMapping {
   const char* name;
@@ -49,15 +52,16 @@ uint32_t GetContentProtectionValue(drmModePropertyRes* property,
   return 0;
 }
 
-std::string GetEnumNameForProperty(drmModeConnector* connector,
+std::string GetEnumNameForProperty(drmModeObjectProperties* property_values,
                                    drmModePropertyRes* property) {
-  for (int prop_idx = 0; prop_idx < connector->count_props; ++prop_idx) {
-    if (connector->props[prop_idx] != property->prop_id)
+  for (uint32_t prop_idx = 0; prop_idx < property_values->count_props;
+       ++prop_idx) {
+    if (property_values->props[prop_idx] != property->prop_id)
       continue;
 
     for (int enum_idx = 0; enum_idx < property->count_enums; ++enum_idx) {
       const drm_mode_property_enum& property_enum = property->enums[enum_idx];
-      if (property_enum.value == connector->prop_values[prop_idx])
+      if (property_enum.value == property_values->prop_values[prop_idx])
         return property_enum.name;
     }
   }
@@ -88,13 +92,24 @@ DrmDisplay::DrmDisplay(ScreenManager* screen_manager,
 DrmDisplay::~DrmDisplay() {
 }
 
+uint32_t DrmDisplay::connector() const {
+  return connector_->connector_id;
+}
+
 std::unique_ptr<display::DisplaySnapshot> DrmDisplay::Update(
     HardwareDisplayControllerInfo* info,
     size_t device_index) {
   std::unique_ptr<display::DisplaySnapshot> params = CreateDisplaySnapshot(
       info, drm_->get_fd(), drm_->device_path(), device_index, origin_);
   crtc_ = info->crtc()->crtc_id;
-  connector_ = info->connector()->connector_id;
+  // TODO(dcastagna): consider taking ownership of |info->connector()|
+  connector_ = ScopedDrmConnectorPtr(
+      drm_->GetConnector(info->connector()->connector_id));
+  if (!connector_) {
+    PLOG(ERROR) << "Failed to get connector "
+                << info->connector()->connector_id;
+  }
+
   display_id_ = params->display_id();
   modes_ = GetDrmModeVector(info->connector());
   return params;
@@ -103,15 +118,16 @@ std::unique_ptr<display::DisplaySnapshot> DrmDisplay::Update(
 bool DrmDisplay::Configure(const drmModeModeInfo* mode,
                            const gfx::Point& origin) {
   VLOG(1) << "DRM configuring: device=" << drm_->device_path().value()
-          << " crtc=" << crtc_ << " connector=" << connector_
+          << " crtc=" << crtc_ << " connector=" << connector_->connector_id
           << " origin=" << origin.ToString()
-          << " size=" << (mode ? GetDrmModeSize(*mode).ToString() : "0x0");
+          << " size=" << (mode ? GetDrmModeSize(*mode).ToString() : "0x0")
+          << " refresh_rate=" << (mode ? mode->vrefresh : 0) << "Hz";
 
   if (mode) {
-    if (!screen_manager_->ConfigureDisplayController(drm_, crtc_, connector_,
-                                                     origin, *mode)) {
+    if (!screen_manager_->ConfigureDisplayController(
+            drm_, crtc_, connector_->connector_id, origin, *mode)) {
       VLOG(1) << "Failed to configure: device=" << drm_->device_path().value()
-              << " crtc=" << crtc_ << " connector=" << connector_;
+              << " crtc=" << crtc_ << " connector=" << connector_->connector_id;
       return false;
     }
   } else {
@@ -127,21 +143,22 @@ bool DrmDisplay::Configure(const drmModeModeInfo* mode,
 }
 
 bool DrmDisplay::GetHDCPState(display::HDCPState* state) {
-  ScopedDrmConnectorPtr connector(drm_->GetConnector(connector_));
-  if (!connector) {
-    PLOG(ERROR) << "Failed to get connector " << connector_;
+  if (!connector_)
     return false;
-  }
 
+  TRACE_EVENT1("drm", "DrmDisplay::GetHDCPState", "connector",
+               connector_->connector_id);
   ScopedDrmPropertyPtr hdcp_property(
-      drm_->GetProperty(connector.get(), kContentProtection));
+      drm_->GetProperty(connector_.get(), kContentProtection));
   if (!hdcp_property) {
-    PLOG(ERROR) << "'" << kContentProtection << "' property doesn't exist.";
+    PLOG(INFO) << "'" << kContentProtection << "' property doesn't exist.";
     return false;
   }
 
+  ScopedDrmObjectPropertyPtr property_values(drm_->GetObjectProperties(
+      connector_->connector_id, DRM_MODE_OBJECT_CONNECTOR));
   std::string name =
-      GetEnumNameForProperty(connector.get(), hdcp_property.get());
+      GetEnumNameForProperty(property_values.get(), hdcp_property.get());
   for (size_t i = 0; i < base::size(kContentProtectionStates); ++i) {
     if (name == kContentProtectionStates[i].name) {
       *state = kContentProtectionStates[i].state;
@@ -155,21 +172,20 @@ bool DrmDisplay::GetHDCPState(display::HDCPState* state) {
 }
 
 bool DrmDisplay::SetHDCPState(display::HDCPState state) {
-  ScopedDrmConnectorPtr connector(drm_->GetConnector(connector_));
-  if (!connector) {
-    PLOG(ERROR) << "Failed to get connector " << connector_;
+  if (!connector_) {
     return false;
   }
 
   ScopedDrmPropertyPtr hdcp_property(
-      drm_->GetProperty(connector.get(), kContentProtection));
+      drm_->GetProperty(connector_.get(), kContentProtection));
+
   if (!hdcp_property) {
-    LOG(ERROR) << "'" << kContentProtection << "' property doesn't exist.";
+    PLOG(INFO) << "'" << kContentProtection << "' property doesn't exist.";
     return false;
   }
 
   return drm_->SetProperty(
-      connector_, hdcp_property->prop_id,
+      connector_->connector_id, hdcp_property->prop_id,
       GetContentProtectionValue(hdcp_property.get(), state));
 }
 
@@ -189,6 +205,27 @@ void DrmDisplay::SetGammaCorrection(
   if (!drm_->plane_manager()->SetGammaCorrection(crtc_, degamma_lut,
                                                  gamma_lut)) {
     LOG(ERROR) << "Failed to set gamma tables for display: crtc_id = " << crtc_;
+  }
+}
+
+// TODO(gildekel): consider reformatting this to use the new DRM API or cache
+// |privacy_screen_property| after crrev.com/c/1715751 lands.
+void DrmDisplay::SetPrivacyScreen(bool enabled) {
+  if (!connector_)
+    return;
+
+  ScopedDrmPropertyPtr privacy_screen_property(
+      drm_->GetProperty(connector_.get(), kPrivacyScreen));
+
+  if (!privacy_screen_property) {
+    LOG(ERROR) << "'" << kPrivacyScreen << "' property doesn't exist.";
+    return;
+  }
+
+  if (!drm_->SetProperty(connector_->connector_id,
+                         privacy_screen_property->prop_id, enabled)) {
+    LOG(ERROR) << (enabled ? "Enabling" : "Disabling") << " property '"
+               << kPrivacyScreen << "' failed!";
   }
 }
 

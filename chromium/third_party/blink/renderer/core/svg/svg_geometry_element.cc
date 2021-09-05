@@ -75,13 +75,14 @@ void SVGGeometryElement::SvgAttributeChanged(const QualifiedName& attr_name) {
   SVGGraphicsElement::SvgAttributeChanged(attr_name);
 }
 
-void SVGGeometryElement::Trace(blink::Visitor* visitor) {
+void SVGGeometryElement::Trace(Visitor* visitor) {
   visitor->Trace(path_length_);
   SVGGraphicsElement::Trace(visitor);
 }
 
 bool SVGGeometryElement::isPointInFill(SVGPointTearOff* point) const {
-  GetDocument().UpdateStyleAndLayoutForNode(this);
+  GetDocument().UpdateStyleAndLayoutForNode(this,
+                                            DocumentUpdateReason::kJavaScript);
 
   // FIXME: Eventually we should support isPointInFill for display:none
   // elements.
@@ -95,7 +96,8 @@ bool SVGGeometryElement::isPointInFill(SVGPointTearOff* point) const {
 }
 
 bool SVGGeometryElement::isPointInStroke(SVGPointTearOff* point) const {
-  GetDocument().UpdateStyleAndLayoutForNode(this);
+  GetDocument().UpdateStyleAndLayoutForNode(this,
+                                            DocumentUpdateReason::kJavaScript);
 
   // FIXME: Eventually we should support isPointInStroke for display:none
   // elements.
@@ -132,7 +134,8 @@ Path SVGGeometryElement::ToClipPath() const {
 }
 
 float SVGGeometryElement::getTotalLength(ExceptionState& exception_state) {
-  GetDocument().UpdateStyleAndLayoutForNode(this);
+  GetDocument().UpdateStyleAndLayoutForNode(this,
+                                            DocumentUpdateReason::kJavaScript);
 
   if (!GetLayoutObject()) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
@@ -144,7 +147,8 @@ float SVGGeometryElement::getTotalLength(ExceptionState& exception_state) {
 }
 
 SVGPointTearOff* SVGGeometryElement::getPointAtLength(float length) {
-  GetDocument().UpdateStyleAndLayoutForNode(this);
+  GetDocument().UpdateStyleAndLayoutForNode(this,
+                                            DocumentUpdateReason::kJavaScript);
 
   FloatPoint point;
   if (GetLayoutObject()) {

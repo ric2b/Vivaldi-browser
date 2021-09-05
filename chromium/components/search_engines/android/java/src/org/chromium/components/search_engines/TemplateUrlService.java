@@ -5,10 +5,10 @@
 package org.chromium.components.search_engines;
 
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ObserverList;
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.base.task.PostTask;
@@ -251,6 +251,14 @@ public class TemplateUrlService {
     }
 
     /**
+     * Finds the query in the url, if any. Returns empty if no query is present.
+     */
+    public String getSearchQueryForUrl(String url) {
+        return TemplateUrlServiceJni.get().getSearchQueryForUrl(
+                mNativeTemplateUrlServiceAndroid, TemplateUrlService.this, url);
+    }
+
+    /**
      * Finds the default search engine for the default provider and returns the url query
      * {@link String} for {@code query} with voice input source param set.
      * @param query The {@link String} that represents the text query the search url should
@@ -308,32 +316,28 @@ public class TemplateUrlService {
      * @param searchUrl Search url of the search engine to be added.
      * @param suggestUrl Url for retrieving search suggestions.
      * @param faviconUrl Favicon url of the search engine to be added.
+     * @param setAsDefault If true, set as default search provider.
      * @return True if search engine was successfully added, false if search engine from Play API
      *         with such keyword already existed (e.g. from previous attempt to set search engine).
      */
-    public boolean setPlayAPISearchEngine(
-            String name, String keyword, String searchUrl, String suggestUrl, String faviconUrl) {
+    public boolean setPlayAPISearchEngine(String name, String keyword, String searchUrl,
+            String suggestUrl, String faviconUrl, boolean setAsDefault) {
         return TemplateUrlServiceJni.get().setPlayAPISearchEngine(mNativeTemplateUrlServiceAndroid,
-                TemplateUrlService.this, name, keyword, searchUrl, suggestUrl, faviconUrl);
+                TemplateUrlService.this, name, keyword, searchUrl, suggestUrl, faviconUrl,
+                setAsDefault);
     }
     // TODO(crbug/1002271): This API is called from clank repo. Helper function below will be
     // removed once clank repo is updated.
     public boolean setPlayAPISearchEngine(
-            String name, String keyword, String searchUrl, String faviconUrl) {
+            String name, String keyword, String searchUrl, String suggestUrl, String faviconUrl) {
         return TemplateUrlServiceJni.get().setPlayAPISearchEngine(mNativeTemplateUrlServiceAndroid,
-                TemplateUrlService.this, name, keyword, searchUrl, null, faviconUrl);
+                TemplateUrlService.this, name, keyword, searchUrl, suggestUrl, faviconUrl, true);
     }
 
     @VisibleForTesting
     public String addSearchEngineForTesting(String keyword, int ageInDays) {
         return TemplateUrlServiceJni.get().addSearchEngineForTesting(
                 mNativeTemplateUrlServiceAndroid, TemplateUrlService.this, keyword, ageInDays);
-    }
-
-    @VisibleForTesting
-    public String updateLastVisitedForTesting(String keyword) {
-        return TemplateUrlServiceJni.get().updateLastVisitedForTesting(
-                mNativeTemplateUrlServiceAndroid, TemplateUrlService.this, keyword);
     }
 
     @NativeMethods
@@ -352,6 +356,8 @@ public class TemplateUrlService {
                 long nativeTemplateUrlServiceAndroid, TemplateUrlService caller);
         String getUrlForSearchQuery(
                 long nativeTemplateUrlServiceAndroid, TemplateUrlService caller, String query);
+        String getSearchQueryForUrl(
+                long nativeTemplateUrlServiceAndroid, TemplateUrlService caller, String url);
         String getUrlForVoiceSearchQuery(
                 long nativeTemplateUrlServiceAndroid, TemplateUrlService caller, String query);
         String getUrlForContextualSearchQuery(long nativeTemplateUrlServiceAndroid,
@@ -365,9 +371,7 @@ public class TemplateUrlService {
                 TemplateUrlService caller, String keyword, int offset);
         boolean setPlayAPISearchEngine(long nativeTemplateUrlServiceAndroid,
                 TemplateUrlService caller, String name, String keyword, String searchUrl,
-                String suggestUrl, String faviconUrl);
-        String updateLastVisitedForTesting(
-                long nativeTemplateUrlServiceAndroid, TemplateUrlService caller, String keyword);
+                String suggestUrl, String faviconUrl, boolean setAsDefault);
         void getTemplateUrls(long nativeTemplateUrlServiceAndroid, TemplateUrlService caller,
                 List<TemplateUrl> templateUrls);
         TemplateUrl getDefaultSearchEngine(

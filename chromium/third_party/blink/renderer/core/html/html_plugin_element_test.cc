@@ -93,7 +93,7 @@ class HTMLPlugInElementTest : public PageTestBase,
   Persistent<TestPluginLocalFrameClient> frame_client_;
 };
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          HTMLPlugInElementTest,
                          testing::Values("embed", "object"));
 
@@ -108,11 +108,11 @@ TEST_P(HTMLPlugInElementTest, RemovePlugin) {
   )HTML";
 
   const char* container_type = GetParam();
-  GetDocument().body()->SetInnerHTMLFromString(
+  GetDocument().body()->setInnerHTML(
       String::Format(kDivWithPlugin, container_type, container_type));
 
   auto* plugin =
-      ToHTMLPlugInElement(GetDocument().getElementById("test_plugin"));
+      To<HTMLPlugInElement>(GetDocument().getElementById("test_plugin"));
   ASSERT_TRUE(plugin);
   EXPECT_EQ(container_type, plugin->tagName().LowerASCII());
 

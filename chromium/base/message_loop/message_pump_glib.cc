@@ -9,8 +9,8 @@
 
 #include <glib.h>
 
-#include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/no_destructor.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/synchronization/lock.h"
@@ -19,6 +19,21 @@
 namespace base {
 
 namespace {
+
+// Priorities of event sources are important to let everything be processed.
+// In particular, GTK event source should have the highest priority (because
+// UI events come from it), then Wayland events (the ones coming from the FD
+// watcher), and the lowest priority is GLib events (our base message pump).
+//
+// The g_source API uses ints to denote priorities, and the lower is its value,
+// the higher is the priority (i.e., they are ordered backwards).
+constexpr int kPriorityWork = G_PRIORITY_DEFAULT_IDLE;
+constexpr int kPriorityFdWatch = G_PRIORITY_DEFAULT_IDLE - 10;
+
+// See the explanation above.
+static_assert(G_PRIORITY_DEFAULT < kPriorityFdWatch &&
+                  kPriorityFdWatch < kPriorityWork,
+              "Wrong priorities are set for event sources!");
 
 // Return a timeout suitable for the glib loop according to |next_task_time|, -1
 // to block forever, 0 to return right away, or a timeout in milliseconds from
@@ -79,8 +94,8 @@ int GetTimeIntervalMilliseconds(TimeTicks next_task_time) {
 //
 // For the GLib pump we try to follow the Windows UI pump model:
 // - Whenever we receive a wakeup event or the timer for delayed work expires,
-// we run DoSomeWork. That part will also run in the other event pumps.
-// - We also run DoSomeWork, and possibly DoIdleWork, in the main loop,
+// we run DoWork. That part will also run in the other event pumps.
+// - We also run DoWork, and possibly DoIdleWork, in the main loop,
 // around event handling.
 
 struct WorkSource : public GSource {
@@ -104,7 +119,6 @@ gboolean WorkSourceCheck(GSource* source) {
 gboolean WorkSourceDispatch(GSource* source,
                             GSourceFunc unused_func,
                             gpointer unused_data) {
-
   static_cast<WorkSource*>(source)->pump->HandleDispatch();
   // Always return TRUE so our source stays registered.
   return TRUE;
@@ -129,29 +143,32 @@ struct ThreadInfo {
 };
 
 // Used for accesing |thread_info|.
-static LazyInstance<Lock>::Leaky thread_info_lock = LAZY_INSTANCE_INITIALIZER;
+Lock& GetThreadInfoLock() {
+  static NoDestructor<Lock> thread_info_lock;
+  return *thread_info_lock;
+}
 
 // If non-null it means a MessagePumpGlib exists and has been Run. This is
 // destroyed when the MessagePump is destroyed.
-ThreadInfo* thread_info = nullptr;
+ThreadInfo* g_thread_info = nullptr;
 
 void CheckThread(MessagePumpGlib* pump) {
-  AutoLock auto_lock(thread_info_lock.Get());
-  if (!thread_info) {
-    thread_info = new ThreadInfo;
-    thread_info->pump = pump;
-    thread_info->thread_id = PlatformThread::CurrentId();
+  AutoLock auto_lock(GetThreadInfoLock());
+  if (!g_thread_info) {
+    g_thread_info = new ThreadInfo;
+    g_thread_info->pump = pump;
+    g_thread_info->thread_id = PlatformThread::CurrentId();
   }
-  DCHECK(thread_info->thread_id == PlatformThread::CurrentId()) <<
-      "Running MessagePumpGlib on two different threads; "
-      "this is unsupported by GLib!";
+  DCHECK_EQ(g_thread_info->thread_id, PlatformThread::CurrentId())
+      << "Running MessagePumpGlib on two different threads; "
+         "this is unsupported by GLib!";
 }
 
 void PumpDestroyed(MessagePumpGlib* pump) {
-  AutoLock auto_lock(thread_info_lock.Get());
-  if (thread_info && thread_info->pump == pump) {
-    delete thread_info;
-    thread_info = nullptr;
+  AutoLock auto_lock(GetThreadInfoLock());
+  if (g_thread_info && g_thread_info->pump == pump) {
+    delete g_thread_info;
+    g_thread_info = nullptr;
   }
 }
 
@@ -218,8 +235,7 @@ MessagePumpGlib::MessagePumpGlib()
   work_source_ = g_source_new(&WorkSourceFuncs, sizeof(WorkSource));
   static_cast<WorkSource*>(work_source_)->pump = this;
   g_source_add_poll(work_source_, wakeup_gpollfd_.get());
-  // Use a low priority so that we let other events in the queue go first.
-  g_source_set_priority(work_source_, G_PRIORITY_DEFAULT_IDLE);
+  g_source_set_priority(work_source_, kPriorityWork);
   // This is needed to allow Run calls inside Dispatch.
   g_source_set_can_recurse(work_source_, TRUE);
   g_source_attach(work_source_, context_);
@@ -294,6 +310,7 @@ bool MessagePumpGlib::FdWatchController::InitOrUpdate(int fd,
   g_source_add_poll(source_, poll_fd_.get());
   g_source_set_can_recurse(source_, TRUE);
   g_source_set_callback(source_, nullptr, nullptr, nullptr);
+  g_source_set_priority(source_, kPriorityFdWatch);
 
   watcher_ = watcher;
   return true;
@@ -389,7 +406,7 @@ bool MessagePumpGlib::HandleCheck() {
 }
 
 void MessagePumpGlib::HandleDispatch() {
-  state_->next_work_info = state_->delegate->DoSomeWork();
+  state_->next_work_info = state_->delegate->DoWork();
 }
 
 void MessagePumpGlib::Run(Delegate* delegate) {
@@ -423,7 +440,7 @@ void MessagePumpGlib::Run(Delegate* delegate) {
     if (state_->should_quit)
       break;
 
-    state_->next_work_info = state_->delegate->DoSomeWork();
+    state_->next_work_info = state_->delegate->DoWork();
     more_work_is_plausible |= state_->next_work_info.is_immediate();
     if (state_->should_quit)
       break;

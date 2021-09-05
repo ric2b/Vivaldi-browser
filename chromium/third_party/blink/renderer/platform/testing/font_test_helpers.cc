@@ -57,6 +57,12 @@ class TestFontSelector : public FontSelector {
   unsigned Version() const override { return 0; }
   void FontCacheInvalidated() override {}
   void ReportNotDefGlyph() const override {}
+  void ReportSuccessfulFontFamilyMatch(
+      const AtomicString& font_family_name) override {}
+  void ReportFailedFontFamilyMatch(
+      const AtomicString& font_family_name) override {}
+  void ReportSuccessfulLocalFontMatch(const AtomicString& font_name) override {}
+  void ReportFailedLocalFontMatch(const AtomicString& font_name) override {}
   ExecutionContext* GetExecutionContext() const override { return nullptr; }
   FontFaceCache* GetFontFaceCache() override { return nullptr; }
 
@@ -89,9 +95,7 @@ Font CreateTestFont(const AtomicString& family_name,
   if (ligatures)
     font_description.SetVariantLigatures(*ligatures);
 
-  Font font(font_description);
-  font.Update(TestFontSelector::Create(font_path));
-  return font;
+  return Font(font_description, TestFontSelector::Create(font_path));
 }
 
 }  // namespace test

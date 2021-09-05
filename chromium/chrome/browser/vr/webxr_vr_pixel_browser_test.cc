@@ -10,7 +10,6 @@
 #include "chrome/browser/vr/test/mock_xr_device_hook_base.h"
 #include "chrome/browser/vr/test/multi_class_browser_test.h"
 #include "chrome/browser/vr/test/ui_utils.h"
-#include "chrome/browser/vr/test/webvr_browser_test.h"
 #include "chrome/browser/vr/test/webxr_vr_browser_test.h"
 
 #include <memory>
@@ -54,7 +53,7 @@ void MyXRMock::OnFrameSubmitted(
   std::move(callback).Run();
 }
 
-// Pixel test for WebVR/WebXR - start presentation, submit frames, get data back
+// Pixel test for WebXR - start presentation, submit frames, get data back
 // out. Validates that a pixel was rendered with the expected color.
 void TestPresentationPixelsImpl(WebXrVrBrowserTestBase* t,
                                 std::string filename) {
@@ -63,7 +62,7 @@ void TestPresentationPixelsImpl(WebXrVrBrowserTestBase* t,
   MyXRMock my_mock;
 
   // Load the test page, and enter presentation.
-  t->LoadUrlAndAwaitInitialization(t->GetFileUrlForHtmlTestFile(filename));
+  t->LoadFileAndAwaitInitialization(filename);
   t->EnterSessionWithUserGestureOrFail();
 
   // Wait for JavaScript to submit at least one frame.
@@ -88,11 +87,6 @@ void TestPresentationPixelsImpl(WebXrVrBrowserTestBase* t,
       << "Alpha channel of submitted color does not match expectation";
 }
 
-IN_PROC_BROWSER_TEST_F(WebVrOpenVrBrowserTest, TestPresentationPixels) {
-  TestPresentationPixelsImpl(this, "test_webvr_pixels");
-}
-
-// TODO(crbug.com/986621) - OpenXR currently hard codes data
 WEBXR_VR_ALL_RUNTIMES_BROWSER_TEST_F(TestPresentationPixels) {
   TestPresentationPixelsImpl(t, "test_webxr_pixels");
 }

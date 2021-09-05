@@ -25,7 +25,7 @@ constexpr base::TimeDelta kDefaultTimeout = base::TimeDelta::FromMinutes(1);
 // How long to wait while doing more complex operations like starting or
 // creating a container.
 constexpr base::TimeDelta kLongOperationTimeout =
-    base::TimeDelta::FromMinutes(2);
+    base::TimeDelta::FromMinutes(3);
 }  // namespace
 
 class CiceroneClientImpl : public CiceroneClient {
@@ -441,6 +441,29 @@ class CiceroneClientImpl : public CiceroneClient {
         &method_call, kDefaultTimeout.InMilliseconds(),
         base::BindOnce(&CiceroneClientImpl::OnDBusProtoResponse<
                            vm_tools::cicerone::ApplyAnsiblePlaybookResponse>,
+                       weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+  }
+
+  void ConfigureForArcSideload(
+      const vm_tools::cicerone::ConfigureForArcSideloadRequest& request,
+      DBusMethodCallback<vm_tools::cicerone::ConfigureForArcSideloadResponse>
+          callback) override {
+    dbus::MethodCall method_call(
+        vm_tools::cicerone::kVmCiceroneInterface,
+        vm_tools::cicerone::kConfigureForArcSideloadMethod);
+    dbus::MessageWriter writer(&method_call);
+
+    if (!writer.AppendProtoAsArrayOfBytes(request)) {
+      LOG(ERROR) << "Failed to encode ConfigureForArcSideloadRequest protobuf";
+      base::ThreadTaskRunnerHandle::Get()->PostTask(
+          FROM_HERE, base::BindOnce(std::move(callback), base::nullopt));
+      return;
+    }
+
+    cicerone_proxy_->CallMethod(
+        &method_call, kDefaultTimeout.InMilliseconds(),
+        base::BindOnce(&CiceroneClientImpl::OnDBusProtoResponse<
+                           vm_tools::cicerone::ConfigureForArcSideloadResponse>,
                        weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
   }
 

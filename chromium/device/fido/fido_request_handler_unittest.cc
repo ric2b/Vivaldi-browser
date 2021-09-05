@@ -58,9 +58,7 @@ class EmptyRequestHandler : public FidoRequestHandlerBase {
  public:
   EmptyRequestHandler(const base::flat_set<FidoTransportProtocol>& protocols,
                       test::FakeFidoDiscoveryFactory* fake_discovery_factory)
-      : FidoRequestHandlerBase(nullptr /* connector */,
-                               fake_discovery_factory,
-                               protocols) {
+      : FidoRequestHandlerBase(fake_discovery_factory, protocols) {
     Start();
   }
   ~EmptyRequestHandler() override = default;
@@ -161,7 +159,11 @@ class TestObserver : public FidoRequestHandlerBase::Observer {
 
   void SetMightCreateResidentCredential(bool v) override {}
 
-  void FinishCollectPIN() override { NOTREACHED(); }
+  void OnRetryUserVerification(int attempts) override {}
+
+  void OnInternalUserVerificationLocked() override {}
+
+  void FinishCollectToken() override { NOTREACHED(); }
 
  private:
   TransportAvailabilityNotificationReceiver
@@ -234,21 +236,13 @@ class FakeFidoRequestHandler : public FidoRequestHandlerBase {
                               base::Optional<std::vector<uint8_t>>,
                               const FidoAuthenticator*)>;
 
-  FakeFidoRequestHandler(service_manager::Connector* connector,
-                         test::FakeFidoDiscoveryFactory* fake_discovery_factory,
-                         const base::flat_set<FidoTransportProtocol>& protocols,
-                         CompletionCallback callback)
-      : FidoRequestHandlerBase(connector, fake_discovery_factory, protocols),
-        completion_callback_(std::move(callback)) {
-    Start();
-  }
   FakeFidoRequestHandler(test::FakeFidoDiscoveryFactory* fake_discovery_factory,
                          const base::flat_set<FidoTransportProtocol>& protocols,
                          CompletionCallback callback)
-      : FakeFidoRequestHandler(nullptr /* connector */,
-                               fake_discovery_factory,
-                               protocols,
-                               std::move(callback)) {}
+      : FidoRequestHandlerBase(fake_discovery_factory, protocols),
+        completion_callback_(std::move(callback)) {
+    Start();
+  }
   ~FakeFidoRequestHandler() override = default;
 
   void DispatchRequest(FidoAuthenticator* authenticator) override {

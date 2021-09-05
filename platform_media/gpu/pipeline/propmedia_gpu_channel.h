@@ -16,6 +16,7 @@
 
 namespace media {
 class IPCMediaPipeline;
+class PlatformMediaPipelineFactory;
 }
 
 namespace gpu {
@@ -37,12 +38,13 @@ class ProprietaryMediaGpuChannel : public IPC::Listener, public IPC::Sender
 
  private:
 
-  void OnNewMediaPipeline(int32_t route_id, int32_t command_buffer_route_id);
+  void OnNewMediaPipeline(int32_t route_id);
   void OnDestroyMediaPipeline(int32_t route_id);
   bool OnPipelineMessageReceived(const IPC::Message& message);
 
   gpu::GpuChannel* const channel_;
   base::IDMap<std::unique_ptr<media::IPCMediaPipeline>> media_pipelines_;
+  std::unique_ptr<media::PlatformMediaPipelineFactory> pipeline_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(ProprietaryMediaGpuChannel);
 };

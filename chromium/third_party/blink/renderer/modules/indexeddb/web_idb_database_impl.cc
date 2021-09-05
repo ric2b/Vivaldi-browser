@@ -5,8 +5,9 @@
 #include "third_party/blink/renderer/modules/indexeddb/web_idb_database_impl.h"
 
 #include "base/format_macros.h"
+#include "base/memory/ptr_util.h"
 #include "mojo/public/cpp/bindings/self_owned_associated_receiver.h"
-#include "third_party/blink/public/platform/modules/indexeddb/web_idb_database_exception.h"
+#include "third_party/blink/public/mojom/indexeddb/indexeddb.mojom-blink.h"
 #include "third_party/blink/renderer/modules/indexeddb/idb_database_error.h"
 #include "third_party/blink/renderer/modules/indexeddb/idb_key_range.h"
 #include "third_party/blink/renderer/modules/indexeddb/indexed_db_blink_mojom_traits.h"

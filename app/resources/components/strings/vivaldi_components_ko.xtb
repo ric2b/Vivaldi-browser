@@ -1,4 +1,34 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="ko">
+<translation id="3830627370375585318">Vivaldi이 방화벽이나 백신 프로그램이 설정된
+        네트워크에 액세스할 수 있도록 허용합니다.</translation>
+<translation id="4200102020577305737">Vivaldi 메뉴 &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          LAN 설정으로 이동하여
+          '사용자 LAN에 프록시 서버 사용'을 선택 취소합니다.</translation>
+<translation id="4932161901409251843">Vivaldi 메뉴 &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          (으)로 이동하여 '프록시 없음' 또는 '직접 연결'로 설정되어 있는지 확인합니다.</translation>
+<translation id="5248344925342018662">안전한 Vivaldi 페이지를 보는 중</translation>
+<translation id="7023871570427738255">Vivaldi 메뉴 &gt;
+
+        <ph name="SETTINGS_TITLE" />
+        &gt;
+        <ph name="ADVANCED_TITLE" />
+        (으)로 이동하고 '<ph name="NO_PREFETCH_DESCRIPTION" />'을(를) 선택 취소합니다.
+        그래도 문제가 해결되지 않으면 이 옵션을 다시 선택하여
+        성능을 개선해 보시기 바랍니다.</translation>
+<translation id="8187289872471304532">애플리케이션 &gt; 시스템 환경설정 &gt; 네트워크 &gt; 고급 &gt; 프록시
+          로 이동한 다음
+          선택된 프록시를 선택 취소합니다.</translation>
 </translationbundle>

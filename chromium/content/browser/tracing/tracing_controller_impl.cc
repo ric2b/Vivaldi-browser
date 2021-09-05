@@ -32,14 +32,13 @@
 #include "content/browser/tracing/tracing_ui.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
-#include "content/public/browser/system_connector.h"
 #include "content/public/browser/tracing_controller.h"
 #include "content/public/browser/tracing_delegate.h"
+#include "content/public/browser/tracing_service.h"
 #include "content/public/common/content_client.h"
 #include "gpu/config/gpu_info.h"
 #include "mojo/public/cpp/system/data_pipe.h"
 #include "net/base/network_change_notifier.h"
-#include "services/service_manager/public/cpp/connector.h"
 #include "services/tracing/public/cpp/perfetto/perfetto_config.h"
 #include "services/tracing/public/cpp/trace_event_agent.h"
 #include "services/tracing/public/cpp/traced_process_impl.h"
@@ -221,13 +220,9 @@ void TracingControllerImpl::AddAgents() {
 
 void TracingControllerImpl::ConnectToServiceIfNeeded() {
   if (!consumer_host_) {
-    GetSystemConnector()->BindInterface(tracing::mojom::kServiceName,
-                                        &consumer_host_);
-    consumer_host_.set_connection_error_handler(base::BindOnce(
-        [](TracingControllerImpl* controller) {
-          controller->consumer_host_.reset();
-        },
-        base::Unretained(this)));
+    GetTracingService().BindConsumerHost(
+        consumer_host_.BindNewPipeAndPassReceiver());
+    consumer_host_.reset_on_disconnect();
   }
 }
 
@@ -399,17 +394,13 @@ bool TracingControllerImpl::StartTracing(
   perfetto::TraceConfig perfetto_config = tracing::GetDefaultPerfettoConfig(
       trace_config, /*requires_anonymized_data=*/false);
 
-  mojo::PendingRemote<tracing::mojom::TracingSessionClient>
-      tracing_session_client;
-  binding_.Bind(tracing_session_client.InitWithNewPipeAndPassReceiver());
-  binding_.set_connection_error_handler(base::BindOnce(
-      &TracingControllerImpl::OnTracingFailed, base::Unretained(this)));
-
   consumer_host_->EnableTracing(
-      mojo::MakeRequest(&tracing_session_host_),
-      std::move(tracing_session_client), std::move(perfetto_config),
+      tracing_session_host_.BindNewPipeAndPassReceiver(),
+      receiver_.BindNewPipeAndPassRemote(), std::move(perfetto_config),
       tracing::mojom::TracingClientPriority::kUserInitiated);
-  tracing_session_host_.set_connection_error_handler(base::BindOnce(
+  receiver_.set_disconnect_handler(base::BindOnce(
+      &TracingControllerImpl::OnTracingFailed, base::Unretained(this)));
+  tracing_session_host_.set_disconnect_handler(base::BindOnce(
       &TracingControllerImpl::OnTracingFailed, base::Unretained(this)));
 
   start_tracing_callback_ = std::move(callback);
@@ -472,9 +463,12 @@ void TracingControllerImpl::EndStartupTracing() {
   if (!tracing::TraceStartupConfig::GetInstance()->IsEnabled())
     return;
 
+  // Use USER_VISIBLE priority because BEST_EFFORT tasks are not run at startup
+  // and we want the trace file to be written soon.
   StopTracing(CreateFileEndpoint(
       startup_trace_file_,
-      base::BindRepeating(OnStoppedStartupTracing, startup_trace_file_)));
+      base::BindRepeating(OnStoppedStartupTracing, startup_trace_file_),
+      base::TaskPriority::USER_VISIBLE));
 }
 
 void TracingControllerImpl::FinalizeStartupTracingIfNeeded() {
@@ -617,7 +611,7 @@ void TracingControllerImpl::CompleteFlush() {
   trace_config_ = nullptr;
   drainer_ = nullptr;
   tracing_session_host_.reset();
-  binding_.Close();
+  receiver_.reset();
 }
 
 void TracingControllerImpl::OnDataComplete() {

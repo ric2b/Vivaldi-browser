@@ -6,11 +6,12 @@
 #define CONTENT_RENDERER_WORKER_DEDICATED_WORKER_HOST_FACTORY_CLIENT_H_
 
 #include <memory>
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
-#include "services/service_manager/public/cpp/interface_provider.h"
-#include "third_party/blink/public/mojom/renderer_preference_watcher.mojom.h"
-#include "third_party/blink/public/mojom/renderer_preferences.mojom.h"
+#include "third_party/blink/public/common/browser_interface_broker_proxy.h"
+#include "third_party/blink/public/mojom/renderer_preference_watcher.mojom-forward.h"
+#include "third_party/blink/public/mojom/renderer_preferences.mojom-forward.h"
 #include "third_party/blink/public/mojom/worker/dedicated_worker_host.mojom.h"
 #include "third_party/blink/public/mojom/worker/dedicated_worker_host_factory.mojom.h"
 #include "third_party/blink/public/platform/web_dedicated_worker_host_factory_client.h"
@@ -38,17 +39,16 @@ class DedicatedWorkerHostFactoryClient final
  public:
   DedicatedWorkerHostFactoryClient(
       blink::WebDedicatedWorker* worker,
-      service_manager::InterfaceProvider* interface_provider);
+      const blink::BrowserInterfaceBrokerProxy& interface_broker);
   ~DedicatedWorkerHostFactoryClient() override;
 
   // Implements blink::WebDedicatedWorkerHostFactoryClient.
   void CreateWorkerHostDeprecated(
-      const blink::WebSecurityOrigin& script_origin) override;
+      base::OnceCallback<void(const network::CrossOriginEmbedderPolicy&)>
+          callback) override;
   void CreateWorkerHost(
       const blink::WebURL& script_url,
-      const blink::WebSecurityOrigin& script_origin,
       network::mojom::CredentialsMode credentials_mode,
-      const blink::WebSecurityOrigin& fetch_client_security_origin,
       const blink::WebFetchClientSettingsObject& fetch_client_settings_object,
       mojo::ScopedMessagePipeHandle blob_url_token) override;
   scoped_refptr<blink::WebWorkerFetchContext> CloneWorkerFetchContext(
@@ -64,15 +64,14 @@ class DedicatedWorkerHostFactoryClient final
  private:
   // Implements blink::mojom::DedicatedWorkerHostFactoryClient.
   void OnWorkerHostCreated(
-      service_manager::mojom::InterfaceProviderPtr interface_provider,
       mojo::PendingRemote<blink::mojom::BrowserInterfaceBroker>
           browser_interface_broker) override;
   void OnScriptLoadStarted(
       blink::mojom::ServiceWorkerProviderInfoForClientPtr
           service_worker_provider_info,
       blink::mojom::WorkerMainScriptLoadParamsPtr main_script_load_params,
-      std::unique_ptr<blink::URLLoaderFactoryBundleInfo>
-          subresource_loader_factory_bundle_info,
+      std::unique_ptr<blink::PendingURLLoaderFactoryBundle>
+          pending_subresource_loader_factory_bundle,
       mojo::PendingReceiver<blink::mojom::SubresourceLoaderUpdater>
           subresource_loader_updater,
       blink::mojom::ControllerServiceWorkerInfoPtr controller_info) override;

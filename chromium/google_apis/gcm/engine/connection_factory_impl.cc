@@ -112,8 +112,8 @@ void ConnectionFactoryImpl::Connect() {
     connection_handler_ = CreateConnectionHandler(
         base::TimeDelta::FromMilliseconds(kReadTimeoutMs), read_callback_,
         write_callback_,
-        base::Bind(&ConnectionFactoryImpl::ConnectionHandlerCallback,
-                   weak_ptr_factory_.GetWeakPtr()));
+        base::BindRepeating(&ConnectionFactoryImpl::ConnectionHandlerCallback,
+                            weak_ptr_factory_.GetWeakPtr()));
   }
 
   if (connecting_ || waiting_for_backoff_)
@@ -316,7 +316,9 @@ void ConnectionFactoryImpl::StartConnection() {
   GURL current_endpoint = GetCurrentEndpoint();
   recorder_->RecordConnectionInitiated(current_endpoint.host());
 
-  get_socket_factory_callback_.Run(mojo::MakeRequest(&socket_factory_));
+  socket_factory_.reset();
+  get_socket_factory_callback_.Run(
+      socket_factory_.BindNewPipeAndPassReceiver());
 
   net::NetworkTrafficAnnotationTag traffic_annotation =
       net::DefineNetworkTrafficAnnotation("gcm_connection_factory", R"(

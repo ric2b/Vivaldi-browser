@@ -11,14 +11,10 @@
 #include "chrome/browser/ui/global_media_controls/media_notification_container_observer.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
 
-namespace service_manager {
-class Connector;
-}  // namespace service_manager
-
 class MediaDialogViewObserver;
 class MediaNotificationContainerImplView;
 class MediaNotificationListView;
-class MediaToolbarButtonController;
+class MediaNotificationService;
 
 // Dialog that shows media controls that control the active media session.
 class MediaDialogView : public views::BubbleDialogDelegateView,
@@ -26,8 +22,7 @@ class MediaDialogView : public views::BubbleDialogDelegateView,
                         public MediaNotificationContainerObserver {
  public:
   static void ShowDialog(views::View* anchor_view,
-                         MediaToolbarButtonController* controller,
-                         service_manager::Connector* connector);
+                         MediaNotificationService* service);
   static void HideDialog();
   static bool IsShowing();
 
@@ -38,10 +33,8 @@ class MediaDialogView : public views::BubbleDialogDelegateView,
       const std::string& id,
       base::WeakPtr<media_message_center::MediaNotificationItem> item) override;
   void HideMediaSession(const std::string& id) override;
-
-  // views::DialogDelegate implementation.
-  int GetDialogButtons() const override;
-  bool Close() override;
+  std::unique_ptr<OverlayMediaNotification> PopOut(const std::string& id,
+                                                   gfx::Rect bounds) override;
 
   // views::View implementation.
   void AddedToWidget() override;
@@ -53,6 +46,8 @@ class MediaDialogView : public views::BubbleDialogDelegateView,
   void OnContainerClicked(const std::string& id) override {}
   void OnContainerDismissed(const std::string& id) override {}
   void OnContainerDestroyed(const std::string& id) override;
+  void OnContainerDraggedOut(const std::string& id, gfx::Rect bounds) override {
+  }
 
   void AddObserver(MediaDialogViewObserver* observer);
   void RemoveObserver(MediaDialogViewObserver* observer);
@@ -62,8 +57,7 @@ class MediaDialogView : public views::BubbleDialogDelegateView,
 
  private:
   explicit MediaDialogView(views::View* anchor_view,
-                           MediaToolbarButtonController* controller,
-                           service_manager::Connector* connector);
+                           MediaNotificationService* service);
   ~MediaDialogView() override;
 
   static MediaDialogView* instance_;
@@ -75,7 +69,7 @@ class MediaDialogView : public views::BubbleDialogDelegateView,
   void Init() override;
   void WindowClosing() override;
 
-  MediaToolbarButtonController* const controller_;
+  MediaNotificationService* const service_;
 
   MediaNotificationListView* const active_sessions_view_;
 

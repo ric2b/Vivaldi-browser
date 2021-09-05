@@ -174,6 +174,7 @@ class BlinkNotificationServiceImplTest : public ::testing::Test {
       base::RunLoop run_loop;
       embedded_worker_helper_->context()->RegisterServiceWorker(
           GURL(kTestServiceWorkerUrl), options,
+          blink::mojom::FetchClientSettingsObject::New(),
           base::BindOnce(
               &BlinkNotificationServiceImplTest::DidRegisterServiceWorker,
               base::Unretained(this), &service_worker_registration_id,
@@ -188,7 +189,7 @@ class BlinkNotificationServiceImplTest : public ::testing::Test {
 
     {
       base::RunLoop run_loop;
-      embedded_worker_helper_->context()->storage()->FindRegistrationForId(
+      embedded_worker_helper_->context()->registry()->FindRegistrationForId(
           service_worker_registration_id, GURL(kTestOrigin),
           base::BindOnce(&BlinkNotificationServiceImplTest::
                              DidFindServiceWorkerRegistration,

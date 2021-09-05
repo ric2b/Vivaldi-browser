@@ -1,4 +1,34 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="hr">
+<translation id="3830627370375585318">U postavkama vatrozida ili antivirusnog programa omogućite Chromeu da pristupa mreži.</translation>
+<translation id="4200102020577305737">Idite na
+          izbornik Vivaldi &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          Postavke LAN-a
+          pa poništite odabir potvrdnog okvira "Upotrijebi proxy poslužitelj za LAN".</translation>
+<translation id="4932161901409251843">Idite na
+          izbornik Vivaldi &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          i provjerite je li konfiguracija postavljena na "bez proxyja" ili "izravno."</translation>
+<translation id="7023871570427738255">Otvorite
+        izbornik Chromea &gt;
+        <ph name="SETTINGS_TITLE" />
+        &gt;
+        <ph name="ADVANCED_TITLE" />
+        pa poništite odabir stavke "<ph name="NO_PREFETCH_DESCRIPTION" />".
+        Ako se time ne riješi poteškoća, preporučujemo da ponovo odaberete tu opciju
+        radi bolje izvedbe.</translation>
+<translation id="8187289872471304532">Idite na
+          Aplikacije &gt; Postavke sustava &gt; Mreža &gt; Napredno &gt; Proxy poslužitelji
+          i poništite odabir proxy poslužitelja.</translation>
 </translationbundle>

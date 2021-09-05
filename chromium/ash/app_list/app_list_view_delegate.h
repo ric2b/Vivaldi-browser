@@ -62,11 +62,14 @@ class ASH_PUBLIC_EXPORT AppListViewDelegate {
   // chrome/browser/ui/app_list/app_launch_event_logger.proto. |launch_type| is
   // either kAppSearchResult or kSearchResult and is used to determine which
   // histograms to log to.
+  // |launch_as_default|: True if the result is launched as the default result
+  // by user pressing ENTER key.
   virtual void OpenSearchResult(const std::string& result_id,
                                 int event_flags,
-                                ash::AppListLaunchedFrom launched_from,
-                                ash::AppListLaunchType launch_type,
-                                int suggestion_index) = 0;
+                                AppListLaunchedFrom launched_from,
+                                AppListLaunchType launch_type,
+                                int suggestion_index,
+                                bool launch_as_default) = 0;
 
   // Called to log UMA metrics for the launch of an item either in the app tile
   // list or the search result list. The |launch_location| argument determines
@@ -116,7 +119,7 @@ class ASH_PUBLIC_EXPORT AppListViewDelegate {
   // Activates (opens) the item.
   virtual void ActivateItem(const std::string& id,
                             int event_flags,
-                            ash::AppListLaunchedFrom launched_from) = 0;
+                            AppListLaunchedFrom launched_from) = 0;
 
   // Returns the context menu model for a ChromeAppListItem with |id|, or
   // nullptr if there is currently no menu for the item (e.g. during install).
@@ -127,7 +130,7 @@ class ASH_PUBLIC_EXPORT AppListViewDelegate {
   // Returns an animation observer if the |target_state| is interesting to the
   // delegate.
   virtual ui::ImplicitAnimationObserver* GetAnimationObserver(
-      ash::AppListViewState target_state) = 0;
+      AppListViewState target_state) = 0;
 
   // Show wallpaper context menu from the specified onscreen location.
   virtual void ShowWallpaperContextMenu(const gfx::Point& onscreen_location,
@@ -135,9 +138,7 @@ class ASH_PUBLIC_EXPORT AppListViewDelegate {
 
   // Forwards events to the home launcher gesture handler and returns true if
   // they have been processed.
-  virtual bool ProcessHomeLauncherGesture(
-      ui::GestureEvent* event,
-      const gfx::Point& screen_location) = 0;
+  virtual bool ProcessHomeLauncherGesture(ui::GestureEvent* event) = 0;
 
   // Returns True if the last event passing through app list was a key event.
   // This is stored in the controller and managed by the presenter.
@@ -162,7 +163,7 @@ class ASH_PUBLIC_EXPORT AppListViewDelegate {
   virtual int GetTargetYForAppListHide(aura::Window* root_window) = 0;
 
   // Returns the AssistantViewDelegate.
-  virtual ash::AssistantViewDelegate* GetAssistantViewDelegate() = 0;
+  virtual AssistantViewDelegate* GetAssistantViewDelegate() = 0;
 
   // Called if a search result has its visibility updated and wants to
   // be notified (i.e. its notify_visibility_change() returns true).
@@ -178,7 +179,7 @@ class ASH_PUBLIC_EXPORT AppListViewDelegate {
   // clicked, |position_index| will be -1).
   virtual void NotifySearchResultsForLogging(
       const base::string16& raw_query,
-      const ash::SearchResultIdWithPositionIndices& results,
+      const SearchResultIdWithPositionIndices& results,
       int position_index) = 0;
 
   // Returns true if the Assistant feature is allowed and enabled.
@@ -196,8 +197,7 @@ class ASH_PUBLIC_EXPORT AppListViewDelegate {
   virtual void MarkAssistantPrivacyInfoDismissed() = 0;
 
   // Called when the app list view animation is completed.
-  virtual void OnStateTransitionAnimationCompleted(
-      ash::AppListViewState state) = 0;
+  virtual void OnStateTransitionAnimationCompleted(AppListViewState state) = 0;
 
   // Fills the given AppLaunchedMetricParams with info known by the delegate.
   virtual void GetAppLaunchedMetricParams(
@@ -207,8 +207,9 @@ class ASH_PUBLIC_EXPORT AppListViewDelegate {
   // space. This prevents 1px gaps on displays with non-integer scale factors.
   virtual gfx::Rect SnapBoundsToDisplayEdge(const gfx::Rect& bounds) = 0;
 
-  // Gets the current shelf height from the ShelfConfig.
-  virtual int GetShelfHeight() = 0;
+  // Gets the current shelf height (or width for side-shelf) from the
+  // ShelfConfig.
+  virtual int GetShelfSize() = 0;
 };
 
 }  // namespace ash

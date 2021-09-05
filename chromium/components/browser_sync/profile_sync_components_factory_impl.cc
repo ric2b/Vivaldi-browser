@@ -21,7 +21,6 @@
 #include "components/history/core/browser/sync/history_delete_directives_model_type_controller.h"
 #include "components/history/core/browser/sync/typed_url_model_type_controller.h"
 #include "components/password_manager/core/browser/password_store.h"
-#include "components/password_manager/core/browser/sync/password_data_type_controller.h"
 #include "components/password_manager/core/browser/sync/password_model_type_controller.h"
 #include "components/prefs/pref_service.h"
 #include "components/reading_list/features/reading_list_switches.h"
@@ -38,9 +37,6 @@
 #include "components/sync/model/model_type_store_service.h"
 #include "components/sync/model_impl/forwarding_model_type_controller_delegate.h"
 #include "components/sync/model_impl/proxy_model_type_controller_delegate.h"
-#include "components/sync_bookmarks/bookmark_change_processor.h"
-#include "components/sync_bookmarks/bookmark_data_type_controller.h"
-#include "components/sync_bookmarks/bookmark_model_associator.h"
 #include "components/sync_bookmarks/bookmark_sync_service.h"
 #include "components/sync_device_info/device_info_sync_service.h"
 #include "components/sync_sessions/proxy_tabs_data_type_controller.h"
@@ -52,21 +48,15 @@
 #include "chromeos/constants/chromeos_features.h"
 #endif
 
-#include "sync/glue/notes_data_type_controller.h"
+#include "app/vivaldi_apptools.h"
+#include "sync/notes/note_sync_service.h"
 
-using base::FeatureList;
-using bookmarks::BookmarkModel;
-using sync_bookmarks::BookmarkChangeProcessor;
-using sync_bookmarks::BookmarkDataTypeController;
-using sync_bookmarks::BookmarkModelAssociator;
 using syncer::DataTypeController;
 using syncer::DataTypeManager;
 using syncer::DataTypeManagerImpl;
 using syncer::DataTypeManagerObserver;
 using syncer::ModelTypeController;
 using syncer::SyncableServiceBasedModelTypeController;
-
-using vivaldi::NotesDataTypeController;
 
 namespace browser_sync {
 
@@ -123,7 +113,8 @@ ProfileSyncComponentsFactoryImpl::ProfileSyncComponentsFactoryImpl(
         profile_password_store,
     const scoped_refptr<password_manager::PasswordStore>&
         account_password_store,
-    sync_bookmarks::BookmarkSyncService* bookmark_sync_service)
+    sync_bookmarks::BookmarkSyncService* bookmark_sync_service,
+    sync_notes::NoteSyncService* note_sync_service)
     : sync_client_(sync_client),
       channel_(channel),
       history_disabled_pref_(history_disabled_pref),
@@ -133,7 +124,8 @@ ProfileSyncComponentsFactoryImpl::ProfileSyncComponentsFactoryImpl(
       web_data_service_in_memory_(web_data_service_in_memory),
       profile_password_store_(profile_password_store),
       account_password_store_(account_password_store),
-      bookmark_sync_service_(bookmark_sync_service) {
+      bookmark_sync_service_(bookmark_sync_service),
+      note_sync_service_(note_sync_service) {
   DCHECK(sync_client_);
 }
 
@@ -218,7 +210,6 @@ ProfileSyncComponentsFactoryImpl::CreateCommonDataTypeControllers(
   // Bookmark sync is enabled by default.  Register unless explicitly
   // disabled.
   if (!disabled_types.Has(syncer::BOOKMARKS)) {
-    if (FeatureList::IsEnabled(switches::kSyncUSSBookmarks)) {
       controllers.push_back(std::make_unique<ModelTypeController>(
           syncer::BOOKMARKS,
           std::make_unique<syncer::ProxyModelTypeControllerDelegate>(
@@ -227,18 +218,19 @@ ProfileSyncComponentsFactoryImpl::CreateCommonDataTypeControllers(
                                       GetBookmarkSyncControllerDelegate,
                                   base::Unretained(bookmark_sync_service_),
                                   sync_client_->GetFaviconService()))));
-    } else {
-      controllers.push_back(std::make_unique<BookmarkDataTypeController>(
-          dump_stack, sync_service, sync_client_->GetBookmarkModel(),
-          sync_client_->GetHistoryService(), this));
-    }
   }
 
   // Notes sync is enabled by default.  Register unless explicitly
   // disabled.
-  if (!disabled_types.Has(syncer::NOTES)) {
-    controllers.push_back(std::make_unique<NotesDataTypeController>(
-        dump_stack, sync_service, sync_client_));
+  if (!disabled_types.Has(syncer::NOTES) &&
+      (vivaldi::IsVivaldiRunning() || vivaldi::ForcedVivaldiRunning())) {
+      controllers.push_back(std::make_unique<ModelTypeController>(
+          syncer::NOTES,
+          std::make_unique<syncer::ProxyModelTypeControllerDelegate>(
+              ui_thread_,
+              base::BindRepeating(&sync_notes::NoteSyncService::
+                                      GetNoteSyncControllerDelegate,
+                                  base::Unretained(note_sync_service_)))));
   }
 
   // These features are enabled only if history is not disabled.
@@ -280,47 +272,22 @@ ProfileSyncComponentsFactoryImpl::CreateCommonDataTypeControllers(
                       .get()),
               history_disabled_pref_));
     }
-
-    // If |kDoNotSyncFaviconDataTypes| feature is enabled, never register
-    // controllers for favicon sync. Otherwise, it is enabled by default and we
-    // should register unless explicitly disabled.
-    if (!base::FeatureList::IsEnabled(switches::kDoNotSyncFaviconDataTypes) &&
-        !disabled_types.Has(syncer::FAVICON_IMAGES) &&
-        !disabled_types.Has(syncer::FAVICON_TRACKING)) {
-      controllers.push_back(
-          std::make_unique<SyncableServiceBasedModelTypeController>(
-              syncer::FAVICON_IMAGES,
-              sync_client_->GetModelTypeStoreService()->GetStoreFactory(),
-              sync_client_->GetSyncableServiceForType(syncer::FAVICON_IMAGES),
-              dump_stack));
-      controllers.push_back(
-          std::make_unique<SyncableServiceBasedModelTypeController>(
-              syncer::FAVICON_TRACKING,
-              sync_client_->GetModelTypeStoreService()->GetStoreFactory(),
-              sync_client_->GetSyncableServiceForType(syncer::FAVICON_TRACKING),
-              dump_stack));
-    }
   }
 
   // Password sync is enabled by default.  Register unless explicitly
   // disabled.
   if (!disabled_types.Has(syncer::PASSWORDS)) {
-    if (base::FeatureList::IsEnabled(switches::kSyncUSSPasswords)) {
-      if (profile_password_store_) {
-        // |profile_password_store_| can be null in tests.
-        controllers.push_back(
-            std::make_unique<password_manager::PasswordModelTypeController>(
-                profile_password_store_->CreateSyncControllerDelegate(),
-                account_password_store_
-                    ? account_password_store_->CreateSyncControllerDelegate()
-                    : nullptr,
-                sync_service, sync_client_->GetPasswordStateChangedCallback()));
-      }
-    } else {
-      controllers.push_back(std::make_unique<PasswordDataTypeController>(
-          dump_stack, sync_service, sync_client_,
-          sync_client_->GetPasswordStateChangedCallback(),
-          profile_password_store_));
+    if (profile_password_store_) {
+      // |profile_password_store_| can be null in tests.
+      controllers.push_back(
+          std::make_unique<password_manager::PasswordModelTypeController>(
+              profile_password_store_->CreateSyncControllerDelegate(),
+              account_password_store_
+                  ? account_password_store_->CreateSyncControllerDelegate()
+                  : nullptr,
+              sync_client_->GetPrefService(),
+              sync_client_->GetIdentityManager(), sync_service,
+              sync_client_->GetPasswordStateChangedCallback()));
     }
   }
 
@@ -344,37 +311,12 @@ ProfileSyncComponentsFactoryImpl::CreateCommonDataTypeControllers(
   }
 
 #if defined(OS_CHROMEOS)
-  if (chromeos::features::IsSplitSettingsSyncEnabled()) {
-    if (!disabled_types.Has(syncer::OS_PREFERENCES)) {
-      controllers.push_back(
-          std::make_unique<SyncableServiceBasedModelTypeController>(
-              syncer::OS_PREFERENCES,
-              sync_client_->GetModelTypeStoreService()->GetStoreFactory(),
-              sync_client_->GetSyncableServiceForType(syncer::OS_PREFERENCES),
-              dump_stack));
-    }
-    if (!disabled_types.Has(syncer::OS_PRIORITY_PREFERENCES)) {
-      controllers.push_back(
-          std::make_unique<SyncableServiceBasedModelTypeController>(
-              syncer::OS_PRIORITY_PREFERENCES,
-              sync_client_->GetModelTypeStoreService()->GetStoreFactory(),
-              sync_client_->GetSyncableServiceForType(
-                  syncer::OS_PRIORITY_PREFERENCES),
-              dump_stack));
-    }
-  }
-  if (!disabled_types.Has(syncer::PRINTERS)) {
+  // When SplitSettingsSync is enabled the controller is created in
+  // ChromeSyncClient.
+  if (!disabled_types.Has(syncer::PRINTERS) &&
+      !chromeos::features::IsSplitSettingsSyncEnabled()) {
     controllers.push_back(
         CreateModelTypeControllerForModelRunningOnUIThread(syncer::PRINTERS));
-  }
-  if (!disabled_types.Has(syncer::WIFI_CONFIGURATIONS) &&
-      base::FeatureList::IsEnabled(switches::kSyncWifiConfigurations)) {
-    controllers.push_back(std::make_unique<ModelTypeController>(
-        syncer::WIFI_CONFIGURATIONS,
-        std::make_unique<syncer::ForwardingModelTypeControllerDelegate>(
-            sync_client_
-                ->GetControllerDelegateForModelType(syncer::WIFI_CONFIGURATIONS)
-                .get())));
   }
 #endif  // defined(OS_CHROMEOS)
 
@@ -438,30 +380,6 @@ ProfileSyncComponentsFactoryImpl::CreateSyncEngine(
   return std::make_unique<syncer::SyncEngineImpl>(
       name, invalidator, sync_prefs,
       sync_client_->GetModelTypeStoreService()->GetSyncDataPath());
-}
-
-syncer::SyncApiComponentFactory::SyncComponents
-ProfileSyncComponentsFactoryImpl::CreateBookmarkSyncComponents(
-    std::unique_ptr<syncer::DataTypeErrorHandler> error_handler,
-    syncer::UserShare* user_share) {
-  BookmarkModel* bookmark_model = sync_client_->GetBookmarkModel();
-// TODO(akalin): We may want to propagate this switch up eventually.
-#if defined(OS_ANDROID) || defined(OS_IOS)
-  const bool kExpectMobileBookmarksFolder = true;
-#else
-  const bool kExpectMobileBookmarksFolder = false;
-#endif
-
-  auto model_associator = std::make_unique<BookmarkModelAssociator>(
-      bookmark_model, sync_client_->GetBookmarkUndoService(),
-      sync_client_->GetFaviconService(), user_share, error_handler->Copy(),
-      kExpectMobileBookmarksFolder);
-
-  SyncComponents components;
-  components.change_processor = std::make_unique<BookmarkChangeProcessor>(
-      model_associator.get(), std::move(error_handler));
-  components.model_associator = std::move(model_associator);
-  return components;
 }
 
 std::unique_ptr<syncer::ModelTypeControllerDelegate>

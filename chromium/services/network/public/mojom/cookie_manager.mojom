@@ -33,12 +33,31 @@ struct CookieManagerParams {
   // access rules.
   array<content_settings.mojom.ContentSettingPatternSource>
       settings_for_legacy_cookie_access;
+
+  // The type of CookieAccessDelegate to pass to the underlying CookieStore.
+  // If these params are not present, CookieManager defaults to using
+  // USE_CONTENT_SETTINGS.
+  CookieAccessDelegateType cookie_access_delegate_type = USE_CONTENT_SETTINGS;
+};
+
+enum CookieAccessDelegateType {
+  // Decides access semantics based on the content settings it was constructed
+  // with.
+  USE_CONTENT_SETTINGS,
+  // Always returns Legacy access semantics.
+  ALWAYS_LEGACY,
 };
 
 enum CookiePriority {
   LOW,
   MEDIUM,
   HIGH
+};
+
+enum CookieSourceScheme {
+  kUnset,
+  kNonSecure,
+  kSecure,
 };
 
 // See https://tools.ietf.org/html/draft-ietf-httpbis-cookie-same-site-00
@@ -51,20 +70,26 @@ enum CookieSameSite {
   NO_RESTRICTION = 0,
   LAX_MODE = 1,
   STRICT_MODE = 2,
-  EXTENDED_MODE = 3,
+  // Reserved 3 (was EXTENDED_MODE), next number is 4.
 };
 
-enum CookieSameSiteContext {
+enum ContextType {
   CROSS_SITE,
   SAME_SITE_LAX_METHOD_UNSAFE,
   SAME_SITE_LAX,
-  SAME_SITE_STRICT,
-  SAME_SITE_LAX_METHOD_UNSAFE_CROSS_SCHEME_SECURE_URL,
-  SAME_SITE_LAX_CROSS_SCHEME_SECURE_URL,
-  SAME_SITE_STRICT_CROSS_SCHEME_SECURE_URL,
-  SAME_SITE_LAX_METHOD_UNSAFE_CROSS_SCHEME_INSECURE_URL,
-  SAME_SITE_LAX_CROSS_SCHEME_INSECURE_URL,
-  SAME_SITE_STRICT_CROSS_SCHEME_INSECURE_URL
+  SAME_SITE_STRICT
+};
+
+enum CrossSchemeness {
+  NONE,
+  INSECURE_SECURE,
+  SECURE_INSECURE
+};
+
+// Keep defaults here in sync with net/cookies/cookie_options.h.
+struct CookieSameSiteContext {
+  ContextType context = CROSS_SITE;
+  CrossSchemeness cross_schemeness = NONE;
 };
 
 // What rules to apply when determining whether access to a particular cookie is
@@ -79,7 +104,7 @@ enum CookieAccessSemantics {
 // Keep defaults here in sync with net/cookies/cookie_options.cc.
 struct CookieOptions {
   bool exclude_httponly = true;
-  CookieSameSiteContext same_site_cookie_context = CROSS_SITE;
+  CookieSameSiteContext same_site_cookie_context;
   bool update_access_time = true;
   bool return_excluded_cookies = false;
 };
@@ -98,22 +123,16 @@ struct CanonicalCookie {
   bool httponly = false;
   CookieSameSite site_restrictions = NO_RESTRICTION;
   CookiePriority priority = MEDIUM;
+  CookieSourceScheme source_scheme = kUnset;
 };
 
-// Keep values here in sync with
-// net::CanonicalCookie::CookieInclusionStatus::WarningReason.
-enum CookieInclusionStatusWarningReason {
-  DO_NOT_WARN = 0,
-  WARN_SAMESITE_UNSPECIFIED_CROSS_SITE_CONTEXT,
-  WARN_SAMESITE_NONE_INSECURE,
-  WARN_SAMESITE_UNSPECIFIED_LAX_ALLOW_UNSAFE
-};
-
-// Exclusion reasons can be found in
-// net::CanonicalCookie::CookieInclusionStatus::ExclusionReason.
 struct CookieInclusionStatus {
+  // Bitfield. Is defined in
+  // net::CanonicalCookie::CookieInclusionStatus::ExclusionReason.
   uint32 exclusion_reasons;
-  CookieInclusionStatusWarningReason warning;
+  // Bitfield. Is defined in
+  // net::CanonicalCookie::CookieInclusionStatus::WarningReason.
+  uint32 warning_reasons;
 };
 
 struct CookieWithStatus {
@@ -338,4 +357,9 @@ interface CookieManager {
   // access rules.
   SetContentSettingsForLegacyCookieAccess(
       array<content_settings.mojom.ContentSettingPatternSource> settings);
+
+  // Sets content settings for which storage access grants exist. Will ack
+  // the caller with a callback when settings have been updated.
+  SetStorageAccessGrantSettings(
+      array<content_settings.mojom.ContentSettingPatternSource> settings) => ();
 };

@@ -8,29 +8,20 @@
 #include "base/time/time.h"
 #include "net/base/backoff_entry.h"
 
-// InstanceID scope for Google Cloud Messaging to get GCM enabled token.
-extern const char kFCMScope[];
-
-// Sender ID linked to GCM messages for Sharing.
+// App ID linked to FCM messages for Sharing.
 extern const char kSharingFCMAppID[];
 
-// Amount of time before an ack message is expired.
-extern const base::TimeDelta kAckTimeToLive;
-
-// Amount of offline time before decice is consider expired.
-extern const base::TimeDelta kDeviceExpiration;
+// Sender ID for Sharing.
+extern const char kSharingSenderID[];
 
 // Amount of time before FCM registration should happen again.
 extern const base::TimeDelta kRegistrationExpiration;
 
-// Amount of time before a message is considered timeout if no ack is received.
-extern const base::TimeDelta kSendMessageTimeout;
+// Time until we treat a WebRTC connection as timed out and force close it.
+extern const base::TimeDelta kSharingWebRtcTimeout;
 
 // Backoff policy for registration retry.
 extern const net::BackoffEntry::Policy kRetryBackoffPolicy;
-
-// Time limit for message expiration.
-extern const base::TimeDelta kSharingMessageTTL;
 
 // Maximum number of devices to be shown in dialog and context menu.
 extern const int kMaxDevicesShown;
@@ -47,6 +38,25 @@ enum class SharingFeatureName {
   kClickToCall,
   kSharedClipboard,
   kMaxValue = kSharedClipboard,
+};
+
+// The device platform that the user is sharing from/with.
+enum class SharingDevicePlatform {
+  kUnknown,
+  kAndroid,
+  kChromeOS,
+  kIOS,
+  kLinux,
+  kMac,
+  kWindows,
+};
+
+enum class SharingChannelType {
+  kUnknown,
+  kFcmVapid,
+  kFcmSenderId,
+  kServer,
+  kWebRtc
 };
 
 #endif  // CHROME_BROWSER_SHARING_SHARING_CONSTANTS_H_

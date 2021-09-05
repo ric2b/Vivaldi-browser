@@ -2,10 +2,21 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import 'chrome://resources/cr_elements/md_select_css.m.js';
+import './print_preview_shared_css.js';
+import './settings_section.js';
+
+import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
+import {SelectBehavior} from './select_behavior.js';
+import {SettingsBehavior} from './settings_behavior.js';
+
 Polymer({
   is: 'print-preview-color-settings',
 
-  behaviors: [SettingsBehavior, print_preview.SelectBehavior],
+  _template: html`{__html_template__}`,
+
+  behaviors: [SettingsBehavior, SelectBehavior],
 
   properties: {
     disabled: Boolean,
@@ -23,7 +34,7 @@ Polymer({
    * @param {*} newValue The new value of the color setting.
    * @private
    */
-  onColorSettingChange_: function(newValue) {
+  onColorSettingChange_(newValue) {
     this.selectedValue = /** @type {boolean} */ (newValue) ? 'color' : 'bw';
   },
 
@@ -33,12 +44,12 @@ Polymer({
    * @return {boolean} Whether drop-down should be disabled.
    * @private
    */
-  computeDisabled_: function(disabled, managed) {
+  computeDisabled_(disabled, managed) {
     return !!(disabled || managed);
   },
 
   /** @param {string} value The new select value. */
-  onProcessSelectChange: function(value) {
-    this.setSetting('color', value == 'color');
+  onProcessSelectChange(value) {
+    this.setSetting('color', value === 'color');
   },
 });

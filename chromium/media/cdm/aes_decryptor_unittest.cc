@@ -234,9 +234,7 @@ enum class TestType {
 class AesDecryptorTest : public testing::TestWithParam<TestType> {
  public:
   AesDecryptorTest()
-      : decrypt_cb_(base::Bind(&AesDecryptorTest::BufferDecrypted,
-                               base::Unretained(this))),
-        original_data_(kOriginalData, kOriginalData + kOriginalDataSize),
+      : original_data_(kOriginalData, kOriginalData + kOriginalDataSize),
         encrypted_data_(kEncryptedData,
                         kEncryptedData + base::size(kEncryptedData)),
         subsample_encrypted_data_(
@@ -247,6 +245,9 @@ class AesDecryptorTest : public testing::TestWithParam<TestType> {
         normal_subsample_entries_(
             kSubsampleEntriesNormal,
             kSubsampleEntriesNormal + base::size(kSubsampleEntriesNormal)) {}
+
+  MOCK_METHOD2(BufferDecrypted,
+               void(Decryptor::Status, scoped_refptr<DecoderBuffer>));
 
  protected:
   void SetUp() override {
@@ -283,18 +284,19 @@ class AesDecryptorTest : public testing::TestWithParam<TestType> {
       std::unique_ptr<CdmAllocator> allocator(new SimpleCdmAllocator());
       std::unique_ptr<CdmAuxiliaryHelper> cdm_helper(
           new MockCdmAuxiliaryHelper(std::move(allocator)));
-      CdmAdapter::Create(
-          helper_->KeySystemName(), url::Origin::Create(GURL("http://foo.com")),
-          cdm_config, create_cdm_func, std::move(cdm_helper),
-          base::Bind(&MockCdmClient::OnSessionMessage,
-                     base::Unretained(&cdm_client_)),
-          base::Bind(&MockCdmClient::OnSessionClosed,
-                     base::Unretained(&cdm_client_)),
-          base::Bind(&MockCdmClient::OnSessionKeysChange,
-                     base::Unretained(&cdm_client_)),
-          base::Bind(&MockCdmClient::OnSessionExpirationUpdate,
-                     base::Unretained(&cdm_client_)),
-          base::Bind(&AesDecryptorTest::OnCdmCreated, base::Unretained(this)));
+      CdmAdapter::Create(helper_->KeySystemName(),
+                         url::Origin::Create(GURL("http://foo.com")),
+                         cdm_config, create_cdm_func, std::move(cdm_helper),
+                         base::Bind(&MockCdmClient::OnSessionMessage,
+                                    base::Unretained(&cdm_client_)),
+                         base::Bind(&MockCdmClient::OnSessionClosed,
+                                    base::Unretained(&cdm_client_)),
+                         base::Bind(&MockCdmClient::OnSessionKeysChange,
+                                    base::Unretained(&cdm_client_)),
+                         base::Bind(&MockCdmClient::OnSessionExpirationUpdate,
+                                    base::Unretained(&cdm_client_)),
+                         base::BindOnce(&AesDecryptorTest::OnCdmCreated,
+                                        base::Unretained(this)));
 
       base::RunLoop().RunUntilIdle();
 #else
@@ -345,10 +347,10 @@ class AesDecryptorTest : public testing::TestWithParam<TestType> {
   std::unique_ptr<SimpleCdmPromise> CreatePromise(
       ExpectedResult expected_result) {
     std::unique_ptr<SimpleCdmPromise> promise(new CdmCallbackPromise<>(
-        base::Bind(&AesDecryptorTest::OnResolve, base::Unretained(this),
-                   expected_result),
-        base::Bind(&AesDecryptorTest::OnReject, base::Unretained(this),
-                   expected_result)));
+        base::BindOnce(&AesDecryptorTest::OnResolve, base::Unretained(this),
+                       expected_result),
+        base::BindOnce(&AesDecryptorTest::OnReject, base::Unretained(this),
+                       expected_result)));
     return promise;
   }
 
@@ -356,10 +358,10 @@ class AesDecryptorTest : public testing::TestWithParam<TestType> {
       ExpectedResult expected_result) {
     std::unique_ptr<NewSessionCdmPromise> promise(
         new CdmCallbackPromise<std::string>(
-            base::Bind(&AesDecryptorTest::OnResolveWithSession,
-                       base::Unretained(this), expected_result),
-            base::Bind(&AesDecryptorTest::OnReject, base::Unretained(this),
-                       expected_result)));
+            base::BindOnce(&AesDecryptorTest::OnResolveWithSession,
+                           base::Unretained(this), expected_result),
+            base::BindOnce(&AesDecryptorTest::OnReject, base::Unretained(this),
+                           expected_result)));
     return promise;
   }
 
@@ -428,9 +430,6 @@ class AesDecryptorTest : public testing::TestWithParam<TestType> {
     return false;
   }
 
-  MOCK_METHOD2(BufferDecrypted,
-               void(Decryptor::Status, scoped_refptr<DecoderBuffer>));
-
   enum DecryptExpectation {
     SUCCESS,
     DATA_MISMATCH,
@@ -463,9 +462,13 @@ class AesDecryptorTest : public testing::TestWithParam<TestType> {
 
     if (GetParam() == TestType::kCdmAdapter) {
       ANNOTATE_SCOPED_MEMORY_LEAK;  // http://crbug.com/569736
-      decryptor_->Decrypt(Decryptor::kVideo, encrypted, decrypt_cb_);
+      decryptor_->Decrypt(Decryptor::kVideo, encrypted,
+                          base::BindOnce(&AesDecryptorTest::BufferDecrypted,
+                                         base::Unretained(this)));
     } else {
-      decryptor_->Decrypt(Decryptor::kVideo, encrypted, decrypt_cb_);
+      decryptor_->Decrypt(Decryptor::kVideo, encrypted,
+                          base::BindOnce(&AesDecryptorTest::BufferDecrypted,
+                                         base::Unretained(this)));
     }
 
     std::vector<uint8_t> decrypted_text;
@@ -498,7 +501,6 @@ class AesDecryptorTest : public testing::TestWithParam<TestType> {
   StrictMock<MockCdmClient> cdm_client_;
   scoped_refptr<ContentDecryptionModule> cdm_;
   Decryptor* decryptor_;
-  Decryptor::DecryptCB decrypt_cb_;
   std::string session_id_;
 
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
@@ -634,7 +636,9 @@ TEST_P(AesDecryptorTest, NoKey) {
   scoped_refptr<DecoderBuffer> encrypted_buffer = CreateEncryptedBuffer(
       encrypted_data_, key_id_, iv_, no_subsample_entries_);
   EXPECT_CALL(*this, BufferDecrypted(AesDecryptor::kNoKey, IsNull()));
-  decryptor_->Decrypt(Decryptor::kVideo, encrypted_buffer, decrypt_cb_);
+  decryptor_->Decrypt(Decryptor::kVideo, encrypted_buffer,
+                      base::BindOnce(&AesDecryptorTest::BufferDecrypted,
+                                     base::Unretained(this)));
 }
 
 TEST_P(AesDecryptorTest, KeyReplacement) {

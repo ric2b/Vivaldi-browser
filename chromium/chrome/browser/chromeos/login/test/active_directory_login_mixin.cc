@@ -14,7 +14,7 @@
 #include "chrome/browser/ui/webui/chromeos/login/gaia_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
 #include "chrome/browser/ui/webui/chromeos/login/signin_screen_handler.h"
-#include "chromeos/dbus/auth_policy/fake_auth_policy_client.h"
+#include "chromeos/dbus/authpolicy/fake_authpolicy_client.h"
 #include "content/public/test/browser_test_utils.h"
 
 namespace chromeos {
@@ -35,8 +35,8 @@ constexpr char kAdAutocompleteRealm[] = "$.userInput.querySelector('span')";
 constexpr char kPasswordChangeId[] = "active-directory-password-change";
 constexpr char kAdAnimatedPages[] = "animatedPages";
 constexpr char kAdOldPasswordInput[] = "oldPassword";
-constexpr char kAdNewPassword1Input[] = "newPassword1";
-constexpr char kAdNewPassword2Input[] = "newPassword2";
+constexpr char kAdNewPassword1Input[] = "newPassword";
+constexpr char kAdNewPassword2Input[] = "newPasswordRepeat";
 constexpr char kPasswordChangeFormId[] = "inputForm";
 constexpr char kFormButtonId[] = "button";
 
@@ -102,13 +102,15 @@ void ActiveDirectoryLoginMixin::ClosePasswordChangeScreen() {
 void ActiveDirectoryLoginMixin::TestLoginVisible() {
   OobeScreenWaiter screen_waiter(GaiaView::kScreenId);
   screen_waiter.Wait();
+
+  // Wait for the Active Directory signin visible.
+  std::initializer_list<base::StringPiece> ad_screen{kGaiaSigninId,
+                                                     kAdOfflineAuthId};
+  test::OobeJS().CreateVisibilityWaiter(true, ad_screen)->Wait();
+
   // Checks if Gaia signin is hidden.
   test::OobeJS().ExpectHiddenPath({kGaiaSigninId, kGaiaSigninDialogId});
 
-  // Checks if Active Directory signin is visible.
-  std::initializer_list<base::StringPiece> ad_screen{kGaiaSigninId,
-                                                     kAdOfflineAuthId};
-  test::OobeJS().ExpectVisiblePath(ad_screen);
   test::OobeJS().ExpectNE(test::GetOobeElementPath(ad_screen) + ".clientWidth",
                           0);
   test::OobeJS().ExpectNE(test::GetOobeElementPath(ad_screen) + ".clientHeight",
@@ -213,7 +215,7 @@ void ActiveDirectoryLoginMixin::TestPasswordChangeError(
   for (const char* element :
        {kAdOldPasswordInput, kAdNewPassword1Input, kAdNewPassword2Input}) {
     std::string js_assertion =
-        test::GetOobeElementPath({kPasswordChangeId, element}) + ".isInvalid";
+        test::GetOobeElementPath({kPasswordChangeId, element}) + ".invalid";
     if (element != invalid_element)
       js_assertion = "!" + js_assertion;
     test::OobeJS().ExpectTrue(js_assertion);

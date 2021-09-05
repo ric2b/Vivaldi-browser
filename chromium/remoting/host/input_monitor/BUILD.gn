@@ -5,9 +5,7 @@
 import("//remoting/build/config/remoting_build.gni")
 
 source_set("input_monitor") {
-  public = [
-    "local_input_monitor.h",
-  ]
+  public = [ "local_input_monitor.h" ]
 
   sources = [
     "local_hotkey_input_monitor.h",
@@ -32,7 +30,8 @@ source_set("input_monitor") {
 
   deps = [
     "//remoting/proto",
-    "//third_party/webrtc/modules/desktop_capture",
+    "//third_party/webrtc_overrides:webrtc_component",
+    "//ui/events",
   ]
 
   if (use_ozone) {

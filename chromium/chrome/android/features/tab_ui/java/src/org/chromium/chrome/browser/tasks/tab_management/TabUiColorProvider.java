@@ -7,9 +7,9 @@ package org.chromium.chrome.browser.tasks.tab_management;
 import android.content.Context;
 import android.content.res.ColorStateList;
 import android.graphics.drawable.Drawable;
-import android.support.v7.content.res.AppCompatResources;
 
 import androidx.annotation.ColorInt;
+import androidx.appcompat.content.res.AppCompatResources;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.tab_ui.R;
@@ -65,8 +65,8 @@ public class TabUiColorProvider {
      * @return The text appearance for the tab grid card title.
      */
     public static int getTitleTextAppearance(boolean isIncognito) {
-        return isIncognito ? R.style.TextAppearance_WhiteTitle2
-                           : R.style.TextAppearance_BlackTitle2;
+        return isIncognito ? R.style.TextAppearance_TextMediumThick_Primary_Light
+                           : R.style.TextAppearance_TextMediumThick_Primary;
     }
 
     /**
@@ -81,6 +81,20 @@ public class TabUiColorProvider {
         return AppCompatResources.getColorStateList(context,
                 isIncognito ? R.color.tab_grid_card_action_button_tint_color_incognito
                             : R.color.tab_grid_card_action_button_tint_color);
+    }
+
+    /**
+     * Returns the {@link ColorStateList} to use for the plus sign in new tab tile based on the
+     * incognito mode.
+     *
+     * @param context {@link Context} used to retrieve color.
+     * @param isIncognito Whether the color is used for incognito mode.
+     * @return The {@link ColorStateList} for new tab tile plus sign color.
+     */
+    public static ColorStateList getNewTabTilePlusTintList(Context context, boolean isIncognito) {
+        return AppCompatResources.getColorStateList(context,
+                isIncognito ? R.color.new_tab_tile_plus_color_incognito
+                            : R.color.new_tab_tile_plus_color);
     }
 
     /**

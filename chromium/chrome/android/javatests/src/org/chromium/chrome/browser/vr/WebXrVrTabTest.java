@@ -25,7 +25,7 @@ import org.chromium.base.test.params.ParameterizedRunner;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.base.test.util.Restriction;
-import org.chromium.chrome.browser.ChromeSwitches;
+import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.vr.util.NativeUiUtils;
 import org.chromium.chrome.browser.vr.util.PermissionUtils;
 import org.chromium.chrome.browser.vr.util.VrTestRuleUtils;
@@ -37,13 +37,13 @@ import java.util.List;
 import java.util.concurrent.Callable;
 
 /**
- * End-to-end tests for WebVR's behavior when multiple tabs are involved.
+ * End-to-end tests for WebXR's behavior when multiple tabs are involved.
  */
 @RunWith(ParameterizedRunner.class)
 @UseRunnerDelegate(ChromeJUnit4RunnerDelegate.class)
-@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
-        "enable-features=LogJsConsoleMessages", "enable-webvr"})
-@MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP) // WebVR is only supported on K+
+@CommandLineFlags.
+Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE, "enable-features=LogJsConsoleMessages"})
+@MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP) // WebXR is only supported on L+
 public class WebXrVrTabTest {
     @ClassParameter
     private static List<ParameterSet> sClassParams =
@@ -53,7 +53,6 @@ public class WebXrVrTabTest {
 
     private ChromeActivityTestRule mTestRule;
     private WebXrVrTestFramework mWebXrVrTestFramework;
-    private WebVrTestFramework mWebVrTestFramework;
 
     public WebXrVrTabTest(Callable<ChromeActivityTestRule> callable) throws Exception {
         mTestRule = callable.call();
@@ -63,21 +62,6 @@ public class WebXrVrTabTest {
     @Before
     public void setUp() {
         mWebXrVrTestFramework = new WebXrVrTestFramework(mTestRule);
-        mWebVrTestFramework = new WebVrTestFramework(mTestRule);
-    }
-
-    /**
-     * Tests that non-focused tabs cannot get pose information. Disabled on standalones because
-     * they will always be in the VR Browser, and thus shouldn't be getting inline poses even
-     * if the tab is focused.
-     */
-    @Test
-    @MediumTest
-    @Restriction(RESTRICTION_TYPE_SVR)
-    public void testPoseDataUnfocusedTab() {
-        testPoseDataUnfocusedTabImpl(
-                WebVrTestFramework.getFileUrlForHtmlTestFile("test_pose_data_unfocused_tab"),
-                mWebVrTestFramework);
     }
 
     /**
@@ -88,17 +72,13 @@ public class WebXrVrTabTest {
     @Test
     @MediumTest
     @Restriction(RESTRICTION_TYPE_SVR)
-    @CommandLineFlags
-            .Remove({"enable-webvr"})
             @CommandLineFlags.Add({"enable-features=WebXR"})
             public void testPoseDataUnfocusedTab_WebXr() {
-        testPoseDataUnfocusedTabImpl(WebXrVrTestFramework.getFileUrlForHtmlTestFile(
-                                             "webxr_test_pose_data_unfocused_tab"),
-                mWebXrVrTestFramework);
+        testPoseDataUnfocusedTabImpl("webxr_test_pose_data_unfocused_tab", mWebXrVrTestFramework);
     }
 
     private void testPoseDataUnfocusedTabImpl(String url, WebXrVrTestFramework framework) {
-        framework.loadUrlAndAwaitInitialization(url, PAGE_LOAD_TIMEOUT_S);
+        framework.loadFileAndAwaitInitialization(url, PAGE_LOAD_TIMEOUT_S);
         framework.executeStepAndWait("stepCheckFrameDataWhileFocusedTab()");
         WebContents firstTabContents = framework.getCurrentWebContents();
 
@@ -116,8 +96,6 @@ public class WebXrVrTabTest {
     @Test
     @MediumTest
     @Restriction(RESTRICTION_TYPE_VIEWER_DAYDREAM_OR_STANDALONE)
-    @CommandLineFlags
-            .Remove({"enable-webvr"})
             @CommandLineFlags.Add({"enable-features=WebXR"})
             public void testPermissionsInOtherTab() throws InterruptedException {
         testPermissionsInOtherTabImpl(false /* incognito */);
@@ -126,18 +104,14 @@ public class WebXrVrTabTest {
     @Test
     @MediumTest
     @Restriction(RESTRICTION_TYPE_VIEWER_DAYDREAM_OR_STANDALONE)
-    @CommandLineFlags
-            .Remove({"enable-webvr"})
             @CommandLineFlags.Add({"enable-features=WebXR"})
             public void testPermissionsInOtherTabIncognito() throws InterruptedException {
         testPermissionsInOtherTabImpl(true /* incognito */);
     }
 
     private void testPermissionsInOtherTabImpl(boolean incognito) throws InterruptedException {
-        mWebXrVrTestFramework.loadUrlAndAwaitInitialization(
-                mWebXrVrTestFramework.getEmbeddedServerUrlForHtmlTestFile(
-                        "generic_webxr_permission_page"),
-                PAGE_LOAD_TIMEOUT_S);
+        mWebXrVrTestFramework.loadFileAndAwaitInitialization(
+                "generic_webxr_permission_page", PAGE_LOAD_TIMEOUT_S);
         // Be sure to store the stream we're given so that the permission is actually in use, as
         // otherwise the toast doesn't show up since another tab isn't actually using the
         // permission.
@@ -165,9 +139,8 @@ public class WebXrVrTabTest {
             mTestRule.loadUrlInNewTab("about:blank");
         }
 
-        mWebXrVrTestFramework.loadUrlAndAwaitInitialization(
-                WebXrVrTestFramework.getFileUrlForHtmlTestFile("generic_webxr_page"),
-                PAGE_LOAD_TIMEOUT_S);
+        mWebXrVrTestFramework.loadFileAndAwaitInitialization(
+                "generic_webxr_page", PAGE_LOAD_TIMEOUT_S);
         mWebXrVrTestFramework.enterSessionWithUserGestureOrFail();
         NativeUiUtils.performActionAndWaitForVisibilityStatus(
                 UserFriendlyElementName.WEB_XR_AUDIO_INDICATOR, true /* visible */, () -> {});

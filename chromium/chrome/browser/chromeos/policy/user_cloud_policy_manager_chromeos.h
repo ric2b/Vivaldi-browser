@@ -14,9 +14,12 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/optional.h"
+#include "base/scoped_observer.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/chromeos/policy/wildcard_login_checker.h"
+#include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/profiles/profile_manager_observer.h"
 #include "components/account_id/account_id.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/keyed_service/core/keyed_service_shutdown_notifier.h"
@@ -24,8 +27,7 @@
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/policy/core/common/cloud/cloud_policy_manager.h"
 #include "components/policy/core/common/cloud/cloud_policy_service.h"
-#include "content/public/browser/notification_observer.h"
-#include "content/public/browser/notification_registrar.h"
+#include "components/session_manager/core/session_manager_observer.h"
 
 class GoogleServiceAuthError;
 class PrefService;
@@ -39,6 +41,10 @@ namespace network {
 class SharedURLLoaderFactory;
 }
 
+namespace enterprise_reporting {
+class ReportScheduler;
+}
+
 namespace policy {
 
 class AppInstallEventLogUploader;
@@ -48,11 +54,12 @@ class PolicyOAuth2TokenFetcher;
 class RemoteCommandsInvalidator;
 
 // Implements logic for initializing user policy on Chrome OS.
-class UserCloudPolicyManagerChromeOS : public CloudPolicyManager,
-                                       public CloudPolicyClient::Observer,
-                                       public CloudPolicyService::Observer,
-                                       public content::NotificationObserver,
-                                       public KeyedService {
+class UserCloudPolicyManagerChromeOS
+    : public CloudPolicyManager,
+      public CloudPolicyClient::Observer,
+      public CloudPolicyService::Observer,
+      public ProfileManagerObserver,
+      public session_manager::SessionManagerObserver {
  public:
   // Enum describing what behavior we want to enforce here.
   enum class PolicyEnforcement {
@@ -162,6 +169,9 @@ class UserCloudPolicyManagerChromeOS : public CloudPolicyManager,
   // CloudPolicyManager:
   void OnStoreLoaded(CloudPolicyStore* cloud_policy_store) override;
 
+  // SessionManagerObserver:
+  void OnUserProfileLoaded(const AccountId& account_id) override;
+
   // Helper function to force a policy fetch timeout.
   void ForceTimeoutForTest();
 
@@ -175,6 +185,9 @@ class UserCloudPolicyManagerChromeOS : public CloudPolicyManager,
   // Set a refresh token to be used in tests instead of the user context refresh
   // token when fetching the policy OAuth token.
   void SetUserContextRefreshTokenForTests(const std::string& refresh_token);
+
+  // Return the ReportScheduler used to report usage data to the server.
+  enterprise_reporting::ReportScheduler* GetReportSchedulerForTesting();
 
  protected:
   // CloudPolicyManager:
@@ -223,12 +236,15 @@ class UserCloudPolicyManagerChromeOS : public CloudPolicyManager,
   // call it multiple times.
   void StartRefreshSchedulerIfReady();
 
-  // content::NotificationObserver:
-  void Observe(int type,
-               const content::NotificationSource& source,
-               const content::NotificationDetails& details) override;
+  // Starts report scheduler if all the required conditions are fulfilled.
+  // Exits immediately if corresponding feature flag is closed. Pass |true| to
+  // pend creation until all profiles are loaded in profile manager.
+  void StartReportSchedulerIfReady(bool enable_delayed_creation);
 
-  // Observer called on profile shutdown.
+  // ProfileManagerObserver:
+  void OnProfileAdded(Profile* profile) override;
+
+  // Called on profile shutdown.
   void ProfileShutdown();
 
   // Profile associated with the current user.
@@ -242,6 +258,9 @@ class UserCloudPolicyManagerChromeOS : public CloudPolicyManager,
 
   // Helper used to send app push-install event logs to the policy server.
   std::unique_ptr<AppInstallEventLogUploader> app_install_event_log_uploader_;
+
+  // Scheduler used to report usage data to DM server periodically.
+  std::unique_ptr<enterprise_reporting::ReportScheduler> report_scheduler_;
 
   // Username for the wildcard login check if applicable, empty otherwise.
   std::string wildcard_username_;
@@ -288,9 +307,6 @@ class UserCloudPolicyManagerChromeOS : public CloudPolicyManager,
   // injected in the constructor to make it easier to write tests.
   base::OnceClosure fatal_error_callback_;
 
-  // Used to register for notification that profile creation is complete.
-  content::NotificationRegistrar registrar_;
-
   // Invalidator used for remote commands to be delivered to this user.
   std::unique_ptr<RemoteCommandsInvalidator> invalidator_;
 
@@ -303,6 +319,9 @@ class UserCloudPolicyManagerChromeOS : public CloudPolicyManager,
       system_url_loader_factory_for_tests_;
   scoped_refptr<network::SharedURLLoaderFactory>
       signin_url_loader_factory_for_tests_;
+
+  ScopedObserver<ProfileManager, ProfileManagerObserver>
+      observed_profile_manager_{this};
 
   // Refresh token used in tests instead of the user context refresh token to
   // fetch the policy OAuth token.

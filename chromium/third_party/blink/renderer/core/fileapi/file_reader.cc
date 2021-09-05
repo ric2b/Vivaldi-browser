@@ -125,7 +125,7 @@ class FileReader::ThrottlingController final
       : Supplement<ExecutionContext>(context),
         max_running_readers_(kMaxOutstandingRequestsPerThread) {}
 
-  void Trace(blink::Visitor* visitor) override {
+  void Trace(Visitor* visitor) override {
     visitor->Trace(pending_readers_);
     visitor->Trace(running_readers_);
     Supplement<ExecutionContext>::Trace(visitor);
@@ -198,7 +198,7 @@ FileReader* FileReader::Create(ExecutionContext* context) {
 }
 
 FileReader::FileReader(ExecutionContext* context)
-    : ContextLifecycleObserver(context),
+    : ExecutionContextLifecycleObserver(context),
       state_(kEmpty),
       loading_state_(kLoadingStateNone),
       still_firing_events_(false),
@@ -212,12 +212,13 @@ const AtomicString& FileReader::InterfaceName() const {
   return event_target_names::kFileReader;
 }
 
-void FileReader::ContextDestroyed(ExecutionContext* destroyed_context) {
+void FileReader::ContextDestroyed() {
   // The delayed abort task tidies up and advances to the DONE state.
   if (loading_state_ == kLoadingStateAborted)
     return;
 
   if (HasPendingActivity()) {
+    ExecutionContext* destroyed_context = GetExecutionContext();
     ThrottlingController::FinishReader(
         destroyed_context, this,
         ThrottlingController::RemoveReader(destroyed_context, this));
@@ -292,7 +293,8 @@ void FileReader::ReadInternal(Blob* blob,
 
   // A document loader will not load new resources once the Document has
   // detached from its frame.
-  if (IsA<Document>(context) && !To<Document>(context)->GetFrame()) {
+  Document* document = Document::DynamicFrom(context);
+  if (document && !document->GetFrame()) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kAbortError,
         "Reading from a Document-detached FileReader is not supported.");
@@ -474,10 +476,10 @@ void FileReader::FireEvent(const AtomicString& type) {
   }
 }
 
-void FileReader::Trace(blink::Visitor* visitor) {
+void FileReader::Trace(Visitor* visitor) {
   visitor->Trace(error_);
   EventTargetWithInlineData::Trace(visitor);
-  ContextLifecycleObserver::Trace(visitor);
+  ExecutionContextLifecycleObserver::Trace(visitor);
 }
 
 }  // namespace blink

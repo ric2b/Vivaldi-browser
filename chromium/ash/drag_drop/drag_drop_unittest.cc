@@ -117,13 +117,7 @@ using DragDropTest = AshTestBase;
 
 // Test if the mouse gets moved properly to another display
 // during drag & drop operation.
-// Fails in debug builds, crbug.com/1006101.
-#if !defined(NDEBUG)
-#define MAYBE_DragDropAcrossMultiDisplay DISABLED_DragDropAcrossMultiDisplay
-#else
-#define MAYBE_DragDropAcrossMultiDisplay DragDropAcrossMultiDisplay
-#endif
-TEST_F(DragDropTest, MAYBE_DragDropAcrossMultiDisplay) {
+TEST_F(DragDropTest, DragDropAcrossMultiDisplay) {
   ui_controls::InstallUIControlsAura(test::CreateAshUIControls());
 
   UpdateDisplay("400x400,400x400");
@@ -132,12 +126,12 @@ TEST_F(DragDropTest, MAYBE_DragDropAcrossMultiDisplay) {
   draggable_view->set_drag_controller(NULL);
   draggable_view->SetBounds(0, 0, 100, 100);
   views::Widget* source =
-      CreateWidget(draggable_view, gfx::Rect(0, 0, 100, 100), CurrentContext());
+      CreateWidget(draggable_view, gfx::Rect(0, 0, 100, 100), GetContext());
 
   TargetView* target_view = new TargetView();
   target_view->SetBounds(0, 0, 100, 100);
   views::Widget* target =
-      CreateWidget(target_view, gfx::Rect(400, 0, 100, 100), CurrentContext());
+      CreateWidget(target_view, gfx::Rect(400, 0, 100, 100), GetContext());
 
   // Make sure they're on the different root windows.
   EXPECT_EQ(root_windows[0], source->GetNativeView()->GetRootWindow());

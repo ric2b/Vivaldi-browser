@@ -22,10 +22,11 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/webui_url_constants.h"
-#include "chrome/grit/browser_resources.h"
+#include "chrome/grit/dev_ui_browser_resources.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/accessibility_tree_formatter.h"
+#include "content/public/browser/ax_event_notification_details.h"
 #include "content/public/browser/browser_accessibility_state.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/favicon_status.h"
@@ -54,6 +55,7 @@ static const char kAccessibilityModeField[] = "a11yMode";
 static const char kBrowsersField[] = "browsers";
 static const char kEnabledField[] = "enabled";
 static const char kErrorField[] = "error";
+static const char kEventLogsField[] = "eventLogs";
 static const char kFaviconUrlField[] = "faviconUrl";
 static const char kFlagNameField[] = "flagName";
 static const char kModeIdField[] = "modeId";
@@ -62,9 +64,10 @@ static const char kPagesField[] = "pages";
 static const char kPidField[] = "pid";
 static const char kProcessIdField[] = "processId";
 static const char kRequestTypeField[] = "requestType";
-static const char kRouteIdField[] = "routeId";
+static const char kRoutingIdField[] = "routingId";
 static const char kSessionIdField[] = "sessionId";
 static const char kShouldRequestTreeField[] = "shouldRequestTree";
+static const char kStartField[] = "start";
 static const char kTreeField[] = "tree";
 static const char kTypeField[] = "type";
 static const char kUrlField[] = "url";
@@ -94,13 +97,13 @@ std::unique_ptr<base::DictionaryValue> BuildTargetDescriptor(
     const std::string& name,
     const GURL& favicon_url,
     int process_id,
-    int route_id,
+    int routing_id,
     ui::AXMode accessibility_mode,
     base::ProcessHandle handle = base::kNullProcessHandle) {
   std::unique_ptr<base::DictionaryValue> target_data(
       new base::DictionaryValue());
   target_data->SetInteger(kProcessIdField, process_id);
-  target_data->SetInteger(kRouteIdField, route_id);
+  target_data->SetInteger(kRoutingIdField, routing_id);
   target_data->SetString(kUrlField, url.spec());
   target_data->SetString(kNameField, net::EscapeForHTML(name));
   target_data->SetInteger(kPidField, base::GetProcId(handle));
@@ -160,7 +163,7 @@ bool ShouldHandleAccessibilityRequestCallback(const std::string& path) {
 void HandleAccessibilityRequestCallback(
     content::BrowserContext* current_context,
     const std::string& path,
-    const content::WebUIDataSource::GotDataCallback& callback) {
+    content::WebUIDataSource::GotDataCallback callback) {
   DCHECK(ShouldHandleAccessibilityRequestCallback(path));
 
   base::DictionaryValue data;
@@ -219,8 +222,8 @@ void HandleAccessibilityRequestCallback(
     content::WebContentsDelegate* delegate = web_contents->GetDelegate();
     if (!delegate)
       continue;
-    // Ignore views that are never visible, like background pages.
-    if (delegate->IsNeverVisible(web_contents))
+    // Ignore views that are never user-visible, like background pages.
+    if (delegate->IsNeverComposited(web_contents))
       continue;
     content::BrowserContext* context = rvh->GetProcess()->GetBrowserContext();
     if (context != current_context)
@@ -247,7 +250,7 @@ void HandleAccessibilityRequestCallback(
   std::string json_string;
   base::JSONWriter::Write(data, &json_string);
 
-  callback.Run(base::RefCountedString::TakeString(&json_string));
+  std::move(callback).Run(base::RefCountedString::TakeString(&json_string));
 }
 
 bool MatchesPropertyFilters(
@@ -346,11 +349,25 @@ AccessibilityUI::AccessibilityUI(content::WebUI* web_ui)
   web_ui->AddMessageHandler(std::make_unique<AccessibilityUIMessageHandler>());
 }
 
-AccessibilityUI::~AccessibilityUI() {}
+AccessibilityUI::~AccessibilityUI() = default;
 
-AccessibilityUIMessageHandler::AccessibilityUIMessageHandler() {}
+AccessibilityUIObserver::AccessibilityUIObserver(
+    content::WebContents* web_contents,
+    std::vector<std::string>* event_logs)
+    : content::WebContentsObserver(web_contents), event_logs_(event_logs) {}
 
-AccessibilityUIMessageHandler::~AccessibilityUIMessageHandler() {}
+AccessibilityUIObserver::~AccessibilityUIObserver() = default;
+
+void AccessibilityUIObserver::AccessibilityEventReceived(
+    const content::AXEventNotificationDetails& details) {
+  for (const ui::AXEvent& event : details.events) {
+    event_logs_->push_back(event.ToString());
+  }
+}
+
+AccessibilityUIMessageHandler::AccessibilityUIMessageHandler() = default;
+
+AccessibilityUIMessageHandler::~AccessibilityUIMessageHandler() = default;
 
 void AccessibilityUIMessageHandler::RegisterMessages() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -372,6 +389,11 @@ void AccessibilityUIMessageHandler::RegisterMessages() {
       "requestNativeUITree",
       base::BindRepeating(&AccessibilityUIMessageHandler::RequestNativeUITree,
                           base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "requestAccessibilityEvents",
+      base::BindRepeating(
+          &AccessibilityUIMessageHandler::RequestAccessibilityEvents,
+          base::Unretained(this)));
 }
 
 void AccessibilityUIMessageHandler::ToggleAccessibility(
@@ -380,13 +402,13 @@ void AccessibilityUIMessageHandler::ToggleAccessibility(
   CHECK(args->GetDictionary(0, &data));
 
   int process_id = *data->FindIntPath(kProcessIdField);
-  int route_id = *data->FindIntPath(kRouteIdField);
+  int routing_id = *data->FindIntPath(kRoutingIdField);
   int mode = *data->FindIntPath(kModeIdField);
   bool should_request_tree = *data->FindBoolPath(kShouldRequestTreeField);
 
   AllowJavascript();
   content::RenderViewHost* rvh =
-      content::RenderViewHost::FromID(process_id, route_id);
+      content::RenderViewHost::FromID(process_id, routing_id);
   if (!rvh)
     return;
   content::WebContents* web_contents =
@@ -416,7 +438,7 @@ void AccessibilityUIMessageHandler::ToggleAccessibility(
   if (should_request_tree) {
     base::DictionaryValue request_data;
     request_data.SetIntPath(kProcessIdField, process_id);
-    request_data.SetIntPath(kRouteIdField, route_id);
+    request_data.SetIntPath(kRoutingIdField, routing_id);
     request_data.SetStringPath(kRequestTypeField, kShowOrRefreshTree);
     base::ListValue request_args;
     request_args.Append(std::move(request_data));
@@ -496,7 +518,7 @@ void AccessibilityUIMessageHandler::RequestWebContentsTree(
   CHECK(args->GetDictionary(0, &data));
 
   int process_id = *data->FindIntPath(kProcessIdField);
-  int route_id = *data->FindIntPath(kRouteIdField);
+  int routing_id = *data->FindIntPath(kRoutingIdField);
 
   const std::string* request_type_p = data->FindStringPath(kRequestTypeField);
   CHECK(IsValidJSValue(request_type_p));
@@ -516,11 +538,11 @@ void AccessibilityUIMessageHandler::RequestWebContentsTree(
 
   AllowJavascript();
   content::RenderViewHost* rvh =
-      content::RenderViewHost::FromID(process_id, route_id);
+      content::RenderViewHost::FromID(process_id, routing_id);
   if (!rvh) {
     std::unique_ptr<base::DictionaryValue> result(new base::DictionaryValue());
     result->SetInteger(kProcessIdField, process_id);
-    result->SetInteger(kRouteIdField, route_id);
+    result->SetInteger(kRoutingIdField, routing_id);
     result->SetString(kErrorField, "Renderer no longer exists.");
     CallJavascriptFunction(request_type, *(result.get()));
     return;
@@ -533,6 +555,8 @@ void AccessibilityUIMessageHandler::RequestWebContentsTree(
   // because we are about to show the accessibility tree
   web_contents->SetAccessibilityMode(
       ui::AXMode(ui::AXMode::kNativeAPIs | ui::AXMode::kWebContents));
+  // Enable AXMode to access to AX objects.
+  ui::AXPlatformNode::NotifyAddAXModeFlags(ui::kAXModeComplete);
 
   std::vector<content::AccessibilityTreeFormatter::PropertyFilter>
       property_filters;
@@ -611,6 +635,59 @@ void AccessibilityUIMessageHandler::RequestNativeUITree(
   result->SetString(kTypeField, kBrowser);
   result->SetString(kErrorField, "Browser no longer exists.");
   CallJavascriptFunction(request_type, *(result.get()));
+}
+
+void AccessibilityUIMessageHandler::Callback(const std::string& str) {
+  event_logs_.push_back(str);
+}
+
+void AccessibilityUIMessageHandler::RequestAccessibilityEvents(
+    const base::ListValue* args) {
+  const base::DictionaryValue* data;
+  CHECK(args->GetDictionary(0, &data));
+
+  int process_id = *data->FindIntPath(kProcessIdField);
+  int routing_id = *data->FindIntPath(kRoutingIdField);
+  bool start = *data->FindBoolPath(kStartField);
+
+  AllowJavascript();
+
+  content::RenderViewHost* rvh =
+      content::RenderViewHost::FromID(process_id, routing_id);
+  if (!rvh) {
+    return;
+  }
+
+  std::unique_ptr<base::DictionaryValue> result(BuildTargetDescriptor(rvh));
+  content::WebContents* web_contents =
+      content::WebContents::FromRenderViewHost(rvh);
+  if (start) {
+    if (observer_) {
+      return;
+    }
+    web_contents->RecordAccessibilityEvents(
+        base::BindRepeating(&AccessibilityUIMessageHandler::Callback,
+                            base::Unretained(this)),
+        true);
+    observer_ =
+        std::make_unique<AccessibilityUIObserver>(web_contents, &event_logs_);
+  } else {
+    web_contents->RecordAccessibilityEvents(
+        base::BindRepeating(&AccessibilityUIMessageHandler::Callback,
+                            base::Unretained(this)),
+        false);
+    observer_.release();
+
+    std::string event_logs_str;
+    for (std::string log : event_logs_) {
+      event_logs_str += log;
+      event_logs_str += "\n";
+    }
+    result->SetString(kEventLogsField, event_logs_str);
+    event_logs_.clear();
+
+    CallJavascriptFunction("accessibility.startOrStopEvents", *(result.get()));
+  }
 }
 
 // static

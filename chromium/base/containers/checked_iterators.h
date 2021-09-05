@@ -38,9 +38,9 @@ class CheckedContiguousIterator {
   constexpr CheckedContiguousIterator(const CheckedContiguousIterator& other) =
       default;
 
-  // Converting constructor allowing conversions like CRAI<T> to CRAI<const T>,
-  // but disallowing CRAI<const T> to CRAI<T> or CRAI<Derived> to CRAI<Base>,
-  // which are unsafe. Furthermore, this is the same condition as used by the
+  // Converting constructor allowing conversions like CCI<T> to CCI<const T>,
+  // but disallowing CCI<const T> to CCI<T> or CCI<Derived> to CCI<Base>, which
+  // are unsafe. Furthermore, this is the same condition as used by the
   // converting constructors of std::span<T> and std::unique_ptr<T[]>.
   // See https://wg21.link/n4042 for details.
   template <
@@ -60,34 +60,39 @@ class CheckedContiguousIterator {
   constexpr CheckedContiguousIterator& operator=(
       const CheckedContiguousIterator& other) = default;
 
-  constexpr bool operator==(const CheckedContiguousIterator& other) const {
-    CheckComparable(other);
-    return current_ == other.current_;
+  friend constexpr bool operator==(const CheckedContiguousIterator& lhs,
+                                   const CheckedContiguousIterator& rhs) {
+    lhs.CheckComparable(rhs);
+    return lhs.current_ == rhs.current_;
   }
 
-  constexpr bool operator!=(const CheckedContiguousIterator& other) const {
-    CheckComparable(other);
-    return current_ != other.current_;
+  friend constexpr bool operator!=(const CheckedContiguousIterator& lhs,
+                                   const CheckedContiguousIterator& rhs) {
+    lhs.CheckComparable(rhs);
+    return lhs.current_ != rhs.current_;
   }
 
-  constexpr bool operator<(const CheckedContiguousIterator& other) const {
-    CheckComparable(other);
-    return current_ < other.current_;
+  friend constexpr bool operator<(const CheckedContiguousIterator& lhs,
+                                  const CheckedContiguousIterator& rhs) {
+    lhs.CheckComparable(rhs);
+    return lhs.current_ < rhs.current_;
   }
 
-  constexpr bool operator<=(const CheckedContiguousIterator& other) const {
-    CheckComparable(other);
-    return current_ <= other.current_;
+  friend constexpr bool operator<=(const CheckedContiguousIterator& lhs,
+                                   const CheckedContiguousIterator& rhs) {
+    lhs.CheckComparable(rhs);
+    return lhs.current_ <= rhs.current_;
+  }
+  friend constexpr bool operator>(const CheckedContiguousIterator& lhs,
+                                  const CheckedContiguousIterator& rhs) {
+    lhs.CheckComparable(rhs);
+    return lhs.current_ > rhs.current_;
   }
 
-  constexpr bool operator>(const CheckedContiguousIterator& other) const {
-    CheckComparable(other);
-    return current_ > other.current_;
-  }
-
-  constexpr bool operator>=(const CheckedContiguousIterator& other) const {
-    CheckComparable(other);
-    return current_ >= other.current_;
+  friend constexpr bool operator>=(const CheckedContiguousIterator& lhs,
+                                   const CheckedContiguousIterator& rhs) {
+    lhs.CheckComparable(rhs);
+    return lhs.current_ >= rhs.current_;
   }
 
   constexpr CheckedContiguousIterator& operator++() {
@@ -108,7 +113,7 @@ class CheckedContiguousIterator {
     return *this;
   }
 
-  constexpr CheckedContiguousIterator& operator--(int) {
+  constexpr CheckedContiguousIterator operator--(int) {
     CheckedContiguousIterator old = *this;
     --*this;
     return old;
@@ -132,9 +137,9 @@ class CheckedContiguousIterator {
 
   constexpr CheckedContiguousIterator& operator-=(difference_type rhs) {
     if (rhs < 0) {
-      CHECK_LE(rhs, end_ - current_);
+      CHECK_LE(-rhs, end_ - current_);
     } else {
-      CHECK_LE(-rhs, current_ - start_);
+      CHECK_LE(rhs, current_ - start_);
     }
     current_ -= rhs;
     return *this;
@@ -149,8 +154,7 @@ class CheckedContiguousIterator {
   constexpr friend difference_type operator-(
       const CheckedContiguousIterator& lhs,
       const CheckedContiguousIterator& rhs) {
-    CHECK_EQ(lhs.start_, rhs.start_);
-    CHECK_EQ(lhs.end_, rhs.end_);
+    lhs.CheckComparable(rhs);
     return lhs.current_ - rhs.current_;
   }
 

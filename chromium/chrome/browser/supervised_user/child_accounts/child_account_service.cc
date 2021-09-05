@@ -25,6 +25,7 @@
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/public/identity_manager/accounts_in_cookie_jar_info.h"
+#include "components/signin/public/identity_manager/consent_level.h"
 #include "components/sync/driver/sync_service.h"
 #include "components/sync/driver/sync_user_settings.h"
 #include "content/public/browser/browser_context.h"
@@ -99,9 +100,11 @@ void ChildAccountService::Init() {
 
   // If we're already signed in, check the account immediately just to be sure.
   // (We might have missed an update before registering as an observer.)
+  // "Unconsented" because this class doesn't care about browser sync consent.
   base::Optional<AccountInfo> primary_account_info =
       identity_manager_->FindExtendedAccountInfoForAccountWithRefreshToken(
-          identity_manager_->GetPrimaryAccountInfo());
+          identity_manager_->GetPrimaryAccountInfo(
+              signin::ConsentLevel::kNotRequired));
 
   if (primary_account_info.has_value())
     OnExtendedAccountInfoUpdated(primary_account_info.value());
@@ -171,6 +174,11 @@ bool ChildAccountService::SetActive(bool active) {
     settings_service->SetLocalSetting(supervised_users::kForceSafeSearch,
                                       std::make_unique<base::Value>(false));
 
+    // GeolocationDisabled is controlled at the account level, so don't override
+    // it client-side.
+    settings_service->SetLocalSetting(supervised_users::kGeolocationDisabled,
+                                      std::make_unique<base::Value>(false));
+
 #if defined(OS_CHROMEOS)
     // Mirror account consistency is required for child accounts on Chrome OS.
     settings_service->SetLocalSetting(
@@ -200,6 +208,8 @@ bool ChildAccountService::SetActive(bool active) {
     settings_service->SetLocalSetting(supervised_users::kCookiesAlwaysAllowed,
                                       nullptr);
     settings_service->SetLocalSetting(supervised_users::kForceSafeSearch,
+                                      nullptr);
+    settings_service->SetLocalSetting(supervised_users::kGeolocationDisabled,
                                       nullptr);
 #if defined(OS_CHROMEOS)
     settings_service->SetLocalSetting(
@@ -258,7 +268,9 @@ void ChildAccountService::OnExtendedAccountInfoUpdated(
     return;
   }
 
-  std::string auth_account_id = identity_manager_->GetPrimaryAccountId();
+  // This class doesn't care about browser sync consent.
+  CoreAccountId auth_account_id = identity_manager_->GetPrimaryAccountId(
+      signin::ConsentLevel::kNotRequired);
   if (info.account_id != auth_account_id)
     return;
 
@@ -267,6 +279,11 @@ void ChildAccountService::OnExtendedAccountInfoUpdated(
 
 void ChildAccountService::OnExtendedAccountInfoRemoved(
     const AccountInfo& info) {
+  // This class doesn't care about browser sync consent.
+  if (info.account_id != identity_manager_->GetPrimaryAccountId(
+                             signin::ConsentLevel::kNotRequired))
+    return;
+
   SetIsChildAccount(false);
 }
 

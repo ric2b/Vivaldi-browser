@@ -12,7 +12,7 @@
 #include "notes/notes_factory.h"
 #include "notes/notes_model_loaded_observer.h"
 #include "notes/notes_model_observer.h"
-#include "notes/notesnode.h"
+#include "notes/note_node.h"
 #include "notes/note_id.h"
 
 
@@ -202,65 +202,65 @@ class NotesBridge : public vivaldi::NotesModelObserver {
   void EndGroupingUndos(JNIEnv* env,
                         const base::android::JavaParamRef<jobject>& obj);
 
-  base::string16 GetContent(const vivaldi::Notes_Node* node) const;
-  base::string16 GetTitle(const vivaldi::Notes_Node* node) const;
+  base::string16 GetContent(const vivaldi::NoteNode* node) const;
+  base::string16 GetTitle(const vivaldi::NoteNode* node) const;
 
   // notes_model_observer
   // Invoked when the model has finished loading. |ids_reassigned| mirrors
-    // TODO void NotesModelLoaded(vivaldi::Notes_Model* model, bool ids_reassigned) override {}
+    // TODO void NotesModelLoaded(vivaldi::NotesModel* model, bool ids_reassigned) override {}
 
-    // Invoked from the destructor of the Notes_Model.
-    // TODO void NotesModelBeingDeleted(vivaldi::Notes_Model* model) override {}
+    // Invoked from the destructor of the NotesModel.
+    // TODO void NotesModelBeingDeleted(vivaldi::NotesModel* model) override {}
 
     // Invoked when a node has moved.
-    void NotesNodeMoved(vivaldi::Notes_Model* model,
-                        const vivaldi::Notes_Node* old_parent,
+    void NotesNodeMoved(vivaldi::NotesModel* model,
+                        const vivaldi::NoteNode* old_parent,
                         size_t old_index,
-                        const vivaldi::Notes_Node* new_parent,
+                        const vivaldi::NoteNode* new_parent,
                         size_t new_index) override;
 
     // Invoked when a node has been added.
-    void NotesNodeAdded(vivaldi::Notes_Model* model,
-                        const vivaldi::Notes_Node* parent,
+    void NotesNodeAdded(vivaldi::NotesModel* model,
+                        const vivaldi::NoteNode* parent,
                         size_t index) override;
 
  /*   // Invoked before a node is removed.
     // |parent| the parent of the node that will be removed.
     // |old_index| the index of the node about to be removed in |parent|.
     // |node| is the node to be removed.
-   void OnWillRemoveNotes(vivaldi::Notes_Model* model,
-                                   const vivaldi::Notes_Node* parent,
+   void OnWillRemoveNotes(vivaldi::NotesModel* model,
+                                   const vivaldi::NoteNode* parent,
                                    int old_index,
-                                   const vivaldi::Notes_Node* node) override {}*/
+                                   const vivaldi::NoteNode* node) override {}*/
 
     // Invoked when a node has been removed, the item may still be starred though.
     // |parent| the parent of the node that was removed.
     // |old_index| the index of the removed node in |parent| before it was
     // removed.
     // |node| is the node that was removed.
-    void NotesNodeRemoved(vivaldi::Notes_Model* model,
-                                  const vivaldi::Notes_Node* parent,
+    void NotesNodeRemoved(vivaldi::NotesModel* model,
+                                  const vivaldi::NoteNode* parent,
                                   size_t old_index,
-                                  const vivaldi::Notes_Node* node) override;
+                                  const vivaldi::NoteNode* node) override;
 
    /* // Invoked before the title or url of a node is changed.
-    void OnWillChangeNotesNode(vivaldi::Notes_Model* model,
-                                       const vivaldi::Notes_Node* node) override {}*/
+    void OnWillChangeNotesNode(vivaldi::NotesModel* model,
+                                       const vivaldi::NoteNode* node) override {}*/
 
     // Invoked when the title or url of a node changes.
-    void NotesNodeChanged(vivaldi::Notes_Model* model, const vivaldi::Notes_Node* node) override;
+    void NotesNodeChanged(vivaldi::NotesModel* model, const vivaldi::NoteNode* node) override;
 
     // Invoked when a attachment has been loaded or changed.
 
     /*// Invoked before the direct children of |node| have been reordered in some
     // way, such as sorted.
-    void OnWillReorderNotesNode(vivaldi::Notes_Model* model,
-                                        const vivaldi::Notes_Node* node) override {}
+    void OnWillReorderNotesNode(vivaldi::NotesModel* model,
+                                        const vivaldi::NoteNode* node) override {}
 
     // Invoked when the children (just direct children, not descendants) of
     // |node| have been reordered in some way, such as sorted.
-    void NotesNodeChildrenReordered(vivaldi::Notes_Model* model,
-                                            const vivaldi::Notes_Node* node) override {}
+    void NotesNodeChildrenReordered(vivaldi::NotesModel* model,
+                                            const vivaldi::NoteNode* node) override {}
 
     // Invoked before an extensive set of model changes is about to begin.
     // This tells UI intensive observers to wait until the updates finish to
@@ -268,46 +268,46 @@ class NotesBridge : public vivaldi::NotesModelObserver {
     // These methods should only be used for imports and sync.
     // Observers should still respond to NotesNodeRemoved immediately,
     // to avoid holding onto stale node pointers.
-    void ExtensiveNotesChangesBeginning(vivaldi::Notes_Model* model) override {}
+    void ExtensiveNotesChangesBeginning(vivaldi::NotesModel* model) override {}
 
     // Invoked after an extensive set of model changes has ended.
     // This tells observers to update themselves if they were waiting for the
     // update to finish.
-    void ExtensiveNotesChangesEnded(vivaldi::Notes_Model* model) override {}
+    void ExtensiveNotesChangesEnded(vivaldi::NotesModel* model) override {}
 
     // Invoked before all non-permanent notes nodes are removed.
-    void OnWillRemoveAllNotes(vivaldi::Notes_Model* model) override {}
+    void OnWillRemoveAllNotes(vivaldi::NotesModel* model) override {}
 
     // Invoked when all non-permanent notes nodes have been removed.
-    void NotesAllNodesRemoved(vivaldi::Notes_Model* model) override {}
+    void NotesAllNodesRemoved(vivaldi::NotesModel* model) override {}
 
-    void GroupedNotesChangesBeginning(vivaldi::Notes_Model* model) override {}
-    void GroupedNotesChangesEnded(vivaldi::Notes_Model* model) override {}*/
+    void GroupedNotesChangesBeginning(vivaldi::NotesModel* model) override {}
+    void GroupedNotesChangesEnded(vivaldi::NotesModel* model) override {}*/
 
 
  private:
   ~NotesBridge() override;
 
   base::android::ScopedJavaLocalRef<jobject> CreateJavaNote(
-      const vivaldi::Notes_Node* node);
-  void ExtractNotes_NodeInformation(
-      const vivaldi::Notes_Node* node,
+      const vivaldi::NoteNode* node);
+  void ExtractNoteNodeInformation(
+      const vivaldi::NoteNode* node,
       const base::android::JavaRef<jobject>& j_result_obj);
-  const vivaldi::Notes_Node* GetNodeByID(long node_id, int type);
-  const vivaldi::Notes_Node* GetFolderWithFallback(long folder_id,
+  const vivaldi::NoteNode* GetNodeByID(long node_id, int type);
+  const vivaldi::NoteNode* GetFolderWithFallback(long folder_id,
                                                        int type);
   bool IsEditNotesEnabled() const;
   void EditNotesEnabledChanged();
   // Returns whether |node| can be modified by the user.
-  bool IsEditable(const vivaldi::Notes_Node* node) const;
+  bool IsEditable(const vivaldi::NoteNode* node) const;
   // Returns whether |node| is a managed bookmark.
-  bool IsManaged(const vivaldi::Notes_Node* node) const;
-  const vivaldi::Notes_Node* GetParentNode(
-      const vivaldi::Notes_Node* node);
-  int GetNoteType(const vivaldi::Notes_Node* node);
-  bool IsReachable(const vivaldi::Notes_Node* node) const;
+  bool IsManaged(const vivaldi::NoteNode* node) const;
+  const vivaldi::NoteNode* GetParentNode(
+      const vivaldi::NoteNode* node);
+  int GetNoteType(const vivaldi::NoteNode* node);
+  bool IsReachable(const vivaldi::NoteNode* node) const;
   bool IsLoaded() const;
-  bool IsFolderAvailable(const vivaldi::Notes_Node* folder) const;
+  bool IsFolderAvailable(const vivaldi::NoteNode* folder) const;
   void NotifyIfDoneLoading();
 
   // Override vivaldi::BaseNotesModelObserver.
@@ -315,36 +315,36 @@ class NotesBridge : public vivaldi::NotesModelObserver {
   // any of the other callback methods. For example, this is called when
   // partner bookmarks change.
   void NotesModelChanged();
-  void NotesModelLoaded(vivaldi::Notes_Model* model,
+  void NotesModelLoaded(vivaldi::NotesModel* model,
                            bool ids_reassigned) override;
-  void NotesModelBeingDeleted(vivaldi::Notes_Model* model) override;
-  void Notes_NodeMoved(vivaldi::Notes_Model* model,
-                         const vivaldi::Notes_Node* old_parent,
+  void NotesModelBeingDeleted(vivaldi::NotesModel* model) override;
+  void NoteNodeMoved(vivaldi::NotesModel* model,
+                         const vivaldi::NoteNode* old_parent,
                          size_t old_index,
-                         const vivaldi::Notes_Node* new_parent,
+                         const vivaldi::NoteNode* new_parent,
                          size_t new_index);
-  void Notes_NodeAdded(vivaldi::Notes_Model* model,
-                         const vivaldi::Notes_Node* parent,
+  void NoteNodeAdded(vivaldi::NotesModel* model,
+                         const vivaldi::NoteNode* parent,
                          size_t index);
-  void Notes_NodeRemoved(vivaldi::Notes_Model* model,
-                           const vivaldi::Notes_Node* parent,
+  void NoteNodeRemoved(vivaldi::NotesModel* model,
+                           const vivaldi::NoteNode* parent,
                            size_t old_index,
-                           const vivaldi::Notes_Node* node,
+                           const vivaldi::NoteNode* node,
                            const std::set<GURL>& removed_urls);
-  void NoteAllUserNodesRemoved(vivaldi::Notes_Model* model,
+  void NoteAllUserNodesRemoved(vivaldi::NotesModel* model,
                                    const std::set<GURL>& removed_urls);
-  void Notes_NodeChanged(vivaldi::Notes_Model* model,
-                           const vivaldi::Notes_Node* node);
-  void Notes_NodeChildrenReordered(
-      vivaldi::Notes_Model* model,
-      const vivaldi::Notes_Node* node);
+  void NoteNodeChanged(vivaldi::NotesModel* model,
+                           const vivaldi::NoteNode* node);
+  void NoteNodeChildrenReordered(
+      vivaldi::NotesModel* model,
+      const vivaldi::NoteNode* node);
   void ExtensiveNoteChangesBeginning(
-      vivaldi::Notes_Model* model);
-  void ExtensiveNoteChangesEnded(vivaldi::Notes_Model* model);
+      vivaldi::NotesModel* model);
+  void ExtensiveNoteChangesEnded(vivaldi::NotesModel* model);
 
   Profile* profile_;
   JavaObjectWeakGlobalRef weak_java_ref_;
-  vivaldi::Notes_Model* notes_model_;  // weak
+  vivaldi::NotesModel* notes_model_;  // weak
    //std::unique_ptr<vivaldi::ScopedGroupNoteActions>
    //    grouped_note_actions_;
   PrefChangeRegistrar pref_change_registrar_;

@@ -35,6 +35,8 @@
 #include "gpu/command_buffer/common/constants.h"
 #include "gpu/command_buffer/common/skia_utils.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
+#include "gpu/config/skia_limits.h"
+#include "gpu/ipc/client/client_shared_image_interface.h"
 #include "gpu/ipc/client/command_buffer_proxy_impl.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
 #include "gpu/skia_bindings/gles2_implementation_with_grcontext_support.h"
@@ -80,8 +82,7 @@ ContextProviderCommandBuffer::ContextProviderCommandBuffer(
 }
 
 ContextProviderCommandBuffer::~ContextProviderCommandBuffer() {
-  DCHECK(main_thread_checker_.CalledOnValidThread() ||
-         context_thread_checker_.CalledOnValidThread());
+  DCHECK(context_thread_checker_.CalledOnValidThread());
 
   if (bind_tried_ && bind_result_ == gpu::ContextResult::kSuccess) {
     // Clear the lock to avoid DCHECKs that the lock is being held during
@@ -183,7 +184,8 @@ gpu::ContextResult ContextProviderCommandBuffer::BindToCurrentThread() {
     webgpu_interface_ = std::move(webgpu_impl);
     helper_ = std::move(webgpu_helper);
   } else if (attributes_.enable_raster_interface &&
-             !attributes_.enable_gles2_interface) {
+             !attributes_.enable_gles2_interface &&
+             !attributes_.enable_grcontext) {
     DCHECK(!support_grcontext_);
     // The raster helper writes the command buffer protocol.
     auto raster_helper =
@@ -324,6 +326,10 @@ gpu::ContextResult ContextProviderCommandBuffer::BindToCurrentThread() {
     command_buffer_->SetLock(&context_lock_);
     cache_controller_->SetLock(&context_lock_);
   }
+
+  shared_image_interface_ = channel_->CreateClientSharedImageInterface();
+  DCHECK(shared_image_interface_);
+
   base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
       this, "ContextProviderCommandBuffer", std::move(task_runner));
   return bind_result_;
@@ -353,7 +359,6 @@ gpu::raster::RasterInterface* ContextProviderCommandBuffer::RasterInterface() {
     return raster_interface_.get();
 
   if (!attributes_.enable_raster_interface) {
-    DLOG(ERROR) << "Unexpected access to RasterInterface()";
     return nullptr;
   }
 
@@ -361,7 +366,7 @@ gpu::raster::RasterInterface* ContextProviderCommandBuffer::RasterInterface() {
     return nullptr;
 
   raster_interface_ = std::make_unique<gpu::raster::RasterImplementationGLES>(
-      gles2_impl_.get());
+      gles2_impl_.get(), gles2_impl_.get());
   return raster_interface_.get();
 }
 
@@ -388,7 +393,7 @@ class GrContext* ContextProviderCommandBuffer::GrContext() {
 
   size_t max_resource_cache_bytes;
   size_t max_glyph_cache_texture_bytes;
-  gpu::raster::DetermineGrCacheLimitsFromAvailableMemory(
+  gpu::DetermineGrCacheLimitsFromAvailableMemory(
       &max_resource_cache_bytes, &max_glyph_cache_texture_bytes);
 
   gpu::gles2::GLES2Interface* gl_interface;
@@ -412,7 +417,7 @@ class GrContext* ContextProviderCommandBuffer::GrContext() {
 
 gpu::SharedImageInterface*
 ContextProviderCommandBuffer::SharedImageInterface() {
-  return command_buffer_->channel()->shared_image_interface();
+  return shared_image_interface_.get();
 }
 
 ContextCacheController* ContextProviderCommandBuffer::CacheController() {

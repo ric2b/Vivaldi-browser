@@ -21,17 +21,19 @@ class CrostiniInstallerUI
     : public ui::MojoWebDialogUI,
       public chromeos::crostini_installer::mojom::PageHandlerFactory {
  public:
-  static bool IsEnabled();
-
   explicit CrostiniInstallerUI(content::WebUI* web_ui);
   ~CrostiniInstallerUI() override;
 
- private:
-  void BindPageHandlerFactory(
-      mojo::PendingReceiver<
-          chromeos::crostini_installer::mojom::PageHandlerFactory>
-          pending_receiver);
+  bool can_close();
+  void ClickInstallForTesting();
 
+  // Instantiates implementor of the mojom::PageHandlerFactory
+  // mojo interface passing the pending receiver that will be internally bound.
+  void BindInterface(mojo::PendingReceiver<
+                     chromeos::crostini_installer::mojom::PageHandlerFactory>
+                         pending_receiver);
+
+ private:
   // chromeos::crostini_installer::mojom::PageHandlerFactory:
   void CreatePageHandler(
       mojo::PendingRemote<chromeos::crostini_installer::mojom::Page>
@@ -39,9 +41,14 @@ class CrostiniInstallerUI
       mojo::PendingReceiver<chromeos::crostini_installer::mojom::PageHandler>
           pending_page_handler) override;
 
+  void OnWebUICloseDialog();
+
   std::unique_ptr<CrostiniInstallerPageHandler> page_handler_;
   mojo::Receiver<chromeos::crostini_installer::mojom::PageHandlerFactory>
       page_factory_receiver_{this};
+  bool can_close_ = false;
+
+  WEB_UI_CONTROLLER_TYPE_DECL();
 
   DISALLOW_COPY_AND_ASSIGN(CrostiniInstallerUI);
 };
